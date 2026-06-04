@@ -487,9 +487,7 @@ public abstract class StaticGeneratedStructSerializer<T> extends AbstractObjectS
     if (remoteField.compatibleCollectionArrayReadAction != null) {
       return true;
     }
-    Class<?> remoteType = remoteField.serializationFieldInfo.typeRef.getRawType();
-    Class<?> localType = localFieldInfo.typeRef.getRawType();
-    return FieldConverters.canConvert(remoteType, localType);
+    return FieldConverters.canConvert(remoteField.serializationFieldInfo, localFieldInfo);
   }
 
   public final Object readCompatibleFieldValue(
@@ -498,9 +496,8 @@ public abstract class StaticGeneratedStructSerializer<T> extends AbstractObjectS
     if (remoteField.compatibleCollectionArrayReadAction != null) {
       return fieldValue;
     }
-    Class<?> remoteType = remoteField.serializationFieldInfo.typeRef.getRawType();
-    Class<?> localType = localFieldInfo.typeRef.getRawType();
-    return FieldConverters.convertValue(remoteType, localType, fieldValue);
+    return FieldConverters.convertValue(
+        remoteField.serializationFieldInfo, localFieldInfo, fieldValue);
   }
 
   protected final void debugWriteField(

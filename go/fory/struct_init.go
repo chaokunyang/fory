@@ -405,6 +405,7 @@ func (s *structSerializer) initFieldsFromTypeDef(typeResolver *TypeResolver) err
 		var localType reflect.Type
 		var localFieldSpec *FieldSpec
 		var exists bool
+		var scalarConversion *compatibleScalarField
 
 		if def.tagID >= 0 {
 			if binding, ok := fieldTagIDToBinding[def.tagID]; ok {
@@ -549,6 +550,13 @@ func (s *structSerializer) initFieldsFromTypeDef(typeResolver *TypeResolver) err
 			} else if !typeLookupFailed && typesCompatible(localType, remoteType) {
 				shouldRead = true
 				fieldType = localType
+			}
+			if !shouldRead && localFieldSpec != nil {
+				if conversion, ok := newCompatibleScalarField(def.typeSpec.TypeId(), localFieldSpec.Type.TypeId(), localType); ok {
+					shouldRead = true
+					fieldType = localType
+					scalarConversion = conversion
+				}
 			}
 
 			if shouldRead {
@@ -720,18 +728,19 @@ func (s *structSerializer) initFieldsFromTypeDef(typeResolver *TypeResolver) err
 			Kind:       fieldKind,
 			Serializer: fieldSerializer,
 			Meta: &FieldMeta{
-				Name:           fieldName,
-				Type:           fieldType,
-				TypeId:         fieldTypeId,
-				Nullable:       def.nullable, // Use remote nullable flag
-				FieldIndex:     fieldIndex,
-				FieldDef:       def, // Save original FieldDef for skipping
-				WriteType:      writeType,
-				CachedTypeInfo: cachedTypeInfo,
-				HasGenerics:    isCollectionType(fieldTypeId), // Container fields have declared element types
-				OptionalInfo:   optionalInfo,
-				Spec:           metaSpec,
-				TypeSpec:       def.typeSpec,
+				Name:             fieldName,
+				Type:             fieldType,
+				TypeId:           fieldTypeId,
+				Nullable:         def.nullable, // Use remote nullable flag
+				FieldIndex:       fieldIndex,
+				FieldDef:         def, // Save original FieldDef for skipping
+				WriteType:        writeType,
+				CachedTypeInfo:   cachedTypeInfo,
+				HasGenerics:      isCollectionType(fieldTypeId), // Container fields have declared element types
+				OptionalInfo:     optionalInfo,
+				Spec:             metaSpec,
+				TypeSpec:         def.typeSpec,
+				CompatibleScalar: scalarConversion,
 			},
 		}
 		fields = append(fields, fieldInfo)

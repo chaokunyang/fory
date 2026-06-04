@@ -28,6 +28,7 @@ import "./string";
 import "./bool";
 import "./datetime";
 import "./decimal";
+import "./compatibleScalar";
 import "./map";
 import "./number";
 import "./set";

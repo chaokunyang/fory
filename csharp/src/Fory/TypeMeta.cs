@@ -802,6 +802,11 @@ public sealed class TypeMeta : IEquatable<TypeMeta>
             return true;
         }
 
+        if (topLevel && CompatibleScalarConverter.IsScalarPair(remote.TypeId, local.TypeId))
+        {
+            return true;
+        }
+
         if (NormalizeTypeIdForMatch(remote.TypeId) != NormalizeTypeIdForMatch(local.TypeId))
         {
             return false;

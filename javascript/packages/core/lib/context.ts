@@ -28,6 +28,10 @@ import { InnerFieldInfo, TypeMeta } from "./meta/TypeMeta";
 import { Type, TypeInfo } from "./typeInfo";
 import { Config, RefFlags, Serializer, TypeId } from "./type";
 import { markCompatibleCollectionArrayRead } from "./gen/collection";
+import {
+  isCompatibleScalarPair,
+  markCompatibleScalarRead,
+} from "./gen/compatibleScalar";
 
 type TypeResolverLike = {
   config: Config;
@@ -882,6 +886,14 @@ export class ReadContext {
       && compatibleArrayElementTypeId(local.options.inner.typeId) === remoteArrayElement
     ) {
       return compatibleArrayToListTypeInfo(remoteArrayElement);
+    }
+    if (isCompatibleScalarPair(remote.typeId, local.typeId)) {
+      return markCompatibleScalarRead(local.clone(), {
+        remoteTypeId: remote.typeId,
+        localTypeId: local.typeId,
+        remoteNullable: remote.nullable,
+        remoteTrackingRef: remote.trackingRef,
+      });
     }
     return undefined;
   }

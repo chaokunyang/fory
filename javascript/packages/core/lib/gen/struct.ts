@@ -25,6 +25,10 @@ import { CodegenRegistry } from "./router";
 import { BaseSerializerGenerator, SerializerGenerator } from "./serializer";
 import { TypeMeta } from "../meta/TypeMeta";
 import { getCompatibleCollectionArrayReadAction } from "./collection";
+import {
+  CompatibleScalarConverter,
+  getCompatibleScalarReadAction,
+} from "./compatibleScalar";
 
 /**
  * Returns true when a field's read cannot recurse and needs no depth tracking.
@@ -98,6 +102,7 @@ function isDirectVarInt32Field(
 ) {
   return typeInfo.typeId === TypeId.VARINT32
     && toRefMode(typeInfo.trackingRef, typeInfo.nullable) === RefMode.NONE
+    && getCompatibleScalarReadAction(typeInfo) === undefined
     && typeResolver.isMonomorphic(typeInfo, typeInfo.dynamic);
 }
 
@@ -108,6 +113,7 @@ function directNumericFieldReadExpr(
   if (
     toRefMode(typeInfo.trackingRef, typeInfo.nullable) !== RefMode.NONE
     || !builder.resolver.isMonomorphic(typeInfo, typeInfo.dynamic)
+    || getCompatibleScalarReadAction(typeInfo) !== undefined
   ) {
     return null;
   }
@@ -183,10 +189,49 @@ class StructSerializerGenerator extends BaseSerializerGenerator {
       && this.sortedProps.every(({ typeInfo }) => isDepthFreeField(typeInfo));
   }
 
-  readField(fieldTypeInfo: TypeInfo, assignStmt: (expr: string) => string, embedGenerator: SerializerGenerator) {
+  readField(fieldName: string, fieldTypeInfo: TypeInfo, assignStmt: (expr: string) => string, embedGenerator: SerializerGenerator) {
     const { nullable = false, dynamic, trackingRef } = fieldTypeInfo;
     const refMode = toRefMode(trackingRef, nullable);
     const assignCompatible = (expr: string) => assignStmt(compatibleReadTargetExpr(fieldTypeInfo, expr));
+    const scalarAction = getCompatibleScalarReadAction(fieldTypeInfo);
+    if (scalarAction) {
+      const converter = this.builder.getExternal(CompatibleScalarConverter.name);
+      const remoteRefMode = toRefMode(
+        scalarAction.remoteTrackingRef,
+        scalarAction.remoteNullable,
+      );
+      const readValue = `${converter}.read(${this.builder.reader.ownName()}, ${scalarAction.remoteTypeId}, ${scalarAction.localTypeId}, ${CodecBuilder.safeString(fieldName)})`;
+      if (remoteRefMode === RefMode.NONE) {
+        return assignStmt(readValue);
+      }
+      const refFlag = this.scope.uniqueName("refFlag");
+      const result = this.scope.uniqueName("result");
+      return `
+        const ${refFlag} = ${this.builder.reader.readInt8()};
+        let ${result};
+        switch (${refFlag}) {
+          case ${RefFlags.NotNullValueFlag}:
+          case ${RefFlags.RefValueFlag}:
+            ${result} = ${readValue};
+            break;
+          case ${RefFlags.RefFlag}:
+            ${result} = ${this.builder.referenceResolver.getReadRef(this.builder.reader.readVarUInt32())};
+            break;
+          case ${RefFlags.NullFlag}:
+            ${result} = null;
+            break;
+          default:
+            throw new Error("Invalid reference flag for compatible scalar field ${CodecBuilder.replaceBackslashAndQuote(fieldName)}");
+        }
+        ${remoteRefMode === RefMode.TRACKING
+          ? `
+        if (${refFlag} === ${RefFlags.RefValueFlag}) {
+          ${this.builder.referenceResolver.reference(result)}
+        }`
+          : ""}
+        ${assignStmt(result)};
+      `;
+    }
     let stmt = "";
     // polymorphic type
     if (this.builder.resolver.isMonomorphic(fieldTypeInfo, dynamic)) {
@@ -415,7 +460,7 @@ class StructSerializerGenerator extends BaseSerializerGenerator {
         }
         const innerGenerator = new InnerGeneratorClass(typeInfo, this.builder, this.scope);
         return `
-          ${this.readField(typeInfo, expr => `${result}${CodecBuilder.safePropAccessor(key)} = ${expr}`, innerGenerator.readEmbed())}
+          ${this.readField(key, typeInfo, expr => `${result}${CodecBuilder.safePropAccessor(key)} = ${expr}`, innerGenerator.readEmbed())}
         `;
       }).join(";\n")}
       ${accessor(result)}

@@ -509,18 +509,25 @@ public class ForyStructProcessorTest {
         compile(
             "test.EvolvingStruct",
             "package test;\n"
+                + "import java.math.BigDecimal;\n"
                 + "import org.apache.fory.annotation.ForyField;\n"
                 + "import org.apache.fory.annotation.ForyStruct;\n"
                 + "import org.apache.fory.annotation.Nullable;\n"
                 + "@ForyStruct public class EvolvingStruct {\n"
                 + "  @Nullable @ForyField(id = 1) public String id;\n"
                 + "  @Nullable @ForyField(id = 2) public String name;\n"
+                + "  @Nullable @ForyField(id = 4) public String flag;\n"
+                + "  @ForyField(id = 5) public int text;\n"
+                + "  @Nullable @ForyField(id = 6) public String decimalText;\n"
+                + "  @Nullable @ForyField(id = 7) public BigDecimal decimalValue;\n"
+                + "  @ForyField(id = 8) public long narrow;\n"
                 + "  public EvolvingStruct() {}\n"
                 + "}\n");
     CompilationResult readerResult =
         compile(
             "test.EvolvingStruct",
             "package test;\n"
+                + "import java.math.BigDecimal;\n"
                 + "import org.apache.fory.annotation.ForyField;\n"
                 + "import org.apache.fory.annotation.ForyStruct;\n"
                 + "import org.apache.fory.annotation.Nullable;\n"
@@ -528,6 +535,11 @@ public class ForyStructProcessorTest {
                 + "  @ForyField(id = 1) public int id;\n"
                 + "  @Nullable @ForyField(id = 2) public String name;\n"
                 + "  @Nullable @ForyField(id = 3) public String added = \"default\";\n"
+                + "  @ForyField(id = 4) public boolean flag;\n"
+                + "  @Nullable @ForyField(id = 5) public String text;\n"
+                + "  @Nullable @ForyField(id = 6) public BigDecimal decimalText;\n"
+                + "  @Nullable @ForyField(id = 7) public String decimalValue;\n"
+                + "  @ForyField(id = 8) public int narrow;\n"
                 + "  public EvolvingStruct() {}\n"
                 + "}\n");
     Assert.assertTrue(writerResult.success, writerResult.diagnostics());
@@ -544,6 +556,11 @@ public class ForyStructProcessorTest {
       Object value = writerType.getConstructor().newInstance();
       setField(writerType, value, "id", "42");
       setField(writerType, value, "name", "old");
+      setField(writerType, value, "flag", "true");
+      setField(writerType, value, "text", 7);
+      setField(writerType, value, "decimalText", "12.50");
+      setField(writerType, value, "decimalValue", new java.math.BigDecimal("10.500"));
+      setField(writerType, value, "narrow", 123L);
       Fory writer =
           Fory.builder()
               .withXlang(false)
@@ -574,6 +591,14 @@ public class ForyStructProcessorTest {
       Assert.assertEquals(getField(readerType, roundTrip, "id"), 42);
       Assert.assertEquals(getField(readerType, roundTrip, "name"), "old");
       Assert.assertEquals(getField(readerType, roundTrip, "added"), "default");
+      Assert.assertEquals(getField(readerType, roundTrip, "flag"), true);
+      Assert.assertEquals(getField(readerType, roundTrip, "text"), "7");
+      Assert.assertEquals(
+          ((java.math.BigDecimal) getField(readerType, roundTrip, "decimalText"))
+              .compareTo(new java.math.BigDecimal("12.5")),
+          0);
+      Assert.assertEquals(getField(readerType, roundTrip, "decimalValue"), "10.5");
+      Assert.assertEquals(getField(readerType, roundTrip, "narrow"), 123);
       Object serializer = reader.getTypeResolver().getTypeInfo(readerType).getSerializer();
       Assert.assertTrue(serializer instanceof StaticGeneratedStructSerializer);
     }

@@ -1098,8 +1098,11 @@ void TypeMeta::assign_field_ids(const TypeMeta *local_type,
           if (used[i] || local_fields[i].field_id >= 0) {
             continue;
           }
-          if (field_types_compatible_top_level(local_fields[i].field_type,
-                                               remote_field.field_type)) {
+          // Scalar conversion requires a tag or canonical-name match; the
+          // type-only fallback is only for schemas whose scalar identity
+          // already matches, otherwise unrelated fields can bind by value type.
+          if (field_types_compatible_top_level_identity(
+                  local_fields[i].field_type, remote_field.field_type)) {
             local_index = i;
             break;
           }

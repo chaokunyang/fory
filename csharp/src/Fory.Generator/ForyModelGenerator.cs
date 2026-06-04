@@ -240,34 +240,6 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
 
         EmitCompatibleFieldCodecMethods(sb, model);
 
-        sb.AppendLine("    private static bool __ForyCanReadCompatiblePrimitive(global::Apache.Fory.TypeId typeId)");
-        sb.AppendLine("    {");
-        sb.AppendLine("        return typeId switch");
-        sb.AppendLine("        {");
-        sb.AppendLine("            global::Apache.Fory.TypeId.Bool or");
-        sb.AppendLine("            global::Apache.Fory.TypeId.Int8 or");
-        sb.AppendLine("            global::Apache.Fory.TypeId.Int16 or");
-        sb.AppendLine("            global::Apache.Fory.TypeId.Int32 or");
-        sb.AppendLine("            global::Apache.Fory.TypeId.VarInt32 or");
-        sb.AppendLine("            global::Apache.Fory.TypeId.Int64 or");
-        sb.AppendLine("            global::Apache.Fory.TypeId.VarInt64 or");
-        sb.AppendLine("            global::Apache.Fory.TypeId.TaggedInt64 or");
-        sb.AppendLine("            global::Apache.Fory.TypeId.UInt8 or");
-        sb.AppendLine("            global::Apache.Fory.TypeId.UInt16 or");
-        sb.AppendLine("            global::Apache.Fory.TypeId.UInt32 or");
-        sb.AppendLine("            global::Apache.Fory.TypeId.VarUInt32 or");
-        sb.AppendLine("            global::Apache.Fory.TypeId.UInt64 or");
-        sb.AppendLine("            global::Apache.Fory.TypeId.VarUInt64 or");
-        sb.AppendLine("            global::Apache.Fory.TypeId.TaggedUInt64 or");
-        sb.AppendLine("            global::Apache.Fory.TypeId.Float16 or");
-        sb.AppendLine("            global::Apache.Fory.TypeId.BFloat16 or");
-        sb.AppendLine("            global::Apache.Fory.TypeId.Float32 or");
-        sb.AppendLine("            global::Apache.Fory.TypeId.Float64 or");
-        sb.AppendLine("            global::Apache.Fory.TypeId.String => true,");
-        sb.AppendLine("            _ => false,");
-        sb.AppendLine("        };");
-        sb.AppendLine("    }");
-        sb.AppendLine();
         sb.AppendLine("    private static object __ForyReadCompatiblePrimitivePayload(global::Apache.Fory.TypeId typeId, global::Apache.Fory.ReadContext context)");
         sb.AppendLine("    {");
         sb.AppendLine("        return typeId switch");
@@ -299,57 +271,36 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
         sb.AppendLine("    private static T __ForyReadCompatibleField<T>(");
         sb.AppendLine("        global::Apache.Fory.ReadContext context,");
         sb.AppendLine("        global::Apache.Fory.TypeMetaFieldType fieldType,");
+        sb.AppendLine("        global::Apache.Fory.TypeId localTypeId,");
+        sb.AppendLine("        string fieldName,");
         sb.AppendLine("        global::Apache.Fory.RefMode refMode,");
         sb.AppendLine("        bool readTypeInfo)");
         sb.AppendLine("    {");
         sb.AppendLine("        global::Apache.Fory.TypeId typeId = (global::Apache.Fory.TypeId)fieldType.TypeId;");
-        sb.AppendLine("        if (!readTypeInfo && __ForyCanReadCompatiblePrimitive(typeId))");
+        sb.AppendLine("        if (!readTypeInfo && global::Apache.Fory.CompatibleScalarConverter.IsScalarPair(fieldType.TypeId, (uint)localTypeId))");
         sb.AppendLine("        {");
-        sb.AppendLine("            object? value;");
         sb.AppendLine("            switch (refMode)");
         sb.AppendLine("            {");
         sb.AppendLine("                case global::Apache.Fory.RefMode.None:");
-        sb.AppendLine("                    value = __ForyReadCompatiblePrimitivePayload(typeId, context);");
-        sb.AppendLine("                    break;");
+        sb.AppendLine("                    return global::Apache.Fory.CompatibleScalarConverter.ReadField<T>(context, typeId, localTypeId, fieldName);");
         sb.AppendLine("                case global::Apache.Fory.RefMode.NullOnly:");
         sb.AppendLine("                {");
         sb.AppendLine("                    sbyte refFlag = context.Reader.ReadInt8();");
         sb.AppendLine("                    if (refFlag == (sbyte)global::Apache.Fory.RefFlag.Null)");
         sb.AppendLine("                    {");
-        sb.AppendLine("                        value = null;");
+        sb.AppendLine("                        return default!;");
         sb.AppendLine("                    }");
         sb.AppendLine("                    else if (refFlag == (sbyte)global::Apache.Fory.RefFlag.NotNullValue)");
         sb.AppendLine("                    {");
-        sb.AppendLine("                        value = __ForyReadCompatiblePrimitivePayload(typeId, context);");
+        sb.AppendLine("                        return global::Apache.Fory.CompatibleScalarConverter.ReadField<T>(context, typeId, localTypeId, fieldName);");
         sb.AppendLine("                    }");
         sb.AppendLine("                    else");
         sb.AppendLine("                    {");
         sb.AppendLine("                        throw new global::Apache.Fory.InvalidDataException($\"invalid compatible nullOnly ref flag {refFlag}\");");
         sb.AppendLine("                    }");
-        sb.AppendLine();
-        sb.AppendLine("                    break;");
         sb.AppendLine("                }");
         sb.AppendLine("                default:");
         sb.AppendLine("                    return context.TypeResolver.GetSerializer<T>().Read(context, refMode, readTypeInfo);");
-        sb.AppendLine("            }");
-        sb.AppendLine();
-        sb.AppendLine("            if (value is null)");
-        sb.AppendLine("            {");
-        sb.AppendLine("                return default!;");
-        sb.AppendLine("            }");
-        sb.AppendLine();
-        sb.AppendLine("            if (value is T typedValue)");
-        sb.AppendLine("            {");
-        sb.AppendLine("                return typedValue;");
-        sb.AppendLine("            }");
-        sb.AppendLine();
-        sb.AppendLine("            try");
-        sb.AppendLine("            {");
-        sb.AppendLine("                return (T)value;");
-        sb.AppendLine("            }");
-        sb.AppendLine("            catch (global::System.InvalidCastException ex)");
-        sb.AppendLine("            {");
-        sb.AppendLine("                throw new global::Apache.Fory.InvalidDataException($\"cannot cast compatible field value of type {value.GetType()} to {typeof(T)}: {ex.Message}\");");
         sb.AppendLine("            }");
         sb.AppendLine("        }");
         sb.AppendLine();
@@ -2031,7 +1982,7 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
         if (variableSuffix == "Compat")
         {
             sb.AppendLine(
-                $"{indent}{assignmentTarget} = __ForyReadCompatibleField<{member.TypeName}>(context, remoteField.FieldType, {refModeExpr}, {readTypeInfoExpr});");
+                $"{indent}{assignmentTarget} = __ForyReadCompatibleField<{member.TypeName}>(context, remoteField.FieldType, (global::Apache.Fory.TypeId){member.TypeMeta.TypeIdExpr}, \"{EscapeString(member.FieldIdentifier)}\", {refModeExpr}, {readTypeInfoExpr});");
             return;
         }
 

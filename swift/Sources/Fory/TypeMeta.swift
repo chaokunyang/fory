@@ -637,7 +637,11 @@ public final class TypeMeta: Equatable, @unchecked Sendable {
 
       if localMatch == nil {
         for localIndex in localFields.indices where !usedLocalFields[localIndex] {
-          if Self.isCompatibleFieldType(field.fieldType, localFields[localIndex].fieldType) {
+          if Self.isCompatibleFieldType(
+            field.fieldType,
+            localFields[localIndex].fieldType,
+            allowScalarConversion: false
+          ) {
             localMatch = (localIndex, localFields[localIndex])
             break
           }
@@ -681,9 +685,13 @@ public final class TypeMeta: Equatable, @unchecked Sendable {
   private static func isCompatibleFieldType(
     _ remoteType: FieldType,
     _ localType: FieldType,
-    topLevel: Bool = true
+    topLevel: Bool = true,
+    allowScalarConversion: Bool = true
   ) -> Bool {
     if topLevel, isCompatibleTopLevelListArrayFieldType(remoteType, localType) {
+      return true
+    }
+    if topLevel, allowScalarConversion, isCompatibleTopLevelScalarFieldType(remoteType, localType) {
       return true
     }
     if normalizeCompatibleTypeIDForComparison(remoteType.typeID)
@@ -694,7 +702,12 @@ public final class TypeMeta: Equatable, @unchecked Sendable {
       return false
     }
     for (remoteGeneric, localGeneric) in zip(remoteType.generics, localType.generics)
-    where !isCompatibleFieldType(remoteGeneric, localGeneric, topLevel: false) {
+    where !isCompatibleFieldType(
+      remoteGeneric,
+      localGeneric,
+      topLevel: false,
+      allowScalarConversion: false
+    ) {
       return false
     }
     return true
@@ -723,6 +736,85 @@ public final class TypeMeta: Equatable, @unchecked Sendable {
       return false
     }
     return TypeId.listElementTypeID(elementType.typeID, matchesDenseArrayTypeID: arrayTypeID)
+  }
+
+  private static func isCompatibleTopLevelScalarFieldType(
+    _ remoteType: FieldType,
+    _ localType: FieldType
+  ) -> Bool {
+    guard remoteType.generics.isEmpty,
+      localType.generics.isEmpty,
+      remoteType.typeID != localType.typeID,
+      let remoteKind = compatibleScalarKind(remoteType.typeID),
+      let localKind = compatibleScalarKind(localType.typeID)
+    else {
+      return false
+    }
+    if remoteKind == .bool {
+      return localKind == .string || localKind.isNumeric
+    }
+    if localKind == .bool {
+      return remoteKind == .string || remoteKind.isNumeric
+    }
+    if remoteKind == .string {
+      return localKind.isNumeric
+    }
+    if localKind == .string {
+      return remoteKind.isNumeric
+    }
+    return remoteKind.isNumeric && localKind.isNumeric
+  }
+
+  private enum CompatibleScalarKind {
+    case bool
+    case string
+    case signedInteger
+    case unsignedInteger
+    case floatingPoint
+    case decimal
+
+    var isNumeric: Bool {
+      switch self {
+      case .signedInteger, .unsignedInteger, .floatingPoint, .decimal:
+        return true
+      case .bool, .string:
+        return false
+      }
+    }
+  }
+
+  private static func compatibleScalarKind(_ typeID: UInt32) -> CompatibleScalarKind? {
+    switch typeID {
+    case TypeId.bool.rawValue:
+      return .bool
+    case TypeId.string.rawValue:
+      return .string
+    case TypeId.int8.rawValue,
+      TypeId.int16.rawValue,
+      TypeId.int32.rawValue,
+      TypeId.varint32.rawValue,
+      TypeId.int64.rawValue,
+      TypeId.varint64.rawValue,
+      TypeId.taggedInt64.rawValue:
+      return .signedInteger
+    case TypeId.uint8.rawValue,
+      TypeId.uint16.rawValue,
+      TypeId.uint32.rawValue,
+      TypeId.varUInt32.rawValue,
+      TypeId.uint64.rawValue,
+      TypeId.varUInt64.rawValue,
+      TypeId.taggedUInt64.rawValue:
+      return .unsignedInteger
+    case TypeId.float16.rawValue,
+      TypeId.bfloat16.rawValue,
+      TypeId.float32.rawValue,
+      TypeId.float64.rawValue:
+      return .floatingPoint
+    case TypeId.decimal.rawValue:
+      return .decimal
+    default:
+      return nil
+    }
   }
 
   private static func normalizeCompatibleTypeIDForComparison(_ typeID: UInt32) -> UInt32 {

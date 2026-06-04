@@ -237,18 +237,28 @@ impl<'a> ResolvedField<'a> {
                 let call = self.codec_call();
                 quote! {
                     let remote_field_type = &_field.field_type;
-                    if let Some(value) = #call::read_compatible(
-                        context,
+                    if ::fory_core::serializer::codec::field_types_compatible(
                         local_field_type,
                         remote_field_type,
-                    )? {
-                        #var = Some(value);
+                    ) {
+                        #var = Some(#call::read_field_with_type(context, remote_field_type)?);
                     } else {
-                        let read_ref_flag = ::fory_core::serializer::util::field_need_write_ref_into(
-                            remote_field_type.type_id,
-                            remote_field_type.nullable,
-                        );
-                        ::fory_core::serializer::skip::skip_field_value(context, remote_field_type, read_ref_flag)?;
+                        if let Some(value) = #call::read_compatible(
+                            context,
+                            local_field_type,
+                            remote_field_type,
+                        ).map_err(|err| ::fory_core::Error::invalid_data(
+                            format!("compatible field '{}': {}", _field.field_name.as_str(), err)
+                        ))? {
+                            #var = Some(value);
+                        } else {
+                            return Err(::fory_core::Error::invalid_data(format!(
+                                "compatible field '{}' cannot convert remote type {} to local type {}",
+                                _field.field_name.as_str(),
+                                remote_field_type.type_id,
+                                local_field_type.type_id,
+                            )));
+                        }
                     }
                 }
             }
@@ -275,11 +285,12 @@ impl<'a> ResolvedField<'a> {
                             read_type_info,
                         )?);
                     } else {
-                        let read_ref_flag = ::fory_core::serializer::util::field_need_write_ref_into(
+                        return Err(::fory_core::Error::invalid_data(format!(
+                            "compatible field '{}' cannot convert remote type {} to local type {}",
+                            _field.field_name.as_str(),
                             remote_field_type.type_id,
-                            remote_field_type.nullable,
-                        );
-                        ::fory_core::serializer::skip::skip_field_value(context, remote_field_type, read_ref_flag)?;
+                            local_field_type.type_id,
+                        )));
                     }
                 }
             }

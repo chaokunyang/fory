@@ -83,6 +83,26 @@ object ForySerializerDerivationTest {
       derives ForySerializer
 
   @ForyStruct
+  final case class CompatibleScalarWriter(
+      @ForyField(id = 1) flag: Option[String],
+      @ForyField(id = 2) numberText: String,
+      @ForyField(id = 3) text: Int,
+      @ForyField(id = 4) decimalText: String,
+      @ForyField(id = 5) decimalValue: java.math.BigDecimal,
+      @ForyField(id = 6) narrow: Long)
+      derives ForySerializer
+
+  @ForyStruct
+  final case class CompatibleScalarReader(
+      @ForyField(id = 1) flag: Boolean,
+      @ForyField(id = 2) numberText: Int,
+      @ForyField(id = 3) text: String,
+      @ForyField(id = 4) decimalText: java.math.BigDecimal,
+      @ForyField(id = 5) decimalValue: String,
+      @ForyField(id = 6) narrow: Int)
+      derives ForySerializer
+
+  @ForyStruct
   final case class CopyBox(
       @ForyField(id = 1) user: SearchUser,
       @ForyField(id = 2) names: List[String],
@@ -281,6 +301,40 @@ class ForySerializerDerivationTest extends AnyWordSpec with Matchers {
         List(Some(1), None),
         Map("a" -> Some(9L), "b" -> None),
         Map(Some("a") -> 1, None -> 2))
+    }
+
+    "read compatible scalar conversions through derived serializers" in {
+      val writerFory = ForySerializerDerivationTest.compatibleXlangFory()
+      ForySerializer.register(
+        writerFory,
+        classOf[CompatibleScalarWriter],
+        "scala_test",
+        "CompatibleScalar")
+      val readerFory = ForySerializerDerivationTest.compatibleXlangFory()
+      ForySerializer.register(
+        readerFory,
+        classOf[CompatibleScalarReader],
+        "scala_test",
+        "CompatibleScalar")
+
+      val writerValue = CompatibleScalarWriter(
+        Some("true"),
+        "42",
+        7,
+        "12.50",
+        new java.math.BigDecimal("10.500"),
+        123L)
+      val readerValue =
+        readerFory
+          .deserialize(writerFory.serialize(writerValue))
+          .asInstanceOf[CompatibleScalarReader]
+
+      readerValue.flag shouldBe true
+      readerValue.numberText shouldBe 42
+      readerValue.text shouldBe "7"
+      readerValue.decimalText.compareTo(new java.math.BigDecimal("12.5")) shouldBe 0
+      readerValue.decimalValue shouldBe "10.5"
+      readerValue.narrow shouldBe 123
     }
 
     "emit inner nullable metadata for Option collection elements" in {

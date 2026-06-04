@@ -41,7 +41,7 @@ fn simple() {
         f3: Vec<i8>,
         f4: String,
         f5: i8,
-        f6: Vec<i16>,
+        f6: Vec<i8>,
         f7: i16,
         last: i8,
     }
@@ -53,7 +53,7 @@ fn simple() {
         f1: HashMap::from([(1, vec![2])]),
         f2: String::from("hello"),
         f3: vec![1, 2, 3],
-        f5: String::from("f5"),
+        f5: String::from("5"),
         f6: vec![42],
         f7: 43,
         last: 44,
@@ -63,9 +63,9 @@ fn simple() {
     assert_eq!(animal.f1, obj.f1);
     assert_eq!(animal.f3, obj.f3);
     assert_eq!(obj.f4, String::default());
-    assert_eq!(obj.f5, i8::default());
-    assert_eq!(obj.f6, Vec::<i16>::default());
-    assert_eq!(obj.f7, i16::default());
+    assert_eq!(obj.f5, 5);
+    assert_eq!(obj.f6, animal.f6);
+    assert_eq!(obj.f7, 43);
     assert_eq!(animal.last, obj.last);
 }
 
@@ -158,8 +158,14 @@ fn compatible_list_array_field_pairs() {
             payload: vec![vec![1, 2], vec![3]],
         })
         .unwrap();
-    let decoded: NestedArrayPayload = reader.deserialize(&bytes).unwrap();
-    assert_eq!(decoded.payload, Vec::<Vec<i32>>::default());
+    let err = reader
+        .deserialize::<NestedArrayPayload>(&bytes)
+        .expect_err("expected nested list/array mismatch to fail compatible field read");
+    assert!(
+        err.to_string()
+            .contains("compatible field 'payload' cannot convert"),
+        "{err}"
+    );
 }
 
 #[test]
@@ -183,14 +189,14 @@ fn skip_option() {
     fory2.register::<Item2>(999).unwrap();
     let item1 = Item1 {
         f1: None,
-        f2: Some(String::from("f2")),
+        f2: Some(String::from("2")),
         last: 42,
     };
     let bin = fory1.serialize(&item1).unwrap();
     let item2: Item2 = fory2.deserialize(&bin).unwrap();
 
     assert_eq!(item2.f1, i8::default());
-    assert_eq!(item2.f2, i8::default());
+    assert_eq!(item2.f2, 2);
     assert_eq!(item2.last, item1.last)
 }
 
@@ -231,8 +237,39 @@ fn nonexistent_struct() {
     let obj: Person2 = fory2.deserialize(&bin).unwrap();
     use fory_core::ForyDefault;
     assert_eq!(obj.f2, Item2::fory_default());
-    assert_eq!(obj.f3, i64::default());
+    assert_eq!(obj.f3, 24);
     assert_eq!(obj.last, person.last);
+}
+
+#[test]
+fn serializer_container_mismatch_errors() {
+    #[derive(ForyStruct, Debug)]
+    struct SetI8 {
+        values: HashSet<i8>,
+    }
+
+    #[derive(ForyStruct, Debug)]
+    struct SetI16 {
+        values: HashSet<i16>,
+    }
+
+    let mut fory1 = Fory::builder().xlang(false).compatible(true).build();
+    let mut fory2 = Fory::builder().xlang(false).compatible(true).build();
+    fory1.register::<SetI8>(998).unwrap();
+    fory2.register::<SetI16>(998).unwrap();
+    let bin = fory1
+        .serialize(&SetI8 {
+            values: HashSet::from([1]),
+        })
+        .unwrap();
+    let err = fory2
+        .deserialize::<SetI16>(&bin)
+        .expect_err("expected matched incompatible container field to fail");
+    assert!(
+        err.to_string()
+            .contains("compatible field 'values' cannot convert"),
+        "{err}"
+    );
 }
 
 #[test]

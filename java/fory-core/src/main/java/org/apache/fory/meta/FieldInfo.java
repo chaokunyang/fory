@@ -181,13 +181,17 @@ public final class FieldInfo implements Serializable {
           return descriptor;
         }
       }
-      if (FieldTypes.useFieldType(rawType, descriptor)) {
-        return new DescriptorBuilder(descriptor)
-            .typeName(typeName)
-            .trackingRef(remoteTrackingRef)
-            .nullable(remoteNullable)
-            .typeRef(typeRef)
+      Descriptor remoteDescriptor = builder.build();
+      FieldConverter<?> converter =
+          FieldConverters.getConverter(resolver, remoteDescriptor, descriptor);
+      if (converter != null) {
+        return new DescriptorBuilder(remoteDescriptor)
+            .field(null)
+            .fieldConverter(converter)
             .build();
+      }
+      if (FieldTypes.useFieldType(rawType, descriptor)) {
+        return remoteDescriptor;
       }
       // Local field exists - check if we need to update nullable/trackingRef
       boolean typeMismatch = !typeRef.equals(declared);
@@ -202,13 +206,6 @@ public final class FieldInfo implements Serializable {
           // Set field to null if types are incompatible (not the same primitive type)
           if (!samePrimitiveType) {
             builder.field(null);
-          }
-        }
-        if (descriptor.getField() != null) {
-          FieldConverter<?> converter =
-              FieldConverters.getConverter(rawType, descriptor.getField());
-          if (converter != null) {
-            builder.fieldConverter(converter);
           }
         }
       }

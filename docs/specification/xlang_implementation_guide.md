@@ -306,6 +306,8 @@ In Dart that internal owner is `StructSerializer`.
 - caching compatible read layouts
 - skipping unknown compatible fields
 - passing compatible read layouts explicitly to generated serializers
+- classifying matched compatible fields that require top-level scalar
+  conversion and routing those fields through cold conversion helpers
 
 When `Config.compatible` is enabled and the struct is marked evolving:
 
@@ -314,11 +316,23 @@ When `Config.compatible` is enabled and the struct is marked evolving:
 - reads map incoming fields by identifier and skip unknown fields
 - generated serializers apply matched fields directly while preserving their own
   object construction and default-value rules
+- matched scalar fields may use compatible scalar conversion only when the
+  layout has classified a remote/local top-level scalar pair as lossless
+  convertible
 
 When `compatible` is disabled and `checkStructVersion` is enabled:
 
 - the runtime writes the schema hash for struct payloads
 - the read side checks that hash before reading fields
+
+Compatible scalar conversion is owned by the compatible struct field reader or
+the generated compatible layout action. Root facades, read/write contexts, type
+resolvers, class resolvers, xlang type resolvers, and raw buffer utilities must
+not expose public conversion APIs or carry conversion state. Resolvers may
+provide field schema metadata for layout classification, but the conversion
+decision and value adaptation stay with the serializer-owned compatible field
+layout. Same-schema readers and schema-consistent readers must keep direct
+scalar read paths without conversion branches or per-field conversion objects.
 
 ## Meta Strings And Shared Type Metadata
 

@@ -31,11 +31,15 @@
  * Schema evolution is enabled via the compatible mode flag.
  */
 
+#include "fory/serialization/compatible_scalar.h"
 #include "fory/serialization/fory.h"
 #include "gtest/gtest.h"
 #include <algorithm>
+#include <cmath>
 #include <cstdint>
 #include <map>
+#include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -257,6 +261,72 @@ struct CompatibleNestedArrayField {
                                       fory::T::array(fory::T::int32()))));
 };
 
+struct ScalarBoolField {
+  bool value = false;
+  FORY_STRUCT(ScalarBoolField, (value, fory::F(1)));
+};
+
+struct ScalarStringField {
+  std::string value;
+  FORY_STRUCT(ScalarStringField, (value, fory::F(1)));
+};
+
+struct ScalarInt8Field {
+  int8_t value = 0;
+  FORY_STRUCT(ScalarInt8Field, (value, fory::F(1)));
+};
+
+struct ScalarInt32Field {
+  int32_t value = 0;
+  FORY_STRUCT(ScalarInt32Field, (value, fory::F(1)));
+};
+
+struct ScalarInt64Field {
+  int64_t value = 0;
+  FORY_STRUCT(ScalarInt64Field, (value, fory::F(1)));
+};
+
+struct ScalarFloatField {
+  float value = 0.0f;
+  FORY_STRUCT(ScalarFloatField, (value, fory::F(1)));
+};
+
+struct ScalarFloat16Field {
+  fory::float16_t value = fory::float16_t::from_bits(0);
+  FORY_STRUCT(ScalarFloat16Field, (value, fory::F(1)));
+};
+
+struct ScalarBFloat16Field {
+  fory::bfloat16_t value = fory::bfloat16_t::from_bits(0);
+  FORY_STRUCT(ScalarBFloat16Field, (value, fory::F(1)));
+};
+
+struct ScalarDoubleField {
+  double value = 0.0;
+  FORY_STRUCT(ScalarDoubleField, (value, fory::F(1)));
+};
+
+struct ScalarDecimalField {
+  fory::serialization::Decimal value;
+  FORY_STRUCT(ScalarDecimalField, (value, fory::F(1)));
+};
+
+struct ScalarDecimalExtraField {
+  fory::serialization::Decimal value;
+  int32_t extra = 0;
+  FORY_STRUCT(ScalarDecimalExtraField, (value, fory::F(1)), extra);
+};
+
+struct OptionalStringField {
+  std::optional<std::string> value;
+  FORY_STRUCT(OptionalStringField, (value, fory::F(1)));
+};
+
+struct OptionalIntField {
+  std::optional<int32_t> value;
+  FORY_STRUCT(OptionalIntField, (value, fory::F(1)));
+};
+
 // ============================================================================
 // TESTS
 // ============================================================================
@@ -264,6 +334,26 @@ struct CompatibleNestedArrayField {
 namespace fory {
 namespace serialization {
 namespace test {
+
+template <typename WriterT, typename ReaderT>
+Result<ReaderT, Error> convert_field(const WriterT &value, uint32_t type_id) {
+  auto writer = Fory::builder().compatible(true).xlang(true).build();
+  auto reader = Fory::builder().compatible(true).xlang(true).build();
+  auto writer_reg = writer.register_struct<WriterT>(type_id);
+  if (!writer_reg.ok()) {
+    return Unexpected(std::move(writer_reg).error());
+  }
+  auto reader_reg = reader.register_struct<ReaderT>(type_id);
+  if (!reader_reg.ok()) {
+    return Unexpected(std::move(reader_reg).error());
+  }
+  auto bytes = writer.serialize(value);
+  if (!bytes.ok()) {
+    return Unexpected(std::move(bytes).error());
+  }
+  return reader.deserialize<ReaderT>(bytes.value().data(),
+                                     bytes.value().size());
+}
 
 TEST(SchemaEvolutionTest, AddingSingleField) {
   // Serialize V1, deserialize as V2 (V2 should have default value for email)
@@ -534,6 +624,182 @@ TEST(SchemaEvolutionTest, NestedListArraySchemaPairsAreNotMatched) {
 
   ASSERT_TRUE(decoded.ok()) << decoded.error().to_string();
   EXPECT_TRUE(decoded.value().values.empty());
+}
+
+TEST(SchemaEvolutionTest, ScalarBoolString) {
+  auto decoded =
+      convert_field<ScalarStringField, ScalarBoolField>({"true"}, 1010);
+  ASSERT_TRUE(decoded.ok()) << decoded.error().to_string();
+  EXPECT_TRUE(decoded.value().value);
+
+  auto text = convert_field<ScalarBoolField, ScalarStringField>({true}, 1011);
+  ASSERT_TRUE(text.ok()) << text.error().to_string();
+  EXPECT_EQ(text.value().value, "true");
+
+  auto invalid =
+      convert_field<ScalarStringField, ScalarBoolField>({"TRUE"}, 1012);
+  ASSERT_FALSE(invalid.ok());
+  EXPECT_EQ(invalid.error().code(), ErrorCode::InvalidData);
+}
+
+TEST(SchemaEvolutionTest, ScalarBoolPayloadRejectsNonCanonicalByte) {
+  Config config;
+  config.compatible = true;
+  config.xlang = true;
+  ReadContext ctx(config, std::make_unique<TypeResolver>());
+  std::vector<uint8_t> bytes{2};
+  Buffer buffer(bytes);
+  ctx.attach(buffer);
+
+  auto value =
+      read_compatible_string(ctx, static_cast<uint32_t>(TypeId::BOOL), "value");
+
+  EXPECT_EQ(value, "");
+  ASSERT_TRUE(ctx.has_error());
+  EXPECT_EQ(ctx.error().code(), ErrorCode::InvalidData);
+  ctx.detach();
+}
+
+TEST(SchemaEvolutionTest, ScalarBoolNumber) {
+  auto decoded = convert_field<ScalarInt32Field, ScalarBoolField>({1}, 1013);
+  ASSERT_TRUE(decoded.ok()) << decoded.error().to_string();
+  EXPECT_TRUE(decoded.value().value);
+
+  auto number = convert_field<ScalarBoolField, ScalarInt32Field>({true}, 1014);
+  ASSERT_TRUE(number.ok()) << number.error().to_string();
+  EXPECT_EQ(number.value().value, 1);
+
+  auto invalid = convert_field<ScalarDoubleField, ScalarBoolField>({0.5}, 1015);
+  ASSERT_FALSE(invalid.ok());
+  EXPECT_EQ(invalid.error().code(), ErrorCode::InvalidData);
+}
+
+TEST(SchemaEvolutionTest, ScalarNumberNumber) {
+  auto narrowed = convert_field<ScalarInt64Field, ScalarInt8Field>({127}, 1016);
+  ASSERT_TRUE(narrowed.ok()) << narrowed.error().to_string();
+  EXPECT_EQ(narrowed.value().value, 127);
+
+  auto range_error =
+      convert_field<ScalarInt64Field, ScalarInt8Field>({128}, 1017);
+  ASSERT_FALSE(range_error.ok());
+  EXPECT_EQ(range_error.error().code(), ErrorCode::InvalidData);
+
+  auto exact_float =
+      convert_field<ScalarInt64Field, ScalarFloatField>({16777216}, 1018);
+  ASSERT_TRUE(exact_float.ok()) << exact_float.error().to_string();
+  EXPECT_EQ(exact_float.value().value, 16777216.0f);
+
+  auto precision_error =
+      convert_field<ScalarInt64Field, ScalarFloatField>({16777217}, 1019);
+  ASSERT_FALSE(precision_error.ok());
+  EXPECT_EQ(precision_error.error().code(), ErrorCode::InvalidData);
+
+  auto negative_zero_half =
+      convert_field<ScalarFloatField, ScalarFloat16Field>({-0.0f}, 1038);
+  ASSERT_TRUE(negative_zero_half.ok())
+      << negative_zero_half.error().to_string();
+  EXPECT_EQ(negative_zero_half.value().value.to_bits(), 0x8000u);
+
+  auto negative_zero_bfloat =
+      convert_field<ScalarDoubleField, ScalarBFloat16Field>({-0.0}, 1039);
+  ASSERT_TRUE(negative_zero_bfloat.ok())
+      << negative_zero_bfloat.error().to_string();
+  EXPECT_EQ(negative_zero_bfloat.value().value.to_bits(), 0x8000u);
+
+  auto half_inf = convert_field<ScalarFloat16Field, ScalarBFloat16Field>(
+      {fory::float16_t::from_bits(0x7C00u)}, 1040);
+  ASSERT_TRUE(half_inf.ok()) << half_inf.error().to_string();
+  EXPECT_TRUE(fory::bfloat16_t::is_inf(half_inf.value().value, 1));
+
+  auto bfloat_inf = convert_field<ScalarBFloat16Field, ScalarFloat16Field>(
+      {fory::bfloat16_t::from_bits(0xFF80u)}, 1041);
+  ASSERT_TRUE(bfloat_inf.ok()) << bfloat_inf.error().to_string();
+  EXPECT_TRUE(fory::float16_t::is_inf(bfloat_inf.value().value, -1));
+}
+
+TEST(SchemaEvolutionTest, ScalarStringNumber) {
+  auto integer =
+      convert_field<ScalarStringField, ScalarInt32Field>({"1e2"}, 1020);
+  ASSERT_TRUE(integer.ok()) << integer.error().to_string();
+  EXPECT_EQ(integer.value().value, 100);
+
+  auto exact_float =
+      convert_field<ScalarStringField, ScalarDoubleField>({"0.5"}, 1021);
+  ASSERT_TRUE(exact_float.ok()) << exact_float.error().to_string();
+  EXPECT_EQ(exact_float.value().value, 0.5);
+
+  auto grammar_error =
+      convert_field<ScalarStringField, ScalarInt32Field>({"+1"}, 1022);
+  ASSERT_FALSE(grammar_error.ok());
+  EXPECT_EQ(grammar_error.error().code(), ErrorCode::InvalidData);
+
+  auto precision_error =
+      convert_field<ScalarStringField, ScalarFloatField>({"0.1"}, 1023);
+  ASSERT_FALSE(precision_error.ok());
+  EXPECT_EQ(precision_error.error().code(), ErrorCode::InvalidData);
+
+  std::string trailing_zero_decimal = "1.";
+  trailing_zero_decimal.append(5000, '0');
+  auto canonical_decimal = convert_field<ScalarStringField, ScalarDecimalField>(
+      {trailing_zero_decimal}, 1042);
+  ASSERT_TRUE(canonical_decimal.ok()) << canonical_decimal.error().to_string();
+  EXPECT_EQ(canonical_decimal.value().value, Decimal::from_int64(1, 0));
+}
+
+TEST(SchemaEvolutionTest, ScalarNumberString) {
+  auto integer =
+      convert_field<ScalarInt32Field, ScalarStringField>({-12}, 1024);
+  ASSERT_TRUE(integer.ok()) << integer.error().to_string();
+  EXPECT_EQ(integer.value().value, "-12");
+
+  auto floating =
+      convert_field<ScalarFloatField, ScalarStringField>({0.5f}, 1025);
+  ASSERT_TRUE(floating.ok()) << floating.error().to_string();
+  EXPECT_EQ(floating.value().value, "0.5");
+
+  auto decimal = convert_field<ScalarDecimalField, ScalarStringField>(
+      {Decimal::from_int64(12340, 3)}, 1026);
+  ASSERT_TRUE(decimal.ok()) << decimal.error().to_string();
+  EXPECT_EQ(decimal.value().value, "12.34");
+
+  auto oversized_decimal = convert_field<ScalarDecimalField, ScalarStringField>(
+      {Decimal::from_int64(1, 4097)}, 1043);
+  ASSERT_FALSE(oversized_decimal.ok());
+  EXPECT_EQ(oversized_decimal.error().code(), ErrorCode::InvalidData);
+}
+
+TEST(SchemaEvolutionTest, ScalarDecimal) {
+  auto bool_value = convert_field<ScalarDecimalField, ScalarBoolField>(
+      {Decimal::from_int64(10, 1)}, 1027);
+  ASSERT_TRUE(bool_value.ok()) << bool_value.error().to_string();
+  EXPECT_TRUE(bool_value.value().value);
+
+  auto bool_error = convert_field<ScalarDecimalField, ScalarBoolField>(
+      {Decimal::from_int64(5, 1)}, 1028);
+  ASSERT_FALSE(bool_error.ok());
+  EXPECT_EQ(bool_error.error().code(), ErrorCode::InvalidData);
+
+  auto decimal =
+      convert_field<ScalarStringField, ScalarDecimalField>({"1.2300"}, 1029);
+  ASSERT_TRUE(decimal.ok()) << decimal.error().to_string();
+  EXPECT_EQ(decimal.value().value, Decimal::from_int64(123, 2));
+
+  auto same_type = convert_field<ScalarDecimalExtraField, ScalarDecimalField>(
+      {Decimal::from_int64(1230, 3), 7}, 1030);
+  ASSERT_TRUE(same_type.ok()) << same_type.error().to_string();
+  EXPECT_EQ(same_type.value().value, Decimal::from_int64(1230, 3));
+}
+
+TEST(SchemaEvolutionTest, ScalarOptional) {
+  auto primitive = convert_field<OptionalStringField, ScalarBoolField>(
+      {std::string("1")}, 1031);
+  ASSERT_TRUE(primitive.ok()) << primitive.error().to_string();
+  EXPECT_TRUE(primitive.value().value);
+
+  auto optional = convert_field<OptionalStringField, OptionalIntField>(
+      {std::nullopt}, 1032);
+  ASSERT_TRUE(optional.ok()) << optional.error().to_string();
+  EXPECT_FALSE(optional.value().value.has_value());
 }
 
 TEST(SchemaEvolutionTest, RoundtripWithSameVersion) {

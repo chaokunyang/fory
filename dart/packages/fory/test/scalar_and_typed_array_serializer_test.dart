@@ -123,6 +123,78 @@ class CompatibleNestedListEnvelope {
   List<List<int>> values = <List<int>>[];
 }
 
+@ForyStruct()
+class CompatibleScalarStringEnvelope {
+  CompatibleScalarStringEnvelope();
+
+  @ForyField(id: 1)
+  String value = '';
+}
+
+@ForyStruct()
+class CompatibleScalarOptionalStringEnvelope {
+  CompatibleScalarOptionalStringEnvelope();
+
+  @ForyField(id: 1, type: StringType(nullable: true))
+  String? value;
+}
+
+@ForyStruct()
+class CompatibleScalarBoolEnvelope {
+  CompatibleScalarBoolEnvelope();
+
+  @ForyField(id: 1)
+  bool value = false;
+}
+
+@ForyStruct()
+class CompatibleScalarInt64Envelope {
+  CompatibleScalarInt64Envelope();
+
+  @ForyField(id: 1, type: Int64Type(encoding: Encoding.varint))
+  int value = 0;
+}
+
+@ForyStruct()
+class CompatibleScalarInt8Envelope {
+  CompatibleScalarInt8Envelope();
+
+  @ForyField(id: 1, type: Int8Type())
+  int value = 0;
+}
+
+@ForyStruct()
+class CompatibleScalarUint64Envelope {
+  CompatibleScalarUint64Envelope();
+
+  @ForyField(id: 1, type: Uint64Type(encoding: Encoding.varint))
+  Uint64 value = Uint64(0);
+}
+
+@ForyStruct()
+class CompatibleScalarFloat64Envelope {
+  CompatibleScalarFloat64Envelope();
+
+  @ForyField(id: 1, type: Float64Type())
+  double value = 0.0;
+}
+
+@ForyStruct()
+class CompatibleScalarFloat32Envelope {
+  CompatibleScalarFloat32Envelope();
+
+  @ForyField(id: 1, type: Float32Type())
+  double value = 0.0;
+}
+
+@ForyStruct()
+class CompatibleScalarDecimalEnvelope {
+  CompatibleScalarDecimalEnvelope();
+
+  @ForyField(id: 1)
+  Decimal value = Decimal.zero();
+}
+
 void _registerScalarTypes(Fory fory) {
   ScalarAndTypedArraySerializerTestForyModule.register(
     fory,
@@ -138,6 +210,50 @@ void _registerScalarTypes(Fory fory) {
 
 T _roundTripRoot<T>(Fory fory, Object value) {
   return fory.deserialize<T>(fory.serialize(value));
+}
+
+T _compatibleScalarRoundTrip<T>(
+  Type writerType,
+  Type readerType,
+  Object value,
+) {
+  final writer = Fory();
+  final reader = Fory();
+  ScalarAndTypedArraySerializerTestForyModule.register(
+    writer,
+    writerType,
+    name: 'test.CompatibleScalarEnvelope',
+  );
+  ScalarAndTypedArraySerializerTestForyModule.register(
+    reader,
+    readerType,
+    name: 'test.CompatibleScalarEnvelope',
+  );
+  return reader.deserialize<T>(writer.serialize(value));
+}
+
+void _expectCompatibleScalarError(
+  Type writerType,
+  Type readerType,
+  Object value,
+) {
+  final writer = Fory();
+  final reader = Fory();
+  ScalarAndTypedArraySerializerTestForyModule.register(
+    writer,
+    writerType,
+    name: 'test.CompatibleScalarEnvelope',
+  );
+  ScalarAndTypedArraySerializerTestForyModule.register(
+    reader,
+    readerType,
+    name: 'test.CompatibleScalarEnvelope',
+  );
+  final bytes = writer.serialize(value);
+  expect(
+    () => reader.deserialize<Object>(bytes),
+    throwsA(isA<InvalidDataException>()),
+  );
 }
 
 ScalarAndArrayEnvelope _sampleEnvelope() {
@@ -705,6 +821,195 @@ void main() {
         () => reader.deserialize<CompatibleNestedListEnvelope>(bytes),
         throwsStateError,
       );
+    });
+
+    test('converts compatible scalar fields losslessly', () {
+      expect(
+        _compatibleScalarRoundTrip<CompatibleScalarBoolEnvelope>(
+          CompatibleScalarStringEnvelope,
+          CompatibleScalarBoolEnvelope,
+          CompatibleScalarStringEnvelope()..value = 'true',
+        ).value,
+        isTrue,
+      );
+      expect(
+        _compatibleScalarRoundTrip<CompatibleScalarStringEnvelope>(
+          CompatibleScalarBoolEnvelope,
+          CompatibleScalarStringEnvelope,
+          CompatibleScalarBoolEnvelope()..value = true,
+        ).value,
+        equals('true'),
+      );
+      expect(
+        _compatibleScalarRoundTrip<CompatibleScalarBoolEnvelope>(
+          CompatibleScalarInt64Envelope,
+          CompatibleScalarBoolEnvelope,
+          CompatibleScalarInt64Envelope()..value = 1,
+        ).value,
+        isTrue,
+      );
+      expect(
+        _compatibleScalarRoundTrip<CompatibleScalarInt8Envelope>(
+          CompatibleScalarBoolEnvelope,
+          CompatibleScalarInt8Envelope,
+          CompatibleScalarBoolEnvelope()..value = true,
+        ).value,
+        equals(1),
+      );
+      expect(
+        _compatibleScalarRoundTrip<CompatibleScalarInt8Envelope>(
+          CompatibleScalarInt64Envelope,
+          CompatibleScalarInt8Envelope,
+          CompatibleScalarInt64Envelope()..value = 127,
+        ).value,
+        equals(127),
+      );
+      expect(
+        _compatibleScalarRoundTrip<CompatibleScalarInt64Envelope>(
+          CompatibleScalarUint64Envelope,
+          CompatibleScalarInt64Envelope,
+          CompatibleScalarUint64Envelope()..value = Uint64(42),
+        ).value,
+        equals(42),
+      );
+      expect(
+        _compatibleScalarRoundTrip<CompatibleScalarStringEnvelope>(
+          CompatibleScalarUint64Envelope,
+          CompatibleScalarStringEnvelope,
+          CompatibleScalarUint64Envelope()
+            ..value = Uint64.fromBigInt((BigInt.one << 64) - BigInt.one),
+        ).value,
+        equals('18446744073709551615'),
+      );
+      expect(
+        _compatibleScalarRoundTrip<CompatibleScalarFloat32Envelope>(
+          CompatibleScalarStringEnvelope,
+          CompatibleScalarFloat32Envelope,
+          CompatibleScalarStringEnvelope()..value = '0.5',
+        ).value,
+        equals(0.5),
+      );
+      final negativeZero =
+          _compatibleScalarRoundTrip<CompatibleScalarFloat32Envelope>(
+            CompatibleScalarStringEnvelope,
+            CompatibleScalarFloat32Envelope,
+            CompatibleScalarStringEnvelope()..value = '-0e0',
+          ).value;
+      expect(negativeZero, equals(0.0));
+      expect(negativeZero.isNegative, isTrue);
+      expect(
+        _compatibleScalarRoundTrip<CompatibleScalarStringEnvelope>(
+          CompatibleScalarFloat64Envelope,
+          CompatibleScalarStringEnvelope,
+          CompatibleScalarFloat64Envelope()..value = -0.0,
+        ).value,
+        equals('-0.0'),
+      );
+      expect(
+        _compatibleScalarRoundTrip<CompatibleScalarDecimalEnvelope>(
+          CompatibleScalarStringEnvelope,
+          CompatibleScalarDecimalEnvelope,
+          CompatibleScalarStringEnvelope()..value = '1.2300',
+        ).value,
+        equals(Decimal(BigInt.from(123), 2)),
+      );
+      expect(
+        _compatibleScalarRoundTrip<CompatibleScalarInt64Envelope>(
+          CompatibleScalarDecimalEnvelope,
+          CompatibleScalarInt64Envelope,
+          CompatibleScalarDecimalEnvelope()
+            ..value = Decimal(BigInt.from(10), 1),
+        ).value,
+        equals(1),
+      );
+    });
+
+    test('rejects invalid compatible scalar payloads as invalid data', () {
+      _expectCompatibleScalarError(
+        CompatibleScalarStringEnvelope,
+        CompatibleScalarBoolEnvelope,
+        CompatibleScalarStringEnvelope()..value = 'True',
+      );
+      _expectCompatibleScalarError(
+        CompatibleScalarInt64Envelope,
+        CompatibleScalarBoolEnvelope,
+        CompatibleScalarInt64Envelope()..value = 2,
+      );
+      _expectCompatibleScalarError(
+        CompatibleScalarStringEnvelope,
+        CompatibleScalarInt64Envelope,
+        CompatibleScalarStringEnvelope()..value = '01',
+      );
+      _expectCompatibleScalarError(
+        CompatibleScalarStringEnvelope,
+        CompatibleScalarInt64Envelope,
+        CompatibleScalarStringEnvelope()..value = '1.5',
+      );
+      _expectCompatibleScalarError(
+        CompatibleScalarStringEnvelope,
+        CompatibleScalarFloat32Envelope,
+        CompatibleScalarStringEnvelope()..value = '0.1',
+      );
+      _expectCompatibleScalarError(
+        CompatibleScalarStringEnvelope,
+        CompatibleScalarDecimalEnvelope,
+        CompatibleScalarStringEnvelope()..value = '1e4097',
+      );
+      _expectCompatibleScalarError(
+        CompatibleScalarStringEnvelope,
+        CompatibleScalarDecimalEnvelope,
+        CompatibleScalarStringEnvelope()..value = '1e2147483647',
+      );
+      _expectCompatibleScalarError(
+        CompatibleScalarInt64Envelope,
+        CompatibleScalarInt8Envelope,
+        CompatibleScalarInt64Envelope()..value = 128,
+      );
+      _expectCompatibleScalarError(
+        CompatibleScalarDecimalEnvelope,
+        CompatibleScalarInt64Envelope,
+        CompatibleScalarDecimalEnvelope()..value = Decimal(BigInt.one << 63, 0),
+      );
+      _expectCompatibleScalarError(
+        CompatibleScalarFloat64Envelope,
+        CompatibleScalarStringEnvelope,
+        CompatibleScalarFloat64Envelope()..value = double.infinity,
+      );
+    });
+
+    test('composes compatible scalar conversion with nullable fields', () {
+      expect(
+        _compatibleScalarRoundTrip<CompatibleScalarBoolEnvelope>(
+          CompatibleScalarOptionalStringEnvelope,
+          CompatibleScalarBoolEnvelope,
+          CompatibleScalarOptionalStringEnvelope()..value = 'false',
+        ).value,
+        isFalse,
+      );
+      expect(
+        _compatibleScalarRoundTrip<CompatibleScalarBoolEnvelope>(
+          CompatibleScalarOptionalStringEnvelope,
+          CompatibleScalarBoolEnvelope,
+          CompatibleScalarOptionalStringEnvelope()..value = null,
+        ).value,
+        isFalse,
+      );
+    });
+
+    test('keeps same-schema compatible scalar reads direct', () {
+      final fory = Fory();
+      ScalarAndTypedArraySerializerTestForyModule.register(
+        fory,
+        CompatibleScalarStringEnvelope,
+        name: 'test.CompatibleScalarEnvelope',
+      );
+
+      final value = CompatibleScalarStringEnvelope()..value = 'True';
+      final roundTrip = fory.deserialize<CompatibleScalarStringEnvelope>(
+        fory.serialize(value),
+      );
+
+      expect(roundTrip.value, equals('True'));
     });
 
     test('enforces maxBinarySize on write and read', () {

@@ -22,12 +22,15 @@ import decimal
 import importlib
 import inspect
 import marshal
+import math
 import os
 import pickle
+import re
+import struct as _struct
 import types
 from typing import Tuple
 
-from pyfory.serialization import Buffer
+from pyfory.serialization import Buffer, _bfloat16_from_bits, _bfloat16_to_bits, _float16_from_bits, _float16_to_bits
 from pyfory.resolver import NULL_FLAG, NOT_NULL_VALUE_FLAG
 from pyfory.policy import DEFAULT_POLICY
 
@@ -44,6 +47,7 @@ from pyfory._fory import (
 _WINDOWS = os.name == "nt"
 
 from pyfory.serialization import ENABLE_FORY_CYTHON_SERIALIZATION
+from pyfory.types import TypeId
 
 
 def _import_validated_module(policy, module_name, is_local=False):
@@ -265,7 +269,6 @@ else:
 
     _RuntimeNumpy1DArraySerializer = None
 
-from pyfory.types import TypeId
 from pyfory.annotation import (
     BFloat16Array,
     BoolArray,
@@ -411,6 +414,291 @@ class DecimalSerializer(Serializer):
     def read(self, read_context):
         scale, unscaled = _read_decimal_parts(read_context)
         return _decimal_from_parts(scale, unscaled)
+
+
+_SIGNED_INT_TYPE_IDS = frozenset((TypeId.INT8, TypeId.INT16, TypeId.INT32, TypeId.VARINT32, TypeId.INT64, TypeId.VARINT64, TypeId.TAGGED_INT64))
+_UNSIGNED_INT_TYPE_IDS = frozenset(
+    (TypeId.UINT8, TypeId.UINT16, TypeId.UINT32, TypeId.VAR_UINT32, TypeId.UINT64, TypeId.VAR_UINT64, TypeId.TAGGED_UINT64)
+)
+_INT_RANGES_BY_TYPE_ID = {
+    TypeId.INT8: (-(1 << 7), (1 << 7) - 1),
+    TypeId.INT16: (-(1 << 15), (1 << 15) - 1),
+    TypeId.INT32: (-(1 << 31), (1 << 31) - 1),
+    TypeId.VARINT32: (-(1 << 31), (1 << 31) - 1),
+    TypeId.INT64: (-(1 << 63), (1 << 63) - 1),
+    TypeId.VARINT64: (-(1 << 63), (1 << 63) - 1),
+    TypeId.TAGGED_INT64: (-(1 << 63), (1 << 63) - 1),
+    TypeId.UINT8: (0, (1 << 8) - 1),
+    TypeId.UINT16: (0, (1 << 16) - 1),
+    TypeId.UINT32: (0, (1 << 32) - 1),
+    TypeId.VAR_UINT32: (0, (1 << 32) - 1),
+    TypeId.UINT64: (0, (1 << 64) - 1),
+    TypeId.VAR_UINT64: (0, (1 << 64) - 1),
+    TypeId.TAGGED_UINT64: (0, (1 << 64) - 1),
+}
+_FLOAT_TYPE_IDS = frozenset((TypeId.FLOAT16, TypeId.BFLOAT16, TypeId.FLOAT32, TypeId.FLOAT64))
+_NUMERIC_TYPE_IDS = _SIGNED_INT_TYPE_IDS | _UNSIGNED_INT_TYPE_IDS | _FLOAT_TYPE_IDS | frozenset((TypeId.DECIMAL,))
+_SCALAR_CONVERSION_TYPE_IDS = _NUMERIC_TYPE_IDS | frozenset((TypeId.BOOL, TypeId.STRING))
+_MAX_COMPATIBLE_DECIMAL_DIGITS = 4096
+_NUMERIC_LITERAL_RE = re.compile(
+    r"-?(?:(?:0|[1-9][0-9]*)|(?:0|[1-9][0-9]*)\.[0-9]+(?:[eE]-?(?:0|[1-9][0-9]*))?|(?:0|[1-9][0-9]*)[eE]-?(?:0|[1-9][0-9]*))$"
+)
+
+
+def supports_compatible_scalar_conversion(remote_type_id: int, local_type_id: int) -> bool:
+    if remote_type_id == local_type_id:
+        return False
+    if remote_type_id not in _SCALAR_CONVERSION_TYPE_IDS or local_type_id not in _SCALAR_CONVERSION_TYPE_IDS:
+        return False
+    if remote_type_id == TypeId.BOOL:
+        return local_type_id == TypeId.STRING or local_type_id in _NUMERIC_TYPE_IDS
+    if local_type_id == TypeId.BOOL:
+        return remote_type_id == TypeId.STRING or remote_type_id in _NUMERIC_TYPE_IDS
+    if remote_type_id == TypeId.STRING:
+        return local_type_id in _NUMERIC_TYPE_IDS
+    if local_type_id == TypeId.STRING:
+        return remote_type_id in _NUMERIC_TYPE_IDS
+    return remote_type_id in _NUMERIC_TYPE_IDS and local_type_id in _NUMERIC_TYPE_IDS
+
+
+def _decimal_from_text(value: str) -> decimal.Decimal:
+    if not _NUMERIC_LITERAL_RE.fullmatch(value):
+        raise ValueError("invalid numeric literal")
+    return _canonical_decimal(decimal.Decimal(value))
+
+
+def _canonical_decimal(value: decimal.Decimal) -> decimal.Decimal:
+    if not value.is_finite():
+        raise ValueError("non-finite decimal")
+    if value.is_zero():
+        return decimal.Decimal(0)
+    sign, digits, exponent = value.as_tuple()
+    digits = list(digits)
+    while exponent < 0 and digits[-1] == 0:
+        digits.pop()
+        exponent += 1
+    scale = -exponent if exponent < 0 else 0
+    digit_count = len(digits) + (exponent if exponent > 0 else 0)
+    if scale > _MAX_COMPATIBLE_DECIMAL_DIGITS or digit_count > _MAX_COMPATIBLE_DECIMAL_DIGITS:
+        raise ValueError("decimal exceeds compatible conversion limit")
+    if exponent >= 0:
+        text = "".join(str(digit) for digit in digits) + ("0" * exponent)
+        integer = int(text)
+        return decimal.Decimal(-integer if sign else integer)
+    return decimal.Decimal((sign, tuple(digits), exponent))
+
+
+def _is_negative_zero(value: float) -> bool:
+    return value == 0.0 and math.copysign(1.0, value) < 0.0
+
+
+def _same_float_value(left: float, right: float) -> bool:
+    if math.isnan(left) or math.isnan(right):
+        return False
+    if left == 0.0 and right == 0.0:
+        return math.copysign(1.0, left) == math.copysign(1.0, right)
+    return left == right
+
+
+def _to_float32(value: float) -> float:
+    return _struct.unpack(">f", _struct.pack(">f", value))[0]
+
+
+def _to_float_domain(value: float, type_id: int) -> float:
+    if type_id == TypeId.FLOAT64:
+        return float(value)
+    if type_id == TypeId.FLOAT32:
+        return _to_float32(value)
+    if type_id == TypeId.FLOAT16:
+        return _float16_from_bits(_float16_to_bits(value))
+    if type_id == TypeId.BFLOAT16:
+        return _bfloat16_from_bits(_bfloat16_to_bits(value))
+    raise ValueError(f"type id {type_id} is not a floating type")
+
+
+def _decimal_from_float_value(value: float) -> decimal.Decimal:
+    if value == 0.0:
+        return decimal.Decimal(0)
+    return _canonical_decimal(decimal.Decimal.from_float(value))
+
+
+def _int_value(value, local_type_id: int) -> int:
+    min_value, max_value = _INT_RANGES_BY_TYPE_ID[local_type_id]
+    if isinstance(value, decimal.Decimal):
+        if not value.is_finite() or value != value.to_integral_exact():
+            raise ValueError("decimal is not an integral value")
+        result = int(value)
+    elif type(value) is float:
+        if not math.isfinite(value) or not value.is_integer():
+            raise ValueError("floating value is not a finite integer")
+        result = int(value)
+    elif type(value) is int:
+        result = value
+    else:
+        raise ValueError(f"expected numeric value, got {type(value)!r}")
+    if result < min_value or result > max_value:
+        raise OverflowError(f"value {result} is outside target integer range")
+    return result
+
+
+def _float_value(value, local_type_id: int) -> float:
+    if isinstance(value, decimal.Decimal):
+        if not value.is_finite():
+            raise ValueError("decimal is not finite")
+        if value.is_zero():
+            return 0.0
+        result = _to_float_domain(float(value), local_type_id)
+        if _decimal_from_float_value(result) != _canonical_decimal(value):
+            raise ValueError("decimal value is not exactly representable by target float")
+        return result
+    if type(value) is int:
+        result = _to_float_domain(float(value), local_type_id)
+        if not math.isfinite(result) or int(result) != value:
+            raise ValueError("integer value is not exactly representable by target float")
+        return result
+    if type(value) is float:
+        if math.isnan(value):
+            raise ValueError("NaN is not convertible across floating types")
+        result = _to_float_domain(value, local_type_id)
+        if not _same_float_value(_to_float_domain(result, local_type_id), result):
+            raise ValueError("target float round-trip failed")
+        if not _same_float_value(result, value):
+            raise ValueError("floating value is not exactly representable by target float")
+        return result
+    raise ValueError(f"expected numeric value, got {type(value)!r}")
+
+
+def _bool_value(value) -> bool:
+    if type(value) is bool:
+        return value
+    if type(value) is str:
+        if value in ("1", "true"):
+            return True
+        if value in ("0", "false"):
+            return False
+        raise ValueError("string is not a compatible bool literal")
+    if isinstance(value, decimal.Decimal):
+        if not value.is_finite():
+            raise ValueError("decimal is not finite")
+        if value == 0:
+            return False
+        if value == 1:
+            return True
+        raise ValueError("decimal bool value must be 0 or 1")
+    if type(value) is float:
+        if not math.isfinite(value):
+            raise ValueError("floating bool value is not finite")
+        if value == 0.0:
+            return False
+        if value == 1.0:
+            return True
+        raise ValueError("floating bool value must be 0 or 1")
+    if type(value) is int:
+        if value == 0:
+            return False
+        if value == 1:
+            return True
+    raise ValueError("numeric bool value must be 0 or 1")
+
+
+def _plain_decimal_text(value: decimal.Decimal) -> str:
+    value = _canonical_decimal(value)
+    if value.is_zero():
+        return "0"
+    text = format(value, "f")
+    if "." in text:
+        text = text.rstrip("0").rstrip(".")
+    return text
+
+
+def _float_text(value: float) -> str:
+    if math.isnan(value) or math.isinf(value):
+        raise ValueError("non-finite float cannot convert to string")
+    if value == 0.0:
+        return "-0.0" if _is_negative_zero(value) else "0.0"
+    text = format(decimal.Decimal.from_float(value), "f")
+    if "." not in text:
+        return f"{text}.0"
+    text = text.rstrip("0")
+    if text.endswith("."):
+        text += "0"
+    return text
+
+
+def _string_value(value) -> str:
+    if type(value) is bool:
+        return "true" if value else "false"
+    if type(value) is int:
+        return str(value)
+    if type(value) is float:
+        return _float_text(value)
+    if isinstance(value, decimal.Decimal):
+        return _plain_decimal_text(value)
+    raise ValueError(f"expected scalar value, got {type(value)!r}")
+
+
+def _numeric_value(value, local_type_id: int):
+    if type(value) is str:
+        if local_type_id in _FLOAT_TYPE_IDS and value.startswith("-"):
+            decimal_value = _decimal_from_text(value)
+            if decimal_value.is_zero():
+                return _to_float_domain(-0.0, local_type_id)
+        value = _decimal_from_text(value)
+    elif type(value) is bool:
+        value = 1 if value else 0
+    if local_type_id in _INT_RANGES_BY_TYPE_ID:
+        return _int_value(value, local_type_id)
+    if local_type_id in _FLOAT_TYPE_IDS:
+        return _float_value(value, local_type_id)
+    if local_type_id == TypeId.DECIMAL:
+        if type(value) is int:
+            return decimal.Decimal(value)
+        if type(value) is float:
+            if not math.isfinite(value):
+                raise ValueError("non-finite float cannot convert to decimal")
+            return _decimal_from_float_value(value)
+        if isinstance(value, decimal.Decimal):
+            return _canonical_decimal(value)
+    raise ValueError(f"type id {local_type_id} is not a numeric scalar")
+
+
+def compatible_scalar_convert(value, remote_type_id: int, local_type_id: int):
+    if local_type_id == TypeId.BOOL:
+        return _bool_value(value)
+    if local_type_id == TypeId.STRING:
+        return _string_value(value)
+    if local_type_id in _NUMERIC_TYPE_IDS:
+        return _numeric_value(value, local_type_id)
+    raise ValueError(f"type id {local_type_id} is not a compatible scalar target")
+
+
+def _scalar_conversion_error(field_name: str, remote_type_id: int, local_type_id: int, value, cause: Exception):
+    from pyfory.error import ForyInvalidDataError
+
+    raise ForyInvalidDataError(
+        f"Cannot convert compatible field {field_name!r} from type {remote_type_id} to type {local_type_id}: {value!r}"
+    ) from cause
+
+
+class CompatibleScalarFieldSerializer(Serializer):
+    def __init__(self, type_resolver, remote_serializer, remote_type_id: int, local_type_id: int, field_name: str):
+        super().__init__(type_resolver, list)
+        self.need_to_write_ref = False
+        self.remote_serializer = remote_serializer
+        self.remote_type_id = remote_type_id
+        self.local_type_id = local_type_id
+        self.field_name = field_name
+        self._compatible_scalar_conversion = True
+
+    def write(self, write_context, value):
+        raise NotImplementedError("compatible scalar field serializer is read-only")
+
+    def read(self, read_context):
+        value = self.remote_serializer.read(read_context)
+        try:
+            return compatible_scalar_convert(value, self.remote_type_id, self.local_type_id)
+        except (ValueError, OverflowError, decimal.InvalidOperation) as exc:
+            _scalar_conversion_error(self.field_name, self.remote_type_id, self.local_type_id, value, exc)
 
 
 class PandasRangeIndexSerializer(Serializer):

@@ -35,6 +35,7 @@ mod option;
 mod primitive_list;
 mod rc;
 mod refcell;
+mod scalar_conversion;
 mod set;
 pub mod skip;
 mod string;

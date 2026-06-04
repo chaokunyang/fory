@@ -50,6 +50,7 @@ import org.apache.fory.serializer.ObjectSerializer;
 import org.apache.fory.serializer.Serializer;
 import org.apache.fory.serializer.Serializers;
 import org.apache.fory.serializer.converter.FieldConverter;
+import org.apache.fory.serializer.converter.FieldConverters;
 import org.apache.fory.type.Descriptor;
 import org.apache.fory.type.DescriptorBuilder;
 import org.apache.fory.type.DescriptorGrouper;
@@ -266,9 +267,18 @@ public class CompatibleCodecBuilder extends ObjectCodecBuilder {
       FieldConverter<?> converter = descriptor.getFieldConverter();
       if (converter != null) {
         Field field = converter.getField();
-        StaticInvoke converted =
+        StaticInvoke convertedValue =
             new StaticInvoke(
-                converter.getClass(), "convertFrom", TypeRef.of(field.getType()), value);
+                FieldConverters.class,
+                "convertValue",
+                OBJECT_TYPE,
+                Literal.ofInt(FieldConverters.fromDispatchId(converter)),
+                Literal.ofClass(FieldConverters.fromType(converter)),
+                Literal.ofInt(FieldConverters.toDispatchId(converter)),
+                Literal.ofClass(FieldConverters.toType(converter)),
+                Literal.ofString(FieldConverters.fieldName(converter)),
+                value);
+        Expression converted = new Expression.Cast(convertedValue, TypeRef.of(field.getType()));
         Descriptor newDesc =
             new DescriptorBuilder(descriptor)
                 .field(field)

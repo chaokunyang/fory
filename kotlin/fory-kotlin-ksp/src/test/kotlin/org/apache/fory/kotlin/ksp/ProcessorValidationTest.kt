@@ -631,6 +631,103 @@ class ProcessorValidationTest {
   }
 
   @Test
+  fun compatibleScalarReadsUseRuntimePath() {
+    val fields =
+      listOf(
+        field(
+          0,
+          "flag",
+          scalar("Boolean::class.javaPrimitiveType!!", "Boolean", "boolean", "Types.BOOL", true),
+        ),
+        field(
+          1,
+          "numberText",
+          scalar("Int::class.javaPrimitiveType!!", "Int", "int", "Types.INT32", true),
+        ),
+        field(
+          2,
+          "text",
+          scalar("String::class.java", "String", "java.lang.String", "Types.STRING", false),
+        ),
+        field(
+          3,
+          "decimalText",
+          scalar(
+            "java.math.BigDecimal::class.java",
+            "java.math.BigDecimal",
+            "java.math.BigDecimal",
+            "Types.DECIMAL",
+            false,
+          ),
+        ),
+        field(
+          4,
+          "decimalValue",
+          scalar("String::class.java", "String", "java.lang.String", "Types.STRING", false),
+        ),
+        field(
+          5,
+          "narrow",
+          scalar("Int::class.javaPrimitiveType!!", "Int", "int", "Types.INT32", true),
+        ),
+        field(
+          6,
+          "unsigned",
+          scalar(
+            "Int::class.javaPrimitiveType!!",
+            "UInt",
+            "int",
+            "Types.UINT32",
+            false,
+            unsigned = true,
+          ),
+        ),
+      )
+    val source =
+      KotlinSerializerSourceWriter(
+          KotlinSourceStruct(
+            packageName = "example",
+            typeName = "CompatibleScalar",
+            qualifiedTypeName = "example.CompatibleScalar",
+            serializerName = "CompatibleScalar_ForySerializer",
+            serializerVisibility = KotlinSerializerVisibility.PUBLIC,
+            construction = KotlinStructConstruction.MUTABLE,
+            fields = fields,
+            originatingFiles = emptyList(),
+          )
+        )
+        .write()
+    val compatibleStart = source.indexOf("override fun readCompatible")
+    val copyStart = source.indexOf("override fun copy")
+    val compatibleSource = source.substring(compatibleStart, copyStart)
+
+    assertTrue(compatibleSource.contains("if (canReadRemoteField(remoteField, localField))"))
+    assertTrue(
+      compatibleSource.contains("readCompatibleFieldValue(readContext, remoteField, localField)")
+    )
+    assertTrue(
+      compatibleSource.contains("value.flag =") && compatibleSource.contains(" as Boolean")
+    )
+    assertTrue(
+      compatibleSource.contains("value.numberText =") && compatibleSource.contains(" as Int")
+    )
+    assertTrue(compatibleSource.contains("value.text =") && compatibleSource.contains(" as String"))
+    assertTrue(
+      compatibleSource.contains("value.decimalText =") &&
+        compatibleSource.contains(" as java.math.BigDecimal")
+    )
+    assertTrue(
+      compatibleSource.contains("value.decimalValue =") && compatibleSource.contains(" as String")
+    )
+    assertTrue(compatibleSource.contains("value.narrow =") && compatibleSource.contains(" as Int"))
+    assertTrue(
+      compatibleSource.contains("value.unsigned = run") &&
+        compatibleSource.contains("is org.apache.fory.type.unsigned.UInt32") &&
+        compatibleSource.contains("compatibleValue0.toLong().toUInt()")
+    )
+  }
+
+  @Test
   fun tracksWidePresence() {
     val intType =
       KotlinSourceTypeNode(
@@ -1215,6 +1312,101 @@ class ProcessorValidationTest {
   }
 
   @Test
+  fun compatibleUnsignedJavaCarriers() {
+    fun unsignedType(name: String, rawType: String, typeId: String) =
+      KotlinSourceTypeNode(
+        rawClassExpression = "$rawType::class.javaPrimitiveType!!",
+        kotlinTypeName = "kotlin.$name",
+        valueTypeName = name,
+        typeName = "kotlin.$name",
+        typeId = typeId,
+        nullable = false,
+        trackingRef = false,
+        primitive = false,
+        unsigned = true,
+      )
+
+    val fields =
+      listOf(
+        KotlinSourceField(
+          id = 0,
+          name = "u8",
+          type = unsignedType("UByte", "Byte", "Types.UINT8"),
+          hasForyField = true,
+          foryFieldId = 1,
+          trackingRef = false,
+          dynamic = "AUTO",
+          arrayType = false,
+          hasDefault = false,
+          nullable = false,
+          propertyTypeName = "UByte",
+        ),
+        KotlinSourceField(
+          id = 1,
+          name = "u16",
+          type = unsignedType("UShort", "Short", "Types.UINT16"),
+          hasForyField = true,
+          foryFieldId = 2,
+          trackingRef = false,
+          dynamic = "AUTO",
+          arrayType = false,
+          hasDefault = false,
+          nullable = false,
+          propertyTypeName = "UShort",
+        ),
+        KotlinSourceField(
+          id = 2,
+          name = "u32",
+          type = unsignedType("UInt", "Int", "Types.VAR_UINT32"),
+          hasForyField = true,
+          foryFieldId = 3,
+          trackingRef = false,
+          dynamic = "AUTO",
+          arrayType = false,
+          hasDefault = false,
+          nullable = false,
+          propertyTypeName = "UInt",
+        ),
+        KotlinSourceField(
+          id = 3,
+          name = "u64",
+          type = unsignedType("ULong", "Long", "Types.VAR_UINT64"),
+          hasForyField = true,
+          foryFieldId = 4,
+          trackingRef = false,
+          dynamic = "AUTO",
+          arrayType = false,
+          hasDefault = false,
+          nullable = false,
+          propertyTypeName = "ULong",
+        )
+      )
+    val source =
+      KotlinSerializerSourceWriter(
+          KotlinSourceStruct(
+            packageName = "example",
+            typeName = "UnsignedScalars",
+            qualifiedTypeName = "example.UnsignedScalars",
+            serializerName = "UnsignedScalars_ForySerializer",
+            serializerVisibility = KotlinSerializerVisibility.PUBLIC,
+            fields = fields,
+            originatingFiles = emptyList(),
+          )
+        )
+        .write()
+
+    assertTrue(source.contains("is org.apache.fory.type.unsigned.UInt8"))
+    assertTrue(source.contains("compatibleValue0.toInt().toUByte()"))
+    assertTrue(source.contains("is org.apache.fory.type.unsigned.UInt16"))
+    assertTrue(source.contains("compatibleValue0.toInt().toUShort()"))
+    assertTrue(source.contains("is org.apache.fory.type.unsigned.UInt32"))
+    assertTrue(source.contains("compatibleValue0.toLong().toUInt()"))
+    assertTrue(source.contains("is org.apache.fory.type.unsigned.UInt64"))
+    assertTrue(source.contains("compatibleValue0.toLong().toULong()"))
+    assertFalse(source.contains("as Number).to"))
+  }
+
+  @Test
   fun unionUsesCoreHelpers() {
     val owner =
       KotlinSourceTypeNode(
@@ -1400,4 +1592,40 @@ class ProcessorValidationTest {
     assertTrue(source.contains("is example.Pet.UseCase ->"))
     assertTrue(!source.contains("org.apache.fory.type.union.Union"))
   }
+
+  private fun scalar(
+    rawClassExpression: String,
+    kotlinTypeName: String,
+    typeName: String,
+    typeId: String,
+    primitive: Boolean,
+    unsigned: Boolean = false,
+  ): KotlinSourceTypeNode =
+    KotlinSourceTypeNode(
+      rawClassExpression = rawClassExpression,
+      kotlinTypeName = kotlinTypeName,
+      valueTypeName = kotlinTypeName,
+      typeName = typeName,
+      typeId = typeId,
+      nullable = false,
+      trackingRef = false,
+      primitive = primitive,
+      unsigned = unsigned,
+    )
+
+  private fun field(id: Int, name: String, type: KotlinSourceTypeNode): KotlinSourceField =
+    KotlinSourceField(
+      id = id,
+      name = name,
+      type = type,
+      hasForyField = true,
+      foryFieldId = id + 1,
+      trackingRef = false,
+      dynamic = "AUTO",
+      arrayType = false,
+      hasDefault = false,
+      nullable = false,
+      propertyTypeName = type.valueTypeName,
+      constructorParameterName = name,
+    )
 }

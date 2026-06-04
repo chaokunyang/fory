@@ -381,13 +381,61 @@ private func buildCompatibleReadCases(
     assignCase: (Int, ParsedField, String) -> String
 ) -> String {
     sortedFields.enumerated().map { sortedIndex, field -> String in
-        let valueExpr = readFieldExpr(
+        let directValueExpr = readFieldExpr(
             field,
             refModeExpr: "RefMode.from(nullable: remoteField.fieldType.nullable, trackRef: remoteField.fieldType.trackRef)",
             readTypeInfoExpr: "TypeId.needsTypeInfoForField(TypeId(rawValue: remoteField.fieldType.typeID) ?? .unknown)"
         )
+        let valueExpr = compatibleScalarReadExpr(field, directValueExpr: directValueExpr)
         return assignCase(sortedIndex, field, valueExpr)
     }.joined(separator: "\n\(indent)")
+}
+
+private func compatibleScalarReadExpr(_ field: ParsedField, directValueExpr: String) -> String {
+    guard field.dynamicAnyCodec == nil, compatibleScalarTypeID(field.typeID) else {
+        return directValueExpr
+    }
+    let fieldName = swiftStringLiteral(field.schemaIdentifier)
+    if field.isOptional {
+        return """
+        try foryReadCompatibleOptionalScalarField(
+            context,
+            remoteFieldType: remoteField.fieldType,
+            localTypeID: \(field.typeID),
+            fieldName: \(fieldName),
+            directRead: {
+                \(directValueExpr)
+            }
+        )
+        """
+    }
+    return """
+    try foryReadCompatibleScalarField(
+        context,
+        remoteFieldType: remoteField.fieldType,
+        localTypeID: \(field.typeID),
+        fieldName: \(fieldName),
+        directRead: {
+            \(directValueExpr)
+        }
+    )
+    """
+}
+
+private func compatibleScalarTypeID(_ typeID: UInt32) -> Bool {
+    switch typeID {
+    case 1...15, 17...21, 40:
+        return true
+    default:
+        return false
+    }
+}
+
+private func swiftStringLiteral(_ value: String) -> String {
+    let escaped = value
+        .replacingOccurrences(of: "\\", with: "\\\\")
+        .replacingOccurrences(of: "\"", with: "\\\"")
+    return "\"\(escaped)\""
 }
 
 private func readFieldExpr(

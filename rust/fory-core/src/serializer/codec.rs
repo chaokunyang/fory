@@ -314,10 +314,14 @@ pub trait Codec<T: 'static>: 'static {
         local_field_type: &FieldType,
         remote_field_type: &FieldType,
     ) -> Result<Option<T>, Error> {
-        if !field_types_compatible(local_field_type, remote_field_type) {
-            return Ok(None);
+        if field_types_compatible(local_field_type, remote_field_type) {
+            return Self::read_field_with_type(context, remote_field_type).map(Some);
         }
-        Self::read_field_with_type(context, remote_field_type).map(Some)
+        super::scalar_conversion::read_scalar_field::<T, Self>(
+            context,
+            local_field_type,
+            remote_field_type,
+        )
     }
 
     fn write_data(value: &T, context: &mut WriteContext) -> Result<(), Error>;
@@ -890,6 +894,22 @@ where
         } else {
             Ok(Some(C::read_data_with_type(context, remote_field_type)?))
         }
+    }
+
+    #[inline(always)]
+    fn read_compatible(
+        context: &mut ReadContext,
+        local_field_type: &FieldType,
+        remote_field_type: &FieldType,
+    ) -> Result<Option<Option<T>>, Error> {
+        if field_types_compatible(local_field_type, remote_field_type) {
+            return Self::read_field_with_type(context, remote_field_type).map(Some);
+        }
+        super::scalar_conversion::read_scalar_option_field::<T>(
+            context,
+            local_field_type,
+            remote_field_type,
+        )
     }
 
     #[inline(always)]

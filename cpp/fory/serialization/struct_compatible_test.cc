@@ -673,6 +673,14 @@ TEST(SchemaEvolutionTest, ScalarTrackingRefClassifierRejectsMismatch) {
 
   FieldType ref_local_bool(static_cast<uint32_t>(TypeId::BOOL), false, true);
   EXPECT_TRUE(field_types_compatible_top_level(ref_local_bool, remote_bool));
+
+  FieldType fixed_int32(static_cast<uint32_t>(TypeId::INT32), false, false);
+  FieldType varint32(static_cast<uint32_t>(TypeId::VARINT32), false, false);
+  EXPECT_TRUE(field_types_compatible_top_level(fixed_int32, varint32));
+
+  FieldType ref_fixed_int32(static_cast<uint32_t>(TypeId::INT32), false, true);
+  FieldType ref_varint32(static_cast<uint32_t>(TypeId::VARINT32), false, true);
+  EXPECT_FALSE(field_types_compatible_top_level(ref_fixed_int32, ref_varint32));
 }
 
 TEST(SchemaEvolutionTest, ScalarBoolNumber) {

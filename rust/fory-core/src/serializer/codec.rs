@@ -219,11 +219,18 @@ pub(super) fn collection_type_with_fallback_generics(type_id: u32) -> bool {
 
 #[inline(always)]
 pub fn field_types_compatible(local: &FieldType, remote: &FieldType) -> bool {
-    if local.track_ref != remote.track_ref
-        && super::scalar_conversion::is_compatible_scalar_type(local.type_id)
-        && super::scalar_conversion::is_compatible_scalar_type(remote.type_id)
-    {
-        return false;
+    let local_scalar = super::scalar_conversion::is_compatible_scalar_type(local.type_id);
+    let remote_scalar = super::scalar_conversion::is_compatible_scalar_type(remote.type_id);
+    if local_scalar && remote_scalar {
+        if local.track_ref != remote.track_ref {
+            return false;
+        }
+        if (local.track_ref || remote.track_ref) && local.type_id != remote.type_id {
+            return false;
+        }
+        if !local.track_ref && local.type_id != remote.type_id {
+            return false;
+        }
     }
     if local.compatible_fingerprint() == remote.compatible_fingerprint() {
         return true;
@@ -2802,5 +2809,13 @@ mod tests {
         assert!(!field_types_compatible(&bool_value, &ref_bool));
         assert!(!field_types_compatible(&ref_bool, &bool_value));
         assert!(field_types_compatible(&ref_bool, &ref_bool));
+
+        let fixed_i32 = FieldType::new(type_id::INT32, false, vec![]);
+        let var_i32 = FieldType::new(type_id::VARINT32, false, vec![]);
+        assert!(!field_types_compatible(&fixed_i32, &var_i32));
+
+        let ref_fixed_i32 = FieldType::new_with_ref(type_id::INT32, false, true, vec![]);
+        let ref_var_i32 = FieldType::new_with_ref(type_id::VARINT32, false, true, vec![]);
+        assert!(!field_types_compatible(&ref_fixed_i32, &ref_var_i32));
     }
 }

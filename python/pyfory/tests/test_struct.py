@@ -240,6 +240,16 @@ class LocalRefBoolScalar:
 
 
 @dataclass
+class RemoteRefFixedInt32Scalar:
+    value: pyfory.FixedInt32 = pyfory.field(default=0, ref=True)
+
+
+@dataclass
+class LocalRefInt32Scalar:
+    value: pyfory.Int32 = pyfory.field(default=0, ref=True)
+
+
+@dataclass
 class LocalBoolIntScalars:
     flag: bool = False
     count: pyfory.Int32 = 0
@@ -308,9 +318,10 @@ def test_scalar_tracking_ref_rules():
     assert compat_ser_de(RemoteRefBoolScalar, LocalBoolScalar, RemoteRefBoolScalar(True), 739, ref=True) == LocalBoolScalar(False)
     assert compat_ser_de(RemoteBoolScalar, LocalRefBoolScalar, RemoteBoolScalar(True), 740, ref=True) == LocalRefBoolScalar(False)
     assert compat_ser_de(RemoteRefBoolScalar, LocalRefBoolScalar, RemoteRefBoolScalar(True), 741, ref=True) == LocalRefBoolScalar(True)
+    assert compat_ser_de(RemoteRefFixedInt32Scalar, LocalRefInt32Scalar, RemoteRefFixedInt32Scalar(7), 742, ref=True) == LocalRefInt32Scalar(0)
 
 
-def test_same_schema_compatible_scalar_path_is_direct():
+def test_same_schema_scalar_read_is_direct():
     fory = Fory(xlang=True, compatible=True, ref=False)
     fory.register_type(RemoteStringScalar, type_id=736)
     serializer = fory.type_resolver.get_serializer(RemoteStringScalar)

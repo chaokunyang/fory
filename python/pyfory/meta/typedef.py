@@ -861,12 +861,12 @@ def _field_type_assignment(remote_field_type: FieldType, local_field_type: Field
     if top_level:
         from pyfory.serializer import supports_compatible_scalar_conversion
 
-        if (
-            _is_compatible_scalar_type_id(remote_type_id)
-            and _is_compatible_scalar_type_id(local_type_id)
-            and remote_field_type.is_tracking_ref != local_field_type.is_tracking_ref
-        ):
-            return False, False
+        scalar_pair = _is_compatible_scalar_type_id(remote_type_id) and _is_compatible_scalar_type_id(local_type_id)
+        if scalar_pair:
+            if remote_field_type.is_tracking_ref != local_field_type.is_tracking_ref:
+                return False, False
+            if (remote_field_type.is_tracking_ref or local_field_type.is_tracking_ref) and remote_type_id != local_type_id:
+                return False, False
         if (
             not remote_field_type.is_tracking_ref
             and not local_field_type.is_tracking_ref

@@ -296,9 +296,17 @@ inline bool primitive_array_element_type_id(uint32_t array_type_id,
 
 inline bool field_types_compatible_top_level_identity(const FieldType &local,
                                                       const FieldType &remote) {
-  if (local.track_ref != remote.track_ref &&
-      compatible_scalar_field_types(local.type_id, remote.type_id)) {
-    return false;
+  if (compatible_scalar_field_types(local.type_id, remote.type_id)) {
+    if (local.track_ref != remote.track_ref) {
+      return false;
+    }
+    if ((local.track_ref || remote.track_ref) &&
+        local.type_id != remote.type_id) {
+      return false;
+    }
+    if (!local.track_ref && local.type_id != remote.type_id) {
+      return false;
+    }
   }
 
   if (field_types_compatible(local, remote)) {

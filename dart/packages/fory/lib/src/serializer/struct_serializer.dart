@@ -180,11 +180,16 @@ final class StructSerializer extends Serializer<Object?> {
         );
         hasTopLevelListArrayPairs = true;
       }
-      final scalarRefMismatch =
+      final scalarPair =
           isCompatibleScalarType(remoteField.fieldType.typeId) &&
-          isCompatibleScalarType(localField.field.fieldType.typeId) &&
-          remoteField.fieldType.ref != localField.field.fieldType.ref;
-      if (scalarRefMismatch) {
+          isCompatibleScalarType(localField.field.fieldType.typeId);
+      final scalarRefIncompatible =
+          scalarPair &&
+          (remoteField.fieldType.ref != localField.field.fieldType.ref ||
+              ((remoteField.fieldType.ref || localField.field.fieldType.ref) &&
+                  remoteField.fieldType.typeId !=
+                      localField.field.fieldType.typeId));
+      if (scalarRefIncompatible) {
         fields.add(null);
         scalarConversions?.add(null);
         topLevelListArrayPairs?.add(false);

@@ -56,6 +56,10 @@ type scalarInt32 struct {
 	Value int32
 }
 
+type scalarRefInt32 struct {
+	Value int32 `fory:"ref"`
+}
+
 type scalarInt64 struct {
 	Value int64
 }
@@ -369,4 +373,13 @@ func TestCompatibleScalarTrackingRefMismatch(t *testing.T) {
 	assert.Equal(t, 0, ser.fields[0].Meta.FieldIndex)
 	assert.Nil(t, ser.fields[0].Meta.CompatibleScalar)
 	assert.False(t, ser.typeDefDiffers)
+
+	remoteDef.trackRef = true
+	remoteDef.typeSpec = NewSimpleTypeSpec(INT32)
+	ser = newStructSerializerFromTypeDef(reflect.TypeOf(scalarRefInt32{}), "ScalarRefTypeChange", []FieldDef{remoteDef})
+	require.NoError(t, ser.initialize(f.typeResolver))
+	require.Len(t, ser.fields, 1)
+	assert.Equal(t, -1, ser.fields[0].Meta.FieldIndex)
+	assert.Nil(t, ser.fields[0].Meta.CompatibleScalar)
+	assert.True(t, ser.typeDefDiffers)
 }

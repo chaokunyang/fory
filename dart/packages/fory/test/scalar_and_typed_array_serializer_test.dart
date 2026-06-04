@@ -1032,7 +1032,7 @@ void main() {
       );
     });
 
-    test('keeps same-schema compatible scalar reads direct', () {
+    test('keeps same-schema scalar reads direct', () {
       final fory = Fory();
       ScalarAndTypedArraySerializerTestForyModule.register(
         fory,

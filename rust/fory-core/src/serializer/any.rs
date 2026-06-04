@@ -71,11 +71,11 @@ fn is_erased_any_container_type(type_id: TypeId) -> bool {
 #[inline(never)]
 fn unsupported_erased_any_container() -> Error {
     Error::type_error(
-        "Generic containers cannot be used as top-level erased Any payloads via \
-        Box<dyn Any>, Rc<dyn Any>, or Arc<dyn Any + Send + Sync>. This includes Vec<T>, \
-        LinkedList<T>, HashSet<T>, HashMap<K, V>, primitive vector encodings, and other \
-        LIST, MAP, or SET protocol-family containers. Wrap the container in a registered \
-        struct, enum, or union and use that wrapper as the erased payload.",
+        "List-, map-, and set-like containers cannot be used as top-level erased Any \
+        payloads via Box<dyn Any>, Rc<dyn Any>, or Arc<dyn Any + Send + Sync>. This \
+        includes Vec<T>, byte and numeric vectors, LinkedList<T>, HashSet<T>, and \
+        HashMap<K, V>. Wrap the container in a registered struct, enum, or union and \
+        use that wrapper as the erased payload.",
     )
 }
 
@@ -84,9 +84,9 @@ fn unsupported_erased_any_container() -> Error {
 fn erased_any_type_info_error(err: Error) -> Error {
     Error::type_error(format!(
         "{err}. Erased Any payloads require a registered concrete non-container type. \
-        Top-level generic containers such as Vec<T>, LinkedList<T>, HashSet<T>, \
-        HashMap<K, V>, and other LIST, MAP, or SET protocol-family containers are \
-        unsupported; wrap the container in a registered struct, enum, or union."
+        Top-level list-, map-, and set-like containers such as Vec<T>, LinkedList<T>, \
+        HashSet<T>, and HashMap<K, V> are unsupported; wrap the container in a \
+        registered struct, enum, or union."
     ))
 }
 
@@ -197,7 +197,7 @@ impl Serializer for Box<dyn Any> {
 
     fn fory_read_data(_: &mut ReadContext) -> Result<Self, Error> {
         Err(Error::not_allowed(
-            "fory_read_data should not be called directly on polymorphic Rc<dyn Any> trait object",
+            "fory_read_data should not be called directly on polymorphic Box<dyn Any> trait object",
         ))
     }
 
@@ -441,6 +441,7 @@ pub fn read_rc_any(
             Ok(Rc::<dyn Any>::from(boxed))
         }
         RefFlag::RefValue => {
+            let ref_id = context.ref_reader.reserve_ref_id();
             context.inc_depth()?;
             let typeinfo = if read_type_info {
                 context.read_any_type_info()?
@@ -453,7 +454,7 @@ pub fn read_rc_any(
                 .read_polymorphic_data(context, &typeinfo)?;
             context.dec_depth();
             let rc: Rc<dyn Any> = Rc::from(boxed);
-            context.ref_reader.store_rc_ref(rc.clone());
+            context.ref_reader.store_rc_ref_at(ref_id, rc.clone());
             Ok(rc)
         }
     }
@@ -626,6 +627,7 @@ pub fn read_arc_any(
             Ok(Arc::<dyn Any + Send + Sync>::from(boxed))
         }
         RefFlag::RefValue => {
+            let ref_id = context.ref_reader.reserve_ref_id();
             context.inc_depth()?;
             let typeinfo = if read_type_info {
                 context.read_any_type_info()?
@@ -640,7 +642,7 @@ pub fn read_arc_any(
                 .read_polymorphic_data_as_send_sync_any(context, &typeinfo)?;
             context.dec_depth();
             let arc: Arc<dyn Any + Send + Sync> = Arc::from(boxed);
-            context.ref_reader.store_arc_ref(arc.clone());
+            context.ref_reader.store_arc_ref_at(ref_id, arc.clone());
             Ok(arc)
         }
     }

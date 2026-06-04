@@ -132,19 +132,18 @@ let unwrapped = decoded.downcast_ref::<Dog>().unwrap();
 assert_eq!(unwrapped.name, "Buddy");
 ```
 
-`Arc<dyn Any + Send + Sync>` only works for registered concrete types whose
-serializers can read values back into `Box<dyn Any + Send + Sync>`.
-`ForyStruct`, `ForyEnum`, and `ForyUnion` generate this send-sync dynamic reader
-by default unless a field has a known type that is not `Send + Sync`, such as
-`Rc<T>`, `RcWeak<T>`, `RefCell<T>`, or `Cell<T>`. For opaque custom fields, Rust
-checks the final `Self: Send + Sync` bound when compiling the generated reader.
+`Box<dyn Any>`, `Rc<dyn Any>`, and `Arc<dyn Any + Send + Sync>` are supported
+erased `Any` carriers for registered concrete non-container payloads.
+Use `Arc<dyn Any + Send + Sync>` when the erased payload must be shareable
+across threads; the concrete payload type must also satisfy `Send + Sync`.
+Registered structs, enums, and unions that satisfy those bounds can be used as
+the erased payload.
 
-Polymorphic erased `Any` payloads do not directly support nested or generic
-containers as the top-level erased value. This applies to `Box<dyn Any>`,
-`Rc<dyn Any>`, and `Arc<dyn Any + Send + Sync>`. Unsupported top-level payloads
-include `Vec<T>`, primitive vector encodings such as `Vec<u8>`,
-`HashMap<K, V>`, `HashSet<T>`, `LinkedList<T>`, and other `LIST`, `MAP`, or
-`SET` protocol-family containers.
+The unsupported case is a generic container used directly as the top-level
+erased payload. This applies to all erased `Any` carriers: `Box<dyn Any>`,
+`Rc<dyn Any>`, and `Arc<dyn Any + Send + Sync>`. Unsupported direct payloads
+include list-, map-, and set-like containers such as `Vec<T>`, `Vec<u8>`,
+`HashMap<K, V>`, `HashSet<T>`, and `LinkedList<T>`.
 
 If you need to put a container in an erased `Any` payload, wrap it in a
 registered struct, enum, or union and use that wrapper as the erased payload:
@@ -172,10 +171,6 @@ let decoded: Arc<dyn Any + Send + Sync> = fory.deserialize(&bytes)?;
 The wrapper makes the erased payload a concrete registered type while the
 container remains a normal typed field. The same wrapper model is the supported
 path for `Box<dyn Any>` and `Rc<dyn Any>`.
-
-Manual `Serializer` implementations are conservative by default. Override
-`fory_read_data_as_send_sync_any` only when the concrete value read by the
-serializer is `Send + Sync`.
 
 ## Rc/Arc-Based Trait Objects in Structs
 

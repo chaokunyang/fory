@@ -433,11 +433,6 @@ fn main() -> Result<(), Error> {
 }
 ```
 
-Derived Rust serializers support `Arc<dyn Any + Send + Sync>` dynamic reads by
-default for `Send + Sync` types. For local-only nested types that should not use
-that carrier, add `#[fory(send_sync = false)]`; see the
-[Rust polymorphism guide](docs/guide/rust/polymorphism.md).
-
 **C++**
 
 ```cpp

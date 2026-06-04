@@ -554,7 +554,7 @@ impl Error {
 
 #[cold]
 #[inline(never)]
-pub fn unsupported_send_sync_type<T>() -> Error
+pub(crate) fn unsupported_send_sync_type<T>() -> Error
 where
     T: ?Sized,
 {

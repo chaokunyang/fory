@@ -21,7 +21,6 @@ use crate::error::Error;
 use crate::serializer::Serializer;
 use crate::type_id::TypeId;
 use crate::type_id::{is_user_type, ENUM, NAMED_ENUM, NAMED_UNION, TYPED_UNION, UNION, UNKNOWN};
-use std::any::Any;
 
 #[inline(always)]
 pub(crate) fn read_basic_type_info<T: Serializer>(context: &mut ReadContext) -> Result<(), Error> {
@@ -97,10 +96,14 @@ pub fn write_dyn_data_generic<T: Serializer>(
     serializer_fn(any_value, context, has_generics)
 }
 
-#[inline(always)]
-pub fn box_send_sync<T>(value: T) -> Box<dyn Any + Send + Sync>
-where
-    T: Any + Send + Sync,
-{
-    Box::new(value)
+pub(crate) mod send_sync {
+    use std::any::Any;
+
+    #[inline(always)]
+    pub fn box_send_sync<T>(value: T) -> Box<dyn Any + Send + Sync>
+    where
+        T: Any + Send + Sync,
+    {
+        Box::new(value)
+    }
 }

@@ -28,7 +28,6 @@ use crate::types::{Date, Duration, Timestamp};
 use crate::TypeId;
 #[cfg(feature = "chrono")]
 use chrono::{Duration as ChronoDuration, NaiveDate, NaiveDateTime};
-use std::collections::HashSet;
 use std::rc::Rc;
 use std::vec;
 
@@ -820,11 +819,6 @@ impl TypeResolver {
         self.register_internal_serializer::<Vec<isize>>(TypeId::ISIZE_ARRAY)?;
         self.register_internal_serializer::<Vec<i128>>(TypeId::INT128_ARRAY)?;
 
-        // Representative SET/MAP harnesses are still required for non-Any
-        // trait-object serialization that writes an internal protocol-family
-        // type id. Erased Any payloads reject these type ids in serializer::any.
-        self.register_internal_serializer::<HashSet<i32>>(TypeId::SET)?;
-        self.register_internal_serializer::<HashMap<String, i32>>(TypeId::MAP)?;
         Ok(())
     }
 
@@ -903,6 +897,13 @@ impl TypeResolver {
         } else {
             id
         };
+        let supports_compatible_read = matches!(
+            actual_type_id,
+            x if x == TypeId::STRUCT as u32
+                || x == TypeId::COMPATIBLE_STRUCT as u32
+                || x == TypeId::NAMED_STRUCT as u32
+                || x == TypeId::NAMED_COMPATIBLE_STRUCT as u32
+        );
 
         fn write<T2: 'static + Serializer>(
             this: &dyn Any,
@@ -996,8 +997,16 @@ impl TypeResolver {
             write_data_fn: write_data::<T>,
             read_data_fn: read_data::<T>,
             read_data_as_send_sync_any_fn: read_data_as_send_sync_any::<T>,
-            read_compatible_fn: Some(read_compatible::<T>),
-            read_compatible_as_send_sync_any_fn: Some(read_compatible_as_send_sync_any::<T>),
+            read_compatible_fn: if supports_compatible_read {
+                Some(read_compatible::<T>)
+            } else {
+                None
+            },
+            read_compatible_as_send_sync_any_fn: if supports_compatible_read {
+                Some(read_compatible_as_send_sync_any::<T>)
+            } else {
+                None
+            },
             to_serializer: to_serializer::<T>,
             build_type_infos: build_type_infos::<T>,
         };

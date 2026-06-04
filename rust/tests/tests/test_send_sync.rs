@@ -18,7 +18,10 @@
 #![allow(dead_code)]
 
 use fory_core::fory::Fory;
-use fory_core::{Config, ForyDefault, ReadContext, Serializer, TypeResolver};
+use fory_core::{
+    read_data, write_data, Config, Error, ForyDefault, ReadContext, Serializer, TypeResolver,
+    WriteContext,
+};
 use fory_derive::{ForyEnum, ForyStruct, ForyUnion};
 use std::{
     any::Any,
@@ -109,6 +112,45 @@ fn test_derived_send_sync_arc_any_read() {
 }
 
 #[test]
+fn compatible_struct_arc_any_read() {
+    #[derive(ForyStruct, Clone, Debug, PartialEq)]
+    struct ValueV1 {
+        #[fory(id = 0)]
+        name: String,
+        #[fory(id = 1)]
+        count: i32,
+    }
+
+    #[derive(ForyStruct, Clone, Debug, PartialEq)]
+    struct ValueV2 {
+        #[fory(id = 0)]
+        name: String,
+        #[fory(id = 1)]
+        count: i32,
+        #[fory(id = 2)]
+        label: String,
+    }
+
+    let mut writer = Fory::builder().xlang(false).compatible(true).build();
+    writer.register::<ValueV1>(909).unwrap();
+
+    let mut reader = Fory::builder().xlang(false).compatible(true).build();
+    reader.register::<ValueV2>(909).unwrap();
+
+    let value: Arc<dyn Any + Send + Sync> = Arc::new(ValueV1 {
+        name: "compatible".to_string(),
+        count: 11,
+    });
+    let bytes = writer.serialize(&value).unwrap();
+    let decoded: Arc<dyn Any + Send + Sync> = reader.deserialize(&bytes).unwrap();
+    let value = decoded.downcast_ref::<ValueV2>().unwrap();
+
+    assert_eq!(value.name, "compatible");
+    assert_eq!(value.count, 11);
+    assert_eq!(value.label, String::default());
+}
+
+#[test]
 fn wrapped_container_arc_any_read() {
     #[derive(ForyStruct, Clone, Debug, PartialEq)]
     struct IntList {
@@ -160,6 +202,68 @@ fn test_auto_send_sync_struct() {
 #[test]
 fn non_send_sync_carrier_reader_unsupported() {
     assert_send_sync_reader_unsupported::<Rc<dyn Any>>();
+}
+
+#[test]
+fn manual_serializer_arc_any_read() {
+    #[derive(Clone, Debug, PartialEq)]
+    struct ManualValue {
+        id: i32,
+        name: String,
+    }
+
+    impl ForyDefault for ManualValue {
+        fn fory_default() -> Self {
+            Self {
+                id: 0,
+                name: String::new(),
+            }
+        }
+    }
+
+    impl Serializer for ManualValue {
+        fn fory_write_data(&self, context: &mut WriteContext) -> Result<(), Error> {
+            write_data(&self.id, context)?;
+            write_data(&self.name, context)
+        }
+
+        fn fory_read_data(context: &mut ReadContext) -> Result<Self, Error> {
+            Ok(Self {
+                id: read_data(context)?,
+                name: read_data(context)?,
+            })
+        }
+
+        fn fory_read_data_as_send_sync_any(
+            context: &mut ReadContext,
+        ) -> Result<Box<dyn Any + Send + Sync>, Error> {
+            Ok(fory_core::serializer::box_send_sync(Self::fory_read_data(
+                context,
+            )?))
+        }
+
+        fn fory_type_id_dyn(
+            &self,
+            type_resolver: &TypeResolver,
+        ) -> Result<fory_core::TypeId, Error> {
+            Self::fory_get_type_id(type_resolver)
+        }
+
+        fn as_any(&self) -> &dyn Any {
+            self
+        }
+    }
+
+    let mut fory = Fory::builder().xlang(false).build();
+    fory.register_serializer::<ManualValue>(910).unwrap();
+
+    assert_arc_any_roundtrip(
+        &fory,
+        ManualValue {
+            id: 7,
+            name: "manual".to_string(),
+        },
+    );
 }
 
 #[test]
@@ -225,6 +329,37 @@ fn test_send_sync_enum() {
 
     let mut fory = Fory::builder().xlang(false).build();
     fory.register::<Status>(906).unwrap();
+
+    assert_arc_any_roundtrip(&fory, Status::Inactive);
+}
+
+#[test]
+fn compatible_union_arc_any_read() {
+    #[derive(ForyUnion, Clone, Debug, PartialEq)]
+    enum Event {
+        #[fory(unknown)]
+        Unknown(fory_core::UnknownCase),
+        #[fory(id = 0, default)]
+        Value(String),
+    }
+
+    let mut fory = Fory::builder().xlang(false).compatible(true).build();
+    fory.register_union::<Event>(907).unwrap();
+
+    assert_arc_any_roundtrip(&fory, Event::Value("compatible".to_string()));
+}
+
+#[test]
+fn compatible_enum_arc_any_read() {
+    #[derive(ForyEnum, Clone, Debug, Default, PartialEq)]
+    enum Status {
+        #[default]
+        Active,
+        Inactive,
+    }
+
+    let mut fory = Fory::builder().xlang(false).compatible(true).build();
+    fory.register::<Status>(908).unwrap();
 
     assert_arc_any_roundtrip(&fory, Status::Inactive);
 }

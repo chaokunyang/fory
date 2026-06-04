@@ -16,7 +16,7 @@
 // under the License.
 
 use fory_core::fory::Fory;
-use fory_derive::ForyStruct;
+use fory_derive::{ForyEnum, ForyStruct, ForyUnion};
 use std::any::Any;
 use std::collections::{HashMap, HashSet, LinkedList};
 use std::rc::Rc;
@@ -25,7 +25,9 @@ use std::vec;
 
 fn assert_erased_container_error(message: String) {
     assert!(
-        message.contains("top-level erased Any") || message.contains("Erased Any payloads require"),
+        message.contains("top-level erased Any")
+            || message.contains("Erased Any payloads require")
+            || message.contains("not found in type_info registry"),
         "unexpected error: {message}"
     );
 }
@@ -64,6 +66,61 @@ fn assert_arc_any_unsupported<T: 'static + Send + Sync>(fory: &Fory, value: T) {
         }
         Err(err) => assert_erased_container_error(err.to_string()),
     }
+}
+
+fn assert_box_any_values_unsupported(fory: &Fory, values: Vec<Box<dyn Any>>) {
+    let result = fory
+        .serialize(&values)
+        .and_then(|bytes| fory.deserialize::<Vec<Box<dyn Any>>>(&bytes).map(|_| ()));
+    let err = result.expect_err("expected Box<dyn Any> container values to fail");
+    assert_erased_container_error(err.to_string());
+}
+
+fn assert_rc_any_values_unsupported(fory: &Fory, values: Vec<Rc<dyn Any>>) {
+    let result = fory
+        .serialize(&values)
+        .and_then(|bytes| fory.deserialize::<Vec<Rc<dyn Any>>>(&bytes).map(|_| ()));
+    let err = result.expect_err("expected Rc<dyn Any> container values to fail");
+    assert_erased_container_error(err.to_string());
+}
+
+fn assert_arc_any_values_unsupported(fory: &Fory, values: Vec<Arc<dyn Any + Send + Sync>>) {
+    let result = fory.serialize(&values).and_then(|bytes| {
+        fory.deserialize::<Vec<Arc<dyn Any + Send + Sync>>>(&bytes)
+            .map(|_| ())
+    });
+    let err = result.expect_err("expected Arc<dyn Any> container values to fail");
+    assert_erased_container_error(err.to_string());
+}
+
+fn assert_box_any_map_unsupported(fory: &Fory, values: HashMap<String, Box<dyn Any>>) {
+    let result = fory.serialize(&values).and_then(|bytes| {
+        fory.deserialize::<HashMap<String, Box<dyn Any>>>(&bytes)
+            .map(|_| ())
+    });
+    let err = result.expect_err("expected Box<dyn Any> map values to fail");
+    assert_erased_container_error(err.to_string());
+}
+
+fn assert_rc_any_map_unsupported(fory: &Fory, values: HashMap<String, Rc<dyn Any>>) {
+    let result = fory.serialize(&values).and_then(|bytes| {
+        fory.deserialize::<HashMap<String, Rc<dyn Any>>>(&bytes)
+            .map(|_| ())
+    });
+    let err = result.expect_err("expected Rc<dyn Any> map values to fail");
+    assert_erased_container_error(err.to_string());
+}
+
+fn assert_arc_any_map_unsupported(
+    fory: &Fory,
+    values: HashMap<String, Arc<dyn Any + Send + Sync>>,
+) {
+    let result = fory.serialize(&values).and_then(|bytes| {
+        fory.deserialize::<HashMap<String, Arc<dyn Any + Send + Sync>>>(&bytes)
+            .map(|_| ())
+    });
+    let err = result.expect_err("expected Arc<dyn Any> map values to fail");
+    assert_erased_container_error(err.to_string());
 }
 
 #[test]
@@ -247,6 +304,18 @@ struct Container {
     items: Vec<String>,
 }
 
+#[derive(ForyStruct, PartialEq, Debug)]
+struct RcRefPayload {
+    name: String,
+    shared: Rc<String>,
+}
+
+#[derive(ForyStruct, PartialEq, Debug)]
+struct ArcRefPayload {
+    name: String,
+    shared: Arc<String>,
+}
+
 #[test]
 fn wrapped_container_box_any() {
     let mut fory = Fory::builder().xlang(false).build();
@@ -265,6 +334,48 @@ fn wrapped_container_box_any() {
 }
 
 #[test]
+fn rc_any_refvalue_keeps_outer_ref() {
+    let mut fory = Fory::builder().xlang(false).build();
+    fory.register_by_name::<RcRefPayload>("", "RcRefPayload")
+        .unwrap();
+
+    let payload: Rc<dyn Any> = Rc::new(RcRefPayload {
+        name: "outer".to_string(),
+        shared: Rc::new("nested".to_string()),
+    });
+    let values = vec![payload.clone(), payload.clone()];
+
+    let bytes = fory.serialize(&values).unwrap();
+    let decoded: Vec<Rc<dyn Any>> = fory.deserialize(&bytes).unwrap();
+
+    assert!(Rc::ptr_eq(&decoded[0], &decoded[1]));
+    let payload = decoded[0].downcast_ref::<RcRefPayload>().unwrap();
+    assert_eq!(payload.name, "outer");
+    assert_eq!(payload.shared.as_str(), "nested");
+}
+
+#[test]
+fn arc_any_refvalue_keeps_outer_ref() {
+    let mut fory = Fory::builder().xlang(false).build();
+    fory.register_by_name::<ArcRefPayload>("", "ArcRefPayload")
+        .unwrap();
+
+    let payload: Arc<dyn Any + Send + Sync> = Arc::new(ArcRefPayload {
+        name: "outer".to_string(),
+        shared: Arc::new("nested".to_string()),
+    });
+    let values = vec![payload.clone(), payload.clone()];
+
+    let bytes = fory.serialize(&values).unwrap();
+    let decoded: Vec<Arc<dyn Any + Send + Sync>> = fory.deserialize(&bytes).unwrap();
+
+    assert!(Arc::ptr_eq(&decoded[0], &decoded[1]));
+    let payload = decoded[0].downcast_ref::<ArcRefPayload>().unwrap();
+    assert_eq!(payload.name, "outer");
+    assert_eq!(payload.shared.as_str(), "nested");
+}
+
+#[test]
 fn generic_containers_rejected_in_any() {
     let fory = Fory::builder().xlang(false).build();
 
@@ -277,6 +388,110 @@ fn generic_containers_rejected_in_any() {
     assert_arc_any_unsupported(
         &fory,
         HashMap::from([("one".to_string(), 1_i32), ("two".to_string(), 2)]),
+    );
+}
+
+#[test]
+fn any_collection_rejects_containers() {
+    let fory = Fory::builder().xlang(false).build();
+
+    assert_box_any_values_unsupported(&fory, vec![Box::new(vec![1_i32, 2, 3]) as Box<dyn Any>]);
+    assert_box_any_values_unsupported(
+        &fory,
+        vec![
+            Box::new(vec![1_i32, 2, 3]) as Box<dyn Any>,
+            Box::new(vec![4_i32, 5, 6]) as Box<dyn Any>,
+        ],
+    );
+
+    assert_rc_any_values_unsupported(&fory, vec![Rc::new(vec![1_i32, 2, 3]) as Rc<dyn Any>]);
+    assert_rc_any_values_unsupported(
+        &fory,
+        vec![
+            Rc::new(vec![1_i32, 2, 3]) as Rc<dyn Any>,
+            Rc::new(vec![4_i32, 5, 6]) as Rc<dyn Any>,
+        ],
+    );
+
+    assert_arc_any_values_unsupported(
+        &fory,
+        vec![Arc::new(vec![1_i32, 2, 3]) as Arc<dyn Any + Send + Sync>],
+    );
+    assert_arc_any_values_unsupported(
+        &fory,
+        vec![
+            Arc::new(vec![1_i32, 2, 3]) as Arc<dyn Any + Send + Sync>,
+            Arc::new(vec![4_i32, 5, 6]) as Arc<dyn Any + Send + Sync>,
+        ],
+    );
+}
+
+#[test]
+fn any_map_values_reject_containers() {
+    let fory = Fory::builder().xlang(false).build();
+
+    assert_box_any_map_unsupported(
+        &fory,
+        HashMap::from([(
+            "list".to_string(),
+            Box::new(vec![1_i32, 2, 3]) as Box<dyn Any>,
+        )]),
+    );
+    assert_rc_any_map_unsupported(
+        &fory,
+        HashMap::from([(
+            "map".to_string(),
+            Rc::new(HashMap::from([("one".to_string(), 1_i32)])) as Rc<dyn Any>,
+        )]),
+    );
+    assert_arc_any_map_unsupported(
+        &fory,
+        HashMap::from([(
+            "list".to_string(),
+            Arc::new(vec![1_i32, 2, 3]) as Arc<dyn Any + Send + Sync>,
+        )]),
+    );
+}
+
+#[test]
+fn compatible_enum_box_any_read() {
+    #[derive(ForyEnum, Debug, Default, PartialEq)]
+    enum Status {
+        #[default]
+        Active,
+        Inactive,
+    }
+
+    let mut fory = Fory::builder().xlang(false).compatible(true).build();
+    fory.register::<Status>(710).unwrap();
+
+    let value: Box<dyn Any> = Box::new(Status::Inactive);
+    let bytes = fory.serialize(&value).unwrap();
+    let decoded: Box<dyn Any> = fory.deserialize(&bytes).unwrap();
+
+    assert_eq!(decoded.downcast_ref::<Status>().unwrap(), &Status::Inactive);
+}
+
+#[test]
+fn compatible_union_rc_any_read() {
+    #[derive(ForyUnion, Debug, PartialEq)]
+    enum Event {
+        #[fory(unknown)]
+        Unknown(fory_core::UnknownCase),
+        #[fory(id = 0, default)]
+        Value(String),
+    }
+
+    let mut fory = Fory::builder().xlang(false).compatible(true).build();
+    fory.register_union::<Event>(711).unwrap();
+
+    let value: Rc<dyn Any> = Rc::new(Event::Value("compatible".to_string()));
+    let bytes = fory.serialize(&value).unwrap();
+    let decoded: Rc<dyn Any> = fory.deserialize(&bytes).unwrap();
+
+    assert_eq!(
+        decoded.downcast_ref::<Event>().unwrap(),
+        &Event::Value("compatible".to_string())
     );
 }
 
@@ -423,9 +638,8 @@ struct StructB {
 
 /// Test that different Vec<T> types in Box<dyn Any> return a clear error.
 ///
-/// This tests for a known limitation of the xlang serialization protocol:
-/// different generic container types (Vec<StructA>, Vec<StructB>) share the same
-/// type ID (LIST=21), so they cannot be distinguished during polymorphic deserialization.
+/// Different generic container instantiations share broad container metadata, so
+/// they cannot be used as unambiguous top-level erased Any payloads.
 ///
 /// Previously this caused non-deterministic failures. Now it returns a clear error message.
 #[test]

@@ -143,11 +143,10 @@
 //! **Custom Types:**
 //! - Any type that implements `Serializer` (for `Fory`) or `Row` (for `ForyRow`)
 //!
-//! Derived serializers generate send-sync dynamic readers by default unless the
-//! macro sees a known field type that is not `Send + Sync`, such as `Rc<T>` or
-//! `RefCell<T>`. Opaque custom fields are allowed through; Rust validates the
-//! final `Self: Send + Sync` bound when the generated reader boxes the value for
-//! `Arc<dyn Any + Send + Sync>`.
+//! Derived structs, enums, and unions can be used behind
+//! `Arc<dyn Any + Send + Sync>` when the concrete type satisfies `Send + Sync`.
+//! Known non-`Send + Sync` field types such as `Rc<T>` and `RefCell<T>` are not
+//! eligible for that carrier.
 //!
 //! ## Usage with Fory
 //!

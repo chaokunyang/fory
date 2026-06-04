@@ -77,11 +77,11 @@ impl ForyDefault for CustomType {
 >
 > **Tip**: If your type supports `#[derive(ForyStruct)]`, you can use `#[fory(generate_default)]` to automatically generate both `ForyDefault` and `Default` implementations.
 
-## Send-Sync Dynamic Reads
+## Manual Serializers and Arc Any
 
-Manual serializers are conservative by default. If the concrete type is
-`Send + Sync` and should support `Arc<dyn Any + Send + Sync>` dynamic reads or
-`UnknownCase` payload preservation, override the send-sync Any reader:
+If a manually registered serializer needs its type to round-trip behind
+`Arc<dyn Any + Send + Sync>` or preserve `UnknownCase` payloads, implement the
+send-sync Any reader and return the concrete value as a boxed `Any` value:
 
 ```rust
 impl Serializer for CustomType {

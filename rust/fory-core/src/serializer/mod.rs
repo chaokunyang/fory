@@ -51,4 +51,4 @@ mod core;
 mod decimal;
 pub use any::{read_box_any, write_box_any};
 pub use core::{read_data, write_data, ForyDefault, Serializer, StructSerializer};
-pub use util::box_send_sync;
+pub use util::send_sync::box_send_sync;

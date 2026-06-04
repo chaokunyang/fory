@@ -251,19 +251,17 @@ The examples in this section use native mode because Rust trait objects and `dyn
 - `Box<dyn Any>`/`Rc<dyn Any>`/`Arc<dyn Any + Send + Sync>` - Any trait type objects
 - `Vec<Box<dyn Trait>>`, `HashMap<K, Box<dyn Trait>>` - Collections of trait objects
 
-`Arc<dyn Any + Send + Sync>` requires the registered concrete type to support
-send-sync dynamic reads. `ForyStruct`, `ForyEnum`, and `ForyUnion` generate that
-support by default unless a field has a known type that is not `Send + Sync`,
-such as `Rc<T>`, `RcWeak<T>`, `RefCell<T>`, or `Cell<T>`. For opaque custom
-fields, Rust checks the final `Self: Send + Sync` bound when compiling the
-generated reader.
-Manual `Serializer` implementations are conservative by default; override
-`fory_read_data_as_send_sync_any` when the concrete value is `Send + Sync`.
-Direct generic containers such as `Vec<T>`, `HashMap<K, V>`, `HashSet<T>`, and
-`LinkedList<T>` are not supported as top-level erased `Any` payloads behind
-`Box<dyn Any>`, `Rc<dyn Any>`, or `Arc<dyn Any + Send + Sync>`. This also
-includes primitive vector encodings such as `Vec<u8>`. Wrap the container in a
-registered derived type when it needs to travel behind an erased `Any` carrier.
+`Box<dyn Any>`, `Rc<dyn Any>`, and `Arc<dyn Any + Send + Sync>` are supported
+erased `Any` carriers for registered concrete non-container payloads.
+Use `Arc<dyn Any + Send + Sync>` when the erased payload must be shareable
+across threads; the concrete payload type must also satisfy `Send + Sync`.
+Registered structs, enums, and unions that satisfy those bounds can be used as
+the erased payload.
+Generic containers such as `Vec<T>`, `HashMap<K, V>`, `HashSet<T>`, and
+`LinkedList<T>` are not supported directly as top-level erased `Any` payloads
+behind any of those carriers. This also includes primitive vector encodings such
+as `Vec<u8>`. Wrap the container in a registered derived type when it needs to
+travel behind an erased `Any` carrier.
 
 **Basic Trait Object Serialization Example:**
 

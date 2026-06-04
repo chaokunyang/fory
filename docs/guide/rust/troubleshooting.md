@@ -58,43 +58,6 @@ let fory = Fory::builder()
     .build();
 ```
 
-### Nested Struct or Union Is Not Send + Sync
-
-**Error**: A derived outer struct or union fails to compile with a
-`Send + Sync` bound error after adding a nested custom field.
-
-**Cause**: Fory derives send-sync dynamic readers by default for opaque custom
-field types and lets the Rust compiler validate the final `Self: Send + Sync`
-bound. The derive macro can automatically detect known field types that are not
-`Send + Sync` inside the type it is deriving, such as `Rc<T>`, but it does not
-inspect fields inside a different custom type.
-
-If an inner type contains a field whose type is not `Send + Sync`, the inner
-type can usually be left alone because the derive macro sees that field
-directly. The outer type that stores the inner custom type must opt out
-explicitly when it is not intended for `Arc<dyn Any + Send + Sync>` dynamic
-reads or `UnknownCase` payload preservation:
-
-```rust
-use fory::ForyStruct;
-use std::rc::Rc;
-
-#[derive(ForyStruct)]
-struct LocalNode {
-    parent: Rc<String>,
-}
-
-#[derive(ForyStruct)]
-#[fory(send_sync = false)]
-struct LocalEnvelope {
-    node: LocalNode,
-}
-```
-
-Apply the same rule to a `ForyUnion` enum when one of its payload variants uses a
-nested custom type that is not `Send + Sync`: put `#[fory(send_sync = false)]` on
-the outer union enum.
-
 ## Debugging Techniques
 
 ### Enable Panic on Error for Backtraces

@@ -189,52 +189,6 @@ fn test_nested_custom_default() {
 }
 
 #[test]
-fn test_send_sync_opt_out_struct() {
-    #[derive(ForyStruct)]
-    #[fory(send_sync = false)]
-    struct Value {
-        name: String,
-    }
-
-    assert_send_sync_reader_unsupported::<Value>();
-}
-
-#[test]
-fn test_nested_custom_opt_out() {
-    #[derive(ForyStruct)]
-    struct Leaf {
-        name: Rc<String>,
-    }
-
-    #[derive(ForyStruct)]
-    #[fory(send_sync = false)]
-    struct Value {
-        leaf: Leaf,
-    }
-
-    assert_send_sync_reader_unsupported::<Value>();
-}
-
-#[test]
-fn test_send_sync_force_struct() {
-    #[derive(ForyStruct, Clone, Debug, PartialEq)]
-    #[fory(send_sync)]
-    struct Value {
-        name: String,
-    }
-
-    let mut fory = Fory::builder().xlang(false).build();
-    fory.register::<Value>(904).unwrap();
-
-    assert_arc_any_roundtrip(
-        &fory,
-        Value {
-            name: "forced".to_string(),
-        },
-    );
-}
-
-#[test]
 fn test_known_non_send_sync_struct() {
     #[derive(ForyStruct)]
     struct Value {
@@ -242,20 +196,6 @@ fn test_known_non_send_sync_struct() {
     }
 
     assert_send_sync_reader_unsupported::<Value>();
-}
-
-#[test]
-fn test_send_sync_opt_out_union() {
-    #[derive(ForyUnion)]
-    #[fory(send_sync = false)]
-    enum Event {
-        #[fory(unknown)]
-        Unknown(fory_core::UnknownCase),
-        #[fory(id = 0, default)]
-        Value(String),
-    }
-
-    assert_send_sync_reader_unsupported::<Event>();
 }
 
 #[test]
@@ -277,7 +217,6 @@ fn test_send_sync_union() {
 #[test]
 fn test_send_sync_enum() {
     #[derive(ForyEnum, Clone, Debug, Default, PartialEq)]
-    #[fory(send_sync = true)]
     enum Status {
         #[default]
         Active,

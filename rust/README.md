@@ -255,12 +255,10 @@ The examples in this section use native mode because Rust trait objects and `dyn
 send-sync dynamic reads. `ForyStruct`, `ForyEnum`, and `ForyUnion` generate that
 support by default unless a field has a known type that is not `Send + Sync`,
 such as `Rc<T>`, `RcWeak<T>`, `RefCell<T>`, or `Cell<T>`. For opaque custom
-fields, the generated reader is emitted and Rust checks the final
-`Self: Send + Sync` bound. If a nested custom field makes that bound fail to
-compile and the type is not intended for `Arc<dyn Any + Send + Sync>`, mark it
-with `#[fory(send_sync = false)]`. Manual `Serializer` implementations are
-conservative by default; override `fory_read_data_as_send_sync_any` when the
-concrete value is `Send + Sync`.
+fields, Rust checks the final `Self: Send + Sync` bound when compiling the
+generated reader.
+Manual `Serializer` implementations are conservative by default; override
+`fory_read_data_as_send_sync_any` when the concrete value is `Send + Sync`.
 Direct generic containers such as `Vec<T>`, `HashMap<K, V>`, `HashSet<T>`, and
 `LinkedList<T>` are not supported as top-level erased `Any` payloads behind
 `Box<dyn Any>`, `Rc<dyn Any>`, or `Arc<dyn Any + Send + Sync>`. This also

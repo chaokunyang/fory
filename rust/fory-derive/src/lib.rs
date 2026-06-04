@@ -111,11 +111,6 @@
 //!   `fory_core::serializer::struct_`.
 //! - **`#[fory(evolving = false)]`**: Disables compatible struct type IDs for the annotated
 //!   struct, forcing STRUCT/NAMED_STRUCT even when compatible mode is enabled.
-//! - **`#[fory(send_sync)]` / `#[fory(send_sync = true)]`**: Forces generation of
-//!   dynamic readers for `Arc<dyn Any + Send + Sync>`.
-//! - **`#[fory(send_sync = false)]`**: Disables dynamic send-sync readers. Use this
-//!   when a type is not intended for `Arc<dyn Any + Send + Sync>` and has nested
-//!   custom fields that are not `Send + Sync`.
 //! - **`#[fory(skip)]`**: Marks an individual field (or enum variant) to be ignored by the
 //!   generated serializer, retaining compatibility with previous releases.
 //! - **`#[fory(generate_default)]`**: Enables the macro to generate `Default` implementation.
@@ -152,9 +147,7 @@
 //! macro sees a known field type that is not `Send + Sync`, such as `Rc<T>` or
 //! `RefCell<T>`. Opaque custom fields are allowed through; Rust validates the
 //! final `Self: Send + Sync` bound when the generated reader boxes the value for
-//! `Arc<dyn Any + Send + Sync>`. If a nested custom type makes that bound fail
-//! and the outer type is not meant to be used through `Arc<dyn Any + Send + Sync>`,
-//! mark the outer type with `#[fory(send_sync = false)]`.
+//! `Arc<dyn Any + Send + Sync>`.
 //!
 //! ## Usage with Fory
 //!
@@ -291,7 +284,6 @@ pub(crate) struct ForyAttrs {
     pub debug_enabled: bool,
     pub generate_default: bool,
     pub evolving: Option<bool>,
-    pub send_sync: Option<bool>,
 }
 
 /// Parse fory attributes and return ForyAttrs
@@ -299,7 +291,6 @@ fn parse_fory_attrs(attrs: &[Attribute]) -> syn::Result<ForyAttrs> {
     let mut debug_flag: Option<bool> = None;
     let mut generate_default_flag: Option<bool> = None;
     let mut evolving_flag: Option<bool> = None;
-    let mut send_sync_flag: Option<bool> = None;
 
     for attr in attrs {
         if attr.path().is_ident("fory") {
@@ -355,23 +346,8 @@ fn parse_fory_attrs(attrs: &[Attribute]) -> syn::Result<ForyAttrs> {
                         Some(_) => evolving_flag,
                         None => Some(value),
                     };
-                } else if meta.path.is_ident("send_sync") {
-                    let value = if meta.input.is_empty() {
-                        true
-                    } else {
-                        let lit: LitBool = meta.value()?.parse()?;
-                        lit.value
-                    };
-                    send_sync_flag = match send_sync_flag {
-                        Some(existing) if existing != value => {
-                            return Err(syn::Error::new(
-                                meta.path.span(),
-                                "conflicting `send_sync` attribute values",
-                            ));
-                        }
-                        Some(_) => send_sync_flag,
-                        None => Some(value),
-                    };
+                } else {
+                    return Err(meta.error("unsupported type-level fory attribute"));
                 }
                 Ok(())
             })?;
@@ -382,6 +358,5 @@ fn parse_fory_attrs(attrs: &[Attribute]) -> syn::Result<ForyAttrs> {
         debug_enabled: debug_flag.unwrap_or(false),
         generate_default: generate_default_flag.unwrap_or(false),
         evolving: evolving_flag,
-        send_sync: send_sync_flag,
     })
 }

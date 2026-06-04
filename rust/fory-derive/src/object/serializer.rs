@@ -52,7 +52,7 @@ pub fn derive_serializer(ast: &syn::DeriveInput, attrs: ForyAttrs) -> TokenStrea
     } else {
         quote! {}
     };
-    let send_sync_tokens = generate_send_sync_tokens(ast, attrs.send_sync);
+    let send_sync_tokens = generate_send_sync_tokens(ast);
     let serializer_send_sync_ts = send_sync_tokens.serializer.clone();
 
     // StructSerializer
@@ -268,11 +268,8 @@ struct SendSyncTokens {
     struct_read_compatible: proc_macro2::TokenStream,
 }
 
-fn generate_send_sync_tokens(
-    ast: &syn::DeriveInput,
-    send_sync_attr: Option<bool>,
-) -> SendSyncTokens {
-    if !derive_type_is_send_sync(ast, send_sync_attr) {
+fn generate_send_sync_tokens(ast: &syn::DeriveInput) -> SendSyncTokens {
+    if !derive_type_is_send_sync(ast) {
         return SendSyncTokens {
             serializer: quote! {},
             struct_read_compatible: quote! {},
@@ -309,17 +306,14 @@ fn generate_send_sync_tokens(
     }
 }
 
-fn derive_type_is_send_sync(ast: &syn::DeriveInput, send_sync_attr: Option<bool>) -> bool {
+fn derive_type_is_send_sync(ast: &syn::DeriveInput) -> bool {
     use crate::object::util::{
         all_type_params_send_sync, type_is_send_sync, type_param_send_sync_bounds,
     };
 
-    if let Some(send_sync) = send_sync_attr {
-        return send_sync;
-    }
-    // This is a syntactic filter for generating the send-sync reader. The
-    // generated reader still boxes `Self`, so Rust enforces the final
-    // `Send + Sync` invariant for nested user-defined field types.
+    // This syntactic filter rejects field types that are known not to satisfy
+    // `Send + Sync`. Opaque custom field types are allowed through, and Rust
+    // validates the final `Self: Send + Sync` bound when compiling the reader.
     if !all_type_params_send_sync(&ast.generics) {
         return false;
     }

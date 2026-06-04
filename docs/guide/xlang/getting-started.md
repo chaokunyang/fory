@@ -259,7 +259,7 @@ struct Person {
 
 let mut fory = Fory::builder().xlang(true).build();
 fory
-    .register_by_name::<Person>("example", "Person")
+    .register_by_name::<Person>("example.Person")
     .expect("register Person");
 ```
 

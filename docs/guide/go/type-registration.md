@@ -223,7 +223,7 @@ struct User {
 }
 
 let mut fory = Fory::default();
-fory.register_by_name::<User>("example", "User")?;
+fory.register_by_name::<User>("example.User")?;
 ```
 
 ## Best Practices

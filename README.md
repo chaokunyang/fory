@@ -421,7 +421,7 @@ struct Person {
 
 fn main() -> Result<(), Error> {
     let mut fory = Fory::builder().xlang(true).build();
-    fory.register_by_name::<Person>("example", "Person")?;
+    fory.register_by_name::<Person>("example.Person")?;
 
     let bytes = fory.serialize(&Person {
         name: "Alice".to_string(),
@@ -525,8 +525,7 @@ void main() {
   PersonFory.register(
     fory,
     Person,
-    namespace: 'example',
-    typeName: 'Person',
+    typeName: 'example.Person',
   );
 
   final bytes = fory.serialize(Person()

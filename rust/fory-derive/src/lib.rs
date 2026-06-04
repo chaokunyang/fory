@@ -165,7 +165,7 @@
 //!
 //! fn main() -> Result<(), Error> {
 //!     let mut fory = Fory::builder().xlang(true).build();
-//!     fory.register_by_name::<MyData>("example", "MyData")?;
+//!     fory.register_by_name::<MyData>("example.MyData")?;
 //!     
 //!     let data = MyData {
 //!         value: 42,

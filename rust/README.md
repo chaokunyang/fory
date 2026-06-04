@@ -112,8 +112,8 @@ struct Address {
 }
 
 let mut fory = Fory::builder().xlang(true).build();
-fory.register_by_name::<Address>("example", "Address").unwrap();
-fory.register_by_name::<Person>("example", "Person").unwrap();
+fory.register_by_name::<Address>("example.Address").unwrap();
+fory.register_by_name::<Person>("example.Person").unwrap();
 
 let person = Person {
     name: "John Doe".to_string(),
@@ -359,10 +359,10 @@ struct PersonV2 {
 }
 
 let mut fory1 = Fory::builder().xlang(true).compatible(true).build();
-fory1.register_by_name::<PersonV1>("example", "Person").unwrap();
+fory1.register_by_name::<PersonV1>("example.Person").unwrap();
 
 let mut fory2 = Fory::builder().xlang(true).compatible(true).build();
-fory2.register_by_name::<PersonV2>("example", "Person").unwrap();
+fory2.register_by_name::<PersonV2>("example.Person").unwrap();
 
 let person_v1 = PersonV1 {
     name: "Alice".to_string(),
@@ -626,7 +626,7 @@ let mut fory = Fory::builder().xlang(true).build();
 fory.register::<MyStruct>(100)?;
 
 // Or use name-based registration
-fory.register_by_name::<MyStruct>("com.example", "MyStruct")?;
+fory.register_by_name::<MyStruct>("com.example.MyStruct")?;
 ```
 
 See [xlang_type_mapping.md](https://fory.apache.org/docs/specification/xlang_type_mapping) for type mapping across languages.

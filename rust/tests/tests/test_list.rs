@@ -117,7 +117,7 @@ struct CollectionStruct {
 #[test]
 fn test_struct_with_collections() {
     let mut fory = Fory::builder().xlang(false).build();
-    fory.register_by_name::<CollectionStruct>("", "CollectionStruct")
+    fory.register_by_name::<CollectionStruct>("CollectionStruct")
         .unwrap();
 
     let mut deque = VecDeque::new();

@@ -244,7 +244,7 @@ fn test_any_registered_by_name() {
     }
 
     let mut fory = Fory::builder().xlang(false).build();
-    fory.register_by_name::<Person>("test", "Person").unwrap();
+    fory.register_by_name::<Person>("test.Person").unwrap();
 
     let person = Person {
         name: "Alice".to_string(),
@@ -271,7 +271,7 @@ fn test_mixed_any_types() {
     }
 
     let mut fory = Fory::builder().xlang(false).build();
-    fory.register_by_name::<Item>("", "Item").unwrap();
+    fory.register_by_name::<Item>("Item").unwrap();
 
     let item = Item {
         id: 123,
@@ -319,7 +319,7 @@ struct ArcRefPayload {
 #[test]
 fn wrapped_container_box_any() {
     let mut fory = Fory::builder().xlang(false).build();
-    fory.register_by_name::<Container>("", "Container").unwrap();
+    fory.register_by_name::<Container>("Container").unwrap();
 
     let value: Box<dyn Any> = Box::new(Container {
         id: 321,
@@ -336,7 +336,7 @@ fn wrapped_container_box_any() {
 #[test]
 fn rc_any_refvalue_keeps_outer_ref() {
     let mut fory = Fory::builder().xlang(false).build();
-    fory.register_by_name::<RcRefPayload>("", "RcRefPayload")
+    fory.register_by_name::<RcRefPayload>("RcRefPayload")
         .unwrap();
 
     let payload: Rc<dyn Any> = Rc::new(RcRefPayload {
@@ -357,7 +357,7 @@ fn rc_any_refvalue_keeps_outer_ref() {
 #[test]
 fn arc_any_refvalue_keeps_outer_ref() {
     let mut fory = Fory::builder().xlang(false).build();
-    fory.register_by_name::<ArcRefPayload>("", "ArcRefPayload")
+    fory.register_by_name::<ArcRefPayload>("ArcRefPayload")
         .unwrap();
 
     let payload: Arc<dyn Any + Send + Sync> = Arc::new(ArcRefPayload {
@@ -543,7 +543,7 @@ fn test_hashmap_fixed_key_rc_any_field_compatible() {
 #[test]
 fn test_arc_by_name() {
     let mut fory = Fory::builder().xlang(false).build();
-    fory.register_by_name::<Container>("", "Container").unwrap();
+    fory.register_by_name::<Container>("Container").unwrap();
 
     let container = Container {
         id: 999,
@@ -574,8 +574,8 @@ fn test_arc_by_name() {
 #[test]
 fn test_arc_any_field_by_name() {
     let mut fory = Fory::builder().xlang(false).build();
-    fory.register_by_name::<Container>("", "Container").unwrap();
-    fory.register_by_name::<ArcAnyHolder>("", "ArcAnyHolder")
+    fory.register_by_name::<Container>("Container").unwrap();
+    fory.register_by_name::<ArcAnyHolder>("ArcAnyHolder")
         .unwrap();
 
     let holder = ArcAnyHolder {
@@ -596,7 +596,7 @@ fn test_arc_any_field_by_name() {
 #[test]
 fn test_rc_by_name() {
     let mut fory = Fory::builder().xlang(false).build();
-    fory.register_by_name::<Container>("", "Container").unwrap();
+    fory.register_by_name::<Container>("Container").unwrap();
 
     let container = Container {
         id: 555,
@@ -645,8 +645,8 @@ struct StructB {
 #[test]
 fn generic_vecs_rejected_in_box_any() {
     let mut fory = Fory::builder().xlang(false).build();
-    fory.register_by_name::<StructA>("", "StructA").unwrap();
-    fory.register_by_name::<StructB>("", "StructB").unwrap();
+    fory.register_by_name::<StructA>("StructA").unwrap();
+    fory.register_by_name::<StructB>("StructB").unwrap();
 
     assert_box_any_unsupported(&fory, vec![StructA { a: 11 }; 5]);
     assert_box_any_unsupported(&fory, vec![StructB { i: 1 }; 5]);

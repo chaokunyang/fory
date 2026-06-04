@@ -928,21 +928,7 @@ final class ForyGenerator extends Generator {
       ..writeln('    int? id,')
       ..writeln('    String? namespace,')
       ..writeln('    String? typeName,')
-      ..writeln('  }) {')
-      ..writeln('    final hasNumeric = id != null;')
-      ..writeln('    final hasNamed = namespace != null || typeName != null;')
-      ..writeln('    if (hasNumeric == hasNamed) {')
-      ..writeln(
-        "      throw ArgumentError('Exactly one registration mode is required: id, or namespace + typeName.');",
-      )
-      ..writeln('    }')
-      ..writeln(
-        '    if (hasNamed && (namespace == null || typeName == null)) {',
-      )
-      ..writeln(
-        "      throw ArgumentError('Both namespace and typeName are required for named registration.');",
-      )
-      ..writeln('    }');
+      ..writeln('  }) {');
 
     for (final enumSpec in enumSpecs) {
       final schemaName = '_${_toCamelCase(enumSpec.name)}ForySchema';

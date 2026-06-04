@@ -39,6 +39,31 @@ const UINT64_MASK = (1n << 64n) - 1n;
 const HEADER_HASH_MASK = UINT64_MASK ^ LOW_HEADER_BITS_MASK;
 
 describe("typemeta", () => {
+  test("splits dotted names", () => {
+    const structInfo = Type.struct({ typeName: "com.example.User" }, {});
+    expect(structInfo.namespace).toBe("com.example");
+    expect(structInfo.typeName).toBe("User");
+
+    const enumInfo = Type.enum("com.example.Color", { Red: 1 });
+    expect(enumInfo.namespace).toBe("com.example");
+    expect(enumInfo.typeName).toBe("Color");
+
+    const extInfo = Type.ext("com.example.External");
+    expect(extInfo.namespace).toBe("com.example");
+    expect(extInfo.typeName).toBe("External");
+
+    const unionInfo = Type.union("com.example.Payload", { 1: Type.string() });
+    expect(unionInfo.namespace).toBe("com.example");
+    expect(unionInfo.typeName).toBe("Payload");
+
+    const explicitInfo = Type.struct(
+      { namespace: "", typeName: "com.example.Raw" },
+      {},
+    );
+    expect(explicitInfo.namespace).toBe("");
+    expect(explicitInfo.typeName).toBe("com.example.Raw");
+  });
+
   test("writes TypeMeta header bits in the xlang layout", () => {
     const typeInfo = Type.struct(7001, {
       fullName: Type.string().setId(1),

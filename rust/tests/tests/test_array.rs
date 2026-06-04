@@ -129,7 +129,7 @@ struct Point {
 #[test]
 fn test_array_struct() {
     let mut fory = Fory::builder().xlang(false).build();
-    fory.register_by_name::<Point>("", "Point").unwrap();
+    fory.register_by_name::<Point>("Point").unwrap();
 
     let arr = [
         Point { x: 1, y: 2 },
@@ -151,8 +151,7 @@ struct ArrayStruct {
 #[test]
 fn test_struct_with_arrays() {
     let mut fory = Fory::builder().xlang(false).build();
-    fory.register_by_name::<ArrayStruct>("", "ArrayStruct")
-        .unwrap();
+    fory.register_by_name::<ArrayStruct>("ArrayStruct").unwrap();
 
     let data = ArrayStruct {
         int_array: [1, 2, 3, 4, 5],
@@ -316,8 +315,7 @@ fn test_struct_with_vec_of_arrays() {
     }
 
     let mut fory = Fory::builder().xlang(false).build();
-    fory.register_by_name::<PointCloud>("", "PointCloud")
-        .unwrap();
+    fory.register_by_name::<PointCloud>("PointCloud").unwrap();
 
     let data = PointCloud {
         index: 42,

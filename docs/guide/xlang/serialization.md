@@ -399,10 +399,10 @@ fn complex_struct() {
 
     let mut fory = Fory::builder().xlang(true).build();
     fory
-        .register_by_name::<Animal>("example", "foo2")
+        .register_by_name::<Animal>("example.foo2")
         .expect("register Animal");
     fory
-        .register_by_name::<Person>("example", "foo")
+        .register_by_name::<Person>("example.foo")
         .expect("register Person");
     let bin = fory.serialize(&person).expect("serialize success");
     let obj: Person = fory.deserialize(&bin).expect("deserialize success");

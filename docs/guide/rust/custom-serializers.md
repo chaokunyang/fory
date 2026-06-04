@@ -98,8 +98,8 @@ impl Serializer for CustomType {
 }
 ```
 
-Do not override this method for values that contain local-only fields such as
-`Rc<T>`, `RcWeak<T>`, `RefCell<T>`, or `Cell<T>`.
+Do not override this method for values that contain fields whose types are not
+`Send + Sync`, such as `Rc<T>`, `RcWeak<T>`, `RefCell<T>`, or `Cell<T>`.
 
 ## Registering Custom Serializers
 

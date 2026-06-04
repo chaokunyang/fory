@@ -473,9 +473,9 @@
 //! `Arc<dyn Any + Send + Sync>` requires the registered concrete type to support
 //! send-sync dynamic reads. Derived `ForyStruct`, `ForyEnum`, and `ForyUnion`
 //! serializers generate that support by default unless a field is a known
-//! local-only type such as `Rc<T>`, `RcWeak<T>`, `RefCell<T>`, or `Cell<T>`.
-//! Opaque custom fields are allowed through and Rust checks the final
-//! `Self: Send + Sync` bound. If a nested custom field makes a local-only type
+//! type that is not `Send + Sync`, such as `Rc<T>`, `RcWeak<T>`, `RefCell<T>`,
+//! or `Cell<T>`. Opaque custom fields are allowed through and Rust checks the
+//! final `Self: Send + Sync` bound. If a nested custom field makes that bound
 //! fail to compile and the type is not intended for this carrier, mark it with
 //! `#[fory(send_sync = false)]`. Manual `Serializer` implementations are
 //! conservative by default; override `fory_read_data_as_send_sync_any` when the

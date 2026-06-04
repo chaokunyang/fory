@@ -138,8 +138,8 @@ non-negative IDs. `UnknownCase` stores its payload as
 `Arc<dyn Any + Send + Sync>`, so locally registered future payload types must
 support send-sync dynamic reads to be preserved as unknown cases. The Rust
 derive macros generate that support by default for `Send + Sync` types and let
-the Rust compiler validate opaque nested custom fields. If a local-only type has
-nested `Rc` or `RefCell` fields and should not be preserved inside
+the Rust compiler validate opaque nested custom fields. If a nested custom type
+has fields that are not `Send + Sync` and should not be preserved inside
 `UnknownCase`, mark it with `#[fory(send_sync = false)]`.
 Direct generic containers are not supported as erased `Any` payloads; wrap the
 container in a registered derived type if an unknown case needs to preserve it.

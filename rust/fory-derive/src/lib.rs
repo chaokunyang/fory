@@ -114,7 +114,8 @@
 //! - **`#[fory(send_sync)]` / `#[fory(send_sync = true)]`**: Forces generation of
 //!   dynamic readers for `Arc<dyn Any + Send + Sync>`.
 //! - **`#[fory(send_sync = false)]`**: Disables dynamic send-sync readers. Use this
-//!   when a type is local-only and has nested custom fields that are not `Send + Sync`.
+//!   when a type is not intended for `Arc<dyn Any + Send + Sync>` and has nested
+//!   custom fields that are not `Send + Sync`.
 //! - **`#[fory(skip)]`**: Marks an individual field (or enum variant) to be ignored by the
 //!   generated serializer, retaining compatibility with previous releases.
 //! - **`#[fory(generate_default)]`**: Enables the macro to generate `Default` implementation.
@@ -148,9 +149,9 @@
 //! - Any type that implements `Serializer` (for `Fory`) or `Row` (for `ForyRow`)
 //!
 //! Derived serializers generate send-sync dynamic readers by default unless the
-//! macro sees a known non-`Send + Sync` field such as `Rc<T>` or `RefCell<T>`.
-//! Opaque custom fields are allowed through; Rust validates the final
-//! `Self: Send + Sync` bound when the generated reader boxes the value for
+//! macro sees a known field type that is not `Send + Sync`, such as `Rc<T>` or
+//! `RefCell<T>`. Opaque custom fields are allowed through; Rust validates the
+//! final `Self: Send + Sync` bound when the generated reader boxes the value for
 //! `Arc<dyn Any + Send + Sync>`. If a nested custom type makes that bound fail
 //! and the outer type is not meant to be used through `Arc<dyn Any + Send + Sync>`,
 //! mark the outer type with `#[fory(send_sync = false)]`.

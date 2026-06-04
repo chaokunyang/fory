@@ -135,10 +135,10 @@ assert_eq!(unwrapped.name, "Buddy");
 `Arc<dyn Any + Send + Sync>` only works for registered concrete types whose
 serializers can read values back into `Box<dyn Any + Send + Sync>`.
 `ForyStruct`, `ForyEnum`, and `ForyUnion` generate this send-sync dynamic reader
-by default unless a field is a known local-only type such as `Rc<T>`,
-`RcWeak<T>`, `RefCell<T>`, or `Cell<T>`. Opaque custom fields are allowed through;
-Rust then checks the final `Self: Send + Sync` bound when compiling the generated
-reader.
+by default unless a field has a known type that is not `Send + Sync`, such as
+`Rc<T>`, `RcWeak<T>`, `RefCell<T>`, or `Cell<T>`. Opaque custom fields are
+allowed through; Rust then checks the final `Self: Send + Sync` bound when
+compiling the generated reader.
 
 Polymorphic erased `Any` payloads do not directly support nested or generic
 containers as the top-level erased value. This applies to `Box<dyn Any>`,
@@ -175,8 +175,9 @@ capability for `Arc<dyn Any + Send + Sync>` while the container remains a normal
 typed field. The same wrapper model is the supported path for `Box<dyn Any>` and
 `Rc<dyn Any>`.
 
-If a nested custom type contains local-only fields and the outer type is not
-intended for `Arc<dyn Any + Send + Sync>`, opt out on the outer type:
+If a nested custom type contains fields whose types are not `Send + Sync` and
+the outer type is not intended for `Arc<dyn Any + Send + Sync>`, opt out on the
+outer type:
 
 ```rust
 use fory::ForyStruct;

@@ -65,15 +65,15 @@ let fory = Fory::builder()
 
 **Cause**: Fory derives send-sync dynamic readers by default for opaque custom
 field types and lets the Rust compiler validate the final `Self: Send + Sync`
-bound. The derive macro can automatically detect known local-only fields inside
-the type it is deriving, such as `Rc<T>`, but it does not inspect fields inside a
-different custom type.
+bound. The derive macro can automatically detect known field types that are not
+`Send + Sync` inside the type it is deriving, such as `Rc<T>`, but it does not
+inspect fields inside a different custom type.
 
-If an inner type contains a non-send-sync field, the inner type can usually be
-left alone because the derive macro sees that field directly. The outer type that
-stores the inner custom type must opt out explicitly when it is not intended for
-`Arc<dyn Any + Send + Sync>` dynamic reads or `UnknownCase` payload
-preservation:
+If an inner type contains a field whose type is not `Send + Sync`, the inner
+type can usually be left alone because the derive macro sees that field
+directly. The outer type that stores the inner custom type must opt out
+explicitly when it is not intended for `Arc<dyn Any + Send + Sync>` dynamic
+reads or `UnknownCase` payload preservation:
 
 ```rust
 use fory::ForyStruct;

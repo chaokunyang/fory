@@ -87,7 +87,7 @@ Serialize and deserialize:
 
 ```dart
 final fory = Fory();
-PersonForyModule.register(fory, Person, typeName: 'example.Person');
+PersonForyModule.register(fory, Person, name: 'example.Person');
 
 final bytes = fory.serialize(Person()..name = 'Ada'..age = 36);
 final roundTrip = fory.deserialize<Person>(bytes);

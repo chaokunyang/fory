@@ -347,11 +347,10 @@ fory.register_type(Envelope.Payload, type_id=2862577837)
 If `option enable_auto_type_id = false;` is set:
 
 ```python
-fory.register_type(Config, namespace="myapp.models", typename="Config")
+fory.register_type(Config, name="myapp.models.Config")
 fory.register_union(
     Holder,
-    namespace="myapp.models",
-    typename="Holder",
+    name="myapp.models.Holder",
     serializer=HolderSerializer(fory),
 )
 ```

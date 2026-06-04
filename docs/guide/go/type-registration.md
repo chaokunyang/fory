@@ -208,7 +208,7 @@ fory.register(User.class, "example.User");
 **Python**:
 
 ```python
-fory.register(User, typename="example.User")
+fory.register_type(User, name="example.User")
 ```
 
 **Rust**:

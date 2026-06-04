@@ -237,7 +237,7 @@ fory.register(Person.class, "example.Person");
 **Python:**
 
 ```python
-fory.register_type(Person, typename="example.Person")
+fory.register_type(Person, name="example.Person")
 ```
 
 **Go:**
@@ -287,7 +287,7 @@ fory.register_struct<Person>("example.Person");
 **C#:**
 
 ```csharp
-fory.Register<Person>("example", "Person");
+fory.Register<Person>("example.Person");
 ```
 
 **Dart:**
@@ -296,15 +296,14 @@ fory.Register<Person>("example", "Person");
 PersonForyModule.register(
   fory,
   Person,
-  namespace: 'example',
-  typeName: 'Person',
+  name: 'example.Person',
 );
 ```
 
 **Swift:**
 
 ```swift
-try fory.register(Person.self, namespace: "example", name: "Person")
+try fory.register(Person.self, name: "example.Person")
 ```
 
 **Scala:**
@@ -441,7 +440,7 @@ class Person:
     age: pyfory.Int32
 
 fory = pyfory.Fory(xlang=True)
-fory.register_type(Person, typename="example.Person")
+fory.register_type(Person, name="example.Person")
 
 with open("person.bin", "rb") as f:
     data = f.read()

@@ -370,7 +370,7 @@ class Person:
     age: pyfory.Int32
 
 fory = pyfory.Fory(xlang=True)
-fory.register_type(Person, typename="example.Person")
+fory.register_type(Person, name="example.Person")
 
 data = fory.serialize(Person("Alice", 30))
 person = fory.deserialize(data)
@@ -525,7 +525,7 @@ void main() {
   PersonFory.register(
     fory,
     Person,
-    typeName: 'example.Person',
+    name: 'example.Person',
   );
 
   final bytes = fory.serialize(Person()
@@ -555,7 +555,7 @@ struct Person {
 }
 
 let fory = Fory()
-try fory.register(Person.self, namespace: "example", name: "Person")
+try fory.register(Person.self, name: "example.Person")
 
 let bytes = try fory.serialize(Person(name: "Alice", age: 30))
 let person: Person = try fory.deserialize(bytes)

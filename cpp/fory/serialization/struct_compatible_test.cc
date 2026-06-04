@@ -761,12 +761,41 @@ TEST(SchemaEvolutionTest, ScalarStringNumber) {
   ASSERT_FALSE(precision_error.ok());
   EXPECT_EQ(precision_error.error().code(), ErrorCode::InvalidData);
 
-  std::string trailing_zero_decimal = "1.";
-  trailing_zero_decimal.append(5000, '0');
-  auto canonical_decimal = convert_field<ScalarStringField, ScalarDecimalField>(
-      {trailing_zero_decimal}, 1042);
-  ASSERT_TRUE(canonical_decimal.ok()) << canonical_decimal.error().to_string();
-  EXPECT_EQ(canonical_decimal.value().value, Decimal::from_int64(1, 0));
+  std::string digits_256(256, '1');
+  auto digit_bound =
+      convert_field<ScalarStringField, ScalarDecimalField>({digits_256}, 1042);
+  ASSERT_TRUE(digit_bound.ok()) << digit_bound.error().to_string();
+  EXPECT_EQ(digit_bound.value().value.scale(), 0);
+  EXPECT_FALSE(digit_bound.value().value.is_zero());
+
+  auto exponent_bound =
+      convert_field<ScalarStringField, ScalarDecimalField>({"1e255"}, 1043);
+  ASSERT_TRUE(exponent_bound.ok()) << exponent_bound.error().to_string();
+  EXPECT_EQ(exponent_bound.value().value.scale(), 0);
+  EXPECT_FALSE(exponent_bound.value().value.is_zero());
+
+  std::string digits_257(257, '1');
+  auto digit_error =
+      convert_field<ScalarStringField, ScalarDecimalField>({digits_257}, 1044);
+  ASSERT_FALSE(digit_error.ok());
+  EXPECT_EQ(digit_error.error().code(), ErrorCode::InvalidData);
+
+  std::string raw_length = "0.";
+  raw_length.append(319, '0');
+  auto raw_length_error =
+      convert_field<ScalarStringField, ScalarDecimalField>({raw_length}, 1045);
+  ASSERT_FALSE(raw_length_error.ok());
+  EXPECT_EQ(raw_length_error.error().code(), ErrorCode::InvalidData);
+
+  auto huge_exponent =
+      convert_field<ScalarStringField, ScalarDecimalField>({"1e1000000"}, 1046);
+  ASSERT_FALSE(huge_exponent.ok());
+  EXPECT_EQ(huge_exponent.error().code(), ErrorCode::InvalidData);
+
+  auto exponent_error =
+      convert_field<ScalarStringField, ScalarDecimalField>({"1e256"}, 1047);
+  ASSERT_FALSE(exponent_error.ok());
+  EXPECT_EQ(exponent_error.error().code(), ErrorCode::InvalidData);
 }
 
 TEST(SchemaEvolutionTest, ScalarNumberString) {
@@ -786,7 +815,7 @@ TEST(SchemaEvolutionTest, ScalarNumberString) {
   EXPECT_EQ(decimal.value().value, "12.34");
 
   auto oversized_decimal = convert_field<ScalarDecimalField, ScalarStringField>(
-      {Decimal::from_int64(1, 4097)}, 1043);
+      {Decimal::from_int64(1, -256)}, 1048);
   ASSERT_FALSE(oversized_decimal.ok());
   EXPECT_EQ(oversized_decimal.error().code(), ErrorCode::InvalidData);
 }

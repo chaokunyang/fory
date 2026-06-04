@@ -243,6 +243,20 @@ public sealed class ScalarUInt32Field
 }
 
 [ForyStruct]
+public sealed class ScalarFixedUInt32Field
+{
+    [ForyField(1, Type = typeof(S.Fixed<S.UInt32>))]
+    public uint Value { get; set; }
+}
+
+[ForyStruct]
+public sealed class ScalarNullableFixedUInt32Field
+{
+    [ForyField(1, Type = typeof(S.Fixed<S.UInt32>))]
+    public uint? Value { get; set; }
+}
+
+[ForyStruct]
 public sealed class ScalarFloat32Field
 {
     [ForyField(1, Type = typeof(S.Float32))]
@@ -1387,14 +1401,31 @@ public sealed class ForyRuntimeTests
         Assert.Equal("12.34", CompatibleRead<ScalarDecimalField, ScalarStringField>(
             new ScalarDecimalField { Value = new ForyDecimal(new BigInteger(12340), 3) }).Value);
 
+        string digits256 = new('1', 256);
+        ForyDecimal digitBound = CompatibleRead<ScalarStringField, ScalarDecimalField>(
+            new ScalarStringField { Value = digits256 }).Value;
+        Assert.Equal(BigInteger.Parse(digits256), digitBound.UnscaledValue);
+        Assert.Equal(0, digitBound.Scale);
+
+        ForyDecimal exponentBound = CompatibleRead<ScalarStringField, ScalarDecimalField>(
+            new ScalarStringField { Value = "1e255" }).Value;
+        Assert.Equal(256, exponentBound.UnscaledValue.ToString().Length);
+        Assert.Equal(0, exponentBound.Scale);
+
         Assert.Throws<InvalidDataException>(() => CompatibleRead<ScalarDecimalField, ScalarBoolField>(
             new ScalarDecimalField { Value = new ForyDecimal(new BigInteger(5), 1) }));
         Assert.Throws<InvalidDataException>(() => CompatibleRead<ScalarDecimalField, ScalarInt32Field>(
             new ScalarDecimalField { Value = new ForyDecimal(new BigInteger(5), 1) }));
         Assert.Throws<InvalidDataException>(() => CompatibleRead<ScalarStringField, ScalarDecimalField>(
-            new ScalarStringField { Value = "1e4097" }));
+            new ScalarStringField { Value = new string('1', 257) }));
         Assert.Throws<InvalidDataException>(() => CompatibleRead<ScalarStringField, ScalarDecimalField>(
-            new ScalarStringField { Value = "1e2147483647" }));
+            new ScalarStringField { Value = "0." + new string('0', 319) }));
+        Assert.Throws<InvalidDataException>(() => CompatibleRead<ScalarStringField, ScalarDecimalField>(
+            new ScalarStringField { Value = "1e1000000" }));
+        Assert.Throws<InvalidDataException>(() => CompatibleRead<ScalarStringField, ScalarDecimalField>(
+            new ScalarStringField { Value = "1e256" }));
+        Assert.Throws<InvalidDataException>(() => CompatibleRead<ScalarDecimalField, ScalarStringField>(
+            new ScalarDecimalField { Value = new ForyDecimal(BigInteger.One, -256) }));
     }
 
     [Fact]
@@ -1406,6 +1437,13 @@ public sealed class ForyRuntimeTests
             new ScalarStringField { Value = null }).Value);
         Assert.Equal(1, CompatibleRead<ScalarBoolField, ScalarNullableInt32Field>(
             new ScalarBoolField { Value = true }).Value);
+    }
+
+    [Fact]
+    public void CompatibleScalarSchemaOverride()
+    {
+        Assert.Equal(4_000_000_000u, CompatibleRead<ScalarFixedUInt32Field, ScalarNullableFixedUInt32Field>(
+            new ScalarFixedUInt32Field { Value = 4_000_000_000u }).Value);
     }
 
     [Fact]

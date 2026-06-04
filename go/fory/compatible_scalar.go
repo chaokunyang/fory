@@ -21,7 +21,6 @@ import (
 	"math"
 	"math/big"
 	"reflect"
-	"regexp"
 	"strconv"
 	"strings"
 	"unsafe"
@@ -48,9 +47,14 @@ type compatibleScalarValue struct {
 	negZero  bool
 }
 
-var compatibleNumericLiteralPattern = regexp.MustCompile(`^-?(0|[1-9][0-9]*)(\.[0-9]+([eE]-?(0|[1-9][0-9]*))?|[eE]-?(0|[1-9][0-9]*))?$`)
+const maxCompatibleDecimalDigits int64 = 256
+const maxCompatibleNumericTextLen = 320
 
-const maxCompatibleDecimalDigits int64 = 4096
+var maxCompatibleDecimalMagnitude = new(big.Int).Exp(
+	big.NewInt(10),
+	big.NewInt(maxCompatibleDecimalDigits),
+	nil,
+)
 
 func newCompatibleScalarField(remoteTypeID TypeId, localTypeID TypeId, localType reflect.Type) (*compatibleScalarField, bool) {
 	if remoteTypeID == localTypeID || remoteTypeID == FLOAT8 || localTypeID == FLOAT8 {
@@ -345,24 +349,24 @@ func compatibleValueToString(value compatibleScalarValue) (string, bool) {
 		if !f.IsFinite() {
 			return "", false
 		}
-		return finiteFloatRatString(exactRatFromFloat32(f.Float32()), f.Signbit() && f.IsZero()), true
+		return finiteFloatRatString(exactRatFromFloat32(f.Float32()), f.Signbit() && f.IsZero())
 	case BFLOAT16:
 		f := bfloat16.BFloat16FromBits(value.halfBits).Float32()
 		if math.IsNaN(float64(f)) || math.IsInf(float64(f), 0) {
 			return "", false
 		}
-		return finiteFloatRatString(exactRatFromFloat32(f), math.Float32bits(f) == 0x80000000), true
+		return finiteFloatRatString(exactRatFromFloat32(f), math.Float32bits(f) == 0x80000000)
 	case FLOAT32:
 		f := float32(value.float64)
 		if math.IsNaN(float64(f)) || math.IsInf(float64(f), 0) {
 			return "", false
 		}
-		return finiteFloatRatString(exactRatFromFloat32(f), value.negZero), true
+		return finiteFloatRatString(exactRatFromFloat32(f), value.negZero)
 	case FLOAT64:
 		if math.IsNaN(value.float64) || math.IsInf(value.float64, 0) {
 			return "", false
 		}
-		return finiteFloatRatString(exactRatFromFloat64(value.float64), value.negZero), true
+		return finiteFloatRatString(exactRatFromFloat64(value.float64), value.negZero)
 	case DECIMAL:
 		return canonicalDecimalString(value.decimal)
 	default:
@@ -637,29 +641,96 @@ func compatibleNonFiniteHalf(value compatibleScalarValue, target TypeId) (uint16
 }
 
 func parseCompatibleNumericLiteral(s string) (*big.Rat, bool, bool) {
-	if !compatibleNumericLiteralPattern.MatchString(s) {
+	if len(s) == 0 || len(s) > maxCompatibleNumericTextLen {
 		return nil, false, false
 	}
-	neg := strings.HasPrefix(s, "-")
-	body := s
+
+	pos := 0
+	neg := s[pos] == '-'
 	if neg {
-		body = body[1:]
-	}
-	exponent := int64(0)
-	if idx := strings.IndexAny(body, "eE"); idx >= 0 {
-		exp, err := strconv.ParseInt(body[idx+1:], 10, 32)
-		if err != nil {
+		pos++
+		if pos == len(s) {
 			return nil, false, false
 		}
-		exponent = exp
-		body = body[:idx]
 	}
-	scale := int64(0)
-	if idx := strings.IndexByte(body, '.'); idx >= 0 {
-		scale = int64(len(body) - idx - 1)
-		body = body[:idx] + body[idx+1:]
+
+	intStart := pos
+	significantDigits := int64(0)
+	seenNonZero := false
+	if s[pos] == '0' {
+		countCompatibleDigit(s[pos], &seenNonZero, &significantDigits)
+		pos++
+		if pos < len(s) && isASCIIDigit(s[pos]) {
+			return nil, false, false
+		}
+	} else if s[pos] >= '1' && s[pos] <= '9' {
+		for pos < len(s) && isASCIIDigit(s[pos]) {
+			countCompatibleDigit(s[pos], &seenNonZero, &significantDigits)
+			pos++
+		}
+	} else {
+		return nil, false, false
 	}
-	scale -= exponent
+	intEnd := pos
+
+	fracStart := pos
+	fracEnd := pos
+	if pos < len(s) && s[pos] == '.' {
+		pos++
+		fracStart = pos
+		for pos < len(s) && isASCIIDigit(s[pos]) {
+			countCompatibleDigit(s[pos], &seenNonZero, &significantDigits)
+			pos++
+		}
+		if pos == fracStart {
+			return nil, false, false
+		}
+		fracEnd = pos
+	}
+
+	exponent := int64(0)
+	if pos < len(s) && (s[pos] == 'e' || s[pos] == 'E') {
+		pos++
+		expNegative := false
+		if pos < len(s) && s[pos] == '-' {
+			expNegative = true
+			pos++
+		}
+		if pos == len(s) {
+			return nil, false, false
+		}
+		if s[pos] == '0' {
+			pos++
+			if pos < len(s) && isASCIIDigit(s[pos]) {
+				return nil, false, false
+			}
+		} else if s[pos] >= '1' && s[pos] <= '9' {
+			for pos < len(s) && isASCIIDigit(s[pos]) {
+				exponent = exponent*10 + int64(s[pos]-'0')
+				if exponent > maxCompatibleDecimalDigits {
+					return nil, false, false
+				}
+				pos++
+			}
+		} else {
+			return nil, false, false
+		}
+		if expNegative {
+			exponent = -exponent
+		}
+	}
+	if pos != len(s) || significantDigits > maxCompatibleDecimalDigits {
+		return nil, false, false
+	}
+	scale := int64(fracEnd-fracStart) - exponent
+	if !compatibleDecimalShape(significantDigits, scale) {
+		return nil, false, false
+	}
+
+	body := s[intStart:intEnd]
+	if fracEnd > fracStart {
+		body += s[fracStart:fracEnd]
+	}
 	unscaled, ok := new(big.Int).SetString(body, 10)
 	if !ok {
 		return nil, false, false
@@ -671,8 +742,7 @@ func parseCompatibleNumericLiteral(s string) (*big.Rat, bool, bool) {
 	if scale <= 0 {
 		if scale < 0 {
 			extraDigits := -scale
-			if extraDigits > maxCompatibleDecimalDigits ||
-				int64(decimalDigitCount(unscaled))+extraDigits > maxCompatibleDecimalDigits {
+			if !compatibleDecimalShape(int64(decimalDigitCount(unscaled)), scale) || extraDigits > maxCompatibleDecimalDigits {
 				return nil, false, false
 			}
 			unscaled.Mul(unscaled, pow10Int(-scale))
@@ -696,6 +766,27 @@ func parseCompatibleNumericLiteral(s string) (*big.Rat, bool, bool) {
 		return nil, false, false
 	}
 	return new(big.Rat).SetFrac(unscaled, pow10Int(scale)), negZero, true
+}
+
+func countCompatibleDigit(digit byte, seenNonZero *bool, significantDigits *int64) {
+	if digit != '0' || *seenNonZero {
+		*seenNonZero = true
+		(*significantDigits)++
+	}
+}
+
+func compatibleDecimalShape(significantDigits int64, scale int64) bool {
+	if scale > maxCompatibleDecimalDigits {
+		return false
+	}
+	if scale < 0 && significantDigits+(-scale) > maxCompatibleDecimalDigits {
+		return false
+	}
+	return true
+}
+
+func isASCIIDigit(b byte) bool {
+	return b >= '0' && b <= '9'
 }
 
 func exactRatFromFloat32(f float32) *big.Rat {
@@ -839,16 +930,22 @@ func canonicalDecimalString(decimal Decimal) (string, bool) {
 	return text, true
 }
 
-func finiteFloatRatString(rat *big.Rat, negZero bool) string {
+func finiteFloatRatString(rat *big.Rat, negZero bool) (string, bool) {
 	if negZero {
-		return "-0.0"
+		return "-0.0", true
 	}
-	decimal, _ := canonicalDecimalFromRat(rat)
-	text, _ := canonicalDecimalString(decimal)
+	decimal, ok := canonicalDecimalFromRat(rat)
+	if !ok {
+		return "", false
+	}
+	text, ok := canonicalDecimalString(decimal)
+	if !ok {
+		return "", false
+	}
 	if !strings.Contains(text, ".") {
 		text += ".0"
 	}
-	return text
+	return text, true
 }
 
 func pow10Int(exp int64) *big.Int {
@@ -856,10 +953,11 @@ func pow10Int(exp int64) *big.Int {
 }
 
 func decimalDigitCount(value *big.Int) int {
-	if value.Sign() < 0 {
-		value = new(big.Int).Abs(value)
+	magnitude := new(big.Int).Abs(value)
+	if magnitude.Cmp(maxCompatibleDecimalMagnitude) >= 0 {
+		return int(maxCompatibleDecimalDigits) + 1
 	}
-	return len(value.String())
+	return len(magnitude.String())
 }
 
 func signedRange(typeID TypeId, kind reflect.Kind) (int64, int64) {

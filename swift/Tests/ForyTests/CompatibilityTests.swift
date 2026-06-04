@@ -439,6 +439,20 @@ func scalarStringNumberConverts() throws {
     id: 9940
   )
   #expect(stringFromNegativeZero.value == "-0.0")
+
+  let decimalFromString: ScalarDecimalBox = try compatibleDecode(
+    ScalarStringBox(value: "123.5"),
+    as: ScalarDecimalBox.self,
+    id: 9954
+  )
+  #expect(decimalFromString.value == Decimal(string: "123.5")!)
+
+  let stringFromDecimal: ScalarStringBox = try compatibleDecode(
+    ScalarDecimalBox(value: Decimal(string: "123.5")!),
+    as: ScalarStringBox.self,
+    id: 9955
+  )
+  #expect(stringFromDecimal.value == "123.5")
 }
 
 @Test
@@ -562,7 +576,7 @@ func scalarConversionFailures() throws {
 
   try expectInvalidData {
     let _: ScalarDecimalBox = try compatibleDecode(
-      ScalarStringBox(value: "1e4097"),
+      ScalarStringBox(value: String(repeating: "1", count: 257)),
       as: ScalarDecimalBox.self,
       id: 9949
     )
@@ -570,9 +584,25 @@ func scalarConversionFailures() throws {
 
   try expectInvalidData {
     let _: ScalarDecimalBox = try compatibleDecode(
-      ScalarStringBox(value: "1e2147483647"),
+      ScalarStringBox(value: "0." + String(repeating: "0", count: 319)),
       as: ScalarDecimalBox.self,
       id: 9950
+    )
+  }
+
+  try expectInvalidData {
+    let _: ScalarDecimalBox = try compatibleDecode(
+      ScalarStringBox(value: "1e1000000"),
+      as: ScalarDecimalBox.self,
+      id: 9956
+    )
+  }
+
+  try expectInvalidData {
+    let _: ScalarDecimalBox = try compatibleDecode(
+      ScalarStringBox(value: "1e256"),
+      as: ScalarDecimalBox.self,
+      id: 9957
     )
   }
 

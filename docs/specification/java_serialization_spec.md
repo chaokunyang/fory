@@ -261,10 +261,11 @@ Compatible scalar conversion follows the xlang scalar conversion contract:
   use canonical scale: zero and non-zero integers use scale `0`; finite
   fractional values use the smallest non-negative scale that preserves the
   mathematical value and leaves an unscaled value not divisible by `10`.
-  Compatible conversion rejects converted decimal values whose canonical scale
-  is greater than `4096` or whose unscaled decimal magnitude has more than
-  `4096` digits before constructing large powers of ten. Same-type `BigDecimal`
-  reads preserve the ordinary decimal payload.
+  Compatible conversion rejects numeric strings longer than `320` bytes before
+  arbitrary precision parsing. It also rejects converted decimal values whose
+  canonical exponent or scale work exceeds the `256` digit bound before
+  constructing large powers of ten or formatting plain decimal text. Same-type
+  `BigDecimal` reads preserve the ordinary decimal payload.
 - `String` to numeric accepts only the finite compatible numeric literal grammar
   from the xlang serialization spec and then applies the same lossless
   target-domain checks. `NaN`, infinities, whitespace, leading plus signs,

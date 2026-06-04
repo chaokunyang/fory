@@ -277,7 +277,7 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
         sb.AppendLine("        bool readTypeInfo)");
         sb.AppendLine("    {");
         sb.AppendLine("        global::Apache.Fory.TypeId typeId = (global::Apache.Fory.TypeId)fieldType.TypeId;");
-        sb.AppendLine("        if (!readTypeInfo && global::Apache.Fory.CompatibleScalarConverter.CanConvert(fieldType.TypeId, (uint)localTypeId))");
+        sb.AppendLine("        if (!readTypeInfo && refMode != global::Apache.Fory.RefMode.Tracking && global::Apache.Fory.CompatibleScalarConverter.CanRead(fieldType.TypeId, (uint)localTypeId))");
         sb.AppendLine("        {");
         sb.AppendLine("            return global::Apache.Fory.CompatibleScalarConverter.ReadField<T>(context, typeId, localTypeId, fieldName, refMode);");
         sb.AppendLine("        }");

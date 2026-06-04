@@ -35,7 +35,8 @@ namespace fory {
 namespace serialization {
 namespace {
 
-constexpr int32_t MAX_COMPATIBLE_DECIMAL_DIGITS = 4096;
+constexpr int32_t MAX_COMPATIBLE_DECIMAL_DIGITS = 256;
+constexpr size_t MAX_COMPATIBLE_NUMERIC_TEXT_LENGTH = 320;
 
 enum class ScalarKind {
   Bool,
@@ -144,6 +145,22 @@ struct BigUInt {
     return digits;
   }
 
+  int64_t decimal_digit_count_bounded(int64_t limit) const {
+    if (is_zero()) {
+      return 1;
+    }
+    BigUInt copy = *this;
+    int64_t digits = 0;
+    while (!copy.is_zero()) {
+      copy.divmod(10);
+      ++digits;
+      if (digits > limit) {
+        return digits;
+      }
+    }
+    return digits;
+  }
+
   std::vector<uint8_t> to_bytes_le() const {
     std::vector<uint8_t> bytes;
     bytes.reserve(limbs.size() * sizeof(uint32_t));
@@ -207,6 +224,22 @@ struct ScalarValue {
   Decimal decimal_value;
   std::string string_value;
 };
+
+void count_significant_digit(char digit, bool &seen_nonzero,
+                             int64_t &significant_digits) {
+  if (digit != '0' || seen_nonzero) {
+    seen_nonzero = true;
+    ++significant_digits;
+  }
+}
+
+bool decimal_shape_fits(int64_t significant_digits, int64_t scale) {
+  if (scale > MAX_COMPATIBLE_DECIMAL_DIGITS) {
+    return false;
+  }
+  return scale >= 0 ||
+         significant_digits + (-scale) <= MAX_COMPATIBLE_DECIMAL_DIGITS;
+}
 
 bool scalar_kind(uint32_t type_id, ScalarKind &kind) {
   switch (static_cast<TypeId>(type_id)) {
@@ -329,7 +362,7 @@ bool canonical_decimal(BigUInt magnitude, bool negative, int64_t scale64,
     --scale64;
   }
   int64_t digit_count =
-      static_cast<int64_t>(magnitude.to_decimal_string().size());
+      magnitude.decimal_digit_count_bounded(MAX_COMPATIBLE_DECIMAL_DIGITS + 1);
   if (scale64 < 0) {
     if (scale64 < -static_cast<int64_t>(MAX_COMPATIBLE_DECIMAL_DIGITS)) {
       return false;
@@ -444,7 +477,7 @@ bool decimal_to_uint64(const Decimal &decimal, uint64_t max_value,
 }
 
 bool parsed_decimal(std::string_view text, ParsedDecimal &out) {
-  if (text.empty()) {
+  if (text.empty() || text.size() > MAX_COMPATIBLE_NUMERIC_TEXT_LENGTH) {
     return false;
   }
   size_t pos = 0;
@@ -460,13 +493,17 @@ bool parsed_decimal(std::string_view text, ParsedDecimal &out) {
   }
 
   const size_t int_start = pos;
+  int64_t significant_digits = 0;
+  bool seen_nonzero = false;
   if (text[pos] == '0') {
+    count_significant_digit(text[pos], seen_nonzero, significant_digits);
     ++pos;
     if (pos < text.size() && text[pos] >= '0' && text[pos] <= '9') {
       return false;
     }
   } else if (text[pos] >= '1' && text[pos] <= '9') {
     while (pos < text.size() && text[pos] >= '0' && text[pos] <= '9') {
+      count_significant_digit(text[pos], seen_nonzero, significant_digits);
       ++pos;
     }
   } else {
@@ -483,6 +520,7 @@ bool parsed_decimal(std::string_view text, ParsedDecimal &out) {
       return false;
     }
     while (pos < text.size() && text[pos] >= '0' && text[pos] <= '9') {
+      count_significant_digit(text[pos], seen_nonzero, significant_digits);
       ++pos;
     }
     frac_end = pos;
@@ -508,10 +546,10 @@ bool parsed_decimal(std::string_view text, ParsedDecimal &out) {
       }
     } else if (text[pos] >= '1' && text[pos] <= '9') {
       while (pos < text.size() && text[pos] >= '0' && text[pos] <= '9') {
-        if (exponent > 100000) {
+        exponent = exponent * 10 + (text[pos] - '0');
+        if (exponent > MAX_COMPATIBLE_DECIMAL_DIGITS) {
           return false;
         }
-        exponent = exponent * 10 + (text[pos] - '0');
         ++pos;
       }
     } else {
@@ -524,6 +562,11 @@ bool parsed_decimal(std::string_view text, ParsedDecimal &out) {
   if (pos != text.size()) {
     return false;
   }
+  int64_t scale = static_cast<int64_t>(frac_end - frac_start) - exponent;
+  if (significant_digits > MAX_COMPATIBLE_DECIMAL_DIGITS ||
+      !decimal_shape_fits(significant_digits, scale)) {
+    return false;
+  }
 
   std::string digits;
   digits.reserve((int_end - int_start) + (frac_end - frac_start));
@@ -532,7 +575,6 @@ bool parsed_decimal(std::string_view text, ParsedDecimal &out) {
     digits.append(text.substr(frac_start, frac_end - frac_start));
   }
   BigUInt magnitude = BigUInt::from_decimal_digits(digits);
-  int64_t scale = static_cast<int64_t>(frac_end - frac_start) - exponent;
   out.negative_zero = negative && magnitude.is_zero();
   return canonical_decimal(std::move(magnitude), negative, scale, out.decimal);
 }
@@ -547,34 +589,34 @@ Decimal decimal_from_unsigned(uint64_t value) {
   return out;
 }
 
-Decimal decimal_from_float_bits(bool negative, uint64_t significand,
-                                int32_t exponent) {
+bool decimal_from_float_bits(bool negative, uint64_t significand,
+                             int32_t exponent, Decimal &out) {
   BigUInt magnitude = BigUInt::from_uint64(significand);
   if (exponent >= 0) {
     for (int32_t i = 0; i < exponent; ++i) {
       magnitude.multiply(2);
     }
-    Decimal out;
-    canonical_decimal(std::move(magnitude), negative, 0, out);
-    return out;
+    return canonical_decimal(std::move(magnitude), negative, 0, out);
   }
   const int32_t scale = -exponent;
+  if (scale > MAX_COMPATIBLE_DECIMAL_DIGITS) {
+    return false;
+  }
   for (int32_t i = 0; i < scale; ++i) {
     magnitude.multiply(5);
   }
-  Decimal out;
-  canonical_decimal(std::move(magnitude), negative, scale, out);
-  return out;
+  return canonical_decimal(std::move(magnitude), negative, scale, out);
 }
 
-Decimal decimal_from_float32(float value) {
+bool decimal_from_float32(float value, Decimal &out) {
   uint32_t bits = 0;
   std::memcpy(&bits, &value, sizeof(bits));
   const bool negative = (bits & 0x80000000u) != 0;
   const uint32_t exp_bits = (bits >> 23) & 0xffu;
   uint32_t frac = bits & 0x7fffffu;
   if (exp_bits == 0 && frac == 0) {
-    return Decimal();
+    out = Decimal();
+    return true;
   }
   uint64_t significand = frac;
   int32_t exponent = -149;
@@ -582,17 +624,18 @@ Decimal decimal_from_float32(float value) {
     significand |= uint64_t{1} << 23;
     exponent = static_cast<int32_t>(exp_bits) - 127 - 23;
   }
-  return decimal_from_float_bits(negative, significand, exponent);
+  return decimal_from_float_bits(negative, significand, exponent, out);
 }
 
-Decimal decimal_from_float64(double value) {
+bool decimal_from_float64(double value, Decimal &out) {
   uint64_t bits = 0;
   std::memcpy(&bits, &value, sizeof(bits));
   const bool negative = (bits & 0x8000000000000000ULL) != 0;
   const uint64_t exp_bits = (bits >> 52) & 0x7ffULL;
   uint64_t frac = bits & 0xfffffffffffffULL;
   if (exp_bits == 0 && frac == 0) {
-    return Decimal();
+    out = Decimal();
+    return true;
   }
   uint64_t significand = frac;
   int32_t exponent = -1074;
@@ -600,16 +643,17 @@ Decimal decimal_from_float64(double value) {
     significand |= uint64_t{1} << 52;
     exponent = static_cast<int32_t>(exp_bits) - 1023 - 52;
   }
-  return decimal_from_float_bits(negative, significand, exponent);
+  return decimal_from_float_bits(negative, significand, exponent, out);
 }
 
-Decimal decimal_from_float16(float16_t value) {
+bool decimal_from_float16(float16_t value, Decimal &out) {
   uint16_t bits = value.to_bits();
   const bool negative = (bits & 0x8000u) != 0;
   const uint16_t exp_bits = (bits >> 10) & 0x1fu;
   uint16_t frac = bits & 0x03ffu;
   if (exp_bits == 0 && frac == 0) {
-    return Decimal();
+    out = Decimal();
+    return true;
   }
   uint64_t significand = frac;
   int32_t exponent = -24;
@@ -617,16 +661,17 @@ Decimal decimal_from_float16(float16_t value) {
     significand |= uint64_t{1} << 10;
     exponent = static_cast<int32_t>(exp_bits) - 15 - 10;
   }
-  return decimal_from_float_bits(negative, significand, exponent);
+  return decimal_from_float_bits(negative, significand, exponent, out);
 }
 
-Decimal decimal_from_bfloat16(bfloat16_t value) {
+bool decimal_from_bfloat16(bfloat16_t value, Decimal &out) {
   uint16_t bits = value.to_bits();
   const bool negative = (bits & 0x8000u) != 0;
   const uint16_t exp_bits = (bits >> 7) & 0xffu;
   uint16_t frac = bits & 0x007fu;
   if (exp_bits == 0 && frac == 0) {
-    return Decimal();
+    out = Decimal();
+    return true;
   }
   uint64_t significand = frac;
   int32_t exponent = -133;
@@ -634,7 +679,7 @@ Decimal decimal_from_bfloat16(bfloat16_t value) {
     significand |= uint64_t{1} << 7;
     exponent = static_cast<int32_t>(exp_bits) - 127 - 7;
   }
-  return decimal_from_float_bits(negative, significand, exponent);
+  return decimal_from_float_bits(negative, significand, exponent, out);
 }
 
 bool decimal_plain_string(const Decimal &decimal, std::string &out) {
@@ -809,32 +854,28 @@ bool scalar_to_decimal(const ScalarValue &value, Decimal &out,
     }
     negative_zero = float16_t::is_zero(value.float16_value) &&
                     float16_t::signbit(value.float16_value);
-    out = decimal_from_float16(value.float16_value);
-    return true;
+    return decimal_from_float16(value.float16_value, out);
   case ScalarKind::BFloat16:
     if (!bfloat16_t::is_finite(value.bfloat16_value)) {
       return false;
     }
     negative_zero = bfloat16_t::is_zero(value.bfloat16_value) &&
                     bfloat16_t::signbit(value.bfloat16_value);
-    out = decimal_from_bfloat16(value.bfloat16_value);
-    return true;
+    return decimal_from_bfloat16(value.bfloat16_value, out);
   case ScalarKind::Float32:
     if (!std::isfinite(value.float32_value)) {
       return false;
     }
     negative_zero =
         value.float32_value == 0.0f && std::signbit(value.float32_value);
-    out = decimal_from_float32(value.float32_value);
-    return true;
+    return decimal_from_float32(value.float32_value, out);
   case ScalarKind::Float64:
     if (!std::isfinite(value.float64_value)) {
       return false;
     }
     negative_zero =
         value.float64_value == 0.0 && std::signbit(value.float64_value);
-    out = decimal_from_float64(value.float64_value);
-    return true;
+    return decimal_from_float64(value.float64_value, out);
   case ScalarKind::Decimal:
     return canonical_decimal(value.decimal_value, out);
   case ScalarKind::String: {
@@ -906,7 +947,9 @@ bool decimal_to_float16(const Decimal &decimal, float16_t &out) {
   if (!float16_t::is_finite(out)) {
     return false;
   }
-  return decimal_equal_value(decimal, decimal_from_float16(out));
+  Decimal actual;
+  return decimal_from_float16(out, actual) &&
+         decimal_equal_value(decimal, actual);
 }
 
 bool decimal_to_bfloat16(const Decimal &decimal, bfloat16_t &out) {
@@ -919,7 +962,9 @@ bool decimal_to_bfloat16(const Decimal &decimal, bfloat16_t &out) {
   if (!bfloat16_t::is_finite(out)) {
     return false;
   }
-  return decimal_equal_value(decimal, decimal_from_bfloat16(out));
+  Decimal actual;
+  return decimal_from_bfloat16(out, actual) &&
+         decimal_equal_value(decimal, actual);
 }
 
 bool decimal_to_float32(const Decimal &decimal, bool negative_zero,
@@ -935,7 +980,9 @@ bool decimal_to_float32(const Decimal &decimal, bool negative_zero,
   if (!std::isfinite(out)) {
     return false;
   }
-  return decimal_equal_value(decimal, decimal_from_float32(out));
+  Decimal actual;
+  return decimal_from_float32(out, actual) &&
+         decimal_equal_value(decimal, actual);
 }
 
 bool decimal_to_float64(const Decimal &decimal, bool negative_zero,
@@ -951,7 +998,9 @@ bool decimal_to_float64(const Decimal &decimal, bool negative_zero,
   if (!std::isfinite(out)) {
     return false;
   }
-  return decimal_equal_value(decimal, decimal_from_float64(out));
+  Decimal actual;
+  return decimal_from_float64(out, actual) &&
+         decimal_equal_value(decimal, actual);
 }
 
 bool scalar_to_bool(const ScalarValue &value, bool &out) {
@@ -1001,32 +1050,51 @@ bool scalar_to_string(const ScalarValue &value, std::string &out) {
     if (!float16_t::is_finite(value.float16_value)) {
       return false;
     }
-    return floating_plain_string(decimal_from_float16(value.float16_value),
-                                 float16_t::is_zero(value.float16_value) &&
-                                     float16_t::signbit(value.float16_value),
-                                 out);
+    {
+      Decimal decimal;
+      return decimal_from_float16(value.float16_value, decimal) &&
+             floating_plain_string(decimal,
+                                   float16_t::is_zero(value.float16_value) &&
+                                       float16_t::signbit(value.float16_value),
+                                   out);
+    }
   case ScalarKind::BFloat16:
     if (!bfloat16_t::is_finite(value.bfloat16_value)) {
       return false;
     }
-    return floating_plain_string(decimal_from_bfloat16(value.bfloat16_value),
-                                 bfloat16_t::is_zero(value.bfloat16_value) &&
-                                     bfloat16_t::signbit(value.bfloat16_value),
-                                 out);
+    {
+      Decimal decimal;
+      return decimal_from_bfloat16(value.bfloat16_value, decimal) &&
+             floating_plain_string(
+                 decimal,
+                 bfloat16_t::is_zero(value.bfloat16_value) &&
+                     bfloat16_t::signbit(value.bfloat16_value),
+                 out);
+    }
   case ScalarKind::Float32:
     if (!std::isfinite(value.float32_value)) {
       return false;
     }
-    return floating_plain_string(
-        decimal_from_float32(value.float32_value),
-        value.float32_value == 0.0f && std::signbit(value.float32_value), out);
+    {
+      Decimal decimal;
+      return decimal_from_float32(value.float32_value, decimal) &&
+             floating_plain_string(decimal,
+                                   value.float32_value == 0.0f &&
+                                       std::signbit(value.float32_value),
+                                   out);
+    }
   case ScalarKind::Float64:
     if (!std::isfinite(value.float64_value)) {
       return false;
     }
-    return floating_plain_string(
-        decimal_from_float64(value.float64_value),
-        value.float64_value == 0.0 && std::signbit(value.float64_value), out);
+    {
+      Decimal decimal;
+      return decimal_from_float64(value.float64_value, decimal) &&
+             floating_plain_string(decimal,
+                                   value.float64_value == 0.0 &&
+                                       std::signbit(value.float64_value),
+                                   out);
+    }
   case ScalarKind::Decimal:
     return decimal_plain_string(value.decimal_value, out);
   }

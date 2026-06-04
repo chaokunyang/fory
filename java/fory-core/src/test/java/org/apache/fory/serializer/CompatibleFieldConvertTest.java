@@ -278,14 +278,39 @@ public class CompatibleFieldConvertTest extends ForyTestBase {
     public long value;
   }
 
-  public static final class HugeDecimalStringWriter {
+  public static final class DigitBoundStringWriter {
     @ForyField(id = 0)
-    public String value = "1e4097";
+    public String value = repeat("1", 256);
+  }
+
+  public static final class ExponentBoundStringWriter {
+    @ForyField(id = 0)
+    public String value = "1e255";
+  }
+
+  public static final class TooManyDigitsStringWriter {
+    @ForyField(id = 0)
+    public String value = repeat("1", 257);
+  }
+
+  public static final class RawLengthStringWriter {
+    @ForyField(id = 0)
+    public String value = "0." + repeat("0", 319);
   }
 
   public static final class HugeExponentStringWriter {
     @ForyField(id = 0)
-    public String value = "1e2147483647";
+    public String value = "1e1000000";
+  }
+
+  public static final class ExponentExpansionStringWriter {
+    @ForyField(id = 0)
+    public String value = "1e256";
+  }
+
+  public static final class NegativeScaleDecimalWriter {
+    @ForyField(id = 0)
+    public BigDecimal value = new BigDecimal(BigDecimal.ONE.unscaledValue(), -256);
   }
 
   public static final class DecimalReader {
@@ -419,6 +444,16 @@ public class CompatibleFieldConvertTest extends ForyTestBase {
     BFloat16Reader bfloat16Reader =
         readAs(new Float16Writer(), BFloat16Reader.class, xlang, codegen);
     Assert.assertEquals(bfloat16Reader.value, BFloat16.ONE);
+
+    DecimalReader digitBound =
+        readAs(new DigitBoundStringWriter(), DecimalReader.class, xlang, codegen);
+    Assert.assertEquals(digitBound.value.unscaledValue().toString(), repeat("1", 256));
+    Assert.assertEquals(digitBound.value.scale(), 0);
+
+    DecimalReader exponentBound =
+        readAs(new ExponentBoundStringWriter(), DecimalReader.class, xlang, codegen);
+    Assert.assertEquals(exponentBound.value.unscaledValue().toString().length(), 256);
+    Assert.assertEquals(exponentBound.value.scale(), 0);
   }
 
   @Test(dataProvider = "codegenModes")
@@ -489,8 +524,11 @@ public class CompatibleFieldConvertTest extends ForyTestBase {
     assertConversionFails(new UnsignedLongWriter(), IntReader.class, xlang, codegen);
     assertConversionFails(new UnsignedLongWriter(), LongReader.class, xlang, codegen);
     assertConversionFails(new SignedLongWriter(), UnsignedLongReader.class, xlang, codegen);
-    assertConversionFails(new HugeDecimalStringWriter(), DecimalReader.class, xlang, codegen);
+    assertConversionFails(new TooManyDigitsStringWriter(), DecimalReader.class, xlang, codegen);
+    assertConversionFails(new RawLengthStringWriter(), DecimalReader.class, xlang, codegen);
     assertConversionFails(new HugeExponentStringWriter(), DecimalReader.class, xlang, codegen);
+    assertConversionFails(new ExponentExpansionStringWriter(), DecimalReader.class, xlang, codegen);
+    assertConversionFails(new NegativeScaleDecimalWriter(), StringReader.class, xlang, codegen);
     assertConversionFails(new Float16NanWriter(), BFloat16Reader.class, xlang, codegen);
   }
 
@@ -512,5 +550,13 @@ public class CompatibleFieldConvertTest extends ForyTestBase {
 
   private static Fory compatibleFory(boolean xlang, boolean codegen) {
     return Fory.builder().withXlang(xlang).withCompatible(true).withCodegen(codegen).build();
+  }
+
+  private static String repeat(String value, int count) {
+    StringBuilder builder = new StringBuilder(value.length() * count);
+    for (int i = 0; i < count; i++) {
+      builder.append(value);
+    }
+    return builder.toString();
   }
 }

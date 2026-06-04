@@ -22,8 +22,8 @@
 //! nested collection configuration without creating wrapper value types.
 
 use super::collection::{
-    read_primitive_array_vec_compatible_mismatch, read_vec_compatible_mismatch,
-    CompatibleListArrayElement,
+    compatible_list_array_field, read_primitive_array_vec_compatible_mismatch,
+    read_vec_compatible_mismatch, CompatibleListArrayElement,
 };
 use crate::context::{ReadContext, WriteContext};
 use crate::error::Error;
@@ -242,6 +242,14 @@ pub fn field_types_compatible(local: &FieldType, remote: &FieldType) -> bool {
         return true;
     }
     false
+}
+
+#[cold]
+#[inline(never)]
+pub fn compatible_field_pair(local: &FieldType, remote: &FieldType) -> bool {
+    field_types_compatible(local, remote)
+        || super::scalar_conversion::scalar_field_types_compatible(local, remote)
+        || compatible_list_array_field(local, remote)
 }
 
 #[inline(always)]
@@ -2785,7 +2793,7 @@ any_codec!(AnyArcCodec, Arc<dyn Any + Send + Sync>);
 
 #[cfg(test)]
 mod tests {
-    use super::field_types_compatible;
+    use super::{compatible_field_pair, field_types_compatible};
     use crate::meta::FieldType;
     use crate::type_id;
 
@@ -2817,5 +2825,28 @@ mod tests {
         let ref_fixed_i32 = FieldType::new_with_ref(type_id::INT32, false, true, vec![]);
         let ref_var_i32 = FieldType::new_with_ref(type_id::VARINT32, false, true, vec![]);
         assert!(!field_types_compatible(&ref_fixed_i32, &ref_var_i32));
+    }
+
+    #[test]
+    fn compatible_field_pair_rules() {
+        let int8 = FieldType::new(type_id::INT8, false, vec![]);
+        let int16 = FieldType::new(type_id::INT16, false, vec![]);
+        assert!(compatible_field_pair(&int16, &int8));
+
+        let ref_int16 = FieldType::new_with_ref(type_id::INT16, false, true, vec![]);
+        assert!(!compatible_field_pair(&ref_int16, &int8));
+
+        let list_i8 = FieldType::new(type_id::LIST, false, vec![int8]);
+        let list_i16 = FieldType::new(type_id::LIST, false, vec![int16]);
+        assert!(!compatible_field_pair(&list_i16, &list_i8));
+
+        let int32_array = FieldType::new(type_id::INT32_ARRAY, false, vec![]);
+        let list_i32 = FieldType::new(
+            type_id::LIST,
+            false,
+            vec![FieldType::new(type_id::INT32, false, vec![])],
+        );
+        assert!(compatible_field_pair(&list_i32, &int32_array));
+        assert!(compatible_field_pair(&int32_array, &list_i32));
     }
 }

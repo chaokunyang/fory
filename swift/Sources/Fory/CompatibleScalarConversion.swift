@@ -17,7 +17,8 @@
 
 import Foundation
 
-private let maxCompatibleDecimalDigits = 4096
+private let maxCompatibleDecimalDigits = 256
+private let maxCompatibleNumericTextLength = 320
 
 private enum CompatibleScalarValue {
   case bool(Bool)
@@ -735,7 +736,7 @@ private func compatibleScalarDefaultValue<T>(_: T.Type, localTypeID: TypeId) -> 
 }
 
 private func compatibleParseNumericLiteral(_ text: String) -> DecimalLiteral? {
-  guard !text.isEmpty, text.first != "+" else {
+  guard !text.isEmpty, text.count <= maxCompatibleNumericTextLength, text.first != "+" else {
     return nil
   }
   let chars = Array(text)
@@ -775,7 +776,7 @@ private func compatibleParseNumericLiteral(_ text: String) -> DecimalLiteral? {
       index += 1
     }
     guard let exponentDigits = compatibleReadDigits(chars, index: &index, allowLeadingZeros: false),
-      let parsedExponent = Int(exponentDigits)
+      let parsedExponent = compatibleParseExponent(exponentDigits)
     else {
       return nil
     }
@@ -788,12 +789,19 @@ private func compatibleParseNumericLiteral(_ text: String) -> DecimalLiteral? {
     return nil
   }
 
-  var digits = integerDigits + fractionalDigits
   let adjustedScale = scale.subtractingReportingOverflow(exponent)
   guard !adjustedScale.overflow else {
     return nil
   }
   scale = adjustedScale.partialValue
+  let significantDigits = compatibleSignificantDigitCount(integerDigits + fractionalDigits)
+  guard significantDigits <= maxCompatibleDecimalDigits,
+    compatibleDecimalShape(significantDigits: significantDigits, scale: scale)
+  else {
+    return nil
+  }
+
+  var digits = integerDigits + fractionalDigits
   if scale < 0 {
     let extra = 0.subtractingReportingOverflow(scale)
     guard !extra.overflow,
@@ -822,6 +830,36 @@ private func compatibleParseNumericLiteral(_ text: String) -> DecimalLiteral? {
   let negativeZero = negative && normalized == "0"
   return DecimalLiteral(
     negative: negative, digits: normalized, scale: scale, negativeZero: negativeZero)
+}
+
+private func compatibleParseExponent(_ digits: String) -> Int? {
+  var value = 0
+  for digit in digits.utf8 {
+    value = value * 10 + Int(digit) - 48
+    if value > maxCompatibleDecimalDigits {
+      return nil
+    }
+  }
+  return value
+}
+
+private func compatibleSignificantDigitCount(_ digits: String) -> Int {
+  var seenNonZero = false
+  var count = 0
+  for digit in digits.utf8 {
+    if digit != 48 || seenNonZero {
+      seenNonZero = true
+      count += 1
+    }
+  }
+  return count
+}
+
+private func compatibleDecimalShape(significantDigits: Int, scale: Int) -> Bool {
+  if scale > maxCompatibleDecimalDigits {
+    return false
+  }
+  return scale >= 0 || significantDigits + (-scale) <= maxCompatibleDecimalDigits
 }
 
 private func compatibleParseCanonicalDecimal(_ text: String?) -> DecimalLiteral? {
@@ -1059,9 +1097,15 @@ private func compatibleFiniteBinaryFloatText(_ layout: BinaryFloatLayout) -> Str
     }
   } else {
     scale = -exponent2
+    guard scale <= maxCompatibleDecimalDigits else {
+      return nil
+    }
     for _ in 0..<scale {
       compatibleMultiplyDecimalDigits(&digits, by: 5)
     }
+  }
+  guard digits.count <= maxCompatibleDecimalDigits else {
+    return nil
   }
   return compatibleFormatFloatText(sign: layout.sign, digits: digits, scale: scale)
 }

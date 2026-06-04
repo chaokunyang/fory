@@ -47,10 +47,11 @@ final BigInt _uint64Max = (BigInt.one << 64) - BigInt.one;
 final BigInt _doubleSignMask = BigInt.one << 63;
 final BigInt _doubleFractionMask = (BigInt.one << 52) - BigInt.one;
 final BigInt _ten = BigInt.from(10);
-const int _maxCompatibleDecimalDigits = 4096;
-final RegExp _numericLiteral = RegExp(
-  r'^-?(?:(?:0|[1-9][0-9]*)|(?:0|[1-9][0-9]*)\.[0-9]+(?:[eE]-?(?:0|[1-9][0-9]*))?|(?:0|[1-9][0-9]*)[eE]-?(?:0|[1-9][0-9]*))$',
-);
+const int _maxCompatibleDecimalDigits = 256;
+const int _maxCompatibleNumericTextLength = 320;
+final BigInt _maxCompatibleDecimalMagnitude = BigInt.from(
+  10,
+).pow(_maxCompatibleDecimalDigits);
 final ByteData _floatData = ByteData(8);
 
 final class CompatibleScalarConversion {
@@ -421,21 +422,111 @@ double _decimalToDouble(_DecimalValue value) {
 }
 
 _DecimalValue _parseDecimalLiteral(String value) {
-  if (!_numericLiteral.hasMatch(value)) {
+  if (value.isEmpty || value.length > _maxCompatibleNumericTextLength) {
     throw const FormatException('Invalid compatible numeric literal.');
   }
-  final negative = value.startsWith('-');
-  final unsigned = negative ? value.substring(1) : value;
-  final exponentIndex = unsigned.indexOf(RegExp('[eE]'));
-  final mantissa =
-      exponentIndex < 0 ? unsigned : unsigned.substring(0, exponentIndex);
-  final exponent =
-      exponentIndex < 0 ? 0 : int.parse(unsigned.substring(exponentIndex + 1));
-  final dotIndex = mantissa.indexOf('.');
-  final integerPart = dotIndex < 0 ? mantissa : mantissa.substring(0, dotIndex);
-  final fractionPart = dotIndex < 0 ? '' : mantissa.substring(dotIndex + 1);
-  var unscaled = BigInt.parse('$integerPart$fractionPart');
-  var scale = fractionPart.length - exponent;
+
+  var index = 0;
+  final negative = value.codeUnitAt(index) == 45;
+  if (negative) {
+    index += 1;
+    if (index == value.length) {
+      throw const FormatException('Invalid compatible numeric literal.');
+    }
+  }
+
+  final integerStart = index;
+  var significantDigits = 0;
+  var seenNonZero = false;
+  void countDigit(int digit) {
+    if (digit != 48 || seenNonZero) {
+      seenNonZero = true;
+      significantDigits += 1;
+    }
+  }
+
+  var digit = value.codeUnitAt(index);
+  if (digit == 48) {
+    countDigit(digit);
+    index += 1;
+    if (index < value.length && _isDigit(value.codeUnitAt(index))) {
+      throw const FormatException('Invalid compatible numeric literal.');
+    }
+  } else if (digit >= 49 && digit <= 57) {
+    while (index < value.length && _isDigit(value.codeUnitAt(index))) {
+      countDigit(value.codeUnitAt(index));
+      index += 1;
+    }
+  } else {
+    throw const FormatException('Invalid compatible numeric literal.');
+  }
+  final integerEnd = index;
+
+  var fractionStart = index;
+  var fractionEnd = index;
+  if (index < value.length && value.codeUnitAt(index) == 46) {
+    index += 1;
+    fractionStart = index;
+    while (index < value.length && _isDigit(value.codeUnitAt(index))) {
+      countDigit(value.codeUnitAt(index));
+      index += 1;
+    }
+    if (index == fractionStart) {
+      throw const FormatException('Invalid compatible numeric literal.');
+    }
+    fractionEnd = index;
+  }
+
+  var exponent = 0;
+  if (index < value.length) {
+    final marker = value.codeUnitAt(index);
+    if (marker == 101 || marker == 69) {
+      index += 1;
+      var exponentNegative = false;
+      if (index < value.length && value.codeUnitAt(index) == 45) {
+        exponentNegative = true;
+        index += 1;
+      }
+      if (index == value.length) {
+        throw const FormatException('Invalid compatible numeric literal.');
+      }
+      digit = value.codeUnitAt(index);
+      if (digit == 48) {
+        index += 1;
+        if (index < value.length && _isDigit(value.codeUnitAt(index))) {
+          throw const FormatException('Invalid compatible numeric literal.');
+        }
+      } else if (digit >= 49 && digit <= 57) {
+        while (index < value.length && _isDigit(value.codeUnitAt(index))) {
+          exponent = exponent * 10 + value.codeUnitAt(index) - 48;
+          if (exponent > _maxCompatibleDecimalDigits) {
+            throw const FormatException('Compatible exponent is too large.');
+          }
+          index += 1;
+        }
+      } else {
+        throw const FormatException('Invalid compatible numeric literal.');
+      }
+      if (exponentNegative) {
+        exponent = -exponent;
+      }
+    }
+  }
+
+  if (index != value.length ||
+      significantDigits > _maxCompatibleDecimalDigits) {
+    throw const FormatException('Compatible numeric literal is too large.');
+  }
+
+  final scale = fractionEnd - fractionStart - exponent;
+  if (!_decimalShapeFits(significantDigits, scale)) {
+    throw const FormatException('Compatible numeric literal is too large.');
+  }
+
+  var unscaled = BigInt.parse(
+    '${value.substring(integerStart, integerEnd)}'
+    '${value.substring(fractionStart, fractionEnd)}',
+  );
   if (unscaled == BigInt.zero) {
     return _DecimalValue(BigInt.zero, 0);
   }
@@ -444,6 +535,16 @@ _DecimalValue _parseDecimalLiteral(String value) {
   }
   return _canonicalDecimalValue(unscaled, scale);
 }
+
+bool _decimalShapeFits(int significantDigits, int scale) {
+  if (scale > _maxCompatibleDecimalDigits) {
+    return false;
+  }
+  return scale >= 0 ||
+      significantDigits + (-scale) <= _maxCompatibleDecimalDigits;
+}
+
+bool _isDigit(int codeUnit) => codeUnit >= 48 && codeUnit <= 57;
 
 bool _isNegativeZeroLiteral(String value) {
   if (!value.startsWith('-')) {
@@ -464,7 +565,7 @@ _DecimalValue _canonicalDecimalValue(BigInt unscaled, int scale) {
   var resultUnscaled = unscaled;
   var resultScale = scale;
   if (resultScale < 0) {
-    final digitCount = resultUnscaled.abs().toString().length;
+    final digitCount = _decimalDigitCount(resultUnscaled);
     if (digitCount - resultScale > _maxCompatibleDecimalDigits) {
       throw const FormatException('Compatible decimal magnitude is too large.');
     }
@@ -475,12 +576,20 @@ _DecimalValue _canonicalDecimalValue(BigInt unscaled, int scale) {
     resultUnscaled ~/= _ten;
     resultScale -= 1;
   }
-  final digitCount = resultUnscaled.abs().toString().length;
+  final digitCount = _decimalDigitCount(resultUnscaled);
   if (resultScale > _maxCompatibleDecimalDigits ||
       digitCount > _maxCompatibleDecimalDigits) {
     throw const FormatException('Compatible decimal is too large.');
   }
   return _DecimalValue(resultUnscaled, resultScale);
+}
+
+int _decimalDigitCount(BigInt value) {
+  final magnitude = value.abs();
+  if (magnitude >= _maxCompatibleDecimalMagnitude) {
+    return _maxCompatibleDecimalDigits + 1;
+  }
+  return magnitude.toString().length;
 }
 
 String _canonicalDecimalText(_DecimalValue value) {
@@ -537,6 +646,9 @@ _DecimalValue _canonicalDecimalFromFiniteFloat(double value) {
     scale = 0;
   } else {
     scale = -exponent;
+    if (scale > _maxCompatibleDecimalDigits) {
+      throw const FormatException('Float decimal expansion is too large.');
+    }
     unscaled = significand * BigInt.from(5).pow(scale);
   }
   if (negative) {

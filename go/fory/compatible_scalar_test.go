@@ -21,6 +21,7 @@ import (
 	"math"
 	"math/big"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/apache/fory/go/fory/optional"
@@ -267,11 +268,43 @@ func TestCompatibleScalarConversions(t *testing.T) {
 			},
 		},
 		{
-			name:                 "HugeDecimalStringFails",
+			name:      "DigitBoundDecimalString",
+			tag:       "ScalarValue",
+			writeType: scalarString{},
+			readType:  scalarDecimal{},
+			input:     scalarString{Value: strings.Repeat("1", 256)},
+			assertFunc: func(t *testing.T, input any, output any) {
+				got := output.(scalarDecimal).Value
+				assert.Equal(t, strings.Repeat("1", 256), got.Unscaled.String())
+				assert.Equal(t, int32(0), got.Scale)
+			},
+		},
+		{
+			name:      "ExponentBoundDecimalString",
+			tag:       "ScalarValue",
+			writeType: scalarString{},
+			readType:  scalarDecimal{},
+			input:     scalarString{Value: "1e255"},
+			assertFunc: func(t *testing.T, input any, output any) {
+				got := output.(scalarDecimal).Value
+				assert.Equal(t, 256, len(got.Unscaled.String()))
+				assert.Equal(t, int32(0), got.Scale)
+			},
+		},
+		{
+			name:                 "TooManyDigitsDecimalStringFails",
 			tag:                  "ScalarValue",
 			writeType:            scalarString{},
 			readType:             scalarDecimal{},
-			input:                scalarString{Value: "1e4097"},
+			input:                scalarString{Value: strings.Repeat("1", 257)},
+			unmarshalErrContains: "compatible scalar conversion failed",
+		},
+		{
+			name:                 "RawLengthDecimalStringFails",
+			tag:                  "ScalarValue",
+			writeType:            scalarString{},
+			readType:             scalarDecimal{},
+			input:                scalarString{Value: "0." + strings.Repeat("0", 319)},
 			unmarshalErrContains: "compatible scalar conversion failed",
 		},
 		{
@@ -279,7 +312,23 @@ func TestCompatibleScalarConversions(t *testing.T) {
 			tag:                  "ScalarValue",
 			writeType:            scalarString{},
 			readType:             scalarDecimal{},
-			input:                scalarString{Value: "1e2147483647"},
+			input:                scalarString{Value: "1e1000000"},
+			unmarshalErrContains: "compatible scalar conversion failed",
+		},
+		{
+			name:                 "ExponentExpansionStringFails",
+			tag:                  "ScalarValue",
+			writeType:            scalarString{},
+			readType:             scalarDecimal{},
+			input:                scalarString{Value: "1e256"},
+			unmarshalErrContains: "compatible scalar conversion failed",
+		},
+		{
+			name:                 "NegativeScaleDecimalStringFails",
+			tag:                  "ScalarValue",
+			writeType:            scalarDecimal{},
+			readType:             scalarString{},
+			input:                scalarDecimal{Value: NewDecimal(big.NewInt(1), -256)},
 			unmarshalErrContains: "compatible scalar conversion failed",
 		},
 		{

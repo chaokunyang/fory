@@ -27,7 +27,8 @@ use num_bigint::BigInt;
 use num_traits::{One, Signed, ToPrimitive, Zero};
 use std::any::Any;
 
-const MAX_COMPATIBLE_DECIMAL_DIGITS: i32 = 4096;
+const MAX_COMPATIBLE_DECIMAL_DIGITS: i32 = 256;
+const MAX_COMPATIBLE_NUMERIC_TEXT_LEN: usize = 320;
 
 enum ScalarValue {
     Bool(bool),
@@ -109,7 +110,7 @@ pub(super) fn is_compatible_scalar_type(type_id: u32) -> bool {
 }
 
 #[inline(always)]
-fn scalar_field_types_compatible(local: &FieldType, remote: &FieldType) -> bool {
+pub(super) fn scalar_field_types_compatible(local: &FieldType, remote: &FieldType) -> bool {
     !local.track_ref && !remote.track_ref && scalar_types_compatible(local.type_id, remote.type_id)
 }
 
@@ -653,7 +654,7 @@ fn numeric_one(value: &ScalarValue, remote_type: u32, local_type: u32) -> Result
 
 fn parse_number(input: &str) -> Option<ParsedNumber> {
     let bytes = input.as_bytes();
-    if bytes.is_empty() {
+    if bytes.is_empty() || bytes.len() > MAX_COMPATIBLE_NUMERIC_TEXT_LEN {
         return None;
     }
     let mut pos = 0;
@@ -667,14 +668,19 @@ fn parse_number(input: &str) -> Option<ParsedNumber> {
         false
     };
     let int_start = pos;
+    let mut significant_digits = 0usize;
+    let mut seen_nonzero = false;
     if bytes[pos] == b'0' {
+        count_significant_digit(bytes[pos], &mut seen_nonzero, &mut significant_digits);
         pos += 1;
         if pos < bytes.len() && bytes[pos].is_ascii_digit() {
             return None;
         }
     } else if bytes[pos].is_ascii_digit() && bytes[pos] != b'0' {
+        count_significant_digit(bytes[pos], &mut seen_nonzero, &mut significant_digits);
         pos += 1;
         while pos < bytes.len() && bytes[pos].is_ascii_digit() {
+            count_significant_digit(bytes[pos], &mut seen_nonzero, &mut significant_digits);
             pos += 1;
         }
     } else {
@@ -687,6 +693,7 @@ fn parse_number(input: &str) -> Option<ParsedNumber> {
         pos += 1;
         frac_start = pos;
         while pos < bytes.len() && bytes[pos].is_ascii_digit() {
+            count_significant_digit(bytes[pos], &mut seen_nonzero, &mut significant_digits);
             pos += 1;
         }
         if pos == frac_start {
@@ -716,6 +723,9 @@ fn parse_number(input: &str) -> Option<ParsedNumber> {
                 exponent = exponent
                     .checked_mul(10)?
                     .checked_add((bytes[pos] - b'0') as i64)?;
+                if exponent > i64::from(MAX_COMPATIBLE_DECIMAL_DIGITS) {
+                    return None;
+                }
                 pos += 1;
             }
         } else {
@@ -728,6 +738,13 @@ fn parse_number(input: &str) -> Option<ParsedNumber> {
     if pos != bytes.len() {
         return None;
     }
+    if significant_digits > MAX_COMPATIBLE_DECIMAL_DIGITS as usize {
+        return None;
+    }
+    let scale = (frac_end - frac_start) as i64 - exponent;
+    if !compatible_decimal_shape(significant_digits, scale) {
+        return None;
+    }
     let mut digits = String::with_capacity(int_end - int_start + frac_end - frac_start);
     digits.push_str(&input[int_start..int_end]);
     digits.push_str(&input[frac_start..frac_end]);
@@ -735,12 +752,29 @@ fn parse_number(input: &str) -> Option<ParsedNumber> {
     if negative {
         unscaled = -unscaled;
     }
-    let scale = (frac_end - frac_start) as i64 - exponent;
     let decimal = normalize_decimal_parts(unscaled, scale)?;
     Some(ParsedNumber {
         negative_zero: negative && decimal.unscaled.is_zero(),
         decimal,
     })
+}
+
+fn count_significant_digit(byte: u8, seen_nonzero: &mut bool, significant_digits: &mut usize) {
+    if byte != b'0' || *seen_nonzero {
+        *seen_nonzero = true;
+        *significant_digits += 1;
+    }
+}
+
+fn compatible_decimal_shape(significant_digits: usize, scale: i64) -> bool {
+    if scale > i64::from(MAX_COMPATIBLE_DECIMAL_DIGITS) {
+        return false;
+    }
+    if scale < 0 && significant_digits as i64 + (-scale) > i64::from(MAX_COMPATIBLE_DECIMAL_DIGITS)
+    {
+        return false;
+    }
+    true
 }
 
 fn normalize_decimal_parts(mut unscaled: BigInt, scale: i64) -> Option<Decimal> {
@@ -1033,7 +1067,11 @@ fn compatible_decimal_bounds(unscaled: &BigInt, scale: i32) -> bool {
 }
 
 fn decimal_digit_count(value: &BigInt) -> usize {
-    value.abs().to_string().len()
+    let magnitude = value.abs();
+    if magnitude >= BigInt::from(10).pow(MAX_COMPATIBLE_DECIMAL_DIGITS as u32) {
+        return MAX_COMPATIBLE_DECIMAL_DIGITS as usize + 1;
+    }
+    magnitude.to_string().len()
 }
 
 fn boxed_to_value<T: 'static>(value: Box<dyn Any>) -> Result<T, Error> {

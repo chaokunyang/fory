@@ -21,7 +21,6 @@ package org.apache.fory.serializer.converter;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
-import java.util.regex.Pattern;
 import org.apache.fory.annotation.Internal;
 import org.apache.fory.exception.DeserializationException;
 import org.apache.fory.type.BFloat16;
@@ -60,10 +59,8 @@ final class CompatibleScalarConverter {
   private static final BigInteger UNSIGNED_INT64_MAX = TWO_64.subtract(BigInteger.ONE);
   private static final BigDecimal DECIMAL_ZERO = BigDecimal.ZERO;
   private static final BigDecimal DECIMAL_ONE = BigDecimal.ONE;
-  private static final int MAX_COMPATIBLE_DECIMAL_DIGITS = 4096;
-  private static final Pattern NUMERIC_LITERAL =
-      Pattern.compile(
-          "-?(0|[1-9][0-9]*)(\\.[0-9]+([eE]-?(0|[1-9][0-9]*))?|[eE]-?(0|[1-9][0-9]*))?");
+  private static final int MAX_COMPATIBLE_DECIMAL_DIGITS = 256;
+  private static final int MAX_COMPATIBLE_NUMERIC_TEXT_LENGTH = 320;
 
   private CompatibleScalarConverter() {}
 
@@ -253,7 +250,7 @@ final class CompatibleScalarConverter {
     if (toDomain == BOOL) {
       return toBool(DispatchId.STRING, String.class, STRING, value, toType, fieldName);
     }
-    if (!NUMERIC_LITERAL.matcher(value).matches()) {
+    if (!numericLiteralFits(value)) {
       throw dataError(DispatchId.STRING, String.class, toDispatchId, toType, fieldName);
     }
     BigDecimal decimal;
@@ -277,6 +274,105 @@ final class CompatibleScalarConverter {
           fieldName);
     }
     throw dataError(DispatchId.STRING, String.class, toDispatchId, toType, fieldName);
+  }
+
+  private static boolean numericLiteralFits(String value) {
+    int length = value.length();
+    if (length == 0 || length > MAX_COMPATIBLE_NUMERIC_TEXT_LENGTH) {
+      return false;
+    }
+    int index = 0;
+    if (value.charAt(index) == '-') {
+      index++;
+      if (index == length) {
+        return false;
+      }
+    }
+
+    int significantDigits = 0;
+    boolean seenNonZero = false;
+    if (value.charAt(index) == '0') {
+      index++;
+      if (index < length && isDigit(value.charAt(index))) {
+        return false;
+      }
+    } else if (value.charAt(index) >= '1' && value.charAt(index) <= '9') {
+      while (index < length && isDigit(value.charAt(index))) {
+        if (value.charAt(index) != '0' || seenNonZero) {
+          seenNonZero = true;
+          significantDigits++;
+        }
+        index++;
+      }
+    } else {
+      return false;
+    }
+
+    int fractionalDigits = 0;
+    if (index < length && value.charAt(index) == '.') {
+      index++;
+      int fractionStart = index;
+      while (index < length && isDigit(value.charAt(index))) {
+        if (value.charAt(index) != '0' || seenNonZero) {
+          seenNonZero = true;
+          significantDigits++;
+        }
+        fractionalDigits++;
+        index++;
+      }
+      if (index == fractionStart) {
+        return false;
+      }
+    }
+
+    int exponent = 0;
+    if (index < length && (value.charAt(index) == 'e' || value.charAt(index) == 'E')) {
+      index++;
+      boolean exponentNegative = false;
+      if (index < length && value.charAt(index) == '-') {
+        exponentNegative = true;
+        index++;
+      }
+      if (index == length) {
+        return false;
+      }
+      if (value.charAt(index) == '0') {
+        index++;
+        if (index < length && isDigit(value.charAt(index))) {
+          return false;
+        }
+      } else if (value.charAt(index) >= '1' && value.charAt(index) <= '9') {
+        while (index < length && isDigit(value.charAt(index))) {
+          exponent = exponent * 10 + (value.charAt(index) - '0');
+          if (exponent > MAX_COMPATIBLE_DECIMAL_DIGITS) {
+            return false;
+          }
+          index++;
+        }
+      } else {
+        return false;
+      }
+      if (exponentNegative) {
+        exponent = -exponent;
+      }
+    }
+
+    if (index != length || significantDigits > MAX_COMPATIBLE_DECIMAL_DIGITS) {
+      return false;
+    }
+    int finalScale = fractionalDigits - exponent;
+    return decimalShapeFits(significantDigits, finalScale);
+  }
+
+  private static boolean decimalShapeFits(int significantDigits, int scale) {
+    if (scale > MAX_COMPATIBLE_DECIMAL_DIGITS) {
+      return false;
+    }
+    return scale >= 0 || significantDigits + (-scale) <= MAX_COMPATIBLE_DECIMAL_DIGITS;
+  }
+
+  private static boolean isDigit(char value) {
+    return value >= '0' && value <= '9';
   }
 
   private static String toStringValue(
@@ -560,6 +656,9 @@ final class CompatibleScalarConverter {
       decimal = new BigDecimal(significand.shiftLeft(binaryExponent));
     } else {
       int scale = -binaryExponent;
+      if (scale > MAX_COMPATIBLE_DECIMAL_DIGITS) {
+        throw new IllegalArgumentException("Float decimal expansion is too large");
+      }
       BigInteger unscaled = significand.multiply(BigInteger.valueOf(5).pow(scale));
       decimal = new BigDecimal(unscaled, scale);
     }

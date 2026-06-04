@@ -297,14 +297,17 @@ Canonical converted decimal form is:
   `unscaled * 10^-scale` equals the value and whose `unscaled` is not divisible
   by `10`.
 
-Compatible scalar conversion MUST reject a converted decimal before constructing
-large powers of ten when its canonical converted form would require a scale
-greater than `4096` or an unscaled decimal magnitude with more than `4096`
-digits. This bound applies only to values produced by compatible scalar
-conversion, including string-to-decimal and floating-to-decimal conversion.
-Same-type decimal reads preserve the ordinary decimal payload. A bounded public
-decimal carrier may reject smaller values when it cannot represent the value
-exactly.
+Compatible scalar conversion MUST reject a numeric string before arbitrary
+precision parsing when the raw string length is greater than `320`. It MUST also
+reject a converted decimal before constructing large powers of ten or formatting
+plain decimal text when its canonical converted form would require an exponent or
+scale outside `[-256, 256]`, a positive scale greater than `256`, an unscaled
+decimal magnitude with more than `256` significant digits, or a negative scale
+whose formatted integer digit count would exceed `256`. These bounds apply only
+to values produced by compatible scalar conversion, including string-to-decimal,
+decimal-to-string, and floating-to-decimal conversion. Same-type decimal reads
+preserve the ordinary decimal payload. A bounded public decimal carrier may
+reject smaller values when it cannot represent the value exactly.
 
 Nullable, boxed, optional, and nullable-field composition is supported for
 matched scalar pairs whose top-level field schemas have `trackingRef = false`.

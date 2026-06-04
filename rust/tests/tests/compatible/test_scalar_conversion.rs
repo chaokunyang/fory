@@ -178,11 +178,16 @@ fn number_string() {
         "{err}"
     );
 
-    for value in ["1e4097", "1e2147483647"] {
+    for value in [
+        "1e1000000".to_string(),
+        "1e256".to_string(),
+        "1".repeat(257),
+        format!("0.{}", "0".repeat(319)),
+    ] {
         let err = convert::<TextValue, DecimalValue>(
             12_036,
             &TextValue {
-                value: value.to_string(),
+                value: value.clone(),
             },
         )
         .unwrap_err();
@@ -246,6 +251,61 @@ fn decimal_conversion() {
     )
     .unwrap();
     assert_eq!(decoded.value, 12);
+}
+
+#[test]
+fn decimal_guardrails() {
+    #[derive(ForyStruct, Debug)]
+    struct DecimalValue {
+        value: Decimal,
+    }
+
+    #[derive(ForyStruct, Debug)]
+    struct TextValue {
+        value: String,
+    }
+
+    let digits_256 = "1".repeat(256);
+    let decoded: DecimalValue = convert(
+        12_071,
+        &TextValue {
+            value: digits_256.clone(),
+        },
+    )
+    .unwrap();
+    assert_eq!(decoded.value.unscaled.to_string(), digits_256);
+    assert_eq!(decoded.value.scale, 0);
+
+    let decoded: DecimalValue = convert(
+        12_072,
+        &TextValue {
+            value: "1e255".to_string(),
+        },
+    )
+    .unwrap();
+    assert_eq!(decoded.value.unscaled.to_string().len(), 256);
+    assert_eq!(decoded.value.scale, 0);
+
+    let invalid_texts = [
+        "1".repeat(257),
+        format!("0.{}", "0".repeat(319)),
+        "1e1000000".to_string(),
+        "1e256".to_string(),
+    ];
+    for (index, value) in invalid_texts.into_iter().enumerate() {
+        let err = convert::<TextValue, DecimalValue>(12_073 + index as u32, &TextValue { value })
+            .unwrap_err();
+        assert!(matches!(err, Error::InvalidData(_)), "{err}");
+    }
+
+    let err = convert::<DecimalValue, TextValue>(
+        12_078,
+        &DecimalValue {
+            value: Decimal::new(BigInt::from(1), -256),
+        },
+    )
+    .unwrap_err();
+    assert!(matches!(err, Error::InvalidData(_)), "{err}");
 }
 
 #[test]

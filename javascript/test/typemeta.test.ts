@@ -518,6 +518,25 @@ describe("typemeta", () => {
         decimal(12340n, 3),
       ),
     ).toEqual({ value: "12.34" });
+
+    const digitBound = readCompatibleScalar(
+      7255,
+      Type.string(),
+      Type.decimal(),
+      "1".repeat(256),
+    );
+    expect(digitBound.value).toBeInstanceOf(Decimal);
+    expect(digitBound.value.equals(decimal("1".repeat(256), 0))).toBe(true);
+
+    const exponentBound = readCompatibleScalar(
+      7256,
+      Type.string(),
+      Type.decimal(),
+      "1e255",
+    );
+    expect(exponentBound.value).toBeInstanceOf(Decimal);
+    expect(exponentBound.value.unscaledValue.toString()).toHaveLength(256);
+    expect(exponentBound.value.scale).toBe(0);
   });
 
   test("rejects inexact number scalars", () => {
@@ -534,13 +553,22 @@ describe("typemeta", () => {
       readCompatibleScalar(7250, Type.string(), Type.float64(), "1."),
     ).toThrow(/compatible field value/);
     expect(() =>
-      readCompatibleScalar(7251, Type.string(), Type.decimal(), "1e2147483648"),
+      readCompatibleScalar(7251, Type.string(), Type.decimal(), "1".repeat(257)),
     ).toThrow(/compatible field value/);
     expect(() =>
-      readCompatibleScalar(7253, Type.string(), Type.decimal(), "1e2147483647"),
+      readCompatibleScalar(7253, Type.string(), Type.decimal(), `0.${"0".repeat(319)}`),
+    ).toThrow(/compatible field value/);
+    expect(() =>
+      readCompatibleScalar(7257, Type.string(), Type.decimal(), "1e1000000"),
+    ).toThrow(/compatible field value/);
+    expect(() =>
+      readCompatibleScalar(7258, Type.string(), Type.decimal(), "1e256"),
     ).toThrow(/compatible field value/);
     expect(() =>
       readCompatibleScalar(7233, Type.decimal(), Type.int32(), decimal(5n, 1)),
+    ).toThrow(/compatible field value/);
+    expect(() =>
+      readCompatibleScalar(7259, Type.decimal(), Type.string(), decimal(1n, -256)),
     ).toThrow(/compatible field value/);
     expect(() =>
       readCompatibleScalar(

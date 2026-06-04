@@ -43,7 +43,10 @@ public static class CompatibleScalarConverter
     private static readonly BigInteger UInt32Max = uint.MaxValue;
     private static readonly BigInteger UInt64Max = ulong.MaxValue;
     private static readonly BigInteger DecimalMask = uint.MaxValue;
-    private const int MaxCompatibleDecimalDigits = 4096;
+    private const int MaxCompatibleDecimalDigits = 256;
+    private const int MaxCompatibleNumericTextLength = 320;
+    private static readonly BigInteger MaxCompatibleDecimalMagnitude =
+        BigInteger.Pow(10, MaxCompatibleDecimalDigits);
 
     /// <summary>
     /// Returns whether the field type id is in the compatible scalar family.
@@ -91,6 +94,16 @@ public static class CompatibleScalarConverter
         }
 
         return IsNumeric(remote) && IsNumeric(local);
+    }
+
+    /// <summary>
+    /// Returns whether the generated compatible reader should read the field through this scalar reader.
+    /// </summary>
+    public static bool CanRead(uint remoteTypeId, uint localTypeId)
+    {
+        TypeId remote = NormalizeScalarTypeId(remoteTypeId);
+        TypeId local = NormalizeScalarTypeId(localTypeId);
+        return IsScalar(remote) && IsScalar(local) && (remote == local || CanConvert(remoteTypeId, localTypeId));
     }
 
     /// <summary>
@@ -809,6 +822,10 @@ public static class CompatibleScalarConverter
         }
 
         int scale = checked(-binaryExponent);
+        if (scale > MaxCompatibleDecimalDigits)
+        {
+            throw Fail(TypeId.Float64, TypeId.Decimal, "", "float decimal expansion is too large");
+        }
         BigInteger decimalSignificand = significand * BigInteger.Pow(5, scale);
         return Normalize(new DecimalValue(
             negative ? BigInteger.Negate(decimalSignificand) : decimalSignificand,
@@ -819,7 +836,7 @@ public static class CompatibleScalarConverter
     private static bool TryParseNumber(string value, out DecimalValue result)
     {
         result = default;
-        if (value.Length == 0)
+        if (value.Length == 0 || value.Length > MaxCompatibleNumericTextLength)
         {
             return false;
         }
@@ -836,7 +853,26 @@ public static class CompatibleScalarConverter
         }
 
         int intStart = index;
-        if (!ReadDigits(value, ref index, allowLeadingZero: false))
+        int significantDigits = 0;
+        bool seenNonZero = false;
+        if (value[index] == '0')
+        {
+            CountSignificantDigit(value[index], ref seenNonZero, ref significantDigits);
+            index++;
+            if (index < value.Length && IsDigit(value[index]))
+            {
+                return false;
+            }
+        }
+        else if (value[index] is >= '1' and <= '9')
+        {
+            while (index < value.Length && IsDigit(value[index]))
+            {
+                CountSignificantDigit(value[index], ref seenNonZero, ref significantDigits);
+                index++;
+            }
+        }
+        else
         {
             return false;
         }
@@ -848,7 +884,13 @@ public static class CompatibleScalarConverter
         {
             index++;
             fracStart = index;
-            if (!ReadDigits(value, ref index, allowLeadingZero: true))
+            while (index < value.Length && IsDigit(value[index]))
+            {
+                CountSignificantDigit(value[index], ref seenNonZero, ref significantDigits);
+                index++;
+            }
+
+            if (index == fracStart)
             {
                 return false;
             }
@@ -866,13 +908,32 @@ public static class CompatibleScalarConverter
                 index++;
             }
 
-            int exponentStart = index;
-            if (!ReadDigits(value, ref index, allowLeadingZero: false))
+            if (index == value.Length)
             {
                 return false;
             }
 
-            if (!int.TryParse(value.AsSpan(exponentStart, index - exponentStart), NumberStyles.None, CultureInfo.InvariantCulture, out exponent))
+            if (value[index] == '0')
+            {
+                index++;
+                if (index < value.Length && IsDigit(value[index]))
+                {
+                    return false;
+                }
+            }
+            else if (value[index] is >= '1' and <= '9')
+            {
+                while (index < value.Length && IsDigit(value[index]))
+                {
+                    exponent = exponent * 10 + value[index] - '0';
+                    if (exponent > MaxCompatibleDecimalDigits)
+                    {
+                        return false;
+                    }
+                    index++;
+                }
+            }
+            else
             {
                 return false;
             }
@@ -888,6 +949,17 @@ public static class CompatibleScalarConverter
             return false;
         }
 
+        if (significantDigits > MaxCompatibleDecimalDigits)
+        {
+            return false;
+        }
+
+        int scale = fracEnd - fracStart - exponent;
+        if (!CompatibleDecimalShape(significantDigits, scale))
+        {
+            return false;
+        }
+
         string digits = string.Concat(value.AsSpan(intStart, intEnd - intStart), value.AsSpan(fracStart, fracEnd - fracStart));
         BigInteger unscaled = BigInteger.Parse(digits, CultureInfo.InvariantCulture);
         if (negative)
@@ -895,38 +967,30 @@ public static class CompatibleScalarConverter
             unscaled = BigInteger.Negate(unscaled);
         }
 
-        int scale;
-        try
-        {
-            scale = checked(fracEnd - fracStart - exponent);
-        }
-        catch (OverflowException)
-        {
-            return false;
-        }
-
         return TryNormalize(new DecimalValue(unscaled, scale, negative && unscaled.IsZero), out result);
     }
 
-    private static bool ReadDigits(string value, ref int index, bool allowLeadingZero)
+    private static void CountSignificantDigit(char digit, ref bool seenNonZero, ref int significantDigits)
     {
-        if (index >= value.Length || value[index] < '0' || value[index] > '9')
+        if (digit != '0' || seenNonZero)
+        {
+            seenNonZero = true;
+            significantDigits++;
+        }
+    }
+
+    private static bool CompatibleDecimalShape(int significantDigits, int scale)
+    {
+        if (scale > MaxCompatibleDecimalDigits)
         {
             return false;
         }
+        return scale >= 0 || significantDigits + (-scale) <= MaxCompatibleDecimalDigits;
+    }
 
-        if (!allowLeadingZero && value[index] == '0')
-        {
-            index++;
-            return index >= value.Length || value[index] < '0' || value[index] > '9';
-        }
-
-        while (index < value.Length && value[index] >= '0' && value[index] <= '9')
-        {
-            index++;
-        }
-
-        return true;
+    private static bool IsDigit(char value)
+    {
+        return value is >= '0' and <= '9';
     }
 
     private static DecimalValue Normalize(
@@ -1036,7 +1100,13 @@ public static class CompatibleScalarConverter
 
     private static int DecimalDigitCount(BigInteger value)
     {
-        return BigInteger.Abs(value).ToString(CultureInfo.InvariantCulture).Length;
+        BigInteger magnitude = BigInteger.Abs(value);
+        if (magnitude >= MaxCompatibleDecimalMagnitude)
+        {
+            return MaxCompatibleDecimalDigits + 1;
+        }
+
+        return magnitude.ToString(CultureInfo.InvariantCulture).Length;
     }
 
     private static TypeId NormalizeScalarTypeId(uint typeId)

@@ -158,14 +158,8 @@ fn compatible_list_array_field_pairs() {
             payload: vec![vec![1, 2], vec![3]],
         })
         .unwrap();
-    let err = reader
-        .deserialize::<NestedArrayPayload>(&bytes)
-        .expect_err("expected nested list/array mismatch to fail compatible field read");
-    assert!(
-        err.to_string()
-            .contains("compatible field 'payload' cannot convert"),
-        "{err}"
-    );
+    let decoded: NestedArrayPayload = reader.deserialize(&bytes).unwrap();
+    assert_eq!(decoded.payload, Vec::<Vec<i32>>::default());
 }
 
 #[test]
@@ -242,7 +236,7 @@ fn nonexistent_struct() {
 }
 
 #[test]
-fn serializer_container_mismatch_errors() {
+fn serializer_container_mismatch_defaults() {
     #[derive(ForyStruct, Debug)]
     struct SetI8 {
         values: HashSet<i8>,
@@ -262,14 +256,8 @@ fn serializer_container_mismatch_errors() {
             values: HashSet::from([1]),
         })
         .unwrap();
-    let err = fory2
-        .deserialize::<SetI16>(&bin)
-        .expect_err("expected matched incompatible container field to fail");
-    assert!(
-        err.to_string()
-            .contains("compatible field 'values' cannot convert"),
-        "{err}"
-    );
+    let decoded: SetI16 = fory2.deserialize(&bin).unwrap();
+    assert_eq!(decoded.values, HashSet::default());
 }
 
 #[test]

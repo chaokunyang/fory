@@ -1039,14 +1039,26 @@ impl TypeMeta {
 
             match local_match {
                 Some((sorted_index, local_info)) => {
+                    if !crate::serializer::codec::compatible_field_pair(
+                        &local_info.field_type,
+                        &field.field_type,
+                    ) {
+                        if crate::util::ENABLE_FORY_DEBUG_OUTPUT {
+                            eprintln!(
+                                "[fory-debug] schema-incompatible field: name={}, remote_type={:?}, local_type={:?}",
+                                field.field_name, field.field_type, local_info.field_type
+                            );
+                        }
+                        field.field_id = -1;
+                        continue;
+                    }
                     // Always copy field name if it was ID-encoded
                     // This is needed because TypeMeta may need to re-serialize the field info
                     if field.field_name.is_empty() {
                         field.field_name = local_info.field_name.clone();
                     }
-                    // Assign SORTED INDEX for generated code. The generated field
-                    // codec inspects the remote FieldType and either consumes it or
-                    // asks the caller to skip the remote payload.
+                    // Assign SORTED INDEX for generated code only after the pair is
+                    // accepted as an exact read or a supported compatible read action.
                     field.field_id = sorted_index as i16;
                     if crate::util::ENABLE_FORY_DEBUG_OUTPUT {
                         eprintln!(

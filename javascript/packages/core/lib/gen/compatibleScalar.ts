@@ -52,9 +52,9 @@ const INT16_MIN = -32768n;
 const INT16_MAX = 32767n;
 const INT32_MIN = -2147483648n;
 const INT32_MAX = 2147483647n;
-const INT32_MIN_NUMBER = -2147483648;
-const INT32_MAX_NUMBER = 2147483647;
-const MAX_COMPATIBLE_DECIMAL_DIGITS = 4096;
+const MAX_COMPATIBLE_DECIMAL_DIGITS = 256;
+const MAX_COMPATIBLE_NUMERIC_TEXT_LENGTH = 320;
+const MAX_COMPATIBLE_DECIMAL_MAGNITUDE = 10n ** BigInt(MAX_COMPATIBLE_DECIMAL_DIGITS);
 const INT64_MIN = -(1n << 63n);
 const INT64_MAX = (1n << 63n) - 1n;
 const UINT8_MAX = 255n;
@@ -271,7 +271,7 @@ function normalizeParts(value: DecimalParts): DecimalParts {
     unscaled /= 10n;
     scale--;
   }
-  const digits = (unscaled < 0n ? -unscaled : unscaled).toString().length;
+  const digits = decimalDigitCount(unscaled);
   if (
     scale > MAX_COMPATIBLE_DECIMAL_DIGITS
     || digits > MAX_COMPATIBLE_DECIMAL_DIGITS
@@ -288,10 +288,7 @@ function decimalToParts(value: Decimal): DecimalParts {
     return { unscaled: 0n, scale: 0, negativeZero: false };
   }
   if (value.scale < 0) {
-    const digits
-      = value.unscaledValue < 0n
-        ? (-value.unscaledValue).toString().length
-        : value.unscaledValue.toString().length;
+    const digits = decimalDigitCount(value.unscaledValue);
     if (digits - value.scale > MAX_COMPATIBLE_DECIMAL_DIGITS) {
       throw new Error(
         "Scalar decimal magnitude exceeds compatible conversion limit.",
@@ -353,6 +350,9 @@ function floatToParts(value: number): DecimalParts {
     });
   }
   const scale = -exponent;
+  if (scale > MAX_COMPATIBLE_DECIMAL_DIGITS) {
+    throw new Error("Scalar float decimal expansion exceeds compatible limit.");
+  }
   return normalizeParts({
     unscaled: mantissa * pow5(scale),
     scale,
@@ -361,48 +361,133 @@ function floatToParts(value: number): DecimalParts {
 }
 
 function parseDecimalString(value: string): DecimalParts {
-  const match
-    = /^(-?)(0|[1-9][0-9]*)(?:\.([0-9]+))?(?:[eE](-?(?:0|[1-9][0-9]*)))?$/.exec(
-      value,
-    );
-  if (!match) {
+  if (value.length === 0 || value.length > MAX_COMPATIBLE_NUMERIC_TEXT_LENGTH) {
     throw new Error(`Invalid scalar string "${value}".`);
   }
-  const sign = match[1];
-  const integerPart = match[2];
-  const fractionPart = match[3] ?? "";
-  const exponent = match[4] === undefined ? 0 : Number(match[4]);
-  if (
-    !Number.isSafeInteger(exponent)
-    || exponent < INT32_MIN_NUMBER
-    || exponent > INT32_MAX_NUMBER
-  ) {
-    throw new Error(`Invalid scalar string exponent in "${value}".`);
+
+  let index = 0;
+  const negative = value[index] === "-";
+  if (negative) {
+    index++;
+    if (index === value.length) {
+      throw new Error(`Invalid scalar string "${value}".`);
+    }
   }
-  const digits = `${integerPart}${fractionPart}`;
+
+  const integerStart = index;
+  let significantDigits = 0;
+  let seenNonZero = false;
+  if (value[index] === "0") {
+    index++;
+    if (index < value.length && isDigit(value[index])) {
+      throw new Error(`Invalid scalar string "${value}".`);
+    }
+  } else if (value[index] >= "1" && value[index] <= "9") {
+    while (index < value.length && isDigit(value[index])) {
+      if (value[index] !== "0" || seenNonZero) {
+        seenNonZero = true;
+        significantDigits++;
+      }
+      index++;
+    }
+  } else {
+    throw new Error(`Invalid scalar string "${value}".`);
+  }
+  const integerEnd = index;
+
+  let fractionStart = index;
+  let fractionEnd = index;
+  if (index < value.length && value[index] === ".") {
+    index++;
+    fractionStart = index;
+    while (index < value.length && isDigit(value[index])) {
+      if (value[index] !== "0" || seenNonZero) {
+        seenNonZero = true;
+        significantDigits++;
+      }
+      index++;
+    }
+    if (index === fractionStart) {
+      throw new Error(`Invalid scalar string "${value}".`);
+    }
+    fractionEnd = index;
+  }
+
+  let exponent = 0;
+  if (index < value.length && (value[index] === "e" || value[index] === "E")) {
+    index++;
+    let exponentNegative = false;
+    if (index < value.length && value[index] === "-") {
+      exponentNegative = true;
+      index++;
+    }
+    if (index === value.length) {
+      throw new Error(`Invalid scalar string "${value}".`);
+    }
+    if (value[index] === "0") {
+      index++;
+      if (index < value.length && isDigit(value[index])) {
+        throw new Error(`Invalid scalar string "${value}".`);
+      }
+    } else if (value[index] >= "1" && value[index] <= "9") {
+      while (index < value.length && isDigit(value[index])) {
+        exponent = exponent * 10 + value.charCodeAt(index) - 48;
+        if (exponent > MAX_COMPATIBLE_DECIMAL_DIGITS) {
+          throw new Error(`Invalid scalar string exponent in "${value}".`);
+        }
+        index++;
+      }
+    } else {
+      throw new Error(`Invalid scalar string "${value}".`);
+    }
+    if (exponentNegative) {
+      exponent = -exponent;
+    }
+  }
+  if (index !== value.length || significantDigits > MAX_COMPATIBLE_DECIMAL_DIGITS) {
+    throw new Error(`Invalid scalar string magnitude in "${value}".`);
+  }
+  let scale = fractionEnd - fractionStart - exponent;
+  if (!decimalShapeFits(significantDigits, scale)) {
+    throw new Error(`Invalid scalar string magnitude in "${value}".`);
+  }
+
+  const digits = `${value.slice(integerStart, integerEnd)}${value.slice(fractionStart, fractionEnd)}`;
   let unscaled = BigInt(digits.length === 0 ? "0" : digits);
-  if (sign === "-") {
+  if (negative) {
     unscaled = -unscaled;
   }
-  let scale = fractionPart.length - exponent;
   if (unscaled === 0n) {
-    return { unscaled: 0n, scale: 0, negativeZero: sign === "-" };
-  }
-  if (scale < INT32_MIN_NUMBER || scale > INT32_MAX_NUMBER) {
-    throw new Error(`Invalid scalar string scale in "${value}".`);
+    return { unscaled: 0n, scale: 0, negativeZero: negative };
   }
   if (scale < 0) {
-    if (digits.length - scale > MAX_COMPATIBLE_DECIMAL_DIGITS) {
-      throw new Error(`Invalid scalar string magnitude in "${value}".`);
-    }
     unscaled *= pow10(-scale);
     scale = 0;
   }
   return {
     unscaled,
     scale,
-    negativeZero: sign === "-" && unscaled === 0n,
+    negativeZero: negative && unscaled === 0n,
   };
+}
+
+function decimalShapeFits(significantDigits: number, scale: number): boolean {
+  if (scale > MAX_COMPATIBLE_DECIMAL_DIGITS) {
+    return false;
+  }
+  return scale >= 0 || significantDigits + (-scale) <= MAX_COMPATIBLE_DECIMAL_DIGITS;
+}
+
+function decimalDigitCount(value: bigint): number {
+  const magnitude = value < 0n ? -value : value;
+  if (magnitude >= MAX_COMPATIBLE_DECIMAL_MAGNITUDE) {
+    return MAX_COMPATIBLE_DECIMAL_DIGITS + 1;
+  }
+  return magnitude.toString().length;
+}
+
+function isDigit(value: string): boolean {
+  return value >= "0" && value <= "9";
 }
 
 function formatParts(value: DecimalParts, forceDecimal: boolean): string {

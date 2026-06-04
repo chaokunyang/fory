@@ -949,6 +949,22 @@ void main() {
         ).value,
         equals(Decimal(BigInt.from(123), 2)),
       );
+      final digits256 = List<String>.filled(256, '1').join();
+      final digitBound =
+          _compatibleScalarRoundTrip<CompatibleScalarDecimalEnvelope>(
+            CompatibleScalarStringEnvelope,
+            CompatibleScalarDecimalEnvelope,
+            CompatibleScalarStringEnvelope()..value = digits256,
+          ).value;
+      expect(digitBound, equals(Decimal(BigInt.parse(digits256), 0)));
+      final exponentBound =
+          _compatibleScalarRoundTrip<CompatibleScalarDecimalEnvelope>(
+            CompatibleScalarStringEnvelope,
+            CompatibleScalarDecimalEnvelope,
+            CompatibleScalarStringEnvelope()..value = '1e255',
+          ).value;
+      expect(exponentBound.unscaledValue.toString().length, equals(256));
+      expect(exponentBound.scale, equals(0));
       expect(
         _compatibleScalarRoundTrip<CompatibleScalarInt64Envelope>(
           CompatibleScalarDecimalEnvelope,
@@ -989,12 +1005,24 @@ void main() {
       _expectCompatibleScalarError(
         CompatibleScalarStringEnvelope,
         CompatibleScalarDecimalEnvelope,
-        CompatibleScalarStringEnvelope()..value = '1e4097',
+        CompatibleScalarStringEnvelope()
+          ..value = List<String>.filled(257, '1').join(),
       );
       _expectCompatibleScalarError(
         CompatibleScalarStringEnvelope,
         CompatibleScalarDecimalEnvelope,
-        CompatibleScalarStringEnvelope()..value = '1e2147483647',
+        CompatibleScalarStringEnvelope()
+          ..value = '0.${List<String>.filled(319, '0').join()}',
+      );
+      _expectCompatibleScalarError(
+        CompatibleScalarStringEnvelope,
+        CompatibleScalarDecimalEnvelope,
+        CompatibleScalarStringEnvelope()..value = '1e1000000',
+      );
+      _expectCompatibleScalarError(
+        CompatibleScalarStringEnvelope,
+        CompatibleScalarDecimalEnvelope,
+        CompatibleScalarStringEnvelope()..value = '1e256',
       );
       _expectCompatibleScalarError(
         CompatibleScalarInt64Envelope,
@@ -1005,6 +1033,11 @@ void main() {
         CompatibleScalarDecimalEnvelope,
         CompatibleScalarInt64Envelope,
         CompatibleScalarDecimalEnvelope()..value = Decimal(BigInt.one << 63, 0),
+      );
+      _expectCompatibleScalarError(
+        CompatibleScalarDecimalEnvelope,
+        CompatibleScalarStringEnvelope,
+        CompatibleScalarDecimalEnvelope()..value = Decimal(BigInt.one, -256),
       );
       _expectCompatibleScalarError(
         CompatibleScalarFloat64Envelope,

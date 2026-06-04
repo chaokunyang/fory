@@ -25,7 +25,6 @@ import marshal
 import math
 import os
 import pickle
-import re
 import struct as _struct
 import types
 from typing import Tuple
@@ -439,10 +438,8 @@ _INT_RANGES_BY_TYPE_ID = {
 _FLOAT_TYPE_IDS = frozenset((TypeId.FLOAT16, TypeId.BFLOAT16, TypeId.FLOAT32, TypeId.FLOAT64))
 _NUMERIC_TYPE_IDS = _SIGNED_INT_TYPE_IDS | _UNSIGNED_INT_TYPE_IDS | _FLOAT_TYPE_IDS | frozenset((TypeId.DECIMAL,))
 _SCALAR_CONVERSION_TYPE_IDS = _NUMERIC_TYPE_IDS | frozenset((TypeId.BOOL, TypeId.STRING))
-_MAX_COMPATIBLE_DECIMAL_DIGITS = 4096
-_NUMERIC_LITERAL_RE = re.compile(
-    r"-?(?:(?:0|[1-9][0-9]*)|(?:0|[1-9][0-9]*)\.[0-9]+(?:[eE]-?(?:0|[1-9][0-9]*))?|(?:0|[1-9][0-9]*)[eE]-?(?:0|[1-9][0-9]*))$"
-)
+_MAX_COMPATIBLE_DECIMAL_DIGITS = 256
+_MAX_COMPATIBLE_NUMERIC_TEXT_LENGTH = 320
 
 
 def supports_compatible_scalar_conversion(remote_type_id: int, local_type_id: int) -> bool:
@@ -462,9 +459,86 @@ def supports_compatible_scalar_conversion(remote_type_id: int, local_type_id: in
 
 
 def _decimal_from_text(value: str) -> decimal.Decimal:
-    if not _NUMERIC_LITERAL_RE.fullmatch(value):
+    if not _numeric_literal_fits(value):
         raise ValueError("invalid numeric literal")
     return _canonical_decimal(decimal.Decimal(value))
+
+
+def _numeric_literal_fits(value: str) -> bool:
+    if not value or len(value) > _MAX_COMPATIBLE_NUMERIC_TEXT_LENGTH:
+        return False
+    index = 0
+    if value[index] == "-":
+        index += 1
+        if index == len(value):
+            return False
+
+    significant_digits = 0
+    seen_nonzero = False
+    if value[index] == "0":
+        index += 1
+        if index < len(value) and _is_digit(value[index]):
+            return False
+    elif "1" <= value[index] <= "9":
+        while index < len(value) and _is_digit(value[index]):
+            if value[index] != "0" or seen_nonzero:
+                seen_nonzero = True
+                significant_digits += 1
+            index += 1
+    else:
+        return False
+
+    fractional_digits = 0
+    if index < len(value) and value[index] == ".":
+        index += 1
+        fraction_start = index
+        while index < len(value) and _is_digit(value[index]):
+            if value[index] != "0" or seen_nonzero:
+                seen_nonzero = True
+                significant_digits += 1
+            fractional_digits += 1
+            index += 1
+        if index == fraction_start:
+            return False
+
+    exponent = 0
+    if index < len(value) and value[index] in ("e", "E"):
+        index += 1
+        exponent_negative = False
+        if index < len(value) and value[index] == "-":
+            exponent_negative = True
+            index += 1
+        if index == len(value):
+            return False
+        if value[index] == "0":
+            index += 1
+            if index < len(value) and _is_digit(value[index]):
+                return False
+        elif "1" <= value[index] <= "9":
+            while index < len(value) and _is_digit(value[index]):
+                exponent = exponent * 10 + ord(value[index]) - ord("0")
+                if exponent > _MAX_COMPATIBLE_DECIMAL_DIGITS:
+                    return False
+                index += 1
+        else:
+            return False
+        if exponent_negative:
+            exponent = -exponent
+
+    if index != len(value) or significant_digits > _MAX_COMPATIBLE_DECIMAL_DIGITS:
+        return False
+    final_scale = fractional_digits - exponent
+    return _decimal_shape_fits(significant_digits, final_scale)
+
+
+def _decimal_shape_fits(significant_digits: int, scale: int) -> bool:
+    if scale > _MAX_COMPATIBLE_DECIMAL_DIGITS:
+        return False
+    return scale >= 0 or significant_digits + (-scale) <= _MAX_COMPATIBLE_DECIMAL_DIGITS
+
+
+def _is_digit(value: str) -> bool:
+    return "0" <= value <= "9"
 
 
 def _canonical_decimal(value: decimal.Decimal) -> decimal.Decimal:
@@ -525,6 +599,7 @@ def _decimal_from_float_value(value: float) -> decimal.Decimal:
 def _int_value(value, local_type_id: int) -> int:
     min_value, max_value = _INT_RANGES_BY_TYPE_ID[local_type_id]
     if isinstance(value, decimal.Decimal):
+        value = _canonical_decimal(value)
         if not value.is_finite() or value != value.to_integral_exact():
             raise ValueError("decimal is not an integral value")
         result = int(value)
@@ -543,12 +618,11 @@ def _int_value(value, local_type_id: int) -> int:
 
 def _float_value(value, local_type_id: int) -> float:
     if isinstance(value, decimal.Decimal):
-        if not value.is_finite():
-            raise ValueError("decimal is not finite")
+        value = _canonical_decimal(value)
         if value.is_zero():
             return 0.0
         result = _to_float_domain(float(value), local_type_id)
-        if _decimal_from_float_value(result) != _canonical_decimal(value):
+        if _decimal_from_float_value(result) != value:
             raise ValueError("decimal value is not exactly representable by target float")
         return result
     if type(value) is int:
@@ -578,8 +652,7 @@ def _bool_value(value) -> bool:
             return False
         raise ValueError("string is not a compatible bool literal")
     if isinstance(value, decimal.Decimal):
-        if not value.is_finite():
-            raise ValueError("decimal is not finite")
+        value = _canonical_decimal(value)
         if value == 0:
             return False
         if value == 1:
@@ -616,7 +689,7 @@ def _float_text(value: float) -> str:
         raise ValueError("non-finite float cannot convert to string")
     if value == 0.0:
         return "-0.0" if _is_negative_zero(value) else "0.0"
-    text = format(decimal.Decimal.from_float(value), "f")
+    text = _plain_decimal_text(decimal.Decimal.from_float(value))
     if "." not in text:
         return f"{text}.0"
     text = text.rstrip("0")

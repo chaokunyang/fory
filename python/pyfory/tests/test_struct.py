@@ -268,6 +268,11 @@ def test_compatible_scalar_conversions():
     assert compat_ser_de(RemoteStringScalar, LocalDecimalScalar, RemoteStringScalar("1.2300"), 729) == LocalDecimalScalar(decimal.Decimal("1.23"))
     assert compat_ser_de(RemoteDecimalScalar, LocalInt64Scalar, RemoteDecimalScalar(decimal.Decimal("1.0")), 730) == LocalInt64Scalar(1)
     assert compat_ser_de(RemoteInt64Scalar, LocalDecimalScalar, RemoteInt64Scalar(7), 731) == LocalDecimalScalar(decimal.Decimal(7))
+    digits_256 = "1" * 256
+    digit_bound = compat_ser_de(RemoteStringScalar, LocalDecimalScalar, RemoteStringScalar(digits_256), 743)
+    assert digit_bound.value == decimal.Decimal(digits_256)
+    exponent_bound = compat_ser_de(RemoteStringScalar, LocalDecimalScalar, RemoteStringScalar("1e255"), 744)
+    assert len(str(int(exponent_bound.value))) == 256
     result = compat_ser_de(RemoteStringScalar, LocalFloat32Scalar, RemoteStringScalar("-0e0"), 737)
     assert result.value == 0.0
     assert math.copysign(1.0, result.value) < 0.0
@@ -281,10 +286,13 @@ def test_compatible_scalar_conversions():
         (RemoteStringScalar, LocalInt64Scalar, RemoteStringScalar("01")),
         (RemoteStringScalar, LocalInt64Scalar, RemoteStringScalar("1.5")),
         (RemoteStringScalar, LocalFloat32Scalar, RemoteStringScalar("0.1")),
-        (RemoteStringScalar, LocalDecimalScalar, RemoteStringScalar("1e4097")),
-        (RemoteStringScalar, LocalDecimalScalar, RemoteStringScalar("1e2147483647")),
+        (RemoteStringScalar, LocalDecimalScalar, RemoteStringScalar("1" * 257)),
+        (RemoteStringScalar, LocalDecimalScalar, RemoteStringScalar("0." + "0" * 319)),
+        (RemoteStringScalar, LocalDecimalScalar, RemoteStringScalar("1e1000000")),
+        (RemoteStringScalar, LocalDecimalScalar, RemoteStringScalar("1e256")),
         (RemoteInt64Scalar, LocalInt8Scalar, RemoteInt64Scalar(128)),
         (RemoteDecimalScalar, LocalInt64Scalar, RemoteDecimalScalar(decimal.Decimal(1 << 63))),
+        (RemoteDecimalScalar, LocalStringScalar, RemoteDecimalScalar(decimal.Decimal((0, (1,), 256)))),
         (RemoteFloat64Scalar, LocalStringScalar, RemoteFloat64Scalar(float("inf"))),
     ],
 )

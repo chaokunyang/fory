@@ -916,7 +916,7 @@ pub trait Serializer: 'static {
         Self: Sized + ForyDefault,
     {
         let _ = context;
-        Err(unsupported_send_sync_type::<Self>())
+        Err(crate::error::unsupported_send_sync_type::<Self>())
     }
 
     /// Read and validate type metadata from the buffer.
@@ -1481,7 +1481,7 @@ pub trait StructSerializer: Serializer + 'static {
     {
         let _ = context;
         let _ = type_info;
-        Err(unsupported_send_sync_type::<Self>())
+        Err(crate::error::unsupported_send_sync_type::<Self>())
     }
 }
 
@@ -1501,24 +1501,4 @@ pub fn write_data<T: Serializer>(this: &T, context: &mut WriteContext) -> Result
 #[inline(always)]
 pub fn read_data<T: Serializer + ForyDefault>(context: &mut ReadContext) -> Result<T, Error> {
     T::fory_read_data(context)
-}
-
-#[inline(always)]
-pub fn box_send_sync<T>(value: T) -> Box<dyn Any + Send + Sync>
-where
-    T: Any + Send + Sync,
-{
-    Box::new(value)
-}
-
-#[cold]
-#[inline(never)]
-pub fn unsupported_send_sync_type<T>() -> Error
-where
-    T: ?Sized,
-{
-    Error::type_error(format!(
-        "{} cannot be represented as Arc<dyn Any + Send + Sync>",
-        std::any::type_name::<T>()
-    ))
 }

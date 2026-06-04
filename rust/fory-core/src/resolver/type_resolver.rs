@@ -972,7 +972,7 @@ impl TypeResolver {
             if T2::fory_is_send_sync_type() {
                 T2::fory_read_data_send_sync(context)
             } else {
-                Err(crate::serializer::unsupported_send_sync_type::<T2>())
+                Err(crate::error::unsupported_send_sync_type::<T2>())
             }
         }
 
@@ -1213,7 +1213,7 @@ impl TypeResolver {
             if T2::fory_is_send_sync_type() {
                 T2::fory_read_data_send_sync(context)
             } else {
-                Err(crate::serializer::unsupported_send_sync_type::<T2>())
+                Err(crate::error::unsupported_send_sync_type::<T2>())
             }
         }
 

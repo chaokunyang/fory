@@ -50,7 +50,5 @@ pub mod weak;
 mod core;
 mod decimal;
 pub use any::{read_box_any, write_box_any};
-pub use core::{
-    box_send_sync, read_data, unsupported_send_sync_type, write_data, ForyDefault, Serializer,
-    StructSerializer,
-};
+pub use core::{read_data, write_data, ForyDefault, Serializer, StructSerializer};
+pub use util::box_send_sync;

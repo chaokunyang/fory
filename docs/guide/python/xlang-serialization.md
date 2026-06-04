@@ -49,7 +49,7 @@ class Person:
     name: str
     age: pyfory.Int32
 
-f.register(Person, typename="example.Person")
+f.register(Person, name="example.Person")
 
 person = Person("Charlie", 35)
 binary_data = f.serialize(person)

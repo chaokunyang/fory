@@ -286,7 +286,7 @@ final class TypeResolver {
     if (entry == null) {
       throw StateError(
         'Type $type has no generated type metadata. '
-        'Register it through its generated library namespace first.',
+        'Register it through its generated Fory module first.',
       );
     }
     _registerResolvedSerializer(
@@ -541,7 +541,7 @@ final class TypeResolver {
     }
     throw StateError(
       'Type $runtimeType is not registered. Register generated types with '
-      'their generated library namespace, or register a serializer explicitly.',
+      'their generated Fory module, or register a serializer explicitly.',
     );
   }
 
@@ -1635,7 +1635,7 @@ final class TypeResolver {
     final hasNamed = namespace != null || typeName != null;
     if (hasNumeric == hasNamed) {
       throw ArgumentError(
-        'Exactly one registration mode is required: id, or typeName.',
+        'Exactly one registration mode is required: id, or name.',
       );
     }
     if (namespace != null && typeName == null) {
@@ -1656,7 +1656,7 @@ final class TypeResolver {
       }
     }
     if (resolvedTypeName.isEmpty) {
-      throw ArgumentError('typeName must include a non-empty type name.');
+      throw ArgumentError('name must include a non-empty type name.');
     }
     return (namespace: resolvedNamespace, typeName: resolvedTypeName);
   }

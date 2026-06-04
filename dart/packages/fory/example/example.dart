@@ -36,8 +36,8 @@ class Person {
 
 void main() {
   final fory = Fory();
-  ExampleForyModule.register(fory, Color, typeName: 'example.Color');
-  ExampleForyModule.register(fory, Person, typeName: 'example.Person');
+  ExampleForyModule.register(fory, Color, name: 'example.Color');
+  ExampleForyModule.register(fory, Person, name: 'example.Person');
 
   final person =
       Person()

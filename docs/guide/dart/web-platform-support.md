@@ -61,7 +61,7 @@ void main() {
   AccountForyModule.register(
     fory,
     Account,
-    typeName: 'example.Account',
+    name: 'example.Account',
   );
 
   final bytes = fory.serialize(Account()..name = 'web');

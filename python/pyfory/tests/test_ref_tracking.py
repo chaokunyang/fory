@@ -185,8 +185,8 @@ def test_struct_shared_fields_and_cross_container_alias_python_mode():
 def test_struct_field_ref_override_controls_alias_preservation(xlang):
     fory = pyfory.Fory(xlang=xlang, ref=True, strict=False)
     if xlang:
-        fory.register_type(RefOverrideDisabled, typename="example.RefOverrideDisabled")
-        fory.register_type(RefOverrideEnabled, typename="example.RefOverrideEnabled")
+        fory.register_type(RefOverrideDisabled, name="example.RefOverrideDisabled")
+        fory.register_type(RefOverrideEnabled, name="example.RefOverrideEnabled")
     else:
         fory.register(RefOverrideDisabled)
         fory.register(RefOverrideEnabled)
@@ -206,7 +206,7 @@ def test_struct_field_ref_override_controls_alias_preservation(xlang):
 
 def test_collection_ref_override_unsets_tracking_bit():
     fory = pyfory.Fory(xlang=True, ref=True, compatible=True)
-    fory.register_type(CollectionRefOverrideItem, typename="example.CollectionRefOverrideItem")
+    fory.register_type(CollectionRefOverrideItem, name="example.CollectionRefOverrideItem")
 
     serializer = ListSerializer(fory.type_resolver, list, elem_tracking_ref=False)
     shared = CollectionRefOverrideItem(7)
@@ -231,8 +231,8 @@ def test_ref_annotation_preserves_override():
 
 def test_collection_ref_override_disables_alias_preservation():
     fory = pyfory.Fory(xlang=True, ref=True, compatible=True)
-    fory.register_type(CollectionRefOverrideItem, typename="example.CollectionRefOverrideItem")
-    fory.register_type(CollectionRefOverrideContainer, typename="example.CollectionRefOverrideContainer")
+    fory.register_type(CollectionRefOverrideItem, name="example.CollectionRefOverrideItem")
+    fory.register_type(CollectionRefOverrideContainer, name="example.CollectionRefOverrideContainer")
 
     shared = CollectionRefOverrideItem(11)
     restored = _roundtrip(
@@ -328,7 +328,7 @@ def test_optional_fixed_uint64_roundtrip(xlang):
     value = 1234567890123456789
     fory = pyfory.Fory(xlang=xlang, ref=True, strict=False)
     if xlang:
-        fory.register_type(FixedUint64Pair, typename="example.FixedUint64Pair")
+        fory.register_type(FixedUint64Pair, name="example.FixedUint64Pair")
     else:
         fory.register(FixedUint64Pair)
 

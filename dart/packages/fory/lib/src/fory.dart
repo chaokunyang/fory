@@ -217,22 +217,21 @@ final class Fory {
   ///
   /// Exactly one registration mode is required:
   /// - pass [id] for id-based registration, or
-  /// - pass [typeName] for name-based registration.
+  /// - pass [name] for name-based registration.
   ///
-  /// When [namespace] is omitted, [typeName] may include a namespace prefix
-  /// separated by `.`; otherwise [namespace] and [typeName] are used as the
-  /// explicit split components.
+  /// [name] may include a namespace prefix separated by `.`, such as
+  /// `example.Person`. The final segment is the type name.
   ///
   /// Generated struct and enum registration should normally flow through the
-  /// generated library namespace, which installs generated metadata into the
+  /// generated Fory module, which installs generated metadata into the
   /// internal registry before calling this method. For manual serializers,
   /// including unions, use [registerSerializer].
-  void register(Type type, {int? id, String? namespace, String? typeName}) {
+  void register(Type type, {int? id, String? name}) {
     _typeResolver.registerGenerated(
       type,
       id: id,
-      namespace: namespace,
-      typeName: typeName,
+      namespace: null,
+      typeName: name,
     );
   }
 
@@ -240,11 +239,10 @@ final class Fory {
   ///
   /// Exactly one registration mode is required:
   /// - pass [id] for id-based registration, or
-  /// - pass [typeName] for name-based registration.
+  /// - pass [name] for name-based registration.
   ///
-  /// When [namespace] is omitted, [typeName] may include a namespace prefix
-  /// separated by `.`; otherwise [namespace] and [typeName] are used as the
-  /// explicit split components.
+  /// [name] may include a namespace prefix separated by `.`, such as
+  /// `example.Person`. The final segment is the type name.
   ///
   /// This is the advanced escape hatch for external types, manual unions, or
   /// custom wire behavior. Prefer [register] for generated types.
@@ -252,15 +250,14 @@ final class Fory {
     Type type,
     Serializer serializer, {
     int? id,
-    String? namespace,
-    String? typeName,
+    String? name,
   }) {
     _typeResolver.registerSerializer(
       type,
       serializer,
       id: id,
-      namespace: namespace,
-      typeName: typeName,
+      namespace: null,
+      typeName: name,
     );
   }
 }

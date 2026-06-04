@@ -388,7 +388,7 @@ Type registration can be ID-based or name-based:
 
 ```swift
 fory.register(MyType.self, id: 100)
-try fory.register(MyType.self, namespace: "com.example", name: "MyType")
+try fory.register(MyType.self, name: "com.example.MyType")
 ```
 
 Cross-language rules:

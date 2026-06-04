@@ -66,8 +66,8 @@ class ComplexObject:
 
 def test_struct():
     fory = Fory(xlang=True, compatible=False, ref=True)
-    fory.register_type(SimpleObject, typename="SimpleObject")
-    fory.register_type(ComplexObject, typename="example.ComplexObject")
+    fory.register_type(SimpleObject, name="SimpleObject")
+    fory.register_type(ComplexObject, name="example.ComplexObject")
     o = SimpleObject(f1={1: 1.0 / 3})
     assert ser_de(fory, o) == o
 
@@ -405,8 +405,8 @@ def test_numeric_serializer_need_to_write_ref_disabled(numeric_type):
 
 def test_data_class_serializer_xlang():
     fory = Fory(xlang=True, compatible=False, ref=True)
-    fory.register_type(ComplexObject, typename="example.ComplexObject")
-    fory.register_type(DataClassObject, typename="example.TestDataClassObject")
+    fory.register_type(ComplexObject, name="example.ComplexObject")
+    fory.register_type(DataClassObject, name="example.TestDataClassObject")
 
     complex_data = ComplexObject(
         f1="nested_str",
@@ -471,7 +471,7 @@ def test_dataclass_with_typed_tuple_field(track_ref):
 @pytest.mark.parametrize("track_ref", [False, True])
 def test_xlang_dataclass_tuple_field(track_ref):
     fory = Fory(xlang=True, compatible=False, ref=track_ref, strict=False)
-    fory.register_type(XlangTupleFieldObject, typename="example.XlangTupleFieldObject")
+    fory.register_type(XlangTupleFieldObject, name="example.XlangTupleFieldObject")
     obj = XlangTupleFieldObject(bar=("a", 1))
     result = ser_de(fory, obj)
     assert result == obj
@@ -481,7 +481,7 @@ def test_xlang_dataclass_tuple_field(track_ref):
 @pytest.mark.parametrize("track_ref", [False, True])
 def test_xlang_nested_tuple_container_fields(track_ref):
     fory = Fory(xlang=True, compatible=False, ref=track_ref, strict=False)
-    fory.register_type(XlangNestedTupleObject, typename="example.XlangNestedTupleObject")
+    fory.register_type(XlangNestedTupleObject, name="example.XlangNestedTupleObject")
     obj = XlangNestedTupleObject(
         tuple_field=([1, 2], {"a": 1, "b": 2}),
         list_of_tuples=[("a", 1), ("b", 2)],
@@ -509,8 +509,8 @@ def test_struct_evolving_override():
         f1: pyfory.Int32 = 0
 
     fory = Fory(xlang=True, compatible=True)
-    fory.register_type(EvolvingStruct, namespace="test", typename="EvolvingStruct")
-    fory.register_type(FixedStruct, namespace="test", typename="FixedStruct")
+    fory.register_type(EvolvingStruct, name="test.EvolvingStruct")
+    fory.register_type(FixedStruct, name="test.FixedStruct")
     evolving_info = fory.type_resolver.get_type_info(EvolvingStruct)
     fixed_info = fory.type_resolver.get_type_info(FixedStruct)
     assert evolving_info.type_id == TypeId.NAMED_COMPATIBLE_STRUCT
@@ -531,8 +531,8 @@ def test_data_class_serializer_xlang_serializer():
     fory = Fory(xlang=True, compatible=False, ref=True)
 
     # Register types first
-    fory.register_type(ComplexObject, typename="example.ComplexObject")
-    fory.register_type(DataClassObject, typename="example.TestDataClassObject")
+    fory.register_type(ComplexObject, name="example.ComplexObject")
+    fory.register_type(DataClassObject, name="example.TestDataClassObject")
 
     # trigger lazy serializer replace
     fory.serialize(DataClassObject.create())
@@ -577,8 +577,8 @@ def test_data_class_serializer_xlang_vs_non_xlang():
     fory_python = Fory(xlang=False, ref=True, strict=False)
 
     # Register types for xlang
-    fory_xlang.register_type(ComplexObject, typename="example.ComplexObject")
-    fory_xlang.register_type(DataClassObject, typename="example.TestDataClassObject")
+    fory_xlang.register_type(ComplexObject, name="example.ComplexObject")
+    fory_xlang.register_type(DataClassObject, name="example.TestDataClassObject")
 
     # trigger lazy serializer replace
     fory_xlang.serialize(DataClassObject.create())
@@ -677,7 +677,7 @@ class OptionalFieldsObject:
 def test_optional_fields(xlang, compatible):
     fory = Fory(xlang=xlang, ref=True, compatible=compatible, strict=False)
     if xlang:
-        fory.register_type(OptionalFieldsObject, typename="example.OptionalFieldsObject")
+        fory.register_type(OptionalFieldsObject, name="example.OptionalFieldsObject")
 
     obj_with_none = OptionalFieldsObject(f1=None, f2=None, f3=None, f4=42, f5="test")
     result = ser_de(fory, obj_with_none)
@@ -716,8 +716,8 @@ class NestedOptionalObject:
 def test_nested_optional_fields(xlang, compatible):
     fory = Fory(xlang=xlang, ref=True, compatible=compatible, strict=False)
     if xlang:
-        fory.register_type(ComplexObject, typename="example.ComplexObject")
-        fory.register_type(NestedOptionalObject, typename="example.NestedOptionalObject")
+        fory.register_type(ComplexObject, name="example.ComplexObject")
+        fory.register_type(NestedOptionalObject, name="example.NestedOptionalObject")
 
     obj_with_none = NestedOptionalObject(f1=None, f2=None, f3="test")
     result = ser_de(fory, obj_with_none)
@@ -810,8 +810,8 @@ def test_compatible_mode_add_field(xlang):
     fory_v1 = Fory(xlang=xlang, ref=True, compatible=True, strict=False)
     fory_v2 = Fory(xlang=xlang, ref=True, compatible=True, strict=False)
 
-    fory_v1.register_type(CompatibleV1, typename="example.Compatible")
-    fory_v2.register_type(CompatibleV2, typename="example.Compatible")
+    fory_v1.register_type(CompatibleV1, name="example.Compatible")
+    fory_v2.register_type(CompatibleV2, name="example.Compatible")
 
     # V1 object serialized
     v1_obj = CompatibleV1(f1=100, f2="test", f3=3.14)
@@ -831,8 +831,8 @@ def test_compatible_mode_remove_field(xlang):
     fory_v2 = Fory(xlang=xlang, ref=True, compatible=True, strict=False)
     fory_v3 = Fory(xlang=xlang, ref=True, compatible=True, strict=False)
 
-    fory_v2.register_type(CompatibleV2, typename="example.Compatible")
-    fory_v3.register_type(CompatibleV3, typename="example.Compatible")
+    fory_v2.register_type(CompatibleV2, name="example.Compatible")
+    fory_v3.register_type(CompatibleV3, name="example.Compatible")
 
     # V2 object with all fields
     v2_obj = CompatibleV2(f1=200, f2="hello", f3=2.71, f4=True)
@@ -851,8 +851,8 @@ def test_compatible_mode_bidirectional(xlang):
     fory_v1 = Fory(xlang=xlang, ref=True, compatible=True, strict=False)
     fory_v2 = Fory(xlang=xlang, ref=True, compatible=True, strict=False)
 
-    fory_v1.register_type(CompatibleV1, typename="example.Compatible")
-    fory_v2.register_type(CompatibleV2, typename="example.Compatible")
+    fory_v1.register_type(CompatibleV1, name="example.Compatible")
+    fory_v2.register_type(CompatibleV2, name="example.Compatible")
 
     # V1 -> V2
     v1_obj = CompatibleV1(f1=100, f2="test", f3=3.14)
@@ -877,8 +877,8 @@ def test_compatible_mode_add_required_field_without_default_uses_zero_value(xlan
     fory_v1 = Fory(xlang=xlang, ref=True, compatible=True, strict=False)
     fory_v2 = Fory(xlang=xlang, ref=True, compatible=True, strict=False)
 
-    fory_v1.register_type(CompatibleRequiredFieldV1, typename="example.CompatibleRequiredField")
-    fory_v2.register_type(CompatibleRequiredFieldV2, typename="example.CompatibleRequiredField")
+    fory_v1.register_type(CompatibleRequiredFieldV1, name="example.CompatibleRequiredField")
+    fory_v2.register_type(CompatibleRequiredFieldV2, name="example.CompatibleRequiredField")
 
     v1_binary = fory_v1.serialize(CompatibleRequiredFieldV1(f1=321))
     v2_result = fory_v2.deserialize(v1_binary)
@@ -899,8 +899,8 @@ def test_compatible_mode_add_required_fields_use_type_defaults(xlang):
     fory_v1 = Fory(xlang=xlang, ref=True, compatible=True, strict=False)
     fory_v2 = Fory(xlang=xlang, ref=True, compatible=True, strict=False)
 
-    fory_v1.register_type(CompatibleRequiredDefaultsV1, typename="example.CompatibleRequiredDefaults")
-    fory_v2.register_type(CompatibleRequiredDefaultsV2, typename="example.CompatibleRequiredDefaults")
+    fory_v1.register_type(CompatibleRequiredDefaultsV1, name="example.CompatibleRequiredDefaults")
+    fory_v2.register_type(CompatibleRequiredDefaultsV2, name="example.CompatibleRequiredDefaults")
 
     v1_binary = fory_v1.serialize(CompatibleRequiredDefaultsV1(f1=11))
     v2_result = fory_v2.deserialize(v1_binary)
@@ -937,8 +937,8 @@ def test_compatible_mode_with_optional_fields(xlang):
     fory_v1 = Fory(xlang=xlang, ref=True, compatible=True, strict=False)
     fory_v2 = Fory(xlang=xlang, ref=True, compatible=True, strict=False)
 
-    fory_v1.register_type(CompatibleWithOptional, typename="example.CompatibleOptional")
-    fory_v2.register_type(CompatibleWithOptionalV2, typename="example.CompatibleOptional")
+    fory_v1.register_type(CompatibleWithOptional, name="example.CompatibleOptional")
+    fory_v2.register_type(CompatibleWithOptionalV2, name="example.CompatibleOptional")
 
     # V1 with None values
     v1_obj = CompatibleWithOptional(f1=None, f2="test", f3=None)
@@ -986,8 +986,8 @@ def test_compatible_mode_all_basic_types(xlang):
     fory_v1 = Fory(xlang=xlang, ref=True, compatible=True, strict=False)
     fory_v2 = Fory(xlang=xlang, ref=True, compatible=True, strict=False)
 
-    fory_v1.register_type(CompatibleAllTypes, typename="example.CompatibleAllTypes")
-    fory_v2.register_type(CompatibleAllTypesV2, typename="example.CompatibleAllTypes")
+    fory_v1.register_type(CompatibleAllTypes, name="example.CompatibleAllTypes")
+    fory_v2.register_type(CompatibleAllTypesV2, name="example.CompatibleAllTypes")
 
     v1_obj = CompatibleAllTypes(f_int=42, f_str="hello", f_float=3.14, f_bool=True, f_list=[1, 2, 3], f_dict={"a": 1, "b": 2})
     v1_binary = fory_v1.serialize(v1_obj)
@@ -1007,9 +1007,9 @@ def test_optional_compatible_mode_evolution():
     fory_v2 = Fory(xlang=True, ref=True, compatible=True)
     fory_v3 = Fory(xlang=True, ref=True, compatible=True)
 
-    fory_v1.register_type(OptionalV1, typename="example.OptionalVersioned")
-    fory_v2.register_type(OptionalV2, typename="example.OptionalVersioned")
-    fory_v3.register_type(OptionalV3, typename="example.OptionalVersioned")
+    fory_v1.register_type(OptionalV1, name="example.OptionalVersioned")
+    fory_v2.register_type(OptionalV2, name="example.OptionalVersioned")
+    fory_v3.register_type(OptionalV3, name="example.OptionalVersioned")
 
     v1_obj = OptionalV1(f1=100, f2="test", f3=[1, 2, 3])
     v1_binary = fory_v1.serialize(v1_obj)
@@ -1101,9 +1101,9 @@ def test_dynamic_with_inheritance():
 def test_dynamic_with_inheritance_xlang():
     """Test dynamic=True allows polymorphic serialization in xlang mode."""
     fory = Fory(xlang=True, compatible=False, ref=True)
-    fory.register_type(Animal, typename="example.Animal")
-    fory.register_type(Dog, typename="example.Dog")
-    fory.register_type(Zoo, typename="example.Zoo")
+    fory.register_type(Animal, name="example.Animal")
+    fory.register_type(Dog, name="example.Dog")
+    fory.register_type(Zoo, name="example.Zoo")
 
     dog1 = Dog(name="Max", breed="Husky")
     dog2 = Dog(name="Luna", breed="Poodle")

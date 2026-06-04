@@ -105,7 +105,7 @@ class Fory:
         ...     age: pyfory.Int32
         >>>
         >>> fory = pyfory.Fory(xlang=True)
-        >>> fory.register(Person, typename="example.Person")
+        >>> fory.register(Person, name="example.Person")
         >>> data = fory.serialize(Person("Alice", 30))
         >>> person = fory.deserialize(data)
 
@@ -240,8 +240,7 @@ class Fory:
         cls: Union[type, TypeVar],
         *,
         type_id: int = None,
-        namespace: str = None,
-        typename: str = None,
+        name: str = None,
         serializer=None,
     ):
         """
@@ -253,17 +252,15 @@ class Fory:
 
         For cross-language serialization, types can be matched between languages using:
         1. **type_id** (recommended): Numeric ID matching - faster and more compact
-        2. **namespace + typename**: String-based matching - more flexible but larger overhead
+        2. **name**: String-based matching - more flexible but larger overhead
 
         Args:
             cls: The Python type to register
             type_id: Optional unique numeric ID for cross-language type matching.
                 Using type_id provides better performance and smaller serialized size
-                compared to namespace/typename matching.
-            namespace: Optional namespace for cross-language type matching by name.
-                Used when type_id is not specified.
-            typename: Optional type name for cross-language type matching by name.
-                Defaults to class name if not specified. Used with namespace.
+                compared to name matching.
+            name: Optional name for cross-language type matching. The last `.`
+                separates the internal namespace from the type name.
             serializer: Optional custom serializer instance for this type
 
         Example:
@@ -271,8 +268,8 @@ class Fory:
             >>> fory = Fory(xlang=True)
             >>> fory.register(Person, type_id=100)
             >>>
-            >>> # Register with namespace and typename (more flexible)
-            >>> fory.register(Person, namespace="com.example", typename="Person")
+            >>> # Register with name (more flexible)
+            >>> fory.register(Person, name="com.example.Person")
             >>>
             >>> # Python native mode (no cross-language matching needed)
             >>> fory = Fory(xlang=False)
@@ -281,8 +278,7 @@ class Fory:
         self.register_type(
             cls,
             type_id=type_id,
-            namespace=namespace,
-            typename=typename,
+            name=name,
             serializer=serializer,
         )
 
@@ -292,8 +288,7 @@ class Fory:
         cls: Union[type, TypeVar],
         *,
         type_id: int = None,
-        namespace: str = None,
-        typename: str = None,
+        name: str = None,
         serializer=None,
     ):
         """
@@ -304,17 +299,15 @@ class Fory:
 
         For cross-language serialization, types can be matched between languages using:
         1. **type_id** (recommended): Numeric ID matching - faster and more compact
-        2. **namespace + typename**: String-based matching - more flexible but larger overhead
+        2. **name**: String-based matching - more flexible but larger overhead
 
         Args:
             cls: The Python type to register
             type_id: Optional unique numeric ID for cross-language type matching.
                 Using type_id provides better performance and smaller serialized size
-                compared to namespace/typename matching.
-            namespace: Optional namespace for cross-language type matching by name.
-                Used when type_id is not specified.
-            typename: Optional type name for cross-language type matching by name.
-                Defaults to class name if not specified. Used with namespace.
+                compared to name matching.
+            name: Optional name for cross-language type matching. The last `.`
+                separates the internal namespace from the type name.
             serializer: Optional custom serializer instance for this type
 
         Example:
@@ -322,8 +315,8 @@ class Fory:
             >>> fory = Fory(xlang=True)
             >>> fory.register_type(Person, type_id=100)
             >>>
-            >>> # Register with namespace and typename (more flexible)
-            >>> fory.register_type(Person, namespace="com.example", typename="Person")
+            >>> # Register with name (more flexible)
+            >>> fory.register_type(Person, name="com.example.Person")
             >>>
             >>> # Python native mode (no cross-language matching needed)
             >>> fory = Fory(xlang=False)
@@ -332,8 +325,7 @@ class Fory:
         return self.type_resolver.register_type(
             cls,
             type_id=type_id,
-            namespace=namespace,
-            typename=typename,
+            name=name,
             serializer=serializer,
         )
 
@@ -342,8 +334,7 @@ class Fory:
         cls: Union[type, TypeVar],
         *,
         type_id: int = None,
-        namespace: str = None,
-        typename: str = None,
+        name: str = None,
         serializer=None,
     ):
         """
@@ -352,8 +343,7 @@ class Fory:
         return self.type_resolver.register_union(
             cls,
             type_id=type_id,
-            namespace=namespace,
-            typename=typename,
+            name=name,
             serializer=serializer,
         )
 
@@ -701,33 +691,30 @@ class ThreadSafeFory:
         cls: Union[type, TypeVar],
         *,
         type_id: int = None,
-        namespace: str = None,
-        typename: str = None,
+        name: str = None,
         serializer=None,
     ):
-        self._register_callback(lambda f: f.register(cls, type_id=type_id, namespace=namespace, typename=typename, serializer=serializer))
+        self._register_callback(lambda f: f.register(cls, type_id=type_id, name=name, serializer=serializer))
 
     def register_type(
         self,
         cls: Union[type, TypeVar],
         *,
         type_id: int = None,
-        namespace: str = None,
-        typename: str = None,
+        name: str = None,
         serializer=None,
     ):
-        self._register_callback(lambda f: f.register_type(cls, type_id=type_id, namespace=namespace, typename=typename, serializer=serializer))
+        self._register_callback(lambda f: f.register_type(cls, type_id=type_id, name=name, serializer=serializer))
 
     def register_union(
         self,
         cls: Union[type, TypeVar],
         *,
         type_id: int = None,
-        namespace: str = None,
-        typename: str = None,
+        name: str = None,
         serializer=None,
     ):
-        self._register_callback(lambda f: f.register_union(cls, type_id=type_id, namespace=namespace, typename=typename, serializer=serializer))
+        self._register_callback(lambda f: f.register_union(cls, type_id=type_id, name=name, serializer=serializer))
 
     def register_serializer(self, cls: type, serializer):
         self._register_callback(lambda f: f.register_serializer(cls, serializer))

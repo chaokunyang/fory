@@ -694,6 +694,36 @@ def test_register_type():
     assert isinstance(fory.deserialize(fory.serialize(A.B.C())), A.B.C)
 
 
+def test_register_type_name():
+    class NamedType:
+        pass
+
+    class LocalNameType:
+        pass
+
+    fory = Fory(xlang=True)
+    namespaced_info = fory.register_type(NamedType, name="example.NamedType")
+    local_info = fory.register_type(LocalNameType, name="LocalNameType")
+
+    assert namespaced_info.decode_namespace() == "example"
+    assert namespaced_info.decode_typename() == "NamedType"
+    assert local_info.decode_namespace() == ""
+    assert local_info.decode_typename() == "LocalNameType"
+
+
+def test_register_type_name_invalid():
+    for name in ("", "example."):
+        fory = Fory(xlang=True)
+        with pytest.raises(ValueError, match="name must not be empty"):
+            fory.register_type(A, name=name)
+
+
+def test_register_type_name_exclusive():
+    fory = Fory(xlang=True)
+    with pytest.raises(TypeError, match="type name"):
+        fory.register_type(A, type_id=100, name="example.A")
+
+
 def test_np_types():
     fory = Fory(xlang=False, ref=True, strict=False)
     o1 = [1, True, np.dtype(np.int32)]

@@ -613,6 +613,77 @@ def test_java_nested_name_registration_uses_owner_namespace():
     )
 
 
+def test_generated_registration_uses_single_name_for_dart_python_swift():
+    schema = parse_fdl(
+        """
+        option enable_auto_type_id = false;
+        package demo;
+
+        message Envelope {
+            message Payload {
+                int32 value = 1;
+            }
+
+            enum Kind {
+                UNKNOWN = 0;
+                ACTIVE = 1;
+            }
+
+            union Choice {
+                Payload payload = 1;
+                string note = 2;
+            }
+
+            Payload payload = 1;
+            Kind kind = 2;
+            Choice choice = 3;
+        }
+        """
+    )
+
+    dart_output = render_files(generate_files(schema, DartGenerator))
+    assert (
+        "registerGeneratedStruct(fory, _envelopeForySchema, id: null, name: 'demo.Envelope');"
+        in dart_output
+    )
+    assert (
+        "registerGeneratedEnum(fory, _envelopeKindForySchema, id: null, name: 'demo.Envelope.Kind');"
+        in dart_output
+    )
+    assert (
+        "fory.registerSerializer(Envelope_Choice, const _Envelope_ChoiceForySerializer(), id: null, name: 'demo.Envelope.Choice');"
+        in dart_output
+    )
+    assert "namespace:" not in dart_output
+    assert "typeName:" not in dart_output
+
+    python_output = render_files(generate_files(schema, PythonGenerator))
+    assert 'fory.register_type(Envelope, name="demo.Envelope")' in python_output
+    assert (
+        'fory.register_type(Envelope.Kind, name="demo.Envelope.Kind")' in python_output
+    )
+    assert (
+        'fory.register_union(Envelope.Choice, name="demo.Envelope.Choice", serializer=Envelope.ChoiceSerializer(fory.type_resolver))'
+        in python_output
+    )
+    assert "namespace=" not in python_output
+    assert "typename=" not in python_output
+
+    swift_output = render_files(generate_files(schema, SwiftGenerator))
+    assert (
+        'try fory.register(Demo.Envelope.self, name: "demo.Envelope")' in swift_output
+    )
+    assert (
+        'try fory.register(Demo.Envelope.Kind.self, name: "demo.Envelope.Kind")'
+        in swift_output
+    )
+    assert (
+        'try fory.register(Demo.Envelope.Choice.self, name: "demo.Envelope.Choice")'
+        in swift_output
+    )
+    assert "namespace:" not in swift_output
+
+
 def test_java_default_package_import_registers_dependency(tmp_path):
     common = tmp_path / "common.fdl"
     common.write_text(

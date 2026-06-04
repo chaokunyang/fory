@@ -66,7 +66,7 @@ final fory = Fory();
 fory.registerSerializer(
   Person,
   const PersonSerializer(),
-  typeName: 'example.Person',
+  name: 'example.Person',
 );
 ```
 
@@ -129,7 +129,7 @@ Skipping this step causes back-references to that object to resolve to `null`.
 ## Tips
 
 - Use `context.buffer` for direct byte reads/writes in hot paths.
-- Register the serializer with the same identity (`id` or `typeName`) on every side.
+- Register the serializer with the same identity (`id` or `name`) on every side.
 
 ## Related Topics
 

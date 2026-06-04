@@ -290,15 +290,13 @@ cdef class TypeResolver:
         cls: Union[type, TypeVar],
         *,
         type_id: int = None,
-        namespace: str = None,
-        typename: str = None,
+        name: str = None,
         serializer=None,
     ):
         cdef TypeInfo typeinfo = self.resolver.register_type(
             cls,
             type_id=type_id,
-            namespace=namespace,
-            typename=typename,
+            name=name,
             serializer=serializer,
         )
         self._populate_type_info(typeinfo)
@@ -309,15 +307,13 @@ cdef class TypeResolver:
         cls: Union[type, TypeVar],
         *,
         type_id: int = None,
-        namespace: str = None,
-        typename: str = None,
+        name: str = None,
         serializer=None,
     ):
         cdef TypeInfo typeinfo = self.resolver.register_union(
             cls,
             type_id=type_id,
-            namespace=namespace,
-            typename=typename,
+            name=name,
             serializer=serializer,
         )
         self._populate_type_info(typeinfo)
@@ -907,15 +903,13 @@ cdef class Fory:
         cls,
         *,
         type_id=None,
-        namespace=None,
-        typename=None,
+        name=None,
         serializer=None,
     ):
         self.register_type(
             cls,
             type_id=type_id,
-            namespace=namespace,
-            typename=typename,
+            name=name,
             serializer=serializer,
         )
 
@@ -924,15 +918,13 @@ cdef class Fory:
         cls: Union[type, TypeVar],
         *,
         type_id: int = None,
-        namespace: str = None,
-        typename: str = None,
+        name: str = None,
         serializer=None,
     ):
         self.type_resolver.register_type(
             cls,
             type_id=type_id,
-            namespace=namespace,
-            typename=typename,
+            name=name,
             serializer=serializer,
         )
 
@@ -941,15 +933,13 @@ cdef class Fory:
         cls: Union[type, TypeVar],
         *,
         type_id: int = None,
-        namespace: str = None,
-        typename: str = None,
+        name: str = None,
         serializer=None,
     ):
         self.type_resolver.register_union(
             cls,
             type_id=type_id,
-            namespace=namespace,
-            typename=typename,
+            name=name,
             serializer=serializer,
         )
 

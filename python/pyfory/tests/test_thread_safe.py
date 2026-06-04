@@ -88,7 +88,7 @@ def test_thread_safe_fory_registration():
         xlang=False,
     )
     fory.register(Person, type_id=100)
-    fory.register(Address, namespace="test", typename="Address")
+    fory.register(Address, name="test.Address")
 
     person = Person(name="Bob", age=25)
     data = fory.serialize(person)

@@ -17,42 +17,33 @@
  * under the License.
  */
 
-import 'package:fory/fory.dart';
+/// Base exception for Apache Fory Dart runtime failures.
+class ForyException implements Exception {
+  const ForyException(this.message, [this.cause]);
 
-final class Person {
-  Person(this.name, this.age);
-
-  final String name;
-  final Int64 age;
-}
-
-final class PersonSerializer extends Serializer<Person> {
-  const PersonSerializer();
+  final String message;
+  final Object? cause;
 
   @override
-  void write(WriteContext context, Person value) {
-    final buffer = context.buffer;
-    buffer.writeUtf8(value.name);
-    buffer.writeInt64(value.age);
-  }
-
-  @override
-  Person read(ReadContext context) {
-    final buffer = context.buffer;
-    return Person(buffer.readUtf8(), buffer.readInt64());
+  String toString() {
+    final cause = this.cause;
+    if (cause == null) {
+      return 'ForyException: $message';
+    }
+    return 'ForyException: $message (caused by $cause)';
   }
 }
 
-void main() {
-  final fory = Fory();
-  fory.registerSerializer(
-    Person,
-    const PersonSerializer(),
-    name: 'example.Person',
-  );
+/// Exception thrown when serialized data is invalid for the requested read.
+class InvalidDataException extends ForyException {
+  const InvalidDataException(super.message, [super.cause]);
 
-  final person = Person('Ada', Int64(36));
-  final bytes = fory.serialize(person);
-  final roundTrip = fory.deserialize<Person>(bytes);
-  print(roundTrip.name);
+  @override
+  String toString() {
+    final cause = this.cause;
+    if (cause == null) {
+      return 'InvalidDataException: $message';
+    }
+    return 'InvalidDataException: $message (caused by $cause)';
+  }
 }

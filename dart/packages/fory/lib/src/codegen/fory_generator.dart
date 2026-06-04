@@ -926,8 +926,7 @@ final class ForyGenerator extends Generator {
       ..writeln('    Fory fory,')
       ..writeln('    Type type, {')
       ..writeln('    int? id,')
-      ..writeln('    String? namespace,')
-      ..writeln('    String? typeName,')
+      ..writeln('    String? name,')
       ..writeln('  }) {');
 
     for (final enumSpec in enumSpecs) {
@@ -937,8 +936,7 @@ final class ForyGenerator extends Generator {
       output.writeln('      fory,');
       output.writeln('      $schemaName,');
       output.writeln('      id: id,');
-      output.writeln('      namespace: namespace,');
-      output.writeln('      typeName: typeName,');
+      output.writeln('      name: name,');
       output.writeln('    );');
       output.writeln('    return;');
       output.writeln('  }');
@@ -950,8 +948,7 @@ final class ForyGenerator extends Generator {
       output.writeln('      fory,');
       output.writeln('      $schemaName,');
       output.writeln('      id: id,');
-      output.writeln('      namespace: namespace,');
-      output.writeln('      typeName: typeName,');
+      output.writeln('      name: name,');
       output.writeln('    );');
       output.writeln('    return;');
       output.writeln('  }');

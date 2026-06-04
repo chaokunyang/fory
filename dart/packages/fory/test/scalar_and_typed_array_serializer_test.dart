@@ -127,14 +127,12 @@ void _registerScalarTypes(Fory fory) {
   ScalarAndTypedArraySerializerTestForyModule.register(
     fory,
     ScalarAndArrayEnvelope,
-    namespace: 'test',
-    typeName: 'ScalarAndArrayEnvelope',
+    name: 'test.ScalarAndArrayEnvelope',
   );
   ScalarAndTypedArraySerializerTestForyModule.register(
     fory,
     ExplicitArrayEnvelope,
-    namespace: 'test',
-    typeName: 'ExplicitArrayEnvelope',
+    name: 'test.ExplicitArrayEnvelope',
   );
 }
 
@@ -580,14 +578,12 @@ void main() {
       ScalarAndTypedArraySerializerTestForyModule.register(
         writer,
         CompatibleListEnvelope,
-        namespace: 'test',
-        typeName: 'CompatibleListArrayEnvelope',
+        name: 'test.CompatibleListArrayEnvelope',
       );
       ScalarAndTypedArraySerializerTestForyModule.register(
         reader,
         CompatibleArrayEnvelope,
-        namespace: 'test',
-        typeName: 'CompatibleListArrayEnvelope',
+        name: 'test.CompatibleListArrayEnvelope',
       );
 
       final bytes = writer.serialize(
@@ -607,14 +603,12 @@ void main() {
       ScalarAndTypedArraySerializerTestForyModule.register(
         writer,
         CompatibleArrayEnvelope,
-        namespace: 'test',
-        typeName: 'CompatibleListArrayEnvelope',
+        name: 'test.CompatibleListArrayEnvelope',
       );
       ScalarAndTypedArraySerializerTestForyModule.register(
         reader,
         CompatibleListEnvelope,
-        namespace: 'test',
-        typeName: 'CompatibleListArrayEnvelope',
+        name: 'test.CompatibleListArrayEnvelope',
       );
 
       final bytes = writer.serialize(
@@ -633,14 +627,12 @@ void main() {
         ScalarAndTypedArraySerializerTestForyModule.register(
           writer,
           CompatibleNullableListEnvelope,
-          namespace: 'test',
-          typeName: 'CompatibleNullableListArrayEnvelope',
+          name: 'test.CompatibleNullableListArrayEnvelope',
         );
         ScalarAndTypedArraySerializerTestForyModule.register(
           reader,
           CompatibleArrayEnvelope,
-          namespace: 'test',
-          typeName: 'CompatibleNullableListArrayEnvelope',
+          name: 'test.CompatibleNullableListArrayEnvelope',
         );
 
         final nonNullBytes = writer.serialize(
@@ -670,14 +662,12 @@ void main() {
         ScalarAndTypedArraySerializerTestForyModule.register(
           writer,
           CompatibleStringListEnvelope,
-          namespace: 'test',
-          typeName: 'CompatibleMismatchedListArrayEnvelope',
+          name: 'test.CompatibleMismatchedListArrayEnvelope',
         );
         ScalarAndTypedArraySerializerTestForyModule.register(
           reader,
           CompatibleArrayEnvelope,
-          namespace: 'test',
-          typeName: 'CompatibleMismatchedListArrayEnvelope',
+          name: 'test.CompatibleMismatchedListArrayEnvelope',
         );
 
         final bytes = writer.serialize(
@@ -696,14 +686,12 @@ void main() {
       ScalarAndTypedArraySerializerTestForyModule.register(
         writer,
         CompatibleNestedArrayListEnvelope,
-        namespace: 'test',
-        typeName: 'CompatibleNestedListArrayEnvelope',
+        name: 'test.CompatibleNestedListArrayEnvelope',
       );
       ScalarAndTypedArraySerializerTestForyModule.register(
         reader,
         CompatibleNestedListEnvelope,
-        namespace: 'test',
-        typeName: 'CompatibleNestedListArrayEnvelope',
+        name: 'test.CompatibleNestedListArrayEnvelope',
       );
 
       final bytes = writer.serialize(

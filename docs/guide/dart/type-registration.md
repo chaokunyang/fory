@@ -48,11 +48,11 @@ More self-describing. Good when multiple teams or packages define types independ
 ModelsForyModule.register(
   fory,
   User,
-  typeName: 'example.User',
+  name: 'example.User',
 );
 ```
 
-Every runtime that reads or writes this type must use the same name. Use `.` inside `typeName`
+Every runtime that reads or writes this type must use the same name. Use `.` inside `name`
 to add a namespace prefix.
 
 > **Do not mix strategies for the same type.** If one side uses a numeric ID and the other uses a name, deserialization will fail.
@@ -73,7 +73,7 @@ For types that you cannot annotate with `@ForyStruct()`, pass a serializer insta
 fory.registerSerializer(
   ExternalType,
   const ExternalTypeSerializer(),
-  typeName: 'example.ExternalType',
+  name: 'example.ExternalType',
 );
 ```
 

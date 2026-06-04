@@ -1045,20 +1045,8 @@ func (r *TypeResolver) getTypeInfo(value reflect.Value, create bool) (*TypeInfo,
 			return ptrInfo, nil
 		}
 
-		// Element type not registered - try auto-registration for structs
 		if elemType.Kind() == reflect.Struct {
-			// First register the value type
-			elemPkgPath := elemType.PkgPath()
-			elemTypeName := elemType.Name()
-			if err := r.registerStructByName(elemType, elemPkgPath, elemTypeName); err != nil {
-				// Might already be registered, that's okay
-				_ = err
-			}
-			// Now the pointer type should be registered
-			if info, ok := r.typesInfo[type_]; ok {
-				return info, nil
-			}
-			return nil, fmt.Errorf("failed to find registered pointer type %v", type_)
+			return nil, fmt.Errorf("struct type %s must be registered explicitly before serializing %s", elemType, type_)
 		}
 
 		// For primitive types and other types, we can auto-create pointer serializer
@@ -1081,6 +1069,8 @@ func (r *TypeResolver) getTypeInfo(value reflect.Value, create bool) (*TypeInfo,
 		return nil, fmt.Errorf("pointer element type %v must be registered", elemType)
 	case type_.Kind() == reflect.Interface:
 		return nil, fmt.Errorf("interface types must be registered explicitly")
+	case type_.Kind() == reflect.Struct:
+		return nil, fmt.Errorf("struct type %s must be registered explicitly", type_)
 	case pkgPath == "" && typeName == "":
 		// Allow anonymous collection types (maps, slices, arrays) without registration
 		kind := type_.Kind()
@@ -1808,23 +1798,7 @@ func (r *TypeResolver) createSerializer(type_ reflect.Type, mapInStruct bool) (s
 	case reflect.Struct:
 		serializer := r.typeToSerializers[type_]
 		if serializer == nil {
-			// In xlang/compatible mode, auto-register struct types
-			if r.isXlang || r.fory.config.Compatible {
-				// Use the type's actual package path and name for auto-registration
-				pkgPath := type_.PkgPath()
-				typeName := type_.Name()
-				if typeName == "" {
-					return nil, fmt.Errorf("cannot auto-register anonymous struct type %s", type_.String())
-				}
-				// For auto-registered types, use package path as namespace and type name
-				if err := r.registerStructByName(type_, pkgPath, typeName); err != nil {
-					return nil, fmt.Errorf("failed to auto-register struct %s: %w", type_.String(), err)
-				}
-				serializer = r.typeToSerializers[type_]
-			}
-			if serializer == nil {
-				return nil, fmt.Errorf("struct type %s not registered", type_.String())
-			}
+			return nil, fmt.Errorf("struct type %s must be registered explicitly", type_.String())
 		}
 		return serializer, nil
 	}

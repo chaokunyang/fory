@@ -171,7 +171,7 @@ func TestDeserializeByteSliceAcceptsUint8ArrayRootType(t *testing.T) {
 }
 
 // TestSerializeGenericComplex tests Serialize[T]/DeserializeWithCallbackBuffers[T] with complex types.
-// These fall back to reflection-based serialization.
+// Struct wrappers must be registered explicitly before reflection-based serialization.
 func TestSerializeGenericComplex(t *testing.T) {
 	f := NewFory(WithXlang(false), WithRefTracking(true))
 
@@ -199,6 +199,7 @@ func TestSerializeGenericComplex(t *testing.T) {
 		type SliceWrapper struct {
 			Items []int32
 		}
+		require.NoError(t, f.RegisterStructByName(SliceWrapper{}, "example.SliceWrapper"))
 		original := SliceWrapper{Items: []int32{1, 2, 3, 4, 5}}
 		data, err := Serialize(f, &original)
 		require.NoError(t, err)
@@ -214,6 +215,7 @@ func TestSerializeGenericComplex(t *testing.T) {
 		type MapWrapper struct {
 			Items map[string]int32
 		}
+		require.NoError(t, f.RegisterStructByName(MapWrapper{}, "example.MapWrapper"))
 		original := MapWrapper{Items: map[string]int32{"a": 1, "b": 2, "c": 3}}
 		data, err := Serialize(f, &original)
 		require.NoError(t, err)

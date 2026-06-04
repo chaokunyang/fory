@@ -144,6 +144,7 @@ func TestDeserialize(t *testing.T) {
 		type SliceWrapper struct {
 			Items []int32
 		}
+		require.NoError(t, f.RegisterStructByName(SliceWrapper{}, "threadsafe.SliceWrapper"))
 		original := SliceWrapper{Items: []int32{1, 2, 3, 4, 5}}
 		data, err := Serialize(f, &original)
 		require.NoError(t, err)

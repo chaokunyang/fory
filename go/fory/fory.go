@@ -824,7 +824,8 @@ func readHeaderSlow(ctx *ReadContext, bitmap byte) {
 
 // Serialize - type T inferred, serializer auto-resolved.
 // The serializer handles its own ref/type info writing internally.
-// Falls back to reflection-based serialization for unregistered types.
+// Uses reflection-based serializers for supported non-struct types. Structs must
+// be registered explicitly before serialization.
 // Note: For structs, T must be a pointer to struct (*MyStruct), not struct value.
 //
 // IMPORTANT: The returned byte slice is a zero-copy view of the internal buffer.

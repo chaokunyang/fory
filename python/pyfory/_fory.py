@@ -275,7 +275,7 @@ class Fory:
             >>> fory = Fory(xlang=False)
             >>> fory.register(Person)
         """
-        self.register_type(
+        return self.register_type(
             cls,
             type_id=type_id,
             name=name,

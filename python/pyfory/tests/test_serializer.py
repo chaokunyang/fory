@@ -701,14 +701,20 @@ def test_register_type_name():
     class LocalNameType:
         pass
 
+    class AliasNameType:
+        pass
+
     fory = Fory(xlang=True)
     namespaced_info = fory.register_type(NamedType, name="example.NamedType")
     local_info = fory.register_type(LocalNameType, name="LocalNameType")
+    alias_info = fory.register(AliasNameType, name="example.AliasNameType")
 
     assert namespaced_info.decode_namespace() == "example"
     assert namespaced_info.decode_typename() == "NamedType"
     assert local_info.decode_namespace() == ""
     assert local_info.decode_typename() == "LocalNameType"
+    assert alias_info.decode_namespace() == "example"
+    assert alias_info.decode_typename() == "AliasNameType"
 
 
 def test_register_type_name_invalid():

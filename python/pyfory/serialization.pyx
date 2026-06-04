@@ -906,7 +906,7 @@ cdef class Fory:
         name=None,
         serializer=None,
     ):
-        self.register_type(
+        return self.register_type(
             cls,
             type_id=type_id,
             name=name,
@@ -921,7 +921,7 @@ cdef class Fory:
         name: str = None,
         serializer=None,
     ):
-        self.type_resolver.register_type(
+        return self.type_resolver.register_type(
             cls,
             type_id=type_id,
             name=name,
@@ -936,7 +936,7 @@ cdef class Fory:
         name: str = None,
         serializer=None,
     ):
-        self.type_resolver.register_union(
+        return self.type_resolver.register_union(
             cls,
             type_id=type_id,
             name=name,

@@ -971,9 +971,6 @@ impl TypeResolver {
         ) -> Result<Box<dyn Any + Send + Sync>, Error> {
             if T2::fory_is_send_sync_type() {
                 T2::fory_read_data_send_sync(context)
-            } else if crate::serializer::is_known_send_sync_static_type_id(T2::fory_static_type_id())
-            {
-                crate::serializer::read_known_send_sync_data::<T2>(context)
             } else {
                 Err(crate::serializer::unsupported_send_sync_type::<T2>())
             }
@@ -1016,8 +1013,7 @@ impl TypeResolver {
             read_data_send_sync_fn: read_data_send_sync::<T>,
             read_compatible_fn: Some(read_compatible::<T>),
             read_compatible_send_sync_fn: Some(read_compatible_send_sync::<T>),
-            send_sync: T::fory_is_send_sync_type()
-                || crate::serializer::is_known_send_sync_static_type_id(T::fory_static_type_id()),
+            send_sync: T::fory_is_send_sync_type(),
             to_serializer: to_serializer::<T>,
             build_type_infos: build_type_infos::<T>,
         };
@@ -1216,9 +1212,6 @@ impl TypeResolver {
         ) -> Result<Box<dyn Any + Send + Sync>, Error> {
             if T2::fory_is_send_sync_type() {
                 T2::fory_read_data_send_sync(context)
-            } else if crate::serializer::is_known_send_sync_static_type_id(T2::fory_static_type_id())
-            {
-                crate::serializer::read_known_send_sync_data::<T2>(context)
             } else {
                 Err(crate::serializer::unsupported_send_sync_type::<T2>())
             }
@@ -1257,8 +1250,7 @@ impl TypeResolver {
             read_data_send_sync_fn: read_data_send_sync::<T>,
             read_compatible_fn: None,
             read_compatible_send_sync_fn: None,
-            send_sync: T::fory_is_send_sync_type()
-                || crate::serializer::is_known_send_sync_static_type_id(T::fory_static_type_id()),
+            send_sync: T::fory_is_send_sync_type(),
             to_serializer: to_serializer::<T>,
             build_type_infos: build_type_infos::<T>,
         };

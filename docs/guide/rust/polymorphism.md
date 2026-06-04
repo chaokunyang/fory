@@ -140,6 +140,35 @@ by default unless a field is a known local-only type such as `Rc<T>`,
 Rust then checks the final `Self: Send + Sync` bound when compiling the generated
 reader.
 
+Polymorphic erased `Any` payloads do not directly support nested or generic
+containers as the top-level erased value. This includes `Vec<T>`,
+`HashMap<K, V>`, `HashSet<T>`, `LinkedList<T>`, and other generic containers.
+If you need to put a container in `Arc<dyn Any + Send + Sync>`, wrap it in a
+registered struct, enum, or union and use that wrapper as the erased payload:
+
+```rust
+use fory::{Fory, ForyStruct};
+use std::any::Any;
+use std::sync::Arc;
+
+#[derive(ForyStruct)]
+struct IntList {
+    values: Vec<i32>,
+}
+
+let mut fory = Fory::builder().xlang(false).build();
+fory.register::<IntList>(100)?;
+
+let value: Arc<dyn Any + Send + Sync> = Arc::new(IntList {
+    values: vec![1, 2, 3],
+});
+let bytes = fory.serialize(&value)?;
+let decoded: Arc<dyn Any + Send + Sync> = fory.deserialize(&bytes)?;
+```
+
+The wrapper lets the generated serializer own the send-sync dynamic read
+capability while the container remains a normal typed field.
+
 If a nested custom type contains local-only fields and the outer type is not
 intended for `Arc<dyn Any + Send + Sync>`, opt out on the outer type:
 
@@ -161,7 +190,9 @@ struct LocalEnvelope {
 
 Manual `Serializer` implementations are conservative by default. Implement
 `fory_is_send_sync_type` and `fory_read_data_send_sync` only when the concrete
-value read by the serializer is `Send + Sync`.
+value read by the serializer is `Send + Sync`. Send-sync support is declared by
+the serializer that owns the concrete value; registering a type does not add that
+capability unless the serializer exposes it.
 
 ## Rc/Arc-Based Trait Objects in Structs
 

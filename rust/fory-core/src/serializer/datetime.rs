@@ -42,6 +42,26 @@ impl Serializer for Timestamp {
     }
 
     #[inline(always)]
+    fn fory_is_send_sync_type() -> bool
+    where
+        Self: Sized,
+    {
+        true
+    }
+
+    #[inline]
+    fn fory_read_data_send_sync(
+        context: &mut ReadContext,
+    ) -> Result<Box<dyn std::any::Any + Send + Sync>, Error>
+    where
+        Self: Sized + ForyDefault,
+    {
+        Ok(crate::serializer::box_send_sync(Self::fory_read_data(
+            context,
+        )?))
+    }
+
+    #[inline(always)]
     fn fory_reserved_space() -> usize {
         mem::size_of::<i64>() + mem::size_of::<u32>()
     }
@@ -111,6 +131,26 @@ impl Serializer for Date {
     }
 
     #[inline(always)]
+    fn fory_is_send_sync_type() -> bool
+    where
+        Self: Sized,
+    {
+        true
+    }
+
+    #[inline]
+    fn fory_read_data_send_sync(
+        context: &mut ReadContext,
+    ) -> Result<Box<dyn std::any::Any + Send + Sync>, Error>
+    where
+        Self: Sized + ForyDefault,
+    {
+        Ok(crate::serializer::box_send_sync(Self::fory_read_data(
+            context,
+        )?))
+    }
+
+    #[inline(always)]
     fn fory_reserved_space() -> usize {
         9
     }
@@ -167,6 +207,26 @@ impl Serializer for Duration {
         let seconds = context.reader.read_var_i64()?;
         let nanos = context.reader.read_i32()?;
         Duration::new(seconds, nanos)
+    }
+
+    #[inline(always)]
+    fn fory_is_send_sync_type() -> bool
+    where
+        Self: Sized,
+    {
+        true
+    }
+
+    #[inline]
+    fn fory_read_data_send_sync(
+        context: &mut ReadContext,
+    ) -> Result<Box<dyn std::any::Any + Send + Sync>, Error>
+    where
+        Self: Sized + ForyDefault,
+    {
+        Ok(crate::serializer::box_send_sync(Self::fory_read_data(
+            context,
+        )?))
     }
 
     #[inline(always)]
@@ -230,6 +290,26 @@ mod chrono_support {
         }
 
         #[inline(always)]
+        fn fory_is_send_sync_type() -> bool
+        where
+            Self: Sized,
+        {
+            true
+        }
+
+        #[inline]
+        fn fory_read_data_send_sync(
+            context: &mut ReadContext,
+        ) -> Result<Box<dyn std::any::Any + Send + Sync>, Error>
+        where
+            Self: Sized + ForyDefault,
+        {
+            Ok(crate::serializer::box_send_sync(Self::fory_read_data(
+                context,
+            )?))
+        }
+
+        #[inline(always)]
         fn fory_reserved_space() -> usize {
             Timestamp::fory_reserved_space()
         }
@@ -284,6 +364,26 @@ mod chrono_support {
         }
 
         #[inline(always)]
+        fn fory_is_send_sync_type() -> bool
+        where
+            Self: Sized,
+        {
+            true
+        }
+
+        #[inline]
+        fn fory_read_data_send_sync(
+            context: &mut ReadContext,
+        ) -> Result<Box<dyn std::any::Any + Send + Sync>, Error>
+        where
+            Self: Sized + ForyDefault,
+        {
+            Ok(crate::serializer::box_send_sync(Self::fory_read_data(
+                context,
+            )?))
+        }
+
+        #[inline(always)]
         fn fory_reserved_space() -> usize {
             Date::fory_reserved_space()
         }
@@ -335,6 +435,26 @@ mod chrono_support {
         #[inline(always)]
         fn fory_read_data(context: &mut ReadContext) -> Result<Self, Error> {
             Duration::fory_read_data(context)?.try_into()
+        }
+
+        #[inline(always)]
+        fn fory_is_send_sync_type() -> bool
+        where
+            Self: Sized,
+        {
+            true
+        }
+
+        #[inline]
+        fn fory_read_data_send_sync(
+            context: &mut ReadContext,
+        ) -> Result<Box<dyn std::any::Any + Send + Sync>, Error>
+        where
+            Self: Sized + ForyDefault,
+        {
+            Ok(crate::serializer::box_send_sync(Self::fory_read_data(
+                context,
+            )?))
         }
 
         #[inline(always)]

@@ -54,4 +54,3 @@ pub use core::{
     box_send_sync, read_data, unsupported_send_sync_type, write_data, ForyDefault, Serializer,
     StructSerializer,
 };
-pub(crate) use core::{is_known_send_sync_static_type_id, read_known_send_sync_data};

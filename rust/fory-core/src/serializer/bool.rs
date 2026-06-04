@@ -37,6 +37,26 @@ impl Serializer for bool {
     }
 
     #[inline(always)]
+    fn fory_is_send_sync_type() -> bool
+    where
+        Self: Sized,
+    {
+        true
+    }
+
+    #[inline]
+    fn fory_read_data_send_sync(
+        context: &mut ReadContext,
+    ) -> Result<Box<dyn std::any::Any + Send + Sync>, Error>
+    where
+        Self: Sized + ForyDefault,
+    {
+        Ok(crate::serializer::box_send_sync(Self::fory_read_data(
+            context,
+        )?))
+    }
+
+    #[inline(always)]
     fn fory_reserved_space() -> usize {
         mem::size_of::<i32>()
     }

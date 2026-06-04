@@ -480,6 +480,10 @@
 //! `#[fory(send_sync = false)]`. Manual `Serializer` implementations are
 //! conservative by default; implement `fory_is_send_sync_type` and
 //! `fory_read_data_send_sync` when the concrete value is `Send + Sync`.
+//! Direct generic containers such as `Vec<T>`, `HashMap<K, V>`, `HashSet<T>`,
+//! and `LinkedList<T>` are not supported as top-level erased send-sync payloads;
+//! wrap them in a registered derived type when they need to travel behind this
+//! carrier.
 //!
 //! #### Rc/Arc-Based Trait Objects in Structs
 //!

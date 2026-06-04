@@ -90,13 +90,10 @@ fn test_arc_dyn_any() {
     let deserialized2: Arc<dyn Any + Send + Sync> = fory.deserialize(&bytes2).unwrap();
     assert_eq!(deserialized2.downcast_ref::<i32>().unwrap(), &123i32);
 
-    let value3: Arc<dyn Any + Send + Sync> = Arc::new(vec![1, 2, 3]);
+    let value3: Arc<dyn Any + Send + Sync> = Arc::new(true);
     let bytes3 = fory.serialize(&value3).unwrap();
     let deserialized3: Arc<dyn Any + Send + Sync> = fory.deserialize(&bytes3).unwrap();
-    assert_eq!(
-        deserialized3.downcast_ref::<Vec<i32>>().unwrap(),
-        &vec![1, 2, 3]
-    );
+    assert_eq!(deserialized3.downcast_ref::<bool>().unwrap(), &true);
 }
 
 #[test]
@@ -122,17 +119,17 @@ fn test_rc_dyn_any_shared_reference() {
 fn test_arc_dyn_any_shared_reference() {
     let fory = Fory::builder().xlang(false).build();
 
-    let shared_vec: Arc<dyn Any + Send + Sync> = Arc::new(vec![1, 2, 3]);
+    let shared_vec: Arc<dyn Any + Send + Sync> = Arc::new("shared".to_string());
 
     let data = vec![shared_vec.clone(), shared_vec.clone()];
 
     let bytes = fory.serialize(&data).unwrap();
     let deserialized: Vec<Arc<dyn Any + Send + Sync>> = fory.deserialize(&bytes).unwrap();
 
-    let first_vec = deserialized[0].downcast_ref::<Vec<i32>>().unwrap();
-    let second_vec = deserialized[1].downcast_ref::<Vec<i32>>().unwrap();
-    assert_eq!(first_vec, &vec![1, 2, 3]);
-    assert_eq!(second_vec, &vec![1, 2, 3]);
+    let first_vec = deserialized[0].downcast_ref::<String>().unwrap();
+    let second_vec = deserialized[1].downcast_ref::<String>().unwrap();
+    assert_eq!(first_vec, "shared");
+    assert_eq!(second_vec, "shared");
     assert_eq!(Arc::strong_count(&shared_vec), 3);
 }
 

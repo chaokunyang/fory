@@ -141,6 +141,9 @@ derive macros generate that support by default for `Send + Sync` types and let
 the Rust compiler validate opaque nested custom fields. If a local-only type has
 nested `Rc` or `RefCell` fields and should not be preserved inside
 `UnknownCase`, mark it with `#[fory(send_sync = false)]`.
+Direct generic containers are not supported as erased send-sync payloads; wrap
+the container in a registered derived type if an unknown case needs to preserve
+it.
 
 ### Enum Schema Evolution
 

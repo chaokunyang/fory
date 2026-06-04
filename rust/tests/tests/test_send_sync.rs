@@ -17,9 +17,105 @@
 
 #![allow(dead_code)]
 
+use fory_core::fory::Fory;
 use fory_core::Serializer;
 use fory_derive::{ForyEnum, ForyStruct, ForyUnion};
-use std::{any::Any, rc::Rc, sync::Arc};
+use std::{
+    any::Any,
+    collections::{HashMap, HashSet, LinkedList},
+    fmt::Debug,
+    rc::Rc,
+    sync::Arc,
+};
+
+fn assert_arc_any_roundtrip<T>(fory: &Fory, value: T)
+where
+    T: 'static + Clone + Debug + PartialEq + Send + Sync,
+{
+    let wrapped: Arc<dyn Any + Send + Sync> = Arc::new(value.clone());
+    let bytes = fory.serialize(&wrapped).unwrap();
+    let decoded: Arc<dyn Any + Send + Sync> = fory.deserialize(&bytes).unwrap();
+    assert_eq!(decoded.downcast_ref::<T>().unwrap(), &value);
+}
+
+fn assert_arc_any_unsupported<T>(fory: &Fory, value: T)
+where
+    T: 'static + Send + Sync,
+{
+    let wrapped: Arc<dyn Any + Send + Sync> = Arc::new(value);
+    let bytes = fory.serialize(&wrapped).unwrap();
+    let result: Result<Arc<dyn Any + Send + Sync>, _> = fory.deserialize(&bytes);
+    let err = match result {
+        Ok(_) => panic!("expected direct generic container payload to be unsupported"),
+        Err(err) => err,
+    };
+    let message = err.to_string();
+    assert!(
+        message.contains("generic container types")
+            || message.contains("cannot be represented as Arc<dyn Any + Send + Sync>"),
+        "unexpected error: {err}"
+    );
+}
+
+#[test]
+fn test_builtin_send_sync_arc_any_reads() {
+    let fory = Fory::builder().xlang(false).build();
+
+    assert_arc_any_roundtrip(&fory, 42_i32);
+    assert_arc_any_roundtrip(&fory, true);
+    assert_arc_any_roundtrip(&fory, "thread-safe".to_string());
+}
+
+#[test]
+fn test_derived_send_sync_arc_any_read() {
+    #[derive(ForyStruct, Clone, Debug, PartialEq)]
+    struct Value {
+        name: String,
+        count: i32,
+    }
+
+    let mut fory = Fory::builder().xlang(false).build();
+    fory.register::<Value>(900).unwrap();
+
+    assert_arc_any_roundtrip(
+        &fory,
+        Value {
+            name: "derived".to_string(),
+            count: 7,
+        },
+    );
+}
+
+#[test]
+fn test_wrapped_container_send_sync_arc_any_read() {
+    #[derive(ForyStruct, Clone, Debug, PartialEq)]
+    struct IntList {
+        values: Vec<i32>,
+    }
+
+    let mut fory = Fory::builder().xlang(false).build();
+    fory.register::<IntList>(901).unwrap();
+
+    assert_arc_any_roundtrip(
+        &fory,
+        IntList {
+            values: vec![1, 2, 3],
+        },
+    );
+}
+
+#[test]
+fn test_direct_generic_containers_not_send_sync_arc_any() {
+    let fory = Fory::builder().xlang(false).build();
+
+    assert_arc_any_unsupported(&fory, vec![1_i32, 2, 3]);
+    assert_arc_any_unsupported(&fory, LinkedList::from([1_i32, 2, 3]));
+    assert_arc_any_unsupported(&fory, HashSet::from([1_i32, 2, 3]));
+    assert_arc_any_unsupported(
+        &fory,
+        HashMap::from([("one".to_string(), 1_i32), ("two".to_string(), 2)]),
+    );
+}
 
 #[test]
 fn test_auto_send_sync_struct() {

@@ -52,8 +52,8 @@ pub fn derive_serializer(ast: &syn::DeriveInput, attrs: ForyAttrs) -> TokenStrea
     } else {
         quote! {}
     };
-    let threadsafe_tokens = generate_threadsafe_tokens(ast);
-    let serializer_threadsafe_ts = threadsafe_tokens.serializer.clone();
+    let send_sync_tokens = generate_send_sync_tokens(ast, attrs.send_sync);
+    let serializer_send_sync_ts = send_sync_tokens.serializer.clone();
 
     // StructSerializer
     let (
@@ -79,7 +79,7 @@ pub fn derive_serializer(ast: &syn::DeriveInput, attrs: ForyAttrs) -> TokenStrea
                 misc::gen_field_fields_info(&source_fields),
                 quote! { ::std::result::Result::Ok(::std::vec::Vec::new()) }, // No variants for structs
                 read::gen_read_compatible(&source_fields),
-                threadsafe_tokens.struct_read_compatible.clone(),
+                send_sync_tokens.struct_read_compatible.clone(),
                 vec![], // No variant meta types for structs
             )
         }
@@ -250,7 +250,7 @@ pub fn derive_serializer(ast: &syn::DeriveInput, attrs: ForyAttrs) -> TokenStrea
                 #read_data_ts
             }
 
-            #serializer_threadsafe_ts
+            #serializer_send_sync_ts
 
             #[inline(always)]
             fn fory_read_type_info(context: &mut ::fory_core::ReadContext) -> ::std::result::Result<(), ::fory_core::error::Error> {
@@ -263,14 +263,17 @@ pub fn derive_serializer(ast: &syn::DeriveInput, attrs: ForyAttrs) -> TokenStrea
     code
 }
 
-struct ThreadsafeTokens {
+struct SendSyncTokens {
     serializer: proc_macro2::TokenStream,
     struct_read_compatible: proc_macro2::TokenStream,
 }
 
-fn generate_threadsafe_tokens(ast: &syn::DeriveInput) -> ThreadsafeTokens {
-    if !derive_type_is_threadsafe(ast) {
-        return ThreadsafeTokens {
+fn generate_send_sync_tokens(
+    ast: &syn::DeriveInput,
+    send_sync_attr: Option<bool>,
+) -> SendSyncTokens {
+    if !derive_type_is_send_sync(ast, send_sync_attr) {
+        return SendSyncTokens {
             serializer: quote! {},
             struct_read_compatible: quote! {},
         };
@@ -289,10 +292,10 @@ fn generate_threadsafe_tokens(ast: &syn::DeriveInput) -> ThreadsafeTokens {
     } else {
         quote! {}
     };
-    ThreadsafeTokens {
+    SendSyncTokens {
         serializer: quote! {
             #[inline(always)]
-            fn fory_is_threadsafe_type() -> bool
+            fn fory_is_send_sync_type() -> bool
             where
                 Self: Sized,
             {
@@ -314,11 +317,14 @@ fn generate_threadsafe_tokens(ast: &syn::DeriveInput) -> ThreadsafeTokens {
     }
 }
 
-fn derive_type_is_threadsafe(ast: &syn::DeriveInput) -> bool {
+fn derive_type_is_send_sync(ast: &syn::DeriveInput, send_sync_attr: Option<bool>) -> bool {
     use crate::object::util::{
-        all_type_params_send_sync, type_is_threadsafe, type_param_send_sync_bounds,
+        all_type_params_send_sync, type_is_send_sync, type_param_send_sync_bounds,
     };
 
+    if let Some(send_sync) = send_sync_attr {
+        return send_sync;
+    }
     // This is a syntactic filter for generating the send-sync reader. The
     // generated reader still boxes `Self`, so Rust enforces the final
     // `Send + Sync` invariant for nested user-defined field types.
@@ -330,12 +336,12 @@ fn derive_type_is_threadsafe(ast: &syn::DeriveInput) -> bool {
         syn::Data::Struct(data) => data
             .fields
             .iter()
-            .all(|field| type_is_threadsafe(&field.ty, &send_sync_params)),
+            .all(|field| type_is_send_sync(&field.ty, &send_sync_params)),
         syn::Data::Enum(data) => data.variants.iter().all(|variant| {
             variant
                 .fields
                 .iter()
-                .all(|field| type_is_threadsafe(&field.ty, &send_sync_params))
+                .all(|field| type_is_send_sync(&field.ty, &send_sync_params))
         }),
         syn::Data::Union(_) => false,
     }

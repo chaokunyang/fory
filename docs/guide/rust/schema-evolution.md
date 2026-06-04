@@ -135,8 +135,12 @@ forward-compatibility carrier. It cannot be the default variant, and the union
 must include at least one real schema case. The marker only selects the carrier
 and does not add an entry to the schema case table; schema cases use
 non-negative IDs. `UnknownCase` stores its payload as
-`Arc<dyn Any + Send + Sync>`, so locally registered future payload types must be
-thread-safe to be preserved as unknown cases.
+`Arc<dyn Any + Send + Sync>`, so locally registered future payload types must
+support send-sync dynamic reads to be preserved as unknown cases. The Rust
+derive macros generate that support by default for `Send + Sync` types and let
+the Rust compiler validate opaque nested custom fields. If a local-only type has
+nested `Rc` or `RefCell` fields and should not be preserved inside
+`UnknownCase`, mark it with `#[fory(send_sync = false)]`.
 
 ### Enum Schema Evolution
 

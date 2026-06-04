@@ -963,13 +963,13 @@ pub(crate) fn all_type_params_send_sync(generics: &syn::Generics) -> bool {
         .all(|param| bounded.contains(&param.ident.to_string()))
 }
 
-pub(crate) fn type_is_threadsafe(ty: &Type, send_sync_params: &HashSet<String>) -> bool {
+pub(crate) fn type_is_send_sync(ty: &Type, send_sync_params: &HashSet<String>) -> bool {
     match ty {
-        Type::Array(array) => type_is_threadsafe(array.elem.as_ref(), send_sync_params),
+        Type::Array(array) => type_is_send_sync(array.elem.as_ref(), send_sync_params),
         Type::Tuple(tuple) => tuple
             .elems
             .iter()
-            .all(|elem| type_is_threadsafe(elem, send_sync_params)),
+            .all(|elem| type_is_send_sync(elem, send_sync_params)),
         Type::Path(type_path) => {
             let Some(segment) = type_path.path.segments.last() else {
                 return false;
@@ -996,15 +996,15 @@ pub(crate) fn type_is_threadsafe(ty: &Type, send_sync_params: &HashSet<String>) 
                             trait_object_is_any_send_sync(trait_obj)
                         }
                         (_, Type::TraitObject(_)) => false,
-                        _ => type_is_threadsafe(inner, send_sync_params),
+                        _ => type_is_send_sync(inner, send_sync_params),
                     }
                 }
                 "HashMap" | "BTreeMap" => {
                     let Some((key, value)) = two_path_type_args(&segment.arguments) else {
                         return false;
                     };
-                    type_is_threadsafe(key, send_sync_params)
-                        && type_is_threadsafe(value, send_sync_params)
+                    type_is_send_sync(key, send_sync_params)
+                        && type_is_send_sync(value, send_sync_params)
                 }
                 _ => true,
             }

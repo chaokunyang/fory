@@ -30,7 +30,7 @@ impl<T: Serializer + ForyDefault + Send + Sync + 'static> Serializer for Arc<T> 
     }
 
     #[inline(always)]
-    fn fory_is_threadsafe_type() -> bool
+    fn fory_is_send_sync_type() -> bool
     where
         Self: Sized,
     {

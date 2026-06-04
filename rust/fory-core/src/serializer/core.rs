@@ -896,14 +896,14 @@ pub trait Serializer: 'static {
     /// The default is conservative. Implementations should return true only
     /// when the concrete value produced by this serializer is `Send + Sync`.
     #[inline(always)]
-    fn fory_is_threadsafe_type() -> bool
+    fn fory_is_send_sync_type() -> bool
     where
         Self: Sized,
     {
         false
     }
 
-    /// Deserialize data for dynamic thread-safe carriers.
+    /// Deserialize data for dynamic send-sync carriers.
     ///
     /// This method must construct the `Box<dyn Any + Send + Sync>` from the
     /// concrete value before it is erased as `dyn Any`. It must never try to
@@ -916,7 +916,7 @@ pub trait Serializer: 'static {
         Self: Sized + ForyDefault,
     {
         let _ = context;
-        Err(unsupported_threadsafe_type::<Self>())
+        Err(unsupported_send_sync_type::<Self>())
     }
 
     /// Read and validate type metadata from the buffer.
@@ -1467,7 +1467,7 @@ pub trait StructSerializer: Serializer + 'static {
     where
         Self: Sized;
 
-    /// Deserialize compatible data for dynamic thread-safe carriers.
+    /// Deserialize compatible data for dynamic send-sync carriers.
     ///
     /// Implementations are generated only when the resulting struct/enum is
     /// known to be `Send + Sync`.
@@ -1481,7 +1481,7 @@ pub trait StructSerializer: Serializer + 'static {
     {
         let _ = context;
         let _ = type_info;
-        Err(unsupported_threadsafe_type::<Self>())
+        Err(unsupported_send_sync_type::<Self>())
     }
 }
 
@@ -1512,7 +1512,7 @@ where
 }
 
 #[inline(always)]
-pub(crate) fn is_known_threadsafe_static_type_id(type_id: TypeId) -> bool {
+pub(crate) fn is_known_send_sync_static_type_id(type_id: TypeId) -> bool {
     matches!(
         type_id,
         TypeId::NONE
@@ -1565,98 +1565,98 @@ pub(crate) fn is_known_threadsafe_static_type_id(type_id: TypeId) -> bool {
     )
 }
 
-pub(crate) fn read_known_threadsafe_data<T>(
+pub(crate) fn read_known_send_sync_data<T>(
     context: &mut ReadContext,
 ) -> Result<Box<dyn Any + Send + Sync>, Error>
 where
     T: Serializer + ForyDefault,
 {
     let boxed: Box<dyn Any> = Box::new(T::fory_read_data(context)?);
-    box_known_threadsafe_data(T::fory_static_type_id(), boxed)
+    box_known_send_sync_data(T::fory_static_type_id(), boxed)
 }
 
 #[cold]
 #[inline(never)]
-fn unexpected_threadsafe_type_id(type_id: TypeId) -> Error {
+fn unexpected_send_sync_type_id(type_id: TypeId) -> Error {
     Error::type_error(format!(
-        "deserialized value did not match thread-safe static type id {:?}",
+        "deserialized value did not match send-sync static type id {:?}",
         type_id
     ))
 }
 
-macro_rules! downcast_threadsafe_data {
+macro_rules! downcast_send_sync_data {
     ($boxed:expr, $type_id:expr, $ty:ty) => {
         $boxed
             .downcast::<$ty>()
             .map(|value| value as Box<dyn Any + Send + Sync>)
-            .map_err(|_| unexpected_threadsafe_type_id($type_id))
+            .map_err(|_| unexpected_send_sync_type_id($type_id))
     };
 }
 
-fn box_known_threadsafe_data(
+fn box_known_send_sync_data(
     type_id: TypeId,
     boxed: Box<dyn Any>,
 ) -> Result<Box<dyn Any + Send + Sync>, Error> {
     match type_id {
-        TypeId::NONE => downcast_threadsafe_data!(boxed, type_id, ()),
-        TypeId::BOOL => downcast_threadsafe_data!(boxed, type_id, bool),
-        TypeId::INT8 => downcast_threadsafe_data!(boxed, type_id, i8),
-        TypeId::INT16 => downcast_threadsafe_data!(boxed, type_id, i16),
-        TypeId::INT32 | TypeId::VARINT32 => downcast_threadsafe_data!(boxed, type_id, i32),
+        TypeId::NONE => downcast_send_sync_data!(boxed, type_id, ()),
+        TypeId::BOOL => downcast_send_sync_data!(boxed, type_id, bool),
+        TypeId::INT8 => downcast_send_sync_data!(boxed, type_id, i8),
+        TypeId::INT16 => downcast_send_sync_data!(boxed, type_id, i16),
+        TypeId::INT32 | TypeId::VARINT32 => downcast_send_sync_data!(boxed, type_id, i32),
         TypeId::INT64 | TypeId::VARINT64 | TypeId::TAGGED_INT64 => {
-            downcast_threadsafe_data!(boxed, type_id, i64)
+            downcast_send_sync_data!(boxed, type_id, i64)
         }
-        TypeId::UINT8 => downcast_threadsafe_data!(boxed, type_id, u8),
-        TypeId::UINT16 => downcast_threadsafe_data!(boxed, type_id, u16),
-        TypeId::UINT32 | TypeId::VAR_UINT32 => downcast_threadsafe_data!(boxed, type_id, u32),
+        TypeId::UINT8 => downcast_send_sync_data!(boxed, type_id, u8),
+        TypeId::UINT16 => downcast_send_sync_data!(boxed, type_id, u16),
+        TypeId::UINT32 | TypeId::VAR_UINT32 => downcast_send_sync_data!(boxed, type_id, u32),
         TypeId::UINT64 | TypeId::VAR_UINT64 | TypeId::TAGGED_UINT64 => {
-            downcast_threadsafe_data!(boxed, type_id, u64)
+            downcast_send_sync_data!(boxed, type_id, u64)
         }
         TypeId::FLOAT16 => {
-            downcast_threadsafe_data!(boxed, type_id, crate::types::float16::float16)
+            downcast_send_sync_data!(boxed, type_id, crate::types::float16::float16)
         }
         TypeId::BFLOAT16 => {
-            downcast_threadsafe_data!(boxed, type_id, crate::types::bfloat16::bfloat16)
+            downcast_send_sync_data!(boxed, type_id, crate::types::bfloat16::bfloat16)
         }
-        TypeId::FLOAT32 => downcast_threadsafe_data!(boxed, type_id, f32),
-        TypeId::FLOAT64 => downcast_threadsafe_data!(boxed, type_id, f64),
-        TypeId::STRING => downcast_threadsafe_data!(boxed, type_id, String),
-        TypeId::DURATION => downcast_threadsafe_data!(boxed, type_id, crate::types::Duration),
-        TypeId::TIMESTAMP => downcast_threadsafe_data!(boxed, type_id, crate::types::Timestamp),
-        TypeId::DATE => downcast_threadsafe_data!(boxed, type_id, crate::types::Date),
-        TypeId::DECIMAL => downcast_threadsafe_data!(boxed, type_id, crate::types::Decimal),
-        TypeId::BINARY | TypeId::UINT8_ARRAY => downcast_threadsafe_data!(boxed, type_id, Vec<u8>),
-        TypeId::BOOL_ARRAY => downcast_threadsafe_data!(boxed, type_id, Vec<bool>),
-        TypeId::INT8_ARRAY => downcast_threadsafe_data!(boxed, type_id, Vec<i8>),
-        TypeId::INT16_ARRAY => downcast_threadsafe_data!(boxed, type_id, Vec<i16>),
-        TypeId::INT32_ARRAY => downcast_threadsafe_data!(boxed, type_id, Vec<i32>),
-        TypeId::INT64_ARRAY => downcast_threadsafe_data!(boxed, type_id, Vec<i64>),
-        TypeId::UINT16_ARRAY => downcast_threadsafe_data!(boxed, type_id, Vec<u16>),
-        TypeId::UINT32_ARRAY => downcast_threadsafe_data!(boxed, type_id, Vec<u32>),
-        TypeId::UINT64_ARRAY => downcast_threadsafe_data!(boxed, type_id, Vec<u64>),
+        TypeId::FLOAT32 => downcast_send_sync_data!(boxed, type_id, f32),
+        TypeId::FLOAT64 => downcast_send_sync_data!(boxed, type_id, f64),
+        TypeId::STRING => downcast_send_sync_data!(boxed, type_id, String),
+        TypeId::DURATION => downcast_send_sync_data!(boxed, type_id, crate::types::Duration),
+        TypeId::TIMESTAMP => downcast_send_sync_data!(boxed, type_id, crate::types::Timestamp),
+        TypeId::DATE => downcast_send_sync_data!(boxed, type_id, crate::types::Date),
+        TypeId::DECIMAL => downcast_send_sync_data!(boxed, type_id, crate::types::Decimal),
+        TypeId::BINARY | TypeId::UINT8_ARRAY => downcast_send_sync_data!(boxed, type_id, Vec<u8>),
+        TypeId::BOOL_ARRAY => downcast_send_sync_data!(boxed, type_id, Vec<bool>),
+        TypeId::INT8_ARRAY => downcast_send_sync_data!(boxed, type_id, Vec<i8>),
+        TypeId::INT16_ARRAY => downcast_send_sync_data!(boxed, type_id, Vec<i16>),
+        TypeId::INT32_ARRAY => downcast_send_sync_data!(boxed, type_id, Vec<i32>),
+        TypeId::INT64_ARRAY => downcast_send_sync_data!(boxed, type_id, Vec<i64>),
+        TypeId::UINT16_ARRAY => downcast_send_sync_data!(boxed, type_id, Vec<u16>),
+        TypeId::UINT32_ARRAY => downcast_send_sync_data!(boxed, type_id, Vec<u32>),
+        TypeId::UINT64_ARRAY => downcast_send_sync_data!(boxed, type_id, Vec<u64>),
         TypeId::FLOAT16_ARRAY => {
-            downcast_threadsafe_data!(boxed, type_id, Vec<crate::types::float16::float16>)
+            downcast_send_sync_data!(boxed, type_id, Vec<crate::types::float16::float16>)
         }
         TypeId::BFLOAT16_ARRAY => {
-            downcast_threadsafe_data!(boxed, type_id, Vec<crate::types::bfloat16::bfloat16>)
+            downcast_send_sync_data!(boxed, type_id, Vec<crate::types::bfloat16::bfloat16>)
         }
-        TypeId::FLOAT32_ARRAY => downcast_threadsafe_data!(boxed, type_id, Vec<f32>),
-        TypeId::FLOAT64_ARRAY => downcast_threadsafe_data!(boxed, type_id, Vec<f64>),
-        TypeId::U128 => downcast_threadsafe_data!(boxed, type_id, u128),
-        TypeId::INT128 => downcast_threadsafe_data!(boxed, type_id, i128),
-        TypeId::USIZE => downcast_threadsafe_data!(boxed, type_id, usize),
-        TypeId::ISIZE => downcast_threadsafe_data!(boxed, type_id, isize),
-        TypeId::U128_ARRAY => downcast_threadsafe_data!(boxed, type_id, Vec<u128>),
-        TypeId::INT128_ARRAY => downcast_threadsafe_data!(boxed, type_id, Vec<i128>),
-        TypeId::USIZE_ARRAY => downcast_threadsafe_data!(boxed, type_id, Vec<usize>),
-        TypeId::ISIZE_ARRAY => downcast_threadsafe_data!(boxed, type_id, Vec<isize>),
-        _ => Err(unsupported_threadsafe_type_id(type_id)),
+        TypeId::FLOAT32_ARRAY => downcast_send_sync_data!(boxed, type_id, Vec<f32>),
+        TypeId::FLOAT64_ARRAY => downcast_send_sync_data!(boxed, type_id, Vec<f64>),
+        TypeId::U128 => downcast_send_sync_data!(boxed, type_id, u128),
+        TypeId::INT128 => downcast_send_sync_data!(boxed, type_id, i128),
+        TypeId::USIZE => downcast_send_sync_data!(boxed, type_id, usize),
+        TypeId::ISIZE => downcast_send_sync_data!(boxed, type_id, isize),
+        TypeId::U128_ARRAY => downcast_send_sync_data!(boxed, type_id, Vec<u128>),
+        TypeId::INT128_ARRAY => downcast_send_sync_data!(boxed, type_id, Vec<i128>),
+        TypeId::USIZE_ARRAY => downcast_send_sync_data!(boxed, type_id, Vec<usize>),
+        TypeId::ISIZE_ARRAY => downcast_send_sync_data!(boxed, type_id, Vec<isize>),
+        _ => Err(unsupported_send_sync_type_id(type_id)),
     }
 }
 
 #[cold]
 #[inline(never)]
-pub(crate) fn unsupported_threadsafe_type_id(type_id: TypeId) -> Error {
+pub(crate) fn unsupported_send_sync_type_id(type_id: TypeId) -> Error {
     Error::type_error(format!(
         "{:?} cannot be represented as Arc<dyn Any + Send + Sync>",
         type_id
@@ -1665,7 +1665,7 @@ pub(crate) fn unsupported_threadsafe_type_id(type_id: TypeId) -> Error {
 
 #[cold]
 #[inline(never)]
-pub fn unsupported_threadsafe_type<T>() -> Error
+pub fn unsupported_send_sync_type<T>() -> Error
 where
     T: ?Sized,
 {

@@ -766,7 +766,7 @@ pub(crate) fn codec_type_for(
             );
         }
         return Ok(quote! {
-            compile_error!("Arc<dyn Any> is not a shared thread-safe carrier; use Arc<dyn Any + Send + Sync>")
+            compile_error!("Arc<dyn Any> is not a shared Send + Sync carrier; use Arc<dyn Any + Send + Sync>")
         });
     }
 

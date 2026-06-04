@@ -27,7 +27,7 @@ pub struct UnknownCase {
     type_id: u32,
     // Keep resolver TypeInfo/Rc out of the carrier. Generated unions can outlive or move
     // independently from the resolver context, so the carrier stores only stable metadata
-    // plus a dynamic payload whose thread-safety is guaranteed by the trait object.
+    // plus a dynamic payload whose `Send + Sync` guarantee is carried by the trait object.
     value: Arc<dyn Any + Send + Sync>,
 }
 

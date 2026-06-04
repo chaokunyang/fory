@@ -132,6 +132,37 @@ let unwrapped = decoded.downcast_ref::<Dog>().unwrap();
 assert_eq!(unwrapped.name, "Buddy");
 ```
 
+`Arc<dyn Any + Send + Sync>` only works for registered concrete types whose
+serializers can read values back into `Box<dyn Any + Send + Sync>`.
+`ForyStruct`, `ForyEnum`, and `ForyUnion` generate this send-sync dynamic reader
+by default unless a field is a known local-only type such as `Rc<T>`,
+`RcWeak<T>`, `RefCell<T>`, or `Cell<T>`. Opaque custom fields are allowed through;
+Rust then checks the final `Self: Send + Sync` bound when compiling the generated
+reader.
+
+If a nested custom type contains local-only fields and the outer type is not
+intended for `Arc<dyn Any + Send + Sync>`, opt out on the outer type:
+
+```rust
+use fory::ForyStruct;
+use std::rc::Rc;
+
+#[derive(ForyStruct)]
+struct LocalNode {
+    parent: Rc<String>,
+}
+
+#[derive(ForyStruct)]
+#[fory(send_sync = false)]
+struct LocalEnvelope {
+    node: LocalNode,
+}
+```
+
+Manual `Serializer` implementations are conservative by default. Implement
+`fory_is_send_sync_type` and `fory_read_data_send_sync` only when the concrete
+value read by the serializer is `Send + Sync`.
+
 ## Rc/Arc-Based Trait Objects in Structs
 
 For fields with `Rc<dyn Trait>` or `Arc<dyn Trait>`, Fory automatically handles the conversion:

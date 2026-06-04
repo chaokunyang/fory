@@ -208,7 +208,7 @@ impl Serializer for UnknownCase {
         read_payload(context, 0)
     }
 
-    fn fory_is_threadsafe_type() -> bool {
+    fn fory_is_send_sync_type() -> bool {
         true
     }
 

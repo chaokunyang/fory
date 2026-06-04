@@ -223,7 +223,7 @@ fn union_compatible_enum_xlang_format() {
 }
 
 #[test]
-fn unknown_case_reads_threadsafe_generated_payload() {
+fn unknown_case_reads_send_sync_payload() {
     use fory_core::ArcWeak;
     use std::sync::{Arc, Mutex};
 

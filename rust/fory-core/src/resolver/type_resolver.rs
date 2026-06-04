@@ -93,7 +93,7 @@ pub struct Harness {
     read_data_send_sync_fn: ReadDataSendSyncFn,
     read_compatible_fn: Option<ReadCompatibleFn>,
     read_compatible_send_sync_fn: Option<ReadCompatibleSendSyncFn>,
-    threadsafe: bool,
+    send_sync: bool,
     to_serializer: ToSerializerFn,
     build_type_infos: BuildTypeInfosFn,
 }
@@ -108,7 +108,7 @@ impl Harness {
             read_data_send_sync_fn: stub_read_data_send_sync_fn,
             read_compatible_fn: None,
             read_compatible_send_sync_fn: None,
-            threadsafe: false,
+            send_sync: false,
             to_serializer: stub_to_serializer_fn,
             build_type_infos: stub_build_type_infos,
         }
@@ -171,7 +171,7 @@ impl Harness {
         context: &mut ReadContext,
         typeinfo: &Rc<TypeInfo>,
     ) -> Result<Box<dyn Any + Send + Sync>, Error> {
-        if !self.threadsafe {
+        if !self.send_sync {
             return Err(Error::type_error(format!(
                 "{}::{} cannot be represented as Arc<dyn Any + Send + Sync>",
                 typeinfo.namespace.original, typeinfo.type_name.original
@@ -334,7 +334,7 @@ impl TypeInfo {
                 read_data_send_sync_fn: stub_read_data_send_sync_fn,
                 read_compatible_fn: None,
                 read_compatible_send_sync_fn: None,
-                threadsafe: false,
+                send_sync: false,
                 to_serializer: stub_to_serializer_fn,
                 build_type_infos: stub_build_type_infos,
             }
@@ -969,14 +969,13 @@ impl TypeResolver {
         fn read_data_send_sync<T2: 'static + Serializer + ForyDefault>(
             context: &mut ReadContext,
         ) -> Result<Box<dyn Any + Send + Sync>, Error> {
-            if T2::fory_is_threadsafe_type() {
+            if T2::fory_is_send_sync_type() {
                 T2::fory_read_data_send_sync(context)
-            } else if crate::serializer::is_known_threadsafe_static_type_id(
-                T2::fory_static_type_id(),
-            ) {
-                crate::serializer::read_known_threadsafe_data::<T2>(context)
+            } else if crate::serializer::is_known_send_sync_static_type_id(T2::fory_static_type_id())
+            {
+                crate::serializer::read_known_send_sync_data::<T2>(context)
             } else {
-                Err(crate::serializer::unsupported_threadsafe_type::<T2>())
+                Err(crate::serializer::unsupported_send_sync_type::<T2>())
             }
         }
 
@@ -1017,8 +1016,8 @@ impl TypeResolver {
             read_data_send_sync_fn: read_data_send_sync::<T>,
             read_compatible_fn: Some(read_compatible::<T>),
             read_compatible_send_sync_fn: Some(read_compatible_send_sync::<T>),
-            threadsafe: T::fory_is_threadsafe_type()
-                || crate::serializer::is_known_threadsafe_static_type_id(T::fory_static_type_id()),
+            send_sync: T::fory_is_send_sync_type()
+                || crate::serializer::is_known_send_sync_static_type_id(T::fory_static_type_id()),
             to_serializer: to_serializer::<T>,
             build_type_infos: build_type_infos::<T>,
         };
@@ -1215,14 +1214,13 @@ impl TypeResolver {
         fn read_data_send_sync<T2: 'static + Serializer + ForyDefault>(
             context: &mut ReadContext,
         ) -> Result<Box<dyn Any + Send + Sync>, Error> {
-            if T2::fory_is_threadsafe_type() {
+            if T2::fory_is_send_sync_type() {
                 T2::fory_read_data_send_sync(context)
-            } else if crate::serializer::is_known_threadsafe_static_type_id(
-                T2::fory_static_type_id(),
-            ) {
-                crate::serializer::read_known_threadsafe_data::<T2>(context)
+            } else if crate::serializer::is_known_send_sync_static_type_id(T2::fory_static_type_id())
+            {
+                crate::serializer::read_known_send_sync_data::<T2>(context)
             } else {
-                Err(crate::serializer::unsupported_threadsafe_type::<T2>())
+                Err(crate::serializer::unsupported_send_sync_type::<T2>())
             }
         }
 
@@ -1259,8 +1257,8 @@ impl TypeResolver {
             read_data_send_sync_fn: read_data_send_sync::<T>,
             read_compatible_fn: None,
             read_compatible_send_sync_fn: None,
-            threadsafe: T::fory_is_threadsafe_type()
-                || crate::serializer::is_known_threadsafe_static_type_id(T::fory_static_type_id()),
+            send_sync: T::fory_is_send_sync_type()
+                || crate::serializer::is_known_send_sync_static_type_id(T::fory_static_type_id()),
             to_serializer: to_serializer::<T>,
             build_type_infos: build_type_infos::<T>,
         };

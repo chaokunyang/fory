@@ -251,6 +251,17 @@ The examples in this section use native mode because Rust trait objects and `dyn
 - `Box<dyn Any>`/`Rc<dyn Any>`/`Arc<dyn Any + Send + Sync>` - Any trait type objects
 - `Vec<Box<dyn Trait>>`, `HashMap<K, Box<dyn Trait>>` - Collections of trait objects
 
+`Arc<dyn Any + Send + Sync>` requires the registered concrete type to support
+send-sync dynamic reads. `ForyStruct`, `ForyEnum`, and `ForyUnion` generate that
+support by default unless a field is a known local-only type such as `Rc<T>`,
+`RcWeak<T>`, `RefCell<T>`, or `Cell<T>`. For opaque custom fields, the generated
+reader is emitted and Rust checks the final `Self: Send + Sync` bound. If a
+nested custom field makes a local-only type fail to compile and the type is not
+intended for `Arc<dyn Any + Send + Sync>`, mark it with
+`#[fory(send_sync = false)]`. Manual `Serializer` implementations are
+conservative by default; implement `fory_is_send_sync_type` and
+`fory_read_data_send_sync` when the concrete value is `Send + Sync`.
+
 **Basic Trait Object Serialization Example:**
 
 ```rust

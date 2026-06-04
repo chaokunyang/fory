@@ -298,10 +298,9 @@ impl Serializer for Rc<dyn Any> {
     }
 
     fn fory_read_data(_: &mut ReadContext) -> Result<Self, Error> {
-        Err(Error::not_allowed(format!(
-            "fory_read_data should not be called directly on polymorphic Rc<dyn {}> trait object",
-            stringify!($trait_name)
-        )))
+        Err(Error::not_allowed(
+            "fory_read_data should not be called directly on polymorphic Rc<dyn Any> trait object",
+        ))
     }
 
     fn fory_get_type_id(_: &TypeResolver) -> Result<TypeId, Error> {
@@ -322,11 +321,11 @@ impl Serializer for Rc<dyn Any> {
         true
     }
 
-    fn fory_is_threadsafe_type() -> bool
+    fn fory_is_send_sync_type() -> bool
     where
         Self: Sized,
     {
-        true
+        false
     }
 
     fn fory_is_polymorphic() -> bool {
@@ -502,6 +501,13 @@ impl Serializer for Arc<dyn Any + Send + Sync> {
     }
 
     fn fory_is_shared_ref() -> bool {
+        true
+    }
+
+    fn fory_is_send_sync_type() -> bool
+    where
+        Self: Sized,
+    {
         true
     }
 

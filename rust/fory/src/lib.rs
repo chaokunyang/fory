@@ -68,7 +68,7 @@
 //!
 //! # fn main() -> Result<(), Error> {
 //! let mut fory = Fory::builder().xlang(true).build();
-//! fory.register_by_name::<User>("example", "User")?;
+//! fory.register_by_name::<User>("example.User")?;
 //!
 //! let user = User {
 //!     name: "Alice".to_string(),
@@ -140,8 +140,8 @@
 //!
 //! # fn main() -> Result<(), Error> {
 //! let mut fory = Fory::builder().xlang(true).build();
-//! fory.register_by_name::<Address>("example", "Address")?;
-//! fory.register_by_name::<Person>("example", "Person")?;
+//! fory.register_by_name::<Address>("example.Address")?;
+//! fory.register_by_name::<Person>("example.Person")?;
 //!
 //! let person = Person {
 //!     name: "John Doe".to_string(),
@@ -650,10 +650,10 @@
 //!
 //! # fn main() -> Result<(), Error> {
 //! let mut fory1 = Fory::builder().xlang(true).compatible(true).build();
-//! fory1.register_by_name::<PersonV1>("example", "Person")?;
+//! fory1.register_by_name::<PersonV1>("example.Person")?;
 //!
 //! let mut fory2 = Fory::builder().xlang(true).compatible(true).build();
-//! fory2.register_by_name::<PersonV2>("example", "Person")?;
+//! fory2.register_by_name::<PersonV2>("example.Person")?;
 //!
 //! let person_v1 = PersonV1 {
 //!     name: "Alice".to_string(),
@@ -1072,13 +1072,13 @@
 //!     field2: String,
 //! }
 //!
-//! fory.register_by_name::<MyStruct>("com.example", "MyStruct").unwrap();
+//! fory.register_by_name::<MyStruct>("com.example.MyStruct").unwrap();
 //! ```
 //!
 //! **Type registration strategies:**
 //!
 //! - **ID-based registration**: `fory.register::<T>(id)` - Fastest, requires coordination
-//! - **Name-based registration**: `fory.register_by_name::<T>(namespace, name)` - Automatic cross-language mapping
+//! - **Name-based registration**: `fory.register_by_name::<T>(name)` - Automatic cross-language mapping
 //!
 //! ## Performance Characteristics
 //!
@@ -1120,7 +1120,7 @@
 //!
 //! fn process_data(bytes: &[u8]) -> Result<Data, Error> {
 //!     let mut fory = Fory::builder().xlang(true).build();
-//!     fory.register_by_name::<Data>("example", "Data")?;
+//!     fory.register_by_name::<Data>("example.Data")?;
 //!
 //!     let data: Data = fory.deserialize(bytes)?;
 //!     Ok(data)
@@ -1146,7 +1146,7 @@
 //! }
 //!
 //! let mut fory = Fory::builder().xlang(true).build();
-//! fory.register_by_name::<Item>("example", "Item").unwrap();
+//! fory.register_by_name::<Item>("example.Item").unwrap();
 //! let fory = Arc::new(fory);
 //! let handles: Vec<_> = (0..8)
 //!     .map(|i| {

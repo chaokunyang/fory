@@ -1840,6 +1840,10 @@ TypeResolver::register_by_name(const std::string &ns,
     return Unexpected(
         Error::invalid("type_name must be non-empty for register_by_name"));
   }
+  if (type_name.find('.') != std::string::npos) {
+    return Unexpected(Error::invalid(
+        "type_name must not contain '.' when namespace is provided"));
+  }
 
   constexpr uint64_t ctid = type_index<T>();
 
@@ -1912,6 +1916,10 @@ TypeResolver::register_ext_type_by_name(const std::string &ns,
     return Unexpected(Error::invalid(
         "type_name must be non-empty for register_ext_type_by_name"));
   }
+  if (type_name.find('.') != std::string::npos) {
+    return Unexpected(Error::invalid(
+        "type_name must not contain '.' when namespace is provided"));
+  }
 
   constexpr uint64_t ctid = type_index<T>();
 
@@ -1954,6 +1962,10 @@ TypeResolver::register_union_by_name(const std::string &ns,
   if (type_name.empty()) {
     return Unexpected(Error::invalid(
         "type_name must be non-empty for register_union_by_name"));
+  }
+  if (type_name.find('.') != std::string::npos) {
+    return Unexpected(Error::invalid(
+        "type_name must not contain '.' when namespace is provided"));
   }
 
   constexpr uint64_t ctid = type_index<T>();

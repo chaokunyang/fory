@@ -50,7 +50,7 @@ struct MapContainer {
 #[test]
 fn test_struct_with_maps() {
     let mut fory = Fory::builder().xlang(false).build();
-    fory.register_by_name::<MapContainer>("", "MapContainer")
+    fory.register_by_name::<MapContainer>("MapContainer")
         .unwrap();
     let mut hash_map = HashMap::new();
     hash_map.insert("foo".to_string(), "bar".to_string());

@@ -137,6 +137,22 @@ public class UnionSerializerTest extends ForyTestBase {
     assertEquals(union.getValue(), "hello");
   }
 
+  @Test
+  public void testRegisterUnionDottedName() {
+    Fory fory = Fory.builder().withXlang(true).requireClassRegistration(true).build();
+    UnionSerializer serializer = new UnionSerializer(fory.getTypeResolver(), SchemaUnion.class);
+    fory.registerUnion(SchemaUnion.class, "demo.SchemaUnion", serializer);
+
+    assertEquals(fory.getTypeResolver().getTypeInfo(SchemaUnion.class).decodeNamespace(), "demo");
+    assertEquals(
+        fory.getTypeResolver().getTypeInfo(SchemaUnion.class).decodeTypeName(), "SchemaUnion");
+
+    UnionSerializer invalidSerializer = new UnionSerializer(fory.getTypeResolver(), Union2.class);
+    org.testng.Assert.assertThrows(
+        IllegalArgumentException.class,
+        () -> fory.registerUnion(Union2.class, "demo", "Union.Two", invalidSerializer));
+  }
+
   private static Union writeReadUnion(
       Fory fory, UnionSerializer serializer, Union value, int expectedCaseId) {
     MemoryBuffer buffer = MemoryUtils.buffer(64);

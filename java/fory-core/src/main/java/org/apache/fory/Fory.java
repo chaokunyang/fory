@@ -103,6 +103,19 @@ public final class Fory implements BaseFory {
   private final byte headerBitmap;
   private MemoryBuffer buffer;
 
+  private static String[] splitRegistrationName(String name) {
+    Preconditions.checkNotNull(name);
+    String namespace = "";
+    String typeName = name;
+    int idx = name.lastIndexOf('.');
+    if (idx >= 0) {
+      namespace = name.substring(0, idx);
+      typeName = name.substring(idx + 1);
+    }
+    Preconditions.checkArgument(!typeName.isEmpty(), "Name must include a non-empty type name");
+    return new String[] {namespace, typeName};
+  }
+
   public Fory(ForyBuilder builder, ClassLoader classLoader) {
     this(builder, classLoader, null);
   }
@@ -169,15 +182,10 @@ public final class Fory implements BaseFory {
    * compared to register by id.
    */
   @Override
-  public void register(Class<?> cls, String typeName) {
+  public void register(Class<?> cls, String name) {
     checkRegisterAllowed();
-    int idx = typeName.lastIndexOf('.');
-    String namespace = "";
-    if (idx > 0) {
-      namespace = typeName.substring(0, idx);
-      typeName = typeName.substring(idx + 1);
-    }
-    register(cls, namespace, typeName);
+    String[] parts = splitRegistrationName(name);
+    register(cls, parts[0], parts[1]);
   }
 
   public void register(Class<?> cls, String namespace, String typeName) {
@@ -195,6 +203,13 @@ public final class Fory implements BaseFory {
   public void register(String className, int classId) {
     checkRegisterAllowed();
     getTypeResolver().register(className, Integer.toUnsignedLong(classId));
+  }
+
+  @Override
+  public void register(String className, String name) {
+    checkRegisterAllowed();
+    String[] parts = splitRegistrationName(name);
+    getTypeResolver().register(className, parts[0], parts[1]);
   }
 
   @Override
@@ -223,6 +238,13 @@ public final class Fory implements BaseFory {
   public void registerUnion(Class<?> cls, int id, Serializer<?> serializer) {
     checkRegisterAllowed();
     getTypeResolver().registerUnion(cls, Integer.toUnsignedLong(id), serializer);
+  }
+
+  @Override
+  public void registerUnion(Class<?> cls, String name, Serializer<?> serializer) {
+    checkRegisterAllowed();
+    String[] parts = splitRegistrationName(name);
+    getTypeResolver().registerUnion(cls, parts[0], parts[1], serializer);
   }
 
   @Override

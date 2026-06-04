@@ -254,7 +254,7 @@ public abstract class TypeResolver {
    *
    * @param type the class to register
    * @param namespace the namespace (can be empty if type name has no conflict)
-   * @param typeName the type name
+   * @param typeName the type name; must not contain {@code .}
    */
   public abstract void register(Class<?> type, String namespace, String typeName);
 
@@ -268,7 +268,9 @@ public abstract class TypeResolver {
     register(loadClass(className), classId);
   }
 
-  /** Registers a class by name with a namespace and type name. */
+  /**
+   * Registers a class by name with a namespace and type name. The type name must not contain `.`.
+   */
   public void register(String className, String namespace, String typeName) {
     register(loadClass(className), namespace, typeName);
   }

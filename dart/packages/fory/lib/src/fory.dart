@@ -210,27 +210,24 @@ final class Fory {
         'Out-of-band buffers are not supported by the Dart runtime.',
       );
     }
-    throw StateError(
-      'Only xlang payloads are supported by the Dart runtime.',
-    );
+    throw StateError('Only xlang payloads are supported by the Dart runtime.');
   }
 
   /// Registers a generated type.
   ///
   /// Exactly one registration mode is required:
   /// - pass [id] for id-based registration, or
-  /// - pass both [namespace] and [typeName] for name-based registration.
+  /// - pass [typeName] for name-based registration.
+  ///
+  /// When [namespace] is omitted, [typeName] may include a namespace prefix
+  /// separated by `.`; otherwise [namespace] and [typeName] are used as the
+  /// explicit split components.
   ///
   /// Generated struct and enum registration should normally flow through the
   /// generated library namespace, which installs generated metadata into the
   /// internal registry before calling this method. For manual serializers,
   /// including unions, use [registerSerializer].
-  void register(
-    Type type, {
-    int? id,
-    String? namespace,
-    String? typeName,
-  }) {
+  void register(Type type, {int? id, String? namespace, String? typeName}) {
     _typeResolver.registerGenerated(
       type,
       id: id,
@@ -243,7 +240,11 @@ final class Fory {
   ///
   /// Exactly one registration mode is required:
   /// - pass [id] for id-based registration, or
-  /// - pass both [namespace] and [typeName] for name-based registration.
+  /// - pass [typeName] for name-based registration.
+  ///
+  /// When [namespace] is omitted, [typeName] may include a namespace prefix
+  /// separated by `.`; otherwise [namespace] and [typeName] are used as the
+  /// explicit split components.
   ///
   /// This is the advanced escape hatch for external types, manual unions, or
   /// custom wire behavior. Prefer [register] for generated types.

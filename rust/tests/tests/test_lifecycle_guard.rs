@@ -64,21 +64,18 @@ fn test_multiple_registrations_before_serialize_succeed() {
 }
 
 #[test]
-fn test_register_by_name_requires_type_name() {
+fn test_register_by_name_requires_name() {
     let mut fory = Fory::builder().xlang(false).build();
-    let err = fory
-        .register_by_name::<Point>("com.example", "")
-        .unwrap_err();
+    let err = fory.register_by_name::<Point>("com.example.").unwrap_err();
     assert!(matches!(err, Error::NotAllowed(_)));
 }
 
 #[test]
 fn test_register_by_name_rejects_duplicate_identity() {
     let mut fory = Fory::builder().xlang(false).build();
-    fory.register_by_name::<Point>("com.example", "Point")
-        .unwrap();
+    fory.register_by_name::<Point>("com.example.Point").unwrap();
     let err = fory
-        .register_by_name::<Color>("com.example", "Point")
+        .register_by_name::<Color>("com.example.Point")
         .unwrap_err();
     assert!(matches!(err, Error::TypeError(_)));
 }
@@ -138,12 +135,12 @@ fn test_register_by_name_after_serialize_fails() {
     let _bytes = fory.serialize(&Point { x: 0, y: 0 }).unwrap();
 
     let err = fory
-        .register_by_name::<Color>("", "Color")
+        .register_by_name::<Color>("Color")
         .expect_err("register_by_name after serialize should fail");
     assert!(matches!(err, Error::NotAllowed(_)));
 }
 
-/// Ensures `register_by_name()` with a non-empty namespace is forbidden after snapshot init.
+/// Ensures `register_by_name()` with a namespace prefix is forbidden after snapshot init.
 #[test]
 fn test_register_by_name_with_namespace_after_serialize_fails() {
     let mut fory = Fory::builder().xlang(false).build();
@@ -151,7 +148,7 @@ fn test_register_by_name_with_namespace_after_serialize_fails() {
     let _bytes = fory.serialize(&Point { x: 0, y: 0 }).unwrap();
 
     let err = fory
-        .register_by_name::<Color>("com.example", "Color")
+        .register_by_name::<Color>("com.example.Color")
         .expect_err("register_by_name after serialize should fail");
     assert!(matches!(err, Error::NotAllowed(_)));
 }
@@ -177,12 +174,12 @@ fn test_register_serializer_by_name_after_serialize_fails() {
     let _bytes = fory.serialize(&Point { x: 0, y: 0 }).unwrap();
 
     let err = fory
-        .register_serializer_by_name::<Color>("", "Color")
+        .register_serializer_by_name::<Color>("Color")
         .expect_err("register_serializer_by_name after serialize should fail");
     assert!(matches!(err, Error::NotAllowed(_)));
 }
 
-/// Ensures `register_serializer_by_name()` with a non-empty namespace is forbidden after snapshot init.
+/// Ensures `register_serializer_by_name()` with a namespace prefix is forbidden after snapshot init.
 #[test]
 fn test_register_serializer_by_name_with_namespace_after_serialize_fails() {
     let mut fory = Fory::builder().xlang(false).build();
@@ -190,7 +187,7 @@ fn test_register_serializer_by_name_with_namespace_after_serialize_fails() {
     let _bytes = fory.serialize(&Point { x: 0, y: 0 }).unwrap();
 
     let err = fory
-        .register_serializer_by_name::<Color>("com.example", "Color")
+        .register_serializer_by_name::<Color>("com.example.Color")
         .expect_err("register_serializer_by_name after serialize should fail");
     assert!(matches!(err, Error::NotAllowed(_)));
 }
@@ -216,12 +213,12 @@ fn test_register_union_by_name_after_serialize_fails() {
     let _bytes = fory.serialize(&Point { x: 0, y: 0 }).unwrap();
 
     let err = fory
-        .register_union_by_name::<Color>("", "Color")
+        .register_union_by_name::<Color>("Color")
         .expect_err("register_union_by_name after serialize should fail");
     assert!(matches!(err, Error::NotAllowed(_)));
 }
 
-/// Ensures `register_union_by_name()` with a non-empty namespace is forbidden after snapshot init.
+/// Ensures `register_union_by_name()` with a namespace prefix is forbidden after snapshot init.
 #[test]
 fn test_register_union_by_name_with_namespace_after_serialize_fails() {
     let mut fory = Fory::builder().xlang(false).build();
@@ -229,7 +226,7 @@ fn test_register_union_by_name_with_namespace_after_serialize_fails() {
     let _bytes = fory.serialize(&Point { x: 0, y: 0 }).unwrap();
 
     let err = fory
-        .register_union_by_name::<Color>("com.example", "Color")
+        .register_union_by_name::<Color>("com.example.Color")
         .expect_err("register_union_by_name after serialize should fail");
     assert!(matches!(err, Error::NotAllowed(_)));
 }

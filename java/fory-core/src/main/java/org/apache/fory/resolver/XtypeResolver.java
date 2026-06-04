@@ -267,8 +267,8 @@ public class XtypeResolver extends TypeResolver {
   public void register(Class<?> type, String namespace, String typeName) {
     checkRegisterAllowed();
     Preconditions.checkArgument(
-        !typeName.contains("."),
-        "Typename %s should not contains `.`, please put it into namespace",
+        !typeName.isEmpty() && !typeName.contains("."),
+        "Type name %s must be non-empty and must not contain `.` when namespace is provided",
         typeName);
     TypeInfo typeInfo = classInfoMap.get(type);
     Serializer<?> serializer = null;
@@ -386,8 +386,8 @@ public class XtypeResolver extends TypeResolver {
     checkRegisterAllowed();
     Preconditions.checkNotNull(serializer);
     Preconditions.checkArgument(
-        !typeName.contains("."),
-        "Typename %s should not contains `.`, please put it into namespace",
+        !typeName.isEmpty() && !typeName.contains("."),
+        "Type name %s must be non-empty and must not contain `.` when namespace is provided",
         typeName);
     TypeInfo typeInfo = classInfoMap.get(type);
     if (typeInfo != null && typeInfo.typeName != null) {
@@ -434,8 +434,8 @@ public class XtypeResolver extends TypeResolver {
       namespace = "";
     }
     Preconditions.checkArgument(
-        !typeName.contains("."),
-        "Typename %s should not contains `.`, please put it into namespace",
+        !typeName.isEmpty() && !typeName.contains("."),
+        "Type name %s must be non-empty and must not contain `.` when namespace is provided",
         typeName);
     TypeInfo typeInfo = classInfoMap.get(type);
     if (typeInfo != null && typeInfo.typeName != null) {

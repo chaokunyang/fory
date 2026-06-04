@@ -259,7 +259,7 @@ struct Person {
 
 let mut fory = Fory::builder().xlang(true).build();
 fory
-    .register_by_name::<Person>("example", "Person")
+    .register_by_name::<Person>("example.Person")
     .expect("register Person");
 ```
 
@@ -279,9 +279,9 @@ const { serialize, deserialize } = fory.register(personType);
 **C++:**
 
 ```cpp
-fory.register_struct<Person>("example", "Person");
+fory.register_struct<Person>("example.Person");
 // For enums, use register_enum:
-// fory.register_enum<Color>("example", "Color");
+// fory.register_enum<Color>("example.Color");
 ```
 
 **C#:**

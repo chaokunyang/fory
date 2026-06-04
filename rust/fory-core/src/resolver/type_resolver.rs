@@ -73,14 +73,23 @@ const INTERNAL_TYPE_ID_LIMIT: usize = 256;
 const MAX_USER_TYPE_ID: u32 = 0xfffffffe;
 pub(crate) const NO_USER_TYPE_ID: u32 = u32::MAX;
 
-fn validate_named_registration(type_name: &str, api: &str) -> Result<(), Error> {
-    if type_name.is_empty() {
+fn validate_named_registration(name: &str, api: &str) -> Result<(), Error> {
+    if name.is_empty() {
         return Err(Error::not_allowed(format!(
-            "type_name must be non-empty for {}",
+            "name must be non-empty for {}",
             api
         )));
     }
     Ok(())
+}
+
+fn split_named_registration<'a>(name: &'a str, api: &str) -> Result<(&'a str, &'a str), Error> {
+    let (namespace, type_name) = match name.rsplit_once('.') {
+        Some((namespace, name)) => (namespace, name),
+        None => ("", name),
+    };
+    validate_named_registration(type_name, api)?;
+    Ok((namespace, type_name))
 }
 
 #[derive(Clone, Debug)]
@@ -843,19 +852,17 @@ impl TypeResolver {
 
     pub fn register_by_name<T: 'static + StructSerializer + Serializer + ForyDefault>(
         &mut self,
-        namespace: &str,
-        type_name: &str,
+        name: &str,
     ) -> Result<(), Error> {
-        validate_named_registration(type_name, "register_by_name")?;
+        let (namespace, type_name) = split_named_registration(name, "register_by_name")?;
         self.register_struct_type::<T>(0, namespace, type_name, true)
     }
 
     pub fn register_union_by_name<T: 'static + StructSerializer + Serializer + ForyDefault>(
         &mut self,
-        namespace: &str,
-        type_name: &str,
+        name: &str,
     ) -> Result<(), Error> {
-        validate_named_registration(type_name, "register_union_by_name")?;
+        let (namespace, type_name) = split_named_registration(name, "register_union_by_name")?;
         if T::fory_static_type_id() != TypeId::UNION {
             return Err(Error::not_allowed(
                 "register_union_by_name requires a union-compatible enum type",
@@ -1094,10 +1101,9 @@ impl TypeResolver {
 
     pub fn register_serializer_by_name<T: Serializer + ForyDefault>(
         &mut self,
-        namespace: &str,
-        type_name: &str,
+        name: &str,
     ) -> Result<(), Error> {
-        validate_named_registration(type_name, "register_serializer_by_name")?;
+        let (namespace, type_name) = split_named_registration(name, "register_serializer_by_name")?;
         let actual_type_id = get_ext_actual_type_id(0, true);
         let static_type_id = T::fory_static_type_id();
         if static_type_id != TypeId::EXT && static_type_id != TypeId::NAMED_EXT {

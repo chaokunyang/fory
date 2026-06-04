@@ -540,10 +540,10 @@ fn named_enum() {
         last: i8,
     }
     let mut fory1 = Fory::builder().compatible(true).xlang(true).build();
-    fory1.register_by_name::<Color>("", "a").unwrap();
+    fory1.register_by_name::<Color>("a").unwrap();
     fory1.register::<Item1>(101).unwrap();
     let mut fory2 = Fory::builder().compatible(true).xlang(true).build();
-    fory2.register_by_name::<Color>("", "a").unwrap();
+    fory2.register_by_name::<Color>("a").unwrap();
     fory2.register::<Item2>(101).unwrap();
     let item1 = Item1 {
         f1: Color::Red,

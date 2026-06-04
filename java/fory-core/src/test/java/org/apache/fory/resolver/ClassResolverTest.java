@@ -129,6 +129,23 @@ public class ClassResolverTest extends ForyTestBase {
   }
 
   @Test
+  public void testRegisterDottedName() {
+    for (boolean xlang : new boolean[] {false, true}) {
+      Fory fory = Fory.builder().withXlang(xlang).requireClassRegistration(true).build();
+      TypeResolver resolver = fory.getTypeResolver();
+
+      fory.register(C1.class, "ns.C1");
+      TypeInfo typeInfo = resolver.getTypeInfo(C1.class);
+      assertEquals(typeInfo.decodeNamespace(), "ns");
+      assertEquals(typeInfo.decodeTypeName(), "C1");
+
+      Assert.assertThrows(
+          IllegalArgumentException.class, () -> fory.register(C2.class, "ns", "C2.Bad"));
+      Assert.assertThrows(IllegalArgumentException.class, () -> fory.register(C2.class, "ns."));
+    }
+  }
+
+  @Test
   public void testRegisterClass() {
     Fory fory = Fory.builder().withXlang(false).requireClassRegistration(false).build();
   }

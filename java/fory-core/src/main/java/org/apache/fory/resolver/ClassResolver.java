@@ -534,6 +534,9 @@ public class ClassResolver extends TypeResolver {
     Preconditions.checkArgument(!Functions.isLambda(cls));
     Preconditions.checkArgument(!ReflectionUtils.isJdkProxy(cls));
     Preconditions.checkArgument(!cls.isArray());
+    Preconditions.checkArgument(
+        !name.isEmpty() && !name.contains("."),
+        "Type name must be non-empty and must not contain `.` when namespace is provided");
     String fullname = name;
     if (namespace == null) {
       namespace = "";
@@ -581,6 +584,9 @@ public class ClassResolver extends TypeResolver {
     Preconditions.checkArgument(!Functions.isLambda(cls));
     Preconditions.checkArgument(!ReflectionUtils.isJdkProxy(cls));
     Preconditions.checkArgument(!cls.isArray());
+    Preconditions.checkArgument(
+        !name.isEmpty() && !name.contains("."),
+        "Type name must be non-empty and must not contain `.` when namespace is provided");
     String fullname = name;
     if (namespace == null) {
       namespace = "";
@@ -626,6 +632,9 @@ public class ClassResolver extends TypeResolver {
     Preconditions.checkArgument(!Functions.isLambda(cls));
     Preconditions.checkArgument(!ReflectionUtils.isJdkProxy(cls));
     Preconditions.checkArgument(!cls.isArray());
+    Preconditions.checkArgument(
+        !name.isEmpty() && !name.contains("."),
+        "Type name must be non-empty and must not contain `.` when namespace is provided");
     String fullname = name;
     if (namespace == null) {
       namespace = "";

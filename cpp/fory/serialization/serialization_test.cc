@@ -808,7 +808,7 @@ TEST(SerializationTest, RegistrationByNameFailureDoesNotLeakTypeInfo) {
       Fory::builder().xlang(true).compatible(false).track_ref(false).build();
   TypeResolver &resolver = fory.type_resolver();
 
-  ASSERT_TRUE(fory.register_struct<::SimpleStruct>("demo", "SharedType").ok());
+  ASSERT_TRUE(fory.register_struct<::SimpleStruct>("demo.SharedType").ok());
 
   auto duplicate = fory.register_struct<::NestedStruct>("demo", "SharedType");
   EXPECT_FALSE(duplicate.ok());
@@ -823,6 +823,11 @@ TEST(SerializationTest, RegistrationByNameFailureDoesNotLeakTypeInfo) {
   auto by_name = resolver.get_type_info_by_name("demo", "SharedType");
   ASSERT_TRUE(by_name.ok());
   EXPECT_EQ(by_name.value(), simple_info.value());
+
+  auto dotted_type_name =
+      fory.register_struct<::NestedStruct>("demo", "Nested.Type");
+  EXPECT_FALSE(dotted_type_name.ok());
+  EXPECT_EQ(dotted_type_name.error().code(), ErrorCode::Invalid);
 }
 
 TEST(SerializationTest, TypeMetaRejectsOverConsumedDeclaredSize) {

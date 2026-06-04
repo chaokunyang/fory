@@ -21,11 +21,11 @@ The Rust implementation provides versatile and high-performance serialization wi
 
 ## Crates
 
-| Crate                                                                       | Description                       | Version                                                                                               |
-| --------------------------------------------------------------------------- | --------------------------------- | ----------------------------------------------------------------------------------------------------- |
-| [`fory`](https://github.com/apache/fory/blob/main/rust/fory)                | High-level API with derive macros | [![crates.io](https://img.shields.io/crates/v/fory.svg)](https://crates.io/crates/fory)               |
-| [`fory-core`](https://github.com/apache/fory/blob/main/rust/fory-core/)     | Core serialization engine         | [![crates.io](https://img.shields.io/crates/v/fory-core.svg)](https://crates.io/crates/fory-core)     |
-| [`fory-derive`](https://github.com/apache/fory/blob/main/rust/fory-derive/) | Procedural macros                 | [![crates.io](https://img.shields.io/crates/v/fory-derive.svg)](https://crates.io/crates/fory-derive) |
+| Crate                                                                       | Description                       | Version                                       |
+| --------------------------------------------------------------------------- | --------------------------------- | --------------------------------------------- |
+| [`fory`](https://github.com/apache/fory/blob/main/rust/fory)                | High-level API with derive macros | [1.1.0](https://crates.io/crates/fory)        |
+| [`fory-core`](https://github.com/apache/fory/blob/main/rust/fory-core/)     | Core serialization engine         | [1.1.0](https://crates.io/crates/fory-core)   |
+| [`fory-derive`](https://github.com/apache/fory/blob/main/rust/fory-derive/) | Procedural macros                 | [1.1.0](https://crates.io/crates/fory-derive) |
 
 ## Quick Start
 
@@ -112,8 +112,8 @@ struct Address {
 }
 
 let mut fory = Fory::builder().xlang(true).build();
-fory.register_by_name::<Address>("example", "Address").unwrap();
-fory.register_by_name::<Person>("example", "Person").unwrap();
+fory.register_by_name::<Address>("example.Address").unwrap();
+fory.register_by_name::<Person>("example.Person").unwrap();
 
 let person = Person {
     name: "John Doe".to_string(),
@@ -359,10 +359,10 @@ struct PersonV2 {
 }
 
 let mut fory1 = Fory::builder().xlang(true).compatible(true).build();
-fory1.register_by_name::<PersonV1>("example", "Person").unwrap();
+fory1.register_by_name::<PersonV1>("example.Person").unwrap();
 
 let mut fory2 = Fory::builder().xlang(true).compatible(true).build();
-fory2.register_by_name::<PersonV2>("example", "Person").unwrap();
+fory2.register_by_name::<PersonV2>("example.Person").unwrap();
 
 let person_v1 = PersonV1 {
     name: "Alice".to_string(),
@@ -626,7 +626,7 @@ let mut fory = Fory::builder().xlang(true).build();
 fory.register::<MyStruct>(100)?;
 
 // Or use name-based registration
-fory.register_by_name::<MyStruct>("com.example", "MyStruct")?;
+fory.register_by_name::<MyStruct>("com.example.MyStruct")?;
 ```
 
 See [xlang_type_mapping.md](https://fory.apache.org/docs/specification/xlang_type_mapping) for type mapping across languages.

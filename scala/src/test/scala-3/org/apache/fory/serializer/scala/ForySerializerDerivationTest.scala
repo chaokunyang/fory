@@ -35,6 +35,7 @@ import org.apache.fory.memory.MemoryBuffer
 import org.apache.fory.meta.TypeDef
 import org.apache.fory.scala.ForySerializer
 import org.apache.fory.scala.ForyScala
+import org.apache.fory.scala.register
 import org.apache.fory.serializer.StaticGeneratedStructSerializer
 import org.apache.fory.`type`.{Types, TypeUtils}
 import org.apache.fory.`type`.union.UnknownCase
@@ -156,21 +157,20 @@ object ForySerializerDerivationTest {
       .requireClassRegistration(true)
       .suppressClassRegistrationWarnings(false)
       .build()
-    ForySerializer.register(fory, classOf[Person], "scala_test", "Person")
-    ForySerializer.register(fory, classOf[SearchUser], "scala_test", "SearchUser")
-    ForySerializer.register(fory, classOf[CollectionBox], "scala_test", "CollectionBox")
+    ForySerializer.register(fory, classOf[Person], "scala_test.Person")
+    ForySerializer.register(fory, classOf[SearchUser], "scala_test.SearchUser")
+    ForySerializer.register(fory, classOf[CollectionBox], "scala_test.CollectionBox")
     ForySerializer.register(
       fory,
       classOf[OptionalCollectionBox],
-      "scala_test",
-      "OptionalCollectionBox")
-    ForySerializer.register(fory, classOf[CopyBox], "scala_test", "CopyBox")
-    ForySerializer.register(fory, classOf[RefMetadataBox], "scala_test", "RefMetadataBox")
-    ForySerializer.register(fory, classOf[RefNode], "scala_test", "RefNode")
-    ForySerializer.register(fory, classOf[UnionRefNode], "scala_test", "UnionRefNode")
-    ForySerializer.register(fory, classOf[MixedRecord], "scala_test", "MixedRecord")
-    ForySerializer.register(fory, classOf[SearchTarget], "scala_test", "SearchTarget")
-    ForySerializer.register(fory, classOf[UnionCycle], "scala_test", "UnionCycle")
+      "scala_test.OptionalCollectionBox")
+    ForySerializer.register(fory, classOf[CopyBox], "scala_test.CopyBox")
+    ForySerializer.register(fory, classOf[RefMetadataBox], "scala_test.RefMetadataBox")
+    ForySerializer.register(fory, classOf[RefNode], "scala_test.RefNode")
+    ForySerializer.register(fory, classOf[UnionRefNode], "scala_test.UnionRefNode")
+    ForySerializer.register(fory, classOf[MixedRecord], "scala_test.MixedRecord")
+    ForySerializer.register(fory, classOf[SearchTarget], "scala_test.SearchTarget")
+    ForySerializer.register(fory, classOf[UnionCycle], "scala_test.UnionCycle")
     fory
   }
 
@@ -197,6 +197,25 @@ class ForySerializerDerivationTest extends AnyWordSpec with Matchers {
         Person("Ada", 36, Some("ada@example.com"))
       fory.deserialize(fory.serialize(Person("Grace", 85, None))) shouldEqual
         Person("Grace", 85, None)
+    }
+
+    "register derived structs with dotted names" in {
+      val direct = compatibleXlangFory()
+      ForySerializer.register(direct, classOf[Person], "scala_test.Person")
+      direct.getTypeResolver.getTypeInfo(classOf[Person]).decodeNamespace() shouldBe "scala_test"
+      direct.getTypeResolver.getTypeInfo(classOf[Person]).decodeTypeName() shouldBe "Person"
+
+      val extension = compatibleXlangFory()
+      extension.register[SearchUser]("scala_test.SearchUser")
+      extension.getTypeResolver.getTypeInfo(classOf[SearchUser]).decodeNamespace() shouldBe
+        "scala_test"
+      extension.getTypeResolver.getTypeInfo(classOf[SearchUser]).decodeTypeName() shouldBe
+        "SearchUser"
+
+      val invalid = compatibleXlangFory()
+      intercept[IllegalArgumentException] {
+        ForySerializer.register(invalid, classOf[Person], "scala_test", "Bad.Name")
+      }
     }
 
     "serialize derived union enum cases" in {

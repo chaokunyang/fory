@@ -392,7 +392,7 @@ void main() {
             isA<ArgumentError>().having(
               (error) => error.toString(),
               'message',
-              contains('Both namespace and typeName are required'),
+              contains('typeName is required when namespace is provided'),
             ),
           ),
         );
@@ -411,6 +411,19 @@ void main() {
               contains('Exactly one registration mode is required'),
             ),
           ),
+        );
+
+        final generated = Fory();
+        RuntimeValidationTestForyModule.register(
+          generated,
+          FreshGeneratedValue,
+          typeName: 'FreshGeneratedValue',
+        );
+        expect(
+          generated.deserialize<FreshGeneratedValue>(
+            generated.serialize(FreshGeneratedValue()),
+          ),
+          isA<FreshGeneratedValue>(),
         );
       },
     );

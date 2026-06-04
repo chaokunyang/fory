@@ -78,8 +78,7 @@ Or use a stable name instead of a numeric ID (useful for cross-language scenario
 ModelsForyModule.register(
   fory,
   User,
-  namespace: 'example',
-  typeName: 'User',
+  typeName: 'example.User',
 );
 ```
 

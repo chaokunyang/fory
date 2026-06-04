@@ -38,9 +38,9 @@ def ser_de(fory, obj):
     return fory.deserialize(binary)
 
 
-def compat_ser_de(remote_cls, local_cls, value, type_id):
-    writer = Fory(xlang=True, compatible=True, ref=False)
-    reader = Fory(xlang=True, compatible=True, ref=False)
+def compat_ser_de(remote_cls, local_cls, value, type_id, ref=False):
+    writer = Fory(xlang=True, compatible=True, ref=ref)
+    reader = Fory(xlang=True, compatible=True, ref=ref)
     writer.register_type(remote_cls, type_id=type_id)
     reader.register_type(local_cls, type_id=type_id)
     return reader.deserialize(writer.serialize(value))
@@ -223,6 +223,28 @@ class RemoteOptionalStringScalar:
     value: Optional[str] = None
 
 
+@dataclass
+class RemoteTwoStringScalars:
+    flag: str = pyfory.field(default="", ref=True)
+    count: str = pyfory.field(default="", ref=True)
+
+
+@dataclass
+class RemoteRefBoolScalar:
+    value: bool = pyfory.field(default=False, ref=True)
+
+
+@dataclass
+class LocalRefBoolScalar:
+    value: bool = pyfory.field(default=False, ref=True)
+
+
+@dataclass
+class LocalBoolIntScalars:
+    flag: bool = False
+    count: pyfory.Int32 = 0
+
+
 def test_compatible_scalar_conversions():
     assert compat_ser_de(RemoteStringScalar, LocalBoolScalar, RemoteStringScalar("true"), 720) == LocalBoolScalar(True)
     assert compat_ser_de(RemoteStringScalar, LocalBoolScalar, RemoteStringScalar("0"), 721) == LocalBoolScalar(False)
@@ -266,6 +288,26 @@ def test_compatible_scalar_optional_composition():
     assert compat_ser_de(RemoteOptionalStringScalar, LocalBoolScalar, RemoteOptionalStringScalar("false"), 733) == LocalBoolScalar(False)
     assert compat_ser_de(RemoteOptionalStringScalar, LocalBoolScalar, RemoteOptionalStringScalar("1"), 734) == LocalBoolScalar(True)
     assert compat_ser_de(RemoteOptionalStringScalar, LocalBoolScalar, RemoteOptionalStringScalar(None), 735) == LocalBoolScalar(False)
+
+
+def test_scalar_tracking_ref_is_not_converted():
+    writer = Fory(xlang=True, compatible=True, ref=True)
+    reader = Fory(xlang=True, compatible=True, ref=True)
+    writer.register_type(RemoteTwoStringScalars, type_id=738)
+    reader.register_type(LocalBoolIntScalars, type_id=738)
+    field_infos = writer.type_resolver.get_serializer(RemoteTwoStringScalars)._field_infos
+    assert [field_info.runtime_ref_tracking for field_info in field_infos] == [True, True]
+    assert [field_info.field_type.is_tracking_ref for field_info in field_infos] == [True, True]
+
+    shared = "".join(["", "1"])
+    result = reader.deserialize(writer.serialize(RemoteTwoStringScalars(shared, shared)))
+    assert result == LocalBoolIntScalars(False, 0)
+
+
+def test_scalar_tracking_ref_rules():
+    assert compat_ser_de(RemoteRefBoolScalar, LocalBoolScalar, RemoteRefBoolScalar(True), 739, ref=True) == LocalBoolScalar(False)
+    assert compat_ser_de(RemoteBoolScalar, LocalRefBoolScalar, RemoteBoolScalar(True), 740, ref=True) == LocalRefBoolScalar(False)
+    assert compat_ser_de(RemoteRefBoolScalar, LocalRefBoolScalar, RemoteRefBoolScalar(True), 741, ref=True) == LocalRefBoolScalar(True)
 
 
 def test_same_schema_compatible_scalar_path_is_direct():

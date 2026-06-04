@@ -107,7 +107,9 @@ converted value has the same logical value. Boolean strings must be exactly `"0"
 or `"false"`. Numeric strings must use ordinary finite decimal notation without whitespace, a leading
 `+`, separators, or non-finite values such as `NaN` and `Infinity`. Numbers and decimals can be read
 as canonical strings, and numeric widening or narrowing succeeds only when no precision or range is
-lost. Invalid strings and lossy conversions fail during deserialization.
+lost. Nullable and optional field wrappers still compose with these conversions, but reference-tracked
+scalar type changes are incompatible. Invalid strings and lossy conversions fail during
+deserialization.
 
 ## Adding Fields (Backward Compatibility)
 

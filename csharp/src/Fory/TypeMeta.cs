@@ -802,9 +802,20 @@ public sealed class TypeMeta : IEquatable<TypeMeta>
             return true;
         }
 
-        if (topLevel && CompatibleScalarConverter.IsScalarPair(remote.TypeId, local.TypeId))
+        if (topLevel &&
+            !remote.TrackRef &&
+            !local.TrackRef &&
+            CompatibleScalarConverter.CanConvert(remote.TypeId, local.TypeId))
         {
             return true;
+        }
+
+        if (topLevel &&
+            remote.TrackRef != local.TrackRef &&
+            CompatibleScalarConverter.IsScalarType(remote.TypeId) &&
+            CompatibleScalarConverter.IsScalarType(local.TypeId))
+        {
+            return false;
         }
 
         if (NormalizeTypeIdForMatch(remote.TypeId) != NormalizeTypeIdForMatch(local.TypeId))

@@ -32,7 +32,8 @@ converted value has the same logical value. For example, `"true"`, `"false"`, `"
 be read as booleans, exact finite numeric strings can be read as numeric fields that can hold them,
 numbers and decimals can be read as canonical strings, and numeric widening or narrowing succeeds
 only when no precision or range is lost. Invalid strings and lossy conversions fail during
-deserialization.
+deserialization. Nullable fields still compose with these conversions, but reference-tracked scalar
+type changes are incompatible.
 
 ## Default Compatible Mode
 

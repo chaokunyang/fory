@@ -60,7 +60,7 @@ where
     T: 'static,
     C: Codec<T> + ?Sized,
 {
-    if !scalar_types_compatible(local_field_type.type_id, remote_field_type.type_id) {
+    if !scalar_field_types_compatible(local_field_type, remote_field_type) {
         return Ok(None);
     }
     if !read_present_ref(context, remote_field_type)? {
@@ -79,7 +79,7 @@ pub(super) fn read_scalar_option_field<T>(
 where
     T: 'static,
 {
-    if !scalar_types_compatible(local_field_type.type_id, remote_field_type.type_id) {
+    if !scalar_field_types_compatible(local_field_type, remote_field_type) {
         return Ok(None);
     }
     if !read_present_ref(context, remote_field_type)? {
@@ -101,6 +101,16 @@ pub(super) fn scalar_types_compatible(local: u32, remote: u32) -> bool {
         || (local == type_id::STRING && remote_numeric)
         || (remote == type_id::STRING && local_numeric)
         || (local_numeric && remote_numeric)
+}
+
+#[inline(always)]
+pub(super) fn is_compatible_scalar_type(type_id: u32) -> bool {
+    type_id == type_id::BOOL || type_id == type_id::STRING || numeric_type(type_id)
+}
+
+#[inline(always)]
+fn scalar_field_types_compatible(local: &FieldType, remote: &FieldType) -> bool {
+    !local.track_ref && !remote.track_ref && scalar_types_compatible(local.type_id, remote.type_id)
 }
 
 #[inline(always)]
@@ -140,16 +150,9 @@ fn read_present_ref(
             let flag = context.reader.read_i8()?;
             Ok(flag != RefFlag::Null as i8)
         }
-        RefMode::Tracking => {
-            let flag = context.reader.read_i8()?;
-            match flag {
-                x if x == RefFlag::Null as i8 => Ok(false),
-                x if x == RefFlag::NotNullValue as i8 => Ok(true),
-                _ => Err(Error::invalid_data(
-                    "compatible scalar conversion requires an inline scalar value",
-                )),
-            }
-        }
+        RefMode::Tracking => Err(Error::invalid_data(
+            "trackingRef scalar conversion is not supported",
+        )),
     }
 }
 

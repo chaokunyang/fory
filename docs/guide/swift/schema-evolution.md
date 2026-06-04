@@ -30,7 +30,7 @@ lost. Invalid strings and lossy conversions fail during deserialization.
 
 Scalar conversion also composes with optional fields. A present optional value is converted by the
 same rules, while a missing optional value keeps Swift's normal compatible-mode default for the
-local field.
+local field. Reference-tracked scalar type changes are incompatible.
 
 ## Default Compatible Mode
 

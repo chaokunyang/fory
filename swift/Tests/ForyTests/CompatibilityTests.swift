@@ -466,6 +466,67 @@ func scalarOptionalComposes() throws {
 }
 
 @Test
+func scalarTrackRefMismatchIsUnassigned() throws {
+  let empty = MetaString.empty(specialChar1: "_", specialChar2: "_")
+  let local = try TypeMeta(
+    typeID: TypeId.compatibleStruct.rawValue,
+    userTypeID: 1,
+    namespace: empty,
+    typeName: empty,
+    registerByName: false,
+    fields: [
+      TypeMeta.FieldInfo(
+        fieldID: 1,
+        fieldName: "value",
+        fieldType: TypeMeta.FieldType(typeID: TypeId.bool.rawValue, nullable: false))
+    ])
+  let remoteTracking = try TypeMeta(
+    typeID: TypeId.compatibleStruct.rawValue,
+    userTypeID: 1,
+    namespace: empty,
+    typeName: empty,
+    registerByName: false,
+    fields: [
+      TypeMeta.FieldInfo(
+        fieldID: 1,
+        fieldName: "$tag1",
+        fieldType: TypeMeta.FieldType(typeID: TypeId.bool.rawValue, nullable: false, trackRef: true))
+    ])
+  let resolvedRemote = try remoteTracking.assigningFieldIDs(from: local)
+  #expect(resolvedRemote.fields[0].fieldID == -1)
+
+  let localTracking = try TypeMeta(
+    typeID: TypeId.compatibleStruct.rawValue,
+    userTypeID: 1,
+    namespace: empty,
+    typeName: empty,
+    registerByName: false,
+    fields: [
+      TypeMeta.FieldInfo(
+        fieldID: 1,
+        fieldName: "value",
+        fieldType: TypeMeta.FieldType(typeID: TypeId.bool.rawValue, nullable: false, trackRef: true))
+    ])
+  let remote = try TypeMeta(
+    typeID: TypeId.compatibleStruct.rawValue,
+    userTypeID: 1,
+    namespace: empty,
+    typeName: empty,
+    registerByName: false,
+    fields: [
+      TypeMeta.FieldInfo(
+        fieldID: 1,
+        fieldName: "$tag1",
+        fieldType: TypeMeta.FieldType(typeID: TypeId.bool.rawValue, nullable: false))
+    ])
+  let resolvedLocalTracking = try remote.assigningFieldIDs(from: localTracking)
+  #expect(resolvedLocalTracking.fields[0].fieldID == -1)
+
+  let resolvedBothTracking = try remoteTracking.assigningFieldIDs(from: localTracking)
+  #expect(resolvedBothTracking.fields[0].fieldID == 0)
+}
+
+@Test
 func scalarConversionFailures() throws {
   try expectInvalidData {
     let _: ScalarBoolBox = try compatibleDecode(
@@ -575,7 +636,7 @@ func compatibleModePreservesSharedAndCircularReferencesForMacroObjects() throws 
     items: [shared, shared],
     byName: [
       "left": shared,
-      "right": shared,
+      "right": shared
     ]
   )
 
@@ -635,7 +696,7 @@ func compatibleNestedArrayEvolves() throws {
   let sourceV1 = CompatibleNestedArrayV1(
     items: [
       CompatibleNestedProfileV1(id: 1, name: "alpha"),
-      CompatibleNestedProfileV1(id: 2, name: "beta"),
+      CompatibleNestedProfileV1(id: 2, name: "beta")
     ]
   )
   let decodedAsV2: CompatibleNestedArrayV2 = try readerV2.deserialize(
@@ -656,7 +717,7 @@ func compatibleNestedArrayEvolves() throws {
   let sourceV2 = CompatibleNestedArrayV2(
     items: [
       CompatibleNestedProfileV2(id: 3, name: "gamma", alias: "g", scores: [3, 4]),
-      CompatibleNestedProfileV2(id: 4, name: "delta", alias: "d", scores: []),
+      CompatibleNestedProfileV2(id: 4, name: "delta", alias: "d", scores: [])
     ]
   )
   let decodedAsV1: CompatibleNestedArrayV1 = try readerV1.deserialize(
@@ -664,7 +725,7 @@ func compatibleNestedArrayEvolves() throws {
   #expect(
     decodedAsV1.items == [
       CompatibleNestedProfileV1(id: 3, name: "gamma"),
-      CompatibleNestedProfileV1(id: 4, name: "delta"),
+      CompatibleNestedProfileV1(id: 4, name: "delta")
     ])
 }
 
@@ -693,7 +754,7 @@ func compatibleSkipUsesRemoteMetadataForNestedMapListSetFields() throws {
   let source = RemoteNestedFixedMapV1(
     data: [
       "a": [1, nil, Int32.max],
-      "b": [],
+      "b": []
     ],
     keep: 84,
     ids: [nil, -1, Int32.max]
@@ -795,7 +856,7 @@ func compatibleNestedMapEvolves() throws {
   let sourceV1 = CompatibleNestedMapV1(
     items: [
       1: CompatibleNestedProfileV1(id: 10, name: "first"),
-      2: CompatibleNestedProfileV1(id: 20, name: "second"),
+      2: CompatibleNestedProfileV1(id: 20, name: "second")
     ]
   )
   let decodedAsV2: CompatibleNestedMapV2 = try readerV2.deserialize(
@@ -823,14 +884,14 @@ func compatibleNestedReadsReuseTypeMeta() throws {
   let first = CompatibleNestedArrayV1(
     items: [
       CompatibleNestedProfileV1(id: 1, name: "alpha"),
-      CompatibleNestedProfileV1(id: 2, name: "beta"),
+      CompatibleNestedProfileV1(id: 2, name: "beta")
     ]
   )
   let second = CompatibleNestedArrayV1(
     items: [
       CompatibleNestedProfileV1(id: 3, name: "gamma"),
       CompatibleNestedProfileV1(id: 4, name: "delta"),
-      CompatibleNestedProfileV1(id: 5, name: "epsilon"),
+      CompatibleNestedProfileV1(id: 5, name: "epsilon")
     ]
   )
 

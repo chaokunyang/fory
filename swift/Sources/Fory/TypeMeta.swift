@@ -691,6 +691,12 @@ public final class TypeMeta: Equatable, @unchecked Sendable {
     if topLevel, isCompatibleTopLevelListArrayFieldType(remoteType, localType) {
       return true
     }
+    if topLevel,
+      remoteType.trackRef != localType.trackRef,
+      compatibleScalarKind(remoteType.typeID) != nil,
+      compatibleScalarKind(localType.typeID) != nil {
+      return false
+    }
     if topLevel, allowScalarConversion, isCompatibleTopLevelScalarFieldType(remoteType, localType) {
       return true
     }
@@ -744,6 +750,8 @@ public final class TypeMeta: Equatable, @unchecked Sendable {
   ) -> Bool {
     guard remoteType.generics.isEmpty,
       localType.generics.isEmpty,
+      !remoteType.trackRef,
+      !localType.trackRef,
       remoteType.typeID != localType.typeID,
       let remoteKind = compatibleScalarKind(remoteType.typeID),
       let localKind = compatibleScalarKind(localType.typeID)

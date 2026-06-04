@@ -217,7 +217,14 @@ The scalar conversion rule applies only to the immediate schema of the matched
 compatible field. It does not apply to dynamic root values, `any`, map keys, map
 values, list elements, set elements, array elements, union alternatives, enum
 values, time/date/duration values, binary values, structs, ext values, or nested
-generic/container positions.
+generic/container positions. It also applies only when both the remote and local
+top-level field schemas have `trackingRef = false`; if either matched field
+schema has `trackingRef = true`, scalar conversion is outside the compatible
+layout matrix and scalar type changes remain schema/type incompatible. Same
+scalar type IDs with matching top-level `trackingRef` framing are exact
+same-schema direct reads, not compatible scalar conversion. Same scalar type IDs
+with different top-level `trackingRef` framing are schema/type incompatible
+because the wire framing differs.
 
 The convertible scalar domains are `bool`, `string`, and numeric scalars.
 Numeric scalars are signed integers (`int8`, `int16`, `int32`, `int64`),
@@ -299,13 +306,14 @@ Same-type decimal reads preserve the ordinary decimal payload. A bounded public
 decimal carrier may reject smaller values when it cannot represent the value
 exactly.
 
-Nullable, boxed, optional, nullable-field, and reference framing compose with
-scalar conversion. Readers first consume the remote null/reference framing
-described by the remote field metadata. If a value is present, the reader
-converts the unwrapped scalar value and then assigns or wraps it into the local
-carrier. If the remote value is null or absent, the runtime uses the same
-missing/null compatible-field rule it already applies for that local field; this
-feature does not introduce a second null policy.
+Nullable, boxed, optional, and nullable-field composition is supported for
+matched scalar pairs whose top-level field schemas have `trackingRef = false`.
+Readers first consume the remote null/optional framing described by the remote
+field metadata. If a value is present, the reader converts the unwrapped scalar
+value and then assigns or wraps it into the local carrier. If the remote value
+is null or absent, the runtime uses the same missing/null compatible-field rule
+it already applies for that local field; this feature does not introduce a
+second null policy. Reference-tracked scalar conversion is not supported.
 
 Conversion failures are data errors, not schema misses. A schema pair outside
 the conversion matrix remains a schema/type compatibility error when building

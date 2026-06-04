@@ -106,6 +106,14 @@ public func foryReadCompatibleScalarField<T>(
       reason: "schema pair is outside the scalar conversion matrix"
     )
   }
+  guard !remoteFieldType.trackRef else {
+    throw compatibleScalarError(
+      fieldName: fieldName,
+      remoteTypeID: remoteTypeID,
+      localTypeID: localTypeID,
+      reason: "trackingRef scalar conversion is not supported"
+    )
+  }
   guard
     let remoteValue = try readCompatibleRemoteScalar(
       context, remoteTypeID: remoteTypeID, fieldType: remoteFieldType)
@@ -156,6 +164,14 @@ public func foryReadCompatibleOptionalScalarField<T>(
       remoteTypeID: remoteTypeID,
       localTypeID: localTypeID,
       reason: "schema pair is outside the scalar conversion matrix"
+    )
+  }
+  guard !remoteFieldType.trackRef else {
+    throw compatibleScalarError(
+      fieldName: fieldName,
+      remoteTypeID: remoteTypeID,
+      localTypeID: localTypeID,
+      reason: "trackingRef scalar conversion is not supported"
     )
   }
   guard
@@ -237,109 +253,61 @@ private func readCompatibleRemoteScalar(
       throw ForyError.refError("invalid ref flag \(rawFlag)")
     }
   case .tracking:
-    let rawFlag = try context.buffer.readInt8()
-    guard let flag = RefFlag(rawValue: rawFlag) else {
-      throw ForyError.refError("invalid ref flag \(rawFlag)")
-    }
-    if flag == .null {
-      return nil
-    }
-    context.buffer.moveBack(1)
-    return try readCompatibleRemoteScalarPayload(
-      context, remoteTypeID: remoteTypeID, refMode: .tracking)
+    throw ForyError.invalidData("trackingRef scalar conversion is not supported")
   }
 }
 
 private func readCompatibleRemoteScalarPayload(
   _ context: ReadContext,
-  remoteTypeID: TypeId,
-  refMode: RefMode = .none
+  remoteTypeID: TypeId
 ) throws -> CompatibleScalarValue {
   switch remoteTypeID {
   case .bool:
-    return .bool(try readCompatibleRemoteBool(context, refMode: refMode))
+    return .bool(try readCompatibleBoolPayload(context))
   case .string:
-    return .string(try StringCodec.read(context, refMode: refMode, readTypeInfo: false))
+    return .string(try StringCodec.read(context, refMode: .none, readTypeInfo: false))
   case .int8:
-    return .signed(Int64(try Int8Codec.read(context, refMode: refMode, readTypeInfo: false)))
+    return .signed(Int64(try Int8Codec.read(context, refMode: .none, readTypeInfo: false)))
   case .int16:
-    return .signed(Int64(try Int16Codec.read(context, refMode: refMode, readTypeInfo: false)))
+    return .signed(Int64(try Int16Codec.read(context, refMode: .none, readTypeInfo: false)))
   case .int32:
-    return .signed(Int64(try Int32FixedCodec.read(context, refMode: refMode, readTypeInfo: false)))
+    return .signed(Int64(try Int32FixedCodec.read(context, refMode: .none, readTypeInfo: false)))
   case .varint32:
-    return .signed(Int64(try Int32VarintCodec.read(context, refMode: refMode, readTypeInfo: false)))
+    return .signed(Int64(try Int32VarintCodec.read(context, refMode: .none, readTypeInfo: false)))
   case .int64:
-    return .signed(try Int64FixedCodec.read(context, refMode: refMode, readTypeInfo: false))
+    return .signed(try Int64FixedCodec.read(context, refMode: .none, readTypeInfo: false))
   case .varint64:
-    return .signed(try Int64VarintCodec.read(context, refMode: refMode, readTypeInfo: false))
+    return .signed(try Int64VarintCodec.read(context, refMode: .none, readTypeInfo: false))
   case .taggedInt64:
-    return .signed(try Int64TaggedCodec.read(context, refMode: refMode, readTypeInfo: false))
+    return .signed(try Int64TaggedCodec.read(context, refMode: .none, readTypeInfo: false))
   case .uint8:
-    return .unsigned(UInt64(try UInt8Codec.read(context, refMode: refMode, readTypeInfo: false)))
+    return .unsigned(UInt64(try UInt8Codec.read(context, refMode: .none, readTypeInfo: false)))
   case .uint16:
-    return .unsigned(UInt64(try UInt16Codec.read(context, refMode: refMode, readTypeInfo: false)))
+    return .unsigned(UInt64(try UInt16Codec.read(context, refMode: .none, readTypeInfo: false)))
   case .uint32:
     return .unsigned(
-      UInt64(try UInt32FixedCodec.read(context, refMode: refMode, readTypeInfo: false)))
+      UInt64(try UInt32FixedCodec.read(context, refMode: .none, readTypeInfo: false)))
   case .varUInt32:
     return .unsigned(
-      UInt64(try UInt32VarintCodec.read(context, refMode: refMode, readTypeInfo: false)))
+      UInt64(try UInt32VarintCodec.read(context, refMode: .none, readTypeInfo: false)))
   case .uint64:
-    return .unsigned(try UInt64FixedCodec.read(context, refMode: refMode, readTypeInfo: false))
+    return .unsigned(try UInt64FixedCodec.read(context, refMode: .none, readTypeInfo: false))
   case .varUInt64:
-    return .unsigned(try UInt64VarintCodec.read(context, refMode: refMode, readTypeInfo: false))
+    return .unsigned(try UInt64VarintCodec.read(context, refMode: .none, readTypeInfo: false))
   case .taggedUInt64:
-    return .unsigned(try UInt64TaggedCodec.read(context, refMode: refMode, readTypeInfo: false))
+    return .unsigned(try UInt64TaggedCodec.read(context, refMode: .none, readTypeInfo: false))
   case .float16:
-    return .float16(try Float16Codec.read(context, refMode: refMode, readTypeInfo: false))
+    return .float16(try Float16Codec.read(context, refMode: .none, readTypeInfo: false))
   case .bfloat16:
-    return .bfloat16(try BFloat16Codec.read(context, refMode: refMode, readTypeInfo: false))
+    return .bfloat16(try BFloat16Codec.read(context, refMode: .none, readTypeInfo: false))
   case .float32:
-    return .float32(try FloatCodec.read(context, refMode: refMode, readTypeInfo: false))
+    return .float32(try FloatCodec.read(context, refMode: .none, readTypeInfo: false))
   case .float64:
-    return .float64(try DoubleCodec.read(context, refMode: refMode, readTypeInfo: false))
+    return .float64(try DoubleCodec.read(context, refMode: .none, readTypeInfo: false))
   case .decimal:
-    return .decimal(try DecimalCodec.read(context, refMode: refMode, readTypeInfo: false))
+    return .decimal(try DecimalCodec.read(context, refMode: .none, readTypeInfo: false))
   default:
     throw ForyError.invalidData("unsupported compatible scalar type \(remoteTypeID.rawValue)")
-  }
-}
-
-private func readCompatibleRemoteBool(_ context: ReadContext, refMode: RefMode) throws -> Bool {
-  switch refMode {
-  case .none:
-    return try readCompatibleBoolPayload(context)
-  case .nullOnly:
-    let rawFlag = try context.buffer.readInt8()
-    switch rawFlag {
-    case RefFlag.null.rawValue:
-      return false
-    case RefFlag.notNullValue.rawValue:
-      return try readCompatibleBoolPayload(context)
-    default:
-      throw ForyError.refError("invalid ref flag \(rawFlag)")
-    }
-  case .tracking:
-    let rawFlag = try context.buffer.readInt8()
-    guard let flag = RefFlag(rawValue: rawFlag) else {
-      throw ForyError.refError("invalid ref flag \(rawFlag)")
-    }
-    switch flag {
-    case .null:
-      return false
-    case .ref:
-      let refID = try context.buffer.readVarUInt32()
-      return try context.refReader.readRef(refID, as: Bool.self)
-    case .refValue:
-      let reservedRefID = context.trackRef ? context.refReader.reserveRefID() : nil
-      let value = try readCompatibleBoolPayload(context)
-      if let reservedRefID {
-        context.refReader.storeRef(value, at: reservedRefID)
-      }
-      return value
-    case .notNullValue:
-      return try readCompatibleBoolPayload(context)
-    }
   }
 }
 
@@ -642,8 +610,7 @@ private func compatibleScalarToDecimal(_ value: CompatibleScalarValue) throws ->
 }
 
 private func compatibleScalarToDecimalLiteral(_ value: CompatibleScalarValue) throws
-  -> DecimalLiteral?
-{
+  -> DecimalLiteral? {
   switch value {
   case .bool(let value):
     return DecimalLiteral(negative: false, digits: value ? "1" : "0", scale: 0, negativeZero: false)
@@ -1002,8 +969,7 @@ private func compatibleFormatDecimalText(negative: Bool, digits: String, scale: 
   return fraction.isEmpty ? sign + integer : "\(sign)\(integer).\(fraction)"
 }
 
-private func compatibleFloatCanonicalText(_ literal: DecimalLiteral, forceFraction: Bool) -> String?
-{
+private func compatibleFloatCanonicalText(_ literal: DecimalLiteral, forceFraction: Bool) -> String? {
   if literal.isZero {
     return literal.negativeZero ? "-0.0" : "0.0"
   }

@@ -34,6 +34,8 @@ Scalar conversion is only applied to matched compatible fields, not to root valu
 elements. String-to-number conversion accepts finite decimal literals without whitespace, a leading
 `+`, underscores, or special values such as `NaN` and `Infinity`. Invalid strings, out-of-range
 values, and lossy conversions fail with `pyfory.error.ForyInvalidDataError` during deserialization.
+Optional and nullable fields still compose with these conversions, but reference-tracked scalar type
+changes are incompatible.
 
 ## Xlang Default
 

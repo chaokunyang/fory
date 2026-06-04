@@ -660,6 +660,21 @@ TEST(SchemaEvolutionTest, ScalarBoolPayloadRejectsNonCanonicalByte) {
   ctx.detach();
 }
 
+TEST(SchemaEvolutionTest, ScalarTrackingRefClassifierRejectsMismatch) {
+  FieldType local_bool(static_cast<uint32_t>(TypeId::BOOL), false, false);
+  FieldType remote_bool(static_cast<uint32_t>(TypeId::BOOL), false, true);
+  EXPECT_FALSE(field_types_compatible_top_level(local_bool, remote_bool));
+
+  FieldType local_string(static_cast<uint32_t>(TypeId::STRING), false, false);
+  EXPECT_FALSE(field_types_compatible_top_level(local_string, remote_bool));
+
+  FieldType remote_string(static_cast<uint32_t>(TypeId::STRING), false, false);
+  EXPECT_TRUE(field_types_compatible_top_level(local_bool, remote_string));
+
+  FieldType ref_local_bool(static_cast<uint32_t>(TypeId::BOOL), false, true);
+  EXPECT_TRUE(field_types_compatible_top_level(ref_local_bool, remote_bool));
+}
+
 TEST(SchemaEvolutionTest, ScalarBoolNumber) {
   auto decoded = convert_field<ScalarInt32Field, ScalarBoolField>({1}, 1013);
   ASSERT_TRUE(decoded.ok()) << decoded.error().to_string();

@@ -28,6 +28,7 @@ import { getCompatibleCollectionArrayReadAction } from "./collection";
 import {
   CompatibleScalarConverter,
   getCompatibleScalarReadAction,
+  shouldSkipCompatibleScalarRead,
 } from "./compatibleScalar";
 
 /**
@@ -103,6 +104,7 @@ function isDirectVarInt32Field(
   return typeInfo.typeId === TypeId.VARINT32
     && toRefMode(typeInfo.trackingRef, typeInfo.nullable) === RefMode.NONE
     && getCompatibleScalarReadAction(typeInfo) === undefined
+    && !shouldSkipCompatibleScalarRead(typeInfo)
     && typeResolver.isMonomorphic(typeInfo, typeInfo.dynamic);
 }
 
@@ -114,6 +116,7 @@ function directNumericFieldReadExpr(
     toRefMode(typeInfo.trackingRef, typeInfo.nullable) !== RefMode.NONE
     || !builder.resolver.isMonomorphic(typeInfo, typeInfo.dynamic)
     || getCompatibleScalarReadAction(typeInfo) !== undefined
+    || shouldSkipCompatibleScalarRead(typeInfo)
   ) {
     return null;
   }
@@ -193,43 +196,42 @@ class StructSerializerGenerator extends BaseSerializerGenerator {
     const { nullable = false, dynamic, trackingRef } = fieldTypeInfo;
     const refMode = toRefMode(trackingRef, nullable);
     const assignCompatible = (expr: string) => assignStmt(compatibleReadTargetExpr(fieldTypeInfo, expr));
+    const discard = (expr: string) => `${expr};`;
+    if (shouldSkipCompatibleScalarRead(fieldTypeInfo)) {
+      if (this.builder.resolver.isMonomorphic(fieldTypeInfo, dynamic)) {
+        if (refMode == RefMode.TRACKING || refMode === RefMode.NULL_ONLY) {
+          return embedGenerator.readRefWithoutTypeInfo(discard);
+        }
+        if (isDepthFreeField(fieldTypeInfo)) {
+          return embedGenerator.read(discard, "false");
+        }
+        return embedGenerator.readWithDepth(discard, "false");
+      }
+      if (refMode == RefMode.TRACKING || refMode === RefMode.NULL_ONLY) {
+        return embedGenerator.readRef(discard);
+      }
+      return embedGenerator.readNoRef(discard, "false");
+    }
     const scalarAction = getCompatibleScalarReadAction(fieldTypeInfo);
     if (scalarAction) {
       const converter = this.builder.getExternal(CompatibleScalarConverter.name);
-      const remoteRefMode = toRefMode(
-        scalarAction.remoteTrackingRef,
-        scalarAction.remoteNullable,
-      );
       const readValue = `${converter}.read(${this.builder.reader.ownName()}, ${scalarAction.remoteTypeId}, ${scalarAction.localTypeId}, ${CodecBuilder.safeString(fieldName)})`;
-      if (remoteRefMode === RefMode.NONE) {
+      if (scalarAction.remoteNullable !== true) {
         return assignStmt(readValue);
       }
       const refFlag = this.scope.uniqueName("refFlag");
-      const result = this.scope.uniqueName("result");
       return `
         const ${refFlag} = ${this.builder.reader.readInt8()};
-        let ${result};
         switch (${refFlag}) {
           case ${RefFlags.NotNullValueFlag}:
-          case ${RefFlags.RefValueFlag}:
-            ${result} = ${readValue};
-            break;
-          case ${RefFlags.RefFlag}:
-            ${result} = ${this.builder.referenceResolver.getReadRef(this.builder.reader.readVarUInt32())};
+            ${assignStmt(readValue)}
             break;
           case ${RefFlags.NullFlag}:
-            ${result} = null;
+            ${assignStmt("null")}
             break;
           default:
             throw new Error("Invalid reference flag for compatible scalar field ${CodecBuilder.replaceBackslashAndQuote(fieldName)}");
         }
-        ${remoteRefMode === RefMode.TRACKING
-          ? `
-        if (${refFlag} === ${RefFlags.RefValueFlag}) {
-          ${this.builder.referenceResolver.reference(result)}
-        }`
-          : ""}
-        ${assignStmt(result)};
       `;
     }
     let stmt = "";

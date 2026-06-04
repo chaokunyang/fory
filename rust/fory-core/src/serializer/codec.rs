@@ -219,6 +219,12 @@ pub(super) fn collection_type_with_fallback_generics(type_id: u32) -> bool {
 
 #[inline(always)]
 pub fn field_types_compatible(local: &FieldType, remote: &FieldType) -> bool {
+    if local.track_ref != remote.track_ref
+        && super::scalar_conversion::is_compatible_scalar_type(local.type_id)
+        && super::scalar_conversion::is_compatible_scalar_type(remote.type_id)
+    {
+        return false;
+    }
     if local.compatible_fingerprint() == remote.compatible_fingerprint() {
         return true;
     }
@@ -2786,5 +2792,15 @@ mod tests {
         assert!(field_types_compatible(&uint8_array, &bytes));
         assert!(!field_types_compatible(&bytes, &int8_array));
         assert!(!field_types_compatible(&int8_array, &bytes));
+    }
+
+    #[test]
+    fn scalar_ref_tracking_rules() {
+        let bool_value = FieldType::new(type_id::BOOL, false, vec![]);
+        let ref_bool = FieldType::new_with_ref(type_id::BOOL, false, true, vec![]);
+
+        assert!(!field_types_compatible(&bool_value, &ref_bool));
+        assert!(!field_types_compatible(&ref_bool, &bool_value));
+        assert!(field_types_compatible(&ref_bool, &ref_bool));
     }
 }

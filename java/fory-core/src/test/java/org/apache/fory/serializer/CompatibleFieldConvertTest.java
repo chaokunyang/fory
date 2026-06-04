@@ -27,13 +27,16 @@ import org.apache.fory.Fory;
 import org.apache.fory.ForyTestBase;
 import org.apache.fory.annotation.ForyField;
 import org.apache.fory.annotation.Nullable;
+import org.apache.fory.annotation.Ref;
 import org.apache.fory.annotation.UInt64Type;
 import org.apache.fory.config.Int64Encoding;
 import org.apache.fory.exception.DeserializationException;
 import org.apache.fory.reflect.ReflectionUtils;
+import org.apache.fory.serializer.FieldGroups.SerializationFieldInfo;
 import org.apache.fory.serializer.converter.FieldConverter;
 import org.apache.fory.serializer.converter.FieldConverters;
 import org.apache.fory.type.BFloat16;
+import org.apache.fory.type.Descriptor;
 import org.apache.fory.type.Float16;
 import org.testng.Assert;
 import org.testng.annotations.DataProvider;
@@ -184,6 +187,18 @@ public class CompatibleFieldConvertTest extends ForyTestBase {
   public static final class StringBoolWriter {
     @ForyField(id = 0)
     public String value = "TRUE";
+  }
+
+  public static final class RefStringBoolWriter {
+    @Ref
+    @ForyField(id = 0)
+    public String value = "true";
+  }
+
+  public static final class RefBooleanReader {
+    @Ref
+    @ForyField(id = 0)
+    public Boolean value;
   }
 
   public static final class BoolReader {
@@ -415,6 +430,51 @@ public class CompatibleFieldConvertTest extends ForyTestBase {
     NumberReader numberReader =
         readAs(new IntegerNumberWriter(), NumberReader.class, false, codegen);
     Assert.assertEquals(numberReader.value, 7);
+  }
+
+  @Test(dataProvider = "codegenModes")
+  public void testScalarTrackingRefConversionRejected(boolean codegen) {
+    Fory writer =
+        Fory.builder()
+            .withXlang(true)
+            .withCompatible(true)
+            .withCodegen(codegen)
+            .withRefTracking(true)
+            .build();
+    writer.register(RefStringBoolWriter.class, 28000);
+    byte[] bytes = writer.serialize(new RefStringBoolWriter());
+
+    Fory reader =
+        Fory.builder()
+            .withXlang(true)
+            .withCompatible(true)
+            .withCodegen(codegen)
+            .withRefTracking(true)
+            .build();
+    reader.register(BoolReader.class, 28000);
+    BoolReader value = (BoolReader) reader.deserialize(bytes);
+    Assert.assertFalse(value.value);
+  }
+
+  @Test
+  public void testScalarTrackingRefClassifier() {
+    Fory fory = Fory.builder().withXlang(true).withCompatible(true).withRefTracking(true).build();
+    SerializationFieldInfo remoteRef =
+        new SerializationFieldInfo(
+            fory.getTypeResolver(),
+            Descriptor.getDescriptorsMap(RefStringBoolWriter.class).get("value"));
+    SerializationFieldInfo localBool =
+        new SerializationFieldInfo(
+            fory.getTypeResolver(), Descriptor.getDescriptorsMap(BoolReader.class).get("value"));
+    SerializationFieldInfo localRef =
+        new SerializationFieldInfo(
+            fory.getTypeResolver(),
+            Descriptor.getDescriptorsMap(RefBooleanReader.class).get("value"));
+    Assert.assertTrue(remoteRef.trackingRef);
+    Assert.assertTrue(localRef.trackingRef);
+    Assert.assertFalse(FieldConverters.canConvert(remoteRef, localBool));
+    Assert.assertFalse(FieldConverters.canConvert(localBool, localRef));
+    Assert.assertTrue(FieldConverters.canConvert(localRef, localRef));
   }
 
   @Test(dataProvider = "xlangAndCodegen")

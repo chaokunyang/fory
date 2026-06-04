@@ -278,6 +278,26 @@ public sealed class ScalarInt32ListField
 }
 
 [ForyStruct]
+public sealed class ScalarTwoStringFields
+{
+    [ForyField(1, Type = typeof(S.String))]
+    public string? Flag { get; set; }
+
+    [ForyField(2, Type = typeof(S.String))]
+    public string? Count { get; set; }
+}
+
+[ForyStruct]
+public sealed class ScalarBoolIntFields
+{
+    [ForyField(1, Type = typeof(S.Bool))]
+    public bool Flag { get; set; }
+
+    [ForyField(2, Type = typeof(S.Int32))]
+    public int Count { get; set; }
+}
+
+[ForyStruct]
 public sealed class NestedSchemaSkipReader
 {
     public int Tail { get; set; }
@@ -1389,6 +1409,69 @@ public sealed class ForyRuntimeTests
     }
 
     [Fact]
+    public void CompatibleScalarTrackingRefRules()
+    {
+        List<TypeMetaFieldInfo> localFields =
+        [
+            new TypeMetaFieldInfo(1, "value", new TypeMetaFieldType((uint)TypeId.Bool, false)),
+        ];
+
+        TypeMeta remoteTrackingTypeMeta = new(
+            (uint)TypeId.CompatibleStruct,
+            0,
+            MetaString.Empty('_', '_'),
+            new MetaString("remote", MetaStringEncoding.Utf8, '_', '_', "remote"u8.ToArray()),
+            false,
+            [new TypeMetaFieldInfo(1, "$tag1", new TypeMetaFieldType((uint)TypeId.String, false, true))]);
+        TypeMeta.AssignFieldIds(remoteTrackingTypeMeta, localFields);
+        Assert.Equal(-1, remoteTrackingTypeMeta.Fields[0].AssignedFieldId);
+
+        List<TypeMetaFieldInfo> localTrackingFields =
+        [
+            new TypeMetaFieldInfo(1, "value", new TypeMetaFieldType((uint)TypeId.Bool, false, true)),
+        ];
+        TypeMeta remoteTypeMeta = new(
+            (uint)TypeId.CompatibleStruct,
+            0,
+            MetaString.Empty('_', '_'),
+            new MetaString("remote", MetaStringEncoding.Utf8, '_', '_', "remote"u8.ToArray()),
+            false,
+            [new TypeMetaFieldInfo(1, "$tag1", new TypeMetaFieldType((uint)TypeId.String, false))]);
+        TypeMeta.AssignFieldIds(remoteTypeMeta, localTrackingFields);
+        Assert.Equal(-1, remoteTypeMeta.Fields[0].AssignedFieldId);
+
+        TypeMeta remoteBoolTrackingTypeMeta = new(
+            (uint)TypeId.CompatibleStruct,
+            0,
+            MetaString.Empty('_', '_'),
+            new MetaString("remote", MetaStringEncoding.Utf8, '_', '_', "remote"u8.ToArray()),
+            false,
+            [new TypeMetaFieldInfo(1, "$tag1", new TypeMetaFieldType((uint)TypeId.Bool, false, true))]);
+        TypeMeta.AssignFieldIds(remoteBoolTrackingTypeMeta, localFields);
+        Assert.Equal(-1, remoteBoolTrackingTypeMeta.Fields[0].AssignedFieldId);
+
+        TypeMeta remoteBoolTypeMeta = new(
+            (uint)TypeId.CompatibleStruct,
+            0,
+            MetaString.Empty('_', '_'),
+            new MetaString("remote", MetaStringEncoding.Utf8, '_', '_', "remote"u8.ToArray()),
+            false,
+            [new TypeMetaFieldInfo(1, "$tag1", new TypeMetaFieldType((uint)TypeId.Bool, false))]);
+        TypeMeta.AssignFieldIds(remoteBoolTypeMeta, localTrackingFields);
+        Assert.Equal(-1, remoteBoolTypeMeta.Fields[0].AssignedFieldId);
+
+        TypeMeta remoteBoolBothTrackingTypeMeta = new(
+            (uint)TypeId.CompatibleStruct,
+            0,
+            MetaString.Empty('_', '_'),
+            new MetaString("remote", MetaStringEncoding.Utf8, '_', '_', "remote"u8.ToArray()),
+            false,
+            [new TypeMetaFieldInfo(1, "$tag1", new TypeMetaFieldType((uint)TypeId.Bool, false, true))]);
+        TypeMeta.AssignFieldIds(remoteBoolBothTrackingTypeMeta, localTrackingFields);
+        Assert.Equal(0, remoteBoolBothTrackingTypeMeta.Fields[0].AssignedFieldId);
+    }
+
+    [Fact]
     public void NestedScalarConversionNotApplied()
     {
         ScalarInt32ListField decoded = CompatibleRead<ScalarStringListField, ScalarInt32ListField>(
@@ -2308,11 +2391,11 @@ public sealed class ForyRuntimeTests
         return rewrittenPayload;
     }
 
-    private static TReader CompatibleRead<TWriter, TReader>(TWriter value)
+    private static TReader CompatibleRead<TWriter, TReader>(TWriter value, bool trackRef = false)
     {
-        ForyRuntime writer = ForyRuntime.Builder().Compatible(true).Build();
+        ForyRuntime writer = ForyRuntime.Builder().Compatible(true).TrackRef(trackRef).Build();
         writer.Register<TWriter>(812);
-        ForyRuntime reader = ForyRuntime.Builder().Compatible(true).Build();
+        ForyRuntime reader = ForyRuntime.Builder().Compatible(true).TrackRef(trackRef).Build();
         reader.Register<TReader>(812);
         return reader.Deserialize<TReader>(writer.Serialize(value));
     }

@@ -789,7 +789,11 @@ def _create_compatible_field_serializer(
     if local_field_type is not None:
         from pyfory.serializer import CompatibleScalarFieldSerializer, supports_compatible_scalar_conversion
 
-        if supports_compatible_scalar_conversion(remote_field_type.type_id, local_field_type.type_id):
+        if (
+            not remote_field_type.is_tracking_ref
+            and not local_field_type.is_tracking_ref
+            and supports_compatible_scalar_conversion(remote_field_type.type_id, local_field_type.type_id)
+        ):
             remote_serializer = remote_field_type.create_serializer(resolver, local_declared_type)
             return CompatibleScalarFieldSerializer(
                 resolver,
@@ -817,6 +821,9 @@ _INT_TYPE_DOMAINS.update({type_id: (False, 8) for type_id in _UNSIGNED_INT8_TYPE
 _INT_TYPE_DOMAINS.update({type_id: (False, 16) for type_id in _UNSIGNED_INT16_TYPE_IDS})
 _INT_TYPE_DOMAINS.update({type_id: (False, 32) for type_id in _UNSIGNED_INT32_TYPE_IDS})
 _INT_TYPE_DOMAINS.update({type_id: (False, 64) for type_id in _UNSIGNED_INT64_TYPE_IDS})
+_COMPATIBLE_SCALAR_TYPE_IDS = frozenset(
+    (TypeId.BOOL, TypeId.STRING, TypeId.FLOAT16, TypeId.BFLOAT16, TypeId.FLOAT32, TypeId.FLOAT64, TypeId.DECIMAL)
+) | frozenset(_INT_TYPE_DOMAINS)
 _INT_RANGES = {
     (True, 8): (-(1 << 7), (1 << 7) - 1),
     (True, 16): (-(1 << 15), (1 << 15) - 1),
@@ -854,7 +861,17 @@ def _field_type_assignment(remote_field_type: FieldType, local_field_type: Field
     if top_level:
         from pyfory.serializer import supports_compatible_scalar_conversion
 
-        if supports_compatible_scalar_conversion(remote_type_id, local_type_id):
+        if (
+            _is_compatible_scalar_type_id(remote_type_id)
+            and _is_compatible_scalar_type_id(local_type_id)
+            and remote_field_type.is_tracking_ref != local_field_type.is_tracking_ref
+        ):
+            return False, False
+        if (
+            not remote_field_type.is_tracking_ref
+            and not local_field_type.is_tracking_ref
+            and supports_compatible_scalar_conversion(remote_type_id, local_type_id)
+        ):
             return True, needs_validation
     if remote_type_id in (TypeId.LIST, TypeId.SET):
         if local_type_id != remote_type_id:
@@ -897,6 +914,10 @@ def _field_type_assignment(remote_field_type: FieldType, local_field_type: Field
     if remote_type_id == local_type_id:
         return True, needs_validation
     return False, False
+
+
+def _is_compatible_scalar_type_id(type_id: TypeId) -> bool:
+    return type_id in _COMPATIBLE_SCALAR_TYPE_IDS
 
 
 def plan_field_assignment(

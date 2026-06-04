@@ -20,6 +20,14 @@
 import 'dart:typed_data';
 
 import 'package:fory/fory.dart';
+import 'package:fory/src/context/meta_string_reader.dart';
+import 'package:fory/src/context/ref_reader.dart';
+import 'package:fory/src/context/ref_writer.dart';
+import 'package:fory/src/meta/field_info.dart';
+import 'package:fory/src/meta/field_type.dart';
+import 'package:fory/src/resolver/type_resolver.dart';
+import 'package:fory/src/serializer/scalar_conversion.dart';
+import 'package:fory/src/serializer/serializer_support.dart';
 import 'package:test/test.dart';
 
 part 'scalar_and_typed_array_serializer_test.fory.dart';
@@ -31,6 +39,34 @@ final Int64 _int64Min = Int64.parseHex('8000000000000000');
 final Int64 _int64Max = Int64.parseHex('7fffffffffffffff');
 final Uint64 _uint64HighBit = Uint64.parseHex('8000000000000000');
 final Uint64 _uint64Max = Uint64.parseHex('ffffffffffffffff');
+
+FieldInfo _compatibleScalarField({
+  required int typeId,
+  required Type type,
+  required bool ref,
+}) {
+  return FieldInfo(
+    name: 'value',
+    identifier: '1',
+    id: 1,
+    fieldType: FieldType(
+      type: type,
+      declaredTypeName: '$type',
+      typeId: typeId,
+      nullable: false,
+      ref: ref,
+      dynamic: null,
+      arguments: const <FieldType>[],
+    ),
+  );
+}
+
+ReadContext _compatibleReadContext(Buffer buffer) {
+  const config = Config();
+  final resolver = TypeResolver(config);
+  return ReadContext(config, resolver, RefReader(), MetaStringReader(resolver))
+    ..prepare(buffer);
+}
 
 @ForyStruct()
 class ScalarAndArrayEnvelope {
@@ -1010,6 +1046,37 @@ void main() {
       );
 
       expect(roundTrip.value, equals('True'));
+    });
+
+    test('does not select scalar conversion for ref tracking', () {
+      final remoteRefBool = _compatibleScalarField(
+        typeId: TypeIds.boolType,
+        type: bool,
+        ref: true,
+      );
+      final localString = _compatibleScalarField(
+        typeId: TypeIds.string,
+        type: String,
+        ref: false,
+      );
+      final localRefString = _compatibleScalarField(
+        typeId: TypeIds.string,
+        type: String,
+        ref: true,
+      );
+
+      expect(compatibleScalarConversion(remoteRefBool, localString), isNull);
+      expect(compatibleScalarConversion(localString, localRefString), isNull);
+
+      final buffer =
+          Buffer()
+            ..writeByte(RefWriter.refValueFlag)
+            ..writeBool(true);
+      expect(
+        readCompatibleField(_compatibleReadContext(buffer), remoteRefBool),
+        isTrue,
+      );
+      expect(buffer.readableBytes, equals(0));
     });
 
     test('enforces maxBinarySize on write and read', () {

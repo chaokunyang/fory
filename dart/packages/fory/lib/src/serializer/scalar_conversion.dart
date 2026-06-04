@@ -64,6 +64,9 @@ CompatibleScalarConversion? compatibleScalarConversion(
   FieldInfo remoteField,
   FieldInfo localField,
 ) {
+  if (remoteField.fieldType.ref || localField.fieldType.ref) {
+    return null;
+  }
   if (!_supportsCompatibleScalarConversion(
     remoteField.fieldType.typeId,
     localField.fieldType.typeId,
@@ -100,6 +103,8 @@ bool _isScalarConversionType(int typeId) =>
     typeId == TypeIds.boolType ||
     typeId == TypeIds.string ||
     _isNumericType(typeId);
+
+bool isCompatibleScalarType(int typeId) => _isScalarConversionType(typeId);
 
 bool _isNumericType(int typeId) =>
     _isIntegerType(typeId) ||

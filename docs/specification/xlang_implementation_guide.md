@@ -318,7 +318,7 @@ When `Config.compatible` is enabled and the struct is marked evolving:
   object construction and default-value rules
 - matched scalar fields may use compatible scalar conversion only when the
   layout has classified a remote/local top-level scalar pair as lossless
-  convertible
+  convertible and both field schemas have `trackingRef = false`
 
 When `compatible` is disabled and `checkStructVersion` is enabled:
 
@@ -331,8 +331,12 @@ resolvers, class resolvers, xlang type resolvers, and raw buffer utilities must
 not expose public conversion APIs or carry conversion state. Resolvers may
 provide field schema metadata for layout classification, but the conversion
 decision and value adaptation stay with the serializer-owned compatible field
-layout. Same-schema readers and schema-consistent readers must keep direct
-scalar read paths without conversion branches or per-field conversion objects.
+layout. Layout classification must reject top-level scalar conversions when
+either matched schema has `trackingRef = true` and must reject same scalar type
+pairs whose top-level `trackingRef` framing differs; converters must not add a
+reference-table path for scalar mismatches. Same-schema readers with matching
+reference framing and schema-consistent readers must keep direct scalar read
+paths without conversion branches or per-field conversion objects.
 
 ## Meta Strings And Shared Type Metadata
 

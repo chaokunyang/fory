@@ -238,6 +238,14 @@ boxed numeric scalar fields, Fory scalar annotations whose ClassDef metadata
 identifies a narrower numeric wire domain, and `BigDecimal` as the exact decimal
 numeric scalar. Java native-only metadata outside the type IDs shared with xlang
 must still use the Java ClassDef metadata to identify the scalar domain.
+Compatible scalar conversion applies only when both the remote and local
+top-level ClassDef field metadata have `trackingRef = false`; if either matched
+field has `trackingRef = true`, scalar type changes are schema/type incompatible
+during compatible layout construction. Same scalar ClassDef field types with
+matching top-level `trackingRef` framing are exact same-schema direct reads, not
+compatible scalar conversion. Same scalar ClassDef field types with different
+top-level `trackingRef` framing are schema/type incompatible because the wire
+framing differs.
 
 Compatible scalar conversion follows the xlang scalar conversion contract:
 
@@ -267,10 +275,12 @@ Compatible scalar conversion follows the xlang scalar conversion contract:
   text without exponent notation or insignificant trailing fractional zeros.
 
 Nullable fields, boxed carriers, and primitive defaults compose with scalar
-conversion. Readers first consume the remote null/reference framing described by
-the remote ClassDef field metadata. Present values are converted and then
-assigned or wrapped into the local carrier. Null or absent remote values use the
-same compatible-mode missing/null behavior already defined for the local field.
+conversion when the matched top-level field schemas have `trackingRef = false`.
+Readers first consume the remote null/optional framing described by the remote
+ClassDef field metadata. Present values are converted and then assigned or
+wrapped into the local carrier. Null or absent remote values use the same
+compatible-mode missing/null behavior already defined for the local field.
+Reference-tracked scalar conversion is not supported.
 
 Schema pairs outside the scalar conversion matrix remain schema/type
 compatibility errors while building the compatible layout. Once a matched field

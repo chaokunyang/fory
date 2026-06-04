@@ -20,6 +20,7 @@ package fory
 import (
 	"math"
 	"math/big"
+	"reflect"
 	"testing"
 
 	"github.com/apache/fory/go/fory/optional"
@@ -343,4 +344,29 @@ func TestCompatibleScalarRejectsInvalidBoolPayload(t *testing.T) {
 	err := f.readCtx.CheckError()
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "bool payload is not 0 or 1")
+}
+
+func TestCompatibleScalarTrackingRefMismatch(t *testing.T) {
+	f := NewForyWithOptions(WithXlang(true), WithCompatible(true))
+	remoteDef := FieldDef{
+		name:     "value",
+		nullable: false,
+		trackRef: true,
+		typeSpec: NewSimpleTypeSpec(BOOL),
+		tagID:    -1,
+	}
+	ser := newStructSerializerFromTypeDef(reflect.TypeOf(scalarBool{}), "ScalarRefMismatch", []FieldDef{remoteDef})
+	require.NoError(t, ser.initialize(f.typeResolver))
+	require.Len(t, ser.fields, 1)
+	assert.Equal(t, -1, ser.fields[0].Meta.FieldIndex)
+	assert.Nil(t, ser.fields[0].Meta.CompatibleScalar)
+	assert.True(t, ser.typeDefDiffers)
+
+	remoteDef.trackRef = false
+	ser = newStructSerializerFromTypeDef(reflect.TypeOf(scalarBool{}), "ScalarRefMatch", []FieldDef{remoteDef})
+	require.NoError(t, ser.initialize(f.typeResolver))
+	require.Len(t, ser.fields, 1)
+	assert.Equal(t, 0, ser.fields[0].Meta.FieldIndex)
+	assert.Nil(t, ser.fields[0].Meta.CompatibleScalar)
+	assert.False(t, ser.typeDefDiffers)
 }

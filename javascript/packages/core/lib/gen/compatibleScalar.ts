@@ -29,7 +29,6 @@ export type CompatibleScalarReadAction = {
   remoteTypeId: number;
   localTypeId: number;
   remoteNullable?: boolean;
-  remoteTrackingRef?: boolean;
 };
 
 type ScalarKind = "bool" | "string" | "number";
@@ -41,6 +40,7 @@ type DecimalParts = {
 };
 
 const scalarReadActions = new WeakMap<TypeInfo, CompatibleScalarReadAction>();
+const scalarSkipActions = new WeakSet<TypeInfo>();
 
 const float32Array = new Float32Array(1);
 const float64Buffer = new ArrayBuffer(8);
@@ -74,6 +74,19 @@ export function getCompatibleScalarReadAction(
   typeInfo: TypeInfo,
 ): CompatibleScalarReadAction | undefined {
   return scalarReadActions.get(typeInfo);
+}
+
+export function markCompatibleScalarSkipRead(typeInfo: TypeInfo): TypeInfo {
+  scalarSkipActions.add(typeInfo);
+  return typeInfo;
+}
+
+export function shouldSkipCompatibleScalarRead(typeInfo: TypeInfo): boolean {
+  return scalarSkipActions.has(typeInfo);
+}
+
+export function isCompatibleScalarType(typeId: number): boolean {
+  return scalarKind(typeId) !== undefined;
 }
 
 export function isCompatibleScalarPair(
@@ -176,7 +189,10 @@ function readDecimal(reader: BinaryReader): Decimal {
   return new Decimal((meta & 1n) === 0n ? magnitude : -magnitude, scale);
 }
 
-function readRemote(reader: BinaryReader, remoteTypeId: number): unknown {
+function readScalarPayload(
+  reader: BinaryReader,
+  remoteTypeId: number,
+): unknown {
   switch (remoteTypeId) {
     case TypeId.BOOL: {
       const value = reader.readUint8();
@@ -256,8 +272,13 @@ function normalizeParts(value: DecimalParts): DecimalParts {
     scale--;
   }
   const digits = (unscaled < 0n ? -unscaled : unscaled).toString().length;
-  if (scale > MAX_COMPATIBLE_DECIMAL_DIGITS || digits > MAX_COMPATIBLE_DECIMAL_DIGITS) {
-    throw new Error("Scalar decimal magnitude exceeds compatible conversion limit.");
+  if (
+    scale > MAX_COMPATIBLE_DECIMAL_DIGITS
+    || digits > MAX_COMPATIBLE_DECIMAL_DIGITS
+  ) {
+    throw new Error(
+      "Scalar decimal magnitude exceeds compatible conversion limit.",
+    );
   }
   return { unscaled, scale, negativeZero: false };
 }
@@ -267,11 +288,14 @@ function decimalToParts(value: Decimal): DecimalParts {
     return { unscaled: 0n, scale: 0, negativeZero: false };
   }
   if (value.scale < 0) {
-    const digits = value.unscaledValue < 0n
-      ? (-value.unscaledValue).toString().length
-      : value.unscaledValue.toString().length;
+    const digits
+      = value.unscaledValue < 0n
+        ? (-value.unscaledValue).toString().length
+        : value.unscaledValue.toString().length;
     if (digits - value.scale > MAX_COMPATIBLE_DECIMAL_DIGITS) {
-      throw new Error("Scalar decimal magnitude exceeds compatible conversion limit.");
+      throw new Error(
+        "Scalar decimal magnitude exceeds compatible conversion limit.",
+      );
     }
     return normalizeParts({
       unscaled: value.unscaledValue * pow10(-value.scale),
@@ -306,7 +330,7 @@ function floatToParts(value: number): DecimalParts {
   }
   float64DataView.setFloat64(0, value, false);
   const bits = float64DataView.getBigUint64(0, false);
-  const negative = (bits >> 63n) !== 0n;
+  const negative = bits >> 63n !== 0n;
   const exponentBits = Number((bits >> 52n) & 0x7ffn);
   const fraction = bits & ((1n << 52n) - 1n);
   let mantissa: bigint;
@@ -337,7 +361,10 @@ function floatToParts(value: number): DecimalParts {
 }
 
 function parseDecimalString(value: string): DecimalParts {
-  const match = /^(-?)(0|[1-9][0-9]*)(?:\.([0-9]+))?(?:[eE](-?(?:0|[1-9][0-9]*)))?$/.exec(value);
+  const match
+    = /^(-?)(0|[1-9][0-9]*)(?:\.([0-9]+))?(?:[eE](-?(?:0|[1-9][0-9]*)))?$/.exec(
+      value,
+    );
   if (!match) {
     throw new Error(`Invalid scalar string "${value}".`);
   }
@@ -387,7 +414,9 @@ function formatParts(value: DecimalParts, forceDecimal: boolean): string {
     return forceDecimal ? "0.0" : "0";
   }
   const negative = normalized.unscaled < 0n;
-  const digits = (negative ? -normalized.unscaled : normalized.unscaled).toString();
+  const digits = (
+    negative ? -normalized.unscaled : normalized.unscaled
+  ).toString();
   let result: string;
   if (normalized.scale === 0) {
     result = forceDecimal ? `${digits}.0` : digits;
@@ -403,9 +432,11 @@ function formatParts(value: DecimalParts, forceDecimal: boolean): string {
 function partsEqual(left: DecimalParts, right: DecimalParts): boolean {
   const l = normalizeParts(left);
   const r = normalizeParts(right);
-  return l.unscaled === r.unscaled
+  return (
+    l.unscaled === r.unscaled
     && l.scale === r.scale
-    && l.negativeZero === r.negativeZero;
+    && l.negativeZero === r.negativeZero
+  );
 }
 
 function partsToNumber(value: DecimalParts): number {
@@ -423,7 +454,9 @@ function exactInteger(value: DecimalParts): bigint {
 function exactSafeNumber(value: bigint): number {
   const result = Number(value);
   if (!Number.isSafeInteger(result) || BigInt(result) !== value) {
-    throw new Error(`Scalar integer ${value.toString()} is not exactly representable as a number.`);
+    throw new Error(
+      `Scalar integer ${value.toString()} is not exactly representable as a number.`,
+    );
   }
   return result;
 }
@@ -431,7 +464,9 @@ function exactSafeNumber(value: bigint): number {
 function exactFloat(value: DecimalParts, localTypeId: number): number {
   let candidate = partsToNumber(value);
   if (!Number.isFinite(candidate)) {
-    throw new Error("Scalar value is not exactly representable as a finite float.");
+    throw new Error(
+      "Scalar value is not exactly representable as a finite float.",
+    );
   }
   switch (canonicalScalarTypeId(localTypeId)) {
     case TypeId.FLOAT16:
@@ -448,36 +483,49 @@ function exactFloat(value: DecimalParts, localTypeId: number): number {
       break;
   }
   if (!partsEqual(value, floatToParts(candidate))) {
-    throw new Error("Scalar value is not exactly representable by the target float type.");
+    throw new Error(
+      "Scalar value is not exactly representable by the target float type.",
+    );
   }
   return candidate;
 }
 
-function rangeCheckedInteger(value: bigint, localTypeId: number): number | bigint {
+function rangeCheckedInteger(
+  value: bigint,
+  localTypeId: number,
+): number | bigint {
   switch (canonicalScalarTypeId(localTypeId)) {
     case TypeId.INT8:
-      if (value < INT8_MIN || value > INT8_MAX) throw new Error("Scalar integer is outside int8 range.");
+      if (value < INT8_MIN || value > INT8_MAX)
+        throw new Error("Scalar integer is outside int8 range.");
       return Number(value);
     case TypeId.INT16:
-      if (value < INT16_MIN || value > INT16_MAX) throw new Error("Scalar integer is outside int16 range.");
+      if (value < INT16_MIN || value > INT16_MAX)
+        throw new Error("Scalar integer is outside int16 range.");
       return Number(value);
     case TypeId.INT32:
-      if (value < INT32_MIN || value > INT32_MAX) throw new Error("Scalar integer is outside int32 range.");
+      if (value < INT32_MIN || value > INT32_MAX)
+        throw new Error("Scalar integer is outside int32 range.");
       return Number(value);
     case TypeId.INT64:
-      if (value < INT64_MIN || value > INT64_MAX) throw new Error("Scalar integer is outside int64 range.");
+      if (value < INT64_MIN || value > INT64_MAX)
+        throw new Error("Scalar integer is outside int64 range.");
       return value;
     case TypeId.UINT8:
-      if (value < 0n || value > UINT8_MAX) throw new Error("Scalar integer is outside uint8 range.");
+      if (value < 0n || value > UINT8_MAX)
+        throw new Error("Scalar integer is outside uint8 range.");
       return Number(value);
     case TypeId.UINT16:
-      if (value < 0n || value > UINT16_MAX) throw new Error("Scalar integer is outside uint16 range.");
+      if (value < 0n || value > UINT16_MAX)
+        throw new Error("Scalar integer is outside uint16 range.");
       return Number(value);
     case TypeId.UINT32:
-      if (value < 0n || value > UINT32_MAX) throw new Error("Scalar integer is outside uint32 range.");
+      if (value < 0n || value > UINT32_MAX)
+        throw new Error("Scalar integer is outside uint32 range.");
       return Number(value);
     case TypeId.UINT64:
-      if (value < 0n || value > UINT64_MAX) throw new Error("Scalar integer is outside uint64 range.");
+      if (value < 0n || value > UINT64_MAX)
+        throw new Error("Scalar integer is outside uint64 range.");
       return value;
     default:
       throw new Error("Target scalar type is not an integer.");
@@ -492,7 +540,9 @@ function valueToParts(value: unknown, remoteTypeId: number): DecimalParts {
     return integerToParts(value);
   }
   if (typeof value === "number") {
-    return isFloatType(remoteTypeId) ? floatToParts(value) : integerToParts(value);
+    return isFloatType(remoteTypeId)
+      ? floatToParts(value)
+      : integerToParts(value);
   }
   if (typeof value === "string") {
     return parseDecimalString(value);
@@ -543,7 +593,11 @@ function convertToDecimal(value: unknown, remoteTypeId: number): Decimal {
   return new Decimal(normalized.unscaled, normalized.scale);
 }
 
-function convertToNumber(value: unknown, remoteTypeId: number, localTypeId: number): number | bigint | Decimal {
+function convertToNumber(
+  value: unknown,
+  remoteTypeId: number,
+  localTypeId: number,
+): number | bigint | Decimal {
   if (canonicalScalarTypeId(localTypeId) === TypeId.DECIMAL) {
     return convertToDecimal(value, remoteTypeId);
   }
@@ -572,7 +626,7 @@ export class CompatibleScalarConverter {
     fieldName: string,
   ): unknown {
     try {
-      const value = readRemote(reader, remoteTypeId);
+      const value = readScalarPayload(reader, remoteTypeId);
       switch (scalarKind(localTypeId)) {
         case "bool":
           return convertToBool(value, remoteTypeId);
@@ -585,7 +639,9 @@ export class CompatibleScalarConverter {
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      throw new Error(`Failed to convert compatible field ${fieldName}: ${message}`);
+      throw new Error(
+        `Failed to convert compatible field ${fieldName}: ${message}`,
+      );
     }
   }
 }

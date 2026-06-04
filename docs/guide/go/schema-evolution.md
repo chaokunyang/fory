@@ -178,11 +178,13 @@ value:
   decimal text, floating point values use exact plain decimal text with a
   decimal point, and decimals omit insignificant trailing fractional zeros.
 
-Scalar conversion composes with pointer and `optional.Optional[T]` fields. If a
-remote nullable or optional field is absent, the local field follows the normal
-missing/null compatible-mode behavior. If a present value cannot be converted
-losslessly, deserialization fails with a data error instead of treating the field
-as missing.
+Scalar conversion composes with pointer and `optional.Optional[T]` fields when
+the matched top-level scalar field is not reference-tracked. If a remote
+nullable or optional field is absent, the local field follows the normal
+missing/null compatible-mode behavior. Reference-tracked scalar type changes are
+incompatible. If a present value cannot be converted losslessly,
+deserialization fails with a data error instead of treating the field as
+missing.
 
 ## Incompatible Changes
 

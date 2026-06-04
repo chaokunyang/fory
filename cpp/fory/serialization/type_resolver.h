@@ -296,6 +296,11 @@ inline bool primitive_array_element_type_id(uint32_t array_type_id,
 
 inline bool field_types_compatible_top_level_identity(const FieldType &local,
                                                       const FieldType &remote) {
+  if (local.track_ref != remote.track_ref &&
+      compatible_scalar_field_types(local.type_id, remote.type_id)) {
+    return false;
+  }
+
   if (field_types_compatible(local, remote)) {
     return true;
   }
@@ -321,7 +326,8 @@ inline bool field_types_compatible_top_level_identity(const FieldType &local,
 inline bool field_types_compatible_top_level(const FieldType &local,
                                              const FieldType &remote) {
   return field_types_compatible_top_level_identity(local, remote) ||
-         compatible_scalar_field_types(local.type_id, remote.type_id);
+         (!local.track_ref && !remote.track_ref &&
+          compatible_scalar_field_types(local.type_id, remote.type_id));
 }
 
 // ============================================================================

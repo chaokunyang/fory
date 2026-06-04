@@ -29,7 +29,8 @@ and `java.math.BigDecimal` when the converted value has the same logical value. 
 `"true"` and `"false"` can be read as booleans, `"123"` can be read as a numeric field that can hold
 `123`, numbers and decimals can be read as canonical strings, and numeric widening or narrowing
 succeeds only when no precision or range is lost. Invalid strings and lossy conversions fail during
-deserialization.
+deserialization. Optional and boxed fields still compose with these conversions, but reference-tracked
+scalar type changes are incompatible.
 
 ## Setup
 

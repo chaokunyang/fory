@@ -29,6 +29,7 @@ import { ReadContext } from "../packages/core/lib/context";
 import { TypeMeta } from "../packages/core/lib/meta/TypeMeta";
 import { x64hash128 } from "../packages/core/lib/murmurHash3";
 import { BinaryReader } from "../packages/core/lib/reader";
+import { RefFlags, TypeId } from "../packages/core/lib/type";
 import { BinaryWriter } from "../packages/core/lib/writer";
 import { describe, expect, test } from "@jest/globals";
 
@@ -432,14 +433,28 @@ describe("typemeta", () => {
   });
 
   test("converts compatible bool scalars", () => {
-    expect(readCompatibleScalar(7220, Type.string(), Type.bool(), "true"))
-      .toEqual({ value: true });
-    expect(readCompatibleScalar(7221, Type.bool(), Type.string(), false))
-      .toEqual({ value: "false" });
-    expect(readCompatibleScalar(7222, Type.int32({ encoding: "fixed" }), Type.bool(), 1))
-      .toEqual({ value: true });
-    expect(readCompatibleScalar(7223, Type.bool(), Type.int32({ encoding: "fixed" }), true))
-      .toEqual({ value: 1 });
+    expect(
+      readCompatibleScalar(7220, Type.string(), Type.bool(), "true"),
+    ).toEqual({ value: true });
+    expect(
+      readCompatibleScalar(7221, Type.bool(), Type.string(), false),
+    ).toEqual({ value: "false" });
+    expect(
+      readCompatibleScalar(
+        7222,
+        Type.int32({ encoding: "fixed" }),
+        Type.bool(),
+        1,
+      ),
+    ).toEqual({ value: true });
+    expect(
+      readCompatibleScalar(
+        7223,
+        Type.bool(),
+        Type.int32({ encoding: "fixed" }),
+        true,
+      ),
+    ).toEqual({ value: 1 });
 
     const decimalResult = readCompatibleScalar(
       7224,
@@ -456,25 +471,35 @@ describe("typemeta", () => {
       readCompatibleScalar(7225, Type.string(), Type.bool(), "yes"),
     ).toThrow(/compatible field value/);
     expect(() =>
-      readCompatibleScalar(7226, Type.int32({ encoding: "fixed" }), Type.bool(), 2),
+      readCompatibleScalar(
+        7226,
+        Type.int32({ encoding: "fixed" }),
+        Type.bool(),
+        2,
+      ),
     ).toThrow(/compatible field value/);
   });
 
   test("converts exact number scalars", () => {
-    expect(readCompatibleScalar(
-      7227,
-      Type.int32({ encoding: "fixed" }),
-      Type.int16(),
-      300,
-    )).toEqual({ value: 300 });
-    expect(readCompatibleScalar(
-      7228,
-      Type.string(),
-      Type.int64({ encoding: "fixed" }),
-      "9223372036854775807",
-    )).toEqual({ value: 9223372036854775807n });
-    expect(readCompatibleScalar(7229, Type.string(), Type.float64(), "0.5"))
-      .toEqual({ value: 0.5 });
+    expect(
+      readCompatibleScalar(
+        7227,
+        Type.int32({ encoding: "fixed" }),
+        Type.int16(),
+        300,
+      ),
+    ).toEqual({ value: 300 });
+    expect(
+      readCompatibleScalar(
+        7228,
+        Type.string(),
+        Type.int64({ encoding: "fixed" }),
+        "9223372036854775807",
+      ),
+    ).toEqual({ value: 9223372036854775807n });
+    expect(
+      readCompatibleScalar(7229, Type.string(), Type.float64(), "0.5"),
+    ).toEqual({ value: 0.5 });
 
     const decimalResult = readCompatibleScalar(
       7230,
@@ -485,12 +510,14 @@ describe("typemeta", () => {
     expect(decimalResult.value).toBeInstanceOf(Decimal);
     expect(decimalResult.value.equals(decimal(1234n, 2))).toBe(true);
 
-    expect(readCompatibleScalar(
-      7231,
-      Type.decimal(),
-      Type.string(),
-      decimal(12340n, 3),
-    )).toEqual({ value: "12.34" });
+    expect(
+      readCompatibleScalar(
+        7231,
+        Type.decimal(),
+        Type.string(),
+        decimal(12340n, 3),
+      ),
+    ).toEqual({ value: "12.34" });
   });
 
   test("rejects inexact number scalars", () => {
@@ -516,7 +543,12 @@ describe("typemeta", () => {
       readCompatibleScalar(7233, Type.decimal(), Type.int32(), decimal(5n, 1)),
     ).toThrow(/compatible field value/);
     expect(() =>
-      readCompatibleScalar(7234, Type.int32({ encoding: "fixed" }), Type.int8(), 128),
+      readCompatibleScalar(
+        7234,
+        Type.int32({ encoding: "fixed" }),
+        Type.int8(),
+        128,
+      ),
     ).toThrow(/compatible field value/);
     expect(() =>
       readCompatibleScalar(7235, Type.float64(), Type.string(), Number.NaN),
@@ -524,33 +556,79 @@ describe("typemeta", () => {
   });
 
   test("composes scalar conversion with nulls", () => {
-    expect(readCompatibleScalar(
-      7236,
-      Type.string().setNullable(true),
-      Type.bool(),
-      "false",
-    )).toEqual({ value: false });
-    expect(readCompatibleScalar(
-      7237,
-      Type.string().setNullable(true),
-      Type.bool(),
-      null,
-    )).toEqual({ value: null });
-    expect(readCompatibleScalar(
-      7252,
-      Type.string(),
-      Type.bool().setNullable(true),
-      "true",
-    )).toEqual({ value: true });
+    expect(
+      readCompatibleScalar(
+        7236,
+        Type.string().setNullable(true),
+        Type.bool(),
+        "false",
+      ),
+    ).toEqual({ value: false });
+    expect(
+      readCompatibleScalar(
+        7237,
+        Type.string().setNullable(true),
+        Type.bool(),
+        null,
+      ),
+    ).toEqual({ value: null });
+    expect(
+      readCompatibleScalar(
+        7252,
+        Type.string(),
+        Type.bool().setNullable(true),
+        "true",
+      ),
+    ).toEqual({ value: true });
+  });
+
+  test("applies tracking-ref scalar rules", () => {
+    const readerFory = new Fory({ compatible: true, ref: true });
+    class LocalScalars {
+      flag = false;
+      count = 0;
+      same = false;
+    }
+    Type.struct(7254, {
+      flag: Type.bool().setId(1),
+      count: Type.int32().setId(2).setTrackingRef(true),
+      same: Type.bool().setId(3).setTrackingRef(true),
+    })(LocalScalars);
+    const reader = readerFory.register(LocalScalars);
+    const remoteTypeInfo = Type.struct(7254, {
+      flag: Type.string().setId(1).setTrackingRef(true),
+      count: Type.string().setId(2),
+      same: Type.bool().setId(3).setTrackingRef(true),
+    });
+    const writer = new BinaryWriter();
+
+    writer.writeUint8(1);
+    writer.writeInt8(RefFlags.RefValueFlag);
+    writer.writeUint8(TypeId.COMPATIBLE_STRUCT);
+    writer.writeVarUInt32(0);
+    writer.buffer(TypeMeta.fromTypeInfo(remoteTypeInfo).toBytes());
+    writer.writeInt8(RefFlags.RefValueFlag);
+    writer.bool(true);
+    writer.writeInt8(RefFlags.RefValueFlag);
+    writer.stringWithHeader("1");
+    writer.stringWithHeader("1");
+
+    const result = reader.deserialize(writer.dump());
+    expect(result).toBeInstanceOf(LocalScalars);
+    expect(result.flag).toBe(false);
+    expect(result.count).toBe(0);
+    expect(result.same).toBe(true);
   });
 
   test("keeps nested scalars unconverted", () => {
-    expect(readCompatibleScalar(
-      7238,
-      Type.list(Type.string()),
-      Type.list(Type.int32()),
-      ["1", "2"],
-    )).toEqual({ value: ["1", "2"] });
+    expect(
+      readCompatibleScalar(
+        7238,
+        Type.list(Type.string()),
+        Type.list(Type.int32()),
+        ["1", "2"],
+      ),
+    ).toEqual({ value: ["1", "2"] });
   });
 
   test("keeps same-schema scalar reads direct", () => {

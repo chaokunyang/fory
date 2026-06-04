@@ -3251,7 +3251,7 @@ void read_single_field_by_index_compatible(T &obj, ReadContext &ctx,
     }
   }
 
-  // Case 1: Local raw primitive, any remote ref mode
+  // Case 1: Local raw primitive, using the accepted remote ref mode
   // For primitives, we must use remote_type_id encoding regardless of
   // nullability
   if constexpr (is_raw_prim && is_primitive_field) {

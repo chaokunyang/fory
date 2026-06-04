@@ -67,6 +67,8 @@ public class FieldConverters {
     int fromDispatchId = DispatchId.getDispatchId(resolver, from);
     int toDispatchId = DispatchId.getDispatchId(resolver, to);
     if (field == null
+        || from.isTrackingRef()
+        || to.isTrackingRef()
         || !needsConverter(fromDispatchId, from.getRawType(), toDispatchId, to.getRawType())) {
       return null;
     }
@@ -100,11 +102,22 @@ public class FieldConverters {
    */
   @Internal
   public static boolean canConvert(TypeResolver resolver, Descriptor from, Descriptor to) {
-    return canConvert(
-        DispatchId.getDispatchId(resolver, from),
+    int fromDispatchId = DispatchId.getDispatchId(resolver, from);
+    int toDispatchId = DispatchId.getDispatchId(resolver, to);
+    if (isDirectIdentity(
+        fromDispatchId,
         from.getRawType(),
-        DispatchId.getDispatchId(resolver, to),
-        to.getRawType());
+        from.isTrackingRef(),
+        toDispatchId,
+        to.getRawType(),
+        to.isTrackingRef())) {
+      return true;
+    }
+    if (from.isTrackingRef() || to.isTrackingRef()) {
+      return false;
+    }
+    return CompatibleScalarConverter.canConvert(
+        fromDispatchId, from.getRawType(), toDispatchId, to.getRawType());
   }
 
   /**
@@ -113,7 +126,14 @@ public class FieldConverters {
    */
   @Internal
   public static boolean canConvert(SerializationFieldInfo from, SerializationFieldInfo to) {
-    return canConvert(from.dispatchId, from.type, to.dispatchId, to.type);
+    if (isDirectIdentity(
+        from.dispatchId, from.type, from.trackingRef, to.dispatchId, to.type, to.trackingRef)) {
+      return true;
+    }
+    if (from.trackingRef || to.trackingRef) {
+      return false;
+    }
+    return CompatibleScalarConverter.canConvert(from.dispatchId, from.type, to.dispatchId, to.type);
   }
 
   /**
@@ -139,8 +159,14 @@ public class FieldConverters {
   @Internal
   public static Object convertValue(
       SerializationFieldInfo from, SerializationFieldInfo to, Object value) {
-    if (isDirectIdentity(from.dispatchId, from.type, to.dispatchId, to.type)) {
+    if (isDirectIdentity(
+        from.dispatchId, from.type, from.trackingRef, to.dispatchId, to.type, to.trackingRef)) {
       return value;
+    }
+    if (from.trackingRef || to.trackingRef) {
+      throw new IllegalArgumentException(
+          "Reference-tracked scalar conversion is schema incompatible for "
+              + to.qualifiedFieldName);
     }
     return CompatibleScalarConverter.convert(
         from.dispatchId, from.type, to.dispatchId, to.type, value, to.qualifiedFieldName);
@@ -184,20 +210,31 @@ public class FieldConverters {
     return scalarConverter(converter).fieldName;
   }
 
-  private static boolean canConvert(
-      int fromDispatchId, Class<?> from, int toDispatchId, Class<?> to) {
-    if (isDirectIdentity(fromDispatchId, from, toDispatchId, to)) {
-      return true;
-    }
-    return CompatibleScalarConverter.canConvert(fromDispatchId, from, toDispatchId, to);
-  }
-
   private static boolean needsConverter(
       int fromDispatchId, Class<?> from, int toDispatchId, Class<?> to) {
     if (isDirectIdentity(fromDispatchId, from, toDispatchId, to)) {
       return false;
     }
     return CompatibleScalarConverter.canConvert(fromDispatchId, from, toDispatchId, to);
+  }
+
+  private static boolean isDirectIdentity(
+      int fromDispatchId,
+      Class<?> from,
+      boolean fromTrackingRef,
+      int toDispatchId,
+      Class<?> to,
+      boolean toTrackingRef) {
+    if (!isDirectlyAssignable(from, to)) {
+      return false;
+    }
+    boolean fromScalar = CompatibleScalarConverter.isScalar(fromDispatchId, from);
+    boolean toScalar = CompatibleScalarConverter.isScalar(toDispatchId, to);
+    if (fromScalar && toScalar) {
+      return fromTrackingRef == toTrackingRef
+          && CompatibleScalarConverter.sameScalar(fromDispatchId, from, toDispatchId, to);
+    }
+    return true;
   }
 
   private static boolean isDirectIdentity(

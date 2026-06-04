@@ -46,20 +46,28 @@ public static class CompatibleScalarConverter
     private const int MaxCompatibleDecimalDigits = 4096;
 
     /// <summary>
+    /// Returns whether the field type id is in the compatible scalar family.
+    /// </summary>
+    public static bool IsScalarType(uint typeId)
+    {
+        return IsScalar(NormalizeScalarTypeId(typeId));
+    }
+
+    /// <summary>
     /// Returns whether a top-level compatible field can use scalar conversion.
     /// </summary>
-    public static bool IsScalarPair(uint remoteTypeId, uint localTypeId)
+    public static bool CanConvert(uint remoteTypeId, uint localTypeId)
     {
         TypeId remote = NormalizeScalarTypeId(remoteTypeId);
         TypeId local = NormalizeScalarTypeId(localTypeId);
-        if (!IsScalar(remote) || !IsScalar(local))
+        if (remote == local)
         {
             return false;
         }
 
-        if (remote == local)
+        if (!IsScalar(remote) || !IsScalar(local))
         {
-            return true;
+            return false;
         }
 
         if (remote == TypeId.Bool)
@@ -95,8 +103,65 @@ public static class CompatibleScalarConverter
         TypeId localTypeId,
         string fieldName)
     {
+        return ReadPayloadAs<T>(context, remoteTypeId, localTypeId, fieldName);
+    }
+
+    /// <summary>
+    /// Reads remote scalar null framing and converts the remote scalar payload to the local field type.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static T ReadField<T>(
+        ReadContext context,
+        TypeId remoteTypeId,
+        TypeId localTypeId,
+        string fieldName,
+        RefMode refMode)
+    {
+        switch (refMode)
+        {
+            case RefMode.None:
+                return ReadPayloadAs<T>(context, remoteTypeId, localTypeId, fieldName);
+            case RefMode.NullOnly:
+                {
+                    RefFlag flag = context.RefReader.ReadRefFlag(context.Reader);
+                    return flag switch
+                    {
+                        RefFlag.Null => default!,
+                        RefFlag.NotNullValue => ReadPayloadAs<T>(context, remoteTypeId, localTypeId, fieldName),
+                        _ => throw Fail(
+                            remoteTypeId,
+                            localTypeId,
+                            fieldName,
+                            $"invalid compatible nullOnly ref flag {(sbyte)flag}"),
+                    };
+                }
+            default:
+                throw Fail(remoteTypeId, localTypeId, fieldName, $"unsupported compatible ref mode {refMode}");
+        }
+    }
+
+    private static T ReadPayloadAs<T>(
+        ReadContext context,
+        TypeId remoteTypeId,
+        TypeId localTypeId,
+        string fieldName)
+    {
         bool direct = NormalizeScalarTypeId((uint)remoteTypeId) == NormalizeScalarTypeId((uint)localTypeId);
         object value = ReadPayload(context, remoteTypeId, localTypeId, fieldName, direct);
+        return ConvertReadValue<T>(value, remoteTypeId, localTypeId, fieldName);
+    }
+
+    private static T ConvertReadValue<T>(
+        object? value,
+        TypeId remoteTypeId,
+        TypeId localTypeId,
+        string fieldName)
+    {
+        if (value is null)
+        {
+            return default!;
+        }
+
         if (value is T typedValue)
         {
             return typedValue;

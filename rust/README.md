@@ -259,8 +259,8 @@ reader is emitted and Rust checks the final `Self: Send + Sync` bound. If a
 nested custom field makes a local-only type fail to compile and the type is not
 intended for `Arc<dyn Any + Send + Sync>`, mark it with
 `#[fory(send_sync = false)]`. Manual `Serializer` implementations are
-conservative by default; implement `fory_is_send_sync_type` and
-`fory_read_data_send_sync` when the concrete value is `Send + Sync`.
+conservative by default; override `fory_read_data_as_send_sync_any` when the
+concrete value is `Send + Sync`.
 Direct generic containers such as `Vec<T>`, `HashMap<K, V>`, `HashSet<T>`, and
 `LinkedList<T>` are not supported as top-level erased `Any` payloads behind
 `Box<dyn Any>`, `Rc<dyn Any>`, or `Arc<dyn Any + Send + Sync>`. This also

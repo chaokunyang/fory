@@ -38,17 +38,8 @@ impl Serializer for () {
         // Unit type has no data to read
         Ok(())
     }
-
-    #[inline(always)]
-    fn fory_is_send_sync_type() -> bool
-    where
-        Self: Sized,
-    {
-        true
-    }
-
     #[inline]
-    fn fory_read_data_send_sync(
+    fn fory_read_data_as_send_sync_any(
         context: &mut ReadContext,
     ) -> Result<Box<dyn std::any::Any + Send + Sync>, Error>
     where

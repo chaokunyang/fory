@@ -18,7 +18,7 @@
 #![allow(dead_code)]
 
 use fory_core::fory::Fory;
-use fory_core::Serializer;
+use fory_core::{Config, ForyDefault, ReadContext, Serializer, TypeResolver};
 use fory_derive::{ForyEnum, ForyStruct, ForyUnion};
 use std::{
     any::Any,
@@ -62,6 +62,23 @@ where
     );
 }
 
+fn assert_send_sync_reader_unsupported<T>()
+where
+    T: Serializer + ForyDefault,
+{
+    let mut context = ReadContext::new(TypeResolver::default(), Config::default());
+    let result = T::fory_read_data_as_send_sync_any(&mut context);
+    let err = match result {
+        Ok(_) => panic!("expected send-sync Any reader to be unsupported"),
+        Err(err) => err,
+    };
+    let message = err.to_string();
+    assert!(
+        message.contains("cannot be represented as Arc<dyn Any + Send + Sync>"),
+        "unexpected error: {err}"
+    );
+}
+
 #[test]
 fn test_builtin_send_sync_arc_any_reads() {
     let fory = Fory::builder().xlang(false).build();
@@ -92,7 +109,7 @@ fn test_derived_send_sync_arc_any_read() {
 }
 
 #[test]
-fn test_wrapped_container_send_sync_arc_any_read() {
+fn wrapped_container_arc_any_read() {
     #[derive(ForyStruct, Clone, Debug, PartialEq)]
     struct IntList {
         values: Vec<i32>,
@@ -124,33 +141,51 @@ fn generic_containers_rejected_arc_any() {
 
 #[test]
 fn test_auto_send_sync_struct() {
-    #[derive(ForyStruct)]
+    #[derive(ForyStruct, Clone, Debug, PartialEq)]
     struct Value {
         name: String,
     }
 
-    assert!(Value::fory_is_send_sync_type());
+    let mut fory = Fory::builder().xlang(false).build();
+    fory.register::<Value>(902).unwrap();
+
+    assert_arc_any_roundtrip(
+        &fory,
+        Value {
+            name: "auto".to_string(),
+        },
+    );
 }
 
 #[test]
-fn test_any_carrier_flags() {
-    assert!(!<Rc<dyn Any> as Serializer>::fory_is_send_sync_type());
-    assert!(<Arc<dyn Any + Send + Sync> as Serializer>::fory_is_send_sync_type());
+fn non_send_sync_carrier_reader_unsupported() {
+    assert_send_sync_reader_unsupported::<Rc<dyn Any>>();
 }
 
 #[test]
 fn test_nested_custom_default() {
-    #[derive(ForyStruct)]
+    #[derive(ForyStruct, Clone, Debug, PartialEq)]
     struct Leaf {
         name: String,
     }
 
-    #[derive(ForyStruct)]
+    #[derive(ForyStruct, Clone, Debug, PartialEq)]
     struct Value {
         leaf: Leaf,
     }
 
-    assert!(Value::fory_is_send_sync_type());
+    let mut fory = Fory::builder().xlang(false).build();
+    fory.register::<Leaf>(902).unwrap();
+    fory.register::<Value>(903).unwrap();
+
+    assert_arc_any_roundtrip(
+        &fory,
+        Value {
+            leaf: Leaf {
+                name: "nested".to_string(),
+            },
+        },
+    );
 }
 
 #[test]
@@ -161,7 +196,7 @@ fn test_send_sync_opt_out_struct() {
         name: String,
     }
 
-    assert!(!Value::fory_is_send_sync_type());
+    assert_send_sync_reader_unsupported::<Value>();
 }
 
 #[test]
@@ -177,18 +212,26 @@ fn test_nested_custom_opt_out() {
         leaf: Leaf,
     }
 
-    assert!(!Value::fory_is_send_sync_type());
+    assert_send_sync_reader_unsupported::<Value>();
 }
 
 #[test]
 fn test_send_sync_force_struct() {
-    #[derive(ForyStruct)]
+    #[derive(ForyStruct, Clone, Debug, PartialEq)]
     #[fory(send_sync)]
     struct Value {
         name: String,
     }
 
-    assert!(Value::fory_is_send_sync_type());
+    let mut fory = Fory::builder().xlang(false).build();
+    fory.register::<Value>(904).unwrap();
+
+    assert_arc_any_roundtrip(
+        &fory,
+        Value {
+            name: "forced".to_string(),
+        },
+    );
 }
 
 #[test]
@@ -198,7 +241,7 @@ fn test_known_non_send_sync_struct() {
         name: Rc<String>,
     }
 
-    assert!(!Value::fory_is_send_sync_type());
+    assert_send_sync_reader_unsupported::<Value>();
 }
 
 #[test]
@@ -212,12 +255,12 @@ fn test_send_sync_opt_out_union() {
         Value(String),
     }
 
-    assert!(!Event::fory_is_send_sync_type());
+    assert_send_sync_reader_unsupported::<Event>();
 }
 
 #[test]
 fn test_send_sync_union() {
-    #[derive(ForyUnion)]
+    #[derive(ForyUnion, Clone, Debug, PartialEq)]
     enum Event {
         #[fory(unknown)]
         Unknown(fory_core::UnknownCase),
@@ -225,12 +268,15 @@ fn test_send_sync_union() {
         Value(String),
     }
 
-    assert!(Event::fory_is_send_sync_type());
+    let mut fory = Fory::builder().xlang(false).build();
+    fory.register_union::<Event>(905).unwrap();
+
+    assert_arc_any_roundtrip(&fory, Event::Value("union".to_string()));
 }
 
 #[test]
 fn test_send_sync_enum() {
-    #[derive(ForyEnum, Default)]
+    #[derive(ForyEnum, Clone, Debug, Default, PartialEq)]
     #[fory(send_sync = true)]
     enum Status {
         #[default]
@@ -238,5 +284,8 @@ fn test_send_sync_enum() {
         Inactive,
     }
 
-    assert!(Status::fory_is_send_sync_type());
+    let mut fory = Fory::builder().xlang(false).build();
+    fory.register::<Status>(906).unwrap();
+
+    assert_arc_any_roundtrip(&fory, Status::Inactive);
 }

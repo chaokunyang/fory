@@ -40,17 +40,8 @@ impl Serializer for Timestamp {
         let nanos = context.reader.read_u32()?;
         Timestamp::new(seconds, nanos)
     }
-
-    #[inline(always)]
-    fn fory_is_send_sync_type() -> bool
-    where
-        Self: Sized,
-    {
-        true
-    }
-
     #[inline]
-    fn fory_read_data_send_sync(
+    fn fory_read_data_as_send_sync_any(
         context: &mut ReadContext,
     ) -> Result<Box<dyn std::any::Any + Send + Sync>, Error>
     where
@@ -129,17 +120,8 @@ impl Serializer for Date {
         };
         Ok(Date::from_epoch_days(days))
     }
-
-    #[inline(always)]
-    fn fory_is_send_sync_type() -> bool
-    where
-        Self: Sized,
-    {
-        true
-    }
-
     #[inline]
-    fn fory_read_data_send_sync(
+    fn fory_read_data_as_send_sync_any(
         context: &mut ReadContext,
     ) -> Result<Box<dyn std::any::Any + Send + Sync>, Error>
     where
@@ -208,17 +190,8 @@ impl Serializer for Duration {
         let nanos = context.reader.read_i32()?;
         Duration::new(seconds, nanos)
     }
-
-    #[inline(always)]
-    fn fory_is_send_sync_type() -> bool
-    where
-        Self: Sized,
-    {
-        true
-    }
-
     #[inline]
-    fn fory_read_data_send_sync(
+    fn fory_read_data_as_send_sync_any(
         context: &mut ReadContext,
     ) -> Result<Box<dyn std::any::Any + Send + Sync>, Error>
     where
@@ -288,17 +261,8 @@ mod chrono_support {
         fn fory_read_data(context: &mut ReadContext) -> Result<Self, Error> {
             Timestamp::fory_read_data(context)?.try_into()
         }
-
-        #[inline(always)]
-        fn fory_is_send_sync_type() -> bool
-        where
-            Self: Sized,
-        {
-            true
-        }
-
         #[inline]
-        fn fory_read_data_send_sync(
+        fn fory_read_data_as_send_sync_any(
             context: &mut ReadContext,
         ) -> Result<Box<dyn std::any::Any + Send + Sync>, Error>
         where
@@ -362,17 +326,8 @@ mod chrono_support {
         fn fory_read_data(context: &mut ReadContext) -> Result<Self, Error> {
             Date::fory_read_data(context)?.try_into()
         }
-
-        #[inline(always)]
-        fn fory_is_send_sync_type() -> bool
-        where
-            Self: Sized,
-        {
-            true
-        }
-
         #[inline]
-        fn fory_read_data_send_sync(
+        fn fory_read_data_as_send_sync_any(
             context: &mut ReadContext,
         ) -> Result<Box<dyn std::any::Any + Send + Sync>, Error>
         where
@@ -436,17 +391,8 @@ mod chrono_support {
         fn fory_read_data(context: &mut ReadContext) -> Result<Self, Error> {
             Duration::fory_read_data(context)?.try_into()
         }
-
-        #[inline(always)]
-        fn fory_is_send_sync_type() -> bool
-        where
-            Self: Sized,
-        {
-            true
-        }
-
         #[inline]
-        fn fory_read_data_send_sync(
+        fn fory_read_data_as_send_sync_any(
             context: &mut ReadContext,
         ) -> Result<Box<dyn std::any::Any + Send + Sync>, Error>
         where

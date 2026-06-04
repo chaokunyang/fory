@@ -63,9 +63,9 @@ type ReadFn =
 
 type WriteDataFn = fn(&dyn Any, &mut WriteContext, has_generics: bool) -> Result<(), Error>;
 type ReadDataFn = fn(&mut ReadContext) -> Result<Box<dyn Any>, Error>;
-type ReadDataSendSyncFn = fn(&mut ReadContext) -> Result<Box<dyn Any + Send + Sync>, Error>;
+type ReadDataAsSendSyncAnyFn = fn(&mut ReadContext) -> Result<Box<dyn Any + Send + Sync>, Error>;
 type ReadCompatibleFn = fn(&mut ReadContext, Rc<TypeInfo>) -> Result<Box<dyn Any>, Error>;
-type ReadCompatibleSendSyncFn =
+type ReadCompatibleAsSendSyncAnyFn =
     fn(&mut ReadContext, Rc<TypeInfo>) -> Result<Box<dyn Any + Send + Sync>, Error>;
 type ToSerializerFn = fn(Box<dyn Any>) -> Result<Box<dyn Serializer>, Error>;
 type BuildTypeInfosFn = fn(&TypeResolver) -> Result<Vec<(std::any::TypeId, TypeInfo)>, Error>;
@@ -90,10 +90,9 @@ pub struct Harness {
     read_fn: ReadFn,
     write_data_fn: WriteDataFn,
     read_data_fn: ReadDataFn,
-    read_data_send_sync_fn: ReadDataSendSyncFn,
+    read_data_as_send_sync_any_fn: ReadDataAsSendSyncAnyFn,
     read_compatible_fn: Option<ReadCompatibleFn>,
-    read_compatible_send_sync_fn: Option<ReadCompatibleSendSyncFn>,
-    send_sync: bool,
+    read_compatible_as_send_sync_any_fn: Option<ReadCompatibleAsSendSyncAnyFn>,
     to_serializer: ToSerializerFn,
     build_type_infos: BuildTypeInfosFn,
 }
@@ -105,10 +104,9 @@ impl Harness {
             read_fn: stub_read_fn,
             write_data_fn: stub_write_data_fn,
             read_data_fn: stub_read_data_fn,
-            read_data_send_sync_fn: stub_read_data_send_sync_fn,
+            read_data_as_send_sync_any_fn: stub_read_data_as_send_sync_any_fn,
             read_compatible_fn: None,
-            read_compatible_send_sync_fn: None,
-            send_sync: false,
+            read_compatible_as_send_sync_any_fn: None,
             to_serializer: stub_to_serializer_fn,
             build_type_infos: stub_build_type_infos,
         }
@@ -166,23 +164,17 @@ impl Harness {
     /// This path never upgrades an ordinary `Box<dyn Any>`; it delegates to
     /// type-owned readers that construct the send-sync trait object directly.
     #[inline(always)]
-    pub fn read_polymorphic_data_send_sync(
+    pub fn read_polymorphic_data_as_send_sync_any(
         &self,
         context: &mut ReadContext,
         typeinfo: &Rc<TypeInfo>,
     ) -> Result<Box<dyn Any + Send + Sync>, Error> {
-        if !self.send_sync {
-            return Err(Error::type_error(format!(
-                "{}::{} cannot be represented as Arc<dyn Any + Send + Sync>",
-                typeinfo.namespace.original, typeinfo.type_name.original
-            )));
-        }
         if context.is_compatible() {
-            if let Some(read_compatible_fn) = self.read_compatible_send_sync_fn {
+            if let Some(read_compatible_fn) = self.read_compatible_as_send_sync_any_fn {
                 return read_compatible_fn(context, typeinfo.clone());
             }
         }
-        (self.read_data_send_sync_fn)(context)
+        (self.read_data_as_send_sync_any_fn)(context)
     }
 }
 
@@ -331,10 +323,9 @@ impl TypeInfo {
                 read_fn: stub_read_fn,
                 write_data_fn: stub_write_data_fn,
                 read_data_fn: stub_read_data_fn,
-                read_data_send_sync_fn: stub_read_data_send_sync_fn,
+                read_data_as_send_sync_any_fn: stub_read_data_as_send_sync_any_fn,
                 read_compatible_fn: None,
-                read_compatible_send_sync_fn: None,
-                send_sync: false,
+                read_compatible_as_send_sync_any_fn: None,
                 to_serializer: stub_to_serializer_fn,
                 build_type_infos: stub_build_type_infos,
             }
@@ -384,7 +375,9 @@ fn stub_read_data_fn(_: &mut ReadContext) -> Result<Box<dyn Any>, Error> {
     ))
 }
 
-fn stub_read_data_send_sync_fn(_: &mut ReadContext) -> Result<Box<dyn Any + Send + Sync>, Error> {
+fn stub_read_data_as_send_sync_any_fn(
+    _: &mut ReadContext,
+) -> Result<Box<dyn Any + Send + Sync>, Error> {
     Err(Error::type_error(
         "Cannot deserialize unknown remote type as Arc<dyn Any + Send + Sync> - type not registered locally",
     ))
@@ -962,14 +955,10 @@ impl TypeResolver {
             }
         }
 
-        fn read_data_send_sync<T2: 'static + Serializer + ForyDefault>(
+        fn read_data_as_send_sync_any<T2: 'static + Serializer + ForyDefault>(
             context: &mut ReadContext,
         ) -> Result<Box<dyn Any + Send + Sync>, Error> {
-            if T2::fory_is_send_sync_type() {
-                T2::fory_read_data_send_sync(context)
-            } else {
-                Err(crate::error::unsupported_send_sync_type::<T2>())
-            }
+            T2::fory_read_data_as_send_sync_any(context)
         }
 
         fn to_serializer<T2: 'static + Serializer>(
@@ -994,11 +983,11 @@ impl TypeResolver {
             Ok(Box::new(T2::fory_read_compatible(context, type_info)?))
         }
 
-        fn read_compatible_send_sync<T2: 'static + StructSerializer + ForyDefault>(
+        fn read_compatible_as_send_sync_any<T2: 'static + StructSerializer + ForyDefault>(
             context: &mut ReadContext,
             type_info: Rc<TypeInfo>,
         ) -> Result<Box<dyn Any + Send + Sync>, Error> {
-            T2::fory_read_compatible_send_sync(context, type_info)
+            T2::fory_read_compatible_as_send_sync_any(context, type_info)
         }
 
         let harness = Harness {
@@ -1006,10 +995,9 @@ impl TypeResolver {
             read_fn: read::<T>,
             write_data_fn: write_data::<T>,
             read_data_fn: read_data::<T>,
-            read_data_send_sync_fn: read_data_send_sync::<T>,
+            read_data_as_send_sync_any_fn: read_data_as_send_sync_any::<T>,
             read_compatible_fn: Some(read_compatible::<T>),
-            read_compatible_send_sync_fn: Some(read_compatible_send_sync::<T>),
-            send_sync: T::fory_is_send_sync_type(),
+            read_compatible_as_send_sync_any_fn: Some(read_compatible_as_send_sync_any::<T>),
             to_serializer: to_serializer::<T>,
             build_type_infos: build_type_infos::<T>,
         };
@@ -1203,14 +1191,10 @@ impl TypeResolver {
             }
         }
 
-        fn read_data_send_sync<T2: 'static + Serializer + ForyDefault>(
+        fn read_data_as_send_sync_any<T2: 'static + Serializer + ForyDefault>(
             context: &mut ReadContext,
         ) -> Result<Box<dyn Any + Send + Sync>, Error> {
-            if T2::fory_is_send_sync_type() {
-                T2::fory_read_data_send_sync(context)
-            } else {
-                Err(crate::error::unsupported_send_sync_type::<T2>())
-            }
+            T2::fory_read_data_as_send_sync_any(context)
         }
 
         fn to_serializer<T2: 'static + Serializer>(
@@ -1243,10 +1227,9 @@ impl TypeResolver {
             read_fn: read::<T>,
             write_data_fn: write_data::<T>,
             read_data_fn: read_data::<T>,
-            read_data_send_sync_fn: read_data_send_sync::<T>,
+            read_data_as_send_sync_any_fn: read_data_as_send_sync_any::<T>,
             read_compatible_fn: None,
-            read_compatible_send_sync_fn: None,
-            send_sync: T::fory_is_send_sync_type(),
+            read_compatible_as_send_sync_any_fn: None,
             to_serializer: to_serializer::<T>,
             build_type_infos: build_type_infos::<T>,
         };

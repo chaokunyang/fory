@@ -28,15 +28,6 @@ impl<T: Serializer + ForyDefault + Send + Sync + 'static> Serializer for Arc<T> 
     fn fory_is_shared_ref() -> bool {
         true
     }
-
-    #[inline(always)]
-    fn fory_is_send_sync_type() -> bool
-    where
-        Self: Sized,
-    {
-        true
-    }
-
     fn fory_write(
         &self,
         context: &mut WriteContext,
@@ -129,7 +120,7 @@ impl<T: Serializer + ForyDefault + Send + Sync + 'static> Serializer for Arc<T> 
     }
 
     #[inline]
-    fn fory_read_data_send_sync(
+    fn fory_read_data_as_send_sync_any(
         context: &mut ReadContext,
     ) -> Result<Box<dyn std::any::Any + Send + Sync>, Error>
     where

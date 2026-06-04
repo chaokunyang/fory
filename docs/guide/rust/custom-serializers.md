@@ -81,17 +81,13 @@ impl ForyDefault for CustomType {
 
 Manual serializers are conservative by default. If the concrete type is
 `Send + Sync` and should support `Arc<dyn Any + Send + Sync>` dynamic reads or
-`UnknownCase` payload preservation, override the send-sync methods. Send-sync
+`UnknownCase` payload preservation, override the send-sync Any reader. Send-sync
 support is a serializer-owned capability, so registration alone does not make a
 manual serializer eligible for this carrier:
 
 ```rust
 impl Serializer for CustomType {
-    fn fory_is_send_sync_type() -> bool {
-        true
-    }
-
-    fn fory_read_data_send_sync(
+    fn fory_read_data_as_send_sync_any(
         context: &mut ReadContext,
     ) -> Result<Box<dyn Any + Send + Sync>, Error> {
         Ok(Box::new(Self::fory_read_data(context)?))
@@ -102,7 +98,7 @@ impl Serializer for CustomType {
 }
 ```
 
-Do not enable these methods for values that contain local-only fields such as
+Do not override this method for values that contain local-only fields such as
 `Rc<T>`, `RcWeak<T>`, `RefCell<T>`, or `Cell<T>`.
 
 ## Registering Custom Serializers

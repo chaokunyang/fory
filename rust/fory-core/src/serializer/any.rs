@@ -381,14 +381,6 @@ impl Serializer for Rc<dyn Any> {
     fn fory_is_shared_ref() -> bool {
         true
     }
-
-    fn fory_is_send_sync_type() -> bool
-    where
-        Self: Sized,
-    {
-        false
-    }
-
     fn fory_is_polymorphic() -> bool {
         true
     }
@@ -557,14 +549,6 @@ impl Serializer for Arc<dyn Any + Send + Sync> {
     fn fory_is_shared_ref() -> bool {
         true
     }
-
-    fn fory_is_send_sync_type() -> bool
-    where
-        Self: Sized,
-    {
-        true
-    }
-
     fn fory_static_type_id() -> TypeId {
         TypeId::UNKNOWN
     }
@@ -579,7 +563,7 @@ impl Serializer for Arc<dyn Any + Send + Sync> {
         Ok(())
     }
 
-    fn fory_read_data_send_sync(
+    fn fory_read_data_as_send_sync_any(
         context: &mut ReadContext,
     ) -> Result<Box<dyn Any + Send + Sync>, Error>
     where
@@ -637,7 +621,7 @@ pub fn read_arc_any(
             check_erased_any_payload_type(&typeinfo)?;
             let boxed = typeinfo
                 .get_harness()
-                .read_polymorphic_data_send_sync(context, &typeinfo)?;
+                .read_polymorphic_data_as_send_sync_any(context, &typeinfo)?;
             context.dec_depth();
             Ok(Arc::<dyn Any + Send + Sync>::from(boxed))
         }
@@ -653,7 +637,7 @@ pub fn read_arc_any(
             check_erased_any_payload_type(&typeinfo)?;
             let boxed = typeinfo
                 .get_harness()
-                .read_polymorphic_data_send_sync(context, &typeinfo)?;
+                .read_polymorphic_data_as_send_sync_any(context, &typeinfo)?;
             context.dec_depth();
             let arc: Arc<dyn Any + Send + Sync> = Arc::from(boxed);
             context.ref_reader.store_arc_ref(arc.clone());

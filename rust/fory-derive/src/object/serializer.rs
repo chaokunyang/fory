@@ -62,7 +62,7 @@ pub fn derive_serializer(ast: &syn::DeriveInput, attrs: ForyAttrs) -> TokenStrea
         fields_info_ts,
         variants_fields_info_ts,
         read_compatible_ts,
-        read_compatible_send_sync_ts,
+        read_compatible_as_send_sync_any_ts,
         enum_variant_meta_types,
     ) = match &ast.data {
         syn::Data::Struct(s) => {
@@ -185,7 +185,7 @@ pub fn derive_serializer(ast: &syn::DeriveInput, attrs: ForyAttrs) -> TokenStrea
                 #read_compatible_ts
             }
 
-            #read_compatible_send_sync_ts
+            #read_compatible_as_send_sync_any_ts
         }
 
         impl #impl_generics ::fory_core::Serializer for #name #ty_generics #where_clause {
@@ -281,7 +281,7 @@ fn generate_send_sync_tokens(
     let struct_read_compatible = if matches!(ast.data, syn::Data::Struct(_)) {
         quote! {
             #[inline]
-            fn fory_read_compatible_send_sync(
+            fn fory_read_compatible_as_send_sync_any(
                 context: &mut ::fory_core::ReadContext,
                 type_info: ::std::rc::Rc<::fory_core::TypeInfo>,
             ) -> ::std::result::Result<::std::boxed::Box<dyn ::std::any::Any + Send + Sync>, ::fory_core::error::Error> {
@@ -294,16 +294,8 @@ fn generate_send_sync_tokens(
     };
     SendSyncTokens {
         serializer: quote! {
-            #[inline(always)]
-            fn fory_is_send_sync_type() -> bool
-            where
-                Self: Sized,
-            {
-                true
-            }
-
             #[inline]
-            fn fory_read_data_send_sync(
+            fn fory_read_data_as_send_sync_any(
                 context: &mut ::fory_core::ReadContext,
             ) -> ::std::result::Result<::std::boxed::Box<dyn ::std::any::Any + Send + Sync>, ::fory_core::error::Error>
             where

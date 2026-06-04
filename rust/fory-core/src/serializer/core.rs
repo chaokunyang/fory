@@ -890,26 +890,13 @@ pub trait Serializer: 'static {
     where
         Self: Sized + ForyDefault;
 
-    /// Whether this serialized value can be safely represented behind
-    /// `Arc<dyn Any + Send + Sync>` after a dynamic read.
-    ///
-    /// The default is conservative. Implementations should return true only
-    /// when the concrete value produced by this serializer is `Send + Sync`.
-    #[inline(always)]
-    fn fory_is_send_sync_type() -> bool
-    where
-        Self: Sized,
-    {
-        false
-    }
-
     /// Deserialize data for dynamic send-sync carriers.
     ///
     /// This method must construct the `Box<dyn Any + Send + Sync>` from the
     /// concrete value before it is erased as `dyn Any`. It must never try to
     /// upgrade a `Box<dyn Any>` returned by the ordinary dynamic read path.
     #[inline(always)]
-    fn fory_read_data_send_sync(
+    fn fory_read_data_as_send_sync_any(
         context: &mut ReadContext,
     ) -> Result<Box<dyn Any + Send + Sync>, Error>
     where
@@ -1472,7 +1459,7 @@ pub trait StructSerializer: Serializer + 'static {
     /// Implementations are generated only when the resulting struct/enum is
     /// known to be `Send + Sync`.
     #[inline(always)]
-    fn fory_read_compatible_send_sync(
+    fn fory_read_compatible_as_send_sync_any(
         context: &mut ReadContext,
         type_info: Rc<TypeInfo>,
     ) -> Result<Box<dyn Any + Send + Sync>, Error>

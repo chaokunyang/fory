@@ -151,7 +151,8 @@ public class EnumSerializerTest extends ForyTestBase {
         Fory.builder()
             .withXlang(xlang)
             .withRefTracking(referenceTracking)
-            .requireClassRegistration(false);
+            .requireClassRegistration(false)
+            .withCompatible(xlang);
     Fory fory1 = builder.build();
     Fory fory2 = builder.build();
     if (fory1.getConfig().isXlang()) {
@@ -293,12 +294,17 @@ public class EnumSerializerTest extends ForyTestBase {
     Class<?> cls2 =
         JaninoUtils.compileClass(getClass().getClassLoader(), "", "TestEnum2", enumCode2);
     ForyBuilder builderSerialization =
-        Fory.builder().withXlang(false).withRefTracking(true).requireClassRegistration(false);
+        Fory.builder()
+            .withXlang(false)
+            .withRefTracking(true)
+            .requireClassRegistration(false)
+            .withCompatible(false);
     ForyBuilder builderDeserialize =
         Fory.builder()
             .withXlang(false)
             .withRefTracking(true)
             .requireClassRegistration(false)
+            .withCompatible(false)
             .deserializeUnknownEnumValueAsNull(true)
             .withClassLoader(cls2.getClassLoader());
     Fory foryDeserialize = builderDeserialize.build();

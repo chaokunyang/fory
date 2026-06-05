@@ -148,6 +148,7 @@ public class SerializerFactoryTest {
             .withXlang(false)
             .withRefTracking(false)
             .requireClassRegistration(false)
+            .withCompatible(false)
             .withSerializerFactory(
                 (resolver, cls) -> {
                   calls.add("custom");

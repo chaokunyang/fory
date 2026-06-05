@@ -148,7 +148,8 @@ public class ArraySerializersTest extends ForyTestBase {
         Fory.builder()
             .withXlang(xlang)
             .withRefTracking(referenceTracking)
-            .requireClassRegistration(false);
+            .requireClassRegistration(false)
+            .withCompatible(false);
     Fory fory1 = builder.build();
     Fory fory2 = builder.build();
     if (fory1.getConfig().isMetaShareEnabled()) {
@@ -232,7 +233,8 @@ public class ArraySerializersTest extends ForyTestBase {
         Fory.builder()
             .withXlang(xlang)
             .withRefTracking(referenceTracking)
-            .requireClassRegistration(false);
+            .requireClassRegistration(false)
+            .withCompatible(false);
     Fory fory1 = builder.build();
     Fory fory2 = builder.build();
     if (fory1.getConfig().isMetaShareEnabled()) {
@@ -272,7 +274,8 @@ public class ArraySerializersTest extends ForyTestBase {
             Fory.builder()
                 .withXlang(xlang)
                 .withRefTracking(referenceTracking)
-                .requireClassRegistration(false);
+                .requireClassRegistration(false)
+                .withCompatible(xlang);
     Fory fory1 = builder.get().build();
     Fory fory2 = builder.get().build();
     testPrimitiveArray(fory1, fory2);
@@ -451,7 +454,8 @@ public class ArraySerializersTest extends ForyTestBase {
         Fory.builder()
             .withXlang(false)
             .withRefTracking(referenceTracking)
-            .requireClassRegistration(false);
+            .requireClassRegistration(false)
+            .withCompatible(false);
     Fory fory1 = builder.build();
     Fory fory2 = builder.build();
     AtomicInteger counter = new AtomicInteger(0);
@@ -471,7 +475,8 @@ public class ArraySerializersTest extends ForyTestBase {
         Fory.builder()
             .withXlang(false)
             .withRefTracking(referenceTracking)
-            .requireClassRegistration(false);
+            .requireClassRegistration(false)
+            .withCompatible(false);
     Fory fory1 = builder.build();
     Fory fory2 = builder.build();
     AtomicInteger counter = new AtomicInteger(0);

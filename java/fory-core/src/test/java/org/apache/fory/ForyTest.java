@@ -179,7 +179,8 @@ public class ForyTest extends ForyTestBase {
         Fory.builder()
             .withXlang(false)
             .withRefTracking(referenceTracking)
-            .requireClassRegistration(false);
+            .requireClassRegistration(false)
+            .withCompatible(false);
     Fory fory1 = builder.build();
     Fory fory2 = builder.build();
     assertEquals("str", serDe(fory1, fory2, "str"));

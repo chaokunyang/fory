@@ -230,6 +230,7 @@ public final class AndroidForyRuntimeScenarios {
         .withXlang(false)
         .withRefTracking(true)
         .requireClassRegistration(false)
+        .withCompatible(false)
         .registerGuavaTypes(false);
   }
 

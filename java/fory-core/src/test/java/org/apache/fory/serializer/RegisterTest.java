@@ -132,6 +132,7 @@ public class RegisterTest extends ForyTestBase {
             .withCodegen(true)
             .requireClassRegistration(false)
             .suppressClassRegistrationWarnings(true)
+            .withCompatible(false)
             .withName("testRegisterExtSerializerWithSharedGeneratedCodec");
 
     Fory fory1 = builder.build();

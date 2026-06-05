@@ -286,7 +286,8 @@ public class ClassResolverTest extends ForyTestBase {
 
   @Test
   public void testSharedRegistrySharesTypeDefCachesAcrossForyInstances() {
-    ForyBuilder builder = Fory.builder().withXlang(false).requireClassRegistration(false);
+    ForyBuilder builder =
+        Fory.builder().withXlang(false).requireClassRegistration(false).withCompatible(false);
     finishBuilder(builder);
     SharedRegistry sharedRegistry = new SharedRegistry();
     Fory fory1 = new Fory(builder, ClassResolverTest.class.getClassLoader(), sharedRegistry);
@@ -310,7 +311,11 @@ public class ClassResolverTest extends ForyTestBase {
   @Test
   public void testReadTypeDefPublishesValidatedTypeDefById() {
     ForyBuilder builder =
-        Fory.builder().withXlang(false).requireClassRegistration(false).withMetaShare(true);
+        Fory.builder()
+            .withXlang(false)
+            .requireClassRegistration(false)
+            .withCompatible(false)
+            .withMetaShare(true);
     finishBuilder(builder);
     SharedRegistry sharedRegistry = new SharedRegistry();
     Fory fory1 = new Fory(builder, ClassResolverTest.class.getClassLoader(), sharedRegistry);
@@ -338,7 +343,11 @@ public class ClassResolverTest extends ForyTestBase {
   @Test
   public void testTypeDefHeaderCacheStopsAtMaxEntries() {
     ForyBuilder builder =
-        Fory.builder().withXlang(false).requireClassRegistration(false).withMetaShare(true);
+        Fory.builder()
+            .withXlang(false)
+            .requireClassRegistration(false)
+            .withCompatible(false)
+            .withMetaShare(true);
     finishBuilder(builder);
     SharedRegistry sharedRegistry = new SharedRegistry();
     Fory fory = new Fory(builder, ClassResolverTest.class.getClassLoader(), sharedRegistry);
@@ -361,7 +370,8 @@ public class ClassResolverTest extends ForyTestBase {
 
   @Test
   public void testSharedRegistryCachesFieldDescriptorsAndDescriptorGrouper() {
-    ForyBuilder builder = Fory.builder().withXlang(false).requireClassRegistration(false);
+    ForyBuilder builder =
+        Fory.builder().withXlang(false).requireClassRegistration(false).withCompatible(false);
     finishBuilder(builder);
     SharedRegistry sharedRegistry = new SharedRegistry();
     Fory fory1 = new Fory(builder, ClassResolverTest.class.getClassLoader(), sharedRegistry);
@@ -393,7 +403,11 @@ public class ClassResolverTest extends ForyTestBase {
   @Test
   public void testSharedRegistryCachesTypeDefDescriptorsAndDescriptorGrouperBySemanticKey() {
     ForyBuilder builder =
-        Fory.builder().withXlang(false).withMetaShare(true).requireClassRegistration(false);
+        Fory.builder()
+            .withXlang(false)
+            .withMetaShare(true)
+            .requireClassRegistration(false)
+            .withCompatible(false);
     finishBuilder(builder);
     SharedRegistry sharedRegistry = new SharedRegistry();
     Fory fory1 = new Fory(builder, ClassResolverTest.class.getClassLoader(), sharedRegistry);
@@ -427,7 +441,8 @@ public class ClassResolverTest extends ForyTestBase {
 
   @Test
   public void testRegisterNamedClassCachesOnlyNamespaceAndTypeName() {
-    ForyBuilder builder = Fory.builder().withXlang(false).requireClassRegistration(true);
+    ForyBuilder builder =
+        Fory.builder().withXlang(false).requireClassRegistration(true).withCompatible(false);
     finishBuilder(builder);
     SharedRegistry sharedRegistry = new SharedRegistry();
     Fory fory = new Fory(builder, ClassResolverTest.class.getClassLoader(), sharedRegistry);
@@ -441,7 +456,8 @@ public class ClassResolverTest extends ForyTestBase {
 
   @Test
   public void testFinishRegisterPublishesAndAdoptsSharedRegistration() {
-    ForyBuilder builder = Fory.builder().withXlang(false).requireClassRegistration(true);
+    ForyBuilder builder =
+        Fory.builder().withXlang(false).requireClassRegistration(true).withCompatible(false);
     finishBuilder(builder);
     SharedRegistry sharedRegistry = new SharedRegistry();
     Fory fory1 = new Fory(builder, ClassResolverTest.class.getClassLoader(), sharedRegistry);
@@ -785,7 +801,8 @@ public class ClassResolverTest extends ForyTestBase {
 
   @Test
   public void testShareableSerializerSharedAcrossRuntimes() {
-    ForyBuilder builder = Fory.builder().withXlang(false).requireClassRegistration(true);
+    ForyBuilder builder =
+        Fory.builder().withXlang(false).requireClassRegistration(true).withCompatible(false);
     finishBuilder(builder);
     SharedRegistry sharedRegistry = new SharedRegistry();
     Fory fory1 = new Fory(builder, ClassResolverTest.class.getClassLoader(), sharedRegistry);

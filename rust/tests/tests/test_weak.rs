@@ -63,7 +63,7 @@ fn test_rc_weak_requires_track_ref_message() {
     let err = fory.serialize(&weak).unwrap_err().to_string();
     assert_eq!(
         err,
-        "RcWeak requires track_ref to be enabled. Use Fory::builder().track_ref(true).compatible(true).build()"
+        "RcWeak requires track_ref to be enabled. Use Fory::builder().track_ref(true).build()"
     );
     assert!(!err.contains("xlang(false)"));
 }
@@ -76,7 +76,7 @@ fn test_arc_weak_requires_track_ref_message() {
     let err = fory.serialize(&weak).unwrap_err().to_string();
     assert_eq!(
         err,
-        "ArcWeak requires track_ref to be enabled. Use Fory::builder().track_ref(true).compatible(true).build()"
+        "ArcWeak requires track_ref to be enabled. Use Fory::builder().track_ref(true).build()"
     );
     assert!(!err.contains("xlang(false)"));
 }

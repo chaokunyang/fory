@@ -65,7 +65,8 @@ public class SerializersTest extends ForyTestBase {
         Fory.builder()
             .withXlang(xlang)
             .withRefTracking(referenceTracking)
-            .requireClassRegistration(false);
+            .requireClassRegistration(false)
+            .withCompatible(xlang);
     Fory fory1 = builder.build();
     Fory fory2 = builder.build();
     assertEquals("str", serDe(fory1, fory2, "str"));
@@ -79,7 +80,8 @@ public class SerializersTest extends ForyTestBase {
         Fory.builder()
             .withXlang(false)
             .withRefTracking(referenceTracking)
-            .requireClassRegistration(false);
+            .requireClassRegistration(false)
+            .withCompatible(false);
     Fory fory1 = builder.build();
     Fory fory2 = builder.build();
     assertEquals(BigInteger.valueOf(100), serDe(fory1, fory2, BigInteger.valueOf(100)));

@@ -132,7 +132,11 @@ public class PrimitiveSerializersTest extends ForyTestBase {
             Double.MIN_VALUE);
     if (compressNumber) {
       ForyBuilder builder =
-          Fory.builder().withXlang(false).withCodegen(codegen).requireClassRegistration(false);
+          Fory.builder()
+              .withXlang(false)
+              .withCodegen(codegen)
+              .requireClassRegistration(false)
+              .withCompatible(false);
       serDeCheck(
           builder.withNumberCompressed(true).withLongCompressed(Int64Encoding.VARINT).build(),
           struct);

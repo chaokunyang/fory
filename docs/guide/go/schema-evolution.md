@@ -213,7 +213,7 @@ This is treated as removing `UserName` and adding `Username`, resulting in data 
 f := fory.New(fory.WithXlang(true))
 ```
 
-For Go-only native-mode data stored in databases, files, or caches, keep compatible mode enabled:
+For Go-only native-mode data stored in databases, files, or caches, use compatible mode:
 
 ```go
 f := fory.New(fory.WithXlang(false))
@@ -292,12 +292,11 @@ Compatible mode mainly affects serialized size:
 - Long-lived caches
 
 Use `WithCompatible(false)` only when every reader and writer always uses the same Go struct schema
-and you need smaller, faster payloads. For xlang payloads, keep compatible mode unless schemas are
-verified across languages or generated from Fory schema IDL. Same-schema uses include:
+and you want faster serialization and smaller size. For xlang payloads, use `WithCompatible(false)` only after verifying that every language uses the same schema, or when native types are generated from Fory schema IDL. Same-schema uses include:
 
 - In-memory operations
 - Same-schema communication
-- Minimum serialized size
+- Faster serialization and smaller size
 
 ### Per-Struct Opt-Out
 

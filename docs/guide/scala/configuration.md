@@ -167,9 +167,8 @@ this default when models may evolve independently, when services deploy separate
 schemas are written by hand in different languages.
 
 Use `withCompatible(false)` only when the class schema used to deserialize every payload is always
-the same as the class schema used to serialize it and you need smaller, faster same-schema payloads.
-For xlang payloads, keep the default unless schemas are verified across languages or generated from
-Fory schema IDL.
+the same as the class schema used to serialize it and you want faster serialization and smaller size.
+For xlang payloads, call `withCompatible(false)` only after verifying that every language uses the same schema, or when native types are generated from Fory schema IDL.
 
 ## Security
 

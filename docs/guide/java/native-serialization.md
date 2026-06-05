@@ -98,8 +98,8 @@ Compatible mode lets readers tolerate added, removed, or reordered fields when t
 remains compatible. It also enables metadata sharing by default. See [Schema Evolution](schema-evolution.md)
 for field IDs, class version checks, meta sharing, and unknown-class handling.
 
-For smaller same-schema payloads, set `.withCompatible(false)` only when every reader and writer
-always uses the same class schema.
+For faster serialization and smaller size, set `.withCompatible(false)` only when
+every reader and writer always uses the same class schema.
 
 ## Registration And Security
 
@@ -327,8 +327,8 @@ loaders on an existing instance.
 
 - Reuse `Fory` or `ThreadSafeFory` instances instead of rebuilding them per request.
 - Register classes with explicit numeric IDs for compact type metadata and stable deployments.
-- Keep compatible mode unless every reader and writer always uses the same class schema and needs
-  smaller, faster payloads.
+- Use `.withCompatible(false)` only when every reader and writer always uses the same class schema
+  and the application wants faster serialization and smaller size.
 - Disable reference tracking for value-shaped graphs with no identity or cycles.
 - Use async compilation on ordinary JVMs when startup latency can tolerate interpreter-first
   serialization:

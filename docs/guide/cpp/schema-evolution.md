@@ -291,7 +291,7 @@ When fields are missing, C++ default initialization is used:
 ## Same-Schema Optimization
 
 Compatible mode is the default in both xlang and native mode. Set `compatible(false)` explicitly
-only when every reader and writer always uses the same schema and you need smaller, faster payloads:
+only when every reader and writer always uses the same schema and you want faster serialization and smaller size:
 
 ```cpp
 // Same-schema optimization
@@ -307,8 +307,8 @@ auto fory = Fory::builder()
 **Use `compatible(false)` when:**
 
 - Every reader and writer always uses the same schema
-- Smaller payloads are required
-- For xlang payloads, schemas are verified across languages or generated from Fory schema IDL
+- You want faster serialization and smaller size
+- For xlang payloads, every language uses the same verified schema or native types generated from Fory schema IDL
 
 ### Per-Struct Opt-Out
 

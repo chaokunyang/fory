@@ -96,9 +96,7 @@ conversions fail during deserialization.
 
 ## Same-Schema Optimization
 
-Use `.compatible(false)` only when the schema used to deserialize every payload is always the same
-as the schema used to serialize it, and you need smaller, faster payloads. For xlang payloads, keep
-compatible mode unless schemas are verified across languages or generated from Fory schema IDL.
+Use `.compatible(false)` only when the schema used to deserialize every payload is always the same as the schema used to serialize it, and you want faster serialization and smaller size. For xlang payloads, use `.compatible(false)` only after verifying that every language uses the same schema, or when native types are generated from Fory schema IDL.
 
 ```rust
 let mut fory = Fory::builder()

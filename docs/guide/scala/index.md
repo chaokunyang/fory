@@ -96,7 +96,7 @@ object ScalaExample {
 
 Use xlang mode for cross-language payloads and schemas shared with other Fory implementations. Xlang mode is the default Scala wire mode through the JVM builder, and Scala examples that use it set `.withXlang(true)` explicitly so the mode choice is visible.
 
-Use native mode for Scala/JVM-only traffic. Native mode is selected with `.withXlang(false)` and inherits the JVM native-mode object serialization path from Fory Java while adding Scala-specific serializers for case classes, collections, tuples, options, and enumerations. It is optimized for JVM and Scala type systems and is the right path for same-language Scala/JVM framework replacement payloads. Compatible mode is enabled by default. Set `.withCompatible(false)` only for smaller payloads when every reader and writer uses the same Scala/JVM schema.
+Use native mode for Scala/JVM-only traffic. Native mode is selected with `.withXlang(false)` and inherits the JVM native-mode object serialization path from Fory Java while adding Scala-specific serializers for case classes, collections, tuples, options, and enumerations. It is optimized for JVM and Scala type systems and is the right path for same-language Scala/JVM framework replacement payloads. Compatible mode is enabled by default. Set `.withCompatible(false)` only when every reader and writer uses the same Scala/JVM schema and you want faster serialization and smaller size.
 
 See [Configuration](configuration.md) for Scala builder setup and [Java Native Serialization](../java/native-serialization.md) for the full JVM native-mode behavior.
 

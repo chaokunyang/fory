@@ -35,7 +35,7 @@ For payloads whose reader and writer schemas never differ, see
 ### Compatible Mode
 
 Compatible mode is enabled by default, so deserialization can tolerate added, removed, or reordered
-fields when schema metadata remains compatible.
+fields when metadata remains compatible.
 
 In this compatible mode, deserialization can handle schema changes such as missing or extra fields, allowing it to succeed even when the serialization and deserialization processes have different class schemas.
 
@@ -173,7 +173,7 @@ public class StructMappingExample {
 
 ## Deserialize POJO into Another Type
 
-Fory allows you to serialize one POJO and deserialize it into a different POJO. The different POJO means schema inconsistency, so keep compatible mode enabled.
+Fory allows you to serialize one POJO and deserialize it into a different POJO. The different POJO means schema inconsistency, so use compatible mode.
 
 ```java
 public class DeserializeIntoType {
@@ -207,9 +207,8 @@ public class DeserializeIntoType {
 ## Same-Schema Optimization
 
 Use `ForyBuilder#withCompatible(false)` only when the class schema used to deserialize every payload
-is always the same as the class schema used to serialize it, and you need smaller, faster payloads.
-For xlang payloads, keep compatible mode unless schemas are verified across languages or generated
-from Fory schema IDL.
+is always the same as the class schema used to serialize it, and you want faster serialization and smaller size.
+For xlang payloads, call `withCompatible(false)` only after verifying that every language uses the same schema, or when native types are generated from Fory schema IDL.
 
 ```java
 Fory fory = Fory.builder()

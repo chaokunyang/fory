@@ -38,9 +38,7 @@ languages:
 let fory = Fory::builder().xlang(true).build();
 ```
 
-Use `.compatible(false)` only when every reader and writer always uses the same
-xlang schema and you need smaller, faster payloads. Keep compatible mode unless schemas are verified
-across languages or generated from Fory schema IDL:
+Use `.compatible(false)` for xlang payloads only when every reader and writer always uses the same schema and you want faster serialization and smaller size. Use it only after verifying that every language uses that schema, or when native types are generated from Fory schema IDL:
 
 ```rust
 let fory = Fory::builder().compatible(false).build();
@@ -55,7 +53,7 @@ let fory = Fory::builder().xlang(false).build();
 ```
 
 Compatible mode is enabled by default. Set `.compatible(false)` only when every reader and
-writer always uses the same Rust schema and you need smaller, faster same-schema payloads.
+writer always uses the same Rust schema and you want faster serialization and smaller size.
 
 ## Configuration
 
@@ -136,10 +134,7 @@ Compatible mode is enabled by default for both xlang and native mode. Keep this 
 structs may evolve independently, when services deploy separately, or when xlang schemas are written
 by hand in different languages.
 
-Use `.compatible(false)` only when the schema used to deserialize every payload is always the same
-as the schema used to serialize it and you need smaller, faster same-schema payloads. For xlang
-payloads, keep the default unless schemas are verified across languages or generated from Fory schema
-IDL.
+Use `.compatible(false)` only when the schema used to deserialize every payload is always the same as the schema used to serialize it and you want faster serialization and smaller size. For xlang payloads, use `.compatible(false)` only after verifying that every language uses the same schema, or when native types are generated from Fory schema IDL.
 
 ## Security
 

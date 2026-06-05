@@ -107,7 +107,7 @@ fun main() {
 
 Use xlang mode for cross-language payloads and schemas shared with other Fory implementations. Xlang mode is the default Kotlin wire mode through the JVM builder, and Kotlin examples that use it set `.withXlang(true)` explicitly so the mode choice is visible.
 
-Use native mode for Kotlin/JVM-only traffic. Native mode is selected with `.withXlang(false)` and inherits the JVM native-mode object serialization path from Fory Java while adding Kotlin-specific serializers for data classes, unsigned values, ranges, stdlib types, and generated serializers. It is optimized for JVM and Kotlin type systems and is the right path for same-language Kotlin/JVM framework replacement payloads. Compatible mode is enabled by default. Set `.withCompatible(false)` only for smaller payloads when every reader and writer uses the same Kotlin/JVM schema.
+Use native mode for Kotlin/JVM-only traffic. Native mode is selected with `.withXlang(false)` and inherits the JVM native-mode object serialization path from Fory Java while adding Kotlin-specific serializers for data classes, unsigned values, ranges, stdlib types, and generated serializers. It is optimized for JVM and Kotlin type systems and is the right path for same-language Kotlin/JVM framework replacement payloads. Compatible mode is enabled by default. Set `.withCompatible(false)` only when every reader and writer uses the same Kotlin/JVM schema and you want faster serialization and smaller size.
 
 See [Configuration](configuration.md) for Kotlin builder setup and [Java Native Serialization](../java/native-serialization.md) for the full JVM native-mode behavior.
 

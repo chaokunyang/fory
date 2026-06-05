@@ -69,8 +69,8 @@ writes native-mode payloads for C++-only traffic.
 
 Compatible mode is enabled by default. No builder call is required for the
 default compatible mode. Set `.compatible(false)` only when every reader and
-writer always uses the same schema and you need smaller, faster same-schema
-payloads.
+writer always uses the same schema and you want faster serialization and smaller
+size.
 
 ```cpp
 auto fory = Fory::builder()
@@ -78,8 +78,7 @@ auto fory = Fory::builder()
     .build();
 ```
 
-For xlang payloads, keep the default unless schemas are verified across
-languages or generated from Fory schema IDL.
+For xlang payloads, use `.compatible(false)` only after verifying that every language uses the same schema, or when native types are generated from Fory schema IDL.
 
 **Default:** `true`
 

@@ -58,8 +58,8 @@ fory = pyfory.Fory(xlang=True)
 
 **Symptom**: `InvalidDataException` while deserializing generated struct types.
 
-**Cause**: `Compatible(false)` with `CheckStructVersion(true)` checks schema hashes for payloads
-that intentionally omit compatible-mode schema metadata.
+**Cause**: `Compatible(false)` with `CheckStructVersion(true)` checks schema hashes for intentional
+same-schema payloads.
 
 **Fix options**:
 

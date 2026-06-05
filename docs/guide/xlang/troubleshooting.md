@@ -242,9 +242,7 @@ still align exactly.
    `compatible=false`, remove that override or enable compatible mode on every peer.
    Compatible mode writes extra schema metadata, so payloads are larger, but it is recommended
    for xlang services that may evolve independently.
-3. Use `compatible=false` only when every reader and writer always uses the same schema. For xlang
-   payloads, keep compatible mode unless schemas are verified across languages or generated from Fory
-   schema IDL.
+3. Set `compatible=false` only when every reader and writer always uses the same schema. For xlang payloads, do this only after verifying that every language uses that schema, or when native types are generated from Fory schema IDL.
 
 ### Serialization Format Changed
 

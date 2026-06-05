@@ -67,12 +67,10 @@ let fory = Fory(ref: true)
 
 Enables compatible schema mode for evolution across versions.
 
-- `false`: Same-schema mode for smaller, faster payloads
+- `false`: Faster serialization and smaller size
 - `true`: Compatible mode (supports add/remove/reorder fields)
 
-Use `compatible: false` only when every reader and writer always uses the same schema. For
-cross-language payloads, keep the default unless schemas are verified across languages or generated
-from Fory schema IDL.
+Use `compatible: false` only when every reader and writer always uses the same schema and you want faster serialization and smaller size. For cross-language payloads, set `compatible: false` only after verifying that every language uses the same schema, or when native types are generated from Fory schema IDL.
 
 ```swift
 let fory = Fory(compatible: false)

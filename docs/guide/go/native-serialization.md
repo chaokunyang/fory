@@ -34,7 +34,8 @@ Use native serialization when:
 - A payload is produced and consumed only by Go applications.
 - The data model uses Go-specific behavior such as native `int`/`uint`, nil slices, nil maps,
   pointers, interfaces, or Go-only dynamic values.
-- You need smaller same-schema Go payloads and every reader uses the same struct schema as the writer.
+- You want faster serialization and smaller size, and every reader uses the same struct schema as
+  the writer.
 - You want compatible schema evolution for Go-only rolling deployments without committing to a
   cross-language type mapping.
 - You are using reflection or code-generated serializers for Go structs that never leave Go.
@@ -95,8 +96,8 @@ reader := fory.New(fory.WithXlang(false))
 Compatible mode writes schema metadata so readers can tolerate added, removed, or reordered fields
 when field names or explicit field IDs remain compatible. See [Schema Evolution](schema-evolution.md).
 
-For smaller same-schema payloads, set `WithCompatible(false)` only when every reader and writer
-always uses the same Go struct schema.
+For faster serialization and smaller size, set `WithCompatible(false)` only when
+every reader and writer always uses the same Go struct schema.
 
 ## Registration
 
@@ -169,8 +170,8 @@ _ = data
 ## Performance Guidelines
 
 - Reuse `Fory` or the thread-safe wrapper instead of constructing a Fory instance per request.
-- Keep compatible mode unless every reader and writer always uses the same Go struct schema and
-  needs smaller, faster payloads.
+- Use `WithCompatible(false)` only when every reader and writer always uses the same Go struct
+  schema and wants faster serialization and smaller size.
 - Register structs with explicit numeric IDs.
 - Disable reference tracking unless the graph requires identity or cycles.
 - Use code generation for hot Go structs when reflection overhead matters.

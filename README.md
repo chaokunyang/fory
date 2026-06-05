@@ -316,11 +316,12 @@ Compatible mode is Fory's schema-evolution mode. It writes the metadata readers
 and writers need to tolerate schema differences. It is the default for xlang
 mode and native mode in implementations that expose the option.
 
-Keep compatible mode when services deploy independently or when fields may be
+Use compatible mode when services deploy independently or when fields may be
 added or deleted over time. Set compatible mode to `false` only when every reader
-and writer always uses the same schema and you need smaller, faster payloads. For
-xlang payloads, keep compatible mode unless schemas are verified across languages
-or generated from Fory schema IDL.
+and writer always uses the same schema and you want faster serialization and
+smaller size. For xlang payloads, set compatible mode to `false` only after
+verifying that every language uses the same schema, or when native types are
+generated from Fory schema IDL.
 
 For xlang, all peers must agree on type identity. Name-based registration is
 easier to read in examples. Numeric IDs are smaller and faster, but they require

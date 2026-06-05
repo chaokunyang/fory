@@ -74,17 +74,19 @@ Then mark reference-tracked fields in the schema, for example with
 
 ## Compatible Schema Evolution
 
-Compatible mode is the default. To opt into smaller same-schema payloads:
+Compatible mode is the default. To use faster serialization and smaller size:
 
 ```ts
 const fory = new Fory({ compatible: false });
 ```
 
-Keep the default for rolling upgrades, independently deployed services, and cross-language payloads.
-Use `compatible: false` only when every reader and writer always uses the same struct schema and you
-need smaller, faster payloads. For individual structs, `evolving: false` applies the same opt-out to
-that struct. For cross-language payloads, keep the default unless schemas are verified across
-languages or generated from Fory schema IDL. See [Schema Evolution](schema-evolution.md).
+Use compatible mode for rolling upgrades, independently deployed services, and
+cross-language payloads. Use `compatible: false` only when every reader and
+writer always uses the same struct schema and you want faster serialization and
+smaller size. For individual structs, `evolving: false` applies the same opt-out
+to that struct. For cross-language payloads, set `compatible: false` only after
+verifying that every language uses the same schema, or when native types are
+generated from Fory schema IDL. See [Schema Evolution](schema-evolution.md).
 
 ## Optional HPS String Path
 

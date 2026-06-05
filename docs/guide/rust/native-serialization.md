@@ -34,7 +34,8 @@ Use native serialization when:
 - A payload is produced and consumed only by Rust applications.
 - The data model uses Rust-specific object graph features such as `Rc<T>`, `Arc<T>`, weak
   pointers, `RefCell<T>`, `Mutex<T>`, trait objects, or `dyn Any`.
-- You need smaller same-schema Rust payloads and every reader uses the same schema as the writer.
+- You want faster serialization and smaller size, and every reader uses the same schema as the
+  writer.
 - You need compatible schema evolution for Rust-only rolling deployments.
 - You want compile-time serializers from `#[derive(ForyStruct)]` without portable xlang mapping
   constraints.
@@ -75,11 +76,11 @@ let mut writer = Fory::builder().xlang(false).build();
 let mut reader = Fory::builder().xlang(false).build();
 ```
 
-Compatible mode uses schema metadata to tolerate added, removed, or reordered fields when field
+Compatible mode uses metadata to tolerate added, removed, or reordered fields when field
 identity remains compatible. See [Schema Evolution](schema-evolution.md).
 
-For smaller same-schema payloads, set `.compatible(false)` only when every reader and writer always
-uses the same Rust schema.
+For faster serialization and smaller size, set `.compatible(false)` only when
+every reader and writer always uses the same Rust schema.
 
 ## Registration
 
@@ -182,8 +183,8 @@ Register every concrete implementation that can appear behind the trait object.
 ## Performance Guidelines
 
 - Reuse a configured `Fory` instance and register types before concurrent use.
-- Keep compatible mode unless every reader and writer always uses the same Rust schema and needs
-  smaller, faster payloads.
+- Use `.compatible(false)` only when every reader and writer always uses the same Rust schema and
+  the application wants faster serialization and smaller size.
 - Use derive-generated serializers for application structs.
 - Use `.track_ref(true)` only for weak-pointer or cyclic graph scenarios that require it.
 - Prefer concrete typed fields over `dyn Any` or trait objects on hot paths.

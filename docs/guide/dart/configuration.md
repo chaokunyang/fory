@@ -55,8 +55,7 @@ When `compatible: true`:
 When `compatible: false`:
 
 - Both sides must have exactly the same schema. Use this only when every reader and writer always
-  uses that schema and you need smaller, faster payloads. For cross-language payloads, keep the
-  default unless schemas are verified across languages or generated from Fory schema IDL.
+  uses that schema and you want faster serialization and smaller size. For cross-language payloads, set `compatible: false` only after verifying that every language uses the same schema, or when native types are generated from Fory schema IDL.
 
 ```dart
 final fory = Fory(compatible: false);

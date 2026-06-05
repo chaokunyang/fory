@@ -25,8 +25,8 @@ This page covers common problems when using Fory JavaScript.
 
 Fory JavaScript only reads Fory cross-language payloads. If the producer is a Java or Go service using a native-mode format, the JavaScript side cannot decode it.
 
-Fix: switch the producer to xlang payloads. Java and Go use xlang by default; keep compatible mode
-enabled unless every peer uses the same schema.
+Fix: switch the producer to xlang payloads. Java and Go use xlang by default; use compatible mode
+unless every peer uses the same schema.
 
 ## `maxDepth must be an integer >= 2`
 

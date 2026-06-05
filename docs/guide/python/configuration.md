@@ -111,9 +111,7 @@ fory.register(MyDataClass, name="com.example.MyDataClass")
 data = fory.serialize(MyDataClass(field1="value", field2=42))
 ```
 
-Use `compatible=False` only when every reader and writer always uses the same xlang schema and you
-need smaller, faster payloads. Keep compatible mode unless schemas are verified across languages or
-generated from Fory schema IDL.
+Use `compatible=False` for xlang payloads only when every reader and writer always uses the same schema and you want faster serialization and smaller size. Use it only after verifying that every language uses that schema, or when native types are generated from Fory schema IDL.
 
 ## Native Mode
 
@@ -125,8 +123,8 @@ fory = pyfory.Fory(xlang=False, ref=True, strict=False)
 
 Native mode supports Python-specific object features such as functions, local classes, methods,
 `__reduce__`, and `__getstate__`. Compatible mode is still enabled by default. Set
-`compatible=False` only when every reader and writer always uses the same Python class schema and you
-need smaller, faster same-schema payloads.
+`compatible=False` only when every reader and writer always uses the same Python
+class schema and you want faster serialization and smaller size.
 
 ## Compatible Mode
 
@@ -134,8 +132,7 @@ Compatible mode is enabled by default for both xlang and native mode. Keep this 
 classes may evolve independently, when services deploy separately, or when xlang schemas are written
 by hand in different languages.
 
-For xlang payloads, keep the default unless schemas are verified across languages or generated from
-Fory schema IDL.
+For xlang payloads, set `compatible=False` only after verifying that every language uses the same schema, or when native types are generated from Fory schema IDL.
 
 ## Example Configurations
 

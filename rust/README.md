@@ -320,7 +320,7 @@ assert_eq!(decoded.star_animal.speak(), "Woof!");
 
 ### 4. Schema Evolution
 
-Apache Fory™ supports schema evolution in **Compatible mode**, allowing serialization and deserialization peers to have different type definitions. Compatible mode is the default for both xlang and native mode. Set `.compatible(false)` only when every reader and writer always uses the same schema and you need smaller, faster payloads. For xlang payloads, keep compatible mode unless schemas are verified across languages or generated from Fory schema IDL.
+Apache Fory™ supports schema evolution in **Compatible mode**, allowing serialization and deserialization peers to have different type definitions. Compatible mode is the default for both xlang and native mode. Set `.compatible(false)` only when every reader and writer always uses the same schema and you want faster serialization and smaller size. For xlang payloads, use `.compatible(false)` only after verifying that every language uses the same schema, or when native types are generated from Fory schema IDL.
 
 **Features:**
 

@@ -49,8 +49,7 @@ ThreadSafeFory fory = Fory.builder()
 Default Java xlang mode also defaults to compatible schema mode, so independently deployed services
 can add and remove fields when their schema metadata remains compatible. Use
 `withCompatible(false)` only when every reader and writer always uses the same schema and you want
-smaller same-schema xlang payloads. Keep compatible mode unless xlang schemas are verified across
-languages or generated from Fory schema IDL.
+faster serialization and smaller size. Use the `compatible=false` opt-out only after verifying that every language uses the same xlang schema, or when native types are generated from Fory schema IDL.
 
 ## Register Custom Types
 
@@ -113,9 +112,8 @@ object copy, and native-mode zero-copy buffers. See [Native Serialization](nativ
 - `withRefTracking(true)` preserves shared references and circular references.
 - `requireClassRegistration(true)` keeps the default registered-type policy.
 - Compatible mode is enabled by default for native-mode and xlang payloads. Use
-  `withCompatible(false)` only when every reader and writer uses the same schema and smaller
-  payloads matter. For xlang payloads, keep compatible mode unless schemas are verified across
-  languages or generated from Fory schema IDL.
+  `withCompatible(false)` only when every reader and writer uses the same schema and you want faster
+  serialization and smaller size. For xlang payloads, use the `compatible=false` opt-out only after verifying that every language uses the same schema, or when native types are generated from Fory schema IDL.
 - `withAsyncCompilation(true)` enables asynchronous serializer compilation where supported.
 
 ## Best Practices

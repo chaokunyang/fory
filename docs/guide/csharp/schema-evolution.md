@@ -73,8 +73,8 @@ System.Diagnostics.Debug.Assert(evolved.F2 == string.Empty);
 
 ## Same-Schema Optimization
 
-Use this only when every reader and writer always uses the same schema and you need smaller, faster
-payloads:
+Use this only when every reader and writer always uses the same schema and you
+want faster serialization and smaller size:
 
 ```csharp
 Fory sameSchema = Fory.Builder()
@@ -83,8 +83,7 @@ Fory sameSchema = Fory.Builder()
     .Build();
 ```
 
-Because C# uses the xlang wire format only, keep compatible mode unless schemas are verified across
-languages or generated from Fory schema IDL. This mode throws on schema hash mismatches.
+Because C# uses the xlang wire format only, use `Compatible(false)` only after verifying that every peer uses the same schema, or when native types are generated from Fory schema IDL. This mode throws on schema hash mismatches.
 
 ## Best Practices
 

@@ -91,8 +91,7 @@ print(user.email)  # "unknown@example.com"
 ## Same-Schema Class Optimization
 
 Use `compatible=False` only when the class schema used to deserialize every payload is always the same
-as the class schema used to serialize it, and you need smaller, faster payloads. For xlang payloads,
-keep compatible mode unless schemas are verified across languages or generated from Fory schema IDL.
+as the class schema used to serialize it, and you want faster serialization and smaller size. For xlang payloads, set `compatible=False` only after verifying that every language uses the same schema, or when native types are generated from Fory schema IDL.
 
 ```python
 f = pyfory.Fory(xlang=False, compatible=False)

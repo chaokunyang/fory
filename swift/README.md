@@ -401,8 +401,8 @@ Cross-language rules:
 
 - Prefer `trackRef=false` for value-only payloads to avoid reference-table overhead
 - Reuse the same `Fory` instance and register types once per process/service lifecycle
-- Use `compatible=false` only when every reader and writer always uses the same schema and smaller
-  payloads matter
+- Use `compatible=false` only when every reader and writer always uses the same schema and you want
+  faster serialization and smaller size
 
 ## Development
 

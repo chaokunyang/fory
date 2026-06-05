@@ -85,8 +85,8 @@ See [References](references.md) for details.
 ### WithCompatible
 
 Compatible mode is enabled by default in both xlang and native mode. Set
-`WithCompatible(false)` only when every reader and writer always uses the same schema and you need
-smaller, faster same-schema payloads:
+`WithCompatible(false)` only when every reader and writer always uses the same schema and you want
+faster serialization and smaller size:
 
 ```go
 f := fory.New(fory.WithCompatible(false))
@@ -101,13 +101,11 @@ f := fory.New(fory.WithCompatible(false))
 
 **When disabled:**
 
-- Compact serialization without field metadata
-- Faster serialization and smaller output
+- Faster serialization and smaller size
 - Fields matched by sorted order
 - Requires consistent struct definitions across all services
 
-For xlang payloads, keep the default unless schemas are verified across languages or generated from
-Fory schema IDL. See [Schema Evolution](schema-evolution.md) for details.
+For xlang payloads, use `WithCompatible(false)` only after verifying that every language uses the same schema, or when native types are generated from Fory schema IDL. See [Schema Evolution](schema-evolution.md) for details.
 
 ### WithMaxDepth
 

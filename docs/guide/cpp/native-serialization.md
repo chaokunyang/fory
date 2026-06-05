@@ -34,7 +34,8 @@ Use native serialization when:
 - A payload is produced and consumed only by C++ applications.
 - The data model uses C++-specific types such as character types, unsigned-native type IDs,
   `std::tuple`, smart pointers, or C++ polymorphic models.
-- You need smaller same-schema C++ payloads and every reader uses the same schema as the writer.
+- You want faster serialization and smaller size, and every reader uses the same schema as the
+  writer.
 - You need compatible schema evolution for C++-only rolling deployments.
 - You want to avoid portable xlang type-mapping constraints for a C++ boundary.
 
@@ -97,8 +98,8 @@ auto fory = Fory::builder()
 Compatible mode writes schema metadata so readers can tolerate added, removed, or reordered fields
 when field identity remains compatible. See [Schema Evolution](schema-evolution.md).
 
-For smaller same-schema payloads, set `.compatible(false)` only when every reader and writer always
-uses the same C++ schema.
+For faster serialization and smaller size, set `.compatible(false)` only when
+every reader and writer always uses the same C++ schema.
 
 ## Registration
 
@@ -157,7 +158,7 @@ auto unsigned_bytes = fory.serialize(uint64_t{42}).value();
 auto unsigned_value = fory.deserialize<uint64_t>(unsigned_bytes).value();
 ```
 
-For xlang payloads, use schema metadata and the shared xlang type mapping instead of relying on
+For xlang payloads, use metadata and the shared xlang type mapping instead of relying on
 C++ native-only type IDs.
 
 ## Performance Guidelines
@@ -165,8 +166,8 @@ C++ native-only type IDs.
 - Reuse configured `Fory` instances.
 - Use single-threaded `Fory` per thread for the fastest path; use `build_thread_safe()` for shared
   concurrent use.
-- Keep compatible mode unless every reader and writer always uses the same C++ schema and needs
-  smaller, faster payloads.
+- Use `.compatible(false)` only when every reader and writer always uses the same C++ schema and
+  the application wants faster serialization and smaller size.
 - Register structs with explicit numeric IDs for compact payloads.
 - Disable reference tracking for value-shaped graphs.
 - Prefer concrete types over polymorphic/dynamic fields on hot paths.
@@ -196,7 +197,7 @@ Native serialization defaults to compatible mode. Keep that default when schemas
 
 ### A native-only scalar does not map to another language
 
-Use xlang serialization with explicit schema metadata for portable payloads. Native C++ type IDs
+Use xlang serialization with explicit metadata for portable payloads. Native C++ type IDs
 are only for C++ readers.
 
 ### A shared pointer graph loses identity

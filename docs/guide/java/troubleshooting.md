@@ -37,7 +37,7 @@ Fory fory = Fory.builder()
 // If ClassNotCompatibleException is thrown, remove withCompatible(false).
 ```
 
-**Note**: compatible mode is the default for both xlang and native mode. Use `withCompatible(false)` only if every reader and writer always uses the same class schema and you need smaller, faster payloads.
+**Note**: compatible mode is the default for both xlang and native mode. Use `withCompatible(false)` only if every reader and writer always uses the same class schema and you want faster serialization and smaller size.
 
 ## Using Wrong API for Deserialization
 
@@ -67,7 +67,7 @@ MyClass typedResult = fory.deserialize(typedBytes, MyClass.class);
 
 ## Deserialize POJO into Another Type
 
-If you want to serialize one POJO and deserialize it into a different POJO type, keep compatible mode enabled:
+If you want to serialize one POJO and deserialize it into a different POJO type, use compatible mode:
 
 ```java
 public class DeserializeIntoType {

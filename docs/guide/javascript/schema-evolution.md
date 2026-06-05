@@ -82,11 +82,12 @@ With compatible mode, the reader ignores fields it does not know about, and fill
 | -------------------------------------------- | ------------------- | --------------- |
 | Every reader and writer uses the same schema | works               | works           |
 | Independent deployments                      | unsafe              | recommended     |
-| Smallest possible messages                   | smallest            | slightly larger |
+| Best size and speed for same-schema data     | yes                 | no              |
 | Rolling upgrades                             | unsafe              | recommended     |
 
-For xlang payloads, keep compatible mode unless schemas are verified across languages or generated
-from Fory schema IDL.
+Set `compatible: false` for xlang payloads only after verifying that every
+language uses the same schema, or when native types are generated from Fory
+schema IDL.
 
 ## Same-Schema Per-Struct Opt-Out
 
@@ -101,7 +102,7 @@ const fixedType = Type.struct(
 );
 ```
 
-`evolving: false` produces smaller messages for that struct. Use it only when every reader and
+`evolving: false` can be faster and smaller for that struct. Use it only when every reader and
 writer always uses the same struct schema. If one side writes with `evolving: false` and the other
 reads expecting compatible metadata, deserialization will fail.
 

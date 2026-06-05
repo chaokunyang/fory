@@ -742,7 +742,7 @@ for t in threads: t.join()
 - **`xlang`** (`bool`, default=`True`): Use xlang mode. Set `False` for Python native mode supporting Python-specific objects.
 - **`ref`** (`bool`, default=`False`): Enable reference tracking for shared/circular references. Disable for better performance if your data has no shared references.
 - **`strict`** (`bool`, default=`True`): Require type registration for security. **Highly recommended** for production. Only disable in trusted environments.
-- **`compatible`** (`bool | None`, default `None`): Enable schema evolution. `None` enables compatible mode in both xlang and native mode. Set `False` only when every reader and writer always uses the same Python class schema and you need smaller, faster payloads.
+- **`compatible`** (`bool | None`, default `None`): Enable schema evolution. `None` enables compatible mode in both xlang and native mode. Set `False` only when every reader and writer always uses the same Python class schema and you want faster serialization and smaller size.
 - **`max_depth`** (`int`, default=`50`): Maximum deserialization depth for security, preventing stack overflow attacks.
 
 **Key Methods:**
@@ -977,7 +977,7 @@ Optimize serialization speed and memory usage with these guidelines:
 1. **Disable `ref=True` if not needed**: Reference tracking has overhead
 2. **Use type_id instead of name**: Integer IDs are faster than string names
 3. **Reuse Fory instances**: Create once, use many times
-4. **Use `compatible=False` only for same-schema data**: Disable compatible mode only when every reader and writer always uses the same Python class schema and you need smaller, faster payloads
+4. **Use `compatible=False` only for same-schema data**: Disable compatible mode only when every reader and writer always uses the same Python class schema and you want faster serialization and smaller size
 5. **Enable Cython**: Make sure `ENABLE_FORY_CYTHON_SERIALIZATION=1`, should be enabled by default
 6. **Use row format for large arrays**: Zero-copy access for analytics
 

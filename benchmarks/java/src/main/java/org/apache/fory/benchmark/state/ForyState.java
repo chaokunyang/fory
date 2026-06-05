@@ -127,10 +127,8 @@ public class ForyState {
               .withXlang(false)
               .withClassVersionCheck(false)
               .withRefTracking(references)
+              .withCompatible(compatible())
               .requireClassRegistration(false);
-      if (compatible()) {
-        foryBuilder.withCompatible(true);
-      }
       fory = foryBuilder.build();
       switch (objectType) {
         case SAMPLE:

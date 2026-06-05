@@ -164,15 +164,15 @@ func TestMetaShareEnabled(t *testing.T) {
 }
 
 func TestCompatibleDefaults(t *testing.T) {
-	defaultXlang := &Fory{config: defaultConfig()}
-	WithXlang(true)(defaultXlang)
-	defaultXlang.applyCompatibleDefault()
-	defaultNative := &Fory{config: defaultConfig()}
-	WithXlang(false)(defaultNative)
-	defaultNative.applyCompatibleDefault()
+	defaultXlang := NewForyWithOptions(WithXlang(true))
+	defaultNative := NewForyWithOptions(WithXlang(false))
 
 	assert.True(t, defaultXlang.config.Compatible)
+	assert.NotNil(t, defaultXlang.metaContext)
+	assert.True(t, defaultXlang.metaContext.IsScopedMetaShareEnabled())
 	assert.True(t, defaultNative.config.Compatible)
+	assert.NotNil(t, defaultNative.metaContext)
+	assert.True(t, defaultNative.metaContext.IsScopedMetaShareEnabled())
 }
 
 func TestCompatibleModeOverrides(t *testing.T) {

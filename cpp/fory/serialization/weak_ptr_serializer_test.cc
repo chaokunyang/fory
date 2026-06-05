@@ -429,8 +429,7 @@ TEST(WeakPtrSerializerTest, RequiresTrackRef) {
   original.weak_ref = SharedWeak<SimpleStruct>::from(target);
 
   // Create serializer WITHOUT track_ref
-  auto fory =
-      Fory::builder().xlang(true).track_ref(false).compatible(true).build();
+  auto fory = Fory::builder().xlang(true).track_ref(false).build();
   fory.register_struct<SimpleStruct>(100);
   fory.register_struct<StructWithWeak>(101);
 
@@ -439,7 +438,7 @@ TEST(WeakPtrSerializerTest, RequiresTrackRef) {
   auto error = bytes_result.error().to_string();
   EXPECT_EQ(error,
             "Invalid ref: SharedWeak requires track_ref to be enabled. Use "
-            "Fory::builder().track_ref(true).compatible(true).build()");
+            "Fory::builder().track_ref(true).build()");
   EXPECT_EQ(error.find("xlang("), std::string::npos);
 }
 

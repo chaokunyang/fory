@@ -1043,6 +1043,8 @@ TEST(SerializationTest, ConfigurationBuilder) {
   EXPECT_EQ(fory1.config().max_dyn_depth, 10);
   EXPECT_FALSE(fory1.config().track_ref);
 
+  auto default_xlang = Fory::builder().xlang(true).build();
+  auto default_native = Fory::builder().xlang(false).build();
   auto compatible_xlang = Fory::builder().xlang(true).compatible(true).build();
   auto explicit_schema_consistent =
       Fory::builder().compatible(false).xlang(true).build();
@@ -1054,6 +1056,8 @@ TEST(SerializationTest, ConfigurationBuilder) {
                                            .check_struct_version(true)
                                            .build();
 
+  EXPECT_TRUE(default_xlang.config().compatible);
+  EXPECT_TRUE(default_native.config().compatible);
   EXPECT_TRUE(compatible_xlang.config().compatible);
   EXPECT_FALSE(compatible_xlang.config().check_struct_version);
   EXPECT_FALSE(explicit_schema_consistent.config().compatible);

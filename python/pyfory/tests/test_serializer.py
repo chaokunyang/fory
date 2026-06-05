@@ -52,10 +52,18 @@ pa = lazy_import("pyarrow")
 
 
 def test_compatible_mode_overrides():
+    default_xlang = Fory(xlang=True)
+    default_native = Fory(xlang=False)
     compatible_xlang = Fory(xlang=True, compatible=True)
     explicit_schema_consistent = Fory(compatible=False, xlang=True)
     explicit_schema_consistent_reverse_order = Fory(xlang=True, compatible=False)
 
+    assert default_xlang.compatible is True
+    assert default_xlang.write_context.meta_share_context is not None
+    assert default_xlang.read_context.meta_share_context is not None
+    assert default_native.compatible is True
+    assert default_native.write_context.meta_share_context is not None
+    assert default_native.read_context.meta_share_context is not None
     assert compatible_xlang.compatible is True
     assert explicit_schema_consistent.compatible is False
     assert explicit_schema_consistent_reverse_order.compatible is False

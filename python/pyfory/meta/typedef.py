@@ -745,9 +745,11 @@ def _create_compatible_field_serializer(
         raise TypeNotCompatibleError(f"Field {field_name!r} has unsupported list/array schema mismatch")
 
     if _is_root_list_array_pair(remote_field_type, local_field_type):
-        from pyfory.serializer import (
+        from pyfory.converter import (
             CompatibleArrayToListFieldSerializer,
             CompatibleListToArrayFieldSerializer,
+        )
+        from pyfory.serializer import (
             ForyArrayFieldSerializer,
             fory_array_wrapper_type,
         )
@@ -787,7 +789,7 @@ def _create_compatible_field_serializer(
         if serializer is not None:
             return serializer
     if local_field_type is not None:
-        from pyfory.serializer import CompatibleScalarFieldSerializer, supports_compatible_scalar_conversion
+        from pyfory.converter import CompatibleScalarFieldSerializer, supports_compatible_scalar_conversion
 
         exact_scalar_field_type = (
             remote_field_type.type_id == local_field_type.type_id
@@ -865,7 +867,7 @@ def _field_type_assignment(remote_field_type: FieldType, local_field_type: Field
     if top_level and _is_root_list_array_pair(remote_field_type, local_field_type):
         return True, True
     if top_level:
-        from pyfory.serializer import supports_compatible_scalar_conversion
+        from pyfory.converter import supports_compatible_scalar_conversion
 
         scalar_pair = _is_compatible_scalar_type_id(remote_type_id) and _is_compatible_scalar_type_id(local_type_id)
         if scalar_pair:

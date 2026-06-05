@@ -400,10 +400,12 @@ def test_scalar_tracking_ref_rules():
 
 
 def test_same_schema_scalar_read_is_direct():
+    from pyfory.converter import CompatibleScalarFieldSerializer
+
     fory = Fory(xlang=True, compatible=True, ref=False)
     fory.register_type(RemoteStringScalar, type_id=736)
     serializer = fory.type_resolver.get_serializer(RemoteStringScalar)
-    assert all(not getattr(field_serializer, "_compatible_scalar_conversion", False) for field_serializer in serializer._serializers)
+    assert all(not isinstance(field_serializer, CompatibleScalarFieldSerializer) for field_serializer in serializer._serializers)
     value = RemoteStringScalar("true")
     assert fory.deserialize(fory.serialize(value)) == value
 

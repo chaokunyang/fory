@@ -701,7 +701,7 @@ class ProcessorValidationTest {
     val copyStart = source.indexOf("override fun copy")
     val compatibleSource = source.substring(compatibleStart, copyStart)
 
-    assertTrue(compatibleSource.contains("if (canReadRemoteField(remoteField, localField))"))
+    assertTrue(compatibleSource.contains("if (canReadRemoteField(remoteField))"))
     assertTrue(
       compatibleSource.contains("readCompatibleFieldValue(readContext, remoteField, localField)")
     )

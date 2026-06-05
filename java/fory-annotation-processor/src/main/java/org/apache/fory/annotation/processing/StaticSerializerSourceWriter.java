@@ -823,10 +823,7 @@ final class StaticSerializerSourceWriter {
       SourceField field = struct.fields.get(i);
       builder.append("      case ").append(field.id).append(":\n");
       appendDebugRemoteRead("before read", "remoteField", 8);
-      builder
-          .append("        if (canReadRemoteField(remoteField, fieldsById[")
-          .append(field.id)
-          .append("])) {\n");
+      builder.append("        if (canReadRemoteField(remoteField)) {\n");
       builder
           .append(
               "          Object fieldValue = readCompatibleFieldValue(readContext, remoteField, fieldsById[")
@@ -863,10 +860,7 @@ final class StaticSerializerSourceWriter {
       SourceField field = struct.fields.get(i);
       builder.append("      case ").append(field.id).append(":\n");
       appendDebugRemoteRead("before read", "remoteField", 8);
-      builder
-          .append("        if (canReadRemoteField(remoteField, fieldsById[")
-          .append(field.id)
-          .append("])) {\n");
+      builder.append("        if (canReadRemoteField(remoteField)) {\n");
       builder
           .append("          values[")
           .append(field.id)

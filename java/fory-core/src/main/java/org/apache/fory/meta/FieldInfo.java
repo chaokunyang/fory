@@ -126,10 +126,10 @@ public final class FieldInfo implements Serializable {
         }
         return builder.build();
       }
-      FieldTypes.FieldType localFieldType =
-          descriptor.getField() == null
-              ? null
-              : FieldTypes.buildFieldType(resolver, descriptor.getField());
+      // The local descriptor owns normalized wrapper nullability/ref-tracking bits. Rebuilding from
+      // the raw field can make same-schema writer descriptors look incompatible and drop the field
+      // accessor in compatible mode.
+      FieldTypes.FieldType localFieldType = FieldTypes.buildFieldType(resolver, descriptor);
       int peerArrayTypeId = arrayTypeId(fieldType);
       // Static @ArrayType List<T> descriptors are fieldless, but the generated accessor still
       // reads and writes a List. Preserve the local descriptor so field metadata installs the

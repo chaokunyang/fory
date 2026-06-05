@@ -497,6 +497,25 @@ public abstract class StaticGeneratedStructSerializer<T> extends AbstractObjectS
     return remoteField.canRead;
   }
 
+  public final boolean canReadGeneratedField(
+      RemoteFieldInfo remoteField, SerializationFieldInfo localFieldInfo) {
+    if (remoteField.incompatibleCollectionArrayMatch) {
+      throw new DeserializationException(
+          "Cannot read remote field "
+              + remoteField.descriptor.getName()
+              + " as local field "
+              + localFieldInfo.descriptor.getName()
+              + ": compatible list/array adaptation requires a matching non-null primitive element"
+              + " schema and does not apply recursively");
+    }
+    if (remoteField.nestedCollectionArrayMatch) {
+      return false;
+    }
+    return remoteField.canRead
+        || FieldConverters.canReadGeneratedField(
+            remoteField.serializationFieldInfo, localFieldInfo);
+  }
+
   public final Object readCompatibleFieldValue(
       ReadContext readContext, RemoteFieldInfo remoteField, SerializationFieldInfo localFieldInfo) {
     if (remoteField.compatibleScalarRead) {

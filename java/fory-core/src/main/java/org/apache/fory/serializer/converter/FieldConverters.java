@@ -179,6 +179,25 @@ public class FieldConverters {
   }
 
   /**
+   * Returns whether a generated serializer can read {@code from} and adapt it with generated
+   * field-access code for {@code to}.
+   */
+  @Internal
+  public static boolean canReadGeneratedField(
+      SerializationFieldInfo from, SerializationFieldInfo to) {
+    if (canConvert(from, to)) {
+      return true;
+    }
+    if (isScalarField(from) || isScalarField(to)) {
+      return false;
+    }
+    // Generated serializers may adapt source-only carrier types, such as Kotlin unsigned arrays,
+    // after reading the remote wire value. Keep that fallback out of scalar fields so ref/schema
+    // guardrails remain owned by descriptor-level conversion above.
+    return canConvert(from.typeRef.getRawType(), to.typeRef.getRawType());
+  }
+
+  /**
    * Converts {@code value} from {@code from} to {@code to}, or returns it for direct assignment.
    */
   @Internal
@@ -225,6 +244,19 @@ public class FieldConverters {
     }
     return CompatibleScalarConverter.convert(
         from.dispatchId, from.type, to.dispatchId, to.type, value, to.qualifiedFieldName);
+  }
+
+  /** Converts a compatible field value using scalar metadata captured at code generation time. */
+  @Internal
+  public static Object convertValue(
+      int fromDispatchId,
+      Class<?> fromType,
+      int toDispatchId,
+      Class<?> toType,
+      String fieldName,
+      Object value) {
+    return CompatibleScalarConverter.convert(
+        fromDispatchId, fromType, toDispatchId, toType, value, fieldName);
   }
 
   /** Returns whether descriptor-level compatible read must read a scalar conversion payload. */
@@ -291,44 +323,6 @@ public class FieldConverters {
         fromType,
         declaredTypeInfo,
         fieldName);
-  }
-
-  /** Converts a compatible field value using scalar metadata captured at code generation time. */
-  @Internal
-  public static Object convertValue(
-      int fromDispatchId,
-      Class<?> fromType,
-      int toDispatchId,
-      Class<?> toType,
-      String fieldName,
-      Object value) {
-    return CompatibleScalarConverter.convert(
-        fromDispatchId, fromType, toDispatchId, toType, value, fieldName);
-  }
-
-  @Internal
-  public static int fromDispatchId(FieldConverter<?> converter) {
-    return scalarConverter(converter).fromDispatchId;
-  }
-
-  @Internal
-  public static Class<?> fromType(FieldConverter<?> converter) {
-    return scalarConverter(converter).fromType;
-  }
-
-  @Internal
-  public static int toDispatchId(FieldConverter<?> converter) {
-    return scalarConverter(converter).toDispatchId;
-  }
-
-  @Internal
-  public static Class<?> toType(FieldConverter<?> converter) {
-    return scalarConverter(converter).toType;
-  }
-
-  @Internal
-  public static String fieldName(FieldConverter<?> converter) {
-    return scalarConverter(converter).fieldName;
   }
 
   private static Object readScalarSource(
@@ -415,6 +409,31 @@ public class FieldConverters {
     }
   }
 
+  @Internal
+  public static int fromDispatchId(FieldConverter<?> converter) {
+    return scalarConverter(converter).fromDispatchId;
+  }
+
+  @Internal
+  public static Class<?> fromType(FieldConverter<?> converter) {
+    return scalarConverter(converter).fromType;
+  }
+
+  @Internal
+  public static int toDispatchId(FieldConverter<?> converter) {
+    return scalarConverter(converter).toDispatchId;
+  }
+
+  @Internal
+  public static Class<?> toType(FieldConverter<?> converter) {
+    return scalarConverter(converter).toType;
+  }
+
+  @Internal
+  public static String fieldName(FieldConverter<?> converter) {
+    return scalarConverter(converter).fieldName;
+  }
+
   private static Object readDecimalSource(
       ReadContext readContext,
       SerializationFieldInfo from,
@@ -449,6 +468,19 @@ public class FieldConverters {
     return CompatibleScalarConverter.canConvert(fromDispatchId, from, toDispatchId, to);
   }
 
+  private static boolean needsConverter(
+      int fromDispatchId,
+      Class<?> from,
+      RefMode fromRefMode,
+      int toDispatchId,
+      Class<?> to,
+      RefMode toRefMode) {
+    if (isDirectIdentity(fromDispatchId, from, fromRefMode, toDispatchId, to, toRefMode)) {
+      return false;
+    }
+    return CompatibleScalarConverter.canConvert(fromDispatchId, from, toDispatchId, to);
+  }
+
   private static boolean isDirectIdentity(
       int fromDispatchId,
       Class<?> from,
@@ -468,17 +500,16 @@ public class FieldConverters {
     return true;
   }
 
-  private static boolean needsConverter(
-      int fromDispatchId,
-      Class<?> from,
-      RefMode fromRefMode,
-      int toDispatchId,
-      Class<?> to,
-      RefMode toRefMode) {
-    if (isDirectIdentity(fromDispatchId, from, fromRefMode, toDispatchId, to, toRefMode)) {
+  private static boolean isDirectIdentity(
+      int fromDispatchId, Class<?> from, int toDispatchId, Class<?> to) {
+    if (!isDirectlyAssignable(from, to)) {
       return false;
     }
-    return CompatibleScalarConverter.canConvert(fromDispatchId, from, toDispatchId, to);
+    boolean fromScalar = CompatibleScalarConverter.isScalar(fromDispatchId, from);
+    boolean toScalar = CompatibleScalarConverter.isScalar(toDispatchId, to);
+    return !fromScalar
+        || !toScalar
+        || CompatibleScalarConverter.sameScalar(fromDispatchId, from, toDispatchId, to);
   }
 
   private static boolean isRefTrackedScalarSchemaMismatch(
@@ -503,16 +534,8 @@ public class FieldConverters {
             || fromNullable != toNullable);
   }
 
-  private static boolean isDirectIdentity(
-      int fromDispatchId, Class<?> from, int toDispatchId, Class<?> to) {
-    if (!isDirectlyAssignable(from, to)) {
-      return false;
-    }
-    boolean fromScalar = CompatibleScalarConverter.isScalar(fromDispatchId, from);
-    boolean toScalar = CompatibleScalarConverter.isScalar(toDispatchId, to);
-    return !fromScalar
-        || !toScalar
-        || CompatibleScalarConverter.sameScalar(fromDispatchId, from, toDispatchId, to);
+  private static boolean isScalarField(SerializationFieldInfo fieldInfo) {
+    return CompatibleScalarConverter.isScalar(fieldInfo.dispatchId, fieldInfo.type);
   }
 
   private static boolean isDirectlyAssignable(Class<?> from, Class<?> to) {

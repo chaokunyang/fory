@@ -304,7 +304,7 @@ internal class KotlinSerializerSourceWriter(private val struct: KotlinSourceStru
     builder.append("          continue\n")
     builder.append("        }\n")
     builder.append("        val localField = fieldsById[fieldId]!!\n")
-    builder.append("        if (!canReadRemoteField(remoteField)) {\n")
+    builder.append("        if (!canReadGeneratedField(remoteField, localField)) {\n")
     builder.append("          skipField(readContext, remoteField)\n")
     builder.append("          continue\n")
     builder.append("        }\n")
@@ -845,7 +845,7 @@ internal class KotlinSerializerSourceWriter(private val struct: KotlinSourceStru
         .append("      val localField = fieldsById[")
         .append(field.id)
         .append("]!!\n")
-      builder.append(indent).append("      if (canReadRemoteField(remoteField)) {\n")
+      builder.append(indent).append("      if (canReadGeneratedField(remoteField, localField)) {\n")
       val readExpression = "readCompatibleFieldValue(readContext, remoteField, localField)"
       val constructorReadExpression =
         if (constructorRefs && field.trackingRef) {
@@ -924,7 +924,7 @@ internal class KotlinSerializerSourceWriter(private val struct: KotlinSourceStru
     for (field in struct.fields) {
       builder.append("        ").append(field.id).append(" -> {\n")
       builder.append("          val localField = fieldsById[").append(field.id).append("]!!\n")
-      builder.append("          if (canReadRemoteField(remoteField)) {\n")
+      builder.append("          if (canReadGeneratedField(remoteField, localField)) {\n")
       builder
         .append("            value.")
         .append(field.name)

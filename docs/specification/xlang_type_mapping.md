@@ -144,14 +144,10 @@ Notes:
   not apply inside nested collection, map, array, union, or generic positions. A peer `list<T>`
   payload that declares nullable or ref-tracked elements must raise a compatible-read error when the
   local matched field is `array<T>`.
-- The table above remains the canonical xlang schema mapping. In schema-compatible struct/class
-  field matching only, compatible readers may adapt direct top-level scalar fields across `bool`,
-  `string`, integer, unsigned integer, floating point, and `decimal` domains when the conversion is
-  explicitly allowed by the xlang serialization spec, the value is lossless, and both matched
-  top-level field schemas have `trackingRef = false`. Numeric strings use the finite ASCII decimal
-  grammar from the xlang serialization spec. That rule does not change TypeDef metadata, dynamic root
-  type mapping, schema-consistent mode, or nested
-  collection/map/array/union/generic positions.
+- The table above remains the canonical xlang schema mapping. Compatible readers may apply the
+  scalar field adaptation rules defined by `xlang_serialization_spec.md` during schema-compatible
+  struct/class field matching. Those rules do not change TypeDef metadata, dynamic root type
+  mapping, schema-consistent mode, or nested collection/map/array/union/generic positions.
 
 ### Scala IDL Mapping
 

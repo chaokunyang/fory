@@ -250,7 +250,7 @@ Schema B: { name: String (nullable) }
 // These have different fingerprints for schema-consistent reads
 ```
 
-In compatible mode, top-level scalar fields can still be matched when their scalar type is otherwise compatible and the nullability or optional wrapper differs, as long as both the remote and local field schemas have `trackingRef=false`. Present values are read through compatible scalar conversion and must satisfy the normal lossless conversion checks. Remote null values follow the compatible-read null/default behavior for the local field.
+In compatible mode, top-level scalar fields can still be matched when their scalar type is otherwise compatible and the nullability or optional wrapper differs. Present values are read through compatible scalar conversion and must satisfy the normal lossless conversion checks. Remote null values follow the compatible-read null/default behavior for the local field.
 
 ## Best Practices
 

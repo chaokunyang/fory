@@ -20,7 +20,6 @@
 package org.apache.fory.meta;
 
 import java.io.Serializable;
-import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
 import java.util.Objects;
 import org.apache.fory.annotation.ForyField;
@@ -87,9 +86,9 @@ public final class FieldInfo implements Serializable {
   }
 
   /**
-   * Convert this field into a {@link Descriptor}, the corresponding {@link Field} field will be
-   * null. Don't invoke this method if class does have <code>fieldName</code> field. In such case,
-   * reflection should be used to get the descriptor.
+   * Convert this field into a {@link Descriptor}, the corresponding {@link java.lang.reflect.Field}
+   * field will be null. Don't invoke this method if class does have <code>fieldName</code> field.
+   * In such case, reflection should be used to get the descriptor.
    */
   @Internal
   public Descriptor toDescriptor(TypeResolver resolver, Descriptor descriptor) {
@@ -154,10 +153,14 @@ public final class FieldInfo implements Serializable {
       if (localFieldType != null && isListArrayRootPair(fieldType, localFieldType)) {
         throw new IllegalArgumentException(
             StringUtils.format(
-                "Unsupported list/array compatible field mismatch for field {}.{}: peer={}, local={}",
+                "Unsupported list/array compatible field mismatch for field ${definedClass}.${fieldName}: peer=${peer}, local=${local}",
+                "definedClass",
                 definedClass,
+                "fieldName",
                 fieldName,
+                "peer",
                 fieldType,
+                "local",
                 localFieldType));
       }
       if (localFieldType != null && hasNestedListArrayShapeMismatch(fieldType, localFieldType)) {
@@ -234,11 +237,10 @@ public final class FieldInfo implements Serializable {
 
   private boolean isTopLevelListArrayCompatibleReadPair(
       TypeResolver resolver, Descriptor localDescriptor) {
-    Field localField = localDescriptor.getField();
-    if (localField == null || !resolver.isCrossLanguage()) {
+    if (!resolver.isCrossLanguage()) {
       return false;
     }
-    FieldTypes.FieldType localFieldType = FieldTypes.buildFieldType(resolver, localField);
+    FieldTypes.FieldType localFieldType = FieldTypes.buildFieldType(resolver, localDescriptor);
     int peerListElementTypeId = listElementTypeId(fieldType);
     if (peerListElementTypeId != Types.UNKNOWN) {
       int localArrayTypeId = arrayTypeId(localFieldType);

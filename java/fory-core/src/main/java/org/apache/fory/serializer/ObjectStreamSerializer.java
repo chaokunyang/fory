@@ -65,6 +65,7 @@ import org.apache.fory.meta.TypeDef;
 import org.apache.fory.platform.AndroidSupport;
 import org.apache.fory.platform.GraalvmSupport;
 import org.apache.fory.platform.internal._JDKAccess;
+import org.apache.fory.reflect.TypeRef;
 import org.apache.fory.resolver.ClassResolver;
 import org.apache.fory.resolver.TypeInfo;
 import org.apache.fory.resolver.TypeResolver;
@@ -640,6 +641,12 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
    */
   private static FieldTypes.FieldType buildFieldTypeFromClass(
       TypeResolver typeResolver, Class<?> fieldType) {
+    boolean nullable = !fieldType.isPrimitive();
+    // ObjectStreamField exposes the Java serialization field contract without Fory field
+    // annotations, so stream-layer metadata must use the resolver-owned native ref policy to match
+    // the field serializer framing for immutable scalars such as String.
+    boolean trackingRef = nullable && typeResolver.needToWriteRef(TypeRef.of(fieldType));
+
     // For primitives, use RegisteredFieldType
     if (fieldType.isPrimitive()) {
       int typeId = Types.getTypeId(typeResolver, fieldType);
@@ -650,7 +657,7 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
     Class<?> unwrapped = TypeUtils.unwrap(fieldType);
     if (unwrapped.isPrimitive()) {
       int typeId = Types.getTypeId(typeResolver, unwrapped);
-      return new FieldTypes.RegisteredFieldType(true, true, typeId, -1);
+      return new FieldTypes.RegisteredFieldType(nullable, trackingRef, typeId, -1);
     }
 
     // For registered types
@@ -658,17 +665,17 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
     if (classResolver.isRegisteredById(fieldType)) {
       int typeId = classResolver.getTypeIdForTypeDef(fieldType);
       int userTypeId = classResolver.getUserTypeIdForTypeDef(fieldType);
-      return new FieldTypes.RegisteredFieldType(true, true, typeId, userTypeId);
+      return new FieldTypes.RegisteredFieldType(nullable, trackingRef, typeId, userTypeId);
     }
 
     // For enums
     if (fieldType.isEnum()) {
-      return new FieldTypes.EnumFieldType(true, -1, -1);
+      return new FieldTypes.EnumFieldType(nullable, -1, -1);
     }
 
     // For arrays, collections, maps - use ObjectFieldType as a fallback
     // The actual type handling will be done during serialization
-    return new FieldTypes.ObjectFieldType(-1, true, true);
+    return new FieldTypes.ObjectFieldType(-1, nullable, trackingRef);
   }
 
   /**

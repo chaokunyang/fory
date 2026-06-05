@@ -168,12 +168,11 @@ Fory fory = Fory.builder()
 
 ### Schema Evolution
 
-Xlang mode enables compatible schema evolution by default. In native mode, enable compatible mode
-when your class definitions change over time:
+Compatible mode is the default for both xlang and native mode. Keep that default when your class
+definitions change over time:
 
 ```java
 Fory fory = Fory.builder().withXlang(false)
-  .withCompatible(true)
   .build();
 
 // Serialization and deserialization can use different class versions
@@ -227,8 +226,7 @@ Fory fory = Fory.builder()
   .withXlang(false)
   // Reference tracking for circular/shared references
   .withRefTracking(true)
-  // Schema evolution mode. Xlang already enables compatible mode by default.
-  .withCompatible(true)
+  // Compatible schema evolution is enabled by default.
   // Compression options
   .withIntCompressed(true)
   .withLongCompressed(true)

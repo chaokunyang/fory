@@ -68,7 +68,7 @@ Type.float64();
 Type.bfloat16();
 ```
 
-`float16` and `bfloat16` are useful when interoperating with runtimes or payloads that use reduced-precision numeric formats.
+`float16` and `bfloat16` are useful when interoperating with languages or payloads that use reduced-precision numeric formats.
 
 ## Arrays and Typed Arrays
 

@@ -21,10 +21,10 @@ license: |
 
 Schema evolution lets different versions of your service exchange messages safely — a v2 writer can produce a message a v1 reader still understands, and vice versa.
 
-## Compatible And Schema-Consistent Evolution
+## Compatible Mode And Same-Schema Opt-Out
 
 - **Compatible mode** (default): writes extra field metadata so readers can skip unknown fields and tolerate missing ones. Good for independent deployments, rolling upgrades, and xlang services.
-- **Schema-consistent mode**: more compact, but both sides must have exactly the same schema. Use it only when schemas do not change, or when all services update together.
+- **Same-schema opt-out**: more compact, but both sides must have exactly the same schema. Use it only when every reader and writer always uses the same struct schema.
 
 Compatible readers also tolerate selected scalar field type changes when the conversion is lossless.
 A matched field can read between `boolean`, `string`, numeric scalars, and `Decimal` when the
@@ -87,16 +87,18 @@ const fixedType = Type.struct(
 );
 ```
 
-`evolving: false` produces smaller messages for that struct, but **both the writer and reader must agree** on this setting. If one side writes with `evolving: false` and the other reads expecting compatible metadata, deserialization will fail.
+`evolving: false` produces smaller messages for that struct. Use it only when every reader and
+writer always uses the same struct schema. If one side writes with `evolving: false` and the other
+reads expecting compatible metadata, deserialization will fail.
 
 ## When to Use Each Mode
 
-|                                 | Schema-consistent | Compatible          |
-| ------------------------------- | ----------------- | ------------------- |
-| Services always update together | best choice       | works, but wasteful |
-| Independent deployments         | will break        | best choice         |
-| Smallest possible messages      | best choice       | slightly larger     |
-| Rolling upgrades                | risky             | safe                |
+| Requirement                                  | Same-schema opt-out | Compatible mode |
+| -------------------------------------------- | ------------------- | --------------- |
+| Every reader and writer uses the same schema | works               | works           |
+| Independent deployments                      | unsafe              | recommended     |
+| Smallest possible messages                   | smallest            | slightly larger |
+| Rolling upgrades                             | unsafe              | recommended     |
 
 ## Xlang Requirement
 

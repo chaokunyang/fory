@@ -207,9 +207,9 @@ Indexes are assigned in first-use order.
 
 Java native mode has two object schema modes.
 
-### Schema-Consistent Mode
+### Same-Schema Mode
 
-Schema-consistent mode is used when compatible mode is disabled. The writer and
+Same-schema mode is used when compatible mode is disabled. The writer and
 reader must have matching fields and field order. No per-object ClassDef is
 required for ordinary registered classes. Field values are written directly in
 protocol order.
@@ -225,7 +225,7 @@ In compatible mode, a matched field may read between direct top-level scalar
 ClassDef schemas when the remote value can be represented by the local scalar
 schema without changing the logical value. This is a read adaptation only:
 writers keep emitting their local canonical field schema and payload, and
-ClassDef metadata, schema-consistent mode, dynamic value serialization, and
+ClassDef metadata, same-schema mode, dynamic value serialization, and
 unknown-field skipping continue to treat the original field schemas as distinct.
 
 The rule applies only to the immediate schema of a matched field. It does not

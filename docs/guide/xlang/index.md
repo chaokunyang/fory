@@ -30,10 +30,10 @@ workflow is a better fit.
 - **Multi-language support**: Java, Python, C++, Go, Rust,
   JavaScript/TypeScript, C#, Swift, Dart, Scala, and Kotlin interoperate through
   the same xlang format.
-- **Reference support**: Shared and circular references work across language boundaries when reference tracking is enabled in each runtime.
+- **Reference support**: Shared and circular references work across language boundaries when reference tracking is enabled in each peer.
 - **Schema evolution**: Compatible mode is the xlang default so readers can tolerate added, removed, or reordered fields.
-- **Out-of-band buffers**: Language runtimes can expose zero-copy buffer paths for large binary data.
-- **High performance**: Runtimes use generated serializers, JIT serializers, or optimized code paths where available.
+- **Out-of-band buffers**: Language implementations can expose zero-copy buffer paths for large binary data.
+- **High performance**: Fory implementations use generated serializers, JIT serializers, or optimized code paths where available.
 
 ## Supported Languages
 
@@ -57,7 +57,7 @@ Use xlang mode when:
 
 - Building multi-language microservices
 - Creating polyglot data pipelines
-- Sharing data between frontend JavaScript/TypeScript and backend runtimes such
+- Sharing data between frontend JavaScript/TypeScript and backend services such
   as Java, Python, Go, C#, Scala, or Kotlin
 
 Use native mode for same-language traffic in Java, Scala, Kotlin, Python, C++,

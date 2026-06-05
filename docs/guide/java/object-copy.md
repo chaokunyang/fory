@@ -22,7 +22,7 @@ license: |
 This page covers in-memory Java object graph copying with `Fory#copy(Object)`.
 
 `Fory.copy` is a deep-copy operation for Java object graphs. It does not serialize to bytes first.
-Instead, it uses the same runtime type system and serializers to create a copied object graph in
+Instead, it uses Fory's type system and serializers to create a copied object graph in
 memory.
 
 ## When to Use Object Copy
@@ -198,7 +198,7 @@ public class Example {
 }
 ```
 
-This follows the same registration rules as the rest of the runtime: if the runtime requires class
+This follows the same registration rules as other Fory operations: if the Fory instance requires class
 registration, copied runtime types must be registered first.
 
 ## Thread-Safe Copy
@@ -235,7 +235,7 @@ Fory already provides copy support for many common Java runtime types, including
 - Java time and date/time values
 - Beans, records, and nested object graphs
 
-If the runtime already knows how to serialize a mutable type, it may still need an explicit copy
+If Fory already knows how to serialize a mutable type, it may still need an explicit copy
 implementation in that serializer. For mutable serializers, the default `Serializer.copy(...)`
 throws `UnsupportedOperationException` unless the serializer overrides it.
 
@@ -362,12 +362,12 @@ Fix it by either:
 
 ### Registration Errors
 
-If your runtime uses `requireClassRegistration(true)`, make sure the copied runtime types are
+If your Fory instance uses `requireClassRegistration(true)`, make sure the copied runtime types are
 registered before calling `copy(...)`.
 
 ## Related Topics
 
-- [Basic Serialization](basic-serialization.md) - Runtime creation and core APIs
+- [Basic Serialization](basic-serialization.md) - Fory instance creation and core APIs
 - [Configuration](configuration.md) - Builder options including `withRefCopy`
 - [Custom Serializers](custom-serializers.md) - Serializer design and registration
-- [Virtual Threads](virtual-threads.md) - Thread-safe runtime guidance
+- [Virtual Threads](virtual-threads.md) - Thread-safe Fory guidance

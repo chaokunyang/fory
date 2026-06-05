@@ -361,12 +361,11 @@ auto decoded = fory.deserialize<std::shared_ptr<GraphNode>>(bytes).value();
 
 ### Polymorphism + Schema Evolution
 
-Use compatible mode for schema evolution with polymorphic types:
+Compatible mode is enabled by default for schema evolution with polymorphic types:
 
 ```cpp
 auto fory = Fory::builder()
     .xlang(true)
-    .compatible(true)  // Enable schema evolution
     .track_ref(true)
     .build();
 ```

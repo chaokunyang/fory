@@ -23,7 +23,7 @@ Apache Fory™ supports schema evolution in **Compatible mode**, allowing serial
 
 ## Compatible Mode
 
-Enable schema evolution with `compatible(true)`:
+Compatible mode is enabled by default:
 
 ```rust
 use fory::Fory;
@@ -47,10 +47,10 @@ struct PersonV2 {
     metadata: HashMap<String, String>,
 }
 
-let mut fory1 = Fory::builder().xlang(false).compatible(true).build();
+let mut fory1 = Fory::builder().xlang(false).build();
 fory1.register::<PersonV1>(1)?;
 
-let mut fory2 = Fory::builder().xlang(false).compatible(true).build();
+let mut fory2 = Fory::builder().xlang(false).build();
 fory2.register::<PersonV2>(1)?;
 
 let person_v1 = PersonV1 {
@@ -69,9 +69,10 @@ assert_eq!(person_v2.age, 30);
 assert_eq!(person_v2.phone, None);
 ```
 
-### Disable Evolution for Stable Structs
+### Same-Schema Struct Optimization
 
-If a struct schema is stable and will not change, you can disable evolution for that struct to avoid compatible metadata overhead. Use `#[fory(evolving = false)]`:
+For a struct where every reader and writer always uses the same schema, you can disable evolution
+for that struct to reduce payload size. Use `#[fory(evolving = false)]`:
 
 ```rust
 use fory::ForyStruct;
@@ -178,7 +179,7 @@ enum NewEvent {
     KeyPress(String),  // New variant
 }
 
-let mut fory = Fory::builder().xlang(false).compatible(true).build();
+let mut fory = Fory::builder().xlang(false).build();
 
 // Serialize with old schema
 let old_bytes = fory.serialize(&OldEvent::Click { x: 100, y: 200 })?;
@@ -203,7 +204,7 @@ assert!(matches!(new_event, NewEvent::Click { x: 100, y: 200, timestamp: 0 }));
 
 ## Tuple Support
 
-Apache Fory™ supports tuples up to 22 elements out of the box with efficient serialization in both compatible and schema-consistent modes.
+Apache Fory™ supports tuples up to 22 elements out of the box with efficient serialization in both compatible mode and the same-schema optimization.
 
 **Features:**
 
@@ -213,7 +214,7 @@ Apache Fory™ supports tuples up to 22 elements out of the box with efficient s
 
 **Schema modes:**
 
-1. **Schema-consistent mode**: Serializes elements sequentially without collection headers for minimal overhead
+1. **Same-schema optimization**: Serializes elements sequentially without collection headers for minimal overhead
 2. **Compatible mode**: Uses collection protocol with type metadata for schema evolution
 
 ```rust

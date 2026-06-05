@@ -32,8 +32,8 @@ This page documents all configuration options available through `ForyBuilder`.
 | `compressLongArray`                 | Enables or disables SIMD-accelerated compression for long arrays when values can fit in smaller data types. Requires Java 16+.                                                                                                                                                                                                                                                                                                                                                                                                                | `false`                                                              |
 | `compressString`                    | Enables or disables string compression for smaller size.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      | `false`                                                              |
 | `classLoader`                       | The classloader is fixed per `Fory` instance because Fory caches class metadata. To use a different loader, create a new `Fory` or `ThreadSafeFory` configured with that loader, or rely on the thread context classloader before first class resolution.                                                                                                                                                                                                                                                                                     | `Thread.currentThread().getContextClassLoader()`                     |
-| `compatible`                        | Type forward/backward compatibility config. `true`: class schema can be different between serialization peer and deserialization peer. They can add/delete fields independently. `false`: class schema must be consistent between serialization peer and deserialization peer. When unset, compatible mode is enabled in both xlang and native mode. [See more](schema-evolution.md).                                                                                                                                                         | `true`                                                               |
-| `checkClassVersion`                 | Determines whether to check the consistency of the class schema. If enabled, Fory checks, writes, and checks consistency using the `classVersionHash`. It will be automatically disabled when compatible mode is enabled. Disabling is not recommended unless you can ensure the class won't evolve.                                                                                                                                                                                                                                          | `false`                                                              |
+| `compatible`                        | Schema evolution mode. `true`: readers can tolerate compatible field additions, removals, and reordering. `false`: use only when every reader and writer always uses the same class schema and you need smaller, faster same-schema payloads. When unset, compatible mode is enabled in both xlang and native mode. [See more](schema-evolution.md).                                                                                                                                                                                          | `true`                                                               |
+| `checkClassVersion`                 | Checks the class-version hash for intentional same-schema payloads. Fory disables this check when compatible mode is enabled because compatible mode carries schema metadata for evolution.                                                                                                                                                                                                                                                                                                                                                   | `false`                                                              |
 | `checkJdkClassSerializable`         | Enables or disables checking of `Serializable` interface for classes under `java.*`. If a class under `java.*` is not `Serializable`, Fory will throw an `UnsupportedOperationException`.                                                                                                                                                                                                                                                                                                                                                     | `true`                                                               |
 | `registerGuavaTypes`                | Whether to pre-register Guava types such as `RegularImmutableMap`/`RegularImmutableList`. These types are not public API, but seem pretty stable.                                                                                                                                                                                                                                                                                                                                                                                             | `true`                                                               |
 | `requireClassRegistration`          | Disabling may allow unknown classes to be deserialized, potentially causing security risks.                                                                                                                                                                                                                                                                                                                                                                                                                                                   | `true`                                                               |
@@ -60,25 +60,24 @@ Fory fory = Fory.builder()
   .withIntCompressed(true)
   // compress long for smaller size
   .withLongCompressed(true)
-  // Optional: use schema-consistent mode for smaller payloads only when
-  // writer and reader always use the same class schema.
+  // Optional: smaller same-schema payloads only when every reader
+  // and writer always uses the same class schema.
   // .withCompatible(false)
   // enable async multi-threaded compilation.
   .withAsyncCompilation(true)
   .build();
 ```
 
-## Compatible Mode And Schema-Consistent Mode
+## Compatible Mode
 
 Compatible mode is enabled by default for both xlang and native mode. Keep this default when classes
 may evolve independently, when services deploy separately, or when xlang schemas are written by hand
 in different languages.
 
 Use `withCompatible(false)` only when the class schema used to deserialize every payload is always
-the same as the class schema used to serialize it. This schema-consistent mode avoids field metadata
-payload and can be faster, but it requires lockstep schemas. For xlang payloads, keep compatible mode
-unless every language schema has been aligned and verified, or native types are generated from Fory
-schema IDL.
+the same as the class schema used to serialize it and you need smaller, faster same-schema payloads.
+For xlang payloads, keep the default unless schemas are verified across languages or generated from
+Fory schema IDL.
 
 ## Security
 

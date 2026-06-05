@@ -603,7 +603,8 @@ class ThreadSafeFory:
         ref (bool): Whether to enable reference tracking. Defaults to False.
         strict (bool): Whether to require type registration. Defaults to True.
         compatible (bool): Whether to enable compatible mode. Defaults to compatible mode
-            in xlang and schema-consistent mode in Python native mode.
+            in both xlang and Python native mode. Set False only when every reader and
+            writer always uses the same Python class schema and smaller payloads matter.
         max_depth (int): Maximum depth for deserialization. Defaults to 50.
         max_collection_size (int): Maximum allowed size for collections and maps during
             deserialization. Defaults to 1,000,000.

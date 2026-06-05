@@ -264,7 +264,7 @@ public final class AddressBookServiceGrpc {
 The generated marshaller serializes each request or response with the schema
 module's `ThreadSafeFory`. It uses grpc-java's `MethodDescriptor.Marshaller`
 API, so applications compiling these files must provide grpc-java dependencies.
-Those dependencies are not added to Fory Java runtime artifacts.
+Those dependencies are not added to Fory Java artifacts.
 
 ## Python
 
@@ -1292,9 +1292,9 @@ not pass a serializer instance.
 
 ## Scala
 
-The Scala target emits Scala 3 source only. The `fory-scala` runtime artifact
-still supports Scala 2.13 and Scala 3, but generated IDL source and macro
-derivation require Scala 3.
+The Scala target emits Scala 3 source only. The `fory-scala` artifact still
+supports Scala 2.13 and Scala 3, but generated IDL source and macro derivation
+require Scala 3.
 
 ### Output Layout
 

@@ -21,7 +21,7 @@ license: |
 
 Schema evolution lets different versions of your app exchange messages safely — a v2 writer can produce a message that a v1 reader can still decode, and vice versa.
 
-## Compatible And Schema-Consistent Evolution
+## Compatible Mode And Same-Schema Opt-Out
 
 ### Compatible Mode
 
@@ -45,9 +45,10 @@ leading `+`, Unicode digits, underscores, `NaN`, or `Infinity`. Nullable fields 
 these conversions, but reference-tracked scalar type changes are incompatible. Invalid strings,
 out-of-range values, and lossy conversions fail with `InvalidDataException` during deserialization.
 
-### Schema-Consistent Mode
+### Same-Schema Optimization
 
-Both sides must have the same model. Fory validates that the schemas match and will reject messages from a different schema version. Use this when all services are always updated together and you want schema mismatches to be caught as fast errors.
+Use this only when every reader and writer always uses the same schema and you need smaller, faster
+payloads:
 
 ```dart
 final fory = Fory(compatible: false);
@@ -92,7 +93,7 @@ If you add field IDs after payloads are already in production, existing stored m
 
 ## Xlang Notes
 
-Evolution only works when **all** runtimes that exchange messages agree on:
+Evolution only works when **all** peers that exchange messages agree on:
 
 1. The same `compatible` setting.
 2. The same type registration identity (numeric ID or `name`).

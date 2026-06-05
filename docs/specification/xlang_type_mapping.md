@@ -147,12 +147,12 @@ Notes:
 - The table above remains the canonical xlang schema mapping. Compatible readers may apply the
   scalar field adaptation rules defined by `xlang_serialization_spec.md` during schema-compatible
   struct/class field matching. Those rules do not change TypeDef metadata, dynamic root type
-  mapping, schema-consistent mode, or nested collection/map/array/union/generic positions.
+  mapping, same-schema mode, or nested collection/map/array/union/generic positions.
 
 ### Scala IDL Mapping
 
-The Scala schema IDL target emits Scala 3 source only. The `fory-scala` runtime
-artifact remains cross-built for Scala 2.13 and Scala 3.
+The Scala schema IDL target emits Scala 3 source only. The `fory-scala` artifact remains cross-built
+for Scala 2.13 and Scala 3.
 
 | Fory schema kind                      | Scala generated carrier                                                                  |
 | ------------------------------------- | ---------------------------------------------------------------------------------------- |

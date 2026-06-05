@@ -26,7 +26,7 @@ schema evolution behavior.
 ## Type Identity
 
 Structs and enums can use a numeric ID or a name. Pick one identity strategy for a type and use it
-consistently in every runtime that reads or writes the payload.
+consistently in every implementation that reads or writes the payload.
 
 ```ts
 import { Type } from "@apache-fory/core";
@@ -143,7 +143,7 @@ declared type and `.setDynamic(Dynamic.TRUE)` always writes the runtime type. Th
 
 ## Per-Struct Schema Evolution
 
-JavaScript uses compatible schema evolution by default. For a stable struct that should omit
+JavaScript uses compatible schema evolution by default. For a same-schema struct that should omit
 evolution metadata, set `evolving: false`:
 
 ```ts
@@ -155,7 +155,7 @@ const fixedType = Type.struct(
 );
 ```
 
-Both writer and reader must agree on `evolving: false`.
+Use `evolving: false` only when every reader and writer always uses the same struct schema.
 
 ## Related Topics
 

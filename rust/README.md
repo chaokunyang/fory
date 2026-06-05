@@ -299,7 +299,7 @@ struct Zoo {
     star_animal: Box<dyn Animal>,
 }
 
-let mut fory = Fory::builder().xlang(false).compatible(true).build();
+let mut fory = Fory::builder().xlang(false).build();
 fory.register::<Dog>(100)?;
 fory.register::<Cat>(101)?;
 fory.register::<Zoo>(102)?;
@@ -320,7 +320,7 @@ assert_eq!(decoded.star_animal.speak(), "Woof!");
 
 ### 4. Schema Evolution
 
-Apache Fory™ supports schema evolution in **Compatible mode**, allowing serialization and deserialization peers to have different type definitions. Xlang mode uses compatible schema evolution by default. In native mode, add `.compatible(true)` when Rust-only payloads need independent schema evolution.
+Apache Fory™ supports schema evolution in **Compatible mode**, allowing serialization and deserialization peers to have different type definitions. Compatible mode is the default for both xlang and native mode. Set `.compatible(false)` only when every reader and writer always uses the same schema and you need smaller, faster payloads. For xlang payloads, keep compatible mode unless schemas are verified across languages or generated from Fory schema IDL.
 
 **Features:**
 
@@ -358,10 +358,10 @@ struct PersonV2 {
     metadata: HashMap<String, String>,
 }
 
-let mut fory1 = Fory::builder().xlang(true).compatible(true).build();
+let mut fory1 = Fory::builder().xlang(true).build();
 fory1.register_by_name::<PersonV1>("example.Person").unwrap();
 
-let mut fory2 = Fory::builder().xlang(true).compatible(true).build();
+let mut fory2 = Fory::builder().xlang(true).build();
 fory2.register_by_name::<PersonV2>("example.Person").unwrap();
 
 let person_v1 = PersonV1 {
@@ -434,7 +434,7 @@ assert_eq!(value, decoded);
 
 ### 6. Native-Mode Tuple Support
 
-Apache Fory™ supports tuples up to 22 elements out of the box with efficient serialization in both compatible and schema-consistent modes.
+Apache Fory™ supports tuples up to 22 elements out of the box with efficient serialization in both compatible mode and same-schema mode.
 
 **Features:**
 
@@ -444,7 +444,7 @@ Apache Fory™ supports tuples up to 22 elements out of the box with efficient s
 
 **Schema modes:**
 
-1. **Schema-consistent mode**: Serializes elements sequentially without collection headers for minimal overhead
+1. **Same-schema mode**: Serializes elements sequentially without collection headers for minimal overhead
 2. **Compatible mode**: Uses collection protocol with type metadata for schema evolution
 
 ```rust

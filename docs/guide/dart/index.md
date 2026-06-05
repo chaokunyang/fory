@@ -128,7 +128,7 @@ dart run build_runner build --delete-conflicting-outputs
 
 | Topic                                           | Description                                                     |
 | ----------------------------------------------- | --------------------------------------------------------------- |
-| [Configuration](configuration.md)               | Runtime options, compatible mode, and safety limits             |
+| [Configuration](configuration.md)               | Fory options, compatible mode, and safety limits                |
 | [Basic Serialization](basic-serialization.md)   | `serialize`, `deserialize`, generated registration, root graphs |
 | [Code Generation](code-generation.md)           | `@ForyStruct`, build runner, and generated modules              |
 | [Xlang Serialization](xlang-serialization.md)   | Interoperability rules and field alignment                      |
@@ -145,4 +145,4 @@ dart run build_runner build --delete-conflicting-outputs
 - [Xlang serialization specification](../../specification/xlang_serialization_spec.md)
 - [Xlang implementation guide](../../specification/xlang_implementation_guide.md)
 - [Xlang guide](../xlang/index.md)
-- [Dart runtime source directory](https://github.com/apache/fory/tree/main/dart)
+- [Dart implementation source directory](https://github.com/apache/fory/tree/main/dart)

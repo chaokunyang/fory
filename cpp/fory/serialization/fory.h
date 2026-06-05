@@ -62,11 +62,10 @@ class ThreadSafeFory;
 /// Example:
 /// ```cpp
 /// // Single-threaded xlang Fory (not thread-safe)
-/// auto fory = Fory::builder().xlang(true).compatible(true).build();
+/// auto fory = Fory::builder().build();
 ///
 /// // Thread-safe Fory (uses context pools)
-/// auto fory =
-/// Fory::builder().xlang(true).compatible(true).build_thread_safe();
+/// auto fory = Fory::builder().build_thread_safe();
 /// ```
 class ForyBuilder {
 public:
@@ -141,7 +140,7 @@ private:
       config_.compatible = true;
     }
     // Compatible mode carries field metadata for evolution; schema hash checks
-    // belong only to schema-consistent mode.
+    // are only useful for same-schema payloads.
     if (config_.compatible) {
       config_.check_struct_version = false;
     }
@@ -514,7 +513,7 @@ protected:
 ///
 /// Example:
 /// ```cpp
-/// auto fory = Fory::builder().xlang(true).compatible(true).build();
+/// auto fory = Fory::builder().build();
 /// fory.register_struct<MyStruct>(1);
 ///
 /// MyStruct obj{...};
@@ -905,8 +904,7 @@ private:
 ///
 /// Example:
 /// ```cpp
-/// auto fory =
-/// Fory::builder().xlang(true).compatible(true).build_thread_safe();
+/// auto fory = Fory::builder().build_thread_safe();
 /// fory.register_struct<MyStruct>(1);
 ///
 /// // Can be used from multiple threads safely

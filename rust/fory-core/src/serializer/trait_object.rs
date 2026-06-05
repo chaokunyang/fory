@@ -91,7 +91,7 @@ macro_rules! downcast_and_serialize {
 /// register_trait_type!(Animal, Dog, Cat);
 ///
 /// # fn main() {
-/// let mut fory = Fory::builder().xlang(false).compatible(true).build();
+/// let mut fory = Fory::builder().xlang(false).build();
 /// fory.register::<Dog>(100).unwrap();
 /// fory.register::<Cat>(101).unwrap();
 ///

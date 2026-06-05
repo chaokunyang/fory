@@ -19,10 +19,9 @@ license: |
   limitations under the License.
 ---
 
-This page covers C++ runtime configuration. `Fory::builder()` creates xlang
-payloads by default, and omitted compatible mode resolves to compatible mode in
-both xlang and native mode. Native mode is selected explicitly with
-`.xlang(false)`.
+This page covers C++ Fory instance configuration. `Fory::builder()` creates xlang
+payloads by default. Compatible mode is also enabled by default. Select native
+mode only when the payload stays in C++.
 
 ## Builder Pattern
 
@@ -33,25 +32,17 @@ Use `Fory::builder()` to construct Fory instances with custom configuration:
 
 using namespace fory::serialization;
 
-// Xlang mode with compatible schema evolution.
-auto fory = Fory::builder().xlang(true).build();
+// Default xlang mode.
+auto fory = Fory::builder().build();
 
-// Schema-consistent xlang payloads.
-auto fory = Fory::builder()
-    .xlang(true)
-    .compatible(false)
-    .build();
-
-// Native mode for C++-only traffic; compatible mode is still the default.
+// Native mode for C++-only payloads.
 auto fory = Fory::builder()
     .xlang(false)
     .build();
 
-// Schema-consistent native mode for stable lockstep schemas.
+// Same-schema optimization. Use only when every reader and writer
+// always uses the same schema.
 auto fory = Fory::builder()
-    .xlang(false)
-    .track_ref(true)
-    .max_dyn_depth(10)
     .compatible(false)
     .build();
 ```
@@ -76,21 +67,19 @@ writes native-mode payloads for C++-only traffic.
 
 ### compatible(bool)
 
-Enable compatible schema evolution.
+Compatible mode is enabled by default. No builder call is required for the
+default compatible mode. Set `.compatible(false)` only when every reader and
+writer always uses the same schema and you need smaller, faster same-schema
+payloads.
 
 ```cpp
 auto fory = Fory::builder()
-    .xlang(true)
-    .compatible(true)
+    .compatible(false)
     .build();
 ```
 
-When enabled, supports reading data serialized with different schema versions.
-When omitted, compatible mode is enabled in both xlang and native mode. Use
-`.compatible(false)` only when writer and reader always use the same schema and
-you want smaller schema-consistent payloads. For hand-written xlang schemas
-across languages, keep compatible mode unless schema consistency has been
-aligned and verified, or native types are generated from Fory schema IDL.
+For xlang payloads, keep the default unless schemas are verified across
+languages or generated from Fory schema IDL.
 
 **Default:** `true`
 
@@ -100,7 +89,6 @@ Enable/disable reference tracking for shared and circular references.
 
 ```cpp
 auto fory = Fory::builder()
-    .xlang(true)
     .track_ref(true)  // Enable reference tracking
     .build();
 ```
@@ -115,7 +103,6 @@ Set maximum allowed nesting depth for dynamically-typed objects.
 
 ```cpp
 auto fory = Fory::builder()
-    .xlang(true)
     .max_dyn_depth(10)  // Allow up to 10 levels
     .build();
 ```
@@ -135,7 +122,6 @@ Enable/disable struct version checking.
 
 ```cpp
 auto fory = Fory::builder()
-    .xlang(true)
     .compatible(false)
     .check_struct_version(true)  // Enable version checking
     .build();
@@ -150,7 +136,7 @@ When enabled, validates type hashes to detect schema mismatches.
 ### Single-Threaded (Fastest)
 
 ```cpp
-auto fory = Fory::builder().xlang(true).build();  // Returns Fory
+auto fory = Fory::builder().build();  // Returns Fory
 ```
 
 Single-threaded `Fory` is the fastest option, but NOT thread-safe. Use one instance per thread.
@@ -158,7 +144,7 @@ Single-threaded `Fory` is the fastest option, but NOT thread-safe. Use one insta
 ### Thread-Safe
 
 ```cpp
-auto fory = Fory::builder().xlang(true).build_thread_safe();  // Returns ThreadSafeFory
+auto fory = Fory::builder().build_thread_safe();  // Returns ThreadSafeFory
 ```
 
 `ThreadSafeFory` uses a pool of Fory instances to provide thread-safe serialization. Slightly slower due to pool overhead, but safe to use from multiple threads concurrently.
@@ -178,7 +164,7 @@ auto fory = Fory::builder().xlang(true).build_thread_safe();  // Returns ThreadS
 Security-related configuration:
 
 - Register all structs and polymorphic implementations before deserializing untrusted payloads.
-- Use `check_struct_version(true)` with `compatible(false)` when exact schema matching is required.
+- Use `check_struct_version(true)` with `compatible(false)` for intentional same-schema payloads.
 - Keep `max_dyn_depth(...)` as low as your model permits to reject unexpectedly deep polymorphic
   graphs.
 - Prefer concrete fields over broad polymorphic fields for untrusted input.

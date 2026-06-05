@@ -96,8 +96,7 @@ foryc animals.fdl --java_out=./generated/java --python_out=./generated/python --
 
 The generated service code uses normal gRPC APIs, but request and response
 objects are serialized with Fory. Applications provide their own grpc-java or
-`grpcio` dependencies; Fory runtime packages do not add gRPC as a hard
-dependency.
+`grpcio` dependencies; Fory packages do not add gRPC as a hard dependency.
 
 ## Why Fory IDL?
 

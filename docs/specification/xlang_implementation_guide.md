@@ -335,8 +335,7 @@ layout. Layout classification must reject top-level scalar conversions when
 either matched schema has `trackingRef = true` and must reject same scalar type
 pairs whose top-level `trackingRef` framing differs; converters must not add a
 reference-table path for scalar mismatches. Same-schema readers with matching
-reference and null/optional framing and schema-consistent readers must keep
-direct scalar read paths without conversion branches or per-field conversion
+reference and null/optional framing must keep direct scalar read paths without conversion branches or per-field conversion
 objects. Same raw scalar types with different null/optional framing may still
 use the compatible nullable/optional composition path when both fields are not
 reference-tracked.
@@ -366,7 +365,7 @@ In Java:
 - `@ForyEnumId` can override that with a stable explicit tag
 - `serializeEnumByName(true)` affects native Java mode, not xlang mode
 
-Other runtimes should preserve the same wire rule even if the configuration or
+Other language implementations should preserve the same wire rule even if the configuration or
 annotation surface differs.
 
 ## Out-Of-Band Buffer Objects

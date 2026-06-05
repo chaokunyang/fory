@@ -29,13 +29,14 @@ In many systems, the schema of a class used for serialization may change over ti
 
 Fory defaults to compatible mode in both Java native mode (`xlang=false`) and xlang mode. This default is safer for independently deployed services because writer and reader schemas can diverge during rolling upgrades or across language implementations.
 
-Schema-consistent mode is available with `ForyBuilder#withCompatible(false)`. Use it only when the class schema used to deserialize every payload is always the same as the class schema used to serialize it, and you want smaller payloads or exact schema validation.
+The same-schema optimization is available with `ForyBuilder#withCompatible(false)`. Use it only when
+the class schema used to deserialize every payload is always the same as the class schema used to
+serialize it, and you need smaller, faster payloads.
 
 ### Compatible Mode
 
 Compatible mode is enabled by default, so deserialization can tolerate added, removed, or reordered
-fields when schema metadata remains compatible. Use `ForyBuilder#withCompatible(true)` only when
-re-enabling compatibility after a shared builder preset disabled it.
+fields when schema metadata remains compatible.
 
 In this compatible mode, deserialization can handle schema changes such as missing or extra fields, allowing it to succeed even when the serialization and deserialization processes have different class schemas.
 
@@ -50,7 +51,6 @@ lossy conversions fail during deserialization.
 
 ```java
 Fory fory = Fory.builder().withXlang(false)
-  .withCompatible(true)
   .build();
 
 byte[] bytes = fory.serialize(object);
@@ -67,10 +67,11 @@ This compatible mode involves serializing class metadata into the serialized out
 - `Evolution.ENABLED`: require schema evolution metadata for this class. Registration or type resolution fails if the Fory instance cannot emit that metadata.
 - `Evolution.DISABLED`: force fixed-schema `STRUCT/NAMED_STRUCT` encoding even when compatible metadata is otherwise enabled.
 
-Use `@ForyStruct(evolution = Evolution.DISABLED)` for fixed-schema structs. The boolean shorthand
-`@ForyStruct(evolving = false)` is also supported as a fixed-schema opt-out.
+Use `@ForyStruct(evolution = Evolution.DISABLED)` only for same-schema structs. The boolean
+shorthand `@ForyStruct(evolving = false)` is also supported as a same-schema opt-out.
 
-If a class schema is stable and will not change, opt out of schema evolution on that class to avoid compatible metadata overhead:
+For a class where every reader and writer always uses the same schema, opt out of schema evolution
+on that class to reduce payload size:
 
 ```java
 import org.apache.fory.annotation.ForyStruct;
@@ -175,9 +176,9 @@ public class StructMappingExample {
   }
 
   static ThreadSafeFory fory1 = Fory.builder().withXlang(false)
-    .withCompatible(true).buildThreadSafeFory();
+    .buildThreadSafeFory();
   static ThreadSafeFory fory2 = Fory.builder().withXlang(false)
-    .withCompatible(true).buildThreadSafeFory();
+    .buildThreadSafeFory();
 
   static {
     fory1.register(Struct1.class);
@@ -198,7 +199,7 @@ public class StructMappingExample {
 
 ## Deserialize POJO into Another Type
 
-Fory allows you to serialize one POJO and deserialize it into a different POJO. The different POJO means schema inconsistency, so keep compatible mode enabled with the default builder setting or `ForyBuilder#withCompatible(true)`.
+Fory allows you to serialize one POJO and deserialize it into a different POJO. The different POJO means schema inconsistency, so keep compatible mode enabled.
 
 ```java
 public class DeserializeIntoType {
@@ -219,7 +220,7 @@ public class DeserializeIntoType {
   }
 
   static ThreadSafeFory fory = Fory.builder().withXlang(false)
-    .withCompatible(true).buildThreadSafeFory();
+    .buildThreadSafeFory();
 
   public static void main(String[] args) {
     Struct1 struct1 = new Struct1(10, "abc");
@@ -231,14 +232,14 @@ public class DeserializeIntoType {
 
 ## Configuration
 
-| Option                    | Description                            | Default                   |
-| ------------------------- | -------------------------------------- | ------------------------- |
-| `compatibleMode`          | `SCHEMA_CONSISTENT` or `COMPATIBLE`    | `COMPATIBLE`              |
-| `checkClassVersion`       | Check class schema consistency         | `false`                   |
-| `metaShareEnabled`        | Enable meta sharing                    | `true` if Compatible mode |
-| `scopedMetaShareEnabled`  | Scoped meta share per serialization    | `true` if Compatible mode |
-| `deserializeUnknownClass` | Handle non-existent or unknown classes | `true` if Compatible mode |
-| `metaCompressor`          | Compressor for meta compression        | `DeflaterMetaCompressor`  |
+| Option                    | Description                                                         | Default                   |
+| ------------------------- | ------------------------------------------------------------------- | ------------------------- |
+| `compatibleMode`          | `COMPATIBLE` or same-schema opt-out (`SCHEMA_CONSISTENT` API value) | `COMPATIBLE`              |
+| `checkClassVersion`       | Check schema hashes for same-schema payloads                        | `false`                   |
+| `metaShareEnabled`        | Enable meta sharing                                                 | `true` if Compatible mode |
+| `scopedMetaShareEnabled`  | Scoped meta share per serialization                                 | `true` if Compatible mode |
+| `deserializeUnknownClass` | Handle non-existent or unknown classes                              | `true` if Compatible mode |
+| `metaCompressor`          | Compressor for meta compression                                     | `DeflaterMetaCompressor`  |
 
 ## Best Practices
 

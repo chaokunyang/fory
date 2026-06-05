@@ -1,6 +1,6 @@
 # Apache Fory™ Dart
 
-Apache Fory™ Dart is the Dart xlang runtime for
+Apache Fory™ Dart is the Dart xlang implementation for
 [Apache Fory™](https://github.com/apache/fory). It reads and writes Fory's
 cross-language wire format and is designed around generated serializers for
 annotated Dart models, with customized serializers available for advanced use
@@ -116,7 +116,7 @@ Exactly one registration mode is required:
 
 Use `.` inside `name` to add a namespace prefix, for example `example.Person`.
 
-Keep the same registration identity on all runtimes that exchange the type.
+Keep the same registration identity on every peer that exchanges the type.
 
 ## Configuration
 
@@ -131,7 +131,7 @@ final fory = Fory(
 | Option               | Default    | Description                                             |
 | -------------------- | ---------- | ------------------------------------------------------- |
 | `compatible`         | `true`     | Enables compatible struct encoding for schema evolution |
-| `checkStructVersion` | `false`    | Validates struct version in schema-consistent mode      |
+| `checkStructVersion` | `false`    | Validates struct version for same-schema payloads       |
 | `maxDepth`           | `256`      | Maximum nesting depth per operation                     |
 | `maxCollectionSize`  | `1 << 20`  | Maximum collection and map payload size                 |
 | `maxBinarySize`      | `64 << 20` | Maximum binary payload size                             |
@@ -281,7 +281,7 @@ rounding. For 16-bit floating-point arrays, Dart exposes `Float16List` and
 The main exported API includes:
 
 - `Fory` — main serialization facade
-- `Config` — runtime configuration
+- `Config` — Fory configuration
 - `ForyStruct`, `ForyField`, `ListField`, `SetField`, `MapField` — struct annotations
 - `ForyUnion` — union type annotation
 - `Serializer`, `UnionSerializer`, `EnumSerializer` — serializer base classes
@@ -296,7 +296,7 @@ The main exported API includes:
 
 ## Cross-Language Notes
 
-- The Dart runtime only supports xlang payloads.
+- Fory Dart only supports xlang payloads.
 - Register user-defined types before serialization or deserialization.
 - Keep numeric IDs or `name` mappings consistent across
   languages.

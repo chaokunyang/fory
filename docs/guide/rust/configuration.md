@@ -19,7 +19,7 @@ license: |
   limitations under the License.
 ---
 
-This page covers Rust runtime configuration. `Fory::builder().xlang(true).build()` selects xlang mode with
+This page covers Rust Fory instance configuration. `Fory::builder().xlang(true).build()` selects xlang mode with
 compatible schema evolution. Native mode is selected explicitly with `.xlang(false)` and also defaults to
 compatible schema evolution.
 
@@ -38,23 +38,24 @@ languages:
 let fory = Fory::builder().xlang(true).build();
 ```
 
-Use `.compatible(false)` only for xlang payloads where every peer updates the
-same schema together:
+Use `.compatible(false)` only when every reader and writer always uses the same
+xlang schema and you need smaller, faster payloads. Keep compatible mode unless schemas are verified
+across languages or generated from Fory schema IDL:
 
 ```rust
-let fory = Fory::builder().xlang(true).compatible(false).build();
+let fory = Fory::builder().compatible(false).build();
 ```
 
 ### Native Mode
 
-For Rust-only payloads, native mode is explicit and compatible mode remains the default:
+For Rust-only payloads, select native mode explicitly:
 
 ```rust
 let fory = Fory::builder().xlang(false).build();
 ```
 
-Use `.compatible(false)` only when writer and reader always use the same Rust schema and you want
-smaller schema-consistent payloads.
+Compatible mode is enabled by default. Set `.compatible(false)` only when every reader and
+writer always uses the same Rust schema and you need smaller, faster same-schema payloads.
 
 ## Configuration
 
@@ -65,13 +66,13 @@ Apache Fory™ provides protection against stack overflow from deeply nested dyn
 **Default configuration:**
 
 ```rust
-let fory = Fory::builder().xlang(true).build(); // max_dyn_depth = 5
+let fory = Fory::builder().build(); // max_dyn_depth = 5
 ```
 
 **Custom depth limit:**
 
 ```rust
-let fory = Fory::builder().xlang(true).max_dyn_depth(10).build(); // Allow up to 10 levels
+let fory = Fory::builder().max_dyn_depth(10).build(); // Allow up to 10 levels
 ```
 
 **When to adjust:**
@@ -103,22 +104,22 @@ let fory = Fory::builder().xlang(true).build();
 use fory::Fory;
 
 // Default xlang configuration
-let fory = Fory::builder().xlang(true).build();
+let fory = Fory::builder().build();
 
 // Native mode for Rust-only traffic
 let fory = Fory::builder().xlang(false).build();
 
-// Native mode with schema-consistent payloads for stable lockstep schemas
+// Same-schema optimization for Rust-only payloads
 let fory = Fory::builder().xlang(false).compatible(false).build();
 
 // Custom depth limit
-let fory = Fory::builder().xlang(true).max_dyn_depth(10).build();
+let fory = Fory::builder().max_dyn_depth(10).build();
 
 // Combined configuration
 let fory = Fory::builder()
-    .xlang(true)
-    .compatible(true)
-    .max_dyn_depth(10).build();
+    .xlang(false)
+    .max_dyn_depth(10)
+    .build();
 ```
 
 ## Configuration Summary
@@ -129,16 +130,16 @@ let fory = Fory::builder()
 | `xlang(bool)`        | Use xlang mode                          | `true`  |
 | `max_dyn_depth(u32)` | Maximum nesting depth for dynamic types | `5`     |
 
-## Compatible Mode And Schema-Consistent Mode
+## Compatible Mode
 
 Compatible mode is enabled by default for both xlang and native mode. Keep this default when Rust
 structs may evolve independently, when services deploy separately, or when xlang schemas are written
 by hand in different languages.
 
 Use `.compatible(false)` only when the schema used to deserialize every payload is always the same
-as the schema used to serialize it. This schema-consistent mode avoids field metadata payload and can
-be faster, but it requires lockstep schemas. For xlang payloads, keep compatible mode unless every
-language schema has been aligned and verified, or native types are generated from Fory schema IDL.
+as the schema used to serialize it and you need smaller, faster same-schema payloads. For xlang
+payloads, keep the default unless schemas are verified across languages or generated from Fory schema
+IDL.
 
 ## Security
 

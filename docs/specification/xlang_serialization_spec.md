@@ -190,7 +190,7 @@ encodings in the same signedness and width domain match the corresponding dense
 array element domain. This is a read adaptation, not a schema-kind merge:
 writers keep emitting their local canonical `list<T>` or `array<T>` payload, and
 TypeDef/ClassDef encodings, fingerprints, dynamic root serialization,
-schema-consistent mode, and unknown-field skipping continue to treat `list<T>`
+same-schema mode, and unknown-field skipping continue to treat `list<T>`
 and `array<T>` as distinct kinds.
 
 The adaptation is limited to the immediate schema of the matched compatible
@@ -210,7 +210,7 @@ between direct top-level scalar schemas when the remote value can be represented
 by the local scalar schema without changing the logical value. This is a
 compatible read adaptation only: writers keep emitting their local canonical
 schema and payload, and TypeDef/ClassDef encodings, fingerprints, dynamic root
-serialization, schema-consistent mode, unknown-field skipping, and container
+serialization, same-schema mode, unknown-field skipping, and container
 element schemas continue to treat the original scalar types as distinct.
 
 The scalar conversion rule applies only to the immediate schema of the matched
@@ -394,7 +394,7 @@ Named types (`NAMED_*`) do not embed a user ID; their names are carried in metad
 | 24      | MAP                     | Key-value mapping                                      |
 | 25      | ENUM                    | Enum registered by numeric ID                          |
 | 26      | NAMED_ENUM              | Enum registered by namespace + type name               |
-| 27      | STRUCT                  | Struct registered by numeric ID (schema consistent)    |
+| 27      | STRUCT                  | Struct registered by numeric ID (same-schema)          |
 | 28      | COMPATIBLE_STRUCT       | Struct with schema evolution support (by ID)           |
 | 29      | NAMED_STRUCT            | Struct registered by namespace + type name             |
 | 30      | NAMED_COMPATIBLE_STRUCT | Struct with schema evolution (by name)                 |
@@ -1654,7 +1654,7 @@ reachable only in invalid schemas (e.g., duplicate tag IDs).
 - The compressed numeric rule is critical for cross-language consistency: compressed integer
   fields are always placed after all fixed-width integer fields.
 
-#### Schema consistent (meta share disabled)
+#### Same-schema mode (meta share disabled)
 
 Object value layout:
 
@@ -1680,7 +1680,7 @@ value; polymorphic fields include type meta.
 
 #### Compatible mode (meta share enabled)
 
-The field value layout is the same as schema-consistent mode, but the type meta for
+The field value layout is the same as same-schema mode, but the type meta for
 `COMPATIBLE_STRUCT` and `NAMED_COMPATIBLE_STRUCT` uses shared TypeDef entries. Deserializers use
 TypeDef to map fields by name or tag ID and to honor nullable/ref flags from metadata; unknown fields
 are skipped.
@@ -1823,7 +1823,7 @@ Type will be serialized using type meta format.
 1. **Byte Order**: Always use little-endian for multi-byte values
 2. **Varint Sign Extension**: Ensure proper handling of signed vs unsigned varints
 3. **Reference ID Ordering**: IDs must be assigned in serialization order
-4. **Field Order Consistency**: Must match exactly across languages in schema-consistent mode; in compatible mode, match by TypeDef field names or tag IDs
+4. **Field Order Consistency**: Must match exactly across languages in same-schema mode; in compatible mode, match by TypeDef field names or tag IDs
 5. **String Encoding**: Use best encoding for current language
 6. **Null Handling**: Different languages represent null differently
 7. **Empty Collections**: Still write length (0) and header byte

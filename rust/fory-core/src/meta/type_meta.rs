@@ -34,7 +34,7 @@ use crate::util::{murmurhash3_x64_128, to_snake_case};
 /// UNKNOWN (0) is used for polymorphic types (interfaces) in cross-language serialization.
 /// Similarly for ENUM and EXT variants. Dense byte arrays stay distinct here because schema
 /// equality and schema hashes must not turn compatibility-only byte-sequence assignment into
-/// schema-consistent equality.
+/// same-schema equality.
 fn normalize_type_id_for_eq(type_id: u32) -> u32 {
     match type_id {
         // All struct variants and UNKNOWN normalize to STRUCT
@@ -1133,7 +1133,7 @@ impl TypeMeta {
         if read_version != local_version {
             return Err(Error::struct_version_mismatch(format!(
                 "Read class {} version {} is not consistent with {}, please align struct field types and names, 
-                or use compatible mode of Fory by Fory#compatible(true)",
+                or keep compatible mode enabled on every Fory peer",
                 type_name, read_version, local_version
             )));
         }

@@ -20,8 +20,7 @@ license: |
 ---
 
 Apache Fory™ supports schema evolution in compatible mode, allowing fields to be added or removed
-while maintaining compatibility. Compatible mode is enabled by default in both xlang and native mode. In native mode,
-set `compatible=True` explicitly when Python-only payloads need schema evolution.
+while maintaining compatibility. Compatible mode is enabled by default in both xlang and native mode.
 
 Compatible readers also tolerate selected scalar field type changes when the value is lossless. A
 matched field can read between `bool`, `str`, numeric scalars, and `Decimal` when the converted value
@@ -46,9 +45,10 @@ import pyfory
 f = pyfory.Fory(xlang=True)
 ```
 
-## Disable Evolution for Stable Classes
+## Same-Schema Class Optimization
 
-If a dataclass schema is stable and will not change, you can disable evolution for that class to avoid compatible metadata overhead. Use `pyfory.dataclass` with `evolving=False`:
+For a dataclass where every reader and writer always uses the same schema, you can disable evolution
+for that class to reduce payload size. Use `pyfory.dataclass` with `evolving=False`:
 
 ```python
 import pyfory

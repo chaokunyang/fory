@@ -867,8 +867,8 @@ TypeMeta::check_struct_version(int32_t read_version, int32_t local_version,
     return Unexpected(Error::type_error(
         "Read class " + type_name + " version " + std::to_string(read_version) +
         " is not consistent with " + std::to_string(local_version) +
-        ", please align struct field types and names, or use compatible mode "
-        "of Fory by Fory#compatible(true)"));
+        ", please align struct field types and names, or keep compatible mode "
+        "enabled on every Fory peer"));
   }
   return {};
 }

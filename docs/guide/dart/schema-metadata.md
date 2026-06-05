@@ -62,7 +62,7 @@ Explicitly marks a field as nullable or non-nullable, overriding what Fory infer
 String nickname = '';
 ```
 
-In cross-language scenarios, make sure the nullability contract also matches what peer runtimes expect.
+In cross-language scenarios, make sure the nullability contract also matches what peer languages expect.
 
 ## `ref`
 

@@ -4,7 +4,7 @@
 
 **Apache Fory™** is a blazing fast multi-language serialization framework powered by **JIT compilation** and **zero-copy** techniques, providing up to **ultra-fast performance** while maintaining ease of use and type safety.
 
-The C++ implementation provides high-performance serialization with compile-time type safety through template metaprogramming and zero-copy row format for analytics workloads. It defaults to xlang mode for cross-language payloads; use native mode with `.xlang(false)` for C++-only traffic when you want the C++ runtime type system without portable xlang type-mapping constraints.
+The C++ implementation provides high-performance serialization with compile-time type safety through template metaprogramming and zero-copy row format for analytics workloads. It defaults to xlang mode for cross-language payloads; use native mode with `.xlang(false)` for C++-only traffic when you want the C++ type system without portable xlang type-mapping constraints.
 
 ## Why Apache Fory™ C++?
 
@@ -192,7 +192,7 @@ assert(decoded[1].get() == decoded[2].get());
 
 ### 3. Schema Evolution
 
-Apache Fory™ supports schema evolution in **Compatible mode**, allowing serialization and deserialization peers to have different type definitions. Compatible mode is the default for both xlang and native mode; add `.compatible(false)` only when C++-only or xlang schemas are stable and lockstep.
+Apache Fory™ supports schema evolution in **Compatible mode**, allowing serialization and deserialization peers to have different type definitions. Compatible mode is the default for both xlang and native mode. Set `.compatible(false)` only when every reader and writer always uses the same schema and you need smaller, faster payloads. For xlang payloads, keep compatible mode unless schemas are verified across languages or generated from Fory schema IDL.
 
 ```cpp
 // Version 1

@@ -87,6 +87,7 @@ assert(v2.phone == nil)
   rounded, non-finite, or not accepted by the compatible numeric string grammar
 - Inconsistent registration mapping across peers
 
-## Schema-consistent Mode Behavior
+## Same-Schema Optimization
 
-With `compatible=false`, Fory validates schema hash and fails fast on mismatch.
+Set `compatible=false` only when every reader and writer always uses the same
+schema and you need smaller, faster payloads.

@@ -215,7 +215,7 @@ fory.registerSerializer(
 ## Shareability
 
 Implement the `Shareable` marker interface when the serializer can be safely reused across
-equivalent runtimes and concurrent operations. A shareable serializer must not retain operation
+equivalent Fory instances and concurrent operations. A shareable serializer must not retain operation
 state, runtime-local mutable state, or mutable scratch buffers shared across calls. Consumers can
 check shareability via `serializer instanceof Shareable`.
 

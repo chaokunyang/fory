@@ -2,10 +2,22 @@
 
 package org.apache.fory.benchmark.state.generated;
 
-import java.nio.*;
-import java.lang.*;
-
-import com.google.flatbuffers.*;
+import com.google.flatbuffers.BaseVector;
+import com.google.flatbuffers.BooleanVector;
+import com.google.flatbuffers.ByteVector;
+import com.google.flatbuffers.Constants;
+import com.google.flatbuffers.DoubleVector;
+import com.google.flatbuffers.FlatBufferBuilder;
+import com.google.flatbuffers.FloatVector;
+import com.google.flatbuffers.IntVector;
+import com.google.flatbuffers.LongVector;
+import com.google.flatbuffers.ShortVector;
+import com.google.flatbuffers.StringVector;
+import com.google.flatbuffers.Struct;
+import com.google.flatbuffers.Table;
+import com.google.flatbuffers.UnionVector;
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 
 @SuppressWarnings("unused")
 public final class FBSMediaContent extends Table {
@@ -15,13 +27,13 @@ public final class FBSMediaContent extends Table {
   public void __init(int _i, ByteBuffer _bb) { __reset(_i, _bb); }
   public FBSMediaContent __assign(int _i, ByteBuffer _bb) { __init(_i, _bb); return this; }
 
-  public FBSMedia media() { return media(new FBSMedia()); }
-  public FBSMedia media(FBSMedia obj) { int o = __offset(4); return o != 0 ? obj.__assign(__indirect(o + bb_pos), bb) : null; }
-  public FBSImage images(int j) { return images(new FBSImage(), j); }
-  public FBSImage images(FBSImage obj, int j) { int o = __offset(6); return o != 0 ? obj.__assign(__indirect(__vector(o) + j * 4), bb) : null; }
+  public org.apache.fory.benchmark.state.generated.FBSMedia media() { return media(new org.apache.fory.benchmark.state.generated.FBSMedia()); }
+  public org.apache.fory.benchmark.state.generated.FBSMedia media(org.apache.fory.benchmark.state.generated.FBSMedia obj) { int o = __offset(4); return o != 0 ? obj.__assign(__indirect(o + bb_pos), bb) : null; }
+  public org.apache.fory.benchmark.state.generated.FBSImage images(int j) { return images(new org.apache.fory.benchmark.state.generated.FBSImage(), j); }
+  public org.apache.fory.benchmark.state.generated.FBSImage images(org.apache.fory.benchmark.state.generated.FBSImage obj, int j) { int o = __offset(6); return o != 0 ? obj.__assign(__indirect(__vector(o) + j * 4), bb) : null; }
   public int imagesLength() { int o = __offset(6); return o != 0 ? __vector_len(o) : 0; }
-  public FBSImage.Vector imagesVector() { return imagesVector(new FBSImage.Vector()); }
-  public FBSImage.Vector imagesVector(FBSImage.Vector obj) { int o = __offset(6); return o != 0 ? obj.__assign(__vector(o), 4, bb) : null; }
+  public org.apache.fory.benchmark.state.generated.FBSImage.Vector imagesVector() { return imagesVector(new org.apache.fory.benchmark.state.generated.FBSImage.Vector()); }
+  public org.apache.fory.benchmark.state.generated.FBSImage.Vector imagesVector(org.apache.fory.benchmark.state.generated.FBSImage.Vector obj) { int o = __offset(6); return o != 0 ? obj.__assign(__vector(o), 4, bb) : null; }
 
   public static int createFBSMediaContent(FlatBufferBuilder builder,
       int mediaOffset,
@@ -49,4 +61,3 @@ public final class FBSMediaContent extends Table {
     public FBSMediaContent get(FBSMediaContent obj, int j) {  return obj.__assign(__indirect(__element(j), bb), bb); }
   }
 }
-

@@ -2,10 +2,22 @@
 
 package org.apache.fory.benchmark.xlang.generated;
 
-import java.nio.*;
-import java.lang.*;
-import java.util.*;
-import com.google.flatbuffers.*;
+import com.google.flatbuffers.BaseVector;
+import com.google.flatbuffers.BooleanVector;
+import com.google.flatbuffers.ByteVector;
+import com.google.flatbuffers.Constants;
+import com.google.flatbuffers.DoubleVector;
+import com.google.flatbuffers.FlatBufferBuilder;
+import com.google.flatbuffers.FloatVector;
+import com.google.flatbuffers.IntVector;
+import com.google.flatbuffers.LongVector;
+import com.google.flatbuffers.ShortVector;
+import com.google.flatbuffers.StringVector;
+import com.google.flatbuffers.Struct;
+import com.google.flatbuffers.Table;
+import com.google.flatbuffers.UnionVector;
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 
 @SuppressWarnings("unused")
 public final class FBSSampleList extends Table {
@@ -22,9 +34,9 @@ public final class FBSSampleList extends Table {
   public org.apache.fory.benchmark.xlang.generated.FBSSample.Vector sampleListVector(org.apache.fory.benchmark.xlang.generated.FBSSample.Vector obj) { int o = __offset(4); return o != 0 ? obj.__assign(__vector(o), 4, bb) : null; }
 
   public static int createFBSSampleList(FlatBufferBuilder builder,
-      int sample_listOffset) {
+      int sampleListOffset) {
     builder.startTable(1);
-    FBSSampleList.addSampleList(builder, sample_listOffset);
+    FBSSampleList.addSampleList(builder, sampleListOffset);
     return FBSSampleList.endFBSSampleList(builder);
   }
 

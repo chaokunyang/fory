@@ -2,10 +2,22 @@
 
 package org.apache.fory.benchmark.state.generated;
 
-import java.nio.*;
-import java.lang.*;
-
-import com.google.flatbuffers.*;
+import com.google.flatbuffers.BaseVector;
+import com.google.flatbuffers.BooleanVector;
+import com.google.flatbuffers.ByteVector;
+import com.google.flatbuffers.Constants;
+import com.google.flatbuffers.DoubleVector;
+import com.google.flatbuffers.FlatBufferBuilder;
+import com.google.flatbuffers.FloatVector;
+import com.google.flatbuffers.IntVector;
+import com.google.flatbuffers.LongVector;
+import com.google.flatbuffers.ShortVector;
+import com.google.flatbuffers.StringVector;
+import com.google.flatbuffers.Struct;
+import com.google.flatbuffers.Table;
+import com.google.flatbuffers.UnionVector;
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 
 @SuppressWarnings("unused")
 public final class FBSFoo extends Table {
@@ -31,11 +43,11 @@ public final class FBSFoo extends Table {
 
   public static int createFBSFoo(FlatBufferBuilder builder,
       int stringOffset,
-      int f2_keyOffset,
-      int f2_valueOffset) {
+      int f2KeyOffset,
+      int f2ValueOffset) {
     builder.startTable(3);
-    FBSFoo.addF2Value(builder, f2_valueOffset);
-    FBSFoo.addF2Key(builder, f2_keyOffset);
+    FBSFoo.addF2Value(builder, f2ValueOffset);
+    FBSFoo.addF2Key(builder, f2KeyOffset);
     FBSFoo.addString(builder, stringOffset);
     return FBSFoo.endFBSFoo(builder);
   }
@@ -60,4 +72,3 @@ public final class FBSFoo extends Table {
     public FBSFoo get(FBSFoo obj, int j) {  return obj.__assign(__indirect(__element(j), bb), bb); }
   }
 }
-

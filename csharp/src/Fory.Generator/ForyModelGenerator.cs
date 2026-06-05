@@ -280,10 +280,11 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
         sb.AppendLine("        global::Apache.Fory.TypeId typeId = (global::Apache.Fory.TypeId)fieldType.TypeId;");
         sb.AppendLine("        bool scalarPair = global::Apache.Fory.CompatibleScalarConverter.IsScalarType(fieldType.TypeId) &&");
         sb.AppendLine("            global::Apache.Fory.CompatibleScalarConverter.IsScalarType((uint)localTypeId);");
-        sb.AppendLine("        bool exactScalarSchema = fieldType.TypeId == (uint)localTypeId && refMode == localRefMode;");
+        // Compatible scalar reads must use remote field metadata even for same CLR scalar types;
+        // C# serializers default to one wire form while IDL fields may use fixed, varint, or tagged forms.
         sb.AppendLine("        bool compatibleScalarRead = fieldType.TypeId == (uint)localTypeId ||");
         sb.AppendLine("            global::Apache.Fory.CompatibleScalarConverter.RequiresScalarRead(fieldType.TypeId, (uint)localTypeId);");
-        sb.AppendLine("        if (!readTypeInfo && refMode != global::Apache.Fory.RefMode.Tracking && localRefMode != global::Apache.Fory.RefMode.Tracking && scalarPair && !exactScalarSchema && compatibleScalarRead)");
+        sb.AppendLine("        if (!readTypeInfo && refMode != global::Apache.Fory.RefMode.Tracking && localRefMode != global::Apache.Fory.RefMode.Tracking && scalarPair && compatibleScalarRead)");
         sb.AppendLine("        {");
         sb.AppendLine("            return global::Apache.Fory.CompatibleScalarConverter.ReadField<T>(context, typeId, localTypeId, fieldName, refMode);");
         sb.AppendLine("        }");

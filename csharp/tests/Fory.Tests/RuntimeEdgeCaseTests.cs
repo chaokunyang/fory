@@ -182,6 +182,38 @@ public sealed class RuntimeEdgeCaseTests
         Assert.Equal(0, reader.Remaining);
     }
 
+    [Theory]
+    [InlineData(TypeId.Date)]
+    [InlineData(TypeId.Timestamp)]
+    [InlineData(TypeId.Duration)]
+    public void FieldSkipperSkipsTimePayloads(TypeId typeId)
+    {
+        ByteWriter writer = new();
+        switch (typeId)
+        {
+            case TypeId.Date:
+                writer.WriteVarInt64(18_954);
+                break;
+            case TypeId.Timestamp:
+                writer.WriteInt64(1_704_164_645);
+                writer.WriteUInt32(123_456_700);
+                break;
+            case TypeId.Duration:
+                writer.WriteVarInt64(42);
+                writer.WriteInt32(700);
+                break;
+        }
+
+        writer.WriteUInt8(0xA5);
+        ByteReader reader = new(writer.ToArray());
+        ReadContext context = new(reader, new TypeResolver(), trackRef: false);
+
+        FieldSkipper.SkipFieldValue(context, new TypeMetaFieldType((uint)typeId, nullable: false));
+
+        Assert.Equal(0xA5, reader.ReadUInt8());
+        Assert.Equal(0, reader.Remaining);
+    }
+
     [Fact]
     public void DecimalRoundTripEdgeCases()
     {

@@ -38,32 +38,17 @@ f := fory.New(fory.WithXlang(false))
 
 ## How It Works
 
-### Same-Schema Native Optimization
-
-- Compact serialization without metadata
-- Struct hash is checked during deserialization
-- Any schema change causes `ErrKindHashMismatch`
-
 ### With Compatible Mode
 
 - Type metadata is written to serialized data
 - Supports adding, removing, and reordering fields
 - Enables forward and backward compatibility
 
-### Same-Schema Struct Optimization
+### Same-Schema Optimization
 
-For a struct where every reader and writer always uses the same schema, you can disable evolution
-for that struct to reduce payload size. Implement the `ForyEvolving` interface and return `false`:
-
-```go
-type StableMessage struct {
-    ID int64
-}
-
-func (StableMessage) ForyEvolving() bool {
-    return false
-}
-```
+- Compact serialization without evolution metadata
+- Struct hash is checked during deserialization
+- Any schema change causes `ErrKindHashMismatch`
 
 ## Supported Schema Changes
 
@@ -307,11 +292,27 @@ Compatible mode mainly affects serialized size:
 - Long-lived caches
 
 Use `WithCompatible(false)` only when every reader and writer always uses the same Go struct schema
-and you need smaller, faster payloads, such as:
+and you need smaller, faster payloads. For xlang payloads, keep compatible mode unless schemas are
+verified across languages or generated from Fory schema IDL. Same-schema uses include:
 
 - In-memory operations
 - Same-schema communication
 - Minimum serialized size
+
+### Per-Struct Opt-Out
+
+For one struct, you can opt out of evolution metadata by implementing `ForyEvolving` and returning
+`false`:
+
+```go
+type SameSchemaMessage struct {
+    ID int64
+}
+
+func (SameSchemaMessage) ForyEvolving() bool {
+    return false
+}
+```
 
 ## Error Handling
 

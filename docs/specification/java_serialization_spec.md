@@ -50,7 +50,7 @@ root:
 | reference flag | [type metadata] | [value payload] |
 ```
 
-All multi-byte fixed-width values are little endian. A big-endian Java runtime
+All multi-byte fixed-width values are little endian. A big-endian Java implementation
 must still write and read little-endian payloads.
 
 The stream is stateful. Type metadata, class definitions, and object references
@@ -113,7 +113,7 @@ name metadata. Schema-evolution classes may carry a ClassDef.
 | `22..63` | Reserved in Java native mode for the xlang internal ID range.      |
 | `64..68` | Reserved for future Java native internal IDs.                      |
 | `69..98` | Java native built-ins listed below.                                |
-| `99+`    | User and runtime class IDs assigned by the Java `ClassResolver`.   |
+| `99+`    | User and Fory class IDs assigned by the Java `ClassResolver`.      |
 
 The shared scalar IDs are:
 

@@ -220,7 +220,7 @@ public class Container {
     @ForyField(id = 1, dynamic = ForyField.Dynamic.FALSE)
     private Dog dog;  // Concrete - no type info
 
-    // TRUE: Type info written to support runtime subtypes
+    // TRUE: Type info written to support subtypes
     @ForyField(id = 2, dynamic = ForyField.Dynamic.TRUE)
     private Object data;  // Force polymorphic
 }
@@ -232,7 +232,7 @@ public class Container {
 | ------- | ------------------------------------------------------------------- |
 | `AUTO`  | Auto-detect: interface/abstract are dynamic, concrete types are not |
 | `FALSE` | No type info written, uses declared type's serializer directly      |
-| `TRUE`  | Type info written to support subtypes at runtime                    |
+| `TRUE`  | Type info written to support subtypes                               |
 
 ## Skipping Fields
 

@@ -145,7 +145,7 @@ Type.string().setNullable(true);
 
 ## Dynamic Fields
 
-Use `Type.any()` when a field can hold values of different types at runtime.
+Use `Type.any()` when a field can hold values of different concrete types.
 
 ```ts
 const eventType = Type.struct("example.event", {

@@ -32,7 +32,7 @@ Custom serializers should not retain `Fory`.
 
 ## Basic Serializer
 
-Use `WriteContext` and `ReadContext` for runtime state. Only get the buffer into a local variable
+Use `WriteContext` and `ReadContext` for per-operation state. Only get the buffer into a local variable
 when you perform multiple reads or writes.
 
 ```java
@@ -104,7 +104,7 @@ public final class EnvelopeSerializer extends Serializer<Envelope> {
 }
 ```
 
-This serializer can implement `Shareable` because it retains no runtime-local mutable state.
+This serializer can implement `Shareable` because it retains no Fory-instance-local mutable state.
 
 ## Collection Serializers
 
@@ -216,7 +216,7 @@ fory.registerSerializer(
 
 Implement the `Shareable` marker interface when the serializer can be safely reused across
 equivalent Fory instances and concurrent operations. A shareable serializer must not retain operation
-state, runtime-local mutable state, or mutable scratch buffers shared across calls. Consumers can
+state, Fory-instance-local mutable state, or mutable scratch buffers shared across calls. Consumers can
 check shareability via `serializer instanceof Shareable`.
 
 In practice:

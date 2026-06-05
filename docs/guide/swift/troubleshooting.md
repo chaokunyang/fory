@@ -52,12 +52,12 @@ xlang format and has no native-mode switch.
 
 ### `Invalid data: class version hash mismatch`
 
-Cause: schema changed while `compatible=false`.
+Cause: schema changed while `compatible: false`.
 
 Fix:
 
 - Keep compatible mode enabled for evolving schemas.
-- Or use `compatible=false` only when every reader and writer uses the same schema.
+- Or use `compatible: false` only when every reader and writer uses the same schema.
 
 ## Common Macro-time Errors
 

@@ -29,7 +29,7 @@ Key characteristics:
 - **Cross-language**: Same binary format works across Java, Python, C++, Go,
   Rust, JavaScript/TypeScript, C#, Swift, Dart, Scala, and Kotlin
 - **Reference-aware**: Handles shared references and circular references without duplication or infinite recursion
-- **Polymorphic**: Supports object polymorphism with runtime type resolution
+- **Polymorphic**: Supports object polymorphism with concrete type resolution
 
 This specification defines the Fory xlang binary format. The format is dynamic rather than static, which enables flexibility and ease of use at the cost of additional complexity in the wire format.
 
@@ -101,7 +101,7 @@ Note:
 ### Polymorphisms
 
 For polymorphism, if one non-final class is registered, and only one subclass is registered, then we can take all
-elements in List/Map have same type, thus reduce runtime check cost.
+elements in List/Map have same type, thus reduce per-element type checks.
 
 Collection/Array polymorphism are not fully supported, since some languages such as golang have only one collection
 type. If users want to get exactly the type he passed, he must pass that type when deserializing or annotate that type
@@ -318,16 +318,16 @@ matched scalar pairs whose top-level field schemas have `trackingRef = false`.
 Readers first consume the remote null/optional framing described by the remote
 field metadata. If a value is present, the reader converts the unwrapped scalar
 value and then assigns or wraps it into the local carrier. If the remote value
-is null or absent, the runtime uses the same missing/null compatible-field rule
+is null or absent, the reader uses the same missing/null compatible-field rule
 it already applies for that local field; this feature does not introduce a
 second null policy. Reference-tracked scalar conversion is not supported.
 
 Conversion failures are data errors, not schema misses. A schema pair outside
 the conversion matrix remains a schema/type compatibility error when building
 the compatible layout. Once a matched field is accepted as a scalar conversion
-action, an invalid payload value MUST be reported through the runtime's
-data-error owner with enough context to identify the remote type, local type,
-and field when that owner has the information.
+action, an invalid payload value MUST be reported through the implementation's
+data-error path with enough context to identify the remote type, local type, and
+field when that path has the information.
 
 Users can also provide meta hints for fields of a type, or the type whole. Here is an example in java which use
 annotation to provide such information.
@@ -1299,12 +1299,12 @@ The elements header is a single byte that encodes metadata about the collection 
 |      reserved      | is_same_type| is_decl_elem_type| has_null | track_ref |
 ```
 
-| Bit | Name              | Value | Meaning when SET (1)                    | Meaning when UNSET (0)                  |
-| --- | ----------------- | ----- | --------------------------------------- | --------------------------------------- |
-| 0   | track_ref         | 0x01  | Track references for elements           | Don't track element references          |
-| 1   | has_null          | 0x02  | Payload contains null element markers   | No null elements (skip null checks)     |
-| 2   | is_decl_elem_type | 0x04  | Elements are the declared generic type  | Element types differ from declared type |
-| 3   | is_same_type      | 0x08  | All elements have the same runtime type | Elements have different runtime types   |
+| Bit | Name              | Value | Meaning when SET (1)                     | Meaning when UNSET (0)                  |
+| --- | ----------------- | ----- | ---------------------------------------- | --------------------------------------- |
+| 0   | track_ref         | 0x01  | Track references for elements            | Don't track element references          |
+| 1   | has_null          | 0x02  | Payload contains null element markers    | No null elements (skip null checks)     |
+| 2   | is_decl_elem_type | 0x04  | Elements are the declared generic type   | Element types differ from declared type |
+| 3   | is_same_type      | 0x08  | All elements have the same concrete type | Elements have different concrete types  |
 
 **Common header values:**
 
@@ -1377,7 +1377,7 @@ can be taken as an example.
 
 Primitive array are taken as a binary buffer, serialization will just write the length of array size as an unsigned int,
 then copy the whole buffer into the stream. Multi-byte element arrays are always encoded in little-endian element order;
-runtimes whose native typed-array storage uses another byte order must swap or write elements explicitly instead of
+implementations whose native typed-array storage uses another byte order must swap or write elements explicitly instead of
 copying native storage bytes unchanged.
 
 Such serialization won't compress the array. If users want to compress primitive array, users need to register custom
@@ -1506,7 +1506,7 @@ Date represents a date without timezone. It is encoded as:
 - `days` (varint64): signed count of days since the Unix epoch (`1970-01-01`)
 
 The value is reconstructed as `LocalDate.ofEpochDay(days)` or the equivalent calendar-date constructor in
-the target runtime.
+the target language implementation.
 
 This `varint64` encoding applies to xlang serialization only. Native, language-specific local-date
 encodings are unchanged.
@@ -1702,7 +1702,7 @@ union Contact [id=0] {
 Rules:
 
 - A union schema MUST declare at least one schema-defined alternative. The
-  unknown-case carrier used by some language bindings is runtime-owned and is
+  unknown-case carrier used by some language bindings is implementation-provided and is
   omitted from the schema's alternative table.
 - Each union alternative MUST have a stable non-negative tag number (`= 0`, `= 1`, ...).
 - Tag numbers MUST be unique within the union and MUST NOT be reused.
@@ -1751,7 +1751,7 @@ This is required even for primitives so unknown alternatives can be skipped safe
 If a reader sees a `case_id` that is not present in its local union
 schema, it SHOULD preserve the unknown case when the target language has a
 language-neutral carrier for it. Such a carrier MUST expose the original case
-ID and decoded value, and it MUST retain only runtime-internal wire type ID
+ID and decoded value, and it MUST retain only implementation-internal wire type ID
 state needed for reserialization. It MUST NOT store resolver-owned type
 metadata or other context-owned state. Writers MUST use the stored original
 case ID for the union envelope, not any generated carrier marker. Unknown-case
@@ -1759,10 +1759,10 @@ payload writers MUST emit the Any-style payload body in wire order: ref
 metadata first, then full value type metadata, then value bytes. For internal
 numeric type IDs, the type ID byte is the complete value type metadata and the
 payload writer MAY use the stored wire type ID to preserve fixed, variable, or
-tagged integer encodings when the decoded value has the expected runtime type.
+tagged integer encodings when the decoded value has the expected concrete value type.
 These scalar numeric payloads are not reference-tracked, so their ref metadata
-is `NotNullValue`. Otherwise it MUST fall back to the language runtime's
-ordinary polymorphic Any-value writer. Unknown carriers are runtime-owned
+is `NotNullValue`. Otherwise it MUST fall back to the language implementation's
+ordinary polymorphic Any-value writer. Unknown carriers are implementation-provided
 forward-compatibility containers, not entries in the local schema case table;
 schema-defined union cases MAY use `0..N`. When an unknown carrier is written
 back, the union envelope MUST use the carrier's original peer schema case ID

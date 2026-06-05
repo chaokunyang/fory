@@ -28,7 +28,7 @@ languages.
 
 - **Xlang**: serialize in Dart, deserialize in Java, Go, C#, and more without writing any glue code
 - **Platform support**: use the same generated-serializer API on Dart VM/AOT, Flutter, and web
-- **Fast**: generated serializer code replaces reflection at runtime
+- **Fast**: generated serializer code replaces reflection during serialization
 - **Schema evolution**: add or remove fields without breaking existing messages
 - **Circular references**: optional reference tracking handles shared or recursive object graphs
 - **Escape hatch**: write a manual serializer for any type that cannot be annotated

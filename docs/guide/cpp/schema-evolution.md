@@ -74,19 +74,6 @@ int main() {
 }
 ```
 
-### Same-Schema Struct Optimization
-
-For a struct where every reader and writer always uses the same schema, you can disable evolution
-for that struct to reduce payload size. Use `FORY_STRUCT_EVOLVING` after `FORY_STRUCT`:
-
-```cpp
-struct StableMessage {
-  int32_t id;
-};
-FORY_STRUCT(StableMessage, id);
-FORY_STRUCT_EVOLVING(StableMessage, false);
-```
-
 ## Schema Evolution Features
 
 Compatible mode supports the following schema changes:
@@ -303,9 +290,8 @@ When fields are missing, C++ default initialization is used:
 
 ## Same-Schema Optimization
 
-Without compatible mode, schemas must match exactly. In xlang mode, compatible mode is the default,
-so disable it explicitly only when every reader and writer always uses the same schema and you need
-smaller, faster payloads:
+Compatible mode is the default in both xlang and native mode. Set `compatible(false)` explicitly
+only when every reader and writer always uses the same schema and you need smaller, faster payloads:
 
 ```cpp
 // Same-schema optimization
@@ -323,6 +309,19 @@ auto fory = Fory::builder()
 - Every reader and writer always uses the same schema
 - Smaller payloads are required
 - For xlang payloads, schemas are verified across languages or generated from Fory schema IDL
+
+### Per-Struct Opt-Out
+
+For one struct, you can opt out of evolution metadata with `FORY_STRUCT_EVOLVING` after
+`FORY_STRUCT`:
+
+```cpp
+struct SameSchemaMessage {
+  int32_t id;
+};
+FORY_STRUCT(SameSchemaMessage, id);
+FORY_STRUCT_EVOLVING(SameSchemaMessage, false);
+```
 
 **Use Compatible mode when:**
 

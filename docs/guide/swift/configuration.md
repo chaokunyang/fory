@@ -81,8 +81,8 @@ let fory = Fory(compatible: false)
 ### `checkClassVersion`
 
 Controls class-version validation when compatible mode is disabled. When
-omitted, it defaults to `true` when `compatible=false` and `false` when
-`compatible=true`.
+omitted, it defaults to `true` when `compatible: false` and `false` when
+`compatible: true`.
 
 ```swift
 let fory = Fory(compatible: false, checkClassVersion: true)

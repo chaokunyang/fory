@@ -37,26 +37,13 @@ during deserialization.
 Optional and nullable fields still compose with these conversions, but reference-tracked scalar type
 changes are incompatible.
 
-## Xlang Default
+## Default Compatible Mode
 
 ```python
 import pyfory
 
-f = pyfory.Fory(xlang=True)
-```
-
-## Same-Schema Class Optimization
-
-For a dataclass where every reader and writer always uses the same schema, you can disable evolution
-for that class to reduce payload size. Use `pyfory.dataclass` with `evolving=False`:
-
-```python
-import pyfory
-
-@pyfory.dataclass(evolving=False)
-class StableMessage:
-    id: int
-    name: str
+f = pyfory.Fory()
+native_f = pyfory.Fory(xlang=False)
 ```
 
 `pyfory.dataclass` also supports `slots=True`:
@@ -100,6 +87,27 @@ print(user.email)  # "unknown@example.com"
 - **Add new fields**: With default values
 - **Remove fields**: Old data with extra fields will be skipped
 - **Reorder fields**: Fields are matched by name, not position
+
+## Same-Schema Class Optimization
+
+Use `compatible=False` only when the class schema used to deserialize every payload is always the same
+as the class schema used to serialize it, and you need smaller, faster payloads. For xlang payloads,
+keep compatible mode unless schemas are verified across languages or generated from Fory schema IDL.
+
+```python
+f = pyfory.Fory(xlang=False, compatible=False)
+```
+
+For one dataclass, you can opt out of evolution metadata with `pyfory.dataclass(evolving=False)`:
+
+```python
+import pyfory
+
+@pyfory.dataclass(evolving=False)
+class SameSchemaMessage:
+    id: int
+    name: str
+```
 
 ## Best Practices
 

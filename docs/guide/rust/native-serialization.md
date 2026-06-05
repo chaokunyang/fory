@@ -143,7 +143,7 @@ when the target has been dropped.
 
 ## Trait Objects
 
-Trait objects are Rust runtime features and belong in native serialization:
+Trait objects are Rust language features and belong in native serialization:
 
 ```rust
 use fory::{register_trait_type, Error, Fory, ForyStruct, Serializer};

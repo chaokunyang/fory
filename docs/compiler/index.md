@@ -104,7 +104,7 @@ objects are serialized with Fory. Applications provide their own grpc-java or
 
 Define your data model once in Fory IDL and generate consistent, type-safe code across all languages. This ensures:
 
-- **Type Safety**: Catch type errors at compile time, not runtime
+- **Type Safety**: Catch type errors at compile time, not when the code runs
 - **Consistency**: All languages use the same field names, types, and structures
 - **Documentation**: Schema serves as living documentation
 - **Evolution**: Managed schema changes across all implementations

@@ -86,7 +86,7 @@ assert_eq!(decoded.star_animal.speak(), "Woof!");
 ## Serializing dyn Any Trait Objects
 
 Apache Fory™ supports serializing `Box<dyn Any>`, `Rc<dyn Any>`, and
-`Arc<dyn Any + Send + Sync>` for runtime type dispatch:
+`Arc<dyn Any + Send + Sync>` for dynamic type dispatch:
 
 **Key points:**
 

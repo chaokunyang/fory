@@ -89,5 +89,6 @@ assert(v2.phone == nil)
 
 ## Same-Schema Optimization
 
-Set `compatible=false` only when every reader and writer always uses the same
-schema and you need smaller, faster payloads.
+Set `compatible: false` only when every reader and writer always uses the same schema and you need
+smaller, faster payloads. For xlang payloads, keep compatible mode unless schemas are verified
+across languages or generated from Fory schema IDL.

@@ -151,7 +151,7 @@ For example, `List<String>` is encoded as `list<string>` and
 `Map<String, Int>` is encoded as `map<string, int32>`.
 
 Deserialization only guarantees that the result is assignable to the declared
-field type. Fory does not preserve whether the original runtime value was an
+field type. Fory does not preserve whether the original concrete value was an
 `ArrayList`, `LinkedList`, `Collections.unmodifiableList`, synchronized
 collection wrapper, or another JVM-specific collection implementation.
 

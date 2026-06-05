@@ -69,21 +69,6 @@ assert_eq!(person_v2.age, 30);
 assert_eq!(person_v2.phone, None);
 ```
 
-### Same-Schema Struct Optimization
-
-For a struct where every reader and writer always uses the same schema, you can disable evolution
-for that struct to reduce payload size. Use `#[fory(evolving = false)]`:
-
-```rust
-use fory::ForyStruct;
-
-#[derive(ForyStruct)]
-#[fory(evolving = false)]
-struct StableMessage {
-    id: i32,
-}
-```
-
 ## Schema Evolution Features
 
 - Add new fields with default values
@@ -108,6 +93,31 @@ conversions fail during deserialization.
 - Type changes are supported only for nullable/non-nullable changes and selected lossless scalar
   conversions
 - Nested struct types must be registered on both sides
+
+## Same-Schema Optimization
+
+Use `.compatible(false)` only when the schema used to deserialize every payload is always the same
+as the schema used to serialize it, and you need smaller, faster payloads. For xlang payloads, keep
+compatible mode unless schemas are verified across languages or generated from Fory schema IDL.
+
+```rust
+let mut fory = Fory::builder()
+    .xlang(false)
+    .compatible(false)
+    .build();
+```
+
+For one struct, you can opt out of evolution metadata with `#[fory(evolving = false)]`:
+
+```rust
+use fory::ForyStruct;
+
+#[derive(ForyStruct)]
+#[fory(evolving = false)]
+struct SameSchemaMessage {
+    id: i32,
+}
+```
 
 ## Enum Support
 
@@ -237,6 +247,6 @@ assert_eq!(data, decoded);
 
 ## Related Topics
 
-- [Configuration](configuration.md) - Enabling compatible mode
+- [Configuration](configuration.md) - Compatible mode settings
 - [Polymorphism](polymorphism.md) - Trait objects with schema evolution
 - [Xlang Serialization](xlang-serialization.md) - Schema evolution across languages

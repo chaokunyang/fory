@@ -21,9 +21,7 @@ license: |
 
 Schema evolution lets different versions of your app exchange messages safely — a v2 writer can produce a message that a v1 reader can still decode, and vice versa.
 
-## Compatible Mode And Same-Schema Opt-Out
-
-### Compatible Mode
+## Compatible Mode
 
 Compatible mode is the Dart default. Keep this default when services may run different versions at
 the same time, for example during a rolling deployment or when clients are not updated immediately.
@@ -44,15 +42,6 @@ elements. String-to-number conversion accepts finite ASCII decimal literals with
 leading `+`, Unicode digits, underscores, `NaN`, or `Infinity`. Nullable fields still compose with
 these conversions, but reference-tracked scalar type changes are incompatible. Invalid strings,
 out-of-range values, and lossy conversions fail with `InvalidDataException` during deserialization.
-
-### Same-Schema Optimization
-
-Use this only when every reader and writer always uses the same schema and you need smaller, faster
-payloads:
-
-```dart
-final fory = Fory(compatible: false);
-```
 
 ## Setting Up for Evolution
 
@@ -100,6 +89,16 @@ Evolution only works when **all** peers that exchange messages agree on:
 3. The logical meaning of field IDs.
 
 Test rolling-upgrade scenarios with real round trips before deploying.
+
+## Same-Schema Optimization
+
+Use `compatible: false` only when every reader and writer always uses the same schema and you need
+smaller, faster payloads. For xlang payloads, keep compatible mode unless schemas are verified across
+languages or generated from Fory schema IDL.
+
+```dart
+final fory = Fory(compatible: false);
+```
 
 ## Related Topics
 

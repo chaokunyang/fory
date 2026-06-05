@@ -77,20 +77,21 @@ Use this only when every reader and writer always uses the same schema and you n
 payloads:
 
 ```csharp
-Fory strict = Fory.Builder()
+Fory sameSchema = Fory.Builder()
     .Compatible(false)
     .CheckStructVersion(true)
     .Build();
 ```
 
-This mode throws on schema hash mismatches.
+Because C# uses the xlang wire format only, keep compatible mode unless schemas are verified across
+languages or generated from Fory schema IDL. This mode throws on schema hash mismatches.
 
 ## Best Practices
 
 1. Keep compatible mode enabled for independently deployed services.
 2. Keep stable type IDs across versions.
 3. Add new fields with safe defaults.
-4. Use `CheckStructVersion(true)` when strict matching is required.
+4. Use `CheckStructVersion(true)` with `Compatible(false)` for intentional same-schema payloads.
 
 ## Related Topics
 

@@ -128,7 +128,7 @@ Field-level reference metadata has no effect unless `new Fory({ ref: true })` is
 
 ## Dynamic Fields
 
-Use `Type.any()` when a field can hold different Fory values at runtime:
+Use `Type.any()` when a field can hold values with different concrete Fory types:
 
 ```ts
 const eventType = Type.struct("example.event", {
@@ -138,7 +138,7 @@ const eventType = Type.struct("example.event", {
 ```
 
 For a struct field with a declared type, `.setDynamic(Dynamic.FALSE)` always treats values as the
-declared type and `.setDynamic(Dynamic.TRUE)` always writes the runtime type. The default
+declared type and `.setDynamic(Dynamic.TRUE)` always writes the concrete type. The default
 `Dynamic.AUTO` is appropriate for most fields.
 
 ## Per-Struct Schema Evolution

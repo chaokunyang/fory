@@ -121,7 +121,7 @@ listed below.
 
 ## Polymorphic Fields
 
-`Type.any()` lets a field hold different types at runtime, but it is harder to keep in sync across languages. Prefer explicit field schemas whenever possible.
+`Type.any()` lets a field hold different concrete types, but it is harder to keep in sync across languages. Prefer explicit field schemas whenever possible.
 
 ```ts
 const wrapperType = Type.struct(

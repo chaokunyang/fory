@@ -199,7 +199,7 @@ public class Example {
 ```
 
 This follows the same registration rules as other Fory operations: if the Fory instance requires class
-registration, copied runtime types must be registered first.
+registration, copied concrete types must be registered first.
 
 ## Thread-Safe Copy
 
@@ -227,7 +227,7 @@ The same API also works for `buildThreadLocalFory()` and `buildThreadSafeForyPoo
 
 ## Built-In Coverage
 
-Fory already provides copy support for many common Java runtime types, including:
+Fory already provides copy support for many common Java platform types, including:
 
 - Primitive values and boxed primitives
 - Strings and primitive arrays
@@ -274,7 +274,7 @@ Guidelines:
   if the type can participate in cycles or shared-reference graphs
 - Use `copyContext.copyObject(...)` for nested values instead of manually duplicating nested copy
   logic
-- Keep copy logic consistent with the normal runtime semantics of the type
+- Keep copy logic consistent with the normal Java semantics of the type
 
 ## Custom Copy in a Serializer
 
@@ -362,7 +362,7 @@ Fix it by either:
 
 ### Registration Errors
 
-If your Fory instance uses `requireClassRegistration(true)`, make sure the copied runtime types are
+If your Fory instance uses `requireClassRegistration(true)`, make sure the copied concrete types are
 registered before calling `copy(...)`.
 
 ## Related Topics

@@ -405,7 +405,7 @@ func (s *structSerializer) initFieldsFromTypeDef(typeResolver *TypeResolver) err
 		var localType reflect.Type
 		var localFieldSpec *FieldSpec
 		var exists bool
-		var scalarConversion *compatibleScalarField
+		var scalarConversion *compatibleScalarConversion
 
 		if def.tagID >= 0 {
 			if binding, ok := fieldTagIDToBinding[def.tagID]; ok {
@@ -542,7 +542,7 @@ func (s *structSerializer) initFieldsFromTypeDef(typeResolver *TypeResolver) err
 			} else if defTypeId == SET && isSetReflectType(localType) {
 				shouldRead = true
 				fieldType = localType
-			} else if defTypeId == LIST && localFieldSpec != nil && listFieldCanReadLocalArray(
+			} else if defTypeId == LIST && localFieldSpec != nil && sameListSchemaCanReadLocalArray(
 				def.typeSpec,
 				def.nullable,
 				def.trackRef,
@@ -553,7 +553,7 @@ func (s *structSerializer) initFieldsFromTypeDef(typeResolver *TypeResolver) err
 			) {
 				shouldRead = true
 				fieldType = localType
-			} else if defTypeId == LIST && localFieldSpec != nil && compatibleListFieldCanReadLocalArray(def.typeSpec, localFieldSpec.Type, localType) {
+			} else if defTypeId == LIST && localFieldSpec != nil && canReadCompatibleListAsLocalArray(def.typeSpec, localFieldSpec.Type, localType) {
 				shouldRead = true
 				usesCompatibleCollectionArrayReader = true
 				fieldType = localType
@@ -572,7 +572,7 @@ func (s *structSerializer) initFieldsFromTypeDef(typeResolver *TypeResolver) err
 			}
 			if !refTrackedScalarSchemaMismatch && !shouldRead && localFieldSpec != nil {
 				if !def.trackRef && !localTrackRefByIndex[fieldIndex] {
-					if conversion, ok := newCompatibleScalarField(def.typeSpec.TypeId(), localFieldSpec.Type.TypeId(), localType); ok {
+					if conversion, ok := newCompatibleScalarConversion(def.typeSpec.TypeId(), localFieldSpec.Type.TypeId(), localType); ok {
 						shouldRead = true
 						fieldType = localType
 						scalarConversion = conversion
@@ -830,7 +830,7 @@ func fieldSpecEqualForDiff(remoteSpec *TypeSpec, remoteNullable bool, remoteTrac
 	return remote.EqualForDiff(local)
 }
 
-func listFieldCanReadLocalArray(remoteSpec *TypeSpec, remoteNullable bool, remoteTrackRef bool, localSpec *TypeSpec, localNullable bool, localTrackRef bool, localType reflect.Type) bool {
+func sameListSchemaCanReadLocalArray(remoteSpec *TypeSpec, remoteNullable bool, remoteTrackRef bool, localSpec *TypeSpec, localNullable bool, localTrackRef bool, localType reflect.Type) bool {
 	if localType == nil || localType.Kind() != reflect.Array || remoteSpec == nil || localSpec == nil {
 		return false
 	}
@@ -840,7 +840,7 @@ func listFieldCanReadLocalArray(remoteSpec *TypeSpec, remoteNullable bool, remot
 	return fieldSpecEqualForDiff(remoteSpec, remoteNullable, remoteTrackRef, localSpec, localNullable, localTrackRef)
 }
 
-func compatibleListFieldCanReadLocalArray(remoteSpec *TypeSpec, localSpec *TypeSpec, localType reflect.Type) bool {
+func canReadCompatibleListAsLocalArray(remoteSpec *TypeSpec, localSpec *TypeSpec, localType reflect.Type) bool {
 	if remoteSpec == nil || localSpec == nil || localType == nil {
 		return false
 	}

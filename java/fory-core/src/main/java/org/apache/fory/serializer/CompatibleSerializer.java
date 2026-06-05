@@ -291,7 +291,7 @@ public class CompatibleSerializer<T> extends AbstractObjectSerializer<T> {
   private void compatibleRead(
       ReadContext readContext, SerializationFieldInfo fieldInfo, Object obj) {
     Object fieldValue =
-        FieldConverters.readScalarSource(readContext, fieldInfo, fieldInfo.fieldConverter);
+        FieldConverters.readSourceScalar(readContext, fieldInfo, fieldInfo.fieldConverter);
     fieldInfo.fieldConverter.set(obj, fieldValue);
   }
 
@@ -370,7 +370,7 @@ public class CompatibleSerializer<T> extends AbstractObjectSerializer<T> {
       case BUILD_IN:
         if (fieldInfo.fieldConverter != null && action == null) {
           Object sourceValue =
-              FieldConverters.readScalarSource(readContext, fieldInfo, fieldInfo.fieldConverter);
+              FieldConverters.readSourceScalar(readContext, fieldInfo, fieldInfo.fieldConverter);
           return fieldInfo.fieldConverter.convert(sourceValue);
         }
         if (fieldInfo.fieldAccessor == null) {

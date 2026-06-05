@@ -259,9 +259,10 @@ public class FieldConverters {
         fromDispatchId, fromType, toDispatchId, toType, value, fieldName);
   }
 
-  /** Returns whether descriptor-level compatible read must read a scalar conversion payload. */
+  /** Returns whether descriptor-level compatible read must read a source scalar payload. */
   @Internal
-  public static boolean needsScalarRead(SerializationFieldInfo from, SerializationFieldInfo to) {
+  public static boolean requiresSourceScalarRead(
+      SerializationFieldInfo from, SerializationFieldInfo to) {
     if (isRefTrackedScalarSchemaMismatch(
         from.dispatchId,
         from.type,
@@ -285,18 +286,18 @@ public class FieldConverters {
 
   /** Reads a remote scalar conversion source value using descriptor-level scalar metadata. */
   @Internal
-  public static Object readScalarSource(
+  public static Object readSourceScalar(
       ReadContext readContext, SerializationFieldInfo from, SerializationFieldInfo to) {
-    return readScalarSource(
+    return readSourceScalar(
         readContext, from, from.refMode, from.dispatchId, from.type, false, to.qualifiedFieldName);
   }
 
   /** Reads a remote scalar conversion source value for an existing field converter. */
   @Internal
-  public static Object readScalarSource(
+  public static Object readSourceScalar(
       ReadContext readContext, SerializationFieldInfo from, FieldConverter<?> converter) {
     ScalarFieldConverter scalar = scalarConverter(converter);
-    return readScalarSource(
+    return readSourceScalar(
         readContext,
         from,
         from.refMode,
@@ -308,14 +309,14 @@ public class FieldConverters {
 
   /** Reads a remote scalar conversion source value from generated compatible serializers. */
   @Internal
-  public static Object readScalarSource(
+  public static Object readSourceScalar(
       ReadContext readContext,
       int fromDispatchId,
       Class<?> fromType,
       boolean nullable,
       boolean declaredTypeInfo,
       String fieldName) {
-    return readScalarSource(
+    return readSourceScalar(
         readContext,
         null,
         nullable ? RefMode.NULL_ONLY : RefMode.NONE,
@@ -325,7 +326,7 @@ public class FieldConverters {
         fieldName);
   }
 
-  private static Object readScalarSource(
+  private static Object readSourceScalar(
       ReadContext readContext,
       SerializationFieldInfo from,
       RefMode refMode,
@@ -403,7 +404,7 @@ public class FieldConverters {
         return readContext.readString();
       default:
         if (fromType == BigDecimal.class) {
-          return readDecimalSource(readContext, from, fromType, declaredTypeInfo);
+          return readSourceDecimal(readContext, from, fromType, declaredTypeInfo);
         }
         throw new DeserializationException("Unsupported compatible scalar source " + fieldName);
     }
@@ -434,7 +435,7 @@ public class FieldConverters {
     return scalarConverter(converter).fieldName;
   }
 
-  private static Object readDecimalSource(
+  private static Object readSourceDecimal(
       ReadContext readContext,
       SerializationFieldInfo from,
       Class<?> fromType,

@@ -456,7 +456,7 @@ public abstract class StaticGeneratedStructSerializer<T> extends AbstractObjectS
 
   protected final Object readFieldConverterSource(
       ReadContext readContext, RemoteFieldInfo remoteField) {
-    return FieldConverters.readScalarSource(
+    return FieldConverters.readSourceScalar(
         readContext,
         remoteField.serializationFieldInfo,
         remoteField.serializationFieldInfo.fieldConverter);
@@ -520,7 +520,7 @@ public abstract class StaticGeneratedStructSerializer<T> extends AbstractObjectS
       ReadContext readContext, RemoteFieldInfo remoteField, SerializationFieldInfo localFieldInfo) {
     if (remoteField.compatibleScalarRead) {
       Object fieldValue =
-          FieldConverters.readScalarSource(
+          FieldConverters.readSourceScalar(
               readContext, remoteField.serializationFieldInfo, localFieldInfo);
       return FieldConverters.convertValue(
           remoteField.serializationFieldInfo, localFieldInfo, fieldValue);
@@ -836,7 +836,8 @@ public abstract class StaticGeneratedStructSerializer<T> extends AbstractObjectS
       } else {
         this.canRead = FieldConverters.canConvert(serializationFieldInfo, localFieldInfo);
         this.compatibleScalarRead =
-            canRead && FieldConverters.needsScalarRead(serializationFieldInfo, localFieldInfo);
+            canRead
+                && FieldConverters.requiresSourceScalarRead(serializationFieldInfo, localFieldInfo);
       }
     }
   }

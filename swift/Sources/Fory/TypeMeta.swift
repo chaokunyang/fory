@@ -709,7 +709,7 @@ public final class TypeMeta: Equatable, @unchecked Sendable {
     {
       return false
     }
-    if topLevel, allowScalarConversion, isCompatibleTopLevelScalarFieldType(remoteType, localType) {
+    if topLevel, allowScalarConversion, isCompatibleScalarFieldType(remoteType, localType) {
       return true
     }
     if normalizeCompatibleTypeIDForComparison(remoteType.typeID)
@@ -737,17 +737,17 @@ public final class TypeMeta: Equatable, @unchecked Sendable {
     _ localType: FieldType
   ) -> Bool {
     if remoteType.typeID == TypeId.list.rawValue {
-      return listFieldType(remoteType, matchesDenseArrayTypeID: localType.typeID)
+      return listElementMatchesDenseArrayTypeID(remoteType, arrayTypeID: localType.typeID)
     }
     if localType.typeID == TypeId.list.rawValue {
-      return listFieldType(localType, matchesDenseArrayTypeID: remoteType.typeID)
+      return listElementMatchesDenseArrayTypeID(localType, arrayTypeID: remoteType.typeID)
     }
     return false
   }
 
-  private static func listFieldType(
+  private static func listElementMatchesDenseArrayTypeID(
     _ listType: FieldType,
-    matchesDenseArrayTypeID arrayTypeID: UInt32
+    arrayTypeID: UInt32
   ) -> Bool {
     guard listType.typeID == TypeId.list.rawValue,
       let elementType = listType.generics.first
@@ -757,7 +757,7 @@ public final class TypeMeta: Equatable, @unchecked Sendable {
     return TypeId.listElementTypeID(elementType.typeID, matchesDenseArrayTypeID: arrayTypeID)
   }
 
-  private static func isCompatibleTopLevelScalarFieldType(
+  private static func isCompatibleScalarFieldType(
     _ remoteType: FieldType,
     _ localType: FieldType
   ) -> Bool {

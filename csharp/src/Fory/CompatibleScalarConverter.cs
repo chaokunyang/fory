@@ -99,7 +99,7 @@ public static class CompatibleScalarConverter
     /// <summary>
     /// Returns whether the generated compatible reader should read the field through this scalar reader.
     /// </summary>
-    public static bool CanRead(uint remoteTypeId, uint localTypeId)
+    public static bool RequiresScalarRead(uint remoteTypeId, uint localTypeId)
     {
         TypeId remote = NormalizeScalarTypeId(remoteTypeId);
         TypeId local = NormalizeScalarTypeId(localTypeId);

@@ -29,7 +29,7 @@ import (
 	"github.com/apache/fory/go/fory/float16"
 )
 
-type compatibleScalarField struct {
+type compatibleScalarConversion struct {
 	remoteTypeID TypeId
 	localTypeID  TypeId
 	localType    reflect.Type
@@ -57,7 +57,7 @@ var maxCompatibleDecimalMagnitude = new(big.Int).Exp(
 	nil,
 )
 
-func newCompatibleScalarField(remoteTypeID TypeId, localTypeID TypeId, localType reflect.Type) (*compatibleScalarField, bool) {
+func newCompatibleScalarConversion(remoteTypeID TypeId, localTypeID TypeId, localType reflect.Type) (*compatibleScalarConversion, bool) {
 	if remoteTypeID == FLOAT8 || localTypeID == FLOAT8 {
 		return nil, false
 	}
@@ -69,21 +69,21 @@ func newCompatibleScalarField(remoteTypeID TypeId, localTypeID TypeId, localType
 		return nil, false
 	}
 	if remoteTypeID == localTypeID {
-		return &compatibleScalarField{remoteTypeID: remoteTypeID, localTypeID: localTypeID, localType: targetType}, true
+		return &compatibleScalarConversion{remoteTypeID: remoteTypeID, localTypeID: localTypeID, localType: targetType}, true
 	}
 	if remoteTypeID == BOOL {
-		return &compatibleScalarField{remoteTypeID: remoteTypeID, localTypeID: localTypeID, localType: targetType}, localTypeID == STRING || compatibleNumericType(localTypeID)
+		return &compatibleScalarConversion{remoteTypeID: remoteTypeID, localTypeID: localTypeID, localType: targetType}, localTypeID == STRING || compatibleNumericType(localTypeID)
 	}
 	if localTypeID == BOOL {
-		return &compatibleScalarField{remoteTypeID: remoteTypeID, localTypeID: localTypeID, localType: targetType}, remoteTypeID == STRING || compatibleNumericType(remoteTypeID)
+		return &compatibleScalarConversion{remoteTypeID: remoteTypeID, localTypeID: localTypeID, localType: targetType}, remoteTypeID == STRING || compatibleNumericType(remoteTypeID)
 	}
 	if remoteTypeID == STRING {
-		return &compatibleScalarField{remoteTypeID: remoteTypeID, localTypeID: localTypeID, localType: targetType}, compatibleNumericType(localTypeID)
+		return &compatibleScalarConversion{remoteTypeID: remoteTypeID, localTypeID: localTypeID, localType: targetType}, compatibleNumericType(localTypeID)
 	}
 	if localTypeID == STRING {
-		return &compatibleScalarField{remoteTypeID: remoteTypeID, localTypeID: localTypeID, localType: targetType}, compatibleNumericType(remoteTypeID)
+		return &compatibleScalarConversion{remoteTypeID: remoteTypeID, localTypeID: localTypeID, localType: targetType}, compatibleNumericType(remoteTypeID)
 	}
-	return &compatibleScalarField{remoteTypeID: remoteTypeID, localTypeID: localTypeID, localType: targetType}, compatibleNumericType(remoteTypeID) && compatibleNumericType(localTypeID)
+	return &compatibleScalarConversion{remoteTypeID: remoteTypeID, localTypeID: localTypeID, localType: targetType}, compatibleNumericType(remoteTypeID) && compatibleNumericType(localTypeID)
 }
 
 func compatibleScalarValueType(type_ reflect.Type) reflect.Type {

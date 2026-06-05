@@ -282,7 +282,7 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
         sb.AppendLine("            global::Apache.Fory.CompatibleScalarConverter.IsScalarType((uint)localTypeId);");
         sb.AppendLine("        bool exactScalarSchema = fieldType.TypeId == (uint)localTypeId && refMode == localRefMode;");
         sb.AppendLine("        bool compatibleScalarRead = fieldType.TypeId == (uint)localTypeId ||");
-        sb.AppendLine("            global::Apache.Fory.CompatibleScalarConverter.CanRead(fieldType.TypeId, (uint)localTypeId);");
+        sb.AppendLine("            global::Apache.Fory.CompatibleScalarConverter.RequiresScalarRead(fieldType.TypeId, (uint)localTypeId);");
         sb.AppendLine("        if (!readTypeInfo && refMode != global::Apache.Fory.RefMode.Tracking && localRefMode != global::Apache.Fory.RefMode.Tracking && scalarPair && !exactScalarSchema && compatibleScalarRead)");
         sb.AppendLine("        {");
         sb.AppendLine("            return global::Apache.Fory.CompatibleScalarConverter.ReadField<T>(context, typeId, localTypeId, fieldName, refMode);");

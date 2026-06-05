@@ -315,7 +315,7 @@ public class CompatibleCodecBuilder extends ObjectCodecBuilder {
     StaticInvoke sourceValue =
         new StaticInvoke(
             FieldConverters.class,
-            "readScalarSource",
+            "readSourceScalar",
             OBJECT_TYPE,
             readContextRef(),
             Literal.ofInt(FieldConverters.fromDispatchId(converter)),

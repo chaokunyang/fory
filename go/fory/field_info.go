@@ -58,7 +58,7 @@ type FieldMeta struct {
 
 	// CompatibleScalar is set only for matched compatible fields whose remote
 	// top-level scalar schema differs from the local scalar schema.
-	CompatibleScalar *compatibleScalarField
+	CompatibleScalar *compatibleScalarConversion
 
 	// Optional fields (fory/optional.Optional[T]) - only valid when FieldKindOptional
 	OptionalInfo optionalInfo

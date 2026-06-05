@@ -502,10 +502,10 @@ class DataClassSerializer(Serializer):
         self._missing_field_defaults = self._build_missing_field_defaults()
         from pyfory.converter import CompatibleScalarFieldSerializer
 
-        self._compatible_scalar_flags = [isinstance(serializer, CompatibleScalarFieldSerializer) for serializer in self._serializers]
+        self._compatible_scalar_field_flags = [isinstance(serializer, CompatibleScalarFieldSerializer) for serializer in self._serializers]
         self._basic_field_flags = [
             (not self._dynamic_fields.get(field_name, False))
-            and not self._compatible_scalar_flags[index]
+            and not self._compatible_scalar_field_flags[index]
             and isinstance(self._serializers[index], self._BASIC_SERIALIZERS)
             for index, field_name in enumerate(self._field_names)
         ]
@@ -557,7 +557,16 @@ class DataClassSerializer(Serializer):
         else:
             write_context.write_no_ref(field_value, serializer=serializer)
 
-    def _read_field_value(self, read_context, serializer, is_nullable, is_dynamic, is_basic, is_tracking_ref, is_compatible_scalar):
+    def _read_field_value(
+        self,
+        read_context,
+        serializer,
+        is_nullable,
+        is_dynamic,
+        is_basic,
+        is_tracking_ref,
+        is_compatible_scalar_field,
+    ):
         if is_nullable and is_basic:
             if read_context.read_int8() == NULL_FLAG:
                 return None
@@ -570,7 +579,7 @@ class DataClassSerializer(Serializer):
             flag = read_context.read_int8()
             if flag == NULL_FLAG:
                 return None
-            if is_compatible_scalar and flag != NOT_NULL_VALUE_FLAG:
+            if is_compatible_scalar_field and flag != NOT_NULL_VALUE_FLAG:
                 from pyfory.error import ForyInvalidDataError
 
                 raise ForyInvalidDataError(f"Invalid compatible scalar null flag: {flag}")
@@ -665,7 +674,7 @@ class DataClassSerializer(Serializer):
                 is_dynamic = self._dynamic_fields.get(field_name, False)
                 is_tracking_ref = self._ref_fields.get(field_name, False)
                 is_basic = self._basic_field_flags[index]
-                is_compatible_scalar = self._compatible_scalar_flags[index]
+                is_compatible_scalar_field = self._compatible_scalar_field_flags[index]
                 if field_name not in self._current_class_field_names or not self._assign_fields[index]:
                     self._read_missing_field_value(
                         read_context,
@@ -674,7 +683,7 @@ class DataClassSerializer(Serializer):
                         is_dynamic,
                         is_basic,
                         is_tracking_ref,
-                        is_compatible_scalar,
+                        is_compatible_scalar_field,
                     )
                     continue
                 field_value = self._read_field_value(
@@ -684,7 +693,7 @@ class DataClassSerializer(Serializer):
                     is_dynamic,
                     is_basic,
                     is_tracking_ref,
-                    is_compatible_scalar,
+                    is_compatible_scalar_field,
                 )
                 validation_field_type = self._validation_field_types[index]
                 if validation_field_type is None:
@@ -703,7 +712,7 @@ class DataClassSerializer(Serializer):
                     is_dynamic = self._dynamic_fields.get(field_name, False)
                     is_tracking_ref = self._ref_fields.get(field_name, False)
                     is_basic = self._basic_field_flags[index]
-                    is_compatible_scalar = self._compatible_scalar_flags[index]
+                    is_compatible_scalar_field = self._compatible_scalar_field_flags[index]
                     field_value = self._read_field_value(
                         read_context,
                         serializer,
@@ -711,7 +720,7 @@ class DataClassSerializer(Serializer):
                         is_dynamic,
                         is_basic,
                         is_tracking_ref,
-                        is_compatible_scalar,
+                        is_compatible_scalar_field,
                     )
                     interned_name = self._field_name_interned[field_name]
                     if obj_dict is not None:
@@ -725,7 +734,7 @@ class DataClassSerializer(Serializer):
                     is_dynamic = self._dynamic_fields.get(field_name, False)
                     is_tracking_ref = self._ref_fields.get(field_name, False)
                     is_basic = self._basic_field_flags[index]
-                    is_compatible_scalar = self._compatible_scalar_flags[index]
+                    is_compatible_scalar_field = self._compatible_scalar_field_flags[index]
                     field_value = self._read_field_value(
                         read_context,
                         serializer,
@@ -733,7 +742,7 @@ class DataClassSerializer(Serializer):
                         is_dynamic,
                         is_basic,
                         is_tracking_ref,
-                        is_compatible_scalar,
+                        is_compatible_scalar_field,
                     )
                     validation_field_type = self._validation_field_types[index]
                     if validation_field_type is None:
@@ -763,7 +772,7 @@ class DataClassSerializer(Serializer):
         is_dynamic,
         is_basic,
         is_tracking_ref,
-        is_compatible_scalar,
+        is_compatible_scalar_field,
     ):
         previous = self.type_resolver._allow_unregistered_typedef
         self.type_resolver._allow_unregistered_typedef = True
@@ -775,7 +784,7 @@ class DataClassSerializer(Serializer):
                 is_dynamic,
                 is_basic,
                 is_tracking_ref,
-                is_compatible_scalar,
+                is_compatible_scalar_field,
             )
         finally:
             self.type_resolver._allow_unregistered_typedef = previous

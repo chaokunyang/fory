@@ -33,7 +33,7 @@ import {
   isCompatibleScalarType,
   markCompatibleScalarRead,
   markCompatibleScalarSkipRead,
-} from "./gen/compatibleScalar";
+} from "./compatible/scalar";
 
 type TypeResolverLike = {
   config: Config;

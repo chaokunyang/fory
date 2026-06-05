@@ -29,7 +29,7 @@ import {
   CompatibleScalarConverter,
   getCompatibleScalarReadAction,
   shouldSkipCompatibleScalarRead,
-} from "./compatibleScalar";
+} from "../compatible/scalar";
 
 /**
  * Returns true when a field's read cannot recurse and needs no depth tracking.

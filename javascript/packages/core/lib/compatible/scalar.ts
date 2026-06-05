@@ -23,7 +23,6 @@ import type { BinaryReader } from "../reader";
 import { Decimal, DecimalCodec } from "../types/decimal";
 import { fromBFloat16Bits, toBFloat16Bits } from "../types/bfloat16";
 import { fromFloat16Bits, toFloat16Bits } from "../types/float16";
-import { CodegenRegistry } from "./router";
 
 export type CompatibleScalarReadAction = {
   remoteTypeId: number;
@@ -739,5 +738,3 @@ export class CompatibleScalarConverter {
     }
   }
 }
-
-CodegenRegistry.registerExternal(CompatibleScalarConverter);

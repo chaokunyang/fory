@@ -653,7 +653,7 @@ public class CompatibleFieldConvertTest extends ForyTestBase {
   }
 
   @Test(dataProvider = "xlangAndCodegen")
-  public void testScalarNullableBoolRejectsRefFlag(boolean xlang, boolean codegen) {
+  public void testScalarNullableBoolRejectsRefValueFlag(boolean xlang, boolean codegen) {
     Fory writer = compatibleFory(xlang, codegen);
     writer.register(NullableBooleanWriter.class, 28000);
     byte[] bytes = writer.serialize(new NullableBooleanWriter());

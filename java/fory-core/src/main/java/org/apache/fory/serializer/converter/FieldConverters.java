@@ -124,7 +124,7 @@ public class FieldConverters {
   public static boolean canConvert(TypeResolver resolver, Descriptor from, Descriptor to) {
     int fromDispatchId = DispatchId.getDispatchId(resolver, from);
     int toDispatchId = DispatchId.getDispatchId(resolver, to);
-    if (scalarRefFramingMismatch(
+    if (isRefTrackedScalarSchemaMismatch(
         fromDispatchId,
         from.getRawType(),
         from.isTrackingRef(),
@@ -157,7 +157,7 @@ public class FieldConverters {
    */
   @Internal
   public static boolean canConvert(SerializationFieldInfo from, SerializationFieldInfo to) {
-    if (scalarRefFramingMismatch(
+    if (isRefTrackedScalarSchemaMismatch(
         from.dispatchId,
         from.type,
         from.trackingRef,
@@ -201,7 +201,7 @@ public class FieldConverters {
   @Internal
   public static Object convertValue(
       SerializationFieldInfo from, SerializationFieldInfo to, Object value) {
-    if (scalarRefFramingMismatch(
+    if (isRefTrackedScalarSchemaMismatch(
         from.dispatchId,
         from.type,
         from.trackingRef,
@@ -230,7 +230,7 @@ public class FieldConverters {
   /** Returns whether descriptor-level compatible read must read a scalar conversion payload. */
   @Internal
   public static boolean needsScalarRead(SerializationFieldInfo from, SerializationFieldInfo to) {
-    if (scalarRefFramingMismatch(
+    if (isRefTrackedScalarSchemaMismatch(
         from.dispatchId,
         from.type,
         from.trackingRef,
@@ -481,7 +481,7 @@ public class FieldConverters {
     return CompatibleScalarConverter.canConvert(fromDispatchId, from, toDispatchId, to);
   }
 
-  private static boolean scalarRefFramingMismatch(
+  private static boolean isRefTrackedScalarSchemaMismatch(
       int fromDispatchId,
       Class<?> from,
       boolean fromTrackingRef,

@@ -58,7 +58,7 @@ type scalarInt32 struct {
 	Value int32
 }
 
-type scalarRefInt32 struct {
+type scalarTrackingRefInt32 struct {
 	Value int32 `fory:"ref"`
 }
 
@@ -455,7 +455,7 @@ func TestCompatibleScalarTrackingRefMismatch(t *testing.T) {
 		typeSpec: NewSimpleTypeSpec(BOOL),
 		tagID:    -1,
 	}
-	ser := newStructSerializerFromTypeDef(reflect.TypeOf(scalarBool{}), "ScalarRefMismatch", []FieldDef{remoteDef})
+	ser := newStructSerializerFromTypeDef(reflect.TypeOf(scalarBool{}), "ScalarTrackingRefMismatch", []FieldDef{remoteDef})
 	require.NoError(t, ser.initialize(f.typeResolver))
 	require.Len(t, ser.fields, 1)
 	assert.Equal(t, -1, ser.fields[0].Meta.FieldIndex)
@@ -463,7 +463,7 @@ func TestCompatibleScalarTrackingRefMismatch(t *testing.T) {
 	assert.True(t, ser.typeDefDiffers)
 
 	remoteDef.trackRef = false
-	ser = newStructSerializerFromTypeDef(reflect.TypeOf(scalarBool{}), "ScalarRefMatch", []FieldDef{remoteDef})
+	ser = newStructSerializerFromTypeDef(reflect.TypeOf(scalarBool{}), "ScalarTrackingRefMatch", []FieldDef{remoteDef})
 	require.NoError(t, ser.initialize(f.typeResolver))
 	require.Len(t, ser.fields, 1)
 	assert.Equal(t, 0, ser.fields[0].Meta.FieldIndex)
@@ -472,7 +472,7 @@ func TestCompatibleScalarTrackingRefMismatch(t *testing.T) {
 
 	remoteDef.trackRef = true
 	remoteDef.nullable = true
-	ser = newStructSerializerFromTypeDef(reflect.TypeOf(scalarBool{}), "ScalarRefNullableRemote", []FieldDef{remoteDef})
+	ser = newStructSerializerFromTypeDef(reflect.TypeOf(scalarBool{}), "ScalarTrackingRefNullableRemote", []FieldDef{remoteDef})
 	require.NoError(t, ser.initialize(f.typeResolver))
 	require.Len(t, ser.fields, 1)
 	assert.Equal(t, -1, ser.fields[0].Meta.FieldIndex)
@@ -482,7 +482,7 @@ func TestCompatibleScalarTrackingRefMismatch(t *testing.T) {
 	remoteDef.trackRef = true
 	remoteDef.nullable = false
 	remoteDef.typeSpec = NewSimpleTypeSpec(INT32)
-	ser = newStructSerializerFromTypeDef(reflect.TypeOf(scalarRefInt32{}), "ScalarRefTypeChange", []FieldDef{remoteDef})
+	ser = newStructSerializerFromTypeDef(reflect.TypeOf(scalarTrackingRefInt32{}), "ScalarTrackingRefTypeChange", []FieldDef{remoteDef})
 	require.NoError(t, ser.initialize(f.typeResolver))
 	require.Len(t, ser.fields, 1)
 	assert.Equal(t, -1, ser.fields[0].Meta.FieldIndex)

@@ -183,7 +183,7 @@ final class StructSerializer extends Serializer<Object?> {
       final scalarPair =
           isCompatibleScalarType(remoteField.fieldType.typeId) &&
           isCompatibleScalarType(localField.field.fieldType.typeId);
-      final scalarRefIncompatible =
+      final refTrackedScalarSchemaMismatch =
           scalarPair &&
           (remoteField.fieldType.ref != localField.field.fieldType.ref ||
               ((remoteField.fieldType.ref || localField.field.fieldType.ref) &&
@@ -191,7 +191,7 @@ final class StructSerializer extends Serializer<Object?> {
                           localField.field.fieldType.typeId ||
                       remoteField.fieldType.nullable !=
                           localField.field.fieldType.nullable)));
-      if (scalarRefIncompatible) {
+      if (refTrackedScalarSchemaMismatch) {
         fields.add(null);
         scalarConversions?.add(null);
         topLevelListArrayPairs?.add(false);

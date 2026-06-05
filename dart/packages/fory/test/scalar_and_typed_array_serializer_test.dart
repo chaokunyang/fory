@@ -192,16 +192,16 @@ class CompatibleScalarOptionalBoolEnvelope {
 }
 
 @ForyStruct()
-class CompatibleScalarRefBoolEnvelope {
-  CompatibleScalarRefBoolEnvelope();
+class CompatibleScalarTrackingRefBoolEnvelope {
+  CompatibleScalarTrackingRefBoolEnvelope();
 
   @ForyField(id: 1, ref: true)
   bool value = false;
 }
 
 @ForyStruct()
-class CompatibleScalarOptionalRefBoolEnvelope {
-  CompatibleScalarOptionalRefBoolEnvelope();
+class CompatibleScalarOptionalTrackingRefBoolEnvelope {
+  CompatibleScalarOptionalTrackingRefBoolEnvelope();
 
   @ForyField(id: 1, ref: true, type: BoolType(nullable: true))
   bool? value;
@@ -1207,26 +1207,30 @@ void main() {
 
     test('rejects tracked scalar nullable framing mismatch', () {
       expect(
-        _compatibleScalarRoundTrip<CompatibleScalarRefBoolEnvelope>(
-          CompatibleScalarOptionalRefBoolEnvelope,
-          CompatibleScalarRefBoolEnvelope,
-          CompatibleScalarOptionalRefBoolEnvelope()..value = true,
+        _compatibleScalarRoundTrip<CompatibleScalarTrackingRefBoolEnvelope>(
+          CompatibleScalarOptionalTrackingRefBoolEnvelope,
+          CompatibleScalarTrackingRefBoolEnvelope,
+          CompatibleScalarOptionalTrackingRefBoolEnvelope()..value = true,
         ).value,
         isFalse,
       );
       expect(
-        _compatibleScalarRoundTrip<CompatibleScalarOptionalRefBoolEnvelope>(
-          CompatibleScalarRefBoolEnvelope,
-          CompatibleScalarOptionalRefBoolEnvelope,
-          CompatibleScalarRefBoolEnvelope()..value = true,
+        _compatibleScalarRoundTrip<
+          CompatibleScalarOptionalTrackingRefBoolEnvelope
+        >(
+          CompatibleScalarTrackingRefBoolEnvelope,
+          CompatibleScalarOptionalTrackingRefBoolEnvelope,
+          CompatibleScalarTrackingRefBoolEnvelope()..value = true,
         ).value,
         isNull,
       );
       expect(
-        _compatibleScalarRoundTrip<CompatibleScalarOptionalRefBoolEnvelope>(
-          CompatibleScalarOptionalRefBoolEnvelope,
-          CompatibleScalarOptionalRefBoolEnvelope,
-          CompatibleScalarOptionalRefBoolEnvelope()..value = true,
+        _compatibleScalarRoundTrip<
+          CompatibleScalarOptionalTrackingRefBoolEnvelope
+        >(
+          CompatibleScalarOptionalTrackingRefBoolEnvelope,
+          CompatibleScalarOptionalTrackingRefBoolEnvelope,
+          CompatibleScalarOptionalTrackingRefBoolEnvelope()..value = true,
         ).value,
         isTrue,
       );

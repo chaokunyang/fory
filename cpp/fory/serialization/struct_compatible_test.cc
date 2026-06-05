@@ -909,7 +909,7 @@ TEST(SchemaEvolutionTest, ScalarOptionalRejectsRefValueFlag) {
   EXPECT_EQ(decoded.error().code(), ErrorCode::InvalidData);
 }
 
-TEST(SchemaEvolutionTest, ScalarSameTypeOptionalRejectsRefFlag) {
+TEST(SchemaEvolutionTest, ScalarSameTypeOptionalRejectsRefValueFlag) {
   auto writer = Fory::builder().compatible(true).xlang(true).build();
   auto reader = Fory::builder().compatible(true).xlang(true).build();
 

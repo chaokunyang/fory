@@ -182,7 +182,7 @@ public final class FieldInfo implements Serializable {
         }
       }
       Descriptor remoteDescriptor = builder.build();
-      if (localFieldType != null && scalarRefFramingIncompatible(fieldType, localFieldType)) {
+      if (localFieldType != null && isRefTrackedScalarSchemaMismatch(fieldType, localFieldType)) {
         return new DescriptorBuilder(remoteDescriptor).field(null).build();
       }
       FieldConverter<?> converter =
@@ -311,7 +311,7 @@ public final class FieldInfo implements Serializable {
     return false;
   }
 
-  private static boolean scalarRefFramingIncompatible(
+  private static boolean isRefTrackedScalarSchemaMismatch(
       FieldTypes.FieldType remoteFieldType, FieldTypes.FieldType localFieldType) {
     if (!compatibleScalarType(remoteFieldType.typeId)
         || !compatibleScalarType(localFieldType.typeId)) {

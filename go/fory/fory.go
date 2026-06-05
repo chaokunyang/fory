@@ -174,9 +174,7 @@ func New(opts ...Option) *Fory {
 	for _, opt := range opts {
 		opt(f)
 	}
-	if f.config.IsXlang && !f.compatibleSet {
-		f.config.Compatible = true
-	}
+	f.applyCompatibleDefault()
 
 	// Initialize meta context if compatible mode is enabled
 	if f.config.Compatible {
@@ -210,6 +208,12 @@ func New(opts ...Option) *Fory {
 	}
 
 	return f
+}
+
+func (f *Fory) applyCompatibleDefault() {
+	if !f.compatibleSet {
+		f.config.Compatible = true
+	}
 }
 
 // MetaContext returns the meta context for schema evolution

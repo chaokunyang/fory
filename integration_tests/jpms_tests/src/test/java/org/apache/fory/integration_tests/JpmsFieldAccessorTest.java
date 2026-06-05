@@ -53,7 +53,12 @@ public class JpmsFieldAccessorTest {
   @Test
   public void testPrivateFinalFieldSerialization() {
     Fory fory =
-        Fory.builder().withXlang(false).withCodegen(false).requireClassRegistration(false).build();
+        Fory.builder()
+            .withXlang(false)
+            .withCodegen(false)
+            .requireClassRegistration(false)
+            .withCompatible(false)
+            .build();
     PrivateFieldBean result =
         (PrivateFieldBean) fory.deserialize(fory.serialize(new PrivateFieldBean(13)));
     Assert.assertEquals(result.value(), 13);
@@ -65,7 +70,12 @@ public class JpmsFieldAccessorTest {
       return;
     }
     Fory fory =
-        Fory.builder().withXlang(false).withCodegen(false).requireClassRegistration(false).build();
+        Fory.builder()
+            .withXlang(false)
+            .withCodegen(false)
+            .requireClassRegistration(false)
+            .withCompatible(false)
+            .build();
     byte[] bytes = fory.serialize(new NonSerializableNoNoArgBean(5, 13));
     NonSerializableNoNoArgBean.resetParentConstructorCalls();
     NonSerializableNoNoArgBean result = (NonSerializableNoNoArgBean) fory.deserialize(bytes);
@@ -80,7 +90,12 @@ public class JpmsFieldAccessorTest {
       return;
     }
     Fory fory =
-        Fory.builder().withXlang(false).withCodegen(false).requireClassRegistration(false).build();
+        Fory.builder()
+            .withXlang(false)
+            .withCodegen(false)
+            .requireClassRegistration(false)
+            .withCompatible(false)
+            .build();
     Map<String, Boolean> backingMap = Collections.synchronizedMap(new HashMap<>());
     Set<String> set = Collections.newSetFromMap(backingMap);
     set.add("alpha");
@@ -104,7 +119,12 @@ public class JpmsFieldAccessorTest {
       return;
     }
     Fory fory =
-        Fory.builder().withXlang(false).withCodegen(true).requireClassRegistration(false).build();
+        Fory.builder()
+            .withXlang(false)
+            .withCodegen(true)
+            .requireClassRegistration(false)
+            .withCompatible(false)
+            .build();
     PrivateFieldBean result =
         (PrivateFieldBean) fory.deserialize(fory.serialize(new PrivateFieldBean(17)));
     Assert.assertEquals(result.value(), 17);
@@ -134,7 +154,12 @@ public class JpmsFieldAccessorTest {
 
   @Test
   public void testPublicSerializerInExportedPackage() {
-    Fory fory = Fory.builder().withXlang(false).requireClassRegistration(false).build();
+    Fory fory =
+        Fory.builder()
+            .withXlang(false)
+            .requireClassRegistration(false)
+            .withCompatible(false)
+            .build();
     fory.registerSerializer(PublicSerializerValue.class, PublicSerializerValueSerializer.class);
     PublicSerializerValue result =
         (PublicSerializerValue) fory.deserialize(fory.serialize(new PublicSerializerValue(11)));

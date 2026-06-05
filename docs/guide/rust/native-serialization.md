@@ -67,12 +67,12 @@ be shared through `Arc`.
 
 ## Schema Evolution
 
-Native serialization defaults to schema-consistent mode. Enable compatible mode only when Rust-only
-writer and reader versions can differ:
+Native serialization defaults to compatible mode, so Rust-only writer and reader versions can differ
+when the schema metadata remains compatible. Use schema-consistent mode only for lockstep schemas:
 
 ```rust
-let mut writer = Fory::builder().xlang(false).compatible(true).build();
-let mut reader = Fory::builder().xlang(false).compatible(true).build();
+let mut writer = Fory::builder().xlang(false).compatible(false).build();
+let mut reader = Fory::builder().xlang(false).compatible(false).build();
 ```
 
 Compatible mode uses schema metadata to tolerate added, removed, or reordered fields when field
@@ -179,8 +179,9 @@ Register every concrete implementation that can appear behind the trait object.
 ## Performance Guidelines
 
 - Reuse a configured `Fory` instance and register types before concurrent use.
-- Keep native schema-consistent mode for lockstep Rust services.
-- Enable `.compatible(true)` only when Rust-only schema evolution is required.
+- Keep compatible mode unless lockstep Rust services need schema-consistent payloads for smaller
+  same-schema data.
+- Use `.compatible(false)` only when Rust-only schemas are stable and lockstep.
 - Use derive-generated serializers for application structs.
 - Use `.track_ref(true)` only for weak-pointer or cyclic graph scenarios that require it.
 - Prefer concrete typed fields over `dyn Any` or trait objects on hot paths.
@@ -194,7 +195,7 @@ Register every concrete implementation that can appear behind the trait object.
 | `Rc`, `Arc`, weak pointers               | Yes                      | No                      |
 | Trait objects and `dyn Any`              | Yes                      | No                      |
 | Schema-consistent same-language payloads | Yes                      | No                      |
-| Compatible schema evolution by default   | No                       | Yes                     |
+| Compatible schema evolution by default   | Yes                      | Yes                     |
 | Portable type mapping across runtimes    | No                       | Yes                     |
 
 ## Troubleshooting
@@ -216,8 +217,7 @@ object.
 
 ### A rolling deployment fails after a field change
 
-Native serialization defaults to schema-consistent mode. Use `.compatible(true)` on both writer and
-reader when schemas can differ.
+Native serialization defaults to compatible mode. Keep that default when schemas can differ.
 
 ## Related Topics
 

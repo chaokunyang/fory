@@ -94,6 +94,8 @@ int main() {
   auto fory = fory::serialization::Fory::builder()
                   .xlang(true)      // Enable cross-language serialization
                   .track_ref(false) // Disable reference tracking for simplicity
+
+                  .compatible(true)
                   .build();
 
   // Register struct types (required for struct serialization)

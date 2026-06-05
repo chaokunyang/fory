@@ -38,7 +38,7 @@ fn basic() {
         Map(HashMap<String, Token>),
     }
 
-    let mut fory = Fory::builder().xlang(false).build();
+    let mut fory = Fory::builder().xlang(false).compatible(false).build();
     fory.register::<Token>(1000).unwrap();
 
     let mut map = HashMap::new();
@@ -81,10 +81,10 @@ fn named_enum() {
         Assign { value: i32, target: String },
     }
 
-    let mut fory1 = Fory::builder().xlang(false).build();
+    let mut fory1 = Fory::builder().xlang(false).compatible(false).build();
     fory1.register::<Token1>(1000).unwrap();
 
-    let mut fory2 = Fory::builder().xlang(false).build();
+    let mut fory2 = Fory::builder().xlang(false).compatible(false).build();
     fory2.register::<Token2>(1000).unwrap();
 
     let token = Token1::Assign {

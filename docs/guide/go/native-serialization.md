@@ -84,7 +84,7 @@ _ = f.RegisterStruct(Order{}, 100)
 
 ## Schema Evolution
 
-Native serialization defaults to schema-consistent mode. Writer and reader structs should match
+Native serialization defaults to compatible mode. Use schema-consistent mode only when writer and reader structs always match
 when `WithCompatible(true)` is not set.
 
 Enable compatible mode when Go-only services roll independently:
@@ -168,8 +168,8 @@ _ = data
 ## Performance Guidelines
 
 - Reuse `Fory` or the thread-safe wrapper instead of constructing a runtime per request.
-- Keep schema-consistent mode for lockstep Go services; enable compatible mode only when schema
-  evolution is needed.
+- Keep compatible mode unless lockstep Go services need schema-consistent payloads for smaller
+  same-schema data.
 - Register structs with explicit numeric IDs.
 - Disable reference tracking unless the graph requires identity or cycles.
 - Use code generation for hot Go structs when reflection overhead matters.
@@ -183,7 +183,7 @@ _ = data
 | Non-Go readers or writers                | No                       | Yes                     |
 | Go-native `int`, `uint`, nil slice/map   | Yes                      | Limited                 |
 | Schema-consistent same-language payloads | Yes                      | No                      |
-| Compatible schema evolution by default   | No                       | Yes                     |
+| Compatible schema evolution by default   | Yes                      | Yes                     |
 | Portable type mapping across runtimes    | No                       | Yes                     |
 
 ## Troubleshooting
@@ -195,8 +195,8 @@ registration with every peer runtime.
 
 ### A rolling deployment fails after a field change
 
-Native serialization defaults to schema-consistent mode. Use `fory.WithCompatible(true)` on both
-writer and reader when struct definitions can differ.
+Native serialization defaults to compatible mode. Keep that default when struct definitions can
+differ.
 
 ### A nil slice or map changes shape
 

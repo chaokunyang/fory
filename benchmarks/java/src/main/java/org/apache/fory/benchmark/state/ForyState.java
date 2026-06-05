@@ -74,6 +74,7 @@ public class ForyState {
               .withClassVersionCheck(false)
               .withRefTracking(references)
               .requireClassRegistration(false)
+              .withCompatible(false)
               .build();
       setupBuffer();
     }
@@ -97,6 +98,7 @@ public class ForyState {
             .withXlang(false)
             .withRefTracking(true)
             .requireClassRegistration(false)
+            .withCompatible(false)
             .build();
     Object o1 = fory.deserialize(fory.serialize(o));
     Preconditions.checkArgument(o.equals(o1));

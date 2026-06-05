@@ -320,7 +320,7 @@ public final class ForyBuilder {
   }
 
   boolean isCompatible() {
-    return compatible != null ? compatible : xlang;
+    return compatible != null ? compatible : true;
   }
 
   /**

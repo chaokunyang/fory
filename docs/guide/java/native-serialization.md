@@ -85,17 +85,14 @@ settings differ.
 
 ## Schema Evolution
 
-Native serialization defaults to schema-consistent mode. In schema-consistent mode, writer and
-reader classes are expected to have the same schema. This is the most direct native-mode path and is
-the right default for lockstep deployments.
-
-Enable compatible mode when Java classes can evolve independently across writer and reader
-deployments:
+Native serialization defaults to compatible mode, so readers can tolerate schema changes during
+rolling deployments when the schema metadata remains compatible. Use schema-consistent mode only for
+lockstep deployments where writer and reader classes always have the same schema:
 
 ```java
 Fory fory = Fory.builder()
     .withXlang(false)
-    .withCompatible(true)
+    .withCompatible(false)
     .build();
 ```
 
@@ -329,8 +326,8 @@ loaders on an existing runtime.
 
 - Reuse `Fory` or `ThreadSafeFory` instances instead of rebuilding them per request.
 - Register classes with explicit numeric IDs for compact type metadata and stable deployments.
-- Keep schema-consistent mode for lockstep Java services; enable compatible mode only when schema
-  evolution requires it.
+- Keep compatible mode unless lockstep Java services need schema-consistent payloads for smaller
+  same-schema data.
 - Disable reference tracking for value-shaped graphs with no identity or cycles.
 - Use async compilation on ordinary JVMs when startup latency can tolerate interpreter-first
   serialization:
@@ -359,7 +356,7 @@ loaders on an existing runtime.
 | JDK serialization hooks                     | Yes                      | No                      |
 | Java object copy                            | Yes                      | No                      |
 | Portable type mapping across runtimes       | No                       | Yes                     |
-| Compatible schema evolution by default      | No                       | Yes                     |
+| Compatible schema evolution by default      | Yes                      | Yes                     |
 | Schema-consistent same-language performance | Yes                      | No                      |
 
 ## Troubleshooting
@@ -377,8 +374,8 @@ loading is intentional, use `requireClassRegistration(false)` only with an allow
 
 ### A rolling deployment fails after a field change
 
-Native serialization defaults to schema-consistent mode. Use `.withCompatible(true)` when writer and
-reader versions can differ, and add stable field metadata for long-lived schemas.
+Native serialization defaults to compatible mode. Keep that default when writer and reader versions
+can differ, and add stable field metadata for long-lived schemas.
 
 ### Object identity is not preserved
 

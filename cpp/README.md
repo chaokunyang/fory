@@ -192,7 +192,7 @@ assert(decoded[1].get() == decoded[2].get());
 
 ### 3. Schema Evolution
 
-Apache Fory™ supports schema evolution in **Compatible mode**, allowing serialization and deserialization peers to have different type definitions. Xlang mode uses compatible schema evolution by default; in native mode, add `.xlang(false).compatible(true)` when C++-only payloads need schema evolution.
+Apache Fory™ supports schema evolution in **Compatible mode**, allowing serialization and deserialization peers to have different type definitions. Compatible mode is the default for both xlang and native mode; add `.compatible(false)` only when C++-only or xlang schemas are stable and lockstep.
 
 ```cpp
 // Version 1

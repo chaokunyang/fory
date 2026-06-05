@@ -115,6 +115,7 @@ public class DuplicateFieldsTest extends ForyTestBase {
             .withRefTracking(false)
             .withCodegen(true)
             .requireClassRegistration(false)
+            .withCompatible(false)
             .build();
     {
       ObjectSerializer<C> serializer = new ObjectSerializer<>(fory.getTypeResolver(), C.class);
@@ -144,6 +145,7 @@ public class DuplicateFieldsTest extends ForyTestBase {
               .withRefTracking(false)
               .withCodegen(true)
               .requireClassRegistration(false)
+              .withCompatible(false)
               .build();
       C newC = (C) serDeCheckSerializer(fory1, c, "Codec");
       assertEquals(newC.f1, c.f1);
@@ -161,6 +163,7 @@ public class DuplicateFieldsTest extends ForyTestBase {
             .withRefTracking(false)
             .withCodegen(true)
             .requireClassRegistration(false)
+            .withCompatible(false)
             .build();
     Serializer<PrivateChild> serializer =
         Serializers.newSerializer(

@@ -21,8 +21,8 @@ license: |
 
 This page covers C++ runtime configuration. `Fory::builder()` creates xlang
 payloads by default, and omitted compatible mode resolves to compatible mode in
-xlang. Native mode is selected explicitly with `.xlang(false)` and defaults to
-schema-consistent payloads.
+both xlang and native mode. Native mode is selected explicitly with
+`.xlang(false)`.
 
 ## Builder Pattern
 
@@ -42,17 +42,17 @@ auto fory = Fory::builder()
     .compatible(false)
     .build();
 
-// Native mode for C++-only traffic.
+// Native mode for C++-only traffic; compatible mode is still the default.
 auto fory = Fory::builder()
     .xlang(false)
     .build();
 
-// Native mode with compatible schema evolution.
+// Schema-consistent native mode for stable lockstep schemas.
 auto fory = Fory::builder()
     .xlang(false)
     .track_ref(true)
     .max_dyn_depth(10)
-    .compatible(true)
+    .compatible(false)
     .build();
 ```
 
@@ -86,10 +86,13 @@ auto fory = Fory::builder()
 ```
 
 When enabled, supports reading data serialized with different schema versions.
-When omitted, xlang mode defaults to compatible mode. Native mode defaults to
-schema-consistent mode and uses compatible mode only when this option is set.
+When omitted, compatible mode is enabled in both xlang and native mode. Use
+`.compatible(false)` only when writer and reader always use the same schema and
+you want smaller schema-consistent payloads. For hand-written xlang schemas
+across languages, keep compatible mode unless schema consistency has been
+aligned and verified, or native types are generated from Fory schema IDL.
 
-**Default:** `true` in xlang mode; `false` in native mode
+**Default:** `true`
 
 ### track_ref(bool)
 
@@ -162,13 +165,13 @@ auto fory = Fory::builder().xlang(true).build_thread_safe();  // Returns ThreadS
 
 ## Configuration Summary
 
-| Option                       | Description                             | Default                        |
-| ---------------------------- | --------------------------------------- | ------------------------------ |
-| `xlang(bool)`                | Use xlang mode                          | `true`                         |
-| `compatible(bool)`           | Enable schema evolution                 | xlang: `true`; native: `false` |
-| `track_ref(bool)`            | Enable reference tracking               | `true`                         |
-| `max_dyn_depth(uint32_t)`    | Maximum nesting depth for dynamic types | `5`                            |
-| `check_struct_version(bool)` | Enable struct version checking          | `false`                        |
+| Option                       | Description                             | Default |
+| ---------------------------- | --------------------------------------- | ------- |
+| `xlang(bool)`                | Use xlang mode                          | `true`  |
+| `compatible(bool)`           | Enable schema evolution                 | `true`  |
+| `track_ref(bool)`            | Enable reference tracking               | `true`  |
+| `max_dyn_depth(uint32_t)`    | Maximum nesting depth for dynamic types | `5`     |
+| `check_struct_version(bool)` | Enable struct version checking          | `false` |
 
 ## Security
 

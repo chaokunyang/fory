@@ -20,8 +20,8 @@ license: |
 ---
 
 This page covers Rust runtime configuration. `Fory::builder().xlang(true).build()` selects xlang mode with
-compatible schema evolution. Native mode is selected explicitly with `.xlang(false)` and defaults to
-schema-consistent payloads.
+compatible schema evolution. Native mode is selected explicitly with `.xlang(false)` and also defaults to
+compatible schema evolution.
 
 ## Wire Modes
 
@@ -47,13 +47,14 @@ let fory = Fory::builder().xlang(true).compatible(false).build();
 
 ### Native Mode
 
-For Rust-only payloads, native mode is explicit and schema-consistent by default:
+For Rust-only payloads, native mode is explicit and compatible mode remains the default:
 
 ```rust
 let fory = Fory::builder().xlang(false).build();
 ```
 
-Add `.compatible(true)` only when Rust-only deployments need schema evolution.
+Use `.compatible(false)` only when writer and reader always use the same Rust schema and you want
+smaller schema-consistent payloads.
 
 ## Configuration
 
@@ -107,8 +108,8 @@ let fory = Fory::builder().xlang(true).build();
 // Native mode for Rust-only traffic
 let fory = Fory::builder().xlang(false).build();
 
-// Native mode with schema evolution
-let fory = Fory::builder().xlang(false).compatible(true).build();
+// Native mode with schema-consistent payloads for stable lockstep schemas
+let fory = Fory::builder().xlang(false).compatible(false).build();
 
 // Custom depth limit
 let fory = Fory::builder().xlang(true).max_dyn_depth(10).build();
@@ -122,11 +123,22 @@ let fory = Fory::builder()
 
 ## Configuration Summary
 
-| Option               | Description                             | Default                        |
-| -------------------- | --------------------------------------- | ------------------------------ |
-| `compatible(bool)`   | Enable schema evolution                 | xlang: `true`; native: `false` |
-| `xlang(bool)`        | Use xlang mode                          | `true`                         |
-| `max_dyn_depth(u32)` | Maximum nesting depth for dynamic types | `5`                            |
+| Option               | Description                             | Default |
+| -------------------- | --------------------------------------- | ------- |
+| `compatible(bool)`   | Enable schema evolution                 | `true`  |
+| `xlang(bool)`        | Use xlang mode                          | `true`  |
+| `max_dyn_depth(u32)` | Maximum nesting depth for dynamic types | `5`     |
+
+## Compatible Mode And Schema-Consistent Mode
+
+Compatible mode is enabled by default for both xlang and native mode. Keep this default when Rust
+structs may evolve independently, when services deploy separately, or when xlang schemas are written
+by hand in different languages.
+
+Use `.compatible(false)` only when the schema used to deserialize every payload is always the same
+as the schema used to serialize it. This schema-consistent mode avoids field metadata payload and can
+be faster, but it requires lockstep schemas. For xlang payloads, keep compatible mode unless every
+language schema has been aligned and verified, or native types are generated from Fory schema IDL.
 
 ## Security
 

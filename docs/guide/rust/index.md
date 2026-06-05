@@ -95,7 +95,7 @@ fn main() -> Result<(), Error> {
 
 Use xlang mode for cross-language payloads and schemas shared with other Fory runtimes. Xlang mode is the default Rust wire mode, and Rust examples that use it set `.xlang(true)` explicitly so the mode choice is visible.
 
-Use native mode for Rust-only traffic. Native mode is selected with `.xlang(false)`, uses schema-consistent payloads unless compatible mode is enabled, and keeps Rust object serialization on the Rust runtime path. It is optimized for Rust's type system and covers Rust-specific object features such as trait objects and shared-reference patterns that are not portable xlang payloads.
+Use native mode for Rust-only traffic. Native mode is selected with `.xlang(false)`, uses compatible schema evolution by default and supports schema-consistent payloads with an explicit compatible=false setting, and keeps Rust object serialization on the Rust runtime path. It is optimized for Rust's type system and covers Rust-specific object features such as trait objects and shared-reference patterns that are not portable xlang payloads.
 
 See [Xlang Serialization](xlang-serialization.md) for Rust xlang registration and interoperability rules, and [Native Serialization](native-serialization.md) for Rust-only payloads.
 

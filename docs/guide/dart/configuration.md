@@ -58,7 +58,7 @@ When `compatible: true`:
 
 When `compatible: false`:
 
-- Both sides must have exactly the same schema. This is slightly faster and is fine when schemas do not change or all services deploy schema changes at the same time.
+- Both sides must have exactly the same schema. This is slightly faster and reduces field metadata payload when schemas do not change or all services deploy schema changes at the same time. For hand-written xlang schemas across languages, keep compatible mode unless schema consistency has been aligned and verified, or native types are generated from Fory schema IDL.
 
 ### `checkStructVersion`
 

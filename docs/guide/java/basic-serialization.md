@@ -111,8 +111,8 @@ object copy, and native-mode zero-copy buffers. See [Native Serialization](nativ
 
 - `withRefTracking(true)` preserves shared references and circular references.
 - `requireClassRegistration(true)` keeps the default registered-type policy.
-- `withCompatible(true)` enables compatible mode explicitly for native-mode
-  schema evolution. Xlang mode already uses compatible mode by default.
+- Compatible mode is enabled by default for native-mode and xlang payloads. Use
+  `withCompatible(false)` only for stable lockstep schemas when smaller payloads matter.
 - `withAsyncCompilation(true)` enables asynchronous serializer compilation where supported.
 
 ## Best Practices

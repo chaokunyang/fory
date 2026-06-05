@@ -549,6 +549,7 @@ public class ObjectStreamSerializerTest extends ForyTestBase {
             .requireClassRegistration(false)
             .withRefTracking(true)
             .withCodegen(enableCodegen)
+            .withCompatible(false)
             .build();
     fory.registerSerializer(
         ConcurrentHashMap.class,
@@ -1237,14 +1238,24 @@ public class ObjectStreamSerializerTest extends ForyTestBase {
   @Test
   public void testObjectStreamExpectedParentLayer() {
     Fory writerFory =
-        Fory.builder().withXlang(false).withRefTracking(true).withCodegen(false).build();
+        Fory.builder()
+            .withXlang(false)
+            .withRefTracking(true)
+            .withCodegen(false)
+            .withCompatible(false)
+            .build();
     writerFory.register(HierarchyChildDefault.class);
     writerFory.registerSerializer(
         HierarchyChildDefault.class,
         new ObjectStreamSerializer(writerFory.getTypeResolver(), HierarchyChildDefault.class));
 
     Fory readerFory =
-        Fory.builder().withXlang(false).withRefTracking(true).withCodegen(false).build();
+        Fory.builder()
+            .withXlang(false)
+            .withRefTracking(true)
+            .withCodegen(false)
+            .withCompatible(false)
+            .build();
     readerFory.register(HierarchyChildDefault.class);
     readerFory.registerSerializer(
         HierarchyChildDefault.class,
@@ -1266,13 +1277,19 @@ public class ObjectStreamSerializerTest extends ForyTestBase {
             .requireClassRegistration(false)
             .withRefTracking(true)
             .withCodegen(false)
+            .withCompatible(false)
             .build();
     writerFory.registerSerializer(
         HierarchyParentPutFields.class,
         new ObjectStreamSerializer(writerFory.getTypeResolver(), HierarchyParentPutFields.class));
 
     Fory readerFory =
-        Fory.builder().withXlang(false).withRefTracking(true).withCodegen(false).build();
+        Fory.builder()
+            .withXlang(false)
+            .withRefTracking(true)
+            .withCodegen(false)
+            .withCompatible(false)
+            .build();
     readerFory.register(HierarchyChildDefault.class);
     readerFory.registerSerializer(
         HierarchyChildDefault.class,

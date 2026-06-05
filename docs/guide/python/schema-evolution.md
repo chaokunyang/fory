@@ -20,7 +20,7 @@ license: |
 ---
 
 Apache Fory™ supports schema evolution in compatible mode, allowing fields to be added or removed
-while maintaining compatibility. Xlang mode enables compatible mode by default. In native mode,
+while maintaining compatibility. Compatible mode is enabled by default in both xlang and native mode. In native mode,
 set `compatible=True` explicitly when Python-only payloads need schema evolution.
 
 Compatible readers also tolerate selected scalar field type changes when the value is lossless. A

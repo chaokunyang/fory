@@ -27,16 +27,15 @@ In many systems, the schema of a class used for serialization may change over ti
 
 ### Default Mode
 
-In Java native mode (`xlang=false`), Fory serializes objects using schema-consistent mode by default. This mode assumes that the deserialization process uses the same class schema as the serialization process, minimizing payload overhead. However, if there is a schema inconsistency, deserialization will fail.
+Fory defaults to compatible mode in both Java native mode (`xlang=false`) and xlang mode. This default is safer for independently deployed services because writer and reader schemas can diverge during rolling upgrades or across language implementations.
 
-In xlang mode, Fory defaults to compatible mode because schemas can diverge more easily across independently deployed services and language implementations.
+Schema-consistent mode is available with `ForyBuilder#withCompatible(false)`. Use it only when the class schema used to deserialize every payload is always the same as the class schema used to serialize it, and you want smaller payloads or exact schema validation.
 
 ### Compatible Mode
 
-If a Java-native mode schema is expected to change, configure Fory with
-`ForyBuilder#withCompatible(true)` so deserialization can tolerate added, removed, or reordered
-fields. Xlang mode already uses compatible mode by default, so xlang services do not need this
-option unless they previously overrode the schema mode.
+Compatible mode is enabled by default, so deserialization can tolerate added, removed, or reordered
+fields when schema metadata remains compatible. Use `ForyBuilder#withCompatible(true)` only when
+re-enabling compatibility after a shared builder preset disabled it.
 
 In this compatible mode, deserialization can handle schema changes such as missing or extra fields, allowing it to succeed even when the serialization and deserialization processes have different class schemas.
 
@@ -199,7 +198,7 @@ public class StructMappingExample {
 
 ## Deserialize POJO into Another Type
 
-Fory allows you to serialize one POJO and deserialize it into a different POJO. The different POJO means schema inconsistency. Users must enable compatible mode with `ForyBuilder#withCompatible(true)`.
+Fory allows you to serialize one POJO and deserialize it into a different POJO. The different POJO means schema inconsistency, so keep compatible mode enabled with the default builder setting or `ForyBuilder#withCompatible(true)`.
 
 ```java
 public class DeserializeIntoType {
@@ -232,14 +231,14 @@ public class DeserializeIntoType {
 
 ## Configuration
 
-| Option                    | Description                            | Default                                          |
-| ------------------------- | -------------------------------------- | ------------------------------------------------ |
-| `compatibleMode`          | `SCHEMA_CONSISTENT` or `COMPATIBLE`    | xlang: `COMPATIBLE`; native: `SCHEMA_CONSISTENT` |
-| `checkClassVersion`       | Check class schema consistency         | `false`                                          |
-| `metaShareEnabled`        | Enable meta sharing                    | `true` if Compatible mode                        |
-| `scopedMetaShareEnabled`  | Scoped meta share per serialization    | `true` if Compatible mode                        |
-| `deserializeUnknownClass` | Handle non-existent or unknown classes | `true` if Compatible mode                        |
-| `metaCompressor`          | Compressor for meta compression        | `DeflaterMetaCompressor`                         |
+| Option                    | Description                            | Default                   |
+| ------------------------- | -------------------------------------- | ------------------------- |
+| `compatibleMode`          | `SCHEMA_CONSISTENT` or `COMPATIBLE`    | `COMPATIBLE`              |
+| `checkClassVersion`       | Check class schema consistency         | `false`                   |
+| `metaShareEnabled`        | Enable meta sharing                    | `true` if Compatible mode |
+| `scopedMetaShareEnabled`  | Scoped meta share per serialization    | `true` if Compatible mode |
+| `deserializeUnknownClass` | Handle non-existent or unknown classes | `true` if Compatible mode |
+| `metaCompressor`          | Compressor for meta compression        | `DeflaterMetaCompressor`  |
 
 ## Best Practices
 

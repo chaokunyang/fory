@@ -92,7 +92,7 @@ Configuration defaults:
   - TrackRef: false (reference tracking disabled)
   - MaxDepth: 20 (maximum nesting depth)
   - IsXlang: true (xlang mode enabled)
-  - Compatible: true in the default xlang mode; false in native mode unless WithCompatible(true) is set
+  - Compatible: true by default in both xlang and native mode; use WithCompatible(false) for stable lockstep schemas
 
 # Type Registration
 
@@ -184,10 +184,10 @@ When reference tracking is enabled:
 
 # Schema Evolution
 
-Native mode defaults to schema-consistent payloads. Enable compatible mode for
-forward/backward compatibility in Go-only native payloads:
+Native mode defaults to compatible payloads. Use schema-consistent mode only for
+stable lockstep Go-only native payloads:
 
-	f := fory.New(fory.WithXlang(false), fory.WithCompatible(true))
+	f := fory.New(fory.WithXlang(false), fory.WithCompatible(false))
 
 	// V1: original struct
 	type UserV1 struct {

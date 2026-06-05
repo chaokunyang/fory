@@ -61,6 +61,7 @@ public abstract class ForyTestBase {
                   .withXlang(false)
                   .requireClassRegistration(false)
                   .suppressClassRegistrationWarnings(true)
+                  .withCompatible(false)
                   .build());
 
   public static Fory getJavaFory() {
@@ -111,6 +112,7 @@ public abstract class ForyTestBase {
             .withCodegen(false)
             .requireClassRegistration(false)
             .suppressClassRegistrationWarnings(true)
+            .withCompatible(false)
             .build()
       },
       {
@@ -120,6 +122,7 @@ public abstract class ForyTestBase {
             .withCodegen(false)
             .requireClassRegistration(false)
             .suppressClassRegistrationWarnings(true)
+            .withCompatible(false)
             .build()
       }
     };
@@ -206,6 +209,7 @@ public abstract class ForyTestBase {
             .withCodegen(false)
             .requireClassRegistration(false)
             .suppressClassRegistrationWarnings(true)
+            .withCompatible(false)
             .build()
       },
       {
@@ -215,6 +219,7 @@ public abstract class ForyTestBase {
             .withCodegen(false)
             .requireClassRegistration(false)
             .suppressClassRegistrationWarnings(true)
+            .withCompatible(false)
             .build()
       },
       {
@@ -224,6 +229,7 @@ public abstract class ForyTestBase {
             .withCodegen(true)
             .requireClassRegistration(false)
             .suppressClassRegistrationWarnings(true)
+            .withCompatible(false)
             .build()
       },
       {
@@ -233,6 +239,7 @@ public abstract class ForyTestBase {
             .withCodegen(true)
             .requireClassRegistration(false)
             .suppressClassRegistrationWarnings(true)
+            .withCompatible(false)
             .build()
       },
     };

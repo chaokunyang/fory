@@ -384,6 +384,7 @@ public class CompatibleSerializerTest extends ForyTestBase {
         .withDeserializeUnknownClass(true)
         .withAsyncCompilation(asyncCompilation)
         .withCodegen(codegen)
+        .withCompatible(false)
         .build();
   }
 

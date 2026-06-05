@@ -65,7 +65,7 @@ Go, or Rust:
 
 - All serialization/deserialization happens in the same language
 - You need language-specific features such as Python pickle-style objects or Java serialization hooks
-- You want native-mode schema-consistent payloads for same-language services
+- You want native-mode payloads for same-language services
 
 ## Quick Example
 

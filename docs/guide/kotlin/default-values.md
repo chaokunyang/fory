@@ -33,7 +33,7 @@ When a Kotlin data class has parameters with default values, Fory can:
 
 This feature is available when:
 
-- Native mode is explicitly configured with compatible mode
+- Compatible mode is enabled for the native-mode runtime
   (`withXlang(false).withCompatible(true)`)
 - The runtime is built through `ForyKotlin.builder()` or `Fory.builder().withModule(ForyKotlin)`
   with native mode enabled

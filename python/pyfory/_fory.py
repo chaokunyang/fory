@@ -166,8 +166,7 @@ class Fory:
                 are allowed. We are not responsible for security risks when this option
                 is disabled without proper policy controls.
 
-            compatible: Enable schema evolution. When omitted, xlang mode defaults to
-                compatible mode and Python native mode defaults to schema-consistent mode.
+            compatible: Enable schema evolution. When omitted, compatible mode is enabled.
                 When enabled, supports forward/backward compatibility for dataclass field
                 additions and removals.
 
@@ -199,7 +198,7 @@ class Fory:
             >>> # Xlang mode with compatible schema evolution
             >>> fory = Fory(xlang=True)
         """
-        compatible = xlang if compatible is None else compatible
+        compatible = True if compatible is None else compatible
         self.xlang = xlang
         self.track_ref = ref
         self.strict = _ENABLE_TYPE_REGISTRATION_FORCIBLY or strict

@@ -682,6 +682,7 @@ public class MapSerializersTest extends ForyTestBase {
             .withRefTracking(true)
             .requireClassRegistration(false)
             .withMaxCollectionSize(1)
+            .withCompatible(false)
             .build();
     MapSerializers.HashMapSerializer serializer =
         new MapSerializers.HashMapSerializer(fory.getTypeResolver());
@@ -1166,7 +1167,7 @@ public class MapSerializersTest extends ForyTestBase {
   @Test
   public void testStringKeyMapSerializer() {
     // see https://github.com/apache/fory/issues/1170
-    Fory fory = Fory.builder().withXlang(false).withRefTracking(true).build();
+    Fory fory = Fory.builder().withXlang(false).withRefTracking(true).withCompatible(false).build();
     fory.registerSerializer(StringKeyMap.class, MapSerializers.StringKeyMapSerializer.class);
     {
       StringKeyMap<List<String>> map = new StringKeyMap<>();
@@ -1376,7 +1377,12 @@ public class MapSerializersTest extends ForyTestBase {
 
   @Test(dataProvider = "referenceTrackingConfig")
   public void testObjectKeyValueChunk(boolean referenceTrackingConfig) {
-    Fory fory = Fory.builder().withXlang(false).withRefTracking(referenceTrackingConfig).build();
+    Fory fory =
+        Fory.builder()
+            .withXlang(false)
+            .withRefTracking(referenceTrackingConfig)
+            .withCompatible(false)
+            .build();
     final Map<Object, Object> differentKeyAndValueTypeMap = createDifferentKeyAndValueTypeMap();
     final Serializer<? extends Map> serializer =
         fory.getSerializer(differentKeyAndValueTypeMap.getClass());
@@ -1386,7 +1392,12 @@ public class MapSerializersTest extends ForyTestBase {
 
   @Test(dataProvider = "referenceTrackingConfig")
   public void testObjectKeyValueBigChunk(boolean referenceTrackingConfig) {
-    Fory fory = Fory.builder().withXlang(false).withRefTracking(referenceTrackingConfig).build();
+    Fory fory =
+        Fory.builder()
+            .withXlang(false)
+            .withRefTracking(referenceTrackingConfig)
+            .withCompatible(false)
+            .build();
     final Map<Object, Object> differentKeyAndValueTypeMap = createDifferentKeyAndValueTypeMap();
     for (int i = 0; i < 3000; i++) {
       differentKeyAndValueTypeMap.put("k" + i, i);
@@ -1668,7 +1679,8 @@ public class MapSerializersTest extends ForyTestBase {
 
   @Test(dataProvider = "enableCodegen")
   public void testNestedStringLongListMap(boolean enableCodegen) {
-    Fory fory = Fory.builder().withXlang(false).withCodegen(enableCodegen).build();
+    Fory fory =
+        Fory.builder().withXlang(false).withCodegen(enableCodegen).withCompatible(false).build();
     fory.register(NestedStringLongListMap.class);
     NestedStringLongListMap pojo = new NestedStringLongListMap();
     pojo.stringInt64ListMap = new HashMap<>();
@@ -1706,7 +1718,12 @@ public class MapSerializersTest extends ForyTestBase {
 
   @Test
   public void testChunkArrayGeneric() {
-    Fory fory = Fory.builder().withXlang(false).requireClassRegistration(false).build();
+    Fory fory =
+        Fory.builder()
+            .withXlang(false)
+            .requireClassRegistration(false)
+            .withCompatible(false)
+            .build();
     State original = new State(ofHashMap("foo", new String[] {"bar"}));
     State state = serDe(fory, original);
     Assert.assertEquals(state.map.get("foo"), new String[] {"bar"});

@@ -84,11 +84,11 @@ See [References](references.md) for details.
 
 ### WithCompatible
 
-Enable compatible mode explicitly. Xlang mode enables it by default; use this option when
-native-mode Go-only payloads need schema evolution:
+Compatible mode is enabled by default in both xlang and native mode. Use this option to opt into
+schema-consistent payloads only when schemas are stable and lockstep:
 
 ```go
-f := fory.New(fory.WithXlang(false), fory.WithCompatible(true))
+f := fory.New(fory.WithXlang(false), fory.WithCompatible(false))
 ```
 
 **When enabled:**
@@ -106,6 +106,12 @@ f := fory.New(fory.WithXlang(false), fory.WithCompatible(true))
 - Requires consistent struct definitions across all services
 
 See [Schema Evolution](schema-evolution.md) for details.
+
+Use `WithCompatible(false)` only when the struct schema used to deserialize every payload is always
+the same as the struct schema used to serialize it. This schema-consistent mode avoids field metadata
+payload and can be faster, but it requires lockstep schemas. For xlang payloads, keep compatible mode
+unless every language schema has been aligned and verified, or native types are generated from Fory
+schema IDL.
 
 ### WithMaxDepth
 
@@ -140,7 +146,7 @@ xlang := fory.New(fory.WithXlang(true))
 - Go-native serialization mode
 - Supports more Go-native type behavior
 - Not compatible with other language implementations
-- Defaults to schema-consistent mode unless `WithCompatible(true)` is set
+- Defaults to compatible mode unless `WithCompatible(false)` is set
 
 ## Thread Safety
 

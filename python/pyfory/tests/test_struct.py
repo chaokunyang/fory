@@ -460,7 +460,7 @@ class ChildClass1(SuperClass1):
 
 
 def test_strict():
-    fory = Fory(xlang=False, ref=True)
+    fory = Fory(xlang=False, ref=True, compatible=False)
     obj = ChildClass1(f1="a", f2=-10, f3={"a": -10.0, "b": 1 / 3})
     with pytest.raises(TypeUnregisteredError):
         fory.serialize(obj)
@@ -470,7 +470,7 @@ def test_inheritance():
     type_hints = typing.get_type_hints(ChildClass1)
     print(type_hints)
     assert type_hints.keys() == {"f1", "f2", "f3"}
-    fory = Fory(xlang=False, ref=True, strict=False)
+    fory = Fory(xlang=False, ref=True, strict=False, compatible=False)
     obj = ChildClass1(f1="a", f2=-10, f3={"a": -10.0, "b": 1 / 3})
     assert ser_de(fory, obj) == obj
     assert type(fory.type_resolver.get_serializer(ChildClass1)) is pyfory.DataClassSerializer
@@ -621,14 +621,14 @@ def test_duration_and_decimal_fields_use_declared_serializers():
     ],
 )
 def test_bool_field_coercion(value, expected):
-    fory = Fory(xlang=False, ref=True, strict=False)
+    fory = Fory(xlang=False, ref=True, strict=False, compatible=False)
     result = ser_de(fory, BoolCoercionObject(value))
     assert result.b is expected
 
 
 def test_bool_field_coercion_numpy_bool():
     np = pytest.importorskip("numpy")
-    fory = Fory(xlang=False, ref=True, strict=False)
+    fory = Fory(xlang=False, ref=True, strict=False, compatible=False)
 
     result_true = ser_de(fory, BoolCoercionObject(np.bool_(True)))
     assert result_true.b is True
@@ -659,7 +659,7 @@ def test_bool_field_coercion_numpy_bool():
     ],
 )
 def test_numeric_serializer_need_to_write_ref_disabled(numeric_type):
-    fory = Fory(xlang=False, ref=True, strict=False)
+    fory = Fory(xlang=False, ref=True, strict=False, compatible=False)
     serializer = fory.type_resolver.get_serializer(numeric_type)
     assert serializer.need_to_write_ref is False
 
@@ -724,7 +724,7 @@ def test_data_class_serializer_xlang():
 
 @pytest.mark.parametrize("track_ref", [False, True])
 def test_dataclass_with_typed_tuple_field(track_ref):
-    fory = Fory(xlang=False, ref=track_ref, strict=False)
+    fory = Fory(xlang=False, ref=track_ref, strict=False, compatible=False)
     obj = TupleFieldObject(bar=("a", 1))
     assert ser_de(fory, obj) == obj
 
@@ -835,7 +835,7 @@ def test_data_class_serializer_xlang_serializer():
 def test_data_class_serializer_xlang_vs_non_xlang():
     """Test that xlang and non-xlang modes use the same dataclass serializer behavior."""
     fory_xlang = Fory(xlang=True, compatible=False, ref=True)
-    fory_python = Fory(xlang=False, ref=True, strict=False)
+    fory_python = Fory(xlang=False, ref=True, strict=False, compatible=False)
 
     # Register types for xlang
     fory_xlang.register_type(ComplexObject, name="example.ComplexObject")
@@ -877,7 +877,7 @@ class MissingDefaultFactoryFields:
 
 
 def test_build_default_values_factory():
-    fory = Fory(xlang=False, ref=True, strict=False)
+    fory = Fory(xlang=False, ref=True, strict=False, compatible=False)
     type_hints = typing.get_type_hints(MissingDefaultFactoryFields)
     default_factories = build_default_values_factory(
         fory,
@@ -1338,7 +1338,7 @@ class Zoo:
 
 def test_dynamic_with_inheritance():
     """Test dynamic=True allows polymorphic serialization with inheritance."""
-    fory = Fory(xlang=False, ref=True, strict=False)
+    fory = Fory(xlang=False, ref=True, strict=False, compatible=False)
     fory.register_type(Animal)
     fory.register_type(Dog)
     fory.register_type(Zoo)

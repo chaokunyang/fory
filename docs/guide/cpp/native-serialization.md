@@ -85,7 +85,7 @@ Register types before concurrent serialization starts.
 
 ## Schema Evolution
 
-Native serialization defaults to schema-consistent mode. Enable compatible mode when C++-only
+Native serialization defaults to compatible mode. Use schema-consistent mode only when C++-only
 writer and reader schemas can differ:
 
 ```cpp
@@ -163,8 +163,9 @@ C++ native-only type IDs.
 - Reuse configured `Fory` instances.
 - Use single-threaded `Fory` per thread for the fastest path; use `build_thread_safe()` for shared
   concurrent use.
-- Keep native schema-consistent mode for lockstep C++ services.
-- Enable `.compatible(true)` only when C++-only schema evolution is required.
+- Keep compatible mode unless lockstep C++ services need schema-consistent payloads for smaller
+  same-schema data.
+- Use `.compatible(false)` only when C++-only schemas are stable and lockstep.
 - Register structs with explicit numeric IDs for compact payloads.
 - Disable reference tracking for value-shaped graphs.
 - Prefer concrete types over polymorphic/dynamic fields on hot paths.
@@ -178,7 +179,7 @@ C++ native-only type IDs.
 | C++ native character and unsigned shapes | Yes                      | Limited                 |
 | Smart pointers and C++ object graphs     | Yes                      | Limited                 |
 | Schema-consistent same-language payloads | Yes                      | No                      |
-| Compatible schema evolution by default   | No                       | Yes                     |
+| Compatible schema evolution by default   | Yes                      | Yes                     |
 | Portable type mapping across runtimes    | No                       | Yes                     |
 
 ## Troubleshooting
@@ -190,8 +191,7 @@ registration with every peer runtime.
 
 ### A rolling deployment fails after a field change
 
-Native serialization defaults to schema-consistent mode. Use `.compatible(true)` on both writer and
-reader when schemas can differ.
+Native serialization defaults to compatible mode. Keep that default when schemas can differ.
 
 ### A native-only scalar does not map to another language
 

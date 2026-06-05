@@ -1538,7 +1538,7 @@ def _test_nested_annotated_container(cls, type_id: int, expected, compatible: bo
     kwargs = {"xlang": True, "compatible": compatible}
     if compatible:
         kwargs["meta_compressor"] = NoOpMetaCompressor()
-    fory = pyfory.Fory(**kwargs)
+    fory = pyfory.Fory(**kwargs, compatible=True)
     fory.register_type(cls, type_id=type_id)
 
     obj = fory.deserialize(data_bytes)

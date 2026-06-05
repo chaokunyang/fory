@@ -19,7 +19,7 @@ license: |
   limitations under the License.
 ---
 
-Schema evolution allows your data structures to change over time while maintaining compatibility with previously serialized data. Fory Go supports this through compatible mode. Xlang mode uses compatible schema evolution by default; native mode uses schema-consistent payloads by default and enables compatible mode explicitly.
+Schema evolution allows your data structures to change over time while maintaining compatibility with previously serialized data. Fory Go supports this through compatible mode, which is the default for both xlang and native mode.
 
 ## Compatible Mode Defaults
 

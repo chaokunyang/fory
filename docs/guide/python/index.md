@@ -146,7 +146,7 @@ print(result)  # Person(name='Alice', age=30)
 
 Use xlang mode for cross-language payloads and dataclass schemas shared with other Fory runtimes. Xlang mode is the default Python wire mode, and Python examples that use it set `xlang=True` explicitly so the mode choice is visible.
 
-Use native mode for Python-only traffic. Native mode is selected with `xlang=False`, uses schema-consistent payloads unless compatible mode is enabled, and owns pickle/cloudpickle-style behavior such as functions, lambdas, classes, methods, `__reduce__`, `__getstate__`, and out-of-band pickle protocol 5 buffers. It is optimized for Python's type system and supports a broader Python object surface than xlang mode, so use it when replacing pickle or cloudpickle.
+Use native mode for Python-only traffic. Native mode is selected with `xlang=False`, uses compatible schema evolution by default and supports schema-consistent payloads with an explicit compatible=false setting, and owns pickle/cloudpickle-style behavior such as functions, lambdas, classes, methods, `__reduce__`, `__getstate__`, and out-of-band pickle protocol 5 buffers. It is optimized for Python's type system and supports a broader Python object surface than xlang mode, so use it when replacing pickle or cloudpickle.
 
 See [Native Serialization](native-serialization.md) for Python-only serialization details and [Xlang Serialization](xlang-serialization.md) for Python xlang registration and interoperability rules.
 

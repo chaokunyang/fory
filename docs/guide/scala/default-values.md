@@ -49,7 +49,7 @@ Fory supports default values for:
 
 This feature is available when:
 
-- Native mode is explicitly configured with compatible mode
+- Compatible mode is enabled for the native-mode runtime
   (`withXlang(false).withCompatible(true)`)
 - The target class is detected as a Scala class with default values
 - A field is missing from the serialized data but exists in the target class

@@ -20,8 +20,8 @@ license: |
 ---
 
 This page covers Python runtime configuration. `pyfory.Fory()` defaults to xlang mode with
-compatible schema evolution. Native mode is selected explicitly with `xlang=False` and defaults to
-schema-consistent payloads.
+compatible schema evolution. Native mode is selected explicitly with `xlang=False` and also defaults
+to compatible schema evolution.
 
 ## Fory Class
 
@@ -60,7 +60,7 @@ class ThreadSafeFory:
 | `xlang`           | `bool`                          | `True`  | Use xlang mode. Set `False` for Python native mode.                                                                                                     |
 | `ref`             | `bool`                          | `False` | Enable reference tracking for shared/circular references. Disable for better performance if your data has no shared references.                         |
 | `strict`          | `bool`                          | `True`  | Require type registration for security. Keep this enabled for production unless a policy owns trust decisions.                                          |
-| `compatible`      | `bool \| None`                  | `None`  | Schema evolution mode. `None` follows the wire mode: xlang defaults to compatible mode, while native mode defaults to schema-consistent mode.           |
+| `compatible`      | `bool \| None`                  | `None`  | Schema evolution mode. `None` enables compatible mode in both xlang and native mode. Set `False` only for stable lockstep schemas.                      |
 | `max_depth`       | `int`                           | `50`    | Maximum deserialization depth for security, preventing stack overflow attacks.                                                                          |
 | `policy`          | `DeserializationPolicy \| None` | `None`  | Deserialization policy used for security checks. Strongly recommended when `strict=False`.                                                              |
 | `field_nullable`  | `bool`                          | `False` | Treat dataclass fields as nullable by default.                                                                                                          |
@@ -97,7 +97,7 @@ fory.register(MyClass, name="my.package.MyClass", serializer=custom_serializer)
 | Functions/lambdas   | Supported with trusted dynamic deserialization | Not allowed                                                                      |
 | Local classes       | Supported with trusted dynamic deserialization | Not allowed                                                                      |
 | Dynamic classes     | Supported with trusted dynamic deserialization | Not allowed                                                                      |
-| Schema mode default | Schema-consistent                              | Compatible                                                                       |
+| Schema mode default | Compatible                                     | Compatible                                                                       |
 
 ## Xlang Mode
 
@@ -123,8 +123,21 @@ fory = pyfory.Fory(xlang=False, ref=True, strict=False)
 ```
 
 Native mode supports Python-specific object features such as functions, local classes, methods,
-`__reduce__`, and `__getstate__`. It defaults to schema-consistent mode. Set
-`compatible=True` only when Python-only deployments need schema evolution.
+`__reduce__`, and `__getstate__`. Compatible mode remains the default. Set
+`compatible=False` only when writer and reader always use the same Python class schema and you want
+smaller schema-consistent payloads.
+
+## Compatible Mode And Schema-Consistent Mode
+
+Compatible mode is enabled by default for both xlang and native mode. Keep this default when Python
+classes may evolve independently, when services deploy separately, or when xlang schemas are written
+by hand in different languages.
+
+Use `compatible=False` only when the class schema used to deserialize every payload is always the
+same as the class schema used to serialize it. This schema-consistent mode avoids field metadata
+payload and can be faster, but it requires lockstep schemas. For xlang payloads, keep compatible mode
+unless every language schema has been aligned and verified, or native types are generated from Fory
+schema IDL.
 
 ## Example Configurations
 

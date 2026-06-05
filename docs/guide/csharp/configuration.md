@@ -59,8 +59,10 @@ Fory fory = Fory.Builder()
 ### `Compatible(bool enabled = false)`
 
 Enables schema evolution mode. C# uses the xlang wire format only, so compatible mode is enabled by
-default for independently deployed peers. Passing `false` opts into schema-consistent payloads when
-every writer and reader uses the same schema.
+default for independently deployed peers. Passing `false` opts into schema-consistent payloads only
+when every writer and reader always uses the same schema. This avoids field metadata payload and can
+be faster, but hand-written schemas across languages should keep compatible mode unless schema
+consistency has been aligned and verified, or native types are generated from Fory schema IDL.
 
 ```csharp
 Fory fory = Fory.Builder()

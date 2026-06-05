@@ -132,8 +132,8 @@ import org.apache.fory.scala.ForyScala
 val fory = ForyScala.builder().withXlang(false)
   // Enable reference tracking for circular references
   .withRefTracking(true)
-  // Enable schema evolution support for native-mode payloads
-  .withCompatible(true)
+  // Optional schema-consistent mode for stable lockstep schemas
+  .withCompatible(false)
   // Enable async compilation for better startup performance
   .withAsyncCompilation(true)
   .build()
@@ -158,6 +158,18 @@ val fory = ForyScala.builder()
 In xlang mode, Scala collections use canonical `list`, `set`, and `map`
 payloads instead of Scala factory payloads. Generated optional fields use
 `Option[T]`.
+
+## Compatible Mode And Schema-Consistent Mode
+
+Compatible mode is enabled by default through the Java builder in both xlang and native mode. Keep
+this default when models may evolve independently, when services deploy separately, or when xlang
+schemas are written by hand in different languages.
+
+Use `withCompatible(false)` only when the class schema used to deserialize every payload is always
+the same as the class schema used to serialize it. This schema-consistent mode avoids field metadata
+payload and can be faster, but it requires lockstep schemas. For xlang payloads, keep compatible mode
+unless every language schema has been aligned and verified, or native types are generated from Fory
+schema IDL.
 
 ## Security
 

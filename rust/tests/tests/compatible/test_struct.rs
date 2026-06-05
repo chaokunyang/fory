@@ -786,7 +786,7 @@ fn test_struct_with_generic() {
     }
 
     let mut fory1 = Fory::builder().xlang(false).compatible(true).build();
-    let mut fory2 = Fory::builder().xlang(false).build(); // Without compatible it works fine.
+    let mut fory2 = Fory::builder().xlang(false).compatible(false).build(); // Without compatible it works fine.
     let mut fory3 = Fory::builder().xlang(true).compatible(false).build();
 
     fn inner_test(fory: &mut Fory) -> Result<(), Error> {

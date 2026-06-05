@@ -708,7 +708,7 @@ TEST(SerializationTest, NestedStructRoundtrip) {
 // ============================================================================
 
 TEST(SerializationTest, DeserializeInvalidData) {
-  auto fory = Fory::builder().xlang(true).build();
+  auto fory = Fory::builder().xlang(true).compatible(true).build();
 
   uint8_t invalid_data[] = {0xFF, 0xFF, 0xFF};
   auto result = fory.deserialize<int32_t>(invalid_data, 3);
@@ -716,13 +716,13 @@ TEST(SerializationTest, DeserializeInvalidData) {
 }
 
 TEST(SerializationTest, DeserializeNullPointer) {
-  auto fory = Fory::builder().xlang(true).build();
+  auto fory = Fory::builder().xlang(true).compatible(true).build();
   auto result = fory.deserialize<int32_t>(nullptr, 0);
   EXPECT_FALSE(result.ok());
 }
 
 TEST(SerializationTest, DeserializeZeroSize) {
-  auto fory = Fory::builder().xlang(true).build();
+  auto fory = Fory::builder().xlang(true).compatible(true).build();
   uint8_t data[] = {0x01};
   auto result = fory.deserialize<int32_t>(data, 0);
   EXPECT_FALSE(result.ok());
@@ -730,7 +730,7 @@ TEST(SerializationTest, DeserializeZeroSize) {
 
 TEST(SerializationTest, DeserializeRejectsXlangProtocolMismatch) {
   auto writer = Fory::builder().xlang(true).compatible(false).build();
-  auto reader = Fory::builder().xlang(false).build();
+  auto reader = Fory::builder().xlang(false).compatible(false).build();
 
   auto bytes_result = writer.serialize<int32_t>(123);
   ASSERT_TRUE(bytes_result.ok())
@@ -1043,7 +1043,7 @@ TEST(SerializationTest, ConfigurationBuilder) {
   EXPECT_EQ(fory1.config().max_dyn_depth, 10);
   EXPECT_FALSE(fory1.config().track_ref);
 
-  auto default_xlang = Fory::builder().xlang(true).build();
+  auto compatible_xlang = Fory::builder().xlang(true).compatible(true).build();
   auto explicit_schema_consistent =
       Fory::builder().compatible(false).xlang(true).build();
   auto explicit_schema_consistent_reverse_order =
@@ -1054,8 +1054,8 @@ TEST(SerializationTest, ConfigurationBuilder) {
                                            .check_struct_version(true)
                                            .build();
 
-  EXPECT_TRUE(default_xlang.config().compatible);
-  EXPECT_FALSE(default_xlang.config().check_struct_version);
+  EXPECT_TRUE(compatible_xlang.config().compatible);
+  EXPECT_FALSE(compatible_xlang.config().check_struct_version);
   EXPECT_FALSE(explicit_schema_consistent.config().compatible);
   EXPECT_FALSE(explicit_schema_consistent_reverse_order.config().compatible);
   EXPECT_FALSE(compatible_with_version_check.config().check_struct_version);

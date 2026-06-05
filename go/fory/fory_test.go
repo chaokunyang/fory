@@ -269,7 +269,7 @@ func TestSerializeArray(t *testing.T) {
 func TestSerializeStructSimple(t *testing.T) {
 	for _, referenceTracking := range []bool{false, true} {
 		// Use WithXlang(false) for native Go mode where nil slices/maps are preserved
-		fory := NewFory(WithXlang(false), WithRefTracking(referenceTracking))
+		fory := NewFory(WithXlang(false), WithRefTracking(referenceTracking), WithCompatible(false))
 		type A struct {
 			F1 []string
 		}

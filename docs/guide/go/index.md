@@ -89,7 +89,7 @@ func main() {
 
 Use xlang mode for cross-language payloads and schemas shared with other Fory runtimes. Xlang mode is the default Go wire mode, and Go examples that use it set `fory.WithXlang(true)` explicitly so the mode choice is visible.
 
-Use native mode for Go-only traffic. Native mode is selected with `fory.WithXlang(false)`, uses schema-consistent payloads unless compatible mode is enabled, and keeps Go object serialization on the Go runtime path. It is optimized for Go structs, pointers, interfaces, and Go-specific type behavior that does not need a portable xlang mapping.
+Use native mode for Go-only traffic. Native mode is selected with `fory.WithXlang(false)`, uses compatible schema evolution by default and supports schema-consistent payloads with explicit `fory.WithCompatible(false)`, and keeps Go object serialization on the Go runtime path. It is optimized for Go structs, pointers, interfaces, and Go-specific type behavior that does not need a portable xlang mapping.
 
 See [Xlang Serialization](xlang-serialization.md) for Go xlang registration and interoperability rules, and [Native Serialization](native-serialization.md) for Go-only payloads.
 

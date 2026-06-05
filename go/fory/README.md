@@ -88,7 +88,7 @@ f := fory.New(fory.WithXlang(true), fory.WithTrackRef(true))
 f := fory.New(fory.WithXlang(false))
 
 // Enable compatible mode for schema evolution in native mode
-f := fory.New(fory.WithXlang(false), fory.WithCompatible(true))
+f := fory.New(fory.WithXlang(false), fory.WithCompatible(false))
 
 // Set maximum nesting depth
 f := fory.New(fory.WithXlang(true), fory.WithMaxDepth(20))

@@ -742,7 +742,7 @@ for t in threads: t.join()
 - **`xlang`** (`bool`, default=`True`): Use xlang mode. Set `False` for Python native mode supporting Python-specific objects.
 - **`ref`** (`bool`, default=`False`): Enable reference tracking for shared/circular references. Disable for better performance if your data has no shared references.
 - **`strict`** (`bool`, default=`True`): Require type registration for security. **Highly recommended** for production. Only disable in trusted environments.
-- **`compatible`** (`bool`, default follows `xlang`): Enable schema evolution. Xlang mode defaults to compatible mode; native mode defaults to schema-consistent mode.
+- **`compatible`** (`bool | None`, default `None`): Enable schema evolution. `None` enables compatible mode in both xlang and native mode. Set `False` only for stable lockstep schemas.
 - **`max_depth`** (`int`, default=`50`): Maximum deserialization depth for security, preventing stack overflow attacks.
 
 **Key Methods:**
@@ -961,7 +961,7 @@ fory = pyfory.Fory(
     xlang=False,        # Native mode for Python-only traffic
     ref=False,           # Enable if you have shared/circular references
     strict=True,        # CRITICAL: Always True in production
-    compatible=False,   # Native mode defaults to schema-consistent payloads
+    compatible=False,   # Optional schema-consistent mode for stable lockstep schemas
     max_depth=20       # Adjust based on your data structure depth
 )
 

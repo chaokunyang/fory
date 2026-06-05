@@ -96,6 +96,7 @@ public class UnionSerializerTest extends ForyTestBase {
             .withRefTracking(true)
             .withRefCopy(true)
             .requireClassRegistration(true)
+            .withCompatible(true)
             .build();
     ArrayList<String> payload = new ArrayList<>();
     payload.add("future");
@@ -139,7 +140,8 @@ public class UnionSerializerTest extends ForyTestBase {
 
   @Test
   public void testRegisterUnionDottedName() {
-    Fory fory = Fory.builder().withXlang(true).requireClassRegistration(true).build();
+    Fory fory =
+        Fory.builder().withXlang(true).requireClassRegistration(true).withCompatible(true).build();
     UnionSerializer serializer = new UnionSerializer(fory.getTypeResolver(), SchemaUnion.class);
     fory.registerUnion(SchemaUnion.class, "demo.SchemaUnion", serializer);
 

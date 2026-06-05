@@ -67,8 +67,12 @@ let fory = Fory(ref: true)
 
 Enables compatible schema mode for evolution across versions.
 
-- `false`: Schema-consistent mode (stricter, lower metadata overhead)
+- `false`: Schema-consistent mode for stable lockstep schemas (stricter, lower metadata overhead)
 - `true`: Compatible mode (supports add/remove/reorder fields)
+
+Use `compatible: false` only when every writer and reader always uses the same schema. For
+hand-written xlang schemas across languages, keep compatible mode unless schema consistency has been
+aligned and verified, or native types are generated from Fory schema IDL.
 
 ```swift
 let fory = Fory()

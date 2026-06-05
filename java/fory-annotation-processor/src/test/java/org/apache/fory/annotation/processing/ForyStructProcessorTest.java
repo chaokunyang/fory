@@ -80,6 +80,7 @@ public class ForyStructProcessorTest {
               .withClassLoader(loader)
               .withCodegen(false)
               .requireClassRegistration(false)
+              .withCompatible(false)
               .build();
       Object serializer = fory.getTypeResolver().getTypeInfo(type).getSerializer();
       Assert.assertEquals(serializer.getClass().getName(), serializerType.getName());
@@ -182,6 +183,7 @@ public class ForyStructProcessorTest {
               .withClassLoader(loader)
               .withCodegen(false)
               .requireClassRegistration(false)
+              .withCompatible(false)
               .build();
       Object roundTrip = fory.deserialize(fory.serialize(value));
       Assert.assertEquals(invoke(type, roundTrip, "getId"), 8);
@@ -350,6 +352,7 @@ public class ForyStructProcessorTest {
               .withClassLoader(loader)
               .withCodegen(false)
               .requireClassRegistration(false)
+              .withCompatible(false)
               .build();
       StaticGeneratedStructSerializer<?> serializer =
           (StaticGeneratedStructSerializer<?>)
@@ -399,6 +402,7 @@ public class ForyStructProcessorTest {
               .withCodegen(false)
               .withRefTracking(true)
               .requireClassRegistration(false)
+              .withCompatible(false)
               .build();
       StaticGeneratedStructSerializer<?> serializer =
           (StaticGeneratedStructSerializer<?>)
@@ -443,6 +447,7 @@ public class ForyStructProcessorTest {
               .withClassLoader(loader)
               .withCodegen(false)
               .requireClassRegistration(false)
+              .withCompatible(false)
               .build();
       Object value = type.getConstructor().newInstance();
       setField(type, value, "u8", 255);
@@ -491,6 +496,7 @@ public class ForyStructProcessorTest {
               .withClassLoader(loader)
               .withCodegen(false)
               .requireClassRegistration(false)
+              .withCompatible(false)
               .build();
       Object roundTrip = fory.deserialize(fory.serialize(value));
       Assert.assertEquals(invoke(type, roundTrip, "id"), 5);
@@ -646,6 +652,7 @@ public class ForyStructProcessorTest {
               .withCodegen(false)
               .withRefTracking(true)
               .requireClassRegistration(false)
+              .withCompatible(false)
               .build();
       Object serializer = fory.getTypeResolver().getTypeInfo(type).getSerializer();
       Assert.assertTrue(serializer instanceof StaticGeneratedStructSerializer);
@@ -677,6 +684,7 @@ public class ForyStructProcessorTest {
               .withClassLoader(loader)
               .withCodegen(true)
               .requireClassRegistration(false)
+              .withCompatible(false)
               .build();
       List<Descriptor> descriptors = fory.getTypeResolver().getFieldDescriptors(type, true);
       Assert.assertEquals(descriptors.size(), 2);

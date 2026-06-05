@@ -81,7 +81,10 @@ const fory = new Fory();
 ```
 
 Use this default for rolling upgrades, independently deployed services, and cross-language payloads.
-You can opt out for one stable struct with `evolving: false`; see
+Use schema-consistent payloads only when every writer and reader always uses the same schema and you
+want to avoid field metadata payload. For hand-written xlang schemas across languages, keep
+compatible mode unless schema consistency has been aligned and verified, or native types are
+generated from Fory schema IDL. You can opt out for one stable struct with `evolving: false`; see
 [Schema Evolution](schema-evolution.md).
 
 ## Optional HPS String Path

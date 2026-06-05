@@ -208,6 +208,13 @@ public sealed class ScalarBoolField
 }
 
 [ForyStruct]
+public sealed class ScalarNullableBoolField
+{
+    [ForyField(1, Type = typeof(S.Bool))]
+    public bool? Value { get; set; }
+}
+
+[ForyStruct]
 public sealed class ScalarStringField
 {
     [ForyField(1, Type = typeof(S.String))]
@@ -1426,6 +1433,11 @@ public sealed class ForyRuntimeTests
             new ScalarStringField { Value = "1e256" }));
         Assert.Throws<InvalidDataException>(() => CompatibleRead<ScalarDecimalField, ScalarStringField>(
             new ScalarDecimalField { Value = new ForyDecimal(BigInteger.One, -256) }));
+
+        InvalidDataException expansionError = Assert.Throws<InvalidDataException>(() =>
+            CompatibleRead<ScalarFloat64Field, ScalarDecimalField>(
+                new ScalarFloat64Field { Value = double.Epsilon }));
+        Assert.Contains("field 'value' from Float64 to Decimal", expansionError.Message);
     }
 
     [Fact]
@@ -1440,8 +1452,23 @@ public sealed class ForyRuntimeTests
     }
 
     [Fact]
+    public void CompatibleScalarRejectsInvalidBoolPayload()
+    {
+        ForyRuntime writer = ForyRuntime.Builder().Compatible(true).Build();
+        writer.Register<ScalarBoolField>(813);
+        byte[] payload = writer.Serialize(new ScalarBoolField { Value = true });
+        payload[^1] = 2;
+
+        ForyRuntime reader = ForyRuntime.Builder().Compatible(true).Build();
+        reader.Register<ScalarNullableBoolField>(813);
+        Assert.Throws<InvalidDataException>(() => reader.Deserialize<ScalarNullableBoolField>(payload));
+    }
+
+    [Fact]
     public void CompatibleScalarSchemaOverride()
     {
+        Assert.Equal(4_000_000_000u, CompatibleRead<ScalarFixedUInt32Field, ScalarUInt32Field>(
+            new ScalarFixedUInt32Field { Value = 4_000_000_000u }).Value);
         Assert.Equal(4_000_000_000u, CompatibleRead<ScalarFixedUInt32Field, ScalarNullableFixedUInt32Field>(
             new ScalarFixedUInt32Field { Value = 4_000_000_000u }).Value);
     }
@@ -1507,6 +1534,54 @@ public sealed class ForyRuntimeTests
             [new TypeMetaFieldInfo(1, "$tag1", new TypeMetaFieldType((uint)TypeId.Bool, false, true))]);
         TypeMeta.AssignFieldIds(remoteBoolBothTrackingTypeMeta, localTrackingFields);
         Assert.Equal(0, remoteBoolBothTrackingTypeMeta.Fields[0].AssignedFieldId);
+
+        List<TypeMetaFieldInfo> localNullableTrackingFields =
+        [
+            new TypeMetaFieldInfo(1, "value", new TypeMetaFieldType((uint)TypeId.Bool, true, true)),
+        ];
+        TypeMeta remoteBoolNullableTrackingTypeMeta = new(
+            (uint)TypeId.CompatibleStruct,
+            0,
+            MetaString.Empty('_', '_'),
+            new MetaString("remote", MetaStringEncoding.Utf8, '_', '_', "remote"u8.ToArray()),
+            false,
+            [new TypeMetaFieldInfo(1, "$tag1", new TypeMetaFieldType((uint)TypeId.Bool, true, true))]);
+        TypeMeta.AssignFieldIds(remoteBoolNullableTrackingTypeMeta, localNullableTrackingFields);
+        Assert.Equal(0, remoteBoolNullableTrackingTypeMeta.Fields[0].AssignedFieldId);
+
+        TypeMeta remoteBoolTrackingNullableTypeMeta = new(
+            (uint)TypeId.CompatibleStruct,
+            0,
+            MetaString.Empty('_', '_'),
+            new MetaString("remote", MetaStringEncoding.Utf8, '_', '_', "remote"u8.ToArray()),
+            false,
+            [new TypeMetaFieldInfo(1, "$tag1", new TypeMetaFieldType((uint)TypeId.Bool, true, true))]);
+        TypeMeta.AssignFieldIds(remoteBoolTrackingNullableTypeMeta, localTrackingFields);
+        Assert.Equal(-1, remoteBoolTrackingNullableTypeMeta.Fields[0].AssignedFieldId);
+
+        TypeMeta remoteBoolTrackingRequiredTypeMeta = new(
+            (uint)TypeId.CompatibleStruct,
+            0,
+            MetaString.Empty('_', '_'),
+            new MetaString("remote", MetaStringEncoding.Utf8, '_', '_', "remote"u8.ToArray()),
+            false,
+            [new TypeMetaFieldInfo(1, "$tag1", new TypeMetaFieldType((uint)TypeId.Bool, false, true))]);
+        TypeMeta.AssignFieldIds(remoteBoolTrackingRequiredTypeMeta, localNullableTrackingFields);
+        Assert.Equal(-1, remoteBoolTrackingRequiredTypeMeta.Fields[0].AssignedFieldId);
+
+        List<TypeMetaFieldInfo> localTrackingUIntFields =
+        [
+            new TypeMetaFieldInfo(1, "value", new TypeMetaFieldType((uint)TypeId.VarUInt32, false, true)),
+        ];
+        TypeMeta remoteFixedUIntTrackingTypeMeta = new(
+            (uint)TypeId.CompatibleStruct,
+            0,
+            MetaString.Empty('_', '_'),
+            new MetaString("remote", MetaStringEncoding.Utf8, '_', '_', "remote"u8.ToArray()),
+            false,
+            [new TypeMetaFieldInfo(1, "$tag1", new TypeMetaFieldType((uint)TypeId.UInt32, false, true))]);
+        TypeMeta.AssignFieldIds(remoteFixedUIntTrackingTypeMeta, localTrackingUIntFields);
+        Assert.Equal(-1, remoteFixedUIntTrackingTypeMeta.Fields[0].AssignedFieldId);
     }
 
     [Fact]

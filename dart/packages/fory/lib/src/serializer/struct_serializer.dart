@@ -187,8 +187,10 @@ final class StructSerializer extends Serializer<Object?> {
           scalarPair &&
           (remoteField.fieldType.ref != localField.field.fieldType.ref ||
               ((remoteField.fieldType.ref || localField.field.fieldType.ref) &&
-                  remoteField.fieldType.typeId !=
-                      localField.field.fieldType.typeId));
+                  (remoteField.fieldType.typeId !=
+                          localField.field.fieldType.typeId ||
+                      remoteField.fieldType.nullable !=
+                          localField.field.fieldType.nullable)));
       if (scalarRefIncompatible) {
         fields.add(null);
         scalarConversions?.add(null);

@@ -819,8 +819,12 @@ export class ReadContext {
       if (
         isCompatibleScalarType(fieldInfo.typeId)
         && isCompatibleScalarType(fallbackTypeInfo.typeId)
-        && (fieldInfo.trackingRef === true)
+        && ((fieldInfo.trackingRef === true)
         !== (fallbackTypeInfo.trackingRef === true)
+        || ((fieldInfo.trackingRef === true
+        || fallbackTypeInfo.trackingRef === true)
+        && (fieldInfo.typeId !== fallbackTypeInfo.typeId
+        || fieldInfo.nullable !== fallbackTypeInfo.nullable)))
       ) {
         return markCompatibleScalarSkipRead(
           this.fieldInfoToTypeInfo(fieldInfo, undefined, false),
@@ -828,6 +832,7 @@ export class ReadContext {
       }
       if (
         isCompatibleScalarPair(fieldInfo.typeId, fallbackTypeInfo.typeId)
+        && fieldInfo.typeId !== fallbackTypeInfo.typeId
         && (fieldInfo.trackingRef === true
         || fallbackTypeInfo.trackingRef === true)
       ) {
@@ -934,6 +939,8 @@ export class ReadContext {
     if (
       remote.trackingRef !== true
       && local.trackingRef !== true
+      && !(remote.typeId === local.typeId
+      && (remote.nullable === true) === (local.nullable === true))
       && isCompatibleScalarPair(remote.typeId, local.typeId)
     ) {
       return markCompatibleScalarRead(local.clone(), {

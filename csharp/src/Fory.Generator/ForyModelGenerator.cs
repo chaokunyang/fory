@@ -274,10 +274,16 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
         sb.AppendLine("        global::Apache.Fory.TypeId localTypeId,");
         sb.AppendLine("        string fieldName,");
         sb.AppendLine("        global::Apache.Fory.RefMode refMode,");
+        sb.AppendLine("        global::Apache.Fory.RefMode localRefMode,");
         sb.AppendLine("        bool readTypeInfo)");
         sb.AppendLine("    {");
         sb.AppendLine("        global::Apache.Fory.TypeId typeId = (global::Apache.Fory.TypeId)fieldType.TypeId;");
-        sb.AppendLine("        if (!readTypeInfo && refMode != global::Apache.Fory.RefMode.Tracking && global::Apache.Fory.CompatibleScalarConverter.CanRead(fieldType.TypeId, (uint)localTypeId))");
+        sb.AppendLine("        bool scalarPair = global::Apache.Fory.CompatibleScalarConverter.IsScalarType(fieldType.TypeId) &&");
+        sb.AppendLine("            global::Apache.Fory.CompatibleScalarConverter.IsScalarType((uint)localTypeId);");
+        sb.AppendLine("        bool exactScalarSchema = fieldType.TypeId == (uint)localTypeId && refMode == localRefMode;");
+        sb.AppendLine("        bool compatibleScalarRead = fieldType.TypeId == (uint)localTypeId ||");
+        sb.AppendLine("            global::Apache.Fory.CompatibleScalarConverter.CanRead(fieldType.TypeId, (uint)localTypeId);");
+        sb.AppendLine("        if (!readTypeInfo && refMode != global::Apache.Fory.RefMode.Tracking && localRefMode != global::Apache.Fory.RefMode.Tracking && scalarPair && !exactScalarSchema && compatibleScalarRead)");
         sb.AppendLine("        {");
         sb.AppendLine("            return global::Apache.Fory.CompatibleScalarConverter.ReadField<T>(context, typeId, localTypeId, fieldName, refMode);");
         sb.AppendLine("        }");
@@ -1960,7 +1966,7 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
         if (variableSuffix == "Compat")
         {
             sb.AppendLine(
-                $"{indent}{assignmentTarget} = __ForyReadCompatibleField<{member.TypeName}>(context, remoteField.FieldType, (global::Apache.Fory.TypeId){member.TypeMeta.TypeIdExpr}, \"{EscapeString(member.FieldIdentifier)}\", {refModeExpr}, {readTypeInfoExpr});");
+                $"{indent}{assignmentTarget} = __ForyReadCompatibleField<{member.TypeName}>(context, remoteField.FieldType, (global::Apache.Fory.TypeId){member.TypeMeta.TypeIdExpr}, \"{EscapeString(member.FieldIdentifier)}\", {refModeExpr}, {BuildWriteRefModeExpression(member)}, {readTypeInfoExpr});");
             return;
         }
 

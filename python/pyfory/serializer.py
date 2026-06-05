@@ -444,7 +444,7 @@ _MAX_COMPATIBLE_NUMERIC_TEXT_LENGTH = 320
 
 def supports_compatible_scalar_conversion(remote_type_id: int, local_type_id: int) -> bool:
     if remote_type_id == local_type_id:
-        return False
+        return remote_type_id in _SCALAR_CONVERSION_TYPE_IDS
     if remote_type_id not in _SCALAR_CONVERSION_TYPE_IDS or local_type_id not in _SCALAR_CONVERSION_TYPE_IDS:
         return False
     if remote_type_id == TypeId.BOOL:
@@ -736,6 +736,8 @@ def _numeric_value(value, local_type_id: int):
 
 
 def compatible_scalar_convert(value, remote_type_id: int, local_type_id: int):
+    if remote_type_id == local_type_id:
+        return value
     if local_type_id == TypeId.BOOL:
         return _bool_value(value)
     if local_type_id == TypeId.STRING:
@@ -743,6 +745,17 @@ def compatible_scalar_convert(value, remote_type_id: int, local_type_id: int):
     if local_type_id in _NUMERIC_TYPE_IDS:
         return _numeric_value(value, local_type_id)
     raise ValueError(f"type id {local_type_id} is not a compatible scalar target")
+
+
+def _read_compatible_scalar_payload(read_context, remote_serializer, remote_type_id: int):
+    if remote_type_id == TypeId.BOOL:
+        raw = read_context.read_uint8()
+        if raw == 0:
+            return False
+        if raw == 1:
+            return True
+        raise ValueError("bool payload must be encoded as 0 or 1")
+    return remote_serializer.read(read_context)
 
 
 def _scalar_conversion_error(field_name: str, remote_type_id: int, local_type_id: int, value, cause: Exception):
@@ -767,8 +780,9 @@ class CompatibleScalarFieldSerializer(Serializer):
         raise NotImplementedError("compatible scalar field serializer is read-only")
 
     def read(self, read_context):
-        value = self.remote_serializer.read(read_context)
+        value = None
         try:
+            value = _read_compatible_scalar_payload(read_context, self.remote_serializer, self.remote_type_id)
             return compatible_scalar_convert(value, self.remote_type_id, self.local_type_id)
         except (ValueError, OverflowError, decimal.InvalidOperation) as exc:
             _scalar_conversion_error(self.field_name, self.remote_type_id, self.local_type_id, value, exc)

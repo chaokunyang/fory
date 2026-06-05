@@ -221,10 +221,12 @@ generic/container positions. It also applies only when both the remote and local
 top-level field schemas have `trackingRef = false`; if either matched field
 schema has `trackingRef = true`, scalar conversion is outside the compatible
 layout matrix and scalar type changes remain schema/type incompatible. Same
-scalar type IDs with matching top-level `trackingRef` framing are exact
-same-schema direct reads, not compatible scalar conversion. Same scalar type IDs
-with different top-level `trackingRef` framing are schema/type incompatible
-because the wire framing differs.
+scalar type IDs with matching top-level `trackingRef` and null/optional framing
+are exact same-schema direct reads, not compatible scalar conversion. Same
+scalar type IDs with different top-level `trackingRef` framing are schema/type
+incompatible because the wire framing differs. Same scalar type IDs with
+different top-level null/optional framing may still use the nullable/optional
+composition rule below when both fields have `trackingRef = false`.
 
 The convertible scalar domains are `bool`, `string`, and numeric scalars.
 Numeric scalars are signed integers (`int8`, `int16`, `int32`, `int64`),
@@ -277,8 +279,10 @@ language parsers:
 
 - no leading or trailing whitespace;
 - no leading plus sign;
-- no underscores, grouping separators, locale-specific digits, hexadecimal,
-  octal, binary, or type suffixes;
+- ASCII grammar only: signs, digits, decimal points, and exponent markers are
+  the ASCII bytes `-`, `0` through `9`, `.`, `e`, and `E`;
+- no Unicode decimal digits, underscores, grouping separators, locale-specific
+  digits, hexadecimal, octal, binary, or type suffixes;
 - integer literal: `-?(0|[1-9][0-9]*)`;
 - decimal floating literal:
   `-?(0|[1-9][0-9]*)\.[0-9]+([eE]-?(0|[1-9][0-9]*))?` or

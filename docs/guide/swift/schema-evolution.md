@@ -26,7 +26,8 @@ matched field can read between `Bool`, `String`, numeric scalars, and `Decimal` 
 value has the same logical value. For example, `"true"` and `"false"` can be read as booleans,
 `"123"` can be read as a numeric field that can hold `123`, numbers and decimals can be read as
 canonical strings, and numeric widening or narrowing succeeds only when no precision or range is
-lost. Invalid strings and lossy conversions fail during deserialization.
+lost. Numeric strings use finite ASCII decimal syntax. Invalid strings and lossy conversions fail
+during deserialization.
 
 Scalar conversion also composes with optional fields. A present optional value is converted by the
 same rules, while a missing optional value keeps Swift's normal compatible-mode default for the

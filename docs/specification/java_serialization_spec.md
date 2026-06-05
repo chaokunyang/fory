@@ -242,10 +242,12 @@ Compatible scalar conversion applies only when both the remote and local
 top-level ClassDef field metadata have `trackingRef = false`; if either matched
 field has `trackingRef = true`, scalar type changes are schema/type incompatible
 during compatible layout construction. Same scalar ClassDef field types with
-matching top-level `trackingRef` framing are exact same-schema direct reads, not
-compatible scalar conversion. Same scalar ClassDef field types with different
-top-level `trackingRef` framing are schema/type incompatible because the wire
-framing differs.
+matching top-level `trackingRef` and null/optional framing are exact same-schema
+direct reads, not compatible scalar conversion. Same scalar ClassDef field types
+with different top-level `trackingRef` framing are schema/type incompatible
+because the wire framing differs. Same scalar ClassDef field types with
+different top-level null/optional framing may still use the nullable/optional
+composition rule below when both fields have `trackingRef = false`.
 
 Compatible scalar conversion follows the xlang scalar conversion contract:
 
@@ -269,7 +271,8 @@ Compatible scalar conversion follows the xlang scalar conversion contract:
 - `String` to numeric accepts only the finite compatible numeric literal grammar
   from the xlang serialization spec and then applies the same lossless
   target-domain checks. `NaN`, infinities, whitespace, leading plus signs,
-  underscores, grouping separators, non-decimal radices, and type suffixes fail.
+  Unicode decimal digits, underscores, grouping separators, non-decimal radices,
+  and type suffixes fail.
 - numeric to `String` emits canonical finite numeric text: integers use plain
   decimal text, floating values use exact plain decimal text with a decimal point
   and signed-zero preservation, and `BigDecimal` values use exact plain decimal

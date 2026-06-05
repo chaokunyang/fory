@@ -442,14 +442,22 @@ func (s *structSerializer) initFieldsFromTypeDef(typeResolver *TypeResolver) err
 				_, isEnumField = fieldSerializer.(*enumSerializer)
 			}
 			scalarRefIncompatible := false
+			scalarPair := false
+			scalarExactSchema := false
 			if localFieldSpec != nil {
 				remoteScalar := compatibleScalarType(def.typeSpec.TypeId())
 				localScalar := compatibleScalarType(localFieldSpec.Type.TypeId())
 				if remoteScalar && localScalar {
+					scalarPair = true
 					localTrackRef := localTrackRefByIndex[fieldIndex]
+					localNullable := localNullableByIndex[fieldIndex]
 					scalarRefIncompatible = def.trackRef != localTrackRef ||
 						((def.trackRef || localTrackRef) &&
-							def.typeSpec.TypeId() != localFieldSpec.Type.TypeId())
+							(def.typeSpec.TypeId() != localFieldSpec.Type.TypeId() ||
+								def.nullable != localNullable))
+					scalarExactSchema = !scalarRefIncompatible &&
+						def.nullable == localNullable &&
+						def.typeSpec.TypeId() == localFieldSpec.Type.TypeId()
 				}
 			}
 			if isPolymorphicField && localType.Kind() == reflect.Interface {
@@ -558,7 +566,7 @@ func (s *structSerializer) initFieldsFromTypeDef(typeResolver *TypeResolver) err
 				}
 			} else if defTypeId == LIST && localType.Kind() == reflect.Array {
 				shouldRead = false
-			} else if !scalarRefIncompatible && !typeLookupFailed && typesCompatible(localType, remoteType) {
+			} else if !scalarRefIncompatible && !typeLookupFailed && typesCompatible(localType, remoteType) && (!scalarPair || scalarExactSchema) {
 				shouldRead = true
 				fieldType = localType
 			}

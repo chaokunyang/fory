@@ -322,6 +322,11 @@ struct OptionalStringField {
   FORY_STRUCT(OptionalStringField, (value, fory::F(1)));
 };
 
+struct OptionalBoolField {
+  std::optional<bool> value;
+  FORY_STRUCT(OptionalBoolField, (value, fory::F(1)));
+};
+
 struct OptionalIntField {
   std::optional<int32_t> value;
   FORY_STRUCT(OptionalIntField, (value, fory::F(1)));
@@ -353,6 +358,24 @@ Result<ReaderT, Error> convert_field(const WriterT &value, uint32_t type_id) {
   }
   return reader.deserialize<ReaderT>(bytes.value().data(),
                                      bytes.value().size());
+}
+
+size_t single_byte_delta_index(const std::vector<uint8_t> &left,
+                               const std::vector<uint8_t> &right) {
+  if (left.size() != right.size()) {
+    ADD_FAILURE() << "serialized payload sizes differ";
+    return left.size();
+  }
+  size_t index = left.size();
+  for (size_t i = 0; i < left.size(); ++i) {
+    if (left[i] != right[i]) {
+      EXPECT_EQ(index, left.size())
+          << "serialized bool payload must have a single byte delta";
+      index = i;
+    }
+  }
+  EXPECT_NE(index, left.size()) << "serialized bool payload byte not found";
+  return index;
 }
 
 TEST(SchemaEvolutionTest, AddingSingleField) {
@@ -673,6 +696,16 @@ TEST(SchemaEvolutionTest, ScalarTrackingRefClassifierRejectsMismatch) {
 
   FieldType ref_local_bool(static_cast<uint32_t>(TypeId::BOOL), false, true);
   EXPECT_TRUE(field_types_compatible_top_level(ref_local_bool, remote_bool));
+  FieldType ref_local_nullable_bool(static_cast<uint32_t>(TypeId::BOOL), true,
+                                    true);
+  FieldType ref_remote_nullable_bool(static_cast<uint32_t>(TypeId::BOOL), true,
+                                     true);
+  EXPECT_TRUE(field_types_compatible_top_level(ref_local_nullable_bool,
+                                               ref_remote_nullable_bool));
+  EXPECT_FALSE(field_types_compatible_top_level(ref_local_bool,
+                                                ref_remote_nullable_bool));
+  EXPECT_FALSE(
+      field_types_compatible_top_level(ref_local_nullable_bool, remote_bool));
 
   FieldType fixed_int32(static_cast<uint32_t>(TypeId::INT32), false, false);
   FieldType varint32(static_cast<uint32_t>(TypeId::VARINT32), false, false);
@@ -852,6 +885,73 @@ TEST(SchemaEvolutionTest, ScalarOptional) {
       {std::nullopt}, 1032);
   ASSERT_TRUE(optional.ok()) << optional.error().to_string();
   EXPECT_FALSE(optional.value().value.has_value());
+}
+
+TEST(SchemaEvolutionTest, ScalarOptionalRejectsRefValueFlag) {
+  auto writer = Fory::builder().compatible(true).xlang(true).build();
+  auto reader = Fory::builder().compatible(true).xlang(true).build();
+
+  constexpr uint32_t TYPE_ID = 1048;
+  ASSERT_TRUE(writer.register_struct<OptionalStringField>(TYPE_ID).ok());
+  ASSERT_TRUE(reader.register_struct<ScalarBoolField>(TYPE_ID).ok());
+
+  auto bytes = writer.serialize(OptionalStringField{std::string("1")});
+  ASSERT_TRUE(bytes.ok()) << bytes.error().to_string();
+  std::vector<uint8_t> payload = std::move(bytes).value();
+  auto flag = std::find(payload.rbegin(), payload.rend(),
+                        static_cast<uint8_t>(NOT_NULL_VALUE_FLAG));
+  ASSERT_NE(flag, payload.rend());
+  *flag = static_cast<uint8_t>(REF_VALUE_FLAG);
+
+  auto decoded =
+      reader.deserialize<ScalarBoolField>(payload.data(), payload.size());
+  ASSERT_FALSE(decoded.ok());
+  EXPECT_EQ(decoded.error().code(), ErrorCode::InvalidData);
+}
+
+TEST(SchemaEvolutionTest, ScalarSameTypeOptionalRejectsRefFlag) {
+  auto writer = Fory::builder().compatible(true).xlang(true).build();
+  auto reader = Fory::builder().compatible(true).xlang(true).build();
+
+  constexpr uint32_t TYPE_ID = 1049;
+  ASSERT_TRUE(writer.register_struct<OptionalBoolField>(TYPE_ID).ok());
+  ASSERT_TRUE(reader.register_struct<ScalarBoolField>(TYPE_ID).ok());
+
+  auto bytes = writer.serialize(OptionalBoolField{true});
+  ASSERT_TRUE(bytes.ok()) << bytes.error().to_string();
+  std::vector<uint8_t> payload = std::move(bytes).value();
+  auto flag = std::find(payload.rbegin(), payload.rend(),
+                        static_cast<uint8_t>(NOT_NULL_VALUE_FLAG));
+  ASSERT_NE(flag, payload.rend());
+  *flag = static_cast<uint8_t>(REF_VALUE_FLAG);
+
+  auto decoded =
+      reader.deserialize<ScalarBoolField>(payload.data(), payload.size());
+  ASSERT_FALSE(decoded.ok());
+  EXPECT_EQ(decoded.error().code(), ErrorCode::InvalidData);
+}
+
+TEST(SchemaEvolutionTest, ScalarSameTypeOptionalRejectsBadBool) {
+  auto writer = Fory::builder().compatible(true).xlang(true).build();
+  auto reader = Fory::builder().compatible(true).xlang(true).build();
+
+  constexpr uint32_t TYPE_ID = 1050;
+  ASSERT_TRUE(writer.register_struct<OptionalBoolField>(TYPE_ID).ok());
+  ASSERT_TRUE(reader.register_struct<ScalarBoolField>(TYPE_ID).ok());
+
+  auto true_bytes = writer.serialize(OptionalBoolField{true});
+  ASSERT_TRUE(true_bytes.ok()) << true_bytes.error().to_string();
+  auto false_bytes = writer.serialize(OptionalBoolField{false});
+  ASSERT_TRUE(false_bytes.ok()) << false_bytes.error().to_string();
+  std::vector<uint8_t> payload = std::move(true_bytes).value();
+  size_t bool_index = single_byte_delta_index(payload, false_bytes.value());
+  ASSERT_LT(bool_index, payload.size());
+  payload[bool_index] = 2;
+
+  auto decoded =
+      reader.deserialize<ScalarBoolField>(payload.data(), payload.size());
+  ASSERT_FALSE(decoded.ok());
+  EXPECT_EQ(decoded.error().code(), ErrorCode::InvalidData);
 }
 
 TEST(SchemaEvolutionTest, RoundtripWithSameVersion) {

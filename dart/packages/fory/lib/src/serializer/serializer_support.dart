@@ -235,7 +235,7 @@ Object? readCompatibleField(ReadContext context, FieldInfo field) {
     return context.readRef();
   }
   if (fieldType.isPrimitive) {
-    if (fieldType.nullable || fieldType.ref) {
+    if (fieldType.nullable) {
       final flag = context.refReader.tryPreserveRefId(context.buffer);
       final preservedRefId = flag >= RefWriter.refValueFlag ? flag : null;
       if (flag == RefWriter.nullFlag) {

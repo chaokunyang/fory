@@ -29,9 +29,9 @@ Schema evolution lets different versions of your service exchange messages safel
 Compatible readers also tolerate selected scalar field type changes when the conversion is lossless.
 A matched field can read between `boolean`, `string`, numeric scalars, and `Decimal` when the
 converted value has the same logical value. For example, `"true"`, `"false"`, `"1"`, and `"0"` can
-be read as booleans, exact finite numeric strings can be read as numeric fields that can hold them,
-numbers and decimals can be read as canonical strings, and numeric widening or narrowing succeeds
-only when no precision or range is lost. Invalid strings and lossy conversions fail during
+be read as booleans, exact finite ASCII numeric strings can be read as numeric fields that can hold
+them, numbers and decimals can be read as canonical strings, and numeric widening or narrowing
+succeeds only when no precision or range is lost. Invalid strings and lossy conversions fail during
 deserialization. Nullable fields still compose with these conversions, but reference-tracked scalar
 type changes are incompatible.
 

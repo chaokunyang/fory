@@ -20,10 +20,13 @@
 import 'dart:typed_data';
 
 import 'package:fory/src/context/read_context.dart';
+import 'package:fory/src/context/ref_writer.dart';
 import 'package:fory/src/exceptions.dart';
 import 'package:fory/src/meta/field_info.dart';
 import 'package:fory/src/meta/field_type.dart';
 import 'package:fory/src/meta/type_ids.dart';
+import 'package:fory/src/serializer/primitive_serializers.dart';
+import 'package:fory/src/serializer/scalar_serializers.dart';
 import 'package:fory/src/serializer/serializer_support.dart';
 import 'package:fory/src/types/bfloat16.dart';
 import 'package:fory/src/types/decimal.dart';
@@ -68,6 +71,13 @@ CompatibleScalarConversion? compatibleScalarConversion(
   if (remoteField.fieldType.ref || localField.fieldType.ref) {
     return null;
   }
+  final exactScalarFieldType =
+      remoteField.fieldType.typeId == localField.fieldType.typeId &&
+      remoteField.fieldType.nullable == localField.fieldType.nullable &&
+      remoteField.fieldType.ref == localField.fieldType.ref;
+  if (exactScalarFieldType) {
+    return null;
+  }
   if (!_supportsCompatibleScalarConversion(
     remoteField.fieldType.typeId,
     localField.fieldType.typeId,
@@ -79,7 +89,7 @@ CompatibleScalarConversion? compatibleScalarConversion(
 
 bool _supportsCompatibleScalarConversion(int remoteTypeId, int localTypeId) {
   if (remoteTypeId == localTypeId) {
-    return false;
+    return _isScalarConversionType(remoteTypeId);
   }
   if (!_isScalarConversionType(remoteTypeId) ||
       !_isScalarConversionType(localTypeId)) {
@@ -139,7 +149,7 @@ Object? readCompatibleScalarField(
   ReadContext context,
   CompatibleScalarConversion conversion,
 ) {
-  final value = readCompatibleField(context, conversion.remoteField);
+  final value = _readCompatibleScalarPayload(context, conversion);
   if (value == null) {
     return null;
   }
@@ -152,13 +162,64 @@ Object? readCompatibleScalarField(
   }
 }
 
+Object? _readCompatibleScalarPayload(
+  ReadContext context,
+  CompatibleScalarConversion conversion,
+) {
+  final fieldType = conversion.remoteField.fieldType;
+  if (fieldType.nullable) {
+    final flag = context.buffer.readByte();
+    if (flag == RefWriter.nullFlag) {
+      return null;
+    }
+    if (flag != RefWriter.notNullValueFlag) {
+      throw InvalidDataException(
+        'Invalid nullable compatible scalar field flag $flag.',
+      );
+    }
+  }
+  return _readCompatibleScalarValue(context, fieldType);
+}
+
+Object _readCompatibleScalarValue(ReadContext context, FieldType fieldType) {
+  switch (fieldType.typeId) {
+    case TypeIds.boolType:
+      final raw = context.buffer.readUint8();
+      if (raw == 0) {
+        return false;
+      }
+      if (raw == 1) {
+        return true;
+      }
+      throw InvalidDataException('Bool payload must be encoded as 0 or 1.');
+    case TypeIds.string:
+      return StringSerializer.readPayload(context);
+    case TypeIds.decimal:
+      return DecimalSerializer.readPayload(context);
+    default:
+      if (fieldType.isPrimitive) {
+        return convertPrimitiveFieldValue(
+          PrimitiveSerializer.readPayload(context, fieldType.typeId),
+          fieldType,
+        );
+      }
+      throw InvalidDataException(
+        'Unsupported compatible scalar type ${fieldType.typeId}.',
+      );
+  }
+}
+
 @pragma('vm:never-inline')
 Object convertCompatibleScalarValue(
   Object value,
   CompatibleScalarConversion conversion,
 ) {
   final localType = conversion.localField.fieldType;
+  final remoteTypeId = conversion.remoteField.fieldType.typeId;
   final localTypeId = localType.typeId;
+  if (remoteTypeId == localTypeId) {
+    return convertPrimitiveFieldValue(value, localType);
+  }
   if (localTypeId == TypeIds.boolType) {
     return _toBool(value);
   }

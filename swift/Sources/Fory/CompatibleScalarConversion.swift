@@ -83,8 +83,7 @@ public func foryReadCompatibleScalarField<T>(
   directRead: () throws -> T
 ) throws -> T {
   guard let remoteTypeID = TypeId(rawValue: remoteFieldType.typeID),
-    let localTypeID = TypeId(rawValue: localTypeID),
-    remoteTypeID != localTypeID
+    let localTypeID = TypeId(rawValue: localTypeID)
   else {
     return try directRead()
   }
@@ -143,8 +142,7 @@ public func foryReadCompatibleOptionalScalarField<T>(
   directRead: () throws -> T?
 ) throws -> T? {
   guard let remoteTypeID = TypeId(rawValue: remoteFieldType.typeID),
-    let localTypeID = TypeId(rawValue: localTypeID),
-    remoteTypeID != localTypeID
+    let localTypeID = TypeId(rawValue: localTypeID)
   else {
     return try directRead()
   }
@@ -218,6 +216,9 @@ private func compatibleScalarPair(remoteTypeID: TypeId, localTypeID: TypeId) -> 
     let local = compatibleScalarKind(localTypeID)
   else {
     return false
+  }
+  if remoteTypeID == localTypeID {
+    return true
   }
   if remote == .bool {
     return local == .string || local.isNumeric
@@ -611,7 +612,8 @@ private func compatibleScalarToDecimal(_ value: CompatibleScalarValue) throws ->
 }
 
 private func compatibleScalarToDecimalLiteral(_ value: CompatibleScalarValue) throws
-  -> DecimalLiteral? {
+  -> DecimalLiteral?
+{
   switch value {
   case .bool(let value):
     return DecimalLiteral(negative: false, digits: value ? "1" : "0", scale: 0, negativeZero: false)
@@ -736,123 +738,175 @@ private func compatibleScalarDefaultValue<T>(_: T.Type, localTypeID: TypeId) -> 
 }
 
 private func compatibleParseNumericLiteral(_ text: String) -> DecimalLiteral? {
-  guard !text.isEmpty, text.count <= maxCompatibleNumericTextLength, text.first != "+" else {
+  guard !text.isEmpty, text.utf8.count <= maxCompatibleNumericTextLength else {
     return nil
   }
-  let chars = Array(text)
-  var index = 0
+  let utf8 = text.utf8
+  var index = utf8.startIndex
+  let end = utf8.endIndex
+  func currentByte() -> UInt8? {
+    index == end ? nil : utf8[index]
+  }
+  func advance() {
+    utf8.formIndex(after: &index)
+  }
+  func isDigit(_ byte: UInt8) -> Bool {
+    byte >= 48 && byte <= 57
+  }
+
+  guard currentByte() != 43 else {
+    return nil
+  }
+
   var negative = false
-  if chars[index] == "-" {
+  if currentByte() == 45 {
     negative = true
-    index += 1
-    guard index < chars.count else {
+    advance()
+    guard index != end else {
       return nil
     }
   }
 
-  guard let integerDigits = compatibleReadDigits(chars, index: &index, allowLeadingZeros: false)
+  var seenNonZero = false
+  var significantDigits = 0
+  func countSignificantDigit(_ digit: UInt8) -> Bool {
+    if digit != 48 || seenNonZero {
+      seenNonZero = true
+      significantDigits += 1
+    }
+    return significantDigits <= maxCompatibleDecimalDigits
+  }
+
+  var integerDigitCount = 0
+  var firstIntegerDigit: UInt8 = 0
+  while let byte = currentByte(), isDigit(byte) {
+    if integerDigitCount == 0 {
+      firstIntegerDigit = byte
+    }
+    integerDigitCount += 1
+    guard countSignificantDigit(byte) else {
+      return nil
+    }
+    advance()
+  }
+  guard integerDigitCount > 0,
+    integerDigitCount == 1 || firstIntegerDigit != 48
   else {
     return nil
   }
-  var fractionalDigits = ""
-  var scale = 0
-  if index < chars.count && chars[index] == "." {
-    index += 1
-    guard let digits = compatibleReadDigits(chars, index: &index, allowLeadingZeros: true),
-      !digits.isEmpty
-    else {
+
+  var fractionalDigitCount = 0
+  if currentByte() == 46 {
+    advance()
+    while let byte = currentByte(), isDigit(byte) {
+      fractionalDigitCount += 1
+      guard countSignificantDigit(byte) else {
+        return nil
+      }
+      advance()
+    }
+    guard fractionalDigitCount > 0 else {
       return nil
     }
-    fractionalDigits = digits
-    scale = digits.count
   }
 
   var exponent = 0
-  if index < chars.count && (chars[index] == "e" || chars[index] == "E") {
-    index += 1
+  if let byte = currentByte(), byte == 101 || byte == 69 {
+    advance()
     var exponentNegative = false
-    if index < chars.count && chars[index] == "-" {
+    if currentByte() == 45 {
       exponentNegative = true
-      index += 1
+      advance()
     }
-    guard let exponentDigits = compatibleReadDigits(chars, index: &index, allowLeadingZeros: false),
-      let parsedExponent = compatibleParseExponent(exponentDigits)
+    var exponentDigitCount = 0
+    var firstExponentDigit: UInt8 = 0
+    while let byte = currentByte(), isDigit(byte) {
+      if exponentDigitCount == 0 {
+        firstExponentDigit = byte
+      }
+      exponentDigitCount += 1
+      exponent = exponent * 10 + Int(byte - 48)
+      guard exponent <= maxCompatibleDecimalDigits else {
+        return nil
+      }
+      advance()
+    }
+    guard exponentDigitCount > 0,
+      exponentDigitCount == 1 || firstExponentDigit != 48
     else {
       return nil
     }
-    exponent = exponentNegative ? -parsedExponent : parsedExponent
+    if exponentNegative {
+      exponent = -exponent
+    }
   }
-  guard index == chars.count else {
-    return nil
-  }
-  guard !fractionalDigits.isEmpty || exponent != 0 || !text.contains(".") else {
+  guard index == end else {
     return nil
   }
 
-  let adjustedScale = scale.subtractingReportingOverflow(exponent)
+  let adjustedScale = fractionalDigitCount.subtractingReportingOverflow(exponent)
   guard !adjustedScale.overflow else {
     return nil
   }
-  scale = adjustedScale.partialValue
-  let significantDigits = compatibleSignificantDigitCount(integerDigits + fractionalDigits)
+  var scale = adjustedScale.partialValue
   guard significantDigits <= maxCompatibleDecimalDigits,
     compatibleDecimalShape(significantDigits: significantDigits, scale: scale)
   else {
     return nil
   }
+  if significantDigits == 0 {
+    return DecimalLiteral(negative: negative, digits: "0", scale: 0, negativeZero: negative)
+  }
 
-  var digits = integerDigits + fractionalDigits
+  var digitBytes: [UInt8] = []
+  digitBytes.reserveCapacity(integerDigitCount + fractionalDigitCount)
+  var buildIndex = utf8.startIndex
+  if utf8[buildIndex] == 45 {
+    utf8.formIndex(after: &buildIndex)
+  }
+  while buildIndex != end, isDigit(utf8[buildIndex]) {
+    digitBytes.append(utf8[buildIndex])
+    utf8.formIndex(after: &buildIndex)
+  }
+  if buildIndex != end, utf8[buildIndex] == 46 {
+    utf8.formIndex(after: &buildIndex)
+    while buildIndex != end, isDigit(utf8[buildIndex]) {
+      digitBytes.append(utf8[buildIndex])
+      utf8.formIndex(after: &buildIndex)
+    }
+  }
+  var firstNonZero = 0
+  while firstNonZero < digitBytes.count, digitBytes[firstNonZero] == 48 {
+    firstNonZero += 1
+  }
+  if firstNonZero > 0 {
+    digitBytes.removeFirst(firstNonZero)
+  }
+
   if scale < 0 {
     let extra = 0.subtractingReportingOverflow(scale)
     guard !extra.overflow,
       extra.partialValue <= maxCompatibleDecimalDigits,
-      digits.count + extra.partialValue <= maxCompatibleDecimalDigits
+      digitBytes.count + extra.partialValue <= maxCompatibleDecimalDigits
     else {
       return nil
     }
-    digits += String(repeating: "0", count: extra.partialValue)
+    digitBytes.append(contentsOf: repeatElement(48, count: extra.partialValue))
     scale = 0
   }
-  while scale > 0, digits.last == "0" {
-    digits.removeLast()
+  while scale > 0, digitBytes.last == 48 {
+    digitBytes.removeLast()
     scale -= 1
   }
-  let normalized = compatibleNormalizeDigits(digits)
-  guard
-    normalized == "0"
-      || (scale <= maxCompatibleDecimalDigits && normalized.count <= maxCompatibleDecimalDigits)
+  guard scale <= maxCompatibleDecimalDigits,
+    digitBytes.count <= maxCompatibleDecimalDigits
   else {
     return nil
   }
-  if normalized == "0" {
-    scale = 0
-  }
+  let normalized = String(decoding: digitBytes, as: UTF8.self)
   let negativeZero = negative && normalized == "0"
   return DecimalLiteral(
     negative: negative, digits: normalized, scale: scale, negativeZero: negativeZero)
-}
-
-private func compatibleParseExponent(_ digits: String) -> Int? {
-  var value = 0
-  for digit in digits.utf8 {
-    value = value * 10 + Int(digit) - 48
-    if value > maxCompatibleDecimalDigits {
-      return nil
-    }
-  }
-  return value
-}
-
-private func compatibleSignificantDigitCount(_ digits: String) -> Int {
-  var seenNonZero = false
-  var count = 0
-  for digit in digits.utf8 {
-    if digit != 48 || seenNonZero {
-      seenNonZero = true
-      count += 1
-    }
-  }
-  return count
 }
 
 private func compatibleDecimalShape(significantDigits: Int, scale: Int) -> Bool {
@@ -867,28 +921,6 @@ private func compatibleParseCanonicalDecimal(_ text: String?) -> DecimalLiteral?
     return nil
   }
   return compatibleParseNumericLiteral(text)
-}
-
-private func compatibleReadDigits(
-  _ chars: [Character],
-  index: inout Int,
-  allowLeadingZeros: Bool
-) -> String? {
-  guard index < chars.count, chars[index].isNumber else {
-    return nil
-  }
-  let start = index
-  while index < chars.count, chars[index].isNumber {
-    guard chars[index].asciiValue.map({ $0 >= 48 && $0 <= 57 }) == true else {
-      return nil
-    }
-    index += 1
-  }
-  let digits = String(chars[start..<index])
-  if !allowLeadingZeros, digits.count > 1, digits.first == "0" {
-    return nil
-  }
-  return digits
 }
 
 private func compatibleNormalizeDigits(_ digits: String) -> String {
@@ -1007,7 +1039,8 @@ private func compatibleFormatDecimalText(negative: Bool, digits: String, scale: 
   return fraction.isEmpty ? sign + integer : "\(sign)\(integer).\(fraction)"
 }
 
-private func compatibleFloatCanonicalText(_ literal: DecimalLiteral, forceFraction: Bool) -> String? {
+private func compatibleFloatCanonicalText(_ literal: DecimalLiteral, forceFraction: Bool) -> String?
+{
   if literal.isZero {
     return literal.negativeZero ? "-0.0" : "0.0"
   }

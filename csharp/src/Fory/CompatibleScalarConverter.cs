@@ -65,7 +65,7 @@ public static class CompatibleScalarConverter
         TypeId local = NormalizeScalarTypeId(localTypeId);
         if (remote == local)
         {
-            return false;
+            return remoteTypeId != localTypeId && IsScalar(remote);
         }
 
         if (!IsScalar(remote) || !IsScalar(local))
@@ -103,7 +103,8 @@ public static class CompatibleScalarConverter
     {
         TypeId remote = NormalizeScalarTypeId(remoteTypeId);
         TypeId local = NormalizeScalarTypeId(localTypeId);
-        return IsScalar(remote) && IsScalar(local) && (remote == local || CanConvert(remoteTypeId, localTypeId));
+        return IsScalar(remote) && IsScalar(local) && remoteTypeId != localTypeId &&
+            (remote == local || CanConvert(remoteTypeId, localTypeId));
     }
 
     /// <summary>
@@ -159,8 +160,7 @@ public static class CompatibleScalarConverter
         TypeId localTypeId,
         string fieldName)
     {
-        bool direct = NormalizeScalarTypeId((uint)remoteTypeId) == NormalizeScalarTypeId((uint)localTypeId);
-        object value = ReadPayload(context, remoteTypeId, localTypeId, fieldName, direct);
+        object value = ReadPayload(context, remoteTypeId, localTypeId, fieldName);
         return ConvertReadValue<T>(value, remoteTypeId, localTypeId, fieldName);
     }
 
@@ -188,12 +188,11 @@ public static class CompatibleScalarConverter
         ReadContext context,
         TypeId remoteTypeId,
         TypeId localTypeId,
-        string fieldName,
-        bool direct)
+        string fieldName)
     {
         return remoteTypeId switch
         {
-            TypeId.Bool => ReadBool(context, localTypeId, fieldName, direct),
+            TypeId.Bool => ReadBool(context, localTypeId, fieldName),
             TypeId.Int8 => context.Reader.ReadInt8(),
             TypeId.Int16 => context.Reader.ReadInt16(),
             TypeId.Int32 => context.Reader.ReadInt32(),
@@ -222,14 +221,9 @@ public static class CompatibleScalarConverter
         };
     }
 
-    private static bool ReadBool(ReadContext context, TypeId localTypeId, string fieldName, bool direct)
+    private static bool ReadBool(ReadContext context, TypeId localTypeId, string fieldName)
     {
         byte value = context.Reader.ReadUInt8();
-        if (direct)
-        {
-            return value != 0;
-        }
-
         return value switch
         {
             0 => false,
@@ -469,7 +463,7 @@ public static class CompatibleScalarConverter
     {
         float parsed = ParseSingle(value, remote, local, fieldName);
         Half candidate = (Half)parsed;
-        CheckFloatExact(FromHalf(candidate), value, remote, local, fieldName);
+        CheckFloatExact(FromHalf(candidate, remote, local, fieldName), value, remote, local, fieldName);
         return candidate;
     }
 
@@ -477,21 +471,21 @@ public static class CompatibleScalarConverter
     {
         float parsed = ParseSingle(value, remote, local, fieldName);
         BFloat16 candidate = BFloat16.FromSingle(parsed);
-        CheckFloatExact(FromBFloat16(candidate), value, remote, local, fieldName);
+        CheckFloatExact(FromBFloat16(candidate, remote, local, fieldName), value, remote, local, fieldName);
         return candidate;
     }
 
     private static float ToSingle(DecimalValue value, TypeId remote, TypeId local, string fieldName)
     {
         float candidate = ParseSingle(value, remote, local, fieldName);
-        CheckFloatExact(FromSingle(candidate), value, remote, local, fieldName);
+        CheckFloatExact(FromSingle(candidate, remote, local, fieldName), value, remote, local, fieldName);
         return candidate;
     }
 
     private static double ToDouble(DecimalValue value, TypeId remote, TypeId local, string fieldName)
     {
         double candidate = ParseDouble(value, remote, local, fieldName);
-        CheckFloatExact(FromDouble(candidate), value, remote, local, fieldName);
+        CheckFloatExact(FromDouble(candidate, remote, local, fieldName), value, remote, local, fieldName);
         return candidate;
     }
 
@@ -727,7 +721,7 @@ public static class CompatibleScalarConverter
             throw Fail(remote, local, fieldName, "non-finite float16 cannot convert to this target");
         }
 
-        return FromHalf(value);
+        return FromHalf(value, remote, local, fieldName);
     }
 
     private static DecimalValue FromBFloat16Checked(BFloat16 value, TypeId remote, TypeId local, string fieldName)
@@ -737,7 +731,7 @@ public static class CompatibleScalarConverter
             throw Fail(remote, local, fieldName, "non-finite bfloat16 cannot convert to this target");
         }
 
-        return FromBFloat16(value);
+        return FromBFloat16(value, remote, local, fieldName);
     }
 
     private static DecimalValue FromSingleChecked(float value, TypeId remote, TypeId local, string fieldName)
@@ -747,7 +741,7 @@ public static class CompatibleScalarConverter
             throw Fail(remote, local, fieldName, "non-finite float32 cannot convert to this target");
         }
 
-        return FromSingle(value);
+        return FromSingle(value, remote, local, fieldName);
     }
 
     private static DecimalValue FromDoubleChecked(double value, TypeId remote, TypeId local, string fieldName)
@@ -757,7 +751,7 @@ public static class CompatibleScalarConverter
             throw Fail(remote, local, fieldName, "non-finite float64 cannot convert to this target");
         }
 
-        return FromDouble(value);
+        return FromDouble(value, remote, local, fieldName);
     }
 
     private static DecimalValue FromSystemDecimal(decimal value)
@@ -775,31 +769,38 @@ public static class CompatibleScalarConverter
         return new DecimalValue(unscaled, (bits[3] >> 16) & 0xFF, false);
     }
 
-    private static DecimalValue FromHalf(Half value)
+    private static DecimalValue FromHalf(Half value, TypeId remote, TypeId local, string fieldName)
     {
         ushort bits = BitConverter.HalfToUInt16Bits(value);
-        return FromFloatBits(bits, 10, 5, 15);
+        return FromFloatBits(bits, 10, 5, 15, remote, local, fieldName);
     }
 
-    private static DecimalValue FromBFloat16(BFloat16 value)
+    private static DecimalValue FromBFloat16(BFloat16 value, TypeId remote, TypeId local, string fieldName)
     {
         ushort bits = value.ToBits();
-        return FromFloatBits(bits, 7, 8, 127);
+        return FromFloatBits(bits, 7, 8, 127, remote, local, fieldName);
     }
 
-    private static DecimalValue FromSingle(float value)
+    private static DecimalValue FromSingle(float value, TypeId remote, TypeId local, string fieldName)
     {
         uint bits = BitConverter.SingleToUInt32Bits(value);
-        return FromFloatBits(bits, 23, 8, 127);
+        return FromFloatBits(bits, 23, 8, 127, remote, local, fieldName);
     }
 
-    private static DecimalValue FromDouble(double value)
+    private static DecimalValue FromDouble(double value, TypeId remote, TypeId local, string fieldName)
     {
         ulong bits = BitConverter.DoubleToUInt64Bits(value);
-        return FromFloatBits(bits, 52, 11, 1023);
+        return FromFloatBits(bits, 52, 11, 1023, remote, local, fieldName);
     }
 
-    private static DecimalValue FromFloatBits(ulong bits, int fractionBits, int exponentBits, int exponentBias)
+    private static DecimalValue FromFloatBits(
+        ulong bits,
+        int fractionBits,
+        int exponentBits,
+        int exponentBias,
+        TypeId remote,
+        TypeId local,
+        string fieldName)
     {
         bool negative = (bits & (1UL << (fractionBits + exponentBits))) != 0;
         ulong exponentMask = (1UL << exponentBits) - 1UL;
@@ -824,13 +825,13 @@ public static class CompatibleScalarConverter
         int scale = checked(-binaryExponent);
         if (scale > MaxCompatibleDecimalDigits)
         {
-            throw Fail(TypeId.Float64, TypeId.Decimal, "", "float decimal expansion is too large");
+            throw Fail(remote, local, fieldName, "float decimal expansion is too large");
         }
         BigInteger decimalSignificand = significand * BigInteger.Pow(5, scale);
         return Normalize(new DecimalValue(
             negative ? BigInteger.Negate(decimalSignificand) : decimalSignificand,
             scale,
-            false), TypeId.Float64, TypeId.Decimal, "");
+            false), remote, local, fieldName);
     }
 
     private static bool TryParseNumber(string value, out DecimalValue result)

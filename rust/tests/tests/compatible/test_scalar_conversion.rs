@@ -16,7 +16,7 @@
 // under the License.
 
 use fory_core::fory::Fory;
-use fory_core::{Decimal, Error};
+use fory_core::{Decimal, Error, RefFlag};
 use fory_derive::ForyStruct;
 use num_bigint::BigInt;
 
@@ -345,6 +345,42 @@ fn option_composition() {
     )
     .unwrap();
     assert_eq!(decoded.value, Some(false));
+
+    let writer = compatible_fory::<OptionalText>(12_054);
+    let reader = compatible_fory::<BoolValue>(12_054);
+    let mut bytes = writer
+        .serialize(&OptionalText {
+            value: Some("1".to_string()),
+        })
+        .unwrap();
+    let flag = bytes
+        .iter()
+        .rposition(|byte| *byte == RefFlag::NotNullValue as i8 as u8)
+        .unwrap();
+    bytes[flag] = RefFlag::RefValue as i8 as u8;
+    let err = reader.deserialize::<BoolValue>(&bytes).unwrap_err();
+    assert!(matches!(err, Error::InvalidData(_)), "{err}");
+
+    let writer = compatible_fory::<OptionalBool>(12_055);
+    let reader = compatible_fory::<BoolValue>(12_055);
+    let mut bytes = writer
+        .serialize(&OptionalBool { value: Some(true) })
+        .unwrap();
+    let flag = bytes
+        .iter()
+        .rposition(|byte| *byte == RefFlag::NotNullValue as i8 as u8)
+        .unwrap();
+    bytes[flag] = RefFlag::RefValue as i8 as u8;
+    let err = reader.deserialize::<BoolValue>(&bytes).unwrap_err();
+    assert!(matches!(err, Error::InvalidData(_)), "{err}");
+
+    let mut bytes = writer
+        .serialize(&OptionalBool { value: Some(true) })
+        .unwrap();
+    let last = bytes.len() - 1;
+    bytes[last] = 2;
+    let err = reader.deserialize::<BoolValue>(&bytes).unwrap_err();
+    assert!(matches!(err, Error::InvalidData(_)), "{err}");
 }
 
 #[test]

@@ -553,10 +553,20 @@ describe("typemeta", () => {
       readCompatibleScalar(7250, Type.string(), Type.float64(), "1."),
     ).toThrow(/compatible field value/);
     expect(() =>
-      readCompatibleScalar(7251, Type.string(), Type.decimal(), "1".repeat(257)),
+      readCompatibleScalar(
+        7251,
+        Type.string(),
+        Type.decimal(),
+        "1".repeat(257),
+      ),
     ).toThrow(/compatible field value/);
     expect(() =>
-      readCompatibleScalar(7253, Type.string(), Type.decimal(), `0.${"0".repeat(319)}`),
+      readCompatibleScalar(
+        7253,
+        Type.string(),
+        Type.decimal(),
+        `0.${"0".repeat(319)}`,
+      ),
     ).toThrow(/compatible field value/);
     expect(() =>
       readCompatibleScalar(7257, Type.string(), Type.decimal(), "1e1000000"),
@@ -568,7 +578,12 @@ describe("typemeta", () => {
       readCompatibleScalar(7233, Type.decimal(), Type.int32(), decimal(5n, 1)),
     ).toThrow(/compatible field value/);
     expect(() =>
-      readCompatibleScalar(7259, Type.decimal(), Type.string(), decimal(1n, -256)),
+      readCompatibleScalar(
+        7259,
+        Type.decimal(),
+        Type.string(),
+        decimal(1n, -256),
+      ),
     ).toThrow(/compatible field value/);
     expect(() =>
       readCompatibleScalar(
@@ -611,41 +626,57 @@ describe("typemeta", () => {
   });
 
   test("applies tracking-ref scalar rules", () => {
+    const writerFory = new Fory({ compatible: true, ref: true });
     const readerFory = new Fory({ compatible: true, ref: true });
+    class RemoteScalars {
+      flag = "true";
+      count = "1";
+      same = true;
+      remoteNullable = true;
+      localNullable = true;
+      bothNullable = true;
+    }
     class LocalScalars {
       flag = false;
       count = 0;
       same = false;
+      remoteNullable = false;
+      localNullable = false;
+      bothNullable = false;
     }
+    Type.struct(7254, {
+      flag: Type.string().setId(1).setTrackingRef(true),
+      count: Type.string().setId(2),
+      same: Type.bool().setId(3).setTrackingRef(true),
+      remoteNullable: Type.bool()
+        .setId(4)
+        .setTrackingRef(true)
+        .setNullable(true),
+      localNullable: Type.bool().setId(5).setTrackingRef(true),
+      bothNullable: Type.bool().setId(6).setTrackingRef(true).setNullable(true),
+    })(RemoteScalars);
     Type.struct(7254, {
       flag: Type.bool().setId(1),
       count: Type.int32().setId(2).setTrackingRef(true),
       same: Type.bool().setId(3).setTrackingRef(true),
+      remoteNullable: Type.bool().setId(4).setTrackingRef(true),
+      localNullable: Type.bool()
+        .setId(5)
+        .setTrackingRef(true)
+        .setNullable(true),
+      bothNullable: Type.bool().setId(6).setTrackingRef(true).setNullable(true),
     })(LocalScalars);
+    const writer = writerFory.register(RemoteScalars);
     const reader = readerFory.register(LocalScalars);
-    const remoteTypeInfo = Type.struct(7254, {
-      flag: Type.string().setId(1).setTrackingRef(true),
-      count: Type.string().setId(2),
-      same: Type.bool().setId(3).setTrackingRef(true),
-    });
-    const writer = new BinaryWriter();
 
-    writer.writeUint8(1);
-    writer.writeInt8(RefFlags.RefValueFlag);
-    writer.writeUint8(TypeId.COMPATIBLE_STRUCT);
-    writer.writeVarUInt32(0);
-    writer.buffer(TypeMeta.fromTypeInfo(remoteTypeInfo).toBytes());
-    writer.writeInt8(RefFlags.RefValueFlag);
-    writer.bool(true);
-    writer.writeInt8(RefFlags.RefValueFlag);
-    writer.stringWithHeader("1");
-    writer.stringWithHeader("1");
-
-    const result = reader.deserialize(writer.dump());
+    const result = reader.deserialize(writer.serialize(new RemoteScalars()));
     expect(result).toBeInstanceOf(LocalScalars);
     expect(result.flag).toBe(false);
     expect(result.count).toBe(0);
     expect(result.same).toBe(true);
+    expect(result.remoteNullable).toBe(false);
+    expect(result.localNullable).toBe(false);
+    expect(result.bothNullable).toBe(true);
   });
 
   test("keeps nested scalars unconverted", () => {
@@ -680,6 +711,36 @@ describe("typemeta", () => {
 
     expect(Number.isNaN(result.value)).toBe(true);
     expect(generatedReaders).toBe(0);
+  });
+
+  test("strictly reads same-type nullable compatible scalar fields", () => {
+    const writerFory = new Fory({ compatible: true });
+    const readerFory = new Fory({ compatible: true });
+    const writer = writerFory.register(
+      Type.struct(7260, {
+        value: Type.bool().setNullable(true),
+      }),
+    );
+    const reader = readerFory.register(
+      Type.struct(7260, {
+        value: Type.bool(),
+      }),
+    );
+    const bytes = writer.serialize({ value: true });
+    const flag = bytes.lastIndexOf(RefFlags.NotNullValueFlag & 0xff);
+    expect(flag).toBeGreaterThanOrEqual(0);
+
+    const badFlag = new Uint8Array(bytes);
+    badFlag[flag] = RefFlags.RefValueFlag & 0xff;
+    expect(() => reader.deserialize(badFlag)).toThrow(
+      /Invalid reference flag for compatible scalar field value/,
+    );
+
+    const badPayload = new Uint8Array(bytes);
+    badPayload[badPayload.length - 1] = 2;
+    expect(() => reader.deserialize(badPayload)).toThrow(
+      /Invalid boolean scalar value/,
+    );
   });
 
   test("adapts only immediate compatible list and dense array field pairs", () => {

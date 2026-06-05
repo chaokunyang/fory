@@ -42,6 +42,7 @@ type compatibleScalarValue struct {
 	signed   int64
 	unsigned uint64
 	float64  float64
+	float32  float32
 	halfBits uint16
 	decimal  Decimal
 	negZero  bool
@@ -57,7 +58,7 @@ var maxCompatibleDecimalMagnitude = new(big.Int).Exp(
 )
 
 func newCompatibleScalarField(remoteTypeID TypeId, localTypeID TypeId, localType reflect.Type) (*compatibleScalarField, bool) {
-	if remoteTypeID == localTypeID || remoteTypeID == FLOAT8 || localTypeID == FLOAT8 {
+	if remoteTypeID == FLOAT8 || localTypeID == FLOAT8 {
 		return nil, false
 	}
 	targetType := compatibleScalarValueType(localType)
@@ -67,8 +68,8 @@ func newCompatibleScalarField(remoteTypeID TypeId, localTypeID TypeId, localType
 	if !compatibleScalarType(remoteTypeID) || !compatibleScalarType(localTypeID) {
 		return nil, false
 	}
-	if remoteTypeID == STRING && localTypeID == STRING {
-		return nil, false
+	if remoteTypeID == localTypeID {
+		return &compatibleScalarField{remoteTypeID: remoteTypeID, localTypeID: localTypeID, localType: targetType}, true
 	}
 	if remoteTypeID == BOOL {
 		return &compatibleScalarField{remoteTypeID: remoteTypeID, localTypeID: localTypeID, localType: targetType}, localTypeID == STRING || compatibleNumericType(localTypeID)
@@ -154,12 +155,22 @@ func compatibleScalarTargetMatches(typeID TypeId, target reflect.Type) bool {
 func readCompatibleScalarField(ctx *ReadContext, field *FieldInfo, fieldPtr unsafe.Pointer) {
 	err := ctx.Err()
 	if field.RefMode != RefModeNone {
-		if ctx.buffer.ReadInt8(err) == NullFlag {
+		flag := ctx.buffer.ReadInt8(err)
+		if ctx.HasError() {
+			return
+		}
+		switch flag {
+		case NullFlag:
 			optInfo := optionalInfo{}
 			if field.Kind == FieldKindOptional {
 				optInfo = field.Meta.OptionalInfo
 			}
 			clearFieldValue(field.Kind, fieldPtr, optInfo)
+			return
+		case NotNullValueFlag:
+		default:
+			compatibleScalarFail(ctx, "", field.Meta.CompatibleScalar.remoteTypeID, field.Meta.CompatibleScalar.localTypeID,
+				"invalid compatible scalar null flag")
 			return
 		}
 	}
@@ -223,7 +234,7 @@ func readCompatibleScalarValue(ctx *ReadContext, typeID TypeId) compatibleScalar
 		return compatibleScalarValue{typeID: typeID, halfBits: bits, negZero: bits == 0x8000}
 	case FLOAT32:
 		f := buf.ReadFloat32(err)
-		return compatibleScalarValue{typeID: typeID, float64: float64(f), negZero: math.Float32bits(f) == 0x80000000}
+		return compatibleScalarValue{typeID: typeID, float64: float64(f), float32: f, negZero: math.Float32bits(f) == 0x80000000}
 	case FLOAT64:
 		f := buf.ReadFloat64(err)
 		return compatibleScalarValue{typeID: typeID, float64: f, negZero: math.Float64bits(f) == 0x8000000000000000}
@@ -245,6 +256,10 @@ func storeCompatibleScalarValue(ctx *ReadContext, field *FieldInfo, fieldPtr uns
 	optInfo := optionalInfo{}
 	if field.Kind == FieldKindOptional {
 		optInfo = field.Meta.OptionalInfo
+	}
+	if scalar.remoteTypeID == scalar.localTypeID {
+		storeCompatibleScalarIdentity(ctx, field, fieldPtr, optInfo, value)
+		return
 	}
 	switch scalar.localTypeID {
 	case BOOL:
@@ -305,6 +320,29 @@ func storeCompatibleScalarValue(ctx *ReadContext, field *FieldInfo, fieldPtr uns
 			return
 		}
 		storeCompatibleUint(field.Kind, fieldPtr, optInfo, scalar.localType.Kind(), v)
+	}
+}
+
+func storeCompatibleScalarIdentity(ctx *ReadContext, field *FieldInfo, fieldPtr unsafe.Pointer, optInfo optionalInfo, value compatibleScalarValue) {
+	switch value.typeID {
+	case BOOL:
+		storeFieldValue(field.Kind, fieldPtr, optInfo, value.boolVal)
+	case STRING:
+		storeFieldValue(field.Kind, fieldPtr, optInfo, value.string)
+	case INT8, INT16, INT32, VARINT32, INT64, VARINT64, TAGGED_INT64:
+		storeCompatibleInt(field.Kind, fieldPtr, optInfo, field.Meta.CompatibleScalar.localType.Kind(), value.signed)
+	case UINT8, UINT16, UINT32, VAR_UINT32, UINT64, VAR_UINT64, TAGGED_UINT64:
+		storeCompatibleUint(field.Kind, fieldPtr, optInfo, field.Meta.CompatibleScalar.localType.Kind(), value.unsigned)
+	case FLOAT16, BFLOAT16:
+		storeFieldValue(field.Kind, fieldPtr, optInfo, value.halfBits)
+	case FLOAT32:
+		storeFieldValue(field.Kind, fieldPtr, optInfo, value.float32)
+	case FLOAT64:
+		storeFieldValue(field.Kind, fieldPtr, optInfo, value.float64)
+	case DECIMAL:
+		storeFieldValue(field.Kind, fieldPtr, optInfo, value.decimal)
+	default:
+		compatibleScalarFail(ctx, field.Meta.Name, value.typeID, field.Meta.CompatibleScalar.localTypeID, "unsupported identity scalar type")
 	}
 }
 

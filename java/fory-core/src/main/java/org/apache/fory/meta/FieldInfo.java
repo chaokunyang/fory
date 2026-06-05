@@ -182,6 +182,9 @@ public final class FieldInfo implements Serializable {
         }
       }
       Descriptor remoteDescriptor = builder.build();
+      if (localFieldType != null && scalarRefFramingIncompatible(fieldType, localFieldType)) {
+        return new DescriptorBuilder(remoteDescriptor).field(null).build();
+      }
       FieldConverter<?> converter =
           FieldConverters.getConverter(resolver, remoteDescriptor, descriptor);
       if (converter != null) {
@@ -306,6 +309,26 @@ public final class FieldInfo implements Serializable {
           ((FieldTypes.ArrayFieldType) localFieldType).getComponentType());
     }
     return false;
+  }
+
+  private static boolean scalarRefFramingIncompatible(
+      FieldTypes.FieldType remoteFieldType, FieldTypes.FieldType localFieldType) {
+    if (!compatibleScalarType(remoteFieldType.typeId)
+        || !compatibleScalarType(localFieldType.typeId)) {
+      return false;
+    }
+    if (remoteFieldType.trackingRef() != localFieldType.trackingRef()) {
+      return true;
+    }
+    return remoteFieldType.trackingRef()
+        && (remoteFieldType.typeId != localFieldType.typeId
+            || remoteFieldType.nullable() != localFieldType.nullable());
+  }
+
+  private static boolean compatibleScalarType(int typeId) {
+    return (typeId >= Types.BOOL && typeId <= Types.TAGGED_UINT64)
+        || (typeId >= Types.FLOAT16 && typeId <= Types.STRING)
+        || typeId == Types.DECIMAL;
   }
 
   private static boolean isListArrayRootPair(

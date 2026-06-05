@@ -501,7 +501,9 @@ class DataClassSerializer(Serializer):
         )
         self._missing_field_defaults = self._build_missing_field_defaults()
         self._basic_field_flags = [
-            (not self._dynamic_fields.get(field_name, False)) and isinstance(self._serializers[index], self._BASIC_SERIALIZERS)
+            (not self._dynamic_fields.get(field_name, False))
+            and not getattr(self._serializers[index], "_compatible_scalar_conversion", False)
+            and isinstance(self._serializers[index], self._BASIC_SERIALIZERS)
             for index, field_name in enumerate(self._field_names)
         ]
 
@@ -561,8 +563,14 @@ class DataClassSerializer(Serializer):
             return serializer.read(read_context)
         if is_tracking_ref:
             return read_context.read_ref(serializer=None if is_dynamic else serializer)
-        if is_nullable and read_context.read_int8() == NULL_FLAG:
-            return None
+        if is_nullable:
+            flag = read_context.read_int8()
+            if flag == NULL_FLAG:
+                return None
+            if getattr(serializer, "_compatible_scalar_conversion", False) and flag != NOT_NULL_VALUE_FLAG:
+                from pyfory.error import ForyInvalidDataError
+
+                raise ForyInvalidDataError(f"Invalid compatible scalar null flag: {flag}")
         if is_dynamic:
             return read_context.read_no_ref()
         return read_context.read_no_ref(serializer=serializer)

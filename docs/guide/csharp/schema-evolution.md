@@ -34,11 +34,11 @@ Compatible mode writes type metadata that allows readers and writers with differ
 Compatible readers also tolerate selected scalar field type changes when the value is lossless. A
 matched field can read between `bool`, `string`, numeric scalars, and `decimal` when the converted
 value has the same logical value. Boolean strings must be exactly `"0"`, `"1"`, `"true"`, or
-`"false"`. Numeric strings use finite decimal syntax without whitespace, a leading plus sign,
-underscores, hexadecimal notation, `NaN`, or infinities. Numbers and decimals read as strings use
-canonical plain decimal text. Nullable fields still compose with these conversions, but
-reference-tracked scalar type changes are incompatible. Invalid strings, out-of-range values, and
-lossy numeric conversions fail during deserialization.
+`"false"`. Numeric strings use finite ASCII decimal syntax without whitespace, a leading plus sign,
+Unicode digits, underscores, hexadecimal notation, `NaN`, or infinities. Numbers and decimals read as
+strings use canonical plain decimal text. Nullable fields still compose with these conversions, but
+reference-tracked scalar type changes are incompatible. Invalid strings, out-of-range values, and lossy
+numeric conversions fail during deserialization.
 
 ## Example: Add a Field
 

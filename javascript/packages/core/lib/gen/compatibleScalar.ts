@@ -54,7 +54,8 @@ const INT32_MIN = -2147483648n;
 const INT32_MAX = 2147483647n;
 const MAX_COMPATIBLE_DECIMAL_DIGITS = 256;
 const MAX_COMPATIBLE_NUMERIC_TEXT_LENGTH = 320;
-const MAX_COMPATIBLE_DECIMAL_MAGNITUDE = 10n ** BigInt(MAX_COMPATIBLE_DECIMAL_DIGITS);
+const MAX_COMPATIBLE_DECIMAL_MAGNITUDE
+  = 10n ** BigInt(MAX_COMPATIBLE_DECIMAL_DIGITS);
 const INT64_MIN = -(1n << 63n);
 const INT64_MAX = (1n << 63n) - 1n;
 const UINT8_MAX = 255n;
@@ -94,7 +95,7 @@ export function isCompatibleScalarPair(
   localTypeId: number,
 ): boolean {
   if (remoteTypeId === localTypeId) {
-    return false;
+    return scalarKind(remoteTypeId) !== undefined;
   }
   const remoteKind = scalarKind(remoteTypeId);
   const localKind = scalarKind(localTypeId);
@@ -444,7 +445,10 @@ function parseDecimalString(value: string): DecimalParts {
       exponent = -exponent;
     }
   }
-  if (index !== value.length || significantDigits > MAX_COMPATIBLE_DECIMAL_DIGITS) {
+  if (
+    index !== value.length
+    || significantDigits > MAX_COMPATIBLE_DECIMAL_DIGITS
+  ) {
     throw new Error(`Invalid scalar string magnitude in "${value}".`);
   }
   let scale = fractionEnd - fractionStart - exponent;
@@ -475,7 +479,9 @@ function decimalShapeFits(significantDigits: number, scale: number): boolean {
   if (scale > MAX_COMPATIBLE_DECIMAL_DIGITS) {
     return false;
   }
-  return scale >= 0 || significantDigits + (-scale) <= MAX_COMPATIBLE_DECIMAL_DIGITS;
+  return (
+    scale >= 0 || significantDigits + -scale <= MAX_COMPATIBLE_DECIMAL_DIGITS
+  );
 }
 
 function decimalDigitCount(value: bigint): number {
@@ -712,6 +718,9 @@ export class CompatibleScalarConverter {
   ): unknown {
     try {
       const value = readScalarPayload(reader, remoteTypeId);
+      if (remoteTypeId === localTypeId) {
+        return value;
+      }
       switch (scalarKind(localTypeId)) {
         case "bool":
           return convertToBool(value, remoteTypeId);

@@ -171,9 +171,9 @@ value:
 - Integer, unsigned integer, floating point, and decimal fields can be read
   across numeric scalar types only when the value is represented exactly by the
   target field type.
-- Numeric fields can be read from strings only when the string is a finite
-  numeric literal with no whitespace, leading `+`, separators, radix prefixes,
-  or special values such as `NaN` and `Infinity`.
+- Numeric fields can be read from strings only when the string is a finite ASCII
+  decimal literal with no whitespace, leading `+`, Unicode digits, separators,
+  radix prefixes, or special values such as `NaN` and `Infinity`.
 - Numeric fields read as strings use canonical output: integers have normal
   decimal text, floating point values use exact plain decimal text with a
   decimal point, and decimals omit insignificant trailing fractional zeros.

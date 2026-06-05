@@ -40,10 +40,10 @@ value has the same logical value. For example, `"true"` and `"false"` can be rea
 `"123"` can be read as a numeric field that can hold `123`, numbers and decimals can be read as
 canonical strings, and numeric widening or narrowing succeeds only when no precision or range is
 lost. Scalar conversion applies only to matched compatible fields, not root values or collection
-elements. String-to-number conversion accepts finite decimal literals without whitespace, a leading
-`+`, underscores, `NaN`, or `Infinity`. Nullable fields still compose with these conversions, but
-reference-tracked scalar type changes are incompatible. Invalid strings, out-of-range values, and
-lossy conversions fail with `InvalidDataException` during deserialization.
+elements. String-to-number conversion accepts finite ASCII decimal literals without whitespace, a
+leading `+`, Unicode digits, underscores, `NaN`, or `Infinity`. Nullable fields still compose with
+these conversions, but reference-tracked scalar type changes are incompatible. Invalid strings,
+out-of-range values, and lossy conversions fail with `InvalidDataException` during deserialization.
 
 ### Schema-Consistent Mode
 

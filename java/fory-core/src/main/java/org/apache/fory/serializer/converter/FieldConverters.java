@@ -20,13 +20,27 @@
 package org.apache.fory.serializer.converter;
 
 import java.lang.reflect.Field;
+import java.math.BigDecimal;
+import org.apache.fory.Fory;
 import org.apache.fory.annotation.Internal;
+import org.apache.fory.context.ReadContext;
+import org.apache.fory.exception.DeserializationException;
+import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.reflect.FieldAccessor;
+import org.apache.fory.resolver.RefMode;
+import org.apache.fory.resolver.TypeInfo;
 import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.serializer.FieldGroups.SerializationFieldInfo;
+import org.apache.fory.serializer.Serializer;
+import org.apache.fory.type.BFloat16;
 import org.apache.fory.type.Descriptor;
 import org.apache.fory.type.DispatchId;
+import org.apache.fory.type.Float16;
 import org.apache.fory.type.TypeUtils;
+import org.apache.fory.type.unsigned.UInt16;
+import org.apache.fory.type.unsigned.UInt32;
+import org.apache.fory.type.unsigned.UInt64;
+import org.apache.fory.type.unsigned.UInt8;
 
 /** Factory for cold compatible-field scalar converters. */
 public class FieldConverters {
@@ -69,7 +83,13 @@ public class FieldConverters {
     if (field == null
         || from.isTrackingRef()
         || to.isTrackingRef()
-        || !needsConverter(fromDispatchId, from.getRawType(), toDispatchId, to.getRawType())) {
+        || !needsConverter(
+            fromDispatchId,
+            from.getRawType(),
+            RefMode.of(from.isTrackingRef(), from.isNullable()),
+            toDispatchId,
+            to.getRawType(),
+            RefMode.of(to.isTrackingRef(), to.isNullable()))) {
       return null;
     }
     return new ScalarFieldConverter(
@@ -104,13 +124,24 @@ public class FieldConverters {
   public static boolean canConvert(TypeResolver resolver, Descriptor from, Descriptor to) {
     int fromDispatchId = DispatchId.getDispatchId(resolver, from);
     int toDispatchId = DispatchId.getDispatchId(resolver, to);
-    if (isDirectIdentity(
+    if (scalarRefFramingMismatch(
         fromDispatchId,
         from.getRawType(),
         from.isTrackingRef(),
+        from.isNullable(),
         toDispatchId,
         to.getRawType(),
-        to.isTrackingRef())) {
+        to.isTrackingRef(),
+        to.isNullable())) {
+      return false;
+    }
+    if (isDirectIdentity(
+        fromDispatchId,
+        from.getRawType(),
+        RefMode.of(from.isTrackingRef(), from.isNullable()),
+        toDispatchId,
+        to.getRawType(),
+        RefMode.of(to.isTrackingRef(), to.isNullable()))) {
       return true;
     }
     if (from.isTrackingRef() || to.isTrackingRef()) {
@@ -126,8 +157,19 @@ public class FieldConverters {
    */
   @Internal
   public static boolean canConvert(SerializationFieldInfo from, SerializationFieldInfo to) {
+    if (scalarRefFramingMismatch(
+        from.dispatchId,
+        from.type,
+        from.trackingRef,
+        from.nullable,
+        to.dispatchId,
+        to.type,
+        to.trackingRef,
+        to.nullable)) {
+      return false;
+    }
     if (isDirectIdentity(
-        from.dispatchId, from.type, from.trackingRef, to.dispatchId, to.type, to.trackingRef)) {
+        from.dispatchId, from.type, from.refMode, to.dispatchId, to.type, to.refMode)) {
       return true;
     }
     if (from.trackingRef || to.trackingRef) {
@@ -159,8 +201,21 @@ public class FieldConverters {
   @Internal
   public static Object convertValue(
       SerializationFieldInfo from, SerializationFieldInfo to, Object value) {
+    if (scalarRefFramingMismatch(
+        from.dispatchId,
+        from.type,
+        from.trackingRef,
+        from.nullable,
+        to.dispatchId,
+        to.type,
+        to.trackingRef,
+        to.nullable)) {
+      throw new IllegalArgumentException(
+          "Reference-tracked scalar conversion is schema incompatible for "
+              + to.qualifiedFieldName);
+    }
     if (isDirectIdentity(
-        from.dispatchId, from.type, from.trackingRef, to.dispatchId, to.type, to.trackingRef)) {
+        from.dispatchId, from.type, from.refMode, to.dispatchId, to.type, to.refMode)) {
       return value;
     }
     if (from.trackingRef || to.trackingRef) {
@@ -170,6 +225,72 @@ public class FieldConverters {
     }
     return CompatibleScalarConverter.convert(
         from.dispatchId, from.type, to.dispatchId, to.type, value, to.qualifiedFieldName);
+  }
+
+  /** Returns whether descriptor-level compatible read must read a scalar conversion payload. */
+  @Internal
+  public static boolean needsScalarRead(SerializationFieldInfo from, SerializationFieldInfo to) {
+    if (scalarRefFramingMismatch(
+        from.dispatchId,
+        from.type,
+        from.trackingRef,
+        from.nullable,
+        to.dispatchId,
+        to.type,
+        to.trackingRef,
+        to.nullable)) {
+      return false;
+    }
+    if (isDirectIdentity(
+        from.dispatchId, from.type, from.refMode, to.dispatchId, to.type, to.refMode)) {
+      return false;
+    }
+    if (from.trackingRef || to.trackingRef) {
+      return false;
+    }
+    return CompatibleScalarConverter.canConvert(from.dispatchId, from.type, to.dispatchId, to.type);
+  }
+
+  /** Reads a remote scalar conversion source value using descriptor-level scalar metadata. */
+  @Internal
+  public static Object readScalarSource(
+      ReadContext readContext, SerializationFieldInfo from, SerializationFieldInfo to) {
+    return readScalarSource(
+        readContext, from, from.refMode, from.dispatchId, from.type, false, to.qualifiedFieldName);
+  }
+
+  /** Reads a remote scalar conversion source value for an existing field converter. */
+  @Internal
+  public static Object readScalarSource(
+      ReadContext readContext, SerializationFieldInfo from, FieldConverter<?> converter) {
+    ScalarFieldConverter scalar = scalarConverter(converter);
+    return readScalarSource(
+        readContext,
+        from,
+        from.refMode,
+        scalar.fromDispatchId,
+        scalar.fromType,
+        false,
+        scalar.fieldName);
+  }
+
+  /** Reads a remote scalar conversion source value from generated compatible serializers. */
+  @Internal
+  public static Object readScalarSource(
+      ReadContext readContext,
+      int fromDispatchId,
+      Class<?> fromType,
+      boolean nullable,
+      boolean declaredTypeInfo,
+      String fieldName) {
+    return readScalarSource(
+        readContext,
+        null,
+        nullable ? RefMode.NULL_ONLY : RefMode.NONE,
+        fromDispatchId,
+        fromType,
+        declaredTypeInfo,
+        fieldName);
   }
 
   /** Converts a compatible field value using scalar metadata captured at code generation time. */
@@ -210,6 +331,116 @@ public class FieldConverters {
     return scalarConverter(converter).fieldName;
   }
 
+  private static Object readScalarSource(
+      ReadContext readContext,
+      SerializationFieldInfo from,
+      RefMode refMode,
+      int fromDispatchId,
+      Class<?> fromType,
+      boolean declaredTypeInfo,
+      String fieldName) {
+    if (refMode == RefMode.TRACKING) {
+      throw new DeserializationException(
+          "Reference-tracked scalar conversion is schema incompatible for " + fieldName);
+    }
+    MemoryBuffer buffer = readContext.getBuffer();
+    if (refMode == RefMode.NULL_ONLY) {
+      byte flag = buffer.readByte();
+      if (flag == Fory.NULL_FLAG) {
+        return null;
+      }
+      if (flag != Fory.NOT_NULL_VALUE_FLAG) {
+        throw new DeserializationException(
+            "Invalid nullable compatible scalar field flag " + flag + " for " + fieldName);
+      }
+    }
+    switch (fromDispatchId) {
+      case DispatchId.BOOL:
+        return CompatibleScalarConverter.readBool(buffer, fromDispatchId, fromType, fieldName);
+      case DispatchId.INT8:
+        return buffer.readByte();
+      case DispatchId.UINT8:
+        return buffer.readByte() & 0xFF;
+      case DispatchId.EXT_UINT8:
+        return UInt8.valueOf(buffer.readByte());
+      case DispatchId.INT16:
+        return buffer.readInt16();
+      case DispatchId.UINT16:
+        return buffer.readInt16() & 0xFFFF;
+      case DispatchId.EXT_UINT16:
+        return UInt16.valueOf(buffer.readInt16());
+      case DispatchId.INT32:
+        return buffer.readInt32();
+      case DispatchId.UINT32:
+        return Integer.toUnsignedLong(buffer.readInt32());
+      case DispatchId.EXT_UINT32:
+        return UInt32.valueOf(buffer.readInt32());
+      case DispatchId.VARINT32:
+        return buffer.readVarInt32();
+      case DispatchId.VAR_UINT32:
+        return Integer.toUnsignedLong(buffer.readVarUInt32());
+      case DispatchId.EXT_VAR_UINT32:
+        return UInt32.valueOf(buffer.readVarUInt32());
+      case DispatchId.INT64:
+        return buffer.readInt64();
+      case DispatchId.UINT64:
+        return buffer.readInt64();
+      case DispatchId.EXT_UINT64:
+        return UInt64.valueOf(buffer.readInt64());
+      case DispatchId.VARINT64:
+        return buffer.readVarInt64();
+      case DispatchId.TAGGED_INT64:
+        return buffer.readTaggedInt64();
+      case DispatchId.VAR_UINT64:
+        return buffer.readVarUInt64();
+      case DispatchId.EXT_VAR_UINT64:
+        return UInt64.valueOf(buffer.readVarUInt64());
+      case DispatchId.TAGGED_UINT64:
+        return buffer.readTaggedUInt64();
+      case DispatchId.FLOAT32:
+        return buffer.readFloat32();
+      case DispatchId.FLOAT64:
+        return buffer.readFloat64();
+      case DispatchId.FLOAT16:
+        return Float16.fromBits(buffer.readInt16());
+      case DispatchId.BFLOAT16:
+        return BFloat16.fromBits(buffer.readInt16());
+      case DispatchId.STRING:
+        return readContext.readString();
+      default:
+        if (fromType == BigDecimal.class) {
+          return readDecimalSource(readContext, from, fromType, declaredTypeInfo);
+        }
+        throw new DeserializationException("Unsupported compatible scalar source " + fieldName);
+    }
+  }
+
+  private static Object readDecimalSource(
+      ReadContext readContext,
+      SerializationFieldInfo from,
+      Class<?> fromType,
+      boolean declaredTypeInfo) {
+    if (from != null) {
+      if (from.useDeclaredTypeInfo) {
+        readContext.preserveRefId(-1);
+        return readContext.readNonRef(from.typeInfo);
+      }
+      TypeInfo typeInfo = readContext.getTypeResolver().readTypeInfo(readContext, from.type);
+      return typeInfo.getSerializer().read(readContext, RefMode.NONE);
+    }
+    if (declaredTypeInfo) {
+      readContext.preserveRefId(-1);
+      return readContext.readNonRef(readContext.getTypeResolver().getTypeInfo(fromType));
+    }
+    if (readContext.getTypeResolver().isCrossLanguage()) {
+      Serializer<?> serializer =
+          readContext.getTypeResolver().getTypeInfo(fromType).getSerializer();
+      return serializer.read(readContext);
+    }
+    TypeInfo typeInfo = readContext.getTypeResolver().readTypeInfo(readContext, fromType);
+    return typeInfo.getSerializer().read(readContext, RefMode.NONE);
+  }
+
   private static boolean needsConverter(
       int fromDispatchId, Class<?> from, int toDispatchId, Class<?> to) {
     if (isDirectIdentity(fromDispatchId, from, toDispatchId, to)) {
@@ -221,20 +452,55 @@ public class FieldConverters {
   private static boolean isDirectIdentity(
       int fromDispatchId,
       Class<?> from,
-      boolean fromTrackingRef,
+      RefMode fromRefMode,
       int toDispatchId,
       Class<?> to,
-      boolean toTrackingRef) {
+      RefMode toRefMode) {
     if (!isDirectlyAssignable(from, to)) {
       return false;
     }
     boolean fromScalar = CompatibleScalarConverter.isScalar(fromDispatchId, from);
     boolean toScalar = CompatibleScalarConverter.isScalar(toDispatchId, to);
     if (fromScalar && toScalar) {
-      return fromTrackingRef == toTrackingRef
+      return fromRefMode == toRefMode
           && CompatibleScalarConverter.sameScalar(fromDispatchId, from, toDispatchId, to);
     }
     return true;
+  }
+
+  private static boolean needsConverter(
+      int fromDispatchId,
+      Class<?> from,
+      RefMode fromRefMode,
+      int toDispatchId,
+      Class<?> to,
+      RefMode toRefMode) {
+    if (isDirectIdentity(fromDispatchId, from, fromRefMode, toDispatchId, to, toRefMode)) {
+      return false;
+    }
+    return CompatibleScalarConverter.canConvert(fromDispatchId, from, toDispatchId, to);
+  }
+
+  private static boolean scalarRefFramingMismatch(
+      int fromDispatchId,
+      Class<?> from,
+      boolean fromTrackingRef,
+      boolean fromNullable,
+      int toDispatchId,
+      Class<?> to,
+      boolean toTrackingRef,
+      boolean toNullable) {
+    boolean fromScalar = CompatibleScalarConverter.isScalar(fromDispatchId, from);
+    boolean toScalar = CompatibleScalarConverter.isScalar(toDispatchId, to);
+    if (!fromScalar || !toScalar) {
+      return false;
+    }
+    if (fromTrackingRef != toTrackingRef) {
+      return true;
+    }
+    return fromTrackingRef
+        && (!CompatibleScalarConverter.sameScalar(fromDispatchId, from, toDispatchId, to)
+            || fromNullable != toNullable);
   }
 
   private static boolean isDirectIdentity(

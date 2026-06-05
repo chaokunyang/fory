@@ -19,6 +19,7 @@
 
 #pragma once
 
+#include "fory/serialization/ref_mode.h"
 #include "fory/util/bfloat16.h"
 #include "fory/util/float16.h"
 
@@ -34,6 +35,8 @@ class Decimal;
 
 bool compatible_scalar_field_types(uint32_t local_type_id,
                                    uint32_t remote_type_id);
+
+bool read_compatible_scalar_present(ReadContext &ctx, RefMode ref_mode);
 
 bool read_compatible_bool(ReadContext &ctx, uint32_t remote_type_id,
                           std::string_view field);

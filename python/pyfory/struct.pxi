@@ -29,6 +29,7 @@ cdef struct FieldRuntimeInfo:
     uint8_t is_nullable
     uint8_t track_ref
     uint8_t is_dynamic
+    uint8_t compatible_scalar
     uint8_t field_exists
     uint8_t assign
     PyObject *field_name
@@ -213,6 +214,8 @@ cdef class DataClassSerializer(Serializer):
         cdef uint8_t type_id
         if is_dynamic or serializer is None:
             return _BASIC_FIELD_UNSUPPORTED
+        if getattr(serializer, "_compatible_scalar_conversion", False):
+            return _BASIC_FIELD_UNSUPPORTED
         type_id = <uint8_t>self.type_resolver.get_type_info(serializer.type_).type_id
         if type_id == <uint8_t>TypeId.BOOL:
             return type_id
@@ -296,6 +299,9 @@ cdef class DataClassSerializer(Serializer):
             runtime_info.is_nullable = 1 if is_nullable else 0
             runtime_info.track_ref = 1 if is_tracking_ref else 0
             runtime_info.is_dynamic = 1 if is_dynamic else 0
+            runtime_info.compatible_scalar = (
+                1 if getattr(serializer, "_compatible_scalar_conversion", False) else 0
+            )
             runtime_info.field_exists = 1 if field_name in current_fields else 0
             runtime_info.assign = 1 if assign else 0
             if runtime_info.field_exists == 0 or runtime_info.assign == 0:
@@ -550,6 +556,7 @@ cdef class DataClassSerializer(Serializer):
         cdef bint is_nullable = field_info.is_nullable != 0
         cdef bint is_tracking_ref = field_info.track_ref != 0
         cdef bint is_dynamic = field_info.is_dynamic != 0
+        cdef int8_t flag
         cdef Serializer serializer
 
         if type_id != _BASIC_FIELD_UNSUPPORTED:
@@ -562,8 +569,14 @@ cdef class DataClassSerializer(Serializer):
             if is_dynamic:
                 return read_context.read_ref()
             return read_context.read_ref(serializer=serializer)
-        if is_nullable and read_context.read_int8() == NULL_FLAG:
-            return None
+        if is_nullable:
+            flag = read_context.read_int8()
+            if flag == NULL_FLAG:
+                return None
+            if field_info.compatible_scalar != 0 and flag != NOT_NULL_VALUE_FLAG:
+                from pyfory.error import ForyInvalidDataError
+
+                raise ForyInvalidDataError(f"Invalid compatible scalar null flag: {flag}")
         if is_dynamic:
             return read_context.read_no_ref()
         return read_context.read_non_ref(serializer)

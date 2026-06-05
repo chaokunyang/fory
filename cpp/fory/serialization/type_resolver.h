@@ -301,10 +301,12 @@ inline bool field_types_compatible_top_level_identity(const FieldType &local,
       return false;
     }
     if ((local.track_ref || remote.track_ref) &&
-        local.type_id != remote.type_id) {
+        (local.type_id != remote.type_id ||
+         local.nullable != remote.nullable)) {
       return false;
     }
-    if (!local.track_ref && local.type_id != remote.type_id) {
+    if (!local.track_ref && (local.type_id != remote.type_id ||
+                             local.nullable != remote.nullable)) {
       return false;
     }
   }

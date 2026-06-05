@@ -93,7 +93,7 @@ where
 #[inline(always)]
 pub(super) fn scalar_types_compatible(local: u32, remote: u32) -> bool {
     if local == remote {
-        return false;
+        return is_compatible_scalar_type(local);
     }
     let local_numeric = numeric_type(local);
     let remote_numeric = numeric_type(remote);
@@ -111,7 +111,10 @@ pub(super) fn is_compatible_scalar_type(type_id: u32) -> bool {
 
 #[inline(always)]
 pub(super) fn scalar_field_types_compatible(local: &FieldType, remote: &FieldType) -> bool {
-    !local.track_ref && !remote.track_ref && scalar_types_compatible(local.type_id, remote.type_id)
+    !local.track_ref
+        && !remote.track_ref
+        && (local.type_id != remote.type_id || local.nullable != remote.nullable)
+        && scalar_types_compatible(local.type_id, remote.type_id)
 }
 
 #[inline(always)]
@@ -149,7 +152,13 @@ fn read_present_ref(
         RefMode::None => Ok(true),
         RefMode::NullOnly => {
             let flag = context.reader.read_i8()?;
-            Ok(flag != RefFlag::Null as i8)
+            match flag {
+                value if value == RefFlag::Null as i8 => Ok(false),
+                value if value == RefFlag::NotNullValue as i8 => Ok(true),
+                _ => Err(Error::invalid_data(format!(
+                    "invalid compatible scalar null flag {flag}"
+                ))),
+            }
         }
         RefMode::Tracking => Err(Error::invalid_data(
             "trackingRef scalar conversion is not supported",

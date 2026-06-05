@@ -1274,6 +1274,26 @@ bool compatible_scalar_field_types(uint32_t local_type_id,
   return is_numeric(local) && is_numeric(remote);
 }
 
+FORY_NOINLINE bool read_compatible_scalar_present(ReadContext &ctx,
+                                                  RefMode ref_mode) {
+  if (ref_mode == RefMode::None) {
+    return true;
+  }
+  int8_t flag = ctx.read_int8(ctx.error());
+  if (FORY_PREDICT_FALSE(ctx.has_error())) {
+    return false;
+  }
+  if (flag == NULL_FLAG) {
+    return false;
+  }
+  if (flag == NOT_NULL_VALUE_FLAG) {
+    return true;
+  }
+  ctx.set_error(Error::invalid_data("Invalid compatible scalar null flag: " +
+                                    std::to_string(static_cast<int>(flag))));
+  return false;
+}
+
 FORY_NOINLINE bool read_compatible_bool(ReadContext &ctx,
                                         uint32_t remote_type_id,
                                         std::string_view field) {

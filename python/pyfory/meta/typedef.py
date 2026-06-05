@@ -789,9 +789,15 @@ def _create_compatible_field_serializer(
     if local_field_type is not None:
         from pyfory.serializer import CompatibleScalarFieldSerializer, supports_compatible_scalar_conversion
 
+        exact_scalar_field_type = (
+            remote_field_type.type_id == local_field_type.type_id
+            and remote_field_type.is_nullable == local_field_type.is_nullable
+            and remote_field_type.is_tracking_ref == local_field_type.is_tracking_ref
+        )
         if (
             not remote_field_type.is_tracking_ref
             and not local_field_type.is_tracking_ref
+            and not exact_scalar_field_type
             and supports_compatible_scalar_conversion(remote_field_type.type_id, local_field_type.type_id)
         ):
             remote_serializer = remote_field_type.create_serializer(resolver, local_declared_type)
@@ -865,8 +871,16 @@ def _field_type_assignment(remote_field_type: FieldType, local_field_type: Field
         if scalar_pair:
             if remote_field_type.is_tracking_ref != local_field_type.is_tracking_ref:
                 return False, False
-            if (remote_field_type.is_tracking_ref or local_field_type.is_tracking_ref) and remote_type_id != local_type_id:
+            if (remote_field_type.is_tracking_ref or local_field_type.is_tracking_ref) and (
+                remote_type_id != local_type_id or remote_field_type.is_nullable != local_field_type.is_nullable
+            ):
                 return False, False
+            if (
+                not remote_field_type.is_tracking_ref
+                and remote_type_id == local_type_id
+                and remote_field_type.is_nullable != local_field_type.is_nullable
+            ):
+                return True, needs_validation
         if (
             not remote_field_type.is_tracking_ref
             and not local_field_type.is_tracking_ref

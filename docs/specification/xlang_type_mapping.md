@@ -148,8 +148,9 @@ Notes:
   field matching only, compatible readers may adapt direct top-level scalar fields across `bool`,
   `string`, integer, unsigned integer, floating point, and `decimal` domains when the conversion is
   explicitly allowed by the xlang serialization spec, the value is lossless, and both matched
-  top-level field schemas have `trackingRef = false`. That rule does not change TypeDef metadata,
-  dynamic root type mapping, schema-consistent mode, or nested
+  top-level field schemas have `trackingRef = false`. Numeric strings use the finite ASCII decimal
+  grammar from the xlang serialization spec. That rule does not change TypeDef metadata, dynamic root
+  type mapping, schema-consistent mode, or nested
   collection/map/array/union/generic positions.
 
 ### Scala IDL Mapping

@@ -36,6 +36,7 @@ import org.apache.fory.resolver.ClassResolver;
 import org.apache.fory.resolver.RefMode;
 import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.serializer.FieldGroups.SerializationFieldInfo;
+import org.apache.fory.serializer.converter.FieldConverters;
 import org.apache.fory.type.Descriptor;
 import org.apache.fory.type.DescriptorGrouper;
 import org.apache.fory.type.Generics;
@@ -289,10 +290,8 @@ public class CompatibleSerializer<T> extends AbstractObjectSerializer<T> {
 
   private void compatibleRead(
       ReadContext readContext, SerializationFieldInfo fieldInfo, Object obj) {
-    MemoryBuffer buffer = readContext.getBuffer();
     Object fieldValue =
-        AbstractObjectSerializer.readBuildInFieldValue(
-            readContext, typeResolver, readContext.getRefReader(), fieldInfo, buffer);
+        FieldConverters.readScalarSource(readContext, fieldInfo, fieldInfo.fieldConverter);
     fieldInfo.fieldConverter.set(obj, fieldValue);
   }
 
@@ -369,6 +368,11 @@ public class CompatibleSerializer<T> extends AbstractObjectSerializer<T> {
     }
     switch (fieldInfo.codecCategory) {
       case BUILD_IN:
+        if (fieldInfo.fieldConverter != null && action == null) {
+          Object sourceValue =
+              FieldConverters.readScalarSource(readContext, fieldInfo, fieldInfo.fieldConverter);
+          return fieldInfo.fieldConverter.convert(sourceValue);
+        }
         if (fieldInfo.fieldAccessor == null) {
           FieldSkipper.skipField(readContext, typeResolver, refReader, fieldInfo, buffer);
           return null;
@@ -384,23 +388,6 @@ public class CompatibleSerializer<T> extends AbstractObjectSerializer<T> {
       default:
         throw new IllegalStateException("Unknown field codec category " + fieldInfo.codecCategory);
     }
-  }
-
-  private Object readFieldValue(
-      ReadContext readContext,
-      RefReader refReader,
-      Generics generics,
-      SerializationFieldInfo fieldInfo,
-      MemoryBuffer buffer,
-      CompatibleCollectionArrayReader.ReadAction action) {
-    if (fieldInfo.fieldAccessor == null
-        && fieldInfo.fieldConverter != null
-        && fieldInfo.codecCategory == FieldGroups.FieldCodecCategory.BUILD_IN
-        && action == null) {
-      return AbstractObjectSerializer.readBuildInFieldValue(
-          readContext, typeResolver, refReader, fieldInfo, buffer);
-    }
-    return readField(readContext, refReader, generics, fieldInfo, buffer, action);
   }
 
   private void printFieldDebugInfo(SerializationFieldInfo fieldInfo, MemoryBuffer buffer) {

@@ -184,11 +184,43 @@ class CompatibleScalarBoolEnvelope {
 }
 
 @ForyStruct()
+class CompatibleScalarOptionalBoolEnvelope {
+  CompatibleScalarOptionalBoolEnvelope();
+
+  @ForyField(id: 1, type: BoolType(nullable: true))
+  bool? value;
+}
+
+@ForyStruct()
+class CompatibleScalarRefBoolEnvelope {
+  CompatibleScalarRefBoolEnvelope();
+
+  @ForyField(id: 1, ref: true)
+  bool value = false;
+}
+
+@ForyStruct()
+class CompatibleScalarOptionalRefBoolEnvelope {
+  CompatibleScalarOptionalRefBoolEnvelope();
+
+  @ForyField(id: 1, ref: true, type: BoolType(nullable: true))
+  bool? value;
+}
+
+@ForyStruct()
 class CompatibleScalarInt64Envelope {
   CompatibleScalarInt64Envelope();
 
   @ForyField(id: 1, type: Int64Type(encoding: Encoding.varint))
   int value = 0;
+}
+
+@ForyStruct()
+class CompatibleScalarOptionalInt64Envelope {
+  CompatibleScalarOptionalInt64Envelope();
+
+  @ForyField(id: 1, type: Int64Type(encoding: Encoding.varint, nullable: true))
+  int? value;
 }
 
 @ForyStruct()
@@ -1044,6 +1076,27 @@ void main() {
         CompatibleScalarStringEnvelope,
         CompatibleScalarFloat64Envelope()..value = double.infinity,
       );
+
+      final writer = Fory();
+      final reader = Fory();
+      ScalarAndTypedArraySerializerTestForyModule.register(
+        writer,
+        CompatibleScalarBoolEnvelope,
+        name: 'test.CompatibleScalarEnvelope',
+      );
+      ScalarAndTypedArraySerializerTestForyModule.register(
+        reader,
+        CompatibleScalarStringEnvelope,
+        name: 'test.CompatibleScalarEnvelope',
+      );
+      final corrupted = Uint8List.fromList(
+        writer.serialize(CompatibleScalarBoolEnvelope()..value = true),
+      );
+      corrupted[corrupted.length - 1] = 2;
+      expect(
+        () => reader.deserialize<Object>(corrupted),
+        throwsA(isA<InvalidDataException>()),
+      );
     });
 
     test('composes compatible scalar conversion with nullable fields', () {
@@ -1062,6 +1115,49 @@ void main() {
           CompatibleScalarOptionalStringEnvelope()..value = null,
         ).value,
         isFalse,
+      );
+    });
+
+    test('strictly reads same-type nullable compatible scalar fields', () {
+      final writer = Fory();
+      final reader = Fory();
+      ScalarAndTypedArraySerializerTestForyModule.register(
+        writer,
+        CompatibleScalarOptionalBoolEnvelope,
+        name: 'test.CompatibleScalarEnvelope',
+      );
+      ScalarAndTypedArraySerializerTestForyModule.register(
+        reader,
+        CompatibleScalarBoolEnvelope,
+        name: 'test.CompatibleScalarEnvelope',
+      );
+      final bytes = writer.serialize(
+        CompatibleScalarOptionalBoolEnvelope()..value = true,
+      );
+      final flagOffset = bytes.lastIndexOf(RefWriter.notNullValueFlag & 0xff);
+      expect(flagOffset, isNonNegative);
+
+      final badFlag = Uint8List.fromList(bytes);
+      badFlag[flagOffset] = RefWriter.refValueFlag & 0xff;
+      expect(
+        () => reader.deserialize<Object>(badFlag),
+        throwsA(isA<InvalidDataException>()),
+      );
+
+      final badPayload = Uint8List.fromList(bytes);
+      badPayload[badPayload.length - 1] = 2;
+      expect(
+        () => reader.deserialize<Object>(badPayload),
+        throwsA(isA<InvalidDataException>()),
+      );
+
+      expect(
+        _compatibleScalarRoundTrip<CompatibleScalarOptionalInt64Envelope>(
+          CompatibleScalarInt64Envelope,
+          CompatibleScalarOptionalInt64Envelope,
+          CompatibleScalarInt64Envelope()..value = 42,
+        ).value,
+        42,
       );
     });
 
@@ -1101,15 +1197,39 @@ void main() {
       expect(compatibleScalarConversion(remoteRefBool, localString), isNull);
       expect(compatibleScalarConversion(localString, localRefString), isNull);
 
-      final buffer =
-          Buffer()
-            ..writeByte(RefWriter.refValueFlag)
-            ..writeBool(true);
+      final buffer = Buffer()..writeBool(true);
       expect(
         readCompatibleField(_compatibleReadContext(buffer), remoteRefBool),
         isTrue,
       );
       expect(buffer.readableBytes, equals(0));
+    });
+
+    test('rejects tracked scalar nullable framing mismatch', () {
+      expect(
+        _compatibleScalarRoundTrip<CompatibleScalarRefBoolEnvelope>(
+          CompatibleScalarOptionalRefBoolEnvelope,
+          CompatibleScalarRefBoolEnvelope,
+          CompatibleScalarOptionalRefBoolEnvelope()..value = true,
+        ).value,
+        isFalse,
+      );
+      expect(
+        _compatibleScalarRoundTrip<CompatibleScalarOptionalRefBoolEnvelope>(
+          CompatibleScalarRefBoolEnvelope,
+          CompatibleScalarOptionalRefBoolEnvelope,
+          CompatibleScalarRefBoolEnvelope()..value = true,
+        ).value,
+        isNull,
+      );
+      expect(
+        _compatibleScalarRoundTrip<CompatibleScalarOptionalRefBoolEnvelope>(
+          CompatibleScalarOptionalRefBoolEnvelope,
+          CompatibleScalarOptionalRefBoolEnvelope,
+          CompatibleScalarOptionalRefBoolEnvelope()..value = true,
+        ).value,
+        isTrue,
+      );
     });
 
     test('enforces maxBinarySize on write and read', () {

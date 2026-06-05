@@ -225,10 +225,14 @@ pub fn field_types_compatible(local: &FieldType, remote: &FieldType) -> bool {
         if local.track_ref != remote.track_ref {
             return false;
         }
-        if (local.track_ref || remote.track_ref) && local.type_id != remote.type_id {
+        if (local.track_ref || remote.track_ref)
+            && (local.type_id != remote.type_id || local.nullable != remote.nullable)
+        {
             return false;
         }
-        if !local.track_ref && local.type_id != remote.type_id {
+        if !local.track_ref
+            && (local.type_id != remote.type_id || local.nullable != remote.nullable)
+        {
             return false;
         }
     }
@@ -2817,6 +2821,13 @@ mod tests {
         assert!(!field_types_compatible(&bool_value, &ref_bool));
         assert!(!field_types_compatible(&ref_bool, &bool_value));
         assert!(field_types_compatible(&ref_bool, &ref_bool));
+        let nullable_ref_bool = FieldType::new_with_ref(type_id::BOOL, true, true, vec![]);
+        assert!(field_types_compatible(
+            &nullable_ref_bool,
+            &nullable_ref_bool
+        ));
+        assert!(!field_types_compatible(&ref_bool, &nullable_ref_bool));
+        assert!(!field_types_compatible(&nullable_ref_bool, &ref_bool));
 
         let fixed_i32 = FieldType::new(type_id::INT32, false, vec![]);
         let var_i32 = FieldType::new(type_id::VARINT32, false, vec![]);

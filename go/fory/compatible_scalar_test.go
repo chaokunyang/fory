@@ -18,6 +18,7 @@
 package fory
 
 import (
+	"bytes"
 	"math"
 	"math/big"
 	"reflect"
@@ -399,6 +400,52 @@ func TestCompatibleScalarRejectsInvalidBoolPayload(t *testing.T) {
 	assert.Contains(t, err.Error(), "bool payload is not 0 or 1")
 }
 
+func TestCompatibleScalarRejectsRefValueFlag(t *testing.T) {
+	writer := NewForyWithOptions(WithXlang(true), WithCompatible(true))
+	require.NoError(t, writer.RegisterStructByName(scalarOptionalString{}, "ScalarValue"))
+	data, err := writer.Marshal(&scalarOptionalString{Value: optional.String("1")})
+	require.NoError(t, err)
+
+	notNullFlag := NotNullValueFlag
+	refValueFlag := RefValueFlag
+	flagOffset := bytes.LastIndexByte(data, byte(notNullFlag))
+	require.NotEqual(t, -1, flagOffset)
+	data[flagOffset] = byte(refValueFlag)
+
+	reader := NewForyWithOptions(WithXlang(true), WithCompatible(true))
+	require.NoError(t, reader.RegisterStructByName(scalarBool{}, "ScalarValue"))
+	var out scalarBool
+	err = reader.Unmarshal(data, &out)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid compatible scalar null flag")
+}
+
+func TestCompatibleScalarSameTypeNullableStrictRead(t *testing.T) {
+	writer := NewForyWithOptions(WithXlang(true), WithCompatible(true))
+	require.NoError(t, writer.RegisterStructByName(scalarOptionalBool{}, "ScalarValue"))
+	data, err := writer.Marshal(&scalarOptionalBool{Value: optional.Some(true)})
+	require.NoError(t, err)
+
+	reader := NewForyWithOptions(WithXlang(true), WithCompatible(true))
+	require.NoError(t, reader.RegisterStructByName(scalarBool{}, "ScalarValue"))
+
+	notNullFlag := NotNullValueFlag
+	flagOffset := bytes.LastIndexByte(data, byte(notNullFlag))
+	require.NotEqual(t, -1, flagOffset)
+	badFlag := append([]byte(nil), data...)
+	badFlag[flagOffset] = byte(RefValueFlag)
+	var out scalarBool
+	err = reader.Unmarshal(badFlag, &out)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid compatible scalar null flag")
+
+	badPayload := append([]byte(nil), data...)
+	badPayload[len(badPayload)-1] = 2
+	err = reader.Unmarshal(badPayload, &out)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "bool payload")
+}
+
 func TestCompatibleScalarTrackingRefMismatch(t *testing.T) {
 	f := NewForyWithOptions(WithXlang(true), WithCompatible(true))
 	remoteDef := FieldDef{
@@ -424,6 +471,16 @@ func TestCompatibleScalarTrackingRefMismatch(t *testing.T) {
 	assert.False(t, ser.typeDefDiffers)
 
 	remoteDef.trackRef = true
+	remoteDef.nullable = true
+	ser = newStructSerializerFromTypeDef(reflect.TypeOf(scalarBool{}), "ScalarRefNullableRemote", []FieldDef{remoteDef})
+	require.NoError(t, ser.initialize(f.typeResolver))
+	require.Len(t, ser.fields, 1)
+	assert.Equal(t, -1, ser.fields[0].Meta.FieldIndex)
+	assert.Nil(t, ser.fields[0].Meta.CompatibleScalar)
+	assert.True(t, ser.typeDefDiffers)
+
+	remoteDef.trackRef = true
+	remoteDef.nullable = false
 	remoteDef.typeSpec = NewSimpleTypeSpec(INT32)
 	ser = newStructSerializerFromTypeDef(reflect.TypeOf(scalarRefInt32{}), "ScalarRefTypeChange", []FieldDef{remoteDef})
 	require.NoError(t, ser.initialize(f.typeResolver))

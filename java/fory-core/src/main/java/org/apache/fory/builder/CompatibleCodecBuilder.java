@@ -25,10 +25,12 @@ import static org.apache.fory.type.TypeUtils.STRING_TYPE;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Member;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.SortedMap;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Function;
 import org.apache.fory.Fory;
 import org.apache.fory.builder.Generated.GeneratedCompatibleSerializer;
 import org.apache.fory.codegen.CodeGenerator;
@@ -46,6 +48,7 @@ import org.apache.fory.reflect.TypeRef;
 import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.serializer.CodegenSerializer;
 import org.apache.fory.serializer.CompatibleSerializer;
+import org.apache.fory.serializer.FieldGroups.SerializationFieldInfo;
 import org.apache.fory.serializer.ObjectSerializer;
 import org.apache.fory.serializer.Serializer;
 import org.apache.fory.serializer.Serializers;
@@ -262,6 +265,69 @@ public class CompatibleCodecBuilder extends ObjectCodecBuilder {
   }
 
   @Override
+  protected List<Expression> deserializePrimitives(
+      Expression bean, Expression buffer, List<List<Descriptor>> primitiveGroups) {
+    boolean hasConverter = false;
+    for (List<Descriptor> group : primitiveGroups) {
+      for (Descriptor descriptor : group) {
+        if (descriptor.getFieldConverter() != null) {
+          hasConverter = true;
+          break;
+        }
+      }
+      if (hasConverter) {
+        break;
+      }
+    }
+    if (!hasConverter) {
+      return super.deserializePrimitives(bean, buffer, primitiveGroups);
+    }
+
+    List<Expression> expressions = new ArrayList<>();
+    List<List<Descriptor>> bulkGroups = new ArrayList<>();
+    for (List<Descriptor> group : primitiveGroups) {
+      if (!hasFieldConverter(group)) {
+        bulkGroups.add(group);
+        continue;
+      }
+      appendPrimitiveBulkReads(expressions, bean, buffer, bulkGroups);
+      for (Descriptor descriptor : group) {
+        expressions.add(
+            deserializeField(
+                buffer,
+                descriptor,
+                value ->
+                    setFieldValue(
+                        bean, descriptor, tryInlineCast(value, descriptor.getTypeRef()))));
+      }
+    }
+    appendPrimitiveBulkReads(expressions, bean, buffer, bulkGroups);
+    return expressions;
+  }
+
+  @Override
+  protected Expression deserializeField(
+      Expression buffer, Descriptor descriptor, Function<Expression, Expression> callback) {
+    FieldConverter<?> converter = descriptor.getFieldConverter();
+    if (converter == null) {
+      return super.deserializeField(buffer, descriptor, callback);
+    }
+    StaticInvoke sourceValue =
+        new StaticInvoke(
+            FieldConverters.class,
+            "readScalarSource",
+            OBJECT_TYPE,
+            readContextRef(),
+            Literal.ofInt(FieldConverters.fromDispatchId(converter)),
+            Literal.ofClass(FieldConverters.fromType(converter)),
+            Literal.ofBoolean(descriptor.isNullable()),
+            Literal.ofBoolean(
+                new SerializationFieldInfo(typeResolver, descriptor).useDeclaredTypeInfo),
+            Literal.ofString(FieldConverters.fieldName(converter)));
+    return new Expression.ListExpression(sourceValue, callback.apply(sourceValue));
+  }
+
+  @Override
   protected Expression setFieldValue(Expression bean, Descriptor descriptor, Expression value) {
     if (descriptor.getField() == null) {
       FieldConverter<?> converter = descriptor.getFieldConverter();
@@ -294,6 +360,26 @@ public class CompatibleCodecBuilder extends ObjectCodecBuilder {
       return new StaticInvoke(ExceptionUtils.class, "ignore", value);
     }
     return super.setFieldValue(bean, descriptor, value);
+  }
+
+  private static boolean hasFieldConverter(List<Descriptor> descriptors) {
+    for (Descriptor descriptor : descriptors) {
+      if (descriptor.getFieldConverter() != null) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private void appendPrimitiveBulkReads(
+      List<Expression> expressions,
+      Expression bean,
+      Expression buffer,
+      List<List<Descriptor>> bulkGroups) {
+    if (!bulkGroups.isEmpty()) {
+      expressions.addAll(super.deserializePrimitives(bean, buffer, bulkGroups));
+      bulkGroups.clear();
+    }
   }
 
   @Override

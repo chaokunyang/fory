@@ -97,8 +97,9 @@ matched field can read between `bool`, `String`, numeric scalars, and decimal fi
 converted value has the same logical value. For example, `"true"` and `"false"` can be read as
 booleans, `"123"` can be read as a numeric field that can hold `123`, numbers and decimals can be
 read as canonical strings, and numeric widening or narrowing succeeds only when no precision or range
-is lost. Optional fields still compose with these conversions, but reference-tracked scalar type
-changes are incompatible. Invalid strings and lossy conversions fail during deserialization.
+is lost. Numeric strings use finite ASCII decimal syntax. Optional fields still compose with these
+conversions, but reference-tracked scalar type changes are incompatible. Invalid strings and lossy
+conversions fail during deserialization.
 
 ## Compatibility Rules
 

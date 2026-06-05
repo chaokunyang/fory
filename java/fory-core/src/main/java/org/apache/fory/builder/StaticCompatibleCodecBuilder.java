@@ -325,7 +325,7 @@ public final class StaticCompatibleCodecBuilder extends ObjectCodecBuilder {
           .append(": {\n")
           .append(debugRemoteReadCode("before read", "_f_remoteField", 4))
           .append("    if (_f_remoteField.serializationFieldInfo.fieldConverter != null) {\n")
-          .append("      Object _f_fieldValue = readRemoteField(")
+          .append("      Object _f_fieldValue = readFieldConverterSource(")
           .append(READ_CONTEXT_NAME)
           .append(", _f_remoteField);\n")
           .append(debugRemoteReadCode("after read", "_f_remoteField", 6))
@@ -334,7 +334,7 @@ public final class StaticCompatibleCodecBuilder extends ObjectCodecBuilder {
           .append("    } else {\n")
           .append(
               "      SerializationFieldInfo _f_localField = localFieldInfo(_f_remoteField.matchedId);\n")
-          .append("      if (!canReadRemoteField(_f_remoteField, _f_localField)) {\n")
+          .append("      if (!canReadRemoteField(_f_remoteField)) {\n")
           .append(debugRemoteReadCode("before skip", "_f_remoteField", 8))
           .append("        skipField(")
           .append(READ_CONTEXT_NAME)
@@ -378,7 +378,7 @@ public final class StaticCompatibleCodecBuilder extends ObjectCodecBuilder {
           .append(debugRemoteReadCode("before read", "_f_remoteField", 4))
           .append(
               "    SerializationFieldInfo _f_localField = localFieldInfo(_f_remoteField.matchedId);\n")
-          .append("    if (canReadRemoteField(_f_remoteField, _f_localField)) {\n")
+          .append("    if (canReadRemoteField(_f_remoteField)) {\n")
           .append("      _f_recordValues[")
           .append(componentIndex)
           .append("] = readCompatibleFieldValue(")

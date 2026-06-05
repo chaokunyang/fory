@@ -23,6 +23,7 @@ import java.math.BigDecimal;
 import java.math.BigInteger;
 import org.apache.fory.annotation.Internal;
 import org.apache.fory.exception.DeserializationException;
+import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.type.BFloat16;
 import org.apache.fory.type.DispatchId;
 import org.apache.fory.type.Float16;
@@ -180,6 +181,18 @@ final class CompatibleScalarConverter {
       throw dataError(fromDispatchId, fromType, toDispatchId, toType, fieldName, e);
     }
     throw dataError(fromDispatchId, fromType, toDispatchId, toType, fieldName);
+  }
+
+  static Boolean readBool(
+      MemoryBuffer buffer, int fromDispatchId, Class<?> fromType, String fieldName) {
+    byte raw = buffer.readByte();
+    if (raw == 0) {
+      return false;
+    }
+    if (raw == 1) {
+      return true;
+    }
+    throw dataError(fromDispatchId, fromType, DispatchId.BOOL, Boolean.class, fieldName);
   }
 
   private static Object fromBool(
@@ -522,6 +535,7 @@ final class CompatibleScalarConverter {
       Class<?> toType,
       boolean negativeZero,
       String fieldName) {
+    decimal = canonicalDecimal(decimal);
     if (decimal.signum() == 0) {
       return floatZero(toDispatchId, toType, negativeZero);
     }

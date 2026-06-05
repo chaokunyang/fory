@@ -189,13 +189,44 @@ public class CompatibleFieldConvertTest extends ForyTestBase {
     public String value = "TRUE";
   }
 
+  public static final class BoolStringWriter {
+    @ForyField(id = 0)
+    public boolean value = true;
+  }
+
+  public static final class NullableBooleanWriter {
+    @Nullable
+    @ForyField(id = 0)
+    public Boolean value = true;
+  }
+
   public static final class RefStringBoolWriter {
     @Ref
     @ForyField(id = 0)
     public String value = "true";
   }
 
+  public static final class RefBooleanWriter {
+    @Ref
+    @ForyField(id = 0)
+    public Boolean value = true;
+  }
+
+  public static final class NullableRefBooleanWriter {
+    @Nullable
+    @Ref
+    @ForyField(id = 0)
+    public Boolean value = true;
+  }
+
   public static final class RefBooleanReader {
+    @Ref
+    @ForyField(id = 0)
+    public Boolean value;
+  }
+
+  public static final class NullableRefBooleanReader {
+    @Nullable
     @Ref
     @ForyField(id = 0)
     public Boolean value;
@@ -510,6 +541,65 @@ public class CompatibleFieldConvertTest extends ForyTestBase {
     Assert.assertFalse(FieldConverters.canConvert(remoteRef, localBool));
     Assert.assertFalse(FieldConverters.canConvert(localBool, localRef));
     Assert.assertTrue(FieldConverters.canConvert(localRef, localRef));
+
+    SerializationFieldInfo remoteNullableRef =
+        new SerializationFieldInfo(
+            fory.getTypeResolver(),
+            Descriptor.getDescriptorsMap(NullableRefBooleanWriter.class).get("value"));
+    SerializationFieldInfo localNullableRef =
+        new SerializationFieldInfo(
+            fory.getTypeResolver(),
+            Descriptor.getDescriptorsMap(NullableRefBooleanReader.class).get("value"));
+    Assert.assertFalse(FieldConverters.canConvert(remoteNullableRef, localRef));
+    Assert.assertFalse(FieldConverters.canConvert(remoteRef, localNullableRef));
+    Assert.assertTrue(FieldConverters.canConvert(localNullableRef, localNullableRef));
+  }
+
+  @Test(dataProvider = "xlang")
+  public void testScalarTrackingRefMismatchSkipped(boolean xlang) {
+    Fory refWriter = compatibleRefFory(xlang, false);
+    refWriter.register(RefBooleanWriter.class, 28000);
+    byte[] refBytes = refWriter.serialize(new RefBooleanWriter());
+
+    Fory nonRefReader = compatibleRefFory(xlang, false);
+    nonRefReader.register(BoolReader.class, 28000);
+    BoolReader boolReader = (BoolReader) nonRefReader.deserialize(refBytes);
+    Assert.assertFalse(boolReader.value);
+
+    Fory nonRefWriter = compatibleRefFory(xlang, false);
+    nonRefWriter.register(BoolStringWriter.class, 28000);
+    byte[] nonRefBytes = nonRefWriter.serialize(new BoolStringWriter());
+
+    Fory refReaderFory = compatibleRefFory(xlang, false);
+    refReaderFory.register(RefBooleanReader.class, 28000);
+    RefBooleanReader refReader = (RefBooleanReader) refReaderFory.deserialize(nonRefBytes);
+    Assert.assertNull(refReader.value);
+
+    Fory nullableRefWriter = compatibleRefFory(xlang, false);
+    nullableRefWriter.register(NullableRefBooleanWriter.class, 28000);
+    byte[] nullableRefBytes = nullableRefWriter.serialize(new NullableRefBooleanWriter());
+
+    Fory requiredRefReaderFory = compatibleRefFory(xlang, false);
+    requiredRefReaderFory.register(RefBooleanReader.class, 28000);
+    RefBooleanReader requiredRefReader =
+        (RefBooleanReader) requiredRefReaderFory.deserialize(nullableRefBytes);
+    Assert.assertNull(requiredRefReader.value);
+
+    Fory requiredRefWriter = compatibleRefFory(xlang, false);
+    requiredRefWriter.register(RefBooleanWriter.class, 28000);
+    byte[] requiredRefBytes = requiredRefWriter.serialize(new RefBooleanWriter());
+
+    Fory nullableRefReaderFory = compatibleRefFory(xlang, false);
+    nullableRefReaderFory.register(NullableRefBooleanReader.class, 28000);
+    NullableRefBooleanReader nullableRefReader =
+        (NullableRefBooleanReader) nullableRefReaderFory.deserialize(requiredRefBytes);
+    Assert.assertNull(nullableRefReader.value);
+
+    Fory exactNullableRefReaderFory = compatibleRefFory(xlang, false);
+    exactNullableRefReaderFory.register(NullableRefBooleanReader.class, 28000);
+    NullableRefBooleanReader exactNullableRefReader =
+        (NullableRefBooleanReader) exactNullableRefReaderFory.deserialize(nullableRefBytes);
+    Assert.assertEquals(Boolean.TRUE, exactNullableRefReader.value);
   }
 
   @Test(dataProvider = "xlangAndCodegen")
@@ -532,6 +622,49 @@ public class CompatibleFieldConvertTest extends ForyTestBase {
     assertConversionFails(new Float16NanWriter(), BFloat16Reader.class, xlang, codegen);
   }
 
+  @Test(dataProvider = "xlangAndCodegen")
+  public void testScalarBoolPayloadRejectsInvalidByte(boolean xlang, boolean codegen) {
+    Fory writer = compatibleFory(xlang, codegen);
+    writer.register(BoolStringWriter.class, 28000);
+    BoolStringWriter falseValue = new BoolStringWriter();
+    falseValue.value = false;
+    byte[] bytes = writer.serialize(new BoolStringWriter());
+    byte[] falseBytes = writer.serialize(falseValue);
+    bytes[boolPayloadIndex(bytes, falseBytes)] = 2;
+
+    Fory reader = compatibleFory(xlang, codegen);
+    reader.register(StringReader.class, 28000);
+    Assert.assertThrows(DeserializationException.class, () -> reader.deserialize(bytes));
+  }
+
+  @Test(dataProvider = "xlangAndCodegen")
+  public void testScalarNullableBoolRejectsBadPayload(boolean xlang, boolean codegen) {
+    Fory writer = compatibleFory(xlang, codegen);
+    writer.register(NullableBooleanWriter.class, 28000);
+    NullableBooleanWriter falseValue = new NullableBooleanWriter();
+    falseValue.value = false;
+    byte[] bytes = writer.serialize(new NullableBooleanWriter());
+    byte[] falseBytes = writer.serialize(falseValue);
+    bytes[boolPayloadIndex(bytes, falseBytes)] = 2;
+
+    Fory reader = compatibleFory(xlang, codegen);
+    reader.register(BoolReader.class, 28000);
+    Assert.assertThrows(DeserializationException.class, () -> reader.deserialize(bytes));
+  }
+
+  @Test(dataProvider = "xlangAndCodegen")
+  public void testScalarNullableBoolRejectsRefFlag(boolean xlang, boolean codegen) {
+    Fory writer = compatibleFory(xlang, codegen);
+    writer.register(NullableBooleanWriter.class, 28000);
+    byte[] bytes = writer.serialize(new NullableBooleanWriter());
+    int boolIndex = boolPayloadIndex(bytes, writer.serialize(nullableBooleanWriter(false)));
+    bytes[lastIndexBefore(bytes, Fory.NOT_NULL_VALUE_FLAG, boolIndex)] = Fory.REF_VALUE_FLAG;
+
+    Fory reader = compatibleFory(xlang, codegen);
+    reader.register(BoolReader.class, 28000);
+    Assert.assertThrows(DeserializationException.class, () -> reader.deserialize(bytes));
+  }
+
   private static <T> T readAs(
       Object writerObject, Class<T> readerClass, boolean xlang, boolean codegen) {
     Fory writer = compatibleFory(xlang, codegen);
@@ -550,6 +683,46 @@ public class CompatibleFieldConvertTest extends ForyTestBase {
 
   private static Fory compatibleFory(boolean xlang, boolean codegen) {
     return Fory.builder().withXlang(xlang).withCompatible(true).withCodegen(codegen).build();
+  }
+
+  private static Fory compatibleRefFory(boolean xlang, boolean codegen) {
+    return Fory.builder()
+        .withXlang(xlang)
+        .withCompatible(true)
+        .withCodegen(codegen)
+        .withRefTracking(true)
+        .build();
+  }
+
+  private static int boolPayloadIndex(byte[] trueBytes, byte[] falseBytes) {
+    Assert.assertEquals(trueBytes.length, falseBytes.length);
+    int index = -1;
+    for (int i = 0; i < trueBytes.length; i++) {
+      if (trueBytes[i] != falseBytes[i]) {
+        Assert.assertEquals(index, -1, "serialized bool payload must have a single byte delta");
+        Assert.assertEquals(trueBytes[i], 1);
+        Assert.assertEquals(falseBytes[i], 0);
+        index = i;
+      }
+    }
+    Assert.assertNotEquals(index, -1, "serialized bool payload byte not found");
+    return index;
+  }
+
+  private static int lastIndexBefore(byte[] bytes, byte value, int endExclusive) {
+    for (int i = endExclusive - 1; i >= 0; i--) {
+      if (bytes[i] == value) {
+        return i;
+      }
+    }
+    Assert.fail("byte not found before bool payload");
+    return -1;
+  }
+
+  private static NullableBooleanWriter nullableBooleanWriter(boolean value) {
+    NullableBooleanWriter writer = new NullableBooleanWriter();
+    writer.value = value;
+    return writer;
   }
 
   private static String repeat(String value, int count) {

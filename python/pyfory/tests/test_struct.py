@@ -29,6 +29,7 @@ import typing
 import pyfory
 from pyfory import Fory
 from pyfory.error import ForyInvalidDataError, TypeUnregisteredError
+from pyfory.resolver import NOT_NULL_VALUE_FLAG, REF_VALUE_FLAG
 from pyfory.struct import DataClassSerializer, build_default_values_factory
 from pyfory.types import TypeId
 
@@ -174,6 +175,16 @@ class RemoteBoolScalar:
 
 
 @dataclass
+class RemoteOptionalBoolScalar:
+    value: Optional[bool] = None
+
+
+@dataclass
+class RemoteOptionalRefBoolScalar:
+    value: Optional[bool] = pyfory.field(default=True, ref=True)
+
+
+@dataclass
 class LocalStringScalar:
     value: str = ""
 
@@ -240,6 +251,11 @@ class LocalRefBoolScalar:
 
 
 @dataclass
+class LocalOptionalRefBoolScalar:
+    value: Optional[bool] = pyfory.field(default=None, ref=True)
+
+
+@dataclass
 class RemoteRefFixedInt32Scalar:
     value: pyfory.FixedInt32 = pyfory.field(default=0, ref=True)
 
@@ -276,6 +292,39 @@ def test_compatible_scalar_conversions():
     result = compat_ser_de(RemoteStringScalar, LocalFloat32Scalar, RemoteStringScalar("-0e0"), 737)
     assert result.value == 0.0
     assert math.copysign(1.0, result.value) < 0.0
+
+
+def test_compatible_scalar_rejects_invalid_bool_payload():
+    _, reader, payload = compat_ser(RemoteBoolScalar, LocalStringScalar, RemoteBoolScalar(True), 745)
+    corrupted = bytearray(payload)
+    corrupted[-1] = 2
+    with pytest.raises(ForyInvalidDataError):
+        reader.deserialize(bytes(corrupted))
+
+
+def test_compatible_scalar_rejects_ref_value_flag():
+    _, reader, payload = compat_ser(RemoteOptionalStringScalar, LocalBoolScalar, RemoteOptionalStringScalar("1"), 746)
+    corrupted = bytearray(payload)
+    flag_offset = corrupted.rfind(bytes([NOT_NULL_VALUE_FLAG & 0xFF]))
+    assert flag_offset >= 0
+    corrupted[flag_offset] = REF_VALUE_FLAG & 0xFF
+    with pytest.raises(ForyInvalidDataError):
+        reader.deserialize(bytes(corrupted))
+
+
+def test_compatible_scalar_same_type_nullable_uses_strict_source_read():
+    _, reader, payload = compat_ser(RemoteOptionalBoolScalar, LocalBoolScalar, RemoteOptionalBoolScalar(True), 747)
+    corrupted = bytearray(payload)
+    flag_offset = corrupted.rfind(bytes([NOT_NULL_VALUE_FLAG & 0xFF]))
+    assert flag_offset >= 0
+    corrupted[flag_offset] = REF_VALUE_FLAG & 0xFF
+    with pytest.raises(ForyInvalidDataError):
+        reader.deserialize(bytes(corrupted))
+
+    corrupted = bytearray(payload)
+    corrupted[-1] = 2
+    with pytest.raises(ForyInvalidDataError):
+        reader.deserialize(bytes(corrupted))
 
 
 @pytest.mark.parametrize(
@@ -327,6 +376,27 @@ def test_scalar_tracking_ref_rules():
     assert compat_ser_de(RemoteBoolScalar, LocalRefBoolScalar, RemoteBoolScalar(True), 740, ref=True) == LocalRefBoolScalar(False)
     assert compat_ser_de(RemoteRefBoolScalar, LocalRefBoolScalar, RemoteRefBoolScalar(True), 741, ref=True) == LocalRefBoolScalar(True)
     assert compat_ser_de(RemoteRefFixedInt32Scalar, LocalRefInt32Scalar, RemoteRefFixedInt32Scalar(7), 742, ref=True) == LocalRefInt32Scalar(0)
+    assert compat_ser_de(
+        RemoteOptionalRefBoolScalar,
+        LocalRefBoolScalar,
+        RemoteOptionalRefBoolScalar(True),
+        748,
+        ref=True,
+    ) == LocalRefBoolScalar(False)
+    assert compat_ser_de(
+        RemoteRefBoolScalar,
+        LocalOptionalRefBoolScalar,
+        RemoteRefBoolScalar(True),
+        749,
+        ref=True,
+    ) == LocalOptionalRefBoolScalar(None)
+    assert compat_ser_de(
+        RemoteOptionalRefBoolScalar,
+        LocalOptionalRefBoolScalar,
+        RemoteOptionalRefBoolScalar(True),
+        750,
+        ref=True,
+    ) == LocalOptionalRefBoolScalar(True)
 
 
 def test_same_schema_scalar_read_is_direct():

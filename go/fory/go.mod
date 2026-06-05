@@ -17,7 +17,7 @@
 
 module github.com/apache/fory/go/fory
 
-go 1.25.11
+go 1.25.0
 
 require (
 	github.com/stretchr/testify v1.7.0

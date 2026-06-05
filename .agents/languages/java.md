@@ -230,9 +230,13 @@ Load this file when changing anything under `java/` or when Java drives a cross-
 - Source-generated constructor serializers must own their constructor metadata at generation time
   and call constructors directly. They must not depend on runtime `ObjectInstantiator` constructor-field
   metadata or varargs constructor calls.
-- Java annotation-processor static serializers do not own ordinary-class constructor metadata.
-  Reject ordinary non-record final fields instead of generating descriptor-based final-field
-  mutation; records and Kotlin KSP primary-constructor serializers are the constructor-owned paths.
+- Java annotation-processor static serializers must support the same Java class surface as normal
+  Fory object serialization when compatible-read static generation needs it. Ordinary classes that
+  cannot be assigned directly should allocate through generated-subclass-owned
+  `ObjectInstantiator` state and write private, inaccessible, or final fields through
+  generated-subclass-owned cached `FieldAccessor`s. Do not add constructor-binding APIs, per-read
+  reflective lookup, descriptor-based varargs constructor calls, or shared-parent argument buffers.
+  Records and Kotlin KSP primary-constructor serializers remain constructor-owned paths.
 - Generated JVM copy code may direct-copy immutable scalar values, but Java `Collection`/`Map`
   subclasses must be copied through `CopyContext.copyObject(...)` so collection/map serializers own
   concrete type, comparator, wrapper, and reference behavior.

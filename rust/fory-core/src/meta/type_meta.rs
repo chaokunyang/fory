@@ -661,7 +661,7 @@ impl PartialEq for FieldType {
     }
 }
 
-pub fn exact_field_type_match(left: &FieldType, right: &FieldType) -> bool {
+fn exact_field_type_match(left: &FieldType, right: &FieldType) -> bool {
     if left.type_id != right.type_id
         || left.user_type_id != right.user_type_id
         || left.nullable != right.nullable
@@ -676,6 +676,7 @@ pub fn exact_field_type_match(left: &FieldType, right: &FieldType) -> bool {
         .all(|(left, right)| exact_field_type_match(left, right))
 }
 
+#[doc(hidden)]
 pub fn assign_remote_field_ids(
     local_field_infos: &[FieldInfo],
     field_infos: &mut [FieldInfo],

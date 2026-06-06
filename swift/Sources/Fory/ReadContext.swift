@@ -224,8 +224,7 @@ public final class ReadContext {
             "received name-registered type info for id-registered local type")
         }
         if namespace.value != localTypeInfo.namespace.value
-          || typeName.value != localTypeInfo.typeName.value
-        {
+          || typeName.value != localTypeInfo.typeName.value {
           let expectedTypeName = "\(localTypeInfo.namespace.value)::\(localTypeInfo.typeName.value)"
           let actualTypeName = "\(namespace.value)::\(typeName.value)"
           throw ForyError.invalidData(
@@ -257,8 +256,7 @@ public final class ReadContext {
     if !checkClassVersion,
       compatibleTypeDefTypeInfos.isEmpty,
       !localTypeInfo.typeDefHasUserTypeFields,
-      let localTypeDefHeader = localTypeInfo.typeDefHeader
-    {
+      let localTypeDefHeader = localTypeInfo.typeDefHeader {
       let indexMarker = try buffer.readVarUInt32()
       if indexMarker == 0 {
         let headerStart = buffer.getCursor()
@@ -343,8 +341,7 @@ public final class ReadContext {
     let compatibleTypeDefTypeInfos = self.compatibleTypeDefTypeInfos
     let remoteTypeInfo: TypeInfo
     if compatibleTypeDefTypeInfos.isEmpty,
-      let localTypeDefHeader = localTypeInfo.typeDefHeader
-    {
+      let localTypeDefHeader = localTypeInfo.typeDefHeader {
       let indexMarker = try buffer.readVarUInt32()
       if indexMarker != 0 {
         remoteTypeInfo = try readCompatibleTypeInfo(afterMarker: indexMarker)
@@ -391,8 +388,7 @@ public final class ReadContext {
       throw ForyError.invalidData("compatible type metadata is required")
     }
     if let localTypeMeta = localTypeInfo.typeMeta,
-      remoteTypeMeta === localTypeMeta
-    {
+      remoteTypeMeta === localTypeMeta {
       return localTypeInfo
     }
     if remoteTypeMeta.registerByName {
@@ -434,8 +430,7 @@ public final class ReadContext {
         registerByName: localTypeInfo.registerByName,
         compatible: compatible,
         evolving: localTypeInfo.evolving
-      )
-    {
+      ) {
       throw ForyError.typeMismatch(expected: wireTypeID.rawValue, actual: remoteTypeID)
     }
     return remoteTypeInfo
@@ -601,15 +596,15 @@ public final class ReadContext {
   }
 }
 
-extension ReadContext {
-  public func readAny(
+public extension ReadContext {
+  func readAny(
     refMode: RefMode,
     readTypeInfo: Bool = true
   ) throws -> Any? {
     try SerializableAny.foryRead(self, refMode: refMode, readTypeInfo: readTypeInfo).anyValue()
   }
 
-  public func readListOfAny(
+  func readListOfAny(
     refMode: RefMode,
     readTypeInfo: Bool = false
   ) throws -> [Any]? {
@@ -621,7 +616,7 @@ extension ReadContext {
     return wrapped?.map { $0.anyValueForCollection() }
   }
 
-  public func readMapStringToAny(
+  func readMapStringToAny(
     refMode: RefMode,
     readTypeInfo: Bool = false
   ) throws -> [String: Any]? {
@@ -641,7 +636,7 @@ extension ReadContext {
     return map
   }
 
-  public func readMapInt32ToAny(
+  func readMapInt32ToAny(
     refMode: RefMode,
     readTypeInfo: Bool = false
   ) throws -> [Int32: Any]? {
@@ -661,7 +656,7 @@ extension ReadContext {
     return map
   }
 
-  public func readMapAnyHashableToAny(
+  func readMapAnyHashableToAny(
     refMode: RefMode,
     readTypeInfo: Bool = false
   ) throws -> [AnyHashable: Any]? {

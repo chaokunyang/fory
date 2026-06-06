@@ -34,20 +34,20 @@ private let noUserTypeID: UInt32 = UInt32.max
 public let namespaceMetaStringEncodings: [MetaStringEncoding] = [
   .utf8,
   .allToLowerSpecial,
-  .lowerUpperDigitSpecial,
+  .lowerUpperDigitSpecial
 ]
 
 public let typeNameMetaStringEncodings: [MetaStringEncoding] = [
   .utf8,
   .allToLowerSpecial,
   .lowerUpperDigitSpecial,
-  .firstToLowerSpecial,
+  .firstToLowerSpecial
 ]
 
 public let fieldNameMetaStringEncodings: [MetaStringEncoding] = [
   .utf8,
   .allToLowerSpecial,
-  .lowerUpperDigitSpecial,
+  .lowerUpperDigitSpecial
 ]
 
 public final class TypeMeta: Equatable, @unchecked Sendable {
@@ -408,8 +408,7 @@ public final class TypeMeta: Equatable, @unchecked Sendable {
       throw ForyError.invalidData("unexpected trailing bytes in TypeMeta body")
     }
     if (header & Self.hashMask())
-      != Self.typeMetaHeaderHash(encodedBody, headerLowBits: header & ~Self.hashMask())
-    {
+      != Self.typeMetaHeaderHash(encodedBody, headerLowBits: header & ~Self.hashMask()) {
       throw ForyError.invalidData("invalid TypeMeta metadata hash")
     }
 
@@ -623,17 +622,23 @@ public final class TypeMeta: Equatable, @unchecked Sendable {
 
       var localMatch: (Int, FieldInfo)?
       if let fieldID = field.fieldID, fieldID >= 0 {
-        if let candidate = fieldIndexByID[fieldID],
-          Self.isCompatibleFieldType(field.fieldType, candidate.1.fieldType)
-        {
+        if let candidate = fieldIndexByID[fieldID] {
+          guard Self.isCompatibleFieldType(field.fieldType, candidate.1.fieldType) else {
+            throw ForyError.invalidData(
+              "compatible field \(field.fieldName) cannot be read as local field \(candidate.1.fieldName)"
+            )
+          }
           localMatch = candidate
         }
       }
 
       if localMatch == nil {
-        if let candidate = fieldIndexByName[toSnakeCase(field.fieldName)],
-          Self.isCompatibleFieldType(field.fieldType, candidate.1.fieldType)
-        {
+        if let candidate = fieldIndexByName[toSnakeCase(field.fieldName)] {
+          guard Self.isCompatibleFieldType(field.fieldType, candidate.1.fieldType) else {
+            throw ForyError.invalidData(
+              "compatible field \(field.fieldName) cannot be read as local field \(candidate.1.fieldName)"
+            )
+          }
           localMatch = candidate
         }
       }
@@ -652,7 +657,7 @@ public final class TypeMeta: Equatable, @unchecked Sendable {
       }
 
       guard let (sortedIndex, _) = localMatch,
-        sortedIndex <= Int(Int16.max)
+        sortedIndex <= Int(Int16.max) / 2
       else {
         if field.fieldID != -1 {
           resolvedFields[index].fieldID = -1
@@ -661,7 +666,9 @@ public final class TypeMeta: Equatable, @unchecked Sendable {
         continue
       }
 
-      let resolvedFieldID = Int16(sortedIndex)
+      let localField = localFields[sortedIndex]
+      let exactField = field.fieldType == localField.fieldType
+      let resolvedFieldID = Int16(sortedIndex * 2 + (exactField ? 0 : 1))
       if field.fieldID != resolvedFieldID {
         resolvedFields[index].fieldID = resolvedFieldID
         changed = true
@@ -697,24 +704,21 @@ public final class TypeMeta: Equatable, @unchecked Sendable {
     if topLevel,
       remoteType.trackRef != localType.trackRef,
       compatibleScalarKind(remoteType.typeID) != nil,
-      compatibleScalarKind(localType.typeID) != nil
-    {
+      compatibleScalarKind(localType.typeID) != nil {
       return false
     }
     if topLevel,
       remoteType.trackRef || localType.trackRef,
       compatibleScalarKind(remoteType.typeID) != nil,
       compatibleScalarKind(localType.typeID) != nil,
-      remoteType.typeID != localType.typeID || remoteType.nullable != localType.nullable
-    {
+      remoteType.typeID != localType.typeID || remoteType.nullable != localType.nullable {
       return false
     }
     if topLevel, allowScalarConversion, isCompatibleScalarFieldType(remoteType, localType) {
       return true
     }
     if normalizeCompatibleTypeIDForComparison(remoteType.typeID)
-      != normalizeCompatibleTypeIDForComparison(localType.typeID)
-    {
+      != normalizeCompatibleTypeIDForComparison(localType.typeID) {
       return false
     }
     if remoteType.generics.count != localType.generics.count {

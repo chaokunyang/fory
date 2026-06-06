@@ -132,7 +132,8 @@ private func encodedTypeDefHeaderHash(_ bytes: [UInt8]) throws -> UInt64 {
 
 private func fieldNeedsTypeInfo(_ fieldType: TypeMeta.FieldType) -> Bool {
   if let typeID = TypeId(rawValue: fieldType.typeID),
-    TypeId.needsTypeInfoForField(typeID) {
+    TypeId.needsTypeInfoForField(typeID)
+  {
     return true
   }
   return fieldType.generics.contains { fieldNeedsTypeInfo($0) }
@@ -143,7 +144,8 @@ private func encodedTypeDefHasUserTypeFields(_ fields: [TypeMeta.FieldInfo]) -> 
 }
 
 @inline(__always)
-private func readRegisteredValue<T: Serializer>(_ context: ReadContext, as type: T.Type) throws -> T {
+private func readRegisteredValue<T: Serializer>(_ context: ReadContext, as type: T.Type) throws -> T
+{
   try T.foryRead(
     context,
     refMode: T.isRefType ? .tracking : .none,
@@ -201,6 +203,7 @@ public final class TypeInfo: @unchecked Sendable {
   let typeDefHeader: UInt64?
   public let typeDefHeaderHash: UInt64?
   public let typeDefHasUserTypeFields: Bool
+  public let compatibleSequentialReadPlan: Int
 
   private let reader: (ReadContext) throws -> Any
   private let compatibleReader: (ReadContext, TypeInfo) throws -> Any
@@ -239,6 +242,10 @@ public final class TypeInfo: @unchecked Sendable {
     self.typeDefHeader = typeDefHeader
     self.typeDefHeaderHash = typeDefHeaderHash
     self.typeDefHasUserTypeFields = typeDefHasUserTypeFields
+    self.compatibleSequentialReadPlan = Self.sequentialReadPlan(
+      localTypeMeta: typeMeta,
+      compatibleTypeMeta: self.compatibleTypeMeta
+    )
     self.reader = reader
     self.compatibleReader = compatibleReader
     nativeWireTypeID = resolveRegisteredWireTypeID(
@@ -382,7 +389,8 @@ public final class TypeInfo: @unchecked Sendable {
     }
     if context.compatible
       && (compatibleWireTypeID == .compatibleStruct
-        || compatibleWireTypeID == .namedCompatibleStruct) {
+        || compatibleWireTypeID == .namedCompatibleStruct)
+    {
       return try compatibleReader(context, self)
     }
     if compatibleTypeMeta !== typeMeta {
@@ -390,6 +398,36 @@ public final class TypeInfo: @unchecked Sendable {
     }
     return try reader(context)
   }
+
+  private static func sequentialReadPlan(
+    localTypeMeta: TypeMeta?,
+    compatibleTypeMeta: TypeMeta?
+  ) -> Int {
+    guard let localTypeMeta, let compatibleTypeMeta else {
+      return -2
+    }
+    guard compatibleTypeMeta.fields.count == localTypeMeta.fields.count else {
+      return -2
+    }
+    var compatibleIndex = -1
+    for (index, field) in compatibleTypeMeta.fields.enumerated() {
+      let directID = index * 2
+      let fieldID = Int(field.fieldID ?? -1)
+      if fieldID == directID {
+        continue
+      }
+      if fieldID == directID + 1 {
+        if compatibleIndex >= 0 {
+          return -2
+        }
+        compatibleIndex = index
+        continue
+      }
+      return -2
+    }
+    return compatibleIndex
+  }
+
 }
 
 private struct TypeNameKey: Hashable {
@@ -463,7 +501,8 @@ final class TypeResolver {
         registerByName: false,
         evolving: evolving,
         typeName: (namespace: "", name: "")
-      ) {
+      )
+    {
       return
     }
 
@@ -519,7 +558,8 @@ final class TypeResolver {
         registerByName: true,
         evolving: evolving,
         typeName: (namespace: namespace, name: typeName)
-      ) {
+      )
+    {
       return
     }
 
@@ -567,9 +607,8 @@ final class TypeResolver {
       return localTypeInfo
     }
     let canonicalTypeMeta: TypeMeta
-    if let localTypeMeta = localTypeInfo.typeMeta,
-      let remapped = try? typeMeta.assigningFieldIDs(from: localTypeMeta) {
-      canonicalTypeMeta = remapped
+    if let localTypeMeta = localTypeInfo.typeMeta {
+      canonicalTypeMeta = try typeMeta.assigningFieldIDs(from: localTypeMeta)
     } else {
       canonicalTypeMeta = typeMeta
     }
@@ -594,7 +633,8 @@ final class TypeResolver {
       byTypeName[typeNameKey] = typeInfo
     }
     if let typeMeta = typeInfo.typeMeta,
-      let typeDefHeader = typeInfo.typeDefHeader {
+      let typeDefHeader = typeInfo.typeDefHeader
+    {
       typeInfoByHeader.set(
         TypeInfo(
           dynamic: typeInfo,
@@ -674,7 +714,8 @@ final class TypeResolver {
         )
       }
       if existing.typeID != T.staticTypeId || existing.namespace.value != namespace
-        || existing.typeName.value != typeName {
+        || existing.typeName.value != typeName
+      {
         throw ForyError.invalidData(
           """
           \(type) registration conflict: existing name=\(existing.namespace.value)::\(existing.typeName.value), \

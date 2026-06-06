@@ -1065,6 +1065,27 @@ class CompatibleRequiredDefaultsV2:
     f_dict: Dict[str, int]
 
 
+@dataclass
+class CompatibleListItemV1:
+    value: pyfory.Int32
+
+
+@dataclass
+class CompatibleListItemV2:
+    value: pyfory.Int64
+    added: str
+
+
+@dataclass
+class CompatibleListOwnerV1:
+    items: List[CompatibleListItemV1]
+
+
+@dataclass
+class CompatibleListOwnerV2:
+    items: List[CompatibleListItemV2]
+
+
 @pytest.mark.parametrize("xlang", [False, True])
 def test_compatible_mode_add_field(xlang):
     """Test that adding a field with default value works in compatible mode."""
@@ -1175,6 +1196,22 @@ def test_compatible_mode_add_required_fields_use_type_defaults(xlang):
     assert v2_result.f_set == set()
     assert v2_result.f_dict == {}
     assert ser_de(fory_v2, v2_result) == v2_result
+
+
+def test_compatible_nested_list_struct():
+    writer = Fory(xlang=True, compatible=True, ref=False)
+    reader = Fory(xlang=True, compatible=True, ref=False)
+
+    writer.register_type(CompatibleListItemV1, type_id=501)
+    writer.register_type(CompatibleListOwnerV1, type_id=502)
+    reader.register_type(CompatibleListItemV2, type_id=501)
+    reader.register_type(CompatibleListOwnerV2, type_id=502)
+
+    decoded = reader.deserialize(writer.serialize(CompatibleListOwnerV1(items=[CompatibleListItemV1(123), CompatibleListItemV1(456)])))
+
+    assert isinstance(decoded, CompatibleListOwnerV2)
+    assert [item.value for item in decoded.items] == [123, 456]
+    assert [item.added for item in decoded.items] == ["", ""]
 
 
 @dataclass

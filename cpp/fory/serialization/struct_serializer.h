@@ -1247,10 +1247,10 @@ void dispatch_field_index(size_t target_index, Func &&func, bool &handled) {
 
 // ------------------------------------------------------------------
 // Compile-time helpers to compute sorted field indices / names and
-// create small jump-table wrappers to unroll read/write per-field calls.
+  // create small switch-dispatch wrappers to unroll read/write per-field calls.
 // The goal is to mimic the Rust-derived serializer behaviour where the
 // sorted field order is known at compile-time and the read path for
-// compatible mode uses a fast switch/jump table.
+  // compatible mode uses generated source-level switch cases.
 // ------------------------------------------------------------------
 
 template <typename T> struct CompileTimeFieldHelpers {
@@ -3416,29 +3416,91 @@ void read_single_field_by_index_compatible(T &obj, ReadContext &ctx,
   }
 }
 
-/// Helper to dispatch field reading by field_id in compatible mode.
-/// Uses fold expression with short-circuit to avoid lambda overhead.
-/// Sets handled=true if field was matched.
-/// @param remote_field_type The field type tree from the remote schema.
-template <typename T, size_t... Indices>
-FORY_ALWAYS_INLINE void
-dispatch_compatible_field_read_impl(T &obj, ReadContext &ctx, int16_t field_id,
-                                    const FieldType &remote_field_type,
-                                    bool &handled,
-                                    std::index_sequence<Indices...>) {
+template <typename T, size_t MatchedId>
+FORY_ALWAYS_INLINE void read_compatible_exact_case(T &obj, ReadContext &ctx) {
   using Helpers = CompileTimeFieldHelpers<T>;
-
-  // Short-circuit fold: stops at first match
-  // Each element evaluates to bool; || short-circuits on first true
-  (void)((static_cast<int16_t>(Indices) == field_id
-              ? (handled = true,
-                 read_single_field_by_index_compatible<
-                     Helpers::sorted_indices[Indices]>(obj, ctx,
-                                                       remote_field_type),
-                 true)
-              : false) ||
-         ...);
+  constexpr size_t local_sorted_id = MatchedId / 2;
+  constexpr size_t original_index = Helpers::sorted_indices[local_sorted_id];
+  read_single_field_by_index<original_index>(obj, ctx);
 }
+
+template <typename T, size_t MatchedId>
+FORY_ALWAYS_INLINE void
+read_compatible_conversion_case(T &obj, ReadContext &ctx,
+                                const FieldType &remote_field_type) {
+  using Helpers = CompileTimeFieldHelpers<T>;
+  constexpr size_t local_sorted_id = MatchedId / 2;
+  constexpr size_t original_index = Helpers::sorted_indices[local_sorted_id];
+  read_single_field_by_index_compatible<original_index>(obj, ctx,
+                                                        remote_field_type);
+}
+
+#define FORY_COMPAT_SWITCH_CASE(N)                                            \
+  case Base + (N): {                                                          \
+    constexpr size_t matched_case = static_cast<size_t>(Base + (N));          \
+    if constexpr (matched_case < total_cases) {                               \
+      if constexpr ((matched_case & 1U) == 0) {                               \
+        read_compatible_exact_case<T, matched_case>(obj, ctx);                \
+      } else {                                                                \
+        read_compatible_conversion_case<T, matched_case>(                     \
+            obj, ctx, remote_field_type);                                     \
+      }                                                                       \
+    } else {                                                                  \
+      ctx.set_error(Error::type_error("Invalid compatible matched id"));      \
+    }                                                                         \
+    return;                                                                   \
+  }
+
+#define FORY_COMPAT_SWITCH_CASES_16(O)                                        \
+  FORY_COMPAT_SWITCH_CASE((O) + 0)                                            \
+  FORY_COMPAT_SWITCH_CASE((O) + 1)                                            \
+  FORY_COMPAT_SWITCH_CASE((O) + 2)                                            \
+  FORY_COMPAT_SWITCH_CASE((O) + 3)                                            \
+  FORY_COMPAT_SWITCH_CASE((O) + 4)                                            \
+  FORY_COMPAT_SWITCH_CASE((O) + 5)                                            \
+  FORY_COMPAT_SWITCH_CASE((O) + 6)                                            \
+  FORY_COMPAT_SWITCH_CASE((O) + 7)                                            \
+  FORY_COMPAT_SWITCH_CASE((O) + 8)                                            \
+  FORY_COMPAT_SWITCH_CASE((O) + 9)                                            \
+  FORY_COMPAT_SWITCH_CASE((O) + 10)                                           \
+  FORY_COMPAT_SWITCH_CASE((O) + 11)                                           \
+  FORY_COMPAT_SWITCH_CASE((O) + 12)                                           \
+  FORY_COMPAT_SWITCH_CASE((O) + 13)                                           \
+  FORY_COMPAT_SWITCH_CASE((O) + 14)                                           \
+  FORY_COMPAT_SWITCH_CASE((O) + 15)
+
+#define FORY_COMPAT_SWITCH_CASES_128()                                        \
+  FORY_COMPAT_SWITCH_CASES_16(0)                                             \
+  FORY_COMPAT_SWITCH_CASES_16(16)                                            \
+  FORY_COMPAT_SWITCH_CASES_16(32)                                            \
+  FORY_COMPAT_SWITCH_CASES_16(48)                                            \
+  FORY_COMPAT_SWITCH_CASES_16(64)                                            \
+  FORY_COMPAT_SWITCH_CASES_16(80)                                            \
+  FORY_COMPAT_SWITCH_CASES_16(96)                                            \
+  FORY_COMPAT_SWITCH_CASES_16(112)
+
+template <typename T, int16_t Base>
+FORY_NOINLINE void
+dispatch_compatible_field_read_impl(T &obj, ReadContext &ctx, int16_t matched_id,
+                                    const FieldType &remote_field_type) {
+  constexpr size_t total_cases =
+      CompileTimeFieldHelpers<T>::FieldCount * static_cast<size_t>(2);
+  switch (matched_id) {
+    FORY_COMPAT_SWITCH_CASES_128()
+  default:
+    if constexpr (static_cast<size_t>(Base) + 128U < total_cases) {
+      dispatch_compatible_field_read_impl<T, Base + 128>(
+          obj, ctx, matched_id, remote_field_type);
+    } else {
+      ctx.set_error(Error::type_error("Invalid compatible matched id"));
+    }
+    return;
+  }
+}
+
+#undef FORY_COMPAT_SWITCH_CASES_128
+#undef FORY_COMPAT_SWITCH_CASES_16
+#undef FORY_COMPAT_SWITCH_CASE
 
 /// Helper to read a single field at compile-time sorted position
 template <typename T, size_t SortedPosition>
@@ -3805,22 +3867,8 @@ void read_struct_fields_compatible(T &obj, ReadContext &ctx,
       continue;
     }
 
-    // Dispatch to the correct local field by field_id
-    // Uses fold expression with short-circuit - no lambda overhead
-    // Pass remote field type for correct encoding and ref metadata.
-    bool handled = false;
-    dispatch_compatible_field_read_impl<T>(obj, ctx, field_id,
-                                           remote_field.field_type, handled,
-                                           std::index_sequence<Indices...>{});
-
-    if (!handled) {
-      // Shouldn't happen if TypeMeta::assign_field_ids worked correctly
-      skip_field_value(ctx, remote_field.field_type, remote_ref_mode);
-      if (FORY_PREDICT_FALSE(ctx.has_error())) {
-        return;
-      }
-      continue;
-    }
+    dispatch_compatible_field_read_impl<T, 0>(obj, ctx, field_id,
+                                              remote_field.field_type);
 
     if (FORY_PREDICT_FALSE(ctx.has_error())) {
       return;

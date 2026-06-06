@@ -61,6 +61,7 @@ use std::rc::Rc;
 
 const SMALL_NUM_FIELDS_THRESHOLD: usize = 0b11111;
 const MAX_TYPE_META_FIELDS: usize = i16::MAX as usize;
+const MAX_COMPATIBLE_MATCHED_FIELD_INDEX: usize = (i16::MAX as usize - 1) / 2;
 const REGISTER_BY_NAME_FLAG: u8 = 0b0010_0000;
 const COMPATIBLE_TYPEDEF_FLAG: u8 = 0b0100_0000;
 const STRUCT_TYPEDEF_FLAG: u8 = 0b1000_0000;
@@ -660,6 +661,106 @@ impl PartialEq for FieldType {
     }
 }
 
+pub fn exact_field_type_match(left: &FieldType, right: &FieldType) -> bool {
+    if left.type_id != right.type_id
+        || left.user_type_id != right.user_type_id
+        || left.nullable != right.nullable
+        || left.track_ref != right.track_ref
+        || left.generics.len() != right.generics.len()
+    {
+        return false;
+    }
+    left.generics
+        .iter()
+        .zip(right.generics.iter())
+        .all(|(left, right)| exact_field_type_match(left, right))
+}
+
+pub fn assign_remote_field_ids(
+    local_field_infos: &[FieldInfo],
+    field_infos: &mut [FieldInfo],
+) -> Result<(), Error> {
+    // Build maps for both name-based and ID-based lookup.
+    // The value is the sorted local index, not the field's ID attribute.
+    let field_index_by_name: HashMap<String, (usize, &FieldInfo)> = local_field_infos
+        .iter()
+        .enumerate()
+        .filter(|(_, f)| !f.field_name.is_empty())
+        .map(|(i, f)| (f.field_name.clone(), (i, f)))
+        .collect();
+
+    let field_index_by_id: HashMap<i16, (usize, &FieldInfo)> = local_field_infos
+        .iter()
+        .enumerate()
+        .filter(|(_, f)| f.field_id >= 0)
+        .map(|(i, f)| (f.field_id, (i, f)))
+        .collect();
+
+    for field in field_infos.iter_mut() {
+        let local_match = if field.field_id >= 0 && field.field_name.is_empty() {
+            field_index_by_id.get(&field.field_id).copied()
+        } else {
+            let snake_case_name = to_snake_case(&field.field_name);
+            field_index_by_name.get(&snake_case_name).copied()
+        };
+
+        match local_match {
+            Some((sorted_index, local_info)) => {
+                let exact_field = exact_field_type_match(&local_info.field_type, &field.field_type);
+                if !exact_field
+                    && !crate::serializer::codec::compatible_field_pair(
+                        &local_info.field_type,
+                        &field.field_type,
+                    )
+                {
+                    if crate::util::ENABLE_FORY_DEBUG_OUTPUT {
+                        eprintln!(
+                            "[fory-debug] schema-incompatible field: name={}, remote_type={:?}, local_type={:?}",
+                            field.field_name, field.field_type, local_info.field_type
+                        );
+                    }
+                    return Err(Error::type_error(format!(
+                        "Cannot read remote field {} as local field {}: remote and local field schemas are not compatible",
+                        field.field_name, local_info.field_name
+                    )));
+                }
+                // ID-encoded remote fields have no name. Copying the local name keeps later
+                // metadata reserialization and diagnostics tied to the matched local field.
+                if field.field_name.is_empty() {
+                    field.field_name = local_info.field_name.clone();
+                }
+                if sorted_index > MAX_COMPATIBLE_MATCHED_FIELD_INDEX {
+                    return Err(Error::type_error(format!(
+                        "Cannot assign compatible matched id for local field {}: local field index {} exceeds max {}",
+                        local_info.field_name, sorted_index, MAX_COMPATIBLE_MATCHED_FIELD_INDEX
+                    )));
+                }
+                field.field_id = if exact_field {
+                    (sorted_index * 2) as i16
+                } else {
+                    (sorted_index * 2 + 1) as i16
+                };
+                if crate::util::ENABLE_FORY_DEBUG_OUTPUT {
+                    eprintln!(
+                        "[fory-debug]   matched field: name={}, assigned_field_id={}, remote_type={:?}, local_type={:?}",
+                        field.field_name, field.field_id, field.field_type, local_info.field_type
+                    );
+                }
+            }
+            None => {
+                if crate::util::ENABLE_FORY_DEBUG_OUTPUT {
+                    eprintln!(
+                        "[fory-debug] no local match for field: name={}",
+                        field.field_name
+                    );
+                }
+                field.field_id = -1;
+            }
+        }
+    }
+    Ok(())
+}
+
 #[derive(Debug)]
 pub struct TypeMeta {
     // assigned valid value and used, only during deserializing
@@ -958,7 +1059,7 @@ impl TypeMeta {
                         "TypeMeta kind does not match registered type metadata",
                     ));
                 }
-                Self::assign_field_ids(&type_info_current, &mut sorted_field_infos);
+                Self::assign_field_ids(&type_info_current, &mut sorted_field_infos)?;
             }
         } else if user_type_id != NO_USER_TYPE_ID {
             if let Some(type_info_current) = type_resolver.get_user_type_info_by_id(user_type_id) {
@@ -967,10 +1068,10 @@ impl TypeMeta {
                         "TypeMeta kind does not match registered type metadata",
                     ));
                 }
-                Self::assign_field_ids(&type_info_current, &mut sorted_field_infos);
+                Self::assign_field_ids(&type_info_current, &mut sorted_field_infos)?;
             }
         } else if let Some(type_info_current) = type_resolver.get_type_info_by_id(type_id) {
-            Self::assign_field_ids(&type_info_current, &mut sorted_field_infos);
+            Self::assign_field_ids(&type_info_current, &mut sorted_field_infos)?;
         }
         // if no type found, keep all fields id as -1 to be skipped.
         TypeMeta::new(
@@ -983,7 +1084,10 @@ impl TypeMeta {
         )
     }
 
-    fn assign_field_ids(type_info_current: &TypeInfo, field_infos: &mut [FieldInfo]) {
+    fn assign_field_ids(
+        type_info_current: &TypeInfo,
+        field_infos: &mut [FieldInfo],
+    ) -> Result<(), Error> {
         if crate::util::ENABLE_FORY_DEBUG_OUTPUT {
             eprintln!(
                 "[fory-debug] assign_field_ids called for type: {:?}",
@@ -1007,77 +1111,7 @@ impl TypeMeta {
             }
         }
 
-        // Build maps for both name-based and ID-based lookup.
-        // The value is the SORTED INDEX (position in local_field_infos), not the field's ID attribute.
-        // This index is used for matching in generated code.
-        let field_index_by_name: HashMap<String, (usize, &FieldInfo)> = local_field_infos
-            .iter()
-            .enumerate()
-            .filter(|(_, f)| !f.field_name.is_empty())
-            .map(|(i, f)| (f.field_name.clone(), (i, f)))
-            .collect();
-
-        let field_index_by_id: HashMap<i16, (usize, &FieldInfo)> = local_field_infos
-            .iter()
-            .enumerate()
-            .filter(|(_, f)| f.field_id >= 0)
-            .map(|(i, f)| (f.field_id, (i, f)))
-            .collect();
-
-        for field in field_infos.iter_mut() {
-            // Try to match by field ID first (if the incoming field was encoded with ID)
-            let local_match = if field.field_id >= 0 && field.field_name.is_empty() {
-                // Field was encoded with ID, match by ID
-                field_index_by_id.get(&field.field_id).copied()
-            } else {
-                // Field was encoded with name, match by name
-                // Convert incoming field name to snake_case for cross-language compatibility
-                // (Java uses camelCase, Rust uses snake_case)
-                let snake_case_name = to_snake_case(&field.field_name);
-                field_index_by_name.get(&snake_case_name).copied()
-            };
-
-            match local_match {
-                Some((sorted_index, local_info)) => {
-                    if !crate::serializer::codec::compatible_field_pair(
-                        &local_info.field_type,
-                        &field.field_type,
-                    ) {
-                        if crate::util::ENABLE_FORY_DEBUG_OUTPUT {
-                            eprintln!(
-                                "[fory-debug] schema-incompatible field: name={}, remote_type={:?}, local_type={:?}",
-                                field.field_name, field.field_type, local_info.field_type
-                            );
-                        }
-                        field.field_id = -1;
-                        continue;
-                    }
-                    // Always copy field name if it was ID-encoded
-                    // This is needed because TypeMeta may need to re-serialize the field info
-                    if field.field_name.is_empty() {
-                        field.field_name = local_info.field_name.clone();
-                    }
-                    // Assign SORTED INDEX for generated code only after the pair is
-                    // accepted as an exact read or a supported compatible read action.
-                    field.field_id = sorted_index as i16;
-                    if crate::util::ENABLE_FORY_DEBUG_OUTPUT {
-                        eprintln!(
-                            "[fory-debug]   matched field: name={}, assigned_field_id={}, remote_type={:?}, local_type={:?}",
-                            field.field_name, field.field_id, field.field_type, local_info.field_type
-                        );
-                    }
-                }
-                None => {
-                    if crate::util::ENABLE_FORY_DEBUG_OUTPUT {
-                        eprintln!(
-                            "[fory-debug] no local match for field: name={}",
-                            field.field_name
-                        );
-                    }
-                    field.field_id = -1; // No match, skip
-                }
-            }
-        }
+        assign_remote_field_ids(local_field_infos, field_infos)
     }
 
     #[allow(dead_code)]
@@ -1169,6 +1203,42 @@ impl TypeMeta {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn exact_field_type_requires_wire_metadata() {
+        let base = FieldType::new(crate::type_id::INT32, false, vec![]);
+        let nullable = FieldType::new(crate::type_id::INT32, true, vec![]);
+        let tracked = FieldType::new_with_ref(crate::type_id::INT32, false, true, vec![]);
+
+        assert_eq!(base, nullable);
+        assert_eq!(base, tracked);
+        assert!(exact_field_type_match(&base, &base));
+        assert!(!exact_field_type_match(&base, &nullable));
+        assert!(!exact_field_type_match(&base, &tracked));
+    }
+
+    #[test]
+    fn rejects_unrepresentable_matched_field_id() {
+        let field_type = FieldType::new(crate::type_id::INT32, false, vec![]);
+        let mut local_fields = Vec::with_capacity(MAX_COMPATIBLE_MATCHED_FIELD_INDEX + 2);
+        for index in 0..=MAX_COMPATIBLE_MATCHED_FIELD_INDEX + 1 {
+            local_fields.push(FieldInfo::new(
+                &format!("field_{}", index),
+                field_type.clone(),
+            ));
+        }
+        let mut remote_fields = [FieldInfo::new(
+            &format!("field_{}", MAX_COMPATIBLE_MATCHED_FIELD_INDEX + 1),
+            field_type,
+        )];
+
+        let message = assign_remote_field_ids(&local_fields, &mut remote_fields)
+            .err()
+            .map(|error| error.to_string())
+            .unwrap_or_default();
+
+        assert!(message.contains("exceeds max"));
+    }
 
     #[test]
     fn rejects_body_hash_mismatch_after_successful_parse() {

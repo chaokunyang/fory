@@ -32,8 +32,8 @@ import {
   isCompatibleScalarPair,
   isCompatibleScalarType,
   markCompatibleScalarRead,
-  markCompatibleScalarSkipRead,
 } from "./compatible/scalar";
+import { markCompatibleSkipRead } from "./compatible/field";
 
 type TypeResolverLike = {
   config: Config;
@@ -50,8 +50,21 @@ type TypeResolverLike = {
 type RegeneratedReadSerializerCacheEntry = {
   localHash: number;
   localTypeInfo: TypeInfo;
+  localTypeMetaBytes: Uint8Array;
   serializers: Map<number, Serializer>;
 };
+
+function bytesEqual(left: Uint8Array, right: Uint8Array): boolean {
+  if (left.length !== right.length) {
+    return false;
+  }
+  for (let i = 0; i < left.length; i++) {
+    if (left[i] !== right[i]) {
+      return false;
+    }
+  }
+  return true;
+}
 
 function remoteListElementType(
   fieldInfo: InnerFieldInfo,
@@ -800,7 +813,57 @@ export class ReadContext {
     if (expectedHash !== remoteHash) {
       return this.genSerializerByTypeMetaRuntime(typeMeta, original);
     }
+    if (original) {
+      const cacheEntry = this.getRegeneratedReadSerializerCache(original);
+      if (!bytesEqual(typeMeta.toBytes(), cacheEntry.localTypeMetaBytes)) {
+        return this.genSerializerByTypeMetaRuntime(typeMeta, original);
+      }
+    }
     return undefined;
+  }
+
+  private canonicalFieldTypeId(typeInfo: TypeInfo): number {
+    let typeId = this.typeResolver.computeTypeId(typeInfo);
+    if (typeId === TypeId.NAMED_ENUM) {
+      typeId = TypeId.ENUM;
+    } else if (
+      typeId === TypeId.NAMED_UNION
+      || typeId === TypeId.TYPED_UNION
+    ) {
+      typeId = TypeId.UNION;
+    }
+    return typeId;
+  }
+
+  private fieldSchemasEqual(
+    remote: InnerFieldInfo | undefined,
+    local: TypeInfo | undefined,
+  ): boolean {
+    if (remote === undefined || local === undefined) {
+      return false;
+    }
+    if (remote.typeId !== this.canonicalFieldTypeId(local)) {
+      return false;
+    }
+    if (
+      (remote.trackingRef === true) !== (local.trackingRef === true)
+      || (remote.nullable === true) !== (local.nullable === true)
+    ) {
+      return false;
+    }
+    switch (remote.typeId) {
+      case TypeId.MAP:
+        return (
+          this.fieldSchemasEqual(remote.options?.key, local.options?.key)
+          && this.fieldSchemasEqual(remote.options?.value, local.options?.value)
+        );
+      case TypeId.LIST:
+        return this.fieldSchemasEqual(remote.options?.inner, local.options?.inner);
+      case TypeId.SET:
+        return this.fieldSchemasEqual(remote.options?.key, local.options?.key);
+      default:
+        return true;
+    }
   }
 
   private fieldInfoToTypeInfo(
@@ -809,6 +872,9 @@ export class ReadContext {
     topLevel = true,
   ): TypeInfo {
     if (topLevel && fallbackTypeInfo) {
+      if (this.fieldSchemasEqual(fieldInfo, fallbackTypeInfo)) {
+        return fallbackTypeInfo.clone();
+      }
       const compatible = this.compatibleFieldTypeInfo(
         fieldInfo,
         fallbackTypeInfo,
@@ -826,9 +892,7 @@ export class ReadContext {
         && (fieldInfo.typeId !== fallbackTypeInfo.typeId
         || fieldInfo.nullable !== fallbackTypeInfo.nullable)))
       ) {
-        return markCompatibleScalarSkipRead(
-          this.fieldInfoToTypeInfo(fieldInfo, undefined, false),
-        );
+        throw new Error("unsupported compatible scalar tracking-ref schema mismatch");
       }
       if (
         isCompatibleScalarPair(fieldInfo.typeId, fallbackTypeInfo.typeId)
@@ -836,9 +900,23 @@ export class ReadContext {
         && (fieldInfo.trackingRef === true
         || fallbackTypeInfo.trackingRef === true)
       ) {
-        return markCompatibleScalarSkipRead(
-          this.fieldInfoToTypeInfo(fieldInfo, undefined, false),
-        );
+        throw new Error("unsupported compatible scalar tracking-ref schema mismatch");
+      }
+      if (
+        this.hasUnsupportedListArrayMismatch(
+          fieldInfo,
+          fallbackTypeInfo,
+          topLevel,
+        )
+      ) {
+        throw new Error("unsupported compatible list/array schema mismatch");
+      }
+      if (
+        fieldInfo.typeId !== TypeId.UNKNOWN
+        && this.canonicalFieldTypeId(fallbackTypeInfo) !== TypeId.UNKNOWN
+        && fieldInfo.typeId !== this.canonicalFieldTypeId(fallbackTypeInfo)
+      ) {
+        throw new Error("unsupported compatible field schema mismatch");
       }
     }
     if (
@@ -1023,6 +1101,10 @@ export class ReadContext {
       entry = {
         localHash,
         localTypeInfo,
+        localTypeMetaBytes: TypeMeta.fromTypeInfo(
+          localTypeInfo,
+          this.typeResolver,
+        ).toBytes(),
         serializers: new Map(),
       };
       this.regeneratedReadSerializers.set(original, entry);
@@ -1070,18 +1152,22 @@ export class ReadContext {
     const props = Object.fromEntries(
       typeMeta.remapFieldNames(localProps).map((fieldInfo) => {
         const localFieldTypeInfo = localProps?.[fieldInfo.getFieldName()];
-        const fieldTypeInfo = this.fieldInfoToTypeInfo(
+        let fieldTypeInfo = this.fieldInfoToTypeInfo(
           fieldInfo,
           localFieldTypeInfo,
         )
           .setNullable(fieldInfo.nullable)
           .setTrackingRef(fieldInfo.trackingRef)
           .setId(fieldInfo.fieldId);
+        if (localFieldTypeInfo === undefined) {
+          fieldTypeInfo = markCompatibleSkipRead(fieldTypeInfo);
+        }
         return [fieldInfo.getFieldName(), fieldTypeInfo];
       }),
     );
     typeInfo.options = {
       ...typeInfo.options,
+      preserveFieldOrder: true,
       props,
     };
     const serializer = original

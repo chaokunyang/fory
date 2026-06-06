@@ -522,7 +522,11 @@ Object readGeneratedStructDirectValue(
     resolved = context.readTypeMetaValue(declared);
   }
   context.increaseDepth();
-  final value = resolved.structSerializer!.readValue(context, resolved);
+  final structSerializer = resolved.structSerializer!;
+  final value =
+      resolved.remoteTypeDef == null
+          ? structSerializer.readValue(context, resolved)
+          : structSerializer.readGeneratedCompatibleValue(context, resolved);
   context.decreaseDepth();
   return value;
 }

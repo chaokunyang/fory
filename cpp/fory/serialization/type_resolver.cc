@@ -697,7 +697,7 @@ TypeMeta::from_bytes(Buffer &buffer, const TypeMeta *local_type_info) {
 
   // Assign field IDs by comparing with local type
   if (local_type_info != nullptr) {
-    assign_field_ids(local_type_info, field_infos);
+    FORY_RETURN_IF_ERROR(assign_field_ids(local_type_info, field_infos));
   }
 
   size_t current_pos = buffer.reader_index();
@@ -1196,9 +1196,12 @@ TypeMeta::sort_field_infos(std::vector<FieldInfo> fields) {
 // Field ID Assignment (KEY FUNCTION for schema evolution!)
 // ============================================================================
 
-void TypeMeta::assign_field_ids(const TypeMeta *local_type,
-                                std::vector<FieldInfo> &remote_fields) {
+Result<void, Error>
+TypeMeta::assign_field_ids(const TypeMeta *local_type,
+                           std::vector<FieldInfo> &remote_fields) {
   const auto &local_fields = local_type->field_infos;
+  constexpr size_t max_compatible_matched_field_index =
+      (static_cast<size_t>(std::numeric_limits<int16_t>::max()) - 1) / 2;
 
   // Primary mapping: field name -> sorted index in local schema
   std::unordered_map<std::string, size_t> local_field_index_map;
@@ -1219,17 +1222,52 @@ void TypeMeta::assign_field_ids(const TypeMeta *local_type,
   // back to type-based matching.
   std::vector<bool> used(local_fields.size(), false);
 
-  // For each remote field, assign field ID (sorted index in local schema)
+  auto assign_matched_field = [&](FieldInfo &remote_field,
+                                  size_t local_index) -> Result<bool, Error> {
+    if (used[local_index]) {
+      return false;
+    }
+    const FieldInfo &local_field = local_fields[local_index];
+    if (local_field.field_type == remote_field.field_type) {
+      if (local_index > max_compatible_matched_field_index) {
+        return Unexpected(Error::type_error(
+            "Cannot assign compatible matched id for local field " +
+            local_field.field_name + ": local field index " +
+            std::to_string(local_index) + " exceeds max " +
+            std::to_string(max_compatible_matched_field_index)));
+      }
+      remote_field.field_id = static_cast<int16_t>(local_index * 2);
+      used[local_index] = true;
+      return true;
+    }
+    if (field_types_compatible_top_level(local_field.field_type,
+                                         remote_field.field_type)) {
+      if (local_index > max_compatible_matched_field_index) {
+        return Unexpected(Error::type_error(
+            "Cannot assign compatible matched id for local field " +
+            local_field.field_name + ": local field index " +
+            std::to_string(local_index) + " exceeds max " +
+            std::to_string(max_compatible_matched_field_index)));
+      }
+      remote_field.field_id = static_cast<int16_t>(local_index * 2 + 1);
+      used[local_index] = true;
+      return true;
+    }
+    return Unexpected(Error::type_error(
+        "Cannot read remote field " + remote_field.field_name +
+        " as local field " + local_field.field_name +
+        ": remote and local field schemas are not compatible"));
+  };
+
+  // For each remote field, assign doubled dispatch id in local schema.
   for (auto &remote_field : remote_fields) {
-    size_t local_index = static_cast<size_t>(-1);
+    bool matched = false;
 
     if (remote_field.field_id >= 0) {
       auto id_it = local_field_id_map.find(remote_field.field_id);
-      if (id_it != local_field_id_map.end() && !used[id_it->second] &&
-          field_types_compatible_top_level(
-              local_fields[id_it->second].field_type,
-              remote_field.field_type)) {
-        local_index = id_it->second;
+      if (id_it != local_field_id_map.end()) {
+        FORY_TRY(is_matched, assign_matched_field(remote_field, id_it->second));
+        matched = is_matched;
       }
     } else {
       // 1) Try exact name + type match first (fast path for same-language
@@ -1240,10 +1278,9 @@ void TypeMeta::assign_field_ids(const TypeMeta *local_type,
       if (it != local_field_index_map.end()) {
         size_t idx = it->second;
         const FieldInfo &local_field = local_fields[idx];
-        if (local_field.field_id < 0 &&
-            field_types_compatible_top_level(local_field.field_type,
-                                             remote_field.field_type)) {
-          local_index = idx;
+        if (local_field.field_id < 0) {
+          FORY_TRY(is_matched, assign_matched_field(remote_field, idx));
+          matched = is_matched;
         }
       }
 
@@ -1252,7 +1289,7 @@ void TypeMeta::assign_field_ids(const TypeMeta *local_type,
       //    within name-based fields so a mixed schema does not switch into a
       //    global tag-ID mode or bind an untagged field to a tagged local
       //    field.
-      if (local_index == static_cast<size_t>(-1)) {
+      if (!matched) {
         for (size_t i = 0; i < local_fields.size(); ++i) {
           if (used[i] || local_fields[i].field_id >= 0) {
             continue;
@@ -1262,21 +1299,20 @@ void TypeMeta::assign_field_ids(const TypeMeta *local_type,
           // already matches, otherwise unrelated fields can bind by value type.
           if (direct_field_types_compatible(local_fields[i].field_type,
                                             remote_field.field_type)) {
-            local_index = i;
+            FORY_TRY(is_matched, assign_matched_field(remote_field, i));
+            matched = is_matched;
             break;
           }
         }
       }
     }
 
-    if (local_index == static_cast<size_t>(-1)) {
+    if (!matched) {
       // No suitable local field found -> mark as skipped.
       remote_field.field_id = -1;
-    } else {
-      remote_field.field_id = static_cast<int16_t>(local_index);
-      used[local_index] = true;
     }
   }
+  return Result<void, Error>();
 }
 
 int64_t TypeMeta::compute_hash(const std::vector<uint8_t> &meta_bytes) {

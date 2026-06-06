@@ -625,58 +625,44 @@ describe("typemeta", () => {
     ).toEqual({ value: true });
   });
 
-  test("applies tracking-ref scalar rules", () => {
+  test("rejects tracking-ref scalar mismatches", () => {
     const writerFory = new Fory({ compatible: true, ref: true });
     const readerFory = new Fory({ compatible: true, ref: true });
     class RemoteScalars {
       flag = "true";
-      count = "1";
-      same = true;
-      remoteNullable = true;
-      localNullable = true;
-      bothNullable = true;
     }
     class LocalScalars {
       flag = false;
-      count = 0;
-      same = false;
-      remoteNullable = false;
-      localNullable = false;
-      bothNullable = false;
     }
     Type.struct(7254, {
       flag: Type.string().setId(1).setTrackingRef(true),
-      count: Type.string().setId(2),
-      same: Type.bool().setId(3).setTrackingRef(true),
-      remoteNullable: Type.bool()
-        .setId(4)
-        .setTrackingRef(true)
-        .setNullable(true),
-      localNullable: Type.bool().setId(5).setTrackingRef(true),
-      bothNullable: Type.bool().setId(6).setTrackingRef(true).setNullable(true),
     })(RemoteScalars);
     Type.struct(7254, {
       flag: Type.bool().setId(1),
-      count: Type.int32().setId(2).setTrackingRef(true),
-      same: Type.bool().setId(3).setTrackingRef(true),
-      remoteNullable: Type.bool().setId(4).setTrackingRef(true),
-      localNullable: Type.bool()
-        .setId(5)
-        .setTrackingRef(true)
-        .setNullable(true),
-      bothNullable: Type.bool().setId(6).setTrackingRef(true).setNullable(true),
     })(LocalScalars);
     const writer = writerFory.register(RemoteScalars);
     const reader = readerFory.register(LocalScalars);
 
-    const result = reader.deserialize(writer.serialize(new RemoteScalars()));
-    expect(result).toBeInstanceOf(LocalScalars);
-    expect(result.flag).toBe(false);
-    expect(result.count).toBe(0);
-    expect(result.same).toBe(true);
-    expect(result.remoteNullable).toBe(false);
-    expect(result.localNullable).toBe(false);
-    expect(result.bothNullable).toBe(true);
+    expect(() => reader.deserialize(writer.serialize(new RemoteScalars())))
+      .toThrow(/unsupported compatible scalar tracking-ref schema mismatch/);
+  });
+
+  test("rejects incompatible matched fields", () => {
+    const writerFory = new Fory({ compatible: true });
+    const readerFory = new Fory({ compatible: true });
+    const writer = writerFory.register(
+      Type.struct(7255, {
+        value: Type.string().setId(1),
+      }),
+    );
+    const reader = readerFory.register(
+      Type.struct(7255, {
+        value: Type.map(Type.string(), Type.int32()).setId(1),
+      }),
+    );
+
+    expect(() => reader.deserialize(writer.serialize({ value: "abc" })))
+      .toThrow(/unsupported compatible field schema mismatch/);
   });
 
   test("keeps nested scalars unconverted", () => {
@@ -888,7 +874,7 @@ describe("typemeta", () => {
     );
   });
 
-  test("keeps compatible named schema evolution working when field count differs", () => {
+  test("skips remote-only named compatible fields", () => {
     const writerFory = new Fory({ compatible: true });
     const readerFory = new Fory({ compatible: true });
 
@@ -908,8 +894,8 @@ describe("typemeta", () => {
 
     expect(result).toEqual({
       bar: "hello",
-      bar2: 123,
     });
+    expect((result as { bar2?: number }).bar2).toBeUndefined();
   });
 
   test("remaps regenerated compatible field names onto local snake_case properties", () => {
@@ -946,7 +932,7 @@ describe("typemeta", () => {
     expect(
       (result as ReaderHolder & { animalMap?: Map<string, number> }).animalMap,
     ).toBeUndefined();
-    expect((result as ReaderHolder & { marker?: number }).marker).toBe(99);
+    expect((result as ReaderHolder & { marker?: number }).marker).toBeUndefined();
   });
 
   test("skips unknown named custom fields by falling back to any when no local field exists", () => {

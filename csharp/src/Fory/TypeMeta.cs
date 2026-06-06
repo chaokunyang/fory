@@ -706,10 +706,11 @@ public sealed class TypeMeta : IEquatable<TypeMeta>
     }
 
     /// <summary>
-    /// Assigns local sorted field indexes for a remote compatible type meta.
+    /// Assigns doubled compatible dispatch ids for a remote compatible type meta.
     /// The result is written to each remote field's <see cref="TypeMetaFieldInfo.AssignedFieldId"/>:
-    /// - local sorted field index when a compatible local field is found
-    /// - -1 when no compatible local field is found and the field should be skipped
+    /// - local sorted field index * 2 when the matched field schema is exact
+    /// - local sorted field index * 2 + 1 when the matched field schema needs compatible conversion
+    /// - -1 when no local field identity is found and the field should be skipped
     /// </summary>
     public static void AssignFieldIds(
         TypeMeta remoteTypeMeta,
@@ -782,11 +783,21 @@ public sealed class TypeMeta : IEquatable<TypeMeta>
                 }
             }
 
-            if (localIndex >= 0 &&
-                localMatch is not null &&
-                IsCompatibleFieldType(remoteField.FieldType, localMatch.FieldType, topLevel: true))
+            if (localIndex >= 0 && localMatch is not null)
             {
-                remoteField.AssignedFieldId = localIndex;
+                if (remoteField.FieldType.Equals(localMatch.FieldType))
+                {
+                    remoteField.AssignedFieldId = localIndex * 2;
+                }
+                else if (IsCompatibleFieldType(remoteField.FieldType, localMatch.FieldType, topLevel: true))
+                {
+                    remoteField.AssignedFieldId = localIndex * 2 + 1;
+                }
+                else
+                {
+                    throw new InvalidDataException(
+                        $"compatible field {remoteField.FieldName} cannot be read as local field {localMatch.FieldName}: remote and local field schemas are not compatible");
+                }
             }
             else
             {

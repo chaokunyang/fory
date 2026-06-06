@@ -23,6 +23,6 @@ pub use meta_string::{
     FIELD_NAME_ENCODER, NAMESPACE_DECODER, NAMESPACE_ENCODER, TYPE_NAME_DECODER, TYPE_NAME_ENCODER,
 };
 pub use type_meta::{
-    compute_field_hash, compute_struct_hash, sort_fields, FieldInfo, FieldType, TypeMeta,
-    NAMESPACE_ENCODINGS, TYPE_NAME_ENCODINGS,
+    assign_remote_field_ids, compute_field_hash, compute_struct_hash, exact_field_type_match,
+    sort_fields, FieldInfo, FieldType, TypeMeta, NAMESPACE_ENCODINGS, TYPE_NAME_ENCODINGS,
 };

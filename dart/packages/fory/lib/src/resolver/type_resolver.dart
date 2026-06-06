@@ -787,15 +787,22 @@ final class TypeResolver {
       return null;
     }
     final marker = buffer.readVarUint32Small14();
-    if (marker != 0) {
-      bufferSetReaderIndex(buffer, start);
-      return null;
+    if ((marker & 1) == 1) {
+      return sharedTypes[marker >>> 1];
     }
     final header = TypeHeader(buffer.readInt64());
     final expectedTypeDef = expected.typeDef;
     if (expectedTypeDef == null || expectedTypeDef.header != header.value) {
-      bufferSetReaderIndex(buffer, start);
-      return null;
+      final cached = _parsedTypeMetaCache.lookup(header);
+      if (cached != null) {
+        header.skipRemaining(buffer);
+        sharedTypes.add(cached);
+        return cached;
+      }
+      final resolved = _readTypeDefWithHeader(buffer, header);
+      _parsedTypeMetaCache.remember(header, resolved);
+      sharedTypes.add(resolved);
+      return resolved;
     }
     header.skipRemaining(buffer);
     sharedTypes.add(expected);

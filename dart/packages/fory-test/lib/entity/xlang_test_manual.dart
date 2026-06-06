@@ -219,26 +219,55 @@ final class _RefOverrideContainerForySerializer
     CompatibleStructReadLayout layout,
   ) {
     final value = RefOverrideContainer();
+    final fields = _readFields(context);
     for (var index = 0; index < layout.fieldCount; index += 1) {
-      final field = layout.localFieldAt(index);
-      if (field == null) {
-        skipGeneratedCompatibleStructField(context, layout, index);
-        continue;
-      }
-      switch (field.index) {
+      switch (layout.matchedIdAt(index)) {
+        case -1:
+          skipGeneratedCompatibleStructField(context, layout, index);
+          break;
         case 0:
+          value.listField = _readRefOverrideContainerListField(
+            readGeneratedStructFieldInfoValue(
+              context,
+              fields[0],
+              value.listField,
+            ),
+            value.listField,
+          );
+          break;
+        case 1:
           value.listField = _readRefOverrideContainerListField(
             readGeneratedCompatibleStructField(context, layout, index),
             value.listField,
           );
           break;
-        case 1:
+        case 2:
+          value.mapField = _readRefOverrideContainerMapField(
+            readGeneratedStructFieldInfoValue(
+              context,
+              fields[1],
+              value.mapField,
+            ),
+            value.mapField,
+          );
+          break;
+        case 3:
           value.mapField = _readRefOverrideContainerMapField(
             readGeneratedCompatibleStructField(context, layout, index),
             value.mapField,
           );
           break;
-        case 2:
+        case 4:
+          value.setField = _readRefOverrideContainerSetField(
+            readGeneratedStructFieldInfoValue(
+              context,
+              fields[2],
+              value.setField,
+            ),
+            value.setField,
+          );
+          break;
+        case 5:
           value.setField = _readRefOverrideContainerSetField(
             readGeneratedCompatibleStructField(context, layout, index),
             value.setField,
@@ -246,7 +275,7 @@ final class _RefOverrideContainerForySerializer
           break;
         default:
           throw StateError(
-            'Compatible field index is out of range for RefOverrideContainer.',
+            'Compatible matched id is out of range for RefOverrideContainer.',
           );
       }
     }

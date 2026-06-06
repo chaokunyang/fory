@@ -1205,24 +1205,25 @@ void main() {
       expect(buffer.readableBytes, equals(0));
     });
 
-    test('rejects tracked scalar nullable framing mismatch', () {
+    test('rejects tracked scalar nullable framing mismatch during layout', () {
       expect(
-        _compatibleScalarRoundTrip<CompatibleScalarTrackingRefBoolEnvelope>(
-          CompatibleScalarOptionalTrackingRefBoolEnvelope,
-          CompatibleScalarTrackingRefBoolEnvelope,
-          CompatibleScalarOptionalTrackingRefBoolEnvelope()..value = true,
-        ).value,
-        isFalse,
+        () =>
+            _compatibleScalarRoundTrip<CompatibleScalarTrackingRefBoolEnvelope>(
+              CompatibleScalarOptionalTrackingRefBoolEnvelope,
+              CompatibleScalarTrackingRefBoolEnvelope,
+              CompatibleScalarOptionalTrackingRefBoolEnvelope()..value = true,
+            ),
+        throwsA(isA<StateError>()),
       );
       expect(
-        _compatibleScalarRoundTrip<
+        () => _compatibleScalarRoundTrip<
           CompatibleScalarOptionalTrackingRefBoolEnvelope
         >(
           CompatibleScalarTrackingRefBoolEnvelope,
           CompatibleScalarOptionalTrackingRefBoolEnvelope,
           CompatibleScalarTrackingRefBoolEnvelope()..value = true,
-        ).value,
-        isNull,
+        ),
+        throwsA(isA<StateError>()),
       );
       expect(
         _compatibleScalarRoundTrip<

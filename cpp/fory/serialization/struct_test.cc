@@ -35,6 +35,7 @@
 #include <algorithm>
 #include <cfloat>
 #include <climits>
+#include <limits>
 #include <map>
 #include <optional>
 #include <string>
@@ -1004,15 +1005,18 @@ TEST(StructComprehensiveTest,
       make_test_field_type(TypeId::MAP,
                            {make_test_field_type(TypeId::VAR_UINT32),
                             make_test_field_type(TypeId::VAR_UINT32)}))};
-  TypeMeta::assign_field_ids(&local_type, incompatible_remote);
-  EXPECT_EQ(incompatible_remote[0].field_id, -1);
+  auto incompatible_result =
+      TypeMeta::assign_field_ids(&local_type, incompatible_remote);
+  EXPECT_FALSE(incompatible_result.ok());
 
   std::vector<FieldInfo> compatible_remote = {make_test_field_info(
       "items", 7,
       make_test_field_type(TypeId::LIST,
                            {make_test_field_type(TypeId::UINT32)}))};
-  TypeMeta::assign_field_ids(&local_type, compatible_remote);
-  EXPECT_EQ(compatible_remote[0].field_id, 0);
+  auto compatible_result =
+      TypeMeta::assign_field_ids(&local_type, compatible_remote);
+  ASSERT_TRUE(compatible_result.ok());
+  EXPECT_EQ(compatible_remote[0].field_id, 1);
 
   TypeMeta name_mode_local;
   name_mode_local.field_infos = {make_test_field_info(
@@ -1023,14 +1027,15 @@ TEST(StructComprehensiveTest,
       "items", 7,
       make_test_field_type(TypeId::LIST,
                            {make_test_field_type(TypeId::UINT32)}))};
-  TypeMeta::assign_field_ids(&name_mode_local, mixed_mode_remote);
+  ASSERT_TRUE(
+      TypeMeta::assign_field_ids(&name_mode_local, mixed_mode_remote).ok());
   EXPECT_EQ(mixed_mode_remote[0].field_id, -1);
 
   std::vector<FieldInfo> name_remote = {make_test_field_info(
       "items", -1,
       make_test_field_type(TypeId::LIST,
                            {make_test_field_type(TypeId::UINT32)}))};
-  TypeMeta::assign_field_ids(&local_type, name_remote);
+  ASSERT_TRUE(TypeMeta::assign_field_ids(&local_type, name_remote).ok());
   EXPECT_EQ(name_remote[0].field_id, -1);
 
   TypeMeta mixed_local;
@@ -1042,15 +1047,39 @@ TEST(StructComprehensiveTest,
       make_test_field_info("alpha", -1, make_test_field_type(TypeId::BINARY)),
       make_test_field_info("tagged", 3, make_test_field_type(TypeId::STRING)),
       make_test_field_info("beta", -1, make_test_field_type(TypeId::VARINT32))};
-  TypeMeta::assign_field_ids(&mixed_local, mixed_remote);
-  EXPECT_EQ(mixed_remote[0].field_id, 1);
+  ASSERT_TRUE(TypeMeta::assign_field_ids(&mixed_local, mixed_remote).ok());
+  EXPECT_EQ(mixed_remote[0].field_id, 2);
   EXPECT_EQ(mixed_remote[1].field_id, 0);
-  EXPECT_EQ(mixed_remote[2].field_id, 2);
+  EXPECT_EQ(mixed_remote[2].field_id, 4);
 
   std::vector<FieldInfo> untagged_remote_for_tagged_local = {
       make_test_field_info("tagged", -1, make_test_field_type(TypeId::STRING))};
-  TypeMeta::assign_field_ids(&mixed_local, untagged_remote_for_tagged_local);
+  ASSERT_TRUE(
+      TypeMeta::assign_field_ids(&mixed_local, untagged_remote_for_tagged_local)
+          .ok());
   EXPECT_EQ(untagged_remote_for_tagged_local[0].field_id, -1);
+}
+
+TEST(StructComprehensiveTest, AssignFieldIdsRejectsMatchedIdOverflow) {
+  constexpr size_t max_compatible_matched_field_index =
+      (static_cast<size_t>(std::numeric_limits<int16_t>::max()) - 1) / 2;
+  const FieldType field_type = make_test_field_type(TypeId::INT32);
+
+  TypeMeta local_type;
+  local_type.field_infos.reserve(max_compatible_matched_field_index + 2);
+  for (size_t index = 0; index <= max_compatible_matched_field_index + 1;
+       ++index) {
+    local_type.field_infos.push_back(
+        make_test_field_info("field_" + std::to_string(index), -1, field_type));
+  }
+
+  std::vector<FieldInfo> remote_fields = {make_test_field_info(
+      "field_" + std::to_string(max_compatible_matched_field_index + 1), -1,
+      field_type)};
+  auto result = TypeMeta::assign_field_ids(&local_type, remote_fields);
+
+  ASSERT_FALSE(result.ok());
+  EXPECT_NE(result.error().message().find("exceeds max"), std::string::npos);
 }
 
 TEST(StructComprehensiveTest, OptionalFieldsAllEmpty) {

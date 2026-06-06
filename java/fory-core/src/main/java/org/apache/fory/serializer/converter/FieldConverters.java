@@ -292,6 +292,138 @@ public class FieldConverters {
         readContext, from, from.refMode, from.dispatchId, from.type, false, to.qualifiedFieldName);
   }
 
+  @Internal
+  public static boolean readBooleanTarget(
+      ReadContext readContext, SerializationFieldInfo from, SerializationFieldInfo to) {
+    return CompatibleScalarConverter.readBooleanTarget(readContext, from, to);
+  }
+
+  @Internal
+  public static Boolean readBoxedBooleanTarget(
+      ReadContext readContext, SerializationFieldInfo from, SerializationFieldInfo to) {
+    return CompatibleScalarConverter.readBoxedBooleanTarget(readContext, from, to);
+  }
+
+  @Internal
+  public static byte readByteTarget(
+      ReadContext readContext, SerializationFieldInfo from, SerializationFieldInfo to) {
+    return CompatibleScalarConverter.readByteTarget(readContext, from, to);
+  }
+
+  @Internal
+  public static Byte readBoxedByteTarget(
+      ReadContext readContext, SerializationFieldInfo from, SerializationFieldInfo to) {
+    return CompatibleScalarConverter.readBoxedByteTarget(readContext, from, to);
+  }
+
+  @Internal
+  public static short readShortTarget(
+      ReadContext readContext, SerializationFieldInfo from, SerializationFieldInfo to) {
+    return CompatibleScalarConverter.readShortTarget(readContext, from, to);
+  }
+
+  @Internal
+  public static Short readBoxedShortTarget(
+      ReadContext readContext, SerializationFieldInfo from, SerializationFieldInfo to) {
+    return CompatibleScalarConverter.readBoxedShortTarget(readContext, from, to);
+  }
+
+  @Internal
+  public static int readIntTarget(
+      ReadContext readContext, SerializationFieldInfo from, SerializationFieldInfo to) {
+    return CompatibleScalarConverter.readIntTarget(readContext, from, to);
+  }
+
+  @Internal
+  public static Integer readBoxedIntTarget(
+      ReadContext readContext, SerializationFieldInfo from, SerializationFieldInfo to) {
+    return CompatibleScalarConverter.readBoxedIntTarget(readContext, from, to);
+  }
+
+  @Internal
+  public static long readLongTarget(
+      ReadContext readContext, SerializationFieldInfo from, SerializationFieldInfo to) {
+    return CompatibleScalarConverter.readLongTarget(readContext, from, to);
+  }
+
+  @Internal
+  public static Long readBoxedLongTarget(
+      ReadContext readContext, SerializationFieldInfo from, SerializationFieldInfo to) {
+    return CompatibleScalarConverter.readBoxedLongTarget(readContext, from, to);
+  }
+
+  @Internal
+  public static float readFloatTarget(
+      ReadContext readContext, SerializationFieldInfo from, SerializationFieldInfo to) {
+    return CompatibleScalarConverter.readFloatTarget(readContext, from, to);
+  }
+
+  @Internal
+  public static Float readBoxedFloatTarget(
+      ReadContext readContext, SerializationFieldInfo from, SerializationFieldInfo to) {
+    return CompatibleScalarConverter.readBoxedFloatTarget(readContext, from, to);
+  }
+
+  @Internal
+  public static double readDoubleTarget(
+      ReadContext readContext, SerializationFieldInfo from, SerializationFieldInfo to) {
+    return CompatibleScalarConverter.readDoubleTarget(readContext, from, to);
+  }
+
+  @Internal
+  public static Double readBoxedDoubleTarget(
+      ReadContext readContext, SerializationFieldInfo from, SerializationFieldInfo to) {
+    return CompatibleScalarConverter.readBoxedDoubleTarget(readContext, from, to);
+  }
+
+  @Internal
+  public static String readStringTarget(
+      ReadContext readContext, SerializationFieldInfo from, SerializationFieldInfo to) {
+    return CompatibleScalarConverter.readStringTarget(readContext, from, to);
+  }
+
+  @Internal
+  public static BigDecimal readDecimalTarget(
+      ReadContext readContext, SerializationFieldInfo from, SerializationFieldInfo to) {
+    return CompatibleScalarConverter.readDecimalTarget(readContext, from, to);
+  }
+
+  @Internal
+  public static UInt8 readUInt8Target(
+      ReadContext readContext, SerializationFieldInfo from, SerializationFieldInfo to) {
+    return CompatibleScalarConverter.readUInt8Target(readContext, from, to);
+  }
+
+  @Internal
+  public static UInt16 readUInt16Target(
+      ReadContext readContext, SerializationFieldInfo from, SerializationFieldInfo to) {
+    return CompatibleScalarConverter.readUInt16Target(readContext, from, to);
+  }
+
+  @Internal
+  public static UInt32 readUInt32Target(
+      ReadContext readContext, SerializationFieldInfo from, SerializationFieldInfo to) {
+    return CompatibleScalarConverter.readUInt32Target(readContext, from, to);
+  }
+
+  @Internal
+  public static UInt64 readUInt64Target(
+      ReadContext readContext, SerializationFieldInfo from, SerializationFieldInfo to) {
+    return CompatibleScalarConverter.readUInt64Target(readContext, from, to);
+  }
+
+  @Internal
+  public static Float16 readFloat16Target(
+      ReadContext readContext, SerializationFieldInfo from, SerializationFieldInfo to) {
+    return CompatibleScalarConverter.readFloat16Target(readContext, from, to);
+  }
+
+  @Internal
+  public static BFloat16 readBFloat16Target(
+      ReadContext readContext, SerializationFieldInfo from, SerializationFieldInfo to) {
+    return CompatibleScalarConverter.readBFloat16Target(readContext, from, to);
+  }
+
   /** Reads a remote scalar conversion source value for an existing field converter. */
   @Internal
   public static Object readSourceScalar(

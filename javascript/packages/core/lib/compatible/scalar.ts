@@ -39,7 +39,6 @@ type DecimalParts = {
 };
 
 const scalarReadActions = new WeakMap<TypeInfo, CompatibleScalarReadAction>();
-const scalarSkipActions = new WeakSet<TypeInfo>();
 
 const float32Array = new Float32Array(1);
 const float64Buffer = new ArrayBuffer(8);
@@ -74,15 +73,6 @@ export function getCompatibleScalarReadAction(
   typeInfo: TypeInfo,
 ): CompatibleScalarReadAction | undefined {
   return scalarReadActions.get(typeInfo);
-}
-
-export function markCompatibleScalarSkipRead(typeInfo: TypeInfo): TypeInfo {
-  scalarSkipActions.add(typeInfo);
-  return typeInfo;
-}
-
-export function shouldSkipCompatibleScalarRead(typeInfo: TypeInfo): boolean {
-  return scalarSkipActions.has(typeInfo);
 }
 
 export function isCompatibleScalarType(typeId: number): boolean {

@@ -183,7 +183,7 @@ private func buildClassReadCompatibleDataDecl(
       || compatibleCases.contains("__buffer")) ? "let __buffer = context.buffer\n        " : ""
 
   return """
-    @inline(__always)
+    @inline(never)
     private static func __foryReadCompatibleDataImpl(
         _ context: ReadContext,
         remoteTypeInfo: TypeInfo,
@@ -209,14 +209,16 @@ private func buildClassReadCompatibleDataDecl(
         for remoteField in typeMeta.fields {
             switch Int(remoteField.fieldID ?? -1) {
         \(compatibleCases)
-            default:
+            case -1:
                 try context.skipFieldValue(remoteField.fieldType)
+            default:
+                throw ForyError.invalidData("invalid compatible matched id \\(remoteField.fieldID ?? -2)")
             }
         }
         return value
     }
 
-    @inline(__always)
+    @inline(never)
     \(accessPrefix)static func foryReadCompatibleData(_ context: ReadContext, remoteTypeInfo: TypeInfo) throws -> Self {
         try Self.__foryReadCompatibleDataImpl(context, remoteTypeInfo: remoteTypeInfo, reservedRefID: nil)
     }
@@ -225,7 +227,7 @@ private func buildClassReadCompatibleDataDecl(
 
 private func buildEmptyStructReadCompatibleDataDecl(accessPrefix: String) -> String {
   """
-  @inline(__always)
+  @inline(never)
   \(accessPrefix)static func foryReadCompatibleData(_ context: ReadContext, remoteTypeInfo: TypeInfo) throws -> Self {
       guard let typeMeta = remoteTypeInfo.compatibleTypeMeta else {
           throw ForyError.invalidData("compatible type metadata is required")
@@ -266,16 +268,43 @@ private func buildStructReadCompatibleDataDecl(
   ) { sortedIndex, field, valueExpr in
     "case \(sortedIndex): __\(field.name) = \(valueExpr)"
   }
+  let changedFallbackDecl = buildStructChangedFallbackDecl(
+    defaults: compatibleDefaults,
+    cases: compatibleCases,
+    ctorArgs: ctorArgs,
+    sortedFields: sortedFields
+  )
+  let sequentialLeadingCompatBody = buildSequentialCompatStructBody(
+    fields: fields,
+    sortedFields: sortedFields,
+    defaults: compatibleDefaults,
+    declareIndex: true,
+    includeExact: false,
+    includeLeadingCompat: true
+  )
+  let sequentialCompatBody = buildSequentialCompatStructBody(
+    fields: fields,
+    sortedFields: sortedFields,
+    defaults: compatibleDefaults,
+    declareIndex: false,
+    includeExact: true,
+    includeLeadingCompat: false
+  )
   let bufferBinding =
     (schemaReadBody.contains("__buffer") || compatibleAlignedReadBody.contains("__buffer")
-      || compatibleCases.contains("__buffer")) ? "let __buffer = context.buffer\n        " : ""
+      || sequentialLeadingCompatBody.contains("__buffer")
+      || sequentialCompatBody.contains("__buffer"))
+    ? "let __buffer = context.buffer\n        " : ""
 
   return """
-    @inline(__always)
+    \(changedFallbackDecl)
+
+    @inline(never)
     \(accessPrefix)static func foryReadCompatibleData(_ context: ReadContext, remoteTypeInfo: TypeInfo) throws -> Self {
         \(bufferBinding)guard let typeMeta = remoteTypeInfo.compatibleTypeMeta else {
             throw ForyError.invalidData("compatible type metadata is required")
         }
+        \(sequentialLeadingCompatBody)
         if let localHeaderHash = remoteTypeInfo.typeDefHeaderHash,
            typeMeta.headerHash == localHeaderHash,
            typeMeta.fields == Self.foryFieldsInfo(trackRef: context.trackRef) {
@@ -290,19 +319,177 @@ private func buildStructReadCompatibleDataDecl(
                 \(ctorArgs)
             )
         }
-        \(compatibleDefaults)
-        for remoteField in typeMeta.fields {
-            switch Int(remoteField.fieldID ?? -1) {
-            \(compatibleCases)
-            default:
-                try context.skipFieldValue(remoteField.fieldType)
-            }
-        }
-        return Self(
-            \(ctorArgs)
-        )
+        \(sequentialCompatBody)
+        return try Self.__foryReadChangedData(context, typeMeta: typeMeta)
     }
     """
+}
+
+private func buildStructChangedFallbackDecl(
+  defaults: String,
+  cases: String,
+  ctorArgs: String,
+  sortedFields: [ParsedField]
+) -> String {
+  let remoteOrderFastPaths = buildRemoteOrderSingleCompatStructPaths(
+    sortedFields: sortedFields,
+    ctorArgs: ctorArgs
+  )
+  let bufferBinding =
+    (cases.contains("__buffer") || remoteOrderFastPaths.contains("__buffer"))
+    ? "let __buffer = context.buffer\n        " : ""
+  return """
+      @inline(never)
+      private static func __foryReadChangedData(_ context: ReadContext, typeMeta: TypeMeta) throws -> Self {
+          \(bufferBinding)\(defaults)
+          \(remoteOrderFastPaths)
+          for remoteField in typeMeta.fields {
+              switch Int(remoteField.fieldID ?? -1) {
+              \(cases)
+              case -1:
+                  try context.skipFieldValue(remoteField.fieldType)
+              default:
+                  throw ForyError.invalidData("invalid compatible matched id \\(remoteField.fieldID ?? -2)")
+              }
+          }
+          return Self(
+              \(ctorArgs)
+          )
+      }
+    """
+}
+
+private func buildRemoteOrderSingleCompatStructPaths(
+  sortedFields: [ParsedField],
+  ctorArgs: String
+) -> String {
+  var sections: [String] = []
+  for compatibleIndex in sortedFields.indices {
+    let compatibleField = sortedFields[compatibleIndex]
+    guard remoteOrderSingleCompatEligible(compatibleField) else {
+      continue
+    }
+    let remoteOrder = remoteOrderSingleVarint32(sortedFields, compatibleIndex: compatibleIndex)
+    guard !remoteOrder.isEmpty,
+      !remoteOrder.enumerated().allSatisfy({ $0.offset == $0.element })
+    else {
+      continue
+    }
+    let matchedIDs = remoteOrder.map { localIndex in
+      localIndex * 2 + (localIndex == compatibleIndex ? 1 : 0)
+    }
+    let conditions = matchedIDs.enumerated()
+      .map { index, matchedID in
+        "Int(typeMeta.fields[\(index)].fieldID ?? -2) == \(matchedID)"
+      }
+      .joined(separator: " &&\n           ")
+    let readBody = remoteOrder.map { localIndex in
+      let field = sortedFields[localIndex]
+      if localIndex == compatibleIndex {
+        return "__\(field.name) = Int64(try __buffer.readVarInt32())"
+      }
+      return "__\(field.name) = \(compatibleSchemaReadFieldExpr(field))"
+    }.joined(separator: "\n            ")
+    sections.append(
+      """
+      if typeMeta.fields.count == \(sortedFields.count) &&
+         \(conditions) {
+          \(readBody)
+          return Self(
+              \(ctorArgs)
+          )
+      }
+      """)
+  }
+  return sections.joined(separator: "\n        ")
+}
+
+private func remoteOrderSingleCompatEligible(_ field: ParsedField) -> Bool {
+  !field.isOptional && field.dynamicAnyCodec == nil && field.customCodecType == nil
+    && compatibleScalarPayloadType(field.typeText) == "Int64"
+}
+
+private struct RemoteOrderSortField {
+  let field: ParsedField
+  let localIndex: Int
+  let group: Int
+  let typeID: UInt32
+  let isCompressedNumeric: Bool
+  let primitiveSize: Int
+}
+
+private func remoteOrderSingleVarint32(
+  _ sortedFields: [ParsedField],
+  compatibleIndex: Int
+) -> [Int] {
+  let fields = sortedFields.enumerated().map { index, field in
+    if index == compatibleIndex {
+      return RemoteOrderSortField(
+        field: field,
+        localIndex: index,
+        group: field.group,
+        typeID: 5,
+        isCompressedNumeric: true,
+        primitiveSize: 4
+      )
+    }
+    return RemoteOrderSortField(
+      field: field,
+      localIndex: index,
+      group: field.group,
+      typeID: field.typeID,
+      isCompressedNumeric: field.isCompressedNumeric,
+      primitiveSize: field.primitiveSize
+    )
+  }
+  return fields.sorted(by: remoteOrderSortLess).map(\.localIndex)
+}
+
+private func remoteOrderSortLess(
+  _ lhs: RemoteOrderSortField,
+  _ rhs: RemoteOrderSortField
+) -> Bool {
+  if lhs.group != rhs.group {
+    return lhs.group < rhs.group
+  }
+  switch lhs.group {
+  case 1, 2:
+    let lhsCompressed = lhs.isCompressedNumeric ? 1 : 0
+    let rhsCompressed = rhs.isCompressedNumeric ? 1 : 0
+    if lhsCompressed != rhsCompressed {
+      return lhsCompressed < rhsCompressed
+    }
+    if lhs.primitiveSize != rhs.primitiveSize {
+      return lhs.primitiveSize > rhs.primitiveSize
+    }
+    if lhs.typeID != rhs.typeID {
+      return lhs.typeID < rhs.typeID
+    }
+    if let identifierOrder = remoteOrderIdentifierLess(lhs.field, rhs.field) {
+      return identifierOrder
+    }
+  default:
+    if let identifierOrder = remoteOrderIdentifierLess(lhs.field, rhs.field) {
+      return identifierOrder
+    }
+  }
+  return lhs.field.name < rhs.field.name
+}
+
+private func remoteOrderIdentifierLess(_ lhs: ParsedField, _ rhs: ParsedField) -> Bool? {
+  if let lhsID = lhs.fieldID, let rhsID = rhs.fieldID, lhsID != rhsID {
+    return lhsID < rhsID
+  }
+  if lhs.fieldID != nil && rhs.fieldID == nil {
+    return true
+  }
+  if lhs.fieldID == nil && rhs.fieldID != nil {
+    return false
+  }
+  if lhs.fieldIdentifier != rhs.fieldIdentifier {
+    return lhs.fieldIdentifier < rhs.fieldIdentifier
+  }
+  return nil
 }
 
 private func buildClassAssignBody(
@@ -377,6 +564,237 @@ private func buildStructCompatibleDefaults(_ fields: [ParsedField]) -> String {
     .joined(separator: "\n                ")
 }
 
+private func buildSequentialCompatStructBody(
+  fields: [ParsedField],
+  sortedFields: [ParsedField],
+  defaults: String,
+  declareIndex: Bool = true,
+  includeExact: Bool = true,
+  includeLeadingCompat: Bool = true
+) -> String {
+  let ctorArgs = buildCtorArgs(fields)
+  let exactAssignBody = buildSequentialExactAssignBody(sortedFields)
+  let leadingCompatBody =
+    sortedFields.first.map { compatibleField in
+      buildSequentialSingleCompatAssignBody(
+        sortedFields: sortedFields,
+        compatibleIndex: 0,
+        compatibleField: compatibleField
+      )
+    } ?? ""
+
+  var sections: [String] = []
+  if declareIndex {
+    sections.append("let __compatibleIndex = remoteTypeInfo.compatibleSequentialReadPlan")
+  }
+  if includeExact {
+    sections.append(
+      """
+          if __compatibleIndex == -1 {
+              \(defaults)
+              \(exactAssignBody)
+              return Self(
+                  \(ctorArgs)
+              )
+          }
+      """)
+  }
+  if includeLeadingCompat {
+    sections.append(
+      """
+          if __compatibleIndex == 0 {
+              \(defaults)
+              \(leadingCompatBody)
+              return Self(
+                  \(ctorArgs)
+              )
+          }
+      """)
+  }
+  return sections.joined(separator: "\n          ")
+}
+
+private func buildSequentialExactAssignBody(_ fields: [ParsedField]) -> String {
+  buildSequentialExactAssignBody(fields, excludingIndex: -1)
+}
+
+private func buildSequentialSingleCompatAssignBody(
+  sortedFields: [ParsedField],
+  compatibleIndex: Int,
+  compatibleField: ParsedField
+) -> String {
+  let compatibleValueExpr = readFieldExpr(
+    compatibleField,
+    refModeExpr:
+      "RefMode.from(nullable: remoteField.fieldType.nullable, trackRef: remoteField.fieldType.trackRef)",
+    readTypeInfoExpr:
+      "TypeId.needsTypeInfoForField(TypeId(rawValue: remoteField.fieldType.typeID) ?? .unknown)"
+  )
+  let valueExpr = compatibleScalarReadExpr(
+    compatibleField,
+    compatibleValueExpr: compatibleValueExpr
+  )
+  if let fastBody = leadingCompatInt64Body(
+    sortedFields: sortedFields,
+    compatibleIndex: compatibleIndex,
+    compatibleField: compatibleField,
+    fallbackExpr: valueExpr
+  ) {
+    return fastBody
+  }
+  let compatibleAssign =
+    compatScalarAssignBody(
+      field: compatibleField,
+      fieldIndex: compatibleIndex,
+      fallbackExpr: valueExpr
+    )
+      ?? """
+      let remoteField = typeMeta.fields[\(compatibleIndex)]
+                      __\(compatibleField.name) = \(valueExpr)
+      """
+  var sections: [String] = []
+  let prefixFields = Array(sortedFields.prefix(compatibleIndex))
+  if !prefixFields.isEmpty {
+    sections.append(buildSequentialExactAssignBody(prefixFields))
+  }
+  sections.append(compatibleAssign)
+  let suffixFields = Array(sortedFields.dropFirst(compatibleIndex + 1))
+  if !suffixFields.isEmpty {
+    sections.append(buildSequentialExactAssignBody(suffixFields))
+  }
+  return sections.joined(separator: "\n                    ")
+}
+
+private func leadingCompatInt64Body(
+  sortedFields: [ParsedField],
+  compatibleIndex: Int,
+  compatibleField: ParsedField,
+  fallbackExpr: String
+) -> String? {
+  guard
+    compatibleIndex == 0,
+    !compatibleField.isOptional,
+    compatibleField.dynamicAnyCodec == nil,
+    compatibleField.customCodecType == nil,
+    compatibleScalarPayloadType(compatibleField.typeText) == "Int64"
+  else {
+    return nil
+  }
+  let suffixFields = Array(sortedFields.dropFirst())
+  guard leadingPrimitiveFastPathFields(suffixFields).count == suffixFields.count else {
+    return nil
+  }
+  guard
+    let fastReadBlock = compatInt64Varint32Block(
+      compatibleField: compatibleField,
+      suffixFields: suffixFields
+    )
+  else {
+    return nil
+  }
+  let fallbackSuffix = buildSequentialExactAssignBody(suffixFields)
+  return """
+    let remoteField = typeMeta.fields[0]
+                    if !remoteField.fieldType.nullable && !remoteField.fieldType.trackRef
+                        && remoteField.fieldType.typeID == TypeId.varint32.rawValue {
+                        \(fastReadBlock)
+                    } else {
+                        __\(compatibleField.name) = \(fallbackExpr)
+                        \(fallbackSuffix)
+                    }
+    """
+}
+
+private func compatInt64Varint32Block(
+  compatibleField: ParsedField,
+  suffixFields: [ParsedField]
+) -> String? {
+  var readLines = [
+    "__\(compatibleField.name) = Int64(try UnsafeUtil.readInt32(from: __base, length: __length, index: &__readerIndex))"
+  ]
+  for field in suffixFields {
+    guard let readExpr = primitiveUnsafePointerReadAdvanceExpr(for: field) else {
+      return nil
+    }
+    readLines.append("__\(field.name) = \(readExpr)")
+  }
+  let readBody = readLines.joined(separator: "\n            ")
+  return """
+    try UnsafeUtil.readRegion(buffer: __buffer) { __base, __length in
+        var __readerIndex = 0
+        \(readBody)
+        return __readerIndex
+    }
+    """
+}
+
+private func compatScalarAssignBody(
+  field: ParsedField,
+  fieldIndex: Int,
+  fallbackExpr: String
+) -> String? {
+  guard
+    !field.isOptional,
+    field.dynamicAnyCodec == nil,
+    field.customCodecType == nil,
+    compatibleScalarPayloadType(field.typeText) == "Int64"
+  else {
+    return nil
+  }
+  return """
+    let remoteField = typeMeta.fields[\(fieldIndex)]
+                    if !remoteField.fieldType.nullable && !remoteField.fieldType.trackRef {
+                        switch TypeId(rawValue: remoteField.fieldType.typeID) ?? .unknown {
+                        case .int8:
+                            __\(field.name) = Int64(try __buffer.readInt8())
+                        case .int16:
+                            __\(field.name) = Int64(try __buffer.readInt16())
+                        case .int32:
+                            __\(field.name) = Int64(try __buffer.readInt32())
+                        case .varint32:
+                            __\(field.name) = Int64(try __buffer.readVarInt32())
+                        case .int64:
+                            __\(field.name) = try __buffer.readInt64()
+                        case .varint64:
+                            __\(field.name) = try __buffer.readVarInt64()
+                        case .taggedInt64:
+                            __\(field.name) = try __buffer.readTaggedInt64()
+                        default:
+                            __\(field.name) = \(fallbackExpr)
+                        }
+                    } else {
+                        __\(field.name) = \(fallbackExpr)
+                    }
+    """
+}
+
+private func buildSequentialExactAssignBody(
+  _ fields: [ParsedField],
+  excludingIndex: Int
+) -> String {
+  var sections: [String] = []
+  var index = 0
+  while index < fields.count {
+    if index == excludingIndex {
+      index += 1
+      continue
+    }
+    let remaining = Array(fields.dropFirst(index))
+    let primitiveFields = leadingPrimitiveFastPathFields(remaining)
+    if !primitiveFields.isEmpty {
+      if let primitiveReadBlock = buildPrimitiveFastStructReadBlock(primitiveFields) {
+        sections.append(primitiveReadBlock)
+      }
+      index += primitiveFields.count
+      continue
+    }
+    let field = fields[index]
+    sections.append("__\(field.name) = \(compatibleSchemaReadFieldExpr(field))")
+    index += 1
+  }
+  return sections.joined(separator: "\n                    ")
+}
+
 private func schemaHashCheckExpr(indent: String = "        ") -> String {
   """
   \(indent)if context.checkClassVersion {
@@ -395,62 +813,102 @@ private func buildCompatibleReadCases(
   assignCase: (Int, ParsedField, String) -> String
 ) -> String {
   sortedFields.enumerated().map { sortedIndex, field -> String in
-    let directValueExpr = readFieldExpr(
+    let directValueExpr = compatibleSchemaReadFieldExpr(field)
+    let compatibleValueExpr = readFieldExpr(
       field,
       refModeExpr:
         "RefMode.from(nullable: remoteField.fieldType.nullable, trackRef: remoteField.fieldType.trackRef)",
       readTypeInfoExpr:
         "TypeId.needsTypeInfoForField(TypeId(rawValue: remoteField.fieldType.typeID) ?? .unknown)"
     )
-    let valueExpr = compatibleScalarReadExpr(field, directValueExpr: directValueExpr)
-    return assignCase(sortedIndex, field, valueExpr)
+    let compatibleCaseExpr = compatibleScalarReadExpr(
+      field,
+      compatibleValueExpr: compatibleValueExpr
+    )
+    return [
+      assignCase(sortedIndex * 2, field, directValueExpr),
+      assignCase(sortedIndex * 2 + 1, field, compatibleCaseExpr),
+    ].joined(separator: "\n\(indent)")
   }.joined(separator: "\n\(indent)")
 }
 
-private func compatibleScalarReadExpr(_ field: ParsedField, directValueExpr: String) -> String {
-  guard field.dynamicAnyCodec == nil, compatibleScalarTypeID(field.typeID) else {
-    return directValueExpr
+private func compatibleScalarReadExpr(_ field: ParsedField, compatibleValueExpr: String) -> String {
+  guard
+    field.dynamicAnyCodec == nil,
+    let helperTarget = compatibleScalarReaderTarget(field)
+  else {
+    return compatibleValueExpr
   }
   let fieldName = swiftStringLiteral(field.schemaIdentifier)
-  let localRefModeExpr = fieldRefModeExpression(field)
-  if field.isOptional {
-    return """
-      try {
-          let __localRefMode = \(localRefModeExpr)
-          if remoteField.fieldType.typeID == \(field.typeID) &&
-              RefMode.from(nullable: remoteField.fieldType.nullable, trackRef: remoteField.fieldType.trackRef) == __localRefMode {
-              return \(directValueExpr)
-          }
-          return try foryReadCompatibleOptionalScalarField(
-              context,
-              remoteFieldType: remoteField.fieldType,
-              localTypeID: \(field.typeID),
-              fieldName: \(fieldName),
-              directRead: {
-                  \(directValueExpr)
-              }
-          )
-      }()
-      """
-  }
+  let helperName =
+    field.isOptional
+    ? "foryReadCompatibleOptional\(helperTarget)Field"
+    : "foryReadCompatible\(helperTarget)Field"
   return """
-    try {
-        let __localRefMode = \(localRefModeExpr)
-        if remoteField.fieldType.typeID == \(field.typeID) &&
-            RefMode.from(nullable: remoteField.fieldType.nullable, trackRef: remoteField.fieldType.trackRef) == __localRefMode {
-            return \(directValueExpr)
-        }
-        return try foryReadCompatibleScalarField(
-            context,
-            remoteFieldType: remoteField.fieldType,
-            localTypeID: \(field.typeID),
-            fieldName: \(fieldName),
-            directRead: {
-                \(directValueExpr)
-            }
-        )
-    }()
+    try \(helperName)(
+        context,
+        remoteFieldType: remoteField.fieldType,
+        localTypeID: \(field.typeID),
+        fieldName: \(fieldName)
+    )
     """
+}
+
+private func compatibleScalarReaderTarget(_ field: ParsedField) -> String? {
+  guard compatibleScalarTypeID(field.typeID) else {
+    return nil
+  }
+  switch compatibleScalarPayloadType(field.typeText) {
+  case "Bool":
+    return "Bool"
+  case "Int8":
+    return "Int8"
+  case "Int16":
+    return "Int16"
+  case "Int32":
+    return "Int32"
+  case "Int64":
+    return "Int64"
+  case "Int":
+    return "Int"
+  case "UInt8":
+    return "UInt8"
+  case "UInt16":
+    return "UInt16"
+  case "UInt32":
+    return "UInt32"
+  case "UInt64":
+    return "UInt64"
+  case "UInt":
+    return "UInt"
+  case "Float16":
+    return "Float16"
+  case "BFloat16":
+    return "BFloat16"
+  case "Float":
+    return "Float"
+  case "Double":
+    return "Double"
+  case "String":
+    return "String"
+  case "Decimal":
+    return "Decimal"
+  default:
+    return nil
+  }
+}
+
+private func compatibleScalarPayloadType(_ typeText: String) -> String {
+  var type = trimType(typeText)
+  if type.hasSuffix("?") {
+    type.removeLast()
+  } else if type.hasPrefix("Optional<"), type.hasSuffix(">") {
+    type = String(type.dropFirst("Optional<".count).dropLast())
+  }
+  for prefix in ["Swift.", "Foundation.", "Fory."] where type.hasPrefix(prefix) {
+    return String(type.dropFirst(prefix.count))
+  }
+  return type
 }
 
 private func compatibleScalarTypeID(_ typeID: UInt32) -> Bool {

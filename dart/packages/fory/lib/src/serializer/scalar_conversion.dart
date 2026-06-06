@@ -162,6 +162,122 @@ Object? readCompatibleScalarField(
   }
 }
 
+@pragma('vm:prefer-inline')
+int readCompatibleInt64ScalarFieldAsInt(
+  ReadContext context,
+  CompatibleScalarConversion conversion, [
+  int? fallback,
+]) {
+  final fieldType = conversion.remoteField.fieldType;
+  if (isDirectCompatInt64Payload(fieldType.typeId)) {
+    return readCompatInt64PayloadAsInt(
+      context,
+      fieldType.typeId,
+      fieldType.nullable,
+      fallback,
+    );
+  }
+  final value = readCompatibleScalarField(context, conversion);
+  if (value == null) {
+    if (fallback != null) {
+      return fallback;
+    }
+    throw InvalidDataException(
+      'Received null for non-nullable compatible scalar field.',
+    );
+  }
+  return value as int;
+}
+
+@pragma('vm:prefer-inline')
+bool isDirectCompatInt64Payload(int remoteTypeId) {
+  switch (remoteTypeId) {
+    case TypeIds.boolType:
+    case TypeIds.int8:
+    case TypeIds.int16:
+    case TypeIds.int32:
+    case TypeIds.varInt32:
+    case TypeIds.int64:
+    case TypeIds.varInt64:
+    case TypeIds.taggedInt64:
+    case TypeIds.uint8:
+    case TypeIds.uint16:
+    case TypeIds.uint32:
+    case TypeIds.varUint32:
+    case TypeIds.uint64:
+    case TypeIds.varUint64:
+    case TypeIds.taggedUint64:
+      return true;
+    default:
+      return false;
+  }
+}
+
+@pragma('vm:prefer-inline')
+int readCompatInt64PayloadAsInt(
+  ReadContext context,
+  int remoteTypeId,
+  bool remoteNullable, [
+  int? fallback,
+]) {
+  if (remoteNullable) {
+    final flag = context.buffer.readByte();
+    if (flag == RefWriter.nullFlag) {
+      if (fallback != null) {
+        return fallback;
+      }
+      throw InvalidDataException(
+        'Received null for non-nullable compatible scalar field.',
+      );
+    }
+    if (flag != RefWriter.notNullValueFlag) {
+      throw InvalidDataException(
+        'Invalid nullable compatible scalar field flag $flag.',
+      );
+    }
+  }
+  final buffer = context.buffer;
+  switch (remoteTypeId) {
+    case TypeIds.boolType:
+      final raw = buffer.readUint8();
+      if (raw == 0) return 0;
+      if (raw == 1) return 1;
+      throw InvalidDataException('Bool payload must be encoded as 0 or 1.');
+    case TypeIds.int8:
+      return buffer.readByte();
+    case TypeIds.int16:
+      return buffer.readInt16();
+    case TypeIds.int32:
+      return buffer.readInt32();
+    case TypeIds.varInt32:
+      return buffer.readVarInt32();
+    case TypeIds.int64:
+      return buffer.readInt64AsInt();
+    case TypeIds.varInt64:
+      return buffer.readVarInt64AsInt();
+    case TypeIds.taggedInt64:
+      return buffer.readTaggedInt64AsInt();
+    case TypeIds.uint8:
+      return buffer.readUint8();
+    case TypeIds.uint16:
+      return buffer.readUint16();
+    case TypeIds.uint32:
+      return buffer.readUint32();
+    case TypeIds.varUint32:
+      return buffer.readVarUint32();
+    case TypeIds.uint64:
+      return buffer.readUint64().toInt();
+    case TypeIds.varUint64:
+      return buffer.readVarUint64().toInt();
+    case TypeIds.taggedUint64:
+      return buffer.readTaggedUint64().toInt();
+    default:
+      throw StateError(
+        'Unsupported int64-compatible payload type $remoteTypeId.',
+      );
+  }
+}
+
 Object? _readCompatibleScalarPayload(
   ReadContext context,
   CompatibleScalarConversion conversion,
@@ -221,26 +337,26 @@ Object convertCompatibleScalarValue(
     return convertPrimitiveFieldValue(value, localType);
   }
   if (localTypeId == TypeIds.boolType) {
-    return _toBool(value);
+    return _toBool(value, remoteTypeId);
   }
   if (localTypeId == TypeIds.string) {
-    return _toString(value);
+    return _toString(value, remoteTypeId);
   }
   if (_isIntegerType(localTypeId)) {
-    return _toIntegerTarget(value, localType);
+    return _toIntegerTarget(value, localType, remoteTypeId);
   }
   if (_isFloatingType(localTypeId)) {
-    return _toFloatingTarget(value, localType);
+    return _toFloatingTarget(value, localType, remoteTypeId);
   }
   if (localTypeId == TypeIds.decimal) {
-    return _toDecimal(value);
+    return _toDecimal(value, remoteTypeId);
   }
   throw InvalidDataException(
     'Unsupported compatible scalar target $localTypeId.',
   );
 }
 
-bool _toBool(Object value) {
+bool _toBool(Object value, int remoteTypeId) {
   if (value is bool) {
     return value;
   }
@@ -251,7 +367,7 @@ bool _toBool(Object value) {
       _ => throw const FormatException('String is not a bool literal.'),
     };
   }
-  final decimal = _numericDecimal(value);
+  final decimal = _numericDecimal(value, remoteTypeId);
   if (decimal.unscaled == BigInt.zero) {
     return false;
   }
@@ -261,7 +377,7 @@ bool _toBool(Object value) {
   throw const FormatException('Numeric bool value must be 0 or 1.');
 }
 
-String _toString(Object value) {
+String _toString(Object value, int remoteTypeId) {
   if (value is bool) {
     return value ? 'true' : 'false';
   }
@@ -274,11 +390,11 @@ String _toString(Object value) {
   if (value is double) {
     return _exactFloatText(value);
   }
-  return _integerValue(value).toString();
+  return _integerValue(value, remoteTypeId).toString();
 }
 
-Object _toIntegerTarget(Object value, FieldType localType) {
-  final decimal = _numericDecimal(value);
+Object _toIntegerTarget(Object value, FieldType localType, int remoteTypeId) {
+  final decimal = _numericDecimal(value, remoteTypeId);
   if (decimal.scale != 0) {
     throw const FormatException('Numeric value is not integral.');
   }
@@ -287,7 +403,7 @@ Object _toIntegerTarget(Object value, FieldType localType) {
   return _integerCarrier(integer, localType);
 }
 
-Object _toFloatingTarget(Object value, FieldType localType) {
+Object _toFloatingTarget(Object value, FieldType localType, int remoteTypeId) {
   final localTypeId = localType.typeId;
   if (value is String && _isNegativeZeroLiteral(value)) {
     _parseDecimalLiteral(value);
@@ -304,7 +420,7 @@ Object _toFloatingTarget(Object value, FieldType localType) {
     }
     return _floatCarrier(rounded, localType);
   }
-  final decimal = _numericDecimal(value);
+  final decimal = _numericDecimal(value, remoteTypeId);
   if (decimal.unscaled == BigInt.zero) {
     return _floatCarrier(0.0, localType);
   }
@@ -316,7 +432,7 @@ Object _toFloatingTarget(Object value, FieldType localType) {
   return _floatCarrier(rounded, localType);
 }
 
-Decimal _toDecimal(Object value) {
+Decimal _toDecimal(Object value, int remoteTypeId) {
   if (value is bool) {
     return Decimal(value ? BigInt.one : BigInt.zero, 0);
   }
@@ -336,10 +452,10 @@ Decimal _toDecimal(Object value) {
     }
     return _canonicalDecimalFromFiniteFloat(source).toDecimal();
   }
-  return Decimal(_integerValue(value), 0);
+  return Decimal(_integerValue(value, remoteTypeId), 0);
 }
 
-_DecimalValue _numericDecimal(Object value) {
+_DecimalValue _numericDecimal(Object value, int remoteTypeId) {
   if (value is bool) {
     return _DecimalValue(value ? BigInt.one : BigInt.zero, 0);
   }
@@ -359,18 +475,43 @@ _DecimalValue _numericDecimal(Object value) {
     }
     return _canonicalDecimalFromFiniteFloat(source);
   }
-  return _DecimalValue(_integerValue(value), 0);
+  return _DecimalValue(_integerValue(value, remoteTypeId), 0);
 }
 
-BigInt _integerValue(Object value) {
-  if (value is Uint64) {
-    return value.toBigInt();
-  }
-  if (value is Int64) {
-    return value.toBigInt();
-  }
-  if (value is int) {
-    return BigInt.from(value);
+BigInt _integerValue(Object value, int remoteTypeId) {
+  switch (remoteTypeId) {
+    case TypeIds.int8:
+    case TypeIds.int16:
+    case TypeIds.int32:
+    case TypeIds.varInt32:
+    case TypeIds.uint8:
+    case TypeIds.uint16:
+    case TypeIds.uint32:
+    case TypeIds.varUint32:
+      if (value is int) {
+        return BigInt.from(value);
+      }
+      break;
+    case TypeIds.int64:
+    case TypeIds.varInt64:
+    case TypeIds.taggedInt64:
+      if (value is Int64) {
+        return value.toBigInt();
+      }
+      if (value is int) {
+        return Int64(value).toBigInt();
+      }
+      break;
+    case TypeIds.uint64:
+    case TypeIds.varUint64:
+    case TypeIds.taggedUint64:
+      if (value is Uint64) {
+        return value.toBigInt();
+      }
+      if (value is int) {
+        return Uint64(value).toBigInt();
+      }
+      break;
   }
   throw StateError(
     'Expected integer-compatible value, got ${value.runtimeType}.',

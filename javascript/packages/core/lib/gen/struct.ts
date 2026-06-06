@@ -28,8 +28,8 @@ import { getCompatibleCollectionArrayReadAction } from "./collection";
 import {
   CompatibleScalarConverter,
   getCompatibleScalarReadAction,
-  shouldSkipCompatibleScalarRead,
 } from "../compatible/scalar";
+import { shouldSkipCompatibleRead } from "../compatible/field";
 
 /**
  * Returns true when a field's read cannot recurse and needs no depth tracking.
@@ -65,8 +65,14 @@ function compatibleReadTargetExpr(typeInfo: TypeInfo, expr: string): string {
 }
 
 const sortProps = (typeInfo: TypeInfo, typeResolver: CodecBuilder["resolver"]) => {
-  const names = TypeMeta.fromTypeInfo(typeInfo, typeResolver).getFieldInfo();
   const props = typeInfo.options!.props;
+  if (typeInfo.options!.preserveFieldOrder) {
+    return Object.entries(props!).map(([key, fieldTypeInfo]) => ({
+      key,
+      typeInfo: fieldTypeInfo,
+    }));
+  }
+  const names = TypeMeta.fromTypeInfo(typeInfo, typeResolver).getFieldInfo();
   return names.map((x) => {
     return {
       key: x.fieldName,
@@ -101,11 +107,30 @@ function isDirectVarInt32Field(
   typeInfo: TypeInfo,
   typeResolver: CodecBuilder["resolver"],
 ) {
-  return typeInfo.typeId === TypeId.VARINT32
-    && toRefMode(typeInfo.trackingRef, typeInfo.nullable) === RefMode.NONE
-    && getCompatibleScalarReadAction(typeInfo) === undefined
-    && !shouldSkipCompatibleScalarRead(typeInfo)
-    && typeResolver.isMonomorphic(typeInfo, typeInfo.dynamic);
+  return varInt32ObjectReadKind(typeInfo, typeResolver) === "number";
+}
+
+function varInt32ObjectReadKind(
+  typeInfo: TypeInfo,
+  typeResolver: CodecBuilder["resolver"],
+): "number" | "bigint" | null {
+  if (
+    toRefMode(typeInfo.trackingRef, typeInfo.nullable) !== RefMode.NONE
+    || !typeResolver.isMonomorphic(typeInfo, typeInfo.dynamic)
+  ) {
+    return null;
+  }
+  const scalarAction = getCompatibleScalarReadAction(typeInfo);
+  if (scalarAction !== undefined) {
+    return scalarAction.remoteNullable !== true
+      && scalarAction.remoteTypeId === TypeId.VARINT32
+      && (scalarAction.localTypeId === TypeId.INT64
+      || scalarAction.localTypeId === TypeId.VARINT64
+      || scalarAction.localTypeId === TypeId.TAGGED_INT64)
+      ? "bigint"
+      : null;
+  }
+  return typeInfo.typeId === TypeId.VARINT32 ? "number" : null;
 }
 
 function directNumericFieldReadExpr(
@@ -116,7 +141,6 @@ function directNumericFieldReadExpr(
     toRefMode(typeInfo.trackingRef, typeInfo.nullable) !== RefMode.NONE
     || !builder.resolver.isMonomorphic(typeInfo, typeInfo.dynamic)
     || getCompatibleScalarReadAction(typeInfo) !== undefined
-    || shouldSkipCompatibleScalarRead(typeInfo)
   ) {
     return null;
   }
@@ -162,6 +186,147 @@ function directNumericFieldReadExpr(
   }
 }
 
+function compatibleScalarFieldReadExpr(
+  remoteTypeId: number,
+  localTypeId: number,
+  builder: CodecBuilder,
+): string | null {
+  const reader = builder.reader;
+  switch (remoteTypeId) {
+    case TypeId.INT8:
+      if (
+        localTypeId === TypeId.INT64
+        || localTypeId === TypeId.VARINT64
+        || localTypeId === TypeId.TAGGED_INT64
+      ) {
+        return `BigInt(${reader.readInt8()})`;
+      }
+      break;
+    case TypeId.INT16:
+      if (
+        localTypeId === TypeId.INT64
+        || localTypeId === TypeId.VARINT64
+        || localTypeId === TypeId.TAGGED_INT64
+      ) {
+        return `BigInt(${reader.readInt16()})`;
+      }
+      break;
+    case TypeId.INT32:
+      if (
+        localTypeId === TypeId.INT64
+        || localTypeId === TypeId.VARINT64
+        || localTypeId === TypeId.TAGGED_INT64
+      ) {
+        return `BigInt(${reader.readInt32()})`;
+      }
+      break;
+    case TypeId.VARINT32:
+      if (
+        localTypeId === TypeId.INT64
+        || localTypeId === TypeId.VARINT64
+        || localTypeId === TypeId.TAGGED_INT64
+      ) {
+        return `BigInt(${reader.readVarInt32()})`;
+      }
+      break;
+    case TypeId.UINT8:
+      if (
+        localTypeId === TypeId.INT64
+        || localTypeId === TypeId.VARINT64
+        || localTypeId === TypeId.TAGGED_INT64
+        || localTypeId === TypeId.UINT64
+        || localTypeId === TypeId.VAR_UINT64
+        || localTypeId === TypeId.TAGGED_UINT64
+      ) {
+        return `BigInt(${reader.readUint8()})`;
+      }
+      break;
+    case TypeId.UINT16:
+      if (
+        localTypeId === TypeId.INT64
+        || localTypeId === TypeId.VARINT64
+        || localTypeId === TypeId.TAGGED_INT64
+        || localTypeId === TypeId.UINT64
+        || localTypeId === TypeId.VAR_UINT64
+        || localTypeId === TypeId.TAGGED_UINT64
+      ) {
+        return `BigInt(${reader.readUint16()})`;
+      }
+      break;
+    case TypeId.UINT32:
+      if (
+        localTypeId === TypeId.INT64
+        || localTypeId === TypeId.VARINT64
+        || localTypeId === TypeId.TAGGED_INT64
+        || localTypeId === TypeId.UINT64
+        || localTypeId === TypeId.VAR_UINT64
+        || localTypeId === TypeId.TAGGED_UINT64
+      ) {
+        return `BigInt(${reader.readUint32()})`;
+      }
+      break;
+    case TypeId.VAR_UINT32:
+      if (
+        localTypeId === TypeId.INT64
+        || localTypeId === TypeId.VARINT64
+        || localTypeId === TypeId.TAGGED_INT64
+        || localTypeId === TypeId.UINT64
+        || localTypeId === TypeId.VAR_UINT64
+        || localTypeId === TypeId.TAGGED_UINT64
+      ) {
+        return `BigInt(${reader.readVarUInt32()})`;
+      }
+      break;
+    default:
+      break;
+  }
+  if (remoteTypeId !== localTypeId) {
+    return null;
+  }
+  switch (remoteTypeId) {
+    case TypeId.INT8:
+      return reader.readInt8();
+    case TypeId.INT16:
+      return reader.readInt16();
+    case TypeId.INT32:
+      return reader.readInt32();
+    case TypeId.VARINT32:
+      return reader.readVarInt32();
+    case TypeId.INT64:
+      return reader.readInt64();
+    case TypeId.VARINT64:
+      return reader.readVarInt64();
+    case TypeId.TAGGED_INT64:
+      return reader.readTaggedInt64();
+    case TypeId.UINT8:
+      return reader.readUint8();
+    case TypeId.UINT16:
+      return reader.readUint16();
+    case TypeId.UINT32:
+      return reader.readUint32();
+    case TypeId.VAR_UINT32:
+      return reader.readVarUInt32();
+    case TypeId.UINT64:
+      return reader.readUint64();
+    case TypeId.VAR_UINT64:
+      return reader.readVarUInt64();
+    case TypeId.TAGGED_UINT64:
+      return reader.readTaggedUInt64();
+    case TypeId.FLOAT16:
+      return reader.readFloat16();
+    case TypeId.BFLOAT16:
+      return reader.readBfloat16();
+    case TypeId.FLOAT32:
+      return reader.readFloat32();
+    case TypeId.FLOAT64:
+      return reader.readFloat64();
+    case TypeId.STRING:
+      return reader.stringWithHeader();
+    default:
+      return null;
+  }
+}
+
 class StructSerializerGenerator extends BaseSerializerGenerator {
   typeInfo: TypeInfo;
   sortedProps: { key: string; typeInfo: TypeInfo }[];
@@ -196,8 +361,8 @@ class StructSerializerGenerator extends BaseSerializerGenerator {
     const { nullable = false, dynamic, trackingRef } = fieldTypeInfo;
     const refMode = toRefMode(trackingRef, nullable);
     const assignCompatible = (expr: string) => assignStmt(compatibleReadTargetExpr(fieldTypeInfo, expr));
-    const discard = (expr: string) => `${expr};`;
-    if (shouldSkipCompatibleScalarRead(fieldTypeInfo)) {
+    if (shouldSkipCompatibleRead(fieldTypeInfo)) {
+      const discard = (expr: string) => `${expr};`;
       if (this.builder.resolver.isMonomorphic(fieldTypeInfo, dynamic)) {
         if (refMode == RefMode.TRACKING || refMode === RefMode.NULL_ONLY) {
           return embedGenerator.readRefWithoutTypeInfo(discard);
@@ -214,8 +379,11 @@ class StructSerializerGenerator extends BaseSerializerGenerator {
     }
     const scalarAction = getCompatibleScalarReadAction(fieldTypeInfo);
     if (scalarAction) {
-      const converter = this.builder.getExternal(CompatibleScalarConverter.name);
-      const readValue = `${converter}.read(${this.builder.reader.ownName()}, ${scalarAction.remoteTypeId}, ${scalarAction.localTypeId}, ${CodecBuilder.safeString(fieldName)})`;
+      const readValue = compatibleScalarFieldReadExpr(
+        scalarAction.remoteTypeId,
+        scalarAction.localTypeId,
+        this.builder,
+      ) ?? `${this.builder.getExternal(CompatibleScalarConverter.name)}.read(${this.builder.reader.ownName()}, ${scalarAction.remoteTypeId}, ${scalarAction.localTypeId}, ${CodecBuilder.safeString(fieldName)})`;
       if (scalarAction.remoteNullable !== true) {
         return assignStmt(readValue);
       }
@@ -449,8 +617,11 @@ class StructSerializerGenerator extends BaseSerializerGenerator {
         : `
           const ${result} = {
             ${this.sortedProps.map(({ key }) => {
+          if (shouldSkipCompatibleRead(this.typeInfo.options!.props![key])) {
+            return "";
+          }
           return `${CodecBuilder.safePropName(key)}: null`;
-        }).join(",\n")}
+        }).filter(Boolean).join(",\n")}
           };
         `
       }
@@ -482,7 +653,19 @@ class StructSerializerGenerator extends BaseSerializerGenerator {
     }
     const fields: Array<{ key: string; expr: string }> = [];
     for (const { key, typeInfo } of this.sortedProps) {
-      const expr = directNumericFieldReadExpr(typeInfo, this.builder);
+      if (shouldSkipCompatibleRead(typeInfo)) {
+        return null;
+      }
+      const scalarAction = getCompatibleScalarReadAction(typeInfo);
+      const expr = scalarAction?.remoteNullable === true
+        ? null
+        : scalarAction
+          ? compatibleScalarFieldReadExpr(
+            scalarAction.remoteTypeId,
+            scalarAction.localTypeId,
+            this.builder,
+          )
+          : directNumericFieldReadExpr(typeInfo, this.builder);
       if (expr === null) {
         return null;
       }
@@ -505,11 +688,23 @@ class StructSerializerGenerator extends BaseSerializerGenerator {
     if (
       this.typeInfo.options!.withConstructor
       || this.sortedProps.length === 0
-      || !this.sortedProps.every(({ typeInfo }) =>
-        isDirectVarInt32Field(typeInfo, this.builder.resolver)
-      )
     ) {
       return null;
+    }
+    const fields = [];
+    for (const { key, typeInfo } of this.sortedProps) {
+      if (shouldSkipCompatibleRead(typeInfo)) {
+        return null;
+      }
+      const kind = varInt32ObjectReadKind(typeInfo, this.builder.resolver);
+      if (kind === null) {
+        return null;
+      }
+      fields.push({
+        key,
+        kind,
+        local: this.scope.uniqueName(key),
+      });
     }
     const cursor = this.scope.uniqueName("cursor");
     const dataView = this.scope.uniqueName("dataView");
@@ -518,11 +713,7 @@ class StructSerializerGenerator extends BaseSerializerGenerator {
     const byte = this.scope.uniqueName("byte");
     const value = this.scope.uniqueName("value");
     const result = this.scope.uniqueName("result");
-    const fields = this.sortedProps.map(({ key }) => ({
-      key,
-      local: this.scope.uniqueName(key),
-    }));
-    const reads = fields.map(({ local }) => `
+    const reads = fields.map(({ local, kind }) => `
       if (${byteLength} - ${cursor} >= 5) {
         ${fourByteValue} = ${dataView}.getUint32(${cursor}, true);
         ${cursor}++;
@@ -562,7 +753,7 @@ class StructSerializerGenerator extends BaseSerializerGenerator {
           }
         }
       }
-      const ${local} = (${value} >>> 1) ^ -(${value} & 1);
+      const ${local} = ${kind === "bigint" ? "BigInt(" : ""}(${value} >>> 1) ^ -(${value} & 1)${kind === "bigint" ? ")" : ""};
     `).join("\n");
     return `
       let ${cursor} = ${this.builder.reader.readGetCursor()};
@@ -662,7 +853,7 @@ class StructSerializerGenerator extends BaseSerializerGenerator {
           }`;
       }
       return `
-          const ${changedSerializer} = ${this.builder.typeMetaResolver.readTypeMetaIfSchemaChanged(localHash)};
+          const ${changedSerializer} = ${this.builder.typeMetaResolver.readTypeMetaIfSchemaChanged(localHash, this.serializerExpr)};
           if (${changedSerializer} !== undefined) {
             ${onMetaChanged?.(changedSerializer) ?? `return ${changedSerializer};`}
           }${unchangedBranch}

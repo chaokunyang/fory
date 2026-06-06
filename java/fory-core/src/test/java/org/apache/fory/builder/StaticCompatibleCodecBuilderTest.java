@@ -225,6 +225,18 @@ public class StaticCompatibleCodecBuilderTest {
       Class<?> readerType = readerLoader.loadClass("test.StaticCompatibleRecordPayload");
       Fory writer = compatibleFory(writerLoader, writerType, false, "record-writer");
       Fory reader = compatibleFory(readerLoader, readerType, false, "record-reader");
+      TypeDef remoteTypeDef = TypeDef.buildTypeDef(writer.getTypeResolver(), writerType);
+      String generatedSource =
+          new StaticCompatibleCodecBuilder(TypeRef.of(readerType), reader, remoteTypeDef).genCode();
+      Assert.assertTrue(generatedSource.contains("case 0:"));
+      Assert.assertTrue(generatedSource.contains("case 1:"));
+      Assert.assertTrue(generatedSource.contains("FieldConverters.readIntTarget"));
+      Assert.assertTrue(generatedSource.contains("int _f_recordValue0 = 0;"));
+      Assert.assertTrue(generatedSource.contains("newInstanceWithArguments"));
+      Assert.assertTrue(generatedSource.contains("Object[] _f_recordArgs = this._f_recordArgs"));
+      Assert.assertFalse(generatedSource.contains("return new test.StaticCompatibleRecordPayload"));
+      Assert.assertFalse(generatedSource.contains("_f_recordValues"));
+      Assert.assertFalse(generatedSource.contains("readMatchedRecordField"));
       Object writerValue = writerType.getConstructor().newInstance();
       setField(writerType, writerValue, "id", "73");
 

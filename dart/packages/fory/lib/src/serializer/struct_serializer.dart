@@ -22,6 +22,7 @@ import 'package:fory/src/context/write_context.dart';
 import 'package:fory/src/meta/field_info.dart';
 import 'package:fory/src/meta/field_type.dart';
 import 'package:fory/src/meta/type_def.dart';
+import 'package:fory/src/meta/type_ids.dart';
 import 'package:fory/src/resolver/type_resolver.dart';
 import 'package:fory/src/serializer/collection_serializers.dart';
 import 'package:fory/src/serializer/generated_struct_serializer.dart';
@@ -49,8 +50,10 @@ final class StructSerializer extends Serializer<Object?> {
       <String, SerializationFieldInfo>{
         for (final field in _localFields) field.identifier: field,
       };
-  final Expando<CompatibleStructReadLayout> _compatibleReadLayouts =
-      Expando<CompatibleStructReadLayout>('fory_compatible_read_layout');
+  final Map<TypeDef, CompatibleStructReadLayout> _compatibleReadLayouts =
+      Map<TypeDef, CompatibleStructReadLayout>.identity();
+  TypeDef? _lastCompatibleRemoteTypeDef;
+  CompatibleStructReadLayout? _lastCompatibleReadLayout;
 
   StructSerializer(this._payloadSerializer, this._typeDef, this._typeResolver);
 
@@ -114,6 +117,11 @@ final class StructSerializer extends Serializer<Object?> {
 
   @pragma('vm:never-inline')
   Object _readCompatible(ReadContext context, TypeInfo resolved) {
+    return readGeneratedCompatibleValue(context, resolved);
+  }
+
+  @pragma('vm:prefer-inline')
+  Object readGeneratedCompatibleValue(ReadContext context, TypeInfo resolved) {
     final payloadSerializer = _payloadSerializer;
     if (payloadSerializer is! GeneratedStructSerializer<Object?>) {
       throw StateError(
@@ -136,28 +144,67 @@ final class StructSerializer extends Serializer<Object?> {
   ) {
     final remoteTypeDef = resolved.remoteTypeDef;
     if (remoteTypeDef == null) {
-      return CompatibleStructReadLayout(_typeDef.fields, _localFields);
+      return CompatibleStructReadLayout(
+        _typeDef.fields,
+        List<int>.generate(_localFields.length, (index) => index * 2),
+        _localFields,
+        _localFields.length <= 52 ? 0 : -1,
+        0,
+        -1,
+        -1,
+        0,
+      );
+    }
+    final lastRemoteTypeDef = _lastCompatibleRemoteTypeDef;
+    if (identical(lastRemoteTypeDef, remoteTypeDef)) {
+      return _lastCompatibleReadLayout!;
     }
     final cached = _compatibleReadLayouts[remoteTypeDef];
     if (cached != null) {
+      _lastCompatibleRemoteTypeDef = remoteTypeDef;
+      _lastCompatibleReadLayout = cached;
       return cached;
     }
     return _buildCompatibleReadLayout(remoteTypeDef);
   }
 
   CompatibleStructReadLayout _buildCompatibleReadLayout(TypeDef remoteTypeDef) {
+    final matchedIds = <int>[];
     final fields = <SerializationFieldInfo?>[];
     List<CompatibleScalarConversion?>? scalarConversions;
+    List<int>? scalarSourceTypes;
     var hasScalarConversions = false;
     List<bool>? topLevelListArrayPairs;
     var hasTopLevelListArrayPairs = false;
-    for (final remoteField in remoteTypeDef.fields) {
+    var sequentialCompatibleMask =
+        remoteTypeDef.fields.length == _localFields.length &&
+                _localFields.length <= 52
+            ? 0
+            : -1;
+    var singleCompatibleEligible =
+        remoteTypeDef.fields.length == _localFields.length;
+    var singleCompatibleLocalIndex = -1;
+    var singleCompatibleRemoteIndex = -1;
+    var singleCompatibleSourceType = 0;
+    for (
+      var remoteIndex = 0;
+      remoteIndex < remoteTypeDef.fields.length;
+      remoteIndex += 1
+    ) {
+      final remoteField = remoteTypeDef.fields[remoteIndex];
       final localField = _localFieldsByIdentifier[remoteField.identifier];
       if (localField == null) {
+        sequentialCompatibleMask = -1;
+        singleCompatibleEligible = false;
+        matchedIds.add(-1);
         fields.add(null);
+        scalarSourceTypes?.add(0);
         scalarConversions?.add(null);
         topLevelListArrayPairs?.add(false);
         continue;
+      }
+      if (sequentialCompatibleMask >= 0 && localField.index != remoteIndex) {
+        sequentialCompatibleMask = -1;
       }
       final topLevelListArrayPair = _topLevelListArrayPair(
         localField.field,
@@ -180,23 +227,6 @@ final class StructSerializer extends Serializer<Object?> {
         );
         hasTopLevelListArrayPairs = true;
       }
-      final scalarPair =
-          isCompatibleScalarType(remoteField.fieldType.typeId) &&
-          isCompatibleScalarType(localField.field.fieldType.typeId);
-      final refTrackedScalarSchemaMismatch =
-          scalarPair &&
-          (remoteField.fieldType.ref != localField.field.fieldType.ref ||
-              ((remoteField.fieldType.ref || localField.field.fieldType.ref) &&
-                  (remoteField.fieldType.typeId !=
-                          localField.field.fieldType.typeId ||
-                      remoteField.fieldType.nullable !=
-                          localField.field.fieldType.nullable)));
-      if (refTrackedScalarSchemaMismatch) {
-        fields.add(null);
-        scalarConversions?.add(null);
-        topLevelListArrayPairs?.add(false);
-        continue;
-      }
       final scalarConversion =
           topLevelListArrayPair
               ? null
@@ -207,22 +237,107 @@ final class StructSerializer extends Serializer<Object?> {
           null,
           growable: true,
         );
+        scalarSourceTypes ??= List<int>.filled(
+          fields.length,
+          0,
+          growable: true,
+        );
         hasScalarConversions = true;
       }
+      final exactField = _sameFieldType(
+        localField.field.fieldType,
+        remoteField.fieldType,
+      );
+      if (!exactField &&
+          !topLevelListArrayPair &&
+          scalarConversion == null &&
+          !_compatibleFieldType(
+            localField.field.fieldType,
+            remoteField.fieldType,
+            topLevel: true,
+          )) {
+        throw StateError(
+          'Compatible field ${localField.name} has incompatible local and remote schemas.',
+        );
+      }
+      final matchedId =
+          exactField ? localField.index * 2 : localField.index * 2 + 1;
+      if (sequentialCompatibleMask >= 0 && !exactField) {
+        sequentialCompatibleMask |= 1 << localField.index;
+      }
+      if (!exactField) {
+        if (singleCompatibleEligible &&
+            scalarConversion != null &&
+            singleCompatibleLocalIndex < 0) {
+          singleCompatibleLocalIndex = localField.index;
+          singleCompatibleRemoteIndex = remoteIndex;
+          final sourceType = scalarConversion.remoteField.fieldType;
+          singleCompatibleSourceType =
+              sourceType.nullable ? -sourceType.typeId - 1 : sourceType.typeId;
+        } else {
+          singleCompatibleEligible = false;
+          singleCompatibleLocalIndex = -1;
+          singleCompatibleRemoteIndex = -1;
+          singleCompatibleSourceType = 0;
+        }
+      }
       final mergedField =
-          topLevelListArrayPair || scalarConversion != null
+          exactField || topLevelListArrayPair || scalarConversion != null
               ? localField
               : _typeResolver.serializationFieldInfo(
                 mergeCompatibleReadField(localField.field, remoteField),
                 index: localField.index,
               );
+      matchedIds.add(matchedId);
       fields.add(mergedField);
+      if (scalarConversion == null) {
+        scalarSourceTypes?.add(0);
+      } else {
+        final sourceType = scalarConversion.remoteField.fieldType;
+        scalarSourceTypes!.add(
+          sourceType.nullable ? -sourceType.typeId - 1 : sourceType.typeId,
+        );
+      }
       scalarConversions?.add(scalarConversion);
       topLevelListArrayPairs?.add(topLevelListArrayPair);
     }
+    var sequentialCompatibleSourceType = 0;
+    if (sequentialCompatibleMask > 0 &&
+        sequentialCompatibleMask & (sequentialCompatibleMask - 1) == 0 &&
+        scalarSourceTypes != null) {
+      sequentialCompatibleSourceType =
+          scalarSourceTypes[sequentialCompatibleMask.bitLength - 1];
+    }
+    if (singleCompatibleEligible && singleCompatibleLocalIndex >= 0) {
+      for (var index = 0; index < matchedIds.length; index += 1) {
+        final localIndex = _singleMoveLocalIndex(
+          index,
+          singleCompatibleLocalIndex,
+          singleCompatibleRemoteIndex,
+        );
+        final expectedMatchedId =
+            localIndex * 2 + (localIndex == singleCompatibleLocalIndex ? 1 : 0);
+        if (matchedIds[index] != expectedMatchedId) {
+          singleCompatibleEligible = false;
+          break;
+        }
+      }
+    }
+    if (!singleCompatibleEligible || singleCompatibleLocalIndex < 0) {
+      singleCompatibleLocalIndex = -1;
+      singleCompatibleRemoteIndex = -1;
+      singleCompatibleSourceType = 0;
+    }
     final layout = CompatibleStructReadLayout(
       remoteTypeDef.fields,
+      List<int>.unmodifiable(matchedIds),
       List<SerializationFieldInfo?>.unmodifiable(fields),
+      sequentialCompatibleMask,
+      sequentialCompatibleSourceType,
+      singleCompatibleLocalIndex,
+      singleCompatibleRemoteIndex,
+      singleCompatibleSourceType,
+      hasScalarConversions ? List<int>.unmodifiable(scalarSourceTypes!) : null,
       hasScalarConversions
           ? List<CompatibleScalarConversion?>.unmodifiable(scalarConversions!)
           : null,
@@ -231,12 +346,118 @@ final class StructSerializer extends Serializer<Object?> {
           : null,
     );
     _compatibleReadLayouts[remoteTypeDef] = layout;
+    _lastCompatibleRemoteTypeDef = remoteTypeDef;
+    _lastCompatibleReadLayout = layout;
     return layout;
   }
 }
 
+int _singleMoveLocalIndex(
+  int remoteIndex,
+  int localIndex,
+  int remoteCompatibleIndex,
+) {
+  if (localIndex < remoteCompatibleIndex) {
+    if (remoteIndex < localIndex) {
+      return remoteIndex;
+    }
+    if (remoteIndex < remoteCompatibleIndex) {
+      return remoteIndex + 1;
+    }
+    if (remoteIndex == remoteCompatibleIndex) {
+      return localIndex;
+    }
+    return remoteIndex;
+  }
+  if (localIndex > remoteCompatibleIndex) {
+    if (remoteIndex < remoteCompatibleIndex) {
+      return remoteIndex;
+    }
+    if (remoteIndex == remoteCompatibleIndex) {
+      return localIndex;
+    }
+    if (remoteIndex <= localIndex) {
+      return remoteIndex - 1;
+    }
+    return remoteIndex;
+  }
+  return remoteIndex;
+}
+
 bool _topLevelListArrayPair(FieldInfo localField, FieldInfo remoteField) {
   return isCompatibleCollectionArrayFieldPair(localField, remoteField);
+}
+
+bool _sameFieldType(FieldType localType, FieldType remoteType) {
+  if (localType.typeId != remoteType.typeId ||
+      localType.nullable != remoteType.nullable ||
+      localType.ref != remoteType.ref ||
+      localType.arguments.length != remoteType.arguments.length) {
+    return false;
+  }
+  for (var index = 0; index < localType.arguments.length; index += 1) {
+    if (!_sameFieldType(
+      localType.arguments[index],
+      remoteType.arguments[index],
+    )) {
+      return false;
+    }
+  }
+  return true;
+}
+
+bool _compatibleFieldType(
+  FieldType localType,
+  FieldType remoteType, {
+  required bool topLevel,
+}) {
+  if (_sameFieldType(localType, remoteType)) {
+    return true;
+  }
+  if (_isStructWireType(localType.typeId) &&
+      _isStructWireType(remoteType.typeId) &&
+      localType.arguments.length == remoteType.arguments.length) {
+    return true;
+  }
+  if (topLevel && isCompatibleCollectionArrayTypePair(localType, remoteType)) {
+    return true;
+  }
+  final scalarPair =
+      isCompatibleScalarType(remoteType.typeId) &&
+      isCompatibleScalarType(localType.typeId);
+  if (scalarPair) {
+    if (remoteType.ref || localType.ref) {
+      return false;
+    }
+    if (localType.typeId == remoteType.typeId &&
+        localType.arguments.length == remoteType.arguments.length) {
+      return true;
+    }
+    return compatibleScalarConversion(
+          FieldInfo(name: '', identifier: '', id: null, fieldType: remoteType),
+          FieldInfo(name: '', identifier: '', id: null, fieldType: localType),
+        ) !=
+        null;
+  }
+  final sameWireFamily =
+      localType.typeId == remoteType.typeId ||
+      _compatibleUnknownUserType(localType, remoteType) ||
+      (_isStructWireType(localType.typeId) &&
+          _isStructWireType(remoteType.typeId));
+  if (!sameWireFamily ||
+      localType.arguments.length != remoteType.arguments.length) {
+    return false;
+  }
+  for (var index = 0; index < localType.arguments.length; index += 1) {
+    if (!_compatibleFieldType(
+      localType.arguments[index],
+      remoteType.arguments[index],
+      topLevel: false,
+    )) {
+      return false;
+    }
+  }
+  return true;
 }
 
 bool _hasUnsupportedListArrayMismatch(
@@ -260,6 +481,23 @@ bool _hasUnsupportedListArrayMismatch(
     )) {
       return true;
     }
+  }
+  return false;
+}
+
+bool _isStructWireType(int typeId) =>
+    typeId == TypeIds.struct ||
+    typeId == TypeIds.compatibleStruct ||
+    typeId == TypeIds.namedStruct ||
+    typeId == TypeIds.namedCompatibleStruct;
+
+bool _compatibleUnknownUserType(FieldType localType, FieldType remoteType) {
+  if (localType.typeId == TypeIds.unknown) {
+    return remoteType.typeId == TypeIds.unknown ||
+        TypeIds.isUserType(remoteType.typeId);
+  }
+  if (remoteType.typeId == TypeIds.unknown) {
+    return TypeIds.isUserType(localType.typeId);
   }
   return false;
 }

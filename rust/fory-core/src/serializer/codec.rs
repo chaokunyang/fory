@@ -256,6 +256,134 @@ pub fn compatible_field_pair(local: &FieldType, remote: &FieldType) -> bool {
         || compatible_list_array_field(local, remote)
 }
 
+macro_rules! compatible_scalar_reader {
+    ($read:ident, $read_option:ident, $target:ident, $target_option:ident, $ty:ty) => {
+        #[inline(always)]
+        pub fn $read(
+            context: &mut ReadContext,
+            local_type: u32,
+            remote_field_type: &FieldType,
+        ) -> Result<$ty, Error> {
+            super::scalar_conversion::$target(context, local_type, remote_field_type)
+        }
+
+        #[inline(always)]
+        pub fn $read_option(
+            context: &mut ReadContext,
+            local_type: u32,
+            remote_field_type: &FieldType,
+        ) -> Result<Option<$ty>, Error> {
+            super::scalar_conversion::$target_option(context, local_type, remote_field_type)
+        }
+    };
+}
+
+compatible_scalar_reader!(
+    read_bool_compatible_scalar,
+    read_bool_option_compatible_scalar,
+    read_bool_target,
+    read_bool_option_target,
+    bool
+);
+compatible_scalar_reader!(
+    read_string_compatible_scalar,
+    read_string_option_compatible_scalar,
+    read_string_target,
+    read_string_option_target,
+    String
+);
+compatible_scalar_reader!(
+    read_i8_compatible_scalar,
+    read_i8_option_compatible_scalar,
+    read_i8_target,
+    read_i8_option_target,
+    i8
+);
+compatible_scalar_reader!(
+    read_i16_compatible_scalar,
+    read_i16_option_compatible_scalar,
+    read_i16_target,
+    read_i16_option_target,
+    i16
+);
+compatible_scalar_reader!(
+    read_i32_compatible_scalar,
+    read_i32_option_compatible_scalar,
+    read_i32_target,
+    read_i32_option_target,
+    i32
+);
+compatible_scalar_reader!(
+    read_i64_compatible_scalar,
+    read_i64_option_compatible_scalar,
+    read_i64_target,
+    read_i64_option_target,
+    i64
+);
+compatible_scalar_reader!(
+    read_u8_compatible_scalar,
+    read_u8_option_compatible_scalar,
+    read_u8_target,
+    read_u8_option_target,
+    u8
+);
+compatible_scalar_reader!(
+    read_u16_compatible_scalar,
+    read_u16_option_compatible_scalar,
+    read_u16_target,
+    read_u16_option_target,
+    u16
+);
+compatible_scalar_reader!(
+    read_u32_compatible_scalar,
+    read_u32_option_compatible_scalar,
+    read_u32_target,
+    read_u32_option_target,
+    u32
+);
+compatible_scalar_reader!(
+    read_u64_compatible_scalar,
+    read_u64_option_compatible_scalar,
+    read_u64_target,
+    read_u64_option_target,
+    u64
+);
+compatible_scalar_reader!(
+    read_f32_compatible_scalar,
+    read_f32_option_compatible_scalar,
+    read_f32_target,
+    read_f32_option_target,
+    f32
+);
+compatible_scalar_reader!(
+    read_f64_compatible_scalar,
+    read_f64_option_compatible_scalar,
+    read_f64_target,
+    read_f64_option_target,
+    f64
+);
+compatible_scalar_reader!(
+    read_float16_compatible_scalar,
+    read_float16_option_compatible_scalar,
+    read_float16_target,
+    read_float16_option_target,
+    crate::types::float16::float16
+);
+compatible_scalar_reader!(
+    read_bfloat16_compatible_scalar,
+    read_bfloat16_option_compatible_scalar,
+    read_bfloat16_target,
+    read_bfloat16_option_target,
+    crate::types::bfloat16::bfloat16
+);
+compatible_scalar_reader!(
+    read_decimal_compatible_scalar,
+    read_decimal_option_compatible_scalar,
+    read_decimal_target,
+    read_decimal_option_target,
+    crate::types::Decimal
+);
+
 #[inline(always)]
 pub(super) fn generic_field_type<'a>(
     field_type: &'a FieldType,
@@ -267,6 +395,11 @@ pub(super) fn generic_field_type<'a>(
             "{owner} field metadata is missing generic type at index {index}"
         ))
     })
+}
+
+pub enum CodecReadType {
+    Field(FieldType),
+    TypeInfo(std::rc::Rc<crate::TypeInfo>),
 }
 
 #[inline(always)]
@@ -361,6 +494,14 @@ pub trait Codec<T: 'static>: 'static {
         Self::read_data(context)
     }
 
+    #[inline(always)]
+    fn read_data_with_type_info(
+        context: &mut ReadContext,
+        type_info: &std::rc::Rc<crate::TypeInfo>,
+    ) -> Result<T, Error> {
+        Self::read_with_type_info(context, RefMode::None, type_info.clone())
+    }
+
     fn read_field_with_type(
         context: &mut ReadContext,
         remote_field_type: &FieldType,
@@ -391,6 +532,11 @@ pub trait Codec<T: 'static>: 'static {
     fn write_type_info(context: &mut WriteContext) -> Result<(), Error>;
 
     fn read_type_info(context: &mut ReadContext) -> Result<(), Error>;
+
+    #[inline(always)]
+    fn read_type_info_value(context: &mut ReadContext) -> Result<CodecReadType, Error> {
+        Self::read_type_info_as_field_type(context).map(CodecReadType::Field)
+    }
 
     #[inline(always)]
     fn read_type_info_as_field_type(context: &mut ReadContext) -> Result<FieldType, Error> {
@@ -478,6 +624,20 @@ where
     }
 
     #[inline(always)]
+    fn read_data_with_type_info(
+        context: &mut ReadContext,
+        type_info: &std::rc::Rc<crate::TypeInfo>,
+    ) -> Result<T, Error> {
+        if context.is_compatible() {
+            let local = context.get_type_info(&std::any::TypeId::of::<T>())?;
+            if local.get_type_def().as_ref() == type_info.get_type_def().as_ref() {
+                return T::fory_read_data(context);
+            }
+        }
+        T::fory_read_with_type_info(context, RefMode::None, type_info.clone())
+    }
+
+    #[inline(always)]
     fn read_field_with_type(
         context: &mut ReadContext,
         remote_field_type: &FieldType,
@@ -531,6 +691,15 @@ where
     #[inline(always)]
     fn read_type_info(context: &mut ReadContext) -> Result<(), Error> {
         T::fory_read_type_info(context)
+    }
+
+    #[inline(always)]
+    fn read_type_info_value(context: &mut ReadContext) -> Result<CodecReadType, Error> {
+        if context.is_compatible() {
+            return context.read_any_type_info().map(CodecReadType::TypeInfo);
+        }
+        T::fory_read_type_info(context)?;
+        Self::field_type(context.get_type_resolver()).map(CodecReadType::Field)
     }
 
     #[inline(always)]
@@ -1445,9 +1614,11 @@ where
                 "Type inconsistent, target collection element type is not polymorphic",
             ));
         }
-        if (header & DECL_ELEMENT_TYPE) == 0 {
-            C::read_type_info(context)?;
-        }
+        let element_read_type = if (header & DECL_ELEMENT_TYPE) == 0 {
+            Some(C::read_type_info_value(context)?)
+        } else {
+            None
+        };
         let has_null = (header & HAS_NULL) != 0;
         let mut vec = Vec::with_capacity(len as usize);
         if has_null {
@@ -1455,13 +1626,33 @@ where
                 let flag = context.reader.read_i8()?;
                 if flag == RefFlag::Null as i8 {
                     vec.push(C::default_value());
+                } else if let Some(read_type) = element_read_type.as_ref() {
+                    match read_type {
+                        CodecReadType::Field(field_type) => {
+                            vec.push(C::read_data_with_type(context, field_type)?);
+                        }
+                        CodecReadType::TypeInfo(type_info) => {
+                            vec.push(C::read_data_with_type_info(context, type_info)?);
+                        }
+                    }
                 } else {
                     vec.push(C::read_data(context)?);
                 }
             }
         } else {
             for _ in 0..len {
-                vec.push(C::read_data(context)?);
+                if let Some(read_type) = element_read_type.as_ref() {
+                    match read_type {
+                        CodecReadType::Field(field_type) => {
+                            vec.push(C::read_data_with_type(context, field_type)?);
+                        }
+                        CodecReadType::TypeInfo(type_info) => {
+                            vec.push(C::read_data_with_type_info(context, type_info)?);
+                        }
+                    }
+                } else {
+                    vec.push(C::read_data(context)?);
+                }
             }
         }
         Ok(vec)
@@ -1494,12 +1685,10 @@ where
                 "Type inconsistent, target collection element type is not polymorphic",
             ));
         }
-        let owned_element_type;
-        let element_type = if is_declared {
-            generic_field_type(remote_field_type, 0, "list")?
+        let element_read_type = if is_declared {
+            CodecReadType::Field(generic_field_type(remote_field_type, 0, "list")?.clone())
         } else {
-            owned_element_type = C::read_type_info_as_field_type(context)?;
-            &owned_element_type
+            C::read_type_info_value(context)?
         };
         let mut vec = Vec::with_capacity(len as usize);
         if has_null {
@@ -1508,12 +1697,26 @@ where
                 if flag == RefFlag::Null as i8 {
                     vec.push(C::default_value());
                 } else {
-                    vec.push(C::read_data_with_type(context, element_type)?);
+                    match &element_read_type {
+                        CodecReadType::Field(field_type) => {
+                            vec.push(C::read_data_with_type(context, field_type)?);
+                        }
+                        CodecReadType::TypeInfo(type_info) => {
+                            vec.push(C::read_data_with_type_info(context, type_info)?);
+                        }
+                    }
                 }
             }
         } else {
             for _ in 0..len {
-                vec.push(C::read_data_with_type(context, element_type)?);
+                match &element_read_type {
+                    CodecReadType::Field(field_type) => {
+                        vec.push(C::read_data_with_type(context, field_type)?);
+                    }
+                    CodecReadType::TypeInfo(type_info) => {
+                        vec.push(C::read_data_with_type_info(context, type_info)?);
+                    }
+                }
             }
         }
         Ok(vec)

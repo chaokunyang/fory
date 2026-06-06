@@ -399,7 +399,34 @@ pub(super) fn generic_field_type<'a>(
 
 pub enum CodecReadType {
     Field(FieldType),
-    TypeInfo(std::rc::Rc<crate::TypeInfo>),
+    TypeInfo(Rc<crate::TypeInfo>),
+}
+
+enum ElementReadType {
+    Direct,
+    Field(FieldType),
+    TypeInfo(Rc<crate::TypeInfo>),
+}
+
+#[inline(always)]
+fn element_read_type<T, C>(
+    context: &mut ReadContext,
+    read_type: CodecReadType,
+) -> Result<ElementReadType, Error>
+where
+    T: 'static,
+    C: Codec<T>,
+{
+    match read_type {
+        CodecReadType::Field(field_type) => Ok(ElementReadType::Field(field_type)),
+        CodecReadType::TypeInfo(type_info) => {
+            if C::type_info_exact(context, &type_info)? {
+                Ok(ElementReadType::Direct)
+            } else {
+                Ok(ElementReadType::TypeInfo(type_info))
+            }
+        }
+    }
 }
 
 #[inline(always)]
@@ -497,9 +524,17 @@ pub trait Codec<T: 'static>: 'static {
     #[inline(always)]
     fn read_data_with_type_info(
         context: &mut ReadContext,
-        type_info: &std::rc::Rc<crate::TypeInfo>,
+        type_info: &Rc<crate::TypeInfo>,
     ) -> Result<T, Error> {
         Self::read_with_type_info(context, RefMode::None, type_info.clone())
+    }
+
+    #[inline(always)]
+    fn type_info_exact(
+        _context: &ReadContext,
+        _type_info: &Rc<crate::TypeInfo>,
+    ) -> Result<bool, Error> {
+        Ok(false)
     }
 
     fn read_field_with_type(
@@ -626,15 +661,23 @@ where
     #[inline(always)]
     fn read_data_with_type_info(
         context: &mut ReadContext,
-        type_info: &std::rc::Rc<crate::TypeInfo>,
+        type_info: &Rc<crate::TypeInfo>,
     ) -> Result<T, Error> {
-        if context.is_compatible() {
-            let local = context.get_type_info(&std::any::TypeId::of::<T>())?;
-            if local.get_type_def().as_ref() == type_info.get_type_def().as_ref() {
-                return T::fory_read_data(context);
-            }
+        if Self::type_info_exact(context, type_info)? {
+            return T::fory_read_data(context);
         }
         T::fory_read_with_type_info(context, RefMode::None, type_info.clone())
+    }
+
+    #[inline(always)]
+    fn type_info_exact(
+        context: &ReadContext,
+        type_info: &Rc<crate::TypeInfo>,
+    ) -> Result<bool, Error> {
+        if !context.is_compatible() {
+            return Ok(false);
+        }
+        Ok(type_info.has_exact_local_schema())
     }
 
     #[inline(always)]
@@ -1486,6 +1529,71 @@ signed_int_codec!(
 
 pub struct VecCodec<T, C, const NULLABLE: bool, const TRACK_REF: bool>(PhantomData<(T, C)>);
 
+#[inline(always)]
+fn read_vec_items<T, C>(
+    context: &mut ReadContext,
+    len: u32,
+    has_null: bool,
+    read_type: Option<ElementReadType>,
+) -> Result<Vec<T>, Error>
+where
+    T: 'static,
+    C: Codec<T>,
+{
+    let mut vec = Vec::with_capacity(len as usize);
+    match read_type {
+        None | Some(ElementReadType::Direct) => {
+            if has_null {
+                for _ in 0..len {
+                    let flag = context.reader.read_i8()?;
+                    if flag == RefFlag::Null as i8 {
+                        vec.push(C::default_value());
+                    } else {
+                        vec.push(C::read_data(context)?);
+                    }
+                }
+            } else {
+                for _ in 0..len {
+                    vec.push(C::read_data(context)?);
+                }
+            }
+        }
+        Some(ElementReadType::Field(field_type)) => {
+            if has_null {
+                for _ in 0..len {
+                    let flag = context.reader.read_i8()?;
+                    if flag == RefFlag::Null as i8 {
+                        vec.push(C::default_value());
+                    } else {
+                        vec.push(C::read_data_with_type(context, &field_type)?);
+                    }
+                }
+            } else {
+                for _ in 0..len {
+                    vec.push(C::read_data_with_type(context, &field_type)?);
+                }
+            }
+        }
+        Some(ElementReadType::TypeInfo(type_info)) => {
+            if has_null {
+                for _ in 0..len {
+                    let flag = context.reader.read_i8()?;
+                    if flag == RefFlag::Null as i8 {
+                        vec.push(C::default_value());
+                    } else {
+                        vec.push(C::read_data_with_type_info(context, &type_info)?);
+                    }
+                }
+            } else {
+                for _ in 0..len {
+                    vec.push(C::read_data_with_type_info(context, &type_info)?);
+                }
+            }
+        }
+    }
+    Ok(vec)
+}
+
 impl<T, C, const NULLABLE: bool, const TRACK_REF: bool> Codec<Vec<T>>
     for VecCodec<T, C, NULLABLE, TRACK_REF>
 where
@@ -1614,48 +1722,14 @@ where
                 "Type inconsistent, target collection element type is not polymorphic",
             ));
         }
-        let element_read_type = if (header & DECL_ELEMENT_TYPE) == 0 {
-            Some(C::read_type_info_value(context)?)
+        let read_type = if (header & DECL_ELEMENT_TYPE) == 0 {
+            let codec_read_type = C::read_type_info_value(context)?;
+            Some(element_read_type::<T, C>(context, codec_read_type)?)
         } else {
             None
         };
         let has_null = (header & HAS_NULL) != 0;
-        let mut vec = Vec::with_capacity(len as usize);
-        if has_null {
-            for _ in 0..len {
-                let flag = context.reader.read_i8()?;
-                if flag == RefFlag::Null as i8 {
-                    vec.push(C::default_value());
-                } else if let Some(read_type) = element_read_type.as_ref() {
-                    match read_type {
-                        CodecReadType::Field(field_type) => {
-                            vec.push(C::read_data_with_type(context, field_type)?);
-                        }
-                        CodecReadType::TypeInfo(type_info) => {
-                            vec.push(C::read_data_with_type_info(context, type_info)?);
-                        }
-                    }
-                } else {
-                    vec.push(C::read_data(context)?);
-                }
-            }
-        } else {
-            for _ in 0..len {
-                if let Some(read_type) = element_read_type.as_ref() {
-                    match read_type {
-                        CodecReadType::Field(field_type) => {
-                            vec.push(C::read_data_with_type(context, field_type)?);
-                        }
-                        CodecReadType::TypeInfo(type_info) => {
-                            vec.push(C::read_data_with_type_info(context, type_info)?);
-                        }
-                    }
-                } else {
-                    vec.push(C::read_data(context)?);
-                }
-            }
-        }
-        Ok(vec)
+        read_vec_items::<T, C>(context, len, has_null, read_type)
     }
 
     fn read_data_with_type(
@@ -1685,41 +1759,13 @@ where
                 "Type inconsistent, target collection element type is not polymorphic",
             ));
         }
-        let element_read_type = if is_declared {
-            CodecReadType::Field(generic_field_type(remote_field_type, 0, "list")?.clone())
+        let read_type = if is_declared {
+            ElementReadType::Field(generic_field_type(remote_field_type, 0, "list")?.clone())
         } else {
-            C::read_type_info_value(context)?
+            let codec_read_type = C::read_type_info_value(context)?;
+            element_read_type::<T, C>(context, codec_read_type)?
         };
-        let mut vec = Vec::with_capacity(len as usize);
-        if has_null {
-            for _ in 0..len {
-                let flag = context.reader.read_i8()?;
-                if flag == RefFlag::Null as i8 {
-                    vec.push(C::default_value());
-                } else {
-                    match &element_read_type {
-                        CodecReadType::Field(field_type) => {
-                            vec.push(C::read_data_with_type(context, field_type)?);
-                        }
-                        CodecReadType::TypeInfo(type_info) => {
-                            vec.push(C::read_data_with_type_info(context, type_info)?);
-                        }
-                    }
-                }
-            }
-        } else {
-            for _ in 0..len {
-                match &element_read_type {
-                    CodecReadType::Field(field_type) => {
-                        vec.push(C::read_data_with_type(context, field_type)?);
-                    }
-                    CodecReadType::TypeInfo(type_info) => {
-                        vec.push(C::read_data_with_type_info(context, type_info)?);
-                    }
-                }
-            }
-        }
-        Ok(vec)
+        read_vec_items::<T, C>(context, len, has_null, Some(read_type))
     }
 
     #[inline(always)]

@@ -35,6 +35,7 @@ import org.apache.fory.exception.DeserializationException;
 import org.apache.fory.exception.ForyException;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.meta.FieldInfo;
+import org.apache.fory.meta.FieldTypes;
 import org.apache.fory.meta.TypeDef;
 import org.apache.fory.meta.TypeExtMeta;
 import org.apache.fory.reflect.TypeRef;
@@ -721,7 +722,9 @@ public abstract class StaticGeneratedStructSerializer<T> extends AbstractObjectS
       boolean exactFieldSchema = false;
       if (localDescriptor != null) {
         Descriptor readDescriptor = fieldInfo.toDescriptor(typeResolver, localDescriptor);
-        exactFieldSchema = readDescriptor == localDescriptor;
+        exactFieldSchema =
+            readDescriptor == localDescriptor
+                || registeredFieldSchemaEquals(fieldInfo, localDescriptor);
         serializationFieldInfo =
             new SerializationFieldInfo(
                 typeResolver, readDescriptor, serializationFieldInfo.codecCategory);
@@ -737,6 +740,14 @@ public abstract class StaticGeneratedStructSerializer<T> extends AbstractObjectS
               localFieldInfo,
               exactFieldSchema));
     }
+  }
+
+  private boolean registeredFieldSchemaEquals(FieldInfo fieldInfo, Descriptor localDescriptor) {
+    FieldTypes.FieldType remoteFieldType = fieldInfo.getFieldType();
+    FieldTypes.FieldType localFieldType = FieldTypes.buildFieldType(typeResolver, localDescriptor);
+    return remoteFieldType instanceof FieldTypes.RegisteredFieldType
+        && localFieldType instanceof FieldTypes.RegisteredFieldType
+        && remoteFieldType.equals(localFieldType);
   }
 
   private SerializationFieldInfo[] buildLocalFieldsById(List<Descriptor> descriptors) {

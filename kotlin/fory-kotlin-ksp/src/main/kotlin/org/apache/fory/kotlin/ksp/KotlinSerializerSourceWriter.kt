@@ -728,11 +728,12 @@ internal class KotlinSerializerSourceWriter(private val struct: KotlinSourceStru
       builder.append(indent).append("    ").append(field.id * 2).append(" -> {\n")
       builder.append(indent).append("      val buffer = readContext.buffer\n")
       val directRead =
-        castReadExpression(
-          field,
-          directReadExpression(field) ?: "readFieldValue(readContext, fieldsById[${field.id}]!!)",
-          compatible = false,
-        )
+        directReadExpression(field)
+          ?: castReadExpression(
+            field,
+            "readFieldValue(readContext, fieldsById[${field.id}]!!)",
+            compatible = false,
+          )
       val constructorDirectRead =
         if (constructorRefs && field.trackingRef) {
           "run { trackConstructorRefRead(readContext, buffer); ctorFieldValue(readContext, $directRead, type) }"
@@ -741,12 +742,18 @@ internal class KotlinSerializerSourceWriter(private val struct: KotlinSourceStru
         } else {
           directRead
         }
+      val directAssignment =
+        if (constructorRefs) {
+          localValueExpression(field, constructorDirectRead)
+        } else {
+          constructorDirectRead
+        }
       builder
         .append(indent)
         .append("      ")
         .append(field.localName)
         .append(" = ")
-        .append(constructorDirectRead)
+        .append(directAssignment)
         .append("\n")
       builder.append(indent).append("      ")
       appendPresenceSet(field)
@@ -831,17 +838,18 @@ internal class KotlinSerializerSourceWriter(private val struct: KotlinSourceStru
     for (field in struct.fields) {
       builder.append("        ").append(field.id * 2).append(" -> {\n")
       builder.append("          val buffer = readContext.buffer\n")
+      val directRead =
+        directReadExpression(field)
+          ?: castReadExpression(
+            field,
+            "readFieldValue(readContext, fieldsById[${field.id}]!!)",
+            compatible = false,
+          )
       builder
         .append("            value.")
         .append(field.name)
         .append(" = ")
-        .append(
-          castReadExpression(
-            field,
-            directReadExpression(field) ?: "readFieldValue(readContext, fieldsById[${field.id}]!!)",
-            compatible = false,
-          )
-        )
+        .append(directRead)
         .append("\n")
       builder.append("            ")
       appendPresenceSet(field)
@@ -1088,6 +1096,13 @@ internal class KotlinSerializerSourceWriter(private val struct: KotlinSourceStru
       return source
     }
     return "($source as ${field.propertyTypeName})"
+  }
+
+  private fun localValueExpression(field: KotlinSourceField, expression: String): String {
+    if (field.type.valueTypeName == "Any?") {
+      return expression
+    }
+    return "($expression as ${field.type.valueTypeName})"
   }
 
   private fun constructorValueExpression(field: KotlinSourceField): String {

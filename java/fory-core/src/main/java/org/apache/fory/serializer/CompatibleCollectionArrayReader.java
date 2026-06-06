@@ -63,6 +63,7 @@ final class CompatibleCollectionArrayReader {
   static final int READ_LIST_TO_ARRAY = 1;
   static final int READ_ARRAY_TO_LIST = 2;
   static final int READ_LIST_TO_LIST = 3;
+  static final int READ_ARRAY_TO_ARRAY = 4;
 
   static final class ReadAction {
     final int mode;
@@ -131,6 +132,7 @@ final class CompatibleCollectionArrayReader {
       return null;
     }
     FieldTypes.FieldType remoteFieldType = remoteFieldInfo.getFieldType();
+    FieldTypes.FieldType localFieldType = FieldTypes.buildFieldType(resolver, localDescriptor);
     TypeRef<?> localType = localDescriptor.getTypeRef();
     int peerListElementTypeId = listElementTypeId(remoteFieldType);
     if (peerListElementTypeId != Types.UNKNOWN) {
@@ -166,6 +168,14 @@ final class CompatibleCollectionArrayReader {
     }
     int peerArrayTypeId = arrayTypeId(remoteFieldType);
     if (peerArrayTypeId != Types.UNKNOWN) {
+      int localArrayTypeId = arrayTypeId(localFieldType);
+      if (localArrayTypeId == peerArrayTypeId && !remoteFieldType.equals(localFieldType)) {
+        return new ReadAction(
+            READ_ARRAY_TO_ARRAY,
+            peerArrayTypeId,
+            Types.UNKNOWN,
+            denseArrayTargetType(localDescriptor.getRawType(), peerArrayTypeId));
+      }
       int localListElementTypeId = listElementTypeId(localType);
       if (localListElementTypeId != Types.UNKNOWN
           && peerArrayTypeId == denseArrayTypeId(localListElementTypeId)
@@ -337,6 +347,10 @@ final class CompatibleCollectionArrayReader {
       return materializeTarget(array, arrayTypeId, targetType);
     }
     if (readMode == READ_ARRAY_TO_LIST) {
+      Object array = readDenseArrayPayload(readContext, arrayTypeId);
+      return materializeTarget(array, arrayTypeId, targetType);
+    }
+    if (readMode == READ_ARRAY_TO_ARRAY) {
       Object array = readDenseArrayPayload(readContext, arrayTypeId);
       return materializeTarget(array, arrayTypeId, targetType);
     }
@@ -826,6 +840,43 @@ final class CompatibleCollectionArrayReader {
       return materializeBoxedList(array, arrayTypeId);
     }
     throw new DeserializationException("Unsupported compatible list/array target " + targetType);
+  }
+
+  private static Class<?> denseArrayTargetType(Class<?> targetType, int arrayTypeId) {
+    if (targetType.isArray()
+        || targetType == Float16Array.class
+        || targetType == BFloat16Array.class
+        || canMaterializePrimitiveListTarget(targetType, arrayTypeId)) {
+      return targetType;
+    }
+    return primitiveArrayClass(arrayTypeId);
+  }
+
+  private static Class<?> primitiveArrayClass(int arrayTypeId) {
+    switch (arrayTypeId) {
+      case Types.BOOL_ARRAY:
+        return boolean[].class;
+      case Types.INT8_ARRAY:
+      case Types.UINT8_ARRAY:
+        return byte[].class;
+      case Types.INT16_ARRAY:
+      case Types.UINT16_ARRAY:
+      case Types.FLOAT16_ARRAY:
+      case Types.BFLOAT16_ARRAY:
+        return short[].class;
+      case Types.INT32_ARRAY:
+      case Types.UINT32_ARRAY:
+        return int[].class;
+      case Types.INT64_ARRAY:
+      case Types.UINT64_ARRAY:
+        return long[].class;
+      case Types.FLOAT32_ARRAY:
+        return float[].class;
+      case Types.FLOAT64_ARRAY:
+        return double[].class;
+      default:
+        throw new IllegalArgumentException("Unsupported dense array type id " + arrayTypeId);
+    }
   }
 
   private static Object materializePrimitiveList(

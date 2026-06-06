@@ -962,7 +962,6 @@ final class ForyGenerator extends Generator {
         'value.${field.name}',
         'index',
         '          ',
-        localIndex: index,
       );
       output.writeln('          break;');
     }
@@ -1020,7 +1019,6 @@ final class ForyGenerator extends Generator {
         null,
         'index',
         '          ',
-        localIndex: index,
       );
       output
         ..writeln('          hasField$index = true;')
@@ -1124,7 +1122,6 @@ final class ForyGenerator extends Generator {
           'value.${field.name}',
           '$index',
           '        ',
-          localIndex: index,
         );
         output.writeln('      }');
       }
@@ -1157,7 +1154,6 @@ final class ForyGenerator extends Generator {
         null,
         '$index',
         '        ',
-        localIndex: index,
       );
       output.writeln('      }');
     }
@@ -1537,7 +1533,6 @@ final class ForyGenerator extends Generator {
           '$index',
           indent,
           inlineScalar: true,
-          localIndex: index,
         );
       } else {
         _writeSequentialExactRead(
@@ -1682,7 +1677,6 @@ final class ForyGenerator extends Generator {
     String layoutIndex,
     String indent, {
     bool inlineScalar = false,
-    int? localIndex,
   }) {
     final readerFunctionName = field.readerFunctionName(structSpec.name);
     final compatibleDirectRead =
@@ -1699,20 +1693,6 @@ final class ForyGenerator extends Generator {
             );
     if (compatibleDirectRead != null) {
       output.writeln('$indent$target = $compatibleDirectRead;');
-      return;
-    }
-    if (localIndex != null && _usesDirectGeneratedStructFieldFastPath(field)) {
-      output.writeln(
-        '$indent$target = ${_readerCall(readerFunctionName, 'readGeneratedStructDirectValue(context, fields[$localIndex])', fallback)};',
-      );
-      return;
-    }
-    if (localIndex != null &&
-        _usesDirectGeneratedTypedContainerReadFastPath(field) &&
-        _usesGeneratedStructElementReadFastPath(field)) {
-      output.writeln(
-        '$indent$target = ${_directGeneratedTypedContainerReadExpression(structSpec.name, field, 'fields[$localIndex]')};',
-      );
       return;
     }
     output.writeln(
@@ -2362,6 +2342,9 @@ GeneratedFieldType(
         field.fieldType.dynamic == true) {
       return false;
     }
+    if (!_isGeneratedStructType(field.type)) {
+      return false;
+    }
     final typeId = field.fieldType.typeId;
     return typeId == TypeIds.struct ||
         typeId == TypeIds.compatibleStruct ||
@@ -2391,10 +2374,18 @@ GeneratedFieldType(
       return false;
     }
     final elementFieldType = field.fieldType.arguments.single;
+    final elementType = (field.type as InterfaceType).typeArguments.single;
     return !elementFieldType.nullable &&
         !elementFieldType.ref &&
         elementFieldType.dynamic != true &&
+        _isGeneratedStructType(elementType) &&
         _isGeneratedStructFieldType(elementFieldType);
+  }
+
+  bool _isGeneratedStructType(DartType type) {
+    final element = _withoutNullability(type).element;
+    return element is ClassElement &&
+        _foryStructChecker.hasAnnotationOf(element);
   }
 
   bool _isGeneratedStructFieldType(_GeneratedFieldTypeSpec fieldType) {

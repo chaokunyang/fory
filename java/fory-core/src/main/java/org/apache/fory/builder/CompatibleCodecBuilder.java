@@ -292,13 +292,23 @@ public class CompatibleCodecBuilder extends ObjectCodecBuilder {
       }
       appendPrimitiveBulkReads(expressions, bean, buffer, bulkGroups);
       for (Descriptor descriptor : group) {
-        expressions.add(
-            deserializeField(
-                buffer,
-                descriptor,
-                value ->
-                    setFieldValue(
-                        bean, descriptor, tryInlineCast(value, descriptor.getTypeRef()))));
+        FieldConverter<?> converter = descriptor.getFieldConverter();
+        Expression targetValue =
+            converter == null ? null : fieldConverterTargetRead(descriptor, converter);
+        if (targetValue != null) {
+          expressions.add(
+              new Expression.ListExpression(
+                  targetValue,
+                  setFieldConverterTargetValue(bean, descriptor, converter, targetValue)));
+        } else {
+          expressions.add(
+              deserializeField(
+                  buffer,
+                  descriptor,
+                  value ->
+                      setFieldValue(
+                          bean, descriptor, tryInlineCast(value, descriptor.getTypeRef()))));
+        }
       }
     }
     appendPrimitiveBulkReads(expressions, bean, buffer, bulkGroups);
@@ -333,6 +343,16 @@ public class CompatibleCodecBuilder extends ObjectCodecBuilder {
       FieldConverter<?> converter = descriptor.getFieldConverter();
       if (converter != null) {
         Field field = converter.getField();
+        TypeRef<?> targetType = TypeRef.of(field.getType());
+        if (value.type().equals(targetType)) {
+          Descriptor newDesc =
+              new DescriptorBuilder(descriptor)
+                  .field(field)
+                  .type(field.getType())
+                  .typeRef(targetType)
+                  .build();
+          return super.setFieldValue(bean, newDesc, value);
+        }
         StaticInvoke convertedValue =
             new StaticInvoke(
                 FieldConverters.class,
@@ -360,6 +380,42 @@ public class CompatibleCodecBuilder extends ObjectCodecBuilder {
       return new StaticInvoke(ExceptionUtils.class, "ignore", value);
     }
     return super.setFieldValue(bean, descriptor, value);
+  }
+
+  private Expression setFieldConverterTargetValue(
+      Expression bean, Descriptor descriptor, FieldConverter<?> converter, Expression value) {
+    Field field = converter.getField();
+    Descriptor targetDescriptor =
+        new DescriptorBuilder(descriptor)
+            .field(field)
+            .type(field.getType())
+            .typeRef(TypeRef.of(field.getType()))
+            .build();
+    return super.setFieldValue(bean, targetDescriptor, value);
+  }
+
+  private Expression fieldConverterTargetRead(Descriptor descriptor, FieldConverter<?> converter) {
+    Class<?> targetType = FieldConverters.toType(converter);
+    String helper;
+    if (targetType == long.class) {
+      helper = "readLongTarget";
+    } else if (targetType == Long.class) {
+      helper = "readBoxedLongTarget";
+    } else {
+      return null;
+    }
+    return new StaticInvoke(
+        FieldConverters.class,
+        helper,
+        TypeRef.of(targetType),
+        readContextRef(),
+        Literal.ofInt(FieldConverters.fromDispatchId(converter)),
+        Literal.ofClass(FieldConverters.fromType(converter)),
+        Literal.ofBoolean(descriptor.isNullable()),
+        Literal.ofBoolean(new SerializationFieldInfo(typeResolver, descriptor).useDeclaredTypeInfo),
+        Literal.ofInt(FieldConverters.toDispatchId(converter)),
+        Literal.ofClass(targetType),
+        Literal.ofString(FieldConverters.fieldName(converter)));
   }
 
   private static boolean hasFieldConverter(List<Descriptor> descriptors) {

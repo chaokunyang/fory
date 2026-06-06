@@ -798,8 +798,11 @@ public abstract class StaticGeneratedStructSerializer<T> extends AbstractObjectS
   /** Remote field metadata consumed by generated compatible read methods. */
   @Internal
   public static final class RemoteFieldInfo {
-    /** Doubled compatible-read dispatch id: local id * 2 for exact, local id * 2 + 1 for conversion. */
+    /**
+     * Doubled compatible-read dispatch id: local id * 2 for exact, local id * 2 + 1 for conversion.
+     */
     public final int matchedId;
+
     public final FieldInfo fieldInfo;
     public final Descriptor descriptor;
     public final SerializationFieldInfo serializationFieldInfo;
@@ -853,7 +856,10 @@ public abstract class StaticGeneratedStructSerializer<T> extends AbstractObjectS
               FieldConverters.requiresSourceScalarRead(serializationFieldInfo, localFieldInfo);
         } else {
           throw incompatibleFieldError(
-              fieldInfo, localFieldInfo, incompatibleCollectionArrayMatch, nestedCollectionArrayMatch);
+              fieldInfo,
+              localFieldInfo,
+              incompatibleCollectionArrayMatch,
+              nestedCollectionArrayMatch);
         }
       }
     }

@@ -206,9 +206,7 @@ public final class StaticCompatibleCodecBuilder extends ObjectCodecBuilder {
         .append('\n')
         .append("}\n");
     String recordArgs = recordArgsFieldName(components.length);
-    code.append("Object[] _f_recordArgs = this.")
-        .append(recordArgs)
-        .append(";\n");
+    code.append("Object[] _f_recordArgs = this.").append(recordArgs).append(";\n");
     for (int i = 0; i < components.length; i++) {
       code.append("_f_recordArgs[")
           .append(i)
@@ -277,8 +275,7 @@ public final class StaticCompatibleCodecBuilder extends ObjectCodecBuilder {
     code.append("  return;\n");
     code.append("}\n");
     for (int group = 0; group < groupCount; group++) {
-      int upperBound =
-          Math.min(localDescriptors.size() * 2, (group + 1) * DISPATCH_GROUP_SIZE);
+      int upperBound = Math.min(localDescriptors.size() * 2, (group + 1) * DISPATCH_GROUP_SIZE);
       if (group == 0) {
         code.append("if (_f_remoteField.matchedId >= 0 && _f_remoteField.matchedId < ")
             .append(upperBound)
@@ -307,9 +304,7 @@ public final class StaticCompatibleCodecBuilder extends ObjectCodecBuilder {
     for (int matchedId = start; matchedId < end; matchedId++) {
       int localId = matchedId >> 1;
       Descriptor descriptor = localDescriptors.get(localId);
-      code.append("  case ")
-          .append(matchedId)
-          .append(": {\n");
+      code.append("  case ").append(matchedId).append(": {\n");
       if ((matchedId & 1) == 0) {
         code.append("    MemoryBuffer ")
             .append(BUFFER_NAME)
@@ -375,9 +370,7 @@ public final class StaticCompatibleCodecBuilder extends ObjectCodecBuilder {
       if (componentIndex == null) {
         continue;
       }
-      code.append("  case ")
-          .append(matchedId)
-          .append(": {\n");
+      code.append("  case ").append(matchedId).append(": {\n");
       if ((matchedId & 1) == 0) {
         code.append("    MemoryBuffer ")
             .append(BUFFER_NAME)
@@ -386,9 +379,7 @@ public final class StaticCompatibleCodecBuilder extends ObjectCodecBuilder {
             .append(".getBuffer();\n")
             .append(
                 indent(
-                    genDirectReadRecordLocalCode(
-                        descriptor, "_f_recordValue" + componentIndex),
-                    4))
+                    genDirectReadRecordLocalCode(descriptor, "_f_recordValue" + componentIndex), 4))
             .append('\n')
             .append("    break;\n")
             .append("  }\n");

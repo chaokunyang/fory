@@ -29,7 +29,6 @@ import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.resolver.RefMode;
 import org.apache.fory.resolver.TypeInfo;
 import org.apache.fory.serializer.FieldGroups.SerializationFieldInfo;
-import org.apache.fory.serializer.Serializer;
 import org.apache.fory.type.BFloat16;
 import org.apache.fory.type.DispatchId;
 import org.apache.fory.type.Float16;
@@ -195,7 +194,7 @@ final class CompatibleScalarConverter {
     if (buffer == null) {
       return false;
     }
-    return readBooleanTarget(readContext, buffer, from, to);
+    return readBooleanTargetPayload(readContext, buffer, from, to);
   }
 
   static Boolean readBoxedBooleanTarget(
@@ -204,7 +203,7 @@ final class CompatibleScalarConverter {
     if (buffer == null) {
       return null;
     }
-    return readBooleanTarget(readContext, buffer, from, to);
+    return readBooleanTargetPayload(readContext, buffer, from, to);
   }
 
   static byte readByteTarget(
@@ -270,6 +269,30 @@ final class CompatibleScalarConverter {
     return readIntegerBitsTarget(readContext, buffer, from, to);
   }
 
+  static long readLongTarget(
+      ReadContext readContext,
+      int fromDispatchId,
+      Class<?> fromType,
+      boolean nullable,
+      boolean declaredTypeInfo,
+      int toDispatchId,
+      Class<?> toType,
+      String fieldName) {
+    if (!canReadIntegerBitsTarget(fromDispatchId, fromType)) {
+      Object value =
+          FieldConverters.readSourceScalar(
+              readContext, fromDispatchId, fromType, nullable, declaredTypeInfo, fieldName);
+      Object converted = convert(fromDispatchId, fromType, toDispatchId, toType, value, fieldName);
+      return converted == null ? 0L : ((Number) converted).longValue();
+    }
+    MemoryBuffer buffer = readScalarBuffer(readContext, nullable, fieldName);
+    if (buffer == null) {
+      return 0L;
+    }
+    return readIntegerBitsTarget(
+        readContext, buffer, fromDispatchId, fromType, toDispatchId, toType, fieldName);
+  }
+
   static Long readBoxedLongTarget(
       ReadContext readContext, SerializationFieldInfo from, SerializationFieldInfo to) {
     MemoryBuffer buffer = readScalarBuffer(readContext, from);
@@ -279,13 +302,36 @@ final class CompatibleScalarConverter {
     return readIntegerBitsTarget(readContext, buffer, from, to);
   }
 
+  static Long readBoxedLongTarget(
+      ReadContext readContext,
+      int fromDispatchId,
+      Class<?> fromType,
+      boolean nullable,
+      boolean declaredTypeInfo,
+      int toDispatchId,
+      Class<?> toType,
+      String fieldName) {
+    if (!canReadIntegerBitsTarget(fromDispatchId, fromType)) {
+      Object value =
+          FieldConverters.readSourceScalar(
+              readContext, fromDispatchId, fromType, nullable, declaredTypeInfo, fieldName);
+      return (Long) convert(fromDispatchId, fromType, toDispatchId, toType, value, fieldName);
+    }
+    MemoryBuffer buffer = readScalarBuffer(readContext, nullable, fieldName);
+    if (buffer == null) {
+      return null;
+    }
+    return readIntegerBitsTarget(
+        readContext, buffer, fromDispatchId, fromType, toDispatchId, toType, fieldName);
+  }
+
   static float readFloatTarget(
       ReadContext readContext, SerializationFieldInfo from, SerializationFieldInfo to) {
     MemoryBuffer buffer = readScalarBuffer(readContext, from);
     if (buffer == null) {
       return 0.0f;
     }
-    return readFloatTarget(readContext, buffer, from, to);
+    return readFloatTargetPayload(readContext, buffer, from, to);
   }
 
   static Float readBoxedFloatTarget(
@@ -294,7 +340,7 @@ final class CompatibleScalarConverter {
     if (buffer == null) {
       return null;
     }
-    return readFloatTarget(readContext, buffer, from, to);
+    return readFloatTargetPayload(readContext, buffer, from, to);
   }
 
   static double readDoubleTarget(
@@ -303,7 +349,7 @@ final class CompatibleScalarConverter {
     if (buffer == null) {
       return 0.0d;
     }
-    return readDoubleTarget(readContext, buffer, from, to);
+    return readDoubleTargetPayload(readContext, buffer, from, to);
   }
 
   static Double readBoxedDoubleTarget(
@@ -312,7 +358,7 @@ final class CompatibleScalarConverter {
     if (buffer == null) {
       return null;
     }
-    return readDoubleTarget(readContext, buffer, from, to);
+    return readDoubleTargetPayload(readContext, buffer, from, to);
   }
 
   static String readStringTarget(
@@ -355,7 +401,7 @@ final class CompatibleScalarConverter {
     if (buffer == null) {
       return null;
     }
-    BigInteger value = readIntegerTarget(readContext, buffer, from, to);
+    BigInteger value = readIntegerTargetPayload(readContext, buffer, from, to);
     return UInt8.valueOf(value.intValue());
   }
 
@@ -365,7 +411,7 @@ final class CompatibleScalarConverter {
     if (buffer == null) {
       return null;
     }
-    BigInteger value = readIntegerTarget(readContext, buffer, from, to);
+    BigInteger value = readIntegerTargetPayload(readContext, buffer, from, to);
     return UInt16.valueOf(value.intValue());
   }
 
@@ -375,7 +421,7 @@ final class CompatibleScalarConverter {
     if (buffer == null) {
       return null;
     }
-    BigInteger value = readIntegerTarget(readContext, buffer, from, to);
+    BigInteger value = readIntegerTargetPayload(readContext, buffer, from, to);
     return UInt32.valueOf(value.intValue());
   }
 
@@ -385,7 +431,7 @@ final class CompatibleScalarConverter {
     if (buffer == null) {
       return null;
     }
-    BigInteger value = readIntegerTarget(readContext, buffer, from, to);
+    BigInteger value = readIntegerTargetPayload(readContext, buffer, from, to);
     return UInt64.valueOf(value.longValue());
   }
 
@@ -395,7 +441,7 @@ final class CompatibleScalarConverter {
     if (buffer == null) {
       return null;
     }
-    return readFloat16Target(readContext, buffer, from, to);
+    return readFloat16TargetPayload(readContext, buffer, from, to);
   }
 
   static BFloat16 readBFloat16Target(
@@ -404,7 +450,7 @@ final class CompatibleScalarConverter {
     if (buffer == null) {
       return null;
     }
-    return readBFloat16Target(readContext, buffer, from, to);
+    return readBFloat16TargetPayload(readContext, buffer, from, to);
   }
 
   static boolean readBool(
@@ -443,7 +489,23 @@ final class CompatibleScalarConverter {
     return buffer;
   }
 
-  private static boolean readBooleanTarget(
+  private static MemoryBuffer readScalarBuffer(
+      ReadContext readContext, boolean nullable, String fieldName) {
+    MemoryBuffer buffer = readContext.getBuffer();
+    if (nullable) {
+      byte flag = buffer.readByte();
+      if (flag == Fory.NULL_FLAG) {
+        return null;
+      }
+      if (flag != Fory.NOT_NULL_VALUE_FLAG) {
+        throw new DeserializationException(
+            "Invalid nullable compatible scalar field flag " + flag + " for " + fieldName);
+      }
+    }
+    return buffer;
+  }
+
+  private static boolean readBooleanTargetPayload(
       ReadContext readContext,
       MemoryBuffer buffer,
       SerializationFieldInfo from,
@@ -499,7 +561,7 @@ final class CompatibleScalarConverter {
     throw dataError(from.dispatchId, from.type, DispatchId.BOOL, to.type, to.qualifiedFieldName);
   }
 
-  private static BigInteger readIntegerTarget(
+  private static BigInteger readIntegerTargetPayload(
       ReadContext readContext,
       MemoryBuffer buffer,
       SerializationFieldInfo from,
@@ -511,7 +573,8 @@ final class CompatibleScalarConverter {
         value = readBool(buffer, from.dispatchId, from.type, fieldName) ? BIG_ONE : BIG_ZERO;
         break;
       case STRING:
-        value = integerFromDecimal(parseDecimalString(readContext.readString(), from, to), from, to);
+        value =
+            integerFromDecimal(parseDecimalString(readContext.readString(), from, to), from, to);
         break;
       case SIGNED_INT:
       case UNSIGNED_INT:
@@ -546,13 +609,54 @@ final class CompatibleScalarConverter {
       case STRING:
       case DECIMAL:
       case FLOAT:
-        return readIntegerTarget(readContext, buffer, from, to).longValue();
+        return readIntegerTargetPayload(readContext, buffer, from, to).longValue();
       case SIGNED_INT:
         return readSignedIntegerBitsTarget(buffer, from, to.dispatchId, to.type, fieldName);
       case UNSIGNED_INT:
         return readUnsignedIntegerBitsTarget(buffer, from, to.dispatchId, to.type, fieldName);
       default:
         throw dataError(from.dispatchId, from.type, to.dispatchId, to.type, fieldName);
+    }
+  }
+
+  private static long readIntegerBitsTarget(
+      ReadContext readContext,
+      MemoryBuffer buffer,
+      int fromDispatchId,
+      Class<?> fromType,
+      int toDispatchId,
+      Class<?> toType,
+      String fieldName) {
+    switch (domain(fromDispatchId, fromType)) {
+      case BOOL:
+        return checkedSignedIntegerBits(
+            readBool(buffer, fromDispatchId, fromType, fieldName) ? 1L : 0L,
+            toDispatchId,
+            toType,
+            fieldName);
+      case SIGNED_INT:
+        return readSignedIntegerBitsTarget(buffer, fromDispatchId, toDispatchId, toType, fieldName);
+      case UNSIGNED_INT:
+        return readUnsignedIntegerBitsTarget(
+            buffer, fromDispatchId, toDispatchId, toType, fieldName);
+      default:
+        Object value =
+            FieldConverters.readSourceScalar(
+                readContext, fromDispatchId, fromType, false, false, fieldName);
+        Object converted =
+            convert(fromDispatchId, fromType, toDispatchId, toType, value, fieldName);
+        return converted == null ? 0L : ((Number) converted).longValue();
+    }
+  }
+
+  private static boolean canReadIntegerBitsTarget(int fromDispatchId, Class<?> fromType) {
+    switch (domain(fromDispatchId, fromType)) {
+      case BOOL:
+      case SIGNED_INT:
+      case UNSIGNED_INT:
+        return true;
+      default:
+        return false;
     }
   }
 
@@ -587,6 +691,41 @@ final class CompatibleScalarConverter {
         break;
       default:
         throw dataError(from.dispatchId, from.type, toDispatchId, toType, fieldName);
+    }
+    return checkedSignedIntegerBits(value, toDispatchId, toType, fieldName);
+  }
+
+  private static long readSignedIntegerBitsTarget(
+      MemoryBuffer buffer,
+      int fromDispatchId,
+      int toDispatchId,
+      Class<?> toType,
+      String fieldName) {
+    long value;
+    switch (fromDispatchId) {
+      case DispatchId.INT8:
+        value = buffer.readByte();
+        break;
+      case DispatchId.INT16:
+        value = buffer.readInt16();
+        break;
+      case DispatchId.INT32:
+        value = buffer.readInt32();
+        break;
+      case DispatchId.VARINT32:
+        value = buffer.readVarInt32();
+        break;
+      case DispatchId.INT64:
+        value = buffer.readInt64();
+        break;
+      case DispatchId.VARINT64:
+        value = buffer.readVarInt64();
+        break;
+      case DispatchId.TAGGED_INT64:
+        value = buffer.readTaggedInt64();
+        break;
+      default:
+        throw dataError(fromDispatchId, long.class, toDispatchId, toType, fieldName);
     }
     return checkedSignedIntegerBits(value, toDispatchId, toType, fieldName);
   }
@@ -632,6 +771,53 @@ final class CompatibleScalarConverter {
         break;
       default:
         throw dataError(from.dispatchId, from.type, toDispatchId, toType, fieldName);
+    }
+    return unsigned64
+        ? checkedUnsigned64IntegerBits(value, toDispatchId, toType, fieldName)
+        : checkedUnsignedIntegerBits(value, toDispatchId, toType, fieldName);
+  }
+
+  private static long readUnsignedIntegerBitsTarget(
+      MemoryBuffer buffer,
+      int fromDispatchId,
+      int toDispatchId,
+      Class<?> toType,
+      String fieldName) {
+    long value;
+    boolean unsigned64 = false;
+    switch (fromDispatchId) {
+      case DispatchId.UINT8:
+      case DispatchId.EXT_UINT8:
+        value = buffer.readByte() & 0xFFL;
+        break;
+      case DispatchId.UINT16:
+      case DispatchId.EXT_UINT16:
+        value = buffer.readInt16() & 0xFFFFL;
+        break;
+      case DispatchId.UINT32:
+      case DispatchId.EXT_UINT32:
+        value = Integer.toUnsignedLong(buffer.readInt32());
+        break;
+      case DispatchId.VAR_UINT32:
+      case DispatchId.EXT_VAR_UINT32:
+        value = Integer.toUnsignedLong(buffer.readVarUInt32());
+        break;
+      case DispatchId.UINT64:
+      case DispatchId.EXT_UINT64:
+        value = buffer.readInt64();
+        unsigned64 = true;
+        break;
+      case DispatchId.VAR_UINT64:
+      case DispatchId.EXT_VAR_UINT64:
+        value = buffer.readVarUInt64();
+        unsigned64 = true;
+        break;
+      case DispatchId.TAGGED_UINT64:
+        value = buffer.readTaggedUInt64();
+        unsigned64 = true;
+        break;
+      default:
+        throw dataError(fromDispatchId, long.class, toDispatchId, toType, fieldName);
     }
     return unsigned64
         ? checkedUnsigned64IntegerBits(value, toDispatchId, toType, fieldName)
@@ -769,8 +955,7 @@ final class CompatibleScalarConverter {
     }
   }
 
-  private static void throwIntegerRangeError(
-      int toDispatchId, Class<?> toType, String fieldName) {
+  private static void throwIntegerRangeError(int toDispatchId, Class<?> toType, String fieldName) {
     throw dataError(DispatchId.UNKNOWN, BigInteger.class, toDispatchId, toType, fieldName);
   }
 
@@ -821,7 +1006,8 @@ final class CompatibleScalarConverter {
       case DispatchId.TAGGED_UINT64:
         return unsignedLongBigInteger(buffer.readTaggedUInt64());
       default:
-        throw dataError(from.dispatchId, from.type, DispatchId.UNKNOWN, BigInteger.class, fieldName);
+        throw dataError(
+            from.dispatchId, from.type, DispatchId.UNKNOWN, BigInteger.class, fieldName);
     }
   }
 
@@ -833,10 +1019,7 @@ final class CompatibleScalarConverter {
   }
 
   private static BigDecimal readNumericDecimal(
-      ReadContext readContext,
-      MemoryBuffer buffer,
-      SerializationFieldInfo from,
-      String fieldName) {
+      ReadContext readContext, MemoryBuffer buffer, SerializationFieldInfo from, String fieldName) {
     switch (domain(from.dispatchId, from.type)) {
       case BOOL:
         return readBool(buffer, from.dispatchId, from.type, fieldName) ? DECIMAL_ONE : DECIMAL_ZERO;
@@ -850,7 +1033,8 @@ final class CompatibleScalarConverter {
       case FLOAT:
         return readFiniteFloatDecimal(buffer, from, fieldName);
       default:
-        throw dataError(from.dispatchId, from.type, DispatchId.UNKNOWN, BigDecimal.class, fieldName);
+        throw dataError(
+            from.dispatchId, from.type, DispatchId.UNKNOWN, BigDecimal.class, fieldName);
     }
   }
 
@@ -866,7 +1050,8 @@ final class CompatibleScalarConverter {
     }
   }
 
-  private static BigDecimal readDecimalSource(ReadContext readContext, SerializationFieldInfo from) {
+  private static BigDecimal readDecimalSource(
+      ReadContext readContext, SerializationFieldInfo from) {
     if (from.useDeclaredTypeInfo) {
       readContext.preserveRefId(-1);
       return (BigDecimal) readContext.readNonRef(from.typeInfo);
@@ -875,7 +1060,7 @@ final class CompatibleScalarConverter {
     return (BigDecimal) typeInfo.getSerializer().read(readContext, RefMode.NONE);
   }
 
-  private static float readFloatTarget(
+  private static float readFloatTargetPayload(
       ReadContext readContext,
       MemoryBuffer buffer,
       SerializationFieldInfo from,
@@ -904,7 +1089,7 @@ final class CompatibleScalarConverter {
     }
   }
 
-  private static double readDoubleTarget(
+  private static double readDoubleTargetPayload(
       ReadContext readContext,
       MemoryBuffer buffer,
       SerializationFieldInfo from,
@@ -933,7 +1118,7 @@ final class CompatibleScalarConverter {
     }
   }
 
-  private static Float16 readFloat16Target(
+  private static Float16 readFloat16TargetPayload(
       ReadContext readContext,
       MemoryBuffer buffer,
       SerializationFieldInfo from,
@@ -950,7 +1135,7 @@ final class CompatibleScalarConverter {
             to.qualifiedFieldName);
   }
 
-  private static BFloat16 readBFloat16Target(
+  private static BFloat16 readBFloat16TargetPayload(
       ReadContext readContext,
       MemoryBuffer buffer,
       SerializationFieldInfo from,
@@ -974,7 +1159,8 @@ final class CompatibleScalarConverter {
         {
           Float16 value = Float16.fromBits(buffer.readInt16());
           if (!value.isFinite()) {
-            throw dataError(from.dispatchId, from.type, DispatchId.BOOL, to.type, to.qualifiedFieldName);
+            throw dataError(
+                from.dispatchId, from.type, DispatchId.BOOL, to.type, to.qualifiedFieldName);
           }
           if (value.isZero()) {
             return false;
@@ -982,13 +1168,15 @@ final class CompatibleScalarConverter {
           if (value.toBits() == Float16.ONE.toBits()) {
             return true;
           }
-          throw dataError(from.dispatchId, from.type, DispatchId.BOOL, to.type, to.qualifiedFieldName);
+          throw dataError(
+              from.dispatchId, from.type, DispatchId.BOOL, to.type, to.qualifiedFieldName);
         }
       case DispatchId.BFLOAT16:
         {
           BFloat16 value = BFloat16.fromBits(buffer.readInt16());
           if (!value.isFinite()) {
-            throw dataError(from.dispatchId, from.type, DispatchId.BOOL, to.type, to.qualifiedFieldName);
+            throw dataError(
+                from.dispatchId, from.type, DispatchId.BOOL, to.type, to.qualifiedFieldName);
           }
           if (value.isZero()) {
             return false;
@@ -996,13 +1184,15 @@ final class CompatibleScalarConverter {
           if (value.toBits() == BFloat16.ONE.toBits()) {
             return true;
           }
-          throw dataError(from.dispatchId, from.type, DispatchId.BOOL, to.type, to.qualifiedFieldName);
+          throw dataError(
+              from.dispatchId, from.type, DispatchId.BOOL, to.type, to.qualifiedFieldName);
         }
       case DispatchId.FLOAT32:
         {
           float value = buffer.readFloat32();
           if (!Float.isFinite(value)) {
-            throw dataError(from.dispatchId, from.type, DispatchId.BOOL, to.type, to.qualifiedFieldName);
+            throw dataError(
+                from.dispatchId, from.type, DispatchId.BOOL, to.type, to.qualifiedFieldName);
           }
           if (value == 0.0f) {
             return false;
@@ -1010,13 +1200,15 @@ final class CompatibleScalarConverter {
           if (value == 1.0f) {
             return true;
           }
-          throw dataError(from.dispatchId, from.type, DispatchId.BOOL, to.type, to.qualifiedFieldName);
+          throw dataError(
+              from.dispatchId, from.type, DispatchId.BOOL, to.type, to.qualifiedFieldName);
         }
       case DispatchId.FLOAT64:
         {
           double value = buffer.readFloat64();
           if (!Double.isFinite(value)) {
-            throw dataError(from.dispatchId, from.type, DispatchId.BOOL, to.type, to.qualifiedFieldName);
+            throw dataError(
+                from.dispatchId, from.type, DispatchId.BOOL, to.type, to.qualifiedFieldName);
           }
           if (value == 0.0d) {
             return false;
@@ -1024,10 +1216,12 @@ final class CompatibleScalarConverter {
           if (value == 1.0d) {
             return true;
           }
-          throw dataError(from.dispatchId, from.type, DispatchId.BOOL, to.type, to.qualifiedFieldName);
+          throw dataError(
+              from.dispatchId, from.type, DispatchId.BOOL, to.type, to.qualifiedFieldName);
         }
       default:
-        throw dataError(from.dispatchId, from.type, DispatchId.BOOL, to.type, to.qualifiedFieldName);
+        throw dataError(
+            from.dispatchId, from.type, DispatchId.BOOL, to.type, to.qualifiedFieldName);
     }
   }
 
@@ -1038,7 +1232,8 @@ final class CompatibleScalarConverter {
         {
           Float16 value = Float16.fromBits(buffer.readInt16());
           if (!value.isFinite()) {
-            throw dataError(from.dispatchId, from.type, DispatchId.UNKNOWN, BigDecimal.class, fieldName);
+            throw dataError(
+                from.dispatchId, from.type, DispatchId.UNKNOWN, BigDecimal.class, fieldName);
           }
           return value.isZero() ? BigDecimal.ZERO : exactFloatDecimal(value.floatValue());
         }
@@ -1046,7 +1241,8 @@ final class CompatibleScalarConverter {
         {
           BFloat16 value = BFloat16.fromBits(buffer.readInt16());
           if (!value.isFinite()) {
-            throw dataError(from.dispatchId, from.type, DispatchId.UNKNOWN, BigDecimal.class, fieldName);
+            throw dataError(
+                from.dispatchId, from.type, DispatchId.UNKNOWN, BigDecimal.class, fieldName);
           }
           return value.isZero() ? BigDecimal.ZERO : exactFloatDecimal(value.floatValue());
         }
@@ -1054,7 +1250,8 @@ final class CompatibleScalarConverter {
         {
           float value = buffer.readFloat32();
           if (!Float.isFinite(value)) {
-            throw dataError(from.dispatchId, from.type, DispatchId.UNKNOWN, BigDecimal.class, fieldName);
+            throw dataError(
+                from.dispatchId, from.type, DispatchId.UNKNOWN, BigDecimal.class, fieldName);
           }
           return value == 0.0f ? BigDecimal.ZERO : exactFloatDecimal(value);
         }
@@ -1062,12 +1259,14 @@ final class CompatibleScalarConverter {
         {
           double value = buffer.readFloat64();
           if (!Double.isFinite(value)) {
-            throw dataError(from.dispatchId, from.type, DispatchId.UNKNOWN, BigDecimal.class, fieldName);
+            throw dataError(
+                from.dispatchId, from.type, DispatchId.UNKNOWN, BigDecimal.class, fieldName);
           }
           return value == 0.0d ? BigDecimal.ZERO : exactDoubleDecimal(value);
         }
       default:
-        throw dataError(from.dispatchId, from.type, DispatchId.UNKNOWN, BigDecimal.class, fieldName);
+        throw dataError(
+            from.dispatchId, from.type, DispatchId.UNKNOWN, BigDecimal.class, fieldName);
     }
   }
 
@@ -1128,7 +1327,10 @@ final class CompatibleScalarConverter {
   }
 
   private static float readFloatAsFloat32(
-      MemoryBuffer buffer, SerializationFieldInfo from, SerializationFieldInfo to, String fieldName) {
+      MemoryBuffer buffer,
+      SerializationFieldInfo from,
+      SerializationFieldInfo to,
+      String fieldName) {
     switch (normalizedFloatId(from.dispatchId, from.type)) {
       case DispatchId.FLOAT16:
         {
@@ -1180,7 +1382,10 @@ final class CompatibleScalarConverter {
   }
 
   private static double readFloatAsFloat64(
-      MemoryBuffer buffer, SerializationFieldInfo from, SerializationFieldInfo to, String fieldName) {
+      MemoryBuffer buffer,
+      SerializationFieldInfo from,
+      SerializationFieldInfo to,
+      String fieldName) {
     switch (normalizedFloatId(from.dispatchId, from.type)) {
       case DispatchId.FLOAT16:
         {

@@ -442,6 +442,7 @@ bool _compatibleFieldType(
   final sameWireFamily =
       localType.typeId == remoteType.typeId ||
       _compatibleUnknownUserType(localType, remoteType) ||
+      _compatibleGeneratedManualUserType(localType, remoteType) ||
       (_isStructWireType(localType.typeId) &&
           _isStructWireType(remoteType.typeId));
   if (!sameWireFamily ||
@@ -490,6 +491,26 @@ bool _isStructWireType(int typeId) =>
     typeId == TypeIds.compatibleStruct ||
     typeId == TypeIds.namedStruct ||
     typeId == TypeIds.namedCompatibleStruct;
+
+bool _isManualUserWireType(int typeId) =>
+    typeId == TypeIds.ext ||
+    typeId == TypeIds.namedExt ||
+    typeId == TypeIds.union ||
+    typeId == TypeIds.typedUnion ||
+    typeId == TypeIds.namedUnion;
+
+bool _compatibleGeneratedManualUserType(
+  FieldType localType,
+  FieldType remoteType,
+) {
+  if (localType.arguments.isNotEmpty || remoteType.arguments.isNotEmpty) {
+    return false;
+  }
+  return (_isStructWireType(localType.typeId) &&
+          _isManualUserWireType(remoteType.typeId)) ||
+      (_isManualUserWireType(localType.typeId) &&
+          _isStructWireType(remoteType.typeId));
+}
 
 bool _compatibleUnknownUserType(FieldType localType, FieldType remoteType) {
   if (localType.typeId == TypeIds.unknown) {

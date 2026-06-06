@@ -3502,7 +3502,7 @@ read_compatible_conversion_case(T &obj, ReadContext &ctx,
         read_compatible_exact_case<T, matched_case>(obj, ctx);                 \
       } else {                                                                 \
         read_compatible_conversion_case<T, matched_case>(obj, ctx,             \
-                                                        remote_field_type);    \
+                                                         remote_field_type);   \
       }                                                                        \
     } else {                                                                   \
       ctx.set_error(Error::type_error("Invalid compatible matched id"));       \
@@ -3539,9 +3539,9 @@ read_compatible_conversion_case(T &obj, ReadContext &ctx,
   FORY_COMPAT_READ_SWITCH_CASES_16(112)
 
 template <typename T, int16_t Base>
-FORY_ALWAYS_INLINE void dispatch_compat_read_impl(
-    T &obj, ReadContext &ctx, int16_t matched_id,
-    const FieldType &remote_field_type) {
+FORY_ALWAYS_INLINE void
+dispatch_compat_read_impl(T &obj, ReadContext &ctx, int16_t matched_id,
+                          const FieldType &remote_field_type) {
   constexpr size_t total_cases =
       CompileTimeFieldHelpers<T>::FieldCount * static_cast<size_t>(2);
   switch (matched_id) {
@@ -3570,7 +3570,7 @@ FORY_ALWAYS_INLINE void dispatch_compat_read_impl(
       } else {                                                                 \
         ctx.buffer().reader_index(offset);                                     \
         read_compatible_conversion_case<T, matched_case>(obj, ctx,             \
-                                                        remote_field_type);    \
+                                                         remote_field_type);   \
         offset = ctx.buffer().reader_index();                                  \
       }                                                                        \
     } else {                                                                   \
@@ -3608,9 +3608,10 @@ FORY_ALWAYS_INLINE void dispatch_compat_read_impl(
   FORY_COMPAT_READ_AT_SWITCH_CASES_16(112)
 
 template <typename T, int16_t Base>
-FORY_ALWAYS_INLINE void dispatch_compat_read_at_impl(
-    T &obj, ReadContext &ctx, int16_t matched_id,
-    const FieldType &remote_field_type, uint32_t &offset) {
+FORY_ALWAYS_INLINE void
+dispatch_compat_read_at_impl(T &obj, ReadContext &ctx, int16_t matched_id,
+                             const FieldType &remote_field_type,
+                             uint32_t &offset) {
   constexpr size_t total_cases =
       CompileTimeFieldHelpers<T>::FieldCount * static_cast<size_t>(2);
   switch (matched_id) {

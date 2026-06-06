@@ -190,7 +190,8 @@ final class StaticSerializerSourceWriter {
     builder.append("    this.allFields = fieldGroups.allFields;\n");
     builder.append("    this.allFieldIds = localFieldIds(allFields, DESCRIPTORS);\n");
     builder.append("    this.fieldsById = new SerializationFieldInfo[DESCRIPTORS.size()];\n");
-    builder.append("    this.generatedObjectInstantiator = typeResolver.getObjectInstantiator(type);\n");
+    builder.append(
+        "    this.generatedObjectInstantiator = typeResolver.getObjectInstantiator(type);\n");
     if (struct.record) {
       builder
           .append("    this.recordArgs = new Object[")
@@ -562,7 +563,11 @@ final class StaticSerializerSourceWriter {
     appendIndented(indent + 2, "default:");
     appendIndented(
         indent + 4,
-        "Object fieldValue" + field.id + " = readBuildInFieldValue(readContext, " + fieldInfoName + ");");
+        "Object fieldValue"
+            + field.id
+            + " = readBuildInFieldValue(readContext, "
+            + fieldInfoName
+            + ");");
     appendIndented(
         indent + 4,
         assignment(field, target, field.castExpression("fieldValue" + field.id), localTarget));

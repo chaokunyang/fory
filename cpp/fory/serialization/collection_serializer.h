@@ -1316,10 +1316,11 @@ template <typename T, typename Alloc> struct Serializer<std::list<T, Alloc>> {
           } else {
             if constexpr (is_nullable_v<T>) {
               using Inner = nullable_element_t<T>;
-              auto inner = elem_type_info
-                               ? Serializer<Inner>::read_with_type_info(
-                                     ctx, RefMode::None, *elem_type_info)
-                               : Serializer<Inner>::read(ctx, RefMode::None, false);
+              auto inner =
+                  elem_type_info
+                      ? Serializer<Inner>::read_with_type_info(
+                            ctx, RefMode::None, *elem_type_info)
+                      : Serializer<Inner>::read(ctx, RefMode::None, false);
               result.emplace_back(std::move(inner));
             } else {
               auto elem = elem_type_info
@@ -1536,10 +1537,11 @@ template <typename T, typename Alloc> struct Serializer<std::deque<T, Alloc>> {
           } else {
             if constexpr (is_nullable_v<T>) {
               using Inner = nullable_element_t<T>;
-              auto inner = elem_type_info
-                               ? Serializer<Inner>::read_with_type_info(
-                                     ctx, RefMode::None, *elem_type_info)
-                               : Serializer<Inner>::read(ctx, RefMode::None, false);
+              auto inner =
+                  elem_type_info
+                      ? Serializer<Inner>::read_with_type_info(
+                            ctx, RefMode::None, *elem_type_info)
+                      : Serializer<Inner>::read(ctx, RefMode::None, false);
               result.emplace_back(std::move(inner));
             } else {
               auto elem = elem_type_info
@@ -1746,10 +1748,11 @@ struct Serializer<std::forward_list<T, Alloc>> {
             break;
           }
           if (track_ref) {
-            auto elem = elem_type_info
-                            ? Serializer<T>::read_with_type_info(
-                                  ctx, RefMode::Tracking, *elem_type_info)
-                            : Serializer<T>::read(ctx, RefMode::Tracking, false);
+            auto elem =
+                elem_type_info
+                    ? Serializer<T>::read_with_type_info(ctx, RefMode::Tracking,
+                                                         *elem_type_info)
+                    : Serializer<T>::read(ctx, RefMode::Tracking, false);
             temp.push_back(std::move(elem));
           } else if (has_null) {
             bool has_value_elem = read_null_only_flag(ctx, RefMode::NullOnly);
@@ -1758,16 +1761,18 @@ struct Serializer<std::forward_list<T, Alloc>> {
             } else {
               if constexpr (is_nullable_v<T>) {
                 using Inner = nullable_element_t<T>;
-                auto inner = elem_type_info
-                                 ? Serializer<Inner>::read_with_type_info(
-                                       ctx, RefMode::None, *elem_type_info)
-                                 : Serializer<Inner>::read(ctx, RefMode::None, false);
+                auto inner =
+                    elem_type_info
+                        ? Serializer<Inner>::read_with_type_info(
+                              ctx, RefMode::None, *elem_type_info)
+                        : Serializer<Inner>::read(ctx, RefMode::None, false);
                 temp.emplace_back(std::move(inner));
               } else {
-                auto elem = elem_type_info
-                                ? Serializer<T>::read_with_type_info(
-                                      ctx, RefMode::None, *elem_type_info)
-                                : Serializer<T>::read(ctx, RefMode::None, false);
+                auto elem =
+                    elem_type_info
+                        ? Serializer<T>::read_with_type_info(ctx, RefMode::None,
+                                                             *elem_type_info)
+                        : Serializer<T>::read(ctx, RefMode::None, false);
                 temp.push_back(std::move(elem));
               }
             }

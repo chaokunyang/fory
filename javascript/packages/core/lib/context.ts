@@ -582,6 +582,7 @@ export class ReadContext {
     Serializer,
     RegeneratedReadSerializerCacheEntry
   > = new WeakMap();
+
   private recentRegeneratedExpectedHashes = [0, 0, 0, 0];
   private recentRegeneratedRemoteHashes = [0, 0, 0, 0];
   private recentRegeneratedReadSerializers: Array<Serializer | undefined> = [
@@ -590,6 +591,7 @@ export class ReadContext {
     undefined,
     undefined,
   ];
+
   private recentRegeneratedReadSerializerIndex = 0;
   private lastRegeneratedExpectedHash = 0;
   private lastRegeneratedRemoteHash = 0;

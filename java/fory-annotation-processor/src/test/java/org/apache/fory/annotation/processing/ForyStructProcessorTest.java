@@ -204,7 +204,8 @@ public class ForyStructProcessorTest {
                 + "  public InaccessibleStruct() {}\n"
                 + "}\n");
     Assert.assertTrue(result.success, result.diagnostics());
-    String generatedSource = result.generatedSource("test/InaccessibleStruct_ForyNativeSerializer.java");
+    String generatedSource =
+        result.generatedSource("test/InaccessibleStruct_ForyNativeSerializer.java");
     Assert.assertTrue(generatedSource.contains("FieldAccessor fieldAccessor0"), generatedSource);
     try (URLClassLoader loader = result.classLoader()) {
       Class<?> type = loader.loadClass("test.InaccessibleStruct");
@@ -242,7 +243,8 @@ public class ForyStructProcessorTest {
                 + "  public String name() { return name; }\n"
                 + "}\n");
     Assert.assertTrue(result.success, result.diagnostics());
-    String generatedSource = result.generatedSource("test/FinalNoArgStruct_ForyNativeSerializer.java");
+    String generatedSource =
+        result.generatedSource("test/FinalNoArgStruct_ForyNativeSerializer.java");
     Assert.assertTrue(generatedSource.contains("ObjectInstantiator generatedObjectInstantiator"));
     Assert.assertTrue(generatedSource.contains("generatedObjectInstantiator.newInstance()"));
     Assert.assertTrue(generatedSource.contains("FieldAccessor fieldAccessor0"));

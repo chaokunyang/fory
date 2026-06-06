@@ -254,8 +254,11 @@ def write_report(payload: dict, results: dict, output_dir: str):
             sizes = payload["sizes"].get(data_type)
             if sizes is None:
                 continue
+            fory_size = sizes.get("fory", "n/a")
+            protobuf_size = sizes.get("protobuf", "n/a")
+            json_size = sizes.get("json", "n/a")
             handle.write(
-                f"| {DISPLAY_NAMES[data_type]} | {sizes['fory']} | {sizes['protobuf']} | {sizes['json']} |\n"
+                f"| {DISPLAY_NAMES[data_type]} | {fory_size} | {protobuf_size} | {json_size} |\n"
             )
 
     format_markdown_with_prettier(report_path)

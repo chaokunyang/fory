@@ -170,11 +170,20 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+if [[ "${FORY_BENCH_SCHEMA_MISMATCH:-0}" == "1" && "$(lower "${SERIALIZER_FILTER}")" != "fory" ]]; then
+  echo "FORY_BENCH_SCHEMA_MISMATCH=1 supports only Fory benchmarks; rerun with --serializer fory." >&2
+  exit 1
+fi
+
 SERIALIZERS="$(serializer_regex "${SERIALIZER_FILTER}")"
 DATA_TYPES="$(data_regex "${DATA_FILTER}")"
 JMH_DURATION="$(jmh_time "${DURATION_SECONDS}")"
 RESULT_JSON="${REPORT_DIR}/benchmark_results.json"
 BENCHMARK_REGEX="org.apache.fory.benchmark.XlangBenchmark.BM_(${SERIALIZERS})_(${DATA_TYPES})_(Serialize|Deserialize)"
+JMH_EXTRA_ARGS=()
+if [[ "${FORY_BENCH_SCHEMA_MISMATCH:-0}" == "1" ]]; then
+  JMH_EXTRA_ARGS+=("-p" "codegen=true")
+fi
 
 mkdir -p "${REPORT_DIR}"
 
@@ -184,18 +193,27 @@ if [[ "${SKIP_BUILD}" != "true" ]]; then
   mvn -Pjmh -DskipTests package
 fi
 
-ENABLE_FORY_DEBUG_OUTPUT=0 \
-  java -jar target/benchmarks.jar "${BENCHMARK_REGEX}" \
-  -f 1 \
-  -wi 3 \
-  -i 3 \
-  -t 1 \
-  -w "${JMH_DURATION}" \
-  -r "${JMH_DURATION}" \
-  -bm thrpt \
-  -tu s \
-  -rf json \
+JMH_CMD=(
+  java --add-opens=java.base/java.lang.invoke=ALL-UNNAMED
+  -jar target/benchmarks.jar "${BENCHMARK_REGEX}"
+  -f 1
+  -wi 3
+  -i 3
+  -t 1
+)
+if [[ ${#JMH_EXTRA_ARGS[@]} -gt 0 ]]; then
+  JMH_CMD+=("${JMH_EXTRA_ARGS[@]}")
+fi
+JMH_CMD+=(
+  -w "${JMH_DURATION}"
+  -r "${JMH_DURATION}"
+  -bm thrpt
+  -tu s
+  -rf json
   -rff "${RESULT_JSON}"
+)
+
+ENABLE_FORY_DEBUG_OUTPUT=0 "${JMH_CMD[@]}"
 
 if [[ "${GENERATE_REPORT}" == "true" ]]; then
   REPORT_ARGS=(--json-file "${RESULT_JSON}" --output-dir "${REPORT_DIR}")

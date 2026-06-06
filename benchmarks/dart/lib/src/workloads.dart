@@ -37,7 +37,9 @@ final class BenchmarkDefinition<TModel,
   final Object? Function(TModel value, TProto protobufMessage)
       serializeProtobuf;
   final Object? Function(TModel value) serializeJson;
-  final TModel Function(Fory fory, Uint8List bytes) parseFory;
+  final Object? Function(Fory fory, Uint8List bytes) parseFory;
+  final Object? Function(Fory fory, Uint8List bytes) parseForyMismatch;
+  final void Function(Object? decoded, TModel expected) verifyForyMismatch;
   final Object? Function(Uint8List bytes) parseProtobuf;
   final Object? Function(String text) parseJson;
 
@@ -48,20 +50,32 @@ final class BenchmarkDefinition<TModel,
     required this.serializeProtobuf,
     required this.serializeJson,
     required this.parseFory,
+    required this.parseForyMismatch,
+    required this.verifyForyMismatch,
     required this.parseProtobuf,
     required this.parseJson,
   });
 
-  InstantiatedBenchmark instantiate(Fory fory) {
+  InstantiatedBenchmark instantiate({
+    required Fory writerFory,
+    required Fory readerFory,
+    required bool schemaMismatch,
+  }) {
     final model = createModel();
     final buffer = Buffer();
     final protobufMessage = toProto(model);
     final protobufBytes = protobufMessage.writeToBuffer();
     final jsonText = serializeJson(model) as String;
 
-    fory.serializeTo(model, buffer);
+    writerFory.serializeTo(model, buffer);
     final foryBytes = Uint8List.sublistView(buffer.toBytes());
     final forySize = buffer.readableBytes;
+    final decoded = schemaMismatch
+        ? parseForyMismatch(readerFory, foryBytes)
+        : parseFory(readerFory, foryBytes);
+    if (schemaMismatch) {
+      verifyForyMismatch(decoded, model);
+    }
 
     return InstantiatedBenchmark(
       dataType: dataType,
@@ -70,7 +84,7 @@ final class BenchmarkDefinition<TModel,
       jsonSize: utf8.encode(jsonText).length,
       forySerialize: () {
         buffer.clear();
-        fory.serializeTo(model, buffer);
+        writerFory.serializeTo(model, buffer);
         benchmarkSink = buffer.toBytes();
       },
       protobufSerialize: () {
@@ -80,7 +94,9 @@ final class BenchmarkDefinition<TModel,
         benchmarkSink = serializeJson(model);
       },
       foryDeserialize: () {
-        benchmarkSink = parseFory(fory, foryBytes);
+        benchmarkSink = schemaMismatch
+            ? parseForyMismatch(readerFory, foryBytes)
+            : parseFory(readerFory, foryBytes);
       },
       protobufDeserialize: () {
         benchmarkSink = parseProtobuf(protobufBytes);
@@ -128,6 +144,13 @@ List<BenchmarkDefinition<Object, protobuf.GeneratedMessage>>
       serializeProtobuf: (model, _) => toPbStruct(model).writeToBuffer(),
       serializeJson: (model) => jsonEncode(model.toJson()),
       parseFory: (fory, bytes) => fory.deserialize<NumericStruct>(bytes),
+      parseForyMismatch: (fory, bytes) =>
+          fory.deserialize<NumericStructV2>(bytes),
+      verifyForyMismatch: (decoded, expected) {
+        if (decoded is! NumericStructV2 || decoded.f1 != expected.f1) {
+          throw StateError('NumericStructV2 schema mismatch read failed.');
+        }
+      },
       parseProtobuf: (bytes) =>
           fromPbStruct(pb.NumericStruct.fromBuffer(bytes)),
       parseJson: (text) => NumericStruct.fromJson(jsonDecode(text)),
@@ -140,6 +163,12 @@ List<BenchmarkDefinition<Object, protobuf.GeneratedMessage>>
           protobufMessage.writeToBuffer(),
       serializeJson: (model) => jsonEncode(model.toJson()),
       parseFory: (fory, bytes) => fory.deserialize<Sample>(bytes),
+      parseForyMismatch: (fory, bytes) => fory.deserialize<SampleV2>(bytes),
+      verifyForyMismatch: (decoded, expected) {
+        if (decoded is! SampleV2 || decoded.intValue != expected.intValue) {
+          throw StateError('SampleV2 schema mismatch read failed.');
+        }
+      },
       parseProtobuf: pb.Sample.fromBuffer,
       parseJson: (text) => Sample.fromJson(jsonDecode(text)),
     ),
@@ -150,6 +179,16 @@ List<BenchmarkDefinition<Object, protobuf.GeneratedMessage>>
       serializeProtobuf: (model, _) => toPbMediaContent(model).writeToBuffer(),
       serializeJson: (model) => jsonEncode(model.toJson()),
       parseFory: (fory, bytes) => fory.deserialize<MediaContent>(bytes),
+      parseForyMismatch: (fory, bytes) =>
+          fory.deserialize<MediaContentV2>(bytes),
+      verifyForyMismatch: (decoded, expected) {
+        if (decoded is! MediaContentV2 ||
+            decoded.media.width != expected.media.width ||
+            decoded.images.isEmpty ||
+            decoded.images.first.width != expected.images.first.width) {
+          throw StateError('MediaContentV2 schema mismatch read failed.');
+        }
+      },
       parseProtobuf: (bytes) =>
           fromPbMediaContent(pb.MediaContent.fromBuffer(bytes)),
       parseJson: (text) => MediaContent.fromJson(jsonDecode(text)),
@@ -162,6 +201,15 @@ List<BenchmarkDefinition<Object, protobuf.GeneratedMessage>>
           toPbNumericStructList(model).writeToBuffer(),
       serializeJson: (model) => jsonEncode(model.toJson()),
       parseFory: (fory, bytes) => fory.deserialize<NumericStructList>(bytes),
+      parseForyMismatch: (fory, bytes) =>
+          fory.deserialize<NumericStructListV2>(bytes),
+      verifyForyMismatch: (decoded, expected) {
+        if (decoded is! NumericStructListV2 ||
+            decoded.structList.isEmpty ||
+            decoded.structList.first.f1 != expected.structList.first.f1) {
+          throw StateError('NumericStructListV2 schema mismatch read failed.');
+        }
+      },
       parseProtobuf: (bytes) =>
           fromPbNumericStructList(pb.NumericStructList.fromBuffer(bytes)),
       parseJson: (text) => NumericStructList.fromJson(jsonDecode(text)),
@@ -173,6 +221,15 @@ List<BenchmarkDefinition<Object, protobuf.GeneratedMessage>>
       serializeProtobuf: (model, _) => toPbSampleList(model).writeToBuffer(),
       serializeJson: (model) => jsonEncode(model.toJson()),
       parseFory: (fory, bytes) => fory.deserialize<SampleList>(bytes),
+      parseForyMismatch: (fory, bytes) => fory.deserialize<SampleListV2>(bytes),
+      verifyForyMismatch: (decoded, expected) {
+        if (decoded is! SampleListV2 ||
+            decoded.sampleList.isEmpty ||
+            decoded.sampleList.first.intValue !=
+                expected.sampleList.first.intValue) {
+          throw StateError('SampleListV2 schema mismatch read failed.');
+        }
+      },
       parseProtobuf: (bytes) =>
           fromPbSampleList(pb.SampleList.fromBuffer(bytes)),
       parseJson: (text) => SampleList.fromJson(jsonDecode(text)),
@@ -185,6 +242,19 @@ List<BenchmarkDefinition<Object, protobuf.GeneratedMessage>>
           toPbMediaContentList(model).writeToBuffer(),
       serializeJson: (model) => jsonEncode(model.toJson()),
       parseFory: (fory, bytes) => fory.deserialize<MediaContentList>(bytes),
+      parseForyMismatch: (fory, bytes) =>
+          fory.deserialize<MediaContentListV2>(bytes),
+      verifyForyMismatch: (decoded, expected) {
+        if (decoded is! MediaContentListV2 ||
+            decoded.mediaContentList.isEmpty ||
+            decoded.mediaContentList.first.media.width !=
+                expected.mediaContentList.first.media.width ||
+            decoded.mediaContentList.first.images.isEmpty ||
+            decoded.mediaContentList.first.images.first.width !=
+                expected.mediaContentList.first.images.first.width) {
+          throw StateError('MediaContentListV2 schema mismatch read failed.');
+        }
+      },
       parseProtobuf: (bytes) =>
           fromPbMediaContentList(pb.MediaContentList.fromBuffer(bytes)),
       parseJson: (text) => MediaContentList.fromJson(jsonDecode(text)),
@@ -193,7 +263,21 @@ List<BenchmarkDefinition<Object, protobuf.GeneratedMessage>>
 }
 
 Fory newBenchmarkFory() {
+  return newBenchmarkWriterFory();
+}
+
+Fory newBenchmarkWriterFory() {
   final fory = Fory(compatible: true);
   registerBenchmarkTypes(fory);
+  return fory;
+}
+
+Fory newBenchmarkReaderFory({required bool schemaMismatch}) {
+  final fory = Fory(compatible: true);
+  if (schemaMismatch) {
+    registerBenchmarkTypesV2(fory);
+  } else {
+    registerBenchmarkTypes(fory);
+  }
   return fory;
 }

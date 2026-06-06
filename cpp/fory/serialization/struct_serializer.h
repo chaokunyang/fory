@@ -4245,9 +4245,10 @@ read_struct_fields_impl_fast(T &obj, ReadContext &ctx,
 /// Read struct fields with schema evolution (compatible mode)
 /// Reads fields in remote schema order, dispatching by field_id to local fields
 template <typename T, size_t... Indices>
-void read_struct_fields_compatible(T &obj, ReadContext &ctx,
-                                   const TypeMeta *remote_type_meta,
-                                   std::index_sequence<Indices...>) {
+FORY_NOINLINE void
+read_struct_fields_compatible(T &obj, ReadContext &ctx,
+                              const TypeMeta *remote_type_meta,
+                              std::index_sequence<Indices...>) {
   const auto &remote_fields = remote_type_meta->get_field_infos();
   Buffer &buffer = ctx.buffer();
   const bool use_exact_offset_reads = !buffer.has_input_stream();

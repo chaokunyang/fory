@@ -195,6 +195,11 @@ class RemoteInt64Scalar:
 
 
 @dataclass
+class RemoteInt32Scalar:
+    value: pyfory.Int32 = 0
+
+
+@dataclass
 class LocalInt8Scalar:
     value: pyfory.Int8 = 0
 
@@ -408,6 +413,22 @@ def test_same_schema_scalar_read_is_direct():
     assert all(not isinstance(field_serializer, CompatibleScalarFieldSerializer) for field_serializer in serializer._serializers)
     value = RemoteStringScalar("true")
     assert fory.deserialize(fory.serialize(value)) == value
+
+
+def test_integer_widening_scalar_read_is_direct():
+    from pyfory.converter import CompatibleScalarFieldSerializer
+
+    writer, reader, payload = compat_ser(RemoteInt32Scalar, LocalInt64Scalar, RemoteInt32Scalar(42), 751)
+    assert reader.deserialize(payload) == LocalInt64Scalar(42)
+    type_info = next(iter(reader.type_resolver._meta_shared_type_info.values()))
+    field_serializer = type_info.serializer._serializers[0]
+    assert type(field_serializer).__name__ == "Int32Serializer"
+    assert not isinstance(field_serializer, CompatibleScalarFieldSerializer)
+
+    writer, reader, payload = compat_ser(RemoteInt64Scalar, LocalInt8Scalar, RemoteInt64Scalar(42), 752)
+    assert reader.deserialize(payload) == LocalInt8Scalar(42)
+    type_info = next(iter(reader.type_resolver._meta_shared_type_info.values()))
+    assert isinstance(type_info.serializer._serializers[0], CompatibleScalarFieldSerializer)
 
 
 def test_compatible_read_accepts_nested_same_domain_integer_encoding():

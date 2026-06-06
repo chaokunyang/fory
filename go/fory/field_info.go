@@ -44,6 +44,20 @@ type PrimitiveFieldInfo struct {
 	Meta        *FieldMeta
 }
 
+type compatReadAction uint8
+
+const (
+	compatReadSkip compatReadAction = iota
+	compatReadScalar
+	compatReadFixed
+	compatReadVarint
+	compatReadExactRemaining
+	compatReadNullableFixed
+	compatReadNullableVarint
+	compatReadEnum
+	compatReadSerializer
+)
+
 // FieldMeta contains cold/rarely-accessed field metadata.
 // Accessed via pointer from FieldInfo to keep FieldInfo small for cache efficiency.
 type FieldMeta struct {
@@ -59,6 +73,11 @@ type FieldMeta struct {
 	// CompatibleScalar is set only for matched compatible fields whose remote
 	// top-level scalar schema differs from the local scalar schema.
 	CompatibleScalar *compatibleScalarConversion
+
+	// ExactSchema is true when the remote field schema exactly matches the
+	// matched local field schema. Changed-schema reads can use direct field
+	// readers for these fields without consulting remote compatible metadata.
+	ExactSchema bool
 
 	// Optional fields (fory/optional.Optional[T]) - only valid when FieldKindOptional
 	OptionalInfo optionalInfo
@@ -78,8 +97,9 @@ type FieldInfo struct {
 	// Hot fields - accessed frequently during serialization
 	Offset      uintptr    // Field offset for unsafe access
 	DispatchId  DispatchId // Type dispatch ID
-	WriteOffset int        // Offset within fixed-fields buffer region (sum of preceding field sizes)
-	RefMode     RefMode    // ref mode for serializer.Write/Read
+	ReadAction  compatReadAction
+	WriteOffset int     // Offset within fixed-fields buffer region (sum of preceding field sizes)
+	RefMode     RefMode // ref mode for serializer.Write/Read
 	Kind        FieldKind
 	Serializer  Serializer // Serializer for this field
 

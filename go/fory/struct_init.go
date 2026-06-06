@@ -313,6 +313,7 @@ func (s *structSerializer) initFieldsFromTypeDef(typeResolver *TypeResolver) err
 			fieldInfo := FieldInfo{
 				Offset:     0,
 				DispatchId: dispatchId,
+				ReadAction: compatReadSkip,
 				RefMode:    refMode,
 				Kind:       FieldKindValue,
 				Serializer: fieldSerializer,
@@ -406,6 +407,7 @@ func (s *structSerializer) initFieldsFromTypeDef(typeResolver *TypeResolver) err
 		var localFieldSpec *FieldSpec
 		var exists bool
 		var scalarConversion *compatibleScalarConversion
+		exactSchema := false
 
 		if def.tagID >= 0 {
 			if binding, ok := fieldTagIDToBinding[def.tagID]; ok {
@@ -445,6 +447,14 @@ func (s *structSerializer) initFieldsFromTypeDef(typeResolver *TypeResolver) err
 			scalarPair := false
 			scalarExactSchema := false
 			if localFieldSpec != nil {
+				exactSchema = fieldSpecEqualForDiff(
+					def.typeSpec,
+					def.nullable,
+					def.trackRef,
+					localFieldSpec.Type,
+					localNullableByIndex[fieldIndex],
+					localTrackRefByIndex[fieldIndex],
+				)
 				remoteScalar := compatibleScalarType(def.typeSpec.TypeId())
 				localScalar := compatibleScalarType(localFieldSpec.Type.TypeId())
 				if remoteScalar && localScalar {
@@ -762,8 +772,10 @@ func (s *structSerializer) initFieldsFromTypeDef(typeResolver *TypeResolver) err
 				Spec:             metaSpec,
 				TypeSpec:         def.typeSpec,
 				CompatibleScalar: scalarConversion,
+				ExactSchema:      exactSchema,
 			},
 		}
+		fieldInfo.ReadAction = computeCompatReadAction(&fieldInfo)
 		fields = append(fields, fieldInfo)
 	}
 

@@ -1381,7 +1381,10 @@ final class ForyGenerator extends Generator {
     }
     final directPrimitiveRunByStart = <int, _DirectGeneratedPrimitiveRun>{};
     final directPrimitiveRunByEnd = <int, _DirectGeneratedPrimitiveRun>{};
-    for (final run in _directGeneratedPrimitiveRuns(remoteFields)) {
+    for (final run in _directGeneratedPrimitiveRuns(
+      remoteFields,
+      includeCoreInt64Varints: true,
+    )) {
       directPrimitiveRunByStart[run.start] = run;
       directPrimitiveRunByEnd[run.end] = run;
     }
@@ -1407,7 +1410,10 @@ final class ForyGenerator extends Generator {
           mutable
               ? 'value.${field.name}'
               : 'final ${field.displayType} ${field.localName}';
-      if (_usesReservedGeneratedFastPath(remoteField)) {
+      if (_usesReservedGeneratedFastPath(
+        remoteField,
+        includeCoreInt64Varints: true,
+      )) {
         _writeDirectGeneratedBufferReadStatement(
           output,
           remoteField,
@@ -2440,14 +2446,16 @@ GeneratedFieldType(
   }
 
   List<_DirectGeneratedPrimitiveRun> _directGeneratedPrimitiveRuns(
-    List<_GeneratedFieldSpec> fields,
-  ) {
+    List<_GeneratedFieldSpec> fields, {
+    bool includeCoreInt64Varints = false,
+  }) {
     final runs = <_DirectGeneratedPrimitiveRun>[];
     int? start;
     var bytes = 0;
     for (var index = 0; index < fields.length; index += 1) {
       final fieldBytes = _directGeneratedPrimitiveReservationBytes(
         fields[index],
+        includeCoreInt64Varints: includeCoreInt64Varints,
       );
       if (fieldBytes == null) {
         if (start != null) {
@@ -2466,11 +2474,21 @@ GeneratedFieldType(
     return runs;
   }
 
-  bool _usesReservedGeneratedFastPath(_GeneratedFieldSpec field) {
-    return _directGeneratedPrimitiveReservationBytes(field) != null;
+  bool _usesReservedGeneratedFastPath(
+    _GeneratedFieldSpec field, {
+    bool includeCoreInt64Varints = false,
+  }) {
+    return _directGeneratedPrimitiveReservationBytes(
+          field,
+          includeCoreInt64Varints: includeCoreInt64Varints,
+        ) !=
+        null;
   }
 
-  int? _directGeneratedPrimitiveReservationBytes(_GeneratedFieldSpec field) {
+  int? _directGeneratedPrimitiveReservationBytes(
+    _GeneratedFieldSpec field, {
+    bool includeCoreInt64Varints = false,
+  }) {
     if (!_usesDirectGeneratedBasicFastPath(field)) {
       return null;
     }
@@ -2493,6 +2511,9 @@ GeneratedFieldType(
       case TypeIds.varInt32:
       case TypeIds.varUint32:
         return 5;
+      case TypeIds.varInt64:
+      case TypeIds.varUint64:
+        return includeCoreInt64Varints && field.type.isDartCoreInt ? 9 : null;
       default:
         return null;
     }
@@ -2506,7 +2527,9 @@ GeneratedFieldType(
       switch (fields[index].fieldType.typeId) {
         case TypeIds.boolType:
         case TypeIds.varInt32:
+        case TypeIds.varInt64:
         case TypeIds.varUint32:
+        case TypeIds.varUint64:
           return true;
       }
     }
@@ -2521,7 +2544,9 @@ GeneratedFieldType(
       switch (fields[index].fieldType.typeId) {
         case TypeIds.boolType:
         case TypeIds.varInt32:
+        case TypeIds.varInt64:
         case TypeIds.varUint32:
+        case TypeIds.varUint64:
           break;
         default:
           return true;
@@ -2781,6 +2806,36 @@ GeneratedFieldType(
         output.writeln(
           '$indent$target = (($result >>> 1) ^ -($result & 1)).toSigned(32);',
         );
+      case TypeIds.varInt64:
+        if (!field.type.isDartCoreInt) {
+          throw StateError(
+            'Generated varint64 cursor read is only supported for Dart int fields.',
+          );
+        }
+        final assignTarget = _writeGeneratedReadAssignmentTarget(
+          output,
+          target,
+          indent,
+        );
+        final result = 'result$fieldIndex';
+        output
+          ..writeln('$indent if (generatedIsWeb) {')
+          ..writeln('$indent   bufferSetReaderIndex(buffer, $offset);')
+          ..writeln('$indent   $assignTarget = buffer.readVarInt64AsInt();')
+          ..writeln('$indent   $offset = bufferReaderIndex(buffer);')
+          ..writeln('$indent } else {');
+        _writeDirectGeneratedVarUint64Read(
+          output,
+          result,
+          bytes,
+          offset,
+          '$indent   ',
+        );
+        output
+          ..writeln(
+            '$indent   $assignTarget = ($result >>> 1) ^ -($result & 1);',
+          )
+          ..writeln('$indent }');
       case TypeIds.varUint32:
         final result = 'result$fieldIndex';
         _writeDirectGeneratedVarUint32Read(
@@ -2791,11 +2846,56 @@ GeneratedFieldType(
           indent,
         );
         output.writeln('$indent$target = $result;');
+      case TypeIds.varUint64:
+        if (!field.type.isDartCoreInt) {
+          throw StateError(
+            'Generated varuint64 cursor read is only supported for Dart int fields.',
+          );
+        }
+        final assignTarget = _writeGeneratedReadAssignmentTarget(
+          output,
+          target,
+          indent,
+        );
+        final result = 'result$fieldIndex';
+        output
+          ..writeln('$indent if (generatedIsWeb) {')
+          ..writeln('$indent   bufferSetReaderIndex(buffer, $offset);')
+          ..writeln('$indent   $assignTarget = buffer.readVarUint64().toInt();')
+          ..writeln('$indent   $offset = bufferReaderIndex(buffer);')
+          ..writeln('$indent } else {');
+        _writeDirectGeneratedVarUint64Read(
+          output,
+          result,
+          bytes,
+          offset,
+          '$indent   ',
+        );
+        output
+          ..writeln('$indent   $assignTarget = $result;')
+          ..writeln('$indent }');
       default:
         throw StateError(
           'Unsupported generated direct buffer read fast path for ${field.name}.',
         );
     }
+  }
+
+  String _writeGeneratedReadAssignmentTarget(
+    StringBuffer output,
+    String target,
+    String indent,
+  ) {
+    if (!target.startsWith('final ')) {
+      return target;
+    }
+    final nameStart = target.lastIndexOf(' ') + 1;
+    final name = target.substring(nameStart);
+    final typePrefix = target
+        .substring(0, nameStart)
+        .replaceFirst('final ', 'late final ');
+    output.writeln('$indent$typePrefix$name;');
+    return name;
   }
 
   void _writeDirectGeneratedVarUint32Read(
@@ -2818,6 +2918,34 @@ GeneratedFieldType(
       ..writeln('$indent     break;')
       ..writeln('$indent   }')
       ..writeln('$indent   $shift += 7;')
+      ..writeln('$indent }');
+  }
+
+  void _writeDirectGeneratedVarUint64Read(
+    StringBuffer output,
+    String result,
+    String bytes,
+    String offset,
+    String indent,
+  ) {
+    final shift = '${result}Shift';
+    final byte = '${result}Byte';
+    output
+      ..writeln('$indent var $shift = 0;')
+      ..writeln('$indent var $result = 0;')
+      ..writeln('$indent while ($shift < 56) {')
+      ..writeln('$indent   final $byte = $bytes[$offset];')
+      ..writeln('$indent   $offset += 1;')
+      ..writeln('$indent   $result |= ($byte & 0x7f) << $shift;')
+      ..writeln('$indent   if (($byte & 0x80) == 0) {')
+      ..writeln('$indent     break;')
+      ..writeln('$indent   }')
+      ..writeln('$indent   $shift += 7;')
+      ..writeln('$indent }')
+      ..writeln('$indent if ($shift == 56) {')
+      ..writeln('$indent   final $byte = $bytes[$offset];')
+      ..writeln('$indent   $offset += 1;')
+      ..writeln('$indent   $result |= $byte << 56;')
       ..writeln('$indent }');
   }
 

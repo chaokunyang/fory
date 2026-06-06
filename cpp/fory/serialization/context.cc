@@ -23,6 +23,8 @@
 #include "fory/thirdparty/MurmurHash3.h"
 #include "fory/type/type.h"
 
+#include <limits>
+
 namespace fory {
 namespace serialization {
 
@@ -479,6 +481,32 @@ ReadContext::read_enum_type_info(uint32_t base_type_id) {
 
 // Maximum number of parsed type defs to cache (avoid OOM from malicious input)
 static constexpr size_t k_max_parsed_num_type_defs = 8192;
+static constexpr uint64_t k_type_meta_size_mask = 0xff;
+static constexpr uint32_t k_unknown_type_meta_body_size =
+    std::numeric_limits<uint32_t>::max();
+
+static uint32_t cached_type_meta_body_size(int64_t meta_header) {
+  uint64_t meta_size =
+      static_cast<uint64_t>(meta_header) & k_type_meta_size_mask;
+  if (meta_size == k_type_meta_size_mask) {
+    return k_unknown_type_meta_body_size;
+  }
+  return static_cast<uint32_t>(meta_size);
+}
+
+static Result<void, Error>
+skip_cached_type_meta_body(Buffer &buffer, int64_t meta_header,
+                           uint32_t cached_body_size) {
+  if (FORY_PREDICT_FALSE(cached_body_size == k_unknown_type_meta_body_size)) {
+    return TypeMeta::skip_bytes_for_validated_header(buffer, meta_header);
+  }
+  Error error;
+  buffer.skip(cached_body_size, error);
+  if (FORY_PREDICT_FALSE(!error.ok())) {
+    return Unexpected(std::move(error));
+  }
+  return Result<void, Error>();
+}
 
 Result<const TypeInfo *, Error> ReadContext::read_type_meta() {
   Error error;
@@ -510,8 +538,8 @@ Result<const TypeInfo *, Error> ReadContext::read_type_meta() {
     // metadata-hash validation.
     const TypeInfo *cached = last_meta_type_info_;
     reading_type_infos_.push_back(cached);
-    FORY_RETURN_NOT_OK(
-        TypeMeta::skip_bytes_for_validated_header(*buffer_, meta_header));
+    FORY_RETURN_NOT_OK(skip_cached_type_meta_body(*buffer_, meta_header,
+                                                  last_meta_body_size_));
     return cached;
   }
 
@@ -525,8 +553,9 @@ Result<const TypeInfo *, Error> ReadContext::read_type_meta() {
     has_last_meta_header_ = true;
     last_meta_header_ = meta_header;
     last_meta_type_info_ = cached;
-    FORY_RETURN_NOT_OK(
-        TypeMeta::skip_bytes_for_validated_header(*buffer_, meta_header));
+    last_meta_body_size_ = cached_type_meta_body_size(meta_header);
+    FORY_RETURN_NOT_OK(skip_cached_type_meta_body(*buffer_, meta_header,
+                                                  last_meta_body_size_));
     return cached;
   }
 
@@ -594,6 +623,7 @@ Result<const TypeInfo *, Error> ReadContext::read_type_meta() {
     has_last_meta_header_ = true;
     last_meta_header_ = meta_header;
     last_meta_type_info_ = raw_ptr;
+    last_meta_body_size_ = cached_type_meta_body_size(meta_header);
   } else {
     owned_reading_type_infos_.push_back(std::move(type_info));
     raw_ptr = owned_reading_type_infos_.back().get();

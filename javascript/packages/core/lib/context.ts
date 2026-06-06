@@ -50,21 +50,8 @@ type TypeResolverLike = {
 type RegeneratedReadSerializerCacheEntry = {
   localHash: number;
   localTypeInfo: TypeInfo;
-  localTypeMetaBytes: Uint8Array;
   serializers: Map<number, Serializer>;
 };
-
-function bytesEqual(left: Uint8Array, right: Uint8Array): boolean {
-  if (left.length !== right.length) {
-    return false;
-  }
-  for (let i = 0; i < left.length; i++) {
-    if (left[i] !== right[i]) {
-      return false;
-    }
-  }
-  return true;
-}
 
 function remoteListElementType(
   fieldInfo: InnerFieldInfo,
@@ -595,6 +582,18 @@ export class ReadContext {
     Serializer,
     RegeneratedReadSerializerCacheEntry
   > = new WeakMap();
+  private recentRegeneratedExpectedHashes = [0, 0, 0, 0];
+  private recentRegeneratedRemoteHashes = [0, 0, 0, 0];
+  private recentRegeneratedReadSerializers: Array<Serializer | undefined> = [
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+  ];
+  private recentRegeneratedReadSerializerIndex = 0;
+  private lastRegeneratedExpectedHash = 0;
+  private lastRegeneratedRemoteHash = 0;
+  private lastRegeneratedReadSerializer: Serializer | undefined;
 
   private _depth = 0;
   private _maxDepth: number;
@@ -811,15 +810,53 @@ export class ReadContext {
       remoteHash = ReadContext.typeMetaHeaderHash(headerLow, headerHigh);
     }
     if (expectedHash !== remoteHash) {
-      return this.genSerializerByTypeMetaRuntime(typeMeta, original);
-    }
-    if (original) {
-      const cacheEntry = this.getRegeneratedReadSerializerCache(original);
-      if (!bytesEqual(typeMeta.toBytes(), cacheEntry.localTypeMetaBytes)) {
-        return this.genSerializerByTypeMetaRuntime(typeMeta, original);
+      if (
+        this.lastRegeneratedReadSerializer !== undefined
+        && this.lastRegeneratedExpectedHash === expectedHash
+        && this.lastRegeneratedRemoteHash === remoteHash
+      ) {
+        return this.lastRegeneratedReadSerializer;
       }
+      return this.readChangedSerializer(
+        expectedHash,
+        remoteHash,
+        typeMeta,
+        original,
+      );
     }
     return undefined;
+  }
+
+  private readChangedSerializer(
+    expectedHash: number,
+    remoteHash: number,
+    typeMeta: TypeMeta,
+    original?: Serializer,
+  ): Serializer {
+    for (let i = 0; i < this.recentRegeneratedReadSerializers.length; i++) {
+      const serializer = this.recentRegeneratedReadSerializers[i];
+      if (
+        serializer !== undefined
+        && this.recentRegeneratedExpectedHashes[i] === expectedHash
+        && this.recentRegeneratedRemoteHashes[i] === remoteHash
+      ) {
+        this.lastRegeneratedExpectedHash = expectedHash;
+        this.lastRegeneratedRemoteHash = remoteHash;
+        this.lastRegeneratedReadSerializer = serializer;
+        return serializer;
+      }
+    }
+    const serializer = this.genSerializerByTypeMetaRuntime(typeMeta, original);
+    this.lastRegeneratedExpectedHash = expectedHash;
+    this.lastRegeneratedRemoteHash = remoteHash;
+    this.lastRegeneratedReadSerializer = serializer;
+    const index = this.recentRegeneratedReadSerializerIndex;
+    this.recentRegeneratedExpectedHashes[index] = expectedHash;
+    this.recentRegeneratedRemoteHashes[index] = remoteHash;
+    this.recentRegeneratedReadSerializers[index] = serializer;
+    this.recentRegeneratedReadSerializerIndex
+      = (index + 1) & (this.recentRegeneratedReadSerializers.length - 1);
+    return serializer;
   }
 
   private canonicalFieldTypeId(typeInfo: TypeInfo): number {
@@ -1101,10 +1138,6 @@ export class ReadContext {
       entry = {
         localHash,
         localTypeInfo,
-        localTypeMetaBytes: TypeMeta.fromTypeInfo(
-          localTypeInfo,
-          this.typeResolver,
-        ).toBytes(),
         serializers: new Map(),
       };
       this.regeneratedReadSerializers.set(original, entry);

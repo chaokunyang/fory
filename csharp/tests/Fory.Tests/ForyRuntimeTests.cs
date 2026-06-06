@@ -236,6 +236,13 @@ public sealed class ScalarInt32Field
 }
 
 [ForyStruct]
+public sealed class ScalarVarInt32Field
+{
+    [ForyField(1)]
+    public int Value { get; set; }
+}
+
+[ForyStruct]
 public sealed class ScalarNullableInt32Field
 {
     [ForyField(1, Type = typeof(S.Int32))]
@@ -243,10 +250,31 @@ public sealed class ScalarNullableInt32Field
 }
 
 [ForyStruct]
+public sealed class ScalarInt64Field
+{
+    [ForyField(1, Type = typeof(S.Int64))]
+    public long Value { get; set; }
+}
+
+[ForyStruct]
+public sealed class ScalarNullableInt64Field
+{
+    [ForyField(1, Type = typeof(S.Int64))]
+    public long? Value { get; set; }
+}
+
+[ForyStruct]
 public sealed class ScalarUInt32Field
 {
     [ForyField(1, Type = typeof(S.UInt32))]
     public uint Value { get; set; }
+}
+
+[ForyStruct]
+public sealed class ScalarUInt64Field
+{
+    [ForyField(1, Type = typeof(S.UInt64))]
+    public ulong Value { get; set; }
 }
 
 [ForyStruct]
@@ -1352,6 +1380,10 @@ public sealed class ForyRuntimeTests
     {
         Assert.Equal((short)123, CompatibleRead<ScalarInt32Field, ScalarInt16Field>(
             new ScalarInt32Field { Value = 123 }).Value);
+        Assert.Equal(123L, CompatibleRead<ScalarInt32Field, ScalarInt64Field>(
+            new ScalarInt32Field { Value = 123 }).Value);
+        Assert.Equal((long)int.MaxValue, CompatibleRead<ScalarVarInt32Field, ScalarInt64Field>(
+            new ScalarVarInt32Field { Value = int.MaxValue }).Value);
         Assert.Equal(1, CompatibleRead<ScalarFloat64Field, ScalarInt32Field>(
             new ScalarFloat64Field { Value = 1.0d }).Value);
         Assert.Equal(double.PositiveInfinity, CompatibleRead<ScalarFloat32Field, ScalarFloat64Field>(
@@ -1365,6 +1397,8 @@ public sealed class ForyRuntimeTests
             new ScalarInt32Field { Value = 16_777_217 }));
         Assert.Throws<InvalidDataException>(() => CompatibleRead<ScalarFloat32Field, ScalarFloat64Field>(
             new ScalarFloat32Field { Value = float.NaN }));
+        Assert.Throws<InvalidDataException>(() => CompatibleRead<ScalarUInt64Field, ScalarInt64Field>(
+            new ScalarUInt64Field { Value = ulong.MaxValue }));
     }
 
     [Fact]
@@ -1449,6 +1483,10 @@ public sealed class ForyRuntimeTests
             new ScalarStringField { Value = null }).Value);
         Assert.Equal(1, CompatibleRead<ScalarBoolField, ScalarNullableInt32Field>(
             new ScalarBoolField { Value = true }).Value);
+        Assert.Equal(1L, CompatibleRead<ScalarBoolField, ScalarNullableInt64Field>(
+            new ScalarBoolField { Value = true }).Value);
+        Assert.Null(CompatibleRead<ScalarNullableInt32Field, ScalarNullableInt64Field>(
+            new ScalarNullableInt32Field { Value = null }).Value);
     }
 
     [Fact]

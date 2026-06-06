@@ -645,8 +645,8 @@ TEST(SchemaEvolutionTest, NestedListArraySchemaPairsAreNotMatched) {
   auto decoded = reader.deserialize<CompatibleNestedArrayField>(
       bytes.value().data(), bytes.value().size());
 
-  ASSERT_TRUE(decoded.ok()) << decoded.error().to_string();
-  EXPECT_TRUE(decoded.value().values.empty());
+  ASSERT_FALSE(decoded.ok());
+  EXPECT_EQ(decoded.error().code(), ErrorCode::TypeError);
 }
 
 TEST(SchemaEvolutionTest, ScalarBoolString) {
@@ -734,6 +734,10 @@ TEST(SchemaEvolutionTest, ScalarNumberNumber) {
   auto narrowed = convert_field<ScalarInt64Field, ScalarInt8Field>({127}, 1016);
   ASSERT_TRUE(narrowed.ok()) << narrowed.error().to_string();
   EXPECT_EQ(narrowed.value().value, 127);
+
+  auto widened = convert_field<ScalarInt32Field, ScalarInt64Field>({123}, 1050);
+  ASSERT_TRUE(widened.ok()) << widened.error().to_string();
+  EXPECT_EQ(widened.value().value, 123);
 
   auto range_error =
       convert_field<ScalarInt64Field, ScalarInt8Field>({128}, 1017);

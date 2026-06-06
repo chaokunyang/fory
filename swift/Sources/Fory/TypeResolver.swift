@@ -203,6 +203,10 @@ public final class TypeInfo: @unchecked Sendable {
   let typeDefHeader: UInt64?
   public let typeDefHeaderHash: UInt64?
   public let typeDefHasUserTypeFields: Bool
+  // Macro expansions run in user modules, so this classified read plan must be public even though
+  // it is a generated-code detail. -2 is generic, -1 is exact sequential, nonnegative values are
+  // sequential single-compatible indexes, and values <= -3 encode remote-order single-compatible
+  // varint32 indexes as -3 - compatibleIndex.
   public let compatibleSequentialReadPlan: Int
 
   private let reader: (ReadContext) throws -> Any
@@ -410,22 +414,38 @@ public final class TypeInfo: @unchecked Sendable {
       return -2
     }
     var compatibleIndex = -1
-    for (index, field) in compatibleTypeMeta.fields.enumerated() {
-      let directID = index * 2
+    var compatibleSourceIsVarInt32 = false
+    var sequential = true
+    for (remoteIndex, field) in compatibleTypeMeta.fields.enumerated() {
       let fieldID = Int(field.fieldID ?? -1)
-      if fieldID == directID {
+      guard fieldID >= 0 else {
+        return -2
+      }
+      let localIndex = fieldID >> 1
+      guard localIndex < localTypeMeta.fields.count else {
+        return -2
+      }
+      if localIndex != remoteIndex {
+        sequential = false
+      }
+      if fieldID & 1 == 0 {
         continue
       }
-      if fieldID == directID + 1 {
-        if compatibleIndex >= 0 {
-          return -2
-        }
-        compatibleIndex = index
-        continue
+      if compatibleIndex >= 0 {
+        return -2
       }
-      return -2
+      compatibleIndex = localIndex
+      compatibleSourceIsVarInt32 =
+        !field.fieldType.nullable && !field.fieldType.trackRef
+        && field.fieldType.typeID == TypeId.varint32.rawValue
     }
-    return compatibleIndex
+    if sequential {
+      return compatibleIndex
+    }
+    if compatibleIndex >= 0 && compatibleSourceIsVarInt32 {
+      return -3 - compatibleIndex
+    }
+    return -2
   }
 
 }

@@ -1284,12 +1284,11 @@ TypeMeta::assign_field_ids(const TypeMeta *local_type,
         }
       }
 
-      // 2) Fallback: match by type signature and position when field names
-      //    are not available or differ across languages. Keep this fallback
-      //    within name-based fields so a mixed schema does not switch into a
-      //    global tag-ID mode or bind an untagged field to a tagged local
-      //    field.
-      if (!matched) {
+      // 2) Fallback by type signature only when no canonical remote name was
+      //    carried. Named remote fields that miss the local name map are
+      //    remote-only fields; matching them by type can bind an added string
+      //    field such as `email` to an unrelated local string field.
+      if (!matched && remote_field.field_name.empty()) {
         for (size_t i = 0; i < local_fields.size(); ++i) {
           if (used[i] || local_fields[i].field_id >= 0) {
             continue;

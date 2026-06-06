@@ -222,7 +222,9 @@ int generatedCheckedUint16(int value) => checkedUint16(value);
 int generatedCheckedUint32(int value) => checkedUint32(value);
 
 const int _generatedJsSafeUint64IntMax = 9007199254740991;
-const bool _generatedIsWeb = bool.fromEnvironment('dart.library.js_interop');
+@internal
+const bool generatedIsWeb = bool.fromEnvironment('dart.library.js_interop');
+const bool _generatedIsWeb = generatedIsWeb;
 
 @internal
 @pragma('vm:prefer-inline')

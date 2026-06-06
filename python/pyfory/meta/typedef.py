@@ -728,6 +728,20 @@ def _create_local_typehint_serializer(resolver, field_name, type_hint):
     return infer_field(field_name, unwrapped_type, StructFieldSerializerVisitor(resolver))
 
 
+def _can_direct_read_integer_scalar(remote_field_type: FieldType, local_field_type: FieldType) -> bool:
+    if remote_field_type.is_nullable or local_field_type.is_nullable:
+        return False
+    if remote_field_type.is_tracking_ref or local_field_type.is_tracking_ref:
+        return False
+    remote_domain = _INT_TYPE_DOMAINS.get(remote_field_type.type_id)
+    local_domain = _INT_TYPE_DOMAINS.get(local_field_type.type_id)
+    if remote_domain is None or local_domain is None:
+        return False
+    remote_signed, remote_bits = remote_domain
+    local_signed, local_bits = local_domain
+    return remote_signed == local_signed and remote_bits <= local_bits
+
+
 def _create_compatible_field_serializer(
     resolver,
     field_name,
@@ -802,6 +816,8 @@ def _create_compatible_field_serializer(
             and not exact_scalar_field_type
             and supports_compatible_scalar_conversion(remote_field_type.type_id, local_field_type.type_id)
         ):
+            if _can_direct_read_integer_scalar(remote_field_type, local_field_type):
+                return remote_field_type.create_serializer(resolver, local_declared_type)
             remote_serializer = remote_field_type.create_serializer(resolver, local_declared_type)
             return CompatibleScalarFieldSerializer(
                 resolver,

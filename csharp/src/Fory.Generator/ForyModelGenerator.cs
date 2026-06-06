@@ -549,11 +549,21 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
             sb.AppendLine("                        }");
             sb.AppendLine($"                    case {idx * 2 + 1}:");
             sb.AppendLine("                        {");
-            sb.AppendLine("                            global::Apache.Fory.RefMode remoteRefMode = __ForyRefMode(remoteField.FieldType.Nullable, remoteField.FieldType.TrackRef);");
+            string compatRefModeExpr;
+            if (CompatibleCaseNeedsRemoteRefMode(member))
+            {
+                sb.AppendLine("                            global::Apache.Fory.RefMode remoteRefMode = __ForyRefMode(remoteField.FieldType.Nullable, remoteField.FieldType.TrackRef);");
+                compatRefModeExpr = "remoteRefMode";
+            }
+            else
+            {
+                compatRefModeExpr = "default";
+            }
+
             EmitReadMemberAssignment(
                 sb,
                 member,
-                "remoteRefMode",
+                compatRefModeExpr,
                 BuildFieldTypeInfoLiteral(member),
                 "value",
                 "Compat",
@@ -1970,6 +1980,11 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
             $"{indent}{assignmentTarget} = context.TypeResolver.GetSerializer<{member.TypeName}>().Read(context, {refModeExpr}, {readTypeInfoExpr});");
     }
 
+    private static bool CompatibleCaseNeedsRemoteRefMode(MemberModel member)
+    {
+        return !TryBuildCompatibleScalarReadExpression(member, out _);
+    }
+
     private static bool TryBuildCompatibleScalarReadExpression(MemberModel member, out string? readExpr)
     {
         readExpr = null;
@@ -2006,8 +2021,16 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
         }
 
         string methodName = member.IsNullable ? $"ReadNullable{methodTarget}Field" : $"Read{methodTarget}Field";
-        readExpr =
+        string converterExpr =
             $"global::Apache.Fory.CompatibleScalarConverter.{methodName}(context, remoteField.FieldType, (global::Apache.Fory.TypeId){member.TypeMeta.TypeIdExpr}, \"{EscapeString(member.FieldIdentifier)}\")";
+        if (!member.IsNullable && methodTarget == "Int64")
+        {
+            readExpr =
+                $"(!remoteField.FieldType.Nullable && !remoteField.FieldType.TrackRef && remoteField.FieldType.TypeId == (uint)global::Apache.Fory.TypeId.VarInt32 ? (long)context.Reader.ReadVarInt32() : {converterExpr})";
+            return true;
+        }
+
+        readExpr = converterExpr;
         return true;
     }
 

@@ -171,16 +171,26 @@ public static class CompatibleScalarConverter
     [MethodImpl(MethodImplOptions.NoInlining)]
     public static long ReadInt64Field(ReadContext context, TypeMetaFieldType fieldType, TypeId localTypeId, string fieldName)
     {
-        return TryReadScalarValue(context, fieldType, localTypeId, fieldName, out TypeId remote, out TypeId local, out ScalarValue value)
-            ? ToInt64(value, remote, local, fieldName)
+        if (TryReadIntegralToInt64Field(context, fieldType, localTypeId, fieldName, out long fastValue, out bool present))
+        {
+            return present ? fastValue : default;
+        }
+
+        return TryReadScalarValue(context, fieldType, localTypeId, fieldName, out TypeId remote, out TypeId local, out ScalarValue scalarValue)
+            ? ToInt64(scalarValue, remote, local, fieldName)
             : default;
     }
 
     [MethodImpl(MethodImplOptions.NoInlining)]
     public static long? ReadNullableInt64Field(ReadContext context, TypeMetaFieldType fieldType, TypeId localTypeId, string fieldName)
     {
-        return TryReadScalarValue(context, fieldType, localTypeId, fieldName, out TypeId remote, out TypeId local, out ScalarValue value)
-            ? ToInt64(value, remote, local, fieldName)
+        if (TryReadIntegralToInt64Field(context, fieldType, localTypeId, fieldName, out long fastValue, out bool present))
+        {
+            return present ? fastValue : null;
+        }
+
+        return TryReadScalarValue(context, fieldType, localTypeId, fieldName, out TypeId remote, out TypeId local, out ScalarValue scalarValue)
+            ? ToInt64(scalarValue, remote, local, fieldName)
             : null;
     }
 
@@ -404,6 +414,95 @@ public static class CompatibleScalarConverter
             default:
                 throw Fail(remoteTypeId, local, fieldName, "trackingRef scalar conversion is not supported");
         }
+    }
+
+    private static bool TryReadIntegralToInt64Field(
+        ReadContext context,
+        TypeMetaFieldType fieldType,
+        TypeId localTypeId,
+        string fieldName,
+        out long value,
+        out bool present)
+    {
+        TypeId rawRemoteTypeId = (TypeId)fieldType.TypeId;
+        TypeId remoteTypeId = NormalizeScalarTypeId(fieldType.TypeId);
+        TypeId local = NormalizeScalarTypeId((uint)localTypeId);
+        value = default;
+        present = false;
+        if (local != TypeId.Int64 || !IsInt64FastSource(rawRemoteTypeId))
+        {
+            return false;
+        }
+
+        switch (RefModeExtensions.From(fieldType.Nullable, fieldType.TrackRef))
+        {
+            case RefMode.None:
+                value = ReadInt64FastPayload(context, rawRemoteTypeId, local, fieldName);
+                present = true;
+                return true;
+            case RefMode.NullOnly:
+                {
+                    RefFlag flag = context.RefReader.ReadRefFlag(context.Reader);
+                    switch (flag)
+                    {
+                        case RefFlag.Null:
+                            return true;
+                        case RefFlag.NotNullValue:
+                            value = ReadInt64FastPayload(context, rawRemoteTypeId, local, fieldName);
+                            present = true;
+                            return true;
+                        default:
+                            throw Fail(
+                                remoteTypeId,
+                                local,
+                                fieldName,
+                                $"invalid compatible nullOnly ref flag {(sbyte)flag}");
+                    }
+                }
+            default:
+                throw Fail(remoteTypeId, local, fieldName, "trackingRef scalar conversion is not supported");
+        }
+    }
+
+    private static bool IsInt64FastSource(TypeId remoteTypeId)
+    {
+        return remoteTypeId is TypeId.Bool or TypeId.Int8 or TypeId.Int16 or TypeId.Int32 or
+            TypeId.VarInt32 or TypeId.Int64 or TypeId.VarInt64 or TypeId.TaggedInt64 or
+            TypeId.UInt8 or TypeId.UInt16 or TypeId.UInt32 or TypeId.VarUInt32 or
+            TypeId.UInt64 or TypeId.VarUInt64 or TypeId.TaggedUInt64;
+    }
+
+    private static long ReadInt64FastPayload(ReadContext context, TypeId remoteTypeId, TypeId localTypeId, string fieldName)
+    {
+        return remoteTypeId switch
+        {
+            TypeId.Bool => ReadBool(context, localTypeId, fieldName) ? 1 : 0,
+            TypeId.Int8 => context.Reader.ReadInt8(),
+            TypeId.Int16 => context.Reader.ReadInt16(),
+            TypeId.Int32 => context.Reader.ReadInt32(),
+            TypeId.VarInt32 => context.Reader.ReadVarInt32(),
+            TypeId.Int64 => context.Reader.ReadInt64(),
+            TypeId.VarInt64 => context.Reader.ReadVarInt64(),
+            TypeId.TaggedInt64 => context.Reader.ReadTaggedInt64(),
+            TypeId.UInt8 => context.Reader.ReadUInt8(),
+            TypeId.UInt16 => context.Reader.ReadUInt16(),
+            TypeId.UInt32 => context.Reader.ReadUInt32(),
+            TypeId.VarUInt32 => context.Reader.ReadVarUInt32(),
+            TypeId.UInt64 => ToInt64(context.Reader.ReadUInt64(), remoteTypeId, localTypeId, fieldName),
+            TypeId.VarUInt64 => ToInt64(context.Reader.ReadVarUInt64(), remoteTypeId, localTypeId, fieldName),
+            TypeId.TaggedUInt64 => ToInt64(context.Reader.ReadTaggedUInt64(), remoteTypeId, localTypeId, fieldName),
+            _ => throw Fail(remoteTypeId, localTypeId, fieldName, $"unsupported compatible scalar type id {remoteTypeId}"),
+        };
+    }
+
+    private static long ToInt64(ulong value, TypeId remote, TypeId local, string fieldName)
+    {
+        if (value <= long.MaxValue)
+        {
+            return (long)value;
+        }
+
+        throw Fail(remote, local, fieldName, $"integer value {value} is outside {local} range");
     }
 
     private static ScalarValue ReadScalarPayload(

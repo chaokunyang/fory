@@ -320,7 +320,11 @@ private func buildStructReadCompatibleDataDecl(
             )
         }
         \(sequentialCompatBody)
-        return try Self.__foryReadChangedData(context, typeMeta: typeMeta)
+        return try Self.__foryReadChangedData(
+            context,
+            typeMeta: typeMeta,
+            readPlan: __compatibleIndex
+        )
     }
     """
 }
@@ -340,9 +344,13 @@ private func buildStructChangedFallbackDecl(
     ? "let __buffer = context.buffer\n        " : ""
   return """
       @inline(never)
-      private static func __foryReadChangedData(_ context: ReadContext, typeMeta: TypeMeta) throws -> Self {
-          \(bufferBinding)\(defaults)
-          \(remoteOrderFastPaths)
+      private static func __foryReadChangedData(
+          _ context: ReadContext,
+          typeMeta: TypeMeta,
+          readPlan: Int
+      ) throws -> Self {
+          \(bufferBinding)\(remoteOrderFastPaths)
+          \(defaults)
           for remoteField in typeMeta.fields {
               switch Int(remoteField.fieldID ?? -1) {
               \(cases)
@@ -375,25 +383,15 @@ private func buildRemoteOrderSingleCompatStructPaths(
     else {
       continue
     }
-    let matchedIDs = remoteOrder.map { localIndex in
-      localIndex * 2 + (localIndex == compatibleIndex ? 1 : 0)
-    }
-    let conditions = matchedIDs.enumerated()
-      .map { index, matchedID in
-        "Int(typeMeta.fields[\(index)].fieldID ?? -2) == \(matchedID)"
-      }
-      .joined(separator: " &&\n           ")
-    let readBody = remoteOrder.map { localIndex in
-      let field = sortedFields[localIndex]
-      if localIndex == compatibleIndex {
-        return "__\(field.name) = Int64(try __buffer.readVarInt32())"
-      }
-      return "__\(field.name) = \(compatibleSchemaReadFieldExpr(field))"
-    }.joined(separator: "\n            ")
+    let readPlan = -3 - compatibleIndex
+    let readBody = remoteOrderReadBody(
+      sortedFields: sortedFields,
+      remoteOrder: remoteOrder,
+      compatibleIndex: compatibleIndex
+    )
     sections.append(
       """
-      if typeMeta.fields.count == \(sortedFields.count) &&
-         \(conditions) {
+      if readPlan == \(readPlan) {
           \(readBody)
           return Self(
               \(ctorArgs)
@@ -402,6 +400,94 @@ private func buildRemoteOrderSingleCompatStructPaths(
       """)
   }
   return sections.joined(separator: "\n        ")
+}
+
+private func remoteOrderReadBody(
+  sortedFields: [ParsedField],
+  remoteOrder: [Int],
+  compatibleIndex: Int
+) -> String {
+  var sections: [String] = []
+  var primitiveLines: [String] = []
+  var declaredPrimitives: Set<String> = []
+
+  func flushPrimitiveLines() {
+    guard !primitiveLines.isEmpty else {
+      return
+    }
+    let body = primitiveLines.joined(separator: "\n              ")
+    sections.append(
+      """
+      try UnsafeUtil.readRegion(buffer: __buffer) { __base, __length in
+          var __readerIndex = 0
+          \(body)
+          return __readerIndex
+      }
+      """)
+    primitiveLines.removeAll(keepingCapacity: true)
+  }
+
+  for localIndex in remoteOrder {
+    let field = sortedFields[localIndex]
+    if localIndex == compatibleIndex {
+      if declaredPrimitives.insert(field.name).inserted {
+        sections.append("var __\(field.name): \(field.typeText) = \(field.typeText).foryDefault()")
+      }
+      primitiveLines.append(
+        "__\(field.name) = Int64(try UnsafeUtil.readInt32(from: __base, length: __length, index: &__readerIndex))"
+      )
+      continue
+    }
+    if let readExpr = primitiveRemoteOrderReadAdvanceExpr(for: field) {
+      if declaredPrimitives.insert(field.name).inserted {
+        sections.append("var __\(field.name): \(field.typeText) = \(field.typeText).foryDefault()")
+      }
+      primitiveLines.append(readExpr)
+      continue
+    }
+    flushPrimitiveLines()
+    sections.append("let __\(field.name) = \(compatibleSchemaReadFieldExpr(field))")
+  }
+  flushPrimitiveLines()
+  return sections.joined(separator: "\n            ")
+}
+
+private func primitiveRemoteOrderReadAdvanceExpr(for field: ParsedField) -> String? {
+  let fixedRead: String
+  let width: Int
+  switch trimType(field.typeText) {
+  case "Bool":
+    fixedRead = "UnsafeUtil.readBoolUnchecked(from: __base, index: __readerIndex)"
+    width = 1
+  case "Int8":
+    fixedRead = "UnsafeUtil.readInt8Unchecked(from: __base, index: __readerIndex)"
+    width = 1
+  case "UInt8":
+    fixedRead = "UnsafeUtil.readUInt8Unchecked(from: __base, index: __readerIndex)"
+    width = 1
+  case "Int16":
+    fixedRead = "UnsafeUtil.readInt16Unchecked(from: __base, index: __readerIndex)"
+    width = 2
+  case "UInt16":
+    fixedRead = "UnsafeUtil.readUInt16Unchecked(from: __base, index: __readerIndex)"
+    width = 2
+  case "Float":
+    fixedRead = "UnsafeUtil.readFloat32Unchecked(from: __base, index: __readerIndex)"
+    width = 4
+  case "Double":
+    fixedRead = "UnsafeUtil.readFloat64Unchecked(from: __base, index: __readerIndex)"
+    width = 8
+  default:
+    if let readExpr = primitiveUnsafePointerReadAdvanceExpr(for: field) {
+      return "__\(field.name) = \(readExpr)"
+    }
+    return nil
+  }
+  return """
+    try UnsafeUtil.checkReadable(length: __length, index: __readerIndex, need: \(width))
+    __\(field.name) = \(fixedRead)
+    __readerIndex += \(width)
+    """
 }
 
 private func remoteOrderSingleCompatEligible(_ field: ParsedField) -> Bool {
@@ -713,10 +799,10 @@ private func compatInt64Varint32Block(
     "__\(compatibleField.name) = Int64(try UnsafeUtil.readInt32(from: __base, length: __length, index: &__readerIndex))"
   ]
   for field in suffixFields {
-    guard let readExpr = primitiveUnsafePointerReadAdvanceExpr(for: field) else {
+    guard let readExpr = primitiveRemoteOrderReadAdvanceExpr(for: field) else {
       return nil
     }
-    readLines.append("__\(field.name) = \(readExpr)")
+    readLines.append(readExpr)
   }
   let readBody = readLines.joined(separator: "\n            ")
   return """

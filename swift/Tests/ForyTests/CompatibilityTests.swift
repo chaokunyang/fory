@@ -654,6 +654,80 @@ func namedRemoteOnlyFieldIsSkipped() throws {
 }
 
 @Test
+func matchedFieldIdOverflowFails() throws {
+  let empty = MetaString.empty(specialChar1: "_", specialChar2: "_")
+  let fieldType = TypeMeta.FieldType(typeID: TypeId.bool.rawValue, nullable: false)
+  let overflowIndex = Int(Int16.max) / 2 + 1
+  let localFields = (0...overflowIndex).map {
+    TypeMeta.FieldInfo(fieldID: nil, fieldName: "f\($0)", fieldType: fieldType)
+  }
+  let local = try TypeMeta(
+    typeID: TypeId.compatibleStruct.rawValue,
+    userTypeID: 1,
+    namespace: empty,
+    typeName: empty,
+    registerByName: false,
+    fields: localFields)
+  let remote = try TypeMeta(
+    typeID: TypeId.compatibleStruct.rawValue,
+    userTypeID: 1,
+    namespace: empty,
+    typeName: empty,
+    registerByName: false,
+    fields: [
+      TypeMeta.FieldInfo(
+        fieldID: nil,
+        fieldName: "f\(overflowIndex)",
+        fieldType: fieldType)
+    ])
+
+  try expectInvalidData {
+    _ = try remote.assigningFieldIDs(from: local)
+  }
+}
+
+@Test
+func matchedByteFamilyClassification() throws {
+  let empty = MetaString.empty(specialChar1: "_", specialChar2: "_")
+  let binaryType = TypeMeta.FieldType(typeID: TypeId.binary.rawValue, nullable: false)
+  let uint8ArrayType = TypeMeta.FieldType(typeID: TypeId.uint8Array.rawValue, nullable: false)
+  let int8ArrayType = TypeMeta.FieldType(typeID: TypeId.int8Array.rawValue, nullable: false)
+  let local = try TypeMeta(
+    typeID: TypeId.compatibleStruct.rawValue,
+    userTypeID: 1,
+    namespace: empty,
+    typeName: empty,
+    registerByName: false,
+    fields: [
+      TypeMeta.FieldInfo(fieldID: nil, fieldName: "payload", fieldType: binaryType)
+    ])
+  let remoteUInt8Array = try TypeMeta(
+    typeID: TypeId.compatibleStruct.rawValue,
+    userTypeID: 1,
+    namespace: empty,
+    typeName: empty,
+    registerByName: false,
+    fields: [
+      TypeMeta.FieldInfo(fieldID: nil, fieldName: "payload", fieldType: uint8ArrayType)
+    ])
+  let remoteInt8Array = try TypeMeta(
+    typeID: TypeId.compatibleStruct.rawValue,
+    userTypeID: 1,
+    namespace: empty,
+    typeName: empty,
+    registerByName: false,
+    fields: [
+      TypeMeta.FieldInfo(fieldID: nil, fieldName: "payload", fieldType: int8ArrayType)
+    ])
+
+  let resolved = try remoteUInt8Array.assigningFieldIDs(from: local)
+  #expect(resolved.fields[0].fieldID == 1)
+  try expectInvalidData {
+    _ = try remoteInt8Array.assigningFieldIDs(from: local)
+  }
+}
+
+@Test
 func scalarConversionFailures() throws {
   try expectInvalidData {
     let _: ScalarBoolBox = try compatibleDecode(
@@ -779,7 +853,7 @@ func compatibleModePreservesSharedAndCircularReferencesForMacroObjects() throws 
     items: [shared, shared],
     byName: [
       "left": shared,
-      "right": shared,
+      "right": shared
     ]
   )
 
@@ -839,7 +913,7 @@ func compatibleNestedArrayEvolves() throws {
   let sourceV1 = CompatibleNestedArrayV1(
     items: [
       CompatibleNestedProfileV1(id: 1, name: "alpha"),
-      CompatibleNestedProfileV1(id: 2, name: "beta"),
+      CompatibleNestedProfileV1(id: 2, name: "beta")
     ]
   )
   let decodedAsV2: CompatibleNestedArrayV2 = try readerV2.deserialize(
@@ -860,7 +934,7 @@ func compatibleNestedArrayEvolves() throws {
   let sourceV2 = CompatibleNestedArrayV2(
     items: [
       CompatibleNestedProfileV2(id: 3, name: "gamma", alias: "g", scores: [3, 4]),
-      CompatibleNestedProfileV2(id: 4, name: "delta", alias: "d", scores: []),
+      CompatibleNestedProfileV2(id: 4, name: "delta", alias: "d", scores: [])
     ]
   )
   let decodedAsV1: CompatibleNestedArrayV1 = try readerV1.deserialize(
@@ -868,7 +942,7 @@ func compatibleNestedArrayEvolves() throws {
   #expect(
     decodedAsV1.items == [
       CompatibleNestedProfileV1(id: 3, name: "gamma"),
-      CompatibleNestedProfileV1(id: 4, name: "delta"),
+      CompatibleNestedProfileV1(id: 4, name: "delta")
     ])
 }
 
@@ -897,7 +971,7 @@ func compatibleRejectsNestedMapListMismatch() throws {
   let source = RemoteNestedFixedMapV1(
     data: [
       "a": [1, nil, Int32.max],
-      "b": [],
+      "b": []
     ],
     keep: 84,
     ids: [nil, -1, Int32.max]
@@ -1002,7 +1076,7 @@ func compatibleNestedMapEvolves() throws {
   let sourceV1 = CompatibleNestedMapV1(
     items: [
       1: CompatibleNestedProfileV1(id: 10, name: "first"),
-      2: CompatibleNestedProfileV1(id: 20, name: "second"),
+      2: CompatibleNestedProfileV1(id: 20, name: "second")
     ]
   )
   let decodedAsV2: CompatibleNestedMapV2 = try readerV2.deserialize(
@@ -1030,14 +1104,14 @@ func compatibleNestedReadsReuseTypeMeta() throws {
   let first = CompatibleNestedArrayV1(
     items: [
       CompatibleNestedProfileV1(id: 1, name: "alpha"),
-      CompatibleNestedProfileV1(id: 2, name: "beta"),
+      CompatibleNestedProfileV1(id: 2, name: "beta")
     ]
   )
   let second = CompatibleNestedArrayV1(
     items: [
       CompatibleNestedProfileV1(id: 3, name: "gamma"),
       CompatibleNestedProfileV1(id: 4, name: "delta"),
-      CompatibleNestedProfileV1(id: 5, name: "epsilon"),
+      CompatibleNestedProfileV1(id: 5, name: "epsilon")
     ]
   )
 

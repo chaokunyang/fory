@@ -650,9 +650,11 @@ func (s *structSerializer) initFieldsFromTypeDef(typeResolver *TypeResolver) err
 					}
 				}
 			} else {
-				fieldType = remoteType
-				fieldIndex = -1
-				offset = 0
+				return fmt.Errorf(
+					"compatible field %s cannot be read as local field %s",
+					def.name,
+					localFieldName,
+				)
 			}
 		} else {
 			fieldType = remoteType

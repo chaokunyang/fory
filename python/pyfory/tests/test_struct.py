@@ -28,7 +28,7 @@ import typing
 
 import pyfory
 from pyfory import Fory
-from pyfory.error import ForyInvalidDataError, TypeUnregisteredError
+from pyfory.error import ForyInvalidDataError, TypeNotCompatibleError, TypeUnregisteredError
 from pyfory.resolver import NOT_NULL_VALUE_FLAG, REF_VALUE_FLAG
 from pyfory.struct import DataClassSerializer, build_default_values_factory
 from pyfory.types import TypeId
@@ -372,29 +372,34 @@ def test_scalar_tracking_ref_is_not_converted():
     assert [field_info.field_type.is_tracking_ref for field_info in field_infos] == [True, True]
 
     shared = "".join(["", "1"])
-    result = reader.deserialize(writer.serialize(RemoteTwoStringScalars(shared, shared)))
-    assert result == LocalBoolIntScalars(False, 0)
+    with pytest.raises(TypeNotCompatibleError):
+        reader.deserialize(writer.serialize(RemoteTwoStringScalars(shared, shared)))
 
 
 def test_scalar_tracking_ref_rules():
-    assert compat_ser_de(RemoteRefBoolScalar, LocalBoolScalar, RemoteRefBoolScalar(True), 739, ref=True) == LocalBoolScalar(False)
-    assert compat_ser_de(RemoteBoolScalar, LocalRefBoolScalar, RemoteBoolScalar(True), 740, ref=True) == LocalRefBoolScalar(False)
+    with pytest.raises(TypeNotCompatibleError):
+        compat_ser_de(RemoteRefBoolScalar, LocalBoolScalar, RemoteRefBoolScalar(True), 739, ref=True)
+    with pytest.raises(TypeNotCompatibleError):
+        compat_ser_de(RemoteBoolScalar, LocalRefBoolScalar, RemoteBoolScalar(True), 740, ref=True)
     assert compat_ser_de(RemoteRefBoolScalar, LocalRefBoolScalar, RemoteRefBoolScalar(True), 741, ref=True) == LocalRefBoolScalar(True)
-    assert compat_ser_de(RemoteRefFixedInt32Scalar, LocalRefInt32Scalar, RemoteRefFixedInt32Scalar(7), 742, ref=True) == LocalRefInt32Scalar(0)
-    assert compat_ser_de(
-        RemoteOptionalRefBoolScalar,
-        LocalRefBoolScalar,
-        RemoteOptionalRefBoolScalar(True),
-        748,
-        ref=True,
-    ) == LocalRefBoolScalar(False)
-    assert compat_ser_de(
-        RemoteRefBoolScalar,
-        LocalOptionalRefBoolScalar,
-        RemoteRefBoolScalar(True),
-        749,
-        ref=True,
-    ) == LocalOptionalRefBoolScalar(None)
+    with pytest.raises(TypeNotCompatibleError):
+        compat_ser_de(RemoteRefFixedInt32Scalar, LocalRefInt32Scalar, RemoteRefFixedInt32Scalar(7), 742, ref=True)
+    with pytest.raises(TypeNotCompatibleError):
+        compat_ser_de(
+            RemoteOptionalRefBoolScalar,
+            LocalRefBoolScalar,
+            RemoteOptionalRefBoolScalar(True),
+            748,
+            ref=True,
+        )
+    with pytest.raises(TypeNotCompatibleError):
+        compat_ser_de(
+            RemoteRefBoolScalar,
+            LocalOptionalRefBoolScalar,
+            RemoteRefBoolScalar(True),
+            749,
+            ref=True,
+        )
     assert compat_ser_de(
         RemoteOptionalRefBoolScalar,
         LocalOptionalRefBoolScalar,
@@ -459,14 +464,14 @@ def test_compatible_read_validates_nested_integer_narrowing():
     assert result == LocalNestedNarrow()
 
 
-def test_compatible_read_skips_nested_signed_unsigned_mismatch():
-    result = compat_ser_de(
-        RemoteNestedUnsigned,
-        LocalNestedSignedDefault,
-        RemoteNestedUnsigned(values={1: [2]}),
-        705,
-    )
-    assert result == LocalNestedSignedDefault()
+def test_compatible_read_rejects_nested_signed_unsigned_mismatch():
+    with pytest.raises(TypeNotCompatibleError):
+        compat_ser_de(
+            RemoteNestedUnsigned,
+            LocalNestedSignedDefault,
+            RemoteNestedUnsigned(values={1: [2]}),
+            705,
+        )
 
 
 @dataclass
@@ -1233,6 +1238,28 @@ def test_compatible_nested_list_struct():
     assert isinstance(decoded, CompatibleListOwnerV2)
     assert [item.value for item in decoded.items] == [123, 456]
     assert [item.added for item in decoded.items] == ["", ""]
+
+
+@dataclass
+class CompatibleListStringField:
+    items: List[str]
+
+
+@dataclass
+class CompatibleListIntField:
+    items: List[pyfory.Int32]
+
+
+@pytest.mark.parametrize("xlang", [False, True])
+def test_compatible_incompatible_matched_field_fails(xlang):
+    writer = Fory(xlang=xlang, compatible=True, ref=False)
+    reader = Fory(xlang=xlang, compatible=True, ref=False)
+    writer.register_type(CompatibleListStringField, name="example.CompatibleListField")
+    reader.register_type(CompatibleListIntField, name="example.CompatibleListField")
+
+    data = writer.serialize(CompatibleListStringField(items=["one", "two"]))
+    with pytest.raises(TypeNotCompatibleError):
+        reader.deserialize(data)
 
 
 @dataclass

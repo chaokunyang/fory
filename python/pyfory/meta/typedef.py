@@ -261,6 +261,10 @@ class TypeDef:
                 field_info.field_type,
                 local_info.field_type if local_info is not None else None,
             )
+            if local_info is not None and not can_assign:
+                from pyfory.error import TypeNotCompatibleError
+
+                raise TypeNotCompatibleError(f"Compatible field {resolved_name!r} cannot be read as local field {local_info.name!r}")
             type_hint = type_hints.get(resolved_name, typing.Any)
             unwrapped_type, _ = unwrap_optional(type_hint, field_nullable=resolver.field_nullable)
             serializer = _create_compatible_field_serializer(

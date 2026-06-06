@@ -74,7 +74,10 @@ public final class StaticCompatibleCodecBuilder extends ObjectCodecBuilder {
     Preconditions.checkArgument(
         !fory.getConfig().checkClassVersion(),
         "Class version check should be disabled when compatible mode is enabled.");
-    localDescriptors = Collections.unmodifiableList(Descriptor.getDescriptors(beanClass));
+    localDescriptors =
+        Collections.unmodifiableList(
+            typeResolver.normalizeFieldDescriptors(
+                beanClass, true, Descriptor.getDescriptors(beanClass)));
     debug =
         beanClass.isAnnotationPresent(ForyStruct.class)
             && beanClass.isAnnotationPresent(ForyDebug.class);
@@ -97,6 +100,10 @@ public final class StaticCompatibleCodecBuilder extends ObjectCodecBuilder {
     if (isRecord) {
       recordArgsFieldName(RecordUtils.getRecordComponents(beanClass).length);
     }
+    String readCompatibleCode = isRecord ? genRecordCompatibleRead() : genObjectCompatibleRead();
+    genDispatchMethods();
+    // Read/dispatch generation can add serializer fields and instance-init code. Add the
+    // constructor after it because CodegenContext snapshots instance init into constructors.
     String constructorCode =
         StringUtils.format(
             ""
@@ -122,12 +129,7 @@ public final class StaticCompatibleCodecBuilder extends ObjectCodecBuilder {
         "_f_typeDef");
     ctx.addMethod("getGeneratedDescriptors", "return Descriptor.getDescriptors(type);", List.class);
     ctx.overrideMethod(
-        "readCompatible",
-        isRecord ? genRecordCompatibleRead() : genObjectCompatibleRead(),
-        Object.class,
-        ReadContext.class,
-        READ_CONTEXT_NAME);
-    genDispatchMethods();
+        "readCompatible", readCompatibleCode, Object.class, ReadContext.class, READ_CONTEXT_NAME);
     return ctx.genCode();
   }
 

@@ -3484,7 +3484,7 @@ read_exact_primitive_run(T &obj, ReadContext &ctx,
 }
 
 template <typename T, size_t MatchedId>
-FORY_ALWAYS_INLINE void
+FORY_NOINLINE void
 read_compatible_conversion_case(T &obj, ReadContext &ctx,
                                 const FieldType &remote_field_type) {
   using Helpers = CompileTimeFieldHelpers<T>;
@@ -3494,62 +3494,55 @@ read_compatible_conversion_case(T &obj, ReadContext &ctx,
                                                         remote_field_type);
 }
 
-#define FORY_COMPAT_READ_SWITCH_CASE(N)                                        \
+#define FORY_COMPAT_EXACT_READ_SWITCH_CASE(N)                                  \
   case Base + (N): {                                                           \
     constexpr size_t matched_case = static_cast<size_t>(Base + (N));           \
-    if constexpr (matched_case < total_cases) {                                \
-      if constexpr ((matched_case & 1U) == 0) {                                \
-        read_compatible_exact_case<T, matched_case>(obj, ctx);                 \
-      } else {                                                                 \
-        read_compatible_conversion_case<T, matched_case>(obj, ctx,             \
-                                                         remote_field_type);   \
-      }                                                                        \
+    if constexpr (matched_case < total_cases && (matched_case & 1U) == 0) {    \
+      read_compatible_exact_case<T, matched_case>(obj, ctx);                   \
     } else {                                                                   \
       ctx.set_error(Error::type_error("Invalid compatible matched id"));       \
     }                                                                          \
     return;                                                                    \
   }
 
-#define FORY_COMPAT_READ_SWITCH_CASES_16(O)                                    \
-  FORY_COMPAT_READ_SWITCH_CASE((O) + 0)                                        \
-  FORY_COMPAT_READ_SWITCH_CASE((O) + 1)                                        \
-  FORY_COMPAT_READ_SWITCH_CASE((O) + 2)                                        \
-  FORY_COMPAT_READ_SWITCH_CASE((O) + 3)                                        \
-  FORY_COMPAT_READ_SWITCH_CASE((O) + 4)                                        \
-  FORY_COMPAT_READ_SWITCH_CASE((O) + 5)                                        \
-  FORY_COMPAT_READ_SWITCH_CASE((O) + 6)                                        \
-  FORY_COMPAT_READ_SWITCH_CASE((O) + 7)                                        \
-  FORY_COMPAT_READ_SWITCH_CASE((O) + 8)                                        \
-  FORY_COMPAT_READ_SWITCH_CASE((O) + 9)                                        \
-  FORY_COMPAT_READ_SWITCH_CASE((O) + 10)                                       \
-  FORY_COMPAT_READ_SWITCH_CASE((O) + 11)                                       \
-  FORY_COMPAT_READ_SWITCH_CASE((O) + 12)                                       \
-  FORY_COMPAT_READ_SWITCH_CASE((O) + 13)                                       \
-  FORY_COMPAT_READ_SWITCH_CASE((O) + 14)                                       \
-  FORY_COMPAT_READ_SWITCH_CASE((O) + 15)
+#define FORY_COMPAT_EXACT_READ_SWITCH_CASES_16(O)                              \
+  FORY_COMPAT_EXACT_READ_SWITCH_CASE((O) + 0)                                  \
+  FORY_COMPAT_EXACT_READ_SWITCH_CASE((O) + 1)                                  \
+  FORY_COMPAT_EXACT_READ_SWITCH_CASE((O) + 2)                                  \
+  FORY_COMPAT_EXACT_READ_SWITCH_CASE((O) + 3)                                  \
+  FORY_COMPAT_EXACT_READ_SWITCH_CASE((O) + 4)                                  \
+  FORY_COMPAT_EXACT_READ_SWITCH_CASE((O) + 5)                                  \
+  FORY_COMPAT_EXACT_READ_SWITCH_CASE((O) + 6)                                  \
+  FORY_COMPAT_EXACT_READ_SWITCH_CASE((O) + 7)                                  \
+  FORY_COMPAT_EXACT_READ_SWITCH_CASE((O) + 8)                                  \
+  FORY_COMPAT_EXACT_READ_SWITCH_CASE((O) + 9)                                  \
+  FORY_COMPAT_EXACT_READ_SWITCH_CASE((O) + 10)                                 \
+  FORY_COMPAT_EXACT_READ_SWITCH_CASE((O) + 11)                                 \
+  FORY_COMPAT_EXACT_READ_SWITCH_CASE((O) + 12)                                 \
+  FORY_COMPAT_EXACT_READ_SWITCH_CASE((O) + 13)                                 \
+  FORY_COMPAT_EXACT_READ_SWITCH_CASE((O) + 14)                                 \
+  FORY_COMPAT_EXACT_READ_SWITCH_CASE((O) + 15)
 
-#define FORY_COMPAT_READ_SWITCH_CASES_128()                                    \
-  FORY_COMPAT_READ_SWITCH_CASES_16(0)                                          \
-  FORY_COMPAT_READ_SWITCH_CASES_16(16)                                         \
-  FORY_COMPAT_READ_SWITCH_CASES_16(32)                                         \
-  FORY_COMPAT_READ_SWITCH_CASES_16(48)                                         \
-  FORY_COMPAT_READ_SWITCH_CASES_16(64)                                         \
-  FORY_COMPAT_READ_SWITCH_CASES_16(80)                                         \
-  FORY_COMPAT_READ_SWITCH_CASES_16(96)                                         \
-  FORY_COMPAT_READ_SWITCH_CASES_16(112)
+#define FORY_COMPAT_EXACT_READ_SWITCH_CASES_128()                              \
+  FORY_COMPAT_EXACT_READ_SWITCH_CASES_16(0)                                    \
+  FORY_COMPAT_EXACT_READ_SWITCH_CASES_16(16)                                   \
+  FORY_COMPAT_EXACT_READ_SWITCH_CASES_16(32)                                   \
+  FORY_COMPAT_EXACT_READ_SWITCH_CASES_16(48)                                   \
+  FORY_COMPAT_EXACT_READ_SWITCH_CASES_16(64)                                   \
+  FORY_COMPAT_EXACT_READ_SWITCH_CASES_16(80)                                   \
+  FORY_COMPAT_EXACT_READ_SWITCH_CASES_16(96)                                   \
+  FORY_COMPAT_EXACT_READ_SWITCH_CASES_16(112)
 
 template <typename T, int16_t Base>
 FORY_ALWAYS_INLINE void
-dispatch_compat_read_impl(T &obj, ReadContext &ctx, int16_t matched_id,
-                          const FieldType &remote_field_type) {
+dispatch_compat_exact_read_impl(T &obj, ReadContext &ctx, int16_t matched_id) {
   constexpr size_t total_cases =
       CompileTimeFieldHelpers<T>::FieldCount * static_cast<size_t>(2);
   switch (matched_id) {
-    FORY_COMPAT_READ_SWITCH_CASES_128()
+    FORY_COMPAT_EXACT_READ_SWITCH_CASES_128()
   default:
     if constexpr (static_cast<size_t>(Base) + 128U < total_cases) {
-      dispatch_compat_read_impl<T, Base + 128>(obj, ctx, matched_id,
-                                               remote_field_type);
+      dispatch_compat_exact_read_impl<T, Base + 128>(obj, ctx, matched_id);
     } else {
       ctx.set_error(Error::type_error("Invalid compatible matched id"));
     }
@@ -3557,69 +3550,63 @@ dispatch_compat_read_impl(T &obj, ReadContext &ctx, int16_t matched_id,
   }
 }
 
-#undef FORY_COMPAT_READ_SWITCH_CASES_128
-#undef FORY_COMPAT_READ_SWITCH_CASES_16
-#undef FORY_COMPAT_READ_SWITCH_CASE
+#undef FORY_COMPAT_EXACT_READ_SWITCH_CASES_128
+#undef FORY_COMPAT_EXACT_READ_SWITCH_CASES_16
+#undef FORY_COMPAT_EXACT_READ_SWITCH_CASE
 
-#define FORY_COMPAT_READ_AT_SWITCH_CASE(N)                                     \
+#define FORY_COMPAT_CONV_READ_SWITCH_CASE(N)                                   \
   case Base + (N): {                                                           \
     constexpr size_t matched_case = static_cast<size_t>(Base + (N));           \
-    if constexpr (matched_case < total_cases) {                                \
-      if constexpr ((matched_case & 1U) == 0) {                                \
-        read_compatible_exact_case_at<T, matched_case>(obj, ctx, offset);      \
-      } else {                                                                 \
-        ctx.buffer().reader_index(offset);                                     \
-        read_compatible_conversion_case<T, matched_case>(obj, ctx,             \
-                                                         remote_field_type);   \
-        offset = ctx.buffer().reader_index();                                  \
-      }                                                                        \
+    if constexpr (matched_case < total_cases && (matched_case & 1U) != 0) {    \
+      read_compatible_conversion_case<T, matched_case>(obj, ctx,               \
+                                                       remote_field_type);     \
     } else {                                                                   \
       ctx.set_error(Error::type_error("Invalid compatible matched id"));       \
     }                                                                          \
     return;                                                                    \
   }
 
-#define FORY_COMPAT_READ_AT_SWITCH_CASES_16(O)                                 \
-  FORY_COMPAT_READ_AT_SWITCH_CASE((O) + 0)                                     \
-  FORY_COMPAT_READ_AT_SWITCH_CASE((O) + 1)                                     \
-  FORY_COMPAT_READ_AT_SWITCH_CASE((O) + 2)                                     \
-  FORY_COMPAT_READ_AT_SWITCH_CASE((O) + 3)                                     \
-  FORY_COMPAT_READ_AT_SWITCH_CASE((O) + 4)                                     \
-  FORY_COMPAT_READ_AT_SWITCH_CASE((O) + 5)                                     \
-  FORY_COMPAT_READ_AT_SWITCH_CASE((O) + 6)                                     \
-  FORY_COMPAT_READ_AT_SWITCH_CASE((O) + 7)                                     \
-  FORY_COMPAT_READ_AT_SWITCH_CASE((O) + 8)                                     \
-  FORY_COMPAT_READ_AT_SWITCH_CASE((O) + 9)                                     \
-  FORY_COMPAT_READ_AT_SWITCH_CASE((O) + 10)                                    \
-  FORY_COMPAT_READ_AT_SWITCH_CASE((O) + 11)                                    \
-  FORY_COMPAT_READ_AT_SWITCH_CASE((O) + 12)                                    \
-  FORY_COMPAT_READ_AT_SWITCH_CASE((O) + 13)                                    \
-  FORY_COMPAT_READ_AT_SWITCH_CASE((O) + 14)                                    \
-  FORY_COMPAT_READ_AT_SWITCH_CASE((O) + 15)
+#define FORY_COMPAT_CONV_READ_SWITCH_CASES_16(O)                               \
+  FORY_COMPAT_CONV_READ_SWITCH_CASE((O) + 0)                                   \
+  FORY_COMPAT_CONV_READ_SWITCH_CASE((O) + 1)                                   \
+  FORY_COMPAT_CONV_READ_SWITCH_CASE((O) + 2)                                   \
+  FORY_COMPAT_CONV_READ_SWITCH_CASE((O) + 3)                                   \
+  FORY_COMPAT_CONV_READ_SWITCH_CASE((O) + 4)                                   \
+  FORY_COMPAT_CONV_READ_SWITCH_CASE((O) + 5)                                   \
+  FORY_COMPAT_CONV_READ_SWITCH_CASE((O) + 6)                                   \
+  FORY_COMPAT_CONV_READ_SWITCH_CASE((O) + 7)                                   \
+  FORY_COMPAT_CONV_READ_SWITCH_CASE((O) + 8)                                   \
+  FORY_COMPAT_CONV_READ_SWITCH_CASE((O) + 9)                                   \
+  FORY_COMPAT_CONV_READ_SWITCH_CASE((O) + 10)                                  \
+  FORY_COMPAT_CONV_READ_SWITCH_CASE((O) + 11)                                  \
+  FORY_COMPAT_CONV_READ_SWITCH_CASE((O) + 12)                                  \
+  FORY_COMPAT_CONV_READ_SWITCH_CASE((O) + 13)                                  \
+  FORY_COMPAT_CONV_READ_SWITCH_CASE((O) + 14)                                  \
+  FORY_COMPAT_CONV_READ_SWITCH_CASE((O) + 15)
 
-#define FORY_COMPAT_READ_AT_SWITCH_CASES_128()                                 \
-  FORY_COMPAT_READ_AT_SWITCH_CASES_16(0)                                       \
-  FORY_COMPAT_READ_AT_SWITCH_CASES_16(16)                                      \
-  FORY_COMPAT_READ_AT_SWITCH_CASES_16(32)                                      \
-  FORY_COMPAT_READ_AT_SWITCH_CASES_16(48)                                      \
-  FORY_COMPAT_READ_AT_SWITCH_CASES_16(64)                                      \
-  FORY_COMPAT_READ_AT_SWITCH_CASES_16(80)                                      \
-  FORY_COMPAT_READ_AT_SWITCH_CASES_16(96)                                      \
-  FORY_COMPAT_READ_AT_SWITCH_CASES_16(112)
+#define FORY_COMPAT_CONV_READ_SWITCH_CASES_128()                               \
+  FORY_COMPAT_CONV_READ_SWITCH_CASES_16(0)                                     \
+  FORY_COMPAT_CONV_READ_SWITCH_CASES_16(16)                                    \
+  FORY_COMPAT_CONV_READ_SWITCH_CASES_16(32)                                    \
+  FORY_COMPAT_CONV_READ_SWITCH_CASES_16(48)                                    \
+  FORY_COMPAT_CONV_READ_SWITCH_CASES_16(64)                                    \
+  FORY_COMPAT_CONV_READ_SWITCH_CASES_16(80)                                    \
+  FORY_COMPAT_CONV_READ_SWITCH_CASES_16(96)                                    \
+  FORY_COMPAT_CONV_READ_SWITCH_CASES_16(112)
 
 template <typename T, int16_t Base>
-FORY_ALWAYS_INLINE void
-dispatch_compat_read_at_impl(T &obj, ReadContext &ctx, int16_t matched_id,
-                             const FieldType &remote_field_type,
-                             uint32_t &offset) {
+FORY_NOINLINE void
+dispatch_compat_conversion_read_impl(T &obj, ReadContext &ctx,
+                                     int16_t matched_id,
+                                     const FieldType &remote_field_type) {
   constexpr size_t total_cases =
       CompileTimeFieldHelpers<T>::FieldCount * static_cast<size_t>(2);
   switch (matched_id) {
-    FORY_COMPAT_READ_AT_SWITCH_CASES_128()
+    FORY_COMPAT_CONV_READ_SWITCH_CASES_128()
   default:
     if constexpr (static_cast<size_t>(Base) + 128U < total_cases) {
-      dispatch_compat_read_at_impl<T, Base + 128>(obj, ctx, matched_id,
-                                                  remote_field_type, offset);
+      dispatch_compat_conversion_read_impl<T, Base + 128>(obj, ctx, matched_id,
+                                                          remote_field_type);
     } else {
       ctx.set_error(Error::type_error("Invalid compatible matched id"));
     }
@@ -3627,9 +3614,136 @@ dispatch_compat_read_at_impl(T &obj, ReadContext &ctx, int16_t matched_id,
   }
 }
 
-#undef FORY_COMPAT_READ_AT_SWITCH_CASES_128
-#undef FORY_COMPAT_READ_AT_SWITCH_CASES_16
-#undef FORY_COMPAT_READ_AT_SWITCH_CASE
+#undef FORY_COMPAT_CONV_READ_SWITCH_CASES_128
+#undef FORY_COMPAT_CONV_READ_SWITCH_CASES_16
+#undef FORY_COMPAT_CONV_READ_SWITCH_CASE
+
+#define FORY_COMPAT_EXACT_READ_AT_SWITCH_CASE(N)                               \
+  case Base + (N): {                                                           \
+    constexpr size_t matched_case = static_cast<size_t>(Base + (N));           \
+    if constexpr (matched_case < total_cases && (matched_case & 1U) == 0) {    \
+      read_compatible_exact_case_at<T, matched_case>(obj, ctx, offset);        \
+    } else {                                                                   \
+      ctx.set_error(Error::type_error("Invalid compatible matched id"));       \
+    }                                                                          \
+    return;                                                                    \
+  }
+
+#define FORY_COMPAT_EXACT_READ_AT_SWITCH_CASES_16(O)                           \
+  FORY_COMPAT_EXACT_READ_AT_SWITCH_CASE((O) + 0)                               \
+  FORY_COMPAT_EXACT_READ_AT_SWITCH_CASE((O) + 1)                               \
+  FORY_COMPAT_EXACT_READ_AT_SWITCH_CASE((O) + 2)                               \
+  FORY_COMPAT_EXACT_READ_AT_SWITCH_CASE((O) + 3)                               \
+  FORY_COMPAT_EXACT_READ_AT_SWITCH_CASE((O) + 4)                               \
+  FORY_COMPAT_EXACT_READ_AT_SWITCH_CASE((O) + 5)                               \
+  FORY_COMPAT_EXACT_READ_AT_SWITCH_CASE((O) + 6)                               \
+  FORY_COMPAT_EXACT_READ_AT_SWITCH_CASE((O) + 7)                               \
+  FORY_COMPAT_EXACT_READ_AT_SWITCH_CASE((O) + 8)                               \
+  FORY_COMPAT_EXACT_READ_AT_SWITCH_CASE((O) + 9)                               \
+  FORY_COMPAT_EXACT_READ_AT_SWITCH_CASE((O) + 10)                              \
+  FORY_COMPAT_EXACT_READ_AT_SWITCH_CASE((O) + 11)                              \
+  FORY_COMPAT_EXACT_READ_AT_SWITCH_CASE((O) + 12)                              \
+  FORY_COMPAT_EXACT_READ_AT_SWITCH_CASE((O) + 13)                              \
+  FORY_COMPAT_EXACT_READ_AT_SWITCH_CASE((O) + 14)                              \
+  FORY_COMPAT_EXACT_READ_AT_SWITCH_CASE((O) + 15)
+
+#define FORY_COMPAT_EXACT_READ_AT_SWITCH_CASES_128()                           \
+  FORY_COMPAT_EXACT_READ_AT_SWITCH_CASES_16(0)                                 \
+  FORY_COMPAT_EXACT_READ_AT_SWITCH_CASES_16(16)                                \
+  FORY_COMPAT_EXACT_READ_AT_SWITCH_CASES_16(32)                                \
+  FORY_COMPAT_EXACT_READ_AT_SWITCH_CASES_16(48)                                \
+  FORY_COMPAT_EXACT_READ_AT_SWITCH_CASES_16(64)                                \
+  FORY_COMPAT_EXACT_READ_AT_SWITCH_CASES_16(80)                                \
+  FORY_COMPAT_EXACT_READ_AT_SWITCH_CASES_16(96)                                \
+  FORY_COMPAT_EXACT_READ_AT_SWITCH_CASES_16(112)
+
+template <typename T, int16_t Base>
+FORY_ALWAYS_INLINE void
+dispatch_compat_exact_read_at_impl(T &obj, ReadContext &ctx, int16_t matched_id,
+                                   uint32_t &offset) {
+  constexpr size_t total_cases =
+      CompileTimeFieldHelpers<T>::FieldCount * static_cast<size_t>(2);
+  switch (matched_id) {
+    FORY_COMPAT_EXACT_READ_AT_SWITCH_CASES_128()
+  default:
+    if constexpr (static_cast<size_t>(Base) + 128U < total_cases) {
+      dispatch_compat_exact_read_at_impl<T, Base + 128>(obj, ctx, matched_id,
+                                                        offset);
+    } else {
+      ctx.set_error(Error::type_error("Invalid compatible matched id"));
+    }
+    return;
+  }
+}
+
+#undef FORY_COMPAT_EXACT_READ_AT_SWITCH_CASES_128
+#undef FORY_COMPAT_EXACT_READ_AT_SWITCH_CASES_16
+#undef FORY_COMPAT_EXACT_READ_AT_SWITCH_CASE
+
+#define FORY_COMPAT_CONV_READ_AT_SWITCH_CASE(N)                                \
+  case Base + (N): {                                                           \
+    constexpr size_t matched_case = static_cast<size_t>(Base + (N));           \
+    if constexpr (matched_case < total_cases && (matched_case & 1U) != 0) {    \
+      ctx.buffer().reader_index(offset);                                       \
+      read_compatible_conversion_case<T, matched_case>(obj, ctx,               \
+                                                       remote_field_type);     \
+      offset = ctx.buffer().reader_index();                                    \
+    } else {                                                                   \
+      ctx.set_error(Error::type_error("Invalid compatible matched id"));       \
+    }                                                                          \
+    return;                                                                    \
+  }
+
+#define FORY_COMPAT_CONV_READ_AT_SWITCH_CASES_16(O)                            \
+  FORY_COMPAT_CONV_READ_AT_SWITCH_CASE((O) + 0)                                \
+  FORY_COMPAT_CONV_READ_AT_SWITCH_CASE((O) + 1)                                \
+  FORY_COMPAT_CONV_READ_AT_SWITCH_CASE((O) + 2)                                \
+  FORY_COMPAT_CONV_READ_AT_SWITCH_CASE((O) + 3)                                \
+  FORY_COMPAT_CONV_READ_AT_SWITCH_CASE((O) + 4)                                \
+  FORY_COMPAT_CONV_READ_AT_SWITCH_CASE((O) + 5)                                \
+  FORY_COMPAT_CONV_READ_AT_SWITCH_CASE((O) + 6)                                \
+  FORY_COMPAT_CONV_READ_AT_SWITCH_CASE((O) + 7)                                \
+  FORY_COMPAT_CONV_READ_AT_SWITCH_CASE((O) + 8)                                \
+  FORY_COMPAT_CONV_READ_AT_SWITCH_CASE((O) + 9)                                \
+  FORY_COMPAT_CONV_READ_AT_SWITCH_CASE((O) + 10)                               \
+  FORY_COMPAT_CONV_READ_AT_SWITCH_CASE((O) + 11)                               \
+  FORY_COMPAT_CONV_READ_AT_SWITCH_CASE((O) + 12)                               \
+  FORY_COMPAT_CONV_READ_AT_SWITCH_CASE((O) + 13)                               \
+  FORY_COMPAT_CONV_READ_AT_SWITCH_CASE((O) + 14)                               \
+  FORY_COMPAT_CONV_READ_AT_SWITCH_CASE((O) + 15)
+
+#define FORY_COMPAT_CONV_READ_AT_SWITCH_CASES_128()                            \
+  FORY_COMPAT_CONV_READ_AT_SWITCH_CASES_16(0)                                  \
+  FORY_COMPAT_CONV_READ_AT_SWITCH_CASES_16(16)                                 \
+  FORY_COMPAT_CONV_READ_AT_SWITCH_CASES_16(32)                                 \
+  FORY_COMPAT_CONV_READ_AT_SWITCH_CASES_16(48)                                 \
+  FORY_COMPAT_CONV_READ_AT_SWITCH_CASES_16(64)                                 \
+  FORY_COMPAT_CONV_READ_AT_SWITCH_CASES_16(80)                                 \
+  FORY_COMPAT_CONV_READ_AT_SWITCH_CASES_16(96)                                 \
+  FORY_COMPAT_CONV_READ_AT_SWITCH_CASES_16(112)
+
+template <typename T, int16_t Base>
+FORY_NOINLINE void dispatch_compat_conversion_read_at_impl(
+    T &obj, ReadContext &ctx, int16_t matched_id,
+    const FieldType &remote_field_type, uint32_t &offset) {
+  constexpr size_t total_cases =
+      CompileTimeFieldHelpers<T>::FieldCount * static_cast<size_t>(2);
+  switch (matched_id) {
+    FORY_COMPAT_CONV_READ_AT_SWITCH_CASES_128()
+  default:
+    if constexpr (static_cast<size_t>(Base) + 128U < total_cases) {
+      dispatch_compat_conversion_read_at_impl<T, Base + 128>(
+          obj, ctx, matched_id, remote_field_type, offset);
+    } else {
+      ctx.set_error(Error::type_error("Invalid compatible matched id"));
+    }
+    return;
+  }
+}
+
+#undef FORY_COMPAT_CONV_READ_AT_SWITCH_CASES_128
+#undef FORY_COMPAT_CONV_READ_AT_SWITCH_CASES_16
+#undef FORY_COMPAT_CONV_READ_AT_SWITCH_CASE
 
 /// Helper to read a single field at compile-time sorted position
 template <typename T, size_t SortedPosition>
@@ -4223,12 +4337,21 @@ void read_struct_fields_compatible(T &obj, ReadContext &ctx,
       FORY_COMPAT_LOOP_SWITCH_CASES_128()
     default:
       if constexpr (128U < total_cases) {
-        if (use_exact_offset_reads) {
-          dispatch_compat_read_at_impl<T, 128>(obj, ctx, field_id,
-                                               remote_field.field_type, offset);
+        if ((field_id & 1) == 0) {
+          if (use_exact_offset_reads) {
+            dispatch_compat_exact_read_at_impl<T, 128>(obj, ctx, field_id,
+                                                       offset);
+          } else {
+            dispatch_compat_exact_read_impl<T, 128>(obj, ctx, field_id);
+          }
         } else {
-          dispatch_compat_read_impl<T, 128>(obj, ctx, field_id,
-                                            remote_field.field_type);
+          if (use_exact_offset_reads) {
+            dispatch_compat_conversion_read_at_impl<T, 128>(
+                obj, ctx, field_id, remote_field.field_type, offset);
+          } else {
+            dispatch_compat_conversion_read_impl<T, 128>(
+                obj, ctx, field_id, remote_field.field_type);
+          }
         }
       } else {
         ctx.set_error(Error::type_error("Invalid compatible matched id"));

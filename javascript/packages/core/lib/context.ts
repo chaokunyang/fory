@@ -585,6 +585,18 @@ export class ReadContext {
 
   private recentRegeneratedExpectedHashes = [0, 0, 0, 0];
   private recentRegeneratedRemoteHashes = [0, 0, 0, 0];
+  private recentRegeneratedOriginals: Array<Serializer | undefined> = [
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+  ];
+  private recentRegeneratedLocalTypeInfos: Array<TypeInfo | undefined> = [
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+  ];
   private recentRegeneratedReadSerializers: Array<Serializer | undefined> = [
     undefined,
     undefined,
@@ -595,6 +607,8 @@ export class ReadContext {
   private recentRegeneratedReadSerializerIndex = 0;
   private lastRegeneratedExpectedHash = 0;
   private lastRegeneratedRemoteHash = 0;
+  private lastRegeneratedOriginal: Serializer | undefined;
+  private lastRegeneratedLocalTypeInfo: TypeInfo | undefined;
   private lastRegeneratedReadSerializer: Serializer | undefined;
 
   private _depth = 0;
@@ -812,10 +826,14 @@ export class ReadContext {
       remoteHash = ReadContext.typeMetaHeaderHash(headerLow, headerHigh);
     }
     if (expectedHash !== remoteHash) {
+      const originalTypeInfo = original?.getTypeInfo();
       if (
-        this.lastRegeneratedReadSerializer !== undefined
-        && this.lastRegeneratedExpectedHash === expectedHash
-        && this.lastRegeneratedRemoteHash === remoteHash
+        original !== undefined &&
+        this.lastRegeneratedReadSerializer !== undefined &&
+        this.lastRegeneratedOriginal === original &&
+        this.lastRegeneratedLocalTypeInfo === originalTypeInfo &&
+        this.lastRegeneratedExpectedHash === expectedHash &&
+        this.lastRegeneratedRemoteHash === remoteHash
       ) {
         return this.lastRegeneratedReadSerializer;
       }
@@ -824,6 +842,7 @@ export class ReadContext {
         remoteHash,
         typeMeta,
         original,
+        originalTypeInfo,
       );
     }
     return undefined;
@@ -834,30 +853,43 @@ export class ReadContext {
     remoteHash: number,
     typeMeta: TypeMeta,
     original?: Serializer,
+    originalTypeInfo?: TypeInfo,
   ): Serializer {
-    for (let i = 0; i < this.recentRegeneratedReadSerializers.length; i++) {
-      const serializer = this.recentRegeneratedReadSerializers[i];
-      if (
-        serializer !== undefined
-        && this.recentRegeneratedExpectedHashes[i] === expectedHash
-        && this.recentRegeneratedRemoteHashes[i] === remoteHash
-      ) {
-        this.lastRegeneratedExpectedHash = expectedHash;
-        this.lastRegeneratedRemoteHash = remoteHash;
-        this.lastRegeneratedReadSerializer = serializer;
-        return serializer;
+    if (original !== undefined) {
+      for (let i = 0; i < this.recentRegeneratedReadSerializers.length; i++) {
+        const serializer = this.recentRegeneratedReadSerializers[i];
+        if (
+          serializer !== undefined &&
+          this.recentRegeneratedOriginals[i] === original &&
+          this.recentRegeneratedLocalTypeInfos[i] === originalTypeInfo &&
+          this.recentRegeneratedExpectedHashes[i] === expectedHash &&
+          this.recentRegeneratedRemoteHashes[i] === remoteHash
+        ) {
+          this.lastRegeneratedOriginal = original;
+          this.lastRegeneratedLocalTypeInfo = originalTypeInfo;
+          this.lastRegeneratedExpectedHash = expectedHash;
+          this.lastRegeneratedRemoteHash = remoteHash;
+          this.lastRegeneratedReadSerializer = serializer;
+          return serializer;
+        }
       }
     }
     const serializer = this.genSerializerByTypeMetaRuntime(typeMeta, original);
+    this.lastRegeneratedOriginal = original;
+    this.lastRegeneratedLocalTypeInfo = originalTypeInfo;
     this.lastRegeneratedExpectedHash = expectedHash;
     this.lastRegeneratedRemoteHash = remoteHash;
     this.lastRegeneratedReadSerializer = serializer;
-    const index = this.recentRegeneratedReadSerializerIndex;
-    this.recentRegeneratedExpectedHashes[index] = expectedHash;
-    this.recentRegeneratedRemoteHashes[index] = remoteHash;
-    this.recentRegeneratedReadSerializers[index] = serializer;
-    this.recentRegeneratedReadSerializerIndex
-      = (index + 1) & (this.recentRegeneratedReadSerializers.length - 1);
+    if (original !== undefined) {
+      const index = this.recentRegeneratedReadSerializerIndex;
+      this.recentRegeneratedOriginals[index] = original;
+      this.recentRegeneratedLocalTypeInfos[index] = originalTypeInfo;
+      this.recentRegeneratedExpectedHashes[index] = expectedHash;
+      this.recentRegeneratedRemoteHashes[index] = remoteHash;
+      this.recentRegeneratedReadSerializers[index] = serializer;
+      this.recentRegeneratedReadSerializerIndex =
+        (index + 1) & (this.recentRegeneratedReadSerializers.length - 1);
+    }
     return serializer;
   }
 

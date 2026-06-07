@@ -326,14 +326,14 @@ bool _compatibleFieldType(
     if (remoteType.ref || localType.ref) {
       return false;
     }
-    if (localType.typeId == remoteType.typeId &&
-        localType.arguments.length == remoteType.arguments.length) {
-      return true;
-    }
     // Scalar conversion is an immediate field adaptation; nested container
     // element/key/value scalar types must stay schema-compatible as written.
     if (!topLevel) {
       return false;
+    }
+    if (localType.typeId == remoteType.typeId &&
+        localType.arguments.length == remoteType.arguments.length) {
+      return true;
     }
     return compatibleScalarConversion(
           FieldInfo(name: '', identifier: '', id: null, fieldType: remoteType),

@@ -41,6 +41,7 @@ from pyfory.meta.typedef import (
     TYPEDEF_HASH_SHIFT,
     _INT64_MIN,
     _UINT64_MASK,
+    plan_field_assignment,
 )
 from pyfory.meta.typedef_encoder import (
     FIELD_NAME_ENCODER,
@@ -211,6 +212,26 @@ def test_dynamic_field_type():
     assert dynamic_field.is_monomorphic is False
     assert dynamic_field.is_nullable
     assert dynamic_field.is_tracking_ref is False
+
+
+def test_nested_user_type_shape_matching():
+    remote = CollectionFieldType(TypeId.LIST, True, False, False, DynamicFieldType(TypeId.UNKNOWN, False, False, False))
+    local = CollectionFieldType(TypeId.LIST, True, False, False, DynamicFieldType(TypeId.STRUCT, False, False, False))
+
+    can_assign, validation = plan_field_assignment(remote, local)
+
+    assert can_assign
+    assert validation is None
+
+
+def test_nested_unknown_does_not_match_scalar():
+    remote = CollectionFieldType(TypeId.LIST, True, False, False, DynamicFieldType(TypeId.UNKNOWN, False, False, False))
+    local = CollectionFieldType(TypeId.LIST, True, False, False, FieldType(TypeId.INT32, True, False, False))
+
+    can_assign, validation = plan_field_assignment(remote, local)
+
+    assert not can_assign
+    assert validation is None
 
 
 def test_encode_decode_typedef():

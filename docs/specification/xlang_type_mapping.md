@@ -142,8 +142,12 @@ Notes:
   when `T` is one of the dense bool/numeric array domains. Integer list element encodings in the
   same signedness and width domain match the corresponding dense array element domain. The rule does
   not apply inside nested collection, map, array, union, or generic positions. A peer `list<T>`
-  payload that declares nullable or ref-tracked elements must raise a compatible-read error when the
-  local matched field is `array<T>`.
+  payload that actually carries null or reference-tracked elements must raise a compatible-read error
+  when the local matched field is `array<T>`.
+- `binary` and `array<uint8>` remain distinct schema kinds. In schema-compatible struct/class field
+  matching only, a direct top-level `binary` field may be read as a direct top-level `array<uint8>`
+  field and the reverse may be read as the same byte sequence. This rule does not apply inside
+  nested collection, map, array, union, or generic positions, and it does not include `array<int8>`.
 - The table above remains the canonical xlang schema mapping. Compatible readers may apply the
   scalar field adaptation rules defined by `xlang_serialization_spec.md` during schema-compatible
   struct/class field matching. Those rules do not change TypeDef metadata, dynamic root type

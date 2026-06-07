@@ -24,7 +24,7 @@ use crate::meta::{
 use crate::resolver::{TypeInfo, TypeResolver};
 use crate::type_id::{
     TypeId, BINARY, COMPATIBLE_STRUCT, ENUM, EXT, NAMED_COMPATIBLE_STRUCT, NAMED_ENUM, NAMED_EXT,
-    NAMED_STRUCT, NAMED_UNION, STRUCT, TYPED_UNION, UINT8_ARRAY, UNKNOWN,
+    NAMED_STRUCT, NAMED_UNION, STRUCT, TYPED_UNION, UINT8_ARRAY, UNION, UNKNOWN,
 };
 use crate::util::{murmurhash3_x64_128, to_snake_case};
 
@@ -32,7 +32,7 @@ use crate::util::{murmurhash3_x64_128, to_snake_case};
 /// This treats all struct variants (STRUCT, COMPATIBLE_STRUCT, NAMED_STRUCT,
 /// NAMED_COMPATIBLE_STRUCT) and UNKNOWN as equivalent to STRUCT.
 /// UNKNOWN (0) is used for polymorphic types (interfaces) in cross-language serialization.
-/// Similarly for ENUM and EXT variants. Dense byte arrays stay distinct here because schema
+/// Similarly for ENUM, EXT, and UNION variants. Dense byte arrays stay distinct here because schema
 /// equality and schema hashes must not turn compatibility-only byte-sequence assignment into
 /// same-schema equality.
 fn normalize_type_id_for_eq(type_id: u32) -> u32 {
@@ -50,6 +50,8 @@ fn normalize_type_id_for_eq(type_id: u32) -> u32 {
         _ if type_id == ENUM || type_id == NAMED_ENUM => ENUM,
         // All ext variants normalize to EXT
         _ if type_id == EXT || type_id == NAMED_EXT => EXT,
+        // All union variants normalize to UNION
+        _ if type_id == UNION || type_id == TYPED_UNION || type_id == NAMED_UNION => UNION,
         // Everything else stays the same
         _ => type_id,
     }
@@ -232,6 +234,21 @@ impl FieldType {
     #[inline(always)]
     pub(crate) fn compatible_fingerprint(&self) -> u64 {
         self.compatible_fingerprint
+    }
+
+    #[inline(always)]
+    pub(crate) fn exact_shape_match(&self, other: &Self) -> bool {
+        if normalize_type_id_for_eq(self.type_id) != normalize_type_id_for_eq(other.type_id)
+            || self.nullable != other.nullable
+            || self.track_ref != other.track_ref
+            || self.generics.len() != other.generics.len()
+        {
+            return false;
+        }
+        self.generics
+            .iter()
+            .zip(other.generics.iter())
+            .all(|(left, right)| left.exact_shape_match(right))
     }
 
     fn to_bytes(&self, writer: &mut Writer, write_flag: bool, nullable: bool) -> Result<(), Error> {
@@ -649,31 +666,8 @@ pub fn sort_fields(
 
 impl PartialEq for FieldType {
     fn eq(&self, other: &Self) -> bool {
-        // Normalize type IDs for comparison to handle cross-language schema evolution.
-        // This allows UNKNOWN (0) polymorphic types to match STRUCT (15) in Rust.
-        if normalize_type_id_for_eq(self.type_id) != normalize_type_id_for_eq(other.type_id) {
-            return false;
-        }
-        if self.generics != other.generics {
-            return false;
-        }
-        true
+        self.exact_shape_match(other)
     }
-}
-
-fn exact_field_type_match(left: &FieldType, right: &FieldType) -> bool {
-    if left.type_id != right.type_id
-        || left.user_type_id != right.user_type_id
-        || left.nullable != right.nullable
-        || left.track_ref != right.track_ref
-        || left.generics.len() != right.generics.len()
-    {
-        return false;
-    }
-    left.generics
-        .iter()
-        .zip(right.generics.iter())
-        .all(|(left, right)| exact_field_type_match(left, right))
 }
 
 #[doc(hidden)]
@@ -707,7 +701,7 @@ pub fn assign_remote_field_ids(
 
         match local_match {
             Some((sorted_index, local_info)) => {
-                let exact_field = exact_field_type_match(&local_info.field_type, &field.field_type);
+                let exact_field = local_info.field_type.exact_shape_match(&field.field_type);
                 if !exact_field
                     && !crate::serializer::codec::compatible_field_pair(
                         &local_info.field_type,
@@ -1211,11 +1205,26 @@ mod tests {
         let nullable = FieldType::new(crate::type_id::INT32, true, vec![]);
         let tracked = FieldType::new_with_ref(crate::type_id::INT32, false, true, vec![]);
 
-        assert_eq!(base, nullable);
-        assert_eq!(base, tracked);
-        assert!(exact_field_type_match(&base, &base));
-        assert!(!exact_field_type_match(&base, &nullable));
-        assert!(!exact_field_type_match(&base, &tracked));
+        assert_eq!(base, base);
+        assert_ne!(base, nullable);
+        assert_ne!(base, tracked);
+        assert!(base.exact_shape_match(&base));
+        assert!(!base.exact_shape_match(&nullable));
+        assert!(!base.exact_shape_match(&tracked));
+
+        let list = FieldType::new(crate::type_id::LIST, false, vec![base.clone()]);
+        let nullable_list = FieldType::new(crate::type_id::LIST, false, vec![nullable]);
+        assert!(!list.exact_shape_match(&nullable_list));
+
+        let struct_field =
+            FieldType::new_with_user_type_id(crate::type_id::STRUCT, 1, false, false, vec![]);
+        let unknown_field =
+            FieldType::new_with_user_type_id(crate::type_id::UNKNOWN, 2, false, false, vec![]);
+        assert!(struct_field.exact_shape_match(&unknown_field));
+
+        let union_field = FieldType::new(crate::type_id::UNION, false, vec![]);
+        let typed_union_field = FieldType::new(crate::type_id::TYPED_UNION, false, vec![]);
+        assert!(union_field.exact_shape_match(&typed_union_field));
     }
 
     #[test]

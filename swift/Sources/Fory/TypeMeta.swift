@@ -650,6 +650,7 @@ public final class TypeMeta: Equatable, @unchecked Sendable {
           if Self.isCompatibleFieldType(
             field.fieldType,
             localFields[localIndex].fieldType,
+            topLevel: false,
             allowScalarConversion: false
           ) {
             localMatch = (localIndex, localFields[localIndex])
@@ -706,6 +707,9 @@ public final class TypeMeta: Equatable, @unchecked Sendable {
     if topLevel, isCompatibleTopLevelListArrayFieldType(remoteType, localType) {
       return true
     }
+    if topLevel, isCompatibleByteSequenceFieldType(remoteType, localType) {
+      return true
+    }
     if topLevel,
       remoteType.trackRef != localType.trackRef,
       compatibleScalarKind(remoteType.typeID) != nil,
@@ -722,8 +726,12 @@ public final class TypeMeta: Equatable, @unchecked Sendable {
     if topLevel, allowScalarConversion, isCompatibleScalarFieldType(remoteType, localType) {
       return true
     }
-    if normalizeCompatibleTypeIDForComparison(remoteType.typeID)
-      != normalizeCompatibleTypeIDForComparison(localType.typeID) {
+    if !topLevel,
+      remoteType.nullable != localType.nullable || remoteType.trackRef != localType.trackRef {
+      return false
+    }
+    if normalizeUserTypeIDForComparison(remoteType.typeID)
+      != normalizeUserTypeIDForComparison(localType.typeID) {
       return false
     }
     if remoteType.generics.count != localType.generics.count {
@@ -764,6 +772,23 @@ public final class TypeMeta: Equatable, @unchecked Sendable {
       return false
     }
     return TypeId.listElementTypeID(elementType.typeID, matchesDenseArrayTypeID: arrayTypeID)
+  }
+
+  private static func isCompatibleByteSequenceFieldType(
+    _ remoteType: FieldType,
+    _ localType: FieldType
+  ) -> Bool {
+    guard !remoteType.trackRef,
+      !localType.trackRef,
+      remoteType.nullable == localType.nullable
+    else {
+      return false
+    }
+    return
+      (remoteType.typeID == TypeId.binary.rawValue
+      && localType.typeID == TypeId.uint8Array.rawValue)
+      || (remoteType.typeID == TypeId.uint8Array.rawValue
+        && localType.typeID == TypeId.binary.rawValue)
   }
 
   private static func isCompatibleScalarFieldType(
@@ -847,7 +872,7 @@ public final class TypeMeta: Equatable, @unchecked Sendable {
     }
   }
 
-  private static func normalizeCompatibleTypeIDForComparison(_ typeID: UInt32) -> UInt32 {
+  private static func normalizeUserTypeIDForComparison(_ typeID: UInt32) -> UInt32 {
     switch typeID {
     case TypeId.structType.rawValue,
       TypeId.compatibleStruct.rawValue,
@@ -861,9 +886,6 @@ public final class TypeMeta: Equatable, @unchecked Sendable {
     case TypeId.ext.rawValue,
       TypeId.namedExt.rawValue:
       return TypeId.ext.rawValue
-    case TypeId.binary.rawValue,
-      TypeId.uint8Array.rawValue:
-      return TypeId.binary.rawValue
     case TypeId.union.rawValue,
       TypeId.typedUnion.rawValue,
       TypeId.namedUnion.rawValue:

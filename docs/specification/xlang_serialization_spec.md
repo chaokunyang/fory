@@ -205,6 +205,13 @@ as a dense array element value, the local `array<T>` field must raise a
 compatible-read error. Null list elements must not be coerced to dense-array
 default values.
 
+In schema-compatible mode only, a matched struct/class field may read between
+direct top-level `binary` and direct top-level `array<uint8>` schemas. This is a
+byte-sequence adaptation only: it does not merge TypeDef/ClassDef type IDs,
+schema fingerprints, dynamic root serialization, same-schema mode, or nested
+collection/map/array/union/generic positions. `array<int8>` is not part of this
+adapter.
+
 In schema-compatible mode only, a matched struct/class field may also read
 between direct top-level scalar schemas when the remote value can be represented
 by the local scalar schema without changing the logical value. This is a
@@ -1679,6 +1686,9 @@ MurmurHash3 x64_128 of the struct fingerprint string:
   - `LIST` / `SET`: `<type_id>,<ref>,<nullable>[<element_fingerprint>]`
   - `MAP`: `<type_id>,<ref>,<nullable>[<key_fingerprint>|<value_fingerprint>]`
 - Nested container element/key/value fingerprints include nested type ID, container shape, and effective integer encoding, but nested `nullable` and `ref` policy are always hashed as `0`. Only the root field `nullable` and `ref` bits participate in schema hash, because nested reads honor the wire null/ref flags directly.
+- This schema-hash rule is only for same-schema mode without TypeDef metadata. It
+  does not permit compatible-mode matched-field classification to accept nested
+  nullability or reference-tracking mismatches.
 
 Field values are serialized in Fory order. Primitive fields are written as raw values (nullable
 primitives include a null flag). Non-primitive fields write ref/null flags as needed and then the

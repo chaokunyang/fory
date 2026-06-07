@@ -970,26 +970,36 @@ TEST(StructComprehensiveTest, NonPrimitiveFieldsSortByFieldIdentifier) {
   EXPECT_EQ(fields[3].field_name, "custom_value");
 }
 
-TEST(StructComprehensiveTest,
-     FieldTypeCompatibleFingerprintNormalizesEncoding) {
+TEST(StructComprehensiveTest, FieldTypeCompatibilitySeparatesAdapters) {
   FieldType fixed_i32 = make_test_field_type(TypeId::INT32);
   FieldType var_i32 = make_test_field_type(TypeId::VARINT32);
-  EXPECT_TRUE(field_types_compatible(fixed_i32, var_i32));
+  EXPECT_FALSE(field_types_compatible(fixed_i32, var_i32));
+  EXPECT_TRUE(field_types_compatible_top_level(fixed_i32, var_i32));
   EXPECT_EQ(fixed_i32.compatible_fingerprint, var_i32.compatible_fingerprint);
 
   FieldType fixed_list =
       make_test_field_type(TypeId::LIST, {make_test_field_type(TypeId::INT32)});
   FieldType var_list = make_test_field_type(
       TypeId::LIST, {make_test_field_type(TypeId::VARINT32)});
-  EXPECT_TRUE(field_types_compatible(fixed_list, var_list));
+  EXPECT_FALSE(field_types_compatible(fixed_list, var_list));
 
   FieldType int64_list = make_test_field_type(
       TypeId::LIST, {make_test_field_type(TypeId::VARINT64)});
   EXPECT_FALSE(field_types_compatible(fixed_list, int64_list));
 
-  EXPECT_TRUE(
+  FieldType nullable_i32(static_cast<uint32_t>(TypeId::INT32), true);
+  FieldType nullable_list = make_test_field_type(TypeId::LIST, {nullable_i32});
+  EXPECT_FALSE(field_types_compatible(fixed_list, nullable_list));
+
+  EXPECT_FALSE(
       field_types_compatible(make_test_field_type(TypeId::BINARY),
                              make_test_field_type(TypeId::UINT8_ARRAY)));
+  EXPECT_TRUE(field_types_compatible_top_level(
+      make_test_field_type(TypeId::BINARY),
+      make_test_field_type(TypeId::UINT8_ARRAY)));
+
+  FieldType int32_array = make_test_field_type(TypeId::INT32_ARRAY);
+  EXPECT_TRUE(field_types_compatible_top_level(fixed_list, int32_array));
 }
 
 TEST(StructComprehensiveTest,
@@ -1009,14 +1019,22 @@ TEST(StructComprehensiveTest,
       TypeMeta::assign_field_ids(&local_type, incompatible_remote);
   EXPECT_FALSE(incompatible_result.ok());
 
-  std::vector<FieldInfo> compatible_remote = {make_test_field_info(
+  std::vector<FieldInfo> nested_scalar_remote = {make_test_field_info(
       "items", 7,
       make_test_field_type(TypeId::LIST,
                            {make_test_field_type(TypeId::UINT32)}))};
-  auto compatible_result =
-      TypeMeta::assign_field_ids(&local_type, compatible_remote);
-  ASSERT_TRUE(compatible_result.ok());
-  EXPECT_EQ(compatible_remote[0].field_id, 1);
+  auto nested_scalar_result =
+      TypeMeta::assign_field_ids(&local_type, nested_scalar_remote);
+  EXPECT_FALSE(nested_scalar_result.ok());
+
+  TypeMeta scalar_local;
+  scalar_local.field_infos = {make_test_field_info(
+      "count", 8, make_test_field_type(TypeId::VAR_UINT32))};
+  std::vector<FieldInfo> scalar_remote = {
+      make_test_field_info("count", 8, make_test_field_type(TypeId::UINT32))};
+  auto scalar_result = TypeMeta::assign_field_ids(&scalar_local, scalar_remote);
+  ASSERT_TRUE(scalar_result.ok());
+  EXPECT_EQ(scalar_remote[0].field_id, 1);
 
   TypeMeta name_mode_local;
   name_mode_local.field_infos = {make_test_field_info(

@@ -160,6 +160,26 @@ class LocalNestedSignedDefault:
 
 
 @dataclass
+class RemoteNestedNullable:
+    values: Dict[pyfory.Int32, List[Optional[pyfory.Int32]]] = dataclasses.field(default_factory=dict)
+
+
+@dataclass
+class LocalNestedRequired:
+    values: Dict[pyfory.Int32, List[pyfory.Int32]] = dataclasses.field(default_factory=dict)
+
+
+@dataclass
+class RemoteNestedRef:
+    values: Dict[pyfory.Int32, List[pyfory.Ref[str]]] = dataclasses.field(default_factory=dict)
+
+
+@dataclass
+class LocalNestedPlain:
+    values: Dict[pyfory.Int32, List[str]] = dataclasses.field(default_factory=dict)
+
+
+@dataclass
 class RemoteStringScalar:
     value: str = ""
 
@@ -436,32 +456,24 @@ def test_integer_widening_direct():
     assert isinstance(type_info.serializer._serializers[0], CompatibleScalarFieldSerializer)
 
 
-def test_compatible_read_accepts_nested_same_domain_integer_encoding():
-    result = compat_ser_de(
-        RemoteNestedFixedTagged,
-        LocalNestedVarint,
-        RemoteNestedFixedTagged(values={1: [2, -3], -4: [5]}),
-        702,
-    )
-    assert result == LocalNestedVarint(values={1: [2, -3], -4: [5]})
+def test_nested_integer_encoding_rejected():
+    with pytest.raises(TypeNotCompatibleError):
+        compat_ser_de(
+            RemoteNestedFixedTagged,
+            LocalNestedVarint,
+            RemoteNestedFixedTagged(values={1: [2, -3], -4: [5]}),
+            702,
+        )
 
 
-def test_compatible_read_validates_nested_integer_narrowing():
-    result = compat_ser_de(
-        RemoteNestedWide,
-        LocalNestedNarrow,
-        RemoteNestedWide(values={1: [2, -3]}),
-        703,
-    )
-    assert result == LocalNestedNarrow(values={1: [2, -3]})
-
-    result = compat_ser_de(
-        RemoteNestedWide,
-        LocalNestedNarrow,
-        RemoteNestedWide(values={1: [1 << 40]}),
-        704,
-    )
-    assert result == LocalNestedNarrow()
+def test_nested_integer_narrowing_rejected():
+    with pytest.raises(TypeNotCompatibleError):
+        compat_ser_de(
+            RemoteNestedWide,
+            LocalNestedNarrow,
+            RemoteNestedWide(values={1: [2, -3]}),
+            703,
+        )
 
 
 def test_nested_signed_unsigned_rejected():
@@ -471,6 +483,27 @@ def test_nested_signed_unsigned_rejected():
             LocalNestedSignedDefault,
             RemoteNestedUnsigned(values={1: [2]}),
             705,
+        )
+
+
+def test_nested_nullable_scalar_rejected():
+    with pytest.raises(TypeNotCompatibleError):
+        compat_ser_de(
+            RemoteNestedNullable,
+            LocalNestedRequired,
+            RemoteNestedNullable(values={1: [2]}),
+            706,
+        )
+
+
+def test_nested_ref_tracking_rejected():
+    with pytest.raises(TypeNotCompatibleError):
+        compat_ser_de(
+            RemoteNestedRef,
+            LocalNestedPlain,
+            RemoteNestedRef(values={1: ["one"]}),
+            707,
+            ref=True,
         )
 
 

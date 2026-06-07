@@ -219,39 +219,23 @@ pub(super) fn collection_type_with_fallback_generics(type_id: u32) -> bool {
 
 #[inline(always)]
 pub fn field_types_compatible(local: &FieldType, remote: &FieldType) -> bool {
-    let local_scalar = super::scalar_conversion::is_compatible_scalar_type(local.type_id);
-    let remote_scalar = super::scalar_conversion::is_compatible_scalar_type(remote.type_id);
-    if local_scalar && remote_scalar {
-        if local.track_ref != remote.track_ref {
-            return false;
-        }
-        if (local.track_ref || remote.track_ref)
-            && (local.type_id != remote.type_id || local.nullable != remote.nullable)
-        {
-            return false;
-        }
-        if !local.track_ref
-            && (local.type_id != remote.type_id || local.nullable != remote.nullable)
-        {
-            return false;
-        }
-    }
-    if local.compatible_fingerprint() == remote.compatible_fingerprint() {
-        return true;
-    }
-    if local.type_id == remote.type_id
-        && collection_type_with_fallback_generics(local.type_id)
-        && (local.generics.is_empty() || remote.generics.is_empty())
-    {
-        return true;
-    }
-    false
+    local.exact_shape_match(remote)
+}
+
+#[inline(always)]
+fn compatible_byte_sequence_field(local: &FieldType, remote: &FieldType) -> bool {
+    !local.track_ref
+        && !remote.track_ref
+        && local.nullable == remote.nullable
+        && ((local.type_id == type_id::BINARY && remote.type_id == type_id::UINT8_ARRAY)
+            || (local.type_id == type_id::UINT8_ARRAY && remote.type_id == type_id::BINARY))
 }
 
 #[cold]
 #[inline(never)]
 pub fn compatible_field_pair(local: &FieldType, remote: &FieldType) -> bool {
     field_types_compatible(local, remote)
+        || compatible_byte_sequence_field(local, remote)
         || super::scalar_conversion::scalar_field_types_compatible(local, remote)
         || compatible_list_array_field(local, remote)
 }
@@ -1641,7 +1625,7 @@ where
         local_field_type: &FieldType,
         remote_field_type: &FieldType,
     ) -> Result<Option<Vec<T>>, Error> {
-        if local_field_type.compatible_fingerprint() == remote_field_type.compatible_fingerprint() {
+        if field_types_compatible(local_field_type, remote_field_type) {
             return Self::read_field_with_type(context, remote_field_type).map(Some);
         }
         if local_field_type.type_id == remote_field_type.type_id
@@ -1900,7 +1884,7 @@ where
         local_field_type: &FieldType,
         remote_field_type: &FieldType,
     ) -> Result<Option<Vec<T>>, Error> {
-        if local_field_type.compatible_fingerprint() == remote_field_type.compatible_fingerprint() {
+        if field_types_compatible(local_field_type, remote_field_type) {
             return Self::read_field_with_type(context, remote_field_type).map(Some);
         }
         read_primitive_array_vec_compatible_mismatch::<T>(
@@ -3056,10 +3040,14 @@ mod tests {
         let uint8_array = FieldType::new(type_id::UINT8_ARRAY, false, vec![]);
         let int8_array = FieldType::new(type_id::INT8_ARRAY, false, vec![]);
 
-        assert!(field_types_compatible(&bytes, &uint8_array));
-        assert!(field_types_compatible(&uint8_array, &bytes));
+        assert!(!field_types_compatible(&bytes, &uint8_array));
+        assert!(!field_types_compatible(&uint8_array, &bytes));
+        assert!(compatible_field_pair(&bytes, &uint8_array));
+        assert!(compatible_field_pair(&uint8_array, &bytes));
         assert!(!field_types_compatible(&bytes, &int8_array));
         assert!(!field_types_compatible(&int8_array, &bytes));
+        assert!(!compatible_field_pair(&bytes, &int8_array));
+        assert!(!compatible_field_pair(&int8_array, &bytes));
     }
 
     #[test]
@@ -3081,6 +3069,7 @@ mod tests {
         let fixed_i32 = FieldType::new(type_id::INT32, false, vec![]);
         let var_i32 = FieldType::new(type_id::VARINT32, false, vec![]);
         assert!(!field_types_compatible(&fixed_i32, &var_i32));
+        assert!(compatible_field_pair(&fixed_i32, &var_i32));
 
         let ref_fixed_i32 = FieldType::new_with_ref(type_id::INT32, false, true, vec![]);
         let ref_var_i32 = FieldType::new_with_ref(type_id::VARINT32, false, true, vec![]);
@@ -3099,6 +3088,27 @@ mod tests {
         let list_i8 = FieldType::new(type_id::LIST, false, vec![int8]);
         let list_i16 = FieldType::new(type_id::LIST, false, vec![int16]);
         assert!(!compatible_field_pair(&list_i16, &list_i8));
+
+        let list_fixed_i32 = FieldType::new(
+            type_id::LIST,
+            false,
+            vec![FieldType::new(type_id::INT32, false, vec![])],
+        );
+        let list_var_i32 = FieldType::new(
+            type_id::LIST,
+            false,
+            vec![FieldType::new(type_id::VARINT32, false, vec![])],
+        );
+        assert!(!field_types_compatible(&list_fixed_i32, &list_var_i32));
+        assert!(!compatible_field_pair(&list_fixed_i32, &list_var_i32));
+
+        let list_nullable_i32 = FieldType::new(
+            type_id::LIST,
+            false,
+            vec![FieldType::new(type_id::INT32, true, vec![])],
+        );
+        assert!(!field_types_compatible(&list_fixed_i32, &list_nullable_i32));
+        assert!(!compatible_field_pair(&list_fixed_i32, &list_nullable_i32));
 
         let int32_array = FieldType::new(type_id::INT32_ARRAY, false, vec![]);
         let list_i32 = FieldType::new(

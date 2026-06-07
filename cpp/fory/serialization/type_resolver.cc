@@ -987,20 +987,45 @@ bool name_sorter(const FieldInfo &a, const FieldInfo &b) {
   return compare_field_sort_key(a, b) < 0;
 }
 
-bool allows_empty_generic_fallback(uint32_t type_id) {
-  return type_id == static_cast<uint32_t>(TypeId::LIST) ||
-         type_id == static_cast<uint32_t>(TypeId::SET) ||
-         type_id == static_cast<uint32_t>(TypeId::MAP);
+uint32_t exact_schema_type_id(uint32_t type_id) {
+  switch (static_cast<TypeId>(type_id)) {
+  case TypeId::STRUCT:
+  case TypeId::COMPATIBLE_STRUCT:
+  case TypeId::NAMED_STRUCT:
+  case TypeId::NAMED_COMPATIBLE_STRUCT:
+  case TypeId::UNKNOWN:
+    return static_cast<uint32_t>(TypeId::STRUCT);
+  case TypeId::ENUM:
+  case TypeId::NAMED_ENUM:
+    return static_cast<uint32_t>(TypeId::ENUM);
+  case TypeId::EXT:
+  case TypeId::NAMED_EXT:
+    return static_cast<uint32_t>(TypeId::EXT);
+  case TypeId::UNION:
+  case TypeId::TYPED_UNION:
+  case TypeId::NAMED_UNION:
+    return static_cast<uint32_t>(TypeId::UNION);
+  default:
+    return type_id;
+  }
 }
 
-bool union_type_ids_compatible(uint32_t local_type_id,
-                               uint32_t remote_type_id) {
-  auto is_union = [](uint32_t type_id) {
-    TypeId tid = static_cast<TypeId>(type_id);
-    return tid == TypeId::UNION || tid == TypeId::TYPED_UNION ||
-           tid == TypeId::NAMED_UNION;
-  };
-  return is_union(local_type_id) && is_union(remote_type_id);
+bool user_type_ids_compatible(const FieldType &local, const FieldType &remote) {
+  return local.user_type_id == remote.user_type_id ||
+         local.type_id == static_cast<uint32_t>(TypeId::UNKNOWN) ||
+         remote.type_id == static_cast<uint32_t>(TypeId::UNKNOWN);
+}
+
+bool byte_sequence_field_types_compatible(const FieldType &local,
+                                          const FieldType &remote) {
+  if (local.track_ref || remote.track_ref ||
+      local.nullable != remote.nullable) {
+    return false;
+  }
+  return (local.type_id == static_cast<uint32_t>(TypeId::BINARY) &&
+          remote.type_id == static_cast<uint32_t>(TypeId::UINT8_ARRAY)) ||
+         (local.type_id == static_cast<uint32_t>(TypeId::UINT8_ARRAY) &&
+          remote.type_id == static_cast<uint32_t>(TypeId::BINARY));
 }
 
 bool direct_field_types_compatible(const FieldType &local,
@@ -1082,15 +1107,22 @@ uint32_t compatible_fingerprint_type_id(uint32_t type_id) {
 }
 
 bool field_types_compatible(const FieldType &local, const FieldType &remote) {
-  if (local.compatible_fingerprint == remote.compatible_fingerprint) {
-    return true;
+  if (exact_schema_type_id(local.type_id) !=
+          exact_schema_type_id(remote.type_id) ||
+      !user_type_ids_compatible(local, remote) ||
+      local.nullable != remote.nullable ||
+      local.track_ref != remote.track_ref) {
+    return false;
   }
-  if (union_type_ids_compatible(local.type_id, remote.type_id)) {
-    return true;
+  if (local.generics.size() != remote.generics.size()) {
+    return false;
   }
-  return local.type_id == remote.type_id &&
-         allows_empty_generic_fallback(local.type_id) &&
-         (local.generics.empty() || remote.generics.empty());
+  for (size_t i = 0; i < local.generics.size(); ++i) {
+    if (!field_types_compatible(local.generics[i], remote.generics[i])) {
+      return false;
+    }
+  }
+  return true;
 }
 
 bool primitive_array_element_type_id(uint32_t array_type_id,
@@ -1143,6 +1175,7 @@ bool primitive_array_element_type_id(uint32_t array_type_id,
 bool field_types_compatible_top_level(const FieldType &local,
                                       const FieldType &remote) {
   return direct_field_types_compatible(local, remote) ||
+         byte_sequence_field_types_compatible(local, remote) ||
          (!local.track_ref && !remote.track_ref &&
           compatible_scalar_field_types(local.type_id, remote.type_id));
 }
@@ -1228,7 +1261,8 @@ TypeMeta::assign_field_ids(const TypeMeta *local_type,
       return false;
     }
     const FieldInfo &local_field = local_fields[local_index];
-    if (local_field.field_type == remote_field.field_type) {
+    if (field_types_compatible(local_field.field_type,
+                               remote_field.field_type)) {
       if (local_index > max_compatible_matched_field_index) {
         return Unexpected(Error::type_error(
             "Cannot assign compatible matched id for local field " +
@@ -1293,11 +1327,11 @@ TypeMeta::assign_field_ids(const TypeMeta *local_type,
           if (used[i] || local_fields[i].field_id >= 0) {
             continue;
           }
-          // Scalar conversion requires a tag or canonical-name match; the
-          // type-only fallback is only for schemas whose scalar identity
-          // already matches, otherwise unrelated fields can bind by value type.
-          if (direct_field_types_compatible(local_fields[i].field_type,
-                                            remote_field.field_type)) {
+          // Compatible adapters require tag or canonical-name identity. The
+          // type-only fallback is only for anonymous legacy fields with exact
+          // schema shape, otherwise unrelated fields can bind by value type.
+          if (field_types_compatible(local_fields[i].field_type,
+                                     remote_field.field_type)) {
             FORY_TRY(is_matched, assign_matched_field(remote_field, i));
             matched = is_matched;
             break;

@@ -211,6 +211,18 @@ private struct CompatibleNullableListFieldV1: Equatable {
 }
 
 @ForyStruct
+private struct CompatibleNestedNullableListV1: Equatable {
+  @ListField(element: .list(element: .int32(nullable: true)))
+  var values: [[Int32?]] = []
+}
+
+@ForyStruct
+private struct CompatibleNestedRequiredListV2: Equatable {
+  @ListField(element: .list(element: .int32()))
+  var values: [[Int32]] = []
+}
+
+@ForyStruct
 private struct CompatibleNestedListArrayFieldV1: Equatable {
   @ListField(element: .list(element: .int32(encoding: .fixed)))
   var values: [[Int32]] = []
@@ -728,6 +740,89 @@ func matchedByteFamilyClassification() throws {
 }
 
 @Test
+func matchedNestedScalarShapeRejectsNullableDrift() throws {
+  let empty = MetaString.empty(specialChar1: "_", specialChar2: "_")
+  let local = try TypeMeta(
+    typeID: TypeId.compatibleStruct.rawValue,
+    userTypeID: 1,
+    namespace: empty,
+    typeName: empty,
+    registerByName: false,
+    fields: [
+      TypeMeta.FieldInfo(
+        fieldID: nil,
+        fieldName: "values",
+        fieldType: TypeMeta.FieldType(
+          typeID: TypeId.list.rawValue,
+          nullable: false,
+          generics: [TypeMeta.FieldType(typeID: TypeId.int32.rawValue, nullable: false)]))
+    ])
+  let remote = try TypeMeta(
+    typeID: TypeId.compatibleStruct.rawValue,
+    userTypeID: 1,
+    namespace: empty,
+    typeName: empty,
+    registerByName: false,
+    fields: [
+      TypeMeta.FieldInfo(
+        fieldID: nil,
+        fieldName: "values",
+        fieldType: TypeMeta.FieldType(
+          typeID: TypeId.list.rawValue,
+          nullable: false,
+          generics: [TypeMeta.FieldType(typeID: TypeId.int32.rawValue, nullable: true)]))
+    ])
+
+  try expectInvalidData {
+    _ = try remote.assigningFieldIDs(from: local)
+  }
+}
+
+@Test
+func matchedNestedScalarShapeRejectsRefDrift() throws {
+  let empty = MetaString.empty(specialChar1: "_", specialChar2: "_")
+  let local = try TypeMeta(
+    typeID: TypeId.compatibleStruct.rawValue,
+    userTypeID: 1,
+    namespace: empty,
+    typeName: empty,
+    registerByName: false,
+    fields: [
+      TypeMeta.FieldInfo(
+        fieldID: nil,
+        fieldName: "values",
+        fieldType: TypeMeta.FieldType(
+          typeID: TypeId.list.rawValue,
+          nullable: false,
+          generics: [TypeMeta.FieldType(typeID: TypeId.string.rawValue, nullable: false)]))
+    ])
+  let remote = try TypeMeta(
+    typeID: TypeId.compatibleStruct.rawValue,
+    userTypeID: 1,
+    namespace: empty,
+    typeName: empty,
+    registerByName: false,
+    fields: [
+      TypeMeta.FieldInfo(
+        fieldID: nil,
+        fieldName: "values",
+        fieldType: TypeMeta.FieldType(
+          typeID: TypeId.list.rawValue,
+          nullable: false,
+          generics: [
+            TypeMeta.FieldType(
+              typeID: TypeId.string.rawValue,
+              nullable: false,
+              trackRef: true)
+          ]))
+    ])
+
+  try expectInvalidData {
+    _ = try remote.assigningFieldIDs(from: local)
+  }
+}
+
+@Test
 func scalarConversionFailures() throws {
   try expectInvalidData {
     let _: ScalarBoolBox = try compatibleDecode(
@@ -1060,6 +1155,22 @@ func compatibleRejectsNestedListArrayPair() throws {
     throws: ForyError.invalidData("compatible field values cannot be read as local field values")
   ) {
     let _: CompatibleNestedArrayListFieldV2 = try reader.deserialize(bytes)
+  }
+}
+
+@Test
+func compatibleRejectsNestedNullableScalar() throws {
+  let writer = Fory(config: .init(trackRef: false, compatible: true))
+  writer.register(CompatibleNestedNullableListV1.self, id: 9927)
+
+  let reader = Fory(config: .init(trackRef: false, compatible: true))
+  reader.register(CompatibleNestedRequiredListV2.self, id: 9927)
+
+  let bytes = try writer.serialize(CompatibleNestedNullableListV1(values: [[1, 2]]))
+  #expect(
+    throws: ForyError.invalidData("compatible field values cannot be read as local field values")
+  ) {
+    let _: CompatibleNestedRequiredListV2 = try reader.deserialize(bytes)
   }
 }
 

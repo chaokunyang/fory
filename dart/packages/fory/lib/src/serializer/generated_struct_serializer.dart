@@ -26,6 +26,9 @@ import 'package:fory/src/serializer/scalar_conversion.dart';
 import 'package:fory/src/serializer/serialization_field_info.dart';
 import 'package:fory/src/serializer/serializer.dart';
 import 'package:fory/src/serializer/serializer_support.dart';
+import 'package:fory/src/types/float32.dart';
+import 'package:fory/src/types/int64.dart';
+import 'package:fory/src/types/uint64.dart';
 
 @internal
 abstract interface class GeneratedStructSerializer<T> implements Serializer<T> {
@@ -100,8 +103,17 @@ int readGenCompatScalarAsInt(
   CompatibleScalarReadDescriptor scalarRead, [
   int? fallback,
 ]) {
-  assert(scalarRead.readsDirectIntAsInt);
-  return readCompatScalarPayloadAsInt(context, scalarRead, fallback);
+  if (scalarRead.readsDirectIntAsInt) {
+    return readCompatScalarPayloadAsInt(context, scalarRead, fallback);
+  }
+  final value = readGeneratedCompatibleScalarField(context, scalarRead);
+  if (value == null) {
+    if (fallback != null) {
+      return fallback;
+    }
+    throw StateError('Received null for non-nullable field value.');
+  }
+  return value as int;
 }
 
 @internal
@@ -111,8 +123,77 @@ double readGenCompatScalarAsDouble(
   CompatibleScalarReadDescriptor scalarRead, [
   double? fallback,
 ]) {
-  assert(scalarRead.readsDirectDoubleAsDouble);
-  return readCompatScalarPayloadAsDouble(context, scalarRead, fallback);
+  if (scalarRead.readsDirectDoubleAsDouble) {
+    return readCompatScalarPayloadAsDouble(context, scalarRead, fallback);
+  }
+  final value = readGeneratedCompatibleScalarField(context, scalarRead);
+  if (value == null) {
+    if (fallback != null) {
+      return fallback;
+    }
+    throw StateError('Received null for non-nullable field value.');
+  }
+  return value as double;
+}
+
+@internal
+@pragma('vm:prefer-inline')
+Int64 readGenCompatScalarAsInt64(
+  ReadContext context,
+  CompatibleScalarReadDescriptor scalarRead, [
+  Int64? fallback,
+]) {
+  if (scalarRead.readsDirectInt64) {
+    return readCompatScalarPayloadAsInt64(context, scalarRead, fallback);
+  }
+  final value = readGeneratedCompatibleScalarField(context, scalarRead);
+  if (value == null) {
+    if (fallback != null) {
+      return fallback;
+    }
+    throw StateError('Received null for non-nullable field value.');
+  }
+  return value as Int64;
+}
+
+@internal
+@pragma('vm:prefer-inline')
+Uint64 readGenCompatScalarAsUint64(
+  ReadContext context,
+  CompatibleScalarReadDescriptor scalarRead, [
+  Uint64? fallback,
+]) {
+  if (scalarRead.readsDirectUint64) {
+    return readCompatScalarPayloadAsUint64(context, scalarRead, fallback);
+  }
+  final value = readGeneratedCompatibleScalarField(context, scalarRead);
+  if (value == null) {
+    if (fallback != null) {
+      return fallback;
+    }
+    throw StateError('Received null for non-nullable field value.');
+  }
+  return value as Uint64;
+}
+
+@internal
+@pragma('vm:prefer-inline')
+Float32 readGenCompatScalarAsFloat32(
+  ReadContext context,
+  CompatibleScalarReadDescriptor scalarRead, [
+  Float32? fallback,
+]) {
+  if (scalarRead.readsDirectFloat32) {
+    return readCompatScalarPayloadAsFloat32(context, scalarRead, fallback);
+  }
+  final value = readGeneratedCompatibleScalarField(context, scalarRead);
+  if (value == null) {
+    if (fallback != null) {
+      return fallback;
+    }
+    throw StateError('Received null for non-nullable field value.');
+  }
+  return value as Float32;
 }
 
 @internal

@@ -598,7 +598,25 @@ public final class TypeMeta: Equatable, @unchecked Sendable {
 
     let localFields = localTypeMeta.fields
     guard !localFields.isEmpty else {
-      return self
+      var resolvedFields = fields
+      var changed = false
+      for index in resolvedFields.indices where resolvedFields[index].fieldID != -1 {
+        resolvedFields[index].fieldID = -1
+        changed = true
+      }
+      guard changed else {
+        return self
+      }
+      return try TypeMeta(
+        typeID: typeID,
+        userTypeID: userTypeID,
+        namespace: namespace,
+        typeName: typeName,
+        registerByName: registerByName,
+        fields: resolvedFields,
+        compressed: compressed,
+        headerHash: headerHash
+      )
     }
 
     var fieldIndexByName: [String: (Int, FieldInfo)] = [:]

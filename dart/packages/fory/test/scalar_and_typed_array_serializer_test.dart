@@ -300,6 +300,14 @@ class CompatibleScalarUint64Envelope {
 }
 
 @ForyStruct()
+class CompatibleScalarWrappedInt64Envelope {
+  CompatibleScalarWrappedInt64Envelope();
+
+  @ForyField(id: 1, type: Int64Type(encoding: Encoding.varint))
+  Int64 value = Int64(0);
+}
+
+@ForyStruct()
 class CompatibleScalarFloat64Envelope {
   CompatibleScalarFloat64Envelope();
 
@@ -313,6 +321,14 @@ class CompatibleScalarFloat32Envelope {
 
   @ForyField(id: 1, type: Float32Type())
   double value = 0.0;
+}
+
+@ForyStruct()
+class CompatibleScalarWrappedFloat32Envelope {
+  CompatibleScalarWrappedFloat32Envelope();
+
+  @ForyField(id: 1, type: Float32Type())
+  Float32 value = Float32(0);
 }
 
 @ForyStruct()
@@ -1168,6 +1184,22 @@ void main() {
         equals('18446744073709551615'),
       );
       expect(
+        _compatibleScalarRoundTrip<CompatibleScalarUint64Envelope>(
+          CompatibleScalarInt64Envelope,
+          CompatibleScalarUint64Envelope,
+          CompatibleScalarInt64Envelope()..value = 42,
+        ).value,
+        equals(Uint64(42)),
+      );
+      expect(
+        _compatibleScalarRoundTrip<CompatibleScalarWrappedInt64Envelope>(
+          CompatibleScalarUint64Envelope,
+          CompatibleScalarWrappedInt64Envelope,
+          CompatibleScalarUint64Envelope()..value = Uint64(42),
+        ).value,
+        equals(Int64(42)),
+      );
+      expect(
         _compatibleScalarRoundTrip<CompatibleScalarFloat32Envelope>(
           CompatibleScalarStringEnvelope,
           CompatibleScalarFloat32Envelope,
@@ -1198,6 +1230,14 @@ void main() {
           CompatibleScalarFloat64Envelope()..value = double.negativeInfinity,
         ).value,
         equals(double.negativeInfinity),
+      );
+      expect(
+        _compatibleScalarRoundTrip<CompatibleScalarWrappedFloat32Envelope>(
+          CompatibleScalarFloat64Envelope,
+          CompatibleScalarWrappedFloat32Envelope,
+          CompatibleScalarFloat64Envelope()..value = 0.5,
+        ).value,
+        equals(Float32(0.5)),
       );
       final negativeZero =
           _compatibleScalarRoundTrip<CompatibleScalarFloat32Envelope>(

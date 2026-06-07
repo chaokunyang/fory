@@ -286,11 +286,10 @@ impl<'a> ResolvedField<'a> {
                         quote! { #call::static_type_id() as u32 }
                     };
                     return quote! {
-                        let remote_field_type = &_field.field_type;
                         #var = #read_scalar(
                             context,
                             #local_type,
-                            remote_field_type,
+                            _field,
                         ).map_err(|err| ::fory_core::Error::invalid_data(
                             format!("compatible field '{}': {}", _field.field_name.as_str(), err)
                         ))?;

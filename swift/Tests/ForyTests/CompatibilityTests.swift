@@ -666,6 +666,34 @@ func namedRemoteOnlyFieldIsSkipped() throws {
 }
 
 @Test
+func remoteOnlyFieldsSkipWhenLocalSchemaIsEmpty() throws {
+  let empty = MetaString.empty(specialChar1: "_", specialChar2: "_")
+  let stringType = TypeMeta.FieldType(typeID: TypeId.string.rawValue, nullable: false)
+  let intType = TypeMeta.FieldType(typeID: TypeId.int64.rawValue, nullable: false)
+  let local = try TypeMeta(
+    typeID: TypeId.compatibleStruct.rawValue,
+    userTypeID: 1,
+    namespace: empty,
+    typeName: empty,
+    registerByName: false,
+    fields: [])
+  let remote = try TypeMeta(
+    typeID: TypeId.compatibleStruct.rawValue,
+    userTypeID: 1,
+    namespace: empty,
+    typeName: empty,
+    registerByName: false,
+    fields: [
+      TypeMeta.FieldInfo(fieldID: 1, fieldName: "$tag1", fieldType: stringType),
+      TypeMeta.FieldInfo(fieldID: 2, fieldName: "$tag2", fieldType: intType)
+    ])
+
+  let resolved = try remote.assigningFieldIDs(from: local)
+  #expect(resolved.fields[0].fieldID == -1)
+  #expect(resolved.fields[1].fieldID == -1)
+}
+
+@Test
 func matchedFieldIdOverflowFails() throws {
   let empty = MetaString.empty(specialChar1: "_", specialChar2: "_")
   let fieldType = TypeMeta.FieldType(typeID: TypeId.bool.rawValue, nullable: false)

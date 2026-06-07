@@ -27,7 +27,7 @@ use super::collection::{
 };
 use crate::context::{ReadContext, WriteContext};
 use crate::error::Error;
-use crate::meta::FieldType;
+use crate::meta::{FieldInfo, FieldType};
 use crate::resolver::{RefFlag, RefMode, TypeResolver};
 use crate::serializer::{primitive_list, ForyDefault, Serializer};
 use crate::type_id::{self, need_to_write_type_for_field, TypeId, SIZE_OF_REF_AND_TYPE, UNKNOWN};
@@ -236,7 +236,7 @@ fn compatible_byte_sequence_field(local: &FieldType, remote: &FieldType) -> bool
 pub fn compatible_field_pair(local: &FieldType, remote: &FieldType) -> bool {
     field_types_compatible(local, remote)
         || compatible_byte_sequence_field(local, remote)
-        || super::scalar_conversion::scalar_field_types_compatible(local, remote)
+        || crate::meta::compatible_scalar_field_pair(local, remote)
         || compatible_list_array_field(local, remote)
 }
 
@@ -246,18 +246,18 @@ macro_rules! compatible_scalar_reader {
         pub fn $read(
             context: &mut ReadContext,
             local_type: u32,
-            remote_field_type: &FieldType,
+            remote_field: &FieldInfo,
         ) -> Result<$ty, Error> {
-            super::scalar_conversion::$target(context, local_type, remote_field_type)
+            super::scalar_conversion::$target(context, local_type, remote_field)
         }
 
         #[inline(always)]
         pub fn $read_option(
             context: &mut ReadContext,
             local_type: u32,
-            remote_field_type: &FieldType,
+            remote_field: &FieldInfo,
         ) -> Result<Option<$ty>, Error> {
-            super::scalar_conversion::$target_option(context, local_type, remote_field_type)
+            super::scalar_conversion::$target_option(context, local_type, remote_field)
         }
     };
 }

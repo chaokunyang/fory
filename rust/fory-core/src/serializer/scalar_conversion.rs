@@ -18,7 +18,7 @@
 use super::codec::{field_ref_mode, Codec};
 use crate::context::ReadContext;
 use crate::error::Error;
-use crate::meta::FieldType;
+use crate::meta::{CompatibleScalarReadAction, FieldInfo, FieldType};
 use crate::resolver::{RefFlag, RefMode};
 use crate::serializer::{ForyDefault, Serializer};
 use crate::type_id;
@@ -91,31 +91,31 @@ where
 }
 
 macro_rules! scalar_target_reader {
-    ($read:ident, $read_option:ident, $ty:ty, $convert:ident) => {
+    ($read:ident, $read_option:ident, $ty:ty, $payload:ident) => {
         #[inline(never)]
         pub(super) fn $read(
             context: &mut ReadContext,
             local_type: u32,
-            remote_field_type: &FieldType,
+            remote_field: &FieldInfo,
         ) -> Result<$ty, Error> {
+            let remote_field_type = &remote_field.field_type;
             if !read_present_ref(context, remote_field_type)? {
                 return Ok(<$ty as ForyDefault>::fory_default());
             }
-            let value = read_scalar_value(context, remote_field_type.type_id)?;
-            $convert(value, remote_field_type.type_id, local_type)
+            $payload(context, local_type, remote_field.compatible_scalar_read())
         }
 
         #[inline(never)]
         pub(super) fn $read_option(
             context: &mut ReadContext,
             local_type: u32,
-            remote_field_type: &FieldType,
+            remote_field: &FieldInfo,
         ) -> Result<Option<$ty>, Error> {
+            let remote_field_type = &remote_field.field_type;
             if !read_present_ref(context, remote_field_type)? {
                 return Ok(None);
             }
-            let value = read_scalar_value(context, remote_field_type.type_id)?;
-            $convert(value, remote_field_type.type_id, local_type).map(Some)
+            $payload(context, local_type, remote_field.compatible_scalar_read()).map(Some)
         }
     };
 }
@@ -124,74 +124,112 @@ scalar_target_reader!(
     read_bool_target,
     read_bool_option_target,
     bool,
-    value_to_bool
+    read_bool_payload
 );
 scalar_target_reader!(
     read_string_target,
     read_string_option_target,
     String,
-    value_to_string
+    read_string_payload
 );
-scalar_target_reader!(read_i8_target, read_i8_option_target, i8, value_to_i8);
-scalar_target_reader!(read_i16_target, read_i16_option_target, i16, value_to_i16);
-scalar_target_reader!(read_i32_target, read_i32_option_target, i32, value_to_i32);
-scalar_target_reader!(read_u8_target, read_u8_option_target, u8, value_to_u8);
-scalar_target_reader!(read_u16_target, read_u16_option_target, u16, value_to_u16);
-scalar_target_reader!(read_u32_target, read_u32_option_target, u32, value_to_u32);
-scalar_target_reader!(read_u64_target, read_u64_option_target, u64, value_to_u64);
-scalar_target_reader!(read_f32_target, read_f32_option_target, f32, value_to_f32);
-scalar_target_reader!(read_f64_target, read_f64_option_target, f64, value_to_f64);
+scalar_target_reader!(read_i8_target, read_i8_option_target, i8, read_i8_payload);
+scalar_target_reader!(
+    read_i16_target,
+    read_i16_option_target,
+    i16,
+    read_i16_payload
+);
+scalar_target_reader!(
+    read_i32_target,
+    read_i32_option_target,
+    i32,
+    read_i32_payload
+);
+scalar_target_reader!(read_u8_target, read_u8_option_target, u8, read_u8_payload);
+scalar_target_reader!(
+    read_u16_target,
+    read_u16_option_target,
+    u16,
+    read_u16_payload
+);
+scalar_target_reader!(
+    read_u32_target,
+    read_u32_option_target,
+    u32,
+    read_u32_payload
+);
+scalar_target_reader!(
+    read_u64_target,
+    read_u64_option_target,
+    u64,
+    read_u64_payload
+);
+scalar_target_reader!(
+    read_f32_target,
+    read_f32_option_target,
+    f32,
+    read_f32_payload
+);
+scalar_target_reader!(
+    read_f64_target,
+    read_f64_option_target,
+    f64,
+    read_f64_payload
+);
 scalar_target_reader!(
     read_float16_target,
     read_float16_option_target,
     float16,
-    value_to_float16
+    read_float16_payload
 );
 scalar_target_reader!(
     read_bfloat16_target,
     read_bfloat16_option_target,
     bfloat16,
-    value_to_bfloat16
+    read_bfloat16_payload
 );
 scalar_target_reader!(
     read_decimal_target,
     read_decimal_option_target,
     Decimal,
-    value_to_decimal
+    read_decimal_payload
 );
 
 #[inline(never)]
 pub(super) fn read_i64_target(
     context: &mut ReadContext,
     local_type: u32,
-    remote_field_type: &FieldType,
+    remote_field: &FieldInfo,
 ) -> Result<i64, Error> {
+    let remote_field_type = &remote_field.field_type;
     if !read_present_ref(context, remote_field_type)? {
         return Ok(<i64 as ForyDefault>::fory_default());
     }
-    read_i64_payload(context, local_type, remote_field_type.type_id)
+    read_i64_payload(context, local_type, remote_field.compatible_scalar_read())
 }
 
 #[inline(never)]
 pub(super) fn read_i64_option_target(
     context: &mut ReadContext,
     local_type: u32,
-    remote_field_type: &FieldType,
+    remote_field: &FieldInfo,
 ) -> Result<Option<i64>, Error> {
+    let remote_field_type = &remote_field.field_type;
     if !read_present_ref(context, remote_field_type)? {
         return Ok(None);
     }
-    read_i64_payload(context, local_type, remote_field_type.type_id).map(Some)
+    read_i64_payload(context, local_type, remote_field.compatible_scalar_read()).map(Some)
 }
 
 #[inline(always)]
 fn read_i64_payload(
     context: &mut ReadContext,
     local_type: u32,
-    remote_type: u32,
+    action: CompatibleScalarReadAction,
 ) -> Result<i64, Error> {
-    match remote_type {
-        type_id::BOOL => match context.reader.read_u8()? {
+    let remote_type = require_scalar_action(action)?;
+    match action {
+        CompatibleScalarReadAction::Bool => match context.reader.read_u8()? {
             0 => Ok(0),
             1 => Ok(1),
             _ => Err(conversion_error(
@@ -200,57 +238,27 @@ fn read_i64_payload(
                 "invalid bool payload",
             )),
         },
-        type_id::INT8 => Ok(i64::from(context.reader.read_i8()?)),
-        type_id::INT16 => Ok(i64::from(context.reader.read_i16()?)),
-        type_id::INT32 => Ok(i64::from(context.reader.read_i32()?)),
-        type_id::VARINT32 => Ok(i64::from(context.reader.read_var_i32()?)),
-        type_id::INT64 => context.reader.read_i64(),
-        type_id::VARINT64 => context.reader.read_var_i64(),
-        type_id::TAGGED_INT64 => context.reader.read_tagged_i64(),
-        type_id::UINT8 => Ok(i64::from(context.reader.read_u8()?)),
-        type_id::UINT16 => Ok(i64::from(context.reader.read_u16()?)),
-        type_id::UINT32 => Ok(i64::from(context.reader.read_u32()?)),
-        type_id::VAR_UINT32 => Ok(i64::from(context.reader.read_var_u32()?)),
-        type_id::UINT64 => u64_to_i64(context.reader.read_u64()?, remote_type, local_type),
-        type_id::VAR_UINT64 => u64_to_i64(context.reader.read_var_u64()?, remote_type, local_type),
-        type_id::TAGGED_UINT64 => {
+        CompatibleScalarReadAction::Int8 => Ok(i64::from(context.reader.read_i8()?)),
+        CompatibleScalarReadAction::Int16 => Ok(i64::from(context.reader.read_i16()?)),
+        CompatibleScalarReadAction::Int32 => Ok(i64::from(context.reader.read_i32()?)),
+        CompatibleScalarReadAction::VarInt32 => Ok(i64::from(context.reader.read_var_i32()?)),
+        CompatibleScalarReadAction::Int64 => context.reader.read_i64(),
+        CompatibleScalarReadAction::VarInt64 => context.reader.read_var_i64(),
+        CompatibleScalarReadAction::TaggedInt64 => context.reader.read_tagged_i64(),
+        CompatibleScalarReadAction::UInt8 => Ok(i64::from(context.reader.read_u8()?)),
+        CompatibleScalarReadAction::UInt16 => Ok(i64::from(context.reader.read_u16()?)),
+        CompatibleScalarReadAction::UInt32 => Ok(i64::from(context.reader.read_u32()?)),
+        CompatibleScalarReadAction::VarUInt32 => Ok(i64::from(context.reader.read_var_u32()?)),
+        CompatibleScalarReadAction::UInt64 => {
+            u64_to_i64(context.reader.read_u64()?, remote_type, local_type)
+        }
+        CompatibleScalarReadAction::VarUInt64 => {
+            u64_to_i64(context.reader.read_var_u64()?, remote_type, local_type)
+        }
+        CompatibleScalarReadAction::TaggedUInt64 => {
             u64_to_i64(context.reader.read_tagged_u64()?, remote_type, local_type)
         }
-        type_id::FLOAT16 => value_to_i64(
-            ScalarValue::Float(FloatValue::F16(context.reader.read_f16()?)),
-            remote_type,
-            local_type,
-        ),
-        type_id::BFLOAT16 => value_to_i64(
-            ScalarValue::Float(FloatValue::BF16(context.reader.read_bf16()?)),
-            remote_type,
-            local_type,
-        ),
-        type_id::FLOAT32 => value_to_i64(
-            ScalarValue::Float(FloatValue::F32(context.reader.read_f32()?)),
-            remote_type,
-            local_type,
-        ),
-        type_id::FLOAT64 => value_to_i64(
-            ScalarValue::Float(FloatValue::F64(context.reader.read_f64()?)),
-            remote_type,
-            local_type,
-        ),
-        type_id::STRING => value_to_i64(
-            ScalarValue::String(String::fory_read_data(context)?),
-            remote_type,
-            local_type,
-        ),
-        type_id::DECIMAL => value_to_i64(
-            ScalarValue::Decimal(Decimal::fory_read_data(context)?),
-            remote_type,
-            local_type,
-        ),
-        _ => Err(conversion_error(
-            remote_type,
-            local_type,
-            "unsupported scalar source",
-        )),
+        _ => read_i64_cold(context, local_type, action),
     }
 }
 
@@ -261,30 +269,818 @@ fn u64_to_i64(value: u64, remote_type: u32, local_type: u32) -> Result<i64, Erro
 }
 
 #[inline(always)]
-pub(super) fn scalar_types_compatible(local: u32, remote: u32) -> bool {
-    if local == remote {
-        return is_compatible_scalar_type(local);
+fn require_scalar_action(action: CompatibleScalarReadAction) -> Result<u32, Error> {
+    if action.is_some() {
+        Ok(action.type_id())
+    } else {
+        Err(Error::invalid_data("missing compatible scalar read action"))
     }
-    let local_numeric = numeric_type(local);
-    let remote_numeric = numeric_type(remote);
-    (local == type_id::BOOL && (remote == type_id::STRING || remote_numeric))
-        || (remote == type_id::BOOL && (local == type_id::STRING || local_numeric))
-        || (local == type_id::STRING && remote_numeric)
-        || (remote == type_id::STRING && local_numeric)
-        || (local_numeric && remote_numeric)
+}
+
+#[cold]
+#[inline(never)]
+fn read_i64_cold(
+    context: &mut ReadContext,
+    local_type: u32,
+    action: CompatibleScalarReadAction,
+) -> Result<i64, Error> {
+    let remote_type = require_scalar_action(action)?;
+    match action {
+        CompatibleScalarReadAction::Float16
+        | CompatibleScalarReadAction::BFloat16
+        | CompatibleScalarReadAction::Float32
+        | CompatibleScalarReadAction::Float64 => {
+            let value = read_float_value(context, action)?;
+            float_to_integral_num(value, remote_type, local_type, false)
+        }
+        CompatibleScalarReadAction::String => {
+            let value = String::fory_read_data(context)?;
+            string_to_integral_num(&value, remote_type, local_type, false)
+        }
+        CompatibleScalarReadAction::Decimal => {
+            let value = Decimal::fory_read_data(context)?;
+            decimal_to_integral_num(&value, remote_type, local_type, false)
+        }
+        _ => Err(Error::invalid_data("missing compatible scalar read action")),
+    }
 }
 
 #[inline(always)]
-pub(super) fn is_compatible_scalar_type(type_id: u32) -> bool {
-    type_id == type_id::BOOL || type_id == type_id::STRING || numeric_type(type_id)
+fn read_bool_payload(
+    context: &mut ReadContext,
+    local_type: u32,
+    action: CompatibleScalarReadAction,
+) -> Result<bool, Error> {
+    let remote_type = require_scalar_action(action)?;
+    let value = match action {
+        CompatibleScalarReadAction::Bool => {
+            return match context.reader.read_u8()? {
+                0 => Ok(false),
+                1 => Ok(true),
+                _ => Err(conversion_error(
+                    remote_type,
+                    local_type,
+                    "invalid bool payload",
+                )),
+            };
+        }
+        CompatibleScalarReadAction::Int8
+        | CompatibleScalarReadAction::Int16
+        | CompatibleScalarReadAction::Int32
+        | CompatibleScalarReadAction::VarInt32
+        | CompatibleScalarReadAction::Int64
+        | CompatibleScalarReadAction::VarInt64
+        | CompatibleScalarReadAction::TaggedInt64 => read_i64_payload(context, local_type, action)?,
+        CompatibleScalarReadAction::UInt8
+        | CompatibleScalarReadAction::UInt16
+        | CompatibleScalarReadAction::UInt32
+        | CompatibleScalarReadAction::VarUInt32
+        | CompatibleScalarReadAction::UInt64
+        | CompatibleScalarReadAction::VarUInt64
+        | CompatibleScalarReadAction::TaggedUInt64 => {
+            let unsigned = read_u64_payload(context, local_type, action)?;
+            if unsigned == 0 {
+                return Ok(false);
+            }
+            if unsigned == 1 {
+                return Ok(true);
+            }
+            return Err(conversion_error(
+                remote_type,
+                local_type,
+                "numeric value is not 0 or 1",
+            ));
+        }
+        _ => return read_bool_cold(context, local_type, action),
+    };
+    match value {
+        0 => Ok(false),
+        1 => Ok(true),
+        _ => Err(conversion_error(
+            remote_type,
+            local_type,
+            "numeric value is not 0 or 1",
+        )),
+    }
+}
+
+#[inline(always)]
+fn read_string_payload(
+    context: &mut ReadContext,
+    local_type: u32,
+    action: CompatibleScalarReadAction,
+) -> Result<String, Error> {
+    match action {
+        CompatibleScalarReadAction::Bool => match context.reader.read_u8()? {
+            0 => Ok("false".to_string()),
+            1 => Ok("true".to_string()),
+            _ => Err(conversion_error(
+                action.type_id(),
+                local_type,
+                "invalid bool payload",
+            )),
+        },
+        CompatibleScalarReadAction::String => String::fory_read_data(context),
+        CompatibleScalarReadAction::Int8
+        | CompatibleScalarReadAction::Int16
+        | CompatibleScalarReadAction::Int32
+        | CompatibleScalarReadAction::VarInt32
+        | CompatibleScalarReadAction::Int64
+        | CompatibleScalarReadAction::VarInt64
+        | CompatibleScalarReadAction::TaggedInt64 => {
+            read_i64_payload(context, local_type, action).map(|value| value.to_string())
+        }
+        CompatibleScalarReadAction::UInt8
+        | CompatibleScalarReadAction::UInt16
+        | CompatibleScalarReadAction::UInt32
+        | CompatibleScalarReadAction::VarUInt32
+        | CompatibleScalarReadAction::UInt64
+        | CompatibleScalarReadAction::VarUInt64
+        | CompatibleScalarReadAction::TaggedUInt64 => {
+            read_u64_payload(context, local_type, action).map(|value| value.to_string())
+        }
+        _ => read_string_cold(context, local_type, action),
+    }
+}
+
+macro_rules! signed_payload {
+    ($name:ident, $ty:ty) => {
+        #[inline(always)]
+        fn $name(
+            context: &mut ReadContext,
+            local_type: u32,
+            action: CompatibleScalarReadAction,
+        ) -> Result<$ty, Error> {
+            let remote_type = require_scalar_action(action)?;
+            let value = read_i64_payload(context, local_type, action)?;
+            <$ty>::try_from(value).map_err(|_| {
+                conversion_error(remote_type, local_type, "integer value is out of range")
+            })
+        }
+    };
+}
+
+signed_payload!(read_i8_payload, i8);
+signed_payload!(read_i16_payload, i16);
+signed_payload!(read_i32_payload, i32);
+
+#[inline(always)]
+fn read_u64_payload(
+    context: &mut ReadContext,
+    local_type: u32,
+    action: CompatibleScalarReadAction,
+) -> Result<u64, Error> {
+    let remote_type = require_scalar_action(action)?;
+    match action {
+        CompatibleScalarReadAction::Bool => match context.reader.read_u8()? {
+            0 => Ok(0),
+            1 => Ok(1),
+            _ => Err(conversion_error(
+                remote_type,
+                local_type,
+                "invalid bool payload",
+            )),
+        },
+        CompatibleScalarReadAction::Int8 => signed_to_u64(
+            i64::from(context.reader.read_i8()?),
+            remote_type,
+            local_type,
+        ),
+        CompatibleScalarReadAction::Int16 => signed_to_u64(
+            i64::from(context.reader.read_i16()?),
+            remote_type,
+            local_type,
+        ),
+        CompatibleScalarReadAction::Int32 => signed_to_u64(
+            i64::from(context.reader.read_i32()?),
+            remote_type,
+            local_type,
+        ),
+        CompatibleScalarReadAction::VarInt32 => signed_to_u64(
+            i64::from(context.reader.read_var_i32()?),
+            remote_type,
+            local_type,
+        ),
+        CompatibleScalarReadAction::Int64 => {
+            signed_to_u64(context.reader.read_i64()?, remote_type, local_type)
+        }
+        CompatibleScalarReadAction::VarInt64 => {
+            signed_to_u64(context.reader.read_var_i64()?, remote_type, local_type)
+        }
+        CompatibleScalarReadAction::TaggedInt64 => {
+            signed_to_u64(context.reader.read_tagged_i64()?, remote_type, local_type)
+        }
+        CompatibleScalarReadAction::UInt8 => Ok(u64::from(context.reader.read_u8()?)),
+        CompatibleScalarReadAction::UInt16 => Ok(u64::from(context.reader.read_u16()?)),
+        CompatibleScalarReadAction::UInt32 => Ok(u64::from(context.reader.read_u32()?)),
+        CompatibleScalarReadAction::VarUInt32 => Ok(u64::from(context.reader.read_var_u32()?)),
+        CompatibleScalarReadAction::UInt64 => context.reader.read_u64(),
+        CompatibleScalarReadAction::VarUInt64 => context.reader.read_var_u64(),
+        CompatibleScalarReadAction::TaggedUInt64 => context.reader.read_tagged_u64(),
+        _ => read_u64_cold(context, local_type, action),
+    }
+}
+
+#[inline(always)]
+fn signed_to_u64(value: i64, remote_type: u32, local_type: u32) -> Result<u64, Error> {
+    u64::try_from(value)
+        .map_err(|_| conversion_error(remote_type, local_type, "integer value is out of range"))
+}
+
+macro_rules! unsigned_payload {
+    ($name:ident, $ty:ty) => {
+        #[inline(always)]
+        fn $name(
+            context: &mut ReadContext,
+            local_type: u32,
+            action: CompatibleScalarReadAction,
+        ) -> Result<$ty, Error> {
+            let remote_type = require_scalar_action(action)?;
+            let value = read_u64_payload(context, local_type, action)?;
+            <$ty>::try_from(value).map_err(|_| {
+                conversion_error(remote_type, local_type, "integer value is out of range")
+            })
+        }
+    };
+}
+
+unsigned_payload!(read_u8_payload, u8);
+unsigned_payload!(read_u16_payload, u16);
+unsigned_payload!(read_u32_payload, u32);
+
+#[inline(always)]
+fn read_f32_payload(
+    context: &mut ReadContext,
+    local_type: u32,
+    action: CompatibleScalarReadAction,
+) -> Result<f32, Error> {
+    let remote_type = require_scalar_action(action)?;
+    match action {
+        CompatibleScalarReadAction::Bool => match context.reader.read_u8()? {
+            0 => Ok(0.0),
+            1 => Ok(1.0),
+            _ => Err(conversion_error(
+                remote_type,
+                local_type,
+                "invalid bool payload",
+            )),
+        },
+        CompatibleScalarReadAction::Int8
+        | CompatibleScalarReadAction::Int16
+        | CompatibleScalarReadAction::Int32
+        | CompatibleScalarReadAction::VarInt32
+        | CompatibleScalarReadAction::Int64
+        | CompatibleScalarReadAction::VarInt64
+        | CompatibleScalarReadAction::TaggedInt64 => {
+            let value = read_i64_payload(context, local_type, action)?;
+            signed_integer_to_f32(value, remote_type, local_type)
+        }
+        CompatibleScalarReadAction::UInt8
+        | CompatibleScalarReadAction::UInt16
+        | CompatibleScalarReadAction::UInt32
+        | CompatibleScalarReadAction::VarUInt32
+        | CompatibleScalarReadAction::UInt64
+        | CompatibleScalarReadAction::VarUInt64
+        | CompatibleScalarReadAction::TaggedUInt64 => {
+            let value = read_u64_payload(context, local_type, action)?;
+            unsigned_integer_to_f32(value, remote_type, local_type)
+        }
+        CompatibleScalarReadAction::Float16 => {
+            let value = context.reader.read_f16()?;
+            checked_float16(value, remote_type, local_type).map(float16::to_f32)
+        }
+        CompatibleScalarReadAction::BFloat16 => {
+            let value = context.reader.read_bf16()?;
+            checked_bfloat16(value, remote_type, local_type).map(bfloat16::to_f32)
+        }
+        CompatibleScalarReadAction::Float32 => {
+            checked_f32(context.reader.read_f32()?, remote_type, local_type)
+        }
+        CompatibleScalarReadAction::Float64 => {
+            f64_to_f32_exact(context.reader.read_f64()?, remote_type, local_type)
+        }
+        _ => read_f32_cold(context, local_type, action),
+    }
+}
+
+#[inline(always)]
+fn read_f64_payload(
+    context: &mut ReadContext,
+    local_type: u32,
+    action: CompatibleScalarReadAction,
+) -> Result<f64, Error> {
+    let remote_type = require_scalar_action(action)?;
+    match action {
+        CompatibleScalarReadAction::Bool => match context.reader.read_u8()? {
+            0 => Ok(0.0),
+            1 => Ok(1.0),
+            _ => Err(conversion_error(
+                remote_type,
+                local_type,
+                "invalid bool payload",
+            )),
+        },
+        CompatibleScalarReadAction::Int8
+        | CompatibleScalarReadAction::Int16
+        | CompatibleScalarReadAction::Int32
+        | CompatibleScalarReadAction::VarInt32
+        | CompatibleScalarReadAction::Int64
+        | CompatibleScalarReadAction::VarInt64
+        | CompatibleScalarReadAction::TaggedInt64 => {
+            let value = read_i64_payload(context, local_type, action)?;
+            signed_integer_to_f64(value, remote_type, local_type)
+        }
+        CompatibleScalarReadAction::UInt8
+        | CompatibleScalarReadAction::UInt16
+        | CompatibleScalarReadAction::UInt32
+        | CompatibleScalarReadAction::VarUInt32
+        | CompatibleScalarReadAction::UInt64
+        | CompatibleScalarReadAction::VarUInt64
+        | CompatibleScalarReadAction::TaggedUInt64 => {
+            let value = read_u64_payload(context, local_type, action)?;
+            unsigned_integer_to_f64(value, remote_type, local_type)
+        }
+        CompatibleScalarReadAction::Float16 => {
+            let value = context.reader.read_f16()?;
+            checked_float16(value, remote_type, local_type).map(|value| f64::from(value.to_f32()))
+        }
+        CompatibleScalarReadAction::BFloat16 => {
+            let value = context.reader.read_bf16()?;
+            checked_bfloat16(value, remote_type, local_type).map(|value| f64::from(value.to_f32()))
+        }
+        CompatibleScalarReadAction::Float32 => {
+            checked_f32(context.reader.read_f32()?, remote_type, local_type).map(f64::from)
+        }
+        CompatibleScalarReadAction::Float64 => {
+            checked_f64(context.reader.read_f64()?, remote_type, local_type)
+        }
+        _ => read_f64_cold(context, local_type, action),
+    }
+}
+
+#[inline(always)]
+fn read_float16_payload(
+    context: &mut ReadContext,
+    local_type: u32,
+    action: CompatibleScalarReadAction,
+) -> Result<float16, Error> {
+    match action {
+        CompatibleScalarReadAction::Float16 => {
+            let remote_type = require_scalar_action(action)?;
+            checked_float16(context.reader.read_f16()?, remote_type, local_type)
+        }
+        _ => {
+            let remote_type = require_scalar_action(action)?;
+            match action {
+                CompatibleScalarReadAction::String => {
+                    let value = String::fory_read_data(context)?;
+                    string_to_float16_value(&value, remote_type, local_type)
+                }
+                CompatibleScalarReadAction::Decimal => {
+                    let value = Decimal::fory_read_data(context)?;
+                    decimal_to_float16(&value, false, remote_type, local_type)
+                }
+                _ => {
+                    let value = read_f32_payload(context, local_type, action)?;
+                    f32_to_float16_exact(value, remote_type, local_type)
+                }
+            }
+        }
+    }
+}
+
+#[inline(always)]
+fn read_bfloat16_payload(
+    context: &mut ReadContext,
+    local_type: u32,
+    action: CompatibleScalarReadAction,
+) -> Result<bfloat16, Error> {
+    match action {
+        CompatibleScalarReadAction::BFloat16 => {
+            let remote_type = require_scalar_action(action)?;
+            checked_bfloat16(context.reader.read_bf16()?, remote_type, local_type)
+        }
+        _ => {
+            let remote_type = require_scalar_action(action)?;
+            match action {
+                CompatibleScalarReadAction::String => {
+                    let value = String::fory_read_data(context)?;
+                    string_to_bfloat16_value(&value, remote_type, local_type)
+                }
+                CompatibleScalarReadAction::Decimal => {
+                    let value = Decimal::fory_read_data(context)?;
+                    decimal_to_bfloat16(&value, false, remote_type, local_type)
+                }
+                _ => {
+                    let value = read_f32_payload(context, local_type, action)?;
+                    f32_to_bfloat16_exact(value, remote_type, local_type)
+                }
+            }
+        }
+    }
+}
+
+#[inline(always)]
+fn read_decimal_payload(
+    context: &mut ReadContext,
+    local_type: u32,
+    action: CompatibleScalarReadAction,
+) -> Result<Decimal, Error> {
+    let remote_type = require_scalar_action(action)?;
+    match action {
+        CompatibleScalarReadAction::Bool => match context.reader.read_u8()? {
+            0 => Ok(Decimal::new(BigInt::zero(), 0)),
+            1 => Ok(Decimal::new(BigInt::one(), 0)),
+            _ => Err(conversion_error(
+                remote_type,
+                local_type,
+                "invalid bool payload",
+            )),
+        },
+        CompatibleScalarReadAction::Int8
+        | CompatibleScalarReadAction::Int16
+        | CompatibleScalarReadAction::Int32
+        | CompatibleScalarReadAction::VarInt32
+        | CompatibleScalarReadAction::Int64
+        | CompatibleScalarReadAction::VarInt64
+        | CompatibleScalarReadAction::TaggedInt64 => {
+            let value = read_i64_payload(context, local_type, action)?;
+            Ok(Decimal::new(BigInt::from(value), 0))
+        }
+        CompatibleScalarReadAction::UInt8
+        | CompatibleScalarReadAction::UInt16
+        | CompatibleScalarReadAction::UInt32
+        | CompatibleScalarReadAction::VarUInt32
+        | CompatibleScalarReadAction::UInt64
+        | CompatibleScalarReadAction::VarUInt64
+        | CompatibleScalarReadAction::TaggedUInt64 => {
+            let value = read_u64_payload(context, local_type, action)?;
+            Ok(Decimal::new(BigInt::from(value), 0))
+        }
+        CompatibleScalarReadAction::Float16
+        | CompatibleScalarReadAction::BFloat16
+        | CompatibleScalarReadAction::Float32
+        | CompatibleScalarReadAction::Float64 => {
+            let value = read_float_value(context, action)?;
+            float_to_decimal_value(value, remote_type, local_type)
+        }
+        CompatibleScalarReadAction::String => {
+            let value = String::fory_read_data(context)?;
+            string_to_decimal_value(&value, remote_type, local_type).map(|(decimal, _)| decimal)
+        }
+        CompatibleScalarReadAction::Decimal => canonical_decimal(Decimal::fory_read_data(context)?),
+        CompatibleScalarReadAction::None => {
+            Err(Error::invalid_data("missing compatible scalar read action"))
+        }
+    }
+}
+
+#[cold]
+#[inline(never)]
+fn read_bool_cold(
+    context: &mut ReadContext,
+    local_type: u32,
+    action: CompatibleScalarReadAction,
+) -> Result<bool, Error> {
+    let remote_type = require_scalar_action(action)?;
+    match action {
+        CompatibleScalarReadAction::Float16
+        | CompatibleScalarReadAction::BFloat16
+        | CompatibleScalarReadAction::Float32
+        | CompatibleScalarReadAction::Float64 => {
+            let value = read_float_value(context, action)?;
+            float_to_bool_value(value, remote_type, local_type)
+        }
+        CompatibleScalarReadAction::String => {
+            let value = String::fory_read_data(context)?;
+            string_to_bool_value(&value, remote_type, local_type)
+        }
+        CompatibleScalarReadAction::Decimal => {
+            let value = Decimal::fory_read_data(context)?;
+            decimal_to_bool_value(&value, remote_type, local_type)
+        }
+        _ => Err(Error::invalid_data("missing compatible scalar read action")),
+    }
+}
+
+#[cold]
+#[inline(never)]
+fn read_string_cold(
+    context: &mut ReadContext,
+    local_type: u32,
+    action: CompatibleScalarReadAction,
+) -> Result<String, Error> {
+    let remote_type = require_scalar_action(action)?;
+    match action {
+        CompatibleScalarReadAction::Float16
+        | CompatibleScalarReadAction::BFloat16
+        | CompatibleScalarReadAction::Float32
+        | CompatibleScalarReadAction::Float64 => {
+            let value = read_float_value(context, action)?;
+            float_to_string(value, remote_type, local_type)
+        }
+        CompatibleScalarReadAction::Decimal => {
+            let value = canonical_decimal(Decimal::fory_read_data(context)?)?;
+            Ok(decimal_to_string(&value))
+        }
+        _ => Err(Error::invalid_data("missing compatible scalar read action")),
+    }
+}
+
+#[cold]
+#[inline(never)]
+fn read_u64_cold(
+    context: &mut ReadContext,
+    local_type: u32,
+    action: CompatibleScalarReadAction,
+) -> Result<u64, Error> {
+    let remote_type = require_scalar_action(action)?;
+    match action {
+        CompatibleScalarReadAction::Float16
+        | CompatibleScalarReadAction::BFloat16
+        | CompatibleScalarReadAction::Float32
+        | CompatibleScalarReadAction::Float64 => {
+            let value = read_float_value(context, action)?;
+            float_to_integral_num(value, remote_type, local_type, true)
+        }
+        CompatibleScalarReadAction::String => {
+            let value = String::fory_read_data(context)?;
+            string_to_integral_num(&value, remote_type, local_type, true)
+        }
+        CompatibleScalarReadAction::Decimal => {
+            let value = Decimal::fory_read_data(context)?;
+            decimal_to_integral_num(&value, remote_type, local_type, true)
+        }
+        _ => Err(Error::invalid_data("missing compatible scalar read action")),
+    }
+}
+
+#[cold]
+#[inline(never)]
+fn read_f32_cold(
+    context: &mut ReadContext,
+    local_type: u32,
+    action: CompatibleScalarReadAction,
+) -> Result<f32, Error> {
+    let remote_type = require_scalar_action(action)?;
+    match action {
+        CompatibleScalarReadAction::String => {
+            let value = String::fory_read_data(context)?;
+            string_to_f32_value(&value, remote_type, local_type)
+        }
+        CompatibleScalarReadAction::Decimal => {
+            let value = Decimal::fory_read_data(context)?;
+            decimal_to_f32(&value, false, remote_type, local_type)
+        }
+        _ => Err(Error::invalid_data("missing compatible scalar read action")),
+    }
+}
+
+#[cold]
+#[inline(never)]
+fn read_f64_cold(
+    context: &mut ReadContext,
+    local_type: u32,
+    action: CompatibleScalarReadAction,
+) -> Result<f64, Error> {
+    let remote_type = require_scalar_action(action)?;
+    match action {
+        CompatibleScalarReadAction::String => {
+            let value = String::fory_read_data(context)?;
+            string_to_f64_value(&value, remote_type, local_type)
+        }
+        CompatibleScalarReadAction::Decimal => {
+            let value = Decimal::fory_read_data(context)?;
+            decimal_to_f64(&value, false, remote_type, local_type)
+        }
+        _ => Err(Error::invalid_data("missing compatible scalar read action")),
+    }
+}
+
+#[inline(always)]
+fn read_float_value(
+    context: &mut ReadContext,
+    action: CompatibleScalarReadAction,
+) -> Result<FloatValue, Error> {
+    match action {
+        CompatibleScalarReadAction::Float16 => Ok(FloatValue::F16(context.reader.read_f16()?)),
+        CompatibleScalarReadAction::BFloat16 => Ok(FloatValue::BF16(context.reader.read_bf16()?)),
+        CompatibleScalarReadAction::Float32 => Ok(FloatValue::F32(context.reader.read_f32()?)),
+        CompatibleScalarReadAction::Float64 => Ok(FloatValue::F64(context.reader.read_f64()?)),
+        _ => Err(Error::invalid_data("missing compatible scalar read action")),
+    }
+}
+
+#[inline(always)]
+fn integer_exact_in_binary(value: u64, precision: u32) -> bool {
+    if value == 0 {
+        return true;
+    }
+    let bits = u64::BITS - value.leading_zeros();
+    bits <= precision || value.trailing_zeros() >= bits - precision
+}
+
+#[inline(always)]
+fn signed_integer_to_f32(value: i64, remote_type: u32, local_type: u32) -> Result<f32, Error> {
+    let magnitude = value.unsigned_abs();
+    if integer_exact_in_binary(magnitude, f32::MANTISSA_DIGITS) {
+        Ok(value as f32)
+    } else {
+        Err(conversion_error(
+            remote_type,
+            local_type,
+            "integer value is not exactly representable by target float",
+        ))
+    }
+}
+
+#[inline(always)]
+fn unsigned_integer_to_f32(value: u64, remote_type: u32, local_type: u32) -> Result<f32, Error> {
+    if integer_exact_in_binary(value, f32::MANTISSA_DIGITS) {
+        Ok(value as f32)
+    } else {
+        Err(conversion_error(
+            remote_type,
+            local_type,
+            "integer value is not exactly representable by target float",
+        ))
+    }
+}
+
+#[inline(always)]
+fn signed_integer_to_f64(value: i64, remote_type: u32, local_type: u32) -> Result<f64, Error> {
+    let magnitude = value.unsigned_abs();
+    if integer_exact_in_binary(magnitude, f64::MANTISSA_DIGITS) {
+        Ok(value as f64)
+    } else {
+        Err(conversion_error(
+            remote_type,
+            local_type,
+            "integer value is not exactly representable by target float",
+        ))
+    }
+}
+
+#[inline(always)]
+fn unsigned_integer_to_f64(value: u64, remote_type: u32, local_type: u32) -> Result<f64, Error> {
+    if integer_exact_in_binary(value, f64::MANTISSA_DIGITS) {
+        Ok(value as f64)
+    } else {
+        Err(conversion_error(
+            remote_type,
+            local_type,
+            "integer value is not exactly representable by target float",
+        ))
+    }
+}
+
+#[inline(always)]
+fn f64_to_f32_exact(value: f64, remote_type: u32, local_type: u32) -> Result<f32, Error> {
+    if value.is_nan() {
+        return Err(conversion_error(
+            remote_type,
+            local_type,
+            "NaN is not convertible",
+        ));
+    }
+    if value.is_infinite() {
+        return Ok(if value.is_sign_negative() {
+            f32::NEG_INFINITY
+        } else {
+            f32::INFINITY
+        });
+    }
+    let converted = value as f32;
+    if f64::from(converted) == value
+        && (converted != 0.0 || converted.is_sign_negative() == value.is_sign_negative())
+    {
+        Ok(converted)
+    } else {
+        Err(conversion_error(
+            remote_type,
+            local_type,
+            "float value is not exactly representable by target float",
+        ))
+    }
+}
+
+#[inline(always)]
+fn f32_to_float16_exact(value: f32, remote_type: u32, local_type: u32) -> Result<float16, Error> {
+    if value.is_nan() {
+        return Err(conversion_error(
+            remote_type,
+            local_type,
+            "NaN is not convertible",
+        ));
+    }
+    if value.is_infinite() {
+        return Ok(if value.is_sign_negative() {
+            float16::NEG_INFINITY
+        } else {
+            float16::INFINITY
+        });
+    }
+    let converted = float16::from_f32(value);
+    let roundtrip = converted.to_f32();
+    if roundtrip == value
+        && (roundtrip != 0.0 || roundtrip.is_sign_negative() == value.is_sign_negative())
+    {
+        Ok(converted)
+    } else {
+        Err(conversion_error(
+            remote_type,
+            local_type,
+            "float value is not exactly representable by target float",
+        ))
+    }
+}
+
+#[inline(always)]
+fn f32_to_bfloat16_exact(value: f32, remote_type: u32, local_type: u32) -> Result<bfloat16, Error> {
+    if value.is_nan() {
+        return Err(conversion_error(
+            remote_type,
+            local_type,
+            "NaN is not convertible",
+        ));
+    }
+    if value.is_infinite() {
+        return Ok(if value.is_sign_negative() {
+            bfloat16::NEG_INFINITY
+        } else {
+            bfloat16::INFINITY
+        });
+    }
+    let converted = bfloat16::from_f32(value);
+    let roundtrip = converted.to_f32();
+    if roundtrip == value
+        && (roundtrip != 0.0 || roundtrip.is_sign_negative() == value.is_sign_negative())
+    {
+        Ok(converted)
+    } else {
+        Err(conversion_error(
+            remote_type,
+            local_type,
+            "float value is not exactly representable by target float",
+        ))
+    }
+}
+
+#[inline(always)]
+fn checked_f32(value: f32, remote_type: u32, local_type: u32) -> Result<f32, Error> {
+    if value.is_nan() {
+        Err(conversion_error(
+            remote_type,
+            local_type,
+            "NaN is not convertible",
+        ))
+    } else {
+        Ok(value)
+    }
+}
+
+#[inline(always)]
+fn checked_f64(value: f64, remote_type: u32, local_type: u32) -> Result<f64, Error> {
+    if value.is_nan() {
+        Err(conversion_error(
+            remote_type,
+            local_type,
+            "NaN is not convertible",
+        ))
+    } else {
+        Ok(value)
+    }
+}
+
+#[inline(always)]
+fn checked_float16(value: float16, remote_type: u32, local_type: u32) -> Result<float16, Error> {
+    if value.is_nan() {
+        Err(conversion_error(
+            remote_type,
+            local_type,
+            "NaN is not convertible",
+        ))
+    } else {
+        Ok(value)
+    }
+}
+
+#[inline(always)]
+fn checked_bfloat16(value: bfloat16, remote_type: u32, local_type: u32) -> Result<bfloat16, Error> {
+    if value.is_nan() {
+        Err(conversion_error(
+            remote_type,
+            local_type,
+            "NaN is not convertible",
+        ))
+    } else {
+        Ok(value)
+    }
 }
 
 #[inline(always)]
 pub(super) fn scalar_field_types_compatible(local: &FieldType, remote: &FieldType) -> bool {
-    !local.track_ref
-        && !remote.track_ref
-        && (local.type_id != remote.type_id || local.nullable != remote.nullable)
-        && scalar_types_compatible(local.type_id, remote.type_id)
+    crate::meta::compatible_scalar_field_pair(local, remote)
 }
 
 #[inline(always)]
@@ -529,7 +1325,45 @@ where
     T: FromBigInt,
 {
     let (decimal, _) = value_to_decimal_parts(value, remote_type, local_type)?;
-    let value = decimal_to_integral(&decimal, remote_type, local_type)?;
+    decimal_to_integral_num(&decimal, remote_type, local_type, unsigned)
+}
+
+fn string_to_integral_num<T>(
+    value: &str,
+    remote_type: u32,
+    local_type: u32,
+    unsigned: bool,
+) -> Result<T, Error>
+where
+    T: FromBigInt,
+{
+    let (decimal, _) = string_to_decimal_value(value, remote_type, local_type)?;
+    decimal_to_integral_num(&decimal, remote_type, local_type, unsigned)
+}
+
+fn float_to_integral_num<T>(
+    value: FloatValue,
+    remote_type: u32,
+    local_type: u32,
+    unsigned: bool,
+) -> Result<T, Error>
+where
+    T: FromBigInt,
+{
+    let (decimal, _) = finite_float_decimal(value, remote_type, local_type)?;
+    decimal_to_integral_num(&decimal, remote_type, local_type, unsigned)
+}
+
+fn decimal_to_integral_num<T>(
+    decimal: &Decimal,
+    remote_type: u32,
+    local_type: u32,
+    unsigned: bool,
+) -> Result<T, Error>
+where
+    T: FromBigInt,
+{
+    let value = decimal_to_integral(decimal, remote_type, local_type)?;
     if unsigned && value.is_negative() {
         return Err(conversion_error(
             remote_type,
@@ -539,6 +1373,55 @@ where
     }
     T::from_bigint(&value)
         .ok_or_else(|| conversion_error(remote_type, local_type, "integer value is out of range"))
+}
+
+fn string_to_bool_value(value: &str, remote_type: u32, local_type: u32) -> Result<bool, Error> {
+    match value {
+        "0" | "false" => Ok(false),
+        "1" | "true" => Ok(true),
+        _ => Err(conversion_error(
+            remote_type,
+            local_type,
+            "string is not an exact bool literal",
+        )),
+    }
+}
+
+fn decimal_to_bool_value(
+    value: &Decimal,
+    remote_type: u32,
+    local_type: u32,
+) -> Result<bool, Error> {
+    if value.unscaled.is_zero() {
+        Ok(false)
+    } else if decimal_eq(value, &Decimal::new(BigInt::one(), 0)) {
+        Ok(true)
+    } else {
+        Err(conversion_error(
+            remote_type,
+            local_type,
+            "numeric value is not 0 or 1",
+        ))
+    }
+}
+
+fn float_to_bool_value(
+    value: FloatValue,
+    remote_type: u32,
+    local_type: u32,
+) -> Result<bool, Error> {
+    if float_is_nan(value) || float_is_infinite(value) {
+        return Err(conversion_error(
+            remote_type,
+            local_type,
+            "non-finite float is not convertible to bool",
+        ));
+    }
+    if float_is_zero(value) {
+        return Ok(false);
+    }
+    let decimal = canonical_float_decimal(value, remote_type, local_type)?;
+    decimal_to_bool_value(&decimal, remote_type, local_type)
 }
 
 fn value_to_decimal(
@@ -570,6 +1453,52 @@ fn value_to_decimal_parts(
         ScalarValue::Decimal(value) => canonical_decimal(value).map(|value| (value, false)),
         ScalarValue::Float(value) => finite_float_decimal(value, remote_type, local_type),
     }
+}
+
+fn string_to_decimal_value(
+    value: &str,
+    remote_type: u32,
+    local_type: u32,
+) -> Result<(Decimal, bool), Error> {
+    let parsed = parse_number(value)
+        .ok_or_else(|| conversion_error(remote_type, local_type, "invalid numeric literal"))?;
+    Ok((parsed.decimal, parsed.negative_zero))
+}
+
+fn float_to_decimal_value(
+    value: FloatValue,
+    remote_type: u32,
+    local_type: u32,
+) -> Result<Decimal, Error> {
+    finite_float_decimal(value, remote_type, local_type).map(|(decimal, _)| decimal)
+}
+
+fn string_to_f32_value(value: &str, remote_type: u32, local_type: u32) -> Result<f32, Error> {
+    let (decimal, negative_zero) = string_to_decimal_value(value, remote_type, local_type)?;
+    decimal_to_f32(&decimal, negative_zero, remote_type, local_type)
+}
+
+fn string_to_f64_value(value: &str, remote_type: u32, local_type: u32) -> Result<f64, Error> {
+    let (decimal, negative_zero) = string_to_decimal_value(value, remote_type, local_type)?;
+    decimal_to_f64(&decimal, negative_zero, remote_type, local_type)
+}
+
+fn string_to_float16_value(
+    value: &str,
+    remote_type: u32,
+    local_type: u32,
+) -> Result<float16, Error> {
+    let (decimal, negative_zero) = string_to_decimal_value(value, remote_type, local_type)?;
+    decimal_to_float16(&decimal, negative_zero, remote_type, local_type)
+}
+
+fn string_to_bfloat16_value(
+    value: &str,
+    remote_type: u32,
+    local_type: u32,
+) -> Result<bfloat16, Error> {
+    let (decimal, negative_zero) = string_to_decimal_value(value, remote_type, local_type)?;
+    decimal_to_bfloat16(&decimal, negative_zero, remote_type, local_type)
 }
 
 trait FromBigInt: Any + Sized {

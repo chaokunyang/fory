@@ -607,16 +607,14 @@ def test_compatible_incompatible_list_array_elements_reject():
         reader.deserialize(writer.serialize(StringListPayload(payload=["1", "2"])))
 
 
-def test_compatible_nested_list_array_mismatch_not_assigned():
+def test_nested_list_array_mismatch_rejects():
     writer = Fory(xlang=True, compatible=True)
     reader = Fory(xlang=True, compatible=True)
     _register_int32_payload(writer, NestedInt32ListPayload)
     _register_int32_payload(reader, NestedInt32ArrayPayload)
 
-    decoded = reader.deserialize(writer.serialize(NestedInt32ListPayload(payload=[[1, 2], [3]])))
-
-    assert isinstance(decoded, NestedInt32ArrayPayload)
-    assert decoded.payload == []
+    with pytest.raises(TypeNotCompatibleError):
+        reader.deserialize(writer.serialize(NestedInt32ListPayload(payload=[[1, 2], [3]])))
 
 
 if __name__ == "__main__":

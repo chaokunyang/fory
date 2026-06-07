@@ -420,7 +420,7 @@ def test_same_schema_scalar_read_is_direct():
     assert fory.deserialize(fory.serialize(value)) == value
 
 
-def test_integer_widening_scalar_read_is_direct():
+def test_integer_widening_direct():
     from pyfory.converter import CompatibleScalarFieldSerializer
 
     writer, reader, payload = compat_ser(RemoteInt32Scalar, LocalInt64Scalar, RemoteInt32Scalar(42), 751)
@@ -464,7 +464,7 @@ def test_compatible_read_validates_nested_integer_narrowing():
     assert result == LocalNestedNarrow()
 
 
-def test_compatible_read_rejects_nested_signed_unsigned_mismatch():
+def test_nested_signed_unsigned_rejected():
     with pytest.raises(TypeNotCompatibleError):
         compat_ser_de(
             RemoteNestedUnsigned,
@@ -1251,7 +1251,7 @@ class CompatibleListIntField:
 
 
 @pytest.mark.parametrize("xlang", [False, True])
-def test_compatible_incompatible_matched_field_fails(xlang):
+def test_incompatible_matched_field(xlang):
     writer = Fory(xlang=xlang, compatible=True, ref=False)
     reader = Fory(xlang=xlang, compatible=True, ref=False)
     writer.register_type(CompatibleListStringField, name="example.CompatibleListField")

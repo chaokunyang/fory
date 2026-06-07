@@ -193,7 +193,7 @@ public class ForyStructProcessorTest {
   }
 
   @Test
-  public void testPrivateFieldWithoutAccessorsUsesFieldAccessor() throws Exception {
+  public void testPrivateFieldAccessor() throws Exception {
     CompilationResult result =
         compile(
             "test.InaccessibleStruct",

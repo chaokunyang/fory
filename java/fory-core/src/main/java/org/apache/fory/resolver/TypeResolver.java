@@ -1137,7 +1137,9 @@ public abstract class TypeResolver {
             jitContext.registerSerializerJITCallback(
                 () -> CompatibleSerializer.class,
                 () -> CodecUtils.loadOrGenCompatibleCodecClass(this, cls, typeDef),
-                c -> typeInfo.setSerializer(this, Serializers.newSerializer(this, cls, c)));
+                c ->
+                    typeInfo.setSerializer(
+                        this, newGeneratedCompatibleSerializer(cls, c, typeDef)));
       } else if (sc == null) {
         sc = CompatibleSerializer.class;
       }
@@ -1158,10 +1160,29 @@ public abstract class TypeResolver {
       typeInfo.setSerializer(this, newStaticGeneratedStructSerializer(sc, cls, typeDef));
     } else if (sc == CompatibleSerializer.class) {
       typeInfo.setSerializer(this, new CompatibleSerializer(this, cls, typeDef));
+    } else if (GeneratedCompatibleSerializer.class.isAssignableFrom(sc)) {
+      typeInfo.setSerializer(this, newGeneratedCompatibleSerializer(cls, sc, typeDef));
     } else {
       typeInfo.setSerializer(this, Serializers.newSerializer(this, cls, sc));
     }
     return typeInfo;
+  }
+
+  private Serializer<?> newGeneratedCompatibleSerializer(
+      Class<?> cls, Class<? extends Serializer> serializerClass, TypeDef typeDef) {
+    try {
+      Constructor<? extends Serializer> constructor =
+          serializerClass.getDeclaredConstructor(TypeResolver.class, Class.class, TypeDef.class);
+      constructor.setAccessible(true);
+      return constructor.newInstance(this, cls, typeDef);
+    } catch (ReflectiveOperationException e) {
+      throw new ForyException(
+          "Failed to create generated compatible serializer "
+              + serializerClass.getName()
+              + " for "
+              + cls.getName(),
+          e);
+    }
   }
 
   private Class<? extends Serializer> loadGraalvmCompatibleDeserializerClass(

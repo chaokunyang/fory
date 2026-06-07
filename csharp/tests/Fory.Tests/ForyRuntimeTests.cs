@@ -1289,7 +1289,7 @@ public sealed class ForyRuntimeTests
     }
 
     [Fact]
-    public void CompatibleReadRejectsNestedListArraySchemaPairs()
+    public void RejectsNestedListArrayPairs()
     {
         List<TypeMetaFieldInfo> localFields =
         [
@@ -2402,7 +2402,7 @@ public sealed class ForyRuntimeTests
     }
 
     [Fact]
-    public void TypeMetaAssignFieldIdsRejectsTypeMismatchedField()
+    public void RejectsTypeMismatchedField()
     {
         List<TypeMetaFieldInfo> localFields =
         [

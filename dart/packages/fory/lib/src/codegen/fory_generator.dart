@@ -838,7 +838,7 @@ final class ForyGenerator extends Generator {
             '    return _readCompatibleStructFallback(context, layout);',
           );
         } else {
-          _writeConstructorCompatibleSwitchFallback(output, structSpec);
+          _writeCtorCompatSwitch(output, structSpec);
         }
     }
     output.writeln('  }');
@@ -875,7 +875,7 @@ final class ForyGenerator extends Generator {
     if (mutable) {
       _writeMutableCompatibleSwitchFallback(output, structSpec);
     } else {
-      _writeConstructorCompatibleSwitchFallback(output, structSpec);
+      _writeCtorCompatSwitch(output, structSpec);
     }
     output.writeln('  }');
   }
@@ -930,7 +930,7 @@ final class ForyGenerator extends Generator {
       ..writeln('    return value;');
   }
 
-  void _writeConstructorCompatibleSwitchFallback(
+  void _writeCtorCompatSwitch(
     StringBuffer output,
     _GeneratedStructSpec structSpec,
   ) {

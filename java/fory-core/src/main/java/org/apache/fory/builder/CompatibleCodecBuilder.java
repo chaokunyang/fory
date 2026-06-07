@@ -27,6 +27,9 @@ import java.lang.reflect.Field;
 import java.lang.reflect.Member;
 import java.math.BigDecimal;
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashMap;
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.SortedMap;
@@ -87,10 +90,16 @@ import org.apache.fory.util.record.RecordUtils;
  */
 public class CompatibleCodecBuilder extends ObjectCodecBuilder {
   private static final Logger LOG = LoggerFactory.getLogger(CompatibleCodecBuilder.class);
+  private static final String REMOTE_FIELD_INFOS_NAME = "_f_remoteFieldInfos";
+  private static final String LOCAL_FIELD_INFOS_NAME = "_f_localFieldInfos";
+  private static final String CONSTRUCTOR_TYPE_DEF_NAME = "_f_typeDef";
 
   private final TypeDef typeDef;
   private final String defaultValueLanguage;
   private final DefaultValueUtils.DefaultValueField[] defaultValueFields;
+  private final Map<Descriptor, Integer> fieldInfoIds = new IdentityHashMap<>();
+  private String remoteFieldInfosName;
+  private String localFieldInfosName;
 
   public CompatibleCodecBuilder(TypeRef<?> beanType, Fory fory, TypeDef typeDef) {
     super(beanType, fory, GeneratedCompatibleSerializer.class);
@@ -100,6 +109,9 @@ public class CompatibleCodecBuilder extends ObjectCodecBuilder {
     this.typeDef = typeDef;
     DescriptorGrouper grouper = typeResolver(r -> r.createDescriptorGrouper(typeDef, beanClass));
     List<Descriptor> sortedDescriptors = grouper.getSortedDescriptors();
+    for (int i = 0; i < sortedDescriptors.size(); i++) {
+      fieldInfoIds.put(sortedDescriptors.get(i), i);
+    }
     if (org.apache.fory.util.Utils.DEBUG_OUTPUT_ENABLED) {
       LOG.info(
           "========== {} sorted descriptors for {} ==========",
@@ -168,6 +180,7 @@ public class CompatibleCodecBuilder extends ObjectCodecBuilder {
     ctx.extendsClasses(ctx.type(parentSerializerClass));
     ctx.reserveName(POJO_CLASS_TYPE_NAME);
     ctx.reserveName(SERIALIZER_FIELD_NAME);
+    ctx.reserveName(CONSTRUCTOR_TYPE_DEF_NAME);
     String constructorCode =
         StringUtils.format(
             ""
@@ -216,7 +229,9 @@ public class CompatibleCodecBuilder extends ObjectCodecBuilder {
         TypeResolver.class,
         CONSTRUCTOR_TYPE_RESOLVER_NAME,
         Class.class,
-        POJO_CLASS_TYPE_NAME);
+        POJO_CLASS_TYPE_NAME,
+        TypeDef.class,
+        CONSTRUCTOR_TYPE_DEF_NAME);
     return ctx.genCode();
   }
 
@@ -335,12 +350,8 @@ public class CompatibleCodecBuilder extends ObjectCodecBuilder {
             "readSourceScalar",
             OBJECT_TYPE,
             readContextRef(),
-            Literal.ofInt(FieldConverters.fromDispatchId(converter)),
-            Literal.ofClass(FieldConverters.fromType(converter)),
-            Literal.ofBoolean(descriptor.isNullable()),
-            Literal.ofBoolean(
-                new SerializationFieldInfo(typeResolver, descriptor).useDeclaredTypeInfo),
-            Literal.ofString(FieldConverters.fieldName(converter)));
+            remoteFieldInfo(descriptor),
+            localFieldInfo(descriptor));
     return new Expression.ListExpression(sourceValue, callback.apply(sourceValue));
   }
 
@@ -365,11 +376,8 @@ public class CompatibleCodecBuilder extends ObjectCodecBuilder {
                 FieldConverters.class,
                 "convertValue",
                 OBJECT_TYPE,
-                Literal.ofInt(FieldConverters.fromDispatchId(converter)),
-                Literal.ofClass(FieldConverters.fromType(converter)),
-                Literal.ofInt(FieldConverters.toDispatchId(converter)),
-                Literal.ofClass(FieldConverters.toType(converter)),
-                Literal.ofString(FieldConverters.fieldName(converter)),
+                remoteFieldInfo(descriptor),
+                localFieldInfo(descriptor),
                 value);
         Expression converted = new Expression.Cast(convertedValue, TypeRef.of(field.getType()));
         Descriptor newDesc =
@@ -412,13 +420,8 @@ public class CompatibleCodecBuilder extends ObjectCodecBuilder {
         helper,
         TypeRef.of(targetType),
         readContextRef(),
-        Literal.ofInt(FieldConverters.fromDispatchId(converter)),
-        Literal.ofClass(FieldConverters.fromType(converter)),
-        Literal.ofBoolean(descriptor.isNullable()),
-        Literal.ofBoolean(new SerializationFieldInfo(typeResolver, descriptor).useDeclaredTypeInfo),
-        Literal.ofInt(FieldConverters.toDispatchId(converter)),
-        Literal.ofClass(targetType),
-        Literal.ofString(FieldConverters.fieldName(converter)));
+        remoteFieldInfo(descriptor),
+        localFieldInfo(descriptor));
   }
 
   private static String fieldConverterTargetReader(Class<?> targetType) {
@@ -477,6 +480,115 @@ public class CompatibleCodecBuilder extends ObjectCodecBuilder {
       }
     }
     return false;
+  }
+
+  private Expression remoteFieldInfo(Descriptor descriptor) {
+    ensureCompatibleFieldInfos();
+    return fieldInfo(remoteFieldInfosName, descriptor);
+  }
+
+  private Expression localFieldInfo(Descriptor descriptor) {
+    ensureCompatibleFieldInfos();
+    return fieldInfo(localFieldInfosName, descriptor);
+  }
+
+  private Expression fieldInfo(String fieldInfosName, Descriptor descriptor) {
+    Integer fieldInfoId = fieldInfoIds.get(descriptor);
+    Preconditions.checkState(
+        fieldInfoId != null, "Unknown compatible field descriptor " + descriptor);
+    return new Expression.Reference(
+        fieldInfosName + "[" + fieldInfoId + "]", TypeRef.of(SerializationFieldInfo.class));
+  }
+
+  private void ensureCompatibleFieldInfos() {
+    if (remoteFieldInfosName != null) {
+      return;
+    }
+    remoteFieldInfosName = ctx.newName(REMOTE_FIELD_INFOS_NAME);
+    localFieldInfosName = ctx.newName(LOCAL_FIELD_INFOS_NAME);
+    Expression constructorResolver =
+        new Expression.Reference(CONSTRUCTOR_TYPE_RESOLVER_NAME, TypeRef.of(TypeResolver.class));
+    Expression constructorClass =
+        new Expression.Reference(POJO_CLASS_TYPE_NAME, TypeRef.of(Class.class));
+    Expression constructorTypeDef =
+        new Expression.Reference(CONSTRUCTOR_TYPE_DEF_NAME, TypeRef.of(TypeDef.class));
+    TypeRef<SerializationFieldInfo[]> fieldInfoArrayType =
+        TypeRef.of(SerializationFieldInfo[].class);
+    ctx.addField(
+        false,
+        true,
+        ctx.type(fieldInfoArrayType),
+        remoteFieldInfosName,
+        new StaticInvoke(
+            CompatibleCodecBuilder.class,
+            "buildRemoteFieldInfos",
+            fieldInfoArrayType,
+            constructorResolver,
+            constructorClass,
+            constructorTypeDef));
+    ctx.addField(
+        false,
+        true,
+        ctx.type(fieldInfoArrayType),
+        localFieldInfosName,
+        new StaticInvoke(
+            CompatibleCodecBuilder.class,
+            "buildLocalFieldInfosByRemoteId",
+            fieldInfoArrayType,
+            constructorResolver,
+            constructorClass,
+            constructorTypeDef));
+  }
+
+  public static SerializationFieldInfo[] buildRemoteFieldInfos(
+      TypeResolver typeResolver, Class<?> cls, TypeDef typeDef) {
+    List<Descriptor> descriptors =
+        typeResolver.createDescriptorGrouper(typeDef, cls).getSortedDescriptors();
+    SerializationFieldInfo[] fieldInfos = new SerializationFieldInfo[descriptors.size()];
+    for (int i = 0; i < descriptors.size(); i++) {
+      fieldInfos[i] = new SerializationFieldInfo(typeResolver, descriptors.get(i));
+    }
+    return fieldInfos;
+  }
+
+  public static SerializationFieldInfo[] buildLocalFieldInfosByRemoteId(
+      TypeResolver typeResolver, Class<?> cls, TypeDef typeDef) {
+    List<Descriptor> descriptors =
+        typeResolver.createDescriptorGrouper(typeDef, cls).getSortedDescriptors();
+    Map<Field, Descriptor> localDescriptors = localDescriptorsByField(typeResolver, cls);
+    SerializationFieldInfo[] fieldInfos = new SerializationFieldInfo[descriptors.size()];
+    for (int i = 0; i < descriptors.size(); i++) {
+      Descriptor localDescriptor = localDescriptor(descriptors.get(i), localDescriptors);
+      if (localDescriptor != null) {
+        fieldInfos[i] = new SerializationFieldInfo(typeResolver, localDescriptor);
+      }
+    }
+    return fieldInfos;
+  }
+
+  private static Map<Field, Descriptor> localDescriptorsByField(
+      TypeResolver typeResolver, Class<?> cls) {
+    Collection<Descriptor> descriptors = typeResolver.getFieldDescriptors(cls, true);
+    Map<Field, Descriptor> descriptorsByField = new HashMap<>();
+    for (Descriptor descriptor : descriptors) {
+      Field field = descriptor.getField();
+      if (field != null) {
+        descriptorsByField.put(field, descriptor);
+      }
+    }
+    return descriptorsByField;
+  }
+
+  private static Descriptor localDescriptor(
+      Descriptor remoteDescriptor, Map<Field, Descriptor> localDescriptors) {
+    FieldConverter<?> converter = remoteDescriptor.getFieldConverter();
+    if (converter != null) {
+      return localDescriptors.get(converter.getField());
+    }
+    if (remoteDescriptor.getField() != null) {
+      return remoteDescriptor;
+    }
+    return null;
   }
 
   private void appendPrimitiveBulkReads(

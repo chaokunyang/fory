@@ -329,6 +329,12 @@ action, an invalid payload value MUST be reported through the implementation's
 data-error path with enough context to identify the remote type, local type, and
 field when that path has the information.
 
+Unknown-field skipping applies only when the remote field has no matching local
+field identity. If a local field matches by tag ID or name but its schema is
+outside the exact-read and compatible-adaptation rules, the reader MUST reject
+the compatible layout instead of treating the field as missing, remote-only, or
+skippable.
+
 Users can also provide meta hints for fields of a type, or the type whole. Here is an example in java which use
 annotation to provide such information.
 

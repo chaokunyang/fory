@@ -26,6 +26,6 @@ pub use meta_string::{
 pub use type_meta::assign_remote_field_ids;
 pub(crate) use type_meta::compatible_scalar_field_pair;
 pub use type_meta::{
-    compute_field_hash, compute_struct_hash, sort_fields, CompatibleScalarReadAction, FieldInfo,
-    FieldType, TypeMeta, NAMESPACE_ENCODINGS, TYPE_NAME_ENCODINGS,
+    compute_field_hash, compute_struct_hash, sort_fields, FieldInfo, FieldType, TypeMeta,
+    NAMESPACE_ENCODINGS, TYPE_NAME_ENCODINGS,
 };

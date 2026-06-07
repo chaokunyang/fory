@@ -410,70 +410,6 @@ pub struct FieldInfo {
     pub field_id: i16,
     pub field_name: String,
     pub field_type: FieldType,
-    compatible_scalar_read: CompatibleScalarReadAction,
-}
-
-#[derive(Debug, PartialEq, Eq, Clone, Copy, Default)]
-#[repr(u8)]
-pub enum CompatibleScalarReadAction {
-    #[default]
-    None = 0,
-    Bool,
-    Int8,
-    Int16,
-    Int32,
-    VarInt32,
-    Int64,
-    VarInt64,
-    TaggedInt64,
-    UInt8,
-    UInt16,
-    UInt32,
-    VarUInt32,
-    UInt64,
-    VarUInt64,
-    TaggedUInt64,
-    Float16,
-    BFloat16,
-    Float32,
-    Float64,
-    String,
-    Decimal,
-}
-
-impl CompatibleScalarReadAction {
-    #[inline(always)]
-    pub fn is_some(self) -> bool {
-        !matches!(self, Self::None)
-    }
-
-    #[inline(always)]
-    pub fn type_id(self) -> u32 {
-        match self {
-            Self::Bool => TypeId::BOOL as u32,
-            Self::Int8 => TypeId::INT8 as u32,
-            Self::Int16 => TypeId::INT16 as u32,
-            Self::Int32 => TypeId::INT32 as u32,
-            Self::VarInt32 => TypeId::VARINT32 as u32,
-            Self::Int64 => TypeId::INT64 as u32,
-            Self::VarInt64 => TypeId::VARINT64 as u32,
-            Self::TaggedInt64 => TypeId::TAGGED_INT64 as u32,
-            Self::UInt8 => TypeId::UINT8 as u32,
-            Self::UInt16 => TypeId::UINT16 as u32,
-            Self::UInt32 => TypeId::UINT32 as u32,
-            Self::VarUInt32 => TypeId::VAR_UINT32 as u32,
-            Self::UInt64 => TypeId::UINT64 as u32,
-            Self::VarUInt64 => TypeId::VAR_UINT64 as u32,
-            Self::TaggedUInt64 => TypeId::TAGGED_UINT64 as u32,
-            Self::Float16 => TypeId::FLOAT16 as u32,
-            Self::BFloat16 => TypeId::BFLOAT16 as u32,
-            Self::Float32 => TypeId::FLOAT32 as u32,
-            Self::Float64 => TypeId::FLOAT64 as u32,
-            Self::String => TypeId::STRING as u32,
-            Self::Decimal => TypeId::DECIMAL as u32,
-            Self::None => TypeId::UNKNOWN as u32,
-        }
-    }
 }
 
 impl FieldInfo {
@@ -482,7 +418,6 @@ impl FieldInfo {
             field_id: -1i16,
             field_name: field_name.to_string(),
             field_type,
-            compatible_scalar_read: CompatibleScalarReadAction::None,
         }
     }
 
@@ -491,14 +426,7 @@ impl FieldInfo {
             field_id,
             field_name: field_name.to_string(),
             field_type,
-            compatible_scalar_read: CompatibleScalarReadAction::None,
         }
-    }
-
-    #[doc(hidden)]
-    #[inline(always)]
-    pub fn compatible_scalar_read(&self) -> CompatibleScalarReadAction {
-        self.compatible_scalar_read
     }
 
     fn u8_to_encoding(value: u8) -> Result<Encoding, Error> {
@@ -535,7 +463,6 @@ impl FieldInfo {
                 field_id,
                 field_name: String::new(), // No field name when using ID encoding
                 field_type,
-                compatible_scalar_read: CompatibleScalarReadAction::None,
             })
         } else {
             // Field name mode (original behavior)
@@ -556,7 +483,6 @@ impl FieldInfo {
                 field_id: -1i16,
                 field_name: field_name.original,
                 field_type,
-                compatible_scalar_read: CompatibleScalarReadAction::None,
             })
         }
     }
@@ -779,34 +705,6 @@ pub fn compute_struct_hash(field_ids: impl IntoIterator<Item = i16>) -> u32 {
 }
 
 #[inline(always)]
-fn scalar_read_action(type_id: u32) -> CompatibleScalarReadAction {
-    match type_id {
-        x if x == TypeId::BOOL as u32 => CompatibleScalarReadAction::Bool,
-        x if x == TypeId::INT8 as u32 => CompatibleScalarReadAction::Int8,
-        x if x == TypeId::INT16 as u32 => CompatibleScalarReadAction::Int16,
-        x if x == TypeId::INT32 as u32 => CompatibleScalarReadAction::Int32,
-        x if x == TypeId::VARINT32 as u32 => CompatibleScalarReadAction::VarInt32,
-        x if x == TypeId::INT64 as u32 => CompatibleScalarReadAction::Int64,
-        x if x == TypeId::VARINT64 as u32 => CompatibleScalarReadAction::VarInt64,
-        x if x == TypeId::TAGGED_INT64 as u32 => CompatibleScalarReadAction::TaggedInt64,
-        x if x == TypeId::UINT8 as u32 => CompatibleScalarReadAction::UInt8,
-        x if x == TypeId::UINT16 as u32 => CompatibleScalarReadAction::UInt16,
-        x if x == TypeId::UINT32 as u32 => CompatibleScalarReadAction::UInt32,
-        x if x == TypeId::VAR_UINT32 as u32 => CompatibleScalarReadAction::VarUInt32,
-        x if x == TypeId::UINT64 as u32 => CompatibleScalarReadAction::UInt64,
-        x if x == TypeId::VAR_UINT64 as u32 => CompatibleScalarReadAction::VarUInt64,
-        x if x == TypeId::TAGGED_UINT64 as u32 => CompatibleScalarReadAction::TaggedUInt64,
-        x if x == TypeId::FLOAT16 as u32 => CompatibleScalarReadAction::Float16,
-        x if x == TypeId::BFLOAT16 as u32 => CompatibleScalarReadAction::BFloat16,
-        x if x == TypeId::FLOAT32 as u32 => CompatibleScalarReadAction::Float32,
-        x if x == TypeId::FLOAT64 as u32 => CompatibleScalarReadAction::Float64,
-        x if x == TypeId::STRING as u32 => CompatibleScalarReadAction::String,
-        x if x == TypeId::DECIMAL as u32 => CompatibleScalarReadAction::Decimal,
-        _ => CompatibleScalarReadAction::None,
-    }
-}
-
-#[inline(always)]
 fn scalar_numeric_type(type_id: u32) -> bool {
     matches!(
         type_id,
@@ -859,18 +757,6 @@ pub(crate) fn compatible_scalar_field_pair(local: &FieldType, remote: &FieldType
         && !remote.track_ref
         && (local.type_id != remote.type_id || local.nullable != remote.nullable)
         && scalar_types_compatible(local.type_id, remote.type_id)
-}
-
-#[inline(always)]
-fn compatible_scalar_read_action(
-    local: &FieldType,
-    remote: &FieldType,
-) -> CompatibleScalarReadAction {
-    if compatible_scalar_field_pair(local, remote) {
-        scalar_read_action(remote.type_id)
-    } else {
-        CompatibleScalarReadAction::None
-    }
 }
 
 /// Sorts field infos according to the provided sorted field names and assigns field IDs.
@@ -963,13 +849,7 @@ pub fn assign_remote_field_ids(
                     )));
                 }
                 let exact_field = local_info.field_type.exact_shape_match(&field.field_type);
-                let scalar_read_action = if exact_field {
-                    CompatibleScalarReadAction::None
-                } else {
-                    compatible_scalar_read_action(&local_info.field_type, &field.field_type)
-                };
                 if !exact_field
-                    && !scalar_read_action.is_some()
                     && !crate::serializer::codec::compatible_field_pair(
                         &local_info.field_type,
                         &field.field_type,
@@ -1002,7 +882,6 @@ pub fn assign_remote_field_ids(
                 } else {
                     (sorted_index * 2 + 1) as i16
                 };
-                field.compatible_scalar_read = scalar_read_action;
                 used_local_fields[sorted_index] = true;
                 if crate::util::ENABLE_FORY_DEBUG_OUTPUT {
                     eprintln!(
@@ -1019,7 +898,6 @@ pub fn assign_remote_field_ids(
                     );
                 }
                 field.field_id = -1;
-                field.compatible_scalar_read = CompatibleScalarReadAction::None;
             }
         }
     }
@@ -1521,7 +1399,7 @@ mod tests {
     }
 
     #[test]
-    fn preclassifies_compatible_scalar_read_action() {
+    fn classifies_compatible_scalar_field() {
         let local_type = FieldType::new(crate::type_id::INT32, false, vec![]);
         let remote_type = FieldType::new(crate::type_id::INT16, false, vec![]);
         let local_fields = [FieldInfo::new("value", local_type)];
@@ -1530,10 +1408,6 @@ mod tests {
         assign_remote_field_ids(&local_fields, &mut remote_fields).unwrap();
 
         assert_eq!(remote_fields[0].field_id, 1);
-        assert_eq!(
-            remote_fields[0].compatible_scalar_read(),
-            CompatibleScalarReadAction::Int16
-        );
     }
 
     #[test]

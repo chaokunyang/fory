@@ -344,15 +344,11 @@ public class CompatibleCodecBuilder extends ObjectCodecBuilder {
     if (converter == null) {
       return super.deserializeField(buffer, descriptor, callback);
     }
-    StaticInvoke sourceValue =
-        new StaticInvoke(
-            FieldConverters.class,
-            "readSourceScalar",
-            OBJECT_TYPE,
-            readContextRef(),
-            remoteFieldInfo(descriptor),
-            localFieldInfo(descriptor));
-    return new Expression.ListExpression(sourceValue, callback.apply(sourceValue));
+    Expression targetValue = fieldConverterTargetRead(descriptor, converter);
+    Preconditions.checkState(
+        targetValue != null,
+        "Unsupported compatible scalar converter target " + FieldConverters.toType(converter));
+    return new Expression.ListExpression(targetValue, callback.apply(targetValue));
   }
 
   @Override
@@ -360,33 +356,7 @@ public class CompatibleCodecBuilder extends ObjectCodecBuilder {
     if (descriptor.getField() == null) {
       FieldConverter<?> converter = descriptor.getFieldConverter();
       if (converter != null) {
-        Field field = converter.getField();
-        TypeRef<?> targetType = TypeRef.of(field.getType());
-        if (value.type().equals(targetType)) {
-          Descriptor newDesc =
-              new DescriptorBuilder(descriptor)
-                  .field(field)
-                  .type(field.getType())
-                  .typeRef(targetType)
-                  .build();
-          return super.setFieldValue(bean, newDesc, value);
-        }
-        StaticInvoke convertedValue =
-            new StaticInvoke(
-                FieldConverters.class,
-                "convertValue",
-                OBJECT_TYPE,
-                remoteFieldInfo(descriptor),
-                localFieldInfo(descriptor),
-                value);
-        Expression converted = new Expression.Cast(convertedValue, TypeRef.of(field.getType()));
-        Descriptor newDesc =
-            new DescriptorBuilder(descriptor)
-                .field(field)
-                .type(field.getType())
-                .typeRef(TypeRef.of(field.getType()))
-                .build();
-        return super.setFieldValue(bean, newDesc, converted);
+        return setFieldConverterTargetValue(bean, descriptor, converter, value);
       }
       // Field doesn't exist in current class, skip set this field value.
       // Note that the field value shouldn't be an inlined value, otherwise field value read may
@@ -410,7 +380,7 @@ public class CompatibleCodecBuilder extends ObjectCodecBuilder {
   }
 
   private Expression fieldConverterTargetRead(Descriptor descriptor, FieldConverter<?> converter) {
-    Class<?> targetType = FieldConverters.toType(converter);
+    Class<?> targetType = converter.getField().getType();
     String helper = fieldConverterTargetReader(targetType);
     if (helper == null) {
       return null;
@@ -480,6 +450,15 @@ public class CompatibleCodecBuilder extends ObjectCodecBuilder {
       }
     }
     return false;
+  }
+
+  @Override
+  protected TypeRef<?> readValueTypeRef(Descriptor descriptor) {
+    FieldConverter<?> converter = descriptor.getFieldConverter();
+    if (converter != null) {
+      return TypeRef.of(converter.getField().getGenericType());
+    }
+    return super.readValueTypeRef(descriptor);
   }
 
   private Expression remoteFieldInfo(Descriptor descriptor) {

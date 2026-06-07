@@ -838,7 +838,7 @@ final class CompatibleScalarConverter {
       case BOOL:
         return readBool(buffer, from.dispatchId, from.type, fieldName) ? DECIMAL_ONE : DECIMAL_ZERO;
       case STRING:
-        return parseDecimalString(readContext.readString(), from, from);
+        return canonicalDecimal(parseDecimalString(readContext.readString(), from, from));
       case SIGNED_INT:
       case UNSIGNED_INT:
         return new BigDecimal(readIntegerSource(buffer, from, fieldName));

@@ -723,15 +723,24 @@ describe("typemeta", () => {
       .toThrow(/unsupported compatible field schema mismatch/);
   });
 
-  test("keeps nested scalars unconverted", () => {
-    expect(
+  test("rejects nested scalar mismatches", () => {
+    expect(() =>
       readCompatibleScalar(
         7238,
         Type.list(Type.string()),
         Type.list(Type.int32()),
         ["1", "2"],
       ),
-    ).toEqual({ value: ["1", "2"] });
+    ).toThrow(/unsupported compatible field schema mismatch/);
+
+    expect(() =>
+      readCompatibleScalar(
+        7240,
+        Type.map(Type.string(), Type.string()),
+        Type.map(Type.string(), Type.int32()),
+        new Map([["one", "1"]]),
+      ),
+    ).toThrow(/unsupported compatible field schema mismatch/);
   });
 
   test("keeps same-schema scalar reads direct", () => {

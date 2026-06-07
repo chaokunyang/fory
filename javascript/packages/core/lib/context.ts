@@ -999,6 +999,15 @@ export class ReadContext {
     ) {
       throw new Error("unsupported compatible list/array schema mismatch");
     }
+    if (
+      this.hasNestedScalarSchemaMismatch(
+        fieldInfo,
+        fallbackTypeInfo,
+        topLevel,
+      )
+    ) {
+      throw new Error("unsupported compatible field schema mismatch");
+    }
     switch (fieldInfo.typeId) {
       case TypeId.MAP:
         return Type.map(
@@ -1061,6 +1070,26 @@ export class ReadContext {
         return Type.any();
       }
     }
+  }
+
+  private hasNestedScalarSchemaMismatch(
+    remote: InnerFieldInfo,
+    local: TypeInfo | undefined,
+    topLevel: boolean,
+  ): boolean {
+    if (topLevel || local === undefined) {
+      return false;
+    }
+    const localTypeId = this.canonicalFieldTypeId(local);
+    if (
+      !isCompatibleScalarType(remote.typeId)
+      || !isCompatibleScalarType(localTypeId)
+    ) {
+      return false;
+    }
+    // Scalar conversion is only a matched-field compatibility rule. Nested
+    // container element/value schemas need an exact read plan.
+    return !this.fieldSchemasEqual(remote, local);
   }
 
   private compatibleFieldTypeInfo(

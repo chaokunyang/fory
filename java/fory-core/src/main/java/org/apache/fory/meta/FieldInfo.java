@@ -274,14 +274,29 @@ public final class FieldInfo implements Serializable {
 
   private static boolean sameNestedFieldSchema(
       FieldTypes.FieldType peerFieldType, FieldTypes.FieldType localFieldType) {
-    if (peerFieldType.trackingRef() != localFieldType.trackingRef()) {
-      return false;
-    }
     if (compatibleScalarType(peerFieldType.getTypeId())
         || compatibleScalarType(localFieldType.getTypeId())) {
       return peerFieldType.getTypeId() == localFieldType.getTypeId()
+          && peerFieldType.trackingRef() == localFieldType.trackingRef()
           && (!peerFieldType.trackingRef()
               || peerFieldType.nullable() == localFieldType.nullable());
+    }
+    // Preserve peer TypeDef type ids during decode. TYPED_UNION/NAMED_UNION remain peer metadata
+    // identities there; compatible schema comparison owns accepting the union family as one nested
+    // field domain.
+    if (Types.isUnionType(peerFieldType.getTypeId())
+        && Types.isUnionType(localFieldType.getTypeId())) {
+      return true;
+    }
+    // Compatible reads use remote collection/map element metadata for nested user-defined object
+    // presence. Rejecting nullable/ref drift here would block valid xlang IDL payloads whose
+    // runtime element framing still carries the actual null/ref state.
+    if (isUserDefinedNestedType(peerFieldType) && isUserDefinedNestedType(localFieldType)) {
+      return sameUnresolvedOrNormalizedNestedTypeId(
+          peerFieldType.getTypeId(), localFieldType.getTypeId());
+    }
+    if (peerFieldType.trackingRef() != localFieldType.trackingRef()) {
+      return false;
     }
     if (peerFieldType instanceof FieldTypes.CollectionFieldType
         && localFieldType instanceof FieldTypes.CollectionFieldType) {
@@ -313,10 +328,6 @@ public final class FieldInfo implements Serializable {
     }
     if (peerFieldType instanceof FieldTypes.EnumFieldType
         && localFieldType instanceof FieldTypes.EnumFieldType) {
-      return sameUnresolvedOrNormalizedNestedTypeId(
-          peerFieldType.getTypeId(), localFieldType.getTypeId());
-    }
-    if (isUserDefinedNestedType(peerFieldType) && isUserDefinedNestedType(localFieldType)) {
       return sameUnresolvedOrNormalizedNestedTypeId(
           peerFieldType.getTypeId(), localFieldType.getTypeId());
     }

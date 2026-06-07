@@ -857,7 +857,7 @@ func matchedByteFamilyClassification() throws {
 }
 
 @Test
-func matchedNestedScalarShapeRejectsNullableDrift() throws {
+func matchedNestedScalarShapeAcceptsNullableDrift() throws {
   let empty = MetaString.empty(specialChar1: "_", specialChar2: "_")
   let local = try TypeMeta(
     typeID: TypeId.compatibleStruct.rawValue,
@@ -890,9 +890,8 @@ func matchedNestedScalarShapeRejectsNullableDrift() throws {
           generics: [TypeMeta.FieldType(typeID: TypeId.int32.rawValue, nullable: true)]))
     ])
 
-  try expectInvalidData {
-    _ = try remote.assigningFieldIDs(from: local)
-  }
+  let resolved = try remote.assigningFieldIDs(from: local)
+  #expect(resolved.fields[0].fieldID == 1)
 }
 
 @Test
@@ -1297,7 +1296,7 @@ func compatibleRejectsNestedListArrayPair() throws {
 }
 
 @Test
-func compatibleRejectsNestedNullableScalar() throws {
+func compatibleReadsNestedNullableScalarWithoutNulls() throws {
   let writer = Fory(config: .init(trackRef: false, compatible: true))
   writer.register(CompatibleNestedNullableListV1.self, id: 9927)
 
@@ -1305,11 +1304,12 @@ func compatibleRejectsNestedNullableScalar() throws {
   reader.register(CompatibleNestedRequiredListV2.self, id: 9927)
 
   let bytes = try writer.serialize(CompatibleNestedNullableListV1(values: [[1, 2]]))
-  #expect(
-    throws: ForyError.invalidData("compatible field values cannot be read as local field values")
-  ) {
-    let _: CompatibleNestedRequiredListV2 = try reader.deserialize(bytes)
-  }
+  let decoded: CompatibleNestedRequiredListV2 = try reader.deserialize(bytes)
+  #expect(decoded.values == [[1, 2]])
+
+  let nullBytes = try writer.serialize(CompatibleNestedNullableListV1(values: [[1, nil, 2]]))
+  let decodedWithNull: CompatibleNestedRequiredListV2 = try reader.deserialize(nullBytes)
+  #expect(decodedWithNull.values == [[1, 0, 2]])
 }
 
 @Test

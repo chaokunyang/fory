@@ -347,11 +347,7 @@ final class CompatibleCollectionArrayReader {
       return materializeTarget(array, arrayTypeId, targetType);
     }
     if (readMode == READ_LIST_TO_LIST) {
-      Object array = readListPayloadAsPrimitiveArray(readContext, arrayTypeId, elementTypeId);
-      if (array == null) {
-        return null;
-      }
-      return materializeTarget(array, arrayTypeId, targetType);
+      return readListPayloadAsListTarget(readContext, arrayTypeId, elementTypeId, targetType);
     }
     if (readMode == READ_ARRAY_TO_LIST) {
       Object array = readDenseArrayPayload(readContext, arrayTypeId);
@@ -597,9 +593,9 @@ final class CompatibleCollectionArrayReader {
       boolean sameType = (flags & CollectionFlags.IS_SAME_TYPE) == CollectionFlags.IS_SAME_TYPE;
       boolean declared =
           (flags & CollectionFlags.IS_DECL_ELEMENT_TYPE) == CollectionFlags.IS_DECL_ELEMENT_TYPE;
-      if (hasNull || trackingRef) {
+      if (trackingRef) {
         throw new DeserializationException(
-            "Cannot read nullable or ref-tracked peer list<T> payload into local array<T> field");
+            "Cannot read ref-tracked peer list<T> payload into local array<T> field");
       }
       if (!sameType) {
         throw new DeserializationException(
@@ -615,8 +611,58 @@ final class CompatibleCollectionArrayReader {
                   + elementTypeId);
         }
       }
+      return readListPrimitiveElements(buffer, numElements, arrayTypeId, elementTypeId, hasNull);
     }
-    return readListPrimitiveElements(buffer, numElements, arrayTypeId, elementTypeId);
+    return readListPrimitiveElements(buffer, numElements, arrayTypeId, elementTypeId, false);
+  }
+
+  private static Object readListPayloadAsListTarget(
+      ReadContext readContext, int arrayTypeId, int elementTypeId, Class<?> targetType) {
+    MemoryBuffer buffer = readContext.getBuffer();
+    int numElements = buffer.readVarUInt32Small7();
+    validateElementCount(readContext.getConfig(), numElements);
+    validateElementStorageSize(readContext.getConfig(), numElements, elementSize(arrayTypeId));
+    if (numElements == 0) {
+      Object array = readListPrimitiveElements(buffer, 0, arrayTypeId, elementTypeId, false);
+      return materializeTarget(array, arrayTypeId, targetType);
+    }
+    int flags = buffer.readByte();
+    boolean hasNull = (flags & CollectionFlags.HAS_NULL) == CollectionFlags.HAS_NULL;
+    boolean trackingRef = (flags & CollectionFlags.TRACKING_REF) == CollectionFlags.TRACKING_REF;
+    boolean sameType = (flags & CollectionFlags.IS_SAME_TYPE) == CollectionFlags.IS_SAME_TYPE;
+    boolean declared =
+        (flags & CollectionFlags.IS_DECL_ELEMENT_TYPE) == CollectionFlags.IS_DECL_ELEMENT_TYPE;
+    if (trackingRef) {
+      throw new DeserializationException(
+          "Cannot read ref-tracked peer list<T> payload into local list<T> field");
+    }
+    if (!sameType) {
+      throw new DeserializationException(
+          "Cannot read peer list<T> payload into local list<T> field");
+    }
+    if (!declared) {
+      TypeInfo payloadElementTypeInfo = readContext.getTypeResolver().readTypeInfo(readContext);
+      if (payloadElementTypeInfo.getTypeId() != elementTypeId) {
+        throw new DeserializationException(
+            "Cannot read peer list<T> element type id "
+                + payloadElementTypeInfo.getTypeId()
+                + " as local element type id "
+                + elementTypeId);
+      }
+    }
+    if (hasNull) {
+      // Nullable LIST element metadata is not a schema-pair rejection. Only boxed list targets can
+      // preserve actual null elements; dense primitive array/list targets fail while reading the
+      // nullable payload because they cannot represent null elements.
+      if (!targetType.isAssignableFrom(ArrayList.class)) {
+        throw new DeserializationException(
+            "Cannot read null peer list<T> element into local list<T> field");
+      }
+      return readNullableListBoxedElements(buffer, numElements, arrayTypeId, elementTypeId);
+    }
+    Object array =
+        readListPrimitiveElements(buffer, numElements, arrayTypeId, elementTypeId, false);
+    return materializeTarget(array, arrayTypeId, targetType);
   }
 
   private static Object readDenseArrayPayload(ReadContext readContext, int arrayTypeId) {
@@ -714,12 +760,15 @@ final class CompatibleCollectionArrayReader {
   }
 
   private static Object readListPrimitiveElements(
-      MemoryBuffer buffer, int numElements, int arrayTypeId, int elementTypeId) {
+      MemoryBuffer buffer, int numElements, int arrayTypeId, int elementTypeId, boolean hasNull) {
     switch (elementTypeId) {
       case Types.BOOL:
         {
           boolean[] values = new boolean[numElements];
           for (int i = 0; i < numElements; i++) {
+            if (hasNull) {
+              readNonNullListElement(buffer);
+            }
             values[i] = buffer.readBoolean();
           }
           return values;
@@ -728,7 +777,14 @@ final class CompatibleCollectionArrayReader {
       case Types.UINT8:
         {
           byte[] values = new byte[numElements];
-          buffer.readBytes(values);
+          if (hasNull) {
+            for (int i = 0; i < numElements; i++) {
+              readNonNullListElement(buffer);
+              values[i] = buffer.readByte();
+            }
+          } else {
+            buffer.readBytes(values);
+          }
           return values;
         }
       case Types.INT16:
@@ -738,6 +794,9 @@ final class CompatibleCollectionArrayReader {
         {
           short[] values = new short[numElements];
           for (int i = 0; i < numElements; i++) {
+            if (hasNull) {
+              readNonNullListElement(buffer);
+            }
             values[i] = buffer.readInt16();
           }
           return values;
@@ -747,6 +806,9 @@ final class CompatibleCollectionArrayReader {
         {
           int[] values = new int[numElements];
           for (int i = 0; i < numElements; i++) {
+            if (hasNull) {
+              readNonNullListElement(buffer);
+            }
             values[i] = buffer.readInt32();
           }
           return values;
@@ -755,6 +817,9 @@ final class CompatibleCollectionArrayReader {
         {
           int[] values = new int[numElements];
           for (int i = 0; i < numElements; i++) {
+            if (hasNull) {
+              readNonNullListElement(buffer);
+            }
             values[i] = buffer.readVarInt32();
           }
           return values;
@@ -763,6 +828,9 @@ final class CompatibleCollectionArrayReader {
         {
           int[] values = new int[numElements];
           for (int i = 0; i < numElements; i++) {
+            if (hasNull) {
+              readNonNullListElement(buffer);
+            }
             values[i] = buffer.readVarUInt32();
           }
           return values;
@@ -772,6 +840,9 @@ final class CompatibleCollectionArrayReader {
         {
           long[] values = new long[numElements];
           for (int i = 0; i < numElements; i++) {
+            if (hasNull) {
+              readNonNullListElement(buffer);
+            }
             values[i] = buffer.readInt64();
           }
           return values;
@@ -780,6 +851,9 @@ final class CompatibleCollectionArrayReader {
         {
           long[] values = new long[numElements];
           for (int i = 0; i < numElements; i++) {
+            if (hasNull) {
+              readNonNullListElement(buffer);
+            }
             values[i] = buffer.readVarInt64();
           }
           return values;
@@ -788,6 +862,9 @@ final class CompatibleCollectionArrayReader {
         {
           long[] values = new long[numElements];
           for (int i = 0; i < numElements; i++) {
+            if (hasNull) {
+              readNonNullListElement(buffer);
+            }
             values[i] = buffer.readTaggedInt64();
           }
           return values;
@@ -796,6 +873,9 @@ final class CompatibleCollectionArrayReader {
         {
           long[] values = new long[numElements];
           for (int i = 0; i < numElements; i++) {
+            if (hasNull) {
+              readNonNullListElement(buffer);
+            }
             values[i] = buffer.readVarUInt64();
           }
           return values;
@@ -804,6 +884,9 @@ final class CompatibleCollectionArrayReader {
         {
           long[] values = new long[numElements];
           for (int i = 0; i < numElements; i++) {
+            if (hasNull) {
+              readNonNullListElement(buffer);
+            }
             values[i] = buffer.readTaggedUInt64();
           }
           return values;
@@ -812,6 +895,9 @@ final class CompatibleCollectionArrayReader {
         {
           float[] values = new float[numElements];
           for (int i = 0; i < numElements; i++) {
+            if (hasNull) {
+              readNonNullListElement(buffer);
+            }
             values[i] = buffer.readFloat32();
           }
           return values;
@@ -820,10 +906,92 @@ final class CompatibleCollectionArrayReader {
         {
           double[] values = new double[numElements];
           for (int i = 0; i < numElements; i++) {
+            if (hasNull) {
+              readNonNullListElement(buffer);
+            }
             values[i] = buffer.readFloat64();
           }
           return values;
         }
+      default:
+        throw new DeserializationException(
+            "Unsupported peer list<T> element type id "
+                + elementTypeId
+                + " for local array<T> type id "
+                + arrayTypeId);
+    }
+  }
+
+  private static void readNonNullListElement(MemoryBuffer buffer) {
+    byte headFlag = buffer.readByte();
+    if (headFlag == Fory.NULL_FLAG) {
+      throw new DeserializationException(
+          "Cannot read null peer list<T> element into local array<T> field");
+    }
+    if (headFlag != Fory.NOT_NULL_VALUE_FLAG) {
+      throw new DeserializationException(
+          "Unexpected nullable peer list<T> element flag " + headFlag);
+    }
+  }
+
+  private static List<Object> readNullableListBoxedElements(
+      MemoryBuffer buffer, int numElements, int arrayTypeId, int elementTypeId) {
+    ArrayList<Object> values = new ArrayList<>(numElements);
+    for (int i = 0; i < numElements; i++) {
+      byte headFlag = buffer.readByte();
+      if (headFlag == Fory.NULL_FLAG) {
+        values.add(null);
+        continue;
+      }
+      if (headFlag != Fory.NOT_NULL_VALUE_FLAG) {
+        throw new DeserializationException(
+            "Unexpected nullable peer list<T> element flag " + headFlag);
+      }
+      values.add(readBoxedListElement(buffer, arrayTypeId, elementTypeId));
+    }
+    return values;
+  }
+
+  private static Object readBoxedListElement(
+      MemoryBuffer buffer, int arrayTypeId, int elementTypeId) {
+    switch (elementTypeId) {
+      case Types.BOOL:
+        return buffer.readBoolean();
+      case Types.INT8:
+        return buffer.readByte();
+      case Types.UINT8:
+        return buffer.readByte() & 0xFF;
+      case Types.INT16:
+        return buffer.readInt16();
+      case Types.UINT16:
+        return buffer.readInt16() & 0xFFFF;
+      case Types.FLOAT16:
+        return Float16.fromBits(buffer.readInt16());
+      case Types.BFLOAT16:
+        return BFloat16.fromBits(buffer.readInt16());
+      case Types.INT32:
+        return buffer.readInt32();
+      case Types.UINT32:
+        return Integer.toUnsignedLong(buffer.readInt32());
+      case Types.VARINT32:
+        return buffer.readVarInt32();
+      case Types.VAR_UINT32:
+        return Integer.toUnsignedLong(buffer.readVarUInt32());
+      case Types.INT64:
+      case Types.UINT64:
+        return buffer.readInt64();
+      case Types.VARINT64:
+        return buffer.readVarInt64();
+      case Types.TAGGED_INT64:
+        return buffer.readTaggedInt64();
+      case Types.VAR_UINT64:
+        return buffer.readVarUInt64();
+      case Types.TAGGED_UINT64:
+        return buffer.readTaggedUInt64();
+      case Types.FLOAT32:
+        return buffer.readFloat32();
+      case Types.FLOAT64:
+        return buffer.readFloat64();
       default:
         throw new DeserializationException(
             "Unsupported peer list<T> element type id "

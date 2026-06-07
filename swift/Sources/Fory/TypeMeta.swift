@@ -757,9 +757,11 @@ public final class TypeMeta: Equatable, @unchecked Sendable {
     if !topLevel,
       compatibleScalarKind(remoteType.typeID) != nil
         || compatibleScalarKind(localType.typeID) != nil {
+      // Untracked nested scalar payloads carry null markers at read time. A nullable schema can
+      // match a non-null local container element; the container reader owns actual-null semantics.
       return remoteType.typeID == localType.typeID
-        && remoteType.nullable == localType.nullable
         && remoteType.trackRef == localType.trackRef
+        && (!remoteType.trackRef || remoteType.nullable == localType.nullable)
         && remoteType.generics.isEmpty
         && localType.generics.isEmpty
     }

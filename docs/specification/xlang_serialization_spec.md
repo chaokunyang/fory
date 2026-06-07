@@ -210,6 +210,11 @@ field during compatible classification; if it accepts the field, reference
 payloads that cannot be represented as dense array element values must fail
 during read.
 
+The dense-array error rule applies to dense-array targets. A matched
+`list<T?>` field read into a local `list<T?>` target must keep using list
+semantics and preserve actual null elements; implementations must not route that
+payload through a dense primitive-array materialization path that rejects nulls.
+
 In schema-compatible mode only, a matched struct/class field may read between
 direct top-level `binary` and direct top-level `array<uint8>` schemas. This is a
 byte-sequence adaptation only: it does not merge TypeDef/ClassDef type IDs,

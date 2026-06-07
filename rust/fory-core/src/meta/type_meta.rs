@@ -283,10 +283,18 @@ impl FieldType {
         if compatible_scalar_type_id(self.type_id) || compatible_scalar_type_id(other.type_id) {
             return !self.track_ref && !other.track_ref && self.type_id == other.type_id;
         }
-        if normalize_type_id_for_eq(self.type_id) != normalize_type_id_for_eq(other.type_id)
-            || self.generics.len() != other.generics.len()
-        {
+        if normalize_type_id_for_eq(self.type_id) != normalize_type_id_for_eq(other.type_id) {
             return false;
+        }
+        if self.generics.len() != other.generics.len() {
+            return collection_missing_generics_match(self, other);
+        }
+        if self.type_id == TypeId::MAP as u32 {
+            return self
+                .generics
+                .iter()
+                .zip(other.generics.iter())
+                .all(|(left, right)| map_entry_shape_match(left, right));
         }
         self.generics
             .iter()
@@ -674,6 +682,40 @@ fn compatible_fingerprint_type_id(type_id: u32) -> u32 {
         }
         _ => type_id,
     }
+}
+
+#[inline(always)]
+fn same_numeric_wire_shape(left: u32, right: u32) -> bool {
+    let left = compatible_fingerprint_type_id(left);
+    left == compatible_fingerprint_type_id(right)
+        && (left == TypeId::VARINT32 as u32
+            || left == TypeId::VARINT64 as u32
+            || left == TypeId::VAR_UINT32 as u32
+            || left == TypeId::VAR_UINT64 as u32)
+}
+
+#[inline(always)]
+fn collection_missing_generics_match(local: &FieldType, remote: &FieldType) -> bool {
+    matches!(
+        normalize_type_id_for_eq(local.type_id),
+        x if x == TypeId::LIST as u32 || x == TypeId::SET as u32 || x == TypeId::MAP as u32
+    ) && (local.generics.is_empty() || remote.generics.is_empty())
+}
+
+#[inline(always)]
+fn map_entry_shape_match(local: &FieldType, remote: &FieldType) -> bool {
+    if local.exact_shape_match(remote) || local.compatible_shape_match(remote) {
+        return true;
+    }
+    // Map readers consume key/value payloads through the remote entry FieldType.
+    // Fixed and variable integer encodings are therefore payload-shape variants
+    // for the same Rust key/value carrier, not top-level scalar conversions.
+    !local.track_ref
+        && !remote.track_ref
+        && local.nullable == remote.nullable
+        && local.generics.is_empty()
+        && remote.generics.is_empty()
+        && same_numeric_wire_shape(local.type_id, remote.type_id)
 }
 
 #[inline(always)]
@@ -1535,6 +1577,49 @@ mod tests {
             ),
         )];
         assert!(assign_remote_field_ids(&nullable_array_local, &mut remote_list).is_err());
+    }
+
+    #[test]
+    fn classifies_map_entry_encoding_shape() {
+        let any_type = FieldType::new_with_ref(crate::type_id::UNKNOWN, false, true, vec![]);
+        let local_map = FieldType::new(
+            crate::type_id::MAP,
+            false,
+            vec![
+                FieldType::new(crate::type_id::VAR_UINT32, false, vec![]),
+                any_type.clone(),
+            ],
+        );
+        let remote_map = FieldType::new(
+            crate::type_id::MAP,
+            false,
+            vec![
+                FieldType::new(crate::type_id::UINT32, false, vec![]),
+                any_type,
+            ],
+        );
+        let local_fields = [FieldInfo::new_with_id(0, "values", local_map)];
+        let mut remote_fields = [FieldInfo::new_with_id(0, "", remote_map)];
+
+        assign_remote_field_ids(&local_fields, &mut remote_fields).unwrap();
+
+        assert_eq!(remote_fields[0].field_id, 1);
+    }
+
+    #[test]
+    fn classifies_missing_collection_generics() {
+        let local_list = FieldType::new(crate::type_id::LIST, false, vec![]);
+        let remote_list = FieldType::new(
+            crate::type_id::LIST,
+            false,
+            vec![FieldType::new(crate::type_id::UNKNOWN, true, vec![])],
+        );
+        let local_fields = [FieldInfo::new("values", local_list)];
+        let mut remote_fields = [FieldInfo::new("values", remote_list)];
+
+        assign_remote_field_ids(&local_fields, &mut remote_fields).unwrap();
+
+        assert_eq!(remote_fields[0].field_id, 1);
     }
 
     #[test]

@@ -84,7 +84,6 @@ public class RustXlangTest extends XlangTestBase {
     // it on large schema-change structs before the test reaches Fory assertions.
     env.put("RUST_MIN_STACK", "4194304");
     env.put("ENABLE_FORY_DEBUG_OUTPUT", "1");
-    env.put("FORY_PANIC_ON_ERROR", caseName.endsWith("_error") ? "0" : "1");
     return new CommandContext(command, env, new File("../../rust"));
   }
 

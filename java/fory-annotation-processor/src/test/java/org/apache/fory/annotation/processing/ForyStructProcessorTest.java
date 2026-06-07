@@ -1016,8 +1016,12 @@ public class ForyStructProcessorTest {
       Fory reader = xlangCompatibleFory(readerLoader, readerType, false, "ListArrayMismatchStruct");
       Object writerValue = writerType.getConstructor().newInstance();
       setField(writerType, writerValue, "values", Arrays.asList(1, 2, 3));
-      byte[] payload = writer.serialize(writerValue);
-      Assert.expectThrows(ForyException.class, () -> reader.deserialize(payload));
+      Object result = reader.deserialize(writer.serialize(writerValue));
+      Assert.assertTrue(
+          Arrays.equals((int[]) getField(readerType, result, "values"), new int[] {1, 2, 3}));
+      setField(writerType, writerValue, "values", Arrays.asList(1, null, 3));
+      byte[] nullElementPayload = writer.serialize(writerValue);
+      Assert.expectThrows(ForyException.class, () -> reader.deserialize(nullElementPayload));
     }
 
     CompilationResult nestedListWriter =

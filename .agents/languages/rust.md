@@ -78,5 +78,5 @@ cargo bench
 cd java
 mvn -T16 install -DskipTests
 cd fory-core
-RUST_BACKTRACE=1 FORY_PANIC_ON_ERROR=1 FORY_RUST_JAVA_CI=1 ENABLE_FORY_DEBUG_OUTPUT=1 mvn test -Dtest=org.apache.fory.xlang.RustXlangTest
+RUST_BACKTRACE=1 FORY_RUST_JAVA_CI=1 ENABLE_FORY_DEBUG_OUTPUT=1 mvn test -Dtest=org.apache.fory.xlang.RustXlangTest
 ```

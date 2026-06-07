@@ -272,6 +272,14 @@ pub(crate) fn gen_read_compatible_with_construction(
     } else {
         crate::util::ok_self_construction(is_tuple, &assign_ts)
     };
+    let same_schema_construction = construction.clone();
+    let same_schema_read_ts: Vec<TokenStream> = bindings
+        .iter()
+        .map(|binding| match binding {
+            FieldBinding::Codec(binding) => binding.read_field(),
+            FieldBinding::Skipped(binding) => binding.read_default(),
+        })
+        .collect();
 
     let match_arms: Vec<TokenStream> = bindings
         .iter()
@@ -387,8 +395,6 @@ pub(crate) fn gen_read_compatible_with_construction(
                 ))?;
             let local_variant_type_meta = local_variant_type_info.get_type_meta();
             let local_fields = local_variant_type_meta.get_field_infos();
-
-            ::fory_core::meta::assign_remote_field_ids(local_fields, &mut fields)?;
         }
     } else {
         quote! {}
@@ -396,8 +402,26 @@ pub(crate) fn gen_read_compatible_with_construction(
 
     let fields_binding = if variant_ident.is_some() {
         quote! {
-            let mut fields = remote_meta.get_field_infos().clone();
             #variant_field_remap
+            let mut remapped_fields: ::std::vec::Vec<::fory_core::meta::FieldInfo>;
+            let fields = if remote_meta.get_namespace().original.as_str()
+                == local_variant_type_meta.get_namespace().original.as_str()
+                && remote_meta.get_type_name().original.as_str()
+                    == local_variant_type_meta.get_type_name().original.as_str()
+            {
+                // Same-name variant TypeMeta is resolved by the synthetic variant TypeInfo during
+                // parsing, so its field ids are already doubled matched dispatch ids. Running
+                // schema matching here again would treat those internal ids as explicit wire ids
+                // and skip every field.
+                remote_meta.get_field_infos()
+            } else {
+                // Compatible enums match variants by tag first. If that tag now names a different
+                // local variant, the remote synthetic variant TypeMeta could not be classified by
+                // name during parsing, so the selected local variant owns the field remap here.
+                remapped_fields = remote_meta.get_field_infos().clone();
+                ::fory_core::meta::assign_remote_field_ids(local_fields, &mut remapped_fields)?;
+                &remapped_fields
+            };
             let local_fields_ptr = local_fields.as_ptr();
         }
     } else {
@@ -406,19 +430,37 @@ pub(crate) fn gen_read_compatible_with_construction(
             let fields = remote_meta.get_field_infos();
         }
     };
+    let schema_setup = if variant_ident.is_some() {
+        quote! {
+            let remote_meta = type_info.get_type_meta_ref();
+            let remote_type_hash = remote_meta.get_hash();
+            #fields_binding
+            if remote_type_hash == local_variant_type_meta.get_hash() {
+                // The payload is still only the variant fields. Reading the whole enum data here
+                // would consume field bytes as a fresh enum tag, so exact variant schemas use the
+                // local sorted field reader directly.
+                #(#same_schema_read_ts)*
+                return #same_schema_construction;
+            }
+        }
+    } else {
+        quote! {
+            let meta = context.get_type_resolver().get_type_meta_by_index_ref(
+                &::std::any::TypeId::of::<Self>(),
+                <Self as ::fory_core::StructSerializer>::fory_type_index(),
+            )?;
+            let local_type_hash = meta.get_hash();
+            let remote_meta = type_info.get_type_meta_ref();
+            let remote_type_hash = remote_meta.get_hash();
+            if remote_type_hash == local_type_hash {
+                return <Self as ::fory_core::Serializer>::fory_read_data(context);
+            }
+            #fields_binding
+        }
+    };
 
     quote! {
-        let meta = context.get_type_resolver().get_type_meta_by_index_ref(
-            &::std::any::TypeId::of::<Self>(),
-            <Self as ::fory_core::StructSerializer>::fory_type_index(),
-        )?;
-        let local_type_hash = meta.get_hash();
-        let remote_meta = type_info.get_type_meta_ref();
-        let remote_type_hash = remote_meta.get_hash();
-        if remote_type_hash == local_type_hash {
-            return <Self as ::fory_core::Serializer>::fory_read_data(context);
-        }
-        #fields_binding
+        #schema_setup
         #(#declare_ts)*
         for _field in fields.iter() {
             match _field.field_id {

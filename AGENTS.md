@@ -90,6 +90,9 @@ This is the entry point for AI guidance in Apache Fory. Read this file first, th
 - Keep class registration enabled unless explicitly requested otherwise.
 - Prefer schema-consistent mode unless compatibility work requires something else.
 - When debugging test errors, always set `ENABLE_FORY_DEBUG_OUTPUT=1` to see debug output.
+- Do not set `FORY_PANIC_ON_ERROR` for normal tests, CI reproduction, or xlang validation.
+  It is a focused debug knob only; omit it from verification commands, but do not filter it
+  from test harnesses when the user command provides it.
 - Never work around failures. Find and fix the root cause. Do not hack, weaken, or bypass tests to make them pass.
 
 ## Source of Truth

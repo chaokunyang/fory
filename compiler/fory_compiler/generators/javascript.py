@@ -916,9 +916,7 @@ class JavaScriptGenerator(BaseGenerator):
                             qname = self._qualified_type_names.get(
                                 id(resolved), resolved.name
                             )
-                            name_info = (
-                                f'{{ namespace: "{ns}", typeName: "{qname}" }}'
-                            )
+                            name_info = f'{{ namespace: "{ns}", typeName: "{qname}" }}'
                         expr = f"Type.union({name_info}{cases_arg})"
                     elif isinstance(resolved, Message):
                         evolving = self.get_effective_evolving(resolved)

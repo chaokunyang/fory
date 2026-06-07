@@ -160,6 +160,30 @@ class CompatibleNestedListEnvelope {
 }
 
 @ForyStruct()
+class CompatibleNestedStringListEnvelope {
+  CompatibleNestedStringListEnvelope();
+
+  @ListField(element: ListType(element: StringType()))
+  List<List<String>> values = <List<String>>[];
+}
+
+@ForyStruct()
+class CompatibleNestedIntMapEnvelope {
+  CompatibleNestedIntMapEnvelope();
+
+  @MapField(key: StringType(), value: Int32Type(encoding: Encoding.fixed))
+  Map<String, int> values = <String, int>{};
+}
+
+@ForyStruct()
+class CompatibleNestedStringMapEnvelope {
+  CompatibleNestedStringMapEnvelope();
+
+  @MapField(key: StringType(), value: StringType())
+  Map<String, String> values = <String, String>{};
+}
+
+@ForyStruct()
 class CompatibleScalarStringEnvelope {
   CompatibleScalarStringEnvelope();
 
@@ -888,6 +912,70 @@ void main() {
       expect(
         () => reader.deserialize<CompatibleNestedListEnvelope>(bytes),
         throwsStateError,
+      );
+    });
+
+    test('rejects nested list scalar changes', () {
+      final writer = Fory();
+      final reader = Fory();
+      ScalarAndTypedArraySerializerTestForyModule.register(
+        writer,
+        CompatibleNestedStringListEnvelope,
+        name: 'test.CompatibleNestedScalarListEnvelope',
+      );
+      ScalarAndTypedArraySerializerTestForyModule.register(
+        reader,
+        CompatibleNestedListEnvelope,
+        name: 'test.CompatibleNestedScalarListEnvelope',
+      );
+
+      final bytes = writer.serialize(
+        CompatibleNestedStringListEnvelope()
+          ..values = <List<String>>[
+            <String>['1'],
+          ],
+      );
+
+      expect(
+        () => reader.deserialize<CompatibleNestedListEnvelope>(bytes),
+        throwsA(
+          isA<StateError>().having(
+            (error) => error.toString(),
+            'message',
+            contains('incompatible local and remote schemas'),
+          ),
+        ),
+      );
+    });
+
+    test('rejects nested map scalar changes', () {
+      final writer = Fory();
+      final reader = Fory();
+      ScalarAndTypedArraySerializerTestForyModule.register(
+        writer,
+        CompatibleNestedStringMapEnvelope,
+        name: 'test.CompatibleNestedScalarMapEnvelope',
+      );
+      ScalarAndTypedArraySerializerTestForyModule.register(
+        reader,
+        CompatibleNestedIntMapEnvelope,
+        name: 'test.CompatibleNestedScalarMapEnvelope',
+      );
+
+      final bytes = writer.serialize(
+        CompatibleNestedStringMapEnvelope()
+          ..values = <String, String>{'x': '1'},
+      );
+
+      expect(
+        () => reader.deserialize<CompatibleNestedIntMapEnvelope>(bytes),
+        throwsA(
+          isA<StateError>().having(
+            (error) => error.toString(),
+            'message',
+            contains('incompatible local and remote schemas'),
+          ),
+        ),
       );
     });
 

@@ -148,11 +148,6 @@ final class StructSerializer extends Serializer<Object?> {
         _typeDef.fields,
         List<int>.generate(_localFields.length, (index) => index * 2),
         _localFields,
-        _localFields.length <= 52 ? 0 : -1,
-        0,
-        -1,
-        -1,
-        0,
       );
     }
     final lastRemoteTypeDef = _lastCompatibleRemoteTypeDef;
@@ -176,16 +171,6 @@ final class StructSerializer extends Serializer<Object?> {
     var hasScalarConversions = false;
     List<bool>? topLevelListArrayPairs;
     var hasTopLevelListArrayPairs = false;
-    var sequentialCompatibleMask =
-        remoteTypeDef.fields.length == _localFields.length &&
-                _localFields.length <= 52
-            ? 0
-            : -1;
-    var singleCompatibleEligible =
-        remoteTypeDef.fields.length == _localFields.length;
-    var singleCompatibleLocalIndex = -1;
-    var singleCompatibleRemoteIndex = -1;
-    var singleCompatibleSourceType = 0;
     for (
       var remoteIndex = 0;
       remoteIndex < remoteTypeDef.fields.length;
@@ -194,17 +179,12 @@ final class StructSerializer extends Serializer<Object?> {
       final remoteField = remoteTypeDef.fields[remoteIndex];
       final localField = _localFieldsByIdentifier[remoteField.identifier];
       if (localField == null) {
-        sequentialCompatibleMask = -1;
-        singleCompatibleEligible = false;
         matchedIds.add(-1);
         fields.add(null);
         scalarSourceTypes?.add(0);
         scalarConversions?.add(null);
         topLevelListArrayPairs?.add(false);
         continue;
-      }
-      if (sequentialCompatibleMask >= 0 && localField.index != remoteIndex) {
-        sequentialCompatibleMask = -1;
       }
       final topLevelListArrayPair = _topLevelListArrayPair(
         localField.field,
@@ -262,25 +242,6 @@ final class StructSerializer extends Serializer<Object?> {
       }
       final matchedId =
           exactField ? localField.index * 2 : localField.index * 2 + 1;
-      if (sequentialCompatibleMask >= 0 && !exactField) {
-        sequentialCompatibleMask |= 1 << localField.index;
-      }
-      if (!exactField) {
-        if (singleCompatibleEligible &&
-            scalarConversion != null &&
-            singleCompatibleLocalIndex < 0) {
-          singleCompatibleLocalIndex = localField.index;
-          singleCompatibleRemoteIndex = remoteIndex;
-          final sourceType = scalarConversion.remoteField.fieldType;
-          singleCompatibleSourceType =
-              sourceType.nullable ? -sourceType.typeId - 1 : sourceType.typeId;
-        } else {
-          singleCompatibleEligible = false;
-          singleCompatibleLocalIndex = -1;
-          singleCompatibleRemoteIndex = -1;
-          singleCompatibleSourceType = 0;
-        }
-      }
       final mergedField =
           exactField || topLevelListArrayPair || scalarConversion != null
               ? localField
@@ -301,42 +262,10 @@ final class StructSerializer extends Serializer<Object?> {
       scalarConversions?.add(scalarConversion);
       topLevelListArrayPairs?.add(topLevelListArrayPair);
     }
-    var sequentialCompatibleSourceType = 0;
-    if (sequentialCompatibleMask > 0 &&
-        sequentialCompatibleMask & (sequentialCompatibleMask - 1) == 0 &&
-        scalarSourceTypes != null) {
-      sequentialCompatibleSourceType =
-          scalarSourceTypes[sequentialCompatibleMask.bitLength - 1];
-    }
-    if (singleCompatibleEligible && singleCompatibleLocalIndex >= 0) {
-      for (var index = 0; index < matchedIds.length; index += 1) {
-        final localIndex = _singleMoveLocalIndex(
-          index,
-          singleCompatibleLocalIndex,
-          singleCompatibleRemoteIndex,
-        );
-        final expectedMatchedId =
-            localIndex * 2 + (localIndex == singleCompatibleLocalIndex ? 1 : 0);
-        if (matchedIds[index] != expectedMatchedId) {
-          singleCompatibleEligible = false;
-          break;
-        }
-      }
-    }
-    if (!singleCompatibleEligible || singleCompatibleLocalIndex < 0) {
-      singleCompatibleLocalIndex = -1;
-      singleCompatibleRemoteIndex = -1;
-      singleCompatibleSourceType = 0;
-    }
     final layout = CompatibleStructReadLayout(
       remoteTypeDef.fields,
       List<int>.unmodifiable(matchedIds),
       List<SerializationFieldInfo?>.unmodifiable(fields),
-      sequentialCompatibleMask,
-      sequentialCompatibleSourceType,
-      singleCompatibleLocalIndex,
-      singleCompatibleRemoteIndex,
-      singleCompatibleSourceType,
       hasScalarConversions ? List<int>.unmodifiable(scalarSourceTypes!) : null,
       hasScalarConversions
           ? List<CompatibleScalarConversion?>.unmodifiable(scalarConversions!)
@@ -350,38 +279,6 @@ final class StructSerializer extends Serializer<Object?> {
     _lastCompatibleReadLayout = layout;
     return layout;
   }
-}
-
-int _singleMoveLocalIndex(
-  int remoteIndex,
-  int localIndex,
-  int remoteCompatibleIndex,
-) {
-  if (localIndex < remoteCompatibleIndex) {
-    if (remoteIndex < localIndex) {
-      return remoteIndex;
-    }
-    if (remoteIndex < remoteCompatibleIndex) {
-      return remoteIndex + 1;
-    }
-    if (remoteIndex == remoteCompatibleIndex) {
-      return localIndex;
-    }
-    return remoteIndex;
-  }
-  if (localIndex > remoteCompatibleIndex) {
-    if (remoteIndex < remoteCompatibleIndex) {
-      return remoteIndex;
-    }
-    if (remoteIndex == remoteCompatibleIndex) {
-      return localIndex;
-    }
-    if (remoteIndex <= localIndex) {
-      return remoteIndex - 1;
-    }
-    return remoteIndex;
-  }
-  return remoteIndex;
 }
 
 bool _topLevelListArrayPair(FieldInfo localField, FieldInfo remoteField) {

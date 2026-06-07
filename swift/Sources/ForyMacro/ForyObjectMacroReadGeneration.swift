@@ -271,29 +271,10 @@ private func buildStructReadCompatibleDataDecl(
   let changedFallbackDecl = buildStructChangedFallbackDecl(
     defaults: compatibleDefaults,
     cases: compatibleCases,
-    ctorArgs: ctorArgs,
-    sortedFields: sortedFields
-  )
-  let sequentialLeadingCompatBody = buildSequentialCompatStructBody(
-    fields: fields,
-    sortedFields: sortedFields,
-    defaults: compatibleDefaults,
-    declareIndex: true,
-    includeExact: false,
-    includeLeadingCompat: true
-  )
-  let sequentialCompatBody = buildSequentialCompatStructBody(
-    fields: fields,
-    sortedFields: sortedFields,
-    defaults: compatibleDefaults,
-    declareIndex: false,
-    includeExact: true,
-    includeLeadingCompat: false
+    ctorArgs: ctorArgs
   )
   let bufferBinding =
-    (schemaReadBody.contains("__buffer") || compatibleAlignedReadBody.contains("__buffer")
-      || sequentialLeadingCompatBody.contains("__buffer")
-      || sequentialCompatBody.contains("__buffer"))
+    (schemaReadBody.contains("__buffer") || compatibleAlignedReadBody.contains("__buffer"))
     ? "let __buffer = context.buffer\n        " : ""
 
   return """
@@ -304,7 +285,6 @@ private func buildStructReadCompatibleDataDecl(
         \(bufferBinding)guard let typeMeta = remoteTypeInfo.compatibleTypeMeta else {
             throw ForyError.invalidData("compatible type metadata is required")
         }
-        \(sequentialLeadingCompatBody)
         if let localHeaderHash = remoteTypeInfo.typeDefHeaderHash,
            typeMeta.headerHash == localHeaderHash,
            typeMeta.fields == Self.foryFieldsInfo(trackRef: context.trackRef) {
@@ -319,11 +299,9 @@ private func buildStructReadCompatibleDataDecl(
                 \(ctorArgs)
             )
         }
-        \(sequentialCompatBody)
         return try Self.__foryReadChangedData(
             context,
-            typeMeta: typeMeta,
-            readPlan: __compatibleIndex
+            typeMeta: typeMeta
         )
     }
     """
@@ -332,24 +310,16 @@ private func buildStructReadCompatibleDataDecl(
 private func buildStructChangedFallbackDecl(
   defaults: String,
   cases: String,
-  ctorArgs: String,
-  sortedFields: [ParsedField]
+  ctorArgs: String
 ) -> String {
-  let remoteOrderFastPaths = buildRemoteOrderSingleCompatStructPaths(
-    sortedFields: sortedFields,
-    ctorArgs: ctorArgs
-  )
-  let bufferBinding =
-    (cases.contains("__buffer") || remoteOrderFastPaths.contains("__buffer"))
-    ? "let __buffer = context.buffer\n        " : ""
+  let bufferBinding = cases.contains("__buffer") ? "let __buffer = context.buffer\n        " : ""
   return """
       @inline(never)
       private static func __foryReadChangedData(
           _ context: ReadContext,
-          typeMeta: TypeMeta,
-          readPlan: Int
+          typeMeta: TypeMeta
       ) throws -> Self {
-          \(bufferBinding)\(remoteOrderFastPaths)
+          \(bufferBinding)
           \(defaults)
           for remoteField in typeMeta.fields {
               switch Int(remoteField.fieldID ?? -1) {
@@ -367,224 +337,12 @@ private func buildStructChangedFallbackDecl(
     """
 }
 
-private func buildRemoteOrderSingleCompatStructPaths(
-  sortedFields: [ParsedField],
-  ctorArgs: String
-) -> String {
-  var sections: [String] = []
-  for compatibleIndex in sortedFields.indices {
-    let compatibleField = sortedFields[compatibleIndex]
-    guard remoteOrderSingleCompatEligible(compatibleField) else {
-      continue
-    }
-    let remoteOrder = remoteOrderSingleVarint32(sortedFields, compatibleIndex: compatibleIndex)
-    guard !remoteOrder.isEmpty,
-      !remoteOrder.enumerated().allSatisfy({ $0.offset == $0.element })
-    else {
-      continue
-    }
-    let readPlan = -3 - compatibleIndex
-    let readBody = remoteOrderReadBody(
-      sortedFields: sortedFields,
-      remoteOrder: remoteOrder,
-      compatibleIndex: compatibleIndex
-    )
-    sections.append(
-      """
-      if readPlan == \(readPlan) {
-          \(readBody)
-          return Self(
-              \(ctorArgs)
-          )
-      }
-      """)
-  }
-  return sections.joined(separator: "\n        ")
-}
-
-private func remoteOrderReadBody(
-  sortedFields: [ParsedField],
-  remoteOrder: [Int],
-  compatibleIndex: Int
-) -> String {
-  var sections: [String] = []
-  var primitiveLines: [String] = []
-  var declaredPrimitives: Set<String> = []
-
-  func flushPrimitiveLines() {
-    guard !primitiveLines.isEmpty else {
-      return
-    }
-    let body = primitiveLines.joined(separator: "\n              ")
-    sections.append(
-      """
-      try UnsafeUtil.readRegion(buffer: __buffer) { __base, __length in
-          var __readerIndex = 0
-          \(body)
-          return __readerIndex
-      }
-      """)
-    primitiveLines.removeAll(keepingCapacity: true)
-  }
-
-  for localIndex in remoteOrder {
-    let field = sortedFields[localIndex]
-    if localIndex == compatibleIndex {
-      if declaredPrimitives.insert(field.name).inserted {
-        sections.append("var __\(field.name): \(field.typeText) = \(field.typeText).foryDefault()")
-      }
-      primitiveLines.append(
-        "__\(field.name) = Int64(try UnsafeUtil.readInt32(from: __base, length: __length, index: &__readerIndex))"
-      )
-      continue
-    }
-    if let readExpr = primitiveRemoteOrderReadAdvanceExpr(for: field) {
-      if declaredPrimitives.insert(field.name).inserted {
-        sections.append("var __\(field.name): \(field.typeText) = \(field.typeText).foryDefault()")
-      }
-      primitiveLines.append(readExpr)
-      continue
-    }
-    flushPrimitiveLines()
-    sections.append("let __\(field.name) = \(compatibleSchemaReadFieldExpr(field))")
-  }
-  flushPrimitiveLines()
-  return sections.joined(separator: "\n            ")
-}
-
-private func primitiveRemoteOrderReadAdvanceExpr(for field: ParsedField) -> String? {
-  let fixedRead: String
-  let width: Int
-  switch trimType(field.typeText) {
-  case "Bool":
-    fixedRead = "UnsafeUtil.readBoolUnchecked(from: __base, index: __readerIndex)"
-    width = 1
-  case "Int8":
-    fixedRead = "UnsafeUtil.readInt8Unchecked(from: __base, index: __readerIndex)"
-    width = 1
-  case "UInt8":
-    fixedRead = "UnsafeUtil.readUInt8Unchecked(from: __base, index: __readerIndex)"
-    width = 1
-  case "Int16":
-    fixedRead = "UnsafeUtil.readInt16Unchecked(from: __base, index: __readerIndex)"
-    width = 2
-  case "UInt16":
-    fixedRead = "UnsafeUtil.readUInt16Unchecked(from: __base, index: __readerIndex)"
-    width = 2
-  case "Float":
-    fixedRead = "UnsafeUtil.readFloat32Unchecked(from: __base, index: __readerIndex)"
-    width = 4
-  case "Double":
-    fixedRead = "UnsafeUtil.readFloat64Unchecked(from: __base, index: __readerIndex)"
-    width = 8
-  default:
-    if let readExpr = primitiveUnsafePointerReadAdvanceExpr(for: field) {
-      return "__\(field.name) = \(readExpr)"
-    }
-    return nil
-  }
-  return """
-    try UnsafeUtil.checkReadable(length: __length, index: __readerIndex, need: \(width))
-    __\(field.name) = \(fixedRead)
-    __readerIndex += \(width)
-    """
-}
-
-private func remoteOrderSingleCompatEligible(_ field: ParsedField) -> Bool {
-  !field.isOptional && field.dynamicAnyCodec == nil && field.customCodecType == nil
-    && compatibleScalarPayloadType(field.typeText) == "Int64"
-}
-
-private struct RemoteOrderSortField {
-  let field: ParsedField
-  let localIndex: Int
-  let group: Int
-  let typeID: UInt32
-  let isCompressedNumeric: Bool
-  let primitiveSize: Int
-}
-
-private func remoteOrderSingleVarint32(
-  _ sortedFields: [ParsedField],
-  compatibleIndex: Int
-) -> [Int] {
-  let fields = sortedFields.enumerated().map { index, field in
-    if index == compatibleIndex {
-      return RemoteOrderSortField(
-        field: field,
-        localIndex: index,
-        group: field.group,
-        typeID: 5,
-        isCompressedNumeric: true,
-        primitiveSize: 4
-      )
-    }
-    return RemoteOrderSortField(
-      field: field,
-      localIndex: index,
-      group: field.group,
-      typeID: field.typeID,
-      isCompressedNumeric: field.isCompressedNumeric,
-      primitiveSize: field.primitiveSize
-    )
-  }
-  return fields.sorted(by: remoteOrderSortLess).map(\.localIndex)
-}
-
-private func remoteOrderSortLess(
-  _ lhs: RemoteOrderSortField,
-  _ rhs: RemoteOrderSortField
-) -> Bool {
-  if lhs.group != rhs.group {
-    return lhs.group < rhs.group
-  }
-  switch lhs.group {
-  case 1, 2:
-    let lhsCompressed = lhs.isCompressedNumeric ? 1 : 0
-    let rhsCompressed = rhs.isCompressedNumeric ? 1 : 0
-    if lhsCompressed != rhsCompressed {
-      return lhsCompressed < rhsCompressed
-    }
-    if lhs.primitiveSize != rhs.primitiveSize {
-      return lhs.primitiveSize > rhs.primitiveSize
-    }
-    if lhs.typeID != rhs.typeID {
-      return lhs.typeID < rhs.typeID
-    }
-    if let identifierOrder = remoteOrderIdentifierLess(lhs.field, rhs.field) {
-      return identifierOrder
-    }
-  default:
-    if let identifierOrder = remoteOrderIdentifierLess(lhs.field, rhs.field) {
-      return identifierOrder
-    }
-  }
-  return lhs.field.name < rhs.field.name
-}
-
-private func remoteOrderIdentifierLess(_ lhs: ParsedField, _ rhs: ParsedField) -> Bool? {
-  if let lhsID = lhs.fieldID, let rhsID = rhs.fieldID, lhsID != rhsID {
-    return lhsID < rhsID
-  }
-  if lhs.fieldID != nil && rhs.fieldID == nil {
-    return true
-  }
-  if lhs.fieldID == nil && rhs.fieldID != nil {
-    return false
-  }
-  if lhs.fieldIdentifier != rhs.fieldIdentifier {
-    return lhs.fieldIdentifier < rhs.fieldIdentifier
-  }
-  return nil
-}
-
 private func buildClassAssignBody(
   sortedFields: [ParsedField],
   primitiveFastFields: [ParsedField],
   compatibleAligned: Bool
 ) -> String {
-  let remainingAssignLines = sortedFields.dropFirst(primitiveFastFields.count).map {
-    field -> String in
+  let remainingAssignLines = sortedFields.dropFirst(primitiveFastFields.count).map { field -> String in
     let valueExpr: String
     if compatibleAligned {
       valueExpr = compatibleSchemaReadFieldExpr(field)
@@ -616,8 +374,7 @@ private func buildStructReadBody(
   primitiveFastFields: [ParsedField],
   compatibleAligned: Bool
 ) -> String {
-  let remainingReadLines = sortedFields.dropFirst(primitiveFastFields.count).map {
-    field -> String in
+  let remainingReadLines = sortedFields.dropFirst(primitiveFastFields.count).map { field -> String in
     let valueExpr =
       compatibleAligned ? compatibleSchemaReadFieldExpr(field) : schemaReadFieldExpr(field)
     return "let __\(field.name) = \(valueExpr)"
@@ -648,237 +405,6 @@ private func buildStructCompatibleDefaults(_ fields: [ParsedField]) -> String {
     .sorted(by: { $0.originalIndex < $1.originalIndex })
     .map(compatibleDefaultDecl)
     .joined(separator: "\n                ")
-}
-
-private func buildSequentialCompatStructBody(
-  fields: [ParsedField],
-  sortedFields: [ParsedField],
-  defaults: String,
-  declareIndex: Bool = true,
-  includeExact: Bool = true,
-  includeLeadingCompat: Bool = true
-) -> String {
-  let ctorArgs = buildCtorArgs(fields)
-  let exactAssignBody = buildSequentialExactAssignBody(sortedFields)
-  let leadingCompatBody =
-    sortedFields.first.map { compatibleField in
-      buildSequentialSingleCompatAssignBody(
-        sortedFields: sortedFields,
-        compatibleIndex: 0,
-        compatibleField: compatibleField
-      )
-    } ?? ""
-
-  var sections: [String] = []
-  if declareIndex {
-    sections.append("let __compatibleIndex = remoteTypeInfo.compatibleSequentialReadPlan")
-  }
-  if includeExact {
-    sections.append(
-      """
-          if __compatibleIndex == -1 {
-              \(defaults)
-              \(exactAssignBody)
-              return Self(
-                  \(ctorArgs)
-              )
-          }
-      """)
-  }
-  if includeLeadingCompat {
-    sections.append(
-      """
-          if __compatibleIndex == 0 {
-              \(defaults)
-              \(leadingCompatBody)
-              return Self(
-                  \(ctorArgs)
-              )
-          }
-      """)
-  }
-  return sections.joined(separator: "\n          ")
-}
-
-private func buildSequentialExactAssignBody(_ fields: [ParsedField]) -> String {
-  buildSequentialExactAssignBody(fields, excludingIndex: -1)
-}
-
-private func buildSequentialSingleCompatAssignBody(
-  sortedFields: [ParsedField],
-  compatibleIndex: Int,
-  compatibleField: ParsedField
-) -> String {
-  let compatibleValueExpr = readFieldExpr(
-    compatibleField,
-    refModeExpr:
-      "RefMode.from(nullable: remoteField.fieldType.nullable, trackRef: remoteField.fieldType.trackRef)",
-    readTypeInfoExpr:
-      "TypeId.needsTypeInfoForField(TypeId(rawValue: remoteField.fieldType.typeID) ?? .unknown)"
-  )
-  let valueExpr = compatibleScalarReadExpr(
-    compatibleField,
-    compatibleValueExpr: compatibleValueExpr
-  )
-  if let fastBody = leadingCompatInt64Body(
-    sortedFields: sortedFields,
-    compatibleIndex: compatibleIndex,
-    compatibleField: compatibleField,
-    fallbackExpr: valueExpr
-  ) {
-    return fastBody
-  }
-  let compatibleAssign =
-    compatScalarAssignBody(
-      field: compatibleField,
-      fieldIndex: compatibleIndex,
-      fallbackExpr: valueExpr
-    )
-      ?? """
-      let remoteField = typeMeta.fields[\(compatibleIndex)]
-                      __\(compatibleField.name) = \(valueExpr)
-      """
-  var sections: [String] = []
-  let prefixFields = Array(sortedFields.prefix(compatibleIndex))
-  if !prefixFields.isEmpty {
-    sections.append(buildSequentialExactAssignBody(prefixFields))
-  }
-  sections.append(compatibleAssign)
-  let suffixFields = Array(sortedFields.dropFirst(compatibleIndex + 1))
-  if !suffixFields.isEmpty {
-    sections.append(buildSequentialExactAssignBody(suffixFields))
-  }
-  return sections.joined(separator: "\n                    ")
-}
-
-private func leadingCompatInt64Body(
-  sortedFields: [ParsedField],
-  compatibleIndex: Int,
-  compatibleField: ParsedField,
-  fallbackExpr: String
-) -> String? {
-  guard
-    compatibleIndex == 0,
-    !compatibleField.isOptional,
-    compatibleField.dynamicAnyCodec == nil,
-    compatibleField.customCodecType == nil,
-    compatibleScalarPayloadType(compatibleField.typeText) == "Int64"
-  else {
-    return nil
-  }
-  let suffixFields = Array(sortedFields.dropFirst())
-  guard leadingPrimitiveFastPathFields(suffixFields).count == suffixFields.count else {
-    return nil
-  }
-  guard
-    let fastReadBlock = compatInt64Varint32Block(
-      compatibleField: compatibleField,
-      suffixFields: suffixFields
-    )
-  else {
-    return nil
-  }
-  let fallbackSuffix = buildSequentialExactAssignBody(suffixFields)
-  return """
-    let remoteField = typeMeta.fields[0]
-                    if !remoteField.fieldType.nullable && !remoteField.fieldType.trackRef
-                        && remoteField.fieldType.typeID == TypeId.varint32.rawValue {
-                        \(fastReadBlock)
-                    } else {
-                        __\(compatibleField.name) = \(fallbackExpr)
-                        \(fallbackSuffix)
-                    }
-    """
-}
-
-private func compatInt64Varint32Block(
-  compatibleField: ParsedField,
-  suffixFields: [ParsedField]
-) -> String? {
-  var readLines = [
-    "__\(compatibleField.name) = Int64(try UnsafeUtil.readInt32(from: __base, length: __length, index: &__readerIndex))"
-  ]
-  for field in suffixFields {
-    guard let readExpr = primitiveRemoteOrderReadAdvanceExpr(for: field) else {
-      return nil
-    }
-    readLines.append(readExpr)
-  }
-  let readBody = readLines.joined(separator: "\n            ")
-  return """
-    try UnsafeUtil.readRegion(buffer: __buffer) { __base, __length in
-        var __readerIndex = 0
-        \(readBody)
-        return __readerIndex
-    }
-    """
-}
-
-private func compatScalarAssignBody(
-  field: ParsedField,
-  fieldIndex: Int,
-  fallbackExpr: String
-) -> String? {
-  guard
-    !field.isOptional,
-    field.dynamicAnyCodec == nil,
-    field.customCodecType == nil,
-    compatibleScalarPayloadType(field.typeText) == "Int64"
-  else {
-    return nil
-  }
-  return """
-    let remoteField = typeMeta.fields[\(fieldIndex)]
-                    if !remoteField.fieldType.nullable && !remoteField.fieldType.trackRef {
-                        switch TypeId(rawValue: remoteField.fieldType.typeID) ?? .unknown {
-                        case .int8:
-                            __\(field.name) = Int64(try __buffer.readInt8())
-                        case .int16:
-                            __\(field.name) = Int64(try __buffer.readInt16())
-                        case .int32:
-                            __\(field.name) = Int64(try __buffer.readInt32())
-                        case .varint32:
-                            __\(field.name) = Int64(try __buffer.readVarInt32())
-                        case .int64:
-                            __\(field.name) = try __buffer.readInt64()
-                        case .varint64:
-                            __\(field.name) = try __buffer.readVarInt64()
-                        case .taggedInt64:
-                            __\(field.name) = try __buffer.readTaggedInt64()
-                        default:
-                            __\(field.name) = \(fallbackExpr)
-                        }
-                    } else {
-                        __\(field.name) = \(fallbackExpr)
-                    }
-    """
-}
-
-private func buildSequentialExactAssignBody(
-  _ fields: [ParsedField],
-  excludingIndex: Int
-) -> String {
-  var sections: [String] = []
-  var index = 0
-  while index < fields.count {
-    if index == excludingIndex {
-      index += 1
-      continue
-    }
-    let remaining = Array(fields.dropFirst(index))
-    let primitiveFields = leadingPrimitiveFastPathFields(remaining)
-    if !primitiveFields.isEmpty {
-      if let primitiveReadBlock = buildPrimitiveFastStructReadBlock(primitiveFields) {
-        sections.append(primitiveReadBlock)
-      }
-      index += primitiveFields.count
-      continue
-    }
-    let field = fields[index]
-    sections.append("__\(field.name) = \(compatibleSchemaReadFieldExpr(field))")
-    index += 1
-  }
-  return sections.joined(separator: "\n                    ")
 }
 
 private func schemaHashCheckExpr(indent: String = "        ") -> String {
@@ -913,7 +439,7 @@ private func buildCompatibleReadCases(
     )
     return [
       assignCase(sortedIndex * 2, field, directValueExpr),
-      assignCase(sortedIndex * 2 + 1, field, compatibleCaseExpr),
+      assignCase(sortedIndex * 2 + 1, field, compatibleCaseExpr)
     ].joined(separator: "\n\(indent)")
   }.joined(separator: "\n\(indent)")
 }

@@ -769,9 +769,6 @@ final class ForyGenerator extends Generator {
       structSpec,
       readUsesBuffer: readUsesBuffer,
       hasRuntimeFastPath: hasRuntimeFastPath,
-      directPrimitiveRunByStart: directPrimitiveRunByStart,
-      directPrimitiveRunByEnd: directPrimitiveRunByEnd,
-      directPrimitiveRunStartByIndex: directPrimitiveRunStartByIndex,
     );
     output
       ..writeln('}')
@@ -799,9 +796,6 @@ final class ForyGenerator extends Generator {
     _GeneratedStructSpec structSpec, {
     required bool readUsesBuffer,
     required bool hasRuntimeFastPath,
-    required Map<int, _DirectGeneratedPrimitiveRun> directPrimitiveRunByStart,
-    required Map<int, _DirectGeneratedPrimitiveRun> directPrimitiveRunByEnd,
-    required Map<int, int> directPrimitiveRunStartByIndex,
   }) {
     final splitFallback = structSpec.fields.length >= 16;
     output
@@ -819,22 +813,12 @@ final class ForyGenerator extends Generator {
             ..writeln('      context.reference(value);')
             ..writeln('    }');
         }
-        if (readUsesBuffer) {
+        if (!splitFallback && readUsesBuffer) {
           output.writeln('    final buffer = context.buffer;');
         }
-        if (hasRuntimeFastPath) {
+        if (!splitFallback && hasRuntimeFastPath) {
           output.writeln('    final fields = _readFields(context);');
         }
-        _writeSequentialCompatFastPath(
-          output,
-          structSpec,
-          mutable: true,
-          includeFallback: !splitFallback,
-          directPrimitiveRunByStart: directPrimitiveRunByStart,
-          directPrimitiveRunByEnd: directPrimitiveRunByEnd,
-          directPrimitiveRunStartByIndex: directPrimitiveRunStartByIndex,
-        );
-        _writeReorderedSingleCompatFastPaths(output, structSpec, mutable: true);
         if (splitFallback) {
           output.writeln(
             '    return _readCompatibleStructFallback(context, layout, value);',
@@ -843,26 +827,12 @@ final class ForyGenerator extends Generator {
           _writeMutableCompatibleSwitchFallback(output, structSpec);
         }
       case _ConstructorMode.constructor:
-        if (readUsesBuffer) {
+        if (!splitFallback && readUsesBuffer) {
           output.writeln('    final buffer = context.buffer;');
         }
-        if (hasRuntimeFastPath) {
+        if (!splitFallback && hasRuntimeFastPath) {
           output.writeln('    final fields = _readFields(context);');
         }
-        _writeSequentialCompatFastPath(
-          output,
-          structSpec,
-          mutable: false,
-          includeFallback: !splitFallback,
-          directPrimitiveRunByStart: directPrimitiveRunByStart,
-          directPrimitiveRunByEnd: directPrimitiveRunByEnd,
-          directPrimitiveRunStartByIndex: directPrimitiveRunStartByIndex,
-        );
-        _writeReorderedSingleCompatFastPaths(
-          output,
-          structSpec,
-          mutable: false,
-        );
         if (splitFallback) {
           output.writeln(
             '    return _readCompatibleStructFallback(context, layout);',
@@ -878,9 +848,6 @@ final class ForyGenerator extends Generator {
         structSpec,
         readUsesBuffer: readUsesBuffer,
         hasRuntimeFastPath: hasRuntimeFastPath,
-        directPrimitiveRunByStart: directPrimitiveRunByStart,
-        directPrimitiveRunByEnd: directPrimitiveRunByEnd,
-        directPrimitiveRunStartByIndex: directPrimitiveRunStartByIndex,
       );
     }
   }
@@ -890,9 +857,6 @@ final class ForyGenerator extends Generator {
     _GeneratedStructSpec structSpec, {
     required bool readUsesBuffer,
     required bool hasRuntimeFastPath,
-    required Map<int, _DirectGeneratedPrimitiveRun> directPrimitiveRunByStart,
-    required Map<int, _DirectGeneratedPrimitiveRun> directPrimitiveRunByEnd,
-    required Map<int, int> directPrimitiveRunStartByIndex,
   }) {
     final mutable = structSpec.constructorPlan.mode == _ConstructorMode.mutable;
     final valueParameter = mutable ? ', ${structSpec.name} value' : '';
@@ -908,15 +872,6 @@ final class ForyGenerator extends Generator {
     if (hasRuntimeFastPath) {
       output.writeln('    final fields = _readFields(context);');
     }
-    _writeSequentialCompatFastPath(
-      output,
-      structSpec,
-      mutable: mutable,
-      includeFallback: true,
-      directPrimitiveRunByStart: directPrimitiveRunByStart,
-      directPrimitiveRunByEnd: directPrimitiveRunByEnd,
-      directPrimitiveRunStartByIndex: directPrimitiveRunStartByIndex,
-    );
     if (mutable) {
       _writeMutableCompatibleSwitchFallback(output, structSpec);
     } else {
@@ -1051,623 +1006,6 @@ final class ForyGenerator extends Generator {
     output.writeln('    return value;');
   }
 
-  void _writeSequentialCompatFastPath(
-    StringBuffer output,
-    _GeneratedStructSpec structSpec, {
-    required bool mutable,
-    required bool includeFallback,
-    required Map<int, _DirectGeneratedPrimitiveRun> directPrimitiveRunByStart,
-    required Map<int, _DirectGeneratedPrimitiveRun> directPrimitiveRunByEnd,
-    required Map<int, int> directPrimitiveRunStartByIndex,
-  }) {
-    output.writeln('    if (layout.hasSequentialFields) {');
-    final incompatibleMask = _sequentialIncompatibleMask(structSpec);
-    if (incompatibleMask == 0) {
-      _writeSequentialExactBody(
-        output,
-        structSpec,
-        mutable: mutable,
-        directPrimitiveRunByStart: directPrimitiveRunByStart,
-        directPrimitiveRunByEnd: directPrimitiveRunByEnd,
-        directPrimitiveRunStartByIndex: directPrimitiveRunStartByIndex,
-        indent: '      ',
-      );
-      output.writeln('    }');
-      return;
-    }
-    output.writeln(
-      '      final compatibleMask = layout.sequentialCompatibleMask;',
-    );
-    _writeSequentialNoConversionFastPath(
-      output,
-      structSpec,
-      incompatibleMask: incompatibleMask,
-      mutable: mutable,
-      directPrimitiveRunByStart: directPrimitiveRunByStart,
-      directPrimitiveRunByEnd: directPrimitiveRunByEnd,
-      directPrimitiveRunStartByIndex: directPrimitiveRunStartByIndex,
-    );
-    _writeSingleCompatFastPaths(
-      output,
-      structSpec,
-      mutable: mutable,
-      directPrimitiveRunByStart: directPrimitiveRunByStart,
-      directPrimitiveRunByEnd: directPrimitiveRunByEnd,
-      directPrimitiveRunStartByIndex: directPrimitiveRunStartByIndex,
-    );
-    if (!includeFallback) {
-      output.writeln('    }');
-      return;
-    }
-    if (mutable) {
-      for (var index = 0; index < structSpec.fields.length; index += 1) {
-        final field = structSpec.fields[index];
-        final mask = 1 << index;
-        output.writeln('      if ((compatibleMask & $mask) == 0) {');
-        _writeExactCompatRead(
-          output,
-          structSpec,
-          field,
-          index,
-          'value.${field.name}',
-          'value.${field.name}',
-          '        ',
-        );
-        output.writeln('      } else {');
-        _writeCompatConversionRead(
-          output,
-          structSpec,
-          field,
-          'value.${field.name}',
-          'value.${field.name}',
-          '$index',
-          '        ',
-        );
-        output.writeln('      }');
-      }
-      output
-        ..writeln('      return value;')
-        ..writeln('    }');
-      return;
-    }
-    for (var index = 0; index < structSpec.fields.length; index += 1) {
-      final field = structSpec.fields[index];
-      final mask = 1 << index;
-      output
-        ..writeln('      late final ${field.displayType} ${field.localName};')
-        ..writeln('      if ((compatibleMask & $mask) == 0) {');
-      _writeExactCompatRead(
-        output,
-        structSpec,
-        field,
-        index,
-        field.localName,
-        null,
-        '        ',
-      );
-      output.writeln('      } else {');
-      _writeCompatConversionRead(
-        output,
-        structSpec,
-        field,
-        field.localName,
-        null,
-        '$index',
-        '        ',
-      );
-      output.writeln('      }');
-    }
-    final constructorInvocation = _constructorInvocation(structSpec);
-    output.writeln('      final value = $constructorInvocation;');
-    for (final fieldName
-        in structSpec.constructorPlan.postConstructionFieldNames) {
-      final field = structSpec.fields.firstWhere(
-        (item) => item.name == fieldName,
-      );
-      output.writeln('      value.${field.name} = ${field.localName};');
-    }
-    output
-      ..writeln('      return value;')
-      ..writeln('    }');
-  }
-
-  void _writeSequentialNoConversionFastPath(
-    StringBuffer output,
-    _GeneratedStructSpec structSpec, {
-    required bool mutable,
-    required int incompatibleMask,
-    required Map<int, _DirectGeneratedPrimitiveRun> directPrimitiveRunByStart,
-    required Map<int, _DirectGeneratedPrimitiveRun> directPrimitiveRunByEnd,
-    required Map<int, int> directPrimitiveRunStartByIndex,
-  }) {
-    final allFieldsMask = (1 << structSpec.fields.length) - 1;
-    if (incompatibleMask == allFieldsMask) {
-      output.writeln('      if (compatibleMask == 0) {');
-    } else {
-      output.writeln('      if ((compatibleMask & $incompatibleMask) == 0) {');
-    }
-    _writeSequentialExactBody(
-      output,
-      structSpec,
-      mutable: mutable,
-      directPrimitiveRunByStart: directPrimitiveRunByStart,
-      directPrimitiveRunByEnd: directPrimitiveRunByEnd,
-      directPrimitiveRunStartByIndex: directPrimitiveRunStartByIndex,
-      indent: '        ',
-    );
-    output.writeln('      }');
-  }
-
-  int _sequentialIncompatibleMask(_GeneratedStructSpec structSpec) {
-    var directCompatibleMask = 0;
-    for (var index = 0; index < structSpec.fields.length; index += 1) {
-      if (_compatibleSequentialReadMatchesExact(structSpec.fields[index])) {
-        directCompatibleMask |= 1 << index;
-      }
-    }
-    final allFieldsMask = (1 << structSpec.fields.length) - 1;
-    return allFieldsMask & ~directCompatibleMask;
-  }
-
-  bool _compatibleSequentialReadMatchesExact(_GeneratedFieldSpec field) {
-    if (_usesDirectGeneratedStructFieldFastPath(field)) {
-      return true;
-    }
-    return _usesDirectGeneratedTypedContainerReadFastPath(field) &&
-        _usesGeneratedStructElementReadFastPath(field);
-  }
-
-  void _writeSequentialExactBody(
-    StringBuffer output,
-    _GeneratedStructSpec structSpec, {
-    required bool mutable,
-    required Map<int, _DirectGeneratedPrimitiveRun> directPrimitiveRunByStart,
-    required Map<int, _DirectGeneratedPrimitiveRun> directPrimitiveRunByEnd,
-    required Map<int, int> directPrimitiveRunStartByIndex,
-    required String indent,
-  }) {
-    for (var index = 0; index < structSpec.fields.length; index += 1) {
-      final field = structSpec.fields[index];
-      final directPrimitiveRun = directPrimitiveRunByStart[index];
-      if (directPrimitiveRun != null) {
-        _writeDirectGeneratedReadRunStart(
-          output,
-          structSpec.fields,
-          directPrimitiveRun,
-          indent,
-        );
-      }
-      final target =
-          mutable
-              ? 'value.${field.name}'
-              : 'final ${field.displayType} ${field.localName}';
-      _writeSequentialExactRead(
-        output,
-        structSpec,
-        field,
-        index,
-        directPrimitiveRunStartByIndex,
-        target,
-        mutable ? 'value.${field.name}' : null,
-        indent,
-      );
-      final directPrimitiveEndRun = directPrimitiveRunByEnd[index];
-      if (directPrimitiveEndRun != null) {
-        _writeDirectGeneratedReadRunEnd(output, directPrimitiveEndRun, indent);
-      }
-    }
-    if (!mutable) {
-      final constructorInvocation = _constructorInvocation(structSpec);
-      output.writeln('${indent}final value = $constructorInvocation;');
-      for (final fieldName
-          in structSpec.constructorPlan.postConstructionFieldNames) {
-        final field = structSpec.fields.firstWhere(
-          (item) => item.name == fieldName,
-        );
-        output.writeln('${indent}value.${field.name} = ${field.localName};');
-      }
-    }
-    output.writeln('${indent}return value;');
-  }
-
-  void _writeSingleCompatFastPaths(
-    StringBuffer output,
-    _GeneratedStructSpec structSpec, {
-    required bool mutable,
-    required Map<int, _DirectGeneratedPrimitiveRun> directPrimitiveRunByStart,
-    required Map<int, _DirectGeneratedPrimitiveRun> directPrimitiveRunByEnd,
-    required Map<int, int> directPrimitiveRunStartByIndex,
-  }) {
-    for (var index = 0; index < structSpec.fields.length; index += 1) {
-      final field = structSpec.fields[index];
-      if (!_usesDirectCompatibleInt64ScalarRead(field)) {
-        continue;
-      }
-      final mask = 1 << index;
-      output.writeln(
-        '      if (compatibleMask == $mask && layout.sequentialCompatibleSourceType == TypeIds.varInt32) {',
-      );
-      _writeSingleCompatBody(
-        output,
-        structSpec,
-        compatibleIndex: index,
-        mutable: mutable,
-        directPrimitiveRunByStart: directPrimitiveRunByStart,
-        directPrimitiveRunByEnd: directPrimitiveRunByEnd,
-        directPrimitiveRunStartByIndex: directPrimitiveRunStartByIndex,
-        indent: '        ',
-        sourceTypeId: TypeIds.varInt32,
-      );
-      output.writeln('      }');
-      output.writeln('      if (compatibleMask == $mask) {');
-      _writeSingleCompatBody(
-        output,
-        structSpec,
-        compatibleIndex: index,
-        mutable: mutable,
-        directPrimitiveRunByStart: directPrimitiveRunByStart,
-        directPrimitiveRunByEnd: directPrimitiveRunByEnd,
-        directPrimitiveRunStartByIndex: directPrimitiveRunStartByIndex,
-        indent: '        ',
-      );
-      output.writeln('      }');
-    }
-  }
-
-  void _writeReorderedSingleCompatFastPaths(
-    StringBuffer output,
-    _GeneratedStructSpec structSpec, {
-    required bool mutable,
-  }) {
-    for (var index = 0; index < structSpec.fields.length; index += 1) {
-      final field = structSpec.fields[index];
-      if (!_usesDirectCompatibleInt64ScalarRead(field)) {
-        continue;
-      }
-      final remoteOrder = _singleCompatRemoteOrder(
-        structSpec,
-        compatibleIndex: index,
-        sourceTypeId: TypeIds.varInt32,
-      );
-      if (_isLocalOrder(remoteOrder)) {
-        continue;
-      }
-      final remoteIndex = remoteOrder.indexOf(index * 2 + 1);
-      if (!_isSingleMoveOrder(remoteOrder, index, remoteIndex)) {
-        continue;
-      }
-      output
-        ..writeln('    if (layout.singleCompatibleLocalIndex == $index &&')
-        ..writeln(
-          '        layout.singleCompatibleRemoteIndex == $remoteIndex &&',
-        )
-        ..writeln(
-          '        layout.singleCompatibleSourceType == TypeIds.varInt32 &&',
-        )
-        ..writeln('        layout.fieldCount == ${remoteOrder.length}) {');
-      _writeRemoteOrderSingleCompatBody(
-        output,
-        structSpec,
-        compatibleIndex: index,
-        remoteOrder: remoteOrder,
-        mutable: mutable,
-        indent: '      ',
-      );
-      output.writeln('    }');
-    }
-  }
-
-  void _writeRemoteOrderSingleCompatBody(
-    StringBuffer output,
-    _GeneratedStructSpec structSpec, {
-    required int compatibleIndex,
-    required List<int> remoteOrder,
-    required bool mutable,
-    required String indent,
-  }) {
-    final remoteFields = <_GeneratedFieldSpec>[];
-    for (final matchedId in remoteOrder) {
-      final localIndex = matchedId >> 1;
-      final field = structSpec.fields[localIndex];
-      remoteFields.add(
-        localIndex == compatibleIndex
-            ? _fieldWithSourceType(field, TypeIds.varInt32)
-            : field,
-      );
-    }
-    final directPrimitiveRunByStart = <int, _DirectGeneratedPrimitiveRun>{};
-    final directPrimitiveRunByEnd = <int, _DirectGeneratedPrimitiveRun>{};
-    for (final run in _directGeneratedPrimitiveRuns(
-      remoteFields,
-      includeCoreInt64Varints: true,
-    )) {
-      directPrimitiveRunByStart[run.start] = run;
-      directPrimitiveRunByEnd[run.end] = run;
-    }
-    for (
-      var remoteIndex = 0;
-      remoteIndex < remoteOrder.length;
-      remoteIndex += 1
-    ) {
-      final matchedId = remoteOrder[remoteIndex];
-      final localIndex = matchedId >> 1;
-      final field = structSpec.fields[localIndex];
-      final remoteField = remoteFields[remoteIndex];
-      final directPrimitiveRun = directPrimitiveRunByStart[remoteIndex];
-      if (directPrimitiveRun != null) {
-        _writeDirectGeneratedReadRunStart(
-          output,
-          remoteFields,
-          directPrimitiveRun,
-          indent,
-        );
-      }
-      final target =
-          mutable
-              ? 'value.${field.name}'
-              : 'final ${field.displayType} ${field.localName}';
-      if (_usesReservedGeneratedFastPath(
-        remoteField,
-        includeCoreInt64Varints: true,
-      )) {
-        _writeDirectGeneratedBufferReadStatement(
-          output,
-          remoteField,
-          directPrimitiveRunByEnd.entries
-              .firstWhere((entry) => remoteIndex <= entry.key)
-              .value
-              .start,
-          remoteIndex,
-          target,
-          indent,
-        );
-      } else if (localIndex == compatibleIndex) {
-        output.writeln('$indent$target = buffer.readVarInt32();');
-      } else {
-        _writeExactCompatRead(
-          output,
-          structSpec,
-          field,
-          localIndex,
-          target,
-          mutable ? 'value.${field.name}' : null,
-          indent,
-        );
-      }
-      final directPrimitiveEndRun = directPrimitiveRunByEnd[remoteIndex];
-      if (directPrimitiveEndRun != null) {
-        _writeDirectGeneratedReadRunEnd(output, directPrimitiveEndRun, indent);
-      }
-    }
-    if (!mutable) {
-      final constructorInvocation = _constructorInvocation(structSpec);
-      output.writeln('${indent}final value = $constructorInvocation;');
-      for (final fieldName
-          in structSpec.constructorPlan.postConstructionFieldNames) {
-        final field = structSpec.fields.firstWhere(
-          (item) => item.name == fieldName,
-        );
-        output.writeln('${indent}value.${field.name} = ${field.localName};');
-      }
-    }
-    output.writeln('${indent}return value;');
-  }
-
-  void _writeSingleCompatBody(
-    StringBuffer output,
-    _GeneratedStructSpec structSpec, {
-    required int compatibleIndex,
-    required bool mutable,
-    required Map<int, _DirectGeneratedPrimitiveRun> directPrimitiveRunByStart,
-    required Map<int, _DirectGeneratedPrimitiveRun> directPrimitiveRunByEnd,
-    required Map<int, int> directPrimitiveRunStartByIndex,
-    required String indent,
-    int? sourceTypeId,
-  }) {
-    final fieldsForRead =
-        sourceTypeId == null
-            ? structSpec.fields
-            : <_GeneratedFieldSpec>[
-              for (var index = 0; index < structSpec.fields.length; index += 1)
-                index == compatibleIndex
-                    ? _fieldWithSourceType(
-                      structSpec.fields[index],
-                      sourceTypeId,
-                    )
-                    : structSpec.fields[index],
-            ];
-    if (sourceTypeId != null) {
-      directPrimitiveRunByStart = <int, _DirectGeneratedPrimitiveRun>{};
-      directPrimitiveRunByEnd = <int, _DirectGeneratedPrimitiveRun>{};
-      directPrimitiveRunStartByIndex = <int, int>{};
-      for (final run in _directGeneratedPrimitiveRuns(fieldsForRead)) {
-        directPrimitiveRunByStart[run.start] = run;
-        directPrimitiveRunByEnd[run.end] = run;
-        for (var index = run.start; index <= run.end; index += 1) {
-          directPrimitiveRunStartByIndex[index] = run.start;
-        }
-      }
-    }
-    if (sourceTypeId == null) {
-      _writeLeadingInt32CompatPrimitiveRun(
-        output,
-        structSpec,
-        compatibleIndex: compatibleIndex,
-        mutable: mutable,
-        directPrimitiveRunByStart: directPrimitiveRunByStart,
-        indent: indent,
-      );
-    }
-    for (var index = 0; index < structSpec.fields.length; index += 1) {
-      final field = structSpec.fields[index];
-      final readField = fieldsForRead[index];
-      final directPrimitiveRun = directPrimitiveRunByStart[index];
-      if (directPrimitiveRun != null) {
-        _writeDirectGeneratedReadRunStart(
-          output,
-          fieldsForRead,
-          directPrimitiveRun,
-          indent,
-        );
-      }
-      final target =
-          mutable
-              ? 'value.${field.name}'
-              : 'final ${field.displayType} ${field.localName}';
-      if (index == compatibleIndex && sourceTypeId != null) {
-        _writeDirectGeneratedBufferReadStatement(
-          output,
-          readField,
-          directPrimitiveRunStartByIndex[index]!,
-          index,
-          target,
-          indent,
-        );
-      } else if (index == compatibleIndex) {
-        _writeCompatConversionRead(
-          output,
-          structSpec,
-          field,
-          target,
-          mutable ? 'value.${field.name}' : null,
-          '$index',
-          indent,
-          inlineScalar: true,
-        );
-      } else {
-        _writeSequentialExactRead(
-          output,
-          structSpec,
-          field,
-          index,
-          directPrimitiveRunStartByIndex,
-          target,
-          mutable ? 'value.${field.name}' : null,
-          indent,
-        );
-      }
-      final directPrimitiveEndRun = directPrimitiveRunByEnd[index];
-      if (directPrimitiveEndRun != null) {
-        _writeDirectGeneratedReadRunEnd(output, directPrimitiveEndRun, indent);
-      }
-    }
-    if (!mutable) {
-      final constructorInvocation = _constructorInvocation(structSpec);
-      output.writeln('${indent}final value = $constructorInvocation;');
-      for (final fieldName
-          in structSpec.constructorPlan.postConstructionFieldNames) {
-        final field = structSpec.fields.firstWhere(
-          (item) => item.name == fieldName,
-        );
-        output.writeln('${indent}value.${field.name} = ${field.localName};');
-      }
-    }
-    output.writeln('${indent}return value;');
-  }
-
-  void _writeLeadingInt32CompatPrimitiveRun(
-    StringBuffer output,
-    _GeneratedStructSpec structSpec, {
-    required int compatibleIndex,
-    required bool mutable,
-    required Map<int, _DirectGeneratedPrimitiveRun> directPrimitiveRunByStart,
-    required String indent,
-  }) {
-    if (compatibleIndex != 0 || structSpec.fields.length < 2) {
-      return;
-    }
-    final compatibleField = structSpec.fields[0];
-    if (!_usesDirectCompatibleInt64ScalarRead(compatibleField)) {
-      return;
-    }
-    final suffixRun = directPrimitiveRunByStart[1];
-    if (suffixRun == null || suffixRun.end != structSpec.fields.length - 1) {
-      return;
-    }
-    final offset = 'offset0';
-    final view = 'view0';
-    final bytes = 'bytes0';
-    final compatibleTarget =
-        mutable
-            ? 'value.${compatibleField.name}'
-            : 'final ${compatibleField.displayType} ${compatibleField.localName}';
-    output
-      ..writeln(
-        '${indent}if (layout.sequentialCompatibleSourceType == TypeIds.int32) {',
-      )
-      ..writeln('$indent  var $offset = bufferReaderIndex(buffer);')
-      ..writeln('$indent  final $view = bufferByteData(buffer);')
-      ..writeln(
-        '$indent  $compatibleTarget = $view.getInt32($offset, generatedLittleEndian);',
-      )
-      ..writeln('$indent  $offset += 4;');
-    if (_directGeneratedRunUsesBytes(structSpec.fields, suffixRun)) {
-      output.writeln('$indent  final $bytes = bufferBytes(buffer);');
-    }
-    for (var index = suffixRun.start; index <= suffixRun.end; index += 1) {
-      final field = structSpec.fields[index];
-      final target =
-          mutable
-              ? 'value.${field.name}'
-              : 'final ${field.displayType} ${field.localName}';
-      _writeDirectGeneratedBufferReadStatement(
-        output,
-        field,
-        0,
-        index,
-        target,
-        '$indent  ',
-      );
-    }
-    output.writeln('$indent  bufferSetReaderIndex(buffer, $offset);');
-    if (!mutable) {
-      final constructorInvocation = _constructorInvocation(structSpec);
-      output.writeln('$indent  final value = $constructorInvocation;');
-      for (final fieldName
-          in structSpec.constructorPlan.postConstructionFieldNames) {
-        final field = structSpec.fields.firstWhere(
-          (item) => item.name == fieldName,
-        );
-        output.writeln('$indent  value.${field.name} = ${field.localName};');
-      }
-    }
-    output
-      ..writeln('$indent  return value;')
-      ..writeln('$indent}');
-  }
-
-  void _writeSequentialExactRead(
-    StringBuffer output,
-    _GeneratedStructSpec structSpec,
-    _GeneratedFieldSpec field,
-    int index,
-    Map<int, int> directPrimitiveRunStartByIndex,
-    String target,
-    String? fallback,
-    String indent,
-  ) {
-    if (_usesReservedGeneratedFastPath(field)) {
-      _writeDirectGeneratedBufferReadStatement(
-        output,
-        field,
-        directPrimitiveRunStartByIndex[index]!,
-        index,
-        target,
-        indent,
-      );
-      return;
-    }
-    _writeExactCompatRead(
-      output,
-      structSpec,
-      field,
-      index,
-      target,
-      fallback,
-      indent,
-    );
-  }
-
   void _writeCompatConversionRead(
     StringBuffer output,
     _GeneratedStructSpec structSpec,
@@ -1675,22 +1013,14 @@ final class ForyGenerator extends Generator {
     String target,
     String? fallback,
     String layoutIndex,
-    String indent, {
-    bool inlineScalar = false,
-  }) {
+    String indent,
+  ) {
     final readerFunctionName = field.readerFunctionName(structSpec.name);
-    final compatibleDirectRead =
-        inlineScalar
-            ? _compatibleScalarInlineExpression(
-              field,
-              fallback,
-              layoutIndex: layoutIndex,
-            )
-            : _compatibleScalarDirectReadExpression(
-              field,
-              fallback,
-              layoutIndex: layoutIndex,
-            );
+    final compatibleDirectRead = _compatibleScalarDirectReadExpression(
+      field,
+      fallback,
+      layoutIndex: layoutIndex,
+    );
     if (compatibleDirectRead != null) {
       output.writeln('$indent$target = $compatibleDirectRead;');
       return;
@@ -1698,42 +1028,6 @@ final class ForyGenerator extends Generator {
     output.writeln(
       '$indent$target = ${_readerCall(readerFunctionName, 'readGeneratedCompatibleStructField(context, layout, $layoutIndex)', fallback)};',
     );
-  }
-
-  String? _compatibleScalarInlineExpression(
-    _GeneratedFieldSpec field,
-    String? fallback, {
-    required String layoutIndex,
-  }) {
-    if (!_usesDirectCompatibleInt64ScalarRead(field)) {
-      return null;
-    }
-    final fallbackRead =
-        _compatibleScalarDirectReadExpression(
-          field,
-          fallback,
-          layoutIndex: layoutIndex,
-        )!;
-    final sourceType =
-        layoutIndex == 'index'
-            ? 'layout.scalarSourceTypeIdAt($layoutIndex)'
-            : 'layout.sequentialCompatibleSourceType';
-    return '$sourceType <= 0 ? $fallbackRead : switch ($sourceType) { '
-        'TypeIds.int8 => buffer.readByte(), '
-        'TypeIds.int16 => buffer.readInt16(), '
-        'TypeIds.int32 => buffer.readInt32(), '
-        'TypeIds.varInt32 => buffer.readVarInt32(), '
-        'TypeIds.int64 => buffer.readInt64AsInt(), '
-        'TypeIds.varInt64 => buffer.readVarInt64AsInt(), '
-        'TypeIds.taggedInt64 => buffer.readTaggedInt64AsInt(), '
-        'TypeIds.uint8 => buffer.readUint8(), '
-        'TypeIds.uint16 => buffer.readUint16(), '
-        'TypeIds.uint32 => buffer.readUint32(), '
-        'TypeIds.varUint32 => buffer.readVarUint32(), '
-        'TypeIds.uint64 => buffer.readUint64().toInt(), '
-        'TypeIds.varUint64 => buffer.readVarUint64().toInt(), '
-        'TypeIds.taggedUint64 => buffer.readTaggedUint64().toInt(), '
-        '_ => $fallbackRead }';
   }
 
   void _writeExactCompatRead(
@@ -1799,123 +1093,6 @@ final class ForyGenerator extends Generator {
     return field.fieldType.typeId == TypeIds.int64 ||
         field.fieldType.typeId == TypeIds.varInt64 ||
         field.fieldType.typeId == TypeIds.taggedInt64;
-  }
-
-  List<int> _singleCompatRemoteOrder(
-    _GeneratedStructSpec structSpec, {
-    required int compatibleIndex,
-    required int sourceTypeId,
-  }) {
-    final remoteFields = <_GeneratedFieldSpec>[];
-    for (var index = 0; index < structSpec.fields.length; index += 1) {
-      final field = structSpec.fields[index];
-      remoteFields.add(
-        index == compatibleIndex
-            ? _fieldWithSourceType(field, sourceTypeId)
-            : field,
-      );
-    }
-    final localIndexByIdentifier = <String, int>{
-      for (var index = 0; index < structSpec.fields.length; index += 1)
-        structSpec.fields[index].identifier: index,
-    };
-    return _sortFields(remoteFields)
-        .map((field) {
-          final localIndex = localIndexByIdentifier[field.identifier]!;
-          return localIndex * 2 + (localIndex == compatibleIndex ? 1 : 0);
-        })
-        .toList(growable: false);
-  }
-
-  bool _isLocalOrder(List<int> remoteOrder) {
-    for (var index = 0; index < remoteOrder.length; index += 1) {
-      if (remoteOrder[index] != index * 2 &&
-          remoteOrder[index] != index * 2 + 1) {
-        return false;
-      }
-    }
-    return true;
-  }
-
-  bool _isSingleMoveOrder(
-    List<int> remoteOrder,
-    int compatibleLocalIndex,
-    int compatibleRemoteIndex,
-  ) {
-    if (compatibleRemoteIndex < 0) {
-      return false;
-    }
-    for (var index = 0; index < remoteOrder.length; index += 1) {
-      final localIndex = _singleMoveLocalIndex(
-        index,
-        compatibleLocalIndex,
-        compatibleRemoteIndex,
-      );
-      final expectedMatchedId =
-          localIndex * 2 + (localIndex == compatibleLocalIndex ? 1 : 0);
-      if (remoteOrder[index] != expectedMatchedId) {
-        return false;
-      }
-    }
-    return true;
-  }
-
-  int _singleMoveLocalIndex(
-    int remoteIndex,
-    int localIndex,
-    int remoteCompatibleIndex,
-  ) {
-    if (localIndex < remoteCompatibleIndex) {
-      if (remoteIndex < localIndex) {
-        return remoteIndex;
-      }
-      if (remoteIndex < remoteCompatibleIndex) {
-        return remoteIndex + 1;
-      }
-      if (remoteIndex == remoteCompatibleIndex) {
-        return localIndex;
-      }
-      return remoteIndex;
-    }
-    if (localIndex > remoteCompatibleIndex) {
-      if (remoteIndex < remoteCompatibleIndex) {
-        return remoteIndex;
-      }
-      if (remoteIndex == remoteCompatibleIndex) {
-        return localIndex;
-      }
-      if (remoteIndex <= localIndex) {
-        return remoteIndex - 1;
-      }
-      return remoteIndex;
-    }
-    return remoteIndex;
-  }
-
-  _GeneratedFieldSpec _fieldWithSourceType(
-    _GeneratedFieldSpec field,
-    int sourceTypeId,
-  ) {
-    return _GeneratedFieldSpec(
-      name: field.name,
-      type: field.type,
-      displayType: field.displayType,
-      identifier: field.identifier,
-      id: field.id,
-      nullable: field.nullable,
-      ref: field.ref,
-      dynamic: field.dynamic,
-      writable: field.writable,
-      fieldType: _GeneratedFieldTypeSpec(
-        typeLiteral: field.fieldType.typeLiteral,
-        declaredTypeName: field.fieldType.declaredTypeName,
-        typeId: sourceTypeId,
-        nullable: field.fieldType.nullable,
-        ref: field.fieldType.ref,
-        dynamic: field.fieldType.dynamic,
-        arguments: field.fieldType.arguments,
-      ),
-    );
   }
 
   String _readerCall(
@@ -2368,31 +1545,10 @@ GeneratedFieldType(
         field.fieldType.typeId == TypeIds.map;
   }
 
-  bool _usesGeneratedStructElementReadFastPath(_GeneratedFieldSpec field) {
-    final typeId = field.fieldType.typeId;
-    if (typeId != TypeIds.list && typeId != TypeIds.set) {
-      return false;
-    }
-    final elementFieldType = field.fieldType.arguments.single;
-    final elementType = (field.type as InterfaceType).typeArguments.single;
-    return !elementFieldType.nullable &&
-        !elementFieldType.ref &&
-        elementFieldType.dynamic != true &&
-        _isGeneratedStructType(elementType) &&
-        _isGeneratedStructFieldType(elementFieldType);
-  }
-
   bool _isGeneratedStructType(DartType type) {
     final element = _withoutNullability(type).element;
     return element is ClassElement &&
         _foryStructChecker.hasAnnotationOf(element);
-  }
-
-  bool _isGeneratedStructFieldType(_GeneratedFieldTypeSpec fieldType) {
-    return fieldType.typeId == TypeIds.struct ||
-        fieldType.typeId == TypeIds.compatibleStruct ||
-        fieldType.typeId == TypeIds.namedStruct ||
-        fieldType.typeId == TypeIds.namedCompatibleStruct;
   }
 
   bool _usesDirectGeneratedTypedContainerWriteFastPath(

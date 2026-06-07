@@ -25,6 +25,7 @@ import static org.apache.fory.type.TypeUtils.STRING_TYPE;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Member;
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -54,10 +55,16 @@ import org.apache.fory.serializer.Serializer;
 import org.apache.fory.serializer.Serializers;
 import org.apache.fory.serializer.converter.FieldConverter;
 import org.apache.fory.serializer.converter.FieldConverters;
+import org.apache.fory.type.BFloat16;
 import org.apache.fory.type.Descriptor;
 import org.apache.fory.type.DescriptorBuilder;
 import org.apache.fory.type.DescriptorGrouper;
+import org.apache.fory.type.Float16;
 import org.apache.fory.type.ScalaTypes;
+import org.apache.fory.type.unsigned.UInt16;
+import org.apache.fory.type.unsigned.UInt32;
+import org.apache.fory.type.unsigned.UInt64;
+import org.apache.fory.type.unsigned.UInt8;
 import org.apache.fory.util.DefaultValueUtils;
 import org.apache.fory.util.ExceptionUtils;
 import org.apache.fory.util.Preconditions;
@@ -396,12 +403,8 @@ public class CompatibleCodecBuilder extends ObjectCodecBuilder {
 
   private Expression fieldConverterTargetRead(Descriptor descriptor, FieldConverter<?> converter) {
     Class<?> targetType = FieldConverters.toType(converter);
-    String helper;
-    if (targetType == long.class) {
-      helper = "readLongTarget";
-    } else if (targetType == Long.class) {
-      helper = "readBoxedLongTarget";
-    } else {
+    String helper = fieldConverterTargetReader(targetType);
+    if (helper == null) {
       return null;
     }
     return new StaticInvoke(
@@ -416,6 +419,55 @@ public class CompatibleCodecBuilder extends ObjectCodecBuilder {
         Literal.ofInt(FieldConverters.toDispatchId(converter)),
         Literal.ofClass(targetType),
         Literal.ofString(FieldConverters.fieldName(converter)));
+  }
+
+  private static String fieldConverterTargetReader(Class<?> targetType) {
+    if (targetType == boolean.class) {
+      return "readBooleanTarget";
+    } else if (targetType == Boolean.class) {
+      return "readBoxedBooleanTarget";
+    } else if (targetType == byte.class) {
+      return "readByteTarget";
+    } else if (targetType == Byte.class) {
+      return "readBoxedByteTarget";
+    } else if (targetType == short.class) {
+      return "readShortTarget";
+    } else if (targetType == Short.class) {
+      return "readBoxedShortTarget";
+    } else if (targetType == int.class) {
+      return "readIntTarget";
+    } else if (targetType == Integer.class) {
+      return "readBoxedIntTarget";
+    } else if (targetType == long.class) {
+      return "readLongTarget";
+    } else if (targetType == Long.class) {
+      return "readBoxedLongTarget";
+    } else if (targetType == float.class) {
+      return "readFloatTarget";
+    } else if (targetType == Float.class) {
+      return "readBoxedFloatTarget";
+    } else if (targetType == double.class) {
+      return "readDoubleTarget";
+    } else if (targetType == Double.class) {
+      return "readBoxedDoubleTarget";
+    } else if (targetType == String.class) {
+      return "readStringTarget";
+    } else if (targetType == BigDecimal.class) {
+      return "readDecimalTarget";
+    } else if (targetType == UInt8.class) {
+      return "readUInt8Target";
+    } else if (targetType == UInt16.class) {
+      return "readUInt16Target";
+    } else if (targetType == UInt32.class) {
+      return "readUInt32Target";
+    } else if (targetType == UInt64.class) {
+      return "readUInt64Target";
+    } else if (targetType == Float16.class) {
+      return "readFloat16Target";
+    } else if (targetType == BFloat16.class) {
+      return "readBFloat16Target";
+    }
+    return null;
   }
 
   private static boolean hasFieldConverter(List<Descriptor> descriptors) {

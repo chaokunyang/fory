@@ -40,11 +40,6 @@ final class CompatibleStructReadLayout {
   final List<FieldInfo> remoteFields;
   final List<int> matchedIds;
   final List<SerializationFieldInfo?> fields;
-  final int sequentialCompatibleMask;
-  final int sequentialCompatibleSourceType;
-  final int singleCompatibleLocalIndex;
-  final int singleCompatibleRemoteIndex;
-  final int singleCompatibleSourceType;
   final List<int>? _scalarSourceTypes;
   final List<CompatibleScalarConversion?>? _scalarConversions;
   final List<bool>? _topLevelListArrayPairs;
@@ -52,20 +47,13 @@ final class CompatibleStructReadLayout {
   const CompatibleStructReadLayout(
     this.remoteFields,
     this.matchedIds,
-    this.fields,
-    this.sequentialCompatibleMask,
-    this.sequentialCompatibleSourceType,
-    this.singleCompatibleLocalIndex,
-    this.singleCompatibleRemoteIndex,
-    this.singleCompatibleSourceType, [
+    this.fields, [
     this._scalarSourceTypes,
     this._scalarConversions,
     this._topLevelListArrayPairs,
   ]);
 
   int get fieldCount => remoteFields.length;
-
-  bool get hasSequentialFields => sequentialCompatibleMask >= 0;
 
   FieldInfo remoteFieldAt(int index) => remoteFields[index];
 

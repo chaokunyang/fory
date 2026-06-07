@@ -33,16 +33,6 @@ pub(crate) fn create_private_field_name(field: &Field, index: usize) -> Ident {
     }
 }
 
-fn has_tuple_shaped_field(source_fields: &[SourceField<'_>]) -> bool {
-    source_fields.iter().any(|source| {
-        if matches!(&source.field.ty, syn::Type::Tuple(_)) {
-            return true;
-        }
-        let ty = &source.field.ty;
-        quote!(#ty).to_string().contains("Tuple")
-    })
-}
-
 pub(crate) fn declare_var(source_fields: &[SourceField<'_>]) -> Vec<TokenStream> {
     let bindings = match build_bindings(source_fields) {
         Ok(bindings) => bindings,
@@ -331,73 +321,6 @@ pub(crate) fn gen_read_compatible_with_construction(
             [direct_arm, compatible_arm]
         })
         .collect();
-    let active_bindings: Vec<_> = bindings
-        .iter()
-        .filter_map(|binding| match binding {
-            FieldBinding::Codec(binding) => Some(binding),
-            FieldBinding::Skipped(_) => None,
-        })
-        .collect();
-    let local_field_count = active_bindings.len();
-    let emit_sequential_fast_path = variant_ident.is_none()
-        && local_field_count <= 16
-        && !has_tuple_shaped_field(source_fields);
-    let sequential_fast_arms: Vec<TokenStream> = if emit_sequential_fast_path {
-        active_bindings
-            .iter()
-            .enumerate()
-            .map(|(compatible_idx, _)| {
-                let compatible_idx_lit = compatible_idx as i16;
-                let read_statements: Vec<TokenStream> = active_bindings
-                    .iter()
-                    .enumerate()
-                    .map(|(sorted_idx, binding)| {
-                        let field_index = sorted_idx;
-                        if sorted_idx == compatible_idx {
-                            let compatible_body = binding.read_compatible_conversion();
-                            if binding.compatible_needs_local_field_type() {
-                                quote! {
-                                    let _field = &fields[#field_index];
-                                    let local_field_type = unsafe {
-                                        &(*local_fields_ptr.add(#field_index)).field_type
-                                    };
-                                    #compatible_body
-                                }
-                            } else {
-                                quote! {
-                                    let _field = &fields[#field_index];
-                                    #compatible_body
-                                }
-                            }
-                        } else {
-                            let direct_body = binding.read_compatible_direct();
-                            if binding.direct_needs_local_field_type() {
-                                quote! {
-                                    let local_field_type = unsafe {
-                                        &(*local_fields_ptr.add(#field_index)).field_type
-                                    };
-                                    #direct_body
-                                }
-                            } else {
-                                quote! {
-                                    #direct_body
-                                }
-                            }
-                        }
-                    })
-                    .collect();
-                quote! {
-                    #compatible_idx_lit => {
-                        #(#declare_ts)*
-                        #(#read_statements)*
-                        return #construction;
-                    }
-                }
-            })
-            .collect()
-    } else {
-        Vec::new()
-    };
     let skip_arm = if is_debug_enabled() {
         let struct_name = get_struct_name().expect("struct context not set");
         let struct_name_lit = syn::LitStr::new(&struct_name, proc_macro2::Span::call_site());
@@ -484,43 +407,6 @@ pub(crate) fn gen_read_compatible_with_construction(
         }
     };
 
-    let sequential_fast_path = if emit_sequential_fast_path {
-        quote! {
-            if fields.len() == #local_field_count {
-                let mut sequential = true;
-                let mut compatible_index: i16 = -1;
-                for (idx, _field) in fields.iter().enumerate() {
-                    let direct_id = (idx as i16) * 2;
-                    match _field.field_id {
-                        field_id if field_id == direct_id => {}
-                        field_id if field_id == direct_id + 1 => {
-                            if compatible_index >= 0 {
-                                sequential = false;
-                                break;
-                            }
-                            compatible_index = idx as i16;
-                        }
-                        _ => {
-                            sequential = false;
-                            break;
-                        }
-                    }
-                }
-                if sequential {
-                    match compatible_index {
-                        -1 => {
-                            return <Self as ::fory_core::Serializer>::fory_read_data(context);
-                        }
-                        #(#sequential_fast_arms)*
-                        _ => {}
-                    }
-                }
-            }
-        }
-    } else {
-        quote! {}
-    };
-
     quote! {
         let meta = context.get_type_resolver().get_type_meta_by_index_ref(
             &::std::any::TypeId::of::<Self>(),
@@ -533,7 +419,6 @@ pub(crate) fn gen_read_compatible_with_construction(
             return <Self as ::fory_core::Serializer>::fory_read_data(context);
         }
         #fields_binding
-        #sequential_fast_path
         #(#declare_ts)*
         for _field in fields.iter() {
             match _field.field_id {

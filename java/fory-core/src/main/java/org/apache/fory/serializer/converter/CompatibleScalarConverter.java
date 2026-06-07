@@ -188,6 +188,35 @@ final class CompatibleScalarConverter {
     throw dataError(fromDispatchId, fromType, toDispatchId, toType, fieldName);
   }
 
+  private static Object readConvertedScalar(
+      ReadContext readContext,
+      int fromDispatchId,
+      Class<?> fromType,
+      boolean nullable,
+      boolean declaredTypeInfo,
+      int toDispatchId,
+      Class<?> toType,
+      String fieldName) {
+    Object value =
+        FieldConverters.readSourceScalar(
+            readContext, fromDispatchId, fromType, nullable, declaredTypeInfo, fieldName);
+    return convert(fromDispatchId, fromType, toDispatchId, toType, value, fieldName);
+  }
+
+  private static Object readConvertedAfterHeader(
+      ReadContext readContext,
+      int fromDispatchId,
+      Class<?> fromType,
+      boolean declaredTypeInfo,
+      int toDispatchId,
+      Class<?> toType,
+      String fieldName) {
+    Object value =
+        FieldConverters.readSourceScalar(
+            readContext, fromDispatchId, fromType, false, declaredTypeInfo, fieldName);
+    return convert(fromDispatchId, fromType, toDispatchId, toType, value, fieldName);
+  }
+
   static boolean readBooleanTarget(
       ReadContext readContext, SerializationFieldInfo from, SerializationFieldInfo to) {
     MemoryBuffer buffer = readScalarBuffer(readContext, from);
@@ -195,6 +224,34 @@ final class CompatibleScalarConverter {
       return false;
     }
     return readBooleanTargetPayload(readContext, buffer, from, to);
+  }
+
+  static boolean readBooleanTarget(
+      ReadContext readContext,
+      int fromDispatchId,
+      Class<?> fromType,
+      boolean nullable,
+      boolean declaredTypeInfo,
+      int toDispatchId,
+      Class<?> toType,
+      String fieldName) {
+    MemoryBuffer buffer = readScalarBuffer(readContext, nullable, fieldName);
+    if (buffer == null) {
+      return false;
+    }
+    if (domain(fromDispatchId, fromType) == BOOL) {
+      return readBool(buffer, fromDispatchId, fromType, fieldName);
+    }
+    Object converted =
+        readConvertedAfterHeader(
+            readContext,
+            fromDispatchId,
+            fromType,
+            declaredTypeInfo,
+            toDispatchId,
+            toType,
+            fieldName);
+    return converted != null && (Boolean) converted;
   }
 
   static Boolean readBoxedBooleanTarget(
@@ -206,6 +263,33 @@ final class CompatibleScalarConverter {
     return readBooleanTargetPayload(readContext, buffer, from, to);
   }
 
+  static Boolean readBoxedBooleanTarget(
+      ReadContext readContext,
+      int fromDispatchId,
+      Class<?> fromType,
+      boolean nullable,
+      boolean declaredTypeInfo,
+      int toDispatchId,
+      Class<?> toType,
+      String fieldName) {
+    MemoryBuffer buffer = readScalarBuffer(readContext, nullable, fieldName);
+    if (buffer == null) {
+      return null;
+    }
+    if (domain(fromDispatchId, fromType) == BOOL) {
+      return readBool(buffer, fromDispatchId, fromType, fieldName);
+    }
+    return (Boolean)
+        readConvertedAfterHeader(
+            readContext,
+            fromDispatchId,
+            fromType,
+            declaredTypeInfo,
+            toDispatchId,
+            toType,
+            fieldName);
+  }
+
   static byte readByteTarget(
       ReadContext readContext, SerializationFieldInfo from, SerializationFieldInfo to) {
     MemoryBuffer buffer = readScalarBuffer(readContext, from);
@@ -213,6 +297,37 @@ final class CompatibleScalarConverter {
       return 0;
     }
     return (byte) readIntegerBitsTarget(readContext, buffer, from, to);
+  }
+
+  static byte readByteTarget(
+      ReadContext readContext,
+      int fromDispatchId,
+      Class<?> fromType,
+      boolean nullable,
+      boolean declaredTypeInfo,
+      int toDispatchId,
+      Class<?> toType,
+      String fieldName) {
+    if (!canReadIntegerBitsTarget(fromDispatchId, fromType)) {
+      Object converted =
+          readConvertedScalar(
+              readContext,
+              fromDispatchId,
+              fromType,
+              nullable,
+              declaredTypeInfo,
+              toDispatchId,
+              toType,
+              fieldName);
+      return converted == null ? 0 : ((Number) converted).byteValue();
+    }
+    MemoryBuffer buffer = readScalarBuffer(readContext, nullable, fieldName);
+    if (buffer == null) {
+      return 0;
+    }
+    return (byte)
+        readIntegerBitsTarget(
+            readContext, buffer, fromDispatchId, fromType, toDispatchId, toType, fieldName);
   }
 
   static Byte readBoxedByteTarget(
@@ -224,6 +339,36 @@ final class CompatibleScalarConverter {
     return (byte) readIntegerBitsTarget(readContext, buffer, from, to);
   }
 
+  static Byte readBoxedByteTarget(
+      ReadContext readContext,
+      int fromDispatchId,
+      Class<?> fromType,
+      boolean nullable,
+      boolean declaredTypeInfo,
+      int toDispatchId,
+      Class<?> toType,
+      String fieldName) {
+    if (!canReadIntegerBitsTarget(fromDispatchId, fromType)) {
+      return (Byte)
+          readConvertedScalar(
+              readContext,
+              fromDispatchId,
+              fromType,
+              nullable,
+              declaredTypeInfo,
+              toDispatchId,
+              toType,
+              fieldName);
+    }
+    MemoryBuffer buffer = readScalarBuffer(readContext, nullable, fieldName);
+    if (buffer == null) {
+      return null;
+    }
+    return (byte)
+        readIntegerBitsTarget(
+            readContext, buffer, fromDispatchId, fromType, toDispatchId, toType, fieldName);
+  }
+
   static short readShortTarget(
       ReadContext readContext, SerializationFieldInfo from, SerializationFieldInfo to) {
     MemoryBuffer buffer = readScalarBuffer(readContext, from);
@@ -231,6 +376,37 @@ final class CompatibleScalarConverter {
       return 0;
     }
     return (short) readIntegerBitsTarget(readContext, buffer, from, to);
+  }
+
+  static short readShortTarget(
+      ReadContext readContext,
+      int fromDispatchId,
+      Class<?> fromType,
+      boolean nullable,
+      boolean declaredTypeInfo,
+      int toDispatchId,
+      Class<?> toType,
+      String fieldName) {
+    if (!canReadIntegerBitsTarget(fromDispatchId, fromType)) {
+      Object converted =
+          readConvertedScalar(
+              readContext,
+              fromDispatchId,
+              fromType,
+              nullable,
+              declaredTypeInfo,
+              toDispatchId,
+              toType,
+              fieldName);
+      return converted == null ? 0 : ((Number) converted).shortValue();
+    }
+    MemoryBuffer buffer = readScalarBuffer(readContext, nullable, fieldName);
+    if (buffer == null) {
+      return 0;
+    }
+    return (short)
+        readIntegerBitsTarget(
+            readContext, buffer, fromDispatchId, fromType, toDispatchId, toType, fieldName);
   }
 
   static Short readBoxedShortTarget(
@@ -242,6 +418,36 @@ final class CompatibleScalarConverter {
     return (short) readIntegerBitsTarget(readContext, buffer, from, to);
   }
 
+  static Short readBoxedShortTarget(
+      ReadContext readContext,
+      int fromDispatchId,
+      Class<?> fromType,
+      boolean nullable,
+      boolean declaredTypeInfo,
+      int toDispatchId,
+      Class<?> toType,
+      String fieldName) {
+    if (!canReadIntegerBitsTarget(fromDispatchId, fromType)) {
+      return (Short)
+          readConvertedScalar(
+              readContext,
+              fromDispatchId,
+              fromType,
+              nullable,
+              declaredTypeInfo,
+              toDispatchId,
+              toType,
+              fieldName);
+    }
+    MemoryBuffer buffer = readScalarBuffer(readContext, nullable, fieldName);
+    if (buffer == null) {
+      return null;
+    }
+    return (short)
+        readIntegerBitsTarget(
+            readContext, buffer, fromDispatchId, fromType, toDispatchId, toType, fieldName);
+  }
+
   static int readIntTarget(
       ReadContext readContext, SerializationFieldInfo from, SerializationFieldInfo to) {
     MemoryBuffer buffer = readScalarBuffer(readContext, from);
@@ -251,6 +457,37 @@ final class CompatibleScalarConverter {
     return (int) readIntegerBitsTarget(readContext, buffer, from, to);
   }
 
+  static int readIntTarget(
+      ReadContext readContext,
+      int fromDispatchId,
+      Class<?> fromType,
+      boolean nullable,
+      boolean declaredTypeInfo,
+      int toDispatchId,
+      Class<?> toType,
+      String fieldName) {
+    if (!canReadIntegerBitsTarget(fromDispatchId, fromType)) {
+      Object converted =
+          readConvertedScalar(
+              readContext,
+              fromDispatchId,
+              fromType,
+              nullable,
+              declaredTypeInfo,
+              toDispatchId,
+              toType,
+              fieldName);
+      return converted == null ? 0 : ((Number) converted).intValue();
+    }
+    MemoryBuffer buffer = readScalarBuffer(readContext, nullable, fieldName);
+    if (buffer == null) {
+      return 0;
+    }
+    return (int)
+        readIntegerBitsTarget(
+            readContext, buffer, fromDispatchId, fromType, toDispatchId, toType, fieldName);
+  }
+
   static Integer readBoxedIntTarget(
       ReadContext readContext, SerializationFieldInfo from, SerializationFieldInfo to) {
     MemoryBuffer buffer = readScalarBuffer(readContext, from);
@@ -258,6 +495,36 @@ final class CompatibleScalarConverter {
       return null;
     }
     return (int) readIntegerBitsTarget(readContext, buffer, from, to);
+  }
+
+  static Integer readBoxedIntTarget(
+      ReadContext readContext,
+      int fromDispatchId,
+      Class<?> fromType,
+      boolean nullable,
+      boolean declaredTypeInfo,
+      int toDispatchId,
+      Class<?> toType,
+      String fieldName) {
+    if (!canReadIntegerBitsTarget(fromDispatchId, fromType)) {
+      return (Integer)
+          readConvertedScalar(
+              readContext,
+              fromDispatchId,
+              fromType,
+              nullable,
+              declaredTypeInfo,
+              toDispatchId,
+              toType,
+              fieldName);
+    }
+    MemoryBuffer buffer = readScalarBuffer(readContext, nullable, fieldName);
+    if (buffer == null) {
+      return null;
+    }
+    return (int)
+        readIntegerBitsTarget(
+            readContext, buffer, fromDispatchId, fromType, toDispatchId, toType, fieldName);
   }
 
   static long readLongTarget(
@@ -334,6 +601,28 @@ final class CompatibleScalarConverter {
     return readFloatTargetPayload(readContext, buffer, from, to);
   }
 
+  static float readFloatTarget(
+      ReadContext readContext,
+      int fromDispatchId,
+      Class<?> fromType,
+      boolean nullable,
+      boolean declaredTypeInfo,
+      int toDispatchId,
+      Class<?> toType,
+      String fieldName) {
+    Object converted =
+        readConvertedScalar(
+            readContext,
+            fromDispatchId,
+            fromType,
+            nullable,
+            declaredTypeInfo,
+            toDispatchId,
+            toType,
+            fieldName);
+    return converted == null ? 0.0f : ((Number) converted).floatValue();
+  }
+
   static Float readBoxedFloatTarget(
       ReadContext readContext, SerializationFieldInfo from, SerializationFieldInfo to) {
     MemoryBuffer buffer = readScalarBuffer(readContext, from);
@@ -341,6 +630,27 @@ final class CompatibleScalarConverter {
       return null;
     }
     return readFloatTargetPayload(readContext, buffer, from, to);
+  }
+
+  static Float readBoxedFloatTarget(
+      ReadContext readContext,
+      int fromDispatchId,
+      Class<?> fromType,
+      boolean nullable,
+      boolean declaredTypeInfo,
+      int toDispatchId,
+      Class<?> toType,
+      String fieldName) {
+    return (Float)
+        readConvertedScalar(
+            readContext,
+            fromDispatchId,
+            fromType,
+            nullable,
+            declaredTypeInfo,
+            toDispatchId,
+            toType,
+            fieldName);
   }
 
   static double readDoubleTarget(
@@ -352,6 +662,28 @@ final class CompatibleScalarConverter {
     return readDoubleTargetPayload(readContext, buffer, from, to);
   }
 
+  static double readDoubleTarget(
+      ReadContext readContext,
+      int fromDispatchId,
+      Class<?> fromType,
+      boolean nullable,
+      boolean declaredTypeInfo,
+      int toDispatchId,
+      Class<?> toType,
+      String fieldName) {
+    Object converted =
+        readConvertedScalar(
+            readContext,
+            fromDispatchId,
+            fromType,
+            nullable,
+            declaredTypeInfo,
+            toDispatchId,
+            toType,
+            fieldName);
+    return converted == null ? 0.0d : ((Number) converted).doubleValue();
+  }
+
   static Double readBoxedDoubleTarget(
       ReadContext readContext, SerializationFieldInfo from, SerializationFieldInfo to) {
     MemoryBuffer buffer = readScalarBuffer(readContext, from);
@@ -359,6 +691,27 @@ final class CompatibleScalarConverter {
       return null;
     }
     return readDoubleTargetPayload(readContext, buffer, from, to);
+  }
+
+  static Double readBoxedDoubleTarget(
+      ReadContext readContext,
+      int fromDispatchId,
+      Class<?> fromType,
+      boolean nullable,
+      boolean declaredTypeInfo,
+      int toDispatchId,
+      Class<?> toType,
+      String fieldName) {
+    return (Double)
+        readConvertedScalar(
+            readContext,
+            fromDispatchId,
+            fromType,
+            nullable,
+            declaredTypeInfo,
+            toDispatchId,
+            toType,
+            fieldName);
   }
 
   static String readStringTarget(
@@ -386,6 +739,37 @@ final class CompatibleScalarConverter {
     }
   }
 
+  static String readStringTarget(
+      ReadContext readContext,
+      int fromDispatchId,
+      Class<?> fromType,
+      boolean nullable,
+      boolean declaredTypeInfo,
+      int toDispatchId,
+      Class<?> toType,
+      String fieldName) {
+    MemoryBuffer buffer = readScalarBuffer(readContext, nullable, fieldName);
+    if (buffer == null) {
+      return null;
+    }
+    switch (domain(fromDispatchId, fromType)) {
+      case BOOL:
+        return readBool(buffer, fromDispatchId, fromType, fieldName) ? "true" : "false";
+      case STRING:
+        return readContext.readString();
+      default:
+        return (String)
+            readConvertedAfterHeader(
+                readContext,
+                fromDispatchId,
+                fromType,
+                declaredTypeInfo,
+                toDispatchId,
+                toType,
+                fieldName);
+    }
+  }
+
   static BigDecimal readDecimalTarget(
       ReadContext readContext, SerializationFieldInfo from, SerializationFieldInfo to) {
     MemoryBuffer buffer = readScalarBuffer(readContext, from);
@@ -393,6 +777,27 @@ final class CompatibleScalarConverter {
       return null;
     }
     return readNumericDecimal(readContext, buffer, from, to.qualifiedFieldName);
+  }
+
+  static BigDecimal readDecimalTarget(
+      ReadContext readContext,
+      int fromDispatchId,
+      Class<?> fromType,
+      boolean nullable,
+      boolean declaredTypeInfo,
+      int toDispatchId,
+      Class<?> toType,
+      String fieldName) {
+    return (BigDecimal)
+        readConvertedScalar(
+            readContext,
+            fromDispatchId,
+            fromType,
+            nullable,
+            declaredTypeInfo,
+            toDispatchId,
+            toType,
+            fieldName);
   }
 
   static UInt8 readUInt8Target(
@@ -405,6 +810,27 @@ final class CompatibleScalarConverter {
     return UInt8.valueOf(value.intValue());
   }
 
+  static UInt8 readUInt8Target(
+      ReadContext readContext,
+      int fromDispatchId,
+      Class<?> fromType,
+      boolean nullable,
+      boolean declaredTypeInfo,
+      int toDispatchId,
+      Class<?> toType,
+      String fieldName) {
+    return (UInt8)
+        readConvertedScalar(
+            readContext,
+            fromDispatchId,
+            fromType,
+            nullable,
+            declaredTypeInfo,
+            toDispatchId,
+            toType,
+            fieldName);
+  }
+
   static UInt16 readUInt16Target(
       ReadContext readContext, SerializationFieldInfo from, SerializationFieldInfo to) {
     MemoryBuffer buffer = readScalarBuffer(readContext, from);
@@ -413,6 +839,27 @@ final class CompatibleScalarConverter {
     }
     BigInteger value = readIntegerTargetPayload(readContext, buffer, from, to);
     return UInt16.valueOf(value.intValue());
+  }
+
+  static UInt16 readUInt16Target(
+      ReadContext readContext,
+      int fromDispatchId,
+      Class<?> fromType,
+      boolean nullable,
+      boolean declaredTypeInfo,
+      int toDispatchId,
+      Class<?> toType,
+      String fieldName) {
+    return (UInt16)
+        readConvertedScalar(
+            readContext,
+            fromDispatchId,
+            fromType,
+            nullable,
+            declaredTypeInfo,
+            toDispatchId,
+            toType,
+            fieldName);
   }
 
   static UInt32 readUInt32Target(
@@ -425,6 +872,27 @@ final class CompatibleScalarConverter {
     return UInt32.valueOf(value.intValue());
   }
 
+  static UInt32 readUInt32Target(
+      ReadContext readContext,
+      int fromDispatchId,
+      Class<?> fromType,
+      boolean nullable,
+      boolean declaredTypeInfo,
+      int toDispatchId,
+      Class<?> toType,
+      String fieldName) {
+    return (UInt32)
+        readConvertedScalar(
+            readContext,
+            fromDispatchId,
+            fromType,
+            nullable,
+            declaredTypeInfo,
+            toDispatchId,
+            toType,
+            fieldName);
+  }
+
   static UInt64 readUInt64Target(
       ReadContext readContext, SerializationFieldInfo from, SerializationFieldInfo to) {
     MemoryBuffer buffer = readScalarBuffer(readContext, from);
@@ -433,6 +901,27 @@ final class CompatibleScalarConverter {
     }
     BigInteger value = readIntegerTargetPayload(readContext, buffer, from, to);
     return UInt64.valueOf(value.longValue());
+  }
+
+  static UInt64 readUInt64Target(
+      ReadContext readContext,
+      int fromDispatchId,
+      Class<?> fromType,
+      boolean nullable,
+      boolean declaredTypeInfo,
+      int toDispatchId,
+      Class<?> toType,
+      String fieldName) {
+    return (UInt64)
+        readConvertedScalar(
+            readContext,
+            fromDispatchId,
+            fromType,
+            nullable,
+            declaredTypeInfo,
+            toDispatchId,
+            toType,
+            fieldName);
   }
 
   static Float16 readFloat16Target(
@@ -444,6 +933,27 @@ final class CompatibleScalarConverter {
     return readFloat16TargetPayload(readContext, buffer, from, to);
   }
 
+  static Float16 readFloat16Target(
+      ReadContext readContext,
+      int fromDispatchId,
+      Class<?> fromType,
+      boolean nullable,
+      boolean declaredTypeInfo,
+      int toDispatchId,
+      Class<?> toType,
+      String fieldName) {
+    return (Float16)
+        readConvertedScalar(
+            readContext,
+            fromDispatchId,
+            fromType,
+            nullable,
+            declaredTypeInfo,
+            toDispatchId,
+            toType,
+            fieldName);
+  }
+
   static BFloat16 readBFloat16Target(
       ReadContext readContext, SerializationFieldInfo from, SerializationFieldInfo to) {
     MemoryBuffer buffer = readScalarBuffer(readContext, from);
@@ -451,6 +961,27 @@ final class CompatibleScalarConverter {
       return null;
     }
     return readBFloat16TargetPayload(readContext, buffer, from, to);
+  }
+
+  static BFloat16 readBFloat16Target(
+      ReadContext readContext,
+      int fromDispatchId,
+      Class<?> fromType,
+      boolean nullable,
+      boolean declaredTypeInfo,
+      int toDispatchId,
+      Class<?> toType,
+      String fieldName) {
+    return (BFloat16)
+        readConvertedScalar(
+            readContext,
+            fromDispatchId,
+            fromType,
+            nullable,
+            declaredTypeInfo,
+            toDispatchId,
+            toType,
+            fieldName);
   }
 
   static boolean readBool(

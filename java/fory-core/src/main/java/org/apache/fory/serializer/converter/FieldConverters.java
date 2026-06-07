@@ -585,6 +585,426 @@ public class FieldConverters {
   }
 
   @Internal
+  public static boolean readBooleanTarget(
+      ReadContext readContext,
+      int fromDispatchId,
+      Class<?> fromType,
+      boolean nullable,
+      boolean declaredTypeInfo,
+      int toDispatchId,
+      Class<?> toType,
+      String fieldName) {
+    return CompatibleScalarConverter.readBooleanTarget(
+        readContext,
+        fromDispatchId,
+        fromType,
+        nullable,
+        declaredTypeInfo,
+        toDispatchId,
+        toType,
+        fieldName);
+  }
+
+  @Internal
+  public static Boolean readBoxedBooleanTarget(
+      ReadContext readContext,
+      int fromDispatchId,
+      Class<?> fromType,
+      boolean nullable,
+      boolean declaredTypeInfo,
+      int toDispatchId,
+      Class<?> toType,
+      String fieldName) {
+    return CompatibleScalarConverter.readBoxedBooleanTarget(
+        readContext,
+        fromDispatchId,
+        fromType,
+        nullable,
+        declaredTypeInfo,
+        toDispatchId,
+        toType,
+        fieldName);
+  }
+
+  @Internal
+  public static byte readByteTarget(
+      ReadContext readContext,
+      int fromDispatchId,
+      Class<?> fromType,
+      boolean nullable,
+      boolean declaredTypeInfo,
+      int toDispatchId,
+      Class<?> toType,
+      String fieldName) {
+    return CompatibleScalarConverter.readByteTarget(
+        readContext,
+        fromDispatchId,
+        fromType,
+        nullable,
+        declaredTypeInfo,
+        toDispatchId,
+        toType,
+        fieldName);
+  }
+
+  @Internal
+  public static Byte readBoxedByteTarget(
+      ReadContext readContext,
+      int fromDispatchId,
+      Class<?> fromType,
+      boolean nullable,
+      boolean declaredTypeInfo,
+      int toDispatchId,
+      Class<?> toType,
+      String fieldName) {
+    return CompatibleScalarConverter.readBoxedByteTarget(
+        readContext,
+        fromDispatchId,
+        fromType,
+        nullable,
+        declaredTypeInfo,
+        toDispatchId,
+        toType,
+        fieldName);
+  }
+
+  @Internal
+  public static short readShortTarget(
+      ReadContext readContext,
+      int fromDispatchId,
+      Class<?> fromType,
+      boolean nullable,
+      boolean declaredTypeInfo,
+      int toDispatchId,
+      Class<?> toType,
+      String fieldName) {
+    return CompatibleScalarConverter.readShortTarget(
+        readContext,
+        fromDispatchId,
+        fromType,
+        nullable,
+        declaredTypeInfo,
+        toDispatchId,
+        toType,
+        fieldName);
+  }
+
+  @Internal
+  public static Short readBoxedShortTarget(
+      ReadContext readContext,
+      int fromDispatchId,
+      Class<?> fromType,
+      boolean nullable,
+      boolean declaredTypeInfo,
+      int toDispatchId,
+      Class<?> toType,
+      String fieldName) {
+    return CompatibleScalarConverter.readBoxedShortTarget(
+        readContext,
+        fromDispatchId,
+        fromType,
+        nullable,
+        declaredTypeInfo,
+        toDispatchId,
+        toType,
+        fieldName);
+  }
+
+  @Internal
+  public static int readIntTarget(
+      ReadContext readContext,
+      int fromDispatchId,
+      Class<?> fromType,
+      boolean nullable,
+      boolean declaredTypeInfo,
+      int toDispatchId,
+      Class<?> toType,
+      String fieldName) {
+    return CompatibleScalarConverter.readIntTarget(
+        readContext,
+        fromDispatchId,
+        fromType,
+        nullable,
+        declaredTypeInfo,
+        toDispatchId,
+        toType,
+        fieldName);
+  }
+
+  @Internal
+  public static Integer readBoxedIntTarget(
+      ReadContext readContext,
+      int fromDispatchId,
+      Class<?> fromType,
+      boolean nullable,
+      boolean declaredTypeInfo,
+      int toDispatchId,
+      Class<?> toType,
+      String fieldName) {
+    return CompatibleScalarConverter.readBoxedIntTarget(
+        readContext,
+        fromDispatchId,
+        fromType,
+        nullable,
+        declaredTypeInfo,
+        toDispatchId,
+        toType,
+        fieldName);
+  }
+
+  @Internal
+  public static float readFloatTarget(
+      ReadContext readContext,
+      int fromDispatchId,
+      Class<?> fromType,
+      boolean nullable,
+      boolean declaredTypeInfo,
+      int toDispatchId,
+      Class<?> toType,
+      String fieldName) {
+    return CompatibleScalarConverter.readFloatTarget(
+        readContext,
+        fromDispatchId,
+        fromType,
+        nullable,
+        declaredTypeInfo,
+        toDispatchId,
+        toType,
+        fieldName);
+  }
+
+  @Internal
+  public static Float readBoxedFloatTarget(
+      ReadContext readContext,
+      int fromDispatchId,
+      Class<?> fromType,
+      boolean nullable,
+      boolean declaredTypeInfo,
+      int toDispatchId,
+      Class<?> toType,
+      String fieldName) {
+    return CompatibleScalarConverter.readBoxedFloatTarget(
+        readContext,
+        fromDispatchId,
+        fromType,
+        nullable,
+        declaredTypeInfo,
+        toDispatchId,
+        toType,
+        fieldName);
+  }
+
+  @Internal
+  public static double readDoubleTarget(
+      ReadContext readContext,
+      int fromDispatchId,
+      Class<?> fromType,
+      boolean nullable,
+      boolean declaredTypeInfo,
+      int toDispatchId,
+      Class<?> toType,
+      String fieldName) {
+    return CompatibleScalarConverter.readDoubleTarget(
+        readContext,
+        fromDispatchId,
+        fromType,
+        nullable,
+        declaredTypeInfo,
+        toDispatchId,
+        toType,
+        fieldName);
+  }
+
+  @Internal
+  public static Double readBoxedDoubleTarget(
+      ReadContext readContext,
+      int fromDispatchId,
+      Class<?> fromType,
+      boolean nullable,
+      boolean declaredTypeInfo,
+      int toDispatchId,
+      Class<?> toType,
+      String fieldName) {
+    return CompatibleScalarConverter.readBoxedDoubleTarget(
+        readContext,
+        fromDispatchId,
+        fromType,
+        nullable,
+        declaredTypeInfo,
+        toDispatchId,
+        toType,
+        fieldName);
+  }
+
+  @Internal
+  public static String readStringTarget(
+      ReadContext readContext,
+      int fromDispatchId,
+      Class<?> fromType,
+      boolean nullable,
+      boolean declaredTypeInfo,
+      int toDispatchId,
+      Class<?> toType,
+      String fieldName) {
+    return CompatibleScalarConverter.readStringTarget(
+        readContext,
+        fromDispatchId,
+        fromType,
+        nullable,
+        declaredTypeInfo,
+        toDispatchId,
+        toType,
+        fieldName);
+  }
+
+  @Internal
+  public static BigDecimal readDecimalTarget(
+      ReadContext readContext,
+      int fromDispatchId,
+      Class<?> fromType,
+      boolean nullable,
+      boolean declaredTypeInfo,
+      int toDispatchId,
+      Class<?> toType,
+      String fieldName) {
+    return CompatibleScalarConverter.readDecimalTarget(
+        readContext,
+        fromDispatchId,
+        fromType,
+        nullable,
+        declaredTypeInfo,
+        toDispatchId,
+        toType,
+        fieldName);
+  }
+
+  @Internal
+  public static UInt8 readUInt8Target(
+      ReadContext readContext,
+      int fromDispatchId,
+      Class<?> fromType,
+      boolean nullable,
+      boolean declaredTypeInfo,
+      int toDispatchId,
+      Class<?> toType,
+      String fieldName) {
+    return CompatibleScalarConverter.readUInt8Target(
+        readContext,
+        fromDispatchId,
+        fromType,
+        nullable,
+        declaredTypeInfo,
+        toDispatchId,
+        toType,
+        fieldName);
+  }
+
+  @Internal
+  public static UInt16 readUInt16Target(
+      ReadContext readContext,
+      int fromDispatchId,
+      Class<?> fromType,
+      boolean nullable,
+      boolean declaredTypeInfo,
+      int toDispatchId,
+      Class<?> toType,
+      String fieldName) {
+    return CompatibleScalarConverter.readUInt16Target(
+        readContext,
+        fromDispatchId,
+        fromType,
+        nullable,
+        declaredTypeInfo,
+        toDispatchId,
+        toType,
+        fieldName);
+  }
+
+  @Internal
+  public static UInt32 readUInt32Target(
+      ReadContext readContext,
+      int fromDispatchId,
+      Class<?> fromType,
+      boolean nullable,
+      boolean declaredTypeInfo,
+      int toDispatchId,
+      Class<?> toType,
+      String fieldName) {
+    return CompatibleScalarConverter.readUInt32Target(
+        readContext,
+        fromDispatchId,
+        fromType,
+        nullable,
+        declaredTypeInfo,
+        toDispatchId,
+        toType,
+        fieldName);
+  }
+
+  @Internal
+  public static UInt64 readUInt64Target(
+      ReadContext readContext,
+      int fromDispatchId,
+      Class<?> fromType,
+      boolean nullable,
+      boolean declaredTypeInfo,
+      int toDispatchId,
+      Class<?> toType,
+      String fieldName) {
+    return CompatibleScalarConverter.readUInt64Target(
+        readContext,
+        fromDispatchId,
+        fromType,
+        nullable,
+        declaredTypeInfo,
+        toDispatchId,
+        toType,
+        fieldName);
+  }
+
+  @Internal
+  public static Float16 readFloat16Target(
+      ReadContext readContext,
+      int fromDispatchId,
+      Class<?> fromType,
+      boolean nullable,
+      boolean declaredTypeInfo,
+      int toDispatchId,
+      Class<?> toType,
+      String fieldName) {
+    return CompatibleScalarConverter.readFloat16Target(
+        readContext,
+        fromDispatchId,
+        fromType,
+        nullable,
+        declaredTypeInfo,
+        toDispatchId,
+        toType,
+        fieldName);
+  }
+
+  @Internal
+  public static BFloat16 readBFloat16Target(
+      ReadContext readContext,
+      int fromDispatchId,
+      Class<?> fromType,
+      boolean nullable,
+      boolean declaredTypeInfo,
+      int toDispatchId,
+      Class<?> toType,
+      String fieldName) {
+    return CompatibleScalarConverter.readBFloat16Target(
+        readContext,
+        fromDispatchId,
+        fromType,
+        nullable,
+        declaredTypeInfo,
+        toDispatchId,
+        toType,
+        fieldName);
+  }
+
+  @Internal
   public static int fromDispatchId(FieldConverter<?> converter) {
     return scalarConverter(converter).fromDispatchId;
   }

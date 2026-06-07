@@ -32,24 +32,6 @@ private enum CompatibleScalarValue {
   case decimal(Decimal)
 }
 
-private enum CompatibleScalarKind {
-  case bool
-  case string
-  case signedInteger
-  case unsignedInteger
-  case floatingPoint
-  case decimal
-
-  var isNumeric: Bool {
-    switch self {
-    case .signedInteger, .unsignedInteger, .floatingPoint, .decimal:
-      return true
-    case .bool, .string:
-      return false
-    }
-  }
-}
-
 private struct DecimalLiteral {
   let negative: Bool
   let digits: String
@@ -77,29 +59,27 @@ private struct BinaryFloatLayout {
 @inline(never)
 public func foryReadCompatibleBoolField(
   _ context: ReadContext,
-  remoteFieldType: TypeMeta.FieldType,
-  localTypeID: UInt32,
-  fieldName: String
+  remoteField: TypeMeta.FieldInfo,
+  localField: TypeMeta.FieldInfo
 ) throws -> Bool {
   try foryReadCompatibleOptionalBoolField(
-    context, remoteFieldType: remoteFieldType, localTypeID: localTypeID, fieldName: fieldName)
+    context, remoteField: remoteField, localField: localField)
     ?? false
 }
 
 @inline(never)
 public func foryReadCompatibleOptionalBoolField(
   _ context: ReadContext,
-  remoteFieldType: TypeMeta.FieldType,
-  localTypeID: UInt32,
-  fieldName: String
+  remoteField: TypeMeta.FieldInfo,
+  localField: TypeMeta.FieldInfo
 ) throws -> Bool? {
   var remoteTypeID: TypeId = .unknown
-  let resolvedLocalTypeID = try compatibleScalarLocalTypeID(localTypeID, fieldName: fieldName)
+  let resolvedLocalTypeID = try compatibleScalarLocalTypeID(localField)
+  let fieldName = localField.fieldName
   guard
     let remoteValue = try readCompatibleScalarValue(
       context,
-      remoteFieldType: remoteFieldType,
-      localTypeID: resolvedLocalTypeID,
+      remoteField: remoteField,
       fieldName: fieldName,
       remoteTypeID: &remoteTypeID)
   else {
@@ -119,29 +99,27 @@ public func foryReadCompatibleOptionalBoolField(
 @inline(never)
 public func foryReadCompatibleInt8Field(
   _ context: ReadContext,
-  remoteFieldType: TypeMeta.FieldType,
-  localTypeID: UInt32,
-  fieldName: String
+  remoteField: TypeMeta.FieldInfo,
+  localField: TypeMeta.FieldInfo
 ) throws -> Int8 {
   try foryReadCompatibleOptionalInt8Field(
-    context, remoteFieldType: remoteFieldType, localTypeID: localTypeID, fieldName: fieldName)
+    context, remoteField: remoteField, localField: localField)
     ?? 0
 }
 
 @inline(never)
 public func foryReadCompatibleOptionalInt8Field(
   _ context: ReadContext,
-  remoteFieldType: TypeMeta.FieldType,
-  localTypeID: UInt32,
-  fieldName: String
+  remoteField: TypeMeta.FieldInfo,
+  localField: TypeMeta.FieldInfo
 ) throws -> Int8? {
   var remoteTypeID: TypeId = .unknown
-  let resolvedLocalTypeID = try compatibleScalarLocalTypeID(localTypeID, fieldName: fieldName)
+  let resolvedLocalTypeID = try compatibleScalarLocalTypeID(localField)
+  let fieldName = localField.fieldName
   guard
     let remoteValue = try readCompatibleScalarValue(
       context,
-      remoteFieldType: remoteFieldType,
-      localTypeID: resolvedLocalTypeID,
+      remoteField: remoteField,
       fieldName: fieldName,
       remoteTypeID: &remoteTypeID)
   else {
@@ -161,29 +139,27 @@ public func foryReadCompatibleOptionalInt8Field(
 @inline(never)
 public func foryReadCompatibleInt16Field(
   _ context: ReadContext,
-  remoteFieldType: TypeMeta.FieldType,
-  localTypeID: UInt32,
-  fieldName: String
+  remoteField: TypeMeta.FieldInfo,
+  localField: TypeMeta.FieldInfo
 ) throws -> Int16 {
   try foryReadCompatibleOptionalInt16Field(
-    context, remoteFieldType: remoteFieldType, localTypeID: localTypeID, fieldName: fieldName)
+    context, remoteField: remoteField, localField: localField)
     ?? 0
 }
 
 @inline(never)
 public func foryReadCompatibleOptionalInt16Field(
   _ context: ReadContext,
-  remoteFieldType: TypeMeta.FieldType,
-  localTypeID: UInt32,
-  fieldName: String
+  remoteField: TypeMeta.FieldInfo,
+  localField: TypeMeta.FieldInfo
 ) throws -> Int16? {
   var remoteTypeID: TypeId = .unknown
-  let resolvedLocalTypeID = try compatibleScalarLocalTypeID(localTypeID, fieldName: fieldName)
+  let resolvedLocalTypeID = try compatibleScalarLocalTypeID(localField)
+  let fieldName = localField.fieldName
   guard
     let remoteValue = try readCompatibleScalarValue(
       context,
-      remoteFieldType: remoteFieldType,
-      localTypeID: resolvedLocalTypeID,
+      remoteField: remoteField,
       fieldName: fieldName,
       remoteTypeID: &remoteTypeID)
   else {
@@ -203,29 +179,27 @@ public func foryReadCompatibleOptionalInt16Field(
 @inline(never)
 public func foryReadCompatibleInt32Field(
   _ context: ReadContext,
-  remoteFieldType: TypeMeta.FieldType,
-  localTypeID: UInt32,
-  fieldName: String
+  remoteField: TypeMeta.FieldInfo,
+  localField: TypeMeta.FieldInfo
 ) throws -> Int32 {
   try foryReadCompatibleOptionalInt32Field(
-    context, remoteFieldType: remoteFieldType, localTypeID: localTypeID, fieldName: fieldName)
+    context, remoteField: remoteField, localField: localField)
     ?? 0
 }
 
 @inline(never)
 public func foryReadCompatibleOptionalInt32Field(
   _ context: ReadContext,
-  remoteFieldType: TypeMeta.FieldType,
-  localTypeID: UInt32,
-  fieldName: String
+  remoteField: TypeMeta.FieldInfo,
+  localField: TypeMeta.FieldInfo
 ) throws -> Int32? {
   var remoteTypeID: TypeId = .unknown
-  let resolvedLocalTypeID = try compatibleScalarLocalTypeID(localTypeID, fieldName: fieldName)
+  let resolvedLocalTypeID = try compatibleScalarLocalTypeID(localField)
+  let fieldName = localField.fieldName
   guard
     let remoteValue = try readCompatibleScalarValue(
       context,
-      remoteFieldType: remoteFieldType,
-      localTypeID: resolvedLocalTypeID,
+      remoteField: remoteField,
       fieldName: fieldName,
       remoteTypeID: &remoteTypeID)
   else {
@@ -245,29 +219,27 @@ public func foryReadCompatibleOptionalInt32Field(
 @inline(never)
 public func foryReadCompatibleInt64Field(
   _ context: ReadContext,
-  remoteFieldType: TypeMeta.FieldType,
-  localTypeID: UInt32,
-  fieldName: String
+  remoteField: TypeMeta.FieldInfo,
+  localField: TypeMeta.FieldInfo
 ) throws -> Int64 {
   try foryReadCompatibleOptionalInt64Field(
-    context, remoteFieldType: remoteFieldType, localTypeID: localTypeID, fieldName: fieldName)
+    context, remoteField: remoteField, localField: localField)
     ?? 0
 }
 
 @inline(never)
 public func foryReadCompatibleOptionalInt64Field(
   _ context: ReadContext,
-  remoteFieldType: TypeMeta.FieldType,
-  localTypeID: UInt32,
-  fieldName: String
+  remoteField: TypeMeta.FieldInfo,
+  localField: TypeMeta.FieldInfo
 ) throws -> Int64? {
   var remoteTypeID: TypeId = .unknown
-  let resolvedLocalTypeID = try compatibleScalarLocalTypeID(localTypeID, fieldName: fieldName)
+  let resolvedLocalTypeID = try compatibleScalarLocalTypeID(localField)
+  let fieldName = localField.fieldName
   guard
     let remoteValue = try readCompatibleScalarValue(
       context,
-      remoteFieldType: remoteFieldType,
-      localTypeID: resolvedLocalTypeID,
+      remoteField: remoteField,
       fieldName: fieldName,
       remoteTypeID: &remoteTypeID)
   else {
@@ -287,29 +259,27 @@ public func foryReadCompatibleOptionalInt64Field(
 @inline(never)
 public func foryReadCompatibleIntField(
   _ context: ReadContext,
-  remoteFieldType: TypeMeta.FieldType,
-  localTypeID: UInt32,
-  fieldName: String
+  remoteField: TypeMeta.FieldInfo,
+  localField: TypeMeta.FieldInfo
 ) throws -> Int {
   try foryReadCompatibleOptionalIntField(
-    context, remoteFieldType: remoteFieldType, localTypeID: localTypeID, fieldName: fieldName)
+    context, remoteField: remoteField, localField: localField)
     ?? 0
 }
 
 @inline(never)
 public func foryReadCompatibleOptionalIntField(
   _ context: ReadContext,
-  remoteFieldType: TypeMeta.FieldType,
-  localTypeID: UInt32,
-  fieldName: String
+  remoteField: TypeMeta.FieldInfo,
+  localField: TypeMeta.FieldInfo
 ) throws -> Int? {
   var remoteTypeID: TypeId = .unknown
-  let resolvedLocalTypeID = try compatibleScalarLocalTypeID(localTypeID, fieldName: fieldName)
+  let resolvedLocalTypeID = try compatibleScalarLocalTypeID(localField)
+  let fieldName = localField.fieldName
   guard
     let remoteValue = try readCompatibleScalarValue(
       context,
-      remoteFieldType: remoteFieldType,
-      localTypeID: resolvedLocalTypeID,
+      remoteField: remoteField,
       fieldName: fieldName,
       remoteTypeID: &remoteTypeID)
   else {
@@ -329,29 +299,27 @@ public func foryReadCompatibleOptionalIntField(
 @inline(never)
 public func foryReadCompatibleUInt8Field(
   _ context: ReadContext,
-  remoteFieldType: TypeMeta.FieldType,
-  localTypeID: UInt32,
-  fieldName: String
+  remoteField: TypeMeta.FieldInfo,
+  localField: TypeMeta.FieldInfo
 ) throws -> UInt8 {
   try foryReadCompatibleOptionalUInt8Field(
-    context, remoteFieldType: remoteFieldType, localTypeID: localTypeID, fieldName: fieldName)
+    context, remoteField: remoteField, localField: localField)
     ?? 0
 }
 
 @inline(never)
 public func foryReadCompatibleOptionalUInt8Field(
   _ context: ReadContext,
-  remoteFieldType: TypeMeta.FieldType,
-  localTypeID: UInt32,
-  fieldName: String
+  remoteField: TypeMeta.FieldInfo,
+  localField: TypeMeta.FieldInfo
 ) throws -> UInt8? {
   var remoteTypeID: TypeId = .unknown
-  let resolvedLocalTypeID = try compatibleScalarLocalTypeID(localTypeID, fieldName: fieldName)
+  let resolvedLocalTypeID = try compatibleScalarLocalTypeID(localField)
+  let fieldName = localField.fieldName
   guard
     let remoteValue = try readCompatibleScalarValue(
       context,
-      remoteFieldType: remoteFieldType,
-      localTypeID: resolvedLocalTypeID,
+      remoteField: remoteField,
       fieldName: fieldName,
       remoteTypeID: &remoteTypeID)
   else {
@@ -371,29 +339,27 @@ public func foryReadCompatibleOptionalUInt8Field(
 @inline(never)
 public func foryReadCompatibleUInt16Field(
   _ context: ReadContext,
-  remoteFieldType: TypeMeta.FieldType,
-  localTypeID: UInt32,
-  fieldName: String
+  remoteField: TypeMeta.FieldInfo,
+  localField: TypeMeta.FieldInfo
 ) throws -> UInt16 {
   try foryReadCompatibleOptionalUInt16Field(
-    context, remoteFieldType: remoteFieldType, localTypeID: localTypeID, fieldName: fieldName)
+    context, remoteField: remoteField, localField: localField)
     ?? 0
 }
 
 @inline(never)
 public func foryReadCompatibleOptionalUInt16Field(
   _ context: ReadContext,
-  remoteFieldType: TypeMeta.FieldType,
-  localTypeID: UInt32,
-  fieldName: String
+  remoteField: TypeMeta.FieldInfo,
+  localField: TypeMeta.FieldInfo
 ) throws -> UInt16? {
   var remoteTypeID: TypeId = .unknown
-  let resolvedLocalTypeID = try compatibleScalarLocalTypeID(localTypeID, fieldName: fieldName)
+  let resolvedLocalTypeID = try compatibleScalarLocalTypeID(localField)
+  let fieldName = localField.fieldName
   guard
     let remoteValue = try readCompatibleScalarValue(
       context,
-      remoteFieldType: remoteFieldType,
-      localTypeID: resolvedLocalTypeID,
+      remoteField: remoteField,
       fieldName: fieldName,
       remoteTypeID: &remoteTypeID)
   else {
@@ -413,29 +379,27 @@ public func foryReadCompatibleOptionalUInt16Field(
 @inline(never)
 public func foryReadCompatibleUInt32Field(
   _ context: ReadContext,
-  remoteFieldType: TypeMeta.FieldType,
-  localTypeID: UInt32,
-  fieldName: String
+  remoteField: TypeMeta.FieldInfo,
+  localField: TypeMeta.FieldInfo
 ) throws -> UInt32 {
   try foryReadCompatibleOptionalUInt32Field(
-    context, remoteFieldType: remoteFieldType, localTypeID: localTypeID, fieldName: fieldName)
+    context, remoteField: remoteField, localField: localField)
     ?? 0
 }
 
 @inline(never)
 public func foryReadCompatibleOptionalUInt32Field(
   _ context: ReadContext,
-  remoteFieldType: TypeMeta.FieldType,
-  localTypeID: UInt32,
-  fieldName: String
+  remoteField: TypeMeta.FieldInfo,
+  localField: TypeMeta.FieldInfo
 ) throws -> UInt32? {
   var remoteTypeID: TypeId = .unknown
-  let resolvedLocalTypeID = try compatibleScalarLocalTypeID(localTypeID, fieldName: fieldName)
+  let resolvedLocalTypeID = try compatibleScalarLocalTypeID(localField)
+  let fieldName = localField.fieldName
   guard
     let remoteValue = try readCompatibleScalarValue(
       context,
-      remoteFieldType: remoteFieldType,
-      localTypeID: resolvedLocalTypeID,
+      remoteField: remoteField,
       fieldName: fieldName,
       remoteTypeID: &remoteTypeID)
   else {
@@ -455,29 +419,27 @@ public func foryReadCompatibleOptionalUInt32Field(
 @inline(never)
 public func foryReadCompatibleUInt64Field(
   _ context: ReadContext,
-  remoteFieldType: TypeMeta.FieldType,
-  localTypeID: UInt32,
-  fieldName: String
+  remoteField: TypeMeta.FieldInfo,
+  localField: TypeMeta.FieldInfo
 ) throws -> UInt64 {
   try foryReadCompatibleOptionalUInt64Field(
-    context, remoteFieldType: remoteFieldType, localTypeID: localTypeID, fieldName: fieldName)
+    context, remoteField: remoteField, localField: localField)
     ?? 0
 }
 
 @inline(never)
 public func foryReadCompatibleOptionalUInt64Field(
   _ context: ReadContext,
-  remoteFieldType: TypeMeta.FieldType,
-  localTypeID: UInt32,
-  fieldName: String
+  remoteField: TypeMeta.FieldInfo,
+  localField: TypeMeta.FieldInfo
 ) throws -> UInt64? {
   var remoteTypeID: TypeId = .unknown
-  let resolvedLocalTypeID = try compatibleScalarLocalTypeID(localTypeID, fieldName: fieldName)
+  let resolvedLocalTypeID = try compatibleScalarLocalTypeID(localField)
+  let fieldName = localField.fieldName
   guard
     let remoteValue = try readCompatibleScalarValue(
       context,
-      remoteFieldType: remoteFieldType,
-      localTypeID: resolvedLocalTypeID,
+      remoteField: remoteField,
       fieldName: fieldName,
       remoteTypeID: &remoteTypeID)
   else {
@@ -497,29 +459,27 @@ public func foryReadCompatibleOptionalUInt64Field(
 @inline(never)
 public func foryReadCompatibleUIntField(
   _ context: ReadContext,
-  remoteFieldType: TypeMeta.FieldType,
-  localTypeID: UInt32,
-  fieldName: String
+  remoteField: TypeMeta.FieldInfo,
+  localField: TypeMeta.FieldInfo
 ) throws -> UInt {
   try foryReadCompatibleOptionalUIntField(
-    context, remoteFieldType: remoteFieldType, localTypeID: localTypeID, fieldName: fieldName)
+    context, remoteField: remoteField, localField: localField)
     ?? 0
 }
 
 @inline(never)
 public func foryReadCompatibleOptionalUIntField(
   _ context: ReadContext,
-  remoteFieldType: TypeMeta.FieldType,
-  localTypeID: UInt32,
-  fieldName: String
+  remoteField: TypeMeta.FieldInfo,
+  localField: TypeMeta.FieldInfo
 ) throws -> UInt? {
   var remoteTypeID: TypeId = .unknown
-  let resolvedLocalTypeID = try compatibleScalarLocalTypeID(localTypeID, fieldName: fieldName)
+  let resolvedLocalTypeID = try compatibleScalarLocalTypeID(localField)
+  let fieldName = localField.fieldName
   guard
     let remoteValue = try readCompatibleScalarValue(
       context,
-      remoteFieldType: remoteFieldType,
-      localTypeID: resolvedLocalTypeID,
+      remoteField: remoteField,
       fieldName: fieldName,
       remoteTypeID: &remoteTypeID)
   else {
@@ -539,29 +499,27 @@ public func foryReadCompatibleOptionalUIntField(
 @inline(never)
 public func foryReadCompatibleFloat16Field(
   _ context: ReadContext,
-  remoteFieldType: TypeMeta.FieldType,
-  localTypeID: UInt32,
-  fieldName: String
+  remoteField: TypeMeta.FieldInfo,
+  localField: TypeMeta.FieldInfo
 ) throws -> Float16 {
   try foryReadCompatibleOptionalFloat16Field(
-    context, remoteFieldType: remoteFieldType, localTypeID: localTypeID, fieldName: fieldName)
+    context, remoteField: remoteField, localField: localField)
     ?? 0
 }
 
 @inline(never)
 public func foryReadCompatibleOptionalFloat16Field(
   _ context: ReadContext,
-  remoteFieldType: TypeMeta.FieldType,
-  localTypeID: UInt32,
-  fieldName: String
+  remoteField: TypeMeta.FieldInfo,
+  localField: TypeMeta.FieldInfo
 ) throws -> Float16? {
   var remoteTypeID: TypeId = .unknown
-  let resolvedLocalTypeID = try compatibleScalarLocalTypeID(localTypeID, fieldName: fieldName)
+  let resolvedLocalTypeID = try compatibleScalarLocalTypeID(localField)
+  let fieldName = localField.fieldName
   guard
     let remoteValue = try readCompatibleScalarValue(
       context,
-      remoteFieldType: remoteFieldType,
-      localTypeID: resolvedLocalTypeID,
+      remoteField: remoteField,
       fieldName: fieldName,
       remoteTypeID: &remoteTypeID)
   else {
@@ -581,29 +539,27 @@ public func foryReadCompatibleOptionalFloat16Field(
 @inline(never)
 public func foryReadCompatibleBFloat16Field(
   _ context: ReadContext,
-  remoteFieldType: TypeMeta.FieldType,
-  localTypeID: UInt32,
-  fieldName: String
+  remoteField: TypeMeta.FieldInfo,
+  localField: TypeMeta.FieldInfo
 ) throws -> BFloat16 {
   try foryReadCompatibleOptionalBFloat16Field(
-    context, remoteFieldType: remoteFieldType, localTypeID: localTypeID, fieldName: fieldName)
+    context, remoteField: remoteField, localField: localField)
     ?? BFloat16()
 }
 
 @inline(never)
 public func foryReadCompatibleOptionalBFloat16Field(
   _ context: ReadContext,
-  remoteFieldType: TypeMeta.FieldType,
-  localTypeID: UInt32,
-  fieldName: String
+  remoteField: TypeMeta.FieldInfo,
+  localField: TypeMeta.FieldInfo
 ) throws -> BFloat16? {
   var remoteTypeID: TypeId = .unknown
-  let resolvedLocalTypeID = try compatibleScalarLocalTypeID(localTypeID, fieldName: fieldName)
+  let resolvedLocalTypeID = try compatibleScalarLocalTypeID(localField)
+  let fieldName = localField.fieldName
   guard
     let remoteValue = try readCompatibleScalarValue(
       context,
-      remoteFieldType: remoteFieldType,
-      localTypeID: resolvedLocalTypeID,
+      remoteField: remoteField,
       fieldName: fieldName,
       remoteTypeID: &remoteTypeID)
   else {
@@ -623,29 +579,27 @@ public func foryReadCompatibleOptionalBFloat16Field(
 @inline(never)
 public func foryReadCompatibleFloatField(
   _ context: ReadContext,
-  remoteFieldType: TypeMeta.FieldType,
-  localTypeID: UInt32,
-  fieldName: String
+  remoteField: TypeMeta.FieldInfo,
+  localField: TypeMeta.FieldInfo
 ) throws -> Float {
   try foryReadCompatibleOptionalFloatField(
-    context, remoteFieldType: remoteFieldType, localTypeID: localTypeID, fieldName: fieldName)
+    context, remoteField: remoteField, localField: localField)
     ?? 0
 }
 
 @inline(never)
 public func foryReadCompatibleOptionalFloatField(
   _ context: ReadContext,
-  remoteFieldType: TypeMeta.FieldType,
-  localTypeID: UInt32,
-  fieldName: String
+  remoteField: TypeMeta.FieldInfo,
+  localField: TypeMeta.FieldInfo
 ) throws -> Float? {
   var remoteTypeID: TypeId = .unknown
-  let resolvedLocalTypeID = try compatibleScalarLocalTypeID(localTypeID, fieldName: fieldName)
+  let resolvedLocalTypeID = try compatibleScalarLocalTypeID(localField)
+  let fieldName = localField.fieldName
   guard
     let remoteValue = try readCompatibleScalarValue(
       context,
-      remoteFieldType: remoteFieldType,
-      localTypeID: resolvedLocalTypeID,
+      remoteField: remoteField,
       fieldName: fieldName,
       remoteTypeID: &remoteTypeID)
   else {
@@ -665,29 +619,27 @@ public func foryReadCompatibleOptionalFloatField(
 @inline(never)
 public func foryReadCompatibleDoubleField(
   _ context: ReadContext,
-  remoteFieldType: TypeMeta.FieldType,
-  localTypeID: UInt32,
-  fieldName: String
+  remoteField: TypeMeta.FieldInfo,
+  localField: TypeMeta.FieldInfo
 ) throws -> Double {
   try foryReadCompatibleOptionalDoubleField(
-    context, remoteFieldType: remoteFieldType, localTypeID: localTypeID, fieldName: fieldName)
+    context, remoteField: remoteField, localField: localField)
     ?? 0
 }
 
 @inline(never)
 public func foryReadCompatibleOptionalDoubleField(
   _ context: ReadContext,
-  remoteFieldType: TypeMeta.FieldType,
-  localTypeID: UInt32,
-  fieldName: String
+  remoteField: TypeMeta.FieldInfo,
+  localField: TypeMeta.FieldInfo
 ) throws -> Double? {
   var remoteTypeID: TypeId = .unknown
-  let resolvedLocalTypeID = try compatibleScalarLocalTypeID(localTypeID, fieldName: fieldName)
+  let resolvedLocalTypeID = try compatibleScalarLocalTypeID(localField)
+  let fieldName = localField.fieldName
   guard
     let remoteValue = try readCompatibleScalarValue(
       context,
-      remoteFieldType: remoteFieldType,
-      localTypeID: resolvedLocalTypeID,
+      remoteField: remoteField,
       fieldName: fieldName,
       remoteTypeID: &remoteTypeID)
   else {
@@ -707,29 +659,27 @@ public func foryReadCompatibleOptionalDoubleField(
 @inline(never)
 public func foryReadCompatibleStringField(
   _ context: ReadContext,
-  remoteFieldType: TypeMeta.FieldType,
-  localTypeID: UInt32,
-  fieldName: String
+  remoteField: TypeMeta.FieldInfo,
+  localField: TypeMeta.FieldInfo
 ) throws -> String {
   try foryReadCompatibleOptionalStringField(
-    context, remoteFieldType: remoteFieldType, localTypeID: localTypeID, fieldName: fieldName)
+    context, remoteField: remoteField, localField: localField)
     ?? ""
 }
 
 @inline(never)
 public func foryReadCompatibleOptionalStringField(
   _ context: ReadContext,
-  remoteFieldType: TypeMeta.FieldType,
-  localTypeID: UInt32,
-  fieldName: String
+  remoteField: TypeMeta.FieldInfo,
+  localField: TypeMeta.FieldInfo
 ) throws -> String? {
   var remoteTypeID: TypeId = .unknown
-  let resolvedLocalTypeID = try compatibleScalarLocalTypeID(localTypeID, fieldName: fieldName)
+  let resolvedLocalTypeID = try compatibleScalarLocalTypeID(localField)
+  let fieldName = localField.fieldName
   guard
     let remoteValue = try readCompatibleScalarValue(
       context,
-      remoteFieldType: remoteFieldType,
-      localTypeID: resolvedLocalTypeID,
+      remoteField: remoteField,
       fieldName: fieldName,
       remoteTypeID: &remoteTypeID)
   else {
@@ -749,29 +699,27 @@ public func foryReadCompatibleOptionalStringField(
 @inline(never)
 public func foryReadCompatibleDecimalField(
   _ context: ReadContext,
-  remoteFieldType: TypeMeta.FieldType,
-  localTypeID: UInt32,
-  fieldName: String
+  remoteField: TypeMeta.FieldInfo,
+  localField: TypeMeta.FieldInfo
 ) throws -> Decimal {
   try foryReadCompatibleOptionalDecimalField(
-    context, remoteFieldType: remoteFieldType, localTypeID: localTypeID, fieldName: fieldName)
+    context, remoteField: remoteField, localField: localField)
     ?? .zero
 }
 
 @inline(never)
 public func foryReadCompatibleOptionalDecimalField(
   _ context: ReadContext,
-  remoteFieldType: TypeMeta.FieldType,
-  localTypeID: UInt32,
-  fieldName: String
+  remoteField: TypeMeta.FieldInfo,
+  localField: TypeMeta.FieldInfo
 ) throws -> Decimal? {
   var remoteTypeID: TypeId = .unknown
-  let resolvedLocalTypeID = try compatibleScalarLocalTypeID(localTypeID, fieldName: fieldName)
+  let resolvedLocalTypeID = try compatibleScalarLocalTypeID(localField)
+  let fieldName = localField.fieldName
   guard
     let remoteValue = try readCompatibleScalarValue(
       context,
-      remoteFieldType: remoteFieldType,
-      localTypeID: resolvedLocalTypeID,
+      remoteField: remoteField,
       fieldName: fieldName,
       remoteTypeID: &remoteTypeID)
   else {
@@ -790,52 +738,26 @@ public func foryReadCompatibleOptionalDecimalField(
 
 private func readCompatibleScalarValue(
   _ context: ReadContext,
-  remoteFieldType: TypeMeta.FieldType,
-  localTypeID resolvedLocalTypeID: TypeId,
+  remoteField: TypeMeta.FieldInfo,
   fieldName: String,
   remoteTypeID: inout TypeId
 ) throws -> CompatibleScalarValue? {
+  let remoteFieldType = remoteField.fieldType
   guard let resolvedRemoteTypeID = TypeId(rawValue: remoteFieldType.typeID) else {
     throw ForyError.invalidData(
       "unknown compatible scalar remote type \(remoteFieldType.typeID) for field \(fieldName)")
   }
   remoteTypeID = resolvedRemoteTypeID
-  guard !remoteFieldType.trackRef else {
-    throw compatibleScalarError(
-      fieldName: fieldName,
-      remoteTypeID: resolvedRemoteTypeID,
-      localTypeID: resolvedLocalTypeID,
-      reason: "trackingRef scalar conversion is not supported"
-    )
-  }
   return try readCompatibleRemoteScalar(
     context, remoteTypeID: resolvedRemoteTypeID, fieldType: remoteFieldType)
 }
 
-private func compatibleScalarLocalTypeID(_ rawTypeID: UInt32, fieldName: String) throws -> TypeId {
-  guard let localTypeID = TypeId(rawValue: rawTypeID) else {
-    throw ForyError.invalidData("unknown compatible scalar local type for field \(fieldName)")
+private func compatibleScalarLocalTypeID(_ localField: TypeMeta.FieldInfo) throws -> TypeId {
+  guard let localTypeID = TypeId(rawValue: localField.fieldType.typeID) else {
+    throw ForyError.invalidData(
+      "unknown compatible scalar local type for field \(localField.fieldName)")
   }
   return localTypeID
-}
-
-private func compatibleScalarKind(_ typeID: TypeId) -> CompatibleScalarKind? {
-  switch typeID {
-  case .bool:
-    return .bool
-  case .string:
-    return .string
-  case .int8, .int16, .int32, .varint32, .int64, .varint64, .taggedInt64:
-    return .signedInteger
-  case .uint8, .uint16, .uint32, .varUInt32, .uint64, .varUInt64, .taggedUInt64:
-    return .unsignedInteger
-  case .float16, .bfloat16, .float32, .float64:
-    return .floatingPoint
-  case .decimal:
-    return .decimal
-  default:
-    return nil
-  }
 }
 
 private func readCompatibleRemoteScalar(

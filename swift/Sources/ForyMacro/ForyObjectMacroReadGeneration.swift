@@ -181,6 +181,9 @@ private func buildClassReadCompatibleDataDecl(
   let bufferBinding =
     (schemaAssignBody.contains("__buffer") || compatibleAlignedAssignBody.contains("__buffer")
       || compatibleCases.contains("__buffer")) ? "let __buffer = context.buffer\n        " : ""
+  let localFieldsBinding =
+    compatibleCases.contains("__foryLocalFields")
+    ? "let __foryLocalFields = Self.foryFieldsInfo(trackRef: context.trackRef)\n        " : ""
 
   return """
     @inline(never)
@@ -206,7 +209,7 @@ private func buildClassReadCompatibleDataDecl(
             \(compatibleAlignedAssignBody)
             return value
         }
-        for remoteField in typeMeta.fields {
+        \(localFieldsBinding)for remoteField in typeMeta.fields {
             switch Int(remoteField.fieldID ?? -1) {
         \(compatibleCases)
             case -1:
@@ -313,6 +316,9 @@ private func buildStructChangedFallbackDecl(
   ctorArgs: String
 ) -> String {
   let bufferBinding = cases.contains("__buffer") ? "let __buffer = context.buffer\n        " : ""
+  let localFieldsBinding =
+    cases.contains("__foryLocalFields")
+    ? "let __foryLocalFields = Self.foryFieldsInfo(trackRef: context.trackRef)\n          " : ""
   return """
       @inline(never)
       private static func __foryReadChangedData(
@@ -321,7 +327,7 @@ private func buildStructChangedFallbackDecl(
       ) throws -> Self {
           \(bufferBinding)
           \(defaults)
-          for remoteField in typeMeta.fields {
+          \(localFieldsBinding)for remoteField in typeMeta.fields {
               switch Int(remoteField.fieldID ?? -1) {
               \(cases)
               case -1:
@@ -435,6 +441,7 @@ private func buildCompatibleReadCases(
     )
     let compatibleCaseExpr = compatibleScalarReadExpr(
       field,
+      sortedIndex: sortedIndex,
       compatibleValueExpr: compatibleValueExpr
     )
     return [
@@ -444,14 +451,17 @@ private func buildCompatibleReadCases(
   }.joined(separator: "\n\(indent)")
 }
 
-private func compatibleScalarReadExpr(_ field: ParsedField, compatibleValueExpr: String) -> String {
+private func compatibleScalarReadExpr(
+  _ field: ParsedField,
+  sortedIndex: Int,
+  compatibleValueExpr: String
+) -> String {
   guard
     field.dynamicAnyCodec == nil,
     let helperTarget = compatibleScalarReaderTarget(field)
   else {
     return compatibleValueExpr
   }
-  let fieldName = swiftStringLiteral(field.schemaIdentifier)
   let helperName =
     field.isOptional
     ? "foryReadCompatibleOptional\(helperTarget)Field"
@@ -459,9 +469,8 @@ private func compatibleScalarReadExpr(_ field: ParsedField, compatibleValueExpr:
   return """
     try \(helperName)(
         context,
-        remoteFieldType: remoteField.fieldType,
-        localTypeID: \(field.typeID),
-        fieldName: \(fieldName)
+        remoteField: remoteField,
+        localField: __foryLocalFields[\(sortedIndex)]
     )
     """
 }

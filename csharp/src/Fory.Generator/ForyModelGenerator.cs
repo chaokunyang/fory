@@ -461,6 +461,7 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
                 BuildFieldTypeInfoLiteral(member),
                 "valueNoTypeMeta",
                 "CompatNoTypeMeta",
+                null,
                 4,
                 true);
         }
@@ -498,6 +499,7 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
                 "false",
                 "value",
                 "CompatExact",
+                null,
                 6,
                 true);
         }
@@ -516,6 +518,7 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
                 BuildFieldTypeInfoLiteral(member),
                 "value",
                 "CompatExactTyped",
+                null,
                 6,
                 true);
         }
@@ -523,6 +526,11 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
         sb.AppendLine("                return value;");
         sb.AppendLine("            }");
         sb.AppendLine();
+        if (model.SortedMembers.Any(IsCompatibleScalarMember))
+        {
+            sb.AppendLine("            global::System.Collections.Generic.IReadOnlyList<global::Apache.Fory.TypeMetaFieldInfo> __ForyLocalFields = TypeMetaFields(context.TrackRef);");
+        }
+
         sb.AppendLine("            for (int i = 0; i < typeMeta.Fields.Count; i++)");
         sb.AppendLine("            {");
         sb.AppendLine("                global::Apache.Fory.TypeMetaFieldInfo remoteField = typeMeta.Fields[i];");
@@ -543,6 +551,7 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
                 BuildFieldTypeInfoLiteral(member),
                 "value",
                 "CompatDirect",
+                null,
                 7,
                 true);
             sb.AppendLine("                            break;");
@@ -567,6 +576,7 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
                 BuildFieldTypeInfoLiteral(member),
                 "value",
                 "Compat",
+                idx,
                 7,
                 false);
             sb.AppendLine("                            break;");
@@ -598,7 +608,7 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
 
         foreach (MemberModel member in model.SortedMembers)
         {
-            EmitReadMemberAssignment(sb, member, BuildWriteRefModeExpression(member), "false", "valueSchema", "Schema", 2, true);
+            EmitReadMemberAssignment(sb, member, BuildWriteRefModeExpression(member), "false", "valueSchema", "Schema", null, 2, true);
         }
 
         sb.AppendLine("        return valueSchema;");
@@ -1915,6 +1925,7 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
         string readTypeInfoExpr,
         string valueVar,
         string variableSuffix,
+        int? localFieldIndex,
         int indentLevel,
         bool allowDirectRead)
     {
@@ -1934,7 +1945,7 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
         }
 
         if (variableSuffix == "Compat" &&
-            TryBuildCompatibleScalarReadExpression(member, out string? compatibleScalarReadExpr))
+            TryBuildCompatibleScalarReadExpression(member, localFieldIndex, out string? compatibleScalarReadExpr))
         {
             sb.AppendLine($"{indent}{assignmentTarget} = {compatibleScalarReadExpr};");
             return;
@@ -1982,12 +1993,32 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
 
     private static bool CompatibleCaseNeedsRemoteRefMode(MemberModel member)
     {
-        return !TryBuildCompatibleScalarReadExpression(member, out _);
+        return !IsCompatibleScalarMember(member);
     }
 
-    private static bool TryBuildCompatibleScalarReadExpression(MemberModel member, out string? readExpr)
+    private static bool IsCompatibleScalarMember(MemberModel member)
+    {
+        return TryResolveCompatibleScalarTarget(member, out _);
+    }
+
+    private static bool TryBuildCompatibleScalarReadExpression(MemberModel member, int? localFieldIndex, out string? readExpr)
     {
         readExpr = null;
+        if (localFieldIndex is null ||
+            !TryResolveCompatibleScalarTarget(member, out string? methodTarget))
+        {
+            return false;
+        }
+
+        string methodName = member.IsNullable ? $"ReadNullable{methodTarget}Field" : $"Read{methodTarget}Field";
+        readExpr =
+            $"global::Apache.Fory.CompatibleScalarConverter.{methodName}(context, remoteField, __ForyLocalFields[{localFieldIndex.Value}])";
+        return true;
+    }
+
+    private static bool TryResolveCompatibleScalarTarget(MemberModel member, out string? methodTarget)
+    {
+        methodTarget = null;
         if (member.DynamicAnyKind != DynamicAnyKind.None ||
             !IsCompatibleScalarTypeId(member.Classification.TypeId))
         {
@@ -1995,7 +2026,7 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
         }
 
         string targetName = StripNullableForTypeOf(member.TypeName);
-        string? methodTarget = targetName switch
+        methodTarget = targetName switch
         {
             "bool" or "global::System.Boolean" => "Bool",
             "sbyte" or "global::System.SByte" => "SByte",
@@ -2015,23 +2046,8 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
             "global::Apache.Fory.ForyDecimal" => "ForyDecimal",
             _ => null,
         };
-        if (methodTarget is null)
-        {
-            return false;
-        }
 
-        string methodName = member.IsNullable ? $"ReadNullable{methodTarget}Field" : $"Read{methodTarget}Field";
-        string converterExpr =
-            $"global::Apache.Fory.CompatibleScalarConverter.{methodName}(context, remoteField.FieldType, (global::Apache.Fory.TypeId){member.TypeMeta.TypeIdExpr}, \"{EscapeString(member.FieldIdentifier)}\")";
-        if (!member.IsNullable && methodTarget == "Int64")
-        {
-            readExpr =
-                $"(!remoteField.FieldType.Nullable && !remoteField.FieldType.TrackRef && remoteField.FieldType.TypeId == (uint)global::Apache.Fory.TypeId.VarInt32 ? (long)context.Reader.ReadVarInt32() : {converterExpr})";
-            return true;
-        }
-
-        readExpr = converterExpr;
-        return true;
+        return methodTarget is not null;
     }
 
     private static bool IsCompatibleScalarTypeId(uint typeId)

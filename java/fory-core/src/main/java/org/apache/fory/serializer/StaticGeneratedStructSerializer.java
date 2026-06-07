@@ -20,6 +20,7 @@
 package org.apache.fory.serializer;
 
 import java.lang.reflect.Constructor;
+import java.lang.reflect.InvocationTargetException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -45,6 +46,7 @@ import org.apache.fory.serializer.FieldGroups.SerializationFieldInfo;
 import org.apache.fory.serializer.converter.FieldConverters;
 import org.apache.fory.type.Descriptor;
 import org.apache.fory.type.DescriptorGrouper;
+import org.apache.fory.util.ExceptionUtils;
 import org.apache.fory.util.StringUtils;
 
 /** Base class used by javac-generated {@code @ForyStruct} serializers. */
@@ -131,6 +133,8 @@ public abstract class StaticGeneratedStructSerializer<T> extends AbstractObjectS
       constructor.setAccessible(true);
       return (StaticGeneratedStructSerializer<T>)
           constructor.newInstance(typeResolver, type, typeDef);
+    } catch (InvocationTargetException e) {
+      throw ExceptionUtils.throwException(e.getTargetException());
     } catch (ReflectiveOperationException e) {
       throw new ForyException(
           "Failed to copy static generated serializer "

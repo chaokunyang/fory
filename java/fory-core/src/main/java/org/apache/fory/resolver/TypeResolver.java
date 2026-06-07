@@ -23,6 +23,7 @@ import static org.apache.fory.type.Types.INVALID_USER_TYPE_ID;
 
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
+import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Member;
 import java.lang.reflect.Type;
 import java.util.ArrayList;
@@ -100,6 +101,7 @@ import org.apache.fory.type.GenericType;
 import org.apache.fory.type.ScalaTypes;
 import org.apache.fory.type.TypeUtils;
 import org.apache.fory.type.Types;
+import org.apache.fory.util.ExceptionUtils;
 import org.apache.fory.util.Preconditions;
 import org.apache.fory.util.function.Functions;
 
@@ -1175,6 +1177,8 @@ public abstract class TypeResolver {
           serializerClass.getDeclaredConstructor(TypeResolver.class, Class.class, TypeDef.class);
       constructor.setAccessible(true);
       return constructor.newInstance(this, cls, typeDef);
+    } catch (InvocationTargetException e) {
+      throw ExceptionUtils.throwException(e.getTargetException());
     } catch (ReflectiveOperationException e) {
       throw new ForyException(
           "Failed to create generated compatible serializer "
@@ -1771,6 +1775,8 @@ public abstract class TypeResolver {
           serializerClass.getDeclaredConstructor(TypeResolver.class, Class.class, TypeDef.class);
       constructor.setAccessible(true);
       return (StaticGeneratedStructSerializer<?>) constructor.newInstance(this, cls, typeDef);
+    } catch (InvocationTargetException e) {
+      throw ExceptionUtils.throwException(e.getTargetException());
     } catch (ReflectiveOperationException e) {
       throw new ForyException(
           "Failed to create runtime static compatible serializer "

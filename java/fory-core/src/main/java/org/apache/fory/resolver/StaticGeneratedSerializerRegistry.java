@@ -20,6 +20,7 @@
 package org.apache.fory.resolver;
 
 import java.lang.reflect.Constructor;
+import java.lang.reflect.InvocationTargetException;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import org.apache.fory.annotation.Internal;
@@ -27,6 +28,7 @@ import org.apache.fory.exception.ForyException;
 import org.apache.fory.meta.TypeDef;
 import org.apache.fory.serializer.StaticGeneratedStructSerializer;
 import org.apache.fory.type.Descriptor;
+import org.apache.fory.util.ExceptionUtils;
 
 /** Shared registry of build-time generated static serializer mappings. */
 @Internal
@@ -66,6 +68,8 @@ public final class StaticGeneratedSerializerRegistry {
         return typeDef == null
             ? runtimeConstructor.newInstance(resolver, type)
             : compatibleConstructor.newInstance(resolver, type, typeDef);
+      } catch (InvocationTargetException e) {
+        throw ExceptionUtils.throwException(e.getTargetException());
       } catch (ReflectiveOperationException e) {
         throw new ForyException(
             "Failed to create static generated serializer "

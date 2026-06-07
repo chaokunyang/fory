@@ -89,6 +89,39 @@ private struct LocalVarUInt32V2: Equatable {
 }
 
 @ForyStruct
+private struct ExactEncodedV1: Equatable {
+  @ForyField(id: 1, encoding: .fixed)
+  var fixed32: Int32 = 0
+
+  @ForyField(id: 2, encoding: .fixed)
+  var fixed64: Int64 = 0
+
+  @ForyField(id: 3, encoding: .tagged)
+  var tagged64: Int64 = 0
+
+  @ForyField(id: 4)
+  var tail: String = ""
+}
+
+@ForyStruct
+private struct ExactEncodedV2: Equatable {
+  @ForyField(id: 0)
+  var added: Int32 = 0
+
+  @ForyField(id: 3, encoding: .tagged)
+  var tagged64: Int64 = 0
+
+  @ForyField(id: 1, encoding: .fixed)
+  var fixed32: Int32 = 0
+
+  @ForyField(id: 4)
+  var tail: String = ""
+
+  @ForyField(id: 2, encoding: .fixed)
+  var fixed64: Int64 = 0
+}
+
+@ForyStruct
 private struct ScalarBoolBox: Equatable {
   var value: Bool = false
 }
@@ -989,6 +1022,28 @@ func sameSchemaScalarPreserved() throws {
   let value = ScalarStringBox(value: "+1")
   let decoded: ScalarStringBox = try fory.deserialize(try fory.serialize(value))
   #expect(decoded == value)
+}
+
+@Test
+func encodedExactReadsUseCodecs() throws {
+  let value = ExactEncodedV1(
+    fixed32: 0x0102_0304,
+    fixed64: 0x0102_0304_0506_0708,
+    tagged64: Int64(Int32.max) + 0x1020,
+    tail: "aligned"
+  )
+
+  let sameSchema = Fory(config: .init(trackRef: false, compatible: true))
+  sameSchema.register(ExactEncodedV1.self, id: 9960)
+  let sameDecoded: ExactEncodedV1 = try sameSchema.deserialize(try sameSchema.serialize(value))
+  #expect(sameDecoded == value)
+
+  let changedDecoded: ExactEncodedV2 = try compatibleDecode(value, as: ExactEncodedV2.self, id: 9961)
+  #expect(changedDecoded.added == 0)
+  #expect(changedDecoded.fixed32 == value.fixed32)
+  #expect(changedDecoded.fixed64 == value.fixed64)
+  #expect(changedDecoded.tagged64 == value.tagged64)
+  #expect(changedDecoded.tail == value.tail)
 }
 
 @Test

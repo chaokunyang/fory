@@ -313,7 +313,7 @@ func (s *structSerializer) initFieldsFromTypeDef(typeResolver *TypeResolver) err
 			fieldInfo := FieldInfo{
 				Offset:     0,
 				DispatchId: dispatchId,
-				ReadAction: compatReadSkip,
+				ReadAction: remoteFieldReadSkip,
 				RefMode:    refMode,
 				Kind:       FieldKindValue,
 				Serializer: fieldSerializer,
@@ -786,7 +786,7 @@ func (s *structSerializer) initFieldsFromTypeDef(typeResolver *TypeResolver) err
 				ExactSchema:      exactSchema,
 			},
 		}
-		fieldInfo.ReadAction = computeCompatReadAction(&fieldInfo)
+		fieldInfo.ReadAction = computeRemoteFieldReadAction(&fieldInfo)
 		fields = append(fields, fieldInfo)
 	}
 

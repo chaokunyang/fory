@@ -44,18 +44,18 @@ type PrimitiveFieldInfo struct {
 	Meta        *FieldMeta
 }
 
-type compatReadAction uint8
+type remoteFieldReadAction uint8
 
 const (
-	compatReadSkip compatReadAction = iota
-	compatReadScalar
-	compatReadFixed
-	compatReadVarint
-	compatReadExactRemaining
-	compatReadNullableFixed
-	compatReadNullableVarint
-	compatReadEnum
-	compatReadSerializer
+	remoteFieldReadSkip remoteFieldReadAction = iota
+	remoteFieldReadCompatibleScalar
+	remoteFieldReadExactFixed
+	remoteFieldReadExactVarint
+	remoteFieldReadExactRemaining
+	remoteFieldReadExactNullableFixed
+	remoteFieldReadExactNullableVarint
+	remoteFieldReadExactEnum
+	remoteFieldReadSerializer
 )
 
 // FieldMeta contains cold/rarely-accessed field metadata.
@@ -97,7 +97,7 @@ type FieldInfo struct {
 	// Hot fields - accessed frequently during serialization
 	Offset      uintptr    // Field offset for unsafe access
 	DispatchId  DispatchId // Type dispatch ID
-	ReadAction  compatReadAction
+	ReadAction  remoteFieldReadAction
 	WriteOffset int     // Offset within fixed-fields buffer region (sum of preceding field sizes)
 	RefMode     RefMode // ref mode for serializer.Write/Read
 	Kind        FieldKind

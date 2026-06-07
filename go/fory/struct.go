@@ -2317,25 +2317,25 @@ func (s *structSerializer) readFieldsInOrder(ctx *ReadContext, value reflect.Val
 	for i := 0; i < len(s.fields); i++ {
 		field := &s.fields[i]
 		switch field.ReadAction {
-		case compatReadSkip:
+		case remoteFieldReadSkip:
 			s.skipField(ctx, field)
 			if ctx.HasError() {
 				return
 			}
 			continue
-		case compatReadFixed:
+		case remoteFieldReadExactFixed:
 			i = readExactFixedPrimitiveRun(ctx, s.fields, i, ptr) - 1
 			continue
-		case compatReadVarint:
+		case remoteFieldReadExactVarint:
 			i = readExactVarintPrimitiveRun(ctx, s.fields, i, ptr) - 1
 			continue
-		case compatReadScalar:
+		case remoteFieldReadCompatibleScalar:
 			readCompatibleScalarField(ctx, field, unsafe.Add(ptr, field.Offset))
 			if ctx.HasError() {
 				return
 			}
 			continue
-		case compatReadExactRemaining:
+		case remoteFieldReadExactRemaining:
 			s.readRemainingField(ctx, ptr, field, value)
 			continue
 		}
@@ -2347,7 +2347,7 @@ func (s *structSerializer) readFieldsInOrder(ctx *ReadContext, value reflect.Val
 		}
 
 		switch field.ReadAction {
-		case compatReadNullableFixed:
+		case remoteFieldReadExactNullableFixed:
 			refFlag := buf.ReadInt8(err)
 			if refFlag == NullFlag {
 				clearFieldValue(field.Kind, fieldPtr, optInfo)
@@ -2381,7 +2381,7 @@ func (s *structSerializer) readFieldsInOrder(ctx *ReadContext, value reflect.Val
 				storeFieldValue(field.Kind, fieldPtr, optInfo, buf.ReadUint16(err))
 			}
 			continue
-		case compatReadNullableVarint:
+		case remoteFieldReadExactNullableVarint:
 			refFlag := buf.ReadInt8(err)
 			if refFlag == NullFlag {
 				clearFieldValue(field.Kind, fieldPtr, optInfo)
@@ -2407,7 +2407,7 @@ func (s *structSerializer) readFieldsInOrder(ctx *ReadContext, value reflect.Val
 				storeFieldValue(field.Kind, fieldPtr, optInfo, uint(buf.ReadVarUint64(err)))
 			}
 			continue
-		case compatReadEnum:
+		case remoteFieldReadExactEnum:
 			readEnumFieldUnsafe(ctx, field, fieldPtr)
 			continue
 		}
@@ -2428,41 +2428,41 @@ func (s *structSerializer) readFieldsInOrder(ctx *ReadContext, value reflect.Val
 	}
 }
 
-func computeCompatReadAction(field *FieldInfo) compatReadAction {
+func computeRemoteFieldReadAction(field *FieldInfo) remoteFieldReadAction {
 	if field.Meta.FieldIndex < 0 {
-		return compatReadSkip
+		return remoteFieldReadSkip
 	}
 	if field.Meta.CompatibleScalar != nil {
-		return compatReadScalar
+		return remoteFieldReadCompatibleScalar
 	}
 	if field.Meta.CompatibleScalar == nil &&
 		field.Meta.FieldIndex >= 0 &&
 		isFixedSizePrimitive(field.DispatchId) {
-		return compatReadFixed
+		return remoteFieldReadExactFixed
 	}
 	if field.Meta.CompatibleScalar == nil &&
 		field.Meta.FieldIndex >= 0 &&
 		isVarintPrimitive(field.DispatchId) &&
 		!fieldHasNonPrimitiveSerializer(field) {
-		return compatReadVarint
+		return remoteFieldReadExactVarint
 	}
 	if field.Meta.ExactSchema && !isPrimitiveFieldGroupType(field.Meta.TypeId) {
-		return compatReadExactRemaining
+		return remoteFieldReadExactRemaining
 	}
 	if isNullableFixedSizePrimitive(field.DispatchId) {
-		return compatReadNullableFixed
+		return remoteFieldReadExactNullableFixed
 	}
 	if isNullableVarintPrimitive(field.DispatchId) {
-		return compatReadNullableVarint
+		return remoteFieldReadExactNullableVarint
 	}
 	if isEnumField(field) {
-		return compatReadEnum
+		return remoteFieldReadExactEnum
 	}
-	return compatReadSerializer
+	return remoteFieldReadSerializer
 }
 
 func canReadFixedRun(field *FieldInfo) bool {
-	return field.ReadAction == compatReadFixed
+	return field.ReadAction == remoteFieldReadExactFixed
 }
 
 func readExactFixedPrimitiveRun(ctx *ReadContext, fields []FieldInfo, start int, ptr unsafe.Pointer) int {
@@ -2590,7 +2590,7 @@ func readExactFixedPrimitiveRun(ctx *ReadContext, fields []FieldInfo, start int,
 }
 
 func canReadVarintRun(field *FieldInfo) bool {
-	return field.ReadAction == compatReadVarint
+	return field.ReadAction == remoteFieldReadExactVarint
 }
 
 func readExactVarintPrimitiveRun(ctx *ReadContext, fields []FieldInfo, start int, ptr unsafe.Pointer) int {

@@ -91,7 +91,7 @@ import org.apache.fory.util.record.RecordUtils;
 public class CompatibleCodecBuilder extends ObjectCodecBuilder {
   private static final Logger LOG = LoggerFactory.getLogger(CompatibleCodecBuilder.class);
   private static final String REMOTE_FIELD_INFOS_NAME = "_f_remoteFieldInfos";
-  private static final String LOCAL_FIELD_INFOS_NAME = "_f_localFieldInfos";
+  private static final String LOCAL_FIELD_INFOS_NAME = "_f_localFieldInfosByRemoteOrder";
   private static final String CONSTRUCTOR_TYPE_DEF_NAME = "_f_typeDef";
 
   private final TypeDef typeDef;
@@ -512,7 +512,7 @@ public class CompatibleCodecBuilder extends ObjectCodecBuilder {
         localFieldInfosName,
         new StaticInvoke(
             CompatibleCodecBuilder.class,
-            "buildLocalFieldInfosByRemoteId",
+            "buildLocalFieldInfosByRemoteOrder",
             fieldInfoArrayType,
             constructorResolver,
             constructorClass,
@@ -530,7 +530,7 @@ public class CompatibleCodecBuilder extends ObjectCodecBuilder {
     return fieldInfos;
   }
 
-  public static SerializationFieldInfo[] buildLocalFieldInfosByRemoteId(
+  public static SerializationFieldInfo[] buildLocalFieldInfosByRemoteOrder(
       TypeResolver typeResolver, Class<?> cls, TypeDef typeDef) {
     List<Descriptor> descriptors =
         typeResolver.createDescriptorGrouper(typeDef, cls).getSortedDescriptors();

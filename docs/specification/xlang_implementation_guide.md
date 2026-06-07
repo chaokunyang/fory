@@ -321,6 +321,9 @@ When `Config.compatible` is enabled and the struct is marked evolving:
 - matched scalar fields may use compatible scalar conversion only when the
   layout has classified a remote/local top-level scalar pair as lossless
   convertible and both field schemas have `trackingRef = false`
+- compatible scalar conversion applies only to the immediate matched field.
+  Nested collection, array, map key, and map value schemas must not be accepted
+  by recursively applying scalar conversion to child schemas.
 
 When `compatible` is disabled and `checkStructVersion` is enabled:
 
@@ -336,8 +339,10 @@ decision and value adaptation stay with the serializer-owned compatible field
 layout. Layout classification must reject top-level scalar conversions when
 either matched schema has `trackingRef = true` and must reject same scalar type
 pairs whose top-level `trackingRef` framing differs; converters must not add a
-reference-table path for scalar mismatches. Generated serializers should consume
-the classified layout decision directly:
+reference-table path for scalar mismatches. Recursive schema comparison inside
+containers must reject scalar mismatches instead of reusing the top-level scalar
+conversion matrix. Generated serializers should consume the classified layout
+decision directly:
 
 - source-generated serializers use the layout's matched-field dispatch key to
   select exact direct field code, compatible conversion code, or skip code

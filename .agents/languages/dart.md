@@ -17,6 +17,7 @@ Load this file when changing `dart/`.
 - Codegen must support private fields through same-library `part` generation. If generated file naming changes from `*.fory.dart`, update builder config, source `part` directives, analysis exclusions, docs, CI snippets, and stale artifacts together.
 - Keep generated Dart outputs (`*.fory.dart`) and Dart `pubspec.lock` files untracked in this repo.
 - For generated numeric or xlang changes, test root values and generated required/nullable fields across schema-consistent and compatible serializers, metadata type IDs, rejection paths, and every affected encoding mode.
+- Compatible scalar conversion is immediate-field-only. Recursive compatible schema comparison for list elements, typed-array elements, map keys, and map values must reject scalar mismatches instead of applying top-level scalar conversion.
 - Dart xlang or runtime ownership changes need local Dart package tests plus the Java-driven `DartXlangTest`; package-only smoke tests are not enough.
 - When claiming non-VM Dart support, prove a relevant non-VM compile path such as `dart compile js` against active runtime or example code.
 

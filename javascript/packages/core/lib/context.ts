@@ -817,16 +817,22 @@ export class ReadContext {
   }
 
   private canonicalTypeId(typeId: number): number {
-    if (typeId === TypeId.NAMED_ENUM) {
-      typeId = TypeId.ENUM;
-    } else if (typeId === TypeId.NAMED_EXT) {
-      typeId = TypeId.EXT;
-    } else if (TypeId.structType(typeId)) {
-      typeId = TypeId.STRUCT;
-    } else if (typeId === TypeId.NAMED_UNION || typeId === TypeId.TYPED_UNION) {
-      typeId = TypeId.UNION;
+    switch (typeId) {
+      case TypeId.NAMED_ENUM:
+        return TypeId.ENUM;
+      case TypeId.NAMED_EXT:
+        return TypeId.EXT;
+      case TypeId.NAMED_COMPATIBLE_STRUCT:
+      case TypeId.NAMED_STRUCT:
+      case TypeId.COMPATIBLE_STRUCT:
+      case TypeId.STRUCT:
+        return TypeId.STRUCT;
+      case TypeId.NAMED_UNION:
+      case TypeId.TYPED_UNION:
+        return TypeId.UNION;
+      default:
+        return typeId;
     }
-    return typeId;
   }
 
   private canonicalFieldTypeId(typeInfo: TypeInfo): number {

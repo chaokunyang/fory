@@ -935,11 +935,10 @@ struct Serializer<
       bool is_decl_type = (bitmap & COLL_DECL_ELEMENT_TYPE) != 0;
       bool is_same_type = (bitmap & COLL_IS_SAME_TYPE) != 0;
 
-      const TypeInfo *elem_type_info = nullptr;
       // Read element type info if IS_SAME_TYPE is set but IS_DECL_ELEMENT_TYPE
       // is not.
       if (is_same_type && !is_decl_type) {
-        elem_type_info = ctx.read_any_type_info(ctx.error());
+        const TypeInfo *elem_type_info = ctx.read_any_type_info(ctx.error());
         if (FORY_PREDICT_FALSE(ctx.has_error())) {
           return std::vector<T, Alloc>();
         }
@@ -962,10 +961,7 @@ struct Serializer<
           if (FORY_PREDICT_FALSE(ctx.has_error())) {
             return result;
           }
-          auto elem = elem_type_info
-                          ? Serializer<T>::read_with_type_info(
-                                ctx, RefMode::None, *elem_type_info)
-                          : Serializer<T>::read(ctx, RefMode::None, false);
+          auto elem = Serializer<T>::read(ctx, RefMode::None, false);
           result.push_back(std::move(elem));
         }
         return result;
@@ -977,10 +973,7 @@ struct Serializer<
           return result;
         }
         if (track_ref) {
-          auto elem = elem_type_info
-                          ? Serializer<T>::read_with_type_info(
-                                ctx, RefMode::Tracking, *elem_type_info)
-                          : Serializer<T>::read(ctx, RefMode::Tracking, false);
+          auto elem = Serializer<T>::read(ctx, RefMode::Tracking, false);
           result.push_back(std::move(elem));
         } else if (has_null) {
           bool has_value_elem = read_null_only_flag(ctx, RefMode::NullOnly);
@@ -989,17 +982,10 @@ struct Serializer<
           } else {
             if constexpr (is_nullable_v<T>) {
               using Inner = nullable_element_t<T>;
-              auto inner =
-                  elem_type_info
-                      ? Serializer<Inner>::read_with_type_info(
-                            ctx, RefMode::None, *elem_type_info)
-                      : Serializer<Inner>::read(ctx, RefMode::None, false);
+              auto inner = Serializer<Inner>::read(ctx, RefMode::None, false);
               result.emplace_back(std::move(inner));
             } else {
-              auto elem = elem_type_info
-                              ? Serializer<T>::read_with_type_info(
-                                    ctx, RefMode::None, *elem_type_info)
-                              : Serializer<T>::read(ctx, RefMode::None, false);
+              auto elem = Serializer<T>::read(ctx, RefMode::None, false);
               result.push_back(std::move(elem));
             }
           }
@@ -1263,11 +1249,10 @@ template <typename T, typename Alloc> struct Serializer<std::list<T, Alloc>> {
       bool is_decl_type = (bitmap & COLL_DECL_ELEMENT_TYPE) != 0;
       bool is_same_type = (bitmap & COLL_IS_SAME_TYPE) != 0;
 
-      const TypeInfo *elem_type_info = nullptr;
       // Read element type info if IS_SAME_TYPE is set but IS_DECL_ELEMENT_TYPE
       // is not.
       if (is_same_type && !is_decl_type) {
-        elem_type_info = ctx.read_any_type_info(ctx.error());
+        const TypeInfo *elem_type_info = ctx.read_any_type_info(ctx.error());
         if (FORY_PREDICT_FALSE(ctx.has_error())) {
           return std::list<T, Alloc>();
         }
@@ -1289,10 +1274,7 @@ template <typename T, typename Alloc> struct Serializer<std::list<T, Alloc>> {
           if (FORY_PREDICT_FALSE(ctx.has_error())) {
             return result;
           }
-          auto elem = elem_type_info
-                          ? Serializer<T>::read_with_type_info(
-                                ctx, RefMode::None, *elem_type_info)
-                          : Serializer<T>::read(ctx, RefMode::None, false);
+          auto elem = Serializer<T>::read(ctx, RefMode::None, false);
           result.push_back(std::move(elem));
         }
         return result;
@@ -1304,10 +1286,7 @@ template <typename T, typename Alloc> struct Serializer<std::list<T, Alloc>> {
           return result;
         }
         if (track_ref) {
-          auto elem = elem_type_info
-                          ? Serializer<T>::read_with_type_info(
-                                ctx, RefMode::Tracking, *elem_type_info)
-                          : Serializer<T>::read(ctx, RefMode::Tracking, false);
+          auto elem = Serializer<T>::read(ctx, RefMode::Tracking, false);
           result.push_back(std::move(elem));
         } else if (has_null) {
           bool has_value_elem = read_null_only_flag(ctx, RefMode::NullOnly);
@@ -1316,25 +1295,15 @@ template <typename T, typename Alloc> struct Serializer<std::list<T, Alloc>> {
           } else {
             if constexpr (is_nullable_v<T>) {
               using Inner = nullable_element_t<T>;
-              auto inner =
-                  elem_type_info
-                      ? Serializer<Inner>::read_with_type_info(
-                            ctx, RefMode::None, *elem_type_info)
-                      : Serializer<Inner>::read(ctx, RefMode::None, false);
+              auto inner = Serializer<Inner>::read(ctx, RefMode::None, false);
               result.emplace_back(std::move(inner));
             } else {
-              auto elem = elem_type_info
-                              ? Serializer<T>::read_with_type_info(
-                                    ctx, RefMode::None, *elem_type_info)
-                              : Serializer<T>::read(ctx, RefMode::None, false);
+              auto elem = Serializer<T>::read(ctx, RefMode::None, false);
               result.push_back(std::move(elem));
             }
           }
         } else {
-          auto elem = elem_type_info
-                          ? Serializer<T>::read_with_type_info(
-                                ctx, RefMode::None, *elem_type_info)
-                          : Serializer<T>::read(ctx, RefMode::None, false);
+          auto elem = Serializer<T>::read(ctx, RefMode::None, false);
           result.push_back(std::move(elem));
         }
       }
@@ -1484,11 +1453,10 @@ template <typename T, typename Alloc> struct Serializer<std::deque<T, Alloc>> {
       bool is_decl_type = (bitmap & COLL_DECL_ELEMENT_TYPE) != 0;
       bool is_same_type = (bitmap & COLL_IS_SAME_TYPE) != 0;
 
-      const TypeInfo *elem_type_info = nullptr;
       // Read element type info if IS_SAME_TYPE is set but IS_DECL_ELEMENT_TYPE
       // is not.
       if (is_same_type && !is_decl_type) {
-        elem_type_info = ctx.read_any_type_info(ctx.error());
+        const TypeInfo *elem_type_info = ctx.read_any_type_info(ctx.error());
         if (FORY_PREDICT_FALSE(ctx.has_error())) {
           return std::deque<T, Alloc>();
         }
@@ -1510,10 +1478,7 @@ template <typename T, typename Alloc> struct Serializer<std::deque<T, Alloc>> {
           if (FORY_PREDICT_FALSE(ctx.has_error())) {
             return result;
           }
-          auto elem = elem_type_info
-                          ? Serializer<T>::read_with_type_info(
-                                ctx, RefMode::None, *elem_type_info)
-                          : Serializer<T>::read(ctx, RefMode::None, false);
+          auto elem = Serializer<T>::read(ctx, RefMode::None, false);
           result.push_back(std::move(elem));
         }
         return result;
@@ -1525,10 +1490,7 @@ template <typename T, typename Alloc> struct Serializer<std::deque<T, Alloc>> {
           return result;
         }
         if (track_ref) {
-          auto elem = elem_type_info
-                          ? Serializer<T>::read_with_type_info(
-                                ctx, RefMode::Tracking, *elem_type_info)
-                          : Serializer<T>::read(ctx, RefMode::Tracking, false);
+          auto elem = Serializer<T>::read(ctx, RefMode::Tracking, false);
           result.push_back(std::move(elem));
         } else if (has_null) {
           bool has_value_elem = read_null_only_flag(ctx, RefMode::NullOnly);
@@ -1537,25 +1499,15 @@ template <typename T, typename Alloc> struct Serializer<std::deque<T, Alloc>> {
           } else {
             if constexpr (is_nullable_v<T>) {
               using Inner = nullable_element_t<T>;
-              auto inner =
-                  elem_type_info
-                      ? Serializer<Inner>::read_with_type_info(
-                            ctx, RefMode::None, *elem_type_info)
-                      : Serializer<Inner>::read(ctx, RefMode::None, false);
+              auto inner = Serializer<Inner>::read(ctx, RefMode::None, false);
               result.emplace_back(std::move(inner));
             } else {
-              auto elem = elem_type_info
-                              ? Serializer<T>::read_with_type_info(
-                                    ctx, RefMode::None, *elem_type_info)
-                              : Serializer<T>::read(ctx, RefMode::None, false);
+              auto elem = Serializer<T>::read(ctx, RefMode::None, false);
               result.push_back(std::move(elem));
             }
           }
         } else {
-          auto elem = elem_type_info
-                          ? Serializer<T>::read_with_type_info(
-                                ctx, RefMode::None, *elem_type_info)
-                          : Serializer<T>::read(ctx, RefMode::None, false);
+          auto elem = Serializer<T>::read(ctx, RefMode::None, false);
           result.push_back(std::move(elem));
         }
       }
@@ -1711,11 +1663,10 @@ struct Serializer<std::forward_list<T, Alloc>> {
       bool is_decl_type = (bitmap & COLL_DECL_ELEMENT_TYPE) != 0;
       bool is_same_type = (bitmap & COLL_IS_SAME_TYPE) != 0;
 
-      const TypeInfo *elem_type_info = nullptr;
       // Read element type info if IS_SAME_TYPE is set but IS_DECL_ELEMENT_TYPE
       // is not.
       if (is_same_type && !is_decl_type) {
-        elem_type_info = ctx.read_any_type_info(ctx.error());
+        const TypeInfo *elem_type_info = ctx.read_any_type_info(ctx.error());
         if (FORY_PREDICT_FALSE(ctx.has_error())) {
           return std::forward_list<T, Alloc>();
         }
@@ -1735,10 +1686,7 @@ struct Serializer<std::forward_list<T, Alloc>> {
           if (FORY_PREDICT_FALSE(ctx.has_error())) {
             break;
           }
-          auto elem = elem_type_info
-                          ? Serializer<T>::read_with_type_info(
-                                ctx, RefMode::None, *elem_type_info)
-                          : Serializer<T>::read(ctx, RefMode::None, false);
+          auto elem = Serializer<T>::read(ctx, RefMode::None, false);
           temp.push_back(std::move(elem));
         }
       } else {
@@ -1748,11 +1696,7 @@ struct Serializer<std::forward_list<T, Alloc>> {
             break;
           }
           if (track_ref) {
-            auto elem =
-                elem_type_info
-                    ? Serializer<T>::read_with_type_info(ctx, RefMode::Tracking,
-                                                         *elem_type_info)
-                    : Serializer<T>::read(ctx, RefMode::Tracking, false);
+            auto elem = Serializer<T>::read(ctx, RefMode::Tracking, false);
             temp.push_back(std::move(elem));
           } else if (has_null) {
             bool has_value_elem = read_null_only_flag(ctx, RefMode::NullOnly);
@@ -1761,26 +1705,15 @@ struct Serializer<std::forward_list<T, Alloc>> {
             } else {
               if constexpr (is_nullable_v<T>) {
                 using Inner = nullable_element_t<T>;
-                auto inner =
-                    elem_type_info
-                        ? Serializer<Inner>::read_with_type_info(
-                              ctx, RefMode::None, *elem_type_info)
-                        : Serializer<Inner>::read(ctx, RefMode::None, false);
+                auto inner = Serializer<Inner>::read(ctx, RefMode::None, false);
                 temp.emplace_back(std::move(inner));
               } else {
-                auto elem =
-                    elem_type_info
-                        ? Serializer<T>::read_with_type_info(ctx, RefMode::None,
-                                                             *elem_type_info)
-                        : Serializer<T>::read(ctx, RefMode::None, false);
+                auto elem = Serializer<T>::read(ctx, RefMode::None, false);
                 temp.push_back(std::move(elem));
               }
             }
           } else {
-            auto elem = elem_type_info
-                            ? Serializer<T>::read_with_type_info(
-                                  ctx, RefMode::None, *elem_type_info)
-                            : Serializer<T>::read(ctx, RefMode::None, false);
+            auto elem = Serializer<T>::read(ctx, RefMode::None, false);
             temp.push_back(std::move(elem));
           }
         }
@@ -2201,9 +2134,8 @@ struct Serializer<std::set<T, Args...>> {
       bool is_decl_type = (bitmap & COLL_DECL_ELEMENT_TYPE) != 0;
       bool is_same_type = (bitmap & COLL_IS_SAME_TYPE) != 0;
 
-      const TypeInfo *elem_type_info = nullptr;
       if (is_same_type && !is_decl_type) {
-        elem_type_info = ctx.read_any_type_info(ctx.error());
+        const TypeInfo *elem_type_info = ctx.read_any_type_info(ctx.error());
         if (FORY_PREDICT_FALSE(ctx.has_error())) {
           return std::set<T, Args...>();
         }
@@ -2221,10 +2153,7 @@ struct Serializer<std::set<T, Args...>> {
           if (FORY_PREDICT_FALSE(ctx.has_error())) {
             return result;
           }
-          auto elem = elem_type_info
-                          ? Serializer<T>::read_with_type_info(
-                                ctx, RefMode::None, *elem_type_info)
-                          : Serializer<T>::read(ctx, RefMode::None, false);
+          auto elem = Serializer<T>::read(ctx, RefMode::None, false);
           result.insert(std::move(elem));
         }
         return result;
@@ -2235,25 +2164,16 @@ struct Serializer<std::set<T, Args...>> {
           return result;
         }
         if (track_ref) {
-          auto elem = elem_type_info
-                          ? Serializer<T>::read_with_type_info(
-                                ctx, RefMode::Tracking, *elem_type_info)
-                          : Serializer<T>::read(ctx, RefMode::Tracking, false);
+          auto elem = Serializer<T>::read(ctx, RefMode::Tracking, false);
           result.insert(std::move(elem));
         } else if (has_null) {
           bool has_value_elem = read_null_only_flag(ctx, RefMode::NullOnly);
           if (has_value_elem) {
-            auto elem = elem_type_info
-                            ? Serializer<T>::read_with_type_info(
-                                  ctx, RefMode::None, *elem_type_info)
-                            : Serializer<T>::read(ctx, RefMode::None, false);
+            auto elem = Serializer<T>::read(ctx, RefMode::None, false);
             result.insert(std::move(elem));
           }
         } else {
-          auto elem = elem_type_info
-                          ? Serializer<T>::read_with_type_info(
-                                ctx, RefMode::None, *elem_type_info)
-                          : Serializer<T>::read(ctx, RefMode::None, false);
+          auto elem = Serializer<T>::read(ctx, RefMode::None, false);
           result.insert(std::move(elem));
         }
       }
@@ -2402,9 +2322,8 @@ struct Serializer<std::unordered_set<T, Args...>> {
       bool is_decl_type = (bitmap & COLL_DECL_ELEMENT_TYPE) != 0;
       bool is_same_type = (bitmap & COLL_IS_SAME_TYPE) != 0;
 
-      const TypeInfo *elem_type_info = nullptr;
       if (is_same_type && !is_decl_type) {
-        elem_type_info = ctx.read_any_type_info(ctx.error());
+        const TypeInfo *elem_type_info = ctx.read_any_type_info(ctx.error());
         if (FORY_PREDICT_FALSE(ctx.has_error())) {
           return std::unordered_set<T, Args...>();
         }
@@ -2423,10 +2342,7 @@ struct Serializer<std::unordered_set<T, Args...>> {
           if (FORY_PREDICT_FALSE(ctx.has_error())) {
             return result;
           }
-          auto elem = elem_type_info
-                          ? Serializer<T>::read_with_type_info(
-                                ctx, RefMode::None, *elem_type_info)
-                          : Serializer<T>::read(ctx, RefMode::None, false);
+          auto elem = Serializer<T>::read(ctx, RefMode::None, false);
           result.insert(std::move(elem));
         }
         return result;
@@ -2437,25 +2353,16 @@ struct Serializer<std::unordered_set<T, Args...>> {
           return result;
         }
         if (track_ref) {
-          auto elem = elem_type_info
-                          ? Serializer<T>::read_with_type_info(
-                                ctx, RefMode::Tracking, *elem_type_info)
-                          : Serializer<T>::read(ctx, RefMode::Tracking, false);
+          auto elem = Serializer<T>::read(ctx, RefMode::Tracking, false);
           result.insert(std::move(elem));
         } else if (has_null) {
           bool has_value_elem = read_null_only_flag(ctx, RefMode::NullOnly);
           if (has_value_elem) {
-            auto elem = elem_type_info
-                            ? Serializer<T>::read_with_type_info(
-                                  ctx, RefMode::None, *elem_type_info)
-                            : Serializer<T>::read(ctx, RefMode::None, false);
+            auto elem = Serializer<T>::read(ctx, RefMode::None, false);
             result.insert(std::move(elem));
           }
         } else {
-          auto elem = elem_type_info
-                          ? Serializer<T>::read_with_type_info(
-                                ctx, RefMode::None, *elem_type_info)
-                          : Serializer<T>::read(ctx, RefMode::None, false);
+          auto elem = Serializer<T>::read(ctx, RefMode::None, false);
           result.insert(std::move(elem));
         }
       }

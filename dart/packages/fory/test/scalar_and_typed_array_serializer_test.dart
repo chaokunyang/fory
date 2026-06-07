@@ -879,38 +879,44 @@ void main() {
       expect(decoded.values, orderedEquals(<int>[1, 2, 3]));
     });
 
-    test(
-      'rejects compatible list payload with nullable elements for dense array fields',
-      () {
-        final writer = Fory();
-        final reader = Fory();
-        ScalarAndTypedArraySerializerTestForyModule.register(
-          writer,
-          CompatibleNullableListEnvelope,
-          name: 'test.CompatibleNullableListArrayEnvelope',
-        );
-        ScalarAndTypedArraySerializerTestForyModule.register(
-          reader,
-          CompatibleArrayEnvelope,
-          name: 'test.CompatibleNullableListArrayEnvelope',
-        );
+    test('adapts compatible nullable list schema into dense array fields', () {
+      final writer = Fory();
+      final reader = Fory();
+      ScalarAndTypedArraySerializerTestForyModule.register(
+        writer,
+        CompatibleNullableListEnvelope,
+        name: 'test.CompatibleNullableListArrayEnvelope',
+      );
+      ScalarAndTypedArraySerializerTestForyModule.register(
+        reader,
+        CompatibleArrayEnvelope,
+        name: 'test.CompatibleNullableListArrayEnvelope',
+      );
 
-        final bytes = writer.serialize(
-          CompatibleNullableListEnvelope()..values = <int?>[1, 2, 3],
-        );
+      final bytes = writer.serialize(
+        CompatibleNullableListEnvelope()..values = <int?>[1, 2, 3],
+      );
 
-        expect(
-          () => reader.deserialize<CompatibleArrayEnvelope>(bytes),
-          throwsA(
-            isA<StateError>().having(
-              (error) => error.toString(),
-              'message',
-              contains('unsupported list/array schema mismatch'),
-            ),
+      final decoded = reader.deserialize<CompatibleArrayEnvelope>(bytes);
+      _expectInt32ListEquals(
+        decoded.values,
+        Int32List.fromList(<int>[1, 2, 3]),
+      );
+
+      final nullBytes = writer.serialize(
+        CompatibleNullableListEnvelope()..values = <int?>[1, null, 3],
+      );
+      expect(
+        () => reader.deserialize<CompatibleArrayEnvelope>(nullBytes),
+        throwsA(
+          isA<StateError>().having(
+            (error) => error.toString(),
+            'message',
+            contains('cannot read nullable'),
           ),
-        );
-      },
-    );
+        ),
+      );
+    });
 
     test('rejects compatible nullable list field into dense array field', () {
       final writer = Fory();

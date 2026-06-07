@@ -620,7 +620,7 @@ TEST(SchemaEvolutionTest, ImmediateArrayFieldCanReadIntoListCarrier) {
   EXPECT_EQ(decoded.value().values, (std::vector<int32_t>{4, 5, 6}));
 }
 
-TEST(SchemaEvolutionTest, NullableListElementsCannotReadIntoArrayCarrier) {
+TEST(SchemaEvolutionTest, NullableListElementsReadIntoArrayCarrier) {
   auto writer = Fory::builder().compatible(true).xlang(true).build();
   auto reader = Fory::builder().compatible(true).xlang(true).build();
 
@@ -635,8 +635,17 @@ TEST(SchemaEvolutionTest, NullableListElementsCannotReadIntoArrayCarrier) {
   auto decoded =
       reader.deserialize<CompatibleArrayField>(payload.data(), payload.size());
 
-  ASSERT_FALSE(decoded.ok());
-  EXPECT_EQ(decoded.error().code(), ErrorCode::TypeError);
+  ASSERT_TRUE(decoded.ok()) << decoded.error().to_string();
+  EXPECT_EQ(decoded.value().values, (std::vector<int32_t>{1, 2}));
+
+  auto null_bytes = writer.serialize(
+      CompatibleNullableListField{{std::optional<int32_t>{1}, std::nullopt}});
+  ASSERT_TRUE(null_bytes.ok()) << null_bytes.error().to_string();
+  auto null_payload = std::move(null_bytes).value();
+  auto null_decoded = reader.deserialize<CompatibleArrayField>(
+      null_payload.data(), null_payload.size());
+  ASSERT_FALSE(null_decoded.ok());
+  EXPECT_EQ(null_decoded.error().code(), ErrorCode::InvalidData);
 }
 
 TEST(SchemaEvolutionTest, NestedListArraySchemaPairsAreNotMatched) {

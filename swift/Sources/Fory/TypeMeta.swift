@@ -814,7 +814,7 @@ public final class TypeMeta: Equatable, @unchecked Sendable {
     else {
       return false
     }
-    if requireUnframedElement, elementType.nullable || elementType.trackRef {
+    if requireUnframedElement, elementType.trackRef {
       return false
     }
     return TypeId.listElementTypeID(elementType.typeID, matchesDenseArrayTypeID: arrayTypeID)

@@ -188,7 +188,7 @@ public class MetaShareXlangTest extends ForyTestBase {
   }
 
   @Test
-  public void testNullableListCompatibleReadToArrayRejectsNullElements() {
+  public void testNullableListCompatibleReadToArray() {
     for (boolean codegen : new boolean[] {false, true}) {
       Fory listFory = compatibleFory(DirectNullableListField.class, codegen);
       DirectNullableListField listStruct = new DirectNullableListField();
@@ -196,7 +196,13 @@ public class MetaShareXlangTest extends ForyTestBase {
       byte[] listBytes = listFory.serialize(listStruct);
 
       Fory arrayFory = compatibleFory(DirectArrayField.class, codegen);
-      assertThrows(DeserializationException.class, () -> arrayFory.deserialize(listBytes));
+      DirectArrayField arrayStruct = (DirectArrayField) arrayFory.deserialize(listBytes);
+      assertTrue(Arrays.equals(arrayStruct.values, new int[] {1, 2, 3}));
+
+      DirectNullableListField nullElementStruct = new DirectNullableListField();
+      nullElementStruct.values = Arrays.asList(1, null, 3);
+      byte[] nullElementBytes = listFory.serialize(nullElementStruct);
+      assertThrows(DeserializationException.class, () -> arrayFory.deserialize(nullElementBytes));
     }
   }
 

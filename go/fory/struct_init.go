@@ -876,7 +876,7 @@ func canReadCompatibleListAsLocalArray(remoteSpec *TypeSpec, remoteNullable bool
 	if remoteSpec.TypeID != LIST || remoteSpec.Element == nil {
 		return false
 	}
-	if remoteSpec.Element.Nullable || remoteSpec.Element.TrackRef {
+	if remoteSpec.Element.TrackRef {
 		return false
 	}
 	if !isPrimitiveArrayType(localSpec.TypeID) {

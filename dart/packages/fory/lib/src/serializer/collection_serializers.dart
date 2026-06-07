@@ -497,8 +497,7 @@ bool _listElementMatchesArray(
   final elementType =
       listType.arguments.isEmpty ? null : listType.arguments.single;
   return elementType != null &&
-      (!requireUnframedElement ||
-          (!elementType.nullable && !elementType.ref)) &&
+      (!requireUnframedElement || !elementType.ref) &&
       _arrayElementTypeId(arrayTypeId) ==
           _compatibleArrayElementTypeId(elementType.typeId);
 }

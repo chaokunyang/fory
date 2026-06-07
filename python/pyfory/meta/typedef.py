@@ -662,7 +662,7 @@ def _list_array_element_type_matches(list_field_type: FieldType, array_field_typ
     element_type = list_field_type.element_type
     if element_type is None:
         return False
-    if require_unframed_element and (element_type.is_nullable or element_type.is_tracking_ref):
+    if require_unframed_element and element_type.is_tracking_ref:
         return False
     return list_field_type.type_id == TypeId.LIST and _list_element_type_matches_array_element(element_type.type_id, array_element_type_id)
 

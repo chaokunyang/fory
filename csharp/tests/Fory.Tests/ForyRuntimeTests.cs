@@ -1324,7 +1324,7 @@ public sealed class ForyRuntimeTests
     }
 
     [Fact]
-    public void CompatibleReadRejectsNullableListElementsIntoArrayCarrier()
+    public void CompatibleReadAllowsNullableListSchemaIntoArrayCarrier()
     {
         ForyRuntime writer = ForyRuntime.Builder().Compatible(true).Build();
         writer.Register<CompatibleNullableListSchema>(308);
@@ -1332,9 +1332,13 @@ public sealed class ForyRuntimeTests
         reader.Register<CompatibleArraySchema>(308);
 
         byte[] payload = writer.Serialize(new CompatibleNullableListSchema { Values = [1, 2] });
+        CompatibleArraySchema decoded = reader.Deserialize<CompatibleArraySchema>(payload);
+        Assert.Equal([1, 2], decoded.Values);
+
+        byte[] nullPayload = writer.Serialize(new CompatibleNullableListSchema { Values = [1, null, 3] });
         InvalidDataException exception =
-            Assert.Throws<InvalidDataException>(() => reader.Deserialize<CompatibleArraySchema>(payload));
-        Assert.Contains("cannot be read as local field", exception.Message);
+            Assert.Throws<InvalidDataException>(() => reader.Deserialize<CompatibleArraySchema>(nullPayload));
+        Assert.Contains("non-null elements", exception.Message);
     }
 
     [Fact]

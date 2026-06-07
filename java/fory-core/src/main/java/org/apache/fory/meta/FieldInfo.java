@@ -233,7 +233,7 @@ public final class FieldInfo implements Serializable {
         || localFieldType.trackingRef()) {
       return false;
     }
-    int peerListElementTypeId = nonNullableListElementTypeId(fieldType);
+    int peerListElementTypeId = untrackedListElementTypeId(fieldType);
     if (peerListElementTypeId != Types.UNKNOWN) {
       int localArrayTypeId = arrayTypeId(localFieldType);
       return localArrayTypeId != Types.UNKNOWN
@@ -462,7 +462,7 @@ public final class FieldInfo implements Serializable {
     return listElementTypeId(fieldType, false);
   }
 
-  private static int listElementTypeId(FieldTypes.FieldType fieldType, boolean requireNonNullable) {
+  private static int listElementTypeId(FieldTypes.FieldType fieldType, boolean requireUntracked) {
     if (!(fieldType instanceof FieldTypes.CollectionFieldType)
         || fieldType.getTypeId() != Types.LIST) {
       return Types.UNKNOWN;
@@ -470,7 +470,7 @@ public final class FieldInfo implements Serializable {
     FieldTypes.FieldType elementType =
         ((FieldTypes.CollectionFieldType) fieldType).getElementType();
     if (elementType instanceof FieldTypes.RegisteredFieldType) {
-      if (requireNonNullable && (elementType.nullable() || elementType.trackingRef())) {
+      if (requireUntracked && elementType.trackingRef()) {
         return Types.UNKNOWN;
       }
       return ((FieldTypes.RegisteredFieldType) elementType).getTypeId();
@@ -478,7 +478,7 @@ public final class FieldInfo implements Serializable {
     return Types.UNKNOWN;
   }
 
-  private static int nonNullableListElementTypeId(FieldTypes.FieldType fieldType) {
+  private static int untrackedListElementTypeId(FieldTypes.FieldType fieldType) {
     return listElementTypeId(fieldType, true);
   }
 

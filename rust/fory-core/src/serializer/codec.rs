@@ -3124,6 +3124,7 @@ mod tests {
             vec![FieldType::new(type_id::INT32, false, vec![])],
         );
         assert!(compatible_field_pair(&list_i32, &int32_array));
+        assert!(compatible_field_pair(&list_nullable_i32, &int32_array));
         assert!(compatible_field_pair(&int32_array, &list_i32));
     }
 }

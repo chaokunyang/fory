@@ -921,7 +921,6 @@ public sealed class TypeMeta : IEquatable<TypeMeta>
         bool remoteListLocalArray = remote.TypeId == (uint)global::Apache.Fory.TypeId.List &&
                                     localArrayElementTypeId.HasValue &&
                                     remote.Generics.Count == 1 &&
-                                    !remote.Generics[0].Nullable &&
                                     !remote.Generics[0].TrackRef &&
                                     NormalizeScalarTypeIdForMatch(localArrayElementTypeId.Value) ==
                                     NormalizeScalarTypeIdForMatch(remote.Generics[0].TypeId);

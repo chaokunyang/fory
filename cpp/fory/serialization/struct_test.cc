@@ -1013,7 +1013,7 @@ TEST(StructComprehensiveTest, FieldTypeCompatibilitySeparatesAdapters) {
   FieldType int32_array = make_test_field_type(TypeId::INT32_ARRAY);
   EXPECT_TRUE(field_types_compatible_top_level(fixed_list, int32_array));
   EXPECT_TRUE(field_types_compatible_top_level(nullable_list, int32_array));
-  EXPECT_FALSE(field_types_compatible_top_level(int32_array, nullable_list));
+  EXPECT_TRUE(field_types_compatible_top_level(int32_array, nullable_list));
   FieldType tracked_i32(static_cast<uint32_t>(TypeId::INT32), false, true);
   FieldType tracked_list = make_test_field_type(TypeId::LIST, {tracked_i32});
   EXPECT_TRUE(field_types_compatible_top_level(tracked_list, int32_array));

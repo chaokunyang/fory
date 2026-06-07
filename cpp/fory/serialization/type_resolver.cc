@@ -1088,8 +1088,9 @@ bool direct_field_types_compatible(const FieldType &local,
       local.generics.size() == 0 &&
       primitive_array_element_type_id(local.type_id, array_element_type_id) &&
       remote.generics.size() == 1 && !local.nullable && !local.track_ref &&
-      !remote.nullable && !remote.track_ref && !remote.generics[0].nullable &&
-      !remote.generics[0].track_ref) {
+      !remote.nullable && !remote.track_ref && !remote.generics[0].track_ref) {
+    // Nullable element schema is compatible with dense arrays when the payload
+    // has no nulls; actual null elements are rejected by the array reader.
     return compatible_fingerprint_type_id(remote.generics[0].type_id) ==
            compatible_fingerprint_type_id(array_element_type_id);
   }

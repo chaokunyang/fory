@@ -1495,7 +1495,7 @@ mod tests {
     }
 
     #[test]
-    fn rejects_framed_list_array_bridge() {
+    fn classifies_list_array_bridge() {
         let array_type = FieldType::new(crate::type_id::INT32_ARRAY, false, vec![]);
         let int_type = FieldType::new(crate::type_id::INT32, false, vec![]);
         let local_fields = [FieldInfo::new("values", array_type.clone())];
@@ -1512,7 +1512,8 @@ mod tests {
             "values",
             FieldType::new(crate::type_id::LIST, false, vec![nullable_int]),
         )];
-        assert!(assign_remote_field_ids(&local_fields, &mut nullable_remote).is_err());
+        assign_remote_field_ids(&local_fields, &mut nullable_remote).unwrap();
+        assert_eq!(nullable_remote[0].field_id, 1);
 
         let tracked_int = FieldType::new_with_ref(crate::type_id::INT32, false, true, vec![]);
         let mut tracked_remote = [FieldInfo::new(

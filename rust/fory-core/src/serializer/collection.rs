@@ -544,7 +544,7 @@ fn list_element_type_matches_array(
             return false;
         }
         let element = &list.generics[0];
-        if require_unframed_element && (element.nullable || element.track_ref) {
+        if require_unframed_element && element.track_ref {
             return false;
         }
         primitive_array_element_type_matches(element_type_id, element.type_id)

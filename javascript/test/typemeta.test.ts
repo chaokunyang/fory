@@ -616,8 +616,8 @@ describe("typemeta", () => {
       "10": "first",
       "1": "second",
     });
-    const firstRead = source.indexOf("[\"10\"] = result_");
-    const secondRead = source.indexOf("[\"1\"] = result_");
+    const firstRead = source.indexOf('["10"] = result_');
+    const secondRead = source.indexOf('["1"] = result_');
     expect(firstRead).toBeGreaterThanOrEqual(0);
     expect(secondRead).toBeGreaterThan(firstRead);
   });
@@ -1127,7 +1127,7 @@ describe("typemeta", () => {
     ).toThrow(/unsupported compatible field schema mismatch/);
   });
 
-  test("rejects compatible list to dense array when schema has nullable elements", () => {
+  test("adapts compatible nullable list schema to dense array", () => {
     const writerFory = new Fory({ compatible: true });
     const readerFory = new Fory({ compatible: true });
 
@@ -1144,9 +1144,14 @@ describe("typemeta", () => {
     const bytes = serializer.serialize({
       values: [1, 2, 3],
     });
-    expect(() =>
-      readerFory.register(readerType).deserialize(bytes),
-    ).toThrow(/list\/array/);
+    const reader = readerFory.register(readerType);
+    const decoded = reader.deserialize(bytes);
+    expect(Array.from(decoded.values as Int32Array)).toEqual([1, 2, 3]);
+
+    const nullBytes = serializer.serialize({
+      values: [1, null, 3],
+    });
+    expect(() => reader.deserialize(nullBytes)).toThrow(/nullable/);
   });
 
   test("rejects compatible list and dense array root framing drift", () => {

@@ -30,6 +30,7 @@ import org.apache.fory.annotation.ForyField;
 import org.apache.fory.annotation.Nullable;
 import org.apache.fory.annotation.Ref;
 import org.apache.fory.annotation.UInt64Type;
+import org.apache.fory.annotation.UInt8Type;
 import org.apache.fory.config.Int64Encoding;
 import org.apache.fory.exception.DeserializationException;
 import org.apache.fory.reflect.ReflectionUtils;
@@ -410,9 +411,29 @@ public class CompatibleFieldConvertTest extends ForyTestBase {
     public List<String> value = Collections.singletonList("1");
   }
 
+  public static final class RefStringListWriter {
+    @ForyField(id = 0)
+    public List<@Ref String> value = Collections.singletonList("1");
+  }
+
+  public static final class PlainStringListReader {
+    @ForyField(id = 0)
+    public List<String> value;
+  }
+
   public static final class IntListReader {
     @ForyField(id = 0)
     public List<Integer> value;
+  }
+
+  public static final class ByteArrayListWriter {
+    @ForyField(id = 0)
+    public List<byte[]> value = Collections.singletonList(new byte[] {1});
+  }
+
+  public static final class UInt8ByteArrayListReader {
+    @ForyField(id = 0)
+    public List<@UInt8Type byte[]> value;
   }
 
   @DataProvider
@@ -606,6 +627,16 @@ public class CompatibleFieldConvertTest extends ForyTestBase {
   @Test
   public void testNestedScalarMismatchRejected() {
     assertSchemaFails(new StringListWriter(), IntListReader.class, true, false);
+  }
+
+  @Test(dataProvider = "codegenModes")
+  public void testNestedRefTrackingRejected(boolean codegen) {
+    assertRefSchemaFails(new RefStringListWriter(), PlainStringListReader.class, true, codegen);
+  }
+
+  @Test(dataProvider = "codegenModes")
+  public void testNestedArrayTypeRejected(boolean codegen) {
+    assertSchemaFails(new ByteArrayListWriter(), UInt8ByteArrayListReader.class, true, codegen);
   }
 
   @Test(dataProvider = "xlangAndCodegen")

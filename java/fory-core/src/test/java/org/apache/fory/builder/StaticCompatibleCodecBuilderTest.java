@@ -21,6 +21,7 @@ package org.apache.fory.builder;
 
 import java.io.IOException;
 import java.lang.reflect.Field;
+import java.lang.reflect.InvocationTargetException;
 import java.net.URL;
 import java.net.URLClassLoader;
 import java.nio.charset.StandardCharsets;
@@ -454,6 +455,42 @@ public class StaticCompatibleCodecBuilderTest {
   }
 
   @Test
+  public void testStaticRejectsNestedRefSchema() throws Exception {
+    assertStaticSchemaFails(
+        "package test;\n"
+            + "import java.util.List;\n"
+            + "import org.apache.fory.annotation.Ref;\n"
+            + "public class StaticCompatibleNestedPayload {\n"
+            + "  public List<@Ref String> values;\n"
+            + "  public StaticCompatibleNestedPayload() {}\n"
+            + "}\n",
+        "package test;\n"
+            + "import java.util.List;\n"
+            + "public class StaticCompatibleNestedPayload {\n"
+            + "  public List<String> values;\n"
+            + "  public StaticCompatibleNestedPayload() {}\n"
+            + "}\n");
+  }
+
+  @Test
+  public void testStaticRejectsNestedArraySchema() throws Exception {
+    assertStaticSchemaFails(
+        "package test;\n"
+            + "import java.util.List;\n"
+            + "public class StaticCompatibleNestedPayload {\n"
+            + "  public List<byte[]> values;\n"
+            + "  public StaticCompatibleNestedPayload() {}\n"
+            + "}\n",
+        "package test;\n"
+            + "import java.util.List;\n"
+            + "import org.apache.fory.annotation.UInt8Type;\n"
+            + "public class StaticCompatibleNestedPayload {\n"
+            + "  public List<@UInt8Type byte[]> values;\n"
+            + "  public StaticCompatibleNestedPayload() {}\n"
+            + "}\n");
+  }
+
+  @Test
   public void testGraalCompatibleSerializerRegistryUsesLocalReaderClass() throws Exception {
     CompilationResult writerAResult =
         compile(
@@ -536,6 +573,33 @@ public class StaticCompatibleCodecBuilderTest {
     byte[] bytes = writer.serialize(writerValue);
     reader.setMetaReadContext(new MetaReadContext());
     return reader.deserialize(bytes);
+  }
+
+  private static void assertStaticSchemaFails(String writerSource, String readerSource)
+      throws Exception {
+    CompilationResult writerResult = compile("test.StaticCompatibleNestedPayload", writerSource);
+    CompilationResult readerResult = compile("test.StaticCompatibleNestedPayload", readerSource);
+    Assert.assertTrue(writerResult.success, writerResult.diagnostics());
+    Assert.assertTrue(readerResult.success, readerResult.diagnostics());
+    try (URLClassLoader writerLoader = writerResult.classLoader();
+        URLClassLoader readerLoader = readerResult.classLoader()) {
+      Class<?> writerType = writerLoader.loadClass("test.StaticCompatibleNestedPayload");
+      Class<?> readerType = readerLoader.loadClass("test.StaticCompatibleNestedPayload");
+      Fory writer = compatibleFory(writerLoader, writerType, true, "schema-writer");
+      Fory reader = compatibleFory(readerLoader, readerType, true, "schema-reader");
+      TypeDef remoteTypeDef = TypeDef.buildTypeDef(writer.getTypeResolver(), writerType);
+      Class<? extends Serializer> compatibleSerializerClass =
+          CodecUtils.loadOrGenStaticCompatibleCodecClass(
+              reader.getTypeResolver(), cast(readerType), remoteTypeDef);
+      InvocationTargetException exception =
+          Assert.expectThrows(
+              InvocationTargetException.class,
+              () ->
+                  compatibleSerializerClass
+                      .getConstructor(TypeResolver.class, Class.class, TypeDef.class)
+                      .newInstance(reader.getTypeResolver(), readerType, remoteTypeDef));
+      Assert.assertTrue(exception.getCause() instanceof RuntimeException, exception.toString());
+    }
   }
 
   private static Map<String, FieldCodecCategory> remoteCodecCategories(

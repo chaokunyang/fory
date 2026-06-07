@@ -128,6 +128,9 @@ Load this file when changing anything under `java/` or when Java drives a cross-
   `ObjectInstantiators.getObjectInstantiator(TypeResolver, Class)` or bypass the runtime-scoped owner; format
   builders without a Fory runtime context may use the base `ObjectInstantiators.getObjectInstantiator(Class)`
   construction default.
+- Compatible scalar, list-array, and binary/uint8 adapters are immediate-field-only. For matched
+  nested field metadata, classify schema pairs before generated dispatch and require exact
+  nullable/ref/generic/type shape, except for user-defined type-family normalization.
 - Root codegen and builder classes that still need Unsafe on JDK8-24 must route symbolic Unsafe
   access through a helper with a Java 25 replacement. Do not leave `_JDKAccess.unsafe()` or
   `sun.misc.Unsafe` references in JDK25-visible classes outside matching `java25` replacements.

@@ -153,11 +153,8 @@ public final class FieldInfo implements Serializable {
       if (localFieldType != null && isListArrayRootPair(fieldType, localFieldType)) {
         throw incompatibleField("unsupported list/array compatible field mismatch", localFieldType);
       }
-      if (localFieldType != null && hasNestedListArrayShapeMismatch(fieldType, localFieldType)) {
-        throw incompatibleField("nested list/array shape mismatch", localFieldType);
-      }
-      if (localFieldType != null && hasNestedScalarMismatch(fieldType, localFieldType)) {
-        throw incompatibleField("nested scalar schema mismatch", localFieldType);
+      if (localFieldType != null && hasNestedFieldSchemaMismatch(fieldType, localFieldType)) {
+        throw incompatibleField("nested field schema mismatch", localFieldType);
       }
       if (remoteNullable == descriptor.isNullable()
           && remoteTrackingRef == descriptor.isTrackingRef()
@@ -240,17 +237,11 @@ public final class FieldInfo implements Serializable {
     return false;
   }
 
-  private static boolean hasListArrayShapeMismatch(
+  private static boolean hasNestedFieldSchemaMismatch(
       FieldTypes.FieldType peerFieldType, FieldTypes.FieldType localFieldType) {
-    if (isListArrayRootPair(peerFieldType, localFieldType)) {
-      return true;
-    }
-    if (peerFieldType.getTypeId() != localFieldType.getTypeId()) {
-      return false;
-    }
     if (peerFieldType instanceof FieldTypes.CollectionFieldType
         && localFieldType instanceof FieldTypes.CollectionFieldType) {
-      return hasListArrayShapeMismatch(
+      return !sameNestedFieldSchema(
           ((FieldTypes.CollectionFieldType) peerFieldType).getElementType(),
           ((FieldTypes.CollectionFieldType) localFieldType).getElementType());
     }
@@ -258,100 +249,87 @@ public final class FieldInfo implements Serializable {
         && localFieldType instanceof FieldTypes.MapFieldType) {
       FieldTypes.MapFieldType peerMap = (FieldTypes.MapFieldType) peerFieldType;
       FieldTypes.MapFieldType localMap = (FieldTypes.MapFieldType) localFieldType;
-      return hasListArrayShapeMismatch(peerMap.getKeyType(), localMap.getKeyType())
-          || hasListArrayShapeMismatch(peerMap.getValueType(), localMap.getValueType());
+      return !sameNestedFieldSchema(peerMap.getKeyType(), localMap.getKeyType())
+          || !sameNestedFieldSchema(peerMap.getValueType(), localMap.getValueType());
     }
     if (peerFieldType instanceof FieldTypes.ArrayFieldType
         && localFieldType instanceof FieldTypes.ArrayFieldType) {
-      return hasListArrayShapeMismatch(
+      return !sameNestedFieldSchema(
           ((FieldTypes.ArrayFieldType) peerFieldType).getComponentType(),
           ((FieldTypes.ArrayFieldType) localFieldType).getComponentType());
     }
     return false;
   }
 
-  private static boolean hasNestedListArrayShapeMismatch(
+  private static boolean sameNestedFieldSchema(
       FieldTypes.FieldType peerFieldType, FieldTypes.FieldType localFieldType) {
-    if (peerFieldType.getTypeId() != localFieldType.getTypeId()) {
+    if (peerFieldType.nullable() != localFieldType.nullable()
+        || peerFieldType.trackingRef() != localFieldType.trackingRef()) {
       return false;
     }
     if (peerFieldType instanceof FieldTypes.CollectionFieldType
         && localFieldType instanceof FieldTypes.CollectionFieldType) {
-      return hasListArrayShapeMismatch(
-          ((FieldTypes.CollectionFieldType) peerFieldType).getElementType(),
-          ((FieldTypes.CollectionFieldType) localFieldType).getElementType());
+      return sameContainerType(peerFieldType, localFieldType)
+          && sameNestedFieldSchema(
+              ((FieldTypes.CollectionFieldType) peerFieldType).getElementType(),
+              ((FieldTypes.CollectionFieldType) localFieldType).getElementType());
     }
     if (peerFieldType instanceof FieldTypes.MapFieldType
         && localFieldType instanceof FieldTypes.MapFieldType) {
       FieldTypes.MapFieldType peerMap = (FieldTypes.MapFieldType) peerFieldType;
       FieldTypes.MapFieldType localMap = (FieldTypes.MapFieldType) localFieldType;
-      return hasListArrayShapeMismatch(peerMap.getKeyType(), localMap.getKeyType())
-          || hasListArrayShapeMismatch(peerMap.getValueType(), localMap.getValueType());
+      return sameContainerType(peerFieldType, localFieldType)
+          && sameNestedFieldSchema(peerMap.getKeyType(), localMap.getKeyType())
+          && sameNestedFieldSchema(peerMap.getValueType(), localMap.getValueType());
     }
     if (peerFieldType instanceof FieldTypes.ArrayFieldType
         && localFieldType instanceof FieldTypes.ArrayFieldType) {
-      return hasListArrayShapeMismatch(
-          ((FieldTypes.ArrayFieldType) peerFieldType).getComponentType(),
-          ((FieldTypes.ArrayFieldType) localFieldType).getComponentType());
+      FieldTypes.ArrayFieldType peerArray = (FieldTypes.ArrayFieldType) peerFieldType;
+      FieldTypes.ArrayFieldType localArray = (FieldTypes.ArrayFieldType) localFieldType;
+      return sameContainerType(peerFieldType, localFieldType)
+          && peerArray.getDimensions() == localArray.getDimensions()
+          && sameNestedFieldSchema(peerArray.getComponentType(), localArray.getComponentType());
     }
-    return false;
+    if (peerFieldType instanceof FieldTypes.RegisteredFieldType
+        && localFieldType instanceof FieldTypes.RegisteredFieldType) {
+      return normalizedNestedTypeId(peerFieldType.getTypeId())
+          == normalizedNestedTypeId(localFieldType.getTypeId());
+    }
+    if (peerFieldType instanceof FieldTypes.EnumFieldType
+        && localFieldType instanceof FieldTypes.EnumFieldType) {
+      return normalizedNestedTypeId(peerFieldType.getTypeId())
+          == normalizedNestedTypeId(localFieldType.getTypeId());
+    }
+    if (peerFieldType instanceof FieldTypes.ObjectFieldType
+        && localFieldType instanceof FieldTypes.ObjectFieldType) {
+      return normalizedNestedTypeId(peerFieldType.getTypeId())
+          == normalizedNestedTypeId(localFieldType.getTypeId());
+    }
+    return peerFieldType instanceof FieldTypes.UnionFieldType
+        && localFieldType instanceof FieldTypes.UnionFieldType;
   }
 
-  private static boolean hasNestedScalarMismatch(
+  private static boolean sameContainerType(
       FieldTypes.FieldType peerFieldType, FieldTypes.FieldType localFieldType) {
-    if (peerFieldType.getTypeId() != localFieldType.getTypeId()) {
-      return false;
-    }
-    if (peerFieldType instanceof FieldTypes.CollectionFieldType
-        && localFieldType instanceof FieldTypes.CollectionFieldType) {
-      return hasScalarMismatch(
-          ((FieldTypes.CollectionFieldType) peerFieldType).getElementType(),
-          ((FieldTypes.CollectionFieldType) localFieldType).getElementType());
-    }
-    if (peerFieldType instanceof FieldTypes.MapFieldType
-        && localFieldType instanceof FieldTypes.MapFieldType) {
-      FieldTypes.MapFieldType peerMap = (FieldTypes.MapFieldType) peerFieldType;
-      FieldTypes.MapFieldType localMap = (FieldTypes.MapFieldType) localFieldType;
-      return hasScalarMismatch(peerMap.getKeyType(), localMap.getKeyType())
-          || hasScalarMismatch(peerMap.getValueType(), localMap.getValueType());
-    }
-    if (peerFieldType instanceof FieldTypes.ArrayFieldType
-        && localFieldType instanceof FieldTypes.ArrayFieldType) {
-      return hasScalarMismatch(
-          ((FieldTypes.ArrayFieldType) peerFieldType).getComponentType(),
-          ((FieldTypes.ArrayFieldType) localFieldType).getComponentType());
-    }
-    return false;
+    int peerTypeId = normalizedNestedTypeId(peerFieldType.getTypeId());
+    int localTypeId = normalizedNestedTypeId(localFieldType.getTypeId());
+    return peerTypeId <= 0 || localTypeId <= 0 || peerTypeId == localTypeId;
   }
 
-  private static boolean hasScalarMismatch(
-      FieldTypes.FieldType peerFieldType, FieldTypes.FieldType localFieldType) {
-    if (compatibleScalarType(peerFieldType.typeId) && compatibleScalarType(localFieldType.typeId)) {
-      return peerFieldType.typeId != localFieldType.typeId;
+  private static int normalizedNestedTypeId(int typeId) {
+    if (typeId == Types.UNKNOWN || Types.isStructType(typeId)) {
+      return Types.STRUCT;
     }
-    if (peerFieldType.getTypeId() != localFieldType.getTypeId()) {
-      return false;
+    if (Types.isEnumType(typeId)) {
+      return Types.ENUM;
     }
-    if (peerFieldType instanceof FieldTypes.CollectionFieldType
-        && localFieldType instanceof FieldTypes.CollectionFieldType) {
-      return hasScalarMismatch(
-          ((FieldTypes.CollectionFieldType) peerFieldType).getElementType(),
-          ((FieldTypes.CollectionFieldType) localFieldType).getElementType());
+    if (Types.isExtType(typeId)) {
+      return Types.EXT;
     }
-    if (peerFieldType instanceof FieldTypes.MapFieldType
-        && localFieldType instanceof FieldTypes.MapFieldType) {
-      FieldTypes.MapFieldType peerMap = (FieldTypes.MapFieldType) peerFieldType;
-      FieldTypes.MapFieldType localMap = (FieldTypes.MapFieldType) localFieldType;
-      return hasScalarMismatch(peerMap.getKeyType(), localMap.getKeyType())
-          || hasScalarMismatch(peerMap.getValueType(), localMap.getValueType());
+    if (Types.isUnionType(typeId)) {
+      return Types.UNION;
     }
-    if (peerFieldType instanceof FieldTypes.ArrayFieldType
-        && localFieldType instanceof FieldTypes.ArrayFieldType) {
-      return hasScalarMismatch(
-          ((FieldTypes.ArrayFieldType) peerFieldType).getComponentType(),
-          ((FieldTypes.ArrayFieldType) localFieldType).getComponentType());
-    }
-    return false;
+    return typeId;
   }
 
   private static boolean isRefTrackedScalarSchemaMismatch(

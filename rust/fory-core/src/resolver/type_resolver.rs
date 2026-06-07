@@ -195,6 +195,8 @@ pub struct TypeInfo {
     namespace: Rc<MetaString>,
     type_name: Rc<MetaString>,
     register_by_name: bool,
+    // False only for a remote TypeMeta paired with the local harness. Those
+    // values must read through compatible schema mapping, not direct local data.
     exact_local_schema: bool,
     harness: Harness,
 }

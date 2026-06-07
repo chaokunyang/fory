@@ -178,7 +178,8 @@ impl MetaReaderResolver {
                     if let Some(local_type_info) =
                         type_resolver.get_type_info_by_name(namespace, type_name)
                     {
-                        // Use local harness with remote metadata
+                        // Exact schemas can reuse the local TypeInfo; changed
+                        // schemas keep the remote metadata with the local harness.
                         if type_meta.get_hash() == local_type_info.get_type_meta_ref().get_hash() {
                             local_type_info
                         } else {
@@ -206,7 +207,8 @@ impl MetaReaderResolver {
                         if let Some(local_type_info) =
                             type_resolver.get_user_type_info_by_id(user_type_id)
                         {
-                            // Use local harness with remote metadata
+                            // Exact schemas can reuse the local TypeInfo; changed
+                            // schemas keep the remote metadata with the local harness.
                             if type_meta.get_hash()
                                 == local_type_info.get_type_meta_ref().get_hash()
                             {
@@ -230,7 +232,8 @@ impl MetaReaderResolver {
                         }
                     } else if let Some(local_type_info) = type_resolver.get_type_info_by_id(type_id)
                     {
-                        // Use local harness with remote metadata
+                        // Exact schemas can reuse the local TypeInfo; changed
+                        // schemas keep the remote metadata with the local harness.
                         if type_meta.get_hash() == local_type_info.get_type_meta_ref().get_hash() {
                             local_type_info
                         } else {

@@ -309,13 +309,13 @@ public final class FieldInfo implements Serializable {
     }
     if (peerFieldType instanceof FieldTypes.EnumFieldType
         && localFieldType instanceof FieldTypes.EnumFieldType) {
-      return normalizedNestedTypeId(peerFieldType.getTypeId())
-          == normalizedNestedTypeId(localFieldType.getTypeId());
+      return sameUnresolvedOrNormalizedNestedTypeId(
+          peerFieldType.getTypeId(), localFieldType.getTypeId());
     }
     if (peerFieldType instanceof FieldTypes.ObjectFieldType
         && localFieldType instanceof FieldTypes.ObjectFieldType) {
-      return normalizedNestedTypeId(peerFieldType.getTypeId())
-          == normalizedNestedTypeId(localFieldType.getTypeId());
+      return sameUnresolvedOrNormalizedNestedTypeId(
+          peerFieldType.getTypeId(), localFieldType.getTypeId());
     }
     return peerFieldType instanceof FieldTypes.UnionFieldType
         && localFieldType instanceof FieldTypes.UnionFieldType;
@@ -323,9 +323,15 @@ public final class FieldInfo implements Serializable {
 
   private static boolean sameContainerType(
       FieldTypes.FieldType peerFieldType, FieldTypes.FieldType localFieldType) {
-    int peerTypeId = normalizedNestedTypeId(peerFieldType.getTypeId());
-    int localTypeId = normalizedNestedTypeId(localFieldType.getTypeId());
-    return peerTypeId <= 0 || localTypeId <= 0 || peerTypeId == localTypeId;
+    return sameUnresolvedOrNormalizedNestedTypeId(
+        peerFieldType.getTypeId(), localFieldType.getTypeId());
+  }
+
+  private static boolean sameUnresolvedOrNormalizedNestedTypeId(int peerTypeId, int localTypeId) {
+    if (peerTypeId <= Types.UNKNOWN || localTypeId <= Types.UNKNOWN) {
+      return true;
+    }
+    return normalizedNestedTypeId(peerTypeId) == normalizedNestedTypeId(localTypeId);
   }
 
   private static int normalizedNestedTypeId(int typeId) {
@@ -447,10 +453,6 @@ public final class FieldInfo implements Serializable {
     return listElementTypeId(fieldType, false);
   }
 
-  private static int nonNullableListElementTypeId(FieldTypes.FieldType fieldType) {
-    return listElementTypeId(fieldType, true);
-  }
-
   private static int listElementTypeId(FieldTypes.FieldType fieldType, boolean requireNonNullable) {
     if (!(fieldType instanceof FieldTypes.CollectionFieldType)
         || fieldType.getTypeId() != Types.LIST) {
@@ -465,6 +467,10 @@ public final class FieldInfo implements Serializable {
       return ((FieldTypes.RegisteredFieldType) elementType).getTypeId();
     }
     return Types.UNKNOWN;
+  }
+
+  private static int nonNullableListElementTypeId(FieldTypes.FieldType fieldType) {
+    return listElementTypeId(fieldType, true);
   }
 
   private static int arrayTypeId(FieldTypes.FieldType fieldType) {

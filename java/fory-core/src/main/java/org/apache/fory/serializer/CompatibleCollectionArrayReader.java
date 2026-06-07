@@ -133,15 +133,16 @@ final class CompatibleCollectionArrayReader {
     }
     FieldTypes.FieldType remoteFieldType = remoteFieldInfo.getFieldType();
     FieldTypes.FieldType localFieldType = FieldTypes.buildFieldType(resolver, localDescriptor);
-    if (remoteFieldType.nullable()
-        || localFieldType.nullable()
-        || remoteFieldType.trackingRef()
-        || localFieldType.trackingRef()) {
+    if (remoteFieldType.trackingRef() || localFieldType.trackingRef()) {
       return null;
     }
     TypeRef<?> localType = localDescriptor.getTypeRef();
+    boolean nullableArrayField = remoteFieldType.nullable() || localFieldType.nullable();
     int peerListElementTypeId = nonNullableListElementTypeId(remoteFieldType);
     if (peerListElementTypeId != Types.UNKNOWN) {
+      if (nullableArrayField) {
+        return null;
+      }
       int localArrayTypeId = arrayTypeId(localDescriptor);
       if (localArrayTypeId != Types.UNKNOWN
           && localArrayTypeId == denseArrayTypeId(peerListElementTypeId)) {
@@ -178,6 +179,9 @@ final class CompatibleCollectionArrayReader {
             peerArrayTypeId,
             Types.UNKNOWN,
             denseArrayTargetType(localDescriptor.getRawType(), peerArrayTypeId));
+      }
+      if (nullableArrayField) {
+        return null;
       }
       int localListElementTypeId = listElementTypeId(localType);
       if (localListElementTypeId != Types.UNKNOWN

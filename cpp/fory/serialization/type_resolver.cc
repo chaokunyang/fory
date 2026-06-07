@@ -1028,6 +1028,32 @@ bool byte_sequence_field_types_compatible(const FieldType &local,
           remote.type_id == static_cast<uint32_t>(TypeId::BINARY));
 }
 
+bool scalar_field_type_id(uint32_t type_id) {
+  return compatible_scalar_field_types(type_id, type_id);
+}
+
+bool compatible_payload_field_types(const FieldType &local,
+                                    const FieldType &remote) {
+  if (scalar_field_type_id(local.type_id) ||
+      scalar_field_type_id(remote.type_id)) {
+    return !local.track_ref && !remote.track_ref &&
+           local.type_id == remote.type_id;
+  }
+  if (exact_schema_type_id(local.type_id) !=
+          exact_schema_type_id(remote.type_id) ||
+      !user_type_ids_compatible(local, remote) ||
+      local.generics.size() != remote.generics.size()) {
+    return false;
+  }
+  for (size_t i = 0; i < local.generics.size(); ++i) {
+    if (!compatible_payload_field_types(local.generics[i],
+                                        remote.generics[i])) {
+      return false;
+    }
+  }
+  return true;
+}
+
 bool direct_field_types_compatible(const FieldType &local,
                                    const FieldType &remote) {
   if (compatible_scalar_field_types(local.type_id, remote.type_id)) {
@@ -1180,7 +1206,8 @@ bool field_types_compatible_top_level(const FieldType &local,
   return direct_field_types_compatible(local, remote) ||
          byte_sequence_field_types_compatible(local, remote) ||
          (!local.track_ref && !remote.track_ref &&
-          compatible_scalar_field_types(local.type_id, remote.type_id));
+          compatible_scalar_field_types(local.type_id, remote.type_id)) ||
+         compatible_payload_field_types(local, remote);
 }
 
 std::vector<FieldInfo>

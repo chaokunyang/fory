@@ -40,7 +40,6 @@ import org.apache.fory.Fory;
 import org.apache.fory.ThreadSafeFory;
 import org.apache.fory.context.MetaReadContext;
 import org.apache.fory.context.MetaWriteContext;
-import org.apache.fory.exception.DeserializationException;
 import org.apache.fory.exception.ForyException;
 import org.apache.fory.exception.SerializationException;
 import org.apache.fory.meta.FieldInfo;
@@ -987,7 +986,7 @@ public class ForyStructProcessorTest {
   }
 
   @Test
-  public void testStaticListArrayCompatibleReadPayloadValidation() throws Exception {
+  public void testStaticListArraySchemaValidation() throws Exception {
     CompilationResult nullableListWriter =
         compile(
             "test.ListArrayMismatchStruct",
@@ -1017,15 +1016,8 @@ public class ForyStructProcessorTest {
       Fory reader = xlangCompatibleFory(readerLoader, readerType, false, "ListArrayMismatchStruct");
       Object writerValue = writerType.getConstructor().newInstance();
       setField(writerType, writerValue, "values", Arrays.asList(1, 2, 3));
-      Object result = reader.deserialize(writer.serialize(writerValue));
-      Assert.assertTrue(
-          Arrays.equals((int[]) getField(readerType, result, "values"), new int[] {1, 2, 3}));
-
-      Object nullElementWriterValue = writerType.getConstructor().newInstance();
-      setField(writerType, nullElementWriterValue, "values", Arrays.asList(1, null, 3));
-      byte[] nullElementPayload = writer.serialize(nullElementWriterValue);
-      Assert.expectThrows(
-          DeserializationException.class, () -> reader.deserialize(nullElementPayload));
+      byte[] payload = writer.serialize(writerValue);
+      Assert.expectThrows(ForyException.class, () -> reader.deserialize(payload));
     }
 
     CompilationResult nestedListWriter =

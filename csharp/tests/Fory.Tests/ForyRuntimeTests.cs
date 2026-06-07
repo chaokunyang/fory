@@ -1384,7 +1384,7 @@ public sealed class ForyRuntimeTests
     }
 
     [Fact]
-    public void RejectsNestedScalarFramingChanges()
+    public void AllowsNestedScalarNullableChanges()
     {
         List<TypeMetaFieldInfo> localFields =
         [
@@ -1415,7 +1415,8 @@ public sealed class ForyRuntimeTests
                         [new TypeMetaFieldType((uint)TypeId.String, true)])),
             ]);
 
-        Assert.Throws<InvalidDataException>(() => TypeMeta.AssignFieldIds(remoteNullableTypeMeta, localFields));
+        TypeMeta.AssignFieldIds(remoteNullableTypeMeta, localFields);
+        Assert.Equal(1, remoteNullableTypeMeta.Fields[0].AssignedFieldId);
 
         TypeMeta remoteTrackedTypeMeta = new(
             (uint)TypeId.CompatibleStruct,

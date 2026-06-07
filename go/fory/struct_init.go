@@ -582,7 +582,8 @@ func (s *structSerializer) initFieldsFromTypeDef(typeResolver *TypeResolver) err
 						listReader: listReader.(primitiveListSerializer),
 					}
 				}
-			} else if defTypeId == LIST && localType.Kind() == reflect.Array {
+			} else if defTypeId == LIST && localFieldSpec != nil &&
+				isPrimitiveArrayType(localFieldSpec.Type.TypeID) {
 				shouldRead = false
 			} else if !refTrackedScalarSchemaMismatch && !typeLookupFailed && typesCompatible(localType, remoteType) && (!scalarPair || scalarExactSchema) {
 				shouldRead = true

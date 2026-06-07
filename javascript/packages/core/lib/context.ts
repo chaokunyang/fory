@@ -1023,12 +1023,6 @@ export class ReadContext {
     ) {
       return true;
     }
-    if (
-      (remote.nullable === true) !== (local.nullable === true)
-      || (remote.trackingRef === true) !== (local.trackingRef === true)
-    ) {
-      return true;
-    }
     switch (remote.typeId) {
       case TypeId.MAP:
         return (

@@ -832,9 +832,14 @@ public sealed class TypeMeta : IEquatable<TypeMeta>
             return true;
         }
 
-        if (remote.Nullable != local.Nullable || remote.TrackRef != local.TrackRef)
+        bool remoteScalar = CompatibleScalarConverter.IsScalarType(remote.TypeId);
+        bool localScalar = CompatibleScalarConverter.IsScalarType(local.TypeId);
+        if (remoteScalar || localScalar)
         {
-            return false;
+            return !remote.TrackRef &&
+                   !local.TrackRef &&
+                   remote.TypeId == local.TypeId &&
+                   remote.Generics.Count == local.Generics.Count;
         }
 
         if (NormalizeTypeIdForMatch(remote.TypeId) != NormalizeTypeIdForMatch(local.TypeId))

@@ -726,7 +726,7 @@ def _exact_field_type_match(remote_field_type: FieldType, local_field_type: Fiel
     return True
 
 
-def _payload_shape_matches(remote_field_type: FieldType, local_field_type: FieldType, top_level: bool = True) -> bool:
+def _compatible_field_type_match(remote_field_type: FieldType, local_field_type: FieldType, top_level: bool = True) -> bool:
     if local_field_type is None:
         return False
     remote_type_id = remote_field_type.type_id
@@ -735,7 +735,31 @@ def _payload_shape_matches(remote_field_type: FieldType, local_field_type: Field
         return True
     if top_level and _is_root_list_array_pair(remote_field_type, local_field_type):
         return True
-    return _exact_field_type_match(remote_field_type, local_field_type)
+    if remote_type_id in _COMPATIBLE_SCALAR_TYPE_IDS or local_type_id in _COMPATIBLE_SCALAR_TYPE_IDS:
+        return remote_type_id == local_type_id
+    if _normalize_user_type_id(remote_type_id) != _normalize_user_type_id(local_type_id):
+        return False
+    if remote_type_id in (TypeId.LIST, TypeId.SET):
+        return _compatible_field_type_match(
+            remote_field_type.element_type,
+            local_field_type.element_type,
+            False,
+        )
+    if remote_type_id == TypeId.MAP:
+        return _compatible_field_type_match(
+            remote_field_type.key_type,
+            local_field_type.key_type,
+            False,
+        ) and _compatible_field_type_match(
+            remote_field_type.value_type,
+            local_field_type.value_type,
+            False,
+        )
+    return True
+
+
+def _payload_shape_matches(remote_field_type: FieldType, local_field_type: FieldType, top_level: bool = True) -> bool:
+    return _compatible_field_type_match(remote_field_type, local_field_type, top_level)
 
 
 def _payload_shape_needs_local_carrier(remote_field_type: FieldType, local_field_type: FieldType, top_level: bool = True) -> bool:
@@ -947,7 +971,7 @@ def _field_type_assignment(remote_field_type: FieldType, local_field_type: Field
             and supports_compatible_scalar_conversion(remote_type_id, local_type_id)
         ):
             return True, needs_validation
-    return _exact_field_type_match(remote_field_type, local_field_type), False
+    return _compatible_field_type_match(remote_field_type, local_field_type), needs_validation
 
 
 def _is_compatible_scalar_type_id(type_id: TypeId) -> bool:

@@ -1028,7 +1028,7 @@ void main() {
       );
     });
 
-    test('rejects nested list scalar nullable changes', () {
+    test('reads nested list scalar nullable changes', () {
       final writer = Fory();
       final reader = Fory();
       ScalarAndTypedArraySerializerTestForyModule.register(
@@ -1045,20 +1045,14 @@ void main() {
       final bytes = writer.serialize(
         CompatibleNestedNullableListEnvelope()
           ..values = <List<int?>>[
-            <int?>[null],
+            <int?>[7],
           ],
       );
 
-      expect(
-        () => reader.deserialize<CompatibleNestedListEnvelope>(bytes),
-        throwsA(
-          isA<StateError>().having(
-            (error) => error.toString(),
-            'message',
-            contains('incompatible local and remote schemas'),
-          ),
-        ),
-      );
+      final decoded = reader.deserialize<CompatibleNestedListEnvelope>(bytes);
+      expect(decoded.values, <List<int>>[
+        <int>[7],
+      ]);
     });
 
     test('rejects nested map scalar changes', () {
@@ -1092,7 +1086,7 @@ void main() {
       );
     });
 
-    test('rejects nested map scalar nullable changes', () {
+    test('reads nested map scalar nullable changes', () {
       final writer = Fory();
       final reader = Fory();
       ScalarAndTypedArraySerializerTestForyModule.register(
@@ -1107,20 +1101,11 @@ void main() {
       );
 
       final bytes = writer.serialize(
-        CompatibleNestedNullableMapEnvelope()
-          ..values = <String, int?>{'x': null},
+        CompatibleNestedNullableMapEnvelope()..values = <String, int?>{'x': 9},
       );
 
-      expect(
-        () => reader.deserialize<CompatibleNestedIntMapEnvelope>(bytes),
-        throwsA(
-          isA<StateError>().having(
-            (error) => error.toString(),
-            'message',
-            contains('incompatible local and remote schemas'),
-          ),
-        ),
-      );
+      final decoded = reader.deserialize<CompatibleNestedIntMapEnvelope>(bytes);
+      expect(decoded.values, <String, int>{'x': 9});
     });
 
     test('converts compatible scalar fields losslessly', () {

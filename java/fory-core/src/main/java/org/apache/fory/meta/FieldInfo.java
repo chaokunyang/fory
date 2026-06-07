@@ -143,12 +143,11 @@ public final class FieldInfo implements Serializable {
             .build();
       }
       if (peerArrayTypeId != Types.UNKNOWN
-          && peerArrayTypeId == arrayTypeId(localFieldType)
-          && TypeAnnotationUtils.isArrayType(descriptor)) {
-        return new DescriptorBuilder(descriptor)
-            .trackingRef(remoteTrackingRef)
-            .nullable(remoteNullable)
-            .build();
+          && localFieldType != null
+          && peerArrayTypeId == arrayTypeId(localFieldType)) {
+        // Dense-array schema ids, not JVM carrier classes, define xlang compatibility. Keep the
+        // remote carrier so compatible generated arms can perform any required local adaptation.
+        return builder.build();
       }
       if (localFieldType != null && isListArrayRootPair(fieldType, localFieldType)) {
         throw incompatibleField("unsupported list/array compatible field mismatch", localFieldType);
@@ -275,9 +274,16 @@ public final class FieldInfo implements Serializable {
 
   private static boolean sameNestedFieldSchema(
       FieldTypes.FieldType peerFieldType, FieldTypes.FieldType localFieldType) {
-    if (peerFieldType.nullable() != localFieldType.nullable()
-        || peerFieldType.trackingRef() != localFieldType.trackingRef()) {
+    if (peerFieldType.trackingRef() != localFieldType.trackingRef()) {
       return false;
+    }
+    if (peerFieldType.trackingRef()
+        && peerFieldType.nullable() != localFieldType.nullable()) {
+      return false;
+    }
+    if (compatibleScalarType(peerFieldType.getTypeId())
+        || compatibleScalarType(localFieldType.getTypeId())) {
+      return peerFieldType.getTypeId() == localFieldType.getTypeId();
     }
     if (peerFieldType instanceof FieldTypes.CollectionFieldType
         && localFieldType instanceof FieldTypes.CollectionFieldType) {

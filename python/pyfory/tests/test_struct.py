@@ -486,25 +486,23 @@ def test_nested_signed_unsigned_rejected():
         )
 
 
-def test_nested_nullable_scalar_rejected():
-    with pytest.raises(TypeNotCompatibleError):
-        compat_ser_de(
-            RemoteNestedNullable,
-            LocalNestedRequired,
-            RemoteNestedNullable(values={1: [2]}),
-            706,
-        )
+def test_nested_nullable_scalar_compatible():
+    assert compat_ser_de(
+        RemoteNestedNullable,
+        LocalNestedRequired,
+        RemoteNestedNullable(values={1: [2]}),
+        706,
+    ) == LocalNestedRequired(values={1: [2]})
 
 
-def test_nested_ref_tracking_rejected():
-    with pytest.raises(TypeNotCompatibleError):
-        compat_ser_de(
-            RemoteNestedRef,
-            LocalNestedPlain,
-            RemoteNestedRef(values={1: ["one"]}),
-            707,
-            ref=True,
-        )
+def test_nested_ref_tracking_compatible():
+    assert compat_ser_de(
+        RemoteNestedRef,
+        LocalNestedPlain,
+        RemoteNestedRef(values={1: ["one"]}),
+        707,
+        ref=True,
+    ) == LocalNestedPlain(values={1: ["one"]})
 
 
 @dataclass

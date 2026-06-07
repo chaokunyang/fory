@@ -635,16 +635,8 @@ TEST(SchemaEvolutionTest, NullableListElementsCannotReadIntoArrayCarrier) {
   auto decoded =
       reader.deserialize<CompatibleArrayField>(payload.data(), payload.size());
 
-  ASSERT_TRUE(decoded.ok()) << decoded.error().to_string();
-  EXPECT_EQ(decoded.value().values, (std::vector<int32_t>{1, 2}));
-
-  bytes = writer.serialize(CompatibleNullableListField{{1, std::nullopt}});
-  ASSERT_TRUE(bytes.ok()) << bytes.error().to_string();
-  payload = std::move(bytes).value();
-  decoded =
-      reader.deserialize<CompatibleArrayField>(payload.data(), payload.size());
-
   ASSERT_FALSE(decoded.ok());
+  EXPECT_EQ(decoded.error().code(), ErrorCode::TypeError);
 }
 
 TEST(SchemaEvolutionTest, NestedListArraySchemaPairsAreNotMatched) {

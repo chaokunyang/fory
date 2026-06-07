@@ -56,6 +56,33 @@ fn normalize_type_id_for_eq(type_id: u32) -> u32 {
         _ => type_id,
     }
 }
+
+fn compatible_scalar_type_id(type_id: u32) -> bool {
+    matches!(
+        type_id,
+        crate::type_id::BOOL
+            | crate::type_id::INT8
+            | crate::type_id::INT16
+            | crate::type_id::INT32
+            | crate::type_id::VARINT32
+            | crate::type_id::INT64
+            | crate::type_id::VARINT64
+            | crate::type_id::TAGGED_INT64
+            | crate::type_id::UINT8
+            | crate::type_id::UINT16
+            | crate::type_id::UINT32
+            | crate::type_id::VAR_UINT32
+            | crate::type_id::UINT64
+            | crate::type_id::VAR_UINT64
+            | crate::type_id::TAGGED_UINT64
+            | crate::type_id::FLOAT16
+            | crate::type_id::BFLOAT16
+            | crate::type_id::FLOAT32
+            | crate::type_id::FLOAT64
+            | crate::type_id::STRING
+            | crate::type_id::DECIMAL
+    )
+}
 use std::clone::Clone;
 use std::cmp::min;
 use std::collections::HashMap;
@@ -249,6 +276,22 @@ impl FieldType {
             .iter()
             .zip(other.generics.iter())
             .all(|(left, right)| left.exact_shape_match(right))
+    }
+
+    #[inline(always)]
+    pub(crate) fn compatible_shape_match(&self, other: &Self) -> bool {
+        if compatible_scalar_type_id(self.type_id) || compatible_scalar_type_id(other.type_id) {
+            return !self.track_ref && !other.track_ref && self.type_id == other.type_id;
+        }
+        if normalize_type_id_for_eq(self.type_id) != normalize_type_id_for_eq(other.type_id)
+            || self.generics.len() != other.generics.len()
+        {
+            return false;
+        }
+        self.generics
+            .iter()
+            .zip(other.generics.iter())
+            .all(|(left, right)| left.compatible_shape_match(right))
     }
 
     fn to_bytes(&self, writer: &mut Writer, write_flag: bool, nullable: bool) -> Result<(), Error> {

@@ -297,12 +297,13 @@ bool _compatibleFieldType(
       isCompatibleScalarType(remoteType.typeId) &&
       isCompatibleScalarType(localType.typeId);
   if (scalarPair) {
-    if (remoteType.ref || localType.ref) {
-      return false;
-    }
     // Scalar conversion is an immediate field adaptation; nested container
     // element/key/value scalar types must stay schema-compatible as written.
     if (!topLevel) {
+      return localType.typeId == remoteType.typeId &&
+          localType.arguments.length == remoteType.arguments.length;
+    }
+    if (remoteType.ref || localType.ref) {
       return false;
     }
     if (localType.typeId == remoteType.typeId &&
@@ -314,10 +315,6 @@ bool _compatibleFieldType(
           FieldInfo(name: '', identifier: '', id: null, fieldType: localType),
         ) !=
         null;
-  }
-  if (localType.nullable != remoteType.nullable ||
-      localType.ref != remoteType.ref) {
-    return false;
   }
   if (_isStructWireType(localType.typeId) &&
       _isStructWireType(remoteType.typeId) &&

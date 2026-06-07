@@ -238,6 +238,7 @@ pub fn compatible_field_pair(local: &FieldType, remote: &FieldType) -> bool {
         || compatible_byte_sequence_field(local, remote)
         || crate::meta::compatible_scalar_field_pair(local, remote)
         || compatible_list_array_field(local, remote)
+        || local.compatible_shape_match(remote)
 }
 
 macro_rules! compatible_scalar_reader {
@@ -483,7 +484,9 @@ pub trait Codec<T: 'static>: 'static {
         local_field_type: &FieldType,
         remote_field_type: &FieldType,
     ) -> Result<Option<T>, Error> {
-        if field_types_compatible(local_field_type, remote_field_type) {
+        if field_types_compatible(local_field_type, remote_field_type)
+            || local_field_type.compatible_shape_match(remote_field_type)
+        {
             return Self::read_field_with_type(context, remote_field_type).map(Some);
         }
         super::scalar_conversion::read_scalar_field::<T, Self>(
@@ -1123,7 +1126,9 @@ where
         local_field_type: &FieldType,
         remote_field_type: &FieldType,
     ) -> Result<Option<Option<T>>, Error> {
-        if field_types_compatible(local_field_type, remote_field_type) {
+        if field_types_compatible(local_field_type, remote_field_type)
+            || local_field_type.compatible_shape_match(remote_field_type)
+        {
             return Self::read_field_with_type(context, remote_field_type).map(Some);
         }
         super::scalar_conversion::read_scalar_option_field::<T>(
@@ -1625,7 +1630,9 @@ where
         local_field_type: &FieldType,
         remote_field_type: &FieldType,
     ) -> Result<Option<Vec<T>>, Error> {
-        if field_types_compatible(local_field_type, remote_field_type) {
+        if field_types_compatible(local_field_type, remote_field_type)
+            || local_field_type.compatible_shape_match(remote_field_type)
+        {
             return Self::read_field_with_type(context, remote_field_type).map(Some);
         }
         if local_field_type.type_id == remote_field_type.type_id
@@ -3108,7 +3115,7 @@ mod tests {
             vec![FieldType::new(type_id::INT32, true, vec![])],
         );
         assert!(!field_types_compatible(&list_fixed_i32, &list_nullable_i32));
-        assert!(!compatible_field_pair(&list_fixed_i32, &list_nullable_i32));
+        assert!(compatible_field_pair(&list_fixed_i32, &list_nullable_i32));
 
         let int32_array = FieldType::new(type_id::INT32_ARRAY, false, vec![]);
         let list_i32 = FieldType::new(

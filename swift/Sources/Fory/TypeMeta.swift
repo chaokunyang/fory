@@ -750,13 +750,15 @@ public final class TypeMeta: Equatable, @unchecked Sendable {
     if topLevel, allowScalarConversion, isCompatibleScalarFieldType(remoteType, localType) {
       return true
     }
-    if !topLevel,
-      remoteType.nullable != localType.nullable || remoteType.trackRef != localType.trackRef {
-      return false
-    }
     if normalizeUserTypeIDForComparison(remoteType.typeID)
       != normalizeUserTypeIDForComparison(localType.typeID) {
       return false
+    }
+    if !topLevel,
+      compatibleScalarKind(remoteType.typeID) != nil
+        || compatibleScalarKind(localType.typeID) != nil
+    {
+      return remoteType.typeID == localType.typeID
     }
     if remoteType.generics.count != localType.generics.count {
       return false

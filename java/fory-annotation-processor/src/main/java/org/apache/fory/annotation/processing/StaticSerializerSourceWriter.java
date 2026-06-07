@@ -61,7 +61,9 @@ final class StaticSerializerSourceWriter {
     builder.append("import org.apache.fory.meta.TypeDef;\n");
     builder.append("import org.apache.fory.meta.TypeExtMeta;\n");
     builder.append("import org.apache.fory.reflect.FieldAccessor;\n");
-    builder.append("import org.apache.fory.reflect.ObjectInstantiator;\n");
+    if (!struct.record) {
+      builder.append("import org.apache.fory.reflect.ObjectInstantiator;\n");
+    }
     builder.append("import org.apache.fory.resolver.TypeResolver;\n");
     builder.append("import org.apache.fory.serializer.FieldGroups;\n");
     builder.append("import org.apache.fory.serializer.FieldGroups.SerializationFieldInfo;\n");
@@ -91,9 +93,8 @@ final class StaticSerializerSourceWriter {
     builder.append("  private final SerializationFieldInfo[] allFields;\n");
     builder.append("  private final int[] allFieldIds;\n");
     builder.append("  private final SerializationFieldInfo[] fieldsById;\n");
-    builder.append("  private final ObjectInstantiator generatedObjectInstantiator;\n");
-    if (struct.record) {
-      builder.append("  private final Object[] recordArgs;\n");
+    if (!struct.record) {
+      builder.append("  private final ObjectInstantiator generatedObjectInstantiator;\n");
     }
     for (SourceField field : struct.fields) {
       if (field.usesFieldAccessor()) {
@@ -155,9 +156,8 @@ final class StaticSerializerSourceWriter {
     builder.append("    this.allFields = null;\n");
     builder.append("    this.allFieldIds = null;\n");
     builder.append("    this.fieldsById = null;\n");
-    builder.append("    this.generatedObjectInstantiator = null;\n");
-    if (struct.record) {
-      builder.append("    this.recordArgs = null;\n");
+    if (!struct.record) {
+      builder.append("    this.generatedObjectInstantiator = null;\n");
     }
     for (SourceField field : struct.fields) {
       if (field.usesFieldAccessor()) {
@@ -190,13 +190,9 @@ final class StaticSerializerSourceWriter {
     builder.append("    this.allFields = fieldGroups.allFields;\n");
     builder.append("    this.allFieldIds = localFieldIds(allFields, DESCRIPTORS);\n");
     builder.append("    this.fieldsById = new SerializationFieldInfo[DESCRIPTORS.size()];\n");
-    builder.append(
-        "    this.generatedObjectInstantiator = typeResolver.getObjectInstantiator(type);\n");
-    if (struct.record) {
-      builder
-          .append("    this.recordArgs = new Object[")
-          .append(struct.recordConstructorFields.size())
-          .append("];\n");
+    if (!struct.record) {
+      builder.append(
+          "    this.generatedObjectInstantiator = typeResolver.getObjectInstantiator(type);\n");
     }
     builder.append("    SerializationFieldInfo[] allFields = fieldGroups.allFields;\n");
     builder.append("    int[] allFieldIds = localFieldIds(allFields, DESCRIPTORS);\n");
@@ -1252,30 +1248,25 @@ final class StaticSerializerSourceWriter {
 
   private void appendRecordConstruction(String variableName, String prefix, int indent) {
     appendIndent(indent);
-    builder.append("Object[] recordArgs = this.recordArgs;\n");
+    builder
+        .append(struct.typeName)
+        .append(" ")
+        .append(variableName)
+        .append(" = new ")
+        .append(struct.typeName)
+        .append("(");
     for (int i = 0; i < struct.recordConstructorFields.size(); i++) {
-      appendIndent(indent);
-      builder.append("recordArgs[").append(i).append("] = ");
+      if (i != 0) {
+        builder.append(", ");
+      }
       SourceField field = struct.recordConstructorFields.get(i);
       if (field.serialized) {
         builder.append(prefix).append(field.id);
       } else {
         builder.append(field.defaultValue());
       }
-      builder.append(";\n");
     }
-    appendIndent(indent);
-    builder
-        .append(struct.typeName)
-        .append(" ")
-        .append(variableName)
-        .append(" = (")
-        .append(struct.typeName)
-        .append(") generatedObjectInstantiator.newInstanceWithArguments(recordArgs);\n");
-    for (int i = 0; i < struct.recordConstructorFields.size(); i++) {
-      appendIndent(indent);
-      builder.append("recordArgs[").append(i).append("] = null;\n");
-    }
+    builder.append(");\n");
   }
 
   private String newGeneratedBeanExpression() {

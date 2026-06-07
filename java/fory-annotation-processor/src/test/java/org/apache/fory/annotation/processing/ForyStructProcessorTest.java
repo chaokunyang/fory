@@ -547,10 +547,10 @@ public class ForyStructProcessorTest {
     Assert.assertTrue(generatedSource.contains("case 0:"));
     Assert.assertTrue(generatedSource.contains("case 1:"));
     Assert.assertTrue(generatedSource.contains("remoteField.matchedId == -1"));
-    Assert.assertTrue(generatedSource.contains("ObjectInstantiator generatedObjectInstantiator"));
-    Assert.assertTrue(generatedSource.contains("private final Object[] recordArgs"));
-    Assert.assertTrue(generatedSource.contains("newInstanceWithArguments(recordArgs)"));
-    Assert.assertFalse(generatedSource.contains("return new RecordStruct"));
+    Assert.assertFalse(generatedSource.contains("ObjectInstantiator generatedObjectInstantiator"));
+    Assert.assertFalse(generatedSource.contains("private final Object[] recordArgs"));
+    Assert.assertFalse(generatedSource.contains("newInstanceWithArguments"));
+    Assert.assertTrue(generatedSource.contains("new test.RecordStruct("));
     Assert.assertFalse(generatedSource.contains("Object[] values"));
     Assert.assertFalse(generatedSource.contains("readCompatibleRecordField"));
     try (URLClassLoader loader = result.classLoader()) {

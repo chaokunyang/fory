@@ -591,12 +591,14 @@ export class ReadContext {
     undefined,
     undefined,
   ];
+
   private recentRegeneratedLocalTypeInfos: Array<TypeInfo | undefined> = [
     undefined,
     undefined,
     undefined,
     undefined,
   ];
+
   private recentRegeneratedReadSerializers: Array<Serializer | undefined> = [
     undefined,
     undefined,
@@ -828,12 +830,12 @@ export class ReadContext {
     if (expectedHash !== remoteHash) {
       const originalTypeInfo = original?.getTypeInfo();
       if (
-        original !== undefined &&
-        this.lastRegeneratedReadSerializer !== undefined &&
-        this.lastRegeneratedOriginal === original &&
-        this.lastRegeneratedLocalTypeInfo === originalTypeInfo &&
-        this.lastRegeneratedExpectedHash === expectedHash &&
-        this.lastRegeneratedRemoteHash === remoteHash
+        original !== undefined
+        && this.lastRegeneratedReadSerializer !== undefined
+        && this.lastRegeneratedOriginal === original
+        && this.lastRegeneratedLocalTypeInfo === originalTypeInfo
+        && this.lastRegeneratedExpectedHash === expectedHash
+        && this.lastRegeneratedRemoteHash === remoteHash
       ) {
         return this.lastRegeneratedReadSerializer;
       }
@@ -859,11 +861,11 @@ export class ReadContext {
       for (let i = 0; i < this.recentRegeneratedReadSerializers.length; i++) {
         const serializer = this.recentRegeneratedReadSerializers[i];
         if (
-          serializer !== undefined &&
-          this.recentRegeneratedOriginals[i] === original &&
-          this.recentRegeneratedLocalTypeInfos[i] === originalTypeInfo &&
-          this.recentRegeneratedExpectedHashes[i] === expectedHash &&
-          this.recentRegeneratedRemoteHashes[i] === remoteHash
+          serializer !== undefined
+          && this.recentRegeneratedOriginals[i] === original
+          && this.recentRegeneratedLocalTypeInfos[i] === originalTypeInfo
+          && this.recentRegeneratedExpectedHashes[i] === expectedHash
+          && this.recentRegeneratedRemoteHashes[i] === remoteHash
         ) {
           this.lastRegeneratedOriginal = original;
           this.lastRegeneratedLocalTypeInfo = originalTypeInfo;
@@ -887,16 +889,17 @@ export class ReadContext {
       this.recentRegeneratedExpectedHashes[index] = expectedHash;
       this.recentRegeneratedRemoteHashes[index] = remoteHash;
       this.recentRegeneratedReadSerializers[index] = serializer;
-      this.recentRegeneratedReadSerializerIndex =
-        (index + 1) & (this.recentRegeneratedReadSerializers.length - 1);
+      this.recentRegeneratedReadSerializerIndex
+        = (index + 1) & (this.recentRegeneratedReadSerializers.length - 1);
     }
     return serializer;
   }
 
-  private canonicalFieldTypeId(typeInfo: TypeInfo): number {
-    let typeId = this.typeResolver.computeTypeId(typeInfo);
+  private canonicalTypeId(typeId: number): number {
     if (typeId === TypeId.NAMED_ENUM) {
       typeId = TypeId.ENUM;
+    } else if (TypeId.structType(typeId)) {
+      typeId = TypeId.STRUCT;
     } else if (
       typeId === TypeId.NAMED_UNION
       || typeId === TypeId.TYPED_UNION
@@ -906,6 +909,10 @@ export class ReadContext {
     return typeId;
   }
 
+  private canonicalFieldTypeId(typeInfo: TypeInfo): number {
+    return this.canonicalTypeId(this.typeResolver.computeTypeId(typeInfo));
+  }
+
   private fieldSchemasEqual(
     remote: InnerFieldInfo | undefined,
     local: TypeInfo | undefined,
@@ -913,7 +920,7 @@ export class ReadContext {
     if (remote === undefined || local === undefined) {
       return false;
     }
-    if (remote.typeId !== this.canonicalFieldTypeId(local)) {
+    if (this.canonicalTypeId(remote.typeId) !== this.canonicalFieldTypeId(local)) {
       return false;
     }
     if (
@@ -985,7 +992,8 @@ export class ReadContext {
       if (
         fieldInfo.typeId !== TypeId.UNKNOWN
         && this.canonicalFieldTypeId(fallbackTypeInfo) !== TypeId.UNKNOWN
-        && fieldInfo.typeId !== this.canonicalFieldTypeId(fallbackTypeInfo)
+        && this.canonicalTypeId(fieldInfo.typeId)
+        !== this.canonicalFieldTypeId(fallbackTypeInfo)
       ) {
         throw new Error("unsupported compatible field schema mismatch");
       }
@@ -1088,8 +1096,10 @@ export class ReadContext {
       return false;
     }
     // Scalar conversion is only a matched-field compatibility rule. Nested
-    // container element/value schemas need an exact read plan.
-    return !this.fieldSchemasEqual(remote, local);
+    // container element/value schemas may still carry nullable/ref framing in
+    // the payload header, but they must not reinterpret one scalar wire type as
+    // another.
+    return remote.typeId !== localTypeId;
   }
 
   private compatibleFieldTypeInfo(

@@ -743,6 +743,36 @@ describe("typemeta", () => {
     ).toThrow(/unsupported compatible field schema mismatch/);
   });
 
+  test("allows nested scalar nullable framing drift", () => {
+    expect(
+      readCompatibleScalar(
+        7241,
+        Type.list(Type.string().setNullable(true)),
+        Type.list(Type.string()),
+        ["a", null],
+      ),
+    ).toEqual({ value: ["a", null] });
+  });
+
+  test("reuses local struct metadata across struct wire families", () => {
+    const fory = new Fory({ compatible: true });
+    const readContext = (fory as any).readContext;
+    const local = Type.struct(7243, {
+      name: Type.string(),
+    });
+    const remote = {
+      typeId: TypeId.STRUCT,
+      nullable: false,
+      trackingRef: false,
+      options: {},
+    };
+
+    const regenerated = readContext.fieldInfoToTypeInfo(remote, local);
+
+    expect(regenerated.typeId).toBe(local.typeId);
+    expect(regenerated.options.props.name.typeId).toBe(TypeId.STRING);
+  });
+
   test("keeps same-schema scalar reads direct", () => {
     const writerFory = new Fory({ compatible: true });
     const readerFory = new Fory({ compatible: true });

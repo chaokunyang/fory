@@ -277,13 +277,11 @@ public final class FieldInfo implements Serializable {
     if (peerFieldType.trackingRef() != localFieldType.trackingRef()) {
       return false;
     }
-    if (peerFieldType.trackingRef()
-        && peerFieldType.nullable() != localFieldType.nullable()) {
-      return false;
-    }
     if (compatibleScalarType(peerFieldType.getTypeId())
         || compatibleScalarType(localFieldType.getTypeId())) {
-      return peerFieldType.getTypeId() == localFieldType.getTypeId();
+      return peerFieldType.getTypeId() == localFieldType.getTypeId()
+          && (!peerFieldType.trackingRef()
+              || peerFieldType.nullable() == localFieldType.nullable());
     }
     if (peerFieldType instanceof FieldTypes.CollectionFieldType
         && localFieldType instanceof FieldTypes.CollectionFieldType) {
@@ -318,8 +316,7 @@ public final class FieldInfo implements Serializable {
       return sameUnresolvedOrNormalizedNestedTypeId(
           peerFieldType.getTypeId(), localFieldType.getTypeId());
     }
-    if (peerFieldType instanceof FieldTypes.ObjectFieldType
-        && localFieldType instanceof FieldTypes.ObjectFieldType) {
+    if (isUserDefinedNestedType(peerFieldType) && isUserDefinedNestedType(localFieldType)) {
       return sameUnresolvedOrNormalizedNestedTypeId(
           peerFieldType.getTypeId(), localFieldType.getTypeId());
     }
@@ -354,6 +351,12 @@ public final class FieldInfo implements Serializable {
       return Types.UNION;
     }
     return typeId;
+  }
+
+  private static boolean isUserDefinedNestedType(FieldTypes.FieldType fieldType) {
+    int typeId = fieldType.getTypeId();
+    return (fieldType instanceof FieldTypes.RegisteredFieldType && Types.isUserDefinedType(typeId))
+        || fieldType instanceof FieldTypes.ObjectFieldType;
   }
 
   private static boolean isRefTrackedScalarSchemaMismatch(

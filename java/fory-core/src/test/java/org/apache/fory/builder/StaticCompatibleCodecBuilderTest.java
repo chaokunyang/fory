@@ -232,9 +232,11 @@ public class StaticCompatibleCodecBuilderTest {
       Assert.assertTrue(generatedSource.contains("case 1:"));
       Assert.assertTrue(generatedSource.contains("FieldConverters.readIntTarget"));
       Assert.assertTrue(generatedSource.contains("int _f_recordValue0 = 0;"));
-      Assert.assertTrue(generatedSource.contains("newInstanceWithArguments"));
-      Assert.assertTrue(generatedSource.contains("Object[] _f_recordArgs = this._f_recordArgs"));
-      Assert.assertFalse(generatedSource.contains("return new test.StaticCompatibleRecordPayload"));
+      Assert.assertTrue(
+          generatedSource.contains(
+              "return new test.StaticCompatibleRecordPayload(_f_recordValue0);"));
+      Assert.assertFalse(generatedSource.contains("newInstanceWithArguments"));
+      Assert.assertFalse(generatedSource.contains("Object[] _f_recordArgs = this._f_recordArgs"));
       Assert.assertFalse(generatedSource.contains("_f_recordValues"));
       Assert.assertFalse(generatedSource.contains("readMatchedRecordField"));
       Object writerValue = writerType.getConstructor().newInstance();
@@ -245,6 +247,39 @@ public class StaticCompatibleCodecBuilderTest {
               writer, reader, writerType, readerType, writerValue);
       Assert.assertSame(result.getClass(), readerType);
       Assert.assertEquals(invoke(readerType, result, "id"), 73);
+    }
+  }
+
+  @Test
+  public void testInaccessibleRecordInstantiator() throws Exception {
+    assumeRecordSupport();
+    CompilationResult writerResult =
+        compile(
+            "test.StaticCompatibleHiddenRecordPayload",
+            "package test;\n"
+                + "public class StaticCompatibleHiddenRecordPayload {\n"
+                + "  public String id;\n"
+                + "  public StaticCompatibleHiddenRecordPayload() {}\n"
+                + "}\n");
+    CompilationResult readerResult =
+        compile(
+            "test.StaticCompatibleHiddenRecordPayload",
+            "package test;\n" + "record StaticCompatibleHiddenRecordPayload(int id) {}\n");
+    Assert.assertTrue(writerResult.success, writerResult.diagnostics());
+    Assert.assertTrue(readerResult.success, readerResult.diagnostics());
+    try (URLClassLoader writerLoader = writerResult.classLoader();
+        URLClassLoader readerLoader = readerResult.classLoader()) {
+      Class<?> writerType = writerLoader.loadClass("test.StaticCompatibleHiddenRecordPayload");
+      Class<?> readerType = readerLoader.loadClass("test.StaticCompatibleHiddenRecordPayload");
+      Fory writer = compatibleFory(writerLoader, writerType, false, "hidden-record-writer");
+      Fory reader = compatibleFory(readerLoader, readerType, false, "hidden-record-reader");
+      TypeDef remoteTypeDef = TypeDef.buildTypeDef(writer.getTypeResolver(), writerType);
+      String generatedSource =
+          new StaticCompatibleCodecBuilder(TypeRef.of(readerType), reader, remoteTypeDef).genCode();
+      Assert.assertTrue(generatedSource.contains("newInstanceWithArguments"));
+      Assert.assertTrue(generatedSource.contains("Object[] _f_recordArgs = this._f_recordArgs"));
+      Assert.assertFalse(
+          generatedSource.contains("return new test.StaticCompatibleHiddenRecordPayload"));
     }
   }
 

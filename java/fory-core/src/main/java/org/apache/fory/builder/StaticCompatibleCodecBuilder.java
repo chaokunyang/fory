@@ -96,8 +96,10 @@ public final class StaticCompatibleCodecBuilder extends ObjectCodecBuilder {
     ctx.extendsClasses(ctx.type(parentSerializerClass));
     ctx.reserveName(POJO_CLASS_TYPE_NAME);
     ctx.addImports(List.class, TypeDef.class, Descriptor.class, SerializationFieldInfo.class);
-    generatedObjectInstantiator();
-    if (isRecord) {
+    if (!isRecord || !recordCtrAccessible) {
+      generatedObjectInstantiator();
+    }
+    if (isRecord && !recordCtrAccessible) {
       recordArgsFieldName(RecordUtils.getRecordComponents(beanClass).length);
     }
     String readCompatibleCode = isRecord ? genRecordCompatibleRead() : genObjectCompatibleRead();
@@ -207,6 +209,17 @@ public final class StaticCompatibleCodecBuilder extends ObjectCodecBuilder {
         .append(indent(genRecordDispatchSwitch(), 2))
         .append('\n')
         .append("}\n");
+    if (recordCtrAccessible) {
+      code.append("return new ").append(ctx.type(beanClass)).append("(");
+      for (int i = 0; i < components.length; i++) {
+        if (i > 0) {
+          code.append(", ");
+        }
+        code.append("_f_recordValue").append(i);
+      }
+      code.append(");");
+      return code.toString();
+    }
     String recordArgs = recordArgsFieldName(components.length);
     code.append("Object[] _f_recordArgs = this.").append(recordArgs).append(";\n");
     for (int i = 0; i < components.length; i++) {

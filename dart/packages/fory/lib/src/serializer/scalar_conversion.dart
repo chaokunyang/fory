@@ -67,16 +67,24 @@ final class CompatibleScalarConversion {
 
 final class CompatibleScalarReadDescriptor {
   final CompatibleScalarConversion conversion;
-  final int int64SourceTypeId;
-  final bool int64SourceNullable;
+  final int intSourceTypeId;
+  final int intTargetTypeId;
+  final int doubleSourceTypeId;
+  final int doubleTargetTypeId;
+  final bool sourceNullable;
 
   const CompatibleScalarReadDescriptor(
     this.conversion,
-    this.int64SourceTypeId,
-    this.int64SourceNullable,
+    this.intSourceTypeId,
+    this.intTargetTypeId,
+    this.doubleSourceTypeId,
+    this.doubleTargetTypeId,
+    this.sourceNullable,
   );
 
-  bool get readsDirectInt64AsInt => int64SourceTypeId >= 0;
+  bool get readsDirectIntAsInt => intSourceTypeId >= 0;
+
+  bool get readsDirectDoubleAsDouble => doubleSourceTypeId >= 0;
 }
 
 CompatibleScalarConversion? compatibleScalarConversion(
@@ -107,13 +115,20 @@ CompatibleScalarReadDescriptor compatibleScalarReadDescriptor(
 ) {
   final localType = conversion.localField.fieldType;
   final remoteType = conversion.remoteField.fieldType;
-  final int64SourceTypeId =
-      _usesDirectInt64Target(localType)
-          ? _directInt64SourceTypeId(remoteType.typeId)
+  final intSourceTypeId =
+      _usesDirectIntTarget(localType)
+          ? _directIntSourceTypeId(remoteType.typeId)
+          : -1;
+  final doubleSourceTypeId =
+      intSourceTypeId < 0 && _usesDirectDoubleTarget(localType)
+          ? _directDoubleSourceTypeId(remoteType.typeId)
           : -1;
   return CompatibleScalarReadDescriptor(
     conversion,
-    int64SourceTypeId,
+    intSourceTypeId,
+    intSourceTypeId >= 0 ? localType.typeId : -1,
+    doubleSourceTypeId,
+    doubleSourceTypeId >= 0 ? localType.typeId : -1,
     remoteType.nullable,
   );
 }
@@ -175,19 +190,27 @@ bool _isFloatingType(int typeId) =>
     typeId == TypeIds.float32 ||
     typeId == TypeIds.float64;
 
-bool _usesDirectInt64Target(FieldType localType) {
+bool _usesDirectIntTarget(FieldType localType) {
   if (localType.type != int ||
       localType.nullable ||
       localType.ref ||
       localType.dynamic == true) {
     return false;
   }
-  return localType.typeId == TypeIds.int64 ||
+  return localType.typeId == TypeIds.int8 ||
+      localType.typeId == TypeIds.int16 ||
+      localType.typeId == TypeIds.int32 ||
+      localType.typeId == TypeIds.varInt32 ||
+      localType.typeId == TypeIds.int64 ||
       localType.typeId == TypeIds.varInt64 ||
-      localType.typeId == TypeIds.taggedInt64;
+      localType.typeId == TypeIds.taggedInt64 ||
+      localType.typeId == TypeIds.uint8 ||
+      localType.typeId == TypeIds.uint16 ||
+      localType.typeId == TypeIds.uint32 ||
+      localType.typeId == TypeIds.varUint32;
 }
 
-int _directInt64SourceTypeId(int remoteTypeId) {
+int _directIntSourceTypeId(int remoteTypeId) {
   switch (remoteTypeId) {
     case TypeIds.boolType:
     case TypeIds.int8:
@@ -204,6 +227,38 @@ int _directInt64SourceTypeId(int remoteTypeId) {
     case TypeIds.uint64:
     case TypeIds.varUint64:
     case TypeIds.taggedUint64:
+      return remoteTypeId;
+    default:
+      return -1;
+  }
+}
+
+bool _usesDirectDoubleTarget(FieldType localType) {
+  if (localType.type != double ||
+      localType.nullable ||
+      localType.ref ||
+      localType.dynamic == true) {
+    return false;
+  }
+  return localType.typeId == TypeIds.float32 ||
+      localType.typeId == TypeIds.float64;
+}
+
+int _directDoubleSourceTypeId(int remoteTypeId) {
+  switch (remoteTypeId) {
+    case TypeIds.boolType:
+    case TypeIds.int8:
+    case TypeIds.int16:
+    case TypeIds.int32:
+    case TypeIds.varInt32:
+    case TypeIds.uint8:
+    case TypeIds.uint16:
+    case TypeIds.uint32:
+    case TypeIds.varUint32:
+    case TypeIds.float16:
+    case TypeIds.bfloat16:
+    case TypeIds.float32:
+    case TypeIds.float64:
       return remoteTypeId;
     default:
       return -1;
@@ -229,66 +284,183 @@ Object? readCompatibleScalarField(
 }
 
 @pragma('vm:prefer-inline')
-int readCompatInt64PayloadAsInt(
+int readCompatScalarPayloadAsInt(
   ReadContext context,
-  int remoteTypeId,
-  bool remoteNullable, [
+  CompatibleScalarReadDescriptor scalarRead, [
   int? fallback,
 ]) {
-  if (remoteNullable) {
-    final flag = context.buffer.readByte();
-    if (flag == RefWriter.nullFlag) {
-      if (fallback != null) {
-        return fallback;
-      }
-      throw InvalidDataException(
-        'Received null for non-nullable compatible scalar field.',
-      );
+  if (!_readCompatibleScalarHeader(context, scalarRead.sourceNullable)) {
+    if (fallback != null) {
+      return fallback;
     }
-    if (flag != RefWriter.notNullValueFlag) {
-      throw InvalidDataException(
-        'Invalid nullable compatible scalar field flag $flag.',
-      );
-    }
+    throw InvalidDataException(
+      'Received null for non-nullable compatible scalar field.',
+    );
   }
   final buffer = context.buffer;
-  switch (remoteTypeId) {
-    case TypeIds.boolType:
-      final raw = buffer.readUint8();
-      if (raw == 0) return 0;
-      if (raw == 1) return 1;
-      throw InvalidDataException('Bool payload must be encoded as 0 or 1.');
+  final value = switch (scalarRead.intSourceTypeId) {
+    TypeIds.boolType => _readBoolIntPayload(buffer.readUint8()),
+    TypeIds.int8 => buffer.readByte(),
+    TypeIds.int16 => buffer.readInt16(),
+    TypeIds.int32 => buffer.readInt32(),
+    TypeIds.varInt32 => buffer.readVarInt32(),
+    TypeIds.int64 => buffer.readInt64AsInt(),
+    TypeIds.varInt64 => buffer.readVarInt64AsInt(),
+    TypeIds.taggedInt64 => buffer.readTaggedInt64AsInt(),
+    TypeIds.uint8 => buffer.readUint8(),
+    TypeIds.uint16 => buffer.readUint16(),
+    TypeIds.uint32 => buffer.readUint32(),
+    TypeIds.varUint32 => buffer.readVarUint32(),
+    TypeIds.uint64 => _uint64ToSignedInt64Target(buffer.readUint64()),
+    TypeIds.varUint64 => _uint64ToSignedInt64Target(buffer.readVarUint64()),
+    TypeIds.taggedUint64 => _uint64ToSignedInt64Target(
+      buffer.readTaggedUint64(),
+    ),
+    _ =>
+      throw StateError(
+        'Unsupported int-compatible payload type ${scalarRead.intSourceTypeId}.',
+      ),
+  };
+  _checkIntTargetRange(value, scalarRead.intTargetTypeId);
+  return value;
+}
+
+@pragma('vm:prefer-inline')
+double readCompatScalarPayloadAsDouble(
+  ReadContext context,
+  CompatibleScalarReadDescriptor scalarRead, [
+  double? fallback,
+]) {
+  if (!_readCompatibleScalarHeader(context, scalarRead.sourceNullable)) {
+    if (fallback != null) {
+      return fallback;
+    }
+    throw InvalidDataException(
+      'Received null for non-nullable compatible scalar field.',
+    );
+  }
+  final buffer = context.buffer;
+  final value = switch (scalarRead.doubleSourceTypeId) {
+    TypeIds.boolType => _readBoolIntPayload(buffer.readUint8()).toDouble(),
+    TypeIds.int8 => buffer.readByte().toDouble(),
+    TypeIds.int16 => buffer.readInt16().toDouble(),
+    TypeIds.int32 => buffer.readInt32().toDouble(),
+    TypeIds.varInt32 => buffer.readVarInt32().toDouble(),
+    TypeIds.uint8 => buffer.readUint8().toDouble(),
+    TypeIds.uint16 => buffer.readUint16().toDouble(),
+    TypeIds.uint32 => buffer.readUint32().toDouble(),
+    TypeIds.varUint32 => buffer.readVarUint32().toDouble(),
+    TypeIds.float16 => buffer.readFloat16(),
+    TypeIds.bfloat16 => buffer.readBfloat16(),
+    TypeIds.float32 => buffer.readFloat32(),
+    TypeIds.float64 => buffer.readFloat64(),
+    _ =>
+      throw StateError(
+        'Unsupported double-compatible payload type ${scalarRead.doubleSourceTypeId}.',
+      ),
+  };
+  return _checkedDoubleTarget(value, scalarRead.doubleTargetTypeId);
+}
+
+bool _readCompatibleScalarHeader(ReadContext context, bool nullable) {
+  if (!nullable) {
+    return true;
+  }
+  final flag = context.buffer.readByte();
+  if (flag == RefWriter.nullFlag) {
+    return false;
+  }
+  if (flag != RefWriter.notNullValueFlag) {
+    throw InvalidDataException(
+      'Invalid nullable compatible scalar field flag $flag.',
+    );
+  }
+  return true;
+}
+
+int _readBoolIntPayload(int raw) {
+  if (raw == 0) {
+    return 0;
+  }
+  if (raw == 1) {
+    return 1;
+  }
+  throw InvalidDataException('Bool payload must be encoded as 0 or 1.');
+}
+
+void _checkIntTargetRange(int value, int targetTypeId) {
+  switch (targetTypeId) {
     case TypeIds.int8:
-      return buffer.readByte();
+      if (value < -128 || value > 127) {
+        throw InvalidDataException(
+          'Integer value $value is outside int8 range.',
+        );
+      }
+      return;
     case TypeIds.int16:
-      return buffer.readInt16();
+      if (value < -32768 || value > 32767) {
+        throw InvalidDataException(
+          'Integer value $value is outside int16 range.',
+        );
+      }
+      return;
     case TypeIds.int32:
-      return buffer.readInt32();
     case TypeIds.varInt32:
-      return buffer.readVarInt32();
-    case TypeIds.int64:
-      return buffer.readInt64AsInt();
-    case TypeIds.varInt64:
-      return buffer.readVarInt64AsInt();
-    case TypeIds.taggedInt64:
-      return buffer.readTaggedInt64AsInt();
+      if (value < -2147483648 || value > 2147483647) {
+        throw InvalidDataException(
+          'Integer value $value is outside int32 range.',
+        );
+      }
+      return;
     case TypeIds.uint8:
-      return buffer.readUint8();
+      if (value < 0 || value > 255) {
+        throw InvalidDataException(
+          'Integer value $value is outside uint8 range.',
+        );
+      }
+      return;
     case TypeIds.uint16:
-      return buffer.readUint16();
+      if (value < 0 || value > 65535) {
+        throw InvalidDataException(
+          'Integer value $value is outside uint16 range.',
+        );
+      }
+      return;
     case TypeIds.uint32:
-      return buffer.readUint32();
     case TypeIds.varUint32:
-      return buffer.readVarUint32();
-    case TypeIds.uint64:
-      return _uint64ToSignedInt64Target(buffer.readUint64());
-    case TypeIds.varUint64:
-      return _uint64ToSignedInt64Target(buffer.readVarUint64());
-    case TypeIds.taggedUint64:
-      return _uint64ToSignedInt64Target(buffer.readTaggedUint64());
+      if (value < 0 || value > 4294967295) {
+        throw InvalidDataException(
+          'Integer value $value is outside uint32 range.',
+        );
+      }
+      return;
+    case TypeIds.int64:
+    case TypeIds.varInt64:
+    case TypeIds.taggedInt64:
+      return;
+    default:
+      throw StateError('Unsupported int-compatible target type $targetTypeId.');
+  }
+}
+
+double _checkedDoubleTarget(double value, int targetTypeId) {
+  if (value.isNaN) {
+    throw const InvalidDataException('NaN is not convertible.');
+  }
+  switch (targetTypeId) {
+    case TypeIds.float64:
+      return value;
+    case TypeIds.float32:
+      final rounded = Float32(value).value;
+      if (_sameFloatValue(value, rounded)) {
+        return rounded;
+      }
+      throw const InvalidDataException(
+        'Numeric value is not exactly representable by float32.',
+      );
     default:
       throw StateError(
-        'Unsupported int64-compatible payload type $remoteTypeId.',
+        'Unsupported double-compatible target type $targetTypeId.',
       );
   }
 }

@@ -95,19 +95,24 @@ Object? readGeneratedCompatibleStructField(
 
 @internal
 @pragma('vm:prefer-inline')
-int readGenCompatInt64ScalarAsInt(
+int readGenCompatScalarAsInt(
   ReadContext context,
   CompatibleScalarReadDescriptor scalarRead, [
   int? fallback,
 ]) {
-  final sourceTypeId = scalarRead.int64SourceTypeId;
-  assert(sourceTypeId >= 0);
-  return readCompatInt64PayloadAsInt(
-    context,
-    sourceTypeId,
-    scalarRead.int64SourceNullable,
-    fallback,
-  );
+  assert(scalarRead.readsDirectIntAsInt);
+  return readCompatScalarPayloadAsInt(context, scalarRead, fallback);
+}
+
+@internal
+@pragma('vm:prefer-inline')
+double readGenCompatScalarAsDouble(
+  ReadContext context,
+  CompatibleScalarReadDescriptor scalarRead, [
+  double? fallback,
+]) {
+  assert(scalarRead.readsDirectDoubleAsDouble);
+  return readCompatScalarPayloadAsDouble(context, scalarRead, fallback);
 }
 
 @internal

@@ -161,10 +161,10 @@ public sealed class ForyGeneratorTests
         Assert.Contains("case 1:", generated, StringComparison.Ordinal);
         Assert.Contains("case 2:", generated, StringComparison.Ordinal);
         Assert.Contains("case 3:", generated, StringComparison.Ordinal);
-        Assert.Contains("__ForyLocalFields = TypeMetaFields(context.TrackRef)", generated, StringComparison.Ordinal);
-        Assert.Contains("ReadBoolField(context, remoteField, __ForyLocalFields[0])", generated, StringComparison.Ordinal);
-        Assert.Contains("ReadNullableStringField(context, remoteField, __ForyLocalFields[1])", generated, StringComparison.Ordinal);
-        Assert.Contains("ReadNullableInt32Field(context, remoteField, __ForyLocalFields[2])", generated, StringComparison.Ordinal);
+        Assert.DoesNotContain("__ForyLocalFields", generated, StringComparison.Ordinal);
+        Assert.Contains("ReadBoolField(context, remoteField)", generated, StringComparison.Ordinal);
+        Assert.Contains("ReadNullableStringField(context, remoteField)", generated, StringComparison.Ordinal);
+        Assert.Contains("ReadNullableInt32Field(context, remoteField)", generated, StringComparison.Ordinal);
         Assert.Contains("ReadValuesFieldBridge(context, remoteField.FieldType", generated, StringComparison.Ordinal);
         Assert.DoesNotContain("__ForyReadCompatibleField<", generated, StringComparison.Ordinal);
         Assert.DoesNotContain("RequiresScalarRead", generated, StringComparison.Ordinal);

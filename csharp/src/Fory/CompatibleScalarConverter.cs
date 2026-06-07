@@ -21,6 +21,27 @@ using System.Runtime.CompilerServices;
 
 namespace Apache.Fory;
 
+internal readonly struct CompatibleScalarRead(
+    TypeId rawRemoteTypeId,
+    TypeId remoteTypeId,
+    TypeId localTypeId,
+    bool remoteNullable,
+    bool int64FastSource,
+    string fieldName)
+{
+    public TypeId RawRemoteTypeId { get; } = rawRemoteTypeId;
+
+    public TypeId RemoteTypeId { get; } = remoteTypeId;
+
+    public TypeId LocalTypeId { get; } = localTypeId;
+
+    public bool RemoteNullable { get; } = remoteNullable;
+
+    public bool Int64FastSource { get; } = int64FastSource;
+
+    public string FieldName { get; } = fieldName;
+}
+
 /// <summary>
 /// Provides compatible scalar field conversion for generated serializers.
 /// </summary>
@@ -96,368 +117,404 @@ public static class CompatibleScalarConverter
         return IsNumeric(remote) && IsNumeric(local);
     }
 
-    [MethodImpl(MethodImplOptions.NoInlining)]
-    public static bool ReadBoolField(
-        ReadContext context,
+    internal static CompatibleScalarRead? TryBuildRead(
         TypeMetaFieldInfo remoteField,
         TypeMetaFieldInfo localField)
     {
-        return TryReadScalarValue(context, remoteField, localField, out TypeId remote, out TypeId local, out ScalarValue value)
-            ? ToBool(value, remote, local, localField.FieldName)
+        TypeMetaFieldType remoteFieldType = remoteField.FieldType;
+        TypeMetaFieldType localFieldType = localField.FieldType;
+        if (remoteFieldType.TrackRef || localFieldType.TrackRef)
+        {
+            return null;
+        }
+
+        TypeId rawRemoteTypeId = (TypeId)remoteFieldType.TypeId;
+        TypeId remoteTypeId = NormalizeScalarTypeId(remoteFieldType.TypeId);
+        TypeId localTypeId = NormalizeScalarTypeId(localFieldType.TypeId);
+        if (!IsScalar(remoteTypeId) || !IsScalar(localTypeId))
+        {
+            return null;
+        }
+
+        bool sameWireType = remoteFieldType.TypeId == localFieldType.TypeId;
+        bool sameNullable = remoteFieldType.Nullable == localFieldType.Nullable;
+        if (sameWireType && sameNullable)
+        {
+            return null;
+        }
+
+        if (!sameWireType && !CanConvert(remoteFieldType.TypeId, localFieldType.TypeId))
+        {
+            return null;
+        }
+
+        return new CompatibleScalarRead(
+            rawRemoteTypeId,
+            remoteTypeId,
+            localTypeId,
+            remoteFieldType.Nullable,
+            IsInt64FastSource(rawRemoteTypeId),
+            localField.FieldName);
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static bool ReadBoolField(ReadContext context, TypeMetaFieldInfo remoteField)
+    {
+        return TryReadScalarValue(context, remoteField, out CompatibleScalarRead read, out ScalarValue value)
+            ? ToBool(value, read.RemoteTypeId, read.LocalTypeId, read.FieldName)
             : false;
     }
 
     [MethodImpl(MethodImplOptions.NoInlining)]
-    public static bool? ReadNullableBoolField(
-        ReadContext context,
-        TypeMetaFieldInfo remoteField,
-        TypeMetaFieldInfo localField)
+    public static bool? ReadNullableBoolField(ReadContext context, TypeMetaFieldInfo remoteField)
     {
-        return TryReadScalarValue(context, remoteField, localField, out TypeId remote, out TypeId local, out ScalarValue value)
-            ? ToBool(value, remote, local, localField.FieldName)
+        return TryReadScalarValue(context, remoteField, out CompatibleScalarRead read, out ScalarValue value)
+            ? ToBool(value, read.RemoteTypeId, read.LocalTypeId, read.FieldName)
             : null;
     }
 
     [MethodImpl(MethodImplOptions.NoInlining)]
-    public static sbyte ReadSByteField(ReadContext context, TypeMetaFieldInfo remoteField, TypeMetaFieldInfo localField)
+    public static sbyte ReadSByteField(ReadContext context, TypeMetaFieldInfo remoteField)
     {
-        return TryReadScalarValue(context, remoteField, localField, out TypeId remote, out TypeId local, out ScalarValue value)
-            ? ToSByte(value, remote, local, localField.FieldName)
+        return TryReadScalarValue(context, remoteField, out CompatibleScalarRead read, out ScalarValue value)
+            ? ToSByte(value, read.RemoteTypeId, read.LocalTypeId, read.FieldName)
             : default;
     }
 
     [MethodImpl(MethodImplOptions.NoInlining)]
-    public static sbyte? ReadNullableSByteField(ReadContext context, TypeMetaFieldInfo remoteField, TypeMetaFieldInfo localField)
+    public static sbyte? ReadNullableSByteField(ReadContext context, TypeMetaFieldInfo remoteField)
     {
-        return TryReadScalarValue(context, remoteField, localField, out TypeId remote, out TypeId local, out ScalarValue value)
-            ? ToSByte(value, remote, local, localField.FieldName)
+        return TryReadScalarValue(context, remoteField, out CompatibleScalarRead read, out ScalarValue value)
+            ? ToSByte(value, read.RemoteTypeId, read.LocalTypeId, read.FieldName)
             : null;
     }
 
     [MethodImpl(MethodImplOptions.NoInlining)]
-    public static short ReadInt16Field(ReadContext context, TypeMetaFieldInfo remoteField, TypeMetaFieldInfo localField)
+    public static short ReadInt16Field(ReadContext context, TypeMetaFieldInfo remoteField)
     {
-        return TryReadScalarValue(context, remoteField, localField, out TypeId remote, out TypeId local, out ScalarValue value)
-            ? ToInt16(value, remote, local, localField.FieldName)
+        return TryReadScalarValue(context, remoteField, out CompatibleScalarRead read, out ScalarValue value)
+            ? ToInt16(value, read.RemoteTypeId, read.LocalTypeId, read.FieldName)
             : default;
     }
 
     [MethodImpl(MethodImplOptions.NoInlining)]
-    public static short? ReadNullableInt16Field(ReadContext context, TypeMetaFieldInfo remoteField, TypeMetaFieldInfo localField)
+    public static short? ReadNullableInt16Field(ReadContext context, TypeMetaFieldInfo remoteField)
     {
-        return TryReadScalarValue(context, remoteField, localField, out TypeId remote, out TypeId local, out ScalarValue value)
-            ? ToInt16(value, remote, local, localField.FieldName)
+        return TryReadScalarValue(context, remoteField, out CompatibleScalarRead read, out ScalarValue value)
+            ? ToInt16(value, read.RemoteTypeId, read.LocalTypeId, read.FieldName)
             : null;
     }
 
     [MethodImpl(MethodImplOptions.NoInlining)]
-    public static int ReadInt32Field(ReadContext context, TypeMetaFieldInfo remoteField, TypeMetaFieldInfo localField)
+    public static int ReadInt32Field(ReadContext context, TypeMetaFieldInfo remoteField)
     {
-        return TryReadScalarValue(context, remoteField, localField, out TypeId remote, out TypeId local, out ScalarValue value)
-            ? ToInt32(value, remote, local, localField.FieldName)
+        return TryReadScalarValue(context, remoteField, out CompatibleScalarRead read, out ScalarValue value)
+            ? ToInt32(value, read.RemoteTypeId, read.LocalTypeId, read.FieldName)
             : default;
     }
 
     [MethodImpl(MethodImplOptions.NoInlining)]
-    public static int? ReadNullableInt32Field(ReadContext context, TypeMetaFieldInfo remoteField, TypeMetaFieldInfo localField)
+    public static int? ReadNullableInt32Field(ReadContext context, TypeMetaFieldInfo remoteField)
     {
-        return TryReadScalarValue(context, remoteField, localField, out TypeId remote, out TypeId local, out ScalarValue value)
-            ? ToInt32(value, remote, local, localField.FieldName)
+        return TryReadScalarValue(context, remoteField, out CompatibleScalarRead read, out ScalarValue value)
+            ? ToInt32(value, read.RemoteTypeId, read.LocalTypeId, read.FieldName)
             : null;
     }
 
     [MethodImpl(MethodImplOptions.NoInlining)]
-    public static long ReadInt64Field(ReadContext context, TypeMetaFieldInfo remoteField, TypeMetaFieldInfo localField)
+    public static long ReadInt64Field(ReadContext context, TypeMetaFieldInfo remoteField)
     {
-        if (TryReadIntegralToInt64Field(context, remoteField, localField, out long fastValue, out bool present))
+        if (TryReadIntegralToInt64Field(context, remoteField, out long fastValue, out bool present))
         {
             return present ? fastValue : default;
         }
 
-        return TryReadScalarValue(context, remoteField, localField, out TypeId remote, out TypeId local, out ScalarValue scalarValue)
-            ? ToInt64(scalarValue, remote, local, localField.FieldName)
+        return TryReadScalarValue(context, remoteField, out CompatibleScalarRead read, out ScalarValue value)
+            ? ToInt64(value, read.RemoteTypeId, read.LocalTypeId, read.FieldName)
             : default;
     }
 
     [MethodImpl(MethodImplOptions.NoInlining)]
-    public static long? ReadNullableInt64Field(ReadContext context, TypeMetaFieldInfo remoteField, TypeMetaFieldInfo localField)
+    public static long? ReadNullableInt64Field(ReadContext context, TypeMetaFieldInfo remoteField)
     {
-        if (TryReadIntegralToInt64Field(context, remoteField, localField, out long fastValue, out bool present))
+        if (TryReadIntegralToInt64Field(context, remoteField, out long fastValue, out bool present))
         {
             return present ? fastValue : null;
         }
 
-        return TryReadScalarValue(context, remoteField, localField, out TypeId remote, out TypeId local, out ScalarValue scalarValue)
-            ? ToInt64(scalarValue, remote, local, localField.FieldName)
+        return TryReadScalarValue(context, remoteField, out CompatibleScalarRead read, out ScalarValue value)
+            ? ToInt64(value, read.RemoteTypeId, read.LocalTypeId, read.FieldName)
             : null;
     }
 
     [MethodImpl(MethodImplOptions.NoInlining)]
-    public static byte ReadByteField(ReadContext context, TypeMetaFieldInfo remoteField, TypeMetaFieldInfo localField)
+    public static byte ReadByteField(ReadContext context, TypeMetaFieldInfo remoteField)
     {
-        return TryReadScalarValue(context, remoteField, localField, out TypeId remote, out TypeId local, out ScalarValue value)
-            ? ToByte(value, remote, local, localField.FieldName)
+        return TryReadScalarValue(context, remoteField, out CompatibleScalarRead read, out ScalarValue value)
+            ? ToByte(value, read.RemoteTypeId, read.LocalTypeId, read.FieldName)
             : default;
     }
 
     [MethodImpl(MethodImplOptions.NoInlining)]
-    public static byte? ReadNullableByteField(ReadContext context, TypeMetaFieldInfo remoteField, TypeMetaFieldInfo localField)
+    public static byte? ReadNullableByteField(ReadContext context, TypeMetaFieldInfo remoteField)
     {
-        return TryReadScalarValue(context, remoteField, localField, out TypeId remote, out TypeId local, out ScalarValue value)
-            ? ToByte(value, remote, local, localField.FieldName)
+        return TryReadScalarValue(context, remoteField, out CompatibleScalarRead read, out ScalarValue value)
+            ? ToByte(value, read.RemoteTypeId, read.LocalTypeId, read.FieldName)
             : null;
     }
 
     [MethodImpl(MethodImplOptions.NoInlining)]
-    public static ushort ReadUInt16Field(ReadContext context, TypeMetaFieldInfo remoteField, TypeMetaFieldInfo localField)
+    public static ushort ReadUInt16Field(ReadContext context, TypeMetaFieldInfo remoteField)
     {
-        return TryReadScalarValue(context, remoteField, localField, out TypeId remote, out TypeId local, out ScalarValue value)
-            ? ToUInt16(value, remote, local, localField.FieldName)
+        return TryReadScalarValue(context, remoteField, out CompatibleScalarRead read, out ScalarValue value)
+            ? ToUInt16(value, read.RemoteTypeId, read.LocalTypeId, read.FieldName)
             : default;
     }
 
     [MethodImpl(MethodImplOptions.NoInlining)]
-    public static ushort? ReadNullableUInt16Field(ReadContext context, TypeMetaFieldInfo remoteField, TypeMetaFieldInfo localField)
+    public static ushort? ReadNullableUInt16Field(ReadContext context, TypeMetaFieldInfo remoteField)
     {
-        return TryReadScalarValue(context, remoteField, localField, out TypeId remote, out TypeId local, out ScalarValue value)
-            ? ToUInt16(value, remote, local, localField.FieldName)
+        return TryReadScalarValue(context, remoteField, out CompatibleScalarRead read, out ScalarValue value)
+            ? ToUInt16(value, read.RemoteTypeId, read.LocalTypeId, read.FieldName)
             : null;
     }
 
     [MethodImpl(MethodImplOptions.NoInlining)]
-    public static uint ReadUInt32Field(ReadContext context, TypeMetaFieldInfo remoteField, TypeMetaFieldInfo localField)
+    public static uint ReadUInt32Field(ReadContext context, TypeMetaFieldInfo remoteField)
     {
-        return TryReadScalarValue(context, remoteField, localField, out TypeId remote, out TypeId local, out ScalarValue value)
-            ? ToUInt32(value, remote, local, localField.FieldName)
+        return TryReadScalarValue(context, remoteField, out CompatibleScalarRead read, out ScalarValue value)
+            ? ToUInt32(value, read.RemoteTypeId, read.LocalTypeId, read.FieldName)
             : default;
     }
 
     [MethodImpl(MethodImplOptions.NoInlining)]
-    public static uint? ReadNullableUInt32Field(ReadContext context, TypeMetaFieldInfo remoteField, TypeMetaFieldInfo localField)
+    public static uint? ReadNullableUInt32Field(ReadContext context, TypeMetaFieldInfo remoteField)
     {
-        return TryReadScalarValue(context, remoteField, localField, out TypeId remote, out TypeId local, out ScalarValue value)
-            ? ToUInt32(value, remote, local, localField.FieldName)
+        return TryReadScalarValue(context, remoteField, out CompatibleScalarRead read, out ScalarValue value)
+            ? ToUInt32(value, read.RemoteTypeId, read.LocalTypeId, read.FieldName)
             : null;
     }
 
     [MethodImpl(MethodImplOptions.NoInlining)]
-    public static ulong ReadUInt64Field(ReadContext context, TypeMetaFieldInfo remoteField, TypeMetaFieldInfo localField)
+    public static ulong ReadUInt64Field(ReadContext context, TypeMetaFieldInfo remoteField)
     {
-        return TryReadScalarValue(context, remoteField, localField, out TypeId remote, out TypeId local, out ScalarValue value)
-            ? ToUInt64(value, remote, local, localField.FieldName)
+        return TryReadScalarValue(context, remoteField, out CompatibleScalarRead read, out ScalarValue value)
+            ? ToUInt64(value, read.RemoteTypeId, read.LocalTypeId, read.FieldName)
             : default;
     }
 
     [MethodImpl(MethodImplOptions.NoInlining)]
-    public static ulong? ReadNullableUInt64Field(ReadContext context, TypeMetaFieldInfo remoteField, TypeMetaFieldInfo localField)
+    public static ulong? ReadNullableUInt64Field(ReadContext context, TypeMetaFieldInfo remoteField)
     {
-        return TryReadScalarValue(context, remoteField, localField, out TypeId remote, out TypeId local, out ScalarValue value)
-            ? ToUInt64(value, remote, local, localField.FieldName)
+        return TryReadScalarValue(context, remoteField, out CompatibleScalarRead read, out ScalarValue value)
+            ? ToUInt64(value, read.RemoteTypeId, read.LocalTypeId, read.FieldName)
             : null;
     }
 
     [MethodImpl(MethodImplOptions.NoInlining)]
-    public static Half ReadHalfField(ReadContext context, TypeMetaFieldInfo remoteField, TypeMetaFieldInfo localField)
+    public static Half ReadHalfField(ReadContext context, TypeMetaFieldInfo remoteField)
     {
-        return TryReadScalarValue(context, remoteField, localField, out TypeId remote, out TypeId local, out ScalarValue value)
-            ? ToHalfTarget(value, remote, local, localField.FieldName)
+        return TryReadScalarValue(context, remoteField, out CompatibleScalarRead read, out ScalarValue value)
+            ? ToHalfTarget(value, read.RemoteTypeId, read.LocalTypeId, read.FieldName)
             : default;
     }
 
     [MethodImpl(MethodImplOptions.NoInlining)]
-    public static Half? ReadNullableHalfField(ReadContext context, TypeMetaFieldInfo remoteField, TypeMetaFieldInfo localField)
+    public static Half? ReadNullableHalfField(ReadContext context, TypeMetaFieldInfo remoteField)
     {
-        return TryReadScalarValue(context, remoteField, localField, out TypeId remote, out TypeId local, out ScalarValue value)
-            ? ToHalfTarget(value, remote, local, localField.FieldName)
+        return TryReadScalarValue(context, remoteField, out CompatibleScalarRead read, out ScalarValue value)
+            ? ToHalfTarget(value, read.RemoteTypeId, read.LocalTypeId, read.FieldName)
             : null;
     }
 
     [MethodImpl(MethodImplOptions.NoInlining)]
-    public static BFloat16 ReadBFloat16Field(ReadContext context, TypeMetaFieldInfo remoteField, TypeMetaFieldInfo localField)
+    public static BFloat16 ReadBFloat16Field(ReadContext context, TypeMetaFieldInfo remoteField)
     {
-        return TryReadScalarValue(context, remoteField, localField, out TypeId remote, out TypeId local, out ScalarValue value)
-            ? ToBFloat16Target(value, remote, local, localField.FieldName)
+        return TryReadScalarValue(context, remoteField, out CompatibleScalarRead read, out ScalarValue value)
+            ? ToBFloat16Target(value, read.RemoteTypeId, read.LocalTypeId, read.FieldName)
             : default;
     }
 
     [MethodImpl(MethodImplOptions.NoInlining)]
-    public static BFloat16? ReadNullableBFloat16Field(ReadContext context, TypeMetaFieldInfo remoteField, TypeMetaFieldInfo localField)
+    public static BFloat16? ReadNullableBFloat16Field(ReadContext context, TypeMetaFieldInfo remoteField)
     {
-        return TryReadScalarValue(context, remoteField, localField, out TypeId remote, out TypeId local, out ScalarValue value)
-            ? ToBFloat16Target(value, remote, local, localField.FieldName)
+        return TryReadScalarValue(context, remoteField, out CompatibleScalarRead read, out ScalarValue value)
+            ? ToBFloat16Target(value, read.RemoteTypeId, read.LocalTypeId, read.FieldName)
             : null;
     }
 
     [MethodImpl(MethodImplOptions.NoInlining)]
-    public static float ReadFloatField(ReadContext context, TypeMetaFieldInfo remoteField, TypeMetaFieldInfo localField)
+    public static float ReadFloatField(ReadContext context, TypeMetaFieldInfo remoteField)
     {
-        return TryReadScalarValue(context, remoteField, localField, out TypeId remote, out TypeId local, out ScalarValue value)
-            ? ToSingleTarget(value, remote, local, localField.FieldName)
+        return TryReadScalarValue(context, remoteField, out CompatibleScalarRead read, out ScalarValue value)
+            ? ToSingleTarget(value, read.RemoteTypeId, read.LocalTypeId, read.FieldName)
             : default;
     }
 
     [MethodImpl(MethodImplOptions.NoInlining)]
-    public static float? ReadNullableFloatField(ReadContext context, TypeMetaFieldInfo remoteField, TypeMetaFieldInfo localField)
+    public static float? ReadNullableFloatField(ReadContext context, TypeMetaFieldInfo remoteField)
     {
-        return TryReadScalarValue(context, remoteField, localField, out TypeId remote, out TypeId local, out ScalarValue value)
-            ? ToSingleTarget(value, remote, local, localField.FieldName)
+        return TryReadScalarValue(context, remoteField, out CompatibleScalarRead read, out ScalarValue value)
+            ? ToSingleTarget(value, read.RemoteTypeId, read.LocalTypeId, read.FieldName)
             : null;
     }
 
     [MethodImpl(MethodImplOptions.NoInlining)]
-    public static double ReadDoubleField(ReadContext context, TypeMetaFieldInfo remoteField, TypeMetaFieldInfo localField)
+    public static double ReadDoubleField(ReadContext context, TypeMetaFieldInfo remoteField)
     {
-        return TryReadScalarValue(context, remoteField, localField, out TypeId remote, out TypeId local, out ScalarValue value)
-            ? ToDoubleTarget(value, remote, local, localField.FieldName)
+        return TryReadScalarValue(context, remoteField, out CompatibleScalarRead read, out ScalarValue value)
+            ? ToDoubleTarget(value, read.RemoteTypeId, read.LocalTypeId, read.FieldName)
             : default;
     }
 
     [MethodImpl(MethodImplOptions.NoInlining)]
-    public static double? ReadNullableDoubleField(ReadContext context, TypeMetaFieldInfo remoteField, TypeMetaFieldInfo localField)
+    public static double? ReadNullableDoubleField(ReadContext context, TypeMetaFieldInfo remoteField)
     {
-        return TryReadScalarValue(context, remoteField, localField, out TypeId remote, out TypeId local, out ScalarValue value)
-            ? ToDoubleTarget(value, remote, local, localField.FieldName)
+        return TryReadScalarValue(context, remoteField, out CompatibleScalarRead read, out ScalarValue value)
+            ? ToDoubleTarget(value, read.RemoteTypeId, read.LocalTypeId, read.FieldName)
             : null;
     }
 
     [MethodImpl(MethodImplOptions.NoInlining)]
-    public static string ReadStringField(ReadContext context, TypeMetaFieldInfo remoteField, TypeMetaFieldInfo localField)
+    public static string ReadStringField(ReadContext context, TypeMetaFieldInfo remoteField)
     {
-        return TryReadScalarValue(context, remoteField, localField, out TypeId remote, out TypeId local, out ScalarValue value)
-            ? ToStringValue(value, remote, local, localField.FieldName)
+        return TryReadScalarValue(context, remoteField, out CompatibleScalarRead read, out ScalarValue value)
+            ? ToStringValue(value, read.RemoteTypeId, read.LocalTypeId, read.FieldName)
             : default!;
     }
 
     [MethodImpl(MethodImplOptions.NoInlining)]
-    public static string? ReadNullableStringField(ReadContext context, TypeMetaFieldInfo remoteField, TypeMetaFieldInfo localField)
+    public static string? ReadNullableStringField(ReadContext context, TypeMetaFieldInfo remoteField)
     {
-        return TryReadScalarValue(context, remoteField, localField, out TypeId remote, out TypeId local, out ScalarValue value)
-            ? ToStringValue(value, remote, local, localField.FieldName)
+        return TryReadScalarValue(context, remoteField, out CompatibleScalarRead read, out ScalarValue value)
+            ? ToStringValue(value, read.RemoteTypeId, read.LocalTypeId, read.FieldName)
             : null;
     }
 
     [MethodImpl(MethodImplOptions.NoInlining)]
-    public static ForyDecimal ReadForyDecimalField(ReadContext context, TypeMetaFieldInfo remoteField, TypeMetaFieldInfo localField)
+    public static ForyDecimal ReadForyDecimalField(ReadContext context, TypeMetaFieldInfo remoteField)
     {
-        return TryReadScalarValue(context, remoteField, localField, out TypeId remote, out TypeId local, out ScalarValue value)
-            ? ToForyDecimalTarget(value, remote, local, localField.FieldName)
+        return TryReadScalarValue(context, remoteField, out CompatibleScalarRead read, out ScalarValue value)
+            ? ToForyDecimalTarget(value, read.RemoteTypeId, read.LocalTypeId, read.FieldName)
             : default;
     }
 
     [MethodImpl(MethodImplOptions.NoInlining)]
-    public static ForyDecimal? ReadNullableForyDecimalField(ReadContext context, TypeMetaFieldInfo remoteField, TypeMetaFieldInfo localField)
+    public static ForyDecimal? ReadNullableForyDecimalField(ReadContext context, TypeMetaFieldInfo remoteField)
     {
-        return TryReadScalarValue(context, remoteField, localField, out TypeId remote, out TypeId local, out ScalarValue value)
-            ? ToForyDecimalTarget(value, remote, local, localField.FieldName)
+        return TryReadScalarValue(context, remoteField, out CompatibleScalarRead read, out ScalarValue value)
+            ? ToForyDecimalTarget(value, read.RemoteTypeId, read.LocalTypeId, read.FieldName)
             : null;
     }
 
     [MethodImpl(MethodImplOptions.NoInlining)]
-    public static decimal ReadDecimalField(ReadContext context, TypeMetaFieldInfo remoteField, TypeMetaFieldInfo localField)
+    public static decimal ReadDecimalField(ReadContext context, TypeMetaFieldInfo remoteField)
     {
-        return TryReadScalarValue(context, remoteField, localField, out TypeId remote, out TypeId local, out ScalarValue value)
-            ? ToSystemDecimalTarget(value, remote, local, localField.FieldName)
+        return TryReadScalarValue(context, remoteField, out CompatibleScalarRead read, out ScalarValue value)
+            ? ToSystemDecimalTarget(value, read.RemoteTypeId, read.LocalTypeId, read.FieldName)
             : default;
     }
 
     [MethodImpl(MethodImplOptions.NoInlining)]
-    public static decimal? ReadNullableDecimalField(ReadContext context, TypeMetaFieldInfo remoteField, TypeMetaFieldInfo localField)
+    public static decimal? ReadNullableDecimalField(ReadContext context, TypeMetaFieldInfo remoteField)
     {
-        return TryReadScalarValue(context, remoteField, localField, out TypeId remote, out TypeId local, out ScalarValue value)
-            ? ToSystemDecimalTarget(value, remote, local, localField.FieldName)
+        return TryReadScalarValue(context, remoteField, out CompatibleScalarRead read, out ScalarValue value)
+            ? ToSystemDecimalTarget(value, read.RemoteTypeId, read.LocalTypeId, read.FieldName)
             : null;
     }
 
     private static bool TryReadScalarValue(
         ReadContext context,
         TypeMetaFieldInfo remoteField,
-        TypeMetaFieldInfo localField,
-        out TypeId remoteTypeId,
-        out TypeId local,
+        out CompatibleScalarRead scalarRead,
         out ScalarValue value)
     {
-        TypeMetaFieldType fieldType = remoteField.FieldType;
-        string fieldName = localField.FieldName;
-        TypeId rawRemoteTypeId = (TypeId)fieldType.TypeId;
-        remoteTypeId = NormalizeScalarTypeId(fieldType.TypeId);
-        local = NormalizeScalarTypeId(localField.FieldType.TypeId);
+        scalarRead = RequireRead(remoteField);
         value = default;
 
-        switch (RefModeExtensions.From(fieldType.Nullable, fieldType.TrackRef))
+        if (!scalarRead.RemoteNullable)
         {
-            case RefMode.None:
-                value = ReadScalarPayload(context, rawRemoteTypeId, local, fieldName);
+            value = ReadScalarPayload(
+                context,
+                scalarRead.RawRemoteTypeId,
+                scalarRead.LocalTypeId,
+                scalarRead.FieldName);
+            return true;
+        }
+
+        RefFlag flag = context.RefReader.ReadRefFlag(context.Reader);
+        switch (flag)
+        {
+            case RefFlag.Null:
+                return false;
+            case RefFlag.NotNullValue:
+                value = ReadScalarPayload(
+                    context,
+                    scalarRead.RawRemoteTypeId,
+                    scalarRead.LocalTypeId,
+                    scalarRead.FieldName);
                 return true;
-            case RefMode.NullOnly:
-                {
-                    RefFlag flag = context.RefReader.ReadRefFlag(context.Reader);
-                    switch (flag)
-                    {
-                        case RefFlag.Null:
-                            return false;
-                        case RefFlag.NotNullValue:
-                            value = ReadScalarPayload(context, rawRemoteTypeId, local, fieldName);
-                            return true;
-                        default:
-                            throw Fail(
-                                remoteTypeId,
-                                local,
-                                fieldName,
-                                $"invalid compatible nullOnly ref flag {(sbyte)flag}");
-                    }
-                }
             default:
-                throw Fail(remoteTypeId, local, fieldName, "trackingRef scalar conversion is not supported");
+                throw Fail(
+                    scalarRead.RemoteTypeId,
+                    scalarRead.LocalTypeId,
+                    scalarRead.FieldName,
+                    $"invalid compatible nullOnly ref flag {(sbyte)flag}");
         }
     }
 
     private static bool TryReadIntegralToInt64Field(
         ReadContext context,
         TypeMetaFieldInfo remoteField,
-        TypeMetaFieldInfo localField,
         out long value,
         out bool present)
     {
-        TypeMetaFieldType fieldType = remoteField.FieldType;
-        string fieldName = localField.FieldName;
-        TypeId rawRemoteTypeId = (TypeId)fieldType.TypeId;
-        TypeId remoteTypeId = NormalizeScalarTypeId(fieldType.TypeId);
-        TypeId local = NormalizeScalarTypeId(localField.FieldType.TypeId);
+        CompatibleScalarRead scalarRead = RequireRead(remoteField);
         value = default;
         present = false;
-        if (!IsInt64FastSource(rawRemoteTypeId))
+        if (!scalarRead.Int64FastSource)
         {
             return false;
         }
 
-        switch (RefModeExtensions.From(fieldType.Nullable, fieldType.TrackRef))
+        if (!scalarRead.RemoteNullable)
         {
-            case RefMode.None:
-                value = ReadInt64FastPayload(context, rawRemoteTypeId, local, fieldName);
+            value = ReadInt64FastPayload(
+                context,
+                scalarRead.RawRemoteTypeId,
+                scalarRead.LocalTypeId,
+                scalarRead.FieldName);
+            present = true;
+            return true;
+        }
+
+        RefFlag flag = context.RefReader.ReadRefFlag(context.Reader);
+        switch (flag)
+        {
+            case RefFlag.Null:
+                return true;
+            case RefFlag.NotNullValue:
+                value = ReadInt64FastPayload(
+                    context,
+                    scalarRead.RawRemoteTypeId,
+                    scalarRead.LocalTypeId,
+                    scalarRead.FieldName);
                 present = true;
                 return true;
-            case RefMode.NullOnly:
-                {
-                    RefFlag flag = context.RefReader.ReadRefFlag(context.Reader);
-                    switch (flag)
-                    {
-                        case RefFlag.Null:
-                            return true;
-                        case RefFlag.NotNullValue:
-                            value = ReadInt64FastPayload(context, rawRemoteTypeId, local, fieldName);
-                            present = true;
-                            return true;
-                        default:
-                            throw Fail(
-                                remoteTypeId,
-                                local,
-                                fieldName,
-                                $"invalid compatible nullOnly ref flag {(sbyte)flag}");
-                    }
-                }
             default:
-                throw Fail(remoteTypeId, local, fieldName, "trackingRef scalar conversion is not supported");
+                throw Fail(
+                    scalarRead.RemoteTypeId,
+                    scalarRead.LocalTypeId,
+                    scalarRead.FieldName,
+                    $"invalid compatible nullOnly ref flag {(sbyte)flag}");
         }
+    }
+
+    private static CompatibleScalarRead RequireRead(TypeMetaFieldInfo remoteField)
+    {
+        return remoteField.CompatibleScalarRead
+            ?? throw new InvalidDataException(
+                $"compatible scalar field {remoteField.FieldName} was not classified for scalar conversion");
     }
 
     private static bool IsInt64FastSource(TypeId remoteTypeId)

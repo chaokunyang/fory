@@ -1021,13 +1021,28 @@ final class ForyGenerator extends Generator {
     String indent,
   ) {
     final readerFunctionName = field.readerFunctionName(structSpec.name);
-    if (_usesDirectCompatibleInt64ScalarRead(field)) {
+    if (_usesDirectCompatibleIntScalarRead(field)) {
       final scalarRead = 'scalarRead$index';
       final fallbackArg = fallback == null ? '' : ', $fallback';
       output.writeln('${indent}final $scalarRead = $readField.scalarRead!;');
-      output.writeln('${indent}if ($scalarRead.readsDirectInt64AsInt) {');
+      output.writeln('${indent}if ($scalarRead.readsDirectIntAsInt) {');
       output.writeln(
-        '$indent  $target = readGenCompatInt64ScalarAsInt(context, $scalarRead$fallbackArg);',
+        '$indent  $target = readGenCompatScalarAsInt(context, $scalarRead$fallbackArg);',
+      );
+      output.writeln('$indent} else {');
+      output.writeln(
+        '$indent  $target = ${_readerCall(readerFunctionName, 'readGeneratedCompatibleScalarField(context, $scalarRead)', fallback)};',
+      );
+      output.writeln('$indent}');
+      return;
+    }
+    if (_usesDirectCompatibleDoubleScalarRead(field)) {
+      final scalarRead = 'scalarRead$index';
+      final fallbackArg = fallback == null ? '' : ', $fallback';
+      output.writeln('${indent}final $scalarRead = $readField.scalarRead!;');
+      output.writeln('${indent}if ($scalarRead.readsDirectDoubleAsDouble) {');
+      output.writeln(
+        '$indent  $target = readGenCompatScalarAsDouble(context, $scalarRead$fallbackArg);',
       );
       output.writeln('$indent} else {');
       output.writeln(
@@ -1082,16 +1097,35 @@ final class ForyGenerator extends Generator {
     output.writeln('$indent$target = $readerFunctionName($valueExpression);');
   }
 
-  bool _usesDirectCompatibleInt64ScalarRead(_GeneratedFieldSpec field) {
+  bool _usesDirectCompatibleIntScalarRead(_GeneratedFieldSpec field) {
     if (!field.type.isDartCoreInt ||
         field.fieldType.nullable ||
         field.fieldType.ref ||
         _isGeneratedDynamicField(field)) {
       return false;
     }
-    return field.fieldType.typeId == TypeIds.int64 ||
+    return field.fieldType.typeId == TypeIds.int8 ||
+        field.fieldType.typeId == TypeIds.int16 ||
+        field.fieldType.typeId == TypeIds.int32 ||
+        field.fieldType.typeId == TypeIds.varInt32 ||
+        field.fieldType.typeId == TypeIds.int64 ||
         field.fieldType.typeId == TypeIds.varInt64 ||
-        field.fieldType.typeId == TypeIds.taggedInt64;
+        field.fieldType.typeId == TypeIds.taggedInt64 ||
+        field.fieldType.typeId == TypeIds.uint8 ||
+        field.fieldType.typeId == TypeIds.uint16 ||
+        field.fieldType.typeId == TypeIds.uint32 ||
+        field.fieldType.typeId == TypeIds.varUint32;
+  }
+
+  bool _usesDirectCompatibleDoubleScalarRead(_GeneratedFieldSpec field) {
+    if (!field.type.isDartCoreDouble ||
+        field.fieldType.nullable ||
+        field.fieldType.ref ||
+        _isGeneratedDynamicField(field)) {
+      return false;
+    }
+    return field.fieldType.typeId == TypeIds.float32 ||
+        field.fieldType.typeId == TypeIds.float64;
   }
 
   String _readerCall(

@@ -1175,6 +1175,30 @@ void main() {
         ).value,
         equals(0.5),
       );
+      expect(
+        _compatibleScalarRoundTrip<CompatibleScalarFloat32Envelope>(
+          CompatibleScalarFloat64Envelope,
+          CompatibleScalarFloat32Envelope,
+          CompatibleScalarFloat64Envelope()..value = 0.5,
+        ).value,
+        equals(0.5),
+      );
+      expect(
+        _compatibleScalarRoundTrip<CompatibleScalarFloat64Envelope>(
+          CompatibleScalarFloat32Envelope,
+          CompatibleScalarFloat64Envelope,
+          CompatibleScalarFloat32Envelope()..value = double.infinity,
+        ).value,
+        equals(double.infinity),
+      );
+      expect(
+        _compatibleScalarRoundTrip<CompatibleScalarFloat32Envelope>(
+          CompatibleScalarFloat64Envelope,
+          CompatibleScalarFloat32Envelope,
+          CompatibleScalarFloat64Envelope()..value = double.negativeInfinity,
+        ).value,
+        equals(double.negativeInfinity),
+      );
       final negativeZero =
           _compatibleScalarRoundTrip<CompatibleScalarFloat32Envelope>(
             CompatibleScalarStringEnvelope,

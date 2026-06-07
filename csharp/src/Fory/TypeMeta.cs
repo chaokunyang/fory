@@ -268,6 +268,8 @@ public sealed class TypeMetaFieldInfo : IEquatable<TypeMetaFieldInfo>
 
     public int AssignedFieldId { get; internal set; }
 
+    internal CompatibleScalarRead? CompatibleScalarRead { get; set; }
+
     internal void Write(ByteWriter writer)
     {
         byte header = 0;
@@ -744,6 +746,7 @@ public sealed class TypeMeta : IEquatable<TypeMeta>
         for (int i = 0; i < remoteTypeMeta.Fields.Count; i++)
         {
             TypeMetaFieldInfo remoteField = remoteTypeMeta.Fields[i];
+            remoteField.CompatibleScalarRead = null;
             if (remoteField.FieldId.HasValue && remoteField.FieldId.Value >= 0)
             {
                 short fieldId = remoteField.FieldId.Value;
@@ -789,6 +792,11 @@ public sealed class TypeMeta : IEquatable<TypeMeta>
                 {
                     remoteField.AssignedFieldId = localIndex * 2;
                 }
+                else if (CompatibleScalarConverter.TryBuildRead(remoteField, localMatch) is { } scalarRead)
+                {
+                    remoteField.AssignedFieldId = localIndex * 2 + 1;
+                    remoteField.CompatibleScalarRead = scalarRead;
+                }
                 else if (IsCompatibleFieldType(remoteField.FieldType, localMatch.FieldType, topLevel: true))
                 {
                     remoteField.AssignedFieldId = localIndex * 2 + 1;
@@ -814,27 +822,6 @@ public sealed class TypeMeta : IEquatable<TypeMeta>
         }
 
         if (topLevel && IsCompatibleListArrayFieldPair(remote, local))
-        {
-            return true;
-        }
-
-        if (topLevel &&
-            (remote.TrackRef || local.TrackRef) &&
-            CompatibleScalarConverter.IsScalarType(remote.TypeId) &&
-            CompatibleScalarConverter.IsScalarType(local.TypeId))
-        {
-            return remote.TrackRef == local.TrackRef &&
-                   remote.TypeId == local.TypeId &&
-                   remote.Nullable == local.Nullable;
-        }
-
-        if (topLevel &&
-            !remote.TrackRef &&
-            !local.TrackRef &&
-            CompatibleScalarConverter.IsScalarType(remote.TypeId) &&
-            CompatibleScalarConverter.IsScalarType(local.TypeId) &&
-            (remote.TypeId == local.TypeId ||
-             CompatibleScalarConverter.CanConvert(remote.TypeId, local.TypeId)))
         {
             return true;
         }

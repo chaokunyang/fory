@@ -145,9 +145,18 @@ final class StructSerializer extends Serializer<Object?> {
     final remoteTypeDef = resolved.remoteTypeDef;
     if (remoteTypeDef == null) {
       return CompatibleStructReadLayout(
-        _typeDef.fields,
-        List<int>.generate(_localFields.length, (index) => index * 2),
-        _localFields,
+        List<CompatibleStructReadField>.unmodifiable(
+          List<CompatibleStructReadField>.generate(
+            _localFields.length,
+            (index) => CompatibleStructReadField(
+              remoteField: _typeDef.fields[index],
+              matchedId: index * 2,
+              localField: _localFields[index],
+              scalarRead: null,
+              topLevelListArrayPair: false,
+            ),
+          ),
+        ),
       );
     }
     final lastRemoteTypeDef = _lastCompatibleRemoteTypeDef;
@@ -164,13 +173,7 @@ final class StructSerializer extends Serializer<Object?> {
   }
 
   CompatibleStructReadLayout _buildCompatibleReadLayout(TypeDef remoteTypeDef) {
-    final matchedIds = <int>[];
-    final fields = <SerializationFieldInfo?>[];
-    List<CompatibleScalarConversion?>? scalarConversions;
-    List<int>? scalarSourceTypes;
-    var hasScalarConversions = false;
-    List<bool>? topLevelListArrayPairs;
-    var hasTopLevelListArrayPairs = false;
+    final fields = <CompatibleStructReadField>[];
     for (
       var remoteIndex = 0;
       remoteIndex < remoteTypeDef.fields.length;
@@ -179,11 +182,15 @@ final class StructSerializer extends Serializer<Object?> {
       final remoteField = remoteTypeDef.fields[remoteIndex];
       final localField = _localFieldsByIdentifier[remoteField.identifier];
       if (localField == null) {
-        matchedIds.add(-1);
-        fields.add(null);
-        scalarSourceTypes?.add(0);
-        scalarConversions?.add(null);
-        topLevelListArrayPairs?.add(false);
+        fields.add(
+          CompatibleStructReadField(
+            remoteField: remoteField,
+            matchedId: -1,
+            localField: null,
+            scalarRead: null,
+            topLevelListArrayPair: false,
+          ),
+        );
         continue;
       }
       final topLevelListArrayPair = _topLevelListArrayPair(
@@ -199,31 +206,14 @@ final class StructSerializer extends Serializer<Object?> {
           'Compatible field ${localField.name} has unsupported list/array schema mismatch.',
         );
       }
-      if (topLevelListArrayPair) {
-        topLevelListArrayPairs ??= List<bool>.filled(
-          fields.length,
-          false,
-          growable: true,
-        );
-        hasTopLevelListArrayPairs = true;
-      }
       final scalarConversion =
           topLevelListArrayPair
               ? null
               : compatibleScalarConversion(remoteField, localField.field);
-      if (scalarConversion != null) {
-        scalarConversions ??= List<CompatibleScalarConversion?>.filled(
-          fields.length,
-          null,
-          growable: true,
-        );
-        scalarSourceTypes ??= List<int>.filled(
-          fields.length,
-          0,
-          growable: true,
-        );
-        hasScalarConversions = true;
-      }
+      final scalarRead =
+          scalarConversion == null
+              ? null
+              : compatibleScalarReadDescriptor(scalarConversion);
       final exactField = _sameFieldType(
         localField.field.fieldType,
         remoteField.fieldType,
@@ -243,36 +233,24 @@ final class StructSerializer extends Serializer<Object?> {
       final matchedId =
           exactField ? localField.index * 2 : localField.index * 2 + 1;
       final mergedField =
-          exactField || topLevelListArrayPair || scalarConversion != null
+          exactField || topLevelListArrayPair || scalarRead != null
               ? localField
               : _typeResolver.serializationFieldInfo(
                 mergeCompatibleReadField(localField.field, remoteField),
                 index: localField.index,
               );
-      matchedIds.add(matchedId);
-      fields.add(mergedField);
-      if (scalarConversion == null) {
-        scalarSourceTypes?.add(0);
-      } else {
-        final sourceType = scalarConversion.remoteField.fieldType;
-        scalarSourceTypes!.add(
-          sourceType.nullable ? -sourceType.typeId - 1 : sourceType.typeId,
-        );
-      }
-      scalarConversions?.add(scalarConversion);
-      topLevelListArrayPairs?.add(topLevelListArrayPair);
+      fields.add(
+        CompatibleStructReadField(
+          remoteField: remoteField,
+          matchedId: matchedId,
+          localField: mergedField,
+          scalarRead: scalarRead,
+          topLevelListArrayPair: topLevelListArrayPair,
+        ),
+      );
     }
     final layout = CompatibleStructReadLayout(
-      remoteTypeDef.fields,
-      List<int>.unmodifiable(matchedIds),
-      List<SerializationFieldInfo?>.unmodifiable(fields),
-      hasScalarConversions ? List<int>.unmodifiable(scalarSourceTypes!) : null,
-      hasScalarConversions
-          ? List<CompatibleScalarConversion?>.unmodifiable(scalarConversions!)
-          : null,
-      hasTopLevelListArrayPairs
-          ? List<bool>.unmodifiable(topLevelListArrayPairs!)
-          : null,
+      List<CompatibleStructReadField>.unmodifiable(fields),
     );
     _compatibleReadLayouts[remoteTypeDef] = layout;
     _lastCompatibleRemoteTypeDef = remoteTypeDef;

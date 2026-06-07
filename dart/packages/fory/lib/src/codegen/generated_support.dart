@@ -123,6 +123,23 @@ final class GeneratedEnumSchema {
 typedef GeneratedStructFieldInfo = SerializationFieldInfo;
 
 @internal
+final class GeneratedStructFieldDescriptor {
+  final GeneratedStructFieldInfo field;
+  final resolver.TypeInfo? declaredTypeInfo;
+  final bool usesDeclaredType;
+
+  const GeneratedStructFieldDescriptor({
+    required this.field,
+    required this.declaredTypeInfo,
+    required this.usesDeclaredType,
+  });
+
+  String get name => field.name;
+
+  meta_types.FieldType get fieldType => field.fieldType;
+}
+
+@internal
 final class GeneratedStructSchema<T> {
   final Type type;
   final Serializer<Object?> Function() serializerFactory;
@@ -369,6 +386,22 @@ List<GeneratedStructFieldInfo> buildGeneratedStructFieldInfos(
 }
 
 @internal
+List<GeneratedStructFieldDescriptor> buildGeneratedStructFieldDescriptors(
+  resolver.TypeResolver typeResolver,
+  GeneratedStructSchema schema,
+) {
+  final fields = buildGeneratedStructFieldInfos(typeResolver, schema);
+  return List<GeneratedStructFieldDescriptor>.generate(fields.length, (index) {
+    final field = fields[index];
+    return GeneratedStructFieldDescriptor(
+      field: field,
+      declaredTypeInfo: fieldDeclaredTypeInfo(typeResolver, field),
+      usesDeclaredType: fieldUsesDeclaredType(typeResolver, field),
+    );
+  }, growable: false);
+}
+
+@internal
 List<GeneratedStructFieldInfo> buildGeneratedUnionCaseFieldInfos(
   List<GeneratedFieldInfo> fields,
 ) {
@@ -444,35 +477,10 @@ Object? readGeneratedUnionCaseValue(
 }
 
 @internal
-void writeGeneratedStructFieldInfoValue(
-  WriteContext context,
-  GeneratedStructFieldInfo field,
-  Object? value,
-) {
-  final fieldType = field.fieldType;
-  if (!fieldType.isDynamic && !fieldType.ref && !fieldType.nullable) {
-    if (fieldType.isPrimitive) {
-      context.writePrimitiveValue(fieldType.typeId, value as Object);
-      return;
-    }
-    final resolved = fieldDeclaredTypeInfo(context.typeResolver, field)!;
-    if (fieldUsesDeclaredType(context.typeResolver, field)) {
-      context.writeResolvedValue(resolved, value as Object, fieldType);
-      return;
-    }
-    final actualResolved = context.typeResolver.resolveValue(value as Object);
-    context.writeTypeMetaValue(actualResolved, value);
-    context.writeResolvedValue(actualResolved, value, fieldType);
-    return;
-  }
-  writeFieldValue(context, field, value);
-}
-
-@internal
 @pragma('vm:prefer-inline')
-Object? readGeneratedStructFieldInfoValue(
+Object? readGeneratedStructDescriptorValue(
   ReadContext context,
-  GeneratedStructFieldInfo field, [
+  GeneratedStructFieldDescriptor field, [
   Object? fallback,
 ]) {
   final fieldType = field.fieldType;
@@ -486,24 +494,24 @@ Object? readGeneratedStructFieldInfoValue(
         fieldType,
       );
     }
-    final resolved = fieldDeclaredTypeInfo(context.typeResolver, field)!;
-    if (fieldUsesDeclaredType(context.typeResolver, field)) {
+    final resolved = field.declaredTypeInfo!;
+    if (field.usesDeclaredType) {
       return context.readResolvedValue(resolved, fieldType);
     }
     final actualResolved = context.readTypeMetaValue(resolved);
     return context.readResolvedValue(actualResolved, fieldType);
   }
-  return readFieldValue(context, field, fallback);
+  return readFieldValue(context, field.field, fallback);
 }
 
 @internal
 @pragma('vm:prefer-inline')
 Object? readGeneratedStructDeclaredValue(
   ReadContext context,
-  GeneratedStructFieldInfo field,
+  GeneratedStructFieldDescriptor field,
 ) {
-  final resolved = fieldDeclaredTypeInfo(context.typeResolver, field)!;
-  if (fieldUsesDeclaredType(context.typeResolver, field)) {
+  final resolved = field.declaredTypeInfo!;
+  if (field.usesDeclaredType) {
     return context.readResolvedValue(resolved, field.fieldType);
   }
   final actualResolved = context.readTypeMetaValue(resolved);
@@ -514,11 +522,11 @@ Object? readGeneratedStructDeclaredValue(
 @pragma('vm:prefer-inline')
 Object readGeneratedStructDirectValue(
   ReadContext context,
-  GeneratedStructFieldInfo field,
+  GeneratedStructFieldDescriptor field,
 ) {
-  final declared = fieldDeclaredTypeInfo(context.typeResolver, field)!;
+  final declared = field.declaredTypeInfo!;
   final resolver.TypeInfo resolved;
-  if (fieldUsesDeclaredType(context.typeResolver, field)) {
+  if (field.usesDeclaredType) {
     resolved = declared;
   } else {
     resolved = context.readTypeMetaValue(declared);
@@ -536,7 +544,7 @@ Object readGeneratedStructDirectValue(
 @internal
 void writeGeneratedDirectListValue<T>(
   WriteContext context,
-  GeneratedStructFieldInfo field,
+  GeneratedStructFieldDescriptor field,
   List<T> value,
 ) {
   final fieldType = field.fieldType;
@@ -558,7 +566,7 @@ void writeGeneratedDirectListValue<T>(
 @internal
 void writeGeneratedDirectSetValue<T>(
   WriteContext context,
-  GeneratedStructFieldInfo field,
+  GeneratedStructFieldDescriptor field,
   Set<T> value,
 ) {
   final fieldType = field.fieldType;
@@ -581,7 +589,7 @@ void writeGeneratedDirectSetValue<T>(
 @pragma('vm:prefer-inline')
 List<T> readGeneratedDirectListValue<T>(
   ReadContext context,
-  GeneratedStructFieldInfo field,
+  GeneratedStructFieldDescriptor field,
   T Function(Object? value) convert,
 ) {
   final fieldType = field.fieldType;
@@ -598,7 +606,7 @@ List<T> readGeneratedDirectListValue<T>(
 @pragma('vm:prefer-inline')
 Set<T> readGeneratedDirectSetValue<T>(
   ReadContext context,
-  GeneratedStructFieldInfo field,
+  GeneratedStructFieldDescriptor field,
   T Function(Object? value) convert,
 ) {
   final fieldType = field.fieldType;
@@ -615,7 +623,7 @@ Set<T> readGeneratedDirectSetValue<T>(
 @pragma('vm:prefer-inline')
 Map<K, V> readGeneratedDirectMapValue<K, V>(
   ReadContext context,
-  GeneratedStructFieldInfo field,
+  GeneratedStructFieldDescriptor field,
   K Function(Object? value) convertKey,
   V Function(Object? value) convertValue,
 ) {

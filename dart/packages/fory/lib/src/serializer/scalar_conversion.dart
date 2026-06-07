@@ -64,6 +64,18 @@ final class CompatibleScalarConversion {
   const CompatibleScalarConversion(this.remoteField, this.localField);
 }
 
+final class CompatibleScalarReadDescriptor {
+  final CompatibleScalarConversion conversion;
+  final int int64SourceTypeId;
+  final bool int64SourceNullable;
+
+  const CompatibleScalarReadDescriptor(
+    this.conversion,
+    this.int64SourceTypeId,
+    this.int64SourceNullable,
+  );
+}
+
 CompatibleScalarConversion? compatibleScalarConversion(
   FieldInfo remoteField,
   FieldInfo localField,
@@ -85,6 +97,22 @@ CompatibleScalarConversion? compatibleScalarConversion(
     return null;
   }
   return CompatibleScalarConversion(remoteField, localField);
+}
+
+CompatibleScalarReadDescriptor compatibleScalarReadDescriptor(
+  CompatibleScalarConversion conversion,
+) {
+  final localType = conversion.localField.fieldType;
+  final remoteType = conversion.remoteField.fieldType;
+  final int64SourceTypeId =
+      _usesDirectInt64Target(localType)
+          ? _directInt64SourceTypeId(remoteType.typeId)
+          : -1;
+  return CompatibleScalarReadDescriptor(
+    conversion,
+    int64SourceTypeId,
+    remoteType.nullable,
+  );
 }
 
 bool _supportsCompatibleScalarConversion(int remoteTypeId, int localTypeId) {
@@ -144,53 +172,19 @@ bool _isFloatingType(int typeId) =>
     typeId == TypeIds.float32 ||
     typeId == TypeIds.float64;
 
-@pragma('vm:never-inline')
-Object? readCompatibleScalarField(
-  ReadContext context,
-  CompatibleScalarConversion conversion,
-) {
-  final value = _readCompatibleScalarPayload(context, conversion);
-  if (value == null) {
-    return null;
+bool _usesDirectInt64Target(FieldType localType) {
+  if (localType.type != int ||
+      localType.nullable ||
+      localType.ref ||
+      localType.dynamic == true) {
+    return false;
   }
-  try {
-    return convertCompatibleScalarValue(value, conversion);
-  } on InvalidDataException {
-    rethrow;
-  } catch (error) {
-    _throwScalarConversionError(conversion, value, error);
-  }
+  return localType.typeId == TypeIds.int64 ||
+      localType.typeId == TypeIds.varInt64 ||
+      localType.typeId == TypeIds.taggedInt64;
 }
 
-@pragma('vm:prefer-inline')
-int readCompatibleInt64ScalarFieldAsInt(
-  ReadContext context,
-  CompatibleScalarConversion conversion, [
-  int? fallback,
-]) {
-  final fieldType = conversion.remoteField.fieldType;
-  if (isDirectCompatInt64Payload(fieldType.typeId)) {
-    return readCompatInt64PayloadAsInt(
-      context,
-      fieldType.typeId,
-      fieldType.nullable,
-      fallback,
-    );
-  }
-  final value = readCompatibleScalarField(context, conversion);
-  if (value == null) {
-    if (fallback != null) {
-      return fallback;
-    }
-    throw InvalidDataException(
-      'Received null for non-nullable compatible scalar field.',
-    );
-  }
-  return value as int;
-}
-
-@pragma('vm:prefer-inline')
-bool isDirectCompatInt64Payload(int remoteTypeId) {
+int _directInt64SourceTypeId(int remoteTypeId) {
   switch (remoteTypeId) {
     case TypeIds.boolType:
     case TypeIds.int8:
@@ -207,9 +201,27 @@ bool isDirectCompatInt64Payload(int remoteTypeId) {
     case TypeIds.uint64:
     case TypeIds.varUint64:
     case TypeIds.taggedUint64:
-      return true;
+      return remoteTypeId;
     default:
-      return false;
+      return -1;
+  }
+}
+
+@pragma('vm:never-inline')
+Object? readCompatibleScalarField(
+  ReadContext context,
+  CompatibleScalarConversion conversion,
+) {
+  final value = _readCompatibleScalarPayload(context, conversion);
+  if (value == null) {
+    return null;
+  }
+  try {
+    return convertCompatibleScalarValue(value, conversion);
+  } on InvalidDataException {
+    rethrow;
+  } catch (error) {
+    _throwScalarConversionError(conversion, value, error);
   }
 }
 

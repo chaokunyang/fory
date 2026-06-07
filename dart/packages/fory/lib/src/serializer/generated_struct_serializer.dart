@@ -37,70 +37,48 @@ abstract interface class GeneratedStructSerializer<T> implements Serializer<T> {
 
 @internal
 final class CompatibleStructReadLayout {
-  final List<FieldInfo> remoteFields;
-  final List<int> matchedIds;
-  final List<SerializationFieldInfo?> fields;
-  final List<int>? _scalarSourceTypes;
-  final List<CompatibleScalarConversion?>? _scalarConversions;
-  final List<bool>? _topLevelListArrayPairs;
+  final List<CompatibleStructReadField> fields;
 
-  const CompatibleStructReadLayout(
-    this.remoteFields,
-    this.matchedIds,
-    this.fields, [
-    this._scalarSourceTypes,
-    this._scalarConversions,
-    this._topLevelListArrayPairs,
-  ]);
+  const CompatibleStructReadLayout(this.fields);
 
-  int get fieldCount => remoteFields.length;
+  int get fieldCount => fields.length;
 
-  FieldInfo remoteFieldAt(int index) => remoteFields[index];
+  CompatibleStructReadField fieldAt(int index) => fields[index];
+}
 
-  int matchedIdAt(int index) => matchedIds[index];
+@internal
+final class CompatibleStructReadField {
+  final FieldInfo remoteField;
+  final int matchedId;
+  final SerializationFieldInfo? localField;
+  final CompatibleScalarReadDescriptor? scalarRead;
+  final bool topLevelListArrayPair;
 
-  SerializationFieldInfo? localFieldAt(int index) => fields[index];
-
-  CompatibleScalarConversion? scalarConversionAt(int index) =>
-      _scalarConversions?[index];
-
-  int scalarSourceTypeIdAt(int index) {
-    final encoded = _scalarSourceTypes?[index];
-    if (encoded == null) {
-      return scalarConversionAt(index)!.remoteField.fieldType.typeId;
-    }
-    return encoded >= 0 ? encoded : -encoded - 1;
-  }
-
-  bool scalarSourceNullableAt(int index) {
-    final encoded = _scalarSourceTypes?[index];
-    if (encoded == null) {
-      return scalarConversionAt(index)!.remoteField.fieldType.nullable;
-    }
-    return encoded < 0;
-  }
-
-  bool topLevelListArrayPairAt(int index) =>
-      _topLevelListArrayPairs?[index] ?? false;
+  const CompatibleStructReadField({
+    required this.remoteField,
+    required this.matchedId,
+    required this.localField,
+    required this.scalarRead,
+    required this.topLevelListArrayPair,
+  });
 }
 
 @internal
 @pragma('vm:never-inline')
 Object? readGeneratedCompatibleStructField(
   ReadContext context,
-  CompatibleStructReadLayout layout,
-  int index,
+  CompatibleStructReadField field,
 ) {
-  final localField = layout.localFieldAt(index)!;
-  final scalarConversion = layout.scalarConversionAt(index);
-  if (scalarConversion != null) {
-    return readCompatibleScalarField(context, scalarConversion);
+  final localField = field.localField!;
+  final scalarRead = field.scalarRead;
+  if (scalarRead != null) {
+    return readCompatibleScalarField(context, scalarRead.conversion);
   }
-  if (layout.topLevelListArrayPairAt(index)) {
+  if (field.topLevelListArrayPair) {
     return readCompatibleMatchedCollectionArrayField(
       context,
       localField,
-      layout.remoteFieldAt(index),
+      field.remoteField,
     );
   }
   return readFieldValue<Object?>(context, localField);
@@ -108,40 +86,35 @@ Object? readGeneratedCompatibleStructField(
 
 @internal
 @pragma('vm:prefer-inline')
-int readGenCompatInt64AsInt(
+int readGenCompatInt64ScalarAsInt(
   ReadContext context,
-  CompatibleStructReadLayout layout,
-  int index, [
+  CompatibleScalarReadDescriptor scalarRead, [
   int? fallback,
 ]) {
-  final sourceTypeId = layout.scalarSourceTypeIdAt(index);
-  if (!isDirectCompatInt64Payload(sourceTypeId)) {
-    final value = readCompatibleScalarField(
+  final sourceTypeId = scalarRead.int64SourceTypeId;
+  if (sourceTypeId >= 0) {
+    return readCompatInt64PayloadAsInt(
       context,
-      layout.scalarConversionAt(index)!,
+      sourceTypeId,
+      scalarRead.int64SourceNullable,
+      fallback,
     );
-    if (value == null) {
-      if (fallback != null) {
-        return fallback;
-      }
-      throw StateError('Expected non-null int-compatible scalar value.');
-    }
-    return value as int;
   }
-  return readCompatInt64PayloadAsInt(
-    context,
-    sourceTypeId,
-    layout.scalarSourceNullableAt(index),
-    fallback,
-  );
+  final value = readCompatibleScalarField(context, scalarRead.conversion);
+  if (value == null) {
+    if (fallback != null) {
+      return fallback;
+    }
+    throw StateError('Expected non-null int-compatible scalar value.');
+  }
+  return value as int;
 }
 
 @internal
 @pragma('vm:never-inline')
 void skipGeneratedCompatibleStructField(
   ReadContext context,
-  CompatibleStructReadLayout layout,
-  int index,
+  CompatibleStructReadField field,
 ) {
-  readCompatibleField(context, layout.remoteFieldAt(index));
+  readCompatibleField(context, field.remoteField);
 }

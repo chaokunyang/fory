@@ -47,10 +47,9 @@ type TypeResolverLike = {
   regenerateReadSerializer(typeInfo: TypeInfo): Serializer;
 };
 
-type RegeneratedReadSerializerCacheEntry = {
+type CompatibleReadSerializerCacheEntry = {
   localHash: number;
-  localTypeInfo: TypeInfo;
-  serializers: Map<number, Serializer>;
+  serializer: Serializer;
 };
 
 function remoteListElementType(
@@ -562,7 +561,7 @@ export class WriteContext {
 
 export class ReadContext {
   private static readonly MAX_CACHED_TYPE_META = 8192;
-  private static readonly MAX_CACHED_REGENERATED_READ_SERIALIZER = 8192;
+  private static readonly MAX_CACHED_COMPATIBLE_READ_SERIALIZER = 8192;
 
   readonly reader: BinaryReader;
   readonly refReader: RefReader;
@@ -578,40 +577,10 @@ export class ReadContext {
   private recentTypeMetaHeaderLows = [-1, -1, -1, -1];
   private recentTypeMetaHeaderHighs = [-1, -1, -1, -1];
   private recentTypeMetas: Array<TypeMeta | null> = [null, null, null, null];
-  private regeneratedReadSerializers: WeakMap<
-    Serializer,
-    RegeneratedReadSerializerCacheEntry
-  > = new WeakMap();
-
-  private recentRegeneratedExpectedHashes = [0, 0, 0, 0];
-  private recentRegeneratedRemoteHashes = [0, 0, 0, 0];
-  private recentRegeneratedOriginals: Array<Serializer | undefined> = [
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-  ];
-
-  private recentRegeneratedLocalTypeInfos: Array<TypeInfo | undefined> = [
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-  ];
-
-  private recentRegeneratedReadSerializers: Array<Serializer | undefined> = [
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-  ];
-
-  private recentRegeneratedReadSerializerIndex = 0;
-  private lastRegeneratedExpectedHash = 0;
-  private lastRegeneratedRemoteHash = 0;
-  private lastRegeneratedOriginal: Serializer | undefined;
-  private lastRegeneratedLocalTypeInfo: TypeInfo | undefined;
-  private lastRegeneratedReadSerializer: Serializer | undefined;
+  private compatibleReadSerializers = new Map<
+    number,
+    CompatibleReadSerializerCacheEntry
+  >();
 
   private _depth = 0;
   private _maxDepth: number;
@@ -828,71 +797,23 @@ export class ReadContext {
       remoteHash = ReadContext.typeMetaHeaderHash(headerLow, headerHigh);
     }
     if (expectedHash !== remoteHash) {
-      const originalTypeInfo = original?.getTypeInfo();
-      if (
-        original !== undefined
-        && this.lastRegeneratedReadSerializer !== undefined
-        && this.lastRegeneratedOriginal === original
-        && this.lastRegeneratedLocalTypeInfo === originalTypeInfo
-        && this.lastRegeneratedExpectedHash === expectedHash
-        && this.lastRegeneratedRemoteHash === remoteHash
-      ) {
-        return this.lastRegeneratedReadSerializer;
+      const cached = this.compatibleReadSerializers.get(remoteHash);
+      if (cached !== undefined && cached.localHash === expectedHash) {
+        return cached.serializer;
       }
-      return this.readChangedSerializer(
-        expectedHash,
-        remoteHash,
-        typeMeta,
-        original,
-        originalTypeInfo,
-      );
+      const serializer = this.genSerializerByTypeMetaRuntime(typeMeta, original);
+      if (
+        this.compatibleReadSerializers.size
+        < ReadContext.MAX_CACHED_COMPATIBLE_READ_SERIALIZER
+      ) {
+        this.compatibleReadSerializers.set(remoteHash, {
+          localHash: expectedHash,
+          serializer,
+        });
+      }
+      return serializer;
     }
     return undefined;
-  }
-
-  private readChangedSerializer(
-    expectedHash: number,
-    remoteHash: number,
-    typeMeta: TypeMeta,
-    original?: Serializer,
-    originalTypeInfo?: TypeInfo,
-  ): Serializer {
-    if (original !== undefined) {
-      for (let i = 0; i < this.recentRegeneratedReadSerializers.length; i++) {
-        const serializer = this.recentRegeneratedReadSerializers[i];
-        if (
-          serializer !== undefined
-          && this.recentRegeneratedOriginals[i] === original
-          && this.recentRegeneratedLocalTypeInfos[i] === originalTypeInfo
-          && this.recentRegeneratedExpectedHashes[i] === expectedHash
-          && this.recentRegeneratedRemoteHashes[i] === remoteHash
-        ) {
-          this.lastRegeneratedOriginal = original;
-          this.lastRegeneratedLocalTypeInfo = originalTypeInfo;
-          this.lastRegeneratedExpectedHash = expectedHash;
-          this.lastRegeneratedRemoteHash = remoteHash;
-          this.lastRegeneratedReadSerializer = serializer;
-          return serializer;
-        }
-      }
-    }
-    const serializer = this.genSerializerByTypeMetaRuntime(typeMeta, original);
-    this.lastRegeneratedOriginal = original;
-    this.lastRegeneratedLocalTypeInfo = originalTypeInfo;
-    this.lastRegeneratedExpectedHash = expectedHash;
-    this.lastRegeneratedRemoteHash = remoteHash;
-    this.lastRegeneratedReadSerializer = serializer;
-    if (original !== undefined) {
-      const index = this.recentRegeneratedReadSerializerIndex;
-      this.recentRegeneratedOriginals[index] = original;
-      this.recentRegeneratedLocalTypeInfos[index] = originalTypeInfo;
-      this.recentRegeneratedExpectedHashes[index] = expectedHash;
-      this.recentRegeneratedRemoteHashes[index] = remoteHash;
-      this.recentRegeneratedReadSerializers[index] = serializer;
-      this.recentRegeneratedReadSerializerIndex
-        = (index + 1) & (this.recentRegeneratedReadSerializers.length - 1);
-    }
-    return serializer;
   }
 
   private canonicalTypeId(typeId: number): number {
@@ -1277,27 +1198,6 @@ export class ReadContext {
     );
   }
 
-  private getRegeneratedReadSerializerCache(
-    original: Serializer,
-  ): RegeneratedReadSerializerCacheEntry {
-    const localTypeInfo = original.getTypeInfo();
-    const localHash = original.getHash();
-    let entry = this.regeneratedReadSerializers.get(original);
-    if (
-      entry === undefined
-      || entry.localTypeInfo !== localTypeInfo
-      || entry.localHash !== localHash
-    ) {
-      entry = {
-        localHash,
-        localTypeInfo,
-        serializers: new Map(),
-      };
-      this.regeneratedReadSerializers.set(original, entry);
-    }
-    return entry;
-  }
-
   genSerializerByTypeMetaRuntime(typeMeta: TypeMeta, original?: Serializer) {
     const typeId = typeMeta.getTypeId();
     if (!TypeId.structType(typeId)) {
@@ -1313,15 +1213,6 @@ export class ReadContext {
           typeMeta.getUserTypeId(),
         );
       }
-    }
-    const cacheEntry
-      = original === undefined
-        ? undefined
-        : this.getRegeneratedReadSerializerCache(original);
-    const remoteHash = typeMeta.getHash();
-    const cached = cacheEntry?.serializers.get(remoteHash);
-    if (cached !== undefined) {
-      return cached;
     }
     let typeInfo: TypeInfo;
     if (original) {
@@ -1363,13 +1254,6 @@ export class ReadContext {
     const serializer = original
       ? this.typeResolver.generateReadSerializer(typeInfo)
       : this.typeResolver.regenerateReadSerializer(typeInfo);
-    if (
-      cacheEntry !== undefined
-      && cacheEntry.serializers.size
-      < ReadContext.MAX_CACHED_REGENERATED_READ_SERIALIZER
-    ) {
-      cacheEntry.serializers.set(remoteHash, serializer);
-    }
     return serializer;
   }
 

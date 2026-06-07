@@ -70,6 +70,13 @@ function readCompatibleScalar(
   return reader.deserialize(writer.serialize({ value }));
 }
 
+function typeMetaRecord(typeMeta: TypeMeta): Uint8Array {
+  const writer = new BinaryWriter({});
+  writer.writeVarUInt32(0);
+  writer.buffer(typeMeta.toBytes());
+  return writer.dump();
+}
+
 describe("typemeta", () => {
   test("splits dotted names", () => {
     const structInfo = Type.struct({ typeName: "com.example.User" }, {});
@@ -299,7 +306,7 @@ describe("typemeta", () => {
     expect(result).toEqual({ value: 123 });
   });
 
-  test("does not retain regenerated compatible serializer after a schema mismatch read", () => {
+  test("changed-schema reader does not replace the original serializer", () => {
     const changedWriterFory = new Fory({ compatible: true });
     const localWriterFory = new Fory({ compatible: true });
     const readerFory = new Fory({ compatible: true });
@@ -343,7 +350,7 @@ describe("typemeta", () => {
     expect(serializer.getTypeInfo().named).toBe("example$repro_struct");
   });
 
-  test("caches regenerated compatible readers for alternating nested schemas", () => {
+  test("caches compatible readers for alternating nested schemas", () => {
     const stringWriterFory = new Fory({ compatible: true });
     const boolWriterFory = new Fory({ compatible: true });
     const localWriterFory = new Fory({ compatible: true });
@@ -404,6 +411,52 @@ describe("typemeta", () => {
     expect(reader.deserialize(localBytes)).toEqual({
       child: { value: 123 },
     });
+    expect(generatedReaders).toBe(2);
+  });
+
+  test("compatible reader cache uses remote hash and local stale guard", () => {
+    const typeMeta = TypeMeta.fromTypeInfo(
+      Type.struct(7313, {
+        value: Type.string().setId(1),
+      }),
+    );
+    const bytes = typeMetaRecord(typeMeta);
+    const config = { ref: false, useSliceString: false, hooks: {} } as any;
+    const context = new ReadContext(
+      {
+        config,
+        trackingRef: false,
+        computeTypeId: (typeInfo: any) => typeInfo.typeId,
+        getSerializerById: () => undefined,
+        getSerializerByName: () => undefined,
+        getSerializerByData: () => undefined,
+        isCompatible: () => true,
+        generateReadSerializer: () => {
+          throw new Error("unused");
+        },
+        regenerateReadSerializer: () => {
+          throw new Error("unused");
+        },
+      } as any,
+      config,
+    );
+    const serializers = [{ name: "localA" }, { name: "localB" }] as any[];
+    let generatedReaders = 0;
+    (context as any).genSerializerByTypeMetaRuntime = () =>
+      serializers[generatedReaders++];
+    const localHashA = typeMeta.getHash() + 1;
+    const localHashB = typeMeta.getHash() + 2;
+    const originalA = { name: "originalA" } as any;
+    const originalB = { name: "originalB" } as any;
+    const readChanged = (localHash: number, original: any) => {
+      context.reset(bytes);
+      return context.readTypeMetaIfSchemaChanged(localHash, original);
+    };
+
+    expect(readChanged(localHashA, originalA)).toBe(serializers[0]);
+    expect(readChanged(localHashA, originalB)).toBe(serializers[0]);
+    expect(readChanged(localHashB, originalA)).toBe(serializers[1]);
+    expect(readChanged(localHashB, originalB)).toBe(serializers[1]);
     expect(generatedReaders).toBe(2);
   });
 

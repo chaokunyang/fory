@@ -4577,13 +4577,6 @@ struct Serializer<T, std::enable_if_t<is_fory_serializable_v<T>>> {
               remote_type_id == static_cast<uint8_t>(TypeId::NAMED_STRUCT);
           (void)remote_user_type_id;
           if (remote_has_meta) {
-            if (const TypeInfo *cached_type_info =
-                    ctx.try_read_last_type_meta(ctx.error())) {
-              return read_compatible(ctx, cached_type_info);
-            }
-            if (FORY_PREDICT_FALSE(ctx.has_error())) {
-              return T{};
-            }
             // Read TypeMeta inline using streaming protocol
             auto remote_type_info_res = ctx.read_type_meta();
             if (!remote_type_info_res.ok()) {

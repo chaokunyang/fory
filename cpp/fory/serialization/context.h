@@ -38,7 +38,6 @@ namespace serialization {
 
 // Forward declarations
 class TypeResolver;
-template <typename T, typename Enable> struct Serializer;
 class ReadContext;
 
 /// RAII helper to automatically decrease dynamic depth when leaving scope.
@@ -657,39 +656,6 @@ public:
   inline const Config &config() const { return *config_; }
 
 private:
-  template <typename, typename> friend struct Serializer;
-
-  FORY_ALWAYS_INLINE const TypeInfo *try_read_last_type_meta(Error &error) {
-    if (FORY_PREDICT_FALSE(!has_last_meta_header_)) {
-      return nullptr;
-    }
-    const uint32_t start = buffer_->reader_index();
-    const uint32_t index_marker = buffer_->read_var_uint32(error);
-    if (FORY_PREDICT_FALSE(!error.ok())) {
-      return nullptr;
-    }
-    if ((index_marker & 1U) != 0) {
-      buffer_->reader_index(start);
-      return nullptr;
-    }
-    const int64_t meta_header = buffer_->read_int64(error);
-    if (FORY_PREDICT_FALSE(!error.ok())) {
-      return nullptr;
-    }
-    if (meta_header != last_meta_header_ ||
-        last_meta_body_size_ == static_cast<uint32_t>(-1)) {
-      buffer_->reader_index(start);
-      return nullptr;
-    }
-    const TypeInfo *cached = last_meta_type_info_;
-    reading_type_infos_.push_back(cached);
-    buffer_->increase_reader_index(last_meta_body_size_, error);
-    if (FORY_PREDICT_FALSE(!error.ok())) {
-      return nullptr;
-    }
-    return cached;
-  }
-
   // Error state - accumulated during deserialization, checked at the end
   Error error_;
 
@@ -711,7 +677,6 @@ private:
   // Fast path for repeated type meta headers.
   int64_t last_meta_header_ = 0;
   const TypeInfo *last_meta_type_info_ = nullptr;
-  uint32_t last_meta_body_size_ = 0;
   bool has_last_meta_header_ = false;
   bool meta_string_table_active_ = false;
 

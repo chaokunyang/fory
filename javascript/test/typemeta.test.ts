@@ -466,10 +466,68 @@ describe("typemeta", () => {
     expect(decimalResult.value.equals(decimal(0n, 0))).toBe(true);
   });
 
+  test("generates direct compatible scalar reads", () => {
+    const generated: string[] = [];
+    const writerFory = new Fory({ compatible: true });
+    const readerFory = new Fory({
+      compatible: true,
+      hooks: {
+        afterCodeGenerated: (code) => {
+          generated.push(code);
+          return code;
+        },
+      },
+    });
+    const writer = writerFory.register(
+      Type.struct(7261, {
+        wide: Type.int32({ encoding: "fixed" }).setId(1),
+        flag: Type.string().setId(2),
+        label: Type.bool().setId(3),
+        narrow: Type.int64({ encoding: "fixed" }).setId(4),
+      }),
+    );
+    const reader = readerFory.register(
+      Type.struct(7261, {
+        wide: Type.int64({ encoding: "fixed" }).setId(1),
+        flag: Type.bool().setId(2),
+        label: Type.string().setId(3),
+        narrow: Type.int32({ encoding: "fixed" }).setId(4),
+      }),
+    );
+
+    const result = reader.deserialize(writer.serialize({
+      wide: 7,
+      flag: "true",
+      label: false,
+      narrow: 42n,
+    }));
+    const source = generated.join("\n");
+
+    expect(result).toEqual({
+      wide: 7n,
+      flag: true,
+      label: "false",
+      narrow: 42,
+    });
+    expect(source).toContain("BigInt(br.readInt32())");
+    expect(source).toContain(
+      "external.CompatibleScalarConverter.stringToBool(br.stringWithHeader())",
+    );
+    expect(source).toContain(
+      "(external.CompatibleScalarConverter.checkedBool(br.readUint8()) ? \"true\" : \"false\")",
+    );
+    expect(source).toContain(
+      "external.CompatibleScalarConverter.checkedInt32(br.readInt64())",
+    );
+    expect(source).not.toContain("CompatibleScalarConverter.read(");
+    expect(source).not.toContain("remoteTypeId");
+    expect(source).not.toContain("scalarKind(");
+  });
+
   test("rejects invalid bool scalars", () => {
     expect(() =>
       readCompatibleScalar(7225, Type.string(), Type.bool(), "yes"),
-    ).toThrow(/compatible field value/);
+    ).toThrow(/not a boolean value/);
     expect(() =>
       readCompatibleScalar(
         7226,
@@ -477,7 +535,7 @@ describe("typemeta", () => {
         Type.bool(),
         2,
       ),
-    ).toThrow(/compatible field value/);
+    ).toThrow(/not a boolean value/);
   });
 
   test("converts exact number scalars", () => {
@@ -542,16 +600,16 @@ describe("typemeta", () => {
   test("rejects inexact number scalars", () => {
     expect(() =>
       readCompatibleScalar(7232, Type.string(), Type.float64(), "0.1"),
-    ).toThrow(/compatible field value/);
+    ).toThrow(/not exactly representable/);
     expect(() =>
       readCompatibleScalar(7248, Type.string(), Type.int32(), "+1"),
-    ).toThrow(/compatible field value/);
+    ).toThrow(/Invalid scalar string/);
     expect(() =>
       readCompatibleScalar(7249, Type.string(), Type.float64(), ".5"),
-    ).toThrow(/compatible field value/);
+    ).toThrow(/Invalid scalar string/);
     expect(() =>
       readCompatibleScalar(7250, Type.string(), Type.float64(), "1."),
-    ).toThrow(/compatible field value/);
+    ).toThrow(/Invalid scalar string/);
     expect(() =>
       readCompatibleScalar(
         7251,
@@ -559,7 +617,7 @@ describe("typemeta", () => {
         Type.decimal(),
         "1".repeat(257),
       ),
-    ).toThrow(/compatible field value/);
+    ).toThrow(/Invalid scalar string/);
     expect(() =>
       readCompatibleScalar(
         7253,
@@ -567,16 +625,16 @@ describe("typemeta", () => {
         Type.decimal(),
         `0.${"0".repeat(319)}`,
       ),
-    ).toThrow(/compatible field value/);
+    ).toThrow(/Invalid scalar string/);
     expect(() =>
       readCompatibleScalar(7257, Type.string(), Type.decimal(), "1e1000000"),
-    ).toThrow(/compatible field value/);
+    ).toThrow(/Invalid scalar string/);
     expect(() =>
       readCompatibleScalar(7258, Type.string(), Type.decimal(), "1e256"),
-    ).toThrow(/compatible field value/);
+    ).toThrow(/Invalid scalar string/);
     expect(() =>
       readCompatibleScalar(7233, Type.decimal(), Type.int32(), decimal(5n, 1)),
-    ).toThrow(/compatible field value/);
+    ).toThrow(/not an integer/);
     expect(() =>
       readCompatibleScalar(
         7259,
@@ -584,7 +642,7 @@ describe("typemeta", () => {
         Type.string(),
         decimal(1n, -256),
       ),
-    ).toThrow(/compatible field value/);
+    ).toThrow(/magnitude exceeds compatible conversion limit/);
     expect(() =>
       readCompatibleScalar(
         7234,
@@ -592,10 +650,10 @@ describe("typemeta", () => {
         Type.int8(),
         128,
       ),
-    ).toThrow(/compatible field value/);
+    ).toThrow(/outside int8 range/);
     expect(() =>
       readCompatibleScalar(7235, Type.float64(), Type.string(), Number.NaN),
-    ).toThrow(/compatible field value/);
+    ).toThrow(/Non-finite scalar value NaN/);
   });
 
   test("composes scalar conversion with nulls", () => {

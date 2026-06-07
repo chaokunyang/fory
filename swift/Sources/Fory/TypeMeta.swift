@@ -759,6 +759,10 @@ public final class TypeMeta: Equatable, @unchecked Sendable {
         || compatibleScalarKind(localType.typeID) != nil
     {
       return remoteType.typeID == localType.typeID
+        && remoteType.nullable == localType.nullable
+        && remoteType.trackRef == localType.trackRef
+        && remoteType.generics.isEmpty
+        && localType.generics.isEmpty
     }
     if remoteType.generics.count != localType.generics.count {
       return false

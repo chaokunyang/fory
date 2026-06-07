@@ -178,6 +178,9 @@ public final class FieldInfo implements Serializable {
             .fieldConverter(converter)
             .build();
       }
+      if (FieldConverters.canConvert(resolver, remoteDescriptor, descriptor)) {
+        return remoteDescriptor;
+      }
       if (FieldTypes.useFieldType(rawType, descriptor)) {
         return remoteDescriptor;
       }

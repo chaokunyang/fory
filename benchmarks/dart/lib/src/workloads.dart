@@ -63,9 +63,9 @@ final class BenchmarkDefinition<TModel,
   }) {
     final model = createModel();
     final buffer = Buffer();
-    final protobufMessage = toProto(model);
-    final protobufBytes = protobufMessage.writeToBuffer();
-    final jsonText = serializeJson(model) as String;
+    final protobufMessage = schemaMismatch ? null : toProto(model);
+    final protobufBytes = protobufMessage?.writeToBuffer();
+    final jsonText = schemaMismatch ? null : serializeJson(model) as String;
 
     writerFory.serializeTo(model, buffer);
     final foryBytes = Uint8List.sublistView(buffer.toBytes());
@@ -80,17 +80,27 @@ final class BenchmarkDefinition<TModel,
     return InstantiatedBenchmark(
       dataType: dataType,
       forySize: forySize,
-      protobufSize: protobufBytes.length,
-      jsonSize: utf8.encode(jsonText).length,
+      protobufSize: protobufBytes?.length,
+      jsonSize: jsonText == null ? null : utf8.encode(jsonText).length,
       forySerialize: () {
         buffer.clear();
         writerFory.serializeTo(model, buffer);
         benchmarkSink = buffer.toBytes();
       },
       protobufSerialize: () {
+        if (protobufMessage == null) {
+          throw StateError(
+            'Schema-mismatch mode supports only Fory benchmarks.',
+          );
+        }
         benchmarkSink = serializeProtobuf(model, protobufMessage);
       },
       jsonSerialize: () {
+        if (jsonText == null) {
+          throw StateError(
+            'Schema-mismatch mode supports only Fory benchmarks.',
+          );
+        }
         benchmarkSink = serializeJson(model);
       },
       foryDeserialize: () {
@@ -99,9 +109,19 @@ final class BenchmarkDefinition<TModel,
             : parseFory(readerFory, foryBytes);
       },
       protobufDeserialize: () {
+        if (protobufBytes == null) {
+          throw StateError(
+            'Schema-mismatch mode supports only Fory benchmarks.',
+          );
+        }
         benchmarkSink = parseProtobuf(protobufBytes);
       },
       jsonDeserialize: () {
+        if (jsonText == null) {
+          throw StateError(
+            'Schema-mismatch mode supports only Fory benchmarks.',
+          );
+        }
         benchmarkSink = parseJson(jsonText);
       },
     );
@@ -111,8 +131,8 @@ final class BenchmarkDefinition<TModel,
 final class InstantiatedBenchmark {
   final String dataType;
   final int forySize;
-  final int protobufSize;
-  final int jsonSize;
+  final int? protobufSize;
+  final int? jsonSize;
   final void Function() forySerialize;
   final void Function() protobufSerialize;
   final void Function() jsonSerialize;

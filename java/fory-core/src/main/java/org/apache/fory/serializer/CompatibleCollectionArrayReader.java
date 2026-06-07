@@ -87,11 +87,11 @@ final class CompatibleCollectionArrayReader {
       return null;
     }
     FieldTypes.FieldType localFieldType = FieldTypes.buildFieldType(resolver, field);
-    int peerListElementTypeId = listElementTypeId(descriptor);
+    if (localFieldType.nullable() || localFieldType.trackingRef()) {
+      return null;
+    }
+    int peerListElementTypeId = nonNullableListElementTypeId(descriptor);
     if (peerListElementTypeId != Types.UNKNOWN) {
-      // Element nullable/ref flags in TypeDef describe what the peer schema can encode, not what
-      // this payload actually contains. Dense-array compatibility is decided here by element type;
-      // readListPayloadAsPrimitiveArray rejects payloads that carry null/ref element markers.
       int localArrayTypeId = arrayTypeId(localFieldType);
       if (localArrayTypeId != Types.UNKNOWN
           && localArrayTypeId == denseArrayTypeId(peerListElementTypeId)) {
@@ -133,15 +133,18 @@ final class CompatibleCollectionArrayReader {
     }
     FieldTypes.FieldType remoteFieldType = remoteFieldInfo.getFieldType();
     FieldTypes.FieldType localFieldType = FieldTypes.buildFieldType(resolver, localDescriptor);
+    if (remoteFieldType.nullable()
+        || localFieldType.nullable()
+        || remoteFieldType.trackingRef()
+        || localFieldType.trackingRef()) {
+      return null;
+    }
     TypeRef<?> localType = localDescriptor.getTypeRef();
-    int peerListElementTypeId = listElementTypeId(remoteFieldType);
+    int peerListElementTypeId = nonNullableListElementTypeId(remoteFieldType);
     if (peerListElementTypeId != Types.UNKNOWN) {
       int localArrayTypeId = arrayTypeId(localDescriptor);
       if (localArrayTypeId != Types.UNKNOWN
           && localArrayTypeId == denseArrayTypeId(peerListElementTypeId)) {
-        // Remote element nullable/ref flags describe what the schema can encode. Actual payload
-        // null/ref markers are validated while reading so nullable list<T> payloads without nulls
-        // remain compatible with local array<T> fields.
         return new ReadAction(
             READ_LIST_TO_ARRAY,
             localArrayTypeId,
@@ -149,7 +152,7 @@ final class CompatibleCollectionArrayReader {
             localDescriptor.getRawType());
       }
       int nonNullablePeerListElementTypeId = nonNullableListElementTypeId(remoteFieldType);
-      int localListElementTypeId = nonNullableListElementTypeId(localType);
+      int localListElementTypeId = listElementTypeId(localType);
       int peerArrayTypeId = denseArrayTypeId(peerListElementTypeId);
       // List-to-array and list-to-list materialize through a dense primitive array, so they cannot
       // preserve nullable or ref-tracked peer elements.

@@ -579,17 +579,14 @@ func TestCompatibleSerializationScenarios(t *testing.T) {
 			},
 		},
 		{
-			name:      "NullableInt32ListWithoutNullsMatchesArray",
+			name:      "NullableInt32ListWithoutNullsDoesNotMatchArray",
 			tag:       "Int32Sequence",
 			writeType: NullableInt32ListPayloadDataClass{},
 			readType:  Int32ArrayPayloadDataClass{},
 			input: NullableInt32ListPayloadDataClass{
 				Payload: []*int32{ptr(int32(1)), ptr(int32(2)), ptr(int32(3))},
 			},
-			assertFunc: func(t *testing.T, input any, output any) {
-				out := output.(Int32ArrayPayloadDataClass)
-				assert.Equal(t, [3]int32{1, 2, 3}, out.Payload)
-			},
+			unmarshalErrContains: "cannot be read as local field",
 		},
 		{
 			name:      "NullableInt32ListPayloadDoesNotMatchArray",
@@ -599,7 +596,7 @@ func TestCompatibleSerializationScenarios(t *testing.T) {
 			input: NullableInt32ListPayloadDataClass{
 				Payload: []*int32{ptr(int32(1)), nil, ptr(int32(3))},
 			},
-			unmarshalErrContains: "compatible list to array field requires non-null elements",
+			unmarshalErrContains: "cannot be read as local field",
 		},
 		{
 			name:      "NestedListArrayMismatch",

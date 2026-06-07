@@ -156,9 +156,15 @@ public final class FieldInfo implements Serializable {
       if (localFieldType != null && hasNestedFieldSchemaMismatch(fieldType, localFieldType)) {
         throw incompatibleField("nested field schema mismatch", localFieldType);
       }
+      if (localFieldType != null && hasIncompatibleRootArrayOrBinary(fieldType, localFieldType)) {
+        throw incompatibleField("primitive-array/binary field schema mismatch", localFieldType);
+      }
+      boolean rootArrayOrBinaryBridge =
+          localFieldType != null && isBinaryUint8ArrayRootPair(fieldType, localFieldType);
       if (remoteNullable == descriptor.isNullable()
           && remoteTrackingRef == descriptor.isTrackingRef()
-          && typeRef.equals(descriptor.getTypeRef())) {
+          && typeRef.equals(descriptor.getTypeRef())
+          && !rootArrayOrBinaryBridge) {
         if (typeName.equals(descriptor.getTypeName())) {
           return descriptor;
         }
@@ -222,7 +228,13 @@ public final class FieldInfo implements Serializable {
       return false;
     }
     FieldTypes.FieldType localFieldType = FieldTypes.buildFieldType(resolver, localDescriptor);
-    int peerListElementTypeId = listElementTypeId(fieldType);
+    if (fieldType.nullable()
+        || localFieldType.nullable()
+        || fieldType.trackingRef()
+        || localFieldType.trackingRef()) {
+      return false;
+    }
+    int peerListElementTypeId = nonNullableListElementTypeId(fieldType);
     if (peerListElementTypeId != Types.UNKNOWN) {
       int localArrayTypeId = arrayTypeId(localFieldType);
       return localArrayTypeId != Types.UNKNOWN
@@ -352,6 +364,32 @@ public final class FieldInfo implements Serializable {
         || typeId == Types.DECIMAL;
   }
 
+  private static boolean hasIncompatibleRootArrayOrBinary(
+      FieldTypes.FieldType remoteFieldType, FieldTypes.FieldType localFieldType) {
+    int remoteTypeId = rootArrayOrBinaryTypeId(remoteFieldType);
+    int localTypeId = rootArrayOrBinaryTypeId(localFieldType);
+    if (remoteTypeId == Types.UNKNOWN && localTypeId == Types.UNKNOWN) {
+      return false;
+    }
+    return remoteTypeId != localTypeId && !isBinaryUint8ArrayTypePair(remoteTypeId, localTypeId);
+  }
+
+  private static boolean isBinaryUint8ArrayRootPair(
+      FieldTypes.FieldType remoteFieldType, FieldTypes.FieldType localFieldType) {
+    return isBinaryUint8ArrayTypePair(
+        rootArrayOrBinaryTypeId(remoteFieldType), rootArrayOrBinaryTypeId(localFieldType));
+  }
+
+  private static boolean isBinaryUint8ArrayTypePair(int remoteTypeId, int localTypeId) {
+    return (remoteTypeId == Types.BINARY && localTypeId == Types.UINT8_ARRAY)
+        || (remoteTypeId == Types.UINT8_ARRAY && localTypeId == Types.BINARY);
+  }
+
+  private static int rootArrayOrBinaryTypeId(FieldTypes.FieldType fieldType) {
+    int typeId = fieldType.getTypeId();
+    return typeId == Types.BINARY || Types.isPrimitiveArray(typeId) ? typeId : Types.UNKNOWN;
+  }
+
   private IllegalArgumentException incompatibleField(
       String reason, FieldTypes.FieldType localFieldType) {
     return new IllegalArgumentException(
@@ -406,6 +444,14 @@ public final class FieldInfo implements Serializable {
   }
 
   private static int listElementTypeId(FieldTypes.FieldType fieldType) {
+    return listElementTypeId(fieldType, false);
+  }
+
+  private static int nonNullableListElementTypeId(FieldTypes.FieldType fieldType) {
+    return listElementTypeId(fieldType, true);
+  }
+
+  private static int listElementTypeId(FieldTypes.FieldType fieldType, boolean requireNonNullable) {
     if (!(fieldType instanceof FieldTypes.CollectionFieldType)
         || fieldType.getTypeId() != Types.LIST) {
       return Types.UNKNOWN;
@@ -413,6 +459,9 @@ public final class FieldInfo implements Serializable {
     FieldTypes.FieldType elementType =
         ((FieldTypes.CollectionFieldType) fieldType).getElementType();
     if (elementType instanceof FieldTypes.RegisteredFieldType) {
+      if (requireNonNullable && (elementType.nullable() || elementType.trackingRef())) {
+        return Types.UNKNOWN;
+      }
       return ((FieldTypes.RegisteredFieldType) elementType).getTypeId();
     }
     return Types.UNKNOWN;

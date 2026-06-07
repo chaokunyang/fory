@@ -1300,7 +1300,7 @@ final class TypeResolver {
       typeId: typeId,
       nullable: nullable,
       ref: ref,
-      dynamic: typeId == TypeIds.unknown ? true : false,
+      dynamic: typeId == TypeIds.unknown && !ref ? true : null,
       arguments: arguments,
     );
   }

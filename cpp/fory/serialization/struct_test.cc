@@ -134,6 +134,18 @@ struct MixedFieldIdentityStruct {
               alpha_value, (count, fory::F(2).varint()));
 };
 
+struct SignedToUnsignedWriter {
+  int32_t value;
+
+  FORY_STRUCT(SignedToUnsignedWriter, (value, fory::F(1)));
+};
+
+struct UnsignedTargetReader {
+  uint32_t value = 0;
+
+  FORY_STRUCT(UnsignedTargetReader, (value, fory::F(1)));
+};
+
 class PrivateFieldsStruct {
 public:
   PrivateFieldsStruct() = default;
@@ -1000,6 +1012,16 @@ TEST(StructComprehensiveTest, FieldTypeCompatibilitySeparatesAdapters) {
 
   FieldType int32_array = make_test_field_type(TypeId::INT32_ARRAY);
   EXPECT_TRUE(field_types_compatible_top_level(fixed_list, int32_array));
+  EXPECT_TRUE(field_types_compatible_top_level(nullable_list, int32_array));
+  EXPECT_FALSE(field_types_compatible_top_level(int32_array, nullable_list));
+  FieldType tracked_i32(static_cast<uint32_t>(TypeId::INT32), false, true);
+  FieldType tracked_list = make_test_field_type(TypeId::LIST, {tracked_i32});
+  EXPECT_TRUE(field_types_compatible_top_level(tracked_list, int32_array));
+  EXPECT_FALSE(field_types_compatible_top_level(int32_array, tracked_list));
+  FieldType nullable_int32_array(static_cast<uint32_t>(TypeId::INT32_ARRAY),
+                                 true);
+  EXPECT_FALSE(
+      field_types_compatible_top_level(fixed_list, nullable_int32_array));
 }
 
 TEST(StructComprehensiveTest,
@@ -1076,6 +1098,44 @@ TEST(StructComprehensiveTest,
       TypeMeta::assign_field_ids(&mixed_local, untagged_remote_for_tagged_local)
           .ok());
   EXPECT_EQ(untagged_remote_for_tagged_local[0].field_id, -1);
+}
+
+TEST(StructComprehensiveTest, CompatibleSignedToUnsignedStructRead) {
+  auto writer =
+      Fory::builder().xlang(true).compatible(true).track_ref(false).build();
+  auto reader =
+      Fory::builder().xlang(true).compatible(true).track_ref(false).build();
+  ASSERT_TRUE(writer.register_struct<SignedToUnsignedWriter>(608).ok());
+  ASSERT_TRUE(reader.register_struct<UnsignedTargetReader>(608).ok());
+
+  auto bytes_result = writer.serialize(SignedToUnsignedWriter{123});
+  ASSERT_TRUE(bytes_result.ok())
+      << "Serialization failed: " << bytes_result.error().to_string();
+
+  std::vector<uint8_t> bytes = std::move(bytes_result).value();
+  auto result =
+      reader.deserialize<UnsignedTargetReader>(bytes.data(), bytes.size());
+  ASSERT_TRUE(result.ok()) << "Deserialization failed: "
+                           << result.error().to_string();
+  EXPECT_EQ(result.value().value, 123u);
+}
+
+TEST(StructComprehensiveTest, CompatibleNegativeSignedToUnsignedFails) {
+  auto writer =
+      Fory::builder().xlang(true).compatible(true).track_ref(false).build();
+  auto reader =
+      Fory::builder().xlang(true).compatible(true).track_ref(false).build();
+  ASSERT_TRUE(writer.register_struct<SignedToUnsignedWriter>(609).ok());
+  ASSERT_TRUE(reader.register_struct<UnsignedTargetReader>(609).ok());
+
+  auto bytes_result = writer.serialize(SignedToUnsignedWriter{-1});
+  ASSERT_TRUE(bytes_result.ok())
+      << "Serialization failed: " << bytes_result.error().to_string();
+
+  std::vector<uint8_t> bytes = std::move(bytes_result).value();
+  auto result =
+      reader.deserialize<UnsignedTargetReader>(bytes.data(), bytes.size());
+  EXPECT_FALSE(result.ok());
 }
 
 TEST(StructComprehensiveTest, AssignFieldIdsRejectsMatchedIdOverflow) {

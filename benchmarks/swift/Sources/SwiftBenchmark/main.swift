@@ -128,8 +128,17 @@ private func runMain() throws {
 
     print("\nSerialized sizes (bytes):")
     for entry in output.serializedSizes {
-        print("  \(entry.dataType): fory=\(entry.fory), protobuf=\(entry.protobuf), json=\(entry.json)")
+        let protobufSize = formatSize(entry.protobuf)
+        let jsonSize = formatSize(entry.json)
+        print("  \(entry.dataType): fory=\(entry.fory), protobuf=\(protobufSize), json=\(jsonSize)")
     }
+}
+
+private func formatSize(_ value: Int?) -> String {
+    guard let value = value else {
+        return "N/A"
+    }
+    return String(value)
 }
 
 private func writeOutput(_ output: BenchmarkOutput, to path: String) throws {

@@ -136,26 +136,28 @@ public class XlangBenchmark {
       forySampleListBytes = foryWriter.serialize(sampleList);
       foryMediaContentListBytes = foryWriter.serialize(mediaContentList);
 
-      protobufNumericStructBytes = toFixedProto(numericStruct).toByteArray();
-      protobufSampleBytes = toProto(sample).toByteArray();
-      protobufMediaContentBytes = toProto(mediaContent).toByteArray();
-      protobufNumericStructListBytes = toProto(numericStructList).toByteArray();
-      protobufSampleListBytes = toProto(sampleList).toByteArray();
-      protobufMediaContentListBytes = toProto(mediaContentList).toByteArray();
+      if (!schemaMismatch) {
+        protobufNumericStructBytes = toFixedProto(numericStruct).toByteArray();
+        protobufSampleBytes = toProto(sample).toByteArray();
+        protobufMediaContentBytes = toProto(mediaContent).toByteArray();
+        protobufNumericStructListBytes = toProto(numericStructList).toByteArray();
+        protobufSampleListBytes = toProto(sampleList).toByteArray();
+        protobufMediaContentListBytes = toProto(mediaContentList).toByteArray();
 
-      flatbufferNumericStructBytes = toFlatBuffer(numericStruct);
-      flatbufferSampleBytes = toFlatBuffer(sample);
-      flatbufferMediaContentBytes = toFlatBuffer(mediaContent);
-      flatbufferNumericStructListBytes = toFlatBuffer(numericStructList);
-      flatbufferSampleListBytes = toFlatBuffer(sampleList);
-      flatbufferMediaContentListBytes = toFlatBuffer(mediaContentList);
+        flatbufferNumericStructBytes = toFlatBuffer(numericStruct);
+        flatbufferSampleBytes = toFlatBuffer(sample);
+        flatbufferMediaContentBytes = toFlatBuffer(mediaContent);
+        flatbufferNumericStructListBytes = toFlatBuffer(numericStructList);
+        flatbufferSampleListBytes = toFlatBuffer(sampleList);
+        flatbufferMediaContentListBytes = toFlatBuffer(mediaContentList);
 
-      flatbufferNumericStructBuffer = ByteBuffer.wrap(flatbufferNumericStructBytes);
-      flatbufferSampleBuffer = ByteBuffer.wrap(flatbufferSampleBytes);
-      flatbufferMediaContentBuffer = ByteBuffer.wrap(flatbufferMediaContentBytes);
-      flatbufferNumericStructListBuffer = ByteBuffer.wrap(flatbufferNumericStructListBytes);
-      flatbufferSampleListBuffer = ByteBuffer.wrap(flatbufferSampleListBytes);
-      flatbufferMediaContentListBuffer = ByteBuffer.wrap(flatbufferMediaContentListBytes);
+        flatbufferNumericStructBuffer = ByteBuffer.wrap(flatbufferNumericStructBytes);
+        flatbufferSampleBuffer = ByteBuffer.wrap(flatbufferSampleBytes);
+        flatbufferMediaContentBuffer = ByteBuffer.wrap(flatbufferMediaContentBytes);
+        flatbufferNumericStructListBuffer = ByteBuffer.wrap(flatbufferNumericStructListBytes);
+        flatbufferSampleListBuffer = ByteBuffer.wrap(flatbufferSampleListBytes);
+        flatbufferMediaContentListBuffer = ByteBuffer.wrap(flatbufferMediaContentListBytes);
+      }
 
       verifySetup();
     }
@@ -171,9 +173,9 @@ public class XlangBenchmark {
         verifySchemaMismatch();
       } else {
         foryReader.deserialize(foryNumericStructBytes);
+        fromProtoStruct(protobufNumericStructBytes);
+        fromFlatBufferNumericStruct(flatbufferNumericStructBuffer);
       }
-      fromProtoStruct(protobufNumericStructBytes);
-      fromFlatBufferNumericStruct(flatbufferNumericStructBuffer);
     }
 
     private void verifyForySerializerMode(Fory fory, Class<?> type) {

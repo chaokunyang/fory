@@ -196,12 +196,7 @@ public class MetaShareXlangTest extends ForyTestBase {
       byte[] listBytes = listFory.serialize(listStruct);
 
       Fory arrayFory = compatibleFory(DirectArrayField.class, codegen);
-      DirectArrayField arrayStruct = (DirectArrayField) arrayFory.deserialize(listBytes);
-      assertTrue(Arrays.equals(arrayStruct.values, new int[] {1, 2, 3}));
-
-      listStruct.values = Arrays.asList(1, null, 3);
-      byte[] nullablePayload = listFory.serialize(listStruct);
-      assertThrows(DeserializationException.class, () -> arrayFory.deserialize(nullablePayload));
+      assertThrows(DeserializationException.class, () -> arrayFory.deserialize(listBytes));
     }
   }
 

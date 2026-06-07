@@ -37,6 +37,7 @@ import org.apache.fory.type.Descriptor;
 import org.apache.fory.type.DispatchId;
 import org.apache.fory.type.Float16;
 import org.apache.fory.type.TypeUtils;
+import org.apache.fory.type.Types;
 import org.apache.fory.type.unsigned.UInt16;
 import org.apache.fory.type.unsigned.UInt32;
 import org.apache.fory.type.unsigned.UInt64;
@@ -122,6 +123,9 @@ public class FieldConverters {
    */
   @Internal
   public static boolean canConvert(TypeResolver resolver, Descriptor from, Descriptor to) {
+    if (hasIncompatibleRootArrayOrBinary(resolver, from, to)) {
+      return false;
+    }
     int fromDispatchId = DispatchId.getDispatchId(resolver, from);
     int toDispatchId = DispatchId.getDispatchId(resolver, to);
     if (isRefTrackedScalarSchemaMismatch(
@@ -178,13 +182,13 @@ public class FieldConverters {
     return CompatibleScalarConverter.canConvert(from.dispatchId, from.type, to.dispatchId, to.type);
   }
 
-  /**
-   * Returns whether a generated serializer can read {@code from} and adapt it with generated
-   * field-access code for {@code to}.
-   */
+  /** Returns whether a remote field can be classified as a compatible local-field read. */
   @Internal
-  public static boolean canReadGeneratedField(
-      SerializationFieldInfo from, SerializationFieldInfo to) {
+  public static boolean canReadCompatibleField(
+      TypeResolver resolver, SerializationFieldInfo from, SerializationFieldInfo to) {
+    if (hasIncompatibleRootArrayOrBinary(resolver, from.descriptor, to.descriptor)) {
+      return false;
+    }
     if (canConvert(from, to)) {
       return true;
     }
@@ -623,6 +627,26 @@ public class FieldConverters {
 
   private static boolean isScalarField(SerializationFieldInfo fieldInfo) {
     return CompatibleScalarConverter.isScalar(fieldInfo.dispatchId, fieldInfo.type);
+  }
+
+  private static boolean hasIncompatibleRootArrayOrBinary(
+      TypeResolver resolver, Descriptor from, Descriptor to) {
+    int fromTypeId = rootArrayOrBinaryTypeId(resolver, from);
+    int toTypeId = rootArrayOrBinaryTypeId(resolver, to);
+    if (fromTypeId == Types.UNKNOWN && toTypeId == Types.UNKNOWN) {
+      return false;
+    }
+    return fromTypeId != toTypeId && !isBinaryUint8ArrayTypePair(fromTypeId, toTypeId);
+  }
+
+  private static boolean isBinaryUint8ArrayTypePair(int fromTypeId, int toTypeId) {
+    return (fromTypeId == Types.BINARY && toTypeId == Types.UINT8_ARRAY)
+        || (fromTypeId == Types.UINT8_ARRAY && toTypeId == Types.BINARY);
+  }
+
+  private static int rootArrayOrBinaryTypeId(TypeResolver resolver, Descriptor descriptor) {
+    int typeId = Types.getDescriptorTypeId(resolver, descriptor);
+    return typeId == Types.BINARY || Types.isPrimitiveArray(typeId) ? typeId : Types.UNKNOWN;
   }
 
   private static boolean isDirectlyAssignable(Class<?> from, Class<?> to) {

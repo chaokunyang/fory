@@ -41,8 +41,8 @@ struct BenchmarkEntry: Codable {
 struct SizeEntry: Codable {
     let dataType: String
     let fory: Int
-    let protobuf: Int
-    let json: Int
+    let protobuf: Int?
+    let json: Int?
 }
 
 struct BenchmarkContext: Codable {
@@ -196,15 +196,15 @@ final class BenchmarkSuite {
         }
 
         let foryBytes = try foryWriter.serialize(value)
-        let protobufBytes = config.schemaMismatch ? Data() : try value.toProtobuf().serializedData()
-        let jsonBytes = config.schemaMismatch ? Data() : try jsonEncoder.encode(value)
+        let protobufBytes = config.schemaMismatch ? nil : try value.toProtobuf().serializedData()
+        let jsonBytes = config.schemaMismatch ? nil : try jsonEncoder.encode(value)
 
         sizeEntries.append(
             SizeEntry(
                 dataType: dataKind.title,
                 fory: foryBytes.count,
-                protobuf: protobufBytes.count,
-                json: jsonBytes.count
+                protobuf: protobufBytes?.count,
+                json: jsonBytes?.count
             )
         )
         if config.schemaMismatch {
@@ -245,6 +245,9 @@ final class BenchmarkSuite {
         }
 
         if !config.schemaMismatch && shouldRun(dataKind, .protobuf) {
+            guard let protobufBytes = protobufBytes else {
+                throw BenchmarkError.schemaMismatchValidation(dataKind.rawValue)
+            }
             entries.append(
                 try runSingleCase(
                     serializer: .protobuf,
@@ -271,6 +274,9 @@ final class BenchmarkSuite {
         }
 
         if !config.schemaMismatch && shouldRun(dataKind, .json) {
+            guard let jsonBytes = jsonBytes else {
+                throw BenchmarkError.schemaMismatchValidation(dataKind.rawValue)
+            }
             entries.append(
                 try runSingleCase(
                     serializer: .json,

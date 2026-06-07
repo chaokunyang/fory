@@ -802,6 +802,7 @@ internal class KotlinSerializerSourceWriter(private val struct: KotlinSourceStru
       )
     builder.append(indent).append("  }\n")
     builder.append(indent).append("}\n")
+    writeMissingRequiredChecks(indent)
     builder.append(indent).append("var missingDefaultMask = 0\n")
     val defaultFields = struct.fields.filter { it.hasDefault }
     for (field in struct.fields) {
@@ -881,7 +882,27 @@ internal class KotlinSerializerSourceWriter(private val struct: KotlinSourceStru
     )
     builder.append("      }\n")
     builder.append("    }\n")
+    writeMissingRequiredChecks("    ")
     builder.append("    return value\n")
+  }
+
+  private fun writeMissingRequiredChecks(indent: String) {
+    for (field in struct.fields) {
+      if (field.hasDefault || field.nullable) {
+        continue
+      }
+      builder.append(indent).append("if (")
+      appendPresenceMissing(field)
+      builder.append(") {\n")
+      builder
+        .append(indent)
+        .append("  throw DeserializationException(\"Required Kotlin field ")
+        .append(struct.qualifiedTypeName)
+        .append(".")
+        .append(field.name)
+        .append(" is missing\")\n")
+      builder.append(indent).append("}\n")
+    }
   }
 
   private fun writePresenceVars(indent: String = "    ") {
@@ -1376,8 +1397,10 @@ internal class KotlinSerializerSourceWriter(private val struct: KotlinSourceStru
           } else {
             "FieldConverters.readDoubleTarget(readContext, remoteField.serializationFieldInfo, localField)"
           }
-        "String" -> "FieldConverters.readStringTarget(readContext, remoteField.serializationFieldInfo, localField)"
-        "java.math.BigDecimal" -> "FieldConverters.readDecimalTarget(readContext, remoteField.serializationFieldInfo, localField)"
+        "String" ->
+          "FieldConverters.readStringTarget(readContext, remoteField.serializationFieldInfo, localField)"
+        "java.math.BigDecimal" ->
+          "FieldConverters.readDecimalTarget(readContext, remoteField.serializationFieldInfo, localField)"
         "UByte" ->
           if (nullable) {
             "FieldConverters.readBoxedIntTarget(readContext, remoteField.serializationFieldInfo, localField)?.toUByte()"

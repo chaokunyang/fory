@@ -694,6 +694,62 @@ func remoteOnlyFieldsSkipWhenLocalSchemaIsEmpty() throws {
 }
 
 @Test
+func nameRemoteFieldDoesNotMatchTaggedLocalField() throws {
+  let empty = MetaString.empty(specialChar1: "_", specialChar2: "_")
+  let stringType = TypeMeta.FieldType(typeID: TypeId.string.rawValue, nullable: false)
+  let local = try TypeMeta(
+    typeID: TypeId.compatibleStruct.rawValue,
+    userTypeID: 1,
+    namespace: empty,
+    typeName: empty,
+    registerByName: false,
+    fields: [
+      TypeMeta.FieldInfo(fieldID: 1, fieldName: "value", fieldType: stringType)
+    ])
+  let remote = try TypeMeta(
+    typeID: TypeId.compatibleStruct.rawValue,
+    userTypeID: 1,
+    namespace: empty,
+    typeName: empty,
+    registerByName: false,
+    fields: [
+      TypeMeta.FieldInfo(fieldID: nil, fieldName: "value", fieldType: stringType)
+    ])
+
+  let resolved = try remote.assigningFieldIDs(from: local)
+  #expect(resolved.fields[0].fieldID == -1)
+}
+
+@Test
+func duplicateRemoteNameBindingFails() throws {
+  let empty = MetaString.empty(specialChar1: "_", specialChar2: "_")
+  let stringType = TypeMeta.FieldType(typeID: TypeId.string.rawValue, nullable: false)
+  let local = try TypeMeta(
+    typeID: TypeId.compatibleStruct.rawValue,
+    userTypeID: 1,
+    namespace: empty,
+    typeName: empty,
+    registerByName: false,
+    fields: [
+      TypeMeta.FieldInfo(fieldID: nil, fieldName: "value", fieldType: stringType)
+    ])
+  let remote = try TypeMeta(
+    typeID: TypeId.compatibleStruct.rawValue,
+    userTypeID: 1,
+    namespace: empty,
+    typeName: empty,
+    registerByName: false,
+    fields: [
+      TypeMeta.FieldInfo(fieldID: nil, fieldName: "value", fieldType: stringType),
+      TypeMeta.FieldInfo(fieldID: nil, fieldName: "value", fieldType: stringType)
+    ])
+
+  #expect(throws: ForyError.invalidData("compatible field value duplicates local field value")) {
+    _ = try remote.assigningFieldIDs(from: local)
+  }
+}
+
+@Test
 func matchedFieldIdOverflowFails() throws {
   let empty = MetaString.empty(specialChar1: "_", specialChar2: "_")
   let fieldType = TypeMeta.FieldType(typeID: TypeId.bool.rawValue, nullable: false)
@@ -1158,15 +1214,10 @@ func compatibleReadRejectsNullableListElementsForArrayField() throws {
   reader.register(CompatibleArrayFieldV2.self, id: 9923)
 
   let bytes = try writer.serialize(CompatibleNullableListFieldV1(values: [1, 2, 3], extra: 9))
-  let decoded: CompatibleArrayFieldV2 = try reader.deserialize(bytes)
-  #expect(decoded.values == [1, 2, 3])
-
-  let nullableBytes = try writer.serialize(
-    CompatibleNullableListFieldV1(values: [1, nil, 3], extra: 9))
   #expect(
-    throws: ForyError.invalidData("compatible list-to-array field cannot read nullable elements")
+    throws: ForyError.invalidData("compatible field values cannot be read as local field values")
   ) {
-    let _: CompatibleArrayFieldV2 = try reader.deserialize(nullableBytes)
+    let _: CompatibleArrayFieldV2 = try reader.deserialize(bytes)
   }
 }
 

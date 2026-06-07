@@ -67,10 +67,12 @@ function compatibleReadTargetExpr(typeInfo: TypeInfo, expr: string): string {
 const sortProps = (typeInfo: TypeInfo, typeResolver: CodecBuilder["resolver"]) => {
   const props = typeInfo.options!.props;
   if (typeInfo.options!.preserveFieldOrder) {
-    return Object.entries(props!).map(([key, fieldTypeInfo]) => ({
-      key,
-      typeInfo: fieldTypeInfo,
-    }));
+    return typeInfo.options!.fieldEntries ?? Object.entries(props!).map(
+      ([key, fieldTypeInfo]) => ({
+        key,
+        typeInfo: fieldTypeInfo,
+      }),
+    );
   }
   const names = TypeMeta.fromTypeInfo(typeInfo, typeResolver).getFieldInfo();
   return names.map((x) => {

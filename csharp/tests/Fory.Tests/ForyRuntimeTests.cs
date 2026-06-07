@@ -1331,14 +1331,10 @@ public sealed class ForyRuntimeTests
         ForyRuntime reader = ForyRuntime.Builder().Compatible(true).Build();
         reader.Register<CompatibleArraySchema>(308);
 
-        byte[] nonNullPayload = writer.Serialize(new CompatibleNullableListSchema { Values = [1, 2] });
-        CompatibleArraySchema decoded = reader.Deserialize<CompatibleArraySchema>(nonNullPayload);
-        Assert.Equal([1, 2], decoded.Values);
-
-        byte[] payload = writer.Serialize(new CompatibleNullableListSchema { Values = [1, null] });
+        byte[] payload = writer.Serialize(new CompatibleNullableListSchema { Values = [1, 2] });
         InvalidDataException exception =
             Assert.Throws<InvalidDataException>(() => reader.Deserialize<CompatibleArraySchema>(payload));
-        Assert.Contains("compatible list to array field requires non-null elements", exception.Message);
+        Assert.Contains("cannot be read as local field", exception.Message);
     }
 
     [Fact]
@@ -2571,7 +2567,7 @@ public sealed class ForyRuntimeTests
     {
         List<TypeMetaFieldInfo> localFields =
         [
-            new TypeMetaFieldInfo(1, "int_value", new TypeMetaFieldType((uint)TypeId.VarInt32, false)),
+            new TypeMetaFieldInfo(null, "int_value", new TypeMetaFieldType((uint)TypeId.VarInt32, false)),
             new TypeMetaFieldInfo(2, "name", new TypeMetaFieldType((uint)TypeId.String, true)),
         ];
         List<TypeMetaFieldInfo> remoteFields =
@@ -2592,6 +2588,54 @@ public sealed class ForyRuntimeTests
         Assert.Equal(2, remoteTypeMeta.Fields[0].AssignedFieldId);
         Assert.Equal(0, remoteTypeMeta.Fields[1].AssignedFieldId);
         Assert.Equal(-1, remoteTypeMeta.Fields[2].AssignedFieldId);
+    }
+
+    [Fact]
+    public void TypeMetaAssignFieldIdsDoesNotNameMatchTaggedLocalField()
+    {
+        List<TypeMetaFieldInfo> localFields =
+        [
+            new TypeMetaFieldInfo(1, "value", new TypeMetaFieldType((uint)TypeId.String, false)),
+        ];
+        List<TypeMetaFieldInfo> remoteFields =
+        [
+            new TypeMetaFieldInfo(null, "value", new TypeMetaFieldType((uint)TypeId.String, false)),
+        ];
+        TypeMeta remoteTypeMeta = new(
+            (uint)TypeId.CompatibleStruct,
+            505,
+            MetaString.Empty('.', '_'),
+            MetaString.Empty('$', '_'),
+            registerByName: false,
+            remoteFields);
+
+        TypeMeta.AssignFieldIds(remoteTypeMeta, localFields);
+        Assert.Equal(-1, remoteTypeMeta.Fields[0].AssignedFieldId);
+    }
+
+    [Fact]
+    public void TypeMetaAssignFieldIdsThrowsOnDuplicateRemoteNameBinding()
+    {
+        List<TypeMetaFieldInfo> localFields =
+        [
+            new TypeMetaFieldInfo(null, "value", new TypeMetaFieldType((uint)TypeId.String, false)),
+        ];
+        List<TypeMetaFieldInfo> remoteFields =
+        [
+            new TypeMetaFieldInfo(null, "value", new TypeMetaFieldType((uint)TypeId.String, false)),
+            new TypeMetaFieldInfo(null, "value", new TypeMetaFieldType((uint)TypeId.String, false)),
+        ];
+        TypeMeta remoteTypeMeta = new(
+            (uint)TypeId.CompatibleStruct,
+            506,
+            MetaString.Empty('.', '_'),
+            MetaString.Empty('$', '_'),
+            registerByName: false,
+            remoteFields);
+
+        InvalidDataException exception = Assert.Throws<InvalidDataException>(
+            () => TypeMeta.AssignFieldIds(remoteTypeMeta, localFields));
+        Assert.Contains("duplicates local field value", exception.Message, StringComparison.Ordinal);
     }
 
     [Fact]

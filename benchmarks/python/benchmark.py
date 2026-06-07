@@ -721,7 +721,10 @@ def verify_schema_mismatch(datatype: str, decoded: Any, expected: Any) -> None:
             or not isinstance(decoded.media_content_list[0].media, MediaV2)
             or decoded.media_content_list[0].media.width
             != expected.media_content_list[0].media.width
+            or not decoded.media_content_list[0].images
             or not isinstance(decoded.media_content_list[0].images[0], ImageV2)
+            or decoded.media_content_list[0].images[0].width
+            != expected.media_content_list[0].images[0].width
         ):
             raise AssertionError("MediaContentListV2 schema mismatch read failed")
         return

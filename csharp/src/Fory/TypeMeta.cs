@@ -726,11 +726,6 @@ public sealed class TypeMeta : IEquatable<TypeMeta>
         for (int i = 0; i < localFieldInfos.Count; i++)
         {
             TypeMetaFieldInfo localField = localFieldInfos[i];
-            if (!string.IsNullOrEmpty(localField.FieldName))
-            {
-                localByName.TryAdd(localField.FieldName, (i, localField));
-            }
-
             if (localField.FieldId.HasValue && localField.FieldId.Value >= 0)
             {
                 short fieldId = localField.FieldId.Value;
@@ -740,9 +735,14 @@ public sealed class TypeMeta : IEquatable<TypeMeta>
                         $"duplicate local field id {fieldId} in compatible type metadata");
                 }
             }
+            else if (!string.IsNullOrEmpty(localField.FieldName))
+            {
+                localByName.TryAdd(localField.FieldName, (i, localField));
+            }
         }
 
         HashSet<short>? remoteFieldIds = null;
+        HashSet<int> usedLocalFields = [];
         for (int i = 0; i < remoteTypeMeta.Fields.Count; i++)
         {
             TypeMetaFieldInfo remoteField = remoteTypeMeta.Fields[i];
@@ -762,12 +762,13 @@ public sealed class TypeMeta : IEquatable<TypeMeta>
             TypeMetaFieldInfo? localMatch = null;
 
             if (remoteField.FieldId.HasValue &&
+                remoteField.FieldId.Value >= 0 &&
                 localById.TryGetValue(remoteField.FieldId.Value, out (int Index, TypeMetaFieldInfo Field) byId))
             {
                 localIndex = byId.Index;
                 localMatch = byId.Field;
             }
-            else
+            else if (!remoteField.FieldId.HasValue)
             {
                 if (localByName.TryGetValue(remoteField.FieldName, out (int Index, TypeMetaFieldInfo Field) byName))
                 {
@@ -788,6 +789,11 @@ public sealed class TypeMeta : IEquatable<TypeMeta>
 
             if (localIndex >= 0 && localMatch is not null)
             {
+                if (!usedLocalFields.Add(localIndex))
+                {
+                    throw new InvalidDataException(
+                        $"compatible field {remoteField.FieldName} duplicates local field {localMatch.FieldName}");
+                }
                 if (IsDirectFieldType(remoteField.FieldType, localMatch.FieldType))
                 {
                     remoteField.AssignedFieldId = localIndex * 2;
@@ -910,6 +916,8 @@ public sealed class TypeMeta : IEquatable<TypeMeta>
         bool remoteListLocalArray = remote.TypeId == (uint)global::Apache.Fory.TypeId.List &&
                                     localArrayElementTypeId.HasValue &&
                                     remote.Generics.Count == 1 &&
+                                    !remote.Generics[0].Nullable &&
+                                    !remote.Generics[0].TrackRef &&
                                     NormalizeScalarTypeIdForMatch(localArrayElementTypeId.Value) ==
                                     NormalizeScalarTypeIdForMatch(remote.Generics[0].TypeId);
         if (remoteListLocalArray)

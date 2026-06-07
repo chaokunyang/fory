@@ -462,11 +462,19 @@ bool isCompatibleCollectionArrayTypePair(
   }
   if (isCompatibleArrayType(localType.typeId) &&
       remoteType.typeId == TypeIds.list) {
-    return _listElementMatchesArray(remoteType, localType.typeId);
+    return _listElementMatchesArray(
+      remoteType,
+      localType.typeId,
+      requireUnframedElement: true,
+    );
   }
   if (localType.typeId == TypeIds.list &&
       isCompatibleArrayType(remoteType.typeId)) {
-    return _listElementMatchesArray(localType, remoteType.typeId);
+    return _listElementMatchesArray(
+      localType,
+      remoteType.typeId,
+      requireUnframedElement: false,
+    );
   }
   return false;
 }
@@ -481,10 +489,16 @@ bool isCompatibleCollectionArrayRootTypePair(
       (isCompatibleArrayType(localTypeId) && remoteTypeId == TypeIds.list);
 }
 
-bool _listElementMatchesArray(FieldType listType, int arrayTypeId) {
+bool _listElementMatchesArray(
+  FieldType listType,
+  int arrayTypeId, {
+  required bool requireUnframedElement,
+}) {
   final elementType =
       listType.arguments.isEmpty ? null : listType.arguments.single;
   return elementType != null &&
+      (!requireUnframedElement ||
+          (!elementType.nullable && !elementType.ref)) &&
       _arrayElementTypeId(arrayTypeId) ==
           _compatibleArrayElementTypeId(elementType.typeId);
 }

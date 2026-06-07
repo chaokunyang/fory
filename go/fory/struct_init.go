@@ -563,7 +563,15 @@ func (s *structSerializer) initFieldsFromTypeDef(typeResolver *TypeResolver) err
 			) {
 				shouldRead = true
 				fieldType = localType
-			} else if defTypeId == LIST && localFieldSpec != nil && canReadCompatibleListAsLocalArray(def.typeSpec, localFieldSpec.Type, localType) {
+			} else if defTypeId == LIST && localFieldSpec != nil && canReadCompatibleListAsLocalArray(
+				def.typeSpec,
+				def.nullable,
+				def.trackRef,
+				localFieldSpec.Type,
+				localNullableByIndex[fieldIndex],
+				localTrackRefByIndex[fieldIndex],
+				localType,
+			) {
 				shouldRead = true
 				usesCompatibleCollectionArrayReader = true
 				fieldType = localType
@@ -854,7 +862,10 @@ func sameListSchemaCanReadLocalArray(remoteSpec *TypeSpec, remoteNullable bool, 
 	return fieldSpecEqualForDiff(remoteSpec, remoteNullable, remoteTrackRef, localSpec, localNullable, localTrackRef)
 }
 
-func canReadCompatibleListAsLocalArray(remoteSpec *TypeSpec, localSpec *TypeSpec, localType reflect.Type) bool {
+func canReadCompatibleListAsLocalArray(remoteSpec *TypeSpec, remoteNullable bool, remoteTrackRef bool, localSpec *TypeSpec, localNullable bool, localTrackRef bool, localType reflect.Type) bool {
+	if remoteNullable || remoteTrackRef || localNullable || localTrackRef {
+		return false
+	}
 	if remoteSpec == nil || localSpec == nil || localType == nil {
 		return false
 	}
@@ -862,6 +873,9 @@ func canReadCompatibleListAsLocalArray(remoteSpec *TypeSpec, localSpec *TypeSpec
 		return false
 	}
 	if remoteSpec.TypeID != LIST || remoteSpec.Element == nil {
+		return false
+	}
+	if remoteSpec.Element.Nullable || remoteSpec.Element.TrackRef {
 		return false
 	}
 	if !isPrimitiveArrayType(localSpec.TypeID) {

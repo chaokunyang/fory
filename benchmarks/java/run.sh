@@ -180,10 +180,6 @@ DATA_TYPES="$(data_regex "${DATA_FILTER}")"
 JMH_DURATION="$(jmh_time "${DURATION_SECONDS}")"
 RESULT_JSON="${REPORT_DIR}/benchmark_results.json"
 BENCHMARK_REGEX="org.apache.fory.benchmark.XlangBenchmark.BM_(${SERIALIZERS})_(${DATA_TYPES})_(Serialize|Deserialize)"
-JMH_EXTRA_ARGS=()
-if [[ "${FORY_BENCH_SCHEMA_MISMATCH:-0}" == "1" ]]; then
-  JMH_EXTRA_ARGS+=("-p" "codegen=true")
-fi
 
 mkdir -p "${REPORT_DIR}"
 
@@ -201,9 +197,6 @@ JMH_CMD=(
   -i 3
   -t 1
 )
-if [[ ${#JMH_EXTRA_ARGS[@]} -gt 0 ]]; then
-  JMH_CMD+=("${JMH_EXTRA_ARGS[@]}")
-fi
 JMH_CMD+=(
   -w "${JMH_DURATION}"
   -r "${JMH_DURATION}"

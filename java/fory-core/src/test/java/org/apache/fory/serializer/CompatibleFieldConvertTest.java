@@ -22,11 +22,15 @@ package org.apache.fory.serializer;
 import com.google.common.collect.ImmutableSet;
 import java.lang.reflect.Field;
 import java.math.BigDecimal;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import org.apache.fory.Fory;
 import org.apache.fory.ForyTestBase;
+import org.apache.fory.annotation.BFloat16Type;
+import org.apache.fory.annotation.Float16Type;
 import org.apache.fory.annotation.ForyField;
+import org.apache.fory.annotation.Int8Type;
 import org.apache.fory.annotation.Nullable;
 import org.apache.fory.annotation.Ref;
 import org.apache.fory.annotation.UInt64Type;
@@ -436,6 +440,52 @@ public class CompatibleFieldConvertTest extends ForyTestBase {
     public List<@UInt8Type byte[]> value;
   }
 
+  public static final class BinaryWriter {
+    @ForyField(id = 0)
+    public byte[] value = new byte[] {1, 2};
+  }
+
+  public static final class BinaryReader {
+    @ForyField(id = 0)
+    public byte[] value;
+  }
+
+  public static final class Int8ArrayWriter {
+    @Int8Type
+    @ForyField(id = 0)
+    public byte[] value = new byte[] {1, 2};
+  }
+
+  public static final class Int8ArrayReader {
+    @Int8Type
+    @ForyField(id = 0)
+    public byte[] value;
+  }
+
+  public static final class UInt8ArrayWriter {
+    @UInt8Type
+    @ForyField(id = 0)
+    public byte[] value = new byte[] {(byte) 200, (byte) 250};
+  }
+
+  public static final class UInt8ArrayReader {
+    @UInt8Type
+    @ForyField(id = 0)
+    public byte[] value;
+  }
+
+  public static final class Float16ArrayWriter {
+    @Float16Type
+    @ForyField(id = 0)
+    public short[] value = new short[] {0, 1};
+  }
+
+  public static final class BFloat16ArrayReader {
+    @BFloat16Type
+    @ForyField(id = 0)
+    public short[] value;
+  }
+
   @DataProvider
   public static Object[][] xlangAndCodegen() {
     return new Object[][] {{false, false}, {false, true}, {true, false}, {true, true}};
@@ -637,6 +687,23 @@ public class CompatibleFieldConvertTest extends ForyTestBase {
   @Test(dataProvider = "codegenModes")
   public void testNestedArrayTypeRejected(boolean codegen) {
     assertSchemaFails(new ByteArrayListWriter(), UInt8ByteArrayListReader.class, true, codegen);
+  }
+
+  @Test(dataProvider = "codegenModes")
+  public void testBinaryUint8ArrayBridge(boolean codegen) {
+    UInt8ArrayReader uint8Reader =
+        readAs(new BinaryWriter(), UInt8ArrayReader.class, true, codegen);
+    Assert.assertTrue(Arrays.equals(uint8Reader.value, new byte[] {1, 2}));
+
+    BinaryReader binaryReader = readAs(new UInt8ArrayWriter(), BinaryReader.class, true, codegen);
+    Assert.assertTrue(Arrays.equals(binaryReader.value, new byte[] {(byte) 200, (byte) 250}));
+  }
+
+  @Test(dataProvider = "codegenModes")
+  public void testRootPrimitiveArrayMismatchRejected(boolean codegen) {
+    assertSchemaFails(new BinaryWriter(), Int8ArrayReader.class, true, codegen);
+    assertSchemaFails(new Int8ArrayWriter(), UInt8ArrayReader.class, true, codegen);
+    assertSchemaFails(new Float16ArrayWriter(), BFloat16ArrayReader.class, true, codegen);
   }
 
   @Test(dataProvider = "xlangAndCodegen")

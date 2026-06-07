@@ -141,9 +141,9 @@ Notes:
   field, and a direct top-level `array<T>` field may be read as a direct top-level `list<T>` field,
   when `T` is one of the dense bool/numeric array domains. Integer list element encodings in the
   same signedness and width domain match the corresponding dense array element domain. The rule does
-  not apply inside nested collection, map, array, union, or generic positions. A peer `list<T>`
-  payload that actually carries null or reference-tracked elements must raise a compatible-read error
-  when the local matched field is `array<T>`.
+  not apply inside nested collection, map, array, union, or generic positions. A peer `list<T>` field
+  whose element schema is nullable or reference-tracked must be rejected during compatible field
+  classification when the local matched field is `array<T>`.
 - `binary` and `array<uint8>` remain distinct schema kinds. In schema-compatible struct/class field
   matching only, a direct top-level `binary` field may be read as a direct top-level `array<uint8>`
   field and the reverse may be read as the same byte sequence. This rule does not apply inside

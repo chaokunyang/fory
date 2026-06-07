@@ -625,9 +625,10 @@ public final class TypeMeta: Equatable, @unchecked Sendable {
     fieldIndexByID.reserveCapacity(localFields.count)
 
     for (index, localField) in localFields.enumerated() {
-      fieldIndexByName[toSnakeCase(localField.fieldName)] = (index, localField)
       if let fieldID = localField.fieldID, fieldID >= 0 {
         fieldIndexByID[fieldID] = (index, localField)
+      } else {
+        fieldIndexByName[toSnakeCase(localField.fieldName)] = (index, localField)
       }
     }
 
@@ -650,7 +651,7 @@ public final class TypeMeta: Equatable, @unchecked Sendable {
         }
       }
 
-      if localMatch == nil {
+      if localMatch == nil && field.fieldID == nil {
         if let candidate = fieldIndexByName[toSnakeCase(field.fieldName)] {
           guard Self.isCompatibleFieldType(field.fieldType, candidate.1.fieldType) else {
             throw ForyError.invalidData(
@@ -687,6 +688,11 @@ public final class TypeMeta: Equatable, @unchecked Sendable {
       guard sortedIndex <= Int(Int16.max) / 2 else {
         throw ForyError.invalidData(
           "compatible field \(field.fieldName) matched local field index \(sortedIndex) beyond Int16 dispatch range"
+        )
+      }
+      if usedLocalFields[sortedIndex] {
+        throw ForyError.invalidData(
+          "compatible field \(field.fieldName) duplicates local field \(localFields[sortedIndex].fieldName)"
         )
       }
 
@@ -771,22 +777,38 @@ public final class TypeMeta: Equatable, @unchecked Sendable {
     _ remoteType: FieldType,
     _ localType: FieldType
   ) -> Bool {
+    guard !remoteType.nullable, !localType.nullable, !remoteType.trackRef, !localType.trackRef
+    else {
+      return false
+    }
     if remoteType.typeID == TypeId.list.rawValue {
-      return listElementMatchesDenseArrayTypeID(remoteType, arrayTypeID: localType.typeID)
+      return listElementMatchesDenseArrayTypeID(
+        remoteType,
+        arrayTypeID: localType.typeID,
+        requireUnframedElement: true
+      )
     }
     if localType.typeID == TypeId.list.rawValue {
-      return listElementMatchesDenseArrayTypeID(localType, arrayTypeID: remoteType.typeID)
+      return listElementMatchesDenseArrayTypeID(
+        localType,
+        arrayTypeID: remoteType.typeID,
+        requireUnframedElement: false
+      )
     }
     return false
   }
 
   private static func listElementMatchesDenseArrayTypeID(
     _ listType: FieldType,
-    arrayTypeID: UInt32
+    arrayTypeID: UInt32,
+    requireUnframedElement: Bool
   ) -> Bool {
     guard listType.typeID == TypeId.list.rawValue,
       let elementType = listType.generics.first
     else {
+      return false
+    }
+    if requireUnframedElement, elementType.nullable || elementType.trackRef {
       return false
     }
     return TypeId.listElementTypeID(elementType.typeID, matchesDenseArrayTypeID: arrayTypeID)

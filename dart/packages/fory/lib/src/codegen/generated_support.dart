@@ -547,20 +547,7 @@ void writeGeneratedDirectListValue<T>(
   GeneratedStructFieldDescriptor field,
   List<T> value,
 ) {
-  final fieldType = field.fieldType;
-  if (fieldType.typeId != TypeIds.list ||
-      fieldType.nullable ||
-      fieldType.ref ||
-      fieldType.isDynamic) {
-    throw StateError('Field ${field.name} is not a direct list path.');
-  }
-  final elementFieldType = fieldType.arguments.single;
-  if (elementFieldType.ref || elementFieldType.isDynamic) {
-    throw StateError(
-      'Field ${field.name} element type is not a direct list path.',
-    );
-  }
-  writeTypedListPayload<T>(context, value, elementFieldType);
+  writeTypedListPayload<T>(context, value, field.fieldType.arguments.single);
 }
 
 @internal
@@ -569,20 +556,7 @@ void writeGeneratedDirectSetValue<T>(
   GeneratedStructFieldDescriptor field,
   Set<T> value,
 ) {
-  final fieldType = field.fieldType;
-  if (fieldType.typeId != TypeIds.set ||
-      fieldType.nullable ||
-      fieldType.ref ||
-      fieldType.isDynamic) {
-    throw StateError('Field ${field.name} is not a direct set path.');
-  }
-  final elementFieldType = fieldType.arguments.single;
-  if (elementFieldType.ref || elementFieldType.isDynamic) {
-    throw StateError(
-      'Field ${field.name} element type is not a direct set path.',
-    );
-  }
-  writeTypedSetPayload<T>(context, value, elementFieldType);
+  writeTypedSetPayload<T>(context, value, field.fieldType.arguments.single);
 }
 
 @internal
@@ -592,14 +566,11 @@ List<T> readGeneratedDirectListValue<T>(
   GeneratedStructFieldDescriptor field,
   T Function(Object? value) convert,
 ) {
-  final fieldType = field.fieldType;
-  if (fieldType.typeId != TypeIds.list ||
-      fieldType.nullable ||
-      fieldType.ref ||
-      fieldType.isDynamic) {
-    throw StateError('Field ${field.name} is not a direct list path.');
-  }
-  return readTypedListPayload(context, fieldType.arguments.single, convert);
+  return readTypedListPayload(
+    context,
+    field.fieldType.arguments.single,
+    convert,
+  );
 }
 
 @internal
@@ -609,14 +580,11 @@ Set<T> readGeneratedDirectSetValue<T>(
   GeneratedStructFieldDescriptor field,
   T Function(Object? value) convert,
 ) {
-  final fieldType = field.fieldType;
-  if (fieldType.typeId != TypeIds.set ||
-      fieldType.nullable ||
-      fieldType.ref ||
-      fieldType.isDynamic) {
-    throw StateError('Field ${field.name} is not a direct set path.');
-  }
-  return readTypedSetPayload(context, fieldType.arguments.single, convert);
+  return readTypedSetPayload(
+    context,
+    field.fieldType.arguments.single,
+    convert,
+  );
 }
 
 @internal
@@ -627,17 +595,10 @@ Map<K, V> readGeneratedDirectMapValue<K, V>(
   K Function(Object? value) convertKey,
   V Function(Object? value) convertValue,
 ) {
-  final fieldType = field.fieldType;
-  if (fieldType.typeId != TypeIds.map ||
-      fieldType.nullable ||
-      fieldType.ref ||
-      fieldType.isDynamic) {
-    throw StateError('Field ${field.name} is not a direct map path.');
-  }
   return readTypedMapPayload(
     context,
-    fieldType.arguments[0],
-    fieldType.arguments[1],
+    field.fieldType.arguments[0],
+    field.fieldType.arguments[1],
     convertKey,
     convertValue,
   );

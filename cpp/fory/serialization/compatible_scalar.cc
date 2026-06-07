@@ -1326,6 +1326,100 @@ ScalarReadState read_int_target(ReadContext &ctx, uint32_t remote_type_id,
   return ScalarReadState::Read;
 }
 
+ScalarReadState read_uint_target(ReadContext &ctx, uint32_t remote_type_id,
+                                 uint32_t local_type_id, std::string_view field,
+                                 uint64_t max_value, uint64_t &out) {
+  int64_t signed_value = 0;
+  uint64_t unsigned_value = 0;
+  bool is_unsigned = false;
+  switch (static_cast<TypeId>(remote_type_id)) {
+  case TypeId::BOOL: {
+    uint8_t raw = ctx.read_uint8(ctx.error());
+    if (FORY_PREDICT_FALSE(ctx.has_error())) {
+      return ScalarReadState::Failed;
+    }
+    if (FORY_PREDICT_FALSE(raw != 0 && raw != 1)) {
+      conversion_error(ctx, remote_type_id, local_type_id, field,
+                       "invalid bool payload");
+      return ScalarReadState::Failed;
+    }
+    signed_value = raw != 0 ? 1 : 0;
+    break;
+  }
+  case TypeId::INT8:
+    signed_value = ctx.read_int8(ctx.error());
+    break;
+  case TypeId::INT16:
+    signed_value = ctx.read_int16(ctx.error());
+    break;
+  case TypeId::INT32:
+    signed_value = ctx.read_int32(ctx.error());
+    break;
+  case TypeId::VARINT32:
+    signed_value = ctx.read_var_int32(ctx.error());
+    break;
+  case TypeId::INT64:
+    signed_value = ctx.read_int64(ctx.error());
+    break;
+  case TypeId::VARINT64:
+    signed_value = ctx.read_var_int64(ctx.error());
+    break;
+  case TypeId::TAGGED_INT64:
+    signed_value = ctx.read_tagged_int64(ctx.error());
+    break;
+  case TypeId::UINT8:
+    is_unsigned = true;
+    unsigned_value = ctx.read_uint8(ctx.error());
+    break;
+  case TypeId::UINT16:
+    is_unsigned = true;
+    unsigned_value = static_cast<uint16_t>(ctx.read_int16(ctx.error()));
+    break;
+  case TypeId::UINT32:
+    is_unsigned = true;
+    unsigned_value = static_cast<uint32_t>(ctx.read_int32(ctx.error()));
+    break;
+  case TypeId::VAR_UINT32:
+    is_unsigned = true;
+    unsigned_value = ctx.read_var_uint32(ctx.error());
+    break;
+  case TypeId::UINT64:
+    is_unsigned = true;
+    unsigned_value = static_cast<uint64_t>(ctx.read_int64(ctx.error()));
+    break;
+  case TypeId::VAR_UINT64:
+    is_unsigned = true;
+    unsigned_value = ctx.read_var_uint64(ctx.error());
+    break;
+  case TypeId::TAGGED_UINT64:
+    is_unsigned = true;
+    unsigned_value = ctx.read_tagged_uint64(ctx.error());
+    break;
+  default:
+    return ScalarReadState::Unsupported;
+  }
+  if (FORY_PREDICT_FALSE(ctx.has_error())) {
+    return ScalarReadState::Failed;
+  }
+  if (is_unsigned) {
+    if (FORY_PREDICT_FALSE(unsigned_value > max_value)) {
+      conversion_error(ctx, remote_type_id, local_type_id, field,
+                       "value is not lossless");
+      return ScalarReadState::Failed;
+    }
+    out = unsigned_value;
+    return ScalarReadState::Read;
+  }
+  if (FORY_PREDICT_FALSE(signed_value < 0 ||
+                         static_cast<uint64_t>(signed_value) > max_value)) {
+    conversion_error(ctx, remote_type_id, local_type_id, field,
+                     "value is not lossless");
+    return ScalarReadState::Failed;
+  }
+  out = static_cast<uint64_t>(signed_value);
+  return ScalarReadState::Read;
+}
+
 template <typename ResultType, typename Convert>
 ResultType read_converted(ReadContext &ctx, uint32_t remote_type_id,
                           uint32_t local_type_id, std::string_view field,
@@ -1432,6 +1526,17 @@ FORY_NOINLINE int8_t read_compatible_int8(ReadContext &ctx,
 FORY_NOINLINE uint8_t read_compatible_uint8(ReadContext &ctx,
                                             uint32_t remote_type_id,
                                             std::string_view field) {
+  uint64_t value = 0;
+  switch (read_uint_target(ctx, remote_type_id,
+                           static_cast<uint32_t>(TypeId::UINT8), field,
+                           std::numeric_limits<uint8_t>::max(), value)) {
+  case ScalarReadState::Read:
+    return static_cast<uint8_t>(value);
+  case ScalarReadState::Failed:
+    return 0;
+  case ScalarReadState::Unsupported:
+    break;
+  }
   return read_converted<uint8_t>(
       ctx, remote_type_id, static_cast<uint32_t>(TypeId::UINT8), field,
       [](const ScalarValue &value, uint8_t &out) {
@@ -1476,6 +1581,17 @@ FORY_NOINLINE int16_t read_compatible_int16(ReadContext &ctx,
 FORY_NOINLINE uint16_t read_compatible_uint16(ReadContext &ctx,
                                               uint32_t remote_type_id,
                                               std::string_view field) {
+  uint64_t value = 0;
+  switch (read_uint_target(ctx, remote_type_id,
+                           static_cast<uint32_t>(TypeId::UINT16), field,
+                           std::numeric_limits<uint16_t>::max(), value)) {
+  case ScalarReadState::Read:
+    return static_cast<uint16_t>(value);
+  case ScalarReadState::Failed:
+    return 0;
+  case ScalarReadState::Unsupported:
+    break;
+  }
   return read_converted<uint16_t>(
       ctx, remote_type_id, static_cast<uint32_t>(TypeId::UINT16), field,
       [](const ScalarValue &value, uint16_t &out) {
@@ -1520,6 +1636,17 @@ FORY_NOINLINE int32_t read_compatible_int32(ReadContext &ctx,
 FORY_NOINLINE uint32_t read_compatible_uint32(ReadContext &ctx,
                                               uint32_t remote_type_id,
                                               std::string_view field) {
+  uint64_t value = 0;
+  switch (read_uint_target(ctx, remote_type_id,
+                           static_cast<uint32_t>(TypeId::UINT32), field,
+                           std::numeric_limits<uint32_t>::max(), value)) {
+  case ScalarReadState::Read:
+    return static_cast<uint32_t>(value);
+  case ScalarReadState::Failed:
+    return 0;
+  case ScalarReadState::Unsupported:
+    break;
+  }
   return read_converted<uint32_t>(
       ctx, remote_type_id, static_cast<uint32_t>(TypeId::UINT32), field,
       [](const ScalarValue &value, uint32_t &out) {
@@ -1559,6 +1686,17 @@ FORY_NOINLINE int64_t read_compatible_int64(ReadContext &ctx,
 FORY_NOINLINE uint64_t read_compatible_uint64(ReadContext &ctx,
                                               uint32_t remote_type_id,
                                               std::string_view field) {
+  uint64_t value = 0;
+  switch (read_uint_target(ctx, remote_type_id,
+                           static_cast<uint32_t>(TypeId::UINT64), field,
+                           std::numeric_limits<uint64_t>::max(), value)) {
+  case ScalarReadState::Read:
+    return value;
+  case ScalarReadState::Failed:
+    return 0;
+  case ScalarReadState::Unsupported:
+    break;
+  }
   return read_converted<uint64_t>(
       ctx, remote_type_id, static_cast<uint32_t>(TypeId::UINT64), field,
       [](const ScalarValue &value, uint64_t &out) {

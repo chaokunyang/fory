@@ -849,7 +849,7 @@ pub fn assign_remote_field_ids(
     let field_index_by_name: HashMap<String, (usize, &FieldInfo)> = local_field_infos
         .iter()
         .enumerate()
-        .filter(|(_, f)| !f.field_name.is_empty())
+        .filter(|(_, f)| f.field_id < 0 && !f.field_name.is_empty())
         .map(|(i, f)| (f.field_name.clone(), (i, f)))
         .collect();
 
@@ -860,8 +860,9 @@ pub fn assign_remote_field_ids(
         .map(|(i, f)| (f.field_id, (i, f)))
         .collect();
 
+    let mut used_local_fields = vec![false; local_field_infos.len()];
     for field in field_infos.iter_mut() {
-        let local_match = if field.field_id >= 0 && field.field_name.is_empty() {
+        let local_match = if field.field_id >= 0 {
             field_index_by_id.get(&field.field_id).copied()
         } else {
             let snake_case_name = to_snake_case(&field.field_name);
@@ -870,6 +871,12 @@ pub fn assign_remote_field_ids(
 
         match local_match {
             Some((sorted_index, local_info)) => {
+                if used_local_fields[sorted_index] {
+                    return Err(Error::type_error(format!(
+                        "Remote field {} duplicates local field {} in compatible metadata",
+                        field.field_name, local_info.field_name
+                    )));
+                }
                 let exact_field = local_info.field_type.exact_shape_match(&field.field_type);
                 let scalar_read_action = if exact_field {
                     CompatibleScalarReadAction::None
@@ -911,6 +918,7 @@ pub fn assign_remote_field_ids(
                     (sorted_index * 2 + 1) as i16
                 };
                 field.compatible_scalar_read = scalar_read_action;
+                used_local_fields[sorted_index] = true;
                 if crate::util::ENABLE_FORY_DEBUG_OUTPUT {
                     eprintln!(
                         "[fory-debug]   matched field: name={}, assigned_field_id={}, remote_type={:?}, local_type={:?}",
@@ -1441,6 +1449,76 @@ mod tests {
             remote_fields[0].compatible_scalar_read(),
             CompatibleScalarReadAction::Int16
         );
+    }
+
+    #[test]
+    fn rejects_framed_list_array_bridge() {
+        let array_type = FieldType::new(crate::type_id::INT32_ARRAY, false, vec![]);
+        let int_type = FieldType::new(crate::type_id::INT32, false, vec![]);
+        let local_fields = [FieldInfo::new("values", array_type.clone())];
+        let mut remote_fields = [FieldInfo::new(
+            "values",
+            FieldType::new(crate::type_id::LIST, false, vec![int_type]),
+        )];
+
+        assign_remote_field_ids(&local_fields, &mut remote_fields).unwrap();
+        assert_eq!(remote_fields[0].field_id, 1);
+
+        let nullable_int = FieldType::new(crate::type_id::INT32, true, vec![]);
+        let mut nullable_remote = [FieldInfo::new(
+            "values",
+            FieldType::new(crate::type_id::LIST, false, vec![nullable_int]),
+        )];
+        assert!(assign_remote_field_ids(&local_fields, &mut nullable_remote).is_err());
+
+        let tracked_int = FieldType::new_with_ref(crate::type_id::INT32, false, true, vec![]);
+        let mut tracked_remote = [FieldInfo::new(
+            "values",
+            FieldType::new(crate::type_id::LIST, false, vec![tracked_int]),
+        )];
+        assert!(assign_remote_field_ids(&local_fields, &mut tracked_remote).is_err());
+
+        let nullable_array_local = [FieldInfo::new(
+            "values",
+            FieldType::new(crate::type_id::INT32_ARRAY, true, vec![]),
+        )];
+        let mut remote_list = [FieldInfo::new(
+            "values",
+            FieldType::new(
+                crate::type_id::LIST,
+                false,
+                vec![FieldType::new(crate::type_id::INT32, false, vec![])],
+            ),
+        )];
+        assert!(assign_remote_field_ids(&nullable_array_local, &mut remote_list).is_err());
+    }
+
+    #[test]
+    fn name_remote_does_not_match_tagged_local() {
+        let field_type = FieldType::new(crate::type_id::STRING, false, vec![]);
+        let local_fields = [FieldInfo::new_with_id(1, "value", field_type.clone())];
+        let mut remote_fields = [FieldInfo::new("value", field_type)];
+
+        assign_remote_field_ids(&local_fields, &mut remote_fields).unwrap();
+
+        assert_eq!(remote_fields[0].field_id, -1);
+    }
+
+    #[test]
+    fn duplicate_remote_name_binding_fails() {
+        let field_type = FieldType::new(crate::type_id::STRING, false, vec![]);
+        let local_fields = [FieldInfo::new("value", field_type.clone())];
+        let mut remote_fields = [
+            FieldInfo::new("value", field_type.clone()),
+            FieldInfo::new("value", field_type),
+        ];
+
+        let message = assign_remote_field_ids(&local_fields, &mut remote_fields)
+            .err()
+            .map(|error| error.to_string())
+            .unwrap_or_default();
+
+        assert!(message.contains("duplicates local field"));
     }
 
     #[test]

@@ -267,6 +267,7 @@ bool _sameFieldType(FieldType localType, FieldType remoteType) {
   if (localType.typeId != remoteType.typeId ||
       localType.nullable != remoteType.nullable ||
       localType.ref != remoteType.ref ||
+      _explicitDynamic(localType) != _explicitDynamic(remoteType) ||
       localType.arguments.length != remoteType.arguments.length) {
     return false;
   }
@@ -288,6 +289,9 @@ bool _compatibleFieldType(
 }) {
   if (_sameFieldType(localType, remoteType)) {
     return true;
+  }
+  if (_explicitDynamic(localType) != _explicitDynamic(remoteType)) {
+    return false;
   }
   final scalarPair =
       isCompatibleScalarType(remoteType.typeId) &&
@@ -344,6 +348,8 @@ bool _compatibleFieldType(
   }
   return true;
 }
+
+bool _explicitDynamic(FieldType fieldType) => fieldType.dynamic == true;
 
 bool _hasUnsupportedListArrayMismatch(
   FieldType localType,

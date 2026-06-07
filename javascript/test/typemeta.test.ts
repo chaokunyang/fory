@@ -526,6 +526,49 @@ describe("typemeta", () => {
     expect(source).not.toContain("scalarKind(");
   });
 
+  test("preserves regenerated compatible remote field order", () => {
+    const generated: string[] = [];
+    const writerFory = new Fory({ compatible: true });
+    const readerFory = new Fory({
+      compatible: true,
+      hooks: {
+        afterCodeGenerated: (code) => {
+          generated.push(code);
+          return code;
+        },
+      },
+    });
+    const writer = writerFory.register(
+      Type.struct(7264, {
+        remoteFirst: Type.string().setId(1),
+        remoteSecond: Type.string().setId(2),
+      }),
+    );
+    const reader = readerFory.register(
+      Type.struct(7264, {
+        "10": Type.string().setId(1),
+        "1": Type.string().setId(2),
+      }),
+    );
+
+    const result = reader.deserialize(
+      writer.serialize({
+        remoteFirst: "first",
+        remoteSecond: "second",
+      }),
+    );
+    const source = generated.join("\n");
+
+    expect(result).toEqual({
+      "10": "first",
+      "1": "second",
+    });
+    const firstRead = source.indexOf("[\"10\"] = result_");
+    const secondRead = source.indexOf("[\"1\"] = result_");
+    expect(firstRead).toBeGreaterThanOrEqual(0);
+    expect(secondRead).toBeGreaterThan(firstRead);
+  });
+
   test("rejects invalid bool scalars", () => {
     expect(() =>
       readCompatibleScalar(7225, Type.string(), Type.bool(), "yes"),
@@ -1021,7 +1064,7 @@ describe("typemeta", () => {
     ).toThrow(/unsupported compatible field schema mismatch/);
   });
 
-  test("rejects compatible list to dense array when payload has nullable elements", () => {
+  test("rejects compatible list to dense array when schema has nullable elements", () => {
     const writerFory = new Fory({ compatible: true });
     const readerFory = new Fory({ compatible: true });
 
@@ -1035,18 +1078,12 @@ describe("typemeta", () => {
     });
 
     const serializer = writerFory.register(writerType);
-    const nonNullBytes = serializer.serialize({
+    const bytes = serializer.serialize({
       values: [1, 2, 3],
     });
-    const result = readerFory.register(readerType).deserialize(nonNullBytes);
-    expect(Array.from(result.values as Int32Array)).toEqual([1, 2, 3]);
-
-    const nullableBytes = serializer.serialize({
-      values: [1, null, 3],
-    });
     expect(() =>
-      readerFory.register(readerType).deserialize(nullableBytes),
-    ).toThrow();
+      readerFory.register(readerType).deserialize(bytes),
+    ).toThrow(/list\/array/);
   });
 
   test("rejects compatible list and dense array root framing drift", () => {

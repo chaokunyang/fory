@@ -895,21 +895,19 @@ void main() {
           name: 'test.CompatibleNullableListArrayEnvelope',
         );
 
-        final nonNullBytes = writer.serialize(
+        final bytes = writer.serialize(
           CompatibleNullableListEnvelope()..values = <int?>[1, 2, 3],
-        );
-        final decoded = reader.deserialize<CompatibleArrayEnvelope>(
-          nonNullBytes,
-        );
-        expect(decoded.values, orderedEquals(<int>[1, 2, 3]));
-
-        final nullableBytes = writer.serialize(
-          CompatibleNullableListEnvelope()..values = <int?>[1, null, 3],
         );
 
         expect(
-          () => reader.deserialize<CompatibleArrayEnvelope>(nullableBytes),
-          throwsStateError,
+          () => reader.deserialize<CompatibleArrayEnvelope>(bytes),
+          throwsA(
+            isA<StateError>().having(
+              (error) => error.toString(),
+              'message',
+              contains('unsupported list/array schema mismatch'),
+            ),
+          ),
         );
       },
     );

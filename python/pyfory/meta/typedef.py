@@ -653,13 +653,18 @@ _ARRAY_ELEMENT_TYPE_IDS = {
 }
 
 
-def _list_array_element_type_matches(list_field_type: FieldType, array_field_type: FieldType) -> bool:
+def _list_array_element_type_matches(list_field_type: FieldType, array_field_type: FieldType, *, require_unframed_element: bool) -> bool:
     array_element_type_id = _ARRAY_ELEMENT_TYPE_IDS.get(array_field_type.type_id)
     if array_element_type_id is None:
         return False
-    return list_field_type.type_id == TypeId.LIST and _list_element_type_matches_array_element(
-        list_field_type.element_type.type_id, array_element_type_id
-    )
+    if list_field_type.is_nullable or list_field_type.is_tracking_ref or array_field_type.is_nullable or array_field_type.is_tracking_ref:
+        return False
+    element_type = list_field_type.element_type
+    if element_type is None:
+        return False
+    if require_unframed_element and (element_type.is_nullable or element_type.is_tracking_ref):
+        return False
+    return list_field_type.type_id == TypeId.LIST and _list_element_type_matches_array_element(element_type.type_id, array_element_type_id)
 
 
 def _list_element_type_matches_array_element(list_element_type_id: TypeId, array_element_type_id: TypeId) -> bool:
@@ -673,9 +678,9 @@ def _is_root_list_array_pair(remote_field_type: FieldType, local_field_type: Fie
     if local_field_type is None:
         return False
     if remote_field_type.type_id == TypeId.LIST and local_field_type.type_id in _ARRAY_TYPE_IDS:
-        return _list_array_element_type_matches(remote_field_type, local_field_type)
+        return _list_array_element_type_matches(remote_field_type, local_field_type, require_unframed_element=True)
     if local_field_type.type_id == TypeId.LIST and remote_field_type.type_id in _ARRAY_TYPE_IDS:
-        return _list_array_element_type_matches(local_field_type, remote_field_type)
+        return _list_array_element_type_matches(local_field_type, remote_field_type, require_unframed_element=False)
     return False
 
 
@@ -694,7 +699,7 @@ def _remote_list_to_local_array_allowed(remote_field_type: FieldType, local_fiel
     return (
         remote_field_type.type_id == TypeId.LIST
         and local_field_type.type_id in _ARRAY_TYPE_IDS
-        and _list_array_element_type_matches(remote_field_type, local_field_type)
+        and _list_array_element_type_matches(remote_field_type, local_field_type, require_unframed_element=True)
     )
 
 

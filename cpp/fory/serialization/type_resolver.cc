@@ -1053,14 +1053,17 @@ bool direct_field_types_compatible(const FieldType &local,
   if (local.type_id == static_cast<uint32_t>(TypeId::LIST) &&
       remote.generics.size() == 0 &&
       primitive_array_element_type_id(remote.type_id, array_element_type_id) &&
-      local.generics.size() == 1) {
+      local.generics.size() == 1 && !local.nullable && !local.track_ref &&
+      !remote.nullable && !remote.track_ref) {
     return compatible_fingerprint_type_id(local.generics[0].type_id) ==
            compatible_fingerprint_type_id(array_element_type_id);
   }
   if (remote.type_id == static_cast<uint32_t>(TypeId::LIST) &&
       local.generics.size() == 0 &&
       primitive_array_element_type_id(local.type_id, array_element_type_id) &&
-      remote.generics.size() == 1) {
+      remote.generics.size() == 1 && !local.nullable && !local.track_ref &&
+      !remote.nullable && !remote.track_ref && !remote.generics[0].nullable &&
+      !remote.generics[0].track_ref) {
     return compatible_fingerprint_type_id(remote.generics[0].type_id) ==
            compatible_fingerprint_type_id(array_element_type_id);
   }

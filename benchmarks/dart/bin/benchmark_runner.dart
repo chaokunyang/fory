@@ -124,8 +124,8 @@ void main(List<String> arguments) {
         ? <String, int>{'fory': benchmark.forySize}
         : <String, int>{
             'fory': benchmark.forySize,
-            'protobuf': benchmark.protobufSize,
-            'json': benchmark.jsonSize,
+            'protobuf': benchmark.protobufSize!,
+            'json': benchmark.jsonSize!,
           };
 
     if (_matches(selectedSerializers, 'fory') &&

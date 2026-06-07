@@ -175,7 +175,9 @@ class ProcessorValidationTest {
         .write()
 
     assertTrue(source.contains("private fun readSchemaConstructorField"))
-    assertTrue(source.contains("private fun readCompatibleConstructor(readContext: ReadContext): Node"))
+    assertTrue(
+      source.contains("private fun readCompatibleConstructor(readContext: ReadContext): Node")
+    )
     assertTrue(source.contains("trackConstructorRefRead(readContext, buffer)"))
   }
 
@@ -528,16 +530,12 @@ class ProcessorValidationTest {
         source.contains("readCompatibleFieldValue(readContext, remoteField, localField)") &&
         source.contains("ctorFieldValue(readContext")
     )
-    assertTrue(
-      source.contains("3 -> {") && source.contains("fieldsById[1]!!")
-    )
+    assertTrue(source.contains("3 -> {") && source.contains("fieldsById[1]!!"))
     assertTrue(
       source.contains("readCompatibleFieldValue(readContext, remoteField, localField)") &&
         source.contains("as Collection<*>")
     )
-    assertTrue(
-      source.contains("7 -> {") && source.contains("fieldsById[3]!!")
-    )
+    assertTrue(source.contains("7 -> {") && source.contains("fieldsById[3]!!"))
     assertTrue(
       source.contains("readCompatibleFieldValue(readContext, remoteField, localField)") &&
         source.contains("as Map<*, *>")
@@ -690,7 +688,13 @@ class ProcessorValidationTest {
         field(
           7,
           "nullableFlag",
-          scalar("Boolean::class.javaObjectType", "Boolean?", "java.lang.Boolean", "Types.BOOL", false)
+          scalar(
+              "Boolean::class.javaObjectType",
+              "Boolean?",
+              "java.lang.Boolean",
+              "Types.BOOL",
+              false
+            )
             .copy(nullable = true),
         ),
         field(
@@ -702,7 +706,14 @@ class ProcessorValidationTest {
         field(
           9,
           "nullableUnsigned",
-          scalar("Int::class.javaObjectType", "UInt?", "java.lang.Integer", "Types.UINT32", false, unsigned = true)
+          scalar(
+              "Int::class.javaObjectType",
+              "UInt?",
+              "java.lang.Integer",
+              "Types.UINT32",
+              false,
+              unsigned = true
+            )
             .copy(nullable = true),
         ),
       )
@@ -811,7 +822,7 @@ class ProcessorValidationTest {
     assertTrue(source.contains("var presentMask0 = 0L"))
     assertTrue(source.contains("var presentMask1 = 0L"))
     assertTrue(source.contains("presentMask1 = presentMask1 or (1L shl 5)"))
-    assertFalse(source.contains("Required Kotlin field example.WideStruct.field69 is missing"))
+    assertTrue(source.contains("Required Kotlin field example.WideStruct.field69 is missing"))
   }
 
   @Test
@@ -1045,7 +1056,7 @@ class ProcessorValidationTest {
     assertTrue(source.contains("readContext.reference(value)"))
     assertTrue(source.contains("value.parent = (readFieldValue(readContext, fieldInfo) as Node?)"))
     assertTrue(source.contains("presentMask0 = presentMask0 or (1L shl 0)"))
-    assertFalse(source.contains("Required Kotlin field example.Node.id is missing"))
+    assertTrue(source.contains("Required Kotlin field example.Node.id is missing"))
     assertTrue(source.contains("copyContext.reference(value, copy)"))
     assertFalse(source.contains("readCompatibleConstructor("))
     assertFalse(source.contains("newConstructorObject("))

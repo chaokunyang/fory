@@ -1170,6 +1170,12 @@ export class ReadContext {
     const remoteElement = remoteListElementType(remote);
     const localElement = denseArrayElementTypeId(local.typeId);
     if (remoteElement !== undefined && localElement !== undefined) {
+      if (
+        remoteElement.nullable === true
+        || remoteElement.trackingRef === true
+      ) {
+        return undefined;
+      }
       if (compatibleArrayElementTypeId(remoteElement.typeId) !== localElement) {
         return undefined;
       }
@@ -1329,8 +1335,8 @@ export class ReadContext {
       });
     }
     const localProps = original?.getTypeInfo().options?.props;
-    const props = Object.fromEntries(
-      typeMeta.remapFieldNames(localProps).map((fieldInfo) => {
+    const fieldEntries = typeMeta.remapFieldNames(localProps).map(
+      (fieldInfo) => {
         const localFieldTypeInfo = localProps?.[fieldInfo.getFieldName()];
         let fieldTypeInfo = this.fieldInfoToTypeInfo(
           fieldInfo,
@@ -1342,12 +1348,16 @@ export class ReadContext {
         if (localFieldTypeInfo === undefined) {
           fieldTypeInfo = markCompatibleSkipRead(fieldTypeInfo);
         }
-        return [fieldInfo.getFieldName(), fieldTypeInfo];
-      }),
+        return { key: fieldInfo.getFieldName(), typeInfo: fieldTypeInfo };
+      },
+    );
+    const props = Object.fromEntries(
+      fieldEntries.map(({ key, typeInfo }) => [key, typeInfo]),
     );
     typeInfo.options = {
       ...typeInfo.options,
       preserveFieldOrder: true,
+      fieldEntries,
       props,
     };
     const serializer = original

@@ -491,6 +491,95 @@ public class StaticCompatibleCodecBuilderTest {
   }
 
   @Test
+  public void testStaticBinaryUint8ArrayUsesCompatibleCase() throws Exception {
+    CompilationResult writerResult =
+        compile(
+            "test.StaticCompatibleBytePayload",
+            "package test;\n"
+                + "public class StaticCompatibleBytePayload {\n"
+                + "  public byte[] value;\n"
+                + "  public StaticCompatibleBytePayload() {}\n"
+                + "}\n");
+    CompilationResult readerResult =
+        compile(
+            "test.StaticCompatibleBytePayload",
+            "package test;\n"
+                + "import org.apache.fory.annotation.UInt8Type;\n"
+                + "public class StaticCompatibleBytePayload {\n"
+                + "  @UInt8Type public byte[] value;\n"
+                + "  public StaticCompatibleBytePayload() {}\n"
+                + "}\n");
+    Assert.assertTrue(writerResult.success, writerResult.diagnostics());
+    Assert.assertTrue(readerResult.success, readerResult.diagnostics());
+    try (URLClassLoader writerLoader = writerResult.classLoader();
+        URLClassLoader readerLoader = readerResult.classLoader()) {
+      Class<?> writerType = writerLoader.loadClass("test.StaticCompatibleBytePayload");
+      Class<?> readerType = readerLoader.loadClass("test.StaticCompatibleBytePayload");
+      Fory writer = compatibleFory(writerLoader, writerType, true, "byte-writer");
+      Fory reader = compatibleFory(readerLoader, readerType, true, "uint8-reader");
+      TypeDef remoteTypeDef = TypeDef.buildTypeDef(writer.getTypeResolver(), writerType);
+      Class<? extends Serializer> compatibleSerializerClass =
+          CodecUtils.loadOrGenStaticCompatibleCodecClass(
+              reader.getTypeResolver(), cast(readerType), remoteTypeDef);
+      Serializer<Object> compatibleSerializer =
+          compatibleSerializerClass
+              .getConstructor(TypeResolver.class, Class.class, TypeDef.class)
+              .newInstance(reader.getTypeResolver(), readerType, remoteTypeDef);
+      Assert.assertEquals(remoteFields(compatibleSerializer).get(0).matchedId, 1);
+
+      Object writerValue = writerType.getConstructor().newInstance();
+      setField(writerType, writerValue, "value", new byte[] {1, 2});
+      Object result =
+          roundTripThroughStaticCompatibleSerializer(
+              writer, reader, writerType, readerType, writerValue);
+      Assert.assertTrue(
+          Arrays.equals((byte[]) getField(readerType, result, "value"), new byte[] {1, 2}));
+    }
+  }
+
+  @Test
+  public void testStaticRejectsRootPrimitiveArraySchema() throws Exception {
+    assertStaticSchemaFails(
+        "package test;\n"
+            + "public class StaticCompatibleNestedPayload {\n"
+            + "  public byte[] values;\n"
+            + "  public StaticCompatibleNestedPayload() {}\n"
+            + "}\n",
+        "package test;\n"
+            + "import org.apache.fory.annotation.Int8Type;\n"
+            + "public class StaticCompatibleNestedPayload {\n"
+            + "  @Int8Type public byte[] values;\n"
+            + "  public StaticCompatibleNestedPayload() {}\n"
+            + "}\n");
+    assertStaticSchemaFails(
+        "package test;\n"
+            + "import org.apache.fory.annotation.Int8Type;\n"
+            + "public class StaticCompatibleNestedPayload {\n"
+            + "  @Int8Type public byte[] values;\n"
+            + "  public StaticCompatibleNestedPayload() {}\n"
+            + "}\n",
+        "package test;\n"
+            + "import org.apache.fory.annotation.UInt8Type;\n"
+            + "public class StaticCompatibleNestedPayload {\n"
+            + "  @UInt8Type public byte[] values;\n"
+            + "  public StaticCompatibleNestedPayload() {}\n"
+            + "}\n");
+    assertStaticSchemaFails(
+        "package test;\n"
+            + "import org.apache.fory.annotation.Float16Type;\n"
+            + "public class StaticCompatibleNestedPayload {\n"
+            + "  @Float16Type public short[] values;\n"
+            + "  public StaticCompatibleNestedPayload() {}\n"
+            + "}\n",
+        "package test;\n"
+            + "import org.apache.fory.annotation.BFloat16Type;\n"
+            + "public class StaticCompatibleNestedPayload {\n"
+            + "  @BFloat16Type public short[] values;\n"
+            + "  public StaticCompatibleNestedPayload() {}\n"
+            + "}\n");
+  }
+
+  @Test
   public void testGraalCompatibleSerializerRegistryUsesLocalReaderClass() throws Exception {
     CompilationResult writerAResult =
         compile(
@@ -604,17 +693,22 @@ public class StaticCompatibleCodecBuilderTest {
 
   private static Map<String, FieldCodecCategory> remoteCodecCategories(
       Serializer<Object> compatibleSerializer) throws Exception {
-    Field remoteFieldsField =
-        StaticGeneratedStructSerializer.class.getDeclaredField("remoteFields");
-    remoteFieldsField.setAccessible(true);
-    List<?> remoteFields = (List<?>) remoteFieldsField.get(compatibleSerializer);
+    List<RemoteFieldInfo> remoteFields = remoteFields(compatibleSerializer);
     Map<String, FieldCodecCategory> categories = new HashMap<>();
-    for (Object field : remoteFields) {
-      RemoteFieldInfo remoteField = (RemoteFieldInfo) field;
+    for (RemoteFieldInfo remoteField : remoteFields) {
       categories.put(
           remoteField.descriptor.getName(), remoteField.serializationFieldInfo.codecCategory);
     }
     return categories;
+  }
+
+  @SuppressWarnings("unchecked")
+  private static List<RemoteFieldInfo> remoteFields(Serializer<Object> compatibleSerializer)
+      throws Exception {
+    Field remoteFieldsField =
+        StaticGeneratedStructSerializer.class.getDeclaredField("remoteFields");
+    remoteFieldsField.setAccessible(true);
+    return (List<RemoteFieldInfo>) remoteFieldsField.get(compatibleSerializer);
   }
 
   private static Fory compatibleFory(

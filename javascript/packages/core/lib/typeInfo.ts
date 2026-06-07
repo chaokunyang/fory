@@ -62,6 +62,7 @@ class ExtensibleFunction extends Function {
 
 interface TypeInfoOptions {
   props?: { [key: string]: TypeInfo };
+  fieldEntries?: Array<{ key: string; typeInfo: TypeInfo }>;
   preserveFieldOrder?: boolean;
   withConstructor?: boolean;
   creator?: Function;

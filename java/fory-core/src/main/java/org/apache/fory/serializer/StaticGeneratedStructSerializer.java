@@ -19,8 +19,7 @@
 
 package org.apache.fory.serializer;
 
-import java.lang.reflect.Constructor;
-import java.lang.reflect.InvocationTargetException;
+import java.lang.invoke.MethodHandle;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -39,6 +38,7 @@ import org.apache.fory.meta.FieldInfo;
 import org.apache.fory.meta.FieldTypes;
 import org.apache.fory.meta.TypeDef;
 import org.apache.fory.meta.TypeExtMeta;
+import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.reflect.TypeRef;
 import org.apache.fory.resolver.TypeInfo;
 import org.apache.fory.resolver.TypeResolver;
@@ -126,22 +126,17 @@ public abstract class StaticGeneratedStructSerializer<T> extends AbstractObjectS
   public StaticGeneratedStructSerializer<T> copySerializer(
       TypeResolver typeResolver, Class<?> type, TypeDef typeDef) {
     try {
-      Constructor<? extends StaticGeneratedStructSerializer> constructor =
-          getClass()
-              .asSubclass(StaticGeneratedStructSerializer.class)
-              .getDeclaredConstructor(TypeResolver.class, Class.class, TypeDef.class);
-      constructor.setAccessible(true);
-      return (StaticGeneratedStructSerializer<T>)
-          constructor.newInstance(typeResolver, type, typeDef);
-    } catch (InvocationTargetException e) {
-      throw ExceptionUtils.throwException(e.getTargetException());
-    } catch (ReflectiveOperationException e) {
-      throw new ForyException(
-          "Failed to copy static generated serializer "
-              + getClass().getName()
-              + " for "
-              + type.getName(),
-          e);
+      // The generated serializer class may be in a named application module that is not open to
+      // Fory. Reuse the trusted constructor owner instead of reflective setAccessible.
+      MethodHandle constructor =
+          ReflectionUtils.getCtrHandle(
+              getClass().asSubclass(StaticGeneratedStructSerializer.class),
+              TypeResolver.class,
+              Class.class,
+              TypeDef.class);
+      return (StaticGeneratedStructSerializer<T>) constructor.invoke(typeResolver, type, typeDef);
+    } catch (Throwable e) {
+      throw ExceptionUtils.throwException(e);
     }
   }
 

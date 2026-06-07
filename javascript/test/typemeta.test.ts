@@ -875,16 +875,26 @@ describe("typemeta", () => {
     ).toThrow(/unsupported compatible field schema mismatch/);
   });
 
-  test("rejects nested scalar nullable framing drift", () => {
-    expect(() =>
+  test("reads nested scalar nullable drift", () => {
+    expect(
       readCompatibleScalar(
         7241,
         Type.list(Type.string().setNullable(true)),
         Type.list(Type.string()),
         ["a", null],
       ),
-    ).toThrow(/unsupported compatible field schema mismatch/);
+    ).toEqual({ value: ["a", null] });
+    expect(
+      readCompatibleScalar(
+        7246,
+        Type.map(Type.string(), Type.string().setNullable(true)),
+        Type.map(Type.string(), Type.string()),
+        new Map([["a", null]]),
+      ),
+    ).toEqual({ value: new Map([["a", null]]) });
+  });
 
+  test("rejects nested scalar tracking-ref drift", () => {
     expect(() =>
       readCompatibleScalar(
         7242,

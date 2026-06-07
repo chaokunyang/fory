@@ -1023,6 +1023,15 @@ export class ReadContext {
     ) {
       return true;
     }
+    const remoteTracksRef = remote.trackingRef === true;
+    const localTracksRef = local.trackingRef === true;
+    if (
+      remoteTracksRef !== localTracksRef
+      || ((remoteTracksRef || localTracksRef)
+      && (remote.nullable === true) !== (local.nullable === true))
+    ) {
+      return true;
+    }
     switch (remote.typeId) {
       case TypeId.MAP:
         return (

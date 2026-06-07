@@ -876,6 +876,9 @@ func canReadCompatibleListAsLocalArray(remoteSpec *TypeSpec, remoteNullable bool
 	if remoteSpec.TypeID != LIST || remoteSpec.Element == nil {
 		return false
 	}
+	// Nullable element schema is allowed for list<T?> -> array<T>; actual
+	// null payload elements fail in the dense-array reader. Ref-tracked
+	// element framing is rejected here because this path stays primitive-only.
 	if remoteSpec.Element.TrackRef {
 		return false
 	}

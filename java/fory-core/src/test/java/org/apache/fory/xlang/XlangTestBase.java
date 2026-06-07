@@ -1901,8 +1901,7 @@ public abstract class XlangTestBase extends ForyTestBase {
         () -> arrayFory.deserialize(MemoryUtils.wrap(nullableListWithNullPayload)));
     ctx =
         prepareExecution(
-            "test_list_array_compatible_nullable_list_to_array_error",
-            nullableListWithNullPayload);
+            "test_list_array_compatible_nullable_list_to_array_error", nullableListWithNullPayload);
     runPeer(ctx);
     Path nullableDataFile = ctx.dataFile();
     Assert.expectThrows(

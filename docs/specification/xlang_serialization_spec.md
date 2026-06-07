@@ -196,14 +196,19 @@ and `array<T>` as distinct kinds.
 The adaptation is limited to the immediate schema of the matched compatible
 field. It does not apply when `list<T>` or `array<T>` appears inside another
 field type, including collection elements, map keys or values, array elements,
-union alternatives, or other generic/container positions. A peer `list<T>`
-TypeDef element may be declared nullable or ref-tracked; that declaration alone
-does not prevent a local matched `array<T>` field from reading the value. The
-reader must decide from the collection payload. If the payload actually carries
-a null element or reference-tracked element encoding that cannot be represented
-as a dense array element value, the local `array<T>` field must raise a
+union alternatives, or other generic/container positions. A peer `list<T?>`
+TypeDef element schema is not immediate schema incompatibility for a local
+matched `array<T>` field. Classification must accept the matched field when the
+element domains match and the only element-schema difference is nullable
+metadata. The reader must decide from the collection payload: if the payload
+actually carries a null element, the local `array<T>` field must raise a
 compatible-read error. Null list elements must not be coerced to dense-array
-default values.
+default values. Reference-tracked list-element framing is separate from
+nullable element schema. A runtime that cannot materialize ref-tracked list
+elements into a dense array without generic/reference paths may reject that
+field during compatible classification; if it accepts the field, reference
+payloads that cannot be represented as dense array element values must fail
+during read.
 
 In schema-compatible mode only, a matched struct/class field may read between
 direct top-level `binary` and direct top-level `array<uint8>` schemas. This is a

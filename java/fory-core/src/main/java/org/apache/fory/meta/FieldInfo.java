@@ -470,6 +470,8 @@ public final class FieldInfo implements Serializable {
     FieldTypes.FieldType elementType =
         ((FieldTypes.CollectionFieldType) fieldType).getElementType();
     if (elementType instanceof FieldTypes.RegisteredFieldType) {
+      // Nullable element schema is allowed for list<T?> -> array<T> compatibility;
+      // actual null payload elements are rejected by the dense-array reader.
       if (requireUntracked && elementType.trackingRef()) {
         return Types.UNKNOWN;
       }

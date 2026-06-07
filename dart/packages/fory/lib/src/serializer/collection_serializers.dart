@@ -496,6 +496,9 @@ bool _listElementMatchesArray(
 }) {
   final elementType =
       listType.arguments.isEmpty ? null : listType.arguments.single;
+  // Nullable element schema is allowed for list<T?> -> array<T>; actual
+  // null payload elements fail in the dense-array reader. Ref-tracked
+  // element framing is rejected here because this path stays primitive-only.
   return elementType != null &&
       (!requireUnframedElement || !elementType.ref) &&
       _arrayElementTypeId(arrayTypeId) ==

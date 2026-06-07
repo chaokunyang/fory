@@ -756,8 +756,7 @@ public final class TypeMeta: Equatable, @unchecked Sendable {
     }
     if !topLevel,
       compatibleScalarKind(remoteType.typeID) != nil
-        || compatibleScalarKind(localType.typeID) != nil
-    {
+        || compatibleScalarKind(localType.typeID) != nil {
       return remoteType.typeID == localType.typeID
         && remoteType.nullable == localType.nullable
         && remoteType.trackRef == localType.trackRef
@@ -814,6 +813,9 @@ public final class TypeMeta: Equatable, @unchecked Sendable {
     else {
       return false
     }
+    // Nullable element schema is allowed for list<T?> -> array<T>; actual
+    // null payload elements fail in the dense-array reader. Ref-tracked
+    // element framing is rejected here because this path stays primitive-only.
     if requireUnframedElement, elementType.trackRef {
       return false
     }

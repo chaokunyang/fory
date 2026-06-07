@@ -544,6 +544,9 @@ fn list_element_type_matches_array(
             return false;
         }
         let element = &list.generics[0];
+        // Nullable element schema is allowed for list<T?> -> array<T>; actual
+        // null payload elements fail in the dense-array reader. Ref-tracked
+        // element framing is rejected here because this path stays primitive-only.
         if require_unframed_element && element.track_ref {
             return false;
         }

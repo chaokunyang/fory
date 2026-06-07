@@ -324,6 +324,12 @@ When `Config.compatible` is enabled and the struct is marked evolving:
 - compatible scalar conversion applies only to the immediate matched field.
   Nested collection, array, map key, and map value schemas must not be accepted
   by recursively applying scalar conversion to child schemas.
+- direct top-level `list<T?>` to dense `array<T>` matched fields must be
+  classified as compatible when element domains match; the nullable element
+  schema bit alone is not a schema-pair rejection. Actual null element payloads
+  fail in the dense-array reader. Ref-tracked list-element framing is separate
+  and may remain rejected when the runtime cannot materialize it without
+  generic/reference paths.
 
 When `compatible` is disabled and `checkStructVersion` is enabled:
 

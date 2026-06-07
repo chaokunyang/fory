@@ -101,7 +101,8 @@ final class CompatibleCollectionArrayReader {
       int untrackedPeerListElementTypeId = untrackedListElementTypeId(descriptor);
       int localListElementTypeId = untrackedListElementTypeId(localFieldType);
       int peerArrayTypeId = denseArrayTypeId(peerListElementTypeId);
-      // Actual null or ref-tracked payload elements are rejected by readListPayloadAsPrimitiveArray.
+      // Actual null or ref-tracked payload elements are rejected by
+      // readListPayloadAsPrimitiveArray.
       if (untrackedPeerListElementTypeId != Types.UNKNOWN
           && localListElementTypeId != Types.UNKNOWN
           && peerArrayTypeId != Types.UNKNOWN
@@ -154,7 +155,8 @@ final class CompatibleCollectionArrayReader {
       int untrackedPeerListElementTypeId = untrackedListElementTypeId(remoteFieldType);
       int localListElementTypeId = listElementTypeId(localType);
       int peerArrayTypeId = denseArrayTypeId(peerListElementTypeId);
-      // Actual null or ref-tracked payload elements are rejected by readListPayloadAsPrimitiveArray.
+      // Actual null or ref-tracked payload elements are rejected by
+      // readListPayloadAsPrimitiveArray.
       if (untrackedPeerListElementTypeId != Types.UNKNOWN
           && localListElementTypeId != Types.UNKNOWN
           && peerArrayTypeId != Types.UNKNOWN
@@ -374,6 +376,8 @@ final class CompatibleCollectionArrayReader {
     FieldTypes.FieldType elementType =
         ((FieldTypes.CollectionFieldType) fieldType).getElementType();
     if (elementType instanceof FieldTypes.RegisteredFieldType) {
+      // Nullable element schema is allowed for list<T?> -> array<T> compatibility;
+      // actual null payload elements are rejected by the dense-array reader.
       if (requireUntracked && elementType.trackingRef()) {
         return Types.UNKNOWN;
       }
@@ -402,8 +406,9 @@ final class CompatibleCollectionArrayReader {
           // wire shape here; otherwise array->list reads are misclassified as list->list reads.
           return Types.UNKNOWN;
         }
-        if (Types.isPrimitiveType(typeId)
-            && (!requireUntracked || !extMeta.trackingRef())) {
+        if (Types.isPrimitiveType(typeId) && (!requireUntracked || !extMeta.trackingRef())) {
+          // Nullable element metadata is not a schema-pair rejection. The
+          // dense-array read path fails only when the payload contains nulls.
           return typeId;
         }
       }
@@ -446,8 +451,9 @@ final class CompatibleCollectionArrayReader {
           // wire shape here; otherwise array->list reads are misclassified as list->list reads.
           return Types.UNKNOWN;
         }
-        if (Types.isPrimitiveType(typeId)
-            && (!requireUntracked || !extMeta.trackingRef())) {
+        if (Types.isPrimitiveType(typeId) && (!requireUntracked || !extMeta.trackingRef())) {
+          // Nullable element metadata is not a schema-pair rejection. The
+          // dense-array read path fails only when the payload contains nulls.
           return typeId;
         }
       }
@@ -475,6 +481,7 @@ final class CompatibleCollectionArrayReader {
   }
 
   private static boolean isPrimitiveElement(TypeExtMeta elementExtMeta, boolean requireUntracked) {
+    // Nullable element metadata is allowed; actual null payload elements fail while reading.
     return elementExtMeta != null
         && Types.isPrimitiveType(elementExtMeta.typeId())
         && (!requireUntracked || !elementExtMeta.trackingRef());

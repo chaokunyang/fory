@@ -918,6 +918,9 @@ public sealed class TypeMeta : IEquatable<TypeMeta>
 
         uint? localArrayElementTypeId = TryPackedArrayElementTypeId(local.TypeId);
         uint? remoteArrayElementTypeId = TryPackedArrayElementTypeId(remote.TypeId);
+        // Nullable element schema is allowed for list<T?> -> array<T>; actual null payload
+        // elements fail in the dense-array reader. Ref-tracked element framing is rejected here
+        // because this path stays primitive-only.
         bool remoteListLocalArray = remote.TypeId == (uint)global::Apache.Fory.TypeId.List &&
                                     localArrayElementTypeId.HasValue &&
                                     remote.Generics.Count == 1 &&

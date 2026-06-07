@@ -32,6 +32,7 @@ Load this file when changing documentation, public APIs, protocol specs, benchma
 - Documentation examples should use normal explicit imports, avoid unused imports, and keep common Fory types unqualified where that is the idiom.
 - Generated Markdown under `docs/benchmarks/**` should satisfy markdownlint blank-line rules at generation time: no repeated blank lines and no extra blank line after final content.
 - Keep default recommendations minimal. Put uncommon optimization or transport patterns in clearly labeled optional sections.
+- For xlang compatible list/array field adaptation, do not treat nullable list-element schema as immediate incompatibility. A direct matched `list<T?>` remote field can read into a local dense `array<T>` field when element domains match and the actual payload has no nulls; actual null elements fail in the dense-array reader. Ref-tracked element framing is a separate concern and may remain rejected when a runtime cannot materialize it without generic/ref paths.
 - Before every git commit, run the formatter that owns every changed tracked file. If any formatter rewrites a file, review and stage that formatter output before committing. Do not rely on `git diff --check` alone; CI `Code Style Check` also runs language formatters and fails when they would change code, such as Google Java Format wrapping a changed Java builder chain.
 
 ## Formatting Commands

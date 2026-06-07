@@ -65,6 +65,15 @@ final class CompatibleStructReadField {
 
 @internal
 @pragma('vm:never-inline')
+Object? readGeneratedCompatibleScalarField(
+  ReadContext context,
+  CompatibleScalarReadDescriptor scalarRead,
+) {
+  return readCompatibleScalarField(context, scalarRead.conversion);
+}
+
+@internal
+@pragma('vm:never-inline')
 Object? readGeneratedCompatibleStructField(
   ReadContext context,
   CompatibleStructReadField field,
@@ -72,7 +81,7 @@ Object? readGeneratedCompatibleStructField(
   final localField = field.localField!;
   final scalarRead = field.scalarRead;
   if (scalarRead != null) {
-    return readCompatibleScalarField(context, scalarRead.conversion);
+    return readGeneratedCompatibleScalarField(context, scalarRead);
   }
   if (field.topLevelListArrayPair) {
     return readCompatibleMatchedCollectionArrayField(
@@ -92,22 +101,13 @@ int readGenCompatInt64ScalarAsInt(
   int? fallback,
 ]) {
   final sourceTypeId = scalarRead.int64SourceTypeId;
-  if (sourceTypeId >= 0) {
-    return readCompatInt64PayloadAsInt(
-      context,
-      sourceTypeId,
-      scalarRead.int64SourceNullable,
-      fallback,
-    );
-  }
-  final value = readCompatibleScalarField(context, scalarRead.conversion);
-  if (value == null) {
-    if (fallback != null) {
-      return fallback;
-    }
-    throw StateError('Expected non-null int-compatible scalar value.');
-  }
-  return value as int;
+  assert(sourceTypeId >= 0);
+  return readCompatInt64PayloadAsInt(
+    context,
+    sourceTypeId,
+    scalarRead.int64SourceNullable,
+    fallback,
+  );
 }
 
 @internal

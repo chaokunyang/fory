@@ -454,6 +454,12 @@ bool isCompatibleCollectionArrayTypePair(
   FieldType localType,
   FieldType remoteType,
 ) {
+  if (localType.nullable ||
+      remoteType.nullable ||
+      localType.ref ||
+      remoteType.ref) {
+    return false;
+  }
   if (isCompatibleArrayType(localType.typeId) &&
       remoteType.typeId == TypeIds.list) {
     return _listElementMatchesArray(remoteType, localType.typeId);

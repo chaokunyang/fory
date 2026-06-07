@@ -898,12 +898,11 @@ export class ReadContext {
   private canonicalTypeId(typeId: number): number {
     if (typeId === TypeId.NAMED_ENUM) {
       typeId = TypeId.ENUM;
+    } else if (typeId === TypeId.NAMED_EXT) {
+      typeId = TypeId.EXT;
     } else if (TypeId.structType(typeId)) {
       typeId = TypeId.STRUCT;
-    } else if (
-      typeId === TypeId.NAMED_UNION
-      || typeId === TypeId.TYPED_UNION
-    ) {
+    } else if (typeId === TypeId.NAMED_UNION || typeId === TypeId.TYPED_UNION) {
       typeId = TypeId.UNION;
     }
     return typeId;
@@ -920,7 +919,9 @@ export class ReadContext {
     if (remote === undefined || local === undefined) {
       return false;
     }
-    if (this.canonicalTypeId(remote.typeId) !== this.canonicalFieldTypeId(local)) {
+    if (
+      this.canonicalTypeId(remote.typeId) !== this.canonicalFieldTypeId(local)
+    ) {
       return false;
     }
     if (
@@ -936,7 +937,10 @@ export class ReadContext {
           && this.fieldSchemasEqual(remote.options?.value, local.options?.value)
         );
       case TypeId.LIST:
-        return this.fieldSchemasEqual(remote.options?.inner, local.options?.inner);
+        return this.fieldSchemasEqual(
+          remote.options?.inner,
+          local.options?.inner,
+        );
       case TypeId.SET:
         return this.fieldSchemasEqual(remote.options?.key, local.options?.key);
       default:
@@ -970,7 +974,9 @@ export class ReadContext {
         && (fieldInfo.typeId !== fallbackTypeInfo.typeId
         || fieldInfo.nullable !== fallbackTypeInfo.nullable)))
       ) {
-        throw new Error("unsupported compatible scalar tracking-ref schema mismatch");
+        throw new Error(
+          "unsupported compatible scalar tracking-ref schema mismatch",
+        );
       }
       if (
         isCompatibleScalarPair(fieldInfo.typeId, fallbackTypeInfo.typeId)
@@ -978,7 +984,9 @@ export class ReadContext {
         && (fieldInfo.trackingRef === true
         || fallbackTypeInfo.trackingRef === true)
       ) {
-        throw new Error("unsupported compatible scalar tracking-ref schema mismatch");
+        throw new Error(
+          "unsupported compatible scalar tracking-ref schema mismatch",
+        );
       }
       if (
         this.hasUnsupportedListArrayMismatch(
@@ -1007,13 +1015,7 @@ export class ReadContext {
     ) {
       throw new Error("unsupported compatible list/array schema mismatch");
     }
-    if (
-      this.hasNestedScalarSchemaMismatch(
-        fieldInfo,
-        fallbackTypeInfo,
-        topLevel,
-      )
-    ) {
+    if (this.hasNestedSchemaMismatch(fieldInfo, fallbackTypeInfo, topLevel)) {
       throw new Error("unsupported compatible field schema mismatch");
     }
     switch (fieldInfo.typeId) {
@@ -1080,7 +1082,7 @@ export class ReadContext {
     }
   }
 
-  private hasNestedScalarSchemaMismatch(
+  private hasNestedSchemaMismatch(
     remote: InnerFieldInfo,
     local: TypeInfo | undefined,
     topLevel: boolean,
@@ -1088,24 +1090,83 @@ export class ReadContext {
     if (topLevel || local === undefined) {
       return false;
     }
-    const localTypeId = this.canonicalFieldTypeId(local);
     if (
-      !isCompatibleScalarType(remote.typeId)
-      || !isCompatibleScalarType(localTypeId)
+      this.schemaMatchTypeId(remote.typeId)
+      !== this.schemaMatchTypeId(this.typeResolver.computeTypeId(local))
     ) {
-      return false;
+      return true;
     }
-    // Scalar conversion is only a matched-field compatibility rule. Nested
-    // container element/value schemas may still carry nullable/ref framing in
-    // the payload header, but they must not reinterpret one scalar wire type as
-    // another.
-    return remote.typeId !== localTypeId;
+    if (
+      (remote.nullable === true) !== (local.nullable === true)
+      || (remote.trackingRef === true) !== (local.trackingRef === true)
+    ) {
+      return true;
+    }
+    switch (remote.typeId) {
+      case TypeId.MAP:
+        return (
+          local.options?.key === undefined
+          || local.options?.value === undefined
+          || this.hasNestedSchemaMismatch(
+            remote.options!.key!,
+            local.options.key,
+            false,
+          )
+          || this.hasNestedSchemaMismatch(
+            remote.options!.value!,
+            local.options.value,
+            false,
+          )
+        );
+      case TypeId.LIST:
+        return (
+          local.options?.inner === undefined
+          || this.hasNestedSchemaMismatch(
+            remote.options!.inner!,
+            local.options.inner,
+            false,
+          )
+        );
+      case TypeId.SET:
+        return (
+          local.options?.key === undefined
+          || this.hasNestedSchemaMismatch(
+            remote.options!.key!,
+            local.options.key,
+            false,
+          )
+        );
+      default:
+        return false;
+    }
+  }
+
+  private schemaMatchTypeId(typeId: number): number {
+    return this.canonicalTypeId(typeId);
   }
 
   private compatibleFieldTypeInfo(
     remote: InnerFieldInfo,
     local: TypeInfo,
   ): TypeInfo | undefined {
+    if (this.isByteSequenceRootPair(remote, local)) {
+      if (
+        (remote.nullable === true) !== (local.nullable === true)
+        || (remote.trackingRef === true) !== (local.trackingRef === true)
+      ) {
+        return undefined;
+      }
+      return local.clone();
+    }
+    if (
+      this.isListArrayRootPair(remote, local)
+      && (remote.nullable === true
+      || local.nullable === true
+      || remote.trackingRef === true
+      || local.trackingRef === true)
+    ) {
+      return undefined;
+    }
     const remoteElement = remoteListElementType(remote);
     const localElement = denseArrayElementTypeId(local.typeId);
     if (remoteElement !== undefined && localElement !== undefined) {
@@ -1127,8 +1188,10 @@ export class ReadContext {
     if (
       remote.trackingRef !== true
       && local.trackingRef !== true
-      && !(remote.typeId === local.typeId
-      && (remote.nullable === true) === (local.nullable === true))
+      && !(
+        remote.typeId === local.typeId
+        && (remote.nullable === true) === (local.nullable === true)
+      )
       && isCompatibleScalarPair(remote.typeId, local.typeId)
     ) {
       return markCompatibleScalarRead(local.clone(), {
@@ -1194,6 +1257,17 @@ export class ReadContext {
       && denseArrayElementTypeId(local.typeId) !== undefined)
       || (denseArrayElementTypeId(remote.typeId) !== undefined
       && local.typeId === TypeId.LIST)
+    );
+  }
+
+  private isByteSequenceRootPair(
+    remote: InnerFieldInfo,
+    local: TypeInfo,
+  ): boolean {
+    return (
+      (remote.typeId === TypeId.BINARY
+      && local.typeId === TypeId.UINT8_ARRAY)
+      || (remote.typeId === TypeId.UINT8_ARRAY && local.typeId === TypeId.BINARY)
     );
   }
 

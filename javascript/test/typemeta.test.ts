@@ -495,12 +495,14 @@ describe("typemeta", () => {
       }),
     );
 
-    const result = reader.deserialize(writer.serialize({
-      wide: 7,
-      flag: "true",
-      label: false,
-      narrow: 42n,
-    }));
+    const result = reader.deserialize(
+      writer.serialize({
+        wide: 7,
+        flag: "true",
+        label: false,
+        narrow: 42n,
+      }),
+    );
     const source = generated.join("\n");
 
     expect(result).toEqual({
@@ -514,7 +516,7 @@ describe("typemeta", () => {
       "external.CompatibleScalarConverter.stringToBool(br.stringWithHeader())",
     );
     expect(source).toContain(
-      "(external.CompatibleScalarConverter.checkedBool(br.readUint8()) ? \"true\" : \"false\")",
+      '(external.CompatibleScalarConverter.checkedBool(br.readUint8()) ? "true" : "false")',
     );
     expect(source).toContain(
       "external.CompatibleScalarConverter.checkedInt32(br.readInt64())",
@@ -701,8 +703,9 @@ describe("typemeta", () => {
     const writer = writerFory.register(RemoteScalars);
     const reader = readerFory.register(LocalScalars);
 
-    expect(() => reader.deserialize(writer.serialize(new RemoteScalars())))
-      .toThrow(/unsupported compatible scalar tracking-ref schema mismatch/);
+    expect(() =>
+      reader.deserialize(writer.serialize(new RemoteScalars())),
+    ).toThrow(/unsupported compatible scalar tracking-ref schema mismatch/);
   });
 
   test("rejects incompatible matched fields", () => {
@@ -719,8 +722,9 @@ describe("typemeta", () => {
       }),
     );
 
-    expect(() => reader.deserialize(writer.serialize({ value: "abc" })))
-      .toThrow(/unsupported compatible field schema mismatch/);
+    expect(() =>
+      reader.deserialize(writer.serialize({ value: "abc" })),
+    ).toThrow(/unsupported compatible field schema mismatch/);
   });
 
   test("rejects nested scalar mismatches", () => {
@@ -743,15 +747,56 @@ describe("typemeta", () => {
     ).toThrow(/unsupported compatible field schema mismatch/);
   });
 
-  test("allows nested scalar nullable framing drift", () => {
-    expect(
+  test("rejects nested collection shape drift", () => {
+    expect(() =>
+      readCompatibleScalar(
+        7263,
+        Type.list(Type.string()),
+        Type.list(Type.map(Type.string(), Type.int32())),
+        ["one"],
+      ),
+    ).toThrow(/unsupported compatible field schema mismatch/);
+
+    expect(() =>
+      readCompatibleScalar(
+        7264,
+        Type.map(Type.string(), Type.list(Type.string())),
+        Type.map(
+          Type.string(),
+          Type.list(Type.map(Type.string(), Type.int32())),
+        ),
+        new Map([["values", ["one"]]]),
+      ),
+    ).toThrow(/unsupported compatible field schema mismatch/);
+
+    expect(() =>
+      readCompatibleScalar(
+        7268,
+        Type.list(Type.any()),
+        Type.list(Type.struct(7269, { name: Type.string() })),
+        ["one"],
+      ),
+    ).toThrow(/unsupported compatible field schema mismatch/);
+  });
+
+  test("rejects nested scalar nullable framing drift", () => {
+    expect(() =>
       readCompatibleScalar(
         7241,
         Type.list(Type.string().setNullable(true)),
         Type.list(Type.string()),
         ["a", null],
       ),
-    ).toEqual({ value: ["a", null] });
+    ).toThrow(/unsupported compatible field schema mismatch/);
+
+    expect(() =>
+      readCompatibleScalar(
+        7242,
+        Type.list(Type.string().setTrackingRef(true)),
+        Type.list(Type.string()),
+        ["a"],
+      ),
+    ).toThrow(/unsupported compatible field schema mismatch/);
   });
 
   test("reuses local struct metadata across struct wire families", () => {
@@ -771,6 +816,40 @@ describe("typemeta", () => {
 
     expect(regenerated.typeId).toBe(local.typeId);
     expect(regenerated.options.props.name.typeId).toBe(TypeId.STRING);
+  });
+
+  test("reuses local ext metadata across ext wire families", () => {
+    const fory = new Fory({ compatible: true });
+    const readContext = (fory as any).readContext;
+    const numericLocal = Type.ext(7244);
+    const namedRemote = {
+      typeId: TypeId.NAMED_EXT,
+      nullable: false,
+      trackingRef: false,
+      options: {},
+    };
+
+    const numericRegenerated = readContext.fieldInfoToTypeInfo(
+      namedRemote,
+      numericLocal,
+    );
+    expect(numericRegenerated.typeId).toBe(numericLocal.typeId);
+    expect(numericRegenerated.userTypeId).toBe(7244);
+
+    const namedLocal = Type.ext("example.External");
+    const numericRemote = {
+      typeId: TypeId.EXT,
+      nullable: false,
+      trackingRef: false,
+      options: {},
+    };
+
+    const namedRegenerated = readContext.fieldInfoToTypeInfo(
+      numericRemote,
+      namedLocal,
+    );
+    expect(namedRegenerated.typeId).toBe(namedLocal.typeId);
+    expect(namedRegenerated.typeName).toBe("External");
   });
 
   test("keeps same-schema scalar reads direct", () => {
@@ -903,6 +982,45 @@ describe("typemeta", () => {
     expect(result).toEqual({ values: [1, 2, 3] });
   });
 
+  test("adapts immediate binary and uint8 array field pairs", () => {
+    const bytes = new Uint8Array([0, 1, 2, 250, 255]);
+    expect(
+      Array.from(
+        readCompatibleScalar(7265, Type.binary(), Type.uint8Array(), bytes)
+          .value as Uint8Array,
+      ),
+    ).toEqual(Array.from(bytes));
+
+    expect(
+      Array.from(
+        readCompatibleScalar(7266, Type.uint8Array(), Type.binary(), bytes)
+          .value as Uint8Array,
+      ),
+    ).toEqual(Array.from(bytes));
+
+    expect(
+      Array.from(
+        readCompatibleScalar(
+          7270,
+          Type.binary().setTrackingRef(true),
+          Type.uint8Array().setTrackingRef(true),
+          bytes,
+        ).value as Uint8Array,
+      ),
+    ).toEqual(Array.from(bytes));
+  });
+
+  test("rejects nested binary and uint8 array positions", () => {
+    expect(() =>
+      readCompatibleScalar(
+        7267,
+        Type.list(Type.binary()),
+        Type.list(Type.uint8Array()),
+        [new Uint8Array([1, 2])],
+      ),
+    ).toThrow(/unsupported compatible field schema mismatch/);
+  });
+
   test("rejects compatible list to dense array when payload has nullable elements", () => {
     const writerFory = new Fory({ compatible: true });
     const readerFory = new Fory({ compatible: true });
@@ -929,6 +1047,26 @@ describe("typemeta", () => {
     expect(() =>
       readerFory.register(readerType).deserialize(nullableBytes),
     ).toThrow();
+  });
+
+  test("rejects compatible list and dense array root framing drift", () => {
+    expect(() =>
+      readCompatibleScalar(
+        7261,
+        Type.list(Type.int32({ encoding: "fixed" })).setNullable(true),
+        Type.int32Array(),
+        [1, 2, 3],
+      ),
+    ).toThrow(/list\/array/);
+
+    expect(() =>
+      readCompatibleScalar(
+        7262,
+        Type.int32Array(),
+        Type.list(Type.int32({ encoding: "fixed" })).setNullable(true),
+        new Int32Array([1, 2, 3]),
+      ),
+    ).toThrow(/list\/array/);
   });
 
   test("rejects incompatible immediate list and dense array element fields", () => {
@@ -1029,7 +1167,9 @@ describe("typemeta", () => {
     expect(
       (result as ReaderHolder & { animalMap?: Map<string, number> }).animalMap,
     ).toBeUndefined();
-    expect((result as ReaderHolder & { marker?: number }).marker).toBeUndefined();
+    expect(
+      (result as ReaderHolder & { marker?: number }).marker,
+    ).toBeUndefined();
   });
 
   test("skips unknown named custom fields by falling back to any when no local field exists", () => {

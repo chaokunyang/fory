@@ -165,7 +165,7 @@ public sealed class ForyGeneratorTests
         Assert.Contains("ReadBoolField(context, remoteField, __ForyLocalFields[0])", generated, StringComparison.Ordinal);
         Assert.Contains("ReadNullableStringField(context, remoteField, __ForyLocalFields[1])", generated, StringComparison.Ordinal);
         Assert.Contains("ReadNullableInt32Field(context, remoteField, __ForyLocalFields[2])", generated, StringComparison.Ordinal);
-        Assert.Contains("ReadValuesListArrayBridge(context, remoteField.FieldType", generated, StringComparison.Ordinal);
+        Assert.Contains("ReadValuesFieldBridge(context, remoteField.FieldType", generated, StringComparison.Ordinal);
         Assert.DoesNotContain("__ForyReadCompatibleField<", generated, StringComparison.Ordinal);
         Assert.DoesNotContain("RequiresScalarRead", generated, StringComparison.Ordinal);
         Assert.DoesNotContain("CompatibleScalarConverter.ReadBoolField(context, remoteField.FieldType", generated, StringComparison.Ordinal);

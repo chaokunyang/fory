@@ -785,7 +785,7 @@ public sealed class TypeMeta : IEquatable<TypeMeta>
 
             if (localIndex >= 0 && localMatch is not null)
             {
-                if (remoteField.FieldType.Equals(localMatch.FieldType))
+                if (IsDirectFieldType(remoteField.FieldType, localMatch.FieldType))
                 {
                     remoteField.AssignedFieldId = localIndex * 2;
                 }
@@ -808,6 +808,11 @@ public sealed class TypeMeta : IEquatable<TypeMeta>
 
     private static bool IsCompatibleFieldType(TypeMetaFieldType remote, TypeMetaFieldType local, bool topLevel)
     {
+        if (topLevel && IsCompatibleByteSequenceFieldPair(remote, local))
+        {
+            return true;
+        }
+
         if (topLevel && IsCompatibleListArrayFieldPair(remote, local))
         {
             return true;
@@ -826,9 +831,17 @@ public sealed class TypeMeta : IEquatable<TypeMeta>
         if (topLevel &&
             !remote.TrackRef &&
             !local.TrackRef &&
-            CompatibleScalarConverter.CanConvert(remote.TypeId, local.TypeId))
+            CompatibleScalarConverter.IsScalarType(remote.TypeId) &&
+            CompatibleScalarConverter.IsScalarType(local.TypeId) &&
+            (remote.TypeId == local.TypeId ||
+             CompatibleScalarConverter.CanConvert(remote.TypeId, local.TypeId)))
         {
             return true;
+        }
+
+        if (remote.Nullable != local.Nullable || remote.TrackRef != local.TrackRef)
+        {
+            return false;
         }
 
         if (NormalizeTypeIdForMatch(remote.TypeId) != NormalizeTypeIdForMatch(local.TypeId))
@@ -852,8 +865,59 @@ public sealed class TypeMeta : IEquatable<TypeMeta>
         return true;
     }
 
+    private static bool IsDirectFieldType(TypeMetaFieldType remote, TypeMetaFieldType local)
+    {
+        if (remote.Equals(local))
+        {
+            return true;
+        }
+
+        if (remote.Nullable != local.Nullable || remote.TrackRef != local.TrackRef)
+        {
+            return false;
+        }
+
+        if (NormalizeTypeIdForMatch(remote.TypeId) != NormalizeTypeIdForMatch(local.TypeId))
+        {
+            return false;
+        }
+
+        if (remote.Generics.Count != local.Generics.Count)
+        {
+            return false;
+        }
+
+        for (int i = 0; i < remote.Generics.Count; i++)
+        {
+            if (!IsDirectFieldType(remote.Generics[i], local.Generics[i]))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static bool IsCompatibleByteSequenceFieldPair(TypeMetaFieldType remote, TypeMetaFieldType local)
+    {
+        if (remote.TrackRef || local.TrackRef || remote.Nullable != local.Nullable)
+        {
+            return false;
+        }
+
+        return (remote.TypeId == (uint)global::Apache.Fory.TypeId.Binary &&
+                local.TypeId == (uint)global::Apache.Fory.TypeId.UInt8Array) ||
+               (remote.TypeId == (uint)global::Apache.Fory.TypeId.UInt8Array &&
+                local.TypeId == (uint)global::Apache.Fory.TypeId.Binary);
+    }
+
     private static bool IsCompatibleListArrayFieldPair(TypeMetaFieldType remote, TypeMetaFieldType local)
     {
+        if (remote.Nullable || local.Nullable || remote.TrackRef || local.TrackRef)
+        {
+            return false;
+        }
+
         uint? localArrayElementTypeId = TryPackedArrayElementTypeId(local.TypeId);
         uint? remoteArrayElementTypeId = TryPackedArrayElementTypeId(remote.TypeId);
         bool remoteListLocalArray = remote.TypeId == (uint)global::Apache.Fory.TypeId.List &&
@@ -928,9 +992,6 @@ public sealed class TypeMeta : IEquatable<TypeMeta>
             (uint)global::Apache.Fory.TypeId.Union or
             (uint)global::Apache.Fory.TypeId.NamedUnion or
             (uint)global::Apache.Fory.TypeId.TypedUnion => (uint)global::Apache.Fory.TypeId.Union,
-            (uint)global::Apache.Fory.TypeId.Binary or
-            (uint)global::Apache.Fory.TypeId.Int8Array or
-            (uint)global::Apache.Fory.TypeId.UInt8Array => (uint)global::Apache.Fory.TypeId.Binary,
             _ => typeId,
         };
     }

@@ -50,6 +50,7 @@ final BigInt _uint64Max = (BigInt.one << 64) - BigInt.one;
 final BigInt _doubleSignMask = BigInt.one << 63;
 final BigInt _doubleFractionMask = (BigInt.one << 52) - BigInt.one;
 final BigInt _ten = BigInt.from(10);
+const int _int64SignHigh32 = 0x80000000;
 const int _maxCompatibleDecimalDigits = 256;
 const int _maxCompatibleNumericTextLength = 320;
 final BigInt _maxCompatibleDecimalMagnitude = BigInt.from(
@@ -74,6 +75,8 @@ final class CompatibleScalarReadDescriptor {
     this.int64SourceTypeId,
     this.int64SourceNullable,
   );
+
+  bool get readsDirectInt64AsInt => int64SourceTypeId >= 0;
 }
 
 CompatibleScalarConversion? compatibleScalarConversion(
@@ -278,15 +281,31 @@ int readCompatInt64PayloadAsInt(
     case TypeIds.varUint32:
       return buffer.readVarUint32();
     case TypeIds.uint64:
-      return buffer.readUint64().toInt();
+      return _uint64ToSignedInt64Target(buffer.readUint64());
     case TypeIds.varUint64:
-      return buffer.readVarUint64().toInt();
+      return _uint64ToSignedInt64Target(buffer.readVarUint64());
     case TypeIds.taggedUint64:
-      return buffer.readTaggedUint64().toInt();
+      return _uint64ToSignedInt64Target(buffer.readTaggedUint64());
     default:
       throw StateError(
         'Unsupported int64-compatible payload type $remoteTypeId.',
       );
+  }
+}
+
+int _uint64ToSignedInt64Target(Uint64 value) {
+  if (value.high32Unsigned >= _int64SignHigh32) {
+    throw InvalidDataException(
+      'Unsigned 64-bit compatible scalar value exceeds signed int64 range.',
+    );
+  }
+  try {
+    return value.toInt();
+  } on StateError catch (error) {
+    throw InvalidDataException(
+      'Unsigned 64-bit compatible scalar value is not representable as a Dart int.',
+      error,
+    );
   }
 }
 

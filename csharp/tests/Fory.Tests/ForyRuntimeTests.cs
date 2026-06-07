@@ -174,6 +174,27 @@ public sealed class CompatibleUInt32ArrayListCarrierSchema
 }
 
 [ForyStruct]
+public sealed class CompatibleBinarySchema
+{
+    [ForyField(1, Type = typeof(S.Binary))]
+    public byte[] Value { get; set; } = [];
+}
+
+[ForyStruct]
+public sealed class CompatibleUInt8ArrayBytesSchema
+{
+    [ForyField(1, Type = typeof(S.Array<S.UInt8>))]
+    public byte[] Value { get; set; } = [];
+}
+
+[ForyStruct]
+public sealed class CompatibleUInt8ArrayListSchema
+{
+    [ForyField(1, Type = typeof(S.Array<S.UInt8>))]
+    public List<byte> Value { get; set; } = [];
+}
+
+[ForyStruct]
 public sealed class CompatibleNestedListSchema
 {
     [ForyField(Type = typeof(S.Map<S.String, S.List<S.Int32>>))]
@@ -1271,6 +1292,38 @@ public sealed class ForyRuntimeTests
     }
 
     [Fact]
+    public void CompatibleReadSupportsBinaryUint8ArrayPairs()
+    {
+        ForyRuntime binaryWriter = ForyRuntime.Builder().Compatible(true).Build();
+        binaryWriter.Register<CompatibleBinarySchema>(311);
+        ForyRuntime uint8ArrayReader = ForyRuntime.Builder().Compatible(true).Build();
+        uint8ArrayReader.Register<CompatibleUInt8ArrayBytesSchema>(311);
+
+        byte[] binaryPayload = [0, 1, 2, 250, 255];
+        CompatibleUInt8ArrayBytesSchema decodedArray =
+            uint8ArrayReader.Deserialize<CompatibleUInt8ArrayBytesSchema>(
+                binaryWriter.Serialize(new CompatibleBinarySchema { Value = binaryPayload }));
+        Assert.Equal(binaryPayload, decodedArray.Value);
+
+        ForyRuntime listReader = ForyRuntime.Builder().Compatible(true).Build();
+        listReader.Register<CompatibleUInt8ArrayListSchema>(311);
+        CompatibleUInt8ArrayListSchema decodedList =
+            listReader.Deserialize<CompatibleUInt8ArrayListSchema>(
+                binaryWriter.Serialize(new CompatibleBinarySchema { Value = binaryPayload }));
+        Assert.Equal(binaryPayload, decodedList.Value);
+
+        ForyRuntime uint8ArrayWriter = ForyRuntime.Builder().Compatible(true).Build();
+        uint8ArrayWriter.Register<CompatibleUInt8ArrayBytesSchema>(312);
+        ForyRuntime binaryReader = ForyRuntime.Builder().Compatible(true).Build();
+        binaryReader.Register<CompatibleBinarySchema>(312);
+
+        byte[] arrayPayload = [3, 4, 5, 253];
+        CompatibleBinarySchema decodedBinary = binaryReader.Deserialize<CompatibleBinarySchema>(
+            uint8ArrayWriter.Serialize(new CompatibleUInt8ArrayBytesSchema { Value = arrayPayload }));
+        Assert.Equal(arrayPayload, decodedBinary.Value);
+    }
+
+    [Fact]
     public void CompatibleReadRejectsNullableListElementsIntoArrayCarrier()
     {
         ForyRuntime writer = ForyRuntime.Builder().Compatible(true).Build();
@@ -1332,6 +1385,146 @@ public sealed class ForyRuntimeTests
         InvalidDataException exception =
             Assert.Throws<InvalidDataException>(() => TypeMeta.AssignFieldIds(remoteTypeMeta, localFields));
         Assert.Contains("remote and local field schemas are not compatible", exception.Message);
+    }
+
+    [Fact]
+    public void RejectsNestedScalarFramingChanges()
+    {
+        List<TypeMetaFieldInfo> localFields =
+        [
+            new TypeMetaFieldInfo(
+                null,
+                "values",
+                new TypeMetaFieldType(
+                    (uint)TypeId.List,
+                    false,
+                    false,
+                    [new TypeMetaFieldType((uint)TypeId.String, false)])),
+        ];
+
+        TypeMeta remoteNullableTypeMeta = new(
+            (uint)TypeId.CompatibleStruct,
+            0,
+            MetaString.Empty('_', '_'),
+            new MetaString("remote", MetaStringEncoding.Utf8, '_', '_', "remote"u8.ToArray()),
+            false,
+            [
+                new TypeMetaFieldInfo(
+                    null,
+                    "values",
+                    new TypeMetaFieldType(
+                        (uint)TypeId.List,
+                        false,
+                        false,
+                        [new TypeMetaFieldType((uint)TypeId.String, true)])),
+            ]);
+
+        Assert.Throws<InvalidDataException>(() => TypeMeta.AssignFieldIds(remoteNullableTypeMeta, localFields));
+
+        TypeMeta remoteTrackedTypeMeta = new(
+            (uint)TypeId.CompatibleStruct,
+            0,
+            MetaString.Empty('_', '_'),
+            new MetaString("remote", MetaStringEncoding.Utf8, '_', '_', "remote"u8.ToArray()),
+            false,
+            [
+                new TypeMetaFieldInfo(
+                    null,
+                    "values",
+                    new TypeMetaFieldType(
+                        (uint)TypeId.List,
+                        false,
+                        false,
+                        [new TypeMetaFieldType((uint)TypeId.String, false, true)])),
+            ]);
+
+        Assert.Throws<InvalidDataException>(() => TypeMeta.AssignFieldIds(remoteTrackedTypeMeta, localFields));
+    }
+
+    [Fact]
+    public void RestrictsByteSequenceCompatibility()
+    {
+        List<TypeMetaFieldInfo> localBytes =
+        [
+            new TypeMetaFieldInfo(1, "value", new TypeMetaFieldType((uint)TypeId.Binary, false)),
+        ];
+        TypeMeta remoteUInt8Array = new(
+            (uint)TypeId.CompatibleStruct,
+            0,
+            MetaString.Empty('_', '_'),
+            new MetaString("remote", MetaStringEncoding.Utf8, '_', '_', "remote"u8.ToArray()),
+            false,
+            [new TypeMetaFieldInfo(1, "$tag1", new TypeMetaFieldType((uint)TypeId.UInt8Array, false))]);
+
+        TypeMeta.AssignFieldIds(remoteUInt8Array, localBytes);
+        Assert.Equal(1, remoteUInt8Array.Fields[0].AssignedFieldId);
+
+        TypeMeta remoteInt8Array = new(
+            (uint)TypeId.CompatibleStruct,
+            0,
+            MetaString.Empty('_', '_'),
+            new MetaString("remote", MetaStringEncoding.Utf8, '_', '_', "remote"u8.ToArray()),
+            false,
+            [new TypeMetaFieldInfo(1, "$tag1", new TypeMetaFieldType((uint)TypeId.Int8Array, false))]);
+
+        Assert.Throws<InvalidDataException>(() => TypeMeta.AssignFieldIds(remoteInt8Array, localBytes));
+
+        List<TypeMetaFieldInfo> localNested =
+        [
+            new TypeMetaFieldInfo(
+                null,
+                "value",
+                new TypeMetaFieldType(
+                    (uint)TypeId.List,
+                    false,
+                    false,
+                    [new TypeMetaFieldType((uint)TypeId.Binary, false)])),
+        ];
+        TypeMeta remoteNested = new(
+            (uint)TypeId.CompatibleStruct,
+            0,
+            MetaString.Empty('_', '_'),
+            new MetaString("remote", MetaStringEncoding.Utf8, '_', '_', "remote"u8.ToArray()),
+            false,
+            [
+                new TypeMetaFieldInfo(
+                    null,
+                    "value",
+                    new TypeMetaFieldType(
+                        (uint)TypeId.List,
+                        false,
+                        false,
+                        [new TypeMetaFieldType((uint)TypeId.UInt8Array, false)])),
+            ]);
+
+        Assert.Throws<InvalidDataException>(() => TypeMeta.AssignFieldIds(remoteNested, localNested));
+    }
+
+    [Fact]
+    public void RejectsFramedListArrayPairs()
+    {
+        List<TypeMetaFieldInfo> localFields =
+        [
+            new TypeMetaFieldInfo(1, "values", new TypeMetaFieldType((uint)TypeId.Int32Array, false)),
+        ];
+        TypeMeta remoteTypeMeta = new(
+            (uint)TypeId.CompatibleStruct,
+            0,
+            MetaString.Empty('_', '_'),
+            new MetaString("remote", MetaStringEncoding.Utf8, '_', '_', "remote"u8.ToArray()),
+            false,
+            [
+                new TypeMetaFieldInfo(
+                    1,
+                    "$tag1",
+                    new TypeMetaFieldType(
+                        (uint)TypeId.List,
+                        true,
+                        false,
+                        [new TypeMetaFieldType((uint)TypeId.VarInt32, false)])),
+            ]);
+
+        Assert.Throws<InvalidDataException>(() => TypeMeta.AssignFieldIds(remoteTypeMeta, localFields));
     }
 
     [Fact]
@@ -2468,7 +2661,7 @@ public sealed class ForyRuntimeTests
             remoteFields);
 
         TypeMeta.AssignFieldIds(remoteTypeMeta, localFields);
-        Assert.Equal(1, remoteTypeMeta.Fields[0].AssignedFieldId);
+        Assert.Equal(0, remoteTypeMeta.Fields[0].AssignedFieldId);
     }
 
     [Fact]

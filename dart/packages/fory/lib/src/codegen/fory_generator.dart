@@ -916,6 +916,7 @@ final class ForyGenerator extends Generator {
         output,
         structSpec,
         field,
+        index,
         'value.${field.name}',
         'value.${field.name}',
         'field',
@@ -972,6 +973,7 @@ final class ForyGenerator extends Generator {
         output,
         structSpec,
         field,
+        index,
         field.localName,
         null,
         'field',
@@ -1012,19 +1014,26 @@ final class ForyGenerator extends Generator {
     StringBuffer output,
     _GeneratedStructSpec structSpec,
     _GeneratedFieldSpec field,
+    int index,
     String target,
     String? fallback,
     String readField,
     String indent,
   ) {
     final readerFunctionName = field.readerFunctionName(structSpec.name);
-    final compatibleDirectRead = _compatibleScalarDirectReadExpression(
-      field,
-      fallback,
-      readField: readField,
-    );
-    if (compatibleDirectRead != null) {
-      output.writeln('$indent$target = $compatibleDirectRead;');
+    if (_usesDirectCompatibleInt64ScalarRead(field)) {
+      final scalarRead = 'scalarRead$index';
+      final fallbackArg = fallback == null ? '' : ', $fallback';
+      output.writeln('${indent}final $scalarRead = $readField.scalarRead!;');
+      output.writeln('${indent}if ($scalarRead.readsDirectInt64AsInt) {');
+      output.writeln(
+        '$indent  $target = readGenCompatInt64ScalarAsInt(context, $scalarRead$fallbackArg);',
+      );
+      output.writeln('$indent} else {');
+      output.writeln(
+        '$indent  $target = ${_readerCall(readerFunctionName, 'readGeneratedCompatibleScalarField(context, $scalarRead)', fallback)};',
+      );
+      output.writeln('$indent}');
       return;
     }
     output.writeln(
@@ -1073,23 +1082,11 @@ final class ForyGenerator extends Generator {
     output.writeln('$indent$target = $readerFunctionName($valueExpression);');
   }
 
-  String? _compatibleScalarDirectReadExpression(
-    _GeneratedFieldSpec field,
-    String? fallback, {
-    String readField = 'field',
-  }) {
-    if (!_usesDirectCompatibleInt64ScalarRead(field)) {
-      return null;
-    }
-    final fallbackArg = fallback == null ? '' : ', $fallback';
-    return 'readGenCompatInt64ScalarAsInt(context, $readField.scalarRead!$fallbackArg)';
-  }
-
   bool _usesDirectCompatibleInt64ScalarRead(_GeneratedFieldSpec field) {
     if (!field.type.isDartCoreInt ||
         field.fieldType.nullable ||
         field.fieldType.ref ||
-        field.fieldType.dynamic == true) {
+        _isGeneratedDynamicField(field)) {
       return false;
     }
     return field.fieldType.typeId == TypeIds.int64 ||
@@ -1295,7 +1292,7 @@ GeneratedFieldType(
       if (_isNullable(type)) {
         return valueExpression;
       }
-      return '$valueExpression == null ? $nullExpression : $valueExpression';
+      return '$valueExpression ?? $nullExpression';
     }
     if (_isNullable(type)) {
       final nonNullableType = _withoutNullability(type);
@@ -1436,7 +1433,7 @@ GeneratedFieldType(
   bool _usesDirectGeneratedBasicFastPath(_GeneratedFieldSpec field) {
     if (field.fieldType.nullable ||
         field.fieldType.ref ||
-        field.fieldType.dynamic == true) {
+        _isGeneratedDynamicField(field)) {
       return false;
     }
     return _isPrimitiveTypeId(field.fieldType.typeId) ||
@@ -1508,7 +1505,7 @@ GeneratedFieldType(
   bool _usesDirectGeneratedDeclaredReadFastPath(_GeneratedFieldSpec field) {
     if (field.fieldType.nullable ||
         field.fieldType.ref ||
-        field.fieldType.dynamic == true) {
+        _isGeneratedDynamicField(field)) {
       return false;
     }
     final typeId = field.fieldType.typeId;
@@ -1518,7 +1515,7 @@ GeneratedFieldType(
   bool _usesDirectGeneratedStructFieldFastPath(_GeneratedFieldSpec field) {
     if (field.fieldType.nullable ||
         field.fieldType.ref ||
-        field.fieldType.dynamic == true) {
+        _isGeneratedDynamicField(field)) {
       return false;
     }
     if (!_isGeneratedStructType(field.type)) {
@@ -1536,7 +1533,7 @@ GeneratedFieldType(
   ) {
     if (field.fieldType.nullable ||
         field.fieldType.ref ||
-        field.fieldType.dynamic == true) {
+        _isGeneratedDynamicField(field)) {
       return false;
     }
     if (_isBoolList(field.type)) {
@@ -1558,7 +1555,7 @@ GeneratedFieldType(
   ) {
     if (field.fieldType.nullable ||
         field.fieldType.ref ||
-        field.fieldType.dynamic == true) {
+        _isGeneratedDynamicField(field)) {
       return false;
     }
     if (_isBoolList(field.type)) {
@@ -1569,7 +1566,7 @@ GeneratedFieldType(
       return false;
     }
     final elementFieldType = field.fieldType.arguments.single;
-    if (elementFieldType.ref || elementFieldType.dynamic == true) {
+    if (elementFieldType.ref || _isGeneratedDynamicType(elementFieldType)) {
       return false;
     }
     final elementType = (field.type as InterfaceType).typeArguments.single;
@@ -1583,8 +1580,14 @@ GeneratedFieldType(
     if (_usesDirectGeneratedTypedContainerWriteFastPath(field)) {
       return true;
     }
-    return field.fieldType.dynamic != true;
+    return !_isGeneratedDynamicField(field);
   }
+
+  bool _isGeneratedDynamicField(_GeneratedFieldSpec field) =>
+      _isGeneratedDynamicType(field.fieldType);
+
+  bool _isGeneratedDynamicType(_GeneratedFieldTypeSpec fieldType) =>
+      fieldType.dynamic == true || fieldType.typeId == TypeIds.unknown;
 
   String _directGeneratedTypedContainerWriteStatement(
     _GeneratedFieldSpec field,
@@ -2373,7 +2376,7 @@ GeneratedFieldType(
   ) {
     final value = 'field${index}Value';
     output.writeln('${indent}final $value = $valueExpression;');
-    if (field.fieldType.dynamic == true) {
+    if (_isGeneratedDynamicField(field)) {
       _writeGeneratedDynamicValue(output, field, value, indent);
       return;
     }
@@ -2421,7 +2424,9 @@ GeneratedFieldType(
       ..writeln(
         '${indent}if (!context.refWriter.writeRefOrNull(context.buffer, $valueExpression, trackRef: false)) {',
       )
-      ..writeln('$indent  context.writeNonRef($valueExpression as Object);')
+      ..writeln(
+        '$indent  context.writeNonRef(${_nonNullObjectExpression(field, valueExpression)});',
+      )
       ..writeln('$indent}');
   }
 
@@ -2501,9 +2506,23 @@ GeneratedFieldType(
       return 'null as $displayType';
     }
     if (fallbackExpression != null) {
+      if (_withoutNullability(type).isDartCoreObject) {
+        return '($fallbackExpression ?? (throw StateError(\'Received null for non-nullable $errorTarget.\')))';
+      }
       return '($fallbackExpression != null ? $fallbackExpression as $displayType : (throw StateError(\'Received null for non-nullable $errorTarget.\')))';
     }
     return '(throw StateError(\'Received null for non-nullable $errorTarget.\'))';
+  }
+
+  String _nonNullObjectExpression(
+    _GeneratedFieldSpec field,
+    String valueExpression,
+  ) {
+    if (_withoutNullability(field.type).isDartCoreObject &&
+        !_isNullable(field.type)) {
+      return valueExpression;
+    }
+    return '$valueExpression as Object';
   }
 
   _GeneratedFieldTypeSpec _nonNullableFieldType(
@@ -3703,7 +3722,8 @@ GeneratedFieldType(
   }
 
   bool _fieldTypeUsesNestedTypeDefinitions(_GeneratedFieldTypeSpec fieldType) {
-    if (fieldType.dynamic == true || TypeIds.isUserType(fieldType.typeId)) {
+    if (_isGeneratedDynamicType(fieldType) ||
+        TypeIds.isUserType(fieldType.typeId)) {
       return true;
     }
     for (final argument in fieldType.arguments) {

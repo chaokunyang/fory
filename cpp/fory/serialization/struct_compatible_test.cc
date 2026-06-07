@@ -261,6 +261,22 @@ struct CompatibleNestedArrayField {
                                       fory::T::array(fory::T::int32()))));
 };
 
+struct CompatibleUnsignedExactV1 {
+  uint32_t id = 0;
+  uint64_t count = 0;
+  std::string extra;
+
+  FORY_STRUCT(CompatibleUnsignedExactV1, (id, fory::F(1)), (count, fory::F(2)),
+              (extra, fory::F(3)));
+};
+
+struct CompatibleUnsignedExactV2 {
+  uint32_t id = 0;
+  uint64_t count = 0;
+
+  FORY_STRUCT(CompatibleUnsignedExactV2, (id, fory::F(1)), (count, fory::F(2)));
+};
+
 struct ScalarBoolField {
   bool value = false;
   FORY_STRUCT(ScalarBoolField, (value, fory::F(1)));
@@ -647,6 +663,25 @@ TEST(SchemaEvolutionTest, NestedListArraySchemaPairsAreNotMatched) {
 
   ASSERT_FALSE(decoded.ok());
   EXPECT_EQ(decoded.error().code(), ErrorCode::TypeError);
+}
+
+TEST(SchemaEvolutionTest, ChangedSchemaReadsExactUnsignedFields) {
+  auto writer = Fory::builder().compatible(true).xlang(true).build();
+  auto reader = Fory::builder().compatible(true).xlang(true).build();
+
+  constexpr uint32_t TYPE_ID = 1009;
+  ASSERT_TRUE(writer.register_struct<CompatibleUnsignedExactV1>(TYPE_ID).ok());
+  ASSERT_TRUE(reader.register_struct<CompatibleUnsignedExactV2>(TYPE_ID).ok());
+
+  CompatibleUnsignedExactV1 value{300u, 5000000000ull, "skip"};
+  auto bytes = writer.serialize(value);
+  ASSERT_TRUE(bytes.ok()) << bytes.error().to_string();
+  auto decoded = reader.deserialize<CompatibleUnsignedExactV2>(
+      bytes.value().data(), bytes.value().size());
+
+  ASSERT_TRUE(decoded.ok()) << decoded.error().to_string();
+  EXPECT_EQ(decoded.value().id, value.id);
+  EXPECT_EQ(decoded.value().count, value.count);
 }
 
 TEST(SchemaEvolutionTest, ScalarBoolString) {

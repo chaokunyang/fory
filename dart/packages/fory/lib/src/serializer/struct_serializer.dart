@@ -289,14 +289,6 @@ bool _compatibleFieldType(
   if (_sameFieldType(localType, remoteType)) {
     return true;
   }
-  if (_isStructWireType(localType.typeId) &&
-      _isStructWireType(remoteType.typeId) &&
-      localType.arguments.length == remoteType.arguments.length) {
-    return true;
-  }
-  if (topLevel && isCompatibleCollectionArrayTypePair(localType, remoteType)) {
-    return true;
-  }
   final scalarPair =
       isCompatibleScalarType(remoteType.typeId) &&
       isCompatibleScalarType(localType.typeId);
@@ -318,6 +310,18 @@ bool _compatibleFieldType(
           FieldInfo(name: '', identifier: '', id: null, fieldType: localType),
         ) !=
         null;
+  }
+  if (localType.nullable != remoteType.nullable ||
+      localType.ref != remoteType.ref) {
+    return false;
+  }
+  if (_isStructWireType(localType.typeId) &&
+      _isStructWireType(remoteType.typeId) &&
+      localType.arguments.length == remoteType.arguments.length) {
+    return true;
+  }
+  if (topLevel && isCompatibleCollectionArrayTypePair(localType, remoteType)) {
+    return true;
   }
   final sameWireFamily =
       localType.typeId == remoteType.typeId ||

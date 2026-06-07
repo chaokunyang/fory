@@ -136,6 +136,19 @@ class CompatibleNullableListEnvelope {
 }
 
 @ForyStruct()
+class CompatibleRootNullableListEnvelope {
+  CompatibleRootNullableListEnvelope();
+
+  @ForyField(
+    type: ListType(
+      element: Int32Type(encoding: Encoding.fixed),
+      nullable: true,
+    ),
+  )
+  List<int>? values = <int>[];
+}
+
+@ForyStruct()
 class CompatibleStringListEnvelope {
   CompatibleStringListEnvelope();
 
@@ -885,6 +898,36 @@ void main() {
       },
     );
 
+    test('rejects compatible nullable list field into dense array field', () {
+      final writer = Fory();
+      final reader = Fory();
+      ScalarAndTypedArraySerializerTestForyModule.register(
+        writer,
+        CompatibleRootNullableListEnvelope,
+        name: 'test.CompatibleRootNullableListArrayEnvelope',
+      );
+      ScalarAndTypedArraySerializerTestForyModule.register(
+        reader,
+        CompatibleArrayEnvelope,
+        name: 'test.CompatibleRootNullableListArrayEnvelope',
+      );
+
+      final bytes = writer.serialize(
+        CompatibleRootNullableListEnvelope()..values = <int>[1, 2, 3],
+      );
+
+      expect(
+        () => reader.deserialize<CompatibleArrayEnvelope>(bytes),
+        throwsA(
+          isA<StateError>().having(
+            (error) => error.toString(),
+            'message',
+            contains('unsupported list/array schema mismatch'),
+          ),
+        ),
+      );
+    });
+
     test(
       'rejects incompatible compatible list and dense array element fields',
       () {
@@ -1240,6 +1283,11 @@ void main() {
         CompatibleScalarDecimalEnvelope,
         CompatibleScalarInt64Envelope,
         CompatibleScalarDecimalEnvelope()..value = Decimal(BigInt.one << 63, 0),
+      );
+      _expectCompatibleScalarError(
+        CompatibleScalarUint64Envelope,
+        CompatibleScalarInt64Envelope,
+        CompatibleScalarUint64Envelope()..value = _uint64HighBit,
       );
       _expectCompatibleScalarError(
         CompatibleScalarDecimalEnvelope,

@@ -150,12 +150,13 @@ segmentation is normal input and is not a security issue by itself.
 
 ## Skip Semantics
 
-Skipping unknown or incompatible data should avoid materializing values that the
-caller will discard.
+Skipping unknown or incompatible data is classified by concrete impact, not by
+whether the runtime materializes a temporary value.
 
-For list, set, map, string, binary, and dense-array fields, a skip path should
-consume the encoded contents directly when the format gives enough information
-to do so. It should not build a full container only to drop it afterward.
+Directly consuming encoded contents is useful when it is simple and owned by the
+current runtime path. It is not a security requirement for complex fields such
+as lists, sets, and maps. A runtime may materialize a value and discard it when
+that preserves the existing serializer ownership model.
 
 For extension, dynamic, or user-owned types, the owning runtime may not always
 have enough information to skip without invoking a registered serializer. In
@@ -163,8 +164,8 @@ that case, classify the behavior by concrete impact:
 
 - Resource leak, retained state, no-progress loop, or policy bypass is
   security-relevant.
-- Bounded materialization followed by an error or discard is a hardening concern
-  only when it creates meaningful memory or CPU pressure.
+- Bounded materialization followed by an error or discard is allowed unless it
+  creates meaningful memory or CPU pressure.
 - Pure strictness about whether a skipped value used one specific encoding shape
   is not a security issue.
 

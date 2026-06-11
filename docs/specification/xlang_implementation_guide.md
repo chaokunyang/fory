@@ -290,11 +290,11 @@ primitive-array element counts, compression modes, or collection capacity
 policy.
 
 For large byte-counted values, implementations in every stream-capable runtime,
-including C++, Java, Python, and Go, should use an available-first bounded
-result growth policy. This applies to binary values and to primitive wire arrays
-whose encoded body is measured in bytes. For multi-byte primitive wire arrays,
-compare the encoded byte count, not only the logical element count, with the
-currently available bytes.
+including C++, Java, Python, and Go, should use an available-first readability
+check policy. This applies to binary values and to primitive wire arrays whose
+encoded body is measured in bytes. For multi-byte primitive wire arrays, compare
+the encoded byte count, not only the logical element count, with the currently
+available bytes.
 
 1. Validate the encoded byte count in the serializer. For fixed-width primitive
    arrays, check overflow and element alignment before allocation, such as
@@ -305,136 +305,78 @@ currently available bytes.
    copy or decode directly from the buffer. Buffer-backed inputs normally stay
    entirely on this path. Stream-backed inputs also use this path when the
    stream buffer already holds the requested body.
-4. If `available < wireByteCount`, read only bounded chunks such as
-   `min(remainingWireBytes, 8192)` until the unread suffix is already available
-   in the current read buffer.
-5. Once `remainingWireBytes <= available`, allocate or resize the result to the
-   final logical size and finish with one direct buffer copy or decode into the
-   final result range.
+4. If `wireByteCount > available`, call a byte-owner operation such as
+   `checkReadableBytes(wireByteCount)`. Buffer-only implementations should
+   report truncated input before allocating the final value. Stream-backed
+   implementations should fill the read buffer until the requested encoded body
+   is readable or an input error is recorded.
+5. After readability is proven, allocate the final value once and copy or decode
+   from the read buffer into the final result.
 
-Buffer-only implementations follow the same first branch. If
-`wireByteCount > available` and no stream can supply more bytes, they should
-report truncated input before allocating the full final value.
+`checkReadableBytes` is not an `ensureCapacity(wireByteCount)` operation. In
+stream mode it may end with the byte owner holding the full encoded body in its
+read buffer, but it must grow that buffer as bytes are successfully read from
+the stream. It must not reserve the attacker-declared length before input bytes
+prove that length exists. The stream slow path may pay one extra intermediate
+buffer copy; this is preferable to serializer-local chunk accumulation and
+repeated final-container growth.
 
-Resizable result containers, such as C++ vectors, Go slices, or Python
-growable byte/array-like containers, may grow the final result itself:
+For primitive wire arrays:
 
-```text
-wireByteCount = readVarUint32()
-elementWidth = primitiveWireElementWidth(kind)
-validate wireByteCount and element alignment
-elementCount = wireByteCount / elementWidth
-available = ctx.availableBytes()
+- Compare and prove the encoded wire byte count, not only the logical element
+  count.
+- Keep compression, bit-packing, byte-order conversion, and other primitive
+  array encoding semantics in the serializer. `checkReadableBytes` only proves
+  that the encoded bytes are present.
+- For compressed or transformed bodies, the serializer must still validate the
+  decoded length and encoding-specific metadata before allocating or returning
+  the final value.
 
-if wireByteCount <= available:
-  result = allocatePrimitiveResult(elementCount)
-  ctx.readOrDecodePrimitiveBytes(result, 0, wireByteCount)
-  return result
-
-remaining = wireByteCount
-chunk = boundedAlignedChunk(remaining, elementWidth, 8192)
-result = allocatePrimitiveResult(chunk / elementWidth)
-ctx.readOrDecodePrimitiveBytes(result, 0, chunk)
-remaining -= chunk
-written = chunk
-
-while remaining > ctx.availableBytes():
-  chunk = boundedAlignedChunk(remaining, elementWidth, 8192)
-  result.resize((written + chunk) / elementWidth)
-  ctx.readOrDecodePrimitiveBytes(result, written / elementWidth, chunk)
-  remaining -= chunk
-  written += chunk
-
-result.resize(elementCount)
-ctx.readOrDecodePrimitiveBytes(result, written / elementWidth, remaining)
-return result
-```
-
-`boundedAlignedChunk` returns a chunk measured in encoded wire bytes, rounded to
-whole primitive elements for fixed-width primitive arrays. When the remaining
-encoded body is smaller than the bound, it returns the remaining encoded byte
-count.
-
-Fixed-size result containers, such as Java primitive arrays or non-resizable
-byte arrays, cannot resize the final result. They should use the same
-availability rule, but keep bounded chunks on the stream slow path and allocate
-the final array only after the already-read chunks plus the currently available
-suffix prove the declared body exists:
+The common serializer shape is:
 
 ```text
 wireByteCount = readVarUint32()
 elementWidth = primitiveWireElementWidth(kind)
 validate wireByteCount and element alignment
 elementCount = wireByteCount / elementWidth
-available = ctx.availableBytes()
 
-if wireByteCount <= available:
-  result = allocatePrimitiveResult(elementCount)
-  ctx.readOrDecodePrimitiveBytes(result, 0, wireByteCount)
-  return result
-
-chunks = []
-remaining = wireByteCount
-readBytes = 0
-
-while remaining > ctx.availableBytes():
-  chunk = boundedAlignedChunk(remaining, elementWidth, 8192)
-  chunkResult = allocatePrimitiveChunk(chunk / elementWidth)
-  ctx.readOrDecodePrimitiveBytes(chunkResult, 0, chunk)
-  chunks.add(chunkResult)
-  remaining -= chunk
-  readBytes += chunk
+if wireByteCount > ctx.availableBytes():
+  ctx.checkReadableBytes(wireByteCount)
 
 result = allocatePrimitiveResult(elementCount)
-copyPrimitiveChunks(chunks, result)
-ctx.readOrDecodePrimitiveBytes(result, readBytes / elementWidth, remaining)
+ctx.readOrDecodePrimitiveBytes(result, 0, wireByteCount)
 return result
 ```
 
 Byte values are the `elementWidth == 1` specialization of the same policy. In
-that case the fast path is:
+that case the serializer shape is:
 
 ```text
 byteCount = readVarUint32()
-available = ctx.availableBytes()
 
-if byteCount <= available:
-  result = allocateBytes(byteCount)
-  ctx.readExactBytes(result.data, byteCount)
-  return result
+if byteCount > ctx.availableBytes():
+  ctx.checkReadableBytes(byteCount)
+
+result = allocateBytes(byteCount)
+ctx.readExactBytes(result.data, byteCount)
+return result
 ```
 
-For primitive array bodies that are compressed, bit-packed, byte-order
-converted outside the final array, or otherwise not a direct byte target, the
-serializer still applies the same availability rule to the encoded wire byte
-count. The chunk operation may decode into the result instead of copying raw
-bytes, but it must not materialize the full encoded body before enough bytes are
-available or read.
+This policy avoids three inefficient implementation shapes:
 
-The byte owner must not grow an intermediate stream buffer to the declared body
-length just to prove readability. When the complete body is not already
-available, result allocation should grow with bytes that are available or
-successfully read, rather than jumping to the declared final size.
-
-This policy avoids three inefficient or unsafe implementation shapes:
-
-- staging the full declared byte count in the stream buffer before copying to
-  the final value
-- allocating the complete final contiguous container before enough bytes are
-  available or have been read
-- adding a scratch buffer for primitive dense arrays when bytes can be read
-  directly into the final target
+- allocating the complete final contiguous value before the encoded body is
+  readable
+- growing or repeatedly copying the final result container on stream slow paths
+- adding serializer-local chunk buffers when the byte owner can prove
+  readability once and expose a normal buffered read
 
 Scratch buffers remain appropriate when the target representation is not a
 direct byte target, such as string transcoding, compression, byte-order
 conversion that is not performed in place, bit-packed values, or runtimes whose
 stream API cannot read into a caller-provided target.
 
-For fixed-width primitive arrays, chunk sizing and result resizing must preserve
-valid element storage and overflow checks. The bounded chunk size must be
-element-aligned before resizing the typed array. The partially read result must
-not be returned to callers; it becomes visible only after the exact byte count
-has been read successfully.
+For fixed-width primitive arrays, the final result must not become visible to
+callers until the exact encoded byte count has been read successfully.
 
 Exact skip follows the same ownership rule. It should consume any available
 buffered prefix first, then skip or drop the remaining stream bytes in bounded

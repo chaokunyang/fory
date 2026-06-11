@@ -121,11 +121,13 @@ For buffer-backed input:
 For stream-backed input:
 
 - Reading or skipping a large byte region is the proof that the bytes exist.
-- Stream readers should use exact or chunked reads and skips for large regions.
-- A stream-backed buffer must not grow to an attacker-declared size merely to
-  prove availability.
-- A truncated stream should allocate at most the data actually received plus the
-  current bounded chunk.
+- Stream readers may use exact reads, exact skips, or byte-owner readability
+  checks for large regions.
+- A stream-backed buffer may hold the full requested encoded body after that
+  body has been read from the stream. It must not reserve the attacker-declared
+  length before input bytes prove that length exists.
+- A truncated stream should fail before allocating the final deserialized value
+  and should allocate only for bytes actually read plus bounded spare capacity.
 
 The byte owner should stay byte-oriented. Buffer, reader, or read-context APIs
 may expose byte read and byte skip operations, but string decoding, decimal

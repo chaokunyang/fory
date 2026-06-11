@@ -289,28 +289,110 @@ These operations are byte operations only. They must not decode strings,
 primitive-array element counts, compression modes, or collection capacity
 policy.
 
-For large byte-counted values, implementations should use an available-first
-bounded result growth policy. The decision point is the number of bytes already
-available in the current read buffer:
+For large byte-counted values, implementations in every stream-capable runtime,
+including C++, Java, Python, and Go, should use an available-first bounded
+result growth policy. This applies to binary values and to primitive wire arrays
+whose encoded body is measured in bytes. For multi-byte primitive wire arrays,
+compare the encoded byte count, not only the logical element count, with the
+currently available bytes.
 
 1. Validate the encoded byte count in the serializer. For fixed-width primitive
    arrays, check overflow and element alignment before allocation, such as
-   `byteCount % elementByteWidth == 0`.
+   `wireByteCount % elementByteWidth == 0`, then derive the logical element
+   count from the encoded byte count.
 2. Check the bytes already available in the current read buffer.
-3. If `byteCount <= available`, allocate the complete final value once and copy
-   directly from the buffer. Buffer-backed inputs normally stay entirely on this
-   path. Stream-backed inputs also use this path when the stream buffer already
-   holds the requested body.
-4. If `available < byteCount`, allocate only a bounded first chunk such as
-   `min(byteCount, 8192)`. Read exactly that chunk into the allocated result
-   range, consuming any buffered prefix and then reading directly from the
-   stream into the result range if needed.
-5. Repeat bounded chunk reads while the remaining byte count is still larger
-   than the bytes currently available in the read buffer.
-6. Once `remaining <= available`, resize the result to the final byte count and
-   finish with one direct buffer copy into the final result range.
+3. If `wireByteCount <= available`, allocate the complete final value once and
+   copy or decode directly from the buffer. Buffer-backed inputs normally stay
+   entirely on this path. Stream-backed inputs also use this path when the
+   stream buffer already holds the requested body.
+4. If `available < wireByteCount`, read only bounded chunks such as
+   `min(remainingWireBytes, 8192)` until the unread suffix is already available
+   in the current read buffer.
+5. Once `remainingWireBytes <= available`, allocate or resize the result to the
+   final logical size and finish with one direct buffer copy or decode into the
+   final result range.
 
-In pseudocode for byte values:
+Buffer-only implementations follow the same first branch. If
+`wireByteCount > available` and no stream can supply more bytes, they should
+report truncated input before allocating the full final value.
+
+Resizable result containers, such as C++ vectors, Go slices, or Python
+growable byte/array-like containers, may grow the final result itself:
+
+```text
+wireByteCount = readVarUint32()
+elementWidth = primitiveWireElementWidth(kind)
+validate wireByteCount and element alignment
+elementCount = wireByteCount / elementWidth
+available = ctx.availableBytes()
+
+if wireByteCount <= available:
+  result = allocatePrimitiveResult(elementCount)
+  ctx.readOrDecodePrimitiveBytes(result, 0, wireByteCount)
+  return result
+
+remaining = wireByteCount
+chunk = boundedAlignedChunk(remaining, elementWidth, 8192)
+result = allocatePrimitiveResult(chunk / elementWidth)
+ctx.readOrDecodePrimitiveBytes(result, 0, chunk)
+remaining -= chunk
+written = chunk
+
+while remaining > ctx.availableBytes():
+  chunk = boundedAlignedChunk(remaining, elementWidth, 8192)
+  result.resize((written + chunk) / elementWidth)
+  ctx.readOrDecodePrimitiveBytes(result, written / elementWidth, chunk)
+  remaining -= chunk
+  written += chunk
+
+result.resize(elementCount)
+ctx.readOrDecodePrimitiveBytes(result, written / elementWidth, remaining)
+return result
+```
+
+`boundedAlignedChunk` returns a chunk measured in encoded wire bytes, rounded to
+whole primitive elements for fixed-width primitive arrays. When the remaining
+encoded body is smaller than the bound, it returns the remaining encoded byte
+count.
+
+Fixed-size result containers, such as Java primitive arrays or non-resizable
+byte arrays, cannot resize the final result. They should use the same
+availability rule, but keep bounded chunks on the stream slow path and allocate
+the final array only after the already-read chunks plus the currently available
+suffix prove the declared body exists:
+
+```text
+wireByteCount = readVarUint32()
+elementWidth = primitiveWireElementWidth(kind)
+validate wireByteCount and element alignment
+elementCount = wireByteCount / elementWidth
+available = ctx.availableBytes()
+
+if wireByteCount <= available:
+  result = allocatePrimitiveResult(elementCount)
+  ctx.readOrDecodePrimitiveBytes(result, 0, wireByteCount)
+  return result
+
+chunks = []
+remaining = wireByteCount
+readBytes = 0
+
+while remaining > ctx.availableBytes():
+  chunk = boundedAlignedChunk(remaining, elementWidth, 8192)
+  chunkResult = allocatePrimitiveChunk(chunk / elementWidth)
+  ctx.readOrDecodePrimitiveBytes(chunkResult, 0, chunk)
+  chunks.add(chunkResult)
+  remaining -= chunk
+  readBytes += chunk
+
+result = allocatePrimitiveResult(elementCount)
+copyPrimitiveChunks(chunks, result)
+ctx.readOrDecodePrimitiveBytes(result, readBytes / elementWidth, remaining)
+return result
+```
+
+Byte values are the `elementWidth == 1` specialization of the same policy. In
+that case the fast path is:
 
 ```text
 byteCount = readVarUint32()
@@ -320,25 +402,14 @@ if byteCount <= available:
   result = allocateBytes(byteCount)
   ctx.readExactBytes(result.data, byteCount)
   return result
-
-remaining = byteCount
-chunk = min(remaining, 8192)
-result = allocateBytes(chunk)
-ctx.readExactBytes(result.data, chunk)
-remaining -= chunk
-written = chunk
-
-while remaining > ctx.availableBytes():
-  chunk = min(remaining, 8192)
-  result.resize(written + chunk)
-  ctx.readExactBytes(result.data + written, chunk)
-  remaining -= chunk
-  written += chunk
-
-result.resize(byteCount)
-ctx.readExactBytes(result.data + written, remaining)
-return result
 ```
+
+For primitive array bodies that are compressed, bit-packed, byte-order
+converted outside the final array, or otherwise not a direct byte target, the
+serializer still applies the same availability rule to the encoded wire byte
+count. The chunk operation may decode into the result instead of copying raw
+bytes, but it must not materialize the full encoded body before enough bytes are
+available or read.
 
 The byte owner must not grow an intermediate stream buffer to the declared body
 length just to prove readability. When the complete body is not already

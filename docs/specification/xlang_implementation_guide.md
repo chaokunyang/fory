@@ -273,45 +273,39 @@ complex payloads delegate to the resolved serializer.
 
 ### Stream And Buffer Byte Reads
 
-Stream-capable implementations must keep byte availability in the byte owner
-layer while keeping string, binary, primitive-array, compression, and collection
-semantics in serializers.
+Implementations must keep byte availability in the byte owner layer while
+keeping string, binary, primitive-array, compression, and collection semantics in
+serializers.
 
-Read contexts may expose internal exact byte operations such as:
+The required byte-owner primitive for allocation-before-read checks is a
+readability check such as `checkReadableBytes(byteCount)`. Implementations do
+not need additional generic read-context methods for this design. After the
+readability check succeeds, serializers use their existing local buffer read,
+copy, or decode paths.
 
-```text
-readExact(target, byteCount)
-skipExact(byteCount)
-readBytes(byteCount)
-```
-
-These operations are byte operations only. They must not decode strings,
+The readability check is a byte operation only. It must not decode strings,
 primitive-array element counts, compression modes, or collection capacity
 policy.
 
-For large byte-counted values, implementations in every stream-capable runtime,
-including C++, Java, Python, and Go, should use an available-first readability
-check policy. This applies to binary values and to primitive wire arrays whose
-encoded body is measured in bytes. For multi-byte primitive wire arrays, compare
-the encoded byte count, not only the logical element count, with the currently
-available bytes.
+For large byte-counted values, every implementation should call the byte-owner
+readability check before allocating a variable-length result. This applies to
+binary values, strings, decimal or metadata bodies, and primitive wire arrays
+whose encoded body is measured in bytes. For multi-byte primitive wire arrays,
+compare the encoded byte count, not only the logical element count, with the
+readable bytes.
 
 1. Validate the encoded byte count in the serializer. For fixed-width primitive
    arrays, check overflow and element alignment before allocation, such as
    `wireByteCount % elementByteWidth == 0`, then derive the logical element
    count from the encoded byte count.
-2. Check the bytes already available in the current read buffer.
-3. If `wireByteCount <= available`, allocate the complete final value once and
-   copy or decode directly from the buffer. Buffer-backed inputs normally stay
-   entirely on this path. Stream-backed inputs also use this path when the
-   stream buffer already holds the requested body.
-4. If `wireByteCount > available`, call a byte-owner operation such as
-   `checkReadableBytes(wireByteCount)`. Buffer-only implementations should
-   report truncated input before allocating the final value. Stream-backed
-   implementations should fill the read buffer until the requested encoded body
-   is readable or an input error is recorded.
-5. After readability is proven, allocate the final value once and copy or decode
-   from the read buffer into the final result.
+2. Call `checkReadableBytes(wireByteCount)` unconditionally before allocating
+   the variable-length result. Buffer-backed inputs normally return from this
+   check with only a bounds comparison. Stream-backed inputs use the same call;
+   the byte owner handles the fast path when enough bytes are already buffered
+   and otherwise fills the read buffer until the requested encoded body is
+   readable or an input error is recorded.
+3. After readability is proven, allocate the final value once and copy or decode
+   from the current readable buffer into the final result.
 
 `checkReadableBytes` is not an `ensureCapacity(wireByteCount)` operation. In
 stream mode it may end with the byte owner holding the full encoded body in its
@@ -320,6 +314,11 @@ the stream. It must not reserve the attacker-declared length before input bytes
 prove that length exists. The stream slow path may pay one extra intermediate
 buffer copy; this is preferable to serializer-local chunk accumulation and
 repeated final-container growth.
+
+The serializer should not duplicate the byte owner's fast-path branch by testing
+`availableBytes()` before calling `checkReadableBytes`. Keeping that branch in
+the byte owner gives every language the same correctness rule and keeps
+serializer hot paths focused on their own wire semantics.
 
 For primitive wire arrays:
 
@@ -340,11 +339,10 @@ elementWidth = primitiveWireElementWidth(kind)
 validate wireByteCount and element alignment
 elementCount = wireByteCount / elementWidth
 
-if wireByteCount > ctx.availableBytes():
-  ctx.checkReadableBytes(wireByteCount)
-
+ctx.checkReadableBytes(wireByteCount)
 result = allocatePrimitiveResult(elementCount)
-ctx.readOrDecodePrimitiveBytes(result, 0, wireByteCount)
+copy or decode wireByteCount bytes from the current readable buffer into result
+advance the reader index by wireByteCount
 return result
 ```
 
@@ -354,11 +352,10 @@ that case the serializer shape is:
 ```text
 byteCount = readVarUint32()
 
-if byteCount > ctx.availableBytes():
-  ctx.checkReadableBytes(byteCount)
-
+ctx.checkReadableBytes(byteCount)
 result = allocateBytes(byteCount)
-ctx.readExactBytes(result.data, byteCount)
+copy byteCount bytes from the current readable buffer into result
+advance the reader index by byteCount
 return result
 ```
 
@@ -378,9 +375,9 @@ stream API cannot read into a caller-provided target.
 For fixed-width primitive arrays, the final result must not become visible to
 callers until the exact encoded byte count has been read successfully.
 
-Exact skip follows the same ownership rule. It should consume any available
-buffered prefix first, then skip or drop the remaining stream bytes in bounded
-steps without growing the read buffer to the full requested length.
+Skip paths do not need to materialize skipped values. Existing byte-skip
+operations should consume any available buffered prefix first, then skip or drop
+remaining stream bytes in bounded steps.
 
 ### Nested reads use `ReadContext`
 

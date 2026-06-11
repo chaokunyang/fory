@@ -110,9 +110,10 @@ the required bytes are available or have been read exactly.
 
 For buffer-backed input:
 
-- Fixed-size binary values and primitive dense arrays should compare the
-  required encoded byte size with remaining readable bytes before allocating the
-  destination.
+- Fixed-size binary values and primitive dense arrays should call the byte
+  owner's readability check for the required encoded byte size before allocating
+  the destination. For buffer-backed input this is normally a remaining-byte
+  comparison.
 - Multi-byte element arrays should compute the required byte size with overflow
   checks before allocation.
 - Container readers should avoid eager capacity proportional to untrusted
@@ -121,8 +122,9 @@ For buffer-backed input:
 For stream-backed input:
 
 - Reading or skipping a large byte region is the proof that the bytes exist.
-- Stream readers may use exact reads, exact skips, or byte-owner readability
-  checks for large regions.
+- Byte-counted variable-length result allocation should use the byte owner's
+  readability check before allocation. Skip paths may use bounded skip without
+  materializing the skipped value.
 - A stream-backed buffer may hold the full requested encoded body after that
   body has been read from the stream. It must not reserve the attacker-declared
   length before input bytes prove that length exists.

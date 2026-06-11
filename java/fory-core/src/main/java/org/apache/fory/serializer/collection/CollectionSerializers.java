@@ -87,18 +87,13 @@ public class CollectionSerializers {
     }
   }
 
-  private static void throwBinarySizeLimitExceeded(long size, int maxBinarySize) {
-    throw new DeserializationException(
-        "Binary payload size " + size + " exceeds max binary size " + maxBinarySize);
-  }
-
   private static void throwNegativeBinarySize(int size) {
-    throw new DeserializationException("Binary payload size must be non-negative: " + size);
+    throw new DeserializationException("Binary body size must be non-negative: " + size);
   }
 
   private static void throwUnalignedBinarySize(int size, int elemSize) {
     throw new DeserializationException(
-        "Binary payload size " + size + " is not aligned to element size " + elemSize);
+        "Binary body size " + size + " is not aligned to element size " + elemSize);
   }
 
   private static void checkBoundedQueueCapacity(Config config, int numElements, int capacity) {
@@ -126,7 +121,7 @@ public class CollectionSerializers {
         "Serializing or copying "
             + type.getName()
             + " requires access to its exact capacity field. This runtime can deserialize existing "
-            + "payloads for this type, but cannot serialize or copy it without JDK concurrent "
+            + "wire bodies for this type, but cannot serialize or copy it without JDK concurrent "
             + "field access.");
   }
 
@@ -349,7 +344,7 @@ public class CollectionSerializers {
         int numElements = readCollectionSize(readContext.getBuffer());
         if (numElements != 0) {
           throw new DeserializationException(
-              "Empty list payload must have zero elements but got " + numElements);
+              "Empty list body must have zero elements but got " + numElements);
         }
       }
       return Collections.EMPTY_LIST;
@@ -622,7 +617,7 @@ public class CollectionSerializers {
       } else {
         if (!MemoryUtils.JDK_COLLECTION_FIELD_ACCESS) {
           throw new UnsupportedOperationException(
-              "This runtime cannot read SetFromMap backing-map payloads that require hidden JDK field "
+              "This runtime cannot read SetFromMap backing-map bodies that require hidden JDK field "
                   + "restoration");
         }
         Map<?, Boolean> map = (Map<?, Boolean>) mapSerializer.read(readContext);
@@ -631,7 +626,7 @@ public class CollectionSerializers {
           SetFromMapAccess.restore(set, map);
         } catch (Throwable e) {
           throw new UnsupportedOperationException(
-              "This runtime cannot restore SetFromMap backing-map payloads through final JDK fields",
+              "This runtime cannot restore SetFromMap backing-map bodies through final JDK fields",
               e);
         }
         setNumElements(0);
@@ -813,11 +808,9 @@ public class CollectionSerializers {
   }
 
   public static class BitSetSerializer extends Serializer<BitSet> {
-    private final int maxBinarySize;
 
     public BitSetSerializer(TypeResolver typeResolver, Class<BitSet> type) {
       super(typeResolver.getConfig(), type);
-      maxBinarySize = typeResolver.getConfig().maxBinarySize();
     }
 
     @Override
@@ -842,11 +835,9 @@ public class CollectionSerializers {
       if ((size & 7) != 0) {
         throwUnalignedBinarySize(size, 8);
       }
-      if (size > maxBinarySize) {
-        throwBinarySizeLimitExceeded(size, maxBinarySize);
-      }
+      buffer.checkReadableBytes(size);
       long[] values = new long[size >>> 3];
-      buffer.readInt64ArrayPayload(values, size);
+      buffer.readInt64ArrayBytes(values, size);
       return BitSet.valueOf(values);
     }
   }

@@ -64,7 +64,6 @@ public class Config implements Serializable {
   private final boolean serializeEnumByName;
   private final int bufferSizeLimitBytes;
   private final int maxDepth;
-  private final int maxBinarySize;
   private final int maxCollectionSize;
   private final float mapRefLoadFactor;
   private final boolean forVirtualThread;
@@ -108,7 +107,6 @@ public class Config implements Serializable {
     serializeEnumByName = builder.serializeEnumByName;
     bufferSizeLimitBytes = builder.bufferSizeLimitBytes;
     maxDepth = builder.maxDepth;
-    maxBinarySize = builder.maxBinarySize;
     maxCollectionSize = builder.maxCollectionSize;
     mapRefLoadFactor = builder.mapRefLoadFactor;
     forVirtualThread = builder.forVirtualThread;
@@ -296,11 +294,6 @@ public class Config implements Serializable {
     return maxDepth;
   }
 
-  /** Returns max binary payload size for attacker-controlled binary and primitive-array lengths. */
-  public int maxBinarySize() {
-    return maxBinarySize;
-  }
-
   /** Returns max collection allocation size for attacker-controlled collection lengths. */
   public int maxCollectionSize() {
     return maxCollectionSize;
@@ -340,7 +333,6 @@ public class Config implements Serializable {
         && compressIntArray == config.compressIntArray
         && compressLongArray == config.compressLongArray
         && bufferSizeLimitBytes == config.bufferSizeLimitBytes
-        && maxBinarySize == config.maxBinarySize
         && maxCollectionSize == config.maxCollectionSize
         && requireClassRegistration == config.requireClassRegistration
         && suppressClassRegistrationWarnings == config.suppressClassRegistrationWarnings
@@ -380,7 +372,6 @@ public class Config implements Serializable {
         compressIntArray,
         compressLongArray,
         bufferSizeLimitBytes,
-        maxBinarySize,
         maxCollectionSize,
         requireClassRegistration,
         suppressClassRegistrationWarnings,

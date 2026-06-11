@@ -133,6 +133,7 @@ public class SerializedLambdaSerializer extends Serializer {
     if (capturedArgCount < 0 || capturedArgCount > maxCollectionSize) {
       throwInvalidCapturedArgCount(capturedArgCount);
     }
+    buffer.checkReadableBytes(capturedArgCount);
     Object[] capturedArgs = new Object[capturedArgCount];
     for (int i = 0; i < capturedArgCount; i++) {
       capturedArgs[i] = readContext.readRef();

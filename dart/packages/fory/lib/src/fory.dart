@@ -58,14 +58,12 @@ final class Fory {
     bool checkStructVersion = true,
     int maxDepth = Config.defaultMaxDepth,
     int maxCollectionSize = Config.defaultMaxCollectionSize,
-    int maxBinarySize = Config.defaultMaxBinarySize,
   }) {
     final config = Config(
       compatible: compatible,
       checkStructVersion: checkStructVersion,
       maxDepth: maxDepth,
       maxCollectionSize: maxCollectionSize,
-      maxBinarySize: maxBinarySize,
     );
     _readBuffer = Buffer();
     _writeBuffer = Buffer();

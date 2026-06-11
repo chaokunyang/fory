@@ -90,14 +90,6 @@ Maximum number of elements accepted in any single list, set, or map field. Preve
 final fory = Fory(maxCollectionSize: 100000);
 ```
 
-### `maxBinarySize`
-
-Maximum number of bytes accepted for any single binary blob field.
-
-```dart
-final fory = Fory(maxBinarySize: 8 * 1024 * 1024);
-```
-
 ## Defaults
 
 | Option               | Default   |
@@ -106,7 +98,6 @@ final fory = Fory(maxBinarySize: 8 * 1024 * 1024);
 | `checkStructVersion` | `false`   |
 | `maxDepth`           | 256       |
 | `maxCollectionSize`  | 1 048 576 |
-| `maxBinarySize`      | 64 MiB    |
 
 ## Xlang Notes
 
@@ -122,7 +113,7 @@ Security-related configuration:
 
 - Register only the expected generated models before deserializing untrusted payloads.
 - Use `checkStructVersion: true` with `compatible: false` for intentional same-schema payloads.
-- Set `maxDepth`, `maxCollectionSize`, and `maxBinarySize` to reject unexpectedly large payloads.
+- Set `maxDepth` and `maxCollectionSize` to reject unexpectedly deep or broad payload shapes.
 - Prefer generated schemas and explicit field metadata over broad dynamic fields for untrusted input.
 
 ## Related Topics

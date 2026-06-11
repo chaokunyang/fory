@@ -121,12 +121,6 @@ public:
   /// Build a thread-safe Fory instance (uses context pools).
   ThreadSafeFory build_thread_safe();
 
-  /// Set the maximum allowed size for binary data in bytes.
-  inline ForyBuilder &max_binary_size(uint32_t size) {
-    config_.max_binary_size = size;
-    return *this;
-  }
-
   /// Set the maximum allowed number of elements in a collection or entries in a
   /// map.
   inline ForyBuilder &max_collection_size(uint32_t size) {

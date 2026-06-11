@@ -124,17 +124,15 @@ Keep the same registration identity on every peer that exchanges the type.
 final fory = Fory(
   maxDepth: 256,
   maxCollectionSize: 1 << 20,
-  maxBinarySize: 64 * 1024 * 1024,
 );
 ```
 
-| Option               | Default    | Description                                             |
-| -------------------- | ---------- | ------------------------------------------------------- |
-| `compatible`         | `true`     | Enables compatible struct encoding for schema evolution |
-| `checkStructVersion` | `false`    | Validates struct version for same-schema payloads       |
-| `maxDepth`           | `256`      | Maximum nesting depth per operation                     |
-| `maxCollectionSize`  | `1 << 20`  | Maximum collection and map payload size                 |
-| `maxBinarySize`      | `64 << 20` | Maximum binary payload size                             |
+| Option               | Default   | Description                                             |
+| -------------------- | --------- | ------------------------------------------------------- |
+| `compatible`         | `true`    | Enables compatible struct encoding for schema evolution |
+| `checkStructVersion` | `false`   | Validates struct version for same-schema payloads       |
+| `maxDepth`           | `256`     | Maximum nesting depth per operation                     |
+| `maxCollectionSize`  | `1 << 20` | Maximum collection and map payload size                 |
 
 ## Reference Tracking
 

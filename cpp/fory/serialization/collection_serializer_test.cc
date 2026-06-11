@@ -643,27 +643,6 @@ TEST(CollectionSerializerTest, MaxCollectionSizeNativeGuardrail) {
                   "exceeds max_collection_size") != std::string::npos);
 }
 
-// Test max_binary_size using primitive numbers
-TEST(CollectionSerializerTest, MaxBinarySizeNativeGuardrail) {
-  auto fory = Fory::builder()
-                  .xlang(false)
-                  .max_binary_size(10)
-                  .compatible(false)
-                  .build();
-
-  std::vector<int32_t> large_data = {1, 2, 3, 4, 5};
-
-  auto bytes_result = fory.serialize(large_data);
-  ASSERT_TRUE(bytes_result.ok());
-
-  auto deserialize_result = fory.deserialize<std::vector<int32_t>>(
-      bytes_result->data(), bytes_result->size());
-
-  ASSERT_FALSE(deserialize_result.ok());
-  EXPECT_TRUE(deserialize_result.error().message().find(
-                  "exceeds max_binary_size") != std::string::npos);
-}
-
 } // namespace
 } // namespace serialization
 } // namespace fory

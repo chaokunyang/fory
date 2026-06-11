@@ -310,7 +310,7 @@ internal class UnionSerializerSourceWriter(private val union: KotlinSourceUnion)
     }
     val denseUnsignedArrayRead = denseUnsignedArrayRead(type)
     if (denseUnsignedArrayRead != null && !type.trackingRef) {
-      return "KotlinXlangArrayEncoding.$denseUnsignedArrayRead(readContext, typeResolver.config.maxBinarySize())"
+      return "KotlinXlangArrayEncoding.$denseUnsignedArrayRead(readContext)"
     }
     if (!canDirect(type)) {
       return null

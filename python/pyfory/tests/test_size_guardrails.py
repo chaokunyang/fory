@@ -15,13 +15,7 @@
 # specific language governing permissions and limitations
 # under the License.
 
-"""
-Test max_collection_size and max_binary_size guardrails to prevent OOM attacks
-from malicious payloads.
-
-Collections preallocate memory based on declared size, so they need guardrails.
-Binary reads are guarded by max_binary_size on the Buffer.
-"""
+"""Test collection size guardrails for payload-driven container allocation."""
 
 from dataclasses import dataclass
 from typing import List
@@ -30,7 +24,6 @@ import pytest
 
 import pyfory
 from pyfory import Fory
-from pyfory.serialization import Buffer
 from pyfory.types import TypeId
 
 
@@ -42,13 +35,6 @@ def roundtrip(data, limit, xlang=False, ref=False):
     """Serialize and deserialize with given collection size limit."""
     writer = Fory(xlang=xlang, ref=ref, compatible=xlang)
     reader = Fory(xlang=xlang, ref=ref, max_collection_size=limit, compatible=xlang)
-    return reader.deserialize(writer.serialize(data))
-
-
-def roundtrip_binary(data, max_binary_size, xlang=False, ref=False):
-    """Serialize and deserialize with given binary size limit."""
-    writer = Fory(xlang=xlang, ref=ref, compatible=xlang)
-    reader = Fory(xlang=xlang, ref=ref, max_binary_size=max_binary_size, compatible=xlang)
     return reader.deserialize(writer.serialize(data))
 
 
@@ -166,52 +152,7 @@ class TestCollectionSizeLimit:
             reader.deserialize(writer.serialize(arr))
 
 
-class TestBinarySizeLimit:
-    """Binary reads are guarded by max_binary_size on the Buffer."""
-
-    def test_default_limit_is_64mib(self):
-        assert (
-            Fory(
-                xlang=False,
-                compatible=False,
-            ).max_binary_size
-            == 64 * 1024 * 1024
-        )
-
-    @pytest.mark.parametrize("xlang", [False, True])
-    def test_within_limit_succeeds(self, xlang):
-        assert roundtrip_binary(b"x" * 100, max_binary_size=1024, xlang=xlang) == b"x" * 100
-
-    @pytest.mark.parametrize("xlang", [False, True])
-    def test_exceeds_limit_fails(self, xlang):
-        with pytest.raises(ValueError, match="exceeds the configured limit"):
-            roundtrip_binary(b"x" * 200, max_binary_size=100, xlang=xlang)
-
-    @pytest.mark.parametrize("xlang", [False, True])
-    def test_string_exceeds_limit_fails(self, xlang):
-        writer = Fory(xlang=xlang, compatible=xlang)
-        reader = Fory(xlang=xlang, max_binary_size=1, compatible=xlang)
-        with pytest.raises(ValueError, match="String size 2 exceeds"):
-            reader.deserialize(writer.serialize("xx"))
-
-    def test_from_stream_respects_limit(self):
-        import io
-
-        payload = Fory(
-            xlang=False,
-            compatible=False,
-        ).serialize(b"x" * 200)
-        buf = Buffer.from_stream(io.BytesIO(payload), max_binary_size=100)
-        with pytest.raises(ValueError, match="exceeds the configured limit"):
-            Fory(xlang=False, max_binary_size=100, compatible=False).deserialize(buf)
-
-    def test_in_band_buffer_object_respects_limit(self):
-        payload = b"x" * 200
-        data = Fory(xlang=False, ref=True, compatible=False).serialize(payload, buffer_callback=lambda _buffer: True)
-
-        with pytest.raises(ValueError, match="exceeds the configured limit"):
-            Fory(xlang=False, ref=True, max_binary_size=100, compatible=False).deserialize(data, buffers=[])
-
+class TestMalformedMetadata:
     def test_malformed_metastring_ref_raises_value_error(self):
         payload = bytes([1, 255, TypeId.NAMED_STRUCT, 3])
         with pytest.raises(ValueError, match="Invalid dynamic metastring id"):

@@ -508,6 +508,7 @@ public final class ExceptionSerializers {
               + " exceeds max collection size "
               + maxCollectionSize);
     }
+    buffer.checkReadableBytes(numSuppressedExceptions);
     List<Throwable> suppressedExceptions = new ArrayList<>(numSuppressedExceptions);
     for (int i = 0; i < numSuppressedExceptions; i++) {
       suppressedExceptions.add((Throwable) readContext.readRef());

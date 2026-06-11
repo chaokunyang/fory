@@ -346,7 +346,6 @@ export class WriteContext {
 
   private disposeTypeInfo: TypeInfo[] = [];
   private dynamicTypeId = 0;
-  private _maxBinarySize: number;
   private _maxCollectionSize: number;
 
   constructor(
@@ -356,7 +355,6 @@ export class WriteContext {
     this.writer = new BinaryWriter(config);
     this.refWriter = new RefWriter();
     this.metaStringWriter = new MetaStringWriter();
-    this._maxBinarySize = config.maxBinarySize ?? 64 * 1024 * 1024;
     this._maxCollectionSize = config.maxCollectionSize ?? 1_000_000;
   }
 
@@ -376,15 +374,6 @@ export class WriteContext {
       throw new Error(
         `Collection size ${size} exceeds maxCollectionSize ${this._maxCollectionSize}. `
         + "The data may be malicious, or increase maxCollectionSize if needed.",
-      );
-    }
-  }
-
-  checkBinarySize(size: number) {
-    if (size > this._maxBinarySize) {
-      throw new Error(
-        `Binary size ${size} exceeds maxBinarySize ${this._maxBinarySize}. `
-        + "The data may be malicious, or increase maxBinarySize if needed.",
       );
     }
   }
@@ -550,10 +539,6 @@ export class WriteContext {
     this.writer.setUint32Position(offset, value);
   }
 
-  get maxBinarySize() {
-    return this._maxBinarySize;
-  }
-
   get maxCollectionSize() {
     return this._maxCollectionSize;
   }
@@ -584,7 +569,6 @@ export class ReadContext {
 
   private _depth = 0;
   private _maxDepth: number;
-  private _maxBinarySize: number;
   private _maxCollectionSize: number;
 
   private static typeMetaHeaderHash(headerLow: number, headerHigh: number) {
@@ -641,7 +625,6 @@ export class ReadContext {
     this.refReader = new RefReader(this.reader);
     this.metaStringReader = new MetaStringReader();
     this._maxDepth = config.maxDepth ?? 50;
-    this._maxBinarySize = config.maxBinarySize ?? 64 * 1024 * 1024;
     this._maxCollectionSize = config.maxCollectionSize ?? 1_000_000;
   }
 
@@ -676,15 +659,6 @@ export class ReadContext {
       throw new Error(
         `Collection size ${size} exceeds maxCollectionSize ${this._maxCollectionSize}. `
         + "The data may be malicious, or increase maxCollectionSize if needed.",
-      );
-    }
-  }
-
-  checkBinarySize(size: number) {
-    if (size > this._maxBinarySize) {
-      throw new Error(
-        `Binary size ${size} exceeds maxBinarySize ${this._maxBinarySize}. `
-        + "The data may be malicious, or increase maxBinarySize if needed.",
       );
     }
   }
@@ -1387,10 +1361,6 @@ export class ReadContext {
 
   get maxDepth() {
     return this._maxDepth;
-  }
-
-  get maxBinarySize() {
-    return this._maxBinarySize;
   }
 
   get maxCollectionSize() {

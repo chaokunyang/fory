@@ -26,6 +26,7 @@
 #include <chrono>
 #include <cstdint>
 #include <cstring>
+#include <limits>
 #include <map>
 #include <string>
 #include <thread>
@@ -76,6 +77,16 @@ FORY_ENUM(SparseStatus, UNKNOWN, OK);
 
 enum OldStatus : int32_t { OLD_NEG = -7, OLD_ZERO = 0, OLD_POS = 13 };
 FORY_ENUM(::OldStatus, OLD_NEG, OLD_ZERO, OLD_POS);
+
+static std::atomic<int> g_ext_destructor_calls{0};
+
+struct ExtWithDestructor {
+  int32_t value = 0;
+
+  ~ExtWithDestructor() { g_ext_destructor_calls.fetch_add(1); }
+
+  FORY_STRUCT(ExtWithDestructor, value);
+};
 
 namespace fory {
 namespace serialization {
@@ -179,6 +190,21 @@ TEST(SerializationTest, BoolRoundtrip) {
   test_roundtrip(false);
 }
 
+TEST(SerializationTest, HarnessDestroyRunsRegisteredDestructor) {
+  auto fory =
+      Fory::builder().xlang(true).compatible(false).track_ref(false).build();
+  auto register_result = fory.register_extension_type<::ExtWithDestructor>(1);
+  ASSERT_TRUE(register_result.ok()) << register_result.error().message();
+  auto type_info_result =
+      fory.type_resolver().get_type_info<::ExtWithDestructor>();
+  ASSERT_TRUE(type_info_result.ok()) << type_info_result.error().message();
+
+  g_ext_destructor_calls.store(0);
+  void *ptr = new ExtWithDestructor();
+  type_info_result.value()->harness.destroy_fn(ptr);
+  EXPECT_EQ(g_ext_destructor_calls.load(), 1);
+}
+
 TEST(SerializationTest, Int8Roundtrip) {
   test_roundtrip<int8_t>(0);
   test_roundtrip<int8_t>(127);
@@ -226,6 +252,89 @@ TEST(SerializationTest, StringRoundtrip) {
   test_roundtrip(std::string("Hello, World!"));
   test_roundtrip(std::string("The quick brown fox jumps over the lazy dog"));
   test_roundtrip(std::string("UTF-8: 你好世界"));
+}
+
+TEST(SerializationTest, StringReadsCheckBodyBeforeAllocation) {
+  auto fory =
+      Fory::builder().xlang(true).compatible(false).track_ref(false).build();
+  constexpr uint32_t huge_length = std::numeric_limits<uint32_t>::max() - 1;
+
+  for (StringEncoding encoding :
+       {StringEncoding::LATIN1, StringEncoding::UTF16, StringEncoding::UTF8}) {
+    Buffer buffer;
+    buffer.write_var_uint36_small((static_cast<uint64_t>(huge_length) << 2) |
+                                  static_cast<uint64_t>(encoding));
+    ReadContext read_ctx(fory.config(), fory.type_resolver().clone());
+    read_ctx.attach(buffer);
+
+    auto result = detail::read_string_data(read_ctx);
+
+    EXPECT_TRUE(result.empty());
+    EXPECT_TRUE(read_ctx.has_error());
+  }
+}
+
+TEST(SerializationTest, U16StringReadsCheckBodyBeforeAllocation) {
+  auto fory =
+      Fory::builder().xlang(true).compatible(false).track_ref(false).build();
+  constexpr uint32_t huge_length = std::numeric_limits<uint32_t>::max() - 1;
+
+  for (StringEncoding encoding :
+       {StringEncoding::LATIN1, StringEncoding::UTF16, StringEncoding::UTF8}) {
+    Buffer buffer;
+    buffer.write_var_uint36_small((static_cast<uint64_t>(huge_length) << 2) |
+                                  static_cast<uint64_t>(encoding));
+    ReadContext read_ctx(fory.config(), fory.type_resolver().clone());
+    read_ctx.attach(buffer);
+
+    auto result = detail::read_u16string_data(read_ctx);
+
+    EXPECT_TRUE(result.empty());
+    EXPECT_TRUE(read_ctx.has_error());
+  }
+}
+
+TEST(SerializationTest, PrimitiveVectorReadsCheckBodyBeforeAllocation) {
+  auto fory =
+      Fory::builder().xlang(true).compatible(false).track_ref(false).build();
+  Buffer buffer;
+  buffer.write_var_uint32(4096);
+  ReadContext read_ctx(fory.config(), fory.type_resolver().clone());
+  read_ctx.attach(buffer);
+
+  auto result = Serializer<std::vector<int32_t>>::read_data(read_ctx);
+
+  EXPECT_TRUE(result.empty());
+  EXPECT_TRUE(read_ctx.has_error());
+}
+
+TEST(SerializationTest, BoolVectorReadsCheckBodyBeforeAllocation) {
+  auto fory =
+      Fory::builder().xlang(true).compatible(false).track_ref(false).build();
+  Buffer buffer;
+  buffer.write_var_uint32(4096);
+  ReadContext read_ctx(fory.config(), fory.type_resolver().clone());
+  read_ctx.attach(buffer);
+
+  auto result = Serializer<std::vector<bool>>::read_data(read_ctx);
+
+  EXPECT_TRUE(result.empty());
+  EXPECT_TRUE(read_ctx.has_error());
+}
+
+TEST(SerializationTest, DecimalReadsCheckBodyBeforeAllocation) {
+  auto fory =
+      Fory::builder().xlang(true).compatible(false).track_ref(false).build();
+  Buffer buffer;
+  buffer.write_var_int32(0);
+  buffer.write_var_uint64((static_cast<uint64_t>(4096) << 2) | 1ULL);
+  ReadContext read_ctx(fory.config(), fory.type_resolver().clone());
+  read_ctx.attach(buffer);
+
+  auto result = Serializer<Decimal>::read_data(read_ctx);
+
+  EXPECT_TRUE(result.is_zero());
+  EXPECT_TRUE(read_ctx.has_error());
 }
 
 TEST(SerializationTest, DurationRoundtrip) {

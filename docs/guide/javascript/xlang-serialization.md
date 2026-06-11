@@ -146,7 +146,7 @@ Use the same type ID or type name in every peer.
 
 ## Safety Limits
 
-The `maxDepth`, `maxBinarySize`, and `maxCollectionSize` options protect the JavaScript peer from overly large payloads. They do not change the binary format; they only control what the local `Fory` instance accepts.
+The `maxDepth` and `maxCollectionSize` options bound nested and container-shaped payloads. They do not change the binary format; they only control what the local `Fory` instance accepts.
 
 ## Related Topics
 

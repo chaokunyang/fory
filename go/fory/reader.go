@@ -45,7 +45,6 @@ type ReadContext struct {
 	lastTypePtr       uintptr
 	lastTypeInfo      *TypeInfo
 	maxCollectionSize int // Size guardrail for collection reads
-	maxBinarySize     int // Size guardrail for binary reads
 }
 
 // IsXlang returns whether cross-language serialization mode is enabled
@@ -266,15 +265,11 @@ func (c *ReadContext) ReadCollectionLength() int {
 	return length
 }
 
-// ReadBinaryLength reads a length value for binary data with size guardrails
+// ReadBinaryLength reads a byte length value for binary data.
 func (c *ReadContext) ReadBinaryLength() int {
 	err := c.Err()
 	length := c.buffer.ReadLength(err)
 	if c.err.HasError() {
-		return 0
-	}
-	if length > c.maxBinarySize {
-		c.SetError(MaxBinarySizeExceededError(length, c.maxBinarySize))
 		return 0
 	}
 	return length

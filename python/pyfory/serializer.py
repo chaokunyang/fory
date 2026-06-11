@@ -119,6 +119,11 @@ def _validate_function_value(policy, func, is_local):
     return func
 
 
+def _authorize_callable_materialization(policy, callable_type, **kwargs):
+    if policy is not DEFAULT_POLICY:
+        policy.authorize_instantiation(callable_type, **kwargs)
+
+
 def _bind_static_method(obj, method_name):
     cls = obj if isinstance(obj, type) else obj.__class__
     try:
@@ -1504,9 +1509,10 @@ class FunctionSerializer(Serializer):
 
         func_type_id = read_context.read_int8()
         if func_type_id == 0:
+            policy = read_context.policy
+            _authorize_callable_materialization(policy, types.MethodType)
             self_obj = read_context.read_ref()
             method_name = read_context.read_string()
-            policy = read_context.policy
             if policy is DEFAULT_POLICY:
                 return getattr(self_obj, method_name)
             return _resolve_validated_bound_method(policy, self_obj, method_name, is_local=_is_local_receiver(self_obj))
@@ -1519,7 +1525,15 @@ class FunctionSerializer(Serializer):
 
         module = read_context.read_string()
         qualname = read_context.read_string()
-        mod = _import_validated_module(read_context.policy, module, is_local=_is_local_qualname(module, qualname))
+        policy = read_context.policy
+        mod = _import_validated_module(policy, module, is_local=_is_local_qualname(module, qualname))
+        _authorize_callable_materialization(
+            policy,
+            types.FunctionType,
+            module=module,
+            qualname=qualname,
+            is_local=True,
+        )
         name = qualname.rsplit(".")[-1]
 
         marshalled_code = read_context.read_bytes_and_size()
@@ -1609,8 +1623,9 @@ class NativeFuncMethodSerializer(Serializer):
             )
             func = _validate_function_value(read_context.policy, func, is_local=_is_local_callable(func))
         else:
-            obj = read_context.read_ref()
             policy = read_context.policy
+            _authorize_callable_materialization(policy, types.MethodType, method_name=name)
+            obj = read_context.read_ref()
             if policy is DEFAULT_POLICY:
                 func = getattr(obj, name)
             else:
@@ -1634,6 +1649,7 @@ class MethodSerializer(Serializer):
         write_context.write_string(method_name)
 
     def read(self, read_context):
+        _authorize_callable_materialization(read_context.policy, self.cls)
         instance = read_context.read_ref()
         method_name = read_context.read_string()
 

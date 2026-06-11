@@ -134,10 +134,10 @@ function build(
         const idx = this.scope.uniqueName("idx");
         return `
                 const ${rawLen} = ${this.builder.reader.readVarUInt32()};
-                ${this.builder.getReadContextName()}.checkBinarySize(${rawLen});
                 if ((${rawLen} % ${size}) !== 0) {
                   throw new Error("dense array byte length is not divisible by element size");
                 }
+                ${this.builder.reader.checkReadableBytes(rawLen)};
                 const ${len} = ${rawLen} / ${size};
                 const ${result} = new ${creator}(${len});
                 ${this.maybeReference(result, refState)}
@@ -149,7 +149,6 @@ function build(
       }
       return `
                 const ${len} = ${this.builder.reader.readVarUInt32()};
-                ${this.builder.getReadContextName()}.checkBinarySize(${len});
                 const ${copied} = ${this.builder.reader.buffer(len)}
                 const ${result} = new ${creator}(${copied}.buffer, ${copied}.byteOffset, ${copied}.byteLength / ${size});
                 ${this.maybeReference(result, refState)}
@@ -279,10 +278,10 @@ class Float16ArraySerializerGenerator extends BaseSerializerGenerator {
     const raw = this.scope.uniqueName("raw");
     return `
         const ${rawLen} = ${this.builder.reader.readVarUInt32()};
-        ${this.builder.getReadContextName()}.checkBinarySize(${rawLen});
         if ((${rawLen} % 2) !== 0) {
           throw new Error("float16 array byte length is not divisible by element size");
         }
+        ${this.builder.reader.checkReadableBytes(rawLen)};
         const ${len} = ${rawLen} / 2;
         const ${raw} = new Uint16Array(${len});
         for (let ${idx} = 0; ${idx} < ${len}; ${idx}++) {
@@ -337,10 +336,10 @@ class BFloat16ArraySerializerGenerator extends BaseSerializerGenerator {
     const raw = this.scope.uniqueName("raw");
     return `
         const ${rawLen} = ${this.builder.reader.readVarUInt32()};
-        ${this.builder.getReadContextName()}.checkBinarySize(${rawLen});
         if ((${rawLen} % 2) !== 0) {
           throw new Error("bfloat16 array byte length is not divisible by element size");
         }
+        ${this.builder.reader.checkReadableBytes(rawLen)};
         const ${len} = ${rawLen} / 2;
         const ${raw} = new Uint16Array(${len});
         for (let ${idx} = 0; ${idx} < ${len}; ${idx}++) {

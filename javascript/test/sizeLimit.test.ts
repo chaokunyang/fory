@@ -24,13 +24,7 @@ describe('size-limit guardrails', () => {
   describe('configuration', () => {
     test('should have default limits matching Go', () => {
       const fory = new Fory({ compatible: false });
-      expect(fory.readContext.maxBinarySize).toBe(64 * 1024 * 1024);
       expect(fory.readContext.maxCollectionSize).toBe(1_000_000);
-    });
-
-    test('should accept custom maxBinarySize', () => {
-      const fory = new Fory({ compatible: false, maxBinarySize: 1024 });
-      expect(fory.readContext.maxBinarySize).toBe(1024);
     });
 
     test('should accept custom maxCollectionSize', () => {
@@ -39,27 +33,8 @@ describe('size-limit guardrails', () => {
     });
 
     test('should accept zero as a valid limit', () => {
-      const fory = new Fory({ compatible: false, maxBinarySize: 0, maxCollectionSize: 0 });
-      expect(fory.readContext.maxBinarySize).toBe(0);
+      const fory = new Fory({ compatible: false, maxCollectionSize: 0 });
       expect(fory.readContext.maxCollectionSize).toBe(0);
-    });
-
-    test('should reject negative maxBinarySize', () => {
-      expect(() => new Fory({ compatible: false, maxBinarySize: -1 })).toThrow(
-        'maxBinarySize must be a non-negative integer'
-      );
-    });
-
-    test('should reject non-integer maxBinarySize', () => {
-      expect(() => new Fory({ compatible: false, maxBinarySize: 1.5 })).toThrow(
-        'maxBinarySize must be a non-negative integer'
-      );
-    });
-
-    test('should reject NaN maxBinarySize', () => {
-      expect(() => new Fory({ compatible: false, maxBinarySize: NaN })).toThrow(
-        'maxBinarySize must be a non-negative integer'
-      );
     });
 
     test('should reject negative maxCollectionSize', () => {
@@ -77,13 +52,11 @@ describe('size-limit guardrails', () => {
     test('should work with other options combined', () => {
       const fory = new Fory({
         maxDepth: 100,
-        maxBinarySize: 1024,
         maxCollectionSize: 500,
         ref: true,
         compatible: true,
       });
       expect(fory.readContext.maxDepth).toBe(100);
-      expect(fory.readContext.maxBinarySize).toBe(1024);
       expect(fory.readContext.maxCollectionSize).toBe(500);
     });
   });
@@ -111,26 +84,6 @@ describe('size-limit guardrails', () => {
       const fory = new Fory({ compatible: false, maxCollectionSize: 10 });
       expect(() => fory.readContext.checkCollectionSize(20)).toThrow(
         'increase maxCollectionSize if needed'
-      );
-    });
-  });
-
-  describe('checkBinarySize', () => {
-    test('should not throw when size is within default limit', () => {
-      const fory = new Fory({ compatible: false });
-      expect(() => fory.readContext.checkBinarySize(999999)).not.toThrow();
-    });
-
-    test('should not throw when size is within limit', () => {
-      const fory = new Fory({ compatible: false, maxBinarySize: 1024 });
-      expect(() => fory.readContext.checkBinarySize(1024)).not.toThrow();
-      expect(() => fory.readContext.checkBinarySize(0)).not.toThrow();
-    });
-
-    test('should throw when size exceeds limit', () => {
-      const fory = new Fory({ compatible: false, maxBinarySize: 1024 });
-      expect(() => fory.readContext.checkBinarySize(1025)).toThrow(
-        'Binary size 1025 exceeds maxBinarySize 1024'
       );
     });
   });
@@ -209,34 +162,6 @@ describe('size-limit guardrails', () => {
     });
   });
 
-  describe('binary deserialization with maxBinarySize', () => {
-    test('should deserialize binary within limit', () => {
-      const fory = new Fory({ compatible: false, maxBinarySize: 1024, ref: true });
-      const { serialize, deserialize } = fory.register(Type.struct("test.binary", {
-        data: Type.binary(),
-      }));
-      const data = { data: new Uint8Array([1, 2, 3]) };
-      const result = deserialize(serialize(data));
-      expect(result!.data![0]).toBe(1);
-      expect(result!.data![1]).toBe(2);
-      expect(result!.data![2]).toBe(3);
-    });
-
-    test('should throw when binary exceeds maxBinarySize', () => {
-      const serializeFory = new Fory({ compatible: false, ref: true });
-      const { serialize } = serializeFory.register(Type.struct("test.binary2", {
-        data: Type.binary(),
-      }));
-      const bytes = serialize({ data: new Uint8Array(100) });
-
-      const deserializeFory = new Fory({ compatible: false, maxBinarySize: 50, ref: true });
-      const { deserialize } = deserializeFory.register(Type.struct("test.binary2", {
-        data: Type.binary(),
-      }));
-      expect(() => deserialize(bytes)).toThrow('exceeds maxBinarySize');
-    });
-  });
-
   describe('default limits allow normal payloads', () => {
     test('should allow large collections within default limit', () => {
       const fory = new Fory({ compatible: false, ref: true });
@@ -293,59 +218,4 @@ describe('size-limit guardrails', () => {
     });
   });
 
-  describe('float16 array deserialization with maxBinarySize', () => {
-    // Float16ArraySerializerGenerator writes byte count (elements * 2) — guarded by checkBinarySize
-    test('should deserialize float16 array within limit', () => {
-      const fory = new Fory({ compatible: false, maxBinarySize: 1024 });
-      const { serialize, deserialize } = fory.register(Type.struct("test.f16Arr", {
-        vals: Type.float16Array(),
-      }));
-      const data = { vals: [1.0, 2.0, 3.0] };
-      const result = deserialize(serialize(data));
-      expect(result!.vals!.length).toBe(3);
-    });
-
-    test('should throw when float16 array byte length exceeds maxBinarySize', () => {
-      const serializeFory = new Fory({ compatible: false });
-      const { serialize } = serializeFory.register(Type.struct("test.f16Arr2", {
-        vals: Type.float16Array(),
-      }));
-      // 10 elements × 2 bytes each = 20 raw bytes on the wire
-      const bytes = serialize({ vals: Array.from({ length: 10 }, (_, i) => i * 0.5) });
-
-      const deserializeFory = new Fory({ compatible: false, maxBinarySize: 10 }); // 10 < 20
-      const { deserialize } = deserializeFory.register(Type.struct("test.f16Arr2", {
-        vals: Type.float16Array(),
-      }));
-      expect(() => deserialize(bytes)).toThrow('exceeds maxBinarySize');
-    });
-  });
-
-  describe('bfloat16 array deserialization with maxBinarySize', () => {
-    // BFloat16ArraySerializerGenerator writes byte count (elements * 2) — same pattern as float16
-    test('should deserialize bfloat16 array within limit', () => {
-      const fory = new Fory({ compatible: false, maxBinarySize: 1024 });
-      const { serialize, deserialize } = fory.register(Type.struct("test.bf16Arr", {
-        vals: Type.bfloat16Array(),
-      }));
-      const data = { vals: [1.0, 2.0, 3.0] };
-      const result = deserialize(serialize(data));
-      expect(result!.vals!.length).toBe(3);
-    });
-
-    test('should throw when bfloat16 array byte length exceeds maxBinarySize', () => {
-      const serializeFory = new Fory({ compatible: false });
-      const { serialize } = serializeFory.register(Type.struct("test.bf16Arr2", {
-        vals: Type.bfloat16Array(),
-      }));
-      // 10 elements × 2 bytes each = 20 raw bytes on the wire
-      const bytes = serialize({ vals: Array.from({ length: 10 }, (_, i) => i * 0.5) });
-
-      const deserializeFory = new Fory({ compatible: false, maxBinarySize: 10 }); // 10 < 20
-      const { deserialize } = deserializeFory.register(Type.struct("test.bf16Arr2", {
-        vals: Type.bfloat16Array(),
-      }));
-      expect(() => deserialize(bytes)).toThrow('exceeds maxBinarySize');
-    });
-  });
 });

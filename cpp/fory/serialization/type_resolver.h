@@ -1456,6 +1456,10 @@ private:
   template <typename T>
   static void *harness_read_data_adapter_abstract(ReadContext &ctx);
 
+  template <typename T> static void harness_destroy_adapter(void *ptr);
+
+  static void harness_destroy_adapter_noop(void *ptr);
+
   template <typename T>
   static Result<std::vector<FieldInfo>, Error>
   harness_struct_sorted_fields(TypeResolver &resolver);
@@ -2044,6 +2048,7 @@ Harness TypeResolver::make_struct_harness_impl(std::true_type) {
                   &TypeResolver::harness_read_adapter_abstract<T>,
                   &TypeResolver::harness_write_data_adapter<T>,
                   &TypeResolver::harness_read_data_adapter_abstract<T>,
+                  &TypeResolver::harness_destroy_adapter_noop,
                   &TypeResolver::harness_struct_sorted_fields<T>,
                   &TypeResolver::harness_read_compatible_adapter_abstract<T>);
   harness.any_write_fn = &detail::any_write_adapter<T>;
@@ -2057,6 +2062,7 @@ Harness TypeResolver::make_struct_harness_impl(std::false_type) {
                   &TypeResolver::harness_read_adapter<T>,
                   &TypeResolver::harness_write_data_adapter<T>,
                   &TypeResolver::harness_read_data_adapter<T>,
+                  &TypeResolver::harness_destroy_adapter<T>,
                   &TypeResolver::harness_struct_sorted_fields<T>,
                   &TypeResolver::harness_read_compatible_adapter<T>);
   harness.any_write_fn = &detail::any_write_adapter<T>;
@@ -2069,6 +2075,7 @@ template <typename T> Harness TypeResolver::make_serializer_harness() {
                   &TypeResolver::harness_read_adapter<T>,
                   &TypeResolver::harness_write_data_adapter<T>,
                   &TypeResolver::harness_read_data_adapter<T>,
+                  &TypeResolver::harness_destroy_adapter<T>,
                   &TypeResolver::harness_empty_sorted_fields<T>);
   harness.any_write_fn = &detail::any_write_adapter<T>;
   harness.any_read_fn = &detail::any_read_adapter<T>;
@@ -2123,6 +2130,12 @@ void *TypeResolver::harness_read_data_adapter_abstract(ReadContext &ctx) {
   ctx.set_error(Error::type_error("Cannot deserialize abstract type"));
   return nullptr;
 }
+
+template <typename T> void TypeResolver::harness_destroy_adapter(void *ptr) {
+  delete static_cast<T *>(ptr);
+}
+
+inline void TypeResolver::harness_destroy_adapter_noop(void *ptr) { (void)ptr; }
 
 template <typename T>
 void *TypeResolver::harness_read_compatible_adapter(ReadContext &ctx,

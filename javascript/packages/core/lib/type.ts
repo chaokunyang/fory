@@ -276,7 +276,6 @@ export interface Config {
   ref: boolean;
   useSliceString: boolean;
   maxDepth?: number;
-  maxBinarySize?: number;
   maxCollectionSize?: number;
   hooks: {
     afterCodeGenerated?: (code: string) => string;

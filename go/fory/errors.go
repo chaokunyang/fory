@@ -54,8 +54,6 @@ const (
 	ErrKindInvalidUTF16String
 	// ErrKindMaxCollectionSizeExceeded indicates max collection size exceeded
 	ErrKindMaxCollectionSizeExceeded
-	// ErrKindMaxBinarySizeExceeded indicates max binary size exceeded
-	ErrKindMaxBinarySizeExceeded
 )
 
 // Error is a lightweight error type optimized for hot path performance.
@@ -307,16 +305,6 @@ func MaxCollectionSizeExceededError(size, limit int) Error {
 	return panicIfEnabled(Error{
 		kind:    ErrKindMaxCollectionSizeExceeded,
 		message: fmt.Sprintf("max collection size exceeded: size=%d, limit=%d", size, limit),
-	})
-}
-
-// MaxBinarySizeExceededError creates a max binary size exceeded error
-//
-//go:noinline
-func MaxBinarySizeExceededError(size, limit int) Error {
-	return panicIfEnabled(Error{
-		kind:    ErrKindMaxBinarySizeExceeded,
-		message: fmt.Sprintf("max binary size exceeded: size=%d, limit=%d", size, limit),
 	})
 }
 

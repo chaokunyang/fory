@@ -25,6 +25,7 @@
 #include "fory/util/error.h"
 #include <array>
 #include <cstdint>
+#include <cstring>
 #include <limits>
 #include <vector>
 
@@ -704,19 +705,15 @@ template <> struct Serializer<std::vector<uint8_t>> {
   static inline std::vector<uint8_t> read_data(ReadContext &ctx) {
     uint32_t length = ctx.read_var_uint32(ctx.error());
 
-    if (FORY_PREDICT_FALSE(length > ctx.config().max_binary_size)) {
-      ctx.set_error(Error::invalid_data("Binary size exceeds max_binary_size"));
-      return std::vector<uint8_t>();
-    }
-
-    if (FORY_PREDICT_FALSE(length > ctx.buffer().remaining_size())) {
-      ctx.set_error(
-          Error::invalid_data("Invalid length: " + std::to_string(length)));
+    if (FORY_PREDICT_FALSE(
+            !ctx.buffer().ensure_readable(length, ctx.error()))) {
       return std::vector<uint8_t>();
     }
     std::vector<uint8_t> vec(length);
     if (length > 0) {
-      ctx.read_bytes(vec.data(), length, ctx.error());
+      Buffer &buffer = ctx.buffer();
+      std::memcpy(vec.data(), buffer.data() + buffer.reader_index(), length);
+      buffer.unsafe_increase_reader_index(length);
     }
     return vec;
   }
@@ -805,25 +802,22 @@ template <> struct Serializer<std::vector<uint16_t>> {
       return std::vector<uint16_t>();
     }
 
-    if (FORY_PREDICT_FALSE(total_bytes > ctx.config().max_binary_size)) {
-      ctx.set_error(Error::invalid_data("Binary size exceeds max_binary_size"));
-      return std::vector<uint16_t>();
-    }
-
     if (total_bytes % sizeof(uint16_t) != 0) {
       ctx.set_error(Error::invalid_data("Invalid length: " +
                                         std::to_string(total_bytes)));
       return std::vector<uint16_t>();
     }
-    if (FORY_PREDICT_FALSE(total_bytes > ctx.buffer().remaining_size())) {
-      ctx.set_error(Error::invalid_data("Invalid length: " +
-                                        std::to_string(total_bytes)));
+    if (FORY_PREDICT_FALSE(
+            !ctx.buffer().ensure_readable(total_bytes, ctx.error()))) {
       return std::vector<uint16_t>();
     }
     size_t length = total_bytes / sizeof(uint16_t);
     std::vector<uint16_t> vec(length);
     if (total_bytes > 0) {
-      ctx.read_bytes(vec.data(), total_bytes, ctx.error());
+      Buffer &buffer = ctx.buffer();
+      std::memcpy(vec.data(), buffer.data() + buffer.reader_index(),
+                  total_bytes);
+      buffer.unsafe_increase_reader_index(total_bytes);
     }
     return vec;
   }
@@ -913,25 +907,22 @@ template <> struct Serializer<std::vector<uint32_t>> {
       return std::vector<uint32_t>();
     }
 
-    if (FORY_PREDICT_FALSE(total_bytes > ctx.config().max_binary_size)) {
-      ctx.set_error(Error::invalid_data("Binary size exceeds max_binary_size"));
-      return std::vector<uint32_t>();
-    }
-
     if (total_bytes % sizeof(uint32_t) != 0) {
       ctx.set_error(Error::invalid_data("Invalid length: " +
                                         std::to_string(total_bytes)));
       return std::vector<uint32_t>();
     }
-    if (FORY_PREDICT_FALSE(total_bytes > ctx.buffer().remaining_size())) {
-      ctx.set_error(Error::invalid_data("Invalid length: " +
-                                        std::to_string(total_bytes)));
+    if (FORY_PREDICT_FALSE(
+            !ctx.buffer().ensure_readable(total_bytes, ctx.error()))) {
       return std::vector<uint32_t>();
     }
     size_t length = total_bytes / sizeof(uint32_t);
     std::vector<uint32_t> vec(length);
     if (total_bytes > 0) {
-      ctx.read_bytes(vec.data(), total_bytes, ctx.error());
+      Buffer &buffer = ctx.buffer();
+      std::memcpy(vec.data(), buffer.data() + buffer.reader_index(),
+                  total_bytes);
+      buffer.unsafe_increase_reader_index(total_bytes);
     }
     return vec;
   }
@@ -1021,25 +1012,22 @@ template <> struct Serializer<std::vector<uint64_t>> {
       return std::vector<uint64_t>();
     }
 
-    if (FORY_PREDICT_FALSE(total_bytes > ctx.config().max_binary_size)) {
-      ctx.set_error(Error::invalid_data("Binary size exceeds max_binary_size"));
-      return std::vector<uint64_t>();
-    }
-
     if (total_bytes % sizeof(uint64_t) != 0) {
       ctx.set_error(Error::invalid_data("Invalid length: " +
                                         std::to_string(total_bytes)));
       return std::vector<uint64_t>();
     }
-    if (FORY_PREDICT_FALSE(total_bytes > ctx.buffer().remaining_size())) {
-      ctx.set_error(Error::invalid_data("Invalid length: " +
-                                        std::to_string(total_bytes)));
+    if (FORY_PREDICT_FALSE(
+            !ctx.buffer().ensure_readable(total_bytes, ctx.error()))) {
       return std::vector<uint64_t>();
     }
     size_t length = total_bytes / sizeof(uint64_t);
     std::vector<uint64_t> vec(length);
     if (total_bytes > 0) {
-      ctx.read_bytes(vec.data(), total_bytes, ctx.error());
+      Buffer &buffer = ctx.buffer();
+      std::memcpy(vec.data(), buffer.data() + buffer.reader_index(),
+                  total_bytes);
+      buffer.unsafe_increase_reader_index(total_bytes);
     }
     return vec;
   }

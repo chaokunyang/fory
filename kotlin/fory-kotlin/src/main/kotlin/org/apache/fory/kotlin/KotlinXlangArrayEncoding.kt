@@ -43,9 +43,9 @@ public object KotlinXlangArrayEncoding {
   }
 
   @JvmStatic
-  public fun readUByteArray(readContext: ReadContext, maxBinarySize: Int): UByteArray {
+  public fun readUByteArray(readContext: ReadContext): UByteArray {
     val buffer = payloadBuffer(readContext)
-    val size = payloadSize(readContext, buffer, maxBinarySize, 1)
+    val size = payloadSize(readContext, buffer, 1)
     return UByteArray(size) { buffer.readByte().toUByte() }
   }
 
@@ -63,9 +63,9 @@ public object KotlinXlangArrayEncoding {
   }
 
   @JvmStatic
-  public fun readUShortArray(readContext: ReadContext, maxBinarySize: Int): UShortArray {
+  public fun readUShortArray(readContext: ReadContext): UShortArray {
     val buffer = payloadBuffer(readContext)
-    val size = payloadSize(readContext, buffer, maxBinarySize, Short.SIZE_BYTES)
+    val size = payloadSize(readContext, buffer, Short.SIZE_BYTES)
     return UShortArray(size / Short.SIZE_BYTES) { buffer.readInt16().toUShort() }
   }
 
@@ -83,9 +83,9 @@ public object KotlinXlangArrayEncoding {
   }
 
   @JvmStatic
-  public fun readUIntArray(readContext: ReadContext, maxBinarySize: Int): UIntArray {
+  public fun readUIntArray(readContext: ReadContext): UIntArray {
     val buffer = payloadBuffer(readContext)
-    val size = payloadSize(readContext, buffer, maxBinarySize, Int.SIZE_BYTES)
+    val size = payloadSize(readContext, buffer, Int.SIZE_BYTES)
     return UIntArray(size / Int.SIZE_BYTES) { buffer.readInt32().toUInt() }
   }
 
@@ -103,9 +103,9 @@ public object KotlinXlangArrayEncoding {
   }
 
   @JvmStatic
-  public fun readULongArray(readContext: ReadContext, maxBinarySize: Int): ULongArray {
+  public fun readULongArray(readContext: ReadContext): ULongArray {
     val buffer = payloadBuffer(readContext)
-    val size = payloadSize(readContext, buffer, maxBinarySize, Long.SIZE_BYTES)
+    val size = payloadSize(readContext, buffer, Long.SIZE_BYTES)
     return ULongArray(size / Long.SIZE_BYTES) { buffer.readInt64().toULong() }
   }
 
@@ -156,24 +156,18 @@ public object KotlinXlangArrayEncoding {
   private fun payloadBuffer(readContext: ReadContext): MemoryBuffer =
     if (readContext.isPeerOutOfBandEnabled) readContext.readBufferObject() else readContext.buffer
 
-  private fun payloadSize(
-    readContext: ReadContext,
-    buffer: MemoryBuffer,
-    maxBinarySize: Int,
-    elementSize: Int
-  ): Int {
+  private fun payloadSize(readContext: ReadContext, buffer: MemoryBuffer, elementSize: Int): Int {
     val size =
       if (readContext.isPeerOutOfBandEnabled) buffer.remaining() else buffer.readVarUInt32Small7()
-    if (size < 0 || size > maxBinarySize) {
-      throw DeserializationException(
-        "Binary payload size $size exceeds max binary size $maxBinarySize"
-      )
+    if (size < 0) {
+      throw DeserializationException("Binary payload size must be non-negative: $size")
     }
     if (size % elementSize != 0) {
       throw DeserializationException(
         "Binary payload size $size is not aligned to element size $elementSize"
       )
     }
+    buffer.checkReadableBytes(size)
     return size
   }
 

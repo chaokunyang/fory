@@ -23,6 +23,7 @@
 #include "fory/serialization/serializer.h"
 #include <array>
 #include <cstdint>
+#include <cstring>
 #include <deque>
 #include <forward_list>
 #include <limits>
@@ -620,11 +621,6 @@ struct Serializer<
     if (FORY_PREDICT_FALSE(ctx.has_error())) {
       return std::vector<T, Alloc>();
     }
-    // Guardrail: Enforce max_binary_size for binary byte-length reads
-    if (FORY_PREDICT_FALSE(total_bytes_u32 > ctx.config().max_binary_size)) {
-      ctx.set_error(Error::invalid_data("Binary size exceeds max_binary_size"));
-      return std::vector<T, Alloc>();
-    }
     if (sizeof(T) == 0) {
       return std::vector<T, Alloc>();
     }
@@ -637,10 +633,16 @@ struct Serializer<
           " not aligned with element size " + std::to_string(sizeof(T))));
       return std::vector<T, Alloc>();
     }
+    if (FORY_PREDICT_FALSE(
+            !ctx.buffer().ensure_readable(total_bytes_u32, ctx.error()))) {
+      return std::vector<T, Alloc>();
+    }
     std::vector<T, Alloc> result(elem_count);
     if (total_bytes_u32 > 0) {
-      ctx.read_bytes(result.data(), static_cast<uint32_t>(total_bytes_u32),
-                     ctx.error());
+      Buffer &buffer = ctx.buffer();
+      std::memcpy(result.data(), buffer.data() + buffer.reader_index(),
+                  total_bytes_u32);
+      buffer.unsafe_increase_reader_index(total_bytes_u32);
     }
     return result;
   }
@@ -734,20 +736,22 @@ template <typename Alloc> struct Serializer<std::vector<float16_t, Alloc>> {
     if (FORY_PREDICT_FALSE(ctx.has_error())) {
       return std::vector<float16_t, Alloc>();
     }
-    if (FORY_PREDICT_FALSE(total_bytes_u32 > ctx.config().max_binary_size)) {
-      ctx.set_error(Error::invalid_data("Binary size exceeds max_binary_size"));
-      return std::vector<float16_t, Alloc>();
-    }
     size_t elem_count = total_bytes_u32 / sizeof(float16_t);
     if (total_bytes_u32 % sizeof(float16_t) != 0) {
       ctx.set_error(Error::invalid_data(
           "Vector byte size not aligned with float16_t element size"));
       return std::vector<float16_t, Alloc>();
     }
+    if (FORY_PREDICT_FALSE(
+            !ctx.buffer().ensure_readable(total_bytes_u32, ctx.error()))) {
+      return std::vector<float16_t, Alloc>();
+    }
     std::vector<float16_t, Alloc> result(elem_count);
     if (total_bytes_u32 > 0) {
-      ctx.read_bytes(result.data(), static_cast<uint32_t>(total_bytes_u32),
-                     ctx.error());
+      Buffer &buffer = ctx.buffer();
+      std::memcpy(result.data(), buffer.data() + buffer.reader_index(),
+                  total_bytes_u32);
+      buffer.unsafe_increase_reader_index(total_bytes_u32);
     }
     return result;
   }
@@ -839,20 +843,22 @@ template <typename Alloc> struct Serializer<std::vector<bfloat16_t, Alloc>> {
     if (FORY_PREDICT_FALSE(ctx.has_error())) {
       return std::vector<bfloat16_t, Alloc>();
     }
-    if (FORY_PREDICT_FALSE(total_bytes_u32 > ctx.config().max_binary_size)) {
-      ctx.set_error(Error::invalid_data("Binary size exceeds max_binary_size"));
-      return std::vector<bfloat16_t, Alloc>();
-    }
     size_t elem_count = total_bytes_u32 / sizeof(bfloat16_t);
     if (total_bytes_u32 % sizeof(bfloat16_t) != 0) {
       ctx.set_error(Error::invalid_data(
           "Vector byte size not aligned with bfloat16_t element size"));
       return std::vector<bfloat16_t, Alloc>();
     }
+    if (FORY_PREDICT_FALSE(
+            !ctx.buffer().ensure_readable(total_bytes_u32, ctx.error()))) {
+      return std::vector<bfloat16_t, Alloc>();
+    }
     std::vector<bfloat16_t, Alloc> result(elem_count);
     if (total_bytes_u32 > 0) {
-      ctx.read_bytes(result.data(), static_cast<uint32_t>(total_bytes_u32),
-                     ctx.error());
+      Buffer &buffer = ctx.buffer();
+      std::memcpy(result.data(), buffer.data() + buffer.reader_index(),
+                  total_bytes_u32);
+      buffer.unsafe_increase_reader_index(total_bytes_u32);
     }
     return result;
   }
@@ -1141,32 +1147,18 @@ template <typename Alloc> struct Serializer<std::vector<bool, Alloc>> {
       return std::vector<bool, Alloc>();
     }
 
-    if (FORY_PREDICT_FALSE(size > ctx.config().max_binary_size)) {
-      ctx.set_error(Error::invalid_data("Binary size exceeds max_binary_size"));
+    if (FORY_PREDICT_FALSE(!ctx.buffer().ensure_readable(size, ctx.error()))) {
       return std::vector<bool, Alloc>();
     }
 
     std::vector<bool, Alloc> result(size);
-    // Fast path: bulk read all bytes at once if we have enough buffer
     Buffer &buffer = ctx.buffer();
-    if (size > 0 && buffer.reader_index() + size <= buffer.size()) {
+    if (size > 0) {
       const uint8_t *src = buffer.data() + buffer.reader_index();
       for (uint32_t i = 0; i < size; ++i) {
         result[i] = (src[i] != 0);
       }
-      buffer.increase_reader_index(size, ctx.error());
-      if (FORY_PREDICT_FALSE(ctx.has_error())) {
-        return std::vector<bool, Alloc>();
-      }
-    } else {
-      // Fallback: read byte-by-byte with bounds checking
-      for (uint32_t i = 0; i < size; ++i) {
-        if (FORY_PREDICT_FALSE(ctx.has_error())) {
-          return result;
-        }
-        uint8_t byte = ctx.read_uint8(ctx.error());
-        result[i] = (byte != 0);
-      }
+      buffer.unsafe_increase_reader_index(size);
     }
     return result;
   }

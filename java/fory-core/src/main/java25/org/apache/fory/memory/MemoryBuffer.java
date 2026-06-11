@@ -3058,6 +3058,7 @@ public final class MemoryBuffer {
   }
 
   public byte[] readBytes(int length) {
+    checkReadableBytes(length);
     int readerIdx = readerIndex;
     byte[] bytes = new byte[length];
     // use subtract to avoid overflow
@@ -3217,6 +3218,7 @@ public final class MemoryBuffer {
 
   public byte[] readBytesAndSize() {
     final int numBytes = readBinarySize();
+    checkReadableBytes(numBytes);
     int readerIdx = readerIndex;
     final byte[] arr = new byte[numBytes];
     // use subtract to avoid overflow
@@ -3230,11 +3232,11 @@ public final class MemoryBuffer {
   }
 
   /**
-   * Reads a size-validated primitive byte-array payload into {@code values}. The caller owns size
-   * validation and destination allocation; this method reads payload bytes only, not the size
+   * Reads a size-validated primitive byte-array body into {@code values}. The caller owns size
+   * validation and destination allocation; this method reads body bytes only, not the size
    * prefix.
    */
-  public void readByteArrayPayload(byte[] values, int numBytes) {
+  public void readByteArrayBytes(byte[] values, int numBytes) {
     int readerIdx = readerIndex;
     if (readerIdx > size - numBytes) {
       streamReader.readTo(values, 0, numBytes);
@@ -3245,11 +3247,11 @@ public final class MemoryBuffer {
   }
 
   /**
-   * Reads a size-validated primitive boolean-array payload into {@code values}. The caller owns
-   * size validation and destination allocation; this method reads payload bytes only, not the size
+   * Reads a size-validated primitive boolean-array body into {@code values}. The caller owns
+   * size validation and destination allocation; this method reads body bytes only, not the size
    * prefix.
    */
-  public void readBooleanArrayPayload(boolean[] values, int numBytes) {
+  public void readBooleanArrayBytes(boolean[] values, int numBytes) {
     int readerIdx = readerIndex;
     if (readerIdx > size - numBytes) {
       streamReader.readBooleans(values, 0, numBytes);
@@ -3260,11 +3262,11 @@ public final class MemoryBuffer {
   }
 
   /**
-   * Reads a size-validated primitive char-array payload into {@code values}. The caller owns size
-   * validation and destination allocation; this method reads payload bytes only, not the size
+   * Reads a size-validated primitive char-array body into {@code values}. The caller owns size
+   * validation and destination allocation; this method reads body bytes only, not the size
    * prefix.
    */
-  public void readCharArrayPayload(char[] values, int numBytes) {
+  public void readCharArrayBytes(char[] values, int numBytes) {
     int readerIdx = readerIndex;
     if (readerIdx > size - numBytes) {
       streamReader.readChars(values, 0, numBytes >>> 1);
@@ -3275,11 +3277,11 @@ public final class MemoryBuffer {
   }
 
   /**
-   * Reads a size-validated primitive int16-array payload into {@code values}. The caller owns size
-   * validation and destination allocation; this method reads payload bytes only, not the size
+   * Reads a size-validated primitive int16-array body into {@code values}. The caller owns size
+   * validation and destination allocation; this method reads body bytes only, not the size
    * prefix.
    */
-  public void readInt16ArrayPayload(short[] values, int numBytes) {
+  public void readInt16ArrayBytes(short[] values, int numBytes) {
     int readerIdx = readerIndex;
     if (readerIdx > size - numBytes) {
       streamReader.readShorts(values, 0, numBytes >>> 1);
@@ -3290,11 +3292,11 @@ public final class MemoryBuffer {
   }
 
   /**
-   * Reads a size-validated primitive int32-array payload into {@code values}. The caller owns size
-   * validation and destination allocation; this method reads payload bytes only, not the size
+   * Reads a size-validated primitive int32-array body into {@code values}. The caller owns size
+   * validation and destination allocation; this method reads body bytes only, not the size
    * prefix.
    */
-  public void readInt32ArrayPayload(int[] values, int numBytes) {
+  public void readInt32ArrayBytes(int[] values, int numBytes) {
     int readerIdx = readerIndex;
     if (readerIdx > size - numBytes) {
       streamReader.readInts(values, 0, numBytes >>> 2);
@@ -3305,11 +3307,11 @@ public final class MemoryBuffer {
   }
 
   /**
-   * Reads a size-validated primitive int64-array payload into {@code values}. The caller owns size
-   * validation and destination allocation; this method reads payload bytes only, not the size
+   * Reads a size-validated primitive int64-array body into {@code values}. The caller owns size
+   * validation and destination allocation; this method reads body bytes only, not the size
    * prefix.
    */
-  public void readInt64ArrayPayload(long[] values, int numBytes) {
+  public void readInt64ArrayBytes(long[] values, int numBytes) {
     int readerIdx = readerIndex;
     if (readerIdx > size - numBytes) {
       streamReader.readLongs(values, 0, numBytes >>> 3);
@@ -3320,11 +3322,11 @@ public final class MemoryBuffer {
   }
 
   /**
-   * Reads a size-validated primitive float32-array payload into {@code values}. The caller owns
-   * size validation and destination allocation; this method reads payload bytes only, not the size
+   * Reads a size-validated primitive float32-array body into {@code values}. The caller owns
+   * size validation and destination allocation; this method reads body bytes only, not the size
    * prefix.
    */
-  public void readFloat32ArrayPayload(float[] values, int numBytes) {
+  public void readFloat32ArrayBytes(float[] values, int numBytes) {
     int readerIdx = readerIndex;
     if (readerIdx > size - numBytes) {
       streamReader.readFloats(values, 0, numBytes >>> 2);
@@ -3335,11 +3337,11 @@ public final class MemoryBuffer {
   }
 
   /**
-   * Reads a size-validated primitive float64-array payload into {@code values}. The caller owns
-   * size validation and destination allocation; this method reads payload bytes only, not the size
+   * Reads a size-validated primitive float64-array body into {@code values}. The caller owns
+   * size validation and destination allocation; this method reads body bytes only, not the size
    * prefix.
    */
-  public void readFloat64ArrayPayload(double[] values, int numBytes) {
+  public void readFloat64ArrayBytes(double[] values, int numBytes) {
     int readerIdx = readerIndex;
     if (readerIdx > size - numBytes) {
       streamReader.readDoubles(values, 0, numBytes >>> 3);
@@ -3385,6 +3387,7 @@ public final class MemoryBuffer {
   @CodegenInvoke
   public char[] readCharsAndSize() {
     final int numBytes = readBinarySize();
+    checkReadableBytes(numBytes);
     int numElements = numBytes >> 1;
     char[] values = new char[numElements];
     readChars(values, 0, numElements);

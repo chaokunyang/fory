@@ -332,33 +332,14 @@ fn test_type_mismatch_error_shows_type_name() {
 #[test]
 fn test_size_guardrail_configuration_accessors() {
     let default_fory = Fory::builder().xlang(false).compatible(false).build();
-    assert_eq!(default_fory.get_max_binary_size(), 64 * 1024 * 1024);
     assert_eq!(default_fory.get_max_collection_size(), 1024 * 1024);
 
     let configured_fory = Fory::builder()
         .xlang(false)
-        .max_binary_size(4096)
         .max_collection_size(128)
         .compatible(false)
         .build();
-    assert_eq!(configured_fory.get_max_binary_size(), 4096);
     assert_eq!(configured_fory.get_max_collection_size(), 128);
-}
-
-#[test]
-fn test_max_binary_size_does_not_limit_string_reads() {
-    let fory = Fory::builder().xlang(false).compatible(false).build();
-    let original = "this string should not be treated as binary".repeat(4);
-    let serialized = fory.serialize(&original).unwrap();
-
-    let limited_fory = Fory::builder()
-        .xlang(false)
-        .max_binary_size(4)
-        .compatible(false)
-        .build();
-    let deserialized: String = limited_fory.deserialize(&serialized).unwrap();
-
-    assert_eq!(deserialized, original);
 }
 
 #[test]

@@ -22,6 +22,7 @@
 #include "fory/serialization/serializer.h"
 
 #include <cstdint>
+#include <cstring>
 #include <initializer_list>
 #include <limits>
 #include <string>
@@ -263,10 +264,6 @@ template <> struct Serializer<Decimal> {
       ctx.set_error(Error::invalid_data("Invalid decimal magnitude length 0"));
       return Decimal();
     }
-    if (length64 > ctx.config().max_binary_size) {
-      ctx.set_error(Error::invalid_data("Binary size exceeds max_binary_size"));
-      return Decimal();
-    }
     if (length64 > std::numeric_limits<uint32_t>::max()) {
       ctx.set_error(Error::invalid_data("Invalid decimal magnitude length " +
                                         std::to_string(length64)));
@@ -274,11 +271,14 @@ template <> struct Serializer<Decimal> {
     }
 
     uint32_t length = static_cast<uint32_t>(length64);
-    std::vector<uint8_t> payload(length);
-    ctx.buffer().read_bytes(payload.data(), length, ctx.error());
-    if (FORY_PREDICT_FALSE(ctx.has_error())) {
+    if (FORY_PREDICT_FALSE(
+            !ctx.buffer().ensure_readable(length, ctx.error()))) {
       return Decimal();
     }
+    std::vector<uint8_t> payload(length);
+    Buffer &buffer = ctx.buffer();
+    std::memcpy(payload.data(), buffer.data() + buffer.reader_index(), length);
+    buffer.unsafe_increase_reader_index(length);
     if (payload.back() == 0) {
       ctx.set_error(Error::invalid_data(
           "Non-canonical decimal payload: trailing zero byte"));

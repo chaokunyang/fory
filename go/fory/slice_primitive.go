@@ -75,14 +75,19 @@ func (s byteSliceSerializer) ReadData(ctx *ReadContext, value reflect.Value) {
 	buf := ctx.Buffer()
 	ctxErr := ctx.Err()
 	length := ctx.ReadBinaryLength()
+	if ctx.HasError() {
+		return
+	}
 	ptr := (*[]byte)(value.Addr().UnsafePointer())
 	if length == 0 {
 		*ptr = make([]byte, 0)
 		return
 	}
+	if !buf.CheckReadable(length, ctxErr) {
+		return
+	}
 	result := make([]byte, length)
-	raw := buf.ReadBinary(length, ctxErr)
-	copy(result, raw)
+	buf.Read(result)
 	*ptr = result
 }
 
@@ -643,6 +648,9 @@ func (s stringSliceSerializer) ReadData(ctx *ReadContext, value reflect.Value) {
 	buf := ctx.Buffer()
 	ctxErr := ctx.Err()
 	length := ctx.ReadCollectionLength()
+	if ctx.HasError() {
+		return
+	}
 	ptr := (*[]string)(value.Addr().UnsafePointer())
 	if length == 0 {
 		*ptr = make([]string, 0)
@@ -651,10 +659,19 @@ func (s stringSliceSerializer) ReadData(ctx *ReadContext, value reflect.Value) {
 
 	// Read collection flags
 	collectFlag := buf.ReadInt8(ctxErr)
+	if ctx.HasError() {
+		return
+	}
 
 	// Read element type info if present (when CollectionIsSameType but not CollectionIsDeclElementType)
 	if (collectFlag&CollectionIsSameType) != 0 && (collectFlag&CollectionIsDeclElementType) == 0 {
 		_ = buf.ReadUint8(ctxErr) // Read and discard type ID (we know it's STRING)
+	}
+	if ctx.HasError() {
+		return
+	}
+	if !buf.CheckReadable(length, ctxErr) {
+		return
 	}
 
 	result := make([]string, length)
@@ -1128,10 +1145,14 @@ func (s float16SliceSerializer) ReadData(ctx *ReadContext, value reflect.Value) 
 	buf := ctx.Buffer()
 	ctxErr := ctx.Err()
 	size := ctx.ReadBinaryLength()
-	length := size / 2
 	if ctx.HasError() {
 		return
 	}
+	if size%2 != 0 {
+		ctx.SetError(DeserializationErrorf("float16 array byte length %d is not aligned to element size 2", size))
+		return
+	}
+	length := size / 2
 
 	// Ensure capacity
 	ptr := (*[]float16.Float16)(value.Addr().UnsafePointer())
@@ -1140,13 +1161,15 @@ func (s float16SliceSerializer) ReadData(ctx *ReadContext, value reflect.Value) 
 		return
 	}
 
+	if !buf.CheckReadable(size, ctxErr) {
+		return
+	}
 	result := make([]float16.Float16, length)
 
 	if isLittleEndian {
-		raw := buf.ReadBinary(size, ctxErr)
 		// unsafe copy
 		targetPtr := unsafe.Pointer(&result[0])
-		copy(unsafe.Slice((*byte)(targetPtr), size), raw)
+		buf.Read(unsafe.Slice((*byte)(targetPtr), size))
 	} else {
 		for i := 0; i < length; i++ {
 			// ReadUint16 handles endianness
@@ -1337,6 +1360,9 @@ func ReadStringSlice(buf *ByteBuffer, err *Error) []string {
 	if (collectFlag&CollectionIsSameType) != 0 && (collectFlag&CollectionIsDeclElementType) == 0 {
 		_ = buf.ReadUint8(err) // Read and discard element type ID
 	}
+	if err.HasError() || !buf.CheckReadable(length, err) {
+		return nil
+	}
 	result := make([]string, length)
 	trackRefs := (collectFlag & CollectionTrackingRef) != 0
 	hasNull := (collectFlag & CollectionHasNull) != 0
@@ -1405,10 +1431,14 @@ func (s bfloat16SliceSerializer) ReadData(ctx *ReadContext, value reflect.Value)
 	buf := ctx.Buffer()
 	ctxErr := ctx.Err()
 	size := ctx.ReadBinaryLength()
-	length := size / 2
 	if ctx.HasError() {
 		return
 	}
+	if size%2 != 0 {
+		ctx.SetError(DeserializationErrorf("bfloat16 array byte length %d is not aligned to element size 2", size))
+		return
+	}
+	length := size / 2
 
 	ptr := (*[]bfloat16.BFloat16)(value.Addr().UnsafePointer())
 	if length == 0 {
@@ -1416,12 +1446,14 @@ func (s bfloat16SliceSerializer) ReadData(ctx *ReadContext, value reflect.Value)
 		return
 	}
 
+	if !buf.CheckReadable(size, ctxErr) {
+		return
+	}
 	result := make([]bfloat16.BFloat16, length)
 
 	if isLittleEndian {
-		raw := buf.ReadBinary(size, ctxErr)
 		targetPtr := unsafe.Pointer(&result[0])
-		copy(unsafe.Slice((*byte)(targetPtr), size), raw)
+		buf.Read(unsafe.Slice((*byte)(targetPtr), size))
 	} else {
 		for i := 0; i < length; i++ {
 			result[i] = bfloat16.BFloat16FromBits(buf.ReadUint16(ctxErr))

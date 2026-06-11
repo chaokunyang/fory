@@ -199,8 +199,7 @@ pub enum Error {
 
     /// Deserialization size limit exceeded.
     ///
-    /// Returned when a payload-driven length exceeds a configured guardrail
-    /// (e.g. `max_binary_size` or `max_collection_size`).
+    /// Returned when a payload-driven length exceeds a configured guardrail.
     ///
     /// Do not construct this variant directly; use [`Error::size_limit_exceeded`] instead.
     #[error("{0}")]

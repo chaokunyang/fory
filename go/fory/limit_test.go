@@ -68,36 +68,3 @@ func TestMaxCollectionSizeGuardrail(t *testing.T) {
 		require.Equal(t, str, decoded)
 	})
 }
-
-func TestMaxBinarySizeGuardrail(t *testing.T) {
-	// 1. Test binary (byte slice) exceeding limit
-	t.Run("Byte slice exceeds MaxBinarySize", func(t *testing.T) {
-		config := WithMaxBinarySize(5)
-		f := NewFory(WithXlang(false), config, WithCompatible(false))
-
-		// We can serialize a byte slice using standard serializer, then decode with the f instance
-		slice := []byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}
-		fBase := NewFory(WithXlang(false), WithCompatible(false))
-		bytes, _ := fBase.Serialize(slice)
-
-		var decoded []byte
-		err := f.Deserialize(bytes, &decoded)
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "max binary size exceeded: size=10, limit=5")
-	})
-
-	// 2. Test string is not affected by MaxBinarySize
-	t.Run("String unaffected by MaxBinarySize", func(t *testing.T) {
-		config := WithMaxBinarySize(2)
-		f := NewFory(WithXlang(false), config, WithCompatible(false))
-
-		str := "hello world" // length 11
-		bytes, err := f.Serialize(str)
-		require.NoError(t, err)
-
-		var decoded string
-		err = f.Deserialize(bytes, &decoded)
-		require.NoError(t, err)
-		require.Equal(t, str, decoded)
-	})
-}

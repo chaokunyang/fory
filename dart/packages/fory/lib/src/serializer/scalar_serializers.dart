@@ -132,22 +132,13 @@ final class BinarySerializer extends Serializer<Uint8List> {
   }
 
   static void writePayload(WriteContext context, Uint8List value) {
-    if (value.length > context.config.maxBinarySize) {
-      throw StateError(
-        'Binary payload exceeds ${context.config.maxBinarySize} bytes.',
-      );
-    }
     context.buffer.writeVarUint32(value.length);
     context.buffer.writeBytes(value);
   }
 
   static Uint8List readPayload(ReadContext context) {
     final size = context.buffer.readVarUint32();
-    if (size > context.config.maxBinarySize) {
-      throw StateError(
-        'Binary payload exceeds ${context.config.maxBinarySize} bytes.',
-      );
-    }
+    context.buffer.checkReadableBytes(size);
     return context.buffer.copyBytes(size);
   }
 }
@@ -198,11 +189,10 @@ final class DecimalSerializer extends Serializer<Decimal> {
     if (length <= 0) {
       throw StateError('Invalid decimal magnitude length $length.');
     }
+    context.buffer.checkReadableBytes(length);
     final payload = context.buffer.copyBytes(length);
     if (payload[length - 1] == 0) {
-      throw StateError(
-        'Non-canonical decimal payload: trailing zero byte.',
-      );
+      throw StateError('Non-canonical decimal payload: trailing zero byte.');
     }
     final magnitude = _decimalMagnitudeFromCanonicalLittleEndian(payload);
     if (magnitude == BigInt.zero) {

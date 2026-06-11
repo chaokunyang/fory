@@ -1732,10 +1732,10 @@ internal class KotlinSerializerSourceWriter(private val struct: KotlinSourceStru
   private fun directReadExpression(field: KotlinSourceField): String? {
     val denseRead = denseUnsignedArrayRead(field)
     if (denseRead != null && !field.nullable) {
-      return "KotlinXlangArrayEncoding.$denseRead(readContext, typeResolver.config.maxBinarySize())"
+      return "KotlinXlangArrayEncoding.$denseRead(readContext)"
     }
     if (denseRead != null && field.nullable && !field.trackingRef) {
-      return "if (buffer.readByte() == Fory.NULL_FLAG) null else KotlinXlangArrayEncoding.$denseRead(readContext, typeResolver.config.maxBinarySize())"
+      return "if (buffer.readByte() == Fory.NULL_FLAG) null else KotlinXlangArrayEncoding.$denseRead(readContext)"
     }
     if (isScalarUnsigned(field) && field.nullable && !field.trackingRef) {
       val readValue =

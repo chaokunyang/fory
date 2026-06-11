@@ -38,14 +38,6 @@ new Fory({ maxDepth: 100 });
 
 Increase this only if your data is legitimately deeply nested.
 
-## `Binary size ... exceeds maxBinarySize`
-
-A binary field or the overall message exceeded the safety limit. If the size is expected and the source is trusted, increase the limit:
-
-```ts
-new Fory({ maxBinarySize: 128 * 1024 * 1024 });
-```
-
 ## `Collection size ... exceeds maxCollectionSize`
 
 A list, set, or map has more elements than the configured limit. This often means the data is unexpectedly large. If it is legitimate, increase the limit:

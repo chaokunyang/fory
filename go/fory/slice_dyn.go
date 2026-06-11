@@ -263,13 +263,18 @@ func (s sliceDynSerializer) ReadData(ctx *ReadContext, value reflect.Value) {
 	ctxErr := ctx.Err()
 	length := ctx.ReadCollectionLength()
 	sliceType := value.Type()
-	value.Set(reflect.MakeSlice(sliceType, length, length))
+	if ctx.HasError() {
+		return
+	}
 	if length == 0 {
+		value.Set(reflect.MakeSlice(sliceType, 0, 0))
 		return
 	}
 
 	collectFlag := buf.ReadInt8(ctxErr)
-	ctx.RefResolver().Reference(value)
+	if ctx.HasError() {
+		return
+	}
 
 	var elemTypeInfo *TypeInfo
 	var elemType reflect.Type
@@ -286,9 +291,16 @@ func (s sliceDynSerializer) ReadData(ctx *ReadContext, value reflect.Value) {
 			elemType = sliceType.Elem()
 			elemSerializer, _ = ctx.TypeResolver().getSerializerByType(elemType, false)
 		}
+		if ctx.HasError() {
+			return
+		}
+		value.Set(reflect.MakeSlice(sliceType, length, length))
+		ctx.RefResolver().Reference(value)
 		s.readSameType(ctx, buf, value, elemType, elemSerializer, collectFlag)
 		return
 	}
+	value.Set(reflect.MakeSlice(sliceType, length, length))
+	ctx.RefResolver().Reference(value)
 	s.readDifferentTypes(ctx, buf, value, collectFlag)
 }
 

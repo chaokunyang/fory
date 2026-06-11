@@ -365,8 +365,16 @@ func (s byteArraySerializer) Write(ctx *WriteContext, refMode RefMode, writeType
 
 func (s byteArraySerializer) ReadData(ctx *ReadContext, value reflect.Value) {
 	buf := ctx.Buffer()
-	length := ctx.ReadCollectionLength()
+	err := ctx.Err()
+	length := buf.ReadLength(err)
 	if ctx.HasError() {
+		return
+	}
+	if length != value.Len() {
+		ctx.SetError(DeserializationErrorf("array length %d does not match serialized binary length %d", value.Len(), length))
+		return
+	}
+	if !buf.CheckReadable(length, err) {
 		return
 	}
 	data := make([]byte, length)

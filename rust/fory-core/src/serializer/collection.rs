@@ -581,13 +581,6 @@ where
     if size_bytes % elem_size != 0 {
         return Err(Error::invalid_data("Invalid data length"));
     }
-    let max = context.max_binary_size() as usize;
-    if size_bytes > max {
-        return Err(Error::size_limit_exceeded(format!(
-            "Binary size {} exceeds limit {}",
-            size_bytes, max
-        )));
-    }
     let remaining = context.reader.slice_after_cursor().len();
     if size_bytes > remaining {
         let cursor = context.reader.get_cursor();

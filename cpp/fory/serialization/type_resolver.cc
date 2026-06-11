@@ -244,6 +244,16 @@ Result<FieldInfo, Error> FieldInfo::from_bytes(Buffer &buffer) {
   // special characters (same as Encoders.FIELD_NAME_DECODER).
 
   const size_t name_size = size_field + 1;
+  if (FORY_PREDICT_FALSE(
+          name_size >
+          static_cast<size_t>(std::numeric_limits<uint32_t>::max()))) {
+    return Unexpected(
+        Error::invalid_data("Field name size exceeds uint32 range"));
+  }
+  if (FORY_PREDICT_FALSE(
+          !buffer.ensure_readable(static_cast<uint32_t>(name_size), error))) {
+    return Unexpected(std::move(error));
+  }
   std::vector<uint8_t> name_bytes(name_size);
   buffer.read_bytes(name_bytes.data(), static_cast<uint32_t>(name_size), error);
   if (FORY_PREDICT_FALSE(!error.ok())) {
@@ -486,6 +496,15 @@ read_meta_name(Buffer &buffer, const MetaStringDecoder &decoder,
     length = BIG_NAME_THRESHOLD + static_cast<size_t>(extra);
   }
 
+  if (FORY_PREDICT_FALSE(
+          length > static_cast<size_t>(std::numeric_limits<uint32_t>::max()))) {
+    return Unexpected(
+        Error::invalid_data("Meta string size exceeds uint32 range"));
+  }
+  if (FORY_PREDICT_FALSE(
+          !buffer.ensure_readable(static_cast<uint32_t>(length), error))) {
+    return Unexpected(std::move(error));
+  }
   std::vector<uint8_t> bytes(length);
   if (length > 0) {
     buffer.read_bytes(bytes.data(), static_cast<uint32_t>(length), error);
@@ -618,6 +637,9 @@ TypeMeta::from_bytes(Buffer &buffer, const TypeMeta *local_type_info) {
   FORY_TRY(meta_size, read_type_meta_size(buffer, header_bits, &header_size));
   int64_t meta_hash = static_cast<int64_t>(header_bits >> TYPE_META_HASH_SHIFT);
   uint32_t body_start = static_cast<uint32_t>(start_pos + header_size);
+  if (FORY_PREDICT_FALSE(!buffer.ensure_readable(meta_size, error))) {
+    return Unexpected(std::move(error));
+  }
   // Read meta header
   uint8_t meta_header = buffer.read_uint8(error);
   if (FORY_PREDICT_FALSE(!error.ok())) {
@@ -684,6 +706,10 @@ TypeMeta::from_bytes(Buffer &buffer, const TypeMeta *local_type_info) {
   }
 
   // Read field infos
+  if (FORY_PREDICT_FALSE(num_fields > meta_size)) {
+    return Unexpected(
+        Error::invalid_data("TypeMeta field count exceeds metadata body size"));
+  }
   std::vector<FieldInfo> field_infos;
   field_infos.reserve(num_fields);
   for (size_t i = 0; i < num_fields; ++i) {
@@ -734,6 +760,9 @@ TypeMeta::from_bytes_with_header(Buffer &buffer, int64_t header) {
 
   uint32_t start_pos = buffer.reader_index();
   Error error;
+  if (FORY_PREDICT_FALSE(!buffer.ensure_readable(meta_size, error))) {
+    return Unexpected(std::move(error));
+  }
 
   // Read meta header
   uint8_t meta_header = buffer.read_uint8(error);
@@ -801,6 +830,10 @@ TypeMeta::from_bytes_with_header(Buffer &buffer, int64_t header) {
   }
 
   // Read field infos
+  if (FORY_PREDICT_FALSE(num_fields > meta_size)) {
+    return Unexpected(
+        Error::invalid_data("TypeMeta field count exceeds metadata body size"));
+  }
   std::vector<FieldInfo> field_infos;
   field_infos.reserve(num_fields);
   for (size_t i = 0; i < num_fields; ++i) {

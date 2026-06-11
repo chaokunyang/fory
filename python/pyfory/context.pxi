@@ -484,7 +484,6 @@ cdef class WriteContext:
     cdef readonly bint field_nullable
     cdef readonly object policy
     cdef readonly int32_t max_collection_size
-    cdef readonly int32_t max_binary_size
     cdef readonly RefWriter ref_writer
     cdef readonly MetaStringWriter meta_string_writer
     cdef readonly MetaShareWriteContext meta_share_context
@@ -504,7 +503,6 @@ cdef class WriteContext:
         self.field_nullable = config.field_nullable
         self.policy = config.policy
         self.max_collection_size = config.max_collection_size
-        self.max_binary_size = config.max_binary_size
         self.ref_writer = RefWriter(self.track_ref)
         self.meta_string_writer = MetaStringWriter()
         self.meta_share_context = MetaShareWriteContext() if config.scoped_meta_share_enabled else None
@@ -751,7 +749,6 @@ cdef class ReadContext:
     cdef readonly object policy
     cdef readonly int32_t max_depth
     cdef readonly int32_t max_collection_size
-    cdef readonly int32_t max_binary_size
     cdef readonly RefReader ref_reader
     cdef readonly MetaStringReader meta_string_reader
     cdef readonly MetaShareReadContext meta_share_context
@@ -773,7 +770,6 @@ cdef class ReadContext:
         self.policy = config.policy
         self.max_depth = config.max_depth
         self.max_collection_size = config.max_collection_size
-        self.max_binary_size = config.max_binary_size
         self.ref_reader = RefReader(self.track_ref)
         self.meta_string_reader = MetaStringReader(self.type_resolver.shared_registry)
         self.meta_share_context = MetaShareReadContext() if config.scoped_meta_share_enabled else None
@@ -951,11 +947,10 @@ cdef class ReadContext:
         cdef Buffer buf
         if not self.peer_out_of_band_enabled:
             size = self.read_var_uint32()
-            if size > <uint32_t>self.max_binary_size:
-                raise ValueError(f"Binary size {size} exceeds the configured limit of {self.max_binary_size}")
             if self.buffer.has_input_stream():
                 return self.buffer.read_bytes(size)
             reader_index = self.buffer.get_reader_index()
+            self.buffer.check_bound(reader_index, size)
             buf = self.buffer.slice(reader_index, size)
             self.buffer.set_reader_index(reader_index + size)
             return buf
@@ -963,11 +958,10 @@ cdef class ReadContext:
             assert self.buffers is not None
             return next(self.buffers)
         size = self.read_var_uint32()
-        if size > <uint32_t>self.max_binary_size:
-            raise ValueError(f"Binary size {size} exceeds the configured limit of {self.max_binary_size}")
         if self.buffer.has_input_stream():
             return self.buffer.read_bytes(size)
         reader_index = self.buffer.get_reader_index()
+        self.buffer.check_bound(reader_index, size)
         buf = self.buffer.slice(reader_index, size)
         self.buffer.set_reader_index(reader_index + size)
         return buf

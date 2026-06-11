@@ -412,13 +412,6 @@ func decodeLimitsRejectOversizedPayloads() throws {
     #expect(Bool(false))
   } catch {}
 
-  let oversizedBinary = try writer.serialize(Data([0x01, 0x02, 0x03, 0x04]))
-  let binaryLimited = Fory(config: .init(maxBinarySize: 3))
-  do {
-    let _: Data = try binaryLimited.deserialize(oversizedBinary)
-    #expect(Bool(false))
-  } catch {}
-
   let oversizedArrayPayload = try writer.serialize([UInt16(1), 2])
   let payloadLimited = Fory(config: .init(maxCollectionSize: 1))
   do {

@@ -22,7 +22,6 @@ public struct Config {
   public let compatible: Bool
   public let checkClassVersion: Bool
   public let maxCollectionSize: Int
-  public let maxBinarySize: Int
   public let maxDepth: Int
 
   public init(
@@ -30,7 +29,6 @@ public struct Config {
     compatible: Bool? = nil,
     checkClassVersion: Bool? = nil,
     maxCollectionSize: Int = 1_000_000,
-    maxBinarySize: Int = 64 * 1024 * 1024,
     maxDepth: Int = 5
   ) {
     let effectiveCompatible = compatible ?? true
@@ -39,7 +37,6 @@ public struct Config {
     self.compatible = effectiveCompatible
     self.checkClassVersion = effectiveCheckClassVersion
     self.maxCollectionSize = maxCollectionSize
-    self.maxBinarySize = maxBinarySize
     self.maxDepth = maxDepth
   }
 }
@@ -60,7 +57,6 @@ public final class Fory {
     compatible: Bool? = nil,
     checkClassVersion: Bool? = nil,
     maxCollectionSize: Int = 1_000_000,
-    maxBinarySize: Int = 64 * 1024 * 1024,
     maxDepth: Int = 5
   ) {
     self.init(
@@ -69,7 +65,6 @@ public final class Fory {
         compatible: compatible,
         checkClassVersion: checkClassVersion,
         maxCollectionSize: maxCollectionSize,
-        maxBinarySize: maxBinarySize,
         maxDepth: maxDepth
       ))
   }
@@ -93,7 +88,6 @@ public final class Fory {
       compatible: self.config.compatible,
       checkClassVersion: self.config.checkClassVersion,
       maxCollectionSize: self.config.maxCollectionSize,
-      maxBinarySize: self.config.maxBinarySize,
       maxDepth: self.config.maxDepth
     )
   }

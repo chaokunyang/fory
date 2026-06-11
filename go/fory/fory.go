@@ -70,7 +70,6 @@ type Config struct {
 	IsXlang           bool
 	Compatible        bool // Schema evolution compatibility mode
 	MaxCollectionSize int
-	MaxBinarySize     int
 	MaxTypeFields     int
 }
 
@@ -81,7 +80,6 @@ func defaultConfig() Config {
 		MaxDepth:          20,
 		IsXlang:           true,
 		MaxCollectionSize: 1_000_000,
-		MaxBinarySize:     64 * 1024 * 1024,
 		MaxTypeFields:     10000,
 	}
 }
@@ -127,13 +125,6 @@ func WithCompatible(enabled bool) Option {
 func WithMaxCollectionSize(size int) Option {
 	return func(f *Fory) {
 		f.config.MaxCollectionSize = size
-	}
-}
-
-// WithMaxBinarySize sets the maximum binary size limit
-func WithMaxBinarySize(size int) Option {
-	return func(f *Fory) {
-		f.config.MaxBinarySize = size
 	}
 }
 
@@ -198,7 +189,6 @@ func New(opts ...Option) *Fory {
 
 	f.readCtx = NewReadContext(f.config.TrackRef)
 	f.readCtx.maxCollectionSize = f.config.MaxCollectionSize
-	f.readCtx.maxBinarySize = f.config.MaxBinarySize
 	f.readCtx.typeResolver = f.typeResolver
 	f.readCtx.refResolver = f.refResolver
 	f.readCtx.compatible = f.config.Compatible

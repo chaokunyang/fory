@@ -303,6 +303,9 @@ func (s *sliceSerializer) ReadData(ctx *ReadContext, value reflect.Value) {
 	buf := ctx.Buffer()
 	ctxErr := ctx.Err()
 	length := ctx.ReadCollectionLength()
+	if ctx.HasError() {
+		return
+	}
 	isArrayType := value.Type().Kind() == reflect.Array
 
 	if length == 0 {
@@ -314,6 +317,9 @@ func (s *sliceSerializer) ReadData(ctx *ReadContext, value reflect.Value) {
 
 	// ReadData collection flags
 	collectFlag := buf.ReadInt8(ctxErr)
+	if ctx.HasError() {
+		return
+	}
 
 	elemSerializer := s.elemSerializer
 
@@ -334,6 +340,9 @@ func (s *sliceSerializer) ReadData(ctx *ReadContext, value reflect.Value) {
 				}
 			}
 		}
+	}
+	if ctx.HasError() {
+		return
 	}
 
 	// IMPORTANT: collection readers must obey the TRACKING_REF bit written on the

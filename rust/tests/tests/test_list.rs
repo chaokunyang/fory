@@ -247,29 +247,3 @@ fn test_vec_bfloat16_special_values() {
     assert_eq!(obj[3].to_bits(), bfloat16::MAX.to_bits());
     assert!(obj[5].is_subnormal());
 }
-
-#[test]
-fn test_vec_max_collection_size_guardrail() {
-    let fory = Fory::builder().xlang(false).compatible(false).build();
-    let original = vec!["alpha".to_string(), "beta".to_string(), "gamma".to_string()];
-    let serialized = fory.serialize(&original).unwrap();
-
-    let limited_fory = Fory::builder()
-        .xlang(false)
-        .max_collection_size(2)
-        .compatible(false)
-        .build();
-    let err = limited_fory
-        .deserialize::<Vec<String>>(&serialized)
-        .expect_err("expected vec deserialization to fail on max_collection_size");
-
-    assert!(
-        matches!(err, fory_core::Error::SizeLimitExceeded(_)),
-        "expected SizeLimitExceeded, got: {err}"
-    );
-    assert!(
-        err.to_string()
-            .contains("Collection size 3 exceeds limit 2"),
-        "unexpected error message: {err}"
-    );
-}

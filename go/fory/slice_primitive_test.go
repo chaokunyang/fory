@@ -467,13 +467,40 @@ func TestReadInt32Slice_OOM_Bug(t *testing.T) {
 	assert.Equal(t, 0, len(result), "Expected an empty slice due to missing data")
 }
 
+func TestReadFixedWidthSliceBytes(t *testing.T) {
+	t.Run("unaligned_size", func(t *testing.T) {
+		buf := NewByteBuffer(nil)
+		buf.WriteLength(3)
+		buf.WriteBinary([]byte{1, 2, 3})
+		buf.SetReaderIndex(0)
+
+		err := &Error{}
+		result := ReadInt16Slice(buf, err)
+
+		assert.True(t, err.HasError())
+		assert.Nil(t, result)
+	})
+
+	t.Run("missing_body", func(t *testing.T) {
+		buf := NewByteBuffer(nil)
+		buf.WriteLength(40000)
+		buf.SetReaderIndex(0)
+
+		err := &Error{}
+		result := ReadFloat64Slice(buf, err)
+
+		assert.True(t, err.HasError())
+		assert.Nil(t, result)
+	})
+}
+
 func TestReadBoolSliceWrappedBuffer(t *testing.T) {
-	payload := NewByteBuffer(nil)
-	WriteBoolSlice(payload, []bool{true, false})
+	arrayBytes := NewByteBuffer(nil)
+	WriteBoolSlice(arrayBytes, []bool{true, false})
 
 	err := &Error{}
-	result := ReadBoolSlice(NewByteBuffer(payload.Bytes()), err)
+	result := ReadBoolSlice(NewByteBuffer(arrayBytes.Bytes()), err)
 
-	assert.False(t, err.HasError(), "Expected wrapped buffer reads to use the serialized payload")
+	assert.False(t, err.HasError(), "Expected wrapped buffer reads to use serialized array bytes")
 	assert.Equal(t, []bool{true, false}, result)
 }

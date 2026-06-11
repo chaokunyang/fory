@@ -1180,6 +1180,7 @@ impl TypeMeta {
             type_name = empty_name;
         }
 
+        reader.check_bound(num_fields)?;
         let mut field_infos = Vec::with_capacity(num_fields);
         for _ in 0..num_fields {
             field_infos.push(FieldInfo::from_bytes(reader)?);

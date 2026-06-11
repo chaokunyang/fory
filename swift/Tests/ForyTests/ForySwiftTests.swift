@@ -396,31 +396,6 @@ func structEvolvingOverrideUsesSmallerCompatiblePayload() throws {
 }
 
 @Test
-func decodeLimitsRejectOversizedPayloads() throws {
-  let writer = Fory()
-
-  let oversizedCollection = try writer.serialize(["a", "b", "c"])
-  let collectionLimited = Fory(config: .init(maxCollectionSize: 2))
-  do {
-    let _: [String] = try collectionLimited.deserialize(oversizedCollection)
-    #expect(Bool(false))
-  } catch {}
-
-  let oversizedMap = try writer.serialize([Int32(1): Int32(1), 2: 2, 3: 3])
-  do {
-    let _: [Int32: Int32] = try collectionLimited.deserialize(oversizedMap)
-    #expect(Bool(false))
-  } catch {}
-
-  let oversizedArrayPayload = try writer.serialize([UInt16(1), 2])
-  let payloadLimited = Fory(config: .init(maxCollectionSize: 1))
-  do {
-    let _: [UInt16] = try payloadLimited.deserialize(oversizedArrayPayload)
-    #expect(Bool(false))
-  } catch {}
-}
-
-@Test
 func deserializeRejectsTrailingBytes() throws {
   let fory = Fory()
   let payload = try fory.serialize(Int32(7))

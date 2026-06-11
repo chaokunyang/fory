@@ -22,6 +22,7 @@
 #include "fory/serialization/skip.h"
 #include "fory/thirdparty/MurmurHash3.h"
 #include "gtest/gtest.h"
+#include <array>
 #include <atomic>
 #include <chrono>
 #include <cstdint>
@@ -320,6 +321,23 @@ TEST(SerializationTest, BoolVectorReadsCheckBodyBeforeAllocation) {
 
   EXPECT_TRUE(result.empty());
   EXPECT_TRUE(read_ctx.has_error());
+}
+
+TEST(SerializationTest, FixedPrimitiveArrayRejectsWrongByteSize) {
+  auto fory =
+      Fory::builder().xlang(true).compatible(false).track_ref(false).build();
+  Buffer buffer;
+  buffer.write_var_uint32(sizeof(int32_t) + 1);
+  buffer.write_uint32(1);
+  buffer.write_uint8(0);
+  ReadContext read_ctx(fory.config(), fory.type_resolver().clone());
+  read_ctx.attach(buffer);
+
+  auto result = Serializer<std::array<int32_t, 1>>::read_data(read_ctx);
+
+  EXPECT_EQ(result[0], 0);
+  ASSERT_TRUE(read_ctx.has_error());
+  EXPECT_EQ(read_ctx.error().code(), ErrorCode::InvalidData);
 }
 
 TEST(SerializationTest, DecimalReadsCheckBodyBeforeAllocation) {

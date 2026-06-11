@@ -578,6 +578,14 @@ public class MemoryBufferTest {
   }
 
   @Test
+  public void testReadCharsAndSizeAlignment() {
+    MemoryBuffer buf = MemoryUtils.buffer(8);
+    buf.writeVarUInt32(3);
+    buf.writeBytes(new byte[] {1, 2, 3});
+    assertThrows(IllegalArgumentException.class, buf::readCharsAndSize);
+  }
+
+  @Test
   public void testWriteVarUInt32() {
     for (int i = 0; i < 32; i++) {
       MemoryBuffer buf = MemoryUtils.buffer(8);

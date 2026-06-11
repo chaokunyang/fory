@@ -50,6 +50,17 @@ public class StringSerializerTest extends ForyTestBase {
   }
 
   @Test
+  public void testRejectOddUtf16ByteSize() {
+    Fory fory = Fory.builder().build();
+    StringSerializer serializer = new StringSerializer(fory.getConfig());
+    MemoryBuffer buffer = MemoryBuffer.newHeapBuffer(8);
+    int writerIndex = buffer._unsafePutVarUint36Small(0, (3L << 2) | 1);
+    buffer._unsafeWriterIndex(writerIndex);
+    buffer.writeBytes(new byte[] {1, 2, 3});
+    Assert.assertThrows(IllegalArgumentException.class, () -> serializer.readString(buffer));
+  }
+
+  @Test
   public void testJavaStringZeroCopy() {
     if (JdkVersion.MAJOR_VERSION >= 17) {
       throw new SkipException("Skip on jdk17+");

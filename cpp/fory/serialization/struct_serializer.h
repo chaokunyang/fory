@@ -900,6 +900,9 @@ Container read_configured_list_data(ReadContext &ctx) {
   if (FORY_PREDICT_FALSE(ctx.has_error()) || length == 0) {
     return result;
   }
+  if (FORY_PREDICT_FALSE(!ctx.buffer().ensure_readable(length, ctx.error()))) {
+    return result;
+  }
   if constexpr (has_reserve_v<Container>) {
     result.reserve(length);
   }
@@ -943,11 +946,6 @@ FORY_NOINLINE Container read_configured_list_data_as_array_field(
   if (FORY_PREDICT_FALSE(ctx.has_error()) || length == 0) {
     return result;
   }
-  if (FORY_PREDICT_FALSE(length > ctx.config().max_collection_size)) {
-    ctx.set_error(
-        Error::invalid_data("Collection length exceeds max_collection_size"));
-    return result;
-  }
   uint8_t bitmap = ctx.read_uint8(ctx.error());
   if (FORY_PREDICT_FALSE(ctx.has_error())) {
     return result;
@@ -969,6 +967,9 @@ FORY_NOINLINE Container read_configured_list_data_as_array_field(
   if (FORY_PREDICT_FALSE(!is_decl_type)) {
     ctx.set_error(Error::invalid_data(
         "compatible list to array field requires declared elements"));
+    return result;
+  }
+  if (FORY_PREDICT_FALSE(!ctx.buffer().ensure_readable(1, ctx.error()))) {
     return result;
   }
   if constexpr (has_reserve_v<Container>) {
@@ -1056,6 +1057,12 @@ MapType read_configured_map_data(ReadContext &ctx) {
   using Value = mapped_type_t<MapType>;
   uint32_t length = ctx.read_var_uint32(ctx.error());
   MapType result;
+  if (FORY_PREDICT_FALSE(ctx.has_error()) || length == 0) {
+    return result;
+  }
+  if (FORY_PREDICT_FALSE(!ctx.buffer().ensure_readable(2, ctx.error()))) {
+    return result;
+  }
   MapReserver<MapType>::reserve(result, length);
   uint32_t read_count = 0;
   while (read_count < length && !ctx.has_error()) {

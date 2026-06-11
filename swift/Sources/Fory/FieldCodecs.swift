@@ -962,6 +962,7 @@ where KeyCodec.Value: Hashable {
             return [:]
         }
 
+        try context.ensureRemainingBytes(1, label: "map")
         var map: Value = [:]
         map.reserveCapacity(Swift.min(totalLength, context.buffer.remaining))
         var readCount = 0
@@ -1511,12 +1512,12 @@ private func readPackedArrayElementCount(
     width: Int,
     label: String
 ) throws -> Int {
-    let payloadSize = Int(try context.buffer.readVarUInt32())
-    try context.ensureRemainingBytes(payloadSize, label: "primitive_array_payload")
-    if payloadSize % width != 0 {
-        throw ForyError.invalidData("\(label) payload size mismatch")
+    let byteSize = Int(try context.buffer.readVarUInt32())
+    try context.ensureRemainingBytes(byteSize, label: "primitive_array_bytes")
+    if byteSize % width != 0 {
+        throw ForyError.invalidData("\(label) byte size mismatch")
     }
-    let count = payloadSize / width
+    let count = byteSize / width
     try context.ensureCollectionLength(count, label: label)
     return count
 }
@@ -1698,9 +1699,6 @@ private func readListPayloadAsArrayPayload<ElementCodec: FieldCodec>(
     let declared = (header & CollectionHeader.declaredElementType) != 0
     let sameType = (header & CollectionHeader.sameType) != 0
 
-    var result: [ElementCodec.Value] = []
-    result.reserveCapacity(length)
-
     if !sameType {
         throw ForyError.invalidData("compatible list-to-array field requires same-type elements")
     }
@@ -1714,6 +1712,9 @@ private func readListPayloadAsArrayPayload<ElementCodec: FieldCodec>(
     } else {
         throw ForyError.invalidData("compatible list-to-array field requires declared elements")
     }
+    try context.ensureRemainingBytes(length, label: "array")
+    var result: [ElementCodec.Value] = []
+    result.reserveCapacity(length)
     return try ElementCodec.withTypeInfo(elementTypeInfo, context) {
         for _ in 0..<length {
             result.append(try readCompatibleElementPayload(

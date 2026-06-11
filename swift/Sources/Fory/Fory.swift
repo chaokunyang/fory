@@ -21,14 +21,12 @@ public struct Config {
   public let trackRef: Bool
   public let compatible: Bool
   public let checkClassVersion: Bool
-  public let maxCollectionSize: Int
   public let maxDepth: Int
 
   public init(
     trackRef: Bool = false,
     compatible: Bool? = nil,
     checkClassVersion: Bool? = nil,
-    maxCollectionSize: Int = 1_000_000,
     maxDepth: Int = 5
   ) {
     let effectiveCompatible = compatible ?? true
@@ -36,7 +34,6 @@ public struct Config {
     self.trackRef = trackRef
     self.compatible = effectiveCompatible
     self.checkClassVersion = effectiveCheckClassVersion
-    self.maxCollectionSize = maxCollectionSize
     self.maxDepth = maxDepth
   }
 }
@@ -56,7 +53,6 @@ public final class Fory {
     ref: Bool = false,
     compatible: Bool? = nil,
     checkClassVersion: Bool? = nil,
-    maxCollectionSize: Int = 1_000_000,
     maxDepth: Int = 5
   ) {
     self.init(
@@ -64,7 +60,6 @@ public final class Fory {
         trackRef: ref,
         compatible: compatible,
         checkClassVersion: checkClassVersion,
-        maxCollectionSize: maxCollectionSize,
         maxDepth: maxDepth
       ))
   }
@@ -87,7 +82,6 @@ public final class Fory {
       trackRef: self.config.trackRef,
       compatible: self.config.compatible,
       checkClassVersion: self.config.checkClassVersion,
-      maxCollectionSize: self.config.maxCollectionSize,
       maxDepth: self.config.maxDepth
     )
   }

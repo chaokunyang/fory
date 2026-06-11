@@ -49,7 +49,6 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CopyOnWriteArraySet;
 import java.util.concurrent.LinkedBlockingQueue;
 import org.apache.fory.collection.CollectionSnapshot;
-import org.apache.fory.config.Config;
 import org.apache.fory.context.CopyContext;
 import org.apache.fory.context.ReadContext;
 import org.apache.fory.context.WriteContext;
@@ -96,7 +95,7 @@ public class CollectionSerializers {
         "Binary body size " + size + " is not aligned to element size " + elemSize);
   }
 
-  private static void checkBoundedQueueCapacity(Config config, int numElements, int capacity) {
+  private static void checkBoundedQueueCapacity(int numElements, int capacity) {
     // Keep these as direct primitive branches. This collection read path is JIT-sensitive; using
     // Preconditions.checkArgument here adds helper/varargs overhead and hurts inlining.
     if (numElements < 0) {
@@ -108,11 +107,6 @@ public class CollectionSerializers {
     if (capacity < numElements) {
       throw new DeserializationException(
           "Queue capacity " + capacity + " is smaller than serialized size " + numElements);
-    }
-    int maxCollectionSize = config.maxCollectionSize();
-    if (capacity > maxCollectionSize) {
-      throw new DeserializationException(
-          "Queue capacity " + capacity + " exceeds max collection size " + maxCollectionSize);
     }
   }
 
@@ -932,7 +926,7 @@ public class CollectionSerializers {
       int numElements = readCollectionSize(buffer);
       setNumElements(numElements);
       int capacity = buffer.readVarUInt32Small7();
-      checkBoundedQueueCapacity(config, numElements, capacity);
+      checkBoundedQueueCapacity(numElements, capacity);
       ArrayBlockingQueue queue = new ArrayBlockingQueue<>(capacity);
       readContext.reference(queue);
       return queue;
@@ -998,7 +992,7 @@ public class CollectionSerializers {
       int numElements = readCollectionSize(buffer);
       setNumElements(numElements);
       int capacity = buffer.readVarUInt32Small7();
-      checkBoundedQueueCapacity(config, numElements, capacity);
+      checkBoundedQueueCapacity(numElements, capacity);
       LinkedBlockingQueue queue = new LinkedBlockingQueue<>(capacity);
       readContext.reference(queue);
       return queue;

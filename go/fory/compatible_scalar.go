@@ -326,7 +326,7 @@ func readCompatibleScalarValue(ctx *ReadContext, typeID TypeId) compatibleScalar
 		case 1:
 			return compatibleScalarValue{typeID: typeID, boolVal: true}
 		default:
-			compatibleScalarFail(ctx, "", typeID, UNKNOWN, "bool payload is not 0 or 1")
+			compatibleScalarFail(ctx, "", typeID, UNKNOWN, "bool byte is not 0 or 1")
 			return compatibleScalarValue{}
 		}
 	case STRING:

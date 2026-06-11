@@ -265,6 +265,10 @@ public final class MemoryBuffer {
     }
   }
 
+  boolean isStreamBacked() {
+    return !(streamReader instanceof BoundChecker);
+  }
+
   public void initHeapBuffer(byte[] buffer, int offset, int length) {
     if (buffer == null) {
       throw new NullPointerException("buffer");
@@ -3188,7 +3192,7 @@ public final class MemoryBuffer {
     }
     int diff = size - readIdx;
     if (diff < binarySize) {
-      streamReader.fillBuffer(diff);
+      streamReader.fillBuffer(binarySize - diff);
     }
     return binarySize;
   }
@@ -3211,14 +3215,13 @@ public final class MemoryBuffer {
     }
     int diff = size - readIdx;
     if (diff < binarySize) {
-      streamReader.fillBuffer(diff);
+      streamReader.fillBuffer(binarySize - diff);
     }
     return binarySize;
   }
 
   public byte[] readBytesAndSize() {
     final int numBytes = readBinarySize();
-    checkReadableBytes(numBytes);
     int readerIdx = readerIndex;
     final byte[] arr = new byte[numBytes];
     // use subtract to avoid overflow
@@ -3238,7 +3241,7 @@ public final class MemoryBuffer {
    */
   public void readByteArrayBytes(byte[] values, int numBytes) {
     int readerIdx = readerIndex;
-    if (readerIdx > size - numBytes) {
+    if (readerIdx > size - numBytes || isStreamBacked()) {
       streamReader.readTo(values, 0, numBytes);
       return;
     }
@@ -3253,7 +3256,7 @@ public final class MemoryBuffer {
    */
   public void readBooleanArrayBytes(boolean[] values, int numBytes) {
     int readerIdx = readerIndex;
-    if (readerIdx > size - numBytes) {
+    if (readerIdx > size - numBytes || isStreamBacked()) {
       streamReader.readBooleans(values, 0, numBytes);
       return;
     }
@@ -3268,7 +3271,7 @@ public final class MemoryBuffer {
    */
   public void readCharArrayBytes(char[] values, int numBytes) {
     int readerIdx = readerIndex;
-    if (readerIdx > size - numBytes) {
+    if (readerIdx > size - numBytes || isStreamBacked()) {
       streamReader.readChars(values, 0, numBytes >>> 1);
       return;
     }
@@ -3283,7 +3286,7 @@ public final class MemoryBuffer {
    */
   public void readInt16ArrayBytes(short[] values, int numBytes) {
     int readerIdx = readerIndex;
-    if (readerIdx > size - numBytes) {
+    if (readerIdx > size - numBytes || isStreamBacked()) {
       streamReader.readShorts(values, 0, numBytes >>> 1);
       return;
     }
@@ -3298,7 +3301,7 @@ public final class MemoryBuffer {
    */
   public void readInt32ArrayBytes(int[] values, int numBytes) {
     int readerIdx = readerIndex;
-    if (readerIdx > size - numBytes) {
+    if (readerIdx > size - numBytes || isStreamBacked()) {
       streamReader.readInts(values, 0, numBytes >>> 2);
       return;
     }
@@ -3313,7 +3316,7 @@ public final class MemoryBuffer {
    */
   public void readInt64ArrayBytes(long[] values, int numBytes) {
     int readerIdx = readerIndex;
-    if (readerIdx > size - numBytes) {
+    if (readerIdx > size - numBytes || isStreamBacked()) {
       streamReader.readLongs(values, 0, numBytes >>> 3);
       return;
     }
@@ -3328,7 +3331,7 @@ public final class MemoryBuffer {
    */
   public void readFloat32ArrayBytes(float[] values, int numBytes) {
     int readerIdx = readerIndex;
-    if (readerIdx > size - numBytes) {
+    if (readerIdx > size - numBytes || isStreamBacked()) {
       streamReader.readFloats(values, 0, numBytes >>> 2);
       return;
     }
@@ -3343,7 +3346,7 @@ public final class MemoryBuffer {
    */
   public void readFloat64ArrayBytes(double[] values, int numBytes) {
     int readerIdx = readerIndex;
-    if (readerIdx > size - numBytes) {
+    if (readerIdx > size - numBytes || isStreamBacked()) {
       streamReader.readDoubles(values, 0, numBytes >>> 3);
       return;
     }
@@ -3387,7 +3390,10 @@ public final class MemoryBuffer {
   @CodegenInvoke
   public char[] readCharsAndSize() {
     final int numBytes = readBinarySize();
-    checkReadableBytes(numBytes);
+    if ((numBytes & 1) != 0) {
+      throw new IllegalArgumentException(
+          "Char array byte size " + numBytes + " is not aligned to element size 2");
+    }
     int numElements = numBytes >> 1;
     char[] values = new char[numElements];
     readChars(values, 0, numElements);

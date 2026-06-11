@@ -65,22 +65,20 @@ const (
 
 // Config holds configuration options for Fory instances
 type Config struct {
-	TrackRef          bool
-	MaxDepth          int
-	IsXlang           bool
-	Compatible        bool // Schema evolution compatibility mode
-	MaxCollectionSize int
-	MaxTypeFields     int
+	TrackRef      bool
+	MaxDepth      int
+	IsXlang       bool
+	Compatible    bool // Schema evolution compatibility mode
+	MaxTypeFields int
 }
 
 // defaultConfig returns the default configuration
 func defaultConfig() Config {
 	return Config{
-		TrackRef:          false, // Match Java's default: reference tracking disabled
-		MaxDepth:          20,
-		IsXlang:           true,
-		MaxCollectionSize: 1_000_000,
-		MaxTypeFields:     10000,
+		TrackRef:      false, // Match Java's default: reference tracking disabled
+		MaxDepth:      20,
+		IsXlang:       true,
+		MaxTypeFields: 10000,
 	}
 }
 
@@ -118,13 +116,6 @@ func WithCompatible(enabled bool) Option {
 	return func(f *Fory) {
 		f.config.Compatible = enabled
 		f.compatibleSet = true
-	}
-}
-
-// WithMaxCollectionSize sets the maximum collection size limit
-func WithMaxCollectionSize(size int) Option {
-	return func(f *Fory) {
-		f.config.MaxCollectionSize = size
 	}
 }
 
@@ -188,7 +179,6 @@ func New(opts ...Option) *Fory {
 	f.writeCtx.xlang = f.config.IsXlang
 
 	f.readCtx = NewReadContext(f.config.TrackRef)
-	f.readCtx.maxCollectionSize = f.config.MaxCollectionSize
 	f.readCtx.typeResolver = f.typeResolver
 	f.readCtx.refResolver = f.refResolver
 	f.readCtx.compatible = f.config.Compatible

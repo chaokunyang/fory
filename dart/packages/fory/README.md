@@ -123,16 +123,14 @@ Keep the same registration identity on every peer that exchanges the type.
 ```dart
 final fory = Fory(
   maxDepth: 256,
-  maxCollectionSize: 1 << 20,
 );
 ```
 
-| Option               | Default   | Description                                             |
-| -------------------- | --------- | ------------------------------------------------------- |
-| `compatible`         | `true`    | Enables compatible struct encoding for schema evolution |
-| `checkStructVersion` | `false`   | Validates struct version for same-schema payloads       |
-| `maxDepth`           | `256`     | Maximum nesting depth per operation                     |
-| `maxCollectionSize`  | `1 << 20` | Maximum collection and map payload size                 |
+| Option               | Default | Description                                             |
+| -------------------- | ------- | ------------------------------------------------------- |
+| `compatible`         | `true`  | Enables compatible struct encoding for schema evolution |
+| `checkStructVersion` | `false` | Validates struct version for same-schema payloads       |
+| `maxDepth`           | `256`   | Maximum nesting depth per operation                     |
 
 ## Reference Tracking
 

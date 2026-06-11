@@ -815,7 +815,7 @@ void skip_field_value(ReadContext &ctx, const FieldType &field_type,
         return;
       }
     }
-    // Typed primitive arrays encode payload size in bytes, not element count.
+    // Typed primitive arrays encode byte size, not element count.
     uint32_t payload_size = ctx.read_var_uint32(ctx.error());
     if (FORY_PREDICT_FALSE(ctx.has_error())) {
       return;

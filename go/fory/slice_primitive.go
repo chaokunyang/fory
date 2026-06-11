@@ -776,6 +776,24 @@ func ReadInt8Slice(buf *ByteBuffer, err *Error) []int8 {
 	return result
 }
 
+func readSliceBytes(buf *ByteBuffer, err *Error, elemSize int) (int, int, bool) {
+	size := buf.ReadLength(err)
+	if err.HasError() {
+		return 0, 0, false
+	}
+	if size%elemSize != 0 {
+		*err = DeserializationErrorf("array byte size %d is not aligned to element size %d", size, elemSize)
+		return 0, 0, false
+	}
+	if size == 0 {
+		return 0, 0, true
+	}
+	if !buf.CheckReadable(size, err) {
+		return 0, 0, false
+	}
+	return size, size / elemSize, true
+}
+
 // WriteInt16Slice writes []int16 to buffer using ARRAY protocol
 func WriteInt16Slice(buf *ByteBuffer, value []int16) {
 	size := len(value) * 2
@@ -793,8 +811,10 @@ func WriteInt16Slice(buf *ByteBuffer, value []int16) {
 
 // ReadInt16Slice reads []int16 from buffer using ARRAY protocol
 func ReadInt16Slice(buf *ByteBuffer, err *Error) []int16 {
-	size := buf.ReadLength(err)
-	length := size / 2
+	size, length, ok := readSliceBytes(buf, err, 2)
+	if !ok {
+		return nil
+	}
 	if length == 0 {
 		return make([]int16, 0)
 	}
@@ -832,8 +852,10 @@ func WriteInt32Slice(buf *ByteBuffer, value []int32) {
 
 // ReadInt32Slice reads []int32 from buffer using ARRAY protocol
 func ReadInt32Slice(buf *ByteBuffer, err *Error) []int32 {
-	size := buf.ReadLength(err)
-	length := size / 4
+	size, length, ok := readSliceBytes(buf, err, 4)
+	if !ok {
+		return nil
+	}
 	if length == 0 {
 		return make([]int32, 0)
 	}
@@ -871,8 +893,10 @@ func WriteInt64Slice(buf *ByteBuffer, value []int64) {
 
 // ReadInt64Slice reads []int64 from buffer using ARRAY protocol
 func ReadInt64Slice(buf *ByteBuffer, err *Error) []int64 {
-	size := buf.ReadLength(err)
-	length := size / 8
+	size, length, ok := readSliceBytes(buf, err, 8)
+	if !ok {
+		return nil
+	}
 	if length == 0 {
 		return make([]int64, 0)
 	}
@@ -910,8 +934,10 @@ func WriteUint16Slice(buf *ByteBuffer, value []uint16) {
 
 // ReadUint16Slice reads []uint16 from buffer using ARRAY protocol
 func ReadUint16Slice(buf *ByteBuffer, err *Error) []uint16 {
-	size := buf.ReadLength(err)
-	length := size / 2
+	size, length, ok := readSliceBytes(buf, err, 2)
+	if !ok {
+		return nil
+	}
 	if length == 0 {
 		return make([]uint16, 0)
 	}
@@ -949,8 +975,10 @@ func WriteUint32Slice(buf *ByteBuffer, value []uint32) {
 
 // ReadUint32Slice reads []uint32 from buffer using ARRAY protocol
 func ReadUint32Slice(buf *ByteBuffer, err *Error) []uint32 {
-	size := buf.ReadLength(err)
-	length := size / 4
+	size, length, ok := readSliceBytes(buf, err, 4)
+	if !ok {
+		return nil
+	}
 	if length == 0 {
 		return make([]uint32, 0)
 	}
@@ -988,8 +1016,10 @@ func WriteUint64Slice(buf *ByteBuffer, value []uint64) {
 
 // ReadUint64Slice reads []uint64 from buffer using ARRAY protocol
 func ReadUint64Slice(buf *ByteBuffer, err *Error) []uint64 {
-	size := buf.ReadLength(err)
-	length := size / 8
+	size, length, ok := readSliceBytes(buf, err, 8)
+	if !ok {
+		return nil
+	}
 	if length == 0 {
 		return make([]uint64, 0)
 	}
@@ -1027,8 +1057,10 @@ func WriteFloat32Slice(buf *ByteBuffer, value []float32) {
 
 // ReadFloat32Slice reads []float32 from buffer using ARRAY protocol
 func ReadFloat32Slice(buf *ByteBuffer, err *Error) []float32 {
-	size := buf.ReadLength(err)
-	length := size / 4
+	size, length, ok := readSliceBytes(buf, err, 4)
+	if !ok {
+		return nil
+	}
 	if length == 0 {
 		return make([]float32, 0)
 	}
@@ -1066,8 +1098,10 @@ func WriteFloat64Slice(buf *ByteBuffer, value []float64) {
 
 // ReadFloat64Slice reads []float64 from buffer using ARRAY protocol
 func ReadFloat64Slice(buf *ByteBuffer, err *Error) []float64 {
-	size := buf.ReadLength(err)
-	length := size / 8
+	size, length, ok := readSliceBytes(buf, err, 8)
+	if !ok {
+		return nil
+	}
 	if length == 0 {
 		return make([]float64, 0)
 	}
@@ -1210,9 +1244,11 @@ func WriteIntSlice(buf *ByteBuffer, value []int) {
 
 // ReadIntSlice reads []int from buffer using ARRAY protocol
 func ReadIntSlice(buf *ByteBuffer, err *Error) []int {
-	size := buf.ReadLength(err)
 	if strconv.IntSize == 64 {
-		length := size / 8
+		size, length, ok := readSliceBytes(buf, err, 8)
+		if !ok {
+			return nil
+		}
 		if length == 0 {
 			return make([]int, 0)
 		}
@@ -1232,7 +1268,10 @@ func ReadIntSlice(buf *ByteBuffer, err *Error) []int {
 			return result
 		}
 	} else {
-		length := size / 4
+		size, length, ok := readSliceBytes(buf, err, 4)
+		if !ok {
+			return nil
+		}
 		if length == 0 {
 			return make([]int, 0)
 		}
@@ -1285,9 +1324,11 @@ func WriteUintSlice(buf *ByteBuffer, value []uint) {
 
 // ReadUintSlice reads []uint from buffer using ARRAY protocol
 func ReadUintSlice(buf *ByteBuffer, err *Error) []uint {
-	size := buf.ReadLength(err)
 	if strconv.IntSize == 64 {
-		length := size / 8
+		size, length, ok := readSliceBytes(buf, err, 8)
+		if !ok {
+			return nil
+		}
 		if length == 0 {
 			return make([]uint, 0)
 		}
@@ -1307,7 +1348,10 @@ func ReadUintSlice(buf *ByteBuffer, err *Error) []uint {
 			return result
 		}
 	} else {
-		length := size / 4
+		size, length, ok := readSliceBytes(buf, err, 4)
+		if !ok {
+			return nil
+		}
 		if length == 0 {
 			return make([]uint, 0)
 		}

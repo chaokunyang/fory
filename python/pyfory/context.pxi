@@ -483,7 +483,6 @@ cdef class WriteContext:
     cdef readonly bint compatible
     cdef readonly bint field_nullable
     cdef readonly object policy
-    cdef readonly int32_t max_collection_size
     cdef readonly RefWriter ref_writer
     cdef readonly MetaStringWriter meta_string_writer
     cdef readonly MetaShareWriteContext meta_share_context
@@ -502,7 +501,6 @@ cdef class WriteContext:
         self.compatible = config.compatible
         self.field_nullable = config.field_nullable
         self.policy = config.policy
-        self.max_collection_size = config.max_collection_size
         self.ref_writer = RefWriter(self.track_ref)
         self.meta_string_writer = MetaStringWriter()
         self.meta_share_context = MetaShareWriteContext() if config.scoped_meta_share_enabled else None
@@ -748,7 +746,6 @@ cdef class ReadContext:
     cdef readonly bint field_nullable
     cdef readonly object policy
     cdef readonly int32_t max_depth
-    cdef readonly int32_t max_collection_size
     cdef readonly RefReader ref_reader
     cdef readonly MetaStringReader meta_string_reader
     cdef readonly MetaShareReadContext meta_share_context
@@ -769,7 +766,6 @@ cdef class ReadContext:
         self.field_nullable = config.field_nullable
         self.policy = config.policy
         self.max_depth = config.max_depth
-        self.max_collection_size = config.max_collection_size
         self.ref_reader = RefReader(self.track_ref)
         self.meta_string_reader = MetaStringReader(self.type_resolver.shared_registry)
         self.meta_share_context = MetaShareReadContext() if config.scoped_meta_share_enabled else None
@@ -1103,6 +1099,17 @@ cdef class ReadContext:
 
     cpdef read_bytes_and_size(self):
         return self.buffer.read_bytes_and_size()
+
+    cpdef check_readable_bytes(self, int32_t length):
+        cdef Buffer buffer
+        if length < 0:
+            raise_fory_error(CErrorCode.InvalidData, f"Readable byte count {length} is negative")
+        if length == 0:
+            return
+        buffer = self.buffer
+        if not self.c_buffer.ensure_readable(<uint32_t>length, buffer._error):
+            if not buffer._error.ok():
+                buffer._raise_if_error()
 
     cpdef inline int32_t get_reader_index(self):
         return self.buffer.get_reader_index()

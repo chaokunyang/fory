@@ -264,11 +264,6 @@ final class ListSerializer extends Serializer<List> {
     required bool trackRef,
   }) {
     final size = values.length;
-    if (size > context.config.maxCollectionSize) {
-      throw StateError(
-        'Collection size $size exceeds ${context.config.maxCollectionSize}.',
-      );
-    }
     context.buffer.writeVarUint32(size);
     if (size == 0) {
       return;
@@ -512,11 +507,6 @@ Object _readCompatibleListAsArrayField(
   String fieldName,
 ) {
   final size = context.buffer.readVarUint32();
-  if (size > context.config.maxCollectionSize) {
-    throw StateError(
-      'Collection size $size exceeds ${context.config.maxCollectionSize}.',
-    );
-  }
   if (size == 0) {
     return _newArrayValue(arrayTypeId, 0);
   }
@@ -537,6 +527,7 @@ Object _readCompatibleListAsArrayField(
     );
   }
   final elementResolved = context.typeResolver.resolveFieldType(elementType);
+  context.buffer.checkReadableBytes(size);
   final result = _newArrayValue(arrayTypeId, size);
   for (var index = 0; index < size; index += 1) {
     _setArrayValue(
@@ -732,11 +723,6 @@ void writeTypedListPayload<T>(
   FieldType elementFieldType,
 ) {
   final size = values.length;
-  if (size > context.config.maxCollectionSize) {
-    throw StateError(
-      'Collection size $size exceeds ${context.config.maxCollectionSize}.',
-    );
-  }
   context.buffer.writeVarUint32(size);
   if (size == 0) return;
   final declaredTypeInfo = context.typeResolver.resolveFieldType(
@@ -919,11 +905,6 @@ _PreparedListRead _prepareListRead(
   FieldType? elementFieldType,
 ) {
   final size = context.buffer.readVarUint32();
-  if (size > context.config.maxCollectionSize) {
-    throw StateError(
-      'Collection size $size exceeds ${context.config.maxCollectionSize}.',
-    );
-  }
   if (size == 0) {
     return _PreparedListRead(
       size: 0,

@@ -144,7 +144,6 @@ func TestReadCollectionLengthDoesNotTreatElementsAsBytes(t *testing.T) {
 	writer.WriteLength(1024)
 
 	ctx := NewReadContext(false)
-	ctx.maxCollectionSize = 1 << 20
 	ctx.SetData(writer.Bytes())
 
 	require.Equal(t, 1024, ctx.ReadCollectionLength())

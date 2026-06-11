@@ -541,6 +541,7 @@ public sealed class TypeMeta : IEquatable<TypeMeta>
             typeName = MetaString.Empty('$', '_');
         }
 
+        bodyReader.CheckBound(numFields);
         List<TypeMetaFieldInfo> fields = new(numFields);
         for (int i = 0; i < numFields; i++)
         {

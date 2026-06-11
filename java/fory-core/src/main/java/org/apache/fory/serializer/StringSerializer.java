@@ -175,8 +175,13 @@ public final class StringSerializer extends ImmutableSerializer<String> {
     byte coder = (byte) (header & 0b11);
     int numBytes = readStringSize(header);
     byte[] bytes;
-    if (!NativeByteOrder.IS_LITTLE_ENDIAN && coder == UTF16) {
-      bytes = readBytesUTF16BE(buffer, numBytes);
+    if (coder == UTF16) {
+      checkUtf16Bytes(numBytes);
+      if (NativeByteOrder.IS_LITTLE_ENDIAN) {
+        bytes = readBytesUnCompressedUTF16(buffer, numBytes);
+      } else {
+        bytes = readBytesUTF16BE(buffer, numBytes);
+      }
     } else {
       bytes = readBytesUnCompressedUTF16(buffer, numBytes);
     }
@@ -223,6 +228,7 @@ public final class StringSerializer extends ImmutableSerializer<String> {
       return newBytesStringZeroCopy(coder, readBytesUnCompressedUTF16(buffer, numBytes));
     } else if (coder == UTF16) {
       byte[] bytes;
+      checkUtf16Bytes(numBytes);
       if (NativeByteOrder.IS_LITTLE_ENDIAN) {
         bytes = readBytesUnCompressedUTF16(buffer, numBytes);
       } else {
@@ -618,6 +624,7 @@ public final class StringSerializer extends ImmutableSerializer<String> {
   }
 
   public char[] readCharsUTF16(MemoryBuffer buffer, int numBytes) {
+    checkUtf16Bytes(numBytes);
     if (NativeByteOrder.IS_LITTLE_ENDIAN) {
       buffer.checkReadableBytes(numBytes);
       char[] chars = new char[numBytes >> 1];
@@ -675,6 +682,13 @@ public final class StringSerializer extends ImmutableSerializer<String> {
       throwStringSizeOutOfBounds(size);
     }
     return (int) size;
+  }
+
+  private static void checkUtf16Bytes(int numBytes) {
+    if ((numBytes & 1) != 0) {
+      throw new IllegalArgumentException(
+          "UTF-16 byte size " + numBytes + " is not aligned to element size 2");
+    }
   }
 
   private void checkStringSize(int size) {

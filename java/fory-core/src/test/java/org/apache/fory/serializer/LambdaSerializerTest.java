@@ -33,7 +33,6 @@ import java.util.function.BiFunction;
 import java.util.function.Function;
 import org.apache.fory.Fory;
 import org.apache.fory.ForyTestBase;
-import org.apache.fory.exception.DeserializationException;
 import org.apache.fory.exception.InsecureException;
 import org.testng.Assert;
 import org.testng.annotations.Test;
@@ -127,28 +126,6 @@ public class LambdaSerializerTest extends ForyTestBase {
     Fory reader = Fory.builder().withXlang(false).withCompatible(false).build();
     byte[] bytes = writer.serialize(extractSerializedLambda(function));
     Assert.assertThrows(InsecureException.class, () -> reader.deserialize(bytes));
-  }
-
-  @Test
-  public void testSerializedLambdaArgLimit() throws Exception {
-    int delta = 7;
-    Function<Integer, Integer> function =
-        (Serializable & Function<Integer, Integer>) (x) -> x + delta;
-    Fory writer =
-        Fory.builder()
-            .withXlang(false)
-            .requireClassRegistration(false)
-            .withCompatible(false)
-            .build();
-    Fory reader =
-        Fory.builder()
-            .withXlang(false)
-            .requireClassRegistration(false)
-            .withMaxCollectionSize(0)
-            .withCompatible(false)
-            .build();
-    byte[] bytes = writer.serialize(extractSerializedLambda(function));
-    Assert.assertThrows(DeserializationException.class, () -> reader.deserialize(bytes));
   }
 
   @Test(dataProvider = "foryCopyConfig")

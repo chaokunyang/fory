@@ -29,22 +29,21 @@ import (
 
 // ReadContext holds all state needed during deserialization.
 type ReadContext struct {
-	buffer            *ByteBuffer
-	refReader         *RefReader
-	trackRef          bool // Cached flag to avoid indirection
-	xlang             bool // Cross-language serialization mode
-	rootHeader        byte
-	compatible        bool          // Schema evolution compatibility mode
-	typeResolver      *TypeResolver // For complex type deserialization
-	refResolver       *RefResolver  // For reference tracking in native-mode paths
-	outOfBandBuffers  []*ByteBuffer // Out-of-band buffers for deserialization
-	outOfBandIndex    int           // Current index into out-of-band buffers
-	depth             int           // Current nesting depth for cycle detection
-	maxDepth          int           // Maximum allowed nesting depth
-	err               Error         // Accumulated error state for deferred checking
-	lastTypePtr       uintptr
-	lastTypeInfo      *TypeInfo
-	maxCollectionSize int // Size guardrail for collection reads
+	buffer           *ByteBuffer
+	refReader        *RefReader
+	trackRef         bool // Cached flag to avoid indirection
+	xlang            bool // Cross-language serialization mode
+	rootHeader       byte
+	compatible       bool          // Schema evolution compatibility mode
+	typeResolver     *TypeResolver // For complex type deserialization
+	refResolver      *RefResolver  // For reference tracking in native-mode paths
+	outOfBandBuffers []*ByteBuffer // Out-of-band buffers for deserialization
+	outOfBandIndex   int           // Current index into out-of-band buffers
+	depth            int           // Current nesting depth for cycle detection
+	maxDepth         int           // Maximum allowed nesting depth
+	err              Error         // Accumulated error state for deferred checking
+	lastTypePtr      uintptr
+	lastTypeInfo     *TypeInfo
 }
 
 // IsXlang returns whether cross-language serialization mode is enabled
@@ -251,15 +250,11 @@ func (c *ReadContext) ReadAndValidateTypeId(expected TypeId) {
 	}
 }
 
-// ReadCollectionLength reads a length value for collections with size guardrails
+// ReadCollectionLength reads a length value for collections.
 func (c *ReadContext) ReadCollectionLength() int {
 	err := c.Err()
 	length := c.buffer.ReadLength(err)
 	if c.err.HasError() {
-		return 0
-	}
-	if length > c.maxCollectionSize {
-		c.SetError(MaxCollectionSizeExceededError(length, c.maxCollectionSize))
 		return 0
 	}
 	return length

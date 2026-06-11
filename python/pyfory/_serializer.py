@@ -300,13 +300,13 @@ class _DenseArraySerializer(Serializer):
             write_context.write_buffer(swapped)
 
     def read(self, read_context):
-        payload_size = read_context.read_var_uint32()
-        data = read_context.read_bytes(payload_size)
+        byte_size = read_context.read_var_uint32()
+        data = read_context.read_bytes(byte_size)
         if self.wrapper_type is BoolArray:
             return BoolArray(bool(value) for value in data)
         if self.reduced_precision:
-            if payload_size & 1:
-                raise ValueError(f"{self.wrapper_type.__name__} payload size mismatch")
+            if byte_size & 1:
+                raise ValueError(f"{self.wrapper_type.__name__} byte size mismatch")
             raw = array.array("H")
             raw.frombytes(data)
             if not is_little_endian:

@@ -1696,13 +1696,6 @@ where
         if len == 0 {
             return Ok(Vec::new());
         }
-        let max = context.max_collection_size();
-        if len > max {
-            return Err(Error::size_limit_exceeded(format!(
-                "Collection size {} exceeds limit {}",
-                len, max
-            )));
-        }
         let header = context.reader.read_u8()?;
         if C::is_polymorphic() || C::is_shared_ref() {
             let field_type = Self::field_type(context.get_type_resolver())?;
@@ -1730,13 +1723,6 @@ where
         let len = context.reader.read_var_u32()?;
         if len == 0 {
             return Ok(Vec::new());
-        }
-        let max = context.max_collection_size();
-        if len > max {
-            return Err(Error::size_limit_exceeded(format!(
-                "Collection size {} exceeds limit {}",
-                len, max
-            )));
         }
         let header = context.reader.read_u8()?;
         let has_null = (header & HAS_NULL) != 0;
@@ -2280,13 +2266,6 @@ where
         if len == 0 {
             return Ok(HashMap::new());
         }
-        let max = context.max_collection_size();
-        if len > max {
-            return Err(Error::size_limit_exceeded(format!(
-                "Map size {} exceeds limit {}",
-                len, max
-            )));
-        }
         if KC::is_polymorphic()
             || KC::is_shared_ref()
             || VC::is_polymorphic()
@@ -2306,13 +2285,6 @@ where
         if len == 0 {
             return Ok(HashMap::new());
         }
-        let max = context.max_collection_size();
-        if len > max {
-            return Err(Error::size_limit_exceeded(format!(
-                "Map size {} exceeds limit {}",
-                len, max
-            )));
-        }
         if KC::is_polymorphic()
             || KC::is_shared_ref()
             || VC::is_polymorphic()
@@ -2320,6 +2292,7 @@ where
         {
             return read_map_dynamic::<K, V, KC, VC>(context, len, remote_field_type);
         }
+        context.reader.check_bound(1)?;
         let mut map = HashMap::with_capacity(len as usize);
         let mut len_counter = 0;
         while len_counter < len {
@@ -2469,6 +2442,7 @@ where
     KC: Codec<K>,
     VC: Codec<V>,
 {
+    context.reader.check_bound(1)?;
     let mut map = HashMap::with_capacity(len as usize);
     let mut len_counter = 0u32;
     while len_counter < len {
@@ -2575,6 +2549,7 @@ where
     KC: Codec<K>,
     VC: Codec<V>,
 {
+    context.reader.check_bound(1)?;
     let mut map = HashMap::with_capacity(len as usize);
     let mut len_counter = 0u32;
     while len_counter < len {

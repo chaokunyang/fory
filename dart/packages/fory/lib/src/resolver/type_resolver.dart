@@ -1144,6 +1144,7 @@ final class TypeResolver {
   TypeInfo _readTypeDefWithHeader(Buffer buffer, TypeHeader header) {
     header.validateGlobal();
     final metaSize = header.readMetaSize(buffer);
+    buffer.checkReadableBytes(metaSize);
     final metaBody = buffer.readBytes(metaSize);
     final metaBytes = Buffer.wrap(metaBody);
     final classHeader = metaBytes.readUint8();

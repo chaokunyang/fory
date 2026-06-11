@@ -34,8 +34,6 @@ import { ReadContext, WriteContext } from "./context";
 
 const DEFAULT_DEPTH_LIMIT = 50 as const;
 const MIN_DEPTH_LIMIT = 2 as const;
-const DEFAULT_MAX_COLLECTION_SIZE = 1_000_000 as const;
-
 export default class Fory {
   readonly typeResolver: TypeResolver;
   readonly anySerializer: Serializer;
@@ -60,14 +58,6 @@ export default class Fory {
         `maxDepth must be an integer >= ${MIN_DEPTH_LIMIT} but got ${maxDepth}`,
       );
     }
-    const maxCollectionSize
-      = this.config.maxCollectionSize ?? DEFAULT_MAX_COLLECTION_SIZE;
-    if (!Number.isInteger(maxCollectionSize) || maxCollectionSize < 0) {
-      throw new Error(
-        `maxCollectionSize must be a non-negative integer but got ${maxCollectionSize}`,
-      );
-    }
-
     this.typeResolver = new TypeResolver(this.config);
     this.writeContext = new WriteContext(this.typeResolver, this.config);
     this.readContext = new ReadContext(this.typeResolver, this.config);
@@ -81,7 +71,6 @@ export default class Fory {
       ref: Boolean(config?.ref),
       useSliceString: Boolean(config?.useSliceString),
       maxDepth: config?.maxDepth,
-      maxCollectionSize: config?.maxCollectionSize,
       hooks: config?.hooks || {},
       compatible: config?.compatible ?? true,
       hps: config?.hps,
@@ -151,8 +140,8 @@ export default class Fory {
   }
 
   private throwInvalidRootHeader(bitmap: number): never {
-    const knownFlags
-      = ConfigFlags.isCrossLanguageFlag | ConfigFlags.isOutOfBandFlag;
+    const knownFlags =
+      ConfigFlags.isCrossLanguageFlag | ConfigFlags.isOutOfBandFlag;
     if ((bitmap & ~knownFlags) !== 0) {
       throw new Error(
         `unsupported root header bitmap 0x${bitmap.toString(16)}`,

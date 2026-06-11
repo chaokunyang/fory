@@ -706,9 +706,9 @@ TypeMeta::from_bytes(Buffer &buffer, const TypeMeta *local_type_info) {
   }
 
   // Read field infos
-  if (FORY_PREDICT_FALSE(num_fields > meta_size)) {
+  if (FORY_PREDICT_FALSE(num_fields > buffer.remaining_size())) {
     return Unexpected(
-        Error::invalid_data("TypeMeta field count exceeds metadata body size"));
+        Error::invalid_data("TypeMeta field count exceeds remaining metadata"));
   }
   std::vector<FieldInfo> field_infos;
   field_infos.reserve(num_fields);
@@ -830,9 +830,9 @@ TypeMeta::from_bytes_with_header(Buffer &buffer, int64_t header) {
   }
 
   // Read field infos
-  if (FORY_PREDICT_FALSE(num_fields > meta_size)) {
+  if (FORY_PREDICT_FALSE(num_fields > buffer.remaining_size())) {
     return Unexpected(
-        Error::invalid_data("TypeMeta field count exceeds metadata body size"));
+        Error::invalid_data("TypeMeta field count exceeds remaining metadata"));
   }
   std::vector<FieldInfo> field_infos;
   field_infos.reserve(num_fields);

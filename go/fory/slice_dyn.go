@@ -259,11 +259,19 @@ func (s sliceDynSerializer) Read(ctx *ReadContext, refMode RefMode, readType boo
 }
 
 func (s sliceDynSerializer) ReadData(ctx *ReadContext, value reflect.Value) {
+	s.readData(ctx, value, -1)
+}
+
+func (s sliceDynSerializer) readData(ctx *ReadContext, value reflect.Value, expectedLength int) {
 	buf := ctx.Buffer()
 	ctxErr := ctx.Err()
 	length := ctx.ReadCollectionLength()
 	sliceType := value.Type()
 	if ctx.HasError() {
+		return
+	}
+	if expectedLength >= 0 && length != expectedLength {
+		ctx.SetError(DeserializationErrorf("array length %d does not match serialized length %d", expectedLength, length))
 		return
 	}
 	if length == 0 {
@@ -294,9 +302,15 @@ func (s sliceDynSerializer) ReadData(ctx *ReadContext, value reflect.Value) {
 		if ctx.HasError() {
 			return
 		}
+		if !buf.CheckReadable(1, ctxErr) {
+			return
+		}
 		value.Set(reflect.MakeSlice(sliceType, length, length))
 		ctx.RefResolver().Reference(value)
 		s.readSameType(ctx, buf, value, elemType, elemSerializer, collectFlag)
+		return
+	}
+	if !buf.CheckReadable(1, ctxErr) {
 		return
 	}
 	value.Set(reflect.MakeSlice(sliceType, length, length))

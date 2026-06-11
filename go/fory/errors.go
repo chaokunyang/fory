@@ -52,8 +52,6 @@ const (
 	ErrKindInvalidTag
 	// ErrKindInvalidUTF16String indicates malformed UTF-16 string data
 	ErrKindInvalidUTF16String
-	// ErrKindMaxCollectionSizeExceeded indicates max collection size exceeded
-	ErrKindMaxCollectionSizeExceeded
 )
 
 // Error is a lightweight error type optimized for hot path performance.
@@ -295,16 +293,6 @@ func InvalidUTF16StringError(byteCount int) Error {
 	return panicIfEnabled(Error{
 		kind:    ErrKindInvalidUTF16String,
 		message: fmt.Sprintf("invalid UTF-16 string byte count %d: must be even", byteCount),
-	})
-}
-
-// MaxCollectionSizeExceededError creates a max collection size exceeded error
-//
-//go:noinline
-func MaxCollectionSizeExceededError(size, limit int) Error {
-	return panicIfEnabled(Error{
-		kind:    ErrKindMaxCollectionSizeExceeded,
-		message: fmt.Sprintf("max collection size exceeded: size=%d, limit=%d", size, limit),
 	})
 }
 

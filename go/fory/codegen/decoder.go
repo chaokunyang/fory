@@ -635,6 +635,9 @@ func writeSliceReadElements(buf *bytes.Buffer, sliceType *types.Slice, elemType 
 	}
 
 	// Create slice
+	fmt.Fprintf(buf, "%sif !buf.CheckReadable(1, err) {\n", indent)
+	fmt.Fprintf(buf, "%s\treturn ctx.TakeError()\n", indent)
+	fmt.Fprintf(buf, "%s}\n", indent)
 	if elemIsReferencable {
 		fmt.Fprintf(buf, "%sif trackRefs && !buf.CheckReadable(sliceLen, err) {\n", indent)
 		fmt.Fprintf(buf, "%s\treturn ctx.TakeError()\n", indent)

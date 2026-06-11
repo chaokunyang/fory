@@ -298,36 +298,6 @@ impl ForyBuilder {
         self
     }
 
-    /// Sets the maximum allowed number of elements in a collection or entries in a map
-    /// during deserialization.
-    ///
-    /// # Arguments
-    ///
-    /// * `max_collection_size` - The maximum number of elements/entries allowed for a single
-    ///   collection or map during deserialization. Payloads exceeding this limit will cause a
-    ///   `SizeLimitExceeded` error.
-    ///
-    /// # Returns
-    ///
-    /// Returns `self` for method chaining.
-    ///
-    /// # Default
-    ///
-    /// The default value is `1024 * 1024` (1 million elements).
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// use fory_core::Fory;
-    ///
-    /// // Limit collections to 10000 elements
-    /// let fory = Fory::builder().max_collection_size(10000).build();
-    /// ```
-    pub fn max_collection_size(mut self, max_collection_size: u32) -> Self {
-        self.config.max_collection_size = max_collection_size;
-        self
-    }
-
     fn finish_config(self) -> Config {
         let mut config = self.config;
         if !self.compatible_set {
@@ -464,11 +434,6 @@ impl Fory {
     /// Returns the maximum depth for nested dynamic object serialization.
     pub fn get_max_dyn_depth(&self) -> u32 {
         self.config.max_dyn_depth
-    }
-
-    /// Returns the maximum allowed collection/map element count.
-    pub fn get_max_collection_size(&self) -> u32 {
-        self.config.max_collection_size
     }
 
     /// Returns whether class version checking is enabled.

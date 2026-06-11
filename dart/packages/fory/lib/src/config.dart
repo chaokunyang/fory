@@ -25,10 +25,6 @@ final class Config {
   /// deserialization operation.
   static const int defaultMaxDepth = 256;
 
-  /// Default maximum number of collection entries accepted in one collection or
-  /// map payload.
-  static const int defaultMaxCollectionSize = 1 << 20;
-
   /// Enables compatible struct encoding and decoding.
   ///
   /// In compatible mode Fory shares TypeDef metadata and disables
@@ -43,9 +39,6 @@ final class Config {
   /// Maximum allowed read or write nesting depth.
   final int maxDepth;
 
-  /// Maximum allowed collection or map size.
-  final int maxCollectionSize;
-
   /// Creates an immutable configuration object.
   ///
   /// Invalid numeric limits fail fast. When [compatible] is `true`,
@@ -54,8 +47,6 @@ final class Config {
     this.compatible = true,
     bool checkStructVersion = true,
     this.maxDepth = defaultMaxDepth,
-    this.maxCollectionSize = defaultMaxCollectionSize,
   }) : checkStructVersion = compatible ? false : checkStructVersion,
-       assert(maxDepth > 0, 'maxDepth must be positive'),
-       assert(maxCollectionSize > 0, 'maxCollectionSize must be positive');
+       assert(maxDepth > 0, 'maxDepth must be positive');
 }

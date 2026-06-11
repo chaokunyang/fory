@@ -150,7 +150,7 @@ public class PrimitiveListSerializers {
         byteSize = buffer.readVarUInt32Small7();
       } else if (config.isXlang()) {
         int size = readXlangListHeader(buffer);
-        byteSize = size * elemSize;
+        byteSize = Math.multiplyExact(size, elemSize);
         buffer.checkReadableBytes(byteSize);
         return size;
       } else {

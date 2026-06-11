@@ -62,30 +62,61 @@ public class ForyReadableChannel implements ForyStreamReader, ReadableByteChanne
 
   @Override
   public int fillBuffer(int minFillSize) {
+    if (minFillSize < 0) {
+      throw new DeserializationException("Negative minimum fill size " + minFillSize);
+    }
+    if (minFillSize == 0) {
+      return 0;
+    }
     try {
-      ByteBuffer byteBuf = byteBuffer;
-      MemoryBuffer memoryBuf = memoryBuffer;
-      int position = byteBuf.position();
-      int newLimit = position + minFillSize;
-      if (newLimit > byteBuf.capacity()) {
-        int newSize =
-            newLimit < MemoryBuffer.BUFFER_GROW_STEP_THRESHOLD
-                ? newLimit << 2
-                : (int) Math.min(newLimit * 1.5d, Integer.MAX_VALUE);
-        ByteBuffer newByteBuf =
-            byteBuf.isDirect() ? ByteBuffer.allocateDirect(newSize) : ByteBuffer.allocate(newSize);
-        byteBuf.position(0);
-        newByteBuf.put(byteBuf);
-        byteBuf = byteBuffer = newByteBuf;
-        memoryBuf.initByteBuffer(byteBuf, position);
+      int totalRead = 0;
+      while (totalRead < minFillSize) {
+        ByteBuffer byteBuf = byteBuffer;
+        MemoryBuffer memoryBuf = memoryBuffer;
+        int position = byteBuf.position();
+        long targetSize = (long) position + minFillSize - totalRead;
+        if (targetSize > Integer.MAX_VALUE) {
+          throw new DeserializationException("Stream buffer size exceeds supported range");
+        }
+        if (position == byteBuf.capacity()) {
+          byteBuf = growBuffer(byteBuf, memoryBuf, position, (int) targetSize);
+        }
+        byteBuf.limit(byteBuf.capacity());
+        int read = channel.read(byteBuf);
+        if (read <= 0) {
+          throw new DeserializationException("Unexpected end of byte channel");
+        }
+        totalRead += read;
+        memoryBuf.increaseSize(read);
+        byteBuf.limit(byteBuf.position());
       }
-      byteBuf.limit(newLimit);
-      readFully(byteBuf, minFillSize);
-      memoryBuf.increaseSize(minFillSize);
-      return minFillSize;
+      return totalRead;
     } catch (IOException e) {
       throw new DeserializationException("Failed to read the provided byte channel", e);
     }
+  }
+
+  private ByteBuffer growBuffer(
+      ByteBuffer byteBuf, MemoryBuffer memoryBuf, int position, int targetSize) {
+    int oldCapacity = byteBuf.capacity();
+    long grown =
+        oldCapacity < MemoryBuffer.BUFFER_GROW_STEP_THRESHOLD
+            ? Math.max((long) oldCapacity << 2, 1L)
+            : Math.min((long) (oldCapacity * 1.5d), Integer.MAX_VALUE);
+    grown = Math.min(Math.max(grown, (long) oldCapacity + 1), targetSize);
+    if (grown <= oldCapacity) {
+      throw new DeserializationException("Stream buffer size exceeds supported range");
+    }
+    ByteBuffer newByteBuf =
+        byteBuf.isDirect()
+            ? ByteBuffer.allocateDirect((int) grown)
+            : ByteBuffer.allocate((int) grown);
+    byteBuf.position(0);
+    byteBuf.limit(position);
+    newByteBuf.put(byteBuf);
+    byteBuffer = newByteBuf;
+    memoryBuf.initByteBuffer(newByteBuf, position);
+    return newByteBuf;
   }
 
   @Override

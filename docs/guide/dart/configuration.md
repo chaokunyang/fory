@@ -82,22 +82,13 @@ Limits how deeply nested an object graph can be. Increase this if you have legit
 final fory = Fory(maxDepth: 128);
 ```
 
-### `maxCollectionSize`
-
-Maximum number of elements accepted in any single list, set, or map field. Prevents runaway memory allocation from malformed messages.
-
-```dart
-final fory = Fory(maxCollectionSize: 100000);
-```
-
 ## Defaults
 
-| Option               | Default   |
-| -------------------- | --------- |
-| `compatible`         | `true`    |
-| `checkStructVersion` | `false`   |
-| `maxDepth`           | 256       |
-| `maxCollectionSize`  | 1 048 576 |
+| Option               | Default |
+| -------------------- | ------- |
+| `compatible`         | `true`  |
+| `checkStructVersion` | `false` |
+| `maxDepth`           | 256     |
 
 ## Xlang Notes
 
@@ -113,7 +104,7 @@ Security-related configuration:
 
 - Register only the expected generated models before deserializing untrusted payloads.
 - Use `checkStructVersion: true` with `compatible: false` for intentional same-schema payloads.
-- Set `maxDepth` and `maxCollectionSize` to reject unexpectedly deep or broad payload shapes.
+- Set `maxDepth` to reject unexpectedly deep payload shapes.
 - Prefer generated schemas and explicit field metadata over broad dynamic fields for untrusted input.
 
 ## Related Topics

@@ -358,7 +358,6 @@ pub struct ReadContext<'a> {
     max_dyn_depth: u32,
     check_struct_version: bool,
     check_string_read: bool,
-    max_collection_size: u32,
 
     // Context-specific fields
     pub reader: Reader<'a>,
@@ -387,7 +386,6 @@ impl<'a> ReadContext<'a> {
             max_dyn_depth: config.max_dyn_depth,
             check_struct_version: config.check_struct_version,
             check_string_read: config.check_string_read,
-            max_collection_size: config.max_collection_size,
             reader: Reader::default(),
             meta_resolver: MetaReaderResolver::default(),
             meta_string_resolver: MetaStringReaderResolver::default(),
@@ -436,12 +434,6 @@ impl<'a> ReadContext<'a> {
     #[inline(always)]
     pub fn max_dyn_depth(&self) -> u32 {
         self.max_dyn_depth
-    }
-
-    /// Get maximum allowed collection/map element count.
-    #[inline(always)]
-    pub fn max_collection_size(&self) -> u32 {
-        self.max_collection_size
     }
 
     #[inline(always)]

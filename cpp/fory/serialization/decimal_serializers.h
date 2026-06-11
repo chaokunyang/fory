@@ -275,17 +275,18 @@ template <> struct Serializer<Decimal> {
             !ctx.buffer().ensure_readable(length, ctx.error()))) {
       return Decimal();
     }
-    std::vector<uint8_t> payload(length);
+    std::vector<uint8_t> magnitude(length);
     Buffer &buffer = ctx.buffer();
-    std::memcpy(payload.data(), buffer.data() + buffer.reader_index(), length);
+    std::memcpy(magnitude.data(), buffer.data() + buffer.reader_index(),
+                length);
     buffer.unsafe_increase_reader_index(length);
-    if (payload.back() == 0) {
+    if (magnitude.back() == 0) {
       ctx.set_error(Error::invalid_data(
-          "Non-canonical decimal payload: trailing zero byte"));
+          "Non-canonical decimal magnitude: trailing zero byte"));
       return Decimal();
     }
 
-    return Decimal(scale, (meta & 1ULL) != 0, std::move(payload));
+    return Decimal(scale, (meta & 1ULL) != 0, std::move(magnitude));
   }
 
   static inline Decimal read_data_generic(ReadContext &ctx, bool has_generics) {

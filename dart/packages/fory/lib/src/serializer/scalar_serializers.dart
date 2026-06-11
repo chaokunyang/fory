@@ -50,10 +50,10 @@ Uint8List _decimalMagnitudeToCanonicalLittleEndian(BigInt magnitude) {
   return Uint8List.fromList(bytes);
 }
 
-BigInt _decimalMagnitudeFromCanonicalLittleEndian(Uint8List payload) {
+BigInt _decimalMagnitudeFromCanonicalLittleEndian(Uint8List magnitudeBytes) {
   var magnitude = BigInt.zero;
-  for (var index = payload.length - 1; index >= 0; index -= 1) {
-    magnitude = (magnitude << 8) | BigInt.from(payload[index]);
+  for (var index = magnitudeBytes.length - 1; index >= 0; index -= 1) {
+    magnitude = (magnitude << 8) | BigInt.from(magnitudeBytes[index]);
   }
   return magnitude;
 }
@@ -169,11 +169,13 @@ final class DecimalSerializer extends Serializer<Decimal> {
       return;
     }
 
-    final payload = _decimalMagnitudeToCanonicalLittleEndian(unscaled.abs());
+    final magnitudeBytes = _decimalMagnitudeToCanonicalLittleEndian(
+      unscaled.abs(),
+    );
     final sign = unscaled.isNegative ? 1 : 0;
-    final meta = (payload.length << 1) | sign;
+    final meta = (magnitudeBytes.length << 1) | sign;
     buffer.writeVarUint64(Uint64((meta << 1) | 1));
-    buffer.writeBytes(payload);
+    buffer.writeBytes(magnitudeBytes);
   }
 
   static Decimal readPayload(ReadContext context) {
@@ -190,11 +192,15 @@ final class DecimalSerializer extends Serializer<Decimal> {
       throw StateError('Invalid decimal magnitude length $length.');
     }
     context.buffer.checkReadableBytes(length);
-    final payload = context.buffer.copyBytes(length);
-    if (payload[length - 1] == 0) {
-      throw StateError('Non-canonical decimal payload: trailing zero byte.');
+    final magnitudeBytes = context.buffer.copyBytes(length);
+    if (magnitudeBytes[length - 1] == 0) {
+      throw StateError(
+        'Non-canonical decimal magnitude bytes: trailing zero byte.',
+      );
     }
-    final magnitude = _decimalMagnitudeFromCanonicalLittleEndian(payload);
+    final magnitude = _decimalMagnitudeFromCanonicalLittleEndian(
+      magnitudeBytes,
+    );
     if (magnitude == BigInt.zero) {
       throw StateError('Big decimal encoding must not represent zero.');
     }

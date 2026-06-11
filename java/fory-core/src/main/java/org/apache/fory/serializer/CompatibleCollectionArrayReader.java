@@ -36,7 +36,6 @@ import org.apache.fory.collection.UInt16List;
 import org.apache.fory.collection.UInt32List;
 import org.apache.fory.collection.UInt64List;
 import org.apache.fory.collection.UInt8List;
-import org.apache.fory.config.Config;
 import org.apache.fory.context.ReadContext;
 import org.apache.fory.context.RefReader;
 import org.apache.fory.exception.DeserializationException;
@@ -584,7 +583,7 @@ final class CompatibleCollectionArrayReader {
       ReadContext readContext, int arrayTypeId, int elementTypeId) {
     MemoryBuffer buffer = readContext.getBuffer();
     int numElements = buffer.readVarUInt32Small7();
-    validateElementCount(readContext.getConfig(), numElements);
+    validateElementCount(numElements);
     if (numElements > 0) {
       int flags = buffer.readByte();
       boolean hasNull = (flags & CollectionFlags.HAS_NULL) == CollectionFlags.HAS_NULL;
@@ -619,7 +618,7 @@ final class CompatibleCollectionArrayReader {
       ReadContext readContext, int arrayTypeId, int elementTypeId, Class<?> targetType) {
     MemoryBuffer buffer = readContext.getBuffer();
     int numElements = buffer.readVarUInt32Small7();
-    validateElementCount(readContext.getConfig(), numElements);
+    validateElementCount(numElements);
     if (numElements == 0) {
       Object array = readListPrimitiveElements(buffer, 0, arrayTypeId, elementTypeId, false);
       return materializeTarget(array, arrayTypeId, targetType);
@@ -666,7 +665,7 @@ final class CompatibleCollectionArrayReader {
     MemoryBuffer buffer = readContext.getBuffer();
     int byteSize = buffer.readVarUInt32Small7();
     int elemSize = elementSize(arrayTypeId);
-    validateBinarySize(readContext.getConfig(), buffer, byteSize, elemSize);
+    validateBinarySize(byteSize, elemSize);
     buffer.checkReadableBytes(byteSize);
     return readPrimitiveElements(buffer, byteSize, byteSize / elemSize, arrayTypeId);
   }
@@ -978,6 +977,7 @@ final class CompatibleCollectionArrayReader {
 
   private static List<Object> readNullableListBoxedElements(
       MemoryBuffer buffer, int numElements, int arrayTypeId, int elementTypeId) {
+    buffer.checkReadableBytes(minReadablePrimitiveListBytes(numElements, elementTypeId, true));
     ArrayList<Object> values = new ArrayList<>(numElements);
     for (int i = 0; i < numElements; i++) {
       byte headFlag = buffer.readByte();
@@ -1267,21 +1267,13 @@ final class CompatibleCollectionArrayReader {
     }
   }
 
-  private static void validateElementCount(Config config, int numElements) {
+  private static void validateElementCount(int numElements) {
     if (numElements < 0) {
       throw new DeserializationException("Collection size must be non-negative: " + numElements);
     }
-    if (numElements > config.maxCollectionSize()) {
-      throw new DeserializationException(
-          "Collection size "
-              + numElements
-              + " exceeds max collection size "
-              + config.maxCollectionSize());
-    }
   }
 
-  private static void validateBinarySize(
-      Config config, MemoryBuffer buffer, int byteSize, int elemSize) {
+  private static void validateBinarySize(int byteSize, int elemSize) {
     if (byteSize < 0) {
       throw new DeserializationException("Binary body size must be non-negative: " + byteSize);
     }

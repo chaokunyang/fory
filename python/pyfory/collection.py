@@ -176,8 +176,6 @@ class CollectionSerializer(Serializer):
 
     def read(self, read_context):
         length = read_context.read_var_uint32()
-        if length > read_context.max_collection_size:
-            raise ValueError(f"Collection size {length} exceeds the configured limit of {read_context.max_collection_size}")
         collection_ = self.new_instance(read_context, self.type_)
         if length == 0:
             return collection_
@@ -457,8 +455,6 @@ class MapSerializer(Serializer):
 
     def read(self, read_context):
         size = read_context.read_var_uint32()
-        if size > read_context.max_collection_size:
-            raise ValueError(f"Map size {size} exceeds the configured limit of {read_context.max_collection_size}")
         map_ = {}
         ref_reader = read_context.ref_reader
         read_context.reference(map_)

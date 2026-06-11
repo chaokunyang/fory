@@ -121,7 +121,7 @@ cdef class Config:
     directional read/write contexts.
 
     The Cython runtime treats this object as the single source of truth for
-    execution-mode flags and guardrail limits. Higher-level facades may expose
+    execution-mode and maximum-depth flags. Higher-level facades may expose
     convenience accessors, but runtime code should read these values from the
     config instance instead of mirroring them onto other owners.
 
@@ -136,7 +136,6 @@ cdef class Config:
         field_nullable: Treats struct/dataclass fields as nullable by default.
         policy: Deserialization policy used for security-sensitive checks.
         meta_compressor: Optional typedef/meta compressor implementation.
-        max_collection_size: Upper bound for declared collection/map sizes.
     """
 
     cdef public bint xlang
@@ -149,7 +148,6 @@ cdef class Config:
     cdef public bint field_nullable
     cdef public object policy
     cdef public object meta_compressor
-    cdef public int32_t max_collection_size
 
     def __init__(
         self,
@@ -164,7 +162,6 @@ cdef class Config:
         field_nullable,
         policy,
         meta_compressor,
-        max_collection_size,
     ):
         """
         Build a runtime config object for one Python or Cython Fory instance.
@@ -180,7 +177,6 @@ cdef class Config:
             field_nullable: Treat all struct fields as nullable by default.
             policy: Deserialization policy implementation.
             meta_compressor: Optional typedef/meta compressor.
-            max_collection_size: Maximum declared collection/map size.
         """
         self.xlang = xlang
         self.track_ref = track_ref
@@ -192,7 +188,6 @@ cdef class Config:
         self.field_nullable = field_nullable
         self.policy = policy
         self.meta_compressor = meta_compressor
-        self.max_collection_size = max_collection_size
 
 
 cdef inline bint _is_struct_type_id(uint8_t type_id):
@@ -227,7 +222,6 @@ cdef class TypeResolver:
     cdef readonly bint compatible
     cdef readonly bint field_nullable
     cdef readonly object policy
-    cdef readonly int32_t max_collection_size
     cdef readonly bint meta_share
     cdef readonly dict _types_info
     cdef readonly dict _type_id_to_type_info
@@ -261,7 +255,6 @@ cdef class TypeResolver:
         self.compatible = resolver.compatible
         self.field_nullable = resolver.field_nullable
         self.policy = resolver.policy
-        self.max_collection_size = resolver.max_collection_size
         self.meta_share = resolver.meta_share
         self._types_info = resolver._types_info
         self._type_id_to_type_info = resolver._type_id_to_type_info
@@ -813,7 +806,6 @@ cdef class Fory:
     cdef public bint field_nullable
     cdef public int32_t max_depth
     cdef public object policy
-    cdef public int32_t max_collection_size
     cdef public Config config
     cdef public TypeResolver type_resolver
     cdef public WriteContext write_context
@@ -830,7 +822,6 @@ cdef class Fory:
         policy=None,
         field_nullable=False,
         meta_compressor=None,
-        max_collection_size=1_000_000,
     ):
         """
         Initialize a Cython-backed Fory runtime instance.
@@ -845,7 +836,6 @@ cdef class Fory:
             policy: Optional deserialization policy implementation.
             field_nullable: Treat struct fields as nullable by default.
             meta_compressor: Optional typedef/meta compressor implementation.
-            max_collection_size: Maximum allowed declared collection/map size.
         """
         compatible = True if compatible is None else compatible
         self.xlang = xlang
@@ -860,7 +850,6 @@ cdef class Fory:
         self.compatible = compatible
         self.field_nullable = field_nullable
         self.max_depth = max_depth
-        self.max_collection_size = max_collection_size
         self.config = Config(
             xlang=xlang,
             track_ref=ref,
@@ -872,7 +861,6 @@ cdef class Fory:
             field_nullable=field_nullable,
             policy=self.policy,
             meta_compressor=meta_compressor,
-            max_collection_size=max_collection_size,
         )
         from pyfory.registry import SharedRegistry
 

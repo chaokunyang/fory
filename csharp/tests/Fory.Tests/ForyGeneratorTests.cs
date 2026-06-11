@@ -172,6 +172,43 @@ public sealed class ForyGeneratorTests
         Assert.DoesNotContain("if (remoteField.FieldType.TypeId ==", generated, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void CompatibleBinaryListChecksBeforeCapacity()
+    {
+        const string source = """
+            using System.Collections.Generic;
+            using Apache.Fory;
+            using S = Apache.Fory.Schema.Types;
+
+            namespace GeneratedDiagnostics;
+
+            [ForyStruct]
+            public sealed class BinaryListShape
+            {
+                [ForyField(1, Type = typeof(S.Array<S.UInt8>))]
+                public List<byte> Value { get; set; } = [];
+            }
+            """;
+
+        string generated = GenerateSource(source);
+
+        int lengthIndex = generated.IndexOf(
+            "int __foryLength = checked((int)context.Reader.ReadVarUInt32());",
+            StringComparison.Ordinal);
+        int checkIndex = generated.IndexOf(
+            "context.Reader.CheckBound(__foryLength);",
+            lengthIndex,
+            StringComparison.Ordinal);
+        int allocationIndex = generated.IndexOf(
+            "new(__foryLength);",
+            lengthIndex,
+            StringComparison.Ordinal);
+
+        Assert.True(lengthIndex >= 0);
+        Assert.True(checkIndex > lengthIndex);
+        Assert.True(allocationIndex > checkIndex);
+    }
+
     private static string GenerateSource(string source)
     {
         CSharpCompilation compilation = CreateCompilation(source);

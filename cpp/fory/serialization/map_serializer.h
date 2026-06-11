@@ -551,19 +551,14 @@ inline MapType read_map_data_fast(ReadContext &ctx, uint32_t length) {
   static_assert(!is_shared_ref_v<K> && !is_shared_ref_v<V>,
                 "Fast path is for non-shared-ref types only");
 
-  // Guardrail: Enforce max_collection_size for map reads (entry count)
-  if (FORY_PREDICT_FALSE(length > ctx.config().max_collection_size)) {
-    ctx.set_error(
-        Error::invalid_data("Map entry count exceeds max_collection_size"));
-    return MapType{};
-  }
-
   MapType result;
-  MapReserver<MapType>::reserve(result, length);
-
   if (length == 0) {
     return result;
   }
+  if (FORY_PREDICT_FALSE(!ctx.buffer().ensure_readable(1, ctx.error()))) {
+    return result;
+  }
+  MapReserver<MapType>::reserve(result, length);
 
   uint32_t len_counter = 0;
 
@@ -689,19 +684,14 @@ inline MapType read_map_data_fast(ReadContext &ctx, uint32_t length) {
 /// Read map data for polymorphic or shared-ref maps
 template <typename K, typename V, typename MapType>
 inline MapType read_map_data_slow(ReadContext &ctx, uint32_t length) {
-  // Guardrail: Enforce max_collection_size for map reads (entry count)
-  if (FORY_PREDICT_FALSE(length > ctx.config().max_collection_size)) {
-    ctx.set_error(
-        Error::invalid_data("Map entry count exceeds max_collection_size"));
-    return MapType{};
-  }
-
   MapType result;
-  MapReserver<MapType>::reserve(result, length);
-
   if (length == 0) {
     return result;
   }
+  if (FORY_PREDICT_FALSE(!ctx.buffer().ensure_readable(1, ctx.error()))) {
+    return result;
+  }
+  MapReserver<MapType>::reserve(result, length);
 
   constexpr bool key_is_polymorphic = is_polymorphic_v<K>;
   constexpr bool val_is_polymorphic = is_polymorphic_v<V>;

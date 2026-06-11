@@ -1010,7 +1010,7 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
             sb.AppendLine("            if (remoteFieldType.TypeId == (uint)global::Apache.Fory.TypeId.Binary)");
             sb.AppendLine("            {");
             EmitReadNullOnlyPrefix(sb, member, 4);
-            EmitReadBinaryPayload(sb, codec, $"__{memberId}BinaryValue", 4);
+            EmitReadBinaryField(sb, codec, $"__{memberId}BinaryValue", 4);
             sb.AppendLine($"                return __{memberId}BinaryValue;");
             sb.AppendLine("            }");
         }
@@ -1037,7 +1037,7 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
         sb.AppendLine($"{indent}}}");
     }
 
-    private static void EmitReadBinaryPayload(
+    private static void EmitReadBinaryField(
         StringBuilder sb,
         FieldCodecModel codec,
         string targetVar,
@@ -1053,6 +1053,7 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
 
         if (codec.CarrierKind == CarrierKind.List)
         {
+            sb.AppendLine($"{indent}context.Reader.CheckBound(__foryLength);");
             sb.AppendLine($"{indent}{codec.TypeName} {targetVar} = new(__foryLength);");
             sb.AppendLine($"{indent}for (int __foryIndex = 0; __foryIndex < __foryLength; __foryIndex++)");
             sb.AppendLine($"{indent}{{");
@@ -1153,6 +1154,10 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
         sb.AppendLine($"{innerIndent}        throw new global::Apache.Fory.TypeMismatchException(remoteFieldType.Generics[0].TypeId, __foryWireTypeId);");
         sb.AppendLine($"{innerIndent}    }}");
         sb.AppendLine($"{innerIndent}}}");
+        sb.AppendLine($"{indent}}}");
+        sb.AppendLine($"{indent}if ({lengthVar} != 0)");
+        sb.AppendLine($"{indent}{{");
+        sb.AppendLine($"{indent}    context.Reader.CheckBound({lengthVar});");
         sb.AppendLine($"{indent}}}");
         string elementTypeName = codec.CarrierKind == CarrierKind.Array ? ElementTypeName(codec.TypeName) : PackedArrayElementTypeName(codec.TypeId);
         uint elementTypeId = PackedArrayElementTypeId(codec.TypeId);
@@ -1488,19 +1493,20 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
         string indent = new(' ', indentLevel * 4);
         int width = PackedArrayElementWidth(codec.TypeId);
         uint elementTypeId = PackedArrayElementTypeId(codec.TypeId);
-        string payloadSizeVar = $"__foryPayloadSize{id++}";
+        string byteSizeVar = $"__foryByteSize{id++}";
         string countVar = $"__foryPackedCount{id++}";
-        sb.AppendLine($"{indent}int {payloadSizeVar} = checked((int)context.Reader.ReadVarUInt32());");
+        sb.AppendLine($"{indent}int {byteSizeVar} = checked((int)context.Reader.ReadVarUInt32());");
         if (width > 1)
         {
             int mask = width - 1;
-            sb.AppendLine($"{indent}if (({payloadSizeVar} & {mask}) != 0)");
+            sb.AppendLine($"{indent}if (({byteSizeVar} & {mask}) != 0)");
             sb.AppendLine($"{indent}{{");
-            sb.AppendLine($"{indent}    throw new global::Apache.Fory.InvalidDataException(\"packed array payload size mismatch\");");
+            sb.AppendLine($"{indent}    throw new global::Apache.Fory.InvalidDataException(\"packed array byte size mismatch\");");
             sb.AppendLine($"{indent}}}");
         }
 
-        sb.AppendLine($"{indent}int {countVar} = {payloadSizeVar}{(width == 1 ? string.Empty : $" / {width}")};");
+        sb.AppendLine($"{indent}context.Reader.CheckBound({byteSizeVar});");
+        sb.AppendLine($"{indent}int {countVar} = {byteSizeVar}{(width == 1 ? string.Empty : $" / {width}")};");
         if (codec.CarrierKind == CarrierKind.Array)
         {
             sb.AppendLine($"{indent}{codec.TypeName} {targetVar} = new {ElementTypeName(codec.TypeName)}[{countVar}];");
@@ -1546,6 +1552,10 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
         string sameTypeVar = $"__forySameType{id++}";
         string declaredVar = $"__foryDeclared{id++}";
         sb.AppendLine($"{indent}int {lengthVar} = checked((int)context.Reader.ReadVarUInt32());");
+        sb.AppendLine($"{indent}if ({lengthVar} != 0)");
+        sb.AppendLine($"{indent}{{");
+        sb.AppendLine($"{indent}    context.Reader.CheckBound(1);");
+        sb.AppendLine($"{indent}}}");
         if (isSet)
         {
             sb.AppendLine($"{indent}{codec.TypeName} {targetVar} = new();");
@@ -1647,6 +1657,10 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
         FieldCodecModel value = codec.Generics[1];
         string totalVar = $"__foryTotal{id++}";
         sb.AppendLine($"{indent}int {totalVar} = checked((int)context.Reader.ReadVarUInt32());");
+        sb.AppendLine($"{indent}if ({totalVar} != 0)");
+        sb.AppendLine($"{indent}{{");
+        sb.AppendLine($"{indent}    context.Reader.CheckBound(1);");
+        sb.AppendLine($"{indent}}}");
         sb.AppendLine($"{indent}{codec.TypeName} {targetVar} = new({totalVar});");
         sb.AppendLine($"{indent}int __foryRead = 0;");
         sb.AppendLine($"{indent}while (__foryRead < {totalVar})");
@@ -1724,7 +1738,7 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
         if (!CanValidateInlineTypeInfo(codec.TypeId))
         {
             sb.AppendLine(
-                $"{indent}throw new global::Apache.Fory.InvalidDataException(\"generated field payload requires declared nested user type metadata\");");
+                $"{indent}throw new global::Apache.Fory.InvalidDataException(\"generated field value requires declared nested user type metadata\");");
             return;
         }
 

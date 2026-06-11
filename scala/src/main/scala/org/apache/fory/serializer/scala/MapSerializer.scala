@@ -54,6 +54,9 @@ abstract class AbstractScalaMapSerializer[K, V, T](typeResolver: TypeResolver, c
     val numElements = buffer.readVarUInt32()
     setNumElements(numElements)
     val factory = readContext.readRef().asInstanceOf[Factory[(K, V), T]]
+    if (numElements != 0) {
+      buffer.checkReadableBytes(1)
+    }
     val builder = factory.newBuilder
     builder.sizeHint(numElements)
     new MapBuilder[K, V, T](builder)

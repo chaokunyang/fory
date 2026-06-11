@@ -363,12 +363,17 @@ template <size_t N> struct Serializer<std::array<uint8_t, N>> {
 
   static inline std::array<uint8_t, N> read_data(ReadContext &ctx) {
     uint32_t length = ctx.read_var_uint32(ctx.error());
-    if (FORY_PREDICT_FALSE(length != N || length * sizeof(uint8_t) >
-                                              ctx.buffer().remaining_size())) {
+    if (FORY_PREDICT_FALSE(length != N)) {
       ctx.set_error(Error::invalid_data("Array size mismatch: expected " +
                                         std::to_string(N) + " but got " +
                                         std::to_string(length)));
       return std::array<uint8_t, N>();
+    }
+    if constexpr (N > 0) {
+      if (FORY_PREDICT_FALSE(!ctx.buffer().ensure_readable(N * sizeof(uint8_t),
+                                                           ctx.error()))) {
+        return std::array<uint8_t, N>();
+      }
     }
     std::array<uint8_t, N> arr;
     if constexpr (N > 0) {
@@ -447,12 +452,17 @@ template <size_t N> struct Serializer<std::array<uint16_t, N>> {
 
   static inline std::array<uint16_t, N> read_data(ReadContext &ctx) {
     uint32_t length = ctx.read_var_uint32(ctx.error());
-    if (FORY_PREDICT_FALSE(length != N || length * sizeof(uint16_t) >
-                                              ctx.buffer().remaining_size())) {
+    if (FORY_PREDICT_FALSE(length != N)) {
       ctx.set_error(Error::invalid_data("Array size mismatch: expected " +
                                         std::to_string(N) + " but got " +
                                         std::to_string(length)));
       return std::array<uint16_t, N>();
+    }
+    if constexpr (N > 0) {
+      if (FORY_PREDICT_FALSE(!ctx.buffer().ensure_readable(N * sizeof(uint16_t),
+                                                           ctx.error()))) {
+        return std::array<uint16_t, N>();
+      }
     }
     std::array<uint16_t, N> arr;
     if constexpr (N > 0) {
@@ -531,12 +541,17 @@ template <size_t N> struct Serializer<std::array<uint32_t, N>> {
 
   static inline std::array<uint32_t, N> read_data(ReadContext &ctx) {
     uint32_t length = ctx.read_var_uint32(ctx.error());
-    if (FORY_PREDICT_FALSE(length != N || length * sizeof(uint32_t) >
-                                              ctx.buffer().remaining_size())) {
+    if (FORY_PREDICT_FALSE(length != N)) {
       ctx.set_error(Error::invalid_data("Array size mismatch: expected " +
                                         std::to_string(N) + " but got " +
                                         std::to_string(length)));
       return std::array<uint32_t, N>();
+    }
+    if constexpr (N > 0) {
+      if (FORY_PREDICT_FALSE(!ctx.buffer().ensure_readable(N * sizeof(uint32_t),
+                                                           ctx.error()))) {
+        return std::array<uint32_t, N>();
+      }
     }
     std::array<uint32_t, N> arr;
     if constexpr (N > 0) {
@@ -615,12 +630,17 @@ template <size_t N> struct Serializer<std::array<uint64_t, N>> {
 
   static inline std::array<uint64_t, N> read_data(ReadContext &ctx) {
     uint32_t length = ctx.read_var_uint32(ctx.error());
-    if (FORY_PREDICT_FALSE(length != N || length * sizeof(uint64_t) >
-                                              ctx.buffer().remaining_size())) {
+    if (FORY_PREDICT_FALSE(length != N)) {
       ctx.set_error(Error::invalid_data("Array size mismatch: expected " +
                                         std::to_string(N) + " but got " +
                                         std::to_string(length)));
       return std::array<uint64_t, N>();
+    }
+    if constexpr (N > 0) {
+      if (FORY_PREDICT_FALSE(!ctx.buffer().ensure_readable(N * sizeof(uint64_t),
+                                                           ctx.error()))) {
+        return std::array<uint64_t, N>();
+      }
     }
     std::array<uint64_t, N> arr;
     if constexpr (N > 0) {

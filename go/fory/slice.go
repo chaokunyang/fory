@@ -344,6 +344,9 @@ func (s *sliceSerializer) ReadData(ctx *ReadContext, value reflect.Value) {
 	if ctx.HasError() {
 		return
 	}
+	if !buf.CheckReadable(1, ctxErr) {
+		return
+	}
 
 	// IMPORTANT: collection readers must obey the TRACKING_REF bit written on the
 	// wire, not whatever the local field annotation or inferred Go type would

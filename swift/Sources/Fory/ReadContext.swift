@@ -25,7 +25,6 @@ public final class ReadContext {
   public let trackRef: Bool
   public let compatible: Bool
   public let checkClassVersion: Bool
-  public let maxCollectionSize: Int
   public let maxDepth: Int
   public let refReader: RefReader
   private let compatibleTypeDefTypeInfos = ReusableArray<TypeInfo?>(defaultValue: nil, reserve: 2)
@@ -42,7 +41,6 @@ public final class ReadContext {
     trackRef: Bool,
     compatible: Bool = false,
     checkClassVersion: Bool = true,
-    maxCollectionSize: Int = 1_000_000,
     maxDepth: Int = 5
   ) {
     self.buffer = buffer
@@ -50,7 +48,6 @@ public final class ReadContext {
     self.trackRef = trackRef
     self.compatible = compatible
     self.checkClassVersion = checkClassVersion
-    self.maxCollectionSize = maxCollectionSize
     self.maxDepth = maxDepth
     self.refReader = RefReader()
   }
@@ -80,11 +77,6 @@ public final class ReadContext {
   func ensureCollectionLength(_ length: Int, label: String) throws {
     if length < 0 {
       throw ForyError.invalidData("\(label) length is negative")
-    }
-    if length > maxCollectionSize {
-      throw ForyError.invalidData(
-        "\(label) length \(length) exceeds configured maxCollectionSize \(maxCollectionSize)"
-      )
     }
   }
 

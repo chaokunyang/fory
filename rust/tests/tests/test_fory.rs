@@ -328,23 +328,3 @@ fn test_type_mismatch_error_shows_type_name() {
         err_str
     );
 }
-
-#[test]
-fn test_size_guardrail_configuration_accessors() {
-    let default_fory = Fory::builder().xlang(false).compatible(false).build();
-    assert_eq!(default_fory.get_max_collection_size(), 1024 * 1024);
-
-    let configured_fory = Fory::builder()
-        .xlang(false)
-        .max_collection_size(128)
-        .compatible(false)
-        .build();
-    assert_eq!(configured_fory.get_max_collection_size(), 128);
-}
-
-#[test]
-fn test_size_limit_exceeded_error_display() {
-    let err = Error::size_limit_exceeded("Collection size 3 exceeds limit 2");
-    assert!(matches!(err, Error::SizeLimitExceeded(_)));
-    assert_eq!(err.to_string(), "Collection size 3 exceeds limit 2");
-}

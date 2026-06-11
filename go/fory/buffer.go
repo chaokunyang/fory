@@ -77,15 +77,25 @@ func (b *ByteBuffer) fill(n int, errOut *Error) bool {
 
 	for len(b.data) < n {
 		if len(b.data) == cap(b.data) {
-			newCap := cap(b.data) * 2
+			currentCap := cap(b.data)
+			newCap := currentCap * 2
+			if currentCap > MaxInt/2 {
+				newCap = MaxInt
+			}
 			if newCap < b.bufferSize {
 				newCap = b.bufferSize
 			}
-			if newCap <= cap(b.data) {
-				newCap = cap(b.data) + 1
+			if newCap <= currentCap {
+				newCap = currentCap + 1
 			}
 			if newCap > n {
 				newCap = n
+			}
+			if newCap <= currentCap {
+				if errOut != nil {
+					*errOut = DeserializationErrorf("stream buffer size exceeds supported range")
+				}
+				return false
 			}
 			newData := make([]byte, len(b.data), newCap)
 			copy(newData, b.data)
@@ -107,6 +117,12 @@ func (b *ByteBuffer) fill(n int, errOut *Error) bool {
 				} else {
 					*errOut = DeserializationError(fmt.Sprintf("stream read error: %v", err))
 				}
+			}
+			return false
+		}
+		if readBytes == 0 {
+			if errOut != nil {
+				*errOut = DeserializationError("stream read made no progress")
 			}
 			return false
 		}

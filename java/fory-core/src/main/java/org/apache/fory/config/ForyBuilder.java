@@ -99,7 +99,6 @@ public final class ForyBuilder {
   Integer bufferSizeLimitBytes = -1;
   MetaCompressor metaCompressor = new DeflaterMetaCompressor();
   int maxDepth = 50;
-  int maxCollectionSize = 1_000_000;
   float mapRefLoadFactor = 0.51f;
   boolean forVirtualThread = false;
   TypeChecker typeChecker;
@@ -509,18 +508,6 @@ public final class ForyBuilder {
     Preconditions.checkArgument(maxDepth >= 2, "maxDepth must >= 2 but got %s", maxDepth);
     this.maxDepth = maxDepth;
     recordAction(b -> b.withMaxDepth(maxDepth));
-    return this;
-  }
-
-  /**
-   * Set max collection size for deserialization. Collection lengths and collection capacity fields
-   * above this limit are rejected before allocation. Default max collection size is 1,000,000.
-   */
-  public ForyBuilder withMaxCollectionSize(int maxCollectionSize) {
-    Preconditions.checkArgument(
-        maxCollectionSize >= 0, "maxCollectionSize must >= 0 but got %s", maxCollectionSize);
-    this.maxCollectionSize = maxCollectionSize;
-    recordAction(b -> b.withMaxCollectionSize(maxCollectionSize));
     return this;
   }
 

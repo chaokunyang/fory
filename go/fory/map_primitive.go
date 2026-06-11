@@ -73,7 +73,7 @@ func readTypedMapSize(ctx *ReadContext) (int, bool) {
 	if size == 0 || ctx.HasError() {
 		return size, false
 	}
-	if !ctx.Buffer().CheckReadable(2, ctx.Err()) {
+	if !ctx.Buffer().CheckReadable(size, ctx.Err()) {
 		return 0, false
 	}
 	return size, true

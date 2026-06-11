@@ -112,7 +112,6 @@ func dateAndTimestampContextHelpersUseExpectedWireProtocols() throws {
         trackRef: false,
         compatible: true,
         checkClassVersion: true,
-        maxCollectionSize: 1_000_000,
         maxDepth: 5
     )
     let xlangLocalDateDecoded = try xlangReadContext.readLocalDate(refMode: RefMode.nullOnly, readTypeInfo: true)
@@ -136,7 +135,6 @@ func dateAndTimestampContextHelpersUseExpectedWireProtocols() throws {
         trackRef: false,
         compatible: true,
         checkClassVersion: true,
-        maxCollectionSize: 1_000_000,
         maxDepth: 5
     )
     let timestampDecoded = try timestampReadContext.readTimestamp(refMode: RefMode.nullOnly, readTypeInfo: true)

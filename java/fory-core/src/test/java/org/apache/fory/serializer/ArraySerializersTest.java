@@ -209,19 +209,18 @@ public class ArraySerializersTest extends ForyTestBase {
   }
 
   @Test
-  public void testObjectArrayReadRejectsOversizedElementCount() {
+  public void testObjectArrayReadRequiresBodyByte() {
     Fory fory =
         Fory.builder()
             .withXlang(false)
             .withRefTracking(true)
             .requireClassRegistration(false)
-            .withMaxCollectionSize(1)
             .withCompatible(false)
             .build();
     assertThrows(
-        DeserializationException.class, () -> readObjectArrayBody(fory, Object[].class, 2));
+        IndexOutOfBoundsException.class, () -> readObjectArrayBody(fory, Object[].class, 2));
     assertThrows(
-        DeserializationException.class, () -> readObjectArrayBody(fory, String[].class, 2));
+        IndexOutOfBoundsException.class, () -> readObjectArrayBody(fory, String[].class, 2));
   }
 
   @Test(dataProvider = "crossLanguageReferenceTrackingConfig")

@@ -36,11 +36,6 @@ pub const DECL_ELEMENT_TYPE: u8 = 0b100;
 //  Whether collection elements type same.
 pub const IS_SAME_TYPE: u8 = 0b1000;
 
-#[cold]
-fn collection_size_limit_exceeded(len: u32, max: u32) -> Error {
-    Error::size_limit_exceeded(format!("Collection size {} exceeds limit {}", len, max))
-}
-
 fn check_collection_len<T: Serializer>(context: &ReadContext, len: u32) -> Result<(), Error> {
     if std::mem::size_of::<T>() == 0 {
         return Ok(());
@@ -254,10 +249,6 @@ where
     if len == 0 {
         return Ok(C::from_iter(std::iter::empty()));
     }
-    let max = context.max_collection_size();
-    if len > max {
-        return Err(collection_size_limit_exceeded(len, max));
-    }
     if T::fory_is_polymorphic() || T::fory_is_shared_ref() {
         return read_collection_data_dyn_ref(context, len);
     }
@@ -299,10 +290,6 @@ where
     let len = context.reader.read_var_u32()?;
     if len == 0 {
         return Ok(Vec::new());
-    }
-    let max = context.max_collection_size();
-    if len > max {
-        return Err(collection_size_limit_exceeded(len, max));
     }
     if T::fory_is_polymorphic() || T::fory_is_shared_ref() {
         return read_vec_data_dyn_ref(context, len);
@@ -510,11 +497,13 @@ fn read_primitive_array_data_bulk<T: 'static>(
     }
     #[cfg(target_endian = "little")]
     {
-        let mut vec: Vec<T> = Vec::with_capacity(len);
+        // Prove the encoded primitive-array body exists before allocating from
+        // its declared byte length.
         let src = match context.reader.read_bytes(size_bytes) {
             Ok(src) => src,
             Err(error) => return Some(Err(error)),
         };
+        let mut vec: Vec<T> = Vec::with_capacity(len);
         unsafe {
             std::ptr::copy_nonoverlapping(src.as_ptr(), vec.as_mut_ptr() as *mut u8, size_bytes);
             vec.set_len(len);
@@ -756,13 +745,6 @@ where
     if len == 0 {
         return Ok(Vec::new());
     }
-    let max = context.max_collection_size();
-    if len > max {
-        return Err(Error::size_limit_exceeded(format!(
-            "Collection size {} exceeds limit {}",
-            len, max
-        )));
-    }
     let header = context.reader.read_u8()?;
     if (header & HAS_NULL) != 0 {
         return Err(Error::type_error(
@@ -784,6 +766,7 @@ where
             "array-compatible list must declare element type",
         ));
     }
+    context.reader.check_bound(len as usize)?;
     let mut vec = Vec::with_capacity(len as usize);
     for _ in 0..len {
         vec.push(T::read_list_array_element(context, element_type.type_id)?);

@@ -620,29 +620,6 @@ TEST(CollectionSerializerTest, ForwardListEmptyRoundTrip) {
   EXPECT_TRUE(deserialized.strings.empty());
 }
 
-// Test max_collection_size using objects (e.g., strings)
-TEST(CollectionSerializerTest, MaxCollectionSizeNativeGuardrail) {
-  auto fory = Fory::builder()
-                  .xlang(false)
-                  .max_collection_size(2)
-                  .compatible(false)
-                  .build();
-  fory.register_struct<VectorStringHolder>(200);
-
-  VectorStringHolder original;
-  original.strings = {"A", "B", "C"};
-
-  auto bytes_result = fory.serialize(original);
-  ASSERT_TRUE(bytes_result.ok());
-
-  auto deserialize_result = fory.deserialize<VectorStringHolder>(
-      bytes_result->data(), bytes_result->size());
-
-  ASSERT_FALSE(deserialize_result.ok());
-  EXPECT_TRUE(deserialize_result.error().message().find(
-                  "exceeds max_collection_size") != std::string::npos);
-}
-
 } // namespace
 } // namespace serialization
 } // namespace fory

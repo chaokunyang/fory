@@ -27,7 +27,7 @@ import org.apache.fory.exception.DeserializationException
 import org.apache.fory.memory.MemoryBuffer
 import org.apache.fory.type.Types
 
-/** Kotlin/JVM carrier helpers for Fory xlang dense unsigned array payloads. */
+/** Kotlin/JVM carrier helpers for Fory xlang dense unsigned array bodies. */
 public object KotlinXlangArrayEncoding {
   @JvmStatic
   public fun writeUByteArray(writeContext: WriteContext, value: UByteArray) {
@@ -44,8 +44,8 @@ public object KotlinXlangArrayEncoding {
 
   @JvmStatic
   public fun readUByteArray(readContext: ReadContext): UByteArray {
-    val buffer = payloadBuffer(readContext)
-    val size = payloadSize(readContext, buffer, 1)
+    val buffer = arrayBuffer(readContext)
+    val size = arrayByteSize(readContext, buffer, 1)
     return UByteArray(size) { buffer.readByte().toUByte() }
   }
 
@@ -64,8 +64,8 @@ public object KotlinXlangArrayEncoding {
 
   @JvmStatic
   public fun readUShortArray(readContext: ReadContext): UShortArray {
-    val buffer = payloadBuffer(readContext)
-    val size = payloadSize(readContext, buffer, Short.SIZE_BYTES)
+    val buffer = arrayBuffer(readContext)
+    val size = arrayByteSize(readContext, buffer, Short.SIZE_BYTES)
     return UShortArray(size / Short.SIZE_BYTES) { buffer.readInt16().toUShort() }
   }
 
@@ -84,8 +84,8 @@ public object KotlinXlangArrayEncoding {
 
   @JvmStatic
   public fun readUIntArray(readContext: ReadContext): UIntArray {
-    val buffer = payloadBuffer(readContext)
-    val size = payloadSize(readContext, buffer, Int.SIZE_BYTES)
+    val buffer = arrayBuffer(readContext)
+    val size = arrayByteSize(readContext, buffer, Int.SIZE_BYTES)
     return UIntArray(size / Int.SIZE_BYTES) { buffer.readInt32().toUInt() }
   }
 
@@ -104,8 +104,8 @@ public object KotlinXlangArrayEncoding {
 
   @JvmStatic
   public fun readULongArray(readContext: ReadContext): ULongArray {
-    val buffer = payloadBuffer(readContext)
-    val size = payloadSize(readContext, buffer, Long.SIZE_BYTES)
+    val buffer = arrayBuffer(readContext)
+    val size = arrayByteSize(readContext, buffer, Long.SIZE_BYTES)
     return ULongArray(size / Long.SIZE_BYTES) { buffer.readInt64().toULong() }
   }
 
@@ -153,18 +153,18 @@ public object KotlinXlangArrayEncoding {
     return result
   }
 
-  private fun payloadBuffer(readContext: ReadContext): MemoryBuffer =
+  private fun arrayBuffer(readContext: ReadContext): MemoryBuffer =
     if (readContext.isPeerOutOfBandEnabled) readContext.readBufferObject() else readContext.buffer
 
-  private fun payloadSize(readContext: ReadContext, buffer: MemoryBuffer, elementSize: Int): Int {
+  private fun arrayByteSize(readContext: ReadContext, buffer: MemoryBuffer, elementSize: Int): Int {
     val size =
       if (readContext.isPeerOutOfBandEnabled) buffer.remaining() else buffer.readVarUInt32Small7()
     if (size < 0) {
-      throw DeserializationException("Binary payload size must be non-negative: $size")
+      throw DeserializationException("Array byte size must be non-negative: $size")
     }
     if (size % elementSize != 0) {
       throw DeserializationException(
-        "Binary payload size $size is not aligned to element size $elementSize"
+        "Array byte size $size is not aligned to element size $elementSize"
       )
     }
     buffer.checkReadableBytes(size)

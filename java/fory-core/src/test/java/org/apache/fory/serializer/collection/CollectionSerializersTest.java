@@ -1164,22 +1164,11 @@ public class CollectionSerializersTest extends ForyTestBase {
             .withXlang(false)
             .withRefTracking(true)
             .requireClassRegistration(false)
-            .withMaxCollectionSize(4)
             .withCompatible(false)
             .build();
-    CollectionSerializers.ArrayBlockingQueueSerializer arraySerializer =
-        new CollectionSerializers.ArrayBlockingQueueSerializer(
-            fory.getTypeResolver(), ArrayBlockingQueue.class);
     CollectionSerializers.LinkedBlockingQueueSerializer linkedSerializer =
         new CollectionSerializers.LinkedBlockingQueueSerializer(
             fory.getTypeResolver(), LinkedBlockingQueue.class);
-
-    MemoryBuffer oversizedCapacity = MemoryUtils.buffer(8);
-    oversizedCapacity.writeVarUInt32Small7(2);
-    oversizedCapacity.writeVarUInt32Small7(5);
-    Assert.expectThrows(
-        DeserializationException.class,
-        () -> withReadContext(fory, oversizedCapacity, arraySerializer::newCollection));
 
     MemoryBuffer undersizedCapacity = MemoryUtils.buffer(8);
     undersizedCapacity.writeVarUInt32Small7(2);
@@ -1190,13 +1179,12 @@ public class CollectionSerializersTest extends ForyTestBase {
   }
 
   @Test
-  public void testCollectionRejectsTooManyElements() {
+  public void testCollectionReadRequiresBodyByte() {
     Fory fory =
         Fory.builder()
             .withXlang(false)
             .withRefTracking(true)
             .requireClassRegistration(false)
-            .withMaxCollectionSize(1)
             .withCompatible(false)
             .build();
     CollectionSerializers.ArrayListSerializer serializer =
@@ -1204,7 +1192,7 @@ public class CollectionSerializersTest extends ForyTestBase {
     MemoryBuffer buffer = MemoryUtils.buffer(8);
     buffer.writeVarUInt32Small7(2);
     Assert.expectThrows(
-        DeserializationException.class,
+        IndexOutOfBoundsException.class,
         () -> withReadContext(fory, buffer, serializer::newCollection));
   }
 

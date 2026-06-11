@@ -127,20 +127,12 @@ Result<void, Error> StdInputStream::fill_buffer(uint32_t min_fill_size) {
   }
 
   const uint32_t read_pos = buffer_->reader_index_;
-  const uint32_t deficit = min_fill_size - remaining_size();
   constexpr uint64_t k_max_u32 = std::numeric_limits<uint32_t>::max();
-  const uint64_t required = static_cast<uint64_t>(buffer_->size_) + deficit;
-  if (required > k_max_u32) {
+  const uint64_t target =
+      static_cast<uint64_t>(read_pos) + static_cast<uint64_t>(min_fill_size);
+  if (target > k_max_u32) {
     return Unexpected(
         Error::out_of_bound("stream buffer size exceeds uint32 range"));
-  }
-  if (required > data_.size()) {
-    uint64_t new_size =
-        std::max<uint64_t>(required, static_cast<uint64_t>(data_.size()) * 2);
-    if (new_size > k_max_u32) {
-      new_size = k_max_u32;
-    }
-    reserve(static_cast<uint32_t>(new_size));
   }
 
   std::streambuf *source = stream_->rdbuf();
@@ -149,6 +141,18 @@ Result<void, Error> StdInputStream::fill_buffer(uint32_t min_fill_size) {
   }
   uint32_t write_pos = buffer_->size_;
   while (remaining_size() < min_fill_size) {
+    if (write_pos == data_.size()) {
+      uint64_t new_size =
+          std::max<uint64_t>(static_cast<uint64_t>(data_.size()) * 2,
+                             static_cast<uint64_t>(initial_buffer_size_));
+      if (new_size <= data_.size()) {
+        new_size = static_cast<uint64_t>(data_.size()) + 1;
+      }
+      if (new_size > target) {
+        new_size = target;
+      }
+      reserve(static_cast<uint32_t>(new_size));
+    }
     uint32_t writable = static_cast<uint32_t>(data_.size()) - write_pos;
     const std::streamsize read_bytes =
         source->sgetn(reinterpret_cast<char *>(data_.data() + write_pos),

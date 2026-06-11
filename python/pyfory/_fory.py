@@ -126,7 +126,6 @@ class Fory:
         "max_depth",
         "field_nullable",
         "policy",
-        "max_collection_size",
     )
 
     def __init__(
@@ -139,7 +138,6 @@ class Fory:
         policy: DeserializationPolicy = None,
         field_nullable: bool = False,
         meta_compressor=None,
-        max_collection_size: int = 1_000_000,
     ):
         """
         Initialize a Fory serialization instance.
@@ -178,12 +176,6 @@ class Fory:
             field_nullable: Treat all dataclass fields as nullable regardless of
                 Optional annotation.
 
-            max_collection_size: Maximum allowed size for collections (lists, sets, tuples)
-                and maps (dicts) during deserialization. This limit is used to prevent
-                out-of-memory attacks from malicious payloads that claim extremely large
-                collection sizes, as collections preallocate memory based on the declared
-                size. Raises an exception if exceeded. Default is 1,000,000.
-
         Example:
             >>> # Python native mode with reference tracking
             >>> fory = Fory(xlang=False, ref=True)
@@ -199,7 +191,6 @@ class Fory:
         self.compatible = compatible
         self.field_nullable = field_nullable
         self.max_depth = max_depth
-        self.max_collection_size = max_collection_size
         self.config = Config(
             xlang=xlang,
             track_ref=ref,
@@ -211,7 +202,6 @@ class Fory:
             field_nullable=field_nullable,
             policy=self.policy,
             meta_compressor=meta_compressor,
-            max_collection_size=max_collection_size,
         )
         from pyfory.registry import SharedRegistry, TypeResolver
 
@@ -597,9 +587,6 @@ class ThreadSafeFory:
             in both xlang and Python native mode. Set False only when every reader and
             writer always uses the same Python class schema and smaller payloads matter.
         max_depth (int): Maximum depth for deserialization. Defaults to 50.
-        max_collection_size (int): Maximum allowed size for collections and maps during
-            deserialization. Defaults to 1,000,000.
-
     Example:
         >>> import pyfory
         >>> import threading

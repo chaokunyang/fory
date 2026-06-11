@@ -375,6 +375,18 @@ stream API cannot read into a caller-provided target.
 For fixed-width primitive arrays, the final result must not become visible to
 callers until the exact encoded byte count has been read successfully.
 
+For list, set, map, and other container readers, the declared logical element
+count is not an encoded byte count. After validating the count, a non-empty
+container reader should call the byte owner's readability check for the next
+required encoded byte or chunk header before allocating from that logical count.
+Do not add a separate initial-capacity cap for this allocation-before-read
+check.
+
+For TypeDef or TypeMeta bodies, first prove that the encoded metadata body bytes
+are readable through the byte owner. Field-list allocation should happen after
+that body readability check and should not use a separate small initial-capacity
+cap as a security rule.
+
 Skip paths do not need to materialize skipped values. Existing byte-skip
 operations should consume any available buffered prefix first, then skip or drop
 remaining stream bytes in bounded steps.

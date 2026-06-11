@@ -116,8 +116,10 @@ For buffer-backed input:
   comparison.
 - Multi-byte element arrays should compute the required byte size with overflow
   checks before allocation.
-- Container readers should avoid eager capacity proportional to untrusted
-  logical element counts when a small bounded initial capacity is sufficient.
+- Container readers should call the byte owner's readability check for the next
+  required non-empty container byte or chunk header before allocating from a
+  declared logical element count. The logical element count is not itself a byte
+  count.
 
 For stream-backed input:
 
@@ -141,11 +143,12 @@ policy belong to the owning serializers.
 Large valid collection inputs are allowed. If the input contains many encoded
 elements, proportional deserialization is expected.
 
-The security requirement is to avoid disproportionate preallocation from a
-declared logical count. A reader can use a bounded initial capacity and then
-grow as elements are actually read. This keeps valid large inputs supported
-without giving a short header the ability to allocate a large container before
-any element body is processed.
+The security requirement is to avoid preallocation from a declared logical count
+before the following container body is proven readable. For a non-empty
+container, the reader should call the byte owner's readability check for the
+next required encoded byte or chunk header before allocating from the logical
+count. No separate bounded initial-capacity rule is required for this security
+model.
 
 Map or collection chunk validation is security-relevant only when missing
 validation can cause a no-progress loop, unbounded resource growth, retained

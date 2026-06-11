@@ -12,9 +12,9 @@ does not describe exploit techniques, and does not document implementation
 history.
 
 The model is intentionally narrow. Fory should prevent resource and policy
-failures caused by untrusted input, but it should not add strict validation that
-only rejects non-canonical or writer-unusual inputs when doing so adds hot-path
-cost and does not protect a Fory security boundary.
+failures caused by untrusted input, but it should not add hot-path validation
+that only enforces byte-form strictness when doing so does not protect a Fory
+security boundary.
 
 ## Scope
 
@@ -49,11 +49,10 @@ Fory security boundaries include:
 Fory security boundaries do not include:
 
 - The business meaning of a protocol-valid value.
-- Whether a reader accepts an alternate representation that normal Fory writers
-  do not emit.
-- Whether a map, set, object, or metadata shape is canonical, unless canonical
-  rejection is itself an explicit owner policy or protects one of the boundaries
-  above.
+- Which protocol-allowed byte form was used for a value.
+- Whether a map, set, object, or metadata value uses one specific encoding
+  shape, unless rejecting other shapes is an explicit owner policy or protects
+  one of the boundaries above.
 
 ## Security Invariants
 
@@ -72,26 +71,28 @@ Deserialization code must prevent the following outcomes for untrusted input:
   later root operation or grow across operations.
 - Successful bypass of an explicit Fory policy boundary.
 
-When a path cannot produce one of these outcomes, strict rejection of malformed
-or non-canonical bytes is normally a correctness or interoperability choice, not
-a security requirement.
+When a path cannot produce one of these outcomes, earlier rejection of malformed
+bytes is normally a correctness or interoperability choice, not a security
+requirement.
 
 ## Non-Security Semantics
 
 The following patterns are not vulnerabilities by default:
 
+- Protocol-allowed collection chunking, map chunking, and field ordering.
+- Duplicate keys, set elements, or compatible fields that collapse according to
+  the target data structure or owning serializer semantics.
 - Malformed ref, null, or type flags that eventually produce a read error.
-- Writer-impossible encodings that still deserialize to a valid value.
-- Duplicate keys, set elements, or compatible fields that collapse to a value.
-- Canonicality mismatches where multiple accepted byte encodings represent the
-  same logical value.
-- Encoded-body-before-shape-validation when the operation ultimately returns an
-  error and does not create a security-invariant failure.
+- Malformed scalar bytes that are consumed linearly and eventually produce a
+  read error.
+- Reading an encoded body before later shape validation when the operation
+  ultimately returns an error and does not create a security-invariant failure.
 
-Fory may still reject these forms for specification strictness or
+Fory may still reject malformed forms for specification strictness or
 interoperability. That validation should be added only when it is required by
 the protocol owner, is effectively free on the relevant path, or protects a
-security invariant listed above.
+security invariant listed above. Do not add protocol-layer validation solely to
+reject scalar byte forms whose only effect is extra decode cost.
 
 ### Value-bearing ref flags
 
@@ -128,8 +129,8 @@ For stream-backed input:
 
 The byte owner should stay byte-oriented. Buffer, reader, or read-context APIs
 may expose byte read and byte skip operations, but string decoding, decimal
-canonical checks, primitive-array encoding, compression modes, and collection
-capacity policy belong to the owning serializers.
+parsing, primitive-array encoding, compression modes, and collection capacity
+policy belong to the owning serializers.
 
 ## Collection And Map Capacity
 
@@ -144,8 +145,8 @@ any element body is processed.
 
 Map or collection chunk validation is security-relevant only when missing
 validation can cause a no-progress loop, unbounded resource growth, retained
-state, or success across a Fory policy boundary. Strict rejection of a
-writer-unusual but bounded chunk shape is not a security requirement by itself.
+state, or success across a Fory policy boundary. Protocol-allowed chunk
+segmentation is normal input and is not a security issue by itself.
 
 ## Skip Semantics
 
@@ -164,8 +165,8 @@ that case, classify the behavior by concrete impact:
   security-relevant.
 - Bounded materialization followed by an error or discard is a hardening concern
   only when it creates meaningful memory or CPU pressure.
-- Pure strictness about whether a skipped value could have been represented more
-  canonically is not a security issue.
+- Pure strictness about whether a skipped value used one specific encoding shape
+  is not a security issue.
 
 ## Metadata And Type Resolution
 
@@ -180,10 +181,9 @@ Metadata readers should:
   policy decisions.
 - Reset or release metadata state at the correct root-operation boundary.
 
-Metadata canonicality alone is not a security requirement. Rejecting encodings
-that normal writers do not produce is useful only when the owner wants strict
-wire canonicality or when the encoding changes type identity, retained state,
-resource use, or policy behavior.
+Metadata byte-form strictness alone is not a security requirement. Rejecting a
+metadata shape is useful only when the owner wants that strictness or when the
+shape changes type identity, retained state, resource use, or policy behavior.
 
 ## Reference Tracking
 
@@ -252,7 +252,7 @@ Use the following questions when reviewing deserialization behavior:
 
 If the answer to the first seven questions is no, the issue is normally not a
 security finding. If the validation is not effectively free, avoid adding it
-unless the protocol owner explicitly requires strict canonical rejection.
+unless the protocol owner explicitly requires it.
 
 ## Documentation Boundaries
 

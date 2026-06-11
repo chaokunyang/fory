@@ -9,6 +9,7 @@ This is the entry point for AI guidance in Apache Fory. Read this file first, th
 - `.agents/docs-and-formatting.md`: documentation, specification, and markdown rules.
 - `.agents/ci-and-pr.md`: CI triage, PR expectations, and commit conventions.
 - `.agents/testing/integration-tests.md`: `integration_tests/` prerequisites, regeneration rules, and commands.
+- `docs/security/deserialization.md`: security boundaries for untrusted deserialization classification.
 - `.agents/languages/java.md`
 - `.agents/languages/csharp.md`
 - `.agents/languages/cpp.md`

@@ -290,35 +290,36 @@ primitive-array element counts, compression modes, or collection capacity
 policy.
 
 For large byte-counted values, implementations should use an available-first
-direct-target read policy:
+bounded result growth policy:
 
 1. Validate the encoded byte count in the serializer. For fixed-width primitive
    arrays, check overflow and element alignment before allocation, such as
    `byteCount % elementByteWidth == 0`.
 2. Check the bytes already available in the current read buffer.
-3. If `available >= byteCount`, allocate the final value once and copy directly
-   from the buffer. Buffer-backed inputs normally stay entirely on this path.
-   Stream-backed inputs also use this path when the stream buffer already holds
-   the requested body.
-4. If `available < byteCount`, allocate the final value once, copy the
-   available buffered prefix into the final target, and then direct-read the
-   remaining bytes into the final target in bounded chunks, for example
-   `min(remaining, 8192)`.
+3. If `available >= byteCount`, allocate the complete final value once and copy
+   directly from the buffer. Buffer-backed inputs normally stay entirely on this
+   path. Stream-backed inputs also use this path when the stream buffer already
+   holds the requested body.
+4. If `available < byteCount`, allocate only the first available prefix or a
+   bounded chunk such as `min(remaining, 8192)`, then copy or direct-read into
+   that initialized result range. Continue growing the result as more bytes
+   become available or are read from the stream.
 5. Before each direct stream read, check the current buffer availability again.
-   If the buffer now holds all remaining bytes, finish with one buffer copy
-   instead of reading from the underlying stream directly.
+   If the buffer now holds all remaining bytes, resize the result to the final
+   size and finish with one buffer copy instead of reading from the underlying
+   stream directly.
 
 The byte owner must not grow an intermediate stream buffer to the declared body
-length just to prove readability. The destination allocation is the exact final
-value allocation after serializer-owned length validation; intermediate stream
-or staging buffers should stay bounded.
+length just to prove readability. When the complete body is not already
+available, result allocation should grow with bytes that are available or
+successfully read, rather than jumping to the declared final size.
 
 This policy avoids three inefficient or unsafe implementation shapes:
 
 - staging the full declared byte count in the stream buffer before copying to
   the final value
-- growing the final contiguous container progressively, which can cause repeated
-  reallocations and copies
+- allocating the complete final contiguous container before enough bytes are
+  available or have been read
 - adding a scratch buffer for primitive dense arrays when bytes can be read
   directly into the final target
 
@@ -326,6 +327,11 @@ Scratch buffers remain appropriate when the target representation is not a
 direct byte target, such as string transcoding, compression, byte-order
 conversion that is not performed in place, bit-packed values, or runtimes whose
 stream API cannot read into a caller-provided target.
+
+For fixed-width primitive arrays, chunk sizing and result resizing must preserve
+valid element storage and overflow checks. The partially read result must not be
+returned to callers; it becomes visible only after the exact byte count has been
+read successfully.
 
 Exact skip follows the same ownership rule. It should consume any available
 buffered prefix first, then skip or drop the remaining stream bytes in bounded

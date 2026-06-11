@@ -290,24 +290,55 @@ primitive-array element counts, compression modes, or collection capacity
 policy.
 
 For large byte-counted values, implementations should use an available-first
-bounded result growth policy:
+bounded result growth policy. The decision point is the number of bytes already
+available in the current read buffer:
 
 1. Validate the encoded byte count in the serializer. For fixed-width primitive
    arrays, check overflow and element alignment before allocation, such as
    `byteCount % elementByteWidth == 0`.
 2. Check the bytes already available in the current read buffer.
-3. If `available >= byteCount`, allocate the complete final value once and copy
+3. If `byteCount <= available`, allocate the complete final value once and copy
    directly from the buffer. Buffer-backed inputs normally stay entirely on this
    path. Stream-backed inputs also use this path when the stream buffer already
    holds the requested body.
-4. If `available < byteCount`, allocate only the first available prefix or a
-   bounded chunk such as `min(remaining, 8192)`, then copy or direct-read into
-   that initialized result range. Continue growing the result as more bytes
-   become available or are read from the stream.
-5. Before each direct stream read, check the current buffer availability again.
-   If the buffer now holds all remaining bytes, resize the result to the final
-   size and finish with one buffer copy instead of reading from the underlying
-   stream directly.
+4. If `available < byteCount`, allocate only a bounded first chunk such as
+   `min(byteCount, 8192)`. Read exactly that chunk into the allocated result
+   range, consuming any buffered prefix and then reading directly from the
+   stream into the result range if needed.
+5. Repeat bounded chunk reads while the remaining byte count is still larger
+   than the bytes currently available in the read buffer.
+6. Once `remaining <= available`, resize the result to the final byte count and
+   finish with one direct buffer copy into the final result range.
+
+In pseudocode for byte values:
+
+```text
+byteCount = readVarUint32()
+available = ctx.availableBytes()
+
+if byteCount <= available:
+  result = allocateBytes(byteCount)
+  ctx.readExactBytes(result.data, byteCount)
+  return result
+
+remaining = byteCount
+chunk = min(remaining, 8192)
+result = allocateBytes(chunk)
+ctx.readExactBytes(result.data, chunk)
+remaining -= chunk
+written = chunk
+
+while remaining > ctx.availableBytes():
+  chunk = min(remaining, 8192)
+  result.resize(written + chunk)
+  ctx.readExactBytes(result.data + written, chunk)
+  remaining -= chunk
+  written += chunk
+
+result.resize(byteCount)
+ctx.readExactBytes(result.data + written, remaining)
+return result
+```
 
 The byte owner must not grow an intermediate stream buffer to the declared body
 length just to prove readability. When the complete body is not already
@@ -329,9 +360,10 @@ conversion that is not performed in place, bit-packed values, or runtimes whose
 stream API cannot read into a caller-provided target.
 
 For fixed-width primitive arrays, chunk sizing and result resizing must preserve
-valid element storage and overflow checks. The partially read result must not be
-returned to callers; it becomes visible only after the exact byte count has been
-read successfully.
+valid element storage and overflow checks. The bounded chunk size must be
+element-aligned before resizing the typed array. The partially read result must
+not be returned to callers; it becomes visible only after the exact byte count
+has been read successfully.
 
 Exact skip follows the same ownership rule. It should consume any available
 buffered prefix first, then skip or drop the remaining stream bytes in bounded

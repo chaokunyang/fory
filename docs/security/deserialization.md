@@ -3,8 +3,6 @@ title: Deserialization Security Model
 sidebar_position: 2
 ---
 
-# Deserialization Security Model
-
 This document defines the security model for Apache Fory deserialization. It is
 a public security reference for classifying deserialization behavior and
 deciding where validation is required. It is not a vulnerability disclosure,

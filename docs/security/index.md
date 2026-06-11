@@ -3,8 +3,6 @@ title: Security
 sidebar_position: 1
 ---
 
-# Security
-
 This directory documents Apache Fory security models and security invariants.
 It is not a vulnerability disclosure area and does not list CVE details,
 exploit samples, issue timelines, or implementation history.

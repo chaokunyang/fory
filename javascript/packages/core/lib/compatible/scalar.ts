@@ -52,8 +52,8 @@ const INT32_MIN = -2147483648n;
 const INT32_MAX = 2147483647n;
 const MAX_COMPATIBLE_DECIMAL_DIGITS = 256;
 const MAX_COMPATIBLE_NUMERIC_TEXT_LENGTH = 320;
-const MAX_COMPATIBLE_DECIMAL_MAGNITUDE =
-  10n ** BigInt(MAX_COMPATIBLE_DECIMAL_DIGITS);
+const MAX_COMPATIBLE_DECIMAL_MAGNITUDE
+  = 10n ** BigInt(MAX_COMPATIBLE_DECIMAL_DIGITS);
 const INT64_MIN = -(1n << 63n);
 const INT64_MAX = (1n << 63n) - 1n;
 const UINT8_MAX = 255n;
@@ -162,8 +162,8 @@ function readDecimal(reader: BinaryReader): Decimal {
       "Non-canonical decimal magnitude bytes: trailing zero byte.",
     );
   }
-  const magnitude =
-    DecimalCodec.fromCanonicalLittleEndianMagnitude(magnitudeBytes);
+  const magnitude
+    = DecimalCodec.fromCanonicalLittleEndianMagnitude(magnitudeBytes);
   if (magnitude === 0n) {
     throw new Error("Big decimal encoding must not represent zero.");
   }
@@ -197,8 +197,8 @@ function normalizeParts(value: DecimalParts): DecimalParts {
   }
   const digits = decimalDigitCount(unscaled);
   if (
-    scale > MAX_COMPATIBLE_DECIMAL_DIGITS ||
-    digits > MAX_COMPATIBLE_DECIMAL_DIGITS
+    scale > MAX_COMPATIBLE_DECIMAL_DIGITS
+    || digits > MAX_COMPATIBLE_DECIMAL_DIGITS
   ) {
     throw new Error(
       "Scalar decimal magnitude exceeds compatible conversion limit.",
@@ -369,8 +369,8 @@ function parseDecimalString(value: string): DecimalParts {
     }
   }
   if (
-    index !== value.length ||
-    significantDigits > MAX_COMPATIBLE_DECIMAL_DIGITS
+    index !== value.length
+    || significantDigits > MAX_COMPATIBLE_DECIMAL_DIGITS
   ) {
     throw new Error(`Invalid scalar string magnitude in "${value}".`);
   }
@@ -447,9 +447,9 @@ function partsEqual(left: DecimalParts, right: DecimalParts): boolean {
   const l = normalizeParts(left);
   const r = normalizeParts(right);
   return (
-    l.unscaled === r.unscaled &&
-    l.scale === r.scale &&
-    l.negativeZero === r.negativeZero
+    l.unscaled === r.unscaled
+    && l.scale === r.scale
+    && l.negativeZero === r.negativeZero
   );
 }
 

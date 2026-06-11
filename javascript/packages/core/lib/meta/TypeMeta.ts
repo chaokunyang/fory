@@ -75,8 +75,8 @@ export const isPrimitiveTypeId = (typeId: number): boolean => {
 
 export const refTrackingUnableTypeId = (typeId: number): boolean => {
   return (
-    PRIMITIVE_TYPE_IDS.includes(typeId as any) ||
-    [TypeId.DURATION, TypeId.DATE, TypeId.TIMESTAMP, TypeId.STRING].includes(
+    PRIMITIVE_TYPE_IDS.includes(typeId as any)
+    || [TypeId.DURATION, TypeId.DATE, TypeId.TIMESTAMP, TypeId.STRING].includes(
       typeId as any,
     )
   );
@@ -357,10 +357,10 @@ export class TypeMeta {
 
   private fingerprintTypeId(typeId: number) {
     if (
-      TypeId.userDefinedType(typeId) ||
-      typeId === TypeId.UNION ||
-      typeId === TypeId.TYPED_UNION ||
-      typeId === TypeId.NAMED_UNION
+      TypeId.userDefinedType(typeId)
+      || typeId === TypeId.UNION
+      || typeId === TypeId.TYPED_UNION
+      || typeId === TypeId.NAMED_UNION
     ) {
       return TypeId.UNKNOWN;
     }
@@ -389,8 +389,8 @@ export class TypeMeta {
           if (fieldTypeId === TypeId.NAMED_ENUM) {
             fieldTypeId = TypeId.ENUM;
           } else if (
-            fieldTypeId === TypeId.NAMED_UNION ||
-            fieldTypeId === TypeId.TYPED_UNION
+            fieldTypeId === TypeId.NAMED_UNION
+            || fieldTypeId === TypeId.TYPED_UNION
           ) {
             fieldTypeId = TypeId.UNION;
           }
@@ -646,8 +646,8 @@ export class TypeMeta {
       if (typeId === TypeId.NAMED_ENUM) {
         typeId = TypeId.ENUM;
       } else if (
-        typeId === TypeId.NAMED_UNION ||
-        typeId === TypeId.TYPED_UNION
+        typeId === TypeId.NAMED_UNION
+        || typeId === TypeId.TYPED_UNION
       ) {
         typeId = TypeId.UNION;
       }
@@ -803,12 +803,12 @@ export class TypeMeta {
 
     let currentClassHeader: number;
     if (isStruct) {
-      currentClassHeader =
-        STRUCT_TYPEDEF_FLAG |
-        Math.min(this.fields.length, SMALL_NUM_FIELDS_THRESHOLD);
+      currentClassHeader
+        = STRUCT_TYPEDEF_FLAG
+        | Math.min(this.fields.length, SMALL_NUM_FIELDS_THRESHOLD);
       if (
-        this.type.typeId === TypeId.COMPATIBLE_STRUCT ||
-        this.type.typeId === TypeId.NAMED_COMPATIBLE_STRUCT
+        this.type.typeId === TypeId.COMPATIBLE_STRUCT
+        || this.type.typeId === TypeId.NAMED_COMPATIBLE_STRUCT
       ) {
         currentClassHeader |= COMPATIBLE_TYPEDEF_FLAG;
       }
@@ -996,8 +996,8 @@ export class TypeMeta {
     if (isCompressed) {
       headerLowBits |= COMPRESS_META_FLAG;
     }
-    const header =
-      TypeMeta.headerHashBits(buffer, headerLowBits) | headerLowBits;
+    const header
+      = TypeMeta.headerHashBits(buffer, headerLowBits) | headerLowBits;
     return {
       header: BigInt.asUintN(64, header),
       headerHash: Number(header >> HASH_SHIFT_BITS),
@@ -1054,9 +1054,9 @@ export class TypeMeta {
       if (c >= "A" && c <= "Z") {
         if (i > 0) {
           const prevUpper = chars[i - 1] >= "A" && chars[i - 1] <= "Z";
-          const nextUpperOrEnd =
-            i + 1 >= chars.length ||
-            (chars[i + 1] >= "A" && chars[i + 1] <= "Z");
+          const nextUpperOrEnd
+            = i + 1 >= chars.length
+            || (chars[i + 1] >= "A" && chars[i + 1] <= "Z");
 
           if (!prevUpper || !nextUpperOrEnd) {
             result.push("_");
@@ -1089,12 +1089,12 @@ export class TypeMeta {
     b: { fieldName: string; fieldId?: number },
   ) {
     if (
-      a.fieldId !== undefined &&
-      a.fieldId !== null &&
-      a.fieldId >= 0 &&
-      b.fieldId !== undefined &&
-      b.fieldId !== null &&
-      b.fieldId >= 0
+      a.fieldId !== undefined
+      && a.fieldId !== null
+      && a.fieldId >= 0
+      && b.fieldId !== undefined
+      && b.fieldId !== null
+      && b.fieldId >= 0
     ) {
       return a.fieldId - b.fieldId;
     }

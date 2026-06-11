@@ -140,8 +140,8 @@ export default class Fory {
   }
 
   private throwInvalidRootHeader(bitmap: number): never {
-    const knownFlags =
-      ConfigFlags.isCrossLanguageFlag | ConfigFlags.isOutOfBandFlag;
+    const knownFlags
+      = ConfigFlags.isCrossLanguageFlag | ConfigFlags.isOutOfBandFlag;
     if ((bitmap & ~knownFlags) !== 0) {
       throw new Error(
         `unsupported root header bitmap 0x${bitmap.toString(16)}`,

@@ -271,6 +271,66 @@ The current root read flow mirrors the write flow:
 Primitive and string-like hot paths should read directly from the buffer;
 complex payloads delegate to the resolved serializer.
 
+### Stream And Buffer Byte Reads
+
+Stream-capable implementations must keep byte availability in the byte owner
+layer while keeping string, binary, primitive-array, compression, and collection
+semantics in serializers.
+
+Read contexts may expose internal exact byte operations such as:
+
+```text
+readExact(target, byteCount)
+skipExact(byteCount)
+readBytes(byteCount)
+```
+
+These operations are byte operations only. They must not decode strings,
+primitive-array element counts, compression modes, or collection capacity
+policy.
+
+For large byte-counted values, implementations should use an available-first
+direct-target read policy:
+
+1. Validate the encoded byte count in the serializer. For fixed-width primitive
+   arrays, check overflow and element alignment before allocation, such as
+   `byteCount % elementByteWidth == 0`.
+2. Check the bytes already available in the current read buffer.
+3. If `available >= byteCount`, allocate the final value once and copy directly
+   from the buffer. Buffer-backed inputs normally stay entirely on this path.
+   Stream-backed inputs also use this path when the stream buffer already holds
+   the requested body.
+4. If `available < byteCount`, allocate the final value once, copy the
+   available buffered prefix into the final target, and then direct-read the
+   remaining bytes into the final target in bounded chunks, for example
+   `min(remaining, 8192)`.
+5. Before each direct stream read, check the current buffer availability again.
+   If the buffer now holds all remaining bytes, finish with one buffer copy
+   instead of reading from the underlying stream directly.
+
+The byte owner must not grow an intermediate stream buffer to the declared body
+length just to prove readability. The destination allocation is the exact final
+value allocation after serializer-owned length validation; intermediate stream
+or staging buffers should stay bounded.
+
+This policy avoids three inefficient or unsafe implementation shapes:
+
+- staging the full declared byte count in the stream buffer before copying to
+  the final value
+- growing the final contiguous container progressively, which can cause repeated
+  reallocations and copies
+- adding a scratch buffer for primitive dense arrays when bytes can be read
+  directly into the final target
+
+Scratch buffers remain appropriate when the target representation is not a
+direct byte target, such as string transcoding, compression, byte-order
+conversion that is not performed in place, bit-packed values, or runtimes whose
+stream API cannot read into a caller-provided target.
+
+Exact skip follows the same ownership rule. It should consume any available
+buffered prefix first, then skip or drop the remaining stream bytes in bounded
+steps without growing the read buffer to the full requested length.
+
 ### Nested reads use `ReadContext`
 
 Important rules:

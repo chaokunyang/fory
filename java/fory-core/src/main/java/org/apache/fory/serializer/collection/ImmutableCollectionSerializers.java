@@ -128,9 +128,9 @@ public class ImmutableCollectionSerializers {
       int numElements = readCollectionSize(buffer);
       setNumElements(numElements);
       if (JdkVersion.MAJOR_VERSION > 8) {
-        return new CollectionContainer<>(numElements);
+        return new CollectionContainer<>(checkedCollectionCapacity(buffer, numElements));
       } else {
-        return new ArrayList(numElements);
+        return new ArrayList(checkedCollectionCapacity(buffer, numElements));
       }
     }
 
@@ -161,8 +161,9 @@ public class ImmutableCollectionSerializers {
       if (JdkVersion.MAJOR_VERSION > 8) {
         CollectionContainer container = (CollectionContainer) collection;
         if (!MemoryUtils.JDK_COLLECTION_FIELD_ACCESS) {
-          ArrayList list = new ArrayList(container.elements.length);
-          Collections.addAll(list, container.elements);
+          Object[] elements = container.elements;
+          ArrayList list = new ArrayList(elements.length);
+          Collections.addAll(list, elements);
           return Collections.unmodifiableList(list);
         }
         try {
@@ -188,9 +189,9 @@ public class ImmutableCollectionSerializers {
       int numElements = readCollectionSize(buffer);
       setNumElements(numElements);
       if (JdkVersion.MAJOR_VERSION > 8) {
-        return new CollectionContainer<>(numElements);
+        return new CollectionContainer<>(checkedCollectionCapacity(buffer, numElements));
       } else {
-        return new HashSet(numElements);
+        return new HashSet(checkedCollectionCapacity(buffer, numElements));
       }
     }
 
@@ -221,8 +222,9 @@ public class ImmutableCollectionSerializers {
       if (JdkVersion.MAJOR_VERSION > 8) {
         CollectionContainer container = (CollectionContainer) collection;
         if (!MemoryUtils.JDK_COLLECTION_FIELD_ACCESS) {
-          HashSet set = new HashSet(container.elements.length);
-          Collections.addAll(set, container.elements);
+          Object[] elements = container.elements;
+          HashSet set = new HashSet(elements.length);
+          Collections.addAll(set, elements);
           return Collections.unmodifiableSet(set);
         }
         try {
@@ -248,9 +250,9 @@ public class ImmutableCollectionSerializers {
       int numElements = readMapSize(buffer);
       setNumElements(numElements);
       if (JdkVersion.MAJOR_VERSION > 8) {
-        return new JDKImmutableMapContainer(numElements);
+        return new JDKImmutableMapContainer(checkedMapCapacity(buffer, numElements));
       } else {
-        return new HashMap(numElements);
+        return new HashMap(checkedMapCapacity(buffer, numElements));
       }
     }
 
@@ -288,7 +290,8 @@ public class ImmutableCollectionSerializers {
         }
         try {
           if (container.size() == 1) {
-            map = (Map) map1Factory.invoke(container.array[0], container.array[1]);
+            Object[] elements = container.array;
+            map = (Map) map1Factory.invoke(elements[0], elements[1]);
           } else {
             map = (Map) mapNFactory.invoke(container.array);
           }

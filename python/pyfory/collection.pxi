@@ -471,6 +471,7 @@ cdef class ListSerializer(CollectionSerializer):
             list_ = PyList_New(0)
             return list_
 
+        read_context.check_readable_bytes(len_)
         collect_flag = buffer.read_int8()
         list_ = PyList_New(len_)
         # IMPORTANT: collection readers must obey the ref/null bits written on
@@ -587,6 +588,7 @@ cdef class TupleSerializer(CollectionSerializer):
             tuple_ = PyTuple_New(0)
             return tuple_
 
+        read_context.check_readable_bytes(len_)
         collect_flag = buffer.read_int8()
         tuple_ = PyTuple_New(len_)
         if (collect_flag & COLL_IS_SAME_TYPE) != 0:
@@ -1049,6 +1051,7 @@ cdef class MapSerializer(Serializer):
         if size == 0:
             map_ = {}
         else:
+            read_context.check_readable_bytes(size)
             chunk_header = read_context.read_uint8()
             map_ = _PyDict_NewPresized(size)
         cdef RefReader ref_reader = read_context.ref_reader

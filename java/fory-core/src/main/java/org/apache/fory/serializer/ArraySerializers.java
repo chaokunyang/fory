@@ -136,7 +136,7 @@ public final class ArraySerializers {
         throwInvalidObjectArraySize(numElements);
       }
       if (numElements != 0) {
-        buffer.checkReadableBytes(1);
+        buffer.checkReadableBytes(numElements);
       }
       Object[] value = newArray(numElements);
       readContext.reference(value);
@@ -223,7 +223,7 @@ public final class ArraySerializers {
         throwInvalidObjectArraySize(numElements);
       }
       if (numElements != 0) {
-        buffer.checkReadableBytes(1);
+        buffer.checkReadableBytes(numElements);
       }
       Object[] value = newArray(numElements);
       readContext.reference(value);
@@ -666,7 +666,7 @@ public final class ArraySerializers {
         throwInvalidObjectArraySize(numElements);
       }
       if (numElements != 0) {
-        buffer.checkReadableBytes(1);
+        buffer.checkReadableBytes(numElements);
       }
       Object[] value = newArray(numElements);
       readContext.reference(value);

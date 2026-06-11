@@ -84,7 +84,6 @@ func (s boolArraySerializer) Write(ctx *WriteContext, refMode RefMode, writeType
 
 func (s boolArraySerializer) ReadData(ctx *ReadContext, value reflect.Value) {
 	buf := ctx.Buffer()
-	err := ctx.Err()
 	length := ctx.ReadBinaryLength()
 	if _, ok := checkWireArraySize(ctx, length, 1, value); !ok {
 		return
@@ -92,8 +91,7 @@ func (s boolArraySerializer) ReadData(ctx *ReadContext, value reflect.Value) {
 	if length > 0 {
 		// Direct memory copy - bool is 1 byte in Go
 		ptr := value.Addr().UnsafePointer()
-		raw := buf.ReadBinary(length, err)
-		copy(unsafe.Slice((*byte)(ptr), length), raw)
+		buf.Read(unsafe.Slice((*byte)(ptr), length))
 	}
 }
 
@@ -145,7 +143,6 @@ func (s int8ArraySerializer) Write(ctx *WriteContext, refMode RefMode, writeType
 
 func (s int8ArraySerializer) ReadData(ctx *ReadContext, value reflect.Value) {
 	buf := ctx.Buffer()
-	err := ctx.Err()
 	length := ctx.ReadBinaryLength()
 	if _, ok := checkWireArraySize(ctx, length, 1, value); !ok {
 		return
@@ -153,8 +150,7 @@ func (s int8ArraySerializer) ReadData(ctx *ReadContext, value reflect.Value) {
 	if length > 0 {
 		// Direct memory copy - int8 is 1 byte
 		ptr := value.Addr().UnsafePointer()
-		raw := buf.ReadBinary(length, err)
-		copy(unsafe.Slice((*byte)(ptr), length), raw)
+		buf.Read(unsafe.Slice((*byte)(ptr), length))
 	}
 }
 
@@ -216,8 +212,7 @@ func (s int16ArraySerializer) ReadData(ctx *ReadContext, value reflect.Value) {
 	if length > 0 {
 		if isLittleEndian {
 			ptr := value.Addr().UnsafePointer()
-			raw := buf.ReadBinary(size, err)
-			copy(unsafe.Slice((*byte)(ptr), size), raw)
+			buf.Read(unsafe.Slice((*byte)(ptr), size))
 		} else {
 			for i := 0; i < length; i++ {
 				value.Index(i).SetInt(int64(buf.ReadInt16(err)))
@@ -284,8 +279,7 @@ func (s int32ArraySerializer) ReadData(ctx *ReadContext, value reflect.Value) {
 	if length > 0 {
 		if isLittleEndian {
 			ptr := value.Addr().UnsafePointer()
-			raw := buf.ReadBinary(size, err)
-			copy(unsafe.Slice((*byte)(ptr), size), raw)
+			buf.Read(unsafe.Slice((*byte)(ptr), size))
 		} else {
 			for i := 0; i < length; i++ {
 				value.Index(i).SetInt(int64(buf.ReadInt32(err)))
@@ -352,8 +346,7 @@ func (s int64ArraySerializer) ReadData(ctx *ReadContext, value reflect.Value) {
 	if length > 0 {
 		if isLittleEndian {
 			ptr := value.Addr().UnsafePointer()
-			raw := buf.ReadBinary(size, err)
-			copy(unsafe.Slice((*byte)(ptr), size), raw)
+			buf.Read(unsafe.Slice((*byte)(ptr), size))
 		} else {
 			for i := 0; i < length; i++ {
 				value.Index(i).SetInt(buf.ReadInt64(err))
@@ -420,8 +413,7 @@ func (s float32ArraySerializer) ReadData(ctx *ReadContext, value reflect.Value) 
 	if length > 0 {
 		if isLittleEndian {
 			ptr := value.Addr().UnsafePointer()
-			raw := buf.ReadBinary(size, err)
-			copy(unsafe.Slice((*byte)(ptr), size), raw)
+			buf.Read(unsafe.Slice((*byte)(ptr), size))
 		} else {
 			for i := 0; i < length; i++ {
 				value.Index(i).SetFloat(float64(buf.ReadFloat32(err)))
@@ -488,8 +480,7 @@ func (s float64ArraySerializer) ReadData(ctx *ReadContext, value reflect.Value) 
 	if length > 0 {
 		if isLittleEndian {
 			ptr := value.Addr().UnsafePointer()
-			raw := buf.ReadBinary(size, err)
-			copy(unsafe.Slice((*byte)(ptr), size), raw)
+			buf.Read(unsafe.Slice((*byte)(ptr), size))
 		} else {
 			for i := 0; i < length; i++ {
 				value.Index(i).SetFloat(buf.ReadFloat64(err))
@@ -546,7 +537,6 @@ func (s uint8ArraySerializer) Write(ctx *WriteContext, refMode RefMode, writeTyp
 
 func (s uint8ArraySerializer) ReadData(ctx *ReadContext, value reflect.Value) {
 	buf := ctx.Buffer()
-	err := ctx.Err()
 	length := ctx.ReadBinaryLength()
 	if _, ok := checkWireArraySize(ctx, length, 1, value); !ok {
 		return
@@ -554,8 +544,7 @@ func (s uint8ArraySerializer) ReadData(ctx *ReadContext, value reflect.Value) {
 	if length > 0 {
 		// Direct memory copy - uint8 is 1 byte
 		ptr := value.Addr().UnsafePointer()
-		raw := buf.ReadBinary(length, err)
-		copy(unsafe.Slice((*byte)(ptr), length), raw)
+		buf.Read(unsafe.Slice((*byte)(ptr), length))
 	}
 }
 
@@ -618,8 +607,7 @@ func (s uint16ArraySerializer) ReadData(ctx *ReadContext, value reflect.Value) {
 	if length > 0 {
 		if isLittleEndian {
 			ptr := value.Addr().UnsafePointer()
-			raw := buf.ReadBinary(size, err)
-			copy(unsafe.Slice((*byte)(ptr), size), raw)
+			buf.Read(unsafe.Slice((*byte)(ptr), size))
 		} else {
 			for i := 0; i < length; i++ {
 				value.Index(i).SetUint(uint64(uint16(buf.ReadInt16(err))))
@@ -685,8 +673,7 @@ func (s uint32ArraySerializer) ReadData(ctx *ReadContext, value reflect.Value) {
 	if length > 0 {
 		if isLittleEndian {
 			ptr := value.Addr().UnsafePointer()
-			raw := buf.ReadBinary(size, err)
-			copy(unsafe.Slice((*byte)(ptr), size), raw)
+			buf.Read(unsafe.Slice((*byte)(ptr), size))
 		} else {
 			for i := 0; i < length; i++ {
 				value.Index(i).SetUint(uint64(uint32(buf.ReadInt32(err))))
@@ -751,8 +738,7 @@ func (s uint64ArraySerializer) ReadData(ctx *ReadContext, value reflect.Value) {
 	if length > 0 {
 		if isLittleEndian {
 			ptr := value.Addr().UnsafePointer()
-			raw := buf.ReadBinary(size, err)
-			copy(unsafe.Slice((*byte)(ptr), size), raw)
+			buf.Read(unsafe.Slice((*byte)(ptr), size))
 		} else {
 			for i := 0; i < length; i++ {
 				value.Index(i).SetUint(uint64(buf.ReadInt64(err)))
@@ -822,8 +808,7 @@ func (s float16ArraySerializer) ReadData(ctx *ReadContext, value reflect.Value) 
 	if length > 0 {
 		if isLittleEndian {
 			ptr := value.Addr().UnsafePointer()
-			raw := buf.ReadBinary(size, ctxErr)
-			copy(unsafe.Slice((*byte)(ptr), size), raw)
+			buf.Read(unsafe.Slice((*byte)(ptr), size))
 		} else {
 			for i := 0; i < length; i++ {
 				value.Index(i).Set(reflect.ValueOf(float16.Float16FromBits(buf.ReadUint16(ctxErr))))
@@ -892,8 +877,7 @@ func (s bfloat16ArraySerializer) ReadData(ctx *ReadContext, value reflect.Value)
 	if length > 0 {
 		if isLittleEndian {
 			ptr := value.Addr().UnsafePointer()
-			raw := buf.ReadBinary(size, ctxErr)
-			copy(unsafe.Slice((*byte)(ptr), size), raw)
+			buf.Read(unsafe.Slice((*byte)(ptr), size))
 		} else {
 			for i := 0; i < length; i++ {
 				value.Index(i).Set(reflect.ValueOf(bfloat16.BFloat16FromBits(buf.ReadUint16(ctxErr))))

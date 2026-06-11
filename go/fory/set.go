@@ -353,10 +353,13 @@ func (s setSerializer) ReadData(ctx *ReadContext, value reflect.Value) {
 	if ctx.HasError() {
 		return
 	}
+	if !buf.CheckReadable(length, err) {
+		return
+	}
 
 	// Initialize set if nil
 	if value.IsNil() {
-		value.Set(reflect.MakeMap(type_))
+		value.Set(reflect.MakeMapWithSize(type_, length))
 	}
 	// Register reference for tracking (handles circular references)
 	ctx.RefResolver().Reference(value)

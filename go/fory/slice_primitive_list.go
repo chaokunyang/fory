@@ -282,38 +282,37 @@ func (s compatiblePrimitiveListToArraySerializer) ReadWithTypeInfo(ctx *ReadCont
 }
 
 func (s primitiveListSerializer) checkBodyReadable(buf *ByteBuffer, err *Error, length int, hasNull bool) bool {
-	byteSize := length
 	if !hasNull {
 		switch s.type_.Elem().Kind() {
 		case reflect.Int16, reflect.Uint16:
-			byteSize = length * 2
+			return checkPrimitiveListBytes(buf, err, length, 2)
 		case reflect.Int32, reflect.Uint32:
 			if s.elemTypeID == INT32 || s.elemTypeID == UINT32 {
-				byteSize = length * 4
+				return checkPrimitiveListBytes(buf, err, length, 4)
 			}
 		case reflect.Int64, reflect.Uint64:
 			if s.elemTypeID == INT64 || s.elemTypeID == UINT64 {
-				byteSize = length * 8
+				return checkPrimitiveListBytes(buf, err, length, 8)
 			}
 		case reflect.Int:
 			if s.elemTypeID == INT64 {
-				byteSize = length * 8
+				return checkPrimitiveListBytes(buf, err, length, 8)
 			} else if s.elemTypeID == INT32 {
-				byteSize = length * 4
+				return checkPrimitiveListBytes(buf, err, length, 4)
 			}
 		case reflect.Uint:
 			if s.elemTypeID == UINT64 {
-				byteSize = length * 8
+				return checkPrimitiveListBytes(buf, err, length, 8)
 			} else if s.elemTypeID == UINT32 {
-				byteSize = length * 4
+				return checkPrimitiveListBytes(buf, err, length, 4)
 			}
 		case reflect.Float32:
-			byteSize = length * 4
+			return checkPrimitiveListBytes(buf, err, length, 4)
 		case reflect.Float64:
-			byteSize = length * 8
+			return checkPrimitiveListBytes(buf, err, length, 8)
 		}
 	}
-	return buf.CheckReadable(byteSize, err)
+	return buf.CheckReadable(length, err)
 }
 
 func (s primitiveListSerializer) readValues(buf *ByteBuffer, err *Error, value reflect.Value, length int, hasNull bool) {
@@ -350,20 +349,11 @@ func (s primitiveListSerializer) readValues(buf *ByteBuffer, err *Error, value r
 func (s primitiveListSerializer) readArrayValues(buf *ByteBuffer, err *Error, value reflect.Value, length int) {
 	switch s.type_.Elem().Kind() {
 	case reflect.Bool:
-		raw := buf.ReadBinary(length, err)
-		for i := 0; i < length; i++ {
-			value.Index(i).SetBool(raw[i] != 0)
-		}
+		buf.Read(unsafe.Slice((*byte)(value.Addr().UnsafePointer()), length))
 	case reflect.Int8:
-		raw := buf.ReadBinary(length, err)
-		for i := 0; i < length; i++ {
-			value.Index(i).SetInt(int64(int8(raw[i])))
-		}
+		buf.Read(unsafe.Slice((*byte)(value.Addr().UnsafePointer()), length))
 	case reflect.Uint8:
-		raw := buf.ReadBinary(length, err)
-		for i := 0; i < length; i++ {
-			value.Index(i).SetUint(uint64(raw[i]))
-		}
+		buf.Read(unsafe.Slice((*byte)(value.Addr().UnsafePointer()), length))
 	case reflect.Int16:
 		for i := 0; i < length; i++ {
 			value.Index(i).SetInt(int64(buf.ReadInt16(err)))
@@ -451,11 +441,37 @@ func writeBoolListValues(buf *ByteBuffer, value []bool) {
 	}
 }
 
+func primitiveListByteSize(length int, elemSize int, err *Error) (int, bool) {
+	if length < 0 {
+		*err = DeserializationErrorf("negative primitive list length: %d", length)
+		return 0, false
+	}
+	if elemSize <= 0 {
+		*err = DeserializationErrorf("invalid primitive element size: %d", elemSize)
+		return 0, false
+	}
+	if length > int(^uint(0)>>1)/elemSize {
+		*err = DeserializationErrorf("primitive list byte size overflows: length %d element size %d", length, elemSize)
+		return 0, false
+	}
+	return length * elemSize, true
+}
+
+func checkPrimitiveListBytes(buf *ByteBuffer, err *Error, length int, elemSize int) bool {
+	size, ok := primitiveListByteSize(length, elemSize, err)
+	if !ok {
+		return false
+	}
+	if !buf.CheckReadable(size, err) {
+		return false
+	}
+	return true
+}
+
 func readBoolListValues(buf *ByteBuffer, err *Error, length int, hasNull bool) []bool {
 	result := make([]bool, length)
 	if !hasNull {
-		raw := buf.ReadBinary(length, err)
-		copy(unsafe.Slice((*byte)(unsafe.Pointer(&result[0])), length), raw)
+		buf.Read(unsafe.Slice((*byte)(unsafe.Pointer(&result[0])), length))
 		return result
 	}
 	for i := 0; i < length; i++ {
@@ -475,8 +491,7 @@ func writeInt8ListValues(buf *ByteBuffer, value []int8) {
 func readInt8ListValues(buf *ByteBuffer, err *Error, length int, hasNull bool) []int8 {
 	result := make([]int8, length)
 	if !hasNull {
-		raw := buf.ReadBinary(length, err)
-		copy(unsafe.Slice((*byte)(unsafe.Pointer(&result[0])), length), raw)
+		buf.Read(unsafe.Slice((*byte)(unsafe.Pointer(&result[0])), length))
 		return result
 	}
 	for i := 0; i < length; i++ {
@@ -496,8 +511,7 @@ func writeUint8ListValues(buf *ByteBuffer, value []byte) {
 func readUint8ListValues(buf *ByteBuffer, err *Error, length int, hasNull bool) []byte {
 	result := make([]byte, length)
 	if !hasNull {
-		raw := buf.ReadBinary(length, err)
-		copy(result, raw)
+		buf.Read(result)
 		return result
 	}
 	for i := 0; i < length; i++ {
@@ -526,8 +540,7 @@ func readInt16ListValues(buf *ByteBuffer, err *Error, length int, hasNull bool) 
 	if !hasNull {
 		size := length * 2
 		if isLittleEndian {
-			raw := buf.ReadBinary(size, err)
-			copy(unsafe.Slice((*byte)(unsafe.Pointer(&result[0])), size), raw)
+			buf.Read(unsafe.Slice((*byte)(unsafe.Pointer(&result[0])), size))
 		} else {
 			for i := 0; i < length; i++ {
 				result[i] = buf.ReadInt16(err)
@@ -561,8 +574,7 @@ func readUint16ListValues(buf *ByteBuffer, err *Error, length int, hasNull bool)
 	if !hasNull {
 		size := length * 2
 		if isLittleEndian {
-			raw := buf.ReadBinary(size, err)
-			copy(unsafe.Slice((*byte)(unsafe.Pointer(&result[0])), size), raw)
+			buf.Read(unsafe.Slice((*byte)(unsafe.Pointer(&result[0])), size))
 		} else {
 			for i := 0; i < length; i++ {
 				result[i] = uint16(buf.ReadInt16(err))
@@ -606,8 +618,7 @@ func readInt32ListValues(buf *ByteBuffer, err *Error, length int, hasNull bool, 
 	if !hasNull && typeID == INT32 {
 		size := length * 4
 		if isLittleEndian {
-			raw := buf.ReadBinary(size, err)
-			copy(unsafe.Slice((*byte)(unsafe.Pointer(&result[0])), size), raw)
+			buf.Read(unsafe.Slice((*byte)(unsafe.Pointer(&result[0])), size))
 		} else {
 			for i := 0; i < length; i++ {
 				result[i] = buf.ReadInt32(err)
@@ -656,8 +667,7 @@ func readUint32ListValues(buf *ByteBuffer, err *Error, length int, hasNull bool,
 	if !hasNull && typeID == UINT32 {
 		size := length * 4
 		if isLittleEndian {
-			raw := buf.ReadBinary(size, err)
-			copy(unsafe.Slice((*byte)(unsafe.Pointer(&result[0])), size), raw)
+			buf.Read(unsafe.Slice((*byte)(unsafe.Pointer(&result[0])), size))
 		} else {
 			for i := 0; i < length; i++ {
 				result[i] = uint32(buf.ReadInt32(err))
@@ -711,8 +721,7 @@ func readInt64ListValues(buf *ByteBuffer, err *Error, length int, hasNull bool, 
 	if !hasNull && typeID == INT64 {
 		size := length * 8
 		if isLittleEndian {
-			raw := buf.ReadBinary(size, err)
-			copy(unsafe.Slice((*byte)(unsafe.Pointer(&result[0])), size), raw)
+			buf.Read(unsafe.Slice((*byte)(unsafe.Pointer(&result[0])), size))
 		} else {
 			for i := 0; i < length; i++ {
 				result[i] = buf.ReadInt64(err)
@@ -769,8 +778,7 @@ func readUint64ListValues(buf *ByteBuffer, err *Error, length int, hasNull bool,
 	if !hasNull && typeID == UINT64 {
 		size := length * 8
 		if isLittleEndian {
-			raw := buf.ReadBinary(size, err)
-			copy(unsafe.Slice((*byte)(unsafe.Pointer(&result[0])), size), raw)
+			buf.Read(unsafe.Slice((*byte)(unsafe.Pointer(&result[0])), size))
 		} else {
 			for i := 0; i < length; i++ {
 				result[i] = uint64(buf.ReadInt64(err))
@@ -882,8 +890,7 @@ func readFloat32ListValues(buf *ByteBuffer, err *Error, length int, hasNull bool
 	if !hasNull {
 		size := length * 4
 		if isLittleEndian {
-			raw := buf.ReadBinary(size, err)
-			copy(unsafe.Slice((*byte)(unsafe.Pointer(&result[0])), size), raw)
+			buf.Read(unsafe.Slice((*byte)(unsafe.Pointer(&result[0])), size))
 		} else {
 			for i := 0; i < length; i++ {
 				result[i] = buf.ReadFloat32(err)
@@ -917,8 +924,7 @@ func readFloat64ListValues(buf *ByteBuffer, err *Error, length int, hasNull bool
 	if !hasNull {
 		size := length * 8
 		if isLittleEndian {
-			raw := buf.ReadBinary(size, err)
-			copy(unsafe.Slice((*byte)(unsafe.Pointer(&result[0])), size), raw)
+			buf.Read(unsafe.Slice((*byte)(unsafe.Pointer(&result[0])), size))
 		} else {
 			for i := 0; i < length; i++ {
 				result[i] = buf.ReadFloat64(err)

@@ -129,7 +129,7 @@ public class CollectionSerializers {
       MemoryBuffer buffer = readContext.getBuffer();
       int numElements = readCollectionSize(buffer);
       setNumElements(numElements);
-      ArrayList arrayList = new ArrayList(numElements);
+      ArrayList arrayList = new ArrayList(checkedCollectionCapacity(buffer, numElements));
       readContext.reference(arrayList);
       return arrayList;
     }
@@ -191,7 +191,7 @@ public class CollectionSerializers {
       MemoryBuffer buffer = readContext.getBuffer();
       int numElements = readCollectionSize(buffer);
       setNumElements(numElements);
-      ArrayList arrayList = new ArrayList(numElements);
+      ArrayList arrayList = new ArrayList(checkedCollectionCapacity(buffer, numElements));
       readContext.reference(arrayList);
       return arrayList;
     }
@@ -207,7 +207,7 @@ public class CollectionSerializers {
       MemoryBuffer buffer = readContext.getBuffer();
       int numElements = readCollectionSize(buffer);
       setNumElements(numElements);
-      HashSet hashSet = new HashSet(numElements);
+      HashSet hashSet = new HashSet(checkedCollectionCapacity(buffer, numElements));
       readContext.reference(hashSet);
       return hashSet;
     }
@@ -223,7 +223,7 @@ public class CollectionSerializers {
       MemoryBuffer buffer = readContext.getBuffer();
       int numElements = readCollectionSize(buffer);
       setNumElements(numElements);
-      LinkedHashSet hashSet = new LinkedHashSet(numElements);
+      LinkedHashSet hashSet = new LinkedHashSet(checkedCollectionCapacity(buffer, numElements));
       readContext.reference(hashSet);
       return hashSet;
     }
@@ -358,7 +358,7 @@ public class CollectionSerializers {
       MemoryBuffer buffer = readContext.getBuffer();
       int numElements = readCollectionSize(buffer);
       setNumElements(numElements);
-      return new CollectionContainer<>(numElements);
+      return new CollectionContainer<>(checkedCollectionCapacity(buffer, numElements));
     }
 
     @Override
@@ -392,7 +392,7 @@ public class CollectionSerializers {
       MemoryBuffer buffer = readContext.getBuffer();
       int numElements = readCollectionSize(buffer);
       setNumElements(numElements);
-      return new CollectionContainer<>(numElements);
+      return new CollectionContainer<>(checkedCollectionCapacity(buffer, numElements));
     }
 
     @Override
@@ -728,7 +728,7 @@ public class CollectionSerializers {
       MemoryBuffer buffer = readContext.getBuffer();
       int numElements = readCollectionSize(buffer);
       setNumElements(numElements);
-      Vector<Object> vector = new Vector<>(numElements);
+      Vector<Object> vector = new Vector<>(checkedCollectionCapacity(buffer, numElements));
       readContext.reference(vector);
       return vector;
     }
@@ -745,7 +745,7 @@ public class CollectionSerializers {
       MemoryBuffer buffer = readContext.getBuffer();
       int numElements = readCollectionSize(buffer);
       setNumElements(numElements);
-      ArrayDeque deque = new ArrayDeque(numElements);
+      ArrayDeque deque = new ArrayDeque(checkedCollectionCapacity(buffer, numElements));
       readContext.reference(deque);
       return deque;
     }
@@ -927,6 +927,7 @@ public class CollectionSerializers {
       setNumElements(numElements);
       int capacity = buffer.readVarUInt32Small7();
       checkBoundedQueueCapacity(numElements, capacity);
+      buffer.checkReadableBytes(capacity);
       ArrayBlockingQueue queue = new ArrayBlockingQueue<>(capacity);
       readContext.reference(queue);
       return queue;
@@ -993,6 +994,7 @@ public class CollectionSerializers {
       setNumElements(numElements);
       int capacity = buffer.readVarUInt32Small7();
       checkBoundedQueueCapacity(numElements, capacity);
+      buffer.checkReadableBytes(capacity);
       LinkedBlockingQueue queue = new LinkedBlockingQueue<>(capacity);
       readContext.reference(queue);
       return queue;
@@ -1131,7 +1133,7 @@ public class CollectionSerializers {
       MemoryBuffer buffer = readContext.getBuffer();
       int numElements = readCollectionSize(buffer);
       setNumElements(numElements);
-      ArrayList list = new ArrayList(numElements);
+      ArrayList list = new ArrayList(checkedCollectionCapacity(buffer, numElements));
       readContext.reference(list);
       return list;
     }
@@ -1147,7 +1149,7 @@ public class CollectionSerializers {
       MemoryBuffer buffer = readContext.getBuffer();
       int numElements = readCollectionSize(buffer);
       setNumElements(numElements);
-      HashSet set = new HashSet(numElements);
+      HashSet set = new HashSet(checkedCollectionCapacity(buffer, numElements));
       readContext.reference(set);
       return set;
     }

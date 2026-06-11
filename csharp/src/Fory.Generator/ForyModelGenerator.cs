@@ -1554,7 +1554,7 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
         sb.AppendLine($"{indent}int {lengthVar} = checked((int)context.Reader.ReadVarUInt32());");
         sb.AppendLine($"{indent}if ({lengthVar} != 0)");
         sb.AppendLine($"{indent}{{");
-        sb.AppendLine($"{indent}    context.Reader.CheckBound(1);");
+        sb.AppendLine($"{indent}    context.Reader.CheckBound({lengthVar});");
         sb.AppendLine($"{indent}}}");
         if (isSet)
         {
@@ -1659,7 +1659,7 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
         sb.AppendLine($"{indent}int {totalVar} = checked((int)context.Reader.ReadVarUInt32());");
         sb.AppendLine($"{indent}if ({totalVar} != 0)");
         sb.AppendLine($"{indent}{{");
-        sb.AppendLine($"{indent}    context.Reader.CheckBound(1);");
+        sb.AppendLine($"{indent}    context.Reader.CheckBound({totalVar});");
         sb.AppendLine($"{indent}}}");
         sb.AppendLine($"{indent}{codec.TypeName} {targetVar} = new({totalVar});");
         sb.AppendLine($"{indent}int __foryRead = 0;");

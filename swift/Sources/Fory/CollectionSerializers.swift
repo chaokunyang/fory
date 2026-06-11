@@ -541,6 +541,7 @@ extension Array: Serializer where Element: Serializer {
         let declared = (header & CollectionHeader.declaredElementType) != 0
         let sameType = (header & CollectionHeader.sameType) != 0
         if !sameType {
+            try context.ensureRemainingBytes(length, label: "array")
             if trackRef {
                 return try readArrayUninitialized(count: length) { destination in
                     for index in 0..<length {
@@ -578,6 +579,7 @@ extension Array: Serializer where Element: Serializer {
         }
 
         let elementTypeInfo = declared ? nil : try Element.foryReadTypeInfo(context)
+        try context.ensureRemainingBytes(length, label: "array")
         return try context.withTypeInfo(elementTypeInfo, for: Element.self) {
             if trackRef {
                 return try readArrayUninitialized(count: length) { destination in
@@ -865,9 +867,9 @@ extension Dictionary: Serializer where Key: Serializer & Hashable, Value: Serial
             return [:]
         }
 
-        try context.ensureRemainingBytes(1, label: "map")
         var map: [Key: Value] = [:]
-        map.reserveCapacity(Swift.min(totalLength, context.buffer.remaining))
+        try context.ensureRemainingBytes(totalLength, label: "map")
+        map.reserveCapacity(totalLength)
         let keyDynamicType = Key.staticTypeId == .unknown
         let valueDynamicType = Value.staticTypeId == .unknown
         if keyDynamicType || valueDynamicType {

@@ -1029,8 +1029,12 @@ public abstract class MapLikeSerializer<T> extends Serializer<T> {
   protected final int readMapSize(MemoryBuffer buffer) {
     int numElements = buffer.readVarUInt32Small7();
     checkMapSize(numElements);
+    return numElements;
+  }
+
+  protected final int checkedMapCapacity(MemoryBuffer buffer, int numElements) {
     if (numElements != 0) {
-      buffer.checkReadableBytes(1);
+      buffer.checkReadableBytes(numElements);
     }
     return numElements;
   }

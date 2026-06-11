@@ -81,6 +81,15 @@ struct MapReserver<MapType,
   static void reserve(MapType &map, uint32_t size) { map.reserve(size); }
 };
 
+template <typename MapType>
+inline bool reserve_map(MapType &map, ReadContext &ctx, uint32_t length) {
+  if (FORY_PREDICT_FALSE(!ctx.buffer().ensure_readable(length, ctx.error()))) {
+    return false;
+  }
+  MapReserver<MapType>::reserve(map, length);
+  return true;
+}
+
 /// write chunk size at header offset
 inline void write_chunk_size(WriteContext &ctx, size_t header_offset,
                              uint8_t size) {
@@ -555,10 +564,9 @@ inline MapType read_map_data_fast(ReadContext &ctx, uint32_t length) {
   if (length == 0) {
     return result;
   }
-  if (FORY_PREDICT_FALSE(!ctx.buffer().ensure_readable(1, ctx.error()))) {
+  if (FORY_PREDICT_FALSE(!reserve_map(result, ctx, length))) {
     return result;
   }
-  MapReserver<MapType>::reserve(result, length);
 
   uint32_t len_counter = 0;
 
@@ -688,10 +696,9 @@ inline MapType read_map_data_slow(ReadContext &ctx, uint32_t length) {
   if (length == 0) {
     return result;
   }
-  if (FORY_PREDICT_FALSE(!ctx.buffer().ensure_readable(1, ctx.error()))) {
+  if (FORY_PREDICT_FALSE(!reserve_map(result, ctx, length))) {
     return result;
   }
-  MapReserver<MapType>::reserve(result, length);
 
   constexpr bool key_is_polymorphic = is_polymorphic_v<K>;
   constexpr bool val_is_polymorphic = is_polymorphic_v<V>;

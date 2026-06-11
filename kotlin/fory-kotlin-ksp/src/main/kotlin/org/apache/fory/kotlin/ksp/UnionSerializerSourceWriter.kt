@@ -364,7 +364,7 @@ internal class UnionSerializerSourceWriter(private val union: KotlinSourceUnion)
     }
     val readElement = directPayloadRead(elementType) ?: return null
     val valueType = type.valueTypeName.removeSuffix("?")
-    return "run { val size = buffer.readVarUInt32Small7(); val result = if (size == 0) java.util.ArrayList<Any?>(0) else { check(buffer.readByte().toInt() == CollectionFlags.DECL_SAME_TYPE_NOT_HAS_NULL); val values = java.util.ArrayList<Any?>(size); for (i in 0 until size) { values.add($readElement) }; values }; result as $valueType }"
+    return "run { val size = buffer.readVarUInt32Small7(); val result = if (size == 0) java.util.ArrayList<Any?>(0) else { check(buffer.readByte().toInt() == CollectionFlags.DECL_SAME_TYPE_NOT_HAS_NULL); buffer.checkReadableBytes(size); val values = java.util.ArrayList<Any?>(size); for (i in 0 until size) { values.add($readElement) }; values }; result as $valueType }"
   }
 
   private fun denseUnsignedArrayWrite(type: KotlinSourceTypeNode): String? =

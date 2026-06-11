@@ -3394,6 +3394,7 @@ public final class MemoryBuffer {
       throw new IllegalArgumentException(
           "Char array byte size " + numBytes + " is not aligned to element size 2");
     }
+    checkReadableBytes(numBytes);
     int numElements = numBytes >> 1;
     char[] values = new char[numElements];
     readChars(values, 0, numElements);

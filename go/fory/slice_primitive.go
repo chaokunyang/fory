@@ -719,12 +719,11 @@ func ReadByteSlice(buf *ByteBuffer, err *Error) []byte {
 	if size == 0 {
 		return make([]byte, 0)
 	}
-	raw := buf.ReadBinary(size, err)
-	if err.HasError() {
+	if !buf.CheckReadable(size, err) {
 		return nil
 	}
 	result := make([]byte, size)
-	copy(result, raw)
+	buf.Read(result)
 	return result
 }
 
@@ -743,12 +742,11 @@ func ReadBoolSlice(buf *ByteBuffer, err *Error) []bool {
 	if size == 0 {
 		return make([]bool, 0)
 	}
-	raw := buf.ReadBinary(size, err)
-	if err.HasError() {
+	if !buf.CheckReadable(size, err) {
 		return nil
 	}
 	result := make([]bool, size)
-	copy(unsafe.Slice((*byte)(unsafe.Pointer(&result[0])), size), raw)
+	buf.Read(unsafe.Slice((*byte)(unsafe.Pointer(&result[0])), size))
 	return result
 }
 
@@ -767,12 +765,11 @@ func ReadInt8Slice(buf *ByteBuffer, err *Error) []int8 {
 	if size == 0 {
 		return make([]int8, 0)
 	}
-	raw := buf.ReadBinary(size, err)
-	if err.HasError() {
+	if !buf.CheckReadable(size, err) {
 		return nil
 	}
 	result := make([]int8, size)
-	copy(unsafe.Slice((*byte)(unsafe.Pointer(&result[0])), size), raw)
+	buf.Read(unsafe.Slice((*byte)(unsafe.Pointer(&result[0])), size))
 	return result
 }
 
@@ -819,12 +816,8 @@ func ReadInt16Slice(buf *ByteBuffer, err *Error) []int16 {
 		return make([]int16, 0)
 	}
 	if isLittleEndian {
-		raw := buf.ReadBinary(size, err)
-		if err.HasError() {
-			return nil
-		}
 		result := make([]int16, length)
-		copy(unsafe.Slice((*byte)(unsafe.Pointer(&result[0])), size), raw)
+		buf.Read(unsafe.Slice((*byte)(unsafe.Pointer(&result[0])), size))
 		return result
 	} else {
 		result := make([]int16, length)
@@ -860,12 +853,8 @@ func ReadInt32Slice(buf *ByteBuffer, err *Error) []int32 {
 		return make([]int32, 0)
 	}
 	if isLittleEndian {
-		raw := buf.ReadBinary(size, err)
-		if err.HasError() {
-			return nil
-		}
 		result := make([]int32, length)
-		copy(unsafe.Slice((*byte)(unsafe.Pointer(&result[0])), size), raw)
+		buf.Read(unsafe.Slice((*byte)(unsafe.Pointer(&result[0])), size))
 		return result
 	} else {
 		result := make([]int32, length)
@@ -901,12 +890,8 @@ func ReadInt64Slice(buf *ByteBuffer, err *Error) []int64 {
 		return make([]int64, 0)
 	}
 	if isLittleEndian {
-		raw := buf.ReadBinary(size, err)
-		if err.HasError() {
-			return nil
-		}
 		result := make([]int64, length)
-		copy(unsafe.Slice((*byte)(unsafe.Pointer(&result[0])), size), raw)
+		buf.Read(unsafe.Slice((*byte)(unsafe.Pointer(&result[0])), size))
 		return result
 	} else {
 		result := make([]int64, length)
@@ -942,12 +927,8 @@ func ReadUint16Slice(buf *ByteBuffer, err *Error) []uint16 {
 		return make([]uint16, 0)
 	}
 	if isLittleEndian {
-		raw := buf.ReadBinary(size, err)
-		if err.HasError() {
-			return nil
-		}
 		result := make([]uint16, length)
-		copy(unsafe.Slice((*byte)(unsafe.Pointer(&result[0])), size), raw)
+		buf.Read(unsafe.Slice((*byte)(unsafe.Pointer(&result[0])), size))
 		return result
 	} else {
 		result := make([]uint16, length)
@@ -983,12 +964,8 @@ func ReadUint32Slice(buf *ByteBuffer, err *Error) []uint32 {
 		return make([]uint32, 0)
 	}
 	if isLittleEndian {
-		raw := buf.ReadBinary(size, err)
-		if err.HasError() {
-			return nil
-		}
 		result := make([]uint32, length)
-		copy(unsafe.Slice((*byte)(unsafe.Pointer(&result[0])), size), raw)
+		buf.Read(unsafe.Slice((*byte)(unsafe.Pointer(&result[0])), size))
 		return result
 	} else {
 		result := make([]uint32, length)
@@ -1024,12 +1001,8 @@ func ReadUint64Slice(buf *ByteBuffer, err *Error) []uint64 {
 		return make([]uint64, 0)
 	}
 	if isLittleEndian {
-		raw := buf.ReadBinary(size, err)
-		if err.HasError() {
-			return nil
-		}
 		result := make([]uint64, length)
-		copy(unsafe.Slice((*byte)(unsafe.Pointer(&result[0])), size), raw)
+		buf.Read(unsafe.Slice((*byte)(unsafe.Pointer(&result[0])), size))
 		return result
 	} else {
 		result := make([]uint64, length)
@@ -1065,12 +1038,8 @@ func ReadFloat32Slice(buf *ByteBuffer, err *Error) []float32 {
 		return make([]float32, 0)
 	}
 	if isLittleEndian {
-		raw := buf.ReadBinary(size, err)
-		if err.HasError() {
-			return nil
-		}
 		result := make([]float32, length)
-		copy(unsafe.Slice((*byte)(unsafe.Pointer(&result[0])), size), raw)
+		buf.Read(unsafe.Slice((*byte)(unsafe.Pointer(&result[0])), size))
 		return result
 	} else {
 		result := make([]float32, length)
@@ -1106,12 +1075,8 @@ func ReadFloat64Slice(buf *ByteBuffer, err *Error) []float64 {
 		return make([]float64, 0)
 	}
 	if isLittleEndian {
-		raw := buf.ReadBinary(size, err)
-		if err.HasError() {
-			return nil
-		}
 		result := make([]float64, length)
-		copy(unsafe.Slice((*byte)(unsafe.Pointer(&result[0])), size), raw)
+		buf.Read(unsafe.Slice((*byte)(unsafe.Pointer(&result[0])), size))
 		return result
 	} else {
 		result := make([]float64, length)
@@ -1253,12 +1218,8 @@ func ReadIntSlice(buf *ByteBuffer, err *Error) []int {
 			return make([]int, 0)
 		}
 		if isLittleEndian {
-			raw := buf.ReadBinary(size, err)
-			if err.HasError() {
-				return nil
-			}
 			result := make([]int, length)
-			copy(unsafe.Slice((*byte)(unsafe.Pointer(&result[0])), size), raw)
+			buf.Read(unsafe.Slice((*byte)(unsafe.Pointer(&result[0])), size))
 			return result
 		} else {
 			result := make([]int, length)
@@ -1276,12 +1237,8 @@ func ReadIntSlice(buf *ByteBuffer, err *Error) []int {
 			return make([]int, 0)
 		}
 		if isLittleEndian {
-			raw := buf.ReadBinary(size, err)
-			if err.HasError() {
-				return nil
-			}
 			result := make([]int, length)
-			copy(unsafe.Slice((*byte)(unsafe.Pointer(&result[0])), size), raw)
+			buf.Read(unsafe.Slice((*byte)(unsafe.Pointer(&result[0])), size))
 			return result
 		} else {
 			result := make([]int, length)
@@ -1333,12 +1290,8 @@ func ReadUintSlice(buf *ByteBuffer, err *Error) []uint {
 			return make([]uint, 0)
 		}
 		if isLittleEndian {
-			raw := buf.ReadBinary(size, err)
-			if err.HasError() {
-				return nil
-			}
 			result := make([]uint, length)
-			copy(unsafe.Slice((*byte)(unsafe.Pointer(&result[0])), size), raw)
+			buf.Read(unsafe.Slice((*byte)(unsafe.Pointer(&result[0])), size))
 			return result
 		} else {
 			result := make([]uint, length)
@@ -1356,12 +1309,8 @@ func ReadUintSlice(buf *ByteBuffer, err *Error) []uint {
 			return make([]uint, 0)
 		}
 		if isLittleEndian {
-			raw := buf.ReadBinary(size, err)
-			if err.HasError() {
-				return nil
-			}
 			result := make([]uint, length)
-			copy(unsafe.Slice((*byte)(unsafe.Pointer(&result[0])), size), raw)
+			buf.Read(unsafe.Slice((*byte)(unsafe.Pointer(&result[0])), size))
 			return result
 		} else {
 			result := make([]uint, length)

@@ -62,10 +62,10 @@ public class KotlinArrayDequeSerializer<E>(
     if (numElements < 0) {
       throw DeserializationException("Collection size must be non-negative: $numElements")
     }
-    if (numElements != 0) {
-      buffer.checkReadableBytes(1)
-    }
     setNumElements(numElements)
+    if (numElements != 0) {
+      buffer.checkReadableBytes(numElements)
+    }
     return ArrayDequeBuilder<E>(ArrayDeque<E>(numElements))
   }
 }

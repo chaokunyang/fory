@@ -116,10 +116,11 @@ For buffer-backed input:
   comparison.
 - Multi-byte element arrays should compute the required byte size with overflow
   checks before allocation.
-- Container readers should call the byte owner's readability check for the next
-  required non-empty container byte or chunk header before allocating from a
-  declared logical element count. The logical element count is not itself a byte
-  count.
+- Container readers that allocate, reserve, or size-hint from a declared
+  logical element count should first call the byte owner's readability check for
+  that count. This is not a full container-body validation; it is the allocation
+  proof that the sender has supplied at least proportional input bytes before
+  the reader preallocates from the count.
 
 For stream-backed input:
 
@@ -143,12 +144,14 @@ policy belong to the owning serializers.
 Large valid collection inputs are allowed. If the input contains many encoded
 elements, proportional deserialization is expected.
 
-The security requirement is to avoid preallocation from a declared logical count
-before the following container body is proven readable. For a non-empty
-container, the reader should call the byte owner's readability check for the
-next required encoded byte or chunk header before allocating from the logical
-count. No separate bounded initial-capacity rule is required for this security
-model.
+The security requirement is to avoid disproportionate preallocation from a
+declared logical count before enough input bytes justify that capacity. For a
+non-empty container, a reader that will allocate or reserve from the declared
+count should call `checkReadableBytes(logicalCount)` or the runtime equivalent
+before that allocation. The check remains byte-owner-only: it does not decode
+the whole container, validate element semantics, or replace chunk validation.
+Readers that do not preallocate from the logical count may still grow
+proportionally as elements are actually read.
 
 Map or collection chunk validation is security-relevant only when missing
 validation can cause a no-progress loop, unbounded resource growth, retained

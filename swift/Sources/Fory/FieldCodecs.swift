@@ -962,9 +962,9 @@ where KeyCodec.Value: Hashable {
             return [:]
         }
 
-        try context.ensureRemainingBytes(1, label: "map")
         var map: Value = [:]
-        map.reserveCapacity(Swift.min(totalLength, context.buffer.remaining))
+        try context.ensureRemainingBytes(totalLength, label: "map")
+        map.reserveCapacity(totalLength)
         var readCount = 0
         while readCount < totalLength {
             let header = try context.buffer.readUInt8()
@@ -1604,6 +1604,7 @@ private func readCollectionPayload<ElementCodec: FieldCodec>(
     let sameType = (header & CollectionHeader.sameType) != 0
 
     var result: [ElementCodec.Value] = []
+    try context.ensureRemainingBytes(length, label: "array")
     result.reserveCapacity(length)
 
     if !sameType {

@@ -1136,24 +1136,22 @@ public class CollectionSerializersTest extends ForyTestBase {
             .withCompatible(false)
             .build();
     {
-      ArrayBlockingQueue<Integer> queue = new ArrayBlockingQueue<>(10);
+      ArrayBlockingQueue<Integer> queue = new ArrayBlockingQueue<>(3);
       queue.add(1);
       queue.add(2);
       queue.add(3);
       ArrayBlockingQueue<Integer> deserialized = serDe(fory, queue);
       assertEquals(new ArrayList<>(deserialized), new ArrayList<>(queue));
-      // Verify capacity is preserved
-      assertEquals(deserialized.remainingCapacity() + deserialized.size(), 10);
+      assertEquals(deserialized.remainingCapacity() + deserialized.size(), 3);
     }
     {
-      LinkedBlockingQueue<Integer> queue = new LinkedBlockingQueue<>(10);
+      LinkedBlockingQueue<Integer> queue = new LinkedBlockingQueue<>(3);
       queue.add(1);
       queue.add(2);
       queue.add(3);
       LinkedBlockingQueue<Integer> deserialized = serDe(fory, queue);
       assertEquals(new ArrayList<>(deserialized), new ArrayList<>(queue));
-      // Verify capacity is preserved
-      assertEquals(deserialized.remainingCapacity() + deserialized.size(), 10);
+      assertEquals(deserialized.remainingCapacity() + deserialized.size(), 3);
     }
   }
 
@@ -1176,6 +1174,16 @@ public class CollectionSerializersTest extends ForyTestBase {
     Assert.expectThrows(
         DeserializationException.class,
         () -> withReadContext(fory, undersizedCapacity, linkedSerializer::newCollection));
+
+    CollectionSerializers.ArrayBlockingQueueSerializer arraySerializer =
+        new CollectionSerializers.ArrayBlockingQueueSerializer(
+            fory.getTypeResolver(), ArrayBlockingQueue.class);
+    MemoryBuffer sparseCapacity = MemoryUtils.buffer(8);
+    sparseCapacity.writeVarUInt32Small7(2);
+    sparseCapacity.writeVarUInt32Small7(10);
+    Assert.expectThrows(
+        IndexOutOfBoundsException.class,
+        () -> withReadContext(fory, sparseCapacity, arraySerializer::newCollection));
   }
 
   @Test

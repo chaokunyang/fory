@@ -384,12 +384,17 @@ func (s byteArraySerializer) ReadData(ctx *ReadContext, value reflect.Value) {
 	if !buf.CheckReadable(length, err) {
 		return
 	}
+	if length == 0 {
+		return
+	}
+	if value.CanAddr() {
+		buf.Read(value.Slice(0, length).Bytes())
+		return
+	}
 	data := make([]byte, length)
 	buf.Read(data)
-	if value.CanSet() {
-		for i := 0; i < length && i < value.Len(); i++ {
-			value.Index(i).SetUint(uint64(data[i]))
-		}
+	for i := 0; i < length && i < value.Len(); i++ {
+		value.Index(i).SetUint(uint64(data[i]))
 	}
 }
 

@@ -315,10 +315,11 @@ prove that length exists. The stream slow path may pay one extra intermediate
 buffer copy; this is preferable to serializer-local chunk accumulation and
 repeated final-container growth.
 
-The serializer should not duplicate the byte owner's fast-path branch by testing
-`availableBytes()` before calling `checkReadableBytes`. Keeping that branch in
-the byte owner gives every language the same correctness rule and keeps
-serializer hot paths focused on their own wire semantics.
+For byte-counted values, the serializer should not duplicate the byte owner's
+fast-path branch by testing `availableBytes()` before calling
+`checkReadableBytes`. Keeping that branch in the byte owner gives every language
+the same correctness rule and keeps serializer hot paths focused on their own
+wire semantics.
 
 For primitive wire arrays:
 
@@ -376,11 +377,20 @@ For fixed-width primitive arrays, the final result must not become visible to
 callers until the exact encoded byte count has been read successfully.
 
 For list, set, map, and other container readers, the declared logical element
-count is not an encoded byte count. After validating the count, a non-empty
-container reader should call the byte owner's readability check for the next
-required encoded byte or chunk header before allocating from that logical count.
-Do not add a separate initial-capacity cap for this allocation-before-read
-check.
+count is not an encoded byte count, so serializers must still own all element,
+chunk, nullability, reference, and type-dispatch semantics. It is still the
+right allocation proof for count-based preallocation: after validating a
+non-empty count and reading any serializer-owned header or type metadata that
+precedes allocation, call `checkReadableBytes(logicalCount)` before allocating,
+reserving, or size-hinting from that count. The byte owner handles buffer versus
+stream readiness; the container serializer then allocates with the declared
+count and reads elements through its normal owner path.
+
+This check is not a full container-body validation. It only prevents a small or
+truncated input from causing a large count-based preallocation. Chunk sizes,
+duplicate keys, element value semantics, and protocol strictness remain owned by
+the container/map serializer and should be validated only when they protect a
+real owner invariant.
 
 For TypeDef or TypeMeta bodies, first prove that the encoded metadata body bytes
 are readable through the byte owner. Field-list allocation should happen after

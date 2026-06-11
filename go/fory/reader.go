@@ -671,6 +671,19 @@ func (c *ReadContext) ReadBufferObject() *ByteBuffer {
 	isInBand := c.buffer.ReadBool(err)
 	if isInBand {
 		size := c.ReadBinaryLength()
+		if c.HasError() {
+			return nil
+		}
+		if c.buffer.reader != nil {
+			bytes := c.buffer.ReadBytes(size, err)
+			if c.HasError() {
+				return nil
+			}
+			return NewByteBuffer(bytes)
+		}
+		if !c.buffer.CheckReadable(size, err) {
+			return nil
+		}
 		buf := c.buffer.Slice(c.buffer.readerIndex, size)
 		c.buffer.readerIndex += size
 		return buf

@@ -19,12 +19,21 @@ package fory
 
 import (
 	"math"
+	"reflect"
 	"testing"
 
 	"github.com/apache/fory/go/fory/bfloat16"
 	"github.com/apache/fory/go/fory/float16"
 	"github.com/stretchr/testify/assert"
 )
+
+func TestPrimitiveListReadableOverflow(t *testing.T) {
+	var err Error
+	serializer := primitiveListSerializer{type_: reflect.TypeOf([]int64{}), elemTypeID: INT64}
+	length := int(^uint(0)>>1)/8 + 1
+	assert.False(t, serializer.checkBodyReadable(NewByteBuffer(nil), &err, length, false))
+	assert.True(t, err.HasError())
+}
 
 func TestFloat16Slice(t *testing.T) {
 	f := NewFory(WithXlang(false), WithCompatible(false))

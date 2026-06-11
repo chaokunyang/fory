@@ -1519,6 +1519,13 @@ signed_int_codec!(
 pub struct VecCodec<T, C, const NULLABLE: bool, const TRACK_REF: bool>(PhantomData<(T, C)>);
 
 #[inline(always)]
+fn check_sequence_len(context: &ReadContext, len: u32) -> Result<usize, Error> {
+    let len = len as usize;
+    context.reader.check_bound(len)?;
+    Ok(len)
+}
+
+#[inline(always)]
 fn read_vec_items<T, C>(
     context: &mut ReadContext,
     len: u32,
@@ -1529,7 +1536,7 @@ where
     T: 'static,
     C: Codec<T>,
 {
-    let mut vec = Vec::with_capacity(len as usize);
+    let mut vec = Vec::with_capacity(check_sequence_len(context, len)?);
     match read_type {
         None | Some(ElementReadType::Direct) => {
             if has_null {
@@ -2074,7 +2081,7 @@ where
     } else {
         RefMode::None
     };
-    let mut vec = Vec::with_capacity(len as usize);
+    let mut vec = Vec::with_capacity(check_sequence_len(context, len)?);
     if is_same_type {
         if C::is_polymorphic() {
             if is_declared {
@@ -2292,8 +2299,7 @@ where
         {
             return read_map_dynamic::<K, V, KC, VC>(context, len, remote_field_type);
         }
-        context.reader.check_bound(1)?;
-        let mut map = HashMap::with_capacity(len as usize);
+        let mut map = HashMap::with_capacity(check_map_len(context, len)?);
         let mut len_counter = 0;
         while len_counter < len {
             let header = context.reader.read_u8()?;
@@ -2432,6 +2438,13 @@ struct MapEntryReadType {
     type_info: Option<std::rc::Rc<crate::TypeInfo>>,
 }
 
+#[inline(always)]
+fn check_map_len(context: &ReadContext, len: u32) -> Result<usize, Error> {
+    let len = len as usize;
+    context.reader.check_bound(len)?;
+    Ok(len)
+}
+
 fn read_map_static<K, V, KC, VC>(
     context: &mut ReadContext,
     len: u32,
@@ -2442,8 +2455,7 @@ where
     KC: Codec<K>,
     VC: Codec<V>,
 {
-    context.reader.check_bound(1)?;
-    let mut map = HashMap::with_capacity(len as usize);
+    let mut map = HashMap::with_capacity(check_map_len(context, len)?);
     let mut len_counter = 0u32;
     while len_counter < len {
         let header = context.reader.read_u8()?;
@@ -2549,8 +2561,7 @@ where
     KC: Codec<K>,
     VC: Codec<V>,
 {
-    context.reader.check_bound(1)?;
-    let mut map = HashMap::with_capacity(len as usize);
+    let mut map = HashMap::with_capacity(check_map_len(context, len)?);
     let mut len_counter = 0u32;
     while len_counter < len {
         let header = context.reader.read_u8()?;

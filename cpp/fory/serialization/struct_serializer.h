@@ -900,11 +900,8 @@ Container read_configured_list_data(ReadContext &ctx) {
   if (FORY_PREDICT_FALSE(ctx.has_error()) || length == 0) {
     return result;
   }
-  if (FORY_PREDICT_FALSE(!ctx.buffer().ensure_readable(length, ctx.error()))) {
+  if (FORY_PREDICT_FALSE(!reserve_collection(result, ctx, length))) {
     return result;
-  }
-  if constexpr (has_reserve_v<Container>) {
-    result.reserve(length);
   }
   uint8_t bitmap = ctx.read_uint8(ctx.error());
   if (FORY_PREDICT_FALSE(ctx.has_error())) {
@@ -969,11 +966,8 @@ FORY_NOINLINE Container read_configured_list_data_as_array_field(
         "compatible list to array field requires declared elements"));
     return result;
   }
-  if (FORY_PREDICT_FALSE(!ctx.buffer().ensure_readable(1, ctx.error()))) {
+  if (FORY_PREDICT_FALSE(!reserve_collection(result, ctx, length))) {
     return result;
-  }
-  if constexpr (has_reserve_v<Container>) {
-    result.reserve(length);
   }
   for (uint32_t i = 0; i < length; ++i) {
     if constexpr (is_raw_primitive_v<Elem>) {
@@ -1060,10 +1054,9 @@ MapType read_configured_map_data(ReadContext &ctx) {
   if (FORY_PREDICT_FALSE(ctx.has_error()) || length == 0) {
     return result;
   }
-  if (FORY_PREDICT_FALSE(!ctx.buffer().ensure_readable(2, ctx.error()))) {
+  if (FORY_PREDICT_FALSE(!reserve_map(result, ctx, length))) {
     return result;
   }
-  MapReserver<MapType>::reserve(result, length);
   uint32_t read_count = 0;
   while (read_count < length && !ctx.has_error()) {
     uint8_t header = ctx.read_uint8(ctx.error());

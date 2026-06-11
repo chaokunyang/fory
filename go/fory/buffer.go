@@ -241,7 +241,15 @@ func (b *ByteBuffer) WriteLength(value int) {
 }
 
 func (b *ByteBuffer) ReadLength(err *Error) int {
-	return int(b.ReadVarUint32(err))
+	length := b.ReadVarUint32(err)
+	const maxInt32 = uint32(1<<31 - 1)
+	if intSize == 32 && length > maxInt32 {
+		if err != nil {
+			*err = DeserializationErrorf("length %d exceeds supported int range", length)
+		}
+		return 0
+	}
+	return int(length)
 }
 
 func (b *ByteBuffer) WriteUint64(value uint64) {

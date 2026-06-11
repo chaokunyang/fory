@@ -344,9 +344,6 @@ func (s *sliceSerializer) ReadData(ctx *ReadContext, value reflect.Value) {
 	if ctx.HasError() {
 		return
 	}
-	if !buf.CheckReadable(1, ctxErr) {
-		return
-	}
 
 	// IMPORTANT: collection readers must obey the TRACKING_REF bit written on the
 	// wire, not whatever the local field annotation or inferred Go type would
@@ -365,6 +362,9 @@ func (s *sliceSerializer) ReadData(ctx *ReadContext, value reflect.Value) {
 			return
 		}
 	} else {
+		if !buf.CheckReadable(length, ctxErr) {
+			return
+		}
 		// For slices, allocate or resize as needed
 		if value.Cap() < length {
 			value.Set(reflect.MakeSlice(value.Type(), length, length))
@@ -382,14 +382,16 @@ func (s *sliceSerializer) ReadData(ctx *ReadContext, value reflect.Value) {
 	if !trackRefs && !hasNull {
 		if declaredGenericDispatch {
 			for i := 0; i < length; i++ {
-				elemSerializer.Read(ctx, RefModeNone, false, true, value.Index(i))
+				elem := value.Index(i)
+				elemSerializer.Read(ctx, RefModeNone, false, true, elem)
 				if ctx.HasError() {
 					return
 				}
 			}
 		} else {
 			for i := 0; i < length; i++ {
-				elemSerializer.ReadData(ctx, value.Index(i))
+				elem := value.Index(i)
+				elemSerializer.ReadData(ctx, elem)
 				if ctx.HasError() {
 					return
 				}

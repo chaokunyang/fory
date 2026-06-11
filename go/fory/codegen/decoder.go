@@ -389,48 +389,6 @@ func generateOptionValueRead(buf *bytes.Buffer, elemType types.Type, valueExpr s
 	return nil
 }
 
-// Note: generateSliceRead is no longer used since we use WriteReferencable/ReadValue for slice fields
-// generateSliceRead generates code to deserialize a slice according to the list format
-func generateSliceRead(buf *bytes.Buffer, sliceType *types.Slice, fieldAccess string) error {
-	elemType := sliceType.Elem()
-
-	// Use block scope to avoid variable redeclaration across multiple slice fields
-	fmt.Fprintf(buf, "\t// ReadData slice %s\n", fieldAccess)
-	fmt.Fprintf(buf, "\t{\n")
-	fmt.Fprintf(buf, "\t\tsliceLen := int(buf.ReadVarUint32())\n")
-	fmt.Fprintf(buf, "\t\tif sliceLen == 0 {\n")
-	fmt.Fprintf(buf, "\t\t\t// Empty slice - matching reflection behavior where nil and empty are treated the same\n")
-	fmt.Fprintf(buf, "\t\t\t%s = nil\n", fieldAccess)
-	fmt.Fprintf(buf, "\t\t} else {\n")
-
-	// ReadData collection flags for non-empty slice
-	fmt.Fprintf(buf, "\t\t\t// ReadData collection flags\n")
-	fmt.Fprintf(buf, "\t\t\tcollectFlag := buf.ReadInt8()\n")
-	fmt.Fprintf(buf, "\t\t\t// Check if CollectionIsDeclElementType flag is NOT set (meaning we need to read type ID)\n")
-	fmt.Fprintf(buf, "\t\t\tif (collectFlag & 4) == 0 {\n")
-	fmt.Fprintf(buf, "\t\t\t\t// ReadData element type ID (not declared, so we need to read it)\n")
-	fmt.Fprintf(buf, "\t\t\t\t_ = buf.ReadVarUint32()\n")
-	fmt.Fprintf(buf, "\t\t\t}\n")
-
-	// Create slice
-	fmt.Fprintf(buf, "\t\t\t%s = make(%s, sliceLen)\n", fieldAccess, sliceType.String())
-
-	// ReadData elements - for declared type slices, use direct element reading without flags
-	fmt.Fprintf(buf, "\t\t\tfor i := 0; i < sliceLen; i++ {\n")
-
-	// Generate element read code - for typed slices, read directly via serializer
-	elemAccess := fmt.Sprintf("%s[i]", fieldAccess)
-	if err := generateSliceElementReadDirect(buf, elemType, elemAccess); err != nil {
-		return err
-	}
-
-	fmt.Fprintf(buf, "\t\t\t}\n")
-	fmt.Fprintf(buf, "\t\t}\n")
-	fmt.Fprintf(buf, "\t}\n")
-
-	return nil
-}
-
 // generateSliceElementRead generates code to read a single slice element
 func generateSliceElementRead(buf *bytes.Buffer, elemType types.Type, elemAccess string) error {
 	// Handle basic types
@@ -635,14 +593,9 @@ func writeSliceReadElements(buf *bytes.Buffer, sliceType *types.Slice, elemType 
 	}
 
 	// Create slice
-	fmt.Fprintf(buf, "%sif !buf.CheckReadable(1, err) {\n", indent)
+	fmt.Fprintf(buf, "%sif !buf.CheckReadable(sliceLen, err) {\n", indent)
 	fmt.Fprintf(buf, "%s\treturn ctx.TakeError()\n", indent)
 	fmt.Fprintf(buf, "%s}\n", indent)
-	if elemIsReferencable {
-		fmt.Fprintf(buf, "%sif trackRefs && !buf.CheckReadable(sliceLen, err) {\n", indent)
-		fmt.Fprintf(buf, "%s\treturn ctx.TakeError()\n", indent)
-		fmt.Fprintf(buf, "%s}\n", indent)
-	}
 	fmt.Fprintf(buf, "%s%s = make(%s, sliceLen)\n", indent, fieldAccess, sliceType.String())
 
 	// ReadData elements based on whether CollectionIsDeclElementType is set
@@ -943,7 +896,7 @@ func generateMapReadInlineNoNull(buf *bytes.Buffer, mapType *types.Map, fieldAcc
 
 // writeMapReadChunks generates the map chunk reading code with specified indentation
 func writeMapReadChunks(buf *bytes.Buffer, mapType *types.Map, fieldAccess string, keyType, valueType types.Type, keyIsInterface, valueIsInterface bool, indent string) error {
-	fmt.Fprintf(buf, "%sif !buf.CheckReadable(2, err) {\n", indent)
+	fmt.Fprintf(buf, "%sif !buf.CheckReadable(mapLen, err) {\n", indent)
 	fmt.Fprintf(buf, "%s\treturn ctx.TakeError()\n", indent)
 	fmt.Fprintf(buf, "%s}\n", indent)
 	fmt.Fprintf(buf, "%s%s = make(%s, mapLen)\n", indent, fieldAccess, mapType.String())

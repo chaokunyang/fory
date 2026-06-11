@@ -380,6 +380,18 @@ struct has_reserve<Container,
 template <typename Container>
 inline constexpr bool has_reserve_v = has_reserve<Container>::value;
 
+template <typename Container>
+inline bool reserve_collection(Container &result, ReadContext &ctx,
+                               uint32_t length) {
+  if (FORY_PREDICT_FALSE(!ctx.buffer().ensure_readable(length, ctx.error()))) {
+    return false;
+  }
+  if constexpr (has_reserve_v<Container>) {
+    result.reserve(length);
+  }
+  return true;
+}
+
 // Helper to insert element into container (vector or set)
 template <typename Container, typename T>
 inline void collection_insert(Container &result, T &&elem) {
@@ -397,11 +409,8 @@ inline Container read_collection_data_slow(ReadContext &ctx, uint32_t length) {
   if (length == 0) {
     return result;
   }
-  if (FORY_PREDICT_FALSE(!ctx.buffer().ensure_readable(1, ctx.error()))) {
+  if (FORY_PREDICT_FALSE(!reserve_collection(result, ctx, length))) {
     return result;
-  }
-  if constexpr (has_reserve_v<Container>) {
-    result.reserve(length);
   }
 
   constexpr bool elem_is_polymorphic = is_polymorphic_v<T>;
@@ -948,7 +957,9 @@ struct Serializer<
       }
 
       std::vector<T, Alloc> result;
-      result.reserve(length);
+      if (FORY_PREDICT_FALSE(!reserve_collection(result, ctx, length))) {
+        return result;
+      }
 
       // Fast path: no tracking, no nulls, elements have declared type
       if (!track_ref && !has_null && is_same_type) {
@@ -1044,10 +1055,9 @@ struct Serializer<
     if (size == 0) {
       return result;
     }
-    if (FORY_PREDICT_FALSE(!ctx.buffer().ensure_readable(1, ctx.error()))) {
+    if (FORY_PREDICT_FALSE(!reserve_collection(result, ctx, size))) {
       return result;
     }
-    result.reserve(size);
     for (uint32_t i = 0; i < size; ++i) {
       if (FORY_PREDICT_FALSE(ctx.has_error())) {
         return result;
@@ -1629,7 +1639,9 @@ struct Serializer<std::forward_list<T, Alloc>> {
         }
       }
 
-      temp.reserve(length);
+      if (FORY_PREDICT_FALSE(!reserve_collection(temp, ctx, length))) {
+        return std::forward_list<T, Alloc>();
+      }
       // Fast path: no tracking, no nulls, elements have declared type
       if (!track_ref && !has_null && is_same_type) {
         for (uint32_t i = 0; i < length; ++i) {
@@ -1951,12 +1963,10 @@ struct Serializer<std::forward_list<T, Alloc>> {
       return std::forward_list<T, Alloc>();
     }
 
-    if (FORY_PREDICT_FALSE(size != 0 &&
-                           !ctx.buffer().ensure_readable(1, ctx.error()))) {
+    std::vector<T> temp;
+    if (FORY_PREDICT_FALSE(!reserve_collection(temp, ctx, size))) {
       return std::forward_list<T, Alloc>();
     }
-    std::vector<T> temp;
-    temp.reserve(size);
     for (uint32_t i = 0; i < size; ++i) {
       if (FORY_PREDICT_FALSE(ctx.has_error())) {
         break;
@@ -2266,7 +2276,9 @@ struct Serializer<std::unordered_set<T, Args...>> {
       }
 
       std::unordered_set<T, Args...> result;
-      result.reserve(size);
+      if (FORY_PREDICT_FALSE(!reserve_collection(result, ctx, size))) {
+        return result;
+      }
       if (!track_ref && !has_null && is_same_type) {
         for (uint32_t i = 0; i < size; ++i) {
           if (FORY_PREDICT_FALSE(ctx.has_error())) {
@@ -2312,12 +2324,10 @@ struct Serializer<std::unordered_set<T, Args...>> {
       return std::unordered_set<T, Args...>();
     }
 
-    if (FORY_PREDICT_FALSE(size != 0 &&
-                           !ctx.buffer().ensure_readable(1, ctx.error()))) {
-      return std::unordered_set<T, Args...>();
-    }
     std::unordered_set<T, Args...> result;
-    result.reserve(size);
+    if (FORY_PREDICT_FALSE(!reserve_collection(result, ctx, size))) {
+      return result;
+    }
     for (uint32_t i = 0; i < size; ++i) {
       if (FORY_PREDICT_FALSE(ctx.has_error())) {
         return result;

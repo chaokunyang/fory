@@ -85,6 +85,13 @@ public class MemoryBufferTest {
   }
 
   @Test
+  public void testReadCharsAndSizeRequiresBodyBeforeAlloc() {
+    MemoryBuffer buffer = MemoryUtils.buffer(8);
+    buffer.writeVarUInt32(1 << 20);
+    assertThrows(IndexOutOfBoundsException.class, buffer::readCharsAndSize);
+  }
+
+  @Test
   public void testDirectBufferRejectsHeap() {
     assertThrows(
         IllegalArgumentException.class,

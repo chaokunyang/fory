@@ -18,7 +18,7 @@
 "Shared utilities for gRPC service stub generators."
 
 from enum import Enum
-from typing import List, Dict
+from typing import Dict
 from fory_compiler.ir.ast import RpcMethod
 
 
@@ -49,6 +49,3 @@ class ImportTracker:
 
     def add(self, alias: str, import_path: str) -> None:
         self._imports[alias] = import_path
-
-    def go_imports(self) -> List[str]:
-        return sorted(self._imports.values())

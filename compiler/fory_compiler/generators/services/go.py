@@ -17,7 +17,7 @@
 
 """Go gRPC service code generator."""
 
-from typing import List
+from typing import Dict, List
 from fory_compiler.generators.services.base import (
     ImportTracker,
     StreamingMode,
@@ -36,7 +36,21 @@ class GoServiceGeneratorMixin:
         ]
         if not local_services:
             return []
+        self._validate_method_name_collisions(local_services)
         return [self._generate_grpc_file(local_services)]
+
+    def _validate_method_name_collisions(self, services: List[Service]) -> None:
+        for service in services:
+            seen: Dict[str, str] = {}
+            for method in service.methods:
+                go_name = self.to_pascal_case(method.name)
+                prior = seen.get(go_name)
+                if prior is not None:
+                    raise ValueError(
+                        f"Go gRPC method name collision in service {service.name}: "
+                        f"{prior} and {method.name} both generate {go_name}"
+                    )
+                seen[go_name] = method.name
 
     def _generate_grpc_file(self, services: List[Service]) -> GeneratedFile:
         """Generate one _grpc.go file containing all services in the schema."""
@@ -672,9 +686,7 @@ class GoServiceGeneratorMixin:
             mode = streaming_mode(method)
             if mode is StreamingMode.UNARY:
                 lines.append("\t\t{")
-                lines.append(
-                    f'\t\t\tMethodName:\t"{self.to_pascal_case(method.name)}",'
-                )
+                lines.append(f'\t\t\tMethodName:\t"{method.name}",')
                 lines.append(
                     f"\t\t\tHandler:\t_{service.name}_{self.to_pascal_case(method.name)}_Handler,"
                 )
@@ -689,9 +701,7 @@ class GoServiceGeneratorMixin:
                 continue
             else:
                 lines.append("\t\t{")
-                lines.append(
-                    f'\t\t\tStreamName:\t"{self.to_pascal_case(method.name)}",'
-                )
+                lines.append(f'\t\t\tStreamName:\t"{method.name}",')
                 lines.append(
                     f"\t\t\tHandler:\t_{service.name}_{self.to_pascal_case(method.name)}_Handler,"
                 )

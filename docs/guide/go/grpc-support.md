@@ -77,6 +77,10 @@ For this schema, the Go generator emits:
 | `greeter/demo_greeter.go`      | Fory model types and registration helpers    |
 | `greeter/demo_greeter_grpc.go` | grpc-go client, server interfaces, and codec |
 
+Generated Go methods use exported PascalCase names such as `SayHello`. The
+underlying gRPC method path keeps the exact schema method name, so names such as
+`sayHello` or `say_hello` continue to route by their schema spelling.
+
 ## Implement a Server
 
 Implement the generated `GreeterServer` interface, create a grpc-go server with

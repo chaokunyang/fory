@@ -855,6 +855,10 @@ addressbook.RegisterAddressBookServiceServer(server, service)
 client := addressbook.NewAddressBookServiceClient(conn)
 ```
 
+Go method names are exported as PascalCase identifiers, while the gRPC method
+path keeps the exact service and method names from the schema. Regenerate both
+peers after changing service or method names.
+
 Applications compiling these files must provide grpc-go dependencies; Fory Go
 packages do not add gRPC as a hard dependency.
 

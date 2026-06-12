@@ -254,6 +254,42 @@ def test_go_grpc_service_codegen():
     assert "mustEmbedUnimplementedGreeterServer()" in content
 
 
+def test_go_grpc_service_desc_uses_idl_method_names():
+    schema = parse_fdl(
+        dedent(
+            """
+            package demo.routes;
+
+            message Req {}
+            message Res {}
+
+            service Router {
+                rpc sayHello (Req) returns (Res);
+                rpc stream_replies (Req) returns (stream Res);
+                rpc clientTalk (stream Req) returns (Res);
+                rpc bidi_chat (stream Req) returns (stream Res);
+            }
+            """
+        )
+    )
+
+    content = next(iter(generate_service_files(schema, GoGenerator).values()))
+    assert "SayHello(ctx context.Context" in content
+    assert "StreamReplies(ctx context.Context" in content
+    assert "ClientTalk(ctx context.Context" in content
+    assert "BidiChat(ctx context.Context" in content
+    assert '"/demo.routes.Router/sayHello"' in content
+    assert '"/demo.routes.Router/stream_replies"' in content
+    assert '"/demo.routes.Router/clientTalk"' in content
+    assert '"/demo.routes.Router/bidi_chat"' in content
+    assert 'MethodName:\t"sayHello"' in content
+    assert 'StreamName:\t"stream_replies"' in content
+    assert 'StreamName:\t"clientTalk"' in content
+    assert 'StreamName:\t"bidi_chat"' in content
+    assert 'MethodName:\t"SayHello"' not in content
+    assert 'StreamName:\t"StreamReplies"' not in content
+
+
 def test_java_outer_classname_service_references_nested_model_types():
     schema = parse_fdl(
         dedent(
@@ -630,6 +666,17 @@ def test_grpc_method_name_collisions_fail():
     else:
         raise AssertionError("Expected Rust gRPC method name collision")
 
+    go_generator = GoGenerator(
+        schema, GeneratorOptions(output_dir=Path("/tmp"), grpc=True)
+    )
+    try:
+        go_generator.generate_services()
+    except ValueError as e:
+        assert "Go gRPC method name collision" in str(e)
+        assert "Foo and foo" in str(e)
+    else:
+        raise AssertionError("Expected Go gRPC method name collision")
+
 
 def test_java_python_grpc_method_keywords_are_safe_names():
     schema = parse_fdl(
@@ -782,18 +829,21 @@ def test_service_schema_produces_one_file_per_message_per_language():
         )
 
 
-def test_compile_service_schema_with_grpc_flag(tmp_path: Path):
+def test_compile_service_schema_with_grpc_flag(tmp_path: Path, capsys):
     example_path = Path(__file__).resolve().parents[2] / "examples" / "service.fdl"
     lang_dirs = {}
     for lang in ("java", "python", "rust", "go", "cpp", "csharp", "swift"):
         lang_dirs[lang] = tmp_path / lang
     ok = compile_file(example_path, lang_dirs, grpc=True, generated_outputs={})
+    output = capsys.readouterr().out
     assert ok is True
     for lang, lang_dir in lang_dirs.items():
         files = [p for p in lang_dir.rglob("*") if p.is_file()]
         assert len(files) >= 1, f"{lang}: expected at least one file with grpc=True"
     assert (lang_dirs["java"] / "demo" / "greeter" / "GreeterGrpc.java").exists()
     assert (lang_dirs["python"] / "demo_greeter_grpc.py").exists()
+    assert (lang_dirs["go"] / "demo_greeter_grpc.go").exists()
+    assert output.count("demo_greeter_grpc.go") == 1
     assert (lang_dirs["rust"] / "demo_greeter_service.rs").exists()
     assert (lang_dirs["rust"] / "demo_greeter_service_grpc.rs").exists()
 

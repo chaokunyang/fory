@@ -161,18 +161,6 @@ public class GrpcInteropTest {
     assertFdlUnions(blocking, async, unions);
   }
 
-  // exerciseFdlMessages exercises the four FDL message streaming modes without union methods.
-  private void exerciseFdlMessages(ManagedChannel channel) throws InterruptedException {
-    grpc_fdl.FdlGrpcServiceGrpc.FdlGrpcServiceBlockingStub blocking =
-        grpc_fdl.FdlGrpcServiceGrpc.newBlockingStub(channel);
-    grpc_fdl.FdlGrpcServiceGrpc.FdlGrpcServiceStub async =
-        grpc_fdl.FdlGrpcServiceGrpc.newStub(channel);
-
-    List<grpc_fdl.GrpcFdlRequest> messages =
-        Arrays.asList(fdlRequest("fdl-a", 1, "alpha"), fdlRequest("fdl-b", 2, "beta"));
-    assertFdlMessages(blocking, async, messages);
-  }
-
   private void assertFdlMessages(
       grpc_fdl.FdlGrpcServiceGrpc.FdlGrpcServiceBlockingStub blocking,
       grpc_fdl.FdlGrpcServiceGrpc.FdlGrpcServiceStub async,
@@ -353,7 +341,7 @@ public class GrpcInteropTest {
       ManagedChannel channel =
           ManagedChannelBuilder.forAddress("127.0.0.1", port).usePlaintext().build();
       try {
-        exerciseFdlMessages(channel);
+        exerciseFdl(channel);
       } finally {
         channel.shutdownNow();
         channel.awaitTermination(10, TimeUnit.SECONDS);

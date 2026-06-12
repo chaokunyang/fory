@@ -97,6 +97,11 @@ let person: Person = fory.deserialize(&binary_data)?;
 
 Use pyfory type annotations for explicit xlang type mapping:
 
+The `pyfory.Int32`, `pyfory.Float32`, and related markers are typing-friendly
+aliases over Python `int` or `float`. Standard typing tools see the underlying
+Python value type, while Fory uses the marker metadata to preserve the exact
+xlang wire type.
+
 ```python
 from dataclasses import dataclass
 from typing import Dict, List

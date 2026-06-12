@@ -19,7 +19,6 @@ import datetime
 import os
 import platform
 import time
-from typing import TypeVar, Union
 
 import cython
 from libc.stdint cimport int32_t, int64_t, uint8_t, uint64_t
@@ -46,6 +45,7 @@ from pyfory.meta.typedef_decoder import decode_typedef
 from pyfory.meta.metastring import MetaStringDecoder
 from pyfory.policy import DEFAULT_POLICY
 from pyfory.resolver import NULL_FLAG, NOT_NULL_VALUE_FLAG
+from pyfory.type_util import normalize_fory_type
 from pyfory.includes.libserialization cimport (
     TypeId,
     TypeRegistrationKind,
@@ -83,35 +83,13 @@ cdef int32_t NOT_NULL_STRING_FLAG = (NOT_NULL_VALUE_FLAG & 0xFF) | (<int32_t>Typ
 cdef int32_t NOT_NULL_FLOAT64_FLAG = (NOT_NULL_VALUE_FLAG & 0xFF) | (<int32_t>TypeId.FLOAT64 << 8)
 cdef int32_t MAX_CACHED_TYPE_DEFS = 8192
 
-_PRIMITIVE_TYPEVAR_NAMES = frozenset(
-    {
-        "Int8",
-        "UInt8",
-        "Int16",
-        "UInt16",
-        "Int32",
-        "UInt32",
-        "FixedInt32",
-        "FixedUInt32",
-        "Int64",
-        "UInt64",
-        "FixedInt64",
-        "TaggedInt64",
-        "FixedUInt64",
-        "TaggedUInt64",
-        "Float16",
-        "BFloat16",
-        "Float32",
-        "Float64",
-    }
-)
 _PRIMITIVE_TYPE_IDS = frozenset(range(1, 21)) - {16}
 
 
 def _is_primitive_type(type_):
     if type(type_) is int:
         return type_ in _PRIMITIVE_TYPE_IDS
-    return type_ in (bool, int, float) or getattr(type_, "__name__", None) in _PRIMITIVE_TYPEVAR_NAMES
+    return type_ in (bool, int, float)
 
 
 @cython.final
@@ -273,7 +251,7 @@ cdef class TypeResolver:
 
     def register_type(
         self,
-        cls: Union[type, TypeVar],
+        cls,
         *,
         type_id: int = None,
         name: str = None,
@@ -290,7 +268,7 @@ cdef class TypeResolver:
 
     def register_union(
         self,
-        cls: Union[type, TypeVar],
+        cls,
         *,
         type_id: int = None,
         name: str = None,
@@ -609,7 +587,7 @@ cdef class Serializer:
     cdef readonly object type_
     cdef public bint need_to_write_ref
 
-    def __init__(self, TypeResolver type_resolver, type_: Union[type, TypeVar]):
+    def __init__(self, TypeResolver type_resolver, type_):
         """
         Initialize a serializer for one declared Python type.
 
@@ -618,6 +596,7 @@ cdef class Serializer:
             type_: Declared Python type handled by this serializer.
         """
         self.type_resolver = type_resolver
+        type_ = normalize_fory_type(type_)
         self.type_ = type_
         self.need_to_write_ref = self.type_resolver.track_ref and not _is_primitive_type(type_)
 
@@ -751,7 +730,7 @@ cdef class TypeInfo:
 
     def __init__(
         self,
-        cls: Union[type, TypeVar] = None,
+        cls=None,
         type_id: int = 0,
         user_type_id: int = 0xFFFFFFFF,
         serializer=None,
@@ -891,7 +870,7 @@ cdef class Fory:
 
     def register_type(
         self,
-        cls: Union[type, TypeVar],
+        cls,
         *,
         type_id: int = None,
         name: str = None,
@@ -906,7 +885,7 @@ cdef class Fory:
 
     def register_union(
         self,
-        cls: Union[type, TypeVar],
+        cls,
         *,
         type_id: int = None,
         name: str = None,

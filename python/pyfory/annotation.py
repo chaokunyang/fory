@@ -17,7 +17,8 @@
 
 import array
 import typing
-from typing import TypeVar
+
+from pyfory.type_id import TypeId
 
 if typing.TYPE_CHECKING:
     from pyfory.serialization import (
@@ -45,25 +46,31 @@ except ImportError:
         _Annotated = None
 
 
+def _scalar_type(base_type, type_id):
+    if _Annotated is None:
+        raise RuntimeError("pyfory scalar markers require typing.Annotated or typing_extensions.Annotated")
+    return _Annotated[base_type, type_id]
+
+
 Bool = bool
-Int8 = TypeVar("Int8", bound=int)
-UInt8 = TypeVar("UInt8", bound=int)
-Int16 = TypeVar("Int16", bound=int)
-UInt16 = TypeVar("UInt16", bound=int)
-Int32 = TypeVar("Int32", bound=int)
-UInt32 = TypeVar("UInt32", bound=int)
-FixedInt32 = TypeVar("FixedInt32", bound=int)
-FixedUInt32 = TypeVar("FixedUInt32", bound=int)
-Int64 = TypeVar("Int64", bound=int)
-UInt64 = TypeVar("UInt64", bound=int)
-FixedInt64 = TypeVar("FixedInt64", bound=int)
-TaggedInt64 = TypeVar("TaggedInt64", bound=int)
-FixedUInt64 = TypeVar("FixedUInt64", bound=int)
-TaggedUInt64 = TypeVar("TaggedUInt64", bound=int)
-Float16 = TypeVar("Float16", bound=float)
-BFloat16 = TypeVar("BFloat16", bound=float)
-Float32 = TypeVar("Float32", bound=float)
-Float64 = TypeVar("Float64", bound=float)
+Int8 = _scalar_type(int, TypeId.INT8)
+UInt8 = _scalar_type(int, TypeId.UINT8)
+Int16 = _scalar_type(int, TypeId.INT16)
+UInt16 = _scalar_type(int, TypeId.UINT16)
+Int32 = _scalar_type(int, TypeId.VARINT32)
+UInt32 = _scalar_type(int, TypeId.VAR_UINT32)
+FixedInt32 = _scalar_type(int, TypeId.INT32)
+FixedUInt32 = _scalar_type(int, TypeId.UINT32)
+Int64 = _scalar_type(int, TypeId.VARINT64)
+UInt64 = _scalar_type(int, TypeId.VAR_UINT64)
+FixedInt64 = _scalar_type(int, TypeId.INT64)
+TaggedInt64 = _scalar_type(int, TypeId.TAGGED_INT64)
+FixedUInt64 = _scalar_type(int, TypeId.UINT64)
+TaggedUInt64 = _scalar_type(int, TypeId.TAGGED_UINT64)
+Float16 = _scalar_type(float, TypeId.FLOAT16)
+BFloat16 = _scalar_type(float, TypeId.BFLOAT16)
+Float32 = _scalar_type(float, TypeId.FLOAT32)
+Float64 = _scalar_type(float, TypeId.FLOAT64)
 
 _ARRAY_EXPORTS = {
     "BoolArray",

@@ -44,6 +44,7 @@ from pyfory.serialization import (
     _float16_to_bits,
 )
 from pyfory.types import is_primitive_type
+from pyfory.type_util import normalize_fory_type
 from pyfory.utils import is_little_endian
 
 try:
@@ -64,9 +65,10 @@ class Serializer(ABC):
 
     __slots__ = "type_resolver", "type_", "need_to_write_ref"
 
-    def __init__(self, type_resolver, type_: type):
+    def __init__(self, type_resolver, type_):
         self.type_resolver = type_resolver
-        self.type_: type = type_
+        type_ = normalize_fory_type(type_)
+        self.type_ = type_
         self.need_to_write_ref = type_resolver.track_ref and not is_primitive_type(type_)
 
     def write(self, write_context, value):

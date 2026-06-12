@@ -156,11 +156,14 @@ function readDecimal(reader: BinaryReader): Decimal {
   if (length <= 0 || length > 0x7fffffff) {
     throw new Error(`Invalid decimal magnitude length ${length}.`);
   }
-  const payload = reader.buffer(length);
-  if (payload[length - 1] === 0) {
-    throw new Error("Non-canonical decimal payload: trailing zero byte.");
+  const magnitudeBytes = reader.buffer(length);
+  if (magnitudeBytes[length - 1] === 0) {
+    throw new Error(
+      "Non-canonical decimal magnitude bytes: trailing zero byte.",
+    );
   }
-  const magnitude = DecimalCodec.fromCanonicalLittleEndianMagnitude(payload);
+  const magnitude
+    = DecimalCodec.fromCanonicalLittleEndianMagnitude(magnitudeBytes);
   if (magnitude === 0n) {
     throw new Error("Big decimal encoding must not represent zero.");
   }

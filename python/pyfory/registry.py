@@ -342,8 +342,6 @@ class TypeResolver:
         "compatible",
         "field_nullable",
         "policy",
-        "max_collection_size",
-        "max_binary_size",
         "shared_registry",
         "_type_id_counter",
         "_types_info",
@@ -374,8 +372,6 @@ class TypeResolver:
         self.compatible = config.compatible
         self.field_nullable = config.field_nullable
         self.policy = config.policy
-        self.max_collection_size = config.max_collection_size
-        self.max_binary_size = config.max_binary_size
         self.shared_registry = shared_registry
         self.require_registration = self.strict
         self._metastr_to_type = dict()

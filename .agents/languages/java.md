@@ -22,6 +22,10 @@ Load this file when changing anything under `java/` or when Java drives a cross-
 - Do not add normal-JVM process-global caches keyed by user classes, generated classes, serializer classes, classloaders, or class-bound method handles. Prefer per-runtime state, immutable shared metadata, or build-time-only template data.
 - Concrete serializers may opt into sharing only after auditing retained fields. Treat serializers retaining `TypeResolver`, `RefResolver`, mutable scratch buffers, runtime state, or classloader-sensitive state as non-shareable unless that state is externalized.
 - Resolver and serializer hot paths should keep the fast-path/null-slow-path shape obvious. Hoist repeated buffer or cache-state access into locals for multi-step operations and keep rebuild/restoration logic cold.
+- Do not use `instanceof` in Java hot paths, including per-value, per-field, per-element,
+  read/write/copy, resolver, serializer, codec, and buffer paths. Choose concrete
+  implementations during cold setup or code generation, cache final/static-final shape decisions,
+  or move type checks behind cold one-time dispatch instead.
 - Hot-path feature gates that are runtime constants must be `static final` fields read directly in
   the branch. Do not hide them behind helper methods such as `jdkInternalFieldAccess()`, because
   that obscures branch folding and can leave avoidable call/inlining work in hot serializers.

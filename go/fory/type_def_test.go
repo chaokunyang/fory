@@ -437,20 +437,10 @@ func TestTypeDefHeaderHashIncludesHeaderLowBits(t *testing.T) {
 	require.Contains(t, err.Error(), "metadata hash")
 }
 
-func TestTypeDefRejectsEncodedMetadataAboveMaxBinarySize(t *testing.T) {
-	fory := NewFory(WithXlang(false), WithMaxBinarySize(1), WithCompatible(false))
-	body := typeDefTestBodyWithoutFields()
-	frame, header := typeDefTestFrame(t, body, false)
-
-	_, err := decodeTypeDef(fory, frame, header)
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "max binary size exceeded")
-}
-
 func TestTypeDefRejectsCompressedMetadata(t *testing.T) {
 	decoded := typeDefTestBodyWithoutFields()
 	compressed := deflateTypeDefTestBody(t, decoded)
-	fory := NewFory(WithXlang(false), WithMaxBinarySize(4096), WithCompatible(false))
+	fory := NewFory(WithXlang(false), WithCompatible(false))
 	frame, header := typeDefTestFrame(t, compressed, true)
 
 	_, err := decodeTypeDef(fory, frame, header)

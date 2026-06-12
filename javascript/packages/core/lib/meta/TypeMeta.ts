@@ -44,6 +44,7 @@ const HASH_SHIFT_BITS = 64n - BigInt(NUM_HASH_BITS);
 const UINT64_MASK = 0xffffffffffffffffn;
 const HEADER_HASH_MASK = UINT64_MASK ^ ((1n << HASH_SHIFT_BITS) - 1n);
 const BIG_NAME_THRESHOLD = 0b111111;
+const MAX_TYPE_META_NESTING = 128;
 
 const PRIMITIVE_TYPE_IDS = [
   TypeId.BOOL,
@@ -468,6 +469,8 @@ export class TypeMeta {
     const headerHash = Number(header >> HASH_SHIFT_BITS);
 
     const bodyStart = reader.readGetCursor();
+    reader.checkReadableBytes(metaSize);
+    const bodyEnd = bodyStart + metaSize;
     const classHeader = reader.readUint8();
     const isStruct = (classHeader & STRUCT_TYPEDEF_FLAG) !== 0;
     let numFields = 0;
@@ -508,6 +511,9 @@ export class TypeMeta {
     }
 
     // Read fields
+    if (numFields > bodyEnd - reader.readGetCursor()) {
+      throw new Error("TypeMeta field count exceeds metadata body size");
+    }
     const fields: FieldInfo[] = [];
     for (let i = 0; i < numFields; i++) {
       const fieldInfo = this.readFieldInfo(reader);
@@ -622,7 +628,13 @@ export class TypeMeta {
   private static readTypeId(
     reader: BinaryReader,
     readFlag = false,
+    depth = 0,
   ): InnerFieldInfo {
+    if (depth > MAX_TYPE_META_NESTING) {
+      throw new Error(
+        `TypeMeta nesting depth limit exceeded: ${depth} > ${MAX_TYPE_META_NESTING}`,
+      );
+    }
     const options: InnerFieldInfoOptions = {};
     let nullable = false;
     let trackingRef = false;
@@ -639,7 +651,7 @@ export class TypeMeta {
       ) {
         typeId = TypeId.UNION;
       }
-      this.readNestedTypeInfo(reader, typeId, options);
+      this.readNestedTypeInfo(reader, typeId, options, depth);
       return { typeId, userTypeId: -1, nullable, trackingRef, options };
     }
     let typeId = reader.readUint8();
@@ -648,7 +660,7 @@ export class TypeMeta {
     } else if (typeId === TypeId.NAMED_UNION || typeId === TypeId.TYPED_UNION) {
       typeId = TypeId.UNION;
     }
-    this.readNestedTypeInfo(reader, typeId, options);
+    this.readNestedTypeInfo(reader, typeId, options, depth);
     return { typeId, userTypeId: -1, nullable, trackingRef, options };
   }
 
@@ -656,17 +668,18 @@ export class TypeMeta {
     reader: BinaryReader,
     typeId: number,
     options: InnerFieldInfoOptions,
+    depth: number,
   ) {
     switch (typeId) {
       case TypeId.LIST:
-        options.inner = this.readTypeId(reader, true);
+        options.inner = this.readTypeId(reader, true, depth + 1);
         break;
       case TypeId.SET:
-        options.key = this.readTypeId(reader, true);
+        options.key = this.readTypeId(reader, true, depth + 1);
         break;
       case TypeId.MAP:
-        options.key = this.readTypeId(reader, true);
-        options.value = this.readTypeId(reader, true);
+        options.key = this.readTypeId(reader, true, depth + 1);
+        options.value = this.readTypeId(reader, true, depth + 1);
         break;
       default:
         break;

@@ -21,6 +21,7 @@ import pytest
 from pyfory import Fory, DeserializationPolicy
 from pyfory.serializer import (
     FunctionSerializer,
+    MethodSerializer,
     NativeFuncMethodSerializer,
     TypeSerializer,
 )
@@ -258,7 +259,13 @@ def test_stateful_intercepts_falsey_state_before_bool():
             raise ValueError("state blocked")
 
     FalseyState.bool_called = False
-    fory = Fory(xlang=False, ref=True, strict=False, policy=BlockSetStatePolicy(), compatible=False)
+    fory = Fory(
+        xlang=False,
+        ref=True,
+        strict=False,
+        policy=BlockSetStatePolicy(),
+        compatible=False,
+    )
     data = fory.serialize(FalseyStatePayload())
 
     with pytest.raises(ValueError, match="state blocked"):
@@ -278,7 +285,13 @@ def test_object_serializer_intercepts_state_before_setattr():
     ObjectSetAttrPayload.setattr_called = False
 
     writer = Fory(xlang=False, ref=True, strict=False, compatible=False)
-    reader = Fory(xlang=False, ref=True, strict=False, policy=BlockSetStatePolicy(), compatible=False)
+    reader = Fory(
+        xlang=False,
+        ref=True,
+        strict=False,
+        policy=BlockSetStatePolicy(),
+        compatible=False,
+    )
     writer.register(ObjectSetAttrPayload)
     reader.register(ObjectSetAttrPayload)
 
@@ -490,6 +503,95 @@ def test_registered_dataclass_authorizes_instantiation_in_strict_mode():
     assert policy.authorize_instantiation_calls == 1
 
 
+def test_function_bound_method_authorizes_before_receiver_read():
+    class BlockMethodMaterializationPolicy(DeserializationPolicy):
+        def __init__(self):
+            self.calls = []
+
+        def authorize_instantiation(self, cls, **kwargs):
+            self.calls.append((cls, kwargs))
+            if cls is types.MethodType:
+                raise ValueError("method materialization blocked")
+
+    policy = BlockMethodMaterializationPolicy()
+    fory = Fory(xlang=False, ref=True, strict=False, policy=policy, compatible=False)
+    serializer = FunctionSerializer(fory.type_resolver, type(policy_global_function))
+    read_context = FakeReadContext(policy, [0])
+
+    with pytest.raises(ValueError, match="method materialization blocked"):
+        serializer._deserialize_function(read_context)
+    assert policy.calls == [(types.MethodType, {})]
+
+
+def test_local_function_authorizes_before_body_read():
+    class BlockFunctionMaterializationPolicy(DeserializationPolicy):
+        def __init__(self):
+            self.calls = []
+
+        def authorize_instantiation(self, cls, **kwargs):
+            self.calls.append((cls, kwargs))
+            if cls is types.FunctionType:
+                raise ValueError("function materialization blocked")
+
+    policy = BlockFunctionMaterializationPolicy()
+    fory = Fory(xlang=False, ref=True, strict=False, policy=policy, compatible=False)
+    serializer = FunctionSerializer(fory.type_resolver, type(policy_global_function))
+    read_context = FakeReadContext(policy, [2, __name__, "policy_global_function"])
+
+    with pytest.raises(ValueError, match="function materialization blocked"):
+        serializer._deserialize_function(read_context)
+    assert policy.calls == [
+        (
+            types.FunctionType,
+            {
+                "module": __name__,
+                "qualname": "policy_global_function",
+                "is_local": True,
+            },
+        )
+    ]
+
+
+def test_native_bound_method_authorizes_before_receiver_read():
+    class BlockMethodMaterializationPolicy(DeserializationPolicy):
+        def __init__(self):
+            self.calls = []
+
+        def authorize_instantiation(self, cls, **kwargs):
+            self.calls.append((cls, kwargs))
+            if cls is types.MethodType:
+                raise ValueError("method materialization blocked")
+
+    policy = BlockMethodMaterializationPolicy()
+    fory = Fory(xlang=False, ref=True, strict=False, policy=policy, compatible=False)
+    serializer = NativeFuncMethodSerializer(fory.type_resolver, type(policy_global_function))
+    read_context = FakeReadContext(policy, ["run", False])
+
+    with pytest.raises(ValueError, match="method materialization blocked"):
+        serializer.read(read_context)
+    assert policy.calls == [(types.MethodType, {"method_name": "run"})]
+
+
+def test_method_serializer_authorizes_before_instance_read():
+    class BlockMethodMaterializationPolicy(DeserializationPolicy):
+        def __init__(self):
+            self.calls = []
+
+        def authorize_instantiation(self, cls, **kwargs):
+            self.calls.append((cls, kwargs))
+            if cls is types.MethodType:
+                raise ValueError("method materialization blocked")
+
+    policy = BlockMethodMaterializationPolicy()
+    fory = Fory(xlang=False, ref=True, strict=False, policy=policy, compatible=False)
+    serializer = MethodSerializer(fory.type_resolver, types.MethodType)
+    read_context = FakeReadContext(policy, [])
+
+    with pytest.raises(ValueError, match="method materialization blocked"):
+        serializer.read(read_context)
+    assert policy.calls == [(types.MethodType, {})]
+
+
 def test_validate_module():
     """Test validate_module policy hook for module deserialization."""
     import json
@@ -500,7 +602,13 @@ def test_validate_module():
             assert not is_local
             return collections
 
-    fory1 = Fory(xlang=False, ref=True, strict=False, policy=ReturnModulePolicy(), compatible=False)
+    fory1 = Fory(
+        xlang=False,
+        ref=True,
+        strict=False,
+        policy=ReturnModulePolicy(),
+        compatible=False,
+    )
     data = fory1.serialize(json)
     assert fory1.deserialize(data) is json
 
@@ -572,7 +680,13 @@ def test_local_class_return_ignored():
         def validate_class(self, cls, is_local, **kwargs):
             return SafeClass if is_local else None
 
-    fory = Fory(xlang=False, ref=True, strict=False, policy=ReturnClassPolicy(), compatible=False)
+    fory = Fory(
+        xlang=False,
+        ref=True,
+        strict=False,
+        policy=ReturnClassPolicy(),
+        compatible=False,
+    )
     decoded = fory.deserialize(fory.serialize(make_payload_class()))
     assert decoded is not SafeClass
     assert decoded.run() == "payload"
@@ -648,7 +762,13 @@ def test_bound_method_policy_runs_before_getattribute_side_effect():
 
     obj = GuardedMethod()
     method = types.MethodType(GuardedMethod.run, obj)
-    fory = Fory(xlang=False, ref=True, strict=False, policy=BlockMethodPolicy(), compatible=False)
+    fory = Fory(
+        xlang=False,
+        ref=True,
+        strict=False,
+        policy=BlockMethodPolicy(),
+        compatible=False,
+    )
     data = fory.serialize(method)
 
     GuardedMethod.getattribute_called = False

@@ -267,6 +267,7 @@ void writeGeneratedBoolArrayValue(WriteContext context, BoolList value) {
 BoolList readGeneratedBoolArrayValue(ReadContext context) {
   final buffer = context.buffer;
   final size = buffer.readVarUint32();
+  buffer.checkReadableBytes(size);
   return BoolList.arrayStorage(buffer.readInt8Bytes(size));
 }
 

@@ -346,8 +346,6 @@ export class WriteContext {
 
   private disposeTypeInfo: TypeInfo[] = [];
   private dynamicTypeId = 0;
-  private _maxBinarySize: number;
-  private _maxCollectionSize: number;
 
   constructor(
     readonly typeResolver: TypeResolverLike,
@@ -356,8 +354,6 @@ export class WriteContext {
     this.writer = new BinaryWriter(config);
     this.refWriter = new RefWriter();
     this.metaStringWriter = new MetaStringWriter();
-    this._maxBinarySize = config.maxBinarySize ?? 64 * 1024 * 1024;
-    this._maxCollectionSize = config.maxCollectionSize ?? 1_000_000;
   }
 
   reset() {
@@ -369,24 +365,6 @@ export class WriteContext {
     });
     this.disposeTypeInfo = [];
     this.dynamicTypeId = 0;
-  }
-
-  checkCollectionSize(size: number) {
-    if (size > this._maxCollectionSize) {
-      throw new Error(
-        `Collection size ${size} exceeds maxCollectionSize ${this._maxCollectionSize}. `
-        + "The data may be malicious, or increase maxCollectionSize if needed.",
-      );
-    }
-  }
-
-  checkBinarySize(size: number) {
-    if (size > this._maxBinarySize) {
-      throw new Error(
-        `Binary size ${size} exceeds maxBinarySize ${this._maxBinarySize}. `
-        + "The data may be malicious, or increase maxBinarySize if needed.",
-      );
-    }
   }
 
   isCompatible() {
@@ -549,14 +527,6 @@ export class WriteContext {
   setUint32Position(offset: number, value: number) {
     this.writer.setUint32Position(offset, value);
   }
-
-  get maxBinarySize() {
-    return this._maxBinarySize;
-  }
-
-  get maxCollectionSize() {
-    return this._maxCollectionSize;
-  }
 }
 
 export class ReadContext {
@@ -584,8 +554,6 @@ export class ReadContext {
 
   private _depth = 0;
   private _maxDepth: number;
-  private _maxBinarySize: number;
-  private _maxCollectionSize: number;
 
   private static typeMetaHeaderHash(headerLow: number, headerHigh: number) {
     return headerHigh * 0x100000 + (headerLow >>> 12);
@@ -641,8 +609,6 @@ export class ReadContext {
     this.refReader = new RefReader(this.reader);
     this.metaStringReader = new MetaStringReader();
     this._maxDepth = config.maxDepth ?? 50;
-    this._maxBinarySize = config.maxBinarySize ?? 64 * 1024 * 1024;
-    this._maxCollectionSize = config.maxCollectionSize ?? 1_000_000;
   }
 
   reset(bytes: Uint8Array) {
@@ -669,24 +635,6 @@ export class ReadContext {
 
   decReadDepth() {
     this._depth--;
-  }
-
-  checkCollectionSize(size: number) {
-    if (size > this._maxCollectionSize) {
-      throw new Error(
-        `Collection size ${size} exceeds maxCollectionSize ${this._maxCollectionSize}. `
-        + "The data may be malicious, or increase maxCollectionSize if needed.",
-      );
-    }
-  }
-
-  checkBinarySize(size: number) {
-    if (size > this._maxBinarySize) {
-      throw new Error(
-        `Binary size ${size} exceeds maxBinarySize ${this._maxBinarySize}. `
-        + "The data may be malicious, or increase maxBinarySize if needed.",
-      );
-    }
   }
 
   readRefFlag() {
@@ -1387,13 +1335,5 @@ export class ReadContext {
 
   get maxDepth() {
     return this._maxDepth;
-  }
-
-  get maxBinarySize() {
-    return this._maxBinarySize;
-  }
-
-  get maxCollectionSize() {
-    return this._maxCollectionSize;
   }
 }

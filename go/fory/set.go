@@ -314,6 +314,9 @@ func (s setSerializer) ReadData(ctx *ReadContext, value reflect.Value) {
 	type_ := value.Type()
 	// ReadData collection length from buffer
 	length := ctx.ReadCollectionLength()
+	if ctx.HasError() {
+		return
+	}
 	if length == 0 {
 		// Initialize empty set if length is 0
 		value.Set(reflect.MakeMap(type_))
@@ -322,6 +325,9 @@ func (s setSerializer) ReadData(ctx *ReadContext, value reflect.Value) {
 
 	// ReadData collection flags that indicate special characteristics
 	collectFlag := buf.ReadInt8(err)
+	if ctx.HasError() {
+		return
+	}
 	var elemTypeInfo *TypeInfo
 
 	// If all elements are same type, get element type info
@@ -344,10 +350,16 @@ func (s setSerializer) ReadData(ctx *ReadContext, value reflect.Value) {
 			elemTypeInfo = ctx.TypeResolver().ReadTypeInfo(buf, err)
 		}
 	}
+	if ctx.HasError() {
+		return
+	}
+	if !buf.CheckReadable(length, err) {
+		return
+	}
 
 	// Initialize set if nil
 	if value.IsNil() {
-		value.Set(reflect.MakeMap(type_))
+		value.Set(reflect.MakeMapWithSize(type_, length))
 	}
 	// Register reference for tracking (handles circular references)
 	ctx.RefResolver().Reference(value)

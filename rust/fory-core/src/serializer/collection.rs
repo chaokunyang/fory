@@ -36,22 +36,10 @@ pub const DECL_ELEMENT_TYPE: u8 = 0b100;
 //  Whether collection elements type same.
 pub const IS_SAME_TYPE: u8 = 0b1000;
 
-#[cold]
-fn collection_size_limit_exceeded(len: u32, max: u32) -> Error {
-    Error::size_limit_exceeded(format!("Collection size {} exceeds limit {}", len, max))
-}
-
-fn check_collection_len<T: Serializer>(context: &ReadContext, len: u32) -> Result<(), Error> {
-    if std::mem::size_of::<T>() == 0 {
-        return Ok(());
-    }
+fn check_collection_len(context: &ReadContext, len: u32) -> Result<usize, Error> {
     let len = len as usize;
-    let remaining = context.reader.slice_after_cursor().len();
-    if len > remaining {
-        let cursor = context.reader.get_cursor();
-        return Err(Error::buffer_out_of_bound(cursor, len, cursor + remaining));
-    }
-    Ok(())
+    context.reader.check_bound(len)?;
+    Ok(len)
 }
 
 pub fn write_collection_type_info(
@@ -254,10 +242,6 @@ where
     if len == 0 {
         return Ok(C::from_iter(std::iter::empty()));
     }
-    let max = context.max_collection_size();
-    if len > max {
-        return Err(collection_size_limit_exceeded(len, max));
-    }
     if T::fory_is_polymorphic() || T::fory_is_shared_ref() {
         return read_collection_data_dyn_ref(context, len);
     }
@@ -273,7 +257,7 @@ where
         (header & IS_SAME_TYPE) != 0,
         Error::type_error("Type inconsistent, target type is not polymorphic")
     );
-    check_collection_len::<T>(context, len)?;
+    let _ = check_collection_len(context, len)?;
     if !has_null {
         (0..len)
             .map(|_| T::fory_read_data(context))
@@ -300,10 +284,6 @@ where
     if len == 0 {
         return Ok(Vec::new());
     }
-    let max = context.max_collection_size();
-    if len > max {
-        return Err(collection_size_limit_exceeded(len, max));
-    }
     if T::fory_is_polymorphic() || T::fory_is_shared_ref() {
         return read_vec_data_dyn_ref(context, len);
     }
@@ -317,8 +297,7 @@ where
         (header & IS_SAME_TYPE) != 0,
         Error::type_error("Type inconsistent, target type is not polymorphic")
     );
-    check_collection_len::<T>(context, len)?;
-    let mut vec = Vec::with_capacity(len as usize);
+    let mut vec = Vec::with_capacity(check_collection_len(context, len)?);
     if !has_null {
         for _ in 0..len {
             vec.push(T::fory_read_data(context)?);
@@ -364,8 +343,7 @@ where
         } else {
             T::fory_get_type_info(context.get_type_resolver())?
         };
-        check_collection_len::<T>(context, len)?;
-        let mut vec = Vec::with_capacity(len as usize);
+        let mut vec = Vec::with_capacity(check_collection_len(context, len)?);
         if elem_ref_mode == RefMode::None {
             for _ in 0..len {
                 vec.push(T::fory_read_with_type_info(
@@ -385,8 +363,7 @@ where
         }
         Ok(vec)
     } else {
-        check_collection_len::<T>(context, len)?;
-        let mut vec = Vec::with_capacity(len as usize);
+        let mut vec = Vec::with_capacity(check_collection_len(context, len)?);
         for _ in 0..len {
             vec.push(T::fory_read(context, elem_ref_mode, true)?);
         }
@@ -426,8 +403,8 @@ where
         } else {
             T::fory_get_type_info(context.get_type_resolver())?
         };
-        check_collection_len::<T>(context, len)?;
         // All elements are same type
+        let _ = check_collection_len(context, len)?;
         if elem_ref_mode == RefMode::None {
             // No null elements, no tracking
             (0..len)
@@ -440,7 +417,7 @@ where
                 .collect::<Result<C, Error>>()
         }
     } else {
-        check_collection_len::<T>(context, len)?;
+        let _ = check_collection_len(context, len)?;
         (0..len)
             .map(|_| T::fory_read(context, elem_ref_mode, true))
             .collect::<Result<C, Error>>()
@@ -510,11 +487,13 @@ fn read_primitive_array_data_bulk<T: 'static>(
     }
     #[cfg(target_endian = "little")]
     {
-        let mut vec: Vec<T> = Vec::with_capacity(len);
+        // Prove the encoded primitive-array body exists before allocating from
+        // its declared byte length.
         let src = match context.reader.read_bytes(size_bytes) {
             Ok(src) => src,
             Err(error) => return Some(Err(error)),
         };
+        let mut vec: Vec<T> = Vec::with_capacity(len);
         unsafe {
             std::ptr::copy_nonoverlapping(src.as_ptr(), vec.as_mut_ptr() as *mut u8, size_bytes);
             vec.set_len(len);
@@ -581,22 +560,7 @@ where
     if size_bytes % elem_size != 0 {
         return Err(Error::invalid_data("Invalid data length"));
     }
-    let max = context.max_binary_size() as usize;
-    if size_bytes > max {
-        return Err(Error::size_limit_exceeded(format!(
-            "Binary size {} exceeds limit {}",
-            size_bytes, max
-        )));
-    }
-    let remaining = context.reader.slice_after_cursor().len();
-    if size_bytes > remaining {
-        let cursor = context.reader.get_cursor();
-        return Err(Error::buffer_out_of_bound(
-            cursor,
-            size_bytes,
-            cursor + remaining,
-        ));
-    }
+    context.reader.check_bound(size_bytes)?;
     let len = size_bytes / elem_size;
     let element_type_id = primitive_array_element_type_id(remote_field_type.type_id)
         .ok_or_else(|| Error::type_error("array-compatible field is not a primitive array"))?;
@@ -763,13 +727,6 @@ where
     if len == 0 {
         return Ok(Vec::new());
     }
-    let max = context.max_collection_size();
-    if len > max {
-        return Err(Error::size_limit_exceeded(format!(
-            "Collection size {} exceeds limit {}",
-            len, max
-        )));
-    }
     let header = context.reader.read_u8()?;
     if (header & HAS_NULL) != 0 {
         return Err(Error::type_error(
@@ -791,6 +748,7 @@ where
             "array-compatible list must declare element type",
         ));
     }
+    context.reader.check_bound(len as usize)?;
     let mut vec = Vec::with_capacity(len as usize);
     for _ in 0..len {
         vec.push(T::read_list_array_element(context, element_type.type_id)?);

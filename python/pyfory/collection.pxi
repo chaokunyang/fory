@@ -467,15 +467,13 @@ cdef class ListSerializer(CollectionSerializer):
         cdef int32_t ref_id
         cdef int64_t i
 
-        if len_ > read_context.max_collection_size:
-            raise ValueError(
-                f"List size {len_} exceeds the configured limit of {read_context.max_collection_size}"
-            )
-        list_ = PyList_New(len_)
         if len_ == 0:
+            list_ = PyList_New(0)
             return list_
 
+        read_context.check_readable_bytes(len_)
         collect_flag = buffer.read_int8()
+        list_ = PyList_New(len_)
         # IMPORTANT: collection readers must obey the ref/null bits written on
         # the wire, not local Python/Cython element metadata that may imply a
         # different ref policy. Shared xlang tests intentionally deserialize
@@ -586,15 +584,13 @@ cdef class TupleSerializer(CollectionSerializer):
         cdef int8_t head_flag
         cdef int64_t i
 
-        if len_ > read_context.max_collection_size:
-            raise ValueError(
-                f"Tuple size {len_} exceeds the configured limit of {read_context.max_collection_size}"
-            )
-        tuple_ = PyTuple_New(len_)
         if len_ == 0:
+            tuple_ = PyTuple_New(0)
             return tuple_
 
+        read_context.check_readable_bytes(len_)
         collect_flag = buffer.read_int8()
+        tuple_ = PyTuple_New(len_)
         if (collect_flag & COLL_IS_SAME_TYPE) != 0:
             if (collect_flag & COLL_IS_DECL_ELEMENT_TYPE) == 0:
                 typeinfo = type_resolver.read_type_info(read_context)
@@ -708,10 +704,6 @@ cdef class SetSerializer(CollectionSerializer):
 
         read_context.reference(instance)
         len_ = buffer.read_var_uint32()
-        if len_ > read_context.max_collection_size:
-            raise ValueError(
-                f"Set size {len_} exceeds the configured limit of {read_context.max_collection_size}"
-            )
         if len_ == 0:
             return instance
 
@@ -1054,12 +1046,14 @@ cdef class MapSerializer(Serializer):
     cpdef inline read(self, ReadContext read_context):
         cdef int32_t size = read_context.read_var_uint32()
         cdef int32_t ref_id
-        if size > read_context.max_collection_size:
-            raise ValueError(f"Map size {size} exceeds the configured limit of {read_context.max_collection_size}")
-        cdef dict map_ = _PyDict_NewPresized(size)
+        cdef dict map_
         cdef int8_t chunk_header = 0
-        if size != 0:
+        if size == 0:
+            map_ = {}
+        else:
+            read_context.check_readable_bytes(size)
             chunk_header = read_context.read_uint8()
+            map_ = _PyDict_NewPresized(size)
         cdef RefReader ref_reader = read_context.ref_reader
         cdef Serializer key_serializer = self.key_serializer
         cdef Serializer value_serializer = self.value_serializer

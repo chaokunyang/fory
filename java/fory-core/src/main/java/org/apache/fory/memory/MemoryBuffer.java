@@ -3113,6 +3113,7 @@ public final class MemoryBuffer {
   }
 
   public byte[] readBytes(int length) {
+    checkReadableBytes(length);
     int readerIdx = readerIndex;
     byte[] bytes = new byte[length];
     // use subtract to avoid overflow
@@ -3254,7 +3255,7 @@ public final class MemoryBuffer {
     }
     int diff = size - readIdx;
     if (diff < binarySize) {
-      streamReader.fillBuffer(diff);
+      streamReader.fillBuffer(binarySize - diff);
     }
     return binarySize;
   }
@@ -3277,7 +3278,7 @@ public final class MemoryBuffer {
     }
     int diff = size - readIdx;
     if (diff < binarySize) {
-      streamReader.fillBuffer(diff);
+      streamReader.fillBuffer(binarySize - diff);
     }
     return binarySize;
   }
@@ -3302,13 +3303,12 @@ public final class MemoryBuffer {
   }
 
   /**
-   * Reads a size-validated primitive byte-array payload into {@code values}. The caller owns size
-   * validation and destination allocation; this method reads payload bytes only, not the size
-   * prefix.
+   * Reads a size-validated primitive byte-array body into {@code values}. The caller owns size
+   * validation and destination allocation; this method reads body bytes only, not the size prefix.
    */
-  public void readByteArrayPayload(byte[] values, int numBytes) {
+  public void readByteArrayBytes(byte[] values, int numBytes) {
     if (AndroidSupport.IS_ANDROID) {
-      MemoryOps.readByteArrayPayload(this, values, numBytes);
+      MemoryOps.readByteArrayBytes(this, values, numBytes);
     } else {
       int readerIdx = readerIndex;
       if (readerIdx > size - numBytes) {
@@ -3326,13 +3326,12 @@ public final class MemoryBuffer {
   }
 
   /**
-   * Reads a size-validated primitive boolean-array payload into {@code values}. The caller owns
-   * size validation and destination allocation; this method reads payload bytes only, not the size
-   * prefix.
+   * Reads a size-validated primitive boolean-array body into {@code values}. The caller owns size
+   * validation and destination allocation; this method reads body bytes only, not the size prefix.
    */
-  public void readBooleanArrayPayload(boolean[] values, int numBytes) {
+  public void readBooleanArrayBytes(boolean[] values, int numBytes) {
     if (AndroidSupport.IS_ANDROID) {
-      MemoryOps.readBooleanArrayPayload(this, values, numBytes);
+      MemoryOps.readBooleanArrayBytes(this, values, numBytes);
     } else {
       int readerIdx = readerIndex;
       if (readerIdx > size - numBytes) {
@@ -3345,13 +3344,12 @@ public final class MemoryBuffer {
   }
 
   /**
-   * Reads a size-validated primitive char-array payload into {@code values}. The caller owns size
-   * validation and destination allocation; this method reads payload bytes only, not the size
-   * prefix.
+   * Reads a size-validated primitive char-array body into {@code values}. The caller owns size
+   * validation and destination allocation; this method reads body bytes only, not the size prefix.
    */
-  public void readCharArrayPayload(char[] values, int numBytes) {
+  public void readCharArrayBytes(char[] values, int numBytes) {
     if (AndroidSupport.IS_ANDROID) {
-      MemoryOps.readCharArrayPayload(this, values, numBytes);
+      MemoryOps.readCharArrayBytes(this, values, numBytes);
     } else {
       int readerIdx = readerIndex;
       if (readerIdx > size - numBytes) {
@@ -3364,13 +3362,12 @@ public final class MemoryBuffer {
   }
 
   /**
-   * Reads a size-validated primitive int16-array payload into {@code values}. The caller owns size
-   * validation and destination allocation; this method reads payload bytes only, not the size
-   * prefix.
+   * Reads a size-validated primitive int16-array body into {@code values}. The caller owns size
+   * validation and destination allocation; this method reads body bytes only, not the size prefix.
    */
-  public void readInt16ArrayPayload(short[] values, int numBytes) {
+  public void readInt16ArrayBytes(short[] values, int numBytes) {
     if (AndroidSupport.IS_ANDROID) {
-      MemoryOps.readInt16ArrayPayload(this, values, numBytes);
+      MemoryOps.readInt16ArrayBytes(this, values, numBytes);
     } else {
       int readerIdx = readerIndex;
       if (readerIdx > size - numBytes) {
@@ -3383,13 +3380,12 @@ public final class MemoryBuffer {
   }
 
   /**
-   * Reads a size-validated primitive int32-array payload into {@code values}. The caller owns size
-   * validation and destination allocation; this method reads payload bytes only, not the size
-   * prefix.
+   * Reads a size-validated primitive int32-array body into {@code values}. The caller owns size
+   * validation and destination allocation; this method reads body bytes only, not the size prefix.
    */
-  public void readInt32ArrayPayload(int[] values, int numBytes) {
+  public void readInt32ArrayBytes(int[] values, int numBytes) {
     if (AndroidSupport.IS_ANDROID) {
-      MemoryOps.readInt32ArrayPayload(this, values, numBytes);
+      MemoryOps.readInt32ArrayBytes(this, values, numBytes);
     } else {
       int readerIdx = readerIndex;
       if (readerIdx > size - numBytes) {
@@ -3402,13 +3398,12 @@ public final class MemoryBuffer {
   }
 
   /**
-   * Reads a size-validated primitive int64-array payload into {@code values}. The caller owns size
-   * validation and destination allocation; this method reads payload bytes only, not the size
-   * prefix.
+   * Reads a size-validated primitive int64-array body into {@code values}. The caller owns size
+   * validation and destination allocation; this method reads body bytes only, not the size prefix.
    */
-  public void readInt64ArrayPayload(long[] values, int numBytes) {
+  public void readInt64ArrayBytes(long[] values, int numBytes) {
     if (AndroidSupport.IS_ANDROID) {
-      MemoryOps.readInt64ArrayPayload(this, values, numBytes);
+      MemoryOps.readInt64ArrayBytes(this, values, numBytes);
     } else {
       int readerIdx = readerIndex;
       if (readerIdx > size - numBytes) {
@@ -3421,13 +3416,12 @@ public final class MemoryBuffer {
   }
 
   /**
-   * Reads a size-validated primitive float32-array payload into {@code values}. The caller owns
-   * size validation and destination allocation; this method reads payload bytes only, not the size
-   * prefix.
+   * Reads a size-validated primitive float32-array body into {@code values}. The caller owns size
+   * validation and destination allocation; this method reads body bytes only, not the size prefix.
    */
-  public void readFloat32ArrayPayload(float[] values, int numBytes) {
+  public void readFloat32ArrayBytes(float[] values, int numBytes) {
     if (AndroidSupport.IS_ANDROID) {
-      MemoryOps.readFloat32ArrayPayload(this, values, numBytes);
+      MemoryOps.readFloat32ArrayBytes(this, values, numBytes);
     } else {
       int readerIdx = readerIndex;
       if (readerIdx > size - numBytes) {
@@ -3440,13 +3434,12 @@ public final class MemoryBuffer {
   }
 
   /**
-   * Reads a size-validated primitive float64-array payload into {@code values}. The caller owns
-   * size validation and destination allocation; this method reads payload bytes only, not the size
-   * prefix.
+   * Reads a size-validated primitive float64-array body into {@code values}. The caller owns size
+   * validation and destination allocation; this method reads body bytes only, not the size prefix.
    */
-  public void readFloat64ArrayPayload(double[] values, int numBytes) {
+  public void readFloat64ArrayBytes(double[] values, int numBytes) {
     if (AndroidSupport.IS_ANDROID) {
-      MemoryOps.readFloat64ArrayPayload(this, values, numBytes);
+      MemoryOps.readFloat64ArrayBytes(this, values, numBytes);
     } else {
       int readerIdx = readerIndex;
       if (readerIdx > size - numBytes) {
@@ -3508,6 +3501,11 @@ public final class MemoryBuffer {
   @CodegenInvoke
   public char[] readCharsAndSize() {
     final int numBytes = readBinarySize();
+    if ((numBytes & 1) != 0) {
+      throw new IllegalArgumentException(
+          "Char array byte size " + numBytes + " is not aligned to element size 2");
+    }
+    checkReadableBytes(numBytes);
     int numElements = numBytes >> 1;
     char[] values = new char[numElements];
     readChars(values, 0, numElements);
@@ -3638,8 +3636,12 @@ public final class MemoryBuffer {
     // use subtract to avoid overflow
     int remaining = size - readerIndex;
     if (minimumReadableBytes > remaining) {
-      streamReader.fillBuffer(minimumReadableBytes - remaining);
+      fillReadableBytes(minimumReadableBytes, remaining);
     }
+  }
+
+  private void fillReadableBytes(int minimumReadableBytes, int remaining) {
+    streamReader.fillBuffer(minimumReadableBytes - remaining);
   }
 
   /**

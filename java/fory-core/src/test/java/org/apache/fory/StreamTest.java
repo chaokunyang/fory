@@ -21,6 +21,7 @@ package org.apache.fory;
 
 import static org.apache.fory.io.ForyStreamReader.of;
 import static org.testng.Assert.assertEquals;
+import static org.testng.Assert.assertFalse;
 import static org.testng.Assert.assertTrue;
 
 import com.google.common.collect.Lists;
@@ -337,6 +338,40 @@ public class StreamTest extends ForyTestBase {
   }
 
   @Test
+  public void testStreamFillGrowsFromBufferedBytes() throws IOException {
+    byte[] complete = new byte[100];
+    ForyInputStream inputWithAvailable = new ForyInputStream(new ByteArrayInputStream(complete), 4);
+    assertEquals(inputWithAvailable.fillBuffer(100), 100);
+    assertEquals(inputWithAvailable.getBuffer().getHeapMemory().length, 100);
+
+    byte[] truncated = new byte[17];
+    ForyInputStream input = new ForyInputStream(new ByteArrayInputStream(truncated), 4);
+    Assert.assertThrows(IndexOutOfBoundsException.class, () -> input.fillBuffer(100));
+    int inputCapacity = input.getBuffer().getHeapMemory().length;
+    assertTrue(inputCapacity < 100);
+    assertTrue(inputCapacity <= 32);
+
+    try (ForyReadableChannel channel =
+        new ForyReadableChannel(
+            new ChunkedReadableByteChannel(truncated, truncated.length), ByteBuffer.allocate(4))) {
+      Assert.assertThrows(DeserializationException.class, () -> channel.fillBuffer(100));
+      int channelCapacity = channel.getBuffer().getHeapMemory().length;
+      assertTrue(channelCapacity < 100);
+      assertTrue(channelCapacity <= 32);
+    }
+
+    Path tempFile = Files.createTempFile("readable_channel_available", "data");
+    Files.write(tempFile, complete);
+    try (ForyReadableChannel channel =
+        new ForyReadableChannel(Files.newByteChannel(tempFile), ByteBuffer.allocate(4))) {
+      assertEquals(channel.fillBuffer(100), 100);
+      assertEquals(channel.getBuffer().getHeapMemory().length, 100);
+    } finally {
+      Files.delete(tempFile);
+    }
+  }
+
+  @Test
   public void testScopedMetaShare() throws IOException {
     Fory fory =
         Fory.builder()
@@ -470,7 +505,7 @@ public class StreamTest extends ForyTestBase {
   }
 
   @Test
-  public void testPrimitiveArrayStreamReaderUsesTypedReads() throws IOException {
+  public void testStreamPrimitiveArrayBody() throws IOException {
     Fory fory = builder().requireClassRegistration(false).build();
 
     int[] ints = new int[257];
@@ -480,7 +515,7 @@ public class StreamTest extends ForyTestBase {
     TrackingForyInputStream input =
         new TrackingForyInputStream(new ChunkedInputStream(fory.serialize(ints), 1), 3);
     Assert.assertEquals((int[]) fory.deserialize(input), ints);
-    assertTrue(input.readIntsCalled);
+    assertFalse(input.readIntsCalled);
 
     long[] longs = new long[257];
     for (int i = 0; i < longs.length; i++) {
@@ -491,7 +526,7 @@ public class StreamTest extends ForyTestBase {
         new TrackingForyReadableChannel(
             new ChunkedReadableByteChannel(serialized, 1), ByteBuffer.allocateDirect(5))) {
       Assert.assertEquals((long[]) fory.deserialize(channel), longs);
-      assertTrue(channel.readLongsCalled);
+      assertFalse(channel.readLongsCalled);
     }
 
     ByteBuffer limitedDirectBuffer = ByteBuffer.allocateDirect(serialized.length + 8);
@@ -500,7 +535,7 @@ public class StreamTest extends ForyTestBase {
         new TrackingForyReadableChannel(
             new ChunkedReadableByteChannel(serialized, 1), limitedDirectBuffer)) {
       Assert.assertEquals((long[]) fory.deserialize(channel), longs);
-      assertTrue(channel.readLongsCalled);
+      assertFalse(channel.readLongsCalled);
     }
   }
 

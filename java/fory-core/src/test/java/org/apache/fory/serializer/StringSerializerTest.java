@@ -33,7 +33,6 @@ import lombok.Data;
 import org.apache.fory.Fory;
 import org.apache.fory.ForyTestBase;
 import org.apache.fory.collection.Tuple2;
-import org.apache.fory.exception.DeserializationException;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.memory.MemoryUtils;
 import org.apache.fory.platform.JdkVersion;
@@ -48,6 +47,17 @@ public class StringSerializerTest extends ForyTestBase {
   @DataProvider(name = "stringCompress")
   public static Object[][] stringCompress() {
     return new Object[][] {{false}, {true}};
+  }
+
+  @Test
+  public void testRejectOddUtf16ByteSize() {
+    Fory fory = Fory.builder().build();
+    StringSerializer serializer = new StringSerializer(fory.getConfig());
+    MemoryBuffer buffer = MemoryBuffer.newHeapBuffer(8);
+    int writerIndex = buffer._unsafePutVarUint36Small(0, (3L << 2) | 1);
+    buffer._unsafeWriterIndex(writerIndex);
+    buffer.writeBytes(new byte[] {1, 2, 3});
+    Assert.assertThrows(IllegalArgumentException.class, () -> serializer.readString(buffer));
   }
 
   @Test
@@ -165,19 +175,6 @@ public class StringSerializerTest extends ForyTestBase {
       assertEquals(str, serializer.readString(buffer));
       Assert.assertEquals(buffer.writerIndex(), buffer.readerIndex());
     }
-  }
-
-  @Test
-  public void testStringSizeLimit() {
-    Fory writer = Fory.builder().withXlang(false).withCompatible(false).build();
-    Fory reader =
-        Fory.builder().withXlang(false).withMaxBinarySize(2).withCompatible(false).build();
-    MemoryBuffer buffer = MemoryUtils.buffer(32);
-    new StringSerializer(writer.getConfig()).writeString(buffer, "abcd");
-
-    Assert.assertThrows(
-        DeserializationException.class,
-        () -> new StringSerializer(reader.getConfig()).readString(buffer));
   }
 
   @Data

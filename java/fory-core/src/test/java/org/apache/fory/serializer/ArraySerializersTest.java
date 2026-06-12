@@ -209,19 +209,18 @@ public class ArraySerializersTest extends ForyTestBase {
   }
 
   @Test
-  public void testObjectArrayReadRejectsOversizedElementCount() {
+  public void testObjectArrayReadRequiresBodyByte() {
     Fory fory =
         Fory.builder()
             .withXlang(false)
             .withRefTracking(true)
             .requireClassRegistration(false)
-            .withMaxCollectionSize(1)
             .withCompatible(false)
             .build();
     assertThrows(
-        DeserializationException.class, () -> readObjectArrayPayload(fory, Object[].class, 2));
+        IndexOutOfBoundsException.class, () -> readObjectArrayBody(fory, Object[].class, 2));
     assertThrows(
-        DeserializationException.class, () -> readObjectArrayPayload(fory, String[].class, 2));
+        IndexOutOfBoundsException.class, () -> readObjectArrayBody(fory, String[].class, 2));
   }
 
   @Test(dataProvider = "crossLanguageReferenceTrackingConfig")
@@ -310,51 +309,20 @@ public class ArraySerializersTest extends ForyTestBase {
   }
 
   @Test
-  public void testPrimitiveArrayReadRejectsOversizedBinaryPayload() {
-    Fory fory =
-        Fory.builder()
-            .withXlang(false)
-            .withMaxBinarySize(4)
-            .withIntArrayCompressed(true)
-            .withLongArrayCompressed(true)
-            .withCompatible(false)
-            .build();
-    for (Class<?> arrayType :
-        new Class<?>[] {
-          boolean[].class,
-          byte[].class,
-          char[].class,
-          short[].class,
-          int[].class,
-          long[].class,
-          float[].class,
-          double[].class
-        }) {
-      assertThrows(
-          DeserializationException.class,
-          () -> readPrimitiveArrayPayload(fory, arrayType, 8, false));
-    }
-    assertThrows(
-        DeserializationException.class,
-        () -> readPrimitiveArrayPayload(fory, byte[].class, 5, true));
-  }
-
-  @Test
-  public void testPrimitiveArrayReadRejectsUnalignedBinaryPayload() {
-    Fory fory = Fory.builder().withXlang(false).withMaxBinarySize(64).withCompatible(false).build();
+  public void testPrimitiveArrayReadRejectsUnalignedBinaryBody() {
+    Fory fory = Fory.builder().withXlang(false).withCompatible(false).build();
     for (Class<?> arrayType :
         new Class<?>[] {
           char[].class, short[].class, int[].class, long[].class, float[].class, double[].class
         }) {
       assertThrows(
-          DeserializationException.class,
-          () -> readPrimitiveArrayPayload(fory, arrayType, 3, false));
+          DeserializationException.class, () -> readPrimitiveArrayBody(fory, arrayType, 3, false));
     }
   }
 
   @Test
-  public void testPrimitiveArrayReadRejectsTruncatedPayload() {
-    Fory fory = Fory.builder().withXlang(false).withMaxBinarySize(64).withCompatible(false).build();
+  public void testPrimitiveArrayReadRejectsTruncatedBody() {
+    Fory fory = Fory.builder().withXlang(false).withCompatible(false).build();
     Class<?>[] arrayTypes =
         new Class<?>[] {
           boolean[].class,
@@ -372,16 +340,16 @@ public class ArraySerializersTest extends ForyTestBase {
       int byteSize = byteSizes[i];
       assertThrows(
           IndexOutOfBoundsException.class,
-          () -> readTruncatedPrimitiveArrayPayload(fory, arrayType, byteSize));
+          () -> readTruncatedPrimitiveArrayBody(fory, arrayType, byteSize));
     }
   }
 
   @Test
-  public void testPrimitiveArrayReadRejectsNegativeDecodedBinaryPayload() {
+  public void testPrimitiveArrayReadRejectsNegativeDecodedBinaryBody() {
     Fory fixedWidthFory = Fory.builder().withXlang(false).withCompatible(false).build();
     assertThrows(
         DeserializationException.class,
-        () -> readPrimitiveArrayRawPayload(fixedWidthFory, char[].class));
+        () -> readPrimitiveArrayRawBody(fixedWidthFory, char[].class));
 
     Fory compressedFory =
         Fory.builder()
@@ -392,13 +360,13 @@ public class ArraySerializersTest extends ForyTestBase {
             .build();
     assertThrows(
         DeserializationException.class,
-        () -> readPrimitiveArrayRawPayload(compressedFory, int[].class));
+        () -> readPrimitiveArrayRawBody(compressedFory, int[].class));
     assertThrows(
         DeserializationException.class,
-        () -> readPrimitiveArrayRawPayload(compressedFory, long[].class));
+        () -> readPrimitiveArrayRawBody(compressedFory, long[].class));
   }
 
-  private static Object readPrimitiveArrayPayload(
+  private static Object readPrimitiveArrayBody(
       Fory fory, Class<?> arrayType, int byteSize, boolean outOfBand) {
     ReadContext readContext = fory.getReadContext();
     if (outOfBand) {
@@ -414,7 +382,7 @@ public class ArraySerializersTest extends ForyTestBase {
     return fory.getSerializer(arrayType).read(readContext);
   }
 
-  private static Object readTruncatedPrimitiveArrayPayload(
+  private static Object readTruncatedPrimitiveArrayBody(
       Fory fory, Class<?> arrayType, int byteSize) {
     ReadContext readContext = fory.getReadContext();
     MemoryBuffer buffer = MemoryBuffer.newHeapBuffer(5);
@@ -424,7 +392,7 @@ public class ArraySerializersTest extends ForyTestBase {
     return fory.getSerializer(arrayType).read(readContext);
   }
 
-  private static Object readPrimitiveArrayRawPayload(Fory fory, Class<?> arrayType) {
+  private static Object readPrimitiveArrayRawBody(Fory fory, Class<?> arrayType) {
     ReadContext readContext = fory.getReadContext();
     MemoryBuffer buffer = MemoryBuffer.newHeapBuffer(5);
     writeNegativeDecodedVarUInt32(buffer);
@@ -432,7 +400,7 @@ public class ArraySerializersTest extends ForyTestBase {
     return fory.getSerializer(arrayType).read(readContext);
   }
 
-  private static Object readObjectArrayPayload(Fory fory, Class<?> arrayType, int numElements) {
+  private static Object readObjectArrayBody(Fory fory, Class<?> arrayType, int numElements) {
     ReadContext readContext = fory.getReadContext();
     MemoryBuffer buffer = MemoryBuffer.newHeapBuffer(5);
     buffer.writeVarUInt32Small7(numElements);

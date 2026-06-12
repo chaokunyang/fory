@@ -1519,6 +1519,13 @@ signed_int_codec!(
 pub struct VecCodec<T, C, const NULLABLE: bool, const TRACK_REF: bool>(PhantomData<(T, C)>);
 
 #[inline(always)]
+fn check_sequence_len(context: &ReadContext, len: u32) -> Result<usize, Error> {
+    let len = len as usize;
+    context.reader.check_bound(len)?;
+    Ok(len)
+}
+
+#[inline(always)]
 fn read_vec_items<T, C>(
     context: &mut ReadContext,
     len: u32,
@@ -1529,7 +1536,7 @@ where
     T: 'static,
     C: Codec<T>,
 {
-    let mut vec = Vec::with_capacity(len as usize);
+    let mut vec = Vec::with_capacity(check_sequence_len(context, len)?);
     match read_type {
         None | Some(ElementReadType::Direct) => {
             if has_null {
@@ -1696,13 +1703,6 @@ where
         if len == 0 {
             return Ok(Vec::new());
         }
-        let max = context.max_collection_size();
-        if len > max {
-            return Err(Error::size_limit_exceeded(format!(
-                "Collection size {} exceeds limit {}",
-                len, max
-            )));
-        }
         let header = context.reader.read_u8()?;
         if C::is_polymorphic() || C::is_shared_ref() {
             let field_type = Self::field_type(context.get_type_resolver())?;
@@ -1730,13 +1730,6 @@ where
         let len = context.reader.read_var_u32()?;
         if len == 0 {
             return Ok(Vec::new());
-        }
-        let max = context.max_collection_size();
-        if len > max {
-            return Err(Error::size_limit_exceeded(format!(
-                "Collection size {} exceeds limit {}",
-                len, max
-            )));
         }
         let header = context.reader.read_u8()?;
         let has_null = (header & HAS_NULL) != 0;
@@ -2088,7 +2081,7 @@ where
     } else {
         RefMode::None
     };
-    let mut vec = Vec::with_capacity(len as usize);
+    let mut vec = Vec::with_capacity(check_sequence_len(context, len)?);
     if is_same_type {
         if C::is_polymorphic() {
             if is_declared {
@@ -2280,13 +2273,6 @@ where
         if len == 0 {
             return Ok(HashMap::new());
         }
-        let max = context.max_collection_size();
-        if len > max {
-            return Err(Error::size_limit_exceeded(format!(
-                "Map size {} exceeds limit {}",
-                len, max
-            )));
-        }
         if KC::is_polymorphic()
             || KC::is_shared_ref()
             || VC::is_polymorphic()
@@ -2306,13 +2292,6 @@ where
         if len == 0 {
             return Ok(HashMap::new());
         }
-        let max = context.max_collection_size();
-        if len > max {
-            return Err(Error::size_limit_exceeded(format!(
-                "Map size {} exceeds limit {}",
-                len, max
-            )));
-        }
         if KC::is_polymorphic()
             || KC::is_shared_ref()
             || VC::is_polymorphic()
@@ -2320,7 +2299,7 @@ where
         {
             return read_map_dynamic::<K, V, KC, VC>(context, len, remote_field_type);
         }
-        let mut map = HashMap::with_capacity(len as usize);
+        let mut map = HashMap::with_capacity(check_map_len(context, len)?);
         let mut len_counter = 0;
         while len_counter < len {
             let header = context.reader.read_u8()?;
@@ -2459,6 +2438,13 @@ struct MapEntryReadType {
     type_info: Option<std::rc::Rc<crate::TypeInfo>>,
 }
 
+#[inline(always)]
+fn check_map_len(context: &ReadContext, len: u32) -> Result<usize, Error> {
+    let len = len as usize;
+    context.reader.check_bound(len)?;
+    Ok(len)
+}
+
 fn read_map_static<K, V, KC, VC>(
     context: &mut ReadContext,
     len: u32,
@@ -2469,7 +2455,7 @@ where
     KC: Codec<K>,
     VC: Codec<V>,
 {
-    let mut map = HashMap::with_capacity(len as usize);
+    let mut map = HashMap::with_capacity(check_map_len(context, len)?);
     let mut len_counter = 0u32;
     while len_counter < len {
         let header = context.reader.read_u8()?;
@@ -2575,7 +2561,7 @@ where
     KC: Codec<K>,
     VC: Codec<V>,
 {
-    let mut map = HashMap::with_capacity(len as usize);
+    let mut map = HashMap::with_capacity(check_map_len(context, len)?);
     let mut len_counter = 0u32;
     while len_counter < len {
         let header = context.reader.read_u8()?;

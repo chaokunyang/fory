@@ -1512,32 +1512,5 @@ void main() {
         isTrue,
       );
     });
-
-    test('enforces maxBinarySize on write and read', () {
-      final oversized = Uint8List.fromList(<int>[1, 2, 3, 4]);
-
-      expect(
-        () => Fory(maxBinarySize: 3).serialize(oversized),
-        throwsA(
-          isA<StateError>().having(
-            (error) => error.toString(),
-            'message',
-            contains('Binary payload exceeds 3 bytes.'),
-          ),
-        ),
-      );
-
-      final bytes = Fory().serialize(oversized);
-      expect(
-        () => Fory(maxBinarySize: 3).deserialize<Uint8List>(bytes),
-        throwsA(
-          isA<StateError>().having(
-            (error) => error.toString(),
-            'message',
-            contains('Binary payload exceeds 3 bytes.'),
-          ),
-        ),
-      );
-    });
   });
 }

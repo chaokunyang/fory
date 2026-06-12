@@ -36,7 +36,6 @@ import org.apache.fory.collection.UInt16List;
 import org.apache.fory.collection.UInt32List;
 import org.apache.fory.collection.UInt64List;
 import org.apache.fory.collection.UInt8List;
-import org.apache.fory.config.Config;
 import org.apache.fory.context.ReadContext;
 import org.apache.fory.context.RefReader;
 import org.apache.fory.exception.DeserializationException;
@@ -101,8 +100,8 @@ final class CompatibleCollectionArrayReader {
       int untrackedPeerListElementTypeId = untrackedListElementTypeId(descriptor);
       int localListElementTypeId = untrackedListElementTypeId(localFieldType);
       int peerArrayTypeId = denseArrayTypeId(peerListElementTypeId);
-      // Actual null or ref-tracked payload elements are rejected by
-      // readListPayloadAsPrimitiveArray.
+      // Actual null or ref-tracked body elements are rejected by
+      // readListBodyAsPrimitiveArray.
       if (untrackedPeerListElementTypeId != Types.UNKNOWN
           && localListElementTypeId != Types.UNKNOWN
           && peerArrayTypeId != Types.UNKNOWN
@@ -155,8 +154,8 @@ final class CompatibleCollectionArrayReader {
       int untrackedPeerListElementTypeId = untrackedListElementTypeId(remoteFieldType);
       int localListElementTypeId = listElementTypeId(localType);
       int peerArrayTypeId = denseArrayTypeId(peerListElementTypeId);
-      // Actual null or ref-tracked payload elements are rejected by
-      // readListPayloadAsPrimitiveArray.
+      // Actual null or ref-tracked body elements are rejected by
+      // readListBodyAsPrimitiveArray.
       if (untrackedPeerListElementTypeId != Types.UNKNOWN
           && localListElementTypeId != Types.UNKNOWN
           && peerArrayTypeId != Types.UNKNOWN
@@ -340,21 +339,21 @@ final class CompatibleCollectionArrayReader {
       int elementTypeId,
       Class<?> targetType) {
     if (readMode == READ_LIST_TO_ARRAY) {
-      Object array = readListPayloadAsPrimitiveArray(readContext, arrayTypeId, elementTypeId);
+      Object array = readListBodyAsPrimitiveArray(readContext, arrayTypeId, elementTypeId);
       if (array == null) {
         return null;
       }
       return materializeTarget(array, arrayTypeId, targetType);
     }
     if (readMode == READ_LIST_TO_LIST) {
-      return readListPayloadAsListTarget(readContext, arrayTypeId, elementTypeId, targetType);
+      return readListBodyAsListTarget(readContext, arrayTypeId, elementTypeId, targetType);
     }
     if (readMode == READ_ARRAY_TO_LIST) {
-      Object array = readDenseArrayPayload(readContext, arrayTypeId);
+      Object array = readDenseArrayBody(readContext, arrayTypeId);
       return materializeTarget(array, arrayTypeId, targetType);
     }
     if (readMode == READ_ARRAY_TO_ARRAY) {
-      Object array = readDenseArrayPayload(readContext, arrayTypeId);
+      Object array = readDenseArrayBody(readContext, arrayTypeId);
       return materializeTarget(array, arrayTypeId, targetType);
     }
     throw new IllegalStateException("Unexpected compatible read mode " + readMode);
@@ -373,7 +372,7 @@ final class CompatibleCollectionArrayReader {
         ((FieldTypes.CollectionFieldType) fieldType).getElementType();
     if (elementType instanceof FieldTypes.RegisteredFieldType) {
       // Nullable element schema is allowed for list<T?> -> array<T> compatibility;
-      // actual null payload elements are rejected by the dense-array reader.
+      // actual null body elements are rejected by the dense-array reader.
       if (requireUntracked && elementType.trackingRef()) {
         return Types.UNKNOWN;
       }
@@ -398,13 +397,13 @@ final class CompatibleCollectionArrayReader {
         int typeId = extMeta.typeId();
         if (Types.isPrimitiveArray(typeId)) {
           // A compatible descriptor can keep the local primitive-list carrier while the remote
-          // TypeDef says the peer wrote a dense array payload. Treat the TypeExtMeta as the remote
+          // TypeDef says the peer wrote a dense array body. Treat the TypeExtMeta as the remote
           // wire shape here; otherwise array->list reads are misclassified as list->list reads.
           return Types.UNKNOWN;
         }
         if (Types.isPrimitiveType(typeId) && (!requireUntracked || !extMeta.trackingRef())) {
           // Nullable element metadata is not a schema-pair rejection. The
-          // dense-array read path fails only when the payload contains nulls.
+          // dense-array read path fails only when the body contains nulls.
           return typeId;
         }
       }
@@ -443,13 +442,13 @@ final class CompatibleCollectionArrayReader {
         int typeId = extMeta.typeId();
         if (Types.isPrimitiveArray(typeId)) {
           // A compatible descriptor can keep the local primitive-list raw carrier while the remote
-          // TypeDef says the peer wrote a dense array payload. Treat the TypeExtMeta as the remote
+          // TypeDef says the peer wrote a dense array body. Treat the TypeExtMeta as the remote
           // wire shape here; otherwise array->list reads are misclassified as list->list reads.
           return Types.UNKNOWN;
         }
         if (Types.isPrimitiveType(typeId) && (!requireUntracked || !extMeta.trackingRef())) {
           // Nullable element metadata is not a schema-pair rejection. The
-          // dense-array read path fails only when the payload contains nulls.
+          // dense-array read path fails only when the body contains nulls.
           return typeId;
         }
       }
@@ -477,7 +476,7 @@ final class CompatibleCollectionArrayReader {
   }
 
   private static boolean isPrimitiveElement(TypeExtMeta elementExtMeta, boolean requireUntracked) {
-    // Nullable element metadata is allowed; actual null payload elements fail while reading.
+    // Nullable element metadata is allowed; actual null body elements fail while reading.
     return elementExtMeta != null
         && Types.isPrimitiveType(elementExtMeta.typeId())
         && (!requireUntracked || !elementExtMeta.trackingRef());
@@ -580,12 +579,11 @@ final class CompatibleCollectionArrayReader {
     }
   }
 
-  private static Object readListPayloadAsPrimitiveArray(
+  private static Object readListBodyAsPrimitiveArray(
       ReadContext readContext, int arrayTypeId, int elementTypeId) {
     MemoryBuffer buffer = readContext.getBuffer();
     int numElements = buffer.readVarUInt32Small7();
-    validateElementCount(readContext.getConfig(), numElements);
-    validateElementStorageSize(readContext.getConfig(), numElements, elementSize(arrayTypeId));
+    validateElementCount(numElements);
     if (numElements > 0) {
       int flags = buffer.readByte();
       boolean hasNull = (flags & CollectionFlags.HAS_NULL) == CollectionFlags.HAS_NULL;
@@ -595,18 +593,18 @@ final class CompatibleCollectionArrayReader {
           (flags & CollectionFlags.IS_DECL_ELEMENT_TYPE) == CollectionFlags.IS_DECL_ELEMENT_TYPE;
       if (trackingRef) {
         throw new DeserializationException(
-            "Cannot read ref-tracked peer list<T> payload into local array<T> field");
+            "Cannot read ref-tracked peer list<T> body into local array<T> field");
       }
       if (!sameType) {
         throw new DeserializationException(
-            "Cannot read peer list<T> payload into local array<T> field");
+            "Cannot read peer list<T> body into local array<T> field");
       }
       if (!declared) {
-        TypeInfo payloadElementTypeInfo = readContext.getTypeResolver().readTypeInfo(readContext);
-        if (payloadElementTypeInfo.getTypeId() != elementTypeId) {
+        TypeInfo bodyElementTypeInfo = readContext.getTypeResolver().readTypeInfo(readContext);
+        if (bodyElementTypeInfo.getTypeId() != elementTypeId) {
           throw new DeserializationException(
               "Cannot read peer list<T> element type id "
-                  + payloadElementTypeInfo.getTypeId()
+                  + bodyElementTypeInfo.getTypeId()
                   + " as local element type id "
                   + elementTypeId);
         }
@@ -616,12 +614,11 @@ final class CompatibleCollectionArrayReader {
     return readListPrimitiveElements(buffer, numElements, arrayTypeId, elementTypeId, false);
   }
 
-  private static Object readListPayloadAsListTarget(
+  private static Object readListBodyAsListTarget(
       ReadContext readContext, int arrayTypeId, int elementTypeId, Class<?> targetType) {
     MemoryBuffer buffer = readContext.getBuffer();
     int numElements = buffer.readVarUInt32Small7();
-    validateElementCount(readContext.getConfig(), numElements);
-    validateElementStorageSize(readContext.getConfig(), numElements, elementSize(arrayTypeId));
+    validateElementCount(numElements);
     if (numElements == 0) {
       Object array = readListPrimitiveElements(buffer, 0, arrayTypeId, elementTypeId, false);
       return materializeTarget(array, arrayTypeId, targetType);
@@ -634,18 +631,17 @@ final class CompatibleCollectionArrayReader {
         (flags & CollectionFlags.IS_DECL_ELEMENT_TYPE) == CollectionFlags.IS_DECL_ELEMENT_TYPE;
     if (trackingRef) {
       throw new DeserializationException(
-          "Cannot read ref-tracked peer list<T> payload into local list<T> field");
+          "Cannot read ref-tracked peer list<T> body into local list<T> field");
     }
     if (!sameType) {
-      throw new DeserializationException(
-          "Cannot read peer list<T> payload into local list<T> field");
+      throw new DeserializationException("Cannot read peer list<T> body into local list<T> field");
     }
     if (!declared) {
-      TypeInfo payloadElementTypeInfo = readContext.getTypeResolver().readTypeInfo(readContext);
-      if (payloadElementTypeInfo.getTypeId() != elementTypeId) {
+      TypeInfo bodyElementTypeInfo = readContext.getTypeResolver().readTypeInfo(readContext);
+      if (bodyElementTypeInfo.getTypeId() != elementTypeId) {
         throw new DeserializationException(
             "Cannot read peer list<T> element type id "
-                + payloadElementTypeInfo.getTypeId()
+                + bodyElementTypeInfo.getTypeId()
                 + " as local element type id "
                 + elementTypeId);
       }
@@ -653,7 +649,7 @@ final class CompatibleCollectionArrayReader {
     if (hasNull) {
       // Nullable LIST element metadata is not a schema-pair rejection. Only boxed list targets can
       // preserve actual null elements; dense primitive array/list targets fail while reading the
-      // nullable payload because they cannot represent null elements.
+      // nullable body because they cannot represent null elements.
       if (!targetType.isAssignableFrom(ArrayList.class)) {
         throw new DeserializationException(
             "Cannot read null peer list<T> element into local list<T> field");
@@ -665,11 +661,12 @@ final class CompatibleCollectionArrayReader {
     return materializeTarget(array, arrayTypeId, targetType);
   }
 
-  private static Object readDenseArrayPayload(ReadContext readContext, int arrayTypeId) {
+  private static Object readDenseArrayBody(ReadContext readContext, int arrayTypeId) {
     MemoryBuffer buffer = readContext.getBuffer();
     int byteSize = buffer.readVarUInt32Small7();
     int elemSize = elementSize(arrayTypeId);
-    validateBinarySize(readContext.getConfig(), buffer, byteSize, elemSize);
+    validateBinarySize(byteSize, elemSize);
+    buffer.checkReadableBytes(byteSize);
     return readPrimitiveElements(buffer, byteSize, byteSize / elemSize, arrayTypeId);
   }
 
@@ -679,14 +676,14 @@ final class CompatibleCollectionArrayReader {
       case Types.BOOL_ARRAY:
         {
           boolean[] values = new boolean[numElements];
-          buffer.readBooleanArrayPayload(values, byteSize);
+          buffer.readBooleanArrayBytes(values, byteSize);
           return values;
         }
       case Types.INT8_ARRAY:
       case Types.UINT8_ARRAY:
         {
           byte[] values = new byte[numElements];
-          buffer.readByteArrayPayload(values, byteSize);
+          buffer.readByteArrayBytes(values, byteSize);
           return values;
         }
       case Types.INT16_ARRAY:
@@ -696,7 +693,7 @@ final class CompatibleCollectionArrayReader {
         {
           short[] values = new short[numElements];
           if (NativeByteOrder.IS_LITTLE_ENDIAN) {
-            buffer.readInt16ArrayPayload(values, byteSize);
+            buffer.readInt16ArrayBytes(values, byteSize);
           } else {
             for (int i = 0; i < numElements; i++) {
               values[i] = buffer.readInt16();
@@ -709,7 +706,7 @@ final class CompatibleCollectionArrayReader {
         {
           int[] values = new int[numElements];
           if (NativeByteOrder.IS_LITTLE_ENDIAN) {
-            buffer.readInt32ArrayPayload(values, byteSize);
+            buffer.readInt32ArrayBytes(values, byteSize);
           } else {
             for (int i = 0; i < numElements; i++) {
               values[i] = buffer.readInt32();
@@ -722,7 +719,7 @@ final class CompatibleCollectionArrayReader {
         {
           long[] values = new long[numElements];
           if (NativeByteOrder.IS_LITTLE_ENDIAN) {
-            buffer.readInt64ArrayPayload(values, byteSize);
+            buffer.readInt64ArrayBytes(values, byteSize);
           } else {
             for (int i = 0; i < numElements; i++) {
               values[i] = buffer.readInt64();
@@ -734,7 +731,7 @@ final class CompatibleCollectionArrayReader {
         {
           float[] values = new float[numElements];
           if (NativeByteOrder.IS_LITTLE_ENDIAN) {
-            buffer.readFloat32ArrayPayload(values, byteSize);
+            buffer.readFloat32ArrayBytes(values, byteSize);
           } else {
             for (int i = 0; i < numElements; i++) {
               values[i] = buffer.readFloat32();
@@ -746,7 +743,7 @@ final class CompatibleCollectionArrayReader {
         {
           double[] values = new double[numElements];
           if (NativeByteOrder.IS_LITTLE_ENDIAN) {
-            buffer.readFloat64ArrayPayload(values, byteSize);
+            buffer.readFloat64ArrayBytes(values, byteSize);
           } else {
             for (int i = 0; i < numElements; i++) {
               values[i] = buffer.readFloat64();
@@ -761,6 +758,7 @@ final class CompatibleCollectionArrayReader {
 
   private static Object readListPrimitiveElements(
       MemoryBuffer buffer, int numElements, int arrayTypeId, int elementTypeId, boolean hasNull) {
+    buffer.checkReadableBytes(minReadablePrimitiveListBytes(numElements, elementTypeId, hasNull));
     switch (elementTypeId) {
       case Types.BOOL:
         {
@@ -922,6 +920,49 @@ final class CompatibleCollectionArrayReader {
     }
   }
 
+  private static int minReadablePrimitiveListBytes(
+      int numElements, int elementTypeId, boolean hasNull) {
+    int valueBytes;
+    switch (elementTypeId) {
+      case Types.BOOL:
+      case Types.INT8:
+      case Types.UINT8:
+      case Types.VARINT32:
+      case Types.VAR_UINT32:
+      case Types.VARINT64:
+      case Types.TAGGED_INT64:
+      case Types.VAR_UINT64:
+      case Types.TAGGED_UINT64:
+        valueBytes = 1;
+        break;
+      case Types.INT16:
+      case Types.UINT16:
+      case Types.FLOAT16:
+      case Types.BFLOAT16:
+        valueBytes = 2;
+        break;
+      case Types.INT32:
+      case Types.UINT32:
+      case Types.FLOAT32:
+        valueBytes = 4;
+        break;
+      case Types.INT64:
+      case Types.UINT64:
+      case Types.FLOAT64:
+        valueBytes = 8;
+        break;
+      default:
+        throw new IllegalArgumentException(
+            "Unsupported primitive element type id " + elementTypeId);
+    }
+    int bytesPerElement = hasNull ? valueBytes + 1 : valueBytes;
+    long byteSize = (long) numElements * bytesPerElement;
+    if (byteSize > Integer.MAX_VALUE) {
+      throw new DeserializationException("Primitive list body size exceeds int range");
+    }
+    return (int) byteSize;
+  }
+
   private static void readNonNullListElement(MemoryBuffer buffer) {
     byte headFlag = buffer.readByte();
     if (headFlag == Fory.NULL_FLAG) {
@@ -936,6 +977,7 @@ final class CompatibleCollectionArrayReader {
 
   private static List<Object> readNullableListBoxedElements(
       MemoryBuffer buffer, int numElements, int arrayTypeId, int elementTypeId) {
+    buffer.checkReadableBytes(minReadablePrimitiveListBytes(numElements, elementTypeId, true));
     ArrayList<Object> values = new ArrayList<>(numElements);
     for (int i = 0; i < numElements; i++) {
       byte headFlag = buffer.readByte();
@@ -1225,41 +1267,19 @@ final class CompatibleCollectionArrayReader {
     }
   }
 
-  private static void validateElementCount(Config config, int numElements) {
+  private static void validateElementCount(int numElements) {
     if (numElements < 0) {
       throw new DeserializationException("Collection size must be non-negative: " + numElements);
     }
-    if (numElements > config.maxCollectionSize()) {
-      throw new DeserializationException(
-          "Collection size "
-              + numElements
-              + " exceeds max collection size "
-              + config.maxCollectionSize());
-    }
   }
 
-  private static void validateElementStorageSize(Config config, int numElements, int elemSize) {
-    if (numElements > config.maxBinarySize() / elemSize) {
-      throw new DeserializationException(
-          "Binary payload size "
-              + ((long) numElements * elemSize)
-              + " exceeds max binary size "
-              + config.maxBinarySize());
-    }
-  }
-
-  private static void validateBinarySize(
-      Config config, MemoryBuffer buffer, int byteSize, int elemSize) {
+  private static void validateBinarySize(int byteSize, int elemSize) {
     if (byteSize < 0) {
-      throw new DeserializationException("Binary payload size must be non-negative: " + byteSize);
-    }
-    if (byteSize > config.maxBinarySize()) {
-      throw new DeserializationException(
-          "Binary payload size " + byteSize + " exceeds max binary size " + config.maxBinarySize());
+      throw new DeserializationException("Binary body size must be non-negative: " + byteSize);
     }
     if (byteSize % elemSize != 0) {
       throw new DeserializationException(
-          "Binary payload size " + byteSize + " is not aligned to element size " + elemSize);
+          "Binary body size " + byteSize + " is not aligned to element size " + elemSize);
     }
   }
 }

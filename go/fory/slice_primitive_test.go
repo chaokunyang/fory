@@ -19,12 +19,21 @@ package fory
 
 import (
 	"math"
+	"reflect"
 	"testing"
 
 	"github.com/apache/fory/go/fory/bfloat16"
 	"github.com/apache/fory/go/fory/float16"
 	"github.com/stretchr/testify/assert"
 )
+
+func TestPrimitiveListReadableOverflow(t *testing.T) {
+	var err Error
+	serializer := primitiveListSerializer{type_: reflect.TypeOf([]int64{}), elemTypeID: INT64}
+	length := int(^uint(0)>>1)/8 + 1
+	assert.False(t, serializer.checkBodyReadable(NewByteBuffer(nil), &err, length, false))
+	assert.True(t, err.HasError())
+}
 
 func TestFloat16Slice(t *testing.T) {
 	f := NewFory(WithXlang(false), WithCompatible(false))
@@ -467,13 +476,40 @@ func TestReadInt32Slice_OOM_Bug(t *testing.T) {
 	assert.Equal(t, 0, len(result), "Expected an empty slice due to missing data")
 }
 
+func TestReadFixedWidthSliceBytes(t *testing.T) {
+	t.Run("unaligned_size", func(t *testing.T) {
+		buf := NewByteBuffer(nil)
+		buf.WriteLength(3)
+		buf.WriteBinary([]byte{1, 2, 3})
+		buf.SetReaderIndex(0)
+
+		err := &Error{}
+		result := ReadInt16Slice(buf, err)
+
+		assert.True(t, err.HasError())
+		assert.Nil(t, result)
+	})
+
+	t.Run("missing_body", func(t *testing.T) {
+		buf := NewByteBuffer(nil)
+		buf.WriteLength(40000)
+		buf.SetReaderIndex(0)
+
+		err := &Error{}
+		result := ReadFloat64Slice(buf, err)
+
+		assert.True(t, err.HasError())
+		assert.Nil(t, result)
+	})
+}
+
 func TestReadBoolSliceWrappedBuffer(t *testing.T) {
-	payload := NewByteBuffer(nil)
-	WriteBoolSlice(payload, []bool{true, false})
+	arrayBytes := NewByteBuffer(nil)
+	WriteBoolSlice(arrayBytes, []bool{true, false})
 
 	err := &Error{}
-	result := ReadBoolSlice(NewByteBuffer(payload.Bytes()), err)
+	result := ReadBoolSlice(NewByteBuffer(arrayBytes.Bytes()), err)
 
-	assert.False(t, err.HasError(), "Expected wrapped buffer reads to use the serialized payload")
+	assert.False(t, err.HasError(), "Expected wrapped buffer reads to use serialized array bytes")
 	assert.Equal(t, []bool{true, false}, result)
 }

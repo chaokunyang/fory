@@ -1625,7 +1625,8 @@ class ProcessorValidationTest {
     assertTrue(source.contains("DurationSerializers.serializer(typeResolver.config"))
     assertTrue(source.contains("listValue.isNotEmpty()"))
     assertTrue(source.contains("buffer.writeByte(CollectionFlags.DECL_SAME_TYPE_NOT_HAS_NULL)"))
-    assertTrue(source.contains("if (size > 0)"))
+    assertTrue(source.contains("if (size == 0) java.util.ArrayList<Any?>(0)"))
+    assertTrue(source.contains("buffer.checkReadableBytes(size)"))
     assertTrue(source.contains("java.util.ArrayList<Any?>(size)"))
     assertTrue(
       source.contains("KotlinXlangArrayEncoding.writeUIntArray(writeContext, value.value)")

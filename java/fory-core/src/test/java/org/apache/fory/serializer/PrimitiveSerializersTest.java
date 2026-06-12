@@ -269,31 +269,24 @@ public class PrimitiveSerializersTest extends ForyTestBase {
   }
 
   @Test
-  public void testPrimitiveListReadRejectsMalformedBinaryPayloadSize() {
+  public void testPrimitiveListReadRejectsMalformedBinaryBodySize() {
     Fory fory =
         Fory.builder()
             .withXlang(false)
-            .withMaxBinarySize(4)
             .withIntArrayCompressed(true)
             .withLongArrayCompressed(true)
             .withCompatible(false)
             .build();
     assertThrows(
-        DeserializationException.class, () -> readPrimitiveListPayload(fory, Int8List.class, 5));
-    assertThrows(
-        DeserializationException.class, () -> readPrimitiveListPayload(fory, Int16List.class, 3));
-    assertThrows(
-        DeserializationException.class, () -> readPrimitiveListPayload(fory, Int32List.class, 2));
-    assertThrows(
-        DeserializationException.class, () -> readPrimitiveListPayload(fory, Int64List.class, 1));
+        DeserializationException.class, () -> readPrimitiveListBody(fory, Int16List.class, 3));
   }
 
   @Test
-  public void testPrimitiveListReadRejectsNegativeDecodedBinaryPayload() {
+  public void testPrimitiveListReadRejectsNegativeDecodedBinaryBody() {
     Fory fixedWidthFory = Fory.builder().withXlang(false).withCompatible(false).build();
     assertThrows(
         DeserializationException.class,
-        () -> readPrimitiveListRawPayload(fixedWidthFory, Int16List.class));
+        () -> readPrimitiveListRawBody(fixedWidthFory, Int16List.class));
 
     Fory compressedFory =
         Fory.builder()
@@ -304,13 +297,13 @@ public class PrimitiveSerializersTest extends ForyTestBase {
             .build();
     assertThrows(
         DeserializationException.class,
-        () -> readPrimitiveListRawPayload(compressedFory, Int32List.class));
+        () -> readPrimitiveListRawBody(compressedFory, Int32List.class));
     assertThrows(
         DeserializationException.class,
-        () -> readPrimitiveListRawPayload(compressedFory, Int64List.class));
+        () -> readPrimitiveListRawBody(compressedFory, Int64List.class));
   }
 
-  private static Object readPrimitiveListPayload(Fory fory, Class<?> listType, int headerSize) {
+  private static Object readPrimitiveListBody(Fory fory, Class<?> listType, int headerSize) {
     MemoryBuffer buffer = MemoryBuffer.newHeapBuffer(5);
     buffer.writeVarUInt32Small7(headerSize);
     ReadContext readContext = fory.getReadContext();
@@ -318,7 +311,7 @@ public class PrimitiveSerializersTest extends ForyTestBase {
     return fory.getSerializer(listType).read(readContext);
   }
 
-  private static Object readPrimitiveListRawPayload(Fory fory, Class<?> listType) {
+  private static Object readPrimitiveListRawBody(Fory fory, Class<?> listType) {
     MemoryBuffer buffer = MemoryBuffer.newHeapBuffer(5);
     writeNegativeDecodedVarUInt32(buffer);
     ReadContext readContext = fory.getReadContext();

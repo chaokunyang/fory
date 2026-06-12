@@ -1144,6 +1144,7 @@ final class TypeResolver {
   TypeInfo _readTypeDefWithHeader(Buffer buffer, TypeHeader header) {
     header.validateGlobal();
     final metaSize = header.readMetaSize(buffer);
+    buffer.checkReadableBytes(metaSize);
     final metaBody = buffer.readBytes(metaSize);
     final metaBytes = Buffer.wrap(metaBody);
     final classHeader = metaBytes.readUint8();
@@ -1245,6 +1246,7 @@ final class TypeResolver {
     if (size == typeDefBigNameThreshold) {
       size += source.readVarUint32Small7();
     }
+    source.checkReadableBytes(size);
     return internEncodedMetaString(
       Uint8List.fromList(source.readBytes(size)),
       encoding: decodeEncoding(compactEncoding),
@@ -1269,10 +1271,13 @@ final class TypeResolver {
       nullable: fieldNullable,
       ref: fieldRef,
     );
-    final identifier =
-        isTag
-            ? tagId.toString()
-            : decodeFieldName(source.readBytes(size), encoding);
+    final String identifier;
+    if (isTag) {
+      identifier = tagId.toString();
+    } else {
+      source.checkReadableBytes(size);
+      identifier = decodeFieldName(source.readBytes(size), encoding);
+    }
     return FieldInfo(
       name: identifier,
       identifier: identifier,

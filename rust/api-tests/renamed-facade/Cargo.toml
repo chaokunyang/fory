@@ -15,34 +15,17 @@
 # specific language governing permissions and limitations
 # under the License.
 
-[workspace]
-members = [
-    "fory-core",
-    "fory",
-    "fory-derive",
-    "api-tests/facade-only",
-    "api-tests/renamed-facade",
-    "tests",
-]
+[package]
+name = "fory-renamed-facade-api-tests"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
 
-exclude = [
-    "fuzz"
-]
+[dependencies]
+fory_facade = { package = "fory", path = "../../fory" }
 
-resolver = "2"
-
-[workspace.package]
-version = "1.2.0-alpha.0"
-rust-version = "1.70"
-description = "Apache Fory: Blazingly fast multi-language serialization framework with trait objects and reference support."
-license = "Apache-2.0"
-license-file = "../LICENSE"
-readme = "README.md"
-repository = "https://github.com/apache/fory"
-edition = "2021"
-keywords = ["serialization", "serde", "trait-object", "zero-copy", "schema-evolution"]
-categories = ["encoding"]
-
-[workspace.dependencies]
-fory-core = { path = "fory-core", version = "1.2.0-alpha.0" }
-fory-derive = { path = "fory-derive", version = "1.2.0-alpha.0" }
+[features]
+default = []
+tests = []

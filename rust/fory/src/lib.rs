@@ -50,7 +50,6 @@
 //! ```toml
 //! [dependencies]
 //! fory = "0.13"
-//! fory-derive = "0.13"
 //! ```
 //!
 //! ### Basic Example
@@ -932,8 +931,7 @@
 //! | Suitable for         | Small objects, full access    | Large objects, selective access |
 //!
 //! ```rust
-//! use fory::{to_row, from_row};
-//! use fory_derive::ForyRow;
+//! use fory::{from_row, to_row, ForyRow};
 //! use std::collections::BTreeMap;
 //!
 //! #[derive(ForyRow)]
@@ -1185,7 +1183,7 @@
 //!   struct, enum, or trait implementation calls `register::<T>(type_id)` before use, and reuse
 //!   the same IDs when deserializing.
 //! - **Quick error lookup**: Always prefer the static constructors on
-//!   [`fory_core::error::Error`]—for example `Error::type_mismatch`, `Error::invalid_data`, or
+//!   [`Error`]—for example `Error::type_mismatch`, `Error::invalid_data`, or
 //!   `Error::unknown`. They keep diagnostics consistent and allow optional panic-on-error
 //!   debugging.
 //! - **Panic on error for backtraces**: Set `FORY_PANIC_ON_ERROR=1` (or `true`) together with
@@ -1212,6 +1210,10 @@
 //! - **[API Documentation](https://docs.rs/fory)** - Complete API reference
 //! - **[GitHub Repository](https://github.com/apache/fory)** - Source code and issue tracking
 
+// Derive macros resolve the facade through `::fory::__private`, including doctests where
+// `crate` is the doctest crate instead of this facade crate.
+extern crate self as fory;
+
 pub use fory_core::{
     error::Error, fory::Fory, fory::ForyBuilder, register_trait_type, row::from_row, row::to_row,
     ArcWeak, BFloat16, Date, Decimal, Duration, Float16, ForyDefault, RcWeak, ReadContext, Reader,
@@ -1219,3 +1221,8 @@ pub use fory_core::{
     Writer,
 };
 pub use fory_derive::{ForyEnum, ForyRow, ForyStruct, ForyUnion};
+
+#[doc(hidden)]
+pub mod __private {
+    pub use fory_core::*;
+}

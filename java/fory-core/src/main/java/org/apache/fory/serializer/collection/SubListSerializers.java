@@ -160,7 +160,7 @@ public class SubListSerializers {
       MemoryBuffer buffer = readContext.getBuffer();
       int numElements = readCollectionSize(buffer);
       setNumElements(numElements);
-      ArrayList list = new ArrayList(checkedCollectionCapacity(buffer, numElements));
+      ArrayList list = new ArrayList(numElements);
       readContext.reference(list);
       return list;
     }

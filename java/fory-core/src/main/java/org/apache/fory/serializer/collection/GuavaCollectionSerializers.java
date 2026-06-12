@@ -96,7 +96,7 @@ public class GuavaCollectionSerializers {
       MemoryBuffer buffer = readContext.getBuffer();
       int numElements = readCollectionSize(buffer);
       setNumElements(numElements);
-      return new CollectionContainer<>(checkedCollectionCapacity(buffer, numElements));
+      return new CollectionContainer<>(numElements);
     }
 
     @Override
@@ -129,7 +129,7 @@ public class GuavaCollectionSerializers {
       MemoryBuffer buffer = readContext.getBuffer();
       int numElements = readCollectionSize(buffer);
       setNumElements(numElements);
-      return new CollectionContainer(checkedCollectionCapacity(buffer, numElements));
+      return new CollectionContainer(numElements);
     }
 
     @Override
@@ -163,7 +163,7 @@ public class GuavaCollectionSerializers {
       MemoryBuffer buffer = readContext.getBuffer();
       int numElements = readCollectionSize(buffer);
       setNumElements(numElements);
-      return new CollectionContainer<>(checkedCollectionCapacity(buffer, numElements));
+      return new CollectionContainer<>(numElements);
     }
 
     @Override
@@ -206,8 +206,7 @@ public class GuavaCollectionSerializers {
       int numElements = readCollectionSize(buffer);
       setNumElements(numElements);
       Comparator comparator = (Comparator) readContext.readRef();
-      return new SortedCollectionContainer(
-          comparator, checkedCollectionCapacity(buffer, numElements));
+      return new SortedCollectionContainer(comparator, numElements);
     }
 
     @Override
@@ -239,7 +238,7 @@ public class GuavaCollectionSerializers {
       MemoryBuffer buffer = readContext.getBuffer();
       int numElements = readMapSize(buffer);
       setNumElements(numElements);
-      return new MapContainer(checkedMapCapacity(buffer, numElements));
+      return new MapContainer(numElements);
     }
 
     @Override
@@ -578,7 +577,7 @@ public class GuavaCollectionSerializers {
       int numElements = readMapSize(buffer);
       setNumElements(numElements);
       Comparator comparator = (Comparator) readContext.readRef();
-      return new SortedMapContainer<>(comparator, checkedMapCapacity(buffer, numElements));
+      return new SortedMapContainer<>(comparator, numElements);
     }
 
     @Override

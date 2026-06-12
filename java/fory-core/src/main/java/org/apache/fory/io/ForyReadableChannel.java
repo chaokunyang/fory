@@ -21,8 +21,8 @@ package org.apache.fory.io;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.nio.channels.FileChannel;
 import java.nio.channels.ReadableByteChannel;
+import java.nio.channels.SeekableByteChannel;
 import javax.annotation.concurrent.NotThreadSafe;
 import org.apache.fory.exception.DeserializationException;
 import org.apache.fory.memory.MemoryBuffer;
@@ -32,19 +32,38 @@ import org.apache.fory.util.Preconditions;
 @NotThreadSafe
 public class ForyReadableChannel implements ForyStreamReader, ReadableByteChannel {
   private final ReadableByteChannel channel;
+  private final SeekableByteChannel seekableChannel;
   private final MemoryBuffer memoryBuffer;
   private ByteBuffer byteBuffer;
 
   public ForyReadableChannel(ReadableByteChannel channel) {
     this(
         channel,
-        AndroidSupport.IS_ANDROID ? ByteBuffer.allocate(4096) : ByteBuffer.allocateDirect(4096));
+        AndroidSupport.IS_ANDROID ? ByteBuffer.allocate(4096) : ByteBuffer.allocateDirect(4096),
+        null);
+  }
+
+  public ForyReadableChannel(SeekableByteChannel channel) {
+    this(
+        channel,
+        AndroidSupport.IS_ANDROID ? ByteBuffer.allocate(4096) : ByteBuffer.allocateDirect(4096),
+        channel);
   }
 
   public ForyReadableChannel(ReadableByteChannel channel, ByteBuffer buffer) {
+    this(channel, buffer, null);
+  }
+
+  public ForyReadableChannel(SeekableByteChannel channel, ByteBuffer buffer) {
+    this(channel, buffer, channel);
+  }
+
+  private ForyReadableChannel(
+      ReadableByteChannel channel, ByteBuffer buffer, SeekableByteChannel seekableChannel) {
     Preconditions.checkArgument(
         !buffer.isReadOnly(), "ForyReadableChannel requires writable ByteBuffer.");
     this.channel = channel;
+    this.seekableChannel = seekableChannel;
     if (AndroidSupport.IS_ANDROID && buffer.isDirect()) {
       buffer = ByteBuffer.allocate(buffer.capacity());
     }
@@ -71,6 +90,8 @@ public class ForyReadableChannel implements ForyStreamReader, ReadableByteChanne
     }
     try {
       int totalRead = 0;
+      SeekableByteChannel seekableChannel = this.seekableChannel;
+      boolean checkedSeekableRemaining = seekableChannel == null;
       while (totalRead < minFillSize) {
         ByteBuffer byteBuf = byteBuffer;
         MemoryBuffer memoryBuf = memoryBuffer;
@@ -81,9 +102,20 @@ public class ForyReadableChannel implements ForyStreamReader, ReadableByteChanne
           throw new DeserializationException("Stream buffer size exceeds supported range");
         }
         if (targetSize > byteBuf.capacity()) {
-          boolean targetReadable = hasAvailable(remainingNeeded);
-          if (targetReadable || position == byteBuf.capacity()) {
-            byteBuf = growBuffer(byteBuf, memoryBuf, position, (int) targetSize, targetReadable);
+          int newCapacity = 0;
+          if (!checkedSeekableRemaining) {
+            checkedSeekableRemaining = true;
+            // Query exact channel remaining bytes only as a one-shot fast path. Otherwise grow
+            // from bytes already buffered so truncated channels fail before reserving the body.
+            if (seekableChannel.size() - seekableChannel.position() >= remainingNeeded) {
+              newCapacity = (int) targetSize;
+            }
+          }
+          if (newCapacity == 0 && position == byteBuf.capacity()) {
+            newCapacity = nextBufferSize(byteBuf.capacity(), (int) targetSize);
+          }
+          if (newCapacity != 0) {
+            byteBuf = growBuffer(byteBuf, memoryBuf, position, newCapacity);
           }
         }
         byteBuf.limit(byteBuf.capacity());
@@ -102,13 +134,8 @@ public class ForyReadableChannel implements ForyStreamReader, ReadableByteChanne
   }
 
   private ByteBuffer growBuffer(
-      ByteBuffer byteBuf,
-      MemoryBuffer memoryBuf,
-      int position,
-      int targetSize,
-      boolean targetReadable) {
+      ByteBuffer byteBuf, MemoryBuffer memoryBuf, int position, int newCapacity) {
     int oldCapacity = byteBuf.capacity();
-    int newCapacity = targetReadable ? targetSize : nextBufferSize(oldCapacity, targetSize);
     if (newCapacity <= oldCapacity) {
       throw new DeserializationException("Stream buffer size exceeds supported range");
     }
@@ -125,23 +152,11 @@ public class ForyReadableChannel implements ForyStreamReader, ReadableByteChanne
   }
 
   private static int nextBufferSize(int oldCapacity, int targetSize) {
-    // targetSize is derived from the requested readable byte count, which may
-    // come from attacker-controlled wire lengths. Unless the channel can prove
-    // the remaining bytes are already available, grow only from bytes buffered
-    // so truncated channels fail before reserving the declared body size.
     long grown = oldCapacity == 0 ? 1L : (long) oldCapacity << 1;
     if (grown > Integer.MAX_VALUE) {
       grown = Integer.MAX_VALUE;
     }
     return (int) Math.min(grown, targetSize);
-  }
-
-  private boolean hasAvailable(int remainingNeeded) throws IOException {
-    if (channel instanceof FileChannel) {
-      FileChannel fileChannel = (FileChannel) channel;
-      return fileChannel.size() - fileChannel.position() >= remainingNeeded;
-    }
-    return false;
   }
 
   @Override

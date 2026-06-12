@@ -128,9 +128,9 @@ public class ImmutableCollectionSerializers {
       int numElements = readCollectionSize(buffer);
       setNumElements(numElements);
       if (JdkVersion.MAJOR_VERSION > 8) {
-        return new CollectionContainer<>(checkedCollectionCapacity(buffer, numElements));
+        return new CollectionContainer<>(numElements);
       } else {
-        return new ArrayList(checkedCollectionCapacity(buffer, numElements));
+        return new ArrayList(numElements);
       }
     }
 
@@ -189,9 +189,9 @@ public class ImmutableCollectionSerializers {
       int numElements = readCollectionSize(buffer);
       setNumElements(numElements);
       if (JdkVersion.MAJOR_VERSION > 8) {
-        return new CollectionContainer<>(checkedCollectionCapacity(buffer, numElements));
+        return new CollectionContainer<>(numElements);
       } else {
-        return new HashSet(checkedCollectionCapacity(buffer, numElements));
+        return new HashSet(numElements);
       }
     }
 
@@ -250,9 +250,9 @@ public class ImmutableCollectionSerializers {
       int numElements = readMapSize(buffer);
       setNumElements(numElements);
       if (JdkVersion.MAJOR_VERSION > 8) {
-        return new JDKImmutableMapContainer(checkedMapCapacity(buffer, numElements));
+        return new JDKImmutableMapContainer(numElements);
       } else {
-        return new HashMap(checkedMapCapacity(buffer, numElements));
+        return new HashMap(numElements);
       }
     }
 

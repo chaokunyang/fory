@@ -1029,11 +1029,10 @@ public abstract class MapLikeSerializer<T> extends Serializer<T> {
   protected final int readMapSize(MemoryBuffer buffer) {
     int numElements = buffer.readVarUInt32Small7();
     checkMapSize(numElements);
-    return numElements;
-  }
-
-  protected final int checkedMapCapacity(MemoryBuffer buffer, int numElements) {
-    buffer.checkReadableBytes(numElements);
+    if (numElements > Integer.MAX_VALUE / 2) {
+      throwInvalidMapBodySize(numElements);
+    }
+    buffer.checkReadableBytes(numElements << 1);
     return numElements;
   }
 
@@ -1047,6 +1046,10 @@ public abstract class MapLikeSerializer<T> extends Serializer<T> {
 
   private void throwInvalidMapSize(int numElements) {
     throw new DeserializationException("Map size must be non-negative: " + numElements);
+  }
+
+  private void throwInvalidMapBodySize(int numElements) {
+    throw new DeserializationException("Map size is too large to read: " + numElements);
   }
 
   public abstract T onMapCopy(Map map);

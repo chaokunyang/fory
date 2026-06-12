@@ -299,8 +299,7 @@ public class ChildContainerSerializers {
       setNumElements(numElements);
       int refId = readContext.lastPreservedRefId();
       Comparator comparator = (Comparator) readContext.readRef();
-      T collection =
-          subclassFactory.newCollection(comparator, checkedCollectionCapacity(buffer, numElements));
+      T collection = subclassFactory.newCollection(comparator, numElements);
       readContext.setReadRef(refId, collection);
       readChildFields(readContext, collection);
       return collection;

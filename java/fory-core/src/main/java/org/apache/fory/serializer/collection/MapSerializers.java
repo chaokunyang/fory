@@ -88,7 +88,7 @@ public class MapSerializers {
       MemoryBuffer buffer = readContext.getBuffer();
       int numElements = readMapSize(buffer);
       setNumElements(numElements);
-      HashMap hashMap = new HashMap(checkedMapCapacity(buffer, numElements));
+      HashMap hashMap = new HashMap(numElements);
       readContext.reference(hashMap);
       return hashMap;
     }
@@ -109,7 +109,7 @@ public class MapSerializers {
       MemoryBuffer buffer = readContext.getBuffer();
       int numElements = readMapSize(buffer);
       setNumElements(numElements);
-      LinkedHashMap hashMap = new LinkedHashMap(checkedMapCapacity(buffer, numElements));
+      LinkedHashMap hashMap = new LinkedHashMap(numElements);
       readContext.reference(hashMap);
       return hashMap;
     }
@@ -148,7 +148,7 @@ public class MapSerializers {
       MemoryBuffer buffer = readContext.getBuffer();
       int numElements = readMapSize(buffer);
       setNumElements(numElements);
-      LazyMap map = new LazyMap(checkedMapCapacity(buffer, numElements));
+      LazyMap map = new LazyMap(numElements);
       readContext.reference(map);
       return map;
     }
@@ -324,7 +324,7 @@ public class MapSerializers {
       MemoryBuffer buffer = readContext.getBuffer();
       int numElements = readMapSize(buffer);
       setNumElements(numElements);
-      ConcurrentHashMap map = new ConcurrentHashMap(checkedMapCapacity(buffer, numElements));
+      ConcurrentHashMap map = new ConcurrentHashMap(numElements);
       readContext.reference(map);
       return map;
     }
@@ -621,7 +621,7 @@ public class MapSerializers {
       MemoryBuffer buffer = readContext.getBuffer();
       int numElements = readMapSize(buffer);
       setNumElements(numElements);
-      HashMap<Object, Object> map = new HashMap<>(checkedMapCapacity(buffer, numElements));
+      HashMap<Object, Object> map = new HashMap<>(numElements);
       readContext.reference(map);
       return map;
     }

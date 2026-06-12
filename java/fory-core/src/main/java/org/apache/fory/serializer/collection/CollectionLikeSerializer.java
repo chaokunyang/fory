@@ -563,10 +563,6 @@ public abstract class CollectionLikeSerializer<T> extends Serializer<T> {
   protected final int readCollectionSize(MemoryBuffer buffer) {
     int numElements = buffer.readVarUInt32Small7();
     checkCollectionSize(numElements);
-    return numElements;
-  }
-
-  protected final int checkedCollectionCapacity(MemoryBuffer buffer, int numElements) {
     buffer.checkReadableBytes(numElements);
     return numElements;
   }

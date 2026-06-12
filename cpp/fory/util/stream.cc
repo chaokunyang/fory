@@ -23,27 +23,11 @@
 #include <cstring>
 #include <limits>
 #include <sstream>
-#include <typeinfo>
 
 #include "fory/util/buffer.h"
 #include "fory/util/logging.h"
 
 namespace fory {
-
-namespace {
-
-bool has_exact_available(std::streambuf *source, uint32_t remaining_needed) {
-  // Do not accept subclasses here: showmanyc()/in_avail() can be over-reported
-  // by custom streambufs, so only the exact standard owner can prove capacity.
-  if (typeid(*source) != typeid(std::stringbuf)) {
-    return false;
-  }
-  auto *string_buf = static_cast<std::stringbuf *>(source);
-  return string_buf->in_avail() >=
-         static_cast<std::streamsize>(remaining_needed);
-}
-
-} // namespace
 
 OutputStream::OutputStream(uint32_t buffer_size)
     : buffer_(std::make_unique<Buffer>()) {
@@ -158,15 +142,12 @@ Result<void, Error> StdInputStream::fill_buffer(uint32_t min_fill_size) {
   }
   uint32_t write_pos = buffer_->size_;
   while (remaining_size() < min_fill_size) {
-    const uint32_t remaining_needed = min_fill_size - remaining_size();
-    if (target > data_.size() &&
-        has_exact_available(source, remaining_needed)) {
-      reserve(static_cast<uint32_t>(target));
-    } else if (write_pos == data_.size()) {
-      // min_fill_size can come from attacker-controlled wire lengths. Grow only
-      // from bytes already buffered unless a known exact stream buffer proves
-      // the remaining bytes are available, so truncated streams fail before
-      // reserving the declared body size.
+    if (write_pos == data_.size()) {
+      // min_fill_size can come from attacker-controlled wire lengths. Do not
+      // query stream availability here: the virtual probe is not part of the
+      // correctness contract and would add an extra hot-path call for a rare
+      // fast path. Grow only from bytes already buffered so truncated streams
+      // fail before reserving the declared body size.
       uint64_t new_size =
           std::max<uint64_t>(static_cast<uint64_t>(data_.size()) * 2,
                              static_cast<uint64_t>(initial_buffer_size_));

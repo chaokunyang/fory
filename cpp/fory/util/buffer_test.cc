@@ -36,8 +36,11 @@ public:
   explicit OneByteStreamBuf(std::vector<uint8_t> data)
       : data_(std::move(data)), pos_(0) {}
 
+  const std::vector<std::streamsize> &read_sizes() const { return read_sizes_; }
+
 protected:
   std::streamsize xsgetn(char *s, std::streamsize count) override {
+    read_sizes_.push_back(count);
     if (pos_ >= data_.size() || count <= 0) {
       return 0;
     }
@@ -59,6 +62,7 @@ private:
   std::vector<uint8_t> data_;
   size_t pos_;
   char current_ = 0;
+  std::vector<std::streamsize> read_sizes_;
 };
 
 class OneByteIStream : public std::istream {
@@ -68,55 +72,12 @@ public:
     rdbuf(&buf_);
   }
 
+  const std::vector<std::streamsize> &read_sizes() const {
+    return buf_.read_sizes();
+  }
+
 private:
   OneByteStreamBuf buf_;
-};
-
-class OverreportingStringBuf : public std::stringbuf {
-public:
-  explicit OverreportingStringBuf(std::string data)
-      : std::stringbuf(data, std::ios_base::in) {}
-
-  const std::vector<std::streamsize> &read_sizes() const { return read_sizes_; }
-
-protected:
-  std::streamsize showmanyc() override { return 100; }
-
-  std::streamsize xsgetn(char *s, std::streamsize count) override {
-    read_sizes_.push_back(count);
-    return std::stringbuf::xsgetn(s, count);
-  }
-
-private:
-  std::vector<std::streamsize> read_sizes_;
-};
-
-class OverreportingStreamBuf : public std::streambuf {
-public:
-  explicit OverreportingStreamBuf(std::vector<uint8_t> data)
-      : data_(std::move(data)), pos_(0) {}
-
-  const std::vector<std::streamsize> &read_sizes() const { return read_sizes_; }
-
-protected:
-  std::streamsize showmanyc() override { return 100; }
-
-  std::streamsize xsgetn(char *s, std::streamsize count) override {
-    read_sizes_.push_back(count);
-    if (pos_ >= data_.size() || count <= 0) {
-      return 0;
-    }
-    const size_t read =
-        std::min(static_cast<size_t>(count), data_.size() - pos_);
-    std::memcpy(s, data_.data() + pos_, read);
-    pos_ += read;
-    return static_cast<std::streamsize>(read);
-  }
-
-private:
-  std::vector<uint8_t> data_;
-  size_t pos_;
-  std::vector<std::streamsize> read_sizes_;
 };
 
 class CountingOutputStream final : public OutputStream {
@@ -379,40 +340,6 @@ TEST(Buffer, StreamSkipAndUnread) {
   EXPECT_EQ(view.reader_index(), 2U);
 }
 
-TEST(Buffer, StreamFillUsesAvailableBytesForSingleGrow) {
-  std::string payload(100, '\x7');
-  std::stringbuf stream_buf(payload, std::ios_base::in);
-  std::istream source(&stream_buf);
-  StdInputStream stream(source, 4);
-
-  auto fill_result = stream.fill_buffer(100);
-  ASSERT_TRUE(fill_result.ok()) << fill_result.error().to_string();
-  EXPECT_EQ(stream.get_buffer().size(), 100U);
-}
-
-TEST(Buffer, StreamFillIgnoresGenericOverreportedAvailable) {
-  std::vector<uint8_t> raw(17, 0x7);
-  OverreportingStreamBuf stream_buf(raw);
-  std::istream source(&stream_buf);
-  StdInputStream stream(source, 4);
-
-  auto fill_result = stream.fill_buffer(100);
-  EXPECT_FALSE(fill_result.ok());
-  ASSERT_FALSE(stream_buf.read_sizes().empty());
-  EXPECT_EQ(stream_buf.read_sizes().front(), 4);
-}
-
-TEST(Buffer, StreamFillIgnoresStringBufSubclassOverreportedAvailable) {
-  OverreportingStringBuf stream_buf(std::string(17, '\x7'));
-  std::istream source(&stream_buf);
-  StdInputStream stream(source, 4);
-
-  auto fill_result = stream.fill_buffer(100);
-  EXPECT_FALSE(fill_result.ok());
-  ASSERT_FALSE(stream_buf.read_sizes().empty());
-  EXPECT_EQ(stream_buf.read_sizes().front(), 4);
-}
-
 TEST(Buffer, StreamShrinkBufferBestEffortUsesConfiguredBufferSize) {
   constexpr uint32_t kConfiguredBufferSize = 32768;
   constexpr uint32_t kPayloadSize = kConfiguredBufferSize * 2;
@@ -449,6 +376,19 @@ TEST(Buffer, StreamReadErrorWhenInsufficientData) {
   EXPECT_EQ(reader.read_uint32(error), 0U);
   EXPECT_FALSE(error.ok());
   EXPECT_EQ(error.code(), ErrorCode::BufferOutOfBound);
+}
+
+TEST(Buffer, StreamFillDoubleGrowsFromBufferedBytes) {
+  std::vector<uint8_t> raw(17, 0x7);
+  OneByteIStream one_byte_stream(raw);
+  StdInputStream stream(one_byte_stream, 4);
+
+  auto fill_result = stream.fill_buffer(100);
+  EXPECT_FALSE(fill_result.ok());
+  ASSERT_FALSE(one_byte_stream.read_sizes().empty());
+  EXPECT_EQ(one_byte_stream.read_sizes().front(), 4);
+  EXPECT_LT(stream.get_buffer().size(), 100U);
+  EXPECT_LE(stream.get_buffer().size(), 32U);
 }
 
 TEST(Buffer, OutputStreamThresholdFlushOnWriteBytes) {

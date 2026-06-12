@@ -19,7 +19,6 @@ package fory
 
 import (
 	"bytes"
-	"io"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -140,7 +139,7 @@ func TestStreamSkipDoesNotGrowToSkippedLength(t *testing.T) {
 	require.LessOrEqual(t, cap(buf.data), 16)
 }
 
-func TestStreamFillUsesAvailableBytes(t *testing.T) {
+func TestStreamFillDoubleGrowsFromBufferedBytes(t *testing.T) {
 	var err Error
 	data := make([]byte, 100)
 	buf := NewByteBufferFromReader(bytes.NewReader(data), 4)
@@ -155,33 +154,6 @@ func TestStreamFillUsesAvailableBytes(t *testing.T) {
 	require.True(t, err.HasError())
 	require.Less(t, cap(buf.data), 100)
 	require.LessOrEqual(t, cap(buf.data), 32)
-
-	err = Error{}
-	lying := &lyingLenReader{data: truncated, available: 100}
-	buf = NewByteBufferFromReader(lying, 4)
-	require.False(t, buf.fill(100, &err))
-	require.True(t, err.HasError())
-	require.Less(t, cap(buf.data), 100)
-	require.LessOrEqual(t, cap(buf.data), 32)
-}
-
-type lyingLenReader struct {
-	data      []byte
-	index     int
-	available int
-}
-
-func (r *lyingLenReader) Len() int {
-	return r.available
-}
-
-func (r *lyingLenReader) Read(p []byte) (int, error) {
-	if r.index == len(r.data) {
-		return 0, io.EOF
-	}
-	n := copy(p, r.data[r.index:])
-	r.index += n
-	return n, nil
 }
 
 func TestReadCollectionLengthDoesNotTreatElementsAsBytes(t *testing.T) {

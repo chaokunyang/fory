@@ -18,13 +18,10 @@
 package fory
 
 import (
-	"bufio"
-	"bytes"
 	"encoding/binary"
 	"fmt"
 	"io"
 	"math"
-	"strings"
 	"unsafe"
 )
 
@@ -79,30 +76,25 @@ func (b *ByteBuffer) fill(n int, errOut *Error) bool {
 	}
 
 	for len(b.data) < n {
-		remainingNeeded := n - len(b.data)
-		targetReadable := readerAvailable(b.reader) >= remainingNeeded
-		growToTarget := targetReadable && n > cap(b.data)
-		if growToTarget || len(b.data) == cap(b.data) {
-			// n can come from attacker-controlled wire lengths. Grow only from bytes
-			// already buffered unless a known reader owner reports the remaining
-			// bytes are available, so truncated streams fail before reserving the
-			// declared body size.
+		if len(b.data) == cap(b.data) {
+			// n can come from attacker-controlled wire lengths. Do not query
+			// reader availability here: interface/type-specific probes add
+			// hot-path cost for a rare fast path and are not the correctness
+			// source. Grow only from bytes already buffered so truncated streams
+			// fail before reserving the declared body size.
 			currentCap := cap(b.data)
-			newCap := n
-			if !growToTarget {
-				newCap = currentCap * 2
-				if currentCap > MaxInt/2 {
-					newCap = MaxInt
-				}
-				if newCap < b.bufferSize {
-					newCap = b.bufferSize
-				}
-				if newCap <= currentCap {
-					newCap = currentCap + 1
-				}
-				if newCap > n {
-					newCap = n
-				}
+			newCap := currentCap * 2
+			if currentCap > MaxInt/2 {
+				newCap = MaxInt
+			}
+			if newCap < b.bufferSize {
+				newCap = b.bufferSize
+			}
+			if newCap <= currentCap {
+				newCap = currentCap + 1
+			}
+			if newCap > n {
+				newCap = n
 			}
 			if newCap <= currentCap {
 				if errOut != nil {
@@ -141,21 +133,6 @@ func (b *ByteBuffer) fill(n int, errOut *Error) bool {
 		}
 	}
 	return true
-}
-
-func readerAvailable(reader io.Reader) int {
-	switch r := reader.(type) {
-	case *bytes.Reader:
-		return r.Len()
-	case *bytes.Buffer:
-		return r.Len()
-	case *strings.Reader:
-		return r.Len()
-	case *bufio.Reader:
-		return r.Buffered()
-	default:
-		return -1
-	}
 }
 
 func (b *ByteBuffer) discardFromReader(length int, errOut *Error) bool {

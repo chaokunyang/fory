@@ -237,15 +237,19 @@ def test_go_grpc_service_codegen():
     files = generate_service_files(schema, GoGenerator)
     assert len(files) == 1
     content = next(iter(files.values()))
-    assert "func NewGreeterClient(" in content
+    assert "func NewGreeterClient(cc grpc.ClientConnInterface) GreeterClient" in content
     assert "func RegisterGreeterServer(" in content
     assert "type GreeterClient interface" in content
     assert "type GreeterServer interface" in content
     assert "type UnimplementedGreeterServer struct" in content
-    assert "CodecV2{Fory: c.fory}" in content
-    assert "type CodecV2 struct" in content
+    assert "CodecV2{}" in content
+    assert "type CodecV2 struct{}" in content
     assert "func (c CodecV2) Marshal(v any) (mem.BufferSlice, error)" in content
     assert "func (c CodecV2) Unmarshal(data mem.BufferSlice, v any) error" in content
+    assert "getFory().Serialize(v)" in content
+    assert "getFory().Deserialize(b, v)" in content
+    assert "*fory.Fory" not in content
+    assert "c.fory" not in content
     assert '"/demo.greeter.Greeter/SayHello"' in content
     assert "mustEmbedUnimplementedGreeterServer()" in content
 

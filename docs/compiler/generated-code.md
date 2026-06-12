@@ -826,6 +826,38 @@ if err := restored.FromBytes(data); err != nil {
 }
 ```
 
+### gRPC Service Companions
+
+When a schema contains services and the compiler is run with `--grpc`, Go
+generation emits one `<module>_grpc.go` file next to the model file. The
+companion contains grpc-go client and server interfaces plus a Fory-backed
+`CodecV2`.
+
+```go
+type AddressBookServiceClient interface {
+    Lookup(ctx context.Context, in *Person, opts ...grpc.CallOption) (*AddressBook, error)
+}
+
+func NewAddressBookServiceClient(cc grpc.ClientConnInterface) AddressBookServiceClient { ... }
+
+type CodecV2 struct{}
+```
+
+The generated codec uses the same package-level thread-safe Fory runtime as the
+generated `ToBytes` and `FromBytes` helpers. Applications should pass
+`CodecV2{}` to grpc-go server options, and generated clients force the same
+codec on each call:
+
+```go
+server := grpc.NewServer(grpc.ForceServerCodecV2(addressbook.CodecV2{}))
+addressbook.RegisterAddressBookServiceServer(server, service)
+
+client := addressbook.NewAddressBookServiceClient(conn)
+```
+
+Applications compiling these files must provide grpc-go dependencies; Fory Go
+packages do not add gRPC as a hard dependency.
+
 ## C\#
 
 ### Output Layout

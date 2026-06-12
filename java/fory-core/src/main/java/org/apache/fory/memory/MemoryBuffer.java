@@ -3640,8 +3640,12 @@ public final class MemoryBuffer {
     // use subtract to avoid overflow
     int remaining = size - readerIndex;
     if (minimumReadableBytes > remaining) {
-      streamReader.fillBuffer(minimumReadableBytes - remaining);
+      fillReadableBytes(minimumReadableBytes, remaining);
     }
+  }
+
+  private void fillReadableBytes(int minimumReadableBytes, int remaining) {
+    streamReader.fillBuffer(minimumReadableBytes - remaining);
   }
 
   /**

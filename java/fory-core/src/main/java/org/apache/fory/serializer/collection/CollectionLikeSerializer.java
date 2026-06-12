@@ -567,9 +567,7 @@ public abstract class CollectionLikeSerializer<T> extends Serializer<T> {
   }
 
   protected final int checkedCollectionCapacity(MemoryBuffer buffer, int numElements) {
-    if (numElements != 0) {
-      buffer.checkReadableBytes(numElements);
-    }
+    buffer.checkReadableBytes(numElements);
     return numElements;
   }
 

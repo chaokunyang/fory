@@ -176,7 +176,6 @@ public final class StringSerializer extends ImmutableSerializer<String> {
     int numBytes = readStringSize(header);
     byte[] bytes;
     if (coder == UTF16) {
-      checkUtf16Bytes(numBytes);
       if (NativeByteOrder.IS_LITTLE_ENDIAN) {
         bytes = readBytesUnCompressedUTF16(buffer, numBytes);
       } else {
@@ -228,7 +227,6 @@ public final class StringSerializer extends ImmutableSerializer<String> {
       return newBytesStringZeroCopy(coder, readBytesUnCompressedUTF16(buffer, numBytes));
     } else if (coder == UTF16) {
       byte[] bytes;
-      checkUtf16Bytes(numBytes);
       if (NativeByteOrder.IS_LITTLE_ENDIAN) {
         bytes = readBytesUnCompressedUTF16(buffer, numBytes);
       } else {

@@ -1,6 +1,6 @@
 # Kotlin
 
-Load this file when changing `kotlin/`.
+Load this file when changing `kotlin/` or compiler code that generates Kotlin source.
 
 ## Rules
 

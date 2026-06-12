@@ -16,7 +16,7 @@
 // under the License.
 
 // Binary grpc-interop is the Go peer for Java-driven gRPC integration tests.
-// It is invoked as a subprocess by GrpcInteropTest.java and supports two modes:
+// It is invoked as a subprocess by Java gRPC integration tests and supports two modes:
 //
 //	server --port-file <path>  start a gRPC server and write the bound port to the file
 //	client --target <addr>     connect to addr and exercise all four streaming modes

@@ -375,6 +375,28 @@ public abstract class GrpcTestBase {
     return peerCommand;
   }
 
+  protected PeerCommand kotlinCommand(String... args) {
+    Path grpcRoot = repoRoot().resolve("integration_tests").resolve("grpc_tests");
+    Path kotlinRoot = grpcRoot.resolve("kotlin");
+    List<String> command = new ArrayList<>();
+    command.add("java");
+    command.add("-jar");
+    command.add(kotlinRoot.resolve("target").resolve("fory-kotlin-grpc-peer.jar").toString());
+    command.addAll(Arrays.asList(args));
+    PeerCommand peerCommand = new PeerCommand();
+    peerCommand.command = command;
+    peerCommand.workDir = kotlinRoot;
+    peerCommand.environment.put("ENABLE_FORY_DEBUG_OUTPUT", "1");
+    peerCommand.environment.put("NO_PROXY", "127.0.0.1,localhost");
+    peerCommand.environment.put("no_proxy", "127.0.0.1,localhost");
+    for (String proxyVar :
+        Arrays.asList(
+            "all_proxy", "http_proxy", "https_proxy", "ALL_PROXY", "HTTP_PROXY", "HTTPS_PROXY")) {
+      peerCommand.environment.put(proxyVar, "");
+    }
+    return peerCommand;
+  }
+
   protected void runPython(String peer, String... args) throws IOException, InterruptedException {
     Process process = startPeer(pythonCommand(args));
     PeerOutputCollector outputCollector = new PeerOutputCollector(process.getInputStream(), peer);
@@ -399,6 +421,28 @@ public abstract class GrpcTestBase {
 
   protected void runRust(String peer, String... args) throws IOException, InterruptedException {
     Process process = startPeer(rustCommand(args));
+    PeerOutputCollector outputCollector = new PeerOutputCollector(process.getInputStream(), peer);
+    outputCollector.start();
+    boolean finished = process.waitFor(180, TimeUnit.SECONDS);
+    if (!finished) {
+      process.destroyForcibly();
+      process.waitFor(10, TimeUnit.SECONDS);
+      Assert.fail("Peer process timed out for " + peer + peerOutput(outputCollector));
+    }
+    int exitCode = process.exitValue();
+    if (exitCode != 0) {
+      Assert.fail(
+          "Peer process failed for "
+              + peer
+              + " with exit code "
+              + exitCode
+              + peerOutput(outputCollector));
+    }
+    outputCollector.awaitOutput();
+  }
+
+  protected void runKotlin(String peer, String... args) throws IOException, InterruptedException {
+    Process process = startPeer(kotlinCommand(args));
     PeerOutputCollector outputCollector = new PeerOutputCollector(process.getInputStream(), peer);
     outputCollector.start();
     boolean finished = process.waitFor(180, TimeUnit.SECONDS);

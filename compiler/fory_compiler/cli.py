@@ -275,11 +275,12 @@ def validate_kotlin_import_packages(graph: List[Tuple[Path, Schema]]) -> bool:
 
 def validate_kotlin_output_paths(
     graph: List[Tuple[Path, Schema]],
+    grpc: bool = False,
 ) -> bool:
     """Check Kotlin output paths for the current generation run."""
     outputs: Dict[str, List[str]] = {}
     for path, schema in graph:
-        for output_path, owner in kotlin_output_paths(schema):
+        for output_path, owner in kotlin_output_paths(schema, include_services=grpc):
             outputs.setdefault(output_path, []).append(f"{path} {owner}")
     collisions = {
         output_path: paths for output_path, paths in outputs.items() if len(paths) > 1
@@ -301,6 +302,7 @@ def validate_kotlin_output_paths(
 def validate_kotlin_generation(
     files: List[Path],
     import_paths: List[Path],
+    grpc: bool = False,
 ) -> bool:
     """Preflight Kotlin package and helper paths before writing output."""
     cache: Dict[Path, Schema] = {}
@@ -312,7 +314,7 @@ def validate_kotlin_generation(
         graph.extend(file_graph)
     if not validate_kotlin_import_packages(graph):
         return False
-    return validate_kotlin_output_paths(graph)
+    return validate_kotlin_output_paths(graph, grpc=grpc)
 
 
 def _find_go_module_root(base_go_out: Path) -> Optional[Path]:
@@ -895,7 +897,7 @@ def cmd_compile(args: argparse.Namespace) -> int:
             import_paths.append(resolved)
 
     if "kotlin" in lang_output_dirs:
-        if not validate_kotlin_generation(args.files, import_paths):
+        if not validate_kotlin_generation(args.files, import_paths, grpc=args.grpc):
             return 1
 
     # Create output directories

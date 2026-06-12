@@ -2326,11 +2326,19 @@ FORY_ALWAYS_INLINE void write_single_fixed_field(const T &obj, Buffer &buffer,
   constexpr size_t field_offset =
       compute_fixed_field_write_offset<T, SortedIdx>();
   const auto field_info = fory_field_info(obj);
-  const auto field_entry =
+  const auto field_ptr =
       std::get<original_index>(decltype(field_info)::ptrs_ref());
-  using RawFieldType = meta::FieldRawTypeT<T, decltype(field_entry)>;
+  static_assert(Helpers::template is_direct_field<original_index>());
+  using RawFieldType =
+      typename meta::RemoveMemberPointerCVRefT<decltype(field_ptr)>;
   using FieldType = unwrap_field_t<RawFieldType>;
-  auto &&field_value = field_value_get(obj, field_entry);
+  const FieldType &field_value = [&]() -> const FieldType & {
+    if constexpr (is_fory_field_v<RawFieldType>) {
+      return (obj.*field_ptr).value;
+    } else {
+      return obj.*field_ptr;
+    }
+  }();
   put_fixed_primitive_at<FieldType>(field_value, buffer,
                                     base_offset + field_offset);
 }
@@ -2360,11 +2368,19 @@ FORY_ALWAYS_INLINE void write_single_varint_field(const T &obj, Buffer &buffer,
   using Helpers = CompileTimeFieldHelpers<T>;
   constexpr size_t original_index = Helpers::sorted_indices[SortedPos];
   const auto field_info = fory_field_info(obj);
-  const auto field_entry =
+  const auto field_ptr =
       std::get<original_index>(decltype(field_info)::ptrs_ref());
-  using RawFieldType = meta::FieldRawTypeT<T, decltype(field_entry)>;
+  static_assert(Helpers::template is_direct_field<original_index>());
+  using RawFieldType =
+      typename meta::RemoveMemberPointerCVRefT<decltype(field_ptr)>;
   using FieldType = unwrap_field_t<RawFieldType>;
-  auto &&field_value = field_value_get(obj, field_entry);
+  const FieldType &field_value = [&]() -> const FieldType & {
+    if constexpr (is_fory_field_v<RawFieldType>) {
+      return (obj.*field_ptr).value;
+    } else {
+      return obj.*field_ptr;
+    }
+  }();
 
   if constexpr (is_configurable_int_v<FieldType>) {
     offset += write_configurable_int_at<FieldType, T, original_index>(
@@ -2395,11 +2411,19 @@ write_single_remaining_field(const T &obj, Buffer &buffer, uint32_t &offset) {
   using Helpers = CompileTimeFieldHelpers<T>;
   constexpr size_t original_index = Helpers::sorted_indices[SortedPos];
   const auto field_info = fory_field_info(obj);
-  const auto field_entry =
+  const auto field_ptr =
       std::get<original_index>(decltype(field_info)::ptrs_ref());
-  using RawFieldType = meta::FieldRawTypeT<T, decltype(field_entry)>;
+  static_assert(Helpers::template is_direct_field<original_index>());
+  using RawFieldType =
+      typename meta::RemoveMemberPointerCVRefT<decltype(field_ptr)>;
   using FieldType = unwrap_field_t<RawFieldType>;
-  auto &&field_value = field_value_get(obj, field_entry);
+  const FieldType &field_value = [&]() -> const FieldType & {
+    if constexpr (is_fory_field_v<RawFieldType>) {
+      return (obj.*field_ptr).value;
+    } else {
+      return obj.*field_ptr;
+    }
+  }();
   if constexpr (is_configurable_int_v<FieldType>) {
     offset += write_configurable_int_at<FieldType, T, original_index>(
         field_value, buffer, offset);
@@ -2476,7 +2500,17 @@ void write_single_field(const T &obj, WriteContext &ctx,
   using RawFieldType = meta::FieldRawTypeT<T, decltype(field_entry)>;
   using FieldType = unwrap_field_t<RawFieldType>;
 
-  auto &&field_value = field_value_get(obj, field_entry);
+  auto &&field_value = [&]() -> decltype(auto) {
+    if constexpr (Helpers::template is_direct_field<Index>()) {
+      if constexpr (is_fory_field_v<RawFieldType>) {
+        return (obj.*field_entry).value;
+      } else {
+        return (obj.*field_entry);
+      }
+    } else {
+      return field_value_get(obj, field_entry);
+    }
+  }();
 
   constexpr TypeId field_type_id = Serializer<FieldType>::type_id;
   constexpr bool is_primitive_field = is_primitive_type_id(field_type_id);
@@ -3338,13 +3372,19 @@ FORY_ALWAYS_INLINE void read_single_exact_primitive_at(T &obj, ReadContext &ctx,
   using Helpers = CompileTimeFieldHelpers<T>;
   constexpr size_t original_index = Helpers::sorted_indices[Index];
   const auto field_info = fory_field_info(obj);
-  const auto field_entry =
+  const auto field_ptr =
       std::get<original_index>(decltype(field_info)::ptrs_ref());
-  using RawFieldType = meta::FieldRawTypeT<T, decltype(field_entry)>;
+  static_assert(Helpers::template is_direct_field<original_index>());
+  using RawFieldType =
+      typename meta::RemoveMemberPointerCVRefT<decltype(field_ptr)>;
   using FieldType = unwrap_field_t<RawFieldType>;
   FieldType value =
       read_primitive_at_checked<FieldType>(ctx.buffer(), offset, ctx.error());
-  field_value_set(obj, field_entry, value);
+  if constexpr (is_fory_field_v<RawFieldType>) {
+    (obj.*field_ptr).value = value;
+  } else {
+    obj.*field_ptr = value;
+  }
 }
 
 template <typename T, size_t MatchedId>
@@ -3744,14 +3784,19 @@ FORY_ALWAYS_INLINE void read_single_fixed_field(T &obj, Buffer &buffer,
   constexpr size_t original_index = Helpers::sorted_indices[SortedIdx];
   constexpr size_t field_offset = compute_fixed_field_offset<T, SortedIdx>();
   const auto field_info = fory_field_info(obj);
-  const auto field_entry =
+  const auto field_ptr =
       std::get<original_index>(decltype(field_info)::ptrs_ref());
-  using RawFieldType = meta::FieldRawTypeT<T, decltype(field_entry)>;
+  static_assert(Helpers::template is_direct_field<original_index>());
+  using RawFieldType =
+      typename meta::RemoveMemberPointerCVRefT<decltype(field_ptr)>;
   using FieldType = unwrap_field_t<RawFieldType>;
   FieldType result =
       read_fixed_primitive_at<FieldType>(buffer, base_offset + field_offset);
-  // Assign to field.
-  field_value_set(obj, field_entry, result);
+  if constexpr (is_fory_field_v<RawFieldType>) {
+    (obj.*field_ptr).value = result;
+  } else {
+    obj.*field_ptr = result;
+  }
 }
 
 /// Fast read leading fixed-size primitive fields using unsafe_get.
@@ -3975,9 +4020,11 @@ FORY_ALWAYS_INLINE void read_single_varint_field(T &obj, Buffer &buffer,
   using Helpers = CompileTimeFieldHelpers<T>;
   constexpr size_t original_index = Helpers::sorted_indices[SortedPos];
   const auto field_info = fory_field_info(obj);
-  const auto field_entry =
+  const auto field_ptr =
       std::get<original_index>(decltype(field_info)::ptrs_ref());
-  using RawFieldType = meta::FieldRawTypeT<T, decltype(field_entry)>;
+  static_assert(Helpers::template is_direct_field<original_index>());
+  using RawFieldType =
+      typename meta::RemoveMemberPointerCVRefT<decltype(field_ptr)>;
   using FieldType = unwrap_field_t<RawFieldType>;
 
   FieldType result;
@@ -3988,8 +4035,11 @@ FORY_ALWAYS_INLINE void read_single_varint_field(T &obj, Buffer &buffer,
     result = read_varint_at<FieldType>(buffer, offset);
   }
 
-  // Assign to field.
-  field_value_set(obj, field_entry, result);
+  if constexpr (is_fory_field_v<RawFieldType>) {
+    (obj.*field_ptr).value = result;
+  } else {
+    obj.*field_ptr = result;
+  }
 }
 
 /// Fast read consecutive varint primitive fields (int32, int64).

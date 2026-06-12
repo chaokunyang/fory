@@ -205,20 +205,6 @@ Generated Java service methods follow grpc-java conventions:
 - Blocking stubs expose the grpc-java blocking APIs for supported streaming
   shapes.
 
-## Compatibility Rules
-
-- Generate every peer from the same service schema, or from schemas that are
-  compatible under Fory schema evolution rules.
-- Keep request and response type IDs, field IDs, package names, and service
-  names stable after deployment.
-- Use compatible mode unless every deployed reader and writer is updated in
-  lockstep.
-- Regenerate the service companion when service names, method names, streaming
-  shapes, or message types change.
-- Do not mix Fory-generated gRPC companions with protobuf-generated stubs for
-  the same method path. They use the same gRPC transport, but the message bytes
-  are encoded differently.
-
 ## Operations
 
 The generated service code only replaces request and response serialization.

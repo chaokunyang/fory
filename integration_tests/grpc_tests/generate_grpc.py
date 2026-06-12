@@ -35,6 +35,7 @@ OUTPUTS = {
     "python": TEST_DIR / "python/grpc_tests/generated",
     "go": TEST_DIR / "go/generated",
     "rust": TEST_DIR / "rust/generated/src",
+    "kotlin": TEST_DIR / "kotlin/src/main/kotlin/generated",
 }
 
 
@@ -76,6 +77,7 @@ def main() -> int:
                 f"--python_out={OUTPUTS['python']}",
                 f"--go_out={go_pkg_out}",
                 f"--rust_out={OUTPUTS['rust']}",
+                f"--kotlin_out={OUTPUTS['kotlin']}",
                 "--grpc",
             ],
             env=env,

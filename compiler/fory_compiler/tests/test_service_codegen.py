@@ -37,6 +37,7 @@ from fory_compiler.generators.cpp import CppGenerator
 from fory_compiler.generators.csharp import CSharpGenerator
 from fory_compiler.generators.go import GoGenerator
 from fory_compiler.generators.java import JavaGenerator
+from fory_compiler.generators.kotlin import KotlinGenerator
 from fory_compiler.generators.python import PythonGenerator
 from fory_compiler.generators.rust import RustGenerator
 from fory_compiler.generators.swift import SwiftGenerator
@@ -52,6 +53,7 @@ GENERATOR_CLASSES: Tuple[Type[BaseGenerator], ...] = (
     GoGenerator,
     CSharpGenerator,
     SwiftGenerator,
+    KotlinGenerator,
 )
 
 _GREETER_WITH_SERVICE = dedent(
@@ -136,6 +138,7 @@ def test_generate_services_returns_empty_list_for_unsupported_generators():
             PythonGenerator,
             GoGenerator,
             RustGenerator,
+            KotlinGenerator,
         ):
             continue
         options = GeneratorOptions(output_dir=Path("/tmp"))
@@ -178,6 +181,42 @@ def test_python_grpc_service_codegen_uses_byte_callbacks():
     assert '"/demo.greeter.Greeter/SayHello"' in content
     assert "SerializeToString" not in content
     assert "FromString" not in content
+
+
+def test_kotlin_grpc_service_codegen_contains_fory_marshaller():
+    schema = parse_fdl(_GREETER_WITH_SERVICE)
+    files = generate_service_files(schema, KotlinGenerator)
+    assert set(files) == {"demo/greeter/GreeterGrpcKt.kt"}
+    content = files["demo/greeter/GreeterGrpcKt.kt"]
+    assert "public object GreeterGrpcKt" in content
+    assert 'SERVICE_NAME: String = "demo.greeter.Greeter"' in content
+    assert "private val FORY: org.apache.fory.ThreadSafeFory" in content
+    assert "GreeterForyModule.getFory()" in content
+    assert (
+        "private val serviceDescriptorValue: io.grpc.ServiceDescriptor by lazy"
+        in content
+    )
+    assert "public val serviceDescriptor: io.grpc.ServiceDescriptor" in content
+    assert (
+        "private val sayHelloMethodValue: io.grpc.MethodDescriptor<HelloRequest, HelloReply> by lazy"
+        in content
+    )
+    assert (
+        "public val sayHelloMethod: io.grpc.MethodDescriptor<HelloRequest, HelloReply>"
+        in content
+    )
+    assert "public abstract class GreeterCoroutineImplBase" in content
+    assert "io.grpc.kotlin.ServerCalls.unaryServerMethodDefinition" in content
+    assert "public class GreeterCoroutineStub @JvmOverloads constructor" in content
+    assert "io.grpc.kotlin.ClientCalls.unaryRpc" in content
+    assert "implements" not in content
+    assert "private class ForyMarshaller<T : Any>(" in content
+    assert "fory.serialize(value)" in content
+    assert "fory.deserialize(readBytes(stream), type)" in content
+    assert "stream is io.grpc.KnownLength" in content
+    assert "readUnknownLengthBytes(stream)" in content
+    assert "ProtoUtils" not in content
+    assert "MessageLite" not in content
 
 
 def test_grpc_streaming_method_shapes():
@@ -230,6 +269,23 @@ def test_grpc_streaming_method_shapes():
     assert "ServerStreams:\ttrue" in go
     assert "grpc.ClientStream" in go
     assert "grpc.ServerStream" in go
+
+    kotlin = next(iter(generate_service_files(schema, KotlinGenerator).values()))
+    assert "io.grpc.MethodDescriptor.MethodType.UNARY" in kotlin
+    assert "io.grpc.MethodDescriptor.MethodType.SERVER_STREAMING" in kotlin
+    assert "io.grpc.MethodDescriptor.MethodType.CLIENT_STREAMING" in kotlin
+    assert "io.grpc.MethodDescriptor.MethodType.BIDI_STREAMING" in kotlin
+    assert "public suspend fun unary(" in kotlin
+    assert "public fun server(" in kotlin
+    assert "public suspend fun client(" in kotlin
+    assert "public fun bidi(" in kotlin
+    assert "kotlinx.coroutines.flow.Flow<Payload>" in kotlin
+    assert "io.grpc.kotlin.ClientCalls.serverStreamingRpc" in kotlin
+    assert "io.grpc.kotlin.ClientCalls.clientStreamingRpc" in kotlin
+    assert "io.grpc.kotlin.ClientCalls.bidiStreamingRpc" in kotlin
+    assert "io.grpc.kotlin.ServerCalls.serverStreamingServerMethodDefinition" in kotlin
+    assert "io.grpc.kotlin.ServerCalls.clientStreamingServerMethodDefinition" in kotlin
+    assert "io.grpc.kotlin.ServerCalls.bidiStreamingServerMethodDefinition" in kotlin
 
 
 def test_go_grpc_service_codegen():
@@ -369,6 +425,13 @@ def test_grpc_services_use_imported_java_type_references(tmp_path: Path):
     assert "class ApiServiceStub" in python
     assert "ImportedCall" not in python
 
+    kotlin_files = generate_service_files(schema, KotlinGenerator)
+    assert set(kotlin_files) == {"api/ApiServiceGrpcKt.kt"}
+    kotlin = kotlin_files["api/ApiServiceGrpcKt.kt"]
+    assert "io.grpc.MethodDescriptor<common.Shared, Local>" in kotlin
+    assert "marshaller(common.Shared::class.java)" in kotlin
+    assert "public open suspend fun get(request: common.Shared): Local" in kotlin
+
 
 def test_proto_grpc_services_use_imported_qualified_type_references(tmp_path: Path):
     common = tmp_path / "common.proto"
@@ -422,6 +485,11 @@ def test_proto_grpc_services_use_imported_qualified_type_references(tmp_path: Pa
     assert "crate::common::common::Shared" not in rust_service
     assert "crate::api::api::Local" not in rust_service
 
+    kotlin_files = generate_service_files(schema, KotlinGenerator)
+    kotlin = kotlin_files["api/ApiServiceGrpcKt.kt"]
+    assert "io.grpc.MethodDescriptor<common.Shared, Local>" in kotlin
+    assert "marshaller(common.Shared::class.java)" in kotlin
+
 
 def test_proto_grpc_absolute_rpc_type_uses_package_type_not_nested_shadow():
     schema = parse_proto(
@@ -456,6 +524,11 @@ def test_proto_grpc_absolute_rpc_type_uses_package_type_not_nested_shadow():
     assert "::tonic::Response<crate::demo::Response>" in rust_service
     assert "crate::demo::demo::Request" not in rust_service
     assert "crate::demo::::demo::Request" not in rust_service
+
+    kotlin_files = generate_service_files(schema, KotlinGenerator)
+    kotlin = kotlin_files["demo/ApiServiceGrpcKt.kt"]
+    assert "io.grpc.MethodDescriptor<Request, Response>" in kotlin
+    assert "io.grpc.MethodDescriptor<demo.Request, Response>" not in kotlin
 
 
 def test_proto_grpc_absolute_rpc_type_prefers_longest_package_prefix(tmp_path: Path):
@@ -508,6 +581,11 @@ def test_proto_grpc_absolute_rpc_type_prefers_longest_package_prefix(tmp_path: P
     assert "::tonic::Response<crate::alpha_beta::C>" in rust_service
     assert "crate::alpha::beta::C" not in rust_service
 
+    kotlin_files = generate_service_files(schema, KotlinGenerator)
+    kotlin = kotlin_files["alpha/ApiServiceGrpcKt.kt"]
+    assert "io.grpc.MethodDescriptor<alpha.beta.C, alpha.beta.C>" in kotlin
+    assert "io.grpc.MethodDescriptor<beta.C, beta.C>" not in kotlin
+
 
 def test_java_grpc_service_class_collision_fails():
     schema = parse_fdl(
@@ -534,6 +612,26 @@ def test_java_grpc_service_class_collision_fails():
         assert "Java gRPC service class GreeterGrpc conflicts" in str(e)
     else:
         raise AssertionError("Expected Java gRPC service class collision")
+
+
+def test_kotlin_grpc_service_class_collision_fails():
+    schema = parse_fdl(
+        dedent(
+            """
+            package demo.collision;
+
+            message GreeterGrpcKt {}
+            message Req {}
+            message Res {}
+
+            service Greeter {
+                rpc Call (Req) returns (Res);
+            }
+            """
+        )
+    )
+    with pytest.raises(ValueError, match="Kotlin generated file path collision"):
+        KotlinGenerator(schema, GeneratorOptions(output_dir=Path("/tmp"), grpc=True))
 
 
 def test_java_grpc_service_class_collision_with_imported_type_fails(tmp_path: Path):
@@ -677,6 +775,17 @@ def test_grpc_method_name_collisions_fail():
     else:
         raise AssertionError("Expected Go gRPC method name collision")
 
+    kotlin_generator = KotlinGenerator(
+        schema, GeneratorOptions(output_dir=Path("/tmp"), grpc=True)
+    )
+    try:
+        kotlin_generator.generate_services()
+    except ValueError as e:
+        assert "Kotlin gRPC method name collision" in str(e)
+        assert "Foo and foo" in str(e)
+    else:
+        raise AssertionError("Expected Kotlin gRPC method name collision")
+
 
 def test_java_python_grpc_method_keywords_are_safe_names():
     schema = parse_fdl(
@@ -704,6 +813,11 @@ def test_java_python_grpc_method_keywords_are_safe_names():
     assert "def class_(self, request, context):" in python
     assert "servicer.class_" in python
     assert '        "Class": grpc.unary_unary_rpc_method_handler(' in python
+
+    kotlin = next(iter(generate_service_files(schema, KotlinGenerator).values()))
+    assert "public open suspend fun `class`(request: Req): Res" in kotlin
+    assert "public suspend fun `class`(" in kotlin
+    assert "implementation = ::`class`" in kotlin
 
 
 def test_python_grpc_service_registration_collisions_fail():
@@ -832,7 +946,7 @@ def test_service_schema_produces_one_file_per_message_per_language():
 def test_compile_service_schema_with_grpc_flag(tmp_path: Path, capsys):
     example_path = Path(__file__).resolve().parents[2] / "examples" / "service.fdl"
     lang_dirs = {}
-    for lang in ("java", "python", "rust", "go", "cpp", "csharp", "swift"):
+    for lang in ("java", "python", "rust", "go", "cpp", "csharp", "swift", "kotlin"):
         lang_dirs[lang] = tmp_path / lang
     ok = compile_file(example_path, lang_dirs, grpc=True, generated_outputs={})
     output = capsys.readouterr().out
@@ -846,6 +960,7 @@ def test_compile_service_schema_with_grpc_flag(tmp_path: Path, capsys):
     assert output.count("demo_greeter_grpc.go") == 1
     assert (lang_dirs["rust"] / "demo_greeter_service.rs").exists()
     assert (lang_dirs["rust"] / "demo_greeter_service_grpc.rs").exists()
+    assert (lang_dirs["kotlin"] / "demo" / "greeter" / "GreeterGrpcKt.kt").exists()
 
 
 def test_generated_message_contains_key_signatures():

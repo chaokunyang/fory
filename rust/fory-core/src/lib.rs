@@ -183,6 +183,10 @@
 //! // let row = from_row::<MyStruct>(&row_data);
 //! ```
 
+// Direct lower-level derive users may resolve this crate through `::fory_core`, including
+// doctests where `crate` is the doctest crate instead of this runtime crate.
+extern crate self as fory_core;
+
 pub mod buffer;
 pub mod config;
 pub mod context;

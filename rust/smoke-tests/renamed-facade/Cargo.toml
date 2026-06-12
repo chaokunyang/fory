@@ -16,33 +16,16 @@
 # under the License.
 
 [package]
-name = "fory-derive"
+name = "fory-renamed-facade-smoke"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
-description = "Apache Fory: Blazingly fast multi-language serialization framework with trait objects and reference support."
-license-file = "../../LICENSE"
-readme = "../README.md"
-repository = "https://github.com/apache/fory"
-keywords = ["serialization", "serde", "trait-object", "zero-copy", "schema-evolution"]
-categories = ["encoding"]
-
-[lib]
-proc-macro = true
+license.workspace = true
+publish = false
 
 [dependencies]
-proc-macro-crate = { version = "1.3" }
-proc-macro2 = { default-features = false, version = "1.0" }
-fory-core.workspace = true
-syn = { default-features = false, version = "2.0", features = [
-    "parsing",
-    "proc-macro",
-    "derive",
-    "printing",
-] }
-quote = { default-features = false, version = "1.0" }
+fory_facade = { package = "fory", path = "../../fory" }
 
 [features]
-default = ["fields-loop-unroll"]
-fields-loop-unroll = []
+default = []
 tests = []

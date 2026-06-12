@@ -26,12 +26,9 @@ from pyfory.annotation import ArrayMeta, RefMeta
 from pyfory.type_id import TypeId
 
 try:
-    from typing import Annotated as _Annotated
+    from typing import Annotated
 except ImportError:
-    try:
-        from typing_extensions import Annotated as _Annotated
-    except ImportError:
-        _Annotated = None
+    from typing_extensions import Annotated
 
 try:
     from typing_extensions import get_type_hints as _typing_extensions_get_type_hints
@@ -75,7 +72,7 @@ def get_type_hints(type_):
 
 def unwrap_ref(type_):
     origin = _get_origin(type_)
-    if _Annotated is not None and origin is _Annotated:
+    if origin is Annotated:
         args = _get_args(type_)
         if args:
             base = args[0]
@@ -83,7 +80,7 @@ def unwrap_ref(type_):
             for meta in args[1:]:
                 if isinstance(meta, RefMeta):
                     if other_metadata:
-                        return _Annotated[(base, *other_metadata)], meta.enable
+                        return Annotated[(base, *other_metadata)], meta.enable
                     return base, meta.enable
                 other_metadata.append(meta)
             return type_, None
@@ -103,7 +100,7 @@ def unwrap_ref(type_):
 
 def unwrap_array(type_):
     origin = _get_origin(type_)
-    if _Annotated is not None and origin is _Annotated:
+    if origin is Annotated:
         args = _get_args(type_)
         for meta in args[1:]:
             if isinstance(meta, ArrayMeta):
@@ -137,7 +134,7 @@ def scalar_type_id(type_):
     if type(type_) is int and type_ in _SCALAR_TYPE_IDS:
         return type_
     origin = _get_origin(type_)
-    if _Annotated is None or origin is not _Annotated:
+    if origin is not Annotated:
         return None
     args = _get_args(type_)
     if not args:

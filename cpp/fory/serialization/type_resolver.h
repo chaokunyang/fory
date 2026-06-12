@@ -634,13 +634,13 @@ void apply_integer_encoding(FieldType &ft, const FieldNodeSpec &spec,
     ft.set_type_id(static_cast<uint32_t>(TypeId::UINT16));
   } else if constexpr (std::is_same_v<Decayed, uint32_t>) {
     ft.set_type_id(static_cast<uint32_t>(
-        enc == Encoding::Varint ? TypeId::VAR_UINT32 : TypeId::UINT32));
+        enc == Encoding::Fixed ? TypeId::UINT32 : TypeId::VAR_UINT32));
   } else if constexpr (std::is_same_v<Decayed, uint64_t>) {
-    ft.set_type_id(static_cast<uint32_t>(enc == Encoding::Varint
-                                             ? TypeId::VAR_UINT64
+    ft.set_type_id(static_cast<uint32_t>(enc == Encoding::Fixed
+                                             ? TypeId::UINT64
                                              : (enc == Encoding::Tagged
                                                     ? TypeId::TAGGED_UINT64
-                                                    : TypeId::UINT64)));
+                                                    : TypeId::VAR_UINT64)));
   } else if constexpr (std::is_same_v<Decayed, int32_t> ||
                        std::is_same_v<Decayed, int>) {
     ft.set_type_id(static_cast<uint32_t>(
@@ -1118,19 +1118,19 @@ constexpr uint32_t compute_unsigned_type_id() {
     } else if constexpr (std::is_same_v<InnerType, uint16_t>) {
       return static_cast<uint32_t>(TypeId::UINT16);
     } else if constexpr (std::is_same_v<InnerType, uint32_t>) {
-      if constexpr (enc == Encoding::Varint) {
-        return static_cast<uint32_t>(TypeId::VAR_UINT32);
-      } else {
+      // uint32_t defaults to Serializer<uint32_t>::type_id (VAR_UINT32);
+      // only an explicit fixed field config should emit UINT32 metadata.
+      if constexpr (enc == Encoding::Fixed) {
         return static_cast<uint32_t>(TypeId::UINT32);
       }
+      return static_cast<uint32_t>(TypeId::VAR_UINT32);
     } else if constexpr (std::is_same_v<InnerType, uint64_t>) {
-      if constexpr (enc == Encoding::Varint) {
-        return static_cast<uint32_t>(TypeId::VAR_UINT64);
+      if constexpr (enc == Encoding::Fixed) {
+        return static_cast<uint32_t>(TypeId::UINT64);
       } else if constexpr (enc == Encoding::Tagged) {
         return static_cast<uint32_t>(TypeId::TAGGED_UINT64);
-      } else {
-        return static_cast<uint32_t>(TypeId::UINT64);
       }
+      return static_cast<uint32_t>(TypeId::VAR_UINT64);
     }
   }
   // Not an unsigned type with configured encoding; use the type default.

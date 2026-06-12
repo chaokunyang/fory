@@ -261,6 +261,52 @@ struct AllPrimitivesStruct {
               float_val, double_val);
 };
 
+struct UnsignedDefaultEncodingWriter {
+  uint32_t u32;
+  uint64_t u64;
+
+  bool operator==(const UnsignedDefaultEncodingWriter &other) const {
+    return u32 == other.u32 && u64 == other.u64;
+  }
+
+  FORY_STRUCT(UnsignedDefaultEncodingWriter, u32, u64);
+};
+
+struct UnsignedExplicitVarintReader {
+  uint32_t u32 = 0;
+  uint64_t u64 = 0;
+
+  FORY_STRUCT(UnsignedExplicitVarintReader, (u32, fory::F().varint()),
+              (u64, fory::F().varint()));
+};
+
+struct UnsignedEncodingStruct {
+  uint32_t default_u32;
+  uint64_t default_u64;
+  uint32_t id_default_u32;
+  uint64_t id_default_u64;
+  uint32_t var_u32;
+  uint32_t fixed_u32;
+  uint64_t var_u64;
+  uint64_t fixed_u64;
+  uint64_t tagged_u64;
+
+  bool operator==(const UnsignedEncodingStruct &other) const {
+    return default_u32 == other.default_u32 &&
+           default_u64 == other.default_u64 &&
+           id_default_u32 == other.id_default_u32 &&
+           id_default_u64 == other.id_default_u64 && var_u32 == other.var_u32 &&
+           fixed_u32 == other.fixed_u32 && var_u64 == other.var_u64 &&
+           fixed_u64 == other.fixed_u64 && tagged_u64 == other.tagged_u64;
+  }
+
+  FORY_STRUCT(UnsignedEncodingStruct, default_u32, default_u64,
+              (id_default_u32, fory::F(1)), (id_default_u64, fory::F(2)),
+              (var_u32, fory::F().varint()), (fixed_u32, fory::F().fixed()),
+              (var_u64, fory::F().varint()), (fixed_u64, fory::F().fixed()),
+              (tagged_u64, fory::F().tagged()));
+};
+
 // String handling
 struct StringTestStruct {
   std::string empty;
@@ -608,6 +654,9 @@ inline void register_all_test_types(Fory &fory) {
   fory.register_struct<PimplPropertyStruct>(type_id++);
   fory.register_struct<PimplConfiguredPropertyStruct>(type_id++);
   fory.register_struct<AllPrimitivesStruct>(type_id++);
+  fory.register_struct<UnsignedDefaultEncodingWriter>(type_id++);
+  fory.register_struct<UnsignedExplicitVarintReader>(type_id++);
+  fory.register_struct<UnsignedEncodingStruct>(type_id++);
   fory.register_struct<StringTestStruct>(type_id++);
   fory.register_struct<Point2D>(type_id++);
   fory.register_struct<Point3D>(type_id++);
@@ -722,6 +771,131 @@ TEST(StructComprehensiveTest, AllPrimitivesMin) {
   test_roundtrip(AllPrimitivesStruct{false, INT8_MIN, INT16_MIN, INT32_MIN,
                                      INT64_MIN, 0, 0, 0, 0, -FLT_MAX,
                                      -DBL_MAX});
+}
+
+TEST(StructComprehensiveTest, UnsignedDefaultEncodingRoundTrip) {
+  auto writer =
+      Fory::builder().xlang(true).compatible(true).track_ref(false).build();
+  auto reader =
+      Fory::builder().xlang(true).compatible(true).track_ref(false).build();
+  ASSERT_TRUE(writer.register_struct<UnsignedDefaultEncodingWriter>(610).ok());
+  ASSERT_TRUE(reader.register_struct<UnsignedExplicitVarintReader>(610).ok());
+
+  UnsignedDefaultEncodingWriter original{66051u, 0x01020304050607ULL};
+  auto bytes_result = writer.serialize(original);
+  ASSERT_TRUE(bytes_result.ok())
+      << "Serialization failed: " << bytes_result.error().to_string();
+
+  std::vector<uint8_t> bytes = std::move(bytes_result).value();
+  auto result = reader.deserialize<UnsignedExplicitVarintReader>(bytes.data(),
+                                                                 bytes.size());
+  ASSERT_TRUE(result.ok()) << "Deserialization failed: "
+                           << result.error().to_string();
+  EXPECT_EQ(result.value().u32, original.u32);
+  EXPECT_EQ(result.value().u64, original.u64);
+
+  auto explicit_bytes = reader.serialize(
+      UnsignedExplicitVarintReader{original.u32, original.u64});
+  ASSERT_TRUE(explicit_bytes.ok())
+      << "Serialization failed: " << explicit_bytes.error().to_string();
+  auto default_result = writer.deserialize<UnsignedDefaultEncodingWriter>(
+      explicit_bytes.value().data(), explicit_bytes.value().size());
+  ASSERT_TRUE(default_result.ok())
+      << "Deserialization failed: " << default_result.error().to_string();
+  EXPECT_EQ(default_result.value(), original);
+}
+
+TEST(StructComprehensiveTest, UnsignedEncodingsRoundTrip) {
+  test_roundtrip(UnsignedEncodingStruct{
+      66051u,
+      0x01020304050607ULL,
+      131071u,
+      0x02030405060708ULL,
+      262143u,
+      0x03020100u,
+      0x03040506070809ULL,
+      0x0405060708090aULL,
+      0x05060708090a0bULL,
+  });
+}
+
+TEST(StructComprehensiveTest, UnsignedEncodingFieldMeta) {
+  auto fory =
+      Fory::builder().xlang(true).compatible(true).track_ref(false).build();
+  ASSERT_TRUE(fory.register_struct<UnsignedEncodingStruct>(611).ok());
+  ASSERT_TRUE(fory.serialize(UnsignedEncodingStruct{
+                                 1u,
+                                 2u,
+                                 3u,
+                                 4u,
+                                 5u,
+                                 6u,
+                                 7u,
+                                 8u,
+                                 9u,
+                             })
+                  .ok());
+
+  TypeMeta meta =
+      fory.type_resolver().clone_struct_meta<UnsignedEncodingStruct>();
+  const auto &fields = meta.get_field_infos();
+  ASSERT_EQ(fields.size(), 9);
+
+  auto find_field = [&](const std::string &name) -> const FieldInfo * {
+    auto it =
+        std::find_if(fields.begin(), fields.end(), [&](const FieldInfo &field) {
+          return field.field_name == name;
+        });
+    return it == fields.end() ? nullptr : &*it;
+  };
+  auto find_field_id = [&](int16_t id) -> const FieldInfo * {
+    auto it =
+        std::find_if(fields.begin(), fields.end(), [&](const FieldInfo &field) {
+          return field.field_id == id;
+        });
+    return it == fields.end() ? nullptr : &*it;
+  };
+
+  const FieldInfo *default_u32 = find_field("default_u32");
+  const FieldInfo *default_u64 = find_field("default_u64");
+  const FieldInfo *id_default_u32 = find_field_id(1);
+  const FieldInfo *id_default_u64 = find_field_id(2);
+  const FieldInfo *var_u32 = find_field("var_u32");
+  const FieldInfo *fixed_u32 = find_field("fixed_u32");
+  const FieldInfo *var_u64 = find_field("var_u64");
+  const FieldInfo *fixed_u64 = find_field("fixed_u64");
+  const FieldInfo *tagged_u64 = find_field("tagged_u64");
+
+  ASSERT_NE(default_u32, nullptr);
+  ASSERT_NE(default_u64, nullptr);
+  ASSERT_NE(id_default_u32, nullptr);
+  ASSERT_NE(id_default_u64, nullptr);
+  ASSERT_NE(var_u32, nullptr);
+  ASSERT_NE(fixed_u32, nullptr);
+  ASSERT_NE(var_u64, nullptr);
+  ASSERT_NE(fixed_u64, nullptr);
+  ASSERT_NE(tagged_u64, nullptr);
+
+  EXPECT_EQ(default_u32->field_type.type_id,
+            static_cast<uint32_t>(TypeId::VAR_UINT32));
+  EXPECT_EQ(default_u64->field_type.type_id,
+            static_cast<uint32_t>(TypeId::VAR_UINT64));
+  EXPECT_EQ(id_default_u32->field_type.type_id,
+            static_cast<uint32_t>(TypeId::VAR_UINT32));
+  EXPECT_EQ(id_default_u32->field_id, 1);
+  EXPECT_EQ(id_default_u64->field_type.type_id,
+            static_cast<uint32_t>(TypeId::VAR_UINT64));
+  EXPECT_EQ(id_default_u64->field_id, 2);
+  EXPECT_EQ(var_u32->field_type.type_id,
+            static_cast<uint32_t>(TypeId::VAR_UINT32));
+  EXPECT_EQ(fixed_u32->field_type.type_id,
+            static_cast<uint32_t>(TypeId::UINT32));
+  EXPECT_EQ(var_u64->field_type.type_id,
+            static_cast<uint32_t>(TypeId::VAR_UINT64));
+  EXPECT_EQ(fixed_u64->field_type.type_id,
+            static_cast<uint32_t>(TypeId::UINT64));
+  EXPECT_EQ(tagged_u64->field_type.type_id,
+            static_cast<uint32_t>(TypeId::TAGGED_UINT64));
 }
 
 TEST(StructComprehensiveTest, StringVariations) {

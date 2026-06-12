@@ -71,8 +71,9 @@ public class ForyInputStream extends InputStream implements ForyStreamReader {
           int newSize = 0;
           if (!checkedAvailable) {
             checkedAvailable = true;
-            // Use available() only as a one-shot fast path. It may be expensive or conservative,
-            // and correctness still comes from read() proving bytes exist before the buffer grows.
+            // Use available() only as a one-shot growth hint. It may be expensive or
+            // conservative, so failed hints fall back to bounded doubling. Final value
+            // allocation still waits for fillBuffer to complete successfully.
             if (stream.available() >= remainingNeeded) {
               newSize = (int) targetSize;
             }

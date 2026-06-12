@@ -265,10 +265,6 @@ public final class MemoryBuffer {
     }
   }
 
-  boolean isStreamBacked() {
-    return !(streamReader instanceof BoundChecker);
-  }
-
   public void initHeapBuffer(byte[] buffer, int offset, int length) {
     if (buffer == null) {
       throw new NullPointerException("buffer");
@@ -3241,7 +3237,7 @@ public final class MemoryBuffer {
    */
   public void readByteArrayBytes(byte[] values, int numBytes) {
     int readerIdx = readerIndex;
-    if (readerIdx > size - numBytes || isStreamBacked()) {
+    if (readerIdx > size - numBytes) {
       streamReader.readTo(values, 0, numBytes);
       return;
     }
@@ -3256,7 +3252,7 @@ public final class MemoryBuffer {
    */
   public void readBooleanArrayBytes(boolean[] values, int numBytes) {
     int readerIdx = readerIndex;
-    if (readerIdx > size - numBytes || isStreamBacked()) {
+    if (readerIdx > size - numBytes) {
       streamReader.readBooleans(values, 0, numBytes);
       return;
     }
@@ -3271,7 +3267,7 @@ public final class MemoryBuffer {
    */
   public void readCharArrayBytes(char[] values, int numBytes) {
     int readerIdx = readerIndex;
-    if (readerIdx > size - numBytes || isStreamBacked()) {
+    if (readerIdx > size - numBytes) {
       streamReader.readChars(values, 0, numBytes >>> 1);
       return;
     }
@@ -3286,7 +3282,7 @@ public final class MemoryBuffer {
    */
   public void readInt16ArrayBytes(short[] values, int numBytes) {
     int readerIdx = readerIndex;
-    if (readerIdx > size - numBytes || isStreamBacked()) {
+    if (readerIdx > size - numBytes) {
       streamReader.readShorts(values, 0, numBytes >>> 1);
       return;
     }
@@ -3301,7 +3297,7 @@ public final class MemoryBuffer {
    */
   public void readInt32ArrayBytes(int[] values, int numBytes) {
     int readerIdx = readerIndex;
-    if (readerIdx > size - numBytes || isStreamBacked()) {
+    if (readerIdx > size - numBytes) {
       streamReader.readInts(values, 0, numBytes >>> 2);
       return;
     }
@@ -3316,7 +3312,7 @@ public final class MemoryBuffer {
    */
   public void readInt64ArrayBytes(long[] values, int numBytes) {
     int readerIdx = readerIndex;
-    if (readerIdx > size - numBytes || isStreamBacked()) {
+    if (readerIdx > size - numBytes) {
       streamReader.readLongs(values, 0, numBytes >>> 3);
       return;
     }
@@ -3331,7 +3327,7 @@ public final class MemoryBuffer {
    */
   public void readFloat32ArrayBytes(float[] values, int numBytes) {
     int readerIdx = readerIndex;
-    if (readerIdx > size - numBytes || isStreamBacked()) {
+    if (readerIdx > size - numBytes) {
       streamReader.readFloats(values, 0, numBytes >>> 2);
       return;
     }
@@ -3346,7 +3342,7 @@ public final class MemoryBuffer {
    */
   public void readFloat64ArrayBytes(double[] values, int numBytes) {
     int readerIdx = readerIndex;
-    if (readerIdx > size - numBytes || isStreamBacked()) {
+    if (readerIdx > size - numBytes) {
       streamReader.readDoubles(values, 0, numBytes >>> 3);
       return;
     }

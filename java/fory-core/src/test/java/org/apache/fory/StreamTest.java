@@ -21,6 +21,7 @@ package org.apache.fory;
 
 import static org.apache.fory.io.ForyStreamReader.of;
 import static org.testng.Assert.assertEquals;
+import static org.testng.Assert.assertFalse;
 import static org.testng.Assert.assertTrue;
 
 import com.google.common.collect.Lists;
@@ -504,7 +505,7 @@ public class StreamTest extends ForyTestBase {
   }
 
   @Test
-  public void testPrimitiveArrayStreamReaderUsesTypedReads() throws IOException {
+  public void testStreamPrimitiveArrayBody() throws IOException {
     Fory fory = builder().requireClassRegistration(false).build();
 
     int[] ints = new int[257];
@@ -514,7 +515,7 @@ public class StreamTest extends ForyTestBase {
     TrackingForyInputStream input =
         new TrackingForyInputStream(new ChunkedInputStream(fory.serialize(ints), 1), 3);
     Assert.assertEquals((int[]) fory.deserialize(input), ints);
-    assertTrue(input.readIntsCalled);
+    assertFalse(input.readIntsCalled);
 
     long[] longs = new long[257];
     for (int i = 0; i < longs.length; i++) {
@@ -525,7 +526,7 @@ public class StreamTest extends ForyTestBase {
         new TrackingForyReadableChannel(
             new ChunkedReadableByteChannel(serialized, 1), ByteBuffer.allocateDirect(5))) {
       Assert.assertEquals((long[]) fory.deserialize(channel), longs);
-      assertTrue(channel.readLongsCalled);
+      assertFalse(channel.readLongsCalled);
     }
 
     ByteBuffer limitedDirectBuffer = ByteBuffer.allocateDirect(serialized.length + 8);
@@ -534,7 +535,7 @@ public class StreamTest extends ForyTestBase {
         new TrackingForyReadableChannel(
             new ChunkedReadableByteChannel(serialized, 1), limitedDirectBuffer)) {
       Assert.assertEquals((long[]) fory.deserialize(channel), longs);
-      assertTrue(channel.readLongsCalled);
+      assertFalse(channel.readLongsCalled);
     }
   }
 

@@ -131,12 +131,11 @@ For stream-backed input:
   length before input bytes prove that length exists.
 - Stream-backed fill buffers should grow from the current proven buffer size,
   such as by doubling current capacity, and cap only to the immediate target
-  when the next bounded growth step reaches it. If the byte owner can reliably
-  prove the remaining requested bytes are already available from the stream, it
-  may grow once to the immediate target. Generic `available`, `Len`,
-  `Buffered`, `in_avail`, or equivalent methods on user-provided stream types
-  are not proof unless the runtime knows the exact concrete owner cannot
-  over-report availability.
+  when the next bounded growth step reaches it. A byte owner may use an
+  owner-local availability signal as a one-shot growth hint when the stream
+  implementation itself is caller-owned trusted code; if that hint is absent or
+  insufficient, the reader must fall back to bounded growth from already
+  buffered bytes. Serializers should not add their own availability branches.
 - A truncated stream should fail before allocating the final deserialized value
   and should allocate only for bytes actually read plus bounded spare capacity.
 

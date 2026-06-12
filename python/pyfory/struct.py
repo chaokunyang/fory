@@ -51,6 +51,7 @@ from pyfory.type_util import (
     is_subclass,
     get_type_hints,
     normalize_fory_type,
+    scalar_type_id,
     unwrap_array,
     unwrap_optional,
     unwrap_ref,
@@ -1158,6 +1159,9 @@ def _normalize_schema_fingerprint_type_id(type_id):
 
 
 def _leaf_schema_fingerprint_type_id(type_resolver, type_hint):
+    scalar_id = scalar_type_id(type_hint)
+    if scalar_id is not None:
+        return scalar_id
     if type_hint is typing.Any or type_hint is object:
         return TypeId.UNKNOWN
     if is_primitive_array_type(type_hint):

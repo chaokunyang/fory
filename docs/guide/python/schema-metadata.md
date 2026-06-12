@@ -231,10 +231,9 @@ class Container:
 
 Fory provides type annotations to control integer encoding:
 
-These annotations are normal Python typing aliases over `int` or `float`, so
-tools that do not read Fory metadata can still treat the fields as ordinary
-numeric values. Fory reads the annotation metadata to choose the exact wire
-type.
+Use these markers directly in Python type annotations. Field values remain
+ordinary Python `int` or `float` values, and Fory serializes them with the
+requested xlang numeric width and encoding.
 
 ### Signed Integers
 

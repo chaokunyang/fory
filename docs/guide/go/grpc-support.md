@@ -257,12 +257,6 @@ Confirm that the generated service was registered with
 `RegisterGreeterServer(...)`, and that the client and server were generated from
 the same package, service, and method names.
 
-### Deserialization Errors
-
-Regenerate the model and service files from the same schema on both sides.
-Check for stale generated files, changed field IDs, changed type IDs, or peers
-using different Fory versions.
-
 ### Protobuf Clients Cannot Decode the Service
 
 Fory gRPC companions do not use protobuf wire encoding for messages. Use a

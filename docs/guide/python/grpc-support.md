@@ -218,12 +218,6 @@ Confirm that the generated servicer was registered with the server, and that the
 client and server were generated from the same package, service, and method
 names.
 
-### `INTERNAL` Deserialization Errors
-
-Regenerate the model and service modules from the same schema on both sides.
-Check for stale generated files, changed field IDs, changed type IDs, or peers
-using different Fory versions.
-
 ### Protobuf Clients Cannot Decode the Service
 
 Fory gRPC companions do not use protobuf wire encoding for messages. Use a

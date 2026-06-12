@@ -244,12 +244,6 @@ Confirm that the generated service implementation is registered with
 `ServerBuilder.addService(...)`, and that the client and server were generated
 from the same package, service, and method names.
 
-### `INTERNAL: Fory deserialization failed`
-
-Regenerate the model and service files from the same schema on both sides.
-Check for stale generated files, changed field IDs, changed type IDs, or peers
-using different Fory versions.
-
 ### Protobuf Clients Cannot Decode the Service
 
 Fory gRPC companions do not use protobuf wire encoding for messages. Use a

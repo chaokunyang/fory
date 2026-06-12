@@ -231,12 +231,6 @@ Confirm that the generated server wrapper was added with
 `Server::builder().add_service(...)`, and that the client and server were
 generated from the same package, service, and method names.
 
-### `Status { code: Internal, ... }`
-
-Regenerate the model and service files from the same schema on both sides.
-Check for stale generated files, changed field IDs, changed type IDs, or peers
-using different Fory versions.
-
 ### Non-Thread-Safe Reference Errors During Code Generation
 
 Rust gRPC payloads must be `Send + 'static`. Change the request or response

@@ -3348,6 +3348,11 @@ template <typename T>
 FORY_ALWAYS_INLINE T read_primitive_at_checked(Buffer &buffer, uint32_t &offset,
                                                Error &error);
 
+template <typename FieldType, typename StructT, size_t Index>
+FORY_ALWAYS_INLINE FieldType read_configurable_int_at_checked(Buffer &buffer,
+                                                              uint32_t &offset,
+                                                              Error &error);
+
 template <typename T, size_t Index>
 constexpr bool can_read_exact_primitive_with_offset() {
   using Helpers = CompileTimeFieldHelpers<T>;
@@ -3375,8 +3380,17 @@ FORY_ALWAYS_INLINE void read_single_exact_primitive_at(T &obj, ReadContext &ctx,
   using RawFieldType =
       typename meta::RemoveMemberPointerCVRefT<decltype(field_ptr)>;
   using FieldType = unwrap_field_t<RawFieldType>;
-  FieldType value =
-      read_primitive_at_checked<FieldType>(ctx.buffer(), offset, ctx.error());
+  FieldType value;
+  if constexpr (is_configurable_int_v<FieldType>) {
+    // Compatible exact schema still needs the local field encoding config:
+    // uint32_t/uint64_t default to VAR_UINT*, while explicit fixed fields do
+    // not.
+    value = read_configurable_int_at_checked<FieldType, T, original_index>(
+        ctx.buffer(), offset, ctx.error());
+  } else {
+    value =
+        read_primitive_at_checked<FieldType>(ctx.buffer(), offset, ctx.error());
+  }
   if constexpr (is_fory_field_v<RawFieldType>) {
     (obj.*field_ptr).value = value;
   } else {
@@ -3908,6 +3922,44 @@ FORY_ALWAYS_INLINE bool ensure_offset_readable(Buffer &buffer, uint32_t offset,
   return true;
 }
 
+FORY_ALWAYS_INLINE uint64_t read_tagged_uint64_at_checked(Buffer &buffer,
+                                                          uint32_t &offset,
+                                                          Error &error) {
+  if (FORY_PREDICT_FALSE(!ensure_offset_readable<4>(buffer, offset, error))) {
+    return 0;
+  }
+  uint32_t first = buffer.unsafe_get<uint32_t>(offset);
+  if ((first & 0b1) != 0b1) {
+    offset += 4;
+    return static_cast<uint64_t>(first >> 1);
+  }
+  if (FORY_PREDICT_FALSE(!ensure_offset_readable<9>(buffer, offset, error))) {
+    return 0;
+  }
+  uint64_t value = buffer.unsafe_get<uint64_t>(offset + 1);
+  offset += 9;
+  return value;
+}
+
+FORY_ALWAYS_INLINE int64_t read_tagged_int64_at_checked(Buffer &buffer,
+                                                        uint32_t &offset,
+                                                        Error &error) {
+  if (FORY_PREDICT_FALSE(!ensure_offset_readable<4>(buffer, offset, error))) {
+    return 0;
+  }
+  int32_t first = buffer.unsafe_get<int32_t>(offset);
+  if ((first & 0b1) != 0b1) {
+    offset += 4;
+    return static_cast<int64_t>(first >> 1);
+  }
+  if (FORY_PREDICT_FALSE(!ensure_offset_readable<9>(buffer, offset, error))) {
+    return 0;
+  }
+  int64_t value = buffer.unsafe_get<int64_t>(offset + 1);
+  offset += 9;
+  return value;
+}
+
 template <typename T>
 FORY_ALWAYS_INLINE T read_fixed_primitive_at_checked(Buffer &buffer,
                                                      uint32_t &offset,
@@ -3947,6 +3999,13 @@ FORY_ALWAYS_INLINE T read_fixed_primitive_at_checked(Buffer &buffer,
     T value = buffer.unsafe_get<uint16_t>(offset);
     offset += 2;
     return value;
+  } else if constexpr (std::is_same_v<T, int32_t> || std::is_same_v<T, int>) {
+    if (FORY_PREDICT_FALSE(!ensure_offset_readable<4>(buffer, offset, error))) {
+      return T{};
+    }
+    T value = static_cast<T>(buffer.unsafe_get<int32_t>(offset));
+    offset += 4;
+    return value;
   } else if constexpr (std::is_same_v<T, uint32_t> ||
                        std::is_same_v<T, unsigned int>) {
     if (FORY_PREDICT_FALSE(!ensure_offset_readable<4>(buffer, offset, error))) {
@@ -3961,6 +4020,14 @@ FORY_ALWAYS_INLINE T read_fixed_primitive_at_checked(Buffer &buffer,
     }
     T value = buffer.unsafe_get<float>(offset);
     offset += 4;
+    return value;
+  } else if constexpr (std::is_same_v<T, int64_t> ||
+                       std::is_same_v<T, long long>) {
+    if (FORY_PREDICT_FALSE(!ensure_offset_readable<8>(buffer, offset, error))) {
+      return T{};
+    }
+    T value = static_cast<T>(buffer.unsafe_get<int64_t>(offset));
+    offset += 8;
     return value;
   } else if constexpr (std::is_same_v<T, uint64_t> ||
                        std::is_same_v<T, unsigned long long>) {
@@ -3994,6 +4061,39 @@ FORY_ALWAYS_INLINE T read_fixed_primitive_at_checked(Buffer &buffer,
   } else {
     static_assert(sizeof(T) == 0, "Unsupported fixed primitive type");
     return T{};
+  }
+}
+
+template <typename FieldType, typename StructT, size_t Index>
+FORY_ALWAYS_INLINE FieldType read_configurable_int_at_checked(Buffer &buffer,
+                                                              uint32_t &offset,
+                                                              Error &error) {
+  static_assert(is_configurable_int_v<FieldType>,
+                "read_configurable_int_at_checked requires a configurable int "
+                "type");
+  constexpr Encoding enc = field_int_encoding<FieldType, StructT, Index>();
+  if constexpr (is_signed_configurable_int_v<FieldType>) {
+    if constexpr (enc == Encoding::Fixed) {
+      return read_fixed_primitive_at_checked<FieldType>(buffer, offset, error);
+    }
+    if constexpr (enc == Encoding::Tagged) {
+      if constexpr (is_configurable_int64_v<FieldType>) {
+        return static_cast<FieldType>(
+            read_tagged_int64_at_checked(buffer, offset, error));
+      }
+    }
+    return read_varint_at_checked<FieldType>(buffer, offset, error);
+  } else {
+    if constexpr (enc == Encoding::Fixed) {
+      return read_fixed_primitive_at_checked<FieldType>(buffer, offset, error);
+    }
+    if constexpr (enc == Encoding::Tagged) {
+      if constexpr (is_configurable_int64_v<FieldType>) {
+        return static_cast<FieldType>(
+            read_tagged_uint64_at_checked(buffer, offset, error));
+      }
+    }
+    return read_varint_at_checked<FieldType>(buffer, offset, error);
   }
 }
 

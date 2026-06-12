@@ -16,7 +16,7 @@
 # under the License.
 
 [package]
-name = "fory-renamed-facade-smoke"
+name = "fory-renamed-facade-api-tests"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

@@ -20,8 +20,8 @@ members = [
     "fory-core",
     "fory",
     "fory-derive",
-    "smoke-tests/facade-only",
-    "smoke-tests/renamed-facade",
+    "api-tests/facade-only",
+    "api-tests/renamed-facade",
     "tests",
 ]
 

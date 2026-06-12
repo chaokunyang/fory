@@ -16,7 +16,7 @@
 // under the License.
 
 // Binary grpc-interop is the Go peer for Java-driven gRPC integration tests.
-// It is invoked as a subprocess by GrpcInteropTest.java and supports two modes:
+// It is invoked as a subprocess by Java gRPC integration tests and supports two modes:
 //
 //	server --port-file <path>  start a gRPC server and write the bound port to the file
 //	client --target <addr>     connect to addr and exercise all four streaming modes
@@ -32,22 +32,12 @@ import (
 	"os"
 	"strings"
 
-	"github.com/apache/fory/go/fory"
 	grpc_fdl "github.com/apache/fory/integration_tests/grpc_tests/go/generated/grpc_fdl"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
-	"google.golang.org/grpc/encoding"
 )
 
 // --- helpers ----------------------------------------------------------------
-
-func newFory() *fory.Fory {
-	f := fory.New(fory.WithXlang(true), fory.WithRefTracking(true), fory.WithCompatible(true))
-	if err := grpc_fdl.RegisterTypes(f); err != nil {
-		log.Fatalf("RegisterTypes: %v", err)
-	}
-	return f
-}
 
 func fdlResponse(req *grpc_fdl.GrpcFdlRequest, tag string, offset int) *grpc_fdl.GrpcFdlResponse {
 	return &grpc_fdl.GrpcFdlResponse{
@@ -73,25 +63,59 @@ func fdlAggregate(requests []*grpc_fdl.GrpcFdlRequest) *grpc_fdl.GrpcFdlResponse
 	}
 }
 
-// protoFallbackCodec overrides the built-in "proto" codec (v1 registry) with
-// Fory so the server can decode requests from Java clients, which send with the
-// default content-type (application/grpc) rather than application/grpc+fory.
-type protoFallbackCodec struct{ grpc_fdl.CodecV2 }
-
-func (protoFallbackCodec) Name() string { return "proto" }
-
-func (c protoFallbackCodec) Marshal(v interface{}) ([]byte, error) {
-	b, err := c.Fory.Marshal(v)
-	if err != nil {
-		return nil, err
-	}
-	out := make([]byte, len(b))
-	copy(out, b)
-	return out, nil
+func fdlRequestUnion(req *grpc_fdl.GrpcFdlRequest) *grpc_fdl.GrpcFdlUnion {
+	union := grpc_fdl.RequestGrpcFdlUnion(req)
+	return &union
 }
 
-func (c protoFallbackCodec) Unmarshal(data []byte, v interface{}) error {
-	return c.Fory.Unmarshal(data, v)
+func fdlResponseUnion(response *grpc_fdl.GrpcFdlResponse) *grpc_fdl.GrpcFdlUnion {
+	union := grpc_fdl.ResponseGrpcFdlUnion(response)
+	return &union
+}
+
+func fdlUnionResponse(req *grpc_fdl.GrpcFdlRequest, tag string, offset int) *grpc_fdl.GrpcFdlUnion {
+	return fdlResponseUnion(fdlResponse(req, tag, offset))
+}
+
+func fdlUnionAggregate(unions []*grpc_fdl.GrpcFdlUnion) (*grpc_fdl.GrpcFdlUnion, error) {
+	requests := make([]*grpc_fdl.GrpcFdlRequest, len(unions))
+	for i, union := range unions {
+		req, err := fdlRequestFromUnion(union)
+		if err != nil {
+			return nil, err
+		}
+		requests[i] = req
+	}
+	return fdlResponseUnion(fdlAggregate(requests)), nil
+}
+
+func fdlRequestFromUnion(union *grpc_fdl.GrpcFdlUnion) (*grpc_fdl.GrpcFdlRequest, error) {
+	if union == nil {
+		return nil, fmt.Errorf("expected request union, got nil")
+	}
+	req, ok := union.AsRequest()
+	if !ok {
+		return nil, fmt.Errorf("expected request union, got case %d", union.Case())
+	}
+	return req, nil
+}
+
+func expectUnionResponse(name string, got *grpc_fdl.GrpcFdlUnion, want *grpc_fdl.GrpcFdlUnion) error {
+	if got == nil || want == nil {
+		return fmt.Errorf("%s: got %+v, want %+v", name, got, want)
+	}
+	gotResponse, ok := got.AsResponse()
+	if !ok {
+		return fmt.Errorf("%s: got non-response union case %d", name, got.Case())
+	}
+	wantResponse, ok := want.AsResponse()
+	if !ok {
+		return fmt.Errorf("%s: want non-response union case %d", name, want.Case())
+	}
+	if *gotResponse != *wantResponse {
+		return fmt.Errorf("%s: got %+v, want %+v", name, gotResponse, wantResponse)
+	}
+	return nil
 }
 
 // --- server -----------------------------------------------------------------
@@ -144,19 +168,72 @@ func (s *fdlService) BidiStreamMessage(stream grpc_fdl.FdlGrpcService_BidiStream
 	}
 }
 
-func runServer(portFile string, f *fory.Fory) error {
+func (s *fdlService) UnaryUnion(_ context.Context, req *grpc_fdl.GrpcFdlUnion) (*grpc_fdl.GrpcFdlUnion, error) {
+	message, err := fdlRequestFromUnion(req)
+	if err != nil {
+		return nil, err
+	}
+	return fdlUnionResponse(message, "unary", 10), nil
+}
+
+func (s *fdlService) ServerStreamUnion(req *grpc_fdl.GrpcFdlUnion, stream grpc_fdl.FdlGrpcService_ServerStreamUnionServer) error {
+	message, err := fdlRequestFromUnion(req)
+	if err != nil {
+		return err
+	}
+	for i := 0; i < 3; i++ {
+		if err := stream.Send(fdlUnionResponse(message, fmt.Sprintf("server-%d", i), i)); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *fdlService) ClientStreamUnion(stream grpc_fdl.FdlGrpcService_ClientStreamUnionServer) error {
+	var requests []*grpc_fdl.GrpcFdlUnion
+	for {
+		req, err := stream.Recv()
+		if err == io.EOF {
+			response, err := fdlUnionAggregate(requests)
+			if err != nil {
+				return err
+			}
+			return stream.SendAndClose(response)
+		}
+		if err != nil {
+			return err
+		}
+		requests = append(requests, req)
+	}
+}
+
+func (s *fdlService) BidiStreamUnion(stream grpc_fdl.FdlGrpcService_BidiStreamUnionServer) error {
+	index := 0
+	for {
+		req, err := stream.Recv()
+		if err == io.EOF {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		message, err := fdlRequestFromUnion(req)
+		if err != nil {
+			return err
+		}
+		if err := stream.Send(fdlUnionResponse(message, fmt.Sprintf("bidi-%d", index), index)); err != nil {
+			return err
+		}
+		index++
+	}
+}
+
+func runServer(portFile string) error {
 	lis, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		return fmt.Errorf("listen: %w", err)
 	}
-	codec := grpc_fdl.CodecV2{Fory: f}
-	// "fory" (v2): used by Go clients via grpc.ForceCodecV2.
-	encoding.RegisterCodecV2(codec)
-	// "proto" (v1): overrides the built-in proto codec so Java clients are
-	// also handled by Fory. RegisterCodecV2 writes to a separate registry and
-	// does not replace the v1 "proto" entry; RegisterCodec must be used.
-	encoding.RegisterCodec(protoFallbackCodec{codec})
-	s := grpc.NewServer()
+	s := grpc.NewServer(grpc.ForceServerCodecV2(grpc_fdl.CodecV2{}))
 	grpc_fdl.RegisterFdlGrpcServiceServer(s, &fdlService{})
 
 	// Write the bound port so the Java test harness knows where to connect.
@@ -246,19 +323,123 @@ func exerciseMessageStub(stub grpc_fdl.FdlGrpcServiceClient, requests []*grpc_fd
 	return nil
 }
 
-func runClient(target string, f *fory.Fory) error {
+func exerciseUnionStub(stub grpc_fdl.FdlGrpcServiceClient, requests []*grpc_fdl.GrpcFdlUnion) error {
+	ctx := context.Background()
+	first := requests[0]
+	firstMessage, err := fdlRequestFromUnion(first)
+	if err != nil {
+		return err
+	}
+
+	// unary
+	got, err := stub.UnaryUnion(ctx, first)
+	if err != nil {
+		return fmt.Errorf("UnaryUnion: %w", err)
+	}
+	if err := expectUnionResponse("UnaryUnion", got, fdlUnionResponse(firstMessage, "unary", 10)); err != nil {
+		return err
+	}
+
+	// server streaming
+	ss, err := stub.ServerStreamUnion(ctx, first)
+	if err != nil {
+		return fmt.Errorf("ServerStreamUnion: %w", err)
+	}
+	for i := 0; i < 3; i++ {
+		got, err := ss.Recv()
+		if err != nil {
+			return fmt.Errorf("ServerStreamUnion Recv[%d]: %w", i, err)
+		}
+		if err := expectUnionResponse(
+			fmt.Sprintf("ServerStreamUnion[%d]", i),
+			got,
+			fdlUnionResponse(firstMessage, fmt.Sprintf("server-%d", i), i),
+		); err != nil {
+			return err
+		}
+	}
+	if _, err := ss.Recv(); err != io.EOF {
+		return fmt.Errorf("ServerStreamUnion: expected EOF, got %v", err)
+	}
+
+	// client streaming
+	cs, err := stub.ClientStreamUnion(ctx)
+	if err != nil {
+		return fmt.Errorf("ClientStreamUnion: %w", err)
+	}
+	for _, req := range requests {
+		if err := cs.Send(req); err != nil {
+			return fmt.Errorf("ClientStreamUnion Send: %w", err)
+		}
+	}
+	csResp, err := cs.CloseAndRecv()
+	if err != nil {
+		return fmt.Errorf("ClientStreamUnion CloseAndRecv: %w", err)
+	}
+	wantAggregate, err := fdlUnionAggregate(requests)
+	if err != nil {
+		return err
+	}
+	if err := expectUnionResponse("ClientStreamUnion", csResp, wantAggregate); err != nil {
+		return err
+	}
+
+	// bidirectional streaming
+	bidi, err := stub.BidiStreamUnion(ctx)
+	if err != nil {
+		return fmt.Errorf("BidiStreamUnion: %w", err)
+	}
+	for i, req := range requests {
+		message, err := fdlRequestFromUnion(req)
+		if err != nil {
+			return err
+		}
+		if err := bidi.Send(req); err != nil {
+			return fmt.Errorf("BidiStreamUnion Send[%d]: %w", i, err)
+		}
+		got, err := bidi.Recv()
+		if err != nil {
+			return fmt.Errorf("BidiStreamUnion Recv[%d]: %w", i, err)
+		}
+		if err := expectUnionResponse(
+			fmt.Sprintf("BidiStreamUnion[%d]", i),
+			got,
+			fdlUnionResponse(message, fmt.Sprintf("bidi-%d", i), i),
+		); err != nil {
+			return err
+		}
+	}
+	if err := bidi.CloseSend(); err != nil {
+		return fmt.Errorf("BidiStreamUnion CloseSend: %w", err)
+	}
+	if _, err := bidi.Recv(); err != io.EOF {
+		return fmt.Errorf("BidiStreamUnion: expected EOF after CloseSend, got %v", err)
+	}
+
+	return nil
+}
+
+func runClient(target string) error {
 	conn, err := grpc.NewClient(target, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		return fmt.Errorf("dial %s: %w", target, err)
 	}
 	defer conn.Close()
 
-	stub := grpc_fdl.NewFdlGrpcServiceClient(conn, f)
+	stub := grpc_fdl.NewFdlGrpcServiceClient(conn)
 	requests := []*grpc_fdl.GrpcFdlRequest{
 		{Id: "fdl-a", Count: 1, Payload: "alpha"},
 		{Id: "fdl-b", Count: 2, Payload: "beta"},
 	}
-	return exerciseMessageStub(stub, requests)
+	if err := exerciseMessageStub(stub, requests); err != nil {
+		return err
+	}
+
+	unionRequests := []*grpc_fdl.GrpcFdlUnion{
+		fdlRequestUnion(&grpc_fdl.GrpcFdlRequest{Id: "fdl-u-a", Count: 3, Payload: "union-alpha"}),
+		fdlRequestUnion(&grpc_fdl.GrpcFdlRequest{Id: "fdl-u-b", Count: 4, Payload: "union-beta"}),
+	}
+	return exerciseUnionStub(stub, unionRequests)
 }
 
 // --- entry point ------------------------------------------------------------
@@ -274,15 +455,13 @@ func main() {
 		log.Fatal("usage: grpc-interop <server|client> [flags]")
 	}
 
-	f := newFory()
-
 	switch os.Args[1] {
 	case "server":
 		serverCmd.Parse(os.Args[2:])
 		if *serverPortFile == "" {
 			log.Fatal("--port-file is required")
 		}
-		if err := runServer(*serverPortFile, f); err != nil {
+		if err := runServer(*serverPortFile); err != nil {
 			log.Fatalf("server error: %v", err)
 		}
 	case "client":
@@ -290,7 +469,7 @@ func main() {
 		if *clientTarget == "" {
 			log.Fatal("--target is required")
 		}
-		if err := runClient(*clientTarget, f); err != nil {
+		if err := runClient(*clientTarget); err != nil {
 			log.Fatalf("client error: %v", err)
 		}
 	default:

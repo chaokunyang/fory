@@ -21,6 +21,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+TEST_CLASSES="${1:-PythonGrpcInteropTest,RustGrpcInteropTest,GoGrpcInteropTest}"
 
 python -m pip install "grpcio>=1.62.2,<1.71"
 python -m pip install -v -e "${ROOT_DIR}/python"
@@ -32,5 +33,5 @@ go build -o grpc-interop .
 cargo build --manifest-path "${SCRIPT_DIR}/rust/Cargo.toml" --workspace --quiet
 cd "${ROOT_DIR}/integration_tests/grpc_tests/java"
 mvn -T16 --no-transfer-progress \
-  -Dtest=GrpcInteropTest \
+  -Dtest="${TEST_CLASSES}" \
   test

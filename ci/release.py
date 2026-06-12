@@ -282,6 +282,12 @@ def bump_rust_version(new_version):
         rust_version,
         _update_cargo_package_version,
     )
+    _bump_version(
+        "integration_tests/grpc_tests/rust",
+        "Cargo.toml",
+        rust_version,
+        _update_rust_version,
+    )
 
 
 def bump_kotlin_version(new_version):

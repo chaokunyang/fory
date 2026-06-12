@@ -40,44 +40,52 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 import org.testng.Assert;
-import org.testng.annotations.Test;
 
-public class GrpcInteropTest {
+public abstract class GrpcTestBase {
 
-  @Test
-  public void testJavaServerPythonClient() throws Exception {
-    Server server =
-        ServerBuilder.forPort(0)
-            .addService(new FdlService())
-            .addService(new FbsService())
-            .addService(new PbService())
-            .build()
-            .start();
-    try {
-      runPython("python-grpc-client", "client", "--target", "127.0.0.1:" + server.getPort());
-    } finally {
-      server.shutdownNow();
-      server.awaitTermination(10, TimeUnit.SECONDS);
-    }
+  @FunctionalInterface
+  protected interface ChannelExercise {
+    void run(ManagedChannel channel) throws Exception;
   }
 
-  @Test
-  public void testJavaClientPythonServer() throws Exception {
-    Path portFile = Files.createTempFile("fory-grpc-python-", ".port");
+  protected Server startJavaAllSchemasServer() throws IOException {
+    return ServerBuilder.forPort(0)
+        .addService(new FdlService())
+        .addService(new FbsService())
+        .addService(new PbService())
+        .build()
+        .start();
+  }
+
+  protected Server startJavaFdlServer() throws IOException {
+    return ServerBuilder.forPort(0).addService(new FdlService()).build().start();
+  }
+
+  protected void exerciseAllSchemas(ManagedChannel channel) throws InterruptedException {
+    exerciseFdl(channel);
+    exerciseFbs(channel);
+    exercisePb(channel);
+  }
+
+  protected void exercisePeerServer(
+      String peer,
+      String language,
+      String portPrefix,
+      PeerCommand command,
+      ChannelExercise exercise)
+      throws Exception {
+    Path portFile = Files.createTempFile(portPrefix, ".port");
     Files.deleteIfExists(portFile);
-    PeerCommand command = pythonCommand("server", "--port-file", portFile.toString());
-    Process process = startPeer(command);
+    Process process = startPeer(command.withPortFile(portFile));
     PeerOutputCollector outputCollector =
-        new PeerOutputCollector(process.getInputStream(), "python-grpc-server");
+        new PeerOutputCollector(process.getInputStream(), peer + "-server");
     outputCollector.start();
     try {
-      int port = waitForPort(process, outputCollector, portFile, "Python");
+      int port = waitForPort(process, outputCollector, portFile, language);
       ManagedChannel channel =
           ManagedChannelBuilder.forAddress("127.0.0.1", port).usePlaintext().build();
       try {
-        exerciseFdl(channel);
-        exerciseFbs(channel);
-        exercisePb(channel);
+        exercise.run(channel);
       } finally {
         channel.shutdownNow();
         channel.awaitTermination(10, TimeUnit.SECONDS);
@@ -94,57 +102,7 @@ public class GrpcInteropTest {
     }
   }
 
-  @Test
-  public void testJavaServerRustClient() throws Exception {
-    Server server =
-        ServerBuilder.forPort(0)
-            .addService(new FdlService())
-            .addService(new FbsService())
-            .addService(new PbService())
-            .build()
-            .start();
-    try {
-      runRust("rust-grpc-client", "client", "--target", "127.0.0.1:" + server.getPort());
-    } finally {
-      server.shutdownNow();
-      server.awaitTermination(10, TimeUnit.SECONDS);
-    }
-  }
-
-  @Test
-  public void testJavaClientRustServer() throws Exception {
-    Path portFile = Files.createTempFile("fory-grpc-rust-", ".port");
-    Files.deleteIfExists(portFile);
-    PeerCommand command = rustCommand("server", "--port-file", portFile.toString());
-    Process process = startPeer(command);
-    PeerOutputCollector outputCollector =
-        new PeerOutputCollector(process.getInputStream(), "rust-grpc-server");
-    outputCollector.start();
-    try {
-      int port = waitForPort(process, outputCollector, portFile, "Rust");
-      ManagedChannel channel =
-          ManagedChannelBuilder.forAddress("127.0.0.1", port).usePlaintext().build();
-      try {
-        exerciseFdl(channel);
-        exerciseFbs(channel);
-        exercisePb(channel);
-      } finally {
-        channel.shutdownNow();
-        channel.awaitTermination(10, TimeUnit.SECONDS);
-      }
-    } finally {
-      process.destroy();
-      process.waitFor(10, TimeUnit.SECONDS);
-      if (process.isAlive()) {
-        process.destroyForcibly();
-        process.waitFor(10, TimeUnit.SECONDS);
-      }
-      outputCollector.awaitOutput();
-      Files.deleteIfExists(portFile);
-    }
-  }
-
-  private void exerciseFdl(ManagedChannel channel) throws InterruptedException {
+  protected void exerciseFdl(ManagedChannel channel) throws InterruptedException {
     grpc_fdl.FdlGrpcServiceGrpc.FdlGrpcServiceBlockingStub blocking =
         grpc_fdl.FdlGrpcServiceGrpc.newBlockingStub(channel);
     grpc_fdl.FdlGrpcServiceGrpc.FdlGrpcServiceStub async =
@@ -159,18 +117,6 @@ public class GrpcInteropTest {
             grpc_fdl.GrpcFdlUnion.ofRequest(fdlRequest("fdl-u-a", 3, "union-alpha")),
             grpc_fdl.GrpcFdlUnion.ofRequest(fdlRequest("fdl-u-b", 4, "union-beta")));
     assertFdlUnions(blocking, async, unions);
-  }
-
-  // exerciseFdlMessages exercises the four FDL message streaming modes without union methods.
-  private void exerciseFdlMessages(ManagedChannel channel) throws InterruptedException {
-    grpc_fdl.FdlGrpcServiceGrpc.FdlGrpcServiceBlockingStub blocking =
-        grpc_fdl.FdlGrpcServiceGrpc.newBlockingStub(channel);
-    grpc_fdl.FdlGrpcServiceGrpc.FdlGrpcServiceStub async =
-        grpc_fdl.FdlGrpcServiceGrpc.newStub(channel);
-
-    List<grpc_fdl.GrpcFdlRequest> messages =
-        Arrays.asList(fdlRequest("fdl-a", 1, "alpha"), fdlRequest("fdl-b", 2, "beta"));
-    assertFdlMessages(blocking, async, messages);
   }
 
   private void assertFdlMessages(
@@ -227,7 +173,7 @@ public class GrpcInteropTest {
             fdlUnionResponse(fdlRequestFromUnion(requests.get(1)), "bidi-1", 1)));
   }
 
-  private void exerciseFbs(ManagedChannel channel) throws InterruptedException {
+  protected void exerciseFbs(ManagedChannel channel) throws InterruptedException {
     grpc_fbs.FbsGrpcServiceGrpc.FbsGrpcServiceBlockingStub blocking =
         grpc_fbs.FbsGrpcServiceGrpc.newBlockingStub(channel);
     grpc_fbs.FbsGrpcServiceGrpc.FbsGrpcServiceStub async =
@@ -298,7 +244,7 @@ public class GrpcInteropTest {
             fbsUnionResponse(fbsRequestFromUnion(requests.get(1)), "bidi-1", 1)));
   }
 
-  private void exercisePb(ManagedChannel channel) throws InterruptedException {
+  protected void exercisePb(ManagedChannel channel) throws InterruptedException {
     grpc_pb.PbGrpcServiceGrpc.PbGrpcServiceBlockingStub blocking =
         grpc_pb.PbGrpcServiceGrpc.newBlockingStub(channel);
     grpc_pb.PbGrpcServiceGrpc.PbGrpcServiceStub async = grpc_pb.PbGrpcServiceGrpc.newStub(channel);
@@ -328,49 +274,7 @@ public class GrpcInteropTest {
             pbResponse(requests.get(0), "bidi-0", 0), pbResponse(requests.get(1), "bidi-1", 1)));
   }
 
-  @Test
-  public void testJavaServerGoClient() throws Exception {
-    Server server = ServerBuilder.forPort(0).addService(new FdlService()).build().start();
-    try {
-      runGo("go-grpc-client", "client", "--target", "127.0.0.1:" + server.getPort());
-    } finally {
-      server.shutdownNow();
-      server.awaitTermination(10, TimeUnit.SECONDS);
-    }
-  }
-
-  @Test
-  public void testGoServerJavaClient() throws Exception {
-    Path portFile = Files.createTempFile("fory-grpc-go-", ".port");
-    Files.deleteIfExists(portFile);
-    PeerCommand command = goCommand("server", "--port-file", portFile.toString());
-    Process process = startPeer(command);
-    PeerOutputCollector outputCollector =
-        new PeerOutputCollector(process.getInputStream(), "go-grpc-server");
-    outputCollector.start();
-    try {
-      int port = waitForPort(process, outputCollector, portFile, "Go");
-      ManagedChannel channel =
-          ManagedChannelBuilder.forAddress("127.0.0.1", port).usePlaintext().build();
-      try {
-        exerciseFdlMessages(channel);
-      } finally {
-        channel.shutdownNow();
-        channel.awaitTermination(10, TimeUnit.SECONDS);
-      }
-    } finally {
-      process.destroy();
-      process.waitFor(10, TimeUnit.SECONDS);
-      if (process.isAlive()) {
-        process.destroyForcibly();
-        process.waitFor(10, TimeUnit.SECONDS);
-      }
-      outputCollector.awaitOutput();
-      Files.deleteIfExists(portFile);
-    }
-  }
-
-  private PeerCommand goCommand(String... args) {
+  protected PeerCommand goCommand(String... args) {
     Path grpcRoot = repoRoot().resolve("integration_tests").resolve("grpc_tests");
     Path goRoot = grpcRoot.resolve("go");
     List<String> command = new ArrayList<>();
@@ -384,7 +288,7 @@ public class GrpcInteropTest {
     return peerCommand;
   }
 
-  private void runGo(String peer, String... args) throws IOException, InterruptedException {
+  protected void runGo(String peer, String... args) throws IOException, InterruptedException {
     Process process = startPeer(goCommand(args));
     PeerOutputCollector outputCollector = new PeerOutputCollector(process.getInputStream(), peer);
     outputCollector.start();
@@ -406,7 +310,7 @@ public class GrpcInteropTest {
     outputCollector.awaitOutput();
   }
 
-  private PeerCommand pythonCommand(String... args) {
+  protected PeerCommand pythonCommand(String... args) {
     Path repoRoot = repoRoot();
     Path grpcRoot = repoRoot.resolve("integration_tests").resolve("grpc_tests");
     Path pythonRoot = grpcRoot.resolve("python");
@@ -443,7 +347,7 @@ public class GrpcInteropTest {
     return peerCommand;
   }
 
-  private PeerCommand rustCommand(String... args) {
+  protected PeerCommand rustCommand(String... args) {
     Path repoRoot = repoRoot();
     Path grpcRoot = repoRoot.resolve("integration_tests").resolve("grpc_tests");
     Path rustRoot = grpcRoot.resolve("rust");
@@ -471,7 +375,7 @@ public class GrpcInteropTest {
     return peerCommand;
   }
 
-  private void runPython(String peer, String... args) throws IOException, InterruptedException {
+  protected void runPython(String peer, String... args) throws IOException, InterruptedException {
     Process process = startPeer(pythonCommand(args));
     PeerOutputCollector outputCollector = new PeerOutputCollector(process.getInputStream(), peer);
     outputCollector.start();
@@ -493,7 +397,7 @@ public class GrpcInteropTest {
     outputCollector.awaitOutput();
   }
 
-  private void runRust(String peer, String... args) throws IOException, InterruptedException {
+  protected void runRust(String peer, String... args) throws IOException, InterruptedException {
     Process process = startPeer(rustCommand(args));
     PeerOutputCollector outputCollector = new PeerOutputCollector(process.getInputStream(), peer);
     outputCollector.start();
@@ -589,7 +493,7 @@ public class GrpcInteropTest {
 
   private static grpc_fdl.GrpcFdlUnion fdlUnionAggregate(List<grpc_fdl.GrpcFdlUnion> unions) {
     return grpc_fdl.GrpcFdlUnion.ofResponse(
-        fdlAggregate(map(unions, GrpcInteropTest::fdlRequestFromUnion)));
+        fdlAggregate(map(unions, GrpcTestBase::fdlRequestFromUnion)));
   }
 
   private static grpc_fdl.GrpcFdlRequest fdlRequestFromUnion(grpc_fdl.GrpcFdlUnion union) {
@@ -629,7 +533,7 @@ public class GrpcInteropTest {
 
   private static grpc_fbs.GrpcFbsUnion fbsUnionAggregate(List<grpc_fbs.GrpcFbsUnion> unions) {
     return grpc_fbs.GrpcFbsUnion.ofGrpcFbsResponse(
-        fbsAggregate(map(unions, GrpcInteropTest::fbsRequestFromUnion)));
+        fbsAggregate(map(unions, GrpcTestBase::fbsRequestFromUnion)));
   }
 
   private static grpc_fbs.GrpcFbsRequest fbsRequestFromUnion(grpc_fbs.GrpcFbsUnion union) {
@@ -795,7 +699,7 @@ public class GrpcInteropTest {
     @Override
     public StreamObserver<grpc_fdl.GrpcFdlRequest> clientStreamMessage(
         StreamObserver<grpc_fdl.GrpcFdlResponse> responseObserver) {
-      return collectAndRespond(responseObserver, GrpcInteropTest::fdlAggregate);
+      return collectAndRespond(responseObserver, GrpcTestBase::fdlAggregate);
     }
 
     @Override
@@ -843,7 +747,7 @@ public class GrpcInteropTest {
     @Override
     public StreamObserver<grpc_fdl.GrpcFdlUnion> clientStreamUnion(
         StreamObserver<grpc_fdl.GrpcFdlUnion> responseObserver) {
-      return collectAndRespond(responseObserver, GrpcInteropTest::fdlUnionAggregate);
+      return collectAndRespond(responseObserver, GrpcTestBase::fdlUnionAggregate);
     }
 
     @Override
@@ -895,7 +799,7 @@ public class GrpcInteropTest {
     @Override
     public StreamObserver<grpc_fbs.GrpcFbsRequest> clientStreamMessage(
         StreamObserver<grpc_fbs.GrpcFbsResponse> responseObserver) {
-      return collectAndRespond(responseObserver, GrpcInteropTest::fbsAggregate);
+      return collectAndRespond(responseObserver, GrpcTestBase::fbsAggregate);
     }
 
     @Override
@@ -943,7 +847,7 @@ public class GrpcInteropTest {
     @Override
     public StreamObserver<grpc_fbs.GrpcFbsUnion> clientStreamUnion(
         StreamObserver<grpc_fbs.GrpcFbsUnion> responseObserver) {
-      return collectAndRespond(responseObserver, GrpcInteropTest::fbsUnionAggregate);
+      return collectAndRespond(responseObserver, GrpcTestBase::fbsUnionAggregate);
     }
 
     @Override
@@ -993,7 +897,7 @@ public class GrpcInteropTest {
     @Override
     public StreamObserver<grpc_pb.GrpcPbRequest> clientStreamMessage(
         StreamObserver<grpc_pb.GrpcPbResponse> responseObserver) {
-      return collectAndRespond(responseObserver, GrpcInteropTest::pbAggregate);
+      return collectAndRespond(responseObserver, GrpcTestBase::pbAggregate);
     }
 
     @Override
@@ -1053,10 +957,21 @@ public class GrpcInteropTest {
     }
   }
 
-  private static final class PeerCommand {
+  protected static final class PeerCommand {
     private List<String> command;
     private Path workDir;
     private final java.util.Map<String, String> environment = new java.util.HashMap<>();
+
+    private PeerCommand withPortFile(Path portFile) {
+      List<String> serverCommand = new ArrayList<>(command);
+      serverCommand.add("--port-file");
+      serverCommand.add(portFile.toString());
+      PeerCommand peerCommand = new PeerCommand();
+      peerCommand.command = serverCommand;
+      peerCommand.workDir = workDir;
+      peerCommand.environment.putAll(environment);
+      return peerCommand;
+    }
   }
 
   private static final class PeerOutputCollector extends Thread {

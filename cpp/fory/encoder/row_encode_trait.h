@@ -19,6 +19,7 @@
 
 #pragma once
 
+#include "fory/meta/field.h"
 #include "fory/meta/field_info.h"
 #include "fory/meta/type_traits.h"
 #include "fory/row/writer.h"

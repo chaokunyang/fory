@@ -145,8 +145,7 @@ FORY_ALWAYS_INLINE uint32_t put_primitive_at(T value, Buffer &buffer,
     return buffer.put_var_uint32(offset, zigzag);
   } else if constexpr (std::is_same_v<T, uint32_t> ||
                        std::is_same_v<T, unsigned int>) {
-    buffer.unsafe_put<uint32_t>(offset, static_cast<uint32_t>(value));
-    return 4;
+    return buffer.put_var_uint32(offset, static_cast<uint32_t>(value));
   } else if constexpr (std::is_same_v<T, int64_t> ||
                        std::is_same_v<T, long long>) {
     // varint64 with zigzag encoding
@@ -156,8 +155,7 @@ FORY_ALWAYS_INLINE uint32_t put_primitive_at(T value, Buffer &buffer,
     return buffer.put_var_uint64(offset, zigzag);
   } else if constexpr (std::is_same_v<T, uint64_t> ||
                        std::is_same_v<T, unsigned long long>) {
-    buffer.unsafe_put<uint64_t>(offset, static_cast<uint64_t>(value));
-    return 8;
+    return buffer.put_var_uint64(offset, static_cast<uint64_t>(value));
   } else if constexpr (std::is_same_v<T, int32_t> || std::is_same_v<T, int>) {
     buffer.unsafe_put<int32_t>(offset, static_cast<int32_t>(value));
     return 4;
@@ -315,8 +313,10 @@ constexpr bool configurable_int_is_fixed() {
   if constexpr (is_signed_configurable_int_v<FieldType>) {
     return field_int_encoding<FieldType, StructT, Index>() == Encoding::Fixed;
   } else if constexpr (is_unsigned_configurable_int_v<FieldType>) {
-    constexpr auto enc = field_int_encoding<FieldType, StructT, Index>();
-    return enc != Encoding::Varint && enc != Encoding::Tagged;
+    // uint32_t/uint64_t default to their Serializer type IDs (VAR_UINT*).
+    // Treat only explicit Fixed as fixed so field metadata and field bytes
+    // agree.
+    return field_int_encoding<FieldType, StructT, Index>() == Encoding::Fixed;
   } else {
     return false;
   }
@@ -327,8 +327,7 @@ constexpr bool configurable_int_is_varint() {
   if constexpr (is_signed_configurable_int_v<FieldType>) {
     return field_int_encoding<FieldType, StructT, Index>() != Encoding::Fixed;
   } else if constexpr (is_unsigned_configurable_int_v<FieldType>) {
-    constexpr auto enc = field_int_encoding<FieldType, StructT, Index>();
-    return enc == Encoding::Varint || enc == Encoding::Tagged;
+    return field_int_encoding<FieldType, StructT, Index>() != Encoding::Fixed;
   } else {
     return false;
   }
@@ -366,16 +365,16 @@ constexpr size_t configurable_int_max_varint_bytes() {
     return 10;
   } else if constexpr (is_unsigned_configurable_int_v<FieldType>) {
     constexpr auto enc = field_int_encoding<FieldType, StructT, Index>();
-    if constexpr (enc == Encoding::Varint) {
-      if constexpr (is_configurable_int32_v<FieldType>) {
-        return 5;
-      }
-      return 10;
+    if constexpr (enc == Encoding::Fixed) {
+      return 0;
     }
     if constexpr (enc == Encoding::Tagged) {
       return 9;
     }
-    return 0;
+    if constexpr (is_configurable_int32_v<FieldType>) {
+      return 5;
+    }
+    return 10;
   } else {
     return 0;
   }
@@ -402,8 +401,13 @@ FORY_ALWAYS_INLINE uint32_t write_configurable_int_at(FieldType value,
     }
     return put_varint_at<FieldType>(value, buffer, offset);
   } else {
-    if constexpr (enc == Encoding::Varint) {
-      return put_varint_at<FieldType>(value, buffer, offset);
+    if constexpr (enc == Encoding::Fixed) {
+      if constexpr (is_configurable_int32_v<FieldType>) {
+        buffer.unsafe_put<uint32_t>(offset, static_cast<uint32_t>(value));
+        return 4;
+      }
+      buffer.unsafe_put<uint64_t>(offset, static_cast<uint64_t>(value));
+      return 8;
     }
     if constexpr (enc == Encoding::Tagged) {
       if constexpr (is_configurable_int64_v<FieldType>) {
@@ -411,12 +415,7 @@ FORY_ALWAYS_INLINE uint32_t write_configurable_int_at(FieldType value,
       }
       return put_varint_at<FieldType>(value, buffer, offset);
     }
-    if constexpr (is_configurable_int32_v<FieldType>) {
-      buffer.unsafe_put<uint32_t>(offset, static_cast<uint32_t>(value));
-      return 4;
-    }
-    buffer.unsafe_put<uint64_t>(offset, static_cast<uint64_t>(value));
-    return 8;
+    return put_varint_at<FieldType>(value, buffer, offset);
   }
 }
 
@@ -447,8 +446,17 @@ FORY_ALWAYS_INLINE FieldType read_configurable_int_at(Buffer &buffer,
     }
     return read_varint_at<FieldType>(buffer, offset);
   } else {
-    if constexpr (enc == Encoding::Varint) {
-      return read_varint_at<FieldType>(buffer, offset);
+    if constexpr (enc == Encoding::Fixed) {
+      if constexpr (is_configurable_int32_v<FieldType>) {
+        FieldType value =
+            static_cast<FieldType>(buffer.unsafe_get<uint32_t>(offset));
+        offset += 4;
+        return value;
+      }
+      FieldType value =
+          static_cast<FieldType>(buffer.unsafe_get<uint64_t>(offset));
+      offset += 8;
+      return value;
     }
     if constexpr (enc == Encoding::Tagged) {
       if constexpr (is_configurable_int64_v<FieldType>) {
@@ -459,16 +467,7 @@ FORY_ALWAYS_INLINE FieldType read_configurable_int_at(Buffer &buffer,
       }
       return read_varint_at<FieldType>(buffer, offset);
     }
-    if constexpr (is_configurable_int32_v<FieldType>) {
-      FieldType value =
-          static_cast<FieldType>(buffer.unsafe_get<uint32_t>(offset));
-      offset += 4;
-      return value;
-    }
-    FieldType value =
-        static_cast<FieldType>(buffer.unsafe_get<uint64_t>(offset));
-    offset += 8;
-    return value;
+    return read_varint_at<FieldType>(buffer, offset);
   }
 }
 
@@ -492,19 +491,19 @@ FORY_ALWAYS_INLINE FieldType read_configurable_int(ReadContext &ctx) {
     }
     return static_cast<FieldType>(ctx.read_var_int64(ctx.error()));
   } else {
-    if constexpr (enc == Encoding::Varint) {
+    if constexpr (enc == Encoding::Fixed) {
       if constexpr (is_configurable_int32_v<FieldType>) {
-        return static_cast<FieldType>(ctx.read_var_uint32(ctx.error()));
+        return static_cast<FieldType>(ctx.read_int32(ctx.error()));
       }
-      return static_cast<FieldType>(ctx.read_var_uint64(ctx.error()));
+      return static_cast<FieldType>(ctx.read_uint64(ctx.error()));
     }
     if constexpr (enc == Encoding::Tagged) {
       return static_cast<FieldType>(ctx.read_tagged_uint64(ctx.error()));
     }
     if constexpr (is_configurable_int32_v<FieldType>) {
-      return static_cast<FieldType>(ctx.read_int32(ctx.error()));
+      return static_cast<FieldType>(ctx.read_var_uint32(ctx.error()));
     }
-    return static_cast<FieldType>(ctx.read_uint64(ctx.error()));
+    return static_cast<FieldType>(ctx.read_var_uint64(ctx.error()));
   }
 }
 
@@ -693,10 +692,10 @@ constexpr uint32_t configured_scalar_type_id() {
     return static_cast<uint32_t>(TypeId::VARINT32);
   } else if constexpr (std::is_same_v<Decayed, uint32_t> ||
                        std::is_same_v<Decayed, unsigned int>) {
-    if constexpr (enc == Encoding::Varint) {
-      return static_cast<uint32_t>(TypeId::VAR_UINT32);
+    if constexpr (enc == Encoding::Fixed) {
+      return static_cast<uint32_t>(TypeId::UINT32);
     }
-    return static_cast<uint32_t>(TypeId::UINT32);
+    return static_cast<uint32_t>(TypeId::VAR_UINT32);
   } else if constexpr (std::is_same_v<Decayed, int64_t> ||
                        std::is_same_v<Decayed, long long>) {
     if constexpr (enc == Encoding::Fixed) {
@@ -707,12 +706,12 @@ constexpr uint32_t configured_scalar_type_id() {
     return static_cast<uint32_t>(TypeId::VARINT64);
   } else if constexpr (std::is_same_v<Decayed, uint64_t> ||
                        std::is_same_v<Decayed, unsigned long long>) {
-    if constexpr (enc == Encoding::Varint) {
-      return static_cast<uint32_t>(TypeId::VAR_UINT64);
+    if constexpr (enc == Encoding::Fixed) {
+      return static_cast<uint32_t>(TypeId::UINT64);
     } else if constexpr (enc == Encoding::Tagged) {
       return static_cast<uint32_t>(TypeId::TAGGED_UINT64);
     }
-    return static_cast<uint32_t>(TypeId::UINT64);
+    return static_cast<uint32_t>(TypeId::VAR_UINT64);
   } else if constexpr (std::is_same_v<Decayed, float16_t>) {
     return static_cast<uint32_t>(TypeId::FLOAT16);
   } else if constexpr (std::is_same_v<Decayed, bfloat16_t>) {
@@ -773,18 +772,18 @@ FORY_ALWAYS_INLINE void write_configured_scalar(const FieldType &value,
       configured_node_encoding<StructT, Index, NodeIndex>();
   if constexpr (is_configurable_int_v<FieldType>) {
     if constexpr (std::is_same_v<FieldType, uint32_t>) {
-      if constexpr (enc == Encoding::Varint) {
-        ctx.write_var_uint32(value);
-      } else {
+      if constexpr (enc == Encoding::Fixed) {
         ctx.buffer().write_int32(static_cast<int32_t>(value));
+      } else {
+        ctx.write_var_uint32(value);
       }
     } else if constexpr (std::is_same_v<FieldType, uint64_t>) {
-      if constexpr (enc == Encoding::Varint) {
-        ctx.write_var_uint64(value);
+      if constexpr (enc == Encoding::Fixed) {
+        ctx.buffer().write_int64(static_cast<int64_t>(value));
       } else if constexpr (enc == Encoding::Tagged) {
         ctx.write_tagged_uint64(value);
       } else {
-        ctx.buffer().write_int64(static_cast<int64_t>(value));
+        ctx.write_var_uint64(value);
       }
     } else if constexpr (std::is_same_v<FieldType, int32_t> ||
                          std::is_same_v<FieldType, int>) {
@@ -816,17 +815,17 @@ FORY_ALWAYS_INLINE FieldType read_configured_scalar(ReadContext &ctx) {
     constexpr Encoding enc =
         configured_node_encoding<StructT, Index, NodeIndex>();
     if constexpr (std::is_same_v<FieldType, uint32_t>) {
-      if constexpr (enc == Encoding::Varint) {
-        return static_cast<FieldType>(ctx.read_var_uint32(ctx.error()));
+      if constexpr (enc == Encoding::Fixed) {
+        return static_cast<FieldType>(ctx.read_int32(ctx.error()));
       }
-      return static_cast<FieldType>(ctx.read_int32(ctx.error()));
+      return static_cast<FieldType>(ctx.read_var_uint32(ctx.error()));
     } else if constexpr (std::is_same_v<FieldType, uint64_t>) {
-      if constexpr (enc == Encoding::Varint) {
-        return static_cast<FieldType>(ctx.read_var_uint64(ctx.error()));
+      if constexpr (enc == Encoding::Fixed) {
+        return static_cast<FieldType>(ctx.read_uint64(ctx.error()));
       } else if constexpr (enc == Encoding::Tagged) {
         return static_cast<FieldType>(ctx.read_tagged_uint64(ctx.error()));
       }
-      return static_cast<FieldType>(ctx.read_uint64(ctx.error()));
+      return static_cast<FieldType>(ctx.read_var_uint64(ctx.error()));
     } else if constexpr (std::is_same_v<FieldType, int32_t> ||
                          std::is_same_v<FieldType, int>) {
       if constexpr (enc == Encoding::Fixed) {
@@ -1463,8 +1462,8 @@ template <typename T> struct CompileTimeFieldHelpers {
   }
 
   /// Check if field at Index uses fixed-size encoding based on C++ type
-  /// Fixed types: bool, int8, uint8, int16, uint16, uint32, uint64, float,
-  /// double. Signed int32/int64 are fixed only when field encoding is
+  /// Fixed types: bool, int8, uint8, int16, uint16, float, double. Configurable
+  /// int32/int64/uint32/uint64 fields are fixed only when field encoding is
   /// configured as fixed.
   template <size_t Index> static constexpr bool field_is_fixed_primitive() {
     if constexpr (FieldCount == 0) {
@@ -1491,8 +1490,8 @@ template <typename T> struct CompileTimeFieldHelpers {
     }
   }
 
-  /// Check if field at Index uses varint encoding based on C++ type
-  /// Varint types: int32, int, int64, long long (signed integers use zigzag)
+  /// Check if field at Index uses varint/tagged encoding based on C++ type.
+  /// Configurable integer fields default to varint unless configured as fixed.
   template <size_t Index> static constexpr bool field_is_varint_primitive() {
     if constexpr (FieldCount == 0) {
       return false;
@@ -2565,19 +2564,19 @@ void write_single_field(const T &obj, WriteContext &ctx,
     using InnerType = typename std::remove_reference_t<FieldType>::value_type;
     InnerType value = field_value.value();
     if constexpr (std::is_same_v<InnerType, uint32_t>) {
-      if constexpr (enc == Encoding::Varint) {
-        ctx.write_var_uint32(value);
-      } else {
+      if constexpr (enc == Encoding::Fixed) {
         ctx.buffer().write_int32(static_cast<int32_t>(value));
+      } else {
+        ctx.write_var_uint32(value);
       }
     } else if constexpr (std::is_same_v<InnerType, uint64_t>) {
-      if constexpr (enc == Encoding::Varint) {
-        ctx.write_var_uint64(value);
+      if constexpr (enc == Encoding::Fixed) {
+        // For fixed encoding, cast to int64 since binary representation is same
+        ctx.buffer().write_int64(static_cast<int64_t>(value));
       } else if constexpr (enc == Encoding::Tagged) {
         ctx.write_tagged_uint64(value);
       } else {
-        // For fixed encoding, cast to int64 since binary representation is same
-        ctx.buffer().write_int64(static_cast<int64_t>(value));
+        ctx.write_var_uint64(value);
       }
     }
     return;
@@ -2626,19 +2625,19 @@ void write_single_field(const T &obj, WriteContext &ctx,
       constexpr auto enc =
           ::fory::detail::GetFieldConfigEntry<T, Index>::encoding;
       if constexpr (std::is_same_v<FieldType, uint32_t>) {
-        if constexpr (enc == Encoding::Varint) {
-          ctx.write_var_uint32(field_value);
-        } else {
+        if constexpr (enc == Encoding::Fixed) {
           ctx.buffer().write_int32(static_cast<int32_t>(field_value));
+        } else {
+          ctx.write_var_uint32(field_value);
         }
         return;
       } else if constexpr (std::is_same_v<FieldType, uint64_t>) {
-        if constexpr (enc == Encoding::Varint) {
-          ctx.write_var_uint64(field_value);
+        if constexpr (enc == Encoding::Fixed) {
+          ctx.buffer().write_int64(static_cast<int64_t>(field_value));
         } else if constexpr (enc == Encoding::Tagged) {
           ctx.write_tagged_uint64(field_value);
         } else {
-          ctx.buffer().write_int64(static_cast<int64_t>(field_value));
+          ctx.write_var_uint64(field_value);
         }
         return;
       } else if constexpr (std::is_same_v<FieldType, int32_t> ||
@@ -2922,8 +2921,8 @@ FORY_ALWAYS_INLINE FieldType read_primitive_field_direct(ReadContext &ctx,
   static_assert(is_raw_primitive_v<FieldType>,
                 "read_primitive_field_direct only supports raw primitives");
 
-  // Use the actual C++ type, not TypeId, because default encoding differs
-  // between signed (varint) and unsigned (fixed) primitives.
+  // Use the actual C++ type, not TypeId. Fixed unsigned fields use the
+  // explicit fixed read helpers; this path follows serializer defaults.
   if constexpr (std::is_same_v<FieldType, bool>) {
     uint8_t v = ctx.read_uint8(error);
     return v != 0;
@@ -2942,14 +2941,12 @@ FORY_ALWAYS_INLINE FieldType read_primitive_field_direct(ReadContext &ctx,
     // int32_t uses varint encoding
     return ctx.read_var_int32(error);
   } else if constexpr (std::is_same_v<FieldType, uint32_t>) {
-    // uint32_t uses fixed 4-byte encoding (not varint!)
-    return static_cast<uint32_t>(ctx.read_int32(error));
+    return ctx.read_var_uint32(error);
   } else if constexpr (std::is_same_v<FieldType, int64_t>) {
     // int64_t uses varint encoding
     return ctx.read_var_int64(error);
   } else if constexpr (std::is_same_v<FieldType, uint64_t>) {
-    // uint64_t uses fixed 8-byte encoding (not varint!)
-    return static_cast<uint64_t>(ctx.read_int64(error));
+    return ctx.read_var_uint64(error);
   } else if constexpr (std::is_same_v<FieldType, float16_t>) {
     return ctx.read_f16(error);
   } else if constexpr (std::is_same_v<FieldType, bfloat16_t>) {
@@ -3066,18 +3063,18 @@ void read_single_field_by_index(T &obj, ReadContext &ctx) {
       using InnerType = typename std::remove_reference_t<FieldType>::value_type;
       InnerType value;
       if constexpr (std::is_same_v<InnerType, uint32_t>) {
-        if constexpr (enc == Encoding::Varint) {
-          value = ctx.read_var_uint32(ctx.error());
-        } else {
+        if constexpr (enc == Encoding::Fixed) {
           value = static_cast<uint32_t>(ctx.read_int32(ctx.error()));
+        } else {
+          value = ctx.read_var_uint32(ctx.error());
         }
       } else if constexpr (std::is_same_v<InnerType, uint64_t>) {
-        if constexpr (enc == Encoding::Varint) {
-          value = ctx.read_var_uint64(ctx.error());
+        if constexpr (enc == Encoding::Fixed) {
+          value = ctx.read_uint64(ctx.error());
         } else if constexpr (enc == Encoding::Tagged) {
           value = ctx.read_tagged_uint64(ctx.error());
         } else {
-          value = ctx.read_uint64(ctx.error());
+          value = ctx.read_var_uint64(ctx.error());
         }
       }
       field_value_set(obj, field_entry, std::optional<InnerType>(value));

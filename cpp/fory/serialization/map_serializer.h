@@ -83,6 +83,11 @@ struct MapReserver<MapType,
 
 template <typename MapType>
 inline bool reserve_map(MapType &map, ReadContext &ctx, uint32_t length) {
+  // Lazy error propagation may continue into later readers; do not let that
+  // path retain attacker-controlled capacity after an earlier read failure.
+  if (FORY_PREDICT_FALSE(ctx.has_error())) {
+    return false;
+  }
   if (FORY_PREDICT_FALSE(!ctx.buffer().ensure_readable(length, ctx.error()))) {
     return false;
   }

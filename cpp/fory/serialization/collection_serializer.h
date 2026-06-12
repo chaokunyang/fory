@@ -383,6 +383,11 @@ inline constexpr bool has_reserve_v = has_reserve<Container>::value;
 template <typename Container>
 inline bool reserve_collection(Container &result, ReadContext &ctx,
                                uint32_t length) {
+  // Lazy error propagation may continue into later readers; do not let that
+  // path retain attacker-controlled capacity after an earlier read failure.
+  if (FORY_PREDICT_FALSE(ctx.has_error())) {
+    return false;
+  }
   if (FORY_PREDICT_FALSE(!ctx.buffer().ensure_readable(length, ctx.error()))) {
     return false;
   }

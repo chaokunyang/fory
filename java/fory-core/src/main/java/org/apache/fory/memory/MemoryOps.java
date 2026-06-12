@@ -930,7 +930,7 @@ final class MemoryOps {
   }
 
   static void readByteArrayBytes(MemoryBuffer buffer, byte[] values, int numBytes) {
-    if (buffer.readerIndex > buffer.size - numBytes || buffer.isStreamBacked()) {
+    if (buffer.readerIndex > buffer.size - numBytes) {
       buffer.streamReader.readTo(values, 0, numBytes);
       return;
     }
@@ -941,7 +941,7 @@ final class MemoryOps {
 
   static void readBooleanArrayBytes(MemoryBuffer buffer, boolean[] values, int numBytes) {
     int readerIdx = buffer.readerIndex;
-    if (readerIdx > buffer.size - numBytes || buffer.isStreamBacked()) {
+    if (readerIdx > buffer.size - numBytes) {
       buffer.streamReader.readBooleans(values, 0, numBytes);
       return;
     }
@@ -955,7 +955,7 @@ final class MemoryOps {
 
   static void readCharArrayBytes(MemoryBuffer buffer, char[] values, int numBytes) {
     int readerIdx = buffer.readerIndex;
-    if (readerIdx > buffer.size - numBytes || buffer.isStreamBacked()) {
+    if (readerIdx > buffer.size - numBytes) {
       buffer.streamReader.readChars(values, 0, numBytes >>> 1);
       return;
     }
@@ -970,7 +970,7 @@ final class MemoryOps {
 
   static void readInt16ArrayBytes(MemoryBuffer buffer, short[] values, int numBytes) {
     int readerIdx = buffer.readerIndex;
-    if (readerIdx > buffer.size - numBytes || buffer.isStreamBacked()) {
+    if (readerIdx > buffer.size - numBytes) {
       buffer.streamReader.readShorts(values, 0, numBytes >>> 1);
       return;
     }
@@ -985,7 +985,7 @@ final class MemoryOps {
 
   static void readInt32ArrayBytes(MemoryBuffer buffer, int[] values, int numBytes) {
     int readerIdx = buffer.readerIndex;
-    if (readerIdx > buffer.size - numBytes || buffer.isStreamBacked()) {
+    if (readerIdx > buffer.size - numBytes) {
       buffer.streamReader.readInts(values, 0, numBytes >>> 2);
       return;
     }
@@ -1004,7 +1004,7 @@ final class MemoryOps {
 
   static void readInt64ArrayBytes(MemoryBuffer buffer, long[] values, int numBytes) {
     int readerIdx = buffer.readerIndex;
-    if (readerIdx > buffer.size - numBytes || buffer.isStreamBacked()) {
+    if (readerIdx > buffer.size - numBytes) {
       buffer.streamReader.readLongs(values, 0, numBytes >>> 3);
       return;
     }
@@ -1027,7 +1027,7 @@ final class MemoryOps {
 
   static void readFloat32ArrayBytes(MemoryBuffer buffer, float[] values, int numBytes) {
     int readerIdx = buffer.readerIndex;
-    if (readerIdx > buffer.size - numBytes || buffer.isStreamBacked()) {
+    if (readerIdx > buffer.size - numBytes) {
       buffer.streamReader.readFloats(values, 0, numBytes >>> 2);
       return;
     }
@@ -1047,7 +1047,7 @@ final class MemoryOps {
 
   static void readFloat64ArrayBytes(MemoryBuffer buffer, double[] values, int numBytes) {
     int readerIdx = buffer.readerIndex;
-    if (readerIdx > buffer.size - numBytes || buffer.isStreamBacked()) {
+    if (readerIdx > buffer.size - numBytes) {
       buffer.streamReader.readDoubles(values, 0, numBytes >>> 3);
       return;
     }

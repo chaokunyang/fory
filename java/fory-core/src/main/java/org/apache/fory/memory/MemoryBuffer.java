@@ -332,10 +332,6 @@ public final class MemoryBuffer {
     }
   }
 
-  boolean isStreamBacked() {
-    return !(streamReader instanceof BoundChecker);
-  }
-
   public void initHeapBuffer(byte[] buffer, int offset, int length) {
     if (AndroidSupport.IS_ANDROID) {
       MemoryOps.initHeapBuffer(this, buffer, offset, length);
@@ -3315,7 +3311,7 @@ public final class MemoryBuffer {
       MemoryOps.readByteArrayBytes(this, values, numBytes);
     } else {
       int readerIdx = readerIndex;
-      if (readerIdx > size - numBytes || isStreamBacked()) {
+      if (readerIdx > size - numBytes) {
         streamReader.readTo(values, 0, numBytes);
         return;
       }
@@ -3338,7 +3334,7 @@ public final class MemoryBuffer {
       MemoryOps.readBooleanArrayBytes(this, values, numBytes);
     } else {
       int readerIdx = readerIndex;
-      if (readerIdx > size - numBytes || isStreamBacked()) {
+      if (readerIdx > size - numBytes) {
         streamReader.readBooleans(values, 0, numBytes);
         return;
       }
@@ -3356,7 +3352,7 @@ public final class MemoryBuffer {
       MemoryOps.readCharArrayBytes(this, values, numBytes);
     } else {
       int readerIdx = readerIndex;
-      if (readerIdx > size - numBytes || isStreamBacked()) {
+      if (readerIdx > size - numBytes) {
         streamReader.readChars(values, 0, numBytes >>> 1);
         return;
       }
@@ -3374,7 +3370,7 @@ public final class MemoryBuffer {
       MemoryOps.readInt16ArrayBytes(this, values, numBytes);
     } else {
       int readerIdx = readerIndex;
-      if (readerIdx > size - numBytes || isStreamBacked()) {
+      if (readerIdx > size - numBytes) {
         streamReader.readShorts(values, 0, numBytes >>> 1);
         return;
       }
@@ -3392,7 +3388,7 @@ public final class MemoryBuffer {
       MemoryOps.readInt32ArrayBytes(this, values, numBytes);
     } else {
       int readerIdx = readerIndex;
-      if (readerIdx > size - numBytes || isStreamBacked()) {
+      if (readerIdx > size - numBytes) {
         streamReader.readInts(values, 0, numBytes >>> 2);
         return;
       }
@@ -3410,7 +3406,7 @@ public final class MemoryBuffer {
       MemoryOps.readInt64ArrayBytes(this, values, numBytes);
     } else {
       int readerIdx = readerIndex;
-      if (readerIdx > size - numBytes || isStreamBacked()) {
+      if (readerIdx > size - numBytes) {
         streamReader.readLongs(values, 0, numBytes >>> 3);
         return;
       }
@@ -3428,7 +3424,7 @@ public final class MemoryBuffer {
       MemoryOps.readFloat32ArrayBytes(this, values, numBytes);
     } else {
       int readerIdx = readerIndex;
-      if (readerIdx > size - numBytes || isStreamBacked()) {
+      if (readerIdx > size - numBytes) {
         streamReader.readFloats(values, 0, numBytes >>> 2);
         return;
       }
@@ -3446,7 +3442,7 @@ public final class MemoryBuffer {
       MemoryOps.readFloat64ArrayBytes(this, values, numBytes);
     } else {
       int readerIdx = readerIndex;
-      if (readerIdx > size - numBytes || isStreamBacked()) {
+      if (readerIdx > size - numBytes) {
         streamReader.readDoubles(values, 0, numBytes >>> 3);
         return;
       }

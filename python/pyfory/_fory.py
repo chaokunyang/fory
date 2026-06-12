@@ -17,7 +17,7 @@
 
 import os
 from abc import ABC, abstractmethod
-from typing import Iterable, Optional, TypeVar, Union
+from typing import Iterable, Optional, Union
 
 _ENABLE_TYPE_REGISTRATION_FORCIBLY = os.getenv("ENABLE_TYPE_REGISTRATION_FORCIBLY", "0") in {
     "1",
@@ -217,7 +217,7 @@ class Fory:
 
     def register(
         self,
-        cls: Union[type, TypeVar],
+        cls,
         *,
         type_id: int = None,
         name: str = None,
@@ -262,10 +262,9 @@ class Fory:
             serializer=serializer,
         )
 
-    # `Union[type, TypeVar]` is not supported in py3.6
     def register_type(
         self,
-        cls: Union[type, TypeVar],
+        cls,
         *,
         type_id: int = None,
         name: str = None,
@@ -311,7 +310,7 @@ class Fory:
 
     def register_union(
         self,
-        cls: Union[type, TypeVar],
+        cls,
         *,
         type_id: int = None,
         name: str = None,
@@ -664,7 +663,7 @@ class ThreadSafeFory:
 
     def register(
         self,
-        cls: Union[type, TypeVar],
+        cls,
         *,
         type_id: int = None,
         name: str = None,
@@ -674,7 +673,7 @@ class ThreadSafeFory:
 
     def register_type(
         self,
-        cls: Union[type, TypeVar],
+        cls,
         *,
         type_id: int = None,
         name: str = None,
@@ -684,7 +683,7 @@ class ThreadSafeFory:
 
     def register_union(
         self,
-        cls: Union[type, TypeVar],
+        cls,
         *,
         type_id: int = None,
         name: str = None,

@@ -26,11 +26,18 @@ from typing import Dict, Any, List, Set, Optional, Tuple
 import pytest
 import typing
 
+try:
+    from typing_extensions import get_args
+except ImportError:
+    from typing import get_args
+
 import pyfory
 from pyfory import Fory
 from pyfory.error import ForyInvalidDataError, TypeNotCompatibleError, TypeUnregisteredError
 from pyfory.resolver import NOT_NULL_VALUE_FLAG, REF_VALUE_FLAG
-from pyfory.struct import DataClassSerializer, build_default_values_factory
+from pyfory.serializer import FixedInt32Serializer
+from pyfory.struct import DataClassSerializer, build_default_values_factory, compute_struct_fingerprint
+from pyfory.type_util import get_type_hints
 from pyfory.types import TypeId
 
 
@@ -72,6 +79,93 @@ class ComplexObject:
     f8: pyfory.Float64 = 0
     f9: Optional[List[pyfory.Int16]] = None
     f10: Optional[Dict[pyfory.Int32, pyfory.Float64]] = None
+
+
+@dataclass
+class TypingFriendlyScalarObject:
+    byte_value: pyfory.Int8 = 0
+    int_value: pyfory.Int32 = 0
+    fixed_int_value: pyfory.FixedInt32 = 0
+    float_value: pyfory.Float32 = 0.0
+    double_value: pyfory.Float64 = 0.0
+    values: List[pyfory.Int16] = dataclasses.field(default_factory=list)
+    dense_values: pyfory.Array[pyfory.Int32] = dataclasses.field(default_factory=pyfory.Int32Array)
+
+
+def _plain_numeric_hint_base(type_hint):
+    args = get_args(type_hint)
+    if args and args[0] in (int, float):
+        return args[0]
+    return type_hint
+
+
+def test_scalar_markers_are_typing_friendly_aliases():
+    plain_hints = typing.get_type_hints(TypingFriendlyScalarObject)
+    assert _plain_numeric_hint_base(plain_hints["byte_value"]) is int
+    assert _plain_numeric_hint_base(plain_hints["int_value"]) is int
+    assert _plain_numeric_hint_base(plain_hints["float_value"]) is float
+    assert _plain_numeric_hint_base(plain_hints["double_value"]) is float
+
+    fory_hints = get_type_hints(TypingFriendlyScalarObject)
+    assert get_args(fory_hints["byte_value"]) == (int, TypeId.INT8)
+    assert get_args(fory_hints["int_value"]) == (int, TypeId.VARINT32)
+    assert get_args(fory_hints["fixed_int_value"]) == (int, TypeId.INT32)
+    assert get_args(fory_hints["float_value"]) == (float, TypeId.FLOAT32)
+    assert get_args(fory_hints["double_value"]) == (float, TypeId.FLOAT64)
+
+
+def test_scalar_marker_typeids_drive_struct_fields():
+    fory = Fory(xlang=True, compatible=True, ref=False)
+    fory.register_type(TypingFriendlyScalarObject, type_id=702)
+    serializer = fory.type_resolver.get_serializer(TypingFriendlyScalarObject)
+    field_infos = {field_info.name: field_info for field_info in serializer._field_infos}
+
+    assert field_infos["byte_value"].field_type.type_id == TypeId.INT8
+    assert field_infos["int_value"].field_type.type_id == TypeId.VARINT32
+    assert field_infos["fixed_int_value"].field_type.type_id == TypeId.INT32
+    assert field_infos["float_value"].field_type.type_id == TypeId.FLOAT32
+    assert field_infos["double_value"].field_type.type_id == TypeId.FLOAT64
+    assert field_infos["values"].field_type.element_type.type_id == TypeId.INT16
+    assert field_infos["dense_values"].field_type.type_id == TypeId.INT32_ARRAY
+    fingerprint = compute_struct_fingerprint(
+        fory.type_resolver,
+        serializer._field_names,
+        serializer._serializers,
+        serializer._nullable_fields,
+        serializer._field_infos,
+    )
+    assert f"byte_value,{TypeId.INT8},0,0;" in fingerprint
+    assert f"fixed_int_value,{TypeId.INT32},0,0;" in fingerprint
+    assert f"float_value,{TypeId.FLOAT32},0,0;" in fingerprint
+    assert f"values,{TypeId.LIST},0,0[{TypeId.INT16},0,0];" in fingerprint
+
+    value = TypingFriendlyScalarObject(
+        byte_value=127,
+        int_value=2**31 - 1,
+        fixed_int_value=-(2**31),
+        float_value=1.5,
+        double_value=2.5,
+        values=[1, 2, 3],
+        dense_values=pyfory.Int32Array([4, 5, 6]),
+    )
+    assert ser_de(fory, value) == value
+
+
+def test_scalar_marker_resolves_registered_serializer():
+    fory = Fory(xlang=True, compatible=False, ref=True)
+    cases = [
+        (pyfory.Int8, TypeId.INT8, pyfory.ByteSerializer),
+        (pyfory.Int32, TypeId.VARINT32, pyfory.Int32Serializer),
+        (pyfory.FixedInt32, TypeId.INT32, FixedInt32Serializer),
+        (pyfory.Float32, TypeId.FLOAT32, pyfory.Float32Serializer),
+        (pyfory.Float64, TypeId.FLOAT64, pyfory.Float64Serializer),
+    ]
+    for marker, type_id, serializer_type in cases:
+        typeinfo = fory.type_resolver.get_type_info(marker)
+        assert typeinfo.cls == type_id
+        assert typeinfo.type_id == type_id
+        assert type(typeinfo.serializer) is serializer_type
+        assert typeinfo.serializer.need_to_write_ref is False
 
 
 def test_struct():

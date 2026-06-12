@@ -50,6 +50,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       compiler: ${{ steps.filter.outputs.compiler }}
+      grpc_tests: ${{ steps.filter.outputs.grpc_tests }}
       cpp: ${{ steps.filter.outputs.cpp }}
       cpp_code: ${{ steps.filter.outputs.cpp_code }}
       java_code: ${{ steps.filter.outputs.java_code }}
@@ -70,6 +71,7 @@ jobs:
         run: |
           if [[ "$GITHUB_EVENT_NAME" != "pull_request" ]]; then
             echo "compiler=true" >> "$GITHUB_OUTPUT"
+            echo "grpc_tests=true" >> "$GITHUB_OUTPUT"
             echo "cpp=true" >> "$GITHUB_OUTPUT"
             echo "cpp_code=true" >> "$GITHUB_OUTPUT"
             echo "java_code=true" >> "$GITHUB_OUTPUT"
@@ -90,6 +92,12 @@ jobs:
             echo "compiler=true" >> "$GITHUB_OUTPUT"
           else
             echo "compiler=false" >> "$GITHUB_OUTPUT"
+          fi
+
+          if grep -Eq '^(compiler/|integration_tests/grpc_tests/)' <<< "$changed_files"; then
+            echo "grpc_tests=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "grpc_tests=false" >> "$GITHUB_OUTPUT"
           fi
 
           if grep -Eq '^(cpp/|examples/cpp/|benchmarks/cpp/|integration_tests/idl_tests/cpp/|bazel/|BUILD$|WORKSPACE$|MODULE\.bazel$|\.bazelrc$)' <<< "$changed_files"; then
@@ -698,7 +706,7 @@ jobs:
   grpc_java_python_tests:
     name: Java/Python gRPC Tests
     needs: changes
-    if: needs.changes.outputs.compiler == 'true'
+    if: needs.changes.outputs.grpc_tests == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -737,7 +745,7 @@ jobs:
   grpc_java_go_tests:
     name: Java/Go gRPC Tests
     needs: changes
-    if: needs.changes.outputs.compiler == 'true'
+    if: needs.changes.outputs.grpc_tests == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -776,7 +784,7 @@ jobs:
   grpc_java_rust_tests:
     name: Java/Rust gRPC Tests
     needs: changes
-    if: needs.changes.outputs.compiler == 'true'
+    if: needs.changes.outputs.grpc_tests == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -818,7 +826,7 @@ jobs:
   grpc_java_kotlin_tests:
     name: Java/Kotlin gRPC Tests
     needs: changes
-    if: needs.changes.outputs.compiler == 'true'
+    if: needs.changes.outputs.grpc_tests == 'true' || needs.changes.outputs.kotlin == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5

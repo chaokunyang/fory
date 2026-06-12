@@ -128,9 +128,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
-The generated codec calls each generated model type's `to_bytes` and
-`from_bytes` helpers, so generated request and response types do not need manual
-runtime registration in the service implementation.
+Generated request and response types are serialized by the generated service
+code, so service implementations do not perform manual Fory registration.
 
 ## Create a Client
 

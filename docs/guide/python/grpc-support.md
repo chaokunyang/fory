@@ -107,9 +107,8 @@ if __name__ == "__main__":
     serve()
 ```
 
-The generated companion uses the model module's thread-safe Fory instance, so
-generated request and response types do not need manual registration in the
-service implementation.
+Generated request and response types are serialized by the generated companion,
+so service implementations do not perform manual Fory registration.
 
 ## Create a Client
 

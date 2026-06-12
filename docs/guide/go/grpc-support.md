@@ -130,6 +130,9 @@ func main() {
 `grpc.ForceServerCodecV2(...)` is required so the server decodes incoming frames
 with the generated Fory codec instead of the default protobuf codec.
 
+Use the zero-value generated `CodecV2{}` for the service schema. The generated
+client methods force the same codec for outgoing calls.
+
 ## Create a Client
 
 The generated client constructor accepts a grpc-go connection. Generated client
@@ -172,18 +175,6 @@ func main() {
     fmt.Println(reply.Reply)
 }
 ```
-
-## Runtime Ownership
-
-The generated model file owns the package-level thread-safe Fory runtime. The
-generated `CodecV2` reuses that runtime, so application code does not need to
-construct a separate `*fory.Fory`, repeat generated registrations, or pass a
-runtime into generated clients.
-
-This keeps the gRPC path consistent with generated `ToBytes` and `FromBytes`
-helpers, and it is safe for concurrent RPCs. See [Thread Safety](thread-safety.md)
-for the underlying Fory concurrency rules when you use Fory directly outside
-generated gRPC code.
 
 ## Streaming RPCs
 

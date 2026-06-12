@@ -103,12 +103,12 @@ foryc service.fdl --java_out=./generated/java --grpc
 
 For this schema, the Java generator emits:
 
-| File                     | Purpose                                     |
-| ------------------------ | ------------------------------------------- |
-| `HelloRequest.java`      | Fory model type for the request             |
-| `HelloReply.java`        | Fory model type for the response            |
-| `GreeterForyModule.java` | Shared `ThreadSafeFory` registration module |
-| `GreeterGrpc.java`       | grpc-java service base class, stubs, codecs |
+| File                     | Purpose                                      |
+| ------------------------ | -------------------------------------------- |
+| `HelloRequest.java`      | Fory model type for the request              |
+| `HelloReply.java`        | Fory model type for the response             |
+| `GreeterForyModule.java` | Fory registration module for generated types |
+| `GreeterGrpc.java`       | grpc-java service base class, stubs, codecs  |
 
 ## Implement a Server
 
@@ -145,9 +145,8 @@ public final class GreeterServer {
 }
 ```
 
-The generated marshaller uses the generated module's `ThreadSafeFory`, so no
-manual serializer registration is required for generated request and response
-types.
+Generated request and response types are registered by the generated code, so
+service implementations do not perform manual serializer registration.
 
 ## Create a Client
 

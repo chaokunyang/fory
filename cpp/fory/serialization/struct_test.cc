@@ -37,6 +37,7 @@
 #include <climits>
 #include <limits>
 #include <map>
+#include <memory>
 #include <optional>
 #include <string>
 #include <vector>
@@ -163,6 +164,74 @@ private:
 
 public:
   FORY_STRUCT(PrivateFieldsStruct, id_, name_, scores_);
+};
+
+struct PimplPropertyImpl {
+  int32_t a = 0;
+};
+
+class PimplPropertyStruct {
+public:
+  PimplPropertyStruct() : impl_(std::make_unique<PimplPropertyImpl>()) {}
+  explicit PimplPropertyStruct(int32_t a) : PimplPropertyStruct() {
+    impl_->a = a;
+  }
+  PimplPropertyStruct(const PimplPropertyStruct &other)
+      : PimplPropertyStruct(other.a()) {}
+  PimplPropertyStruct &operator=(const PimplPropertyStruct &other) {
+    a(other.a());
+    return *this;
+  }
+  PimplPropertyStruct(PimplPropertyStruct &&) noexcept = default;
+  PimplPropertyStruct &operator=(PimplPropertyStruct &&) noexcept = default;
+
+  const int32_t &a() const { return impl_->a; }
+  int32_t &a() { return impl_->a; }
+  PimplPropertyStruct &a(int32_t value) {
+    impl_->a = value;
+    return *this;
+  }
+
+  bool operator==(const PimplPropertyStruct &other) const {
+    return a() == other.a();
+  }
+
+private:
+  std::unique_ptr<PimplPropertyImpl> impl_;
+
+public:
+  FORY_STRUCT(PimplPropertyStruct, FORY_PROPERTY(a));
+};
+
+struct PimplConfiguredPropertyImpl {
+  int32_t value = 0;
+};
+
+class PimplConfiguredPropertyStruct {
+public:
+  PimplConfiguredPropertyStruct()
+      : impl_(std::make_unique<PimplConfiguredPropertyImpl>()) {}
+  explicit PimplConfiguredPropertyStruct(int32_t value)
+      : PimplConfiguredPropertyStruct() {
+    impl_->value = value;
+  }
+
+  const int32_t &get_value() const { return impl_->value; }
+  PimplConfiguredPropertyStruct &set_value(int32_t value) {
+    impl_->value = value;
+    return *this;
+  }
+
+  bool operator==(const PimplConfiguredPropertyStruct &other) const {
+    return get_value() == other.get_value();
+  }
+
+private:
+  std::unique_ptr<PimplConfiguredPropertyImpl> impl_;
+
+public:
+  FORY_STRUCT(PimplConfiguredPropertyStruct,
+              FORY_PROPERTY(value, get_value, set_value, fory::F(1).varint()));
 };
 
 // All primitives
@@ -536,6 +605,8 @@ inline void register_all_test_types(Fory &fory) {
   fory.register_struct<NumericTaggedOrderStruct>(type_id++);
   fory.register_struct<TaggedGroupedOrderStruct>(type_id++);
   fory.register_struct<PrivateFieldsStruct>(type_id++);
+  fory.register_struct<PimplPropertyStruct>(type_id++);
+  fory.register_struct<PimplConfiguredPropertyStruct>(type_id++);
   fory.register_struct<AllPrimitivesStruct>(type_id++);
   fory.register_struct<StringTestStruct>(type_id++);
   fory.register_struct<Point2D>(type_id++);
@@ -627,6 +698,14 @@ TEST(StructComprehensiveTest, ManyFieldsStruct) {
 
 TEST(StructComprehensiveTest, PrivateFieldsStruct) {
   test_roundtrip(PrivateFieldsStruct{42, "secret", {1, 2, 3}});
+}
+
+TEST(StructComprehensiveTest, PimplPropertyStruct) {
+  test_roundtrip(PimplPropertyStruct{12345});
+}
+
+TEST(StructComprehensiveTest, PimplConfiguredPropertyStruct) {
+  test_roundtrip(PimplConfiguredPropertyStruct{-12345});
 }
 
 TEST(StructComprehensiveTest, AllPrimitivesZero) {

@@ -348,6 +348,52 @@ struct OptionalIntField {
   FORY_STRUCT(OptionalIntField, (value, fory::F(1)));
 };
 
+struct PimplCompatibleAImpl {
+  int32_t a = 0;
+};
+
+class PimplCompatibleA {
+public:
+  PimplCompatibleA() : impl_(std::make_unique<PimplCompatibleAImpl>()) {}
+  explicit PimplCompatibleA(int32_t a) : PimplCompatibleA() { impl_->a = a; }
+  PimplCompatibleA(const PimplCompatibleA &other)
+      : PimplCompatibleA(other.a()) {}
+  PimplCompatibleA &operator=(const PimplCompatibleA &other) {
+    a(other.a());
+    return *this;
+  }
+  PimplCompatibleA(PimplCompatibleA &&) noexcept = default;
+  PimplCompatibleA &operator=(PimplCompatibleA &&) noexcept = default;
+
+  const int32_t &a() const { return impl_->a; }
+  int32_t &a() { return impl_->a; }
+  PimplCompatibleA &a(int32_t value) {
+    impl_->a = value;
+    return *this;
+  }
+
+private:
+  std::unique_ptr<PimplCompatibleAImpl> impl_;
+
+public:
+  FORY_STRUCT(PimplCompatibleA, FORY_PROPERTY(a));
+};
+
+struct DirectCompatibleA {
+  int32_t a = 0;
+  FORY_STRUCT(DirectCompatibleA, a);
+};
+
+struct PimplCompatibleB {
+  PimplCompatibleA a;
+  FORY_STRUCT(PimplCompatibleB, a);
+};
+
+struct DirectCompatibleB {
+  DirectCompatibleA a;
+  FORY_STRUCT(DirectCompatibleB, a);
+};
+
 // ============================================================================
 // TESTS
 // ============================================================================
@@ -683,6 +729,31 @@ TEST(SchemaEvolutionTest, ChangedSchemaReadsExactUnsignedFields) {
   ASSERT_TRUE(decoded.ok()) << decoded.error().to_string();
   EXPECT_EQ(decoded.value().id, value.id);
   EXPECT_EQ(decoded.value().count, value.count);
+}
+
+TEST(SchemaEvolutionTest, PimplPropertyNestedNamedStruct) {
+  auto writer = Fory::builder().compatible(true).xlang(true).build();
+  auto reader = Fory::builder().compatible(true).xlang(true).build();
+
+  ASSERT_TRUE(writer.register_struct<PimplCompatibleA>("pimpl", "A").ok());
+  ASSERT_TRUE(writer.register_struct<PimplCompatibleB>("pimpl", "B").ok());
+  ASSERT_TRUE(reader.register_struct<DirectCompatibleA>("pimpl", "A").ok());
+  ASSERT_TRUE(reader.register_struct<DirectCompatibleB>("pimpl", "B").ok());
+
+  auto type_info = writer.type_resolver().get_type_info<PimplCompatibleA>();
+  ASSERT_TRUE(type_info.ok()) << type_info.error().to_string();
+  EXPECT_EQ(type_info.value()->type_id,
+            static_cast<uint32_t>(TypeId::NAMED_COMPATIBLE_STRUCT));
+
+  PimplCompatibleB original;
+  original.a.a(2468);
+  auto bytes = writer.serialize(original);
+  ASSERT_TRUE(bytes.ok()) << bytes.error().to_string();
+
+  auto decoded = reader.deserialize<DirectCompatibleB>(bytes.value().data(),
+                                                       bytes.value().size());
+  ASSERT_TRUE(decoded.ok()) << decoded.error().to_string();
+  EXPECT_EQ(decoded.value().a.a, 2468);
 }
 
 TEST(SchemaEvolutionTest, ScalarBoolString) {

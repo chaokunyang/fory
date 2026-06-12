@@ -1175,9 +1175,8 @@ template <typename T, size_t Index> struct FieldInfoBuilder {
         ::fory::to_snake_case<max_snake_len>(original_name);
     std::string field_name(snake_buffer.data(), snake_len);
 
-    const auto field_ptr = std::get<Index>(field_ptrs);
-    using RawFieldType =
-        typename meta::RemoveMemberPointerCVRefT<decltype(field_ptr)>;
+    const auto field_entry = std::get<Index>(field_ptrs);
+    using RawFieldType = meta::FieldRawTypeT<T, decltype(field_entry)>;
     using ActualFieldType =
         std::remove_cv_t<std::remove_reference_t<RawFieldType>>;
     using UnwrappedFieldType = fory::unwrap_field_t<ActualFieldType>;
@@ -1222,9 +1221,8 @@ template <typename T, size_t Index> struct FieldInfoBuilder {
         ::fory::to_snake_case<max_snake_len>(original_name);
     std::string field_name(snake_buffer.data(), snake_len);
 
-    const auto field_ptr = std::get<Index>(field_ptrs);
-    using RawFieldType =
-        typename meta::RemoveMemberPointerCVRefT<decltype(field_ptr)>;
+    const auto field_entry = std::get<Index>(field_ptrs);
+    using RawFieldType = meta::FieldRawTypeT<T, decltype(field_entry)>;
     using ActualFieldType =
         std::remove_cv_t<std::remove_reference_t<RawFieldType>>;
     using UnwrappedFieldType = fory::unwrap_field_t<ActualFieldType>;

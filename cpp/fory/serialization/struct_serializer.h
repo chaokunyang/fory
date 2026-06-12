@@ -1242,13 +1242,21 @@ template <typename T> struct CompileTimeFieldHelpers {
   static inline constexpr auto ptrs = FieldDescriptor::ptrs();
   using FieldPtrs = decltype(ptrs);
 
+  template <size_t Index>
+  using EntryType = std::tuple_element_t<Index, FieldPtrs>;
+  template <size_t Index>
+  using RawFieldTypeFor = meta::FieldRawTypeT<T, EntryType<Index>>;
+  template <size_t Index>
+  using ValueType = unwrap_field_t<RawFieldTypeFor<Index>>;
+  template <size_t Index> static constexpr bool is_direct_field() {
+    return !meta::IsPropertyDescriptorV<EntryType<Index>>;
+  }
+
   template <size_t Index> static constexpr uint32_t field_type_id() {
     if constexpr (FieldCount == 0) {
       return 0;
     } else {
-      using PtrT = std::tuple_element_t<Index, FieldPtrs>;
-      using RawFieldType = meta::RemoveMemberPointerCVRefT<PtrT>;
-      using FieldType = unwrap_field_t<RawFieldType>;
+      using FieldType = ValueType<Index>;
 
       if constexpr (::fory::detail::has_field_config_v<T>) {
         constexpr uint32_t effective_tid =
@@ -1283,8 +1291,7 @@ template <typename T> struct CompileTimeFieldHelpers {
     if constexpr (FieldCount == 0) {
       return false;
     } else {
-      using PtrT = std::tuple_element_t<Index, FieldPtrs>;
-      using RawFieldType = meta::RemoveMemberPointerCVRefT<PtrT>;
+      using RawFieldType = RawFieldTypeFor<Index>;
 
       if constexpr (is_fory_field_v<RawFieldType>) {
         return RawFieldType::is_nullable;
@@ -1312,8 +1319,7 @@ template <typename T> struct CompileTimeFieldHelpers {
     if constexpr (FieldCount == 0) {
       return -1;
     } else {
-      using PtrT = std::tuple_element_t<Index, FieldPtrs>;
-      using RawFieldType = meta::RemoveMemberPointerCVRefT<PtrT>;
+      using RawFieldType = RawFieldTypeFor<Index>;
 
       if constexpr (::fory::detail::has_field_config_v<T>) {
         constexpr int16_t config_id =
@@ -1351,8 +1357,7 @@ template <typename T> struct CompileTimeFieldHelpers {
     if constexpr (FieldCount == 0) {
       return false;
     } else {
-      using PtrT = std::tuple_element_t<Index, FieldPtrs>;
-      using RawFieldType = meta::RemoveMemberPointerCVRefT<PtrT>;
+      using RawFieldType = RawFieldTypeFor<Index>;
 
       if constexpr (is_fory_field_v<RawFieldType>) {
         return RawFieldType::track_ref;
@@ -1379,8 +1384,7 @@ template <typename T> struct CompileTimeFieldHelpers {
     if constexpr (FieldCount == 0) {
       return -1; // AUTO
     } else {
-      using PtrT = std::tuple_element_t<Index, FieldPtrs>;
-      using RawFieldType = meta::RemoveMemberPointerCVRefT<PtrT>;
+      using RawFieldType = RawFieldTypeFor<Index>;
 
       if constexpr (is_fory_field_v<RawFieldType>) {
         return RawFieldType::dynamic_value;
@@ -1408,9 +1412,7 @@ template <typename T> struct CompileTimeFieldHelpers {
     if constexpr (FieldCount == 0) {
       return false;
     } else {
-      using PtrT = std::tuple_element_t<Index, FieldPtrs>;
-      using RawFieldType = meta::RemoveMemberPointerCVRefT<PtrT>;
-      using FieldType = unwrap_field_t<RawFieldType>;
+      using FieldType = ValueType<Index>;
 
       constexpr TypeId field_type_id = Serializer<FieldType>::type_id;
       constexpr bool is_struct = is_struct_type(field_type_id);
@@ -1442,9 +1444,7 @@ template <typename T> struct CompileTimeFieldHelpers {
 
   /// get the underlying field type.
   template <size_t Index> struct UnwrappedFieldTypeHelper {
-    using PtrT = std::tuple_element_t<Index, FieldPtrs>;
-    using RawFieldType = meta::RemoveMemberPointerCVRefT<PtrT>;
-    using type = unwrap_field_t<RawFieldType>;
+    using type = ValueType<Index>;
   };
   template <size_t Index>
   using UnwrappedFieldType = typename UnwrappedFieldTypeHelper<Index>::type;
@@ -1456,9 +1456,7 @@ template <typename T> struct CompileTimeFieldHelpers {
     if constexpr (FieldCount == 0) {
       return false;
     } else {
-      using PtrT = std::tuple_element_t<Index, FieldPtrs>;
-      using RawFieldType = meta::RemoveMemberPointerCVRefT<PtrT>;
-      using FieldType = unwrap_field_t<RawFieldType>;
+      using FieldType = ValueType<Index>;
       // Check the unwrapped type
       return is_nullable_v<FieldType>;
     }
@@ -1472,9 +1470,10 @@ template <typename T> struct CompileTimeFieldHelpers {
     if constexpr (FieldCount == 0) {
       return false;
     } else {
-      using PtrT = std::tuple_element_t<Index, FieldPtrs>;
-      using RawFieldType = meta::RemoveMemberPointerCVRefT<PtrT>;
-      using FieldType = unwrap_field_t<RawFieldType>;
+      if constexpr (!is_direct_field<Index>()) {
+        return false;
+      }
+      using FieldType = ValueType<Index>;
 
       if constexpr (is_configurable_int_v<FieldType>) {
         return configurable_int_is_fixed<FieldType, T, Index>();
@@ -1498,9 +1497,10 @@ template <typename T> struct CompileTimeFieldHelpers {
     if constexpr (FieldCount == 0) {
       return false;
     } else {
-      using PtrT = std::tuple_element_t<Index, FieldPtrs>;
-      using RawFieldType = meta::RemoveMemberPointerCVRefT<PtrT>;
-      using FieldType = unwrap_field_t<RawFieldType>;
+      if constexpr (!is_direct_field<Index>()) {
+        return false;
+      }
+      using FieldType = ValueType<Index>;
 
       if constexpr (is_configurable_int_v<FieldType>) {
         return configurable_int_is_varint<FieldType, T, Index>();
@@ -1518,9 +1518,10 @@ template <typename T> struct CompileTimeFieldHelpers {
     if constexpr (FieldCount == 0) {
       return 0;
     } else {
-      using PtrT = std::tuple_element_t<Index, FieldPtrs>;
-      using RawFieldType = meta::RemoveMemberPointerCVRefT<PtrT>;
-      using FieldType = unwrap_field_t<RawFieldType>;
+      if constexpr (!is_direct_field<Index>()) {
+        return 0;
+      }
+      using FieldType = ValueType<Index>;
       if constexpr (std::is_same_v<FieldType, bool> ||
                     std::is_same_v<FieldType, int8_t> ||
                     std::is_same_v<FieldType, uint8_t>) {
@@ -1547,9 +1548,10 @@ template <typename T> struct CompileTimeFieldHelpers {
     if constexpr (FieldCount == 0) {
       return 0;
     } else {
-      using PtrT = std::tuple_element_t<Index, FieldPtrs>;
-      using RawFieldType = meta::RemoveMemberPointerCVRefT<PtrT>;
-      using FieldType = unwrap_field_t<RawFieldType>;
+      if constexpr (!is_direct_field<Index>()) {
+        return 0;
+      }
+      using FieldType = ValueType<Index>;
 
       if constexpr (is_configurable_int_v<FieldType>) {
         return configurable_int_max_varint_bytes<FieldType, T, Index>();
@@ -1565,6 +1567,16 @@ template <typename T> struct CompileTimeFieldHelpers {
   }
 
   /// Create arrays of field encoding info at compile time
+  template <size_t... Indices>
+  static constexpr std::array<bool, FieldCount>
+  make_direct_field_array(std::index_sequence<Indices...>) {
+    if constexpr (FieldCount == 0) {
+      return {};
+    } else {
+      return {is_direct_field<Indices>()...};
+    }
+  }
+
   template <size_t... Indices>
   static constexpr std::array<bool, FieldCount>
   make_field_is_fixed_array(std::index_sequence<Indices...>) {
@@ -1607,6 +1619,8 @@ template <typename T> struct CompileTimeFieldHelpers {
 
   /// Arrays storing encoding info for each field (indexed by original field
   /// index)
+  static inline constexpr std::array<bool, FieldCount> direct_fields =
+      make_direct_field_array(std::make_index_sequence<FieldCount>{});
   static inline constexpr std::array<bool, FieldCount> field_is_fixed =
       make_field_is_fixed_array(std::make_index_sequence<FieldCount>{});
   static inline constexpr std::array<bool, FieldCount> field_is_varint =
@@ -1848,7 +1862,7 @@ template <typename T> struct CompileTimeFieldHelpers {
     } else {
       uint32_t tid = type_ids[index];
       bool nullable = nullable_flags[index];
-      if (is_primitive_type_id(tid)) {
+      if (direct_fields[index] && is_primitive_type_id(tid)) {
         return nullable ? 1 : 0;
       }
       return 2;
@@ -1969,8 +1983,8 @@ template <typename T> struct CompileTimeFieldHelpers {
       return true;
     } else {
       for (size_t i = 0; i < FieldCount; ++i) {
-        if (!is_primitive_type_id(type_ids[i]) || nullable_flags[i] ||
-            nullable_type_flags[i]) {
+        if (!direct_fields[i] || !is_primitive_type_id(type_ids[i]) ||
+            nullable_flags[i] || nullable_type_flags[i]) {
           return false;
         }
       }
@@ -2045,7 +2059,8 @@ template <typename T> struct CompileTimeFieldHelpers {
       size_t count = 0;
       for (size_t i = 0; i < FieldCount; ++i) {
         size_t original_idx = sorted_indices[i];
-        if (is_primitive_type_id(type_ids[original_idx]) &&
+        if (direct_fields[original_idx] &&
+            is_primitive_type_id(type_ids[original_idx]) &&
             !nullable_flags[original_idx] &&
             !nullable_type_flags[original_idx]) {
           ++count;
@@ -2313,10 +2328,10 @@ FORY_ALWAYS_INLINE void write_single_fixed_field(const T &obj, Buffer &buffer,
   const auto field_info = fory_field_info(obj);
   const auto field_ptr =
       std::get<original_index>(decltype(field_info)::ptrs_ref());
+  static_assert(Helpers::template is_direct_field<original_index>());
   using RawFieldType =
       typename meta::RemoveMemberPointerCVRefT<decltype(field_ptr)>;
   using FieldType = unwrap_field_t<RawFieldType>;
-  // get the actual field value.
   const FieldType &field_value = [&]() -> const FieldType & {
     if constexpr (is_fory_field_v<RawFieldType>) {
       return (obj.*field_ptr).value;
@@ -2355,10 +2370,10 @@ FORY_ALWAYS_INLINE void write_single_varint_field(const T &obj, Buffer &buffer,
   const auto field_info = fory_field_info(obj);
   const auto field_ptr =
       std::get<original_index>(decltype(field_info)::ptrs_ref());
+  static_assert(Helpers::template is_direct_field<original_index>());
   using RawFieldType =
       typename meta::RemoveMemberPointerCVRefT<decltype(field_ptr)>;
   using FieldType = unwrap_field_t<RawFieldType>;
-  // get the actual field value.
   const FieldType &field_value = [&]() -> const FieldType & {
     if constexpr (is_fory_field_v<RawFieldType>) {
       return (obj.*field_ptr).value;
@@ -2398,10 +2413,10 @@ write_single_remaining_field(const T &obj, Buffer &buffer, uint32_t &offset) {
   const auto field_info = fory_field_info(obj);
   const auto field_ptr =
       std::get<original_index>(decltype(field_info)::ptrs_ref());
+  static_assert(Helpers::template is_direct_field<original_index>());
   using RawFieldType =
       typename meta::RemoveMemberPointerCVRefT<decltype(field_ptr)>;
   using FieldType = unwrap_field_t<RawFieldType>;
-  // get the actual field value.
   const FieldType &field_value = [&]() -> const FieldType & {
     if constexpr (is_fory_field_v<RawFieldType>) {
       return (obj.*field_ptr).value;
@@ -2481,18 +2496,19 @@ template <typename T, size_t Index, typename FieldPtrs>
 void write_single_field(const T &obj, WriteContext &ctx,
                         const FieldPtrs &field_ptrs, bool has_generics) {
   using Helpers = CompileTimeFieldHelpers<T>;
-  const auto field_ptr = std::get<Index>(field_ptrs);
-  using RawFieldType =
-      typename meta::RemoveMemberPointerCVRefT<decltype(field_ptr)>;
+  const auto field_entry = std::get<Index>(field_ptrs);
+  using RawFieldType = meta::FieldRawTypeT<T, decltype(field_entry)>;
   using FieldType = unwrap_field_t<RawFieldType>;
 
-  // get the actual field value.
-  const auto &raw_field_ref = obj.*field_ptr;
-  const FieldType &field_value = [&]() -> const FieldType & {
-    if constexpr (is_fory_field_v<RawFieldType>) {
-      return raw_field_ref.value;
+  auto &&field_value = [&]() -> decltype(auto) {
+    if constexpr (Helpers::template is_direct_field<Index>()) {
+      if constexpr (is_fory_field_v<RawFieldType>) {
+        return (obj.*field_entry).value;
+      } else {
+        return (obj.*field_entry);
+      }
     } else {
-      return raw_field_ref;
+      return field_value_get(obj, field_entry);
     }
   }();
 
@@ -2956,9 +2972,8 @@ void read_single_field_by_index(T &obj, ReadContext &ctx) {
   using Helpers = CompileTimeFieldHelpers<T>;
   const auto field_info = fory_field_info(obj);
   const auto &field_ptrs = decltype(field_info)::ptrs_ref();
-  const auto field_ptr = std::get<Index>(field_ptrs);
-  using RawFieldType =
-      typename meta::RemoveMemberPointerCVRefT<decltype(field_ptr)>;
+  const auto field_entry = std::get<Index>(field_ptrs);
+  using RawFieldType = meta::FieldRawTypeT<T, decltype(field_entry)>;
   using FieldType = unwrap_field_t<RawFieldType>;
 
   // In non-compatible mode, no type info for fields except for polymorphic
@@ -3004,11 +3019,7 @@ void read_single_field_by_index(T &obj, ReadContext &ctx) {
   if constexpr (configured_node_has_override<T, Index>()) {
     FieldType result = read_configured_value<FieldType, T, Index, 0>(
         ctx, field_ref_mode, read_type);
-    if constexpr (is_fory_field_v<RawFieldType>) {
-      (obj.*field_ptr).value = std::move(result);
-    } else {
-      obj.*field_ptr = std::move(result);
-    }
+    field_value_set(obj, field_entry, std::move(result));
     return;
   }
 
@@ -3024,12 +3035,7 @@ void read_single_field_by_index(T &obj, ReadContext &ctx) {
     } else {
       value = read_primitive_field_direct<FieldType>(ctx, ctx.error());
     }
-    // Assign to field.
-    if constexpr (is_fory_field_v<RawFieldType>) {
-      (obj.*field_ptr).value = value;
-    } else {
-      obj.*field_ptr = value;
-    }
+    field_value_set(obj, field_entry, value);
   } else {
     // Special handling for std::optional<uint32_t/uint64_t> with encoding
     // config
@@ -3053,11 +3059,7 @@ void read_single_field_by_index(T &obj, ReadContext &ctx) {
         return;
       }
       if (flag == NULL_FLAG) {
-        if constexpr (is_fory_field_v<RawFieldType>) {
-          (obj.*field_ptr).value = std::nullopt;
-        } else {
-          obj.*field_ptr = std::nullopt;
-        }
+        field_value_set(obj, field_entry, std::nullopt);
         return;
       }
       // Read the value with encoding-aware reading
@@ -3078,11 +3080,7 @@ void read_single_field_by_index(T &obj, ReadContext &ctx) {
           value = ctx.read_uint64(ctx.error());
         }
       }
-      if constexpr (is_fory_field_v<RawFieldType>) {
-        (obj.*field_ptr).value = std::optional<InnerType>(value);
-      } else {
-        obj.*field_ptr = std::optional<InnerType>(value);
-      }
+      field_value_set(obj, field_entry, std::optional<InnerType>(value));
     } else if constexpr (is_encoded_optional_int) {
       constexpr auto enc =
           ::fory::detail::GetFieldConfigEntry<T, Index>::encoding;
@@ -3091,11 +3089,7 @@ void read_single_field_by_index(T &obj, ReadContext &ctx) {
         return;
       }
       if (flag == NULL_FLAG) {
-        if constexpr (is_fory_field_v<RawFieldType>) {
-          (obj.*field_ptr).value = std::nullopt;
-        } else {
-          obj.*field_ptr = std::nullopt;
-        }
+        field_value_set(obj, field_entry, std::nullopt);
         return;
       }
       using InnerType = typename std::remove_reference_t<FieldType>::value_type;
@@ -3117,20 +3111,12 @@ void read_single_field_by_index(T &obj, ReadContext &ctx) {
           value = static_cast<InnerType>(ctx.read_var_int64(ctx.error()));
         }
       }
-      if constexpr (is_fory_field_v<RawFieldType>) {
-        (obj.*field_ptr).value = std::optional<InnerType>(value);
-      } else {
-        obj.*field_ptr = std::optional<InnerType>(value);
-      }
+      field_value_set(obj, field_entry, std::optional<InnerType>(value));
     } else {
       // Assign to field.
       FieldType result =
           Serializer<FieldType>::read(ctx, field_ref_mode, read_type);
-      if constexpr (is_fory_field_v<RawFieldType>) {
-        (obj.*field_ptr).value = std::move(result);
-      } else {
-        obj.*field_ptr = std::move(result);
-      }
+      field_value_set(obj, field_entry, std::move(result));
     }
   }
 }
@@ -3144,9 +3130,8 @@ void read_single_field_by_index_compatible(T &obj, ReadContext &ctx,
   using Helpers = CompileTimeFieldHelpers<T>;
   const auto field_info = fory_field_info(obj);
   const auto &field_ptrs = decltype(field_info)::ptrs_ref();
-  const auto field_ptr = std::get<Index>(field_ptrs);
-  using RawFieldType =
-      typename meta::RemoveMemberPointerCVRefT<decltype(field_ptr)>;
+  const auto field_entry = std::get<Index>(field_ptrs);
+  using RawFieldType = meta::FieldRawTypeT<T, decltype(field_entry)>;
   using FieldType = unwrap_field_t<RawFieldType>;
   const RefMode remote_ref_mode = remote_field_type.ref_mode;
   const uint32_t remote_type_id = remote_field_type.type_id;
@@ -3206,11 +3191,7 @@ void read_single_field_by_index_compatible(T &obj, ReadContext &ctx,
       if (FORY_PREDICT_FALSE(ctx.has_error())) {
         return;
       }
-      if constexpr (is_fory_field_v<RawFieldType>) {
-        (obj.*field_ptr).value = std::move(result);
-      } else {
-        obj.*field_ptr = std::move(result);
-      }
+      field_value_set(obj, field_entry, std::move(result));
       return;
     }
   }
@@ -3229,11 +3210,7 @@ void read_single_field_by_index_compatible(T &obj, ReadContext &ctx,
             return;
           }
           if (!has_value) {
-            if constexpr (is_fory_field_v<RawFieldType>) {
-              (obj.*field_ptr).value = std::nullopt;
-            } else {
-              obj.*field_ptr = std::nullopt;
-            }
+            field_value_set(obj, field_entry, std::nullopt);
             return;
           }
         }
@@ -3242,11 +3219,8 @@ void read_single_field_by_index_compatible(T &obj, ReadContext &ctx,
         if (FORY_PREDICT_FALSE(ctx.has_error())) {
           return;
         }
-        if constexpr (is_fory_field_v<RawFieldType>) {
-          (obj.*field_ptr).value = std::optional<InnerType>(std::move(value));
-        } else {
-          obj.*field_ptr = std::optional<InnerType>(std::move(value));
-        }
+        field_value_set(obj, field_entry,
+                        std::optional<InnerType>(std::move(value)));
         return;
       }
     }
@@ -3258,13 +3232,9 @@ void read_single_field_by_index_compatible(T &obj, ReadContext &ctx,
   if constexpr (is_raw_prim && is_primitive_field) {
     if (remote_ref_mode == RefMode::None) {
       // Remote is non-nullable, no ref flag
-      if constexpr (is_fory_field_v<RawFieldType>) {
-        (obj.*field_ptr).value = read_primitive_by_type_id<FieldType>(
-            ctx, remote_type_id, ctx.error());
-      } else {
-        obj.*field_ptr = read_primitive_by_type_id<FieldType>(
-            ctx, remote_type_id, ctx.error());
-      }
+      FieldType value = read_primitive_by_type_id<FieldType>(
+          ctx, remote_type_id, ctx.error());
+      field_value_set(obj, field_entry, std::move(value));
       return;
     } else {
       // Remote is nullable, has ref flag
@@ -3279,13 +3249,9 @@ void read_single_field_by_index_compatible(T &obj, ReadContext &ctx,
         return;
       }
       // NOT_NULL_VALUE_FLAG or REF_VALUE_FLAG - read the value
-      if constexpr (is_fory_field_v<RawFieldType>) {
-        (obj.*field_ptr).value = read_primitive_by_type_id<FieldType>(
-            ctx, remote_type_id, ctx.error());
-      } else {
-        obj.*field_ptr = read_primitive_by_type_id<FieldType>(
-            ctx, remote_type_id, ctx.error());
-      }
+      FieldType value = read_primitive_by_type_id<FieldType>(
+          ctx, remote_type_id, ctx.error());
+      field_value_set(obj, field_entry, std::move(value));
       return;
     }
   }
@@ -3304,11 +3270,7 @@ void read_single_field_by_index_compatible(T &obj, ReadContext &ctx,
         if (FORY_PREDICT_FALSE(ctx.has_error())) {
           return;
         }
-        if constexpr (is_fory_field_v<RawFieldType>) {
-          (obj.*field_ptr).value = std::optional<InnerType>(value);
-        } else {
-          obj.*field_ptr = std::optional<InnerType>(value);
-        }
+        field_value_set(obj, field_entry, std::optional<InnerType>(value));
         return;
       } else {
         // Remote is nullable, has ref flag
@@ -3318,11 +3280,7 @@ void read_single_field_by_index_compatible(T &obj, ReadContext &ctx,
         }
         if (flag == NULL_FLAG) {
           // Null value - set optional to nullopt
-          if constexpr (is_fory_field_v<RawFieldType>) {
-            (obj.*field_ptr).value = std::nullopt;
-          } else {
-            obj.*field_ptr = std::nullopt;
-          }
+          field_value_set(obj, field_entry, std::nullopt);
           return;
         }
         // NOT_NULL_VALUE_FLAG or REF_VALUE_FLAG - read the value
@@ -3331,11 +3289,7 @@ void read_single_field_by_index_compatible(T &obj, ReadContext &ctx,
         if (FORY_PREDICT_FALSE(ctx.has_error())) {
           return;
         }
-        if constexpr (is_fory_field_v<RawFieldType>) {
-          (obj.*field_ptr).value = std::optional<InnerType>(value);
-        } else {
-          obj.*field_ptr = std::optional<InnerType>(value);
-        }
+        field_value_set(obj, field_entry, std::optional<InnerType>(value));
         return;
       }
     }
@@ -3358,11 +3312,7 @@ void read_single_field_by_index_compatible(T &obj, ReadContext &ctx,
         constexpr int8_t child = configured_node_child<T, Index, 0, 0>();
         FieldType result = read_configured_list_data_as_array_field<
             FieldType, T, Index, 0, child>(ctx, remote_element_type.type_id);
-        if constexpr (is_fory_field_v<RawFieldType>) {
-          (obj.*field_ptr).value = std::move(result);
-        } else {
-          obj.*field_ptr = std::move(result);
-        }
+        field_value_set(obj, field_entry, std::move(result));
         return;
       }
     } else if constexpr (configured_as_list) {
@@ -3370,11 +3320,7 @@ void read_single_field_by_index_compatible(T &obj, ReadContext &ctx,
       if (primitive_array_element_type_id(remote_type_id, element_type_id)) {
         FieldType result = read_configured_array_data_as_list_field<FieldType>(
             ctx, remote_ref_mode);
-        if constexpr (is_fory_field_v<RawFieldType>) {
-          (obj.*field_ptr).value = std::move(result);
-        } else {
-          obj.*field_ptr = std::move(result);
-        }
+        field_value_set(obj, field_entry, std::move(result));
         return;
       }
     }
@@ -3383,22 +3329,14 @@ void read_single_field_by_index_compatible(T &obj, ReadContext &ctx,
   if constexpr (configured_node_has_override<T, Index>()) {
     FieldType result = read_configured_value<FieldType, T, Index, 0>(
         ctx, remote_ref_mode, read_type);
-    if constexpr (is_fory_field_v<RawFieldType>) {
-      (obj.*field_ptr).value = std::move(result);
-    } else {
-      obj.*field_ptr = std::move(result);
-    }
+    field_value_set(obj, field_entry, std::move(result));
     return;
   }
 
   // For non-primitive types, use the standard serializer path
   FieldType result =
       Serializer<FieldType>::read(ctx, remote_ref_mode, read_type);
-  if constexpr (is_fory_field_v<RawFieldType>) {
-    (obj.*field_ptr).value = std::move(result);
-  } else {
-    obj.*field_ptr = std::move(result);
-  }
+  field_value_set(obj, field_entry, std::move(result));
 }
 
 template <typename T, size_t MatchedId>
@@ -3417,13 +3355,12 @@ template <typename T, size_t Index>
 constexpr bool can_read_exact_primitive_with_offset() {
   using Helpers = CompileTimeFieldHelpers<T>;
   constexpr size_t original_index = Helpers::sorted_indices[Index];
-  using FieldPtr =
-      typename std::tuple_element<original_index,
-                                  typename Helpers::FieldPtrs>::type;
-  using RawFieldType = typename meta::RemoveMemberPointerCVRefT<FieldPtr>;
+  using RawFieldType =
+      typename Helpers::template RawFieldTypeFor<original_index>;
   using FieldType = unwrap_field_t<RawFieldType>;
   constexpr TypeId field_type_id = Serializer<FieldType>::type_id;
-  return is_raw_primitive_v<FieldType> && is_primitive_type_id(field_type_id) &&
+  return Helpers::template is_direct_field<original_index>() &&
+         is_raw_primitive_v<FieldType> && is_primitive_type_id(field_type_id) &&
          !is_nullable_v<FieldType> &&
          !Helpers::template field_nullable<original_index>() &&
          !configured_node_has_override<T, original_index>();
@@ -3437,6 +3374,7 @@ FORY_ALWAYS_INLINE void read_single_exact_primitive_at(T &obj, ReadContext &ctx,
   const auto field_info = fory_field_info(obj);
   const auto field_ptr =
       std::get<original_index>(decltype(field_info)::ptrs_ref());
+  static_assert(Helpers::template is_direct_field<original_index>());
   using RawFieldType =
       typename meta::RemoveMemberPointerCVRefT<decltype(field_ptr)>;
   using FieldType = unwrap_field_t<RawFieldType>;
@@ -3848,12 +3786,12 @@ FORY_ALWAYS_INLINE void read_single_fixed_field(T &obj, Buffer &buffer,
   const auto field_info = fory_field_info(obj);
   const auto field_ptr =
       std::get<original_index>(decltype(field_info)::ptrs_ref());
+  static_assert(Helpers::template is_direct_field<original_index>());
   using RawFieldType =
       typename meta::RemoveMemberPointerCVRefT<decltype(field_ptr)>;
   using FieldType = unwrap_field_t<RawFieldType>;
   FieldType result =
       read_fixed_primitive_at<FieldType>(buffer, base_offset + field_offset);
-  // Assign to field.
   if constexpr (is_fory_field_v<RawFieldType>) {
     (obj.*field_ptr).value = result;
   } else {
@@ -4084,6 +4022,7 @@ FORY_ALWAYS_INLINE void read_single_varint_field(T &obj, Buffer &buffer,
   const auto field_info = fory_field_info(obj);
   const auto field_ptr =
       std::get<original_index>(decltype(field_info)::ptrs_ref());
+  static_assert(Helpers::template is_direct_field<original_index>());
   using RawFieldType =
       typename meta::RemoveMemberPointerCVRefT<decltype(field_ptr)>;
   using FieldType = unwrap_field_t<RawFieldType>;
@@ -4096,7 +4035,6 @@ FORY_ALWAYS_INLINE void read_single_varint_field(T &obj, Buffer &buffer,
     result = read_varint_at<FieldType>(buffer, offset);
   }
 
-  // Assign to field.
   if constexpr (is_fory_field_v<RawFieldType>) {
     (obj.*field_ptr).value = result;
   } else {

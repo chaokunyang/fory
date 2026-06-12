@@ -123,11 +123,12 @@ inline std::string read_string_data(ReadContext &ctx) {
     return std::string();
   }
 
+  Buffer &buffer = ctx.buffer();
+  const uint8_t *data = buffer.data() + buffer.reader_index();
+
   // Handle different encodings
   switch (encoding) {
   case StringEncoding::LATIN1: {
-    Buffer &buffer = ctx.buffer();
-    const uint8_t *data = buffer.data() + buffer.reader_index();
     std::string result = latin1_to_utf8(data, length_u32);
     buffer.unsafe_increase_reader_index(length_u32);
     return result;
@@ -138,17 +139,12 @@ inline std::string read_string_data(ReadContext &ctx) {
       return std::string();
     }
     std::vector<uint16_t> utf16_chars(length_u32 / 2);
-    Buffer &buffer = ctx.buffer();
-    std::memcpy(utf16_chars.data(), buffer.data() + buffer.reader_index(),
-                length_u32);
+    std::memcpy(utf16_chars.data(), data, length_u32);
     buffer.unsafe_increase_reader_index(length_u32);
     return utf16_to_utf8(utf16_chars.data(), utf16_chars.size());
   }
   case StringEncoding::UTF8: {
-    Buffer &buffer = ctx.buffer();
-    const char *data =
-        reinterpret_cast<const char *>(buffer.data() + buffer.reader_index());
-    std::string result(data, length_u32);
+    std::string result(reinterpret_cast<const char *>(data), length_u32);
     buffer.unsafe_increase_reader_index(length_u32);
     return result;
   }
@@ -185,12 +181,13 @@ inline std::u16string read_u16string_data(ReadContext &ctx) {
     return std::u16string();
   }
 
+  Buffer &buffer = ctx.buffer();
+  const uint8_t *data = buffer.data() + buffer.reader_index();
+
   // Handle different encodings
   switch (encoding) {
   case StringEncoding::LATIN1: {
     // Latin1 bytes map directly to char16_t (codepoints 0-255)
-    Buffer &buffer = ctx.buffer();
-    const uint8_t *data = buffer.data() + buffer.reader_index();
     std::u16string result(length_u32, u'\0');
     for (size_t i = 0; i < length_u32; ++i) {
       result[i] = static_cast<char16_t>(data[i]);
@@ -204,16 +201,14 @@ inline std::u16string read_u16string_data(ReadContext &ctx) {
       return std::u16string();
     }
     std::u16string result(length_u32 / 2, u'\0');
-    Buffer &buffer = ctx.buffer();
-    std::memcpy(&result[0], buffer.data() + buffer.reader_index(), length_u32);
+    std::memcpy(&result[0], data, length_u32);
     buffer.unsafe_increase_reader_index(length_u32);
     return result;
   }
   case StringEncoding::UTF8: {
     // Read UTF-8 bytes and convert to UTF-16
     std::string utf8(length_u32, '\0');
-    Buffer &buffer = ctx.buffer();
-    std::memcpy(&utf8[0], buffer.data() + buffer.reader_index(), length_u32);
+    std::memcpy(&utf8[0], data, length_u32);
     buffer.unsafe_increase_reader_index(length_u32);
     return utf8_to_utf16(utf8, true /* little endian */);
   }

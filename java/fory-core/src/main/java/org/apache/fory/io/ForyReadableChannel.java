@@ -21,6 +21,7 @@ package org.apache.fory.io;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.nio.channels.FileChannel;
 import java.nio.channels.ReadableByteChannel;
 import javax.annotation.concurrent.NotThreadSafe;
 import org.apache.fory.exception.DeserializationException;
@@ -74,12 +75,16 @@ public class ForyReadableChannel implements ForyStreamReader, ReadableByteChanne
         ByteBuffer byteBuf = byteBuffer;
         MemoryBuffer memoryBuf = memoryBuffer;
         int position = byteBuf.position();
-        long targetSize = (long) position + minFillSize - totalRead;
+        int remainingNeeded = minFillSize - totalRead;
+        long targetSize = (long) position + remainingNeeded;
         if (targetSize > Integer.MAX_VALUE) {
           throw new DeserializationException("Stream buffer size exceeds supported range");
         }
-        if (position == byteBuf.capacity()) {
-          byteBuf = growBuffer(byteBuf, memoryBuf, position, (int) targetSize);
+        if (targetSize > byteBuf.capacity()) {
+          boolean targetReadable = hasAvailable(remainingNeeded);
+          if (targetReadable || position == byteBuf.capacity()) {
+            byteBuf = growBuffer(byteBuf, memoryBuf, position, (int) targetSize, targetReadable);
+          }
         }
         byteBuf.limit(byteBuf.capacity());
         int read = channel.read(byteBuf);
@@ -97,26 +102,46 @@ public class ForyReadableChannel implements ForyStreamReader, ReadableByteChanne
   }
 
   private ByteBuffer growBuffer(
-      ByteBuffer byteBuf, MemoryBuffer memoryBuf, int position, int targetSize) {
+      ByteBuffer byteBuf,
+      MemoryBuffer memoryBuf,
+      int position,
+      int targetSize,
+      boolean targetReadable) {
     int oldCapacity = byteBuf.capacity();
-    long grown =
-        oldCapacity < MemoryBuffer.BUFFER_GROW_STEP_THRESHOLD
-            ? Math.max((long) oldCapacity << 2, 1L)
-            : Math.min((long) (oldCapacity * 1.5d), Integer.MAX_VALUE);
-    grown = Math.min(Math.max(grown, (long) oldCapacity + 1), targetSize);
-    if (grown <= oldCapacity) {
+    int newCapacity = targetReadable ? targetSize : nextBufferSize(oldCapacity, targetSize);
+    if (newCapacity <= oldCapacity) {
       throw new DeserializationException("Stream buffer size exceeds supported range");
     }
     ByteBuffer newByteBuf =
         byteBuf.isDirect()
-            ? ByteBuffer.allocateDirect((int) grown)
-            : ByteBuffer.allocate((int) grown);
+            ? ByteBuffer.allocateDirect(newCapacity)
+            : ByteBuffer.allocate(newCapacity);
     byteBuf.position(0);
     byteBuf.limit(position);
     newByteBuf.put(byteBuf);
     byteBuffer = newByteBuf;
     memoryBuf.initByteBuffer(newByteBuf, position);
     return newByteBuf;
+  }
+
+  private static int nextBufferSize(int oldCapacity, int targetSize) {
+    // targetSize is derived from the requested readable byte count, which may
+    // come from attacker-controlled wire lengths. Unless the channel can prove
+    // the remaining bytes are already available, grow only from bytes buffered
+    // so truncated channels fail before reserving the declared body size.
+    long grown = oldCapacity == 0 ? 1L : (long) oldCapacity << 1;
+    if (grown > Integer.MAX_VALUE) {
+      grown = Integer.MAX_VALUE;
+    }
+    return (int) Math.min(grown, targetSize);
+  }
+
+  private boolean hasAvailable(int remainingNeeded) throws IOException {
+    if (channel instanceof FileChannel) {
+      FileChannel fileChannel = (FileChannel) channel;
+      return fileChannel.size() - fileChannel.position() >= remainingNeeded;
+    }
+    return false;
   }
 
   @Override

@@ -310,10 +310,17 @@ readable bytes.
 `checkReadableBytes` is not an `ensureCapacity(wireByteCount)` operation. In
 stream mode it may end with the byte owner holding the full encoded body in its
 read buffer, but it must grow that buffer as bytes are successfully read from
-the stream. It must not reserve the attacker-declared length before input bytes
-prove that length exists. The stream slow path may pay one extra intermediate
-buffer copy; this is preferable to serializer-local chunk accumulation and
-repeated final-container growth.
+the stream. It should grow from current proven buffer capacity, such as by
+doubling current capacity, and cap only when that bounded growth step reaches
+the immediate target. If the byte owner can reliably prove the remaining
+requested bytes are already available from the stream, it may grow once to the
+immediate target. Generic `available`, `Len`, `Buffered`, `in_avail`, or
+equivalent methods on user-provided stream types are not proof unless the
+runtime knows the exact concrete owner cannot over-report availability. It must
+not reserve the attacker-declared length before input bytes prove that length
+exists. The stream slow path may pay one extra intermediate buffer copy; this
+is preferable to serializer-local chunk accumulation and repeated
+final-container growth.
 
 For byte-counted values, the serializer should not duplicate the byte owner's
 fast-path branch by testing `availableBytes()` before calling

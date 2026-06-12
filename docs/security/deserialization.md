@@ -129,6 +129,14 @@ For stream-backed input:
 - A stream-backed buffer may hold the full requested encoded body after that
   body has been read from the stream. It must not reserve the attacker-declared
   length before input bytes prove that length exists.
+- Stream-backed fill buffers should grow from the current proven buffer size,
+  such as by doubling current capacity, and cap only to the immediate target
+  when the next bounded growth step reaches it. If the byte owner can reliably
+  prove the remaining requested bytes are already available from the stream, it
+  may grow once to the immediate target. Generic `available`, `Len`,
+  `Buffered`, `in_avail`, or equivalent methods on user-provided stream types
+  are not proof unless the runtime knows the exact concrete owner cannot
+  over-report availability.
 - A truncated stream should fail before allocating the final deserialized value
   and should allocate only for bytes actually read plus bounded spare capacity.
 

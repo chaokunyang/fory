@@ -310,6 +310,9 @@ public:
     uint32_t write_pos = buffer_->size_;
     while (remaining_size() < min_fill_size) {
       if (write_pos == data_.size()) {
+        // min_fill_size can come from attacker-controlled wire lengths. Grow
+        // only from bytes already buffered so truncated streams fail before
+        // reserving the declared body size.
         uint64_t new_size =
             std::max<uint64_t>(static_cast<uint64_t>(data_.size()) * 2,
                                static_cast<uint64_t>(initial_buffer_size_));

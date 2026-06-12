@@ -31,6 +31,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.nio.channels.ReadableByteChannel;
+import java.nio.channels.SeekableByteChannel;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -333,6 +334,148 @@ public class StreamTest extends ForyTestBase {
     try (ForyReadableChannel channel =
         new ForyReadableChannel(new ChunkedReadableByteChannel(truncated, 1))) {
       Assert.assertThrows(DeserializationException.class, () -> fory.deserialize(channel));
+    }
+  }
+
+  @Test
+  public void testStreamFillGrowsFromBufferedBytes() throws IOException {
+    byte[] complete = new byte[100];
+    ForyInputStream inputWithAvailable = new ForyInputStream(new ByteArrayInputStream(complete), 4);
+    assertEquals(inputWithAvailable.fillBuffer(100), 100);
+    assertEquals(inputWithAvailable.getBuffer().getHeapMemory().length, 100);
+
+    byte[] truncated = new byte[17];
+    ForyInputStream input = new ForyInputStream(new ByteArrayInputStream(truncated), 4);
+    Assert.assertThrows(IndexOutOfBoundsException.class, () -> input.fillBuffer(100));
+    int inputCapacity = input.getBuffer().getHeapMemory().length;
+    assertTrue(inputCapacity < 100);
+    assertTrue(inputCapacity <= 32);
+
+    ForyInputStream overreportingInput =
+        new ForyInputStream(new OverreportingInputStream(truncated, 100), 4);
+    Assert.assertThrows(IndexOutOfBoundsException.class, () -> overreportingInput.fillBuffer(100));
+    int overreportingCapacity = overreportingInput.getBuffer().getHeapMemory().length;
+    assertTrue(overreportingCapacity < 100);
+    assertTrue(overreportingCapacity <= 32);
+
+    try (ForyReadableChannel channel =
+        new ForyReadableChannel(
+            new ChunkedReadableByteChannel(truncated, truncated.length), ByteBuffer.allocate(4))) {
+      Assert.assertThrows(DeserializationException.class, () -> channel.fillBuffer(100));
+      int channelCapacity = channel.getBuffer().getHeapMemory().length;
+      assertTrue(channelCapacity < 100);
+      assertTrue(channelCapacity <= 32);
+    }
+
+    try (ForyReadableChannel channel =
+        new ForyReadableChannel(
+            new OverreportingSeekableChannel(truncated), ByteBuffer.allocate(4))) {
+      Assert.assertThrows(DeserializationException.class, () -> channel.fillBuffer(100));
+      int channelCapacity = channel.getBuffer().getHeapMemory().length;
+      assertTrue(channelCapacity < 100);
+      assertTrue(channelCapacity <= 32);
+    }
+
+    Path tempFile = Files.createTempFile("readable_channel_available", "data");
+    Files.write(tempFile, complete);
+    try (ForyReadableChannel channel =
+        new ForyReadableChannel(Files.newByteChannel(tempFile), ByteBuffer.allocate(4))) {
+      assertEquals(channel.fillBuffer(100), 100);
+      assertEquals(channel.getBuffer().getHeapMemory().length, 100);
+    } finally {
+      Files.delete(tempFile);
+    }
+  }
+
+  private static final class OverreportingSeekableChannel implements SeekableByteChannel {
+    private final byte[] data;
+    private int index;
+    private boolean open = true;
+
+    private OverreportingSeekableChannel(byte[] data) {
+      this.data = data;
+    }
+
+    @Override
+    public int read(ByteBuffer dst) {
+      if (index == data.length) {
+        return -1;
+      }
+      int read = Math.min(dst.remaining(), data.length - index);
+      dst.put(data, index, read);
+      index += read;
+      return read;
+    }
+
+    @Override
+    public int write(ByteBuffer src) {
+      throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public long position() {
+      return index;
+    }
+
+    @Override
+    public SeekableByteChannel position(long newPosition) {
+      index = (int) newPosition;
+      return this;
+    }
+
+    @Override
+    public long size() {
+      return 100;
+    }
+
+    @Override
+    public SeekableByteChannel truncate(long size) {
+      throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public boolean isOpen() {
+      return open;
+    }
+
+    @Override
+    public void close() {
+      open = false;
+    }
+  }
+
+  private static final class OverreportingInputStream extends InputStream {
+    private final byte[] data;
+    private final int available;
+    private int index;
+
+    private OverreportingInputStream(byte[] data, int available) {
+      this.data = data;
+      this.available = available;
+    }
+
+    @Override
+    public int read() {
+      if (index == data.length) {
+        return -1;
+      }
+      return data[index++] & 0xFF;
+    }
+
+    @Override
+    public int read(byte[] b, int off, int len) {
+      if (index == data.length) {
+        return -1;
+      }
+      int read = Math.min(len, data.length - index);
+      System.arraycopy(data, index, b, off, read);
+      index += read;
+      return read;
+    }
+
+    @Override
+    public int available() {
+      return available;
     }
   }
 

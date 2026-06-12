@@ -19,6 +19,7 @@
 
 package org.apache.fory.io;
 
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
@@ -61,12 +62,16 @@ public class ForyInputStream extends InputStream implements ForyStreamReader {
       while (totalRead < minFillSize) {
         byte[] heapMemory = buffer.getHeapMemory();
         int offset = buffer.size();
-        long targetSize = (long) offset + minFillSize - totalRead;
+        int remainingNeeded = minFillSize - totalRead;
+        long targetSize = (long) offset + remainingNeeded;
         if (targetSize > Integer.MAX_VALUE - 8L) {
           throw new IndexOutOfBoundsException("Stream buffer size exceeds supported range");
         }
-        if (offset == heapMemory.length) {
-          heapMemory = growBuffer(buffer, (int) targetSize);
+        if (targetSize > heapMemory.length) {
+          boolean targetReadable = hasExactAvailable(remainingNeeded);
+          if (targetReadable || offset == heapMemory.length) {
+            heapMemory = growBuffer(buffer, (int) targetSize, targetReadable);
+          }
         }
         int read = stream.read(heapMemory, offset, heapMemory.length - offset);
         if (read <= 0) {
@@ -83,14 +88,9 @@ public class ForyInputStream extends InputStream implements ForyStreamReader {
     }
   }
 
-  private byte[] growBuffer(MemoryBuffer buffer, int targetSize) {
-    int newSize;
+  private byte[] growBuffer(MemoryBuffer buffer, int targetSize, boolean targetReadable) {
     int size = buffer.size();
-    long grown =
-        size < MemoryBuffer.BUFFER_GROW_STEP_THRESHOLD
-            ? Math.max((long) size << 2, 1L)
-            : Math.min((long) (size * 1.5d), Integer.MAX_VALUE - 8L);
-    newSize = (int) Math.min(Math.max(grown, (long) size + 1), targetSize);
+    int newSize = targetReadable ? targetSize : nextBufferSize(size, targetSize);
     if (newSize <= size) {
       throw new IndexOutOfBoundsException("Stream buffer size exceeds supported range");
     }
@@ -100,6 +100,27 @@ public class ForyInputStream extends InputStream implements ForyStreamReader {
     buffer.initHeapBuffer(newBuffer, 0, size);
     heapMemory = newBuffer;
     return heapMemory;
+  }
+
+  private static int nextBufferSize(int size, int targetSize) {
+    // targetSize is derived from the requested readable byte count, which may
+    // come from attacker-controlled wire lengths. Unless a known exact stream
+    // owner proves the remaining bytes are already available, grow only from
+    // bytes buffered so truncated streams fail before reserving the declared body size.
+    long grown = size == 0 ? 1L : (long) size << 1;
+    int maxSize = Integer.MAX_VALUE - 8;
+    if (grown > maxSize) {
+      grown = maxSize;
+    }
+    return (int) Math.min(grown, targetSize);
+  }
+
+  private boolean hasExactAvailable(int remainingNeeded) throws IOException {
+    Class<?> streamClass = stream.getClass();
+    if (streamClass == ByteArrayInputStream.class || streamClass == MemoryBufferInputStream.class) {
+      return stream.available() >= remainingNeeded;
+    }
+    return false;
   }
 
   @Override

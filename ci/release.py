@@ -334,6 +334,9 @@ def bump_dart_version(new_version):
         new_version,
         _update_dart_readme_dependency_version,
     )
+    if _is_release_version(new_version):
+        for p in ["dart", "dart/packages/fory"]:
+            _bump_version(p, "CHANGELOG.md", new_version, _update_dart_changelog)
 
 
 def bump_compiler_version(new_version):
@@ -587,6 +590,29 @@ def _update_dart_readme_dependency_version(lines, v: str):
     raise ValueError("No Dart README dependency snippet for fory found")
 
 
+def _update_dart_changelog(lines, v: str):
+    v = v.strip()
+    if v.startswith("v"):
+        v = v[1:]
+    heading = f"## {v}\n"
+    body = ["\n", f"- Release Apache Fory Dart {v}.\n", "\n"]
+    heading_pattern = re.compile(rf"^##\s+{re.escape(v)}(?:-[^\s]+)?\s*$")
+    start_index = -1
+    for index, line in enumerate(lines):
+        if heading_pattern.match(line):
+            start_index = index
+            break
+    if start_index == -1:
+        return [heading] + body + lines
+
+    end_index = len(lines)
+    for index in range(start_index + 1, len(lines)):
+        if re.match(r"^##\s+", lines[index]):
+            end_index = index
+            break
+    return lines[:start_index] + [heading] + body + lines[end_index:]
+
+
 def _update_csharp_props_version(lines, v: str):
     for index, line in enumerate(lines):
         if "<Version>" not in line:
@@ -699,6 +725,13 @@ def _normalize_js_version(v: str) -> str:
     if re.search(r"(?i)(-snapshot|\\.dev|-dev)$", v):
         v = re.sub(r"(?i)(-snapshot|\\.dev|-dev)$", "-alpha.0", v)
     return v
+
+
+def _is_release_version(v: str) -> bool:
+    v = v.strip()
+    if v.startswith("v"):
+        v = v[1:]
+    return re.match(r"^\d+\.\d+\.\d+$", v) is not None
 
 
 def _normalize_rust_version(v: str) -> str:

@@ -198,6 +198,15 @@ person = Person(name="Alice", age=30)
 data = bytes(person) # or `person.to_bytes()`
 ```
 
+**JavaScript/TypeScript:**
+
+```ts
+import { deserializePerson, serializePerson } from "./generated/example";
+
+const data = serializePerson({ name: "Alice", age: 30, email: null });
+const person = deserializePerson(data);
+```
+
 ## Documentation
 
 | Document                                         | Description                                       |

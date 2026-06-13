@@ -1059,47 +1059,26 @@ export type Animal =
 ### Schema Helpers
 
 Each generated model file exports a registration helper for custom `Fory`
-instances and default root serialization helpers:
+instances and root serialization helpers. The public API looks like:
 
 ```typescript
-import __foryRuntime$Fory, {
-  Type as __foryRuntime$Type,
-} from "@apache-fory/core";
-import type { Serializer as __foryRuntime$Serializer } from "@apache-fory/core";
+import type Fory, { Serializer } from "@apache-fory/core";
 
-type __foryGenerated$RootRegistration<T> = {
-  serializer: __foryRuntime$Serializer;
-  serialize: (value: T | null) => Uint8Array;
-  deserialize: (bytes: Uint8Array) => T;
-};
-
-export function registerAddressbookTypes(fory: __foryRuntime$Fory) {
-  const person = fory.register(
-    __foryRuntime$Type.struct(
-      { namespace: "addressbook", typeName: "Person" },
-      {
-        name: __foryRuntime$Type.string().setId(1),
-      },
-    ),
-  ) as unknown as __foryGenerated$RootRegistration<Person>;
-  return {
-    person,
+export function registerAddressbookTypes(fory: Fory): {
+  person: {
+    serialize: (value: Person | null) => Uint8Array;
+    deserialize: (bytes: Uint8Array) => Person;
+    serializer: Serializer;
   };
-}
-
-const MODEL_NEEDS_REF = false;
-const DEFAULT_FORY = new __foryRuntime$Fory({ ref: MODEL_NEEDS_REF });
-const DEFAULT_TYPES = registerAddressbookTypes(DEFAULT_FORY);
-
-export const serializePerson = DEFAULT_TYPES.person.serialize;
-export const deserializePerson = DEFAULT_TYPES.person.deserialize;
+};
+export const serializePerson: (value: Person | null) => Uint8Array;
+export const deserializePerson: (bytes: Uint8Array) => Person;
 ```
 
 Imported schema modules are registered automatically by `registerXxxTypes(fory)`.
-Applications call that helper when they manage their own `Fory` instance. The
-generated default helpers use the model file's private default `Fory` instance.
-Generated gRPC companions import the generated `serializeX` and `deserializeX`
-helpers automatically.
+Use `serializeX` and `deserializeX` for the generated default serialization
+path. Call `registerXxxTypes(fory)` when the application manages its own `Fory`
+instance. Generated gRPC companions import the generated helpers automatically.
 
 ### gRPC Service Companions
 

@@ -38,8 +38,11 @@ lazy val root = Project(id = "fory-scala", base = file("."))
         "dev@fory.apache.org",
         url("https://github.com/apache/fory/graphs/contributors"))))
 
-resolvers += Resolver.mavenLocal
-resolvers += Resolver.ApacheMavenSnapshotsRepo
+ThisBuild / externalResolvers := Seq(
+  Resolver.mavenCentral,
+  Resolver.ApacheMavenSnapshotsRepo,
+  Resolver.mavenLocal,
+)
 
 libraryDependencies ++= Seq(
   "org.apache.fory" % "fory-core" % foryVersion,

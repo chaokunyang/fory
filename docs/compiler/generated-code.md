@@ -1589,6 +1589,60 @@ object AddressbookForyModule extends org.apache.fory.ForyModule {
 }
 ```
 
+### gRPC Service Companions
+
+When a schema contains services and the compiler is run with `--grpc`, Scala
+generation emits one `<ServiceName>Grpc.scala` companion per local service
+definition. The companion lives in the same Scala package as the generated
+models and schema module.
+
+For a service such as:
+
+```protobuf
+service AddressBookService {
+  rpc Lookup (Person) returns (AddressBook);
+  rpc Watch (Person) returns (stream AddressBook);
+}
+```
+
+the generated companion contains:
+
+- `SERVICE_NAME` and grpc-java method descriptors
+- `AddressBookServiceImplBase` for server implementations
+- `AddressBookServiceClient` for client calls
+- Fory-backed grpc-java marshallers for request and response payloads
+
+Unary client convenience methods return `org.apache.fory.scala.rpc.RpcFuture`:
+
+```scala
+val client = AddressBookServiceGrpc.newClient(channel)
+val call = client.lookup(person)
+call.asFuture.foreach(handleAddressBook)(scala.concurrent.ExecutionContext.global)
+```
+
+Server-streaming client convenience methods return
+`org.apache.fory.scala.rpc.RpcIterator`:
+
+```scala
+val stream = client.watch(person)
+try {
+  while (stream.hasNext) {
+    handleAddressBook(stream.next())
+  }
+} finally {
+  stream.close()
+}
+```
+
+The same generated client also exposes grpc-java-style per-method variants for
+observer-based async calls, blocking calls, and unary `ListenableFuture` calls.
+Client-streaming and bidirectional methods use grpc-java `StreamObserver` APIs.
+
+Applications compiling generated Scala gRPC companions must provide grpc-java
+dependencies such as `grpc-api`, `grpc-stub`, and a transport like
+`grpc-netty-shaded`. The `fory-scala` artifact does not add grpc-java as a hard
+dependency.
+
 ## Cross-Language Notes
 
 ### Type ID Behavior

@@ -992,21 +992,44 @@ Each generated model file exports helpers for installing and reusing the schema:
 
 ```typescript
 import __foryRuntime$Fory, { Type as __foryRuntime$Type } from "@apache-fory/core";
+import type { Serializer as __foryRuntime$Serializer } from "@apache-fory/core";
 
-export function install(fory: __foryRuntime$Fory): void {
-  fory.register(
+export type ForySerializerMap = {
+  "addressbook.Person": __foryRuntime$Serializer;
+};
+
+export interface ForyState {
+  fory: __foryRuntime$Fory;
+  serializers: ForySerializerMap;
+}
+
+export function install(fory: __foryRuntime$Fory): ForyState {
+  const serializers = {} as ForySerializerMap;
+  serializers["addressbook.Person"] = fory.register(
     __foryRuntime$Type.struct({ namespace: "addressbook", typeName: "Person" }, {
       name: __foryRuntime$Type.string().setId(1),
     }),
-  );
+  ).serializer;
+  return { fory, serializers };
 }
 
 const MODEL_NEEDS_REF = false;
+let defaultForyState: ForyState | undefined;
+
+export function createForyState(): ForyState {
+  const fory = new __foryRuntime$Fory({ ref: MODEL_NEEDS_REF });
+  return install(fory);
+}
 
 export function createFory(): __foryRuntime$Fory {
-  const fory = new __foryRuntime$Fory({ ref: MODEL_NEEDS_REF });
-  install(fory);
-  return fory;
+  return createForyState().fory;
+}
+
+export function getForyState(): ForyState {
+  if (defaultForyState === undefined) {
+    defaultForyState = createForyState();
+  }
+  return defaultForyState;
 }
 
 export function getFory(): __foryRuntime$Fory { ... }
@@ -1014,7 +1037,8 @@ export function getFory(): __foryRuntime$Fory { ... }
 
 Imported schema modules are installed automatically by `install(fory)`.
 Applications can call `install(fory)` when they manage their own `Fory`
-instance, or use `getFory()` for the generated default instance.
+instance, or use `getFory()` for the generated default instance. Generated gRPC
+companions use `getForyState()` automatically.
 
 ### gRPC Service Companions
 

@@ -362,8 +362,23 @@ def test_javascript_file_structure():
     assert "// Schema installation" in output
 
     # Check module-owned Fory helpers.
-    assert "export function install(fory: __foryRuntime$Fory): void" in output
+    assert (
+        "import type { Serializer as __foryRuntime$Serializer } from '@apache-fory/core';"
+        in output
+    )
+    assert "export type ForySerializerMap =" in output
+    assert '"example.v1.Request": __foryRuntime$Serializer;' in output
+    assert '"example.v1.Response": __foryRuntime$Serializer;' in output
+    assert "export interface ForyState" in output
+    assert "export function install(fory: __foryRuntime$Fory): ForyState" in output
+    assert (
+        'serializers["example.v1.Request"] = fory.register(__foryRuntime$Type.struct'
+        in output
+    )
+    assert ".serializer;" in output
+    assert "export function createForyState(): ForyState" in output
     assert "export function createFory(): __foryRuntime$Fory" in output
+    assert "export function getForyState(): ForyState" in output
     assert "export function getFory(): __foryRuntime$Fory" in output
     assert "registerExampleV1Types" not in output
 
@@ -404,7 +419,9 @@ def test_js_import_install_uses_module_owner(tmp_path: Path):
 
     assert "import * as _commonModule0 from './common';" in output
     assert "import { Shared } from './common';" in output
-    assert "_commonModule0.install(fory);" in output
+    assert "const _commonModule0State = _commonModule0.install(fory);" in output
+    assert "Object.assign(serializers, _commonModule0State.serializers);" in output
+    assert "_commonModule0.ForySerializerMap" in output
     assert "registerDemoSharedTypes" not in output
 
 

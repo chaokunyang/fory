@@ -193,12 +193,22 @@ def test_js_grpc_uses_model_fory():
     content = files["demo_greeter_grpc.ts"]
     assert 'import * as grpc from "@grpc/grpc-js";' in content
     assert (
-        'import { getFory, HelloReply, HelloRequest } from "./demo_greeter";' in content
+        'import { getForyState, HelloReply, HelloRequest } from "./demo_greeter";'
+        in content
     )
-    assert "const FORY = getFory();" in content
+    assert "const FORY_STATE = getForyState();" in content
+    assert "const FORY = FORY_STATE.fory;" in content
     assert (
-        'FORY.getRootCodec<HelloRequest>({ kind: "struct", namespace: "demo.greeter", '
-        'typeName: "HelloRequest" })' in content
+        'const root0Serializer = FORY_STATE.serializers["demo.greeter.HelloRequest"];'
+        in content
+    )
+    assert (
+        "const serializeRoot0 = (value: HelloRequest) => "
+        "FORY.serialize(value, root0Serializer);" in content
+    )
+    assert (
+        "const deserializeRoot1 = (bytes: Uint8Array) => "
+        "FORY.deserialize(bytes, root1Serializer) as HelloReply;" in content
     )
     assert "export interface GreeterHandlers" in content
     assert "createGreeterServiceDefinition()" in content
@@ -218,6 +228,7 @@ def test_js_grpc_uses_model_fory():
     assert "options?.fory" not in content
     assert "new Fory" not in content
     assert "WeakMap<Fory" not in content
+    assert "getRootCodec" not in content
     assert "Type.struct" not in content
     assert "Type.union" not in content
 
@@ -246,10 +257,10 @@ def test_js_grpc_named_union_root():
     files = generate_service_files(schema, JavaScriptGenerator)
     content = files["demo_greeter_grpc.ts"]
 
-    assert (
-        'FORY.getRootCodec<Greeting>({ kind: "union", namespace: "demo.greeter", '
-        'typeName: "Greeting" })' in content
-    )
+    assert 'FORY_STATE.serializers["demo.greeter.Greeting"]' in content
+    assert "FORY.serialize(value, root0Serializer)" in content
+    assert "FORY.deserialize(bytes, root0Serializer) as Greeting" in content
+    assert "getRootCodec" not in content
     assert "Type.union" not in content
 
 
@@ -272,10 +283,8 @@ def test_js_grpc_evolving_false_roots():
     numeric_content = generate_service_files(numeric_schema, JavaScriptGenerator)[
         "demo_stable_grpc.ts"
     ]
-    assert (
-        'FORY.getRootCodec<Stable>({ kind: "struct", typeId: 100, evolving: false })'
-        in numeric_content
-    )
+    assert 'FORY_STATE.serializers["demo.stable.Stable"]' in numeric_content
+    assert "FORY.serialize(value, root0Serializer)" in numeric_content
 
     named_schema = parse_fdl(
         dedent(
@@ -296,10 +305,8 @@ def test_js_grpc_evolving_false_roots():
     named_content = generate_service_files(named_schema, JavaScriptGenerator)[
         "demo_stable_grpc.ts"
     ]
-    assert (
-        'FORY.getRootCodec<Stable>({ kind: "struct", namespace: "demo.stable", '
-        'typeName: "Stable", evolving: false })' in named_content
-    )
+    assert 'FORY_STATE.serializers["demo.stable.Stable"]' in named_content
+    assert "FORY.deserialize(bytes, root0Serializer) as Stable" in named_content
 
 
 def test_js_grpc_imported_evolving_default(tmp_path: Path):
@@ -337,10 +344,9 @@ def test_js_grpc_imported_evolving_default(tmp_path: Path):
     )
     content = generator.generate_services()[0].content
 
-    assert (
-        'FORY.getRootCodec<Stable>({ kind: "struct", namespace: "demo.common", '
-        'typeName: "Stable", evolving: false })' in content
-    )
+    assert 'import { getForyState } from "./service";' in content
+    assert 'FORY_STATE.serializers["demo.common.Stable"]' in content
+    assert "getRootCodec" not in content
 
 
 def test_js_grpc_nested_roots():
@@ -369,13 +375,11 @@ def test_js_grpc_nested_roots():
     files = generate_service_files(schema, JavaScriptGenerator)
     content = files["demo_nested_grpc.ts"]
 
-    assert 'import { getFory, Envelope } from "./demo_nested";' in content
-    assert "import { getFory, Envelope.Request" not in content
-    assert "FORY.getRootCodec<Envelope.Request>" in content
-    assert (
-        'FORY.getRootCodec<Envelope.Result>({ kind: "union", namespace: "demo.nested", '
-        'typeName: "Envelope.Result" })' in content
-    )
+    assert 'import { getForyState, Envelope } from "./demo_nested";' in content
+    assert "import { getForyState, Envelope.Request" not in content
+    assert 'FORY_STATE.serializers["demo.nested.Envelope.Request"]' in content
+    assert 'FORY_STATE.serializers["demo.nested.Envelope.Result"]' in content
+    assert "getRootCodec" not in content
 
 
 def test_js_grpc_imported_nested_roots(tmp_path: Path):
@@ -418,10 +422,12 @@ def test_js_grpc_imported_nested_roots(tmp_path: Path):
     )
     content = generator.generate_services()[0].content
 
-    assert 'import { getFory } from "./service";' in content
+    assert 'import { getForyState } from "./service";' in content
     assert 'import { Envelope } from "./common";' in content
     assert "Envelope.Request" in content
     assert "Envelope.Result" in content
+    assert 'FORY_STATE.serializers["demo.common.Envelope.Request"]' in content
+    assert 'FORY_STATE.serializers["demo.common.Envelope.Result"]' in content
     assert "Envelope.ResultCase" not in content
 
 
@@ -460,10 +466,9 @@ def test_js_grpc_imported_default_package(tmp_path: Path):
     )
     content = generator.generate_services()[0].content
 
-    assert (
-        'FORY.getRootCodec<Request>({ kind: "struct", namespace: "default"' in content
-    )
-    assert 'FORY.getRootCodec<Reply>({ kind: "struct", namespace: "default"' in content
+    assert 'FORY_STATE.serializers["default.Request"]' in content
+    assert 'FORY_STATE.serializers["default.Reply"]' in content
+    assert "getRootCodec" not in content
 
 
 def test_js_grpc_web_codegen():
@@ -484,6 +489,7 @@ def test_js_grpc_web_codegen():
         in content
     )
     assert "this.client.thenableCall(" in content
+    assert "PromiseCallOptions" not in content
     assert "unaryCall" not in content
     assert "GrpcWebUnaryClientBase" not in content
     assert "grpcWeb.MethodType.UNARY" in content

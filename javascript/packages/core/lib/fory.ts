@@ -27,48 +27,13 @@ import {
   TypeId,
   CustomSerializer,
 } from "./type";
-import { InputType, ResultType, Type, TypeInfo } from "./typeInfo";
+import { InputType, ResultType, TypeInfo } from "./typeInfo";
 import { Gen } from "./gen";
 import { PlatformBuffer } from "./platformBuffer";
 import { ReadContext, WriteContext } from "./context";
 
 const DEFAULT_DEPTH_LIMIT = 50 as const;
 const MIN_DEPTH_LIMIT = 2 as const;
-
-/**
- * Identifies an installed struct or union that can be used as a root payload.
- */
-export type RootTypeIdentity =
-  | {
-    kind: "struct";
-    namespace?: string;
-    typeName: string;
-    evolving?: boolean;
-  }
-  | {
-    kind: "struct";
-    typeId: number;
-    evolving?: boolean;
-  }
-  | {
-    kind: "union";
-    namespace?: string;
-    typeName: string;
-  }
-  | {
-    kind: "union";
-    typeId: number;
-  };
-
-/**
- * Root serialization functions bound to one installed struct or union schema.
- */
-export type RootCodec<T = any> = {
-  serializer: Serializer;
-  serialize(data: T | null): PlatformBuffer;
-  deserialize(bytes: Uint8Array): T | null;
-};
-
 export default class Fory {
   readonly typeResolver: TypeResolver;
   readonly anySerializer: Serializer;
@@ -81,11 +46,6 @@ export default class Fory {
   >();
 
   private readonly rootDeserializers = new WeakMap<
-    Serializer,
-    (bytes: Uint8Array) => any
-  >();
-
-  private readonly exactRootDeserializers = new WeakMap<
     Serializer,
     (bytes: Uint8Array) => any
   >();
@@ -166,22 +126,6 @@ export default class Fory {
     };
   }
 
-  /**
-   * Returns root serialization functions for an already installed schema root.
-   *
-   * This lookup is for generated IDL service companions and plain TypeScript
-   * interface values, where generic `serialize(value)` cannot infer a runtime
-   * constructor from the JavaScript object.
-   */
-  getRootCodec<T = any>(identity: RootTypeIdentity): RootCodec<T> {
-    const serializer = this.getRootSerializerByIdentity(identity);
-    return {
-      serializer,
-      serialize: this.getRootSerializer(serializer),
-      deserialize: this.getExactRootDeserializer(serializer),
-    };
-  }
-
   deserialize<T = any>(
     bytes: Uint8Array,
     serializer: Serializer = this.anySerializer,
@@ -249,63 +193,6 @@ export default class Fory {
     };
     this.rootDeserializers.set(serializer, rootDeserializer);
     return rootDeserializer;
-  }
-
-  private getExactRootDeserializer(serializer: Serializer) {
-    let rootDeserializer = this.exactRootDeserializers.get(serializer);
-    if (rootDeserializer !== undefined) {
-      return rootDeserializer;
-    }
-    const readContext = this.readContext;
-    const reader = readContext.reader;
-    const rootHeader = ConfigFlags.isCrossLanguageFlag;
-    rootDeserializer = (bytes: Uint8Array) => {
-      readContext.reset(bytes);
-      const bitmap = reader.readUint8();
-      if (bitmap !== rootHeader) {
-        this.throwInvalidRootHeader(bitmap);
-      }
-      return serializer.readRef();
-    };
-    this.exactRootDeserializers.set(serializer, rootDeserializer);
-    return rootDeserializer;
-  }
-
-  private getRootSerializerByIdentity(identity: RootTypeIdentity) {
-    let typeInfo: TypeInfo;
-    if ("typeId" in identity) {
-      typeInfo = identity.kind === "struct"
-        ? identity.evolving === false
-          ? Type.struct({ typeId: identity.typeId, evolving: false })
-          : Type.struct(identity.typeId)
-        : Type.union(identity.typeId);
-    } else {
-      typeInfo = identity.kind === "struct"
-        ? Type.struct(
-          identity.evolving === false
-            ? {
-              namespace: identity.namespace,
-              typeName: identity.typeName,
-              evolving: false,
-            }
-            : {
-              namespace: identity.namespace,
-              typeName: identity.typeName,
-            },
-        )
-        : Type.union({
-          namespace: identity.namespace,
-          typeName: identity.typeName,
-        });
-    }
-    const serializer = this.typeResolver.getSerializerByTypeInfo(typeInfo);
-    if (!serializer?._initialized) {
-      const name = "typeId" in identity
-        ? `${identity.kind}#${identity.typeId}`
-        : `${identity.namespace ? `${identity.namespace}.` : ""}${identity.typeName}`;
-      throw new Error(`Fory root type is not installed: ${name}`);
-    }
-    return serializer;
   }
 
   serialize<T = any>(data: T, serializer: Serializer = this.anySerializer) {

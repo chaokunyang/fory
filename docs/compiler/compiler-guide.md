@@ -370,7 +370,8 @@ generated/
 - `export interface` declarations for messages
 - `export enum` declarations for enums
 - Discriminated unions with case enums
-- Schema helpers `install(fory)`, `createFory()`, and `getFory()` included
+- Schema helpers `install(fory)`, `createFory()`, `getFory()`,
+  `createForyState()`, and `getForyState()` included
 - `--grpc` emits a Node.js companion using `@grpc/grpc-js`
 - `--grpc-web` emits a browser client companion using `grpc-web`
 

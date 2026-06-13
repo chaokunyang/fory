@@ -261,7 +261,7 @@ class JavaScriptServiceGeneratorMixin:
                 current_types.add(type_name)
 
         lines: List[str] = []
-        current_imports = ["getFory", *sorted(current_types)]
+        current_imports = ["getForyState", *sorted(current_types)]
         lines.append(
             f'import {{ {", ".join(current_imports)} }} from "./{self.get_module_name()}";'
         )
@@ -311,8 +311,10 @@ class JavaScriptServiceGeneratorMixin:
     def _ts_import_name(self, type_def: RootType) -> str:
         return self._ts_type_name(type_def).split(".", 1)[0]
 
-    def _codec_var(self, type_def: RootType, root_indexes: Dict[int, int]) -> str:
-        return f"root{root_indexes[id(type_def)]}Codec"
+    def _root_serializer_var(
+        self, type_def: RootType, root_indexes: Dict[int, int]
+    ) -> str:
+        return f"root{root_indexes[id(type_def)]}Serializer"
 
     def _serializer_name(self, type_def: RootType, root_indexes: Dict[int, int]) -> str:
         return f"serializeRoot{root_indexes[id(type_def)]}"
@@ -332,38 +334,22 @@ class JavaScriptServiceGeneratorMixin:
     ) -> str:
         return f"root{root_indexes[id(type_def)]}GrpcWebType"
 
-    def _root_identity_expr(self, type_def: RootType) -> str:
-        kind = "union" if isinstance(type_def, Union) else "struct"
-        evolving_opt = (
-            ", evolving: false"
-            if isinstance(type_def, Message) and not self._type_evolving(type_def)
-            else ""
-        )
-        if self.should_register_by_id(type_def):
-            return f'{{ kind: "{kind}", typeId: {type_def.type_id}{evolving_opt} }}'
-        namespace = self._get_type_package(type_def)
-        type_name = self._qualified_type_names.get(id(type_def), type_def.name)
-        return (
-            f'{{ kind: "{kind}", namespace: "{namespace}", typeName: "{type_name}"'
-            f"{evolving_opt} }}"
-        )
-
     def _generate_shared_codec_bindings(
         self, services: List[Service], root_indexes: Dict[int, int]
     ) -> List[str]:
-        lines = ["const FORY = getFory();"]
+        lines = ["const FORY_STATE = getForyState();", "const FORY = FORY_STATE.fory;"]
         for root in self._service_roots(services):
             ts_type = self._ts_type_name(root)
-            codec = self._codec_var(root, root_indexes)
-            identity = self._root_identity_expr(root)
-            lines.append(f"const {codec} = FORY.getRootCodec<{ts_type}>({identity});")
+            serializer = self._root_serializer_var(root, root_indexes)
+            key = self._serializer_key(root)
+            lines.append(f'const {serializer} = FORY_STATE.serializers["{key}"];')
             lines.append(
                 f"const {self._serializer_name(root, root_indexes)} = (value: {ts_type}) => "
-                f"{codec}.serialize(value);"
+                f"FORY.serialize(value, {serializer});"
             )
             lines.append(
                 f"const {self._deserializer_name(root, root_indexes)} = (bytes: Uint8Array) => "
-                f"{codec}.deserialize(bytes) as {ts_type};"
+                f"FORY.deserialize(bytes, {serializer}) as {ts_type};"
             )
         return lines
 
@@ -871,14 +857,12 @@ class JavaScriptServiceGeneratorMixin:
             f"  {name}(",
             f"    request: {req},",
             "    metadata?: grpcWeb.Metadata,",
-            "    options?: grpcWeb.PromiseCallOptions,",
             f"  ): Promise<{res}> {{",
             "    return this.client.thenableCall(",
             f"      this.hostname + {self._method_paths_constant_name(service)}.{self._method_path_key(method)},",
             "      request,",
             "      metadata ?? {},",
             f"      {descriptor},",
-            "      options,",
             "    );",
             "  }",
         ]

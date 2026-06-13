@@ -18,6 +18,8 @@
 
 val foryVersion = "1.2.0-SNAPSHOT"
 val scala213Version = "2.13.15"
+val foryMavenLocal =
+  sys.env.get("FORY_SCALA_MAVEN_LOCAL").map(file).getOrElse(Path.userHome / ".m2" / "repository")
 ThisBuild / apacheSonatypeProjectProfile := "fory"
 version := foryVersion
 scalaVersion := scala213Version
@@ -41,7 +43,7 @@ lazy val root = Project(id = "fory-scala", base = file("."))
 ThisBuild / externalResolvers := Seq(
   Resolver.mavenCentral,
   Resolver.ApacheMavenSnapshotsRepo,
-  Resolver.mavenLocal,
+  Resolver.file("fory-maven-local", foryMavenLocal)(Resolver.mavenStylePatterns),
 )
 
 libraryDependencies ++= Seq(

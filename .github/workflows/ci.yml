@@ -595,7 +595,7 @@ jobs:
     if: needs.changes.outputs.scala == 'true'
     runs-on: ubuntu-latest
     env:
-      FORY_SCALA_MAVEN_LOCAL: ${{ runner.temp }}/fory-scala-m2/repository
+      FORY_SCALA_MAVEN_LOCAL: /tmp/fory-scala-m2/repository
     steps:
       - uses: actions/checkout@v5
       - name: Set up JDK11
@@ -622,7 +622,7 @@ jobs:
     name: Scala Xlang Test
     runs-on: ubuntu-latest
     env:
-      FORY_SCALA_MAVEN_LOCAL: ${{ runner.temp }}/fory-scala-m2/repository
+      FORY_SCALA_MAVEN_LOCAL: /tmp/fory-scala-m2/repository
     steps:
       - uses: actions/checkout@v5
       - name: Set up JDK 21
@@ -657,7 +657,7 @@ jobs:
     name: Scala IDL Tests
     runs-on: ubuntu-latest
     env:
-      FORY_SCALA_MAVEN_LOCAL: ${{ runner.temp }}/fory-scala-m2/repository
+      FORY_SCALA_MAVEN_LOCAL: /tmp/fory-scala-m2/repository
     steps:
       - uses: actions/checkout@v5
       - name: Set up JDK 21

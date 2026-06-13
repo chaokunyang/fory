@@ -193,6 +193,69 @@ Browser gRPC-Web companions support unary and server-streaming methods. gRPC-Web
 does not support client-streaming or bidirectional methods; the compiler rejects
 those shapes for `--grpc-web`.
 
+Node.js server implementations use the normal `@grpc/grpc-js` streaming call
+objects:
+
+```ts
+const greeter: GreeterHandlers = {
+  sayHello(call, callback) {
+    callback(null, { reply: `Hello, ${call.request.name}` });
+  },
+
+  lotsOfReplies(call) {
+    call.write({ reply: `Hello, ${call.request.name}` });
+    call.write({ reply: `Welcome, ${call.request.name}` });
+    call.end();
+  },
+
+  lotsOfGreetings(call, callback) {
+    const names: string[] = [];
+    call.on("data", (request) => {
+      names.push(request.name);
+    });
+    call.on("end", () => {
+      callback(null, { reply: `Hello, ${names.join(", ")}` });
+    });
+  },
+
+  chat(call) {
+    call.on("data", (request) => {
+      call.write({ reply: `Hello, ${request.name}` });
+    });
+    call.on("end", () => {
+      call.end();
+    });
+  },
+};
+```
+
+Node.js clients use the generated methods that match the RPC shape:
+
+```ts
+const replies = client.lotsOfReplies({ name: "Fory" });
+replies.on("data", (reply) => {
+  console.log(reply.reply);
+});
+
+const greetings = client.lotsOfGreetings((error, reply) => {
+  if (error) {
+    throw error;
+  }
+  console.log(reply.reply);
+});
+greetings.write({ name: "Alice" });
+greetings.write({ name: "Bob" });
+greetings.end();
+
+const chat = client.chat();
+chat.on("data", (reply) => {
+  console.log(reply.reply);
+});
+chat.write({ name: "Alice" });
+chat.write({ name: "Bob" });
+chat.end();
+```
+
 For services with server-streaming methods, the generated gRPC-Web companion
 defaults to `grpcwebtext` wire format. Unary-only services default to
 `grpcweb`. You can choose the format explicitly:
@@ -200,6 +263,22 @@ defaults to `grpcwebtext` wire format. Unary-only services default to
 ```ts
 const client = createGreeterWebClient("https://api.example.com", {
   wireFormat: "grpcwebtext",
+});
+```
+
+Browser clients can consume server-streaming RPCs with the callback client:
+
+```ts
+const stream = client.lotsOfReplies({ name: "Fory" });
+
+stream.on("data", (reply) => {
+  console.log(reply.reply);
+});
+stream.on("error", (error) => {
+  console.error(error.message);
+});
+stream.on("end", () => {
+  console.log("stream ended");
 });
 ```
 

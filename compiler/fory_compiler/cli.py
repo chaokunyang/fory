@@ -655,6 +655,11 @@ def parse_args(args: Optional[List[str]] = None) -> argparse.Namespace:
         action="store_true",
         help="Generate gRPC service code (stubs, serialization traits, etc.)",
     )
+    parser.add_argument(
+        "--grpc-web",
+        action="store_true",
+        help="Generate JavaScript gRPC-Web client code",
+    )
 
     return parser.parse_args(args)
 
@@ -703,6 +708,7 @@ def compile_file(
     emit_fdl_path: Optional[Path] = None,
     resolve_cache: Optional[Dict[Path, Schema]] = None,
     grpc: bool = False,
+    grpc_web: bool = False,
     *,
     generated_outputs: Optional[Dict[Path, Path]] = None,
 ) -> bool:
@@ -773,6 +779,7 @@ def compile_file(
             go_nested_type_style=go_nested_type_style,
             swift_namespace_style=swift_namespace_style,
             grpc=grpc,
+            grpc_web=grpc_web,
         )
 
         generator_class = GENERATORS[lang]
@@ -780,22 +787,29 @@ def compile_file(
             generator = generator_class(schema, options)
             files = generator.generate()
 
-            if grpc:
+            if grpc or (grpc_web and lang == "javascript"):
                 service_files = generator.generate_services()
                 files.extend(service_files)
         except ValueError as e:
             print(f"Error: {e}", file=sys.stderr)
             return False
 
-        if lang in {"rust", "csharp"}:
+        if lang in {"rust", "csharp", "javascript"}:
             # Special error handling for languages with run-wide generated path
             # validation.
-            display_lang = "C#" if lang == "csharp" else "Rust"
+            display_lang = {
+                "csharp": "C#",
+                "javascript": "JavaScript",
+            }.get(lang, lang.capitalize())
             output_targets: List[Path] = []
             for f in files:
                 target = (lang_output / f.path).resolve()
                 # Reject overwriting existing non-generated files
-                if target.exists() and not is_generated_file(target):
+                if (
+                    lang in {"rust", "csharp"}
+                    and target.exists()
+                    and not is_generated_file(target)
+                ):
                     print(
                         f"Error: {display_lang} output path collision: {target} already exists",
                         file=sys.stderr,
@@ -836,6 +850,7 @@ def compile_file_recursive(
     go_module_root: Optional[Path],
     generated_outputs: Dict[Path, Path],
     grpc: bool = False,
+    grpc_web: bool = False,
 ) -> bool:
     file_path = file_path.resolve()
     if file_path in generated:
@@ -901,6 +916,7 @@ def compile_file_recursive(
             go_module_root,
             generated_outputs,
             grpc,
+            grpc_web,
         ):
             stack.remove(file_path)
             return False
@@ -916,6 +932,7 @@ def compile_file_recursive(
         emit_fdl_path,
         resolve_cache,
         grpc,
+        grpc_web,
         generated_outputs=generated_outputs,
     )
     if ok:
@@ -995,6 +1012,13 @@ def cmd_compile(args: argparse.Namespace) -> int:
         if not validate_scala_generation(args.files, import_paths, grpc=args.grpc):
             return 1
 
+    if args.grpc_web and "javascript" not in lang_output_dirs:
+        print(
+            "Error: --grpc-web is only supported with JavaScript output.",
+            file=sys.stderr,
+        )
+        return 1
+
     # Create output directories
     for out_dir in lang_output_dirs.values():
         out_dir.mkdir(parents=True, exist_ok=True)
@@ -1024,6 +1048,7 @@ def cmd_compile(args: argparse.Namespace) -> int:
                 None,
                 generated_outputs,
                 args.grpc,
+                args.grpc_web,
             ):
                 success = False
         except ImportError as e:

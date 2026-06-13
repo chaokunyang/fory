@@ -142,25 +142,28 @@ foryc schema.fdl --output ./src/generated
 foryc user.fdl order.fdl product.fdl --output ./generated
 ```
 
-**Compile a simple schema containing service definitions (Java + Python + Go + Rust + Kotlin + JavaScript models):**
+**Compile a simple schema containing service definitions (Java + Python + Go + Rust + C# + Scala + Kotlin + JavaScript models):**
 
 ```bash
-foryc compiler/examples/service.fdl --java_out=./generated/java --python_out=./generated/python --go_out=./generated/go --rust_out=./generated/rust --kotlin_out=./generated/kotlin --javascript_out=./generated/javascript
+foryc compiler/examples/service.fdl --java_out=./generated/java --python_out=./generated/python --go_out=./generated/go --rust_out=./generated/rust --csharp_out=./generated/csharp --scala_out=./generated/scala --kotlin_out=./generated/kotlin --javascript_out=./generated/javascript
 ```
 
-**Generate Java, Python, Go, Rust, Kotlin, and Node.js JavaScript gRPC service companions:**
+**Generate Java, Python, Go, Rust, C#, Scala, Kotlin, and Node.js JavaScript gRPC service companions:**
 
 ```bash
-foryc compiler/examples/service.fdl --java_out=./generated/java --python_out=./generated/python --go_out=./generated/go --rust_out=./generated/rust --kotlin_out=./generated/kotlin --javascript_out=./generated/javascript --grpc
+foryc compiler/examples/service.fdl --java_out=./generated/java --python_out=./generated/python --go_out=./generated/go --rust_out=./generated/rust --csharp_out=./generated/csharp --scala_out=./generated/scala --kotlin_out=./generated/kotlin --javascript_out=./generated/javascript --grpc
 ```
 
 The generated gRPC service code uses Fory to serialize request and response
-payloads. Java output imports grpc-java APIs, Python output imports `grpc`, and
-Go output imports grpc-go. Rust output imports `tonic` and `bytes`. Kotlin
-output imports grpc-java and grpc-kotlin APIs and uses coroutine stubs.
-JavaScript output imports `@grpc/grpc-js`. Applications that compile or run
-those generated service files must provide their own gRPC dependencies. Fory
-packages do not add a hard gRPC dependency for this feature.
+payloads. Java output imports grpc-java APIs, Python output imports `grpc`, Go
+output imports grpc-go, Rust output imports `tonic` and `bytes`, Scala output
+imports grpc-java APIs, and Kotlin output imports grpc-java and grpc-kotlin APIs
+and uses coroutine stubs. C# output imports `Grpc.Core.Api` types and can be
+hosted with normal .NET gRPC packages such as `Grpc.AspNetCore` or called
+through `Grpc.Net.Client`. JavaScript output imports `@grpc/grpc-js`.
+Applications that compile or run those generated service files must provide
+their own gRPC dependencies. Fory packages do not add a hard gRPC dependency for
+this feature.
 
 **Generate JavaScript gRPC-Web browser clients:**
 
@@ -206,6 +209,9 @@ foryc schema.fdl --java_out=./gen/java -I proto/ -I common/
 
 # Generate Scala 3 code to a specific directory
 foryc schema.fdl --scala_out=./src/main/scala
+
+# Generate Scala 3 models and gRPC service companions
+foryc service.fdl --scala_out=./src/main/scala --grpc
 
 # Generate Kotlin code to a specific directory
 foryc schema.fdl --kotlin_out=./src/main/kotlin
@@ -381,15 +387,18 @@ generated/
 generated/
 └── csharp/
     └── example/
-        └── example.cs
+        └── Example.cs
 ```
 
-- Single `.cs` file per schema
+- Single `.cs` file per schema named from the normalized PascalCase source file
+  stem
 - Namespace uses `csharp_namespace` (if set) or Fory IDL package
 - Includes source-file-prefixed `XXXForyModule` installation helper and
   `ToBytes`/`FromBytes` methods
 - Imported schemas are installed transitively (for example `root.idl` importing
   `addressbook.fdl` and `tree.fdl`)
+- With `--grpc`, one `<ServiceName>Grpc.cs` companion per service next to the
+  schema file output
 
 ### Swift
 
@@ -433,6 +442,7 @@ generated/
         ├── User.scala
         ├── Status.scala
         ├── Animal.scala
+        ├── ExampleServiceGrpc.scala
         └── ExampleForyModule.scala
 ```
 
@@ -443,6 +453,8 @@ generated/
 - Enums use Scala 3 `enum`
 - Unions use Scala 3 ADT `enum` with `@ForyUnion`, `@ForyCase`, and an `Unknown`
 - Schema module object included
+- With `--grpc`, one `<ServiceName>Grpc.scala` service companion is generated
+  per local service definition
 
 ### Kotlin
 

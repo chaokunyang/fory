@@ -121,6 +121,39 @@ describe('fory', () => {
         expect(codec.deserialize(codec.serialize(input))).toEqual(input)
     })
 
+    test('gets root codec for fixed struct roots', () => {
+        const fory = new Fory({ compatible: true })
+        fory.register(Type.struct({
+            typeId: 101,
+            evolving: false,
+        }, {
+            name: Type.string().setId(1),
+        }))
+        fory.register(Type.struct({
+            namespace: 'example',
+            typeName: 'FixedPerson',
+            evolving: false,
+        }, {
+            name: Type.string().setId(1),
+        }))
+        const input = { name: 'Fory' }
+
+        const byId = fory.getRootCodec<{ name: string }>({
+            kind: 'struct',
+            typeId: 101,
+            evolving: false,
+        })
+        const byName = fory.getRootCodec<{ name: string }>({
+            kind: 'struct',
+            namespace: 'example',
+            typeName: 'FixedPerson',
+            evolving: false,
+        })
+
+        expect(byId.deserialize(byId.serialize(input))).toEqual(input)
+        expect(byName.deserialize(byName.serialize(input))).toEqual(input)
+    })
+
     test('gets exact root codec for union roots', () => {
         const fory = new Fory({ compatible: true })
         fory.register(Type.union(200, {

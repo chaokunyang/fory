@@ -334,6 +334,18 @@ class JavaScriptGenerator(JavaScriptServiceGeneratorMixin, BaseGenerator):
                 return imported_schema.package or "default"
         return self.schema.package or "default"
 
+    def _type_evolving(self, message: Message) -> bool:
+        if "evolving" in message.options:
+            return bool(message.options.get("evolving"))
+        location = getattr(message, "location", None)
+        file_path = getattr(location, "file", None) if location else None
+        if file_path and self.is_imported_type(message):
+            imported_schema = self._load_schema(file_path)
+            if imported_schema is not None:
+                file_default = imported_schema.get_option("evolving")
+                return True if file_default is None else bool(file_default)
+        return self.get_effective_evolving(message)
+
     def split_imported_types(
         self, items: List[object]
     ) -> Tuple[List[object], List[object]]:
@@ -353,10 +365,6 @@ class JavaScriptGenerator(JavaScriptServiceGeneratorMixin, BaseGenerator):
         if self.package:
             return self.package.replace(".", "_")
         return "generated"
-
-    def get_registration_function_name(self) -> str:
-        """Get the name of the registration function."""
-        return "install"
 
     def _safe_module_alias(self, module_path: str, index: int) -> str:
         stem = module_path.rsplit("/", 1)[-1]
@@ -934,7 +942,7 @@ class JavaScriptGenerator(JavaScriptServiceGeneratorMixin, BaseGenerator):
                             name_info = f'{{ namespace: "{ns}", typeName: "{qname}" }}'
                         expr = f"{self.RUNTIME_TYPE}.union({name_info}{cases_arg})"
                     elif isinstance(resolved, Message):
-                        evolving = self.get_effective_evolving(resolved)
+                        evolving = self._type_evolving(resolved)
                         if self.should_register_by_id(resolved):
                             if evolving:
                                 expr = f"{self.RUNTIME_TYPE}.struct({resolved.type_id})"
@@ -1043,7 +1051,7 @@ class JavaScriptGenerator(JavaScriptServiceGeneratorMixin, BaseGenerator):
         props_str = ", ".join(props_parts)
         props_arg = f", {{ {props_str} }}" if props_parts else ""
 
-        evolving = self.get_effective_evolving(type_def)
+        evolving = self._type_evolving(type_def)
         if self.should_register_by_id(type_def):
             if evolving:
                 name_info = str(type_def.type_id)

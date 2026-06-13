@@ -133,6 +133,43 @@ const order = deserialize(bytes);
 
 Store and reuse this pair — it is the fast path.
 
+## Root Codecs for Plain Objects
+
+When a root value is a plain object, `fory.serialize(value)` cannot infer which
+registered struct schema to use. Use `getRootCodec(...)` when you need a root
+serializer for a registered struct or union and you identify that root by schema
+metadata:
+
+```ts
+const fory = new Fory();
+fory.register(
+  Type.struct(
+    { typeName: "example.user" },
+    {
+      id: Type.int64(),
+      name: Type.string(),
+    },
+  ),
+);
+
+const userCodec = fory.getRootCodec<{
+  id: bigint;
+  name: string;
+}>({
+  kind: "struct",
+  typeName: "example.user",
+});
+
+const bytes = userCodec.serialize({ id: 1n, name: "Alice" });
+const user = userCodec.deserialize(bytes);
+```
+
+The identity passed to `getRootCodec` must match the registered schema. Use
+`typeId` for numeric IDs, or `namespace` and `typeName` for named types. If the
+struct was registered with `evolving: false`, pass `evolving: false` in the root
+identity too. Generated gRPC companions use this API automatically for generated
+interface types.
+
 ## Field Metadata
 
 Field nullability, reference tracking, dynamic field behavior, numeric widths, and per-struct

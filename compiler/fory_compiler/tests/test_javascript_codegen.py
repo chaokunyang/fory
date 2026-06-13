@@ -408,6 +408,48 @@ def test_js_import_install_uses_module_owner(tmp_path: Path):
     assert "registerDemoSharedTypes" not in output
 
 
+def test_js_imported_evolving_default(tmp_path: Path):
+    common = tmp_path / "common.fdl"
+    common.write_text(
+        dedent(
+            """
+            option enable_auto_type_id = false;
+            option evolving = false;
+            package demo.shared;
+
+            message Shared {
+                string name = 1;
+            }
+            """
+        )
+    )
+    service = tmp_path / "service.fdl"
+    service.write_text(
+        dedent(
+            """
+            package demo.api;
+
+            import "common.fdl";
+
+            message Request {
+                demo.shared.Shared shared = 1;
+            }
+            """
+        )
+    )
+    schema = resolve_imports(service)
+    output = (
+        JavaScriptGenerator(schema, GeneratorOptions(output_dir=tmp_path))
+        .generate()[0]
+        .content
+    )
+
+    assert (
+        'shared: __foryRuntime$Type.struct({ namespace: "demo.shared", '
+        'typeName: "Shared", evolving: false }).setId(1)' in output
+    )
+
+
 def test_js_nested_union_is_installed():
     source = dedent(
         """

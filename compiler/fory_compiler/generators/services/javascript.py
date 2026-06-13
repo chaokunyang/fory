@@ -334,12 +334,18 @@ class JavaScriptServiceGeneratorMixin:
 
     def _root_identity_expr(self, type_def: RootType) -> str:
         kind = "union" if isinstance(type_def, Union) else "struct"
+        evolving_opt = (
+            ", evolving: false"
+            if isinstance(type_def, Message) and not self._type_evolving(type_def)
+            else ""
+        )
         if self.should_register_by_id(type_def):
-            return f'{{ kind: "{kind}", typeId: {type_def.type_id} }}'
+            return f'{{ kind: "{kind}", typeId: {type_def.type_id}{evolving_opt} }}'
         namespace = self._get_type_package(type_def)
         type_name = self._qualified_type_names.get(id(type_def), type_def.name)
         return (
-            f'{{ kind: "{kind}", namespace: "{namespace}", typeName: "{type_name}" }}'
+            f'{{ kind: "{kind}", namespace: "{namespace}", typeName: "{type_name}"'
+            f"{evolving_opt} }}"
         )
 
     def _generate_shared_codec_bindings(

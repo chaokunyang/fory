@@ -40,12 +40,23 @@ const MIN_DEPTH_LIMIT = 2 as const;
  */
 export type RootTypeIdentity =
   | {
-    kind: "struct" | "union";
+    kind: "struct";
+    namespace?: string;
+    typeName: string;
+    evolving?: boolean;
+  }
+  | {
+    kind: "struct";
+    typeId: number;
+    evolving?: boolean;
+  }
+  | {
+    kind: "union";
     namespace?: string;
     typeName: string;
   }
   | {
-    kind: "struct" | "union";
+    kind: "union";
     typeId: number;
   };
 
@@ -264,14 +275,24 @@ export default class Fory {
     let typeInfo: TypeInfo;
     if ("typeId" in identity) {
       typeInfo = identity.kind === "struct"
-        ? Type.struct(identity.typeId)
+        ? identity.evolving === false
+          ? Type.struct({ typeId: identity.typeId, evolving: false })
+          : Type.struct(identity.typeId)
         : Type.union(identity.typeId);
     } else {
       typeInfo = identity.kind === "struct"
-        ? Type.struct({
-          namespace: identity.namespace,
-          typeName: identity.typeName,
-        })
+        ? Type.struct(
+          identity.evolving === false
+            ? {
+              namespace: identity.namespace,
+              typeName: identity.typeName,
+              evolving: false,
+            }
+            : {
+              namespace: identity.namespace,
+              typeName: identity.typeName,
+            },
+        )
         : Type.union({
           namespace: identity.namespace,
           typeName: identity.typeName,

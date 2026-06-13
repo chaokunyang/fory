@@ -253,6 +253,96 @@ def test_js_grpc_named_union_root():
     assert "Type.union" not in content
 
 
+def test_js_grpc_evolving_false_roots():
+    numeric_schema = parse_fdl(
+        dedent(
+            """
+            package demo.stable;
+
+            message Stable [id=100, evolving=false] {
+                string name = 1;
+            }
+
+            service StableService {
+                rpc Call (Stable) returns (Stable);
+            }
+            """
+        )
+    )
+    numeric_content = generate_service_files(numeric_schema, JavaScriptGenerator)[
+        "demo_stable_grpc.ts"
+    ]
+    assert (
+        'FORY.getRootCodec<Stable>({ kind: "struct", typeId: 100, evolving: false })'
+        in numeric_content
+    )
+
+    named_schema = parse_fdl(
+        dedent(
+            """
+            option enable_auto_type_id = false;
+            package demo.stable;
+
+            message Stable [evolving=false] {
+                string name = 1;
+            }
+
+            service StableService {
+                rpc Call (Stable) returns (Stable);
+            }
+            """
+        )
+    )
+    named_content = generate_service_files(named_schema, JavaScriptGenerator)[
+        "demo_stable_grpc.ts"
+    ]
+    assert (
+        'FORY.getRootCodec<Stable>({ kind: "struct", namespace: "demo.stable", '
+        'typeName: "Stable", evolving: false })' in named_content
+    )
+
+
+def test_js_grpc_imported_evolving_default(tmp_path: Path):
+    common = tmp_path / "common.fdl"
+    common.write_text(
+        dedent(
+            """
+            option enable_auto_type_id = false;
+            option evolving = false;
+            package demo.common;
+
+            message Stable {
+                string name = 1;
+            }
+            """
+        )
+    )
+    service = tmp_path / "service.fdl"
+    service.write_text(
+        dedent(
+            """
+            package demo.api;
+
+            import "common.fdl";
+
+            service Api {
+                rpc Call (demo.common.Stable) returns (demo.common.Stable);
+            }
+            """
+        )
+    )
+    schema = resolve_imports(service)
+    generator = JavaScriptGenerator(
+        schema, GeneratorOptions(output_dir=tmp_path, grpc=True)
+    )
+    content = generator.generate_services()[0].content
+
+    assert (
+        'FORY.getRootCodec<Stable>({ kind: "struct", namespace: "demo.common", '
+        'typeName: "Stable", evolving: false })' in content
+    )
+
+
 def test_js_grpc_nested_roots():
     schema = parse_fdl(
         dedent(

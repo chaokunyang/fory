@@ -31,6 +31,7 @@ from fory_compiler.ir.emitter import FDLEmitter
 from fory_compiler.ir.validator import SchemaValidator
 from fory_compiler.generators.base import GeneratorOptions
 from fory_compiler.generators import GENERATORS
+from fory_compiler.generators.csharp import validate_csharp_generation
 from fory_compiler.generators.kotlin import (
     kotlin_output_paths,
     kotlin_package_for_schema,
@@ -319,6 +320,26 @@ def validate_kotlin_generation(
     if not validate_kotlin_import_packages(graph):
         return False
     return validate_kotlin_output_paths(graph, grpc=grpc)
+
+
+def validate_csharp_files(
+    files: List[Path],
+    import_paths: List[Path],
+    grpc: bool = False,
+) -> bool:
+    """Preflight C# generated paths and module owners before writing output."""
+    cache: Dict[Path, Schema] = {}
+    graph: List[Tuple[Path, Schema]] = []
+    for file_path in files:
+        file_graph = collect_schema_graph(file_path, import_paths, cache, set())
+        if file_graph is None:
+            return False
+        graph.extend(file_graph)
+    try:
+        return validate_csharp_generation(graph, grpc=grpc)
+    except ValueError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return False
 
 
 def validate_scala_import_packages(graph: List[Tuple[Path, Schema]]) -> bool:
@@ -766,15 +787,17 @@ def compile_file(
             print(f"Error: {e}", file=sys.stderr)
             return False
 
-        if lang == "rust":
-            # Special error handling for Rust
+        if lang in {"rust", "csharp"}:
+            # Special error handling for languages with run-wide generated path
+            # validation.
+            display_lang = "C#" if lang == "csharp" else "Rust"
             output_targets: List[Path] = []
             for f in files:
                 target = (lang_output / f.path).resolve()
                 # Reject overwriting existing non-generated files
                 if target.exists() and not is_generated_file(target):
                     print(
-                        f"Error: Rust output path collision: {target} already exists",
+                        f"Error: {display_lang} output path collision: {target} already exists",
                         file=sys.stderr,
                     )
                     return False
@@ -782,7 +805,7 @@ def compile_file(
                 previous_source = generated_outputs.get(target)
                 if previous_source is not None and previous_source != file_path:
                     print(
-                        "Error: Rust output path collision: "
+                        f"Error: {display_lang} output path collision: "
                         f"{previous_source} and {file_path} both generate {target}",
                         file=sys.stderr,
                     )
@@ -964,6 +987,9 @@ def cmd_compile(args: argparse.Namespace) -> int:
 
     if "kotlin" in lang_output_dirs:
         if not validate_kotlin_generation(args.files, import_paths, grpc=args.grpc):
+            return 1
+    if "csharp" in lang_output_dirs:
+        if not validate_csharp_files(args.files, import_paths, grpc=args.grpc):
             return 1
     if "scala" in lang_output_dirs:
         if not validate_scala_generation(args.files, import_paths, grpc=args.grpc):

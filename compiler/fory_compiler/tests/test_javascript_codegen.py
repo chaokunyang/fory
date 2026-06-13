@@ -161,8 +161,8 @@ def test_javascript_nested_enum_registration_uses_simple_name():
     # Enums are skipped during registration in JavaScript (they are numeric
     # values at runtime and don't need separate Fory registration).
     assert "fory.register('PhoneType'" not in output
-    # Messages are registered via fory.register(Type.struct(...)).
-    assert "fory.register(Type.struct(100" in output
+    # Messages are registered via fory.register(__foryRuntime$Type.struct(...)).
+    assert "fory.register(__foryRuntime$Type.struct(100" in output
     # Ensure qualified names are NOT used
     assert "Person.PhoneType" not in output
 
@@ -234,11 +234,11 @@ def test_javascript_collection_ref_registration():
     output = generate_javascript(source)
 
     assert (
-        "children: Type.list(Type.struct(100).setNullable(true).setTrackingRef(true)).setId(1)"
+        "children: __foryRuntime$Type.list(__foryRuntime$Type.struct(100).setNullable(true).setTrackingRef(true)).setId(1)"
         in output
     )
     assert (
-        "refs: Type.map(Type.string(), Type.struct(100).setNullable(true).setTrackingRef(true)).setId(2)"
+        "refs: __foryRuntime$Type.map(__foryRuntime$Type.string(), __foryRuntime$Type.struct(100).setNullable(true).setTrackingRef(true)).setId(2)"
         in output
     )
 
@@ -260,10 +260,13 @@ def test_javascript_decimal_generation_uses_runtime_decimal_type():
     )
     output = generate_javascript(source)
 
-    assert "import Fory, { Type, Decimal } from '@apache-fory/core';" in output
-    assert "amount: Decimal;" in output
-    assert "{ case: ValueCase.AMOUNT; value: Decimal }" in output
-    assert "amount: Type.decimal()" in output
+    assert (
+        "import __foryRuntime$Fory, { Type as __foryRuntime$Type, "
+        "Decimal as __foryRuntime$Decimal } from '@apache-fory/core';"
+    ) in output
+    assert "amount: __foryRuntime$Decimal;" in output
+    assert "{ case: ValueCase.AMOUNT; value: __foryRuntime$Decimal }" in output
+    assert "amount: __foryRuntime$Type.decimal()" in output
 
 
 def test_javascript_map_key_fallback_to_map():
@@ -359,13 +362,13 @@ def test_javascript_file_structure():
     assert "// Schema installation" in output
 
     # Check module-owned Fory helpers.
-    assert "export function install(fory: Fory): void" in output
-    assert "export function createFory(): Fory" in output
-    assert "export function getFory(): Fory" in output
+    assert "export function install(fory: __foryRuntime$Fory): void" in output
+    assert "export function createFory(): __foryRuntime$Fory" in output
+    assert "export function getFory(): __foryRuntime$Fory" in output
     assert "registerExampleV1Types" not in output
 
 
-def test_javascript_imported_schema_installation_uses_module_owner(tmp_path: Path):
+def test_js_import_install_uses_module_owner(tmp_path: Path):
     common = tmp_path / "common.fdl"
     common.write_text(
         dedent(
@@ -403,6 +406,52 @@ def test_javascript_imported_schema_installation_uses_module_owner(tmp_path: Pat
     assert "import { Shared } from './common';" in output
     assert "_commonModule0.install(fory);" in output
     assert "registerDemoSharedTypes" not in output
+
+
+def test_js_nested_union_is_installed():
+    source = dedent(
+        """
+        option enable_auto_type_id = false;
+        package demo.nested;
+
+        message Envelope {
+            union Result {
+                string ok = 1;
+            }
+        }
+        """
+    )
+    output = generate_javascript(source)
+
+    assert (
+        '__foryRuntime$Type.union({ namespace: "demo.nested", typeName: "Envelope.Result" }'
+        in output
+    )
+
+
+def test_js_runtime_imports_are_aliased():
+    source = dedent(
+        """
+        package demo.aliases;
+
+        message Fory {}
+        message Type {}
+        message Decimal {
+            decimal value = 1;
+        }
+        """
+    )
+    output = generate_javascript(source)
+
+    assert (
+        "import __foryRuntime$Fory, { Type as __foryRuntime$Type, "
+        "Decimal as __foryRuntime$Decimal } from '@apache-fory/core';"
+    ) in output
+    assert "export interface Fory" in output
+    assert "export interface Type" in output
+    assert "value: __foryRuntime$Decimal;" in output
+    assert "new __foryRuntime$Fory" in output
+    assert "__foryRuntime$Type.struct" in output
 
 
 def test_javascript_field_naming():
@@ -525,7 +574,7 @@ def test_javascript_qualified_nested_type_resolved():
 
 
 def test_javascript_union_registration():
-    """Test that unions are registered with Type.union() including case mappings."""
+    """Test unions are registered with runtime union case mappings."""
     source = dedent(
         """
         package example;
@@ -548,11 +597,11 @@ def test_javascript_union_registration():
     )
     output = generate_javascript(source)
 
-    # Union registration should use Type.union() with type ID and case mappings
-    assert "Type.union(103" in output
+    # Union registration should use runtime union builders with case mappings.
+    assert "__foryRuntime$Type.union(103" in output
     # Case 1 -> Dog (struct 101), Case 2 -> Cat (struct 102)
-    assert "1: Type.struct(101" in output
-    assert "2: Type.struct(102" in output
+    assert "1: __foryRuntime$Type.struct(101" in output
+    assert "2: __foryRuntime$Type.struct(102" in output
     # Struct registrations for the variant types must also be present
-    assert "Type.struct(101" in output
-    assert "Type.struct(102" in output
+    assert "__foryRuntime$Type.struct(101" in output
+    assert "__foryRuntime$Type.struct(102" in output

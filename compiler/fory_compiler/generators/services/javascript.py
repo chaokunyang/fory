@@ -25,6 +25,27 @@ from fory_compiler.ir.ast import Message, NamedType, RpcMethod, Service, Union
 
 
 RootType = TypingUnion[Message, Union]
+CLASS_METHOD_NAMES = {"constructor"}
+SERVICE_MEMBER_NAMES = CLASS_METHOD_NAMES | {
+    "call",
+    "checkOptionalUnaryResponseArguments",
+    "client",
+    "close",
+    "getChannel",
+    "hostname",
+    "makeBidiStreamRequest",
+    "makeClientStreamRequest",
+    "makeServerStreamRequest",
+    "makeUnaryRequest",
+    "then",
+    "waitForReady",
+    "wireFormat",
+}
+WEB_HELPER_TYPE_NAMES = {
+    "ForyGrpcWebClientOptions",
+    "ForyGrpcWebWireFormat",
+    "GrpcWebMessageType",
+}
 
 
 class JavaScriptServiceGeneratorMixin:
@@ -41,37 +62,18 @@ class JavaScriptServiceGeneratorMixin:
         self._validate_javascript_grpc_services(local_services)
         files: List[GeneratedFile] = []
         if self.options.grpc:
+            self._validate_service_exports(local_services, "node")
+            self._validate_model_imports(local_services, "node")
             files.append(self._generate_node_grpc_module(local_services))
         if getattr(self.options, "grpc_web", False):
             self._validate_grpc_web_services(local_services)
+            self._validate_service_exports(local_services, "web")
+            self._validate_model_imports(local_services, "web")
             files.append(self._generate_grpc_web_module(local_services))
         return files
 
     def _validate_javascript_grpc_services(self, services: List[Service]) -> None:
-        used_exports: Dict[str, str] = {}
         for service in services:
-            service_exports = [
-                self._service_constant_name(service),
-                self._method_paths_constant_name(service),
-                f"{self.to_pascal_case(service.name)}Handlers",
-                f"create{self.to_pascal_case(service.name)}ServiceDefinition",
-                f"add{self.to_pascal_case(service.name)}Service",
-                f"{self.to_pascal_case(service.name)}Client",
-                f"create{self.to_pascal_case(service.name)}Client",
-                f"{self.to_pascal_case(service.name)}WebClient",
-                f"{self.to_pascal_case(service.name)}WebPromiseClient",
-                f"create{self.to_pascal_case(service.name)}WebClient",
-                f"create{self.to_pascal_case(service.name)}WebPromiseClient",
-            ]
-            for export in service_exports:
-                previous = used_exports.get(export)
-                if previous is not None:
-                    raise ValueError(
-                        "JavaScript gRPC service export collision: "
-                        f"{previous} and {service.name} both generate {export}"
-                    )
-                used_exports[export] = service.name
-
             used_methods: Dict[str, str] = {}
             used_paths: Dict[str, str] = {}
             for method in service.methods:
@@ -98,6 +100,76 @@ class JavaScriptServiceGeneratorMixin:
                 self._resolve_rpc_root(method.request_type)
                 self._resolve_rpc_root(method.response_type)
 
+    def _validate_service_exports(self, services: List[Service], target: str) -> None:
+        used_exports: Dict[str, str] = {}
+        for service in services:
+            for export in self._service_exports(service, target):
+                previous = used_exports.get(export)
+                if previous is not None:
+                    raise ValueError(
+                        "JavaScript gRPC service export collision: "
+                        f"{previous} and {service.name} both generate {export}"
+                    )
+                used_exports[export] = service.name
+
+    def _service_exports(self, service: Service, target: str) -> List[str]:
+        service_name = self.to_pascal_case(service.name)
+        exports = [
+            self._service_constant_name(service),
+            self._method_paths_constant_name(service),
+        ]
+        if target == "node":
+            exports.extend(
+                [
+                    f"{service_name}Handlers",
+                    f"create{service_name}ServiceDefinition",
+                    f"add{service_name}Service",
+                    f"{service_name}Client",
+                    f"create{service_name}Client",
+                ]
+            )
+        else:
+            exports.extend(
+                [
+                    f"{service_name}WebClient",
+                    f"create{service_name}WebClient",
+                ]
+            )
+            if self._has_unary_method(service):
+                exports.extend(
+                    [
+                        f"{service_name}WebPromiseClient",
+                        f"create{service_name}WebPromiseClient",
+                    ]
+                )
+        return exports
+
+    def _validate_model_imports(self, services: List[Service], target: str) -> None:
+        service_exports = {
+            export
+            for service in services
+            for export in self._service_exports(service, target)
+        }
+        if target == "web":
+            service_exports.update(WEB_HELPER_TYPE_NAMES)
+        owners: Dict[str, str] = {}
+        for root in self._service_roots(services):
+            name = self._ts_import_name(root)
+            owner = (
+                self._module_path_for_type(root) if self.is_imported_type(root) else "."
+            )
+            previous = owners.get(name)
+            if previous is not None and previous != owner:
+                raise ValueError(
+                    "JavaScript gRPC model import collision: "
+                    f"{previous} and {owner} both provide {name}"
+                )
+            owners[name] = owner
+            if name in service_exports:
+                raise ValueError(
+                    f"JavaScript gRPC model import collides with service export: {name}"
+                )
+
     def _validate_grpc_web_services(self, services: List[Service]) -> None:
         for service in services:
             for method in service.methods:
@@ -111,17 +183,23 @@ class JavaScriptServiceGeneratorMixin:
                         f"or bidirectional methods: {service.name}.{method.name}"
                     )
 
+    def _has_unary_method(self, service: Service) -> bool:
+        return any(not method.server_streaming for method in service.methods)
+
     def _generate_node_grpc_module(self, services: List[Service]) -> GeneratedFile:
+        root_indexes = self._root_index_map(services)
         lines = self._service_file_prelude("node")
         lines.append('import * as grpc from "@grpc/grpc-js";')
         lines.extend(self._generate_model_imports(services))
         lines.append("")
-        lines.extend(self._generate_shared_codec_bindings(services))
+        lines.extend(self._generate_shared_codec_bindings(services, root_indexes))
         lines.append("")
         lines.extend(self._generate_node_buffer_helper())
         lines.append("")
+        lines.extend(self._generate_node_grpc_serializers(services, root_indexes))
+        lines.append("")
         for service in services:
-            lines.extend(self._generate_node_service(service))
+            lines.extend(self._generate_node_service(service, root_indexes))
             lines.append("")
         return GeneratedFile(
             path=f"{self.get_module_name()}_grpc.ts",
@@ -129,6 +207,7 @@ class JavaScriptServiceGeneratorMixin:
         )
 
     def _generate_grpc_web_module(self, services: List[Service]) -> GeneratedFile:
+        root_indexes = self._root_index_map(services)
         lines = self._service_file_prelude("web")
         lines.append('import * as grpcWeb from "grpc-web";')
         lines.extend(self._generate_model_imports(services))
@@ -138,7 +217,6 @@ class JavaScriptServiceGeneratorMixin:
                 'export type ForyGrpcWebWireFormat = "grpcweb" | "grpcwebtext";',
                 "",
                 "export interface ForyGrpcWebClientOptions {",
-                "  credentials?: null | { [index: string]: string };",
                 "  unaryInterceptors?: grpcWeb.UnaryInterceptor<unknown, unknown>[];",
                 "  streamInterceptors?: grpcWeb.StreamInterceptor<unknown, unknown>[];",
                 "  suppressCorsPreflight?: boolean;",
@@ -148,14 +226,16 @@ class JavaScriptServiceGeneratorMixin:
                 "",
             ]
         )
-        lines.extend(self._generate_shared_codec_bindings(services))
+        lines.extend(self._generate_shared_codec_bindings(services, root_indexes))
         lines.append("")
-        lines.extend(self._generate_grpc_web_type_bindings(services))
+        lines.extend(self._generate_grpc_web_type_bindings(services, root_indexes))
         lines.append("")
         lines.extend(self._generate_grpc_web_helpers(services))
         lines.append("")
-        for service in services:
-            lines.extend(self._generate_grpc_web_service(service))
+        for service_index, service in enumerate(services):
+            lines.extend(
+                self._generate_grpc_web_service(service, service_index, root_indexes)
+            )
             lines.append("")
         return GeneratedFile(
             path=f"{self.get_module_name()}_grpc_web.ts",
@@ -173,16 +253,12 @@ class JavaScriptServiceGeneratorMixin:
         current_types: Set[str] = set()
         imported_types: Dict[str, Set[str]] = {}
         for root in self._service_roots(services):
-            type_name = self._ts_type_name(root)
+            type_name = self._ts_import_name(root)
             if self.is_imported_type(root):
                 module = self._module_path_for_type(root)
                 imported_types.setdefault(module, set()).add(type_name)
-                if isinstance(root, Union):
-                    imported_types[module].add(f"{type_name}Case")
             else:
                 current_types.add(type_name)
-                if isinstance(root, Union):
-                    current_types.add(f"{type_name}Case")
 
         lines: List[str] = []
         current_imports = ["getFory", *sorted(current_types)]
@@ -206,6 +282,11 @@ class JavaScriptServiceGeneratorMixin:
                     roots.append(root)
         return roots
 
+    def _root_index_map(self, services: List[Service]) -> Dict[int, int]:
+        return {
+            id(root): index for index, root in enumerate(self._service_roots(services))
+        }
+
     def _resolve_rpc_root(self, named_type: NamedType) -> RootType:
         resolved = self._resolve_named_type(named_type.name)
         if isinstance(resolved, (Message, Union)):
@@ -227,20 +308,29 @@ class JavaScriptServiceGeneratorMixin:
             id(type_def), self.safe_type_identifier(type_def.name)
         )
 
-    def _codec_var(self, type_def: RootType) -> str:
-        return f"{self.safe_member_name(self._ts_type_name(type_def).replace('.', '_'))}Codec"
+    def _ts_import_name(self, type_def: RootType) -> str:
+        return self._ts_type_name(type_def).split(".", 1)[0]
 
-    def _serializer_name(self, type_def: RootType) -> str:
-        return f"serialize{self.to_pascal_case(self._ts_type_name(type_def).replace('.', '_'))}"
+    def _codec_var(self, type_def: RootType, root_indexes: Dict[int, int]) -> str:
+        return f"root{root_indexes[id(type_def)]}Codec"
 
-    def _deserializer_name(self, type_def: RootType) -> str:
-        return f"deserialize{self.to_pascal_case(self._ts_type_name(type_def).replace('.', '_'))}"
+    def _serializer_name(self, type_def: RootType, root_indexes: Dict[int, int]) -> str:
+        return f"serializeRoot{root_indexes[id(type_def)]}"
 
-    def _grpc_web_type_name(self, type_def: RootType) -> str:
-        return (
-            f"{self.safe_member_name(self._ts_type_name(type_def).replace('.', '_'))}"
-            "GrpcWebType"
-        )
+    def _grpc_serializer_name(
+        self, type_def: RootType, root_indexes: Dict[int, int]
+    ) -> str:
+        return f"{self._serializer_name(type_def, root_indexes)}Grpc"
+
+    def _deserializer_name(
+        self, type_def: RootType, root_indexes: Dict[int, int]
+    ) -> str:
+        return f"deserializeRoot{root_indexes[id(type_def)]}"
+
+    def _grpc_web_type_name(
+        self, type_def: RootType, root_indexes: Dict[int, int]
+    ) -> str:
+        return f"root{root_indexes[id(type_def)]}GrpcWebType"
 
     def _root_identity_expr(self, type_def: RootType) -> str:
         kind = "union" if isinstance(type_def, Union) else "struct"
@@ -252,19 +342,21 @@ class JavaScriptServiceGeneratorMixin:
             f'{{ kind: "{kind}", namespace: "{namespace}", typeName: "{type_name}" }}'
         )
 
-    def _generate_shared_codec_bindings(self, services: List[Service]) -> List[str]:
+    def _generate_shared_codec_bindings(
+        self, services: List[Service], root_indexes: Dict[int, int]
+    ) -> List[str]:
         lines = ["const FORY = getFory();"]
         for root in self._service_roots(services):
             ts_type = self._ts_type_name(root)
-            codec = self._codec_var(root)
+            codec = self._codec_var(root, root_indexes)
             identity = self._root_identity_expr(root)
             lines.append(f"const {codec} = FORY.getRootCodec<{ts_type}>({identity});")
             lines.append(
-                f"const {self._serializer_name(root)} = (value: {ts_type}) => "
+                f"const {self._serializer_name(root, root_indexes)} = (value: {ts_type}) => "
                 f"{codec}.serialize(value);"
             )
             lines.append(
-                f"const {self._deserializer_name(root)} = (bytes: Uint8Array) => "
+                f"const {self._deserializer_name(root, root_indexes)} = (bytes: Uint8Array) => "
                 f"{codec}.deserialize(bytes) as {ts_type};"
             )
         return lines
@@ -279,7 +371,21 @@ class JavaScriptServiceGeneratorMixin:
             "};",
         ]
 
-    def _generate_node_service(self, service: Service) -> List[str]:
+    def _generate_node_grpc_serializers(
+        self, services: List[Service], root_indexes: Dict[int, int]
+    ) -> List[str]:
+        lines: List[str] = []
+        for root in self._service_roots(services):
+            ts_type = self._ts_type_name(root)
+            lines.append(
+                f"const {self._grpc_serializer_name(root, root_indexes)} = (value: {ts_type}): Buffer => "
+                f"toGrpcBuffer({self._serializer_name(root, root_indexes)}(value));"
+            )
+        return lines
+
+    def _generate_node_service(
+        self, service: Service, root_indexes: Dict[int, int]
+    ) -> List[str]:
         lines: List[str] = []
         service_name = self.to_pascal_case(service.name)
         lines.append(
@@ -294,7 +400,7 @@ class JavaScriptServiceGeneratorMixin:
         lines.append("")
         lines.extend(self._generate_node_handlers(service))
         lines.append("")
-        lines.extend(self._generate_node_service_definition(service))
+        lines.extend(self._generate_node_service_definition(service, root_indexes))
         lines.append("")
         lines.append(
             f"export function add{service_name}Service(server: grpc.Server, "
@@ -305,7 +411,7 @@ class JavaScriptServiceGeneratorMixin:
         )
         lines.append("}")
         lines.append("")
-        lines.extend(self._generate_node_client(service))
+        lines.extend(self._generate_node_client(service, root_indexes))
         return lines
 
     def _generate_node_handlers(self, service: Service) -> List[str]:
@@ -327,7 +433,9 @@ class JavaScriptServiceGeneratorMixin:
         lines.append("}")
         return lines
 
-    def _generate_node_service_definition(self, service: Service) -> List[str]:
+    def _generate_node_service_definition(
+        self, service: Service, root_indexes: Dict[int, int]
+    ) -> List[str]:
         service_name = self.to_pascal_case(service.name)
         lines = [
             f"export function create{service_name}ServiceDefinition(): "
@@ -349,19 +457,21 @@ class JavaScriptServiceGeneratorMixin:
                 f"      responseStream: {'true' if method.server_streaming else 'false'},"
             )
             lines.append(
-                f"      requestSerialize: (value: {self._ts_type_name(request_root)}) => "
-                f"toGrpcBuffer({self._serializer_name(request_root)}(value)),"
+                f"      requestSerialize: {self._grpc_serializer_name(request_root, root_indexes)},"
             )
             lines.append(
-                f"      requestDeserialize: {self._deserializer_name(request_root)},"
+                f"      requestDeserialize: {self._deserializer_name(request_root, root_indexes)},"
             )
             lines.append(
-                f"      responseSerialize: (value: {self._ts_type_name(response_root)}) => "
-                f"toGrpcBuffer({self._serializer_name(response_root)}(value)),"
+                f"      responseSerialize: {self._grpc_serializer_name(response_root, root_indexes)},"
             )
             lines.append(
-                f"      responseDeserialize: {self._deserializer_name(response_root)},"
+                f"      responseDeserialize: {self._deserializer_name(response_root, root_indexes)},"
             )
+            # grpc-js falls back to implementation[originalName] when the
+            # service-definition key is missing. Keep this aligned with the
+            # escaped handler key so raw names such as constructor do not bind
+            # Object.prototype members.
             lines.append(f'      originalName: "{self._method_name(method)}",')
             lines.append("    },")
             if mode is None:
@@ -370,7 +480,9 @@ class JavaScriptServiceGeneratorMixin:
         lines.append("}")
         return lines
 
-    def _generate_node_client(self, service: Service) -> List[str]:
+    def _generate_node_client(
+        self, service: Service, root_indexes: Dict[int, int]
+    ) -> List[str]:
         service_name = self.to_pascal_case(service.name)
         lines = [f"export class {service_name}Client extends grpc.Client {{"]
         lines.extend(
@@ -386,7 +498,9 @@ class JavaScriptServiceGeneratorMixin:
             ]
         )
         for index, method in enumerate(service.methods):
-            lines.extend(self._generate_node_client_method(service, method))
+            lines.extend(
+                self._generate_node_client_method(service, method, root_indexes)
+            )
             if index != len(service.methods) - 1:
                 lines.append("")
         lines.append("}")
@@ -403,16 +517,18 @@ class JavaScriptServiceGeneratorMixin:
         return lines
 
     def _generate_node_client_method(
-        self, service: Service, method: RpcMethod
+        self, service: Service, method: RpcMethod, root_indexes: Dict[int, int]
     ) -> List[str]:
         mode = streaming_mode(method)
         req = self._ts_type_name(self._resolve_rpc_root(method.request_type))
         res = self._ts_type_name(self._resolve_rpc_root(method.response_type))
         name = self._method_name(method)
         path = f"{self._method_paths_constant_name(service)}.{self._method_path_key(method)}"
-        req_ser = self._serializer_name(self._resolve_rpc_root(method.request_type))
+        req_ser = self._grpc_serializer_name(
+            self._resolve_rpc_root(method.request_type), root_indexes
+        )
         res_deser = self._deserializer_name(
-            self._resolve_rpc_root(method.response_type)
+            self._resolve_rpc_root(method.response_type), root_indexes
         )
         lines: List[str] = []
         if mode is StreamingMode.UNARY:
@@ -440,7 +556,7 @@ class JavaScriptServiceGeneratorMixin:
                     "        : callback)!;",
                     "    return this.makeUnaryRequest(",
                     f"      {path},",
-                    f"      (value: {req}) => toGrpcBuffer({req_ser}(value)),",
+                    f"      {req_ser},",
                     f"      {res_deser},",
                     "      request,",
                     "      metadata,",
@@ -456,7 +572,7 @@ class JavaScriptServiceGeneratorMixin:
                     f"  {name}(request: {req}, metadata?: grpc.Metadata, options?: grpc.CallOptions): grpc.ClientReadableStream<{res}> {{",
                     "    return this.makeServerStreamRequest(",
                     f"      {path},",
-                    f"      (value: {req}) => toGrpcBuffer({req_ser}(value)),",
+                    f"      {req_ser},",
                     f"      {res_deser},",
                     "      request,",
                     "      metadata ?? new grpc.Metadata(),",
@@ -489,7 +605,7 @@ class JavaScriptServiceGeneratorMixin:
                     "        : callback)!;",
                     "    return this.makeClientStreamRequest(",
                     f"      {path},",
-                    f"      (value: {req}) => toGrpcBuffer({req_ser}(value)),",
+                    f"      {req_ser},",
                     f"      {res_deser},",
                     "      metadata,",
                     "      options,",
@@ -504,7 +620,7 @@ class JavaScriptServiceGeneratorMixin:
                     f"  {name}(metadata?: grpc.Metadata, options?: grpc.CallOptions): grpc.ClientDuplexStream<{req}, {res}> {{",
                     "    return this.makeBidiStreamRequest(",
                     f"      {path},",
-                    f"      (value: {req}) => toGrpcBuffer({req_ser}(value)),",
+                    f"      {req_ser},",
                     f"      {res_deser},",
                     "      metadata ?? new grpc.Metadata(),",
                     "      options,",
@@ -514,64 +630,51 @@ class JavaScriptServiceGeneratorMixin:
             )
         return lines
 
-    def _generate_grpc_web_type_bindings(self, services: List[Service]) -> List[str]:
+    def _generate_grpc_web_type_bindings(
+        self, services: List[Service], root_indexes: Dict[int, int]
+    ) -> List[str]:
+        # grpc-web's MethodDescriptor type requires constructor tokens, but
+        # generated Fory JavaScript roots are interfaces. The runtime uses the
+        # supplied byte serializers below, so Object is only a descriptor token.
         lines = [
             "type GrpcWebMessageType<T> = new (...args: unknown[]) => T;",
-            "type GrpcWebUnaryClientBase = grpcWeb.GrpcWebClientBase & {",
-            "  unaryCall<REQ, RESP>(",
-            "    method: string,",
-            "    request: REQ,",
-            "    metadata: grpcWeb.Metadata,",
-            "    methodDescriptor: grpcWeb.MethodDescriptor<REQ, RESP>,",
-            "    options?: grpcWeb.PromiseCallOptions,",
-            "  ): Promise<RESP>;",
-            "};",
         ]
         for root in self._service_roots(services):
             lines.append(
-                f"const {self._grpc_web_type_name(root)} = "
+                f"const {self._grpc_web_type_name(root, root_indexes)} = "
                 f"Object as unknown as GrpcWebMessageType<{self._ts_type_name(root)}>;"
             )
         return lines
 
     def _generate_grpc_web_helpers(self, services: List[Service]) -> List[str]:
-        has_server_streaming = any(
-            method.server_streaming
-            for service in services
-            for method in service.methods
-        )
-        default_format = "grpcwebtext" if has_server_streaming else "grpcweb"
-        lines = [
-            f'const DEFAULT_WIRE_FORMAT: ForyGrpcWebWireFormat = "{default_format}";',
-            "",
+        return [
             "const toGrpcWebOptions = (",
-            "  options?: ForyGrpcWebClientOptions,",
+            "  options: ForyGrpcWebClientOptions | undefined,",
+            "  wireFormat: ForyGrpcWebWireFormat,",
             "): grpcWeb.GrpcWebClientBaseOptions => {",
-            "  const wireFormat = options?.wireFormat ?? DEFAULT_WIRE_FORMAT;",
+            "  return {",
+            '    format: wireFormat === "grpcwebtext" ? "text" : "binary",',
+            "    unaryInterceptors: options?.unaryInterceptors,",
+            "    streamInterceptors: options?.streamInterceptors,",
+            "    suppressCorsPreflight: options?.suppressCorsPreflight,",
+            "    withCredentials: options?.withCredentials,",
+            "  };",
+            "};",
         ]
-        if has_server_streaming:
-            lines.extend(
-                [
-                    '  if (wireFormat === "grpcweb") {',
-                    '    throw new Error("grpcweb binary mode does not support server streaming");',
-                    "  }",
-                ]
-            )
-        lines.extend(
-            [
-                "  return {",
-                '    format: wireFormat === "grpcwebtext" ? "text" : "binary",',
-                "    unaryInterceptors: options?.unaryInterceptors,",
-                "    streamInterceptors: options?.streamInterceptors,",
-                "    suppressCorsPreflight: options?.suppressCorsPreflight,",
-                "    withCredentials: options?.withCredentials,",
-                "  };",
-                "};",
-            ]
-        )
-        return lines
 
-    def _generate_grpc_web_service(self, service: Service) -> List[str]:
+    def _grpc_web_default_format(self, service: Service) -> str:
+        return (
+            "grpcwebtext"
+            if any(method.server_streaming for method in service.methods)
+            else "grpcweb"
+        )
+
+    def _grpc_web_descriptor_name(self, service_index: int, method_index: int) -> str:
+        return f"methodDescriptor{service_index}_{method_index}"
+
+    def _generate_grpc_web_service(
+        self, service: Service, service_index: int, root_indexes: Dict[int, int]
+    ) -> List[str]:
         lines: List[str] = []
         lines.append(
             f'export const {self._service_constant_name(service)} = "{self.get_grpc_service_name(service)}";'
@@ -583,22 +686,30 @@ class JavaScriptServiceGeneratorMixin:
             )
         lines.append("} as const;")
         lines.append("")
-        for method in service.methods:
-            lines.extend(self._generate_grpc_web_descriptor(service, method))
+        for method_index, method in enumerate(service.methods):
+            lines.extend(
+                self._generate_grpc_web_descriptor(
+                    service, method, service_index, method_index, root_indexes
+                )
+            )
             lines.append("")
-        lines.extend(self._generate_grpc_web_callback_client(service))
-        lines.append("")
-        lines.extend(self._generate_grpc_web_promise_client(service))
+        lines.extend(self._generate_grpc_web_callback_client(service, service_index))
+        if self._has_unary_method(service):
+            lines.append("")
+            lines.extend(self._generate_grpc_web_promise_client(service, service_index))
         return lines
 
     def _generate_grpc_web_descriptor(
-        self, service: Service, method: RpcMethod
+        self,
+        service: Service,
+        method: RpcMethod,
+        service_index: int,
+        method_index: int,
+        root_indexes: Dict[int, int],
     ) -> List[str]:
         request_root = self._resolve_rpc_root(method.request_type)
         response_root = self._resolve_rpc_root(method.response_type)
-        service_name = self.to_pascal_case(service.name)
-        method_name = self.to_pascal_case(method.name)
-        descriptor = f"methodDescriptor{service_name}{method_name}"
+        descriptor = self._grpc_web_descriptor_name(service_index, method_index)
         method_type = "SERVER_STREAMING" if method.server_streaming else "UNARY"
         return [
             f"const {descriptor} = new grpcWeb.MethodDescriptor<",
@@ -607,33 +718,42 @@ class JavaScriptServiceGeneratorMixin:
             ">(",
             f"  {self._method_paths_constant_name(service)}.{self._method_path_key(method)},",
             f"  grpcWeb.MethodType.{method_type},",
-            f"  {self._grpc_web_type_name(request_root)},",
-            f"  {self._grpc_web_type_name(response_root)},",
-            f"  {self._serializer_name(request_root)},",
-            f"  {self._deserializer_name(response_root)},",
+            f"  {self._grpc_web_type_name(request_root, root_indexes)},",
+            f"  {self._grpc_web_type_name(response_root, root_indexes)},",
+            f"  {self._serializer_name(request_root, root_indexes)},",
+            f"  {self._deserializer_name(response_root, root_indexes)},",
             ");",
         ]
 
-    def _generate_grpc_web_callback_client(self, service: Service) -> List[str]:
+    def _generate_grpc_web_callback_client(
+        self, service: Service, service_index: int
+    ) -> List[str]:
         service_name = self.to_pascal_case(service.name)
+        default_format = self._grpc_web_default_format(service)
         lines = [
             f"export class {service_name}WebClient {{",
             "  private readonly client: grpcWeb.GrpcWebClientBase;",
             "  private readonly hostname: string;",
+            "  private readonly wireFormat: ForyGrpcWebWireFormat;",
             "",
             "  constructor(",
             "    hostname: string,",
-            "    credentials?: null | { [index: string]: string },",
             "    options?: ForyGrpcWebClientOptions,",
             "  ) {",
-            "    this.client = new grpcWeb.GrpcWebClientBase(toGrpcWebOptions(options));",
+            f'    this.wireFormat = options?.wireFormat ?? "{default_format}";',
+            "    this.client = new grpcWeb.GrpcWebClientBase(",
+            "      toGrpcWebOptions(options, this.wireFormat),",
+            "    );",
             '    this.hostname = hostname.replace(/\\/+$/, "");',
-            "    void credentials;",
             "  }",
             "",
         ]
         for index, method in enumerate(service.methods):
-            lines.extend(self._generate_grpc_web_callback_method(service, method))
+            lines.extend(
+                self._generate_grpc_web_callback_method(
+                    service, method, service_index, index
+                )
+            )
             if index != len(service.methods) - 1:
                 lines.append("")
         lines.append("}")
@@ -643,24 +763,25 @@ class JavaScriptServiceGeneratorMixin:
             "hostname: string, options?: ForyGrpcWebClientOptions"
             f"): {service_name}WebClient {{"
         )
-        lines.append(
-            f"  return new {service_name}WebClient(hostname, options?.credentials ?? null, options);"
-        )
+        lines.append(f"  return new {service_name}WebClient(hostname, options);")
         lines.append("}")
         return lines
 
     def _generate_grpc_web_callback_method(
-        self, service: Service, method: RpcMethod
+        self, service: Service, method: RpcMethod, service_index: int, method_index: int
     ) -> List[str]:
         request_root = self._resolve_rpc_root(method.request_type)
         response_root = self._resolve_rpc_root(method.response_type)
         req = self._ts_type_name(request_root)
         res = self._ts_type_name(response_root)
-        descriptor = f"methodDescriptor{self.to_pascal_case(service.name)}{self.to_pascal_case(method.name)}"
+        descriptor = self._grpc_web_descriptor_name(service_index, method_index)
         name = self._method_name(method)
         if method.server_streaming:
             return [
                 f"  {name}(request: {req}, metadata?: grpcWeb.Metadata): grpcWeb.ClientReadableStream<{res}> {{",
+                '    if (this.wireFormat === "grpcweb") {',
+                '      throw new Error("grpcweb binary mode does not support server streaming");',
+                "    }",
                 "    return this.client.serverStreaming(",
                 f"      this.hostname + {self._method_paths_constant_name(service)}.{self._method_path_key(method)},",
                 "      request,",
@@ -685,29 +806,39 @@ class JavaScriptServiceGeneratorMixin:
             "  }",
         ]
 
-    def _generate_grpc_web_promise_client(self, service: Service) -> List[str]:
+    def _generate_grpc_web_promise_client(
+        self, service: Service, service_index: int
+    ) -> List[str]:
         service_name = self.to_pascal_case(service.name)
+        default_format = self._grpc_web_default_format(service)
         lines = [
             f"export class {service_name}WebPromiseClient {{",
-            "  private readonly client: GrpcWebUnaryClientBase;",
+            "  private readonly client: grpcWeb.GrpcWebClientBase;",
             "  private readonly hostname: string;",
             "",
             "  constructor(",
             "    hostname: string,",
-            "    credentials?: null | { [index: string]: string },",
             "    options?: ForyGrpcWebClientOptions,",
             "  ) {",
-            "    this.client = new grpcWeb.GrpcWebClientBase(toGrpcWebOptions(options)) as GrpcWebUnaryClientBase;",
+            f'    const wireFormat = options?.wireFormat ?? "{default_format}";',
+            "    this.client = new grpcWeb.GrpcWebClientBase(",
+            "      toGrpcWebOptions(options, wireFormat),",
+            "    );",
             '    this.hostname = hostname.replace(/\\/+$/, "");',
-            "    void credentials;",
             "  }",
             "",
         ]
         promise_methods = [
-            method for method in service.methods if not method.server_streaming
+            (index, method)
+            for index, method in enumerate(service.methods)
+            if not method.server_streaming
         ]
-        for index, method in enumerate(promise_methods):
-            lines.extend(self._generate_grpc_web_promise_method(service, method))
+        for index, (method_index, method) in enumerate(promise_methods):
+            lines.extend(
+                self._generate_grpc_web_promise_method(
+                    service, method, service_index, method_index
+                )
+            )
             if index != len(promise_methods) - 1:
                 lines.append("")
         lines.append("}")
@@ -717,20 +848,18 @@ class JavaScriptServiceGeneratorMixin:
             "hostname: string, options?: ForyGrpcWebClientOptions"
             f"): {service_name}WebPromiseClient {{"
         )
-        lines.append(
-            f"  return new {service_name}WebPromiseClient(hostname, options?.credentials ?? null, options);"
-        )
+        lines.append(f"  return new {service_name}WebPromiseClient(hostname, options);")
         lines.append("}")
         return lines
 
     def _generate_grpc_web_promise_method(
-        self, service: Service, method: RpcMethod
+        self, service: Service, method: RpcMethod, service_index: int, method_index: int
     ) -> List[str]:
         request_root = self._resolve_rpc_root(method.request_type)
         response_root = self._resolve_rpc_root(method.response_type)
         req = self._ts_type_name(request_root)
         res = self._ts_type_name(response_root)
-        descriptor = f"methodDescriptor{self.to_pascal_case(service.name)}{self.to_pascal_case(method.name)}"
+        descriptor = self._grpc_web_descriptor_name(service_index, method_index)
         name = self._method_name(method)
         return [
             f"  {name}(",
@@ -738,7 +867,7 @@ class JavaScriptServiceGeneratorMixin:
             "    metadata?: grpcWeb.Metadata,",
             "    options?: grpcWeb.PromiseCallOptions,",
             f"  ): Promise<{res}> {{",
-            "    return this.client.unaryCall(",
+            "    return this.client.thenableCall(",
             f"      this.hostname + {self._method_paths_constant_name(service)}.{self._method_path_key(method)},",
             "      request,",
             "      metadata ?? {},",
@@ -755,7 +884,10 @@ class JavaScriptServiceGeneratorMixin:
         return f"{self.to_upper_snake_case(service.name)}_METHOD_PATHS"
 
     def _method_name(self, method: RpcMethod) -> str:
-        return self.safe_identifier(self.to_camel_case(method.name))
+        name = self.safe_identifier(self.to_camel_case(method.name))
+        if name in SERVICE_MEMBER_NAMES:
+            return f"{name}_"
+        return name
 
     def _method_path_key(self, method: RpcMethod) -> str:
-        return self.safe_identifier(f"{self._method_name(method)}Path")
+        return self.safe_member_name(f"{method.name}_path")

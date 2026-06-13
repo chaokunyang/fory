@@ -991,21 +991,25 @@ export type Animal =
 Each generated model file exports helpers for installing and reusing the schema:
 
 ```typescript
-export function install(fory: Fory): void {
+import __foryRuntime$Fory, { Type as __foryRuntime$Type } from "@apache-fory/core";
+
+export function install(fory: __foryRuntime$Fory): void {
   fory.register(
-    Type.struct({ namespace: "addressbook", typeName: "Person" }, {
-      name: Type.string().setId(1),
+    __foryRuntime$Type.struct({ namespace: "addressbook", typeName: "Person" }, {
+      name: __foryRuntime$Type.string().setId(1),
     }),
   );
 }
 
-export function createFory(): Fory {
-  const fory = new Fory();
+const MODEL_NEEDS_REF = false;
+
+export function createFory(): __foryRuntime$Fory {
+  const fory = new __foryRuntime$Fory({ ref: MODEL_NEEDS_REF });
   install(fory);
   return fory;
 }
 
-export function getFory(): Fory { ... }
+export function getFory(): __foryRuntime$Fory { ... }
 ```
 
 Imported schema modules are installed automatically by `install(fory)`.
@@ -1033,8 +1037,8 @@ export class GreeterClient extends grpc.Client { ... }
 ```
 
 When the compiler is run with `--grpc-web`, JavaScript generation emits a
-browser companion named `<module>_grpc_web.ts`. It contains callback and promise
-clients for `grpc-web`:
+browser companion named `<module>_grpc_web.ts`. It contains callback clients for
+`grpc-web`; services with unary RPCs also get promise clients:
 
 ```typescript
 export class GreeterWebClient { ... }

@@ -186,7 +186,7 @@ def test_python_grpc_service_codegen_uses_byte_callbacks():
     assert "FromString" not in content
 
 
-def test_javascript_grpc_service_codegen_uses_model_fory():
+def test_js_grpc_uses_model_fory():
     schema = parse_fdl(_GREETER_WITH_SERVICE)
     files = generate_service_files(schema, JavaScriptGenerator)
     assert set(files) == {"demo_greeter_grpc.ts"}
@@ -207,7 +207,13 @@ def test_javascript_grpc_service_codegen_uses_model_fory():
     )
     assert "export class GreeterClient extends grpc.Client" in content
     assert '"/demo.greeter.Greeter/SayHello"' in content
-    assert "toGrpcBuffer(serializeHelloRequest(value))" in content
+    assert (
+        "const serializeRoot0Grpc = (value: HelloRequest): Buffer => "
+        "toGrpcBuffer(serializeRoot0(value));"
+    ) in content
+    assert "requestSerialize: serializeRoot0Grpc" in content
+    assert "      serializeRoot0Grpc," in content
+    assert "(value: HelloRequest) => toGrpcBuffer" not in content
     assert "Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength)" in content
     assert "options?.fory" not in content
     assert "new Fory" not in content
@@ -216,7 +222,7 @@ def test_javascript_grpc_service_codegen_uses_model_fory():
     assert "Type.union" not in content
 
 
-def test_javascript_grpc_named_union_root_uses_union_identity():
+def test_js_grpc_named_union_root():
     schema = parse_fdl(
         dedent(
             """
@@ -247,7 +253,130 @@ def test_javascript_grpc_named_union_root_uses_union_identity():
     assert "Type.union" not in content
 
 
-def test_javascript_grpc_web_service_codegen():
+def test_js_grpc_nested_roots():
+    schema = parse_fdl(
+        dedent(
+            """
+            option enable_auto_type_id = false;
+            package demo.nested;
+
+            message Envelope {
+                message Request {
+                    string name = 1;
+                }
+
+                union Result {
+                    string ok = 1;
+                }
+            }
+
+            service Nested {
+                rpc Call (Envelope.Request) returns (Envelope.Result);
+            }
+            """
+        )
+    )
+    files = generate_service_files(schema, JavaScriptGenerator)
+    content = files["demo_nested_grpc.ts"]
+
+    assert 'import { getFory, Envelope } from "./demo_nested";' in content
+    assert "import { getFory, Envelope.Request" not in content
+    assert "FORY.getRootCodec<Envelope.Request>" in content
+    assert (
+        'FORY.getRootCodec<Envelope.Result>({ kind: "union", namespace: "demo.nested", '
+        'typeName: "Envelope.Result" })' in content
+    )
+
+
+def test_js_grpc_imported_nested_roots(tmp_path: Path):
+    common = tmp_path / "common.fdl"
+    common.write_text(
+        dedent(
+            """
+            option enable_auto_type_id = false;
+            package demo.common;
+
+            message Envelope {
+                message Request {
+                    string name = 1;
+                }
+
+                union Result {
+                    string ok = 1;
+                }
+            }
+            """
+        )
+    )
+    service = tmp_path / "service.fdl"
+    service.write_text(
+        dedent(
+            """
+            package demo.api;
+
+            import "common.fdl";
+
+            service Nested {
+                rpc Call (demo.common.Envelope.Request) returns (demo.common.Envelope.Result);
+            }
+            """
+        )
+    )
+    schema = resolve_imports(service)
+    generator = JavaScriptGenerator(
+        schema, GeneratorOptions(output_dir=tmp_path, grpc=True)
+    )
+    content = generator.generate_services()[0].content
+
+    assert 'import { getFory } from "./service";' in content
+    assert 'import { Envelope } from "./common";' in content
+    assert "Envelope.Request" in content
+    assert "Envelope.Result" in content
+    assert "Envelope.ResultCase" not in content
+
+
+def test_js_grpc_imported_default_package(tmp_path: Path):
+    common = tmp_path / "common.fdl"
+    common.write_text(
+        dedent(
+            """
+            message Request {
+                string name = 1;
+            }
+
+            message Reply {
+                string text = 1;
+            }
+            """
+        )
+    )
+    service = tmp_path / "service.fdl"
+    service.write_text(
+        dedent(
+            """
+            package demo.api;
+
+            import "common.fdl";
+
+            service Api {
+                rpc Call (Request) returns (Reply);
+            }
+            """
+        )
+    )
+    schema = resolve_imports(service)
+    generator = JavaScriptGenerator(
+        schema, GeneratorOptions(output_dir=tmp_path, grpc=True)
+    )
+    content = generator.generate_services()[0].content
+
+    assert (
+        'FORY.getRootCodec<Request>({ kind: "struct", namespace: "default"' in content
+    )
+    assert 'FORY.getRootCodec<Reply>({ kind: "struct", namespace: "default"' in content
+
+
+def test_js_grpc_web_codegen():
     schema = parse_fdl(_GREETER_WITH_SERVICE)
     generator = JavaScriptGenerator(
         schema, GeneratorOptions(output_dir=Path("/tmp"), grpc_web=True)
@@ -259,13 +388,20 @@ def test_javascript_grpc_web_service_codegen():
     assert "export class GreeterWebClient" in content
     assert "export class GreeterWebPromiseClient" in content
     assert "type GrpcWebMessageType<T> = new (...args: unknown[]) => T;" in content
-    assert "type GrpcWebUnaryClientBase = grpcWeb.GrpcWebClientBase &" in content
     assert "new grpcWeb.MethodDescriptor<" in content
-    assert "Object as unknown as GrpcWebMessageType<HelloRequest>" in content
-    assert "this.client.unaryCall(" in content
+    assert (
+        "const root0GrpcWebType = Object as unknown as GrpcWebMessageType<HelloRequest>;"
+        in content
+    )
+    assert "this.client.thenableCall(" in content
+    assert "unaryCall" not in content
+    assert "GrpcWebUnaryClientBase" not in content
     assert "grpcWeb.MethodType.UNARY" in content
     assert "ForyGrpcWebWireFormat" in content
-    assert 'const DEFAULT_WIRE_FORMAT: ForyGrpcWebWireFormat = "grpcweb";' in content
+    assert 'this.wireFormat = options?.wireFormat ?? "grpcweb";' in content
+    assert "credentials?: null" not in content
+    assert "void credentials" not in content
+    assert "options?.credentials" not in content
     assert "options?.fory" not in content
     assert "new Fory" not in content
     assert "WeakMap<Fory" not in content
@@ -273,7 +409,7 @@ def test_javascript_grpc_web_service_codegen():
     assert "Type.union" not in content
 
 
-def test_javascript_grpc_web_server_streaming_uses_text_mode():
+def test_js_grpc_web_stream_text():
     schema = parse_fdl(
         dedent(
             """
@@ -292,14 +428,14 @@ def test_javascript_grpc_web_server_streaming_uses_text_mode():
         schema, GeneratorOptions(output_dir=Path("/tmp"), grpc_web=True)
     )
     content = next(iter(item.content for item in generator.generate_services()))
-    assert (
-        'const DEFAULT_WIRE_FORMAT: ForyGrpcWebWireFormat = "grpcwebtext";' in content
-    )
+    assert 'this.wireFormat = options?.wireFormat ?? "grpcwebtext";' in content
     assert "grpcweb binary mode does not support server streaming" in content
     assert "grpcWeb.MethodType.SERVER_STREAMING" in content
+    assert "WebPromiseClient" not in content
+    assert "createGreeterWebPromiseClient" not in content
 
 
-def test_javascript_grpc_web_rejects_client_streaming():
+def test_js_grpc_web_rejects_client():
     schema = parse_fdl(
         dedent(
             """
@@ -319,6 +455,258 @@ def test_javascript_grpc_web_rejects_client_streaming():
     )
     with pytest.raises(ValueError, match="gRPC-Web does not support"):
         generator.generate_services()
+
+
+def test_js_grpc_exports_are_per_target():
+    schema = parse_fdl(
+        dedent(
+            """
+            package demo.exports;
+
+            message Req {}
+            message Res {}
+
+            service Foo {
+                rpc Call (Req) returns (Res);
+            }
+
+            service FooWeb {
+                rpc Call (Req) returns (Res);
+            }
+            """
+        )
+    )
+
+    node = JavaScriptGenerator(
+        schema, GeneratorOptions(output_dir=Path("/tmp"), grpc=True)
+    )
+    assert {item.path for item in node.generate_services()} == {"demo_exports_grpc.ts"}
+
+    web = JavaScriptGenerator(
+        schema, GeneratorOptions(output_dir=Path("/tmp"), grpc_web=True)
+    )
+    assert {item.path for item in web.generate_services()} == {
+        "demo_exports_grpc_web.ts"
+    }
+
+    both = JavaScriptGenerator(
+        schema, GeneratorOptions(output_dir=Path("/tmp"), grpc=True, grpc_web=True)
+    )
+    assert {item.path for item in both.generate_services()} == {
+        "demo_exports_grpc.ts",
+        "demo_exports_grpc_web.ts",
+    }
+
+
+def test_js_grpc_model_export_collision():
+    schema = parse_fdl(
+        dedent(
+            """
+            package demo.collision;
+
+            message GreeterClient {}
+            message Reply {}
+
+            service Greeter {
+                rpc Call (GreeterClient) returns (Reply);
+            }
+            """
+        )
+    )
+    generator = JavaScriptGenerator(
+        schema, GeneratorOptions(output_dir=Path("/tmp"), grpc=True)
+    )
+
+    with pytest.raises(ValueError, match="model import collides"):
+        generator.generate_services()
+
+
+def test_js_grpc_web_helper_name_collision():
+    schema = parse_fdl(
+        dedent(
+            """
+            package demo.webcollision;
+
+            message ForyGrpcWebWireFormat {}
+            message Reply {}
+
+            service Api {
+                rpc Call (ForyGrpcWebWireFormat) returns (Reply);
+            }
+            """
+        )
+    )
+    generator = JavaScriptGenerator(
+        schema, GeneratorOptions(output_dir=Path("/tmp"), grpc_web=True)
+    )
+
+    with pytest.raises(ValueError, match="model import collides"):
+        generator.generate_services()
+
+
+def test_js_grpc_root_helper_names():
+    schema = parse_fdl(
+        dedent(
+            """
+            package demo.roots;
+
+            message Foo {
+                message Bar {}
+            }
+            message FooGrpc {}
+            message FooBar {}
+
+            service Api {
+                rpc One (Foo) returns (FooGrpc);
+                rpc Two (FooGrpc) returns (Foo);
+                rpc Three (Foo.Bar) returns (FooBar);
+            }
+            """
+        )
+    )
+    files = generate_service_files(schema, JavaScriptGenerator)
+    content = files["demo_roots_grpc.ts"]
+
+    assert "const serializeRoot0 = (value: Foo)" in content
+    assert "const serializeRoot1 = (value: FooGrpc)" in content
+    assert "const serializeRoot2 = (value: Foo.Bar)" in content
+    assert "const serializeRoot3 = (value: FooBar)" in content
+    assert "const serializeRoot0Grpc = (value: Foo): Buffer" in content
+    assert "const serializeRoot1Grpc = (value: FooGrpc): Buffer" in content
+    assert "const serializeFooGrpc" not in content
+    assert "const serializeFooBar" not in content
+    assert "const fooBarCodec" not in content
+    assert "requestSerialize: serializeRoot0Grpc" in content
+    assert "responseSerialize: serializeRoot1Grpc" in content
+
+    web = JavaScriptGenerator(
+        schema, GeneratorOptions(output_dir=Path("/tmp"), grpc_web=True)
+    )
+    web_content = web.generate_services()[0].content
+    assert (
+        "const root2GrpcWebType = Object as unknown as GrpcWebMessageType<Foo.Bar>;"
+        in web_content
+    )
+    assert "fooBarGrpcWebType" not in web_content
+
+
+def test_js_grpc_web_descriptor_ids():
+    schema = parse_fdl(
+        dedent(
+            """
+            package demo.webnames;
+
+            message Req {}
+            message Res {}
+
+            service Foo {
+                rpc BarBaz (Req) returns (Res);
+            }
+
+            service FooBar {
+                rpc Baz (Req) returns (Res);
+            }
+            """
+        )
+    )
+    generator = JavaScriptGenerator(
+        schema, GeneratorOptions(output_dir=Path("/tmp"), grpc_web=True)
+    )
+    content = generator.generate_services()[0].content
+
+    assert "const methodDescriptor0_0 =" in content
+    assert "const methodDescriptor1_0 =" in content
+    assert "methodDescriptorFooBarBaz" not in content
+    assert "      methodDescriptor0_0," in content
+    assert "      methodDescriptor1_0," in content
+
+
+def test_js_grpc_web_format_per_service():
+    schema = parse_fdl(
+        dedent(
+            """
+            package demo.webformat;
+
+            message Req {}
+            message Res {}
+
+            service UnaryOnly {
+                rpc Call (Req) returns (Res);
+            }
+
+            service StreamOnly {
+                rpc Watch (Req) returns (stream Res);
+            }
+            """
+        )
+    )
+    generator = JavaScriptGenerator(
+        schema, GeneratorOptions(output_dir=Path("/tmp"), grpc_web=True)
+    )
+    content = generator.generate_services()[0].content
+    unary_start = content.index("export class UnaryOnlyWebClient")
+    stream_start = content.index("export class StreamOnlyWebClient")
+    unary_block = content[unary_start:stream_start]
+    stream_block = content[stream_start:]
+
+    assert 'this.wireFormat = options?.wireFormat ?? "grpcweb";' in unary_block
+    assert "grpcweb binary mode does not support server streaming" not in unary_block
+    assert 'this.wireFormat = options?.wireFormat ?? "grpcwebtext";' in stream_block
+    assert "grpcweb binary mode does not support server streaming" in stream_block
+
+
+def test_js_grpc_reserved_methods():
+    schema = parse_fdl(
+        dedent(
+            """
+            package demo.keywords;
+
+            message Req {}
+            message Res {}
+
+            service Factory {
+                rpc constructor (Req) returns (Res);
+                rpc makeUnaryRequest (Req) returns (Res);
+                rpc client (Req) returns (Res);
+                rpc then (Req) returns (Res);
+                rpc wireFormat (Req) returns (Res);
+            }
+            """
+        )
+    )
+
+    node = next(
+        iter(
+            JavaScriptGenerator(
+                schema, GeneratorOptions(output_dir=Path("/tmp"), grpc=True)
+            ).generate_services()
+        )
+    ).content
+    assert 'constructorPath: "/demo.keywords.Factory/constructor"' in node
+    assert "  constructor_(request: Req" in node
+    assert "  constructor(request: Req" not in node
+    assert "  makeUnaryRequest_(request: Req" in node
+    assert "  makeUnaryRequest(request: Req" not in node
+    assert "  then_(request: Req" in node
+    assert "  then(request: Req" not in node
+
+    web = next(
+        iter(
+            JavaScriptGenerator(
+                schema, GeneratorOptions(output_dir=Path("/tmp"), grpc_web=True)
+            ).generate_services()
+        )
+    ).content
+    assert 'constructorPath: "/demo.keywords.Factory/constructor"' in web
+    assert 'thenPath: "/demo.keywords.Factory/then"' in web
+    assert "  constructor_(" in web
+    assert "  constructor(request: Req" not in web
+    assert "  client_(" in web
+    assert "  client(" not in web
+    assert "  then_(" in web
+    assert "  then(" not in web
+    assert "  wireFormat_(" in web
+    assert "  wireFormat(" not in web
 
 
 def test_kotlin_grpc_service_codegen_contains_fory_marshaller():
@@ -1101,7 +1489,7 @@ def test_compile_service_schema_with_grpc_flag(tmp_path: Path, capsys):
     assert (lang_dirs["kotlin"] / "demo" / "greeter" / "GreeterGrpcKt.kt").exists()
 
 
-def test_compile_javascript_service_schema_with_grpc_web_flag(tmp_path: Path, capsys):
+def test_compile_js_grpc_web(tmp_path: Path, capsys):
     example_path = Path(__file__).resolve().parents[2] / "examples" / "service.fdl"
     javascript_out = tmp_path / "javascript"
     ok = compile_file(
@@ -1119,7 +1507,7 @@ def test_compile_javascript_service_schema_with_grpc_web_flag(tmp_path: Path, ca
     assert output.count("service_grpc_web.ts") == 1
 
 
-def test_cli_rejects_grpc_web_without_javascript(tmp_path: Path, capsys):
+def test_cli_rejects_grpc_web_non_js(tmp_path: Path, capsys):
     schema_path = tmp_path / "service.fdl"
     schema_path.write_text(_GREETER_WITH_SERVICE)
     args = parse_args(
@@ -1137,7 +1525,7 @@ def test_cli_rejects_grpc_web_without_javascript(tmp_path: Path, capsys):
     )
 
 
-def test_javascript_output_path_collision_is_rejected(tmp_path: Path, capsys):
+def test_js_output_path_collision(tmp_path: Path, capsys):
     first_dir = tmp_path / "first"
     second_dir = tmp_path / "second"
     first_dir.mkdir()

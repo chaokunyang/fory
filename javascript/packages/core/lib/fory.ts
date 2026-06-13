@@ -35,6 +35,9 @@ import { ReadContext, WriteContext } from "./context";
 const DEFAULT_DEPTH_LIMIT = 50 as const;
 const MIN_DEPTH_LIMIT = 2 as const;
 
+/**
+ * Identifies an installed struct or union that can be used as a root payload.
+ */
 export type RootTypeIdentity =
   | {
     kind: "struct" | "union";
@@ -46,6 +49,9 @@ export type RootTypeIdentity =
     typeId: number;
   };
 
+/**
+ * Root serialization functions bound to one installed struct or union schema.
+ */
 export type RootCodec<T = any> = {
   serializer: Serializer;
   serialize(data: T | null): PlatformBuffer;
@@ -149,6 +155,13 @@ export default class Fory {
     };
   }
 
+  /**
+   * Returns root serialization functions for an already installed schema root.
+   *
+   * This lookup is for generated IDL service companions and plain TypeScript
+   * interface values, where generic `serialize(value)` cannot infer a runtime
+   * constructor from the JavaScript object.
+   */
   getRootCodec<T = any>(identity: RootTypeIdentity): RootCodec<T> {
     const serializer = this.getRootSerializerByIdentity(identity);
     return {

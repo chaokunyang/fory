@@ -45,6 +45,9 @@ class JavaScriptGenerator(JavaScriptServiceGeneratorMixin, BaseGenerator):
 
     language_name = "javascript"
     file_extension = ".ts"
+    RUNTIME_FORY = "__foryRuntime$Fory"
+    RUNTIME_TYPE = "__foryRuntime$Type"
+    RUNTIME_DECIMAL = "__foryRuntime$Decimal"
 
     # JavaScript reserved keywords that cannot be used as identifiers
     TS_KEYWORDS = {
@@ -144,32 +147,32 @@ class JavaScriptGenerator(JavaScriptServiceGeneratorMixin, BaseGenerator):
         PrimitiveKind.DATE: "Date",
         PrimitiveKind.TIMESTAMP: "Date",
         PrimitiveKind.DURATION: "number",
-        PrimitiveKind.DECIMAL: "Decimal",
+        PrimitiveKind.DECIMAL: RUNTIME_DECIMAL,
         PrimitiveKind.ANY: "any",
     }
 
     # Mapping from FDL primitive types to Fory JS runtime Type.xxx() calls
     PRIMITIVE_RUNTIME_MAP = {
-        PrimitiveKind.BOOL: "Type.bool()",
-        PrimitiveKind.INT8: "Type.int8()",
-        PrimitiveKind.INT16: "Type.int16()",
-        PrimitiveKind.INT32: "Type.int32()",
-        PrimitiveKind.INT64: "Type.int64()",
-        PrimitiveKind.UINT8: "Type.uint8()",
-        PrimitiveKind.UINT16: "Type.uint16()",
-        PrimitiveKind.UINT32: "Type.uint32()",
-        PrimitiveKind.UINT64: "Type.uint64()",
-        PrimitiveKind.FLOAT16: "Type.float16()",
-        PrimitiveKind.BFLOAT16: "Type.bfloat16()",
-        PrimitiveKind.FLOAT32: "Type.float32()",
-        PrimitiveKind.FLOAT64: "Type.float64()",
-        PrimitiveKind.STRING: "Type.string()",
-        PrimitiveKind.BYTES: "Type.binary()",
-        PrimitiveKind.DATE: "Type.date()",
-        PrimitiveKind.TIMESTAMP: "Type.timestamp()",
-        PrimitiveKind.DURATION: "Type.duration()",
-        PrimitiveKind.DECIMAL: "Type.decimal()",
-        PrimitiveKind.ANY: "Type.any()",
+        PrimitiveKind.BOOL: f"{RUNTIME_TYPE}.bool()",
+        PrimitiveKind.INT8: f"{RUNTIME_TYPE}.int8()",
+        PrimitiveKind.INT16: f"{RUNTIME_TYPE}.int16()",
+        PrimitiveKind.INT32: f"{RUNTIME_TYPE}.int32()",
+        PrimitiveKind.INT64: f"{RUNTIME_TYPE}.int64()",
+        PrimitiveKind.UINT8: f"{RUNTIME_TYPE}.uint8()",
+        PrimitiveKind.UINT16: f"{RUNTIME_TYPE}.uint16()",
+        PrimitiveKind.UINT32: f"{RUNTIME_TYPE}.uint32()",
+        PrimitiveKind.UINT64: f"{RUNTIME_TYPE}.uint64()",
+        PrimitiveKind.FLOAT16: f"{RUNTIME_TYPE}.float16()",
+        PrimitiveKind.BFLOAT16: f"{RUNTIME_TYPE}.bfloat16()",
+        PrimitiveKind.FLOAT32: f"{RUNTIME_TYPE}.float32()",
+        PrimitiveKind.FLOAT64: f"{RUNTIME_TYPE}.float64()",
+        PrimitiveKind.STRING: f"{RUNTIME_TYPE}.string()",
+        PrimitiveKind.BYTES: f"{RUNTIME_TYPE}.binary()",
+        PrimitiveKind.DATE: f"{RUNTIME_TYPE}.date()",
+        PrimitiveKind.TIMESTAMP: f"{RUNTIME_TYPE}.timestamp()",
+        PrimitiveKind.DURATION: f"{RUNTIME_TYPE}.duration()",
+        PrimitiveKind.DECIMAL: f"{RUNTIME_TYPE}.decimal()",
+        PrimitiveKind.ANY: f"{RUNTIME_TYPE}.any()",
     }
 
     PRIMITIVE_ARRAY_TS_MAP = {
@@ -189,19 +192,19 @@ class JavaScriptGenerator(JavaScriptServiceGeneratorMixin, BaseGenerator):
     }
 
     PRIMITIVE_ARRAY_RUNTIME_MAP = {
-        PrimitiveKind.BOOL: "Type.boolArray()",
-        PrimitiveKind.INT8: "Type.int8Array()",
-        PrimitiveKind.INT16: "Type.int16Array()",
-        PrimitiveKind.INT32: "Type.int32Array()",
-        PrimitiveKind.INT64: "Type.int64Array()",
-        PrimitiveKind.UINT8: "Type.uint8Array()",
-        PrimitiveKind.UINT16: "Type.uint16Array()",
-        PrimitiveKind.UINT32: "Type.uint32Array()",
-        PrimitiveKind.UINT64: "Type.uint64Array()",
-        PrimitiveKind.FLOAT16: "Type.float16Array()",
-        PrimitiveKind.BFLOAT16: "Type.bfloat16Array()",
-        PrimitiveKind.FLOAT32: "Type.float32Array()",
-        PrimitiveKind.FLOAT64: "Type.float64Array()",
+        PrimitiveKind.BOOL: f"{RUNTIME_TYPE}.boolArray()",
+        PrimitiveKind.INT8: f"{RUNTIME_TYPE}.int8Array()",
+        PrimitiveKind.INT16: f"{RUNTIME_TYPE}.int16Array()",
+        PrimitiveKind.INT32: f"{RUNTIME_TYPE}.int32Array()",
+        PrimitiveKind.INT64: f"{RUNTIME_TYPE}.int64Array()",
+        PrimitiveKind.UINT8: f"{RUNTIME_TYPE}.uint8Array()",
+        PrimitiveKind.UINT16: f"{RUNTIME_TYPE}.uint16Array()",
+        PrimitiveKind.UINT32: f"{RUNTIME_TYPE}.uint32Array()",
+        PrimitiveKind.UINT64: f"{RUNTIME_TYPE}.uint64Array()",
+        PrimitiveKind.FLOAT16: f"{RUNTIME_TYPE}.float16Array()",
+        PrimitiveKind.BFLOAT16: f"{RUNTIME_TYPE}.bfloat16Array()",
+        PrimitiveKind.FLOAT32: f"{RUNTIME_TYPE}.float32Array()",
+        PrimitiveKind.FLOAT64: f"{RUNTIME_TYPE}.float64Array()",
     }
 
     def __init__(self, schema: Schema, options):
@@ -327,8 +330,8 @@ class JavaScriptGenerator(JavaScriptServiceGeneratorMixin, BaseGenerator):
         file_path = getattr(location, "file", None) if location else None
         if file_path and self.is_imported_type(type_def):
             imported_schema = self._load_schema(file_path)
-            if imported_schema and imported_schema.package:
-                return imported_schema.package
+            if imported_schema is not None:
+                return imported_schema.package or "default"
         return self.schema.package or "default"
 
     def split_imported_types(
@@ -540,11 +543,11 @@ class JavaScriptGenerator(JavaScriptServiceGeneratorMixin, BaseGenerator):
         lines: List[str] = []
         imported_modules = self._imported_module_aliases()
 
-        core_imports = ["Type"]
+        core_imports = [f"Type as {self.RUNTIME_TYPE}"]
         if self._schema_uses_primitive_kind(PrimitiveKind.DECIMAL):
-            core_imports.append("Decimal")
+            core_imports.append(f"Decimal as {self.RUNTIME_DECIMAL}")
         lines.append(
-            f"import Fory, {{ {', '.join(core_imports)} }} from '@apache-fory/core';"
+            f"import {self.RUNTIME_FORY}, {{ {', '.join(core_imports)} }} from '@apache-fory/core';"
         )
 
         for mod_path, alias in imported_modules:
@@ -865,7 +868,7 @@ class JavaScriptGenerator(JavaScriptServiceGeneratorMixin, BaseGenerator):
             else:
                 expr = self.PRIMITIVE_RUNTIME_MAP.get(field_type.kind)
                 if expr is None:
-                    expr = "Type.any()"
+                    expr = f"{self.RUNTIME_TYPE}.any()"
         elif isinstance(field_type, NamedType):
             # Check for primitive-like shorthand names (e.g. "float", "double")
             lower = field_type.name.lower()
@@ -904,7 +907,7 @@ class JavaScriptGenerator(JavaScriptServiceGeneratorMixin, BaseGenerator):
                             f"{self.strip_enum_prefix(resolved.name, v.name)}: {v.value}"
                             for v in resolved.values
                         )
-                        expr = f"Type.enum({name_info}, {{ {props} }})"
+                        expr = f"{self.RUNTIME_TYPE}.enum({name_info}, {{ {props} }})"
                     elif isinstance(resolved, Union):
                         case_parts = []
                         for case_field in resolved.fields:
@@ -929,15 +932,15 @@ class JavaScriptGenerator(JavaScriptServiceGeneratorMixin, BaseGenerator):
                                 id(resolved), resolved.name
                             )
                             name_info = f'{{ namespace: "{ns}", typeName: "{qname}" }}'
-                        expr = f"Type.union({name_info}{cases_arg})"
+                        expr = f"{self.RUNTIME_TYPE}.union({name_info}{cases_arg})"
                     elif isinstance(resolved, Message):
                         evolving = self.get_effective_evolving(resolved)
                         if self.should_register_by_id(resolved):
                             if evolving:
-                                expr = f"Type.struct({resolved.type_id})"
+                                expr = f"{self.RUNTIME_TYPE}.struct({resolved.type_id})"
                             else:
                                 expr = (
-                                    f"Type.struct({{ typeId: {resolved.type_id}, "
+                                    f"{self.RUNTIME_TYPE}.struct({{ typeId: {resolved.type_id}, "
                                     "evolving: false })"
                                 )
                         else:
@@ -947,17 +950,17 @@ class JavaScriptGenerator(JavaScriptServiceGeneratorMixin, BaseGenerator):
                             )
                             if evolving:
                                 expr = (
-                                    f'Type.struct({{ namespace: "{ns}", '
+                                    f'{self.RUNTIME_TYPE}.struct({{ namespace: "{ns}", '
                                     f'typeName: "{qname}" }})'
                                 )
                             else:
                                 expr = (
-                                    f'Type.struct({{ namespace: "{ns}", '
+                                    f'{self.RUNTIME_TYPE}.struct({{ namespace: "{ns}", '
                                     f'typeName: "{qname}", evolving: false }})'
                                 )
                     else:
                         # Unresolved — fall back to any
-                        expr = "Type.any()"
+                        expr = f"{self.RUNTIME_TYPE}.any()"
         elif isinstance(field_type, ListType):
             inner = self._field_type_expr(
                 field_type.element_type,
@@ -965,7 +968,7 @@ class JavaScriptGenerator(JavaScriptServiceGeneratorMixin, BaseGenerator):
                 nullable=field_type.element_optional or element_nullable_override,
                 ref=field_type.element_ref or element_ref_override,
             )
-            expr = f"Type.list({inner})"
+            expr = f"{self.RUNTIME_TYPE}.list({inner})"
         elif isinstance(field_type, ArrayType):
             if isinstance(field_type.element_type, PrimitiveType):
                 type_expr = self.PRIMITIVE_ARRAY_RUNTIME_MAP.get(
@@ -974,9 +977,9 @@ class JavaScriptGenerator(JavaScriptServiceGeneratorMixin, BaseGenerator):
                 if type_expr:
                     expr = type_expr
                 else:
-                    expr = "Type.any()"
+                    expr = f"{self.RUNTIME_TYPE}.any()"
             else:
-                expr = "Type.any()"
+                expr = f"{self.RUNTIME_TYPE}.any()"
         elif isinstance(field_type, MapType):
             key = self._field_type_expr(field_type.key_type, parent_stack)
             value = self._field_type_expr(
@@ -985,9 +988,9 @@ class JavaScriptGenerator(JavaScriptServiceGeneratorMixin, BaseGenerator):
                 nullable=field_type.value_optional,
                 ref=field_type.value_ref,
             )
-            expr = f"Type.map({key}, {value})"
+            expr = f"{self.RUNTIME_TYPE}.map({key}, {value})"
         else:
-            expr = "Type.any()"
+            expr = f"{self.RUNTIME_TYPE}.any()"
         if nullable or ref:
             expr += ".setNullable(true)"
         if ref:
@@ -1005,8 +1008,8 @@ class JavaScriptGenerator(JavaScriptServiceGeneratorMixin, BaseGenerator):
             return None
         encoding = field_type.encoding_modifier
         if encoding in ("fixed", "tagged"):
-            return f'Type.{method}({{ encoding: "{encoding}" }})'
-        return f"Type.{method}()"
+            return f'{self.RUNTIME_TYPE}.{method}({{ encoding: "{encoding}" }})'
+        return f"{self.RUNTIME_TYPE}.{method}()"
 
     def _register_type_line(
         self,
@@ -1056,19 +1059,21 @@ class JavaScriptGenerator(JavaScriptServiceGeneratorMixin, BaseGenerator):
                     f'{{ namespace: "{ns}", typeName: "{qname}", evolving: false }}'
                 )
 
-        return f"{target_var}.register(Type.struct({name_info}{props_arg}));"
+        return f"{target_var}.register({self.RUNTIME_TYPE}.struct({name_info}{props_arg}));"
 
     def _register_union_line(
         self,
         union_def,
         target_var: str = "fory",
+        parent_stack: Optional[List[Message]] = None,
     ) -> str:
         """Return a ``fory.register(Type.union(...))`` statement."""
+        parent_stack = parent_stack or []
         case_parts: List[str] = []
         for field in union_def.fields:
             case_num = field.tag_id if field.tag_id is not None else field.number
             if case_num is not None:
-                case_type_expr = self._field_type_expr(field.field_type, [])
+                case_type_expr = self._field_type_expr(field.field_type, parent_stack)
                 case_parts.append(f"{case_num}: {case_type_expr}")
         cases_str = ", ".join(case_parts)
         cases_arg = f", {{ {cases_str} }}" if case_parts else ""
@@ -1080,7 +1085,9 @@ class JavaScriptGenerator(JavaScriptServiceGeneratorMixin, BaseGenerator):
             qname = self._qualified_type_names.get(id(union_def), union_def.name)
             name_info = f'{{ namespace: "{ns}", typeName: "{qname}" }}'
 
-        return f"{target_var}.register(Type.union({name_info}{cases_arg}));"
+        return (
+            f"{target_var}.register({self.RUNTIME_TYPE}.union({name_info}{cases_arg}));"
+        )
 
     def _resolve_field_deps(
         self,
@@ -1126,7 +1133,7 @@ class JavaScriptGenerator(JavaScriptServiceGeneratorMixin, BaseGenerator):
         imported_modules = self._imported_module_aliases()
 
         lines.append("// Schema installation")
-        lines.append("export function install(fory: Fory): void {")
+        lines.append(f"export function install(fory: {self.RUNTIME_FORY}): void {{")
 
         # Delegate to imported schema modules first.
         for _module_path, alias in imported_modules:
@@ -1162,6 +1169,27 @@ class JavaScriptGenerator(JavaScriptServiceGeneratorMixin, BaseGenerator):
                 lines.append(f"  {reg_line}")
             for nested_msg in msg.nested_messages:
                 emit_message(nested_msg)
+            for nested_union in msg.nested_unions:
+                emit_union(nested_union, parents + [msg])
+
+        emitted_unions: Set[int] = set()
+
+        def emit_union(union: Union, parent_stack: List[Message]) -> None:
+            if id(union) in emitted_unions or self.is_imported_type(union):
+                return
+            emitted_unions.add(id(union))
+            for ufield in union.fields:
+                if isinstance(ufield.field_type, NamedType):
+                    resolved = self._resolve_named_type(
+                        ufield.field_type.name, parent_stack
+                    )
+                    if isinstance(resolved, Message) and not self.is_imported_type(
+                        resolved
+                    ):
+                        emit_message(resolved)
+            reg_line = self._register_union_line(union, "fory", parent_stack)
+            if reg_line:
+                lines.append(f"  {reg_line}")
 
         for message in self.schema.messages:
             if self.is_imported_type(message):
@@ -1173,18 +1201,7 @@ class JavaScriptGenerator(JavaScriptServiceGeneratorMixin, BaseGenerator):
         # whose variants are messages defined in the same file but not used as
         # direct struct fields).
         for union in self.schema.unions:
-            if self.is_imported_type(union):
-                continue
-            for ufield in union.fields:
-                if isinstance(ufield.field_type, NamedType):
-                    resolved = self._resolve_named_type(ufield.field_type.name)
-                    if isinstance(resolved, Message) and not self.is_imported_type(
-                        resolved
-                    ):
-                        emit_message(resolved)
-            reg_line = self._register_union_line(union, "fory")
-            if reg_line:
-                lines.append(f"  {reg_line}")
+            emit_union(union, [])
 
         lines.append("}")
 
@@ -1195,15 +1212,15 @@ class JavaScriptGenerator(JavaScriptServiceGeneratorMixin, BaseGenerator):
         needs_ref = "true" if self._schema_needs_ref_tracking() else "false"
         return [
             f"const MODEL_NEEDS_REF = {needs_ref};",
-            "let defaultFory: Fory | undefined;",
+            f"let defaultFory: {self.RUNTIME_FORY} | undefined;",
             "",
-            "export function createFory(): Fory {",
-            "  const fory = new Fory({ ref: MODEL_NEEDS_REF });",
+            f"export function createFory(): {self.RUNTIME_FORY} {{",
+            f"  const fory = new {self.RUNTIME_FORY}({{ ref: MODEL_NEEDS_REF }});",
             "  install(fory);",
             "  return fory;",
             "}",
             "",
-            "export function getFory(): Fory {",
+            f"export function getFory(): {self.RUNTIME_FORY} {{",
             "  if (defaultFory === undefined) {",
             "    defaultFory = createFory();",
             "  }",

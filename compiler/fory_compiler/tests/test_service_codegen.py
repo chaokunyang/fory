@@ -222,7 +222,7 @@ def test_kotlin_grpc_service_codegen_contains_fory_marshaller():
     assert "MessageLite" not in content
 
 
-def test_scala_grpc_service_codegen_contains_fory_marshaller():
+def test_scala_grpc_marshaller():
     schema = parse_fdl(_GREETER_WITH_SERVICE)
     files = generate_service_files(schema, ScalaGenerator)
     assert set(files) == {"demo/greeter/GreeterGrpc.scala"}
@@ -713,7 +713,7 @@ def test_kotlin_grpc_service_class_collision_fails():
         KotlinGenerator(schema, GeneratorOptions(output_dir=Path("/tmp"), grpc=True))
 
 
-def test_scala_grpc_service_class_collision_fails():
+def test_scala_grpc_class_collision():
     schema = parse_fdl(
         dedent(
             """
@@ -736,7 +736,7 @@ def test_scala_grpc_service_class_collision_fails():
         generator.generate_services()
 
 
-def test_scala_grpc_service_class_collision_preflight_fails(tmp_path: Path, capsys):
+def test_scala_grpc_preflight_collision(tmp_path: Path, capsys):
     common = tmp_path / "common.fdl"
     common.write_text(
         dedent(
@@ -935,7 +935,7 @@ def test_grpc_method_name_collisions_fail():
         raise AssertionError("Expected Scala gRPC method name collision")
 
 
-def test_scala_grpc_method_names_are_scope_local():
+def test_scala_grpc_method_scopes():
     schema = parse_fdl(
         dedent(
             """
@@ -1133,7 +1133,7 @@ def test_service_schema_produces_one_file_per_message_per_language():
         )
 
 
-def test_compile_service_schema_with_grpc_flag(tmp_path: Path, capsys):
+def test_grpc_flag_compiles_services(tmp_path: Path, capsys):
     example_path = Path(__file__).resolve().parents[2] / "examples" / "service.fdl"
     lang_dirs = {}
     for lang in (

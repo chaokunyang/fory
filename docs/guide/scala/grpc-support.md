@@ -151,7 +151,7 @@ variants such as observer-based async calls, blocking calls, and
 
 ## Streaming RPCs
 
-Fory service definitions can use the same gRPC streaming shapes:
+Fory service definitions can use the same gRPC streaming shapes as grpc-java:
 
 ```protobuf
 service Greeter {
@@ -171,8 +171,201 @@ Generated Scala methods use these shapes:
 | Client streaming        | None                     | `StreamObserver` request stream                  |
 | Bidirectional streaming | None                     | `StreamObserver` request and response streams    |
 
-`RpcIterator[A]` extends Scala `Iterator[A]` and `AutoCloseable`. Call
-`close()` or `cancel()` when you stop reading a server stream early.
+The Scala-friendly convenience layer covers the cases where a direct Scala
+handle can keep the important lifecycle controls. Unary calls use
+`RpcFuture[A]` so callers can compose with Scala `Future` without losing
+cancellation. Server-streaming calls use `RpcIterator[A]` so callers can consume
+responses with the normal Scala `Iterator` contract while still being able to
+close the underlying RPC. Client-streaming and bidirectional streaming stay on
+grpc-java `StreamObserver` APIs because the request stream lifecycle,
+completion, cancellation, and flow-control rules are the grpc-java rules.
+
+### Server-Streaming Clients
+
+Use the Scala-friendly method when the client wants pull-style consumption:
+
+```scala
+val stream = client.lotsOfReplies(HelloRequest("Fory"))
+try {
+  while (stream.hasNext) {
+    val reply = stream.next()
+    println(reply.reply)
+  }
+} finally {
+  stream.close()
+}
+```
+
+`RpcIterator[A]` extends Scala `Iterator[A]` and `AutoCloseable`. A fully
+consumed stream closes when the server completes it. If the caller stops early,
+call `close()` or `cancel()` to release the gRPC call and notify the server that
+the response stream is no longer needed.
+
+Use the observer overload when the client wants grpc-java async callbacks:
+
+```scala
+import io.grpc.stub.StreamObserver
+
+client.lotsOfReplies(
+  HelloRequest("Fory"),
+  new StreamObserver[HelloReply] {
+    override def onNext(value: HelloReply): Unit =
+      println(value.reply)
+
+    override def onError(t: Throwable): Unit =
+      t.printStackTrace()
+
+    override def onCompleted(): Unit =
+      println("done")
+  }
+)
+```
+
+The generated client also exposes a blocking grpc-java-style iterator through
+`lotsOfRepliesBlocking(request)`. Prefer the Scala-friendly `RpcIterator` when
+you need early cancellation; use the blocking iterator only when matching an
+existing grpc-java workflow.
+
+### Client-Streaming Clients
+
+For client-streaming RPCs, the generated method accepts a response observer and
+returns the request observer. Send every request with `onNext`, then call
+`onCompleted` exactly once when the client has finished sending:
+
+```scala
+import io.grpc.stub.StreamObserver
+
+val requests = client.lotsOfGreetings(
+  new StreamObserver[HelloReply] {
+    override def onNext(value: HelloReply): Unit =
+      println(value.reply)
+
+    override def onError(t: Throwable): Unit =
+      t.printStackTrace()
+
+    override def onCompleted(): Unit =
+      println("server completed")
+  }
+)
+
+requests.onNext(HelloRequest("Ada"))
+requests.onNext(HelloRequest("Grace"))
+requests.onCompleted()
+```
+
+If the client cannot finish sending requests, signal the failure with
+`requests.onError(error)`. Deadlines, cancellation, and call options are the
+standard grpc-java stub features, so they are configured on the generated client
+stub before starting the call.
+
+### Bidirectional Clients
+
+Bidirectional streaming uses the same grpc-java request observer pattern, but
+responses can arrive while the client is still sending requests:
+
+```scala
+import io.grpc.stub.StreamObserver
+
+val requests = client.chat(
+  new StreamObserver[HelloReply] {
+    override def onNext(value: HelloReply): Unit =
+      println(value.reply)
+
+    override def onError(t: Throwable): Unit =
+      t.printStackTrace()
+
+    override def onCompleted(): Unit =
+      println("chat closed")
+  }
+)
+
+requests.onNext(HelloRequest("first"))
+requests.onNext(HelloRequest("second"))
+requests.onCompleted()
+```
+
+Use grpc-java observer subtypes such as `ClientResponseObserver`,
+`ClientCallStreamObserver`, or `ServerCallStreamObserver` when an application
+needs manual inbound flow control, readiness callbacks, cancellation handlers,
+or direct transport-level cancellation. The generated Scala methods accept the
+standard grpc-java observer types, so those advanced grpc-java patterns remain
+available without a separate Fory API.
+
+### Streaming Servers
+
+Unary server methods can use the direct Scala-friendly override shown earlier.
+Streaming server methods use grpc-java observers. A server-streaming
+implementation receives one request and writes zero or more responses:
+
+```scala
+import io.grpc.stub.StreamObserver
+import scala.util.control.NonFatal
+
+final class GreeterService extends GreeterGrpc.GreeterImplBase {
+  override def lotsOfReplies(
+      request: HelloRequest,
+      responseObserver: StreamObserver[HelloReply]
+  ): Unit =
+    try {
+      responseObserver.onNext(HelloReply(s"Hello, ${request.name}"))
+      responseObserver.onNext(HelloReply(s"Welcome, ${request.name}"))
+      responseObserver.onCompleted()
+    } catch {
+      case NonFatal(e) =>
+        responseObserver.onError(e)
+    }
+}
+```
+
+Client-streaming servers return an observer for incoming requests and write the
+single response when the request stream completes:
+
+```scala
+import io.grpc.stub.StreamObserver
+import scala.collection.mutable.ArrayBuffer
+
+final class GreeterService extends GreeterGrpc.GreeterImplBase {
+  override def lotsOfGreetings(
+      responseObserver: StreamObserver[HelloReply]
+  ): StreamObserver[HelloRequest] =
+    new StreamObserver[HelloRequest] {
+      private val names = ArrayBuffer.empty[String]
+
+      override def onNext(value: HelloRequest): Unit =
+        names += value.name
+
+      override def onError(t: Throwable): Unit =
+        names.clear()
+
+      override def onCompleted(): Unit = {
+        responseObserver.onNext(HelloReply(names.mkString("Hello ", ", ", "")))
+        responseObserver.onCompleted()
+      }
+    }
+}
+```
+
+Bidirectional servers also return an observer for incoming requests, but may
+emit responses from each `onNext` call:
+
+```scala
+import io.grpc.stub.StreamObserver
+
+final class GreeterService extends GreeterGrpc.GreeterImplBase {
+  override def chat(
+      responseObserver: StreamObserver[HelloReply]
+  ): StreamObserver[HelloRequest] =
+    new StreamObserver[HelloRequest] {
+      override def onNext(value: HelloRequest): Unit =
+        responseObserver.onNext(HelloReply(s"Echo: ${value.name}"))
+
+      override def onError(t: Throwable): Unit = ()
+
+      override def onCompleted(): Unit =
+        responseObserver.onCompleted()
+    }
+}
+```
 
 Server-streaming, client-streaming, and bidirectional server methods use
 grpc-java `StreamObserver` APIs because streaming completion, request flow

@@ -118,6 +118,7 @@ options; see [Configuration](configuration.md).
 | [References](references.md)                   | Shared references and circular object graphs            |
 | [Schema Evolution](schema-evolution.md)       | Compatible mode and evolving structs                    |
 | [Xlang Serialization](xlang-serialization.md) | Interop guidance and mapping rules                      |
+| [gRPC Support](grpc-support.md)               | Node.js gRPC and browser gRPC-Web generated clients     |
 | [Troubleshooting](troubleshooting.md)         | Common issues, limits, and debugging tips               |
 
 ## Related Resources

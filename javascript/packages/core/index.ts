@@ -23,7 +23,7 @@ import {
   Dynamic,
 } from "./lib/typeInfo";
 import { Serializer, Mode } from "./lib/type";
-import Fory from "./lib/fory";
+import Fory, { RootCodec, RootTypeIdentity } from "./lib/fory";
 import { BinaryReader } from "./lib/reader";
 import { BinaryWriter } from "./lib/writer";
 import { BFloat16Array } from "./lib/types/bfloat16";
@@ -47,6 +47,8 @@ export {
   ForyFloat16Array,
   ReadContext,
   WriteContext,
+  RootCodec,
+  RootTypeIdentity,
 };
 
 export default Fory;

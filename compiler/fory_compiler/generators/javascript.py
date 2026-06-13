@@ -17,11 +17,13 @@
 
 """JavaScript code generator."""
 
+import re
 from pathlib import Path
 from typing import Dict, List, Optional, Set, Tuple, Union as TypingUnion
 
 from fory_compiler.frontend.utils import parse_idl_file
 from fory_compiler.generators.base import BaseGenerator, GeneratedFile
+from fory_compiler.generators.services.javascript import JavaScriptServiceGeneratorMixin
 from fory_compiler.ir.ast import (
     ArrayType,
     Enum,
@@ -38,7 +40,7 @@ from fory_compiler.ir.ast import (
 from fory_compiler.ir.types import PrimitiveKind
 
 
-class JavaScriptGenerator(BaseGenerator):
+class JavaScriptGenerator(JavaScriptServiceGeneratorMixin, BaseGenerator):
     """Generates JavaScript type definitions and Fory registration helpers from IDL."""
 
     language_name = "javascript"
@@ -351,7 +353,14 @@ class JavaScriptGenerator(BaseGenerator):
 
     def get_registration_function_name(self) -> str:
         """Get the name of the registration function."""
-        return f"register{self.to_pascal_case(self.get_module_name())}Types"
+        return "install"
+
+    def _safe_module_alias(self, module_path: str, index: int) -> str:
+        stem = module_path.rsplit("/", 1)[-1]
+        normalized = re.sub(r"[^0-9A-Za-z_]", "_", stem)
+        if not normalized or normalized[0].isdigit():
+            normalized = f"module_{normalized}"
+        return f"_{self.safe_identifier(self.to_camel_case(normalized))}Module{index}"
 
     def _normalize_import_path(self, path_str: str) -> str:
         if not path_str:
@@ -382,14 +391,9 @@ class JavaScriptGenerator(BaseGenerator):
             return schema.package.replace(".", "_")
         return "generated"
 
-    def _registration_fn_for_schema(self, schema: Schema) -> str:
-        """Derive the registration function name for an imported schema."""
-        mod = self._module_name_for_schema(schema)
-        return f"register{self.to_pascal_case(mod)}Types"
-
-    def _collect_imported_registrations(self) -> List[Tuple[str, str]]:
-        """Collect (module_path, registration_fn) pairs for imported schemas."""
-        file_info: Dict[str, Tuple[str, str]] = {}
+    def _collect_imported_modules(self) -> List[str]:
+        """Collect generated module paths that own imported schema types."""
+        file_info: Dict[str, str] = {}
         for type_def in self.schema.enums + self.schema.unions + self.schema.messages:
             if not self.is_imported_type(type_def):
                 continue
@@ -403,11 +407,10 @@ class JavaScriptGenerator(BaseGenerator):
             imported_schema = self._load_schema(file_path)
             if imported_schema is None:
                 continue
-            reg_fn = self._registration_fn_for_schema(imported_schema)
             mod_name = self._module_name_for_schema(imported_schema)
-            file_info[normalized] = (f"./{mod_name}", reg_fn)
+            file_info[normalized] = f"./{mod_name}"
 
-        ordered: List[Tuple[str, str]] = []
+        ordered: List[str] = []
         used: Set[str] = set()
 
         if self.schema.source_file:
@@ -425,14 +428,20 @@ class JavaScriptGenerator(BaseGenerator):
                 continue
             ordered.append(file_info[key])
 
-        deduped: List[Tuple[str, str]] = []
-        seen: Set[Tuple[str, str]] = set()
+        deduped: List[str] = []
+        seen: Set[str] = set()
         for item in ordered:
             if item in seen:
                 continue
             seen.add(item)
             deduped.append(item)
         return deduped
+
+    def _imported_module_aliases(self) -> List[Tuple[str, str]]:
+        return [
+            (module_path, self._safe_module_alias(module_path, index))
+            for index, module_path in enumerate(self._collect_imported_modules())
+        ]
 
     def _resolve_named_type(
         self, name: str, parent_stack: Optional[List[Message]] = None
@@ -527,12 +536,19 @@ class JavaScriptGenerator(BaseGenerator):
         return type_str
 
     def generate_imports(self) -> List[str]:
-        """Generate import statements for imported types and registration functions."""
+        """Generate import statements for Fory runtime and imported types."""
         lines: List[str] = []
-        imported_regs = self._collect_imported_registrations()
+        imported_modules = self._imported_module_aliases()
 
+        core_imports = ["Type"]
         if self._schema_uses_primitive_kind(PrimitiveKind.DECIMAL):
-            lines.append("import { Decimal } from '@apache-fory/core';")
+            core_imports.append("Decimal")
+        lines.append(
+            f"import Fory, {{ {', '.join(core_imports)} }} from '@apache-fory/core';"
+        )
+
+        for mod_path, alias in imported_modules:
+            lines.append(f"import * as {alias} from '{mod_path}';")
 
         # Collect all imported types used in this schema
         imported_types_by_module: Dict[str, Set[str]] = {}
@@ -565,12 +581,6 @@ class JavaScriptGenerator(BaseGenerator):
                 imported_types_by_module[mod_path].add(
                     self.safe_type_identifier(f"{type_def.name}Case")
                 )
-
-        # Add registration functions to the imports
-        for mod_path, reg_fn in imported_regs:
-            if mod_path not in imported_types_by_module:
-                imported_types_by_module[mod_path] = set()
-            imported_types_by_module[mod_path].add(reg_fn)
 
         # Generate import statements
         for mod_path, types in sorted(imported_types_by_module.items()):
@@ -663,8 +673,10 @@ class JavaScriptGenerator(BaseGenerator):
                 lines.extend(self.generate_message(message, indent=0))
                 lines.append("")
 
-        # Generate registration function
+        # Generate schema module helpers
         lines.extend(self.generate_registration())
+        lines.append("")
+        lines.extend(self.generate_fory_helpers())
         lines.append("")
 
         return GeneratedFile(
@@ -1105,24 +1117,20 @@ class JavaScriptGenerator(BaseGenerator):
         return deps
 
     def generate_registration(self) -> List[str]:
-        """Generate a registration function that registers all local and
-        imported types with a Fory instance.
+        """Generate a module-level install function for this schema.
 
         Types are emitted in dependency order (leaf types first) via a
         simple DFS so that the Fory JS runtime does not prematurely
         register bare ``Type.struct(id)`` references with empty fields."""
         lines: List[str] = []
-        fn_name = self.get_registration_function_name()
-        imported_regs = self._collect_imported_registrations()
+        imported_modules = self._imported_module_aliases()
 
-        lines.append("// Registration helper")
-        lines.append(f"export function {fn_name}(fory: any, Type: any): void {{")
+        lines.append("// Schema installation")
+        lines.append("export function install(fory: Fory): void {")
 
-        # Delegate to imported registration functions first
-        for _module_path, reg_fn in imported_regs:
-            if reg_fn == fn_name:
-                continue
-            lines.append(f"  {reg_fn}(fory, Type);")
+        # Delegate to imported schema modules first.
+        for _module_path, alias in imported_modules:
+            lines.append(f"  {alias}.install(fory);")
 
         # DFS emit: visit dependencies before the type itself.
         # The visited set also breaks cycles (e.g. self-referential trees).
@@ -1181,3 +1189,59 @@ class JavaScriptGenerator(BaseGenerator):
         lines.append("}")
 
         return lines
+
+    def generate_fory_helpers(self) -> List[str]:
+        """Generate module-owned default Fory helpers."""
+        needs_ref = "true" if self._schema_needs_ref_tracking() else "false"
+        return [
+            f"const MODEL_NEEDS_REF = {needs_ref};",
+            "let defaultFory: Fory | undefined;",
+            "",
+            "export function createFory(): Fory {",
+            "  const fory = new Fory({ ref: MODEL_NEEDS_REF });",
+            "  install(fory);",
+            "  return fory;",
+            "}",
+            "",
+            "export function getFory(): Fory {",
+            "  if (defaultFory === undefined) {",
+            "    defaultFory = createFory();",
+            "  }",
+            "  return defaultFory;",
+            "}",
+        ]
+
+    def _schema_needs_ref_tracking(self) -> bool:
+        def field_type_needs_ref(field_type: FieldType) -> bool:
+            if isinstance(field_type, ListType):
+                return field_type.element_ref or field_type_needs_ref(
+                    field_type.element_type
+                )
+            if isinstance(field_type, ArrayType):
+                return field_type_needs_ref(field_type.element_type)
+            if isinstance(field_type, MapType):
+                return (
+                    field_type.value_ref
+                    or field_type_needs_ref(field_type.key_type)
+                    or field_type_needs_ref(field_type.value_type)
+                )
+            return False
+
+        def message_needs_ref(message: Message) -> bool:
+            for field in message.fields:
+                if field.ref or field_type_needs_ref(field.field_type):
+                    return True
+            for nested_union in message.nested_unions:
+                if union_needs_ref(nested_union):
+                    return True
+            return any(message_needs_ref(nested) for nested in message.nested_messages)
+
+        def union_needs_ref(union: Union) -> bool:
+            return any(
+                field.ref or field_type_needs_ref(field.field_type)
+                for field in union.fields
+            )
+
+        return any(
+            message_needs_ref(message) for message in self.schema.messages
+        ) or any(union_needs_ref(union) for union in self.schema.unions)

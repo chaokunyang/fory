@@ -27,13 +27,31 @@ import {
   TypeId,
   CustomSerializer,
 } from "./type";
-import { InputType, ResultType, TypeInfo } from "./typeInfo";
+import { InputType, ResultType, Type, TypeInfo } from "./typeInfo";
 import { Gen } from "./gen";
 import { PlatformBuffer } from "./platformBuffer";
 import { ReadContext, WriteContext } from "./context";
 
 const DEFAULT_DEPTH_LIMIT = 50 as const;
 const MIN_DEPTH_LIMIT = 2 as const;
+
+export type RootTypeIdentity =
+  | {
+    kind: "struct" | "union";
+    namespace?: string;
+    typeName: string;
+  }
+  | {
+    kind: "struct" | "union";
+    typeId: number;
+  };
+
+export type RootCodec<T = any> = {
+  serializer: Serializer;
+  serialize(data: T | null): PlatformBuffer;
+  deserialize(bytes: Uint8Array): T | null;
+};
+
 export default class Fory {
   readonly typeResolver: TypeResolver;
   readonly anySerializer: Serializer;
@@ -46,6 +64,11 @@ export default class Fory {
   >();
 
   private readonly rootDeserializers = new WeakMap<
+    Serializer,
+    (bytes: Uint8Array) => any
+  >();
+
+  private readonly exactRootDeserializers = new WeakMap<
     Serializer,
     (bytes: Uint8Array) => any
   >();
@@ -126,6 +149,15 @@ export default class Fory {
     };
   }
 
+  getRootCodec<T = any>(identity: RootTypeIdentity): RootCodec<T> {
+    const serializer = this.getRootSerializerByIdentity(identity);
+    return {
+      serializer,
+      serialize: this.getRootSerializer(serializer),
+      deserialize: this.getExactRootDeserializer(serializer),
+    };
+  }
+
   deserialize<T = any>(
     bytes: Uint8Array,
     serializer: Serializer = this.anySerializer,
@@ -193,6 +225,53 @@ export default class Fory {
     };
     this.rootDeserializers.set(serializer, rootDeserializer);
     return rootDeserializer;
+  }
+
+  private getExactRootDeserializer(serializer: Serializer) {
+    let rootDeserializer = this.exactRootDeserializers.get(serializer);
+    if (rootDeserializer !== undefined) {
+      return rootDeserializer;
+    }
+    const readContext = this.readContext;
+    const reader = readContext.reader;
+    const rootHeader = ConfigFlags.isCrossLanguageFlag;
+    rootDeserializer = (bytes: Uint8Array) => {
+      readContext.reset(bytes);
+      const bitmap = reader.readUint8();
+      if (bitmap !== rootHeader) {
+        this.throwInvalidRootHeader(bitmap);
+      }
+      return serializer.readRef();
+    };
+    this.exactRootDeserializers.set(serializer, rootDeserializer);
+    return rootDeserializer;
+  }
+
+  private getRootSerializerByIdentity(identity: RootTypeIdentity) {
+    let typeInfo: TypeInfo;
+    if ("typeId" in identity) {
+      typeInfo = identity.kind === "struct"
+        ? Type.struct(identity.typeId)
+        : Type.union(identity.typeId);
+    } else {
+      typeInfo = identity.kind === "struct"
+        ? Type.struct({
+          namespace: identity.namespace,
+          typeName: identity.typeName,
+        })
+        : Type.union({
+          namespace: identity.namespace,
+          typeName: identity.typeName,
+        });
+    }
+    const serializer = this.typeResolver.getSerializerByTypeInfo(typeInfo);
+    if (!serializer?._initialized) {
+      const name = "typeId" in identity
+        ? `${identity.kind}#${identity.typeId}`
+        : `${identity.namespace ? `${identity.namespace}.` : ""}${identity.typeName}`;
+      throw new Error(`Fory root type is not installed: ${name}`);
+    }
+    return serializer;
   }
 
   serialize<T = any>(data: T, serializer: Serializer = this.anySerializer) {

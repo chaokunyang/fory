@@ -20,6 +20,7 @@
 from pathlib import Path
 from textwrap import dedent
 
+from fory_compiler.cli import resolve_imports
 from fory_compiler.frontend.fdl.lexer import Lexer
 from fory_compiler.frontend.fdl.parser import Parser
 from fory_compiler.generators.base import GeneratorOptions
@@ -259,7 +260,7 @@ def test_javascript_decimal_generation_uses_runtime_decimal_type():
     )
     output = generate_javascript(source)
 
-    assert "import { Decimal } from '@apache-fory/core';" in output
+    assert "import Fory, { Type, Decimal } from '@apache-fory/core';" in output
     assert "amount: Decimal;" in output
     assert "{ case: ValueCase.AMOUNT; value: Decimal }" in output
     assert "amount: Type.decimal()" in output
@@ -355,10 +356,53 @@ def test_javascript_file_structure():
     assert "// Enums" in output
     assert "// Messages" in output
     assert "// Unions" in output
-    assert "// Registration helper" in output
+    assert "// Schema installation" in output
 
-    # Check registration function (uses full package path to avoid collisions)
-    assert "export function registerExampleV1Types" in output
+    # Check module-owned Fory helpers.
+    assert "export function install(fory: Fory): void" in output
+    assert "export function createFory(): Fory" in output
+    assert "export function getFory(): Fory" in output
+    assert "registerExampleV1Types" not in output
+
+
+def test_javascript_imported_schema_installation_uses_module_owner(tmp_path: Path):
+    common = tmp_path / "common.fdl"
+    common.write_text(
+        dedent(
+            """
+            package demo.shared;
+
+            message Shared {
+                string value = 1;
+            }
+            """
+        )
+    )
+    service = tmp_path / "service.fdl"
+    service.write_text(
+        dedent(
+            """
+            package demo.api;
+
+            import "common.fdl";
+
+            message Request {
+                demo.shared.Shared shared = 1;
+            }
+            """
+        )
+    )
+    schema = resolve_imports(service)
+    output = (
+        JavaScriptGenerator(schema, GeneratorOptions(output_dir=tmp_path))
+        .generate()[0]
+        .content
+    )
+
+    assert "import * as _commonModule0 from './common';" in output
+    assert "import { Shared } from './common';" in output
+    assert "_commonModule0.install(fory);" in output
+    assert "registerDemoSharedTypes" not in output
 
 
 def test_javascript_field_naming():

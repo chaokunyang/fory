@@ -945,6 +945,11 @@ JavaScript/TypeScript output is one `.ts` file per schema, for example:
 
 - `<javascript_out>/addressbook.ts`
 
+When the schema contains services, JavaScript can also emit service companions:
+
+- `<javascript_out>/addressbook_grpc.ts` with `--grpc`
+- `<javascript_out>/addressbook_grpc_web.ts` with `--grpc-web`
+
 ### Type Generation
 
 Messages generate `export interface` declarations with camelCase field names:
@@ -980,6 +985,66 @@ export type Animal =
   | { case: AnimalCase.DOG; value: Dog }
   | { case: AnimalCase.CAT; value: Cat };
 ```
+
+### Schema Helpers
+
+Each generated model file exports helpers for installing and reusing the schema:
+
+```typescript
+export function install(fory: Fory): void {
+  fory.register(
+    Type.struct({ namespace: "addressbook", typeName: "Person" }, {
+      name: Type.string().setId(1),
+    }),
+  );
+}
+
+export function createFory(): Fory {
+  const fory = new Fory();
+  install(fory);
+  return fory;
+}
+
+export function getFory(): Fory { ... }
+```
+
+Imported schema modules are installed automatically by `install(fory)`.
+Applications can call `install(fory)` when they manage their own `Fory`
+instance, or use `getFory()` for the generated default instance.
+
+### gRPC Service Companions
+
+When a schema contains services and the compiler is run with `--grpc`,
+JavaScript generation emits a Node.js companion named `<module>_grpc.ts`.
+The file contains service descriptors, handler interfaces, a client class, and a
+server registration helper for `@grpc/grpc-js`.
+
+```typescript
+export interface GreeterHandlers extends grpc.UntypedServiceImplementation {
+  sayHello: grpc.handleUnaryCall<HelloRequest, HelloReply>;
+}
+
+export function addGreeterService(
+  server: grpc.Server,
+  handlers: GreeterHandlers,
+): void { ... }
+
+export class GreeterClient extends grpc.Client { ... }
+```
+
+When the compiler is run with `--grpc-web`, JavaScript generation emits a
+browser companion named `<module>_grpc_web.ts`. It contains callback and promise
+clients for `grpc-web`:
+
+```typescript
+export class GreeterWebClient { ... }
+
+export class GreeterWebPromiseClient { ... }
+```
+
+Node.js service companions import `@grpc/grpc-js`; browser companions import
+`grpc-web`. Add those packages to the application that compiles or runs the
+generated files.
 
 ## Swift
 

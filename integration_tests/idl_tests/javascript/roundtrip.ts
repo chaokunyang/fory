@@ -48,12 +48,12 @@ import {
   Cat,
   Dog,
   Person,
-  install as installAddressbook,
+  registerAddressbookTypes,
 } from "./generated/addressbook";
 import {
   Envelope,
   Status as AutoIdStatus,
-  install as installAutoId,
+  registerAutoIdTypes,
 } from "./generated/auto_id";
 import {
   NumericCollections,
@@ -62,17 +62,17 @@ import {
   NumericCollectionArrayUnionCase,
   NumericCollectionUnion,
   NumericCollectionUnionCase,
-  install as installCollection,
+  registerCollectionTypes,
 } from "./generated/collection";
 import {
   Container,
   PayloadCase,
   ScalarPack,
   Status as ComplexFbsStatus,
-  install as installComplexFbs,
+  registerComplexFbsTypes,
 } from "./generated/complex_fbs";
 import { PrimitiveTypes } from "./generated/complex_pb";
-import { Graph, install as installGraph } from "./generated/graph";
+import { Graph, registerGraphTypes } from "./generated/graph";
 import {
   ExampleLeaf,
   ExampleLeafUnionCase,
@@ -80,18 +80,18 @@ import {
   ExampleMessageUnion,
   ExampleMessageUnionCase,
   ExampleState,
-  install as installExample,
+  registerExampleTypes,
 } from "./generated/example";
 import {
   AllOptionalTypes,
   OptionalHolder,
   OptionalUnionCase,
-  install as installOptionalTypes,
+  registerOptionalTypesTypes,
 } from "./generated/optional_types";
-import { Monster, Color, install as installMonster } from "./generated/monster";
-import { TreeNode, install as installTree } from "./generated/tree";
+import { Monster, Color, registerMonsterTypes } from "./generated/monster";
+import { TreeNode, registerTreeTypes } from "./generated/tree";
 
-type InstallFn = (fory: Fory) => void;
+type RegisterFn = (fory: Fory) => unknown;
 type AssertFn<T> = (expected: T, actual: unknown) => void;
 
 function resolveCompatibleModes(): boolean[] {
@@ -112,14 +112,14 @@ function resolveCompatibleModes(): boolean[] {
 function buildFory(
   compatible: boolean,
   ref: boolean,
-  installFns: ReadonlyArray<InstallFn>,
+  registerFns: ReadonlyArray<RegisterFn>,
 ): Fory {
   const fory = new Fory({
     compatible,
     ref,
   });
-  for (const installFn of installFns) {
-    installFn(fory);
+  for (const registerFn of registerFns) {
+    registerFn(fory);
   }
   return fory;
 }
@@ -860,13 +860,13 @@ function assertGraphEqual(expected: Graph, actualValue: unknown): void {
 function runStandardRoundTrip(compatible: boolean): void {
   // AddressBook registration already includes the shared complex_pb types.
   const fory = buildFory(compatible, false, [
-    installAddressbook,
-    installAutoId,
-    installMonster,
-    installComplexFbs,
-    installCollection,
-    installOptionalTypes,
-    installExample,
+    registerAddressbookTypes,
+    registerAutoIdTypes,
+    registerMonsterTypes,
+    registerComplexFbsTypes,
+    registerCollectionTypes,
+    registerOptionalTypesTypes,
+    registerExampleTypes,
   ]);
 
   runFileRoundTrip(
@@ -945,8 +945,8 @@ function runStandardRoundTrip(compatible: boolean): void {
 
 function runRefRoundTrip(compatible: boolean): void {
   const refFory = buildFory(compatible, true, [
-    installTree,
-    installGraph,
+    registerTreeTypes,
+    registerGraphTypes,
   ]);
 
   runFileRoundTrip("DATA_FILE_TREE", refFory, buildTree(), assertTreeEqual);

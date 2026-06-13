@@ -154,21 +154,22 @@ class JavaScriptServiceGeneratorMixin:
             service_exports.update(WEB_HELPER_TYPE_NAMES)
         owners: Dict[str, str] = {}
         for root in self._service_roots(services):
-            name = self._ts_import_name(root)
             owner = (
                 self._module_path_for_type(root) if self.is_imported_type(root) else "."
             )
-            previous = owners.get(name)
-            if previous is not None and previous != owner:
-                raise ValueError(
-                    "JavaScript gRPC model import collision: "
-                    f"{previous} and {owner} both provide {name}"
-                )
-            owners[name] = owner
-            if name in service_exports:
-                raise ValueError(
-                    f"JavaScript gRPC model import collides with service export: {name}"
-                )
+            for name in self._model_import_names(root):
+                previous = owners.get(name)
+                if previous is not None and previous != owner:
+                    raise ValueError(
+                        "JavaScript gRPC model import collision: "
+                        f"{previous} and {owner} both provide {name}"
+                    )
+                owners[name] = owner
+                if name in service_exports:
+                    raise ValueError(
+                        "JavaScript gRPC model import collides with service "
+                        f"export: {name}"
+                    )
 
     def _validate_grpc_web_services(self, services: List[Service]) -> None:
         for service in services:
@@ -192,8 +193,10 @@ class JavaScriptServiceGeneratorMixin:
         lines.append('import * as grpc from "@grpc/grpc-js";')
         lines.extend(self._generate_model_imports(services))
         lines.append("")
-        lines.extend(self._generate_shared_codec_bindings(services, root_indexes))
-        lines.append("")
+        shared_bindings = self._generate_shared_codec_bindings(services, root_indexes)
+        if shared_bindings:
+            lines.extend(shared_bindings)
+            lines.append("")
         lines.extend(self._generate_node_buffer_helper())
         lines.append("")
         lines.extend(self._generate_node_grpc_serializers(services, root_indexes))
@@ -226,8 +229,10 @@ class JavaScriptServiceGeneratorMixin:
                 "",
             ]
         )
-        lines.extend(self._generate_shared_codec_bindings(services, root_indexes))
-        lines.append("")
+        shared_bindings = self._generate_shared_codec_bindings(services, root_indexes)
+        if shared_bindings:
+            lines.extend(shared_bindings)
+            lines.append("")
         lines.extend(self._generate_grpc_web_type_bindings(services, root_indexes))
         lines.append("")
         lines.extend(self._generate_grpc_web_helpers(services))
@@ -253,18 +258,18 @@ class JavaScriptServiceGeneratorMixin:
         current_types: Set[str] = set()
         imported_types: Dict[str, Set[str]] = {}
         for root in self._service_roots(services):
-            type_name = self._ts_import_name(root)
+            names = self._model_import_names(root)
             if self.is_imported_type(root):
                 module = self._module_path_for_type(root)
-                imported_types.setdefault(module, set()).add(type_name)
+                imported_types.setdefault(module, set()).update(names)
             else:
-                current_types.add(type_name)
+                current_types.update(names)
 
         lines: List[str] = []
-        current_imports = ["getForyState", *sorted(current_types)]
-        lines.append(
-            f'import {{ {", ".join(current_imports)} }} from "./{self.get_module_name()}";'
-        )
+        if current_types:
+            lines.append(
+                f'import {{ {", ".join(sorted(current_types))} }} from "./{self.get_module_name()}";'
+            )
         for module, names in sorted(imported_types.items()):
             lines.append(f'import {{ {", ".join(sorted(names))} }} from "{module}";')
         return lines
@@ -311,13 +316,15 @@ class JavaScriptServiceGeneratorMixin:
     def _ts_import_name(self, type_def: RootType) -> str:
         return self._ts_type_name(type_def).split(".", 1)[0]
 
-    def _root_serializer_var(
-        self, type_def: RootType, root_indexes: Dict[int, int]
-    ) -> str:
-        return f"root{root_indexes[id(type_def)]}Serializer"
+    def _model_import_names(self, type_def: RootType) -> List[str]:
+        return [
+            self._ts_import_name(type_def),
+            self._root_serialize_helper_name(type_def),
+            self._root_deserialize_helper_name(type_def),
+        ]
 
     def _serializer_name(self, type_def: RootType, root_indexes: Dict[int, int]) -> str:
-        return f"serializeRoot{root_indexes[id(type_def)]}"
+        return self._root_serialize_helper_name(type_def)
 
     def _grpc_serializer_name(
         self, type_def: RootType, root_indexes: Dict[int, int]
@@ -327,7 +334,7 @@ class JavaScriptServiceGeneratorMixin:
     def _deserializer_name(
         self, type_def: RootType, root_indexes: Dict[int, int]
     ) -> str:
-        return f"deserializeRoot{root_indexes[id(type_def)]}"
+        return self._root_deserialize_helper_name(type_def)
 
     def _grpc_web_type_name(
         self, type_def: RootType, root_indexes: Dict[int, int]
@@ -337,21 +344,7 @@ class JavaScriptServiceGeneratorMixin:
     def _generate_shared_codec_bindings(
         self, services: List[Service], root_indexes: Dict[int, int]
     ) -> List[str]:
-        lines = ["const FORY_STATE = getForyState();", "const FORY = FORY_STATE.fory;"]
-        for root in self._service_roots(services):
-            ts_type = self._ts_type_name(root)
-            serializer = self._root_serializer_var(root, root_indexes)
-            key = self._serializer_key(root)
-            lines.append(f'const {serializer} = FORY_STATE.serializers["{key}"];')
-            lines.append(
-                f"const {self._serializer_name(root, root_indexes)} = (value: {ts_type}) => "
-                f"FORY.serialize(value, {serializer});"
-            )
-            lines.append(
-                f"const {self._deserializer_name(root, root_indexes)} = (bytes: Uint8Array) => "
-                f"FORY.deserialize(bytes, {serializer}) as {ts_type};"
-            )
-        return lines
+        return []
 
     def _generate_node_buffer_helper(self) -> List[str]:
         return [

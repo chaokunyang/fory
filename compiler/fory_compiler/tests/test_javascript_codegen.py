@@ -359,28 +359,34 @@ def test_javascript_file_structure():
     assert "// Enums" in output
     assert "// Messages" in output
     assert "// Unions" in output
-    assert "// Schema installation" in output
+    assert "// Registration helper" in output
 
-    # Check module-owned Fory helpers.
+    # Check module-owned registration and default root helpers.
     assert (
-        "import type { Serializer as __foryRuntime$Serializer } from '@apache-fory/core';"
+        "import type { Serializer as __foryRuntime$Serializer } "
+        "from '@apache-fory/core';" in output
+    )
+    assert "type __foryGenerated$RootRegistration<T> = {" in output
+    assert "export function registerExampleV1Types(fory: __foryRuntime$Fory)" in output
+    assert (
+        "const request = fory.register(__foryRuntime$Type.struct" in output
+        and "as unknown as __foryGenerated$RootRegistration<Request>;" in output
+    )
+    assert (
+        "const response = fory.register(__foryRuntime$Type.union" in output
+        and "as unknown as __foryGenerated$RootRegistration<Response>;" in output
+    )
+    assert "return {\n    request,\n    response,\n  };" in output
+    assert "const DEFAULT_FORY = new __foryRuntime$Fory" in output
+    assert "const DEFAULT_TYPES = registerExampleV1Types(DEFAULT_FORY);" in output
+    assert "export const serializeRequest = DEFAULT_TYPES.request.serialize;" in output
+    assert (
+        "export const deserializeResponse = DEFAULT_TYPES.response.deserialize;"
         in output
     )
-    assert "export type ForySerializerMap =" in output
-    assert '"example.v1.Request": __foryRuntime$Serializer;' in output
-    assert '"example.v1.Response": __foryRuntime$Serializer;' in output
-    assert "export interface ForyState" in output
-    assert "export function install(fory: __foryRuntime$Fory): ForyState" in output
-    assert (
-        'serializers["example.v1.Request"] = fory.register(__foryRuntime$Type.struct'
-        in output
-    )
-    assert ".serializer;" in output
-    assert "export function createForyState(): ForyState" in output
-    assert "export function createFory(): __foryRuntime$Fory" in output
-    assert "export function getForyState(): ForyState" in output
-    assert "export function getFory(): __foryRuntime$Fory" in output
-    assert "registerExampleV1Types" not in output
+    assert "ForySerializerMap" not in output
+    assert "ForyState" not in output
+    assert "getForyState" not in output
 
 
 def test_js_import_install_uses_module_owner(tmp_path: Path):
@@ -419,10 +425,10 @@ def test_js_import_install_uses_module_owner(tmp_path: Path):
 
     assert "import * as _commonModule0 from './common';" in output
     assert "import { Shared } from './common';" in output
-    assert "const _commonModule0State = _commonModule0.install(fory);" in output
-    assert "Object.assign(serializers, _commonModule0State.serializers);" in output
-    assert "_commonModule0.ForySerializerMap" in output
-    assert "registerDemoSharedTypes" not in output
+    assert "_commonModule0.registerCommonTypes(fory);" in output
+    assert "export function registerServiceTypes(fory: __foryRuntime$Fory)" in output
+    assert "ForySerializerMap" not in output
+    assert "getForyState" not in output
 
 
 def test_js_imported_evolving_default(tmp_path: Path):

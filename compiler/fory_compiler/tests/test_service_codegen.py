@@ -206,22 +206,9 @@ def test_js_grpc_uses_model_fory():
     content = files["demo_greeter_grpc.ts"]
     assert 'import * as grpc from "@grpc/grpc-js";' in content
     assert (
-        'import { getForyState, HelloReply, HelloRequest } from "./demo_greeter";'
+        "import { HelloReply, HelloRequest, deserializeHelloReply, "
+        'deserializeHelloRequest, serializeHelloReply, serializeHelloRequest } from "./demo_greeter";'
         in content
-    )
-    assert "const FORY_STATE = getForyState();" in content
-    assert "const FORY = FORY_STATE.fory;" in content
-    assert (
-        'const root0Serializer = FORY_STATE.serializers["demo.greeter.HelloRequest"];'
-        in content
-    )
-    assert (
-        "const serializeRoot0 = (value: HelloRequest) => "
-        "FORY.serialize(value, root0Serializer);" in content
-    )
-    assert (
-        "const deserializeRoot1 = (bytes: Uint8Array) => "
-        "FORY.deserialize(bytes, root1Serializer) as HelloReply;" in content
     )
     assert "export interface GreeterHandlers" in content
     assert "createGreeterServiceDefinition()" in content
@@ -231,16 +218,21 @@ def test_js_grpc_uses_model_fory():
     assert "export class GreeterClient extends grpc.Client" in content
     assert '"/demo.greeter.Greeter/SayHello"' in content
     assert (
-        "const serializeRoot0Grpc = (value: HelloRequest): Buffer => "
-        "toGrpcBuffer(serializeRoot0(value));"
+        "const serializeHelloRequestGrpc = (value: HelloRequest): Buffer => "
+        "toGrpcBuffer(serializeHelloRequest(value));"
     ) in content
-    assert "requestSerialize: serializeRoot0Grpc" in content
-    assert "      serializeRoot0Grpc," in content
+    assert "requestSerialize: serializeHelloRequestGrpc" in content
+    assert "requestDeserialize: deserializeHelloRequest" in content
+    assert "responseSerialize: serializeHelloReplyGrpc" in content
+    assert "responseDeserialize: deserializeHelloReply" in content
+    assert "      serializeHelloRequestGrpc," in content
+    assert "      deserializeHelloReply," in content
     assert "(value: HelloRequest) => toGrpcBuffer" not in content
     assert "Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength)" in content
     assert "options?.fory" not in content
     assert "new Fory" not in content
     assert "WeakMap<Fory" not in content
+    assert "getForyState" not in content
     assert "getRootCodec" not in content
     assert "Type.struct" not in content
     assert "Type.union" not in content
@@ -270,9 +262,15 @@ def test_js_grpc_named_union_root():
     files = generate_service_files(schema, JavaScriptGenerator)
     content = files["demo_greeter_grpc.ts"]
 
-    assert 'FORY_STATE.serializers["demo.greeter.Greeting"]' in content
-    assert "FORY.serialize(value, root0Serializer)" in content
-    assert "FORY.deserialize(bytes, root0Serializer) as Greeting" in content
+    assert (
+        'import { Greeting, deserializeGreeting, serializeGreeting } from "./demo_greeter";'
+        in content
+    )
+    assert "requestSerialize: serializeGreetingGrpc" in content
+    assert "requestDeserialize: deserializeGreeting" in content
+    assert "responseSerialize: serializeGreetingGrpc" in content
+    assert "responseDeserialize: deserializeGreeting" in content
+    assert "FORY_STATE" not in content
     assert "getRootCodec" not in content
     assert "Type.union" not in content
 
@@ -296,8 +294,11 @@ def test_js_grpc_evolving_false_roots():
     numeric_content = generate_service_files(numeric_schema, JavaScriptGenerator)[
         "demo_stable_grpc.ts"
     ]
-    assert 'FORY_STATE.serializers["demo.stable.Stable"]' in numeric_content
-    assert "FORY.serialize(value, root0Serializer)" in numeric_content
+    assert (
+        'import { Stable, deserializeStable, serializeStable } from "./demo_stable";'
+        in numeric_content
+    )
+    assert "requestSerialize: serializeStableGrpc" in numeric_content
 
     named_schema = parse_fdl(
         dedent(
@@ -318,8 +319,11 @@ def test_js_grpc_evolving_false_roots():
     named_content = generate_service_files(named_schema, JavaScriptGenerator)[
         "demo_stable_grpc.ts"
     ]
-    assert 'FORY_STATE.serializers["demo.stable.Stable"]' in named_content
-    assert "FORY.deserialize(bytes, root0Serializer) as Stable" in named_content
+    assert (
+        'import { Stable, deserializeStable, serializeStable } from "./demo_stable";'
+        in named_content
+    )
+    assert "responseDeserialize: deserializeStable" in named_content
 
 
 def test_js_grpc_imported_evolving_default(tmp_path: Path):
@@ -357,8 +361,14 @@ def test_js_grpc_imported_evolving_default(tmp_path: Path):
     )
     content = generator.generate_services()[0].content
 
-    assert 'import { getForyState } from "./service";' in content
-    assert 'FORY_STATE.serializers["demo.common.Stable"]' in content
+    assert (
+        'import { Stable, deserializeStable, serializeStable } from "./common";'
+        in content
+    )
+    assert "requestSerialize: serializeStableGrpc" in content
+    assert "requestDeserialize: deserializeStable" in content
+    assert "getForyState" not in content
+    assert "FORY_STATE" not in content
     assert "getRootCodec" not in content
 
 
@@ -388,10 +398,15 @@ def test_js_grpc_nested_roots():
     files = generate_service_files(schema, JavaScriptGenerator)
     content = files["demo_nested_grpc.ts"]
 
-    assert 'import { getForyState, Envelope } from "./demo_nested";' in content
-    assert "import { getForyState, Envelope.Request" not in content
-    assert 'FORY_STATE.serializers["demo.nested.Envelope.Request"]' in content
-    assert 'FORY_STATE.serializers["demo.nested.Envelope.Result"]' in content
+    assert (
+        "import { Envelope, deserializeEnvelopeRequest, deserializeEnvelopeResult, "
+        'serializeEnvelopeRequest, serializeEnvelopeResult } from "./demo_nested";'
+        in content
+    )
+    assert "import { Envelope.Request" not in content
+    assert "requestSerialize: serializeEnvelopeRequestGrpc" in content
+    assert "responseDeserialize: deserializeEnvelopeResult" in content
+    assert "getForyState" not in content
     assert "getRootCodec" not in content
 
 
@@ -435,12 +450,16 @@ def test_js_grpc_imported_nested_roots(tmp_path: Path):
     )
     content = generator.generate_services()[0].content
 
-    assert 'import { getForyState } from "./service";' in content
-    assert 'import { Envelope } from "./common";' in content
+    assert (
+        "import { Envelope, deserializeEnvelopeRequest, deserializeEnvelopeResult, "
+        'serializeEnvelopeRequest, serializeEnvelopeResult } from "./common";'
+        in content
+    )
     assert "Envelope.Request" in content
     assert "Envelope.Result" in content
-    assert 'FORY_STATE.serializers["demo.common.Envelope.Request"]' in content
-    assert 'FORY_STATE.serializers["demo.common.Envelope.Result"]' in content
+    assert "requestSerialize: serializeEnvelopeRequestGrpc" in content
+    assert "responseDeserialize: deserializeEnvelopeResult" in content
+    assert "getForyState" not in content
     assert "Envelope.ResultCase" not in content
 
 
@@ -479,8 +498,13 @@ def test_js_grpc_imported_default_package(tmp_path: Path):
     )
     content = generator.generate_services()[0].content
 
-    assert 'FORY_STATE.serializers["default.Request"]' in content
-    assert 'FORY_STATE.serializers["default.Reply"]' in content
+    assert (
+        "import { Reply, Request, deserializeReply, deserializeRequest, "
+        'serializeReply, serializeRequest } from "./common";' in content
+    )
+    assert "requestSerialize: serializeRequestGrpc" in content
+    assert "responseDeserialize: deserializeReply" in content
+    assert "FORY_STATE" not in content
     assert "getRootCodec" not in content
 
 
@@ -493,6 +517,11 @@ def test_js_grpc_web_codegen():
     assert set(files) == {"demo_greeter_grpc_web.ts"}
     content = files["demo_greeter_grpc_web.ts"]
     assert 'import * as grpcWeb from "grpc-web";' in content
+    assert (
+        "import { HelloReply, HelloRequest, deserializeHelloReply, "
+        'deserializeHelloRequest, serializeHelloReply, serializeHelloRequest } from "./demo_greeter";'
+        in content
+    )
     assert "export class GreeterWebClient" in content
     assert "export class GreeterWebPromiseClient" in content
     assert "type GrpcWebMessageType<T> = new (...args: unknown[]) => T;" in content
@@ -501,6 +530,7 @@ def test_js_grpc_web_codegen():
         "const root0GrpcWebType = Object as unknown as GrpcWebMessageType<HelloRequest>;"
         in content
     )
+    assert "  serializeHelloRequest,\n  deserializeHelloReply," in content
     assert "this.client.thenableCall(" in content
     assert "PromiseCallOptions" not in content
     assert "unaryCall" not in content
@@ -514,6 +544,8 @@ def test_js_grpc_web_codegen():
     assert "options?.fory" not in content
     assert "new Fory" not in content
     assert "WeakMap<Fory" not in content
+    assert "getForyState" not in content
+    assert "FORY_STATE" not in content
     assert "Type.struct" not in content
     assert "Type.union" not in content
 
@@ -653,7 +685,7 @@ def test_js_grpc_web_helper_name_collision():
         generator.generate_services()
 
 
-def test_js_grpc_root_helper_names():
+def test_js_grpc_root_helper_name_collision():
     schema = parse_fdl(
         dedent(
             """
@@ -673,30 +705,12 @@ def test_js_grpc_root_helper_names():
             """
         )
     )
-    files = generate_service_files(schema, JavaScriptGenerator)
-    content = files["demo_roots_grpc.ts"]
-
-    assert "const serializeRoot0 = (value: Foo)" in content
-    assert "const serializeRoot1 = (value: FooGrpc)" in content
-    assert "const serializeRoot2 = (value: Foo.Bar)" in content
-    assert "const serializeRoot3 = (value: FooBar)" in content
-    assert "const serializeRoot0Grpc = (value: Foo): Buffer" in content
-    assert "const serializeRoot1Grpc = (value: FooGrpc): Buffer" in content
-    assert "const serializeFooGrpc" not in content
-    assert "const serializeFooBar" not in content
-    assert "const fooBarCodec" not in content
-    assert "requestSerialize: serializeRoot0Grpc" in content
-    assert "responseSerialize: serializeRoot1Grpc" in content
-
-    web = JavaScriptGenerator(
-        schema, GeneratorOptions(output_dir=Path("/tmp"), grpc_web=True)
+    generator = JavaScriptGenerator(
+        schema, GeneratorOptions(output_dir=Path("/tmp"), grpc=True)
     )
-    web_content = web.generate_services()[0].content
-    assert (
-        "const root2GrpcWebType = Object as unknown as GrpcWebMessageType<Foo.Bar>;"
-        in web_content
-    )
-    assert "fooBarGrpcWebType" not in web_content
+
+    with pytest.raises(ValueError, match="registration field collision"):
+        generator.generate()
 
 
 def test_js_grpc_web_descriptor_ids():

@@ -31,14 +31,14 @@ import {
   Cat,
   Dog,
   Person,
-  install as installAddressbook,
+  registerAddressbookTypes,
 } from "../generated/addressbook";
 import {
   Envelope,
   Status as AutoIdStatus,
   Wrapper,
   WrapperCase,
-  install as installAutoId,
+  registerAutoIdTypes,
 } from "../generated/auto_id";
 import {
   NumericCollections,
@@ -47,20 +47,20 @@ import {
   NumericCollectionArrayUnionCase,
   NumericCollectionUnion,
   NumericCollectionUnionCase,
-  install as installCollection,
+  registerCollectionTypes,
 } from "../generated/collection";
 import {
   Container,
   PayloadCase,
   ScalarPack,
   Status as ComplexFbsStatus,
-  install as installComplexFbs,
+  registerComplexFbsTypes,
 } from "../generated/complex_fbs";
 import {
   PrimitiveTypes,
-  install as installComplexPb,
+  registerComplexPbTypes,
 } from "../generated/complex_pb";
-import { Graph, install as installGraph } from "../generated/graph";
+import { Graph, registerGraphTypes } from "../generated/graph";
 import {
   ExampleLeaf,
   ExampleLeafUnionCase,
@@ -68,18 +68,18 @@ import {
   ExampleMessageUnion,
   ExampleMessageUnionCase,
   ExampleState,
-  install as installExample,
+  registerExampleTypes,
 } from "../generated/example";
 import {
   AllOptionalTypes,
   OptionalHolder,
   OptionalUnionCase,
-  install as installOptionalTypes,
+  registerOptionalTypesTypes,
 } from "../generated/optional_types";
-import { Color, Monster, install as installMonster } from "../generated/monster";
-import { TreeNode, install as installTree } from "../generated/tree";
+import { Color, Monster, registerMonsterTypes } from "../generated/monster";
+import { TreeNode, registerTreeTypes } from "../generated/tree";
 
-type InstallFn = (fory: Fory) => void;
+type RegisterFn = (fory: Fory) => unknown;
 type RegisteredTypeInfo =
   | ReturnType<typeof Type.struct>
   | ReturnType<typeof Type.union>;
@@ -92,11 +92,11 @@ const MODES = [
 function buildFory(
   compatible: boolean,
   ref: boolean,
-  installFns: ReadonlyArray<InstallFn>,
+  registerFns: ReadonlyArray<RegisterFn>,
 ): Fory {
   const fory = new Fory({ compatible, ref });
-  for (const installFn of installFns) {
-    installFn(fory);
+  for (const registerFn of registerFns) {
+    registerFn(fory);
   }
   return fory;
 }
@@ -648,7 +648,7 @@ describe.each(MODES)(
   "generated IDL local roundtrip ($title)",
   ({ compatible }) => {
     test("round-trips addressbook messages and root animal unions", () => {
-      const fory = buildFory(compatible, false, [installAddressbook]);
+      const fory = buildFory(compatible, false, [registerAddressbookTypes]);
 
       expectAcyclicEqual(
         buildAddressBook(),
@@ -668,7 +668,7 @@ describe.each(MODES)(
     });
 
     test("round-trips auto_id messages and root wrapper unions", () => {
-      const fory = buildFory(compatible, false, [installAutoId]);
+      const fory = buildFory(compatible, false, [registerAutoIdTypes]);
 
       const envelope = buildAutoIdEnvelope();
       const wrapperEnvelope: Wrapper = {
@@ -693,8 +693,8 @@ describe.each(MODES)(
 
     test("round-trips primitive and collection generated messages and unions", () => {
       const fory = buildFory(compatible, false, [
-        installComplexPb,
-        installCollection,
+        registerComplexPbTypes,
+        registerCollectionTypes,
       ]);
 
       expectAcyclicEqual(
@@ -721,9 +721,9 @@ describe.each(MODES)(
 
     test("round-trips flatbuffers and optional generated messages", () => {
       const flatbufferFory = buildFory(compatible, false, [
-        installMonster,
-        installComplexFbs,
-        installOptionalTypes,
+        registerMonsterTypes,
+        registerComplexFbsTypes,
+        registerOptionalTypesTypes,
       ]);
 
       expectAcyclicEqual(
@@ -741,7 +741,7 @@ describe.each(MODES)(
     });
 
     test("round-trips example messages and an array-valued root union", () => {
-      const fory = buildFory(compatible, false, [installExample]);
+      const fory = buildFory(compatible, false, [registerExampleTypes]);
 
       expectAcyclicEqual(
         buildExampleMessage(),
@@ -763,13 +763,13 @@ describe.each(MODES)(
   "generated IDL local ref roundtrip ($title)",
   ({ compatible }) => {
     test("round-trips tree and preserves shared-node topology", () => {
-      const fory = buildFory(compatible, true, [installTree]);
+      const fory = buildFory(compatible, true, [registerTreeTypes]);
       const tree = buildTree();
       expectTreeEqual(tree, roundTripStruct(fory, 2251833438, tree));
     });
 
     test("round-trips graph and preserves edge/node references", () => {
-      const fory = buildFory(compatible, true, [installGraph]);
+      const fory = buildFory(compatible, true, [registerGraphTypes]);
       const graph = buildGraph();
       expectGraphEqual(graph, roundTripStruct(fory, 2373163777, graph));
     });

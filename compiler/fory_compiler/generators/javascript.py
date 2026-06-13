@@ -49,6 +49,7 @@ class JavaScriptGenerator(JavaScriptServiceGeneratorMixin, BaseGenerator):
     RUNTIME_TYPE = "__foryRuntime$Type"
     RUNTIME_DECIMAL = "__foryRuntime$Decimal"
     RUNTIME_SERIALIZER = "__foryRuntime$Serializer"
+    ROOT_REGISTRATION = "__foryGenerated$RootRegistration"
 
     # JavaScript reserved keywords that cannot be used as identifiers
     TS_KEYWORDS = {
@@ -367,6 +368,10 @@ class JavaScriptGenerator(JavaScriptServiceGeneratorMixin, BaseGenerator):
             return self.package.replace(".", "_")
         return "generated"
 
+    def get_registration_function_name(self) -> str:
+        """Get the name of the public schema registration function."""
+        return f"register{self.to_pascal_case(self.get_module_name())}Types"
+
     def _safe_module_alias(self, module_path: str, index: int) -> str:
         stem = module_path.rsplit("/", 1)[-1]
         normalized = re.sub(r"[^0-9A-Za-z_]", "_", stem)
@@ -402,6 +407,10 @@ class JavaScriptGenerator(JavaScriptServiceGeneratorMixin, BaseGenerator):
         if schema.package:
             return schema.package.replace(".", "_")
         return "generated"
+
+    def _registration_fn_for_module_path(self, module_path: str) -> str:
+        stem = module_path.rsplit("/", 1)[-1]
+        return f"register{self.to_pascal_case(stem)}Types"
 
     def _collect_imported_modules(self) -> List[str]:
         """Collect generated module paths that own imported schema types."""
@@ -558,9 +567,11 @@ class JavaScriptGenerator(JavaScriptServiceGeneratorMixin, BaseGenerator):
         lines.append(
             f"import {self.RUNTIME_FORY}, {{ {', '.join(core_imports)} }} from '@apache-fory/core';"
         )
-        lines.append(
-            f"import type {{ Serializer as {self.RUNTIME_SERIALIZER} }} from '@apache-fory/core';"
-        )
+        if self._local_registration_roots():
+            lines.append(
+                f"import type {{ Serializer as {self.RUNTIME_SERIALIZER} }} "
+                "from '@apache-fory/core';"
+            )
 
         for mod_path, alias in imported_modules:
             lines.append(f"import * as {alias} from '{mod_path}';")
@@ -689,11 +700,13 @@ class JavaScriptGenerator(JavaScriptServiceGeneratorMixin, BaseGenerator):
                 lines.append("")
 
         # Generate schema module helpers
-        lines.extend(self.generate_fory_state_types())
-        lines.append("")
+        root_registration_type = self.generate_root_registration_type()
+        if root_registration_type:
+            lines.extend(root_registration_type)
+            lines.append("")
         lines.extend(self.generate_registration())
         lines.append("")
-        lines.extend(self.generate_fory_helpers())
+        lines.extend(self.generate_default_helpers())
         lines.append("")
 
         return GeneratedFile(
@@ -1030,7 +1043,8 @@ class JavaScriptGenerator(JavaScriptServiceGeneratorMixin, BaseGenerator):
         type_def: TypingUnion[Message, Enum, Union],
         target_var: str = "fory",
         parent_stack: Optional[List[Message]] = None,
-        serializer_key: Optional[str] = None,
+        registration_var: Optional[str] = None,
+        registration_type: Optional[str] = None,
     ) -> str:
         """Return a single ``fory.register(Type.struct(...))`` statement."""
         if isinstance(type_def, Union):
@@ -1077,8 +1091,9 @@ class JavaScriptGenerator(JavaScriptServiceGeneratorMixin, BaseGenerator):
         register_expr = (
             f"{target_var}.register({self.RUNTIME_TYPE}.struct({name_info}{props_arg}))"
         )
-        if serializer_key is not None:
-            return f'serializers["{serializer_key}"] = {register_expr}.serializer;'
+        if registration_var is not None:
+            cast = f" as unknown as {registration_type}" if registration_type else ""
+            return f"const {registration_var} = {register_expr}{cast};"
         return f"{register_expr};"
 
     def _register_union_line(
@@ -1086,7 +1101,8 @@ class JavaScriptGenerator(JavaScriptServiceGeneratorMixin, BaseGenerator):
         union_def,
         target_var: str = "fory",
         parent_stack: Optional[List[Message]] = None,
-        serializer_key: Optional[str] = None,
+        registration_var: Optional[str] = None,
+        registration_type: Optional[str] = None,
     ) -> str:
         """Return a ``fory.register(Type.union(...))`` statement."""
         parent_stack = parent_stack or []
@@ -1109,16 +1125,12 @@ class JavaScriptGenerator(JavaScriptServiceGeneratorMixin, BaseGenerator):
         register_expr = (
             f"{target_var}.register({self.RUNTIME_TYPE}.union({name_info}{cases_arg}))"
         )
-        if serializer_key is not None:
-            return f'serializers["{serializer_key}"] = {register_expr}.serializer;'
+        if registration_var is not None:
+            cast = f" as unknown as {registration_type}" if registration_type else ""
+            return f"const {registration_var} = {register_expr}{cast};"
         return f"{register_expr};"
 
-    def _serializer_key(self, type_def: TypingUnion[Message, Union]) -> str:
-        package = self._get_type_package(type_def)
-        qname = self._qualified_type_names.get(id(type_def), type_def.name)
-        return f"{package}.{qname}"
-
-    def _local_serializer_roots(self) -> List[TypingUnion[Message, Union]]:
+    def _local_registration_roots(self) -> List[TypingUnion[Message, Union]]:
         roots: List[TypingUnion[Message, Union]] = []
 
         def visit_message(message: Message) -> None:
@@ -1138,44 +1150,80 @@ class JavaScriptGenerator(JavaScriptServiceGeneratorMixin, BaseGenerator):
                 roots.append(union)
         return roots
 
-    def generate_fory_state_types(self) -> List[str]:
-        """Generate module-owned Fory state and serializer map types."""
-        imported_modules = self._imported_module_aliases()
-        local_roots = self._local_serializer_roots()
-        imported_parts = [f"{alias}.ForySerializerMap" for _, alias in imported_modules]
-        local_lines = [
-            f'  "{self._serializer_key(root)}": {self.RUNTIME_SERIALIZER};'
-            for root in local_roots
+    def _root_name_parts(self, type_def: TypingUnion[Message, Union]) -> List[str]:
+        qname = self._qualified_type_names.get(id(type_def), type_def.name)
+        return [part for part in qname.split(".") if part]
+
+    def _root_helper_base_name(self, type_def: TypingUnion[Message, Union]) -> str:
+        return "".join(
+            self.safe_type_identifier(part) for part in self._root_name_parts(type_def)
+        )
+
+    def _root_registration_field_name(
+        self, type_def: TypingUnion[Message, Union]
+    ) -> str:
+        name = self.safe_identifier(
+            self.to_camel_case(self._root_helper_base_name(type_def))
+        )
+        if name == "fory":
+            return "fory_"
+        return name
+
+    def _root_serialize_helper_name(self, type_def: TypingUnion[Message, Union]) -> str:
+        return f"serialize{self._root_helper_base_name(type_def)}"
+
+    def _root_deserialize_helper_name(
+        self, type_def: TypingUnion[Message, Union]
+    ) -> str:
+        return f"deserialize{self._root_helper_base_name(type_def)}"
+
+    def _root_ts_type_name(self, type_def: TypingUnion[Message, Union]) -> str:
+        return self._ts_type_names.get(
+            id(type_def),
+            self.safe_type_identifier(type_def.name),
+        )
+
+    def _root_registration_type(self, type_def: TypingUnion[Message, Union]) -> str:
+        return f"{self.ROOT_REGISTRATION}<{self._root_ts_type_name(type_def)}>"
+
+    def generate_root_registration_type(self) -> List[str]:
+        if not self._local_registration_roots():
+            return []
+        return [
+            f"type {self.ROOT_REGISTRATION}<T> = {{",
+            f"  serializer: {self.RUNTIME_SERIALIZER};",
+            "  serialize: (value: T | null) => Uint8Array;",
+            "  deserialize: (bytes: Uint8Array) => T;",
+            "};",
         ]
 
-        lines: List[str] = []
-        if imported_parts:
-            lines.append("export type ForySerializerMap =")
-            for index, part in enumerate(imported_parts):
-                prefix = "  " if index == 0 else "  & "
-                lines.append(f"{prefix}{part}")
-            if local_lines:
-                lines.append("  & {")
-                lines.extend(f"  {line}" for line in local_lines)
-                lines.append("};")
-            else:
-                lines[-1] = f"{lines[-1]};"
-        elif local_lines:
-            lines.append("export type ForySerializerMap = {")
-            lines.extend(local_lines)
-            lines.append("};")
-        else:
-            lines.append("export type ForySerializerMap = Record<string, never>;")
-        lines.extend(
-            [
-                "",
-                "export interface ForyState {",
-                f"  fory: {self.RUNTIME_FORY};",
-                "  serializers: ForySerializerMap;",
-                "}",
-            ]
-        )
-        return lines
+    def _validate_local_root_helper_names(
+        self, roots: List[TypingUnion[Message, Union]]
+    ) -> None:
+        used_fields: Dict[str, str] = {}
+        used_helpers: Dict[str, str] = {}
+        for root in roots:
+            type_name = self._qualified_type_names.get(id(root), root.name)
+            field = self._root_registration_field_name(root)
+            previous = used_fields.get(field)
+            if previous is not None:
+                raise ValueError(
+                    "JavaScript registration field collision: "
+                    f"{previous} and {type_name} both generate {field}"
+                )
+            used_fields[field] = type_name
+
+            for helper in (
+                self._root_serialize_helper_name(root),
+                self._root_deserialize_helper_name(root),
+            ):
+                previous = used_helpers.get(helper)
+                if previous is not None:
+                    raise ValueError(
+                        "JavaScript serialization helper collision: "
+                        f"{previous} and {type_name} both generate {helper}"
+                    )
+                used_helpers[helper] = type_name
 
     def _resolve_field_deps(
         self,
@@ -1212,25 +1260,25 @@ class JavaScriptGenerator(JavaScriptServiceGeneratorMixin, BaseGenerator):
         return deps
 
     def generate_registration(self) -> List[str]:
-        """Generate a module-level install function for this schema.
+        """Generate a module-level registration function for this schema.
 
         Types are emitted in dependency order (leaf types first) via a
         simple DFS so that the Fory JS runtime does not prematurely
         register bare ``Type.struct(id)`` references with empty fields."""
         lines: List[str] = []
         imported_modules = self._imported_module_aliases()
+        fn_name = self.get_registration_function_name()
+        local_roots = self._local_registration_roots()
+        self._validate_local_root_helper_names(local_roots)
+        registered_roots: List[TypingUnion[Message, Union]] = []
 
-        lines.append("// Schema installation")
-        lines.append(
-            f"export function install(fory: {self.RUNTIME_FORY}): ForyState {{"
-        )
-        lines.append("  const serializers = {} as ForySerializerMap;")
+        lines.append("// Registration helper")
+        lines.append(f"export function {fn_name}(fory: {self.RUNTIME_FORY}) {{")
 
         # Delegate to imported schema modules first.
         for _module_path, alias in imported_modules:
-            state_var = f"{alias}State"
-            lines.append(f"  const {state_var} = {alias}.install(fory);")
-            lines.append(f"  Object.assign(serializers, {state_var}.serializers);")
+            reg_fn = self._registration_fn_for_module_path(_module_path)
+            lines.append(f"  {alias}.{reg_fn}(fory);")
 
         # DFS emit: visit dependencies before the type itself.
         # The visited set also breaks cycles (e.g. self-referential trees).
@@ -1261,10 +1309,12 @@ class JavaScriptGenerator(JavaScriptServiceGeneratorMixin, BaseGenerator):
                 msg,
                 "fory",
                 parents,
-                serializer_key=self._serializer_key(msg),
+                registration_var=self._root_registration_field_name(msg),
+                registration_type=self._root_registration_type(msg),
             )
             if reg_line:
                 lines.append(f"  {reg_line}")
+                registered_roots.append(msg)
             for nested_msg in msg.nested_messages:
                 emit_message(nested_msg)
             for nested_union in msg.nested_unions:
@@ -1289,10 +1339,12 @@ class JavaScriptGenerator(JavaScriptServiceGeneratorMixin, BaseGenerator):
                 union,
                 "fory",
                 parent_stack,
-                serializer_key=self._serializer_key(union),
+                registration_var=self._root_registration_field_name(union),
+                registration_type=self._root_registration_type(union),
             )
             if reg_line:
                 lines.append(f"  {reg_line}")
+                registered_roots.append(union)
 
         for message in self.schema.messages:
             if self.is_imported_type(message):
@@ -1306,38 +1358,41 @@ class JavaScriptGenerator(JavaScriptServiceGeneratorMixin, BaseGenerator):
         for union in self.schema.unions:
             emit_union(union, [])
 
-        lines.append("  return { fory, serializers };")
+        if registered_roots:
+            lines.append("  return {")
+            for root in registered_roots:
+                lines.append(f"    {self._root_registration_field_name(root)},")
+            lines.append("  };")
+        else:
+            lines.append("  return {};")
         lines.append("}")
 
         return lines
 
-    def generate_fory_helpers(self) -> List[str]:
-        """Generate module-owned default Fory helpers."""
+    def generate_default_helpers(self) -> List[str]:
+        """Generate private default Fory and root serialization helpers."""
         needs_ref = "true" if self._schema_needs_ref_tracking() else "false"
-        return [
+        lines = [
             f"const MODEL_NEEDS_REF = {needs_ref};",
-            "let defaultForyState: ForyState | undefined;",
-            "",
-            "export function createForyState(): ForyState {",
-            f"  const fory = new {self.RUNTIME_FORY}({{ ref: MODEL_NEEDS_REF }});",
-            "  return install(fory);",
-            "}",
-            "",
-            f"export function createFory(): {self.RUNTIME_FORY} {{",
-            "  return createForyState().fory;",
-            "}",
-            "",
-            "export function getForyState(): ForyState {",
-            "  if (defaultForyState === undefined) {",
-            "    defaultForyState = createForyState();",
-            "  }",
-            "  return defaultForyState;",
-            "}",
-            "",
-            f"export function getFory(): {self.RUNTIME_FORY} {{",
-            "  return getForyState().fory;",
-            "}",
+            f"const DEFAULT_FORY = new {self.RUNTIME_FORY}({{ ref: MODEL_NEEDS_REF }});",
+            f"const DEFAULT_TYPES = {self.get_registration_function_name()}(DEFAULT_FORY);",
         ]
+        roots = self._local_registration_roots()
+        if roots:
+            lines.append("")
+            for index, root in enumerate(roots):
+                field = self._root_registration_field_name(root)
+                lines.append(
+                    f"export const {self._root_serialize_helper_name(root)} = "
+                    f"DEFAULT_TYPES.{field}.serialize;"
+                )
+                lines.append(
+                    f"export const {self._root_deserialize_helper_name(root)} = "
+                    f"DEFAULT_TYPES.{field}.deserialize;"
+                )
+                if index != len(roots) - 1:
+                    lines.append("")
+        return lines
 
     def _schema_needs_ref_tracking(self) -> bool:
         def field_type_needs_ref(field_type: FieldType) -> bool:

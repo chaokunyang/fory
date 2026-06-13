@@ -1058,57 +1058,48 @@ export type Animal =
 
 ### Schema Helpers
 
-Each generated model file exports helpers for installing and reusing the schema:
+Each generated model file exports a registration helper for custom `Fory`
+instances and default root serialization helpers:
 
 ```typescript
-import __foryRuntime$Fory, { Type as __foryRuntime$Type } from "@apache-fory/core";
+import __foryRuntime$Fory, {
+  Type as __foryRuntime$Type,
+} from "@apache-fory/core";
 import type { Serializer as __foryRuntime$Serializer } from "@apache-fory/core";
 
-export type ForySerializerMap = {
-  "addressbook.Person": __foryRuntime$Serializer;
+type __foryGenerated$RootRegistration<T> = {
+  serializer: __foryRuntime$Serializer;
+  serialize: (value: T | null) => Uint8Array;
+  deserialize: (bytes: Uint8Array) => T;
 };
 
-export interface ForyState {
-  fory: __foryRuntime$Fory;
-  serializers: ForySerializerMap;
-}
-
-export function install(fory: __foryRuntime$Fory): ForyState {
-  const serializers = {} as ForySerializerMap;
-  serializers["addressbook.Person"] = fory.register(
-    __foryRuntime$Type.struct({ namespace: "addressbook", typeName: "Person" }, {
-      name: __foryRuntime$Type.string().setId(1),
-    }),
-  ).serializer;
-  return { fory, serializers };
+export function registerAddressbookTypes(fory: __foryRuntime$Fory) {
+  const person = fory.register(
+    __foryRuntime$Type.struct(
+      { namespace: "addressbook", typeName: "Person" },
+      {
+        name: __foryRuntime$Type.string().setId(1),
+      },
+    ),
+  ) as unknown as __foryGenerated$RootRegistration<Person>;
+  return {
+    person,
+  };
 }
 
 const MODEL_NEEDS_REF = false;
-let defaultForyState: ForyState | undefined;
+const DEFAULT_FORY = new __foryRuntime$Fory({ ref: MODEL_NEEDS_REF });
+const DEFAULT_TYPES = registerAddressbookTypes(DEFAULT_FORY);
 
-export function createForyState(): ForyState {
-  const fory = new __foryRuntime$Fory({ ref: MODEL_NEEDS_REF });
-  return install(fory);
-}
-
-export function createFory(): __foryRuntime$Fory {
-  return createForyState().fory;
-}
-
-export function getForyState(): ForyState {
-  if (defaultForyState === undefined) {
-    defaultForyState = createForyState();
-  }
-  return defaultForyState;
-}
-
-export function getFory(): __foryRuntime$Fory { ... }
+export const serializePerson = DEFAULT_TYPES.person.serialize;
+export const deserializePerson = DEFAULT_TYPES.person.deserialize;
 ```
 
-Imported schema modules are installed automatically by `install(fory)`.
-Applications can call `install(fory)` when they manage their own `Fory`
-instance, or use `getFory()` for the generated default instance. Generated gRPC
-companions use `getForyState()` automatically.
+Imported schema modules are registered automatically by `registerXxxTypes(fory)`.
+Applications call that helper when they manage their own `Fory` instance. The
+generated default helpers use the model file's private default `Fory` instance.
+Generated gRPC companions import the generated `serializeX` and `deserializeX`
+helpers automatically.
 
 ### gRPC Service Companions
 

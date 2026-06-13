@@ -89,10 +89,10 @@ For `service.fdl`, JavaScript output contains:
 | `service_grpc.ts`     | Node.js `@grpc/grpc-js` server/client code    |
 | `service_grpc_web.ts` | Browser `grpc-web` clients                    |
 
-The generated model file exports `install(fory)`, `createFory()`, `getFory()`,
-`createForyState()`, and `getForyState()`. Call `install(fory)` when you want to
-use your own `Fory` instance for normal serialization. Generated gRPC
-companions use the generated model file automatically.
+The generated model file exports `registerXxxTypes(fory)` for custom `Fory`
+instances and default root helpers such as `serializeHelloRequest` and
+`deserializeHelloRequest`. Generated gRPC companions import those helpers
+automatically.
 
 ## Implement a Node.js Server
 

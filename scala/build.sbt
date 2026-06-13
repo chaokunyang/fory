@@ -23,6 +23,12 @@ version := foryVersion
 scalaVersion := scala213Version
 crossScalaVersions := Seq(scala213Version, "3.3.1")
 
+val localForyResolver =
+  sys.props
+    .get("fory.maven.repo")
+    .map(repo => "Local Fory Maven Repository" at repo)
+    .getOrElse(Resolver.mavenLocal)
+
 lazy val root = Project(id = "fory-scala", base = file("."))
   .settings(
     name := "fory-scala",
@@ -41,7 +47,7 @@ lazy val root = Project(id = "fory-scala", base = file("."))
 ThisBuild / externalResolvers := Seq(
   Resolver.mavenCentral,
   Resolver.ApacheMavenSnapshotsRepo,
-  Resolver.mavenLocal,
+  localForyResolver,
 )
 
 libraryDependencies ++= Seq(

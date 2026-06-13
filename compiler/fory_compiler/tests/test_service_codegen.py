@@ -23,7 +23,7 @@ from typing import Dict, Tuple, Type
 
 import pytest
 
-from fory_compiler.cli import compile_file, resolve_imports
+from fory_compiler.cli import compile_file, resolve_imports, validate_scala_generation
 from fory_compiler.frontend.fdl.lexer import Lexer
 from fory_compiler.frontend.fdl.parser import Parser
 from fory_compiler.frontend.fbs.lexer import Lexer as FbsLexer
@@ -40,6 +40,7 @@ from fory_compiler.generators.java import JavaGenerator
 from fory_compiler.generators.kotlin import KotlinGenerator
 from fory_compiler.generators.python import PythonGenerator
 from fory_compiler.generators.rust import RustGenerator
+from fory_compiler.generators.scala import ScalaGenerator
 from fory_compiler.generators.swift import SwiftGenerator
 from fory_compiler.ir.ast import Schema
 from fory_compiler.ir.validator import SchemaValidator
@@ -53,6 +54,7 @@ GENERATOR_CLASSES: Tuple[Type[BaseGenerator], ...] = (
     GoGenerator,
     CSharpGenerator,
     SwiftGenerator,
+    ScalaGenerator,
     KotlinGenerator,
 )
 
@@ -138,6 +140,7 @@ def test_generate_services_returns_empty_list_for_unsupported_generators():
             PythonGenerator,
             GoGenerator,
             RustGenerator,
+            ScalaGenerator,
             KotlinGenerator,
         ):
             continue
@@ -219,6 +222,37 @@ def test_kotlin_grpc_service_codegen_contains_fory_marshaller():
     assert "MessageLite" not in content
 
 
+def test_scala_grpc_marshaller():
+    schema = parse_fdl(_GREETER_WITH_SERVICE)
+    files = generate_service_files(schema, ScalaGenerator)
+    assert set(files) == {"demo/greeter/GreeterGrpc.scala"}
+    content = files["demo/greeter/GreeterGrpc.scala"]
+    assert "object GreeterGrpc" in content
+    assert 'SERVICE_NAME: String = "demo.greeter.Greeter"' in content
+    assert "private val FORY: org.apache.fory.ThreadSafeFory" in content
+    assert "GreeterForyModule.getFory" in content
+    assert "import org.apache.fory.scala.rpc.{RpcFuture, RpcIterator}" in content
+    assert (
+        "private lazy val sayHelloMethodValue: io.grpc.MethodDescriptor[HelloRequest, HelloReply]"
+        in content
+    )
+    assert "def sayHello(request: HelloRequest): RpcFuture[HelloReply]" in content
+    assert "def sayHelloBlocking(request: HelloRequest): HelloReply" in content
+    assert (
+        "def sayHelloFuture(\n            request: HelloRequest): com.google.common.util.concurrent.ListenableFuture[HelloReply]"
+        in content
+    )
+    assert "protected override def build(" in content
+    assert "private final class ForyMarshaller[T <: AnyRef]" in content
+    assert "fory.serialize(value)" in content
+    assert "fory.deserialize(readBytes(stream), typ)" in content
+    assert "with io.grpc.KnownLength" in content
+    assert "ProtoUtils" not in content
+    assert "MessageLite" not in content
+    assert "ScalaPB" not in content
+    assert "org.apache.fory.scala.grpc" not in content
+
+
 def test_grpc_streaming_method_shapes():
     schema = parse_fdl(
         dedent(
@@ -286,6 +320,29 @@ def test_grpc_streaming_method_shapes():
     assert "io.grpc.kotlin.ServerCalls.serverStreamingServerMethodDefinition" in kotlin
     assert "io.grpc.kotlin.ServerCalls.clientStreamingServerMethodDefinition" in kotlin
     assert "io.grpc.kotlin.ServerCalls.bidiStreamingServerMethodDefinition" in kotlin
+
+    scala = next(iter(generate_service_files(schema, ScalaGenerator).values()))
+    assert "io.grpc.MethodDescriptor.MethodType.UNARY" in scala
+    assert "io.grpc.MethodDescriptor.MethodType.SERVER_STREAMING" in scala
+    assert "io.grpc.MethodDescriptor.MethodType.CLIENT_STREAMING" in scala
+    assert "io.grpc.MethodDescriptor.MethodType.BIDI_STREAMING" in scala
+    assert "def unary(request: Req): RpcFuture[Res]" in scala
+    assert "def server(request: Req): RpcIterator[Res]" in scala
+    assert (
+        "def client(\n            responseObserver: io.grpc.stub.StreamObserver[Res]\n        ): io.grpc.stub.StreamObserver[Req]"
+        in scala
+    )
+    assert (
+        "def bidi(\n            responseObserver: io.grpc.stub.StreamObserver[Payload]\n        ): io.grpc.stub.StreamObserver[Payload]"
+        in scala
+    )
+    assert "io.grpc.stub.ClientCalls.asyncServerStreamingCall" in scala
+    assert "io.grpc.stub.ClientCalls.asyncClientStreamingCall" in scala
+    assert "io.grpc.stub.ClientCalls.asyncBidiStreamingCall" in scala
+    assert "new RpcIteratorAdapter(" in scala
+    assert "call.request(1)" in scala
+    assert "call.sendMessage(request)" in scala
+    assert "call.halfClose()" in scala
 
 
 def test_go_grpc_service_codegen():
@@ -432,6 +489,13 @@ def test_grpc_services_use_imported_java_type_references(tmp_path: Path):
     assert "marshaller(common.Shared::class.java)" in kotlin
     assert "public open suspend fun get(request: common.Shared): Local" in kotlin
 
+    scala_files = generate_service_files(schema, ScalaGenerator)
+    assert set(scala_files) == {"api/ApiServiceGrpc.scala"}
+    scala = scala_files["api/ApiServiceGrpc.scala"]
+    assert "io.grpc.MethodDescriptor[common.Shared, Local]" in scala
+    assert "marshaller(classOf[common.Shared])" in scala
+    assert "def get(request: common.Shared): RpcFuture[Local]" in scala
+
 
 def test_proto_grpc_services_use_imported_qualified_type_references(tmp_path: Path):
     common = tmp_path / "common.proto"
@@ -490,6 +554,11 @@ def test_proto_grpc_services_use_imported_qualified_type_references(tmp_path: Pa
     assert "io.grpc.MethodDescriptor<common.Shared, Local>" in kotlin
     assert "marshaller(common.Shared::class.java)" in kotlin
 
+    scala_files = generate_service_files(schema, ScalaGenerator)
+    scala = scala_files["api/ApiServiceGrpc.scala"]
+    assert "io.grpc.MethodDescriptor[common.Shared, Local]" in scala
+    assert "marshaller(classOf[common.Shared])" in scala
+
 
 def test_proto_grpc_absolute_rpc_type_uses_package_type_not_nested_shadow():
     schema = parse_proto(
@@ -529,6 +598,11 @@ def test_proto_grpc_absolute_rpc_type_uses_package_type_not_nested_shadow():
     kotlin = kotlin_files["demo/ApiServiceGrpcKt.kt"]
     assert "io.grpc.MethodDescriptor<Request, Response>" in kotlin
     assert "io.grpc.MethodDescriptor<demo.Request, Response>" not in kotlin
+
+    scala_files = generate_service_files(schema, ScalaGenerator)
+    scala = scala_files["demo/ApiServiceGrpc.scala"]
+    assert "io.grpc.MethodDescriptor[Request, Response]" in scala
+    assert "io.grpc.MethodDescriptor[demo.Request, Response]" not in scala
 
 
 def test_proto_grpc_absolute_rpc_type_prefers_longest_package_prefix(tmp_path: Path):
@@ -586,6 +660,11 @@ def test_proto_grpc_absolute_rpc_type_prefers_longest_package_prefix(tmp_path: P
     assert "io.grpc.MethodDescriptor<alpha.beta.C, alpha.beta.C>" in kotlin
     assert "io.grpc.MethodDescriptor<beta.C, beta.C>" not in kotlin
 
+    scala_files = generate_service_files(schema, ScalaGenerator)
+    scala = scala_files["alpha/ApiServiceGrpc.scala"]
+    assert "io.grpc.MethodDescriptor[alpha.beta.C, alpha.beta.C]" in scala
+    assert "io.grpc.MethodDescriptor[beta.C, beta.C]" not in scala
+
 
 def test_java_grpc_service_class_collision_fails():
     schema = parse_fdl(
@@ -632,6 +711,64 @@ def test_kotlin_grpc_service_class_collision_fails():
     )
     with pytest.raises(ValueError, match="Kotlin generated file path collision"):
         KotlinGenerator(schema, GeneratorOptions(output_dir=Path("/tmp"), grpc=True))
+
+
+def test_scala_grpc_class_collision():
+    schema = parse_fdl(
+        dedent(
+            """
+            package demo.collision;
+
+            message GreeterGrpc {}
+            message Req {}
+            message Res {}
+
+            service Greeter {
+                rpc Call (Req) returns (Res);
+            }
+            """
+        )
+    )
+    generator = ScalaGenerator(
+        schema, GeneratorOptions(output_dir=Path("/tmp"), grpc=True)
+    )
+    with pytest.raises(ValueError, match="Scala generated file path collision"):
+        generator.generate_services()
+
+
+def test_scala_grpc_preflight_collision(tmp_path: Path, capsys):
+    common = tmp_path / "common.fdl"
+    common.write_text(
+        dedent(
+            """
+            package demo.collision;
+
+            message GreeterGrpc {}
+            """
+        )
+    )
+    main = tmp_path / "main.fdl"
+    main.write_text(
+        dedent(
+            """
+            package demo.collision;
+
+            import "common.fdl";
+
+            message Req {}
+            message Res {}
+
+            service Greeter {
+                rpc Call (Req) returns (Res);
+            }
+            """
+        )
+    )
+
+    assert validate_scala_generation([main], [tmp_path], grpc=True) is False
+    err = capsys.readouterr().err
+    assert "Scala generated file path collision" in err
+    assert "GreeterGrpc.scala" in err
 
 
 def test_java_grpc_service_class_collision_with_imported_type_fails(tmp_path: Path):
@@ -786,6 +923,44 @@ def test_grpc_method_name_collisions_fail():
     else:
         raise AssertionError("Expected Kotlin gRPC method name collision")
 
+    scala_generator = ScalaGenerator(
+        schema, GeneratorOptions(output_dir=Path("/tmp"), grpc=True)
+    )
+    try:
+        scala_generator.generate_services()
+    except ValueError as e:
+        assert "Scala gRPC method name collision" in str(e)
+        assert "Foo and foo" in str(e)
+    else:
+        raise AssertionError("Expected Scala gRPC method name collision")
+
+
+def test_scala_grpc_method_scopes():
+    schema = parse_fdl(
+        dedent(
+            """
+            package demo.scope;
+
+            message Req {}
+            message Res {}
+
+            service Greeter {
+                rpc Cancel (Req) returns (Res);
+                rpc Close (Req) returns (stream Res);
+                rpc ReadBytes (Req) returns (Res);
+                rpc CompletePromise (Req) returns (Res);
+            }
+            """
+        )
+    )
+
+    files = generate_service_files(schema, ScalaGenerator)
+    content = files["demo/scope/GreeterGrpc.scala"]
+    assert "def cancel(request: Req): RpcFuture[Res]" in content
+    assert "def close(request: Req): RpcIterator[Res]" in content
+    assert "def readBytes(request: Req): RpcFuture[Res]" in content
+    assert "def completePromise(request: Req): RpcFuture[Res]" in content
+
 
 def test_java_python_grpc_method_keywords_are_safe_names():
     schema = parse_fdl(
@@ -818,6 +993,11 @@ def test_java_python_grpc_method_keywords_are_safe_names():
     assert "public open suspend fun `class`(request: Req): Res" in kotlin
     assert "public suspend fun `class`(" in kotlin
     assert "implementation = ::`class`" in kotlin
+
+    scala = next(iter(generate_service_files(schema, ScalaGenerator).values()))
+    assert "def `class`(request: Req): RpcFuture[Res]" in scala
+    assert "def `class`(request: Req, responseObserver:" in scala
+    assert 'SERVICE_NAME,\n                    "Class"' in scala
 
 
 def test_python_grpc_service_registration_collisions_fail():
@@ -907,10 +1087,14 @@ def test_proto_and_fbs_grpc_service_codegen():
     )
     proto_java = generate_service_files(proto_schema, JavaGenerator)
     proto_python = generate_service_files(proto_schema, PythonGenerator)
+    proto_scala = generate_service_files(proto_schema, ScalaGenerator)
     assert "demo/proto/ProtoSvcGrpc.java" in proto_java
     assert "demo_proto_grpc.py" in proto_python
+    assert "demo/proto/ProtoSvcGrpc.scala" in proto_scala
     assert "MethodType.SERVER_STREAMING" in proto_java["demo/proto/ProtoSvcGrpc.java"]
     assert "channel.unary_stream(" in proto_python["demo_proto_grpc.py"]
+    assert "MethodType.SERVER_STREAMING" in proto_scala["demo/proto/ProtoSvcGrpc.scala"]
+    assert "RpcIterator[Res]" in proto_scala["demo/proto/ProtoSvcGrpc.scala"]
 
     fbs_schema = parse_fbs(
         dedent(
@@ -928,10 +1112,16 @@ def test_proto_and_fbs_grpc_service_codegen():
     )
     fbs_java = generate_service_files(fbs_schema, JavaGenerator)
     fbs_python = generate_service_files(fbs_schema, PythonGenerator)
+    fbs_scala = generate_service_files(fbs_schema, ScalaGenerator)
     assert "demo/fbs/FbsSvcGrpc.java" in fbs_java
     assert "demo_fbs_grpc.py" in fbs_python
+    assert "demo/fbs/FbsSvcGrpc.scala" in fbs_scala
     assert 'SERVICE_NAME = "demo.fbs.FbsSvc"' in fbs_java["demo/fbs/FbsSvcGrpc.java"]
     assert '"/demo.fbs.FbsSvc/Call"' in fbs_python["demo_fbs_grpc.py"]
+    assert (
+        'SERVICE_NAME: String = "demo.fbs.FbsSvc"'
+        in fbs_scala["demo/fbs/FbsSvcGrpc.scala"]
+    )
 
 
 def test_service_schema_produces_one_file_per_message_per_language():
@@ -943,10 +1133,20 @@ def test_service_schema_produces_one_file_per_message_per_language():
         )
 
 
-def test_compile_service_schema_with_grpc_flag(tmp_path: Path, capsys):
+def test_grpc_flag_compiles_services(tmp_path: Path, capsys):
     example_path = Path(__file__).resolve().parents[2] / "examples" / "service.fdl"
     lang_dirs = {}
-    for lang in ("java", "python", "rust", "go", "cpp", "csharp", "swift", "kotlin"):
+    for lang in (
+        "java",
+        "python",
+        "rust",
+        "go",
+        "cpp",
+        "csharp",
+        "swift",
+        "scala",
+        "kotlin",
+    ):
         lang_dirs[lang] = tmp_path / lang
     ok = compile_file(example_path, lang_dirs, grpc=True, generated_outputs={})
     output = capsys.readouterr().out
@@ -960,6 +1160,7 @@ def test_compile_service_schema_with_grpc_flag(tmp_path: Path, capsys):
     assert output.count("demo_greeter_grpc.go") == 1
     assert (lang_dirs["rust"] / "demo_greeter_service.rs").exists()
     assert (lang_dirs["rust"] / "demo_greeter_service_grpc.rs").exists()
+    assert (lang_dirs["scala"] / "demo" / "greeter" / "GreeterGrpc.scala").exists()
     assert (lang_dirs["kotlin"] / "demo" / "greeter" / "GreeterGrpcKt.kt").exists()
 
 

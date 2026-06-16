@@ -121,7 +121,8 @@ so service implementations do not perform manual Fory registration.
 
 ## Create a Client
 
-Use the generated stub with a normal `grpcio` channel:
+Use the generated stub with a normal `grpcio` channel. Production clients
+usually pass a TLS/auth-configured channel:
 
 ```python
 import grpc
@@ -140,6 +141,14 @@ def main():
 
 if __name__ == "__main__":
     main()
+```
+
+For local tests and development, an insecure channel can be used explicitly:
+
+```python
+# Test-only channel. Use a TLS/auth-configured grpc.Channel in production.
+with grpc.insecure_channel("localhost:50051") as channel:
+    stub = demo_greeter_grpc.GreeterStub(channel)
 ```
 
 `grpcio` still owns channel options, credentials, deadlines, metadata, retries,

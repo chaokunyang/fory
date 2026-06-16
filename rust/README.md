@@ -1,6 +1,6 @@
 # Apache Fory™ Rust
 
-[![Crates.io](https://img.shields.io/crates/v/fory.svg)](https://crates.io/crates/fory)
+[![Crates.io](https://img.shields.io/badge/crates.io-v1.2.0-blue?logo=rust)](https://crates.io/crates/fory)
 [![Documentation](https://docs.rs/fory/badge.svg)](https://docs.rs/fory)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](https://github.com/apache/fory/blob/main/LICENSE)
 

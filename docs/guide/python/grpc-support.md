@@ -28,6 +28,15 @@ IDL, or FlatBuffers IDL and you want gRPC transport semantics with Fory payload
 encoding. Use standard protobuf gRPC code generation when clients or tools must
 consume protobuf message bytes directly.
 
+Generated Python companions currently target the synchronous `grpcio` API. Use
+regular `def` servicer methods, `grpc.server(...)`, standard `grpc.Channel`
+instances, and Python iterators or generators for streaming RPCs. The generated
+stub accepts any channel configured by your application. The compiler does not
+generate `grpc.aio` stubs or service bases, so do not implement generated
+servicer methods as `async def` unless you add a custom adapter outside the
+generated companion. Python gRPC async support based on `grpc.aio` will be
+available in the next Fory release.
+
 ## Install Dependencies
 
 Install `grpcio` alongside `pyfory`. The generated companion imports `grpc`, but
@@ -112,7 +121,8 @@ so service implementations do not perform manual Fory registration.
 
 ## Create a Client
 
-Use the generated stub with a normal `grpcio` channel:
+Use the generated stub with a normal `grpcio` channel. Production clients
+usually pass a TLS/auth-configured channel:
 
 ```python
 import grpc
@@ -122,7 +132,8 @@ import demo_greeter_grpc
 
 
 def main():
-    with grpc.insecure_channel("localhost:50051") as channel:
+    credentials = grpc.ssl_channel_credentials()
+    with grpc.secure_channel("api.example.com:443", credentials) as channel:
         stub = demo_greeter_grpc.GreeterStub(channel)
         reply = stub.say_hello(demo_greeter.HelloRequest(name="Fory"))
         print(reply.reply)
@@ -130,6 +141,14 @@ def main():
 
 if __name__ == "__main__":
     main()
+```
+
+For local tests and development, an insecure channel can be used explicitly:
+
+```python
+# Test-only channel. Use a TLS/auth-configured grpc.Channel in production.
+with grpc.insecure_channel("localhost:50051") as channel:
+    stub = demo_greeter_grpc.GreeterStub(channel)
 ```
 
 `grpcio` still owns channel options, credentials, deadlines, metadata, retries,
@@ -151,22 +170,58 @@ service Greeter {
 
 Generated Python code follows `grpcio` conventions:
 
-- Unary stubs call `channel.unary_unary(...)`.
-- Server-streaming stubs return an iterator over response objects.
-- Client-streaming stubs accept an iterator of request objects.
-- Bidirectional stubs accept a request iterator and return a response iterator.
-- Servicer methods use snake_case names and return either a single response or
-  an iterator, depending on the streaming shape.
+| IDL shape                                 | Servicer method shape                       | Stub method shape                |
+| ----------------------------------------- | ------------------------------------------- | -------------------------------- |
+| `rpc A (Req) returns (Res)`               | returns one response object                 | returns one response object      |
+| `rpc A (Req) returns (stream Res)`        | yields response objects                     | returns an iterator of responses |
+| `rpc A (stream Req) returns (Res)`        | consumes an iterator and returns a response | accepts an iterator of requests  |
+| `rpc A (stream Req) returns (stream Res)` | consumes and yields iterators               | accepts and returns iterators    |
 
-Example server-streaming implementation:
+Servicer methods use snake_case names, while generated descriptors preserve the
+exact IDL service and method names for the gRPC path.
+
+Server implementations can use Python iterators directly:
 
 ```python
 class Greeter(demo_greeter_grpc.GreeterServicer):
     def lots_of_replies(self, request, context):
-        for index in range(3):
-            yield demo_greeter.HelloReply(
-                reply=f"Hello {request.name}, response {index}"
-            )
+        yield demo_greeter.HelloReply(reply=f"Hello, {request.name}")
+        yield demo_greeter.HelloReply(reply=f"Welcome, {request.name}")
+
+    def lots_of_greetings(self, request_iterator, context):
+        names = [request.name for request in request_iterator]
+        return demo_greeter.HelloReply(reply=", ".join(names))
+
+    def chat(self, request_iterator, context):
+        for request in request_iterator:
+            yield demo_greeter.HelloReply(reply=f"Hello, {request.name}")
+```
+
+Generated clients use the standard `grpcio` streaming call shapes:
+
+```python
+credentials = grpc.ssl_channel_credentials()
+with grpc.secure_channel("api.example.com:443", credentials) as channel:
+    stub = demo_greeter_grpc.GreeterStub(channel)
+
+    for reply in stub.lots_of_replies(
+        demo_greeter.HelloRequest(name="Fory")
+    ):
+        print(reply.reply)
+
+    def greeting_requests():
+        yield demo_greeter.HelloRequest(name="Ada")
+        yield demo_greeter.HelloRequest(name="Grace")
+
+    summary = stub.lots_of_greetings(greeting_requests())
+    print(summary.reply)
+
+    def chat_requests():
+        yield demo_greeter.HelloRequest(name="Fory")
+        yield demo_greeter.HelloRequest(name="RPC")
+
+    for reply in stub.chat(chat_requests()):
+        print(reply.reply)
 ```
 
 ## Operations

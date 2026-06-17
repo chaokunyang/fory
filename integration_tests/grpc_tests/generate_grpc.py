@@ -33,6 +33,7 @@ SCHEMAS = [
 OUTPUTS = {
     "java": TEST_DIR / "java/src/main/java/generated",
     "python": TEST_DIR / "python/grpc_tests/generated",
+    "python_sync": TEST_DIR / "python/grpc_sync_tests/generated",
     "go": TEST_DIR / "go/generated",
     "rust": TEST_DIR / "rust/generated/src",
     "csharp": TEST_DIR / "csharp/generated",
@@ -81,6 +82,19 @@ def main() -> int:
                 f"--csharp_out={OUTPUTS['csharp']}",
                 f"--kotlin_out={OUTPUTS['kotlin']}",
                 "--grpc",
+            ],
+            env=env,
+        )
+        subprocess.check_call(
+            [
+                sys.executable,
+                "-m",
+                "fory_compiler",
+                "compile",
+                str(schema),
+                f"--python_out={OUTPUTS['python_sync']}",
+                "--grpc",
+                "--grpc-python-mode=sync",
             ],
             env=env,
         )

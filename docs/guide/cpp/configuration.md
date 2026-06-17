@@ -115,6 +115,32 @@ This limits the maximum depth for nested polymorphic object serialization (e.g.,
 - **Increase**: For legitimate deeply nested data structures
 - **Decrease**: For stricter security requirements or shallow data structures
 
+### max_schema_versions_per_type(uint32_t)
+
+Set the maximum accepted remote struct schema versions for one logical type on
+metadata cache misses.
+
+```cpp
+auto fory = Fory::builder()
+    .max_schema_versions_per_type(10)
+    .build();
+```
+
+**Default:** `10`
+
+### max_average_schema_versions_per_type(uint32_t)
+
+Set the average accepted remote struct schema versions across accepted remote
+struct types. The effective global floor is `8192` schemas.
+
+```cpp
+auto fory = Fory::builder()
+    .max_average_schema_versions_per_type(3)
+    .build();
+```
+
+**Default:** `3`
+
 ### check_struct_version(bool)
 
 Enable/disable struct version checking.
@@ -150,13 +176,15 @@ auto fory = Fory::builder().build_thread_safe();  // Returns ThreadSafeFory
 
 ## Configuration Summary
 
-| Option                       | Description                             | Default |
-| ---------------------------- | --------------------------------------- | ------- |
-| `xlang(bool)`                | Use xlang mode                          | `true`  |
-| `compatible(bool)`           | Enable schema evolution                 | `true`  |
-| `track_ref(bool)`            | Enable reference tracking               | `true`  |
-| `max_dyn_depth(uint32_t)`    | Maximum nesting depth for dynamic types | `5`     |
-| `check_struct_version(bool)` | Enable struct version checking          | `false` |
+| Option                                           | Description                                        | Default |
+| ------------------------------------------------ | -------------------------------------------------- | ------- |
+| `xlang(bool)`                                    | Use xlang mode                                     | `true`  |
+| `compatible(bool)`                               | Enable schema evolution                            | `true`  |
+| `track_ref(bool)`                                | Enable reference tracking                          | `true`  |
+| `max_dyn_depth(uint32_t)`                        | Maximum nesting depth for dynamic types            | `5`     |
+| `max_schema_versions_per_type(uint32_t)`         | Max remote schema versions for one struct type     | `10`    |
+| `max_average_schema_versions_per_type(uint32_t)` | Average remote schema versions across struct types | `3`     |
+| `check_struct_version(bool)`                     | Enable struct version checking                     | `false` |
 
 ## Security
 
@@ -166,6 +194,8 @@ Security-related configuration:
 - Use `check_struct_version(true)` with `compatible(false)` for intentional same-schema payloads.
 - Keep `max_dyn_depth(...)` as low as your model permits to reject unexpectedly deep polymorphic
   graphs.
+- Keep the remote schema metadata limits at their defaults unless a trusted peer legitimately sends
+  many schema versions.
 - Prefer concrete fields over broad polymorphic fields for untrusted input.
 
 ## Related Topics

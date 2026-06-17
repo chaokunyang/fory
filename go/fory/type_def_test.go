@@ -448,16 +448,13 @@ func TestTypeDefRejectsCompressedMetadata(t *testing.T) {
 	require.Contains(t, err.Error(), "compressed xlang TypeDef")
 }
 
-func TestReadSharedTypeMetaCapsParsedTypeDefCache(t *testing.T) {
+func TestReadSharedTypeMetaExactLocalSkipsRemoteCache(t *testing.T) {
 	fory := NewFory(WithXlang(false), WithCompatible(true))
 	require.NoError(t, fory.RegisterStructByName(SimpleStruct{}, "example.SimpleStruct"))
 	typeDef, err := buildTypeDef(fory, reflect.ValueOf(SimpleStruct{}))
 	require.NoError(t, err)
 	require.NotEmpty(t, typeDef.encoded)
 
-	for i := 0; i < maxCachedTypeDefs; i++ {
-		fory.typeResolver.defIdToTypeDef[int64(i)] = typeDef
-	}
 	headerErr := &Error{}
 	header := NewByteBuffer(typeDef.encoded).ReadInt64(headerErr)
 	require.NoError(t, headerErr.CheckError())
@@ -470,8 +467,54 @@ func TestReadSharedTypeMetaCapsParsedTypeDefCache(t *testing.T) {
 	typeInfo := fory.typeResolver.readSharedTypeMeta(buffer, readErr)
 	require.NoError(t, readErr.CheckError())
 	require.NotNil(t, typeInfo)
-	require.Len(t, fory.typeResolver.defIdToTypeDef, maxCachedTypeDefs)
 	require.NotContains(t, fory.typeResolver.defIdToTypeDef, header)
+}
+
+func TestRemoteSchemaLimitRejectsExtraVersions(t *testing.T) {
+	fory := NewFory(WithXlang(false), WithCompatible(true), WithMaxSchemaVersionsPerType(1))
+	first := remoteSchemaLimitTypeDef(t, SimpleStruct{}, "example.Shared")
+	second := remoteSchemaLimitTypeDef(t, SliceStruct{}, "example.Shared")
+
+	require.NoError(t, readRemoteTypeDef(t, fory, first))
+	err := readRemoteTypeDef(t, fory, second)
+
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "MaxSchemaVersionsPerType")
+}
+
+func TestRemoteSchemaLimitKeepsUnknownTypesSeparate(t *testing.T) {
+	fory := NewFory(WithXlang(false), WithCompatible(true), WithMaxSchemaVersionsPerType(1))
+	first := remoteSchemaLimitTypeDef(t, SimpleStruct{}, "example.UnknownA")
+	second := remoteSchemaLimitTypeDef(t, SliceStruct{}, "example.UnknownB")
+
+	require.NoError(t, readRemoteTypeDef(t, fory, first))
+	require.NoError(t, readRemoteTypeDef(t, fory, second))
+}
+
+func remoteSchemaLimitTypeDef(t *testing.T, value any, name string) *TypeDef {
+	t.Helper()
+	sender := NewFory(WithXlang(false), WithCompatible(true))
+	require.NoError(t, sender.RegisterStructByName(value, name))
+	typeDef, err := buildTypeDef(sender, reflect.ValueOf(value))
+	require.NoError(t, err)
+	return typeDef
+}
+
+func readRemoteTypeDef(t *testing.T, fory *Fory, typeDef *TypeDef) error {
+	t.Helper()
+	buffer := NewByteBuffer(nil)
+	buffer.WriteVarUint32(0)
+	writeErr := &Error{}
+	typeDef.writeTypeDef(buffer, writeErr)
+	require.NoError(t, writeErr.CheckError())
+
+	readErr := &Error{}
+	typeInfo := fory.typeResolver.readSharedTypeMeta(buffer, readErr)
+	if err := readErr.CheckError(); err != nil {
+		return err
+	}
+	require.NotNil(t, typeInfo)
+	return nil
 }
 
 func TestDecodeTypeDefFallbackNamedTypeCacheRespectsCap(t *testing.T) {

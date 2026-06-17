@@ -99,6 +99,8 @@ public final class ForyBuilder {
   Integer bufferSizeLimitBytes = -1;
   MetaCompressor metaCompressor = new DeflaterMetaCompressor();
   int maxDepth = 50;
+  int maxSchemaVersionsPerType = 10;
+  int maxAverageSchemaVersionsPerType = 3;
   float mapRefLoadFactor = 0.51f;
   boolean forVirtualThread = false;
   TypeChecker typeChecker;
@@ -508,6 +510,36 @@ public final class ForyBuilder {
     Preconditions.checkArgument(maxDepth >= 2, "maxDepth must >= 2 but got %s", maxDepth);
     this.maxDepth = maxDepth;
     recordAction(b -> b.withMaxDepth(maxDepth));
+    return this;
+  }
+
+  /**
+   * Sets the maximum number of accepted remote schema versions for one struct type.
+   *
+   * <p>This limit applies only to cold remote metadata miss paths.
+   */
+  public ForyBuilder withMaxSchemaVersionsPerType(int maxSchemaVersionsPerType) {
+    Preconditions.checkArgument(
+        maxSchemaVersionsPerType > 0,
+        "maxSchemaVersionsPerType must be positive but got %s",
+        maxSchemaVersionsPerType);
+    this.maxSchemaVersionsPerType = maxSchemaVersionsPerType;
+    recordAction(b -> b.withMaxSchemaVersionsPerType(maxSchemaVersionsPerType));
+    return this;
+  }
+
+  /**
+   * Sets the maximum average number of accepted remote schema versions across struct types.
+   *
+   * <p>The global limit has an internal floor so small type universes can still evolve normally.
+   */
+  public ForyBuilder withMaxAverageSchemaVersionsPerType(int maxAverageSchemaVersionsPerType) {
+    Preconditions.checkArgument(
+        maxAverageSchemaVersionsPerType > 0,
+        "maxAverageSchemaVersionsPerType must be positive but got %s",
+        maxAverageSchemaVersionsPerType);
+    this.maxAverageSchemaVersionsPerType = maxAverageSchemaVersionsPerType;
+    recordAction(b -> b.withMaxAverageSchemaVersionsPerType(maxAverageSchemaVersionsPerType));
     return this;
   }
 

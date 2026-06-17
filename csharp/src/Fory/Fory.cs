@@ -47,7 +47,9 @@ public sealed class Fory
             Config.TrackRef,
             Config.Compatible,
             Config.CheckStructVersion,
-            Config.MaxDepth);
+            Config.MaxDepth,
+            Config.MaxSchemaVersionsPerType,
+            Config.MaxAverageSchemaVersionsPerType);
     }
 
     /// <summary>

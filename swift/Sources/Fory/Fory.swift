@@ -22,19 +22,29 @@ public struct Config {
   public let compatible: Bool
   public let checkClassVersion: Bool
   public let maxDepth: Int
+  public let maxSchemaVersionsPerType: Int
+  public let maxAverageSchemaVersionsPerType: Int
 
   public init(
     trackRef: Bool = false,
     compatible: Bool? = nil,
     checkClassVersion: Bool? = nil,
-    maxDepth: Int = 5
+    maxDepth: Int = 5,
+    maxSchemaVersionsPerType: Int = 10,
+    maxAverageSchemaVersionsPerType: Int = 3
   ) {
+    precondition(maxSchemaVersionsPerType > 0, "maxSchemaVersionsPerType must be positive")
+    precondition(
+      maxAverageSchemaVersionsPerType > 0,
+      "maxAverageSchemaVersionsPerType must be positive")
     let effectiveCompatible = compatible ?? true
     let effectiveCheckClassVersion = checkClassVersion ?? !effectiveCompatible
     self.trackRef = trackRef
     self.compatible = effectiveCompatible
     self.checkClassVersion = effectiveCheckClassVersion
     self.maxDepth = maxDepth
+    self.maxSchemaVersionsPerType = maxSchemaVersionsPerType
+    self.maxAverageSchemaVersionsPerType = maxAverageSchemaVersionsPerType
   }
 }
 
@@ -53,20 +63,28 @@ public final class Fory {
     ref: Bool = false,
     compatible: Bool? = nil,
     checkClassVersion: Bool? = nil,
-    maxDepth: Int = 5
+    maxDepth: Int = 5,
+    maxSchemaVersionsPerType: Int = 10,
+    maxAverageSchemaVersionsPerType: Int = 3
   ) {
     self.init(
       config: Config(
         trackRef: ref,
         compatible: compatible,
         checkClassVersion: checkClassVersion,
-        maxDepth: maxDepth
+        maxDepth: maxDepth,
+        maxSchemaVersionsPerType: maxSchemaVersionsPerType,
+        maxAverageSchemaVersionsPerType: maxAverageSchemaVersionsPerType
       ))
   }
 
   public init(config: Config) {
     self.config = config
-    self.typeResolver = TypeResolver(trackRef: self.config.trackRef)
+    self.typeResolver = TypeResolver(
+      trackRef: self.config.trackRef,
+      maxSchemaVersionsPerType: self.config.maxSchemaVersionsPerType,
+      maxAverageSchemaVersionsPerType: self.config.maxAverageSchemaVersionsPerType
+    )
     self.writeContext = WriteContext(
       buffer: ByteBuffer(),
       typeResolver: typeResolver,
@@ -115,7 +133,8 @@ public final class Fory {
     }
   }
 
-  public func deserialize<T: Serializer>(from buffer: ByteBuffer, as _: T.Type = T.self) throws -> T {
+  public func deserialize<T: Serializer>(from buffer: ByteBuffer, as _: T.Type = T.self) throws -> T
+  {
     try deserializeRoot(
       from: buffer
     ) { context in
@@ -170,7 +189,8 @@ public final class Fory {
 
   @_disfavoredOverload
   public func deserialize(_ data: Data, as _: (any Serializer).Type = (any Serializer).self) throws
-    -> any Serializer {
+    -> any Serializer
+  {
     try deserializeRoot(
       data: data
     ) { context in
@@ -207,7 +227,8 @@ public final class Fory {
 
   @_disfavoredOverload
   public func deserialize(_ data: Data, as _: [String: Any].Type = [String: Any].self) throws
-    -> [String: Any] {
+    -> [String: Any]
+  {
     try deserializeRoot(
       data: data
     ) { context in
@@ -225,7 +246,8 @@ public final class Fory {
 
   @_disfavoredOverload
   public func deserialize(_ data: Data, as _: [Int32: Any].Type = [Int32: Any].self) throws
-    -> [Int32: Any] {
+    -> [Int32: Any]
+  {
     try deserializeRoot(
       data: data
     ) { context in
@@ -243,7 +265,8 @@ public final class Fory {
 
   @_disfavoredOverload
   public func deserialize(_ data: Data, as _: [AnyHashable: Any].Type = [AnyHashable: Any].self)
-    throws -> [AnyHashable: Any] {
+    throws -> [AnyHashable: Any]
+  {
     try deserializeRoot(
       data: data
     ) { context in
@@ -286,7 +309,8 @@ public final class Fory {
 
   @_disfavoredOverload
   public func deserialize(from buffer: ByteBuffer, as _: AnyObject.Type = AnyObject.self) throws
-    -> AnyObject {
+    -> AnyObject
+  {
     try deserializeRoot(
       from: buffer
     ) { context in
@@ -338,7 +362,8 @@ public final class Fory {
 
   @_disfavoredOverload
   public func deserialize(from buffer: ByteBuffer, as _: [String: Any].Type = [String: Any].self)
-    throws -> [String: Any] {
+    throws -> [String: Any]
+  {
     try deserializeRoot(
       from: buffer
     ) { context in
@@ -364,7 +389,8 @@ public final class Fory {
 
   @_disfavoredOverload
   public func deserialize(from buffer: ByteBuffer, as _: [Int32: Any].Type = [Int32: Any].self)
-    throws -> [Int32: Any] {
+    throws -> [Int32: Any]
+  {
     try deserializeRoot(
       from: buffer
     ) { context in

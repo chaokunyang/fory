@@ -697,7 +697,7 @@ public sealed class TypeResolver
             !info.RegisterByName &&
             typeId == TypeId.CompatibleStruct)
         {
-            TypeMeta remoteTypeMeta = context.ReadTypeMeta();
+            TypeMeta remoteTypeMeta = context.ReadTypeMeta(info);
             if (!HasValidatedTypeMeta(info, remoteTypeMeta))
             {
                 ValidateTypeMeta(
@@ -711,6 +711,7 @@ public sealed class TypeResolver
                 SetValidatedTypeMeta(info, remoteTypeMeta);
             }
 
+            context.AcceptReadTypeMeta(remoteTypeMeta);
             context.StoreTypeMeta(type, remoteTypeMeta);
             return;
         }
@@ -729,7 +730,7 @@ public sealed class TypeResolver
             case TypeId.CompatibleStruct:
             case TypeId.NamedCompatibleStruct:
                 {
-                    TypeMeta remoteTypeMeta = context.ReadTypeMeta();
+                    TypeMeta remoteTypeMeta = context.ReadTypeMeta(info);
                     if (!HasValidatedTypeMeta(info, remoteTypeMeta))
                     {
                         ValidateTypeMeta(
@@ -743,6 +744,7 @@ public sealed class TypeResolver
                         SetValidatedTypeMeta(info, remoteTypeMeta);
                     }
 
+                    context.AcceptReadTypeMeta(remoteTypeMeta);
                     context.StoreTypeMeta(type, remoteTypeMeta);
                     return;
                 }
@@ -781,7 +783,7 @@ public sealed class TypeResolver
     {
         if (compatible)
         {
-            TypeMeta remoteTypeMeta = context.ReadTypeMeta();
+            TypeMeta remoteTypeMeta = context.ReadTypeMeta(typeInfo);
             if (!HasValidatedTypeMeta(typeInfo, remoteTypeMeta))
             {
                 ValidateTypeMeta(
@@ -794,6 +796,7 @@ public sealed class TypeResolver
                 SetValidatedTypeMeta(typeInfo, remoteTypeMeta);
             }
 
+            context.AcceptReadTypeMeta(remoteTypeMeta);
             return;
         }
 
@@ -898,7 +901,12 @@ public sealed class TypeResolver
         {
             case TypeId.CompatibleStruct:
             case TypeId.NamedCompatibleStruct:
-                return ResolveAnyTypeInfoFromMeta(wireTypeId, context.ReadTypeMeta(), context.Compatible);
+                {
+                    TypeMeta typeMeta = context.ReadTypeMeta();
+                    TypeInfo typeInfo = ResolveAnyTypeInfoFromMeta(wireTypeId, typeMeta, context.Compatible);
+                    context.AcceptReadTypeMeta(typeMeta);
+                    return typeInfo;
+                }
             case TypeId.NamedEnum:
             case TypeId.NamedStruct:
             case TypeId.NamedExt:
@@ -918,7 +926,10 @@ public sealed class TypeResolver
     {
         if (context.Compatible)
         {
-            return ResolveAnyTypeInfoFromMeta(wireTypeId, context.ReadTypeMeta(), compatible: true);
+            TypeMeta typeMeta = context.ReadTypeMeta();
+            TypeInfo typeInfo = ResolveAnyTypeInfoFromMeta(wireTypeId, typeMeta, compatible: true);
+            context.AcceptReadTypeMeta(typeMeta);
+            return typeInfo;
         }
 
         MetaString namespaceName = ReadMetaString(

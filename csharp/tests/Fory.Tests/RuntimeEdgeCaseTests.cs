@@ -525,26 +525,37 @@ public sealed class RuntimeEdgeCaseTests
     }
 
     [Fact]
-    public void TypeMetaHeaderCacheStopsPublishingAtCapacity()
+    public void TypeMetaSchemaLimitRejectsExtraVersions()
     {
-        ReadContext context = new(new ByteReader(Array.Empty<byte>()), new TypeResolver(), trackRef: false);
-        TypeMeta typeMeta = new(
-            (uint)TypeId.Struct,
-            901,
-            MetaString.Empty('.', '_'),
-            MetaString.Empty('$', '_'),
-            registerByName: false,
-            []);
+        ReadContext context = new(
+            new ByteReader(Array.Empty<byte>()),
+            new TypeResolver(),
+            trackRef: false,
+            maxSchemaVersionsPerType: 1);
+        TypeMeta first = RemoteStructTypeMeta(901, "first");
+        TypeMeta second = RemoteStructTypeMeta(901, "second");
 
-        for (ulong header = 1; header <= 8192; header++)
-        {
-            context.CacheReadTypeMeta(header, typeMeta);
-        }
+        ReadAndAcceptTypeMeta(context, first);
 
-        Assert.True(context.TryGetCachedReadTypeMeta(8192, out _));
-        context.CacheReadTypeMeta(8193, typeMeta);
+        Assert.Throws<InvalidDataException>(() => ReadAndAcceptTypeMeta(context, second));
+    }
 
-        Assert.False(context.TryGetCachedReadTypeMeta(8193, out _));
+    [Fact]
+    public void TypeMetaSchemaLimitKeepsUnknownTypesSeparate()
+    {
+        ReadContext context = new(
+            new ByteReader(Array.Empty<byte>()),
+            new TypeResolver(),
+            trackRef: false,
+            maxSchemaVersionsPerType: 1);
+        TypeMeta first = RemoteStructTypeMeta(901, "value");
+        TypeMeta second = RemoteStructTypeMeta(902, "value");
+
+        TypeMeta firstRead = ReadAndAcceptTypeMeta(context, first);
+        TypeMeta secondRead = ReadAndAcceptTypeMeta(context, second);
+
+        Assert.True(context.TryGetCachedReadTypeMeta(EncodedTypeMetaHeader(firstRead), out _));
+        Assert.True(context.TryGetCachedReadTypeMeta(EncodedTypeMetaHeader(secondRead), out _));
     }
 
     [Fact]
@@ -571,6 +582,33 @@ public sealed class RuntimeEdgeCaseTests
 
         Assert.Same(typeMeta, context.ReadTypeMeta());
         Assert.Equal(0x7b, context.Reader.ReadUInt8());
+    }
+
+    private static TypeMeta RemoteStructTypeMeta(uint userTypeId, string fieldName)
+    {
+        return new TypeMeta(
+            (uint)TypeId.Struct,
+            userTypeId,
+            MetaString.Empty('.', '_'),
+            MetaString.Empty('$', '_'),
+            registerByName: false,
+            [new TypeMetaFieldInfo(null, fieldName, new TypeMetaFieldType((uint)TypeId.Int32, nullable: false))]);
+    }
+
+    private static TypeMeta ReadAndAcceptTypeMeta(ReadContext context, TypeMeta typeMeta)
+    {
+        ByteWriter writer = new();
+        writer.WriteVarUInt32(0);
+        writer.WriteBytes(typeMeta.Encode());
+        context.ResetFor(new ByteReader(writer.ToArray()));
+        TypeMeta decoded = context.ReadTypeMeta();
+        context.AcceptReadTypeMeta(decoded);
+        return decoded;
+    }
+
+    private static ulong EncodedTypeMetaHeader(TypeMeta typeMeta)
+    {
+        return BitConverter.ToUInt64(typeMeta.Encode(), 0);
     }
 
     [Fact]

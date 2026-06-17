@@ -31,6 +31,8 @@ public struct Config {
   public let compatible: Bool
   public let checkClassVersion: Bool
   public let maxDepth: Int
+  public let maxSchemaVersionsPerType: Int
+  public let maxAverageSchemaVersionsPerType: Int
 }
 ```
 
@@ -86,10 +88,20 @@ let fory = Fory(compatible: false, checkClassVersion: true)
 
 ### Size and Depth Limits
 
-`maxDepth` bounds decoded payload nesting depth.
+`maxDepth` bounds decoded payload nesting depth. Remote struct metadata is also
+limited on metadata cache misses:
+
+- `maxSchemaVersionsPerType` defaults to `10` and limits accepted schema versions for one logical
+  struct type.
+- `maxAverageSchemaVersionsPerType` defaults to `3` and limits the average across accepted remote
+  struct types. The effective global floor is `8192` schemas.
 
 ```swift
-let fory = Fory(maxDepth: 5)
+let fory = Fory(
+  maxDepth: 5,
+  maxSchemaVersionsPerType: 10,
+  maxAverageSchemaVersionsPerType: 3
+)
 ```
 
 ## Recommended Presets
@@ -121,3 +133,5 @@ Security-related configuration:
 - Register only the expected generated models before deserializing untrusted payloads.
 - Use `checkClassVersion` with `compatible: false` for intentional same-schema payloads.
 - Set `maxDepth` for the largest nesting depth your service accepts.
+- Keep the remote schema metadata limits at their defaults unless a trusted peer legitimately sends
+  many schema versions.

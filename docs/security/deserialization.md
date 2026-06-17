@@ -197,6 +197,16 @@ Metadata readers should:
   policy decisions.
 - Reset or release metadata state at the correct root-operation boundary.
 
+Remote struct metadata that can create schema-specific read state must be
+limited on the cold metadata cache-miss path. The check is resource control
+only: it must not change wire compatibility, type registration, dynamic class
+loading, unknown-type handling, deserialization policy, or schema-evolution
+semantics. Metadata cache hits and generated field readers remain hot paths and
+must not add validation, hashing, allocation, or policy work for this limit.
+If a remote metadata body exactly matches a local registered schema after the
+metadata body and hash have been validated, the reader may use the local schema
+without consuming the remote-schema limit.
+
 Metadata byte-form strictness alone is not a security requirement. Rejecting a
 metadata shape is useful only when the owner wants that strictness or when the
 shape changes type identity, retained state, resource use, or policy behavior.

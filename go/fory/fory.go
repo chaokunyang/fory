@@ -65,20 +65,24 @@ const (
 
 // Config holds configuration options for Fory instances
 type Config struct {
-	TrackRef      bool
-	MaxDepth      int
-	IsXlang       bool
-	Compatible    bool // Schema evolution compatibility mode
-	MaxTypeFields int
+	TrackRef                        bool
+	MaxDepth                        int
+	IsXlang                         bool
+	Compatible                      bool // Schema evolution compatibility mode
+	MaxTypeFields                   int
+	MaxSchemaVersionsPerType        int
+	MaxAverageSchemaVersionsPerType int
 }
 
 // defaultConfig returns the default configuration
 func defaultConfig() Config {
 	return Config{
-		TrackRef:      false, // Match Java's default: reference tracking disabled
-		MaxDepth:      20,
-		IsXlang:       true,
-		MaxTypeFields: 10000,
+		TrackRef:                        false, // Match Java's default: reference tracking disabled
+		MaxDepth:                        20,
+		IsXlang:                         true,
+		MaxTypeFields:                   10000,
+		MaxSchemaVersionsPerType:        10,
+		MaxAverageSchemaVersionsPerType: 3,
 	}
 }
 
@@ -123,6 +127,26 @@ func WithCompatible(enabled bool) Option {
 func WithMaxTypeFields(size int) Option {
 	return func(f *Fory) {
 		f.config.MaxTypeFields = size
+	}
+}
+
+// WithMaxSchemaVersionsPerType sets the maximum accepted remote schema versions for one struct type.
+func WithMaxSchemaVersionsPerType(size int) Option {
+	if size <= 0 {
+		panic("MaxSchemaVersionsPerType must be positive")
+	}
+	return func(f *Fory) {
+		f.config.MaxSchemaVersionsPerType = size
+	}
+}
+
+// WithMaxAverageSchemaVersionsPerType sets the average remote schema version limit across accepted struct types.
+func WithMaxAverageSchemaVersionsPerType(size int) Option {
+	if size <= 0 {
+		panic("MaxAverageSchemaVersionsPerType must be positive")
+	}
+	return func(f *Fory) {
+		f.config.MaxAverageSchemaVersionsPerType = size
 	}
 }
 

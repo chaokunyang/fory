@@ -102,11 +102,16 @@ def decode_typedef(buffer: Buffer, resolver, header=None) -> TypeDef:
         raise ValueError("Compressed xlang TypeDef is not supported")
 
     # If meta size is at maximum, read additional size
+    encoded = Buffer.allocate(meta_size + 16)
+    encoded.write_int64(header)
     if meta_size == META_SIZE_MASKS:
-        meta_size += buffer.read_var_uint32()
+        extended_size = buffer.read_var_uint32()
+        encoded.write_var_uint32(extended_size)
+        meta_size += extended_size
 
     # Read meta data
     encoded_meta_data = buffer.read_bytes(meta_size)
+    encoded.write_bytes(encoded_meta_data)
     meta_data = encoded_meta_data
 
     # Create a new buffer for meta data
@@ -195,7 +200,7 @@ def decode_typedef(buffer: Buffer, resolver, header=None) -> TypeDef:
         type_cls,
         type_id,
         field_infos,
-        meta_data,
+        encoded.to_bytes(0, encoded.get_writer_index()),
         is_compressed,
         user_type_id=user_type_id,
     )

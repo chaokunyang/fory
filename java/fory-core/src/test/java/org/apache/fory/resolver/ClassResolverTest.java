@@ -53,6 +53,7 @@ import org.apache.fory.builder.Generated;
 import org.apache.fory.config.ForyBuilder;
 import org.apache.fory.context.ReadContext;
 import org.apache.fory.context.WriteContext;
+import org.apache.fory.exception.ForyException;
 import org.apache.fory.exception.InsecureException;
 import org.apache.fory.logging.Logger;
 import org.apache.fory.logging.LoggerFactory;
@@ -70,6 +71,7 @@ import org.apache.fory.serializer.Shareable;
 import org.apache.fory.serializer.collection.CollectionSerializer;
 import org.apache.fory.serializer.collection.CollectionSerializers;
 import org.apache.fory.serializer.collection.MapSerializers;
+import org.apache.fory.test.bean.BeanA;
 import org.apache.fory.test.bean.BeanB;
 import org.apache.fory.type.Descriptor;
 import org.apache.fory.type.DescriptorGrouper;
@@ -341,31 +343,46 @@ public class ClassResolverTest extends ForyTestBase {
   }
 
   @Test
-  public void testTypeDefHeaderCacheStopsAtMaxEntries() {
+  public void testRemoteSchemaVersionLimitByType() {
     ForyBuilder builder =
         Fory.builder()
             .withXlang(false)
             .requireClassRegistration(false)
             .withCompatible(false)
-            .withMetaShare(true);
+            .withMetaShare(true)
+            .withMaxSchemaVersionsPerType(1);
     finishBuilder(builder);
     SharedRegistry sharedRegistry = new SharedRegistry();
     Fory fory = new Fory(builder, ClassResolverTest.class.getClassLoader(), sharedRegistry);
     ClassResolver resolver = (ClassResolver) fory.getTypeResolver();
-    TypeDef typeDef = TypeDef.buildTypeDef(resolver, BeanB.class);
-    int maxCachedTypeDefs = 8192;
-    for (long i = 0; i < maxCachedTypeDefs; i++) {
-      sharedRegistry.typeDefById.put(i, typeDef);
-    }
+    TypeDef first = TypeDef.buildTypeDef(resolver, BeanB.class);
+    TypeDef second = TypeDef.buildTypeDef(resolver, BeanA.class);
 
-    MemoryBuffer buffer = MemoryBuffer.newHeapBuffer(256);
-    typeDef.writeTypeDef(buffer);
-    buffer.readerIndex(0);
-    TypeDef readTypeDef = resolver.readTypeDef(buffer, buffer.readInt64());
+    assertSame(first, sharedRegistry.getOrCreateRemoteTypeDef(first, "remote.Type"));
+    assertSame(first, sharedRegistry.getOrCreateRemoteTypeDef(first, "remote.Type"));
+    Assert.assertThrows(
+        ForyException.class, () -> sharedRegistry.getOrCreateRemoteTypeDef(second, "remote.Type"));
+  }
 
-    assertNotNull(readTypeDef);
-    assertNull(sharedRegistry.typeDefById.get(typeDef.getId()));
-    assertEquals(sharedRegistry.typeDefById.size(), maxCachedTypeDefs);
+  @Test
+  public void testRemoteSchemaVersionsUseRemoteTypeKey() {
+    ForyBuilder builder =
+        Fory.builder()
+            .withXlang(false)
+            .requireClassRegistration(false)
+            .withCompatible(false)
+            .withMetaShare(true)
+            .withMaxSchemaVersionsPerType(1);
+    finishBuilder(builder);
+    SharedRegistry sharedRegistry = new SharedRegistry();
+    Fory fory = new Fory(builder, ClassResolverTest.class.getClassLoader(), sharedRegistry);
+    ClassResolver resolver = (ClassResolver) fory.getTypeResolver();
+
+    TypeDef first = TypeDef.buildTypeDef(resolver, BeanB.class);
+    TypeDef second = TypeDef.buildTypeDef(resolver, BeanA.class);
+
+    assertSame(first, sharedRegistry.getOrCreateRemoteTypeDef(first, "remote.UnknownA"));
+    assertSame(second, sharedRegistry.getOrCreateRemoteTypeDef(second, "remote.UnknownB"));
   }
 
   @Test

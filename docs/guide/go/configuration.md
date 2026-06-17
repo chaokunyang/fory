@@ -33,12 +33,14 @@ f := fory.New(fory.WithXlang(true))
 
 Default settings:
 
-| Option     | Default | Description                                  |
-| ---------- | ------- | -------------------------------------------- |
-| TrackRef   | false   | Reference tracking disabled                  |
-| MaxDepth   | 20      | Maximum nesting depth                        |
-| IsXlang    | true    | Xlang mode enabled                           |
-| Compatible | true    | Compatible schema-evolution metadata enabled |
+| Option                          | Default | Description                                        |
+| ------------------------------- | ------- | -------------------------------------------------- |
+| TrackRef                        | false   | Reference tracking disabled                        |
+| MaxDepth                        | 20      | Maximum nesting depth                              |
+| IsXlang                         | true    | Xlang mode enabled                                 |
+| Compatible                      | true    | Compatible schema-evolution metadata enabled       |
+| MaxSchemaVersionsPerType        | 10      | Max remote schema versions for one struct type     |
+| MaxAverageSchemaVersionsPerType | 3       | Average remote schema versions across struct types |
 
 ### With Options
 
@@ -47,6 +49,8 @@ f := fory.New(
     fory.WithXlang(true),
     fory.WithTrackRef(true),
     fory.WithMaxDepth(10),
+    fory.WithMaxSchemaVersionsPerType(10),
+    fory.WithMaxAverageSchemaVersionsPerType(3),
 )
 ```
 
@@ -118,6 +122,24 @@ f := fory.New(fory.WithMaxDepth(30))
 - Default: 20
 - Protects against deeply nested, recursive structures or malicious data
 - Serialization fails with error when exceeded
+
+### WithMaxSchemaVersionsPerType
+
+Set the maximum accepted remote struct schema versions for one logical type on
+metadata cache misses:
+
+```go
+f := fory.New(fory.WithMaxSchemaVersionsPerType(10))
+```
+
+### WithMaxAverageSchemaVersionsPerType
+
+Set the average accepted remote struct schema versions across accepted remote
+struct types. The effective global floor is `8192` schemas:
+
+```go
+f := fory.New(fory.WithMaxAverageSchemaVersionsPerType(3))
+```
 
 ### WithXlang
 
@@ -346,6 +368,8 @@ Security-related configuration:
 
 - Register only the expected structs before deserializing untrusted data.
 - Use `WithMaxDepth(...)` to reject unexpectedly deep payloads.
+- Keep the remote schema metadata limits at their defaults unless a trusted peer legitimately sends
+  many schema versions.
 - Prefer concrete struct fields over broad `any` or interface-typed fields for untrusted input.
 
 ## Related Topics

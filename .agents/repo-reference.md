@@ -49,6 +49,10 @@ Apache Fory is a multi-language serialization framework with multiple wire forma
   - `foryc schema.fdl --lang <langs> --output <dir>`
 - Never edit generated code manually. Update the source schema or IDL and regenerate.
 - Protocol changes must update `docs/specification/**` and the relevant cross-language tests.
+- Remote struct `TypeDef` or `TypeMeta` schema limits are resource controls on cold metadata
+  cache-miss parse/publish paths only. They must not change wire format, registration, dynamic type
+  loading, unknown-type behavior, deserialization policy, schema-evolution semantics, or metadata
+  cache-hit/generated-reader hot paths.
 
 ## Runtime Map
 

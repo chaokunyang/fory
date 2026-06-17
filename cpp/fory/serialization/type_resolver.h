@@ -220,8 +220,6 @@ public:
 // TypeMeta - Complete type metadata (for schema evolution)
 // ============================================================================
 
-constexpr size_t MAX_PARSED_NUM_TYPE_DEFS = 8192;
-
 /// Type metadata containing all field information
 /// Used for schema evolution to compare remote and local type schemas
 class TypeMeta {

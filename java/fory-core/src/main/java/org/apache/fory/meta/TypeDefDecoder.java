@@ -90,7 +90,7 @@ class TypeDefDecoder {
         }
         TypeInfo userTypeInfo = resolver.getUserTypeInfo(namespace, typeName);
         if (userTypeInfo == null) {
-          classSpec = new ClassSpec(UnknownClass.UnknownStruct.class, typeId, -1);
+          classSpec = unknownNamedClassSpec(namespace, typeName, typeId);
         } else {
           validateRegisteredTypeDefKind(userTypeInfo, typeId);
           classSpec = new ClassSpec(userTypeInfo.getType(), typeId, userTypeInfo.getUserTypeId());
@@ -116,7 +116,7 @@ class TypeDefDecoder {
         String typeName = readTypeName(buffer);
         TypeInfo userTypeInfo = resolver.getUserTypeInfo(namespace, typeName);
         if (userTypeInfo == null) {
-          classSpec = new ClassSpec(UnknownClass.UnknownStruct.class, typeId, -1);
+          classSpec = unknownNamedClassSpec(namespace, typeName, typeId);
         } else {
           validateRegisteredTypeDefKind(userTypeInfo, typeId);
           classSpec = new ClassSpec(userTypeInfo.getType(), typeId, userTypeInfo.getUserTypeId());
@@ -167,6 +167,13 @@ class TypeDefDecoder {
               "TypeDef kind %s does not match registered kind %s for %s",
               typeId, registeredTypeId, userTypeInfo.getType()));
     }
+  }
+
+  private static ClassSpec unknownNamedClassSpec(String namespace, String typeName, int typeId) {
+    String className = namespace.isEmpty() ? typeName : namespace + "." + typeName;
+    ClassSpec classSpec = new ClassSpec(className, Types.isEnumType(typeId), false, 0, typeId, -1);
+    classSpec.type = UnknownClass.UnknownStruct.class;
+    return classSpec;
   }
 
   private static boolean isStructCompatibilityVariant(int registeredTypeId, int typeId) {

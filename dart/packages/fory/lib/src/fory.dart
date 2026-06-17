@@ -57,11 +57,16 @@ final class Fory {
     bool compatible = true,
     bool checkStructVersion = true,
     int maxDepth = Config.defaultMaxDepth,
+    int maxSchemaVersionsPerType = Config.defaultMaxSchemaVersionsPerType,
+    int maxAverageSchemaVersionsPerType =
+        Config.defaultMaxAverageSchemaVersionsPerType,
   }) {
     final config = Config(
       compatible: compatible,
       checkStructVersion: checkStructVersion,
       maxDepth: maxDepth,
+      maxSchemaVersionsPerType: maxSchemaVersionsPerType,
+      maxAverageSchemaVersionsPerType: maxAverageSchemaVersionsPerType,
     );
     _readBuffer = Buffer();
     _writeBuffer = Buffer();

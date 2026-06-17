@@ -298,6 +298,26 @@ impl ForyBuilder {
         self
     }
 
+    /// Sets the maximum accepted remote struct schema versions for one logical type.
+    pub fn max_schema_versions_per_type(mut self, max_versions: usize) -> Self {
+        assert!(
+            max_versions > 0,
+            "max_schema_versions_per_type must be positive"
+        );
+        self.config.max_schema_versions_per_type = max_versions;
+        self
+    }
+
+    /// Sets the maximum accepted average remote struct schema versions across logical types.
+    pub fn max_average_schema_versions_per_type(mut self, max_versions: usize) -> Self {
+        assert!(
+            max_versions > 0,
+            "max_average_schema_versions_per_type must be positive"
+        );
+        self.config.max_average_schema_versions_per_type = max_versions;
+        self
+    }
+
     fn finish_config(self) -> Config {
         let mut config = self.config;
         if !self.compatible_set {

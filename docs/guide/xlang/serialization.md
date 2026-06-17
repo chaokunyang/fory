@@ -23,6 +23,38 @@ This page demonstrates common cross-language serialization patterns. Data serial
 supported language can be deserialized in any other supported language when peers use matching type
 identity, field schema, and compatibility settings.
 
+## Remote Schema Metadata Limits
+
+Compatible mode may receive remote struct metadata (`TypeDef` or `TypeMeta`) when a reader does not
+already know the metadata header. Fory limits how many distinct remote schema versions can be
+accepted before building schema-specific read state:
+
+- `maxSchemaVersionsPerType`: maximum accepted remote schema versions for one logical struct type.
+  The default is `10`.
+- `maxAverageSchemaVersionsPerType`: average accepted remote schema versions across all accepted
+  remote struct types. The default is `3`; the effective global floor is `8192` schemas.
+
+These limits are checked only on metadata cache misses after the metadata body and hash have been
+validated. They do not change wire format, class registration, dynamic loading, unknown-type, or
+schema-evolution semantics. A remote schema that exactly matches the local registered schema is
+accepted without consuming the remote-schema limit, so normal local traffic can still be read even
+after other remote schemas have filled the limit.
+
+Raise these values only when a trusted peer legitimately sends many schema versions for the same
+logical type or for many different struct types.
+
+| Language              | Per-type option                | Average option                         |
+| --------------------- | ------------------------------ | -------------------------------------- |
+| Java                  | `withMaxSchemaVersionsPerType` | `withMaxAverageSchemaVersionsPerType`  |
+| Python                | `max_schema_versions_per_type` | `max_average_schema_versions_per_type` |
+| JavaScript/TypeScript | `maxSchemaVersionsPerType`     | `maxAverageSchemaVersionsPerType`      |
+| C++                   | `max_schema_versions_per_type` | `max_average_schema_versions_per_type` |
+| Go                    | `WithMaxSchemaVersionsPerType` | `WithMaxAverageSchemaVersionsPerType`  |
+| Rust                  | `max_schema_versions_per_type` | `max_average_schema_versions_per_type` |
+| C#                    | `MaxSchemaVersionsPerType`     | `MaxAverageSchemaVersionsPerType`      |
+| Swift                 | `maxSchemaVersionsPerType`     | `maxAverageSchemaVersionsPerType`      |
+| Dart                  | `maxSchemaVersionsPerType`     | `maxAverageSchemaVersionsPerType`      |
+
 ## Serialize Built-in Types
 
 Common types can be serialized automatically without registration: primitive numeric types, string, binary, array, list, map, and more.

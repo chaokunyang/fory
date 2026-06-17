@@ -132,7 +132,8 @@ private func encodedTypeDefHeaderHash(_ bytes: [UInt8]) throws -> UInt64 {
 
 private func fieldNeedsTypeInfo(_ fieldType: TypeMeta.FieldType) -> Bool {
   if let typeID = TypeId(rawValue: fieldType.typeID),
-    TypeId.needsTypeInfoForField(typeID) {
+    TypeId.needsTypeInfoForField(typeID)
+  {
     return true
   }
   return fieldType.generics.contains { fieldNeedsTypeInfo($0) }
@@ -143,7 +144,8 @@ private func encodedTypeDefHasUserTypeFields(_ fields: [TypeMeta.FieldInfo]) -> 
 }
 
 @inline(__always)
-private func readRegisteredValue<T: Serializer>(_ context: ReadContext, as type: T.Type) throws -> T {
+private func readRegisteredValue<T: Serializer>(_ context: ReadContext, as type: T.Type) throws -> T
+{
   try T.foryRead(
     context,
     refMode: T.isRefType ? .tracking : .none,
@@ -382,7 +384,8 @@ public final class TypeInfo: @unchecked Sendable {
     }
     if context.compatible
       && (compatibleWireTypeID == .compatibleStruct
-        || compatibleWireTypeID == .namedCompatibleStruct) {
+        || compatibleWireTypeID == .namedCompatibleStruct)
+    {
       return try compatibleReader(context, self)
     }
     if compatibleTypeMeta !== typeMeta {
@@ -399,9 +402,11 @@ private struct TypeNameKey: Hashable {
 }
 
 final class TypeResolver {
-  private static let maxCachedTypeDefHeaders = 8192
+  private static let minRemoteStructSchemaLimit = 8192
 
   private let trackRef: Bool
+  private let maxSchemaVersionsPerType: Int
+  private let maxAverageSchemaVersionsPerType: Int
   private var registrationFinished = false
 
   private var bySwiftType = UInt64Map<TypeInfo>(initialCapacity: 64)
@@ -409,9 +414,21 @@ final class TypeResolver {
   private var byTypeName: [TypeNameKey: TypeInfo] = [:]
   private var builtinTypeInfoByID: [TypeInfo?] = []
   private var typeInfoByHeader = UInt64Map<TypeInfo>(initialCapacity: 64)
+  private var remoteSchemaVersionsByType: [String: Int] = [:]
+  private var totalAcceptedSchemaVersions = 0
 
-  init(trackRef: Bool = false) {
+  init(
+    trackRef: Bool = false,
+    maxSchemaVersionsPerType: Int = 10,
+    maxAverageSchemaVersionsPerType: Int = 3
+  ) {
+    precondition(maxSchemaVersionsPerType > 0, "maxSchemaVersionsPerType must be positive")
+    precondition(
+      maxAverageSchemaVersionsPerType > 0,
+      "maxAverageSchemaVersionsPerType must be positive")
     self.trackRef = trackRef
+    self.maxSchemaVersionsPerType = maxSchemaVersionsPerType
+    self.maxAverageSchemaVersionsPerType = maxAverageSchemaVersionsPerType
   }
 
   func finishRegistration() {
@@ -464,7 +481,8 @@ final class TypeResolver {
         registerByName: false,
         evolving: evolving,
         typeName: (namespace: "", name: "")
-      ) {
+      )
+    {
       return
     }
 
@@ -520,7 +538,8 @@ final class TypeResolver {
         registerByName: true,
         evolving: evolving,
         typeName: (namespace: namespace, name: typeName)
-      ) {
+      )
+    {
       return
     }
 
@@ -556,17 +575,25 @@ final class TypeResolver {
   }
 
   @inline(__always)
-  func cacheTypeInfo(_ typeMeta: TypeMeta, forHeader header: UInt64) throws -> TypeInfo {
+  func cacheTypeInfo(
+    _ typeMeta: TypeMeta,
+    forHeader header: UInt64,
+    buffer: ByteBuffer,
+    typeDefStart: Int,
+    typeDefEnd: Int
+  ) throws -> TypeInfo {
     if let cached = typeInfoByHeader.value(for: header) {
       return cached
     }
     let localTypeInfo = try requireTypeInfo(for: typeMeta)
-    if header == localTypeInfo.typeDefHeader {
-      if typeInfoByHeader.count < Self.maxCachedTypeDefHeaders {
-        typeInfoByHeader.set(localTypeInfo, for: header)
-      }
+    if let localTypeDefBytes = localTypeInfo.typeDefBytes,
+      typeDefEnd - typeDefStart == localTypeDefBytes.count,
+      buffer.matchesBytes(start: typeDefStart, bytes: localTypeDefBytes)
+    {
+      typeInfoByHeader.set(localTypeInfo, for: header)
       return localTypeInfo
     }
+    try checkRemoteStructSchemaLimit(typeMeta)
     let canonicalTypeMeta: TypeMeta
     if let localTypeMeta = localTypeInfo.typeMeta {
       canonicalTypeMeta = try typeMeta.assigningFieldIDs(from: localTypeMeta)
@@ -574,10 +601,50 @@ final class TypeResolver {
       canonicalTypeMeta = typeMeta
     }
     let typeInfo = TypeInfo(dynamic: localTypeInfo, compatibleTypeMeta: canonicalTypeMeta)
-    if typeInfoByHeader.count < Self.maxCachedTypeDefHeaders {
-      typeInfoByHeader.set(typeInfo, for: header)
-    }
+    typeInfoByHeader.set(typeInfo, for: header)
     return typeInfo
+  }
+
+  @inline(never)
+  private func checkRemoteStructSchemaLimit(_ typeMeta: TypeMeta) throws {
+    guard let rawTypeID = typeMeta.typeID,
+      let typeID = TypeId(rawValue: rawTypeID)
+    else {
+      return
+    }
+    switch typeID {
+    case .structType, .compatibleStruct, .namedStruct, .namedCompatibleStruct:
+      break
+    default:
+      return
+    }
+
+    let key: String
+    if typeMeta.registerByName {
+      key = "n\(typeMeta.namespace.value)\0\(typeMeta.typeName.value)"
+    } else {
+      key = "i\(typeMeta.userTypeID ?? UInt32.max)"
+    }
+
+    let versionsForType = remoteSchemaVersionsByType[key] ?? 0
+    if versionsForType >= maxSchemaVersionsPerType {
+      throw ForyError.invalidData(
+        "remote struct schema versions for one type exceeded maxSchemaVersionsPerType=\(maxSchemaVersionsPerType)"
+      )
+    }
+    let acceptedStructTypeCount =
+      versionsForType == 0 ? remoteSchemaVersionsByType.count + 1 : remoteSchemaVersionsByType.count
+    let globalLimit = max(
+      Self.minRemoteStructSchemaLimit,
+      acceptedStructTypeCount * maxAverageSchemaVersionsPerType
+    )
+    if totalAcceptedSchemaVersions >= globalLimit {
+      throw ForyError.invalidData(
+        "remote struct schema versions exceeded global limit from maxAverageSchemaVersionsPerType=\(maxAverageSchemaVersionsPerType)"
+      )
+    }
+    remoteSchemaVersionsByType[key] = versionsForType + 1
+    totalAcceptedSchemaVersions += 1
   }
 
   private func store(
@@ -594,7 +661,8 @@ final class TypeResolver {
       byTypeName[typeNameKey] = typeInfo
     }
     if let typeMeta = typeInfo.typeMeta,
-      let typeDefHeader = typeInfo.typeDefHeader {
+      let typeDefHeader = typeInfo.typeDefHeader
+    {
       typeInfoByHeader.set(
         TypeInfo(
           dynamic: typeInfo,
@@ -674,7 +742,8 @@ final class TypeResolver {
         )
       }
       if existing.typeID != T.staticTypeId || existing.namespace.value != namespace
-        || existing.typeName.value != typeName {
+        || existing.typeName.value != typeName
+      {
         throw ForyError.invalidData(
           """
           \(type) registration conflict: existing name=\(existing.namespace.value)::\(existing.typeName.value), \

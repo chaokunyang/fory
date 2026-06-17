@@ -35,12 +35,14 @@ ThreadSafeFory threadSafe = Fory.Builder().BuildThreadSafe();
 
 `Fory.Builder().Build()` uses:
 
-| Option               | Default | Description                                  |
-| -------------------- | ------- | -------------------------------------------- |
-| `TrackRef`           | `false` | Reference tracking disabled                  |
-| `Compatible`         | `true`  | Compatible schema-evolution metadata enabled |
-| `CheckStructVersion` | `false` | Struct schema hash checks disabled           |
-| `MaxDepth`           | `20`    | Max dynamic nesting depth                    |
+| Option                            | Default | Description                                        |
+| --------------------------------- | ------- | -------------------------------------------------- |
+| `TrackRef`                        | `false` | Reference tracking disabled                        |
+| `Compatible`                      | `true`  | Compatible schema-evolution metadata enabled       |
+| `CheckStructVersion`              | `false` | Struct schema hash checks disabled                 |
+| `MaxDepth`                        | `20`    | Max dynamic nesting depth                          |
+| `MaxSchemaVersionsPerType`        | `10`    | Max remote schema versions for one struct type     |
+| `MaxAverageSchemaVersionsPerType` | `3`     | Average remote schema versions across struct types |
 
 ## Builder Options
 
@@ -92,6 +94,28 @@ Fory fory = Fory.Builder()
 
 `value` must be greater than `0`.
 
+### `MaxSchemaVersionsPerType(int value)`
+
+Sets the maximum accepted remote struct schema versions for one logical type on
+metadata cache misses.
+
+```csharp
+Fory fory = Fory.Builder()
+    .MaxSchemaVersionsPerType(10)
+    .Build();
+```
+
+### `MaxAverageSchemaVersionsPerType(int value)`
+
+Sets the average accepted remote struct schema versions across accepted remote
+struct types. The effective global floor is `8192` schemas.
+
+```csharp
+Fory fory = Fory.Builder()
+    .MaxAverageSchemaVersionsPerType(3)
+    .Build();
+```
+
 ## Common Configurations
 
 ### Compatible service
@@ -127,6 +151,8 @@ Security-related configuration:
 - Register only the expected types before deserializing untrusted payloads.
 - Use `CheckStructVersion(true)` with `Compatible(false)` for intentional same-schema payloads.
 - Set `MaxDepth(...)` to reject unexpectedly deep dynamic object graphs.
+- Keep the remote schema metadata limits at their defaults unless a trusted peer legitimately sends
+  many schema versions.
 - Prefer generated or registered concrete models over broad dynamic fields for untrusted input.
 
 ## Related Topics

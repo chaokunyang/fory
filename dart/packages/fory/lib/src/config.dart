@@ -24,6 +24,8 @@ final class Config {
   /// Default maximum nesting depth for a single serialization or
   /// deserialization operation.
   static const int defaultMaxDepth = 256;
+  static const int defaultMaxSchemaVersionsPerType = 10;
+  static const int defaultMaxAverageSchemaVersionsPerType = 3;
 
   /// Enables compatible struct encoding and decoding.
   ///
@@ -39,6 +41,13 @@ final class Config {
   /// Maximum allowed read or write nesting depth.
   final int maxDepth;
 
+  /// Maximum accepted remote struct schema versions for one logical type.
+  final int maxSchemaVersionsPerType;
+
+  /// Maximum accepted average remote struct schema versions across logical
+  /// types.
+  final int maxAverageSchemaVersionsPerType;
+
   /// Creates an immutable configuration object.
   ///
   /// Invalid numeric limits fail fast. When [compatible] is `true`,
@@ -47,6 +56,17 @@ final class Config {
     this.compatible = true,
     bool checkStructVersion = true,
     this.maxDepth = defaultMaxDepth,
+    this.maxSchemaVersionsPerType = defaultMaxSchemaVersionsPerType,
+    this.maxAverageSchemaVersionsPerType =
+        defaultMaxAverageSchemaVersionsPerType,
   }) : checkStructVersion = compatible ? false : checkStructVersion,
-       assert(maxDepth > 0, 'maxDepth must be positive');
+       assert(maxDepth > 0, 'maxDepth must be positive'),
+       assert(
+         maxSchemaVersionsPerType > 0,
+         'maxSchemaVersionsPerType must be positive',
+       ),
+       assert(
+         maxAverageSchemaVersionsPerType > 0,
+         'maxAverageSchemaVersionsPerType must be positive',
+       );
 }

@@ -324,24 +324,57 @@ def test_id_registered_typedef_extended_field_count_header():
     assert len(decoded_typedef.fields) == 32
 
 
-def test_meta_shared_typedef_cache_is_bounded():
-    fory = Fory(xlang=True, compatible=True)
-    fory.register(SimpleTypeDef, name="example.SimpleTypeDef")
-    resolver = fory.type_resolver
-    read_and_build = getattr(resolver, "_read_and_build_type_info", None)
-    if read_and_build is None:
-        pytest.skip("pure-Python resolver internals are not exposed by this runtime")
-    typedef = encode_typedef(resolver, SimpleTypeDef)
-    header_buffer = Buffer(typedef.encoded)
-    header = header_buffer.read_int64()
-    for i in range(8192):
-        resolver._meta_shared_type_info[i] = object()
+@pytest.mark.parametrize("xlang", [False, True])
+def test_remote_schema_limit_rejects_extra_versions(xlang):
+    reader = Fory(
+        xlang=xlang,
+        strict=False,
+        compatible=True,
+        max_schema_versions_per_type=1,
+    )
+    first = make_dataclass("RemoteLimitV1", [("value", int)])
+    second = make_dataclass("RemoteLimitV2", [("value", int), ("extra", int)])
+    first_type_id, first_typedef = _remote_typedef(xlang, "example.Unknown", first)
+    second_type_id, second_typedef = _remote_typedef(xlang, "example.Unknown", second)
 
-    typeinfo = read_and_build(Buffer(typedef.encoded))
+    _read_remote_typedef(reader, first_type_id, first_typedef)
 
-    assert typeinfo.type_def.type_id == typedef.type_id
-    assert header not in resolver._meta_shared_type_info
-    assert len(resolver._meta_shared_type_info) == 8192
+    with pytest.raises(ValueError, match="max_schema_versions_per_type"):
+        _read_remote_typedef(reader, second_type_id, second_typedef)
+
+
+@pytest.mark.parametrize("xlang", [False, True])
+def test_remote_schema_limit_keeps_unknown_types_separate(xlang):
+    reader = Fory(
+        xlang=xlang,
+        strict=False,
+        compatible=True,
+        max_schema_versions_per_type=1,
+    )
+    first = make_dataclass("RemoteUnknownA", [("value", int)])
+    second = make_dataclass("RemoteUnknownB", [("value", int)])
+    first_type_id, first_typedef = _remote_typedef(xlang, "example.UnknownA", first)
+    second_type_id, second_typedef = _remote_typedef(xlang, "example.UnknownB", second)
+
+    _read_remote_typedef(reader, first_type_id, first_typedef)
+    _read_remote_typedef(reader, second_type_id, second_typedef)
+
+
+def _remote_typedef(xlang, remote_name, cls):
+    writer = Fory(xlang=xlang, strict=False, compatible=True)
+    writer.register(cls, name=remote_name)
+    type_id, _ = writer.type_resolver.get_registered_type_ids(cls)
+    return type_id, encode_typedef(writer.type_resolver, cls).encoded
+
+
+def _read_remote_typedef(fory, type_id, encoded):
+    buffer = Buffer.allocate(len(encoded) + 8)
+    buffer.write_uint8(type_id)
+    buffer.write_var_uint32(0)
+    buffer.write_bytes(encoded)
+    fory.read_context.reset()
+    fory.read_context.prepare(Buffer(buffer.to_bytes()))
+    return fory.type_resolver.read_type_info(fory.read_context)
 
 
 def _corrupt_encoded_field_name(typedef, field_name):

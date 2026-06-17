@@ -123,7 +123,6 @@ public abstract class TypeResolver {
   static final int INTERNAL_NATIVE_ID_LIMIT = 250;
   private static final GenericType OBJECT_GENERIC_TYPE = GenericType.build(Object.class);
   private static final float TYPE_ID_MAP_LOAD_FACTOR = 0.5f;
-  private static final int MAX_CACHED_TYPE_DEFS = 8192;
   static final long MAX_USER_TYPE_ID = 0xffff_fffEL;
 
   private static final class TransformedTypeInfo {
@@ -162,6 +161,8 @@ public abstract class TypeResolver {
       JITContext jitContext) {
     this.config = config;
     this.sharedRegistry = sharedRegistry;
+    sharedRegistry.setRemoteSchemaLimits(
+        config.maxSchemaVersionsPerType(), config.maxAverageSchemaVersionsPerType());
     this.jitContext = jitContext;
     metaContextShareEnabled = config.isMetaShareEnabled();
     extRegistry = new ExtRegistry(classLoader, sharedRegistry);
@@ -854,6 +855,11 @@ public abstract class TypeResolver {
    * ClassResolver and XtypeResolver.
    */
   protected final TypeInfo readSharedClassMeta(ReadContext readContext) {
+    return readSharedClassMeta(readContext, null, false);
+  }
+
+  private TypeInfo readSharedClassMeta(
+      ReadContext readContext, Class<?> targetClass, boolean hasTargetClass) {
     MemoryBuffer buffer = readContext.getBuffer();
     MetaReadContext metaReadContext = readContext.getMetaReadContext();
     assert metaReadContext != null : SET_META_READ_CONTEXT_MSG;
@@ -876,10 +882,19 @@ public abstract class TypeResolver {
         TypeDef typeDef = sharedRegistry.typeDefById.get(id);
         if (typeDef != null) {
           TypeDef.skipTypeDef(buffer, id);
+          typeInfo = buildMetaSharedTypeInfo(typeDef);
+        } else if (hasTargetClass) {
+          byte[] encoded = TypeDef.readTypeDefBytes(this, buffer, id);
+          TypeDef localTypeDef = getTypeDef(targetClass, true);
+          if (Arrays.equals(encoded, localTypeDef.getEncoded())) {
+            typeInfo = getTypeInfo(targetClass);
+          } else {
+            typeInfo = buildCheckedMetaSharedTypeInfo(TypeDef.readTypeDef(this, encoded));
+          }
         } else {
-          typeDef = readTypeDef(buffer, id);
+          typeDef = TypeDef.readTypeDef(this, buffer, id);
+          typeInfo = buildCheckedMetaSharedTypeInfo(typeDef);
         }
-        typeInfo = buildMetaSharedTypeInfo(typeDef);
       }
       // index == readTypeInfos.size() since types are written sequentially
       metaReadContext.readTypeInfos.add(typeInfo);
@@ -888,7 +903,7 @@ public abstract class TypeResolver {
   }
 
   public final TypeInfo readSharedClassMeta(ReadContext readContext, Class<?> targetClass) {
-    TypeInfo typeInfo = readSharedClassMeta(readContext);
+    TypeInfo typeInfo = readSharedClassMeta(readContext, targetClass, true);
     Class<?> readClass = typeInfo.getType();
     // replace target class if needed
     if (targetClass != readClass) {
@@ -941,9 +956,6 @@ public abstract class TypeResolver {
     }
     TransformedTypeInfo[] infos = extRegistry.transformedTypeInfo.get(targetClass);
     int size = infos == null ? 0 : infos.length;
-    if (size >= MAX_CACHED_TYPE_DEFS) {
-      return newTypeInfo;
-    }
     TransformedTypeInfo[] newInfos = new TransformedTypeInfo[size + 1];
     if (size > 0) {
       System.arraycopy(infos, 0, newInfos, 0, size);
@@ -1030,8 +1042,31 @@ public abstract class TypeResolver {
       return typeInfo;
     }
     Class<?> cls = loadClass(typeDef.getClassSpec());
-    // A wire TypeDef may create a compatible serializer; admit the class before caching it by id.
     checkClassForDeserialization(cls);
+    return buildMetaSharedTypeInfo(typeDef, cls);
+  }
+
+  private TypeInfo buildCheckedMetaSharedTypeInfo(TypeDef typeDef) {
+    Class<?> cls = loadClass(typeDef.getClassSpec());
+    // A wire TypeDef may create a compatible serializer; check the class before counting it.
+    checkClassForDeserialization(cls);
+    TypeDef localTypeDef = exactLocalTypeDef(typeDef, cls);
+    if (localTypeDef != null) {
+      return buildMetaSharedTypeInfo(localTypeDef, cls);
+    }
+    TypeDef cachedTypeDef = cacheRemoteTypeDef(typeDef);
+    return buildMetaSharedTypeInfo(cachedTypeDef, cls);
+  }
+
+  private TypeDef exactLocalTypeDef(TypeDef remoteTypeDef, Class<?> cls) {
+    TypeDef localTypeDef = getTypeDef(cls, true);
+    return Arrays.equals(remoteTypeDef.getEncoded(), localTypeDef.getEncoded())
+        ? localTypeDef
+        : null;
+  }
+
+  private TypeInfo buildMetaSharedTypeInfo(TypeDef typeDef, Class<?> cls) {
+    TypeInfo typeInfo;
     if (!typeDef.isStructSchemaKind()
         && !UnknownClass.class.isAssignableFrom(TypeUtils.getComponentIfArray(cls))) {
       typeInfo = getTypeInfo(cls);
@@ -1042,9 +1077,7 @@ public abstract class TypeResolver {
     } else {
       typeInfo = getMetaSharedTypeInfo(typeDef, cls);
     }
-    if (extRegistry.typeInfoByTypeDefId.size < MAX_CACHED_TYPE_DEFS) {
-      extRegistry.typeInfoByTypeDefId.put(typeDef.getId(), typeInfo);
-    }
+    extRegistry.typeInfoByTypeDefId.put(typeDef.getId(), typeInfo);
     return typeInfo;
   }
 
@@ -1468,6 +1501,21 @@ public abstract class TypeResolver {
 
   public final TypeDef cacheTypeDef(TypeDef typeDef) {
     return sharedRegistry.getOrCreateTypeDef(typeDef);
+  }
+
+  @Internal
+  public final TypeDef cacheRemoteTypeDef(TypeDef typeDef) {
+    if (!typeDef.isStructSchemaKind()) {
+      return cacheTypeDef(typeDef);
+    }
+    return sharedRegistry.getOrCreateRemoteTypeDef(typeDef, remoteStructKey(typeDef));
+  }
+
+  private static Object remoteStructKey(TypeDef typeDef) {
+    if (typeDef.isNamed()) {
+      return typeDef.getClassSpec().entireClassName;
+    }
+    return typeDef.getClassSpec().userTypeId;
   }
 
   public final boolean isSerializable(Class<?> cls) {

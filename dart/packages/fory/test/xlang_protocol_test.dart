@@ -17,9 +17,15 @@
  * under the License.
  */
 
+import 'dart:collection';
 import 'dart:typed_data';
 
 import 'package:fory/fory.dart';
+import 'package:fory/src/codegen/generated_registry.dart';
+import 'package:fory/src/codegen/generated_support.dart';
+import 'package:fory/src/context/meta_string_reader.dart';
+import 'package:fory/src/context/meta_string_writer.dart';
+import 'package:fory/src/meta/type_def.dart';
 import 'package:fory/src/meta/type_meta.dart';
 import 'package:fory/src/resolver/type_resolver.dart';
 import 'package:fory/src/util/hash_util.dart';
@@ -38,6 +44,77 @@ final class _CacheTestSerializer extends Serializer<Object?> {
   void write(WriteContext context, Object? value) {}
 }
 
+final class _SchemaLocal {}
+
+final class _SchemaRemoteA {}
+
+final class _SchemaRemoteB {}
+
+final class _SchemaRemoteC {}
+
+const _intFieldType = GeneratedFieldType(
+  type: int,
+  typeId: TypeIds.int32,
+  nullable: false,
+  ref: false,
+  dynamic: false,
+  arguments: <GeneratedFieldType>[],
+);
+
+GeneratedFieldInfo _generatedField(String name) => GeneratedFieldInfo(
+  name: name,
+  identifier: name,
+  id: null,
+  fieldType: _intFieldType,
+);
+
+void _rememberSchema(Type type, List<GeneratedFieldInfo> fields) {
+  GeneratedTypeCatalog.remember(
+    type,
+    GeneratedTypeEntry(
+      kind: GeneratedTypeKind.struct,
+      serializerFactory: () => const _CacheTestSerializer(),
+      evolving: true,
+      needsRootRef: false,
+      usesNestedTypeDefinitions: false,
+      fields: fields.map((field) => field.toFieldInfo()).toList(),
+    ),
+  );
+}
+
+Uint8List _typeMetaBytes(
+  Type type,
+  String name,
+  List<GeneratedFieldInfo> fields,
+) {
+  final resolver = TypeResolver(const Config());
+  _rememberSchema(type, fields);
+  final parts = name.split('.');
+  resolver.registerGenerated(
+    type,
+    namespace: parts.first,
+    typeName: parts.last,
+  );
+  final resolved = resolver.resolveUserByName(parts.first, parts.last);
+  final buffer = Buffer();
+  resolver.writeTypeMeta(
+    buffer,
+    resolved,
+    typeDef: resolved.typeDef,
+    typeDefIds: LinkedHashMap<TypeDef, int>.identity(),
+    metaStringWriter: MetaStringWriter(),
+  );
+  return buffer.toBytes();
+}
+
+void _readTypeMeta(TypeResolver resolver, Uint8List bytes) {
+  resolver.readTypeMeta(
+    Buffer.wrap(bytes),
+    sharedTypes: <TypeInfo>[],
+    metaStringReader: MetaStringReader(resolver),
+  );
+}
+
 void main() {
   group('xlang protocol regressions', () {
     test('deserializes NONE wire values as null', () {
@@ -51,17 +128,18 @@ void main() {
     test('deserializes FLOAT16_ARRAY wire values', () {
       final fory = Fory();
       final bytes = Uint8List.fromList(
-        fory.serialize(
-          Uint16List.fromList(<int>[0x3c00, 0xc000, 0x7e00]),
-        ),
+        fory.serialize(Uint16List.fromList(<int>[0x3c00, 0xc000, 0x7e00])),
       );
       bytes[2] = TypeIds.float16Array;
 
       final values = fory.deserialize<Float16List>(bytes);
 
       expect(
-        Uint16List.view(values.buffer, values.offsetInBytes, values.length)
-            .toList(),
+        Uint16List.view(
+          values.buffer,
+          values.offsetInBytes,
+          values.length,
+        ).toList(),
         orderedEquals(<int>[0x3c00, 0xc000, 0x7e00]),
       );
     });
@@ -121,7 +199,7 @@ void main() {
       );
     });
 
-    test('parsed TypeDef cache stops publishing at capacity', () {
+    test('parsed TypeDef cache publishes beyond old implementation floor', () {
       const resolved = TypeInfo(
         type: Object,
         kind: RegistrationKind.builtin,
@@ -140,18 +218,69 @@ void main() {
         remoteTypeDef: null,
       );
       final cache = ParsedTypeMetaCache();
-      for (var i = 0; i < ParsedTypeMetaCache.maxEntries; i++) {
+      const oldImplementationFloor = 8192;
+      for (var i = 0; i < oldImplementationFloor; i++) {
         cache.remember(TypeHeader(Int64(i)), resolved);
       }
 
       expect(
-        cache.lookup(TypeHeader(Int64(ParsedTypeMetaCache.maxEntries - 1))),
+        cache.lookup(TypeHeader(Int64(oldImplementationFloor - 1))),
         same(resolved),
       );
-      final uncached = TypeHeader(Int64(ParsedTypeMetaCache.maxEntries));
-      cache.remember(uncached, resolved);
+      final aboveOldFloor = TypeHeader(Int64(oldImplementationFloor));
+      cache.remember(aboveOldFloor, resolved);
 
-      expect(cache.lookup(uncached), isNull);
+      expect(cache.lookup(aboveOldFloor), same(resolved));
+    });
+
+    test('remote schema limit rejects extra versions', () {
+      const name = 'example.Unknown';
+      final reader = TypeResolver(const Config(maxSchemaVersionsPerType: 1));
+      _rememberSchema(_SchemaLocal, <GeneratedFieldInfo>[]);
+      reader.registerGenerated(
+        _SchemaLocal,
+        namespace: 'example',
+        typeName: 'Unknown',
+      );
+      final first = _typeMetaBytes(_SchemaRemoteA, name, <GeneratedFieldInfo>[
+        _generatedField('firstValue'),
+      ]);
+      final second = _typeMetaBytes(_SchemaRemoteB, name, <GeneratedFieldInfo>[
+        _generatedField('secondValue'),
+      ]);
+
+      _readTypeMeta(reader, first);
+
+      expect(() => _readTypeMeta(reader, second), throwsA(isA<StateError>()));
+    });
+
+    test('remote schema limit keeps unknown types separate', () {
+      final reader = TypeResolver(const Config(maxSchemaVersionsPerType: 1));
+      _rememberSchema(_SchemaLocal, <GeneratedFieldInfo>[]);
+      reader.registerGenerated(
+        _SchemaLocal,
+        namespace: 'example',
+        typeName: 'UnknownA',
+      );
+      _rememberSchema(_SchemaRemoteC, <GeneratedFieldInfo>[]);
+      reader.registerGenerated(
+        _SchemaRemoteC,
+        namespace: 'example',
+        typeName: 'UnknownB',
+      );
+      final first = _typeMetaBytes(
+        _SchemaRemoteA,
+        'example.UnknownA',
+        <GeneratedFieldInfo>[_generatedField('firstValue')],
+      );
+      final second = _typeMetaBytes(
+        _SchemaRemoteB,
+        'example.UnknownB',
+        <GeneratedFieldInfo>[_generatedField('secondValue')],
+      );
+
+      _readTypeMeta(reader, first);
+      _readTypeMeta(reader, second);
     });
 
     test('validates parsed TypeDef body hash before caching', () {

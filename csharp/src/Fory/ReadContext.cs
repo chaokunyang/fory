@@ -15,19 +15,25 @@
 // specific language governing permissions and limitations
 // under the License.
 
+using System.Buffers.Binary;
+
 namespace Apache.Fory;
 
 public sealed class ReadContext
 {
-    private const int MaxParsedTypeMetaEntries = 8192;
+    private const int MinRemoteStructSchemaLimit = 8192;
 
     private readonly ReusableArray<TypeMeta> _readTypeMetas = new();
     private readonly Dictionary<ulong, TypeMeta> _cachedTypeMetasByHeader = [];
+    private readonly Dictionary<object, int> _remoteSchemaVersionsByType = [];
     private TypeMeta? _firstReadTypeMeta;
     private bool _hasFirstReadTypeMeta;
     private ulong _lastMetaHeader;
     private TypeMeta? _lastTypeMeta;
     private bool _hasLastMetaHeader;
+    private TypeMeta? _pendingTypeMeta;
+    private ulong _pendingTypeMetaHeader;
+    private int _pendingTypeMetaIndex = -1;
 
     private readonly List<MetaString> _readMetaStrings = [];
 
@@ -40,6 +46,9 @@ public sealed class ReadContext
     internal Type? _cachedTypeMetaType;
     internal TypeMeta? _cachedTypeMeta;
     internal int _currentDynamicReadDepth;
+    private readonly int _maxSchemaVersionsPerType;
+    private readonly int _maxAverageSchemaVersionsPerType;
+    private int _totalAcceptedSchemaVersions;
 
     public ReadContext(
         ByteReader reader,
@@ -47,11 +56,21 @@ public sealed class ReadContext
         bool trackRef,
         bool compatible = false,
         bool checkStructVersion = false,
-        int maxDynamicReadDepth = 20)
+        int maxDynamicReadDepth = 20,
+        int maxSchemaVersionsPerType = 10,
+        int maxAverageSchemaVersionsPerType = 3)
     {
         if (maxDynamicReadDepth <= 0)
         {
             throw new ArgumentOutOfRangeException(nameof(maxDynamicReadDepth), "MaxDepth must be greater than 0.");
+        }
+        if (maxSchemaVersionsPerType <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(maxSchemaVersionsPerType), "MaxSchemaVersionsPerType must be greater than 0.");
+        }
+        if (maxAverageSchemaVersionsPerType <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(maxAverageSchemaVersionsPerType), "MaxAverageSchemaVersionsPerType must be greater than 0.");
         }
 
         Reader = reader;
@@ -61,6 +80,8 @@ public sealed class ReadContext
         CheckStructVersion = checkStructVersion;
         RefReader = new RefReader();
         _maxDynamicReadDepth = maxDynamicReadDepth;
+        _maxSchemaVersionsPerType = maxSchemaVersionsPerType;
+        _maxAverageSchemaVersionsPerType = maxAverageSchemaVersionsPerType;
     }
 
     public ByteReader Reader { get; private set; }
@@ -164,15 +185,52 @@ public sealed class ReadContext
             return;
         }
 
-        if (_cachedTypeMetasByHeader.Count >= MaxParsedTypeMetaEntries)
-        {
-            return;
-        }
-
+        CheckRemoteStructSchemaLimit(typeMeta);
         _lastMetaHeader = header;
         _lastTypeMeta = typeMeta;
         _hasLastMetaHeader = true;
         _cachedTypeMetasByHeader.TryAdd(header, typeMeta);
+    }
+
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+    private void CheckRemoteStructSchemaLimit(TypeMeta typeMeta)
+    {
+        if (typeMeta.TypeId is not uint typeId ||
+            typeId is not ((uint)TypeId.Struct or
+                (uint)TypeId.CompatibleStruct or
+                (uint)TypeId.NamedStruct or
+                (uint)TypeId.NamedCompatibleStruct))
+        {
+            return;
+        }
+
+        object typeKey = typeMeta.RegisterByName
+            ? $"{typeMeta.NamespaceName.Value}\0{typeMeta.TypeName.Value}"
+            : typeMeta.UserTypeId!.Value;
+        _remoteSchemaVersionsByType.TryGetValue(typeKey, out int versionsForType);
+        if (versionsForType >= _maxSchemaVersionsPerType)
+        {
+            throw new InvalidDataException(
+                $"Remote schema version limit exceeded for type {typeKey}: {versionsForType} >= {_maxSchemaVersionsPerType}. " +
+                "Increase MaxSchemaVersionsPerType if this peer legitimately sends many schema versions for one type.");
+        }
+
+        int acceptedStructTypeCount = versionsForType == 0
+            ? _remoteSchemaVersionsByType.Count + 1
+            : _remoteSchemaVersionsByType.Count;
+        long globalLimit = Math.Max(
+            MinRemoteStructSchemaLimit,
+            (long)acceptedStructTypeCount * _maxAverageSchemaVersionsPerType);
+        if (_totalAcceptedSchemaVersions >= globalLimit)
+        {
+            throw new InvalidDataException(
+                $"Remote schema version limit exceeded: {_totalAcceptedSchemaVersions} schemas for {acceptedStructTypeCount} " +
+                $"accepted struct types exceeds the average limit {_maxAverageSchemaVersionsPerType}. Increase " +
+                "MaxAverageSchemaVersionsPerType if this peer legitimately sends many schema versions across many types.");
+        }
+
+        _remoteSchemaVersionsByType[typeKey] = versionsForType + 1;
+        _totalAcceptedSchemaVersions++;
     }
 
     internal MetaString? GetReadMetaString(int index)
@@ -185,7 +243,20 @@ public sealed class ReadContext
         _readMetaStrings.Add(value);
     }
 
-    internal TypeMeta ReadTypeMeta()
+    internal void AcceptReadTypeMeta(TypeMeta typeMeta)
+    {
+        if (!ReferenceEquals(_pendingTypeMeta, typeMeta))
+        {
+            return;
+        }
+
+        CacheReadTypeMeta(_pendingTypeMetaHeader, typeMeta);
+        StoreReadTypeMeta(typeMeta, _pendingTypeMetaIndex);
+        _pendingTypeMeta = null;
+        _pendingTypeMetaIndex = -1;
+    }
+
+    internal TypeMeta ReadTypeMeta(TypeInfo? exactLocal = null)
     {
         uint indexMarker = Reader.ReadVarUInt32();
         bool isRef = (indexMarker & 1) == 1;
@@ -201,6 +272,11 @@ public sealed class ReadContext
             return cached;
         }
 
+        if (_pendingTypeMeta is not null)
+        {
+            throw new InvalidDataException("previous type meta was not accepted");
+        }
+
         ulong header = Reader.ReadUInt64();
         if (TryGetCachedReadTypeMeta(header, out TypeMeta cachedTypeMeta))
         {
@@ -212,11 +288,44 @@ public sealed class ReadContext
             return cachedTypeMeta;
         }
 
+        if (exactLocal is not null && TryReadExactLocalTypeMeta(header, exactLocal, out TypeMeta localTypeMeta))
+        {
+            StoreReadTypeMeta(localTypeMeta, index);
+            return localTypeMeta;
+        }
+
         Reader.MoveBack(sizeof(ulong));
         TypeMeta typeMeta = TypeMeta.Decode(Reader);
-        StoreReadTypeMeta(typeMeta, index);
-        CacheReadTypeMeta(header, typeMeta);
+        _pendingTypeMeta = typeMeta;
+        _pendingTypeMetaHeader = header;
+        _pendingTypeMetaIndex = index;
         return typeMeta;
+    }
+
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+    private bool TryReadExactLocalTypeMeta(ulong header, TypeInfo exactLocal, out TypeMeta typeMeta)
+    {
+        TypeInfo.TypeMetaCacheEntry local = exactLocal.GetTypeMetaCacheEntry(TrackRef);
+        byte[] encoded = local.EncodedBytes;
+        if (encoded.Length < sizeof(ulong) ||
+            BinaryPrimitives.ReadUInt64LittleEndian(encoded) != header)
+        {
+            typeMeta = null!;
+            return false;
+        }
+
+        int bodyBytes = encoded.Length - sizeof(ulong);
+        Reader.CheckBound(bodyBytes);
+        int start = Reader.Cursor - sizeof(ulong);
+        if (!Reader.Storage.AsSpan(start, encoded.Length).SequenceEqual(encoded))
+        {
+            typeMeta = null!;
+            return false;
+        }
+
+        Reader.Skip(bodyBytes);
+        typeMeta = local.TypeMeta;
+        return true;
     }
 
     internal void StoreTypeMeta(Type type, TypeMeta typeMeta)
@@ -376,5 +485,7 @@ public sealed class ReadContext
         _hasFirstReadTypeMeta = false;
         _readTypeMetas.Clear();
         _readMetaStrings.Clear();
+        _pendingTypeMeta = null;
+        _pendingTypeMetaIndex = -1;
     }
 }

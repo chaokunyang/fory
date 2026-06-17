@@ -18,6 +18,7 @@
 package fory
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"hash/fnv"
@@ -52,11 +53,11 @@ const (
 	useStringId             = 1
 	SMALL_STRING_THRESHOLD  = 16
 	// 0xffffffff is reserved for "unset".
-	maxUserTypeID           uint32 = 0xfffffffe
-	invalidUserTypeID       uint32 = 0xffffffff
-	internalTypeIDLimit            = 0xFF
-	maxCachedTypeDefs              = 8192
-	maxCachedNamedTypeInfos        = 8192
+	maxUserTypeID              uint32 = 0xfffffffe
+	invalidUserTypeID          uint32 = 0xffffffff
+	internalTypeIDLimit               = 0xFF
+	minRemoteStructSchemaLimit        = 8192
+	maxCachedNamedTypeInfos           = 8192
 )
 
 var (
@@ -208,8 +209,10 @@ type TypeResolver struct {
 	typeNameDecoder  *meta.Decoder
 
 	// meta share related
-	typeToTypeDef  map[reflect.Type]*TypeDef
-	defIdToTypeDef map[int64]*TypeDef
+	typeToTypeDef               map[reflect.Type]*TypeDef
+	defIdToTypeDef              map[int64]*TypeDef
+	remoteSchemaVersionsByType  map[any]int
+	totalAcceptedSchemaVersions int
 
 	// Fast type cache for O(1) lookup using type pointer
 	typePointerCache map[uintptr]*TypeInfo
@@ -252,10 +255,11 @@ func newTypeResolver(fory *Fory) *TypeResolver {
 		typeNameEncoder:  meta.NewEncoder('$', '_'),
 		typeNameDecoder:  meta.NewDecoder('$', '_'),
 
-		typeToTypeDef:    make(map[reflect.Type]*TypeDef),
-		defIdToTypeDef:   make(map[int64]*TypeDef),
-		typePointerCache: make(map[uintptr]*TypeInfo),
-		unionTypeCache:   make(map[reflect.Type]bool),
+		typeToTypeDef:              make(map[reflect.Type]*TypeDef),
+		defIdToTypeDef:             make(map[int64]*TypeDef),
+		remoteSchemaVersionsByType: make(map[any]int),
+		typePointerCache:           make(map[uintptr]*TypeInfo),
+		unionTypeCache:             make(map[reflect.Type]bool),
 	}
 	// base type info for encode/decode types.
 	// composite types info will be constructed dynamically.
@@ -1519,6 +1523,54 @@ func (r *TypeResolver) getTypeDef(typ reflect.Type, create bool) (*TypeDef, erro
 	return typeDef, nil
 }
 
+//go:noinline
+func (r *TypeResolver) checkRemoteStructSchemaLimit(td *TypeDef) error {
+	switch TypeId(td.typeId) {
+	case STRUCT, COMPATIBLE_STRUCT, NAMED_STRUCT, NAMED_COMPATIBLE_STRUCT:
+	default:
+		return nil
+	}
+	var typeKey any
+	if td.registerByName {
+		if td.nsName == nil || td.typeName == nil {
+			return fmt.Errorf("named remote struct schema is missing namespace or type name")
+		}
+		namespace, err := r.namespaceDecoder.Decode(td.nsName.Data, td.nsName.Encoding)
+		if err != nil {
+			return err
+		}
+		typeName, err := r.typeNameDecoder.Decode(td.typeName.Data, td.typeName.Encoding)
+		if err != nil {
+			return err
+		}
+		typeKey = namespace + "\x00" + typeName
+	} else {
+		typeKey = td.userTypeId
+	}
+	versionsForType := r.remoteSchemaVersionsByType[typeKey]
+	if versionsForType >= r.fory.config.MaxSchemaVersionsPerType {
+		return fmt.Errorf(
+			"remote schema version limit exceeded for type %v: %d >= %d. Increase MaxSchemaVersionsPerType if this peer legitimately sends many schema versions for one type",
+			typeKey, versionsForType, r.fory.config.MaxSchemaVersionsPerType)
+	}
+	acceptedStructTypeCount := len(r.remoteSchemaVersionsByType)
+	if versionsForType == 0 {
+		acceptedStructTypeCount++
+	}
+	globalLimit := acceptedStructTypeCount * r.fory.config.MaxAverageSchemaVersionsPerType
+	if globalLimit < minRemoteStructSchemaLimit {
+		globalLimit = minRemoteStructSchemaLimit
+	}
+	if r.totalAcceptedSchemaVersions >= globalLimit {
+		return fmt.Errorf(
+			"remote schema version limit exceeded: %d schemas for %d accepted struct types exceeds the average limit %d. Increase MaxAverageSchemaVersionsPerType if this peer legitimately sends many schema versions across many types",
+			r.totalAcceptedSchemaVersions, acceptedStructTypeCount, r.fory.config.MaxAverageSchemaVersionsPerType)
+	}
+	r.remoteSchemaVersionsByType[typeKey] = versionsForType + 1
+	r.totalAcceptedSchemaVersions++
+	return nil
+}
+
 func (r *TypeResolver) readSharedTypeMeta(buffer *ByteBuffer, err *Error) *TypeInfo {
 	context := r.fory.MetaContext()
 	if context == nil {
@@ -1559,6 +1611,7 @@ func (r *TypeResolver) readSharedTypeMeta(buffer *ByteBuffer, err *Error) *TypeI
 	}
 
 	var td *TypeDef
+	newTypeDef := false
 	if existingTd, exists := r.defIdToTypeDef[id]; exists {
 		// Header-cache hits intentionally skip without rehashing. Entries reach this cache only
 		// after a successful TypeDef parse and 52-bit metadata-hash validation.
@@ -1570,6 +1623,21 @@ func (r *TypeResolver) readSharedTypeMeta(buffer *ByteBuffer, err *Error) *TypeI
 			return nil
 		}
 		td = newTd
+		newTypeDef = true
+		if td.type_ != nil {
+			localTd, localErr := r.getTypeDef(td.type_, true)
+			if localErr == nil && bytes.Equal(localTd.encoded, td.encoded) {
+				td = localTd
+				newTypeDef = false
+			}
+		}
+		if newTypeDef {
+			if limitErr := r.checkRemoteStructSchemaLimit(td); limitErr != nil {
+				err.SetError(limitErr)
+				return nil
+			}
+			r.defIdToTypeDef[id] = td
+		}
 	}
 
 	typeInfo, typeInfoErr := td.getOrBuildTypeInfo(r)
@@ -1577,10 +1645,6 @@ func (r *TypeResolver) readSharedTypeMeta(buffer *ByteBuffer, err *Error) *TypeI
 		err.SetError(typeInfoErr)
 		return nil
 	}
-	if _, exists := r.defIdToTypeDef[id]; !exists && len(r.defIdToTypeDef) < maxCachedTypeDefs {
-		r.defIdToTypeDef[id] = td
-	}
-
 	context.readTypeInfos = append(context.readTypeInfos, typeInfo)
 	return typeInfo
 }

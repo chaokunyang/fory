@@ -81,8 +81,6 @@ ENABLE_FORY_CYTHON_SERIALIZATION = os.environ.get(
 cdef int32_t NOT_NULL_BOOL_FLAG = (NOT_NULL_VALUE_FLAG & 0xFF) | (<int32_t>TypeId.BOOL << 8)
 cdef int32_t NOT_NULL_STRING_FLAG = (NOT_NULL_VALUE_FLAG & 0xFF) | (<int32_t>TypeId.STRING << 8)
 cdef int32_t NOT_NULL_FLOAT64_FLAG = (NOT_NULL_VALUE_FLAG & 0xFF) | (<int32_t>TypeId.FLOAT64 << 8)
-cdef int32_t MAX_CACHED_TYPE_DEFS = 8192
-
 _PRIMITIVE_TYPE_IDS = frozenset(range(1, 21)) - {16}
 
 
@@ -111,6 +109,8 @@ cdef class Config:
         meta_share: Enables shared type metadata on the resolver/type-info path.
         scoped_meta_share_enabled: Enables per-operation meta-share state.
         max_depth: Maximum allowed nesting depth during deserialization.
+        max_schema_versions_per_type: Maximum accepted remote schema versions for one struct type.
+        max_average_schema_versions_per_type: Average remote schema versions allowed across accepted struct types.
         field_nullable: Treats struct/dataclass fields as nullable by default.
         policy: Deserialization policy used for security-sensitive checks.
         meta_compressor: Optional typedef/meta compressor implementation.
@@ -123,6 +123,8 @@ cdef class Config:
     cdef public bint meta_share
     cdef public bint scoped_meta_share_enabled
     cdef public int32_t max_depth
+    cdef public int32_t max_schema_versions_per_type
+    cdef public int32_t max_average_schema_versions_per_type
     cdef public bint field_nullable
     cdef public object policy
     cdef public object meta_compressor
@@ -137,6 +139,8 @@ cdef class Config:
         meta_share,
         scoped_meta_share_enabled,
         max_depth,
+        max_schema_versions_per_type,
+        max_average_schema_versions_per_type,
         field_nullable,
         policy,
         meta_compressor,
@@ -152,6 +156,8 @@ cdef class Config:
             meta_share: Enable shared type metadata on resolver/type-info paths.
             scoped_meta_share_enabled: Enable per-operation meta-share state.
             max_depth: Maximum allowed read depth before failing deserialization.
+            max_schema_versions_per_type: Maximum accepted remote schema versions for one struct type.
+            max_average_schema_versions_per_type: Average remote schema versions allowed across accepted struct types.
             field_nullable: Treat all struct fields as nullable by default.
             policy: Deserialization policy implementation.
             meta_compressor: Optional typedef/meta compressor.
@@ -163,6 +169,12 @@ cdef class Config:
         self.meta_share = meta_share
         self.scoped_meta_share_enabled = scoped_meta_share_enabled
         self.max_depth = max_depth
+        if max_schema_versions_per_type <= 0:
+            raise ValueError("max_schema_versions_per_type must be a positive integer")
+        if max_average_schema_versions_per_type <= 0:
+            raise ValueError("max_average_schema_versions_per_type must be a positive integer")
+        self.max_schema_versions_per_type = max_schema_versions_per_type
+        self.max_average_schema_versions_per_type = max_average_schema_versions_per_type
         self.field_nullable = field_nullable
         self.policy = policy
         self.meta_compressor = meta_compressor
@@ -515,7 +527,7 @@ cdef class TypeResolver:
         meta_context.read_type_infos.append(typeinfo)
         return typeinfo
 
-    cdef inline TypeInfo _read_and_build_type_info(self, Buffer buffer):
+    cdef TypeInfo _read_and_build_type_info(self, Buffer buffer):
         cdef int64_t header = buffer.read_int64()
         cdef TypeInfo typeinfo = self._meta_shared_type_info.get(header)
         cdef object type_def
@@ -525,9 +537,15 @@ cdef class TypeResolver:
             _skip_typedef_fast(buffer, header)
             return typeinfo
         type_def = decode_typedef(buffer, self.resolver, header=header)
+        typeinfo = self.resolver._local_type_info_for_typedef(type_def)
+        if typeinfo is not None:
+            if typeinfo.type_def is None:
+                self.resolver._set_type_info(typeinfo)
+            if typeinfo.type_def is not None and typeinfo.type_def.encoded == type_def.encoded:
+                return typeinfo
+        self.resolver._check_remote_struct_schema_limit(type_def)
         typeinfo = self.resolver._build_type_info_from_typedef(type_def)
-        if len(self._meta_shared_type_info) < MAX_CACHED_TYPE_DEFS:
-            self._meta_shared_type_info[header] = typeinfo
+        self._meta_shared_type_info[header] = typeinfo
         return typeinfo
 
     cdef inline TypeInfo _load_bytes_to_type_info(
@@ -544,8 +562,7 @@ cdef class TypeResolver:
         if entry != NULL and deref(entry).second != NULL:
             return <TypeInfo>deref(entry).second
         typeinfo = self.resolver._load_metabytes_to_type_info(ns_metabytes, type_metabytes)
-        if self._c_meta_hash_to_type_info.size() < MAX_CACHED_TYPE_DEFS:
-            self._c_meta_hash_to_type_info[hash_key] = <PyObject *>typeinfo
+        self._c_meta_hash_to_type_info[hash_key] = <PyObject *>typeinfo
         return typeinfo
 
 
@@ -784,6 +801,8 @@ cdef class Fory:
     cdef public bint compatible
     cdef public bint field_nullable
     cdef public int32_t max_depth
+    cdef public int32_t max_schema_versions_per_type
+    cdef public int32_t max_average_schema_versions_per_type
     cdef public object policy
     cdef public Config config
     cdef public TypeResolver type_resolver
@@ -798,6 +817,8 @@ cdef class Fory:
         strict=True,
         compatible=None,
         max_depth=50,
+        max_schema_versions_per_type=10,
+        max_average_schema_versions_per_type=3,
         policy=None,
         field_nullable=False,
         meta_compressor=None,
@@ -812,6 +833,8 @@ cdef class Fory:
             compatible: Enable compatible mode and meta-share type exchange. Defaults to
                 compatible mode.
             max_depth: Maximum allowed read depth before rejecting payloads.
+            max_schema_versions_per_type: Maximum accepted remote schema versions for one struct type.
+            max_average_schema_versions_per_type: Average remote schema versions allowed across accepted struct types.
             policy: Optional deserialization policy implementation.
             field_nullable: Treat struct fields as nullable by default.
             meta_compressor: Optional typedef/meta compressor implementation.
@@ -829,6 +852,8 @@ cdef class Fory:
         self.compatible = compatible
         self.field_nullable = field_nullable
         self.max_depth = max_depth
+        self.max_schema_versions_per_type = max_schema_versions_per_type
+        self.max_average_schema_versions_per_type = max_average_schema_versions_per_type
         self.config = Config(
             xlang=xlang,
             track_ref=ref,
@@ -837,6 +862,8 @@ cdef class Fory:
             meta_share=compatible,
             scoped_meta_share_enabled=compatible,
             max_depth=max_depth,
+            max_schema_versions_per_type=max_schema_versions_per_type,
+            max_average_schema_versions_per_type=max_average_schema_versions_per_type,
             field_nullable=field_nullable,
             policy=self.policy,
             meta_compressor=meta_compressor,

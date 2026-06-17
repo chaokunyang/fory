@@ -43,18 +43,22 @@ const fory = new Fory({
   ref: true,
   compatible: true,
   maxDepth: 100,
+  maxSchemaVersionsPerType: 10,
+  maxAverageSchemaVersionsPerType: 3,
   hps,
 });
 ```
 
-| Option                     | Default | Description                                                                           |
-| -------------------------- | ------- | ------------------------------------------------------------------------------------- |
-| `ref`                      | `false` | Enable reference tracking for shared or circular object graphs                        |
-| `compatible`               | `true`  | Allow field additions/removals without breaking existing messages                     |
-| `maxDepth`                 | `50`    | Maximum nesting depth. Must be `>= 2`. Increase for deeply nested structures          |
-| `useSliceString`           | `false` | Optional string-reading optimization for Node.js. Leave at default unless benchmarked |
-| `hps`                      | unset   | Optional fast string helper from `@apache-fory/hps` (Node.js 20+)                     |
-| `hooks.afterCodeGenerated` | unset   | Callback to inspect the generated serializer code, useful for debugging               |
+| Option                            | Default | Description                                                                           |
+| --------------------------------- | ------- | ------------------------------------------------------------------------------------- |
+| `ref`                             | `false` | Enable reference tracking for shared or circular object graphs                        |
+| `compatible`                      | `true`  | Allow field additions/removals without breaking existing messages                     |
+| `maxDepth`                        | `50`    | Maximum nesting depth. Must be `>= 2`. Increase for deeply nested structures          |
+| `maxSchemaVersionsPerType`        | `10`    | Maximum accepted remote struct schema versions for one logical type                   |
+| `maxAverageSchemaVersionsPerType` | `3`     | Average accepted remote struct schema versions across accepted remote struct types    |
+| `useSliceString`                  | `false` | Optional string-reading optimization for Node.js. Leave at default unless benchmarked |
+| `hps`                             | unset   | Optional fast string helper from `@apache-fory/hps` (Node.js 20+)                     |
+| `hooks.afterCodeGenerated`        | unset   | Callback to inspect the generated serializer code, useful for debugging               |
 
 ## Reference Tracking
 
@@ -102,6 +106,9 @@ Security-related configuration:
 
 - Register only the expected schemas before deserializing untrusted payloads.
 - Set `maxDepth` for the maximum nesting depth your service accepts.
+- Keep `maxSchemaVersionsPerType` and
+  `maxAverageSchemaVersionsPerType` at their defaults unless a trusted peer
+  legitimately sends many remote schema versions.
 - Prefer explicit `Type.struct(...)` schemas over `Type.any()` for untrusted input.
 - Pass `hps` only from the official package version you deploy with Fory.
 

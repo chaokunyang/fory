@@ -530,8 +530,7 @@ export class WriteContext {
 }
 
 export class ReadContext {
-  private static readonly MAX_CACHED_TYPE_META = 8192;
-  private static readonly MAX_CACHED_COMPATIBLE_READ_SERIALIZER = 8192;
+  private static readonly MIN_REMOTE_STRUCT_SCHEMA_LIMIT = 8192;
 
   readonly reader: BinaryReader;
   readonly refReader: RefReader;
@@ -540,13 +539,14 @@ export class ReadContext {
   private typeMeta: TypeMeta[] = [];
   /** Persistent cross-message cache keyed by 8-byte type meta header. */
   private typeMetaCache: Map<number, Map<number, TypeMeta>> = new Map();
-  private typeMetaCacheSize = 0;
   private lastTypeMetaHeaderLow = -1;
   private lastTypeMetaHeaderHigh = -1;
   private lastTypeMeta: TypeMeta | null = null;
   private recentTypeMetaHeaderLows = [-1, -1, -1, -1];
   private recentTypeMetaHeaderHighs = [-1, -1, -1, -1];
   private recentTypeMetas: Array<TypeMeta | null> = [null, null, null, null];
+  private remoteSchemaVersionsByType = new Map<string | number, number>();
+  private totalAcceptedSchemaVersions = 0;
   private compatibleReadSerializers = new Map<
     number,
     CompatibleReadSerializerCacheEntry
@@ -554,6 +554,8 @@ export class ReadContext {
 
   private _depth = 0;
   private _maxDepth: number;
+  private readonly maxSchemaVersionsPerType: number;
+  private readonly maxAverageSchemaVersionsPerType: number;
 
   private static typeMetaHeaderHash(headerLow: number, headerHigh: number) {
     return headerHigh * 0x100000 + (headerLow >>> 12);
@@ -569,9 +571,9 @@ export class ReadContext {
     for (let i = 0; i < metas.length; i++) {
       const typeMeta = metas[i];
       if (
-        typeMeta !== null
-        && lows[i] === headerLow
-        && highs[i] === headerHigh
+        typeMeta !== null &&
+        lows[i] === headerLow &&
+        highs[i] === headerHigh
       ) {
         return typeMeta;
       }
@@ -609,6 +611,9 @@ export class ReadContext {
     this.refReader = new RefReader(this.reader);
     this.metaStringReader = new MetaStringReader();
     this._maxDepth = config.maxDepth ?? 50;
+    this.maxSchemaVersionsPerType = config.maxSchemaVersionsPerType;
+    this.maxAverageSchemaVersionsPerType =
+      config.maxAverageSchemaVersionsPerType;
   }
 
   reset(bytes: Uint8Array) {
@@ -627,8 +632,8 @@ export class ReadContext {
     this._depth++;
     if (this._depth > this._maxDepth) {
       throw new Error(
-        `Deserialization depth limit exceeded: ${this._depth} > ${this._maxDepth}. `
-        + "The data may be malicious, or increase maxDepth if needed.",
+        `Deserialization depth limit exceeded: ${this._depth} > ${this._maxDepth}. ` +
+          "The data may be malicious, or increase maxDepth if needed.",
       );
     }
   }
@@ -653,11 +658,12 @@ export class ReadContext {
     dynamicTypeId: number,
     headerLow: number,
     headerHigh: number,
+    exactLocal?: Serializer,
   ): TypeMeta {
     if (
-      this.lastTypeMeta !== null
-      && this.lastTypeMetaHeaderLow === headerLow
-      && this.lastTypeMetaHeaderHigh === headerHigh
+      this.lastTypeMeta !== null &&
+      this.lastTypeMetaHeaderLow === headerLow &&
+      this.lastTypeMetaHeaderHigh === headerHigh
     ) {
       TypeMeta.skipBodyByHeaderLow(this.reader, headerLow);
       this.typeMeta[dynamicTypeId] = this.lastTypeMeta;
@@ -688,23 +694,75 @@ export class ReadContext {
       this.rememberRecentTypeMeta(headerLow, headerHigh, typeMeta);
     } else {
       const header = (BigInt(headerHigh) << 32n) | BigInt(headerLow);
-      typeMeta = TypeMeta.fromBytesAfterHeader(this.reader, header);
-      if (this.typeMetaCacheSize < ReadContext.MAX_CACHED_TYPE_META) {
-        let highCache = this.typeMetaCache.get(headerHigh);
-        if (highCache === undefined) {
-          highCache = new Map();
-          this.typeMetaCache.set(headerHigh, highCache);
+      if (exactLocal !== undefined) {
+        const localTypeMeta = TypeMeta.fromTypeInfo(
+          exactLocal.getTypeInfo(),
+          this.typeResolver,
+        );
+        if (
+          TypeMeta.matchesEncodedAfterHeader(
+            this.reader,
+            headerLow,
+            headerHigh,
+            localTypeMeta.toBytes(),
+          )
+        ) {
+          this.typeMeta[dynamicTypeId] = localTypeMeta;
+          return localTypeMeta;
         }
-        highCache.set(headerLow, typeMeta);
-        this.typeMetaCacheSize++;
-        this.lastTypeMetaHeaderLow = headerLow;
-        this.lastTypeMetaHeaderHigh = headerHigh;
-        this.lastTypeMeta = typeMeta;
-        this.rememberRecentTypeMeta(headerLow, headerHigh, typeMeta);
       }
+      typeMeta = TypeMeta.fromBytesAfterHeader(this.reader, header);
+      this.checkRemoteStructSchemaLimit(typeMeta);
+      let highCache = this.typeMetaCache.get(headerHigh);
+      if (highCache === undefined) {
+        highCache = new Map();
+        this.typeMetaCache.set(headerHigh, highCache);
+      }
+      highCache.set(headerLow, typeMeta);
+      this.lastTypeMetaHeaderLow = headerLow;
+      this.lastTypeMetaHeaderHigh = headerHigh;
+      this.lastTypeMeta = typeMeta;
+      this.rememberRecentTypeMeta(headerLow, headerHigh, typeMeta);
     }
     this.typeMeta[dynamicTypeId] = typeMeta;
     return typeMeta;
+  }
+
+  private checkRemoteStructSchemaLimit(typeMeta: TypeMeta) {
+    if (!TypeId.structType(typeMeta.getTypeId())) {
+      return;
+    }
+    const typeKey = TypeId.isNamedType(typeMeta.getTypeId())
+      ? `${typeMeta.getNs()}\u0000${typeMeta.getTypeName()}`
+      : typeMeta.getUserTypeId();
+    const versionsForType = this.remoteSchemaVersionsByType.get(typeKey) ?? 0;
+    if (versionsForType >= this.maxSchemaVersionsPerType) {
+      throw new Error(
+        `Remote schema version limit exceeded for type ${String(typeKey)}: ` +
+          `${versionsForType} >= ${this.maxSchemaVersionsPerType}. Increase ` +
+          "maxSchemaVersionsPerType if this peer legitimately sends many " +
+          "schema versions for one type.",
+      );
+    }
+    const acceptedStructTypeCount =
+      versionsForType === 0
+        ? this.remoteSchemaVersionsByType.size + 1
+        : this.remoteSchemaVersionsByType.size;
+    const globalLimit = Math.max(
+      ReadContext.MIN_REMOTE_STRUCT_SCHEMA_LIMIT,
+      acceptedStructTypeCount * this.maxAverageSchemaVersionsPerType,
+    );
+    if (this.totalAcceptedSchemaVersions >= globalLimit) {
+      throw new Error(
+        `Remote schema version limit exceeded: ${this.totalAcceptedSchemaVersions} ` +
+          `schemas for ${acceptedStructTypeCount} accepted struct types exceeds ` +
+          `the average limit ${this.maxAverageSchemaVersionsPerType}. Increase ` +
+          "maxAverageSchemaVersionsPerType if this peer legitimately sends many " +
+          "schema versions across many types.",
+      );
+    }
+    this.remoteSchemaVersionsByType.set(typeKey, versionsForType + 1);
+    this.totalAcceptedSchemaVersions++;
   }
 
   readTypeMeta(): TypeMeta {
@@ -741,6 +799,7 @@ export class ReadContext {
         idOrLen >> 1,
         headerLow,
         headerHigh,
+        original,
       );
       remoteHash = ReadContext.typeMetaHeaderHash(headerLow, headerHigh);
     }
@@ -753,15 +812,10 @@ export class ReadContext {
         typeMeta,
         original,
       );
-      if (
-        this.compatibleReadSerializers.size
-        < ReadContext.MAX_CACHED_COMPATIBLE_READ_SERIALIZER
-      ) {
-        this.compatibleReadSerializers.set(remoteHash, {
-          localHash: expectedHash,
-          serializer,
-        });
-      }
+      this.compatibleReadSerializers.set(remoteHash, {
+        localHash: expectedHash,
+        serializer,
+      });
       return serializer;
     }
     return undefined;
@@ -803,16 +857,16 @@ export class ReadContext {
       return false;
     }
     if (
-      (remote.trackingRef === true) !== (local.trackingRef === true)
-      || (remote.nullable === true) !== (local.nullable === true)
+      (remote.trackingRef === true) !== (local.trackingRef === true) ||
+      (remote.nullable === true) !== (local.nullable === true)
     ) {
       return false;
     }
     switch (remote.typeId) {
       case TypeId.MAP:
         return (
-          this.fieldSchemasEqual(remote.options?.key, local.options?.key)
-          && this.fieldSchemasEqual(remote.options?.value, local.options?.value)
+          this.fieldSchemasEqual(remote.options?.key, local.options?.key) &&
+          this.fieldSchemasEqual(remote.options?.value, local.options?.value)
         );
       case TypeId.LIST:
         return this.fieldSchemasEqual(
@@ -843,24 +897,24 @@ export class ReadContext {
         return compatible;
       }
       if (
-        isCompatibleScalarType(fieldInfo.typeId)
-        && isCompatibleScalarType(fallbackTypeInfo.typeId)
-        && ((fieldInfo.trackingRef === true)
-        !== (fallbackTypeInfo.trackingRef === true)
-        || ((fieldInfo.trackingRef === true
-        || fallbackTypeInfo.trackingRef === true)
-        && (fieldInfo.typeId !== fallbackTypeInfo.typeId
-        || fieldInfo.nullable !== fallbackTypeInfo.nullable)))
+        isCompatibleScalarType(fieldInfo.typeId) &&
+        isCompatibleScalarType(fallbackTypeInfo.typeId) &&
+        ((fieldInfo.trackingRef === true) !==
+          (fallbackTypeInfo.trackingRef === true) ||
+          ((fieldInfo.trackingRef === true ||
+            fallbackTypeInfo.trackingRef === true) &&
+            (fieldInfo.typeId !== fallbackTypeInfo.typeId ||
+              fieldInfo.nullable !== fallbackTypeInfo.nullable)))
       ) {
         throw new Error(
           "unsupported compatible scalar tracking-ref schema mismatch",
         );
       }
       if (
-        isCompatibleScalarPair(fieldInfo.typeId, fallbackTypeInfo.typeId)
-        && fieldInfo.typeId !== fallbackTypeInfo.typeId
-        && (fieldInfo.trackingRef === true
-        || fallbackTypeInfo.trackingRef === true)
+        isCompatibleScalarPair(fieldInfo.typeId, fallbackTypeInfo.typeId) &&
+        fieldInfo.typeId !== fallbackTypeInfo.typeId &&
+        (fieldInfo.trackingRef === true ||
+          fallbackTypeInfo.trackingRef === true)
       ) {
         throw new Error(
           "unsupported compatible scalar tracking-ref schema mismatch",
@@ -876,10 +930,10 @@ export class ReadContext {
         throw new Error("unsupported compatible list/array schema mismatch");
       }
       if (
-        fieldInfo.typeId !== TypeId.UNKNOWN
-        && this.canonicalFieldTypeId(fallbackTypeInfo) !== TypeId.UNKNOWN
-        && this.canonicalTypeId(fieldInfo.typeId)
-        !== this.canonicalFieldTypeId(fallbackTypeInfo)
+        fieldInfo.typeId !== TypeId.UNKNOWN &&
+        this.canonicalFieldTypeId(fallbackTypeInfo) !== TypeId.UNKNOWN &&
+        this.canonicalTypeId(fieldInfo.typeId) !==
+          this.canonicalFieldTypeId(fallbackTypeInfo)
       ) {
         throw new Error("unsupported compatible field schema mismatch");
       }
@@ -969,31 +1023,31 @@ export class ReadContext {
       return false;
     }
     if (
-      this.schemaMatchTypeId(remote.typeId)
-      !== this.schemaMatchTypeId(this.typeResolver.computeTypeId(local))
+      this.schemaMatchTypeId(remote.typeId) !==
+      this.schemaMatchTypeId(this.typeResolver.computeTypeId(local))
     ) {
       return true;
     }
     const remoteTracksRef = remote.trackingRef === true;
     const localTracksRef = local.trackingRef === true;
     if (
-      remoteTracksRef !== localTracksRef
-      || ((remoteTracksRef || localTracksRef)
-      && (remote.nullable === true) !== (local.nullable === true))
+      remoteTracksRef !== localTracksRef ||
+      ((remoteTracksRef || localTracksRef) &&
+        (remote.nullable === true) !== (local.nullable === true))
     ) {
       return true;
     }
     switch (remote.typeId) {
       case TypeId.MAP:
         return (
-          local.options?.key === undefined
-          || local.options?.value === undefined
-          || this.hasNestedSchemaMismatch(
+          local.options?.key === undefined ||
+          local.options?.value === undefined ||
+          this.hasNestedSchemaMismatch(
             remote.options!.key!,
             local.options.key,
             false,
-          )
-          || this.hasNestedSchemaMismatch(
+          ) ||
+          this.hasNestedSchemaMismatch(
             remote.options!.value!,
             local.options.value,
             false,
@@ -1001,8 +1055,8 @@ export class ReadContext {
         );
       case TypeId.LIST:
         return (
-          local.options?.inner === undefined
-          || this.hasNestedSchemaMismatch(
+          local.options?.inner === undefined ||
+          this.hasNestedSchemaMismatch(
             remote.options!.inner!,
             local.options.inner,
             false,
@@ -1010,8 +1064,8 @@ export class ReadContext {
         );
       case TypeId.SET:
         return (
-          local.options?.key === undefined
-          || this.hasNestedSchemaMismatch(
+          local.options?.key === undefined ||
+          this.hasNestedSchemaMismatch(
             remote.options!.key!,
             local.options.key,
             false,
@@ -1032,19 +1086,19 @@ export class ReadContext {
   ): TypeInfo | undefined {
     if (this.isByteSequenceRootPair(remote, local)) {
       if (
-        (remote.nullable === true) !== (local.nullable === true)
-        || (remote.trackingRef === true) !== (local.trackingRef === true)
+        (remote.nullable === true) !== (local.nullable === true) ||
+        (remote.trackingRef === true) !== (local.trackingRef === true)
       ) {
         return undefined;
       }
       return local.clone();
     }
     if (
-      this.isListArrayRootPair(remote, local)
-      && (remote.nullable === true
-      || local.nullable === true
-      || remote.trackingRef === true
-      || local.trackingRef === true)
+      this.isListArrayRootPair(remote, local) &&
+      (remote.nullable === true ||
+        local.nullable === true ||
+        remote.trackingRef === true ||
+        local.trackingRef === true)
     ) {
       return undefined;
     }
@@ -1064,22 +1118,22 @@ export class ReadContext {
     }
     const remoteArrayElement = denseArrayElementTypeId(remote.typeId);
     if (
-      remoteArrayElement !== undefined
-      && local.typeId === TypeId.LIST
-      && local.options?.inner
-      && compatibleArrayElementTypeId(local.options.inner.typeId)
-      === remoteArrayElement
+      remoteArrayElement !== undefined &&
+      local.typeId === TypeId.LIST &&
+      local.options?.inner &&
+      compatibleArrayElementTypeId(local.options.inner.typeId) ===
+        remoteArrayElement
     ) {
       return compatibleArrayToListTypeInfo(remoteArrayElement);
     }
     if (
-      remote.trackingRef !== true
-      && local.trackingRef !== true
-      && !(
-        remote.typeId === local.typeId
-        && (remote.nullable === true) === (local.nullable === true)
-      )
-      && isCompatibleScalarPair(remote.typeId, local.typeId)
+      remote.trackingRef !== true &&
+      local.trackingRef !== true &&
+      !(
+        remote.typeId === local.typeId &&
+        (remote.nullable === true) === (local.nullable === true)
+      ) &&
+      isCompatibleScalarPair(remote.typeId, local.typeId)
     ) {
       return markCompatibleScalarRead(local.clone(), {
         remoteTypeId: remote.typeId,
@@ -1111,8 +1165,8 @@ export class ReadContext {
             remote.options!.key!,
             local.options?.key,
             false,
-          )
-          || this.hasUnsupportedListArrayMismatch(
+          ) ||
+          this.hasUnsupportedListArrayMismatch(
             remote.options!.value!,
             local.options?.value,
             false,
@@ -1140,10 +1194,10 @@ export class ReadContext {
     local: TypeInfo,
   ): boolean {
     return (
-      (remote.typeId === TypeId.LIST
-      && denseArrayElementTypeId(local.typeId) !== undefined)
-      || (denseArrayElementTypeId(remote.typeId) !== undefined
-      && local.typeId === TypeId.LIST)
+      (remote.typeId === TypeId.LIST &&
+        denseArrayElementTypeId(local.typeId) !== undefined) ||
+      (denseArrayElementTypeId(remote.typeId) !== undefined &&
+        local.typeId === TypeId.LIST)
     );
   }
 
@@ -1152,9 +1206,9 @@ export class ReadContext {
     local: TypeInfo,
   ): boolean {
     return (
-      (remote.typeId === TypeId.BINARY
-      && local.typeId === TypeId.UINT8_ARRAY)
-      || (remote.typeId === TypeId.UINT8_ARRAY && local.typeId === TypeId.BINARY)
+      (remote.typeId === TypeId.BINARY &&
+        local.typeId === TypeId.UINT8_ARRAY) ||
+      (remote.typeId === TypeId.UINT8_ARRAY && local.typeId === TypeId.BINARY)
     );
   }
 

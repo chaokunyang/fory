@@ -201,7 +201,8 @@ public final class ReadContext {
             "received name-registered type info for id-registered local type")
         }
         if namespace.value != localTypeInfo.namespace.value
-          || typeName.value != localTypeInfo.typeName.value {
+          || typeName.value != localTypeInfo.typeName.value
+        {
           let expectedTypeName = "\(localTypeInfo.namespace.value)::\(localTypeInfo.typeName.value)"
           let actualTypeName = "\(namespace.value)::\(typeName.value)"
           throw ForyError.invalidData(
@@ -233,7 +234,8 @@ public final class ReadContext {
     if !checkClassVersion,
       compatibleTypeDefTypeInfos.isEmpty,
       !localTypeInfo.typeDefHasUserTypeFields,
-      let localTypeDefHeader = localTypeInfo.typeDefHeader {
+      let localTypeDefHeader = localTypeInfo.typeDefHeader
+    {
       let indexMarker = try buffer.readVarUInt32()
       if indexMarker == 0 {
         let headerStart = buffer.getCursor()
@@ -242,22 +244,30 @@ public final class ReadContext {
         if bodySize == typeMetaSizeMask {
           bodySize += Int(try buffer.readVarUInt32())
         }
-        if header == localTypeDefHeader {
-          // Header-cache hits intentionally skip without rehashing. Entries reach this
-          // cache only after a successful TypeDef parse and 52-bit metadata-hash validation.
-          compatibleTypeDefTypeInfos.push(localTypeInfo)
-          try buffer.skip(bodySize)
-          return nil
-        }
         if let cached = typeResolver.getTypeInfo(forHeader: header) {
           try buffer.skip(bodySize)
           compatibleTypeDefTypeInfos.push(cached)
+          if header == localTypeDefHeader,
+            cached.compatibleTypeMeta === localTypeInfo.typeMeta
+          {
+            return nil
+          }
           return try validateCompatibleTypeInfo(cached, for: localTypeInfo, wireTypeID: wireTypeID)
         }
         buffer.setCursor(headerStart)
         let decoded = try TypeMeta.decode(buffer)
-        let cachedTypeInfo = try typeResolver.cacheTypeInfo(decoded, forHeader: header)
+        let typeMetaEnd = buffer.getCursor()
+        let cachedTypeInfo = try typeResolver.cacheTypeInfo(
+          decoded,
+          forHeader: header,
+          buffer: buffer,
+          typeDefStart: headerStart,
+          typeDefEnd: typeMetaEnd
+        )
         compatibleTypeDefTypeInfos.push(cachedTypeInfo)
+        if cachedTypeInfo === localTypeInfo {
+          return nil
+        }
         return try validateCompatibleTypeInfo(
           cachedTypeInfo, for: localTypeInfo, wireTypeID: wireTypeID)
       }
@@ -304,7 +314,14 @@ public final class ReadContext {
 
     buffer.setCursor(typeMetaStart)
     let decoded = try TypeMeta.decode(buffer)
-    let cachedTypeInfo = try typeResolver.cacheTypeInfo(decoded, forHeader: header)
+    let typeMetaEnd = buffer.getCursor()
+    let cachedTypeInfo = try typeResolver.cacheTypeInfo(
+      decoded,
+      forHeader: header,
+      buffer: buffer,
+      typeDefStart: typeMetaStart,
+      typeDefEnd: typeMetaEnd
+    )
     compatibleTypeDefTypeInfos.push(cachedTypeInfo)
     return cachedTypeInfo
   }
@@ -318,7 +335,8 @@ public final class ReadContext {
     let compatibleTypeDefTypeInfos = self.compatibleTypeDefTypeInfos
     let remoteTypeInfo: TypeInfo
     if compatibleTypeDefTypeInfos.isEmpty,
-      let localTypeDefHeader = localTypeInfo.typeDefHeader {
+      localTypeInfo.typeDefHeader != nil
+    {
       let indexMarker = try buffer.readVarUInt32()
       if indexMarker != 0 {
         remoteTypeInfo = try readCompatibleTypeInfo(afterMarker: indexMarker)
@@ -330,14 +348,6 @@ public final class ReadContext {
           bodySize += Int(try buffer.readVarUInt32())
         }
 
-        if header == localTypeDefHeader {
-          // Header-cache hits intentionally skip without rehashing. Entries reach this
-          // cache only after a successful TypeDef parse and 52-bit metadata-hash validation.
-          compatibleTypeDefTypeInfos.push(localTypeInfo)
-          try buffer.skip(bodySize)
-          return localTypeInfo
-        }
-
         if let cached = typeResolver.getTypeInfo(forHeader: header) {
           try buffer.skip(bodySize)
           compatibleTypeDefTypeInfos.push(cached)
@@ -345,7 +355,14 @@ public final class ReadContext {
         } else {
           buffer.setCursor(headerStart)
           let decoded = try TypeMeta.decode(buffer)
-          remoteTypeInfo = try typeResolver.cacheTypeInfo(decoded, forHeader: header)
+          let typeMetaEnd = buffer.getCursor()
+          remoteTypeInfo = try typeResolver.cacheTypeInfo(
+            decoded,
+            forHeader: header,
+            buffer: buffer,
+            typeDefStart: headerStart,
+            typeDefEnd: typeMetaEnd
+          )
           compatibleTypeDefTypeInfos.push(remoteTypeInfo)
         }
       }
@@ -365,7 +382,8 @@ public final class ReadContext {
       throw ForyError.invalidData("compatible type metadata is required")
     }
     if let localTypeMeta = localTypeInfo.typeMeta,
-      remoteTypeMeta === localTypeMeta {
+      remoteTypeMeta === localTypeMeta
+    {
       return localTypeInfo
     }
     if remoteTypeMeta.registerByName {
@@ -407,7 +425,8 @@ public final class ReadContext {
         registerByName: localTypeInfo.registerByName,
         compatible: compatible,
         evolving: localTypeInfo.evolving
-      ) {
+      )
+    {
       throw ForyError.typeMismatch(expected: wireTypeID.rawValue, actual: remoteTypeID)
     }
     return remoteTypeInfo
@@ -571,15 +590,15 @@ public final class ReadContext {
   }
 }
 
-public extension ReadContext {
-  func readAny(
+extension ReadContext {
+  public func readAny(
     refMode: RefMode,
     readTypeInfo: Bool = true
   ) throws -> Any? {
     try SerializableAny.foryRead(self, refMode: refMode, readTypeInfo: readTypeInfo).anyValue()
   }
 
-  func readListOfAny(
+  public func readListOfAny(
     refMode: RefMode,
     readTypeInfo: Bool = false
   ) throws -> [Any]? {
@@ -591,7 +610,7 @@ public extension ReadContext {
     return wrapped?.map { $0.anyValueForCollection() }
   }
 
-  func readMapStringToAny(
+  public func readMapStringToAny(
     refMode: RefMode,
     readTypeInfo: Bool = false
   ) throws -> [String: Any]? {
@@ -611,7 +630,7 @@ public extension ReadContext {
     return map
   }
 
-  func readMapInt32ToAny(
+  public func readMapInt32ToAny(
     refMode: RefMode,
     readTypeInfo: Bool = false
   ) throws -> [Int32: Any]? {
@@ -631,7 +650,7 @@ public extension ReadContext {
     return map
   }
 
-  func readMapAnyHashableToAny(
+  public func readMapAnyHashableToAny(
     refMode: RefMode,
     readTypeInfo: Bool = false
   ) throws -> [AnyHashable: Any]? {

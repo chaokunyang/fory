@@ -957,6 +957,63 @@ TEST(SerializationTest, RegistrationByNameFailureDoesNotLeakTypeInfo) {
   EXPECT_EQ(dotted_type_name.error().code(), ErrorCode::Invalid);
 }
 
+static std::vector<uint8_t> make_remote_type_meta(const std::string &type_name,
+                                                  const std::string &field) {
+  std::vector<FieldInfo> fields;
+  fields.emplace_back(
+      field, FieldType(static_cast<uint32_t>(TypeId::VARINT32), false));
+  TypeMeta meta =
+      TypeMeta::from_fields(static_cast<uint32_t>(TypeId::NAMED_STRUCT),
+                            "example", type_name, true, 0, std::move(fields));
+  auto bytes = meta.to_bytes();
+  EXPECT_TRUE(bytes.ok()) << "TypeMeta serialization failed: "
+                          << bytes.error().to_string();
+  return bytes.value();
+}
+
+static Result<const TypeInfo *, Error>
+append_and_read_type_meta(ReadContext &ctx, const std::vector<uint8_t> &bytes) {
+  Buffer buffer;
+  buffer.write_var_uint32(0);
+  buffer.write_bytes(bytes.data(), static_cast<uint32_t>(bytes.size()));
+  ctx.reset();
+  ctx.attach(buffer);
+  auto result = ctx.read_type_meta();
+  ctx.detach();
+  return result;
+}
+
+TEST(SerializationTest, RemoteSchemaLimitRejectsExtraVersions) {
+  Config config;
+  config.compatible = true;
+  config.max_schema_versions_per_type = 1;
+  ReadContext ctx(config, std::make_unique<TypeResolver>());
+
+  auto first = append_and_read_type_meta(
+      ctx, make_remote_type_meta("Unknown", "first_value"));
+  ASSERT_TRUE(first.ok()) << first.error().to_string();
+
+  auto second = append_and_read_type_meta(
+      ctx, make_remote_type_meta("Unknown", "second_value"));
+  EXPECT_FALSE(second.ok());
+  ASSERT_FALSE(second.ok());
+  EXPECT_EQ(second.error().code(), ErrorCode::InvalidData);
+}
+
+TEST(SerializationTest, RemoteSchemaLimitKeepsUnknownTypesSeparate) {
+  Config config;
+  config.compatible = true;
+  config.max_schema_versions_per_type = 1;
+  ReadContext ctx(config, std::make_unique<TypeResolver>());
+
+  auto first = append_and_read_type_meta(
+      ctx, make_remote_type_meta("UnknownA", "value"));
+  ASSERT_TRUE(first.ok()) << first.error().to_string();
+  auto second = append_and_read_type_meta(
+      ctx, make_remote_type_meta("UnknownB", "value"));
+  EXPECT_TRUE(second.ok()) << second.error().to_string();
+}
+
 TEST(SerializationTest, TypeMetaRejectsOverConsumedDeclaredSize) {
   TypeMeta meta =
       TypeMeta::from_fields(static_cast<uint32_t>(TypeId::STRUCT), "", "S",

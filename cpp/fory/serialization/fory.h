@@ -109,6 +109,23 @@ public:
     return *this;
   }
 
+  /// Set maximum accepted remote struct schema versions for one logical type.
+  ForyBuilder &max_schema_versions_per_type(uint32_t max_versions) {
+    FORY_CHECK(max_versions > 0)
+        << "max_schema_versions_per_type must be positive";
+    config_.max_schema_versions_per_type = max_versions;
+    return *this;
+  }
+
+  /// Set maximum accepted average remote struct schema versions across logical
+  /// types. The effective global minimum remains 8192 schemas.
+  ForyBuilder &max_average_schema_versions_per_type(uint32_t max_versions) {
+    FORY_CHECK(max_versions > 0)
+        << "max_average_schema_versions_per_type must be positive";
+    config_.max_average_schema_versions_per_type = max_versions;
+    return *this;
+  }
+
   /// Provide a custom type resolver instance.
   ForyBuilder &type_resolver(std::shared_ptr<TypeResolver> resolver) {
     type_resolver_ = std::move(resolver);

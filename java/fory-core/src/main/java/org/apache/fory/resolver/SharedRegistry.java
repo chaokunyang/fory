@@ -22,17 +22,18 @@ package org.apache.fory.resolver;
 import java.lang.reflect.Member;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Objects;
 import java.util.SortedMap;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicInteger;
 import org.apache.fory.annotation.Internal;
 import org.apache.fory.codegen.CodeGenerator;
 import org.apache.fory.collection.BiMap;
 import org.apache.fory.collection.ConcurrentIdentityMap;
 import org.apache.fory.collection.Tuple2;
+import org.apache.fory.exception.ForyException;
 import org.apache.fory.meta.EncodedMetaString;
 import org.apache.fory.meta.Encoders;
 import org.apache.fory.meta.MetaString;
@@ -57,7 +58,7 @@ import org.apache.fory.type.DescriptorGrouper;
 public final class SharedRegistry {
   private static final int MAX_CACHED_ENCODED_META_STRINGS = 32768;
   private static final int MAX_CACHED_ENCODED_META_STRING_LENGTH = 2048;
-  private static final int MAX_CACHED_TYPE_DEFS = 8192;
+  private static final int MIN_REMOTE_STRUCT_SCHEMA_LIMIT = 8192;
 
   final ConcurrentIdentityMap<Class<?>, TypeDef> typeDefMap = new ConcurrentIdentityMap<>();
   final ConcurrentIdentityMap<Class<?>, TypeDef> currentLayerTypeDef =
@@ -90,9 +91,26 @@ public final class SharedRegistry {
   final StaticGeneratedSerializerRegistry staticGeneratedSerializerRegistry =
       new StaticGeneratedSerializerRegistry();
   private final Object metaStringCacheLock = new Object();
-  private final AtomicInteger cachedTypeDefCount = new AtomicInteger();
+  private final HashMap<Object, Integer> remoteSchemaVersionsByType = new HashMap<>();
+  private int maxSchemaVersionsPerType = 10;
+  private int maxAverageSchemaVersionsPerType = 3;
+  private int totalAcceptedSchemaVersions;
+  private boolean remoteSchemaLimitsSet;
   volatile IdentityHashMap<Class<?>, Integer> registeredClassIdMap;
   volatile BiMap<String, Class<?>> registeredClasses;
+
+  synchronized void setRemoteSchemaLimits(
+      int maxSchemaVersionsPerType, int maxAverageSchemaVersionsPerType) {
+    if (remoteSchemaLimitsSet
+        && (this.maxSchemaVersionsPerType != maxSchemaVersionsPerType
+            || this.maxAverageSchemaVersionsPerType != maxAverageSchemaVersionsPerType)) {
+      throw new IllegalArgumentException(
+          "SharedRegistry cannot be reused with different remote schema limits");
+    }
+    this.maxSchemaVersionsPerType = maxSchemaVersionsPerType;
+    this.maxAverageSchemaVersionsPerType = maxAverageSchemaVersionsPerType;
+    remoteSchemaLimitsSet = true;
+  }
 
   synchronized void setRegistrationIfAbsent(
       IdentityHashMap<Class<?>, Integer> candidateRegisteredClassIdMap,
@@ -157,35 +175,54 @@ public final class SharedRegistry {
     if (existing != null) {
       return existing;
     }
-    if (!reserveTypeDefCacheSlot()) {
-      return typeDef;
+    existing = typeDefById.putIfAbsent(id, typeDef);
+    return existing == null ? typeDef : existing;
+  }
+
+  synchronized TypeDef getOrCreateRemoteTypeDef(TypeDef typeDef, Object structTypeKey) {
+    long id = typeDef.getId();
+    TypeDef existing = typeDefById.get(id);
+    if (existing != null) {
+      return existing;
+    }
+    int versionsForType = remoteSchemaVersionsByType.getOrDefault(structTypeKey, 0);
+    if (versionsForType >= maxSchemaVersionsPerType) {
+      throw new ForyException(
+          "Remote schema version limit exceeded for type "
+              + structTypeKey
+              + ": "
+              + versionsForType
+              + " >= "
+              + maxSchemaVersionsPerType
+              + ". Increase maxSchemaVersionsPerType if this peer legitimately sends many "
+              + "schema versions for one type.");
+    }
+    int acceptedStructTypeCount =
+        versionsForType == 0
+            ? remoteSchemaVersionsByType.size() + 1
+            : remoteSchemaVersionsByType.size();
+    long globalLimit =
+        Math.max(
+            (long) MIN_REMOTE_STRUCT_SCHEMA_LIMIT,
+            (long) acceptedStructTypeCount * maxAverageSchemaVersionsPerType);
+    if (totalAcceptedSchemaVersions >= globalLimit) {
+      throw new ForyException(
+          "Remote schema version limit exceeded: "
+              + totalAcceptedSchemaVersions
+              + " schemas for "
+              + acceptedStructTypeCount
+              + " accepted struct types exceeds the average limit "
+              + maxAverageSchemaVersionsPerType
+              + ". Increase maxAverageSchemaVersionsPerType if this peer legitimately sends many "
+              + "schema versions across many types.");
     }
     existing = typeDefById.putIfAbsent(id, typeDef);
     if (existing != null) {
-      cachedTypeDefCount.decrementAndGet();
       return existing;
     }
+    remoteSchemaVersionsByType.put(structTypeKey, versionsForType + 1);
+    totalAcceptedSchemaVersions++;
     return typeDef;
-  }
-
-  private boolean reserveTypeDefCacheSlot() {
-    while (true) {
-      int count = cachedTypeDefCount.get();
-      int mapSize = typeDefById.size();
-      if (mapSize > count) {
-        if (cachedTypeDefCount.compareAndSet(count, mapSize)) {
-          count = mapSize;
-        } else {
-          continue;
-        }
-      }
-      if (count >= MAX_CACHED_TYPE_DEFS) {
-        return false;
-      }
-      if (cachedTypeDefCount.compareAndSet(count, count + 1)) {
-        return true;
-      }
-    }
   }
 
   EncodedMetaString getPackageEncodedMetaString(String string) {

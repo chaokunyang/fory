@@ -34,6 +34,8 @@ final fory = Fory();
 // customize limits while keeping default compatible mode
 final fory = Fory(
   maxDepth: 512,
+  maxSchemaVersionsPerType: 10,
+  maxAverageSchemaVersionsPerType: 3,
 );
 ```
 
@@ -82,13 +84,31 @@ Limits how deeply nested an object graph can be. Increase this if you have legit
 final fory = Fory(maxDepth: 128);
 ```
 
+### Remote schema metadata limits
+
+Compatible mode accepts remote struct metadata on metadata cache misses. These
+limits bound retained schema-specific read state:
+
+```dart
+final fory = Fory(
+  maxSchemaVersionsPerType: 10,
+  maxAverageSchemaVersionsPerType: 3,
+);
+```
+
+- `maxSchemaVersionsPerType` limits accepted schema versions for one logical struct type.
+- `maxAverageSchemaVersionsPerType` limits the average across accepted remote struct types. The
+  effective global floor is `8192` schemas.
+
 ## Defaults
 
-| Option               | Default |
-| -------------------- | ------- |
-| `compatible`         | `true`  |
-| `checkStructVersion` | `false` |
-| `maxDepth`           | 256     |
+| Option                            | Default |
+| --------------------------------- | ------- |
+| `compatible`                      | `true`  |
+| `checkStructVersion`              | `false` |
+| `maxDepth`                        | 256     |
+| `maxSchemaVersionsPerType`        | 10      |
+| `maxAverageSchemaVersionsPerType` | 3       |
 
 ## Xlang Notes
 
@@ -105,6 +125,8 @@ Security-related configuration:
 - Register only the expected generated models before deserializing untrusted payloads.
 - Use `checkStructVersion: true` with `compatible: false` for intentional same-schema payloads.
 - Set `maxDepth` to reject unexpectedly deep payload shapes.
+- Keep the remote schema metadata limits at their defaults unless a trusted peer legitimately sends
+  many schema versions.
 - Prefer generated schemas and explicit field metadata over broad dynamic fields for untrusted input.
 
 ## Related Topics

@@ -124,6 +124,8 @@ class Fory:
         "strict",
         "buffer",
         "max_depth",
+        "max_schema_versions_per_type",
+        "max_average_schema_versions_per_type",
         "field_nullable",
         "policy",
     )
@@ -135,6 +137,8 @@ class Fory:
         strict: bool = True,
         compatible: Optional[bool] = None,
         max_depth: int = 50,
+        max_schema_versions_per_type: int = 10,
+        max_average_schema_versions_per_type: int = 3,
         policy: DeserializationPolicy = None,
         field_nullable: bool = False,
         meta_compressor=None,
@@ -169,6 +173,12 @@ class Fory:
             max_depth: Maximum nesting depth for deserialization (default: 50). Raises
                 an exception if exceeded to prevent malicious deeply-nested data attacks.
 
+            max_schema_versions_per_type: Maximum accepted remote schema versions for one
+                struct type.
+
+            max_average_schema_versions_per_type: Average remote schema versions allowed
+                across accepted struct types.
+
             policy: Custom deserialization policy for security checks. When provided,
                 it controls which types can be deserialized, overriding the default policy.
                 **Strongly recommended** when strict=False to maintain security controls.
@@ -191,6 +201,12 @@ class Fory:
         self.compatible = compatible
         self.field_nullable = field_nullable
         self.max_depth = max_depth
+        if not isinstance(max_schema_versions_per_type, int) or max_schema_versions_per_type <= 0:
+            raise ValueError("max_schema_versions_per_type must be a positive integer")
+        if not isinstance(max_average_schema_versions_per_type, int) or max_average_schema_versions_per_type <= 0:
+            raise ValueError("max_average_schema_versions_per_type must be a positive integer")
+        self.max_schema_versions_per_type = max_schema_versions_per_type
+        self.max_average_schema_versions_per_type = max_average_schema_versions_per_type
         self.config = Config(
             xlang=xlang,
             track_ref=ref,
@@ -199,6 +215,8 @@ class Fory:
             meta_share=compatible,
             scoped_meta_share_enabled=compatible,
             max_depth=max_depth,
+            max_schema_versions_per_type=max_schema_versions_per_type,
+            max_average_schema_versions_per_type=max_average_schema_versions_per_type,
             field_nullable=field_nullable,
             policy=self.policy,
             meta_compressor=meta_compressor,

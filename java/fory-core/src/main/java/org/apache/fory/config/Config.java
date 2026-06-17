@@ -64,6 +64,8 @@ public class Config implements Serializable {
   private final boolean serializeEnumByName;
   private final int bufferSizeLimitBytes;
   private final int maxDepth;
+  private final int maxSchemaVersionsPerType;
+  private final int maxAverageSchemaVersionsPerType;
   private final float mapRefLoadFactor;
   private final boolean forVirtualThread;
 
@@ -106,6 +108,8 @@ public class Config implements Serializable {
     serializeEnumByName = builder.serializeEnumByName;
     bufferSizeLimitBytes = builder.bufferSizeLimitBytes;
     maxDepth = builder.maxDepth;
+    maxSchemaVersionsPerType = builder.maxSchemaVersionsPerType;
+    maxAverageSchemaVersionsPerType = builder.maxAverageSchemaVersionsPerType;
     mapRefLoadFactor = builder.mapRefLoadFactor;
     forVirtualThread = builder.forVirtualThread;
   }
@@ -292,6 +296,16 @@ public class Config implements Serializable {
     return maxDepth;
   }
 
+  /** Returns the maximum accepted remote schema versions for one struct type. */
+  public int maxSchemaVersionsPerType() {
+    return maxSchemaVersionsPerType;
+  }
+
+  /** Returns the maximum average accepted remote schema versions across struct types. */
+  public int maxAverageSchemaVersionsPerType() {
+    return maxAverageSchemaVersionsPerType;
+  }
+
   /** Returns loadFactor of MacRef's writtenObjects. */
   public float mapRefLoadFactor() {
     return mapRefLoadFactor;
@@ -336,6 +350,8 @@ public class Config implements Serializable {
         && deserializeUnknownClass == config.deserializeUnknownClass
         && xlang == config.xlang
         && compatible == config.compatible
+        && maxSchemaVersionsPerType == config.maxSchemaVersionsPerType
+        && maxAverageSchemaVersionsPerType == config.maxAverageSchemaVersionsPerType
         && Objects.equals(defaultJDKStreamSerializerType, config.defaultJDKStreamSerializerType)
         && longEncoding == config.longEncoding
         && forVirtualThread == config.forVirtualThread;
@@ -367,6 +383,8 @@ public class Config implements Serializable {
         requireClassRegistration,
         suppressClassRegistrationWarnings,
         registerGuavaTypes,
+        maxSchemaVersionsPerType,
+        maxAverageSchemaVersionsPerType,
         metaShareEnabled,
         scopedMetaShareEnabled,
         metaCompressor,

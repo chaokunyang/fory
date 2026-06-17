@@ -27,12 +27,16 @@ public sealed class Config
         bool trackRef,
         bool compatible,
         bool checkStructVersion,
-        int maxDepth)
+        int maxDepth,
+        int maxSchemaVersionsPerType,
+        int maxAverageSchemaVersionsPerType)
     {
         TrackRef = trackRef;
         Compatible = compatible;
         CheckStructVersion = checkStructVersion;
         MaxDepth = maxDepth;
+        MaxSchemaVersionsPerType = maxSchemaVersionsPerType;
+        MaxAverageSchemaVersionsPerType = maxAverageSchemaVersionsPerType;
     }
 
     /// <summary>
@@ -54,6 +58,16 @@ public sealed class Config
     /// Gets the maximum allowed nesting depth for dynamic object payload reads.
     /// </summary>
     public int MaxDepth { get; }
+
+    /// <summary>
+    /// Gets the maximum accepted remote schema versions for one struct type.
+    /// </summary>
+    public int MaxSchemaVersionsPerType { get; }
+
+    /// <summary>
+    /// Gets the average remote schema version limit across accepted struct types.
+    /// </summary>
+    public int MaxAverageSchemaVersionsPerType { get; }
 }
 
 /// <summary>
@@ -65,6 +79,8 @@ public sealed class ForyBuilder
     private bool? _compatible;
     private bool _checkStructVersion;
     private int _maxDepth = 20;
+    private int _maxSchemaVersionsPerType = 10;
+    private int _maxAverageSchemaVersionsPerType = 3;
 
     /// <summary>
     /// Enables or disables reference tracking for shared and circular object graphs.
@@ -116,6 +132,34 @@ public sealed class ForyBuilder
         return this;
     }
 
+    /// <summary>
+    /// Sets the maximum accepted remote schema versions for one struct type.
+    /// </summary>
+    public ForyBuilder MaxSchemaVersionsPerType(int value)
+    {
+        if (value <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(value), "MaxSchemaVersionsPerType must be greater than 0.");
+        }
+
+        _maxSchemaVersionsPerType = value;
+        return this;
+    }
+
+    /// <summary>
+    /// Sets the average remote schema version limit across accepted struct types.
+    /// </summary>
+    public ForyBuilder MaxAverageSchemaVersionsPerType(int value)
+    {
+        if (value <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(value), "MaxAverageSchemaVersionsPerType must be greater than 0.");
+        }
+
+        _maxAverageSchemaVersionsPerType = value;
+        return this;
+    }
+
     private Config BuildConfig()
     {
         bool compatible = _compatible ?? true;
@@ -125,7 +169,9 @@ public sealed class ForyBuilder
             trackRef: _trackRef,
             compatible: compatible,
             checkStructVersion: compatible ? false : _checkStructVersion,
-            maxDepth: _maxDepth);
+            maxDepth: _maxDepth,
+            maxSchemaVersionsPerType: _maxSchemaVersionsPerType,
+            maxAverageSchemaVersionsPerType: _maxAverageSchemaVersionsPerType);
     }
 
     /// <summary>

@@ -88,6 +88,23 @@ let fory = Fory::builder().max_dyn_depth(10).build(); // Allow up to 10 levels
 
 Note: Static data types (non-dynamic types) are secure by nature and not subject to depth limits, as their structure is known at compile time.
 
+### Remote Schema Metadata Limits
+
+Compatible mode accepts remote struct metadata on metadata cache misses. These
+limits bound retained schema-specific read state:
+
+```rust
+let fory = Fory::builder()
+    .max_schema_versions_per_type(10)
+    .max_average_schema_versions_per_type(3)
+    .build();
+```
+
+- `max_schema_versions_per_type` defaults to `10` and limits accepted schema versions for one
+  logical struct type.
+- `max_average_schema_versions_per_type` defaults to `3` and limits the average across accepted
+  remote struct types. The effective global floor is `8192` schemas.
+
 ### Explicit Xlang Examples
 
 Set `.xlang(true)` explicitly for xlang serialization examples:
@@ -122,11 +139,13 @@ let fory = Fory::builder()
 
 ## Configuration Summary
 
-| Option               | Description                             | Default |
-| -------------------- | --------------------------------------- | ------- |
-| `compatible(bool)`   | Enable schema evolution                 | `true`  |
-| `xlang(bool)`        | Use xlang mode                          | `true`  |
-| `max_dyn_depth(u32)` | Maximum nesting depth for dynamic types | `5`     |
+| Option                                        | Description                                        | Default |
+| --------------------------------------------- | -------------------------------------------------- | ------- |
+| `compatible(bool)`                            | Enable schema evolution                            | `true`  |
+| `xlang(bool)`                                 | Use xlang mode                                     | `true`  |
+| `max_dyn_depth(u32)`                          | Maximum nesting depth for dynamic types            | `5`     |
+| `max_schema_versions_per_type(usize)`         | Max remote schema versions for one struct type     | `10`    |
+| `max_average_schema_versions_per_type(usize)` | Average remote schema versions across struct types | `3`     |
 
 ## Compatible Mode
 
@@ -143,6 +162,8 @@ Security-related configuration:
 - Register application structs and trait-object implementations before deserializing untrusted
   payloads.
 - Use `max_dyn_depth(...)` to reject unexpectedly deep dynamic object graphs.
+- Keep the remote schema metadata limits at their defaults unless a trusted peer legitimately sends
+  many schema versions.
 - Prefer concrete typed fields over `dyn Any` or broad trait-object fields for untrusted input.
 
 ## Related Topics

@@ -52,6 +52,13 @@ struct Config {
   /// When enabled, avoids duplicating shared objects and handles cycles.
   bool track_ref = true;
 
+  /// Maximum accepted remote struct schema versions for one logical type.
+  uint32_t max_schema_versions_per_type = 10;
+
+  /// Maximum accepted average remote struct schema versions across logical
+  /// types. The effective global minimum remains 8192 schemas.
+  uint32_t max_average_schema_versions_per_type = 3;
+
   /// Default constructor with sensible defaults
   Config() = default;
 };

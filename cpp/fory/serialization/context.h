@@ -31,6 +31,7 @@
 #include "fory/util/result.h"
 
 #include <cassert>
+#include <string>
 #include <typeindex>
 
 namespace fory {
@@ -39,6 +40,7 @@ namespace serialization {
 // Forward declarations
 class TypeResolver;
 class ReadContext;
+class TypeMeta;
 
 /// RAII helper to automatically decrease dynamic depth when leaving scope.
 /// Used for tracking nested polymorphic type deserialization depth.
@@ -656,6 +658,9 @@ public:
   inline const Config &config() const { return *config_; }
 
 private:
+  FORY_NOINLINE Result<void, Error>
+  check_remote_struct_schema_limit(const TypeMeta &type_meta);
+
   // Error state - accumulated during deserialization, checked at the end
   Error error_;
 
@@ -666,14 +671,14 @@ private:
   uint32_t current_dyn_depth_;
 
   // Meta sharing state (for compatible mode)
-  // Per-message storage for TypeInfo objects not cached across messages.
-  std::vector<std::unique_ptr<TypeInfo>> owned_reading_type_infos_;
   // Persistent cache storage for TypeInfo objects keyed by meta header.
   std::vector<std::unique_ptr<TypeInfo>> cached_type_infos_;
-  // Index-based access (pointers to owned_reading_type_infos_ or type_resolver)
+  // Index-based access (pointers to cached_type_infos_ or type_resolver)
   std::vector<const TypeInfo *> reading_type_infos_;
   // Cache by meta_header (pointers to cached_type_infos_)
   fory::flat_hash_map<int64_t, const TypeInfo *> parsed_type_infos_;
+  fory::flat_hash_map<std::string, uint32_t> remote_schema_versions_by_type_;
+  size_t total_accepted_schema_versions_ = 0;
   // Fast path for repeated type meta headers.
   int64_t last_meta_header_ = 0;
   const TypeInfo *last_meta_type_info_ = nullptr;

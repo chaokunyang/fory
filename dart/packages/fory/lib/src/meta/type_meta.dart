@@ -102,8 +102,6 @@ final class TypeHeader {
 }
 
 final class ParsedTypeMetaCache {
-  static const int maxEntries = 8192;
-
   final LinkedHashMap<Int64, TypeInfo> _entries =
       LinkedHashMap<Int64, TypeInfo>();
   Int64? _lastHeader;
@@ -131,10 +129,6 @@ final class ParsedTypeMetaCache {
       _lastResolved = resolved;
       return;
     }
-    if (_entries.length >= maxEntries) {
-      return;
-    }
-
     _entries[header.value] = resolved;
     _lastHeader = header.value;
     _lastResolved = resolved;
@@ -147,7 +141,8 @@ final class WireTypeMetaEncoder {
 
   WireTypeMeta typeMetaFor(Config config, TypeInfo resolvedType) {
     final wireTypeId = wireTypeIdFor(config, resolvedType);
-    final writesTypeDef = wireTypeId == TypeIds.compatibleStruct ||
+    final writesTypeDef =
+        wireTypeId == TypeIds.compatibleStruct ||
         wireTypeId == TypeIds.namedCompatibleStruct ||
         (config.compatible &&
             (wireTypeId == TypeIds.namedEnum ||
@@ -222,15 +217,14 @@ final class WireTypeMetaDecoder {
       int wireTypeId,
       EncodedMetaString namespace,
       EncodedMetaString typeName,
-    ) resolveUserByEncodedNameCached,
+    )
+    resolveUserByEncodedNameCached,
     required TypeInfo? Function(int wireTypeId) expectedNamedType,
     required WireTypeMeta Function() readTypeDef,
-    required EncodedMetaString Function([
-      EncodedMetaString? expected,
-    ]) readPackageMetaString,
-    required EncodedMetaString Function([
-      EncodedMetaString? expected,
-    ]) readTypeNameMetaString,
+    required EncodedMetaString Function([EncodedMetaString? expected])
+    readPackageMetaString,
+    required EncodedMetaString Function([EncodedMetaString? expected])
+    readTypeNameMetaString,
   }) {
     final wireTypeId = buffer.readVarUint32Small7();
     if (_isBuiltinWireType(wireTypeId)) {

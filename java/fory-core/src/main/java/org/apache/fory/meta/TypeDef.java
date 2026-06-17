@@ -321,6 +321,22 @@ public class TypeDef implements Serializable {
     return NativeTypeDefDecoder.decodeTypeDef((ClassResolver) resolver, buffer, buffer.readInt64());
   }
 
+  /** Read encoded class definition bytes from buffer. */
+  public static byte[] readTypeDefBytes(TypeResolver resolver, MemoryBuffer buffer, long header) {
+    if (resolver.isCrossLanguage()) {
+      if ((header & COMPRESS_META_FLAG) != 0) {
+        throw new DeserializationException("Compressed xlang TypeDef is not supported");
+      }
+      return NativeTypeDefDecoder.decodeTypeDefBuf(buffer, resolver, header).f1;
+    }
+    return NativeTypeDefDecoder.decodeTypeDefBuf(buffer, resolver, header).f1;
+  }
+
+  /** Decode an encoded class definition. */
+  public static TypeDef readTypeDef(TypeResolver resolver, byte[] encoded) {
+    return readTypeDef(resolver, MemoryBuffer.fromByteArray(encoded));
+  }
+
   /** Read class definition from buffer. */
   public static TypeDef readTypeDef(TypeResolver resolver, MemoryBuffer buffer, long header) {
     if (resolver.isCrossLanguage()) {

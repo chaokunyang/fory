@@ -144,7 +144,7 @@ from pyfory._fory import (
     NO_TYPE_ID,
     NO_USER_TYPE_ID,
 )
-from pyfory.meta.typedef import TypeDef
+from pyfory.meta.typedef import TypeDef, is_named_typedef_kind, is_struct_typedef_kind
 from pyfory.meta.typedef_decoder import decode_typedef, skip_typedef
 from pyfory.meta.typedef_encoder import encode_typedef
 
@@ -156,7 +156,7 @@ except ImportError:
 logger = logging.getLogger(__name__)
 namespace_decoder = MetaStringDecoder(".", "_")
 typename_decoder = MetaStringDecoder("$", "_")
-MAX_CACHED_TYPE_DEFS = 8192
+MIN_REMOTE_STRUCT_SCHEMA_LIMIT = 8192
 MAX_CACHED_ENCODED_META_STRINGS = 8192
 
 _NO_REF_NUMERIC_TYPE_IDS = frozenset(
@@ -359,6 +359,10 @@ class TypeResolver:
         "_user_type_id_to_type_info",
         "_used_user_type_ids",
         "_meta_shared_type_info",
+        "max_schema_versions_per_type",
+        "max_average_schema_versions_per_type",
+        "_remote_schema_versions_by_type",
+        "_total_accepted_schema_versions",
         "meta_share",
         "_internal_py_serializer_map",
         "_actual_type_resolver",
@@ -388,6 +392,10 @@ class TypeResolver:
         self.namespace_encoder = MetaStringEncoder(".", "_")
         self.namespace_decoder = MetaStringDecoder(".", "_")
         self._meta_shared_type_info = {}
+        self.max_schema_versions_per_type = config.max_schema_versions_per_type
+        self.max_average_schema_versions_per_type = config.max_average_schema_versions_per_type
+        self._remote_schema_versions_by_type = {}
+        self._total_accepted_schema_versions = 0
         self.typename_encoder = MetaStringEncoder("$", "_")
         self.typename_decoder = MetaStringDecoder("$", "_")
         self.meta_compressor = config.meta_compressor if config.meta_compressor is not None else DeflaterMetaCompressor()
@@ -1173,6 +1181,47 @@ class TypeResolver:
         )
         return typeinfo
 
+    def _local_type_info_for_typedef(self, type_def):
+        if is_named_typedef_kind(type_def.type_id):
+            return self.get_type_info_by_name(type_def.namespace, type_def.typename)
+        if self.is_registered_by_id(type_id=type_def.type_id, user_type_id=type_def.user_type_id):
+            return self.get_type_info_by_id(type_def.type_id, user_type_id=type_def.user_type_id)
+        return None
+
+    def _check_remote_struct_schema_limit(self, type_def):
+        if not is_struct_typedef_kind(type_def.type_id):
+            return
+        if is_named_typedef_kind(type_def.type_id):
+            type_key = (type_def.namespace or "", type_def.typename)
+        else:
+            type_key = type_def.user_type_id
+        versions_for_type = self._remote_schema_versions_by_type.get(type_key, 0)
+        if versions_for_type >= self.max_schema_versions_per_type:
+            raise ValueError(
+                f"Remote schema version limit exceeded for type {type_key}: "
+                f"{versions_for_type} >= {self.max_schema_versions_per_type}. Increase "
+                "max_schema_versions_per_type if this peer legitimately sends many "
+                "schema versions for one type."
+            )
+        accepted_struct_type_count = (
+            len(self._remote_schema_versions_by_type) + 1 if versions_for_type == 0 else len(self._remote_schema_versions_by_type)
+        )
+        global_limit = max(
+            MIN_REMOTE_STRUCT_SCHEMA_LIMIT,
+            accepted_struct_type_count * self.max_average_schema_versions_per_type,
+        )
+        if self._total_accepted_schema_versions >= global_limit:
+            raise ValueError(
+                "Remote schema version limit exceeded: "
+                f"{self._total_accepted_schema_versions} schemas for "
+                f"{accepted_struct_type_count} accepted struct types exceeds the average "
+                f"limit {self.max_average_schema_versions_per_type}. Increase "
+                "max_average_schema_versions_per_type if this peer legitimately sends many "
+                "schema versions across many types."
+            )
+        self._remote_schema_versions_by_type[type_key] = versions_for_type + 1
+        self._total_accepted_schema_versions += 1
+
     def _read_and_build_type_info(self, buffer):
         """Read TypeDef inline from buffer and build TypeInfo.
 
@@ -1187,7 +1236,13 @@ class TypeResolver:
             skip_typedef(buffer, header)
             return type_info
         type_def = decode_typedef(buffer, self, header=header)
+        local_type_info = self._local_type_info_for_typedef(type_def)
+        if local_type_info is not None:
+            if local_type_info.type_def is None:
+                self._set_type_info(local_type_info)
+            if local_type_info.type_def is not None and local_type_info.type_def.encoded == type_def.encoded:
+                return local_type_info
+        self._check_remote_struct_schema_limit(type_def)
         type_info = self._build_type_info_from_typedef(type_def)
-        if len(self._meta_shared_type_info) < MAX_CACHED_TYPE_DEFS:
-            self._meta_shared_type_info[header] = type_info
+        self._meta_shared_type_info[header] = type_info
         return type_info

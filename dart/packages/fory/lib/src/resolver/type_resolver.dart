@@ -242,6 +242,8 @@ List<FieldInfo> _validateFieldInfos(Iterable<FieldInfo> fields) {
 }
 
 final class TypeResolver {
+  static const int _minRemoteStructSchemaLimit = 8192;
+
   final Config config;
   final WireTypeMetaEncoder _wireTypeMetaEncoder = const WireTypeMetaEncoder();
   final WireTypeMetaDecoder _wireTypeMetaDecoder = const WireTypeMetaDecoder();
@@ -273,6 +275,8 @@ final class TypeResolver {
   _internedEncodedMetaStrings = <_EncodedMetaStringKey, EncodedMetaString>{};
   final Map<TypeInfo, Uint8List> _initialTypeMetaBytes =
       LinkedHashMap<TypeInfo, Uint8List>.identity();
+  final Map<String, int> _remoteSchemaVersionsByType = <String, int>{};
+  int _totalAcceptedSchemaVersions = 0;
 
   TypeResolver(this.config);
 
@@ -791,22 +795,17 @@ final class TypeResolver {
       return sharedTypes[marker >>> 1];
     }
     final header = TypeHeader(buffer.readInt64());
-    final expectedTypeDef = expected.typeDef;
-    if (expectedTypeDef == null || expectedTypeDef.header != header.value) {
-      final cached = _parsedTypeMetaCache.lookup(header);
-      if (cached != null) {
-        header.skipRemaining(buffer);
-        sharedTypes.add(cached);
-        return cached;
-      }
-      final resolved = _readTypeDefWithHeader(buffer, header);
-      _parsedTypeMetaCache.remember(header, resolved);
-      sharedTypes.add(resolved);
-      return resolved;
+    final cached = _parsedTypeMetaCache.lookup(header);
+    if (cached != null) {
+      header.skipRemaining(buffer);
+      sharedTypes.add(cached);
+      return cached;
     }
-    header.skipRemaining(buffer);
-    sharedTypes.add(expected);
-    return expected;
+    final typeDefStart = bufferReaderIndex(buffer) - 8;
+    final resolved = _readTypeDefWithHeader(buffer, header, typeDefStart);
+    _parsedTypeMetaCache.remember(header, resolved);
+    sharedTypes.add(resolved);
+    return resolved;
   }
 
   Uint8List _encodeInitialTypeDefMeta(int wireTypeId, TypeDef typeDef) {
@@ -1119,14 +1118,6 @@ final class TypeResolver {
       return wireTypeMetaForResolved(sharedTypes[index]);
     }
     final header = TypeHeader(buffer.readInt64());
-    final expectedTypeDef = expectedType?.typeDef;
-    if (expectedTypeDef != null && expectedTypeDef.header == header.value) {
-      // Header-cache hits intentionally skip without rehashing. Entries reach this cache only
-      // after a successful TypeDef parse and 52-bit metadata-hash validation.
-      header.skipRemaining(buffer);
-      sharedTypes.add(expectedType!);
-      return wireTypeMetaForResolved(expectedType);
-    }
     final cached = _parsedTypeMetaCache.lookup(header);
     if (cached != null) {
       // Header-cache hits intentionally skip without rehashing. Entries reach this cache only
@@ -1135,17 +1126,24 @@ final class TypeResolver {
       sharedTypes.add(cached);
       return wireTypeMetaForResolved(cached);
     }
-    final resolved = _readTypeDefWithHeader(buffer, header);
+    final typeDefStart = bufferReaderIndex(buffer) - 8;
+    final resolved = _readTypeDefWithHeader(buffer, header, typeDefStart);
     _parsedTypeMetaCache.remember(header, resolved);
     sharedTypes.add(resolved);
     return wireTypeMetaForResolved(resolved);
   }
 
-  TypeInfo _readTypeDefWithHeader(Buffer buffer, TypeHeader header) {
+  @pragma('vm:never-inline')
+  TypeInfo _readTypeDefWithHeader(
+    Buffer buffer,
+    TypeHeader header,
+    int typeDefStart,
+  ) {
     header.validateGlobal();
     final metaSize = header.readMetaSize(buffer);
     buffer.checkReadableBytes(metaSize);
     final metaBody = buffer.readBytes(metaSize);
+    final typeDefEnd = bufferReaderIndex(buffer);
     final metaBytes = Buffer.wrap(metaBody);
     final classHeader = metaBytes.readUint8();
     final isStruct = (classHeader & typeDefStructFlag) != 0;
@@ -1207,16 +1205,27 @@ final class TypeResolver {
     if (resolved.kind != RegistrationKind.struct) {
       return resolved;
     }
+    final localTypeDef = resolved.typeDef;
+    if (localTypeDef != null &&
+        _matchesEncodedTypeDef(
+          buffer,
+          typeDefStart,
+          typeDefEnd,
+          localTypeDef.encoded,
+        )) {
+      return resolved;
+    }
+    _checkRemoteStructSchemaLimit(
+      typeId: typeId,
+      userTypeId: userTypeId,
+      resolved: resolved,
+    );
     final remoteTypeDef = TypeDef(
       evolving: true,
       fields: List<FieldInfo>.unmodifiable(fields),
       header: header.value,
       encoded: Uint8List(0),
     );
-    final localTypeDef = resolved.typeDef;
-    if (localTypeDef != null && _sameTypeDef(localTypeDef, remoteTypeDef)) {
-      return resolved;
-    }
     return TypeInfo(
       type: resolved.type,
       kind: resolved.kind,
@@ -1234,6 +1243,64 @@ final class TypeResolver {
       typeDef: resolved.typeDef,
       remoteTypeDef: remoteTypeDef,
     );
+  }
+
+  bool _matchesEncodedTypeDef(
+    Buffer buffer,
+    int typeDefStart,
+    int typeDefEnd,
+    Uint8List encoded,
+  ) {
+    if (typeDefEnd - typeDefStart != encoded.length) {
+      return false;
+    }
+    final bytes = buffer.toBytes();
+    for (var i = 0; i < encoded.length; i += 1) {
+      if (bytes[typeDefStart + i] != encoded[i]) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  @pragma('vm:never-inline')
+  void _checkRemoteStructSchemaLimit({
+    required int typeId,
+    required int? userTypeId,
+    required TypeInfo resolved,
+  }) {
+    if (!_isStructTypeDefKind(typeId)) {
+      return;
+    }
+    final key =
+        userTypeId != null
+            ? 'i$userTypeId'
+            : 'n${resolved.namespace ?? ''}\u0000${resolved.typeName ?? ''}';
+    final versionsForType = _remoteSchemaVersionsByType[key] ?? 0;
+    if (versionsForType >= config.maxSchemaVersionsPerType) {
+      throw StateError(
+        'Remote struct schema versions for one type exceeded '
+        'maxSchemaVersionsPerType=${config.maxSchemaVersionsPerType}.',
+      );
+    }
+    final acceptedStructTypeCount =
+        versionsForType == 0
+            ? _remoteSchemaVersionsByType.length + 1
+            : _remoteSchemaVersionsByType.length;
+    final averageLimit =
+        acceptedStructTypeCount * config.maxAverageSchemaVersionsPerType;
+    final globalLimit =
+        averageLimit > _minRemoteStructSchemaLimit
+            ? averageLimit
+            : _minRemoteStructSchemaLimit;
+    if (_totalAcceptedSchemaVersions >= globalLimit) {
+      throw StateError(
+        'Remote struct schema versions exceeded global limit from '
+        'maxAverageSchemaVersionsPerType=${config.maxAverageSchemaVersionsPerType}.',
+      );
+    }
+    _remoteSchemaVersionsByType[key] = versionsForType + 1;
+    _totalAcceptedSchemaVersions += 1;
   }
 
   EncodedMetaString _readTypeDefName(
@@ -1706,39 +1773,6 @@ final class TypeResolver {
     EncodedMetaString typeName,
   ) {
     return Object.hash(wireTypeId, namespace.hash, typeName.hash);
-  }
-
-  bool _sameTypeDef(TypeDef left, TypeDef right) {
-    if (left.evolving != right.evolving ||
-        left.fields.length != right.fields.length) {
-      return false;
-    }
-    for (var index = 0; index < left.fields.length; index += 1) {
-      final leftField = left.fields[index];
-      final rightField = right.fields[index];
-      if (leftField.identifier != rightField.identifier ||
-          leftField.id != rightField.id ||
-          !_sameFieldType(leftField.fieldType, rightField.fieldType)) {
-        return false;
-      }
-    }
-    return true;
-  }
-
-  bool _sameFieldType(FieldType left, FieldType right) {
-    if (left.typeId != right.typeId ||
-        left.nullable != right.nullable ||
-        left.ref != right.ref ||
-        left.dynamic != right.dynamic ||
-        left.arguments.length != right.arguments.length) {
-      return false;
-    }
-    for (var index = 0; index < left.arguments.length; index += 1) {
-      if (!_sameFieldType(left.arguments[index], right.arguments[index])) {
-        return false;
-      }
-    }
-    return true;
   }
 
   Type _builtinTypeForFieldType(FieldType fieldType) {

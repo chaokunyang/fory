@@ -32,4 +32,4 @@ dependencies = ["grpcio>=1.62.2,<1.71", "pyfory"]
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["grpc_tests"]
+include = ["grpc_test_common", "grpc_sync_tests", "grpc_tests"]

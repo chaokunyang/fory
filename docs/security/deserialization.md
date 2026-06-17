@@ -1,6 +1,6 @@
 ---
 title: Deserialization Security Model
-sidebar_position: 2
+sidebar_position: 3
 ---
 
 This document defines the security model for Apache Fory deserialization. It is
@@ -51,6 +51,41 @@ Fory security boundaries do not include:
 - Whether a map, set, object, or metadata value uses one specific encoding
   shape, unless rejecting other shapes is an explicit owner policy or protects
   one of the boundaries above.
+
+## Type And Class Policy
+
+Type, class, function, method, registration, and deserialization policies are
+security boundaries when they are intended to restrict what untrusted bytes may
+materialize.
+
+For untrusted data, a bypass is security-relevant when encoded bytes can
+materialize a type, function, method, class, or dynamic object that the active
+Fory policy should reject. This includes bypasses of class or type
+registration, allow-list checkers, strict-mode checks, or language-specific
+deserialization policies.
+
+Disabling registration or dynamic-type checks for trusted data is a caller
+configuration choice. That choice only removes the arbitrary-type materialization
+claim provided by that policy; it does not remove Fory's runtime-safety,
+resource, cleanup, retained-state, or no-progress-loop requirements for
+untrusted deserialization paths.
+
+Fory is not a sandbox for application-owned types. If a registered type or
+serializer is allowed by the active policy, the application owns whether that
+type's construction, hooks, setters, finalizers, or other logic is safe for the
+application's trust boundary.
+
+## Depth And Progress
+
+Deserialization paths that recurse through objects, metadata, containers, or
+references should enforce the runtime's configured depth limit before crafted
+nesting can exhaust the call stack or bypass cleanup. A malformed input that
+exceeds the configured depth should fail the root operation instead of
+continuing unbounded recursion.
+
+Loops that consume encoded data should guarantee byte progress, logical
+progress, or a terminal error. Inputs that can keep a reader in a no-progress
+loop are security-relevant even when they do not allocate memory.
 
 ## Security Invariants
 

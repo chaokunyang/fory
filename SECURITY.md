@@ -22,8 +22,10 @@ limitations under the License.
 vulnerabilities privately to `security@apache.org`; do not open public
 GitHub issues or pull requests for security reports.
 
-## Threat Model
+## Security Models
 
-What the project treats as in scope and out of scope, the security
-properties it provides and disclaims, the adversary model, and how
-findings are triaged are documented in [THREAT_MODEL.md](./THREAT_MODEL.md).
+Apache Fory security models are documented under
+[docs/security](docs/security/). Start with the
+[project threat model](docs/security/threat-model.md); for detailed untrusted
+deserialization classification rules, see the
+[deserialization security model](docs/security/deserialization.md).

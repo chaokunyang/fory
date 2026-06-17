@@ -1580,7 +1580,7 @@ def test_scala_grpc_preflight_collision(tmp_path: Path, capsys):
     assert "GreeterGrpc.scala" in err
 
 
-def test_java_grpc_service_class_collision_with_imported_type_fails(tmp_path: Path):
+def test_java_grpc_class_import_collision(tmp_path: Path):
     common = tmp_path / "common.fdl"
     common.write_text(
         dedent(
@@ -2044,7 +2044,7 @@ def test_cli_rejects_grpc_web_non_js(tmp_path: Path, capsys):
     )
 
 
-def test_cli_rejects_grpc_python_mode_without_grpc(tmp_path: Path, capsys):
+def test_cli_rejects_mode_without_grpc(tmp_path: Path, capsys):
     schema_path = tmp_path / "service.fdl"
     schema_path.write_text(_GREETER_WITH_SERVICE)
     args = parse_args(
@@ -2061,7 +2061,7 @@ def test_cli_rejects_grpc_python_mode_without_grpc(tmp_path: Path, capsys):
     assert "--grpc-python-mode requires --grpc" in capsys.readouterr().err
 
 
-def test_cli_rejects_grpc_python_mode_non_python(tmp_path: Path, capsys):
+def test_cli_rejects_mode_non_python(tmp_path: Path, capsys):
     schema_path = tmp_path / "service.fdl"
     schema_path.write_text(_GREETER_WITH_SERVICE)
     args = parse_args(

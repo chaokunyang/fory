@@ -34,6 +34,8 @@ public sealed class ReadContext
     private TypeMeta? _pendingTypeMeta;
     private ulong _pendingTypeMetaHeader;
     private int _pendingTypeMetaIndex = -1;
+    private int _pendingTypeMetaStart = -1;
+    private int _pendingTypeMetaEnd = -1;
 
     private readonly List<MetaString> _readMetaStrings = [];
 
@@ -248,8 +250,7 @@ public sealed class ReadContext
 
         CacheReadTypeMeta(_pendingTypeMetaHeader, typeMeta);
         StoreReadTypeMeta(typeMeta, _pendingTypeMetaIndex);
-        _pendingTypeMeta = null;
-        _pendingTypeMetaIndex = -1;
+        ClearPendingTypeMeta();
     }
 
     internal bool TryAcceptExactLocalTypeMeta(TypeMeta typeMeta, TypeInfo exactLocal, out TypeMeta localTypeMeta)
@@ -261,7 +262,10 @@ public sealed class ReadContext
         }
 
         TypeInfo.TypeMetaCacheEntry local = exactLocal.GetTypeMetaCacheEntry(TrackRef);
-        if (!typeMeta.Encode().AsSpan().SequenceEqual(local.EncodedBytes))
+        byte[] encoded = local.EncodedBytes;
+        int pendingBytes = _pendingTypeMetaEnd - _pendingTypeMetaStart;
+        if (pendingBytes != encoded.Length ||
+            !Reader.Storage.AsSpan(_pendingTypeMetaStart, encoded.Length).SequenceEqual(encoded))
         {
             localTypeMeta = typeMeta;
             return false;
@@ -269,8 +273,7 @@ public sealed class ReadContext
 
         localTypeMeta = local.TypeMeta;
         StoreReadTypeMeta(localTypeMeta, _pendingTypeMetaIndex);
-        _pendingTypeMeta = null;
-        _pendingTypeMetaIndex = -1;
+        ClearPendingTypeMeta();
         return true;
     }
 
@@ -295,6 +298,7 @@ public sealed class ReadContext
             throw new InvalidDataException("previous type meta was not accepted");
         }
 
+        int typeMetaStart = Reader.Cursor;
         ulong header = Reader.ReadUInt64();
         if (TryGetCachedReadTypeMeta(header, out TypeMeta cachedTypeMeta))
         {
@@ -317,6 +321,8 @@ public sealed class ReadContext
         _pendingTypeMeta = typeMeta;
         _pendingTypeMetaHeader = header;
         _pendingTypeMetaIndex = index;
+        _pendingTypeMetaStart = typeMetaStart;
+        _pendingTypeMetaEnd = Reader.Cursor;
         return typeMeta;
     }
 
@@ -504,7 +510,14 @@ public sealed class ReadContext
         _hasFirstReadTypeMeta = false;
         _readTypeMetas.Clear();
         _readMetaStrings.Clear();
+        ClearPendingTypeMeta();
+    }
+
+    private void ClearPendingTypeMeta()
+    {
         _pendingTypeMeta = null;
         _pendingTypeMetaIndex = -1;
+        _pendingTypeMetaStart = -1;
+        _pendingTypeMetaEnd = -1;
     }
 }

@@ -41,6 +41,7 @@ type TypeResolverLike = {
   computeTypeId(typeInfo: TypeInfo): number;
   getSerializerById(id: number, userTypeId?: number): Serializer | undefined;
   getSerializerByName(name: string): Serializer | undefined;
+  getSerializerByHash?(hash: number): Serializer | undefined;
   getSerializerByData(value: any): Serializer | null | undefined;
   isCompatible(): boolean;
   generateReadSerializer(typeInfo: TypeInfo): Serializer;
@@ -651,7 +652,8 @@ export class ReadContext {
     this.refReader.reference(object);
   }
 
-  private cachedTypeMeta(
+  private readCachedTypeMetaFromHeader(
+    dynamicTypeId: number,
     headerLow: number,
     headerHigh: number,
   ): TypeMeta | null {
@@ -660,23 +662,32 @@ export class ReadContext {
       && this.lastTypeMetaHeaderLow === headerLow
       && this.lastTypeMetaHeaderHigh === headerHigh
     ) {
+      TypeMeta.skipBodyByHeaderLow(this.reader, headerLow);
+      this.typeMeta[dynamicTypeId] = this.lastTypeMeta;
       return this.lastTypeMeta;
     }
 
     const recent = this.findRecentTypeMeta(headerLow, headerHigh);
     if (recent !== null) {
+      TypeMeta.skipBodyByHeaderLow(this.reader, headerLow);
       this.lastTypeMetaHeaderLow = headerLow;
       this.lastTypeMetaHeaderHigh = headerHigh;
       this.lastTypeMeta = recent;
+      this.typeMeta[dynamicTypeId] = recent;
       return recent;
     }
 
     const cached = this.typeMetaCache.get(headerHigh)?.get(headerLow);
     if (cached) {
+      // Header-cache hits intentionally skip without rehashing. Entries reach this cache only
+      // after a successful TypeMeta parse and 52-bit metadata-hash validation. The current body
+      // size still comes from the current header bytes, not from the cached TypeMeta.
+      TypeMeta.skipBodyByHeaderLow(this.reader, headerLow);
       this.lastTypeMetaHeaderLow = headerLow;
       this.lastTypeMetaHeaderHigh = headerHigh;
       this.lastTypeMeta = cached;
       this.rememberRecentTypeMeta(headerLow, headerHigh, cached);
+      this.typeMeta[dynamicTypeId] = cached;
       return cached;
     }
     return null;
@@ -775,13 +786,12 @@ export class ReadContext {
     headerHigh: number,
     exactLocal?: Serializer,
   ): TypeMeta {
-    const cached = this.cachedTypeMeta(headerLow, headerHigh);
+    const cached = this.readCachedTypeMetaFromHeader(
+      dynamicTypeId,
+      headerLow,
+      headerHigh,
+    );
     if (cached !== null) {
-      // Header-cache hits intentionally skip without rehashing. Entries reach this cache only
-      // after a successful TypeMeta parse and 52-bit metadata-hash validation. The current body
-      // size still comes from the current header bytes, not from the cached TypeMeta.
-      TypeMeta.skipBodyByHeaderLow(this.reader, headerLow);
-      this.typeMeta[dynamicTypeId] = cached;
       return cached;
     }
 
@@ -803,6 +813,7 @@ export class ReadContext {
           this.config.maxTypeMetaBytes,
         )
       ) {
+        this.cacheTypeMeta(headerLow, headerHigh, localTypeMeta, undefined);
         this.typeMeta[dynamicTypeId] = localTypeMeta;
         return localTypeMeta;
       }
@@ -846,11 +857,6 @@ export class ReadContext {
     const idOrLen = this.reader.readVarUInt32();
     let typeMeta: TypeMeta;
     let remoteHash: number;
-    let dynamicTypeId = -1;
-    let headerLow = -1;
-    let headerHigh = -1;
-    let typeKey: string | number | undefined;
-    let shouldCache = false;
     if (idOrLen & 1) {
       typeMeta = this.typeMeta[idOrLen >> 1];
       if (!typeMeta) {
@@ -858,45 +864,78 @@ export class ReadContext {
       }
       remoteHash = typeMeta.getHash();
     } else {
-      dynamicTypeId = idOrLen >> 1;
-      headerLow = this.reader.readUint32();
-      headerHigh = this.reader.readUint32();
+      const dynamicTypeId = idOrLen >> 1;
+      const headerLow = this.reader.readUint32();
+      const headerHigh = this.reader.readUint32();
       remoteHash = ReadContext.typeMetaHeaderHash(headerLow, headerHigh);
-      const cached = this.cachedTypeMeta(headerLow, headerHigh);
-      if (cached !== null) {
-        TypeMeta.skipBodyByHeaderLow(this.reader, headerLow);
-        this.typeMeta[dynamicTypeId] = cached;
-        typeMeta = cached;
-      } else if (
-        original !== undefined
-        && typeof original.getTypeInfo === "function"
-      ) {
-        const localTypeMeta = TypeMeta.fromTypeInfo(
-          original.getTypeInfo(),
-          this.typeResolver,
+      const cached = this.readCachedTypeMetaFromHeader(
+        dynamicTypeId,
+        headerLow,
+        headerHigh,
+      );
+      if (cached === null) {
+        return this.readChangedTypeMetaMiss(
+          expectedHash,
+          original,
+          dynamicTypeId,
+          headerLow,
+          headerHigh,
+          remoteHash,
         );
-        if (
-          TypeMeta.matchesEncodedAfterHeader(
-            this.reader,
-            headerLow,
-            headerHigh,
-            localTypeMeta.toBytes(),
-            this.config.maxTypeMetaBytes,
-          )
-        ) {
-          this.typeMeta[dynamicTypeId] = localTypeMeta;
-          typeMeta = localTypeMeta;
-        } else {
-          const header = (BigInt(headerHigh) << 32n) | BigInt(headerLow);
-          typeMeta = TypeMeta.fromBytesAfterHeader(
-            this.reader,
-            header,
-            this.config.maxTypeFields,
-            this.config.maxTypeMetaBytes,
-          );
-          typeKey = this.checkRemoteStructSchemaLimit(typeMeta);
-          shouldCache = true;
-        }
+      }
+      typeMeta = cached;
+    }
+    if (expectedHash !== remoteHash) {
+      const cached = this.compatibleReadSerializers.get(remoteHash);
+      if (cached !== undefined && cached.localHash === expectedHash) {
+        return cached.serializer;
+      }
+      const serializer = this.genSerializerByTypeMetaRuntime(
+        typeMeta,
+        original,
+      );
+      this.compatibleReadSerializers.set(remoteHash, {
+        localHash: expectedHash,
+        serializer,
+      });
+      return serializer;
+    }
+    return undefined;
+  }
+
+  private readChangedTypeMetaMiss(
+    expectedHash: number,
+    original: Serializer | undefined,
+    dynamicTypeId: number,
+    headerLow: number,
+    headerHigh: number,
+    remoteHash: number,
+  ): Serializer | undefined {
+    let typeMeta: TypeMeta;
+    let typeKey: string | number | undefined;
+    let shouldCache = false;
+    const exactLocal = original
+      ?? this.typeResolver.getSerializerByHash?.(expectedHash);
+    if (
+      exactLocal !== undefined
+      && typeof exactLocal.getTypeInfo === "function"
+    ) {
+      const localTypeMeta = TypeMeta.fromTypeInfo(
+        exactLocal.getTypeInfo(),
+        this.typeResolver,
+      );
+      if (
+        TypeMeta.matchesEncodedAfterHeader(
+          this.reader,
+          headerLow,
+          headerHigh,
+          localTypeMeta.toBytes(),
+          this.config.maxTypeMetaBytes,
+        )
+      ) {
+        this.cacheTypeMeta(headerLow, headerHigh, localTypeMeta, undefined);
+        this.typeMeta[dynamicTypeId] = localTypeMeta;
+        typeMeta = localTypeMeta;
       } else {
         const header = (BigInt(headerHigh) << 32n) | BigInt(headerLow);
         typeMeta = TypeMeta.fromBytesAfterHeader(
@@ -908,6 +947,16 @@ export class ReadContext {
         typeKey = this.checkRemoteStructSchemaLimit(typeMeta);
         shouldCache = true;
       }
+    } else {
+      const header = (BigInt(headerHigh) << 32n) | BigInt(headerLow);
+      typeMeta = TypeMeta.fromBytesAfterHeader(
+        this.reader,
+        header,
+        this.config.maxTypeFields,
+        this.config.maxTypeMetaBytes,
+      );
+      typeKey = this.checkRemoteStructSchemaLimit(typeMeta);
+      shouldCache = true;
     }
     if (expectedHash !== remoteHash) {
       const cached = this.compatibleReadSerializers.get(remoteHash);
@@ -984,10 +1033,12 @@ export class ReadContext {
     const typeMetaStart = this.reader.readGetCursor();
     const headerLow = this.reader.readUint32();
     const headerHigh = this.reader.readUint32();
-    const cached = this.cachedTypeMeta(headerLow, headerHigh);
+    const cached = this.readCachedTypeMetaFromHeader(
+      dynamicTypeId,
+      headerLow,
+      headerHigh,
+    );
     if (cached !== null) {
-      TypeMeta.skipBodyByHeaderLow(this.reader, headerLow);
-      this.typeMeta[dynamicTypeId] = cached;
       const serializer = this.serializerByTypeMeta(typeId, cached);
       return updateStruct
         ? this.updateAnySerializer(serializer, cached)
@@ -1009,6 +1060,7 @@ export class ReadContext {
       serializer,
     );
     if (localTypeMeta !== undefined) {
+      this.cacheTypeMeta(headerLow, headerHigh, localTypeMeta, undefined);
       this.typeMeta[dynamicTypeId] = localTypeMeta;
       return serializer!;
     }

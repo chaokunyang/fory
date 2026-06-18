@@ -87,6 +87,7 @@ export default class TypeResolver {
   readonly trackingRef: boolean;
   private internalSerializer: Serializer[] = new Array(300);
   private customSerializer: Map<number | string, Serializer> = new Map();
+  private serializerByHash: Map<number, Serializer> = new Map();
 
   private writeContext!: WriteContext;
   private readContext!: ReadContext;
@@ -248,6 +249,12 @@ export default class TypeResolver {
     this.initInternalSerializer();
   }
 
+  private rememberSerializerHash(serializer: Serializer | undefined) {
+    if (serializer?._initialized) {
+      this.serializerByHash.set(serializer.getHash(), serializer);
+    }
+  }
+
   registerSerializer(typeInfo: TypeInfo, serializer: Serializer = uninitSerialize) {
     const typeId = this.computeTypeId(typeInfo);
     if (!TypeId.isNamedType(typeId)) {
@@ -258,7 +265,9 @@ export default class TypeResolver {
         } else {
           this.customSerializer.set(key, { ...serializer });
         }
-        return this.customSerializer.get(key);
+        const registered = this.customSerializer.get(key);
+        this.rememberSerializerHash(registered);
+        return registered;
       }
       if (typeId <= 0xFF) {
         if (this.internalSerializer[typeId]) {
@@ -266,14 +275,18 @@ export default class TypeResolver {
         } else {
           this.internalSerializer[typeId] = { ...serializer };
         }
-        return this.internalSerializer[typeId];
+        const registered = this.internalSerializer[typeId];
+        this.rememberSerializerHash(registered);
+        return registered;
       }
       if (this.customSerializer.has(typeId)) {
         Object.assign(this.customSerializer.get(typeId)!, serializer);
       } else {
         this.customSerializer.set(typeId, { ...serializer });
       }
-      return this.customSerializer.get(typeId);
+      const registered = this.customSerializer.get(typeId);
+      this.rememberSerializerHash(registered);
+      return registered;
     }
 
     const name = typeInfo.named!;
@@ -282,7 +295,9 @@ export default class TypeResolver {
     } else {
       this.customSerializer.set(name, { ...serializer });
     }
-    return this.customSerializer.get(name);
+    const registered = this.customSerializer.get(name);
+    this.rememberSerializerHash(registered);
+    return registered;
   }
 
   generateReadSerializer(typeInfo: TypeInfo) {
@@ -322,6 +337,10 @@ export default class TypeResolver {
 
   getSerializerByName(typeIdOrName: number | string) {
     return this.customSerializer.get(typeIdOrName);
+  }
+
+  getSerializerByHash(hash: number) {
+    return this.serializerByHash.get(hash);
   }
 
   getSerializerByData(v: any) {

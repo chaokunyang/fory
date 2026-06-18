@@ -187,12 +187,16 @@ runTest("exact local TypeMeta bypasses schema limit", () => {
       return localTypeInfo;
     },
   };
+  const localHash = TypeMeta.fromTypeInfo(localTypeInfo).getHash();
   const readContext = context({
     computeTypeId(typeInfo) {
       return typeInfo.typeId;
     },
     getSerializerById() {
       return undefined;
+    },
+    getSerializerByHash(hash) {
+      return hash === localHash ? original : undefined;
     },
     generateReadSerializer(typeInfo) {
       return {
@@ -202,13 +206,16 @@ runTest("exact local TypeMeta bypasses schema limit", () => {
       };
     },
   });
-  const localHash = TypeMeta.fromTypeInfo(localTypeInfo).getHash();
 
   readChangedTypeMeta(readContext, localHash, original, remoteStruct("Shared", "extra"));
   assert.doesNotThrow(() => readChangedTypeMeta(
     readContext,
     localHash,
-    original,
+    undefined,
+    TypeMeta.fromTypeInfo(localTypeInfo),
+  ));
+  assert.doesNotThrow(() => readTypeMeta(
+    readContext,
     TypeMeta.fromTypeInfo(localTypeInfo),
   ));
 });
@@ -297,6 +304,10 @@ runTest("exact Any TypeMeta bypasses schema limit", () => {
 
   detectAnySerializer(readContext, anyStruct("extra"));
   assert.doesNotThrow(() => detectAnySerializer(
+    readContext,
+    TypeMeta.fromTypeInfo(localTypeInfo),
+  ));
+  assert.doesNotThrow(() => readTypeMeta(
     readContext,
     TypeMeta.fromTypeInfo(localTypeInfo),
   ));

@@ -28,7 +28,7 @@ public final class ForyJson {
   private final Utf8JsonWriter utf8Writer;
   private final StringJsonWriter stringWriter;
   private byte[] utf8Buffer;
-  private char[] stringBuffer;
+  private byte[] stringBuffer;
   private final boolean writeNullFields;
   private Class<?> lastWriteClass;
   private JsonClassInfo lastWriteClassInfo;
@@ -37,7 +37,7 @@ public final class ForyJson {
     this.writeNullFields = writeNullFields;
     classCache = new JsonClassCache(codegenEnabled, writeNullFields);
     utf8Buffer = new byte[INITIAL_BUFFER_SIZE];
-    stringBuffer = new char[INITIAL_BUFFER_SIZE];
+    stringBuffer = new byte[INITIAL_BUFFER_SIZE];
     utf8Writer = new Utf8JsonWriter(writeNullFields, utf8Buffer);
     stringWriter = new StringJsonWriter(writeNullFields, stringBuffer);
   }
@@ -47,7 +47,7 @@ public final class ForyJson {
   }
 
   public String toJson(Object value) {
-    char[] buffer = borrowStringBuffer();
+    byte[] buffer = borrowStringBuffer();
     StringJsonWriter writer = stringWriter;
     writer.reset(buffer);
     try {
@@ -124,13 +124,13 @@ public final class ForyJson {
     }
   }
 
-  private char[] borrowStringBuffer() {
-    char[] buffer = stringBuffer;
+  private byte[] borrowStringBuffer() {
+    byte[] buffer = stringBuffer;
     stringBuffer = null;
-    return buffer == null ? new char[INITIAL_BUFFER_SIZE] : buffer;
+    return buffer == null ? new byte[INITIAL_BUFFER_SIZE] : buffer;
   }
 
-  private void releaseStringBuffer(char[] buffer) {
+  private void releaseStringBuffer(byte[] buffer) {
     if (buffer.length <= MAX_CACHED_BUFFER_SIZE) {
       stringBuffer = buffer;
     }

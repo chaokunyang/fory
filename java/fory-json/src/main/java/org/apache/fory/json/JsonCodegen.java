@@ -192,8 +192,8 @@ final class JsonCodegen {
           code.append("  private final byte[] u").append(i).append(";\n");
           code.append("  private final byte[] uc").append(i).append(";\n");
         } else {
-          code.append("  private final char[] s").append(i).append(";\n");
-          code.append("  private final char[] sc").append(i).append(";\n");
+          code.append("  private final byte[] s").append(i).append(";\n");
+          code.append("  private final byte[] sc").append(i).append(";\n");
         }
       }
     }

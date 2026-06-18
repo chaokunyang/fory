@@ -44,8 +44,6 @@ final class JsonPropertyInfo {
   private static final int KIND_OBJECT = 14;
   private static final byte[] TRUE_BYTES = "true".getBytes(StandardCharsets.ISO_8859_1);
   private static final byte[] FALSE_BYTES = "false".getBytes(StandardCharsets.ISO_8859_1);
-  private static final char[] TRUE_CHARS = "true".toCharArray();
-  private static final char[] FALSE_CHARS = "false".toCharArray();
 
   private final String name;
   private final Member writeMember;
@@ -62,22 +60,22 @@ final class JsonPropertyInfo {
   private final Type writeMapValueType;
   private final Class<?> writeArrayComponentType;
   private final Class<?> writeElementRawType;
-  private final char[] stringNamePrefix;
-  private final char[] stringCommaNamePrefix;
+  private final byte[] stringNamePrefix;
+  private final byte[] stringCommaNamePrefix;
   private final byte[] utf8NamePrefix;
   private final byte[] utf8CommaNamePrefix;
-  private final char[][] stringEnumValues;
-  private final char[][] stringElementEnumValues;
-  private final char[][] stringEnumNameValues;
-  private final char[][] stringEnumCommaValues;
+  private final byte[][] stringEnumValues;
+  private final byte[][] stringElementEnumValues;
+  private final byte[][] stringEnumNameValues;
+  private final byte[][] stringEnumCommaValues;
   private final byte[][] utf8EnumValues;
   private final byte[][] utf8ElementEnumValues;
   private final byte[][] utf8EnumNameValues;
   private final byte[][] utf8EnumCommaValues;
-  private final char[] stringTrueNameToken;
-  private final char[] stringTrueCommaToken;
-  private final char[] stringFalseNameToken;
-  private final char[] stringFalseCommaToken;
+  private final byte[] stringTrueNameToken;
+  private final byte[] stringTrueCommaToken;
+  private final byte[] stringFalseNameToken;
+  private final byte[] stringFalseCommaToken;
   private final byte[] utf8TrueNameToken;
   private final byte[] utf8TrueCommaToken;
   private final byte[] utf8FalseNameToken;
@@ -112,19 +110,18 @@ final class JsonPropertyInfo {
     writeArrayComponentType =
         writeKind == JsonPropertyKind.ARRAY ? writeRawType.getComponentType() : null;
     writeElementRawType = writeElementType == null ? null : knownRawType(writeElementType);
-    String prefix = escapedNamePrefix(name);
-    stringNamePrefix = prefix.toCharArray();
-    stringCommaNamePrefix = ("," + prefix).toCharArray();
-    utf8NamePrefix = prefix.getBytes(StandardCharsets.UTF_8);
-    utf8CommaNamePrefix = ("," + prefix).getBytes(StandardCharsets.UTF_8);
+    String stringPrefix = escapedNamePrefix(name, true);
+    String utf8Prefix = escapedNamePrefix(name, false);
+    stringNamePrefix = stringPrefix.getBytes(StandardCharsets.ISO_8859_1);
+    stringCommaNamePrefix = ("," + stringPrefix).getBytes(StandardCharsets.ISO_8859_1);
+    utf8NamePrefix = utf8Prefix.getBytes(StandardCharsets.UTF_8);
+    utf8CommaNamePrefix = ("," + utf8Prefix).getBytes(StandardCharsets.UTF_8);
     stringEnumValues = writeKind == JsonPropertyKind.ENUM ? stringEnumValues(writeRawType) : null;
     stringEnumNameValues =
-        writeKind == JsonPropertyKind.ENUM
-            ? stringFieldValues(stringNamePrefix, stringEnumValues)
-            : null;
+        writeKind == JsonPropertyKind.ENUM ? fieldValues(stringNamePrefix, stringEnumValues) : null;
     stringEnumCommaValues =
         writeKind == JsonPropertyKind.ENUM
-            ? stringFieldValues(stringCommaNamePrefix, stringEnumValues)
+            ? fieldValues(stringCommaNamePrefix, stringEnumValues)
             : null;
     stringElementEnumValues =
         writeElementRawType != null && writeElementRawType.isEnum()
@@ -142,10 +139,10 @@ final class JsonPropertyInfo {
             ? enumValues(writeElementRawType)
             : null;
     if (writeKind == JsonPropertyKind.BOOLEAN) {
-      stringTrueNameToken = join(stringNamePrefix, TRUE_CHARS);
-      stringTrueCommaToken = join(stringCommaNamePrefix, TRUE_CHARS);
-      stringFalseNameToken = join(stringNamePrefix, FALSE_CHARS);
-      stringFalseCommaToken = join(stringCommaNamePrefix, FALSE_CHARS);
+      stringTrueNameToken = join(stringNamePrefix, TRUE_BYTES);
+      stringTrueCommaToken = join(stringCommaNamePrefix, TRUE_BYTES);
+      stringFalseNameToken = join(stringNamePrefix, FALSE_BYTES);
+      stringFalseCommaToken = join(stringCommaNamePrefix, FALSE_BYTES);
       utf8TrueNameToken = join(utf8NamePrefix, TRUE_BYTES);
       utf8TrueCommaToken = join(utf8CommaNamePrefix, TRUE_BYTES);
       utf8FalseNameToken = join(utf8NamePrefix, FALSE_BYTES);
@@ -214,11 +211,11 @@ final class JsonPropertyInfo {
     return readAccessor;
   }
 
-  public char[] stringNamePrefix() {
+  public byte[] stringNamePrefix() {
     return stringNamePrefix;
   }
 
-  public char[] stringCommaNamePrefix() {
+  public byte[] stringCommaNamePrefix() {
     return stringCommaNamePrefix;
   }
 
@@ -244,15 +241,15 @@ final class JsonPropertyInfo {
         : (comma ? utf8FalseCommaToken : utf8FalseNameToken);
   }
 
-  public char[] stringEnumValue(Enum<?> value) {
+  public byte[] stringEnumValue(Enum<?> value) {
     return stringEnumValues[value.ordinal()];
   }
 
-  public char[] stringEnumFieldValue(Enum<?> value, boolean comma) {
+  public byte[] stringEnumFieldValue(Enum<?> value, boolean comma) {
     return (comma ? stringEnumCommaValues : stringEnumNameValues)[value.ordinal()];
   }
 
-  public char[] stringBooleanFieldValue(boolean value, boolean comma) {
+  public byte[] stringBooleanFieldValue(boolean value, boolean comma) {
     return value
         ? (comma ? stringTrueCommaToken : stringTrueNameToken)
         : (comma ? stringFalseCommaToken : stringFalseNameToken);
@@ -262,7 +259,7 @@ final class JsonPropertyInfo {
     return utf8ElementEnumValues[value.ordinal()];
   }
 
-  public char[] stringElementEnumValue(Enum<?> value) {
+  public byte[] stringElementEnumValue(Enum<?> value) {
     return stringElementEnumValues[value.ordinal()];
   }
 
@@ -1189,11 +1186,23 @@ final class JsonPropertyInfo {
         || Map.class.isAssignableFrom(rawType);
   }
 
-  private static String escapedNamePrefix(String name) {
+  private static String escapedNamePrefix(String name, boolean escapeNonLatin1) {
     StringBuilder builder = new StringBuilder(name.length() + 3);
+    appendQuoted(builder, name, escapeNonLatin1);
+    builder.append(':');
+    return builder.toString();
+  }
+
+  private static String escapedString(String value, boolean escapeNonLatin1) {
+    StringBuilder builder = new StringBuilder(value.length() + 2);
+    appendQuoted(builder, value, escapeNonLatin1);
+    return builder.toString();
+  }
+
+  private static void appendQuoted(StringBuilder builder, String value, boolean escapeNonLatin1) {
     builder.append('"');
-    for (int i = 0; i < name.length(); i++) {
-      char ch = name.charAt(i);
+    for (int i = 0; i < value.length(); i++) {
+      char ch = value.charAt(i);
       switch (ch) {
         case '"':
           builder.append("\\\"");
@@ -1217,17 +1226,22 @@ final class JsonPropertyInfo {
           builder.append("\\t");
           break;
         default:
-          if (ch < 0x20) {
-            builder.append("\\u00");
-            builder.append(hex((ch >>> 4) & 0xF));
-            builder.append(hex(ch & 0xF));
+          if (ch < 0x20 || escapeNonLatin1 && ch > 0xff) {
+            appendUnicodeEscape(builder, ch);
           } else {
             builder.append(ch);
           }
       }
     }
-    builder.append("\":");
-    return builder.toString();
+    builder.append('"');
+  }
+
+  private static void appendUnicodeEscape(StringBuilder builder, char ch) {
+    builder.append("\\u");
+    builder.append(hex((ch >>> 12) & 0xF));
+    builder.append(hex((ch >>> 8) & 0xF));
+    builder.append(hex((ch >>> 4) & 0xF));
+    builder.append(hex(ch & 0xF));
   }
 
   private static byte[][] enumValues(Class<?> enumType) {
@@ -1236,17 +1250,18 @@ final class JsonPropertyInfo {
     for (Object constant : constants) {
       Enum<?> enumValue = (Enum<?>) constant;
       values[enumValue.ordinal()] =
-          ("\"" + enumValue.name() + "\"").getBytes(StandardCharsets.UTF_8);
+          escapedString(enumValue.name(), false).getBytes(StandardCharsets.UTF_8);
     }
     return values;
   }
 
-  private static char[][] stringEnumValues(Class<?> enumType) {
+  private static byte[][] stringEnumValues(Class<?> enumType) {
     Object[] constants = enumType.getEnumConstants();
-    char[][] values = new char[constants.length][];
+    byte[][] values = new byte[constants.length][];
     for (Object constant : constants) {
       Enum<?> enumValue = (Enum<?>) constant;
-      values[enumValue.ordinal()] = ("\"" + enumValue.name() + "\"").toCharArray();
+      values[enumValue.ordinal()] =
+          escapedString(enumValue.name(), true).getBytes(StandardCharsets.ISO_8859_1);
     }
     return values;
   }
@@ -1259,23 +1274,8 @@ final class JsonPropertyInfo {
     return fieldValues;
   }
 
-  private static char[][] stringFieldValues(char[] prefix, char[][] values) {
-    char[][] fieldValues = new char[values.length][];
-    for (int i = 0; i < values.length; i++) {
-      fieldValues[i] = join(prefix, values[i]);
-    }
-    return fieldValues;
-  }
-
   private static byte[] join(byte[] prefix, byte[] token) {
     byte[] joined = new byte[prefix.length + token.length];
-    System.arraycopy(prefix, 0, joined, 0, prefix.length);
-    System.arraycopy(token, 0, joined, prefix.length, token.length);
-    return joined;
-  }
-
-  private static char[] join(char[] prefix, char[] token) {
-    char[] joined = new char[prefix.length + token.length];
     System.arraycopy(prefix, 0, joined, 0, prefix.length);
     System.arraycopy(token, 0, joined, prefix.length, token.length);
     return joined;

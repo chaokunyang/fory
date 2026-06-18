@@ -1047,6 +1047,12 @@ public abstract class TypeResolver {
   }
 
   private TypeInfo buildMetaSharedTypeInfo(TypeDef typeDef, Class<?> cls) {
+    TypeInfo typeInfo = createMetaSharedTypeInfo(typeDef, cls);
+    extRegistry.typeInfoByTypeDefId.put(typeDef.getId(), typeInfo);
+    return typeInfo;
+  }
+
+  private TypeInfo createMetaSharedTypeInfo(TypeDef typeDef, Class<?> cls) {
     TypeInfo typeInfo;
     if (!typeDef.isStructSchemaKind()
         && !UnknownClass.class.isAssignableFrom(TypeUtils.getComponentIfArray(cls))) {
@@ -1058,7 +1064,6 @@ public abstract class TypeResolver {
     } else {
       typeInfo = getMetaSharedTypeInfo(typeDef, cls);
     }
-    extRegistry.typeInfoByTypeDefId.put(typeDef.getId(), typeInfo);
     return typeInfo;
   }
 
@@ -1070,8 +1075,19 @@ public abstract class TypeResolver {
     if (localTypeDef != null) {
       return buildMetaSharedTypeInfo(localTypeDef, cls);
     }
-    TypeDef cachedTypeDef = cacheRemoteTypeDef(typeDef);
-    return buildMetaSharedTypeInfo(cachedTypeDef, cls);
+    if (!typeDef.isStructSchemaKind()) {
+      TypeDef cachedTypeDef = cacheTypeDef(typeDef);
+      return buildMetaSharedTypeInfo(cachedTypeDef, cls);
+    }
+    Object structTypeKey = remoteStructKey(typeDef);
+    sharedRegistry.checkRemoteTypeDefLimit(typeDef, structTypeKey);
+    TypeInfo typeInfo = createMetaSharedTypeInfo(typeDef, cls);
+    TypeDef cachedTypeDef = sharedRegistry.getOrCreateRemoteTypeDef(typeDef, structTypeKey);
+    if (cachedTypeDef != typeDef) {
+      return buildMetaSharedTypeInfo(cachedTypeDef, cls);
+    }
+    extRegistry.typeInfoByTypeDefId.put(typeDef.getId(), typeInfo);
+    return typeInfo;
   }
 
   private TypeDef exactLocalTypeDef(TypeDef remoteTypeDef, Class<?> cls) {

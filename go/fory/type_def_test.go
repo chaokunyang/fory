@@ -38,6 +38,14 @@ type SliceStruct struct {
 	Items []string
 }
 
+type SchemaLimitBad struct {
+	Value string
+}
+
+type SchemaLimitExtra struct {
+	Extra int32
+}
+
 type NestedSliceStruct struct {
 	ID      int32
 	Matrix  [][]int
@@ -489,6 +497,18 @@ func TestRemoteSchemaLimitKeepsUnknownTypesSeparate(t *testing.T) {
 
 	require.NoError(t, readRemoteTypeDef(t, fory, first))
 	require.NoError(t, readRemoteTypeDef(t, fory, second))
+}
+
+func TestRemoteSchemaCheckDoesNotConsumeLimit(t *testing.T) {
+	fory := NewFory(WithXlang(false), WithCompatible(true), WithMaxSchemaVersionsPerType(1))
+	checked := remoteSchemaLimitTypeDef(t, SchemaLimitBad{}, "example.Accepted")
+	valid := remoteSchemaLimitTypeDef(t, SchemaLimitExtra{}, "example.Accepted")
+
+	typeKey, isStruct, err := fory.typeResolver.checkRemoteStructSchemaLimit(checked)
+	require.NoError(t, err)
+	require.True(t, isStruct)
+	require.NotNil(t, typeKey)
+	require.NoError(t, readRemoteTypeDef(t, fory, valid))
 }
 
 func remoteSchemaLimitTypeDef(t *testing.T, value any, name string) *TypeDef {

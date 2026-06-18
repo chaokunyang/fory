@@ -26,6 +26,7 @@ from typing import List, Dict, Optional
 import pytest
 
 import pyfory
+import pyfory.meta.typedef_decoder as typedef_decoder
 from pyfory.serialization import Buffer
 from pyfory.meta.typedef import (
     TypeDef,
@@ -339,8 +340,10 @@ def test_remote_schema_limit_rejects_extra_versions(xlang):
 
     _read_remote_typedef(reader, first_type_id, first_typedef)
 
+    generated_class_count = typedef_decoder._generated_class_count
     with pytest.raises(ValueError, match="max_schema_versions_per_type"):
         _read_remote_typedef(reader, second_type_id, second_typedef)
+    assert typedef_decoder._generated_class_count == generated_class_count
 
 
 @pytest.mark.parametrize("xlang", [False, True])

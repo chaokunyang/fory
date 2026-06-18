@@ -52,7 +52,9 @@ Apache Fory is a multi-language serialization framework with multiple wire forma
 - Remote struct `TypeDef` or `TypeMeta` schema limits are resource controls on cold metadata
   cache-miss parse/publish paths only. They must not change wire format, registration, dynamic type
   loading, unknown-type behavior, deserialization policy, schema-evolution semantics, or metadata
-  cache-hit/generated-reader hot paths.
+  cache-hit/generated-reader hot paths. Count a remote schema version only after the schema-specific
+  read state has been successfully built and the owning metadata cache can publish it; failed or
+  incompatible metadata must not consume the limit.
 
 ## Runtime Map
 

@@ -1085,7 +1085,7 @@ class StructSerializerGenerator extends BaseSerializerGenerator {
           }`;
       }
       return `
-          const ${changedSerializer} = ${this.builder.typeMetaResolver.readTypeMetaIfSchemaChanged(localHash)};
+          const ${changedSerializer} = ${this.builder.typeMetaResolver.readTypeMetaIfSchemaChanged(localHash, this.serializerExpr)};
           if (${changedSerializer} !== undefined) {
             ${onMetaChanged?.(changedSerializer) ?? `return ${changedSerializer};`}
           }${unchangedBranch}

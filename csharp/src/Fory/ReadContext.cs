@@ -185,15 +185,16 @@ public sealed class ReadContext
             return;
         }
 
-        CheckRemoteStructSchemaLimit(typeMeta);
+        object? typeKey = CheckRemoteStructSchemaLimit(typeMeta);
         _lastMetaHeader = header;
         _lastTypeMeta = typeMeta;
         _hasLastMetaHeader = true;
         _cachedTypeMetasByHeader.TryAdd(header, typeMeta);
+        RecordRemoteStructSchema(typeKey);
     }
 
     [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
-    private void CheckRemoteStructSchemaLimit(TypeMeta typeMeta)
+    private object? CheckRemoteStructSchemaLimit(TypeMeta typeMeta)
     {
         if (typeMeta.TypeId is not uint typeId ||
             typeId is not ((uint)TypeId.Struct or
@@ -201,7 +202,7 @@ public sealed class ReadContext
                 (uint)TypeId.NamedStruct or
                 (uint)TypeId.NamedCompatibleStruct))
         {
-            return;
+            return null;
         }
 
         object typeKey = typeMeta.RegisterByName
@@ -229,6 +230,17 @@ public sealed class ReadContext
                 "MaxAverageSchemaVersionsPerType if this peer legitimately sends many schema versions across many types.");
         }
 
+        return typeKey;
+    }
+
+    private void RecordRemoteStructSchema(object? typeKey)
+    {
+        if (typeKey is null)
+        {
+            return;
+        }
+
+        _remoteSchemaVersionsByType.TryGetValue(typeKey, out int versionsForType);
         _remoteSchemaVersionsByType[typeKey] = versionsForType + 1;
         _totalAcceptedSchemaVersions++;
     }
@@ -254,6 +266,28 @@ public sealed class ReadContext
         StoreReadTypeMeta(typeMeta, _pendingTypeMetaIndex);
         _pendingTypeMeta = null;
         _pendingTypeMetaIndex = -1;
+    }
+
+    internal bool TryAcceptExactLocalTypeMeta(TypeMeta typeMeta, TypeInfo exactLocal, out TypeMeta localTypeMeta)
+    {
+        if (!ReferenceEquals(_pendingTypeMeta, typeMeta))
+        {
+            localTypeMeta = typeMeta;
+            return false;
+        }
+
+        TypeInfo.TypeMetaCacheEntry local = exactLocal.GetTypeMetaCacheEntry(TrackRef);
+        if (!typeMeta.Encode().AsSpan().SequenceEqual(local.EncodedBytes))
+        {
+            localTypeMeta = typeMeta;
+            return false;
+        }
+
+        localTypeMeta = local.TypeMeta;
+        StoreReadTypeMeta(localTypeMeta, _pendingTypeMetaIndex);
+        _pendingTypeMeta = null;
+        _pendingTypeMetaIndex = -1;
+        return true;
     }
 
     internal TypeMeta ReadTypeMeta(TypeInfo? exactLocal = null)

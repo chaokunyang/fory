@@ -593,7 +593,7 @@ final class TypeResolver {
       typeInfoByHeader.set(localTypeInfo, for: header)
       return localTypeInfo
     }
-    try checkRemoteStructSchemaLimit(typeMeta)
+    let remoteSchemaKey = try checkRemoteStructSchemaLimit(typeMeta)
     let canonicalTypeMeta: TypeMeta
     if let localTypeMeta = localTypeInfo.typeMeta {
       canonicalTypeMeta = try typeMeta.assigningFieldIDs(from: localTypeMeta)
@@ -602,21 +602,22 @@ final class TypeResolver {
     }
     let typeInfo = TypeInfo(dynamic: localTypeInfo, compatibleTypeMeta: canonicalTypeMeta)
     typeInfoByHeader.set(typeInfo, for: header)
+    recordRemoteStructSchema(remoteSchemaKey)
     return typeInfo
   }
 
   @inline(never)
-  private func checkRemoteStructSchemaLimit(_ typeMeta: TypeMeta) throws {
+  private func checkRemoteStructSchemaLimit(_ typeMeta: TypeMeta) throws -> String? {
     guard let rawTypeID = typeMeta.typeID,
       let typeID = TypeId(rawValue: rawTypeID)
     else {
-      return
+      return nil
     }
     switch typeID {
     case .structType, .compatibleStruct, .namedStruct, .namedCompatibleStruct:
       break
     default:
-      return
+      return nil
     }
 
     let key: String
@@ -643,6 +644,14 @@ final class TypeResolver {
         "remote struct schema versions exceeded global limit from maxAverageSchemaVersionsPerType=\(maxAverageSchemaVersionsPerType)"
       )
     }
+    return key
+  }
+
+  private func recordRemoteStructSchema(_ key: String?) {
+    guard let key else {
+      return
+    }
+    let versionsForType = remoteSchemaVersionsByType[key] ?? 0
     remoteSchemaVersionsByType[key] = versionsForType + 1
     totalAcceptedSchemaVersions += 1
   }

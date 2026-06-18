@@ -539,6 +539,62 @@ func schemaLimitTracksStructTypesSeparately() throws {
 }
 
 @Test
+func failedSchemaDoesNotConsumeLimit() throws {
+  let resolver = TypeResolver(maxSchemaVersionsPerType: 1)
+  resolver.register(Person.self, id: 901)
+
+  func remoteTypeMeta(fieldName: String, fieldType: TypeMeta.FieldType) throws -> TypeMeta {
+    try TypeMeta(
+      typeID: TypeId.structType.rawValue,
+      userTypeID: 901,
+      namespace: .empty(specialChar1: ".", specialChar2: "_"),
+      typeName: .empty(specialChar1: "$", specialChar2: "_"),
+      registerByName: false,
+      fields: [
+        TypeMeta.FieldInfo(
+          fieldID: nil,
+          fieldName: fieldName,
+          fieldType: fieldType
+        )
+      ]
+    )
+  }
+
+  func cache(_ typeMeta: TypeMeta) throws {
+    let encoded = try typeMeta.encode()
+    let headerReader = ByteBuffer(bytes: encoded)
+    let header = try headerReader.readUInt64()
+    let buffer = ByteBuffer(bytes: encoded)
+    let decoded = try TypeMeta.decode(buffer)
+    _ = try resolver.cacheTypeInfo(
+      decoded,
+      forHeader: header,
+      buffer: buffer,
+      typeDefStart: 0,
+      typeDefEnd: buffer.getCursor()
+    )
+  }
+
+  #expect(throws: (any Error).self) {
+    try cache(remoteTypeMeta(
+      fieldName: "id",
+      fieldType: TypeMeta.FieldType(
+        typeID: TypeId.map.rawValue,
+        nullable: false,
+        generics: [
+          TypeMeta.FieldType(typeID: TypeId.string.rawValue, nullable: false),
+          TypeMeta.FieldType(typeID: TypeId.int32.rawValue, nullable: false),
+        ]
+      )
+    ))
+  }
+  try cache(remoteTypeMeta(
+    fieldName: "remoteA",
+    fieldType: TypeMeta.FieldType(typeID: TypeId.int32.rawValue, nullable: false)
+  ))
+}
+
+@Test
 func macroStructRoundTrip() throws {
   let fory = Fory()
   fory.register(Address.self, id: 100)

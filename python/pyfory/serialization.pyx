@@ -531,6 +531,7 @@ cdef class TypeResolver:
         cdef int64_t header = buffer.read_int64()
         cdef TypeInfo typeinfo = self._meta_shared_type_info.get(header)
         cdef object type_def
+        cdef object type_key
         if typeinfo is not None:
             # Header-cache hits intentionally skip without rehashing. Entries reach this cache only
             # after a successful TypeDef parse and 52-bit metadata-hash validation.
@@ -543,9 +544,10 @@ cdef class TypeResolver:
                 self.resolver._set_type_info(typeinfo)
             if typeinfo.type_def is not None and typeinfo.type_def.encoded == type_def.encoded:
                 return typeinfo
-        self.resolver._check_remote_struct_schema_limit(type_def)
+        type_key = self.resolver._check_remote_struct_schema_limit(type_def)
         typeinfo = self.resolver._build_type_info_from_typedef(type_def)
         self._meta_shared_type_info[header] = typeinfo
+        self.resolver._record_remote_struct_schema(type_key)
         return typeinfo
 
     cdef inline TypeInfo _load_bytes_to_type_info(

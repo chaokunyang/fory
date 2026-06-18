@@ -61,11 +61,44 @@ const _intFieldType = GeneratedFieldType(
   arguments: <GeneratedFieldType>[],
 );
 
+const _mapFieldType = GeneratedFieldType(
+  type: Map<String, int>,
+  typeId: TypeIds.map,
+  nullable: false,
+  ref: false,
+  dynamic: false,
+  arguments: <GeneratedFieldType>[
+    GeneratedFieldType(
+      type: String,
+      typeId: TypeIds.string,
+      nullable: false,
+      ref: false,
+      dynamic: false,
+      arguments: <GeneratedFieldType>[],
+    ),
+    GeneratedFieldType(
+      type: int,
+      typeId: TypeIds.int32,
+      nullable: false,
+      ref: false,
+      dynamic: false,
+      arguments: <GeneratedFieldType>[],
+    ),
+  ],
+);
+
 GeneratedFieldInfo _generatedField(String name) => GeneratedFieldInfo(
   name: name,
   identifier: name,
   id: null,
   fieldType: _intFieldType,
+);
+
+GeneratedFieldInfo _generatedMapField(String name) => GeneratedFieldInfo(
+  name: name,
+  identifier: name,
+  id: null,
+  fieldType: _mapFieldType,
 );
 
 void _rememberSchema(Type type, List<GeneratedFieldInfo> fields) {
@@ -281,6 +314,28 @@ void main() {
 
       _readTypeMeta(reader, first);
       _readTypeMeta(reader, second);
+    });
+
+    test('failed remote schema does not consume schema limit', () {
+      const name = 'example.Accepted';
+      final reader = TypeResolver(const Config(maxSchemaVersionsPerType: 1));
+      _rememberSchema(_SchemaLocal, <GeneratedFieldInfo>[
+        _generatedField('value'),
+      ]);
+      reader.registerGenerated(
+        _SchemaLocal,
+        namespace: 'example',
+        typeName: 'Accepted',
+      );
+      final invalid = _typeMetaBytes(_SchemaRemoteA, name, <GeneratedFieldInfo>[
+        _generatedMapField('value'),
+      ]);
+      final valid = _typeMetaBytes(_SchemaRemoteB, name, <GeneratedFieldInfo>[
+        _generatedField('extraValue'),
+      ]);
+
+      expect(() => _readTypeMeta(reader, invalid), throwsA(isA<StateError>()));
+      _readTypeMeta(reader, valid);
     });
 
     test('validates parsed TypeDef body hash before caching', () {

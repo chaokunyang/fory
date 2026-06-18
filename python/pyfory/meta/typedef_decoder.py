@@ -181,6 +181,7 @@ def decode_typedef(buffer: Buffer, resolver, header=None) -> TypeDef:
                 f"Exceeded maximum number of dynamically generated classes ({MAX_GENERATED_CLASSES}). "
                 "This may indicate malicious data causing memory issues."
             )
+        resolver._check_remote_struct_schema_meta(type_id, namespace, typename, user_type_id)
         _generated_class_count += 1
         # Generate dynamic dataclass from field definitions
         field_definitions = [(field_info.name, Any) for field_info in field_infos]

@@ -658,8 +658,9 @@ public:
   inline const Config &config() const { return *config_; }
 
 private:
-  FORY_NOINLINE Result<void, Error>
+  FORY_NOINLINE Result<std::string, Error>
   check_remote_struct_schema_limit(const TypeMeta &type_meta);
+  void record_remote_struct_schema(const std::string &type_key);
 
   // Error state - accumulated during deserialization, checked at the end
   Error error_;

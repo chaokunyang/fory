@@ -138,6 +138,13 @@ final class StructSerializer extends Serializer<Object?> {
     return value;
   }
 
+  @pragma('vm:never-inline')
+  void validateCompatibleTypeInfo(TypeInfo resolved) {
+    if (resolved.remoteTypeDef != null) {
+      _compatibleReadLayoutForResolved(resolved);
+    }
+  }
+
   @pragma('vm:prefer-inline')
   CompatibleStructReadLayout _compatibleReadLayoutForResolved(
     TypeInfo resolved,

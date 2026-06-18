@@ -481,7 +481,7 @@ ReadContext::read_enum_type_info(uint32_t base_type_id) {
 
 static constexpr size_t k_min_remote_struct_schema_limit = 8192;
 
-Result<void, Error>
+Result<std::string, Error>
 ReadContext::check_remote_struct_schema_limit(const TypeMeta &type_meta) {
   const auto type_id = static_cast<TypeId>(type_meta.type_id);
   switch (type_id) {
@@ -491,7 +491,7 @@ ReadContext::check_remote_struct_schema_limit(const TypeMeta &type_meta) {
   case TypeId::NAMED_COMPATIBLE_STRUCT:
     break;
   default:
-    return Result<void, Error>();
+    return std::string();
   }
 
   std::string key;
@@ -529,13 +529,20 @@ ReadContext::check_remote_struct_schema_limit(const TypeMeta &type_meta) {
         std::to_string(config_->max_average_schema_versions_per_type)));
   }
 
+  return key;
+}
+
+void ReadContext::record_remote_struct_schema(const std::string &type_key) {
+  if (type_key.empty()) {
+    return;
+  }
+  auto *entry = remote_schema_versions_by_type_.find(type_key);
   if (entry == nullptr) {
-    remote_schema_versions_by_type_[std::move(key)] = 1;
+    remote_schema_versions_by_type_[type_key] = 1;
   } else {
-    entry->second = versions_for_type + 1;
+    ++entry->second;
   }
   ++total_accepted_schema_versions_;
-  return Result<void, Error>();
 }
 
 Result<const TypeInfo *, Error> ReadContext::read_type_meta() {
@@ -634,7 +641,7 @@ Result<const TypeInfo *, Error> ReadContext::read_type_meta() {
     }
   }
 
-  FORY_RETURN_NOT_OK(check_remote_struct_schema_limit(*parsed_meta));
+  FORY_TRY(remote_schema_key, check_remote_struct_schema_limit(*parsed_meta));
 
   // Create TypeInfo with field_ids assigned
   auto type_info = std::make_unique<TypeInfo>();
@@ -668,6 +675,7 @@ Result<const TypeInfo *, Error> ReadContext::read_type_meta() {
   has_last_meta_header_ = true;
   last_meta_header_ = meta_header;
   last_meta_type_info_ = raw_ptr;
+  record_remote_struct_schema(remote_schema_key);
 
   reading_type_infos_.push_back(raw_ptr);
   return raw_ptr;

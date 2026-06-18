@@ -882,6 +882,7 @@ public sealed class TypeResolver
         if (typeMeta is not null)
         {
             typeMeta.EnsureAssignedFieldIds(TypeMetaFields(typeInfo, context.TrackRef));
+            context.AcceptReadTypeMeta(typeMeta);
             context.StoreTypeMeta(typeInfo.Type, typeMeta);
         }
 
@@ -904,7 +905,11 @@ public sealed class TypeResolver
                 {
                     TypeMeta typeMeta = context.ReadTypeMeta();
                     TypeInfo typeInfo = ResolveAnyTypeInfoFromMeta(wireTypeId, typeMeta, context.Compatible);
-                    context.AcceptReadTypeMeta(typeMeta);
+                    if (context.TryAcceptExactLocalTypeMeta(typeMeta, typeInfo, out TypeMeta localTypeMeta))
+                    {
+                        return typeInfo.WithWireTypeInfo(wireTypeId, localTypeMeta);
+                    }
+
                     return typeInfo;
                 }
             case TypeId.NamedEnum:
@@ -928,7 +933,11 @@ public sealed class TypeResolver
         {
             TypeMeta typeMeta = context.ReadTypeMeta();
             TypeInfo typeInfo = ResolveAnyTypeInfoFromMeta(wireTypeId, typeMeta, compatible: true);
-            context.AcceptReadTypeMeta(typeMeta);
+            if (context.TryAcceptExactLocalTypeMeta(typeMeta, typeInfo, out TypeMeta localTypeMeta))
+            {
+                return typeInfo.WithWireTypeInfo(wireTypeId, localTypeMeta);
+            }
+
             return typeInfo;
         }
 

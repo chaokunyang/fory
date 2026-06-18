@@ -36,9 +36,11 @@ accepted before building schema-specific read state:
 
 These limits are checked only on metadata cache misses after the metadata body and hash have been
 validated. They do not change wire format, class registration, dynamic loading, unknown-type, or
-schema-evolution semantics. A remote schema that exactly matches the local registered schema is
-accepted without consuming the remote-schema limit, so normal local traffic can still be read even
-after other remote schemas have filled the limit.
+schema-evolution semantics. Failed or incompatible metadata is not counted: a schema version is
+accepted only after the schema-specific read state is successfully built and its owning metadata
+cache can publish it. A remote schema that exactly matches the local registered schema is accepted
+without consuming the remote-schema limit, so normal local traffic can still be read even after
+other remote schemas have filled the limit.
 
 Raise these values only when a trusted peer legitimately sends many schema versions for the same
 logical type or for many different struct types.

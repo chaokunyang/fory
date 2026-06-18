@@ -559,6 +559,44 @@ public sealed class RuntimeEdgeCaseTests
     }
 
     [Fact]
+    public void PendingAnyTypeMetaCheckOnly()
+    {
+        TypeResolver resolver = new();
+        resolver.Register(typeof(CustomPayload), 901);
+        ReadContext context = new(
+            new ByteReader(Array.Empty<byte>()),
+            resolver,
+            trackRef: false,
+            compatible: true,
+            maxSchemaVersionsPerType: 1);
+
+        ReadAnyTypeInfo(context, resolver, RemoteCompatibleStructTypeMeta(901, "first"));
+        TypeMeta accepted = ReadAndAcceptTypeMeta(context, RemoteStructTypeMeta(901, "second"));
+
+        Assert.True(context.TryGetCachedReadTypeMeta(EncodedTypeMetaHeader(accepted), out _));
+    }
+
+    [Fact]
+    public void ExactAnyTypeMetaIsFree()
+    {
+        TypeResolver resolver = new();
+        resolver.Register(typeof(CustomPayload), 901);
+        ReadContext context = new(
+            new ByteReader(Array.Empty<byte>()),
+            resolver,
+            trackRef: false,
+            compatible: true,
+            maxSchemaVersionsPerType: 1);
+        TypeMeta remote = ReadAndAcceptTypeMeta(context, RemoteStructTypeMeta(901, "remote"));
+        TypeMeta exact = resolver.GetTypeInfo(typeof(CustomPayload)).GetTypeMetaCacheEntry(trackRef: false).TypeMeta;
+
+        TypeInfo typeInfo = ReadAnyTypeInfo(context, resolver, exact);
+        context.AcceptReadTypeMeta(typeInfo.GetTypeMeta()!);
+
+        Assert.True(context.TryGetCachedReadTypeMeta(EncodedTypeMetaHeader(remote), out _));
+    }
+
+    [Fact]
     public void TypeMetaHeaderCacheHitSkipsCurrentBodySize()
     {
         const ulong header = 0xffUL;
@@ -595,6 +633,17 @@ public sealed class RuntimeEdgeCaseTests
             [new TypeMetaFieldInfo(null, fieldName, new TypeMetaFieldType((uint)TypeId.Int32, nullable: false))]);
     }
 
+    private static TypeMeta RemoteCompatibleStructTypeMeta(uint userTypeId, string fieldName)
+    {
+        return new TypeMeta(
+            (uint)TypeId.CompatibleStruct,
+            userTypeId,
+            MetaString.Empty('.', '_'),
+            MetaString.Empty('$', '_'),
+            registerByName: false,
+            [new TypeMetaFieldInfo(null, fieldName, new TypeMetaFieldType((uint)TypeId.Int32, nullable: false))]);
+    }
+
     private static TypeMeta ReadAndAcceptTypeMeta(ReadContext context, TypeMeta typeMeta)
     {
         ByteWriter writer = new();
@@ -604,6 +653,16 @@ public sealed class RuntimeEdgeCaseTests
         TypeMeta decoded = context.ReadTypeMeta();
         context.AcceptReadTypeMeta(decoded);
         return decoded;
+    }
+
+    private static TypeInfo ReadAnyTypeInfo(ReadContext context, TypeResolver resolver, TypeMeta typeMeta)
+    {
+        ByteWriter writer = new();
+        writer.WriteUInt8((byte)TypeId.CompatibleStruct);
+        writer.WriteVarUInt32(0);
+        writer.WriteBytes(typeMeta.Encode());
+        context.ResetFor(new ByteReader(writer.ToArray()));
+        return resolver.ReadAnyTypeInfo(context);
     }
 
     private static ulong EncodedTypeMetaHeader(TypeMeta typeMeta)

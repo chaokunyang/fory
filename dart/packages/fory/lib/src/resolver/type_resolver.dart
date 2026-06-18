@@ -803,7 +803,6 @@ final class TypeResolver {
     }
     final typeDefStart = bufferReaderIndex(buffer) - 8;
     final resolved = _readTypeDefWithHeader(buffer, header, typeDefStart);
-    _parsedTypeMetaCache.remember(header, resolved);
     sharedTypes.add(resolved);
     return resolved;
   }
@@ -1128,7 +1127,6 @@ final class TypeResolver {
     }
     final typeDefStart = bufferReaderIndex(buffer) - 8;
     final resolved = _readTypeDefWithHeader(buffer, header, typeDefStart);
-    _parsedTypeMetaCache.remember(header, resolved);
     sharedTypes.add(resolved);
     return wireTypeMetaForResolved(resolved);
   }
@@ -1203,6 +1201,7 @@ final class TypeResolver {
       throw StateError('TypeDef kind does not match registered type metadata.');
     }
     if (resolved.kind != RegistrationKind.struct) {
+      _parsedTypeMetaCache.remember(header, resolved);
       return resolved;
     }
     final localTypeDef = resolved.typeDef;
@@ -1213,9 +1212,10 @@ final class TypeResolver {
           typeDefEnd,
           localTypeDef.encoded,
         )) {
+      _parsedTypeMetaCache.remember(header, resolved);
       return resolved;
     }
-    _checkRemoteStructSchemaLimit(
+    final remoteSchemaKey = _checkRemoteStructSchemaLimit(
       typeId: typeId,
       userTypeId: userTypeId,
       resolved: resolved,
@@ -1226,7 +1226,7 @@ final class TypeResolver {
       header: header.value,
       encoded: Uint8List(0),
     );
-    return TypeInfo(
+    final remoteResolved = TypeInfo(
       type: resolved.type,
       kind: resolved.kind,
       typeId: resolved.typeId,
@@ -1243,6 +1243,10 @@ final class TypeResolver {
       typeDef: resolved.typeDef,
       remoteTypeDef: remoteTypeDef,
     );
+    remoteResolved.structSerializer?.validateCompatibleTypeInfo(remoteResolved);
+    _parsedTypeMetaCache.remember(header, remoteResolved);
+    _recordRemoteStructSchema(remoteSchemaKey);
+    return remoteResolved;
   }
 
   bool _matchesEncodedTypeDef(
@@ -1264,13 +1268,13 @@ final class TypeResolver {
   }
 
   @pragma('vm:never-inline')
-  void _checkRemoteStructSchemaLimit({
+  String? _checkRemoteStructSchemaLimit({
     required int typeId,
     required int? userTypeId,
     required TypeInfo resolved,
   }) {
     if (!_isStructTypeDefKind(typeId)) {
-      return;
+      return null;
     }
     final key =
         userTypeId != null
@@ -1299,6 +1303,14 @@ final class TypeResolver {
         'maxAverageSchemaVersionsPerType=${config.maxAverageSchemaVersionsPerType}.',
       );
     }
+    return key;
+  }
+
+  void _recordRemoteStructSchema(String? key) {
+    if (key == null) {
+      return;
+    }
+    final versionsForType = _remoteSchemaVersionsByType[key] ?? 0;
     _remoteSchemaVersionsByType[key] = versionsForType + 1;
     _totalAcceptedSchemaVersions += 1;
   }

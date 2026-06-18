@@ -1524,24 +1524,24 @@ func (r *TypeResolver) getTypeDef(typ reflect.Type, create bool) (*TypeDef, erro
 }
 
 //go:noinline
-func (r *TypeResolver) checkRemoteStructSchemaLimit(td *TypeDef) error {
+func (r *TypeResolver) checkRemoteStructSchemaLimit(td *TypeDef) (any, bool, error) {
 	switch TypeId(td.typeId) {
 	case STRUCT, COMPATIBLE_STRUCT, NAMED_STRUCT, NAMED_COMPATIBLE_STRUCT:
 	default:
-		return nil
+		return nil, false, nil
 	}
 	var typeKey any
 	if td.registerByName {
 		if td.nsName == nil || td.typeName == nil {
-			return fmt.Errorf("named remote struct schema is missing namespace or type name")
+			return nil, false, fmt.Errorf("named remote struct schema is missing namespace or type name")
 		}
 		namespace, err := r.namespaceDecoder.Decode(td.nsName.Data, td.nsName.Encoding)
 		if err != nil {
-			return err
+			return nil, false, err
 		}
 		typeName, err := r.typeNameDecoder.Decode(td.typeName.Data, td.typeName.Encoding)
 		if err != nil {
-			return err
+			return nil, false, err
 		}
 		typeKey = namespace + "\x00" + typeName
 	} else {
@@ -1549,7 +1549,7 @@ func (r *TypeResolver) checkRemoteStructSchemaLimit(td *TypeDef) error {
 	}
 	versionsForType := r.remoteSchemaVersionsByType[typeKey]
 	if versionsForType >= r.fory.config.MaxSchemaVersionsPerType {
-		return fmt.Errorf(
+		return nil, false, fmt.Errorf(
 			"remote schema version limit exceeded for type %v: %d >= %d. Increase MaxSchemaVersionsPerType if this peer legitimately sends many schema versions for one type",
 			typeKey, versionsForType, r.fory.config.MaxSchemaVersionsPerType)
 	}
@@ -1562,13 +1562,20 @@ func (r *TypeResolver) checkRemoteStructSchemaLimit(td *TypeDef) error {
 		globalLimit = minRemoteStructSchemaLimit
 	}
 	if r.totalAcceptedSchemaVersions >= globalLimit {
-		return fmt.Errorf(
+		return nil, false, fmt.Errorf(
 			"remote schema version limit exceeded: %d schemas for %d accepted struct types exceeds the average limit %d. Increase MaxAverageSchemaVersionsPerType if this peer legitimately sends many schema versions across many types",
 			r.totalAcceptedSchemaVersions, acceptedStructTypeCount, r.fory.config.MaxAverageSchemaVersionsPerType)
 	}
+	return typeKey, true, nil
+}
+
+func (r *TypeResolver) recordRemoteStructSchema(typeKey any, isStruct bool) {
+	if !isStruct {
+		return
+	}
+	versionsForType := r.remoteSchemaVersionsByType[typeKey]
 	r.remoteSchemaVersionsByType[typeKey] = versionsForType + 1
 	r.totalAcceptedSchemaVersions++
-	return nil
 }
 
 func (r *TypeResolver) readSharedTypeMeta(buffer *ByteBuffer, err *Error) *TypeInfo {
@@ -1641,11 +1648,20 @@ func (r *TypeResolver) readSharedTypeMeta(buffer *ByteBuffer, err *Error) *TypeI
 			}
 		}
 		if newTypeDef {
-			if limitErr := r.checkRemoteStructSchemaLimit(td); limitErr != nil {
+			typeKey, isStruct, limitErr := r.checkRemoteStructSchemaLimit(td)
+			if limitErr != nil {
 				err.SetError(limitErr)
 				return nil
 			}
+			typeInfo, typeInfoErr := td.getOrBuildTypeInfo(r)
+			if typeInfoErr != nil {
+				err.SetError(typeInfoErr)
+				return nil
+			}
 			r.defIdToTypeDef[id] = td
+			r.recordRemoteStructSchema(typeKey, isStruct)
+			context.readTypeInfos = append(context.readTypeInfos, typeInfo)
+			return typeInfo
 		}
 	}
 

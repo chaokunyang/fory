@@ -185,6 +185,24 @@ public final class SharedRegistry {
     if (existing != null) {
       return existing;
     }
+    int versionsForType = checkRemoteSchemaLimit(structTypeKey);
+    existing = typeDefById.putIfAbsent(id, typeDef);
+    if (existing != null) {
+      return existing;
+    }
+    remoteSchemaVersionsByType.put(structTypeKey, versionsForType + 1);
+    totalAcceptedSchemaVersions++;
+    return typeDef;
+  }
+
+  synchronized void checkRemoteTypeDefLimit(TypeDef typeDef, Object structTypeKey) {
+    if (typeDefById.containsKey(typeDef.getId())) {
+      return;
+    }
+    checkRemoteSchemaLimit(structTypeKey);
+  }
+
+  private int checkRemoteSchemaLimit(Object structTypeKey) {
     int versionsForType = remoteSchemaVersionsByType.getOrDefault(structTypeKey, 0);
     if (versionsForType >= maxSchemaVersionsPerType) {
       throw new ForyException(
@@ -216,13 +234,7 @@ public final class SharedRegistry {
               + ". Increase maxAverageSchemaVersionsPerType if this peer legitimately sends many "
               + "schema versions across many types.");
     }
-    existing = typeDefById.putIfAbsent(id, typeDef);
-    if (existing != null) {
-      return existing;
-    }
-    remoteSchemaVersionsByType.put(structTypeKey, versionsForType + 1);
-    totalAcceptedSchemaVersions++;
-    return typeDef;
+    return versionsForType;
   }
 
   EncodedMetaString getPackageEncodedMetaString(String string) {

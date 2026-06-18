@@ -1188,13 +1188,16 @@ class TypeResolver:
             return self.get_type_info_by_id(type_def.type_id, user_type_id=type_def.user_type_id)
         return None
 
-    def _check_remote_struct_schema_limit(self, type_def):
-        if not is_struct_typedef_kind(type_def.type_id):
-            return
-        if is_named_typedef_kind(type_def.type_id):
-            type_key = (type_def.namespace or "", type_def.typename)
-        else:
-            type_key = type_def.user_type_id
+    def _remote_struct_schema_key(self, type_id, namespace, typename, user_type_id):
+        if not is_struct_typedef_kind(type_id):
+            return None
+        if is_named_typedef_kind(type_id):
+            return (namespace or "", typename)
+        return user_type_id
+
+    def _check_remote_struct_schema_key(self, type_key):
+        if type_key is None:
+            return None
         versions_for_type = self._remote_schema_versions_by_type.get(type_key, 0)
         if versions_for_type >= self.max_schema_versions_per_type:
             raise ValueError(
@@ -1219,6 +1222,25 @@ class TypeResolver:
                 "max_average_schema_versions_per_type if this peer legitimately sends many "
                 "schema versions across many types."
             )
+        return type_key
+
+    def _check_remote_struct_schema_limit(self, type_def):
+        return self._check_remote_struct_schema_key(
+            self._remote_struct_schema_key(
+                type_def.type_id,
+                type_def.namespace,
+                type_def.typename,
+                type_def.user_type_id,
+            )
+        )
+
+    def _check_remote_struct_schema_meta(self, type_id, namespace, typename, user_type_id):
+        return self._check_remote_struct_schema_key(self._remote_struct_schema_key(type_id, namespace, typename, user_type_id))
+
+    def _record_remote_struct_schema(self, type_key):
+        if type_key is None:
+            return
+        versions_for_type = self._remote_schema_versions_by_type.get(type_key, 0)
         self._remote_schema_versions_by_type[type_key] = versions_for_type + 1
         self._total_accepted_schema_versions += 1
 
@@ -1242,7 +1264,8 @@ class TypeResolver:
                 self._set_type_info(local_type_info)
             if local_type_info.type_def is not None and local_type_info.type_def.encoded == type_def.encoded:
                 return local_type_info
-        self._check_remote_struct_schema_limit(type_def)
+        type_key = self._check_remote_struct_schema_limit(type_def)
         type_info = self._build_type_info_from_typedef(type_def)
         self._meta_shared_type_info[header] = type_info
+        self._record_remote_struct_schema(type_key)
         return type_info

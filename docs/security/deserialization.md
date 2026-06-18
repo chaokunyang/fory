@@ -203,6 +203,9 @@ only: it must not change wire compatibility, type registration, dynamic class
 loading, unknown-type handling, deserialization policy, or schema-evolution
 semantics. Metadata cache hits and generated field readers remain hot paths and
 must not add validation, hashing, allocation, or policy work for this limit.
+Failed or incompatible metadata must not consume the limit. Count a remote
+schema version only after schema-specific read state has been successfully built
+and the owning metadata cache can publish it.
 If a remote metadata body exactly matches a local registered schema after the
 metadata body and hash have been validated, the reader may use the local schema
 without consuming the remote-schema limit.

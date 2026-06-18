@@ -386,6 +386,27 @@ public class ClassResolverTest extends ForyTestBase {
   }
 
   @Test
+  public void testRemoteTypeDefCheckOnly() {
+    ForyBuilder builder =
+        Fory.builder()
+            .withXlang(false)
+            .requireClassRegistration(false)
+            .withCompatible(false)
+            .withMetaShare(true)
+            .withMaxSchemaVersionsPerType(1);
+    finishBuilder(builder);
+    SharedRegistry sharedRegistry = new SharedRegistry();
+    Fory fory = new Fory(builder, ClassResolverTest.class.getClassLoader(), sharedRegistry);
+    ClassResolver resolver = (ClassResolver) fory.getTypeResolver();
+
+    TypeDef checked = TypeDef.buildTypeDef(resolver, BeanB.class);
+    TypeDef accepted = TypeDef.buildTypeDef(resolver, BeanA.class);
+
+    sharedRegistry.checkRemoteTypeDefLimit(checked, "remote.Type");
+    assertSame(accepted, sharedRegistry.getOrCreateRemoteTypeDef(accepted, "remote.Type"));
+  }
+
+  @Test
   public void testSharedRegistryCachesFieldDescriptorsAndDescriptorGrouper() {
     ForyBuilder builder =
         Fory.builder().withXlang(false).requireClassRegistration(false).withCompatible(false);

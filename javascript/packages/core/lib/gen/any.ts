@@ -36,12 +36,37 @@ export class AnyHelper {
       userTypeId = reader.readVarUint32Small7();
     }
     let serializer: Serializer | undefined;
+    let typeMeta: TypeMeta | undefined;
 
     function buildNamedTypeKey(ns: string, typeName: string) {
       return `${ns}$${typeName}`;
     }
 
+    function typeMetaMatchesSerializer(typeMeta: TypeMeta, serializer: Serializer) {
+      if (typeof serializer.getTypeInfo !== "function") {
+        return false;
+      }
+      const localBytes = TypeMeta.fromTypeInfo(
+        serializer.getTypeInfo(),
+        typeResolver,
+      ).toBytes();
+      const remoteBytes = typeMeta.toBytes();
+      if (localBytes.length !== remoteBytes.length) {
+        return false;
+      }
+      for (let i = 0; i < localBytes.length; i++) {
+        if (localBytes[i] !== remoteBytes[i]) {
+          return false;
+        }
+      }
+      return true;
+    }
+
     function tryUpdateSerializer(serializer: Serializer | undefined | null, typeMeta: TypeMeta) {
+      if (serializer && typeMetaMatchesSerializer(typeMeta, serializer)) {
+        return serializer;
+      }
+      readContext.checkTypeMeta(typeMeta);
       if (!serializer) {
         return readContext.genSerializerByTypeMetaRuntime(typeMeta);
       }
@@ -52,60 +77,71 @@ export class AnyHelper {
       return serializer;
     }
 
-    switch (typeId) {
-      case TypeId.COMPATIBLE_STRUCT:
-        {
-          const typeMeta = readContext.readTypeMeta();
+    try {
+      switch (typeId) {
+        case TypeId.COMPATIBLE_STRUCT:
+          typeMeta = readContext.readTypeMetaNoPublish(undefined, false);
           serializer = typeResolver.getSerializerById(typeId, typeMeta.getUserTypeId());
           serializer = tryUpdateSerializer(serializer, typeMeta);
-        }
-        break;
-      case TypeId.NAMED_ENUM:
-      case TypeId.NAMED_UNION:
-        if (readContext.isCompatible()) {
-          const typeMeta = readContext.readTypeMeta();
-          const ns = typeMeta.getNs();
-          const typeName = typeMeta.getTypeName();
-          serializer = typeResolver.getSerializerByName(buildNamedTypeKey(ns, typeName));
-        } else {
-          const ns = readContext.readNamespace();
-          const typeName = readContext.readTypeName();
-          serializer = typeResolver.getSerializerByName(buildNamedTypeKey(ns, typeName));
-        }
-        break;
-      case TypeId.NAMED_EXT:
-        if (readContext.isCompatible()) {
-          const typeMeta = readContext.readTypeMeta();
-          const ns = typeMeta.getNs();
-          const typeName = typeMeta.getTypeName();
-          serializer = typeResolver.getSerializerByName(buildNamedTypeKey(ns, typeName));
-        } else {
-          const ns = readContext.readNamespace();
-          const typeName = readContext.readTypeName();
-          serializer = typeResolver.getSerializerByName(buildNamedTypeKey(ns, typeName));
-        }
-        break;
-      case TypeId.NAMED_STRUCT:
-      case TypeId.NAMED_COMPATIBLE_STRUCT:
-        if (readContext.isCompatible() || typeId === TypeId.NAMED_COMPATIBLE_STRUCT) {
-          const typeMeta = readContext.readTypeMeta();
-          const ns = typeMeta.getNs();
-          const typeName = typeMeta.getTypeName();
-          const named = buildNamedTypeKey(ns, typeName);
-          const namedSerializer = typeResolver.getSerializerByName(named);
-          serializer = tryUpdateSerializer(namedSerializer, typeMeta);
-        } else {
-          const ns = readContext.readNamespace();
-          const typeName = readContext.readTypeName();
-          serializer = typeResolver.getSerializerByName(buildNamedTypeKey(ns, typeName));
-        }
-        break;
-      default:
-        serializer = typeResolver.getSerializerById(typeId, userTypeId);
-        break;
+          break;
+        case TypeId.NAMED_ENUM:
+        case TypeId.NAMED_UNION:
+          if (readContext.isCompatible()) {
+            typeMeta = readContext.readTypeMetaNoPublish(undefined, false);
+            const ns = typeMeta.getNs();
+            const typeName = typeMeta.getTypeName();
+            serializer = typeResolver.getSerializerByName(buildNamedTypeKey(ns, typeName));
+          } else {
+            const ns = readContext.readNamespace();
+            const typeName = readContext.readTypeName();
+            serializer = typeResolver.getSerializerByName(buildNamedTypeKey(ns, typeName));
+          }
+          break;
+        case TypeId.NAMED_EXT:
+          if (readContext.isCompatible()) {
+            typeMeta = readContext.readTypeMetaNoPublish(undefined, false);
+            const ns = typeMeta.getNs();
+            const typeName = typeMeta.getTypeName();
+            serializer = typeResolver.getSerializerByName(buildNamedTypeKey(ns, typeName));
+          } else {
+            const ns = readContext.readNamespace();
+            const typeName = readContext.readTypeName();
+            serializer = typeResolver.getSerializerByName(buildNamedTypeKey(ns, typeName));
+          }
+          break;
+        case TypeId.NAMED_STRUCT:
+        case TypeId.NAMED_COMPATIBLE_STRUCT:
+          if (readContext.isCompatible() || typeId === TypeId.NAMED_COMPATIBLE_STRUCT) {
+            typeMeta = readContext.readTypeMetaNoPublish(undefined, false);
+            const ns = typeMeta.getNs();
+            const typeName = typeMeta.getTypeName();
+            const named = buildNamedTypeKey(ns, typeName);
+            const namedSerializer = typeResolver.getSerializerByName(named);
+            serializer = tryUpdateSerializer(namedSerializer, typeMeta);
+          } else {
+            const ns = readContext.readNamespace();
+            const typeName = readContext.readTypeName();
+            serializer = typeResolver.getSerializerByName(buildNamedTypeKey(ns, typeName));
+          }
+          break;
+        default:
+          serializer = typeResolver.getSerializerById(typeId, userTypeId);
+          break;
+      }
+    } catch (e) {
+      if (typeMeta) {
+        readContext.discardTypeMeta(typeMeta);
+      }
+      throw e;
     }
     if (!serializer) {
+      if (typeMeta) {
+        readContext.discardTypeMeta(typeMeta);
+      }
       throw new Error(`can't find implements of typeId: ${typeId}`);
+    }
+    if (typeMeta) {
+      readContext.publishTypeMeta(typeMeta);
     }
     return serializer;
   }

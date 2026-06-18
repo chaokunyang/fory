@@ -108,6 +108,16 @@ public class ForyJsonTest {
     public char value;
   }
 
+  public static final class RecursiveParent {
+    public RecursiveChild child = new RecursiveChild();
+    public String name = "parent";
+  }
+
+  public static final class RecursiveChild {
+    public String name = "child";
+    public RecursiveParent parent;
+  }
+
   @Test
   public void writePublicFields() {
     ForyJson json = ForyJson.builder().build();
@@ -157,6 +167,18 @@ public class ForyJsonTest {
     assertEquals(
         json.toJson(new Nested()),
         "{\"kind\":\"FAST\",\"names\":[\"a\",\"b\"],\"scores\":{\"one\":1,\"two\":2}}");
+  }
+
+  @Test
+  public void writeRecursiveGeneratedTypes() {
+    ForyJson json = ForyJson.builder().build();
+    RecursiveParent value = new RecursiveParent();
+    assertEquals(json.toJson(value), "{\"child\":{\"name\":\"child\"},\"name\":\"parent\"}");
+    assertEquals(
+        new String(json.toJsonBytes(value), StandardCharsets.UTF_8),
+        "{\"child\":{\"name\":\"child\"},\"name\":\"parent\"}");
+    assertEquals(json.hasGeneratedWriter(RecursiveParent.class), true);
+    assertEquals(json.hasGeneratedWriter(RecursiveChild.class), true);
   }
 
   @Test

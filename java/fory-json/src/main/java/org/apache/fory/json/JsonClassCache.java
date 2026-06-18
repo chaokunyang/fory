@@ -31,11 +31,22 @@ final class JsonClassCache {
   }
 
   public JsonClassInfo get(Class<?> type) {
-    return classes.computeIfAbsent(type, this::build);
+    JsonClassInfo classInfo = classes.get(type);
+    if (classInfo != null) {
+      return classInfo;
+    }
+    return buildAndPublish(type);
   }
 
-  private JsonClassInfo build(Class<?> type) {
+  private synchronized JsonClassInfo buildAndPublish(Class<?> type) {
+    JsonClassInfo cached = classes.get(type);
+    if (cached != null) {
+      return cached;
+    }
     JsonClassInfo classInfo = JsonClassInfo.build(type);
+    // Codegen may ask for nested class metadata that points back to this type.
+    // Publishing metadata before compiling the writer keeps that recursion cache-owned.
+    classes.put(type, classInfo);
     if (codegen != null) {
       classInfo.setObjectWriter(codegen.compile(classInfo, this));
     }

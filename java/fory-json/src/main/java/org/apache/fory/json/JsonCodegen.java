@@ -550,7 +550,7 @@ final class JsonCodegen {
       return;
     }
     if (isPojo(elementType)) {
-      boolean hasElementInfo = utf8 && elementType != ownerType;
+      boolean hasElementInfo = elementType != ownerType;
       code.append(indent)
           .append("writer.writeArrayStart();\n")
           .append(indent)
@@ -671,7 +671,7 @@ final class JsonCodegen {
         .append("  JsonClassInfo classInfo = c")
         .append(prop.substring(1))
         .append(";\n");
-    if (!utf8 || rawType == ownerType) {
+    if (rawType == ownerType) {
       code.append(indent).append("  if (classInfo == null) {\n");
       code.append(indent)
           .append("    classInfo = classCache.get(")

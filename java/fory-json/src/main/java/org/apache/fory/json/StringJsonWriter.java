@@ -34,6 +34,7 @@ final class StringJsonWriter extends JsonWriter {
   private static final char[] DIGIT_HUNDREDS = new char[1000];
   private static final char[] DIGIT_TENS = new char[1000];
   private static final char[] DIGIT_ONES = new char[1000];
+  private static final long[] DIGIT_QUADS = new long[10000];
   private static final boolean STRING_BYTES_BACKED = StringLayout.isBytesBacked();
 
   static {
@@ -41,6 +42,15 @@ final class StringJsonWriter extends JsonWriter {
       DIGIT_HUNDREDS[i] = (char) ('0' + i / 100);
       DIGIT_TENS[i] = (char) ('0' + (i / 10) % 10);
       DIGIT_ONES[i] = (char) ('0' + i % 10);
+    }
+    for (int i = 0; i < 10000; i++) {
+      int high = i / 100;
+      int low = i - high * 100;
+      long c0 = '0' + high / 10;
+      long c1 = '0' + high % 10;
+      long c2 = '0' + low / 10;
+      long c3 = '0' + low % 10;
+      DIGIT_QUADS[i] = c0 | (c1 << 16) | (c2 << 32) | (c3 << 48);
     }
   }
 
@@ -557,45 +567,38 @@ final class StringJsonWriter extends JsonWriter {
   private void writePositiveIntNoEnsure(int value) {
     char[] chars = buffer;
     int pos = position;
-    if (value < 1000) {
-      position = writeIntUpTo3(chars, pos, value);
+    if (value < 10000) {
+      position = writeIntUpTo4(chars, pos, value);
       return;
     }
-    int high = divide1000(value);
-    int low = value - high * 1000;
-    if (high < 1000) {
-      pos = writeIntUpTo3(chars, pos, high);
-      position = writePadded3(chars, pos, low);
+    int high = divide10000(value);
+    int low = value - high * 10000;
+    if (high < 10000) {
+      pos = writeIntUpTo4(chars, pos, high);
+      position = writePadded4(chars, pos, low);
       return;
     }
-    int top = divide1000(high);
-    int middle = high - top * 1000;
-    if (top < 1000) {
-      pos = writeIntUpTo3(chars, pos, top);
-      pos = writePadded3(chars, pos, middle);
-      position = writePadded3(chars, pos, low);
-      return;
-    }
-    int first = divide1000(top);
-    int middleHigh = top - first * 1000;
-    chars[pos++] = (char) ('0' + first);
-    pos = writePadded3(chars, pos, middleHigh);
-    pos = writePadded3(chars, pos, middle);
-    position = writePadded3(chars, pos, low);
+    int top = divide10000(high);
+    int middle = high - top * 10000;
+    pos = writeIntUpTo4(chars, pos, top);
+    pos = writePadded4(chars, pos, middle);
+    position = writePadded4(chars, pos, low);
   }
 
-  private static int divide1000(int value) {
-    return (int) (((long) value * 274877907L) >> 38);
+  private static int divide10000(int value) {
+    return (int) (((long) value * 1759218605L) >> 44);
   }
 
-  private static int writeIntUpTo3(char[] chars, int pos, int value) {
+  private static int writeIntUpTo4(char[] chars, int pos, int value) {
     if (value < 10) {
       chars[pos++] = DIGIT_ONES[value];
     } else if (value < 100) {
       chars[pos++] = DIGIT_TENS[value];
       chars[pos++] = DIGIT_ONES[value];
-    } else {
+    } else if (value < 1000) {
       pos = writePadded3(chars, pos, value);
+    } else {
+      pos = writePadded4(chars, pos, value);
     }
     return pos;
   }
@@ -605,5 +608,10 @@ final class StringJsonWriter extends JsonWriter {
     chars[pos++] = DIGIT_TENS[value];
     chars[pos++] = DIGIT_ONES[value];
     return pos;
+  }
+
+  private static int writePadded4(char[] chars, int pos, int value) {
+    JsonCharArrays.putInt64(chars, pos, DIGIT_QUADS[value]);
+    return pos + 4;
   }
 }

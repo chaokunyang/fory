@@ -57,7 +57,6 @@ const (
 	invalidUserTypeID          uint32 = 0xffffffff
 	internalTypeIDLimit               = 0xFF
 	minRemoteStructSchemaLimit        = 8192
-	maxCachedNamedTypeInfos           = 8192
 )
 
 var (
@@ -2170,9 +2169,7 @@ func (r *TypeResolver) resolveTypeInfoByMetaBytes(nsBytes, typeBytes *MetaString
 
 	nameKey := [2]string{ns, typeName}
 	if typeInfo, exists := r.namedTypeToTypeInfo[nameKey]; exists {
-		if len(r.nsTypeToTypeInfo) < maxCachedNamedTypeInfos {
-			r.nsTypeToTypeInfo[compositeKey] = typeInfo
-		}
+		r.nsTypeToTypeInfo[compositeKey] = typeInfo
 		return typeInfo
 	}
 

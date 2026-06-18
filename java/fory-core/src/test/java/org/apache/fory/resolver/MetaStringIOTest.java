@@ -27,6 +27,7 @@ import static org.testng.Assert.assertTrue;
 import static org.testng.Assert.expectThrows;
 
 import java.nio.ByteBuffer;
+import org.apache.fory.Fory;
 import org.apache.fory.TestUtils;
 import org.apache.fory.collection.LongLongByteMap;
 import org.apache.fory.context.MetaStringReader;
@@ -40,9 +41,13 @@ import org.apache.fory.util.StringUtils;
 import org.testng.annotations.Test;
 
 public class MetaStringIOTest {
+  private static SharedRegistry newSharedRegistry() {
+    return new SharedRegistry(Fory.builder().build().getConfig());
+  }
+
   @Test
   public void testWriteMetaString() {
-    SharedRegistry sharedRegistry = new SharedRegistry();
+    SharedRegistry sharedRegistry = newSharedRegistry();
     MetaStringWriter writer = new MetaStringWriter();
     MetaStringReader reader = new MetaStringReader(sharedRegistry);
     MemoryBuffer buffer = MemoryUtils.buffer(32);
@@ -67,7 +72,7 @@ public class MetaStringIOTest {
         }) {
       for (int i = 0; i < 32; i++) {
         String str = StringUtils.random(i, 0);
-        SharedRegistry sharedRegistry = new SharedRegistry();
+        SharedRegistry sharedRegistry = newSharedRegistry();
         MetaStringWriter writer = new MetaStringWriter();
         MetaStringReader reader = new MetaStringReader(sharedRegistry);
         writer.writeMetaString(buffer, newGenericMetaString(str));
@@ -82,7 +87,7 @@ public class MetaStringIOTest {
 
   @Test
   public void testMetaStringWriterResetClearsDynamicWriteState() {
-    SharedRegistry sharedRegistry = new SharedRegistry();
+    SharedRegistry sharedRegistry = newSharedRegistry();
     MetaStringWriter writer = new MetaStringWriter();
     MetaStringReader reader = new MetaStringReader(sharedRegistry);
     EncodedMetaString metaString = newGenericMetaString("thread_safe_fory");
@@ -101,7 +106,7 @@ public class MetaStringIOTest {
 
   @Test
   public void testMetaStringReaderUsesSharedRegistryInstances() {
-    SharedRegistry sharedRegistry = new SharedRegistry();
+    SharedRegistry sharedRegistry = newSharedRegistry();
     MetaStringWriter writer = new MetaStringWriter();
     MetaStringReader reader = new MetaStringReader(sharedRegistry);
     EncodedMetaString encodedMetaString = newGenericMetaString("shared_meta_string");
@@ -119,7 +124,7 @@ public class MetaStringIOTest {
 
   @Test
   public void testSharedRegistrySkipsLongEncodedMetaStrings() {
-    SharedRegistry sharedRegistry = new SharedRegistry();
+    SharedRegistry sharedRegistry = newSharedRegistry();
     String str = StringUtils.random(2050, 0);
 
     EncodedMetaString first = newGenericMetaString(sharedRegistry, str);
@@ -130,7 +135,7 @@ public class MetaStringIOTest {
 
   @Test
   public void testSharedRegistryCapsEncodedMetaStringCount() {
-    SharedRegistry sharedRegistry = new SharedRegistry();
+    SharedRegistry sharedRegistry = newSharedRegistry();
     EncodedMetaString first = null;
     for (int i = 0; i < 32768; i++) {
       EncodedMetaString encodedMetaString = newGenericMetaString(sharedRegistry, "meta_" + i);
@@ -148,7 +153,7 @@ public class MetaStringIOTest {
 
   @Test
   public void testReadBigMetaStringRejectsNonCanonicalHash() {
-    SharedRegistry sharedRegistry = new SharedRegistry();
+    SharedRegistry sharedRegistry = newSharedRegistry();
     MetaStringReader reader = new MetaStringReader(sharedRegistry);
     EncodedMetaString encodedMetaString = newGenericMetaString(StringUtils.random(32, 0));
     MemoryBuffer buffer = MemoryUtils.buffer(64);
@@ -162,7 +167,7 @@ public class MetaStringIOTest {
 
   @Test
   public void testCachedBigMetaStringReusesHeaderCache() {
-    SharedRegistry sharedRegistry = new SharedRegistry();
+    SharedRegistry sharedRegistry = newSharedRegistry();
     MetaStringReader reader = new MetaStringReader(sharedRegistry);
     EncodedMetaString encodedMetaString = newGenericMetaString(StringUtils.random(32, 0));
     MemoryBuffer buffer = MemoryUtils.buffer(128);
@@ -179,7 +184,7 @@ public class MetaStringIOTest {
 
   @Test
   public void testReadSmallMetaStringKeyIncludesLengthAndEncoding() {
-    SharedRegistry sharedRegistry = new SharedRegistry();
+    SharedRegistry sharedRegistry = newSharedRegistry();
     MetaStringReader reader = new MetaStringReader(sharedRegistry);
     MemoryBuffer buffer = MemoryUtils.buffer(32);
 
@@ -201,7 +206,7 @@ public class MetaStringIOTest {
 
   @Test
   public void testMetaStringReaderResetClearsDynamicIdsOnly() {
-    SharedRegistry sharedRegistry = new SharedRegistry();
+    SharedRegistry sharedRegistry = newSharedRegistry();
     MetaStringReader reader = new MetaStringReader(sharedRegistry);
     MemoryBuffer buffer = MemoryUtils.buffer(32);
 

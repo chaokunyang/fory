@@ -342,6 +342,7 @@ class TypeResolver:
         "compatible",
         "field_nullable",
         "policy",
+        "config",
         "shared_registry",
         "_type_id_counter",
         "_types_info",
@@ -359,10 +360,6 @@ class TypeResolver:
         "_user_type_id_to_type_info",
         "_used_user_type_ids",
         "_meta_shared_type_info",
-        "max_type_fields",
-        "max_type_meta_bytes",
-        "max_schema_versions_per_type",
-        "max_average_schema_versions_per_type",
         "_remote_schema_versions_by_type",
         "_total_accepted_schema_versions",
         "meta_share",
@@ -372,6 +369,7 @@ class TypeResolver:
     )
 
     def __init__(self, config, *, shared_registry):
+        self.config = config
         self.xlang = config.xlang
         self.track_ref = config.track_ref
         self.strict = config.strict
@@ -394,10 +392,6 @@ class TypeResolver:
         self.namespace_encoder = MetaStringEncoder(".", "_")
         self.namespace_decoder = MetaStringDecoder(".", "_")
         self._meta_shared_type_info = {}
-        self.max_type_fields = config.max_type_fields
-        self.max_type_meta_bytes = config.max_type_meta_bytes
-        self.max_schema_versions_per_type = config.max_schema_versions_per_type
-        self.max_average_schema_versions_per_type = config.max_average_schema_versions_per_type
         self._remote_schema_versions_by_type = {}
         self._total_accepted_schema_versions = 0
         self.typename_encoder = MetaStringEncoder("$", "_")
@@ -1203,26 +1197,28 @@ class TypeResolver:
         if type_key is None:
             return None
         versions_for_type = self._remote_schema_versions_by_type.get(type_key, 0)
-        if versions_for_type >= self.max_schema_versions_per_type:
+        max_schema_versions_per_type = self.config.max_schema_versions_per_type
+        if versions_for_type >= max_schema_versions_per_type:
             raise ValueError(
                 f"Remote schema version limit exceeded for type {type_key}: "
-                f"{versions_for_type} >= {self.max_schema_versions_per_type}. Increase "
+                f"{versions_for_type} >= {max_schema_versions_per_type}. Increase "
                 "max_schema_versions_per_type if this peer legitimately sends many "
                 "schema versions for one type."
             )
         accepted_struct_type_count = (
             len(self._remote_schema_versions_by_type) + 1 if versions_for_type == 0 else len(self._remote_schema_versions_by_type)
         )
+        max_average_schema_versions_per_type = self.config.max_average_schema_versions_per_type
         global_limit = max(
             MIN_REMOTE_STRUCT_SCHEMA_LIMIT,
-            accepted_struct_type_count * self.max_average_schema_versions_per_type,
+            accepted_struct_type_count * max_average_schema_versions_per_type,
         )
         if self._total_accepted_schema_versions >= global_limit:
             raise ValueError(
                 "Remote schema version limit exceeded: "
                 f"{self._total_accepted_schema_versions} schemas for "
                 f"{accepted_struct_type_count} accepted struct types exceeds the average "
-                f"limit {self.max_average_schema_versions_per_type}. Increase "
+                f"limit {max_average_schema_versions_per_type}. Increase "
                 "max_average_schema_versions_per_type if this peer legitimately sends many "
                 "schema versions across many types."
             )

@@ -92,11 +92,7 @@ public final class Fory {
 
   public init(config: Config) {
     self.config = config
-    self.typeResolver = TypeResolver(
-      trackRef: self.config.trackRef,
-      maxSchemaVersionsPerType: self.config.maxSchemaVersionsPerType,
-      maxAverageSchemaVersionsPerType: self.config.maxAverageSchemaVersionsPerType
-    )
+    self.typeResolver = TypeResolver(config: self.config)
     self.writeContext = WriteContext(
       buffer: ByteBuffer(),
       typeResolver: typeResolver,
@@ -109,12 +105,7 @@ public final class Fory {
     self.readContext = ReadContext(
       buffer: ByteBuffer(),
       typeResolver: typeResolver,
-      trackRef: self.config.trackRef,
-      compatible: self.config.compatible,
-      checkClassVersion: self.config.checkClassVersion,
-      maxDepth: self.config.maxDepth,
-      maxTypeFields: self.config.maxTypeFields,
-      maxTypeMetaBytes: self.config.maxTypeMetaBytes
+      config: self.config
     )
   }
 

@@ -556,6 +556,9 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
     TypeDef localTypeDef = typeResolver.getTypeDef(cls, false);
     TypeDef typeDef;
     if (Arrays.equals(encoded, localTypeDef.getEncoded())) {
+      // Exact local bytes only avoid remote schema counting/parsing. They still select the
+      // target class serializer, so the class must pass the active deserialization policy.
+      typeResolver.checkClassForDeserialization(cls);
       typeDef = localTypeDef;
     } else {
       typeResolver.checkClassForDeserialization(cls);

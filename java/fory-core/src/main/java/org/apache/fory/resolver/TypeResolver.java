@@ -161,8 +161,7 @@ public abstract class TypeResolver {
       JITContext jitContext) {
     this.config = config;
     this.sharedRegistry = sharedRegistry;
-    sharedRegistry.setRemoteSchemaLimits(
-        config.maxSchemaVersionsPerType(), config.maxAverageSchemaVersionsPerType());
+    sharedRegistry.checkConfig(config);
     this.jitContext = jitContext;
     metaContextShareEnabled = config.isMetaShareEnabled();
     extRegistry = new ExtRegistry(classLoader, sharedRegistry);
@@ -887,6 +886,9 @@ public abstract class TypeResolver {
           byte[] encoded = TypeDef.readTypeDefBytes(this, buffer, id);
           TypeDef localTypeDef = getTypeDef(targetClass, true);
           if (Arrays.equals(encoded, localTypeDef.getEncoded())) {
+            // Exact local bytes only avoid remote schema counting/parsing. They still select the
+            // target class serializer, so the class must pass the active deserialization policy.
+            checkClassForDeserialization(targetClass);
             typeInfo = getTypeInfo(targetClass);
           } else {
             typeInfo = buildCheckedMetaSharedTypeInfo(TypeDef.readTypeDef(this, encoded));

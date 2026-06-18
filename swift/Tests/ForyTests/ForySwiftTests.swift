@@ -548,7 +548,7 @@ func typeMetaBodyLimitRejectsLargeMetadata() throws {
 
 @Test
 func schemaLimitTracksStructTypesSeparately() throws {
-  let resolver = TypeResolver(maxSchemaVersionsPerType: 1)
+  let resolver = TypeResolver(config: Config(maxSchemaVersionsPerType: 1))
   resolver.register(Person.self, id: 901)
   resolver.register(Address.self, id: 902)
 
@@ -593,7 +593,7 @@ func schemaLimitTracksStructTypesSeparately() throws {
 
 @Test
 func failedSchemaDoesNotConsumeLimit() throws {
-  let resolver = TypeResolver(maxSchemaVersionsPerType: 1)
+  let resolver = TypeResolver(config: Config(maxSchemaVersionsPerType: 1))
   resolver.register(Person.self, id: 901)
 
   func remoteTypeMeta(fieldName: String, fieldType: TypeMeta.FieldType) throws -> TypeMeta {
@@ -733,7 +733,7 @@ func dynamicUserTypesDecodeByID() throws {
 
 @Test
 func duplicateNameRegistrationIsRejected() throws {
-  let resolver = TypeResolver(trackRef: false)
+  let resolver = TypeResolver(config: Config(trackRef: false))
   try resolver.register(Address.self, namespace: "demo", typeName: "entity")
 
   do {
@@ -744,7 +744,7 @@ func duplicateNameRegistrationIsRejected() throws {
 
 @Test
 func nameRegistrationSplitsLastDot() throws {
-  let resolver = TypeResolver(trackRef: false)
+  let resolver = TypeResolver(config: Config(trackRef: false))
   try resolver.register(Address.self, name: "com.example.Address")
 
   let info = try resolver.requireTypeInfo(namespace: "com.example", typeName: "Address")
@@ -754,7 +754,7 @@ func nameRegistrationSplitsLastDot() throws {
 
 @Test
 func nameRegistrationAllowsSimpleName() throws {
-  let resolver = TypeResolver(trackRef: false)
+  let resolver = TypeResolver(config: Config(trackRef: false))
   try resolver.register(Address.self, name: "Address")
 
   let info = try resolver.requireTypeInfo(namespace: "", typeName: "Address")
@@ -782,7 +782,7 @@ func nameRegistrationRejectsTrailingDot() throws {
 
 @Test
 func splitNameRegistrationRejectsDottedTypeName() throws {
-  let resolver = TypeResolver(trackRef: false)
+  let resolver = TypeResolver(config: Config(trackRef: false))
 
   #expect(throws: ForyError.self) {
     try resolver.register(Address.self, namespace: "com", typeName: "example.Address")
@@ -1059,7 +1059,7 @@ func macroFieldOrderFollowsForyRules() throws {
   let second = try buffer.readVarInt64()
   let third = try buffer.readVarInt32()
 
-  let tailContext = ReadContext(buffer: buffer, typeResolver: fory.typeResolver, trackRef: false)
+  let tailContext = ReadContext(buffer: buffer, typeResolver: fory.typeResolver, config: fory.config)
   let fourth = try String.foryReadData(tailContext)
 
   #expect(first == value.shortValue)
@@ -1087,7 +1087,7 @@ func macroTaggedFieldsKeepGroupedPayloadOrder() throws {
   _ = try buffer.readInt32()
 
   #expect(try buffer.readVarInt32() == value.intValue)
-  let tailContext = ReadContext(buffer: buffer, typeResolver: fory.typeResolver, trackRef: false)
+  let tailContext = ReadContext(buffer: buffer, typeResolver: fory.typeResolver, config: fory.config)
   #expect(try String.foryReadData(tailContext) == value.textTail)
 }
 

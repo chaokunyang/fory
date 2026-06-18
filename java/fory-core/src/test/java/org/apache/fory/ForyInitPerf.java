@@ -23,6 +23,7 @@ import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.List;
+import org.apache.fory.config.Config;
 import org.apache.fory.config.ForyBuilder;
 import org.apache.fory.context.MetaReadContext;
 import org.apache.fory.context.MetaWriteContext;
@@ -144,12 +145,15 @@ public class ForyInitPerf {
             .withAsyncCompilation(false)
             .withCodegen(true);
     finishBuilder(builder);
-    return new BenchmarkContext(builder, benchmarkClassLoader(), new SharedRegistry());
+    return new BenchmarkContext(
+        builder, benchmarkClassLoader(), new SharedRegistry(new Config(builder)));
   }
 
   private static Fory newFory(BenchmarkContext context, boolean useSharedRegistry) {
     SharedRegistry sharedRegistry =
-        useSharedRegistry ? context.sharedRegistry : new SharedRegistry();
+        useSharedRegistry
+            ? context.sharedRegistry
+            : new SharedRegistry(new Config(context.builder));
     return new Fory(context.builder, context.classLoader, sharedRegistry);
   }
 

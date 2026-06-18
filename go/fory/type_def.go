@@ -1183,9 +1183,7 @@ func decodeTypeDef(fory *Fory, buffer *ByteBuffer, header int64) (*TypeDef, erro
 			if fallbackInfo, fallbackExists := fory.typeResolver.namedTypeToTypeInfo[nameKey]; fallbackExists {
 				info = fallbackInfo
 				exists = true
-				if len(fory.typeResolver.nsTypeToTypeInfo) < maxCachedNamedTypeInfos {
-					fory.typeResolver.nsTypeToTypeInfo[nsTypeKey{nsBytes.Hashcode, nameBytes.Hashcode}] = info
-				}
+				fory.typeResolver.nsTypeToTypeInfo[nsTypeKey{nsBytes.Hashcode, nameBytes.Hashcode}] = info
 			}
 		}
 		if exists {

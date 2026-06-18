@@ -33,6 +33,7 @@ import org.apache.fory.codegen.CodeGenerator;
 import org.apache.fory.collection.BiMap;
 import org.apache.fory.collection.ConcurrentIdentityMap;
 import org.apache.fory.collection.Tuple2;
+import org.apache.fory.config.Config;
 import org.apache.fory.exception.ForyException;
 import org.apache.fory.meta.EncodedMetaString;
 import org.apache.fory.meta.Encoders;
@@ -91,25 +92,20 @@ public final class SharedRegistry {
   final StaticGeneratedSerializerRegistry staticGeneratedSerializerRegistry =
       new StaticGeneratedSerializerRegistry();
   private final Object metaStringCacheLock = new Object();
+  private final Config config;
   private final HashMap<Object, Integer> remoteSchemaVersionsByType = new HashMap<>();
-  private int maxSchemaVersionsPerType = 10;
-  private int maxAverageSchemaVersionsPerType = 3;
   private int totalAcceptedSchemaVersions;
-  private boolean remoteSchemaLimitsSet;
   volatile IdentityHashMap<Class<?>, Integer> registeredClassIdMap;
   volatile BiMap<String, Class<?>> registeredClasses;
 
-  synchronized void setRemoteSchemaLimits(
-      int maxSchemaVersionsPerType, int maxAverageSchemaVersionsPerType) {
-    if (remoteSchemaLimitsSet
-        && (this.maxSchemaVersionsPerType != maxSchemaVersionsPerType
-            || this.maxAverageSchemaVersionsPerType != maxAverageSchemaVersionsPerType)) {
-      throw new IllegalArgumentException(
-          "SharedRegistry cannot be reused with different remote schema limits");
+  public SharedRegistry(Config config) {
+    this.config = Objects.requireNonNull(config);
+  }
+
+  public void checkConfig(Config config) {
+    if (!this.config.equals(config)) {
+      throw new IllegalArgumentException("SharedRegistry cannot be reused with different config");
     }
-    this.maxSchemaVersionsPerType = maxSchemaVersionsPerType;
-    this.maxAverageSchemaVersionsPerType = maxAverageSchemaVersionsPerType;
-    remoteSchemaLimitsSet = true;
   }
 
   synchronized void setRegistrationIfAbsent(
@@ -204,6 +200,7 @@ public final class SharedRegistry {
 
   private int checkRemoteSchemaLimit(Object structTypeKey) {
     int versionsForType = remoteSchemaVersionsByType.getOrDefault(structTypeKey, 0);
+    int maxSchemaVersionsPerType = config.maxSchemaVersionsPerType();
     if (versionsForType >= maxSchemaVersionsPerType) {
       throw new ForyException(
           "Remote schema version limit exceeded for type "
@@ -222,7 +219,7 @@ public final class SharedRegistry {
     long globalLimit =
         Math.max(
             (long) MIN_REMOTE_STRUCT_SCHEMA_LIMIT,
-            (long) acceptedStructTypeCount * maxAverageSchemaVersionsPerType);
+            (long) acceptedStructTypeCount * config.maxAverageSchemaVersionsPerType());
     if (totalAcceptedSchemaVersions >= globalLimit) {
       throw new ForyException(
           "Remote schema version limit exceeded: "
@@ -230,7 +227,7 @@ public final class SharedRegistry {
               + " schemas for "
               + acceptedStructTypeCount
               + " accepted struct types exceeds the average limit "
-              + maxAverageSchemaVersionsPerType
+              + config.maxAverageSchemaVersionsPerType()
               + ". Increase maxAverageSchemaVersionsPerType if this peer legitimately sends many "
               + "schema versions across many types.");
     }

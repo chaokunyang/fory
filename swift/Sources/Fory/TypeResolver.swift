@@ -404,9 +404,7 @@ private struct TypeNameKey: Hashable {
 final class TypeResolver {
   private static let minRemoteStructSchemaLimit = 8192
 
-  private let trackRef: Bool
-  private let maxSchemaVersionsPerType: Int
-  private let maxAverageSchemaVersionsPerType: Int
+  private let config: Config
   private var registrationFinished = false
 
   private var bySwiftType = UInt64Map<TypeInfo>(initialCapacity: 64)
@@ -417,18 +415,8 @@ final class TypeResolver {
   private var remoteSchemaVersionsByType: [String: Int] = [:]
   private var totalAcceptedSchemaVersions = 0
 
-  init(
-    trackRef: Bool = false,
-    maxSchemaVersionsPerType: Int = 10,
-    maxAverageSchemaVersionsPerType: Int = 3
-  ) {
-    precondition(maxSchemaVersionsPerType > 0, "maxSchemaVersionsPerType must be positive")
-    precondition(
-      maxAverageSchemaVersionsPerType > 0,
-      "maxAverageSchemaVersionsPerType must be positive")
-    self.trackRef = trackRef
-    self.maxSchemaVersionsPerType = maxSchemaVersionsPerType
-    self.maxAverageSchemaVersionsPerType = maxAverageSchemaVersionsPerType
+  init(config: Config) {
+    self.config = config
   }
 
   func finishRegistration() {
@@ -465,7 +453,7 @@ final class TypeResolver {
       evolving: evolving,
       namespace: MetaString.empty(specialChar1: ".", specialChar2: "_"),
       typeName: MetaString.empty(specialChar1: "$", specialChar2: "_"),
-      fields: T.foryFieldsInfo(trackRef: trackRef),
+      fields: T.foryFieldsInfo(trackRef: config.trackRef),
       reader: { context in
         try readRegisteredValue(context, as: T.self)
       },
@@ -522,7 +510,7 @@ final class TypeResolver {
       evolving: evolving,
       namespace: namespaceMeta,
       typeName: typeNameMeta,
-      fields: T.foryFieldsInfo(trackRef: trackRef),
+      fields: T.foryFieldsInfo(trackRef: config.trackRef),
       reader: { context in
         try readRegisteredValue(context, as: T.self)
       },
@@ -628,6 +616,7 @@ final class TypeResolver {
     }
 
     let versionsForType = remoteSchemaVersionsByType[key] ?? 0
+    let maxSchemaVersionsPerType = config.maxSchemaVersionsPerType
     if versionsForType >= maxSchemaVersionsPerType {
       throw ForyError.invalidData(
         "remote struct schema versions for one type exceeded maxSchemaVersionsPerType=\(maxSchemaVersionsPerType)"
@@ -635,6 +624,7 @@ final class TypeResolver {
     }
     let acceptedStructTypeCount =
       versionsForType == 0 ? remoteSchemaVersionsByType.count + 1 : remoteSchemaVersionsByType.count
+    let maxAverageSchemaVersionsPerType = config.maxAverageSchemaVersionsPerType
     let globalLimit = max(
       Self.minRemoteStructSchemaLimit,
       acceptedStructTypeCount * maxAverageSchemaVersionsPerType

@@ -107,7 +107,7 @@ def decode_typedef(buffer: Buffer, resolver, header=None) -> TypeDef:
         extended_size = buffer.read_var_uint32()
         encoded.write_var_uint32(extended_size)
         meta_size += extended_size
-    max_type_meta_bytes = resolver.max_type_meta_bytes
+    max_type_meta_bytes = resolver.config.max_type_meta_bytes
     if meta_size > max_type_meta_bytes:
         raise ValueError(
             f"Type metadata body size {meta_size} exceeds max_type_meta_bytes {max_type_meta_bytes}. "
@@ -141,7 +141,7 @@ def decode_typedef(buffer: Buffer, resolver, header=None) -> TypeDef:
         num_fields = meta_header & SMALL_NUM_FIELDS_THRESHOLD
         if num_fields == SMALL_NUM_FIELDS_THRESHOLD:
             num_fields += meta_buffer.read_var_uint32()
-        max_type_fields = resolver.max_type_fields
+        max_type_fields = resolver.config.max_type_fields
         if num_fields > max_type_fields:
             raise ValueError(
                 f"Type metadata field count {num_fields} exceeds max_type_fields {max_type_fields}. "

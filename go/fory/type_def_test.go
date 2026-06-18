@@ -569,7 +569,7 @@ func readRemoteTypeDef(t *testing.T, fory *Fory, typeDef *TypeDef) error {
 	return nil
 }
 
-func TestDecodeTypeDefFallbackNamedTypeCacheRespectsCap(t *testing.T) {
+func TestDecodeTypeDefFallbackNamedTypeCachesLookup(t *testing.T) {
 	fory := NewFory(WithXlang(false), WithCompatible(true))
 	require.NoError(t, fory.RegisterStructByName(SimpleStruct{}, "example.SimpleStruct"))
 	typeDef, err := buildTypeDef(fory, reflect.ValueOf(SimpleStruct{}))
@@ -581,9 +581,6 @@ func TestDecodeTypeDefFallbackNamedTypeCacheRespectsCap(t *testing.T) {
 	delete(fory.typeResolver.nsTypeToTypeInfo, nameKey)
 	info := fory.typeResolver.namedTypeToTypeInfo[[2]string{"example", "SimpleStruct"}]
 	require.NotNil(t, info)
-	for i := 0; len(fory.typeResolver.nsTypeToTypeInfo) < maxCachedNamedTypeInfos; i++ {
-		fory.typeResolver.nsTypeToTypeInfo[nsTypeKey{int64(i + 1), int64(i + 2)}] = info
-	}
 	require.NotContains(t, fory.typeResolver.nsTypeToTypeInfo, nameKey)
 
 	buffer := NewByteBuffer(nil)
@@ -595,8 +592,7 @@ func TestDecodeTypeDefFallbackNamedTypeCacheRespectsCap(t *testing.T) {
 	decoded := readTypeDef(fory, buffer, header, readErr)
 	require.NoError(t, readErr.CheckError())
 	require.NotNil(t, decoded)
-	require.Len(t, fory.typeResolver.nsTypeToTypeInfo, maxCachedNamedTypeInfos)
-	require.NotContains(t, fory.typeResolver.nsTypeToTypeInfo, nameKey)
+	require.Contains(t, fory.typeResolver.nsTypeToTypeInfo, nameKey)
 }
 
 func TestTypeDefRejectsNamespaceLengthBeyondMetadata(t *testing.T) {

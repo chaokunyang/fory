@@ -50,7 +50,9 @@ import lombok.ToString;
 import org.apache.fory.Fory;
 import org.apache.fory.ForyTestBase;
 import org.apache.fory.builder.Generated;
+import org.apache.fory.config.Config;
 import org.apache.fory.config.ForyBuilder;
+import org.apache.fory.context.MetaReadContext;
 import org.apache.fory.context.ReadContext;
 import org.apache.fory.context.WriteContext;
 import org.apache.fory.exception.ForyException;
@@ -291,7 +293,7 @@ public class ClassResolverTest extends ForyTestBase {
     ForyBuilder builder =
         Fory.builder().withXlang(false).requireClassRegistration(false).withCompatible(false);
     finishBuilder(builder);
-    SharedRegistry sharedRegistry = new SharedRegistry();
+    SharedRegistry sharedRegistry = new SharedRegistry(new Config(builder));
     Fory fory1 = new Fory(builder, ClassResolverTest.class.getClassLoader(), sharedRegistry);
     Fory fory2 = new Fory(builder, ClassResolverTest.class.getClassLoader(), sharedRegistry);
 
@@ -319,7 +321,7 @@ public class ClassResolverTest extends ForyTestBase {
             .withCompatible(false)
             .withMetaShare(true);
     finishBuilder(builder);
-    SharedRegistry sharedRegistry = new SharedRegistry();
+    SharedRegistry sharedRegistry = new SharedRegistry(new Config(builder));
     Fory fory1 = new Fory(builder, ClassResolverTest.class.getClassLoader(), sharedRegistry);
     Fory fory2 = new Fory(builder, ClassResolverTest.class.getClassLoader(), sharedRegistry);
 
@@ -343,6 +345,32 @@ public class ClassResolverTest extends ForyTestBase {
   }
 
   @Test
+  public void testExactLocalTypeDefChecksTypeChecker() {
+    Fory reader =
+        Fory.builder()
+            .withXlang(false)
+            .requireClassRegistration(false)
+            .withCompatible(false)
+            .withMetaShare(true)
+            .build();
+    reader
+        .getTypeResolver()
+        .setTypeChecker((resolver, className) -> !className.equals(BeanB.class.getName()));
+    ClassResolver resolver = (ClassResolver) reader.getTypeResolver();
+    TypeDef typeDef = resolver.getTypeDef(BeanB.class, true);
+    ReadContext readContext = reader.getReadContext();
+    readContext.setMetaReadContext(new MetaReadContext());
+    MemoryBuffer buffer = MemoryBuffer.newHeapBuffer(256);
+    readContext.prepare(buffer, null, false);
+    buffer.writeVarUInt32(0);
+    typeDef.writeTypeDef(buffer);
+    buffer.readerIndex(0);
+
+    Assert.assertThrows(
+        InsecureException.class, () -> resolver.readSharedClassMeta(readContext, BeanB.class));
+  }
+
+  @Test
   public void testRemoteSchemaVersionLimitByType() {
     ForyBuilder builder =
         Fory.builder()
@@ -352,7 +380,7 @@ public class ClassResolverTest extends ForyTestBase {
             .withMetaShare(true)
             .withMaxSchemaVersionsPerType(1);
     finishBuilder(builder);
-    SharedRegistry sharedRegistry = new SharedRegistry();
+    SharedRegistry sharedRegistry = new SharedRegistry(new Config(builder));
     Fory fory = new Fory(builder, ClassResolverTest.class.getClassLoader(), sharedRegistry);
     ClassResolver resolver = (ClassResolver) fory.getTypeResolver();
     TypeDef first = TypeDef.buildTypeDef(resolver, BeanB.class);
@@ -374,7 +402,7 @@ public class ClassResolverTest extends ForyTestBase {
             .withMetaShare(true)
             .withMaxSchemaVersionsPerType(1);
     finishBuilder(builder);
-    SharedRegistry sharedRegistry = new SharedRegistry();
+    SharedRegistry sharedRegistry = new SharedRegistry(new Config(builder));
     Fory fory = new Fory(builder, ClassResolverTest.class.getClassLoader(), sharedRegistry);
     ClassResolver resolver = (ClassResolver) fory.getTypeResolver();
 
@@ -395,7 +423,7 @@ public class ClassResolverTest extends ForyTestBase {
             .withMetaShare(true)
             .withMaxSchemaVersionsPerType(1);
     finishBuilder(builder);
-    SharedRegistry sharedRegistry = new SharedRegistry();
+    SharedRegistry sharedRegistry = new SharedRegistry(new Config(builder));
     Fory fory = new Fory(builder, ClassResolverTest.class.getClassLoader(), sharedRegistry);
     ClassResolver resolver = (ClassResolver) fory.getTypeResolver();
 
@@ -411,7 +439,7 @@ public class ClassResolverTest extends ForyTestBase {
     ForyBuilder builder =
         Fory.builder().withXlang(false).requireClassRegistration(false).withCompatible(false);
     finishBuilder(builder);
-    SharedRegistry sharedRegistry = new SharedRegistry();
+    SharedRegistry sharedRegistry = new SharedRegistry(new Config(builder));
     Fory fory1 = new Fory(builder, ClassResolverTest.class.getClassLoader(), sharedRegistry);
     Fory fory2 = new Fory(builder, ClassResolverTest.class.getClassLoader(), sharedRegistry);
 
@@ -447,7 +475,7 @@ public class ClassResolverTest extends ForyTestBase {
             .requireClassRegistration(false)
             .withCompatible(false);
     finishBuilder(builder);
-    SharedRegistry sharedRegistry = new SharedRegistry();
+    SharedRegistry sharedRegistry = new SharedRegistry(new Config(builder));
     Fory fory1 = new Fory(builder, ClassResolverTest.class.getClassLoader(), sharedRegistry);
     Fory fory2 = new Fory(builder, ClassResolverTest.class.getClassLoader(), sharedRegistry);
 
@@ -482,7 +510,7 @@ public class ClassResolverTest extends ForyTestBase {
     ForyBuilder builder =
         Fory.builder().withXlang(false).requireClassRegistration(true).withCompatible(false);
     finishBuilder(builder);
-    SharedRegistry sharedRegistry = new SharedRegistry();
+    SharedRegistry sharedRegistry = new SharedRegistry(new Config(builder));
     Fory fory = new Fory(builder, ClassResolverTest.class.getClassLoader(), sharedRegistry);
     ClassResolver classResolver = (ClassResolver) fory.getTypeResolver();
 
@@ -497,7 +525,7 @@ public class ClassResolverTest extends ForyTestBase {
     ForyBuilder builder =
         Fory.builder().withXlang(false).requireClassRegistration(true).withCompatible(false);
     finishBuilder(builder);
-    SharedRegistry sharedRegistry = new SharedRegistry();
+    SharedRegistry sharedRegistry = new SharedRegistry(new Config(builder));
     Fory fory1 = new Fory(builder, ClassResolverTest.class.getClassLoader(), sharedRegistry);
     Fory fory2 = new Fory(builder, ClassResolverTest.class.getClassLoader(), sharedRegistry);
 
@@ -842,7 +870,7 @@ public class ClassResolverTest extends ForyTestBase {
     ForyBuilder builder =
         Fory.builder().withXlang(false).requireClassRegistration(true).withCompatible(false);
     finishBuilder(builder);
-    SharedRegistry sharedRegistry = new SharedRegistry();
+    SharedRegistry sharedRegistry = new SharedRegistry(new Config(builder));
     Fory fory1 = new Fory(builder, ClassResolverTest.class.getClassLoader(), sharedRegistry);
     Fory fory2 = new Fory(builder, ClassResolverTest.class.getClassLoader(), sharedRegistry);
 

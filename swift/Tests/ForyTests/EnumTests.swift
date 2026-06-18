@@ -97,7 +97,7 @@ func unionDefaultUsesKnownCase() {
 @Test
 func unionCaseIdZeroIsKnownCase() throws {
     let buffer = ByteBuffer()
-    let typeResolver = TypeResolver(trackRef: false)
+    let typeResolver = TypeResolver(config: Config(trackRef: false))
     let writeContext = WriteContext(buffer: buffer, typeResolver: typeResolver, trackRef: false)
     try ForwardStringOrLong.text("zero").foryWriteData(writeContext, hasGenerics: false)
     buffer.flip()
@@ -106,7 +106,7 @@ func unionCaseIdZeroIsKnownCase() throws {
     let context = ReadContext(
         buffer: buffer,
         typeResolver: typeResolver,
-        trackRef: false
+        config: Config(trackRef: false)
     )
 
     #expect(try ForwardStringOrLong.foryReadData(context) == .text("zero"))

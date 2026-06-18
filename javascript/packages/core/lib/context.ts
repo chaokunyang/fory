@@ -560,10 +560,7 @@ export class ReadContext {
 
   private _depth = 0;
   private _maxDepth: number;
-  private readonly maxTypeFields: number;
-  private readonly maxTypeMetaBytes: number;
-  private readonly maxSchemaVersionsPerType: number;
-  private readonly maxAverageSchemaVersionsPerType: number;
+  private readonly config: Config;
 
   private static typeMetaHeaderHash(headerLow: number, headerHigh: number) {
     return headerHigh * 0x100000 + (headerLow >>> 12);
@@ -619,11 +616,7 @@ export class ReadContext {
     this.refReader = new RefReader(this.reader);
     this.metaStringReader = new MetaStringReader();
     this._maxDepth = config.maxDepth ?? 50;
-    this.maxTypeFields = config.maxTypeFields;
-    this.maxTypeMetaBytes = config.maxTypeMetaBytes;
-    this.maxSchemaVersionsPerType = config.maxSchemaVersionsPerType;
-    this.maxAverageSchemaVersionsPerType
-      = config.maxAverageSchemaVersionsPerType;
+    this.config = config;
   }
 
   reset(bytes: Uint8Array) {
@@ -723,7 +716,7 @@ export class ReadContext {
             headerLow,
             headerHigh,
             localTypeMeta.toBytes(),
-            this.maxTypeMetaBytes,
+            this.config.maxTypeMetaBytes,
           )
         ) {
           this.typeMeta[dynamicTypeId] = localTypeMeta;
@@ -733,8 +726,8 @@ export class ReadContext {
       typeMeta = TypeMeta.fromBytesAfterHeader(
         this.reader,
         header,
-        this.maxTypeFields,
-        this.maxTypeMetaBytes,
+        this.config.maxTypeFields,
+        this.config.maxTypeMetaBytes,
       );
       this.pendingTypeMetaKey = checkLimit
         ? this.checkRemoteStructSchemaLimit(typeMeta)
@@ -757,10 +750,11 @@ export class ReadContext {
       ? `${typeMeta.getNs()}\u0000${typeMeta.getTypeName()}`
       : typeMeta.getUserTypeId();
     const versionsForType = this.remoteSchemaVersionsByType.get(typeKey) ?? 0;
-    if (versionsForType >= this.maxSchemaVersionsPerType) {
+    const maxSchemaVersionsPerType = this.config.maxSchemaVersionsPerType;
+    if (versionsForType >= maxSchemaVersionsPerType) {
       throw new Error(
         `Remote schema version limit exceeded for type ${String(typeKey)}: `
-        + `${versionsForType} >= ${this.maxSchemaVersionsPerType}. Increase `
+        + `${versionsForType} >= ${maxSchemaVersionsPerType}. Increase `
         + "maxSchemaVersionsPerType if this peer legitimately sends many "
         + "schema versions for one type.",
       );
@@ -769,15 +763,17 @@ export class ReadContext {
       = versionsForType === 0
         ? this.remoteSchemaVersionsByType.size + 1
         : this.remoteSchemaVersionsByType.size;
+    const maxAverageSchemaVersionsPerType
+      = this.config.maxAverageSchemaVersionsPerType;
     const globalLimit = Math.max(
       ReadContext.MIN_REMOTE_STRUCT_SCHEMA_LIMIT,
-      acceptedStructTypeCount * this.maxAverageSchemaVersionsPerType,
+      acceptedStructTypeCount * maxAverageSchemaVersionsPerType,
     );
     if (this.totalAcceptedSchemaVersions >= globalLimit) {
       throw new Error(
         `Remote schema version limit exceeded: ${this.totalAcceptedSchemaVersions} `
         + `schemas for ${acceptedStructTypeCount} accepted struct types exceeds `
-        + `the average limit ${this.maxAverageSchemaVersionsPerType}. Increase `
+        + `the average limit ${maxAverageSchemaVersionsPerType}. Increase `
         + "maxAverageSchemaVersionsPerType if this peer legitimately sends many "
         + "schema versions across many types.",
       );

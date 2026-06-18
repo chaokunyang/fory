@@ -219,6 +219,7 @@ cdef class TypeResolver:
     """
 
     cdef object resolver
+    cdef readonly Config config
     cdef readonly object shared_registry
     cdef readonly bint xlang
     cdef readonly bint track_ref
@@ -252,6 +253,7 @@ cdef class TypeResolver:
             shared_registry=shared_registry,
         )
         self.resolver = resolver
+        self.config = config
         self.shared_registry = resolver.shared_registry
         self.xlang = resolver.xlang
         self.track_ref = resolver.track_ref
@@ -817,10 +819,6 @@ cdef class Fory:
     cdef public bint compatible
     cdef public bint field_nullable
     cdef public int32_t max_depth
-    cdef public int32_t max_type_fields
-    cdef public int32_t max_type_meta_bytes
-    cdef public int32_t max_schema_versions_per_type
-    cdef public int32_t max_average_schema_versions_per_type
     cdef public object policy
     cdef public Config config
     cdef public TypeResolver type_resolver
@@ -874,10 +872,6 @@ cdef class Fory:
         self.compatible = compatible
         self.field_nullable = field_nullable
         self.max_depth = max_depth
-        self.max_type_fields = max_type_fields
-        self.max_type_meta_bytes = max_type_meta_bytes
-        self.max_schema_versions_per_type = max_schema_versions_per_type
-        self.max_average_schema_versions_per_type = max_average_schema_versions_per_type
         self.config = Config(
             xlang=xlang,
             track_ref=ref,

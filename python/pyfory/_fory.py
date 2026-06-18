@@ -124,10 +124,6 @@ class Fory:
         "strict",
         "buffer",
         "max_depth",
-        "max_type_fields",
-        "max_type_meta_bytes",
-        "max_schema_versions_per_type",
-        "max_average_schema_versions_per_type",
         "field_nullable",
         "policy",
     )
@@ -217,10 +213,6 @@ class Fory:
             raise ValueError("max_schema_versions_per_type must be a positive integer")
         if not isinstance(max_average_schema_versions_per_type, int) or max_average_schema_versions_per_type <= 0:
             raise ValueError("max_average_schema_versions_per_type must be a positive integer")
-        self.max_type_fields = max_type_fields
-        self.max_type_meta_bytes = max_type_meta_bytes
-        self.max_schema_versions_per_type = max_schema_versions_per_type
-        self.max_average_schema_versions_per_type = max_average_schema_versions_per_type
         self.config = Config(
             xlang=xlang,
             track_ref=ref,

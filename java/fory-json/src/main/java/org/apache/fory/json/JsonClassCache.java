@@ -37,7 +37,7 @@ final class JsonClassCache {
   private JsonClassInfo build(Class<?> type) {
     JsonClassInfo classInfo = JsonClassInfo.build(type);
     if (codegen != null) {
-      classInfo.setObjectWriter(codegen.compile(classInfo));
+      classInfo.setObjectWriter(codegen.compile(classInfo, this));
     }
     return classInfo;
   }

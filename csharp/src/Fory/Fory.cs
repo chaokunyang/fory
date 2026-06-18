@@ -44,14 +44,7 @@ public sealed class Fory
         _readContext = new ReadContext(
             new ByteReader(Array.Empty<byte>()),
             _typeResolver,
-            Config.TrackRef,
-            Config.Compatible,
-            Config.CheckStructVersion,
-            Config.MaxDepth,
-            Config.MaxTypeFields,
-            Config.MaxTypeMetaBytes,
-            Config.MaxSchemaVersionsPerType,
-            Config.MaxAverageSchemaVersionsPerType);
+            Config);
     }
 
     /// <summary>

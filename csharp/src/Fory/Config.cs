@@ -33,6 +33,27 @@ public sealed class Config
         int maxSchemaVersionsPerType,
         int maxAverageSchemaVersionsPerType)
     {
+        if (maxDepth <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(maxDepth), "MaxDepth must be greater than 0.");
+        }
+        if (maxTypeFields <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(maxTypeFields), "MaxTypeFields must be greater than 0.");
+        }
+        if (maxTypeMetaBytes <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(maxTypeMetaBytes), "MaxTypeMetaBytes must be greater than 0.");
+        }
+        if (maxSchemaVersionsPerType <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(maxSchemaVersionsPerType), "MaxSchemaVersionsPerType must be greater than 0.");
+        }
+        if (maxAverageSchemaVersionsPerType <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(maxAverageSchemaVersionsPerType), "MaxAverageSchemaVersionsPerType must be greater than 0.");
+        }
+
         TrackRef = trackRef;
         Compatible = compatible;
         CheckStructVersion = checkStructVersion;

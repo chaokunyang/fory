@@ -46,56 +46,24 @@ public sealed class ReadContext
     internal Type? _cachedTypeMetaType;
     internal TypeMeta? _cachedTypeMeta;
     internal int _currentDynamicReadDepth;
-    private readonly int _maxTypeFields;
-    private readonly int _maxTypeMetaBytes;
-    private readonly int _maxSchemaVersionsPerType;
-    private readonly int _maxAverageSchemaVersionsPerType;
+    private readonly Config _config;
     private int _totalAcceptedSchemaVersions;
 
     public ReadContext(
         ByteReader reader,
         TypeResolver typeResolver,
-        bool trackRef,
-        bool compatible = false,
-        bool checkStructVersion = false,
-        int maxDynamicReadDepth = 20,
-        int maxTypeFields = 512,
-        int maxTypeMetaBytes = 4096,
-        int maxSchemaVersionsPerType = 10,
-        int maxAverageSchemaVersionsPerType = 3)
+        Config config)
     {
-        if (maxDynamicReadDepth <= 0)
-        {
-            throw new ArgumentOutOfRangeException(nameof(maxDynamicReadDepth), "MaxDepth must be greater than 0.");
-        }
-        if (maxTypeFields <= 0)
-        {
-            throw new ArgumentOutOfRangeException(nameof(maxTypeFields), "MaxTypeFields must be greater than 0.");
-        }
-        if (maxTypeMetaBytes <= 0)
-        {
-            throw new ArgumentOutOfRangeException(nameof(maxTypeMetaBytes), "MaxTypeMetaBytes must be greater than 0.");
-        }
-        if (maxSchemaVersionsPerType <= 0)
-        {
-            throw new ArgumentOutOfRangeException(nameof(maxSchemaVersionsPerType), "MaxSchemaVersionsPerType must be greater than 0.");
-        }
-        if (maxAverageSchemaVersionsPerType <= 0)
-        {
-            throw new ArgumentOutOfRangeException(nameof(maxAverageSchemaVersionsPerType), "MaxAverageSchemaVersionsPerType must be greater than 0.");
-        }
+        ArgumentNullException.ThrowIfNull(config);
 
         Reader = reader;
         TypeResolver = typeResolver;
-        TrackRef = trackRef;
-        Compatible = compatible;
-        CheckStructVersion = checkStructVersion;
+        TrackRef = config.TrackRef;
+        Compatible = config.Compatible;
+        CheckStructVersion = config.CheckStructVersion;
         RefReader = new RefReader();
-        _maxDynamicReadDepth = maxDynamicReadDepth;
-        _maxTypeFields = maxTypeFields;
-        _maxTypeMetaBytes = maxTypeMetaBytes;
-        _maxSchemaVersionsPerType = maxSchemaVersionsPerType;
-        _maxAverageSchemaVersionsPerType = maxAverageSchemaVersionsPerType;
+        _maxDynamicReadDepth = config.MaxDepth;
+        _config = config;
     }
 
     public ByteReader Reader { get; private set; }
@@ -223,24 +191,26 @@ public sealed class ReadContext
             ? $"{typeMeta.NamespaceName.Value}\0{typeMeta.TypeName.Value}"
             : typeMeta.UserTypeId!.Value;
         _remoteSchemaVersionsByType.TryGetValue(typeKey, out int versionsForType);
-        if (versionsForType >= _maxSchemaVersionsPerType)
+        int maxSchemaVersionsPerType = _config.MaxSchemaVersionsPerType;
+        if (versionsForType >= maxSchemaVersionsPerType)
         {
             throw new InvalidDataException(
-                $"Remote schema version limit exceeded for type {typeKey}: {versionsForType} >= {_maxSchemaVersionsPerType}. " +
+                $"Remote schema version limit exceeded for type {typeKey}: {versionsForType} >= {maxSchemaVersionsPerType}. " +
                 "Increase MaxSchemaVersionsPerType if this peer legitimately sends many schema versions for one type.");
         }
 
         int acceptedStructTypeCount = versionsForType == 0
             ? _remoteSchemaVersionsByType.Count + 1
             : _remoteSchemaVersionsByType.Count;
+        int maxAverageSchemaVersionsPerType = _config.MaxAverageSchemaVersionsPerType;
         long globalLimit = Math.Max(
             MinRemoteStructSchemaLimit,
-            (long)acceptedStructTypeCount * _maxAverageSchemaVersionsPerType);
+            (long)acceptedStructTypeCount * maxAverageSchemaVersionsPerType);
         if (_totalAcceptedSchemaVersions >= globalLimit)
         {
             throw new InvalidDataException(
                 $"Remote schema version limit exceeded: {_totalAcceptedSchemaVersions} schemas for {acceptedStructTypeCount} " +
-                $"accepted struct types exceeds the average limit {_maxAverageSchemaVersionsPerType}. Increase " +
+                $"accepted struct types exceeds the average limit {maxAverageSchemaVersionsPerType}. Increase " +
                 "MaxAverageSchemaVersionsPerType if this peer legitimately sends many schema versions across many types.");
         }
 
@@ -343,7 +313,7 @@ public sealed class ReadContext
         }
 
         Reader.MoveBack(sizeof(ulong));
-        TypeMeta typeMeta = TypeMeta.Decode(Reader, _maxTypeFields, _maxTypeMetaBytes);
+        TypeMeta typeMeta = TypeMeta.Decode(Reader, _config.MaxTypeFields, _config.MaxTypeMetaBytes);
         _pendingTypeMeta = typeMeta;
         _pendingTypeMetaHeader = header;
         _pendingTypeMetaIndex = index;
@@ -363,7 +333,7 @@ public sealed class ReadContext
         }
 
         int bodyBytes = encoded.Length - sizeof(ulong);
-        TypeMeta.CheckEncodedBodySize(encoded, _maxTypeMetaBytes);
+        TypeMeta.CheckEncodedBodySize(encoded, _config.MaxTypeMetaBytes);
         Reader.CheckBound(bodyBytes);
         int start = Reader.Cursor - sizeof(ulong);
         if (!Reader.Storage.AsSpan(start, encoded.Length).SequenceEqual(encoded))

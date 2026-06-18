@@ -206,7 +206,8 @@ public sealed class RuntimeEdgeCaseTests
 
         writer.WriteUInt8(0xA5);
         ByteReader reader = new(writer.ToArray());
-        ReadContext context = new(reader, new TypeResolver(), trackRef: false);
+        Config config = ForyRuntime.Builder().Compatible(false).Build().Config;
+        ReadContext context = new(reader, new TypeResolver(), config);
 
         FieldSkipper.SkipFieldValue(context, new TypeMetaFieldType((uint)typeId, nullable: false));
 
@@ -527,11 +528,12 @@ public sealed class RuntimeEdgeCaseTests
     [Fact]
     public void TypeMetaSchemaLimitRejectsExtraVersions()
     {
-        ReadContext context = new(
-            new ByteReader(Array.Empty<byte>()),
-            new TypeResolver(),
-            trackRef: false,
-            maxSchemaVersionsPerType: 1);
+        Config config = ForyRuntime.Builder()
+            .Compatible(false)
+            .MaxSchemaVersionsPerType(1)
+            .Build()
+            .Config;
+        ReadContext context = new(new ByteReader(Array.Empty<byte>()), new TypeResolver(), config);
         TypeMeta first = RemoteStructTypeMeta(901, "first");
         TypeMeta second = RemoteStructTypeMeta(901, "second");
 
@@ -543,11 +545,12 @@ public sealed class RuntimeEdgeCaseTests
     [Fact]
     public void TypeMetaFieldLimitRejectsLargeStruct()
     {
-        ReadContext context = new(
-            new ByteReader(Array.Empty<byte>()),
-            new TypeResolver(),
-            trackRef: false,
-            maxTypeFields: 1);
+        Config config = ForyRuntime.Builder()
+            .Compatible(false)
+            .MaxTypeFields(1)
+            .Build()
+            .Config;
+        ReadContext context = new(new ByteReader(Array.Empty<byte>()), new TypeResolver(), config);
         TypeMeta typeMeta = RemoteStructTypeMeta(901, "first", "second");
 
         InvalidDataException exception =
@@ -558,11 +561,12 @@ public sealed class RuntimeEdgeCaseTests
     [Fact]
     public void TypeMetaBodyLimitRejectsLargeMetadata()
     {
-        ReadContext context = new(
-            new ByteReader(Array.Empty<byte>()),
-            new TypeResolver(),
-            trackRef: false,
-            maxTypeMetaBytes: 1);
+        Config config = ForyRuntime.Builder()
+            .Compatible(false)
+            .MaxTypeMetaBytes(1)
+            .Build()
+            .Config;
+        ReadContext context = new(new ByteReader(Array.Empty<byte>()), new TypeResolver(), config);
 
         InvalidDataException exception =
             Assert.Throws<InvalidDataException>(() => ReadAndAcceptTypeMeta(context, RemoteStructTypeMeta(901, "value")));
@@ -572,11 +576,12 @@ public sealed class RuntimeEdgeCaseTests
     [Fact]
     public void TypeMetaSchemaLimitKeepsUnknownTypesSeparate()
     {
-        ReadContext context = new(
-            new ByteReader(Array.Empty<byte>()),
-            new TypeResolver(),
-            trackRef: false,
-            maxSchemaVersionsPerType: 1);
+        Config config = ForyRuntime.Builder()
+            .Compatible(false)
+            .MaxSchemaVersionsPerType(1)
+            .Build()
+            .Config;
+        ReadContext context = new(new ByteReader(Array.Empty<byte>()), new TypeResolver(), config);
         TypeMeta first = RemoteStructTypeMeta(901, "value");
         TypeMeta second = RemoteStructTypeMeta(902, "value");
 
@@ -592,12 +597,12 @@ public sealed class RuntimeEdgeCaseTests
     {
         TypeResolver resolver = new();
         resolver.Register(typeof(CustomPayload), 901);
-        ReadContext context = new(
-            new ByteReader(Array.Empty<byte>()),
-            resolver,
-            trackRef: false,
-            compatible: true,
-            maxSchemaVersionsPerType: 1);
+        Config config = ForyRuntime.Builder()
+            .Compatible(true)
+            .MaxSchemaVersionsPerType(1)
+            .Build()
+            .Config;
+        ReadContext context = new(new ByteReader(Array.Empty<byte>()), resolver, config);
 
         ReadAnyTypeInfo(context, resolver, RemoteCompatibleStructTypeMeta(901, "first"));
         TypeMeta accepted = ReadAndAcceptTypeMeta(context, RemoteStructTypeMeta(901, "second"));
@@ -610,12 +615,12 @@ public sealed class RuntimeEdgeCaseTests
     {
         TypeResolver resolver = new();
         resolver.Register(typeof(CustomPayload), 901);
-        ReadContext context = new(
-            new ByteReader(Array.Empty<byte>()),
-            resolver,
-            trackRef: false,
-            compatible: true,
-            maxSchemaVersionsPerType: 1);
+        Config config = ForyRuntime.Builder()
+            .Compatible(true)
+            .MaxSchemaVersionsPerType(1)
+            .Build()
+            .Config;
+        ReadContext context = new(new ByteReader(Array.Empty<byte>()), resolver, config);
         TypeMeta remote = ReadAndAcceptTypeMeta(context, RemoteStructTypeMeta(901, "remote"));
         TypeMeta exact = resolver.GetTypeInfo(typeof(CustomPayload)).GetTypeMetaCacheEntry(trackRef: false).TypeMeta;
 
@@ -644,7 +649,8 @@ public sealed class RuntimeEdgeCaseTests
         writer.WriteBytes(new byte[0xff]);
         writer.WriteUInt8(0x7b);
 
-        ReadContext context = new(new ByteReader(writer.ToArray()), new TypeResolver(), trackRef: false);
+        Config config = ForyRuntime.Builder().Compatible(false).Build().Config;
+        ReadContext context = new(new ByteReader(writer.ToArray()), new TypeResolver(), config);
         context.CacheReadTypeMeta(header, typeMeta);
 
         Assert.Same(typeMeta, context.ReadTypeMeta());

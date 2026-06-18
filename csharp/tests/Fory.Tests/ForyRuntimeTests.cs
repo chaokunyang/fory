@@ -1118,7 +1118,7 @@ public sealed class ForyRuntimeTests
         short first = reader.ReadInt16();
         long second = reader.ReadVarInt64();
         int third = reader.ReadVarInt32();
-        ReadContext tailContext = new(reader, new TypeResolver(), false, false);
+        ReadContext tailContext = new(reader, new TypeResolver(), fory.Config);
         string fourth = tailContext.TypeResolver.GetSerializer<string>().ReadData(tailContext);
 
         Assert.Equal(value.B, first);
@@ -2157,6 +2157,7 @@ public sealed class ForyRuntimeTests
     {
         TypeResolver resolver = new();
         Serializer<Union2<string, long>> serializer = resolver.GetSerializer<Union2<string, long>>();
+        Config config = ForyRuntime.Builder().TrackRef(true).Build().Config;
 
         ByteWriter firstWriter = new();
         WriteContext firstWrite = new(firstWriter, resolver, trackRef: true);
@@ -2165,7 +2166,7 @@ public sealed class ForyRuntimeTests
         Assert.Equal(0u, firstReader.ReadVarUInt32());
 
         Union2<string, long> firstDecoded =
-            serializer.ReadData(new ReadContext(new ByteReader(firstWriter.ToArray()), resolver, trackRef: true));
+            serializer.ReadData(new ReadContext(new ByteReader(firstWriter.ToArray()), resolver, config));
         Assert.Equal(0, firstDecoded.Index);
         Assert.Equal("hello", firstDecoded.GetT1());
 
@@ -2176,7 +2177,7 @@ public sealed class ForyRuntimeTests
         Assert.Equal(1u, secondReader.ReadVarUInt32());
 
         Union2<string, long> secondDecoded =
-            serializer.ReadData(new ReadContext(new ByteReader(secondWriter.ToArray()), resolver, trackRef: true));
+            serializer.ReadData(new ReadContext(new ByteReader(secondWriter.ToArray()), resolver, config));
         Assert.Equal(1, secondDecoded.Index);
         Assert.Equal(42L, secondDecoded.GetT2());
 
@@ -2857,7 +2858,8 @@ public sealed class ForyRuntimeTests
         int byteLength = checked((int)(header >> 2));
         Assert.Equal(payload.Length - headerReader.Cursor, byteLength);
 
-        ReadContext readContext = new(new ByteReader(payload), resolver, trackRef: false, compatible: false);
+        Config config = ForyRuntime.Builder().Compatible(false).Build().Config;
+        ReadContext readContext = new(new ByteReader(payload), resolver, config);
         string decoded = StringSerializer.ReadString(readContext);
         Assert.Equal(0, readContext.Reader.Remaining);
         return (encoding, decoded);

@@ -358,8 +358,10 @@ mod tests {
             resolver.read_type_meta(&mut reader, &TypeResolver::default(), config)
         }
 
-        let mut config = Config::default();
-        config.max_schema_versions_per_type = 1;
+        let config = Config {
+            max_schema_versions_per_type: 1,
+            ..Default::default()
+        };
 
         let mut resolver = MetaReaderResolver::default();
         read_type_def(&mut resolver, &config, &type_def(9001, "a")).unwrap();
@@ -387,8 +389,10 @@ mod tests {
         .unwrap();
         let type_def = meta.get_bytes().to_vec();
 
-        let mut config = Config::default();
-        config.max_schema_versions_per_type = 1;
+        let config = Config {
+            max_schema_versions_per_type: 1,
+            ..Default::default()
+        };
         let mut resolver = MetaReaderResolver::default();
         let mut bytes = vec![];
         let mut writer = Writer::from_buffer(&mut bytes);

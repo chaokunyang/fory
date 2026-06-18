@@ -195,8 +195,6 @@ class TypeDefEncoder {
     TypeInfo typeInfo = resolver.getTypeInfo(type);
     int typeId = typeInfo.getTypeId();
     boolean isStruct = Types.isStructType(typeId);
-    Preconditions.checkArgument(
-        isStruct || fields.isEmpty(), "Non-struct TypeDef %s cannot carry field metadata", typeId);
     MemoryBuffer buffer = MemoryBuffer.newHeapBuffer(128);
     buffer.writeByte(-1); // placeholder for header, update later
     if (isStruct) {
@@ -209,10 +207,6 @@ class TypeDefEncoder {
         buffer.writeVarUInt32(fieldCount - SMALL_NUM_FIELDS_THRESHOLD);
       }
       if (resolver.isRegisteredById(type)) {
-        Preconditions.checkArgument(
-            typeInfo.getUserTypeId() != -1,
-            "User type id is required for typeId %s",
-            typeInfo.getTypeId());
         buffer.writeVarUInt32(typeInfo.getUserTypeId());
       } else {
         Preconditions.checkArgument(resolver.isRegisteredByName(type));
@@ -227,10 +221,6 @@ class TypeDefEncoder {
     } else {
       buffer.putByte(0, nonStructKindCode(typeId));
       if (resolver.isRegisteredById(type)) {
-        Preconditions.checkArgument(
-            typeInfo.getUserTypeId() != -1,
-            "User type id is required for typeId %s",
-            typeInfo.getTypeId());
         buffer.writeVarUInt32(typeInfo.getUserTypeId());
       } else {
         Preconditions.checkArgument(resolver.isRegisteredByName(type));

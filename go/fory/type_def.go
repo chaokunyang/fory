@@ -396,6 +396,7 @@ func buildTypeDef(fory *Fory, value reflect.Value) (*TypeDef, error) {
 	}
 	registerByName := IsNamespacedType(TypeId(typeId))
 	typeDef := NewTypeDef(typeId, infoPtr.UserTypeID, infoPtr.PkgPathBytes, infoPtr.NameBytes, registerByName, false, fieldDefs)
+	typeDef.type_ = value.Type()
 
 	// encoding the typeDef, and save the encoded bytes
 	encoded, err := encodingTypeDef(fory.typeResolver, typeDef)
@@ -1215,9 +1216,6 @@ func decodeTypeDef(fory *Fory, buffer *ByteBuffer, header int64) (*TypeDef, erro
 			return nil, fmt.Errorf("failed to read field def %d: %w", i, err)
 		}
 		fieldInfos[i] = fieldInfo
-	}
-	if !isStruct && len(fieldInfos) != 0 {
-		return nil, fmt.Errorf("non-struct TypeDef cannot carry field metadata")
 	}
 	if metaErr.HasError() {
 		return nil, metaErr.TakeError()

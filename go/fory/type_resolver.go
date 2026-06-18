@@ -1625,10 +1625,19 @@ func (r *TypeResolver) readSharedTypeMeta(buffer *ByteBuffer, err *Error) *TypeI
 		td = newTd
 		newTypeDef = true
 		if td.type_ != nil {
-			localTd, localErr := r.getTypeDef(td.type_, true)
+			localType := td.type_
+			localTd, localErr := r.getTypeDef(localType, true)
 			if localErr == nil && bytes.Equal(localTd.encoded, td.encoded) {
 				td = localTd
 				newTypeDef = false
+				if typeInfo := r.getTypeInfoByType(localType); typeInfo != nil {
+					context.readTypeInfos = append(context.readTypeInfos, typeInfo)
+					return typeInfo
+				}
+				if typeInfo, typeInfoErr := r.getTypeInfo(reflect.Zero(localType), true); typeInfoErr == nil {
+					context.readTypeInfos = append(context.readTypeInfos, typeInfo)
+					return typeInfo
+				}
 			}
 		}
 		if newTypeDef {

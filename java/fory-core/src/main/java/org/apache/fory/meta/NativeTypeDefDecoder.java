@@ -175,9 +175,6 @@ class NativeTypeDefDecoder {
     }
     Preconditions.checkNotNull(classSpec);
     boolean hasFieldMetadata = !classFields.isEmpty();
-    if (!Types.isStructType(rootTypeId) && hasFieldMetadata) {
-      throw new DeserializationException("Non-struct TypeDef cannot carry field metadata");
-    }
     if (rootClass != null) {
       int expectedRootTypeId = resolver.getTypeDefRootTypeId(rootClass, hasFieldMetadata);
       if (!isCompatibleRootKind(expectedRootTypeId, rootTypeId, !rootClassLayerRegistered)) {

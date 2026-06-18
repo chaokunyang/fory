@@ -69,22 +69,22 @@ export default class Fory {
   }
 
   private initConfig(config: Partial<Config> | undefined) {
-    const maxSchemaVersionsPerType =
-      config?.maxSchemaVersionsPerType ?? DEFAULT_MAX_SCHEMA_VERSIONS_PER_TYPE;
+    const maxSchemaVersionsPerType
+      = config?.maxSchemaVersionsPerType ?? DEFAULT_MAX_SCHEMA_VERSIONS_PER_TYPE;
     if (
-      !Number.isInteger(maxSchemaVersionsPerType) ||
-      maxSchemaVersionsPerType <= 0
+      !Number.isInteger(maxSchemaVersionsPerType)
+      || maxSchemaVersionsPerType <= 0
     ) {
       throw new Error(
         `maxSchemaVersionsPerType must be a positive integer but got ${maxSchemaVersionsPerType}`,
       );
     }
-    const maxAverageSchemaVersionsPerType =
-      config?.maxAverageSchemaVersionsPerType ??
-      DEFAULT_MAX_AVERAGE_SCHEMA_VERSIONS_PER_TYPE;
+    const maxAverageSchemaVersionsPerType
+      = config?.maxAverageSchemaVersionsPerType
+      ?? DEFAULT_MAX_AVERAGE_SCHEMA_VERSIONS_PER_TYPE;
     if (
-      !Number.isInteger(maxAverageSchemaVersionsPerType) ||
-      maxAverageSchemaVersionsPerType <= 0
+      !Number.isInteger(maxAverageSchemaVersionsPerType)
+      || maxAverageSchemaVersionsPerType <= 0
     ) {
       throw new Error(
         `maxAverageSchemaVersionsPerType must be a positive integer but got ${maxAverageSchemaVersionsPerType}`,
@@ -165,8 +165,8 @@ export default class Fory {
   }
 
   private throwInvalidRootHeader(bitmap: number): never {
-    const knownFlags =
-      ConfigFlags.isCrossLanguageFlag | ConfigFlags.isOutOfBandFlag;
+    const knownFlags
+      = ConfigFlags.isCrossLanguageFlag | ConfigFlags.isOutOfBandFlag;
     if ((bitmap & ~knownFlags) !== 0) {
       throw new Error(
         `unsupported root header bitmap 0x${bitmap.toString(16)}`,

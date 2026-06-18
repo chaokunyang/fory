@@ -134,9 +134,6 @@ class TypeDefDecoder {
     }
     List<FieldInfo> classFields =
         readFieldsInfo(buffer, resolver, classSpec.entireClassName, numFields);
-    if (!isStruct && !classFields.isEmpty()) {
-      throw new DeserializationException("Non-struct TypeDef cannot carry field metadata");
-    }
     if (buffer.remaining() != 0) {
       throw new DeserializationException("Invalid TypeDef metadata size");
     }

@@ -1046,6 +1046,22 @@ public abstract class TypeResolver {
     return buildMetaSharedTypeInfo(typeDef, cls);
   }
 
+  private TypeInfo buildMetaSharedTypeInfo(TypeDef typeDef, Class<?> cls) {
+    TypeInfo typeInfo;
+    if (!typeDef.isStructSchemaKind()
+        && !UnknownClass.class.isAssignableFrom(TypeUtils.getComponentIfArray(cls))) {
+      typeInfo = getTypeInfo(cls);
+    } else if (ClassResolver.useReplaceResolveSerializer(cls)) {
+      // For classes with writeReplace/readResolve, use their natural serializer
+      // (ReplaceResolveSerializer) instead of CompatibleSerializer
+      typeInfo = getTypeInfo(cls);
+    } else {
+      typeInfo = getMetaSharedTypeInfo(typeDef, cls);
+    }
+    extRegistry.typeInfoByTypeDefId.put(typeDef.getId(), typeInfo);
+    return typeInfo;
+  }
+
   private TypeInfo buildCheckedMetaSharedTypeInfo(TypeDef typeDef) {
     Class<?> cls = loadClass(typeDef.getClassSpec());
     // A wire TypeDef may create a compatible serializer; check the class before counting it.
@@ -1063,22 +1079,6 @@ public abstract class TypeResolver {
     return Arrays.equals(remoteTypeDef.getEncoded(), localTypeDef.getEncoded())
         ? localTypeDef
         : null;
-  }
-
-  private TypeInfo buildMetaSharedTypeInfo(TypeDef typeDef, Class<?> cls) {
-    TypeInfo typeInfo;
-    if (!typeDef.isStructSchemaKind()
-        && !UnknownClass.class.isAssignableFrom(TypeUtils.getComponentIfArray(cls))) {
-      typeInfo = getTypeInfo(cls);
-    } else if (ClassResolver.useReplaceResolveSerializer(cls)) {
-      // For classes with writeReplace/readResolve, use their natural serializer
-      // (ReplaceResolveSerializer) instead of CompatibleSerializer
-      typeInfo = getTypeInfo(cls);
-    } else {
-      typeInfo = getMetaSharedTypeInfo(typeDef, cls);
-    }
-    extRegistry.typeInfoByTypeDefId.put(typeDef.getId(), typeInfo);
-    return typeInfo;
   }
 
   // TODO(chaokunyang) if TypeDef is consistent with class in this process,

@@ -20,7 +20,10 @@
 "use strict";
 
 const assert = require("node:assert/strict");
-const test = require("node:test");
+const runTest =
+  typeof globalThis.expect === "function" && typeof globalThis.test === "function"
+    ? globalThis.test
+    : require("node:test").test;
 const { ReadContext } = require("../dist/lib/context");
 const { FieldInfo, TypeMeta } = require("../dist/lib/meta/TypeMeta");
 const { TypeId } = require("../dist/lib/type");
@@ -55,7 +58,7 @@ function readTypeMeta(readContext, typeMeta) {
   return readContext.readTypeMeta();
 }
 
-test("remote schema limit rejects extra versions", () => {
+runTest("remote schema limit rejects extra versions", () => {
   const readContext = context();
   readTypeMeta(readContext, remoteStruct("Shared", "first"));
   assert.throws(
@@ -64,7 +67,7 @@ test("remote schema limit rejects extra versions", () => {
   );
 });
 
-test("remote schema limit keeps unknown structs separate", () => {
+runTest("remote schema limit keeps unknown structs separate", () => {
   const readContext = context();
   assert.equal(
     readTypeMeta(readContext, remoteStruct("UnknownA", "value")).getTypeName(),

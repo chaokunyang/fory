@@ -48,7 +48,7 @@ final class JsonClassCache {
     // Publishing metadata before compiling the writer keeps that recursion cache-owned.
     classes.put(type, classInfo);
     if (codegen != null) {
-      classInfo.setObjectWriter(codegen.compile(classInfo, this));
+      classInfo.setObjectWriters(codegen.compile(classInfo, this));
     }
     return classInfo;
   }

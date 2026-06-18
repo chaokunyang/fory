@@ -44,7 +44,7 @@ final class JsonCodegen {
     codeGenerator = new CodeGenerator(jsonLoader);
   }
 
-  JsonObjectWriter compile(JsonClassInfo classInfo, JsonClassCache classCache) {
+  JsonObjectWriters compile(JsonClassInfo classInfo, JsonClassCache classCache) {
     Class<?> type = classInfo.type();
     if (!canCompile(type)) {
       return null;
@@ -57,14 +57,35 @@ final class JsonCodegen {
     }
     String className = className(type);
     JsonClassInfo[] nestedInfos = nestedInfos(classInfo, classCache);
-    String code = genCode(className, type, properties);
+    JsonUtf8ObjectWriter utf8Writer =
+        (JsonUtf8ObjectWriter)
+            compileWriter(className + "_Utf8", type, properties, nestedInfos, true);
+    if (utf8Writer == null) {
+      return null;
+    }
+    JsonStringObjectWriter stringWriter =
+        (JsonStringObjectWriter)
+            compileWriter(className + "_String", type, properties, nestedInfos, false);
+    if (stringWriter == null) {
+      return null;
+    }
+    return new JsonObjectWriters(stringWriter, utf8Writer);
+  }
+
+  private Object compileWriter(
+      String className,
+      Class<?> type,
+      JsonPropertyInfo[] properties,
+      JsonClassInfo[] nestedInfos,
+      boolean utf8) {
+    String code = genCode(className, type, properties, utf8);
     try {
       CompileUnit unit = new CompileUnit(PACKAGE, className, code, JsonCodegen.class);
       Class<?> writerClass = codeGenerator.compileAndLoad(unit, state -> state.lock.lock());
       Constructor<?> constructor =
           writerClass.getDeclaredConstructor(JsonPropertyInfo[].class, JsonClassInfo[].class);
       constructor.setAccessible(true);
-      return (JsonObjectWriter) constructor.newInstance(properties, nestedInfos);
+      return constructor.newInstance(properties, nestedInfos);
     } catch (Throwable ignored) {
       return null;
     }
@@ -141,11 +162,16 @@ final class JsonCodegen {
     return "JsonWriter_" + name + "_" + uniqueId;
   }
 
-  private String genCode(String className, Class<?> type, JsonPropertyInfo[] properties) {
+  private String genCode(
+      String className, Class<?> type, JsonPropertyInfo[] properties, boolean utf8) {
     String typeName = sourceName(type);
     StringBuilder code = new StringBuilder(4096);
     code.append("package ").append(PACKAGE).append(";\n");
-    code.append("final class ").append(className).append(" implements JsonObjectWriter {\n");
+    code.append("final class ")
+        .append(className)
+        .append(" implements ")
+        .append(utf8 ? "JsonUtf8ObjectWriter" : "JsonStringObjectWriter")
+        .append(" {\n");
     boolean[] useInfo = new boolean[properties.length];
     boolean[] useClassInfo = new boolean[properties.length];
     boolean[] usePrefix = new boolean[properties.length];
@@ -161,10 +187,13 @@ final class JsonCodegen {
         code.append("  private final JsonClassInfo c").append(i).append(";\n");
       }
       if (usePrefix[i]) {
-        code.append("  private final byte[] u").append(i).append(";\n");
-        code.append("  private final byte[] uc").append(i).append(";\n");
-        code.append("  private final char[] s").append(i).append(";\n");
-        code.append("  private final char[] sc").append(i).append(";\n");
+        if (utf8) {
+          code.append("  private final byte[] u").append(i).append(";\n");
+          code.append("  private final byte[] uc").append(i).append(";\n");
+        } else {
+          code.append("  private final char[] s").append(i).append(";\n");
+          code.append("  private final char[] sc").append(i).append(";\n");
+        }
       }
     }
     code.append("  ")
@@ -178,31 +207,33 @@ final class JsonCodegen {
         code.append("    this.c").append(i).append(" = classInfos[").append(i).append("];\n");
       }
       if (usePrefix[i]) {
-        code.append("    this.u")
-            .append(i)
-            .append(" = properties[")
-            .append(i)
-            .append("].utf8NamePrefix();\n");
-        code.append("    this.uc")
-            .append(i)
-            .append(" = properties[")
-            .append(i)
-            .append("].utf8CommaNamePrefix();\n");
-        code.append("    this.s")
-            .append(i)
-            .append(" = properties[")
-            .append(i)
-            .append("].stringNamePrefix();\n");
-        code.append("    this.sc")
-            .append(i)
-            .append(" = properties[")
-            .append(i)
-            .append("].stringCommaNamePrefix();\n");
+        if (utf8) {
+          code.append("    this.u")
+              .append(i)
+              .append(" = properties[")
+              .append(i)
+              .append("].utf8NamePrefix();\n");
+          code.append("    this.uc")
+              .append(i)
+              .append(" = properties[")
+              .append(i)
+              .append("].utf8CommaNamePrefix();\n");
+        } else {
+          code.append("    this.s")
+              .append(i)
+              .append(" = properties[")
+              .append(i)
+              .append("].stringNamePrefix();\n");
+          code.append("    this.sc")
+              .append(i)
+              .append(" = properties[")
+              .append(i)
+              .append("].stringCommaNamePrefix();\n");
+        }
       }
     }
     code.append("  }\n");
-    writeMethod(code, type, typeName, properties, true);
-    writeMethod(code, type, typeName, properties, false);
+    writeMethod(code, type, typeName, properties, utf8);
     code.append("}\n");
     return code.toString();
   }

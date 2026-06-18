@@ -39,7 +39,8 @@ final class JsonClassInfo {
   private final JsonPropertyInfo[] readProperties;
   private final JsonPropertyTable readTable;
   private final ObjectInstantiator<?> instantiator;
-  private JsonObjectWriter objectWriter;
+  private JsonStringObjectWriter stringWriter;
+  private JsonUtf8ObjectWriter utf8Writer;
 
   private JsonClassInfo(
       Class<?> type,
@@ -138,12 +139,16 @@ final class JsonClassInfo {
     return instantiator.newInstance();
   }
 
-  void setObjectWriter(JsonObjectWriter objectWriter) {
-    this.objectWriter = objectWriter;
+  void setObjectWriters(JsonObjectWriters objectWriters) {
+    if (objectWriters == null) {
+      return;
+    }
+    stringWriter = objectWriters.stringWriter();
+    utf8Writer = objectWriters.utf8Writer();
   }
 
   boolean hasObjectWriter() {
-    return objectWriter != null;
+    return stringWriter != null && utf8Writer != null;
   }
 
   public void write(JsonWriter writer, Object value, JsonClassCache classCache) {
@@ -175,7 +180,7 @@ final class JsonClassInfo {
   }
 
   public void write(StringJsonWriter writer, Object value, JsonClassCache classCache) {
-    JsonObjectWriter generatedWriter = objectWriter;
+    JsonStringObjectWriter generatedWriter = stringWriter;
     if (generatedWriter != null) {
       generatedWriter.writeString(writer, value, classCache);
       return;
@@ -208,7 +213,7 @@ final class JsonClassInfo {
   }
 
   public void writeUtf8(Utf8JsonWriter writer, Object value, JsonClassCache classCache) {
-    JsonObjectWriter generatedWriter = objectWriter;
+    JsonUtf8ObjectWriter generatedWriter = utf8Writer;
     if (generatedWriter != null) {
       generatedWriter.writeUtf8(writer, value, classCache);
       return;

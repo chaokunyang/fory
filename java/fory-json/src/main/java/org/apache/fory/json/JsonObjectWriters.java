@@ -19,8 +19,20 @@
 
 package org.apache.fory.json;
 
-interface JsonObjectWriter {
-  void writeString(StringJsonWriter writer, Object value, JsonClassCache classCache);
+final class JsonObjectWriters {
+  private final JsonStringObjectWriter stringWriter;
+  private final JsonUtf8ObjectWriter utf8Writer;
 
-  void writeUtf8(Utf8JsonWriter writer, Object value, JsonClassCache classCache);
+  JsonObjectWriters(JsonStringObjectWriter stringWriter, JsonUtf8ObjectWriter utf8Writer) {
+    this.stringWriter = stringWriter;
+    this.utf8Writer = utf8Writer;
+  }
+
+  JsonStringObjectWriter stringWriter() {
+    return stringWriter;
+  }
+
+  JsonUtf8ObjectWriter utf8Writer() {
+    return utf8Writer;
+  }
 }

@@ -116,6 +116,10 @@ public class ForyJsonTest {
     public long total = 2;
   }
 
+  public static final class TokenGroup {
+    public List<TokenValues> values;
+  }
+
   public static final class CharValue {
     public char value;
   }
@@ -128,6 +132,15 @@ public class ForyJsonTest {
   public static final class RecursiveChild {
     public String name = "child";
     public RecursiveParent parent;
+  }
+
+  private static TokenValues tokenValue(int count, String name, List<String> tags, long total) {
+    TokenValues value = new TokenValues();
+    value.count = count;
+    value.name = name;
+    value.tags = tags;
+    value.total = total;
+    return value;
   }
 
   @Test
@@ -241,6 +254,38 @@ public class ForyJsonTest {
     String second = "{\"count\":7,\"name\":\"beta\",\"tags\":[\"z\",\"x\"],\"total\":9}";
     assertEquals(json.toJson(value), second);
     assertEquals(new String(json.toJsonBytes(value), StandardCharsets.UTF_8), second);
+    assertEquals(json.hasGeneratedWriter(TokenValues.class), true);
+  }
+
+  @Test
+  public void writeGeneratedTokenLanes() {
+    ForyJson json = ForyJson.builder().build();
+    TokenGroup group = new TokenGroup();
+    group.values =
+        Arrays.asList(
+            tokenValue(1, "alpha", Arrays.asList("x", "y"), 2),
+            tokenValue(3, "beta", Arrays.asList("z", "x"), 4),
+            tokenValue(5, "gamma", Arrays.asList("y", "z"), 6));
+    String first =
+        "{\"values\":[{\"count\":1,\"name\":\"alpha\",\"tags\":[\"x\",\"y\"],\"total\":2},"
+            + "{\"count\":3,\"name\":\"beta\",\"tags\":[\"z\",\"x\"],\"total\":4},"
+            + "{\"count\":5,\"name\":\"gamma\",\"tags\":[\"y\",\"z\"],\"total\":6}]}";
+    assertEquals(json.toJson(group), first);
+    assertEquals(new String(json.toJsonBytes(group), StandardCharsets.UTF_8), first);
+    assertEquals(json.toJson(group), first);
+    assertEquals(new String(json.toJsonBytes(group), StandardCharsets.UTF_8), first);
+    TokenValues middle = group.values.get(1);
+    middle.count = 7;
+    middle.name = "delta";
+    middle.tags = Arrays.asList("q", "x");
+    middle.total = 8;
+    String second =
+        "{\"values\":[{\"count\":1,\"name\":\"alpha\",\"tags\":[\"x\",\"y\"],\"total\":2},"
+            + "{\"count\":7,\"name\":\"delta\",\"tags\":[\"q\",\"x\"],\"total\":8},"
+            + "{\"count\":5,\"name\":\"gamma\",\"tags\":[\"y\",\"z\"],\"total\":6}]}";
+    assertEquals(json.toJson(group), second);
+    assertEquals(new String(json.toJsonBytes(group), StandardCharsets.UTF_8), second);
+    assertEquals(json.hasGeneratedWriter(TokenGroup.class), true);
     assertEquals(json.hasGeneratedWriter(TokenValues.class), true);
   }
 

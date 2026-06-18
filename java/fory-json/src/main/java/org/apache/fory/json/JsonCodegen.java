@@ -146,46 +146,98 @@ final class JsonCodegen {
     StringBuilder code = new StringBuilder(4096);
     code.append("package ").append(PACKAGE).append(";\n");
     code.append("final class ").append(className).append(" implements JsonObjectWriter {\n");
+    boolean[] useInfo = new boolean[properties.length];
+    boolean[] useClassInfo = new boolean[properties.length];
+    boolean[] usePrefix = new boolean[properties.length];
     for (int i = 0; i < properties.length; i++) {
-      code.append("  private final JsonPropertyInfo p").append(i).append(";\n");
-      code.append("  private final JsonClassInfo c").append(i).append(";\n");
-      code.append("  private final byte[] u").append(i).append(";\n");
-      code.append("  private final byte[] uc").append(i).append(";\n");
-      code.append("  private final char[] s").append(i).append(";\n");
-      code.append("  private final char[] sc").append(i).append(";\n");
+      JsonPropertyInfo property = properties[i];
+      useInfo[i] = usesPropertyInfo(property);
+      useClassInfo[i] = usesClassInfo(property);
+      usePrefix[i] = usesPrefix(property);
+      if (useInfo[i]) {
+        code.append("  private final JsonPropertyInfo p").append(i).append(";\n");
+      }
+      if (useClassInfo[i]) {
+        code.append("  private final JsonClassInfo c").append(i).append(";\n");
+      }
+      if (usePrefix[i]) {
+        code.append("  private final byte[] u").append(i).append(";\n");
+        code.append("  private final byte[] uc").append(i).append(";\n");
+        code.append("  private final char[] s").append(i).append(";\n");
+        code.append("  private final char[] sc").append(i).append(";\n");
+      }
     }
     code.append("  ")
         .append(className)
         .append("(JsonPropertyInfo[] properties, JsonClassInfo[] classInfos) {\n");
     for (int i = 0; i < properties.length; i++) {
-      code.append("    this.p").append(i).append(" = properties[").append(i).append("];\n");
-      code.append("    this.c").append(i).append(" = classInfos[").append(i).append("];\n");
-      code.append("    this.u")
-          .append(i)
-          .append(" = properties[")
-          .append(i)
-          .append("].utf8NamePrefix();\n");
-      code.append("    this.uc")
-          .append(i)
-          .append(" = properties[")
-          .append(i)
-          .append("].utf8CommaNamePrefix();\n");
-      code.append("    this.s")
-          .append(i)
-          .append(" = properties[")
-          .append(i)
-          .append("].stringNamePrefix();\n");
-      code.append("    this.sc")
-          .append(i)
-          .append(" = properties[")
-          .append(i)
-          .append("].stringCommaNamePrefix();\n");
+      if (useInfo[i]) {
+        code.append("    this.p").append(i).append(" = properties[").append(i).append("];\n");
+      }
+      if (useClassInfo[i]) {
+        code.append("    this.c").append(i).append(" = classInfos[").append(i).append("];\n");
+      }
+      if (usePrefix[i]) {
+        code.append("    this.u")
+            .append(i)
+            .append(" = properties[")
+            .append(i)
+            .append("].utf8NamePrefix();\n");
+        code.append("    this.uc")
+            .append(i)
+            .append(" = properties[")
+            .append(i)
+            .append("].utf8CommaNamePrefix();\n");
+        code.append("    this.s")
+            .append(i)
+            .append(" = properties[")
+            .append(i)
+            .append("].stringNamePrefix();\n");
+        code.append("    this.sc")
+            .append(i)
+            .append(" = properties[")
+            .append(i)
+            .append("].stringCommaNamePrefix();\n");
+      }
     }
     code.append("  }\n");
     writeMethod(code, type, typeName, properties, true);
     writeMethod(code, type, typeName, properties, false);
     code.append("}\n");
     return code.toString();
+  }
+
+  private boolean usesPrefix(JsonPropertyInfo property) {
+    JsonPropertyKind kind = property.writeKind();
+    return kind != JsonPropertyKind.BOOLEAN && kind != JsonPropertyKind.ENUM
+        || writeNullFields && !property.writeRawType().isPrimitive();
+  }
+
+  private static boolean usesPropertyInfo(JsonPropertyInfo property) {
+    switch (property.writeKind()) {
+      case BOOLEAN:
+      case ENUM:
+      case ARRAY:
+      case MAP:
+        return true;
+      case COLLECTION:
+        return property.writeElementRawType() != String.class;
+      case OBJECT:
+        return property.writeRawType() != Object.class;
+      default:
+        return false;
+    }
+  }
+
+  private static boolean usesClassInfo(JsonPropertyInfo property) {
+    switch (property.writeKind()) {
+      case COLLECTION:
+        return isPojo(property.writeElementRawType());
+      case OBJECT:
+        return property.writeRawType() != Object.class;
+      default:
+        return false;
+    }
   }
 
   private void writeMethod(

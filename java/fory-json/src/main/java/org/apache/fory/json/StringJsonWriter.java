@@ -20,13 +20,21 @@
 package org.apache.fory.json;
 
 import java.util.Arrays;
+import org.apache.fory.memory.LittleEndian;
+import org.apache.fory.util.StringLayout;
 
 final class StringJsonWriter extends JsonWriter {
   private static final char[] MIN_INT_CHARS = "-2147483648".toCharArray();
   private static final char[] MIN_LONG_CHARS = "-9223372036854775808".toCharArray();
+  private static final long HIGH_BITS = 0x8080808080808080L;
+  private static final long ASCII_CONTROL_OFFSET = 0x6060606060606060L;
+  private static final long ONE_BYTES = 0x0101010101010101L;
+  private static final long QUOTE_BYTES_COMPLEMENT = ~0x2222222222222222L;
+  private static final long BACKSLASH_BYTES_COMPLEMENT = ~0x5C5C5C5C5C5C5C5CL;
   private static final char[] DIGIT_HUNDREDS = new char[1000];
   private static final char[] DIGIT_TENS = new char[1000];
   private static final char[] DIGIT_ONES = new char[1000];
+  private static final boolean STRING_BYTES_BACKED = StringLayout.isBytesBacked();
 
   static {
     for (int i = 0; i < 1000; i++) {
@@ -270,6 +278,9 @@ final class StringJsonWriter extends JsonWriter {
   }
 
   private void writeStringNoEnsure(String value) {
+    if (STRING_BYTES_BACKED && writeBytesBackedStringNoEnsure(value)) {
+      return;
+    }
     int length = value.length();
     char[] chars = buffer;
     int pos = position;
@@ -319,6 +330,113 @@ final class StringJsonWriter extends JsonWriter {
     }
     chars[pos++] = '"';
     position = pos;
+  }
+
+  private boolean writeBytesBackedStringNoEnsure(String value) {
+    byte[] bytes = StringLayout.bytes(value);
+    byte coder = StringLayout.coder(value);
+    if (coder == StringLayout.LATIN1) {
+      writeLatin1StringNoEnsure(bytes);
+      return true;
+    } else if (coder == StringLayout.UTF16) {
+      writeUtf16StringNoEnsure(bytes);
+      return true;
+    }
+    return false;
+  }
+
+  private void writeLatin1StringNoEnsure(byte[] value) {
+    int length = value.length;
+    char[] chars = buffer;
+    int pos = position;
+    chars[pos++] = '"';
+    int i = 0;
+    int upperBound = length & ~7;
+    for (; i < upperBound; i += 8) {
+      long word = LittleEndian.getInt64(value, i);
+      if (!isJsonAsciiWord(word)) {
+        break;
+      }
+      JsonCharArrays.putInt64(chars, pos, expandLatin1(word));
+      JsonCharArrays.putInt64(chars, pos + 4, expandLatin1(word >>> 32));
+      pos += 8;
+    }
+    while (i < length) {
+      char ch = (char) (value[i] & 0xff);
+      if (isJsonChar(ch)) {
+        chars[pos++] = ch;
+        i++;
+      } else {
+        position = pos;
+        writeLatin1StringSlow(value, i, length);
+        return;
+      }
+    }
+    chars[pos++] = '"';
+    position = pos;
+  }
+
+  private void writeUtf16StringNoEnsure(byte[] value) {
+    int charLength = value.length >> 1;
+    char[] chars = buffer;
+    int pos = position;
+    chars[pos++] = '"';
+    int i = 0;
+    int upperBound = charLength & ~3;
+    for (; i < upperBound; i += 4) {
+      long word = LittleEndian.getInt64(value, i << 1);
+      char c0 = (char) word;
+      char c1 = (char) (word >>> 16);
+      char c2 = (char) (word >>> 32);
+      char c3 = (char) (word >>> 48);
+      if (!isJsonChar(c0) || !isJsonChar(c1) || !isJsonChar(c2) || !isJsonChar(c3)) {
+        break;
+      }
+      JsonCharArrays.putInt64(chars, pos, word);
+      pos += 4;
+    }
+    while (i < charLength) {
+      char ch = StringLayout.utf16Char(value, i << 1);
+      if (isJsonChar(ch)) {
+        chars[pos++] = ch;
+        i++;
+      } else {
+        position = pos;
+        writeUtf16StringSlow(value, i, charLength);
+        return;
+      }
+    }
+    chars[pos++] = '"';
+    position = pos;
+  }
+
+  private void writeLatin1StringSlow(byte[] value, int index, int length) {
+    for (int i = index; i < length; i++) {
+      writeEscapedChar((char) (value[i] & 0xff));
+    }
+    writeCharRaw('"');
+  }
+
+  private void writeUtf16StringSlow(byte[] value, int index, int length) {
+    for (int i = index; i < length; i++) {
+      char ch = StringLayout.utf16Char(value, i << 1);
+      if (Character.isHighSurrogate(ch)) {
+        if (i + 1 >= length) {
+          throw new ForyJsonException("Unpaired high surrogate in string");
+        }
+        char low = StringLayout.utf16Char(value, (++i) << 1);
+        if (!Character.isLowSurrogate(low)) {
+          throw new ForyJsonException("Unpaired high surrogate in string");
+        }
+        writeCharRaw(ch);
+        writeCharRaw(low);
+      } else if (Character.isLowSurrogate(ch)) {
+        throw new ForyJsonException("Unpaired low surrogate in string");
+      } else {
+        writeEscapedChar(ch);
+      }
+    }
+    writeCharRaw('"');
   }
 
   private void writeUnicodeEscape(char ch) {
@@ -383,6 +501,19 @@ final class StringJsonWriter extends JsonWriter {
 
   private static boolean isJsonChar(char ch) {
     return ch > 0x1F && ch != '"' && ch != '\\' && (ch & 0xF800) != 0xD800;
+  }
+
+  private static boolean isJsonAsciiWord(long word) {
+    return ((word + ASCII_CONTROL_OFFSET) & HIGH_BITS) == HIGH_BITS
+        && (((word ^ QUOTE_BYTES_COMPLEMENT) + ONE_BYTES) & HIGH_BITS) == HIGH_BITS
+        && (((word ^ BACKSLASH_BYTES_COMPLEMENT) + ONE_BYTES) & HIGH_BITS) == HIGH_BITS;
+  }
+
+  private static long expandLatin1(long word) {
+    return (word & 0xFFL)
+        | ((word & 0xFF00L) << 8)
+        | ((word & 0xFF0000L) << 16)
+        | ((word & 0xFF000000L) << 24);
   }
 
   private void writePositiveInt(int value) {

@@ -24,6 +24,7 @@ import java.lang.reflect.Field;
 import java.lang.reflect.Member;
 import java.lang.reflect.Method;
 import java.util.Collection;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.apache.fory.codegen.CodeGenerator;
@@ -565,18 +566,15 @@ final class JsonCodegen {
       boolean utf8,
       String indent) {
     Class<?> elementType = property.writeElementRawType();
+    boolean declaredList = List.class.isAssignableFrom(property.writeRawType());
     if (elementType == String.class) {
       code.append(indent)
           .append("writer.writeArrayStart();\n")
           .append(indent)
           .append("int elementIndex = 0;\n")
-          .append(indent)
-          .append("if (")
-          .append(value)
-          .append(" instanceof java.util.List && ")
-          .append(value)
-          .append(" instanceof java.util.RandomAccess) {\n")
-          .append(indent)
+          .append(indent);
+      writeListBranchStart(code, value, declaredList);
+      code.append(indent)
           .append("  java.util.List<?> list = (java.util.List<?>) ")
           .append(value)
           .append(";\n")
@@ -636,13 +634,9 @@ final class JsonCodegen {
           .append("JsonClassInfo elementInfo = c")
           .append(prop.substring(1))
           .append(";\n")
-          .append(indent)
-          .append("if (")
-          .append(value)
-          .append(" instanceof java.util.List && ")
-          .append(value)
-          .append(" instanceof java.util.RandomAccess) {\n")
-          .append(indent)
+          .append(indent);
+      writeListBranchStart(code, value, declaredList);
+      code.append(indent)
           .append("  java.util.List<?> list = (java.util.List<?>) ")
           .append(value)
           .append(";\n")
@@ -723,6 +717,17 @@ final class JsonCodegen {
         .append(", ")
         .append(prop)
         .append(".writeElementType(), classCache);\n");
+  }
+
+  private static void writeListBranchStart(StringBuilder code, String value, boolean declaredList) {
+    code.append("if (").append(value);
+    if (declaredList) {
+      code.append(" instanceof java.util.RandomAccess) {\n");
+    } else {
+      code.append(" instanceof java.util.List && ")
+          .append(value)
+          .append(" instanceof java.util.RandomAccess) {\n");
+    }
   }
 
   private void writeObject(

@@ -109,6 +109,8 @@ cdef class Config:
         meta_share: Enables shared type metadata on the resolver/type-info path.
         scoped_meta_share_enabled: Enables per-operation meta-share state.
         max_depth: Maximum allowed nesting depth during deserialization.
+        max_type_fields: Maximum accepted field count in one received struct TypeDef.
+        max_type_meta_bytes: Maximum accepted body size in one received TypeDef.
         max_schema_versions_per_type: Maximum accepted remote schema versions for one struct type.
         max_average_schema_versions_per_type: Average remote schema versions allowed across accepted struct types.
         field_nullable: Treats struct/dataclass fields as nullable by default.
@@ -123,6 +125,8 @@ cdef class Config:
     cdef public bint meta_share
     cdef public bint scoped_meta_share_enabled
     cdef public int32_t max_depth
+    cdef public int32_t max_type_fields
+    cdef public int32_t max_type_meta_bytes
     cdef public int32_t max_schema_versions_per_type
     cdef public int32_t max_average_schema_versions_per_type
     cdef public bint field_nullable
@@ -139,6 +143,8 @@ cdef class Config:
         meta_share,
         scoped_meta_share_enabled,
         max_depth,
+        max_type_fields,
+        max_type_meta_bytes,
         max_schema_versions_per_type,
         max_average_schema_versions_per_type,
         field_nullable,
@@ -156,6 +162,8 @@ cdef class Config:
             meta_share: Enable shared type metadata on resolver/type-info paths.
             scoped_meta_share_enabled: Enable per-operation meta-share state.
             max_depth: Maximum allowed read depth before failing deserialization.
+            max_type_fields: Maximum accepted field count in one received struct TypeDef.
+            max_type_meta_bytes: Maximum accepted body size in one received TypeDef.
             max_schema_versions_per_type: Maximum accepted remote schema versions for one struct type.
             max_average_schema_versions_per_type: Average remote schema versions allowed across accepted struct types.
             field_nullable: Treat all struct fields as nullable by default.
@@ -169,10 +177,16 @@ cdef class Config:
         self.meta_share = meta_share
         self.scoped_meta_share_enabled = scoped_meta_share_enabled
         self.max_depth = max_depth
+        if max_type_fields <= 0:
+            raise ValueError("max_type_fields must be a positive integer")
+        if max_type_meta_bytes <= 0:
+            raise ValueError("max_type_meta_bytes must be a positive integer")
         if max_schema_versions_per_type <= 0:
             raise ValueError("max_schema_versions_per_type must be a positive integer")
         if max_average_schema_versions_per_type <= 0:
             raise ValueError("max_average_schema_versions_per_type must be a positive integer")
+        self.max_type_fields = max_type_fields
+        self.max_type_meta_bytes = max_type_meta_bytes
         self.max_schema_versions_per_type = max_schema_versions_per_type
         self.max_average_schema_versions_per_type = max_average_schema_versions_per_type
         self.field_nullable = field_nullable
@@ -803,6 +817,8 @@ cdef class Fory:
     cdef public bint compatible
     cdef public bint field_nullable
     cdef public int32_t max_depth
+    cdef public int32_t max_type_fields
+    cdef public int32_t max_type_meta_bytes
     cdef public int32_t max_schema_versions_per_type
     cdef public int32_t max_average_schema_versions_per_type
     cdef public object policy
@@ -819,6 +835,8 @@ cdef class Fory:
         strict=True,
         compatible=None,
         max_depth=50,
+        max_type_fields=512,
+        max_type_meta_bytes=4096,
         max_schema_versions_per_type=10,
         max_average_schema_versions_per_type=3,
         policy=None,
@@ -833,8 +851,10 @@ cdef class Fory:
             ref: Enable reference tracking for shared and circular references.
             strict: Require registered types on dynamic resolution paths.
             compatible: Enable compatible mode and meta-share type exchange. Defaults to
-                compatible mode.
+            compatible mode.
             max_depth: Maximum allowed read depth before rejecting payloads.
+            max_type_fields: Maximum accepted field count in one received struct TypeDef.
+            max_type_meta_bytes: Maximum accepted body size in one received TypeDef.
             max_schema_versions_per_type: Maximum accepted remote schema versions for one struct type.
             max_average_schema_versions_per_type: Average remote schema versions allowed across accepted struct types.
             policy: Optional deserialization policy implementation.
@@ -854,6 +874,8 @@ cdef class Fory:
         self.compatible = compatible
         self.field_nullable = field_nullable
         self.max_depth = max_depth
+        self.max_type_fields = max_type_fields
+        self.max_type_meta_bytes = max_type_meta_bytes
         self.max_schema_versions_per_type = max_schema_versions_per_type
         self.max_average_schema_versions_per_type = max_average_schema_versions_per_type
         self.config = Config(
@@ -864,6 +886,8 @@ cdef class Fory:
             meta_share=compatible,
             scoped_meta_share_enabled=compatible,
             max_depth=max_depth,
+            max_type_fields=max_type_fields,
+            max_type_meta_bytes=max_type_meta_bytes,
             max_schema_versions_per_type=max_schema_versions_per_type,
             max_average_schema_versions_per_type=max_average_schema_versions_per_type,
             field_nullable=field_nullable,

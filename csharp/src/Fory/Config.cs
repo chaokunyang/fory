@@ -28,6 +28,8 @@ public sealed class Config
         bool compatible,
         bool checkStructVersion,
         int maxDepth,
+        int maxTypeFields,
+        int maxTypeMetaBytes,
         int maxSchemaVersionsPerType,
         int maxAverageSchemaVersionsPerType)
     {
@@ -35,6 +37,8 @@ public sealed class Config
         Compatible = compatible;
         CheckStructVersion = checkStructVersion;
         MaxDepth = maxDepth;
+        MaxTypeFields = maxTypeFields;
+        MaxTypeMetaBytes = maxTypeMetaBytes;
         MaxSchemaVersionsPerType = maxSchemaVersionsPerType;
         MaxAverageSchemaVersionsPerType = maxAverageSchemaVersionsPerType;
     }
@@ -60,6 +64,16 @@ public sealed class Config
     public int MaxDepth { get; }
 
     /// <summary>
+    /// Gets the maximum accepted field count in one received struct TypeMeta.
+    /// </summary>
+    public int MaxTypeFields { get; }
+
+    /// <summary>
+    /// Gets the maximum accepted body size in one received TypeMeta.
+    /// </summary>
+    public int MaxTypeMetaBytes { get; }
+
+    /// <summary>
     /// Gets the maximum accepted remote schema versions for one struct type.
     /// </summary>
     public int MaxSchemaVersionsPerType { get; }
@@ -79,6 +93,8 @@ public sealed class ForyBuilder
     private bool? _compatible;
     private bool _checkStructVersion;
     private int _maxDepth = 20;
+    private int _maxTypeFields = 512;
+    private int _maxTypeMetaBytes = 4096;
     private int _maxSchemaVersionsPerType = 10;
     private int _maxAverageSchemaVersionsPerType = 3;
 
@@ -133,6 +149,34 @@ public sealed class ForyBuilder
     }
 
     /// <summary>
+    /// Sets the maximum accepted field count in one received struct TypeMeta.
+    /// </summary>
+    public ForyBuilder MaxTypeFields(int value)
+    {
+        if (value <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(value), "MaxTypeFields must be greater than 0.");
+        }
+
+        _maxTypeFields = value;
+        return this;
+    }
+
+    /// <summary>
+    /// Sets the maximum accepted body size in one received TypeMeta.
+    /// </summary>
+    public ForyBuilder MaxTypeMetaBytes(int value)
+    {
+        if (value <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(value), "MaxTypeMetaBytes must be greater than 0.");
+        }
+
+        _maxTypeMetaBytes = value;
+        return this;
+    }
+
+    /// <summary>
     /// Sets the maximum accepted remote schema versions for one struct type.
     /// </summary>
     public ForyBuilder MaxSchemaVersionsPerType(int value)
@@ -170,6 +214,8 @@ public sealed class ForyBuilder
             compatible: compatible,
             checkStructVersion: compatible ? false : _checkStructVersion,
             maxDepth: _maxDepth,
+            maxTypeFields: _maxTypeFields,
+            maxTypeMetaBytes: _maxTypeMetaBytes,
             maxSchemaVersionsPerType: _maxSchemaVersionsPerType,
             maxAverageSchemaVersionsPerType: _maxAverageSchemaVersionsPerType);
     }

@@ -27,35 +27,41 @@ identity, field schema, and compatibility settings.
 
 Compatible mode may receive remote struct metadata (`TypeDef` or `TypeMeta`) when a reader does not
 already know the metadata header. Fory limits how many distinct remote schema versions can be
-accepted before building schema-specific read state:
+accepted before building schema-specific read state, and also limits the size of each received
+metadata body:
 
 - `maxSchemaVersionsPerType`: maximum accepted remote schema versions for one logical struct type.
   The default is `10`.
 - `maxAverageSchemaVersionsPerType`: average accepted remote schema versions across all accepted
   remote struct types. The default is `3`; the effective global floor is `8192` schemas.
+- `maxTypeFields`: maximum fields declared by one received struct metadata body. The default is
+  `512`.
+- `maxTypeMetaBytes`: maximum encoded metadata body bytes for one received TypeDef or TypeMeta body,
+  excluding the 8-byte header and any extended-size varint. The default is `4096`.
 
-These limits are checked only on metadata cache misses after the metadata body and hash have been
-validated. They do not change wire format, class registration, dynamic loading, unknown-type, or
-schema-evolution semantics. Failed or incompatible metadata is not counted: a schema version is
+These limits are checked only on the cold metadata parse and cache-miss paths. They do not change
+wire format, class registration, dynamic loading, unknown-type, or schema-evolution semantics. Cache
+hits and generated field readers remain hot paths and do not add extra validation for these limits.
+Failed or incompatible metadata is not counted against schema-version limits: a schema version is
 accepted only after the schema-specific read state is successfully built and its owning metadata
 cache can publish it. A remote schema that exactly matches the local registered schema is accepted
 without consuming the remote-schema limit, so normal local traffic can still be read even after
 other remote schemas have filled the limit.
 
-Raise these values only when a trusted peer legitimately sends many schema versions for the same
-logical type or for many different struct types.
+Raise these values only when the data is not malicious and a trusted peer sends larger metadata or
+many schema versions.
 
-| Language              | Per-type option                | Average option                         |
-| --------------------- | ------------------------------ | -------------------------------------- |
-| Java                  | `withMaxSchemaVersionsPerType` | `withMaxAverageSchemaVersionsPerType`  |
-| Python                | `max_schema_versions_per_type` | `max_average_schema_versions_per_type` |
-| JavaScript/TypeScript | `maxSchemaVersionsPerType`     | `maxAverageSchemaVersionsPerType`      |
-| C++                   | `max_schema_versions_per_type` | `max_average_schema_versions_per_type` |
-| Go                    | `WithMaxSchemaVersionsPerType` | `WithMaxAverageSchemaVersionsPerType`  |
-| Rust                  | `max_schema_versions_per_type` | `max_average_schema_versions_per_type` |
-| C#                    | `MaxSchemaVersionsPerType`     | `MaxAverageSchemaVersionsPerType`      |
-| Swift                 | `maxSchemaVersionsPerType`     | `maxAverageSchemaVersionsPerType`      |
-| Dart                  | `maxSchemaVersionsPerType`     | `maxAverageSchemaVersionsPerType`      |
+| Language              | Field-count option  | Metadata-bytes option  | Per-type option                | Average option                         |
+| --------------------- | ------------------- | ---------------------- | ------------------------------ | -------------------------------------- |
+| Java                  | `withMaxTypeFields` | `withMaxTypeMetaBytes` | `withMaxSchemaVersionsPerType` | `withMaxAverageSchemaVersionsPerType`  |
+| Python                | `max_type_fields`   | `max_type_meta_bytes`  | `max_schema_versions_per_type` | `max_average_schema_versions_per_type` |
+| JavaScript/TypeScript | `maxTypeFields`     | `maxTypeMetaBytes`     | `maxSchemaVersionsPerType`     | `maxAverageSchemaVersionsPerType`      |
+| C++                   | `max_type_fields`   | `max_type_meta_bytes`  | `max_schema_versions_per_type` | `max_average_schema_versions_per_type` |
+| Go                    | `WithMaxTypeFields` | `WithMaxTypeMetaBytes` | `WithMaxSchemaVersionsPerType` | `WithMaxAverageSchemaVersionsPerType`  |
+| Rust                  | `max_type_fields`   | `max_type_meta_bytes`  | `max_schema_versions_per_type` | `max_average_schema_versions_per_type` |
+| C#                    | `MaxTypeFields`     | `MaxTypeMetaBytes`     | `MaxSchemaVersionsPerType`     | `MaxAverageSchemaVersionsPerType`      |
+| Swift                 | `maxTypeFields`     | `maxTypeMetaBytes`     | `maxSchemaVersionsPerType`     | `maxAverageSchemaVersionsPerType`      |
+| Dart                  | `maxTypeFields`     | `maxTypeMetaBytes`     | `maxSchemaVersionsPerType`     | `maxAverageSchemaVersionsPerType`      |
 
 ## Serialize Built-in Types
 

@@ -50,6 +50,8 @@ constexpr int8_t NUM_HASH_BITS = 52;
 constexpr uint32_t TYPE_META_HASH_SHIFT = 64 - NUM_HASH_BITS;
 constexpr uint64_t TYPE_META_HASH_BITS_MASK = ~uint64_t{0}
                                               << TYPE_META_HASH_SHIFT;
+constexpr uint32_t kDefaultMaxTypeFields = 512;
+constexpr uint32_t kDefaultMaxTypeMetaBytes = 4096;
 
 // ============================================================================
 // FieldType Implementation
@@ -450,6 +452,30 @@ read_type_meta_size(Buffer &buffer, uint64_t header, size_t *header_size) {
   return static_cast<uint32_t>(meta_size);
 }
 
+inline Result<void, Error>
+check_type_meta_body_size(uint32_t meta_size, uint32_t max_type_meta_bytes) {
+  if (FORY_PREDICT_FALSE(meta_size > max_type_meta_bytes)) {
+    return Unexpected(Error::invalid_data(
+        "Type metadata body size " + std::to_string(meta_size) +
+        " exceeds max_type_meta_bytes " + std::to_string(max_type_meta_bytes) +
+        ". The data may be malicious. If the data is not malicious, please "
+        "increase max_type_meta_bytes."));
+  }
+  return Result<void, Error>();
+}
+
+inline Result<void, Error> check_type_meta_fields(size_t num_fields,
+                                                  uint32_t max_type_fields) {
+  if (FORY_PREDICT_FALSE(num_fields > max_type_fields)) {
+    return Unexpected(Error::invalid_data(
+        "Type metadata field count " + std::to_string(num_fields) +
+        " exceeds max_type_fields " + std::to_string(max_type_fields) +
+        ". The data may be malicious. If the data is not malicious, please "
+        "increase max_type_fields."));
+  }
+  return Result<void, Error>();
+}
+
 inline Result<void, Error> validate_type_meta_hash(Buffer &buffer,
                                                    uint32_t body_start,
                                                    uint32_t meta_size,
@@ -635,6 +661,8 @@ TypeMeta::from_bytes(Buffer &buffer, const TypeMeta *local_type_info) {
   uint64_t header_bits = static_cast<uint64_t>(header);
   FORY_RETURN_IF_ERROR(validate_type_meta_header(header_bits));
   FORY_TRY(meta_size, read_type_meta_size(buffer, header_bits, &header_size));
+  FORY_RETURN_IF_ERROR(
+      check_type_meta_body_size(meta_size, kDefaultMaxTypeMetaBytes));
   int64_t meta_hash = static_cast<int64_t>(header_bits >> TYPE_META_HASH_SHIFT);
   uint32_t body_start = static_cast<uint32_t>(start_pos + header_size);
   if (FORY_PREDICT_FALSE(!buffer.ensure_readable(meta_size, error))) {
@@ -671,6 +699,8 @@ TypeMeta::from_bytes(Buffer &buffer, const TypeMeta *local_type_info) {
       }
       num_fields += extra;
     }
+    FORY_RETURN_IF_ERROR(
+        check_type_meta_fields(num_fields, kDefaultMaxTypeFields));
   } else {
     if (FORY_PREDICT_FALSE((meta_header & NON_STRUCT_RESERVED_BITS_MASK) !=
                            0)) {
@@ -752,10 +782,14 @@ TypeMeta::from_bytes(Buffer &buffer, const TypeMeta *local_type_info) {
 }
 
 Result<std::unique_ptr<TypeMeta>, Error>
-TypeMeta::from_bytes_with_header(Buffer &buffer, int64_t header) {
+TypeMeta::from_bytes_with_header(Buffer &buffer, int64_t header,
+                                 uint32_t max_type_fields,
+                                 uint32_t max_type_meta_bytes) {
   uint64_t header_bits = static_cast<uint64_t>(header);
   FORY_RETURN_IF_ERROR(validate_type_meta_header(header_bits));
   FORY_TRY(meta_size, read_type_meta_size(buffer, header_bits, nullptr));
+  FORY_RETURN_IF_ERROR(
+      check_type_meta_body_size(meta_size, max_type_meta_bytes));
   int64_t meta_hash = static_cast<int64_t>(header_bits >> TYPE_META_HASH_SHIFT);
 
   uint32_t start_pos = buffer.reader_index();
@@ -795,6 +829,7 @@ TypeMeta::from_bytes_with_header(Buffer &buffer, int64_t header) {
       }
       num_fields += extra;
     }
+    FORY_RETURN_IF_ERROR(check_type_meta_fields(num_fields, max_type_fields));
   } else {
     if (FORY_PREDICT_FALSE((meta_header & NON_STRUCT_RESERVED_BITS_MASK) !=
                            0)) {
@@ -1770,13 +1805,11 @@ TypeResolver::build_final_type_resolver() {
 
     // Update the TypeInfo in place
     partial_ptr->type_def = std::move(type_def);
-
-    // Parse the serialized TypeMeta back to create unique_ptr<TypeMeta>
-    Buffer buffer(partial_ptr->type_def.data(),
-                  static_cast<uint32_t>(partial_ptr->type_def.size()), false);
-    buffer.writer_index(static_cast<uint32_t>(partial_ptr->type_def.size()));
-    FORY_TRY(parsed_meta, TypeMeta::from_bytes(buffer, nullptr));
-    partial_ptr->type_meta = std::move(parsed_meta);
+    uint64_t header_bits = 0;
+    std::memcpy(&header_bits, partial_ptr->type_def.data(),
+                sizeof(header_bits));
+    meta.hash = static_cast<int64_t>(header_bits >> TYPE_META_HASH_SHIFT);
+    partial_ptr->type_meta = std::make_unique<TypeMeta>(std::move(meta));
   }
 
   // Clear partial_type_infos in the final resolver since they're all completed

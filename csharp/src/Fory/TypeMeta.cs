@@ -394,6 +394,9 @@ public sealed class TypeMetaFieldInfo : IEquatable<TypeMetaFieldInfo>
 
 public sealed class TypeMeta : IEquatable<TypeMeta>
 {
+    private const int DefaultMaxTypeFields = 512;
+    private const int DefaultMaxTypeMetaBytes = 4096;
+
     private bool _hasAssignedFieldIds;
 
     public TypeMeta(
@@ -486,14 +489,20 @@ public sealed class TypeMeta : IEquatable<TypeMeta>
 
     public static TypeMeta Decode(byte[] bytes)
     {
-        return Decode(new ByteReader(bytes));
+        return Decode(new ByteReader(bytes), DefaultMaxTypeFields, DefaultMaxTypeMetaBytes);
     }
 
     public static TypeMeta Decode(ByteReader reader)
     {
+        return Decode(reader, DefaultMaxTypeFields, DefaultMaxTypeMetaBytes);
+    }
+
+    internal static TypeMeta Decode(ByteReader reader, int maxTypeFields, int maxTypeMetaBytes)
+    {
         ulong header = reader.ReadUInt64();
         ValidateGlobalHeader(header);
         int metaSize = ReadBodySize(reader, header);
+        CheckBodySize(metaSize, maxTypeMetaBytes);
         byte[] encodedBody = reader.ReadBytes(metaSize);
         ByteReader bodyReader = new(encodedBody);
         byte metaHeader = bodyReader.ReadUInt8();
@@ -516,6 +525,7 @@ public sealed class TypeMeta : IEquatable<TypeMeta>
             {
                 numFields += (int)bodyReader.ReadVarUInt32();
             }
+            CheckFieldCount(numFields, maxTypeFields);
         }
         else
         {
@@ -570,6 +580,15 @@ public sealed class TypeMeta : IEquatable<TypeMeta>
             header >> TypeMetaConstants.TypeMetaHashShift);
     }
 
+    internal static void CheckEncodedBodySize(byte[] encoded, int maxTypeMetaBytes)
+    {
+        ByteReader reader = new(encoded);
+        ulong header = reader.ReadUInt64();
+        ValidateGlobalHeader(header);
+        int metaSize = ReadBodySize(reader, header);
+        CheckBodySize(metaSize, maxTypeMetaBytes);
+    }
+
     internal static void ValidateAndSkipBody(ByteReader reader, ulong header)
     {
         ValidateGlobalHeader(header);
@@ -606,6 +625,24 @@ public sealed class TypeMeta : IEquatable<TypeMeta>
         }
 
         return metaSize;
+    }
+
+    private static void CheckBodySize(int metaSize, int maxTypeMetaBytes)
+    {
+        if (metaSize > maxTypeMetaBytes)
+        {
+            throw new InvalidDataException(
+                $"Type metadata body size {metaSize} exceeds MaxTypeMetaBytes {maxTypeMetaBytes}. The data may be malicious. If the data is not malicious, please increase MaxTypeMetaBytes.");
+        }
+    }
+
+    private static void CheckFieldCount(int numFields, int maxTypeFields)
+    {
+        if (numFields > maxTypeFields)
+        {
+            throw new InvalidDataException(
+                $"Type metadata field count {numFields} exceeds MaxTypeFields {maxTypeFields}. The data may be malicious. If the data is not malicious, please increase MaxTypeFields.");
+        }
     }
 
     internal static void SkipBody(ByteReader reader, ulong header)

@@ -43,6 +43,8 @@ const fory = new Fory({
   ref: true,
   compatible: true,
   maxDepth: 100,
+  maxTypeFields: 512,
+  maxTypeMetaBytes: 4096,
   maxSchemaVersionsPerType: 10,
   maxAverageSchemaVersionsPerType: 3,
   hps,
@@ -54,6 +56,8 @@ const fory = new Fory({
 | `ref`                             | `false` | Enable reference tracking for shared or circular object graphs                        |
 | `compatible`                      | `true`  | Allow field additions/removals without breaking existing messages                     |
 | `maxDepth`                        | `50`    | Maximum nesting depth. Must be `>= 2`. Increase for deeply nested structures          |
+| `maxTypeFields`                   | `512`   | Maximum fields accepted in one received remote struct metadata body                   |
+| `maxTypeMetaBytes`                | `4096`  | Maximum encoded body bytes accepted for one received TypeMeta body                    |
 | `maxSchemaVersionsPerType`        | `10`    | Maximum accepted remote struct schema versions for one logical type                   |
 | `maxAverageSchemaVersionsPerType` | `3`     | Average accepted remote struct schema versions across accepted remote struct types    |
 | `useSliceString`                  | `false` | Optional string-reading optimization for Node.js. Leave at default unless benchmarked |
@@ -106,9 +110,11 @@ Security-related configuration:
 
 - Register only the expected schemas before deserializing untrusted payloads.
 - Set `maxDepth` for the maximum nesting depth your service accepts.
+- Keep `maxTypeFields` and `maxTypeMetaBytes` at their defaults unless the data
+  is not malicious and a trusted peer sends larger remote metadata.
 - Keep `maxSchemaVersionsPerType` and
-  `maxAverageSchemaVersionsPerType` at their defaults unless a trusted peer
-  legitimately sends many remote schema versions.
+  `maxAverageSchemaVersionsPerType` at their defaults unless the data is not
+  malicious and a trusted peer sends many remote schema versions.
 - Prefer explicit `Type.struct(...)` schemas over `Type.any()` for untrusted input.
 - Pass `hps` only from the official package version you deploy with Fory.
 

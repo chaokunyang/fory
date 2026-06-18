@@ -359,6 +359,8 @@ class TypeResolver:
         "_user_type_id_to_type_info",
         "_used_user_type_ids",
         "_meta_shared_type_info",
+        "max_type_fields",
+        "max_type_meta_bytes",
         "max_schema_versions_per_type",
         "max_average_schema_versions_per_type",
         "_remote_schema_versions_by_type",
@@ -392,6 +394,8 @@ class TypeResolver:
         self.namespace_encoder = MetaStringEncoder(".", "_")
         self.namespace_decoder = MetaStringDecoder(".", "_")
         self._meta_shared_type_info = {}
+        self.max_type_fields = config.max_type_fields
+        self.max_type_meta_bytes = config.max_type_meta_bytes
         self.max_schema_versions_per_type = config.max_schema_versions_per_type
         self.max_average_schema_versions_per_type = config.max_average_schema_versions_per_type
         self._remote_schema_versions_by_type = {}

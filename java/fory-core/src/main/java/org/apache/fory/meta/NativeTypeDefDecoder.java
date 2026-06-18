@@ -46,8 +46,6 @@ import org.apache.fory.util.Preconditions;
  * href="https://fory.apache.org/docs/specification/fory_java_serialization_spec">...</a>
  */
 class NativeTypeDefDecoder {
-  private static final int MAX_TYPE_DEF_SIZE_BYTES = 16 * 1024 * 1024;
-
   static Tuple2<byte[], byte[]> decodeTypeDefBuf(
       MemoryBuffer inputBuffer, TypeResolver resolver, long id) {
     if ((id & TypeDef.RESERVED_META_FLAGS) != 0) {
@@ -58,12 +56,13 @@ class NativeTypeDefDecoder {
     int size = (int) (id & META_SIZE_MASKS);
     if (size == META_SIZE_MASKS) {
       int moreSize = inputBuffer.readVarUInt32Small14();
+      if (moreSize < 0 || moreSize > Integer.MAX_VALUE - size) {
+        throw new DeserializationException("Invalid TypeDef metadata size " + moreSize);
+      }
       encoded.writeVarUInt32(moreSize);
       size += moreSize;
     }
-    if (size > MAX_TYPE_DEF_SIZE_BYTES) {
-      throw new DeserializationException("TypeDef metadata size exceeds the maximum size");
-    }
+    checkTypeMetaBodySize(size, resolver.getConfig().maxTypeMetaBytes());
     byte[] encodedTypeDef = inputBuffer.readBytes(size);
     encoded.writeBytes(encodedTypeDef);
     if ((id & COMPRESS_META_FLAG) != 0) {
@@ -71,9 +70,33 @@ class NativeTypeDefDecoder {
           resolver
               .getConfig()
               .getMetaCompressor()
-              .decompress(encodedTypeDef, 0, size, MAX_TYPE_DEF_SIZE_BYTES);
+              .decompress(encodedTypeDef, 0, size, resolver.getConfig().maxTypeMetaBytes());
     }
     return Tuple2.of(encodedTypeDef, encoded.getBytes(0, encoded.writerIndex()));
+  }
+
+  static void checkTypeMetaBodySize(int size, int maxTypeMetaBytes) {
+    if (size > maxTypeMetaBytes) {
+      throw new DeserializationException(
+          "Type metadata body size "
+              + size
+              + " exceeds maxTypeMetaBytes "
+              + maxTypeMetaBytes
+              + ". The data may be malicious. If the data is not malicious, please increase "
+              + "maxTypeMetaBytes.");
+    }
+  }
+
+  static void checkTypeMetaFieldCount(long fieldCount, int maxTypeFields) {
+    if (fieldCount > maxTypeFields) {
+      throw new DeserializationException(
+          "Type metadata field count "
+              + fieldCount
+              + " exceeds maxTypeFields "
+              + maxTypeFields
+              + ". The data may be malicious. If the data is not malicious, please increase "
+              + "maxTypeFields.");
+    }
   }
 
   public static TypeDef decodeTypeDef(ClassResolver resolver, MemoryBuffer buffer, long id) {
@@ -95,6 +118,8 @@ class NativeTypeDefDecoder {
     ClassSpec classSpec = null;
     Class<?> rootClass = null;
     boolean rootClassLayerRegistered = false;
+    int maxTypeFields = resolver.getConfig().maxTypeFields();
+    long totalFields = 0;
     for (int i = 0; i < numClasses; i++) {
       // | num fields + register flag | header + package name | header + class name
       // | header + type id + field name | next field info | ... |
@@ -104,6 +129,8 @@ class NativeTypeDefDecoder {
       }
       boolean isRegistered = (currentClassHeader & 0b1) != 0;
       int numFields = currentClassHeader >>> 1;
+      totalFields += numFields;
+      checkTypeMetaFieldCount(totalFields, maxTypeFields);
       Class<?> currentClass = null;
       if (isRegistered) {
         int typeId = typeDefBuf.readUInt8();

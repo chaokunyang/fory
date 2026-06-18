@@ -1078,6 +1078,52 @@ TEST(SerializationTest, TypeMetaHeaderUses52BitMetadataHash) {
             parsed.value()->get_hash());
 }
 
+TEST(SerializationTest, TypeMetaRejectsMaxTypeFields) {
+  std::vector<FieldInfo> fields;
+  fields.emplace_back(
+      "first", FieldType(static_cast<uint32_t>(TypeId::VARINT32), false));
+  fields.emplace_back(
+      "second", FieldType(static_cast<uint32_t>(TypeId::VARINT32), false));
+  TypeMeta meta = TypeMeta::from_fields(static_cast<uint32_t>(TypeId::STRUCT),
+                                        "", "S", false, 1, std::move(fields));
+  auto bytes_result = meta.to_bytes();
+  ASSERT_TRUE(bytes_result.ok())
+      << "TypeMeta serialization failed: " << bytes_result.error().to_string();
+  std::vector<uint8_t> bytes = bytes_result.value();
+  Buffer buffer(bytes);
+  Error error;
+  int64_t header = 0;
+  buffer.read_bytes(&header, sizeof(header), error);
+  ASSERT_TRUE(error.ok()) << error.to_string();
+
+  auto parsed = TypeMeta::from_bytes_with_header(buffer, header, 1, 4096);
+  ASSERT_FALSE(parsed.ok());
+  EXPECT_NE(parsed.error().to_string().find("max_type_fields"),
+            std::string::npos);
+}
+
+TEST(SerializationTest, TypeMetaRejectsMaxTypeMetaBytes) {
+  std::vector<FieldInfo> fields;
+  fields.emplace_back(
+      "value", FieldType(static_cast<uint32_t>(TypeId::VARINT32), false));
+  TypeMeta meta = TypeMeta::from_fields(static_cast<uint32_t>(TypeId::STRUCT),
+                                        "", "S", false, 1, std::move(fields));
+  auto bytes_result = meta.to_bytes();
+  ASSERT_TRUE(bytes_result.ok())
+      << "TypeMeta serialization failed: " << bytes_result.error().to_string();
+  std::vector<uint8_t> bytes = bytes_result.value();
+  Buffer buffer(bytes);
+  Error error;
+  int64_t header = 0;
+  buffer.read_bytes(&header, sizeof(header), error);
+  ASSERT_TRUE(error.ok()) << error.to_string();
+
+  auto parsed = TypeMeta::from_bytes_with_header(buffer, header, 512, 1);
+  ASSERT_FALSE(parsed.ok());
+  EXPECT_NE(parsed.error().to_string().find("max_type_meta_bytes"),
+            std::string::npos);
+}
+
 TEST(SerializationTest, TypeMetaRejectsBodyOnlyHeaderHash) {
   TypeMeta meta =
       TypeMeta::from_fields(static_cast<uint32_t>(TypeId::STRUCT), "", "S",

@@ -188,6 +188,8 @@ impl MetaReaderResolver {
             reader,
             type_resolver,
             meta_header,
+            config.max_type_fields(),
+            config.max_type_meta_bytes(),
         )?);
         let remote_type_def = reader.sub_slice(type_def_start, reader.get_cursor())?;
 
@@ -338,6 +340,75 @@ mod tests {
     use crate::meta::{FieldInfo, FieldType, MetaString};
     use crate::TypeId;
 
+    fn read_type_def(
+        resolver: &mut MetaReaderResolver,
+        config: &Config,
+        type_def: &[u8],
+    ) -> Result<Rc<TypeInfo>, Error> {
+        let mut bytes = vec![];
+        let mut writer = Writer::from_buffer(&mut bytes);
+        writer.write_var_u32(0);
+        writer.write_bytes(type_def);
+        let mut reader = Reader::new(&bytes);
+        resolver.read_type_meta(&mut reader, &TypeResolver::default(), config)
+    }
+
+    #[test]
+    fn type_meta_field_limit_rejects_large_struct() {
+        let meta = TypeMeta::new(
+            TypeId::STRUCT as u32,
+            9001,
+            MetaString::get_empty().clone(),
+            MetaString::get_empty().clone(),
+            false,
+            vec![
+                FieldInfo::new("a", FieldType::new(crate::type_id::INT32, false, vec![])),
+                FieldInfo::new("b", FieldType::new(crate::type_id::INT32, false, vec![])),
+            ],
+        )
+        .unwrap();
+        let config = Config {
+            max_type_fields: 1,
+            ..Default::default()
+        };
+        let err = read_type_def(
+            &mut MetaReaderResolver::default(),
+            &config,
+            meta.get_bytes(),
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(err.contains("max_type_fields"));
+    }
+
+    #[test]
+    fn type_meta_body_limit_rejects_large_metadata() {
+        let meta = TypeMeta::new(
+            TypeId::STRUCT as u32,
+            9001,
+            MetaString::get_empty().clone(),
+            MetaString::get_empty().clone(),
+            false,
+            vec![FieldInfo::new(
+                "a",
+                FieldType::new(crate::type_id::INT32, false, vec![]),
+            )],
+        )
+        .unwrap();
+        let config = Config {
+            max_type_meta_bytes: 1,
+            ..Default::default()
+        };
+        let err = read_type_def(
+            &mut MetaReaderResolver::default(),
+            &config,
+            meta.get_bytes(),
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(err.contains("max_type_meta_bytes"));
+    }
+
     #[test]
     fn schema_limit_tracks_unknown_struct_types_separately() {
         fn type_def(user_type_id: u32, field_name: &str) -> Vec<u8> {
@@ -355,19 +426,6 @@ mod tests {
             .unwrap()
             .get_bytes()
             .to_vec()
-        }
-
-        fn read_type_def(
-            resolver: &mut MetaReaderResolver,
-            config: &Config,
-            type_def: &[u8],
-        ) -> Result<Rc<TypeInfo>, Error> {
-            let mut bytes = vec![];
-            let mut writer = Writer::from_buffer(&mut bytes);
-            writer.write_var_u32(0);
-            writer.write_bytes(type_def);
-            let mut reader = Reader::new(&bytes);
-            resolver.read_type_meta(&mut reader, &TypeResolver::default(), config)
         }
 
         let config = Config {

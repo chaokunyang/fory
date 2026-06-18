@@ -291,6 +291,8 @@ export interface Config {
   ref: boolean;
   useSliceString: boolean;
   maxDepth?: number;
+  maxTypeFields: number;
+  maxTypeMetaBytes: number;
   maxSchemaVersionsPerType: number;
   maxAverageSchemaVersionsPerType: number;
   hooks: {

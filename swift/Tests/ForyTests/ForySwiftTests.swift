@@ -357,6 +357,8 @@ func namedInitializerBuildsConfig() {
   #expect(defaultConfig.config.compatible == true)
   #expect(defaultConfig.config.checkClassVersion == false)
   #expect(defaultConfig.config.maxDepth == 5)
+  #expect(defaultConfig.config.maxTypeFields == 512)
+  #expect(defaultConfig.config.maxTypeMetaBytes == 4096)
   #expect(defaultConfig.config.maxSchemaVersionsPerType == 10)
   #expect(defaultConfig.config.maxAverageSchemaVersionsPerType == 3)
 
@@ -364,6 +366,8 @@ func namedInitializerBuildsConfig() {
     ref: true,
     compatible: true,
     maxDepth: 7,
+    maxTypeFields: 31,
+    maxTypeMetaBytes: 1234,
     maxSchemaVersionsPerType: 12,
     maxAverageSchemaVersionsPerType: 4
   )
@@ -371,6 +375,8 @@ func namedInitializerBuildsConfig() {
   #expect(explicitConfig.config.compatible == true)
   #expect(explicitConfig.config.checkClassVersion == false)
   #expect(explicitConfig.config.maxDepth == 7)
+  #expect(explicitConfig.config.maxTypeFields == 31)
+  #expect(explicitConfig.config.maxTypeMetaBytes == 1234)
   #expect(explicitConfig.config.maxSchemaVersionsPerType == 12)
   #expect(explicitConfig.config.maxAverageSchemaVersionsPerType == 4)
 
@@ -379,6 +385,8 @@ func namedInitializerBuildsConfig() {
       trackRef: false,
       compatible: true,
       maxDepth: 9,
+      maxTypeFields: 41,
+      maxTypeMetaBytes: 2048,
       maxSchemaVersionsPerType: 14,
       maxAverageSchemaVersionsPerType: 5
     ))
@@ -386,6 +394,8 @@ func namedInitializerBuildsConfig() {
   #expect(configInit.config.compatible == true)
   #expect(configInit.config.checkClassVersion == false)
   #expect(configInit.config.maxDepth == 9)
+  #expect(configInit.config.maxTypeFields == 41)
+  #expect(configInit.config.maxTypeMetaBytes == 2048)
   #expect(configInit.config.maxSchemaVersionsPerType == 14)
   #expect(configInit.config.maxAverageSchemaVersionsPerType == 5)
 
@@ -491,6 +501,49 @@ func primitiveArrayTypeIDs() throws {
   let uint8Data = try fory.serialize([UInt8(1), 2, 3])
   let uint8Bytes = [UInt8](uint8Data)
   #expect(UInt32(uint8Bytes[2]) == TypeId.list.rawValue)
+}
+
+@Test
+func typeMetaFieldLimitRejectsLargeStruct() throws {
+  let fieldType = TypeMeta.FieldType(typeID: TypeId.int32.rawValue, nullable: false)
+  let meta = try TypeMeta(
+    typeID: TypeId.structType.rawValue,
+    userTypeID: 901,
+    namespace: .empty(specialChar1: ".", specialChar2: "_"),
+    typeName: .empty(specialChar1: "$", specialChar2: "_"),
+    registerByName: false,
+    fields: [
+      TypeMeta.FieldInfo(fieldID: nil, fieldName: "first", fieldType: fieldType),
+      TypeMeta.FieldInfo(fieldID: nil, fieldName: "second", fieldType: fieldType)
+    ]
+  )
+  let encoded = try meta.encode()
+
+  #expect(throws: (any Error).self) {
+    _ = try TypeMeta.decode(encoded, maxTypeFields: 1)
+  }
+}
+
+@Test
+func typeMetaBodyLimitRejectsLargeMetadata() throws {
+  let meta = try TypeMeta(
+    typeID: TypeId.structType.rawValue,
+    userTypeID: 901,
+    namespace: .empty(specialChar1: ".", specialChar2: "_"),
+    typeName: .empty(specialChar1: "$", specialChar2: "_"),
+    registerByName: false,
+    fields: [
+      TypeMeta.FieldInfo(
+        fieldID: nil,
+        fieldName: "value",
+        fieldType: TypeMeta.FieldType(typeID: TypeId.int32.rawValue, nullable: false))
+    ]
+  )
+  let encoded = try meta.encode()
+
+  #expect(throws: (any Error).self) {
+    _ = try TypeMeta.decode(encoded, maxTypeMetaBytes: 1)
+  }
 }
 
 @Test

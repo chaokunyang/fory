@@ -1016,6 +1016,11 @@ func decodeTypeDef(fory *Fory, buffer *ByteBuffer, header int64) (*TypeDef, erro
 		extraMetaSize = int(extra)
 		metaSize += extraMetaSize
 	}
+	if metaSize > fory.config.MaxTypeMetaBytes {
+		return nil, fmt.Errorf(
+			"type metadata body size %d exceeds MaxTypeMetaBytes %d. The data may be malicious. If the data is not malicious, please increase MaxTypeMetaBytes",
+			metaSize, fory.config.MaxTypeMetaBytes)
+	}
 	// Store the encoded bytes for the TypeDef (including meta header and metadata)
 	encodedMeta := buffer.ReadBinary(metaSize, &bufErr)
 	if bufErr.HasError() {
@@ -1044,8 +1049,13 @@ func decodeTypeDef(fory *Fory, buffer *ByteBuffer, header int64) (*TypeDef, erro
 		if metaErr.HasError() {
 			return nil, metaErr.TakeError()
 		}
-		if fieldCount > fory.config.MaxTypeFields || fieldCount > metaBuffer.remaining() {
-			return nil, fmt.Errorf("field count exceeds maximum allowed limit or available buffer size")
+		if fieldCount > fory.config.MaxTypeFields {
+			return nil, fmt.Errorf(
+				"type metadata field count %d exceeds MaxTypeFields %d. The data may be malicious. If the data is not malicious, please increase MaxTypeFields",
+				fieldCount, fory.config.MaxTypeFields)
+		}
+		if fieldCount > metaBuffer.remaining() {
+			return nil, fmt.Errorf("type metadata field count exceeds available buffer size")
 		}
 		if registeredByName {
 			if (metaHeaderByte & CompatibleTypeDefFlag) != 0 {

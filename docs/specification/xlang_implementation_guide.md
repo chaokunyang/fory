@@ -403,6 +403,17 @@ are readable through the byte owner. Field-list allocation should happen after
 that body readability check and should not use a separate small initial-capacity
 cap as a security rule.
 
+Implementations should also bound received struct metadata on the cold metadata
+parse path. `maxTypeMetaBytes` limits one encoded TypeDef or TypeMeta body,
+excluding the 8-byte header and any extended-size varint, and is checked before
+copying or decompressing that body. `maxTypeFields` limits the number of fields
+declared by one received struct metadata body and is checked before reserving or
+allocating the field list. These limits are runtime resource controls; they do
+not change wire encoding, type identity, dynamic loading, unknown-type behavior,
+deserialization policy, or schema-evolution semantics. Metadata cache hits and
+generated field readers remain hot paths and must not add work for these
+limits.
+
 Skip paths do not need to materialize skipped values. Existing byte-skip
 operations should consume any available buffered prefix first, then skip or drop
 remaining stream bytes in bounded steps.

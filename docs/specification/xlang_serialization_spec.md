@@ -743,6 +743,12 @@ Meta header byte for non-struct TypeDefs:
 - Bits 4-6: reserved (must be zero).
 - Bits 0-3: kind code.
 
+Readers may reject a received TypeDef that exceeds runtime resource limits such
+as maximum metadata body bytes or maximum fields in one struct TypeDef. These
+limits are receive-side resource controls and do not change TypeDef wire
+encoding, type identity, dynamic loading, unknown-type handling, registration
+policy, or schema-evolution semantics.
+
 Non-struct kind codes:
 
 - `0`: `ENUM`

@@ -22,6 +22,8 @@ public struct Config {
   public let compatible: Bool
   public let checkClassVersion: Bool
   public let maxDepth: Int
+  public let maxTypeFields: Int
+  public let maxTypeMetaBytes: Int
   public let maxSchemaVersionsPerType: Int
   public let maxAverageSchemaVersionsPerType: Int
 
@@ -30,9 +32,13 @@ public struct Config {
     compatible: Bool? = nil,
     checkClassVersion: Bool? = nil,
     maxDepth: Int = 5,
+    maxTypeFields: Int = 512,
+    maxTypeMetaBytes: Int = 4096,
     maxSchemaVersionsPerType: Int = 10,
     maxAverageSchemaVersionsPerType: Int = 3
   ) {
+    precondition(maxTypeFields > 0, "maxTypeFields must be positive")
+    precondition(maxTypeMetaBytes > 0, "maxTypeMetaBytes must be positive")
     precondition(maxSchemaVersionsPerType > 0, "maxSchemaVersionsPerType must be positive")
     precondition(
       maxAverageSchemaVersionsPerType > 0,
@@ -43,6 +49,8 @@ public struct Config {
     self.compatible = effectiveCompatible
     self.checkClassVersion = effectiveCheckClassVersion
     self.maxDepth = maxDepth
+    self.maxTypeFields = maxTypeFields
+    self.maxTypeMetaBytes = maxTypeMetaBytes
     self.maxSchemaVersionsPerType = maxSchemaVersionsPerType
     self.maxAverageSchemaVersionsPerType = maxAverageSchemaVersionsPerType
   }
@@ -64,6 +72,8 @@ public final class Fory {
     compatible: Bool? = nil,
     checkClassVersion: Bool? = nil,
     maxDepth: Int = 5,
+    maxTypeFields: Int = 512,
+    maxTypeMetaBytes: Int = 4096,
     maxSchemaVersionsPerType: Int = 10,
     maxAverageSchemaVersionsPerType: Int = 3
   ) {
@@ -73,6 +83,8 @@ public final class Fory {
         compatible: compatible,
         checkClassVersion: checkClassVersion,
         maxDepth: maxDepth,
+        maxTypeFields: maxTypeFields,
+        maxTypeMetaBytes: maxTypeMetaBytes,
         maxSchemaVersionsPerType: maxSchemaVersionsPerType,
         maxAverageSchemaVersionsPerType: maxAverageSchemaVersionsPerType
       ))
@@ -100,7 +112,9 @@ public final class Fory {
       trackRef: self.config.trackRef,
       compatible: self.config.compatible,
       checkClassVersion: self.config.checkClassVersion,
-      maxDepth: self.config.maxDepth
+      maxDepth: self.config.maxDepth,
+      maxTypeFields: self.config.maxTypeFields,
+      maxTypeMetaBytes: self.config.maxTypeMetaBytes
     )
   }
 

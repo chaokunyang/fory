@@ -20,6 +20,7 @@
 package org.apache.fory.meta;
 
 import static org.apache.fory.meta.Encoders.fieldNameEncodings;
+import static org.apache.fory.meta.NativeTypeDefDecoder.checkTypeMetaFieldCount;
 import static org.apache.fory.meta.NativeTypeDefDecoder.decodeTypeDefBuf;
 import static org.apache.fory.meta.NativeTypeDefDecoder.readPkgName;
 import static org.apache.fory.meta.NativeTypeDefDecoder.readTypeName;
@@ -82,6 +83,7 @@ class TypeDefDecoder {
         }
         numFields += extraFields;
       }
+      checkTypeMetaFieldCount(numFields, resolver.getConfig().maxTypeFields());
       if (named) {
         String namespace = readPkgName(buffer);
         String typeName = readTypeName(buffer);

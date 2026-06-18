@@ -70,6 +70,7 @@ type Config struct {
 	IsXlang                         bool
 	Compatible                      bool // Schema evolution compatibility mode
 	MaxTypeFields                   int
+	MaxTypeMetaBytes                int
 	MaxSchemaVersionsPerType        int
 	MaxAverageSchemaVersionsPerType int
 }
@@ -80,7 +81,8 @@ func defaultConfig() Config {
 		TrackRef:                        false, // Match Java's default: reference tracking disabled
 		MaxDepth:                        20,
 		IsXlang:                         true,
-		MaxTypeFields:                   10000,
+		MaxTypeFields:                   512,
+		MaxTypeMetaBytes:                4096,
 		MaxSchemaVersionsPerType:        10,
 		MaxAverageSchemaVersionsPerType: 3,
 	}
@@ -125,8 +127,21 @@ func WithCompatible(enabled bool) Option {
 
 // WithMaxTypeFields sets the maximum field count limit for schema definition deserialization
 func WithMaxTypeFields(size int) Option {
+	if size <= 0 {
+		panic("MaxTypeFields must be positive")
+	}
 	return func(f *Fory) {
 		f.config.MaxTypeFields = size
+	}
+}
+
+// WithMaxTypeMetaBytes sets the maximum body size for received type metadata.
+func WithMaxTypeMetaBytes(size int) Option {
+	if size <= 0 {
+		panic("MaxTypeMetaBytes must be positive")
+	}
+	return func(f *Fory) {
+		f.config.MaxTypeMetaBytes = size
 	}
 }
 

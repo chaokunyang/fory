@@ -64,6 +64,8 @@ public class Config implements Serializable {
   private final boolean serializeEnumByName;
   private final int bufferSizeLimitBytes;
   private final int maxDepth;
+  private final int maxTypeFields;
+  private final int maxTypeMetaBytes;
   private final int maxSchemaVersionsPerType;
   private final int maxAverageSchemaVersionsPerType;
   private final float mapRefLoadFactor;
@@ -108,6 +110,8 @@ public class Config implements Serializable {
     serializeEnumByName = builder.serializeEnumByName;
     bufferSizeLimitBytes = builder.bufferSizeLimitBytes;
     maxDepth = builder.maxDepth;
+    maxTypeFields = builder.maxTypeFields;
+    maxTypeMetaBytes = builder.maxTypeMetaBytes;
     maxSchemaVersionsPerType = builder.maxSchemaVersionsPerType;
     maxAverageSchemaVersionsPerType = builder.maxAverageSchemaVersionsPerType;
     mapRefLoadFactor = builder.mapRefLoadFactor;
@@ -296,6 +300,16 @@ public class Config implements Serializable {
     return maxDepth;
   }
 
+  /** Returns the maximum number of fields accepted in one received struct TypeDef. */
+  public int maxTypeFields() {
+    return maxTypeFields;
+  }
+
+  /** Returns the maximum body size accepted for one received TypeDef. */
+  public int maxTypeMetaBytes() {
+    return maxTypeMetaBytes;
+  }
+
   /** Returns the maximum accepted remote schema versions for one struct type. */
   public int maxSchemaVersionsPerType() {
     return maxSchemaVersionsPerType;
@@ -350,6 +364,8 @@ public class Config implements Serializable {
         && deserializeUnknownClass == config.deserializeUnknownClass
         && xlang == config.xlang
         && compatible == config.compatible
+        && maxTypeFields == config.maxTypeFields
+        && maxTypeMetaBytes == config.maxTypeMetaBytes
         && maxSchemaVersionsPerType == config.maxSchemaVersionsPerType
         && maxAverageSchemaVersionsPerType == config.maxAverageSchemaVersionsPerType
         && Objects.equals(defaultJDKStreamSerializerType, config.defaultJDKStreamSerializerType)
@@ -383,6 +399,8 @@ public class Config implements Serializable {
         requireClassRegistration,
         suppressClassRegistrationWarnings,
         registerGuavaTypes,
+        maxTypeFields,
+        maxTypeMetaBytes,
         maxSchemaVersionsPerType,
         maxAverageSchemaVersionsPerType,
         metaShareEnabled,

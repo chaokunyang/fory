@@ -256,7 +256,9 @@ public:
   /// @param buffer Source buffer (positioned after header)
   /// @param header Pre-read 8-byte header
   static Result<std::unique_ptr<TypeMeta>, Error>
-  from_bytes_with_header(Buffer &buffer, int64_t header);
+  from_bytes_with_header(Buffer &buffer, int64_t header,
+                         uint32_t max_type_fields = 512,
+                         uint32_t max_type_meta_bytes = 4096);
 
   /// skip type meta in buffer without parsing
   static Result<void, Error> skip_bytes_for_validated_header(Buffer &buffer,

@@ -95,11 +95,16 @@ limits bound retained schema-specific read state:
 
 ```rust
 let fory = Fory::builder()
+    .max_type_fields(512)
+    .max_type_meta_bytes(4096)
     .max_schema_versions_per_type(10)
     .max_average_schema_versions_per_type(3)
     .build();
 ```
 
+- `max_type_fields` defaults to `512` and limits fields in one received struct metadata body.
+- `max_type_meta_bytes` defaults to `4096` and limits encoded body bytes in one received TypeDef or
+  TypeMeta body, excluding the 8-byte header and any extended-size varint.
 - `max_schema_versions_per_type` defaults to `10` and limits accepted schema versions for one
   logical struct type.
 - `max_average_schema_versions_per_type` defaults to `3` and limits the average across accepted
@@ -144,6 +149,8 @@ let fory = Fory::builder()
 | `compatible(bool)`                            | Enable schema evolution                            | `true`  |
 | `xlang(bool)`                                 | Use xlang mode                                     | `true`  |
 | `max_dyn_depth(u32)`                          | Maximum nesting depth for dynamic types            | `5`     |
+| `max_type_fields(usize)`                      | Max fields in one received struct metadata body    | `512`   |
+| `max_type_meta_bytes(usize)`                  | Max encoded bytes in one received metadata body    | `4096`  |
 | `max_schema_versions_per_type(usize)`         | Max remote schema versions for one struct type     | `10`    |
 | `max_average_schema_versions_per_type(usize)` | Average remote schema versions across struct types | `3`     |
 
@@ -162,8 +169,8 @@ Security-related configuration:
 - Register application structs and trait-object implementations before deserializing untrusted
   payloads.
 - Use `max_dyn_depth(...)` to reject unexpectedly deep dynamic object graphs.
-- Keep the remote schema metadata limits at their defaults unless a trusted peer legitimately sends
-  many schema versions.
+- Keep the remote schema metadata limits at their defaults unless the data is not malicious and a
+  trusted peer sends larger metadata or many schema versions.
 - Prefer concrete typed fields over `dyn Any` or broad trait-object fields for untrusted input.
 
 ## Related Topics

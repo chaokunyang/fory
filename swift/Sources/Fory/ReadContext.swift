@@ -26,6 +26,8 @@ public final class ReadContext {
   public let compatible: Bool
   public let checkClassVersion: Bool
   public let maxDepth: Int
+  public let maxTypeFields: Int
+  public let maxTypeMetaBytes: Int
   public let refReader: RefReader
   private let compatibleTypeDefTypeInfos = ReusableArray<TypeInfo?>(defaultValue: nil, reserve: 2)
   private let metaStrings = ReusableArray<MetaString?>(defaultValue: nil, reserve: 16)
@@ -41,7 +43,9 @@ public final class ReadContext {
     trackRef: Bool,
     compatible: Bool = false,
     checkClassVersion: Bool = true,
-    maxDepth: Int = 5
+    maxDepth: Int = 5,
+    maxTypeFields: Int = 512,
+    maxTypeMetaBytes: Int = 4096
   ) {
     self.buffer = buffer
     self.typeResolver = typeResolver
@@ -49,6 +53,8 @@ public final class ReadContext {
     self.compatible = compatible
     self.checkClassVersion = checkClassVersion
     self.maxDepth = maxDepth
+    self.maxTypeFields = maxTypeFields
+    self.maxTypeMetaBytes = maxTypeMetaBytes
     self.refReader = RefReader()
   }
 
@@ -255,7 +261,10 @@ public final class ReadContext {
           return try validateCompatibleTypeInfo(cached, for: localTypeInfo, wireTypeID: wireTypeID)
         }
         buffer.setCursor(headerStart)
-        let decoded = try TypeMeta.decode(buffer)
+        let decoded = try TypeMeta.decode(
+          buffer,
+          maxTypeFields: maxTypeFields,
+          maxTypeMetaBytes: maxTypeMetaBytes)
         let typeMetaEnd = buffer.getCursor()
         let cachedTypeInfo = try typeResolver.cacheTypeInfo(
           decoded,
@@ -313,7 +322,10 @@ public final class ReadContext {
     }
 
     buffer.setCursor(typeMetaStart)
-    let decoded = try TypeMeta.decode(buffer)
+    let decoded = try TypeMeta.decode(
+      buffer,
+      maxTypeFields: maxTypeFields,
+      maxTypeMetaBytes: maxTypeMetaBytes)
     let typeMetaEnd = buffer.getCursor()
     let cachedTypeInfo = try typeResolver.cacheTypeInfo(
       decoded,
@@ -354,7 +366,10 @@ public final class ReadContext {
           remoteTypeInfo = cached
         } else {
           buffer.setCursor(headerStart)
-          let decoded = try TypeMeta.decode(buffer)
+          let decoded = try TypeMeta.decode(
+            buffer,
+            maxTypeFields: maxTypeFields,
+            maxTypeMetaBytes: maxTypeMetaBytes)
           let typeMetaEnd = buffer.getCursor()
           remoteTypeInfo = try typeResolver.cacheTypeInfo(
             decoded,

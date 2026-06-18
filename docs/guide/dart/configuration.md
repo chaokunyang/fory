@@ -34,6 +34,8 @@ final fory = Fory();
 // customize limits while keeping default compatible mode
 final fory = Fory(
   maxDepth: 512,
+  maxTypeFields: 512,
+  maxTypeMetaBytes: 4096,
   maxSchemaVersionsPerType: 10,
   maxAverageSchemaVersionsPerType: 3,
 );
@@ -91,11 +93,16 @@ limits bound retained schema-specific read state:
 
 ```dart
 final fory = Fory(
+  maxTypeFields: 512,
+  maxTypeMetaBytes: 4096,
   maxSchemaVersionsPerType: 10,
   maxAverageSchemaVersionsPerType: 3,
 );
 ```
 
+- `maxTypeFields` limits fields in one received struct metadata body.
+- `maxTypeMetaBytes` limits encoded body bytes in one received TypeMeta body, excluding the 8-byte
+  header and any extended-size varint.
 - `maxSchemaVersionsPerType` limits accepted schema versions for one logical struct type.
 - `maxAverageSchemaVersionsPerType` limits the average across accepted remote struct types. The
   effective global floor is `8192` schemas.
@@ -107,6 +114,8 @@ final fory = Fory(
 | `compatible`                      | `true`  |
 | `checkStructVersion`              | `false` |
 | `maxDepth`                        | 256     |
+| `maxTypeFields`                   | 512     |
+| `maxTypeMetaBytes`                | 4096    |
 | `maxSchemaVersionsPerType`        | 10      |
 | `maxAverageSchemaVersionsPerType` | 3       |
 
@@ -125,8 +134,8 @@ Security-related configuration:
 - Register only the expected generated models before deserializing untrusted payloads.
 - Use `checkStructVersion: true` with `compatible: false` for intentional same-schema payloads.
 - Set `maxDepth` to reject unexpectedly deep payload shapes.
-- Keep the remote schema metadata limits at their defaults unless a trusted peer legitimately sends
-  many schema versions.
+- Keep the remote schema metadata limits at their defaults unless the data is not malicious and a
+  trusted peer sends larger metadata or many schema versions.
 - Prefer generated schemas and explicit field metadata over broad dynamic fields for untrusted input.
 
 ## Related Topics

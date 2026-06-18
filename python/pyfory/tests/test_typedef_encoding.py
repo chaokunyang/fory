@@ -326,6 +326,26 @@ def test_id_registered_typedef_extended_field_count_header():
 
 
 @pytest.mark.parametrize("xlang", [False, True])
+def test_type_meta_field_limit_rejects_large_struct(xlang):
+    reader = Fory(xlang=xlang, strict=False, compatible=True, max_type_fields=1)
+    remote = make_dataclass("RemoteTooManyFields", [("value", int), ("extra", int)])
+    type_id, typedef = _remote_typedef(xlang, "example.TooManyFields", remote)
+
+    with pytest.raises(ValueError, match="max_type_fields"):
+        _read_remote_typedef(reader, type_id, typedef)
+
+
+@pytest.mark.parametrize("xlang", [False, True])
+def test_type_meta_body_limit_rejects_large_metadata(xlang):
+    reader = Fory(xlang=xlang, strict=False, compatible=True, max_type_meta_bytes=1)
+    remote = make_dataclass("RemoteLargeTypeMeta", [("value", int)])
+    type_id, typedef = _remote_typedef(xlang, "example.LargeTypeMeta", remote)
+
+    with pytest.raises(ValueError, match="max_type_meta_bytes"):
+        _read_remote_typedef(reader, type_id, typedef)
+
+
+@pytest.mark.parametrize("xlang", [False, True])
 def test_remote_schema_limit_rejects_extra_versions(xlang):
     reader = Fory(
         xlang=xlang,

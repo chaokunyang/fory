@@ -48,6 +48,8 @@ public sealed class Fory
             Config.Compatible,
             Config.CheckStructVersion,
             Config.MaxDepth,
+            Config.MaxTypeFields,
+            Config.MaxTypeMetaBytes,
             Config.MaxSchemaVersionsPerType,
             Config.MaxAverageSchemaVersionsPerType);
     }

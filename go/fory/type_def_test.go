@@ -353,6 +353,38 @@ func TestTypeDefFieldCountOOMPanic(t *testing.T) {
 	}
 }
 
+func TestTypeDefRejectsMaxTypeFields(t *testing.T) {
+	writer := NewFory(WithXlang(false), WithCompatible(true))
+	require.NoError(t, writer.RegisterStructByName(SimpleStruct{}, "example.SimpleStruct"))
+	typeDef, err := buildTypeDef(writer, reflect.ValueOf(SimpleStruct{}))
+	require.NoError(t, err)
+	buffer := NewByteBuffer(typeDef.encoded)
+	readErr := &Error{}
+	header := buffer.ReadInt64(readErr)
+	require.NoError(t, readErr.CheckError())
+
+	reader := NewFory(WithXlang(false), WithCompatible(true), WithMaxTypeFields(1))
+	_, err = decodeTypeDef(reader, buffer, header)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "MaxTypeFields")
+}
+
+func TestTypeDefRejectsMaxTypeMetaBytes(t *testing.T) {
+	writer := NewFory(WithXlang(false), WithCompatible(true))
+	require.NoError(t, writer.RegisterStructByName(SimpleStruct{}, "example.SimpleStruct"))
+	typeDef, err := buildTypeDef(writer, reflect.ValueOf(SimpleStruct{}))
+	require.NoError(t, err)
+	buffer := NewByteBuffer(typeDef.encoded)
+	readErr := &Error{}
+	header := buffer.ReadInt64(readErr)
+	require.NoError(t, readErr.CheckError())
+
+	reader := NewFory(WithXlang(false), WithCompatible(true), WithMaxTypeMetaBytes(1))
+	_, err = decodeTypeDef(reader, buffer, header)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "MaxTypeMetaBytes")
+}
+
 func TestTypeDefRejectsReservedGlobalHeaderBits(t *testing.T) {
 	fory := NewFory(WithXlang(false), WithCompatible(false))
 	buffer := NewByteBuffer(nil)

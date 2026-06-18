@@ -53,7 +53,6 @@ from pyfory.meta.metastring import MetaStringDecoder, Encoding
 
 
 MAX_GENERATED_CLASSES = 1000
-MAX_FIELDS_PER_CLASS = 256
 _generated_class_count = 0
 
 
@@ -108,6 +107,12 @@ def decode_typedef(buffer: Buffer, resolver, header=None) -> TypeDef:
         extended_size = buffer.read_var_uint32()
         encoded.write_var_uint32(extended_size)
         meta_size += extended_size
+    max_type_meta_bytes = resolver.max_type_meta_bytes
+    if meta_size > max_type_meta_bytes:
+        raise ValueError(
+            f"Type metadata body size {meta_size} exceeds max_type_meta_bytes {max_type_meta_bytes}. "
+            "The data may be malicious. If the data is not malicious, please increase max_type_meta_bytes."
+        )
 
     # Read meta data
     encoded_meta_data = buffer.read_bytes(meta_size)
@@ -136,8 +141,12 @@ def decode_typedef(buffer: Buffer, resolver, header=None) -> TypeDef:
         num_fields = meta_header & SMALL_NUM_FIELDS_THRESHOLD
         if num_fields == SMALL_NUM_FIELDS_THRESHOLD:
             num_fields += meta_buffer.read_var_uint32()
-        if num_fields > MAX_FIELDS_PER_CLASS:
-            raise ValueError(f"Class has {num_fields} fields, exceeding the maximum allowed {MAX_FIELDS_PER_CLASS} fields.")
+        max_type_fields = resolver.max_type_fields
+        if num_fields > max_type_fields:
+            raise ValueError(
+                f"Type metadata field count {num_fields} exceeds max_type_fields {max_type_fields}. "
+                "The data may be malicious. If the data is not malicious, please increase max_type_fields."
+            )
     else:
         if meta_header & 0b01110000:
             raise ValueError("Invalid TypeDef kind header")

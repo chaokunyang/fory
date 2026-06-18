@@ -40,6 +40,10 @@ pub struct Config {
     /// When enabled, shared references and circular references are tracked
     /// and preserved during serialization/deserialization.
     pub track_ref: bool,
+    /// Maximum accepted field count in one received struct TypeMeta.
+    pub max_type_fields: usize,
+    /// Maximum accepted body size in one received TypeMeta.
+    pub max_type_meta_bytes: usize,
     /// Maximum accepted remote struct schema versions for one logical type.
     pub max_schema_versions_per_type: usize,
     /// Maximum accepted average remote struct schema versions across logical types.
@@ -57,6 +61,8 @@ impl Default for Config {
             max_dyn_depth: 5,
             check_struct_version: false,
             track_ref: false,
+            max_type_fields: 512,
+            max_type_meta_bytes: 4096,
             max_schema_versions_per_type: 10,
             max_average_schema_versions_per_type: 3,
         }
@@ -115,6 +121,18 @@ impl Config {
     #[inline(always)]
     pub fn is_track_ref(&self) -> bool {
         self.track_ref
+    }
+
+    /// Get maximum accepted field count in one received struct TypeMeta.
+    #[inline(always)]
+    pub fn max_type_fields(&self) -> usize {
+        self.max_type_fields
+    }
+
+    /// Get maximum accepted body size in one received TypeMeta.
+    #[inline(always)]
+    pub fn max_type_meta_bytes(&self) -> usize {
+        self.max_type_meta_bytes
     }
 
     /// Get maximum accepted remote struct schema versions for one logical type.

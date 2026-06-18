@@ -1139,6 +1139,13 @@ final class TypeResolver {
   ) {
     header.validateGlobal();
     final metaSize = header.readMetaSize(buffer);
+    if (metaSize > config.maxTypeMetaBytes) {
+      throw StateError(
+        'Type metadata body size $metaSize exceeds maxTypeMetaBytes '
+        '${config.maxTypeMetaBytes}. The data may be malicious. If the data '
+        'is not malicious, please increase maxTypeMetaBytes.',
+      );
+    }
     buffer.checkReadableBytes(metaSize);
     final metaBody = buffer.readBytes(metaSize);
     final typeDefEnd = bufferReaderIndex(buffer);
@@ -1161,6 +1168,13 @@ final class TypeResolver {
       if (fieldCount == typeDefSmallFieldCountThreshold) {
         fieldCount += metaBytes.readVarUint32Small7();
       }
+      if (fieldCount > config.maxTypeFields) {
+        throw StateError(
+          'Type metadata field count $fieldCount exceeds maxTypeFields '
+          '${config.maxTypeFields}. The data may be malicious. If the data '
+          'is not malicious, please increase maxTypeFields.',
+        );
+      }
     } else {
       if ((classHeader & 0x70) != 0) {
         throw StateError('Invalid TypeDef kind header.');
@@ -1175,6 +1189,11 @@ final class TypeResolver {
     int? userTypeId;
     if (!byName) {
       userTypeId = metaBytes.readVarUint32();
+    }
+    if (fieldCount > metaBytes.readableBytes) {
+      throw StateError(
+        'Type metadata field count exceeds available body bytes.',
+      );
     }
     final fields = <FieldInfo>[];
     for (var i = 0; i < fieldCount; i += 1) {

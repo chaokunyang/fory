@@ -30,14 +30,17 @@ const { FieldInfo, TypeMeta } = require("../dist/lib/meta/TypeMeta");
 const { TypeId } = require("../dist/lib/type");
 const { Type } = require("../dist/lib/typeInfo");
 
-function context(typeResolver = {}) {
+function context(typeResolver = {}, config = {}) {
   return new ReadContext(
     typeResolver,
     {
       compatible: true,
+      maxTypeFields: 512,
+      maxTypeMetaBytes: 4096,
       maxAverageSchemaVersionsPerType: 3,
       maxSchemaVersionsPerType: 1,
       useSliceString: false,
+      ...config,
     },
   );
 }
@@ -102,6 +105,31 @@ runTest("remote schema limit rejects extra versions", () => {
   assert.throws(
     () => readTypeMeta(readContext, remoteStruct("Shared", "second")),
     /maxSchemaVersionsPerType/,
+  );
+});
+
+runTest("TypeMeta field limit rejects large struct metadata", () => {
+  const readContext = context({}, { maxTypeFields: 1 });
+  const fieldType = Type.int32({ encoding: "fixed" });
+  const typeMeta = new TypeMeta([
+    new FieldInfo("first", fieldType.typeId, fieldType.userTypeId, false, false, fieldType.options),
+    new FieldInfo("second", fieldType.typeId, fieldType.userTypeId, false, false, fieldType.options),
+  ], {
+    namespace: "example",
+    typeId: TypeId.NAMED_STRUCT,
+    typeName: "TooManyFields",
+    userTypeId: -1,
+  });
+
+  assert.throws(() => readTypeMeta(readContext, typeMeta), /maxTypeFields/);
+});
+
+runTest("TypeMeta body limit rejects large metadata", () => {
+  const readContext = context({}, { maxTypeMetaBytes: 1 });
+
+  assert.throws(
+    () => readTypeMeta(readContext, remoteStruct("LargeMeta", "value")),
+    /maxTypeMetaBytes/,
   );
 });
 

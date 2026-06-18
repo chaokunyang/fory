@@ -109,6 +109,20 @@ public:
     return *this;
   }
 
+  /// Set maximum accepted field count in one received struct TypeMeta.
+  ForyBuilder &max_type_fields(uint32_t max_fields) {
+    FORY_CHECK(max_fields > 0) << "max_type_fields must be positive";
+    config_.max_type_fields = max_fields;
+    return *this;
+  }
+
+  /// Set maximum accepted body size in one received TypeMeta.
+  ForyBuilder &max_type_meta_bytes(uint32_t max_bytes) {
+    FORY_CHECK(max_bytes > 0) << "max_type_meta_bytes must be positive";
+    config_.max_type_meta_bytes = max_bytes;
+    return *this;
+  }
+
   /// Set maximum accepted remote struct schema versions for one logical type.
   ForyBuilder &max_schema_versions_per_type(uint32_t max_versions) {
     FORY_CHECK(max_versions > 0)

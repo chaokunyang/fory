@@ -57,6 +57,8 @@ final class Fory {
     bool compatible = true,
     bool checkStructVersion = true,
     int maxDepth = Config.defaultMaxDepth,
+    int maxTypeFields = Config.defaultMaxTypeFields,
+    int maxTypeMetaBytes = Config.defaultMaxTypeMetaBytes,
     int maxSchemaVersionsPerType = Config.defaultMaxSchemaVersionsPerType,
     int maxAverageSchemaVersionsPerType =
         Config.defaultMaxAverageSchemaVersionsPerType,
@@ -65,6 +67,8 @@ final class Fory {
       compatible: compatible,
       checkStructVersion: checkStructVersion,
       maxDepth: maxDepth,
+      maxTypeFields: maxTypeFields,
+      maxTypeMetaBytes: maxTypeMetaBytes,
       maxSchemaVersionsPerType: maxSchemaVersionsPerType,
       maxAverageSchemaVersionsPerType: maxAverageSchemaVersionsPerType,
     );

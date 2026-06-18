@@ -128,6 +128,31 @@ auto fory = Fory::builder()
 
 **Default:** `10`
 
+### max_type_fields(uint32_t)
+
+Set the maximum fields accepted in one received remote struct metadata body.
+
+```cpp
+auto fory = Fory::builder()
+    .max_type_fields(512)
+    .build();
+```
+
+**Default:** `512`
+
+### max_type_meta_bytes(uint32_t)
+
+Set the maximum encoded body bytes accepted for one received TypeDef body,
+excluding the 8-byte header and any extended-size varint.
+
+```cpp
+auto fory = Fory::builder()
+    .max_type_meta_bytes(4096)
+    .build();
+```
+
+**Default:** `4096`
+
 ### max_average_schema_versions_per_type(uint32_t)
 
 Set the average accepted remote struct schema versions across accepted remote
@@ -182,6 +207,8 @@ auto fory = Fory::builder().build_thread_safe();  // Returns ThreadSafeFory
 | `compatible(bool)`                               | Enable schema evolution                            | `true`  |
 | `track_ref(bool)`                                | Enable reference tracking                          | `true`  |
 | `max_dyn_depth(uint32_t)`                        | Maximum nesting depth for dynamic types            | `5`     |
+| `max_type_fields(uint32_t)`                      | Max fields in one received struct metadata body    | `512`   |
+| `max_type_meta_bytes(uint32_t)`                  | Max encoded bytes in one received metadata body    | `4096`  |
 | `max_schema_versions_per_type(uint32_t)`         | Max remote schema versions for one struct type     | `10`    |
 | `max_average_schema_versions_per_type(uint32_t)` | Average remote schema versions across struct types | `3`     |
 | `check_struct_version(bool)`                     | Enable struct version checking                     | `false` |
@@ -194,8 +221,8 @@ Security-related configuration:
 - Use `check_struct_version(true)` with `compatible(false)` for intentional same-schema payloads.
 - Keep `max_dyn_depth(...)` as low as your model permits to reject unexpectedly deep polymorphic
   graphs.
-- Keep the remote schema metadata limits at their defaults unless a trusted peer legitimately sends
-  many schema versions.
+- Keep the remote schema metadata limits at their defaults unless the data is not malicious and a
+  trusted peer sends larger metadata or many schema versions.
 - Prefer concrete fields over broad polymorphic fields for untrusted input.
 
 ## Related Topics

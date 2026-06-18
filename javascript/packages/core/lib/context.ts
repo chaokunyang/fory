@@ -560,6 +560,8 @@ export class ReadContext {
 
   private _depth = 0;
   private _maxDepth: number;
+  private readonly maxTypeFields: number;
+  private readonly maxTypeMetaBytes: number;
   private readonly maxSchemaVersionsPerType: number;
   private readonly maxAverageSchemaVersionsPerType: number;
 
@@ -617,6 +619,8 @@ export class ReadContext {
     this.refReader = new RefReader(this.reader);
     this.metaStringReader = new MetaStringReader();
     this._maxDepth = config.maxDepth ?? 50;
+    this.maxTypeFields = config.maxTypeFields;
+    this.maxTypeMetaBytes = config.maxTypeMetaBytes;
     this.maxSchemaVersionsPerType = config.maxSchemaVersionsPerType;
     this.maxAverageSchemaVersionsPerType
       = config.maxAverageSchemaVersionsPerType;
@@ -719,13 +723,19 @@ export class ReadContext {
             headerLow,
             headerHigh,
             localTypeMeta.toBytes(),
+            this.maxTypeMetaBytes,
           )
         ) {
           this.typeMeta[dynamicTypeId] = localTypeMeta;
           return localTypeMeta;
         }
       }
-      typeMeta = TypeMeta.fromBytesAfterHeader(this.reader, header);
+      typeMeta = TypeMeta.fromBytesAfterHeader(
+        this.reader,
+        header,
+        this.maxTypeFields,
+        this.maxTypeMetaBytes,
+      );
       this.pendingTypeMetaKey = checkLimit
         ? this.checkRemoteStructSchemaLimit(typeMeta)
         : undefined;

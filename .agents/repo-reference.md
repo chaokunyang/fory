@@ -55,6 +55,12 @@ Apache Fory is a multi-language serialization framework with multiple wire forma
   cache-hit/generated-reader hot paths. Count a remote schema version only after the schema-specific
   read state has been successfully built and the owning metadata cache can publish it; failed or
   incompatible metadata must not consume the limit.
+- Remote struct metadata body and field-count limits are also cold-path resource controls.
+  `maxTypeMetaBytes` limits one received TypeDef or TypeMeta body excluding the 8-byte header and
+  extended-size varint; `maxTypeFields` limits one received struct metadata body's field count
+  (Java native TypeDef counts total fields across class layers). Check these before body
+  copy/decompression and before field-list allocation, and never add cache-hit or generated-reader
+  hot-path work for them.
 
 ## Runtime Map
 

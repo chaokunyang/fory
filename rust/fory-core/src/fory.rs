@@ -298,6 +298,20 @@ impl ForyBuilder {
         self
     }
 
+    /// Sets the maximum field count accepted in one received struct TypeMeta.
+    pub fn max_type_fields(mut self, max_fields: usize) -> Self {
+        assert!(max_fields > 0, "max_type_fields must be positive");
+        self.config.max_type_fields = max_fields;
+        self
+    }
+
+    /// Sets the maximum body size accepted for one received TypeMeta.
+    pub fn max_type_meta_bytes(mut self, max_bytes: usize) -> Self {
+        assert!(max_bytes > 0, "max_type_meta_bytes must be positive");
+        self.config.max_type_meta_bytes = max_bytes;
+        self
+    }
+
     /// Sets the maximum accepted remote struct schema versions for one logical type.
     pub fn max_schema_versions_per_type(mut self, max_versions: usize) -> Self {
         assert!(

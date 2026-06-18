@@ -45,6 +45,8 @@ const UINT64_MASK = 0xffffffffffffffffn;
 const HEADER_HASH_MASK = UINT64_MASK ^ ((1n << HASH_SHIFT_BITS) - 1n);
 const BIG_NAME_THRESHOLD = 0b111111;
 const MAX_TYPE_META_NESTING = 128;
+const DEFAULT_MAX_TYPE_FIELDS = 512;
+const DEFAULT_MAX_TYPE_META_BYTES = 4096;
 
 const PRIMITIVE_TYPE_IDS = [
   TypeId.BOOL,
@@ -459,9 +461,11 @@ export class TypeMeta {
     headerLow: number,
     headerHigh: number,
     encoded: Uint8Array,
+    maxTypeMetaBytes = DEFAULT_MAX_TYPE_META_BYTES,
   ): boolean {
     const start = reader.readGetCursor();
     const metaSize = TypeMeta.readMetaSizeFromLow(reader, headerLow);
+    TypeMeta.checkTypeMetaBytes(metaSize, maxTypeMetaBytes);
     const bodyStart = reader.readGetCursor();
     const afterHeaderSize = bodyStart - start + metaSize;
     reader.checkReadableBytes(metaSize);
@@ -498,9 +502,15 @@ export class TypeMeta {
    * Parse the type meta body after the header has already been consumed
    * by readHeader(). Used by ReadContext to avoid re-reading the header.
    */
-  static fromBytesAfterHeader(reader: BinaryReader, header: bigint): TypeMeta {
+  static fromBytesAfterHeader(
+    reader: BinaryReader,
+    header: bigint,
+    maxTypeFields = DEFAULT_MAX_TYPE_FIELDS,
+    maxTypeMetaBytes = DEFAULT_MAX_TYPE_META_BYTES,
+  ): TypeMeta {
     TypeMeta.validateGlobalHeader(header);
     const metaSize = TypeMeta.readMetaSize(reader, header);
+    TypeMeta.checkTypeMetaBytes(metaSize, maxTypeMetaBytes);
     const compressed = false;
     const headerHash = Number(header >> HASH_SHIFT_BITS);
 
@@ -531,6 +541,7 @@ export class TypeMeta {
       if (numFields === SMALL_NUM_FIELDS_THRESHOLD) {
         numFields += reader.readVarUInt32();
       }
+      TypeMeta.checkTypeFields(numFields, maxTypeFields);
     } else {
       if ((classHeader & 0b01110000) !== 0) {
         throw new Error("invalid TypeMeta kind header");
@@ -606,6 +617,27 @@ export class TypeMeta {
       metaSize += reader.readVarUInt32();
     }
     return metaSize;
+  }
+
+  private static checkTypeMetaBytes(
+    metaSize: number,
+    maxTypeMetaBytes: number,
+  ) {
+    if (metaSize > maxTypeMetaBytes) {
+      throw new Error(
+        `Type metadata body size ${metaSize} exceeds maxTypeMetaBytes ${maxTypeMetaBytes}. `
+        + "The data may be malicious. If the data is not malicious, please increase maxTypeMetaBytes.",
+      );
+    }
+  }
+
+  private static checkTypeFields(numFields: number, maxTypeFields: number) {
+    if (numFields > maxTypeFields) {
+      throw new Error(
+        `Type metadata field count ${numFields} exceeds maxTypeFields ${maxTypeFields}. `
+        + "The data may be malicious. If the data is not malicious, please increase maxTypeFields.",
+      );
+    }
   }
 
   private static validateParsedBodyHash(header: bigint, body: Uint8Array) {

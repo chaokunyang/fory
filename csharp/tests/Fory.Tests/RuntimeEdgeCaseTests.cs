@@ -541,6 +541,35 @@ public sealed class RuntimeEdgeCaseTests
     }
 
     [Fact]
+    public void TypeMetaFieldLimitRejectsLargeStruct()
+    {
+        ReadContext context = new(
+            new ByteReader(Array.Empty<byte>()),
+            new TypeResolver(),
+            trackRef: false,
+            maxTypeFields: 1);
+        TypeMeta typeMeta = RemoteStructTypeMeta(901, "first", "second");
+
+        InvalidDataException exception =
+            Assert.Throws<InvalidDataException>(() => ReadAndAcceptTypeMeta(context, typeMeta));
+        Assert.Contains("MaxTypeFields", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TypeMetaBodyLimitRejectsLargeMetadata()
+    {
+        ReadContext context = new(
+            new ByteReader(Array.Empty<byte>()),
+            new TypeResolver(),
+            trackRef: false,
+            maxTypeMetaBytes: 1);
+
+        InvalidDataException exception =
+            Assert.Throws<InvalidDataException>(() => ReadAndAcceptTypeMeta(context, RemoteStructTypeMeta(901, "value")));
+        Assert.Contains("MaxTypeMetaBytes", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void TypeMetaSchemaLimitKeepsUnknownTypesSeparate()
     {
         ReadContext context = new(
@@ -624,13 +653,24 @@ public sealed class RuntimeEdgeCaseTests
 
     private static TypeMeta RemoteStructTypeMeta(uint userTypeId, string fieldName)
     {
+        return RemoteStructTypeMeta(userTypeId, [fieldName]);
+    }
+
+    private static TypeMeta RemoteStructTypeMeta(uint userTypeId, params string[] fieldNames)
+    {
+        TypeMetaFieldInfo[] fields = new TypeMetaFieldInfo[fieldNames.Length];
+        for (int i = 0; i < fieldNames.Length; i++)
+        {
+            fields[i] = new TypeMetaFieldInfo(null, fieldNames[i], new TypeMetaFieldType((uint)TypeId.Int32, nullable: false));
+        }
+
         return new TypeMeta(
             (uint)TypeId.Struct,
             userTypeId,
             MetaString.Empty('.', '_'),
             MetaString.Empty('$', '_'),
             registerByName: false,
-            [new TypeMetaFieldInfo(null, fieldName, new TypeMetaFieldType((uint)TypeId.Int32, nullable: false))]);
+            fields);
     }
 
     private static TypeMeta RemoteCompatibleStructTypeMeta(uint userTypeId, string fieldName)

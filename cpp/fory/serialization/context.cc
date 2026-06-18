@@ -598,8 +598,9 @@ Result<const TypeInfo *, Error> ReadContext::read_type_meta() {
   // Not in cache - parse the TypeMeta
   const uint32_t type_def_start =
       buffer_->reader_index() - static_cast<uint32_t>(sizeof(int64_t));
-  FORY_TRY(parsed_meta,
-           TypeMeta::from_bytes_with_header(*buffer_, meta_header));
+  FORY_TRY(parsed_meta, TypeMeta::from_bytes_with_header(
+                            *buffer_, meta_header, config_->max_type_fields,
+                            config_->max_type_meta_bytes));
   const uint32_t type_def_end = buffer_->reader_index();
 
   // Find local TypeInfo to get field_id mapping (optional for schema evolution)

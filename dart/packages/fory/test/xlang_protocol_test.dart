@@ -287,6 +287,31 @@ void main() {
       expect(() => _readTypeMeta(reader, second), throwsA(isA<StateError>()));
     });
 
+    test('type meta field limit rejects large struct', () {
+      final reader = TypeResolver(const Config(maxTypeFields: 1));
+      final bytes = _typeMetaBytes(
+        _SchemaRemoteA,
+        'example.TooManyFields',
+        <GeneratedFieldInfo>[
+          _generatedField('firstValue'),
+          _generatedField('secondValue'),
+        ],
+      );
+
+      expect(() => _readTypeMeta(reader, bytes), throwsA(isA<StateError>()));
+    });
+
+    test('type meta body limit rejects large metadata', () {
+      final reader = TypeResolver(const Config(maxTypeMetaBytes: 1));
+      final bytes = _typeMetaBytes(
+        _SchemaRemoteA,
+        'example.LargeTypeMeta',
+        <GeneratedFieldInfo>[_generatedField('value')],
+      );
+
+      expect(() => _readTypeMeta(reader, bytes), throwsA(isA<StateError>()));
+    });
+
     test('remote schema limit keeps unknown types separate', () {
       final reader = TypeResolver(const Config(maxSchemaVersionsPerType: 1));
       _rememberSchema(_SchemaLocal, <GeneratedFieldInfo>[]);

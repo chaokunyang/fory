@@ -41,6 +41,8 @@ ThreadSafeFory threadSafe = Fory.Builder().BuildThreadSafe();
 | `Compatible`                      | `true`  | Compatible schema-evolution metadata enabled       |
 | `CheckStructVersion`              | `false` | Struct schema hash checks disabled                 |
 | `MaxDepth`                        | `20`    | Max dynamic nesting depth                          |
+| `MaxTypeFields`                   | `512`   | Max fields in one received struct metadata body    |
+| `MaxTypeMetaBytes`                | `4096`  | Max encoded bytes in one received metadata body    |
 | `MaxSchemaVersionsPerType`        | `10`    | Max remote schema versions for one struct type     |
 | `MaxAverageSchemaVersionsPerType` | `3`     | Average remote schema versions across struct types |
 
@@ -93,6 +95,27 @@ Fory fory = Fory.Builder()
 ```
 
 `value` must be greater than `0`.
+
+### `MaxTypeFields(int value)`
+
+Sets the maximum fields accepted in one received remote struct metadata body.
+
+```csharp
+Fory fory = Fory.Builder()
+    .MaxTypeFields(512)
+    .Build();
+```
+
+### `MaxTypeMetaBytes(int value)`
+
+Sets the maximum encoded body bytes accepted for one received TypeMeta body,
+excluding the 8-byte header and any extended-size varint.
+
+```csharp
+Fory fory = Fory.Builder()
+    .MaxTypeMetaBytes(4096)
+    .Build();
+```
 
 ### `MaxSchemaVersionsPerType(int value)`
 
@@ -151,8 +174,8 @@ Security-related configuration:
 - Register only the expected types before deserializing untrusted payloads.
 - Use `CheckStructVersion(true)` with `Compatible(false)` for intentional same-schema payloads.
 - Set `MaxDepth(...)` to reject unexpectedly deep dynamic object graphs.
-- Keep the remote schema metadata limits at their defaults unless a trusted peer legitimately sends
-  many schema versions.
+- Keep the remote schema metadata limits at their defaults unless the data is not malicious and a
+  trusted peer sends larger metadata or many schema versions.
 - Prefer generated or registered concrete models over broad dynamic fields for untrusted input.
 
 ## Related Topics

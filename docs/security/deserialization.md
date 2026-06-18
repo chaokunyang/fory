@@ -210,6 +210,21 @@ If a remote metadata body exactly matches a local registered schema after the
 metadata body and hash have been validated, the reader may use the local schema
 without consuming the remote-schema limit.
 
+Remote struct metadata bodies and field lists must also be bounded on the cold
+metadata parse path. `maxTypeMetaBytes` limits the encoded metadata body bytes
+for one received TypeDef or TypeMeta body, excluding the 8-byte header and any
+extended-size varint. `maxTypeFields` limits the number of fields declared by
+one received struct metadata body. For Java native TypeDef class layers, the
+field limit applies to the total field count across the class layers in that
+one TypeDef. These limits are checked before copying, decompressing, reserving,
+or allocating from attacker-declared metadata sizes or field counts.
+
+The default limits are `maxTypeFields = 512` and `maxTypeMetaBytes = 4096`.
+Runtimes should report limit failures as possible malicious data and tell users
+to increase the exact option only when the data is not malicious. These limits
+must not introduce validation on metadata cache-hit, generated serializer, or
+already-resolved type-id hot paths.
+
 Metadata byte-form strictness alone is not a security requirement. Rejecting a
 metadata shape is useful only when the owner wants that strictness or when the
 shape changes type identity, retained state, resource use, or policy behavior.

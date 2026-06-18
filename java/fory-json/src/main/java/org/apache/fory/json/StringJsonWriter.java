@@ -163,6 +163,9 @@ final class StringJsonWriter extends JsonWriter {
 
   @Override
   public void writeString(String value) {
+    if (STRING_BYTES_BACKED && writeBytesBackedString(value)) {
+      return;
+    }
     ensure(value.length() * 6 + 2);
     writeStringNoEnsure(value);
   }
@@ -220,6 +223,9 @@ final class StringJsonWriter extends JsonWriter {
 
   public void writeStringField(byte[] namePrefix, byte[] commaNamePrefix, int index, String value) {
     byte[] prefix = index == 0 ? namePrefix : commaNamePrefix;
+    if (STRING_BYTES_BACKED && writeBytesBackedStringField(prefix, value)) {
+      return;
+    }
     ensure(prefix.length + value.length() * 6 + 2);
     writeRawNoEnsure(prefix);
     writeStringNoEnsure(value);
@@ -303,6 +309,38 @@ final class StringJsonWriter extends JsonWriter {
       writeLatin1StringNoEnsure(bytes);
       return true;
     } else if (coder == StringLayout.UTF16) {
+      writeUtf16StringNoEnsure(bytes);
+      return true;
+    }
+    return false;
+  }
+
+  private boolean writeBytesBackedString(String value) {
+    byte[] bytes = StringLayout.bytes(value);
+    byte coder = StringLayout.coder(value);
+    if (coder == StringLayout.LATIN1) {
+      ensure(bytes.length + 2);
+      writeLatin1StringNoEnsure(bytes);
+      return true;
+    } else if (coder == StringLayout.UTF16) {
+      ensure((bytes.length >> 1) * 6 + 2);
+      writeUtf16StringNoEnsure(bytes);
+      return true;
+    }
+    return false;
+  }
+
+  private boolean writeBytesBackedStringField(byte[] prefix, String value) {
+    byte[] bytes = StringLayout.bytes(value);
+    byte coder = StringLayout.coder(value);
+    if (coder == StringLayout.LATIN1) {
+      ensure(prefix.length + bytes.length + 2);
+      writeRawNoEnsure(prefix);
+      writeLatin1StringNoEnsure(bytes);
+      return true;
+    } else if (coder == StringLayout.UTF16) {
+      ensure(prefix.length + (bytes.length >> 1) * 6 + 2);
+      writeRawNoEnsure(prefix);
       writeUtf16StringNoEnsure(bytes);
       return true;
     }

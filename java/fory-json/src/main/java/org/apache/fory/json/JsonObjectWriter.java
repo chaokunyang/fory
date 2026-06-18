@@ -19,26 +19,8 @@
 
 package org.apache.fory.json;
 
-/** Builder for {@link ForyJson}. */
-public final class ForyJsonBuilder {
-  private boolean writeNullFields;
-  private boolean codegenEnabled = true;
+interface JsonObjectWriter {
+  void writeString(StringJsonWriter writer, Object value, JsonClassCache classCache);
 
-  ForyJsonBuilder() {}
-
-  /** Writes object properties with null values when enabled. */
-  public ForyJsonBuilder writeNullFields(boolean writeNullFields) {
-    this.writeNullFields = writeNullFields;
-    return this;
-  }
-
-  /** Enables runtime-generated writers for supported public-property classes. */
-  public ForyJsonBuilder withCodegen(boolean codegenEnabled) {
-    this.codegenEnabled = codegenEnabled;
-    return this;
-  }
-
-  public ForyJson build() {
-    return new ForyJson(writeNullFields, codegenEnabled);
-  }
+  void writeUtf8(Utf8JsonWriter writer, Object value, JsonClassCache classCache);
 }

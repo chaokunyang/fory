@@ -33,9 +33,9 @@ public final class ForyJson {
   private Class<?> lastWriteClass;
   private JsonClassInfo lastWriteClassInfo;
 
-  ForyJson(boolean writeNullFields) {
+  ForyJson(boolean writeNullFields, boolean codegenEnabled) {
     this.writeNullFields = writeNullFields;
-    classCache = new JsonClassCache();
+    classCache = new JsonClassCache(codegenEnabled, writeNullFields);
     utf8Buffer = new byte[INITIAL_BUFFER_SIZE];
     stringBuffer = new char[INITIAL_BUFFER_SIZE];
     utf8Writer = new Utf8JsonWriter(writeNullFields, utf8Buffer);
@@ -106,6 +106,10 @@ public final class ForyJson {
 
   public <T> T fromJson(byte[] bytes, Class<T> type) {
     return JsonParsers.fromBytes(bytes, type, classCache);
+  }
+
+  boolean hasGeneratedWriter(Class<?> type) {
+    return classCache.get(type).hasObjectWriter();
   }
 
   private byte[] borrowUtf8Buffer() {

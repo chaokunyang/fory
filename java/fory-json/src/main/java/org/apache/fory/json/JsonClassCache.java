@@ -24,8 +24,21 @@ import java.util.concurrent.ConcurrentMap;
 
 final class JsonClassCache {
   private final ConcurrentMap<Class<?>, JsonClassInfo> classes = new ConcurrentHashMap<>();
+  private final JsonCodegen codegen;
+
+  JsonClassCache(boolean codegenEnabled, boolean writeNullFields) {
+    codegen = codegenEnabled ? new JsonCodegen(writeNullFields) : null;
+  }
 
   public JsonClassInfo get(Class<?> type) {
-    return classes.computeIfAbsent(type, JsonClassInfo::build);
+    return classes.computeIfAbsent(type, this::build);
+  }
+
+  private JsonClassInfo build(Class<?> type) {
+    JsonClassInfo classInfo = JsonClassInfo.build(type);
+    if (codegen != null) {
+      classInfo.setObjectWriter(codegen.compile(classInfo));
+    }
+    return classInfo;
   }
 }

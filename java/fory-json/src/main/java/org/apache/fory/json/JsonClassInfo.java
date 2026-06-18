@@ -39,6 +39,7 @@ final class JsonClassInfo {
   private final JsonPropertyInfo[] readProperties;
   private final JsonPropertyTable readTable;
   private final ObjectInstantiator<?> instantiator;
+  private JsonObjectWriter objectWriter;
 
   private JsonClassInfo(
       Class<?> type,
@@ -125,12 +126,24 @@ final class JsonClassInfo {
     return type;
   }
 
+  public JsonPropertyInfo[] writeProperties() {
+    return writeProperties;
+  }
+
   public JsonPropertyTable readTable() {
     return readTable;
   }
 
   public Object newInstance() {
     return instantiator.newInstance();
+  }
+
+  void setObjectWriter(JsonObjectWriter objectWriter) {
+    this.objectWriter = objectWriter;
+  }
+
+  boolean hasObjectWriter() {
+    return objectWriter != null;
   }
 
   public void write(JsonWriter writer, Object value, JsonClassCache classCache) {
@@ -162,6 +175,11 @@ final class JsonClassInfo {
   }
 
   public void write(StringJsonWriter writer, Object value, JsonClassCache classCache) {
+    JsonObjectWriter generatedWriter = objectWriter;
+    if (generatedWriter != null) {
+      generatedWriter.writeString(writer, value, classCache);
+      return;
+    }
     writer.writeObjectStart();
     int written = 0;
     JsonPropertyInfo[] properties = writeProperties;
@@ -190,6 +208,11 @@ final class JsonClassInfo {
   }
 
   public void writeUtf8(Utf8JsonWriter writer, Object value, JsonClassCache classCache) {
+    JsonObjectWriter generatedWriter = objectWriter;
+    if (generatedWriter != null) {
+      generatedWriter.writeUtf8(writer, value, classCache);
+      return;
+    }
     writer.writeObjectStart();
     int written = 0;
     JsonPropertyInfo[] properties = writeProperties;

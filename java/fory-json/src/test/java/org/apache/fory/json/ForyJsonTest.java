@@ -118,6 +118,20 @@ public class ForyJsonTest {
   }
 
   @Test
+  public void useGeneratedWriter() {
+    ForyJson json = ForyJson.builder().build();
+    assertEquals(json.toJson(new PublicFields()), "{\"active\":true,\"id\":7,\"name\":\"fory\"}");
+    assertEquals(json.hasGeneratedWriter(PublicFields.class), true);
+  }
+
+  @Test
+  public void disableGeneratedWriter() {
+    ForyJson json = ForyJson.builder().withCodegen(false).build();
+    assertEquals(json.toJson(new PublicFields()), "{\"active\":true,\"id\":7,\"name\":\"fory\"}");
+    assertEquals(json.hasGeneratedWriter(PublicFields.class), false);
+  }
+
+  @Test
   public void writeNullFields() {
     ForyJson json = ForyJson.builder().writeNullFields(true).build();
     assertEquals(

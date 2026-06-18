@@ -208,21 +208,31 @@ final class JsonCodegen {
         .append(") value;\n");
     code.append("    writer.writeObjectStart();\n");
     code.append("    int index = 0;\n");
+    boolean commaKnown = false;
     for (int i = 0; i < properties.length; i++) {
-      writeProp(code, ownerType, properties[i], i, utf8);
+      writeProp(code, ownerType, properties[i], i, utf8, commaKnown);
+      if (writeNullFields || properties[i].writeRawType().isPrimitive()) {
+        commaKnown = true;
+      }
     }
     code.append("    writer.writeObjectEnd();\n");
     code.append("  }\n");
   }
 
   private void writeProp(
-      StringBuilder code, Class<?> ownerType, JsonPropertyInfo property, int id, boolean utf8) {
+      StringBuilder code,
+      Class<?> ownerType,
+      JsonPropertyInfo property,
+      int id,
+      boolean utf8,
+      boolean commaKnown) {
     String prop = "p" + id;
     Class<?> rawType = property.writeRawType();
     String value = "v" + id;
     code.append("    ");
     if (rawType.isPrimitive()) {
-      writePrimitive(code, property, prop, memberExpr("object", property.writeMember()), utf8);
+      writePrimitive(
+          code, property, prop, memberExpr("object", property.writeMember()), utf8, commaKnown);
       return;
     }
     code.append(sourceName(rawType))
@@ -234,41 +244,48 @@ final class JsonCodegen {
     if (writeNullFields) {
       if (isPrefixValue(property.writeKind())) {
         code.append("    if (").append(value).append(" == null) {\n");
-        writeFieldName(code, id, utf8, "      ");
+        writeFieldName(code, id, utf8, commaKnown, "      ");
         code.append("      writer.writeNull();\n");
         code.append("    } else {\n");
-        writeValue(code, ownerType, property, prop, value, utf8, "      ");
+        writeValue(code, ownerType, property, prop, value, utf8, commaKnown, "      ");
         code.append("    }\n");
       } else {
-        writeFieldName(code, id, utf8, "    ");
+        writeFieldName(code, id, utf8, commaKnown, "    ");
         code.append("    if (").append(value).append(" == null) {\n");
         code.append("      writer.writeNull();\n");
         code.append("    } else {\n");
-        writeValue(code, ownerType, property, prop, value, utf8, "      ");
+        writeValue(code, ownerType, property, prop, value, utf8, commaKnown, "      ");
         code.append("    }\n");
       }
     } else {
       code.append("    if (").append(value).append(" != null) {\n");
       if (isPrefixValue(property.writeKind())) {
-        writeValue(code, ownerType, property, prop, value, utf8, "      ");
+        writeValue(code, ownerType, property, prop, value, utf8, commaKnown, "      ");
       } else {
-        writeFieldName(code, id, utf8, "      ");
-        writeValue(code, ownerType, property, prop, value, utf8, "      ");
+        writeFieldName(code, id, utf8, commaKnown, "      ");
+        writeValue(code, ownerType, property, prop, value, utf8, commaKnown, "      ");
       }
       code.append("    }\n");
     }
   }
 
   private void writePrimitive(
-      StringBuilder code, JsonPropertyInfo property, String prop, String value, boolean utf8) {
+      StringBuilder code,
+      JsonPropertyInfo property,
+      String prop,
+      String value,
+      boolean utf8,
+      boolean commaKnown) {
     switch (property.writeKind()) {
       case BOOLEAN:
         code.append("writer.writeRawValue(")
             .append(prop)
             .append(utf8 ? ".utf8BooleanFieldValue(" : ".stringBooleanFieldValue(")
             .append(value)
-            .append(", index != 0));\n");
-        code.append("    index++;\n");
+            .append(commaKnown ? ", true));\n" : ", index != 0));\n");
+        if (!commaKnown) {
+          code.append("    index++;\n");
+        }
         return;
       case BYTE:
       case SHORT:
@@ -278,7 +295,7 @@ final class JsonCodegen {
                 utf8
                     ? "u" + prop.substring(1) + ", uc" + prop.substring(1) + ", "
                     : "s" + prop.substring(1) + ", sc" + prop.substring(1) + ", ")
-            .append("index++, ")
+            .append(commaKnown ? "1, " : "index++, ")
             .append(value)
             .append(");\n");
         return;
@@ -288,26 +305,27 @@ final class JsonCodegen {
                 utf8
                     ? "u" + prop.substring(1) + ", uc" + prop.substring(1) + ", "
                     : "s" + prop.substring(1) + ", sc" + prop.substring(1) + ", ")
-            .append("index++, ")
+            .append(commaKnown ? "1, " : "index++, ")
             .append(value)
             .append(");\n");
         return;
       default:
-        writeFieldName(code, Integer.parseInt(prop.substring(1)), utf8, "    ");
+        writeFieldName(code, Integer.parseInt(prop.substring(1)), utf8, commaKnown, "    ");
         writePrimitiveScalar(code, property.writeKind(), value, "    ");
     }
   }
 
-  private static void writeFieldName(StringBuilder code, int id, boolean utf8, String indent) {
+  private static void writeFieldName(
+      StringBuilder code, int id, boolean utf8, boolean commaKnown, String indent) {
     code.append(indent)
-        .append("writer.writeRawValue(index == 0 ? ")
-        .append(utf8 ? "u" : "s")
+        .append("writer.writeRawValue(")
+        .append(commaKnown ? (utf8 ? "uc" : "sc") : "index == 0 ? " + (utf8 ? "u" : "s"))
         .append(id)
-        .append(" : ")
-        .append(utf8 ? "uc" : "sc")
-        .append(id)
+        .append(commaKnown ? "" : " : " + (utf8 ? "uc" : "sc") + id)
         .append(");\n");
-    code.append(indent).append("index++;\n");
+    if (!commaKnown) {
+      code.append(indent).append("index++;\n");
+    }
   }
 
   private void writeValue(
@@ -317,6 +335,7 @@ final class JsonCodegen {
       String prop,
       String value,
       boolean utf8,
+      boolean commaKnown,
       String indent) {
     JsonPropertyKind kind = property.writeKind();
     switch (kind) {
@@ -326,8 +345,10 @@ final class JsonCodegen {
             .append(prop)
             .append(utf8 ? ".utf8BooleanFieldValue(" : ".stringBooleanFieldValue(")
             .append(value)
-            .append(".booleanValue(), index != 0));\n");
-        code.append(indent).append("index++;\n");
+            .append(commaKnown ? ".booleanValue(), true));\n" : ".booleanValue(), index != 0));\n");
+        if (!commaKnown) {
+          code.append(indent).append("index++;\n");
+        }
         return;
       case BYTE:
       case SHORT:
@@ -338,7 +359,7 @@ final class JsonCodegen {
                 utf8
                     ? "u" + prop.substring(1) + ", uc" + prop.substring(1) + ", "
                     : "s" + prop.substring(1) + ", sc" + prop.substring(1) + ", ")
-            .append("index++, ")
+            .append(commaKnown ? "1, " : "index++, ")
             .append(value)
             .append(".intValue());\n");
         return;
@@ -349,7 +370,7 @@ final class JsonCodegen {
                 utf8
                     ? "u" + prop.substring(1) + ", uc" + prop.substring(1) + ", "
                     : "s" + prop.substring(1) + ", sc" + prop.substring(1) + ", ")
-            .append("index++, ")
+            .append(commaKnown ? "1, " : "index++, ")
             .append(value)
             .append(".longValue());\n");
         return;
@@ -360,7 +381,7 @@ final class JsonCodegen {
                 utf8
                     ? "u" + prop.substring(1) + ", uc" + prop.substring(1) + ", "
                     : "s" + prop.substring(1) + ", sc" + prop.substring(1) + ", ")
-            .append("index++, ")
+            .append(commaKnown ? "1, " : "index++, ")
             .append(value)
             .append(");\n");
         return;
@@ -370,8 +391,10 @@ final class JsonCodegen {
             .append(prop)
             .append(utf8 ? ".utf8EnumFieldValue(" : ".stringEnumFieldValue(")
             .append(value)
-            .append(", index != 0));\n");
-        code.append(indent).append("index++;\n");
+            .append(commaKnown ? ", true));\n" : ", index != 0));\n");
+        if (!commaKnown) {
+          code.append(indent).append("index++;\n");
+        }
         return;
       case FLOAT:
       case DOUBLE:

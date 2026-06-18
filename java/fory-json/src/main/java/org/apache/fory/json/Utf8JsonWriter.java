@@ -29,10 +29,16 @@ final class Utf8JsonWriter extends JsonWriter {
   private static final byte[] MIN_LONG_BYTES =
       "-9223372036854775808".getBytes(java.nio.charset.StandardCharsets.ISO_8859_1);
   private static final long HIGH_BITS = 0x8080808080808080L;
+  private static final int INT_HIGH_BITS = 0x80808080;
   private static final long ASCII_CONTROL_OFFSET = 0x6060606060606060L;
+  private static final int INT_ASCII_CONTROL_OFFSET = 0x60606060;
   private static final long ONE_BYTES = 0x0101010101010101L;
+  private static final int INT_ONE_BYTES = 0x01010101;
   private static final long QUOTE_BYTES_COMPLEMENT = ~0x2222222222222222L;
+  private static final int INT_QUOTE_BYTES_COMPLEMENT = ~0x22222222;
   private static final long BACKSLASH_BYTES_COMPLEMENT = ~0x5C5C5C5C5C5C5C5CL;
+  private static final int INT_BACKSLASH_BYTES_COMPLEMENT = ~0x5C5C5C5C;
+  private static final long UTF16_ASCII_MASK = 0xFF80FF80FF80FF80L;
   private static final byte[] DIGIT_HUNDREDS = new byte[1000];
   private static final byte[] DIGIT_TENS = new byte[1000];
   private static final byte[] DIGIT_ONES = new byte[1000];
@@ -325,7 +331,21 @@ final class Utf8JsonWriter extends JsonWriter {
     int start = position;
     int pos = start;
     bytes[pos++] = (byte) '"';
-    for (int i = 0; i < length; i += 2) {
+    int i = 0;
+    int upperBound = length & ~7;
+    for (; i < upperBound; i += 8) {
+      long word = LittleEndian.getInt64(value, i);
+      if ((word & UTF16_ASCII_MASK) != 0) {
+        break;
+      }
+      int packed = packUtf16Ascii(word);
+      if (!isJsonAsciiInt(packed)) {
+        break;
+      }
+      LittleEndian.putInt32(bytes, pos, packed);
+      pos += 4;
+    }
+    for (; i < length; i += 2) {
       char ch = StringLayout.utf16Char(value, i);
       if (ch < 0x80) {
         if (!isJsonAscii(ch)) {
@@ -550,6 +570,21 @@ final class Utf8JsonWriter extends JsonWriter {
     return ((word + ASCII_CONTROL_OFFSET) & HIGH_BITS) == HIGH_BITS
         && (((word ^ QUOTE_BYTES_COMPLEMENT) + ONE_BYTES) & HIGH_BITS) == HIGH_BITS
         && (((word ^ BACKSLASH_BYTES_COMPLEMENT) + ONE_BYTES) & HIGH_BITS) == HIGH_BITS;
+  }
+
+  private static boolean isJsonAsciiInt(int word) {
+    return ((word + INT_ASCII_CONTROL_OFFSET) & INT_HIGH_BITS) == INT_HIGH_BITS
+        && (((word ^ INT_QUOTE_BYTES_COMPLEMENT) + INT_ONE_BYTES) & INT_HIGH_BITS) == INT_HIGH_BITS
+        && (((word ^ INT_BACKSLASH_BYTES_COMPLEMENT) + INT_ONE_BYTES) & INT_HIGH_BITS)
+            == INT_HIGH_BITS;
+  }
+
+  private static int packUtf16Ascii(long word) {
+    return (int)
+        ((word & 0xFFL)
+            | ((word >>> 8) & 0xFF00L)
+            | ((word >>> 16) & 0xFF0000L)
+            | ((word >>> 24) & 0xFF000000L));
   }
 
   private void writePositiveInt(int value) {

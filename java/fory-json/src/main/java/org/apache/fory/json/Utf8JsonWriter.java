@@ -320,14 +320,29 @@ final class Utf8JsonWriter extends JsonWriter {
 
   private boolean writeLatin1StringNoEnsure(byte[] value) {
     int length = value.length;
-    if (hasLatin1JsonEscape(value)) {
-      return false;
-    }
     byte[] bytes = buffer;
-    int pos = position;
+    int start = position;
+    int pos = start;
     bytes[pos++] = (byte) '"';
-    System.arraycopy(value, 0, bytes, pos, length);
-    pos += length;
+    int i = 0;
+    int upperBound = length & ~7;
+    for (; i < upperBound; i += 8) {
+      long word = LittleEndian.getInt64(value, i);
+      if (!isJsonAsciiWord(word)) {
+        break;
+      }
+      LittleEndian.putInt64(bytes, pos, word);
+      pos += 8;
+    }
+    for (; i < length; i++) {
+      byte ch = value[i];
+      if (isJsonAsciiByte(ch)) {
+        bytes[pos++] = ch;
+      } else {
+        position = start;
+        return false;
+      }
+    }
     bytes[pos++] = (byte) '"';
     position = pos;
     return true;
@@ -562,22 +577,6 @@ final class Utf8JsonWriter extends JsonWriter {
   private static boolean isJsonAsciiByte(byte value) {
     int ch = value & 0xff;
     return ch > 0x1F && ch < 0x80 && ch != '"' && ch != '\\';
-  }
-
-  private static boolean hasLatin1JsonEscape(byte[] value) {
-    int i = 0;
-    int upperBound = value.length & ~7;
-    for (; i < upperBound; i += 8) {
-      if (!isJsonAsciiWord(LittleEndian.getInt64(value, i))) {
-        return true;
-      }
-    }
-    for (; i < value.length; i++) {
-      if (!isJsonAsciiByte(value[i])) {
-        return true;
-      }
-    }
-    return false;
   }
 
   private static boolean isJsonAsciiWord(long word) {

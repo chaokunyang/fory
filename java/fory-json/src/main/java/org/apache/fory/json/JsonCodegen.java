@@ -149,6 +149,10 @@ final class JsonCodegen {
     for (int i = 0; i < properties.length; i++) {
       code.append("  private final JsonPropertyInfo p").append(i).append(";\n");
       code.append("  private final JsonClassInfo c").append(i).append(";\n");
+      code.append("  private final byte[] u").append(i).append(";\n");
+      code.append("  private final byte[] uc").append(i).append(";\n");
+      code.append("  private final char[] s").append(i).append(";\n");
+      code.append("  private final char[] sc").append(i).append(";\n");
     }
     code.append("  ")
         .append(className)
@@ -156,6 +160,26 @@ final class JsonCodegen {
     for (int i = 0; i < properties.length; i++) {
       code.append("    this.p").append(i).append(" = properties[").append(i).append("];\n");
       code.append("    this.c").append(i).append(" = classInfos[").append(i).append("];\n");
+      code.append("    this.u")
+          .append(i)
+          .append(" = properties[")
+          .append(i)
+          .append("].utf8NamePrefix();\n");
+      code.append("    this.uc")
+          .append(i)
+          .append(" = properties[")
+          .append(i)
+          .append("].utf8CommaNamePrefix();\n");
+      code.append("    this.s")
+          .append(i)
+          .append(" = properties[")
+          .append(i)
+          .append("].stringNamePrefix();\n");
+      code.append("    this.sc")
+          .append(i)
+          .append(" = properties[")
+          .append(i)
+          .append("].stringCommaNamePrefix();\n");
     }
     code.append("  }\n");
     writeMethod(code, typeName, properties, true);
@@ -205,13 +229,13 @@ final class JsonCodegen {
     if (writeNullFields) {
       if (isPrefixValue(property.writeKind())) {
         code.append("    if (").append(value).append(" == null) {\n");
-        code.append("      writer.writeFieldName(").append(prop).append(", index++);\n");
+        writeFieldName(code, id, utf8, "      ");
         code.append("      writer.writeNull();\n");
         code.append("    } else {\n");
         writeValue(code, property, prop, value, utf8, "      ");
         code.append("    }\n");
       } else {
-        code.append("    writer.writeFieldName(").append(prop).append(", index++);\n");
+        writeFieldName(code, id, utf8, "    ");
         code.append("    if (").append(value).append(" == null) {\n");
         code.append("      writer.writeNull();\n");
         code.append("    } else {\n");
@@ -223,7 +247,7 @@ final class JsonCodegen {
       if (isPrefixValue(property.writeKind())) {
         writeValue(code, property, prop, value, utf8, "      ");
       } else {
-        code.append("      writer.writeFieldName(").append(prop).append(", index++);\n");
+        writeFieldName(code, id, utf8, "      ");
         writeValue(code, property, prop, value, utf8, "      ");
       }
       code.append("    }\n");
@@ -247,8 +271,8 @@ final class JsonCodegen {
         code.append("writer.writeIntField(")
             .append(
                 utf8
-                    ? prop + ".utf8NamePrefix(), " + prop + ".utf8CommaNamePrefix(), "
-                    : prop + ".stringNamePrefix(), " + prop + ".stringCommaNamePrefix(), ")
+                    ? "u" + prop.substring(1) + ", uc" + prop.substring(1) + ", "
+                    : "s" + prop.substring(1) + ", sc" + prop.substring(1) + ", ")
             .append("index++, ")
             .append(value)
             .append(");\n");
@@ -257,16 +281,28 @@ final class JsonCodegen {
         code.append("writer.writeLongField(")
             .append(
                 utf8
-                    ? prop + ".utf8NamePrefix(), " + prop + ".utf8CommaNamePrefix(), "
-                    : prop + ".stringNamePrefix(), " + prop + ".stringCommaNamePrefix(), ")
+                    ? "u" + prop.substring(1) + ", uc" + prop.substring(1) + ", "
+                    : "s" + prop.substring(1) + ", sc" + prop.substring(1) + ", ")
             .append("index++, ")
             .append(value)
             .append(");\n");
         return;
       default:
-        code.append("writer.writeFieldName(").append(prop).append(", index++);\n");
+        writeFieldName(code, Integer.parseInt(prop.substring(1)), utf8, "    ");
         writePrimitiveScalar(code, property.writeKind(), value, "    ");
     }
+  }
+
+  private static void writeFieldName(StringBuilder code, int id, boolean utf8, String indent) {
+    code.append(indent)
+        .append("writer.writeRawValue(index == 0 ? ")
+        .append(utf8 ? "u" : "s")
+        .append(id)
+        .append(" : ")
+        .append(utf8 ? "uc" : "sc")
+        .append(id)
+        .append(");\n");
+    code.append(indent).append("index++;\n");
   }
 
   private void writeValue(
@@ -294,8 +330,8 @@ final class JsonCodegen {
             .append("writer.writeIntField(")
             .append(
                 utf8
-                    ? prop + ".utf8NamePrefix(), " + prop + ".utf8CommaNamePrefix(), "
-                    : prop + ".stringNamePrefix(), " + prop + ".stringCommaNamePrefix(), ")
+                    ? "u" + prop.substring(1) + ", uc" + prop.substring(1) + ", "
+                    : "s" + prop.substring(1) + ", sc" + prop.substring(1) + ", ")
             .append("index++, ")
             .append(value)
             .append(".intValue());\n");
@@ -305,8 +341,8 @@ final class JsonCodegen {
             .append("writer.writeLongField(")
             .append(
                 utf8
-                    ? prop + ".utf8NamePrefix(), " + prop + ".utf8CommaNamePrefix(), "
-                    : prop + ".stringNamePrefix(), " + prop + ".stringCommaNamePrefix(), ")
+                    ? "u" + prop.substring(1) + ", uc" + prop.substring(1) + ", "
+                    : "s" + prop.substring(1) + ", sc" + prop.substring(1) + ", ")
             .append("index++, ")
             .append(value)
             .append(".longValue());\n");
@@ -316,8 +352,8 @@ final class JsonCodegen {
             .append("writer.writeStringField(")
             .append(
                 utf8
-                    ? prop + ".utf8NamePrefix(), " + prop + ".utf8CommaNamePrefix(), "
-                    : prop + ".stringNamePrefix(), " + prop + ".stringCommaNamePrefix(), ")
+                    ? "u" + prop.substring(1) + ", uc" + prop.substring(1) + ", "
+                    : "s" + prop.substring(1) + ", sc" + prop.substring(1) + ", ")
             .append("index++, ")
             .append(value)
             .append(");\n");

@@ -248,6 +248,7 @@ final class JsonCodegen {
       boolean utf8) {
     String writerType = utf8 ? "Utf8JsonWriter" : "StringJsonWriter";
     String method = utf8 ? "writeUtf8" : "writeString";
+    boolean objectStartFused = canFuseObjectStart(properties);
     code.append("  public void ")
         .append(method)
         .append("(")
@@ -258,17 +259,62 @@ final class JsonCodegen {
         .append(" object = (")
         .append(typeName)
         .append(") value;\n");
-    code.append("    writer.writeObjectStart();\n");
-    code.append("    int index = 0;\n");
-    boolean commaKnown = false;
+    if (!objectStartFused) {
+      code.append("    writer.writeObjectStart();\n");
+      code.append("    int index = 0;\n");
+    }
+    boolean commaKnown = objectStartFused;
     for (int i = 0; i < properties.length; i++) {
-      writeProp(code, ownerType, properties[i], i, utf8, commaKnown);
+      if (objectStartFused && i == 0) {
+        writeObjectStartPrimitive(
+            code, properties[i], memberExpr("object", properties[i].writeMember()), utf8);
+      } else {
+        writeProp(code, ownerType, properties[i], i, utf8, commaKnown);
+      }
       if (writeNullFields || properties[i].writeRawType().isPrimitive()) {
         commaKnown = true;
       }
     }
     code.append("    writer.writeObjectEnd();\n");
     code.append("  }\n");
+  }
+
+  private static boolean canFuseObjectStart(JsonPropertyInfo[] properties) {
+    if (properties.length == 0 || !properties[0].writeRawType().isPrimitive()) {
+      return false;
+    }
+    switch (properties[0].writeKind()) {
+      case BYTE:
+      case SHORT:
+      case INT:
+      case LONG:
+        return true;
+      default:
+        return false;
+    }
+  }
+
+  private static void writeObjectStartPrimitive(
+      StringBuilder code, JsonPropertyInfo property, String value, boolean utf8) {
+    switch (property.writeKind()) {
+      case BYTE:
+      case SHORT:
+      case INT:
+        code.append("    writer.writeObjectIntField(")
+            .append(utf8 ? "u0, " : "s0, ")
+            .append(value)
+            .append(");\n");
+        return;
+      case LONG:
+        code.append("    writer.writeObjectLongField(")
+            .append(utf8 ? "u0, " : "s0, ")
+            .append(value)
+            .append(");\n");
+        return;
+      default:
+        throw new ForyJsonException(
+            "Unsupported generated object-start kind " + property.writeKind());
+    }
   }
 
   private void writeProp(

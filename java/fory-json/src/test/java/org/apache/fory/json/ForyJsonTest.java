@@ -43,6 +43,11 @@ public class ForyJsonTest {
     public String missing;
   }
 
+  public static final class FirstIntField {
+    public int count = 2;
+    public String name = "first";
+  }
+
   public static final class Accessors {
     public String value = "field";
     private boolean ready = true;
@@ -125,6 +130,16 @@ public class ForyJsonTest {
     assertEquals(
         new String(json.toJsonBytes(new PublicFields()), StandardCharsets.UTF_8),
         "{\"active\":true,\"id\":7,\"name\":\"fory\"}");
+  }
+
+  @Test
+  public void writeFirstIntGenerated() {
+    ForyJson json = ForyJson.builder().build();
+    String expected = "{\"count\":2,\"name\":\"first\"}";
+    assertEquals(json.toJson(new FirstIntField()), expected);
+    assertEquals(
+        new String(json.toJsonBytes(new FirstIntField()), StandardCharsets.UTF_8), expected);
+    assertEquals(json.hasGeneratedWriter(FirstIntField.class), true);
   }
 
   @Test

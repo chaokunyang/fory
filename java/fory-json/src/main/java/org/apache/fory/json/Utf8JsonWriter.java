@@ -231,10 +231,24 @@ final class Utf8JsonWriter extends JsonWriter {
     writeIntNoEnsure(value);
   }
 
+  public void writeObjectIntField(byte[] namePrefix, int value) {
+    ensure(namePrefix.length + 12);
+    buffer[position++] = (byte) '{';
+    writeRawNoEnsure(namePrefix);
+    writeIntNoEnsure(value);
+  }
+
   public void writeLongField(byte[] namePrefix, byte[] commaNamePrefix, int index, long value) {
     byte[] prefix = index == 0 ? namePrefix : commaNamePrefix;
     ensure(prefix.length + 20);
     writeRawNoEnsure(prefix);
+    writeLongNoEnsure(value);
+  }
+
+  public void writeObjectLongField(byte[] namePrefix, long value) {
+    ensure(namePrefix.length + 21);
+    buffer[position++] = (byte) '{';
+    writeRawNoEnsure(namePrefix);
     writeLongNoEnsure(value);
   }
 

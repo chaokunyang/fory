@@ -188,10 +188,24 @@ final class StringJsonWriter extends JsonWriter {
     writeIntNoEnsure(value);
   }
 
+  public void writeObjectIntField(char[] namePrefix, int value) {
+    ensure(namePrefix.length + 12);
+    buffer[position++] = '{';
+    writeRawNoEnsure(namePrefix);
+    writeIntNoEnsure(value);
+  }
+
   public void writeLongField(char[] namePrefix, char[] commaNamePrefix, int index, long value) {
     char[] prefix = index == 0 ? namePrefix : commaNamePrefix;
     ensure(prefix.length + 20);
     writeRawNoEnsure(prefix);
+    writeLongNoEnsure(value);
+  }
+
+  public void writeObjectLongField(char[] namePrefix, long value) {
+    ensure(namePrefix.length + 21);
+    buffer[position++] = '{';
+    writeRawNoEnsure(namePrefix);
     writeLongNoEnsure(value);
   }
 

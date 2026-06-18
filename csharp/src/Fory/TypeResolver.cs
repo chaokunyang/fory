@@ -697,21 +697,14 @@ public sealed class TypeResolver
             !info.RegisterByName &&
             typeId == TypeId.CompatibleStruct)
         {
-            TypeMeta remoteTypeMeta = context.ReadTypeMeta(info);
-            if (!HasValidatedTypeMeta(info, remoteTypeMeta))
-            {
-                ValidateTypeMeta(
-                    remoteTypeMeta,
-                    info,
-                    info.UserTypeKind.Value,
-                    info.RegisterByName,
-                    context.Compatible,
-                    typeId);
-                remoteTypeMeta.EnsureAssignedFieldIds(TypeMetaFields(info, context.TrackRef));
-                SetValidatedTypeMeta(info, remoteTypeMeta);
-            }
-
-            context.AcceptReadTypeMeta(remoteTypeMeta);
+            TypeMeta remoteTypeMeta = ReadCheckedTypeMeta(
+                info,
+                info.UserTypeKind.Value,
+                info.RegisterByName,
+                context.Compatible,
+                typeId,
+                assignFieldIds: true,
+                context);
             context.StoreTypeMeta(type, remoteTypeMeta);
             return;
         }
@@ -730,21 +723,14 @@ public sealed class TypeResolver
             case TypeId.CompatibleStruct:
             case TypeId.NamedCompatibleStruct:
                 {
-                    TypeMeta remoteTypeMeta = context.ReadTypeMeta(info);
-                    if (!HasValidatedTypeMeta(info, remoteTypeMeta))
-                    {
-                        ValidateTypeMeta(
-                            remoteTypeMeta,
-                            info,
-                            declaredKind,
-                            registerByName,
-                            compatible,
-                            typeId);
-                        remoteTypeMeta.EnsureAssignedFieldIds(TypeMetaFields(info, context.TrackRef));
-                        SetValidatedTypeMeta(info, remoteTypeMeta);
-                    }
-
-                    context.AcceptReadTypeMeta(remoteTypeMeta);
+                    TypeMeta remoteTypeMeta = ReadCheckedTypeMeta(
+                        info,
+                        declaredKind,
+                        registerByName,
+                        compatible,
+                        typeId,
+                        assignFieldIds: true,
+                        context);
                     context.StoreTypeMeta(type, remoteTypeMeta);
                     return;
                 }
@@ -783,20 +769,14 @@ public sealed class TypeResolver
     {
         if (compatible)
         {
-            TypeMeta remoteTypeMeta = context.ReadTypeMeta(typeInfo);
-            if (!HasValidatedTypeMeta(typeInfo, remoteTypeMeta))
-            {
-                ValidateTypeMeta(
-                    remoteTypeMeta,
-                    typeInfo,
-                    declaredKind,
-                    registerByName,
-                    compatible,
-                    wireTypeId);
-                SetValidatedTypeMeta(typeInfo, remoteTypeMeta);
-            }
-
-            context.AcceptReadTypeMeta(remoteTypeMeta);
+            _ = ReadCheckedTypeMeta(
+                typeInfo,
+                declaredKind,
+                registerByName,
+                compatible,
+                wireTypeId,
+                assignFieldIds: false,
+                context);
             return;
         }
 
@@ -819,6 +799,109 @@ public sealed class TypeResolver
             throw new InvalidDataException(
                 $"type name mismatch: expected {typeInfo.NamespaceName.Value.Value}::{typeInfo.TypeName.Value.Value}, got {namespaceName.Value}::{typeName.Value}");
         }
+    }
+
+    private TypeMeta ReadCheckedTypeMeta(
+        TypeInfo typeInfo,
+        UserTypeKind declaredKind,
+        bool registerByName,
+        bool compatible,
+        TypeId wireTypeId,
+        bool assignFieldIds,
+        ReadContext context)
+    {
+        if (context.TryReadTypeMetaRef(out int index, out TypeMeta remoteTypeMeta))
+        {
+            ValidateCheckedTypeMeta(
+                remoteTypeMeta,
+                typeInfo,
+                declaredKind,
+                registerByName,
+                compatible,
+                wireTypeId,
+                assignFieldIds,
+                context);
+            return remoteTypeMeta;
+        }
+
+        ulong header = context.Reader.ReadUInt64();
+        if (context.TryGetCachedReadTypeMeta(header, out remoteTypeMeta))
+        {
+            // Checked cache hits are already parsed and hash-validated. Keep this
+            // path body-skip only; schema limits are owned by cold cache misses.
+            TypeMeta.SkipBody(context.Reader, header);
+            context.StoreReadTypeMeta(remoteTypeMeta, index);
+            ValidateCheckedTypeMeta(
+                remoteTypeMeta,
+                typeInfo,
+                declaredKind,
+                registerByName,
+                compatible,
+                wireTypeId,
+                assignFieldIds,
+                context);
+            return remoteTypeMeta;
+        }
+
+        if (context.TryReadExactLocalTypeMeta(header, typeInfo, out remoteTypeMeta))
+        {
+            ValidateCheckedTypeMeta(
+                remoteTypeMeta,
+                typeInfo,
+                declaredKind,
+                registerByName,
+                compatible,
+                wireTypeId,
+                assignFieldIds,
+                context);
+            context.StoreReadTypeMeta(remoteTypeMeta, index);
+            return remoteTypeMeta;
+        }
+
+        context.Reader.MoveBack(sizeof(ulong));
+        remoteTypeMeta = context.DecodeReadTypeMeta();
+        ValidateCheckedTypeMeta(
+            remoteTypeMeta,
+            typeInfo,
+            declaredKind,
+            registerByName,
+            compatible,
+            wireTypeId,
+            assignFieldIds,
+            context);
+        context.CacheReadTypeMeta(header, remoteTypeMeta);
+        context.StoreReadTypeMeta(remoteTypeMeta, index);
+        return remoteTypeMeta;
+    }
+
+    private void ValidateCheckedTypeMeta(
+        TypeMeta remoteTypeMeta,
+        TypeInfo typeInfo,
+        UserTypeKind declaredKind,
+        bool registerByName,
+        bool compatible,
+        TypeId wireTypeId,
+        bool assignFieldIds,
+        ReadContext context)
+    {
+        if (HasValidatedTypeMeta(typeInfo, remoteTypeMeta))
+        {
+            return;
+        }
+
+        ValidateTypeMeta(
+            remoteTypeMeta,
+            typeInfo,
+            declaredKind,
+            registerByName,
+            compatible,
+            wireTypeId);
+        if (assignFieldIds)
+        {
+            remoteTypeMeta.EnsureAssignedFieldIds(TypeMetaFields(typeInfo, context.TrackRef));
+        }
+
+        SetValidatedTypeMeta(typeInfo, remoteTypeMeta);
     }
 
     internal static TypeId ResolveWireTypeId(
@@ -876,16 +959,8 @@ public sealed class TypeResolver
 
     private object? ReadRegisteredValue(
         TypeInfo typeInfo,
-        ReadContext context,
-        TypeMeta? typeMeta)
+        ReadContext context)
     {
-        if (typeMeta is not null)
-        {
-            typeMeta.EnsureAssignedFieldIds(TypeMetaFields(typeInfo, context.TrackRef));
-            context.AcceptReadTypeMeta(typeMeta);
-            context.StoreTypeMeta(typeInfo.Type, typeMeta);
-        }
-
         return ReadObject(typeInfo, context, RefMode.None, false);
     }
 
@@ -902,16 +977,7 @@ public sealed class TypeResolver
         {
             case TypeId.CompatibleStruct:
             case TypeId.NamedCompatibleStruct:
-                {
-                    TypeMeta typeMeta = context.ReadTypeMeta();
-                    TypeInfo typeInfo = ResolveAnyTypeInfoFromMeta(wireTypeId, typeMeta, context.Compatible);
-                    if (context.TryAcceptExactLocalTypeMeta(typeMeta, typeInfo, out TypeMeta localTypeMeta))
-                    {
-                        return typeInfo.WithWireTypeInfo(wireTypeId, localTypeMeta);
-                    }
-
-                    return typeInfo;
-                }
+                return ReadAnyTypeMetaInfo(wireTypeId, context.Compatible, context);
             case TypeId.NamedEnum:
             case TypeId.NamedStruct:
             case TypeId.NamedExt:
@@ -931,14 +997,7 @@ public sealed class TypeResolver
     {
         if (context.Compatible)
         {
-            TypeMeta typeMeta = context.ReadTypeMeta();
-            TypeInfo typeInfo = ResolveAnyTypeInfoFromMeta(wireTypeId, typeMeta, compatible: true);
-            if (context.TryAcceptExactLocalTypeMeta(typeMeta, typeInfo, out TypeMeta localTypeMeta))
-            {
-                return typeInfo.WithWireTypeInfo(wireTypeId, localTypeMeta);
-            }
-
-            return typeInfo;
+            return ReadAnyTypeMetaInfo(wireTypeId, compatible: true, context);
         }
 
         MetaString namespaceName = ReadMetaString(
@@ -950,6 +1009,49 @@ public sealed class TypeResolver
             MetaStringDecoder.TypeName,
             TypeMetaEncodings.TypeNameMetaStringEncodings);
         return ResolveAnyUserTypeInfo(wireTypeId, namespaceName.Value, typeName.Value, compatible: false);
+    }
+
+    private TypeInfo ReadAnyTypeMetaInfo(TypeId wireTypeId, bool compatible, ReadContext context)
+    {
+        if (context.TryReadTypeMetaRef(out int index, out TypeMeta typeMeta))
+        {
+            TypeInfo typeInfo = ResolveAnyTypeInfoFromMeta(wireTypeId, typeMeta, compatible);
+            typeMeta.EnsureAssignedFieldIds(TypeMetaFields(typeInfo, context.TrackRef));
+            context.StoreTypeMeta(typeInfo.Type, typeMeta);
+            return typeInfo;
+        }
+
+        int typeMetaStart = context.Reader.Cursor;
+        ulong header = context.Reader.ReadUInt64();
+        if (context.TryGetCachedReadTypeMeta(header, out typeMeta))
+        {
+            // Header-cache hits stay body-skip only. Type resolution and field binding
+            // below are existing Any resolution work, not schema-limit checks.
+            TypeMeta.SkipBody(context.Reader, header);
+            context.StoreReadTypeMeta(typeMeta, index);
+            TypeInfo typeInfo = ResolveAnyTypeInfoFromMeta(wireTypeId, typeMeta, compatible);
+            typeMeta.EnsureAssignedFieldIds(TypeMetaFields(typeInfo, context.TrackRef));
+            context.StoreTypeMeta(typeInfo.Type, typeMeta);
+            return typeInfo;
+        }
+
+        context.Reader.MoveBack(sizeof(ulong));
+        typeMeta = context.DecodeReadTypeMeta();
+        int typeMetaEnd = context.Reader.Cursor;
+        TypeInfo resolvedInfo = ResolveAnyTypeInfoFromMeta(wireTypeId, typeMeta, compatible);
+        if (context.TryUseExactLocalTypeMeta(typeMetaStart, typeMetaEnd, resolvedInfo, out TypeMeta localTypeMeta))
+        {
+            localTypeMeta.EnsureAssignedFieldIds(TypeMetaFields(resolvedInfo, context.TrackRef));
+            context.StoreReadTypeMeta(localTypeMeta, index);
+            context.StoreTypeMeta(resolvedInfo.Type, localTypeMeta);
+            return resolvedInfo.WithWireTypeInfo(wireTypeId, localTypeMeta);
+        }
+
+        typeMeta.EnsureAssignedFieldIds(TypeMetaFields(resolvedInfo, context.TrackRef));
+        context.CacheReadTypeMeta(header, typeMeta);
+        context.StoreReadTypeMeta(typeMeta, index);
+        context.StoreTypeMeta(resolvedInfo.Type, typeMeta);
+        return resolvedInfo;
     }
 
     internal object? ReadAnyValue(TypeInfo typeInfo, ReadContext context)
@@ -989,10 +1091,10 @@ public sealed class TypeResolver
             case TypeId.NamedUnion:
             case TypeId.CompatibleStruct:
             case TypeId.NamedCompatibleStruct:
-                return ReadNestedRegisteredValue(typeInfo, context, typeInfo.GetTypeMeta());
+                return ReadNestedRegisteredValue(typeInfo, context);
             case TypeId.Enum:
             case TypeId.NamedEnum:
-                return ReadRegisteredValue(typeInfo, context, typeInfo.GetTypeMeta());
+                return ReadRegisteredValue(typeInfo, context);
             case TypeId.None:
                 return null;
             default:
@@ -1018,11 +1120,10 @@ public sealed class TypeResolver
 
     private object? ReadNestedRegisteredValue(
         TypeInfo typeInfo,
-        ReadContext context,
-        TypeMeta? typeMeta)
+        ReadContext context)
     {
         context.IncreaseReadDepth();
-        object? value = ReadRegisteredValue(typeInfo, context, typeMeta);
+        object? value = ReadRegisteredValue(typeInfo, context);
         context.DecreaseReadDepth();
         return value;
     }

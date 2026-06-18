@@ -1228,6 +1228,9 @@ func decodeTypeDef(fory *Fory, buffer *ByteBuffer, header int64) (*TypeDef, erro
 	if metaErr.HasError() {
 		return nil, metaErr.TakeError()
 	}
+	if !isStruct && len(fieldInfos) != 0 {
+		return nil, fmt.Errorf("non-struct TypeDef cannot carry field metadata")
+	}
 	if remaining := metaBuffer.remaining(); remaining != 0 {
 		return nil, fmt.Errorf("TypeDef metadata body has %d trailing bytes", remaining)
 	}

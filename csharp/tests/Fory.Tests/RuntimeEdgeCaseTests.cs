@@ -537,9 +537,9 @@ public sealed class RuntimeEdgeCaseTests
         TypeMeta first = RemoteStructTypeMeta(901, "first");
         TypeMeta second = RemoteStructTypeMeta(901, "second");
 
-        ReadAndAcceptTypeMeta(context, first);
+        ReadAndCacheTypeMeta(context, first);
 
-        Assert.Throws<InvalidDataException>(() => ReadAndAcceptTypeMeta(context, second));
+        Assert.Throws<InvalidDataException>(() => ReadAndCacheTypeMeta(context, second));
     }
 
     [Fact]
@@ -554,7 +554,7 @@ public sealed class RuntimeEdgeCaseTests
         TypeMeta typeMeta = RemoteStructTypeMeta(901, "first", "second");
 
         InvalidDataException exception =
-            Assert.Throws<InvalidDataException>(() => ReadAndAcceptTypeMeta(context, typeMeta));
+            Assert.Throws<InvalidDataException>(() => ReadAndCacheTypeMeta(context, typeMeta));
         Assert.Contains("MaxTypeFields", exception.Message, StringComparison.Ordinal);
     }
 
@@ -569,7 +569,7 @@ public sealed class RuntimeEdgeCaseTests
         ReadContext context = new(new ByteReader(Array.Empty<byte>()), new TypeResolver(), config);
 
         InvalidDataException exception =
-            Assert.Throws<InvalidDataException>(() => ReadAndAcceptTypeMeta(context, RemoteStructTypeMeta(901, "value")));
+            Assert.Throws<InvalidDataException>(() => ReadAndCacheTypeMeta(context, RemoteStructTypeMeta(901, "value")));
         Assert.Contains("MaxTypeMetaBytes", exception.Message, StringComparison.Ordinal);
     }
 
@@ -585,15 +585,15 @@ public sealed class RuntimeEdgeCaseTests
         TypeMeta first = RemoteStructTypeMeta(901, "value");
         TypeMeta second = RemoteStructTypeMeta(902, "value");
 
-        TypeMeta firstRead = ReadAndAcceptTypeMeta(context, first);
-        TypeMeta secondRead = ReadAndAcceptTypeMeta(context, second);
+        TypeMeta firstRead = ReadAndCacheTypeMeta(context, first);
+        TypeMeta secondRead = ReadAndCacheTypeMeta(context, second);
 
         Assert.True(context.TryGetCachedReadTypeMeta(EncodedTypeMetaHeader(firstRead), out _));
         Assert.True(context.TryGetCachedReadTypeMeta(EncodedTypeMetaHeader(secondRead), out _));
     }
 
     [Fact]
-    public void PendingAnyTypeMetaCheckOnly()
+    public void FailedAnyTypeMetaDoesNotConsumeLimit()
     {
         TypeResolver resolver = new();
         resolver.Register(typeof(CustomPayload), 901);
@@ -604,8 +604,9 @@ public sealed class RuntimeEdgeCaseTests
             .Config;
         ReadContext context = new(new ByteReader(Array.Empty<byte>()), resolver, config);
 
-        ReadAnyTypeInfo(context, resolver, RemoteCompatibleStructTypeMeta(901, "first"));
-        TypeMeta accepted = ReadAndAcceptTypeMeta(context, RemoteStructTypeMeta(901, "second"));
+        Assert.Throws<InvalidDataException>(() =>
+            ReadAnyTypeInfo(context, resolver, RemoteCompatibleStructTypeMeta(901, "Id", MapType())));
+        TypeMeta accepted = ReadAndCacheTypeMeta(context, RemoteStructTypeMeta(901, "second"));
 
         Assert.True(context.TryGetCachedReadTypeMeta(EncodedTypeMetaHeader(accepted), out _));
     }
@@ -621,11 +622,10 @@ public sealed class RuntimeEdgeCaseTests
             .Build()
             .Config;
         ReadContext context = new(new ByteReader(Array.Empty<byte>()), resolver, config);
-        TypeMeta remote = ReadAndAcceptTypeMeta(context, RemoteStructTypeMeta(901, "remote"));
+        TypeMeta remote = ReadAndCacheTypeMeta(context, RemoteStructTypeMeta(901, "remote"));
         TypeMeta exact = resolver.GetTypeInfo(typeof(CustomPayload)).GetTypeMetaCacheEntry(trackRef: false).TypeMeta;
 
         TypeInfo typeInfo = ReadAnyTypeInfo(context, resolver, exact);
-        context.AcceptReadTypeMeta(typeInfo.GetTypeMeta()!);
 
         Assert.True(context.TryGetCachedReadTypeMeta(EncodedTypeMetaHeader(remote), out _));
     }
@@ -681,24 +681,45 @@ public sealed class RuntimeEdgeCaseTests
 
     private static TypeMeta RemoteCompatibleStructTypeMeta(uint userTypeId, string fieldName)
     {
+        return RemoteCompatibleStructTypeMeta(
+            userTypeId,
+            fieldName,
+            new TypeMetaFieldType((uint)TypeId.Int32, nullable: false));
+    }
+
+    private static TypeMeta RemoteCompatibleStructTypeMeta(
+        uint userTypeId,
+        string fieldName,
+        TypeMetaFieldType fieldType)
+    {
         return new TypeMeta(
             (uint)TypeId.CompatibleStruct,
             userTypeId,
             MetaString.Empty('.', '_'),
             MetaString.Empty('$', '_'),
             registerByName: false,
-            [new TypeMetaFieldInfo(null, fieldName, new TypeMetaFieldType((uint)TypeId.Int32, nullable: false))]);
+            [new TypeMetaFieldInfo(null, fieldName, fieldType)]);
     }
 
-    private static TypeMeta ReadAndAcceptTypeMeta(ReadContext context, TypeMeta typeMeta)
+    private static TypeMetaFieldType MapType()
+    {
+        return new TypeMetaFieldType(
+            (uint)TypeId.Map,
+            nullable: false,
+            trackRef: false,
+            [
+                new TypeMetaFieldType((uint)TypeId.String, nullable: false),
+                new TypeMetaFieldType((uint)TypeId.Int32, nullable: false),
+            ]);
+    }
+
+    private static TypeMeta ReadAndCacheTypeMeta(ReadContext context, TypeMeta typeMeta)
     {
         ByteWriter writer = new();
         writer.WriteVarUInt32(0);
         writer.WriteBytes(typeMeta.Encode());
         context.ResetFor(new ByteReader(writer.ToArray()));
-        TypeMeta decoded = context.ReadTypeMeta();
-        context.AcceptReadTypeMeta(decoded);
-        return decoded;
+        return context.ReadTypeMeta();
     }
 
     private static TypeInfo ReadAnyTypeInfo(ReadContext context, TypeResolver resolver, TypeMeta typeMeta)

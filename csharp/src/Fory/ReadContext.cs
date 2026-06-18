@@ -31,11 +31,6 @@ public sealed class ReadContext
     private ulong _lastMetaHeader;
     private TypeMeta? _lastTypeMeta;
     private bool _hasLastMetaHeader;
-    private TypeMeta? _pendingTypeMeta;
-    private ulong _pendingTypeMetaHeader;
-    private int _pendingTypeMetaIndex = -1;
-    private int _pendingTypeMetaStart = -1;
-    private int _pendingTypeMetaEnd = -1;
 
     private readonly List<MetaString> _readMetaStrings = [];
 
@@ -241,64 +236,13 @@ public sealed class ReadContext
         _readMetaStrings.Add(value);
     }
 
-    internal void AcceptReadTypeMeta(TypeMeta typeMeta)
-    {
-        if (!ReferenceEquals(_pendingTypeMeta, typeMeta))
-        {
-            return;
-        }
-
-        CacheReadTypeMeta(_pendingTypeMetaHeader, typeMeta);
-        StoreReadTypeMeta(typeMeta, _pendingTypeMetaIndex);
-        ClearPendingTypeMeta();
-    }
-
-    internal bool TryAcceptExactLocalTypeMeta(TypeMeta typeMeta, TypeInfo exactLocal, out TypeMeta localTypeMeta)
-    {
-        if (!ReferenceEquals(_pendingTypeMeta, typeMeta))
-        {
-            localTypeMeta = typeMeta;
-            return false;
-        }
-
-        TypeInfo.TypeMetaCacheEntry local = exactLocal.GetTypeMetaCacheEntry(TrackRef);
-        byte[] encoded = local.EncodedBytes;
-        int pendingBytes = _pendingTypeMetaEnd - _pendingTypeMetaStart;
-        if (pendingBytes != encoded.Length ||
-            !Reader.Storage.AsSpan(_pendingTypeMetaStart, encoded.Length).SequenceEqual(encoded))
-        {
-            localTypeMeta = typeMeta;
-            return false;
-        }
-
-        localTypeMeta = local.TypeMeta;
-        StoreReadTypeMeta(localTypeMeta, _pendingTypeMetaIndex);
-        ClearPendingTypeMeta();
-        return true;
-    }
-
     internal TypeMeta ReadTypeMeta(TypeInfo? exactLocal = null)
     {
-        uint indexMarker = Reader.ReadVarUInt32();
-        bool isRef = (indexMarker & 1) == 1;
-        int index = checked((int)(indexMarker >> 1));
-        if (isRef)
+        if (TryReadTypeMetaRef(out int index, out TypeMeta typeMeta))
         {
-            TypeMeta? cached = GetReadTypeMeta(index);
-            if (cached is null)
-            {
-                throw new InvalidDataException($"unknown type meta ref index {index}");
-            }
-
-            return cached;
+            return typeMeta;
         }
 
-        if (_pendingTypeMeta is not null)
-        {
-            throw new InvalidDataException("previous type meta was not accepted");
-        }
-
-        int typeMetaStart = Reader.Cursor;
         ulong header = Reader.ReadUInt64();
         if (TryGetCachedReadTypeMeta(header, out TypeMeta cachedTypeMeta))
         {
@@ -317,17 +261,35 @@ public sealed class ReadContext
         }
 
         Reader.MoveBack(sizeof(ulong));
-        TypeMeta typeMeta = TypeMeta.Decode(Reader, _config.MaxTypeFields, _config.MaxTypeMetaBytes);
-        _pendingTypeMeta = typeMeta;
-        _pendingTypeMetaHeader = header;
-        _pendingTypeMetaIndex = index;
-        _pendingTypeMetaStart = typeMetaStart;
-        _pendingTypeMetaEnd = Reader.Cursor;
+        typeMeta = DecodeReadTypeMeta();
+        CacheReadTypeMeta(header, typeMeta);
+        StoreReadTypeMeta(typeMeta, index);
         return typeMeta;
     }
 
+    internal bool TryReadTypeMetaRef(out int index, out TypeMeta typeMeta)
+    {
+        uint indexMarker = Reader.ReadVarUInt32();
+        bool isRef = (indexMarker & 1) == 1;
+        index = checked((int)(indexMarker >> 1));
+        if (isRef)
+        {
+            TypeMeta? cached = GetReadTypeMeta(index);
+            if (cached is null)
+            {
+                throw new InvalidDataException($"unknown type meta ref index {index}");
+            }
+
+            typeMeta = cached;
+            return true;
+        }
+
+        typeMeta = null!;
+        return false;
+    }
+
     [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
-    private bool TryReadExactLocalTypeMeta(ulong header, TypeInfo exactLocal, out TypeMeta typeMeta)
+    internal bool TryReadExactLocalTypeMeta(ulong header, TypeInfo exactLocal, out TypeMeta typeMeta)
     {
         TypeInfo.TypeMetaCacheEntry local = exactLocal.GetTypeMetaCacheEntry(TrackRef);
         byte[] encoded = local.EncodedBytes;
@@ -351,6 +313,28 @@ public sealed class ReadContext
         Reader.Skip(bodyBytes);
         typeMeta = local.TypeMeta;
         return true;
+    }
+
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+    internal bool TryUseExactLocalTypeMeta(int start, int end, TypeInfo exactLocal, out TypeMeta typeMeta)
+    {
+        TypeInfo.TypeMetaCacheEntry local = exactLocal.GetTypeMetaCacheEntry(TrackRef);
+        byte[] encoded = local.EncodedBytes;
+        if (end - start != encoded.Length ||
+            !Reader.Storage.AsSpan(start, encoded.Length).SequenceEqual(encoded))
+        {
+            typeMeta = null!;
+            return false;
+        }
+
+        typeMeta = local.TypeMeta;
+        return true;
+    }
+
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+    internal TypeMeta DecodeReadTypeMeta()
+    {
+        return TypeMeta.Decode(Reader, _config.MaxTypeFields, _config.MaxTypeMetaBytes);
     }
 
     internal void StoreTypeMeta(Type type, TypeMeta typeMeta)
@@ -510,14 +494,5 @@ public sealed class ReadContext
         _hasFirstReadTypeMeta = false;
         _readTypeMetas.Clear();
         _readMetaStrings.Clear();
-        ClearPendingTypeMeta();
-    }
-
-    private void ClearPendingTypeMeta()
-    {
-        _pendingTypeMeta = null;
-        _pendingTypeMetaIndex = -1;
-        _pendingTypeMetaStart = -1;
-        _pendingTypeMetaEnd = -1;
     }
 }

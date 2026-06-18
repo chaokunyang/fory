@@ -237,6 +237,11 @@ public class ForyJsonTest {
     assertEquals(
         new String(json.toJsonBytes(fields), StandardCharsets.UTF_8),
         "{\"active\":true,\"id\":7,\"name\":\"caf\u00e9\"}");
+    fields.name = "\u0080";
+    String expected = "{\"active\":true,\"id\":7,\"name\":\"\u0080\"}";
+    assertEquals(json.toJson(fields), expected);
+    assertEquals(new String(json.toJsonBytes(fields), StandardCharsets.UTF_8), expected);
+    assertEquals(json.fromJson(json.toJsonBytes(fields), PublicFields.class).name, fields.name);
   }
 
   @Test

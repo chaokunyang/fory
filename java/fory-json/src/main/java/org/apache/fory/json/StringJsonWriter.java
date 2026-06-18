@@ -560,13 +560,13 @@ final class StringJsonWriter extends JsonWriter {
   }
 
   private static boolean isJsonAsciiWord(long word) {
-    return ((word + ASCII_CONTROL_OFFSET) & HIGH_BITS) == HIGH_BITS
+    return (((word + ASCII_CONTROL_OFFSET) & ~word) & HIGH_BITS) == HIGH_BITS
         && (((word ^ QUOTE_BYTES_COMPLEMENT) + ONE_BYTES) & HIGH_BITS) == HIGH_BITS
         && (((word ^ BACKSLASH_BYTES_COMPLEMENT) + ONE_BYTES) & HIGH_BITS) == HIGH_BITS;
   }
 
   private static boolean isJsonAsciiInt(int word) {
-    return ((word + INT_ASCII_CONTROL_OFFSET) & INT_HIGH_BITS) == INT_HIGH_BITS
+    return (((word + INT_ASCII_CONTROL_OFFSET) & ~word) & INT_HIGH_BITS) == INT_HIGH_BITS
         && (((word ^ INT_QUOTE_BYTES_COMPLEMENT) + INT_ONE_BYTES) & INT_HIGH_BITS) == INT_HIGH_BITS
         && (((word ^ INT_BACKSLASH_BYTES_COMPLEMENT) + INT_ONE_BYTES) & INT_HIGH_BITS)
             == INT_HIGH_BITS;

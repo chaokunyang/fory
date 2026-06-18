@@ -17,20 +17,15 @@
  * under the License.
  */
 
-package org.apache.fory.annotation;
+package org.apache.fory.json;
 
-import java.lang.annotation.ElementType;
-import java.lang.annotation.Retention;
-import java.lang.annotation.RetentionPolicy;
-import java.lang.annotation.Target;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 
-/** Ignore properties just like transient. */
-@Retention(RetentionPolicy.RUNTIME)
-@Target({ElementType.FIELD, ElementType.METHOD})
-public @interface Ignore {
-  /** Whether this member is ignored when reading data into an object. */
-  boolean ignoreRead() default true;
+final class JsonClassCache {
+  private final ConcurrentMap<Class<?>, JsonClassInfo> classes = new ConcurrentHashMap<>();
 
-  /** Whether this member is ignored when writing an object. */
-  boolean ignoreWrite() default true;
+  public JsonClassInfo get(Class<?> type) {
+    return classes.computeIfAbsent(type, JsonClassInfo::build);
+  }
 }

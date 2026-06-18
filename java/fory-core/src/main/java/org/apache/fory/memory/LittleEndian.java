@@ -81,6 +81,17 @@ public class LittleEndian {
     return NativeByteOrder.IS_LITTLE_ENDIAN ? v : Long.reverseBytes(v);
   }
 
+  public static void putInt32(byte[] o, int index, int value) {
+    if (AndroidSupport.IS_ANDROID) {
+      MemoryOps.putInt32(o, index, value);
+      return;
+    }
+    if (!NativeByteOrder.IS_LITTLE_ENDIAN) {
+      value = Integer.reverseBytes(value);
+    }
+    UNSAFE.putInt(o, (long) BYTE_ARRAY_OFFSET + index, value);
+  }
+
   public static void putInt64(byte[] o, int index, long value) {
     if (AndroidSupport.IS_ANDROID) {
       MemoryOps.putInt64(o, index, value);

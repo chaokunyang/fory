@@ -17,20 +17,8 @@
  * under the License.
  */
 
-package org.apache.fory.annotation;
+module org.apache.fory.json {
+  requires org.apache.fory.core;
 
-import java.lang.annotation.ElementType;
-import java.lang.annotation.Retention;
-import java.lang.annotation.RetentionPolicy;
-import java.lang.annotation.Target;
-
-/** Ignore properties just like transient. */
-@Retention(RetentionPolicy.RUNTIME)
-@Target({ElementType.FIELD, ElementType.METHOD})
-public @interface Ignore {
-  /** Whether this member is ignored when reading data into an object. */
-  boolean ignoreRead() default true;
-
-  /** Whether this member is ignored when writing an object. */
-  boolean ignoreWrite() default true;
+  exports org.apache.fory.json;
 }

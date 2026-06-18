@@ -60,6 +60,7 @@
 
   <modules>
     <module>fory-core</module>
+    <module>fory-json</module>
     <module>fory-annotation-processor</module>
     <module>fory-extensions</module>
     <module>fory-test-core</module>

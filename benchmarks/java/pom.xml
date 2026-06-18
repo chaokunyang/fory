@@ -100,6 +100,11 @@
     </dependency>
     <dependency>
       <groupId>org.apache.fory</groupId>
+      <artifactId>fory-json</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.fory</groupId>
       <artifactId>fory-format</artifactId>
       <version>${project.version}</version>
     </dependency>

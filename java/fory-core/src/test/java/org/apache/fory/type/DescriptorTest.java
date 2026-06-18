@@ -26,6 +26,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.SortedMap;
 import java.util.stream.Collectors;
+import org.apache.fory.annotation.Ignore;
 import org.apache.fory.codegen.CodeGenerator;
 import org.apache.fory.reflect.TypeRef;
 import org.apache.fory.test.bean.BeanA;
@@ -40,6 +41,20 @@ public class DescriptorTest {
 
   static class B extends A {
     long f2;
+  }
+
+  static class DirectionalIgnoreFields {
+    @Ignore(ignoreRead = false, ignoreWrite = true)
+    int readOnly;
+
+    @Ignore(ignoreRead = true, ignoreWrite = false)
+    int writeOnly;
+
+    @Ignore(ignoreRead = false, ignoreWrite = false)
+    int notIgnored;
+
+    @Ignore int both;
+    int kept;
   }
 
   @Test
@@ -93,6 +108,17 @@ public class DescriptorTest {
     Descriptor.getAllDescriptorsMap(BeanA.class);
     Descriptor.clearDescriptorCache();
     Descriptor.getAllDescriptorsMap(BeanA.class);
+  }
+
+  @Test
+  public void ignorePartialInCore() {
+    SortedMap<String, Descriptor> descriptors =
+        Descriptor.getDescriptorsMap(DirectionalIgnoreFields.class);
+    Assert.assertTrue(descriptors.containsKey("kept"));
+    Assert.assertTrue(descriptors.containsKey("notIgnored"));
+    Assert.assertFalse(descriptors.containsKey("readOnly"));
+    Assert.assertFalse(descriptors.containsKey("writeOnly"));
+    Assert.assertFalse(descriptors.containsKey("both"));
   }
 
   @Test

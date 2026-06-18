@@ -182,14 +182,18 @@ final class JsonCodegen {
           .append("].stringCommaNamePrefix();\n");
     }
     code.append("  }\n");
-    writeMethod(code, typeName, properties, true);
-    writeMethod(code, typeName, properties, false);
+    writeMethod(code, type, typeName, properties, true);
+    writeMethod(code, type, typeName, properties, false);
     code.append("}\n");
     return code.toString();
   }
 
   private void writeMethod(
-      StringBuilder code, String typeName, JsonPropertyInfo[] properties, boolean utf8) {
+      StringBuilder code,
+      Class<?> ownerType,
+      String typeName,
+      JsonPropertyInfo[] properties,
+      boolean utf8) {
     String writerType = utf8 ? "Utf8JsonWriter" : "StringJsonWriter";
     String method = utf8 ? "writeUtf8" : "writeString";
     code.append("  public void ")
@@ -205,13 +209,14 @@ final class JsonCodegen {
     code.append("    writer.writeObjectStart();\n");
     code.append("    int index = 0;\n");
     for (int i = 0; i < properties.length; i++) {
-      writeProp(code, properties[i], i, utf8);
+      writeProp(code, ownerType, properties[i], i, utf8);
     }
     code.append("    writer.writeObjectEnd();\n");
     code.append("  }\n");
   }
 
-  private void writeProp(StringBuilder code, JsonPropertyInfo property, int id, boolean utf8) {
+  private void writeProp(
+      StringBuilder code, Class<?> ownerType, JsonPropertyInfo property, int id, boolean utf8) {
     String prop = "p" + id;
     Class<?> rawType = property.writeRawType();
     String value = "v" + id;
@@ -232,23 +237,23 @@ final class JsonCodegen {
         writeFieldName(code, id, utf8, "      ");
         code.append("      writer.writeNull();\n");
         code.append("    } else {\n");
-        writeValue(code, property, prop, value, utf8, "      ");
+        writeValue(code, ownerType, property, prop, value, utf8, "      ");
         code.append("    }\n");
       } else {
         writeFieldName(code, id, utf8, "    ");
         code.append("    if (").append(value).append(" == null) {\n");
         code.append("      writer.writeNull();\n");
         code.append("    } else {\n");
-        writeValue(code, property, prop, value, utf8, "      ");
+        writeValue(code, ownerType, property, prop, value, utf8, "      ");
         code.append("    }\n");
       }
     } else {
       code.append("    if (").append(value).append(" != null) {\n");
       if (isPrefixValue(property.writeKind())) {
-        writeValue(code, property, prop, value, utf8, "      ");
+        writeValue(code, ownerType, property, prop, value, utf8, "      ");
       } else {
         writeFieldName(code, id, utf8, "      ");
-        writeValue(code, property, prop, value, utf8, "      ");
+        writeValue(code, ownerType, property, prop, value, utf8, "      ");
       }
       code.append("    }\n");
     }
@@ -307,6 +312,7 @@ final class JsonCodegen {
 
   private void writeValue(
       StringBuilder code,
+      Class<?> ownerType,
       JsonPropertyInfo property,
       String prop,
       String value,
@@ -382,7 +388,7 @@ final class JsonCodegen {
             .append(".writeArrayComponentType(), classCache);\n");
         return;
       case COLLECTION:
-        writeCollection(code, property, prop, value, utf8, indent);
+        writeCollection(code, ownerType, property, prop, value, utf8, indent);
         return;
       case MAP:
         code.append(indent)
@@ -394,12 +400,13 @@ final class JsonCodegen {
             .append(".writeMapValueType(), classCache);\n");
         return;
       default:
-        writeObject(code, property, prop, value, utf8, indent);
+        writeObject(code, ownerType, property, prop, value, utf8, indent);
     }
   }
 
   private void writeCollection(
       StringBuilder code,
+      Class<?> ownerType,
       JsonPropertyInfo property,
       String prop,
       String value,
@@ -468,6 +475,7 @@ final class JsonCodegen {
       return;
     }
     if (isPojo(elementType)) {
+      boolean hasElementInfo = utf8 && elementType != ownerType;
       code.append(indent)
           .append("writer.writeArrayStart();\n")
           .append(indent)
@@ -501,7 +509,7 @@ final class JsonCodegen {
           .append(indent)
           .append("    } else if (element.getClass() == ")
           .append(sourceName(elementType))
-          .append(".class && elementInfo != null) {\n")
+          .append(hasElementInfo ? ".class) {\n" : ".class && elementInfo != null) {\n")
           .append(indent)
           .append("      elementInfo.")
           .append(utf8 ? "writeUtf8" : "write")
@@ -533,7 +541,7 @@ final class JsonCodegen {
           .append(indent)
           .append("  } else if (element.getClass() == ")
           .append(sourceName(elementType))
-          .append(".class && elementInfo != null) {\n")
+          .append(hasElementInfo ? ".class) {\n" : ".class && elementInfo != null) {\n")
           .append(indent)
           .append("    elementInfo.")
           .append(utf8 ? "writeUtf8" : "write")
@@ -567,6 +575,7 @@ final class JsonCodegen {
 
   private void writeObject(
       StringBuilder code,
+      Class<?> ownerType,
       JsonPropertyInfo property,
       String prop,
       String value,
@@ -587,12 +596,14 @@ final class JsonCodegen {
         .append("  JsonClassInfo classInfo = c")
         .append(prop.substring(1))
         .append(";\n");
-    code.append(indent).append("  if (classInfo == null) {\n");
-    code.append(indent)
-        .append("    classInfo = classCache.get(")
-        .append(sourceName(rawType))
-        .append(".class);\n");
-    code.append(indent).append("  }\n");
+    if (!utf8 || rawType == ownerType) {
+      code.append(indent).append("  if (classInfo == null) {\n");
+      code.append(indent)
+          .append("    classInfo = classCache.get(")
+          .append(sourceName(rawType))
+          .append(".class);\n");
+      code.append(indent).append("  }\n");
+    }
     code.append(indent)
         .append("  classInfo.")
         .append(utf8 ? "writeUtf8" : "write")

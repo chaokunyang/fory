@@ -109,6 +109,13 @@ public class ForyJsonTest {
     public Object text = "fory";
   }
 
+  public static final class TokenValues {
+    public int count = 1;
+    public String name = "alpha";
+    public List<String> tags = Arrays.asList("x", "y");
+    public long total = 2;
+  }
+
   public static final class CharValue {
     public char value;
   }
@@ -216,6 +223,25 @@ public class ForyJsonTest {
     assertEquals(json.toJson(new NaturalValues()), expected);
     assertEquals(
         new String(json.toJsonBytes(new NaturalValues()), StandardCharsets.UTF_8), expected);
+  }
+
+  @Test
+  public void writeGeneratedTokenChanges() {
+    ForyJson json = ForyJson.builder().build();
+    TokenValues value = new TokenValues();
+    String first = "{\"count\":1,\"name\":\"alpha\",\"tags\":[\"x\",\"y\"],\"total\":2}";
+    assertEquals(json.toJson(value), first);
+    assertEquals(new String(json.toJsonBytes(value), StandardCharsets.UTF_8), first);
+    assertEquals(json.toJson(value), first);
+    assertEquals(new String(json.toJsonBytes(value), StandardCharsets.UTF_8), first);
+    value.count = 7;
+    value.name = "beta";
+    value.tags = Arrays.asList("z", "x");
+    value.total = 9;
+    String second = "{\"count\":7,\"name\":\"beta\",\"tags\":[\"z\",\"x\"],\"total\":9}";
+    assertEquals(json.toJson(value), second);
+    assertEquals(new String(json.toJsonBytes(value), StandardCharsets.UTF_8), second);
+    assertEquals(json.hasGeneratedWriter(TokenValues.class), true);
   }
 
   @Test

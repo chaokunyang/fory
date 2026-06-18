@@ -80,6 +80,9 @@ final class JsonPropertyInfo {
   private final byte[] utf8TrueCommaToken;
   private final byte[] utf8FalseNameToken;
   private final byte[] utf8FalseCommaToken;
+  private final JsonStringTokenCache stringTokenCache;
+  private final JsonStringTokenCache elementStringTokenCache;
+  private final JsonNumberTokenCache numberTokenCache;
   private JsonClassInfo writeClassInfo;
   private JsonClassInfo writeElementClassInfo;
 
@@ -110,8 +113,8 @@ final class JsonPropertyInfo {
     writeArrayComponentType =
         writeKind == JsonPropertyKind.ARRAY ? writeRawType.getComponentType() : null;
     writeElementRawType = writeElementType == null ? null : knownRawType(writeElementType);
-    String stringPrefix = escapedNamePrefix(name, true);
-    String utf8Prefix = escapedNamePrefix(name, false);
+    String stringPrefix = JsonStringEscaper.escapedNamePrefix(name, true);
+    String utf8Prefix = JsonStringEscaper.escapedNamePrefix(name, false);
     stringNamePrefix = stringPrefix.getBytes(StandardCharsets.ISO_8859_1);
     stringCommaNamePrefix = ("," + stringPrefix).getBytes(StandardCharsets.ISO_8859_1);
     utf8NamePrefix = utf8Prefix.getBytes(StandardCharsets.UTF_8);
@@ -157,6 +160,10 @@ final class JsonPropertyInfo {
       utf8FalseNameToken = null;
       utf8FalseCommaToken = null;
     }
+    stringTokenCache = writeKind == JsonPropertyKind.STRING ? new JsonStringTokenCache() : null;
+    elementStringTokenCache =
+        writeElementRawType == String.class ? new JsonStringTokenCache() : null;
+    numberTokenCache = isIntegerKind(writeKind) ? new JsonNumberTokenCache() : null;
   }
 
   public String name() {
@@ -253,6 +260,18 @@ final class JsonPropertyInfo {
     return value
         ? (comma ? stringTrueCommaToken : stringTrueNameToken)
         : (comma ? stringFalseCommaToken : stringFalseNameToken);
+  }
+
+  JsonStringTokenCache stringTokenCache() {
+    return stringTokenCache;
+  }
+
+  JsonStringTokenCache elementStringTokenCache() {
+    return elementStringTokenCache;
+  }
+
+  JsonNumberTokenCache numberTokenCache() {
+    return numberTokenCache;
   }
 
   public byte[] utf8ElementEnumValue(Enum<?> value) {
@@ -1165,6 +1184,13 @@ final class JsonPropertyInfo {
     }
   }
 
+  private static boolean isIntegerKind(JsonPropertyKind kind) {
+    return kind == JsonPropertyKind.BYTE
+        || kind == JsonPropertyKind.SHORT
+        || kind == JsonPropertyKind.INT
+        || kind == JsonPropertyKind.LONG;
+  }
+
   private static Class<?> knownRawType(Type type) {
     Class<?> rawType = JsonSerializers.rawType(type, null);
     return rawType == Object.class ? null : rawType;
@@ -1186,71 +1212,12 @@ final class JsonPropertyInfo {
         || Map.class.isAssignableFrom(rawType);
   }
 
-  private static String escapedNamePrefix(String name, boolean escapeNonLatin1) {
-    StringBuilder builder = new StringBuilder(name.length() + 3);
-    appendQuoted(builder, name, escapeNonLatin1);
-    builder.append(':');
-    return builder.toString();
-  }
-
-  private static String escapedString(String value, boolean escapeNonLatin1) {
-    StringBuilder builder = new StringBuilder(value.length() + 2);
-    appendQuoted(builder, value, escapeNonLatin1);
-    return builder.toString();
-  }
-
-  private static void appendQuoted(StringBuilder builder, String value, boolean escapeNonLatin1) {
-    builder.append('"');
-    for (int i = 0; i < value.length(); i++) {
-      char ch = value.charAt(i);
-      switch (ch) {
-        case '"':
-          builder.append("\\\"");
-          break;
-        case '\\':
-          builder.append("\\\\");
-          break;
-        case '\b':
-          builder.append("\\b");
-          break;
-        case '\f':
-          builder.append("\\f");
-          break;
-        case '\n':
-          builder.append("\\n");
-          break;
-        case '\r':
-          builder.append("\\r");
-          break;
-        case '\t':
-          builder.append("\\t");
-          break;
-        default:
-          if (ch < 0x20 || escapeNonLatin1 && ch > 0xff) {
-            appendUnicodeEscape(builder, ch);
-          } else {
-            builder.append(ch);
-          }
-      }
-    }
-    builder.append('"');
-  }
-
-  private static void appendUnicodeEscape(StringBuilder builder, char ch) {
-    builder.append("\\u");
-    builder.append(hex((ch >>> 12) & 0xF));
-    builder.append(hex((ch >>> 8) & 0xF));
-    builder.append(hex((ch >>> 4) & 0xF));
-    builder.append(hex(ch & 0xF));
-  }
-
   private static byte[][] enumValues(Class<?> enumType) {
     Object[] constants = enumType.getEnumConstants();
     byte[][] values = new byte[constants.length][];
     for (Object constant : constants) {
       Enum<?> enumValue = (Enum<?>) constant;
-      values[enumValue.ordinal()] =
-          escapedString(enumValue.name(), false).getBytes(StandardCharsets.UTF_8);
+      values[enumValue.ordinal()] = JsonStringEscaper.utf8Value(enumValue.name());
     }
     return values;
   }
@@ -1260,8 +1227,7 @@ final class JsonPropertyInfo {
     byte[][] values = new byte[constants.length][];
     for (Object constant : constants) {
       Enum<?> enumValue = (Enum<?>) constant;
-      values[enumValue.ordinal()] =
-          escapedString(enumValue.name(), true).getBytes(StandardCharsets.ISO_8859_1);
+      values[enumValue.ordinal()] = JsonStringEscaper.stringValue(enumValue.name());
     }
     return values;
   }
@@ -1279,9 +1245,5 @@ final class JsonPropertyInfo {
     System.arraycopy(prefix, 0, joined, 0, prefix.length);
     System.arraycopy(token, 0, joined, prefix.length, token.length);
     return joined;
-  }
-
-  private static char hex(int value) {
-    return (char) (value < 10 ? '0' + value : 'a' + value - 10);
   }
 }

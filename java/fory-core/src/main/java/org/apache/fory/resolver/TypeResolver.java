@@ -853,11 +853,6 @@ public abstract class TypeResolver {
    * ClassResolver and XtypeResolver.
    */
   protected final TypeInfo readSharedClassMeta(ReadContext readContext) {
-    return readSharedClassMeta(readContext, null, false);
-  }
-
-  private TypeInfo readSharedClassMeta(
-      ReadContext readContext, Class<?> targetClass, boolean hasTargetClass) {
     MemoryBuffer buffer = readContext.getBuffer();
     MetaReadContext metaReadContext = readContext.getMetaReadContext();
     assert metaReadContext != null : SET_META_READ_CONTEXT_MSG;
@@ -877,25 +872,7 @@ public abstract class TypeResolver {
       if (typeInfo != null) {
         TypeDef.skipTypeDef(buffer, id);
       } else {
-        TypeDef typeDef = sharedRegistry.remoteTypeDefById.get(id);
-        if (typeDef != null) {
-          TypeDef.skipTypeDef(buffer, id);
-          typeInfo = buildMetaSharedTypeInfo(typeDef);
-        } else if (hasTargetClass) {
-          byte[] encoded = TypeDef.readTypeDefBytes(this, buffer, id);
-          TypeDef localTypeDef = exactLocalTypeDef(encoded, targetClass);
-          if (localTypeDef != null) {
-            // Preserve typed-field semantics: selecting the declared local target type does not add
-            // a new registration check for fields that were already reachable through a registered
-            // enclosing type. Non-exact metadata still goes through buildCheckedMetaSharedTypeInfo.
-            typeInfo = buildMetaSharedTypeInfo(localTypeDef, targetClass);
-          } else {
-            typeInfo = buildCheckedMetaSharedTypeInfo(TypeDef.readTypeDef(this, encoded));
-          }
-        } else {
-          typeDef = TypeDef.readTypeDef(this, buffer, id);
-          typeInfo = buildCheckedMetaSharedTypeInfo(typeDef);
-        }
+        typeInfo = readSharedClassMetaMiss(buffer, id);
       }
       // index == readTypeInfos.size() since types are written sequentially
       metaReadContext.readTypeInfos.add(typeInfo);
@@ -903,8 +880,18 @@ public abstract class TypeResolver {
     return typeInfo;
   }
 
+  private TypeInfo readSharedClassMetaMiss(MemoryBuffer buffer, long id) {
+    TypeDef typeDef = sharedRegistry.remoteTypeDefById.get(id);
+    if (typeDef != null) {
+      TypeDef.skipTypeDef(buffer, id);
+      return buildMetaSharedTypeInfo(typeDef);
+    }
+    typeDef = TypeDef.readTypeDef(this, buffer, id);
+    return buildCheckedMetaSharedTypeInfo(typeDef);
+  }
+
   public final TypeInfo readSharedClassMeta(ReadContext readContext, Class<?> targetClass) {
-    TypeInfo typeInfo = readSharedClassMeta(readContext, targetClass, true);
+    TypeInfo typeInfo = readSharedClassMeta(readContext);
     Class<?> readClass = typeInfo.getType();
     // replace target class if needed
     if (targetClass != readClass) {

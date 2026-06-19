@@ -22,7 +22,7 @@ public sealed class ReadContext
     private const int MinRemoteTypeMetaLimit = 8192;
 
     private readonly ReusableArray<TypeMeta> _messageTypeMetas = new();
-    private readonly Dictionary<ulong, TypeMeta> _typeMetasByHeader = [];
+    private readonly UInt64Map<TypeMeta> _typeMetasByHeader = new();
     private TypeMeta? _firstMessageTypeMeta;
     private bool _hasFirstMessageTypeMeta;
 
@@ -76,7 +76,6 @@ public sealed class ReadContext
         Reset();
     }
 
-    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
     internal TypeMeta? GetMessageTypeMeta(int index)
     {
         if (index < 0)
@@ -92,7 +91,6 @@ public sealed class ReadContext
         return _messageTypeMetas.Get(index - 1);
     }
 
-    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
     internal void StoreMessageTypeMeta(TypeMeta typeMeta, int index)
     {
         if (index < 0)
@@ -130,10 +128,15 @@ public sealed class ReadContext
             $"type meta index gap: index={index}, count={_messageTypeMetas.Count + 1}");
     }
 
-    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
     internal bool TryGetTypeMetaByHeader(ulong header, out TypeMeta typeMeta)
     {
-        if (_typeMetasByHeader.TryGetValue(header, out TypeMeta? cached) && cached is not null)
+        // UInt64Map reserves ulong.MaxValue as its empty-slot marker. A valid
+        // cached TypeMeta header cannot use reserved global-header bits, but an
+        // attacker-controlled cache lookup can happen before cold-path header
+        // validation, so this value must be forced to the miss path.
+        if (header != ulong.MaxValue &&
+            _typeMetasByHeader.TryGetValue(header, out TypeMeta? cached) &&
+            cached is not null)
         {
             typeMeta = cached;
             return true;
@@ -145,19 +148,19 @@ public sealed class ReadContext
 
     internal void StoreRemoteTypeMeta(ulong header, TypeMeta typeMeta)
     {
-        if (_typeMetasByHeader.ContainsKey(header))
+        if (_typeMetasByHeader.TryGetValue(header, out _))
         {
             return;
         }
 
         object typeKey = CheckRemoteTypeMetaLimits(typeMeta);
-        _typeMetasByHeader.Add(header, typeMeta);
+        _typeMetasByHeader.Set(header, typeMeta);
         RecordRemoteTypeMetaVersion(typeKey);
     }
 
     internal void StoreExactLocalTypeMeta(ulong header, TypeMeta typeMeta)
     {
-        _typeMetasByHeader.TryAdd(header, typeMeta);
+        _typeMetasByHeader.Set(header, typeMeta);
     }
 
     [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
@@ -242,7 +245,6 @@ public sealed class ReadContext
         return typeMeta;
     }
 
-    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
     internal bool TryReadTypeMetaRef(out int index, out TypeMeta typeMeta)
     {
         uint indexMarker = Reader.ReadVarUInt32();

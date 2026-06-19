@@ -117,8 +117,8 @@ pub struct MetaReaderResolver {
     parsed_type_infos: HashMap<i64, Rc<TypeInfo>>,
     remote_schema_versions_by_type: HashMap<String, usize>,
     total_accepted_schema_versions: usize,
-    last_meta_header: i64,
-    last_type_info: Option<Rc<TypeInfo>>,
+    cached_meta_header: i64,
+    cached_type_info: Option<Rc<TypeInfo>>,
 }
 
 impl MetaReaderResolver {
@@ -149,9 +149,9 @@ impl MetaReaderResolver {
             // New type - read TypeMeta inline
             let meta_header = reader.read_i64()?;
             if let Some(type_info) = self
-                .last_type_info
+                .cached_type_info
                 .as_ref()
-                .filter(|_| self.last_meta_header == meta_header)
+                .filter(|_| self.cached_meta_header == meta_header)
             {
                 // Header-cache hits intentionally skip without rehashing. Entries reach this cache
                 // only after a successful TypeMeta parse and 52-bit metadata-hash validation.
@@ -162,21 +162,27 @@ impl MetaReaderResolver {
             if let Some(type_info) = self.parsed_type_infos.get(&meta_header) {
                 // Header-cache hits intentionally skip without rehashing. Entries reach this cache
                 // only after a successful TypeMeta parse and 52-bit metadata-hash validation.
-                self.last_meta_header = meta_header;
-                self.last_type_info = Some(type_info.clone());
+                self.cached_meta_header = meta_header;
+                self.cached_type_info = Some(type_info.clone());
                 self.reading_type_infos.push(type_info.clone());
                 TypeMeta::skip_bytes_for_validated_header(reader, meta_header)?;
                 Ok(type_info.clone())
             } else {
                 let type_def_start = reader.get_cursor() - std::mem::size_of::<i64>();
-                self.read_type_meta_miss(reader, type_resolver, config, meta_header, type_def_start)
+                self.read_remote_type_meta(
+                    reader,
+                    type_resolver,
+                    config,
+                    meta_header,
+                    type_def_start,
+                )
             }
         }
     }
 
     #[cold]
     #[inline(never)]
-    fn read_type_meta_miss(
+    fn read_remote_type_meta(
         &mut self,
         reader: &mut Reader,
         type_resolver: &TypeResolver,
@@ -264,8 +270,8 @@ impl MetaReaderResolver {
 
         self.parsed_type_infos
             .insert(meta_header, type_info.clone());
-        self.last_meta_header = meta_header;
-        self.last_type_info = Some(type_info.clone());
+        self.cached_meta_header = meta_header;
+        self.cached_type_info = Some(type_info.clone());
         self.reading_type_infos.push(type_info.clone());
         if let Some(remote_schema_key) = remote_schema_key {
             self.record_remote_type_meta(remote_schema_key);

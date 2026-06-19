@@ -557,11 +557,11 @@ Result<const TypeInfo *, Error> ReadContext::read_type_meta() {
   }
 
   // Check if we already parsed this type meta (cache lookup by header)
-  if (has_last_meta_header_ && meta_header == last_meta_header_) {
+  if (has_cached_meta_header_ && meta_header == cached_meta_header_) {
     // Header-cache hits intentionally skip without rehashing. Entries reach
     // this cache only after a successful TypeMeta parse and 52-bit
     // metadata-hash validation.
-    const TypeInfo *cached = last_meta_type_info_;
+    const TypeInfo *cached = cached_meta_type_info_;
     reading_type_infos_.push_back(cached);
     FORY_RETURN_NOT_OK(
         TypeMeta::skip_bytes_for_validated_header(*buffer_, meta_header));
@@ -575,9 +575,9 @@ Result<const TypeInfo *, Error> ReadContext::read_type_meta() {
     // metadata-hash validation.
     const TypeInfo *cached = cache_entry->second;
     reading_type_infos_.push_back(cached);
-    has_last_meta_header_ = true;
-    last_meta_header_ = meta_header;
-    last_meta_type_info_ = cached;
+    has_cached_meta_header_ = true;
+    cached_meta_header_ = meta_header;
+    cached_meta_type_info_ = cached;
     FORY_RETURN_NOT_OK(
         TypeMeta::skip_bytes_for_validated_header(*buffer_, meta_header));
     return cached;
@@ -629,9 +629,9 @@ Result<const TypeInfo *, Error> ReadContext::read_type_meta() {
         std::memcmp(local_type_def.data(), buffer_->data() + type_def_start,
                     remote_type_def_size) == 0) {
       parsed_type_infos_[meta_header] = local_type_info;
-      has_last_meta_header_ = true;
-      last_meta_header_ = meta_header;
-      last_meta_type_info_ = local_type_info;
+      has_cached_meta_header_ = true;
+      cached_meta_header_ = meta_header;
+      cached_meta_type_info_ = local_type_info;
       reading_type_infos_.push_back(local_type_info);
       return local_type_info;
     }
@@ -668,9 +668,9 @@ Result<const TypeInfo *, Error> ReadContext::read_type_meta() {
   cached_type_infos_.push_back(std::move(type_info));
   const TypeInfo *raw_ptr = cached_type_infos_.back().get();
   parsed_type_infos_[meta_header] = raw_ptr;
-  has_last_meta_header_ = true;
-  last_meta_header_ = meta_header;
-  last_meta_type_info_ = raw_ptr;
+  has_cached_meta_header_ = true;
+  cached_meta_header_ = meta_header;
+  cached_meta_type_info_ = raw_ptr;
   record_remote_type_meta(remote_schema_key);
 
   reading_type_infos_.push_back(raw_ptr);

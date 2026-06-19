@@ -680,9 +680,9 @@ private:
   // Cache by meta_header (pointers to cached_type_infos_)
   fory::flat_hash_map<int64_t, const TypeInfo *> parsed_type_infos_;
   // Fast path for repeated type meta headers.
-  int64_t last_meta_header_ = 0;
-  const TypeInfo *last_meta_type_info_ = nullptr;
-  bool has_last_meta_header_ = false;
+  int64_t cached_meta_header_ = 0;
+  const TypeInfo *cached_meta_type_info_ = nullptr;
+  bool has_cached_meta_header_ = false;
   bool meta_string_table_active_ = false;
 
   // Dynamic meta strings used for named type/class info.

@@ -104,18 +104,18 @@ final class TypeHeader {
 final class ParsedTypeMetaCache {
   final LinkedHashMap<Int64, TypeInfo> _entries =
       LinkedHashMap<Int64, TypeInfo>();
-  Int64? _lastHeader;
-  TypeInfo? _lastResolved;
+  Int64? _cachedHeader;
+  TypeInfo? _cachedTypeInfo;
 
   @pragma('vm:prefer-inline')
   TypeInfo? lookup(TypeHeader header) {
-    if (_lastHeader == header.value) {
-      return _lastResolved;
+    if (_cachedHeader == header.value) {
+      return _cachedTypeInfo;
     }
     final resolved = _entries[header.value];
     if (resolved != null) {
-      _lastHeader = header.value;
-      _lastResolved = resolved;
+      _cachedHeader = header.value;
+      _cachedTypeInfo = resolved;
     }
     return resolved;
   }
@@ -125,13 +125,13 @@ final class ParsedTypeMetaCache {
     final cached = _entries[header.value];
     if (cached != null) {
       _entries[header.value] = resolved;
-      _lastHeader = header.value;
-      _lastResolved = resolved;
+      _cachedHeader = header.value;
+      _cachedTypeInfo = resolved;
       return;
     }
     _entries[header.value] = resolved;
-    _lastHeader = header.value;
-    _lastResolved = resolved;
+    _cachedHeader = header.value;
+    _cachedTypeInfo = resolved;
   }
 }
 

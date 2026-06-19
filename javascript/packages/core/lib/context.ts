@@ -541,9 +541,9 @@ export class ReadContext {
   /** Persistent cross-message cache keyed by 8-byte type meta header. */
   private typeMetaCache: Map<number, Map<number, TypeMeta>> = new Map();
   private totalAcceptedSchemaVersions = 0;
-  private lastTypeMetaHeaderLow = -1;
-  private lastTypeMetaHeaderHigh = -1;
-  private lastTypeMeta: TypeMeta | null = null;
+  private cachedTypeMetaHeaderLow = -1;
+  private cachedTypeMetaHeaderHigh = -1;
+  private cachedTypeMeta: TypeMeta | null = null;
   private recentTypeMetaHeaderLows = [-1, -1, -1, -1];
   private recentTypeMetaHeaderHighs = [-1, -1, -1, -1];
   private recentTypeMetas: Array<TypeMeta | null> = [null, null, null, null];
@@ -659,7 +659,7 @@ export class ReadContext {
     this.refReader.reference(object);
   }
 
-  private readAndCacheTypeMeta(
+  private readRemoteTypeMeta(
     headerLow: number,
     headerHigh: number,
   ): TypeMeta {
@@ -682,10 +682,10 @@ export class ReadContext {
     );
     if (localTypeMeta !== undefined) {
       typeMeta = localTypeMeta;
-      this.cacheTypeMeta(headerLow, headerHigh, typeMeta, undefined);
+      this.storeTypeMetaByHeader(headerLow, headerHigh, typeMeta, undefined);
     } else {
       const typeKey = this.checkRemoteTypeMetaLimit(typeMeta);
-      this.cacheTypeMeta(headerLow, headerHigh, typeMeta, typeKey);
+      this.storeTypeMetaByHeader(headerLow, headerHigh, typeMeta, typeKey);
     }
     return typeMeta;
   }
@@ -719,13 +719,13 @@ export class ReadContext {
       const headerHigh = this.reader.readUint32();
       remoteHash = headerHigh * 0x100000 + (headerLow >>> 12);
       if (localHash !== remoteHash) {
-        const cached = this.readCachedTypeMetaFromHeader(
+        const cached = this.readTypeMetaHeaderHit(
           dynamicTypeId,
           headerLow,
           headerHigh,
         );
         typeMeta = cached
-        ?? this.readStructTypeMetaMiss(
+        ?? this.readRemoteStructTypeMeta(
           localHash,
           dynamicTypeId,
           headerLow,
@@ -767,21 +767,21 @@ export class ReadContext {
     headerHigh: number,
   ): TypeMeta {
     if (
-      this.lastTypeMeta !== null
-      && this.lastTypeMetaHeaderLow === headerLow
-      && this.lastTypeMetaHeaderHigh === headerHigh
+      this.cachedTypeMeta !== null
+      && this.cachedTypeMetaHeaderLow === headerLow
+      && this.cachedTypeMetaHeaderHigh === headerHigh
     ) {
       this.skipTypeMetaBody(headerLow);
-      this.typeMeta[dynamicTypeId] = this.lastTypeMeta;
-      return this.lastTypeMeta;
+      this.typeMeta[dynamicTypeId] = this.cachedTypeMeta;
+      return this.cachedTypeMeta;
     }
 
     const recent = this.findRecentTypeMeta(headerLow, headerHigh);
     if (recent !== null) {
       this.skipTypeMetaBody(headerLow);
-      this.lastTypeMetaHeaderLow = headerLow;
-      this.lastTypeMetaHeaderHigh = headerHigh;
-      this.lastTypeMeta = recent;
+      this.cachedTypeMetaHeaderLow = headerLow;
+      this.cachedTypeMetaHeaderHigh = headerHigh;
+      this.cachedTypeMeta = recent;
       this.typeMeta[dynamicTypeId] = recent;
       return recent;
     }
@@ -794,18 +794,18 @@ export class ReadContext {
       // size still comes from the current header bytes, not from the cached TypeMeta.
       this.skipTypeMetaBody(headerLow);
       typeMeta = cached;
-      this.lastTypeMetaHeaderLow = headerLow;
-      this.lastTypeMetaHeaderHigh = headerHigh;
-      this.lastTypeMeta = typeMeta;
+      this.cachedTypeMetaHeaderLow = headerLow;
+      this.cachedTypeMetaHeaderHigh = headerHigh;
+      this.cachedTypeMeta = typeMeta;
       this.rememberRecentTypeMeta(headerLow, headerHigh, typeMeta);
     } else {
-      typeMeta = this.readAndCacheTypeMeta(headerLow, headerHigh);
+      typeMeta = this.readRemoteTypeMeta(headerLow, headerHigh);
     }
     this.typeMeta[dynamicTypeId] = typeMeta;
     return typeMeta;
   }
 
-  private readStructTypeMetaMiss(
+  private readRemoteStructTypeMeta(
     expectedHash: number,
     dynamicTypeId: number,
     headerLow: number,
@@ -831,7 +831,7 @@ export class ReadContext {
     );
     if (localTypeMeta !== undefined) {
       typeMeta = localTypeMeta;
-      this.cacheTypeMeta(headerLow, headerHigh, typeMeta, undefined);
+      this.storeTypeMetaByHeader(headerLow, headerHigh, typeMeta, undefined);
       this.typeMeta[dynamicTypeId] = typeMeta;
       return typeMeta;
     }
@@ -848,7 +848,7 @@ export class ReadContext {
       }
     }
 
-    this.cacheTypeMeta(headerLow, headerHigh, typeMeta, typeKey);
+    this.storeTypeMetaByHeader(headerLow, headerHigh, typeMeta, typeKey);
     this.typeMeta[dynamicTypeId] = typeMeta;
     if (compatibleSerializerToCache !== undefined) {
       this.compatibleReadSerializers.set(remoteHash, {
@@ -880,27 +880,27 @@ export class ReadContext {
     return serializer;
   }
 
-  private readCachedTypeMetaFromHeader(
+  private readTypeMetaHeaderHit(
     dynamicTypeId: number,
     headerLow: number,
     headerHigh: number,
   ): TypeMeta | null {
     if (
-      this.lastTypeMeta !== null
-      && this.lastTypeMetaHeaderLow === headerLow
-      && this.lastTypeMetaHeaderHigh === headerHigh
+      this.cachedTypeMeta !== null
+      && this.cachedTypeMetaHeaderLow === headerLow
+      && this.cachedTypeMetaHeaderHigh === headerHigh
     ) {
       TypeMeta.skipBodyByHeaderLow(this.reader, headerLow);
-      this.typeMeta[dynamicTypeId] = this.lastTypeMeta;
-      return this.lastTypeMeta;
+      this.typeMeta[dynamicTypeId] = this.cachedTypeMeta;
+      return this.cachedTypeMeta;
     }
 
     const recent = this.findRecentTypeMeta(headerLow, headerHigh);
     if (recent !== null) {
       TypeMeta.skipBodyByHeaderLow(this.reader, headerLow);
-      this.lastTypeMetaHeaderLow = headerLow;
-      this.lastTypeMetaHeaderHigh = headerHigh;
-      this.lastTypeMeta = recent;
+      this.cachedTypeMetaHeaderLow = headerLow;
+      this.cachedTypeMetaHeaderHigh = headerHigh;
+      this.cachedTypeMeta = recent;
       this.typeMeta[dynamicTypeId] = recent;
       return recent;
     }
@@ -911,9 +911,9 @@ export class ReadContext {
       // after a successful TypeMeta parse and 52-bit metadata-hash validation. The current body
       // size still comes from the current header bytes, not from the cached TypeMeta.
       TypeMeta.skipBodyByHeaderLow(this.reader, headerLow);
-      this.lastTypeMetaHeaderLow = headerLow;
-      this.lastTypeMetaHeaderHigh = headerHigh;
-      this.lastTypeMeta = cached;
+      this.cachedTypeMetaHeaderLow = headerLow;
+      this.cachedTypeMetaHeaderHigh = headerHigh;
+      this.cachedTypeMeta = cached;
       this.rememberRecentTypeMeta(headerLow, headerHigh, cached);
       this.typeMeta[dynamicTypeId] = cached;
       return cached;
@@ -959,7 +959,7 @@ export class ReadContext {
     return typeKey;
   }
 
-  private cacheTypeMeta(
+  private storeTypeMetaByHeader(
     headerLow: number,
     headerHigh: number,
     typeMeta: TypeMeta,
@@ -971,9 +971,9 @@ export class ReadContext {
       this.typeMetaCache.set(headerHigh, highCache);
     }
     highCache.set(headerLow, typeMeta);
-    this.lastTypeMetaHeaderLow = headerLow;
-    this.lastTypeMetaHeaderHigh = headerHigh;
-    this.lastTypeMeta = typeMeta;
+    this.cachedTypeMetaHeaderLow = headerLow;
+    this.cachedTypeMetaHeaderHigh = headerHigh;
+    this.cachedTypeMeta = typeMeta;
     this.rememberRecentTypeMeta(headerLow, headerHigh, typeMeta);
     if (typeKey !== undefined) {
       let versionsByType = this.remoteSchemaVersionsByType;
@@ -1056,7 +1056,7 @@ export class ReadContext {
     const typeMetaStart = this.reader.readGetCursor();
     const headerLow = this.reader.readUint32();
     const headerHigh = this.reader.readUint32();
-    const cached = this.readCachedTypeMetaFromHeader(
+    const cached = this.readTypeMetaHeaderHit(
       dynamicTypeId,
       headerLow,
       headerHigh,
@@ -1086,7 +1086,7 @@ export class ReadContext {
       resolved,
     );
     if (localTypeMeta !== undefined) {
-      this.cacheTypeMeta(headerLow, headerHigh, localTypeMeta, undefined);
+      this.storeTypeMetaByHeader(headerLow, headerHigh, localTypeMeta, undefined);
       this.typeMeta[dynamicTypeId] = localTypeMeta;
       return resolved;
     }
@@ -1097,7 +1097,7 @@ export class ReadContext {
     if (!updated) {
       return undefined;
     }
-    this.cacheTypeMeta(headerLow, headerHigh, typeMeta, typeKey);
+    this.storeTypeMetaByHeader(headerLow, headerHigh, typeMeta, typeKey);
     this.typeMeta[dynamicTypeId] = typeMeta;
     return updated;
   }

@@ -119,8 +119,7 @@ Fory fory = Fory.Builder()
 
 ### `MaxSchemaVersionsPerType(int value)`
 
-Sets the maximum accepted remote metadata versions for one logical type on
-metadata cache misses.
+Sets the maximum accepted remote metadata versions for one logical type.
 
 ```csharp
 Fory fory = Fory.Builder()

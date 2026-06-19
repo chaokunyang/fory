@@ -146,8 +146,7 @@ f := fory.New(fory.WithMaxTypeMetaBytes(4096))
 
 ### WithMaxSchemaVersionsPerType
 
-Set the maximum accepted remote metadata versions for one logical type on
-metadata cache misses:
+Set the maximum accepted remote metadata versions for one logical type:
 
 ```go
 f := fory.New(fory.WithMaxSchemaVersionsPerType(10))

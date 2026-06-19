@@ -117,8 +117,7 @@ This limits the maximum depth for nested polymorphic object serialization (e.g.,
 
 ### max_schema_versions_per_type(uint32_t)
 
-Set the maximum accepted remote metadata versions for one logical type on
-metadata cache misses.
+Set the maximum accepted remote metadata versions for one logical type.
 
 ```cpp
 auto fory = Fory::builder()

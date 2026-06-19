@@ -403,16 +403,38 @@ are readable through the byte owner. Field-list allocation should happen after
 that body readability check and should not use a separate small initial-capacity
 cap as a security rule.
 
-Implementations should also bound received struct metadata on the cold metadata
-parse path. `maxTypeMetaBytes` limits one encoded TypeDef or TypeMeta body,
-excluding the 8-byte header and any extended-size varint, and is checked before
-copying or decompressing that body. `maxTypeFields` limits the number of fields
-declared by one received struct metadata body and is checked before reserving or
-allocating the field list. These limits are runtime resource controls; they do
-not change wire encoding, type identity, dynamic loading, unknown-type behavior,
-deserialization policy, or schema-evolution semantics. Metadata cache hits and
-generated field readers remain hot paths and must not add work for these
-limits.
+Implementations should also bound received metadata bodies and struct field
+lists on the cold metadata parse path. `maxTypeMetaBytes` limits one encoded
+TypeDef or TypeMeta body, excluding the 8-byte header and any extended-size
+varint, and is checked before copying or decompressing that body.
+`maxTypeFields` limits the number of fields declared by one received struct
+metadata body and is checked before reserving or allocating the field list.
+These limits are runtime resource controls; they do not change wire encoding,
+type identity, dynamic loading, unknown-type behavior, deserialization policy,
+or schema-evolution semantics. Metadata cache hits and generated field readers
+remain hot paths and must not add work for these limits.
+
+Remote schema-version limits belong to the same cold metadata owner path.
+Header cache hits must skip the remaining metadata body and return cached
+metadata without schema-limit checks, hash revalidation, allocation, or policy
+work. On a header miss, keep the handling in one concrete owner path: prove and
+read the metadata body bytes, validate the body against its header, validate
+field counts, resolve the type through the existing registration and
+deserialization-policy checks, compare exact local struct schemas by original
+encoded bytes when applicable, check schema-version limits for non-local remote
+metadata, build the required read state, publish to the persistent metadata
+cache, and then record the schema count. Failed or incompatible metadata must
+not publish to the persistent cache and must not consume schema-version counts.
+
+A remote struct schema whose encoded metadata bytes exactly match the local
+registered struct schema may use the local schema without consuming the remote
+schema-version limit, after the existing type and deserialization-policy checks
+for selecting that local type have run. Pure id-based enum, ext, and typed-union
+values do not carry TypeDef or TypeMeta bodies and must stay on the normal
+type-id plus user-type-id path. Compatible named enum, ext, and union metadata
+normally has one version, but it still counts against accepted remote metadata
+totals when it is sent as shared metadata. `maxTypeFields` applies only to
+struct field lists.
 
 Skip paths do not need to materialize skipped values. Existing byte-skip
 operations should consume any available buffered prefix first, then skip or drop

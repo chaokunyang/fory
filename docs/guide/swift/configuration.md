@@ -90,8 +90,8 @@ let fory = Fory(compatible: false, checkClassVersion: true)
 
 ### Size and Depth Limits
 
-`maxDepth` bounds decoded payload nesting depth. Remote struct metadata is also
-limited on metadata cache misses:
+`maxDepth` bounds decoded payload nesting depth. Compatible-mode remote metadata
+is also limited:
 
 - `maxTypeFields` defaults to `512` and limits fields in one received struct metadata body.
 - `maxTypeMetaBytes` defaults to `4096` and limits encoded body bytes in one received TypeMeta body,

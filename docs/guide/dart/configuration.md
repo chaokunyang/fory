@@ -88,8 +88,8 @@ final fory = Fory(maxDepth: 128);
 
 ### Remote schema metadata limits
 
-Compatible mode accepts remote struct metadata on metadata cache misses. These
-limits bound retained schema-specific read state:
+Compatible mode can receive remote metadata for schema evolution. These limits
+bound metadata size and accepted schema versions:
 
 ```dart
 final fory = Fory(

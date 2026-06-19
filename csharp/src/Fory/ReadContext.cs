@@ -21,10 +21,10 @@ public sealed class ReadContext
 {
     private const int MinRemoteTypeMetaLimit = 8192;
 
-    private readonly ReusableArray<TypeMeta> _readTypeMetas = new();
-    private readonly Dictionary<ulong, TypeMeta> _cachedTypeMetasByHeader = [];
-    private TypeMeta? _firstReadTypeMeta;
-    private bool _hasFirstReadTypeMeta;
+    private readonly ReusableArray<TypeMeta> _messageTypeMetas = new();
+    private readonly Dictionary<ulong, TypeMeta> _typeMetasByHeader = [];
+    private TypeMeta? _firstMessageTypeMeta;
+    private bool _hasFirstMessageTypeMeta;
 
     private readonly List<MetaString> _readMetaStrings = [];
 
@@ -77,7 +77,7 @@ public sealed class ReadContext
     }
 
     [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
-    internal TypeMeta? GetReadTypeMeta(int index)
+    internal TypeMeta? GetMessageTypeMeta(int index)
     {
         if (index < 0)
         {
@@ -86,14 +86,14 @@ public sealed class ReadContext
 
         if (index == 0)
         {
-            return _hasFirstReadTypeMeta ? _firstReadTypeMeta : null;
+            return _hasFirstMessageTypeMeta ? _firstMessageTypeMeta : null;
         }
 
-        return _readTypeMetas.Get(index - 1);
+        return _messageTypeMetas.Get(index - 1);
     }
 
     [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
-    internal void StoreReadTypeMeta(TypeMeta typeMeta, int index)
+    internal void StoreMessageTypeMeta(TypeMeta typeMeta, int index)
     {
         if (index < 0)
         {
@@ -102,38 +102,38 @@ public sealed class ReadContext
 
         if (index == 0)
         {
-            _firstReadTypeMeta = typeMeta;
-            _hasFirstReadTypeMeta = true;
+            _firstMessageTypeMeta = typeMeta;
+            _hasFirstMessageTypeMeta = true;
             return;
         }
 
-        if (!_hasFirstReadTypeMeta)
+        if (!_hasFirstMessageTypeMeta)
         {
             throw new InvalidDataException(
                 $"type meta index gap: index={index}, missing index 0");
         }
 
         int listIndex = index - 1;
-        if (listIndex == _readTypeMetas.Count)
+        if (listIndex == _messageTypeMetas.Count)
         {
-            _readTypeMetas.Add(typeMeta);
+            _messageTypeMetas.Add(typeMeta);
             return;
         }
 
-        if (listIndex < _readTypeMetas.Count)
+        if (listIndex < _messageTypeMetas.Count)
         {
-            _readTypeMetas.Set(listIndex, typeMeta);
+            _messageTypeMetas.Set(listIndex, typeMeta);
             return;
         }
 
         throw new InvalidDataException(
-            $"type meta index gap: index={index}, count={_readTypeMetas.Count + 1}");
+            $"type meta index gap: index={index}, count={_messageTypeMetas.Count + 1}");
     }
 
     [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
-    internal bool TryGetCachedReadTypeMeta(ulong header, out TypeMeta typeMeta)
+    internal bool TryGetTypeMetaByHeader(ulong header, out TypeMeta typeMeta)
     {
-        if (_cachedTypeMetasByHeader.TryGetValue(header, out TypeMeta? cached) && cached is not null)
+        if (_typeMetasByHeader.TryGetValue(header, out TypeMeta? cached) && cached is not null)
         {
             typeMeta = cached;
             return true;
@@ -143,25 +143,25 @@ public sealed class ReadContext
         return false;
     }
 
-    internal void CacheReadTypeMeta(ulong header, TypeMeta typeMeta)
+    internal void StoreRemoteTypeMeta(ulong header, TypeMeta typeMeta)
     {
-        if (_cachedTypeMetasByHeader.ContainsKey(header))
+        if (_typeMetasByHeader.ContainsKey(header))
         {
             return;
         }
 
-        object typeKey = CheckRemoteTypeMetaLimit(typeMeta);
-        _cachedTypeMetasByHeader.Add(header, typeMeta);
-        RecordRemoteTypeMeta(typeKey);
+        object typeKey = CheckRemoteTypeMetaLimits(typeMeta);
+        _typeMetasByHeader.Add(header, typeMeta);
+        RecordRemoteTypeMetaVersion(typeKey);
     }
 
-    internal void CacheExactLocalTypeMeta(ulong header, TypeMeta typeMeta)
+    internal void StoreExactLocalTypeMeta(ulong header, TypeMeta typeMeta)
     {
-        _cachedTypeMetasByHeader.TryAdd(header, typeMeta);
+        _typeMetasByHeader.TryAdd(header, typeMeta);
     }
 
     [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
-    private object CheckRemoteTypeMetaLimit(TypeMeta typeMeta)
+    private object CheckRemoteTypeMetaLimits(TypeMeta typeMeta)
     {
         object typeKey;
         if (typeMeta.RegisterByName)
@@ -203,7 +203,7 @@ public sealed class ReadContext
         return typeKey;
     }
 
-    private void RecordRemoteTypeMeta(object typeKey)
+    private void RecordRemoteTypeMetaVersion(object typeKey)
     {
         _remoteSchemaVersionsByType.TryGetValue(typeKey, out int versionsForType);
         _remoteSchemaVersionsByType[typeKey] = versionsForType + 1;
@@ -228,17 +228,17 @@ public sealed class ReadContext
         }
 
         ulong header = Reader.ReadUInt64();
-        if (TryGetCachedReadTypeMeta(header, out TypeMeta cachedTypeMeta))
+        if (TryGetTypeMetaByHeader(header, out TypeMeta cachedTypeMeta))
         {
             TypeMeta.SkipBody(Reader, header);
-            StoreReadTypeMeta(cachedTypeMeta, index);
+            StoreMessageTypeMeta(cachedTypeMeta, index);
             return cachedTypeMeta;
         }
 
         Reader.MoveBack(sizeof(ulong));
-        typeMeta = DecodeReadTypeMeta();
-        CacheReadTypeMeta(header, typeMeta);
-        StoreReadTypeMeta(typeMeta, index);
+        typeMeta = DecodeTypeMeta();
+        StoreRemoteTypeMeta(header, typeMeta);
+        StoreMessageTypeMeta(typeMeta, index);
         return typeMeta;
     }
 
@@ -250,7 +250,7 @@ public sealed class ReadContext
         index = checked((int)(indexMarker >> 1));
         if (isRef)
         {
-            TypeMeta? cached = GetReadTypeMeta(index);
+            TypeMeta? cached = GetMessageTypeMeta(index);
             if (cached is null)
             {
                 throw new InvalidDataException($"unknown type meta ref index {index}");
@@ -265,7 +265,7 @@ public sealed class ReadContext
     }
 
     [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
-    internal bool IsExactLocalTypeMeta(int start, int end, TypeInfo exactLocal)
+    internal bool MatchesExactLocalTypeMeta(int start, int end, TypeInfo exactLocal)
     {
         TypeInfo.TypeMetaCacheEntry local = exactLocal.GetTypeMetaCacheEntry(TrackRef);
         if (!IsStructMeta(local.TypeMeta))
@@ -294,7 +294,7 @@ public sealed class ReadContext
     }
 
     [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
-    internal TypeMeta DecodeReadTypeMeta()
+    internal TypeMeta DecodeTypeMeta()
     {
         return TypeMeta.Decode(Reader, _config.MaxTypeFields, _config.MaxTypeMetaBytes);
     }
@@ -452,9 +452,9 @@ public sealed class ReadContext
         _cachedTypeMetaType = null;
         _cachedTypeMeta = null;
         _currentDynamicReadDepth = 0;
-        _firstReadTypeMeta = null;
-        _hasFirstReadTypeMeta = false;
-        _readTypeMetas.Clear();
+        _firstMessageTypeMeta = null;
+        _hasFirstMessageTypeMeta = false;
+        _messageTypeMetas.Clear();
         _readMetaStrings.Clear();
     }
 }

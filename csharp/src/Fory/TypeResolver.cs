@@ -702,24 +702,24 @@ public sealed class TypeResolver
             {
                 if (!HasValidatedTypeMeta(info, remoteTypeMeta))
                 {
-                    ValidateTypeMetaMiss(remoteTypeMeta, info, typeId, assignFieldIds: true, context);
+                    ValidateRemoteTypeMeta(remoteTypeMeta, info, typeId, assignFieldIds: true, context);
                 }
             }
             else
             {
                 ulong header = context.Reader.ReadUInt64();
-                if (context.TryGetCachedReadTypeMeta(header, out remoteTypeMeta))
+                if (context.TryGetTypeMetaByHeader(header, out remoteTypeMeta))
                 {
                     TypeMeta.SkipBody(context.Reader, header);
-                    context.StoreReadTypeMeta(remoteTypeMeta, index);
+                    context.StoreMessageTypeMeta(remoteTypeMeta, index);
                     if (!HasValidatedTypeMeta(info, remoteTypeMeta))
                     {
-                        ValidateTypeMetaMiss(remoteTypeMeta, info, typeId, assignFieldIds: true, context);
+                        ValidateRemoteTypeMeta(remoteTypeMeta, info, typeId, assignFieldIds: true, context);
                     }
                 }
                 else
                 {
-                    remoteTypeMeta = ReadCheckedTypeMetaMiss(
+                    remoteTypeMeta = ReadRemoteTypeMeta(
                         info,
                         typeId,
                         assignFieldIds: true,
@@ -752,24 +752,24 @@ public sealed class TypeResolver
                     {
                         if (!HasValidatedTypeMeta(info, remoteTypeMeta))
                         {
-                            ValidateTypeMetaMiss(remoteTypeMeta, info, typeId, assignFieldIds: true, context);
+                            ValidateRemoteTypeMeta(remoteTypeMeta, info, typeId, assignFieldIds: true, context);
                         }
                     }
                     else
                     {
                         ulong header = context.Reader.ReadUInt64();
-                        if (context.TryGetCachedReadTypeMeta(header, out remoteTypeMeta))
+                        if (context.TryGetTypeMetaByHeader(header, out remoteTypeMeta))
                         {
                             TypeMeta.SkipBody(context.Reader, header);
-                            context.StoreReadTypeMeta(remoteTypeMeta, index);
+                            context.StoreMessageTypeMeta(remoteTypeMeta, index);
                             if (!HasValidatedTypeMeta(info, remoteTypeMeta))
                             {
-                                ValidateTypeMetaMiss(remoteTypeMeta, info, typeId, assignFieldIds: true, context);
+                                ValidateRemoteTypeMeta(remoteTypeMeta, info, typeId, assignFieldIds: true, context);
                             }
                         }
                         else
                         {
-                            remoteTypeMeta = ReadCheckedTypeMetaMiss(
+                            remoteTypeMeta = ReadRemoteTypeMeta(
                                 info,
                                 typeId,
                                 assignFieldIds: true,
@@ -821,24 +821,24 @@ public sealed class TypeResolver
             {
                 if (!HasValidatedTypeMeta(typeInfo, remoteTypeMeta))
                 {
-                    ValidateTypeMetaMiss(remoteTypeMeta, typeInfo, wireTypeId, assignFieldIds: false, context);
+                    ValidateRemoteTypeMeta(remoteTypeMeta, typeInfo, wireTypeId, assignFieldIds: false, context);
                 }
             }
             else
             {
                 ulong header = context.Reader.ReadUInt64();
-                if (context.TryGetCachedReadTypeMeta(header, out remoteTypeMeta))
+                if (context.TryGetTypeMetaByHeader(header, out remoteTypeMeta))
                 {
                     TypeMeta.SkipBody(context.Reader, header);
-                    context.StoreReadTypeMeta(remoteTypeMeta, index);
+                    context.StoreMessageTypeMeta(remoteTypeMeta, index);
                     if (!HasValidatedTypeMeta(typeInfo, remoteTypeMeta))
                     {
-                        ValidateTypeMetaMiss(remoteTypeMeta, typeInfo, wireTypeId, assignFieldIds: false, context);
+                        ValidateRemoteTypeMeta(remoteTypeMeta, typeInfo, wireTypeId, assignFieldIds: false, context);
                     }
                 }
                 else
                 {
-                    _ = ReadCheckedTypeMetaMiss(
+                    _ = ReadRemoteTypeMeta(
                         typeInfo,
                         wireTypeId,
                         assignFieldIds: false,
@@ -873,7 +873,7 @@ public sealed class TypeResolver
     }
 
     [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
-    private TypeMeta ReadCheckedTypeMetaMiss(
+    private TypeMeta ReadRemoteTypeMeta(
         TypeInfo typeInfo,
         TypeId wireTypeId,
         bool assignFieldIds,
@@ -883,11 +883,11 @@ public sealed class TypeResolver
     {
         context.Reader.MoveBack(sizeof(ulong));
         int typeMetaStart = context.Reader.Cursor;
-        TypeMeta remoteTypeMeta = context.DecodeReadTypeMeta();
+        TypeMeta remoteTypeMeta = context.DecodeTypeMeta();
         int typeMetaEnd = context.Reader.Cursor;
         if (!HasValidatedTypeMeta(typeInfo, remoteTypeMeta))
         {
-            ValidateTypeMetaMiss(
+            ValidateRemoteTypeMeta(
                 remoteTypeMeta,
                 typeInfo,
                 wireTypeId,
@@ -896,18 +896,18 @@ public sealed class TypeResolver
         }
         try
         {
-            context.CacheReadTypeMeta(header, remoteTypeMeta);
+            context.StoreRemoteTypeMeta(header, remoteTypeMeta);
         }
-        catch (InvalidDataException) when (context.IsExactLocalTypeMeta(typeMetaStart, typeMetaEnd, typeInfo))
+        catch (InvalidDataException) when (context.MatchesExactLocalTypeMeta(typeMetaStart, typeMetaEnd, typeInfo))
         {
-            context.CacheExactLocalTypeMeta(header, remoteTypeMeta);
+            context.StoreExactLocalTypeMeta(header, remoteTypeMeta);
         }
-        context.StoreReadTypeMeta(remoteTypeMeta, index);
+        context.StoreMessageTypeMeta(remoteTypeMeta, index);
         return remoteTypeMeta;
     }
 
     [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
-    private void ValidateTypeMetaMiss(
+    private void ValidateRemoteTypeMeta(
         TypeMeta remoteTypeMeta,
         TypeInfo typeInfo,
         TypeId wireTypeId,
@@ -1009,7 +1009,7 @@ public sealed class TypeResolver
         {
             case TypeId.CompatibleStruct:
             case TypeId.NamedCompatibleStruct:
-                return ReadAnyTypeMetaInfo(wireTypeId, context.Compatible, context);
+                return ReadAnyTypeInfo(wireTypeId, context.Compatible, context);
             case TypeId.NamedEnum:
             case TypeId.NamedStruct:
             case TypeId.NamedExt:
@@ -1029,7 +1029,7 @@ public sealed class TypeResolver
     {
         if (context.Compatible)
         {
-            return ReadAnyTypeMetaInfo(wireTypeId, compatible: true, context);
+            return ReadAnyTypeInfo(wireTypeId, compatible: true, context);
         }
 
         MetaString namespaceName = ReadMetaString(
@@ -1043,7 +1043,7 @@ public sealed class TypeResolver
         return ResolveAnyUserTypeInfo(wireTypeId, namespaceName.Value, typeName.Value, compatible: false);
     }
 
-    private TypeInfo ReadAnyTypeMetaInfo(TypeId wireTypeId, bool compatible, ReadContext context)
+    private TypeInfo ReadAnyTypeInfo(TypeId wireTypeId, bool compatible, ReadContext context)
     {
         if (context.TryReadTypeMetaRef(out int index, out TypeMeta typeMeta))
         {
@@ -1055,12 +1055,12 @@ public sealed class TypeResolver
 
         int typeMetaStart = context.Reader.Cursor;
         ulong header = context.Reader.ReadUInt64();
-        if (context.TryGetCachedReadTypeMeta(header, out typeMeta))
+        if (context.TryGetTypeMetaByHeader(header, out typeMeta))
         {
             // Header-cache hits stay body-skip only. Type resolution and field binding
             // below are existing Any resolution work, not schema-limit checks.
             TypeMeta.SkipBody(context.Reader, header);
-            context.StoreReadTypeMeta(typeMeta, index);
+            context.StoreMessageTypeMeta(typeMeta, index);
             TypeInfo typeInfo = ResolveAnyTypeInfoFromMeta(wireTypeId, typeMeta, compatible);
             typeMeta.EnsureAssignedFieldIds(TypeMetaFields(typeInfo, context.TrackRef));
             context.StoreTypeMeta(typeInfo.Type, typeMeta);
@@ -1068,19 +1068,19 @@ public sealed class TypeResolver
         }
 
         context.Reader.MoveBack(sizeof(ulong));
-        typeMeta = context.DecodeReadTypeMeta();
+        typeMeta = context.DecodeTypeMeta();
         int typeMetaEnd = context.Reader.Cursor;
         TypeInfo resolvedInfo = ResolveAnyTypeInfoFromMeta(wireTypeId, typeMeta, compatible);
         typeMeta.EnsureAssignedFieldIds(TypeMetaFields(resolvedInfo, context.TrackRef));
         try
         {
-            context.CacheReadTypeMeta(header, typeMeta);
+            context.StoreRemoteTypeMeta(header, typeMeta);
         }
-        catch (InvalidDataException) when (context.IsExactLocalTypeMeta(typeMetaStart, typeMetaEnd, resolvedInfo))
+        catch (InvalidDataException) when (context.MatchesExactLocalTypeMeta(typeMetaStart, typeMetaEnd, resolvedInfo))
         {
-            context.CacheExactLocalTypeMeta(header, typeMeta);
+            context.StoreExactLocalTypeMeta(header, typeMeta);
         }
-        context.StoreReadTypeMeta(typeMeta, index);
+        context.StoreMessageTypeMeta(typeMeta, index);
         context.StoreTypeMeta(resolvedInfo.Type, typeMeta);
         return resolvedInfo;
     }

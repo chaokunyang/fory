@@ -537,9 +537,9 @@ public sealed class RuntimeEdgeCaseTests
         TypeMeta first = RemoteStructTypeMeta(901, "first");
         TypeMeta second = RemoteStructTypeMeta(901, "second");
 
-        ReadAndCacheTypeMeta(context, first);
+        ReadAndStoreTypeMeta(context, first);
 
-        Assert.Throws<InvalidDataException>(() => ReadAndCacheTypeMeta(context, second));
+        Assert.Throws<InvalidDataException>(() => ReadAndStoreTypeMeta(context, second));
     }
 
     [Fact]
@@ -554,10 +554,10 @@ public sealed class RuntimeEdgeCaseTests
         TypeMeta first = RemoteNamedNonStructTypeMeta(TypeId.NamedEnum, "SharedEnum");
         TypeMeta second = RemoteNamedNonStructTypeMeta(TypeId.NamedExt, "SharedEnum");
 
-        ReadAndCacheTypeMeta(context, first);
+        ReadAndStoreTypeMeta(context, first);
 
         InvalidDataException exception =
-            Assert.Throws<InvalidDataException>(() => ReadAndCacheTypeMeta(context, second));
+            Assert.Throws<InvalidDataException>(() => ReadAndStoreTypeMeta(context, second));
         Assert.Contains("MaxSchemaVersionsPerType", exception.Message, StringComparison.Ordinal);
     }
 
@@ -604,7 +604,7 @@ public sealed class RuntimeEdgeCaseTests
         TypeMeta typeMeta = RemoteStructTypeMeta(901, "first", "second");
 
         InvalidDataException exception =
-            Assert.Throws<InvalidDataException>(() => ReadAndCacheTypeMeta(context, typeMeta));
+            Assert.Throws<InvalidDataException>(() => ReadAndStoreTypeMeta(context, typeMeta));
         Assert.Contains("MaxTypeFields", exception.Message, StringComparison.Ordinal);
     }
 
@@ -619,7 +619,7 @@ public sealed class RuntimeEdgeCaseTests
         ReadContext context = new(new ByteReader(Array.Empty<byte>()), new TypeResolver(), config);
 
         InvalidDataException exception =
-            Assert.Throws<InvalidDataException>(() => ReadAndCacheTypeMeta(context, RemoteStructTypeMeta(901, "value")));
+            Assert.Throws<InvalidDataException>(() => ReadAndStoreTypeMeta(context, RemoteStructTypeMeta(901, "value")));
         Assert.Contains("MaxTypeMetaBytes", exception.Message, StringComparison.Ordinal);
     }
 
@@ -635,11 +635,11 @@ public sealed class RuntimeEdgeCaseTests
         TypeMeta first = RemoteStructTypeMeta(901, "value");
         TypeMeta second = RemoteStructTypeMeta(902, "value");
 
-        TypeMeta firstRead = ReadAndCacheTypeMeta(context, first);
-        TypeMeta secondRead = ReadAndCacheTypeMeta(context, second);
+        TypeMeta firstRead = ReadAndStoreTypeMeta(context, first);
+        TypeMeta secondRead = ReadAndStoreTypeMeta(context, second);
 
-        Assert.True(context.TryGetCachedReadTypeMeta(EncodedTypeMetaHeader(firstRead), out _));
-        Assert.True(context.TryGetCachedReadTypeMeta(EncodedTypeMetaHeader(secondRead), out _));
+        Assert.True(context.TryGetTypeMetaByHeader(EncodedTypeMetaHeader(firstRead), out _));
+        Assert.True(context.TryGetTypeMetaByHeader(EncodedTypeMetaHeader(secondRead), out _));
     }
 
     [Fact]
@@ -656,9 +656,9 @@ public sealed class RuntimeEdgeCaseTests
 
         Assert.Throws<InvalidDataException>(() =>
             ReadAnyTypeInfo(context, resolver, RemoteCompatibleStructTypeMeta(901, "Id", MapType())));
-        TypeMeta accepted = ReadAndCacheTypeMeta(context, RemoteStructTypeMeta(901, "second"));
+        TypeMeta accepted = ReadAndStoreTypeMeta(context, RemoteStructTypeMeta(901, "second"));
 
-        Assert.True(context.TryGetCachedReadTypeMeta(EncodedTypeMetaHeader(accepted), out _));
+        Assert.True(context.TryGetTypeMetaByHeader(EncodedTypeMetaHeader(accepted), out _));
     }
 
     [Fact]
@@ -672,12 +672,12 @@ public sealed class RuntimeEdgeCaseTests
             .Build()
             .Config;
         ReadContext context = new(new ByteReader(Array.Empty<byte>()), resolver, config);
-        TypeMeta remote = ReadAndCacheTypeMeta(context, RemoteStructTypeMeta(901, "remote"));
+        TypeMeta remote = ReadAndStoreTypeMeta(context, RemoteStructTypeMeta(901, "remote"));
         TypeMeta exact = resolver.GetTypeInfo(typeof(CustomPayload)).GetTypeMetaCacheEntry(trackRef: false).TypeMeta;
 
         TypeInfo typeInfo = ReadAnyTypeInfo(context, resolver, exact);
 
-        Assert.True(context.TryGetCachedReadTypeMeta(EncodedTypeMetaHeader(remote), out _));
+        Assert.True(context.TryGetTypeMetaByHeader(EncodedTypeMetaHeader(remote), out _));
     }
 
     [Fact]
@@ -701,7 +701,7 @@ public sealed class RuntimeEdgeCaseTests
 
         Config config = ForyRuntime.Builder().Compatible(false).Build().Config;
         ReadContext context = new(new ByteReader(writer.ToArray()), new TypeResolver(), config);
-        context.CacheReadTypeMeta(header, typeMeta);
+        context.StoreRemoteTypeMeta(header, typeMeta);
 
         Assert.Same(typeMeta, context.ReadTypeMeta());
         Assert.Equal(0x7b, context.Reader.ReadUInt8());
@@ -774,7 +774,7 @@ public sealed class RuntimeEdgeCaseTests
             ]);
     }
 
-    private static TypeMeta ReadAndCacheTypeMeta(ReadContext context, TypeMeta typeMeta)
+    private static TypeMeta ReadAndStoreTypeMeta(ReadContext context, TypeMeta typeMeta)
     {
         ByteWriter writer = new();
         writer.WriteVarUInt32(0);

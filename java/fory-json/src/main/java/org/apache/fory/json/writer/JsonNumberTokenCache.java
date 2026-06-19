@@ -17,11 +17,11 @@
  * under the License.
  */
 
-package org.apache.fory.json;
+package org.apache.fory.json.writer;
 
 import java.nio.charset.StandardCharsets;
 
-final class JsonNumberTokenCache {
+public final class JsonNumberTokenCache {
   private static final int NO_SLOT = -1;
 
   private boolean hasCandidate0;
@@ -59,7 +59,7 @@ final class JsonNumberTokenCache {
   private byte[] utf8Comma2;
   private byte[] utf8Comma3;
 
-  boolean writeStringField(
+  public boolean writeStringField(
       StringJsonWriter writer, long number, boolean comma, byte[] namePrefix, byte[] commaPrefix) {
     int slot = slot(number);
     if (slot == NO_SLOT) {
@@ -70,7 +70,7 @@ final class JsonNumberTokenCache {
     return true;
   }
 
-  boolean writeUtf8Field(
+  public boolean writeUtf8Field(
       Utf8JsonWriter writer, long number, boolean comma, byte[] namePrefix, byte[] commaPrefix) {
     int slot = slot(number);
     if (slot == NO_SLOT) {

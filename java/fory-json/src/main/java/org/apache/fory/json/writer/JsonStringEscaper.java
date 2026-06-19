@@ -17,25 +17,26 @@
  * under the License.
  */
 
-package org.apache.fory.json;
+package org.apache.fory.json.writer;
 
 import java.nio.charset.StandardCharsets;
+import org.apache.fory.json.ForyJsonException;
 
-final class JsonStringEscaper {
+public final class JsonStringEscaper {
   private JsonStringEscaper() {}
 
-  static String escapedNamePrefix(String name, boolean escapeNonLatin1) {
+  public static String escapedNamePrefix(String name, boolean escapeNonLatin1) {
     StringBuilder builder = new StringBuilder(name.length() + 3);
     appendQuoted(builder, name, escapeNonLatin1);
     builder.append(':');
     return builder.toString();
   }
 
-  static byte[] stringValue(String value) {
+  public static byte[] stringValue(String value) {
     return escapedString(value, true).getBytes(StandardCharsets.ISO_8859_1);
   }
 
-  static byte[] utf8Value(String value) {
+  public static byte[] utf8Value(String value) {
     return escapedString(value, false).getBytes(StandardCharsets.UTF_8);
   }
 

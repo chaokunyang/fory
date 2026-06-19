@@ -17,7 +17,7 @@
  * under the License.
  */
 
-package org.apache.fory.json;
+package org.apache.fory.json.meta;
 
 import java.lang.reflect.Member;
 import java.lang.reflect.Type;
@@ -26,8 +26,19 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.RandomAccess;
+import org.apache.fory.json.ForyJsonException;
+import org.apache.fory.json.reader.JsonReader;
+import org.apache.fory.json.resolver.JsonTypeInfo;
+import org.apache.fory.json.resolver.JsonTypeResolver;
+import org.apache.fory.json.serializer.JsonSerializers;
+import org.apache.fory.json.writer.JsonNumberTokenCache;
+import org.apache.fory.json.writer.JsonStringEscaper;
+import org.apache.fory.json.writer.JsonStringTokenCache;
+import org.apache.fory.json.writer.JsonWriter;
+import org.apache.fory.json.writer.StringJsonWriter;
+import org.apache.fory.json.writer.Utf8JsonWriter;
 
-final class JsonPropertyInfo {
+public final class JsonFieldInfo {
   private static final int KIND_BOOLEAN = 1;
   private static final int KIND_BYTE = 2;
   private static final int KIND_SHORT = 3;
@@ -51,8 +62,8 @@ final class JsonPropertyInfo {
   private final Class<?> writeRawType;
   private final Type readType;
   private final Class<?> readRawType;
-  private final JsonPropertyKind writeKind;
-  private final JsonPropertyKind readKind;
+  private final JsonFieldKind writeKind;
+  private final JsonFieldKind readKind;
   private final int writeKindId;
   private final JsonMemberAccessor writeAccessor;
   private final JsonMemberAccessor readAccessor;
@@ -83,10 +94,12 @@ final class JsonPropertyInfo {
   private final JsonStringTokenCache stringTokenCache;
   private final JsonStringTokenCache elementStringTokenCache;
   private final JsonNumberTokenCache numberTokenCache;
+  private JsonTypeInfo writeTypeInfo;
+  private JsonTypeInfo readTypeInfo;
   private JsonClassInfo writeClassInfo;
   private JsonClassInfo writeElementClassInfo;
 
-  JsonPropertyInfo(
+  JsonFieldInfo(
       String name,
       Member writeMember,
       Type writeType,
@@ -107,11 +120,11 @@ final class JsonPropertyInfo {
     readKind = readRawType == null ? null : kind(readRawType);
     writeKindId = writeKind == null ? 0 : kindId(writeKind);
     writeElementType =
-        writeKind == JsonPropertyKind.COLLECTION ? JsonSerializers.elementType(writeType) : null;
+        writeKind == JsonFieldKind.COLLECTION ? JsonSerializers.elementType(writeType) : null;
     writeMapValueType =
-        writeKind == JsonPropertyKind.MAP ? JsonSerializers.mapValueType(writeType) : null;
+        writeKind == JsonFieldKind.MAP ? JsonSerializers.mapValueType(writeType) : null;
     writeArrayComponentType =
-        writeKind == JsonPropertyKind.ARRAY ? writeRawType.getComponentType() : null;
+        writeKind == JsonFieldKind.ARRAY ? writeRawType.getComponentType() : null;
     writeElementRawType = writeElementType == null ? null : knownRawType(writeElementType);
     String stringPrefix = JsonStringEscaper.escapedNamePrefix(name, true);
     String utf8Prefix = JsonStringEscaper.escapedNamePrefix(name, false);
@@ -119,29 +132,27 @@ final class JsonPropertyInfo {
     stringCommaNamePrefix = ("," + stringPrefix).getBytes(StandardCharsets.ISO_8859_1);
     utf8NamePrefix = utf8Prefix.getBytes(StandardCharsets.UTF_8);
     utf8CommaNamePrefix = ("," + utf8Prefix).getBytes(StandardCharsets.UTF_8);
-    stringEnumValues = writeKind == JsonPropertyKind.ENUM ? stringEnumValues(writeRawType) : null;
+    stringEnumValues = writeKind == JsonFieldKind.ENUM ? stringEnumValues(writeRawType) : null;
     stringEnumNameValues =
-        writeKind == JsonPropertyKind.ENUM ? fieldValues(stringNamePrefix, stringEnumValues) : null;
+        writeKind == JsonFieldKind.ENUM ? fieldValues(stringNamePrefix, stringEnumValues) : null;
     stringEnumCommaValues =
-        writeKind == JsonPropertyKind.ENUM
+        writeKind == JsonFieldKind.ENUM
             ? fieldValues(stringCommaNamePrefix, stringEnumValues)
             : null;
     stringElementEnumValues =
         writeElementRawType != null && writeElementRawType.isEnum()
             ? stringEnumValues(writeElementRawType)
             : null;
-    utf8EnumValues = writeKind == JsonPropertyKind.ENUM ? enumValues(writeRawType) : null;
+    utf8EnumValues = writeKind == JsonFieldKind.ENUM ? enumValues(writeRawType) : null;
     utf8EnumNameValues =
-        writeKind == JsonPropertyKind.ENUM ? fieldValues(utf8NamePrefix, utf8EnumValues) : null;
+        writeKind == JsonFieldKind.ENUM ? fieldValues(utf8NamePrefix, utf8EnumValues) : null;
     utf8EnumCommaValues =
-        writeKind == JsonPropertyKind.ENUM
-            ? fieldValues(utf8CommaNamePrefix, utf8EnumValues)
-            : null;
+        writeKind == JsonFieldKind.ENUM ? fieldValues(utf8CommaNamePrefix, utf8EnumValues) : null;
     utf8ElementEnumValues =
         writeElementRawType != null && writeElementRawType.isEnum()
             ? enumValues(writeElementRawType)
             : null;
-    if (writeKind == JsonPropertyKind.BOOLEAN) {
+    if (writeKind == JsonFieldKind.BOOLEAN) {
       stringTrueNameToken = join(stringNamePrefix, TRUE_BYTES);
       stringTrueCommaToken = join(stringCommaNamePrefix, TRUE_BYTES);
       stringFalseNameToken = join(stringNamePrefix, FALSE_BYTES);
@@ -160,7 +171,7 @@ final class JsonPropertyInfo {
       utf8FalseNameToken = null;
       utf8FalseCommaToken = null;
     }
-    stringTokenCache = writeKind == JsonPropertyKind.STRING ? new JsonStringTokenCache() : null;
+    stringTokenCache = writeKind == JsonFieldKind.STRING ? new JsonStringTokenCache() : null;
     elementStringTokenCache =
         writeElementRawType == String.class ? new JsonStringTokenCache() : null;
     numberTokenCache = isIntegerKind(writeKind) ? new JsonNumberTokenCache() : null;
@@ -182,7 +193,7 @@ final class JsonPropertyInfo {
     return writeRawType;
   }
 
-  public JsonPropertyKind writeKind() {
+  public JsonFieldKind writeKind() {
     return writeKind;
   }
 
@@ -210,12 +221,25 @@ final class JsonPropertyInfo {
     return readRawType;
   }
 
-  public JsonPropertyKind readKind() {
+  public JsonFieldKind readKind() {
     return readKind;
   }
 
   public JsonMemberAccessor readAccessor() {
     return readAccessor;
+  }
+
+  public void resolveTypes(JsonTypeResolver typeResolver) {
+    if (writeRawType != null) {
+      writeTypeInfo = typeResolver.getTypeInfo(writeType, writeRawType);
+    }
+    if (readRawType != null) {
+      readTypeInfo = typeResolver.getTypeInfo(readType, readRawType);
+    }
+  }
+
+  public void read(JsonReader reader, Object object, JsonTypeResolver typeResolver) {
+    readTypeInfo.readField(reader, object, readAccessor, typeResolver);
   }
 
   public byte[] stringNamePrefix() {
@@ -262,15 +286,15 @@ final class JsonPropertyInfo {
         : (comma ? stringFalseCommaToken : stringFalseNameToken);
   }
 
-  JsonStringTokenCache stringTokenCache() {
+  public JsonStringTokenCache stringTokenCache() {
     return stringTokenCache;
   }
 
-  JsonStringTokenCache elementStringTokenCache() {
+  public JsonStringTokenCache elementStringTokenCache() {
     return elementStringTokenCache;
   }
 
-  JsonNumberTokenCache numberTokenCache() {
+  public JsonNumberTokenCache numberTokenCache() {
     return numberTokenCache;
   }
 
@@ -282,7 +306,7 @@ final class JsonPropertyInfo {
     return stringElementEnumValues[value.ordinal()];
   }
 
-  public boolean write(JsonWriter writer, Object object, JsonClassCache classCache, int index) {
+  public boolean write(JsonWriter writer, Object object, JsonTypeResolver typeResolver, int index) {
     switch (writeKind) {
       case BOOLEAN:
         if (!writeRawType.isPrimitive()) {
@@ -353,20 +377,20 @@ final class JsonPropertyInfo {
       case ENUM:
         return writeEnum(writer, object, index);
       case ARRAY:
-        return writeArray(writer, object, classCache, index);
+        return writeArray(writer, object, typeResolver, index);
       case COLLECTION:
-        return writeCollection(writer, object, classCache, index);
+        return writeCollection(writer, object, typeResolver, index);
       case MAP:
-        return writeMap(writer, object, classCache, index);
+        return writeMap(writer, object, typeResolver, index);
       case OBJECT:
-        return writePojo(writer, object, classCache, index);
+        return writePojo(writer, object, typeResolver, index);
       default:
-        return writeObject(writer, object, classCache, index);
+        return writeObject(writer, object, typeResolver, index);
     }
   }
 
   public boolean writeString(
-      StringJsonWriter writer, Object object, JsonClassCache classCache, int index) {
+      StringJsonWriter writer, Object object, JsonTypeResolver typeResolver, int index) {
     switch (writeKindId) {
       case KIND_BOOLEAN:
         if (!writeRawType.isPrimitive()) {
@@ -428,20 +452,20 @@ final class JsonPropertyInfo {
       case KIND_ENUM:
         return writeStringEnum(writer, object, index);
       case KIND_ARRAY:
-        return writeStringArray(writer, object, classCache, index);
+        return writeStringArray(writer, object, typeResolver, index);
       case KIND_COLLECTION:
-        return writeStringCollection(writer, object, classCache, index);
+        return writeStringCollection(writer, object, typeResolver, index);
       case KIND_MAP:
-        return writeStringMap(writer, object, classCache, index);
+        return writeStringMap(writer, object, typeResolver, index);
       case KIND_OBJECT:
-        return writeStringPojo(writer, object, classCache, index);
+        return writeStringPojo(writer, object, typeResolver, index);
       default:
-        return writeObject(writer, object, classCache, index);
+        return writeObject(writer, object, typeResolver, index);
     }
   }
 
   public boolean writeUtf8(
-      Utf8JsonWriter writer, Object object, JsonClassCache classCache, int index) {
+      Utf8JsonWriter writer, Object object, JsonTypeResolver typeResolver, int index) {
     switch (writeKindId) {
       case KIND_BOOLEAN:
         if (!writeRawType.isPrimitive()) {
@@ -503,27 +527,27 @@ final class JsonPropertyInfo {
       case KIND_ENUM:
         return writeUtf8Enum(writer, object, index);
       case KIND_ARRAY:
-        return writeUtf8Array(writer, object, classCache, index);
+        return writeUtf8Array(writer, object, typeResolver, index);
       case KIND_COLLECTION:
-        return writeUtf8Collection(writer, object, classCache, index);
+        return writeUtf8Collection(writer, object, typeResolver, index);
       case KIND_MAP:
-        return writeUtf8Map(writer, object, classCache, index);
+        return writeUtf8Map(writer, object, typeResolver, index);
       case KIND_OBJECT:
-        return writeUtf8Pojo(writer, object, classCache, index);
+        return writeUtf8Pojo(writer, object, typeResolver, index);
       default:
-        return writeUtf8Object(writer, object, classCache, index);
+        return writeUtf8Object(writer, object, typeResolver, index);
     }
   }
 
   private boolean writeObject(
-      JsonWriter writer, Object object, JsonClassCache classCache, int index) {
+      JsonWriter writer, Object object, JsonTypeResolver typeResolver, int index) {
     Object value = writeAccessor.getObject(object);
     if (value == null && !writer.writeNullFields()) {
       return false;
     }
     writer.writeComma(index);
     writer.writeFieldName(this);
-    JsonSerializers.writeValue(writer, value, writeType, classCache);
+    writeTypeInfo.write(writer, value, typeResolver);
     return true;
   }
 
@@ -640,7 +664,7 @@ final class JsonPropertyInfo {
   }
 
   private boolean writeStringArray(
-      StringJsonWriter writer, Object object, JsonClassCache classCache, int index) {
+      StringJsonWriter writer, Object object, JsonTypeResolver typeResolver, int index) {
     Object value = writeAccessor.getObject(object);
     if (value == null && !writer.writeNullFields()) {
       return false;
@@ -649,13 +673,13 @@ final class JsonPropertyInfo {
     if (value == null) {
       writer.writeNull();
     } else {
-      JsonSerializers.writeArray(writer, value, writeArrayComponentType, classCache);
+      JsonSerializers.writeArray(writer, value, writeArrayComponentType, typeResolver);
     }
     return true;
   }
 
   private boolean writeStringCollection(
-      StringJsonWriter writer, Object object, JsonClassCache classCache, int index) {
+      StringJsonWriter writer, Object object, JsonTypeResolver typeResolver, int index) {
     Collection<?> value = (Collection<?>) writeAccessor.getObject(object);
     if (value == null && !writer.writeNullFields()) {
       return false;
@@ -664,13 +688,13 @@ final class JsonPropertyInfo {
     if (value == null) {
       writer.writeNull();
     } else {
-      writeStringCollectionValue(writer, value, classCache);
+      writeStringCollectionValue(writer, value, typeResolver);
     }
     return true;
   }
 
   private void writeStringCollectionValue(
-      StringJsonWriter writer, Collection<?> value, JsonClassCache classCache) {
+      StringJsonWriter writer, Collection<?> value, JsonTypeResolver typeResolver) {
     Class<?> elementRawType = writeElementRawType;
     if (elementRawType == String.class) {
       writer.writeArrayStart();
@@ -713,7 +737,7 @@ final class JsonPropertyInfo {
     } else if (elementRawType != null && !isScalarType(elementRawType)) {
       JsonClassInfo classInfo = writeElementClassInfo;
       if (classInfo == null) {
-        classInfo = classCache.get(elementRawType);
+        classInfo = typeResolver.getClassInfo(elementRawType);
         writeElementClassInfo = classInfo;
       }
       writer.writeArrayStart();
@@ -726,9 +750,9 @@ final class JsonPropertyInfo {
           if (element == null) {
             writer.writeNull();
           } else if (element.getClass() == elementRawType) {
-            classInfo.write(writer, element, classCache);
+            classInfo.write(writer, element, typeResolver);
           } else {
-            JsonSerializers.writeValue(writer, element, writeElementType, classCache);
+            typeResolver.writeValue(writer, element, writeElementType);
           }
         }
       } else {
@@ -738,20 +762,20 @@ final class JsonPropertyInfo {
           if (element == null) {
             writer.writeNull();
           } else if (element.getClass() == elementRawType) {
-            classInfo.write(writer, element, classCache);
+            classInfo.write(writer, element, typeResolver);
           } else {
-            JsonSerializers.writeValue(writer, element, writeElementType, classCache);
+            typeResolver.writeValue(writer, element, writeElementType);
           }
         }
       }
       writer.writeArrayEnd();
     } else {
-      JsonSerializers.writeCollection(writer, value, writeElementType, classCache);
+      JsonSerializers.writeCollection(writer, value, writeElementType, typeResolver);
     }
   }
 
   private boolean writeStringMap(
-      StringJsonWriter writer, Object object, JsonClassCache classCache, int index) {
+      StringJsonWriter writer, Object object, JsonTypeResolver typeResolver, int index) {
     Map<?, ?> value = (Map<?, ?>) writeAccessor.getObject(object);
     if (value == null && !writer.writeNullFields()) {
       return false;
@@ -760,13 +784,13 @@ final class JsonPropertyInfo {
     if (value == null) {
       writer.writeNull();
     } else {
-      JsonSerializers.writeMap(writer, value, writeMapValueType, classCache);
+      JsonSerializers.writeMap(writer, value, writeMapValueType, typeResolver);
     }
     return true;
   }
 
   private boolean writeStringPojo(
-      StringJsonWriter writer, Object object, JsonClassCache classCache, int index) {
+      StringJsonWriter writer, Object object, JsonTypeResolver typeResolver, int index) {
     Object value = writeAccessor.getObject(object);
     if (value == null && !writer.writeNullFields()) {
       return false;
@@ -775,17 +799,17 @@ final class JsonPropertyInfo {
     if (value == null) {
       writer.writeNull();
     } else if (writeRawType == Object.class) {
-      JsonSerializers.writeValue(writer, value, Object.class, classCache);
+      writeTypeInfo.write(writer, value, typeResolver);
     } else {
       JsonClassInfo classInfo = writeClassInfo;
       Class<?> valueClass = value.getClass();
       if (classInfo == null || classInfo.type() != valueClass) {
-        classInfo = classCache.get(valueClass);
+        classInfo = typeResolver.getClassInfo(valueClass);
         if (valueClass == writeRawType) {
           writeClassInfo = classInfo;
         }
       }
-      classInfo.write(writer, value, classCache);
+      classInfo.write(writer, value, typeResolver);
     }
     return true;
   }
@@ -826,13 +850,13 @@ final class JsonPropertyInfo {
   }
 
   private boolean writeUtf8Object(
-      Utf8JsonWriter writer, Object object, JsonClassCache classCache, int index) {
+      Utf8JsonWriter writer, Object object, JsonTypeResolver typeResolver, int index) {
     Object value = writeAccessor.getObject(object);
     if (value == null && !writer.writeNullFields()) {
       return false;
     }
     writer.writeFieldName(this, index);
-    JsonSerializers.writeUtf8Value(writer, value, writeType, classCache);
+    writeTypeInfo.writeUtf8(writer, value, typeResolver);
     return true;
   }
 
@@ -895,7 +919,7 @@ final class JsonPropertyInfo {
   }
 
   private boolean writeArray(
-      JsonWriter writer, Object object, JsonClassCache classCache, int index) {
+      JsonWriter writer, Object object, JsonTypeResolver typeResolver, int index) {
     Object value = writeAccessor.getObject(object);
     if (value == null && !writer.writeNullFields()) {
       return false;
@@ -905,13 +929,13 @@ final class JsonPropertyInfo {
     if (value == null) {
       writer.writeNull();
     } else {
-      JsonSerializers.writeArray(writer, value, writeArrayComponentType, classCache);
+      JsonSerializers.writeArray(writer, value, writeArrayComponentType, typeResolver);
     }
     return true;
   }
 
   private boolean writeUtf8Array(
-      Utf8JsonWriter writer, Object object, JsonClassCache classCache, int index) {
+      Utf8JsonWriter writer, Object object, JsonTypeResolver typeResolver, int index) {
     Object value = writeAccessor.getObject(object);
     if (value == null && !writer.writeNullFields()) {
       return false;
@@ -920,13 +944,13 @@ final class JsonPropertyInfo {
     if (value == null) {
       writer.writeNull();
     } else {
-      JsonSerializers.writeUtf8Array(writer, value, writeArrayComponentType, classCache);
+      JsonSerializers.writeUtf8Array(writer, value, writeArrayComponentType, typeResolver);
     }
     return true;
   }
 
   private boolean writeCollection(
-      JsonWriter writer, Object object, JsonClassCache classCache, int index) {
+      JsonWriter writer, Object object, JsonTypeResolver typeResolver, int index) {
     Collection<?> value = (Collection<?>) writeAccessor.getObject(object);
     if (value == null && !writer.writeNullFields()) {
       return false;
@@ -936,13 +960,13 @@ final class JsonPropertyInfo {
     if (value == null) {
       writer.writeNull();
     } else {
-      JsonSerializers.writeCollection(writer, value, writeElementType, classCache);
+      JsonSerializers.writeCollection(writer, value, writeElementType, typeResolver);
     }
     return true;
   }
 
   private boolean writeUtf8Collection(
-      Utf8JsonWriter writer, Object object, JsonClassCache classCache, int index) {
+      Utf8JsonWriter writer, Object object, JsonTypeResolver typeResolver, int index) {
     Collection<?> value = (Collection<?>) writeAccessor.getObject(object);
     if (value == null && !writer.writeNullFields()) {
       return false;
@@ -951,13 +975,13 @@ final class JsonPropertyInfo {
     if (value == null) {
       writer.writeNull();
     } else {
-      writeUtf8CollectionValue(writer, value, classCache);
+      writeUtf8CollectionValue(writer, value, typeResolver);
     }
     return true;
   }
 
   private void writeUtf8CollectionValue(
-      Utf8JsonWriter writer, Collection<?> value, JsonClassCache classCache) {
+      Utf8JsonWriter writer, Collection<?> value, JsonTypeResolver typeResolver) {
     Class<?> elementRawType = writeElementRawType;
     if (elementRawType == String.class) {
       writer.writeArrayStart();
@@ -1000,7 +1024,7 @@ final class JsonPropertyInfo {
     } else if (elementRawType != null && !isScalarType(elementRawType)) {
       JsonClassInfo classInfo = writeElementClassInfo;
       if (classInfo == null) {
-        classInfo = classCache.get(elementRawType);
+        classInfo = typeResolver.getClassInfo(elementRawType);
         writeElementClassInfo = classInfo;
       }
       writer.writeArrayStart();
@@ -1013,9 +1037,9 @@ final class JsonPropertyInfo {
           if (element == null) {
             writer.writeNull();
           } else if (element.getClass() == elementRawType) {
-            classInfo.writeUtf8(writer, element, classCache);
+            classInfo.writeUtf8(writer, element, typeResolver);
           } else {
-            JsonSerializers.writeUtf8Value(writer, element, writeElementType, classCache);
+            typeResolver.writeUtf8Value(writer, element, writeElementType);
           }
         }
       } else {
@@ -1025,19 +1049,20 @@ final class JsonPropertyInfo {
           if (element == null) {
             writer.writeNull();
           } else if (element.getClass() == elementRawType) {
-            classInfo.writeUtf8(writer, element, classCache);
+            classInfo.writeUtf8(writer, element, typeResolver);
           } else {
-            JsonSerializers.writeUtf8Value(writer, element, writeElementType, classCache);
+            typeResolver.writeUtf8Value(writer, element, writeElementType);
           }
         }
       }
       writer.writeArrayEnd();
     } else {
-      JsonSerializers.writeUtf8Collection(writer, value, writeElementType, classCache);
+      JsonSerializers.writeUtf8Collection(writer, value, writeElementType, typeResolver);
     }
   }
 
-  private boolean writeMap(JsonWriter writer, Object object, JsonClassCache classCache, int index) {
+  private boolean writeMap(
+      JsonWriter writer, Object object, JsonTypeResolver typeResolver, int index) {
     Map<?, ?> value = (Map<?, ?>) writeAccessor.getObject(object);
     if (value == null && !writer.writeNullFields()) {
       return false;
@@ -1047,13 +1072,13 @@ final class JsonPropertyInfo {
     if (value == null) {
       writer.writeNull();
     } else {
-      JsonSerializers.writeMap(writer, value, writeMapValueType, classCache);
+      JsonSerializers.writeMap(writer, value, writeMapValueType, typeResolver);
     }
     return true;
   }
 
   private boolean writeUtf8Map(
-      Utf8JsonWriter writer, Object object, JsonClassCache classCache, int index) {
+      Utf8JsonWriter writer, Object object, JsonTypeResolver typeResolver, int index) {
     Map<?, ?> value = (Map<?, ?>) writeAccessor.getObject(object);
     if (value == null && !writer.writeNullFields()) {
       return false;
@@ -1062,13 +1087,13 @@ final class JsonPropertyInfo {
     if (value == null) {
       writer.writeNull();
     } else {
-      JsonSerializers.writeUtf8Map(writer, value, writeMapValueType, classCache);
+      JsonSerializers.writeUtf8Map(writer, value, writeMapValueType, typeResolver);
     }
     return true;
   }
 
   private boolean writePojo(
-      JsonWriter writer, Object object, JsonClassCache classCache, int index) {
+      JsonWriter writer, Object object, JsonTypeResolver typeResolver, int index) {
     Object value = writeAccessor.getObject(object);
     if (value == null && !writer.writeNullFields()) {
       return false;
@@ -1078,23 +1103,23 @@ final class JsonPropertyInfo {
     if (value == null) {
       writer.writeNull();
     } else if (writeRawType == Object.class) {
-      JsonSerializers.writeValue(writer, value, Object.class, classCache);
+      writeTypeInfo.write(writer, value, typeResolver);
     } else {
       JsonClassInfo classInfo = writeClassInfo;
       Class<?> valueClass = value.getClass();
       if (classInfo == null || classInfo.type() != valueClass) {
-        classInfo = classCache.get(valueClass);
+        classInfo = typeResolver.getClassInfo(valueClass);
         if (valueClass == writeRawType) {
           writeClassInfo = classInfo;
         }
       }
-      classInfo.write(writer, value, classCache);
+      classInfo.write(writer, value, typeResolver);
     }
     return true;
   }
 
   private boolean writeUtf8Pojo(
-      Utf8JsonWriter writer, Object object, JsonClassCache classCache, int index) {
+      Utf8JsonWriter writer, Object object, JsonTypeResolver typeResolver, int index) {
     Object value = writeAccessor.getObject(object);
     if (value == null && !writer.writeNullFields()) {
       return false;
@@ -1103,53 +1128,53 @@ final class JsonPropertyInfo {
     if (value == null) {
       writer.writeNull();
     } else if (writeRawType == Object.class) {
-      JsonSerializers.writeUtf8Value(writer, value, Object.class, classCache);
+      writeTypeInfo.writeUtf8(writer, value, typeResolver);
     } else {
       JsonClassInfo classInfo = writeClassInfo;
       Class<?> valueClass = value.getClass();
       if (classInfo == null || classInfo.type() != valueClass) {
-        classInfo = classCache.get(valueClass);
+        classInfo = typeResolver.getClassInfo(valueClass);
         if (valueClass == writeRawType) {
           writeClassInfo = classInfo;
         }
       }
-      classInfo.writeUtf8(writer, value, classCache);
+      classInfo.writeUtf8(writer, value, typeResolver);
     }
     return true;
   }
 
-  private static JsonPropertyKind kind(Class<?> rawType) {
+  private static JsonFieldKind kind(Class<?> rawType) {
     if (rawType == boolean.class || rawType == Boolean.class) {
-      return JsonPropertyKind.BOOLEAN;
+      return JsonFieldKind.BOOLEAN;
     } else if (rawType == byte.class || rawType == Byte.class) {
-      return JsonPropertyKind.BYTE;
+      return JsonFieldKind.BYTE;
     } else if (rawType == short.class || rawType == Short.class) {
-      return JsonPropertyKind.SHORT;
+      return JsonFieldKind.SHORT;
     } else if (rawType == int.class || rawType == Integer.class) {
-      return JsonPropertyKind.INT;
+      return JsonFieldKind.INT;
     } else if (rawType == long.class || rawType == Long.class) {
-      return JsonPropertyKind.LONG;
+      return JsonFieldKind.LONG;
     } else if (rawType == float.class || rawType == Float.class) {
-      return JsonPropertyKind.FLOAT;
+      return JsonFieldKind.FLOAT;
     } else if (rawType == double.class || rawType == Double.class) {
-      return JsonPropertyKind.DOUBLE;
+      return JsonFieldKind.DOUBLE;
     } else if (rawType == char.class || rawType == Character.class) {
-      return JsonPropertyKind.CHAR;
+      return JsonFieldKind.CHAR;
     } else if (rawType == String.class) {
-      return JsonPropertyKind.STRING;
+      return JsonFieldKind.STRING;
     } else if (rawType.isEnum()) {
-      return JsonPropertyKind.ENUM;
+      return JsonFieldKind.ENUM;
     } else if (rawType.isArray()) {
-      return JsonPropertyKind.ARRAY;
+      return JsonFieldKind.ARRAY;
     } else if (java.util.Collection.class.isAssignableFrom(rawType)) {
-      return JsonPropertyKind.COLLECTION;
+      return JsonFieldKind.COLLECTION;
     } else if (java.util.Map.class.isAssignableFrom(rawType)) {
-      return JsonPropertyKind.MAP;
+      return JsonFieldKind.MAP;
     }
-    return JsonPropertyKind.OBJECT;
+    return JsonFieldKind.OBJECT;
   }
 
-  private static int kindId(JsonPropertyKind kind) {
+  private static int kindId(JsonFieldKind kind) {
     switch (kind) {
       case BOOLEAN:
         return KIND_BOOLEAN;
@@ -1184,11 +1209,11 @@ final class JsonPropertyInfo {
     }
   }
 
-  private static boolean isIntegerKind(JsonPropertyKind kind) {
-    return kind == JsonPropertyKind.BYTE
-        || kind == JsonPropertyKind.SHORT
-        || kind == JsonPropertyKind.INT
-        || kind == JsonPropertyKind.LONG;
+  private static boolean isIntegerKind(JsonFieldKind kind) {
+    return kind == JsonFieldKind.BYTE
+        || kind == JsonFieldKind.SHORT
+        || kind == JsonFieldKind.INT
+        || kind == JsonFieldKind.LONG;
   }
 
   private static Class<?> knownRawType(Type type) {

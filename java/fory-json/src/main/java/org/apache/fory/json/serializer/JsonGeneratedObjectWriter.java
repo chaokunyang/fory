@@ -17,22 +17,18 @@
  * under the License.
  */
 
-package org.apache.fory.json;
+package org.apache.fory.json.serializer;
 
-final class JsonObjectWriters {
-  private final JsonStringObjectWriter stringWriter;
-  private final JsonUtf8ObjectWriter utf8Writer;
+import org.apache.fory.json.meta.JsonClassInfo;
+import org.apache.fory.json.meta.JsonFieldInfo;
 
-  JsonObjectWriters(JsonStringObjectWriter stringWriter, JsonUtf8ObjectWriter utf8Writer) {
-    this.stringWriter = stringWriter;
-    this.utf8Writer = utf8Writer;
-  }
+/** Immutable metadata carrier shared by generated JSON object writers. */
+public abstract class JsonGeneratedObjectWriter {
+  protected final JsonFieldInfo[] fields;
+  protected final JsonClassInfo[] classInfos;
 
-  JsonStringObjectWriter stringWriter() {
-    return stringWriter;
-  }
-
-  JsonUtf8ObjectWriter utf8Writer() {
-    return utf8Writer;
+  protected JsonGeneratedObjectWriter(JsonFieldInfo[] fields, JsonClassInfo[] classInfos) {
+    this.fields = fields;
+    this.classInfos = classInfos;
   }
 }

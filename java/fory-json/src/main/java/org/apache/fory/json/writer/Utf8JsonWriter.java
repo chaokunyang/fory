@@ -17,13 +17,15 @@
  * under the License.
  */
 
-package org.apache.fory.json;
+package org.apache.fory.json.writer;
 
 import java.util.Arrays;
+import org.apache.fory.json.ForyJsonException;
+import org.apache.fory.json.meta.JsonFieldInfo;
 import org.apache.fory.memory.LittleEndian;
 import org.apache.fory.util.StringLayout;
 
-final class Utf8JsonWriter extends JsonWriter {
+public final class Utf8JsonWriter extends JsonWriter {
   private static final byte[] MIN_INT_BYTES =
       "-2147483648".getBytes(java.nio.charset.StandardCharsets.ISO_8859_1);
   private static final byte[] MIN_LONG_BYTES =
@@ -208,11 +210,11 @@ final class Utf8JsonWriter extends JsonWriter {
   }
 
   @Override
-  public void writeFieldName(JsonPropertyInfo property) {
+  public void writeFieldName(JsonFieldInfo property) {
     writeRaw(property.utf8NamePrefix());
   }
 
-  public void writeFieldName(JsonPropertyInfo property, int index) {
+  public void writeFieldName(JsonFieldInfo property, int index) {
     writeRaw(index == 0 ? property.utf8NamePrefix() : property.utf8CommaNamePrefix());
   }
 

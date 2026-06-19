@@ -17,9 +17,9 @@
  * under the License.
  */
 
-package org.apache.fory.json;
+package org.apache.fory.json.reader;
 
-final class StringJsonReader extends JsonReader {
+public final class StringJsonReader extends JsonReader {
   private final String input;
 
   public StringJsonReader(String input) {

@@ -17,7 +17,7 @@
  * under the License.
  */
 
-package org.apache.fory.json;
+package org.apache.fory.json.codegen;
 
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
@@ -29,35 +29,43 @@ import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.apache.fory.codegen.CodeGenerator;
 import org.apache.fory.codegen.CompileUnit;
+import org.apache.fory.json.ForyJsonException;
+import org.apache.fory.json.meta.JsonClassInfo;
+import org.apache.fory.json.meta.JsonFieldInfo;
+import org.apache.fory.json.meta.JsonFieldKind;
+import org.apache.fory.json.resolver.JsonTypeResolver;
+import org.apache.fory.json.serializer.JsonObjectWriters;
+import org.apache.fory.json.serializer.JsonStringObjectWriter;
+import org.apache.fory.json.serializer.JsonUtf8ObjectWriter;
 import org.apache.fory.platform.JdkVersion;
 
-final class JsonCodegen {
-  private static final String PACKAGE = "org.apache.fory.json";
+public final class JsonCodegen {
+  private static final String PACKAGE = "org.apache.fory.json.codegen";
   private static final AtomicInteger ID = new AtomicInteger();
 
   private final boolean writeNullFields;
   private final CodeGenerator codeGenerator;
   private final ClassLoader jsonLoader;
 
-  JsonCodegen(boolean writeNullFields) {
+  public JsonCodegen(boolean writeNullFields) {
     this.writeNullFields = writeNullFields;
     jsonLoader = JsonCodegen.class.getClassLoader();
     codeGenerator = new CodeGenerator(jsonLoader);
   }
 
-  JsonObjectWriters compile(JsonClassInfo classInfo, JsonClassCache classCache) {
+  public JsonObjectWriters compile(JsonClassInfo classInfo, JsonTypeResolver typeResolver) {
     Class<?> type = classInfo.type();
     if (!canCompile(type)) {
       return null;
     }
-    JsonPropertyInfo[] properties = classInfo.writeProperties();
+    JsonFieldInfo[] properties = classInfo.writeProperties();
     for (int i = 0; i < properties.length; i++) {
       if (!canCompile(properties[i])) {
         return null;
       }
     }
     String className = className(type);
-    JsonClassInfo[] nestedInfos = nestedInfos(classInfo, classCache);
+    JsonClassInfo[] nestedInfos = nestedInfos(classInfo, typeResolver);
     JsonUtf8ObjectWriter utf8Writer =
         (JsonUtf8ObjectWriter)
             compileWriter(className + "_Utf8", type, properties, nestedInfos, true);
@@ -76,7 +84,7 @@ final class JsonCodegen {
   private Object compileWriter(
       String className,
       Class<?> type,
-      JsonPropertyInfo[] properties,
+      JsonFieldInfo[] properties,
       JsonClassInfo[] nestedInfos,
       boolean utf8) {
     String code = genCode(className, type, properties, utf8);
@@ -84,40 +92,39 @@ final class JsonCodegen {
       CompileUnit unit = new CompileUnit(PACKAGE, className, code, JsonCodegen.class);
       Class<?> writerClass = codeGenerator.compileAndLoad(unit, state -> state.lock.lock());
       Constructor<?> constructor =
-          writerClass.getDeclaredConstructor(JsonPropertyInfo[].class, JsonClassInfo[].class);
+          writerClass.getDeclaredConstructor(JsonFieldInfo[].class, JsonClassInfo[].class);
       constructor.setAccessible(true);
       return constructor.newInstance(properties, nestedInfos);
-    } catch (Throwable ignored) {
-      return null;
+    } catch (Throwable e) {
+      throw new ForyJsonException("Cannot compile generated JSON writer " + className, e);
     }
   }
 
-  private JsonClassInfo[] nestedInfos(JsonClassInfo classInfo, JsonClassCache classCache) {
-    JsonPropertyInfo[] properties = classInfo.writeProperties();
+  private JsonClassInfo[] nestedInfos(JsonClassInfo classInfo, JsonTypeResolver typeResolver) {
+    JsonFieldInfo[] properties = classInfo.writeProperties();
     JsonClassInfo[] nestedInfos = new JsonClassInfo[properties.length];
     Class<?> type = classInfo.type();
     for (int i = 0; i < properties.length; i++) {
       Class<?> nestedType = nestedType(properties[i]);
       if (nestedType != null && nestedType != type) {
-        nestedInfos[i] = classCache.get(nestedType);
+        nestedInfos[i] = typeResolver.getClassInfo(nestedType);
       }
     }
     return nestedInfos;
   }
 
-  private static Class<?> nestedType(JsonPropertyInfo property) {
-    if (property.writeKind() == JsonPropertyKind.OBJECT
-        && property.writeRawType() != Object.class) {
+  private static Class<?> nestedType(JsonFieldInfo property) {
+    if (property.writeKind() == JsonFieldKind.OBJECT && property.writeRawType() != Object.class) {
       return property.writeRawType();
     }
-    if (property.writeKind() == JsonPropertyKind.COLLECTION
+    if (property.writeKind() == JsonFieldKind.COLLECTION
         && isPojo(property.writeElementRawType())) {
       return property.writeElementRawType();
     }
     return null;
   }
 
-  private boolean canCompile(JsonPropertyInfo property) {
+  private boolean canCompile(JsonFieldInfo property) {
     Member member = property.writeMember();
     if (member == null || !isVisible(member.getDeclaringClass())) {
       return false;
@@ -164,13 +171,24 @@ final class JsonCodegen {
   }
 
   private String genCode(
-      String className, Class<?> type, JsonPropertyInfo[] properties, boolean utf8) {
+      String className, Class<?> type, JsonFieldInfo[] properties, boolean utf8) {
     String typeName = sourceName(type);
     StringBuilder code = new StringBuilder(4096);
     code.append("package ").append(PACKAGE).append(";\n");
+    code.append("import org.apache.fory.json.meta.JsonClassInfo;\n");
+    code.append("import org.apache.fory.json.meta.JsonFieldInfo;\n");
+    code.append("import org.apache.fory.json.resolver.JsonTypeResolver;\n");
+    code.append("import org.apache.fory.json.serializer.JsonGeneratedObjectWriter;\n");
+    code.append("import org.apache.fory.json.serializer.JsonSerializers;\n");
+    code.append("import org.apache.fory.json.serializer.JsonStringObjectWriter;\n");
+    code.append("import org.apache.fory.json.serializer.JsonUtf8ObjectWriter;\n");
+    code.append("import org.apache.fory.json.writer.JsonNumberTokenCache;\n");
+    code.append("import org.apache.fory.json.writer.JsonStringTokenCache;\n");
+    code.append("import org.apache.fory.json.writer.StringJsonWriter;\n");
+    code.append("import org.apache.fory.json.writer.Utf8JsonWriter;\n");
     code.append("final class ")
         .append(className)
-        .append(" implements ")
+        .append(" extends JsonGeneratedObjectWriter implements ")
         .append(utf8 ? "JsonUtf8ObjectWriter" : "JsonStringObjectWriter")
         .append(" {\n");
     boolean objectStartFused = canFuseObjectStart(properties);
@@ -181,17 +199,17 @@ final class JsonCodegen {
     boolean[] useElementToken = new boolean[properties.length];
     boolean[] useNumberToken = new boolean[properties.length];
     for (int i = 0; i < properties.length; i++) {
-      JsonPropertyInfo property = properties[i];
+      JsonFieldInfo property = properties[i];
       useInfo[i] = usesPropertyInfo(property);
       useClassInfo[i] = usesClassInfo(property);
       usePrefix[i] = usesPrefix(property);
-      useStringToken[i] = property.writeKind() == JsonPropertyKind.STRING;
+      useStringToken[i] = property.writeKind() == JsonFieldKind.STRING;
       useElementToken[i] =
-          property.writeKind() == JsonPropertyKind.COLLECTION
+          property.writeKind() == JsonFieldKind.COLLECTION
               && property.writeElementRawType() == String.class;
       useNumberToken[i] = usesNumberToken(property, objectStartFused && i == 0);
       if (useInfo[i]) {
-        code.append("  private final JsonPropertyInfo p").append(i).append(";\n");
+        code.append("  private final JsonFieldInfo p").append(i).append(";\n");
       }
       if (useClassInfo[i]) {
         code.append("  private final JsonClassInfo c").append(i).append(";\n");
@@ -217,7 +235,8 @@ final class JsonCodegen {
     }
     code.append("  ")
         .append(className)
-        .append("(JsonPropertyInfo[] properties, JsonClassInfo[] classInfos) {\n");
+        .append("(JsonFieldInfo[] properties, JsonClassInfo[] classInfos) {\n");
+    code.append("    super(properties, classInfos);\n");
     for (int i = 0; i < properties.length; i++) {
       if (useInfo[i]) {
         code.append("    this.p").append(i).append(" = properties[").append(i).append("];\n");
@@ -278,13 +297,13 @@ final class JsonCodegen {
     return code.toString();
   }
 
-  private boolean usesPrefix(JsonPropertyInfo property) {
-    JsonPropertyKind kind = property.writeKind();
-    return kind != JsonPropertyKind.BOOLEAN && kind != JsonPropertyKind.ENUM
+  private boolean usesPrefix(JsonFieldInfo property) {
+    JsonFieldKind kind = property.writeKind();
+    return kind != JsonFieldKind.BOOLEAN && kind != JsonFieldKind.ENUM
         || writeNullFields && !property.writeRawType().isPrimitive();
   }
 
-  private static boolean usesPropertyInfo(JsonPropertyInfo property) {
+  private static boolean usesPropertyInfo(JsonFieldInfo property) {
     switch (property.writeKind()) {
       case BYTE:
       case SHORT:
@@ -305,7 +324,7 @@ final class JsonCodegen {
     }
   }
 
-  private static boolean usesClassInfo(JsonPropertyInfo property) {
+  private static boolean usesClassInfo(JsonFieldInfo property) {
     switch (property.writeKind()) {
       case COLLECTION:
         return isPojo(property.writeElementRawType());
@@ -316,7 +335,7 @@ final class JsonCodegen {
     }
   }
 
-  private static boolean usesNumberToken(JsonPropertyInfo property, boolean objectStartFused) {
+  private static boolean usesNumberToken(JsonFieldInfo property, boolean objectStartFused) {
     if (objectStartFused) {
       return false;
     }
@@ -335,7 +354,7 @@ final class JsonCodegen {
       StringBuilder code,
       Class<?> ownerType,
       String typeName,
-      JsonPropertyInfo[] properties,
+      JsonFieldInfo[] properties,
       boolean utf8,
       boolean objectStartFused) {
     String writerType = utf8 ? "Utf8JsonWriter" : "StringJsonWriter";
@@ -344,7 +363,7 @@ final class JsonCodegen {
         .append(method)
         .append("(")
         .append(writerType)
-        .append(" writer, Object value, JsonClassCache classCache) {\n");
+        .append(" writer, Object value, JsonTypeResolver typeResolver) {\n");
     code.append("    ")
         .append(typeName)
         .append(" object = (")
@@ -370,7 +389,7 @@ final class JsonCodegen {
     code.append("  }\n");
   }
 
-  private static boolean canFuseObjectStart(JsonPropertyInfo[] properties) {
+  private static boolean canFuseObjectStart(JsonFieldInfo[] properties) {
     if (properties.length == 0 || !properties[0].writeRawType().isPrimitive()) {
       return false;
     }
@@ -386,7 +405,7 @@ final class JsonCodegen {
   }
 
   private static void writeObjectStartPrimitive(
-      StringBuilder code, JsonPropertyInfo property, String value, boolean utf8) {
+      StringBuilder code, JsonFieldInfo property, String value, boolean utf8) {
     switch (property.writeKind()) {
       case BYTE:
       case SHORT:
@@ -411,7 +430,7 @@ final class JsonCodegen {
   private void writeProp(
       StringBuilder code,
       Class<?> ownerType,
-      JsonPropertyInfo property,
+      JsonFieldInfo property,
       int id,
       boolean utf8,
       boolean commaKnown) {
@@ -466,7 +485,7 @@ final class JsonCodegen {
 
   private void writePrimitive(
       StringBuilder code,
-      JsonPropertyInfo property,
+      JsonFieldInfo property,
       String prop,
       String value,
       boolean utf8,
@@ -666,13 +685,13 @@ final class JsonCodegen {
   private void writeValue(
       StringBuilder code,
       Class<?> ownerType,
-      JsonPropertyInfo property,
+      JsonFieldInfo property,
       String prop,
       String value,
       boolean utf8,
       boolean commaKnown,
       String indent) {
-    JsonPropertyKind kind = property.writeKind();
+    JsonFieldKind kind = property.writeKind();
     switch (kind) {
       case BOOLEAN:
         code.append(indent)
@@ -721,7 +740,7 @@ final class JsonCodegen {
             .append(value)
             .append(", ")
             .append(prop)
-            .append(".writeArrayComponentType(), classCache);\n");
+            .append(".writeArrayComponentType(), typeResolver);\n");
         return;
       case COLLECTION:
         writeCollection(code, ownerType, property, prop, value, utf8, indent);
@@ -733,7 +752,7 @@ final class JsonCodegen {
             .append(value)
             .append(", ")
             .append(prop)
-            .append(".writeMapValueType(), classCache);\n");
+            .append(".writeMapValueType(), typeResolver);\n");
         return;
       default:
         writeObject(code, ownerType, property, prop, value, utf8, indent);
@@ -743,7 +762,7 @@ final class JsonCodegen {
   private void writeCollection(
       StringBuilder code,
       Class<?> ownerType,
-      JsonPropertyInfo property,
+      JsonFieldInfo property,
       String prop,
       String value,
       boolean utf8,
@@ -858,15 +877,15 @@ final class JsonCodegen {
           .append(indent)
           .append("      elementInfo.")
           .append(utf8 ? "writeUtf8" : "write")
-          .append("(writer, element, classCache);\n")
+          .append("(writer, element, typeResolver);\n")
           .append(indent)
           .append("    } else {\n")
           .append(indent)
           .append("      ")
-          .append(utf8 ? "JsonSerializers.writeUtf8Value" : "JsonSerializers.writeValue")
+          .append(utf8 ? "typeResolver.writeUtf8Value" : "typeResolver.writeValue")
           .append("(writer, element, ")
           .append(prop)
-          .append(".writeElementType(), classCache);\n")
+          .append(".writeElementType());\n")
           .append(indent)
           .append("    }\n")
           .append(indent)
@@ -890,15 +909,15 @@ final class JsonCodegen {
           .append(indent)
           .append("    elementInfo.")
           .append(utf8 ? "writeUtf8" : "write")
-          .append("(writer, element, classCache);\n")
+          .append("(writer, element, typeResolver);\n")
           .append(indent)
           .append("  } else {\n")
           .append(indent)
           .append("    ")
-          .append(utf8 ? "JsonSerializers.writeUtf8Value" : "JsonSerializers.writeValue")
+          .append(utf8 ? "typeResolver.writeUtf8Value" : "typeResolver.writeValue")
           .append("(writer, element, ")
           .append(prop)
-          .append(".writeElementType(), classCache);\n")
+          .append(".writeElementType());\n")
           .append(indent)
           .append("  }\n")
           .append(indent)
@@ -915,7 +934,7 @@ final class JsonCodegen {
         .append(value)
         .append(", ")
         .append(prop)
-        .append(".writeElementType(), classCache);\n");
+        .append(".writeElementType(), typeResolver);\n");
   }
 
   private static void writeListBranchStart(StringBuilder code, String value, boolean declaredList) {
@@ -932,7 +951,7 @@ final class JsonCodegen {
   private void writeObject(
       StringBuilder code,
       Class<?> ownerType,
-      JsonPropertyInfo property,
+      JsonFieldInfo property,
       String prop,
       String value,
       boolean utf8,
@@ -940,10 +959,10 @@ final class JsonCodegen {
     Class<?> rawType = property.writeRawType();
     if (rawType == Object.class) {
       code.append(indent)
-          .append(utf8 ? "JsonSerializers.writeUtf8Value" : "JsonSerializers.writeValue")
+          .append(utf8 ? "typeResolver.writeUtf8Value" : "typeResolver.writeValue")
           .append("(writer, ")
           .append(value)
-          .append(", Object.class, classCache);\n");
+          .append(", Object.class);\n");
       return;
     }
     code.append(indent).append("if (").append(value).append(".getClass() == ");
@@ -955,7 +974,7 @@ final class JsonCodegen {
     if (rawType == ownerType) {
       code.append(indent).append("  if (classInfo == null) {\n");
       code.append(indent)
-          .append("    classInfo = classCache.get(")
+          .append("    classInfo = typeResolver.getClassInfo(")
           .append(sourceName(rawType))
           .append(".class);\n");
       code.append(indent).append("  }\n");
@@ -965,20 +984,20 @@ final class JsonCodegen {
         .append(utf8 ? "writeUtf8" : "write")
         .append("(writer, ")
         .append(value)
-        .append(", classCache);\n");
+        .append(", typeResolver);\n");
     code.append(indent).append("} else {\n");
     code.append(indent)
         .append("  ")
-        .append(utf8 ? "JsonSerializers.writeUtf8Value" : "JsonSerializers.writeValue")
+        .append(utf8 ? "typeResolver.writeUtf8Value" : "typeResolver.writeValue")
         .append("(writer, ")
         .append(value)
         .append(", ")
         .append(prop)
-        .append(".writeType(), classCache);\n");
+        .append(".writeType());\n");
     code.append(indent).append("}\n");
   }
 
-  private void writeScalar(StringBuilder code, JsonPropertyKind kind, String value, String indent) {
+  private void writeScalar(StringBuilder code, JsonFieldKind kind, String value, String indent) {
     switch (kind) {
       case FLOAT:
         code.append(indent).append("writer.writeFloat(").append(value).append(".floatValue());\n");
@@ -998,7 +1017,7 @@ final class JsonCodegen {
   }
 
   private void writePrimitiveScalar(
-      StringBuilder code, JsonPropertyKind kind, String value, String indent) {
+      StringBuilder code, JsonFieldKind kind, String value, String indent) {
     switch (kind) {
       case FLOAT:
         code.append(indent).append("writer.writeFloat(").append(value).append(");\n");
@@ -1014,14 +1033,14 @@ final class JsonCodegen {
     }
   }
 
-  private static boolean isPrefixValue(JsonPropertyKind kind) {
-    return kind == JsonPropertyKind.BOOLEAN
-        || kind == JsonPropertyKind.BYTE
-        || kind == JsonPropertyKind.SHORT
-        || kind == JsonPropertyKind.INT
-        || kind == JsonPropertyKind.LONG
-        || kind == JsonPropertyKind.STRING
-        || kind == JsonPropertyKind.ENUM;
+  private static boolean isPrefixValue(JsonFieldKind kind) {
+    return kind == JsonFieldKind.BOOLEAN
+        || kind == JsonFieldKind.BYTE
+        || kind == JsonFieldKind.SHORT
+        || kind == JsonFieldKind.INT
+        || kind == JsonFieldKind.LONG
+        || kind == JsonFieldKind.STRING
+        || kind == JsonFieldKind.ENUM;
   }
 
   private static boolean isPojo(Class<?> type) {

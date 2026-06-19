@@ -17,8 +17,21 @@
  * under the License.
  */
 
-package org.apache.fory.json;
+package org.apache.fory.json.meta;
 
-interface JsonUtf8ObjectWriter {
-  void writeUtf8(Utf8JsonWriter writer, Object value, JsonClassCache classCache);
+public enum JsonFieldKind {
+  BOOLEAN,
+  BYTE,
+  SHORT,
+  INT,
+  LONG,
+  FLOAT,
+  DOUBLE,
+  CHAR,
+  STRING,
+  ENUM,
+  ARRAY,
+  COLLECTION,
+  MAP,
+  OBJECT
 }

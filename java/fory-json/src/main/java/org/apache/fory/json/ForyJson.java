@@ -19,27 +19,36 @@
 
 package org.apache.fory.json;
 
-/** Public facade for Fory JSON serialization and parsing. Instances are not thread-safe. */
+import java.util.concurrent.Semaphore;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReferenceArray;
+import org.apache.fory.json.reader.JsonParsers;
+import org.apache.fory.json.resolver.JsonTypeInfo;
+import org.apache.fory.json.resolver.JsonTypeResolver;
+import org.apache.fory.json.writer.StringJsonWriter;
+import org.apache.fory.json.writer.Utf8JsonWriter;
+
+/** Thread-safe public facade for Fory JSON serialization and parsing. */
 public final class ForyJson {
+  private static final int PREFERRED_SLOT_RETRIES = 2;
   private static final int INITIAL_BUFFER_SIZE = 8192;
   private static final int MAX_CACHED_BUFFER_SIZE = 1024 * 1024;
+  private static final int DEFAULT_POOL_SIZE =
+      Math.max(1, Runtime.getRuntime().availableProcessors() * 4);
 
-  private final JsonClassCache classCache;
-  private final Utf8JsonWriter utf8Writer;
-  private final StringJsonWriter stringWriter;
-  private byte[] utf8Buffer;
-  private byte[] stringBuffer;
-  private final boolean writeNullFields;
-  private Class<?> lastWriteClass;
-  private JsonClassInfo lastWriteClassInfo;
+  private final JsonTypeResolver typeResolver;
+  private final int poolSize;
+  private final AtomicReferenceArray<PooledState> slots;
+  private final Semaphore waiterSignal = new Semaphore(0);
+  private final AtomicInteger waitingBorrowers = new AtomicInteger();
 
   ForyJson(boolean writeNullFields, boolean codegenEnabled) {
-    this.writeNullFields = writeNullFields;
-    classCache = new JsonClassCache(codegenEnabled, writeNullFields);
-    utf8Buffer = new byte[INITIAL_BUFFER_SIZE];
-    stringBuffer = new byte[INITIAL_BUFFER_SIZE];
-    utf8Writer = new Utf8JsonWriter(writeNullFields, utf8Buffer);
-    stringWriter = new StringJsonWriter(writeNullFields, stringBuffer);
+    typeResolver = new JsonTypeResolver(codegenEnabled, writeNullFields);
+    poolSize = DEFAULT_POOL_SIZE;
+    slots = new AtomicReferenceArray<>(poolSize);
+    for (int i = 0; i < poolSize; i++) {
+      slots.set(i, new PooledState(new JsonState(writeNullFields), i));
+    }
   }
 
   public static ForyJsonBuilder builder() {
@@ -47,103 +56,183 @@ public final class ForyJson {
   }
 
   public String toJson(Object value) {
-    byte[] buffer = borrowStringBuffer();
-    StringJsonWriter writer = stringWriter;
-    writer.reset(buffer);
+    PooledState entry = acquire();
+    JsonState state = entry.state;
+    StringJsonWriter writer = state.borrowStringWriter();
     try {
       if (value == null) {
         writer.writeNull();
       } else {
-        Class<?> type = value.getClass();
-        if (type.isArray()
-            || type.isPrimitive()
-            || type.isEnum()
-            || value instanceof String
-            || value instanceof java.util.Collection
-            || value instanceof java.util.Map) {
-          JsonSerializers.writeValue(writer, value, type, classCache);
-        } else {
-          JsonClassInfo classInfo = getWriteClassInfo(type);
-          classInfo.write(writer, value, classCache);
-        }
+        state.rootTypeInfo(typeResolver, value.getClass()).write(writer, value, typeResolver);
       }
       return writer.toJson();
     } finally {
-      releaseStringBuffer(writer.buffer());
+      state.releaseStringBuffer(writer.buffer());
+      release(entry);
     }
   }
 
   public byte[] toJsonBytes(Object value) {
-    byte[] buffer = borrowUtf8Buffer();
-    Utf8JsonWriter writer = utf8Writer;
-    writer.reset(buffer);
+    PooledState entry = acquire();
+    JsonState state = entry.state;
+    Utf8JsonWriter writer = state.borrowUtf8Writer();
     try {
       if (value == null) {
         writer.writeNull();
       } else {
-        Class<?> type = value.getClass();
-        if (type.isArray()
-            || type.isPrimitive()
-            || type.isEnum()
-            || value instanceof String
-            || value instanceof java.util.Collection
-            || value instanceof java.util.Map) {
-          JsonSerializers.writeUtf8Value(writer, value, type, classCache);
-        } else {
-          JsonClassInfo classInfo = getWriteClassInfo(type);
-          classInfo.writeUtf8(writer, value, classCache);
-        }
+        state.rootTypeInfo(typeResolver, value.getClass()).writeUtf8(writer, value, typeResolver);
       }
       return writer.toJsonBytes();
     } finally {
-      releaseUtf8Buffer(writer.buffer());
+      state.releaseUtf8Buffer(writer.buffer());
+      release(entry);
     }
   }
 
   public <T> T fromJson(String json, Class<T> type) {
-    return JsonParsers.fromString(json, type, classCache);
+    return JsonParsers.fromString(json, type, typeResolver);
   }
 
   public <T> T fromJson(byte[] bytes, Class<T> type) {
-    return JsonParsers.fromBytes(bytes, type, classCache);
+    return JsonParsers.fromBytes(bytes, type, typeResolver);
   }
 
   boolean hasGeneratedWriter(Class<?> type) {
-    return classCache.get(type).hasObjectWriter();
+    return typeResolver.getClassInfo(type).hasObjectWriter();
   }
 
-  private byte[] borrowUtf8Buffer() {
-    byte[] buffer = utf8Buffer;
-    utf8Buffer = null;
-    return buffer == null ? new byte[INITIAL_BUFFER_SIZE] : buffer;
-  }
-
-  private void releaseUtf8Buffer(byte[] buffer) {
-    if (buffer.length <= MAX_CACHED_BUFFER_SIZE) {
-      utf8Buffer = buffer;
+  private PooledState acquire() {
+    int slotIndex = slotIndexForCurrentThread();
+    PooledState entry = tryBorrowPreferredSlots(slotIndex);
+    if (entry != null) {
+      return entry;
+    }
+    waitingBorrowers.incrementAndGet();
+    try {
+      while (true) {
+        entry = tryBorrowPreferredSlots(slotIndex);
+        if (entry != null) {
+          return entry;
+        }
+        try {
+          waiterSignal.acquire();
+        } catch (InterruptedException e) {
+          Thread.currentThread().interrupt();
+          throw new ForyJsonException("Interrupted while borrowing a pooled JSON state.", e);
+        }
+      }
+    } finally {
+      waitingBorrowers.decrementAndGet();
     }
   }
 
-  private byte[] borrowStringBuffer() {
-    byte[] buffer = stringBuffer;
-    stringBuffer = null;
-    return buffer == null ? new byte[INITIAL_BUFFER_SIZE] : buffer;
-  }
-
-  private void releaseStringBuffer(byte[] buffer) {
-    if (buffer.length <= MAX_CACHED_BUFFER_SIZE) {
-      stringBuffer = buffer;
+  private void release(PooledState entry) {
+    slots.lazySet(entry.homeIndex, entry);
+    if (waitingBorrowers.get() > 0) {
+      waiterSignal.release();
     }
   }
 
-  private JsonClassInfo getWriteClassInfo(Class<?> type) {
-    JsonClassInfo classInfo = lastWriteClassInfo;
-    if (lastWriteClass == type && classInfo != null) {
-      return classInfo;
+  private PooledState tryBorrowPreferredSlots(int slotIndex) {
+    PooledState entry = tryBorrowSlot(slotIndex);
+    if (entry != null) {
+      return entry;
     }
-    classInfo = classCache.get(type);
-    lastWriteClass = type;
-    lastWriteClassInfo = classInfo;
-    return classInfo;
+    for (int i = 1; i < PREFERRED_SLOT_RETRIES; i++) {
+      entry = tryBorrowSlot(slotIndex);
+      if (entry != null) {
+        return entry;
+      }
+    }
+    int index = slotIndex + 1;
+    if (index == poolSize) {
+      index = 0;
+    }
+    for (int i = 1; i < poolSize; i++) {
+      entry = tryBorrowSlot(index);
+      if (entry != null) {
+        return entry;
+      }
+      index++;
+      if (index == poolSize) {
+        index = 0;
+      }
+    }
+    return null;
+  }
+
+  private PooledState tryBorrowSlot(int index) {
+    return slots.getAndSet(index, null);
+  }
+
+  private int slotIndexForCurrentThread() {
+    return Math.floorMod(spread(System.identityHashCode(Thread.currentThread())), poolSize);
+  }
+
+  private static int spread(int hash) {
+    return hash ^ (hash >>> 16);
+  }
+
+  private static final class PooledState {
+    private final JsonState state;
+    private final int homeIndex;
+
+    private PooledState(JsonState state, int homeIndex) {
+      this.state = state;
+      this.homeIndex = homeIndex;
+    }
+  }
+
+  private static final class JsonState {
+    private final Utf8JsonWriter utf8Writer;
+    private final StringJsonWriter stringWriter;
+    private byte[] utf8Buffer;
+    private byte[] stringBuffer;
+    private Class<?> lastRootType;
+    private JsonTypeInfo lastRootInfo;
+
+    private JsonState(boolean writeNullFields) {
+      utf8Buffer = new byte[INITIAL_BUFFER_SIZE];
+      stringBuffer = new byte[INITIAL_BUFFER_SIZE];
+      utf8Writer = new Utf8JsonWriter(writeNullFields, utf8Buffer);
+      stringWriter = new StringJsonWriter(writeNullFields, stringBuffer);
+    }
+
+    private StringJsonWriter borrowStringWriter() {
+      byte[] buffer = stringBuffer;
+      stringBuffer = null;
+      stringWriter.reset(buffer == null ? new byte[INITIAL_BUFFER_SIZE] : buffer);
+      return stringWriter;
+    }
+
+    private Utf8JsonWriter borrowUtf8Writer() {
+      byte[] buffer = utf8Buffer;
+      utf8Buffer = null;
+      utf8Writer.reset(buffer == null ? new byte[INITIAL_BUFFER_SIZE] : buffer);
+      return utf8Writer;
+    }
+
+    private void releaseStringBuffer(byte[] buffer) {
+      if (buffer.length <= MAX_CACHED_BUFFER_SIZE) {
+        stringBuffer = buffer;
+      }
+    }
+
+    private void releaseUtf8Buffer(byte[] buffer) {
+      if (buffer.length <= MAX_CACHED_BUFFER_SIZE) {
+        utf8Buffer = buffer;
+      }
+    }
+
+    private JsonTypeInfo rootTypeInfo(JsonTypeResolver resolver, Class<?> type) {
+      JsonTypeInfo typeInfo = lastRootInfo;
+      if (lastRootType == type && typeInfo != null) {
+        return typeInfo;
+      }
+      typeInfo = resolver.getTypeInfo(type, type);
+      lastRootType = type;
+      lastRootInfo = typeInfo;
+      return typeInfo;
+    }
   }
 }

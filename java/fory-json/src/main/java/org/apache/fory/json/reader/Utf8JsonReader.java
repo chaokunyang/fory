@@ -17,9 +17,9 @@
  * under the License.
  */
 
-package org.apache.fory.json;
+package org.apache.fory.json.reader;
 
-final class Utf8JsonReader extends JsonReader {
+public final class Utf8JsonReader extends JsonReader {
   private final byte[] input;
 
   public Utf8JsonReader(byte[] input) {

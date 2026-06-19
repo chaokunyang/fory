@@ -17,21 +17,22 @@
  * under the License.
  */
 
-package org.apache.fory.json;
+package org.apache.fory.json.meta;
 
-enum JsonPropertyKind {
-  BOOLEAN,
-  BYTE,
-  SHORT,
-  INT,
-  LONG,
-  FLOAT,
-  DOUBLE,
-  CHAR,
-  STRING,
-  ENUM,
-  ARRAY,
-  COLLECTION,
-  MAP,
-  OBJECT
+import java.util.HashMap;
+import java.util.Map;
+
+public final class JsonFieldTable {
+  private final Map<String, JsonFieldInfo> properties;
+
+  JsonFieldTable(JsonFieldInfo[] readProperties) {
+    properties = new HashMap<>(readProperties.length * 2);
+    for (JsonFieldInfo property : readProperties) {
+      properties.put(property.name(), property);
+    }
+  }
+
+  public JsonFieldInfo get(String name) {
+    return properties.get(name);
+  }
 }

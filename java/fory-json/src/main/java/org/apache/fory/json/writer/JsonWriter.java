@@ -17,9 +17,11 @@
  * under the License.
  */
 
-package org.apache.fory.json;
+package org.apache.fory.json.writer;
 
-abstract class JsonWriter {
+import org.apache.fory.json.meta.JsonFieldInfo;
+
+public abstract class JsonWriter {
   private final boolean writeNullFields;
 
   JsonWriter(boolean writeNullFields) {
@@ -48,7 +50,7 @@ abstract class JsonWriter {
 
   public abstract void writeFieldName(String name);
 
-  public abstract void writeFieldName(JsonPropertyInfo property);
+  public abstract void writeFieldName(JsonFieldInfo property);
 
   public abstract void writeObjectStart();
 

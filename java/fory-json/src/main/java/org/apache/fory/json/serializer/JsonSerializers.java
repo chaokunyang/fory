@@ -17,105 +17,23 @@
  * under the License.
  */
 
-package org.apache.fory.json;
+package org.apache.fory.json.serializer;
 
 import java.lang.reflect.Array;
 import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
 import java.util.Collection;
 import java.util.Map;
+import org.apache.fory.json.ForyJsonException;
+import org.apache.fory.json.resolver.JsonTypeResolver;
+import org.apache.fory.json.writer.JsonWriter;
+import org.apache.fory.json.writer.Utf8JsonWriter;
 
-final class JsonSerializers {
+public final class JsonSerializers {
   private JsonSerializers() {}
 
-  public static void writeValue(
-      JsonWriter writer, Object value, Type declaredType, JsonClassCache classCache) {
-    if (value == null) {
-      writer.writeNull();
-      return;
-    }
-    Class<?> rawType = rawType(declaredType, value.getClass());
-    writeNonNull(writer, value, rawType, declaredType, classCache);
-  }
-
-  public static void writeNonNull(
-      JsonWriter writer, Object value, Class<?> rawType, Type type, JsonClassCache classCache) {
-    if (rawType == String.class) {
-      writer.writeString((String) value);
-    } else if (rawType == boolean.class || rawType == Boolean.class) {
-      writer.writeBoolean(((Boolean) value).booleanValue());
-    } else if (rawType == int.class || rawType == Integer.class) {
-      writer.writeInt(((Integer) value).intValue());
-    } else if (rawType == long.class || rawType == Long.class) {
-      writer.writeLong(((Long) value).longValue());
-    } else if (rawType == short.class || rawType == Short.class) {
-      writer.writeInt(((Short) value).intValue());
-    } else if (rawType == byte.class || rawType == Byte.class) {
-      writer.writeInt(((Byte) value).intValue());
-    } else if (rawType == char.class || rawType == Character.class) {
-      writer.writeChar(((Character) value).charValue());
-    } else if (rawType == float.class || rawType == Float.class) {
-      writer.writeFloat(((Float) value).floatValue());
-    } else if (rawType == double.class || rawType == Double.class) {
-      writer.writeDouble(((Double) value).doubleValue());
-    } else if (rawType.isEnum()) {
-      writer.writeString(((Enum<?>) value).name());
-    } else if (rawType.isArray()) {
-      writeArray(writer, value, rawType.getComponentType(), classCache);
-    } else if (Collection.class.isAssignableFrom(rawType)) {
-      writeCollection(writer, (Collection<?>) value, elementType(type), classCache);
-    } else if (Map.class.isAssignableFrom(rawType)) {
-      writeMap(writer, (Map<?, ?>) value, mapValueType(type), classCache);
-    } else {
-      classCache.get(rawType).write(writer, value, classCache);
-    }
-  }
-
-  public static void writeUtf8Value(
-      Utf8JsonWriter writer, Object value, Type declaredType, JsonClassCache classCache) {
-    if (value == null) {
-      writer.writeNull();
-      return;
-    }
-    Class<?> rawType = rawType(declaredType, value.getClass());
-    writeUtf8NonNull(writer, value, rawType, declaredType, classCache);
-  }
-
-  public static void writeUtf8NonNull(
-      Utf8JsonWriter writer, Object value, Class<?> rawType, Type type, JsonClassCache classCache) {
-    if (rawType == String.class) {
-      writer.writeString((String) value);
-    } else if (rawType == boolean.class || rawType == Boolean.class) {
-      writer.writeBoolean(((Boolean) value).booleanValue());
-    } else if (rawType == int.class || rawType == Integer.class) {
-      writer.writeInt(((Integer) value).intValue());
-    } else if (rawType == long.class || rawType == Long.class) {
-      writer.writeLong(((Long) value).longValue());
-    } else if (rawType == short.class || rawType == Short.class) {
-      writer.writeInt(((Short) value).intValue());
-    } else if (rawType == byte.class || rawType == Byte.class) {
-      writer.writeInt(((Byte) value).intValue());
-    } else if (rawType == char.class || rawType == Character.class) {
-      writer.writeChar(((Character) value).charValue());
-    } else if (rawType == float.class || rawType == Float.class) {
-      writer.writeFloat(((Float) value).floatValue());
-    } else if (rawType == double.class || rawType == Double.class) {
-      writer.writeDouble(((Double) value).doubleValue());
-    } else if (rawType.isEnum()) {
-      writer.writeString(((Enum<?>) value).name());
-    } else if (rawType.isArray()) {
-      writeUtf8Array(writer, value, rawType.getComponentType(), classCache);
-    } else if (Collection.class.isAssignableFrom(rawType)) {
-      writeUtf8Collection(writer, (Collection<?>) value, elementType(type), classCache);
-    } else if (Map.class.isAssignableFrom(rawType)) {
-      writeUtf8Map(writer, (Map<?, ?>) value, mapValueType(type), classCache);
-    } else {
-      classCache.get(rawType).writeUtf8(writer, value, classCache);
-    }
-  }
-
   public static void writeArray(
-      JsonWriter writer, Object value, Class<?> componentType, JsonClassCache classCache) {
+      JsonWriter writer, Object value, Class<?> componentType, JsonTypeResolver typeResolver) {
     writer.writeArrayStart();
     if (componentType == int.class) {
       int[] array = (int[]) value;
@@ -170,25 +88,28 @@ final class JsonSerializers {
       for (int i = 0; i < length; i++) {
         writer.writeComma(i);
         Object element = Array.get(value, i);
-        writeValue(writer, element, componentType, classCache);
+        typeResolver.writeValue(writer, element, componentType);
       }
     }
     writer.writeArrayEnd();
   }
 
   public static void writeCollection(
-      JsonWriter writer, Collection<?> collection, Type elementType, JsonClassCache classCache) {
+      JsonWriter writer,
+      Collection<?> collection,
+      Type elementType,
+      JsonTypeResolver typeResolver) {
     writer.writeArrayStart();
     int index = 0;
     for (Object element : collection) {
       writer.writeComma(index++);
-      writeValue(writer, element, elementType, classCache);
+      typeResolver.writeValue(writer, element, elementType);
     }
     writer.writeArrayEnd();
   }
 
   public static void writeMap(
-      JsonWriter writer, Map<?, ?> map, Type valueType, JsonClassCache classCache) {
+      JsonWriter writer, Map<?, ?> map, Type valueType, JsonTypeResolver typeResolver) {
     writer.writeObjectStart();
     int index = 0;
     for (Map.Entry<?, ?> entry : map.entrySet()) {
@@ -198,13 +119,13 @@ final class JsonSerializers {
       }
       writer.writeComma(index++);
       writer.writeFieldName((String) key);
-      writeValue(writer, entry.getValue(), valueType, classCache);
+      typeResolver.writeValue(writer, entry.getValue(), valueType);
     }
     writer.writeObjectEnd();
   }
 
   public static void writeUtf8Array(
-      Utf8JsonWriter writer, Object value, Class<?> componentType, JsonClassCache classCache) {
+      Utf8JsonWriter writer, Object value, Class<?> componentType, JsonTypeResolver typeResolver) {
     writer.writeArrayStart();
     if (componentType == int.class) {
       int[] array = (int[]) value;
@@ -259,7 +180,7 @@ final class JsonSerializers {
       for (int i = 0; i < length; i++) {
         writer.writeComma(i);
         Object element = Array.get(value, i);
-        writeUtf8Value(writer, element, componentType, classCache);
+        typeResolver.writeUtf8Value(writer, element, componentType);
       }
     }
     writer.writeArrayEnd();
@@ -269,18 +190,18 @@ final class JsonSerializers {
       Utf8JsonWriter writer,
       Collection<?> collection,
       Type elementType,
-      JsonClassCache classCache) {
+      JsonTypeResolver typeResolver) {
     writer.writeArrayStart();
     int index = 0;
     for (Object element : collection) {
       writer.writeComma(index++);
-      writeUtf8Value(writer, element, elementType, classCache);
+      typeResolver.writeUtf8Value(writer, element, elementType);
     }
     writer.writeArrayEnd();
   }
 
   public static void writeUtf8Map(
-      Utf8JsonWriter writer, Map<?, ?> map, Type valueType, JsonClassCache classCache) {
+      Utf8JsonWriter writer, Map<?, ?> map, Type valueType, JsonTypeResolver typeResolver) {
     writer.writeObjectStart();
     int index = 0;
     for (Map.Entry<?, ?> entry : map.entrySet()) {
@@ -290,7 +211,7 @@ final class JsonSerializers {
       }
       writer.writeComma(index++);
       writer.writeFieldName((String) key);
-      writeUtf8Value(writer, entry.getValue(), valueType, classCache);
+      typeResolver.writeUtf8Value(writer, entry.getValue(), valueType);
     }
     writer.writeObjectEnd();
   }

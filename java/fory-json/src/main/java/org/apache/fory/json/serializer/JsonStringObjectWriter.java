@@ -17,8 +17,11 @@
  * under the License.
  */
 
-package org.apache.fory.json;
+package org.apache.fory.json.serializer;
 
-interface JsonStringObjectWriter {
-  void writeString(StringJsonWriter writer, Object value, JsonClassCache classCache);
+import org.apache.fory.json.resolver.JsonTypeResolver;
+import org.apache.fory.json.writer.StringJsonWriter;
+
+public interface JsonStringObjectWriter {
+  void writeString(StringJsonWriter writer, Object value, JsonTypeResolver typeResolver);
 }

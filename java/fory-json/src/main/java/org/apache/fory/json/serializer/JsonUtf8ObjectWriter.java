@@ -17,22 +17,11 @@
  * under the License.
  */
 
-package org.apache.fory.json;
+package org.apache.fory.json.serializer;
 
-import java.util.HashMap;
-import java.util.Map;
+import org.apache.fory.json.resolver.JsonTypeResolver;
+import org.apache.fory.json.writer.Utf8JsonWriter;
 
-final class JsonPropertyTable {
-  private final Map<String, JsonPropertyInfo> properties;
-
-  JsonPropertyTable(JsonPropertyInfo[] readProperties) {
-    properties = new HashMap<>(readProperties.length * 2);
-    for (JsonPropertyInfo property : readProperties) {
-      properties.put(property.name(), property);
-    }
-  }
-
-  public JsonPropertyInfo get(String name) {
-    return properties.get(name);
-  }
+public interface JsonUtf8ObjectWriter {
+  void writeUtf8(Utf8JsonWriter writer, Object value, JsonTypeResolver typeResolver);
 }

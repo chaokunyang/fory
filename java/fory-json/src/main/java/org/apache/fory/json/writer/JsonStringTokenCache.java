@@ -17,9 +17,9 @@
  * under the License.
  */
 
-package org.apache.fory.json;
+package org.apache.fory.json.writer;
 
-final class JsonStringTokenCache {
+public final class JsonStringTokenCache {
   private static final int MAX_CHARS = 256;
   private static final int NO_SLOT = -1;
 
@@ -58,7 +58,7 @@ final class JsonStringTokenCache {
   private byte[] utf8Comma2;
   private byte[] utf8Comma3;
 
-  boolean writeStringField(
+  public boolean writeStringField(
       StringJsonWriter writer, String text, boolean comma, byte[] namePrefix, byte[] commaPrefix) {
     int slot = slot(text);
     if (slot == NO_SLOT) {
@@ -69,7 +69,7 @@ final class JsonStringTokenCache {
     return true;
   }
 
-  boolean writeUtf8Field(
+  public boolean writeUtf8Field(
       Utf8JsonWriter writer, String text, boolean comma, byte[] namePrefix, byte[] commaPrefix) {
     int slot = slot(text);
     if (slot == NO_SLOT) {
@@ -80,7 +80,7 @@ final class JsonStringTokenCache {
     return true;
   }
 
-  boolean writeStringValue(StringJsonWriter writer, String text) {
+  public boolean writeStringValue(StringJsonWriter writer, String text) {
     int slot = slot(text);
     if (slot == NO_SLOT) {
       return false;
@@ -90,7 +90,7 @@ final class JsonStringTokenCache {
     return true;
   }
 
-  boolean writeUtf8Value(Utf8JsonWriter writer, String text) {
+  public boolean writeUtf8Value(Utf8JsonWriter writer, String text) {
     int slot = slot(text);
     if (slot == NO_SLOT) {
       return false;

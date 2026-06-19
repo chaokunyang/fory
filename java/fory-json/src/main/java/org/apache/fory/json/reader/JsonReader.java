@@ -17,9 +17,11 @@
  * under the License.
  */
 
-package org.apache.fory.json;
+package org.apache.fory.json.reader;
 
-abstract class JsonReader {
+import org.apache.fory.json.ForyJsonException;
+
+public abstract class JsonReader {
   protected int position;
 
   protected abstract int length();

@@ -17,15 +17,16 @@
  * under the License.
  */
 
-package org.apache.fory.json;
+package org.apache.fory.json.meta;
 
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodType;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import org.apache.fory.json.ForyJsonException;
 
-abstract class JsonMemberAccessor {
+public abstract class JsonMemberAccessor {
   public Object getObject(Object target) {
     throw new UnsupportedOperationException();
   }

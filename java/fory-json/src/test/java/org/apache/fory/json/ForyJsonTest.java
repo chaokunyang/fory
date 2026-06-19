@@ -23,10 +23,15 @@ import static org.testng.Assert.assertEquals;
 import static org.testng.Assert.assertThrows;
 
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import org.apache.fory.json.annotation.JsonIgnore;
 import org.testng.annotations.Test;
 
@@ -109,6 +114,10 @@ public class ForyJsonTest {
     public Object text = "fory";
   }
 
+  public static final class NaturalObjectValue {
+    public Object value = new Object();
+  }
+
   public static final class TokenValues {
     public int count = 1;
     public String name = "alpha";
@@ -160,6 +169,43 @@ public class ForyJsonTest {
     assertEquals(
         new String(json.toJsonBytes(new FirstIntField()), StandardCharsets.UTF_8), expected);
     assertEquals(json.hasGeneratedWriter(FirstIntField.class), true);
+  }
+
+  @Test
+  public void sharedFacadeThreads() throws Exception {
+    ForyJson json = ForyJson.builder().build();
+    String expected = "{\"active\":true,\"id\":7,\"name\":\"fory\"}";
+    int threads = 8;
+    int iterations = 200;
+    ExecutorService executor = Executors.newFixedThreadPool(threads);
+    CountDownLatch start = new CountDownLatch(1);
+    List<Future<?>> futures = new ArrayList<>();
+    try {
+      for (int t = 0; t < threads; t++) {
+        futures.add(
+            executor.submit(
+                () -> {
+                  start.await();
+                  for (int i = 0; i < iterations; i++) {
+                    assertEquals(json.toJson(new PublicFields()), expected);
+                    assertEquals(
+                        new String(json.toJsonBytes(new PublicFields()), StandardCharsets.UTF_8),
+                        expected);
+                    PublicFields value = json.fromJson(expected, PublicFields.class);
+                    assertEquals(value.name, "fory");
+                    assertEquals(value.id, 7);
+                    assertEquals(value.active, true);
+                  }
+                  return null;
+                }));
+      }
+      start.countDown();
+      for (Future<?> future : futures) {
+        future.get();
+      }
+    } finally {
+      executor.shutdownNow();
+    }
   }
 
   @Test
@@ -236,6 +282,15 @@ public class ForyJsonTest {
     assertEquals(json.toJson(new NaturalValues()), expected);
     assertEquals(
         new String(json.toJsonBytes(new NaturalValues()), StandardCharsets.UTF_8), expected);
+  }
+
+  @Test
+  public void writeNaturalEmptyObject() {
+    ForyJson json = ForyJson.builder().build();
+    String expected = "{\"value\":{}}";
+    assertEquals(json.toJson(new NaturalObjectValue()), expected);
+    assertEquals(
+        new String(json.toJsonBytes(new NaturalObjectValue()), StandardCharsets.UTF_8), expected);
   }
 
   @Test

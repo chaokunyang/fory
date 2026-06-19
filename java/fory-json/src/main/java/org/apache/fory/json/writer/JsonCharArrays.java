@@ -17,7 +17,7 @@
  * under the License.
  */
 
-package org.apache.fory.json;
+package org.apache.fory.json.writer;
 
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
@@ -26,7 +26,7 @@ import java.lang.reflect.Method;
 import org.apache.fory.memory.NativeByteOrder;
 import org.apache.fory.platform.AndroidSupport;
 
-final class JsonCharArrays {
+public final class JsonCharArrays {
   private static final MethodHandle PUT_LONG;
   private static final int CHAR_ARRAY_OFFSET;
 

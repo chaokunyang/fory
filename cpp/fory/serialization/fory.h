@@ -619,14 +619,12 @@ public:
     if (FORY_PREDICT_FALSE(!finalized_)) {
       ensure_finalized();
     }
-    WriteContext &ctx = *write_ctx_;
-    Buffer &ctx_buffer = ctx.buffer();
     // Swap in the caller's buffer so all writes go there.
-    buffer.swap(ctx_buffer);
-    auto result = serialize_impl(obj, ctx_buffer);
-    buffer.swap(ctx_buffer);
+    buffer.swap(write_ctx_->buffer());
+    auto result = serialize_impl(obj, write_ctx_->buffer());
+    buffer.swap(write_ctx_->buffer());
     // reset internal state after use without clobbering caller buffer.
-    ctx.reset();
+    write_ctx_->reset();
     return result;
   }
 
@@ -685,10 +683,9 @@ public:
       return Unexpected(invalid_root_header(header));
     }
 
-    ReadContext &ctx = *read_ctx_;
-    ctx.attach(buffer);
-    ReadContextGuard guard(ctx);
-    return deserialize_impl<T>(ctx);
+    read_ctx_->attach(buffer);
+    ReadContextGuard guard(*read_ctx_);
+    return deserialize_impl<T>(buffer);
   }
 
   /// Deserialize an object from a byte vector.
@@ -723,10 +720,9 @@ public:
       return Unexpected(invalid_root_header(header));
     }
 
-    ReadContext &ctx = *read_ctx_;
-    ctx.attach(buffer);
-    ReadContextGuard guard(ctx);
-    return deserialize_impl<T>(ctx);
+    read_ctx_->attach(buffer);
+    ReadContextGuard guard(*read_ctx_);
+    return deserialize_impl<T>(buffer);
   }
 
   /// Deserialize an object from an input stream.
@@ -841,9 +837,7 @@ private:
   /// Core serialization implementation.
   /// TypeMeta is written inline using streaming protocol (no deferred writing).
   template <typename T>
-  FORY_ALWAYS_INLINE Result<size_t, Error> serialize_impl(const T &obj,
-                                                          Buffer &buffer) {
-    WriteContext &ctx = *write_ctx_;
+  Result<size_t, Error> serialize_impl(const T &obj, Buffer &buffer) {
     size_t start_pos = buffer.writer_index();
 
     // write precomputed header (1 byte flags)
@@ -855,17 +849,17 @@ private:
     // otherwise NullOnly for nullable handling
     // TypeMeta is written inline during serialization (streaming protocol)
     const RefMode top_level_ref_mode =
-        ctx.track_ref() ? RefMode::Tracking : RefMode::NullOnly;
+        write_ctx_->track_ref() ? RefMode::Tracking : RefMode::NullOnly;
     if constexpr (is_fory_serializable_v<T>) {
-      FORY_TRY(type_info, cached_write_root_type_info<T>(ctx));
-      Serializer<T>::write_with_type_info(obj, ctx, top_level_ref_mode, true,
-                                          type_info);
+      FORY_TRY(type_info, cached_write_root_type_info<T>());
+      Serializer<T>::write_with_type_info(obj, *write_ctx_, top_level_ref_mode,
+                                          true, type_info);
     } else {
-      Serializer<T>::write(obj, ctx, top_level_ref_mode, true);
+      Serializer<T>::write(obj, *write_ctx_, top_level_ref_mode, true);
     }
     // Check for errors at serialization boundary
-    if (FORY_PREDICT_FALSE(ctx.has_error())) {
-      return Unexpected(ctx.take_error());
+    if (FORY_PREDICT_FALSE(write_ctx_->has_error())) {
+      return Unexpected(write_ctx_->take_error());
     }
 
     return buffer.writer_index() - start_pos;
@@ -873,30 +867,30 @@ private:
 
   /// Core deserialization implementation.
   /// TypeMeta is read inline using streaming protocol.
-  template <typename T> Result<T, Error> deserialize_impl(ReadContext &ctx) {
+  template <typename T> Result<T, Error> deserialize_impl(Buffer &buffer) {
     // Top-level deserialization: use Tracking if ref tracking is enabled,
     // otherwise NullOnly for nullable handling
     // TypeMeta is read inline during deserialization (streaming protocol)
     const RefMode top_level_ref_mode =
-        ctx.track_ref() ? RefMode::Tracking : RefMode::NullOnly;
-    T result = Serializer<T>::read(ctx, top_level_ref_mode, true);
+        read_ctx_->track_ref() ? RefMode::Tracking : RefMode::NullOnly;
+    T result = Serializer<T>::read(*read_ctx_, top_level_ref_mode, true);
     // Check for errors at deserialization boundary
-    if (FORY_PREDICT_FALSE(ctx.has_error())) {
-      return Unexpected(ctx.take_error());
+    if (FORY_PREDICT_FALSE(read_ctx_->has_error())) {
+      return Unexpected(read_ctx_->take_error());
     }
 
-    ctx.ref_reader().resolve_callbacks();
+    read_ctx_->ref_reader().resolve_callbacks();
     return result;
   }
 
   template <typename T>
-  FORY_ALWAYS_INLINE Result<const TypeInfo *, Error>
-  cached_write_root_type_info(WriteContext &ctx) {
+  Result<const TypeInfo *, Error> cached_write_root_type_info() {
     constexpr uint64_t ctid = type_index<T>();
     if (write_root_type_info_ != nullptr && write_root_type_info_key_ == ctid) {
       return write_root_type_info_;
     }
-    FORY_TRY(type_info, ctx.type_resolver().template get_type_info<T>());
+    FORY_TRY(type_info,
+             write_ctx_->type_resolver().template get_type_info<T>());
     write_root_type_info_key_ = ctid;
     write_root_type_info_ = type_info;
     return type_info;
@@ -905,9 +899,9 @@ private:
   bool finalized_;
   uint8_t precomputed_header_;
   std::optional<WriteContext> write_ctx_;
+  std::optional<ReadContext> read_ctx_;
   uint64_t write_root_type_info_key_ = 0;
   const TypeInfo *write_root_type_info_ = nullptr;
-  std::optional<ReadContext> read_ctx_;
 
   friend class ForyBuilder;
   friend class ThreadSafeFory;

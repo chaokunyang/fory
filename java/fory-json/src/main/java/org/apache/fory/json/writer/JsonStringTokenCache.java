@@ -69,6 +69,20 @@ public final class JsonStringTokenCache {
     return true;
   }
 
+  public boolean writeStringCommaField(StringJsonWriter writer, String text, byte[] commaPrefix) {
+    int slot = slot(text);
+    if (slot == NO_SLOT) {
+      return false;
+    }
+    byte[] token = stringComma(slot);
+    if (token == null) {
+      token = join(commaPrefix, stringValueToken(slot, text));
+      setStringComma(slot, token);
+    }
+    writer.writeRawValue(token);
+    return true;
+  }
+
   public boolean writeUtf8Field(
       Utf8JsonWriter writer, String text, boolean comma, byte[] namePrefix, byte[] commaPrefix) {
     int slot = slot(text);
@@ -76,6 +90,20 @@ public final class JsonStringTokenCache {
       return false;
     }
     byte[] token = utf8FieldToken(slot, text, comma, namePrefix, commaPrefix);
+    writer.writeRawValue(token);
+    return true;
+  }
+
+  public boolean writeUtf8CommaField(Utf8JsonWriter writer, String text, byte[] commaPrefix) {
+    int slot = slot(text);
+    if (slot == NO_SLOT) {
+      return false;
+    }
+    byte[] token = utf8Comma(slot);
+    if (token == null) {
+      token = join(commaPrefix, utf8ValueToken(slot, text));
+      setUtf8Comma(slot, token);
+    }
     writer.writeRawValue(token);
     return true;
   }
@@ -155,43 +183,87 @@ public final class JsonStringTokenCache {
   }
 
   private int slot(String text) {
+    int slot = refSlot(text);
+    if (slot != NO_SLOT) {
+      return slot;
+    }
+    return slotSlow(text);
+  }
+
+  private int slotSlow(String text) {
     if (!cacheable(text)) {
       return NO_SLOT;
     }
     String value = value0;
-    if (text == value || value != null && text.equals(value)) {
+    if (value != null && text.equals(value)) {
       return 0;
     }
     value = value1;
-    if (text == value || value != null && text.equals(value)) {
+    if (value != null && text.equals(value)) {
       return 1;
     }
     value = value2;
-    if (text == value || value != null && text.equals(value)) {
+    if (value != null && text.equals(value)) {
       return 2;
     }
     value = value3;
-    if (text == value || value != null && text.equals(value)) {
+    if (value != null && text.equals(value)) {
       return 3;
     }
     return admit(text);
   }
 
+  private int refSlot(String text) {
+    String value = value0;
+    if (text == value) {
+      return 0;
+    }
+    value = value1;
+    if (text == value) {
+      return 1;
+    }
+    value = value2;
+    if (text == value) {
+      return 2;
+    }
+    value = value3;
+    if (text == value) {
+      return 3;
+    }
+    return NO_SLOT;
+  }
+
   private int admit(String text) {
     String candidate = candidate0;
-    if (text == candidate || candidate != null && text.equals(candidate)) {
+    if (text == candidate) {
       return promote(text);
     }
     candidate = candidate1;
-    if (text == candidate || candidate != null && text.equals(candidate)) {
+    if (text == candidate) {
       return promote(text);
     }
     candidate = candidate2;
-    if (text == candidate || candidate != null && text.equals(candidate)) {
+    if (text == candidate) {
       return promote(text);
     }
     candidate = candidate3;
-    if (text == candidate || candidate != null && text.equals(candidate)) {
+    if (text == candidate) {
+      return promote(text);
+    }
+    candidate = candidate0;
+    if (candidate != null && text.equals(candidate)) {
+      return promote(text);
+    }
+    candidate = candidate1;
+    if (candidate != null && text.equals(candidate)) {
+      return promote(text);
+    }
+    candidate = candidate2;
+    if (candidate != null && text.equals(candidate)) {
+      return promote(text);
+    }
+    candidate = candidate3;
+    if (candidate != null && text.equals(candidate)) {
       return promote(text);
     }
     setCandidate(nextCandidate, text);

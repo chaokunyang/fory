@@ -29,6 +29,7 @@ import org.apache.fory.json.meta.JsonClassInfo;
 import org.apache.fory.json.reader.JsonReader;
 import org.apache.fory.json.serializer.JsonSerializers;
 import org.apache.fory.json.writer.JsonWriter;
+import org.apache.fory.json.writer.StringJsonWriter;
 import org.apache.fory.json.writer.Utf8JsonWriter;
 
 public final class JsonTypeResolver {
@@ -64,6 +65,14 @@ public final class JsonTypeResolver {
       return;
     }
     getTypeInfo(declaredType, value.getClass()).write(writer, value, this);
+  }
+
+  public void writeStringValue(StringJsonWriter writer, Object value, Type declaredType) {
+    if (value == null) {
+      writer.writeNull();
+      return;
+    }
+    getTypeInfo(declaredType, value.getClass()).writeString(writer, value, this);
   }
 
   public void writeUtf8Value(Utf8JsonWriter writer, Object value, Type declaredType) {
@@ -140,7 +149,7 @@ public final class JsonTypeResolver {
     } else if (Map.class.isAssignableFrom(rawType)) {
       return new JsonTypeInfo.MapInfo(rawType, declaredType);
     }
-    return new JsonTypeInfo.ObjectInfo(rawType, this);
+    return JsonTypeInfo.objectInfo(rawType, this);
   }
 
   private static Object typeInfoKey(Type declaredType, Class<?> rawType) {

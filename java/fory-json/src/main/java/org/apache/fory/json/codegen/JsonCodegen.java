@@ -529,16 +529,14 @@ public final class JsonCodegen {
     String writerMethod = longValue ? "writeLongField" : "writeIntField";
     String prefix = utf8 ? "u" : "s";
     if (commaKnown) {
+      String commaCacheMethod = utf8 ? "writeUtf8CommaField" : "writeStringCommaField";
       code.append(indent)
           .append("if (!nt")
           .append(id)
           .append(".")
-          .append(cacheMethod)
+          .append(commaCacheMethod)
           .append("(writer, ")
           .append(value)
-          .append(", true, ")
-          .append(prefix)
-          .append(id)
           .append(", ")
           .append(prefix)
           .append("c")
@@ -606,16 +604,14 @@ public final class JsonCodegen {
     String cacheMethod = utf8 ? "writeUtf8Field" : "writeStringField";
     String prefix = utf8 ? "u" : "s";
     if (commaKnown) {
+      String commaCacheMethod = utf8 ? "writeUtf8CommaField" : "writeStringCommaField";
       code.append(indent)
           .append("if (!st")
           .append(id)
           .append(".")
-          .append(cacheMethod)
+          .append(commaCacheMethod)
           .append("(writer, ")
           .append(value)
-          .append(", true, ")
-          .append(prefix)
-          .append(id)
           .append(", ")
           .append(prefix)
           .append("c")
@@ -882,7 +878,7 @@ public final class JsonCodegen {
           .append("    } else {\n")
           .append(indent)
           .append("      ")
-          .append(utf8 ? "typeResolver.writeUtf8Value" : "typeResolver.writeValue")
+          .append(utf8 ? "typeResolver.writeUtf8Value" : "typeResolver.writeStringValue")
           .append("(writer, element, ")
           .append(prop)
           .append(".writeElementType());\n")
@@ -914,7 +910,7 @@ public final class JsonCodegen {
           .append("  } else {\n")
           .append(indent)
           .append("    ")
-          .append(utf8 ? "typeResolver.writeUtf8Value" : "typeResolver.writeValue")
+          .append(utf8 ? "typeResolver.writeUtf8Value" : "typeResolver.writeStringValue")
           .append("(writer, element, ")
           .append(prop)
           .append(".writeElementType());\n")
@@ -959,7 +955,7 @@ public final class JsonCodegen {
     Class<?> rawType = property.writeRawType();
     if (rawType == Object.class) {
       code.append(indent)
-          .append(utf8 ? "typeResolver.writeUtf8Value" : "typeResolver.writeValue")
+          .append(utf8 ? "typeResolver.writeUtf8Value" : "typeResolver.writeStringValue")
           .append("(writer, ")
           .append(value)
           .append(", Object.class);\n");
@@ -988,7 +984,7 @@ public final class JsonCodegen {
     code.append(indent).append("} else {\n");
     code.append(indent)
         .append("  ")
-        .append(utf8 ? "typeResolver.writeUtf8Value" : "typeResolver.writeValue")
+        .append(utf8 ? "typeResolver.writeUtf8Value" : "typeResolver.writeStringValue")
         .append("(writer, ")
         .append(value)
         .append(", ")

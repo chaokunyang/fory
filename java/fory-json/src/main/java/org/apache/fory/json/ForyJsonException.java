@@ -19,8 +19,10 @@
 
 package org.apache.fory.json;
 
+import org.apache.fory.exception.ForyException;
+
 /** Runtime exception raised by Fory JSON readers, writers, and metadata builders. */
-public class ForyJsonException extends RuntimeException {
+public class ForyJsonException extends ForyException {
   public ForyJsonException(String message) {
     super(message);
   }

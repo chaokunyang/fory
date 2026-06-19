@@ -168,6 +168,14 @@ public final class JsonClassInfo {
     return stringWriter != null && utf8Writer != null;
   }
 
+  public JsonStringObjectWriter stringWriter() {
+    return stringWriter;
+  }
+
+  public JsonUtf8ObjectWriter utf8Writer() {
+    return utf8Writer;
+  }
+
   public void write(JsonWriter writer, Object value, JsonTypeResolver typeResolver) {
     writer.writeObjectStart();
     int written = 0;

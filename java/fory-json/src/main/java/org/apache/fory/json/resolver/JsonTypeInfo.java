@@ -29,7 +29,10 @@ import org.apache.fory.json.meta.JsonMemberAccessor;
 import org.apache.fory.json.reader.JsonParsers;
 import org.apache.fory.json.reader.JsonReader;
 import org.apache.fory.json.serializer.JsonSerializers;
+import org.apache.fory.json.serializer.JsonStringObjectWriter;
+import org.apache.fory.json.serializer.JsonUtf8ObjectWriter;
 import org.apache.fory.json.writer.JsonWriter;
+import org.apache.fory.json.writer.StringJsonWriter;
 import org.apache.fory.json.writer.Utf8JsonWriter;
 
 /** Resolved JSON read/write behavior for one declared Java type shape. */
@@ -58,12 +61,29 @@ public abstract class JsonTypeInfo {
     }
   }
 
+  public final void writeString(StringJsonWriter writer, Object value, JsonTypeResolver resolver) {
+    if (value == null) {
+      writer.writeNull();
+    } else {
+      writeStringNonNull(writer, value, resolver);
+    }
+  }
+
+  public final void writeRootString(
+      StringJsonWriter writer, Object value, JsonTypeResolver resolver) {
+    writeRootStringNonNull(writer, value, resolver);
+  }
+
   public final void writeUtf8(Utf8JsonWriter writer, Object value, JsonTypeResolver resolver) {
     if (value == null) {
       writer.writeNull();
     } else {
       writeUtf8NonNull(writer, value, resolver);
     }
+  }
+
+  public final void writeRootUtf8(Utf8JsonWriter writer, Object value, JsonTypeResolver resolver) {
+    writeRootUtf8NonNull(writer, value, resolver);
   }
 
   public final Object read(JsonReader reader, JsonTypeResolver resolver) {
@@ -82,9 +102,29 @@ public abstract class JsonTypeInfo {
     accessor.putObject(object, read(reader, resolver));
   }
 
+  static JsonTypeInfo objectInfo(Class<?> rawType, JsonTypeResolver resolver) {
+    JsonClassInfo classInfo = resolver.getClassInfo(rawType);
+    if (classInfo.hasObjectWriter()) {
+      return new GeneratedObjectInfo(rawType, classInfo);
+    }
+    return new ObjectInfo(rawType, classInfo);
+  }
+
   abstract void writeNonNull(JsonWriter writer, Object value, JsonTypeResolver resolver);
 
+  void writeStringNonNull(StringJsonWriter writer, Object value, JsonTypeResolver resolver) {
+    writeNonNull(writer, value, resolver);
+  }
+
+  void writeRootStringNonNull(StringJsonWriter writer, Object value, JsonTypeResolver resolver) {
+    writeStringNonNull(writer, value, resolver);
+  }
+
   abstract void writeUtf8NonNull(Utf8JsonWriter writer, Object value, JsonTypeResolver resolver);
+
+  void writeRootUtf8NonNull(Utf8JsonWriter writer, Object value, JsonTypeResolver resolver) {
+    writeUtf8NonNull(writer, value, resolver);
+  }
 
   abstract Object readNonNull(JsonReader reader, JsonTypeResolver resolver);
 
@@ -100,6 +140,16 @@ public abstract class JsonTypeInfo {
         resolver.getClassInfo(Object.class).write(writer, value, resolver);
       } else {
         resolver.writeValue(writer, value, valueClass);
+      }
+    }
+
+    @Override
+    void writeStringNonNull(StringJsonWriter writer, Object value, JsonTypeResolver resolver) {
+      Class<?> valueClass = value.getClass();
+      if (valueClass == Object.class) {
+        resolver.getClassInfo(Object.class).write(writer, value, resolver);
+      } else {
+        resolver.writeStringValue(writer, value, valueClass);
       }
     }
 
@@ -458,6 +508,11 @@ public abstract class JsonTypeInfo {
     }
 
     @Override
+    void writeStringNonNull(StringJsonWriter writer, Object value, JsonTypeResolver resolver) {
+      JsonSerializers.writeArray(writer, value, componentType, resolver);
+    }
+
+    @Override
     void writeUtf8NonNull(Utf8JsonWriter writer, Object value, JsonTypeResolver resolver) {
       JsonSerializers.writeUtf8Array(writer, value, componentType, resolver);
     }
@@ -478,6 +533,11 @@ public abstract class JsonTypeInfo {
 
     @Override
     void writeNonNull(JsonWriter writer, Object value, JsonTypeResolver resolver) {
+      JsonSerializers.writeCollection(writer, (Collection<?>) value, elementType, resolver);
+    }
+
+    @Override
+    void writeStringNonNull(StringJsonWriter writer, Object value, JsonTypeResolver resolver) {
       JsonSerializers.writeCollection(writer, (Collection<?>) value, elementType, resolver);
     }
 
@@ -506,6 +566,11 @@ public abstract class JsonTypeInfo {
     }
 
     @Override
+    void writeStringNonNull(StringJsonWriter writer, Object value, JsonTypeResolver resolver) {
+      JsonSerializers.writeMap(writer, (Map<?, ?>) value, valueType, resolver);
+    }
+
+    @Override
     void writeUtf8NonNull(Utf8JsonWriter writer, Object value, JsonTypeResolver resolver) {
       JsonSerializers.writeUtf8Map(writer, (Map<?, ?>) value, valueType, resolver);
     }
@@ -516,12 +581,12 @@ public abstract class JsonTypeInfo {
     }
   }
 
-  static final class ObjectInfo extends JsonTypeInfo {
-    private final JsonClassInfo classInfo;
+  static class ObjectInfo extends JsonTypeInfo {
+    final JsonClassInfo classInfo;
 
-    ObjectInfo(Class<?> rawType, JsonTypeResolver resolver) {
+    ObjectInfo(Class<?> rawType, JsonClassInfo classInfo) {
       super(rawType);
-      classInfo = resolver.getClassInfo(rawType);
+      this.classInfo = classInfo;
     }
 
     @Override
@@ -535,6 +600,21 @@ public abstract class JsonTypeInfo {
     }
 
     @Override
+    void writeStringNonNull(StringJsonWriter writer, Object value, JsonTypeResolver resolver) {
+      Class<?> valueClass = value.getClass();
+      if (valueClass == rawType()) {
+        classInfo.write(writer, value, resolver);
+      } else {
+        resolver.writeStringValue(writer, value, valueClass);
+      }
+    }
+
+    @Override
+    void writeRootStringNonNull(StringJsonWriter writer, Object value, JsonTypeResolver resolver) {
+      classInfo.write(writer, value, resolver);
+    }
+
+    @Override
     void writeUtf8NonNull(Utf8JsonWriter writer, Object value, JsonTypeResolver resolver) {
       Class<?> valueClass = value.getClass();
       if (valueClass == rawType()) {
@@ -545,8 +625,54 @@ public abstract class JsonTypeInfo {
     }
 
     @Override
+    void writeRootUtf8NonNull(Utf8JsonWriter writer, Object value, JsonTypeResolver resolver) {
+      classInfo.writeUtf8(writer, value, resolver);
+    }
+
+    @Override
     Object readNonNull(JsonReader reader, JsonTypeResolver resolver) {
       return JsonParsers.readObject(reader, rawType(), resolver);
+    }
+  }
+
+  static final class GeneratedObjectInfo extends ObjectInfo {
+    private final JsonStringObjectWriter stringWriter;
+    private final JsonUtf8ObjectWriter utf8Writer;
+
+    GeneratedObjectInfo(Class<?> rawType, JsonClassInfo classInfo) {
+      super(rawType, classInfo);
+      stringWriter = classInfo.stringWriter();
+      utf8Writer = classInfo.utf8Writer();
+    }
+
+    @Override
+    void writeStringNonNull(StringJsonWriter writer, Object value, JsonTypeResolver resolver) {
+      Class<?> valueClass = value.getClass();
+      if (valueClass == rawType()) {
+        stringWriter.writeString(writer, value, resolver);
+      } else {
+        resolver.writeStringValue(writer, value, valueClass);
+      }
+    }
+
+    @Override
+    void writeRootStringNonNull(StringJsonWriter writer, Object value, JsonTypeResolver resolver) {
+      stringWriter.writeString(writer, value, resolver);
+    }
+
+    @Override
+    void writeUtf8NonNull(Utf8JsonWriter writer, Object value, JsonTypeResolver resolver) {
+      Class<?> valueClass = value.getClass();
+      if (valueClass == rawType()) {
+        utf8Writer.writeUtf8(writer, value, resolver);
+      } else {
+        resolver.writeUtf8Value(writer, value, valueClass);
+      }
+    }
+
+    @Override
+    void writeRootUtf8NonNull(Utf8JsonWriter writer, Object value, JsonTypeResolver resolver) {
+      utf8Writer.writeUtf8(writer, value, resolver);
     }
   }
 }

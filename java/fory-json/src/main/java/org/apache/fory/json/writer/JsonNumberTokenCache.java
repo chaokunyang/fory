@@ -70,6 +70,20 @@ public final class JsonNumberTokenCache {
     return true;
   }
 
+  public boolean writeStringCommaField(StringJsonWriter writer, long number, byte[] commaPrefix) {
+    int slot = slot(number);
+    if (slot == NO_SLOT) {
+      return false;
+    }
+    byte[] token = stringComma(slot);
+    if (token == null) {
+      token = fieldToken(commaPrefix, number);
+      setStringComma(slot, token);
+    }
+    writer.writeRawValue(token);
+    return true;
+  }
+
   public boolean writeUtf8Field(
       Utf8JsonWriter writer, long number, boolean comma, byte[] namePrefix, byte[] commaPrefix) {
     int slot = slot(number);
@@ -77,6 +91,20 @@ public final class JsonNumberTokenCache {
       return false;
     }
     byte[] token = utf8Token(slot, number, comma, namePrefix, commaPrefix);
+    writer.writeRawValue(token);
+    return true;
+  }
+
+  public boolean writeUtf8CommaField(Utf8JsonWriter writer, long number, byte[] commaPrefix) {
+    int slot = slot(number);
+    if (slot == NO_SLOT) {
+      return false;
+    }
+    byte[] token = utf8Comma(slot);
+    if (token == null) {
+      token = fieldToken(commaPrefix, number);
+      setUtf8Comma(slot, token);
+    }
     writer.writeRawValue(token);
     return true;
   }
@@ -118,32 +146,32 @@ public final class JsonNumberTokenCache {
   }
 
   private int slot(long number) {
-    if (hasValue0 && value0 == number) {
+    if (value0 == number && hasValue0) {
       return 0;
     }
-    if (hasValue1 && value1 == number) {
+    if (value1 == number && hasValue1) {
       return 1;
     }
-    if (hasValue2 && value2 == number) {
+    if (value2 == number && hasValue2) {
       return 2;
     }
-    if (hasValue3 && value3 == number) {
+    if (value3 == number && hasValue3) {
       return 3;
     }
     return admit(number);
   }
 
   private int admit(long number) {
-    if (hasCandidate0 && candidate0 == number) {
+    if (candidate0 == number && hasCandidate0) {
       return promote(number);
     }
-    if (hasCandidate1 && candidate1 == number) {
+    if (candidate1 == number && hasCandidate1) {
       return promote(number);
     }
-    if (hasCandidate2 && candidate2 == number) {
+    if (candidate2 == number && hasCandidate2) {
       return promote(number);
     }
-    if (hasCandidate3 && candidate3 == number) {
+    if (candidate3 == number && hasCandidate3) {
       return promote(number);
     }
     setCandidate(nextCandidate, number);

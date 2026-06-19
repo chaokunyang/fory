@@ -752,7 +752,7 @@ public final class JsonFieldInfo {
           } else if (element.getClass() == elementRawType) {
             classInfo.write(writer, element, typeResolver);
           } else {
-            typeResolver.writeValue(writer, element, writeElementType);
+            typeResolver.writeStringValue(writer, element, writeElementType);
           }
         }
       } else {
@@ -764,7 +764,7 @@ public final class JsonFieldInfo {
           } else if (element.getClass() == elementRawType) {
             classInfo.write(writer, element, typeResolver);
           } else {
-            typeResolver.writeValue(writer, element, writeElementType);
+            typeResolver.writeStringValue(writer, element, writeElementType);
           }
         }
       }
@@ -799,7 +799,7 @@ public final class JsonFieldInfo {
     if (value == null) {
       writer.writeNull();
     } else if (writeRawType == Object.class) {
-      writeTypeInfo.write(writer, value, typeResolver);
+      writeTypeInfo.writeString(writer, value, typeResolver);
     } else {
       JsonClassInfo classInfo = writeClassInfo;
       Class<?> valueClass = value.getClass();

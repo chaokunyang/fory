@@ -580,15 +580,6 @@ public sealed class TypeMeta : IEquatable<TypeMeta>
             header >> TypeMetaConstants.TypeMetaHashShift);
     }
 
-    internal static void CheckEncodedBodySize(byte[] encoded, int maxTypeMetaBytes)
-    {
-        ByteReader reader = new(encoded);
-        ulong header = reader.ReadUInt64();
-        ValidateGlobalHeader(header);
-        int metaSize = ReadBodySize(reader, header);
-        CheckBodySize(metaSize, maxTypeMetaBytes);
-    }
-
     internal static void ValidateAndSkipBody(ByteReader reader, ulong header)
     {
         ValidateGlobalHeader(header);
@@ -636,7 +627,7 @@ public sealed class TypeMeta : IEquatable<TypeMeta>
         }
     }
 
-    private static void CheckFieldCount(int numFields, int maxTypeFields)
+    internal static void CheckFieldCount(int numFields, int maxTypeFields)
     {
         if (numFields > maxTypeFields)
         {

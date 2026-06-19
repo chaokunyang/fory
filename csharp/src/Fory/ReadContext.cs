@@ -15,8 +15,6 @@
 // specific language governing permissions and limitations
 // under the License.
 
-using System.Buffers.Binary;
-
 namespace Apache.Fory;
 
 public sealed class ReadContext
@@ -25,7 +23,6 @@ public sealed class ReadContext
 
     private readonly ReusableArray<TypeMeta> _readTypeMetas = new();
     private readonly Dictionary<ulong, TypeMeta> _cachedTypeMetasByHeader = [];
-    private readonly Dictionary<object, int> _remoteSchemaVersionsByType = [];
     private TypeMeta? _firstReadTypeMeta;
     private bool _hasFirstReadTypeMeta;
     private ulong _lastMetaHeader;
@@ -43,6 +40,7 @@ public sealed class ReadContext
     internal Type? _cachedTypeMetaType;
     internal TypeMeta? _cachedTypeMeta;
     internal int _currentDynamicReadDepth;
+    private readonly Dictionary<object, int> _remoteSchemaVersionsByType = [];
     private readonly Config _config;
     private int _totalAcceptedSchemaVersions;
 
@@ -81,6 +79,7 @@ public sealed class ReadContext
         Reset();
     }
 
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
     internal TypeMeta? GetReadTypeMeta(int index)
     {
         if (index < 0)
@@ -96,6 +95,7 @@ public sealed class ReadContext
         return _readTypeMetas.Get(index - 1);
     }
 
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
     internal void StoreReadTypeMeta(TypeMeta typeMeta, int index)
     {
         if (index < 0)
@@ -133,6 +133,7 @@ public sealed class ReadContext
             $"type meta index gap: index={index}, count={_readTypeMetas.Count + 1}");
     }
 
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
     internal bool TryGetCachedReadTypeMeta(ulong header, out TypeMeta typeMeta)
     {
         if (_hasLastMetaHeader && _lastMetaHeader == header && _lastTypeMeta is not null)
@@ -170,6 +171,22 @@ public sealed class ReadContext
         _hasLastMetaHeader = true;
         _cachedTypeMetasByHeader.TryAdd(header, typeMeta);
         RecordRemoteTypeMeta(typeKey);
+    }
+
+    internal void CacheExactLocalTypeMeta(ulong header, TypeMeta typeMeta)
+    {
+        if (_cachedTypeMetasByHeader.TryGetValue(header, out TypeMeta? existing) && existing is not null)
+        {
+            _lastMetaHeader = header;
+            _lastTypeMeta = existing;
+            _hasLastMetaHeader = true;
+            return;
+        }
+
+        _lastMetaHeader = header;
+        _lastTypeMeta = typeMeta;
+        _hasLastMetaHeader = true;
+        _cachedTypeMetasByHeader.TryAdd(header, typeMeta);
     }
 
     [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
@@ -232,7 +249,7 @@ public sealed class ReadContext
         _readMetaStrings.Add(value);
     }
 
-    internal TypeMeta ReadTypeMeta(TypeInfo? exactLocal = null)
+    internal TypeMeta ReadTypeMeta()
     {
         if (TryReadTypeMetaRef(out int index, out TypeMeta typeMeta))
         {
@@ -242,18 +259,9 @@ public sealed class ReadContext
         ulong header = Reader.ReadUInt64();
         if (TryGetCachedReadTypeMeta(header, out TypeMeta cachedTypeMeta))
         {
-            // Header-cache hits intentionally skip without rehashing. Entries reach this cache only
-            // after a successful TypeMeta parse and 52-bit metadata-hash validation. The current body
-            // size still comes from the current header bytes, not from the cached TypeMeta.
             TypeMeta.SkipBody(Reader, header);
             StoreReadTypeMeta(cachedTypeMeta, index);
             return cachedTypeMeta;
-        }
-
-        if (exactLocal is not null && TryReadExactLocalTypeMeta(header, exactLocal, out TypeMeta localTypeMeta))
-        {
-            StoreReadTypeMeta(localTypeMeta, index);
-            return localTypeMeta;
         }
 
         Reader.MoveBack(sizeof(ulong));
@@ -263,6 +271,7 @@ public sealed class ReadContext
         return typeMeta;
     }
 
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
     internal bool TryReadTypeMetaRef(out int index, out TypeMeta typeMeta)
     {
         uint indexMarker = Reader.ReadVarUInt32();
@@ -285,45 +294,11 @@ public sealed class ReadContext
     }
 
     [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
-    internal bool TryReadExactLocalTypeMeta(ulong header, TypeInfo exactLocal, out TypeMeta typeMeta)
+    internal bool IsExactLocalTypeMeta(int start, int end, TypeInfo exactLocal)
     {
         TypeInfo.TypeMetaCacheEntry local = exactLocal.GetTypeMetaCacheEntry(TrackRef);
         if (!IsStructMeta(local.TypeMeta))
         {
-            typeMeta = null!;
-            return false;
-        }
-
-        byte[] encoded = local.EncodedBytes;
-        if (encoded.Length < sizeof(ulong) ||
-            BinaryPrimitives.ReadUInt64LittleEndian(encoded) != header)
-        {
-            typeMeta = null!;
-            return false;
-        }
-
-        int bodyBytes = encoded.Length - sizeof(ulong);
-        TypeMeta.CheckEncodedBodySize(encoded, _config.MaxTypeMetaBytes);
-        Reader.CheckBound(bodyBytes);
-        int start = Reader.Cursor - sizeof(ulong);
-        if (!Reader.Storage.AsSpan(start, encoded.Length).SequenceEqual(encoded))
-        {
-            typeMeta = null!;
-            return false;
-        }
-
-        Reader.Skip(bodyBytes);
-        typeMeta = local.TypeMeta;
-        return true;
-    }
-
-    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
-    internal bool TryUseExactLocalTypeMeta(int start, int end, TypeInfo exactLocal, out TypeMeta typeMeta)
-    {
-        TypeInfo.TypeMetaCacheEntry local = exactLocal.GetTypeMetaCacheEntry(TrackRef);
-        if (!IsStructMeta(local.TypeMeta))
-        {
-            typeMeta = null!;
             return false;
         }
 
@@ -331,11 +306,10 @@ public sealed class ReadContext
         if (end - start != encoded.Length ||
             !Reader.Storage.AsSpan(start, encoded.Length).SequenceEqual(encoded))
         {
-            typeMeta = null!;
             return false;
         }
 
-        typeMeta = local.TypeMeta;
+        TypeMeta.CheckFieldCount(local.TypeMeta.Fields.Count, _config.MaxTypeFields);
         return true;
     }
 

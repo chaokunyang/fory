@@ -391,11 +391,6 @@ final class TypeResolver {
       typeDef: typeDef,
       remoteTypeDef: null,
     );
-    // Only struct exact-local TypeDefs are prepublished. Named enum/ext/union
-    // TypeDefs still enter the metadata read path so byte and total limits apply.
-    if (registrationKind == RegistrationKind.struct) {
-      _parsedTypeMetaCache.remember(TypeHeader(typeDef.header), resolved);
-    }
     _rememberResolved(
       type,
       resolved,
@@ -799,14 +794,6 @@ final class TypeResolver {
       return sharedTypes[marker >>> 1];
     }
     final header = TypeHeader(buffer.readInt64());
-    final expectedTypeDef = expected.typeDef;
-    if (expected.kind == RegistrationKind.struct &&
-        expectedTypeDef != null &&
-        expectedTypeDef.header == header.value) {
-      header.skipRemaining(buffer);
-      sharedTypes.add(expected);
-      return expected;
-    }
     final cached = _parsedTypeMetaCache.lookup(header);
     if (cached != null) {
       header.skipRemaining(buffer);
@@ -1128,16 +1115,6 @@ final class TypeResolver {
       return wireTypeMetaForResolved(sharedTypes[index]);
     }
     final header = TypeHeader(buffer.readInt64());
-    final expectedTypeDef = expectedType?.typeDef;
-    if (expectedType?.kind == RegistrationKind.struct &&
-        expectedTypeDef != null &&
-        expectedTypeDef.header == header.value) {
-      // Exact local struct schemas keep the header-only fast path. Non-struct
-      // TypeDefs still parse on first read so metadata size and total limits apply.
-      header.skipRemaining(buffer);
-      sharedTypes.add(expectedType!);
-      return wireTypeMetaForResolved(expectedType);
-    }
     final cached = _parsedTypeMetaCache.lookup(header);
     if (cached != null) {
       // Header-cache hits intentionally skip without rehashing. Entries reach this cache only

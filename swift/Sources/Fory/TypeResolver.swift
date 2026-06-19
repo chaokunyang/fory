@@ -638,16 +638,6 @@ final class TypeResolver {
     if let typeNameKey {
       byTypeName[typeNameKey] = typeInfo
     }
-    if let typeMeta = typeInfo.typeMeta,
-      let typeDefHeader = typeInfo.typeDefHeader {
-      typeInfoByHeader.set(
-        TypeInfo(
-          dynamic: typeInfo,
-          compatibleTypeMeta: typeMeta
-        ),
-        for: typeDefHeader
-      )
-    }
   }
 
   @inline(__always)

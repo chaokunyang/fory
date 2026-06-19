@@ -232,7 +232,7 @@ public final class ReadContext {
     if !checkClassVersion,
       compatibleTypeDefTypeInfos.isEmpty,
       !localTypeInfo.typeDefHasUserTypeFields,
-      let localTypeDefHeader = localTypeInfo.typeDefHeader {
+      localTypeInfo.typeDefHeader != nil {
       let indexMarker = try buffer.readVarUInt32()
       if indexMarker == 0 {
         let headerStart = buffer.getCursor()
@@ -240,11 +240,6 @@ public final class ReadContext {
         var bodySize = Int(header & UInt64(typeMetaSizeMask))
         if bodySize == typeMetaSizeMask {
           bodySize += Int(try buffer.readVarUInt32())
-        }
-        if header == localTypeDefHeader {
-          compatibleTypeDefTypeInfos.push(localTypeInfo)
-          try buffer.skip(bodySize)
-          return nil
         }
         if let cached = typeResolver.getTypeInfo(forHeader: header) {
           try buffer.skip(bodySize)
@@ -346,7 +341,7 @@ public final class ReadContext {
     let compatibleTypeDefTypeInfos = self.compatibleTypeDefTypeInfos
     let remoteTypeInfo: TypeInfo
     if compatibleTypeDefTypeInfos.isEmpty,
-      let localTypeDefHeader = localTypeInfo.typeDefHeader {
+      localTypeInfo.typeDefHeader != nil {
       let indexMarker = try buffer.readVarUInt32()
       if indexMarker != 0 {
         remoteTypeInfo = try readCompatibleTypeInfo(afterMarker: indexMarker)
@@ -356,12 +351,6 @@ public final class ReadContext {
         var bodySize = Int(header & UInt64(typeMetaSizeMask))
         if bodySize == typeMetaSizeMask {
           bodySize += Int(try buffer.readVarUInt32())
-        }
-
-        if header == localTypeDefHeader {
-          compatibleTypeDefTypeInfos.push(localTypeInfo)
-          try buffer.skip(bodySize)
-          return localTypeInfo
         }
 
         if let cached = typeResolver.getTypeInfo(forHeader: header) {

@@ -894,13 +894,13 @@ public sealed class TypeResolver
                 assignFieldIds,
                 context);
         }
-        try
-        {
-            context.StoreRemoteTypeMeta(header, remoteTypeMeta);
-        }
-        catch (InvalidDataException) when (context.MatchesExactLocalTypeMeta(typeMetaStart, typeMetaEnd, typeInfo))
+        if (context.MatchesExactLocalTypeMeta(typeMetaStart, typeMetaEnd, typeInfo))
         {
             context.StoreExactLocalTypeMeta(header, remoteTypeMeta);
+        }
+        else
+        {
+            context.StoreRemoteTypeMeta(header, remoteTypeMeta);
         }
         context.StoreTypeMetaRef(remoteTypeMeta, index);
         return remoteTypeMeta;
@@ -1072,13 +1072,13 @@ public sealed class TypeResolver
         int typeMetaEnd = context.Reader.Cursor;
         TypeInfo resolvedInfo = ResolveAnyTypeInfoFromMeta(wireTypeId, typeMeta, compatible);
         typeMeta.EnsureAssignedFieldIds(TypeMetaFields(resolvedInfo, context.TrackRef));
-        try
-        {
-            context.StoreRemoteTypeMeta(header, typeMeta);
-        }
-        catch (InvalidDataException) when (context.MatchesExactLocalTypeMeta(typeMetaStart, typeMetaEnd, resolvedInfo))
+        if (context.MatchesExactLocalTypeMeta(typeMetaStart, typeMetaEnd, resolvedInfo))
         {
             context.StoreExactLocalTypeMeta(header, typeMeta);
+        }
+        else
+        {
+            context.StoreRemoteTypeMeta(header, typeMeta);
         }
         context.StoreTypeMetaRef(typeMeta, index);
         context.StoreTypeMeta(resolvedInfo.Type, typeMeta);

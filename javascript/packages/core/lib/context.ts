@@ -751,14 +751,12 @@ export class ReadContext {
         this.typeResolver.config.maxTypeMetaBytes,
       );
       const typeMetaEnd = this.reader.readGetCursor();
-      const localTypeMeta = this.exactLocalTypeMeta(
+      if (this.matchesExactLocalTypeMeta(
         typeMeta,
         typeMetaStart,
         typeMetaEnd,
         original,
-      );
-      if (localTypeMeta !== undefined) {
-        typeMeta = localTypeMeta;
+      )) {
         this.storeTypeMetaByHeader(headerLow, headerHigh, typeMeta, undefined);
       } else {
         const localSerializer = original ?? this.serializerByTypeMeta(typeMeta);
@@ -902,34 +900,30 @@ export class ReadContext {
     return this.typeResolver.getSerializerById(typeId);
   }
 
-  private exactLocalTypeMeta(
+  private matchesExactLocalTypeMeta(
     remoteTypeMeta: TypeMeta,
     start: number,
     end: number,
     original?: Serializer,
-  ): TypeMeta | undefined {
+  ): boolean {
+    if (!TypeId.structType(remoteTypeMeta.getTypeId())) {
+      return false;
+    }
     const serializer = original ?? this.serializerByTypeMeta(remoteTypeMeta);
-    if (!serializer || typeof serializer.getTypeInfo !== "function") {
-      return undefined;
+    const localBytes = serializer?.getTypeMetaBytes?.();
+    if (localBytes === undefined) {
+      return false;
     }
-    const localTypeMeta = TypeMeta.fromTypeInfo(
-      serializer.getTypeInfo(),
-      this.typeResolver,
-    );
-    if (!TypeId.structType(localTypeMeta.getTypeId())) {
-      return undefined;
-    }
-    const localBytes = localTypeMeta.toBytes();
     if (end - start !== localBytes.length) {
-      return undefined;
+      return false;
     }
     const remoteBytes = this.reader.bufferRefAt(start, localBytes.length);
     for (let i = 0; i < localBytes.length; i++) {
       if (remoteBytes[i] !== localBytes[i]) {
-        return undefined;
+        return false;
       }
     }
-    return localTypeMeta;
+    return true;
   }
 
   private canonicalTypeId(typeId: number): number {

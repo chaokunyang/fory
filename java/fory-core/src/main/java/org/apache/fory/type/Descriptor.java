@@ -22,7 +22,6 @@ package org.apache.fory.type;
 import static org.apache.fory.util.Preconditions.checkArgument;
 
 import java.lang.annotation.Annotation;
-import java.lang.reflect.AnnotatedElement;
 import java.lang.reflect.Field;
 import java.lang.reflect.Member;
 import java.lang.reflect.Method;
@@ -86,11 +85,6 @@ public class Descriptor {
   public static void clearDescriptorCache() {
     descCache.cleanUp();
     descCache = CacheBuilder.newBuilder().weakKeys().softValues().concurrencyLevel(64).build();
-  }
-
-  private static boolean isIgnoredForDescriptor(AnnotatedElement element) {
-    Ignore ignore = element.getAnnotation(Ignore.class);
-    return ignore != null && (ignore.ignoreRead() || ignore.ignoreWrite());
   }
 
   // All fields should not be mutable except as lazy load,
@@ -851,7 +845,7 @@ public class Descriptor {
         if (method.getParameterCount() == 0
             && method.getReturnType() != void.class
             && !Modifier.isStatic(method.getModifiers())
-            && !isIgnoredForDescriptor(method)) {
+            && !method.isAnnotationPresent(Ignore.class)) {
           descriptorMap.put(method, new Descriptor(method));
         }
       }
@@ -867,7 +861,7 @@ public class Descriptor {
         if (field.isAnnotationPresent(Expose.class)) {
           haveExpose = true;
         }
-        if (isIgnoredForDescriptor(field)) {
+        if (field.isAnnotationPresent(Ignore.class)) {
           haveIgnore = true;
         }
         if (haveExpose && haveIgnore) {
@@ -884,7 +878,7 @@ public class Descriptor {
               descriptorMap.put(field, new Descriptor(field, null));
             }
           } else {
-            if (!isIgnoredForDescriptor(field)) {
+            if (!field.isAnnotationPresent(Ignore.class)) {
               descriptorMap.put(field, new Descriptor(field, null));
             }
           }
@@ -972,7 +966,7 @@ public class Descriptor {
         // final and non-private field validation left to {@link isBean(clz)}
         if (!Modifier.isTransient(modifiers)
             && !Modifier.isStatic(modifiers)
-            && !isIgnoredForDescriptor(field)) {
+            && !field.isAnnotationPresent(Ignore.class)) {
           fieldList.add(field);
         }
       }

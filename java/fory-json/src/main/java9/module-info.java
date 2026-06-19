@@ -21,4 +21,5 @@ module org.apache.fory.json {
   requires org.apache.fory.core;
 
   exports org.apache.fory.json;
+  exports org.apache.fory.json.annotation;
 }

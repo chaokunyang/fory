@@ -29,7 +29,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
 import org.apache.fory.annotation.Expose;
-import org.apache.fory.annotation.Ignore;
+import org.apache.fory.json.annotation.JsonIgnore;
 import org.apache.fory.reflect.ObjectInstantiator;
 import org.apache.fory.reflect.ObjectInstantiators;
 
@@ -292,7 +292,7 @@ final class JsonClassInfo {
   }
 
   private static boolean include(Member member, boolean exposeMode, boolean write) {
-    Ignore ignore = annotation(member, Ignore.class);
+    JsonIgnore ignore = annotation(member, JsonIgnore.class);
     boolean ignored = ignore != null && (write ? ignore.ignoreWrite() : ignore.ignoreRead());
     boolean exposed = annotation(member, Expose.class) != null;
     if (ignored && exposed) {

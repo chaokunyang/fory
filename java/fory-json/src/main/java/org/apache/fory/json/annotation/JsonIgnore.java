@@ -17,14 +17,20 @@
  * under the License.
  */
 
-package org.apache.fory.annotation;
+package org.apache.fory.json.annotation;
 
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
-/** Ignore properties just like transient. */
+/** Ignores a public JSON property for reading, writing, or both directions. */
 @Retention(RetentionPolicy.RUNTIME)
 @Target({ElementType.FIELD, ElementType.METHOD})
-public @interface Ignore {}
+public @interface JsonIgnore {
+  /** Whether this property is ignored when reading JSON into an object. */
+  boolean ignoreRead() default true;
+
+  /** Whether this property is ignored when writing an object as JSON. */
+  boolean ignoreWrite() default true;
+}

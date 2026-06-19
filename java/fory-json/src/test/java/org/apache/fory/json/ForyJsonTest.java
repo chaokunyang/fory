@@ -27,7 +27,7 @@ import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import org.apache.fory.annotation.Ignore;
+import org.apache.fory.json.annotation.JsonIgnore;
 import org.testng.annotations.Test;
 
 public class ForyJsonTest {
@@ -75,12 +75,12 @@ public class ForyJsonTest {
   }
 
   public static final class DirectionalIgnore {
-    @Ignore public int both = 1;
+    @JsonIgnore public int both = 1;
 
-    @Ignore(ignoreRead = true, ignoreWrite = false)
+    @JsonIgnore(ignoreRead = true, ignoreWrite = false)
     public int writeOnly = 2;
 
-    @Ignore(ignoreRead = false, ignoreWrite = true)
+    @JsonIgnore(ignoreRead = false, ignoreWrite = true)
     public int readOnly = 3;
   }
 

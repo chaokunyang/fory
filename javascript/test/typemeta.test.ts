@@ -487,15 +487,15 @@ describe("typemeta", () => {
     const localHashB = typeMeta.getHash() + 2;
     const originalA = { name: "originalA" } as any;
     const originalB = { name: "originalB" } as any;
-    const readChanged = (localHash: number, original: any) => {
+    const readStructInfo = (localHash: number, original: any) => {
       context.reset(bytes);
-      return context.readTypeMetaIfSchemaChanged(localHash, original);
+      return context.readStructTypeInfo(localHash, original);
     };
 
-    expect(readChanged(localHashA, originalA)).toBe(serializers[0]);
-    expect(readChanged(localHashA, originalB)).toBe(serializers[0]);
-    expect(readChanged(localHashB, originalA)).toBe(serializers[1]);
-    expect(readChanged(localHashB, originalB)).toBe(serializers[1]);
+    expect(readStructInfo(localHashA, originalA)).toBe(serializers[0]);
+    expect(readStructInfo(localHashA, originalB)).toBe(serializers[0]);
+    expect(readStructInfo(localHashB, originalA)).toBe(serializers[1]);
+    expect(readStructInfo(localHashB, originalB)).toBe(serializers[1]);
     expect(generatedReaders).toBe(2);
   });
 

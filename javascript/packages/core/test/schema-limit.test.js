@@ -87,13 +87,13 @@ function readTypeMeta(readContext, typeMeta) {
   return readContext.readTypeMeta();
 }
 
-function readChangedTypeMeta(readContext, expectedHash, original, typeMeta) {
+function readStructTypeInfo(readContext, expectedHash, original, typeMeta) {
   const encoded = typeMeta.toBytes();
   const bytes = new Uint8Array(encoded.length + 1);
   bytes[0] = 0;
   bytes.set(encoded, 1);
   readContext.reset(bytes);
-  return readContext.readTypeMetaIfSchemaChanged(expectedHash, original);
+  return readContext.readStructTypeInfo(expectedHash, original);
 }
 
 function detectAnySerializer(readContext, typeMeta) {
@@ -219,7 +219,7 @@ runTest("failed compatible TypeMeta does not consume schema limit", () => {
   const localHash = TypeMeta.fromTypeInfo(localTypeInfo).getHash();
 
   assert.throws(
-    () => readChangedTypeMeta(
+    () => readStructTypeInfo(
       readContext,
       localHash,
       original,
@@ -227,7 +227,7 @@ runTest("failed compatible TypeMeta does not consume schema limit", () => {
     ),
     /field schema mismatch/,
   );
-  assert.doesNotThrow(() => readChangedTypeMeta(
+  assert.doesNotThrow(() => readStructTypeInfo(
     readContext,
     localHash,
     original,
@@ -265,8 +265,8 @@ runTest("exact local TypeMeta bypasses schema limit", () => {
     },
   });
 
-  readChangedTypeMeta(readContext, localHash, original, remoteStruct("Shared", "extra"));
-  assert.doesNotThrow(() => readChangedTypeMeta(
+  readStructTypeInfo(readContext, localHash, original, remoteStruct("Shared", "extra"));
+  assert.doesNotThrow(() => readStructTypeInfo(
     readContext,
     localHash,
     undefined,

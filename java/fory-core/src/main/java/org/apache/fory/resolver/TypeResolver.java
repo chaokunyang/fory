@@ -884,9 +884,11 @@ public abstract class TypeResolver {
           typeInfo = buildMetaSharedTypeInfo(typeDef);
         } else if (hasTargetClass) {
           byte[] encoded = TypeDef.readTypeDefBytes(this, buffer, id);
-          checkClassForDeserialization(targetClass);
           TypeDef localTypeDef = exactLocalTypeDef(encoded, targetClass);
           if (localTypeDef != null) {
+            // Preserve typed-field semantics: selecting the declared local target type does not add
+            // a new registration check for fields that were already reachable through a registered
+            // enclosing type. Non-exact metadata still goes through buildCheckedMetaSharedTypeInfo.
             typeInfo = buildMetaSharedTypeInfo(localTypeDef, targetClass);
           } else {
             typeInfo = buildCheckedMetaSharedTypeInfo(TypeDef.readTypeDef(this, encoded));

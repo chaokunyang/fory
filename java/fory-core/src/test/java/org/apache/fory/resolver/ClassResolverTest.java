@@ -345,7 +345,7 @@ public class ClassResolverTest extends ForyTestBase {
   }
 
   @Test
-  public void testExactLocalTypeDefChecksTypeChecker() {
+  public void testRemoteTypeDefChecksTypeChecker() {
     Fory reader =
         Fory.builder()
             .withXlang(false)
@@ -366,8 +366,7 @@ public class ClassResolverTest extends ForyTestBase {
     typeDef.writeTypeDef(buffer);
     buffer.readerIndex(0);
 
-    Assert.assertThrows(
-        InsecureException.class, () -> resolver.readSharedClassMeta(readContext, BeanB.class));
+    Assert.assertThrows(InsecureException.class, () -> resolver.readSharedClassMeta(readContext));
   }
 
   @Test

@@ -252,7 +252,7 @@ public final class ReadContext {
           maxTypeFields: config.maxTypeFields,
           maxTypeMetaBytes: config.maxTypeMetaBytes)
         let typeMetaEnd = buffer.getCursor()
-        let localTypeInfo = try typeResolver.requireTypeInfo(for: decoded)
+        try validateCompatibleTypeMeta(decoded, for: localTypeInfo, wireTypeID: wireTypeID)
         let cachedTypeInfo = try typeResolver.cacheTypeInfo(
           decoded,
           forHeader: header,
@@ -270,9 +270,10 @@ public final class ReadContext {
         return try validateCompatibleTypeInfo(
           cachedTypeInfo, for: localTypeInfo, wireTypeID: wireTypeID)
       }
-      let remoteTypeInfo = try readCompatibleTypeInfo(afterMarker: indexMarker)
-      return try validateCompatibleTypeInfo(
-        remoteTypeInfo, for: localTypeInfo, wireTypeID: wireTypeID)
+      return try readCompatibleTypeInfo(
+        afterMarker: indexMarker,
+        for: localTypeInfo,
+        wireTypeID: wireTypeID)
     }
     return try readCompatibleTypeInfo(
       for: localTypeInfo,
@@ -332,6 +333,58 @@ public final class ReadContext {
     return cachedTypeInfo
   }
 
+  @inline(never)
+  private func readCompatibleTypeInfo(
+    afterMarker indexMarker: UInt32,
+    for localTypeInfo: TypeInfo,
+    wireTypeID: TypeId
+  ) throws -> TypeInfo {
+    let buffer = self.buffer
+    let compatibleTypeDefTypeInfos = self.compatibleTypeDefTypeInfos
+    let isRef = (indexMarker & 1) == 1
+    let index = Int(indexMarker >> 1)
+    if isRef {
+      guard let typeInfo = compatibleTypeDefTypeInfos.get(index) else {
+        throw ForyError.invalidData("unknown compatible type definition ref index \(index)")
+      }
+      return try validateCompatibleTypeInfo(typeInfo, for: localTypeInfo, wireTypeID: wireTypeID)
+    }
+
+    let typeMetaStart = buffer.getCursor()
+    let header = try buffer.readUInt64()
+    var bodySize = Int(header & UInt64(typeMetaSizeMask))
+    if bodySize == typeMetaSizeMask {
+      bodySize += Int(try buffer.readVarUInt32())
+    }
+    if let cached = typeResolver.getTypeInfo(forHeader: header) {
+      // Header-cache hits intentionally skip without rehashing. Entries reach this cache only
+      // after a successful TypeDef parse and 52-bit metadata-hash validation.
+      try buffer.skip(bodySize)
+      compatibleTypeDefTypeInfos.push(cached)
+      return try validateCompatibleTypeInfo(cached, for: localTypeInfo, wireTypeID: wireTypeID)
+    }
+
+    buffer.setCursor(typeMetaStart)
+    let decoded = try TypeMeta.decode(
+      buffer,
+      maxTypeFields: config.maxTypeFields,
+      maxTypeMetaBytes: config.maxTypeMetaBytes)
+    let typeMetaEnd = buffer.getCursor()
+    try validateCompatibleTypeMeta(decoded, for: localTypeInfo, wireTypeID: wireTypeID)
+    let cachedTypeInfo = try typeResolver.cacheTypeInfo(
+      decoded,
+      forHeader: header,
+      localTypeInfo: localTypeInfo,
+      exactLocal: matchesLocalTypeDefBytes(
+        localTypeInfo: localTypeInfo,
+        typeMeta: decoded,
+        start: typeMetaStart,
+        end: typeMetaEnd)
+    )
+    compatibleTypeDefTypeInfos.push(cachedTypeInfo)
+    return try validateCompatibleTypeInfo(cachedTypeInfo, for: localTypeInfo, wireTypeID: wireTypeID)
+  }
+
   @inline(__always)
   private func readCompatibleTypeInfo(
     for localTypeInfo: TypeInfo,
@@ -339,12 +392,14 @@ public final class ReadContext {
   ) throws -> TypeInfo {
     let buffer = self.buffer
     let compatibleTypeDefTypeInfos = self.compatibleTypeDefTypeInfos
-    let remoteTypeInfo: TypeInfo
     if compatibleTypeDefTypeInfos.isEmpty,
       localTypeInfo.typeDefHeader != nil {
       let indexMarker = try buffer.readVarUInt32()
       if indexMarker != 0 {
-        remoteTypeInfo = try readCompatibleTypeInfo(afterMarker: indexMarker)
+        return try readCompatibleTypeInfo(
+          afterMarker: indexMarker,
+          for: localTypeInfo,
+          wireTypeID: wireTypeID)
       } else {
         let headerStart = buffer.getCursor()
         let header = try buffer.readUInt64()
@@ -356,7 +411,7 @@ public final class ReadContext {
         if let cached = typeResolver.getTypeInfo(forHeader: header) {
           try buffer.skip(bodySize)
           compatibleTypeDefTypeInfos.push(cached)
-          remoteTypeInfo = cached
+          return try validateCompatibleTypeInfo(cached, for: localTypeInfo, wireTypeID: wireTypeID)
         } else {
           buffer.setCursor(headerStart)
           let decoded = try TypeMeta.decode(
@@ -364,8 +419,8 @@ public final class ReadContext {
             maxTypeFields: config.maxTypeFields,
             maxTypeMetaBytes: config.maxTypeMetaBytes)
           let typeMetaEnd = buffer.getCursor()
-          let localTypeInfo = try typeResolver.requireTypeInfo(for: decoded)
-          remoteTypeInfo = try typeResolver.cacheTypeInfo(
+          try validateCompatibleTypeMeta(decoded, for: localTypeInfo, wireTypeID: wireTypeID)
+          let remoteTypeInfo = try typeResolver.cacheTypeInfo(
             decoded,
             forHeader: header,
             localTypeInfo: localTypeInfo,
@@ -376,13 +431,16 @@ public final class ReadContext {
               end: typeMetaEnd)
           )
           compatibleTypeDefTypeInfos.push(remoteTypeInfo)
+          return try validateCompatibleTypeInfo(
+            remoteTypeInfo, for: localTypeInfo, wireTypeID: wireTypeID)
         }
       }
-    } else {
-      remoteTypeInfo = try readCompatibleTypeInfo()
     }
-    return try validateCompatibleTypeInfo(
-      remoteTypeInfo, for: localTypeInfo, wireTypeID: wireTypeID)
+    let indexMarker = try buffer.readVarUInt32()
+    return try readCompatibleTypeInfo(
+      afterMarker: indexMarker,
+      for: localTypeInfo,
+      wireTypeID: wireTypeID)
   }
 
   @inline(never)
@@ -417,9 +475,19 @@ public final class ReadContext {
     guard let remoteTypeMeta = remoteTypeInfo.compatibleTypeMeta else {
       throw ForyError.invalidData("compatible type metadata is required")
     }
+    try validateCompatibleTypeMeta(remoteTypeMeta, for: localTypeInfo, wireTypeID: wireTypeID)
+    return remoteTypeInfo
+  }
+
+  @inline(__always)
+  private func validateCompatibleTypeMeta(
+    _ remoteTypeMeta: TypeMeta,
+    for localTypeInfo: TypeInfo,
+    wireTypeID: TypeId
+  ) throws {
     if let localTypeMeta = localTypeInfo.typeMeta,
       remoteTypeMeta === localTypeMeta {
-      return localTypeInfo
+      return
     }
     if remoteTypeMeta.registerByName {
       guard localTypeInfo.registerByName else {
@@ -463,7 +531,6 @@ public final class ReadContext {
       ) {
       throw ForyError.typeMismatch(expected: wireTypeID.rawValue, actual: remoteTypeID)
     }
-    return remoteTypeInfo
   }
 
   func readAnyValue(typeInfo: TypeInfo) throws -> Any {

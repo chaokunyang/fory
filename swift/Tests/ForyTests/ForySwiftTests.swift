@@ -687,6 +687,76 @@ func failedSchemaDoesNotConsumeLimit() throws {
 }
 
 @Test
+func staticTypeRejectsWrongMetaOwner() throws {
+  let config = Config(compatible: true)
+  let resolver = TypeResolver(config: config)
+  resolver.register(Person.self, id: 901)
+  resolver.register(Address.self, id: 902)
+  let wrongTypeMeta = try TypeMeta(
+    typeID: TypeId.compatibleStruct.rawValue,
+    userTypeID: 901,
+    namespace: .empty(specialChar1: ".", specialChar2: "_"),
+    typeName: .empty(specialChar1: "$", specialChar2: "_"),
+    registerByName: false,
+    fields: []
+  )
+  let buffer = ByteBuffer()
+  buffer.writeUInt8(UInt8(truncatingIfNeeded: TypeId.compatibleStruct.rawValue))
+  buffer.writeUInt8(0)
+  buffer.writeBytes(try wrongTypeMeta.encode())
+  let context = ReadContext(buffer: buffer, typeResolver: resolver, config: config)
+
+  #expect(throws: (any Error).self) {
+    _ = try context.readTypeInfo(for: Address.self)
+  }
+}
+
+@Test
+func failedStaticMetaDoesNotCount() throws {
+  let config = Config(compatible: true, maxSchemaVersionsPerType: 1)
+  let resolver = TypeResolver(config: config)
+  resolver.register(Person.self, id: 901)
+  resolver.register(Address.self, id: 902)
+
+  func typeMeta(userTypeID: UInt32, fieldName: String) throws -> TypeMeta {
+    try TypeMeta(
+      typeID: TypeId.compatibleStruct.rawValue,
+      userTypeID: userTypeID,
+      namespace: .empty(specialChar1: ".", specialChar2: "_"),
+      typeName: .empty(specialChar1: "$", specialChar2: "_"),
+      registerByName: false,
+      fields: [
+        TypeMeta.FieldInfo(
+          fieldID: nil,
+          fieldName: fieldName,
+          fieldType: TypeMeta.FieldType(typeID: TypeId.int32.rawValue, nullable: false)
+        )
+      ]
+    )
+  }
+
+  func writeTypeInfo(_ buffer: ByteBuffer, marker: UInt8, typeMeta: TypeMeta) throws {
+    buffer.writeUInt8(UInt8(truncatingIfNeeded: TypeId.compatibleStruct.rawValue))
+    buffer.writeUInt8(marker)
+    buffer.writeBytes(try typeMeta.encode())
+  }
+
+  let failedBuffer = ByteBuffer()
+  try writeTypeInfo(failedBuffer, marker: 0, typeMeta: typeMeta(userTypeID: 902, fieldName: "zip2"))
+  try writeTypeInfo(failedBuffer, marker: 2, typeMeta: typeMeta(userTypeID: 901, fieldName: "id2"))
+  let failedContext = ReadContext(buffer: failedBuffer, typeResolver: resolver, config: config)
+  _ = try failedContext.readTypeInfo(for: Address.self)
+  #expect(throws: (any Error).self) {
+    _ = try failedContext.readTypeInfo(for: Address.self)
+  }
+
+  let validBuffer = ByteBuffer()
+  try writeTypeInfo(validBuffer, marker: 0, typeMeta: typeMeta(userTypeID: 901, fieldName: "id3"))
+  let validContext = ReadContext(buffer: validBuffer, typeResolver: resolver, config: config)
+  _ = try validContext.readTypeInfo(for: Person.self)
+}
+
+@Test
 func macroStructRoundTrip() throws {
   let fory = Fory()
   fory.register(Address.self, id: 100)

@@ -25,9 +25,6 @@ public sealed class ReadContext
     private readonly Dictionary<ulong, TypeMeta> _cachedTypeMetasByHeader = [];
     private TypeMeta? _firstReadTypeMeta;
     private bool _hasFirstReadTypeMeta;
-    private ulong _lastMetaHeader;
-    private TypeMeta? _lastTypeMeta;
-    private bool _hasLastMetaHeader;
 
     private readonly List<MetaString> _readMetaStrings = [];
 
@@ -136,17 +133,8 @@ public sealed class ReadContext
     [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
     internal bool TryGetCachedReadTypeMeta(ulong header, out TypeMeta typeMeta)
     {
-        if (_hasLastMetaHeader && _lastMetaHeader == header && _lastTypeMeta is not null)
-        {
-            typeMeta = _lastTypeMeta;
-            return true;
-        }
-
         if (_cachedTypeMetasByHeader.TryGetValue(header, out TypeMeta? cached) && cached is not null)
         {
-            _lastMetaHeader = header;
-            _lastTypeMeta = cached;
-            _hasLastMetaHeader = true;
             typeMeta = cached;
             return true;
         }
@@ -157,35 +145,18 @@ public sealed class ReadContext
 
     internal void CacheReadTypeMeta(ulong header, TypeMeta typeMeta)
     {
-        if (_cachedTypeMetasByHeader.TryGetValue(header, out TypeMeta? existing) && existing is not null)
+        if (_cachedTypeMetasByHeader.ContainsKey(header))
         {
-            _lastMetaHeader = header;
-            _lastTypeMeta = existing;
-            _hasLastMetaHeader = true;
             return;
         }
 
         object typeKey = CheckRemoteTypeMetaLimit(typeMeta);
-        _lastMetaHeader = header;
-        _lastTypeMeta = typeMeta;
-        _hasLastMetaHeader = true;
-        _cachedTypeMetasByHeader.TryAdd(header, typeMeta);
+        _cachedTypeMetasByHeader.Add(header, typeMeta);
         RecordRemoteTypeMeta(typeKey);
     }
 
     internal void CacheExactLocalTypeMeta(ulong header, TypeMeta typeMeta)
     {
-        if (_cachedTypeMetasByHeader.TryGetValue(header, out TypeMeta? existing) && existing is not null)
-        {
-            _lastMetaHeader = header;
-            _lastTypeMeta = existing;
-            _hasLastMetaHeader = true;
-            return;
-        }
-
-        _lastMetaHeader = header;
-        _lastTypeMeta = typeMeta;
-        _hasLastMetaHeader = true;
         _cachedTypeMetasByHeader.TryAdd(header, typeMeta);
     }
 

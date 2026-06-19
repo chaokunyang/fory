@@ -22,7 +22,6 @@ import 'dart:typed_data';
 
 import 'package:fory/fory.dart';
 import 'package:fory/src/codegen/generated_registry.dart';
-import 'package:fory/src/codegen/generated_support.dart';
 import 'package:fory/src/context/meta_string_reader.dart';
 import 'package:fory/src/context/meta_string_writer.dart';
 import 'package:fory/src/meta/type_def.dart';

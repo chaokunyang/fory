@@ -488,7 +488,7 @@ func TestTypeDefRejectsCompressedMetadata(t *testing.T) {
 	require.Contains(t, err.Error(), "compressed xlang TypeDef")
 }
 
-func TestReadSharedTypeMetaExactLocalSkipsRemoteCache(t *testing.T) {
+func TestReadSharedTypeMetaExactLocalPopulatesCache(t *testing.T) {
 	fory := NewFory(WithXlang(false), WithCompatible(true))
 	require.NoError(t, fory.RegisterStructByName(SimpleStruct{}, "example.SimpleStruct"))
 	typeDef, err := buildTypeDef(fory, reflect.ValueOf(SimpleStruct{}))
@@ -507,7 +507,18 @@ func TestReadSharedTypeMetaExactLocalSkipsRemoteCache(t *testing.T) {
 	typeInfo := fory.typeResolver.readSharedTypeMeta(buffer, readErr)
 	require.NoError(t, readErr.CheckError())
 	require.NotNil(t, typeInfo)
-	require.NotContains(t, fory.typeResolver.defIdToTypeDef, header)
+	require.Contains(t, fory.typeResolver.defIdToTypeDef, header)
+	require.Zero(t, fory.typeResolver.totalAcceptedSchemaVersions)
+
+	invalidBody := append([]byte(nil), typeDef.encoded...)
+	invalidBody[len(invalidBody)-1] ^= 1
+	buffer = NewByteBuffer(nil)
+	buffer.WriteVarUint32(0)
+	buffer.WriteBinary(invalidBody)
+	readErr = &Error{}
+	typeInfo = fory.typeResolver.readSharedTypeMeta(buffer, readErr)
+	require.NoError(t, readErr.CheckError())
+	require.NotNil(t, typeInfo)
 }
 
 func TestRemoteSchemaLimitRejectsExtraVersions(t *testing.T) {

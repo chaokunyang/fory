@@ -1616,6 +1616,7 @@ func (r *TypeResolver) readSharedTypeMeta(buffer *ByteBuffer, err *Error) *TypeI
 			if exactLocalAllowed && localErr == nil && bytes.Equal(localTd.encoded, td.encoded) {
 				td = localTd
 				newTypeDef = false
+				r.defIdToTypeDef[id] = td
 				if typeInfo := r.getTypeInfoByType(localType); typeInfo != nil {
 					context.readTypeInfos = append(context.readTypeInfos, typeInfo)
 					return typeInfo

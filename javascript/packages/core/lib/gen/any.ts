@@ -21,13 +21,93 @@ import { TypeInfo } from "../typeInfo";
 import { CodecBuilder } from "./builder";
 import { BaseSerializerGenerator } from "./serializer";
 import { CodegenRegistry } from "./router";
-import { TypeId } from "../type";
+import { Serializer, TypeId } from "../type";
 import { Scope } from "./scope";
+import { TypeMeta } from "../meta/TypeMeta";
 import { ReadContext, WriteContext } from "../context";
 
 export class AnyHelper {
   static detectSerializer(readContext: ReadContext) {
-    return readContext.detectAnySerializer();
+    const reader = readContext.reader;
+    const typeResolver = readContext.typeResolver;
+    const typeId = reader.readUint8();
+    let userTypeId = -1;
+    if (TypeId.needsUserTypeId(typeId) && typeId !== TypeId.COMPATIBLE_STRUCT) {
+      userTypeId = reader.readVarUint32Small7();
+    }
+    let serializer: Serializer | undefined;
+
+    function buildNamedTypeKey(ns: string, typeName: string) {
+      return `${ns}$${typeName}`;
+    }
+
+    function tryUpdateSerializer(serializer: Serializer | undefined | null, typeMeta: TypeMeta) {
+      if (!serializer) {
+        return readContext.genSerializerByTypeMetaRuntime(typeMeta);
+      }
+      const hash = serializer.getHash();
+      if (hash !== typeMeta.getHash()) {
+        return readContext.genSerializerByTypeMetaRuntime(typeMeta, serializer);
+      }
+      return serializer;
+    }
+
+    switch (typeId) {
+      case TypeId.COMPATIBLE_STRUCT:
+        {
+          const typeMeta = readContext.readTypeMeta();
+          serializer = typeResolver.getSerializerById(typeId, typeMeta.getUserTypeId());
+          serializer = tryUpdateSerializer(serializer, typeMeta);
+        }
+        break;
+      case TypeId.NAMED_ENUM:
+      case TypeId.NAMED_UNION:
+        if (readContext.isCompatible()) {
+          const typeMeta = readContext.readTypeMeta();
+          const ns = typeMeta.getNs();
+          const typeName = typeMeta.getTypeName();
+          serializer = typeResolver.getSerializerByName(buildNamedTypeKey(ns, typeName));
+        } else {
+          const ns = readContext.readNamespace();
+          const typeName = readContext.readTypeName();
+          serializer = typeResolver.getSerializerByName(buildNamedTypeKey(ns, typeName));
+        }
+        break;
+      case TypeId.NAMED_EXT:
+        if (readContext.isCompatible()) {
+          const typeMeta = readContext.readTypeMeta();
+          const ns = typeMeta.getNs();
+          const typeName = typeMeta.getTypeName();
+          serializer = typeResolver.getSerializerByName(buildNamedTypeKey(ns, typeName));
+        } else {
+          const ns = readContext.readNamespace();
+          const typeName = readContext.readTypeName();
+          serializer = typeResolver.getSerializerByName(buildNamedTypeKey(ns, typeName));
+        }
+        break;
+      case TypeId.NAMED_STRUCT:
+      case TypeId.NAMED_COMPATIBLE_STRUCT:
+        if (readContext.isCompatible() || typeId === TypeId.NAMED_COMPATIBLE_STRUCT) {
+          const typeMeta = readContext.readTypeMeta();
+          const ns = typeMeta.getNs();
+          const typeName = typeMeta.getTypeName();
+          const named = buildNamedTypeKey(ns, typeName);
+          const namedSerializer = typeResolver.getSerializerByName(named);
+          serializer = tryUpdateSerializer(namedSerializer, typeMeta);
+        } else {
+          const ns = readContext.readNamespace();
+          const typeName = readContext.readTypeName();
+          serializer = typeResolver.getSerializerByName(buildNamedTypeKey(ns, typeName));
+        }
+        break;
+      default:
+        serializer = typeResolver.getSerializerById(typeId, userTypeId);
+        break;
+    }
+    if (!serializer) {
+      throw new Error(`can't find implements of typeId: ${typeId}`);
+    }
+    return serializer;
   }
 
   static getSerializer(writeContext: WriteContext, v: any) {

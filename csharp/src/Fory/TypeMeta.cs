@@ -583,17 +583,6 @@ public sealed class TypeMeta : IEquatable<TypeMeta>
             header >> TypeMetaConstants.TypeMetaHashShift);
     }
 
-    internal static void ValidateAndSkipBody(ByteReader reader, ulong header)
-    {
-        ValidateGlobalHeader(header);
-        int metaSize = ReadBodySize(reader, header);
-        // Header/body validation may inspect the current bytes, but cache-hit
-        // skip paths must not allocate from the attacker-declared body size.
-        // ReadSpan checks bounds before exposing the slice.
-        ReadOnlySpan<byte> encodedBody = reader.ReadSpan(metaSize);
-        ValidateParsedTypeMetaHash(header, encodedBody);
-    }
-
     private static void ValidateGlobalHeader(ulong header)
     {
         if ((header & TypeMetaConstants.TypeMetaReservedFlags) != 0)

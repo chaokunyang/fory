@@ -41,7 +41,6 @@ type TypeResolverLike = {
   computeTypeId(typeInfo: TypeInfo): number;
   getSerializerById(id: number, userTypeId?: number): Serializer | undefined;
   getSerializerByName(name: string): Serializer | undefined;
-  getSerializerByHash?(hash: number): Serializer | undefined;
   getSerializerByData(value: any): Serializer | null | undefined;
   isCompatible(): boolean;
   generateReadSerializer(typeInfo: TypeInfo): Serializer;
@@ -557,18 +556,6 @@ export class ReadContext {
   private remoteSchemaVersionsByType: Map<string | number, number> | undefined
     = undefined;
 
-  private static typeMetaHeaderHash(headerLow: number, headerHigh: number) {
-    return headerHigh * 0x100000 + (headerLow >>> 12);
-  }
-
-  private skipTypeMetaBody(headerLow: number) {
-    let metaSize = headerLow & 0xff;
-    if (metaSize === 0xff) {
-      metaSize += this.reader.readVarUInt32();
-    }
-    this.reader.readSkip(metaSize);
-  }
-
   private findRecentTypeMeta(
     headerLow: number,
     headerHigh: number,
@@ -659,37 +646,6 @@ export class ReadContext {
     this.refReader.reference(object);
   }
 
-  private readRemoteTypeMeta(
-    headerLow: number,
-    headerHigh: number,
-  ): TypeMeta {
-    const typeMetaStart = this.reader.readGetCursor() - 8;
-    const header = (BigInt(headerHigh) << 32n) | BigInt(headerLow);
-    let typeMeta = TypeMeta.fromBytesAfterHeader(
-      this.reader,
-      header,
-      this.typeResolver.config.maxTypeFields,
-      this.typeResolver.config.maxTypeMetaBytes,
-    );
-    const typeMetaEnd = this.reader.readGetCursor();
-    const localType = this.typeResolver.getSerializerByHash?.(
-      ReadContext.typeMetaHeaderHash(headerLow, headerHigh),
-    );
-    const localTypeMeta = this.exactTypeMetaForSerializer(
-      typeMetaStart,
-      typeMetaEnd,
-      localType,
-    );
-    if (localTypeMeta !== undefined) {
-      typeMeta = localTypeMeta;
-      this.storeTypeMetaByHeader(headerLow, headerHigh, typeMeta, undefined);
-    } else {
-      const typeKey = this.checkRemoteTypeMetaLimit(typeMeta);
-      this.storeTypeMetaByHeader(headerLow, headerHigh, typeMeta, typeKey);
-    }
-    return typeMeta;
-  }
-
   readTypeMeta(): TypeMeta {
     const idOrLen = this.reader.readVarUInt32();
     if (idOrLen & 1) {
@@ -697,7 +653,7 @@ export class ReadContext {
     }
     const headerLow = this.reader.readUint32();
     const headerHigh = this.reader.readUint32();
-    return this.readTypeMetaByHeader(idOrLen >> 1, headerLow, headerHigh);
+    return this.readTypeMetaFromHeader(idOrLen >> 1, headerLow, headerHigh);
   }
 
   readCompatibleStructSerializer(
@@ -718,31 +674,16 @@ export class ReadContext {
       const headerLow = this.reader.readUint32();
       const headerHigh = this.reader.readUint32();
       remoteHash = headerHigh * 0x100000 + (headerLow >>> 12);
-      if (localHash !== remoteHash) {
-        const cached = this.readTypeMetaHeaderHit(
-          dynamicTypeId,
-          headerLow,
-          headerHigh,
-        );
-        typeMeta = cached
-        ?? this.readRemoteStructTypeMeta(
-          localHash,
-          dynamicTypeId,
-          headerLow,
-          headerHigh,
-          remoteHash,
-          original,
-        );
-      } else {
-        typeMeta = this.readTypeMetaByHeader(
-          dynamicTypeId,
-          headerLow,
-          headerHigh,
-        );
-      }
+      typeMeta = this.readTypeMetaFromHeader(
+        dynamicTypeId,
+        headerLow,
+        headerHigh,
+        localHash,
+        original,
+      );
     }
     if (localHash !== remoteHash) {
-      return this.getCompatibleReadSerializer(
+      return this.ensureCompatibleReadSerializer(
         typeMeta,
         localHash,
         remoteHash,
@@ -761,24 +702,26 @@ export class ReadContext {
     return typeMeta;
   }
 
-  private readTypeMetaByHeader(
+  private readTypeMetaFromHeader(
     dynamicTypeId: number,
     headerLow: number,
     headerHigh: number,
+    localHash?: number,
+    original?: Serializer,
   ): TypeMeta {
     if (
       this.cachedTypeMeta !== null
       && this.cachedTypeMetaHeaderLow === headerLow
       && this.cachedTypeMetaHeaderHigh === headerHigh
     ) {
-      this.skipTypeMetaBody(headerLow);
+      TypeMeta.skipBodyByHeaderLow(this.reader, headerLow);
       this.typeMeta[dynamicTypeId] = this.cachedTypeMeta;
       return this.cachedTypeMeta;
     }
 
     const recent = this.findRecentTypeMeta(headerLow, headerHigh);
     if (recent !== null) {
-      this.skipTypeMetaBody(headerLow);
+      TypeMeta.skipBodyByHeaderLow(this.reader, headerLow);
       this.cachedTypeMetaHeaderLow = headerLow;
       this.cachedTypeMetaHeaderHigh = headerHigh;
       this.cachedTypeMeta = recent;
@@ -792,74 +735,71 @@ export class ReadContext {
       // Header-cache hits intentionally skip without rehashing. Entries reach this cache only
       // after a successful TypeMeta parse and 52-bit metadata-hash validation. The current body
       // size still comes from the current header bytes, not from the cached TypeMeta.
-      this.skipTypeMetaBody(headerLow);
+      TypeMeta.skipBodyByHeaderLow(this.reader, headerLow);
       typeMeta = cached;
       this.cachedTypeMetaHeaderLow = headerLow;
       this.cachedTypeMetaHeaderHigh = headerHigh;
       this.cachedTypeMeta = typeMeta;
       this.rememberRecentTypeMeta(headerLow, headerHigh, typeMeta);
     } else {
-      typeMeta = this.readRemoteTypeMeta(headerLow, headerHigh);
-    }
-    this.typeMeta[dynamicTypeId] = typeMeta;
-    return typeMeta;
-  }
-
-  private readRemoteStructTypeMeta(
-    expectedHash: number,
-    dynamicTypeId: number,
-    headerLow: number,
-    headerHigh: number,
-    remoteHash: number,
-    original?: Serializer,
-  ): TypeMeta {
-    const typeMetaStart = this.reader.readGetCursor() - 8;
-    const header = (BigInt(headerHigh) << 32n) | BigInt(headerLow);
-    let typeMeta = TypeMeta.fromBytesAfterHeader(
-      this.reader,
-      header,
-      this.typeResolver.config.maxTypeFields,
-      this.typeResolver.config.maxTypeMetaBytes,
-    );
-    const typeMetaEnd = this.reader.readGetCursor();
-    const exactLocal = original
-      ?? this.typeResolver.getSerializerByHash?.(expectedHash);
-    const localTypeMeta = this.exactTypeMetaForSerializer(
-      typeMetaStart,
-      typeMetaEnd,
-      exactLocal,
-    );
-    if (localTypeMeta !== undefined) {
-      typeMeta = localTypeMeta;
-      this.storeTypeMetaByHeader(headerLow, headerHigh, typeMeta, undefined);
-      this.typeMeta[dynamicTypeId] = typeMeta;
-      return typeMeta;
-    }
-
-    const typeKey = this.checkRemoteTypeMetaLimit(typeMeta);
-    let compatibleSerializerToCache: Serializer | undefined;
-    if (expectedHash !== remoteHash) {
-      const cached = this.compatibleReadSerializers.get(remoteHash);
-      if (cached === undefined || cached.localHash !== expectedHash) {
-        compatibleSerializerToCache = this.genSerializerByTypeMetaRuntime(
-          typeMeta,
-          original,
-        );
+      const typeMetaStart = this.reader.readGetCursor() - 8;
+      const header = (BigInt(headerHigh) << 32n) | BigInt(headerLow);
+      typeMeta = TypeMeta.fromBytesAfterHeader(
+        this.reader,
+        header,
+        this.typeResolver.config.maxTypeFields,
+        this.typeResolver.config.maxTypeMetaBytes,
+      );
+      const typeMetaEnd = this.reader.readGetCursor();
+      const localTypeMeta = this.exactLocalTypeMeta(
+        typeMeta,
+        typeMetaStart,
+        typeMetaEnd,
+        original,
+      );
+      if (localTypeMeta !== undefined) {
+        typeMeta = localTypeMeta;
+        this.storeTypeMetaByHeader(headerLow, headerHigh, typeMeta, undefined);
+      } else {
+        const localSerializer = original ?? this.serializerByTypeMeta(typeMeta);
+        if (
+          localSerializer === undefined
+          && !TypeId.structType(typeMeta.getTypeId())
+        ) {
+          throw new Error(
+            `can't find serializer for TypeMeta ${typeMeta.getNs()}$${typeMeta.getTypeName()}`,
+          );
+        }
+        const typeKey = this.checkRemoteTypeMetaLimit(typeMeta);
+        if (
+          localSerializer !== undefined
+          && TypeId.structType(typeMeta.getTypeId())
+        ) {
+          const expectedHash = localHash ?? localSerializer.getHash();
+          if (expectedHash !== typeMeta.getHash()) {
+            this.ensureCompatibleReadSerializer(
+              typeMeta,
+              expectedHash,
+              typeMeta.getHash(),
+              localSerializer,
+            );
+          }
+        } else if (localHash !== undefined && localHash !== typeMeta.getHash()) {
+          this.ensureCompatibleReadSerializer(
+            typeMeta,
+            localHash,
+            typeMeta.getHash(),
+            original,
+          );
+        }
+        this.storeTypeMetaByHeader(headerLow, headerHigh, typeMeta, typeKey);
       }
     }
-
-    this.storeTypeMetaByHeader(headerLow, headerHigh, typeMeta, typeKey);
     this.typeMeta[dynamicTypeId] = typeMeta;
-    if (compatibleSerializerToCache !== undefined) {
-      this.compatibleReadSerializers.set(remoteHash, {
-        localHash: expectedHash,
-        serializer: compatibleSerializerToCache,
-      });
-    }
     return typeMeta;
   }
 
-  private getCompatibleReadSerializer(
+  private ensureCompatibleReadSerializer(
     typeMeta: TypeMeta,
     localHash: number,
     remoteHash: number,
@@ -878,47 +818,6 @@ export class ReadContext {
       serializer,
     });
     return serializer;
-  }
-
-  private readTypeMetaHeaderHit(
-    dynamicTypeId: number,
-    headerLow: number,
-    headerHigh: number,
-  ): TypeMeta | null {
-    if (
-      this.cachedTypeMeta !== null
-      && this.cachedTypeMetaHeaderLow === headerLow
-      && this.cachedTypeMetaHeaderHigh === headerHigh
-    ) {
-      TypeMeta.skipBodyByHeaderLow(this.reader, headerLow);
-      this.typeMeta[dynamicTypeId] = this.cachedTypeMeta;
-      return this.cachedTypeMeta;
-    }
-
-    const recent = this.findRecentTypeMeta(headerLow, headerHigh);
-    if (recent !== null) {
-      TypeMeta.skipBodyByHeaderLow(this.reader, headerLow);
-      this.cachedTypeMetaHeaderLow = headerLow;
-      this.cachedTypeMetaHeaderHigh = headerHigh;
-      this.cachedTypeMeta = recent;
-      this.typeMeta[dynamicTypeId] = recent;
-      return recent;
-    }
-
-    const cached = this.typeMetaCache.get(headerHigh)?.get(headerLow);
-    if (cached) {
-      // Header-cache hits intentionally skip without rehashing. Entries reach this cache only
-      // after a successful TypeMeta parse and 52-bit metadata-hash validation. The current body
-      // size still comes from the current header bytes, not from the cached TypeMeta.
-      TypeMeta.skipBodyByHeaderLow(this.reader, headerLow);
-      this.cachedTypeMetaHeaderLow = headerLow;
-      this.cachedTypeMetaHeaderHigh = headerHigh;
-      this.cachedTypeMeta = cached;
-      this.rememberRecentTypeMeta(headerLow, headerHigh, cached);
-      this.typeMeta[dynamicTypeId] = cached;
-      return cached;
-    }
-    return null;
   }
 
   private checkRemoteTypeMetaLimit(typeMeta: TypeMeta) {
@@ -987,11 +886,29 @@ export class ReadContext {
     }
   }
 
-  private exactTypeMetaForSerializer(
+  private serializerByTypeMeta(typeMeta: TypeMeta) {
+    const typeId = typeMeta.getTypeId();
+    if (TypeId.isNamedType(typeId)) {
+      return this.typeResolver.getSerializerByName(
+        `${typeMeta.getNs()}$${typeMeta.getTypeName()}`,
+      );
+    }
+    if (TypeId.needsUserTypeId(typeId)) {
+      return this.typeResolver.getSerializerById(
+        typeId,
+        typeMeta.getUserTypeId(),
+      );
+    }
+    return this.typeResolver.getSerializerById(typeId);
+  }
+
+  private exactLocalTypeMeta(
+    remoteTypeMeta: TypeMeta,
     start: number,
     end: number,
-    serializer: Serializer | undefined | null,
+    original?: Serializer,
   ): TypeMeta | undefined {
+    const serializer = original ?? this.serializerByTypeMeta(remoteTypeMeta);
     if (!serializer || typeof serializer.getTypeInfo !== "function") {
       return undefined;
     }
@@ -1013,150 +930,6 @@ export class ReadContext {
       }
     }
     return localTypeMeta;
-  }
-
-  private serializerByTypeMeta(typeId: number, typeMeta: TypeMeta) {
-    if (typeId === TypeId.COMPATIBLE_STRUCT) {
-      return this.typeResolver.getSerializerById(
-        typeId,
-        typeMeta.getUserTypeId(),
-      );
-    }
-    return this.typeResolver.getSerializerByName(
-      `${typeMeta.getNs()}$${typeMeta.getTypeName()}`,
-    );
-  }
-
-  private updateAnySerializer(
-    serializer: Serializer | undefined | null,
-    typeMeta: TypeMeta,
-  ) {
-    if (!serializer) {
-      return this.genSerializerByTypeMetaRuntime(typeMeta);
-    }
-    const hash = serializer.getHash();
-    if (hash !== typeMeta.getHash()) {
-      return this.genSerializerByTypeMetaRuntime(typeMeta, serializer);
-    }
-    return serializer;
-  }
-
-  private readAnyTypeMetaSerializer(typeId: number, updateStruct: boolean) {
-    const idOrLen = this.reader.readVarUInt32();
-    let typeMeta: TypeMeta;
-    if (idOrLen & 1) {
-      typeMeta = this.readTypeMetaRef(idOrLen);
-      const resolved = this.serializerByTypeMeta(typeId, typeMeta);
-      return updateStruct
-        ? this.updateAnySerializer(resolved, typeMeta)
-        : resolved;
-    }
-
-    const dynamicTypeId = idOrLen >> 1;
-    const typeMetaStart = this.reader.readGetCursor();
-    const headerLow = this.reader.readUint32();
-    const headerHigh = this.reader.readUint32();
-    const cached = this.readTypeMetaHeaderHit(
-      dynamicTypeId,
-      headerLow,
-      headerHigh,
-    );
-    if (cached !== null) {
-      const resolved = this.serializerByTypeMeta(typeId, cached);
-      return updateStruct
-        ? this.updateAnySerializer(resolved, cached)
-        : resolved;
-    }
-
-    const header = (BigInt(headerHigh) << 32n) | BigInt(headerLow);
-    typeMeta = TypeMeta.fromBytesAfterHeader(
-      this.reader,
-      header,
-      this.typeResolver.config.maxTypeFields,
-      this.typeResolver.config.maxTypeMetaBytes,
-    );
-    const typeMetaEnd = this.reader.readGetCursor();
-    const resolved = this.serializerByTypeMeta(typeId, typeMeta);
-    if (!updateStruct && !resolved) {
-      return undefined;
-    }
-    const localTypeMeta = this.exactTypeMetaForSerializer(
-      typeMetaStart,
-      typeMetaEnd,
-      resolved,
-    );
-    if (localTypeMeta !== undefined) {
-      this.storeTypeMetaByHeader(headerLow, headerHigh, localTypeMeta, undefined);
-      this.typeMeta[dynamicTypeId] = localTypeMeta;
-      return resolved;
-    }
-    const typeKey = this.checkRemoteTypeMetaLimit(typeMeta);
-    const updated = updateStruct
-      ? this.updateAnySerializer(resolved, typeMeta)
-      : resolved;
-    if (!updated) {
-      return undefined;
-    }
-    this.storeTypeMetaByHeader(headerLow, headerHigh, typeMeta, typeKey);
-    this.typeMeta[dynamicTypeId] = typeMeta;
-    return updated;
-  }
-
-  detectAnySerializer() {
-    const typeId = this.reader.readUint8();
-    let userTypeId = -1;
-    if (TypeId.needsUserTypeId(typeId) && typeId !== TypeId.COMPATIBLE_STRUCT) {
-      userTypeId = this.reader.readVarUint32Small7();
-    }
-    let serializer: Serializer | undefined | null;
-
-    switch (typeId) {
-      case TypeId.COMPATIBLE_STRUCT:
-        serializer = this.readAnyTypeMetaSerializer(typeId, true);
-        break;
-      case TypeId.NAMED_ENUM:
-      case TypeId.NAMED_UNION:
-        if (this.isCompatible()) {
-          serializer = this.readAnyTypeMetaSerializer(typeId, false);
-        } else {
-          const ns = this.readNamespace();
-          const typeName = this.readTypeName();
-          serializer = this.typeResolver.getSerializerByName(
-            `${ns}$${typeName}`,
-          );
-        }
-        break;
-      case TypeId.NAMED_EXT:
-        if (this.isCompatible()) {
-          serializer = this.readAnyTypeMetaSerializer(typeId, false);
-        } else {
-          const ns = this.readNamespace();
-          const typeName = this.readTypeName();
-          serializer = this.typeResolver.getSerializerByName(
-            `${ns}$${typeName}`,
-          );
-        }
-        break;
-      case TypeId.NAMED_STRUCT:
-      case TypeId.NAMED_COMPATIBLE_STRUCT:
-        if (this.isCompatible() || typeId === TypeId.NAMED_COMPATIBLE_STRUCT) {
-          serializer = this.readAnyTypeMetaSerializer(typeId, true);
-        } else {
-          const ns = this.readNamespace();
-          const typeName = this.readTypeName();
-          serializer = this.typeResolver.getSerializerByName(
-            `${ns}$${typeName}`,
-          );
-        }
-        break;
-      default:
-        serializer = this.typeResolver.getSerializerById(typeId, userTypeId);
-        break;
-    }
-    if (!serializer) {
-      throw new Error(`can't find implements of typeId: ${typeId}`);
-    }
-    return serializer;
   }
 
   private canonicalTypeId(typeId: number): number {

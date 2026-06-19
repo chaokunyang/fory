@@ -40,7 +40,17 @@ function context(typeResolver = {}, config = {}) {
     useSliceString: false,
     ...config,
   };
-  return new ReadContext({ config: fullConfig, ...typeResolver }, fullConfig);
+  const resolver = {
+    config: fullConfig,
+    getSerializerById() {
+      return undefined;
+    },
+    getSerializerByName() {
+      return undefined;
+    },
+    ...typeResolver,
+  };
+  return new ReadContext(resolver, fullConfig);
 }
 
 function remoteStruct(
@@ -116,11 +126,34 @@ runTest("remote schema limit rejects extra versions", () => {
 });
 
 runTest("remote non-struct TypeMeta uses schema limit", () => {
-  const readContext = context();
+  const readContext = context({
+    getSerializerByName(name) {
+      return name === "example$SharedEnum" ? {} : undefined;
+    },
+  });
   readTypeMeta(readContext, remoteNamedNonStruct("SharedEnum", TypeId.NAMED_ENUM));
   assert.throws(
     () => readTypeMeta(readContext, remoteNamedNonStruct("SharedEnum", TypeId.NAMED_EXT)),
     /maxSchemaVersionsPerType/,
+  );
+});
+
+runTest("failed non-struct TypeMeta does not consume schema limit", () => {
+  let registered = false;
+  const readContext = context({
+    getSerializerByName(name) {
+      return registered && name === "example$SharedEnum" ? {} : undefined;
+    },
+  });
+
+  assert.throws(
+    () => readTypeMeta(readContext, remoteNamedNonStruct("SharedEnum", TypeId.NAMED_ENUM)),
+    /can't find serializer/,
+  );
+
+  registered = true;
+  assert.doesNotThrow(
+    () => readTypeMeta(readContext, remoteNamedNonStruct("SharedEnum", TypeId.NAMED_EXT)),
   );
 });
 
@@ -136,8 +169,8 @@ runTest("exact local non-struct TypeMeta uses schema limit", () => {
     computeTypeId(typeInfo) {
       return typeInfo.typeId;
     },
-    getSerializerByHash(hash) {
-      return hash === enumMeta.getHash() ? localSerializer : undefined;
+    getSerializerByName(name) {
+      return name === "example$SharedEnum" ? localSerializer : undefined;
     },
   });
 
@@ -196,7 +229,11 @@ runTest("failed compatible TypeMeta does not consume schema limit", () => {
     { namespace: "example", typeName: "Shared" },
     { value: Type.int32({ encoding: "fixed" }) },
   );
+  const localHash = TypeMeta.fromTypeInfo(localTypeInfo).getHash();
   const original = {
+    getHash() {
+      return localHash;
+    },
     getTypeInfo() {
       return localTypeInfo;
     },
@@ -216,8 +253,6 @@ runTest("failed compatible TypeMeta does not consume schema limit", () => {
       };
     },
   });
-  const localHash = TypeMeta.fromTypeInfo(localTypeInfo).getHash();
-
   assert.throws(
     () => readCompatibleStructSerializer(
       readContext,
@@ -240,12 +275,15 @@ runTest("exact local TypeMeta bypasses schema limit", () => {
     { namespace: "example", typeName: "Shared" },
     { value: Type.int32({ encoding: "fixed" }) },
   );
+  const localHash = TypeMeta.fromTypeInfo(localTypeInfo).getHash();
   const original = {
+    getHash() {
+      return localHash;
+    },
     getTypeInfo() {
       return localTypeInfo;
     },
   };
-  const localHash = TypeMeta.fromTypeInfo(localTypeInfo).getHash();
   const readContext = context({
     computeTypeId(typeInfo) {
       return typeInfo.typeId;
@@ -253,8 +291,8 @@ runTest("exact local TypeMeta bypasses schema limit", () => {
     getSerializerById() {
       return undefined;
     },
-    getSerializerByHash(hash) {
-      return hash === localHash ? original : undefined;
+    getSerializerByName(name) {
+      return name === "example$Shared" ? original : undefined;
     },
     generateReadSerializer(typeInfo) {
       return {
@@ -283,18 +321,28 @@ runTest("exact local TypeMeta does not consume schema limit", () => {
     { namespace: "example", typeName: "Shared" },
     { value: Type.int32({ encoding: "fixed" }) },
   );
+  const localHash = TypeMeta.fromTypeInfo(localTypeInfo).getHash();
   const original = {
+    getHash() {
+      return localHash;
+    },
     getTypeInfo() {
       return localTypeInfo;
     },
   };
-  const localHash = TypeMeta.fromTypeInfo(localTypeInfo).getHash();
   const readContext = context({
     computeTypeId(typeInfo) {
       return typeInfo.typeId;
     },
-    getSerializerByHash(hash) {
-      return hash === localHash ? original : undefined;
+    getSerializerByName(name) {
+      return name === "example$Shared" ? original : undefined;
+    },
+    generateReadSerializer(typeInfo) {
+      return {
+        getTypeInfo() {
+          return typeInfo;
+        },
+      };
     },
   });
 

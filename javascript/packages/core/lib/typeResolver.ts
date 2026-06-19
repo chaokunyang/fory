@@ -324,21 +324,6 @@ export default class TypeResolver {
     return this.customSerializer.get(typeIdOrName);
   }
 
-  getSerializerByHash(hash: number) {
-    for (let i = 0; i < this.internalSerializer.length; i++) {
-      const serializer = this.internalSerializer[i];
-      if (serializer?._initialized && serializer.getHash() === hash) {
-        return serializer;
-      }
-    }
-    for (const serializer of this.customSerializer.values()) {
-      if (serializer?._initialized && serializer.getHash() === hash) {
-        return serializer;
-      }
-    }
-    return undefined;
-  }
-
   getSerializerByData(v: any) {
     if (v === null || v === undefined) {
       return null;

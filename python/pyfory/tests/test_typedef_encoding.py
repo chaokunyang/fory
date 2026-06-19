@@ -442,10 +442,10 @@ def test_remote_schema_limit_rejects_extra_versions(xlang):
 
     _read_remote_typedef(reader, first_type_id, first_typedef)
 
-    generated_class_count = typedef_decoder._generated_class_count
+    second_header = Buffer(second_typedef).read_int64()
     with pytest.raises(ValueError, match="max_schema_versions_per_type"):
         _read_remote_typedef(reader, second_type_id, second_typedef)
-    assert typedef_decoder._generated_class_count == generated_class_count
+    assert second_header not in reader.type_resolver._meta_shared_type_info
 
 
 @pytest.mark.parametrize("xlang", [False, True])

@@ -52,9 +52,7 @@ from pyfory._fory import NO_USER_TYPE_ID
 from pyfory.meta.metastring import MetaStringDecoder, Encoding
 
 
-MAX_GENERATED_CLASSES = 1000
 MAX_TYPEDEF_BODY_SIZE = (1 << 31) - 1
-_generated_class_count = 0
 
 
 # Meta string decoders
@@ -92,8 +90,6 @@ def decode_typedef(buffer: Buffer, resolver, header=None) -> TypeDef:
     Returns:
         The decoded TypeDef.
     """
-    global _generated_class_count
-
     # Read global binary header
     if header is None:
         header = buffer.read_int64()
@@ -196,14 +192,7 @@ def decode_typedef(buffer: Buffer, resolver, header=None) -> TypeDef:
     if type_cls is None and is_struct_typedef_kind(type_id):
         if getattr(resolver, "strict", False) and not getattr(resolver, "_allow_unregistered_typedef", False):
             raise ValueError(f"TypeDef {name} is not registered in strict mode")
-        # Check generated class count limit
-        if _generated_class_count >= MAX_GENERATED_CLASSES:
-            raise ValueError(
-                f"Exceeded maximum number of dynamically generated classes ({MAX_GENERATED_CLASSES}). "
-                "This may indicate malicious data causing memory issues."
-            )
         resolver._check_remote_type_def_meta(type_id, namespace, typename, user_type_id)
-        _generated_class_count += 1
         # Generate dynamic dataclass from field definitions
         field_definitions = [(field_info.name, Any) for field_info in field_infos]
         # Use a valid Python identifier for class name

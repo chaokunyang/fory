@@ -138,8 +138,7 @@ public final class Fory {
     }
   }
 
-  public func deserialize<T: Serializer>(from buffer: ByteBuffer, as _: T.Type = T.self) throws -> T
-  {
+  public func deserialize<T: Serializer>(from buffer: ByteBuffer, as _: T.Type = T.self) throws -> T {
     try deserializeRoot(
       from: buffer
     ) { context in
@@ -194,8 +193,7 @@ public final class Fory {
 
   @_disfavoredOverload
   public func deserialize(_ data: Data, as _: (any Serializer).Type = (any Serializer).self) throws
-    -> any Serializer
-  {
+    -> any Serializer {
     try deserializeRoot(
       data: data
     ) { context in
@@ -232,8 +230,7 @@ public final class Fory {
 
   @_disfavoredOverload
   public func deserialize(_ data: Data, as _: [String: Any].Type = [String: Any].self) throws
-    -> [String: Any]
-  {
+    -> [String: Any] {
     try deserializeRoot(
       data: data
     ) { context in
@@ -251,8 +248,7 @@ public final class Fory {
 
   @_disfavoredOverload
   public func deserialize(_ data: Data, as _: [Int32: Any].Type = [Int32: Any].self) throws
-    -> [Int32: Any]
-  {
+    -> [Int32: Any] {
     try deserializeRoot(
       data: data
     ) { context in
@@ -270,8 +266,7 @@ public final class Fory {
 
   @_disfavoredOverload
   public func deserialize(_ data: Data, as _: [AnyHashable: Any].Type = [AnyHashable: Any].self)
-    throws -> [AnyHashable: Any]
-  {
+    throws -> [AnyHashable: Any] {
     try deserializeRoot(
       data: data
     ) { context in
@@ -314,8 +309,7 @@ public final class Fory {
 
   @_disfavoredOverload
   public func deserialize(from buffer: ByteBuffer, as _: AnyObject.Type = AnyObject.self) throws
-    -> AnyObject
-  {
+    -> AnyObject {
     try deserializeRoot(
       from: buffer
     ) { context in
@@ -367,8 +361,7 @@ public final class Fory {
 
   @_disfavoredOverload
   public func deserialize(from buffer: ByteBuffer, as _: [String: Any].Type = [String: Any].self)
-    throws -> [String: Any]
-  {
+    throws -> [String: Any] {
     try deserializeRoot(
       from: buffer
     ) { context in
@@ -394,8 +387,7 @@ public final class Fory {
 
   @_disfavoredOverload
   public func deserialize(from buffer: ByteBuffer, as _: [Int32: Any].Type = [Int32: Any].self)
-    throws -> [Int32: Any]
-  {
+    throws -> [Int32: Any] {
     try deserializeRoot(
       from: buffer
     ) { context in

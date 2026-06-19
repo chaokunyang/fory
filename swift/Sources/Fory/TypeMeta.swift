@@ -353,7 +353,8 @@ public final class TypeMeta: Equatable, @unchecked Sendable {
     }
     if metaSize > maxTypeMetaBytes {
       throw ForyError.invalidData(
-        "Type metadata body size \(metaSize) exceeds maxTypeMetaBytes \(maxTypeMetaBytes). The data may be malicious. If the data is not malicious, please increase maxTypeMetaBytes."
+        "Type metadata body size \(metaSize) exceeds maxTypeMetaBytes \(maxTypeMetaBytes). "
+          + "The data may be malicious. If the data is not malicious, please increase maxTypeMetaBytes."
       )
     }
 
@@ -382,7 +383,8 @@ public final class TypeMeta: Equatable, @unchecked Sendable {
       }
       if numFields > maxTypeFields {
         throw ForyError.invalidData(
-          "Type metadata field count \(numFields) exceeds maxTypeFields \(maxTypeFields). The data may be malicious. If the data is not malicious, please increase maxTypeFields."
+          "Type metadata field count \(numFields) exceeds maxTypeFields \(maxTypeFields). "
+            + "The data may be malicious. If the data is not malicious, please increase maxTypeFields."
         )
       }
       if registerByName {

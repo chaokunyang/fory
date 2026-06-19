@@ -132,8 +132,7 @@ private func encodedTypeDefHeaderHash(_ bytes: [UInt8]) throws -> UInt64 {
 
 private func fieldNeedsTypeInfo(_ fieldType: TypeMeta.FieldType) -> Bool {
   if let typeID = TypeId(rawValue: fieldType.typeID),
-    TypeId.needsTypeInfoForField(typeID)
-  {
+    TypeId.needsTypeInfoForField(typeID) {
     return true
   }
   return fieldType.generics.contains { fieldNeedsTypeInfo($0) }
@@ -144,8 +143,7 @@ private func encodedTypeDefHasUserTypeFields(_ fields: [TypeMeta.FieldInfo]) -> 
 }
 
 @inline(__always)
-private func readRegisteredValue<T: Serializer>(_ context: ReadContext, as type: T.Type) throws -> T
-{
+private func readRegisteredValue<T: Serializer>(_ context: ReadContext, as type: T.Type) throws -> T {
   try T.foryRead(
     context,
     refMode: T.isRefType ? .tracking : .none,
@@ -384,8 +382,7 @@ public final class TypeInfo: @unchecked Sendable {
     }
     if context.compatible
       && (compatibleWireTypeID == .compatibleStruct
-        || compatibleWireTypeID == .namedCompatibleStruct)
-    {
+        || compatibleWireTypeID == .namedCompatibleStruct) {
       return try compatibleReader(context, self)
     }
     if compatibleTypeMeta !== typeMeta {
@@ -469,8 +466,7 @@ final class TypeResolver {
         registerByName: false,
         evolving: evolving,
         typeName: (namespace: "", name: "")
-      )
-    {
+      ) {
       return
     }
 
@@ -526,8 +522,7 @@ final class TypeResolver {
         registerByName: true,
         evolving: evolving,
         typeName: (namespace: namespace, name: typeName)
-      )
-    {
+      ) {
       return
     }
 
@@ -576,8 +571,7 @@ final class TypeResolver {
     let localTypeInfo = try requireTypeInfo(for: typeMeta)
     let exactLocalAllowed: Bool
     if let rawTypeID = typeMeta.typeID,
-      let typeID = TypeId(rawValue: rawTypeID)
-    {
+      let typeID = TypeId(rawValue: rawTypeID) {
       switch typeID {
       case .structType, .compatibleStruct, .namedStruct, .namedCompatibleStruct:
         exactLocalAllowed = true
@@ -590,8 +584,7 @@ final class TypeResolver {
     if exactLocalAllowed,
       let localTypeDefBytes = localTypeInfo.typeDefBytes,
       typeDefEnd - typeDefStart == localTypeDefBytes.count,
-      buffer.matchesBytes(start: typeDefStart, bytes: localTypeDefBytes)
-    {
+      buffer.matchesBytes(start: typeDefStart, bytes: localTypeDefBytes) {
       typeInfoByHeader.set(localTypeInfo, for: header)
       return localTypeInfo
     }
@@ -621,7 +614,9 @@ final class TypeResolver {
     let maxSchemaVersionsPerType = config.maxSchemaVersionsPerType
     if versionsForType >= maxSchemaVersionsPerType {
       throw ForyError.invalidData(
-        "remote schema version limit exceeded for one type. The data may be malicious. If the data is not malicious, please increase maxSchemaVersionsPerType=\(maxSchemaVersionsPerType)"
+        "remote schema version limit exceeded for one type. The data may be malicious. "
+          + "If the data is not malicious, please increase "
+          + "maxSchemaVersionsPerType=\(maxSchemaVersionsPerType)"
       )
     }
     let acceptedTypeCount =
@@ -633,7 +628,9 @@ final class TypeResolver {
     )
     if totalAcceptedSchemaVersions >= globalLimit {
       throw ForyError.invalidData(
-        "remote schema version limit exceeded globally. The data may be malicious. If the data is not malicious, please increase maxAverageSchemaVersionsPerType=\(maxAverageSchemaVersionsPerType)"
+        "remote schema version limit exceeded globally. The data may be malicious. "
+          + "If the data is not malicious, please increase "
+          + "maxAverageSchemaVersionsPerType=\(maxAverageSchemaVersionsPerType)"
       )
     }
     return key
@@ -657,6 +654,16 @@ final class TypeResolver {
     }
     if let typeNameKey {
       byTypeName[typeNameKey] = typeInfo
+    }
+    if let typeMeta = typeInfo.typeMeta,
+      let typeDefHeader = typeInfo.typeDefHeader {
+      typeInfoByHeader.set(
+        TypeInfo(
+          dynamic: typeInfo,
+          compatibleTypeMeta: typeMeta
+        ),
+        for: typeDefHeader
+      )
     }
   }
 
@@ -729,8 +736,7 @@ final class TypeResolver {
         )
       }
       if existing.typeID != T.staticTypeId || existing.namespace.value != namespace
-        || existing.typeName.value != typeName
-      {
+        || existing.typeName.value != typeName {
         throw ForyError.invalidData(
           """
           \(type) registration conflict: existing name=\(existing.namespace.value)::\(existing.typeName.value), \

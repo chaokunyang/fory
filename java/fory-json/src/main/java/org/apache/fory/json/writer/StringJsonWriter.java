@@ -83,6 +83,8 @@ public final class StringJsonWriter extends JsonWriter {
   }
 
   public String toJson() {
+    // Non-Latin1 input chars are emitted as JSON unicode escapes, so the buffer always contains
+    // Latin1 JSON bytes before this zero-copy String construction.
     byte[] bytes = Arrays.copyOf(buffer, position);
     return StringSerializer.newBytesStringZeroCopy(StringLayout.LATIN1, bytes);
   }

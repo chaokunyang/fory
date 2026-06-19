@@ -17,18 +17,21 @@
  * under the License.
  */
 
-package org.apache.fory.json.serializer;
+package org.apache.fory.json.codec;
 
-import org.apache.fory.json.meta.JsonClassInfo;
 import org.apache.fory.json.meta.JsonFieldInfo;
+import org.apache.fory.reflect.ObjectInstantiator;
 
-/** Immutable metadata carrier shared by generated JSON object writers. */
-public abstract class JsonGeneratedObjectWriter {
-  protected final JsonFieldInfo[] fields;
-  protected final JsonClassInfo[] classInfos;
+public final class ObjectCodec extends BaseObjectCodec {
+  ObjectCodec(
+      Class<?> type,
+      JsonFieldInfo[] writeProperties,
+      JsonFieldInfo[] readProperties,
+      ObjectInstantiator<?> instantiator) {
+    super(type, writeProperties, readProperties, instantiator);
+  }
 
-  protected JsonGeneratedObjectWriter(JsonFieldInfo[] fields, JsonClassInfo[] classInfos) {
-    this.fields = fields;
-    this.classInfos = classInfos;
+  public GeneratedObjectCodec withWriters(ObjectWriters writers) {
+    return new GeneratedObjectCodec(this, writers);
   }
 }

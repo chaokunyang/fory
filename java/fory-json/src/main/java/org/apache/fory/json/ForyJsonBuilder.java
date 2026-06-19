@@ -19,10 +19,14 @@
 
 package org.apache.fory.json;
 
+import org.apache.fory.json.codec.CodecRegistry;
+import org.apache.fory.json.codec.JsonCodec;
+
 /** Builder for {@link ForyJson}. */
 public final class ForyJsonBuilder {
   private boolean writeNullFields;
   private boolean codegenEnabled = true;
+  private final CodecRegistry codecRegistry = new CodecRegistry();
 
   ForyJsonBuilder() {}
 
@@ -38,7 +42,13 @@ public final class ForyJsonBuilder {
     return this;
   }
 
+  /** Registers a custom JSON codec for {@code type}. */
+  public <T> ForyJsonBuilder registerCodec(Class<T> type, JsonCodec codec) {
+    codecRegistry.register(type, codec);
+    return this;
+  }
+
   public ForyJson build() {
-    return new ForyJson(writeNullFields, codegenEnabled);
+    return new ForyJson(writeNullFields, codegenEnabled, codecRegistry);
   }
 }

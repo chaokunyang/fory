@@ -20,37 +20,41 @@
 package org.apache.fory.json.resolver;
 
 import java.lang.reflect.Type;
-import java.util.Collection;
-import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import org.apache.fory.json.codec.BaseObjectCodec;
+import org.apache.fory.json.codec.CodecRegistry;
+import org.apache.fory.json.codec.CodecUtils;
+import org.apache.fory.json.codec.Codecs;
+import org.apache.fory.json.codec.JsonCodec;
+import org.apache.fory.json.codec.ObjectCodec;
+import org.apache.fory.json.codec.ObjectWriters;
 import org.apache.fory.json.codegen.JsonCodegen;
-import org.apache.fory.json.meta.JsonClassInfo;
-import org.apache.fory.json.reader.JsonReader;
-import org.apache.fory.json.serializer.JsonSerializers;
 import org.apache.fory.json.writer.JsonWriter;
 import org.apache.fory.json.writer.StringJsonWriter;
 import org.apache.fory.json.writer.Utf8JsonWriter;
 
 public final class JsonTypeResolver {
-  private final ConcurrentMap<Class<?>, JsonClassInfo> classes = new ConcurrentHashMap<>();
+  private final ConcurrentMap<Class<?>, BaseObjectCodec> objectCodecs = new ConcurrentHashMap<>();
   private final ConcurrentMap<Object, JsonTypeInfo> typeInfos = new ConcurrentHashMap<>();
+  private final CodecRegistry registry;
   private final JsonCodegen codegen;
 
-  public JsonTypeResolver(boolean codegenEnabled, boolean writeNullFields) {
+  public JsonTypeResolver(boolean codegenEnabled, boolean writeNullFields, CodecRegistry registry) {
+    this.registry = registry.copy();
     codegen = codegenEnabled ? new JsonCodegen(writeNullFields) : null;
   }
 
-  public JsonClassInfo getClassInfo(Class<?> type) {
-    JsonClassInfo classInfo = classes.get(type);
-    if (classInfo != null) {
-      return classInfo;
+  public BaseObjectCodec getObjectCodec(Class<?> type) {
+    BaseObjectCodec codec = objectCodecs.get(type);
+    if (codec != null) {
+      return codec;
     }
     return buildAndPublish(type);
   }
 
   public JsonTypeInfo getTypeInfo(Type declaredType, Class<?> fallback) {
-    Class<?> rawType = JsonSerializers.rawType(declaredType, fallback);
+    Class<?> rawType = CodecUtils.rawType(declaredType, fallback);
     Object key = typeInfoKey(declaredType, rawType);
     JsonTypeInfo typeInfo = typeInfos.get(key);
     if (typeInfo != null) {
@@ -64,7 +68,8 @@ public final class JsonTypeResolver {
       writer.writeNull();
       return;
     }
-    getTypeInfo(declaredType, value.getClass()).write(writer, value, this);
+    JsonTypeInfo typeInfo = getTypeInfo(declaredType, value.getClass());
+    typeInfo.codec().write(writer, value, this);
   }
 
   public void writeStringValue(StringJsonWriter writer, Object value, Type declaredType) {
@@ -72,7 +77,8 @@ public final class JsonTypeResolver {
       writer.writeNull();
       return;
     }
-    getTypeInfo(declaredType, value.getClass()).writeString(writer, value, this);
+    JsonTypeInfo typeInfo = getTypeInfo(declaredType, value.getClass());
+    typeInfo.codec().writeString(writer, value, this);
   }
 
   public void writeUtf8Value(Utf8JsonWriter writer, Object value, Type declaredType) {
@@ -80,32 +86,40 @@ public final class JsonTypeResolver {
       writer.writeNull();
       return;
     }
-    getTypeInfo(declaredType, value.getClass()).writeUtf8(writer, value, this);
+    JsonTypeInfo typeInfo = getTypeInfo(declaredType, value.getClass());
+    typeInfo.codec().writeUtf8(writer, value, this);
   }
 
-  public Object readValue(JsonReader reader, Type declaredType, Class<?> fallback) {
-    return getTypeInfo(declaredType, fallback).read(reader, this);
+  public Object readValue(
+      org.apache.fory.json.reader.JsonReader reader, Type declaredType, Class<?> fallback) {
+    JsonTypeInfo typeInfo = getTypeInfo(declaredType, fallback);
+    return typeInfo.codec().read(reader, typeInfo, this);
   }
 
-  private synchronized JsonClassInfo buildAndPublish(Class<?> type) {
-    JsonClassInfo cached = classes.get(type);
+  private synchronized BaseObjectCodec buildAndPublish(Class<?> type) {
+    BaseObjectCodec cached = objectCodecs.get(type);
     if (cached != null) {
       return cached;
     }
-    JsonClassInfo classInfo = JsonClassInfo.build(type);
-    // Codegen may ask for nested class metadata that points back to this type.
-    // Publishing metadata before compiling the writer keeps that recursion cache-owned.
-    classes.put(type, classInfo);
+    ObjectCodec codec = BaseObjectCodec.build(type);
+    // Codegen may ask for nested object metadata that points back to this type.
+    // Publishing before compiling keeps recursive ownership in this resolver cache.
+    objectCodecs.put(type, codec);
     try {
-      classInfo.resolveTypes(this);
+      codec.resolveTypes(this);
       if (codegen != null) {
-        classInfo.setObjectWriters(codegen.compile(classInfo, this));
+        ObjectWriters writers = codegen.compile(codec, this);
+        if (writers != null) {
+          BaseObjectCodec generated = codec.withWriters(writers);
+          objectCodecs.put(type, generated);
+          return generated;
+        }
       }
+      return codec;
     } catch (RuntimeException | Error e) {
-      classes.remove(type, classInfo);
+      objectCodecs.remove(type, codec);
       throw e;
     }
-    return classInfo;
   }
 
   private synchronized JsonTypeInfo buildAndPublishTypeInfo(
@@ -120,36 +134,11 @@ public final class JsonTypeResolver {
   }
 
   private JsonTypeInfo buildTypeInfo(Class<?> rawType, Type declaredType) {
-    if (rawType == Object.class) {
-      return new JsonTypeInfo.NaturalInfo();
-    } else if (rawType == String.class) {
-      return new JsonTypeInfo.StringInfo(rawType);
-    } else if (rawType == boolean.class || rawType == Boolean.class) {
-      return new JsonTypeInfo.BooleanInfo(rawType);
-    } else if (rawType == int.class || rawType == Integer.class) {
-      return new JsonTypeInfo.IntInfo(rawType);
-    } else if (rawType == long.class || rawType == Long.class) {
-      return new JsonTypeInfo.LongInfo(rawType);
-    } else if (rawType == short.class || rawType == Short.class) {
-      return new JsonTypeInfo.ShortInfo(rawType);
-    } else if (rawType == byte.class || rawType == Byte.class) {
-      return new JsonTypeInfo.ByteInfo(rawType);
-    } else if (rawType == char.class || rawType == Character.class) {
-      return new JsonTypeInfo.CharInfo(rawType);
-    } else if (rawType == float.class || rawType == Float.class) {
-      return new JsonTypeInfo.FloatInfo(rawType);
-    } else if (rawType == double.class || rawType == Double.class) {
-      return new JsonTypeInfo.DoubleInfo(rawType);
-    } else if (rawType.isEnum()) {
-      return new JsonTypeInfo.EnumInfo(rawType);
-    } else if (rawType.isArray()) {
-      return new JsonTypeInfo.ArrayInfo(rawType);
-    } else if (Collection.class.isAssignableFrom(rawType)) {
-      return new JsonTypeInfo.CollectionInfo(rawType, declaredType);
-    } else if (Map.class.isAssignableFrom(rawType)) {
-      return new JsonTypeInfo.MapInfo(rawType, declaredType);
+    JsonCodec codec = Codecs.forResolvedType(rawType, declaredType, this, registry);
+    if (codec == null) {
+      codec = getObjectCodec(rawType);
     }
-    return JsonTypeInfo.objectInfo(rawType, this);
+    return new JsonTypeInfo(declaredType, rawType, Codecs.kind(rawType), codec);
   }
 
   private static Object typeInfoKey(Type declaredType, Class<?> rawType) {

@@ -17,7 +17,7 @@
  * under the License.
  */
 
-package org.apache.fory.json.meta;
+package org.apache.fory.json.codec;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Member;
@@ -31,26 +31,26 @@ import java.util.TreeMap;
 import org.apache.fory.annotation.Expose;
 import org.apache.fory.json.ForyJsonException;
 import org.apache.fory.json.annotation.JsonIgnore;
+import org.apache.fory.json.meta.JsonFieldInfo;
+import org.apache.fory.json.meta.JsonFieldTable;
+import org.apache.fory.json.meta.JsonMemberAccessor;
+import org.apache.fory.json.reader.JsonReader;
+import org.apache.fory.json.resolver.JsonTypeInfo;
 import org.apache.fory.json.resolver.JsonTypeResolver;
-import org.apache.fory.json.serializer.JsonObjectWriters;
-import org.apache.fory.json.serializer.JsonStringObjectWriter;
-import org.apache.fory.json.serializer.JsonUtf8ObjectWriter;
 import org.apache.fory.json.writer.JsonWriter;
 import org.apache.fory.json.writer.StringJsonWriter;
 import org.apache.fory.json.writer.Utf8JsonWriter;
 import org.apache.fory.reflect.ObjectInstantiator;
 import org.apache.fory.reflect.ObjectInstantiators;
 
-public final class JsonClassInfo {
-  private final Class<?> type;
-  private final JsonFieldInfo[] writeProperties;
-  private final JsonFieldInfo[] readProperties;
-  private final JsonFieldTable readTable;
-  private final ObjectInstantiator<?> instantiator;
-  private JsonStringObjectWriter stringWriter;
-  private JsonUtf8ObjectWriter utf8Writer;
+public abstract class BaseObjectCodec extends AbstractCodec {
+  protected final Class<?> type;
+  protected final JsonFieldInfo[] writeProperties;
+  protected final JsonFieldInfo[] readProperties;
+  protected final JsonFieldTable readTable;
+  protected final ObjectInstantiator<?> instantiator;
 
-  private JsonClassInfo(
+  protected BaseObjectCodec(
       Class<?> type,
       JsonFieldInfo[] writeProperties,
       JsonFieldInfo[] readProperties,
@@ -62,7 +62,7 @@ public final class JsonClassInfo {
     this.instantiator = instantiator;
   }
 
-  public static JsonClassInfo build(Class<?> type) {
+  public static ObjectCodec build(Class<?> type) {
     if (type.isInterface()
         || Modifier.isAbstract(type.getModifiers())
         || type.isPrimitive()
@@ -127,23 +127,23 @@ public final class JsonClassInfo {
     }
     JsonFieldInfo[] writeArray = writes.toArray(new JsonFieldInfo[0]);
     JsonFieldInfo[] readArray = reads.toArray(new JsonFieldInfo[0]);
-    return new JsonClassInfo(
+    return new ObjectCodec(
         type, writeArray, readArray, ObjectInstantiators.createObjectInstantiator(type));
   }
 
-  public Class<?> type() {
+  public final Class<?> type() {
     return type;
   }
 
-  public JsonFieldInfo[] writeProperties() {
+  public final JsonFieldInfo[] writeProperties() {
     return writeProperties;
   }
 
-  public JsonFieldTable readTable() {
+  public final JsonFieldTable readTable() {
     return readTable;
   }
 
-  public void resolveTypes(JsonTypeResolver typeResolver) {
+  public final void resolveTypes(JsonTypeResolver typeResolver) {
     for (JsonFieldInfo property : writeProperties) {
       property.resolveTypes(typeResolver);
     }
@@ -152,118 +152,141 @@ public final class JsonClassInfo {
     }
   }
 
-  public Object newInstance() {
+  public final Object newInstance() {
     return instantiator.newInstance();
   }
 
-  public void setObjectWriters(JsonObjectWriters objectWriters) {
-    if (objectWriters == null) {
-      return;
+  @Override
+  final void writeNonNull(JsonWriter writer, Object value, JsonTypeResolver resolver) {
+    Class<?> valueClass = value.getClass();
+    if (valueClass == type) {
+      writeObject(writer, value, resolver);
+    } else {
+      resolver.writeValue(writer, value, valueClass);
     }
-    stringWriter = objectWriters.stringWriter();
-    utf8Writer = objectWriters.utf8Writer();
   }
 
-  public boolean hasObjectWriter() {
-    return stringWriter != null && utf8Writer != null;
+  @Override
+  void writeStringNonNull(StringJsonWriter writer, Object value, JsonTypeResolver resolver) {
+    Class<?> valueClass = value.getClass();
+    if (valueClass == type) {
+      writeStringObject(writer, value, resolver);
+    } else {
+      resolver.writeStringValue(writer, value, valueClass);
+    }
   }
 
-  public JsonStringObjectWriter stringWriter() {
-    return stringWriter;
+  @Override
+  void writeUtf8NonNull(Utf8JsonWriter writer, Object value, JsonTypeResolver resolver) {
+    Class<?> valueClass = value.getClass();
+    if (valueClass == type) {
+      writeUtf8Object(writer, value, resolver);
+    } else {
+      resolver.writeUtf8Value(writer, value, valueClass);
+    }
   }
 
-  public JsonUtf8ObjectWriter utf8Writer() {
-    return utf8Writer;
+  @Override
+  final Object readNonNull(JsonReader reader, JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
+    Object object = newInstance();
+    reader.expect('{');
+    if (reader.consume('}')) {
+      return object;
+    }
+    do {
+      String name = reader.readString();
+      reader.expect(':');
+      JsonFieldInfo property = readTable.get(name);
+      if (property == null) {
+        reader.skipValue();
+      } else {
+        property.read(reader, object, resolver);
+      }
+    } while (reader.consume(','));
+    reader.expect('}');
+    return object;
   }
 
-  public void write(JsonWriter writer, Object value, JsonTypeResolver typeResolver) {
+  protected final void writeObject(JsonWriter writer, Object value, JsonTypeResolver resolver) {
     writer.writeObjectStart();
     int written = 0;
     JsonFieldInfo[] properties = writeProperties;
     int length = properties.length;
     int i = 0;
     while (i + 4 <= length) {
-      if (properties[i++].write(writer, value, typeResolver, written)) {
+      if (properties[i++].write(writer, value, resolver, written)) {
         written++;
       }
-      if (properties[i++].write(writer, value, typeResolver, written)) {
+      if (properties[i++].write(writer, value, resolver, written)) {
         written++;
       }
-      if (properties[i++].write(writer, value, typeResolver, written)) {
+      if (properties[i++].write(writer, value, resolver, written)) {
         written++;
       }
-      if (properties[i++].write(writer, value, typeResolver, written)) {
+      if (properties[i++].write(writer, value, resolver, written)) {
         written++;
       }
     }
     while (i < length) {
-      if (properties[i++].write(writer, value, typeResolver, written)) {
+      if (properties[i++].write(writer, value, resolver, written)) {
         written++;
       }
     }
     writer.writeObjectEnd();
   }
 
-  public void write(StringJsonWriter writer, Object value, JsonTypeResolver typeResolver) {
-    JsonStringObjectWriter generatedWriter = stringWriter;
-    if (generatedWriter != null) {
-      generatedWriter.writeString(writer, value, typeResolver);
-      return;
-    }
+  protected final void writeStringObject(
+      StringJsonWriter writer, Object value, JsonTypeResolver resolver) {
     writer.writeObjectStart();
     int written = 0;
     JsonFieldInfo[] properties = writeProperties;
     int length = properties.length;
     int i = 0;
     while (i + 4 <= length) {
-      if (properties[i++].writeString(writer, value, typeResolver, written)) {
+      if (properties[i++].writeString(writer, value, resolver, written)) {
         written++;
       }
-      if (properties[i++].writeString(writer, value, typeResolver, written)) {
+      if (properties[i++].writeString(writer, value, resolver, written)) {
         written++;
       }
-      if (properties[i++].writeString(writer, value, typeResolver, written)) {
+      if (properties[i++].writeString(writer, value, resolver, written)) {
         written++;
       }
-      if (properties[i++].writeString(writer, value, typeResolver, written)) {
+      if (properties[i++].writeString(writer, value, resolver, written)) {
         written++;
       }
     }
     while (i < length) {
-      if (properties[i++].writeString(writer, value, typeResolver, written)) {
+      if (properties[i++].writeString(writer, value, resolver, written)) {
         written++;
       }
     }
     writer.writeObjectEnd();
   }
 
-  public void writeUtf8(Utf8JsonWriter writer, Object value, JsonTypeResolver typeResolver) {
-    JsonUtf8ObjectWriter generatedWriter = utf8Writer;
-    if (generatedWriter != null) {
-      generatedWriter.writeUtf8(writer, value, typeResolver);
-      return;
-    }
+  protected final void writeUtf8Object(
+      Utf8JsonWriter writer, Object value, JsonTypeResolver resolver) {
     writer.writeObjectStart();
     int written = 0;
     JsonFieldInfo[] properties = writeProperties;
     int length = properties.length;
     int i = 0;
     while (i + 4 <= length) {
-      if (properties[i++].writeUtf8(writer, value, typeResolver, written)) {
+      if (properties[i++].writeUtf8(writer, value, resolver, written)) {
         written++;
       }
-      if (properties[i++].writeUtf8(writer, value, typeResolver, written)) {
+      if (properties[i++].writeUtf8(writer, value, resolver, written)) {
         written++;
       }
-      if (properties[i++].writeUtf8(writer, value, typeResolver, written)) {
+      if (properties[i++].writeUtf8(writer, value, resolver, written)) {
         written++;
       }
-      if (properties[i++].writeUtf8(writer, value, typeResolver, written)) {
+      if (properties[i++].writeUtf8(writer, value, resolver, written)) {
         written++;
       }
     }
     while (i < length) {
-      if (properties[i++].writeUtf8(writer, value, typeResolver, written)) {
+      if (properties[i++].writeUtf8(writer, value, resolver, written)) {
         written++;
       }
     }

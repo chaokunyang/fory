@@ -30,13 +30,13 @@ import java.util.concurrent.atomic.AtomicInteger;
 import org.apache.fory.codegen.CodeGenerator;
 import org.apache.fory.codegen.CompileUnit;
 import org.apache.fory.json.ForyJsonException;
-import org.apache.fory.json.meta.JsonClassInfo;
+import org.apache.fory.json.codec.BaseObjectCodec;
+import org.apache.fory.json.codec.ObjectWriters;
+import org.apache.fory.json.codec.StringObjectWriter;
+import org.apache.fory.json.codec.Utf8ObjectWriter;
 import org.apache.fory.json.meta.JsonFieldInfo;
 import org.apache.fory.json.meta.JsonFieldKind;
 import org.apache.fory.json.resolver.JsonTypeResolver;
-import org.apache.fory.json.serializer.JsonObjectWriters;
-import org.apache.fory.json.serializer.JsonStringObjectWriter;
-import org.apache.fory.json.serializer.JsonUtf8ObjectWriter;
 import org.apache.fory.platform.JdkVersion;
 
 public final class JsonCodegen {
@@ -53,64 +53,64 @@ public final class JsonCodegen {
     codeGenerator = new CodeGenerator(jsonLoader);
   }
 
-  public JsonObjectWriters compile(JsonClassInfo classInfo, JsonTypeResolver typeResolver) {
-    Class<?> type = classInfo.type();
+  public ObjectWriters compile(BaseObjectCodec objectCodec, JsonTypeResolver typeResolver) {
+    Class<?> type = objectCodec.type();
     if (!canCompile(type)) {
       return null;
     }
-    JsonFieldInfo[] properties = classInfo.writeProperties();
+    JsonFieldInfo[] properties = objectCodec.writeProperties();
     for (int i = 0; i < properties.length; i++) {
       if (!canCompile(properties[i])) {
         return null;
       }
     }
     String className = className(type);
-    JsonClassInfo[] nestedInfos = nestedInfos(classInfo, typeResolver);
-    JsonUtf8ObjectWriter utf8Writer =
-        (JsonUtf8ObjectWriter)
-            compileWriter(className + "_Utf8", type, properties, nestedInfos, true);
+    BaseObjectCodec[] nestedCodecs = nestedCodecs(objectCodec, typeResolver);
+    Utf8ObjectWriter utf8Writer =
+        (Utf8ObjectWriter) compileWriter(className + "_Utf8", type, properties, nestedCodecs, true);
     if (utf8Writer == null) {
       return null;
     }
-    JsonStringObjectWriter stringWriter =
-        (JsonStringObjectWriter)
-            compileWriter(className + "_String", type, properties, nestedInfos, false);
+    StringObjectWriter stringWriter =
+        (StringObjectWriter)
+            compileWriter(className + "_String", type, properties, nestedCodecs, false);
     if (stringWriter == null) {
       return null;
     }
-    return new JsonObjectWriters(stringWriter, utf8Writer);
+    return new ObjectWriters(stringWriter, utf8Writer);
   }
 
   private Object compileWriter(
       String className,
       Class<?> type,
       JsonFieldInfo[] properties,
-      JsonClassInfo[] nestedInfos,
+      BaseObjectCodec[] nestedCodecs,
       boolean utf8) {
     String code = genCode(className, type, properties, utf8);
     try {
       CompileUnit unit = new CompileUnit(PACKAGE, className, code, JsonCodegen.class);
       Class<?> writerClass = codeGenerator.compileAndLoad(unit, state -> state.lock.lock());
       Constructor<?> constructor =
-          writerClass.getDeclaredConstructor(JsonFieldInfo[].class, JsonClassInfo[].class);
+          writerClass.getDeclaredConstructor(JsonFieldInfo[].class, BaseObjectCodec[].class);
       constructor.setAccessible(true);
-      return constructor.newInstance(properties, nestedInfos);
+      return constructor.newInstance(properties, nestedCodecs);
     } catch (Throwable e) {
       throw new ForyJsonException("Cannot compile generated JSON writer " + className, e);
     }
   }
 
-  private JsonClassInfo[] nestedInfos(JsonClassInfo classInfo, JsonTypeResolver typeResolver) {
-    JsonFieldInfo[] properties = classInfo.writeProperties();
-    JsonClassInfo[] nestedInfos = new JsonClassInfo[properties.length];
-    Class<?> type = classInfo.type();
+  private BaseObjectCodec[] nestedCodecs(
+      BaseObjectCodec objectCodec, JsonTypeResolver typeResolver) {
+    JsonFieldInfo[] properties = objectCodec.writeProperties();
+    BaseObjectCodec[] nestedCodecs = new BaseObjectCodec[properties.length];
+    Class<?> type = objectCodec.type();
     for (int i = 0; i < properties.length; i++) {
       Class<?> nestedType = nestedType(properties[i]);
       if (nestedType != null && nestedType != type) {
-        nestedInfos[i] = typeResolver.getClassInfo(nestedType);
+        nestedCodecs[i] = typeResolver.getObjectCodec(nestedType);
       }
     }
-    return nestedInfos;
+    return nestedCodecs;
   }
 
   private static Class<?> nestedType(JsonFieldInfo property) {
@@ -175,25 +175,24 @@ public final class JsonCodegen {
     String typeName = sourceName(type);
     StringBuilder code = new StringBuilder(4096);
     code.append("package ").append(PACKAGE).append(";\n");
-    code.append("import org.apache.fory.json.meta.JsonClassInfo;\n");
+    code.append("import org.apache.fory.json.codec.BaseObjectCodec;\n");
     code.append("import org.apache.fory.json.meta.JsonFieldInfo;\n");
     code.append("import org.apache.fory.json.resolver.JsonTypeResolver;\n");
-    code.append("import org.apache.fory.json.serializer.JsonGeneratedObjectWriter;\n");
-    code.append("import org.apache.fory.json.serializer.JsonSerializers;\n");
-    code.append("import org.apache.fory.json.serializer.JsonStringObjectWriter;\n");
-    code.append("import org.apache.fory.json.serializer.JsonUtf8ObjectWriter;\n");
+    code.append("import org.apache.fory.json.codec.GeneratedObjectWriter;\n");
+    code.append("import org.apache.fory.json.codec.StringObjectWriter;\n");
+    code.append("import org.apache.fory.json.codec.Utf8ObjectWriter;\n");
     code.append("import org.apache.fory.json.writer.JsonNumberTokenCache;\n");
     code.append("import org.apache.fory.json.writer.JsonStringTokenCache;\n");
     code.append("import org.apache.fory.json.writer.StringJsonWriter;\n");
     code.append("import org.apache.fory.json.writer.Utf8JsonWriter;\n");
     code.append("final class ")
         .append(className)
-        .append(" extends JsonGeneratedObjectWriter implements ")
-        .append(utf8 ? "JsonUtf8ObjectWriter" : "JsonStringObjectWriter")
+        .append(" extends GeneratedObjectWriter implements ")
+        .append(utf8 ? "Utf8ObjectWriter" : "StringObjectWriter")
         .append(" {\n");
     boolean objectStartFused = canFuseObjectStart(properties);
     boolean[] useInfo = new boolean[properties.length];
-    boolean[] useClassInfo = new boolean[properties.length];
+    boolean[] useObjectCodec = new boolean[properties.length];
     boolean[] usePrefix = new boolean[properties.length];
     boolean[] useStringToken = new boolean[properties.length];
     boolean[] useElementToken = new boolean[properties.length];
@@ -201,7 +200,7 @@ public final class JsonCodegen {
     for (int i = 0; i < properties.length; i++) {
       JsonFieldInfo property = properties[i];
       useInfo[i] = usesPropertyInfo(property);
-      useClassInfo[i] = usesClassInfo(property);
+      useObjectCodec[i] = usesObjectCodec(property);
       usePrefix[i] = usesPrefix(property);
       useStringToken[i] = property.writeKind() == JsonFieldKind.STRING;
       useElementToken[i] =
@@ -211,8 +210,8 @@ public final class JsonCodegen {
       if (useInfo[i]) {
         code.append("  private final JsonFieldInfo p").append(i).append(";\n");
       }
-      if (useClassInfo[i]) {
-        code.append("  private final JsonClassInfo c").append(i).append(";\n");
+      if (useObjectCodec[i]) {
+        code.append("  private final BaseObjectCodec c").append(i).append(";\n");
       }
       if (usePrefix[i]) {
         if (utf8) {
@@ -235,14 +234,14 @@ public final class JsonCodegen {
     }
     code.append("  ")
         .append(className)
-        .append("(JsonFieldInfo[] properties, JsonClassInfo[] classInfos) {\n");
-    code.append("    super(properties, classInfos);\n");
+        .append("(JsonFieldInfo[] properties, BaseObjectCodec[] objectCodecs) {\n");
+    code.append("    super(properties, objectCodecs);\n");
     for (int i = 0; i < properties.length; i++) {
       if (useInfo[i]) {
         code.append("    this.p").append(i).append(" = properties[").append(i).append("];\n");
       }
-      if (useClassInfo[i]) {
-        code.append("    this.c").append(i).append(" = classInfos[").append(i).append("];\n");
+      if (useObjectCodec[i]) {
+        code.append("    this.c").append(i).append(" = objectCodecs[").append(i).append("];\n");
       }
       if (usePrefix[i]) {
         if (utf8) {
@@ -324,7 +323,7 @@ public final class JsonCodegen {
     }
   }
 
-  private static boolean usesClassInfo(JsonFieldInfo property) {
+  private static boolean usesObjectCodec(JsonFieldInfo property) {
     switch (property.writeKind()) {
       case COLLECTION:
         return isPojo(property.writeElementRawType());
@@ -731,24 +730,24 @@ public final class JsonCodegen {
         return;
       case ARRAY:
         code.append(indent)
-            .append(utf8 ? "JsonSerializers.writeUtf8Array" : "JsonSerializers.writeArray")
+            .append(prop)
+            .append(".writeTypeInfo().codec().")
+            .append(utf8 ? "writeUtf8" : "writeString")
             .append("(writer, ")
             .append(value)
-            .append(", ")
-            .append(prop)
-            .append(".writeArrayComponentType(), typeResolver);\n");
+            .append(", typeResolver);\n");
         return;
       case COLLECTION:
         writeCollection(code, ownerType, property, prop, value, utf8, indent);
         return;
       case MAP:
         code.append(indent)
-            .append(utf8 ? "JsonSerializers.writeUtf8Map" : "JsonSerializers.writeMap")
-            .append("(writer, (java.util.Map<?, ?>) ")
-            .append(value)
-            .append(", ")
             .append(prop)
-            .append(".writeMapValueType(), typeResolver);\n");
+            .append(".writeTypeInfo().codec().")
+            .append(utf8 ? "writeUtf8" : "writeString")
+            .append("(writer, ")
+            .append(value)
+            .append(", typeResolver);\n");
         return;
       default:
         writeObject(code, ownerType, property, prop, value, utf8, indent);
@@ -839,13 +838,13 @@ public final class JsonCodegen {
       return;
     }
     if (isPojo(elementType)) {
-      boolean hasElementInfo = elementType != ownerType;
+      boolean hasElementCodec = elementType != ownerType;
       code.append(indent)
           .append("writer.writeArrayStart();\n")
           .append(indent)
           .append("int elementIndex = 0;\n")
           .append(indent)
-          .append("JsonClassInfo elementInfo = c")
+          .append("BaseObjectCodec elementCodec = c")
           .append(prop.substring(1))
           .append(";\n")
           .append(indent);
@@ -869,10 +868,10 @@ public final class JsonCodegen {
           .append(indent)
           .append("    } else if (element.getClass() == ")
           .append(sourceName(elementType))
-          .append(hasElementInfo ? ".class) {\n" : ".class && elementInfo != null) {\n")
+          .append(hasElementCodec ? ".class) {\n" : ".class && elementCodec != null) {\n")
           .append(indent)
-          .append("      elementInfo.")
-          .append(utf8 ? "writeUtf8" : "write")
+          .append("      elementCodec.")
+          .append(utf8 ? "writeUtf8" : "writeString")
           .append("(writer, element, typeResolver);\n")
           .append(indent)
           .append("    } else {\n")
@@ -901,10 +900,10 @@ public final class JsonCodegen {
           .append(indent)
           .append("  } else if (element.getClass() == ")
           .append(sourceName(elementType))
-          .append(hasElementInfo ? ".class) {\n" : ".class && elementInfo != null) {\n")
+          .append(hasElementCodec ? ".class) {\n" : ".class && elementCodec != null) {\n")
           .append(indent)
-          .append("    elementInfo.")
-          .append(utf8 ? "writeUtf8" : "write")
+          .append("    elementCodec.")
+          .append(utf8 ? "writeUtf8" : "writeString")
           .append("(writer, element, typeResolver);\n")
           .append(indent)
           .append("  } else {\n")
@@ -925,12 +924,12 @@ public final class JsonCodegen {
       return;
     }
     code.append(indent)
-        .append(utf8 ? "JsonSerializers.writeUtf8Collection" : "JsonSerializers.writeCollection")
-        .append("(writer, (java.util.Collection<?>) ")
-        .append(value)
-        .append(", ")
         .append(prop)
-        .append(".writeElementType(), typeResolver);\n");
+        .append(".writeTypeInfo().codec().")
+        .append(utf8 ? "writeUtf8" : "writeString")
+        .append("(writer, ")
+        .append(value)
+        .append(", typeResolver);\n");
   }
 
   private static void writeListBranchStart(StringBuilder code, String value, boolean declaredList) {
@@ -964,20 +963,20 @@ public final class JsonCodegen {
     code.append(indent).append("if (").append(value).append(".getClass() == ");
     code.append(sourceName(rawType)).append(".class) {\n");
     code.append(indent)
-        .append("  JsonClassInfo classInfo = c")
+        .append("  BaseObjectCodec objectCodec = c")
         .append(prop.substring(1))
         .append(";\n");
     if (rawType == ownerType) {
-      code.append(indent).append("  if (classInfo == null) {\n");
+      code.append(indent).append("  if (objectCodec == null) {\n");
       code.append(indent)
-          .append("    classInfo = typeResolver.getClassInfo(")
+          .append("    objectCodec = typeResolver.getObjectCodec(")
           .append(sourceName(rawType))
           .append(".class);\n");
       code.append(indent).append("  }\n");
     }
     code.append(indent)
-        .append("  classInfo.")
-        .append(utf8 ? "writeUtf8" : "write")
+        .append("  objectCodec.")
+        .append(utf8 ? "writeUtf8" : "writeString")
         .append("(writer, ")
         .append(value)
         .append(", typeResolver);\n");

@@ -21,6 +21,8 @@ package org.apache.fory.json;
 
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.atomic.AtomicReferenceArray;
+import org.apache.fory.json.codec.CodecRegistry;
+import org.apache.fory.json.codec.GeneratedObjectCodec;
 import org.apache.fory.json.reader.JsonParsers;
 import org.apache.fory.json.resolver.JsonTypeInfo;
 import org.apache.fory.json.resolver.JsonTypeResolver;
@@ -43,9 +45,9 @@ public final class ForyJson {
   private final AtomicReference<PooledState> primarySlot;
   private final AtomicReferenceArray<PooledState> slots;
 
-  ForyJson(boolean writeNullFields, boolean codegenEnabled) {
+  ForyJson(boolean writeNullFields, boolean codegenEnabled, CodecRegistry codecRegistry) {
     this.writeNullFields = writeNullFields;
-    typeResolver = new JsonTypeResolver(codegenEnabled, writeNullFields);
+    typeResolver = new JsonTypeResolver(codegenEnabled, writeNullFields, codecRegistry);
     poolSize = DEFAULT_POOL_SIZE;
     primarySlot =
         new AtomicReference<>(new PooledState(new JsonState(writeNullFields), PRIMARY_SLOT));
@@ -67,9 +69,8 @@ public final class ForyJson {
       if (value == null) {
         writer.writeNull();
       } else {
-        state
-            .rootTypeInfo(typeResolver, value.getClass())
-            .writeRootString(writer, value, typeResolver);
+        JsonTypeInfo typeInfo = state.rootTypeInfo(typeResolver, value.getClass());
+        typeInfo.codec().writeString(writer, value, typeResolver);
       }
       return writer.toJson();
     } finally {
@@ -85,9 +86,8 @@ public final class ForyJson {
       if (value == null) {
         writer.writeNull();
       } else {
-        state
-            .rootTypeInfo(typeResolver, value.getClass())
-            .writeRootUtf8(writer, value, typeResolver);
+        JsonTypeInfo typeInfo = state.rootTypeInfo(typeResolver, value.getClass());
+        typeInfo.codec().writeUtf8(writer, value, typeResolver);
       }
       return writer.toJsonBytes();
     } finally {
@@ -104,7 +104,7 @@ public final class ForyJson {
   }
 
   boolean hasGeneratedWriter(Class<?> type) {
-    return typeResolver.getClassInfo(type).hasObjectWriter();
+    return typeResolver.getObjectCodec(type) instanceof GeneratedObjectCodec;
   }
 
   private PooledState acquire() {

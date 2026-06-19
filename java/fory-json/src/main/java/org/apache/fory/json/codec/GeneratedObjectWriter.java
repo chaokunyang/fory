@@ -17,22 +17,17 @@
  * under the License.
  */
 
-package org.apache.fory.json.serializer;
+package org.apache.fory.json.codec;
 
-public final class JsonObjectWriters {
-  private final JsonStringObjectWriter stringWriter;
-  private final JsonUtf8ObjectWriter utf8Writer;
+import org.apache.fory.json.meta.JsonFieldInfo;
 
-  public JsonObjectWriters(JsonStringObjectWriter stringWriter, JsonUtf8ObjectWriter utf8Writer) {
-    this.stringWriter = stringWriter;
-    this.utf8Writer = utf8Writer;
-  }
+/** Immutable metadata carrier shared by generated JSON object writers. */
+public abstract class GeneratedObjectWriter {
+  protected final JsonFieldInfo[] fields;
+  protected final BaseObjectCodec[] codecs;
 
-  public JsonStringObjectWriter stringWriter() {
-    return stringWriter;
-  }
-
-  public JsonUtf8ObjectWriter utf8Writer() {
-    return utf8Writer;
+  protected GeneratedObjectWriter(JsonFieldInfo[] fields, BaseObjectCodec[] codecs) {
+    this.fields = fields;
+    this.codecs = codecs;
   }
 }

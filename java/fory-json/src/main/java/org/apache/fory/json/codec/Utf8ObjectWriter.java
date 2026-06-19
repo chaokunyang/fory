@@ -17,22 +17,11 @@
  * under the License.
  */
 
-package org.apache.fory.json.meta;
+package org.apache.fory.json.codec;
 
-import java.util.HashMap;
-import java.util.Map;
+import org.apache.fory.json.resolver.JsonTypeResolver;
+import org.apache.fory.json.writer.Utf8JsonWriter;
 
-public final class JsonFieldTable {
-  private final Map<String, JsonFieldInfo> properties;
-
-  public JsonFieldTable(JsonFieldInfo[] readProperties) {
-    properties = new HashMap<>(readProperties.length * 2);
-    for (JsonFieldInfo property : readProperties) {
-      properties.put(property.name(), property);
-    }
-  }
-
-  public JsonFieldInfo get(String name) {
-    return properties.get(name);
-  }
+public interface Utf8ObjectWriter {
+  void writeUtf8(Utf8JsonWriter writer, Object value, JsonTypeResolver typeResolver);
 }

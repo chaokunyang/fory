@@ -27,10 +27,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.RandomAccess;
 import org.apache.fory.json.ForyJsonException;
+import org.apache.fory.json.codec.BaseObjectCodec;
+import org.apache.fory.json.codec.CodecUtils;
 import org.apache.fory.json.reader.JsonReader;
 import org.apache.fory.json.resolver.JsonTypeInfo;
 import org.apache.fory.json.resolver.JsonTypeResolver;
-import org.apache.fory.json.serializer.JsonSerializers;
 import org.apache.fory.json.writer.JsonNumberTokenCache;
 import org.apache.fory.json.writer.JsonStringEscaper;
 import org.apache.fory.json.writer.JsonStringTokenCache;
@@ -96,10 +97,10 @@ public final class JsonFieldInfo {
   private final JsonNumberTokenCache numberTokenCache;
   private JsonTypeInfo writeTypeInfo;
   private JsonTypeInfo readTypeInfo;
-  private JsonClassInfo writeClassInfo;
-  private JsonClassInfo writeElementClassInfo;
+  private BaseObjectCodec writeObjectCodec;
+  private BaseObjectCodec writeElementObjectCodec;
 
-  JsonFieldInfo(
+  public JsonFieldInfo(
       String name,
       Member writeMember,
       Type writeType,
@@ -120,9 +121,8 @@ public final class JsonFieldInfo {
     readKind = readRawType == null ? null : kind(readRawType);
     writeKindId = writeKind == null ? 0 : kindId(writeKind);
     writeElementType =
-        writeKind == JsonFieldKind.COLLECTION ? JsonSerializers.elementType(writeType) : null;
-    writeMapValueType =
-        writeKind == JsonFieldKind.MAP ? JsonSerializers.mapValueType(writeType) : null;
+        writeKind == JsonFieldKind.COLLECTION ? CodecUtils.elementType(writeType) : null;
+    writeMapValueType = writeKind == JsonFieldKind.MAP ? CodecUtils.mapValueType(writeType) : null;
     writeArrayComponentType =
         writeKind == JsonFieldKind.ARRAY ? writeRawType.getComponentType() : null;
     writeElementRawType = writeElementType == null ? null : knownRawType(writeElementType);
@@ -239,7 +239,11 @@ public final class JsonFieldInfo {
   }
 
   public void read(JsonReader reader, Object object, JsonTypeResolver typeResolver) {
-    readTypeInfo.readField(reader, object, readAccessor, typeResolver);
+    readTypeInfo.codec().readField(reader, object, readAccessor, readTypeInfo, typeResolver);
+  }
+
+  public JsonTypeInfo writeTypeInfo() {
+    return writeTypeInfo;
   }
 
   public byte[] stringNamePrefix() {
@@ -547,7 +551,7 @@ public final class JsonFieldInfo {
     }
     writer.writeComma(index);
     writer.writeFieldName(this);
-    writeTypeInfo.write(writer, value, typeResolver);
+    writeTypeInfo.codec().write(writer, value, typeResolver);
     return true;
   }
 
@@ -673,7 +677,7 @@ public final class JsonFieldInfo {
     if (value == null) {
       writer.writeNull();
     } else {
-      JsonSerializers.writeArray(writer, value, writeArrayComponentType, typeResolver);
+      writeTypeInfo.codec().writeString(writer, value, typeResolver);
     }
     return true;
   }
@@ -735,10 +739,10 @@ public final class JsonFieldInfo {
       }
       writer.writeArrayEnd();
     } else if (elementRawType != null && !isScalarType(elementRawType)) {
-      JsonClassInfo classInfo = writeElementClassInfo;
-      if (classInfo == null) {
-        classInfo = typeResolver.getClassInfo(elementRawType);
-        writeElementClassInfo = classInfo;
+      BaseObjectCodec objectCodec = writeElementObjectCodec;
+      if (objectCodec == null) {
+        objectCodec = typeResolver.getObjectCodec(elementRawType);
+        writeElementObjectCodec = objectCodec;
       }
       writer.writeArrayStart();
       if (value instanceof List && value instanceof RandomAccess) {
@@ -750,7 +754,7 @@ public final class JsonFieldInfo {
           if (element == null) {
             writer.writeNull();
           } else if (element.getClass() == elementRawType) {
-            classInfo.write(writer, element, typeResolver);
+            objectCodec.writeString(writer, element, typeResolver);
           } else {
             typeResolver.writeStringValue(writer, element, writeElementType);
           }
@@ -762,7 +766,7 @@ public final class JsonFieldInfo {
           if (element == null) {
             writer.writeNull();
           } else if (element.getClass() == elementRawType) {
-            classInfo.write(writer, element, typeResolver);
+            objectCodec.writeString(writer, element, typeResolver);
           } else {
             typeResolver.writeStringValue(writer, element, writeElementType);
           }
@@ -770,7 +774,7 @@ public final class JsonFieldInfo {
       }
       writer.writeArrayEnd();
     } else {
-      JsonSerializers.writeCollection(writer, value, writeElementType, typeResolver);
+      writeTypeInfo.codec().writeString(writer, value, typeResolver);
     }
   }
 
@@ -784,7 +788,7 @@ public final class JsonFieldInfo {
     if (value == null) {
       writer.writeNull();
     } else {
-      JsonSerializers.writeMap(writer, value, writeMapValueType, typeResolver);
+      writeTypeInfo.codec().writeString(writer, value, typeResolver);
     }
     return true;
   }
@@ -799,17 +803,17 @@ public final class JsonFieldInfo {
     if (value == null) {
       writer.writeNull();
     } else if (writeRawType == Object.class) {
-      writeTypeInfo.writeString(writer, value, typeResolver);
+      writeTypeInfo.codec().writeString(writer, value, typeResolver);
     } else {
-      JsonClassInfo classInfo = writeClassInfo;
+      BaseObjectCodec objectCodec = writeObjectCodec;
       Class<?> valueClass = value.getClass();
-      if (classInfo == null || classInfo.type() != valueClass) {
-        classInfo = typeResolver.getClassInfo(valueClass);
+      if (objectCodec == null || objectCodec.type() != valueClass) {
+        objectCodec = typeResolver.getObjectCodec(valueClass);
         if (valueClass == writeRawType) {
-          writeClassInfo = classInfo;
+          writeObjectCodec = objectCodec;
         }
       }
-      classInfo.write(writer, value, typeResolver);
+      objectCodec.writeString(writer, value, typeResolver);
     }
     return true;
   }
@@ -856,7 +860,7 @@ public final class JsonFieldInfo {
       return false;
     }
     writer.writeFieldName(this, index);
-    writeTypeInfo.writeUtf8(writer, value, typeResolver);
+    writeTypeInfo.codec().writeUtf8(writer, value, typeResolver);
     return true;
   }
 
@@ -929,7 +933,7 @@ public final class JsonFieldInfo {
     if (value == null) {
       writer.writeNull();
     } else {
-      JsonSerializers.writeArray(writer, value, writeArrayComponentType, typeResolver);
+      writeTypeInfo.codec().write(writer, value, typeResolver);
     }
     return true;
   }
@@ -944,7 +948,7 @@ public final class JsonFieldInfo {
     if (value == null) {
       writer.writeNull();
     } else {
-      JsonSerializers.writeUtf8Array(writer, value, writeArrayComponentType, typeResolver);
+      writeTypeInfo.codec().writeUtf8(writer, value, typeResolver);
     }
     return true;
   }
@@ -960,7 +964,7 @@ public final class JsonFieldInfo {
     if (value == null) {
       writer.writeNull();
     } else {
-      JsonSerializers.writeCollection(writer, value, writeElementType, typeResolver);
+      writeTypeInfo.codec().write(writer, value, typeResolver);
     }
     return true;
   }
@@ -1022,10 +1026,10 @@ public final class JsonFieldInfo {
       }
       writer.writeArrayEnd();
     } else if (elementRawType != null && !isScalarType(elementRawType)) {
-      JsonClassInfo classInfo = writeElementClassInfo;
-      if (classInfo == null) {
-        classInfo = typeResolver.getClassInfo(elementRawType);
-        writeElementClassInfo = classInfo;
+      BaseObjectCodec objectCodec = writeElementObjectCodec;
+      if (objectCodec == null) {
+        objectCodec = typeResolver.getObjectCodec(elementRawType);
+        writeElementObjectCodec = objectCodec;
       }
       writer.writeArrayStart();
       if (value instanceof List && value instanceof RandomAccess) {
@@ -1037,7 +1041,7 @@ public final class JsonFieldInfo {
           if (element == null) {
             writer.writeNull();
           } else if (element.getClass() == elementRawType) {
-            classInfo.writeUtf8(writer, element, typeResolver);
+            objectCodec.writeUtf8(writer, element, typeResolver);
           } else {
             typeResolver.writeUtf8Value(writer, element, writeElementType);
           }
@@ -1049,7 +1053,7 @@ public final class JsonFieldInfo {
           if (element == null) {
             writer.writeNull();
           } else if (element.getClass() == elementRawType) {
-            classInfo.writeUtf8(writer, element, typeResolver);
+            objectCodec.writeUtf8(writer, element, typeResolver);
           } else {
             typeResolver.writeUtf8Value(writer, element, writeElementType);
           }
@@ -1057,7 +1061,7 @@ public final class JsonFieldInfo {
       }
       writer.writeArrayEnd();
     } else {
-      JsonSerializers.writeUtf8Collection(writer, value, writeElementType, typeResolver);
+      writeTypeInfo.codec().writeUtf8(writer, value, typeResolver);
     }
   }
 
@@ -1072,7 +1076,7 @@ public final class JsonFieldInfo {
     if (value == null) {
       writer.writeNull();
     } else {
-      JsonSerializers.writeMap(writer, value, writeMapValueType, typeResolver);
+      writeTypeInfo.codec().write(writer, value, typeResolver);
     }
     return true;
   }
@@ -1087,7 +1091,7 @@ public final class JsonFieldInfo {
     if (value == null) {
       writer.writeNull();
     } else {
-      JsonSerializers.writeUtf8Map(writer, value, writeMapValueType, typeResolver);
+      writeTypeInfo.codec().writeUtf8(writer, value, typeResolver);
     }
     return true;
   }
@@ -1103,17 +1107,17 @@ public final class JsonFieldInfo {
     if (value == null) {
       writer.writeNull();
     } else if (writeRawType == Object.class) {
-      writeTypeInfo.write(writer, value, typeResolver);
+      writeTypeInfo.codec().write(writer, value, typeResolver);
     } else {
-      JsonClassInfo classInfo = writeClassInfo;
+      BaseObjectCodec objectCodec = writeObjectCodec;
       Class<?> valueClass = value.getClass();
-      if (classInfo == null || classInfo.type() != valueClass) {
-        classInfo = typeResolver.getClassInfo(valueClass);
+      if (objectCodec == null || objectCodec.type() != valueClass) {
+        objectCodec = typeResolver.getObjectCodec(valueClass);
         if (valueClass == writeRawType) {
-          writeClassInfo = classInfo;
+          writeObjectCodec = objectCodec;
         }
       }
-      classInfo.write(writer, value, typeResolver);
+      objectCodec.write(writer, value, typeResolver);
     }
     return true;
   }
@@ -1128,17 +1132,17 @@ public final class JsonFieldInfo {
     if (value == null) {
       writer.writeNull();
     } else if (writeRawType == Object.class) {
-      writeTypeInfo.writeUtf8(writer, value, typeResolver);
+      writeTypeInfo.codec().writeUtf8(writer, value, typeResolver);
     } else {
-      JsonClassInfo classInfo = writeClassInfo;
+      BaseObjectCodec objectCodec = writeObjectCodec;
       Class<?> valueClass = value.getClass();
-      if (classInfo == null || classInfo.type() != valueClass) {
-        classInfo = typeResolver.getClassInfo(valueClass);
+      if (objectCodec == null || objectCodec.type() != valueClass) {
+        objectCodec = typeResolver.getObjectCodec(valueClass);
         if (valueClass == writeRawType) {
-          writeClassInfo = classInfo;
+          writeObjectCodec = objectCodec;
         }
       }
-      classInfo.writeUtf8(writer, value, typeResolver);
+      objectCodec.writeUtf8(writer, value, typeResolver);
     }
     return true;
   }
@@ -1217,7 +1221,7 @@ public final class JsonFieldInfo {
   }
 
   private static Class<?> knownRawType(Type type) {
-    Class<?> rawType = JsonSerializers.rawType(type, null);
+    Class<?> rawType = CodecUtils.rawType(type, null);
     return rawType == Object.class ? null : rawType;
   }
 

@@ -28,9 +28,11 @@
 #include "fory/util/buffer.h"
 #include "fory/util/error.h"
 #include "fory/util/flat_int_map.h"
+#include "fory/util/macros.h"
 #include "fory/util/result.h"
 
 #include <cassert>
+#include <limits>
 #include <string>
 #include <typeindex>
 
@@ -376,9 +378,11 @@ private:
   // Meta sharing state (for streaming inline TypeMeta)
   // Maps TypeInfo* to index for reference tracking - uses map size as counter
   util::FlatIntMap<uint64_t, uint32_t> write_type_info_index_map_;
-  // Fast path for the common single-type stream: avoid hash map lookups.
+  // Fast path for common one- and two-type streams: avoid hash map lookups.
   const TypeInfo *first_type_info_ = nullptr;
+  const TypeInfo *second_type_info_ = nullptr;
   bool has_first_type_info_ = false;
+  bool has_second_type_info_ = false;
   bool type_info_index_map_active_ = false;
 };
 
@@ -628,6 +632,7 @@ public:
   /// reference.
   /// @return const pointer to TypeInfo, or error
   Result<const TypeInfo *, Error> read_type_meta();
+  const TypeInfo *read_type_meta(Error &error);
 
   /// get TypeInfo by meta index (internal use for reference lookups).
   /// @return const pointer to TypeInfo if found, error otherwise
@@ -658,6 +663,38 @@ public:
   inline const Config &config() const { return *config_; }
 
 private:
+  static FORY_ALWAYS_INLINE void
+  skip_type_meta_body(Buffer &buffer, int64_t header, Error &error) {
+    constexpr uint64_t meta_size_mask = 0xff;
+    uint64_t meta_size = static_cast<uint64_t>(header) & meta_size_mask;
+    if (meta_size == meta_size_mask) {
+      uint32_t extra = buffer.read_var_uint32(error);
+      if (FORY_PREDICT_FALSE(!error.ok())) {
+        return;
+      }
+      meta_size += extra;
+    }
+    if (FORY_PREDICT_FALSE(
+            meta_size >
+            static_cast<uint64_t>(std::numeric_limits<uint32_t>::max()))) {
+      error = Error::invalid_data("TypeMeta body size exceeds supported range");
+      return;
+    }
+    buffer.skip(static_cast<uint32_t>(meta_size), error);
+  }
+  FORY_ALWAYS_INLINE void cache_type_meta_header(int64_t meta_header,
+                                                 const TypeInfo *type_info) {
+    if (has_last_meta_header_ && meta_header != last_meta_header_) {
+      has_second_meta_header_ = true;
+      second_meta_header_ = last_meta_header_;
+      second_meta_type_info_ = last_meta_type_info_;
+    }
+    has_last_meta_header_ = true;
+    last_meta_header_ = meta_header;
+    last_meta_type_info_ = type_info;
+  }
+  FORY_NOINLINE Result<const TypeInfo *, Error>
+  read_type_meta_slow(int64_t meta_header);
   FORY_NOINLINE Result<std::string, Error>
   check_remote_type_meta_limit(const TypeMeta &type_meta);
   void record_remote_type_meta(const std::string &type_key);
@@ -678,16 +715,19 @@ private:
   std::vector<const TypeInfo *> reading_type_infos_;
   // Cache by meta_header (pointers to cached_type_infos_)
   fory::flat_hash_map<int64_t, const TypeInfo *> parsed_type_infos_;
-  fory::flat_hash_map<std::string, uint32_t> remote_schema_versions_by_type_;
-  size_t total_accepted_schema_versions_ = 0;
   // Fast path for repeated type meta headers.
   int64_t last_meta_header_ = 0;
   const TypeInfo *last_meta_type_info_ = nullptr;
+  int64_t second_meta_header_ = 0;
+  const TypeInfo *second_meta_type_info_ = nullptr;
   bool has_last_meta_header_ = false;
+  bool has_second_meta_header_ = false;
   bool meta_string_table_active_ = false;
 
   // Dynamic meta strings used for named type/class info.
   meta::MetaStringTable meta_string_table_;
+  fory::flat_hash_map<std::string, uint32_t> remote_schema_versions_by_type_;
+  size_t total_accepted_schema_versions_ = 0;
 };
 
 /// Implementation of DynDepthGuard destructor
@@ -699,3 +739,71 @@ inline DynDepthGuard::~DynDepthGuard() { ctx_.decrease_dyn_depth(); }
 // Include type_resolver.h at the end to get MetaWriterResolver and
 // MetaReaderResolver definitions
 #include "fory/serialization/type_resolver.h"
+
+namespace fory {
+namespace serialization {
+
+FORY_ALWAYS_INLINE const TypeInfo *ReadContext::read_type_meta(Error &error) {
+  uint32_t index_marker = buffer_->read_var_uint32(error);
+  if (FORY_PREDICT_FALSE(!error.ok())) {
+    return nullptr;
+  }
+
+  const bool is_ref = (index_marker & 1) == 1;
+  const size_t index = index_marker >> 1;
+  if (is_ref) {
+    if (FORY_PREDICT_FALSE(index >= reading_type_infos_.size())) {
+      error = Error::invalid(
+          "Meta index out of bounds: " + std::to_string(index) +
+          ", size: " + std::to_string(reading_type_infos_.size()));
+      return nullptr;
+    }
+    return reading_type_infos_[index];
+  }
+
+  int64_t meta_header = buffer_->read_int64(error);
+  if (FORY_PREDICT_FALSE(!error.ok())) {
+    return nullptr;
+  }
+
+  if (has_last_meta_header_ && meta_header == last_meta_header_) {
+    const TypeInfo *cached = last_meta_type_info_;
+    reading_type_infos_.push_back(cached);
+    skip_type_meta_body(*buffer_, meta_header, error);
+    if (FORY_PREDICT_FALSE(!error.ok())) {
+      return nullptr;
+    }
+    return cached;
+  }
+  if (has_second_meta_header_ && meta_header == second_meta_header_) {
+    const TypeInfo *cached = second_meta_type_info_;
+    reading_type_infos_.push_back(cached);
+    skip_type_meta_body(*buffer_, meta_header, error);
+    if (FORY_PREDICT_FALSE(!error.ok())) {
+      return nullptr;
+    }
+    return cached;
+  }
+
+  auto *cache_entry = parsed_type_infos_.find(meta_header);
+  if (cache_entry != nullptr) {
+    const TypeInfo *cached = cache_entry->second;
+    reading_type_infos_.push_back(cached);
+    cache_type_meta_header(meta_header, cached);
+    skip_type_meta_body(*buffer_, meta_header, error);
+    if (FORY_PREDICT_FALSE(!error.ok())) {
+      return nullptr;
+    }
+    return cached;
+  }
+
+  auto result = read_type_meta_slow(meta_header);
+  if (FORY_PREDICT_FALSE(!result.ok())) {
+    error = std::move(result).error();
+    return nullptr;
+  }
+  return result.value();
+}
+
+} // namespace serialization
+} // namespace fory

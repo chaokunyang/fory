@@ -4613,12 +4613,11 @@ struct Serializer<T, std::enable_if_t<is_fory_serializable_v<T>>> {
           (void)remote_user_type_id;
           if (remote_has_meta) {
             // Read TypeMeta inline using streaming protocol
-            auto remote_type_info_res = ctx.read_type_meta();
-            if (!remote_type_info_res.ok()) {
-              ctx.set_error(std::move(remote_type_info_res).error());
+            const TypeInfo *remote_type_info = ctx.read_type_meta(ctx.error());
+            if (FORY_PREDICT_FALSE(ctx.has_error())) {
               return T{};
             }
-            return read_compatible(ctx, remote_type_info_res.value());
+            return read_compatible(ctx, remote_type_info);
           }
           return read_data(ctx);
         } else {

@@ -1805,11 +1805,13 @@ TypeResolver::build_final_type_resolver() {
 
     // Update the TypeInfo in place
     partial_ptr->type_def = std::move(type_def);
-    uint64_t header_bits = 0;
-    std::memcpy(&header_bits, partial_ptr->type_def.data(),
-                sizeof(header_bits));
-    meta.hash = static_cast<int64_t>(header_bits >> TYPE_META_HASH_SHIFT);
-    partial_ptr->type_meta = std::make_unique<TypeMeta>(std::move(meta));
+
+    // Parse the serialized TypeMeta back to create unique_ptr<TypeMeta>
+    Buffer buffer(partial_ptr->type_def.data(),
+                  static_cast<uint32_t>(partial_ptr->type_def.size()), false);
+    buffer.writer_index(static_cast<uint32_t>(partial_ptr->type_def.size()));
+    FORY_TRY(parsed_meta, TypeMeta::from_bytes(buffer, nullptr));
+    partial_ptr->type_meta = std::move(parsed_meta);
   }
 
   // Clear partial_type_infos in the final resolver since they're all completed

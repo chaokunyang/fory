@@ -92,13 +92,31 @@ void WriteContext::write_type_meta(const TypeInfo *type_info) {
       buffer_.write_uint8(1); // (index << 1) | 1, index=0
       return;
     }
+    if (!has_second_type_info_) {
+      has_second_type_info_ = true;
+      second_type_info_ = type_info;
+      buffer_.write_uint8(2); // (index << 1), index=1
+      buffer_.write_bytes(type_info->type_def.data(),
+                          type_info->type_def.size());
+      return;
+    }
+    if (type_info == second_type_info_) {
+      buffer_.write_uint8(3); // (index << 1) | 1, index=1
+      return;
+    }
     type_info_index_map_active_ = true;
     write_type_info_index_map_.clear();
     const uint64_t first_key =
         static_cast<uint64_t>(reinterpret_cast<uintptr_t>(first_type_info_));
     write_type_info_index_map_.put(first_key, 0);
+    const uint64_t second_key =
+        static_cast<uint64_t>(reinterpret_cast<uintptr_t>(second_type_info_));
+    write_type_info_index_map_.put(second_key, 1);
   } else if (type_info == first_type_info_) {
     buffer_.write_uint8(1); // (index << 1) | 1, index=0
+    return;
+  } else if (type_info == second_type_info_) {
+    buffer_.write_uint8(3); // (index << 1) | 1, index=1
     return;
   }
 
@@ -409,7 +427,9 @@ void WriteContext::reset() {
     write_type_info_index_map_.clear();
   }
   first_type_info_ = nullptr;
+  second_type_info_ = nullptr;
   has_first_type_info_ = false;
+  has_second_type_info_ = false;
   type_info_index_map_active_ = false;
   current_dyn_depth_ = 0;
   buffer_.clear_output_stream();
@@ -535,54 +555,15 @@ void ReadContext::record_remote_type_meta(const std::string &type_key) {
 
 Result<const TypeInfo *, Error> ReadContext::read_type_meta() {
   Error error;
-  // Read the index marker
-  uint32_t index_marker = buffer_->read_var_uint32(error);
+  const TypeInfo *type_info = read_type_meta(error);
   if (FORY_PREDICT_FALSE(!error.ok())) {
     return Unexpected(std::move(error));
   }
+  return type_info;
+}
 
-  bool is_ref = (index_marker & 1) == 1;
-  size_t index = index_marker >> 1;
-
-  if (is_ref) {
-    // Reference to previously read type
-    return get_type_info_by_index(index);
-  }
-
-  // New type - read TypeMeta inline
-  // Read the 8-byte header first for caching
-  int64_t meta_header = buffer_->read_int64(error);
-  if (FORY_PREDICT_FALSE(!error.ok())) {
-    return Unexpected(std::move(error));
-  }
-
-  // Check if we already parsed this type meta (cache lookup by header)
-  if (has_last_meta_header_ && meta_header == last_meta_header_) {
-    // Header-cache hits intentionally skip without rehashing. Entries reach
-    // this cache only after a successful TypeMeta parse and 52-bit
-    // metadata-hash validation.
-    const TypeInfo *cached = last_meta_type_info_;
-    reading_type_infos_.push_back(cached);
-    FORY_RETURN_NOT_OK(
-        TypeMeta::skip_bytes_for_validated_header(*buffer_, meta_header));
-    return cached;
-  }
-
-  auto *cache_entry = parsed_type_infos_.find(meta_header);
-  if (cache_entry != nullptr) {
-    // Header-cache hits intentionally skip without rehashing. Entries reach
-    // this cache only after a successful TypeMeta parse and 52-bit
-    // metadata-hash validation.
-    const TypeInfo *cached = cache_entry->second;
-    reading_type_infos_.push_back(cached);
-    has_last_meta_header_ = true;
-    last_meta_header_ = meta_header;
-    last_meta_type_info_ = cached;
-    FORY_RETURN_NOT_OK(
-        TypeMeta::skip_bytes_for_validated_header(*buffer_, meta_header));
-    return cached;
-  }
-
+Result<const TypeInfo *, Error>
+ReadContext::read_type_meta_slow(int64_t meta_header) {
   // Not in cache - parse the TypeMeta
   const uint32_t type_def_start =
       buffer_->reader_index() - static_cast<uint32_t>(sizeof(int64_t));
@@ -629,9 +610,7 @@ Result<const TypeInfo *, Error> ReadContext::read_type_meta() {
         std::memcmp(local_type_def.data(), buffer_->data() + type_def_start,
                     remote_type_def_size) == 0) {
       parsed_type_infos_[meta_header] = local_type_info;
-      has_last_meta_header_ = true;
-      last_meta_header_ = meta_header;
-      last_meta_type_info_ = local_type_info;
+      cache_type_meta_header(meta_header, local_type_info);
       reading_type_infos_.push_back(local_type_info);
       return local_type_info;
     }
@@ -668,9 +647,7 @@ Result<const TypeInfo *, Error> ReadContext::read_type_meta() {
   cached_type_infos_.push_back(std::move(type_info));
   const TypeInfo *raw_ptr = cached_type_infos_.back().get();
   parsed_type_infos_[meta_header] = raw_ptr;
-  has_last_meta_header_ = true;
-  last_meta_header_ = meta_header;
-  last_meta_type_info_ = raw_ptr;
+  cache_type_meta_header(meta_header, raw_ptr);
   record_remote_type_meta(remote_schema_key);
 
   reading_type_infos_.push_back(raw_ptr);
@@ -736,12 +713,74 @@ Result<const TypeInfo *, Error> ReadContext::read_any_type_info() {
 }
 
 const TypeInfo *ReadContext::read_any_type_info(Error &error) {
-  auto result = read_any_type_info();
-  if (!result.ok()) {
-    error = std::move(result).error();
+  uint32_t type_id = buffer_->read_uint8(error);
+  if (FORY_PREDICT_FALSE(!error.ok())) {
     return nullptr;
   }
-  return result.value();
+  if (config_->compatible &&
+      (type_id == static_cast<uint32_t>(TypeId::COMPATIBLE_STRUCT) ||
+       type_id == static_cast<uint32_t>(TypeId::NAMED_COMPATIBLE_STRUCT) ||
+       type_id == static_cast<uint32_t>(TypeId::NAMED_STRUCT))) {
+    return read_type_meta(error);
+  }
+  switch (static_cast<TypeId>(type_id)) {
+  case TypeId::ENUM:
+  case TypeId::STRUCT:
+  case TypeId::EXT:
+  case TypeId::TYPED_UNION: {
+    uint32_t user_type_id = buffer_->read_var_uint32(error);
+    if (FORY_PREDICT_FALSE(!error.ok())) {
+      return nullptr;
+    }
+    auto result =
+        type_resolver_->get_user_type_info_by_id(type_id, user_type_id);
+    if (FORY_PREDICT_FALSE(!result.ok())) {
+      error = std::move(result).error();
+      return nullptr;
+    }
+    return result.value();
+  }
+  case TypeId::COMPATIBLE_STRUCT:
+  case TypeId::NAMED_COMPATIBLE_STRUCT: {
+    return read_type_meta(error);
+  }
+  case TypeId::NAMED_ENUM:
+  case TypeId::NAMED_EXT:
+  case TypeId::NAMED_STRUCT:
+  case TypeId::NAMED_UNION: {
+    if (config_->compatible) {
+      return read_type_meta(error);
+    }
+    meta_string_table_active_ = true;
+    auto namespace_result =
+        meta_string_table_.read_string(*buffer_, k_namespace_decoder);
+    if (FORY_PREDICT_FALSE(!namespace_result.ok())) {
+      error = std::move(namespace_result).error();
+      return nullptr;
+    }
+    auto type_name_result =
+        meta_string_table_.read_string(*buffer_, k_type_name_decoder);
+    if (FORY_PREDICT_FALSE(!type_name_result.ok())) {
+      error = std::move(type_name_result).error();
+      return nullptr;
+    }
+    auto result = type_resolver_->get_type_info_by_name(
+        namespace_result.value(), type_name_result.value());
+    if (FORY_PREDICT_FALSE(!result.ok())) {
+      error = std::move(result).error();
+      return nullptr;
+    }
+    return result.value();
+  }
+  default: {
+    auto result = type_resolver_->get_type_info_by_id(type_id);
+    if (FORY_PREDICT_FALSE(!result.ok())) {
+      error = std::move(result).error();
+      return nullptr;
+    }
+    return result.value();
+  }
+  }
 }
 
 void ReadContext::reset() {

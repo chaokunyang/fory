@@ -103,8 +103,8 @@ final fory = Fory(
 - `maxTypeFields` limits fields in one received struct metadata body.
 - `maxTypeMetaBytes` limits encoded body bytes in one received TypeMeta body, excluding the 8-byte
   header and any extended-size varint.
-- `maxSchemaVersionsPerType` limits accepted schema versions for one logical struct type.
-- `maxAverageSchemaVersionsPerType` limits the average across accepted remote struct types. The
+- `maxSchemaVersionsPerType` limits accepted remote metadata versions for one logical type.
+- `maxAverageSchemaVersionsPerType` limits the average across accepted remote types. The
   effective global floor is `8192` schemas.
 
 ## Defaults

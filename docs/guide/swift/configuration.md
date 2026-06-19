@@ -96,10 +96,10 @@ limited on metadata cache misses:
 - `maxTypeFields` defaults to `512` and limits fields in one received struct metadata body.
 - `maxTypeMetaBytes` defaults to `4096` and limits encoded body bytes in one received TypeMeta body,
   excluding the 8-byte header and any extended-size varint.
-- `maxSchemaVersionsPerType` defaults to `10` and limits accepted schema versions for one logical
-  struct type.
+- `maxSchemaVersionsPerType` defaults to `10` and limits accepted remote metadata versions for one
+  logical type.
 - `maxAverageSchemaVersionsPerType` defaults to `3` and limits the average across accepted remote
-  struct types. The effective global floor is `8192` schemas.
+  types. The effective global floor is `8192` schemas.
 
 ```swift
 let fory = Fory(

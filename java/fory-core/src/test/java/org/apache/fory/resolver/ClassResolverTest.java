@@ -393,6 +393,64 @@ public class ClassResolverTest extends ForyTestBase {
   }
 
   @Test
+  public void testRemoteEnumTypeDefUsesLimit() {
+    ForyBuilder builder =
+        Fory.builder()
+            .withXlang(true)
+            .requireClassRegistration(true)
+            .withCompatible(false)
+            .withMetaShare(true)
+            .withMaxSchemaVersionsPerType(1);
+    finishBuilder(builder);
+    SharedRegistry sharedRegistry = new SharedRegistry(new Config(builder));
+    Fory fory = new Fory(builder, ClassResolverTest.class.getClassLoader(), sharedRegistry);
+    fory.register(TestNeedToWriteReferenceClass.class, "test.Enum");
+    fory.register(OtherTestNeedToWriteReferenceClass.class, "test.OtherEnum");
+    TypeResolver resolver = fory.getTypeResolver();
+    TypeDef first = resolver.getTypeDef(TestNeedToWriteReferenceClass.class, true);
+    TypeDef second = TypeDef.buildTypeDef(resolver, OtherTestNeedToWriteReferenceClass.class);
+
+    Assert.assertFalse(first.isStructSchemaKind());
+    assertSame(first, sharedRegistry.getOrCreateRemoteTypeDef(first, "remote.Enum"));
+    Assert.assertThrows(
+        ForyException.class, () -> sharedRegistry.getOrCreateRemoteTypeDef(second, "remote.Enum"));
+  }
+
+  @Test
+  public void testIdEnumDoesNotUseTypeDefMetaLimits() {
+    Fory fory =
+        Fory.builder()
+            .withXlang(true)
+            .requireClassRegistration(true)
+            .withCompatible(true)
+            .withMaxTypeMetaBytes(1)
+            .withMaxSchemaVersionsPerType(1)
+            .build();
+    fory.register(TestNeedToWriteReferenceClass.class, 101);
+
+    serDeCheck(fory, TestNeedToWriteReferenceClass.A);
+  }
+
+  @Test
+  public void testIdExtDoesNotUseTypeDefMetaLimits() {
+    Fory fory =
+        Fory.builder()
+            .withXlang(true)
+            .requireClassRegistration(true)
+            .withCompatible(true)
+            .withMaxTypeMetaBytes(1)
+            .withMaxSchemaVersionsPerType(1)
+            .build();
+    fory.register(IdLimitExt.class, 102);
+    fory.registerSerializer(IdLimitExt.class, IdLimitExtSerializer.class);
+
+    IdLimitExt value = new IdLimitExt();
+    value.value = 42;
+    serDeCheck(fory, value);
+    assertEquals(fory.getTypeResolver().getTypeInfo(IdLimitExt.class).getTypeId(), Types.EXT);
+  }
+
+  @Test
   public void testRemoteSchemaVersionsUseRemoteTypeKey() {
     ForyBuilder builder =
         Fory.builder()
@@ -693,6 +751,11 @@ public class ClassResolverTest extends ForyTestBase {
     int f1;
   }
 
+  @Data
+  static class IdLimitExt {
+    int value;
+  }
+
   @EqualsAndHashCode(callSuper = true)
   @ToString
   static class Bar extends Foo {
@@ -708,6 +771,29 @@ public class ClassResolverTest extends ForyTestBase {
   private enum TestNeedToWriteReferenceClass {
     A,
     B
+  }
+
+  private enum OtherTestNeedToWriteReferenceClass {
+    C,
+    D
+  }
+
+  public static class IdLimitExtSerializer extends Serializer<IdLimitExt> {
+    public IdLimitExtSerializer(TypeResolver typeResolver, Class<IdLimitExt> type) {
+      super(typeResolver.getConfig(), type);
+    }
+
+    @Override
+    public void write(WriteContext writeContext, IdLimitExt value) {
+      writeContext.getBuffer().writeInt32(value.value);
+    }
+
+    @Override
+    public IdLimitExt read(ReadContext readContext) {
+      IdLimitExt value = new IdLimitExt();
+      value.value = readContext.getBuffer().readInt32();
+      return value;
+    }
   }
 
   @Test

@@ -89,6 +89,16 @@ struct ExtWithDestructor {
   FORY_STRUCT(ExtWithDestructor, value);
 };
 
+struct IdLimitExt {
+  int32_t value = 0;
+
+  bool operator==(const IdLimitExt &other) const {
+    return value == other.value;
+  }
+
+  FORY_STRUCT(IdLimitExt, value);
+};
+
 namespace fory {
 namespace serialization {
 namespace test {
@@ -971,6 +981,17 @@ static std::vector<uint8_t> make_remote_type_meta(const std::string &type_name,
   return bytes.value();
 }
 
+static std::vector<uint8_t>
+make_remote_non_struct_type_meta(TypeId type_id, const std::string &type_name) {
+  TypeMeta meta =
+      TypeMeta::from_fields(static_cast<uint32_t>(type_id), "example",
+                            type_name, true, 0, std::vector<FieldInfo>{});
+  auto bytes = meta.to_bytes();
+  EXPECT_TRUE(bytes.ok()) << "TypeMeta serialization failed: "
+                          << bytes.error().to_string();
+  return bytes.value();
+}
+
 static Result<const TypeInfo *, Error>
 append_and_read_type_meta(ReadContext &ctx, const std::vector<uint8_t> &bytes) {
   Buffer buffer;
@@ -1000,6 +1021,23 @@ TEST(SerializationTest, RemoteSchemaLimitRejectsExtraVersions) {
   EXPECT_EQ(second.error().code(), ErrorCode::InvalidData);
 }
 
+TEST(SerializationTest, RemoteNonStructTypeMetaUsesSchemaLimit) {
+  Config config;
+  config.compatible = true;
+  config.max_schema_versions_per_type = 1;
+  ReadContext ctx(config, std::make_unique<TypeResolver>());
+
+  auto first = append_and_read_type_meta(
+      ctx, make_remote_non_struct_type_meta(TypeId::NAMED_ENUM, "RemoteEnum"));
+  ASSERT_TRUE(first.ok()) << first.error().to_string();
+
+  auto second = append_and_read_type_meta(
+      ctx, make_remote_non_struct_type_meta(TypeId::NAMED_EXT, "RemoteEnum"));
+  EXPECT_FALSE(second.ok());
+  ASSERT_FALSE(second.ok());
+  EXPECT_EQ(second.error().code(), ErrorCode::InvalidData);
+}
+
 TEST(SerializationTest, RemoteSchemaLimitKeepsUnknownTypesSeparate) {
   Config config;
   config.compatible = true;
@@ -1012,6 +1050,41 @@ TEST(SerializationTest, RemoteSchemaLimitKeepsUnknownTypesSeparate) {
   auto second = append_and_read_type_meta(
       ctx, make_remote_type_meta("UnknownB", "value"));
   EXPECT_TRUE(second.ok()) << second.error().to_string();
+}
+
+TEST(SerializationTest, IdEnumDoesNotUseTypeMetaLimits) {
+  auto fory = Fory::builder()
+                  .xlang(true)
+                  .compatible(true)
+                  .max_type_meta_bytes(1)
+                  .max_schema_versions_per_type(1)
+                  .build();
+  ASSERT_TRUE(fory.register_enum<SignedScopedStatus>(101).ok());
+
+  auto bytes = fory.serialize(SignedScopedStatus::LARGE);
+  ASSERT_TRUE(bytes.ok()) << bytes.error().to_string();
+  std::vector<uint8_t> payload = std::move(bytes).value();
+  auto decoded =
+      fory.deserialize<SignedScopedStatus>(payload.data(), payload.size());
+  ASSERT_TRUE(decoded.ok()) << decoded.error().to_string();
+  EXPECT_EQ(decoded.value(), SignedScopedStatus::LARGE);
+}
+
+TEST(SerializationTest, IdExtDoesNotUseTypeMetaLimits) {
+  auto fory = Fory::builder()
+                  .xlang(true)
+                  .compatible(true)
+                  .max_type_meta_bytes(1)
+                  .max_schema_versions_per_type(1)
+                  .build();
+  ASSERT_TRUE(fory.register_extension_type<IdLimitExt>(102).ok());
+
+  auto bytes = fory.serialize(IdLimitExt{42});
+  ASSERT_TRUE(bytes.ok()) << bytes.error().to_string();
+  std::vector<uint8_t> payload = std::move(bytes).value();
+  auto decoded = fory.deserialize<IdLimitExt>(payload.data(), payload.size());
+  ASSERT_TRUE(decoded.ok()) << decoded.error().to_string();
+  EXPECT_EQ(decoded.value(), IdLimitExt{42});
 }
 
 TEST(SerializationTest, TypeMetaRejectsOverConsumedDeclaredSize) {

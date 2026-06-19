@@ -521,7 +521,7 @@ Two explicit pieces of state back xlang type metadata:
 
 - `MetaStringWriter` and `MetaStringReader` deduplicate and decode namespace
   and type-name strings
-- shared TypeDef write/read state tracks announced compatible struct metadata
+- shared TypeDef write/read state tracks announced TypeDef metadata
 
 Ownership rules:
 

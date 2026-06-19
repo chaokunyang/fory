@@ -456,44 +456,6 @@ export class TypeMeta {
     reader.readSkip(metaSize);
   }
 
-  static matchesEncodedAfterHeader(
-    reader: BinaryReader,
-    headerLow: number,
-    headerHigh: number,
-    encoded: Uint8Array,
-    maxTypeMetaBytes = DEFAULT_MAX_TYPE_META_BYTES,
-  ): boolean {
-    const start = reader.readGetCursor();
-    const metaSize = TypeMeta.readMetaSizeFromLow(reader, headerLow);
-    TypeMeta.checkTypeMetaBytes(metaSize, maxTypeMetaBytes);
-    const bodyStart = reader.readGetCursor();
-    const afterHeaderSize = bodyStart - start + metaSize;
-    reader.checkReadableBytes(metaSize);
-    if (
-      encoded.length !== 8 + afterHeaderSize
-      || encoded[0] !== (headerLow & 0xff)
-      || encoded[1] !== ((headerLow >>> 8) & 0xff)
-      || encoded[2] !== ((headerLow >>> 16) & 0xff)
-      || encoded[3] !== ((headerLow >>> 24) & 0xff)
-      || encoded[4] !== (headerHigh & 0xff)
-      || encoded[5] !== ((headerHigh >>> 8) & 0xff)
-      || encoded[6] !== ((headerHigh >>> 16) & 0xff)
-      || encoded[7] !== ((headerHigh >>> 24) & 0xff)
-    ) {
-      reader.readSetCursor(start);
-      return false;
-    }
-    const remote = reader.bufferRefAt(start, afterHeaderSize);
-    for (let i = 0; i < afterHeaderSize; i++) {
-      if (remote[i] !== encoded[8 + i]) {
-        reader.readSetCursor(start);
-        return false;
-      }
-    }
-    reader.readSetCursor(start + afterHeaderSize);
-    return true;
-  }
-
   static fromBytes(reader: BinaryReader): TypeMeta {
     return TypeMeta.fromBytesAfterHeader(reader, TypeMeta.readHeader(reader));
   }

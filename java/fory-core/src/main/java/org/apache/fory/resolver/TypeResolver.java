@@ -878,18 +878,16 @@ public abstract class TypeResolver {
       if (typeInfo != null) {
         TypeDef.skipTypeDef(buffer, id);
       } else {
-        TypeDef typeDef = sharedRegistry.typeDefById.get(id);
+        TypeDef typeDef = sharedRegistry.remoteTypeDefById.get(id);
         if (typeDef != null) {
           TypeDef.skipTypeDef(buffer, id);
           typeInfo = buildMetaSharedTypeInfo(typeDef);
         } else if (hasTargetClass) {
           byte[] encoded = TypeDef.readTypeDefBytes(this, buffer, id);
-          TypeDef localTypeDef = getTypeDef(targetClass, true);
-          if (Arrays.equals(encoded, localTypeDef.getEncoded())) {
-            // Exact local bytes only avoid remote schema counting/parsing. They still select the
-            // target class serializer, so the class must pass the active deserialization policy.
-            checkClassForDeserialization(targetClass);
-            typeInfo = getTypeInfo(targetClass);
+          checkClassForDeserialization(targetClass);
+          TypeDef localTypeDef = exactLocalTypeDef(encoded, targetClass);
+          if (localTypeDef != null) {
+            typeInfo = buildMetaSharedTypeInfo(localTypeDef, targetClass);
           } else {
             typeInfo = buildCheckedMetaSharedTypeInfo(TypeDef.readTypeDef(this, encoded));
           }
@@ -1073,18 +1071,16 @@ public abstract class TypeResolver {
     Class<?> cls = loadClass(typeDef.getClassSpec());
     // A wire TypeDef may create a compatible serializer; check the class before counting it.
     checkClassForDeserialization(cls);
-    TypeDef localTypeDef = exactLocalTypeDef(typeDef, cls);
-    if (localTypeDef != null) {
-      return buildMetaSharedTypeInfo(localTypeDef, cls);
+    if (typeDef.isStructSchemaKind()) {
+      TypeDef localTypeDef = exactLocalTypeDef(typeDef, cls);
+      if (localTypeDef != null) {
+        return buildMetaSharedTypeInfo(localTypeDef, cls);
+      }
     }
-    if (!typeDef.isStructSchemaKind()) {
-      TypeDef cachedTypeDef = cacheTypeDef(typeDef);
-      return buildMetaSharedTypeInfo(cachedTypeDef, cls);
-    }
-    Object structTypeKey = remoteStructKey(typeDef);
-    sharedRegistry.checkRemoteTypeDefLimit(typeDef, structTypeKey);
+    Object remoteTypeKey = remoteTypeKey(typeDef);
+    sharedRegistry.checkRemoteTypeDefLimit(typeDef, remoteTypeKey);
     TypeInfo typeInfo = createMetaSharedTypeInfo(typeDef, cls);
-    TypeDef cachedTypeDef = sharedRegistry.getOrCreateRemoteTypeDef(typeDef, structTypeKey);
+    TypeDef cachedTypeDef = sharedRegistry.getOrCreateRemoteTypeDef(typeDef, remoteTypeKey);
     if (cachedTypeDef != typeDef) {
       return buildMetaSharedTypeInfo(cachedTypeDef, cls);
     }
@@ -1093,10 +1089,27 @@ public abstract class TypeResolver {
   }
 
   private TypeDef exactLocalTypeDef(TypeDef remoteTypeDef, Class<?> cls) {
+    assert remoteTypeDef.isStructSchemaKind();
+    return exactLocalTypeDef(remoteTypeDef.getEncoded(), cls);
+  }
+
+  private TypeDef exactLocalTypeDef(byte[] remoteEncoded, Class<?> cls) {
+    // UnknownStruct and id-addressed internal placeholders do not have a local schema to compare
+    // against; building one would change open-world unknown-type semantics.
+    if (UnknownClass.class.isAssignableFrom(TypeUtils.getComponentIfArray(cls))) {
+      return null;
+    }
+    if (isCrossLanguage() && isRegisteredById(cls)) {
+      TypeInfo localInfo = getTypeInfo(cls, false);
+      if (localInfo.userTypeId == INVALID_USER_TYPE_ID) {
+        return null;
+      }
+    }
     TypeDef localTypeDef = getTypeDef(cls, true);
-    return Arrays.equals(remoteTypeDef.getEncoded(), localTypeDef.getEncoded())
-        ? localTypeDef
-        : null;
+    if (!localTypeDef.isStructSchemaKind()) {
+      return null;
+    }
+    return Arrays.equals(remoteEncoded, localTypeDef.getEncoded()) ? localTypeDef : null;
   }
 
   // TODO(chaokunyang) if TypeDef is consistent with class in this process,
@@ -1523,13 +1536,10 @@ public abstract class TypeResolver {
 
   @Internal
   public final TypeDef cacheRemoteTypeDef(TypeDef typeDef) {
-    if (!typeDef.isStructSchemaKind()) {
-      return cacheTypeDef(typeDef);
-    }
-    return sharedRegistry.getOrCreateRemoteTypeDef(typeDef, remoteStructKey(typeDef));
+    return sharedRegistry.getOrCreateRemoteTypeDef(typeDef, remoteTypeKey(typeDef));
   }
 
-  private static Object remoteStructKey(TypeDef typeDef) {
+  private static Object remoteTypeKey(TypeDef typeDef) {
     if (typeDef.isNamed()) {
       return typeDef.getClassSpec().entireClassName;
     }

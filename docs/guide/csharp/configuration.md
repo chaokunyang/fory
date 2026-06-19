@@ -35,16 +35,16 @@ ThreadSafeFory threadSafe = Fory.Builder().BuildThreadSafe();
 
 `Fory.Builder().Build()` uses:
 
-| Option                            | Default | Description                                        |
-| --------------------------------- | ------- | -------------------------------------------------- |
-| `TrackRef`                        | `false` | Reference tracking disabled                        |
-| `Compatible`                      | `true`  | Compatible schema-evolution metadata enabled       |
-| `CheckStructVersion`              | `false` | Struct schema hash checks disabled                 |
-| `MaxDepth`                        | `20`    | Max dynamic nesting depth                          |
-| `MaxTypeFields`                   | `512`   | Max fields in one received struct metadata body    |
-| `MaxTypeMetaBytes`                | `4096`  | Max encoded bytes in one received metadata body    |
-| `MaxSchemaVersionsPerType`        | `10`    | Max remote schema versions for one struct type     |
-| `MaxAverageSchemaVersionsPerType` | `3`     | Average remote schema versions across struct types |
+| Option                            | Default | Description                                       |
+| --------------------------------- | ------- | ------------------------------------------------- |
+| `TrackRef`                        | `false` | Reference tracking disabled                       |
+| `Compatible`                      | `true`  | Compatible schema-evolution metadata enabled      |
+| `CheckStructVersion`              | `false` | Struct schema hash checks disabled                |
+| `MaxDepth`                        | `20`    | Max dynamic nesting depth                         |
+| `MaxTypeFields`                   | `512`   | Max fields in one received struct metadata body   |
+| `MaxTypeMetaBytes`                | `4096`  | Max encoded bytes in one received metadata body   |
+| `MaxSchemaVersionsPerType`        | `10`    | Max remote metadata versions for one logical type |
+| `MaxAverageSchemaVersionsPerType` | `3`     | Average remote metadata versions across types     |
 
 ## Builder Options
 
@@ -119,7 +119,7 @@ Fory fory = Fory.Builder()
 
 ### `MaxSchemaVersionsPerType(int value)`
 
-Sets the maximum accepted remote struct schema versions for one logical type on
+Sets the maximum accepted remote metadata versions for one logical type on
 metadata cache misses.
 
 ```csharp
@@ -130,8 +130,8 @@ Fory fory = Fory.Builder()
 
 ### `MaxAverageSchemaVersionsPerType(int value)`
 
-Sets the average accepted remote struct schema versions across accepted remote
-struct types. The effective global floor is `8192` schemas.
+Sets the average accepted remote metadata versions across accepted remote types.
+The effective global floor is `8192` schemas.
 
 ```csharp
 Fory fory = Fory.Builder()

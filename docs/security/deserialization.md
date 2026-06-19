@@ -197,20 +197,27 @@ Metadata readers should:
   policy decisions.
 - Reset or release metadata state at the correct root-operation boundary.
 
-Remote struct metadata that can create schema-specific read state must be
+Remote metadata that can create persistent read state must be
 limited on the cold metadata cache-miss path. The check is resource control
 only: it must not change wire compatibility, type registration, dynamic class
 loading, unknown-type handling, deserialization policy, or schema-evolution
 semantics. Metadata cache hits and generated field readers remain hot paths and
 must not add validation, hashing, allocation, or policy work for this limit.
 Failed or incompatible metadata must not consume the limit. Count a remote
-schema version only after schema-specific read state has been successfully built
-and the owning metadata cache can publish it.
-If a remote metadata body exactly matches a local registered schema after the
-metadata body and hash have been validated, the reader may use the local schema
-without consuming the remote-schema limit.
+metadata version only after the required read state has been successfully built
+and the owning metadata cache can publish it. Struct types may have multiple
+schema-evolution versions; compatible named enum/ext/union metadata normally
+has one version, but still counts against remote metadata total limits when it
+is sent as shared metadata. Pure id-based enum, ext, and typed-union values use
+type id plus user type id and must not be moved onto this metadata cache path.
+If a remote struct metadata body exactly matches a local registered struct
+schema after the metadata body and hash have been validated, the reader may use
+the local struct schema without consuming the remote-schema limit.
+Only a remote metadata cache entry created after such validation may skip a
+later body by header; locally registered metadata alone must not be treated as
+proof that an untrusted remote body was valid.
 
-Remote struct metadata bodies and field lists must also be bounded on the cold
+Remote metadata bodies and struct field lists must also be bounded on the cold
 metadata parse path. `maxTypeMetaBytes` limits the encoded metadata body bytes
 for one received TypeDef or TypeMeta body, excluding the 8-byte header and any
 extended-size varint. `maxTypeFields` limits the number of fields declared by

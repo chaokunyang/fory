@@ -542,7 +542,7 @@ public final class ForyBuilder {
   }
 
   /**
-   * Sets the maximum number of accepted remote schema versions for one struct type.
+   * Sets the maximum number of accepted remote metadata versions for one logical type.
    *
    * <p>This limit applies only to cold remote metadata miss paths.
    */
@@ -557,7 +557,7 @@ public final class ForyBuilder {
   }
 
   /**
-   * Sets the maximum average number of accepted remote schema versions across struct types.
+   * Sets the maximum average number of accepted remote metadata versions across logical types.
    *
    * <p>The global limit has an internal floor so small type universes can still evolve normally.
    */

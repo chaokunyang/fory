@@ -242,7 +242,7 @@ List<FieldInfo> _validateFieldInfos(Iterable<FieldInfo> fields) {
 }
 
 final class TypeResolver {
-  static const int _minRemoteStructSchemaLimit = 8192;
+  static const int _minRemoteTypeMetaLimit = 8192;
 
   final Config config;
   final WireTypeMetaEncoder _wireTypeMetaEncoder = const WireTypeMetaEncoder();
@@ -391,7 +391,6 @@ final class TypeResolver {
       typeDef: typeDef,
       remoteTypeDef: null,
     );
-    _parsedTypeMetaCache.remember(TypeHeader(typeDef.header), resolved);
     _rememberResolved(
       type,
       resolved,
@@ -1220,7 +1219,13 @@ final class TypeResolver {
       throw StateError('TypeDef kind does not match registered type metadata.');
     }
     if (resolved.kind != RegistrationKind.struct) {
+      final remoteSchemaKey = _checkRemoteTypeDefLimit(
+        typeId: typeId,
+        userTypeId: userTypeId,
+        resolved: resolved,
+      );
       _parsedTypeMetaCache.remember(header, resolved);
+      _recordRemoteTypeDef(remoteSchemaKey);
       return resolved;
     }
     final localTypeDef = resolved.typeDef;
@@ -1234,7 +1239,7 @@ final class TypeResolver {
       _parsedTypeMetaCache.remember(header, resolved);
       return resolved;
     }
-    final remoteSchemaKey = _checkRemoteStructSchemaLimit(
+    final remoteSchemaKey = _checkRemoteTypeDefLimit(
       typeId: typeId,
       userTypeId: userTypeId,
       resolved: resolved,
@@ -1264,7 +1269,7 @@ final class TypeResolver {
     );
     remoteResolved.structSerializer?.validateCompatibleTypeInfo(remoteResolved);
     _parsedTypeMetaCache.remember(header, remoteResolved);
-    _recordRemoteStructSchema(remoteSchemaKey);
+    _recordRemoteTypeDef(remoteSchemaKey);
     return remoteResolved;
   }
 
@@ -1287,14 +1292,11 @@ final class TypeResolver {
   }
 
   @pragma('vm:never-inline')
-  String? _checkRemoteStructSchemaLimit({
+  String _checkRemoteTypeDefLimit({
     required int typeId,
     required int? userTypeId,
     required TypeInfo resolved,
   }) {
-    if (!_isStructTypeDefKind(typeId)) {
-      return null;
-    }
     final key =
         userTypeId != null
             ? 'i$userTypeId'
@@ -1302,33 +1304,32 @@ final class TypeResolver {
     final versionsForType = _remoteSchemaVersionsByType[key] ?? 0;
     if (versionsForType >= config.maxSchemaVersionsPerType) {
       throw StateError(
-        'Remote struct schema versions for one type exceeded '
+        'Remote schema version limit exceeded for one type. The data may be '
+        'malicious. If the data is not malicious, please increase '
         'maxSchemaVersionsPerType=${config.maxSchemaVersionsPerType}.',
       );
     }
-    final acceptedStructTypeCount =
+    final acceptedTypeCount =
         versionsForType == 0
             ? _remoteSchemaVersionsByType.length + 1
             : _remoteSchemaVersionsByType.length;
     final averageLimit =
-        acceptedStructTypeCount * config.maxAverageSchemaVersionsPerType;
+        acceptedTypeCount * config.maxAverageSchemaVersionsPerType;
     final globalLimit =
-        averageLimit > _minRemoteStructSchemaLimit
+        averageLimit > _minRemoteTypeMetaLimit
             ? averageLimit
-            : _minRemoteStructSchemaLimit;
+            : _minRemoteTypeMetaLimit;
     if (_totalAcceptedSchemaVersions >= globalLimit) {
       throw StateError(
-        'Remote struct schema versions exceeded global limit from '
+        'Remote schema version limit exceeded globally. The data may be '
+        'malicious. If the data is not malicious, please increase '
         'maxAverageSchemaVersionsPerType=${config.maxAverageSchemaVersionsPerType}.',
       );
     }
     return key;
   }
 
-  void _recordRemoteStructSchema(String? key) {
-    if (key == null) {
-      return;
-    }
+  void _recordRemoteTypeDef(String key) {
     final versionsForType = _remoteSchemaVersionsByType[key] ?? 0;
     _remoteSchemaVersionsByType[key] = versionsForType + 1;
     _totalAcceptedSchemaVersions += 1;

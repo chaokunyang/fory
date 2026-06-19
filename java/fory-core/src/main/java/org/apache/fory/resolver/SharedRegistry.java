@@ -59,12 +59,13 @@ import org.apache.fory.type.DescriptorGrouper;
 public final class SharedRegistry {
   private static final int MAX_CACHED_ENCODED_META_STRINGS = 32768;
   private static final int MAX_CACHED_ENCODED_META_STRING_LENGTH = 2048;
-  private static final int MIN_REMOTE_STRUCT_SCHEMA_LIMIT = 8192;
+  private static final int MIN_REMOTE_TYPE_DEF_LIMIT = 8192;
 
   final ConcurrentIdentityMap<Class<?>, TypeDef> typeDefMap = new ConcurrentIdentityMap<>();
   final ConcurrentIdentityMap<Class<?>, TypeDef> currentLayerTypeDef =
       new ConcurrentIdentityMap<>();
   final ConcurrentHashMap<Long, TypeDef> typeDefById = new ConcurrentHashMap<>();
+  final ConcurrentHashMap<Long, TypeDef> remoteTypeDefById = new ConcurrentHashMap<>();
   final ConcurrentHashMap<Tuple2<Class<?>, Boolean>, SortedMap<Member, Descriptor>>
       descriptorsCache = new ConcurrentHashMap<>();
   final ConcurrentHashMap<FieldDescriptorsKey, List<Descriptor>> fieldDescriptorsCache =
@@ -93,7 +94,7 @@ public final class SharedRegistry {
       new StaticGeneratedSerializerRegistry();
   private final Object metaStringCacheLock = new Object();
   private final Config config;
-  private final HashMap<Object, Integer> remoteSchemaVersionsByType = new HashMap<>();
+  private final HashMap<Object, Integer> remoteTypeDefVersionsByType = new HashMap<>();
   private int totalAcceptedSchemaVersions;
   volatile IdentityHashMap<Class<?>, Integer> registeredClassIdMap;
   volatile BiMap<String, Class<?>> registeredClasses;
@@ -175,61 +176,65 @@ public final class SharedRegistry {
     return existing == null ? typeDef : existing;
   }
 
-  synchronized TypeDef getOrCreateRemoteTypeDef(TypeDef typeDef, Object structTypeKey) {
+  synchronized TypeDef getOrCreateRemoteTypeDef(TypeDef typeDef, Object remoteTypeKey) {
     long id = typeDef.getId();
-    TypeDef existing = typeDefById.get(id);
+    TypeDef existing = remoteTypeDefById.get(id);
     if (existing != null) {
       return existing;
     }
-    int versionsForType = checkRemoteSchemaLimit(structTypeKey);
-    existing = typeDefById.putIfAbsent(id, typeDef);
+    int versionsForType = checkRemoteTypeLimit(remoteTypeKey);
+    TypeDef canonicalTypeDef = typeDefById.putIfAbsent(id, typeDef);
+    if (canonicalTypeDef == null) {
+      canonicalTypeDef = typeDef;
+    }
+    existing = remoteTypeDefById.putIfAbsent(id, canonicalTypeDef);
     if (existing != null) {
       return existing;
     }
-    remoteSchemaVersionsByType.put(structTypeKey, versionsForType + 1);
+    remoteTypeDefVersionsByType.put(remoteTypeKey, versionsForType + 1);
     totalAcceptedSchemaVersions++;
-    return typeDef;
+    return canonicalTypeDef;
   }
 
-  synchronized void checkRemoteTypeDefLimit(TypeDef typeDef, Object structTypeKey) {
-    if (typeDefById.containsKey(typeDef.getId())) {
+  synchronized void checkRemoteTypeDefLimit(TypeDef typeDef, Object remoteTypeKey) {
+    if (remoteTypeDefById.containsKey(typeDef.getId())) {
       return;
     }
-    checkRemoteSchemaLimit(structTypeKey);
+    checkRemoteTypeLimit(remoteTypeKey);
   }
 
-  private int checkRemoteSchemaLimit(Object structTypeKey) {
-    int versionsForType = remoteSchemaVersionsByType.getOrDefault(structTypeKey, 0);
+  private int checkRemoteTypeLimit(Object remoteTypeKey) {
+    int versionsForType = remoteTypeDefVersionsByType.getOrDefault(remoteTypeKey, 0);
     int maxSchemaVersionsPerType = config.maxSchemaVersionsPerType();
     if (versionsForType >= maxSchemaVersionsPerType) {
       throw new ForyException(
           "Remote schema version limit exceeded for type "
-              + structTypeKey
+              + remoteTypeKey
               + ": "
               + versionsForType
               + " >= "
               + maxSchemaVersionsPerType
-              + ". Increase maxSchemaVersionsPerType if this peer legitimately sends many "
-              + "schema versions for one type.");
+              + ". The data may be malicious. If the data is not malicious, please increase "
+              + "maxSchemaVersionsPerType.");
     }
-    int acceptedStructTypeCount =
+    int acceptedRemoteTypeCount =
         versionsForType == 0
-            ? remoteSchemaVersionsByType.size() + 1
-            : remoteSchemaVersionsByType.size();
+            ? remoteTypeDefVersionsByType.size() + 1
+            : remoteTypeDefVersionsByType.size();
     long globalLimit =
         Math.max(
-            (long) MIN_REMOTE_STRUCT_SCHEMA_LIMIT,
-            (long) acceptedStructTypeCount * config.maxAverageSchemaVersionsPerType());
+            (long) MIN_REMOTE_TYPE_DEF_LIMIT,
+            (long) acceptedRemoteTypeCount * config.maxAverageSchemaVersionsPerType());
     if (totalAcceptedSchemaVersions >= globalLimit) {
       throw new ForyException(
           "Remote schema version limit exceeded: "
               + totalAcceptedSchemaVersions
-              + " schemas for "
-              + acceptedStructTypeCount
-              + " accepted struct types exceeds the average limit "
+              + " metadata versions for "
+              + acceptedRemoteTypeCount
+              + " accepted remote types exceeds the average limit "
               + config.maxAverageSchemaVersionsPerType()
-              + ". Increase maxAverageSchemaVersionsPerType if this peer legitimately sends many "
-              + "schema versions across many types.");
+              + ". The data may be malicious. If the data is not malicious, please increase "
+              + "maxAverageSchemaVersionsPerType.");
     }
     return versionsForType;
   }

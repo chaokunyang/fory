@@ -115,6 +115,16 @@ void _rememberSchema(Type type, List<GeneratedFieldInfo> fields) {
   );
 }
 
+void _rememberEnum(Type type) {
+  GeneratedTypeCatalog.remember(
+    type,
+    GeneratedTypeEntry(
+      kind: GeneratedTypeKind.enumType,
+      serializerFactory: () => const _CacheTestSerializer(),
+    ),
+  );
+}
+
 Uint8List _typeMetaBytes(
   Type type,
   String name,
@@ -122,6 +132,27 @@ Uint8List _typeMetaBytes(
 ) {
   final resolver = TypeResolver(const Config());
   _rememberSchema(type, fields);
+  final parts = name.split('.');
+  resolver.registerGenerated(
+    type,
+    namespace: parts.first,
+    typeName: parts.last,
+  );
+  final resolved = resolver.resolveUserByName(parts.first, parts.last);
+  final buffer = Buffer();
+  resolver.writeTypeMeta(
+    buffer,
+    resolved,
+    typeDef: resolved.typeDef,
+    typeDefIds: LinkedHashMap<TypeDef, int>.identity(),
+    metaStringWriter: MetaStringWriter(),
+  );
+  return buffer.toBytes();
+}
+
+Uint8List _enumTypeMetaBytes(Type type, String name) {
+  final resolver = TypeResolver(const Config());
+  _rememberEnum(type);
   final parts = name.split('.');
   resolver.registerGenerated(
     type,
@@ -285,6 +316,20 @@ void main() {
       _readTypeMeta(reader, first);
 
       expect(() => _readTypeMeta(reader, second), throwsA(isA<StateError>()));
+    });
+
+    test('named enum TypeDef uses metadata byte limit', () {
+      const name = 'example.RemoteEnum';
+      final reader = TypeResolver(const Config(maxTypeMetaBytes: 1));
+      _rememberEnum(_SchemaLocal);
+      reader.registerGenerated(
+        _SchemaLocal,
+        namespace: 'example',
+        typeName: 'RemoteEnum',
+      );
+      final bytes = _enumTypeMetaBytes(_SchemaRemoteA, name);
+
+      expect(() => _readTypeMeta(reader, bytes), throwsA(isA<StateError>()));
     });
 
     test('type meta field limit rejects large struct', () {

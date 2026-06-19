@@ -58,8 +58,8 @@ const fory = new Fory({
 | `maxDepth`                        | `50`    | Maximum nesting depth. Must be `>= 2`. Increase for deeply nested structures          |
 | `maxTypeFields`                   | `512`   | Maximum fields accepted in one received remote struct metadata body                   |
 | `maxTypeMetaBytes`                | `4096`  | Maximum encoded body bytes accepted for one received TypeMeta body                    |
-| `maxSchemaVersionsPerType`        | `10`    | Maximum accepted remote struct schema versions for one logical type                   |
-| `maxAverageSchemaVersionsPerType` | `3`     | Average accepted remote struct schema versions across accepted remote struct types    |
+| `maxSchemaVersionsPerType`        | `10`    | Maximum accepted remote metadata versions for one logical type                        |
+| `maxAverageSchemaVersionsPerType` | `3`     | Average accepted remote metadata versions across accepted remote types                |
 | `useSliceString`                  | `false` | Optional string-reading optimization for Node.js. Leave at default unless benchmarked |
 | `hps`                             | unset   | Optional fast string helper from `@apache-fory/hps` (Node.js 20+)                     |
 | `hooks.afterCodeGenerated`        | unset   | Callback to inspect the generated serializer code, useful for debugging               |

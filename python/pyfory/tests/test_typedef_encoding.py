@@ -20,6 +20,7 @@ Tests for xlang TypeDef implementation.
 """
 
 import array
+import enum
 from dataclasses import dataclass, make_dataclass
 from typing import List, Dict, Optional
 
@@ -52,6 +53,7 @@ from pyfory.meta.typedef_encoder import (
 from pyfory.meta.typedef_decoder import decode_typedef
 from pyfory.serializer import PyArraySerializer
 from pyfory.types import TypeId
+from pyfory.union import UnionSerializer
 from pyfory import Fory
 from pyfory.error import TypeNotCompatibleError
 from pyfory.lib.mmh3 import hash_buffer
@@ -115,6 +117,40 @@ class UInt8ArrayPayload:
 @dataclass
 class Int32ListPayload:
     payload: List[pyfory.FixedInt32]
+
+
+class IdLimitEnum(enum.Enum):
+    A = 1
+    B = 2
+
+
+@dataclass
+class IdLimitExt:
+    value: int = 0
+
+
+class IdLimitExtSerializer(pyfory.serializer.Serializer):
+    def write(self, write_context, value):
+        write_context.write_varint32(value.value)
+
+    def read(self, read_context):
+        return IdLimitExt(read_context.read_varint32())
+
+
+class IdLimitUnion:
+    def __init__(self, case_id: int, value):
+        self._case_id = case_id
+        self._value = value
+
+    def case_id(self):
+        return self._case_id
+
+    @staticmethod
+    def _from_case_id(case_id: int, value):
+        return IdLimitUnion(case_id, value)
+
+    def __eq__(self, other):
+        return isinstance(other, IdLimitUnion) and self._case_id == other._case_id and self._value == other._value
 
 
 @dataclass
@@ -381,6 +417,76 @@ def test_remote_schema_limit_keeps_unknown_types_separate(xlang):
 
     _read_remote_typedef(reader, first_type_id, first_typedef)
     _read_remote_typedef(reader, second_type_id, second_typedef)
+
+
+@pytest.mark.parametrize("xlang", [False, True])
+def test_id_enum_does_not_use_type_meta_limits(xlang):
+    fory = Fory(
+        xlang=xlang,
+        strict=False,
+        compatible=True,
+        max_type_meta_bytes=1,
+        max_schema_versions_per_type=1,
+    )
+    fory.register_type(IdLimitEnum, type_id=310)
+
+    assert fory.deserialize(fory.serialize(IdLimitEnum.B)) == IdLimitEnum.B
+
+
+@pytest.mark.parametrize("xlang", [False, True])
+def test_id_ext_does_not_use_type_meta_limits(xlang):
+    fory = Fory(
+        xlang=xlang,
+        strict=False,
+        compatible=True,
+        max_type_meta_bytes=1,
+        max_schema_versions_per_type=1,
+    )
+    fory.register_type(
+        IdLimitExt,
+        type_id=311,
+        serializer=IdLimitExtSerializer(fory.type_resolver, IdLimitExt),
+    )
+
+    assert fory.deserialize(fory.serialize(IdLimitExt(42))) == IdLimitExt(42)
+
+
+@pytest.mark.parametrize("xlang", [False, True])
+def test_id_union_does_not_use_type_meta_limits(xlang):
+    fory = Fory(
+        xlang=xlang,
+        strict=False,
+        compatible=True,
+        max_type_meta_bytes=1,
+        max_schema_versions_per_type=1,
+    )
+    fory.register_union(
+        IdLimitUnion,
+        type_id=312,
+        serializer=UnionSerializer(fory.type_resolver, IdLimitUnion, {0: str}),
+    )
+
+    assert fory.deserialize(fory.serialize(IdLimitUnion(0, "hello"))) == IdLimitUnion(0, "hello")
+
+
+def test_non_struct_typedef_uses_schema_limit():
+    from pyfory.registry import SharedRegistry, TypeResolver
+
+    fory = Fory(
+        xlang=True,
+        strict=False,
+        compatible=True,
+        max_schema_versions_per_type=1,
+    )
+    resolver = TypeResolver(fory.config, shared_registry=SharedRegistry())
+    first = TypeDef("example", "RemoteEnum", IdLimitEnum, TypeId.NAMED_ENUM, [])
+    second = TypeDef("example", "RemoteEnum", IdLimitEnum, TypeId.NAMED_EXT, [])
+
+    type_key = resolver._check_remote_type_def_limit(first)
+    resolver._record_remote_type_def(type_key)
+
+    with pytest.raises(ValueError, match="max_schema_versions_per_type"):
+        resolver._check_remote_type_def_limit(second)
 
 
 def _remote_typedef(xlang, remote_name, cls):

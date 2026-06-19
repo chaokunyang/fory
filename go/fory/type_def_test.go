@@ -536,17 +536,39 @@ func TestRemoteSchemaCheckDoesNotConsumeLimit(t *testing.T) {
 	checked := remoteSchemaLimitTypeDef(t, SchemaLimitBad{}, "example.Accepted")
 	valid := remoteSchemaLimitTypeDef(t, SchemaLimitExtra{}, "example.Accepted")
 
-	typeKey, isStruct, err := fory.typeResolver.checkRemoteStructSchemaLimit(checked)
+	typeKey, err := fory.typeResolver.checkRemoteTypeDefLimit(checked)
 	require.NoError(t, err)
-	require.True(t, isStruct)
 	require.NotNil(t, typeKey)
 	require.NoError(t, readRemoteTypeDef(t, fory, valid))
+}
+
+func TestRemoteNonStructTypeDefUsesLimit(t *testing.T) {
+	fory := NewFory(WithXlang(false), WithCompatible(true), WithMaxSchemaVersionsPerType(1))
+	first := remoteNamedEnumTypeDef(t, namedAuditEnum(0), "example.RemoteEnum")
+	second := NewTypeDef(uint32(NAMED_EXT), 0, first.nsName, first.typeName, true, false, nil)
+
+	typeKey, err := fory.typeResolver.checkRemoteTypeDefLimit(first)
+	require.NoError(t, err)
+	fory.typeResolver.recordRemoteTypeDef(typeKey)
+
+	_, err = fory.typeResolver.checkRemoteTypeDefLimit(second)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "MaxSchemaVersionsPerType")
 }
 
 func remoteSchemaLimitTypeDef(t *testing.T, value any, name string) *TypeDef {
 	t.Helper()
 	sender := NewFory(WithXlang(false), WithCompatible(true))
 	require.NoError(t, sender.RegisterStructByName(value, name))
+	typeDef, err := buildTypeDef(sender, reflect.ValueOf(value))
+	require.NoError(t, err)
+	return typeDef
+}
+
+func remoteNamedEnumTypeDef(t *testing.T, value any, name string) *TypeDef {
+	t.Helper()
+	sender := NewFory(WithXlang(true), WithCompatible(true))
+	require.NoError(t, sender.RegisterEnumByName(value, name))
 	typeDef, err := buildTypeDef(sender, reflect.ValueOf(value))
 	require.NoError(t, err)
 	return typeDef

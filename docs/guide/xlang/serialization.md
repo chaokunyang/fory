@@ -25,15 +25,16 @@ identity, field schema, and compatibility settings.
 
 ## Remote Schema Metadata Limits
 
-Compatible mode may receive remote struct metadata (`TypeDef` or `TypeMeta`) when a reader does not
-already know the metadata header. Fory limits how many distinct remote schema versions can be
-accepted before building schema-specific read state, and also limits the size of each received
-metadata body:
+Compatible mode may receive remote metadata (`TypeDef` or `TypeMeta`) when a reader does not
+already know the metadata header. Fory limits how many distinct remote metadata versions can be
+accepted before building read state, and also limits the size of each received metadata body:
 
-- `maxSchemaVersionsPerType`: maximum accepted remote schema versions for one logical struct type.
-  The default is `10`.
-- `maxAverageSchemaVersionsPerType`: average accepted remote schema versions across all accepted
-  remote struct types. The default is `3`; the effective global floor is `8192` schemas.
+- `maxSchemaVersionsPerType`: maximum accepted remote metadata versions for one logical type. The
+  default is `10`. Struct types may have multiple schema-evolution versions; compatible named
+  enum/ext/union metadata normally has one version but still counts when it is sent as shared
+  metadata.
+- `maxAverageSchemaVersionsPerType`: average accepted remote metadata versions across all accepted
+  remote types. The default is `3`; the effective global floor is `8192` metadata entries.
 - `maxTypeFields`: maximum fields declared by one received struct metadata body. The default is
   `512`.
 - `maxTypeMetaBytes`: maximum encoded metadata body bytes for one received TypeDef or TypeMeta body,
@@ -42,11 +43,15 @@ metadata body:
 These limits are checked only on the cold metadata parse and cache-miss paths. They do not change
 wire format, class registration, dynamic loading, unknown-type, or schema-evolution semantics. Cache
 hits and generated field readers remain hot paths and do not add extra validation for these limits.
-Failed or incompatible metadata is not counted against schema-version limits: a schema version is
-accepted only after the schema-specific read state is successfully built and its owning metadata
-cache can publish it. A remote schema that exactly matches the local registered schema is accepted
-without consuming the remote-schema limit, so normal local traffic can still be read even after
-other remote schemas have filled the limit.
+Failed or incompatible metadata is not counted against schema-version limits: a metadata version is
+accepted only after the required read state is successfully built and its owning metadata cache can
+publish it. A remote struct schema that exactly matches the local registered struct schema is
+accepted without consuming the remote-schema limit, so normal local traffic can still be read even
+after other remote schemas have filled the limit.
+
+Pure id-based enum, ext, and typed-union values use the normal type-id plus user-type-id wire path.
+They do not carry a TypeDef or TypeMeta body and are not affected by these metadata body or schema
+version limits.
 
 Raise these values only when the data is not malicious and a trusted peer sends larger metadata or
 many schema versions.

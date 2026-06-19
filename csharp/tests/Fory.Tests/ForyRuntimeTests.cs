@@ -2135,6 +2135,24 @@ public sealed class ForyRuntimeTests
     }
 
     [Fact]
+    public void IdUnionDoesNotUseTypeMetaLimits()
+    {
+        ForyRuntime fory = ForyRuntime.Builder()
+            .Compatible(true)
+            .MaxTypeMetaBytes(1)
+            .MaxSchemaVersionsPerType(1)
+            .Build();
+        fory.Register<SourceGeneratedShape>(904);
+
+        SourceGeneratedShape value = new SourceGeneratedShape.Number(42);
+        SourceGeneratedShape decoded =
+            fory.Deserialize<SourceGeneratedShape>(fory.Serialize(value));
+
+        SourceGeneratedShape.Number number = Assert.IsType<SourceGeneratedShape.Number>(decoded);
+        Assert.Equal(42, number.Value);
+    }
+
+    [Fact]
     public void UnionFieldRoundTripCompatible()
     {
         ForyRuntime fory = ForyRuntime.Builder().Compatible(true).Build();

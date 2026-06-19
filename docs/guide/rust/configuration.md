@@ -105,10 +105,10 @@ let fory = Fory::builder()
 - `max_type_fields` defaults to `512` and limits fields in one received struct metadata body.
 - `max_type_meta_bytes` defaults to `4096` and limits encoded body bytes in one received TypeDef or
   TypeMeta body, excluding the 8-byte header and any extended-size varint.
-- `max_schema_versions_per_type` defaults to `10` and limits accepted schema versions for one
-  logical struct type.
+- `max_schema_versions_per_type` defaults to `10` and limits accepted remote metadata versions for
+  one logical type.
 - `max_average_schema_versions_per_type` defaults to `3` and limits the average across accepted
-  remote struct types. The effective global floor is `8192` schemas.
+  remote types. The effective global floor is `8192` schemas.
 
 ### Explicit Xlang Examples
 
@@ -144,15 +144,15 @@ let fory = Fory::builder()
 
 ## Configuration Summary
 
-| Option                                        | Description                                        | Default |
-| --------------------------------------------- | -------------------------------------------------- | ------- |
-| `compatible(bool)`                            | Enable schema evolution                            | `true`  |
-| `xlang(bool)`                                 | Use xlang mode                                     | `true`  |
-| `max_dyn_depth(u32)`                          | Maximum nesting depth for dynamic types            | `5`     |
-| `max_type_fields(usize)`                      | Max fields in one received struct metadata body    | `512`   |
-| `max_type_meta_bytes(usize)`                  | Max encoded bytes in one received metadata body    | `4096`  |
-| `max_schema_versions_per_type(usize)`         | Max remote schema versions for one struct type     | `10`    |
-| `max_average_schema_versions_per_type(usize)` | Average remote schema versions across struct types | `3`     |
+| Option                                        | Description                                       | Default |
+| --------------------------------------------- | ------------------------------------------------- | ------- |
+| `compatible(bool)`                            | Enable schema evolution                           | `true`  |
+| `xlang(bool)`                                 | Use xlang mode                                    | `true`  |
+| `max_dyn_depth(u32)`                          | Maximum nesting depth for dynamic types           | `5`     |
+| `max_type_fields(usize)`                      | Max fields in one received struct metadata body   | `512`   |
+| `max_type_meta_bytes(usize)`                  | Max encoded bytes in one received metadata body   | `4096`  |
+| `max_schema_versions_per_type(usize)`         | Max remote metadata versions for one logical type | `10`    |
+| `max_average_schema_versions_per_type(usize)` | Average remote metadata versions across types     | `3`     |
 
 ## Compatible Mode
 

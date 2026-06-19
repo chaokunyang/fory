@@ -21,7 +21,7 @@ namespace Apache.Fory;
 
 public sealed class ReadContext
 {
-    private const int MinRemoteStructSchemaLimit = 8192;
+    private const int MinRemoteTypeMetaLimit = 8192;
 
     private readonly ReusableArray<TypeMeta> _readTypeMetas = new();
     private readonly Dictionary<ulong, TypeMeta> _cachedTypeMetasByHeader = [];
@@ -164,63 +164,59 @@ public sealed class ReadContext
             return;
         }
 
-        object? typeKey = CheckRemoteStructSchemaLimit(typeMeta);
+        object typeKey = CheckRemoteTypeMetaLimit(typeMeta);
         _lastMetaHeader = header;
         _lastTypeMeta = typeMeta;
         _hasLastMetaHeader = true;
         _cachedTypeMetasByHeader.TryAdd(header, typeMeta);
-        RecordRemoteStructSchema(typeKey);
+        RecordRemoteTypeMeta(typeKey);
     }
 
     [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
-    private object? CheckRemoteStructSchemaLimit(TypeMeta typeMeta)
+    private object CheckRemoteTypeMetaLimit(TypeMeta typeMeta)
     {
-        if (typeMeta.TypeId is not uint typeId ||
-            typeId is not ((uint)TypeId.Struct or
-                (uint)TypeId.CompatibleStruct or
-                (uint)TypeId.NamedStruct or
-                (uint)TypeId.NamedCompatibleStruct))
+        object typeKey;
+        if (typeMeta.RegisterByName)
         {
-            return null;
+            typeKey = $"{typeMeta.NamespaceName.Value}\0{typeMeta.TypeName.Value}";
         }
-
-        object typeKey = typeMeta.RegisterByName
-            ? $"{typeMeta.NamespaceName.Value}\0{typeMeta.TypeName.Value}"
-            : typeMeta.UserTypeId!.Value;
+        else if (typeMeta.UserTypeId.HasValue)
+        {
+            typeKey = typeMeta.UserTypeId.Value;
+        }
+        else
+        {
+            throw new InvalidDataException("remote metadata is missing type identity");
+        }
         _remoteSchemaVersionsByType.TryGetValue(typeKey, out int versionsForType);
         int maxSchemaVersionsPerType = _config.MaxSchemaVersionsPerType;
         if (versionsForType >= maxSchemaVersionsPerType)
         {
             throw new InvalidDataException(
                 $"Remote schema version limit exceeded for type {typeKey}: {versionsForType} >= {maxSchemaVersionsPerType}. " +
-                "Increase MaxSchemaVersionsPerType if this peer legitimately sends many schema versions for one type.");
+                "The data may be malicious. If the data is not malicious, please increase MaxSchemaVersionsPerType.");
         }
 
-        int acceptedStructTypeCount = versionsForType == 0
+        int acceptedTypeCount = versionsForType == 0
             ? _remoteSchemaVersionsByType.Count + 1
             : _remoteSchemaVersionsByType.Count;
         int maxAverageSchemaVersionsPerType = _config.MaxAverageSchemaVersionsPerType;
         long globalLimit = Math.Max(
-            MinRemoteStructSchemaLimit,
-            (long)acceptedStructTypeCount * maxAverageSchemaVersionsPerType);
+            MinRemoteTypeMetaLimit,
+            (long)acceptedTypeCount * maxAverageSchemaVersionsPerType);
         if (_totalAcceptedSchemaVersions >= globalLimit)
         {
             throw new InvalidDataException(
-                $"Remote schema version limit exceeded: {_totalAcceptedSchemaVersions} schemas for {acceptedStructTypeCount} " +
-                $"accepted struct types exceeds the average limit {maxAverageSchemaVersionsPerType}. Increase " +
-                "MaxAverageSchemaVersionsPerType if this peer legitimately sends many schema versions across many types.");
+                $"Remote schema version limit exceeded: {_totalAcceptedSchemaVersions} metadata versions for " +
+                $"{acceptedTypeCount} accepted remote types exceeds the average limit {maxAverageSchemaVersionsPerType}. " +
+                "The data may be malicious. If the data is not malicious, please increase MaxAverageSchemaVersionsPerType.");
         }
 
         return typeKey;
     }
 
-    private void RecordRemoteStructSchema(object? typeKey)
+    private void RecordRemoteTypeMeta(object typeKey)
     {
-        if (typeKey is null)
-        {
-            return;
-        }
-
         _remoteSchemaVersionsByType.TryGetValue(typeKey, out int versionsForType);
         _remoteSchemaVersionsByType[typeKey] = versionsForType + 1;
         _totalAcceptedSchemaVersions++;
@@ -292,6 +288,12 @@ public sealed class ReadContext
     internal bool TryReadExactLocalTypeMeta(ulong header, TypeInfo exactLocal, out TypeMeta typeMeta)
     {
         TypeInfo.TypeMetaCacheEntry local = exactLocal.GetTypeMetaCacheEntry(TrackRef);
+        if (!IsStructMeta(local.TypeMeta))
+        {
+            typeMeta = null!;
+            return false;
+        }
+
         byte[] encoded = local.EncodedBytes;
         if (encoded.Length < sizeof(ulong) ||
             BinaryPrimitives.ReadUInt64LittleEndian(encoded) != header)
@@ -319,6 +321,12 @@ public sealed class ReadContext
     internal bool TryUseExactLocalTypeMeta(int start, int end, TypeInfo exactLocal, out TypeMeta typeMeta)
     {
         TypeInfo.TypeMetaCacheEntry local = exactLocal.GetTypeMetaCacheEntry(TrackRef);
+        if (!IsStructMeta(local.TypeMeta))
+        {
+            typeMeta = null!;
+            return false;
+        }
+
         byte[] encoded = local.EncodedBytes;
         if (end - start != encoded.Length ||
             !Reader.Storage.AsSpan(start, encoded.Length).SequenceEqual(encoded))
@@ -329,6 +337,15 @@ public sealed class ReadContext
 
         typeMeta = local.TypeMeta;
         return true;
+    }
+
+    private static bool IsStructMeta(TypeMeta typeMeta)
+    {
+        return typeMeta.TypeId is uint typeId &&
+               (TypeId)typeId is TypeId.Struct or
+                   TypeId.CompatibleStruct or
+                   TypeId.NamedStruct or
+                   TypeId.NamedCompatibleStruct;
     }
 
     [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]

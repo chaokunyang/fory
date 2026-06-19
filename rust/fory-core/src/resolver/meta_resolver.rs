@@ -36,7 +36,7 @@ pub struct MetaWriterResolver {
     next_index: usize,
 }
 
-const MIN_REMOTE_STRUCT_SCHEMA_LIMIT: usize = 8192;
+const MIN_REMOTE_TYPE_META_LIMIT: usize = 8192;
 const NO_WRITTEN_TYPE_INDEX: usize = usize::MAX;
 
 #[allow(dead_code)]
@@ -196,16 +196,22 @@ impl MetaReaderResolver {
         let namespace = type_meta.get_namespace();
         let type_name = type_meta.get_type_name();
         let register_by_name = !namespace.original.is_empty() || !type_name.original.is_empty();
+        let exact_local_allowed = matches!(
+            type_meta.get_type_id(),
+            STRUCT | COMPATIBLE_STRUCT | NAMED_STRUCT | NAMED_COMPATIBLE_STRUCT
+        );
         let mut remote_schema_key = None;
         let type_info = if register_by_name {
             if let Some(local_type_info) =
                 type_resolver.get_type_info_by_name(&namespace.original, &type_name.original)
             {
-                if local_type_info.get_type_meta_ref().get_bytes() == remote_type_def {
+                if exact_local_allowed
+                    && local_type_info.get_type_meta_ref().get_bytes() == remote_type_def
+                {
                     local_type_info
                 } else {
                     remote_schema_key =
-                        self.check_remote_struct_schema_limit(&type_meta, config)?;
+                        Some(self.check_remote_type_meta_limit(&type_meta, config)?);
                     Rc::new(TypeInfo::from_remote_meta(
                         type_meta.clone(),
                         Some(local_type_info.get_harness()),
@@ -214,7 +220,7 @@ impl MetaReaderResolver {
                     ))
                 }
             } else {
-                remote_schema_key = self.check_remote_struct_schema_limit(&type_meta, config)?;
+                remote_schema_key = Some(self.check_remote_type_meta_limit(&type_meta, config)?);
                 Rc::new(TypeInfo::from_remote_meta(
                     type_meta.clone(),
                     None,
@@ -231,11 +237,13 @@ impl MetaReaderResolver {
                 type_resolver.get_type_info_by_id(type_id)
             };
             if let Some(local_type_info) = local_type_info {
-                if local_type_info.get_type_meta_ref().get_bytes() == remote_type_def {
+                if exact_local_allowed
+                    && local_type_info.get_type_meta_ref().get_bytes() == remote_type_def
+                {
                     local_type_info
                 } else {
                     remote_schema_key =
-                        self.check_remote_struct_schema_limit(&type_meta, config)?;
+                        Some(self.check_remote_type_meta_limit(&type_meta, config)?);
                     Rc::new(TypeInfo::from_remote_meta(
                         type_meta.clone(),
                         Some(local_type_info.get_harness()),
@@ -244,7 +252,7 @@ impl MetaReaderResolver {
                     ))
                 }
             } else {
-                remote_schema_key = self.check_remote_struct_schema_limit(&type_meta, config)?;
+                remote_schema_key = Some(self.check_remote_type_meta_limit(&type_meta, config)?);
                 Rc::new(TypeInfo::from_remote_meta(
                     type_meta.clone(),
                     None,
@@ -259,24 +267,19 @@ impl MetaReaderResolver {
         self.last_meta_header = meta_header;
         self.last_type_info = Some(type_info.clone());
         self.reading_type_infos.push(type_info.clone());
-        self.record_remote_struct_schema(remote_schema_key);
+        if let Some(remote_schema_key) = remote_schema_key {
+            self.record_remote_type_meta(remote_schema_key);
+        }
         Ok(type_info)
     }
 
     #[cold]
     #[inline(never)]
-    fn check_remote_struct_schema_limit(
+    fn check_remote_type_meta_limit(
         &self,
         type_meta: &TypeMeta,
         config: &Config,
-    ) -> Result<Option<String>, Error> {
-        if !matches!(
-            type_meta.get_type_id(),
-            STRUCT | COMPATIBLE_STRUCT | NAMED_STRUCT | NAMED_COMPATIBLE_STRUCT
-        ) {
-            return Ok(None);
-        }
-
+    ) -> Result<String, Error> {
         let namespace = type_meta.get_namespace();
         let type_name = type_meta.get_type_name();
         let key = if !namespace.original.is_empty() || !type_name.original.is_empty() {
@@ -292,7 +295,7 @@ impl MetaReaderResolver {
             .unwrap_or(0);
         if versions_for_type >= config.max_schema_versions_per_type() {
             return Err(Error::invalid_data(format!(
-                "remote struct schema versions for one type exceeded max_schema_versions_per_type={}",
+                "remote schema version limit exceeded for one type. The data may be malicious. If the data is not malicious, please increase max_schema_versions_per_type={}",
                 config.max_schema_versions_per_type()
             )));
         }
@@ -300,23 +303,20 @@ impl MetaReaderResolver {
         let accepted_type_count =
             self.remote_schema_versions_by_type.len() + if versions_for_type == 0 { 1 } else { 0 };
         let global_limit = usize::max(
-            MIN_REMOTE_STRUCT_SCHEMA_LIMIT,
+            MIN_REMOTE_TYPE_META_LIMIT,
             accepted_type_count * config.max_average_schema_versions_per_type(),
         );
         if self.total_accepted_schema_versions >= global_limit {
             return Err(Error::invalid_data(format!(
-                "remote struct schema versions exceeded global limit from max_average_schema_versions_per_type={}",
+                "remote schema version limit exceeded globally. The data may be malicious. If the data is not malicious, please increase max_average_schema_versions_per_type={}",
                 config.max_average_schema_versions_per_type()
             )));
         }
 
-        Ok(Some(key))
+        Ok(key)
     }
 
-    fn record_remote_struct_schema(&mut self, key: Option<String>) {
-        let Some(key) = key else {
-            return;
-        };
+    fn record_remote_type_meta(&mut self, key: String) {
         let versions_for_type = self
             .remote_schema_versions_by_type
             .get(&key)
@@ -337,7 +337,10 @@ impl MetaReaderResolver {
 mod tests {
     use super::*;
     use crate::config::Config;
-    use crate::meta::{FieldInfo, FieldType, MetaString};
+    use crate::meta::{
+        FieldInfo, FieldType, MetaString, NAMESPACE_ENCODER, NAMESPACE_ENCODINGS,
+        TYPE_NAME_ENCODER, TYPE_NAME_ENCODINGS,
+    };
     use crate::TypeId;
 
     fn read_type_def(
@@ -530,7 +533,7 @@ mod tests {
         .unwrap();
 
         resolver
-            .check_remote_struct_schema_limit(&checked, &config)
+            .check_remote_type_meta_limit(&checked, &config)
             .unwrap();
 
         let mut bytes = vec![];
@@ -541,5 +544,49 @@ mod tests {
         resolver
             .read_type_meta(&mut reader, &TypeResolver::default(), &config)
             .unwrap();
+    }
+
+    #[test]
+    fn non_struct_type_meta_uses_limit() {
+        let config = Config {
+            max_schema_versions_per_type: 1,
+            ..Default::default()
+        };
+        let mut resolver = MetaReaderResolver::default();
+        let namespace = NAMESPACE_ENCODER
+            .encode_with_encodings("example", NAMESPACE_ENCODINGS)
+            .unwrap();
+        let type_name = TYPE_NAME_ENCODER
+            .encode_with_encodings("RemoteEnum", TYPE_NAME_ENCODINGS)
+            .unwrap();
+        let first = TypeMeta::new(
+            TypeId::NAMED_ENUM as u32,
+            NO_USER_TYPE_ID,
+            namespace.clone(),
+            type_name.clone(),
+            true,
+            vec![],
+        )
+        .unwrap();
+        let second = TypeMeta::new(
+            TypeId::NAMED_EXT as u32,
+            NO_USER_TYPE_ID,
+            namespace,
+            type_name,
+            true,
+            vec![],
+        )
+        .unwrap();
+
+        let key = resolver
+            .check_remote_type_meta_limit(&first, &config)
+            .unwrap();
+        resolver.record_remote_type_meta(key);
+
+        let err = resolver
+            .check_remote_type_meta_limit(&second, &config)
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("max_schema_versions_per_type"));
     }
 }

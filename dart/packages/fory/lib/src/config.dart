@@ -49,10 +49,10 @@ final class Config {
   /// Maximum accepted body size in one received TypeDef.
   final int maxTypeMetaBytes;
 
-  /// Maximum accepted remote struct schema versions for one logical type.
+  /// Maximum accepted remote metadata versions for one logical type.
   final int maxSchemaVersionsPerType;
 
-  /// Maximum accepted average remote struct schema versions across logical
+  /// Maximum accepted average remote metadata versions across logical
   /// types.
   final int maxAverageSchemaVersionsPerType;
 

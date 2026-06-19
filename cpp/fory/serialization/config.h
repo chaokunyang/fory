@@ -58,10 +58,10 @@ struct Config {
   /// Maximum accepted body size in one received TypeMeta.
   uint32_t max_type_meta_bytes = 4096;
 
-  /// Maximum accepted remote struct schema versions for one logical type.
+  /// Maximum accepted remote metadata versions for one logical type.
   uint32_t max_schema_versions_per_type = 10;
 
-  /// Maximum accepted average remote struct schema versions across logical
+  /// Maximum accepted average remote metadata versions across logical
   /// types. The effective global minimum remains 8192 schemas.
   uint32_t max_average_schema_versions_per_type = 3;
 

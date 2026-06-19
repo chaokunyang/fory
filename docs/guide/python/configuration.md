@@ -68,8 +68,8 @@ class ThreadSafeFory:
 | `max_depth`                            | `int`                           | `50`    | Maximum deserialization depth for security, preventing stack overflow attacks.                                                                           |
 | `max_type_fields`                      | `int`                           | `512`   | Maximum fields accepted in one received remote struct metadata body.                                                                                     |
 | `max_type_meta_bytes`                  | `int`                           | `4096`  | Maximum encoded body bytes accepted for one received TypeDef body, excluding the 8-byte header and any extended-size varint.                             |
-| `max_schema_versions_per_type`         | `int`                           | `10`    | Maximum accepted remote struct schema versions for one logical type on metadata cache misses.                                                            |
-| `max_average_schema_versions_per_type` | `int`                           | `3`     | Average accepted remote struct schema versions across accepted remote struct types. The effective global floor is `8192` schemas.                        |
+| `max_schema_versions_per_type`         | `int`                           | `10`    | Maximum accepted remote metadata versions for one logical type on metadata cache misses.                                                                 |
+| `max_average_schema_versions_per_type` | `int`                           | `3`     | Average accepted remote metadata versions across accepted remote types. The effective global floor is `8192` schemas.                                    |
 | `policy`                               | `DeserializationPolicy \| None` | `None`  | Deserialization policy used for security checks. Strongly recommended when `strict=False`.                                                               |
 | `field_nullable`                       | `bool`                          | `False` | Treat dataclass fields as nullable by default.                                                                                                           |
 | `meta_compressor`                      | `Any`                           | `None`  | Optional metadata compressor used for compatible-mode metadata encoding.                                                                                 |
@@ -220,8 +220,8 @@ Remote struct metadata is also limited on metadata cache misses:
 
 - `max_type_fields` limits the number of fields accepted in one received struct metadata body.
 - `max_type_meta_bytes` limits the encoded body bytes accepted for one received TypeDef body.
-- `max_schema_versions_per_type` limits accepted remote schema versions for one logical type.
-- `max_average_schema_versions_per_type` limits the average across accepted remote struct types.
+- `max_schema_versions_per_type` limits accepted remote metadata versions for one logical type.
+- `max_average_schema_versions_per_type` limits the average across accepted remote types.
 
 These limits do not change `strict`, `policy`, dynamic loading, unknown-class handling, or
 schema-evolution semantics.

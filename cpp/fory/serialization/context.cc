@@ -479,21 +479,10 @@ ReadContext::read_enum_type_info(uint32_t base_type_id) {
   return Unexpected(Error::type_mismatch(type_id, base_type_id));
 }
 
-static constexpr size_t k_min_remote_struct_schema_limit = 8192;
+static constexpr size_t k_min_remote_type_meta_limit = 8192;
 
 Result<std::string, Error>
-ReadContext::check_remote_struct_schema_limit(const TypeMeta &type_meta) {
-  const auto type_id = static_cast<TypeId>(type_meta.type_id);
-  switch (type_id) {
-  case TypeId::STRUCT:
-  case TypeId::COMPATIBLE_STRUCT:
-  case TypeId::NAMED_STRUCT:
-  case TypeId::NAMED_COMPATIBLE_STRUCT:
-    break;
-  default:
-    return std::string();
-  }
-
+ReadContext::check_remote_type_meta_limit(const TypeMeta &type_meta) {
   std::string key;
   if (type_meta.register_by_name) {
     key.reserve(type_meta.namespace_str.size() + type_meta.type_name.size() +
@@ -511,7 +500,8 @@ ReadContext::check_remote_struct_schema_limit(const TypeMeta &type_meta) {
   if (FORY_PREDICT_FALSE(versions_for_type >=
                          config_->max_schema_versions_per_type)) {
     return Unexpected(Error::invalid_data(
-        "Remote struct schema versions for one type exceeded "
+        "Remote schema version limit exceeded for one type. The data may be "
+        "malicious. If the data is not malicious, please increase "
         "max_schema_versions_per_type=" +
         std::to_string(config_->max_schema_versions_per_type)));
   }
@@ -519,12 +509,13 @@ ReadContext::check_remote_struct_schema_limit(const TypeMeta &type_meta) {
   const size_t accepted_type_count =
       remote_schema_versions_by_type_.size() + (entry == nullptr ? 1 : 0);
   const size_t global_limit = std::max(
-      k_min_remote_struct_schema_limit,
+      k_min_remote_type_meta_limit,
       accepted_type_count *
           static_cast<size_t>(config_->max_average_schema_versions_per_type));
   if (FORY_PREDICT_FALSE(total_accepted_schema_versions_ >= global_limit)) {
     return Unexpected(Error::invalid_data(
-        "Remote struct schema versions exceeded global limit from "
+        "Remote schema version limit exceeded globally. The data may be "
+        "malicious. If the data is not malicious, please increase "
         "max_average_schema_versions_per_type=" +
         std::to_string(config_->max_average_schema_versions_per_type)));
   }
@@ -532,10 +523,7 @@ ReadContext::check_remote_struct_schema_limit(const TypeMeta &type_meta) {
   return key;
 }
 
-void ReadContext::record_remote_struct_schema(const std::string &type_key) {
-  if (type_key.empty()) {
-    return;
-  }
+void ReadContext::record_remote_type_meta(const std::string &type_key) {
   auto *entry = remote_schema_versions_by_type_.find(type_key);
   if (entry == nullptr) {
     remote_schema_versions_by_type_[type_key] = 1;
@@ -626,7 +614,14 @@ Result<const TypeInfo *, Error> ReadContext::read_type_meta() {
     }
   }
 
-  if (local_type_info) {
+  const bool exact_local_allowed =
+      parsed_meta->type_id == static_cast<uint32_t>(TypeId::STRUCT) ||
+      parsed_meta->type_id ==
+          static_cast<uint32_t>(TypeId::COMPATIBLE_STRUCT) ||
+      parsed_meta->type_id == static_cast<uint32_t>(TypeId::NAMED_STRUCT) ||
+      parsed_meta->type_id ==
+          static_cast<uint32_t>(TypeId::NAMED_COMPATIBLE_STRUCT);
+  if (local_type_info && exact_local_allowed) {
     const auto &local_type_def = local_type_info->type_def;
     const size_t remote_type_def_size =
         static_cast<size_t>(type_def_end - type_def_start);
@@ -642,7 +637,7 @@ Result<const TypeInfo *, Error> ReadContext::read_type_meta() {
     }
   }
 
-  FORY_TRY(remote_schema_key, check_remote_struct_schema_limit(*parsed_meta));
+  FORY_TRY(remote_schema_key, check_remote_type_meta_limit(*parsed_meta));
 
   // Create TypeInfo with field_ids assigned
   auto type_info = std::make_unique<TypeInfo>();
@@ -676,7 +671,7 @@ Result<const TypeInfo *, Error> ReadContext::read_type_meta() {
   has_last_meta_header_ = true;
   last_meta_header_ = meta_header;
   last_meta_type_info_ = raw_ptr;
-  record_remote_struct_schema(remote_schema_key);
+  record_remote_type_meta(remote_schema_key);
 
   reading_type_infos_.push_back(raw_ptr);
   return raw_ptr;

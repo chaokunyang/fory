@@ -233,6 +233,45 @@ describe("typemeta", () => {
     );
   });
 
+  test("id enum does not use TypeMeta limits", () => {
+    const Color = { Green: 0, Red: 1 };
+    const fory = new Fory({
+      compatible: true,
+      maxTypeMetaBytes: 1,
+      maxSchemaVersionsPerType: 1,
+    });
+    const serializer = fory.register(Type.enum(101, Color));
+
+    expect(serializer.deserialize(serializer.serialize(Color.Red))).toBe(
+      Color.Red,
+    );
+  });
+
+  test("id ext does not use TypeMeta limits", () => {
+    class IdExt {
+      id = 0;
+    }
+    Type.ext(102)(IdExt);
+    const customSerializer = {
+      write: (writeContext: any, value: IdExt) => {
+        writeContext.writeVarInt32(value.id);
+      },
+      read: (readContext: any, result: IdExt) => {
+        result.id = readContext.readVarInt32();
+      },
+    };
+    const fory = new Fory({
+      compatible: true,
+      maxTypeMetaBytes: 1,
+      maxSchemaVersionsPerType: 1,
+    });
+    const serializer = fory.register(IdExt, customSerializer);
+
+    const value = new IdExt();
+    value.id = 42;
+    expect(serializer.deserialize(serializer.serialize(value))).toEqual(value);
+  });
+
   test("TypeMeta header cache hit skips the current body size", () => {
     const header = 0xffn;
     const typeMeta = TypeMeta.fromTypeInfo(Type.struct(7010, {}));

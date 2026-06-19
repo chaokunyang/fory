@@ -33,16 +33,16 @@ f := fory.New(fory.WithXlang(true))
 
 Default settings:
 
-| Option                          | Default | Description                                        |
-| ------------------------------- | ------- | -------------------------------------------------- |
-| TrackRef                        | false   | Reference tracking disabled                        |
-| MaxDepth                        | 20      | Maximum nesting depth                              |
-| IsXlang                         | true    | Xlang mode enabled                                 |
-| Compatible                      | true    | Compatible schema-evolution metadata enabled       |
-| MaxTypeFields                   | 512     | Max fields in one received struct metadata body    |
-| MaxTypeMetaBytes                | 4096    | Max encoded bytes in one received metadata body    |
-| MaxSchemaVersionsPerType        | 10      | Max remote schema versions for one struct type     |
-| MaxAverageSchemaVersionsPerType | 3       | Average remote schema versions across struct types |
+| Option                          | Default | Description                                       |
+| ------------------------------- | ------- | ------------------------------------------------- |
+| TrackRef                        | false   | Reference tracking disabled                       |
+| MaxDepth                        | 20      | Maximum nesting depth                             |
+| IsXlang                         | true    | Xlang mode enabled                                |
+| Compatible                      | true    | Compatible schema-evolution metadata enabled      |
+| MaxTypeFields                   | 512     | Max fields in one received struct metadata body   |
+| MaxTypeMetaBytes                | 4096    | Max encoded bytes in one received metadata body   |
+| MaxSchemaVersionsPerType        | 10      | Max remote metadata versions for one logical type |
+| MaxAverageSchemaVersionsPerType | 3       | Average remote metadata versions across types     |
 
 ### With Options
 
@@ -146,7 +146,7 @@ f := fory.New(fory.WithMaxTypeMetaBytes(4096))
 
 ### WithMaxSchemaVersionsPerType
 
-Set the maximum accepted remote struct schema versions for one logical type on
+Set the maximum accepted remote metadata versions for one logical type on
 metadata cache misses:
 
 ```go
@@ -155,8 +155,8 @@ f := fory.New(fory.WithMaxSchemaVersionsPerType(10))
 
 ### WithMaxAverageSchemaVersionsPerType
 
-Set the average accepted remote struct schema versions across accepted remote
-struct types. The effective global floor is `8192` schemas:
+Set the average accepted remote metadata versions across accepted remote types.
+The effective global floor is `8192` schemas:
 
 ```go
 f := fory.New(fory.WithMaxAverageSchemaVersionsPerType(3))

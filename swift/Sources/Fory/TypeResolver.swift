@@ -402,7 +402,7 @@ private struct TypeNameKey: Hashable {
 }
 
 final class TypeResolver {
-  private static let minRemoteStructSchemaLimit = 8192
+  private static let minRemoteTypeMetaLimit = 8192
 
   private let config: Config
   private var registrationFinished = false
@@ -574,14 +574,28 @@ final class TypeResolver {
       return cached
     }
     let localTypeInfo = try requireTypeInfo(for: typeMeta)
-    if let localTypeDefBytes = localTypeInfo.typeDefBytes,
+    let exactLocalAllowed: Bool
+    if let rawTypeID = typeMeta.typeID,
+      let typeID = TypeId(rawValue: rawTypeID)
+    {
+      switch typeID {
+      case .structType, .compatibleStruct, .namedStruct, .namedCompatibleStruct:
+        exactLocalAllowed = true
+      default:
+        exactLocalAllowed = false
+      }
+    } else {
+      exactLocalAllowed = false
+    }
+    if exactLocalAllowed,
+      let localTypeDefBytes = localTypeInfo.typeDefBytes,
       typeDefEnd - typeDefStart == localTypeDefBytes.count,
       buffer.matchesBytes(start: typeDefStart, bytes: localTypeDefBytes)
     {
       typeInfoByHeader.set(localTypeInfo, for: header)
       return localTypeInfo
     }
-    let remoteSchemaKey = try checkRemoteStructSchemaLimit(typeMeta)
+    let remoteSchemaKey = try checkRemoteTypeMetaLimit(typeMeta)
     let canonicalTypeMeta: TypeMeta
     if let localTypeMeta = localTypeInfo.typeMeta {
       canonicalTypeMeta = try typeMeta.assigningFieldIDs(from: localTypeMeta)
@@ -590,24 +604,12 @@ final class TypeResolver {
     }
     let typeInfo = TypeInfo(dynamic: localTypeInfo, compatibleTypeMeta: canonicalTypeMeta)
     typeInfoByHeader.set(typeInfo, for: header)
-    recordRemoteStructSchema(remoteSchemaKey)
+    recordRemoteTypeMeta(remoteSchemaKey)
     return typeInfo
   }
 
   @inline(never)
-  private func checkRemoteStructSchemaLimit(_ typeMeta: TypeMeta) throws -> String? {
-    guard let rawTypeID = typeMeta.typeID,
-      let typeID = TypeId(rawValue: rawTypeID)
-    else {
-      return nil
-    }
-    switch typeID {
-    case .structType, .compatibleStruct, .namedStruct, .namedCompatibleStruct:
-      break
-    default:
-      return nil
-    }
-
+  private func checkRemoteTypeMetaLimit(_ typeMeta: TypeMeta) throws -> String {
     let key: String
     if typeMeta.registerByName {
       key = "n\(typeMeta.namespace.value)\0\(typeMeta.typeName.value)"
@@ -619,28 +621,25 @@ final class TypeResolver {
     let maxSchemaVersionsPerType = config.maxSchemaVersionsPerType
     if versionsForType >= maxSchemaVersionsPerType {
       throw ForyError.invalidData(
-        "remote struct schema versions for one type exceeded maxSchemaVersionsPerType=\(maxSchemaVersionsPerType)"
+        "remote schema version limit exceeded for one type. The data may be malicious. If the data is not malicious, please increase maxSchemaVersionsPerType=\(maxSchemaVersionsPerType)"
       )
     }
-    let acceptedStructTypeCount =
+    let acceptedTypeCount =
       versionsForType == 0 ? remoteSchemaVersionsByType.count + 1 : remoteSchemaVersionsByType.count
     let maxAverageSchemaVersionsPerType = config.maxAverageSchemaVersionsPerType
     let globalLimit = max(
-      Self.minRemoteStructSchemaLimit,
-      acceptedStructTypeCount * maxAverageSchemaVersionsPerType
+      Self.minRemoteTypeMetaLimit,
+      acceptedTypeCount * maxAverageSchemaVersionsPerType
     )
     if totalAcceptedSchemaVersions >= globalLimit {
       throw ForyError.invalidData(
-        "remote struct schema versions exceeded global limit from maxAverageSchemaVersionsPerType=\(maxAverageSchemaVersionsPerType)"
+        "remote schema version limit exceeded globally. The data may be malicious. If the data is not malicious, please increase maxAverageSchemaVersionsPerType=\(maxAverageSchemaVersionsPerType)"
       )
     }
     return key
   }
 
-  private func recordRemoteStructSchema(_ key: String?) {
-    guard let key else {
-      return
-    }
+  private func recordRemoteTypeMeta(_ key: String) {
     let versionsForType = remoteSchemaVersionsByType[key] ?? 0
     remoteSchemaVersionsByType[key] = versionsForType + 1
     totalAcceptedSchemaVersions += 1
@@ -658,17 +657,6 @@ final class TypeResolver {
     }
     if let typeNameKey {
       byTypeName[typeNameKey] = typeInfo
-    }
-    if let typeMeta = typeInfo.typeMeta,
-      let typeDefHeader = typeInfo.typeDefHeader
-    {
-      typeInfoByHeader.set(
-        TypeInfo(
-          dynamic: typeInfo,
-          compatibleTypeMeta: typeMeta
-        ),
-        for: typeDefHeader
-      )
     }
   }
 

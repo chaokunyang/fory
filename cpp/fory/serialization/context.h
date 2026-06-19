@@ -659,8 +659,8 @@ public:
 
 private:
   FORY_NOINLINE Result<std::string, Error>
-  check_remote_struct_schema_limit(const TypeMeta &type_meta);
-  void record_remote_struct_schema(const std::string &type_key);
+  check_remote_type_meta_limit(const TypeMeta &type_meta);
+  void record_remote_type_meta(const std::string &type_key);
 
   // Error state - accumulated during deserialization, checked at the end
   Error error_;

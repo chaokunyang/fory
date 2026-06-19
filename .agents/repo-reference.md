@@ -49,13 +49,20 @@ Apache Fory is a multi-language serialization framework with multiple wire forma
   - `foryc schema.fdl --lang <langs> --output <dir>`
 - Never edit generated code manually. Update the source schema or IDL and regenerate.
 - Protocol changes must update `docs/specification/**` and the relevant cross-language tests.
-- Remote struct `TypeDef` or `TypeMeta` schema limits are resource controls on cold metadata
-  cache-miss parse/publish paths only. They must not change wire format, registration, dynamic type
-  loading, unknown-type behavior, deserialization policy, schema-evolution semantics, or metadata
-  cache-hit/generated-reader hot paths. Count a remote schema version only after the schema-specific
-  read state has been successfully built and the owning metadata cache can publish it; failed or
-  incompatible metadata must not consume the limit.
-- Remote struct metadata body and field-count limits are also cold-path resource controls.
+- Remote `TypeDef` or `TypeMeta` schema limits are resource controls on cold metadata cache-miss
+  parse/publish paths only. They must not change wire format, registration, dynamic type loading,
+  unknown-type behavior, deserialization policy, schema-evolution semantics, or metadata
+  cache-hit/generated-reader hot paths. Count a remote metadata version only after the required read
+  state has been successfully built and the owning metadata cache can publish it; failed or
+  incompatible metadata must not consume the limit. Struct types may have multiple schema-evolution
+  versions; compatible named enum/ext/union metadata normally has one version but still counts
+  against remote metadata total limits when it is sent as shared metadata. Pure id-based enum, ext,
+  and typed-union values use type id plus user type id and must not be moved onto this metadata
+  cache path. Exact-local metadata bypass applies only to struct schemas with matching encoded
+  bytes, not to named enum/ext/union metadata. A runtime may skip a received metadata body by header
+  only after that same owning remote metadata cache has validated a previous body for that header;
+  locally registered metadata alone is not a remote body validation.
+- Remote metadata body and struct field-count limits are also cold-path resource controls.
   `maxTypeMetaBytes` limits one received TypeDef or TypeMeta body excluding the 8-byte header and
   extended-size varint; `maxTypeFields` limits one received struct metadata body's field count
   (Java native TypeDef counts total fields across class layers). Check these before body

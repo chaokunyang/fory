@@ -177,11 +177,11 @@ class Fory:
 
             max_type_meta_bytes: Maximum accepted body size in one received TypeDef.
 
-            max_schema_versions_per_type: Maximum accepted remote schema versions for one
-                struct type.
+            max_schema_versions_per_type: Maximum accepted remote metadata versions for one
+                logical type.
 
-            max_average_schema_versions_per_type: Average remote schema versions allowed
-                across accepted struct types.
+            max_average_schema_versions_per_type: Average remote metadata versions allowed
+                across accepted remote types.
 
             policy: Custom deserialization policy for security checks. When provided,
                 it controls which types can be deserialized, overriding the default policy.

@@ -95,12 +95,12 @@ public sealed class Config
     public int MaxTypeMetaBytes { get; }
 
     /// <summary>
-    /// Gets the maximum accepted remote schema versions for one struct type.
+    /// Gets the maximum accepted remote metadata versions for one logical type.
     /// </summary>
     public int MaxSchemaVersionsPerType { get; }
 
     /// <summary>
-    /// Gets the average remote schema version limit across accepted struct types.
+    /// Gets the average remote metadata version limit across accepted remote types.
     /// </summary>
     public int MaxAverageSchemaVersionsPerType { get; }
 }
@@ -198,7 +198,7 @@ public sealed class ForyBuilder
     }
 
     /// <summary>
-    /// Sets the maximum accepted remote schema versions for one struct type.
+    /// Sets the maximum accepted remote metadata versions for one logical type.
     /// </summary>
     public ForyBuilder MaxSchemaVersionsPerType(int value)
     {
@@ -212,7 +212,7 @@ public sealed class ForyBuilder
     }
 
     /// <summary>
-    /// Sets the average remote schema version limit across accepted struct types.
+    /// Sets the average remote metadata version limit across accepted remote types.
     /// </summary>
     public ForyBuilder MaxAverageSchemaVersionsPerType(int value)
     {

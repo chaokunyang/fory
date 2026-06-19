@@ -543,6 +543,56 @@ public sealed class RuntimeEdgeCaseTests
     }
 
     [Fact]
+    public void NonStructTypeMetaUsesSchemaLimit()
+    {
+        Config config = ForyRuntime.Builder()
+            .Compatible(false)
+            .MaxSchemaVersionsPerType(1)
+            .Build()
+            .Config;
+        ReadContext context = new(new ByteReader(Array.Empty<byte>()), new TypeResolver(), config);
+        TypeMeta first = RemoteNamedNonStructTypeMeta(TypeId.NamedEnum, "SharedEnum");
+        TypeMeta second = RemoteNamedNonStructTypeMeta(TypeId.NamedExt, "SharedEnum");
+
+        ReadAndCacheTypeMeta(context, first);
+
+        InvalidDataException exception =
+            Assert.Throws<InvalidDataException>(() => ReadAndCacheTypeMeta(context, second));
+        Assert.Contains("MaxSchemaVersionsPerType", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void IdEnumDoesNotUseTypeMetaLimits()
+    {
+        ForyRuntime fory = ForyRuntime.Builder()
+            .Compatible(true)
+            .MaxTypeMetaBytes(1)
+            .MaxSchemaVersionsPerType(1)
+            .Build();
+        fory.Register<TestColor>(901);
+
+        Assert.Equal(TestColor.Red, fory.Deserialize<TestColor>(fory.Serialize(TestColor.Red)));
+    }
+
+    [Fact]
+    public void IdExtDoesNotUseTypeMetaLimits()
+    {
+        ForyRuntime fory = ForyRuntime.Builder()
+            .Compatible(true)
+            .MaxTypeMetaBytes(1)
+            .MaxSchemaVersionsPerType(1)
+            .Build();
+        fory.Register<CustomPayload, CustomPayloadSerializer>(902);
+
+        byte[] payload = fory.Serialize<object?>(new CustomPayload { Id = 9 });
+        object? decoded = fory.Deserialize<object?>(payload);
+
+        CustomPayload result = Assert.IsType<CustomPayload>(decoded);
+        Assert.Equal(9, result.Id);
+        Assert.Equal("custom", result.Marker);
+    }
+
+    [Fact]
     public void TypeMetaFieldLimitRejectsLargeStruct()
     {
         Config config = ForyRuntime.Builder()
@@ -677,6 +727,17 @@ public sealed class RuntimeEdgeCaseTests
             MetaString.Empty('$', '_'),
             registerByName: false,
             fields);
+    }
+
+    private static TypeMeta RemoteNamedNonStructTypeMeta(TypeId typeId, string typeName)
+    {
+        return new TypeMeta(
+            (uint)typeId,
+            null,
+            MetaStringEncoder.Namespace.Encode("example", TypeMetaEncodings.NamespaceMetaStringEncodings),
+            MetaStringEncoder.TypeName.Encode(typeName, TypeMetaEncodings.TypeNameMetaStringEncodings),
+            registerByName: true,
+            []);
     }
 
     private static TypeMeta RemoteCompatibleStructTypeMeta(uint userTypeId, string fieldName)

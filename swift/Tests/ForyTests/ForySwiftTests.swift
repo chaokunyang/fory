@@ -592,6 +592,45 @@ func schemaLimitTracksStructTypesSeparately() throws {
 }
 
 @Test
+func nonStructTypeMetaUsesSchemaLimit() throws {
+  let resolver = TypeResolver(config: Config(maxSchemaVersionsPerType: 1))
+  try resolver.register(SparseStatus.self, name: "example.SharedEnum")
+  let namespace = try MetaStringEncoder.namespace.encode("example")
+  let typeName = try MetaStringEncoder.typeName.encode("SharedEnum")
+
+  func remoteTypeMeta(_ typeID: TypeId) throws -> TypeMeta {
+    try TypeMeta(
+      typeID: typeID.rawValue,
+      userTypeID: nil,
+      namespace: namespace,
+      typeName: typeName,
+      registerByName: true,
+      fields: []
+    )
+  }
+
+  func cache(_ typeMeta: TypeMeta) throws {
+    let encoded = try typeMeta.encode()
+    let headerReader = ByteBuffer(bytes: encoded)
+    let header = try headerReader.readUInt64()
+    let buffer = ByteBuffer(bytes: encoded)
+    let decoded = try TypeMeta.decode(buffer)
+    _ = try resolver.cacheTypeInfo(
+      decoded,
+      forHeader: header,
+      buffer: buffer,
+      typeDefStart: 0,
+      typeDefEnd: buffer.getCursor()
+    )
+  }
+
+  try cache(remoteTypeMeta(.namedExt))
+  #expect(throws: (any Error).self) {
+    try cache(remoteTypeMeta(.namedUnion))
+  }
+}
+
+@Test
 func failedSchemaDoesNotConsumeLimit() throws {
   let resolver = TypeResolver(config: Config(maxSchemaVersionsPerType: 1))
   resolver.register(Person.self, id: 901)

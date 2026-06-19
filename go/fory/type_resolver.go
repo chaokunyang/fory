@@ -53,10 +53,10 @@ const (
 	useStringId             = 1
 	SMALL_STRING_THRESHOLD  = 16
 	// 0xffffffff is reserved for "unset".
-	maxUserTypeID              uint32 = 0xfffffffe
-	invalidUserTypeID          uint32 = 0xffffffff
-	internalTypeIDLimit               = 0xFF
-	minRemoteStructSchemaLimit        = 8192
+	maxUserTypeID         uint32 = 0xfffffffe
+	invalidUserTypeID     uint32 = 0xffffffff
+	internalTypeIDLimit          = 0xFF
+	minRemoteTypeDefLimit        = 8192
 )
 
 var (
@@ -1417,30 +1417,14 @@ func (r *TypeResolver) writeSharedTypeMeta(buffer *ByteBuffer, typeInfo *TypeInf
 	context := r.fory.MetaContext()
 	key := typePointer(typeInfo.Type)
 	writeTypeDefInline := func() {
-		// Only build TypeDef for struct types - enums don't have field definitions
-		actualType := typeInfo.Type
-		if actualType.Kind() == reflect.Ptr {
-			actualType = actualType.Elem()
-		}
-		if actualType.Kind() == reflect.Struct {
-			typeDef, typeDefErr := r.getTypeDef(typeInfo.Type, true)
-			if typeDefErr != nil {
-				err.SetError(typeDefErr)
-				return
-			}
-			// Write TypeDef bytes inline
-			typeDef.writeTypeDef(buffer, err)
-		}
-	}
-	writeTypeDefWithZeroMarker := func() {
-		actualType := typeInfo.Type
-		if actualType.Kind() == reflect.Ptr {
-			actualType = actualType.Elem()
-		}
-		if actualType.Kind() != reflect.Struct {
-			buffer.WriteUint8(0)
+		typeDef, typeDefErr := r.getTypeDef(typeInfo.Type, true)
+		if typeDefErr != nil {
+			err.SetError(typeDefErr)
 			return
 		}
+		typeDef.writeTypeDef(buffer, err)
+	}
+	writeTypeDefWithZeroMarker := func() {
 		typeDef, typeDefErr := r.getTypeDef(typeInfo.Type, true)
 		if typeDefErr != nil {
 			err.SetError(typeDefErr)
@@ -1523,24 +1507,19 @@ func (r *TypeResolver) getTypeDef(typ reflect.Type, create bool) (*TypeDef, erro
 }
 
 //go:noinline
-func (r *TypeResolver) checkRemoteStructSchemaLimit(td *TypeDef) (any, bool, error) {
-	switch TypeId(td.typeId) {
-	case STRUCT, COMPATIBLE_STRUCT, NAMED_STRUCT, NAMED_COMPATIBLE_STRUCT:
-	default:
-		return nil, false, nil
-	}
+func (r *TypeResolver) checkRemoteTypeDefLimit(td *TypeDef) (any, error) {
 	var typeKey any
 	if td.registerByName {
 		if td.nsName == nil || td.typeName == nil {
-			return nil, false, fmt.Errorf("named remote struct schema is missing namespace or type name")
+			return nil, fmt.Errorf("named remote metadata is missing namespace or type name")
 		}
 		namespace, err := r.namespaceDecoder.Decode(td.nsName.Data, td.nsName.Encoding)
 		if err != nil {
-			return nil, false, err
+			return nil, err
 		}
 		typeName, err := r.typeNameDecoder.Decode(td.typeName.Data, td.typeName.Encoding)
 		if err != nil {
-			return nil, false, err
+			return nil, err
 		}
 		typeKey = namespace + "\x00" + typeName
 	} else {
@@ -1548,30 +1527,27 @@ func (r *TypeResolver) checkRemoteStructSchemaLimit(td *TypeDef) (any, bool, err
 	}
 	versionsForType := r.remoteSchemaVersionsByType[typeKey]
 	if versionsForType >= r.fory.config.MaxSchemaVersionsPerType {
-		return nil, false, fmt.Errorf(
-			"remote schema version limit exceeded for type %v: %d >= %d. Increase MaxSchemaVersionsPerType if this peer legitimately sends many schema versions for one type",
+		return nil, fmt.Errorf(
+			"remote schema version limit exceeded for type %v: %d >= %d. The data may be malicious. If the data is not malicious, please increase MaxSchemaVersionsPerType",
 			typeKey, versionsForType, r.fory.config.MaxSchemaVersionsPerType)
 	}
-	acceptedStructTypeCount := len(r.remoteSchemaVersionsByType)
+	acceptedTypeCount := len(r.remoteSchemaVersionsByType)
 	if versionsForType == 0 {
-		acceptedStructTypeCount++
+		acceptedTypeCount++
 	}
-	globalLimit := acceptedStructTypeCount * r.fory.config.MaxAverageSchemaVersionsPerType
-	if globalLimit < minRemoteStructSchemaLimit {
-		globalLimit = minRemoteStructSchemaLimit
+	globalLimit := acceptedTypeCount * r.fory.config.MaxAverageSchemaVersionsPerType
+	if globalLimit < minRemoteTypeDefLimit {
+		globalLimit = minRemoteTypeDefLimit
 	}
 	if r.totalAcceptedSchemaVersions >= globalLimit {
-		return nil, false, fmt.Errorf(
-			"remote schema version limit exceeded: %d schemas for %d accepted struct types exceeds the average limit %d. Increase MaxAverageSchemaVersionsPerType if this peer legitimately sends many schema versions across many types",
-			r.totalAcceptedSchemaVersions, acceptedStructTypeCount, r.fory.config.MaxAverageSchemaVersionsPerType)
+		return nil, fmt.Errorf(
+			"remote schema version limit exceeded: %d metadata versions for %d accepted remote types exceeds the average limit %d. The data may be malicious. If the data is not malicious, please increase MaxAverageSchemaVersionsPerType",
+			r.totalAcceptedSchemaVersions, acceptedTypeCount, r.fory.config.MaxAverageSchemaVersionsPerType)
 	}
-	return typeKey, true, nil
+	return typeKey, nil
 }
 
-func (r *TypeResolver) recordRemoteStructSchema(typeKey any, isStruct bool) {
-	if !isStruct {
-		return
-	}
+func (r *TypeResolver) recordRemoteTypeDef(typeKey any) {
 	versionsForType := r.remoteSchemaVersionsByType[typeKey]
 	r.remoteSchemaVersionsByType[typeKey] = versionsForType + 1
 	r.totalAcceptedSchemaVersions++
@@ -1633,7 +1609,11 @@ func (r *TypeResolver) readSharedTypeMeta(buffer *ByteBuffer, err *Error) *TypeI
 		if td.type_ != nil {
 			localType := td.type_
 			localTd, localErr := r.getTypeDef(localType, true)
-			if localErr == nil && bytes.Equal(localTd.encoded, td.encoded) {
+			exactLocalAllowed := TypeId(td.typeId) == STRUCT ||
+				TypeId(td.typeId) == COMPATIBLE_STRUCT ||
+				TypeId(td.typeId) == NAMED_STRUCT ||
+				TypeId(td.typeId) == NAMED_COMPATIBLE_STRUCT
+			if exactLocalAllowed && localErr == nil && bytes.Equal(localTd.encoded, td.encoded) {
 				td = localTd
 				newTypeDef = false
 				if typeInfo := r.getTypeInfoByType(localType); typeInfo != nil {
@@ -1647,7 +1627,7 @@ func (r *TypeResolver) readSharedTypeMeta(buffer *ByteBuffer, err *Error) *TypeI
 			}
 		}
 		if newTypeDef {
-			typeKey, isStruct, limitErr := r.checkRemoteStructSchemaLimit(td)
+			typeKey, limitErr := r.checkRemoteTypeDefLimit(td)
 			if limitErr != nil {
 				err.SetError(limitErr)
 				return nil
@@ -1658,7 +1638,7 @@ func (r *TypeResolver) readSharedTypeMeta(buffer *ByteBuffer, err *Error) *TypeI
 				return nil
 			}
 			r.defIdToTypeDef[id] = td
-			r.recordRemoteStructSchema(typeKey, isStruct)
+			r.recordRemoteTypeDef(typeKey)
 			context.readTypeInfos = append(context.readTypeInfos, typeInfo)
 			return typeInfo
 		}

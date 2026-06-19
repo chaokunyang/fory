@@ -42,6 +42,7 @@ from pyfory._fory import (
     NOT_NULL_INT64_FLAG,
 )
 from pyfory.meta.typedef_decoder import decode_typedef
+from pyfory.meta.typedef import is_struct_typedef_kind
 from pyfory.meta.metastring import MetaStringDecoder
 from pyfory.policy import DEFAULT_POLICY
 from pyfory.resolver import NULL_FLAG, NOT_NULL_VALUE_FLAG
@@ -111,8 +112,8 @@ cdef class Config:
         max_depth: Maximum allowed nesting depth during deserialization.
         max_type_fields: Maximum accepted field count in one received struct TypeDef.
         max_type_meta_bytes: Maximum accepted body size in one received TypeDef.
-        max_schema_versions_per_type: Maximum accepted remote schema versions for one struct type.
-        max_average_schema_versions_per_type: Average remote schema versions allowed across accepted struct types.
+        max_schema_versions_per_type: Maximum accepted remote metadata versions for one logical type.
+        max_average_schema_versions_per_type: Average remote schema versions allowed across accepted remote types.
         field_nullable: Treats struct/dataclass fields as nullable by default.
         policy: Deserialization policy used for security-sensitive checks.
         meta_compressor: Optional typedef/meta compressor implementation.
@@ -164,8 +165,8 @@ cdef class Config:
             max_depth: Maximum allowed read depth before failing deserialization.
             max_type_fields: Maximum accepted field count in one received struct TypeDef.
             max_type_meta_bytes: Maximum accepted body size in one received TypeDef.
-            max_schema_versions_per_type: Maximum accepted remote schema versions for one struct type.
-            max_average_schema_versions_per_type: Average remote schema versions allowed across accepted struct types.
+            max_schema_versions_per_type: Maximum accepted remote metadata versions for one logical type.
+            max_average_schema_versions_per_type: Average remote schema versions allowed across accepted remote types.
             field_nullable: Treat all struct fields as nullable by default.
             policy: Deserialization policy implementation.
             meta_compressor: Optional typedef/meta compressor.
@@ -558,12 +559,16 @@ cdef class TypeResolver:
         if typeinfo is not None:
             if typeinfo.type_def is None:
                 self.resolver._set_type_info(typeinfo)
-            if typeinfo.type_def is not None and typeinfo.type_def.encoded == type_def.encoded:
+            if (
+                is_struct_typedef_kind(type_def.type_id)
+                and typeinfo.type_def is not None
+                and typeinfo.type_def.encoded == type_def.encoded
+            ):
                 return typeinfo
-        type_key = self.resolver._check_remote_struct_schema_limit(type_def)
+        type_key = self.resolver._check_remote_type_def_limit(type_def)
         typeinfo = self.resolver._build_type_info_from_typedef(type_def)
         self._meta_shared_type_info[header] = typeinfo
-        self.resolver._record_remote_struct_schema(type_key)
+        self.resolver._record_remote_type_def(type_key)
         return typeinfo
 
     cdef inline TypeInfo _load_bytes_to_type_info(
@@ -853,8 +858,8 @@ cdef class Fory:
             max_depth: Maximum allowed read depth before rejecting payloads.
             max_type_fields: Maximum accepted field count in one received struct TypeDef.
             max_type_meta_bytes: Maximum accepted body size in one received TypeDef.
-            max_schema_versions_per_type: Maximum accepted remote schema versions for one struct type.
-            max_average_schema_versions_per_type: Average remote schema versions allowed across accepted struct types.
+            max_schema_versions_per_type: Maximum accepted remote metadata versions for one logical type.
+            max_average_schema_versions_per_type: Average remote schema versions allowed across accepted remote types.
             policy: Optional deserialization policy implementation.
             field_nullable: Treat struct fields as nullable by default.
             meta_compressor: Optional typedef/meta compressor implementation.

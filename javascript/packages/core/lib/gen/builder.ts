@@ -375,6 +375,12 @@ class TypeMetaContextBuilder {
     return `${this.readHolder}.readTypeMeta()`;
   }
 
+  readNamedTypeMeta(typeId: number, namespace: string, typeName: string) {
+    const safeNamespace = CodecBuilder.replaceBackslashAndQuote(namespace);
+    const safeTypeName = CodecBuilder.replaceBackslashAndQuote(typeName);
+    return `${this.readHolder}.readNamedTypeMeta(${typeId}, "${safeNamespace}", "${safeTypeName}")`;
+  }
+
   readCompatibleStructSerializer(localHash: string, original?: string) {
     if (original) {
       return `${this.readHolder}.readCompatibleStructSerializer(${localHash}, ${original})`;

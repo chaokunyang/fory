@@ -436,6 +436,14 @@ normally has one version, but it still counts against accepted remote metadata
 totals when it is sent as shared metadata. `maxTypeFields` applies only to
 struct field lists.
 
+When a statically declared compatible named enum, ext, or union field reads
+shared metadata, the decoded metadata must match the declared type id,
+namespace, and type name before the metadata owner publishes it to the
+persistent cache or records a schema count. Already accepted header or reference
+cache hits still skip the body and must not rerun body-hash, schema-limit, or
+registration checks, but the field reader must not treat metadata for a
+different declared named type as the current field's metadata.
+
 Skip paths do not need to materialize skipped values. Existing byte-skip
 operations should consume any available buffered prefix first, then skip or drop
 remaining stream bytes in bounded steps.

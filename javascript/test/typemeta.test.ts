@@ -77,6 +77,29 @@ function typeMetaRecord(typeMeta: TypeMeta): Uint8Array {
   return writer.dump();
 }
 
+function replaceFirstBytes(
+  bytes: Uint8Array,
+  search: Uint8Array,
+  replacement: Uint8Array,
+): Uint8Array {
+  expect(search.length).toBe(replacement.length);
+  const result = new Uint8Array(bytes);
+  for (let i = 0; i <= result.length - search.length; i++) {
+    let matched = true;
+    for (let j = 0; j < search.length; j++) {
+      if (result[i + j] !== search[j]) {
+        matched = false;
+        break;
+      }
+    }
+    if (matched) {
+      result.set(replacement, i);
+      return result;
+    }
+  }
+  throw new Error("bytes not found");
+}
+
 describe("typemeta", () => {
   test("splits dotted names", () => {
     const structInfo = Type.struct({ typeName: "com.example.User" }, {});
@@ -256,6 +279,88 @@ describe("typemeta", () => {
 
     expect(readerFory.deserialize(writerFory.serialize(Color.Red))).toBe(
       Color.Red,
+    );
+  });
+
+  test("generated named enum validates TypeMeta owner", () => {
+    const colorInfo = Type.enum(
+      { namespace: "example", typeName: "Color" },
+      { Red: 0 },
+    );
+    const otherInfo = Type.enum(
+      { namespace: "example", typeName: "Other" },
+      { Blue: 0 },
+    );
+    const fory = new Fory({ compatible: true, ref: true });
+    fory.register(otherInfo);
+    const colorReg = fory.register(colorInfo);
+
+    const tampered = replaceFirstBytes(
+      colorReg.serialize(0),
+      TypeMeta.fromTypeInfo(colorInfo).toBytes(),
+      TypeMeta.fromTypeInfo(otherInfo).toBytes(),
+    );
+
+    expect(() => fory.deserialize(tampered, colorReg.serializer)).toThrow(
+      "TypeMeta mismatch",
+    );
+  });
+
+  test("generated named ext validates TypeMeta owner", () => {
+    class Alpha {
+      id = 0;
+    }
+    class Bravo {
+      id = 0;
+    }
+    Type.ext({ namespace: "example", typeName: "Alpha" })(Alpha);
+    Type.ext({ namespace: "example", typeName: "Bravo" })(Bravo);
+    const customSerializer = {
+      write: (writeContext: any, value: Alpha | Bravo) => {
+        writeContext.writeVarInt32(value.id);
+      },
+      read: (readContext: any, result: Alpha | Bravo) => {
+        result.id = readContext.readVarInt32();
+      },
+    };
+    const fory = new Fory({ compatible: true, ref: true });
+    const bravoReg = fory.register(Bravo, customSerializer);
+    const alphaReg = fory.register(Alpha, customSerializer);
+    const value = new Alpha();
+    value.id = 7;
+
+    const tampered = replaceFirstBytes(
+      alphaReg.serialize(value),
+      TypeMeta.fromTypeInfo(alphaReg.serializer.getTypeInfo()).toBytes(),
+      TypeMeta.fromTypeInfo(bravoReg.serializer.getTypeInfo()).toBytes(),
+    );
+
+    expect(() => fory.deserialize(tampered, alphaReg.serializer)).toThrow(
+      "TypeMeta mismatch",
+    );
+  });
+
+  test("generated named union validates TypeMeta owner", () => {
+    const leftInfo = Type.union(
+      { namespace: "example", typeName: "Alpha" },
+      { 1: Type.string() },
+    );
+    const rightInfo = Type.union(
+      { namespace: "example", typeName: "Bravo" },
+      { 1: Type.string() },
+    );
+    const fory = new Fory({ compatible: true, ref: true });
+    const rightReg = fory.register(rightInfo);
+    const leftReg = fory.register(leftInfo);
+
+    const tampered = replaceFirstBytes(
+      leftReg.serialize({ case: 1, value: "ok" }),
+      TypeMeta.fromTypeInfo(leftReg.serializer.getTypeInfo()).toBytes(),
+      TypeMeta.fromTypeInfo(rightReg.serializer.getTypeInfo()).toBytes(),
+    );
+
+    expect(() => fory.deserialize(tampered, leftReg.serializer)).toThrow(
+      "TypeMeta mismatch",
     );
   });
 

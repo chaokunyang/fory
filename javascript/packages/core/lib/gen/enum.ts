@@ -101,9 +101,12 @@ class EnumSerializerGenerator extends BaseSerializerGenerator {
         break;
       case TypeId.NAMED_ENUM:
         if (this.builder.resolver.isCompatible()) {
-          const typeMeta = this.scope.uniqueName("enumTypeMeta");
           namesStmt = `
-            const ${typeMeta} = ${this.builder.typeMetaResolver.readTypeMeta()};
+            ${this.builder.typeMetaResolver.readNamedTypeMeta(
+              TypeId.NAMED_ENUM,
+              this.typeInfo.namespace,
+              this.typeInfo.typeName,
+            )};
           `;
         } else {
           namesStmt = `

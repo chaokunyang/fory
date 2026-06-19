@@ -53,6 +53,7 @@ from pyfory.meta.metastring import MetaStringDecoder, Encoding
 
 
 MAX_GENERATED_CLASSES = 1000
+MAX_TYPEDEF_BODY_SIZE = (1 << 31) - 1
 _generated_class_count = 0
 
 
@@ -70,9 +71,12 @@ def skip_typedef(buffer: Buffer, header) -> None:
     meta_size = header & META_SIZE_MASKS
     # If meta size is at maximum, read additional size
     if meta_size == META_SIZE_MASKS:
-        meta_size += buffer.read_var_uint32()
-    # Read meta data
-    buffer.read_bytes(meta_size)
+        extended_size = buffer.read_var_uint32()
+        if extended_size > MAX_TYPEDEF_BODY_SIZE - meta_size:
+            raise ValueError("Invalid TypeDef metadata size")
+        meta_size += extended_size
+    # Header-cache hits must skip opaque metadata without materializing the body.
+    buffer.skip(meta_size)
 
 
 def decode_typedef(buffer: Buffer, resolver, header=None) -> TypeDef:
@@ -101,11 +105,12 @@ def decode_typedef(buffer: Buffer, resolver, header=None) -> TypeDef:
         raise ValueError("Compressed xlang TypeDef is not supported")
 
     # If meta size is at maximum, read additional size
-    encoded = Buffer.allocate(meta_size + 16)
-    encoded.write_int64(header)
+    has_extended_size = meta_size == META_SIZE_MASKS
+    extended_size = 0
     if meta_size == META_SIZE_MASKS:
         extended_size = buffer.read_var_uint32()
-        encoded.write_var_uint32(extended_size)
+        if extended_size > MAX_TYPEDEF_BODY_SIZE - meta_size:
+            raise ValueError("Invalid TypeDef metadata size")
         meta_size += extended_size
     max_type_meta_bytes = resolver.config.max_type_meta_bytes
     if meta_size > max_type_meta_bytes:
@@ -116,6 +121,10 @@ def decode_typedef(buffer: Buffer, resolver, header=None) -> TypeDef:
 
     # Read meta data
     encoded_meta_data = buffer.read_bytes(meta_size)
+    encoded = Buffer.allocate(meta_size + 16)
+    encoded.write_int64(header)
+    if has_extended_size:
+        encoded.write_var_uint32(extended_size)
     encoded.write_bytes(encoded_meta_data)
     meta_data = encoded_meta_data
 

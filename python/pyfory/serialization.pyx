@@ -592,11 +592,15 @@ cdef class TypeResolver:
 
 cdef inline void _skip_typedef_fast(Buffer buffer, int64_t header):
     cdef int32_t meta_size = <int32_t>(header & 0xFF)
+    cdef uint32_t extended_size
     cdef int32_t reader_index
     if meta_size == 0xFF:
-        meta_size += buffer.read_var_uint32()
+        extended_size = buffer.read_var_uint32()
+        if extended_size > <uint32_t>(INT32_MAX - meta_size):
+            raise ValueError("Invalid TypeDef metadata size")
+        meta_size += <int32_t>extended_size
     if buffer.has_input_stream():
-        buffer.read_bytes(meta_size)
+        buffer.skip(meta_size)
         return
     reader_index = buffer.get_reader_index()
     buffer.check_bound(reader_index, meta_size)

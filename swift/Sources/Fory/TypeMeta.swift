@@ -346,6 +346,9 @@ public final class TypeMeta: Equatable, @unchecked Sendable {
       throw ForyError.invalidData("invalid TypeMeta global header")
     }
     let compressed = (header & typeMetaCompressedFlag) != 0
+    if compressed {
+      throw ForyError.encodingError("compressed TypeMeta is not supported yet")
+    }
 
     var metaSize = Int(header & typeMetaSizeMask)
     if metaSize == Int(typeMetaSizeMask) {
@@ -359,10 +362,6 @@ public final class TypeMeta: Equatable, @unchecked Sendable {
     }
 
     let encodedBody = try buffer.readBytes(count: metaSize)
-    if compressed {
-      throw ForyError.encodingError("compressed TypeMeta is not supported yet")
-    }
-
     let bodyReader = ByteBuffer(bytes: encodedBody)
     let metaHeader = try bodyReader.readUInt8()
 

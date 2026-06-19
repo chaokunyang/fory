@@ -348,6 +348,52 @@ def test_decode_typedef_rejects_compressed_xlang_metadata():
         decode_typedef(Buffer(malformed.to_bytes()), fory.type_resolver)
 
 
+def test_decode_typedef_checks_body_before_encoded_allocation(monkeypatch):
+    class GuardedBuffer:
+        @staticmethod
+        def allocate(_size):
+            raise AssertionError("encoded buffer allocated before readable-byte proof")
+
+    fory = Fory(xlang=True, compatible=False, max_type_meta_bytes=1024)
+    header = 16
+    truncated = header.to_bytes(8, "little", signed=False)
+    original_buffer = typedef_decoder.Buffer
+    monkeypatch.setattr(typedef_decoder, "Buffer", GuardedBuffer)
+    with pytest.raises(Exception) as exc:
+        typedef_decoder.decode_typedef(Buffer(truncated), fory.type_resolver)
+    monkeypatch.setattr(typedef_decoder, "Buffer", original_buffer)
+
+    assert "encoded buffer allocated" not in str(exc.value)
+
+
+def test_skip_typedef_does_not_materialize_body():
+    class SkipBuffer:
+        def __init__(self):
+            self.skipped = None
+
+        def skip(self, size):
+            self.skipped = size
+
+        def read_bytes(self, _size):
+            raise AssertionError("skip_typedef must not read metadata body bytes")
+
+    buffer = SkipBuffer()
+    typedef_decoder.skip_typedef(buffer, 7)
+    assert buffer.skipped == 7
+
+
+def test_skip_typedef_rejects_oversized_extended_body():
+    class SkipBuffer:
+        def read_var_uint32(self):
+            return 1 << 31
+
+        def skip(self, _size):
+            raise AssertionError("oversized TypeDef body must not reach skip")
+
+    with pytest.raises(ValueError, match="Invalid TypeDef metadata size"):
+        typedef_decoder.skip_typedef(SkipBuffer(), META_SIZE_MASKS)
+
+
 def test_id_registered_typedef_extended_field_count_header():
     many_fields_type = make_dataclass("ManyTypeDefFields", [(f"field_{i}", int) for i in range(32)])
     fory = Fory(xlang=True, compatible=False)

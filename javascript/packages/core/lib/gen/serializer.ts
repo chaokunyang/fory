@@ -52,7 +52,6 @@ export interface SerializerGenerator {
   read(assignStmt: (v: string) => string, refState: string): string;
   readEmbed(): any;
   getHash(): string;
-  getTypeMetaBytes(): string;
 
   getType(): number;
   getTypeId(): number | undefined;
@@ -276,10 +275,6 @@ export abstract class BaseSerializerGenerator implements SerializerGenerator {
     return "0";
   }
 
-  getTypeMetaBytes(): string {
-    return "undefined";
-  }
-
   toSerializer() {
     this.scope.assertNameNotDuplicate("read");
     this.scope.assertNameNotDuplicate("readInner");
@@ -293,9 +288,6 @@ export abstract class BaseSerializerGenerator implements SerializerGenerator {
     const declare = `
       const getHash = () => {
         return ${this.getHash()};
-      }
-      const getTypeMetaBytes = () => {
-        return ${this.getTypeMetaBytes()};
       }
       const write = (v) => {
         ${this.write("v")}
@@ -340,7 +332,6 @@ export abstract class BaseSerializerGenerator implements SerializerGenerator {
               getUserTypeId: () => ${this.getUserTypeId()},
               getTypeInfo: () => typeInfo,
               getHash,
-              getTypeMetaBytes,
 
               write,
               writeRef,

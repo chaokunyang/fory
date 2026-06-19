@@ -27,7 +27,6 @@ import static org.testng.Assert.assertTrue;
 import static org.testng.Assert.expectThrows;
 
 import java.nio.ByteBuffer;
-import org.apache.fory.Fory;
 import org.apache.fory.TestUtils;
 import org.apache.fory.collection.LongLongByteMap;
 import org.apache.fory.context.MetaStringReader;
@@ -42,7 +41,7 @@ import org.testng.annotations.Test;
 
 public class MetaStringIOTest {
   private static SharedRegistry newSharedRegistry() {
-    return new SharedRegistry(Fory.builder().build().getConfig());
+    return new SharedRegistry();
   }
 
   @Test

@@ -45,7 +45,6 @@ import java.util.concurrent.ConcurrentHashMap;
 import lombok.EqualsAndHashCode;
 import org.apache.fory.Fory;
 import org.apache.fory.ForyTestBase;
-import org.apache.fory.config.Config;
 import org.apache.fory.config.ForyBuilder;
 import org.apache.fory.context.MetaReadContext;
 import org.apache.fory.context.MetaWriteContext;
@@ -1348,7 +1347,7 @@ public class ObjectStreamSerializerTest extends ForyTestBase {
             .withCompatible(compatible)
             .withMetaShare(true);
     finishBuilder(builder);
-    SharedRegistry sharedRegistry = new SharedRegistry(new Config(builder));
+    SharedRegistry sharedRegistry = new SharedRegistry();
     Fory writerFory =
         new Fory(builder, ObjectStreamSerializerTest.class.getClassLoader(), sharedRegistry);
     Fory readerFory1 =
@@ -1389,7 +1388,7 @@ public class ObjectStreamSerializerTest extends ForyTestBase {
             .withCompatible(compatible)
             .withMetaShare(true);
     finishBuilder(builder);
-    SharedRegistry sharedRegistry = new SharedRegistry(new Config(builder));
+    SharedRegistry sharedRegistry = new SharedRegistry();
     Fory writerFory =
         new Fory(builder, ObjectStreamSerializerTest.class.getClassLoader(), sharedRegistry);
     Fory readerFory =

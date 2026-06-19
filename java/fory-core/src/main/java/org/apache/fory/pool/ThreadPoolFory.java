@@ -59,19 +59,9 @@ public class ThreadPoolFory extends AbstractThreadSafeFory {
       throw new IllegalArgumentException(
           String.format("thread safe fory pool size error, please check it, size:[%s]", poolSize));
     }
-    SharedRegistry[] sharedRegistry = new SharedRegistry[1];
+    SharedRegistry sharedRegistry = new SharedRegistry();
     Supplier<Fory> factory =
-        () -> {
-          ForyBuilder builder = Fory.builder();
-          if (sharedRegistry[0] != null) {
-            builder.withSharedRegistry(sharedRegistry[0]);
-          }
-          Fory fory = foryFactory.apply(builder);
-          if (sharedRegistry[0] == null) {
-            sharedRegistry[0] = fory.getTypeResolver().getSharedRegistry();
-          }
-          return fory;
-        };
+        () -> foryFactory.apply(Fory.builder().withSharedRegistry(sharedRegistry));
     this.poolSize = poolSize;
     slots = new AtomicReferenceArray<>(poolSize);
     pooledFory = new Fory[poolSize];

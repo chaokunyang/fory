@@ -125,10 +125,10 @@ public final class Fory implements BaseFory {
     // create thread-safe factories.
     config = new Config(builder);
     if (sharedRegistry == null) {
-      sharedRegistry = new SharedRegistry(config);
-    } else {
-      sharedRegistry.checkConfig(config);
+      sharedRegistry = new SharedRegistry();
     }
+    sharedRegistry.setRemoteSchemaLimits(
+        config.maxSchemaVersionsPerType(), config.maxAverageSchemaVersionsPerType());
     if (classLoader == null) {
       classLoader = Thread.currentThread().getContextClassLoader();
       if (classLoader == null) {

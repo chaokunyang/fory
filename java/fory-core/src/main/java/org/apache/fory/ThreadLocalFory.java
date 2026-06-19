@@ -50,19 +50,8 @@ public class ThreadLocalFory extends AbstractThreadSafeFory {
   private final Object callbackLock = new Object();
 
   public ThreadLocalFory(Function<ForyBuilder, Fory> factory) {
-    SharedRegistry[] sharedRegistry = new SharedRegistry[1];
-    foryFactory =
-        () -> {
-          ForyBuilder builder = Fory.builder();
-          if (sharedRegistry[0] != null) {
-            builder.withSharedRegistry(sharedRegistry[0]);
-          }
-          Fory fory = factory.apply(builder);
-          if (sharedRegistry[0] == null) {
-            sharedRegistry[0] = fory.getSharedRegistry();
-          }
-          return fory;
-        };
+    SharedRegistry sharedRegistry = new SharedRegistry();
+    foryFactory = () -> factory.apply(Fory.builder().withSharedRegistry(sharedRegistry));
     factoryCallback = f -> {};
     allFory = Collections.synchronizedMap(new WeakHashMap<>());
     foryThreadLocal = ThreadLocal.withInitial(this::newFory);

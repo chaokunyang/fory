@@ -161,7 +161,6 @@ public abstract class TypeResolver {
       JITContext jitContext) {
     this.config = config;
     this.sharedRegistry = sharedRegistry;
-    sharedRegistry.checkConfig(config);
     this.jitContext = jitContext;
     metaContextShareEnabled = config.isMetaShareEnabled();
     extRegistry = new ExtRegistry(classLoader, sharedRegistry);

@@ -24,7 +24,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 import lombok.Data;
 import org.apache.fory.Fory;
 import org.apache.fory.ForyTestBase;
-import org.apache.fory.config.Config;
 import org.apache.fory.config.ForyBuilder;
 import org.apache.fory.context.ReadContext;
 import org.apache.fory.context.WriteContext;
@@ -156,7 +155,7 @@ public class RegisterTest extends ForyTestBase {
     ForyBuilder builder =
         Fory.builder().withXlang(true).withCompatible(false).requireClassRegistration(true);
     finishBuilder(builder);
-    SharedRegistry sharedRegistry = new SharedRegistry(new Config(builder));
+    SharedRegistry sharedRegistry = new SharedRegistry();
     Fory fory1 = new Fory(builder, RegisterTest.class.getClassLoader(), sharedRegistry);
     Fory fory2 = new Fory(builder, RegisterTest.class.getClassLoader(), sharedRegistry);
 
@@ -177,7 +176,7 @@ public class RegisterTest extends ForyTestBase {
     ForyBuilder builder =
         Fory.builder().withXlang(true).withCompatible(false).requireClassRegistration(true);
     finishBuilder(builder);
-    SharedRegistry sharedRegistry = new SharedRegistry(new Config(builder));
+    SharedRegistry sharedRegistry = new SharedRegistry();
     Fory fory1 = new Fory(builder, RegisterTest.class.getClassLoader(), sharedRegistry);
     Fory fory2 = new Fory(builder, RegisterTest.class.getClassLoader(), sharedRegistry);
 

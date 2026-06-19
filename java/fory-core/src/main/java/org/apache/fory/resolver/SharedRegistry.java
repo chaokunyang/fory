@@ -33,7 +33,6 @@ import org.apache.fory.codegen.CodeGenerator;
 import org.apache.fory.collection.BiMap;
 import org.apache.fory.collection.ConcurrentIdentityMap;
 import org.apache.fory.collection.Tuple2;
-import org.apache.fory.config.Config;
 import org.apache.fory.exception.ForyException;
 import org.apache.fory.meta.EncodedMetaString;
 import org.apache.fory.meta.Encoders;
@@ -93,19 +92,36 @@ public final class SharedRegistry {
   final StaticGeneratedSerializerRegistry staticGeneratedSerializerRegistry =
       new StaticGeneratedSerializerRegistry();
   private final Object metaStringCacheLock = new Object();
-  private final Config config;
+  private volatile int maxSchemaVersionsPerType = -1;
+  private volatile int maxAverageSchemaVersionsPerType = -1;
   private final HashMap<Object, Integer> remoteTypeDefVersionsByType = new HashMap<>();
   private int totalAcceptedSchemaVersions;
   volatile IdentityHashMap<Class<?>, Integer> registeredClassIdMap;
   volatile BiMap<String, Class<?>> registeredClasses;
 
-  public SharedRegistry(Config config) {
-    this.config = Objects.requireNonNull(config);
-  }
+  public SharedRegistry() {}
 
-  public void checkConfig(Config config) {
-    if (!this.config.equals(config)) {
-      throw new IllegalArgumentException("SharedRegistry cannot be reused with different config");
+  public synchronized void setRemoteSchemaLimits(
+      int maxSchemaVersionsPerType, int maxAverageSchemaVersionsPerType) {
+    if (maxSchemaVersionsPerType <= 0) {
+      throw new IllegalArgumentException(
+          "maxSchemaVersionsPerType must be positive but got " + maxSchemaVersionsPerType);
+    }
+    if (maxAverageSchemaVersionsPerType <= 0) {
+      throw new IllegalArgumentException(
+          "maxAverageSchemaVersionsPerType must be positive but got "
+              + maxAverageSchemaVersionsPerType);
+    }
+    int currentMaxSchemaVersionsPerType = this.maxSchemaVersionsPerType;
+    if (currentMaxSchemaVersionsPerType < 0) {
+      this.maxAverageSchemaVersionsPerType = maxAverageSchemaVersionsPerType;
+      this.maxSchemaVersionsPerType = maxSchemaVersionsPerType;
+      return;
+    }
+    if (currentMaxSchemaVersionsPerType != maxSchemaVersionsPerType
+        || this.maxAverageSchemaVersionsPerType != maxAverageSchemaVersionsPerType) {
+      throw new IllegalArgumentException(
+          "SharedRegistry cannot be reused with different remote schema limits");
     }
   }
 
@@ -205,7 +221,7 @@ public final class SharedRegistry {
 
   private int checkRemoteTypeLimit(Object remoteTypeKey) {
     int versionsForType = remoteTypeDefVersionsByType.getOrDefault(remoteTypeKey, 0);
-    int maxSchemaVersionsPerType = config.maxSchemaVersionsPerType();
+    int maxSchemaVersionsPerType = maxSchemaVersionsPerType();
     if (versionsForType >= maxSchemaVersionsPerType) {
       throw new ForyException(
           "Remote schema version limit exceeded for type "
@@ -221,10 +237,11 @@ public final class SharedRegistry {
         versionsForType == 0
             ? remoteTypeDefVersionsByType.size() + 1
             : remoteTypeDefVersionsByType.size();
+    int maxAverageSchemaVersionsPerType = maxAverageSchemaVersionsPerType();
     long globalLimit =
         Math.max(
             (long) MIN_REMOTE_TYPE_DEF_LIMIT,
-            (long) acceptedRemoteTypeCount * config.maxAverageSchemaVersionsPerType());
+            (long) acceptedRemoteTypeCount * maxAverageSchemaVersionsPerType);
     if (totalAcceptedSchemaVersions >= globalLimit) {
       throw new ForyException(
           "Remote schema version limit exceeded: "
@@ -232,11 +249,27 @@ public final class SharedRegistry {
               + " metadata versions for "
               + acceptedRemoteTypeCount
               + " accepted remote types exceeds the average limit "
-              + config.maxAverageSchemaVersionsPerType()
+              + maxAverageSchemaVersionsPerType
               + ". The data may be malicious. If the data is not malicious, please increase "
               + "maxAverageSchemaVersionsPerType.");
     }
     return versionsForType;
+  }
+
+  private int maxSchemaVersionsPerType() {
+    int maxSchemaVersionsPerType = this.maxSchemaVersionsPerType;
+    if (maxSchemaVersionsPerType < 0) {
+      throw new IllegalStateException("SharedRegistry remote schema limits are not initialized");
+    }
+    return maxSchemaVersionsPerType;
+  }
+
+  private int maxAverageSchemaVersionsPerType() {
+    int maxSchemaVersionsPerType = this.maxSchemaVersionsPerType;
+    if (maxSchemaVersionsPerType < 0) {
+      throw new IllegalStateException("SharedRegistry remote schema limits are not initialized");
+    }
+    return maxAverageSchemaVersionsPerType;
   }
 
   EncodedMetaString getPackageEncodedMetaString(String string) {

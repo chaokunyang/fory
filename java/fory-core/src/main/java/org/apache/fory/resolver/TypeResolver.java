@@ -880,16 +880,6 @@ public abstract class TypeResolver {
     return typeInfo;
   }
 
-  private TypeInfo readSharedClassMetaMiss(MemoryBuffer buffer, long id) {
-    TypeDef typeDef = sharedRegistry.remoteTypeDefById.get(id);
-    if (typeDef != null) {
-      TypeDef.skipTypeDef(buffer, id);
-      return buildMetaSharedTypeInfo(typeDef);
-    }
-    typeDef = TypeDef.readTypeDef(this, buffer, id);
-    return buildCheckedMetaSharedTypeInfo(typeDef);
-  }
-
   public final TypeInfo readSharedClassMeta(ReadContext readContext, Class<?> targetClass) {
     TypeInfo typeInfo = readSharedClassMeta(readContext);
     Class<?> readClass = typeInfo.getType();
@@ -898,6 +888,16 @@ public abstract class TypeResolver {
       return getTargetTypeInfo(typeInfo, targetClass);
     }
     return typeInfo;
+  }
+
+  private TypeInfo readSharedClassMetaMiss(MemoryBuffer buffer, long id) {
+    TypeDef typeDef = sharedRegistry.remoteTypeDefById.get(id);
+    if (typeDef != null) {
+      TypeDef.skipTypeDef(buffer, id);
+      return buildMetaSharedTypeInfo(typeDef);
+    }
+    typeDef = TypeDef.readTypeDef(this, buffer, id);
+    return buildCheckedMetaSharedTypeInfo(typeDef);
   }
 
   private static TypeInfo getMetaReadTypeInfo(MetaReadContext metaReadContext, int index) {

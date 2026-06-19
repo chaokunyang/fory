@@ -725,14 +725,14 @@ export class ReadContext {
           headerHigh,
         );
         typeMeta = cached
-          ?? this.readStructTypeMetaMiss(
-            localHash,
-            dynamicTypeId,
-            headerLow,
-            headerHigh,
-            remoteHash,
-            original,
-          );
+        ?? this.readStructTypeMetaMiss(
+          localHash,
+          dynamicTypeId,
+          headerLow,
+          headerHigh,
+          remoteHash,
+          original,
+        );
       } else {
         typeMeta = this.readTypeMetaByHeader(
           dynamicTypeId,

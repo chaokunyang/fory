@@ -688,32 +688,40 @@ export class ReadContext {
       this.lastTypeMeta = typeMeta;
       this.rememberRecentTypeMeta(headerLow, headerHigh, typeMeta);
     } else {
-      const typeMetaStart = this.reader.readGetCursor() - 8;
-      const header = (BigInt(headerHigh) << 32n) | BigInt(headerLow);
-      typeMeta = TypeMeta.fromBytesAfterHeader(
-        this.reader,
-        header,
-        this.typeResolver.config.maxTypeFields,
-        this.typeResolver.config.maxTypeMetaBytes,
-      );
-      const typeMetaEnd = this.reader.readGetCursor();
-      const localType = this.typeResolver.getSerializerByHash?.(
-        ReadContext.typeMetaHeaderHash(headerLow, headerHigh),
-      );
-      const localTypeMeta = this.exactTypeMetaForSerializer(
-        typeMetaStart,
-        typeMetaEnd,
-        localType,
-      );
-      if (localTypeMeta !== undefined) {
-        typeMeta = localTypeMeta;
-        this.cacheTypeMeta(headerLow, headerHigh, typeMeta, undefined);
-      } else {
-        const typeKey = this.checkRemoteTypeMetaLimit(typeMeta);
-        this.cacheTypeMeta(headerLow, headerHigh, typeMeta, typeKey);
-      }
+      typeMeta = this.readTypeMetaFromHeaderMiss(headerLow, headerHigh);
     }
     this.typeMeta[dynamicTypeId] = typeMeta;
+    return typeMeta;
+  }
+
+  private readTypeMetaFromHeaderMiss(
+    headerLow: number,
+    headerHigh: number,
+  ): TypeMeta {
+    const typeMetaStart = this.reader.readGetCursor() - 8;
+    const header = (BigInt(headerHigh) << 32n) | BigInt(headerLow);
+    let typeMeta = TypeMeta.fromBytesAfterHeader(
+      this.reader,
+      header,
+      this.typeResolver.config.maxTypeFields,
+      this.typeResolver.config.maxTypeMetaBytes,
+    );
+    const typeMetaEnd = this.reader.readGetCursor();
+    const localType = this.typeResolver.getSerializerByHash?.(
+      ReadContext.typeMetaHeaderHash(headerLow, headerHigh),
+    );
+    const localTypeMeta = this.exactTypeMetaForSerializer(
+      typeMetaStart,
+      typeMetaEnd,
+      localType,
+    );
+    if (localTypeMeta !== undefined) {
+      typeMeta = localTypeMeta;
+      this.cacheTypeMeta(headerLow, headerHigh, typeMeta, undefined);
+    } else {
+      const typeKey = this.checkRemoteTypeMetaLimit(typeMeta);
+      this.cacheTypeMeta(headerLow, headerHigh, typeMeta, typeKey);
+    }
     return typeMeta;
   }
 
@@ -756,41 +764,77 @@ export class ReadContext {
           headerHigh,
         );
       } else {
-        const cached = this.readCachedTypeMetaFromHeader(
+        return this.readChangedTypeMetaFromHeader(
+          expectedHash,
+          original,
           dynamicTypeId,
           headerLow,
           headerHigh,
+          remoteHash,
         );
-        if (cached !== null) {
-          typeMeta = cached;
-        } else {
-          return this.readTypeMetaMiss(
-            expectedHash,
-            original,
-            dynamicTypeId,
-            headerLow,
-            headerHigh,
-            remoteHash,
-          );
-        }
       }
     }
     if (expectedHash !== remoteHash) {
-      const cached = this.compatibleReadSerializers.get(remoteHash);
-      if (cached !== undefined && cached.localHash === expectedHash) {
-        return cached.serializer;
-      }
-      const serializer = this.genSerializerByTypeMetaRuntime(
+      return this.changedTypeMetaSerializer(
+        expectedHash,
         typeMeta,
         original,
+        remoteHash,
       );
-      this.compatibleReadSerializers.set(remoteHash, {
-        localHash: expectedHash,
-        serializer,
-      });
-      return serializer;
     }
     return undefined;
+  }
+
+  private readChangedTypeMetaFromHeader(
+    expectedHash: number,
+    original: Serializer | undefined,
+    dynamicTypeId: number,
+    headerLow: number,
+    headerHigh: number,
+    remoteHash: number,
+  ): Serializer | undefined {
+    const cached = this.readCachedTypeMetaFromHeader(
+      dynamicTypeId,
+      headerLow,
+      headerHigh,
+    );
+    if (cached !== null) {
+      return this.changedTypeMetaSerializer(
+        expectedHash,
+        cached,
+        original,
+        remoteHash,
+      );
+    }
+    return this.readTypeMetaMiss(
+      expectedHash,
+      original,
+      dynamicTypeId,
+      headerLow,
+      headerHigh,
+      remoteHash,
+    );
+  }
+
+  private changedTypeMetaSerializer(
+    expectedHash: number,
+    typeMeta: TypeMeta,
+    original: Serializer | undefined,
+    remoteHash: number,
+  ): Serializer {
+    const cached = this.compatibleReadSerializers.get(remoteHash);
+    if (cached !== undefined && cached.localHash === expectedHash) {
+      return cached.serializer;
+    }
+    const serializer = this.genSerializerByTypeMetaRuntime(
+      typeMeta,
+      original,
+    );
+    this.compatibleReadSerializers.set(remoteHash, {
+      localHash: expectedHash,
+      serializer,
+    });
+    return serializer;
   }
 
   private readCachedTypeMetaFromHeader(

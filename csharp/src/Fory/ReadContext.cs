@@ -21,10 +21,10 @@ public sealed class ReadContext
 {
     private const int MinRemoteTypeMetaLimit = 8192;
 
-    private readonly ReusableArray<TypeMeta> _messageTypeMetas = new();
+    private readonly ReusableArray<TypeMeta> _typeMetaRefs = new();
     private readonly UInt64Map<TypeMeta> _typeMetasByHeader = new();
-    private TypeMeta? _firstMessageTypeMeta;
-    private bool _hasFirstMessageTypeMeta;
+    private TypeMeta? _firstTypeMetaRef;
+    private bool _hasFirstTypeMetaRef;
 
     private readonly List<MetaString> _readMetaStrings = [];
 
@@ -76,7 +76,7 @@ public sealed class ReadContext
         Reset();
     }
 
-    internal TypeMeta? GetMessageTypeMeta(int index)
+    internal TypeMeta? GetTypeMetaRef(int index)
     {
         if (index < 0)
         {
@@ -85,13 +85,13 @@ public sealed class ReadContext
 
         if (index == 0)
         {
-            return _hasFirstMessageTypeMeta ? _firstMessageTypeMeta : null;
+            return _hasFirstTypeMetaRef ? _firstTypeMetaRef : null;
         }
 
-        return _messageTypeMetas.Get(index - 1);
+        return _typeMetaRefs.Get(index - 1);
     }
 
-    internal void StoreMessageTypeMeta(TypeMeta typeMeta, int index)
+    internal void StoreTypeMetaRef(TypeMeta typeMeta, int index)
     {
         if (index < 0)
         {
@@ -100,32 +100,32 @@ public sealed class ReadContext
 
         if (index == 0)
         {
-            _firstMessageTypeMeta = typeMeta;
-            _hasFirstMessageTypeMeta = true;
+            _firstTypeMetaRef = typeMeta;
+            _hasFirstTypeMetaRef = true;
             return;
         }
 
-        if (!_hasFirstMessageTypeMeta)
+        if (!_hasFirstTypeMetaRef)
         {
             throw new InvalidDataException(
                 $"type meta index gap: index={index}, missing index 0");
         }
 
         int listIndex = index - 1;
-        if (listIndex == _messageTypeMetas.Count)
+        if (listIndex == _typeMetaRefs.Count)
         {
-            _messageTypeMetas.Add(typeMeta);
+            _typeMetaRefs.Add(typeMeta);
             return;
         }
 
-        if (listIndex < _messageTypeMetas.Count)
+        if (listIndex < _typeMetaRefs.Count)
         {
-            _messageTypeMetas.Set(listIndex, typeMeta);
+            _typeMetaRefs.Set(listIndex, typeMeta);
             return;
         }
 
         throw new InvalidDataException(
-            $"type meta index gap: index={index}, count={_messageTypeMetas.Count + 1}");
+            $"type meta index gap: index={index}, count={_typeMetaRefs.Count + 1}");
     }
 
     internal bool TryGetTypeMetaByHeader(ulong header, out TypeMeta typeMeta)
@@ -234,14 +234,14 @@ public sealed class ReadContext
         if (TryGetTypeMetaByHeader(header, out TypeMeta cachedTypeMeta))
         {
             TypeMeta.SkipBody(Reader, header);
-            StoreMessageTypeMeta(cachedTypeMeta, index);
+            StoreTypeMetaRef(cachedTypeMeta, index);
             return cachedTypeMeta;
         }
 
         Reader.MoveBack(sizeof(ulong));
         typeMeta = DecodeTypeMeta();
         StoreRemoteTypeMeta(header, typeMeta);
-        StoreMessageTypeMeta(typeMeta, index);
+        StoreTypeMetaRef(typeMeta, index);
         return typeMeta;
     }
 
@@ -252,7 +252,7 @@ public sealed class ReadContext
         index = checked((int)(indexMarker >> 1));
         if (isRef)
         {
-            TypeMeta? cached = GetMessageTypeMeta(index);
+            TypeMeta? cached = GetTypeMetaRef(index);
             if (cached is null)
             {
                 throw new InvalidDataException($"unknown type meta ref index {index}");
@@ -454,9 +454,9 @@ public sealed class ReadContext
         _cachedTypeMetaType = null;
         _cachedTypeMeta = null;
         _currentDynamicReadDepth = 0;
-        _firstMessageTypeMeta = null;
-        _hasFirstMessageTypeMeta = false;
-        _messageTypeMetas.Clear();
+        _firstTypeMetaRef = null;
+        _hasFirstTypeMetaRef = false;
+        _typeMetaRefs.Clear();
         _readMetaStrings.Clear();
     }
 }

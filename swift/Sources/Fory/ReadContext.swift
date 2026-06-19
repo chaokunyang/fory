@@ -257,12 +257,16 @@ public final class ReadContext {
           maxTypeFields: config.maxTypeFields,
           maxTypeMetaBytes: config.maxTypeMetaBytes)
         let typeMetaEnd = buffer.getCursor()
+        let localTypeInfo = try typeResolver.requireTypeInfo(for: decoded)
         let cachedTypeInfo = try typeResolver.cacheTypeInfo(
           decoded,
           forHeader: header,
-          buffer: buffer,
-          typeDefStart: headerStart,
-          typeDefEnd: typeMetaEnd
+          localTypeInfo: localTypeInfo,
+          exactLocal: matchesLocalTypeDefBytes(
+            localTypeInfo: localTypeInfo,
+            typeMeta: decoded,
+            start: headerStart,
+            end: typeMetaEnd)
         )
         compatibleTypeDefTypeInfos.push(cachedTypeInfo)
         if cachedTypeInfo === localTypeInfo {
@@ -318,12 +322,16 @@ public final class ReadContext {
       maxTypeFields: config.maxTypeFields,
       maxTypeMetaBytes: config.maxTypeMetaBytes)
     let typeMetaEnd = buffer.getCursor()
+    let localTypeInfo = try typeResolver.requireTypeInfo(for: decoded)
     let cachedTypeInfo = try typeResolver.cacheTypeInfo(
       decoded,
       forHeader: header,
-      buffer: buffer,
-      typeDefStart: typeMetaStart,
-      typeDefEnd: typeMetaEnd
+      localTypeInfo: localTypeInfo,
+      exactLocal: matchesLocalTypeDefBytes(
+        localTypeInfo: localTypeInfo,
+        typeMeta: decoded,
+        start: typeMetaStart,
+        end: typeMetaEnd)
     )
     compatibleTypeDefTypeInfos.push(cachedTypeInfo)
     return cachedTypeInfo
@@ -367,12 +375,16 @@ public final class ReadContext {
             maxTypeFields: config.maxTypeFields,
             maxTypeMetaBytes: config.maxTypeMetaBytes)
           let typeMetaEnd = buffer.getCursor()
+          let localTypeInfo = try typeResolver.requireTypeInfo(for: decoded)
           remoteTypeInfo = try typeResolver.cacheTypeInfo(
             decoded,
             forHeader: header,
-            buffer: buffer,
-            typeDefStart: headerStart,
-            typeDefEnd: typeMetaEnd
+            localTypeInfo: localTypeInfo,
+            exactLocal: matchesLocalTypeDefBytes(
+              localTypeInfo: localTypeInfo,
+              typeMeta: decoded,
+              start: headerStart,
+              end: typeMetaEnd)
           )
           compatibleTypeDefTypeInfos.push(remoteTypeInfo)
         }
@@ -382,6 +394,30 @@ public final class ReadContext {
     }
     return try validateCompatibleTypeInfo(
       remoteTypeInfo, for: localTypeInfo, wireTypeID: wireTypeID)
+  }
+
+  @inline(never)
+  private func matchesLocalTypeDefBytes(
+    localTypeInfo: TypeInfo,
+    typeMeta: TypeMeta,
+    start: Int,
+    end: Int
+  ) -> Bool {
+    guard let rawTypeID = typeMeta.typeID,
+      let typeID = TypeId(rawValue: rawTypeID) else {
+      return false
+    }
+    switch typeID {
+    case .structType, .compatibleStruct, .namedStruct, .namedCompatibleStruct:
+      break
+    default:
+      return false
+    }
+    guard let localTypeDefBytes = localTypeInfo.typeDefBytes,
+      end - start == localTypeDefBytes.count else {
+      return false
+    }
+    return buffer.matchesBytes(start: start, bytes: localTypeDefBytes)
   }
 
   private func validateCompatibleTypeInfo(

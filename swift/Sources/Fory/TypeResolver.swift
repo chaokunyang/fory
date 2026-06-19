@@ -557,34 +557,17 @@ final class TypeResolver {
     typeInfoByHeader.value(for: header)
   }
 
-  @inline(__always)
+  @inline(never)
   func cacheTypeInfo(
     _ typeMeta: TypeMeta,
     forHeader header: UInt64,
-    buffer: ByteBuffer,
-    typeDefStart: Int,
-    typeDefEnd: Int
+    localTypeInfo: TypeInfo,
+    exactLocal: Bool
   ) throws -> TypeInfo {
     if let cached = typeInfoByHeader.value(for: header) {
       return cached
     }
-    let localTypeInfo = try requireTypeInfo(for: typeMeta)
-    let exactLocalAllowed: Bool
-    if let rawTypeID = typeMeta.typeID,
-      let typeID = TypeId(rawValue: rawTypeID) {
-      switch typeID {
-      case .structType, .compatibleStruct, .namedStruct, .namedCompatibleStruct:
-        exactLocalAllowed = true
-      default:
-        exactLocalAllowed = false
-      }
-    } else {
-      exactLocalAllowed = false
-    }
-    if exactLocalAllowed,
-      let localTypeDefBytes = localTypeInfo.typeDefBytes,
-      typeDefEnd - typeDefStart == localTypeDefBytes.count,
-      buffer.matchesBytes(start: typeDefStart, bytes: localTypeDefBytes) {
+    if exactLocal {
       typeInfoByHeader.set(localTypeInfo, for: header)
       return localTypeInfo
     }
@@ -753,8 +736,8 @@ final class TypeResolver {
     }
   }
 
-  @inline(__always)
-  private func requireTypeInfo(for typeMeta: TypeMeta) throws -> TypeInfo {
+  @inline(never)
+  func requireTypeInfo(for typeMeta: TypeMeta) throws -> TypeInfo {
     if typeMeta.registerByName {
       guard
         let typeInfo = byTypeName[

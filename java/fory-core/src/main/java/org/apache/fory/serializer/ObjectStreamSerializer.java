@@ -552,6 +552,11 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
       TypeDef.skipTypeDef(buffer, typeDefId);
       return typeInfo;
     }
+    return readLayerTypeDef(typeResolver, buffer, cls, typeDefId);
+  }
+
+  private TypeInfo readLayerTypeDef(
+      TypeResolver typeResolver, MemoryBuffer buffer, Class<?> cls, long typeDefId) {
     byte[] encoded = TypeDef.readTypeDefBytes(typeResolver, buffer, typeDefId);
     TypeDef localTypeDef = typeResolver.getTypeDef(cls, false);
     TypeDef typeDef;
@@ -564,7 +569,7 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
       typeResolver.checkClassForDeserialization(cls);
       typeDef = typeResolver.cacheRemoteTypeDef(TypeDef.readTypeDef(typeResolver, encoded));
     }
-    typeInfo = new TypeInfo(cls, typeDef);
+    TypeInfo typeInfo = new TypeInfo(cls, typeDef);
     typeDefIdToTypeInfo.put(typeDefId, typeInfo);
     return typeInfo;
   }

@@ -1593,56 +1593,13 @@ func (r *TypeResolver) readSharedTypeMeta(buffer *ByteBuffer, err *Error) *TypeI
 	}
 
 	var td *TypeDef
-	newTypeDef := false
 	if existingTd, exists := r.defIdToTypeDef[id]; exists {
 		// Header-cache hits intentionally skip without rehashing. Entries reach this cache only
 		// after a successful TypeDef parse and 52-bit metadata-hash validation.
 		skipTypeDef(buffer, id, err)
 		td = existingTd
 	} else {
-		newTd := readTypeDef(r.fory, buffer, id, err)
-		if err.HasError() {
-			return nil
-		}
-		td = newTd
-		newTypeDef = true
-		if td.type_ != nil {
-			localType := td.type_
-			localTd, localErr := r.getTypeDef(localType, true)
-			exactLocalAllowed := TypeId(td.typeId) == STRUCT ||
-				TypeId(td.typeId) == COMPATIBLE_STRUCT ||
-				TypeId(td.typeId) == NAMED_STRUCT ||
-				TypeId(td.typeId) == NAMED_COMPATIBLE_STRUCT
-			if exactLocalAllowed && localErr == nil && bytes.Equal(localTd.encoded, td.encoded) {
-				td = localTd
-				newTypeDef = false
-				r.defIdToTypeDef[id] = td
-				if typeInfo := r.getTypeInfoByType(localType); typeInfo != nil {
-					context.readTypeInfos = append(context.readTypeInfos, typeInfo)
-					return typeInfo
-				}
-				if typeInfo, typeInfoErr := r.getTypeInfo(reflect.Zero(localType), true); typeInfoErr == nil {
-					context.readTypeInfos = append(context.readTypeInfos, typeInfo)
-					return typeInfo
-				}
-			}
-		}
-		if newTypeDef {
-			typeKey, limitErr := r.checkRemoteTypeDefLimit(td)
-			if limitErr != nil {
-				err.SetError(limitErr)
-				return nil
-			}
-			typeInfo, typeInfoErr := td.getOrBuildTypeInfo(r)
-			if typeInfoErr != nil {
-				err.SetError(typeInfoErr)
-				return nil
-			}
-			r.defIdToTypeDef[id] = td
-			r.recordRemoteTypeDef(typeKey)
-			context.readTypeInfos = append(context.readTypeInfos, typeInfo)
-			return typeInfo
-		}
+		return r.readTypeDefInfo(buffer, id, context, err)
 	}
 
 	typeInfo, typeInfoErr := td.getOrBuildTypeInfo(r)
@@ -1650,6 +1607,54 @@ func (r *TypeResolver) readSharedTypeMeta(buffer *ByteBuffer, err *Error) *TypeI
 		err.SetError(typeInfoErr)
 		return nil
 	}
+	context.readTypeInfos = append(context.readTypeInfos, typeInfo)
+	return typeInfo
+}
+
+//go:noinline
+func (r *TypeResolver) readTypeDefInfo(buffer *ByteBuffer, id int64, context *MetaContext, err *Error) *TypeInfo {
+	td := readTypeDef(r.fory, buffer, id, err)
+	if err.HasError() {
+		return nil
+	}
+	if td.type_ != nil {
+		localType := td.type_
+		localTd, localErr := r.getTypeDef(localType, true)
+		exactLocalAllowed := TypeId(td.typeId) == STRUCT ||
+			TypeId(td.typeId) == COMPATIBLE_STRUCT ||
+			TypeId(td.typeId) == NAMED_STRUCT ||
+			TypeId(td.typeId) == NAMED_COMPATIBLE_STRUCT
+		if exactLocalAllowed && localErr == nil && bytes.Equal(localTd.encoded, td.encoded) {
+			r.defIdToTypeDef[id] = localTd
+			if typeInfo := r.getTypeInfoByType(localType); typeInfo != nil {
+				context.readTypeInfos = append(context.readTypeInfos, typeInfo)
+				return typeInfo
+			}
+			if typeInfo, typeInfoErr := r.getTypeInfo(reflect.Zero(localType), true); typeInfoErr == nil {
+				context.readTypeInfos = append(context.readTypeInfos, typeInfo)
+				return typeInfo
+			}
+			typeInfo, typeInfoErr := localTd.getOrBuildTypeInfo(r)
+			if typeInfoErr != nil {
+				err.SetError(typeInfoErr)
+				return nil
+			}
+			context.readTypeInfos = append(context.readTypeInfos, typeInfo)
+			return typeInfo
+		}
+	}
+	typeKey, limitErr := r.checkRemoteTypeDefLimit(td)
+	if limitErr != nil {
+		err.SetError(limitErr)
+		return nil
+	}
+	typeInfo, typeInfoErr := td.getOrBuildTypeInfo(r)
+	if typeInfoErr != nil {
+		err.SetError(typeInfoErr)
+		return nil
+	}
+	r.defIdToTypeDef[id] = td
+	r.recordRemoteTypeDef(typeKey)
 	context.readTypeInfos = append(context.readTypeInfos, typeInfo)
 	return typeInfo
 }

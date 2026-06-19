@@ -700,7 +700,7 @@ export class ReadContext {
     return this.readTypeMetaByHeader(idOrLen >> 1, headerLow, headerHigh);
   }
 
-  readStructTypeInfo(
+  readCompatibleStructSerializer(
     localHash: number,
     original?: Serializer,
   ): Serializer | undefined {

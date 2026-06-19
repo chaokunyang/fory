@@ -872,7 +872,7 @@ public abstract class TypeResolver {
       if (typeInfo != null) {
         TypeDef.skipTypeDef(buffer, id);
       } else {
-        typeInfo = readSharedClassMetaMiss(buffer, id);
+        typeInfo = readSharedTypeDefInfo(buffer, id);
       }
       // index == readTypeInfos.size() since types are written sequentially
       metaReadContext.readTypeInfos.add(typeInfo);
@@ -890,7 +890,7 @@ public abstract class TypeResolver {
     return typeInfo;
   }
 
-  private TypeInfo readSharedClassMetaMiss(MemoryBuffer buffer, long id) {
+  private TypeInfo readSharedTypeDefInfo(MemoryBuffer buffer, long id) {
     TypeDef typeDef = sharedRegistry.remoteTypeDefById.get(id);
     if (typeDef != null) {
       TypeDef.skipTypeDef(buffer, id);

@@ -813,8 +813,7 @@ final class TypeResolver {
       sharedTypes.add(cached);
       return cached;
     }
-    final typeDefStart = bufferReaderIndex(buffer) - 8;
-    final resolved = _readTypeDefWithHeader(buffer, header, typeDefStart);
+    final resolved = _readTypeDefWithHeader(buffer, header);
     sharedTypes.add(resolved);
     return resolved;
   }
@@ -1148,18 +1147,14 @@ final class TypeResolver {
       sharedTypes.add(cached);
       return wireTypeMetaForResolved(cached);
     }
-    final typeDefStart = bufferReaderIndex(buffer) - 8;
-    final resolved = _readTypeDefWithHeader(buffer, header, typeDefStart);
+    final resolved = _readTypeDefWithHeader(buffer, header);
     sharedTypes.add(resolved);
     return wireTypeMetaForResolved(resolved);
   }
 
   @pragma('vm:never-inline')
-  TypeInfo _readTypeDefWithHeader(
-    Buffer buffer,
-    TypeHeader header,
-    int typeDefStart,
-  ) {
+  TypeInfo _readTypeDefWithHeader(Buffer buffer, TypeHeader header) {
+    final typeDefStart = bufferReaderIndex(buffer) - 8;
     header.validateGlobal();
     final metaSize = header.readMetaSize(buffer);
     if (metaSize > config.maxTypeMetaBytes) {
@@ -1173,7 +1168,6 @@ final class TypeResolver {
     // readable before readBytes allocates/copies from the attacker-controlled size.
     buffer.checkReadableBytes(metaSize);
     final metaBody = buffer.readBytes(metaSize);
-    final typeDefEnd = bufferReaderIndex(buffer);
     final metaBytes = Buffer.wrap(metaBody);
     final classHeader = metaBytes.readUint8();
     final isStruct = (classHeader & typeDefStructFlag) != 0;
@@ -1256,12 +1250,7 @@ final class TypeResolver {
     }
     final localTypeDef = resolved.typeDef;
     if (localTypeDef != null &&
-        _matchesEncodedTypeDef(
-          buffer,
-          typeDefStart,
-          typeDefEnd,
-          localTypeDef.encoded,
-        )) {
+        _matchesEncodedTypeDef(buffer, typeDefStart, localTypeDef.encoded)) {
       _parsedTypeMetaCache.remember(header, resolved);
       return resolved;
     }
@@ -1302,19 +1291,12 @@ final class TypeResolver {
   bool _matchesEncodedTypeDef(
     Buffer buffer,
     int typeDefStart,
-    int typeDefEnd,
     Uint8List encoded,
   ) {
-    if (typeDefEnd - typeDefStart != encoded.length) {
+    if (bufferReaderIndex(buffer) - typeDefStart != encoded.length) {
       return false;
     }
-    final bytes = buffer.toBytes();
-    for (var i = 0; i < encoded.length; i += 1) {
-      if (bytes[typeDefStart + i] != encoded[i]) {
-        return false;
-      }
-    }
-    return true;
+    return bufferMatchesBytes(buffer, typeDefStart, encoded);
   }
 
   @pragma('vm:never-inline')

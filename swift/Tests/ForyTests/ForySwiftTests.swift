@@ -575,12 +575,12 @@ func schemaLimitTracksStructTypesSeparately() throws {
     let header = try headerReader.readUInt64()
     let buffer = ByteBuffer(bytes: encoded)
     let decoded = try TypeMeta.decode(buffer)
+    let localTypeInfo = try resolver.requireTypeInfo(for: decoded)
     _ = try resolver.cacheTypeInfo(
       decoded,
       forHeader: header,
-      buffer: buffer,
-      typeDefStart: 0,
-      typeDefEnd: buffer.getCursor()
+      localTypeInfo: localTypeInfo,
+      exactLocal: false
     )
   }
 
@@ -615,12 +615,12 @@ func nonStructTypeMetaUsesSchemaLimit() throws {
     let header = try headerReader.readUInt64()
     let buffer = ByteBuffer(bytes: encoded)
     let decoded = try TypeMeta.decode(buffer)
+    let localTypeInfo = try resolver.requireTypeInfo(for: decoded)
     _ = try resolver.cacheTypeInfo(
       decoded,
       forHeader: header,
-      buffer: buffer,
-      typeDefStart: 0,
-      typeDefEnd: buffer.getCursor()
+      localTypeInfo: localTypeInfo,
+      exactLocal: false
     )
   }
 
@@ -658,12 +658,12 @@ func failedSchemaDoesNotConsumeLimit() throws {
     let header = try headerReader.readUInt64()
     let buffer = ByteBuffer(bytes: encoded)
     let decoded = try TypeMeta.decode(buffer)
+    let localTypeInfo = try resolver.requireTypeInfo(for: decoded)
     _ = try resolver.cacheTypeInfo(
       decoded,
       forHeader: header,
-      buffer: buffer,
-      typeDefStart: 0,
-      typeDefEnd: buffer.getCursor()
+      localTypeInfo: localTypeInfo,
+      exactLocal: false
     )
   }
 

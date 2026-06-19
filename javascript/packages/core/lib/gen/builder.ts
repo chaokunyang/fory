@@ -375,11 +375,11 @@ class TypeMetaContextBuilder {
     return `${this.readHolder}.readTypeMeta()`;
   }
 
-  readStructTypeInfo(localHash: string, original?: string) {
+  readCompatibleStructSerializer(localHash: string, original?: string) {
     if (original) {
-      return `${this.readHolder}.readStructTypeInfo(${localHash}, ${original})`;
+      return `${this.readHolder}.readCompatibleStructSerializer(${localHash}, ${original})`;
     }
-    return `${this.readHolder}.readStructTypeInfo(${localHash})`;
+    return `${this.readHolder}.readCompatibleStructSerializer(${localHash})`;
   }
 
   genSerializerByTypeMetaRuntime(typeMeta: string, original?: string) {

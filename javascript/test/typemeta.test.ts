@@ -247,6 +247,18 @@ describe("typemeta", () => {
     );
   });
 
+  test("named enum uses TypeMeta for compatible dynamic reads", () => {
+    const Color = { Green: 0, Red: 1 };
+    const writerFory = new Fory({ compatible: true });
+    const readerFory = new Fory({ compatible: true });
+    writerFory.register(Type.enum("example.Color", Color));
+    readerFory.register(Type.enum("example.Color", Color));
+
+    expect(readerFory.deserialize(writerFory.serialize(Color.Red))).toBe(
+      Color.Red,
+    );
+  });
+
   test("id ext does not use TypeMeta limits", () => {
     class IdExt {
       id = 0;
@@ -489,7 +501,7 @@ describe("typemeta", () => {
     const originalB = { name: "originalB" } as any;
     const readStructInfo = (localHash: number, original: any) => {
       context.reset(bytes);
-      return context.readStructTypeInfo(localHash, original);
+      return context.readCompatibleStructSerializer(localHash, original);
     };
 
     expect(readStructInfo(localHashA, originalA)).toBe(serializers[0]);

@@ -1085,7 +1085,7 @@ class StructSerializerGenerator extends BaseSerializerGenerator {
           }`;
       }
       return `
-          const ${changedSerializer} = ${this.builder.typeMetaResolver.readStructTypeInfo(localHash)};
+          const ${changedSerializer} = ${this.builder.typeMetaResolver.readCompatibleStructSerializer(localHash)};
           if (${changedSerializer} !== undefined) {
             ${onMetaChanged?.(changedSerializer) ?? `return ${changedSerializer};`}
           }${unchangedBranch}
@@ -1166,7 +1166,7 @@ class StructSerializerGenerator extends BaseSerializerGenerator {
       const hoistedHash = scope.declare("serHash", `${hoisted}.getHash()`);
       return `
               ${builder.reader.readUint8()};
-              const ${changedSerializer} = ${builder.typeMetaResolver.readStructTypeInfo(hoistedHash, hoisted)};
+              const ${changedSerializer} = ${builder.typeMetaResolver.readCompatibleStructSerializer(hoistedHash, hoisted)};
               if (${changedSerializer} !== undefined) {
                 ${onMetaChanged(changedSerializer)}
               } else {

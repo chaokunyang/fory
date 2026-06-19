@@ -711,7 +711,7 @@ public sealed class TypeResolver
                 if (context.TryGetTypeMetaByHeader(header, out remoteTypeMeta))
                 {
                     TypeMeta.SkipBody(context.Reader, header);
-                    context.StoreMessageTypeMeta(remoteTypeMeta, index);
+                    context.StoreTypeMetaRef(remoteTypeMeta, index);
                     if (!HasValidatedTypeMeta(info, remoteTypeMeta))
                     {
                         ValidateRemoteTypeMeta(remoteTypeMeta, info, typeId, assignFieldIds: true, context);
@@ -761,7 +761,7 @@ public sealed class TypeResolver
                         if (context.TryGetTypeMetaByHeader(header, out remoteTypeMeta))
                         {
                             TypeMeta.SkipBody(context.Reader, header);
-                            context.StoreMessageTypeMeta(remoteTypeMeta, index);
+                            context.StoreTypeMetaRef(remoteTypeMeta, index);
                             if (!HasValidatedTypeMeta(info, remoteTypeMeta))
                             {
                                 ValidateRemoteTypeMeta(remoteTypeMeta, info, typeId, assignFieldIds: true, context);
@@ -830,7 +830,7 @@ public sealed class TypeResolver
                 if (context.TryGetTypeMetaByHeader(header, out remoteTypeMeta))
                 {
                     TypeMeta.SkipBody(context.Reader, header);
-                    context.StoreMessageTypeMeta(remoteTypeMeta, index);
+                    context.StoreTypeMetaRef(remoteTypeMeta, index);
                     if (!HasValidatedTypeMeta(typeInfo, remoteTypeMeta))
                     {
                         ValidateRemoteTypeMeta(remoteTypeMeta, typeInfo, wireTypeId, assignFieldIds: false, context);
@@ -902,7 +902,7 @@ public sealed class TypeResolver
         {
             context.StoreExactLocalTypeMeta(header, remoteTypeMeta);
         }
-        context.StoreMessageTypeMeta(remoteTypeMeta, index);
+        context.StoreTypeMetaRef(remoteTypeMeta, index);
         return remoteTypeMeta;
     }
 
@@ -1060,7 +1060,7 @@ public sealed class TypeResolver
             // Header-cache hits stay body-skip only. Type resolution and field binding
             // below are existing Any resolution work, not schema-limit checks.
             TypeMeta.SkipBody(context.Reader, header);
-            context.StoreMessageTypeMeta(typeMeta, index);
+            context.StoreTypeMetaRef(typeMeta, index);
             TypeInfo typeInfo = ResolveAnyTypeInfoFromMeta(wireTypeId, typeMeta, compatible);
             typeMeta.EnsureAssignedFieldIds(TypeMetaFields(typeInfo, context.TrackRef));
             context.StoreTypeMeta(typeInfo.Type, typeMeta);
@@ -1080,7 +1080,7 @@ public sealed class TypeResolver
         {
             context.StoreExactLocalTypeMeta(header, typeMeta);
         }
-        context.StoreMessageTypeMeta(typeMeta, index);
+        context.StoreTypeMetaRef(typeMeta, index);
         context.StoreTypeMeta(resolvedInfo.Type, typeMeta);
         return resolvedInfo;
     }

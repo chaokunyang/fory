@@ -420,6 +420,29 @@ def test_remote_schema_limit_keeps_unknown_types_separate(xlang):
 
 
 @pytest.mark.parametrize("xlang", [False, True])
+def test_exact_local_struct_typedef_populates_cache(xlang):
+    reader = Fory(
+        xlang=xlang,
+        strict=False,
+        compatible=True,
+        max_schema_versions_per_type=1,
+    )
+    reader.register(SimpleTypeDef, name="example.SimpleTypeDef")
+    type_id, _ = reader.type_resolver.get_registered_type_ids(SimpleTypeDef)
+    encoded = encode_typedef(reader.type_resolver, SimpleTypeDef).encoded
+    header = Buffer(encoded).read_int64()
+
+    type_info = _read_remote_typedef(reader, type_id, encoded)
+    assert type_info.cls is SimpleTypeDef
+    assert reader.type_resolver._meta_shared_type_info[header].cls is SimpleTypeDef
+
+    invalid_body = bytearray(encoded)
+    invalid_body[-1] ^= 1
+    type_info = _read_remote_typedef(reader, type_id, bytes(invalid_body))
+    assert type_info.cls is SimpleTypeDef
+
+
+@pytest.mark.parametrize("xlang", [False, True])
 def test_id_enum_does_not_use_type_meta_limits(xlang):
     fory = Fory(
         xlang=xlang,

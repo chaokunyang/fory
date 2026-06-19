@@ -1259,6 +1259,7 @@ class TypeResolver:
                 and local_type_info.type_def is not None
                 and local_type_info.type_def.encoded == type_def.encoded
             ):
+                self._meta_shared_type_info[header] = local_type_info
                 return local_type_info
         type_key = self._check_remote_type_def_limit(type_def)
         type_info = self._build_type_info_from_typedef(type_def)

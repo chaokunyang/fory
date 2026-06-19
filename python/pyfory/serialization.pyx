@@ -564,6 +564,7 @@ cdef class TypeResolver:
                 and typeinfo.type_def is not None
                 and typeinfo.type_def.encoded == type_def.encoded
             ):
+                self._meta_shared_type_info[header] = typeinfo
                 return typeinfo
         type_key = self.resolver._check_remote_type_def_limit(type_def)
         typeinfo = self.resolver._build_type_info_from_typedef(type_def)

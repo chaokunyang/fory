@@ -503,6 +503,9 @@ public sealed class TypeMeta : IEquatable<TypeMeta>
         ValidateGlobalHeader(header);
         int metaSize = ReadBodySize(reader, header);
         CheckBodySize(metaSize, maxTypeMetaBytes);
+        // Keep ReadBytes as the first body materialization: it checks the
+        // reader bound before allocating/copying. The size limit alone does
+        // not prove the declared bytes exist in the input.
         byte[] encodedBody = reader.ReadBytes(metaSize);
         ByteReader bodyReader = new(encodedBody);
         byte metaHeader = bodyReader.ReadUInt8();
@@ -584,6 +587,9 @@ public sealed class TypeMeta : IEquatable<TypeMeta>
     {
         ValidateGlobalHeader(header);
         int metaSize = ReadBodySize(reader, header);
+        // Header/body validation may inspect the current bytes, but cache-hit
+        // skip paths must not allocate from the attacker-declared body size.
+        // ReadSpan checks bounds before exposing the slice.
         ReadOnlySpan<byte> encodedBody = reader.ReadSpan(metaSize);
         ValidateParsedTypeMetaHash(header, encodedBody);
     }

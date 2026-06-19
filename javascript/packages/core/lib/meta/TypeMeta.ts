@@ -450,6 +450,7 @@ export class TypeMeta {
   /**
    * Skip the type meta body after the caller has matched the full validated
    * header key. Only the low header bits are needed to decode the body-size field.
+   * Cache-hit skips must not allocate or materialize the opaque metadata body.
    */
   static skipBodyByHeaderLow(reader: BinaryReader, headerLow: number) {
     const metaSize = TypeMeta.readMetaSizeFromLow(reader, headerLow);
@@ -477,6 +478,8 @@ export class TypeMeta {
     const headerHash = Number(header >> HASH_SHIFT_BITS);
 
     const bodyStart = reader.readGetCursor();
+    // Size limits are not byte-availability proof. Keep this readable-byte
+    // check before parsing, slicing, copying, or caching data from metaSize.
     reader.checkReadableBytes(metaSize);
     const bodyEnd = bodyStart + metaSize;
     const classHeader = reader.readUint8();

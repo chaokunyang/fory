@@ -665,6 +665,8 @@ TypeMeta::from_bytes(Buffer &buffer, const TypeMeta *local_type_info) {
       check_type_meta_body_size(meta_size, kDefaultMaxTypeMetaBytes));
   int64_t meta_hash = static_cast<int64_t>(header_bits >> TYPE_META_HASH_SHIFT);
   uint32_t body_start = static_cast<uint32_t>(start_pos + header_size);
+  // The size cap is not byte-availability proof. Ensure the declared body is
+  // readable before any parsing, copying, or cached metadata publication.
   if (FORY_PREDICT_FALSE(!buffer.ensure_readable(meta_size, error))) {
     return Unexpected(std::move(error));
   }
@@ -794,6 +796,8 @@ TypeMeta::from_bytes_with_header(Buffer &buffer, int64_t header,
 
   uint32_t start_pos = buffer.reader_index();
   Error error;
+  // The size cap is not byte-availability proof. Ensure the declared body is
+  // readable before any parsing, copying, or cached metadata publication.
   if (FORY_PREDICT_FALSE(!buffer.ensure_readable(meta_size, error))) {
     return Unexpected(std::move(error));
   }
@@ -906,6 +910,8 @@ TypeMeta::from_bytes_with_header(Buffer &buffer, int64_t header,
 
 Result<void, Error> TypeMeta::skip_bytes_for_validated_header(Buffer &buffer,
                                                               int64_t header) {
+  // Header-cache hits intentionally skip opaque metadata. This path must not
+  // allocate or materialize the body from the attacker-declared size.
   Error error;
   uint64_t meta_size = static_cast<uint64_t>(header) & META_SIZE_MASK;
   if (meta_size == META_SIZE_MASK) {

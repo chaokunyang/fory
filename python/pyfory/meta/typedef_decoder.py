@@ -76,6 +76,8 @@ def skip_typedef(buffer: Buffer, header) -> None:
             raise ValueError("Invalid TypeDef metadata size")
         meta_size += extended_size
     # Header-cache hits must skip opaque metadata without materializing the body.
+    # The skipped size is attacker-controlled, so do not replace this with
+    # read_bytes or any allocation-backed helper.
     buffer.skip(meta_size)
 
 
@@ -119,7 +121,8 @@ def decode_typedef(buffer: Buffer, resolver, header=None) -> TypeDef:
             "The data may be malicious. If the data is not malicious, please increase max_type_meta_bytes."
         )
 
-    # Read meta data
+    # Keep read_bytes before Buffer.allocate: it proves the declared body bytes
+    # are readable before we allocate/copy using the attacker-controlled size.
     encoded_meta_data = buffer.read_bytes(meta_size)
     encoded = Buffer.allocate(meta_size + 16)
     encoded.write_int64(header)

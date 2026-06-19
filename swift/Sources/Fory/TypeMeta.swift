@@ -361,6 +361,8 @@ public final class TypeMeta: Equatable, @unchecked Sendable {
       )
     }
 
+    // maxTypeMetaBytes is only a size cap. readBytes performs the buffer
+    // bound check before allocating/copying the declared body bytes.
     let encodedBody = try buffer.readBytes(count: metaSize)
     let bodyReader = ByteBuffer(bytes: encodedBody)
     let metaHeader = try bodyReader.readUInt8()

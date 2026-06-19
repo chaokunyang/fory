@@ -1298,6 +1298,9 @@ impl TypeMeta {
         validate_type_meta_header(header)?;
         let meta_size = read_type_meta_body_size(reader, header)?;
         check_type_meta_body_size(meta_size, max_type_meta_bytes)?;
+        // The size limit is not byte-availability proof. read_bytes checks
+        // the reader bound before exposing the body slice; do not allocate or
+        // copy from meta_size before this point.
         let body = reader.read_bytes(meta_size)?;
         let mut body_reader = Reader::new(body);
         let mut meta = Self::from_meta_bytes(&mut body_reader, type_resolver, max_type_fields)?;
@@ -1317,7 +1320,8 @@ impl TypeMeta {
     ) -> Result<(), Error> {
         // Header-cache hits intentionally treat the current body as opaque bytes and skip by the
         // current header size. Parsed TypeMeta entries are cached only after body parse and hash
-        // validation; cache hits must not reparse or rehash that body.
+        // validation; cache hits must not reparse, rehash, allocate, or
+        // otherwise materialize that body.
         let mut meta_size = (header & META_SIZE_MASK) as usize;
         if meta_size == META_SIZE_MASK as usize {
             meta_size += reader.read_var_u32()? as usize;

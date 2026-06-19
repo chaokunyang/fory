@@ -1142,7 +1142,8 @@ final class TypeResolver {
     final cached = _parsedTypeMetaCache.lookup(header);
     if (cached != null) {
       // Header-cache hits intentionally skip without rehashing. Entries reach this cache only
-      // after a successful TypeDef parse and 52-bit metadata-hash validation.
+      // after a successful TypeDef parse and 52-bit metadata-hash validation. Do not allocate
+      // or otherwise materialize the opaque body on this path.
       header.skipRemaining(buffer);
       sharedTypes.add(cached);
       return wireTypeMetaForResolved(cached);
@@ -1168,6 +1169,8 @@ final class TypeResolver {
         'is not malicious, please increase maxTypeMetaBytes.',
       );
     }
+    // maxTypeMetaBytes is only a size cap. Prove the declared body bytes are
+    // readable before readBytes allocates/copies from the attacker-controlled size.
     buffer.checkReadableBytes(metaSize);
     final metaBody = buffer.readBytes(metaSize);
     final typeDefEnd = bufferReaderIndex(buffer);

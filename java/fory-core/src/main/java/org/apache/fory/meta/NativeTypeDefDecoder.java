@@ -63,6 +63,9 @@ class NativeTypeDefDecoder {
       size += moreSize;
     }
     checkTypeMetaBodySize(size, resolver.getConfig().maxTypeMetaBytes());
+    // Keep this as the first body materialization: readBytes checks readable
+    // bytes before allocating/copying. The size limit above is not proof that
+    // the declared bytes exist in the input.
     byte[] encodedTypeDef = inputBuffer.readBytes(size);
     encoded.writeBytes(encodedTypeDef);
     if ((id & COMPRESS_META_FLAG) != 0) {

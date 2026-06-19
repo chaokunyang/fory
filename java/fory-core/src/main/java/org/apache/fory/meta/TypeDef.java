@@ -89,7 +89,8 @@ public class TypeDef implements Serializable {
   public static void skipTypeDef(MemoryBuffer buffer, long id) {
     // Header-cache hits intentionally treat the current body as opaque bytes and skip by the size
     // in the current header. Parsed TypeDefs are published to the cache only after successful body
-    // parse and 52-bit metadata-hash validation; cache hits must not reparse or rehash that body.
+    // parse and 52-bit metadata-hash validation; cache hits must not reparse, rehash, allocate, or
+    // otherwise materialize that body.
     int size = (int) (id & META_SIZE_MASKS);
     if (size == META_SIZE_MASKS) {
       int extendedSize = buffer.readVarUInt32Small14();

@@ -286,7 +286,8 @@ func readTypeDef(fory *Fory, buffer *ByteBuffer, header int64, err *Error) *Type
 func skipTypeDef(buffer *ByteBuffer, header int64, err *Error) {
 	// Header-cache hits intentionally treat the current body as opaque bytes and skip by the size in
 	// the current header. Parsed TypeDefs are published to the cache only after successful body parse
-	// and 52-bit metadata-hash validation; cache hits must not reparse or rehash that body.
+	// and 52-bit metadata-hash validation; cache hits must not reparse, rehash, allocate, or
+	// otherwise materialize that body.
 	sz := int(header & META_SIZE_MASK)
 	if sz == META_SIZE_MASK {
 		sz += int(buffer.ReadVarUint32(err))
@@ -1021,7 +1022,9 @@ func decodeTypeDef(fory *Fory, buffer *ByteBuffer, header int64) (*TypeDef, erro
 			"type metadata body size %d exceeds MaxTypeMetaBytes %d. The data may be malicious. If the data is not malicious, please increase MaxTypeMetaBytes",
 			metaSize, fory.config.MaxTypeMetaBytes)
 	}
-	// Store the encoded bytes for the TypeDef (including meta header and metadata)
+	// Store the encoded bytes only through ReadBinary, which checks/fills the declared
+	// body bytes before returning a slice or allocating. MaxTypeMetaBytes is a size cap,
+	// not proof that the input contains metaSize bytes.
 	encodedMeta := buffer.ReadBinary(metaSize, &bufErr)
 	if bufErr.HasError() {
 		return nil, bufErr.TakeError()

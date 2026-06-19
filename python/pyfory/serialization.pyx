@@ -599,6 +599,9 @@ cdef inline void _skip_typedef_fast(Buffer buffer, int64_t header):
         if extended_size > <uint32_t>(INT32_MAX - meta_size):
             raise ValueError("Invalid TypeDef metadata size")
         meta_size += <int32_t>extended_size
+    # Cache-hit skip must not materialize the opaque body. In stream mode,
+    # read_bytes would allocate after filling, while skip proves/consumes bytes
+    # without retaining attacker-controlled metadata.
     if buffer.has_input_stream():
         buffer.skip(meta_size)
         return

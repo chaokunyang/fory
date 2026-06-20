@@ -853,11 +853,11 @@ public abstract class TypeResolver {
    * ClassResolver and XtypeResolver.
    */
   protected final TypeInfo readSharedClassMeta(ReadContext readContext) {
-    return readSharedClassMetaCore(readContext, null);
+    return readSharedClassTypeInfo(readContext, null);
   }
 
   public final TypeInfo readSharedClassMeta(ReadContext readContext, Class<?> targetClass) {
-    TypeInfo typeInfo = readSharedClassMetaCore(readContext, targetClass);
+    TypeInfo typeInfo = readSharedClassTypeInfo(readContext, targetClass);
     Class<?> readClass = typeInfo.getType();
     if (targetClass != readClass) {
       return getTargetTypeInfo(typeInfo, targetClass);
@@ -865,7 +865,7 @@ public abstract class TypeResolver {
     return typeInfo;
   }
 
-  private TypeInfo readSharedClassMetaCore(ReadContext readContext, Class<?> targetClass) {
+  private TypeInfo readSharedClassTypeInfo(ReadContext readContext, Class<?> targetClass) {
     MemoryBuffer buffer = readContext.getBuffer();
     MetaReadContext metaReadContext = readContext.getMetaReadContext();
     assert metaReadContext != null : SET_META_READ_CONTEXT_MSG;

@@ -1110,12 +1110,6 @@ public abstract class TypeResolver {
     if (UnknownClass.class.isAssignableFrom(TypeUtils.getComponentIfArray(cls))) {
       return null;
     }
-    if (isCrossLanguage() && isRegisteredById(cls)) {
-      TypeInfo localInfo = getTypeInfo(cls, false);
-      if (localInfo.userTypeId == INVALID_USER_TYPE_ID) {
-        return null;
-      }
-    }
     TypeDef localTypeDef = getTypeDef(cls, true);
     return Arrays.equals(remoteEncoded, localTypeDef.getEncoded()) ? localTypeDef : null;
   }

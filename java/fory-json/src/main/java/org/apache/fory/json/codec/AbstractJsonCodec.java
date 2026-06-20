@@ -20,7 +20,7 @@
 package org.apache.fory.json.codec;
 
 import org.apache.fory.json.ForyJsonException;
-import org.apache.fory.json.meta.JsonMemberAccessor;
+import org.apache.fory.json.meta.JsonFieldAccessor;
 import org.apache.fory.json.reader.JsonReader;
 import org.apache.fory.json.resolver.JsonTypeInfo;
 import org.apache.fory.json.resolver.JsonTypeResolver;
@@ -81,7 +81,7 @@ abstract class AbstractJsonCodec implements JsonCodec {
   final void readFieldDefault(
       JsonReader reader,
       Object object,
-      JsonMemberAccessor accessor,
+      JsonFieldAccessor accessor,
       JsonTypeInfo typeInfo,
       JsonTypeResolver resolver) {
     JsonCodec.super.readField(reader, object, accessor, typeInfo, resolver);

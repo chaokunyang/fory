@@ -29,7 +29,7 @@ public final class GeneratedObjectCodec extends BaseObjectCodec {
   private final Utf8ObjectWriter utf8Writer;
 
   GeneratedObjectCodec(ObjectCodec base, ObjectWriters writers) {
-    super(base.type, base.writeProperties, base.readProperties, base.instantiator);
+    super(base.type, base.writeFields, base.readFields, base.instantiator);
     stringWriter = writers.stringWriter();
     utf8Writer = writers.utf8Writer();
   }

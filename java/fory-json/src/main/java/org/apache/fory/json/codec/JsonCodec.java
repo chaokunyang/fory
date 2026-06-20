@@ -19,7 +19,7 @@
 
 package org.apache.fory.json.codec;
 
-import org.apache.fory.json.meta.JsonMemberAccessor;
+import org.apache.fory.json.meta.JsonFieldAccessor;
 import org.apache.fory.json.reader.JsonReader;
 import org.apache.fory.json.resolver.JsonTypeInfo;
 import org.apache.fory.json.resolver.JsonTypeResolver;
@@ -40,7 +40,7 @@ public interface JsonCodec {
   default void readField(
       JsonReader reader,
       Object object,
-      JsonMemberAccessor accessor,
+      JsonFieldAccessor accessor,
       JsonTypeInfo typeInfo,
       JsonTypeResolver resolver) {
     accessor.putObject(object, read(reader, typeInfo, resolver));

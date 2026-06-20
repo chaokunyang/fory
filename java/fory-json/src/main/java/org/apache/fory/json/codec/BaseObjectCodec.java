@@ -20,20 +20,16 @@
 package org.apache.fory.json.codec;
 
 import java.lang.reflect.Field;
-import java.lang.reflect.Member;
-import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
-import java.lang.reflect.Type;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.TreeMap;
 import org.apache.fory.annotation.Expose;
 import org.apache.fory.json.ForyJsonException;
 import org.apache.fory.json.annotation.JsonIgnore;
+import org.apache.fory.json.meta.JsonFieldAccessor;
 import org.apache.fory.json.meta.JsonFieldInfo;
 import org.apache.fory.json.meta.JsonFieldTable;
-import org.apache.fory.json.meta.JsonMemberAccessor;
 import org.apache.fory.json.reader.JsonReader;
 import org.apache.fory.json.resolver.JsonTypeInfo;
 import org.apache.fory.json.resolver.JsonTypeResolver;
@@ -45,20 +41,20 @@ import org.apache.fory.reflect.ObjectInstantiators;
 
 public abstract class BaseObjectCodec extends AbstractJsonCodec {
   protected final Class<?> type;
-  protected final JsonFieldInfo[] writeProperties;
-  protected final JsonFieldInfo[] readProperties;
+  protected final JsonFieldInfo[] writeFields;
+  protected final JsonFieldInfo[] readFields;
   protected final JsonFieldTable readTable;
   protected final ObjectInstantiator<?> instantiator;
 
   protected BaseObjectCodec(
       Class<?> type,
-      JsonFieldInfo[] writeProperties,
-      JsonFieldInfo[] readProperties,
+      JsonFieldInfo[] writeFields,
+      JsonFieldInfo[] readFields,
       ObjectInstantiator<?> instantiator) {
     this.type = type;
-    this.writeProperties = writeProperties;
-    this.readProperties = readProperties;
-    readTable = new JsonFieldTable(readProperties);
+    this.writeFields = writeFields;
+    this.readFields = readFields;
+    readTable = new JsonFieldTable(readFields);
     this.instantiator = instantiator;
   }
 
@@ -72,10 +68,10 @@ public abstract class BaseObjectCodec extends AbstractJsonCodec {
     }
     boolean writeExpose = hasWriteExpose(type);
     boolean readExpose = hasReadExpose(type);
-    TreeMap<String, PropertyBuilder> builders = new TreeMap<>();
+    TreeMap<String, FieldBuilder> builders = new TreeMap<>();
     for (Field field : type.getFields()) {
       int modifiers = field.getModifiers();
-      if (Modifier.isStatic(modifiers) || Modifier.isTransient(modifiers) || field.isSynthetic()) {
+      if (!isEligibleField(field)) {
         continue;
       }
       boolean write = includeWrite(field, writeExpose);
@@ -83,46 +79,26 @@ public abstract class BaseObjectCodec extends AbstractJsonCodec {
       if (!write && !read) {
         continue;
       }
-      PropertyBuilder builder = builder(builders, field.getName());
+      FieldBuilder builder = new FieldBuilder(field.getName());
       if (write) {
         builder.setWriteField(field);
       }
       if (read) {
         builder.setReadField(field);
       }
-    }
-    for (Method method : type.getMethods()) {
-      int modifiers = method.getModifiers();
-      if (Modifier.isStatic(modifiers) || method.isSynthetic() || method.isBridge()) {
-        continue;
-      }
-      String name = method.getName();
-      if (isGetter(method)) {
-        if (!includeWrite(method, writeExpose)) {
-          continue;
-        }
-        builder(builders, propertyName(name, 3)).setGetter(method);
-      } else if (isBooleanGetter(method)) {
-        if (!includeWrite(method, writeExpose)) {
-          continue;
-        }
-        builder(builders, propertyName(name, 2)).setBooleanGetter(method);
-      } else if (isSetter(method)) {
-        if (!includeRead(method, readExpose)) {
-          continue;
-        }
-        builder(builders, propertyName(name, 3)).setSetter(method);
+      if (builders.put(field.getName(), builder) != null) {
+        throw new ForyJsonException("Duplicate public JSON field " + field.getName());
       }
     }
     List<JsonFieldInfo> writes = new ArrayList<>();
     List<JsonFieldInfo> reads = new ArrayList<>();
-    for (PropertyBuilder builder : builders.values()) {
-      JsonFieldInfo property = builder.build();
+    for (FieldBuilder builder : builders.values()) {
+      JsonFieldInfo field = builder.build();
       if (builder.writeAccessor != null) {
-        writes.add(property);
+        writes.add(field);
       }
       if (builder.readAccessor != null) {
-        reads.add(property);
+        reads.add(field);
       }
     }
     JsonFieldInfo[] writeArray = writes.toArray(new JsonFieldInfo[0]);
@@ -135,8 +111,8 @@ public abstract class BaseObjectCodec extends AbstractJsonCodec {
     return type;
   }
 
-  public final JsonFieldInfo[] writeProperties() {
-    return writeProperties;
+  public final JsonFieldInfo[] writeFields() {
+    return writeFields;
   }
 
   public final JsonFieldTable readTable() {
@@ -144,11 +120,11 @@ public abstract class BaseObjectCodec extends AbstractJsonCodec {
   }
 
   public final void resolveTypes(JsonTypeResolver typeResolver) {
-    for (JsonFieldInfo property : writeProperties) {
-      property.resolveTypes(typeResolver);
+    for (JsonFieldInfo field : writeFields) {
+      field.resolveTypes(typeResolver);
     }
-    for (JsonFieldInfo property : readProperties) {
-      property.resolveTypes(typeResolver);
+    for (JsonFieldInfo field : readFields) {
+      field.resolveTypes(typeResolver);
     }
   }
 
@@ -199,11 +175,11 @@ public abstract class BaseObjectCodec extends AbstractJsonCodec {
     do {
       String name = reader.readString();
       reader.expect(':');
-      JsonFieldInfo property = readTable.get(name);
-      if (property == null) {
+      JsonFieldInfo field = readTable.get(name);
+      if (field == null) {
         reader.skipValue();
       } else {
-        property.read(reader, object, resolver);
+        field.read(reader, object, resolver);
       }
     } while (reader.consume(','));
     reader.expect('}');
@@ -213,25 +189,25 @@ public abstract class BaseObjectCodec extends AbstractJsonCodec {
   protected final void writeObject(JsonWriter writer, Object value, JsonTypeResolver resolver) {
     writer.writeObjectStart();
     int written = 0;
-    JsonFieldInfo[] properties = writeProperties;
-    int length = properties.length;
+    JsonFieldInfo[] fields = writeFields;
+    int length = fields.length;
     int i = 0;
     while (i + 4 <= length) {
-      if (properties[i++].write(writer, value, resolver, written)) {
+      if (fields[i++].write(writer, value, resolver, written)) {
         written++;
       }
-      if (properties[i++].write(writer, value, resolver, written)) {
+      if (fields[i++].write(writer, value, resolver, written)) {
         written++;
       }
-      if (properties[i++].write(writer, value, resolver, written)) {
+      if (fields[i++].write(writer, value, resolver, written)) {
         written++;
       }
-      if (properties[i++].write(writer, value, resolver, written)) {
+      if (fields[i++].write(writer, value, resolver, written)) {
         written++;
       }
     }
     while (i < length) {
-      if (properties[i++].write(writer, value, resolver, written)) {
+      if (fields[i++].write(writer, value, resolver, written)) {
         written++;
       }
     }
@@ -242,25 +218,25 @@ public abstract class BaseObjectCodec extends AbstractJsonCodec {
       StringJsonWriter writer, Object value, JsonTypeResolver resolver) {
     writer.writeObjectStart();
     int written = 0;
-    JsonFieldInfo[] properties = writeProperties;
-    int length = properties.length;
+    JsonFieldInfo[] fields = writeFields;
+    int length = fields.length;
     int i = 0;
     while (i + 4 <= length) {
-      if (properties[i++].writeString(writer, value, resolver, written)) {
+      if (fields[i++].writeString(writer, value, resolver, written)) {
         written++;
       }
-      if (properties[i++].writeString(writer, value, resolver, written)) {
+      if (fields[i++].writeString(writer, value, resolver, written)) {
         written++;
       }
-      if (properties[i++].writeString(writer, value, resolver, written)) {
+      if (fields[i++].writeString(writer, value, resolver, written)) {
         written++;
       }
-      if (properties[i++].writeString(writer, value, resolver, written)) {
+      if (fields[i++].writeString(writer, value, resolver, written)) {
         written++;
       }
     }
     while (i < length) {
-      if (properties[i++].writeString(writer, value, resolver, written)) {
+      if (fields[i++].writeString(writer, value, resolver, written)) {
         written++;
       }
     }
@@ -271,49 +247,34 @@ public abstract class BaseObjectCodec extends AbstractJsonCodec {
       Utf8JsonWriter writer, Object value, JsonTypeResolver resolver) {
     writer.writeObjectStart();
     int written = 0;
-    JsonFieldInfo[] properties = writeProperties;
-    int length = properties.length;
+    JsonFieldInfo[] fields = writeFields;
+    int length = fields.length;
     int i = 0;
     while (i + 4 <= length) {
-      if (properties[i++].writeUtf8(writer, value, resolver, written)) {
+      if (fields[i++].writeUtf8(writer, value, resolver, written)) {
         written++;
       }
-      if (properties[i++].writeUtf8(writer, value, resolver, written)) {
+      if (fields[i++].writeUtf8(writer, value, resolver, written)) {
         written++;
       }
-      if (properties[i++].writeUtf8(writer, value, resolver, written)) {
+      if (fields[i++].writeUtf8(writer, value, resolver, written)) {
         written++;
       }
-      if (properties[i++].writeUtf8(writer, value, resolver, written)) {
+      if (fields[i++].writeUtf8(writer, value, resolver, written)) {
         written++;
       }
     }
     while (i < length) {
-      if (properties[i++].writeUtf8(writer, value, resolver, written)) {
+      if (fields[i++].writeUtf8(writer, value, resolver, written)) {
         written++;
       }
     }
     writer.writeObjectEnd();
   }
 
-  private static PropertyBuilder builder(Map<String, PropertyBuilder> builders, String name) {
-    PropertyBuilder builder = builders.get(name);
-    if (builder == null) {
-      builder = new PropertyBuilder(name);
-      builders.put(name, builder);
-    }
-    return builder;
-  }
-
   private static boolean hasWriteExpose(Class<?> type) {
     for (Field field : type.getFields()) {
-      if (field.isAnnotationPresent(Expose.class)) {
-        return true;
-      }
-    }
-    for (Method method : type.getMethods()) {
-      if ((isGetter(method) || isBooleanGetter(method))
-          && method.isAnnotationPresent(Expose.class)) {
+      if (isEligibleField(field) && field.isAnnotationPresent(Expose.class)) {
         return true;
       }
     }
@@ -322,32 +283,36 @@ public abstract class BaseObjectCodec extends AbstractJsonCodec {
 
   private static boolean hasReadExpose(Class<?> type) {
     for (Field field : type.getFields()) {
-      if (!Modifier.isFinal(field.getModifiers()) && field.isAnnotationPresent(Expose.class)) {
-        return true;
-      }
-    }
-    for (Method method : type.getMethods()) {
-      if (isSetter(method) && method.isAnnotationPresent(Expose.class)) {
+      if (isEligibleField(field)
+          && !Modifier.isFinal(field.getModifiers())
+          && field.isAnnotationPresent(Expose.class)) {
         return true;
       }
     }
     return false;
   }
 
-  private static boolean includeWrite(Member member, boolean exposeMode) {
-    return include(member, exposeMode, true);
+  private static boolean isEligibleField(Field field) {
+    int modifiers = field.getModifiers();
+    return !Modifier.isStatic(modifiers)
+        && !Modifier.isTransient(modifiers)
+        && !field.isSynthetic();
   }
 
-  private static boolean includeRead(Member member, boolean exposeMode) {
-    return include(member, exposeMode, false);
+  private static boolean includeWrite(Field field, boolean exposeMode) {
+    return include(field, exposeMode, true);
   }
 
-  private static boolean include(Member member, boolean exposeMode, boolean write) {
-    JsonIgnore ignore = annotation(member, JsonIgnore.class);
+  private static boolean includeRead(Field field, boolean exposeMode) {
+    return include(field, exposeMode, false);
+  }
+
+  private static boolean include(Field field, boolean exposeMode, boolean write) {
+    JsonIgnore ignore = field.getAnnotation(JsonIgnore.class);
     boolean ignored = ignore != null && (write ? ignore.ignoreWrite() : ignore.ignoreRead());
-    boolean exposed = annotation(member, Expose.class) != null;
+    boolean exposed = field.isAnnotationPresent(Expose.class);
     if (ignored && exposed) {
-      throw new ForyJsonException("JSON member cannot be both exposed and ignored: " + member);
+      throw new ForyJsonException("JSON field cannot be both exposed and ignored: " + field);
     }
     if (ignored) {
       return false;
@@ -355,84 +320,14 @@ public abstract class BaseObjectCodec extends AbstractJsonCodec {
     return !exposeMode || exposed;
   }
 
-  private static <T extends java.lang.annotation.Annotation> T annotation(
-      Member member, Class<T> annotationType) {
-    if (member instanceof Field) {
-      return ((Field) member).getAnnotation(annotationType);
-    }
-    return ((Method) member).getAnnotation(annotationType);
-  }
-
-  private static boolean isGetter(Method method) {
-    String name = method.getName();
-    return name.length() > 3
-        && name.startsWith("get")
-        && !"getClass".equals(name)
-        && method.getParameterCount() == 0
-        && method.getReturnType() != void.class;
-  }
-
-  private static boolean isBooleanGetter(Method method) {
-    String name = method.getName();
-    Class<?> returnType = method.getReturnType();
-    return name.length() > 2
-        && name.startsWith("is")
-        && method.getParameterCount() == 0
-        && (returnType == boolean.class || returnType == Boolean.class);
-  }
-
-  private static boolean isSetter(Method method) {
-    String name = method.getName();
-    return name.length() > 3
-        && name.startsWith("set")
-        && method.getParameterCount() == 1
-        && method.getReturnType() == void.class;
-  }
-
-  private static String propertyName(String methodName, int prefixLength) {
-    String suffix = methodName.substring(prefixLength);
-    if (suffix.length() > 1
-        && Character.isUpperCase(suffix.charAt(0))
-        && Character.isUpperCase(suffix.charAt(1))) {
-      return suffix;
-    }
-    return Character.toLowerCase(suffix.charAt(0)) + suffix.substring(1);
-  }
-
-  private static Class<?> box(Class<?> type) {
-    if (!type.isPrimitive()) {
-      return type;
-    } else if (type == boolean.class) {
-      return Boolean.class;
-    } else if (type == byte.class) {
-      return Byte.class;
-    } else if (type == short.class) {
-      return Short.class;
-    } else if (type == int.class) {
-      return Integer.class;
-    } else if (type == long.class) {
-      return Long.class;
-    } else if (type == float.class) {
-      return Float.class;
-    } else if (type == double.class) {
-      return Double.class;
-    } else if (type == char.class) {
-      return Character.class;
-    }
-    return type;
-  }
-
-  private static final class PropertyBuilder {
+  private static final class FieldBuilder {
     private final String name;
     private Field writeField;
     private Field readField;
-    private Method getter;
-    private Method booleanGetter;
-    private Method setter;
-    private JsonMemberAccessor writeAccessor;
-    private JsonMemberAccessor readAccessor;
+    private JsonFieldAccessor writeAccessor;
+    private JsonFieldAccessor readAccessor;
 
-    private PropertyBuilder(String name) {
+    private FieldBuilder(String name) {
       this.name = name;
     }
 
@@ -450,90 +345,10 @@ public abstract class BaseObjectCodec extends AbstractJsonCodec {
       readField = field;
     }
 
-    private void setGetter(Method method) {
-      if (getter != null) {
-        throw new ForyJsonException("Duplicate JSON getter " + name);
-      }
-      getter = method;
-    }
-
-    private void setBooleanGetter(Method method) {
-      if (booleanGetter != null) {
-        throw new ForyJsonException("Duplicate JSON boolean getter " + name);
-      }
-      booleanGetter = method;
-    }
-
-    private void setSetter(Method method) {
-      if (setter != null) {
-        throw new ForyJsonException("Duplicate JSON setter " + name);
-      }
-      setter = method;
-    }
-
     private JsonFieldInfo build() {
-      Member writeMember = writeMember();
-      Member readMember = readMember();
-      Type writeType = memberType(writeMember, true);
-      Type readType = memberType(readMember, false);
-      Class<?> writeRawType = memberRawType(writeMember, true);
-      Class<?> readRawType = memberRawType(readMember, false);
-      if (writeRawType != null
-          && readRawType != null
-          && !box(readRawType).isAssignableFrom(box(writeRawType))) {
-        throw new ForyJsonException("Incompatible JSON property types for " + name);
-      }
-      writeAccessor = writeMember == null ? null : accessor(writeMember);
-      readAccessor = readMember == null ? null : accessor(readMember);
-      return new JsonFieldInfo(
-          name,
-          writeMember,
-          writeType,
-          writeRawType,
-          readType,
-          readRawType,
-          writeAccessor,
-          readAccessor);
-    }
-
-    private Member writeMember() {
-      if (booleanGetter != null) {
-        return booleanGetter;
-      } else if (getter != null) {
-        return getter;
-      }
-      return writeField;
-    }
-
-    private Member readMember() {
-      return setter != null ? setter : readField;
-    }
-
-    private Type memberType(Member member, boolean write) {
-      if (member == null) {
-        return null;
-      } else if (member instanceof Field) {
-        return ((Field) member).getGenericType();
-      }
-      Method method = (Method) member;
-      return write ? method.getGenericReturnType() : method.getGenericParameterTypes()[0];
-    }
-
-    private Class<?> memberRawType(Member member, boolean write) {
-      if (member == null) {
-        return null;
-      } else if (member instanceof Field) {
-        return ((Field) member).getType();
-      }
-      Method method = (Method) member;
-      return write ? method.getReturnType() : method.getParameterTypes()[0];
-    }
-
-    private JsonMemberAccessor accessor(Member member) {
-      if (member instanceof Field) {
-        return JsonMemberAccessor.forField((Field) member);
-      }
-      return JsonMemberAccessor.forMethod((Method) member);
+      writeAccessor = writeField == null ? null : JsonFieldAccessor.forField(writeField);
+      readAccessor = readField == null ? null : JsonFieldAccessor.forField(readField);
+      return new JsonFieldInfo(name, writeField, readField, writeAccessor, readAccessor);
     }
   }
 }

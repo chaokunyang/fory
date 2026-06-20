@@ -30,13 +30,13 @@ public final class ForyJsonBuilder {
 
   ForyJsonBuilder() {}
 
-  /** Writes object properties with null values when enabled. */
+  /** Writes object fields with null values when enabled. */
   public ForyJsonBuilder writeNullFields(boolean writeNullFields) {
     this.writeNullFields = writeNullFields;
     return this;
   }
 
-  /** Enables runtime-generated writers for supported public-property classes. */
+  /** Enables runtime-generated writers for supported public-field classes. */
   public ForyJsonBuilder withCodegen(boolean codegenEnabled) {
     this.codegenEnabled = codegenEnabled;
     return this;

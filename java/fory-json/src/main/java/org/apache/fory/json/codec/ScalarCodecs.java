@@ -22,7 +22,7 @@ package org.apache.fory.json.codec;
 import java.util.HashMap;
 import java.util.Map;
 import org.apache.fory.json.ForyJsonException;
-import org.apache.fory.json.meta.JsonMemberAccessor;
+import org.apache.fory.json.meta.JsonFieldAccessor;
 import org.apache.fory.json.reader.JsonReader;
 import org.apache.fory.json.resolver.JsonTypeInfo;
 import org.apache.fory.json.resolver.JsonTypeResolver;
@@ -139,7 +139,7 @@ final class ScalarCodecs {
     public void readField(
         JsonReader reader,
         Object object,
-        JsonMemberAccessor accessor,
+        JsonFieldAccessor accessor,
         JsonTypeInfo typeInfo,
         JsonTypeResolver resolver) {
       if (reader.peekNull()) {
@@ -176,7 +176,7 @@ final class ScalarCodecs {
     public void readField(
         JsonReader reader,
         Object object,
-        JsonMemberAccessor accessor,
+        JsonFieldAccessor accessor,
         JsonTypeInfo typeInfo,
         JsonTypeResolver resolver) {
       if (reader.peekNull()) {
@@ -213,7 +213,7 @@ final class ScalarCodecs {
     public void readField(
         JsonReader reader,
         Object object,
-        JsonMemberAccessor accessor,
+        JsonFieldAccessor accessor,
         JsonTypeInfo typeInfo,
         JsonTypeResolver resolver) {
       if (reader.peekNull()) {
@@ -250,7 +250,7 @@ final class ScalarCodecs {
     public void readField(
         JsonReader reader,
         Object object,
-        JsonMemberAccessor accessor,
+        JsonFieldAccessor accessor,
         JsonTypeInfo typeInfo,
         JsonTypeResolver resolver) {
       if (reader.peekNull()) {
@@ -287,7 +287,7 @@ final class ScalarCodecs {
     public void readField(
         JsonReader reader,
         Object object,
-        JsonMemberAccessor accessor,
+        JsonFieldAccessor accessor,
         JsonTypeInfo typeInfo,
         JsonTypeResolver resolver) {
       if (reader.peekNull()) {
@@ -324,7 +324,7 @@ final class ScalarCodecs {
     public void readField(
         JsonReader reader,
         Object object,
-        JsonMemberAccessor accessor,
+        JsonFieldAccessor accessor,
         JsonTypeInfo typeInfo,
         JsonTypeResolver resolver) {
       if (reader.peekNull()) {
@@ -361,7 +361,7 @@ final class ScalarCodecs {
     public void readField(
         JsonReader reader,
         Object object,
-        JsonMemberAccessor accessor,
+        JsonFieldAccessor accessor,
         JsonTypeInfo typeInfo,
         JsonTypeResolver resolver) {
       if (reader.peekNull()) {
@@ -402,7 +402,7 @@ final class ScalarCodecs {
     public void readField(
         JsonReader reader,
         Object object,
-        JsonMemberAccessor accessor,
+        JsonFieldAccessor accessor,
         JsonTypeInfo typeInfo,
         JsonTypeResolver resolver) {
       if (reader.peekNull()) {

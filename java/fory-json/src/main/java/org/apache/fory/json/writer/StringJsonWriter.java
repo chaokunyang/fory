@@ -191,12 +191,12 @@ public final class StringJsonWriter extends JsonWriter {
   }
 
   @Override
-  public void writeFieldName(JsonFieldInfo property) {
-    writeRaw(property.stringNamePrefix());
+  public void writeFieldName(JsonFieldInfo field) {
+    writeRaw(field.stringNamePrefix());
   }
 
-  public void writeFieldName(JsonFieldInfo property, int index) {
-    writeRaw(index == 0 ? property.stringNamePrefix() : property.stringCommaNamePrefix());
+  public void writeFieldName(JsonFieldInfo field, int index) {
+    writeRaw(index == 0 ? field.stringNamePrefix() : field.stringCommaNamePrefix());
   }
 
   public void writeBooleanField(

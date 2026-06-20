@@ -50,7 +50,7 @@ public abstract class JsonWriter {
 
   public abstract void writeFieldName(String name);
 
-  public abstract void writeFieldName(JsonFieldInfo property);
+  public abstract void writeFieldName(JsonFieldInfo field);
 
   public abstract void writeObjectStart();
 

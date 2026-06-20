@@ -25,10 +25,10 @@ import org.apache.fory.reflect.ObjectInstantiator;
 public final class ObjectCodec extends BaseObjectCodec {
   ObjectCodec(
       Class<?> type,
-      JsonFieldInfo[] writeProperties,
-      JsonFieldInfo[] readProperties,
+      JsonFieldInfo[] writeFields,
+      JsonFieldInfo[] readFields,
       ObjectInstantiator<?> instantiator) {
-    super(type, writeProperties, readProperties, instantiator);
+    super(type, writeFields, readFields, instantiator);
   }
 
   public GeneratedObjectCodec withWriters(ObjectWriters writers) {

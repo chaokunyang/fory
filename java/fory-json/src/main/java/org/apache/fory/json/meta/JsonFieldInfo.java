@@ -19,7 +19,7 @@
 
 package org.apache.fory.json.meta;
 
-import java.lang.reflect.Member;
+import java.lang.reflect.Field;
 import java.lang.reflect.Type;
 import java.nio.charset.StandardCharsets;
 import java.util.Collection;
@@ -58,7 +58,7 @@ public final class JsonFieldInfo {
   private static final byte[] FALSE_BYTES = "false".getBytes(StandardCharsets.ISO_8859_1);
 
   private final String name;
-  private final Member writeMember;
+  private final Field writeField;
   private final Type writeType;
   private final Class<?> writeRawType;
   private final Type readType;
@@ -66,8 +66,8 @@ public final class JsonFieldInfo {
   private final JsonFieldKind writeKind;
   private final JsonFieldKind readKind;
   private final int writeKindId;
-  private final JsonMemberAccessor writeAccessor;
-  private final JsonMemberAccessor readAccessor;
+  private final JsonFieldAccessor writeAccessor;
+  private final JsonFieldAccessor readAccessor;
   private final Type writeElementType;
   private final Type writeMapValueType;
   private final Class<?> writeArrayComponentType;
@@ -102,19 +102,16 @@ public final class JsonFieldInfo {
 
   public JsonFieldInfo(
       String name,
-      Member writeMember,
-      Type writeType,
-      Class<?> writeRawType,
-      Type readType,
-      Class<?> readRawType,
-      JsonMemberAccessor writeAccessor,
-      JsonMemberAccessor readAccessor) {
+      Field writeField,
+      Field readField,
+      JsonFieldAccessor writeAccessor,
+      JsonFieldAccessor readAccessor) {
     this.name = name;
-    this.writeMember = writeMember;
-    this.writeType = writeType;
-    this.writeRawType = writeRawType;
-    this.readType = readType;
-    this.readRawType = readRawType;
+    this.writeField = writeField;
+    this.writeType = fieldType(writeField);
+    this.writeRawType = fieldRawType(writeField);
+    this.readType = fieldType(readField);
+    this.readRawType = fieldRawType(readField);
     this.writeAccessor = writeAccessor;
     this.readAccessor = readAccessor;
     writeKind = writeRawType == null ? null : kind(writeRawType);
@@ -181,8 +178,8 @@ public final class JsonFieldInfo {
     return name;
   }
 
-  public Member writeMember() {
-    return writeMember;
+  public Field writeField() {
+    return writeField;
   }
 
   public Type writeType() {
@@ -225,8 +222,16 @@ public final class JsonFieldInfo {
     return readKind;
   }
 
-  public JsonMemberAccessor readAccessor() {
+  public JsonFieldAccessor readAccessor() {
     return readAccessor;
+  }
+
+  private static Type fieldType(Field field) {
+    return field == null ? null : field.getGenericType();
+  }
+
+  private static Class<?> fieldRawType(Field field) {
+    return field == null ? null : field.getType();
   }
 
   public void resolveTypes(JsonTypeResolver typeResolver) {
@@ -851,7 +856,7 @@ public final class JsonFieldInfo {
         writer.writeChar(((Character) value).charValue());
         return;
       default:
-        throw new ForyJsonException("Not a scalar JSON property " + name);
+        throw new ForyJsonException("Not a scalar JSON field " + name);
     }
   }
 
@@ -1213,7 +1218,7 @@ public final class JsonFieldInfo {
       case OBJECT:
         return KIND_OBJECT;
       default:
-        throw new ForyJsonException("Unsupported JSON property kind " + kind);
+        throw new ForyJsonException("Unsupported JSON field kind " + kind);
     }
   }
 

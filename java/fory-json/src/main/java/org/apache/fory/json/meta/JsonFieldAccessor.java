@@ -19,14 +19,10 @@
 
 package org.apache.fory.json.meta;
 
-import java.lang.invoke.MethodHandle;
-import java.lang.invoke.MethodHandles;
 import java.lang.reflect.Field;
-import java.lang.reflect.Method;
-import org.apache.fory.json.ForyJsonException;
 import org.apache.fory.reflect.FieldAccessor;
 
-public abstract class JsonMemberAccessor {
+public abstract class JsonFieldAccessor {
   public Object getObject(Object target) {
     throw new UnsupportedOperationException();
   }
@@ -99,22 +95,14 @@ public abstract class JsonMemberAccessor {
     putObject(target, value);
   }
 
-  public static JsonMemberAccessor forField(Field field) {
-    return new FieldMemberAccessor(FieldAccessor.createAccessor(field));
+  public static JsonFieldAccessor forField(Field field) {
+    return new FieldJsonAccessor(FieldAccessor.createAccessor(field));
   }
 
-  public static JsonMemberAccessor forMethod(Method method) {
-    try {
-      return new MethodMemberAccessor(MethodHandles.lookup().unreflect(method));
-    } catch (IllegalAccessException e) {
-      throw new ForyJsonException("Cannot access JSON method " + method, e);
-    }
-  }
-
-  private static final class FieldMemberAccessor extends JsonMemberAccessor {
+  private static final class FieldJsonAccessor extends JsonFieldAccessor {
     private final FieldAccessor accessor;
 
-    private FieldMemberAccessor(FieldAccessor accessor) {
+    private FieldJsonAccessor(FieldAccessor accessor) {
       this.accessor = accessor;
     }
 
@@ -206,32 +194,6 @@ public abstract class JsonMemberAccessor {
     @Override
     public void putChar(Object target, char value) {
       accessor.putChar(target, value);
-    }
-  }
-
-  private static final class MethodMemberAccessor extends JsonMemberAccessor {
-    private final MethodHandle handle;
-
-    private MethodMemberAccessor(MethodHandle handle) {
-      this.handle = handle;
-    }
-
-    @Override
-    public Object getObject(Object target) {
-      try {
-        return handle.invoke(target);
-      } catch (Throwable e) {
-        throw new ForyJsonException("Failed to invoke JSON getter", e);
-      }
-    }
-
-    @Override
-    public void putObject(Object target, Object value) {
-      try {
-        handle.invoke(target, value);
-      } catch (Throwable e) {
-        throw new ForyJsonException("Failed to invoke JSON setter", e);
-      }
     }
   }
 }

@@ -24,13 +24,13 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
-/** Ignores a public JSON property for reading, writing, or both directions. */
+/** Ignores a public JSON field for reading, writing, or both directions. */
 @Retention(RetentionPolicy.RUNTIME)
-@Target({ElementType.FIELD, ElementType.METHOD})
+@Target(ElementType.FIELD)
 public @interface JsonIgnore {
-  /** Whether this property is ignored when reading JSON into an object. */
+  /** Whether this field is ignored when reading JSON into an object. */
   boolean ignoreRead() default true;
 
-  /** Whether this property is ignored when writing an object as JSON. */
+  /** Whether this field is ignored when writing an object as JSON. */
   boolean ignoreWrite() default true;
 }

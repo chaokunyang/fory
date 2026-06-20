@@ -23,16 +23,16 @@ import java.util.HashMap;
 import java.util.Map;
 
 public final class JsonFieldTable {
-  private final Map<String, JsonFieldInfo> properties;
+  private final Map<String, JsonFieldInfo> fields;
 
-  public JsonFieldTable(JsonFieldInfo[] readProperties) {
-    properties = new HashMap<>(readProperties.length * 2);
-    for (JsonFieldInfo property : readProperties) {
-      properties.put(property.name(), property);
+  public JsonFieldTable(JsonFieldInfo[] readFields) {
+    fields = new HashMap<>(readFields.length * 2);
+    for (JsonFieldInfo field : readFields) {
+      fields.put(field.name(), field);
     }
   }
 
   public JsonFieldInfo get(String name) {
-    return properties.get(name);
+    return fields.get(name);
   }
 }

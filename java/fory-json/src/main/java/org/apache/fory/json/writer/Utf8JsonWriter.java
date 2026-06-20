@@ -210,12 +210,12 @@ public final class Utf8JsonWriter extends JsonWriter {
   }
 
   @Override
-  public void writeFieldName(JsonFieldInfo property) {
-    writeRaw(property.utf8NamePrefix());
+  public void writeFieldName(JsonFieldInfo field) {
+    writeRaw(field.utf8NamePrefix());
   }
 
-  public void writeFieldName(JsonFieldInfo property, int index) {
-    writeRaw(index == 0 ? property.utf8NamePrefix() : property.utf8CommaNamePrefix());
+  public void writeFieldName(JsonFieldInfo field, int index) {
+    writeRaw(index == 0 ? field.utf8NamePrefix() : field.utf8CommaNamePrefix());
   }
 
   public void writeBooleanField(

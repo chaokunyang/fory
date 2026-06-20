@@ -62,29 +62,22 @@ public class ForyJsonTest {
     public String name = "first";
   }
 
-  public static final class Accessors {
+  public static final class MethodsIgnored {
+    public int setterCalls;
     public String value = "field";
-    private boolean ready = true;
-    private String writeOnly;
+    private String hidden = "hidden";
 
-    public boolean getReady() {
-      return ready;
-    }
-
-    public boolean isReady() {
-      return ready;
+    public String getHidden() {
+      return hidden;
     }
 
     public String getValue() {
       return "getter";
     }
 
-    public void setReady(boolean ready) {
-      this.ready = ready;
-    }
-
-    public void setWriteOnly(String writeOnly) {
-      this.writeOnly = writeOnly;
+    public void setValue(String value) {
+      setterCalls++;
+      this.value = "setter:" + value;
     }
   }
 
@@ -270,9 +263,13 @@ public class ForyJsonTest {
   }
 
   @Test
-  public void writeAccessorPrecedence() {
+  public void ignoreMethods() {
     ForyJson json = ForyJson.builder().build();
-    assertEquals(json.toJson(new Accessors()), "{\"ready\":true,\"value\":\"getter\"}");
+    assertEquals(json.toJson(new MethodsIgnored()), "{\"setterCalls\":0,\"value\":\"field\"}");
+    MethodsIgnored value =
+        json.fromJson("{\"hidden\":\"json\",\"value\":\"json\"}", MethodsIgnored.class);
+    assertEquals(value.setterCalls, 0);
+    assertEquals(value.value, "json");
   }
 
   @Test
@@ -510,15 +507,6 @@ public class ForyJsonTest {
     assertEquals(fields.name, "\uD83D\uDE00\u1234");
     assertEquals(fields.id, 8);
     assertEquals(fields.active, false);
-  }
-
-  @Test
-  public void readSetterProperties() {
-    ForyJson json = ForyJson.builder().build();
-    Accessors accessors =
-        json.fromJson("{\"ready\":false,\"writeOnly\":\"value\"}", Accessors.class);
-    assertEquals(accessors.ready, false);
-    assertEquals(accessors.writeOnly, "value");
   }
 
   @Test

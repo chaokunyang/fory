@@ -1625,12 +1625,15 @@ func (r *TypeResolver) readTypeDefInfo(buffer *ByteBuffer, id int64, context *Me
 			TypeId(td.typeId) == NAMED_STRUCT ||
 			TypeId(td.typeId) == NAMED_COMPATIBLE_STRUCT
 		if exactLocalAllowed && localErr == nil && bytes.Equal(localTd.encoded, td.encoded) {
-			r.defIdToTypeDef[id] = localTd
 			if typeInfo := r.getTypeInfoByType(localType); typeInfo != nil {
+				localTd.cachedTypeInfo = typeInfo
+				r.defIdToTypeDef[id] = localTd
 				context.readTypeInfos = append(context.readTypeInfos, typeInfo)
 				return typeInfo
 			}
 			if typeInfo, typeInfoErr := r.getTypeInfo(reflect.Zero(localType), true); typeInfoErr == nil {
+				localTd.cachedTypeInfo = typeInfo
+				r.defIdToTypeDef[id] = localTd
 				context.readTypeInfos = append(context.readTypeInfos, typeInfo)
 				return typeInfo
 			}
@@ -1639,6 +1642,7 @@ func (r *TypeResolver) readTypeDefInfo(buffer *ByteBuffer, id int64, context *Me
 				err.SetError(typeInfoErr)
 				return nil
 			}
+			r.defIdToTypeDef[id] = localTd
 			context.readTypeInfos = append(context.readTypeInfos, typeInfo)
 			return typeInfo
 		}

@@ -62,10 +62,10 @@ public struct Config {
 /// reusable read/write context pair and must not be used concurrently from
 /// multiple threads.
 public final class Fory {
-  public let config: Config
   let typeResolver: TypeResolver
   private let writeContext: WriteContext
   private let readContext: ReadContext
+  public let config: Config
 
   public convenience init(
     ref: Bool = false,
@@ -91,22 +91,22 @@ public final class Fory {
   }
 
   public init(config: Config) {
-    self.config = config
-    self.typeResolver = TypeResolver(config: self.config)
+    self.typeResolver = TypeResolver(trackRef: config.trackRef)
     self.writeContext = WriteContext(
       buffer: ByteBuffer(),
       typeResolver: typeResolver,
-      trackRef: self.config.trackRef,
-      compatible: self.config.compatible,
-      checkClassVersion: self.config.checkClassVersion,
-      maxDepth: self.config.maxDepth,
+      trackRef: config.trackRef,
+      compatible: config.compatible,
+      checkClassVersion: config.checkClassVersion,
+      maxDepth: config.maxDepth,
       metaStringWriteState: MetaStringWriteState()
     )
     self.readContext = ReadContext(
       buffer: ByteBuffer(),
       typeResolver: typeResolver,
-      config: self.config
+      config: config
     )
+    self.config = config
   }
 
   public func register<T: Serializer>(_ type: T.Type, id: UInt32) {

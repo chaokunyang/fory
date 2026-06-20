@@ -26,7 +26,6 @@ public final class ReadContext {
   public let compatible: Bool
   public let checkClassVersion: Bool
   public let maxDepth: Int
-  private let config: Config
   public let refReader: RefReader
   private let compatibleTypeDefTypeInfos = ReusableArray<TypeInfo?>(defaultValue: nil, reserve: 2)
   private let metaStrings = ReusableArray<MetaString?>(defaultValue: nil, reserve: 16)
@@ -35,6 +34,7 @@ public final class ReadContext {
   private var typeInfoStack = UInt64Map<TypeInfo>(initialCapacity: 8)
   private var typeInfoScopeStack: [(typeKey: UInt64, previousTypeInfo: TypeInfo?)] = []
   private var lastTypeInfo = TypeInfo.uncached
+  private let config: Config
 
   init(
     buffer: ByteBuffer,
@@ -246,23 +246,11 @@ public final class ReadContext {
           compatibleTypeDefTypeInfos.push(cached)
           return try validateCompatibleTypeInfo(cached, for: localTypeInfo, wireTypeID: wireTypeID)
         }
-        buffer.setCursor(headerStart)
-        let decoded = try TypeMeta.decode(
-          buffer,
-          maxTypeFields: config.maxTypeFields,
-          maxTypeMetaBytes: config.maxTypeMetaBytes)
-        let typeMetaEnd = buffer.getCursor()
-        try validateCompatibleTypeMeta(decoded, for: localTypeInfo, wireTypeID: wireTypeID)
-        let cachedTypeInfo = try typeResolver.cacheTypeInfo(
-          decoded,
-          forHeader: header,
-          localTypeInfo: localTypeInfo,
-          exactLocal: matchesLocalTypeDefBytes(
-            localTypeInfo: localTypeInfo,
-            typeMeta: decoded,
-            start: headerStart,
-            end: typeMetaEnd)
-        )
+        let cachedTypeInfo = try readTypeInfoBody(
+          start: headerStart,
+          header: header,
+          for: localTypeInfo,
+          wireTypeID: wireTypeID)
         compatibleTypeDefTypeInfos.push(cachedTypeInfo)
         if cachedTypeInfo === localTypeInfo {
           return nil
@@ -312,23 +300,7 @@ public final class ReadContext {
       return cached
     }
 
-    buffer.setCursor(typeMetaStart)
-    let decoded = try TypeMeta.decode(
-      buffer,
-      maxTypeFields: config.maxTypeFields,
-      maxTypeMetaBytes: config.maxTypeMetaBytes)
-    let typeMetaEnd = buffer.getCursor()
-    let localTypeInfo = try typeResolver.requireTypeInfo(for: decoded)
-    let cachedTypeInfo = try typeResolver.cacheTypeInfo(
-      decoded,
-      forHeader: header,
-      localTypeInfo: localTypeInfo,
-      exactLocal: matchesLocalTypeDefBytes(
-        localTypeInfo: localTypeInfo,
-        typeMeta: decoded,
-        start: typeMetaStart,
-        end: typeMetaEnd)
-    )
+    let cachedTypeInfo = try readTypeInfoBody(start: typeMetaStart, header: header)
     compatibleTypeDefTypeInfos.push(cachedTypeInfo)
     return cachedTypeInfo
   }
@@ -364,23 +336,11 @@ public final class ReadContext {
       return try validateCompatibleTypeInfo(cached, for: localTypeInfo, wireTypeID: wireTypeID)
     }
 
-    buffer.setCursor(typeMetaStart)
-    let decoded = try TypeMeta.decode(
-      buffer,
-      maxTypeFields: config.maxTypeFields,
-      maxTypeMetaBytes: config.maxTypeMetaBytes)
-    let typeMetaEnd = buffer.getCursor()
-    try validateCompatibleTypeMeta(decoded, for: localTypeInfo, wireTypeID: wireTypeID)
-    let cachedTypeInfo = try typeResolver.cacheTypeInfo(
-      decoded,
-      forHeader: header,
-      localTypeInfo: localTypeInfo,
-      exactLocal: matchesLocalTypeDefBytes(
-        localTypeInfo: localTypeInfo,
-        typeMeta: decoded,
-        start: typeMetaStart,
-        end: typeMetaEnd)
-    )
+    let cachedTypeInfo = try readTypeInfoBody(
+      start: typeMetaStart,
+      header: header,
+      for: localTypeInfo,
+      wireTypeID: wireTypeID)
     compatibleTypeDefTypeInfos.push(cachedTypeInfo)
     return try validateCompatibleTypeInfo(cachedTypeInfo, for: localTypeInfo, wireTypeID: wireTypeID)
   }
@@ -413,23 +373,11 @@ public final class ReadContext {
           compatibleTypeDefTypeInfos.push(cached)
           return try validateCompatibleTypeInfo(cached, for: localTypeInfo, wireTypeID: wireTypeID)
         } else {
-          buffer.setCursor(headerStart)
-          let decoded = try TypeMeta.decode(
-            buffer,
-            maxTypeFields: config.maxTypeFields,
-            maxTypeMetaBytes: config.maxTypeMetaBytes)
-          let typeMetaEnd = buffer.getCursor()
-          try validateCompatibleTypeMeta(decoded, for: localTypeInfo, wireTypeID: wireTypeID)
-          let remoteTypeInfo = try typeResolver.cacheTypeInfo(
-            decoded,
-            forHeader: header,
-            localTypeInfo: localTypeInfo,
-            exactLocal: matchesLocalTypeDefBytes(
-              localTypeInfo: localTypeInfo,
-              typeMeta: decoded,
-              start: headerStart,
-              end: typeMetaEnd)
-          )
+          let remoteTypeInfo = try readTypeInfoBody(
+            start: headerStart,
+            header: header,
+            for: localTypeInfo,
+            wireTypeID: wireTypeID)
           compatibleTypeDefTypeInfos.push(remoteTypeInfo)
           return try validateCompatibleTypeInfo(
             remoteTypeInfo, for: localTypeInfo, wireTypeID: wireTypeID)
@@ -441,6 +389,55 @@ public final class ReadContext {
       afterMarker: indexMarker,
       for: localTypeInfo,
       wireTypeID: wireTypeID)
+  }
+
+  @inline(never)
+  private func readTypeInfoBody(start: Int, header: UInt64) throws -> TypeInfo {
+    buffer.setCursor(start)
+    let decoded = try TypeMeta.decode(
+      buffer,
+      maxTypeFields: config.maxTypeFields,
+      maxTypeMetaBytes: config.maxTypeMetaBytes)
+    let typeMetaEnd = buffer.getCursor()
+    let localTypeInfo = try typeResolver.requireTypeInfo(for: decoded)
+    return try typeResolver.cacheTypeInfo(
+      decoded,
+      forHeader: header,
+      localTypeInfo: localTypeInfo,
+      exactLocal: matchesLocalTypeDefBytes(
+        localTypeInfo: localTypeInfo,
+        typeMeta: decoded,
+        start: start,
+        end: typeMetaEnd),
+      config: config
+    )
+  }
+
+  @inline(never)
+  private func readTypeInfoBody(
+    start: Int,
+    header: UInt64,
+    for localTypeInfo: TypeInfo,
+    wireTypeID: TypeId
+  ) throws -> TypeInfo {
+    buffer.setCursor(start)
+    let decoded = try TypeMeta.decode(
+      buffer,
+      maxTypeFields: config.maxTypeFields,
+      maxTypeMetaBytes: config.maxTypeMetaBytes)
+    let typeMetaEnd = buffer.getCursor()
+    try validateCompatibleTypeMeta(decoded, for: localTypeInfo, wireTypeID: wireTypeID)
+    return try typeResolver.cacheTypeInfo(
+      decoded,
+      forHeader: header,
+      localTypeInfo: localTypeInfo,
+      exactLocal: matchesLocalTypeDefBytes(
+        localTypeInfo: localTypeInfo,
+        typeMeta: decoded,
+        start: start,
+        end: typeMetaEnd),
+      config: config
+    )
   }
 
   @inline(never)

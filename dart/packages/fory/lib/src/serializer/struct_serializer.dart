@@ -81,7 +81,7 @@ final class StructSerializer extends Serializer<Object?> {
   }
 
   void writeValue(WriteContext context, TypeInfo resolved, Object value) {
-    if (!context.config.compatible && context.config.checkStructVersion) {
+    if (context.config.checkStructVersion) {
       context.buffer.writeUint32(schemaHash(_typeDef));
     }
     _payloadSerializer.write(context, value);
@@ -103,7 +103,7 @@ final class StructSerializer extends Serializer<Object?> {
 
   @pragma('vm:prefer-inline')
   Object readSameTypeValue(ReadContext context, TypeInfo resolved) {
-    if (!context.config.compatible && context.config.checkStructVersion) {
+    if (context.config.checkStructVersion) {
       final expected = schemaHash(_typeDef);
       final actual = context.buffer.readUint32();
       if (actual != expected) {

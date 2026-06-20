@@ -1249,6 +1249,9 @@ class TypeResolver:
             # after a successful TypeDef parse and 52-bit metadata-hash validation.
             skip_typedef(buffer, header)
             return type_info
+        return self._read_uncached_type_info(buffer, header)
+
+    def _read_uncached_type_info(self, buffer, header):
         type_def = decode_typedef(buffer, self, header=header)
         local_type_info = self._local_type_info_for_typedef(type_def)
         if local_type_info is not None:

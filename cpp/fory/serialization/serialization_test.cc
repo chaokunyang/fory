@@ -1087,6 +1087,18 @@ TEST(SerializationTest, IdExtDoesNotUseTypeMetaLimits) {
   EXPECT_EQ(decoded.value(), IdLimitExt{42});
 }
 
+TEST(SerializationTest, LocalTypeMetaFinalizationIgnoresReceiveBodyLimit) {
+  auto fory = Fory::builder()
+                  .xlang(true)
+                  .compatible(true)
+                  .max_type_meta_bytes(1)
+                  .build();
+  ASSERT_TRUE(fory.register_struct<SimpleStruct>(103).ok());
+
+  auto bytes = fory.serialize(SimpleStruct{1, 2});
+  ASSERT_TRUE(bytes.ok()) << bytes.error().to_string();
+}
+
 TEST(SerializationTest, TypeMetaRejectsOverConsumedDeclaredSize) {
   TypeMeta meta =
       TypeMeta::from_fields(static_cast<uint32_t>(TypeId::STRUCT), "", "S",

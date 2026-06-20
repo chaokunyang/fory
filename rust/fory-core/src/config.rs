@@ -41,13 +41,13 @@ pub struct Config {
     /// and preserved during serialization/deserialization.
     pub track_ref: bool,
     /// Maximum accepted field count in one received struct TypeMeta.
-    pub max_type_fields: usize,
+    pub max_type_fields: u32,
     /// Maximum accepted body size in one received TypeMeta.
-    pub max_type_meta_bytes: usize,
+    pub max_type_meta_bytes: u32,
     /// Maximum accepted remote metadata versions for one logical type.
-    pub max_schema_versions_per_type: usize,
+    pub max_schema_versions_per_type: u32,
     /// Maximum accepted average remote metadata versions across logical types.
-    pub max_average_schema_versions_per_type: usize,
+    pub max_average_schema_versions_per_type: u32,
 }
 
 impl Default for Config {
@@ -126,24 +126,24 @@ impl Config {
     /// Get maximum accepted field count in one received struct TypeMeta.
     #[inline(always)]
     pub fn max_type_fields(&self) -> usize {
-        self.max_type_fields
+        self.max_type_fields as usize
     }
 
     /// Get maximum accepted body size in one received TypeMeta.
     #[inline(always)]
     pub fn max_type_meta_bytes(&self) -> usize {
-        self.max_type_meta_bytes
+        self.max_type_meta_bytes as usize
     }
 
     /// Get maximum accepted remote metadata versions for one logical type.
     #[inline(always)]
     pub fn max_schema_versions_per_type(&self) -> usize {
-        self.max_schema_versions_per_type
+        self.max_schema_versions_per_type as usize
     }
 
     /// Get maximum accepted average remote metadata versions across logical types.
     #[inline(always)]
     pub fn max_average_schema_versions_per_type(&self) -> usize {
-        self.max_average_schema_versions_per_type
+        self.max_average_schema_versions_per_type as usize
     }
 }

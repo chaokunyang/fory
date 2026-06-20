@@ -401,7 +401,7 @@ private struct TypeNameKey: Hashable {
 final class TypeResolver {
   private static let minRemoteTypeMetaLimit = 8192
 
-  private let config: Config
+  private let trackRef: Bool
   private var registrationFinished = false
 
   private var bySwiftType = UInt64Map<TypeInfo>(initialCapacity: 64)
@@ -412,8 +412,12 @@ final class TypeResolver {
   private var remoteSchemaVersionsByType: [String: Int] = [:]
   private var totalAcceptedSchemaVersions = 0
 
-  init(config: Config) {
-    self.config = config
+  init(trackRef: Bool = false) {
+    self.trackRef = trackRef
+  }
+
+  convenience init(config: Config) {
+    self.init(trackRef: config.trackRef)
   }
 
   func finishRegistration() {
@@ -450,7 +454,7 @@ final class TypeResolver {
       evolving: evolving,
       namespace: MetaString.empty(specialChar1: ".", specialChar2: "_"),
       typeName: MetaString.empty(specialChar1: "$", specialChar2: "_"),
-      fields: T.foryFieldsInfo(trackRef: config.trackRef),
+      fields: T.foryFieldsInfo(trackRef: trackRef),
       reader: { context in
         try readRegisteredValue(context, as: T.self)
       },
@@ -506,7 +510,7 @@ final class TypeResolver {
       evolving: evolving,
       namespace: namespaceMeta,
       typeName: typeNameMeta,
-      fields: T.foryFieldsInfo(trackRef: config.trackRef),
+      fields: T.foryFieldsInfo(trackRef: trackRef),
       reader: { context in
         try readRegisteredValue(context, as: T.self)
       },
@@ -562,7 +566,8 @@ final class TypeResolver {
     _ typeMeta: TypeMeta,
     forHeader header: UInt64,
     localTypeInfo: TypeInfo,
-    exactLocal: Bool
+    exactLocal: Bool,
+    config: Config
   ) throws -> TypeInfo {
     if let cached = typeInfoByHeader.value(for: header) {
       return cached
@@ -571,7 +576,7 @@ final class TypeResolver {
       typeInfoByHeader.set(localTypeInfo, for: header)
       return localTypeInfo
     }
-    let remoteSchemaKey = try checkRemoteTypeMetaLimit(typeMeta)
+    let remoteSchemaKey = try checkRemoteTypeMetaLimit(typeMeta, config: config)
     let canonicalTypeMeta: TypeMeta
     if let localTypeMeta = localTypeInfo.typeMeta {
       canonicalTypeMeta = try typeMeta.assigningFieldIDs(from: localTypeMeta)
@@ -585,7 +590,7 @@ final class TypeResolver {
   }
 
   @inline(never)
-  private func checkRemoteTypeMetaLimit(_ typeMeta: TypeMeta) throws -> String {
+  private func checkRemoteTypeMetaLimit(_ typeMeta: TypeMeta, config: Config) throws -> String {
     let key: String
     if typeMeta.registerByName {
       key = "n\(typeMeta.namespace.value)\0\(typeMeta.typeName.value)"

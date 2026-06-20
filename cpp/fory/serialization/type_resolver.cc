@@ -50,8 +50,6 @@ constexpr int8_t NUM_HASH_BITS = 52;
 constexpr uint32_t TYPE_META_HASH_SHIFT = 64 - NUM_HASH_BITS;
 constexpr uint64_t TYPE_META_HASH_BITS_MASK = ~uint64_t{0}
                                               << TYPE_META_HASH_SHIFT;
-constexpr uint32_t kDefaultMaxTypeFields = 512;
-constexpr uint32_t kDefaultMaxTypeMetaBytes = 4096;
 
 // ============================================================================
 // FieldType Implementation
@@ -646,7 +644,8 @@ Result<std::vector<uint8_t>, Error> TypeMeta::to_bytes() const {
 }
 
 Result<std::unique_ptr<TypeMeta>, Error>
-TypeMeta::from_bytes(Buffer &buffer, const TypeMeta *local_type_info) {
+TypeMeta::from_bytes(Buffer &buffer, const TypeMeta *local_type_info,
+                     uint32_t max_type_fields, uint32_t max_type_meta_bytes) {
   size_t start_pos = buffer.reader_index();
 
   // Read global binary header
@@ -662,7 +661,7 @@ TypeMeta::from_bytes(Buffer &buffer, const TypeMeta *local_type_info) {
   FORY_RETURN_IF_ERROR(validate_type_meta_header(header_bits));
   FORY_TRY(meta_size, read_type_meta_size(buffer, header_bits, &header_size));
   FORY_RETURN_IF_ERROR(
-      check_type_meta_body_size(meta_size, kDefaultMaxTypeMetaBytes));
+      check_type_meta_body_size(meta_size, max_type_meta_bytes));
   int64_t meta_hash = static_cast<int64_t>(header_bits >> TYPE_META_HASH_SHIFT);
   uint32_t body_start = static_cast<uint32_t>(start_pos + header_size);
   // The size cap is not byte-availability proof. Ensure the declared body is
@@ -701,8 +700,7 @@ TypeMeta::from_bytes(Buffer &buffer, const TypeMeta *local_type_info) {
       }
       num_fields += extra;
     }
-    FORY_RETURN_IF_ERROR(
-        check_type_meta_fields(num_fields, kDefaultMaxTypeFields));
+    FORY_RETURN_IF_ERROR(check_type_meta_fields(num_fields, max_type_fields));
   } else {
     if (FORY_PREDICT_FALSE((meta_header & NON_STRUCT_RESERVED_BITS_MASK) !=
                            0)) {
@@ -1816,7 +1814,13 @@ TypeResolver::build_final_type_resolver() {
     Buffer buffer(partial_ptr->type_def.data(),
                   static_cast<uint32_t>(partial_ptr->type_def.size()), false);
     buffer.writer_index(static_cast<uint32_t>(partial_ptr->type_def.size()));
-    FORY_TRY(parsed_meta, TypeMeta::from_bytes(buffer, nullptr));
+    // This metadata was just generated from local registration state. Remote
+    // receive limits are enforced only on remote metadata parse/cache-miss
+    // paths, so large trusted local schemas do not fail during finalization.
+    FORY_TRY(parsed_meta,
+             TypeMeta::from_bytes(buffer, nullptr,
+                                  std::numeric_limits<uint32_t>::max(),
+                                  std::numeric_limits<uint32_t>::max()));
     partial_ptr->type_meta = std::move(parsed_meta);
   }
 

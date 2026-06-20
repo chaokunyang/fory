@@ -250,7 +250,9 @@ public:
   /// @param buffer Source buffer
   /// @param local_type_info Local type information (for field ID assignment)
   static Result<std::unique_ptr<TypeMeta>, Error>
-  from_bytes(Buffer &buffer, const TypeMeta *local_type_info);
+  from_bytes(Buffer &buffer, const TypeMeta *local_type_info,
+             uint32_t max_type_fields = 512,
+             uint32_t max_type_meta_bytes = 4096);
 
   /// Read type meta from buffer with pre-read header
   /// @param buffer Source buffer (positioned after header)

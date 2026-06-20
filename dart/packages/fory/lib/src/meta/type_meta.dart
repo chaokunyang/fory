@@ -139,12 +139,12 @@ final class ParsedTypeMetaCache {
 final class WireTypeMetaEncoder {
   const WireTypeMetaEncoder();
 
-  WireTypeMeta typeMetaFor(Config config, TypeInfo resolvedType) {
-    final wireTypeId = wireTypeIdFor(config, resolvedType);
+  WireTypeMeta typeMetaFor(bool compatible, TypeInfo resolvedType) {
+    final wireTypeId = wireTypeIdFor(compatible, resolvedType);
     final writesTypeDef =
         wireTypeId == TypeIds.compatibleStruct ||
         wireTypeId == TypeIds.namedCompatibleStruct ||
-        (config.compatible &&
+        (compatible &&
             (wireTypeId == TypeIds.namedEnum ||
                 wireTypeId == TypeIds.namedStruct ||
                 wireTypeId == TypeIds.namedExt ||
@@ -179,7 +179,7 @@ final class WireTypeMetaEncoder {
   }
 
   @pragma('vm:prefer-inline')
-  int wireTypeIdFor(Config config, TypeInfo resolvedType) {
+  int wireTypeIdFor(bool compatible, TypeInfo resolvedType) {
     switch (resolvedType.kind) {
       case RegistrationKind.builtin:
         return resolvedType.typeId;
@@ -193,8 +193,8 @@ final class WireTypeMetaEncoder {
         }
         return resolvedType.isNamed ? TypeIds.namedUnion : TypeIds.union;
       case RegistrationKind.struct:
-        final compatible = config.compatible && resolvedType.typeDef!.evolving;
-        if (compatible) {
+        final compatibleStruct = compatible && resolvedType.typeDef!.evolving;
+        if (compatibleStruct) {
           return resolvedType.isNamed
               ? TypeIds.namedCompatibleStruct
               : TypeIds.compatibleStruct;

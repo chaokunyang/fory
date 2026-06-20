@@ -548,7 +548,8 @@ func typeMetaBodyLimitRejectsLargeMetadata() throws {
 
 @Test
 func schemaLimitTracksStructTypesSeparately() throws {
-  let resolver = TypeResolver(config: Config(maxSchemaVersionsPerType: 1))
+  let config = Config(maxSchemaVersionsPerType: 1)
+  let resolver = TypeResolver(config: config)
   resolver.register(Person.self, id: 901)
   resolver.register(Address.self, id: 902)
 
@@ -580,7 +581,8 @@ func schemaLimitTracksStructTypesSeparately() throws {
       decoded,
       forHeader: header,
       localTypeInfo: localTypeInfo,
-      exactLocal: false
+      exactLocal: false,
+      config: config
     )
   }
 
@@ -593,7 +595,8 @@ func schemaLimitTracksStructTypesSeparately() throws {
 
 @Test
 func nonStructTypeMetaUsesSchemaLimit() throws {
-  let resolver = TypeResolver(config: Config(maxSchemaVersionsPerType: 1))
+  let config = Config(maxSchemaVersionsPerType: 1)
+  let resolver = TypeResolver(config: config)
   try resolver.register(SparseStatus.self, name: "example.SharedEnum")
   let namespace = try MetaStringEncoder.namespace.encode("example")
   let typeName = try MetaStringEncoder.typeName.encode("SharedEnum")
@@ -620,7 +623,8 @@ func nonStructTypeMetaUsesSchemaLimit() throws {
       decoded,
       forHeader: header,
       localTypeInfo: localTypeInfo,
-      exactLocal: false
+      exactLocal: false,
+      config: config
     )
   }
 
@@ -632,7 +636,8 @@ func nonStructTypeMetaUsesSchemaLimit() throws {
 
 @Test
 func failedSchemaDoesNotConsumeLimit() throws {
-  let resolver = TypeResolver(config: Config(maxSchemaVersionsPerType: 1))
+  let config = Config(maxSchemaVersionsPerType: 1)
+  let resolver = TypeResolver(config: config)
   resolver.register(Person.self, id: 901)
 
   func remoteTypeMeta(fieldName: String, fieldType: TypeMeta.FieldType) throws -> TypeMeta {
@@ -663,7 +668,8 @@ func failedSchemaDoesNotConsumeLimit() throws {
       decoded,
       forHeader: header,
       localTypeInfo: localTypeInfo,
-      exactLocal: false
+      exactLocal: false,
+      config: config
     )
   }
 

@@ -274,7 +274,7 @@ final class TypeResolver {
   final Map<_EncodedMetaStringKey, EncodedMetaString>
   _internedEncodedMetaStrings = <_EncodedMetaStringKey, EncodedMetaString>{};
   final Map<TypeInfo, Uint8List> _initialTypeMetaBytes =
-      LinkedHashMap<TypeInfo, Uint8List>.identity();
+      HashMap<TypeInfo, Uint8List>.identity();
   final Map<String, int> _remoteSchemaVersionsByType = <String, int>{};
   int _totalAcceptedSchemaVersions = 0;
 
@@ -705,7 +705,7 @@ final class TypeResolver {
   }
 
   WireTypeMeta wireTypeMetaForResolved(TypeInfo resolved) {
-    return _wireTypeMetaEncoder.typeMetaFor(config, resolved);
+    return _wireTypeMetaEncoder.typeMetaFor(config.compatible, resolved);
   }
 
   TypeDef typeDefForResolved(TypeInfo resolved, {List<FieldInfo>? fields}) {
@@ -730,7 +730,10 @@ final class TypeResolver {
     required LinkedHashMap<TypeDef, int> typeDefIds,
     required MetaStringWriter metaStringWriter,
   }) {
-    final wireTypeId = _wireTypeMetaEncoder.wireTypeIdFor(config, resolved);
+    final wireTypeId = _wireTypeMetaEncoder.wireTypeIdFor(
+      config.compatible,
+      resolved,
+    );
     buffer.writeVarUint32Small7(wireTypeId);
     if (_wireTypeWritesUserTypeId(wireTypeId)) {
       buffer.writeVarUint32(resolved.userTypeId!);
@@ -762,7 +765,10 @@ final class TypeResolver {
         !identical(typeDef ?? resolvedTypeDef, resolvedTypeDef)) {
       return false;
     }
-    final wireTypeId = _wireTypeMetaEncoder.wireTypeIdFor(config, resolved);
+    final wireTypeId = _wireTypeMetaEncoder.wireTypeIdFor(
+      config.compatible,
+      resolved,
+    );
     if (!_wireTypeWritesTypeDef(wireTypeId)) {
       return false;
     }
@@ -784,7 +790,8 @@ final class TypeResolver {
   }) {
     final start = bufferReaderIndex(buffer);
     final wireTypeId = buffer.readVarUint32Small7();
-    if (wireTypeId != _wireTypeMetaEncoder.wireTypeIdFor(config, expected) ||
+    if (wireTypeId !=
+            _wireTypeMetaEncoder.wireTypeIdFor(config.compatible, expected) ||
         !_wireTypeWritesTypeDef(wireTypeId)) {
       bufferSetReaderIndex(buffer, start);
       return null;

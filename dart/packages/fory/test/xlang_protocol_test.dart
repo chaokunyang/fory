@@ -321,6 +321,15 @@ void main() {
       const name = 'example.RemoteEnum';
       final reader = TypeResolver(const Config(maxTypeMetaBytes: 1));
       _rememberEnum(_SchemaLocal);
+      final bytes = _enumTypeMetaBytes(_SchemaRemoteA, name);
+
+      expect(() => _readTypeMeta(reader, bytes), throwsA(isA<StateError>()));
+    });
+
+    test('registered named enum TypeDef uses metadata byte limit', () {
+      const name = 'example.RemoteEnum';
+      final reader = TypeResolver(const Config(maxTypeMetaBytes: 1));
+      _rememberEnum(_SchemaLocal);
       reader.registerGenerated(
         _SchemaLocal,
         namespace: 'example',

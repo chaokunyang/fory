@@ -544,16 +544,20 @@ cdef class TypeResolver:
         meta_context.read_type_infos.append(typeinfo)
         return typeinfo
 
-    cdef TypeInfo _read_and_build_type_info(self, Buffer buffer):
+    cdef inline TypeInfo _read_and_build_type_info(self, Buffer buffer):
         cdef int64_t header = buffer.read_int64()
         cdef TypeInfo typeinfo = self._meta_shared_type_info.get(header)
-        cdef object type_def
-        cdef object type_key
         if typeinfo is not None:
             # Header-cache hits intentionally skip without rehashing. Entries reach this cache only
             # after a successful TypeDef parse and 52-bit metadata-hash validation.
             _skip_typedef_fast(buffer, header)
             return typeinfo
+        return self._read_uncached_type_info(buffer, header)
+
+    cdef TypeInfo _read_uncached_type_info(self, Buffer buffer, int64_t header):
+        cdef TypeInfo typeinfo
+        cdef object type_def
+        cdef object type_key
         type_def = decode_typedef(buffer, self.resolver, header=header)
         typeinfo = self.resolver._local_type_info_for_typedef(type_def)
         if typeinfo is not None:
@@ -591,23 +595,17 @@ cdef class TypeResolver:
 
 
 cdef inline void _skip_typedef_fast(Buffer buffer, int64_t header):
-    cdef int32_t meta_size = <int32_t>(header & 0xFF)
+    cdef uint32_t meta_size = <uint32_t>(header & 0xFF)
     cdef uint32_t extended_size
-    cdef int32_t reader_index
     if meta_size == 0xFF:
         extended_size = buffer.read_var_uint32()
-        if extended_size > <uint32_t>(INT32_MAX - meta_size):
+        if extended_size > <uint32_t>(UINT32_MAX - meta_size):
             raise ValueError("Invalid TypeDef metadata size")
-        meta_size += <int32_t>extended_size
+        meta_size += extended_size
     # Cache-hit skip must not materialize the opaque body. In stream mode,
     # read_bytes would allocate after filling, while skip proves/consumes bytes
     # without retaining attacker-controlled metadata.
-    if buffer.has_input_stream():
-        buffer.skip(meta_size)
-        return
-    reader_index = buffer.get_reader_index()
-    buffer.check_bound(reader_index, meta_size)
-    buffer.set_reader_index(reader_index + meta_size)
+    buffer.skip(meta_size)
 
 
 

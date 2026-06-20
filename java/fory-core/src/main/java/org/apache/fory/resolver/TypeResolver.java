@@ -881,13 +881,26 @@ public abstract class TypeResolver {
   }
 
   public final TypeInfo readSharedClassMeta(ReadContext readContext, Class<?> targetClass) {
-    TypeInfo typeInfo = readSharedClassMeta(readContext);
-    Class<?> readClass = typeInfo.getType();
-    // replace target class if needed
-    if (targetClass != readClass) {
-      return getTargetTypeInfo(typeInfo, targetClass);
+    MemoryBuffer buffer = readContext.getBuffer();
+    MetaReadContext metaReadContext = readContext.getMetaReadContext();
+    assert metaReadContext != null : SET_META_READ_CONTEXT_MSG;
+    int indexMarker = buffer.readVarUInt32Small14();
+    boolean isRef = (indexMarker & 1) == 1;
+    int index = indexMarker >>> 1;
+    TypeInfo typeInfo;
+    if (isRef) {
+      typeInfo = getMetaReadTypeInfo(metaReadContext, index);
+    } else {
+      long id = buffer.readInt64();
+      typeInfo = extRegistry.typeInfoByTypeDefId.get(id);
+      if (typeInfo != null) {
+        TypeDef.skipTypeDef(buffer, id);
+      } else {
+        typeInfo = readSharedTypeDefInfo(buffer, id, targetClass);
+      }
+      metaReadContext.readTypeInfos.add(typeInfo);
     }
-    return typeInfo;
+    return bindTargetTypeInfo(typeInfo, targetClass);
   }
 
   private TypeInfo readSharedTypeDefInfo(MemoryBuffer buffer, long id) {
@@ -897,6 +910,17 @@ public abstract class TypeResolver {
       return buildMetaSharedTypeInfo(typeDef);
     }
     typeDef = TypeDef.readTypeDef(this, buffer, id);
+    return buildCheckedMetaSharedTypeInfo(typeDef);
+  }
+
+  private TypeInfo readSharedTypeDefInfo(MemoryBuffer buffer, long id, Class<?> targetClass) {
+    TypeDef typeDef = sharedRegistry.remoteTypeDefById.get(id);
+    if (typeDef != null) {
+      TypeDef.skipTypeDef(buffer, id);
+      return buildMetaSharedTypeInfo(typeDef);
+    }
+    typeDef = TypeDef.readTypeDef(this, buffer, id);
+    checkTargetTypeDef(typeDef, targetClass);
     return buildCheckedMetaSharedTypeInfo(typeDef);
   }
 
@@ -924,6 +948,36 @@ public abstract class TypeResolver {
       }
     }
     return transformTypeInfo(typeInfo, targetClass, typeDefId);
+  }
+
+  private TypeInfo bindTargetTypeInfo(TypeInfo typeInfo, Class<?> targetClass) {
+    Class<?> readClass = typeInfo.getType();
+    if (targetClass == readClass || targetClass.isAssignableFrom(readClass)) {
+      return typeInfo;
+    }
+    TypeDef typeDef = typeInfo.getTypeDef();
+    if (typeDef == null || !typeDef.isStructSchemaKind()) {
+      throw new ForyException(
+          "Remote metadata type "
+              + readClass.getName()
+              + " does not match expected type "
+              + targetClass.getName());
+    }
+    return getTargetTypeInfo(typeInfo, targetClass);
+  }
+
+  private void checkTargetTypeDef(TypeDef typeDef, Class<?> targetClass) {
+    Class<?> readClass = loadClass(typeDef.getClassSpec());
+    checkClassForDeserialization(readClass);
+    if (!typeDef.isStructSchemaKind()
+        && readClass != targetClass
+        && !targetClass.isAssignableFrom(readClass)) {
+      throw new ForyException(
+          "Remote metadata type "
+              + readClass.getName()
+              + " does not match expected type "
+              + targetClass.getName());
+    }
   }
 
   private static long transformCacheTypeDefId(TypeInfo typeInfo) {

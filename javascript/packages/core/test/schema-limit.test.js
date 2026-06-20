@@ -346,8 +346,22 @@ runTest("exact local TypeMeta bypasses schema limit", () => {
     { namespace: "example", typeName: "Shared" },
     { value: Type.int32({ encoding: "fixed" }) },
   );
-  const original = localSerializer(localTypeInfo);
-  const localHash = original.getHash();
+  const generatingOriginal = localSerializer(localTypeInfo);
+  const localMeta = TypeMeta.fromTypeInfo(localTypeInfo);
+  const localBytes = localMeta.toBytes();
+  const exactOriginal = {
+    getHash() {
+      return localMeta.getHash();
+    },
+    getTypeInfo() {
+      throw new Error("exact local compare must use encoded bytes");
+    },
+    getTypeMetaBytes() {
+      return localBytes;
+    },
+  };
+  let activeOriginal = generatingOriginal;
+  const localHash = generatingOriginal.getHash();
   const readContext = context({
     computeTypeId(typeInfo) {
       return typeInfo.typeId;
@@ -356,7 +370,7 @@ runTest("exact local TypeMeta bypasses schema limit", () => {
       return undefined;
     },
     getSerializerByName(name) {
-      return name === "example$Shared" ? original : undefined;
+      return name === "example$Shared" ? activeOriginal : undefined;
     },
     generateReadSerializer(typeInfo) {
       return {
@@ -367,16 +381,22 @@ runTest("exact local TypeMeta bypasses schema limit", () => {
     },
   });
 
-  readCompatibleStructSerializer(readContext, localHash, original, remoteStruct("Shared", "extra"));
+  readCompatibleStructSerializer(
+    readContext,
+    localHash,
+    generatingOriginal,
+    remoteStruct("Shared", "extra"),
+  );
+  activeOriginal = exactOriginal;
   assert.doesNotThrow(() => readCompatibleStructSerializer(
     readContext,
     localHash,
     undefined,
-    TypeMeta.fromTypeInfo(localTypeInfo),
+    localMeta,
   ));
   assert.doesNotThrow(() => readTypeMeta(
     readContext,
-    TypeMeta.fromTypeInfo(localTypeInfo),
+    localMeta,
   ));
 });
 
@@ -453,13 +473,27 @@ runTest("exact Any TypeMeta bypasses schema limit", () => {
     901,
     { value: Type.int32({ encoding: "fixed" }) },
   );
-  const original = localSerializer(localTypeInfo);
+  const generatingOriginal = localSerializer(localTypeInfo);
+  const localMeta = TypeMeta.fromTypeInfo(localTypeInfo);
+  const localBytes = localMeta.toBytes();
+  const exactOriginal = {
+    getHash() {
+      return localMeta.getHash();
+    },
+    getTypeInfo() {
+      throw new Error("exact local compare must use encoded bytes");
+    },
+    getTypeMetaBytes() {
+      return localBytes;
+    },
+  };
+  let activeOriginal = generatingOriginal;
   const readContext = context({
     computeTypeId(typeInfo) {
       return typeInfo.typeId;
     },
     getSerializerById(typeId, userTypeId) {
-      return userTypeId === 901 ? original : undefined;
+      return userTypeId === 901 ? activeOriginal : undefined;
     },
     getSerializerByName() {
       return undefined;
@@ -477,13 +511,14 @@ runTest("exact Any TypeMeta bypasses schema limit", () => {
   });
 
   detectAnySerializer(readContext, anyStruct("extra"));
+  activeOriginal = exactOriginal;
   assert.doesNotThrow(() => detectAnySerializer(
     readContext,
-    TypeMeta.fromTypeInfo(localTypeInfo),
+    localMeta,
   ));
   assert.doesNotThrow(() => readTypeMeta(
     readContext,
-    TypeMeta.fromTypeInfo(localTypeInfo),
+    localMeta,
   ));
 });
 

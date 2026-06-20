@@ -1332,6 +1332,10 @@ class StructSerializerGenerator extends BaseSerializerGenerator {
     return TypeMeta.fromTypeInfo(this.typeInfo, this.builder.resolver).getHash().toString();
   }
 
+  getTypeMetaBytes(): string {
+    return this.typeMetaBytesExpr();
+  }
+
   private typeMetaBytesExpr(): string {
     return this.scope.declare(
       "typeInfoBytes",

@@ -996,14 +996,10 @@ export class ReadContext {
       return false;
     }
     const serializer = original ?? this.serializerByTypeMeta(remoteTypeMeta);
-    const localTypeInfo = serializer?.getTypeInfo?.();
-    if (localTypeInfo === undefined) {
+    const localBytes = serializer?.getTypeMetaBytes?.();
+    if (localBytes === undefined) {
       return false;
     }
-    const localBytes = TypeMeta.fromTypeInfo(
-      localTypeInfo,
-      this.typeResolver,
-    ).toBytes();
     if (end - start !== localBytes.length) {
       return false;
     }

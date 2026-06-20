@@ -66,11 +66,13 @@ Apache Fory is a multi-language serialization framework with multiple wire forma
   `(namespace, typeName)` identity; do not add caller-threaded expected-type parameters only for
   this check in any runtime. Java and Python may lazy-build local metadata bytes only after this
   identity lookup selects a local class and the existing class, registration, and deserialization
-  policy checks have run. A runtime may also skip a received metadata body when the current
-  declared type already owns an identical local metadata header; that is a local-schema hit, not a
-  remote cache publish, and it must not consume schema-version limits. Other header-only skips are
-  allowed only after the same owning remote metadata cache has validated a previous body for that
-  header.
+  policy checks have run. When a typed read path already has a declared local type and validates the
+  decoded metadata identity against it, use that same local type for exact-local byte comparison and
+  cache publish; dynamic or Any paths resolve the local type from decoded metadata. A runtime may
+  also skip a received metadata body when the current declared type already owns an identical local
+  metadata header; that is a local-schema hit, not a remote cache publish, and it must not consume
+  schema-version limits. Other header-only skips are allowed only after the same owning remote
+  metadata cache has validated a previous body for that header.
 - Remote metadata body and struct field-count limits are also cold-path resource controls.
   `maxTypeMetaBytes` limits one received TypeDef or TypeMeta body excluding the 8-byte header and
   extended-size varint; `maxTypeFields` limits one received struct metadata body's field count

@@ -800,15 +800,29 @@ func staticTypeRejectsWrongMetaOwner() throws {
     registerByName: false,
     fields: []
   )
+  let wrongBytes = try wrongTypeMeta.encode()
+  let wrongHeader = try ByteBuffer(bytes: wrongBytes).readUInt64()
   let buffer = ByteBuffer()
   buffer.writeUInt8(UInt8(truncatingIfNeeded: TypeId.compatibleStruct.rawValue))
   buffer.writeUInt8(0)
-  buffer.writeBytes(try wrongTypeMeta.encode())
+  buffer.writeBytes(wrongBytes)
   let context = ReadContext(buffer: buffer, typeResolver: resolver, config: config)
 
   #expect(throws: (any Error).self) {
     _ = try context.readTypeInfo(for: Address.self)
   }
+  #expect(resolver.getTypeInfo(forHeader: wrongHeader) == nil)
+
+  let addressInfo = try resolver.requireTypeInfo(for: Address.self)
+  let addressBytes = try #require(addressInfo.typeDefBytes)
+  let addressHeader = try ByteBuffer(bytes: addressBytes).readUInt64()
+  let exactBuffer = ByteBuffer()
+  exactBuffer.writeUInt8(UInt8(truncatingIfNeeded: TypeId.compatibleStruct.rawValue))
+  exactBuffer.writeUInt8(0)
+  exactBuffer.writeBytes(addressBytes)
+  let exactContext = ReadContext(buffer: exactBuffer, typeResolver: resolver, config: config)
+  _ = try exactContext.readTypeInfo(for: Address.self)
+  #expect(resolver.getTypeInfo(forHeader: addressHeader) === addressInfo)
 }
 
 @Test

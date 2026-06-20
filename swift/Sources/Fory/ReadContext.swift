@@ -435,13 +435,14 @@ public final class ReadContext {
       maxTypeMetaBytes: config.maxTypeMetaBytes)
     let typeMetaEnd = buffer.getCursor()
     try validateCompatibleTypeMeta(decoded, for: localTypeInfo, wireTypeID: wireTypeID)
-    let exactLocalTypeInfo = try typeResolver.requireTypeInfo(for: decoded)
+    // The typed path is owned by the declared local type. After identity validation, the
+    // decoded metadata must describe this same TypeInfo; do not resolve another owner here.
     return try typeResolver.cacheTypeInfo(
       decoded,
       forHeader: header,
       localTypeInfo: localTypeInfo,
       exactLocal: try matchesLocalTypeDefBytes(
-        localTypeInfo: exactLocalTypeInfo,
+        localTypeInfo: localTypeInfo,
         typeMeta: decoded,
         start: start,
         end: typeMetaEnd),

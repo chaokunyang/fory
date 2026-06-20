@@ -365,7 +365,8 @@ public class ClassResolverTest extends ForyTestBase {
     typeDef.writeTypeDef(buffer);
     buffer.readerIndex(0);
 
-    Assert.assertThrows(InsecureException.class, () -> resolver.readSharedClassMeta(readContext));
+    Assert.assertThrows(
+        InsecureException.class, () -> resolver.readSharedClassMeta(readContext, BeanB.class));
   }
 
   @Test
@@ -478,7 +479,8 @@ public class ClassResolverTest extends ForyTestBase {
     buffer.readerIndex(0);
 
     assertSame(
-        resolver.readSharedClassMeta(readContext).getType(), TestNeedToWriteReferenceClass.class);
+        resolver.readSharedClassMeta(readContext, TestNeedToWriteReferenceClass.class).getType(),
+        TestNeedToWriteReferenceClass.class);
     assertSame(other, sharedRegistry.getOrCreateRemoteTypeDef(other, "test.Enum"));
   }
 

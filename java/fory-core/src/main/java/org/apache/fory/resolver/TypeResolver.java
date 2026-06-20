@@ -630,7 +630,7 @@ public abstract class TypeResolver {
         break;
       case Types.COMPATIBLE_STRUCT:
       case Types.NAMED_COMPATIBLE_STRUCT:
-        typeInfo = readSharedClassMeta(readContext);
+        typeInfo = readSharedClassTypeInfo(readContext, null);
         break;
       case Types.NAMED_ENUM:
       case Types.NAMED_STRUCT:
@@ -639,7 +639,7 @@ public abstract class TypeResolver {
         if (!metaContextShareEnabled) {
           typeInfo = readTypeInfoFromBytes(readContext, typeInfoCache, typeId);
         } else {
-          typeInfo = readSharedClassMeta(readContext);
+          typeInfo = readSharedClassTypeInfo(readContext, null);
         }
         break;
       case Types.LIST:
@@ -725,7 +725,7 @@ public abstract class TypeResolver {
         break;
       case Types.COMPATIBLE_STRUCT:
       case Types.NAMED_COMPATIBLE_STRUCT:
-        typeInfo = readSharedClassMeta(readContext);
+        typeInfo = readSharedClassTypeInfo(readContext, null);
         break;
       case Types.NAMED_ENUM:
       case Types.NAMED_STRUCT:
@@ -734,7 +734,7 @@ public abstract class TypeResolver {
         if (!metaContextShareEnabled) {
           typeInfo = readTypeInfoFromBytes(readContext, typeInfoCache, typeId);
         } else {
-          typeInfo = readSharedClassMeta(readContext);
+          typeInfo = readSharedClassTypeInfo(readContext, null);
         }
         break;
       case Types.LIST:
@@ -774,7 +774,7 @@ public abstract class TypeResolver {
         break;
       case Types.COMPATIBLE_STRUCT:
       case Types.NAMED_COMPATIBLE_STRUCT:
-        typeInfo = readSharedClassMeta(readContext);
+        typeInfo = readSharedClassTypeInfo(readContext, null);
         break;
       case Types.NAMED_ENUM:
       case Types.NAMED_STRUCT:
@@ -784,7 +784,7 @@ public abstract class TypeResolver {
           typeInfo = readTypeInfoFromBytes(readContext, classInfoHolder.typeInfo, typeId);
           updateCache = true;
         } else {
-          typeInfo = readSharedClassMeta(readContext);
+          typeInfo = readSharedClassTypeInfo(readContext, null);
         }
         break;
       case Types.LIST:
@@ -846,14 +846,6 @@ public abstract class TypeResolver {
 
     // Load class info from bytes (subclass-specific).
     return loadBytesToTypeInfo(header, namespaceBytes, simpleClassNameBytes);
-  }
-
-  /**
-   * Reads shared class metadata from buffer. This is the shared implementation used by both
-   * ClassResolver and XtypeResolver.
-   */
-  protected final TypeInfo readSharedClassMeta(ReadContext readContext) {
-    return readSharedClassTypeInfo(readContext, null);
   }
 
   public final TypeInfo readSharedClassMeta(ReadContext readContext, Class<?> targetClass) {

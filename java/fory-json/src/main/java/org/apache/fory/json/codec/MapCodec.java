@@ -30,7 +30,7 @@ import org.apache.fory.json.writer.JsonWriter;
 import org.apache.fory.json.writer.StringJsonWriter;
 import org.apache.fory.json.writer.Utf8JsonWriter;
 
-public final class MapCodec extends AbstractCodec {
+public final class MapCodec extends AbstractJsonCodec {
   private static final Class<?> UNTYPED_MAP = LinkedHashMap.class;
   private final Class<?> rawType;
   private final JsonTypeInfo valueTypeInfo;

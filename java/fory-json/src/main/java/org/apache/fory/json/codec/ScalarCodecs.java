@@ -30,7 +30,7 @@ import org.apache.fory.json.writer.JsonWriter;
 import org.apache.fory.json.writer.StringJsonWriter;
 import org.apache.fory.json.writer.Utf8JsonWriter;
 
-final class NaturalCodec extends AbstractCodec {
+final class NaturalCodec extends AbstractJsonCodec {
   static final NaturalCodec INSTANCE = new NaturalCodec();
 
   private NaturalCodec() {}
@@ -75,20 +75,20 @@ final class NaturalCodec extends AbstractCodec {
     } else if (token == '[') {
       return CollectionCodec.readUntyped(reader, resolver);
     } else if (token == 't' || token == 'f') {
-      return Boolean.valueOf(reader.readBoolean());
+      return reader.readBoolean();
     } else if (token == 'n') {
       reader.readNull();
       return null;
     }
     String number = reader.readNumber();
     if (number.indexOf('.') >= 0 || number.indexOf('e') >= 0 || number.indexOf('E') >= 0) {
-      return Double.valueOf(Double.parseDouble(number));
+      return Double.parseDouble(number);
     }
-    return Long.valueOf(Long.parseLong(number));
+    return Long.parseLong(number);
   }
 }
 
-final class StringCodec extends AbstractCodec {
+final class StringCodec extends AbstractJsonCodec {
   static final StringCodec INSTANCE = new StringCodec();
 
   private StringCodec() {}
@@ -109,24 +109,24 @@ final class StringCodec extends AbstractCodec {
   }
 }
 
-final class BooleanCodec extends AbstractCodec {
+final class BooleanCodec extends AbstractJsonCodec {
   static final BooleanCodec INSTANCE = new BooleanCodec();
 
   private BooleanCodec() {}
 
   @Override
   void writeNonNull(JsonWriter writer, Object value, JsonTypeResolver resolver) {
-    writer.writeBoolean(((Boolean) value).booleanValue());
+    writer.writeBoolean((Boolean) value);
   }
 
   @Override
   void writeUtf8NonNull(Utf8JsonWriter writer, Object value, JsonTypeResolver resolver) {
-    writer.writeBoolean(((Boolean) value).booleanValue());
+    writer.writeBoolean((Boolean) value);
   }
 
   @Override
   Object readNonNull(JsonReader reader, JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
-    return Boolean.valueOf(reader.readBoolean());
+    return reader.readBoolean();
   }
 
   @Override
@@ -141,29 +141,29 @@ final class BooleanCodec extends AbstractCodec {
     } else if (typeInfo.primitive()) {
       accessor.putBoolean(object, reader.readBoolean());
     } else {
-      accessor.putObject(object, Boolean.valueOf(reader.readBoolean()));
+      accessor.putObject(object, reader.readBoolean());
     }
   }
 }
 
-final class IntCodec extends AbstractCodec {
+final class IntCodec extends AbstractJsonCodec {
   static final IntCodec INSTANCE = new IntCodec();
 
   private IntCodec() {}
 
   @Override
   void writeNonNull(JsonWriter writer, Object value, JsonTypeResolver resolver) {
-    writer.writeInt(((Integer) value).intValue());
+    writer.writeInt((Integer) value);
   }
 
   @Override
   void writeUtf8NonNull(Utf8JsonWriter writer, Object value, JsonTypeResolver resolver) {
-    writer.writeInt(((Integer) value).intValue());
+    writer.writeInt((Integer) value);
   }
 
   @Override
   Object readNonNull(JsonReader reader, JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
-    return Integer.valueOf(Integer.parseInt(reader.readNumber()));
+    return Integer.parseInt(reader.readNumber());
   }
 
   @Override
@@ -178,29 +178,29 @@ final class IntCodec extends AbstractCodec {
     } else if (typeInfo.primitive()) {
       accessor.putInt(object, Integer.parseInt(reader.readNumber()));
     } else {
-      accessor.putObject(object, Integer.valueOf(Integer.parseInt(reader.readNumber())));
+      accessor.putObject(object, Integer.parseInt(reader.readNumber()));
     }
   }
 }
 
-final class LongCodec extends AbstractCodec {
+final class LongCodec extends AbstractJsonCodec {
   static final LongCodec INSTANCE = new LongCodec();
 
   private LongCodec() {}
 
   @Override
   void writeNonNull(JsonWriter writer, Object value, JsonTypeResolver resolver) {
-    writer.writeLong(((Long) value).longValue());
+    writer.writeLong((Long) value);
   }
 
   @Override
   void writeUtf8NonNull(Utf8JsonWriter writer, Object value, JsonTypeResolver resolver) {
-    writer.writeLong(((Long) value).longValue());
+    writer.writeLong((Long) value);
   }
 
   @Override
   Object readNonNull(JsonReader reader, JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
-    return Long.valueOf(Long.parseLong(reader.readNumber()));
+    return Long.parseLong(reader.readNumber());
   }
 
   @Override
@@ -215,12 +215,12 @@ final class LongCodec extends AbstractCodec {
     } else if (typeInfo.primitive()) {
       accessor.putLong(object, Long.parseLong(reader.readNumber()));
     } else {
-      accessor.putObject(object, Long.valueOf(Long.parseLong(reader.readNumber())));
+      accessor.putObject(object, Long.parseLong(reader.readNumber()));
     }
   }
 }
 
-final class ShortCodec extends AbstractCodec {
+final class ShortCodec extends AbstractJsonCodec {
   static final ShortCodec INSTANCE = new ShortCodec();
 
   private ShortCodec() {}
@@ -237,7 +237,7 @@ final class ShortCodec extends AbstractCodec {
 
   @Override
   Object readNonNull(JsonReader reader, JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
-    return Short.valueOf(Short.parseShort(reader.readNumber()));
+    return Short.parseShort(reader.readNumber());
   }
 
   @Override
@@ -252,12 +252,12 @@ final class ShortCodec extends AbstractCodec {
     } else if (typeInfo.primitive()) {
       accessor.putShort(object, Short.parseShort(reader.readNumber()));
     } else {
-      accessor.putObject(object, Short.valueOf(Short.parseShort(reader.readNumber())));
+      accessor.putObject(object, Short.parseShort(reader.readNumber()));
     }
   }
 }
 
-final class ByteCodec extends AbstractCodec {
+final class ByteCodec extends AbstractJsonCodec {
   static final ByteCodec INSTANCE = new ByteCodec();
 
   private ByteCodec() {}
@@ -274,7 +274,7 @@ final class ByteCodec extends AbstractCodec {
 
   @Override
   Object readNonNull(JsonReader reader, JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
-    return Byte.valueOf(Byte.parseByte(reader.readNumber()));
+    return Byte.parseByte(reader.readNumber());
   }
 
   @Override
@@ -289,29 +289,29 @@ final class ByteCodec extends AbstractCodec {
     } else if (typeInfo.primitive()) {
       accessor.putByte(object, Byte.parseByte(reader.readNumber()));
     } else {
-      accessor.putObject(object, Byte.valueOf(Byte.parseByte(reader.readNumber())));
+      accessor.putObject(object, Byte.parseByte(reader.readNumber()));
     }
   }
 }
 
-final class FloatCodec extends AbstractCodec {
+final class FloatCodec extends AbstractJsonCodec {
   static final FloatCodec INSTANCE = new FloatCodec();
 
   private FloatCodec() {}
 
   @Override
   void writeNonNull(JsonWriter writer, Object value, JsonTypeResolver resolver) {
-    writer.writeFloat(((Float) value).floatValue());
+    writer.writeFloat((Float) value);
   }
 
   @Override
   void writeUtf8NonNull(Utf8JsonWriter writer, Object value, JsonTypeResolver resolver) {
-    writer.writeFloat(((Float) value).floatValue());
+    writer.writeFloat((Float) value);
   }
 
   @Override
   Object readNonNull(JsonReader reader, JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
-    return Float.valueOf(Float.parseFloat(reader.readNumber()));
+    return Float.parseFloat(reader.readNumber());
   }
 
   @Override
@@ -326,29 +326,29 @@ final class FloatCodec extends AbstractCodec {
     } else if (typeInfo.primitive()) {
       accessor.putFloat(object, Float.parseFloat(reader.readNumber()));
     } else {
-      accessor.putObject(object, Float.valueOf(Float.parseFloat(reader.readNumber())));
+      accessor.putObject(object, Float.parseFloat(reader.readNumber()));
     }
   }
 }
 
-final class DoubleCodec extends AbstractCodec {
+final class DoubleCodec extends AbstractJsonCodec {
   static final DoubleCodec INSTANCE = new DoubleCodec();
 
   private DoubleCodec() {}
 
   @Override
   void writeNonNull(JsonWriter writer, Object value, JsonTypeResolver resolver) {
-    writer.writeDouble(((Double) value).doubleValue());
+    writer.writeDouble((Double) value);
   }
 
   @Override
   void writeUtf8NonNull(Utf8JsonWriter writer, Object value, JsonTypeResolver resolver) {
-    writer.writeDouble(((Double) value).doubleValue());
+    writer.writeDouble((Double) value);
   }
 
   @Override
   Object readNonNull(JsonReader reader, JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
-    return Double.valueOf(Double.parseDouble(reader.readNumber()));
+    return Double.parseDouble(reader.readNumber());
   }
 
   @Override
@@ -363,24 +363,24 @@ final class DoubleCodec extends AbstractCodec {
     } else if (typeInfo.primitive()) {
       accessor.putDouble(object, Double.parseDouble(reader.readNumber()));
     } else {
-      accessor.putObject(object, Double.valueOf(Double.parseDouble(reader.readNumber())));
+      accessor.putObject(object, Double.parseDouble(reader.readNumber()));
     }
   }
 }
 
-final class CharCodec extends AbstractCodec {
+final class CharCodec extends AbstractJsonCodec {
   static final CharCodec INSTANCE = new CharCodec();
 
   private CharCodec() {}
 
   @Override
   void writeNonNull(JsonWriter writer, Object value, JsonTypeResolver resolver) {
-    writer.writeChar(((Character) value).charValue());
+    writer.writeChar((Character) value);
   }
 
   @Override
   void writeUtf8NonNull(Utf8JsonWriter writer, Object value, JsonTypeResolver resolver) {
-    writer.writeChar(((Character) value).charValue());
+    writer.writeChar((Character) value);
   }
 
   @Override
@@ -389,7 +389,7 @@ final class CharCodec extends AbstractCodec {
     if (value.length() != 1) {
       throw new ForyJsonException("Expected one-character JSON string for char");
     }
-    return Character.valueOf(value.charAt(0));
+    return value.charAt(0);
   }
 
   @Override
@@ -402,17 +402,17 @@ final class CharCodec extends AbstractCodec {
     if (reader.peekNull()) {
       readFieldDefault(reader, object, accessor, typeInfo, resolver);
     } else {
-      char value = ((Character) readNonNull(reader, typeInfo, resolver)).charValue();
+      char value = (Character) readNonNull(reader, typeInfo, resolver);
       if (typeInfo.primitive()) {
         accessor.putChar(object, value);
       } else {
-        accessor.putObject(object, Character.valueOf(value));
+        accessor.putObject(object, value);
       }
     }
   }
 }
 
-final class EnumCodec extends AbstractCodec {
+final class EnumCodec extends AbstractJsonCodec {
   private final Class<?> type;
   private final Map<String, Enum<?>> values;
 

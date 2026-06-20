@@ -43,7 +43,7 @@ import org.apache.fory.json.writer.Utf8JsonWriter;
 import org.apache.fory.reflect.ObjectInstantiator;
 import org.apache.fory.reflect.ObjectInstantiators;
 
-public abstract class BaseObjectCodec extends AbstractCodec {
+public abstract class BaseObjectCodec extends AbstractJsonCodec {
   protected final Class<?> type;
   protected final JsonFieldInfo[] writeProperties;
   protected final JsonFieldInfo[] readProperties;

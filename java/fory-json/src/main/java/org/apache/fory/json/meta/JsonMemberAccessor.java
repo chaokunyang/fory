@@ -32,35 +32,35 @@ public abstract class JsonMemberAccessor {
   }
 
   public boolean getBoolean(Object target) {
-    return ((Boolean) getObject(target)).booleanValue();
+    return (Boolean) getObject(target);
   }
 
   public byte getByte(Object target) {
-    return ((Byte) getObject(target)).byteValue();
+    return (Byte) getObject(target);
   }
 
   public short getShort(Object target) {
-    return ((Short) getObject(target)).shortValue();
+    return (Short) getObject(target);
   }
 
   public int getInt(Object target) {
-    return ((Integer) getObject(target)).intValue();
+    return (Integer) getObject(target);
   }
 
   public long getLong(Object target) {
-    return ((Long) getObject(target)).longValue();
+    return (Long) getObject(target);
   }
 
   public float getFloat(Object target) {
-    return ((Float) getObject(target)).floatValue();
+    return (Float) getObject(target);
   }
 
   public double getDouble(Object target) {
-    return ((Double) getObject(target)).doubleValue();
+    return (Double) getObject(target);
   }
 
   public char getChar(Object target) {
-    return ((Character) getObject(target)).charValue();
+    return (Character) getObject(target);
   }
 
   public void putObject(Object target, Object value) {
@@ -68,35 +68,35 @@ public abstract class JsonMemberAccessor {
   }
 
   public void putBoolean(Object target, boolean value) {
-    putObject(target, Boolean.valueOf(value));
+    putObject(target, value);
   }
 
   public void putByte(Object target, byte value) {
-    putObject(target, Byte.valueOf(value));
+    putObject(target, value);
   }
 
   public void putShort(Object target, short value) {
-    putObject(target, Short.valueOf(value));
+    putObject(target, value);
   }
 
   public void putInt(Object target, int value) {
-    putObject(target, Integer.valueOf(value));
+    putObject(target, value);
   }
 
   public void putLong(Object target, long value) {
-    putObject(target, Long.valueOf(value));
+    putObject(target, value);
   }
 
   public void putFloat(Object target, float value) {
-    putObject(target, Float.valueOf(value));
+    putObject(target, value);
   }
 
   public void putDouble(Object target, double value) {
-    putObject(target, Double.valueOf(value));
+    putObject(target, value);
   }
 
   public void putChar(Object target, char value) {
-    putObject(target, Character.valueOf(value));
+    putObject(target, value);
   }
 
   public static JsonMemberAccessor forField(Field field) {

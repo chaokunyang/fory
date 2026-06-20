@@ -32,7 +32,7 @@ import org.apache.fory.json.writer.JsonWriter;
 import org.apache.fory.json.writer.StringJsonWriter;
 import org.apache.fory.json.writer.Utf8JsonWriter;
 
-public final class CollectionCodec extends AbstractCodec {
+public final class CollectionCodec extends AbstractJsonCodec {
   private static final Class<?> UNTYPED_COLLECTION = ArrayList.class;
   private final Class<?> rawType;
   private final JsonTypeInfo elementTypeInfo;

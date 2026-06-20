@@ -23,7 +23,9 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.atomic.AtomicReferenceArray;
 import org.apache.fory.json.codec.CodecRegistry;
 import org.apache.fory.json.codec.GeneratedObjectCodec;
-import org.apache.fory.json.reader.JsonParsers;
+import org.apache.fory.json.reader.JsonReader;
+import org.apache.fory.json.reader.StringJsonReader;
+import org.apache.fory.json.reader.Utf8JsonReader;
 import org.apache.fory.json.resolver.JsonTypeInfo;
 import org.apache.fory.json.resolver.JsonTypeResolver;
 import org.apache.fory.json.writer.StringJsonWriter;
@@ -96,11 +98,17 @@ public final class ForyJson {
   }
 
   public <T> T fromJson(String json, Class<T> type) {
-    return JsonParsers.fromString(json, type, typeResolver);
+    JsonReader reader = new StringJsonReader(json);
+    Object value = typeResolver.readValue(reader, type, type);
+    reader.finish();
+    return castValue(value, type);
   }
 
   public <T> T fromJson(byte[] bytes, Class<T> type) {
-    return JsonParsers.fromBytes(bytes, type, typeResolver);
+    JsonReader reader = new Utf8JsonReader(bytes);
+    Object value = typeResolver.readValue(reader, type, type);
+    reader.finish();
+    return castValue(value, type);
   }
 
   boolean hasGeneratedWriter(Class<?> type) {
@@ -166,6 +174,11 @@ public final class ForyJson {
 
   private static int spread(int hash) {
     return hash ^ (hash >>> 16);
+  }
+
+  @SuppressWarnings("unchecked")
+  private static <T> T castValue(Object value, Class<T> type) {
+    return type.isPrimitive() ? (T) value : type.cast(value);
   }
 
   private static final class PooledState {

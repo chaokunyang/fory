@@ -29,7 +29,7 @@ import org.apache.fory.json.writer.JsonWriter;
 import org.apache.fory.json.writer.StringJsonWriter;
 import org.apache.fory.json.writer.Utf8JsonWriter;
 
-public final class ArrayCodec extends AbstractCodec {
+public final class ArrayCodec extends AbstractJsonCodec {
   private final Class<?> componentType;
   private final ArrayAccess access;
 

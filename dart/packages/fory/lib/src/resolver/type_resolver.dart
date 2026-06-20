@@ -113,23 +113,27 @@ final class TypeInfo {
   final bool supportsRef;
   final bool needsRootRef;
   final bool usesNestedTypeDefinitions;
+  final bool evolving;
+  final List<FieldInfo> fields;
   final Serializer<Object?> serializer;
-  final StructSerializer? structSerializer;
+  StructSerializer? structSerializer;
   final int? userTypeId;
   final String? namespace;
   final String? typeName;
   final EncodedMetaString? encodedNamespace;
   final EncodedMetaString? encodedTypeName;
-  final TypeDef? typeDef;
+  TypeDef? typeDef;
   final TypeDef? remoteTypeDef;
 
-  const TypeInfo({
+  TypeInfo({
     required this.type,
     required this.kind,
     required this.typeId,
     required this.supportsRef,
     required this.needsRootRef,
     required this.usesNestedTypeDefinitions,
+    required this.evolving,
+    required this.fields,
     required this.serializer,
     required this.structSerializer,
     required this.userTypeId,
@@ -144,10 +148,11 @@ final class TypeInfo {
   bool get isNamed =>
       userTypeId == null && namespace != null && typeName != null;
 
-  bool get isCompatibleStruct =>
-      kind == RegistrationKind.struct && typeDef!.evolving;
+  bool get isCompatibleStruct => kind == RegistrationKind.struct && evolving;
 
   bool get isBasicValue => TypeIds.isBasicValue(typeId);
+
+  Int64? get cachedTypeDefHeader => remoteTypeDef?.header ?? typeDef?.header;
 }
 
 bool usesDeclaredTypeInfo(
@@ -273,8 +278,8 @@ final class TypeResolver {
       <String, EncodedMetaString>{};
   final Map<_EncodedMetaStringKey, EncodedMetaString>
   _internedEncodedMetaStrings = <_EncodedMetaStringKey, EncodedMetaString>{};
-  final Map<TypeInfo, Uint8List> _initialTypeMetaBytes =
-      HashMap<TypeInfo, Uint8List>.identity();
+  final Map<TypeInfo, Uint8List> _cachedTypeDefMetaBytes =
+      LinkedHashMap<TypeInfo, Uint8List>.identity();
   final Map<String, int> _remoteSchemaVersionsByType = <String, int>{};
   int _totalAcceptedSchemaVersions = 0;
 
@@ -355,18 +360,6 @@ final class TypeResolver {
         registrationKind == RegistrationKind.struct
             ? _validateFieldInfos(fields)
             : const <FieldInfo>[];
-    final typeDef = _buildTypeDef(
-      kind: registrationKind,
-      evolving: registrationKind == RegistrationKind.struct ? evolving : false,
-      userTypeId: id,
-      encodedNamespace: encodedNamespace,
-      encodedTypeName: encodedTypeName,
-      fields: normalizedFields,
-    );
-    final structSerializer =
-        registrationKind != RegistrationKind.struct
-            ? null
-            : StructSerializer(payloadSerializer, typeDef, this);
     final resolved = TypeInfo(
       type: type,
       kind: registrationKind,
@@ -381,14 +374,16 @@ final class TypeResolver {
               ? usesNestedTypeDefinitions ??
                   _fieldsUseNestedTypeDefinitions(normalizedFields)
               : true,
+      evolving: registrationKind == RegistrationKind.struct ? evolving : false,
+      fields: normalizedFields,
       serializer: payloadSerializer,
-      structSerializer: structSerializer,
+      structSerializer: null,
       userTypeId: id,
       namespace: resolvedNamespace,
       typeName: resolvedTypeName,
       encodedNamespace: encodedNamespace,
       encodedTypeName: encodedTypeName,
-      typeDef: typeDef,
+      typeDef: null,
       remoteTypeDef: null,
     );
     _rememberResolved(
@@ -398,6 +393,38 @@ final class TypeResolver {
       namespace: resolvedNamespace,
       typeName: resolvedTypeName,
     );
+    _rebuildRegisteredTypeDefs();
+  }
+
+  void _rebuildRegisteredTypeDefs() {
+    // Registration is two-stage: first record every TypeInfo, then rebuild
+    // local TypeDefs from the complete current registry. A later enum/ext/union
+    // registration can change a struct field's wire kind, so rebuild all
+    // registered TypeDefs on the registration cold path instead of constructing
+    // them lazily from read/write hot paths.
+    _cachedTypeDefMetaBytes.clear();
+    final seen = Set<TypeInfo>.identity();
+    for (final resolved in _registeredByType.values) {
+      if (!seen.add(resolved)) {
+        continue;
+      }
+      final typeDef = _buildTypeDef(
+        kind: resolved.kind,
+        evolving: resolved.evolving,
+        userTypeId: resolved.userTypeId,
+        encodedNamespace: resolved.encodedNamespace,
+        encodedTypeName: resolved.encodedTypeName,
+        fields: resolved.fields,
+      );
+      resolved.typeDef = typeDef;
+      if (resolved.kind == RegistrationKind.struct) {
+        resolved.structSerializer = StructSerializer(
+          resolved.serializer,
+          typeDef,
+          this,
+        );
+      }
+    }
   }
 
   EncodedMetaString packageMetaString(String value) {
@@ -709,13 +736,16 @@ final class TypeResolver {
   }
 
   TypeDef typeDefForResolved(TypeInfo resolved, {List<FieldInfo>? fields}) {
-    final resolvedFields = resolved.typeDef?.fields;
-    if (fields == null || identical(fields, resolvedFields)) {
-      return resolved.typeDef!;
+    final localTypeDef = resolved.typeDef;
+    if (localTypeDef == null) {
+      throw StateError('Type ${resolved.type} does not have TypeDef metadata.');
+    }
+    if (fields == null || identical(fields, localTypeDef.fields)) {
+      return localTypeDef;
     }
     return _buildTypeDef(
       kind: resolved.kind,
-      evolving: resolved.typeDef!.evolving,
+      evolving: resolved.evolving,
       userTypeId: resolved.userTypeId,
       encodedNamespace: resolved.encodedNamespace,
       encodedTypeName: resolved.encodedTypeName,
@@ -726,7 +756,6 @@ final class TypeResolver {
   void writeTypeMeta(
     Buffer buffer,
     TypeInfo resolved, {
-    required TypeDef? typeDef,
     required LinkedHashMap<TypeDef, int> typeDefIds,
     required MetaStringWriter metaStringWriter,
   }) {
@@ -734,90 +763,40 @@ final class TypeResolver {
       config.compatible,
       resolved,
     );
-    buffer.writeVarUint32Small7(wireTypeId);
+    if (_wireTypeWritesTypeDef(wireTypeId)) {
+      final localTypeDef = resolved.typeDef!;
+      if (typeDefIds.isEmpty) {
+        // The cached bytes include the wire type id and TypeDef marker 0, so
+        // they are valid only before the per-write TypeDef table has entries.
+        var bytes = _cachedTypeDefMetaBytes[resolved];
+        if (bytes == null) {
+          final encoded = Buffer(localTypeDef.encoded.length + 2);
+          encoded.writeVarUint32Small7(wireTypeId);
+          encoded.writeVarUint32(0);
+          encoded.writeBytes(localTypeDef.encoded);
+          bytes = encoded.toBytes();
+          _cachedTypeDefMetaBytes[resolved] = bytes;
+        }
+        buffer.writeBytes(bytes);
+        if (resolved.usesNestedTypeDefinitions) {
+          typeDefIds[localTypeDef] = 0;
+        }
+      } else {
+        buffer.writeVarUint32Small7(wireTypeId);
+        _writeTypeDef(buffer, localTypeDef, typeDefIds: typeDefIds);
+      }
+      return;
+    }
     if (_wireTypeWritesUserTypeId(wireTypeId)) {
+      buffer.writeVarUint32Small7(wireTypeId);
       buffer.writeVarUint32(resolved.userTypeId!);
       return;
     }
-    if (_wireTypeWritesTypeDef(wireTypeId)) {
-      _writeTypeDef(
-        buffer,
-        typeDef ?? resolved.typeDef!,
-        typeDefIds: typeDefIds,
-      );
-      return;
-    }
+    buffer.writeVarUint32Small7(wireTypeId);
     if (_wireTypeWritesNamedType(wireTypeId)) {
       metaStringWriter.writeMetaString(buffer, resolved.encodedNamespace!);
       metaStringWriter.writeMetaString(buffer, resolved.encodedTypeName!);
     }
-  }
-
-  bool writeInitialTypeDefMeta(
-    Buffer buffer,
-    TypeInfo resolved, {
-    required TypeDef? typeDef,
-    required LinkedHashMap<TypeDef, int> typeDefIds,
-  }) {
-    final resolvedTypeDef = resolved.typeDef;
-    if (typeDefIds.isNotEmpty ||
-        resolvedTypeDef == null ||
-        !identical(typeDef ?? resolvedTypeDef, resolvedTypeDef)) {
-      return false;
-    }
-    final wireTypeId = _wireTypeMetaEncoder.wireTypeIdFor(
-      config.compatible,
-      resolved,
-    );
-    if (!_wireTypeWritesTypeDef(wireTypeId)) {
-      return false;
-    }
-    final bytes = _initialTypeMetaBytes.putIfAbsent(
-      resolved,
-      () => _encodeInitialTypeDefMeta(wireTypeId, resolvedTypeDef),
-    );
-    buffer.writeBytes(bytes);
-    if (resolved.usesNestedTypeDefinitions) {
-      typeDefIds[resolvedTypeDef] = 0;
-    }
-    return true;
-  }
-
-  TypeInfo? readExpectedInitialTypeDefMeta(
-    Buffer buffer,
-    TypeInfo expected, {
-    required List<TypeInfo> sharedTypes,
-  }) {
-    final start = bufferReaderIndex(buffer);
-    final wireTypeId = buffer.readVarUint32Small7();
-    if (wireTypeId !=
-            _wireTypeMetaEncoder.wireTypeIdFor(config.compatible, expected) ||
-        !_wireTypeWritesTypeDef(wireTypeId)) {
-      bufferSetReaderIndex(buffer, start);
-      return null;
-    }
-    final marker = buffer.readVarUint32Small14();
-    if ((marker & 1) == 1) {
-      return sharedTypes[marker >>> 1];
-    }
-    final header = TypeHeader(buffer.readInt64());
-    final cached = _parsedTypeMetaCache.lookup(header);
-    if (cached != null) {
-      header.skipRemaining(buffer);
-      sharedTypes.add(cached);
-      return cached;
-    }
-    final resolved = _readTypeDefWithHeader(buffer, header);
-    sharedTypes.add(resolved);
-    return resolved;
-  }
-
-  Uint8List _encodeInitialTypeDefMeta(int wireTypeId, TypeDef typeDef) {
-    final buffer = Buffer(typeDef.encoded.length + 2);
-    buffer.writeVarUint32Small7(wireTypeId);
-    buffer.writeVarUint32(0);
-    buffer.writeBytes(typeDef.encoded);
-    return buffer.toBytes();
   }
 
   @pragma('vm:prefer-inline')
@@ -851,6 +830,20 @@ final class TypeResolver {
     required List<TypeInfo> sharedTypes,
     required MetaStringReader metaStringReader,
   }) {
+    final expected = expectedNamedType;
+    if (expected != null &&
+        _wireTypeWritesTypeDef(
+          _wireTypeMetaEncoder.wireTypeIdFor(config.compatible, expected),
+        )) {
+      final resolved = readExpectedTypeDefMeta(
+        buffer,
+        expected,
+        sharedTypes: sharedTypes,
+      );
+      if (resolved != null) {
+        return resolved;
+      }
+    }
     final typeMeta = _wireTypeMetaDecoder.read(
       buffer,
       config: config,
@@ -866,12 +859,7 @@ final class TypeResolver {
             ? _lastNamedTypeByWireType[wireTypeId]
             : null;
       },
-      readTypeDef:
-          () => _readTypeDef(
-            buffer,
-            sharedTypes: sharedTypes,
-            expectedType: expectedNamedType,
-          ),
+      readTypeDef: () => _readTypeDef(buffer, sharedTypes: sharedTypes),
       readPackageMetaString:
           ([expected]) => metaStringReader.readMetaString(buffer, expected),
       readTypeNameMetaString:
@@ -881,6 +869,48 @@ final class TypeResolver {
       _rememberNamedType(typeMeta.wireTypeId, typeMeta.resolvedType);
     }
     return typeMeta.resolvedType;
+  }
+
+  TypeInfo? readExpectedTypeDefMeta(
+    Buffer buffer,
+    TypeInfo expected, {
+    required List<TypeInfo> sharedTypes,
+  }) {
+    final start = bufferReaderIndex(buffer);
+    final wireTypeId = buffer.readVarUint32Small7();
+    if (wireTypeId !=
+            _wireTypeMetaEncoder.wireTypeIdFor(config.compatible, expected) ||
+        !_wireTypeWritesTypeDef(wireTypeId)) {
+      bufferSetReaderIndex(buffer, start);
+      return null;
+    }
+    final marker = buffer.readVarUint32Small14();
+    if ((marker & 1) == 1) {
+      return sharedTypes[marker >>> 1];
+    }
+    final headerValue = buffer.readInt64();
+    final expectedTypeDef = expected.typeDef;
+    if (expectedTypeDef != null && expectedTypeDef.header == headerValue) {
+      // The expected local TypeInfo owns this TypeDef header. This is a direct
+      // local-schema hit: skip the remote body, do not rehash, and do not
+      // publish to ParsedTypeMetaCache because no remote metadata miss occurred.
+      TypeHeader.skipBody(buffer, headerValue);
+      sharedTypes.add(expected);
+      return expected;
+    }
+    final header = TypeHeader(headerValue);
+    final cached = _parsedTypeMetaCache.lookup(header);
+    if (cached != null) {
+      // Header-cache hits intentionally skip without rehashing. Entries reach this cache only
+      // after a successful TypeDef parse and 52-bit metadata-hash validation. Do not add
+      // body/hash/schema-limit/exact-local checks here; the miss path owns them before publish.
+      header.skipRemaining(buffer);
+      sharedTypes.add(cached);
+      return cached;
+    }
+    final resolved = _readTypeDefWithHeader(buffer, header);
+    sharedTypes.add(resolved);
+    return resolved;
   }
 
   void _writeTypeDef(
@@ -1106,6 +1136,23 @@ final class TypeResolver {
         fieldType.typeId == TypeIds.namedUnion) {
       return TypeIds.union;
     }
+    final resolved = tryResolveFieldType(fieldType);
+    if (resolved != null && resolved.kind != RegistrationKind.builtin) {
+      switch (resolved.kind) {
+        case RegistrationKind.enumType:
+          return TypeIds.enumById;
+        case RegistrationKind.union:
+          return TypeIds.union;
+        case RegistrationKind.ext:
+        case RegistrationKind.struct:
+          return _wireTypeMetaEncoder.wireTypeIdFor(
+            config.compatible,
+            resolved,
+          );
+        case RegistrationKind.builtin:
+          break;
+      }
+    }
     return fieldType.ref ? TypeIds.unknown : fieldType.typeId;
   }
 
@@ -1113,7 +1160,6 @@ final class TypeResolver {
   WireTypeMeta _readTypeDef(
     Buffer buffer, {
     required List<TypeInfo> sharedTypes,
-    TypeInfo? expectedType,
   }) {
     final marker = buffer.readVarUint32Small14();
     final isRef = (marker & 1) == 1;
@@ -1125,8 +1171,8 @@ final class TypeResolver {
     final cached = _parsedTypeMetaCache.lookup(header);
     if (cached != null) {
       // Header-cache hits intentionally skip without rehashing. Entries reach this cache only
-      // after a successful TypeDef parse and 52-bit metadata-hash validation. Do not allocate
-      // or otherwise materialize the opaque body on this path.
+      // after a successful TypeDef parse and 52-bit metadata-hash validation. Do not add
+      // body/hash/schema-limit/exact-local checks here; the miss path owns them before publish.
       header.skipRemaining(buffer);
       sharedTypes.add(cached);
       return wireTypeMetaForResolved(cached);
@@ -1213,14 +1259,18 @@ final class TypeResolver {
         userTypeId != null
             ? resolveUserById(userTypeId)
             : resolveUserByEncodedName(encodedNamespace!, encodedTypeName!);
-    if (resolved.typeDef?.header != header.value &&
-        _typeDefTypeId(
-              resolved.kind,
-              byName: byName,
-              evolving: resolved.typeDef?.evolving ?? false,
-            ) !=
-            typeId) {
+    if (_typeDefTypeId(
+          resolved.kind,
+          byName: byName,
+          evolving: resolved.evolving,
+        ) !=
+        typeId) {
       throw StateError('TypeDef kind does not match registered type metadata.');
+    }
+    final localTypeDef = typeDefForResolved(resolved);
+    if (_matchesEncodedTypeDef(buffer, typeDefStart, localTypeDef.encoded)) {
+      _parsedTypeMetaCache.remember(header, resolved);
+      return resolved;
     }
     if (resolved.kind != RegistrationKind.struct) {
       final remoteSchemaKey = _checkRemoteTypeDefLimit(
@@ -1230,12 +1280,6 @@ final class TypeResolver {
       );
       _parsedTypeMetaCache.remember(header, resolved);
       _recordRemoteTypeDef(remoteSchemaKey);
-      return resolved;
-    }
-    final localTypeDef = resolved.typeDef;
-    if (localTypeDef != null &&
-        _matchesEncodedTypeDef(buffer, typeDefStart, localTypeDef.encoded)) {
-      _parsedTypeMetaCache.remember(header, resolved);
       return resolved;
     }
     final remoteSchemaKey = _checkRemoteTypeDefLimit(
@@ -1256,6 +1300,8 @@ final class TypeResolver {
       supportsRef: resolved.supportsRef,
       needsRootRef: resolved.needsRootRef,
       usesNestedTypeDefinitions: resolved.usesNestedTypeDefinitions,
+      evolving: resolved.evolving,
+      fields: resolved.fields,
       serializer: resolved.serializer,
       structSerializer: resolved.structSerializer,
       userTypeId: resolved.userTypeId,
@@ -1523,6 +1569,8 @@ final class TypeResolver {
       supportsRef: TypeIds.supportsRef(typeId),
       needsRootRef: false,
       usesNestedTypeDefinitions: false,
+      evolving: false,
+      fields: const <FieldInfo>[],
       serializer: _builtinSerializerFor(typeId, type),
       structSerializer: null,
       userTypeId: null,

@@ -46,6 +46,24 @@ type SchemaLimitExtra struct {
 	Extra int32
 }
 
+type lateTypeDefExt struct {
+	Value int32
+}
+
+type lateTypeDefHolder struct {
+	Value lateTypeDefExt
+}
+
+type lateTypeDefExtSerializer struct{}
+
+func (lateTypeDefExtSerializer) WriteData(ctx *WriteContext, value reflect.Value) {
+	ctx.Buffer().WriteInt32(int32(value.FieldByName("Value").Int()))
+}
+
+func (lateTypeDefExtSerializer) ReadData(ctx *ReadContext, value reflect.Value) {
+	value.FieldByName("Value").SetInt(int64(ctx.Buffer().ReadInt32(ctx.Err())))
+}
+
 type NestedSliceStruct struct {
 	ID      int32
 	Matrix  [][]int
@@ -149,6 +167,17 @@ func TestTypeDefEncodingDecoding(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestTypeDefUsesLateRegisteredFieldType(t *testing.T) {
+	fory := NewFory(WithXlang(false), WithCompatible(true))
+	require.NoError(t, fory.RegisterStructByName(lateTypeDefHolder{}, "example.LateTypeDefHolder"))
+	require.NoError(t, fory.RegisterExtensionByName(lateTypeDefExt{}, "example.LateTypeDefExt", lateTypeDefExtSerializer{}))
+
+	typeDef, err := fory.typeResolver.getTypeDef(reflect.TypeOf(lateTypeDefHolder{}), true)
+	require.NoError(t, err)
+	require.Len(t, typeDef.fieldDefs, 1)
+	require.Equal(t, TypeId(NAMED_EXT), typeDef.fieldDefs[0].typeSpec.TypeId())
 }
 
 func checkFieldDef(t *testing.T, original, decoded FieldDef) {
@@ -565,6 +594,18 @@ func TestRemoteNonStructTypeDefUsesLimit(t *testing.T) {
 	_, err = fory.typeResolver.checkRemoteTypeDefLimit(second)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "MaxSchemaVersionsPerType")
+}
+
+func TestExactLocalNonStructTypeDefBypassesLimit(t *testing.T) {
+	fory := NewFory(WithXlang(true), WithCompatible(true), WithMaxSchemaVersionsPerType(1))
+	require.NoError(t, fory.RegisterEnumByName(namedAuditEnum(0), "example.RemoteEnum"))
+	exact, err := buildTypeDef(fory, reflect.ValueOf(namedAuditEnum(0)))
+	require.NoError(t, err)
+	require.NoError(t, readRemoteTypeDef(t, fory, exact))
+
+	second := NewTypeDef(uint32(NAMED_EXT), 0, exact.nsName, exact.typeName, true, false, nil)
+	_, err = fory.typeResolver.checkRemoteTypeDefLimit(second)
+	require.NoError(t, err)
 }
 
 func remoteSchemaLimitTypeDef(t *testing.T, value any, name string) *TypeDef {

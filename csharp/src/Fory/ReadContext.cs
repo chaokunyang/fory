@@ -233,14 +233,26 @@ public sealed class ReadContext
         ulong header = Reader.ReadUInt64();
         if (TryGetTypeMetaByHeader(header, out TypeMeta cachedTypeMeta))
         {
+            // Header-cache hits intentionally skip without rehashing. Entries reach this cache only
+            // after successful TypeMeta body validation. Do not add body/hash/schema-limit/exact-local
+            // checks here; the miss path owns them before cache publish.
             TypeMeta.SkipBody(Reader, header);
             StoreTypeMetaRef(cachedTypeMeta, index);
             return cachedTypeMeta;
         }
 
         Reader.MoveBack(sizeof(ulong));
+        int typeMetaStart = Reader.Cursor;
         typeMeta = DecodeTypeMeta();
-        StoreRemoteTypeMeta(header, typeMeta);
+        int typeMetaEnd = Reader.Cursor;
+        if (MatchesExactLocalTypeMeta(typeMeta, typeMetaStart, typeMetaEnd))
+        {
+            StoreExactLocalTypeMeta(header, typeMeta);
+        }
+        else
+        {
+            StoreRemoteTypeMeta(header, typeMeta);
+        }
         StoreTypeMetaRef(typeMeta, index);
         return typeMeta;
     }
@@ -267,14 +279,14 @@ public sealed class ReadContext
     }
 
     [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
-    internal bool MatchesExactLocalTypeMeta(int start, int end, TypeInfo exactLocal)
+    internal bool MatchesExactLocalTypeMeta(TypeMeta typeMeta, int start, int end)
     {
-        TypeInfo.TypeMetaCacheEntry local = exactLocal.GetTypeMetaCacheEntry(TrackRef);
-        if (!IsStructMeta(local.TypeMeta))
+        if (!TypeResolver.TryGetLocalTypeInfo(typeMeta, out TypeInfo exactLocal))
         {
             return false;
         }
 
+        TypeInfo.TypeMetaCacheEntry local = exactLocal.GetTypeMetaCacheEntry(TrackRef);
         byte[] encoded = local.EncodedBytes;
         if (end - start != encoded.Length ||
             !Reader.Storage.AsSpan(start, encoded.Length).SequenceEqual(encoded))
@@ -282,17 +294,7 @@ public sealed class ReadContext
             return false;
         }
 
-        TypeMeta.CheckFieldCount(local.TypeMeta.Fields.Count, _config.MaxTypeFields);
         return true;
-    }
-
-    private static bool IsStructMeta(TypeMeta typeMeta)
-    {
-        return typeMeta.TypeId is uint typeId &&
-               (TypeId)typeId is TypeId.Struct or
-                   TypeId.CompatibleStruct or
-                   TypeId.NamedStruct or
-                   TypeId.NamedCompatibleStruct;
     }
 
     [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]

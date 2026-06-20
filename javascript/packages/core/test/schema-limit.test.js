@@ -191,12 +191,15 @@ runTest("failed non-struct TypeMeta does not consume schema limit", () => {
   );
 });
 
-runTest("exact local non-struct TypeMeta uses schema limit", () => {
+runTest("exact local non-struct TypeMeta bypasses schema limit", () => {
   const enumInfo = Type.enum({ namespace: "example", typeName: "SharedEnum" }, { A: 0 });
   const enumMeta = TypeMeta.fromTypeInfo(enumInfo);
   const localSerializer = {
     getTypeInfo() {
       return enumInfo;
+    },
+    getTypeMetaBytes() {
+      return enumMeta.toBytes();
     },
   };
   const readContext = context({
@@ -208,12 +211,28 @@ runTest("exact local non-struct TypeMeta uses schema limit", () => {
     },
   });
 
-  readTypeMeta(readContext, enumMeta);
+  readNamedTypeMeta(readContext, TypeId.NAMED_ENUM, "example", "SharedEnum", enumMeta);
+  assert.doesNotThrow(() => readNamedTypeMeta(
+    readContext,
+    TypeId.NAMED_EXT,
+    "example",
+    "SharedEnum",
+    remoteNamedNonStruct("SharedEnum", TypeId.NAMED_EXT),
+  ));
 
-  assert.throws(
-    () => readTypeMeta(readContext, remoteNamedNonStruct("SharedEnum", TypeId.NAMED_EXT)),
-    /maxSchemaVersionsPerType/,
-  );
+  const genericReadContext = context({
+    computeTypeId(typeInfo) {
+      return typeInfo.typeId;
+    },
+    getSerializerByName(name) {
+      return name === "example$SharedEnum" ? localSerializer : undefined;
+    },
+  });
+  readTypeMeta(genericReadContext, enumMeta);
+  assert.doesNotThrow(() => readTypeMeta(
+    genericReadContext,
+    remoteNamedNonStruct("SharedEnum", TypeId.NAMED_EXT),
+  ));
 });
 
 runTest("named enum TypeMeta validates declared owner before caching", () => {

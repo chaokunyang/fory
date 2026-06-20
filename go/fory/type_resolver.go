@@ -1595,7 +1595,8 @@ func (r *TypeResolver) readSharedTypeMeta(buffer *ByteBuffer, err *Error) *TypeI
 	var td *TypeDef
 	if existingTd, exists := r.defIdToTypeDef[id]; exists {
 		// Header-cache hits intentionally skip without rehashing. Entries reach this cache only
-		// after a successful TypeDef parse and 52-bit metadata-hash validation.
+		// after a successful TypeDef parse and 52-bit metadata-hash validation. Do not add
+		// body/hash/schema-limit/exact-local checks here; the miss path owns them before publish.
 		skipTypeDef(buffer, id, err)
 		td = existingTd
 	} else {
@@ -1617,31 +1618,13 @@ func (r *TypeResolver) readTypeDefInfo(buffer *ByteBuffer, id int64, context *Me
 	if err.HasError() {
 		return nil
 	}
-	if td.type_ != nil {
-		localType := td.type_
-		localTd, localErr := r.getTypeDef(localType, true)
-		exactLocalAllowed := TypeId(td.typeId) == STRUCT ||
-			TypeId(td.typeId) == COMPATIBLE_STRUCT ||
-			TypeId(td.typeId) == NAMED_STRUCT ||
-			TypeId(td.typeId) == NAMED_COMPATIBLE_STRUCT
-		if exactLocalAllowed && localErr == nil && bytes.Equal(localTd.encoded, td.encoded) {
-			if typeInfo := r.getTypeInfoByType(localType); typeInfo != nil {
-				localTd.cachedTypeInfo = typeInfo
-				r.defIdToTypeDef[id] = localTd
-				context.readTypeInfos = append(context.readTypeInfos, typeInfo)
-				return typeInfo
-			}
-			if typeInfo, typeInfoErr := r.getTypeInfo(reflect.Zero(localType), true); typeInfoErr == nil {
-				localTd.cachedTypeInfo = typeInfo
-				r.defIdToTypeDef[id] = localTd
-				context.readTypeInfos = append(context.readTypeInfos, typeInfo)
-				return typeInfo
-			}
-			typeInfo, typeInfoErr := localTd.getOrBuildTypeInfo(r)
-			if typeInfoErr != nil {
-				err.SetError(typeInfoErr)
-				return nil
-			}
+	if typeInfo := r.localTypeInfoForTypeDef(td); typeInfo != nil {
+		localTd, localErr := r.localTypeDef(typeInfo)
+		if localErr != nil {
+			err.SetError(localErr)
+			return nil
+		}
+		if localTd != nil && bytes.Equal(localTd.encoded, td.encoded) {
 			r.defIdToTypeDef[id] = localTd
 			context.readTypeInfos = append(context.readTypeInfos, typeInfo)
 			return typeInfo
@@ -1661,6 +1644,45 @@ func (r *TypeResolver) readTypeDefInfo(buffer *ByteBuffer, id int64, context *Me
 	r.recordRemoteTypeDef(typeKey)
 	context.readTypeInfos = append(context.readTypeInfos, typeInfo)
 	return typeInfo
+}
+
+func (r *TypeResolver) localTypeInfoForTypeDef(td *TypeDef) *TypeInfo {
+	var typeInfo *TypeInfo
+	if td.registerByName {
+		if td.nsName == nil || td.typeName == nil {
+			return nil
+		}
+		typeInfo = r.nsTypeToTypeInfo[nsTypeKey{td.nsName.Hashcode, td.typeName.Hashcode}]
+		if typeInfo == nil {
+			namespace, nsErr := r.namespaceDecoder.Decode(td.nsName.Data, td.nsName.Encoding)
+			typeName, nameErr := r.typeNameDecoder.Decode(td.typeName.Data, td.typeName.Encoding)
+			if nsErr == nil && nameErr == nil {
+				typeInfo = r.namedTypeToTypeInfo[[2]string{namespace, typeName}]
+			}
+		}
+	} else if td.userTypeId != invalidUserTypeID {
+		typeInfo = r.userTypeIdToTypeInfo[td.userTypeId]
+	}
+	if typeInfo == nil {
+		return nil
+	}
+	if typeInfo.Type != nil && typeInfo.Type.Kind() == reflect.Ptr {
+		if valueInfo := r.typesInfo[typeInfo.Type.Elem()]; valueInfo != nil {
+			typeInfo = valueInfo
+		}
+	}
+	return typeInfo
+}
+
+func (r *TypeResolver) localTypeDef(typeInfo *TypeInfo) (*TypeDef, error) {
+	if typeInfo == nil || typeInfo.Type == nil {
+		return nil, nil
+	}
+	type_ := typeInfo.Type
+	if type_.Kind() == reflect.Ptr {
+		type_ = type_.Elem()
+	}
+	return r.getTypeDef(type_, true)
 }
 
 func (r *TypeResolver) createSerializer(type_ reflect.Type, mapInStruct bool) (s Serializer, err error) {

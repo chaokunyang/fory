@@ -1966,6 +1966,14 @@ TypeResolver::build_enum_type_info(uint32_t type_id, uint32_t user_type_id,
   FORY_TRY(enc_tn, encode_meta_string(entry->type_name, false));
   entry->encoded_type_name = std::move(enc_tn);
 
+  if (register_by_name) {
+    TypeMeta meta = TypeMeta::from_fields(
+        type_id, entry->namespace_name, entry->type_name, register_by_name,
+        entry->user_type_id, std::vector<FieldInfo>{});
+    FORY_TRY(type_def, meta.to_bytes());
+    entry->type_def = std::move(type_def);
+  }
+
   return entry;
 }
 
@@ -2031,6 +2039,14 @@ TypeResolver::build_union_type_info(uint32_t type_id, uint32_t user_type_id,
   entry->encoded_namespace = std::move(enc_ns);
   FORY_TRY(enc_tn, encode_meta_string(entry->type_name, false));
   entry->encoded_type_name = std::move(enc_tn);
+
+  if (register_by_name) {
+    TypeMeta meta = TypeMeta::from_fields(
+        type_id, entry->namespace_name, entry->type_name, register_by_name,
+        entry->user_type_id, std::vector<FieldInfo>{});
+    FORY_TRY(type_def, meta.to_bytes());
+    entry->type_def = std::move(type_def);
+  }
 
   return entry;
 }

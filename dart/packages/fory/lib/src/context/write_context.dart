@@ -172,7 +172,7 @@ final class WriteContext {
   /// Writes a non-null value together with its type metadata.
   void writeNonRef(Object value) {
     final resolved = _typeResolver.resolveValue(value);
-    _writeTypeMeta(resolved, value);
+    _writeTypeMeta(resolved);
     writeResolvedValue(resolved, value, null);
   }
 
@@ -206,7 +206,7 @@ final class WriteContext {
     if (resolved.needsRootRef) {
       _refWriter.reference(value);
     }
-    _writeTypeMeta(resolved, value);
+    _writeTypeMeta(resolved);
     writeResolvedValue(resolved, value, null);
   }
 
@@ -228,7 +228,7 @@ final class WriteContext {
     if (!effectiveTrackRef && resolved.needsRootRef) {
       _refWriter.reference(value);
     }
-    _writeTypeMeta(resolved, value);
+    _writeTypeMeta(resolved);
     writeResolvedValue(resolved, value, null);
   }
 
@@ -246,7 +246,7 @@ final class WriteContext {
     if (value == null) {
       return;
     }
-    _writeTypeMeta(resolved!, value);
+    _writeTypeMeta(resolved!);
     writeResolvedValue(resolved, value, null);
   }
 
@@ -398,32 +398,18 @@ final class WriteContext {
     }
   }
 
-  void _writeTypeMeta(TypeInfo resolved, Object value) {
-    final typeDef = resolved.structSerializer?.typeDefForWrite(
-      this,
-      resolved,
-      value,
-    );
-    if (_typeResolver.writeInitialTypeDefMeta(
-      _buffer,
-      resolved,
-      typeDef: typeDef,
-      typeDefIds: _typeDefIds,
-    )) {
-      return;
-    }
+  void _writeTypeMeta(TypeInfo resolved) {
     _typeResolver.writeTypeMeta(
       _buffer,
       resolved,
-      typeDef: typeDef,
       typeDefIds: _typeDefIds,
       metaStringWriter: _metaStringWriter,
     );
   }
 
   @internal
-  void writeTypeMetaValue(TypeInfo resolved, Object value) {
-    _writeTypeMeta(resolved, value);
+  void writeTypeMetaValue(TypeInfo resolved) {
+    _writeTypeMeta(resolved);
   }
 
   bool _tracksDepth(TypeInfo resolved) {

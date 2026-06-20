@@ -24,6 +24,7 @@ import 'package:fory/fory.dart';
 import 'package:fory/src/codegen/generated_registry.dart';
 import 'package:fory/src/context/meta_string_reader.dart';
 import 'package:fory/src/context/meta_string_writer.dart';
+import 'package:fory/src/meta/field_info.dart';
 import 'package:fory/src/meta/type_def.dart';
 import 'package:fory/src/meta/type_meta.dart';
 import 'package:fory/src/resolver/type_resolver.dart';
@@ -50,6 +51,10 @@ final class _SchemaRemoteA {}
 final class _SchemaRemoteB {}
 
 final class _SchemaRemoteC {}
+
+final class _LateDartExt {}
+
+final class _LateDartHolder {}
 
 const _intFieldType = GeneratedFieldType(
   type: int,
@@ -84,6 +89,16 @@ const _mapFieldType = GeneratedFieldType(
       arguments: <GeneratedFieldType>[],
     ),
   ],
+);
+
+const _lateExtFieldType = GeneratedFieldType(
+  type: _LateDartExt,
+  declaredTypeName: '_LateDartExt',
+  typeId: TypeIds.compatibleStruct,
+  nullable: false,
+  ref: true,
+  dynamic: false,
+  arguments: <GeneratedFieldType>[],
 );
 
 GeneratedFieldInfo _generatedField(String name) => GeneratedFieldInfo(
@@ -124,6 +139,45 @@ void _rememberEnum(Type type) {
   );
 }
 
+void _rememberLateHolder() {
+  _rememberSchema(_LateDartHolder, <GeneratedFieldInfo>[
+    const GeneratedFieldInfo(
+      name: 'value',
+      identifier: 'value',
+      id: null,
+      fieldType: _lateExtFieldType,
+    ),
+  ]);
+}
+
+Uint8List _lateHolderTypeDefBytes({required bool registerExtFirst}) {
+  final resolver = TypeResolver(const Config());
+  _rememberLateHolder();
+  if (registerExtFirst) {
+    resolver.registerSerializer(
+      _LateDartExt,
+      const _CacheTestSerializer(),
+      namespace: 'example',
+      typeName: 'LateDartExt',
+    );
+  }
+  resolver.registerGenerated(
+    _LateDartHolder,
+    namespace: 'example',
+    typeName: 'LateDartHolder',
+  );
+  if (!registerExtFirst) {
+    resolver.registerSerializer(
+      _LateDartExt,
+      const _CacheTestSerializer(),
+      namespace: 'example',
+      typeName: 'LateDartExt',
+    );
+  }
+  final resolved = resolver.resolveUserByName('example', 'LateDartHolder');
+  return resolver.typeDefForResolved(resolved).encoded;
+}
+
 Uint8List _typeMetaBytes(
   Type type,
   String name,
@@ -142,7 +196,6 @@ Uint8List _typeMetaBytes(
   resolver.writeTypeMeta(
     buffer,
     resolved,
-    typeDef: resolved.typeDef,
     typeDefIds: LinkedHashMap<TypeDef, int>.identity(),
     metaStringWriter: MetaStringWriter(),
   );
@@ -163,7 +216,6 @@ Uint8List _enumTypeMetaBytes(Type type, String name) {
   resolver.writeTypeMeta(
     buffer,
     resolved,
-    typeDef: resolved.typeDef,
     typeDefIds: LinkedHashMap<TypeDef, int>.identity(),
     metaStringWriter: MetaStringWriter(),
   );
@@ -263,13 +315,15 @@ void main() {
     });
 
     test('parsed TypeDef cache publishes beyond old implementation floor', () {
-      const resolved = TypeInfo(
+      final resolved = TypeInfo(
         type: Object,
         kind: RegistrationKind.builtin,
         typeId: TypeIds.struct,
         supportsRef: false,
         needsRootRef: false,
         usesNestedTypeDefinitions: false,
+        evolving: false,
+        fields: const <FieldInfo>[],
         serializer: _CacheTestSerializer(),
         structSerializer: null,
         userTypeId: null,
@@ -294,6 +348,13 @@ void main() {
       cache.remember(aboveOldFloor, resolved);
 
       expect(cache.lookup(aboveOldFloor), same(resolved));
+    });
+
+    test('TypeDef uses late registered field type', () {
+      expect(
+        _lateHolderTypeDefBytes(registerExtFirst: false),
+        orderedEquals(_lateHolderTypeDefBytes(registerExtFirst: true)),
+      );
     });
 
     test('remote schema limit rejects extra versions', () {
@@ -338,6 +399,20 @@ void main() {
       final bytes = _enumTypeMetaBytes(_SchemaRemoteA, name);
 
       expect(() => _readTypeMeta(reader, bytes), throwsA(isA<StateError>()));
+    });
+
+    test('exact local named enum TypeDef is accepted', () {
+      const name = 'example.SharedEnum';
+      final reader = TypeResolver(const Config(maxSchemaVersionsPerType: 1));
+      _rememberEnum(_SchemaLocal);
+      reader.registerGenerated(
+        _SchemaLocal,
+        namespace: 'example',
+        typeName: 'SharedEnum',
+      );
+      final bytes = _enumTypeMetaBytes(_SchemaLocal, name);
+
+      _readTypeMeta(reader, bytes);
     });
 
     test('type meta field limit rejects large struct', () {

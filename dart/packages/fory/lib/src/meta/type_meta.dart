@@ -76,7 +76,12 @@ final class TypeHeader {
 
   @pragma('vm:prefer-inline')
   int readMetaSize(Buffer buffer) {
-    final lowBits = value.low32 & 0xff;
+    return readMetaSizeFromHeader(buffer, value);
+  }
+
+  @pragma('vm:prefer-inline')
+  static int readMetaSizeFromHeader(Buffer buffer, Int64 header) {
+    final lowBits = header.low32 & 0xff;
     if (lowBits == 0xff) {
       return 0xff + buffer.readVarUint32Small14();
     }
@@ -85,7 +90,12 @@ final class TypeHeader {
 
   @pragma('vm:prefer-inline')
   void skipRemaining(Buffer buffer) {
-    buffer.skip(readMetaSize(buffer));
+    skipBody(buffer, value);
+  }
+
+  @pragma('vm:prefer-inline')
+  static void skipBody(Buffer buffer, Int64 header) {
+    buffer.skip(readMetaSizeFromHeader(buffer, header));
   }
 
   @pragma('vm:prefer-inline')
@@ -104,17 +114,19 @@ final class TypeHeader {
 final class ParsedTypeMetaCache {
   final LinkedHashMap<Int64, TypeInfo> _entries =
       LinkedHashMap<Int64, TypeInfo>();
-  Int64? _cachedHeader;
   TypeInfo? _cachedTypeInfo;
 
   @pragma('vm:prefer-inline')
   TypeInfo? lookup(TypeHeader header) {
-    if (_cachedHeader == header.value) {
-      return _cachedTypeInfo;
+    // The hot hint is one TypeInfo object. The validated TypeDef header lives
+    // on that metadata object; do not add parallel header slots, sentinel
+    // fields, accepted-header state, or body/hash/schema checks to this path.
+    final cached = _cachedTypeInfo;
+    if (cached != null && cached.cachedTypeDefHeader == header.value) {
+      return cached;
     }
     final resolved = _entries[header.value];
     if (resolved != null) {
-      _cachedHeader = header.value;
       _cachedTypeInfo = resolved;
     }
     return resolved;
@@ -122,15 +134,7 @@ final class ParsedTypeMetaCache {
 
   @pragma('vm:prefer-inline')
   void remember(TypeHeader header, TypeInfo resolved) {
-    final cached = _entries[header.value];
-    if (cached != null) {
-      _entries[header.value] = resolved;
-      _cachedHeader = header.value;
-      _cachedTypeInfo = resolved;
-      return;
-    }
     _entries[header.value] = resolved;
-    _cachedHeader = header.value;
     _cachedTypeInfo = resolved;
   }
 }
@@ -193,7 +197,7 @@ final class WireTypeMetaEncoder {
         }
         return resolvedType.isNamed ? TypeIds.namedUnion : TypeIds.union;
       case RegistrationKind.struct:
-        final compatibleStruct = compatible && resolvedType.typeDef!.evolving;
+        final compatibleStruct = compatible && resolvedType.evolving;
         if (compatibleStruct) {
           return resolvedType.isNamed
               ? TypeIds.namedCompatibleStruct

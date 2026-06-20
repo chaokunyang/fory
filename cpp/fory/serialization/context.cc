@@ -560,7 +560,8 @@ Result<const TypeInfo *, Error> ReadContext::read_type_meta() {
   if (has_cached_meta_header_ && meta_header == cached_meta_header_) {
     // Header-cache hits intentionally skip without rehashing. Entries reach
     // this cache only after a successful TypeMeta parse and 52-bit
-    // metadata-hash validation.
+    // metadata-hash validation. Do not add body/hash/schema-limit/exact-local
+    // checks here; the miss path owns them before publish.
     const TypeInfo *cached = cached_meta_type_info_;
     reading_type_infos_.push_back(cached);
     FORY_RETURN_NOT_OK(
@@ -572,7 +573,8 @@ Result<const TypeInfo *, Error> ReadContext::read_type_meta() {
   if (cache_entry != nullptr) {
     // Header-cache hits intentionally skip without rehashing. Entries reach
     // this cache only after a successful TypeMeta parse and 52-bit
-    // metadata-hash validation.
+    // metadata-hash validation. Do not add body/hash/schema-limit/exact-local
+    // checks here; the miss path owns them before publish.
     const TypeInfo *cached = cache_entry->second;
     reading_type_infos_.push_back(cached);
     has_cached_meta_header_ = true;
@@ -614,14 +616,7 @@ Result<const TypeInfo *, Error> ReadContext::read_type_meta() {
     }
   }
 
-  const bool exact_local_allowed =
-      parsed_meta->type_id == static_cast<uint32_t>(TypeId::STRUCT) ||
-      parsed_meta->type_id ==
-          static_cast<uint32_t>(TypeId::COMPATIBLE_STRUCT) ||
-      parsed_meta->type_id == static_cast<uint32_t>(TypeId::NAMED_STRUCT) ||
-      parsed_meta->type_id ==
-          static_cast<uint32_t>(TypeId::NAMED_COMPATIBLE_STRUCT);
-  if (local_type_info && exact_local_allowed) {
+  if (local_type_info) {
     const auto &local_type_def = local_type_info->type_def;
     const size_t remote_type_def_size =
         static_cast<size_t>(type_def_end - type_def_start);

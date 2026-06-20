@@ -72,16 +72,8 @@ final class StructSerializer extends Serializer<Object?> {
 
   List<SerializationFieldInfo> get localFields => _localFields;
 
-  TypeDef typeDefForWrite(
-    WriteContext context,
-    TypeInfo resolved,
-    Object value,
-  ) {
-    return resolved.typeDef!;
-  }
-
   void writeValue(WriteContext context, TypeInfo resolved, Object value) {
-    if (context.config.checkStructVersion) {
+    if (!context.config.compatible && context.config.checkStructVersion) {
       context.buffer.writeUint32(schemaHash(_typeDef));
     }
     _payloadSerializer.write(context, value);
@@ -93,9 +85,9 @@ final class StructSerializer extends Serializer<Object?> {
     TypeInfo resolved, {
     bool hasCurrentPreservedRef = false,
   }) {
-    if (context.config.compatible &&
-        resolved.isCompatibleStruct &&
-        resolved.remoteTypeDef != null) {
+    if (resolved.remoteTypeDef != null &&
+        context.config.compatible &&
+        resolved.isCompatibleStruct) {
       return _readCompatible(context, resolved);
     }
     return readSameTypeValue(context, resolved);
@@ -103,7 +95,7 @@ final class StructSerializer extends Serializer<Object?> {
 
   @pragma('vm:prefer-inline')
   Object readSameTypeValue(ReadContext context, TypeInfo resolved) {
-    if (context.config.checkStructVersion) {
+    if (!context.config.compatible && context.config.checkStructVersion) {
       final expected = schemaHash(_typeDef);
       final actual = context.buffer.readUint32();
       if (actual != expected) {

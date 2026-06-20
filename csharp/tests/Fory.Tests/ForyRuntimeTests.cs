@@ -85,6 +85,33 @@ public sealed class NonPrimitiveFieldOrder
     public int IntValue { get; set; }
 }
 
+public sealed class LateTypeMetaExt
+{
+    public int Value { get; set; }
+}
+
+public sealed class LateTypeMetaExtSerializer : Serializer<LateTypeMetaExt>
+{
+    public override LateTypeMetaExt DefaultValue => null!;
+
+    public override void WriteData(WriteContext context, in LateTypeMetaExt value, bool hasGenerics)
+    {
+        _ = hasGenerics;
+        context.Writer.WriteVarInt32(value?.Value ?? 0);
+    }
+
+    public override LateTypeMetaExt ReadData(ReadContext context)
+    {
+        return new LateTypeMetaExt { Value = context.Reader.ReadVarInt32() };
+    }
+}
+
+[ForyStruct]
+public sealed class LateTypeMetaHolder
+{
+    public LateTypeMetaExt Value { get; set; } = new();
+}
+
 [ForyStruct]
 public sealed class SchemaNumbers
 {
@@ -1139,6 +1166,14 @@ public sealed class ForyRuntimeTests
         Assert.Equal(
             ["int_value", "map_value", "string_value", "binary_value", "custom_value"],
             fieldNames);
+    }
+
+    [Fact]
+    public void TypeMetaUsesLateRegisteredFieldType()
+    {
+        Assert.Equal(
+            LateHolderTypeMetaBytes(registerExtFirst: true),
+            LateHolderTypeMetaBytes(registerExtFirst: false));
     }
 
     [Fact]
@@ -2893,5 +2928,30 @@ public sealed class ForyRuntimeTests
         Assert.Equal(expected.U16Nullable, actual.U16Nullable);
         Assert.Equal(expected.U32Nullable, actual.U32Nullable);
         Assert.Equal(expected.U64Nullable, actual.U64Nullable);
+    }
+
+    private static byte[] LateHolderTypeMetaBytes(bool registerExtFirst)
+    {
+        TypeResolver resolver = new();
+        if (registerExtFirst)
+        {
+            RegisterLateTypeMetaExt(resolver);
+        }
+
+        resolver.Register(typeof(LateTypeMetaHolder), "example", "LateTypeMetaHolder");
+        if (!registerExtFirst)
+        {
+            RegisterLateTypeMetaExt(resolver);
+        }
+
+        return resolver.GetTypeInfo(typeof(LateTypeMetaHolder))
+            .GetTypeMetaCacheEntry(trackRef: false)
+            .EncodedBytes;
+    }
+
+    private static void RegisterLateTypeMetaExt(TypeResolver resolver)
+    {
+        TypeInfo typeInfo = TypeInfo.Create(typeof(LateTypeMetaExt), new LateTypeMetaExtSerializer());
+        resolver.Register(typeof(LateTypeMetaExt), "example", "LateTypeMetaExt", typeInfo);
     }
 }

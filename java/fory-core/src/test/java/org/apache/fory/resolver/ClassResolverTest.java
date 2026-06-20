@@ -369,6 +369,26 @@ public class ClassResolverTest extends ForyTestBase {
   }
 
   @Test
+  public void testMetaLoadClassChecksDisallowedList() {
+    String className = ProcessBuilder.class.getName();
+    CountingClassLoader classLoader =
+        new CountingClassLoader(ClassResolverTest.class.getClassLoader(), className);
+    Fory reader =
+        Fory.builder()
+            .withXlang(false)
+            .requireClassRegistration(false)
+            .withCompatible(false)
+            .withMetaShare(true)
+            .withClassLoader(classLoader)
+            .build();
+    ClassResolver resolver = (ClassResolver) reader.getTypeResolver();
+
+    Assert.assertThrows(
+        InsecureException.class, () -> resolver.loadClassForMeta(className, false, -1));
+    assertEquals(classLoader.loadCount, 0);
+  }
+
+  @Test
   public void testRemoteSchemaVersionLimitByType() {
     ForyBuilder builder =
         Fory.builder()
@@ -429,6 +449,37 @@ public class ClassResolverTest extends ForyTestBase {
     assertSame(first, sharedRegistry.getOrCreateRemoteTypeDef(first, "remote.Enum"));
     Assert.assertThrows(
         ForyException.class, () -> sharedRegistry.getOrCreateRemoteTypeDef(second, "remote.Enum"));
+  }
+
+  @Test
+  public void testExactLocalEnumTypeDefBypassesLimit() {
+    ForyBuilder builder =
+        Fory.builder()
+            .withXlang(true)
+            .requireClassRegistration(true)
+            .withCompatible(false)
+            .withMetaShare(true)
+            .withMaxSchemaVersionsPerType(1);
+    finishBuilder(builder);
+    SharedRegistry sharedRegistry = new SharedRegistry();
+    Fory fory = new Fory(builder, ClassResolverTest.class.getClassLoader(), sharedRegistry);
+    fory.register(TestNeedToWriteReferenceClass.class, "test.Enum");
+    fory.register(OtherTestNeedToWriteReferenceClass.class, "test.OtherEnum");
+    TypeResolver resolver = fory.getTypeResolver();
+    TypeDef exact = resolver.getTypeDef(TestNeedToWriteReferenceClass.class, true);
+    TypeDef other = TypeDef.buildTypeDef(resolver, OtherTestNeedToWriteReferenceClass.class);
+
+    ReadContext readContext = fory.getReadContext();
+    readContext.setMetaReadContext(new MetaReadContext());
+    MemoryBuffer buffer = MemoryBuffer.newHeapBuffer(256);
+    readContext.prepare(buffer, null, false);
+    buffer.writeVarUInt32(0);
+    exact.writeTypeDef(buffer);
+    buffer.readerIndex(0);
+
+    assertSame(
+        resolver.readSharedClassMeta(readContext).getType(), TestNeedToWriteReferenceClass.class);
+    assertSame(other, sharedRegistry.getOrCreateRemoteTypeDef(other, "test.Enum"));
   }
 
   @Test
@@ -626,6 +677,24 @@ public class ClassResolverTest extends ForyTestBase {
       finish.invoke(builder);
     } catch (ReflectiveOperationException e) {
       throw new AssertionError(e);
+    }
+  }
+
+  private static final class CountingClassLoader extends ClassLoader {
+    private final String countedClassName;
+    private int loadCount;
+
+    private CountingClassLoader(ClassLoader parent, String countedClassName) {
+      super(parent);
+      this.countedClassName = countedClassName;
+    }
+
+    @Override
+    protected Class<?> loadClass(String name, boolean resolve) throws ClassNotFoundException {
+      if (countedClassName.equals(name)) {
+        loadCount++;
+      }
+      return super.loadClass(name, resolve);
     }
   }
 

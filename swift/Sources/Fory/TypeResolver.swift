@@ -199,7 +199,6 @@ public final class TypeInfo: @unchecked Sendable {
   public private(set) var typeMeta: TypeMeta?
   public var compatibleTypeMeta: TypeMeta? { remoteCompatibleTypeMeta ?? typeMeta }
   private(set) var typeDefBytes: [UInt8]?
-  private(set) var firstTypeDefBytes: [UInt8]?
   private(set) var typeDefHeader: UInt64?
   public private(set) var typeDefHeaderHash: UInt64?
   public private(set) var typeDefHasUserTypeFields: Bool
@@ -223,7 +222,6 @@ public final class TypeInfo: @unchecked Sendable {
     typeMeta: TypeMeta? = nil,
     compatibleTypeMeta: TypeMeta? = nil,
     typeDefBytes: [UInt8]? = nil,
-    firstTypeDefBytes: [UInt8]? = nil,
     typeDefHeader: UInt64? = nil,
     typeDefHeaderHash: UInt64? = nil,
     typeDefHasUserTypeFields: Bool = true,
@@ -241,7 +239,6 @@ public final class TypeInfo: @unchecked Sendable {
     self.remoteCompatibleTypeMeta = compatibleTypeMeta
     self.typeMeta = typeMeta
     self.typeDefBytes = typeDefBytes
-    self.firstTypeDefBytes = firstTypeDefBytes
     self.typeDefHeader = typeDefHeader
     self.typeDefHeaderHash = typeDefHeaderHash
     self.typeDefHasUserTypeFields = typeDefHasUserTypeFields
@@ -319,7 +316,6 @@ public final class TypeInfo: @unchecked Sendable {
       typeMeta: typeInfo.typeMeta,
       compatibleTypeMeta: compatibleTypeMeta,
       typeDefBytes: typeInfo.typeDefBytes,
-      firstTypeDefBytes: typeInfo.firstTypeDefBytes,
       typeDefHeader: typeInfo.typeDefHeader,
       typeDefHeaderHash: typeInfo.typeDefHeaderHash,
       typeDefHasUserTypeFields: typeInfo.typeDefHasUserTypeFields,
@@ -361,10 +357,6 @@ public final class TypeInfo: @unchecked Sendable {
       fields: fields
     )
     let typeDefBytes = try typeMeta.encode()
-    var firstTypeDefBytes = [UInt8]()
-    firstTypeDefBytes.reserveCapacity(typeDefBytes.count + 1)
-    firstTypeDefBytes.append(0)
-    firstTypeDefBytes.append(contentsOf: typeDefBytes)
     let typeDefHeader = try encodedTypeDefHeader(typeDefBytes)
     let typeDefHeaderHash = try encodedTypeDefHeaderHash(typeDefBytes)
     self.typeMeta = try TypeMeta(
@@ -377,7 +369,6 @@ public final class TypeInfo: @unchecked Sendable {
       headerHash: typeDefHeaderHash
     )
     self.typeDefBytes = typeDefBytes
-    self.firstTypeDefBytes = firstTypeDefBytes
     self.typeDefHeader = typeDefHeader
     self.typeDefHeaderHash = typeDefHeaderHash
     self.typeDefHasUserTypeFields = encodedTypeDefHasUserTypeFields(fields)

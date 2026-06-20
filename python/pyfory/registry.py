@@ -144,7 +144,7 @@ from pyfory._fory import (
     NO_TYPE_ID,
     NO_USER_TYPE_ID,
 )
-from pyfory.meta.typedef import TypeDef, is_named_typedef_kind, is_struct_typedef_kind
+from pyfory.meta.typedef import TypeDef, is_named_typedef_kind
 from pyfory.meta.typedef_decoder import decode_typedef, skip_typedef
 from pyfory.meta.typedef_encoder import encode_typedef
 
@@ -769,16 +769,6 @@ class TypeResolver:
                 if type_id not in self._type_id_to_type_info or not internal:
                     self._type_id_to_type_info[type_id] = typeinfo
         self._types_info[cls] = typeinfo
-        # Create TypeDef for named non-struct types when meta_share is enabled
-        if self.meta_share and type_id is not None:
-            if type_id in (TypeId.NAMED_ENUM, TypeId.NAMED_EXT, TypeId.NAMED_UNION):
-                type_def = encode_typedef(
-                    self._actual_type_resolver,
-                    cls,
-                    include_fields=is_struct_type(type_id),
-                )
-                if type_def is not None:
-                    typeinfo.type_def = type_def
         return typeinfo
 
     def _next_type_id(self):
@@ -1246,7 +1236,8 @@ class TypeResolver:
         type_info = self._meta_shared_type_info.get(header)
         if type_info is not None:
             # Header-cache hits intentionally skip without rehashing. Entries reach this cache only
-            # after a successful TypeDef parse and 52-bit metadata-hash validation.
+            # after a successful TypeDef parse and 52-bit metadata-hash validation. Do not add
+            # body/hash/schema-limit/exact-local checks here; the miss path owns them before publish.
             skip_typedef(buffer, header)
             return type_info
         return self._read_uncached_type_info(buffer, header)
@@ -1257,11 +1248,7 @@ class TypeResolver:
         if local_type_info is not None:
             if local_type_info.type_def is None:
                 self._set_type_info(local_type_info)
-            if (
-                is_struct_typedef_kind(type_def.type_id)
-                and local_type_info.type_def is not None
-                and local_type_info.type_def.encoded == type_def.encoded
-            ):
+            if local_type_info.type_def is not None and local_type_info.type_def.encoded == type_def.encoded:
                 self._meta_shared_type_info[header] = local_type_info
                 return local_type_info
         type_key = self._check_remote_type_def_limit(type_def)

@@ -288,7 +288,10 @@ function nonStructTypeId(kindCode: number): number {
   }
 }
 export class TypeMeta {
-  private headerHash: number | null;
+  // The 52-bit TypeMeta header hash is the checked metadata identity. It is
+  // precise in JS Number and already includes the low header bits as hash input;
+  // hot cache hits must compare this value directly without extra low-bit state.
+  headerHash: number | null;
   private readonly compressed: boolean;
   private bytes: Uint8Array | null = null;
 

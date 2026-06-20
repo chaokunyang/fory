@@ -195,6 +195,14 @@ Metadata readers should:
 - Avoid unbounded table growth from attacker-controlled metadata streams.
 - Validate metadata bodies before using them to bypass or replace existing
   policy decisions.
+- For Java metadata paths, keep name-level checks such as `TypeChecker` and the
+  disallowed-class list before `Class.forName` by routing remote class-name
+  loading through the existing `TypeResolver.loadClass` owner. Do not bypass
+  that owner with direct class loading from TypeDef or TypeMeta names. Other
+  deserialization checks that require a materialized `Class<?>`, such as
+  post-load class policy checks, remain after loading; do not move them earlier
+  or replace them with string-only approximations that change registration,
+  dynamic-loading, or unknown-type semantics.
 - Reset or release metadata state at the correct root-operation boundary.
 
 Remote metadata that can create persistent read state must be bounded before
@@ -206,6 +214,17 @@ cache hits or generated field readers must not add validation, hashing,
 allocation, or policy work for these limits. The concrete sequence for metadata
 parsing, cache publishing, exact-local matching, and counting belongs to the
 [xlang implementation guide](../specification/xlang_implementation_guide.md).
+
+The checked metadata cache is the only owner of whether a received TypeDef or
+TypeMeta header has already been validated. A metadata cache hit means the
+header was previously parsed, body/hash-validated, policy-checked, and
+published by the owning cache, so the reader must skip the remaining metadata
+body and use the cached metadata without repeating body validation, hash
+validation, limit checks, exact-local checks, or policy work. A metadata cache
+miss is the only path that parses the metadata body, validates its hash and
+shape, enforces metadata limits, performs exact-local byte comparison, and
+publishes to the cache. Do not add separate nullable flags, sentinel headers,
+per-TypeInfo acceptance markers, or parallel state to represent this decision.
 
 Only metadata that is actually carried as a TypeDef or TypeMeta body is subject
 to metadata body and schema-version limits. Compatible named enum, ext, and

@@ -58,10 +58,17 @@ Apache Fory is a multi-language serialization framework with multiple wire forma
   versions; compatible named enum/ext/union metadata normally has one version but still counts
   against remote metadata total limits when it is sent as shared metadata. Pure id-based enum, ext,
   and typed-union values use type id plus user type id and must not be moved onto this metadata
-  cache path. Exact-local metadata bypass applies only to struct schemas with matching encoded
-  bytes, not to named enum/ext/union metadata. A runtime may skip a received metadata body by header
-  only after that same owning remote metadata cache has validated a previous body for that header;
-  locally registered metadata alone is not a remote body validation.
+  cache path. Exact-local metadata bypass is not struct-only: after the existing type and
+  deserialization-policy checks for the selected local type, compare the original received encoded
+  bytes with the local encoded metadata bytes, and allow exact matches for struct and named
+  enum/ext/union metadata without consuming remote schema-version limits. Derive the local
+  exact-match candidate inside the metadata owner from the decoded `userTypeId` or
+  `(namespace, typeName)` identity; do not add caller-threaded expected-type parameters only for
+  this check in any runtime. Java and Python may lazy-build local metadata bytes only after this
+  identity lookup selects a local class and the existing class, registration, and deserialization
+  policy checks have run. A runtime may skip a received metadata body by header only after that
+  same owning remote metadata cache has validated a previous body for that header; locally
+  registered metadata alone is not a remote body validation.
 - Remote metadata body and struct field-count limits are also cold-path resource controls.
   `maxTypeMetaBytes` limits one received TypeDef or TypeMeta body excluding the 8-byte header and
   extended-size varint; `maxTypeFields` limits one received struct metadata body's field count

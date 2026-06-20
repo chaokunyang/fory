@@ -31,6 +31,7 @@
 #include <map>
 #include <string>
 #include <thread>
+#include <variant>
 #include <vector>
 
 #include "fory/type/type.h"
@@ -1036,6 +1037,48 @@ TEST(SerializationTest, RemoteNonStructTypeMetaUsesSchemaLimit) {
   EXPECT_FALSE(second.ok());
   ASSERT_FALSE(second.ok());
   EXPECT_EQ(second.error().code(), ErrorCode::InvalidData);
+}
+
+TEST(SerializationTest, ExactLocalNonStructTypeMetaBypassesLimit) {
+  auto fory = Fory::builder()
+                  .xlang(true)
+                  .compatible(true)
+                  .max_schema_versions_per_type(1)
+                  .build();
+  ASSERT_TRUE(
+      fory.register_enum<SignedScopedStatus>("example", "SharedEnum").ok());
+  auto local_type_info =
+      fory.type_resolver().get_type_info<SignedScopedStatus>();
+  ASSERT_TRUE(local_type_info.ok()) << local_type_info.error().to_string();
+  std::vector<uint8_t> exact = local_type_info.value()->type_def;
+  ReadContext ctx(fory.config(), fory.type_resolver().clone());
+
+  auto first = append_and_read_type_meta(ctx, exact);
+  ASSERT_TRUE(first.ok()) << first.error().to_string();
+  auto second = append_and_read_type_meta(
+      ctx, make_remote_non_struct_type_meta(TypeId::NAMED_EXT, "SharedEnum"));
+  ASSERT_TRUE(second.ok()) << second.error().to_string();
+}
+
+TEST(SerializationTest, ExactLocalNamedUnionTypeMetaBypassesLimit) {
+  using LocalUnion = std::variant<int32_t, std::string>;
+  auto fory = Fory::builder()
+                  .xlang(true)
+                  .compatible(true)
+                  .max_schema_versions_per_type(1)
+                  .build();
+  ASSERT_TRUE(fory.register_union<LocalUnion>("example", "SharedUnion").ok());
+  auto local_type_info = fory.type_resolver().get_type_info<LocalUnion>();
+  ASSERT_TRUE(local_type_info.ok()) << local_type_info.error().to_string();
+  std::vector<uint8_t> exact = local_type_info.value()->type_def;
+  ASSERT_FALSE(exact.empty());
+  ReadContext ctx(fory.config(), fory.type_resolver().clone());
+
+  auto first = append_and_read_type_meta(ctx, exact);
+  ASSERT_TRUE(first.ok()) << first.error().to_string();
+  auto second = append_and_read_type_meta(
+      ctx, make_remote_non_struct_type_meta(TypeId::NAMED_EXT, "SharedUnion"));
+  ASSERT_TRUE(second.ok()) << second.error().to_string();
 }
 
 TEST(SerializationTest, RemoteSchemaLimitKeepsUnknownTypesSeparate) {

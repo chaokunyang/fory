@@ -681,6 +681,27 @@ public sealed class RuntimeEdgeCaseTests
     }
 
     [Fact]
+    public void ExactNonStructTypeMetaBypassesLimit()
+    {
+        TypeResolver resolver = new();
+        resolver.Register(typeof(TestColor), "example", "SharedEnum");
+        Config config = ForyRuntime.Builder()
+            .Compatible(true)
+            .MaxSchemaVersionsPerType(1)
+            .Build()
+            .Config;
+        ReadContext context = new(new ByteReader(Array.Empty<byte>()), resolver, config);
+        TypeInfo typeInfo = resolver.GetTypeInfo(typeof(TestColor));
+        TypeMeta exact = typeInfo.GetTypeMetaCacheEntry(trackRef: false).TypeMeta;
+
+        ReadAndStoreTypeMeta(context, exact);
+
+        TypeMeta remote = RemoteNamedNonStructTypeMeta(TypeId.NamedExt, "SharedEnum");
+        ReadAndStoreTypeMeta(context, remote);
+        Assert.True(context.TryGetTypeMetaByHeader(EncodedTypeMetaHeader(remote), out _));
+    }
+
+    [Fact]
     public void TypeMetaHeaderCacheHitSkipsCurrentBodySize()
     {
         const ulong header = 0xffUL;

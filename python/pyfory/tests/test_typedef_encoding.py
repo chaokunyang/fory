@@ -82,6 +82,16 @@ class SimpleTypeDef:
 
 
 @dataclass
+class LateTypeDefNested:
+    value: int
+
+
+@dataclass
+class LateTypeDefHolder:
+    value: LateTypeDefNested
+
+
+@dataclass
 class NestedEncodingTypeDef:
     """TypeDef with nested primitive encoding overrides."""
 
@@ -489,6 +499,26 @@ def test_exact_local_struct_typedef_populates_cache(xlang):
 
 
 @pytest.mark.parametrize("xlang", [False, True])
+def test_exact_local_non_struct_typedef_bypasses_schema_limit(xlang):
+    reader = Fory(
+        xlang=xlang,
+        strict=False,
+        compatible=True,
+        max_schema_versions_per_type=1,
+    )
+    reader.register(IdLimitEnum, name="example.RemoteEnum")
+    type_id, _ = reader.type_resolver.get_registered_type_ids(IdLimitEnum)
+    encoded = encode_typedef(reader.type_resolver, IdLimitEnum).encoded
+
+    type_info = _read_remote_typedef(reader, type_id, encoded)
+    assert type_info.cls is IdLimitEnum
+
+    if hasattr(reader.type_resolver, "_check_remote_type_def_limit"):
+        second = TypeDef("example", "RemoteEnum", IdLimitEnum, TypeId.NAMED_EXT, [])
+        reader.type_resolver._check_remote_type_def_limit(second)
+
+
+@pytest.mark.parametrize("xlang", [False, True])
 def test_id_enum_does_not_use_type_meta_limits(xlang):
     fory = Fory(
         xlang=xlang,
@@ -631,6 +661,16 @@ def test_nested_container_typedef_preserves_declared_encoding():
     assert decoded_values_field.field_type.key_type.type_id == TypeId.INT32
     assert decoded_values_field.field_type.value_type.type_id == TypeId.LIST
     assert decoded_values_field.field_type.value_type.element_type.type_id == TypeId.TAGGED_INT64
+
+
+def test_typedef_uses_late_registered_field_type():
+    fory = Fory(xlang=True, compatible=True)
+    fory.register(LateTypeDefHolder, name="example.LateTypeDefHolder")
+    fory.register(LateTypeDefNested, name="example.LateTypeDefNested")
+
+    typedef = encode_typedef(fory.type_resolver, LateTypeDefHolder)
+    field = next(field for field in typedef.fields if field.name == "value")
+    assert field.field_type.type_id == TypeId.NAMED_COMPATIBLE_STRUCT
 
 
 def test_python_array_typehint_lowering_keeps_list_schema_distinct():

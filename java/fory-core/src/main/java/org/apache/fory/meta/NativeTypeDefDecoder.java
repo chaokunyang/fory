@@ -166,6 +166,8 @@ class NativeTypeDefDecoder {
           classSpec = new ClassSpec(cls, typeId, resolver.getUserTypeIdForTypeDef(cls));
           currentClass = cls;
         } else {
+          // `loadClassForMeta` keeps name-level checks before Class.forName; do not replace this
+          // metadata path with direct class loading from the remote TypeDef name.
           Class<?> cls =
               resolver.loadClassForMeta(
                   decodedSpec.entireClassName, decodedSpec.isEnum, decodedSpec.dimension);

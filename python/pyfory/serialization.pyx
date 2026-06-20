@@ -42,7 +42,6 @@ from pyfory._fory import (
     NOT_NULL_INT64_FLAG,
 )
 from pyfory.meta.typedef_decoder import decode_typedef
-from pyfory.meta.typedef import is_struct_typedef_kind
 from pyfory.meta.metastring import MetaStringDecoder
 from pyfory.policy import DEFAULT_POLICY
 from pyfory.resolver import NULL_FLAG, NOT_NULL_VALUE_FLAG
@@ -549,7 +548,8 @@ cdef class TypeResolver:
         cdef TypeInfo typeinfo = self._meta_shared_type_info.get(header)
         if typeinfo is not None:
             # Header-cache hits intentionally skip without rehashing. Entries reach this cache only
-            # after a successful TypeDef parse and 52-bit metadata-hash validation.
+            # after a successful TypeDef parse and 52-bit metadata-hash validation. Do not add
+            # body/hash/schema-limit/exact-local checks here; the miss path owns them before publish.
             _skip_typedef_fast(buffer, header)
             return typeinfo
         return self._read_uncached_type_info(buffer, header)
@@ -564,8 +564,7 @@ cdef class TypeResolver:
             if typeinfo.type_def is None:
                 self.resolver._set_type_info(typeinfo)
             if (
-                is_struct_typedef_kind(type_def.type_id)
-                and typeinfo.type_def is not None
+                typeinfo.type_def is not None
                 and typeinfo.type_def.encoded == type_def.encoded
             ):
                 self._meta_shared_type_info[header] = typeinfo

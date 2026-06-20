@@ -220,7 +220,7 @@ final class ReadContext {
     final typeMetaResolved =
         expectedRootType == null
             ? _readTypeMeta()
-            : _typeResolver.readExpectedInitialTypeDefMeta(
+            : _typeResolver.readExpectedTypeDefMeta(
                   _buffer,
                   expectedRootType,
                   sharedTypes: _sharedTypes,

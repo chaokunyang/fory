@@ -21,7 +21,6 @@ use crate::error::Error;
 use crate::meta::TypeMeta;
 use crate::resolver::type_resolver::NO_USER_TYPE_ID;
 use crate::resolver::{TypeInfo, TypeResolver};
-use crate::type_id::{COMPATIBLE_STRUCT, NAMED_COMPATIBLE_STRUCT, NAMED_STRUCT, STRUCT};
 use std::collections::HashMap;
 use std::rc::Rc;
 
@@ -154,14 +153,18 @@ impl MetaReaderResolver {
                 .filter(|_| self.cached_meta_header == meta_header)
             {
                 // Header-cache hits intentionally skip without rehashing. Entries reach this cache
-                // only after a successful TypeMeta parse and 52-bit metadata-hash validation.
+                // only after a successful TypeMeta parse and 52-bit metadata-hash validation. Do
+                // not add body/hash/schema-limit/exact-local checks here; the miss path owns them
+                // before publish.
                 self.reading_type_infos.push(type_info.clone());
                 TypeMeta::skip_bytes_for_validated_header(reader, meta_header)?;
                 return Ok(type_info.clone());
             }
             if let Some(type_info) = self.parsed_type_infos.get(&meta_header) {
                 // Header-cache hits intentionally skip without rehashing. Entries reach this cache
-                // only after a successful TypeMeta parse and 52-bit metadata-hash validation.
+                // only after a successful TypeMeta parse and 52-bit metadata-hash validation. Do
+                // not add body/hash/schema-limit/exact-local checks here; the miss path owns them
+                // before publish.
                 self.cached_meta_header = meta_header;
                 self.cached_type_info = Some(type_info.clone());
                 self.reading_type_infos.push(type_info.clone());
@@ -202,18 +205,12 @@ impl MetaReaderResolver {
         let namespace = type_meta.get_namespace();
         let type_name = type_meta.get_type_name();
         let register_by_name = !namespace.original.is_empty() || !type_name.original.is_empty();
-        let exact_local_allowed = matches!(
-            type_meta.get_type_id(),
-            STRUCT | COMPATIBLE_STRUCT | NAMED_STRUCT | NAMED_COMPATIBLE_STRUCT
-        );
         let mut remote_schema_key = None;
         let type_info = if register_by_name {
             if let Some(local_type_info) =
                 type_resolver.get_type_info_by_name(&namespace.original, &type_name.original)
             {
-                if exact_local_allowed
-                    && local_type_info.get_type_meta_ref().get_bytes() == remote_type_def
-                {
+                if local_type_info.get_type_meta_ref().get_bytes() == remote_type_def {
                     local_type_info
                 } else {
                     remote_schema_key =
@@ -243,9 +240,7 @@ impl MetaReaderResolver {
                 type_resolver.get_type_info_by_id(type_id)
             };
             if let Some(local_type_info) = local_type_info {
-                if exact_local_allowed
-                    && local_type_info.get_type_meta_ref().get_bytes() == remote_type_def
-                {
+                if local_type_info.get_type_meta_ref().get_bytes() == remote_type_def {
                     local_type_info
                 } else {
                     remote_schema_key =
@@ -343,15 +338,53 @@ impl MetaReaderResolver {
 mod tests {
     use super::*;
     use crate::config::Config;
+    use crate::context::{ReadContext, WriteContext};
     use crate::meta::{
         FieldInfo, FieldType, MetaString, NAMESPACE_ENCODER, NAMESPACE_ENCODINGS,
         TYPE_NAME_ENCODER, TYPE_NAME_ENCODINGS,
     };
+    use crate::serializer::{ForyDefault, Serializer};
     use crate::TypeId;
+
+    struct LocalExt;
+
+    impl ForyDefault for LocalExt {
+        fn fory_default() -> Self {
+            LocalExt
+        }
+    }
+
+    impl Serializer for LocalExt {
+        fn fory_write_data(&self, _context: &mut WriteContext) -> Result<(), Error> {
+            Ok(())
+        }
+
+        fn fory_read_data(_context: &mut ReadContext) -> Result<Self, Error> {
+            Ok(LocalExt)
+        }
+
+        fn fory_type_id_dyn(&self, type_resolver: &TypeResolver) -> Result<TypeId, Error> {
+            Self::fory_get_type_id(type_resolver)
+        }
+
+        fn as_any(&self) -> &dyn std::any::Any {
+            self
+        }
+    }
 
     fn read_type_def(
         resolver: &mut MetaReaderResolver,
         config: &Config,
+        type_def: &[u8],
+    ) -> Result<Rc<TypeInfo>, Error> {
+        let type_resolver = TypeResolver::default();
+        read_type_def_with_type_resolver(resolver, config, &type_resolver, type_def)
+    }
+
+    fn read_type_def_with_type_resolver(
+        resolver: &mut MetaReaderResolver,
+        config: &Config,
+        type_resolver: &TypeResolver,
         type_def: &[u8],
     ) -> Result<Rc<TypeInfo>, Error> {
         let mut bytes = vec![];
@@ -359,7 +392,7 @@ mod tests {
         writer.write_var_u32(0);
         writer.write_bytes(type_def);
         let mut reader = Reader::new(&bytes);
-        resolver.read_type_meta(&mut reader, &TypeResolver::default(), config)
+        resolver.read_type_meta(&mut reader, type_resolver, config)
     }
 
     #[test]
@@ -594,5 +627,44 @@ mod tests {
             .unwrap_err()
             .to_string();
         assert!(err.contains("max_schema_versions_per_type"));
+    }
+
+    #[test]
+    fn exact_local_non_struct_type_meta_bypasses_limit() {
+        let config = Config {
+            max_schema_versions_per_type: 1,
+            ..Default::default()
+        };
+        let mut type_resolver = TypeResolver::default();
+        type_resolver
+            .register_serializer_by_name::<LocalExt>("example.SharedExt")
+            .unwrap();
+        let type_resolver = type_resolver.build_final_type_resolver().unwrap();
+        let local_info = type_resolver
+            .get_type_info_by_name("example", "SharedExt")
+            .unwrap();
+        let exact = local_info.get_type_meta_ref().get_bytes().to_vec();
+
+        let mut resolver = MetaReaderResolver::default();
+        read_type_def_with_type_resolver(&mut resolver, &config, &type_resolver, &exact).unwrap();
+
+        let namespace = NAMESPACE_ENCODER
+            .encode_with_encodings("example", NAMESPACE_ENCODINGS)
+            .unwrap();
+        let type_name = TYPE_NAME_ENCODER
+            .encode_with_encodings("SharedExt", TYPE_NAME_ENCODINGS)
+            .unwrap();
+        let second = TypeMeta::new(
+            TypeId::NAMED_ENUM as u32,
+            NO_USER_TYPE_ID,
+            namespace,
+            type_name,
+            true,
+            vec![],
+        )
+        .unwrap();
+        resolver
+            .check_remote_type_meta_limit(&second, &config)
+            .unwrap();
     }
 }

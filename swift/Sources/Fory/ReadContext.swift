@@ -242,6 +242,9 @@ public final class ReadContext {
           bodySize += Int(try buffer.readVarUInt32())
         }
         if let cached = typeResolver.getTypeInfo(forHeader: header) {
+          // Header-cache hits intentionally skip without rehashing. Entries reach this cache only
+          // after a successful TypeDef parse and 52-bit metadata-hash validation. Do not add
+          // body/hash/schema-limit/exact-local checks here; the miss path owns them before publish.
           try buffer.skip(bodySize)
           compatibleTypeDefTypeInfos.push(cached)
           return try validateCompatibleTypeInfo(cached, for: localTypeInfo, wireTypeID: wireTypeID)
@@ -294,7 +297,8 @@ public final class ReadContext {
     }
     if let cached = typeResolver.getTypeInfo(forHeader: header) {
       // Header-cache hits intentionally skip without rehashing. Entries reach this cache only
-      // after a successful TypeDef parse and 52-bit metadata-hash validation.
+      // after a successful TypeDef parse and 52-bit metadata-hash validation. Do not add
+      // body/hash/schema-limit/exact-local checks here; the miss path owns them before publish.
       try buffer.skip(bodySize)
       compatibleTypeDefTypeInfos.push(cached)
       return cached
@@ -330,7 +334,8 @@ public final class ReadContext {
     }
     if let cached = typeResolver.getTypeInfo(forHeader: header) {
       // Header-cache hits intentionally skip without rehashing. Entries reach this cache only
-      // after a successful TypeDef parse and 52-bit metadata-hash validation.
+      // after a successful TypeDef parse and 52-bit metadata-hash validation. Do not add
+      // body/hash/schema-limit/exact-local checks here; the miss path owns them before publish.
       try buffer.skip(bodySize)
       compatibleTypeDefTypeInfos.push(cached)
       return try validateCompatibleTypeInfo(cached, for: localTypeInfo, wireTypeID: wireTypeID)
@@ -369,6 +374,9 @@ public final class ReadContext {
         }
 
         if let cached = typeResolver.getTypeInfo(forHeader: header) {
+          // Header-cache hits intentionally skip without rehashing. Entries reach this cache only
+          // after a successful TypeDef parse and 52-bit metadata-hash validation. Do not add
+          // body/hash/schema-limit/exact-local checks here; the miss path owns them before publish.
           try buffer.skip(bodySize)
           compatibleTypeDefTypeInfos.push(cached)
           return try validateCompatibleTypeInfo(cached, for: localTypeInfo, wireTypeID: wireTypeID)

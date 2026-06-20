@@ -894,7 +894,7 @@ public sealed class TypeResolver
                 assignFieldIds,
                 context);
         }
-        if (context.MatchesExactLocalTypeMeta(typeMetaStart, typeMetaEnd, typeInfo))
+        if (context.MatchesExactLocalTypeMeta(remoteTypeMeta, typeMetaStart, typeMetaEnd))
         {
             context.StoreExactLocalTypeMeta(header, remoteTypeMeta);
         }
@@ -1057,8 +1057,9 @@ public sealed class TypeResolver
         ulong header = context.Reader.ReadUInt64();
         if (context.TryGetTypeMetaByHeader(header, out typeMeta))
         {
-            // Header-cache hits stay body-skip only. Type resolution and field binding
-            // below are existing Any resolution work, not schema-limit checks.
+            // Header-cache hits intentionally skip without rehashing. Entries reach this cache only
+            // after successful TypeMeta body validation. Do not add body/hash/schema-limit/exact-local
+            // checks here; Any resolution and field binding below are existing read work.
             TypeMeta.SkipBody(context.Reader, header);
             context.StoreTypeMetaRef(typeMeta, index);
             TypeInfo typeInfo = ResolveAnyTypeInfoFromMeta(wireTypeId, typeMeta, compatible);
@@ -1072,7 +1073,7 @@ public sealed class TypeResolver
         int typeMetaEnd = context.Reader.Cursor;
         TypeInfo resolvedInfo = ResolveAnyTypeInfoFromMeta(wireTypeId, typeMeta, compatible);
         typeMeta.EnsureAssignedFieldIds(TypeMetaFields(resolvedInfo, context.TrackRef));
-        if (context.MatchesExactLocalTypeMeta(typeMetaStart, typeMetaEnd, resolvedInfo))
+        if (context.MatchesExactLocalTypeMeta(typeMeta, typeMetaStart, typeMetaEnd))
         {
             context.StoreExactLocalTypeMeta(header, typeMeta);
         }
@@ -1267,6 +1268,24 @@ public sealed class TypeResolver
         }
 
         throw new TypeNotRegisteredException($"namespace={namespaceName}, type={typeName}");
+    }
+
+    internal bool TryGetLocalTypeInfo(TypeMeta typeMeta, out TypeInfo typeInfo)
+    {
+        if (typeMeta.RegisterByName)
+        {
+            return _byTypeName.TryGetValue(
+                (typeMeta.NamespaceName.Value, typeMeta.TypeName.Value),
+                out typeInfo!);
+        }
+
+        if (typeMeta.UserTypeId.HasValue)
+        {
+            return _byUserTypeId.TryGetValue(typeMeta.UserTypeId.Value, out typeInfo!);
+        }
+
+        typeInfo = null!;
+        return false;
     }
 
     private static byte[] ReadBinary(ReadContext context)

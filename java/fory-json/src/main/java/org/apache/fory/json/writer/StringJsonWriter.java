@@ -25,7 +25,6 @@ import org.apache.fory.json.ForyJsonException;
 import org.apache.fory.json.meta.JsonFieldInfo;
 import org.apache.fory.memory.LittleEndian;
 import org.apache.fory.serializer.StringSerializer;
-import org.apache.fory.util.StringLayout;
 
 public final class StringJsonWriter extends JsonWriter {
   private static final byte[] MIN_INT_BYTES = "-2147483648".getBytes(StandardCharsets.ISO_8859_1);
@@ -45,7 +44,7 @@ public final class StringJsonWriter extends JsonWriter {
   private static final byte[] DIGIT_TENS = new byte[1000];
   private static final byte[] DIGIT_ONES = new byte[1000];
   private static final int[] DIGIT_QUADS = new int[10000];
-  private static final boolean STRING_BYTES_BACKED = StringLayout.isBytesBacked();
+  private static final boolean STRING_BYTES_BACKED = StringSerializer.isBytesBackedString();
 
   static {
     for (int i = 0; i < 1000; i++) {
@@ -89,7 +88,7 @@ public final class StringJsonWriter extends JsonWriter {
       return new String(utf16Buffer, 0, position);
     }
     byte[] bytes = Arrays.copyOf(buffer, position);
-    return StringSerializer.newBytesStringZeroCopy(StringLayout.LATIN1, bytes);
+    return StringSerializer.newLatin1StringZeroCopy(bytes);
   }
 
   public byte[] buffer() {
@@ -354,9 +353,9 @@ public final class StringJsonWriter extends JsonWriter {
   }
 
   private boolean writeBytesBackedStringNoEnsure(String value) {
-    byte[] bytes = StringLayout.bytes(value);
-    byte coder = StringLayout.coder(value);
-    if (coder == StringLayout.LATIN1) {
+    byte[] bytes = StringSerializer.getStringBytes(value);
+    byte coder = StringSerializer.getStringCoder(value);
+    if (StringSerializer.isLatin1Coder(coder)) {
       writeLatin1StringNoEnsure(bytes);
       return true;
     }
@@ -364,9 +363,9 @@ public final class StringJsonWriter extends JsonWriter {
   }
 
   private boolean writeBytesBackedString(String value) {
-    byte[] bytes = StringLayout.bytes(value);
-    byte coder = StringLayout.coder(value);
-    if (coder == StringLayout.LATIN1) {
+    byte[] bytes = StringSerializer.getStringBytes(value);
+    byte coder = StringSerializer.getStringCoder(value);
+    if (StringSerializer.isLatin1Coder(coder)) {
       ensure(bytes.length + 2);
       writeLatin1StringNoEnsure(bytes);
       return true;
@@ -375,9 +374,9 @@ public final class StringJsonWriter extends JsonWriter {
   }
 
   private boolean writeBytesBackedStringField(byte[] prefix, String value) {
-    byte[] bytes = StringLayout.bytes(value);
-    byte coder = StringLayout.coder(value);
-    if (coder == StringLayout.LATIN1) {
+    byte[] bytes = StringSerializer.getStringBytes(value);
+    byte coder = StringSerializer.getStringCoder(value);
+    if (StringSerializer.isLatin1Coder(coder)) {
       ensure(prefix.length + bytes.length + 2);
       writeRawNoEnsure(prefix);
       writeLatin1StringNoEnsure(bytes);

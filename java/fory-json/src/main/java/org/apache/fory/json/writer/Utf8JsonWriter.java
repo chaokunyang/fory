@@ -23,7 +23,7 @@ import java.util.Arrays;
 import org.apache.fory.json.ForyJsonException;
 import org.apache.fory.json.meta.JsonFieldInfo;
 import org.apache.fory.memory.LittleEndian;
-import org.apache.fory.util.StringLayout;
+import org.apache.fory.serializer.StringSerializer;
 
 public final class Utf8JsonWriter extends JsonWriter {
   private static final byte[] MIN_INT_BYTES =
@@ -45,7 +45,7 @@ public final class Utf8JsonWriter extends JsonWriter {
   private static final byte[] DIGIT_TENS = new byte[1000];
   private static final byte[] DIGIT_ONES = new byte[1000];
   private static final int[] DIGIT_QUADS = new int[10000];
-  private static final boolean STRING_BYTES_BACKED = StringLayout.isBytesBacked();
+  private static final boolean STRING_BYTES_BACKED = StringSerializer.isBytesBackedString();
 
   static {
     for (int i = 0; i < 1000; i++) {
@@ -293,22 +293,22 @@ public final class Utf8JsonWriter extends JsonWriter {
   }
 
   private boolean writeBytesBackedString(String value) {
-    byte[] bytes = StringLayout.bytes(value);
-    byte coder = StringLayout.coder(value);
-    if (coder == StringLayout.LATIN1) {
+    byte[] bytes = StringSerializer.getStringBytes(value);
+    byte coder = StringSerializer.getStringCoder(value);
+    if (StringSerializer.isLatin1Coder(coder)) {
       return writeLatin1String(bytes);
-    } else if (coder == StringLayout.UTF16) {
+    } else if (StringSerializer.isUtf16Coder(coder)) {
       return writeUtf16String(bytes);
     }
     return false;
   }
 
   private boolean writeBytesBackedStringNoEnsure(String value) {
-    byte[] bytes = StringLayout.bytes(value);
-    byte coder = StringLayout.coder(value);
-    if (coder == StringLayout.LATIN1) {
+    byte[] bytes = StringSerializer.getStringBytes(value);
+    byte coder = StringSerializer.getStringCoder(value);
+    if (StringSerializer.isLatin1Coder(coder)) {
       return writeLatin1StringNoEnsure(bytes);
-    } else if (coder == StringLayout.UTF16) {
+    } else if (StringSerializer.isUtf16Coder(coder)) {
       return writeUtf16StringNoEnsure(bytes);
     }
     return false;
@@ -377,7 +377,7 @@ public final class Utf8JsonWriter extends JsonWriter {
       pos += 4;
     }
     for (; i < length; i += 2) {
-      char ch = StringLayout.utf16Char(value, i);
+      char ch = StringSerializer.getBytesChar(value, i);
       if (ch < 0x80) {
         if (!isJsonAscii(ch)) {
           position = start;

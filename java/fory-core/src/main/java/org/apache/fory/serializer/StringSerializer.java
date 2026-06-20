@@ -33,6 +33,7 @@ import java.util.Arrays;
 import java.util.function.BiFunction;
 import java.util.function.Function;
 import org.apache.fory.annotation.CodegenInvoke;
+import org.apache.fory.annotation.Internal;
 import org.apache.fory.codegen.Expression;
 import org.apache.fory.codegen.Expression.Invoke;
 import org.apache.fory.codegen.Expression.StaticInvoke;
@@ -428,8 +429,37 @@ public final class StringSerializer extends ImmutableSerializer<String> {
     return PlatformStringUtils.getStringValue(value);
   }
 
-  private static byte getStringCoder(String value) {
+  @Internal
+  public static boolean isBytesBackedString() {
+    return STRING_VALUE_FIELD_IS_BYTES;
+  }
+
+  @Internal
+  public static byte[] getStringBytes(String value) {
+    if (!STRING_VALUE_FIELD_IS_BYTES) {
+      throw new IllegalStateException("String byte layout is not available");
+    }
+    return (byte[]) getStringValue(value);
+  }
+
+  @Internal
+  public static byte getStringCoder(String value) {
     return PlatformStringUtils.getStringCoder(value);
+  }
+
+  @Internal
+  public static boolean isLatin1Coder(byte coder) {
+    return coder == LATIN1;
+  }
+
+  @Internal
+  public static boolean isUtf16Coder(byte coder) {
+    return coder == UTF16;
+  }
+
+  @Internal
+  public static char getBytesChar(byte[] bytes, int byteIndex) {
+    return PlatformStringUtils.getBytesChar(bytes, byteIndex);
   }
 
   private static int getStringOffset(String value) {
@@ -929,6 +959,11 @@ public final class StringSerializer extends ImmutableSerializer<String> {
     } else {
       return BYTES_STRING_ZERO_COPY_CTR.apply(data, coder);
     }
+  }
+
+  @Internal
+  public static String newLatin1StringZeroCopy(byte[] data) {
+    return newBytesStringZeroCopy(LATIN1, data);
   }
 
   private static String newBytesStringSlow(byte coder, byte[] data) {

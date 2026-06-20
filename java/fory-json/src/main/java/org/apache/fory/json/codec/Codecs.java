@@ -35,27 +35,27 @@ public final class Codecs {
       return customCodec;
     }
     if (rawType == Object.class) {
-      return NaturalCodec.INSTANCE;
+      return ScalarCodecs.NaturalCodec.INSTANCE;
     } else if (rawType == String.class) {
-      return StringCodec.INSTANCE;
+      return ScalarCodecs.StringCodec.INSTANCE;
     } else if (rawType == boolean.class || rawType == Boolean.class) {
-      return BooleanCodec.INSTANCE;
+      return ScalarCodecs.BooleanCodec.INSTANCE;
     } else if (rawType == int.class || rawType == Integer.class) {
-      return IntCodec.INSTANCE;
+      return ScalarCodecs.IntCodec.INSTANCE;
     } else if (rawType == long.class || rawType == Long.class) {
-      return LongCodec.INSTANCE;
+      return ScalarCodecs.LongCodec.INSTANCE;
     } else if (rawType == short.class || rawType == Short.class) {
-      return ShortCodec.INSTANCE;
+      return ScalarCodecs.ShortCodec.INSTANCE;
     } else if (rawType == byte.class || rawType == Byte.class) {
-      return ByteCodec.INSTANCE;
+      return ScalarCodecs.ByteCodec.INSTANCE;
     } else if (rawType == char.class || rawType == Character.class) {
-      return CharCodec.INSTANCE;
+      return ScalarCodecs.CharCodec.INSTANCE;
     } else if (rawType == float.class || rawType == Float.class) {
-      return FloatCodec.INSTANCE;
+      return ScalarCodecs.FloatCodec.INSTANCE;
     } else if (rawType == double.class || rawType == Double.class) {
-      return DoubleCodec.INSTANCE;
+      return ScalarCodecs.DoubleCodec.INSTANCE;
     } else if (rawType.isEnum()) {
-      return new EnumCodec(rawType);
+      return new ScalarCodecs.EnumCodec(rawType);
     } else if (rawType.isArray()) {
       return new ArrayCodec(rawType.getComponentType(), resolver);
     } else if (Collection.class.isAssignableFrom(rawType)) {

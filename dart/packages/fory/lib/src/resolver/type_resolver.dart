@@ -250,7 +250,6 @@ final class TypeResolver {
   static const int _minRemoteTypeMetaLimit = 8192;
 
   final Config config;
-  final WireTypeMetaEncoder _wireTypeMetaEncoder = const WireTypeMetaEncoder();
   final WireTypeMetaDecoder _wireTypeMetaDecoder = const WireTypeMetaDecoder();
   final ParsedTypeMetaCache _parsedTypeMetaCache = ParsedTypeMetaCache();
   final List<TypeInfo?> _lastNamedTypeByWireType = List<TypeInfo?>.filled(
@@ -728,7 +727,12 @@ final class TypeResolver {
   }
 
   WireTypeMeta wireTypeMetaForResolved(TypeInfo resolved) {
-    return _wireTypeMetaEncoder.typeMetaFor(config.compatible, resolved);
+    final wireTypeId = _typeIdFor(resolved);
+    return WireTypeMeta(
+      resolvedType: resolved,
+      wireTypeId: wireTypeId,
+      hasTypeDef: _hasTypeDef(wireTypeId),
+    );
   }
 
   TypeDef typeDefForResolved(TypeInfo resolved, {List<FieldInfo>? fields}) {
@@ -755,36 +759,33 @@ final class TypeResolver {
     required LinkedHashMap<TypeDef, int> typeDefIds,
     required MetaStringWriter metaStringWriter,
   }) {
-    final wireTypeId = _wireTypeMetaEncoder.wireTypeIdFor(
-      config.compatible,
-      resolved,
-    );
-    if (_wireTypeWritesTypeDef(wireTypeId)) {
+    final wireTypeId = _typeIdFor(resolved);
+    if (_hasTypeDef(wireTypeId)) {
       buffer.writeVarUint32Small7(wireTypeId);
       _writeTypeDef(buffer, resolved.typeDef!, typeDefIds: typeDefIds);
       return;
     }
-    if (_wireTypeWritesUserTypeId(wireTypeId)) {
+    if (_hasUserTypeId(wireTypeId)) {
       buffer.writeVarUint32Small7(wireTypeId);
       buffer.writeVarUint32(resolved.userTypeId!);
       return;
     }
     buffer.writeVarUint32Small7(wireTypeId);
-    if (_wireTypeWritesNamedType(wireTypeId)) {
+    if (_hasEncodedName(wireTypeId)) {
       metaStringWriter.writeMetaString(buffer, resolved.encodedNamespace!);
       metaStringWriter.writeMetaString(buffer, resolved.encodedTypeName!);
     }
   }
 
   @pragma('vm:prefer-inline')
-  bool _wireTypeWritesUserTypeId(int wireTypeId) =>
+  bool _hasUserTypeId(int wireTypeId) =>
       wireTypeId == TypeIds.enumById ||
       wireTypeId == TypeIds.struct ||
       wireTypeId == TypeIds.ext ||
       wireTypeId == TypeIds.typedUnion;
 
   @pragma('vm:prefer-inline')
-  bool _wireTypeWritesTypeDef(int wireTypeId) =>
+  bool _hasTypeDef(int wireTypeId) =>
       wireTypeId == TypeIds.compatibleStruct ||
       wireTypeId == TypeIds.namedCompatibleStruct ||
       (config.compatible &&
@@ -794,11 +795,36 @@ final class TypeResolver {
               wireTypeId == TypeIds.namedUnion));
 
   @pragma('vm:prefer-inline')
-  bool _wireTypeWritesNamedType(int wireTypeId) =>
+  bool _hasEncodedName(int wireTypeId) =>
       wireTypeId == TypeIds.namedEnum ||
       wireTypeId == TypeIds.namedStruct ||
       wireTypeId == TypeIds.namedExt ||
       wireTypeId == TypeIds.namedUnion;
+
+  @pragma('vm:prefer-inline')
+  int _typeIdFor(TypeInfo resolved) {
+    switch (resolved.kind) {
+      case RegistrationKind.builtin:
+        return resolved.typeId;
+      case RegistrationKind.enumType:
+        return resolved.isNamed ? TypeIds.namedEnum : TypeIds.enumById;
+      case RegistrationKind.ext:
+        return resolved.isNamed ? TypeIds.namedExt : TypeIds.ext;
+      case RegistrationKind.union:
+        if (resolved.userTypeId != null) {
+          return TypeIds.typedUnion;
+        }
+        return resolved.isNamed ? TypeIds.namedUnion : TypeIds.union;
+      case RegistrationKind.struct:
+        final compatibleStruct = config.compatible && resolved.evolving;
+        if (compatibleStruct) {
+          return resolved.isNamed
+              ? TypeIds.namedCompatibleStruct
+              : TypeIds.compatibleStruct;
+        }
+        return resolved.isNamed ? TypeIds.namedStruct : TypeIds.struct;
+    }
+  }
 
   @pragma('vm:prefer-inline')
   TypeInfo readTypeMeta(
@@ -808,10 +834,7 @@ final class TypeResolver {
     required MetaStringReader metaStringReader,
   }) {
     final expected = expectedNamedType;
-    if (expected != null &&
-        _wireTypeWritesTypeDef(
-          _wireTypeMetaEncoder.wireTypeIdFor(config.compatible, expected),
-        )) {
+    if (expected != null && _hasTypeDef(_typeIdFor(expected))) {
       final resolved = readExpectedTypeDefMeta(
         buffer,
         expected,
@@ -842,7 +865,7 @@ final class TypeResolver {
       readTypeNameMetaString:
           ([expected]) => metaStringReader.readMetaString(buffer, expected),
     );
-    if (typeMeta.writesNamedType) {
+    if (typeMeta.hasEncodedName) {
       _rememberNamedType(typeMeta.wireTypeId, typeMeta.resolvedType);
     }
     return typeMeta.resolvedType;
@@ -855,9 +878,7 @@ final class TypeResolver {
   }) {
     final start = bufferReaderIndex(buffer);
     final wireTypeId = buffer.readVarUint32Small7();
-    if (wireTypeId !=
-            _wireTypeMetaEncoder.wireTypeIdFor(config.compatible, expected) ||
-        !_wireTypeWritesTypeDef(wireTypeId)) {
+    if (wireTypeId != _typeIdFor(expected) || !_hasTypeDef(wireTypeId)) {
       bufferSetReaderIndex(buffer, start);
       return null;
     }
@@ -1125,10 +1146,7 @@ final class TypeResolver {
           return TypeIds.union;
         case RegistrationKind.ext:
         case RegistrationKind.struct:
-          return _wireTypeMetaEncoder.wireTypeIdFor(
-            config.compatible,
-            resolved,
-          );
+          return _typeIdFor(resolved);
         case RegistrationKind.builtin:
           break;
       }

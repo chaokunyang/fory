@@ -577,7 +577,6 @@ final class TypeResolver {
 
   TypeInfo? tryResolveFieldType(FieldType fieldType) {
     switch (fieldType.typeId) {
-      case TypeIds.unknown:
       case TypeIds.boolType:
       case TypeIds.int8:
       case TypeIds.int16:
@@ -1119,6 +1118,9 @@ final class TypeResolver {
   }
 
   int _typeDefFieldTypeId(FieldType fieldType) {
+    if (fieldType.typeId == TypeIds.unknown) {
+      return TypeIds.unknown;
+    }
     if (TypeIds.isPrimitive(fieldType.typeId) ||
         TypeIds.isContainer(fieldType.typeId) ||
         fieldType.typeId == TypeIds.string ||

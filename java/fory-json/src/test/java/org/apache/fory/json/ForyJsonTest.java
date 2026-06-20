@@ -36,6 +36,13 @@ import org.apache.fory.json.annotation.JsonIgnore;
 import org.testng.annotations.Test;
 
 public class ForyJsonTest {
+  private static final String TWO_BYTE_TEXT = "\u0100\u07ff\u03a9";
+  private static final String THREE_BYTE_TEXT = "\u0800\u20ac\u4f60\ud7ff\ue000";
+  private static final String SUPPLEMENTARY_TEXT = "\uD834\uDD1E\uD83D\uDE00\uD83C\uDF0D";
+  private static final String MIXED_SCRIPT_TEXT =
+      "\u0100\u03a9\u0416\u05d0\u0627\u0905\u0e01\u4f60";
+  private static final String COMBINING_TEXT = "e\u0301\u200d\uD83D\uDCBB";
+
   public enum Kind {
     FAST,
     SMALL
@@ -137,6 +144,22 @@ public class ForyJsonTest {
     public String first = "\u1234";
     public String second = "music \uD834\uDD1E";
     public List<String> tags = Arrays.asList("latin", "\u1234", "\uD83D\uDE00");
+  }
+
+  public static final class UnicodeMatrix {
+    public Character boxedChar = Character.valueOf('\u20ac');
+    public char charThreeByte = '\u4f60';
+    public char charTwoByte = '\u0100';
+    public char[] chars = {'\u0100', '\u07ff', '\u0800', '\u20ac', '\u4f60'};
+    public String combining = COMBINING_TEXT;
+    public String mixedScripts = MIXED_SCRIPT_TEXT;
+    public String supplementary = SUPPLEMENTARY_TEXT;
+    public String threeByte = THREE_BYTE_TEXT;
+    public String twoByte = TWO_BYTE_TEXT;
+    public Map<String, String> valueMap = unicodeMap();
+    public List<String> values =
+        Arrays.asList(
+            TWO_BYTE_TEXT, THREE_BYTE_TEXT, SUPPLEMENTARY_TEXT, MIXED_SCRIPT_TEXT, COMBINING_TEXT);
   }
 
   public static final class RecursiveParent {
@@ -385,6 +408,24 @@ public class ForyJsonTest {
   }
 
   @Test
+  public void writeNonLatin1Matrix() {
+    ForyJson json = ForyJson.builder().build();
+    UnicodeMatrix value = new UnicodeMatrix();
+    String expected = unicodeMatrixJson();
+    assertEquals(json.toJson(value), expected);
+    assertEquals(json.toJson(value), expected);
+    assertEquals(new String(json.toJsonBytes(value), StandardCharsets.UTF_8), expected);
+    assertUnicodeMatrix(json.fromJson(expected, UnicodeMatrix.class));
+    assertUnicodeMatrix(
+        json.fromJson(expected.getBytes(StandardCharsets.UTF_8), UnicodeMatrix.class));
+    assertEquals(json.fromJson("\"" + MIXED_SCRIPT_TEXT + "\"", String.class), MIXED_SCRIPT_TEXT);
+    assertEquals(
+        json.fromJson(
+            ("\"" + SUPPLEMENTARY_TEXT + "\"").getBytes(StandardCharsets.UTF_8), String.class),
+        SUPPLEMENTARY_TEXT);
+  }
+
+  @Test
   public void writeLatin1NonAsciiBytes() {
     ForyJson json = ForyJson.builder().build();
     PublicFields fields = new PublicFields();
@@ -527,6 +568,63 @@ public class ForyJsonTest {
     scores.put("one", 1);
     scores.put("two", 2);
     return scores;
+  }
+
+  private static Map<String, String> unicodeMap() {
+    Map<String, String> values = new LinkedHashMap<>();
+    values.put(TWO_BYTE_TEXT, THREE_BYTE_TEXT);
+    values.put("\u043a\u043b\u044e\u0447", "\uD83D\uDE00");
+    values.put("\u0645\u0631\u062d\u0628\u0627", "\u0928\u092e\u0938\u094d\u0924\u0947");
+    return values;
+  }
+
+  private static String unicodeMatrixJson() {
+    return "{\"boxedChar\":\"\u20ac\",\"charThreeByte\":\"\u4f60\","
+        + "\"charTwoByte\":\"\u0100\",\"chars\":[\"\u0100\",\"\u07ff\",\"\u0800\","
+        + "\"\u20ac\",\"\u4f60\"],\"combining\":\""
+        + COMBINING_TEXT
+        + "\",\"mixedScripts\":\""
+        + MIXED_SCRIPT_TEXT
+        + "\",\"supplementary\":\""
+        + SUPPLEMENTARY_TEXT
+        + "\",\"threeByte\":\""
+        + THREE_BYTE_TEXT
+        + "\",\"twoByte\":\""
+        + TWO_BYTE_TEXT
+        + "\",\"valueMap\":{\""
+        + TWO_BYTE_TEXT
+        + "\":\""
+        + THREE_BYTE_TEXT
+        + "\",\"\u043a\u043b\u044e\u0447\":\"\uD83D\uDE00\","
+        + "\"\u0645\u0631\u062d\u0628\u0627\":\"\u0928\u092e\u0938\u094d\u0924\u0947\"},"
+        + "\"values\":[\""
+        + TWO_BYTE_TEXT
+        + "\",\""
+        + THREE_BYTE_TEXT
+        + "\",\""
+        + SUPPLEMENTARY_TEXT
+        + "\",\""
+        + MIXED_SCRIPT_TEXT
+        + "\",\""
+        + COMBINING_TEXT
+        + "\"]}";
+  }
+
+  private static void assertUnicodeMatrix(UnicodeMatrix value) {
+    assertEquals(value.boxedChar, Character.valueOf('\u20ac'));
+    assertEquals(value.charThreeByte, '\u4f60');
+    assertEquals(value.charTwoByte, '\u0100');
+    assertEquals(value.chars, new char[] {'\u0100', '\u07ff', '\u0800', '\u20ac', '\u4f60'});
+    assertEquals(value.combining, COMBINING_TEXT);
+    assertEquals(value.mixedScripts, MIXED_SCRIPT_TEXT);
+    assertEquals(value.supplementary, SUPPLEMENTARY_TEXT);
+    assertEquals(value.threeByte, THREE_BYTE_TEXT);
+    assertEquals(value.twoByte, TWO_BYTE_TEXT);
+    assertEquals(value.valueMap, unicodeMap());
+    assertEquals(
+        value.values,
+        Arrays.asList(
+            TWO_BYTE_TEXT, THREE_BYTE_TEXT, SUPPLEMENTARY_TEXT, MIXED_SCRIPT_TEXT, COMBINING_TEXT));
   }
 
   private static Map<String, Object> values() {

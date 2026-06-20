@@ -531,7 +531,6 @@ export class WriteContext {
 
 export class ReadContext {
   private static readonly MIN_REMOTE_TYPE_META_LIMIT = 8192;
-  private static readonly TYPE_META_HINT_COUNT = 4;
 
   readonly reader: BinaryReader;
   readonly refReader: RefReader;
@@ -541,7 +540,7 @@ export class ReadContext {
   /** Persistent checked cache keyed by the 52-bit TypeMeta header hash. */
   private typeMetaCache: Map<number, TypeMeta> = new Map();
   private totalAcceptedSchemaVersions = 0;
-  private cachedTypeMetas: TypeMeta[] = [];
+  private cachedTypeMeta: TypeMeta | undefined;
   private compatibleReadSerializers = new Map<
     number,
     CompatibleReadSerializerCacheEntry
@@ -605,29 +604,15 @@ export class ReadContext {
   }
 
   private findCachedTypeMeta(headerHash: number): TypeMeta | undefined {
-    const cachedTypeMetas = this.cachedTypeMetas;
-    for (let i = 0; i < cachedTypeMetas.length; i++) {
-      const typeMeta = cachedTypeMetas[i];
-      if (typeMeta.headerHash === headerHash) {
-        return typeMeta;
-      }
+    const typeMeta = this.cachedTypeMeta;
+    if (typeMeta !== undefined && typeMeta.headerHash === headerHash) {
+      return typeMeta;
     }
     return undefined;
   }
 
   private rememberTypeMeta(typeMeta: TypeMeta) {
-    const cachedTypeMetas = this.cachedTypeMetas;
-    if (cachedTypeMetas[0] === typeMeta) {
-      return;
-    }
-    const existingIndex = cachedTypeMetas.indexOf(typeMeta);
-    if (existingIndex > 0) {
-      cachedTypeMetas.splice(existingIndex, 1);
-    }
-    cachedTypeMetas.unshift(typeMeta);
-    if (cachedTypeMetas.length > ReadContext.TYPE_META_HINT_COUNT) {
-      cachedTypeMetas.length = ReadContext.TYPE_META_HINT_COUNT;
-    }
+    this.cachedTypeMeta = typeMeta;
   }
 
   readTypeMeta(): TypeMeta {

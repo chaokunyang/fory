@@ -22,7 +22,7 @@ license: |
 ## Overview
 
 This guide describes the current xlang implementation ownership model used by
-the reference Java implementation and mirrored by the Dart implementation rewrite.
+the xlang runtimes.
 
 The wire format is defined by
 [Xlang Serialization Spec](xlang_serialization_spec.md). This document is about

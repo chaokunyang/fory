@@ -1105,8 +1105,8 @@ public abstract class TypeResolver {
   }
 
   private TypeDef exactLocalTypeDef(byte[] remoteEncoded, Class<?> cls) {
-    // UnknownStruct and id-addressed internal placeholders do not have local metadata to compare
-    // against; building it would change open-world unknown-type semantics.
+    // UnknownStruct has no local metadata to compare against; building it would change
+    // open-world unknown-type semantics.
     if (UnknownClass.class.isAssignableFrom(TypeUtils.getComponentIfArray(cls))) {
       return null;
     }

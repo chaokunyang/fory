@@ -887,25 +887,12 @@ public abstract class TypeResolver {
       if (typeInfo != null) {
         TypeDef.skipTypeDef(buffer, id);
       } else {
-        typeInfo =
-            targetClass == null
-                ? readSharedTypeDefInfo(buffer, id)
-                : readSharedTypeDefInfo(buffer, id, targetClass);
+        typeInfo = readSharedTypeDefInfo(buffer, id, targetClass);
       }
       // index == readTypeInfos.size() since types are written sequentially
       metaReadContext.readTypeInfos.add(typeInfo);
     }
     return typeInfo;
-  }
-
-  private TypeInfo readSharedTypeDefInfo(MemoryBuffer buffer, long id) {
-    TypeDef typeDef = sharedRegistry.remoteTypeDefById.get(id);
-    if (typeDef != null) {
-      TypeDef.skipTypeDef(buffer, id);
-      return buildMetaSharedTypeInfo(typeDef);
-    }
-    typeDef = TypeDef.readTypeDef(this, buffer, id);
-    return buildCheckedMetaSharedTypeInfo(typeDef);
   }
 
   private TypeInfo readSharedTypeDefInfo(MemoryBuffer buffer, long id, Class<?> targetClass) {
@@ -915,7 +902,12 @@ public abstract class TypeResolver {
       return buildMetaSharedTypeInfo(typeDef);
     }
     typeDef = TypeDef.readTypeDef(this, buffer, id);
-    checkTargetTypeDef(typeDef, targetClass);
+    // The target check is needed only for a newly parsed TypeDef, before it can be
+    // cached or counted. Cache hits were already accepted; the caller applies target
+    // adaptation after resolving TypeInfo.
+    if (targetClass != null) {
+      checkTargetTypeDef(typeDef, targetClass);
+    }
     return buildCheckedMetaSharedTypeInfo(typeDef);
   }
 

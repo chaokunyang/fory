@@ -822,7 +822,7 @@ func staticTypeRejectsWrongMetaOwner() throws {
   exactBuffer.writeBytes(addressBytes)
   let exactContext = ReadContext(buffer: exactBuffer, typeResolver: resolver, config: config)
   _ = try exactContext.readTypeInfo(for: Address.self)
-  #expect(resolver.getTypeInfo(forHeader: addressHeader) === addressInfo)
+  #expect(resolver.getTypeInfo(forHeader: addressHeader) == nil)
 }
 
 @Test

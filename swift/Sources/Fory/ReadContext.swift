@@ -232,7 +232,7 @@ public final class ReadContext {
     if !checkClassVersion,
       compatibleTypeDefTypeInfos.isEmpty,
       !localTypeInfo.typeDefHasUserTypeFields,
-      localTypeInfo.typeDefHeader != nil {
+      let localTypeDefHeader = localTypeInfo.typeDefHeader {
       let indexMarker = try buffer.readVarUInt32()
       if indexMarker == 0 {
         let headerStart = buffer.getCursor()
@@ -240,6 +240,14 @@ public final class ReadContext {
         var bodySize = Int(header & UInt64(typeMetaSizeMask))
         if bodySize == typeMetaSizeMask {
           bodySize += Int(try buffer.readVarUInt32())
+        }
+        if header == localTypeDefHeader {
+          // The declared local type owns this exact metadata header, so this is a
+          // local-schema hit rather than a remote cache publish. Keep it allocation-free:
+          // skip the body, add the local type to the per-read table, and do not parse/hash.
+          try buffer.skip(bodySize)
+          compatibleTypeDefTypeInfos.push(localTypeInfo)
+          return nil
         }
         if let cached = typeResolver.getTypeInfo(forHeader: header) {
           // Header-cache hits intentionally skip without rehashing. Entries reach this cache only
@@ -358,7 +366,7 @@ public final class ReadContext {
     let buffer = self.buffer
     let compatibleTypeDefTypeInfos = self.compatibleTypeDefTypeInfos
     if compatibleTypeDefTypeInfos.isEmpty,
-      localTypeInfo.typeDefHeader != nil {
+      let localTypeDefHeader = localTypeInfo.typeDefHeader {
       let indexMarker = try buffer.readVarUInt32()
       if indexMarker != 0 {
         return try readCompatibleTypeInfo(
@@ -371,6 +379,15 @@ public final class ReadContext {
         var bodySize = Int(header & UInt64(typeMetaSizeMask))
         if bodySize == typeMetaSizeMask {
           bodySize += Int(try buffer.readVarUInt32())
+        }
+
+        if header == localTypeDefHeader {
+          // The declared local type owns this exact metadata header, so this is a
+          // local-schema hit rather than a remote cache publish. Keep it allocation-free:
+          // skip the body, add the local type to the per-read table, and do not parse/hash.
+          try buffer.skip(bodySize)
+          compatibleTypeDefTypeInfos.push(localTypeInfo)
+          return localTypeInfo
         }
 
         if let cached = typeResolver.getTypeInfo(forHeader: header) {

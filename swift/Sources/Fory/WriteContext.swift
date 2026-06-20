@@ -143,7 +143,7 @@ public final class WriteContext {
         }
     }
 
-    func writeTypeMeta(_ typeInfo: TypeInfo) {
+    func writeTypeMeta(_ typeInfo: TypeInfo) throws {
         if !typeDefStateUsed {
             typeDefStateUsed = true
         }

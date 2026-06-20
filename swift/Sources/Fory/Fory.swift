@@ -477,7 +477,7 @@ public final class Fory {
   private func serializeRoot(
     _ body: (WriteContext) throws -> Void
   ) throws -> Data {
-    typeResolver.finishRegistration()
+    try typeResolver.finishRegistration()
     let context = writeContext
     context.buffer.clear()
     defer {
@@ -493,7 +493,7 @@ public final class Fory {
     to output: inout Data,
     _ body: (WriteContext) throws -> Void
   ) throws {
-    typeResolver.finishRegistration()
+    try typeResolver.finishRegistration()
     let context = writeContext
     context.buffer.clear()
     defer {
@@ -509,7 +509,7 @@ public final class Fory {
     data: Data,
     _ body: (ReadContext) throws -> R
   ) throws -> R {
-    typeResolver.finishRegistration()
+    try typeResolver.finishRegistration()
     return try withReusableReadContext(data: data) { context in
       try readHead(buffer: context.buffer)
       let value = try body(context)
@@ -526,7 +526,7 @@ public final class Fory {
     from buffer: ByteBuffer,
     _ body: (ReadContext) throws -> R
   ) throws -> R {
-    typeResolver.finishRegistration()
+    try typeResolver.finishRegistration()
     readContext.buffer.swapState(with: buffer)
     defer {
       readContext.buffer.swapState(with: buffer)

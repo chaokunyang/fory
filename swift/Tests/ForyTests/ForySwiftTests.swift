@@ -174,6 +174,31 @@ struct CompatibleNestedMapHolder: Equatable {
   var items: [Int32: CompatibleNestedItem]
 }
 
+struct LateMetaExt: Serializer, Equatable {
+  var value: Int32 = 0
+
+  static func foryDefault() -> LateMetaExt {
+    LateMetaExt()
+  }
+
+  static var staticTypeId: TypeId {
+    .ext
+  }
+
+  func foryWriteData(_ context: WriteContext, hasGenerics _: Bool) throws {
+    context.buffer.writeVarInt32(value)
+  }
+
+  static func foryReadData(_ context: ReadContext) throws -> LateMetaExt {
+    LateMetaExt(value: try context.buffer.readVarInt32())
+  }
+}
+
+@ForyStruct
+struct LateMetaHolder: Equatable {
+  var ext: LateMetaExt
+}
+
 @ForyStruct
 final class Node {
   var value: Int32 = 0
@@ -552,6 +577,7 @@ func schemaLimitTracksStructTypesSeparately() throws {
   let resolver = TypeResolver(config: config)
   resolver.register(Person.self, id: 901)
   resolver.register(Address.self, id: 902)
+  try resolver.finishRegistration()
 
   func remoteTypeMeta(userTypeID: UInt32, fieldName: String) throws -> TypeMeta {
     try TypeMeta(
@@ -598,6 +624,7 @@ func nonStructTypeMetaUsesSchemaLimit() throws {
   let config = Config(maxSchemaVersionsPerType: 1)
   let resolver = TypeResolver(config: config)
   try resolver.register(SparseStatus.self, name: "example.SharedEnum")
+  try resolver.finishRegistration()
   let namespace = try MetaStringEncoder.namespace.encode("example")
   let typeName = try MetaStringEncoder.typeName.encode("SharedEnum")
 
@@ -635,10 +662,76 @@ func nonStructTypeMetaUsesSchemaLimit() throws {
 }
 
 @Test
+func exactLocalNonStructTypeMetaBypassesSchemaLimit() throws {
+  let config = Config(compatible: true, maxSchemaVersionsPerType: 1)
+  let resolver = TypeResolver(config: config)
+  try resolver.register(SparseStatus.self, name: "example.SharedEnum")
+  try resolver.finishRegistration()
+  let localTypeInfo = try resolver.requireTypeInfo(for: SparseStatus.self)
+  let namespace = try MetaStringEncoder.namespace.encode("example")
+  let typeName = try MetaStringEncoder.typeName.encode("SharedEnum")
+
+  let exactBuffer = ByteBuffer()
+  exactBuffer.writeUInt8(UInt8(truncatingIfNeeded: TypeId.namedEnum.rawValue))
+  exactBuffer.writeUInt8(0)
+  exactBuffer.writeBytes(localTypeInfo.typeDefBytes!)
+  let exactContext = ReadContext(buffer: exactBuffer, typeResolver: resolver, config: config)
+  _ = try exactContext.readTypeInfo(for: SparseStatus.self)
+
+  let remote = try TypeMeta(
+    typeID: TypeId.namedExt.rawValue,
+    userTypeID: nil,
+    namespace: namespace,
+    typeName: typeName,
+    registerByName: true,
+    fields: []
+  )
+  let encoded = try remote.encode()
+  let headerReader = ByteBuffer(bytes: encoded)
+  let header = try headerReader.readUInt64()
+  let buffer = ByteBuffer(bytes: encoded)
+  let decoded = try TypeMeta.decode(buffer)
+  let resolved = try resolver.requireTypeInfo(for: decoded)
+  _ = try resolver.cacheTypeInfo(
+    decoded,
+    forHeader: header,
+    localTypeInfo: resolved,
+    exactLocal: false,
+    config: config
+  )
+}
+
+@Test
+func typeMetaUsesFinalRegistration() throws {
+  func holderTypeDefBytes(registerFieldTypeFirst: Bool) throws -> [UInt8] {
+    let resolver = TypeResolver(config: Config(compatible: true))
+    if registerFieldTypeFirst {
+      try resolver.register(LateMetaExt.self, name: "example.LateMetaExt")
+      try resolver.register(LateMetaHolder.self, name: "example.LateMetaHolder")
+    } else {
+      try resolver.register(LateMetaHolder.self, name: "example.LateMetaHolder")
+      try resolver.register(LateMetaExt.self, name: "example.LateMetaExt")
+    }
+    try resolver.finishRegistration()
+    return try resolver.requireTypeInfo(for: LateMetaHolder.self).typeDefBytes!
+  }
+
+  let fieldFirst = try holderTypeDefBytes(registerFieldTypeFirst: true)
+  let holderFirst = try holderTypeDefBytes(registerFieldTypeFirst: false)
+  #expect(fieldFirst == holderFirst)
+
+  let typeMeta = try TypeMeta.decode(ByteBuffer(bytes: holderFirst))
+  #expect(typeMeta.fields.count == 1)
+  #expect(typeMeta.fields[0].fieldType.typeID == TypeId.namedExt.rawValue)
+}
+
+@Test
 func failedSchemaDoesNotConsumeLimit() throws {
   let config = Config(maxSchemaVersionsPerType: 1)
   let resolver = TypeResolver(config: config)
   resolver.register(Person.self, id: 901)
+  resolver.register(Address.self, id: 902)
+  try resolver.finishRegistration()
 
   func remoteTypeMeta(fieldName: String, fieldType: TypeMeta.FieldType) throws -> TypeMeta {
     try TypeMeta(
@@ -698,6 +791,7 @@ func staticTypeRejectsWrongMetaOwner() throws {
   let resolver = TypeResolver(config: config)
   resolver.register(Person.self, id: 901)
   resolver.register(Address.self, id: 902)
+  try resolver.finishRegistration()
   let wrongTypeMeta = try TypeMeta(
     typeID: TypeId.compatibleStruct.rawValue,
     userTypeID: 901,
@@ -723,6 +817,7 @@ func failedStaticMetaDoesNotCount() throws {
   let resolver = TypeResolver(config: config)
   resolver.register(Person.self, id: 901)
   resolver.register(Address.self, id: 902)
+  try resolver.finishRegistration()
 
   func typeMeta(userTypeID: UInt32, fieldName: String) throws -> TypeMeta {
     try TypeMeta(

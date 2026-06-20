@@ -404,7 +404,7 @@ public final class ReadContext {
       decoded,
       forHeader: header,
       localTypeInfo: localTypeInfo,
-      exactLocal: matchesLocalTypeDefBytes(
+      exactLocal: try matchesLocalTypeDefBytes(
         localTypeInfo: localTypeInfo,
         typeMeta: decoded,
         start: start,
@@ -427,12 +427,13 @@ public final class ReadContext {
       maxTypeMetaBytes: config.maxTypeMetaBytes)
     let typeMetaEnd = buffer.getCursor()
     try validateCompatibleTypeMeta(decoded, for: localTypeInfo, wireTypeID: wireTypeID)
+    let exactLocalTypeInfo = try typeResolver.requireTypeInfo(for: decoded)
     return try typeResolver.cacheTypeInfo(
       decoded,
       forHeader: header,
       localTypeInfo: localTypeInfo,
-      exactLocal: matchesLocalTypeDefBytes(
-        localTypeInfo: localTypeInfo,
+      exactLocal: try matchesLocalTypeDefBytes(
+        localTypeInfo: exactLocalTypeInfo,
         typeMeta: decoded,
         start: start,
         end: typeMetaEnd),
@@ -446,15 +447,8 @@ public final class ReadContext {
     typeMeta: TypeMeta,
     start: Int,
     end: Int
-  ) -> Bool {
-    guard let rawTypeID = typeMeta.typeID,
-      let typeID = TypeId(rawValue: rawTypeID) else {
-      return false
-    }
-    switch typeID {
-    case .structType, .compatibleStruct, .namedStruct, .namedCompatibleStruct:
-      break
-    default:
+  ) throws -> Bool {
+    guard typeMeta.typeID != nil else {
       return false
     }
     guard let localTypeDefBytes = localTypeInfo.typeDefBytes,

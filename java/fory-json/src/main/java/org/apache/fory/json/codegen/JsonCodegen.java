@@ -177,6 +177,7 @@ public final class JsonCodegen {
     code.append("package ").append(PACKAGE).append(";\n");
     code.append("import org.apache.fory.json.codec.BaseObjectCodec;\n");
     code.append("import org.apache.fory.json.meta.JsonFieldInfo;\n");
+    code.append("import org.apache.fory.json.resolver.JsonTypeInfo;\n");
     code.append("import org.apache.fory.json.resolver.JsonTypeResolver;\n");
     code.append("import org.apache.fory.json.codec.GeneratedObjectWriter;\n");
     code.append("import org.apache.fory.json.codec.StringObjectWriter;\n");
@@ -874,14 +875,15 @@ public final class JsonCodegen {
           .append(utf8 ? "writeUtf8" : "writeString")
           .append("(writer, element, typeResolver);\n")
           .append(indent)
-          .append("    } else {\n")
-          .append(indent)
-          .append("      ")
-          .append(utf8 ? "typeResolver.writeUtf8Value" : "typeResolver.writeStringValue")
-          .append("(writer, element, ")
-          .append(prop)
-          .append(".writeElementType());\n")
-          .append(indent)
+          .append("    } else {\n");
+      writeResolvedValue(
+          code,
+          "elementTypeInfo" + prop.substring(1),
+          "element",
+          prop + ".writeElementType()",
+          utf8,
+          indent + "      ");
+      code.append(indent)
           .append("    }\n")
           .append(indent)
           .append("  }\n")
@@ -906,14 +908,15 @@ public final class JsonCodegen {
           .append(utf8 ? "writeUtf8" : "writeString")
           .append("(writer, element, typeResolver);\n")
           .append(indent)
-          .append("  } else {\n")
-          .append(indent)
-          .append("    ")
-          .append(utf8 ? "typeResolver.writeUtf8Value" : "typeResolver.writeStringValue")
-          .append("(writer, element, ")
-          .append(prop)
-          .append(".writeElementType());\n")
-          .append(indent)
+          .append("  } else {\n");
+      writeResolvedValue(
+          code,
+          "elementTypeInfo" + prop.substring(1),
+          "element",
+          prop + ".writeElementType()",
+          utf8,
+          indent + "    ");
+      code.append(indent)
           .append("  }\n")
           .append(indent)
           .append("}\n")
@@ -953,11 +956,7 @@ public final class JsonCodegen {
       String indent) {
     Class<?> rawType = property.writeRawType();
     if (rawType == Object.class) {
-      code.append(indent)
-          .append(utf8 ? "typeResolver.writeUtf8Value" : "typeResolver.writeStringValue")
-          .append("(writer, ")
-          .append(value)
-          .append(", Object.class);\n");
+      writeResolvedValue(code, "typeInfo" + prop.substring(1), value, "Object.class", utf8, indent);
       return;
     }
     code.append(indent).append("if (").append(value).append(".getClass() == ");
@@ -981,15 +980,33 @@ public final class JsonCodegen {
         .append(value)
         .append(", typeResolver);\n");
     code.append(indent).append("} else {\n");
+    writeResolvedValue(
+        code, "typeInfo" + prop.substring(1), value, prop + ".writeType()", utf8, indent + "  ");
+    code.append(indent).append("}\n");
+  }
+
+  private static void writeResolvedValue(
+      StringBuilder code,
+      String typeInfo,
+      String value,
+      String declaredType,
+      boolean utf8,
+      String indent) {
     code.append(indent)
-        .append("  ")
-        .append(utf8 ? "typeResolver.writeUtf8Value" : "typeResolver.writeStringValue")
+        .append("JsonTypeInfo ")
+        .append(typeInfo)
+        .append(" = typeResolver.getTypeInfo(")
+        .append(declaredType)
+        .append(", ")
+        .append(value)
+        .append(".getClass());\n");
+    code.append(indent)
+        .append(typeInfo)
+        .append(".codec().")
+        .append(utf8 ? "writeUtf8" : "writeString")
         .append("(writer, ")
         .append(value)
-        .append(", ")
-        .append(prop)
-        .append(".writeType());\n");
-    code.append(indent).append("}\n");
+        .append(", typeResolver);\n");
   }
 
   private void writeScalar(StringBuilder code, JsonFieldKind kind, String value, String indent) {

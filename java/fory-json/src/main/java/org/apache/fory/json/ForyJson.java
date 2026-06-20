@@ -99,14 +99,16 @@ public final class ForyJson {
 
   public <T> T fromJson(String json, Class<T> type) {
     JsonReader reader = new StringJsonReader(json);
-    Object value = typeResolver.readValue(reader, type, type);
+    JsonTypeInfo typeInfo = typeResolver.getTypeInfo(type, type);
+    Object value = typeInfo.codec().read(reader, typeInfo, typeResolver);
     reader.finish();
     return castValue(value, type);
   }
 
   public <T> T fromJson(byte[] bytes, Class<T> type) {
     JsonReader reader = new Utf8JsonReader(bytes);
-    Object value = typeResolver.readValue(reader, type, type);
+    JsonTypeInfo typeInfo = typeResolver.getTypeInfo(type, type);
+    Object value = typeInfo.codec().read(reader, typeInfo, typeResolver);
     reader.finish();
     return castValue(value, type);
   }

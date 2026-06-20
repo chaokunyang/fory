@@ -19,6 +19,7 @@
 
 package org.apache.fory.json.codec;
 
+import org.apache.fory.json.resolver.JsonTypeInfo;
 import org.apache.fory.json.resolver.JsonTypeResolver;
 import org.apache.fory.json.writer.StringJsonWriter;
 import org.apache.fory.json.writer.Utf8JsonWriter;
@@ -39,7 +40,8 @@ public final class GeneratedObjectCodec extends BaseObjectCodec {
     if (valueClass == type) {
       stringWriter.writeString(writer, value, resolver);
     } else {
-      resolver.writeStringValue(writer, value, valueClass);
+      JsonTypeInfo typeInfo = resolver.getTypeInfo(valueClass, valueClass);
+      typeInfo.codec().writeString(writer, value, resolver);
     }
   }
 
@@ -49,7 +51,8 @@ public final class GeneratedObjectCodec extends BaseObjectCodec {
     if (valueClass == type) {
       utf8Writer.writeUtf8(writer, value, resolver);
     } else {
-      resolver.writeUtf8Value(writer, value, valueClass);
+      JsonTypeInfo typeInfo = resolver.getTypeInfo(valueClass, valueClass);
+      typeInfo.codec().writeUtf8(writer, value, resolver);
     }
   }
 }

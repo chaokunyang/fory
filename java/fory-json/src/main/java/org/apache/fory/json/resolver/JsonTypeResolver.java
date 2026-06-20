@@ -30,9 +30,6 @@ import org.apache.fory.json.codec.JsonCodec;
 import org.apache.fory.json.codec.ObjectCodec;
 import org.apache.fory.json.codec.ObjectWriters;
 import org.apache.fory.json.codegen.JsonCodegen;
-import org.apache.fory.json.writer.JsonWriter;
-import org.apache.fory.json.writer.StringJsonWriter;
-import org.apache.fory.json.writer.Utf8JsonWriter;
 
 public final class JsonTypeResolver {
   private final ConcurrentMap<Class<?>, BaseObjectCodec> objectCodecs = new ConcurrentHashMap<>();
@@ -61,39 +58,6 @@ public final class JsonTypeResolver {
       return typeInfo;
     }
     return buildAndPublishTypeInfo(key, rawType, declaredType);
-  }
-
-  public void writeValue(JsonWriter writer, Object value, Type declaredType) {
-    if (value == null) {
-      writer.writeNull();
-      return;
-    }
-    JsonTypeInfo typeInfo = getTypeInfo(declaredType, value.getClass());
-    typeInfo.codec().write(writer, value, this);
-  }
-
-  public void writeStringValue(StringJsonWriter writer, Object value, Type declaredType) {
-    if (value == null) {
-      writer.writeNull();
-      return;
-    }
-    JsonTypeInfo typeInfo = getTypeInfo(declaredType, value.getClass());
-    typeInfo.codec().writeString(writer, value, this);
-  }
-
-  public void writeUtf8Value(Utf8JsonWriter writer, Object value, Type declaredType) {
-    if (value == null) {
-      writer.writeNull();
-      return;
-    }
-    JsonTypeInfo typeInfo = getTypeInfo(declaredType, value.getClass());
-    typeInfo.codec().writeUtf8(writer, value, this);
-  }
-
-  public Object readValue(
-      org.apache.fory.json.reader.JsonReader reader, Type declaredType, Class<?> fallback) {
-    JsonTypeInfo typeInfo = getTypeInfo(declaredType, fallback);
-    return typeInfo.codec().read(reader, typeInfo, this);
   }
 
   private synchronized BaseObjectCodec buildAndPublish(Class<?> type) {

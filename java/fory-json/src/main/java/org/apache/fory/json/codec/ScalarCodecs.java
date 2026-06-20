@@ -44,7 +44,8 @@ final class ScalarCodecs {
       if (valueClass == Object.class) {
         resolver.getObjectCodec(Object.class).write(writer, value, resolver);
       } else {
-        resolver.writeValue(writer, value, valueClass);
+        JsonTypeInfo typeInfo = resolver.getTypeInfo(valueClass, valueClass);
+        typeInfo.codec().write(writer, value, resolver);
       }
     }
 
@@ -54,7 +55,8 @@ final class ScalarCodecs {
       if (valueClass == Object.class) {
         resolver.getObjectCodec(Object.class).writeString(writer, value, resolver);
       } else {
-        resolver.writeStringValue(writer, value, valueClass);
+        JsonTypeInfo typeInfo = resolver.getTypeInfo(valueClass, valueClass);
+        typeInfo.codec().writeString(writer, value, resolver);
       }
     }
 
@@ -64,7 +66,8 @@ final class ScalarCodecs {
       if (valueClass == Object.class) {
         resolver.getObjectCodec(Object.class).writeUtf8(writer, value, resolver);
       } else {
-        resolver.writeUtf8Value(writer, value, valueClass);
+        JsonTypeInfo typeInfo = resolver.getTypeInfo(valueClass, valueClass);
+        typeInfo.codec().writeUtf8(writer, value, resolver);
       }
     }
 

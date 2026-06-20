@@ -756,7 +756,8 @@ public final class JsonFieldInfo {
           } else if (element.getClass() == elementRawType) {
             objectCodec.writeString(writer, element, typeResolver);
           } else {
-            typeResolver.writeStringValue(writer, element, writeElementType);
+            JsonTypeInfo typeInfo = typeResolver.getTypeInfo(writeElementType, element.getClass());
+            typeInfo.codec().writeString(writer, element, typeResolver);
           }
         }
       } else {
@@ -768,7 +769,8 @@ public final class JsonFieldInfo {
           } else if (element.getClass() == elementRawType) {
             objectCodec.writeString(writer, element, typeResolver);
           } else {
-            typeResolver.writeStringValue(writer, element, writeElementType);
+            JsonTypeInfo typeInfo = typeResolver.getTypeInfo(writeElementType, element.getClass());
+            typeInfo.codec().writeString(writer, element, typeResolver);
           }
         }
       }
@@ -1043,7 +1045,8 @@ public final class JsonFieldInfo {
           } else if (element.getClass() == elementRawType) {
             objectCodec.writeUtf8(writer, element, typeResolver);
           } else {
-            typeResolver.writeUtf8Value(writer, element, writeElementType);
+            JsonTypeInfo typeInfo = typeResolver.getTypeInfo(writeElementType, element.getClass());
+            typeInfo.codec().writeUtf8(writer, element, typeResolver);
           }
         }
       } else {
@@ -1055,7 +1058,8 @@ public final class JsonFieldInfo {
           } else if (element.getClass() == elementRawType) {
             objectCodec.writeUtf8(writer, element, typeResolver);
           } else {
-            typeResolver.writeUtf8Value(writer, element, writeElementType);
+            JsonTypeInfo typeInfo = typeResolver.getTypeInfo(writeElementType, element.getClass());
+            typeInfo.codec().writeUtf8(writer, element, typeResolver);
           }
         }
       }

@@ -162,7 +162,8 @@ public abstract class BaseObjectCodec extends AbstractJsonCodec {
     if (valueClass == type) {
       writeObject(writer, value, resolver);
     } else {
-      resolver.writeValue(writer, value, valueClass);
+      JsonTypeInfo typeInfo = resolver.getTypeInfo(valueClass, valueClass);
+      typeInfo.codec().write(writer, value, resolver);
     }
   }
 
@@ -172,7 +173,8 @@ public abstract class BaseObjectCodec extends AbstractJsonCodec {
     if (valueClass == type) {
       writeStringObject(writer, value, resolver);
     } else {
-      resolver.writeStringValue(writer, value, valueClass);
+      JsonTypeInfo typeInfo = resolver.getTypeInfo(valueClass, valueClass);
+      typeInfo.codec().writeString(writer, value, resolver);
     }
   }
 
@@ -182,7 +184,8 @@ public abstract class BaseObjectCodec extends AbstractJsonCodec {
     if (valueClass == type) {
       writeUtf8Object(writer, value, resolver);
     } else {
-      resolver.writeUtf8Value(writer, value, valueClass);
+      JsonTypeInfo typeInfo = resolver.getTypeInfo(valueClass, valueClass);
+      typeInfo.codec().writeUtf8(writer, value, resolver);
     }
   }
 

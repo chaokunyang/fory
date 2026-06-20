@@ -19,6 +19,7 @@
 
 package org.apache.fory.json;
 
+import java.lang.reflect.Type;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.atomic.AtomicReferenceArray;
 import org.apache.fory.json.codec.CodecRegistry;
@@ -30,6 +31,7 @@ import org.apache.fory.json.resolver.JsonTypeInfo;
 import org.apache.fory.json.resolver.JsonTypeResolver;
 import org.apache.fory.json.writer.StringJsonWriter;
 import org.apache.fory.json.writer.Utf8JsonWriter;
+import org.apache.fory.reflect.TypeRef;
 
 /** Thread-safe public facade for Fory JSON serialization and parsing. */
 public final class ForyJson {
@@ -98,19 +100,23 @@ public final class ForyJson {
   }
 
   public <T> T fromJson(String json, Class<T> type) {
-    JsonReader reader = new StringJsonReader(json);
-    JsonTypeInfo typeInfo = typeResolver.getTypeInfo(type, type);
-    Object value = typeInfo.codec().read(reader, typeInfo, typeResolver);
-    reader.finish();
-    return castValue(value, type);
+    return castValue(readValue(new StringJsonReader(json), type, type), type);
+  }
+
+  /** Parses JSON using a generic type captured by {@link TypeRef}. */
+  public <T> T fromJson(String json, TypeRef<T> typeRef) {
+    Object value = readValue(new StringJsonReader(json), typeRef.getType(), typeRef.getRawType());
+    return castValue(value, typeRef);
   }
 
   public <T> T fromJson(byte[] bytes, Class<T> type) {
-    JsonReader reader = new Utf8JsonReader(bytes);
-    JsonTypeInfo typeInfo = typeResolver.getTypeInfo(type, type);
-    Object value = typeInfo.codec().read(reader, typeInfo, typeResolver);
-    reader.finish();
-    return castValue(value, type);
+    return castValue(readValue(new Utf8JsonReader(bytes), type, type), type);
+  }
+
+  /** Parses UTF-8 JSON bytes using a generic type captured by {@link TypeRef}. */
+  public <T> T fromJson(byte[] bytes, TypeRef<T> typeRef) {
+    Object value = readValue(new Utf8JsonReader(bytes), typeRef.getType(), typeRef.getRawType());
+    return castValue(value, typeRef);
   }
 
   boolean hasGeneratedWriter(Class<?> type) {
@@ -178,9 +184,22 @@ public final class ForyJson {
     return hash ^ (hash >>> 16);
   }
 
+  private Object readValue(JsonReader reader, Type type, Class<?> fallback) {
+    JsonTypeInfo typeInfo = typeResolver.getTypeInfo(type, fallback);
+    Object value = typeInfo.codec().read(reader, typeInfo, typeResolver);
+    reader.finish();
+    return value;
+  }
+
   @SuppressWarnings("unchecked")
   private static <T> T castValue(Object value, Class<T> type) {
     return type.isPrimitive() ? (T) value : type.cast(value);
+  }
+
+  @SuppressWarnings("unchecked")
+  private static <T> T castValue(Object value, TypeRef<T> typeRef) {
+    Class<?> rawType = typeRef.getRawType();
+    return rawType.isPrimitive() ? (T) value : (T) rawType.cast(value);
   }
 
   private static final class PooledState {

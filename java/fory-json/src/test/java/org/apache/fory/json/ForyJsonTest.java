@@ -33,6 +33,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import org.apache.fory.json.annotation.JsonIgnore;
+import org.apache.fory.reflect.TypeRef;
 import org.testng.annotations.Test;
 
 public class ForyJsonTest {
@@ -535,6 +536,35 @@ public class ForyJsonTest {
     assertEquals(value.intValue, Integer.valueOf(8));
     assertEquals(value.longValue, Long.valueOf(9));
     assertEquals(value.shortValue, Short.valueOf((short) 7));
+  }
+
+  @Test
+  public void readTypeRefList() {
+    ForyJson json = ForyJson.builder().build();
+    List<TokenValues> values =
+        json.fromJson(
+            "[{\"count\":1,\"name\":\"alpha\",\"tags\":[\"x\",\"y\"],\"total\":2},"
+                + "{\"count\":3,\"name\":\"beta\",\"tags\":[\"z\"],\"total\":4}]",
+            new TypeRef<List<TokenValues>>() {});
+    assertEquals(values.size(), 2);
+    assertEquals(values.get(0).name, "alpha");
+    assertEquals(values.get(0).tags, Arrays.asList("x", "y"));
+    assertEquals(values.get(1).count, 3);
+    assertEquals(values.get(1).total, 4);
+  }
+
+  @Test
+  public void readTypeRefMapBytes() {
+    ForyJson json = ForyJson.builder().build();
+    byte[] bytes =
+        "{\"first\":{\"count\":5,\"name\":\"gamma\",\"tags\":[\"u\"],\"total\":6}}"
+            .getBytes(StandardCharsets.UTF_8);
+    Map<String, TokenValues> values =
+        json.fromJson(bytes, new TypeRef<Map<String, TokenValues>>() {});
+    assertEquals(values.size(), 1);
+    assertEquals(values.get("first").name, "gamma");
+    assertEquals(values.get("first").tags, Arrays.asList("u"));
+    assertEquals(values.get("first").total, 6);
   }
 
   @Test

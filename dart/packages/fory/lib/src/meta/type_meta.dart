@@ -134,6 +134,7 @@ final class ParsedTypeMetaCache {
 
   @pragma('vm:prefer-inline')
   void remember(TypeHeader header, TypeInfo resolved) {
+    assert(resolved.cachedTypeDefHeader == header.value);
     _entries[header.value] = resolved;
     _cachedTypeInfo = resolved;
   }

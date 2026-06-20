@@ -152,7 +152,7 @@ final class TypeInfo {
 
   bool get isBasicValue => TypeIds.isBasicValue(typeId);
 
-  Int64? get cachedTypeDefHeader => remoteTypeDef?.header ?? typeDef?.header;
+  Int64 get cachedTypeDefHeader => remoteTypeDef?.header ?? typeDef!.header;
 }
 
 bool usesDeclaredTypeInfo(

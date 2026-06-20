@@ -222,6 +222,33 @@ Uint8List _enumTypeMetaBytes(Type type, String name) {
   return buffer.toBytes();
 }
 
+TypeInfo _cachedTypeInfo(Int64 header) {
+  return TypeInfo(
+    type: Object,
+    kind: RegistrationKind.builtin,
+    typeId: TypeIds.struct,
+    supportsRef: false,
+    needsRootRef: false,
+    usesNestedTypeDefinitions: false,
+    evolving: false,
+    fields: const <FieldInfo>[],
+    serializer: const _CacheTestSerializer(),
+    structSerializer: null,
+    userTypeId: null,
+    namespace: null,
+    typeName: null,
+    encodedNamespace: null,
+    encodedTypeName: null,
+    typeDef: TypeDef(
+      evolving: false,
+      fields: const <FieldInfo>[],
+      header: header,
+      encoded: Uint8List(0),
+    ),
+    remoteTypeDef: null,
+  );
+}
+
 void _readTypeMeta(TypeResolver resolver, Uint8List bytes) {
   resolver.readTypeMeta(
     Buffer.wrap(bytes),
@@ -315,39 +342,25 @@ void main() {
     });
 
     test('parsed TypeDef cache publishes beyond old implementation floor', () {
-      final resolved = TypeInfo(
-        type: Object,
-        kind: RegistrationKind.builtin,
-        typeId: TypeIds.struct,
-        supportsRef: false,
-        needsRootRef: false,
-        usesNestedTypeDefinitions: false,
-        evolving: false,
-        fields: const <FieldInfo>[],
-        serializer: _CacheTestSerializer(),
-        structSerializer: null,
-        userTypeId: null,
-        namespace: null,
-        typeName: null,
-        encodedNamespace: null,
-        encodedTypeName: null,
-        typeDef: null,
-        remoteTypeDef: null,
-      );
       final cache = ParsedTypeMetaCache();
       const oldImplementationFloor = 8192;
+      late TypeInfo lastResolved;
       for (var i = 0; i < oldImplementationFloor; i++) {
-        cache.remember(TypeHeader(Int64(i)), resolved);
+        final header = TypeHeader(Int64(i));
+        final resolved = _cachedTypeInfo(header.value);
+        cache.remember(header, resolved);
+        lastResolved = resolved;
       }
 
       expect(
         cache.lookup(TypeHeader(Int64(oldImplementationFloor - 1))),
-        same(resolved),
+        same(lastResolved),
       );
       final aboveOldFloor = TypeHeader(Int64(oldImplementationFloor));
-      cache.remember(aboveOldFloor, resolved);
+      final aboveOldFloorResolved = _cachedTypeInfo(aboveOldFloor.value);
+      cache.remember(aboveOldFloor, aboveOldFloorResolved);
 
-      expect(cache.lookup(aboveOldFloor), same(resolved));
+      expect(cache.lookup(aboveOldFloor), same(aboveOldFloorResolved));
     });
 
     test('TypeDef uses late registered field type', () {

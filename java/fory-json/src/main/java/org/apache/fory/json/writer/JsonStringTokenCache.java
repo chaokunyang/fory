@@ -60,6 +60,9 @@ public final class JsonStringTokenCache {
 
   public boolean writeStringField(
       StringJsonWriter writer, String text, boolean comma, byte[] namePrefix, byte[] commaPrefix) {
+    if (!latin1Token(text)) {
+      return false;
+    }
     int slot = slot(text);
     if (slot == NO_SLOT) {
       return false;
@@ -70,6 +73,9 @@ public final class JsonStringTokenCache {
   }
 
   public boolean writeStringCommaField(StringJsonWriter writer, String text, byte[] commaPrefix) {
+    if (!latin1Token(text)) {
+      return false;
+    }
     int slot = slot(text);
     if (slot == NO_SLOT) {
       return false;
@@ -109,6 +115,9 @@ public final class JsonStringTokenCache {
   }
 
   public boolean writeStringValue(StringJsonWriter writer, String text) {
+    if (!latin1Token(text)) {
+      return false;
+    }
     int slot = slot(text);
     if (slot == NO_SLOT) {
       return false;
@@ -543,6 +552,16 @@ public final class JsonStringTokenCache {
 
   private static boolean cacheable(String text) {
     return text.length() <= MAX_CHARS;
+  }
+
+  private static boolean latin1Token(String text) {
+    int length = text.length();
+    for (int i = 0; i < length; i++) {
+      if (text.charAt(i) > 0xff) {
+        return false;
+      }
+    }
+    return true;
   }
 
   private static byte[] join(byte[] prefix, byte[] token) {

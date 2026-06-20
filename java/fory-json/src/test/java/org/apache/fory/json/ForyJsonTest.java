@@ -133,6 +133,12 @@ public class ForyJsonTest {
     public char value;
   }
 
+  public static final class UnicodeValues {
+    public String first = "\u1234";
+    public String second = "music \uD834\uDD1E";
+    public List<String> tags = Arrays.asList("latin", "\u1234", "\uD83D\uDE00");
+  }
+
   public static final class RecursiveParent {
     public RecursiveChild child = new RecursiveChild();
     public String name = "parent";
@@ -349,9 +355,33 @@ public class ForyJsonTest {
     ForyJson json = ForyJson.builder().build();
     PublicFields fields = new PublicFields();
     fields.name = "a\n\"b\"\\\u1234";
-    String stringExpected = "{\"active\":true,\"id\":7,\"name\":\"a\\n\\\"b\\\"\\\\" + "\\u1234\"}";
+    String stringExpected = "{\"active\":true,\"id\":7,\"name\":\"a\\n\\\"b\\\"\\\\\u1234\"}";
     assertEquals(json.toJson(fields), stringExpected);
     assertEquals(json.fromJson(stringExpected, PublicFields.class).name, fields.name);
+  }
+
+  @Test
+  public void writeUtf16StringText() {
+    ForyJson json = ForyJson.builder().build();
+    UnicodeValues values = new UnicodeValues();
+    String expected =
+        "{\"first\":\"\u1234\",\"second\":\"music \uD834\uDD1E\","
+            + "\"tags\":[\"latin\",\"\u1234\",\"\uD83D\uDE00\"]}";
+    assertEquals(json.toJson(values), expected);
+    assertEquals(json.toJson(values), expected);
+    assertEquals(new String(json.toJsonBytes(values), StandardCharsets.UTF_8), expected);
+    assertEquals(json.fromJson(expected, UnicodeValues.class).second, values.second);
+    assertEquals(json.fromJson(json.toJsonBytes(values), UnicodeValues.class).tags, values.tags);
+  }
+
+  @Test
+  public void writeUtf16Char() {
+    ForyJson json = ForyJson.builder().build();
+    CharValue value = new CharValue();
+    value.value = '\u1234';
+    assertEquals(json.toJson(value), "{\"value\":\"\u1234\"}");
+    assertEquals(
+        new String(json.toJsonBytes(value), StandardCharsets.UTF_8), "{\"value\":\"\u1234\"}");
   }
 
   @Test
@@ -393,7 +423,7 @@ public class ForyJsonTest {
     ForyJson json = ForyJson.builder().build();
     PublicFields fields = new PublicFields();
     fields.name = "a\uD83D\uDE00";
-    String stringExpected = "{\"active\":true,\"id\":7,\"name\":\"a" + "\\ud83d" + "\\ude00\"}";
+    String stringExpected = "{\"active\":true,\"id\":7,\"name\":\"a\uD83D\uDE00\"}";
     String utf8Expected = "{\"active\":true,\"id\":7,\"name\":\"a\uD83D\uDE00\"}";
     assertEquals(json.toJson(fields), stringExpected);
     assertEquals(new String(json.toJsonBytes(fields), StandardCharsets.UTF_8), utf8Expected);
@@ -416,9 +446,10 @@ public class ForyJsonTest {
   public void readUtf8Bytes() {
     ForyJson json = ForyJson.builder().build();
     byte[] bytes =
-        "{\"name\":\"\u1234\",\"id\":8,\"active\":false}".getBytes(StandardCharsets.UTF_8);
+        "{\"name\":\"\uD83D\uDE00\u1234\",\"id\":8,\"active\":false}"
+            .getBytes(StandardCharsets.UTF_8);
     PublicFields fields = json.fromJson(bytes, PublicFields.class);
-    assertEquals(fields.name, "\u1234");
+    assertEquals(fields.name, "\uD83D\uDE00\u1234");
     assertEquals(fields.id, 8);
     assertEquals(fields.active, false);
   }
@@ -466,6 +497,9 @@ public class ForyJsonTest {
     assertEquals(json.fromJson("7", int.class), Integer.valueOf(7));
     assertEquals(json.fromJson("true", boolean.class), Boolean.TRUE);
     assertEquals(json.fromJson("\"fory\"".getBytes(StandardCharsets.UTF_8), String.class), "fory");
+    assertEquals(
+        json.fromJson("\"\uD83D\uDE00\u1234\"".getBytes(StandardCharsets.UTF_8), String.class),
+        "\uD83D\uDE00\u1234");
   }
 
   @Test

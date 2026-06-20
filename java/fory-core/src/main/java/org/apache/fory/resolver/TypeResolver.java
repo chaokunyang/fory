@@ -1345,7 +1345,7 @@ public abstract class TypeResolver {
     // Remote TypeDef/TypeMeta paths reach class materialization through this owner. Keep
     // name-level checks before Class.forName so rejected metadata cannot force arbitrary class
     // loading.
-    if (!extRegistry.typeChecker.checkType(this, className)) {
+    if (!checkType(className)) {
       throw new InsecureException(
           String.format("Class %s is forbidden for serialization.", className));
     }
@@ -2154,10 +2154,38 @@ public abstract class TypeResolver {
   }
 
   public void setTypeChecker(TypeChecker typeChecker) {
+    sharedRegistry.clearCheckerCache();
     extRegistry.typeChecker = typeChecker == null ? DEFAULT_TYPE_CHECKER : typeChecker;
     if (extRegistry.typeChecker instanceof AllowListChecker && this instanceof ClassResolver) {
       ((AllowListChecker) extRegistry.typeChecker).addListener((ClassResolver) this);
     }
+  }
+
+  final boolean checkType(String className) {
+    TypeChecker typeChecker = extRegistry.typeChecker;
+    if (typeChecker == DEFAULT_TYPE_CHECKER) {
+      return true;
+    }
+    if (sharedRegistry.isTypeAccepted(className)) {
+      return true;
+    }
+    if (!typeChecker.checkType(this, className)) {
+      return false;
+    }
+    sharedRegistry.markTypeAccepted(className);
+    return true;
+  }
+
+  final void clearCheckerCache() {
+    sharedRegistry.clearCheckerCache();
+  }
+
+  final void clearCheckerCacheForClass(String className) {
+    sharedRegistry.clearCheckerCacheForClass(className);
+  }
+
+  final void clearCheckerCacheForPrefix(String prefix) {
+    sharedRegistry.clearCheckerCacheForPrefix(prefix);
   }
 
   public void registerSerializerFactory(SerializerFactory serializerFactory) {

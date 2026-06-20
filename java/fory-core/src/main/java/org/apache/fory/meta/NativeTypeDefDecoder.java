@@ -207,9 +207,8 @@ class NativeTypeDefDecoder {
     }
     Preconditions.checkNotNull(classSpec);
     boolean hasFieldMetadata = !classFields.isEmpty();
-    if (!Types.isStructType(rootTypeId) && hasFieldMetadata) {
-      throw new DeserializationException("Non-struct TypeDef cannot carry field metadata");
-    }
+    // Native TypeDef can carry class-layer fields even when the root wire type is an enum,
+    // map, or other non-struct wrapper. Validate the resolved root class kind instead.
     if (rootClass != null) {
       int expectedRootTypeId = resolver.getTypeDefRootTypeId(rootClass, hasFieldMetadata);
       if (!isCompatibleRootKind(expectedRootTypeId, rootTypeId, !rootClassLayerRegistered)) {

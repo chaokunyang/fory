@@ -878,6 +878,15 @@ class TypeResolver:
                 typeinfo.serializer = DataClassSerializer(serializer_type_resolver, typeinfo.cls)
         else:
             typeinfo.serializer = self._create_serializer(typeinfo.cls)
+            if (
+                self.meta_share
+                and typeinfo.type_def is None
+                and (
+                    TypeId.is_namespaced_type(type_id)
+                    or (needs_user_type_id(type_id) and typeinfo.user_type_id is not None and typeinfo.user_type_id != NO_USER_TYPE_ID)
+                )
+            ):
+                typeinfo.type_def = encode_typedef(serializer_type_resolver, typeinfo.cls)
 
         return typeinfo
 

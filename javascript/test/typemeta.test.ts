@@ -390,13 +390,16 @@ describe("typemeta", () => {
   });
 
   test("TypeMeta header cache hit skips the current body size", () => {
-    const header = 0xffn;
     const typeMeta = TypeMeta.fromTypeInfo(Type.struct(7010, {}));
+    const encoded = typeMeta.toBytes();
+    const headerReader = new BinaryReader({});
+    headerReader.reset(encoded);
+    const header = headerReader.readUint64();
+    const bodySize = encoded.length - 8;
     const writer = new BinaryWriter({});
     writer.writeVarUInt32(0);
     writer.writeUint64(header);
-    writer.writeVarUInt32(0);
-    writer.buffer(new Uint8Array(0xff));
+    writer.buffer(new Uint8Array(bodySize));
     writer.buffer(new Uint8Array([0x7b]));
 
     const config = { ref: false, useSliceString: false, hooks: {} } as any;
@@ -418,10 +421,7 @@ describe("typemeta", () => {
       } as any,
       config,
     );
-    (context as any).typeMetaCache.set(
-      Number(header >> 32n),
-      new Map([[Number(header & 0xffffffffn), typeMeta]]),
-    );
+    (context as any).typeMetaCache.set(typeMeta.getHash(), typeMeta);
     context.reset(writer.dump());
 
     expect(context.readTypeMeta()).toBe(typeMeta);

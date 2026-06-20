@@ -213,10 +213,10 @@ final class WriteContext {
   @internal
   void writeRootBuiltinValue(
     Object value, {
-    required int wireTypeId,
+    required int typeId,
     required bool trackRef,
   }) {
-    final resolved = _typeResolver.resolveBuiltinWireType(wireTypeId);
+    final resolved = _typeResolver.resolveBuiltinTypeId(typeId);
     final effectiveTrackRef = trackRef && resolved.supportsRef;
     if (_refWriter.writeRefOrNull(
       _buffer,

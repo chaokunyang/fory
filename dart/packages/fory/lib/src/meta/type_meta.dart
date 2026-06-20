@@ -28,30 +28,30 @@ import 'package:fory/src/resolver/type_resolver.dart';
 import 'package:fory/src/types/int64.dart';
 import 'package:fory/src/util/hash_util.dart';
 
-/// Wire-level type metadata for one value.
-final class WireTypeMeta {
+/// Type metadata for one serialized value.
+final class TypeMeta {
   final TypeInfo resolvedType;
-  final int wireTypeId;
+  final int typeId;
   final bool hasTypeDef;
 
-  const WireTypeMeta({
+  const TypeMeta({
     required this.resolvedType,
-    required this.wireTypeId,
+    required this.typeId,
     required this.hasTypeDef,
   });
 
   bool get hasUserTypeId =>
-      wireTypeId == TypeIds.enumById ||
-      wireTypeId == TypeIds.struct ||
-      wireTypeId == TypeIds.ext ||
-      wireTypeId == TypeIds.typedUnion;
+      typeId == TypeIds.enumById ||
+      typeId == TypeIds.struct ||
+      typeId == TypeIds.ext ||
+      typeId == TypeIds.typedUnion;
 
   bool get hasEncodedName =>
       !hasTypeDef &&
-      (wireTypeId == TypeIds.namedEnum ||
-          wireTypeId == TypeIds.namedStruct ||
-          wireTypeId == TypeIds.namedExt ||
-          wireTypeId == TypeIds.namedUnion);
+      (typeId == TypeIds.namedEnum ||
+          typeId == TypeIds.namedStruct ||
+          typeId == TypeIds.namedExt ||
+          typeId == TypeIds.namedUnion);
 }
 
 final class TypeHeader {
@@ -141,43 +141,43 @@ final class ParsedTypeMetaCache {
 }
 
 /// Decodes type metadata from the xlang wire format.
-final class WireTypeMetaDecoder {
-  const WireTypeMetaDecoder();
+final class TypeMetaDecoder {
+  const TypeMetaDecoder();
 
-  WireTypeMeta read(
+  TypeMeta read(
     Buffer buffer, {
     required Config config,
-    required TypeInfo Function(int wireTypeId) resolveBuiltinWireType,
+    required TypeInfo Function(int typeId) resolveBuiltinTypeId,
     required TypeInfo Function(int id) resolveUserById,
     required TypeInfo Function(
-      int wireTypeId,
+      int typeId,
       EncodedMetaString namespace,
       EncodedMetaString typeName,
     )
     resolveUserByEncodedNameCached,
-    required TypeInfo? Function(int wireTypeId) expectedNamedType,
-    required WireTypeMeta Function() readTypeDef,
+    required TypeInfo? Function(int typeId) expectedNamedType,
+    required TypeMeta Function() readTypeDef,
     required EncodedMetaString Function([EncodedMetaString? expected])
     readPackageMetaString,
     required EncodedMetaString Function([EncodedMetaString? expected])
     readTypeNameMetaString,
   }) {
-    final wireTypeId = buffer.readVarUint32Small7();
-    if (_isBuiltinWireType(wireTypeId)) {
-      return WireTypeMeta(
-        resolvedType: resolveBuiltinWireType(wireTypeId),
-        wireTypeId: wireTypeId,
+    final typeId = buffer.readVarUint32Small7();
+    if (_isBuiltinTypeId(typeId)) {
+      return TypeMeta(
+        resolvedType: resolveBuiltinTypeId(typeId),
+        typeId: typeId,
         hasTypeDef: false,
       );
     }
-    switch (wireTypeId) {
+    switch (typeId) {
       case TypeIds.enumById:
       case TypeIds.struct:
       case TypeIds.ext:
       case TypeIds.typedUnion:
-        return WireTypeMeta(
+        return TypeMeta(
           resolvedType: resolveUserById(buffer.readVarUint32()),
-          wireTypeId: wireTypeId,
+          typeId: typeId,
           hasTypeDef: false,
         );
       case TypeIds.namedEnum:
@@ -187,76 +187,76 @@ final class WireTypeMetaDecoder {
         if (config.compatible) {
           return readTypeDef();
         }
-        final expected = expectedNamedType(wireTypeId);
+        final expected = expectedNamedType(typeId);
         final namespace = readPackageMetaString(expected?.encodedNamespace);
         final typeName = readTypeNameMetaString(expected?.encodedTypeName);
         if (expected != null &&
             identical(namespace, expected.encodedNamespace) &&
             identical(typeName, expected.encodedTypeName)) {
-          return WireTypeMeta(
+          return TypeMeta(
             resolvedType: expected,
-            wireTypeId: wireTypeId,
+            typeId: typeId,
             hasTypeDef: false,
           );
         }
-        return WireTypeMeta(
+        return TypeMeta(
           resolvedType: resolveUserByEncodedNameCached(
-            wireTypeId,
+            typeId,
             namespace,
             typeName,
           ),
-          wireTypeId: wireTypeId,
+          typeId: typeId,
           hasTypeDef: false,
         );
       case TypeIds.compatibleStruct:
       case TypeIds.namedCompatibleStruct:
         return readTypeDef();
       default:
-        throw StateError('Unsupported wire type id $wireTypeId.');
+        throw StateError('Unsupported type id $typeId.');
     }
   }
 
-  bool _isBuiltinWireType(int wireTypeId) =>
-      wireTypeId == TypeIds.boolType ||
-      wireTypeId == TypeIds.int8 ||
-      wireTypeId == TypeIds.int16 ||
-      wireTypeId == TypeIds.int32 ||
-      wireTypeId == TypeIds.varInt32 ||
-      wireTypeId == TypeIds.int64 ||
-      wireTypeId == TypeIds.varInt64 ||
-      wireTypeId == TypeIds.taggedInt64 ||
-      wireTypeId == TypeIds.uint8 ||
-      wireTypeId == TypeIds.uint16 ||
-      wireTypeId == TypeIds.uint32 ||
-      wireTypeId == TypeIds.varUint32 ||
-      wireTypeId == TypeIds.uint64 ||
-      wireTypeId == TypeIds.varUint64 ||
-      wireTypeId == TypeIds.taggedUint64 ||
-      wireTypeId == TypeIds.float16 ||
-      wireTypeId == TypeIds.bfloat16 ||
-      wireTypeId == TypeIds.float32 ||
-      wireTypeId == TypeIds.float64 ||
-      wireTypeId == TypeIds.string ||
-      wireTypeId == TypeIds.list ||
-      wireTypeId == TypeIds.set ||
-      wireTypeId == TypeIds.map ||
-      wireTypeId == TypeIds.none ||
-      wireTypeId == TypeIds.binary ||
-      wireTypeId == TypeIds.duration ||
-      wireTypeId == TypeIds.decimal ||
-      wireTypeId == TypeIds.date ||
-      wireTypeId == TypeIds.timestamp ||
-      wireTypeId == TypeIds.boolArray ||
-      wireTypeId == TypeIds.int8Array ||
-      wireTypeId == TypeIds.int16Array ||
-      wireTypeId == TypeIds.int32Array ||
-      wireTypeId == TypeIds.int64Array ||
-      wireTypeId == TypeIds.uint8Array ||
-      wireTypeId == TypeIds.uint16Array ||
-      wireTypeId == TypeIds.uint32Array ||
-      wireTypeId == TypeIds.uint64Array ||
-      wireTypeId == TypeIds.float16Array ||
-      wireTypeId == TypeIds.bfloat16Array ||
-      wireTypeId == TypeIds.float32Array ||
-      wireTypeId == TypeIds.float64Array;
+  bool _isBuiltinTypeId(int typeId) =>
+      typeId == TypeIds.boolType ||
+      typeId == TypeIds.int8 ||
+      typeId == TypeIds.int16 ||
+      typeId == TypeIds.int32 ||
+      typeId == TypeIds.varInt32 ||
+      typeId == TypeIds.int64 ||
+      typeId == TypeIds.varInt64 ||
+      typeId == TypeIds.taggedInt64 ||
+      typeId == TypeIds.uint8 ||
+      typeId == TypeIds.uint16 ||
+      typeId == TypeIds.uint32 ||
+      typeId == TypeIds.varUint32 ||
+      typeId == TypeIds.uint64 ||
+      typeId == TypeIds.varUint64 ||
+      typeId == TypeIds.taggedUint64 ||
+      typeId == TypeIds.float16 ||
+      typeId == TypeIds.bfloat16 ||
+      typeId == TypeIds.float32 ||
+      typeId == TypeIds.float64 ||
+      typeId == TypeIds.string ||
+      typeId == TypeIds.list ||
+      typeId == TypeIds.set ||
+      typeId == TypeIds.map ||
+      typeId == TypeIds.none ||
+      typeId == TypeIds.binary ||
+      typeId == TypeIds.duration ||
+      typeId == TypeIds.decimal ||
+      typeId == TypeIds.date ||
+      typeId == TypeIds.timestamp ||
+      typeId == TypeIds.boolArray ||
+      typeId == TypeIds.int8Array ||
+      typeId == TypeIds.int16Array ||
+      typeId == TypeIds.int32Array ||
+      typeId == TypeIds.int64Array ||
+      typeId == TypeIds.uint8Array ||
+      typeId == TypeIds.uint16Array ||
+      typeId == TypeIds.uint32Array ||
+      typeId == TypeIds.uint64Array ||
+      typeId == TypeIds.float16Array ||
+      typeId == TypeIds.bfloat16Array ||
+      typeId == TypeIds.float32Array ||
+      typeId == TypeIds.float64Array;
 }

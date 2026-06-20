@@ -250,12 +250,9 @@ final class TypeResolver {
   static const int _minRemoteTypeMetaLimit = 8192;
 
   final Config config;
-  final WireTypeMetaDecoder _wireTypeMetaDecoder = const WireTypeMetaDecoder();
+  final TypeMetaDecoder _typeMetaDecoder = const TypeMetaDecoder();
   final ParsedTypeMetaCache _parsedTypeMetaCache = ParsedTypeMetaCache();
-  final List<TypeInfo?> _lastNamedTypeByWireType = List<TypeInfo?>.filled(
-    64,
-    null,
-  );
+  final List<TypeInfo?> _lastNamedTypeById = List<TypeInfo?>.filled(64, null);
   final Map<_BuiltinKey, TypeInfo> _builtinByKey = <_BuiltinKey, TypeInfo>{};
   final List<_NamedTypeReadCacheEntry?> _namedTypeLookupCache =
       List<_NamedTypeReadCacheEntry?>.filled(128, null);
@@ -670,29 +667,29 @@ final class TypeResolver {
   }
 
   TypeInfo resolveUserByEncodedNameCached(
-    int wireTypeId,
+    int typeId,
     EncodedMetaString namespace,
     EncodedMetaString typeName,
   ) {
     final slot =
-        _namedTypeLookupCacheIndex(wireTypeId, namespace, typeName) &
+        _namedTypeLookupCacheIndex(typeId, namespace, typeName) &
         (_namedTypeLookupCache.length - 1);
     final cached = _namedTypeLookupCache[slot];
     if (cached != null &&
-        cached.wireTypeId == wireTypeId &&
+        cached.typeId == typeId &&
         identical(cached.namespace, namespace) &&
         identical(cached.typeName, typeName)) {
       return cached.resolved;
     }
     final resolved = resolveUserByEncodedName(namespace, typeName);
     _namedTypeLookupCache[slot] = _NamedTypeReadCacheEntry(
-      wireTypeId,
+      typeId,
       namespace,
       typeName,
       resolved,
     );
-    if (wireTypeId < _lastNamedTypeByWireType.length) {
-      _lastNamedTypeByWireType[wireTypeId] = resolved;
+    if (typeId < _lastNamedTypeById.length) {
+      _lastNamedTypeById[typeId] = resolved;
     }
     return resolved;
   }
@@ -726,12 +723,12 @@ final class TypeResolver {
     );
   }
 
-  WireTypeMeta wireTypeMetaForResolved(TypeInfo resolved) {
-    final wireTypeId = _typeIdFor(resolved);
-    return WireTypeMeta(
+  TypeMeta typeMetaForResolved(TypeInfo resolved) {
+    final typeId = _typeIdFor(resolved);
+    return TypeMeta(
       resolvedType: resolved,
-      wireTypeId: wireTypeId,
-      hasTypeDef: _hasTypeDef(wireTypeId),
+      typeId: typeId,
+      hasTypeDef: _hasTypeDef(typeId),
     );
   }
 
@@ -759,47 +756,47 @@ final class TypeResolver {
     required LinkedHashMap<TypeDef, int> typeDefIds,
     required MetaStringWriter metaStringWriter,
   }) {
-    final wireTypeId = _typeIdFor(resolved);
-    if (_hasTypeDef(wireTypeId)) {
-      buffer.writeVarUint32Small7(wireTypeId);
+    final typeId = _typeIdFor(resolved);
+    if (_hasTypeDef(typeId)) {
+      buffer.writeVarUint32Small7(typeId);
       _writeTypeDef(buffer, resolved.typeDef!, typeDefIds: typeDefIds);
       return;
     }
-    if (_hasUserTypeId(wireTypeId)) {
-      buffer.writeVarUint32Small7(wireTypeId);
+    if (_hasUserTypeId(typeId)) {
+      buffer.writeVarUint32Small7(typeId);
       buffer.writeVarUint32(resolved.userTypeId!);
       return;
     }
-    buffer.writeVarUint32Small7(wireTypeId);
-    if (_hasEncodedName(wireTypeId)) {
+    buffer.writeVarUint32Small7(typeId);
+    if (_hasEncodedName(typeId)) {
       metaStringWriter.writeMetaString(buffer, resolved.encodedNamespace!);
       metaStringWriter.writeMetaString(buffer, resolved.encodedTypeName!);
     }
   }
 
   @pragma('vm:prefer-inline')
-  bool _hasUserTypeId(int wireTypeId) =>
-      wireTypeId == TypeIds.enumById ||
-      wireTypeId == TypeIds.struct ||
-      wireTypeId == TypeIds.ext ||
-      wireTypeId == TypeIds.typedUnion;
+  bool _hasUserTypeId(int typeId) =>
+      typeId == TypeIds.enumById ||
+      typeId == TypeIds.struct ||
+      typeId == TypeIds.ext ||
+      typeId == TypeIds.typedUnion;
 
   @pragma('vm:prefer-inline')
-  bool _hasTypeDef(int wireTypeId) =>
-      wireTypeId == TypeIds.compatibleStruct ||
-      wireTypeId == TypeIds.namedCompatibleStruct ||
+  bool _hasTypeDef(int typeId) =>
+      typeId == TypeIds.compatibleStruct ||
+      typeId == TypeIds.namedCompatibleStruct ||
       (config.compatible &&
-          (wireTypeId == TypeIds.namedEnum ||
-              wireTypeId == TypeIds.namedStruct ||
-              wireTypeId == TypeIds.namedExt ||
-              wireTypeId == TypeIds.namedUnion));
+          (typeId == TypeIds.namedEnum ||
+              typeId == TypeIds.namedStruct ||
+              typeId == TypeIds.namedExt ||
+              typeId == TypeIds.namedUnion));
 
   @pragma('vm:prefer-inline')
-  bool _hasEncodedName(int wireTypeId) =>
-      wireTypeId == TypeIds.namedEnum ||
-      wireTypeId == TypeIds.namedStruct ||
-      wireTypeId == TypeIds.namedExt ||
-      wireTypeId == TypeIds.namedUnion;
+  bool _hasEncodedName(int typeId) =>
+      typeId == TypeIds.namedEnum ||
+      typeId == TypeIds.namedStruct ||
+      typeId == TypeIds.namedExt ||
+      typeId == TypeIds.namedUnion;
 
   @pragma('vm:prefer-inline')
   int _typeIdFor(TypeInfo resolved) {
@@ -844,19 +841,19 @@ final class TypeResolver {
         return resolved;
       }
     }
-    final typeMeta = _wireTypeMetaDecoder.read(
+    final typeMeta = _typeMetaDecoder.read(
       buffer,
       config: config,
-      resolveBuiltinWireType: resolveBuiltinWireType,
+      resolveBuiltinTypeId: resolveBuiltinTypeId,
       resolveUserById: resolveUserById,
       resolveUserByEncodedNameCached: resolveUserByEncodedNameCached,
-      expectedNamedType: (wireTypeId) {
+      expectedNamedType: (typeId) {
         final expected = expectedNamedType;
-        if (expected != null && _matchesNamedWireType(expected, wireTypeId)) {
+        if (expected != null && _matchesNamedTypeId(expected, typeId)) {
           return expected;
         }
-        return wireTypeId < _lastNamedTypeByWireType.length
-            ? _lastNamedTypeByWireType[wireTypeId]
+        return typeId < _lastNamedTypeById.length
+            ? _lastNamedTypeById[typeId]
             : null;
       },
       readTypeDef: () => _readTypeDef(buffer, sharedTypes: sharedTypes),
@@ -866,7 +863,7 @@ final class TypeResolver {
           ([expected]) => metaStringReader.readMetaString(buffer, expected),
     );
     if (typeMeta.hasEncodedName) {
-      _rememberNamedType(typeMeta.wireTypeId, typeMeta.resolvedType);
+      _rememberNamedType(typeMeta.typeId, typeMeta.resolvedType);
     }
     return typeMeta.resolvedType;
   }
@@ -877,8 +874,8 @@ final class TypeResolver {
     required List<TypeInfo> sharedTypes,
   }) {
     final start = bufferReaderIndex(buffer);
-    final wireTypeId = buffer.readVarUint32Small7();
-    if (wireTypeId != _typeIdFor(expected) || !_hasTypeDef(wireTypeId)) {
+    final typeId = buffer.readVarUint32Small7();
+    if (typeId != _typeIdFor(expected) || !_hasTypeDef(typeId)) {
       bufferSetReaderIndex(buffer, start);
       return null;
     }
@@ -1155,15 +1152,12 @@ final class TypeResolver {
   }
 
   @pragma('vm:prefer-inline')
-  WireTypeMeta _readTypeDef(
-    Buffer buffer, {
-    required List<TypeInfo> sharedTypes,
-  }) {
+  TypeMeta _readTypeDef(Buffer buffer, {required List<TypeInfo> sharedTypes}) {
     final marker = buffer.readVarUint32Small14();
     final isRef = (marker & 1) == 1;
     final index = marker >>> 1;
     if (isRef) {
-      return wireTypeMetaForResolved(sharedTypes[index]);
+      return typeMetaForResolved(sharedTypes[index]);
     }
     final header = TypeHeader(buffer.readInt64());
     final cached = _parsedTypeMetaCache.lookup(header);
@@ -1173,11 +1167,11 @@ final class TypeResolver {
       // body/hash/schema-limit/exact-local checks here; the miss path owns them before publish.
       header.skipRemaining(buffer);
       sharedTypes.add(cached);
-      return wireTypeMetaForResolved(cached);
+      return typeMetaForResolved(cached);
     }
     final resolved = _readTypeDefWithHeader(buffer, header);
     sharedTypes.add(resolved);
-    return wireTypeMetaForResolved(resolved);
+    return typeMetaForResolved(resolved);
   }
 
   @pragma('vm:never-inline')
@@ -1455,8 +1449,8 @@ final class TypeResolver {
     );
   }
 
-  TypeInfo resolveBuiltinWireType(int wireTypeId) {
-    switch (wireTypeId) {
+  TypeInfo resolveBuiltinTypeId(int typeId) {
+    switch (typeId) {
       case TypeIds.boolType:
         return _builtin(bool, TypeIds.boolType);
       case TypeIds.int8:
@@ -1542,11 +1536,11 @@ final class TypeResolver {
       case TypeIds.float64Array:
         return _builtin(Float64List, TypeIds.float64Array);
       default:
-        throw StateError('Unsupported builtin wire type id $wireTypeId.');
+        throw StateError('Unsupported builtin type id $typeId.');
     }
   }
 
-  TypeInfo resolveExpectedRootWireType<T>(TypeInfo resolved) {
+  TypeInfo resolveExpectedRootType<T>(TypeInfo resolved) {
     if ((_isType<T, Int64>() || _isType<T, Int64?>()) &&
         resolved.typeId == TypeIds.varInt64) {
       return _builtin(Int64, TypeIds.varInt64);
@@ -1817,9 +1811,9 @@ final class TypeResolver {
     return internEncodedMetaString(encoded.bytes, encoding: encoded.encoding);
   }
 
-  void _rememberNamedType(int wireTypeId, TypeInfo resolved) {
-    if (wireTypeId < _lastNamedTypeByWireType.length) {
-      _lastNamedTypeByWireType[wireTypeId] = resolved;
+  void _rememberNamedType(int typeId, TypeInfo resolved) {
+    if (typeId < _lastNamedTypeById.length) {
+      _lastNamedTypeById[typeId] = resolved;
     }
     final namespace = resolved.encodedNamespace;
     final typeName = resolved.encodedTypeName;
@@ -1827,10 +1821,10 @@ final class TypeResolver {
       return;
     }
     final slot =
-        _namedTypeLookupCacheIndex(wireTypeId, namespace, typeName) &
+        _namedTypeLookupCacheIndex(typeId, namespace, typeName) &
         (_namedTypeLookupCache.length - 1);
     _namedTypeLookupCache[slot] = _NamedTypeReadCacheEntry(
-      wireTypeId,
+      typeId,
       namespace,
       typeName,
       resolved,
@@ -1838,11 +1832,11 @@ final class TypeResolver {
   }
 
   int _namedTypeLookupCacheIndex(
-    int wireTypeId,
+    int typeId,
     EncodedMetaString namespace,
     EncodedMetaString typeName,
   ) {
-    return Object.hash(wireTypeId, namespace.hash, typeName.hash);
+    return Object.hash(typeId, namespace.hash, typeName.hash);
   }
 
   Type _builtinTypeForFieldType(FieldType fieldType) {
@@ -1882,19 +1876,19 @@ final class TypeResolver {
         declaredTypeName.endsWith('.$typeName');
   }
 
-  bool _matchesNamedWireType(TypeInfo resolved, int wireTypeId) {
+  bool _matchesNamedTypeId(TypeInfo resolved, int typeId) {
     if (!resolved.isNamed) {
       return false;
     }
     switch (resolved.kind) {
       case RegistrationKind.enumType:
-        return wireTypeId == TypeIds.namedEnum;
+        return typeId == TypeIds.namedEnum;
       case RegistrationKind.struct:
-        return wireTypeId == TypeIds.namedStruct;
+        return typeId == TypeIds.namedStruct;
       case RegistrationKind.ext:
-        return wireTypeId == TypeIds.namedExt;
+        return typeId == TypeIds.namedExt;
       case RegistrationKind.union:
-        return wireTypeId == TypeIds.namedUnion;
+        return typeId == TypeIds.namedUnion;
       case RegistrationKind.builtin:
         return false;
     }
@@ -1919,13 +1913,13 @@ final class _BuiltinKey {
 }
 
 final class _NamedTypeReadCacheEntry {
-  final int wireTypeId;
+  final int typeId;
   final EncodedMetaString namespace;
   final EncodedMetaString typeName;
   final TypeInfo resolved;
 
   const _NamedTypeReadCacheEntry(
-    this.wireTypeId,
+    this.typeId,
     this.namespace,
     this.typeName,
     this.resolved,

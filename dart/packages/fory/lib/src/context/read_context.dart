@@ -226,9 +226,7 @@ final class ReadContext {
                   sharedTypes: _sharedTypes,
                 ) ??
                 _readTypeMeta(expectedRootType);
-    final resolved = _typeResolver.resolveExpectedRootWireType<T>(
-      typeMetaResolved,
-    );
+    final resolved = _typeResolver.resolveExpectedRootType<T>(typeMetaResolved);
     final rootPreservedRefId =
         preservedRefId == null &&
                 flag == RefWriter.notNullValueFlag &&

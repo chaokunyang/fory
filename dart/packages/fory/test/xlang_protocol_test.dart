@@ -291,7 +291,7 @@ void main() {
       final scalarBytes = Uint8List.fromList(
         fory.serializeBuiltin(
           fromBfloat16Bits(0xbf60),
-          wireTypeId: TypeIds.bfloat16,
+          typeId: TypeIds.bfloat16,
         ),
       );
       final rawArray = Uint16List.fromList(<int>[0x3f80, 0xbf80, 0x7fc1]);
@@ -314,9 +314,9 @@ void main() {
       );
     });
 
-    test('serializes root builtins with an explicit wire type', () {
+    test('serializes root builtins with an explicit xlang type', () {
       final fory = Fory();
-      final bytes = fory.serializeBuiltin(7, wireTypeId: TypeIds.varInt32);
+      final bytes = fory.serializeBuiltin(7, typeId: TypeIds.varInt32);
 
       expect(bytes[0], equals(0x01));
       expect(bytes[1], equals(0xff));

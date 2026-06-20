@@ -21,6 +21,11 @@ package org.apache.fory.benchmark;
 
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONWriter;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.google.gson.Gson;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.util.concurrent.TimeUnit;
 import org.apache.fory.benchmark.data.MediaContent;
@@ -34,25 +39,31 @@ import org.openjdk.jmh.annotations.OutputTimeUnit;
 import org.openjdk.jmh.annotations.Scope;
 import org.openjdk.jmh.annotations.Setup;
 import org.openjdk.jmh.annotations.State;
+import org.openjdk.jmh.annotations.Threads;
 import org.openjdk.jmh.annotations.Warmup;
 
 @BenchmarkMode(Mode.Throughput)
-@OutputTimeUnit(TimeUnit.SECONDS)
-@Warmup(iterations = 5, time = 1)
-@Measurement(iterations = 5, time = 1)
+@OutputTimeUnit(TimeUnit.MILLISECONDS)
+@Warmup(iterations = 3, time = 2)
+@Measurement(iterations = 5, time = 2)
 @Fork(1)
+@Threads(1)
 public class JsonSerializationSuite {
   @State(Scope.Thread)
   public static class JsonState {
     ForyJson foryJson;
     JSONWriter.Context fastjson2Context;
+    ObjectMapper mapper;
+    Gson gson;
     MediaContent mediaContent;
 
     @Setup
     public void setup() {
       foryJson = ForyJson.builder().build();
       fastjson2Context = new JSONWriter.Context();
-      mediaContent = new MediaContent().populate(false);
+      mapper = new ObjectMapper();
+      gson = new Gson();
+      mediaContent = JSON.parseObject(readResource(), MediaContent.class);
       byte[] foryBytes = foryJson.toJsonBytes(mediaContent);
       byte[] fastjsonBytes =
           JSON.toJSONBytes(mediaContent, StandardCharsets.UTF_8, fastjson2Context);
@@ -63,6 +74,26 @@ public class JsonSerializationSuite {
       String fastjsonString = JSON.toJSONString(mediaContent, fastjson2Context);
       if (!JSON.parseObject(foryString).equals(JSON.parseObject(fastjsonString))) {
         throw new IllegalStateException("Fory JSON and fastjson2 produce different JSON strings");
+      }
+    }
+
+    private static String readResource() {
+      InputStream input =
+          JsonSerializationSuite.class.getClassLoader().getResourceAsStream("data/eishay.json");
+      if (input == null) {
+        throw new IllegalStateException("Missing data/eishay.json");
+      }
+      try (InputStream closeable = input;
+          InputStreamReader reader = new InputStreamReader(closeable, StandardCharsets.UTF_8)) {
+        char[] buffer = new char[1024];
+        StringBuilder builder = new StringBuilder();
+        int read;
+        while ((read = reader.read(buffer)) != -1) {
+          builder.append(buffer, 0, read);
+        }
+        return builder.toString();
+      } catch (IOException e) {
+        throw new IllegalStateException("Unable to read data/eishay.json", e);
       }
     }
   }
@@ -78,6 +109,16 @@ public class JsonSerializationSuite {
   }
 
   @Benchmark
+  public byte[] jacksonToJsonBytes(JsonState state) throws IOException {
+    return state.mapper.writeValueAsBytes(state.mediaContent);
+  }
+
+  @Benchmark
+  public byte[] gsonToJsonBytes(JsonState state) {
+    return state.gson.toJson(state.mediaContent).getBytes(StandardCharsets.UTF_8);
+  }
+
+  @Benchmark
   public String foryToJsonString(JsonState state) {
     return state.foryJson.toJson(state.mediaContent);
   }
@@ -85,5 +126,15 @@ public class JsonSerializationSuite {
   @Benchmark
   public String fastjson2ToJsonString(JsonState state) {
     return JSON.toJSONString(state.mediaContent, state.fastjson2Context);
+  }
+
+  @Benchmark
+  public String jacksonToJsonString(JsonState state) throws IOException {
+    return state.mapper.writeValueAsString(state.mediaContent);
+  }
+
+  @Benchmark
+  public String gsonToJsonString(JsonState state) {
+    return state.gson.toJson(state.mediaContent);
   }
 }

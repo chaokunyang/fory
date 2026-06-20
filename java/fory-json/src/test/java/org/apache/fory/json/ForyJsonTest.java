@@ -42,6 +42,8 @@ public class ForyJsonTest {
   private static final String MIXED_SCRIPT_TEXT =
       "\u0100\u03a9\u0416\u05d0\u0627\u0905\u0e01\u4f60";
   private static final String COMBINING_TEXT = "e\u0301\u200d\uD83D\uDCBB";
+  private static final String ZH_TEXT = "你好，Fory";
+  private static final String EU_TEXT = "café crème Österreich € ČšŽ";
 
   public enum Kind {
     FAST,
@@ -152,6 +154,7 @@ public class ForyJsonTest {
     public char charTwoByte = '\u0100';
     public char[] chars = {'\u0100', '\u07ff', '\u0800', '\u20ac', '\u4f60'};
     public String combining = COMBINING_TEXT;
+    public String eu = EU_TEXT;
     public String mixedScripts = MIXED_SCRIPT_TEXT;
     public String supplementary = SUPPLEMENTARY_TEXT;
     public String threeByte = THREE_BYTE_TEXT;
@@ -159,7 +162,14 @@ public class ForyJsonTest {
     public Map<String, String> valueMap = unicodeMap();
     public List<String> values =
         Arrays.asList(
-            TWO_BYTE_TEXT, THREE_BYTE_TEXT, SUPPLEMENTARY_TEXT, MIXED_SCRIPT_TEXT, COMBINING_TEXT);
+            TWO_BYTE_TEXT,
+            THREE_BYTE_TEXT,
+            SUPPLEMENTARY_TEXT,
+            MIXED_SCRIPT_TEXT,
+            COMBINING_TEXT,
+            ZH_TEXT,
+            EU_TEXT);
+    public String zh = ZH_TEXT;
   }
 
   public static final class RecursiveParent {
@@ -426,6 +436,13 @@ public class ForyJsonTest {
   }
 
   @Test
+  public void writeReadZhEuStrings() {
+    ForyJson json = ForyJson.builder().build();
+    assertTextRoundTrip(json, ZH_TEXT);
+    assertTextRoundTrip(json, EU_TEXT);
+  }
+
+  @Test
   public void writeLatin1NonAsciiBytes() {
     ForyJson json = ForyJson.builder().build();
     PublicFields fields = new PublicFields();
@@ -573,6 +590,7 @@ public class ForyJsonTest {
   private static Map<String, String> unicodeMap() {
     Map<String, String> values = new LinkedHashMap<>();
     values.put(TWO_BYTE_TEXT, THREE_BYTE_TEXT);
+    values.put(ZH_TEXT, EU_TEXT);
     values.put("\u043a\u043b\u044e\u0447", "\uD83D\uDE00");
     values.put("\u0645\u0631\u062d\u0628\u0627", "\u0928\u092e\u0938\u094d\u0924\u0947");
     return values;
@@ -583,6 +601,8 @@ public class ForyJsonTest {
         + "\"charTwoByte\":\"\u0100\",\"chars\":[\"\u0100\",\"\u07ff\",\"\u0800\","
         + "\"\u20ac\",\"\u4f60\"],\"combining\":\""
         + COMBINING_TEXT
+        + "\",\"eu\":\""
+        + EU_TEXT
         + "\",\"mixedScripts\":\""
         + MIXED_SCRIPT_TEXT
         + "\",\"supplementary\":\""
@@ -595,6 +615,10 @@ public class ForyJsonTest {
         + TWO_BYTE_TEXT
         + "\":\""
         + THREE_BYTE_TEXT
+        + "\",\""
+        + ZH_TEXT
+        + "\":\""
+        + EU_TEXT
         + "\",\"\u043a\u043b\u044e\u0447\":\"\uD83D\uDE00\","
         + "\"\u0645\u0631\u062d\u0628\u0627\":\"\u0928\u092e\u0938\u094d\u0924\u0947\"},"
         + "\"values\":[\""
@@ -607,7 +631,13 @@ public class ForyJsonTest {
         + MIXED_SCRIPT_TEXT
         + "\",\""
         + COMBINING_TEXT
-        + "\"]}";
+        + "\",\""
+        + ZH_TEXT
+        + "\",\""
+        + EU_TEXT
+        + "\"],\"zh\":\""
+        + ZH_TEXT
+        + "\"}";
   }
 
   private static void assertUnicodeMatrix(UnicodeMatrix value) {
@@ -616,6 +646,7 @@ public class ForyJsonTest {
     assertEquals(value.charTwoByte, '\u0100');
     assertEquals(value.chars, new char[] {'\u0100', '\u07ff', '\u0800', '\u20ac', '\u4f60'});
     assertEquals(value.combining, COMBINING_TEXT);
+    assertEquals(value.eu, EU_TEXT);
     assertEquals(value.mixedScripts, MIXED_SCRIPT_TEXT);
     assertEquals(value.supplementary, SUPPLEMENTARY_TEXT);
     assertEquals(value.threeByte, THREE_BYTE_TEXT);
@@ -624,7 +655,31 @@ public class ForyJsonTest {
     assertEquals(
         value.values,
         Arrays.asList(
-            TWO_BYTE_TEXT, THREE_BYTE_TEXT, SUPPLEMENTARY_TEXT, MIXED_SCRIPT_TEXT, COMBINING_TEXT));
+            TWO_BYTE_TEXT,
+            THREE_BYTE_TEXT,
+            SUPPLEMENTARY_TEXT,
+            MIXED_SCRIPT_TEXT,
+            COMBINING_TEXT,
+            ZH_TEXT,
+            EU_TEXT));
+    assertEquals(value.zh, ZH_TEXT);
+  }
+
+  private static void assertTextRoundTrip(ForyJson json, String text) {
+    String rootJson = "\"" + text + "\"";
+    assertEquals(json.toJson(text), rootJson);
+    assertEquals(new String(json.toJsonBytes(text), StandardCharsets.UTF_8), rootJson);
+    assertEquals(json.fromJson(rootJson, String.class), text);
+    assertEquals(json.fromJson(rootJson.getBytes(StandardCharsets.UTF_8), String.class), text);
+
+    PublicFields fields = new PublicFields();
+    fields.name = text;
+    String objectJson = "{\"active\":true,\"id\":7,\"name\":\"" + text + "\"}";
+    assertEquals(json.toJson(fields), objectJson);
+    assertEquals(new String(json.toJsonBytes(fields), StandardCharsets.UTF_8), objectJson);
+    assertEquals(json.fromJson(objectJson, PublicFields.class).name, text);
+    assertEquals(
+        json.fromJson(objectJson.getBytes(StandardCharsets.UTF_8), PublicFields.class).name, text);
   }
 
   private static Map<String, Object> values() {

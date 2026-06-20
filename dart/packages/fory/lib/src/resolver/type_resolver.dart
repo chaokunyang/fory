@@ -278,8 +278,6 @@ final class TypeResolver {
       <String, EncodedMetaString>{};
   final Map<_EncodedMetaStringKey, EncodedMetaString>
   _internedEncodedMetaStrings = <_EncodedMetaStringKey, EncodedMetaString>{};
-  final Map<TypeInfo, Uint8List> _cachedTypeDefMetaBytes =
-      LinkedHashMap<TypeInfo, Uint8List>.identity();
   final Map<String, int> _remoteSchemaVersionsByType = <String, int>{};
   int _totalAcceptedSchemaVersions = 0;
 
@@ -402,7 +400,6 @@ final class TypeResolver {
     // registration can change a struct field's wire kind, so rebuild all
     // registered TypeDefs on the registration cold path instead of constructing
     // them lazily from read/write hot paths.
-    _cachedTypeDefMetaBytes.clear();
     final seen = Set<TypeInfo>.identity();
     for (final resolved in _registeredByType.values) {
       if (!seen.add(resolved)) {
@@ -763,27 +760,8 @@ final class TypeResolver {
       resolved,
     );
     if (_wireTypeWritesTypeDef(wireTypeId)) {
-      final localTypeDef = resolved.typeDef!;
-      if (typeDefIds.isEmpty) {
-        // The cached bytes include the wire type id and TypeDef marker 0, so
-        // they are valid only before the per-write TypeDef table has entries.
-        var bytes = _cachedTypeDefMetaBytes[resolved];
-        if (bytes == null) {
-          final encoded = Buffer(localTypeDef.encoded.length + 2);
-          encoded.writeVarUint32Small7(wireTypeId);
-          encoded.writeVarUint32(0);
-          encoded.writeBytes(localTypeDef.encoded);
-          bytes = encoded.toBytes();
-          _cachedTypeDefMetaBytes[resolved] = bytes;
-        }
-        buffer.writeBytes(bytes);
-        if (resolved.usesNestedTypeDefinitions) {
-          typeDefIds[localTypeDef] = 0;
-        }
-      } else {
-        buffer.writeVarUint32Small7(wireTypeId);
-        _writeTypeDef(buffer, localTypeDef, typeDefIds: typeDefIds);
-      }
+      buffer.writeVarUint32Small7(wireTypeId);
+      _writeTypeDef(buffer, resolved.typeDef!, typeDefIds: typeDefIds);
       return;
     }
     if (_wireTypeWritesUserTypeId(wireTypeId)) {

@@ -47,6 +47,8 @@ many schema versions.
 | Language              | Field-count option  | Metadata-bytes option  | Per-type option                | Average option                         |
 | --------------------- | ------------------- | ---------------------- | ------------------------------ | -------------------------------------- |
 | Java                  | `withMaxTypeFields` | `withMaxTypeMetaBytes` | `withMaxSchemaVersionsPerType` | `withMaxAverageSchemaVersionsPerType`  |
+| Scala                 | `withMaxTypeFields` | `withMaxTypeMetaBytes` | `withMaxSchemaVersionsPerType` | `withMaxAverageSchemaVersionsPerType`  |
+| Kotlin                | `withMaxTypeFields` | `withMaxTypeMetaBytes` | `withMaxSchemaVersionsPerType` | `withMaxAverageSchemaVersionsPerType`  |
 | Python                | `max_type_fields`   | `max_type_meta_bytes`  | `max_schema_versions_per_type` | `max_average_schema_versions_per_type` |
 | JavaScript/TypeScript | `maxTypeFields`     | `maxTypeMetaBytes`     | `maxSchemaVersionsPerType`     | `maxAverageSchemaVersionsPerType`      |
 | C++                   | `max_type_fields`   | `max_type_meta_bytes`  | `max_schema_versions_per_type` | `max_average_schema_versions_per_type` |

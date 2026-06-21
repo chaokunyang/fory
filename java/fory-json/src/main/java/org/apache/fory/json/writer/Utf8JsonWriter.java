@@ -277,6 +277,9 @@ public final class Utf8JsonWriter extends JsonWriter {
 
   public void writeStringField(byte[] namePrefix, byte[] commaNamePrefix, int index, String value) {
     byte[] prefix = index == 0 ? namePrefix : commaNamePrefix;
+    if (STRING_BYTES_BACKED && writeBytesBackedStringField(prefix, value)) {
+      return;
+    }
     ensure(prefix.length + value.length() * 3 + 2);
     writeRawNoEnsure(prefix);
     writeStringNoEnsure(value);
@@ -372,6 +375,28 @@ public final class Utf8JsonWriter extends JsonWriter {
       return writeLatin1StringNoEnsure(bytes);
     } else if (StringSerializer.isUtf16Coder(coder)) {
       return writeUtf16StringNoEnsure(bytes);
+    }
+    return false;
+  }
+
+  private boolean writeBytesBackedStringField(byte[] prefix, String value) {
+    byte[] bytes = StringSerializer.getStringBytes(value);
+    byte coder = StringSerializer.getStringCoder(value);
+    int start = position;
+    if (StringSerializer.isLatin1Coder(coder)) {
+      ensure(prefix.length + bytes.length + 2);
+      writeRawNoEnsure(prefix);
+      if (writeLatin1StringNoEnsure(bytes)) {
+        return true;
+      }
+      position = start;
+    } else if (StringSerializer.isUtf16Coder(coder)) {
+      ensure(prefix.length + (bytes.length >> 1) * 3 + 2);
+      writeRawNoEnsure(prefix);
+      if (writeUtf16StringNoEnsure(bytes)) {
+        return true;
+      }
+      position = start;
     }
     return false;
   }

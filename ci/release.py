@@ -153,9 +153,9 @@ def verify(v):
     logger.info("Verified checksum successfully")
 
 
-def publish_jvm(l="all"):
+def publish_jvm(languages="all"):
     """Publish Java, Kotlin, and Scala artifacts."""
-    langs = _jvm_release_langs(l)
+    langs = _jvm_release_langs(languages)
     _ensure_openjdk25()
     for lang in langs:
         if lang == "java":
@@ -182,10 +182,10 @@ def publish_scala():
     publish_jvm("scala")
 
 
-def _jvm_release_langs(l):
-    if l in (None, "", "all"):
+def _jvm_release_langs(languages):
+    if languages in (None, "", "all"):
         return list(JVM_RELEASE_LANGS)
-    langs = [lang.strip() for lang in l.split(",") if lang.strip()]
+    langs = [lang.strip() for lang in languages.split(",") if lang.strip()]
     unsupported = [lang for lang in langs if lang not in JVM_RELEASE_LANGS]
     if unsupported:
         raise ValueError(f"Unsupported JVM release language(s): {unsupported}")
@@ -1077,6 +1077,7 @@ def _parse_args():
     )
     publish_jvm_parser.add_argument(
         "-l",
+        dest="languages",
         type=str,
         default="all",
         help="comma separated JVM languages: java,kotlin,scala",

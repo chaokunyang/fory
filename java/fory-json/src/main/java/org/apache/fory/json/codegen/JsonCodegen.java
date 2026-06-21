@@ -218,6 +218,9 @@ public final class JsonCodegen {
     if (!record && property.readAccessor() == null) {
       return false;
     }
+    if (!record && !isInstanceAccessor(property.readAccessor().coreAccessor())) {
+      return false;
+    }
     Class<?> rawType = property.readRawType();
     if (rawType != null && !rawType.isPrimitive() && !isVisible(rawType)) {
       return false;
@@ -284,13 +287,13 @@ public final class JsonCodegen {
     code.append("import org.apache.fory.json.codec.ObjectReader;\n");
     code.append("import org.apache.fory.json.codec.Utf16ObjectReader;\n");
     code.append("import org.apache.fory.json.codec.Utf8ObjectReader;\n");
-    code.append("import org.apache.fory.json.meta.JsonFieldAccessor;\n");
     code.append("import org.apache.fory.json.meta.JsonFieldInfo;\n");
     code.append("import org.apache.fory.json.reader.JsonReader;\n");
     code.append("import org.apache.fory.json.reader.Latin1StringJsonReader;\n");
     code.append("import org.apache.fory.json.reader.Utf16StringJsonReader;\n");
     code.append("import org.apache.fory.json.reader.Utf8JsonReader;\n");
     code.append("import org.apache.fory.json.resolver.JsonTypeResolver;\n");
+    code.append("import org.apache.fory.reflect.InstanceFieldAccessors.InstanceAccessor;\n");
     code.append("final class ")
         .append(className)
         .append(
@@ -299,7 +302,7 @@ public final class JsonCodegen {
     for (int i = 0; i < properties.length; i++) {
       code.append("  private final JsonFieldInfo p").append(i).append(";\n");
       if (!record) {
-        code.append("  private final JsonFieldAccessor a").append(i).append(";\n");
+        code.append("  private final InstanceAccessor a").append(i).append(";\n");
       }
       if (usesReadCodec(properties[i])) {
         code.append("  private final ")
@@ -327,9 +330,9 @@ public final class JsonCodegen {
       if (!record) {
         code.append("    this.a")
             .append(i)
-            .append(" = properties[")
+            .append(" = (InstanceAccessor) properties[")
             .append(i)
-            .append("].readAccessor();\n");
+            .append("].readAccessor().coreAccessor();\n");
       }
       if (usesReadCodec(properties[i])) {
         code.append("    this.r")

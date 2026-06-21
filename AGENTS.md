@@ -9,6 +9,9 @@ This is the entry point for AI guidance in Apache Fory. Read this file first, th
 - `.agents/docs-and-formatting.md`: documentation, specification, and markdown rules.
 - `.agents/ci-and-pr.md`: CI triage, PR expectations, and commit conventions.
 - `.agents/testing/integration-tests.md`: `integration_tests/` prerequisites, regeneration rules, and commands.
+- `docs/security/index.md`: security model index.
+- `docs/security/threat-model.md`: project-level trust boundaries, non-goals,
+  and downstream responsibilities.
 - `docs/security/deserialization.md`: security boundaries for untrusted deserialization classification.
 - `.agents/languages/java.md`
 - `.agents/languages/csharp.md`
@@ -183,3 +186,11 @@ This is the entry point for AI guidance in Apache Fory. Read this file first, th
 - PR titles must follow Conventional Commits; `.github/workflows/pr-lint.yml` enforces this.
 - Performance changes should use the `perf` type and include benchmark data.
 - See `.agents/ci-and-pr.md` for GitHub CLI triage commands and commit message examples.
+
+## Security
+
+Security models start at `docs/security/index.md`. Read
+`docs/security/threat-model.md` for project-level trust boundaries, non-goals,
+and downstream responsibilities. For untrusted deserialization, read
+`docs/security/deserialization.md` before reporting or changing allocation,
+stream filling, skip, reference, metadata, or policy validation behavior.

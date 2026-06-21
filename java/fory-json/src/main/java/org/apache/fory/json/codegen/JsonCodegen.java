@@ -29,10 +29,11 @@ import org.apache.fory.codegen.CodeGenerator;
 import org.apache.fory.codegen.CompileUnit;
 import org.apache.fory.json.ForyJsonException;
 import org.apache.fory.json.codec.BaseObjectCodec;
+import org.apache.fory.json.codec.Latin1ObjectReader;
 import org.apache.fory.json.codec.ObjectCodecs;
 import org.apache.fory.json.codec.ObjectReader;
-import org.apache.fory.json.codec.StringObjectReader;
 import org.apache.fory.json.codec.StringObjectWriter;
+import org.apache.fory.json.codec.Utf16ObjectReader;
 import org.apache.fory.json.codec.Utf8ObjectReader;
 import org.apache.fory.json.codec.Utf8ObjectWriter;
 import org.apache.fory.json.meta.JsonFieldInfo;
@@ -45,8 +46,9 @@ import org.apache.fory.reflect.InstanceFieldAccessors;
 public final class JsonCodegen {
   private static final String PACKAGE = "org.apache.fory.json.codegen";
   private static final int GENERIC_READER = 0;
-  private static final int STRING_READER = 1;
-  private static final int UTF8_READER = 2;
+  private static final int LATIN1_READER = 1;
+  private static final int UTF16_READER = 2;
+  private static final int UTF8_READER = 3;
   private static final AtomicInteger ID = new AtomicInteger();
 
   private final boolean writeNullFields;
@@ -97,7 +99,12 @@ public final class JsonCodegen {
       return null;
     }
     return new ObjectCodecs(
-        stringWriter, utf8Writer, reader, (StringObjectReader) reader, (Utf8ObjectReader) reader);
+        stringWriter,
+        utf8Writer,
+        reader,
+        (Latin1ObjectReader) reader,
+        (Utf16ObjectReader) reader,
+        (Utf8ObjectReader) reader);
   }
 
   private Object compileWriter(
@@ -246,19 +253,22 @@ public final class JsonCodegen {
     StringBuilder code = new StringBuilder(4096);
     code.append("package ").append(PACKAGE).append(";\n");
     code.append("import org.apache.fory.json.codec.BaseObjectCodec;\n");
+    code.append("import org.apache.fory.json.codec.Latin1ObjectReader;\n");
     code.append("import org.apache.fory.json.codec.ObjectReader;\n");
-    code.append("import org.apache.fory.json.codec.StringObjectReader;\n");
+    code.append("import org.apache.fory.json.codec.Utf16ObjectReader;\n");
     code.append("import org.apache.fory.json.codec.Utf8ObjectReader;\n");
     code.append("import org.apache.fory.json.meta.JsonFieldAccessor;\n");
     code.append("import org.apache.fory.json.meta.JsonFieldInfo;\n");
     code.append("import org.apache.fory.json.meta.JsonFieldTable;\n");
     code.append("import org.apache.fory.json.reader.JsonReader;\n");
-    code.append("import org.apache.fory.json.reader.StringJsonReader;\n");
+    code.append("import org.apache.fory.json.reader.Latin1StringJsonReader;\n");
+    code.append("import org.apache.fory.json.reader.Utf16StringJsonReader;\n");
     code.append("import org.apache.fory.json.reader.Utf8JsonReader;\n");
     code.append("import org.apache.fory.json.resolver.JsonTypeResolver;\n");
     code.append("final class ")
         .append(className)
-        .append(" implements ObjectReader, StringObjectReader, Utf8ObjectReader {\n");
+        .append(
+            " implements ObjectReader, Latin1ObjectReader, Utf16ObjectReader, Utf8ObjectReader {\n");
     code.append("  private final String[] fieldNames;\n");
     for (int i = 0; i < properties.length; i++) {
       code.append("  private final JsonFieldInfo p").append(i).append(";\n");
@@ -289,7 +299,8 @@ public final class JsonCodegen {
     }
     code.append("  }\n");
     appendReadMethod(code, "read", "JsonReader", type, properties, GENERIC_READER);
-    appendReadMethod(code, "readString", "StringJsonReader", type, properties, STRING_READER);
+    appendReadMethod(code, "readLatin1", "Latin1StringJsonReader", type, properties, LATIN1_READER);
+    appendReadMethod(code, "readUtf16", "Utf16StringJsonReader", type, properties, UTF16_READER);
     appendReadMethod(code, "readUtf8", "Utf8JsonReader", type, properties, UTF8_READER);
     code.append("}\n");
     return code.toString();
@@ -795,8 +806,10 @@ public final class JsonCodegen {
 
   private static String readObjectMethod(int readerMode) {
     switch (readerMode) {
-      case STRING_READER:
-        return "readString";
+      case LATIN1_READER:
+        return "readLatin1";
+      case UTF16_READER:
+        return "readUtf16";
       case UTF8_READER:
         return "readUtf8";
       default:

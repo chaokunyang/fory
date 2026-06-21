@@ -25,13 +25,15 @@ import java.util.concurrent.atomic.AtomicReferenceArray;
 import org.apache.fory.json.codec.CodecRegistry;
 import org.apache.fory.json.codec.GeneratedObjectCodec;
 import org.apache.fory.json.codec.JsonSharedRegistry;
-import org.apache.fory.json.reader.StringJsonReader;
+import org.apache.fory.json.reader.Latin1StringJsonReader;
+import org.apache.fory.json.reader.Utf16StringJsonReader;
 import org.apache.fory.json.reader.Utf8JsonReader;
 import org.apache.fory.json.resolver.JsonTypeInfo;
 import org.apache.fory.json.resolver.JsonTypeResolver;
 import org.apache.fory.json.writer.StringJsonWriter;
 import org.apache.fory.json.writer.Utf8JsonWriter;
 import org.apache.fory.reflect.TypeRef;
+import org.apache.fory.serializer.StringSerializer;
 
 /** Thread-safe public facade for Fory JSON serialization and parsing. */
 public final class ForyJson {
@@ -106,7 +108,7 @@ public final class ForyJson {
     PooledState entry = acquire();
     JsonState state = entry.state;
     try {
-      return castValue(readStringValue(state.stringReader(json), type, type, state), type);
+      return castValue(readJavaStringValue(json, type, type, state), type);
     } finally {
       state.clearReaders();
       release(entry);
@@ -118,8 +120,7 @@ public final class ForyJson {
     PooledState entry = acquire();
     JsonState state = entry.state;
     try {
-      Object value =
-          readStringValue(state.stringReader(json), typeRef.getType(), typeRef.getRawType(), state);
+      Object value = readJavaStringValue(json, typeRef.getType(), typeRef.getRawType(), state);
       return castValue(value, typeRef);
     } finally {
       state.clearReaders();
@@ -222,11 +223,33 @@ public final class ForyJson {
     return hash ^ (hash >>> 16);
   }
 
-  private Object readStringValue(
-      StringJsonReader reader, Type type, Class<?> fallback, JsonState state) {
+  private Object readJavaStringValue(String json, Type type, Class<?> fallback, JsonState state) {
+    if (StringSerializer.isBytesBackedString()) {
+      byte coder = StringSerializer.getStringCoder(json);
+      if (StringSerializer.isLatin1Coder(coder)) {
+        return readLatin1Value(state.latin1Reader(json), type, fallback, state);
+      }
+      if (StringSerializer.isUtf16Coder(coder)) {
+        return readUtf16Value(state.utf16Reader(json), type, fallback, state);
+      }
+    }
+    return readUtf16Value(state.utf16Reader(json), type, fallback, state);
+  }
+
+  private Object readLatin1Value(
+      Latin1StringJsonReader reader, Type type, Class<?> fallback, JsonState state) {
     JsonTypeResolver resolver = state.typeResolver;
     JsonTypeInfo typeInfo = resolver.getTypeInfo(type, fallback);
-    Object value = typeInfo.codec().readString(reader, typeInfo, resolver);
+    Object value = typeInfo.codec().readLatin1(reader, typeInfo, resolver);
+    reader.finish();
+    return value;
+  }
+
+  private Object readUtf16Value(
+      Utf16StringJsonReader reader, Type type, Class<?> fallback, JsonState state) {
+    JsonTypeResolver resolver = state.typeResolver;
+    JsonTypeInfo typeInfo = resolver.getTypeInfo(type, fallback);
+    Object value = typeInfo.codec().readUtf16(reader, typeInfo, resolver);
     reader.finish();
     return value;
   }
@@ -265,7 +288,8 @@ public final class ForyJson {
     private final Utf8JsonWriter utf8Writer;
     private final StringJsonWriter stringWriter;
     private final Utf8JsonReader utf8Reader;
-    private final StringJsonReader stringReader;
+    private final Latin1StringJsonReader latin1Reader;
+    private final Utf16StringJsonReader utf16Reader;
     private final JsonTypeResolver typeResolver;
     private Class<?> lastRootType;
     private JsonTypeInfo lastRootInfo;
@@ -274,7 +298,8 @@ public final class ForyJson {
       utf8Writer = new Utf8JsonWriter(writeNullFields, new byte[INITIAL_BUFFER_SIZE]);
       stringWriter = new StringJsonWriter(writeNullFields, new byte[INITIAL_BUFFER_SIZE]);
       utf8Reader = new Utf8JsonReader();
-      stringReader = new StringJsonReader();
+      latin1Reader = new Latin1StringJsonReader();
+      utf16Reader = new Utf16StringJsonReader();
       typeResolver = new JsonTypeResolver(sharedRegistry);
     }
 
@@ -288,8 +313,12 @@ public final class ForyJson {
       return utf8Writer;
     }
 
-    private StringJsonReader stringReader(String input) {
-      return stringReader.reset(input);
+    private Latin1StringJsonReader latin1Reader(String input) {
+      return latin1Reader.reset(input);
+    }
+
+    private Utf16StringJsonReader utf16Reader(String input) {
+      return utf16Reader.reset(input);
     }
 
     private Utf8JsonReader utf8Reader(byte[] input) {
@@ -297,7 +326,8 @@ public final class ForyJson {
     }
 
     private void clearReaders() {
-      stringReader.clear();
+      latin1Reader.clear();
+      utf16Reader.clear();
       utf8Reader.clear();
     }
 

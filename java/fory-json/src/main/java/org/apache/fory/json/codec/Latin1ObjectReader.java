@@ -19,9 +19,10 @@
 
 package org.apache.fory.json.codec;
 
-import org.apache.fory.json.reader.StringJsonReader;
+import org.apache.fory.json.reader.Latin1StringJsonReader;
 import org.apache.fory.json.resolver.JsonTypeResolver;
 
-public interface StringObjectReader {
-  Object readString(StringJsonReader reader, BaseObjectCodec owner, JsonTypeResolver typeResolver);
+public interface Latin1ObjectReader {
+  Object readLatin1(
+      Latin1StringJsonReader reader, BaseObjectCodec owner, JsonTypeResolver typeResolver);
 }

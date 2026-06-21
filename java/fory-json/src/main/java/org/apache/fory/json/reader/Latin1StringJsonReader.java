@@ -22,22 +22,30 @@ package org.apache.fory.json.reader;
 import java.nio.charset.StandardCharsets;
 import org.apache.fory.json.meta.JsonFieldInfo;
 import org.apache.fory.json.meta.JsonFieldTable;
+import org.apache.fory.serializer.StringSerializer;
 
-public final class Utf8JsonReader extends JsonReader {
+public final class Latin1StringJsonReader extends JsonReader {
   private static final byte[] EMPTY_BYTES = new byte[0];
 
   private byte[] input;
 
-  public Utf8JsonReader() {
+  public Latin1StringJsonReader() {
     input = EMPTY_BYTES;
   }
 
-  public Utf8JsonReader(byte[] input) {
-    this.input = input;
+  public Latin1StringJsonReader(String input) {
+    reset(input);
   }
 
-  public Utf8JsonReader reset(byte[] input) {
-    this.input = input;
+  public Latin1StringJsonReader reset(String input) {
+    if (!StringSerializer.isBytesBackedString()) {
+      throw new IllegalStateException("Latin1StringJsonReader requires byte-backed strings");
+    }
+    byte coder = StringSerializer.getStringCoder(input);
+    if (!StringSerializer.isLatin1Coder(coder)) {
+      throw new IllegalArgumentException("Latin1StringJsonReader requires a Latin1 string");
+    }
+    this.input = StringSerializer.getStringBytes(input);
     position = 0;
     return this;
   }
@@ -86,27 +94,28 @@ public final class Utf8JsonReader extends JsonReader {
   public boolean readExpectedField(String expectedName) {
     skipWhitespaceFast();
     int savedPosition = position;
-    int length = input.length;
-    if (position >= length || input[position++] != '"') {
+    byte[] bytes = input;
+    int length = bytes.length;
+    if (position >= length || bytes[position++] != '"') {
       position = savedPosition;
       return false;
     }
     int matchedLength = 0;
     int expectedLength = expectedName.length();
     while (position < length) {
-      int b = input[position++] & 0xFF;
-      if (b == '"') {
+      int ch = bytes[position++] & 0xFF;
+      if (ch == '"') {
         if (matchedLength == expectedLength) {
           return true;
         }
         position = savedPosition;
         return false;
       }
-      if (b == '\\' || b < 0x20 || b >= 0x80) {
+      if (ch == '\\' || ch < 0x20 || ch >= 0x80) {
         position = savedPosition;
         return false;
       }
-      if (matchedLength >= expectedLength || expectedName.charAt(matchedLength) != b) {
+      if (matchedLength >= expectedLength || expectedName.charAt(matchedLength) != ch) {
         position = savedPosition;
         return false;
       }
@@ -224,29 +233,22 @@ public final class Utf8JsonReader extends JsonReader {
 
   @Override
   public String readString() {
-    skipWhitespace();
+    skipWhitespaceFast();
     if (position >= input.length || input[position++] != '"') {
       throw error("Expected string");
     }
     int start = position;
     while (position < input.length) {
-      int b = input[position++] & 0xFF;
-      if (b == '"') {
+      int ch = input[position++] & 0xFF;
+      if (ch == '"') {
         return new String(input, start, position - 1 - start, StandardCharsets.ISO_8859_1);
-      } else if (b == '\\') {
+      } else if (ch == '\\') {
         StringBuilder builder = new StringBuilder(input.length - start);
-        appendAscii(builder, start, position - 1);
+        appendLatin1(builder, start, position - 1);
         appendEscape(builder);
         return readStringTail(builder);
-      } else if (b < 0x20) {
+      } else if (ch < 0x20) {
         throw error("Control character in string");
-      } else if (b < 0x80) {
-        continue;
-      } else {
-        StringBuilder builder = new StringBuilder(input.length - start);
-        appendAscii(builder, start, position - 1);
-        appendUtf8(builder, b);
-        return readStringTail(builder);
       }
     }
     throw error("Unterminated string");
@@ -254,7 +256,7 @@ public final class Utf8JsonReader extends JsonReader {
 
   @Override
   public JsonFieldInfo readField(JsonFieldTable table) {
-    skipWhitespace();
+    skipWhitespaceFast();
     byte[] bytes = input;
     int length = bytes.length;
     if (position >= length || bytes[position++] != '"') {
@@ -263,22 +265,22 @@ public final class Utf8JsonReader extends JsonReader {
     int start = position;
     int hash = 0;
     while (position < length) {
-      int b = bytes[position++] & 0xFF;
-      if (b == '"') {
-        return table.getUtf8(this, start, position - 1, hash);
+      int ch = bytes[position++] & 0xFF;
+      if (ch == '"') {
+        return table.getLatin1(this, start, position - 1, hash);
       }
-      if (b == '\\' || b < 0x20 || b >= 0x80) {
+      if (ch == '\\' || ch < 0x20 || ch >= 0x80) {
         position = start - 1;
         return table.get(readString());
       }
-      hash = 31 * hash + b;
+      hash = 31 * hash + ch;
     }
     throw error("Unterminated string");
   }
 
   @Override
   public int readFieldIndex(JsonFieldTable table) {
-    skipWhitespace();
+    skipWhitespaceFast();
     byte[] bytes = input;
     int length = bytes.length;
     if (position >= length || bytes[position++] != '"') {
@@ -287,22 +289,22 @@ public final class Utf8JsonReader extends JsonReader {
     int start = position;
     int hash = 0;
     while (position < length) {
-      int b = bytes[position++] & 0xFF;
-      if (b == '"') {
-        return table.indexUtf8(this, start, position - 1, hash);
+      int ch = bytes[position++] & 0xFF;
+      if (ch == '"') {
+        return table.indexLatin1(this, start, position - 1, hash);
       }
-      if (b == '\\' || b < 0x20 || b >= 0x80) {
+      if (ch == '\\' || ch < 0x20 || ch >= 0x80) {
         position = start - 1;
         return table.index(readString());
       }
-      hash = 31 * hash + b;
+      hash = 31 * hash + ch;
     }
     throw error("Unterminated string");
   }
 
   @Override
   public int readFieldIndex(JsonFieldTable table, String expectedName, int expectedIndex) {
-    skipWhitespace();
+    skipWhitespaceFast();
     byte[] bytes = input;
     int length = bytes.length;
     if (position >= length || bytes[position++] != '"') {
@@ -312,20 +314,20 @@ public final class Utf8JsonReader extends JsonReader {
     int matchedLength = 0;
     int expectedLength = expectedName.length();
     while (position < length) {
-      int b = bytes[position++] & 0xFF;
-      if (b == '"') {
+      int ch = bytes[position++] & 0xFF;
+      if (ch == '"') {
         if (matchedLength == expectedLength) {
           return expectedIndex;
         }
         int end = position - 1;
-        return table.indexUtf8(this, start, end, hashRange(start, end));
+        return table.indexLatin1(this, start, end, hashRange(start, end));
       }
-      if (b == '\\' || b < 0x20 || b >= 0x80) {
+      if (ch == '\\' || ch < 0x20 || ch >= 0x80) {
         position = start - 1;
         String name = readString();
         return expectedName.equals(name) ? expectedIndex : table.index(name);
       }
-      if (matchedLength >= expectedLength || expectedName.charAt(matchedLength) != b) {
+      if (matchedLength >= expectedLength || expectedName.charAt(matchedLength) != ch) {
         return fieldIndexFallback(table, start);
       }
       matchedLength++;
@@ -341,15 +343,15 @@ public final class Utf8JsonReader extends JsonReader {
     }
     int length = bytes.length;
     while (position < length) {
-      int b = bytes[position++] & 0xFF;
-      if (b == '"') {
-        return table.indexUtf8(this, start, position - 1, hash);
+      int ch = bytes[position++] & 0xFF;
+      if (ch == '"') {
+        return table.indexLatin1(this, start, position - 1, hash);
       }
-      if (b == '\\' || b < 0x20 || b >= 0x80) {
+      if (ch == '\\' || ch < 0x20 || ch >= 0x80) {
         position = start - 1;
         return table.index(readString());
       }
-      hash = 31 * hash + b;
+      hash = 31 * hash + ch;
     }
     throw error("Unterminated string");
   }
@@ -371,7 +373,8 @@ public final class Utf8JsonReader extends JsonReader {
     }
     byte[] bytes = input;
     for (int i = 0; i < length; i++) {
-      if ((bytes[start + i] & 0xFF) != value.charAt(i)) {
+      char expected = value.charAt(i);
+      if (expected > 0xFF || (bytes[start + i] & 0xFF) != expected) {
         return false;
       }
     }
@@ -380,77 +383,29 @@ public final class Utf8JsonReader extends JsonReader {
 
   @Override
   protected String slice(int start, int end) {
-    char[] chars = new char[end - start];
-    for (int i = start; i < end; i++) {
-      chars[i - start] = (char) (input[i] & 0xFF);
-    }
-    return new String(chars);
+    return new String(input, start, end - start, StandardCharsets.ISO_8859_1);
   }
 
   private String readStringTail(StringBuilder builder) {
     while (position < input.length) {
-      int b = input[position++] & 0xFF;
-      if (b == '"') {
+      int ch = input[position++] & 0xFF;
+      if (ch == '"') {
         return builder.toString();
-      } else if (b == '\\') {
+      } else if (ch == '\\') {
         appendEscape(builder);
-      } else if (b < 0x20) {
+      } else if (ch < 0x20) {
         throw error("Control character in string");
-      } else if (b < 0x80) {
-        builder.append((char) b);
       } else {
-        appendUtf8(builder, b);
+        builder.append((char) ch);
       }
     }
     throw error("Unterminated string");
   }
 
-  private void appendAscii(StringBuilder builder, int start, int end) {
+  private void appendLatin1(StringBuilder builder, int start, int end) {
     for (int i = start; i < end; i++) {
       builder.append((char) (input[i] & 0xFF));
     }
-  }
-
-  private void appendUtf8(StringBuilder builder, int first) {
-    if ((first & 0xE0) == 0xC0) {
-      int second = continuation();
-      int codePoint = ((first & 0x1F) << 6) | second;
-      if (codePoint < 0x80) {
-        throw error("Overlong UTF-8 sequence");
-      }
-      builder.append((char) codePoint);
-    } else if ((first & 0xF0) == 0xE0) {
-      int second = continuation();
-      int third = continuation();
-      int codePoint = ((first & 0x0F) << 12) | (second << 6) | third;
-      if (codePoint < 0x800 || (codePoint >= 0xD800 && codePoint <= 0xDFFF)) {
-        throw error("Invalid UTF-8 sequence");
-      }
-      builder.append((char) codePoint);
-    } else if ((first & 0xF8) == 0xF0) {
-      int second = continuation();
-      int third = continuation();
-      int fourth = continuation();
-      int codePoint = ((first & 0x07) << 18) | (second << 12) | (third << 6) | fourth;
-      if (codePoint < 0x10000 || codePoint > 0x10FFFF) {
-        throw error("Invalid UTF-8 sequence");
-      }
-      builder.append(Character.highSurrogate(codePoint));
-      builder.append(Character.lowSurrogate(codePoint));
-    } else {
-      throw error("Invalid UTF-8 sequence");
-    }
-  }
-
-  private int continuation() {
-    if (position >= input.length) {
-      throw error("Short UTF-8 sequence");
-    }
-    int value = input[position++] & 0xFF;
-    if ((value & 0xC0) != 0x80) {
-      throw error("Invalid UTF-8 continuation");
-    }
-    return value & 0x3F;
   }
 
   private void skipWhitespaceFast() {

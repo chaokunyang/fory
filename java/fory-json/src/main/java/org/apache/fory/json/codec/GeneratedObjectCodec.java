@@ -20,7 +20,8 @@
 package org.apache.fory.json.codec;
 
 import org.apache.fory.json.reader.JsonReader;
-import org.apache.fory.json.reader.StringJsonReader;
+import org.apache.fory.json.reader.Latin1StringJsonReader;
+import org.apache.fory.json.reader.Utf16StringJsonReader;
 import org.apache.fory.json.reader.Utf8JsonReader;
 import org.apache.fory.json.resolver.JsonTypeInfo;
 import org.apache.fory.json.resolver.JsonTypeResolver;
@@ -31,7 +32,8 @@ public final class GeneratedObjectCodec extends BaseObjectCodec {
   private final StringObjectWriter stringWriter;
   private final Utf8ObjectWriter utf8Writer;
   private final ObjectReader reader;
-  private final StringObjectReader stringReader;
+  private final Latin1ObjectReader latin1Reader;
+  private final Utf16ObjectReader utf16Reader;
   private final Utf8ObjectReader utf8Reader;
 
   GeneratedObjectCodec(ObjectCodec base, ObjectCodecs codecs) {
@@ -39,7 +41,8 @@ public final class GeneratedObjectCodec extends BaseObjectCodec {
     stringWriter = codecs.stringWriter();
     utf8Writer = codecs.utf8Writer();
     reader = codecs.reader();
-    stringReader = codecs.stringReader();
+    latin1Reader = codecs.latin1Reader();
+    utf16Reader = codecs.utf16Reader();
     utf8Reader = codecs.utf8Reader();
   }
 
@@ -71,12 +74,21 @@ public final class GeneratedObjectCodec extends BaseObjectCodec {
   }
 
   @Override
-  public Object readString(
-      StringJsonReader input, JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
+  public Object readLatin1(
+      Latin1StringJsonReader input, JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
     if (input.tryReadNullToken()) {
       return null;
     }
-    return stringReader.readString(input, this, resolver);
+    return latin1Reader.readLatin1(input, this, resolver);
+  }
+
+  @Override
+  public Object readUtf16(
+      Utf16StringJsonReader input, JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
+    if (input.tryReadNullToken()) {
+      return null;
+    }
+    return utf16Reader.readUtf16(input, this, resolver);
   }
 
   @Override

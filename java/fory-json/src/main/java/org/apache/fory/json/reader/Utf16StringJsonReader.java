@@ -21,32 +21,50 @@ package org.apache.fory.json.reader;
 
 import org.apache.fory.json.meta.JsonFieldInfo;
 import org.apache.fory.json.meta.JsonFieldTable;
+import org.apache.fory.serializer.StringSerializer;
 
-public final class StringJsonReader extends JsonReader {
+public final class Utf16StringJsonReader extends JsonReader {
   private String input;
+  private byte[] bytes;
+  private int length;
 
-  public StringJsonReader() {
+  public Utf16StringJsonReader() {
     input = "";
+    bytes = null;
+    length = 0;
   }
 
-  public StringJsonReader(String input) {
-    this.input = input;
+  public Utf16StringJsonReader(String input) {
+    reset(input);
   }
 
-  public StringJsonReader reset(String input) {
+  public Utf16StringJsonReader reset(String input) {
     this.input = input;
+    if (StringSerializer.isBytesBackedString()) {
+      byte coder = StringSerializer.getStringCoder(input);
+      if (StringSerializer.isUtf16Coder(coder)) {
+        bytes = StringSerializer.getStringBytes(input);
+        length = bytes.length >>> 1;
+        position = 0;
+        return this;
+      }
+    }
+    bytes = null;
+    length = input.length();
     position = 0;
     return this;
   }
 
   public void clear() {
     input = "";
+    bytes = null;
+    length = 0;
     position = 0;
   }
 
   public boolean consumeToken(char expected) {
     skipWhitespaceFast();
-    if (position < input.length() && input.charAt(position) == expected) {
+    if (position < length && charAtFast(position) == expected) {
       position++;
       return true;
     }
@@ -83,15 +101,15 @@ public final class StringJsonReader extends JsonReader {
   public boolean readExpectedField(String expectedName) {
     skipWhitespaceFast();
     int savedPosition = position;
-    int length = input.length();
-    if (position >= length || input.charAt(position++) != '"') {
+    int inputLength = length;
+    if (position >= inputLength || charAtFast(position++) != '"') {
       position = savedPosition;
       return false;
     }
     int matchedLength = 0;
     int expectedLength = expectedName.length();
-    while (position < length) {
-      char ch = input.charAt(position++);
+    while (position < inputLength) {
+      char ch = charAtFast(position++);
       if (ch == '"') {
         if (matchedLength == expectedLength) {
           return true;
@@ -119,15 +137,15 @@ public final class StringJsonReader extends JsonReader {
     int result = 0;
     int limit = -Integer.MAX_VALUE;
     boolean negative = false;
-    if (position < input.length() && input.charAt(position) == '-') {
+    if (position < length && charAtFast(position) == '-') {
       negative = true;
       limit = Integer.MIN_VALUE;
       position++;
     }
-    if (position >= input.length()) {
+    if (position >= length) {
       throw error("Expected digit");
     }
-    char ch = input.charAt(position);
+    char ch = charAtFast(position);
     if (ch == '0') {
       position++;
       rejectLeadingDigitFast();
@@ -138,8 +156,8 @@ public final class StringJsonReader extends JsonReader {
       throw error("Expected digit");
     }
     int multmin = limit / 10;
-    while (position < input.length()) {
-      ch = input.charAt(position);
+    while (position < length) {
+      ch = charAtFast(position);
       if (ch < '0' || ch > '9') {
         break;
       }
@@ -167,15 +185,15 @@ public final class StringJsonReader extends JsonReader {
     long result = 0;
     long limit = -Long.MAX_VALUE;
     boolean negative = false;
-    if (position < input.length() && input.charAt(position) == '-') {
+    if (position < length && charAtFast(position) == '-') {
       negative = true;
       limit = Long.MIN_VALUE;
       position++;
     }
-    if (position >= input.length()) {
+    if (position >= length) {
       throw error("Expected digit");
     }
-    char ch = input.charAt(position);
+    char ch = charAtFast(position);
     if (ch == '0') {
       position++;
       rejectLeadingDigitFast();
@@ -186,8 +204,8 @@ public final class StringJsonReader extends JsonReader {
       throw error("Expected digit");
     }
     long multmin = limit / 10;
-    while (position < input.length()) {
-      ch = input.charAt(position);
+    while (position < length) {
+      ch = charAtFast(position);
       if (ch < '0' || ch > '9') {
         break;
       }
@@ -211,24 +229,24 @@ public final class StringJsonReader extends JsonReader {
 
   @Override
   protected int length() {
-    return input.length();
+    return length;
   }
 
   @Override
   protected char charAt(int index) {
-    return input.charAt(index);
+    return charAtFast(index);
   }
 
   @Override
   public String readString() {
     skipWhitespace();
-    if (position >= input.length() || input.charAt(position++) != '"') {
+    if (position >= length || charAtFast(position++) != '"') {
       throw error("Expected string");
     }
     int start = position;
     StringBuilder builder = null;
-    while (position < input.length()) {
-      char ch = input.charAt(position++);
+    while (position < length) {
+      char ch = charAtFast(position++);
       if (ch == '"') {
         if (builder == null) {
           return input.substring(start, position - 1);
@@ -245,7 +263,7 @@ public final class StringJsonReader extends JsonReader {
       } else if (ch < 0x20) {
         throw error("Control character in string");
       } else if (Character.isHighSurrogate(ch)) {
-        if (position >= input.length() || !Character.isLowSurrogate(input.charAt(position))) {
+        if (position >= length || !Character.isLowSurrogate(charAtFast(position))) {
           throw error("Unpaired high surrogate in string");
         }
         position++;
@@ -259,16 +277,16 @@ public final class StringJsonReader extends JsonReader {
   @Override
   public JsonFieldInfo readField(JsonFieldTable table) {
     skipWhitespace();
-    int length = input.length();
-    if (position >= length || input.charAt(position++) != '"') {
+    int inputLength = length;
+    if (position >= inputLength || charAtFast(position++) != '"') {
       throw error("Expected string");
     }
     int start = position;
     int hash = 0;
-    while (position < length) {
-      char ch = input.charAt(position++);
+    while (position < inputLength) {
+      char ch = charAtFast(position++);
       if (ch == '"') {
-        return table.get(this, start, position - 1, hash);
+        return table.getUtf16(this, start, position - 1, hash);
       }
       if (ch == '\\' || ch < 0x20 || ch >= 0x80) {
         position = start - 1;
@@ -282,16 +300,16 @@ public final class StringJsonReader extends JsonReader {
   @Override
   public int readFieldIndex(JsonFieldTable table) {
     skipWhitespace();
-    int length = input.length();
-    if (position >= length || input.charAt(position++) != '"') {
+    int inputLength = length;
+    if (position >= inputLength || charAtFast(position++) != '"') {
       throw error("Expected string");
     }
     int start = position;
     int hash = 0;
-    while (position < length) {
-      char ch = input.charAt(position++);
+    while (position < inputLength) {
+      char ch = charAtFast(position++);
       if (ch == '"') {
-        return table.index(this, start, position - 1, hash);
+        return table.indexUtf16(this, start, position - 1, hash);
       }
       if (ch == '\\' || ch < 0x20 || ch >= 0x80) {
         position = start - 1;
@@ -305,21 +323,21 @@ public final class StringJsonReader extends JsonReader {
   @Override
   public int readFieldIndex(JsonFieldTable table, String expectedName, int expectedIndex) {
     skipWhitespace();
-    int length = input.length();
-    if (position >= length || input.charAt(position++) != '"') {
+    int inputLength = length;
+    if (position >= inputLength || charAtFast(position++) != '"') {
       throw error("Expected string");
     }
     int start = position;
     int matchedLength = 0;
     int expectedLength = expectedName.length();
-    while (position < length) {
-      char ch = input.charAt(position++);
+    while (position < inputLength) {
+      char ch = charAtFast(position++);
       if (ch == '"') {
         if (matchedLength == expectedLength) {
           return expectedIndex;
         }
         int end = position - 1;
-        return table.index(this, start, end, hashRange(start, end));
+        return table.indexUtf16(this, start, end, hashRange(start, end));
       }
       if (ch == '\\' || ch < 0x20 || ch >= 0x80) {
         position = start - 1;
@@ -337,13 +355,13 @@ public final class StringJsonReader extends JsonReader {
   private int fieldIndexFallback(JsonFieldTable table, int start) {
     int hash = 0;
     for (int i = start; i < position; i++) {
-      hash = 31 * hash + input.charAt(i);
+      hash = 31 * hash + charAtFast(i);
     }
-    int length = input.length();
-    while (position < length) {
-      char ch = input.charAt(position++);
+    int inputLength = length;
+    while (position < inputLength) {
+      char ch = charAtFast(position++);
       if (ch == '"') {
-        return table.index(this, start, position - 1, hash);
+        return table.indexUtf16(this, start, position - 1, hash);
       }
       if (ch == '\\' || ch < 0x20 || ch >= 0x80) {
         position = start - 1;
@@ -357,7 +375,7 @@ public final class StringJsonReader extends JsonReader {
   private int hashRange(int start, int end) {
     int hash = 0;
     for (int i = start; i < end; i++) {
-      hash = 31 * hash + input.charAt(i);
+      hash = 31 * hash + charAtFast(i);
     }
     return hash;
   }
@@ -369,7 +387,7 @@ public final class StringJsonReader extends JsonReader {
       return false;
     }
     for (int i = 0; i < length; i++) {
-      if (input.charAt(start + i) != value.charAt(i)) {
+      if (charAtFast(start + i) != value.charAt(i)) {
         return false;
       }
     }
@@ -382,9 +400,9 @@ public final class StringJsonReader extends JsonReader {
   }
 
   private void skipWhitespaceFast() {
-    int length = input.length();
-    while (position < length) {
-      char ch = input.charAt(position);
+    int inputLength = length;
+    while (position < inputLength) {
+      char ch = charAtFast(position);
       if (ch == ' ' || ch == '\n' || ch == '\r' || ch == '\t') {
         position++;
       } else {
@@ -395,11 +413,11 @@ public final class StringJsonReader extends JsonReader {
 
   private boolean startsWithAscii(String value) {
     int end = position + value.length();
-    if (end > input.length()) {
+    if (end > length) {
       return false;
     }
     for (int i = 0; i < value.length(); i++) {
-      if (input.charAt(position + i) != value.charAt(i)) {
+      if (charAtFast(position + i) != value.charAt(i)) {
         return false;
       }
     }
@@ -407,8 +425,8 @@ public final class StringJsonReader extends JsonReader {
   }
 
   private void rejectLeadingDigitFast() {
-    if (position < input.length()) {
-      char ch = input.charAt(position);
+    if (position < length) {
+      char ch = charAtFast(position);
       if (ch >= '0' && ch <= '9') {
         throw error("Leading zero in number");
       }
@@ -416,11 +434,18 @@ public final class StringJsonReader extends JsonReader {
   }
 
   private void rejectFractionOrExponentFast() {
-    if (position < input.length()) {
-      char ch = input.charAt(position);
+    if (position < length) {
+      char ch = charAtFast(position);
       if (ch == '.' || ch == 'e' || ch == 'E') {
         throw error("Expected integer");
       }
     }
+  }
+
+  private char charAtFast(int index) {
+    byte[] localBytes = bytes;
+    return localBytes == null
+        ? input.charAt(index)
+        : StringSerializer.getBytesChar(localBytes, index << 1);
   }
 }

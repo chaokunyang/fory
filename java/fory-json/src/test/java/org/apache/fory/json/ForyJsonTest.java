@@ -54,6 +54,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.apache.fory.json.annotation.JsonIgnore;
 import org.apache.fory.reflect.TypeRef;
+import org.apache.fory.serializer.StringSerializer;
 import org.testng.annotations.Test;
 
 public class ForyJsonTest {
@@ -512,6 +513,21 @@ public class ForyJsonTest {
     ForyJson json = ForyJson.builder().build();
     assertTextRoundTrip(json, ZH_TEXT);
     assertTextRoundTrip(json, EU_TEXT);
+  }
+
+  @Test
+  public void readStringInputLayouts() {
+    ForyJson json = ForyJson.builder().build();
+    String latin1Json = "{\"active\":true,\"id\":7,\"name\":\"café\"}";
+    String utf16Json = "{\"active\":true,\"id\":7,\"name\":\"你好，Fory\"}";
+    if (StringSerializer.isBytesBackedString()) {
+      assertTrue(StringSerializer.isLatin1Coder(StringSerializer.getStringCoder(latin1Json)));
+      assertTrue(StringSerializer.isUtf16Coder(StringSerializer.getStringCoder(utf16Json)));
+    }
+    assertEquals(json.fromJson(latin1Json, PublicFields.class).name, "café");
+    assertEquals(json.fromJson(utf16Json, PublicFields.class).name, ZH_TEXT);
+    assertEquals(json.fromJson("\"café\"", String.class), "café");
+    assertEquals(json.fromJson("\"你好，Fory\"", String.class), ZH_TEXT);
   }
 
   @Test

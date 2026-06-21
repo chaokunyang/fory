@@ -22,6 +22,9 @@ package org.apache.fory.json.meta;
 import java.util.HashMap;
 import java.util.Map;
 import org.apache.fory.json.reader.JsonReader;
+import org.apache.fory.json.reader.Latin1StringJsonReader;
+import org.apache.fory.json.reader.Utf16StringJsonReader;
+import org.apache.fory.json.reader.Utf8JsonReader;
 
 public final class JsonFieldTable {
   private final Map<String, JsonFieldInfo> fields;
@@ -58,6 +61,24 @@ public final class JsonFieldTable {
   }
 
   public JsonFieldInfo get(JsonReader reader, int start, int end, int hash) {
+    return getBySlice(reader, start, end, hash);
+  }
+
+  public JsonFieldInfo getLatin1(
+      Latin1StringJsonReader reader, int startByte, int endByte, int hash) {
+    return getBySlice(reader, startByte, endByte, hash);
+  }
+
+  public JsonFieldInfo getUtf16(
+      Utf16StringJsonReader reader, int startChar, int endChar, int hash) {
+    return getBySlice(reader, startChar, endChar, hash);
+  }
+
+  public JsonFieldInfo getUtf8(Utf8JsonReader reader, int startByte, int endByte, int hash) {
+    return getBySlice(reader, startByte, endByte, hash);
+  }
+
+  private JsonFieldInfo getBySlice(JsonReader reader, int start, int end, int hash) {
     String[] localNames = tableNames;
     int[] localHashes = tableHashes;
     JsonFieldInfo[] localFields = tableFields;
@@ -81,6 +102,22 @@ public final class JsonFieldTable {
   }
 
   public int index(JsonReader reader, int start, int end, int hash) {
+    return indexBySlice(reader, start, end, hash);
+  }
+
+  public int indexLatin1(Latin1StringJsonReader reader, int startByte, int endByte, int hash) {
+    return indexBySlice(reader, startByte, endByte, hash);
+  }
+
+  public int indexUtf16(Utf16StringJsonReader reader, int startChar, int endChar, int hash) {
+    return indexBySlice(reader, startChar, endChar, hash);
+  }
+
+  public int indexUtf8(Utf8JsonReader reader, int startByte, int endByte, int hash) {
+    return indexBySlice(reader, startByte, endByte, hash);
+  }
+
+  private int indexBySlice(JsonReader reader, int start, int end, int hash) {
     String[] localNames = tableNames;
     int[] localHashes = tableHashes;
     int[] localIndexes = tableIndexes;

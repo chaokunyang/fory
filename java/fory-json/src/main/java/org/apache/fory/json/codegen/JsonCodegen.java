@@ -21,6 +21,7 @@ package org.apache.fory.json.codegen;
 
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
+import java.lang.reflect.Modifier;
 import java.util.Collection;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -167,7 +168,7 @@ public final class JsonCodegen {
     if (field == null) {
       return false;
     }
-    if (!isInstanceAccessor(property.writeFieldAccessor())) {
+    if (!canUseDirectField(property) && !isInstanceAccessor(property.writeFieldAccessor())) {
       return false;
     }
     Class<?> rawType = property.writeRawType();
@@ -782,18 +783,22 @@ public final class JsonCodegen {
         .append(" {\n");
     boolean objectStartFused = canFuseObjectStart(properties);
     boolean[] useInfo = new boolean[properties.length];
+    boolean[] useAccessor = new boolean[properties.length];
     boolean[] usePrefix = new boolean[properties.length];
     boolean[] useStringToken = new boolean[properties.length];
     boolean[] useNumberToken = new boolean[properties.length];
     for (int i = 0; i < properties.length; i++) {
       JsonFieldInfo property = properties[i];
       useInfo[i] = true;
+      useAccessor[i] = !canUseDirectField(property);
       usePrefix[i] = usesPrefix(property);
       useStringToken[i] = property.writeKind() == JsonFieldKind.STRING;
       useNumberToken[i] = usesNumberToken(property, objectStartFused && i == 0);
       if (useInfo[i]) {
         code.append("  private final JsonFieldInfo p").append(i).append(";\n");
-        code.append("  private final InstanceAccessor a").append(i).append(";\n");
+        if (useAccessor[i]) {
+          code.append("  private final InstanceAccessor a").append(i).append(";\n");
+        }
       }
       if (usePrefix[i]) {
         if (utf8) {
@@ -818,11 +823,13 @@ public final class JsonCodegen {
     for (int i = 0; i < properties.length; i++) {
       if (useInfo[i]) {
         code.append("    this.p").append(i).append(" = properties[").append(i).append("];\n");
-        code.append("    this.a")
-            .append(i)
-            .append(" = (InstanceAccessor) properties[")
-            .append(i)
-            .append("].writeFieldAccessor();\n");
+        if (useAccessor[i]) {
+          code.append("    this.a")
+              .append(i)
+              .append(" = (InstanceAccessor) properties[")
+              .append(i)
+              .append("].writeFieldAccessor();\n");
+        }
       }
       if (usePrefix[i]) {
         if (utf8) {
@@ -1358,6 +1365,9 @@ public final class JsonCodegen {
   }
 
   private static String fieldValue(JsonFieldInfo property, int id, String object) {
+    if (canUseDirectField(property)) {
+      return object + "." + property.writeField().getName();
+    }
     String accessor = "a" + id;
     if (!property.writeRawType().isPrimitive()) {
       return "("
@@ -1388,6 +1398,14 @@ public final class JsonCodegen {
       default:
         throw new ForyJsonException("Unsupported generated primitive kind " + property.writeKind());
     }
+  }
+
+  private static boolean canUseDirectField(JsonFieldInfo property) {
+    Field field = property.writeField();
+    return field != null
+        && Modifier.isPublic(field.getModifiers())
+        && Modifier.isPublic(field.getDeclaringClass().getModifiers())
+        && CodeGenerator.sourcePublicAccessible(field.getDeclaringClass());
   }
 
   private static String sourceName(Class<?> type) {

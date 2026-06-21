@@ -27,15 +27,14 @@ import java.util.List;
 import java.util.concurrent.TimeUnit;
 import org.testng.annotations.Test;
 
-public class KotlinGrpcTest extends GrpcTestBase {
+public class DartGrpcTest extends GrpcTestBase {
 
   @Test
-  public void testJavaServerKotlinClient() throws Exception {
+  public void testJavaServerDartClient() throws Exception {
     Server server = startJavaAllSchemasServer();
     try {
       runPeer(
-          "kotlin-grpc-client",
-          kotlinCommand("client", "--target", "127.0.0.1:" + server.getPort()));
+          "dart-grpc-client", dartCommand("client", "--target", "127.0.0.1:" + server.getPort()));
     } finally {
       server.shutdownNow();
       server.awaitTermination(10, TimeUnit.SECONDS);
@@ -43,23 +42,19 @@ public class KotlinGrpcTest extends GrpcTestBase {
   }
 
   @Test
-  public void testKotlinServerJavaClient() throws Exception {
+  public void testDartServerJavaClient() throws Exception {
     exercisePeerServer(
-        "kotlin-grpc",
-        "Kotlin",
-        "fory-grpc-kotlin-",
-        kotlinCommand("server"),
-        this::exerciseAllSchemas);
+        "dart-grpc", "Dart", "fory-grpc-dart-", dartCommand("server"), this::exerciseAllSchemas);
   }
 
-  private PeerCommand kotlinCommand(String... args) {
-    Path kotlinRoot = grpcRoot().resolve("kotlin");
+  private PeerCommand dartCommand(String... args) {
+    Path dartRoot = grpcRoot().resolve("dart");
     List<String> command = new ArrayList<>();
-    command.add("java");
-    command.add("-jar");
-    command.add(kotlinRoot.resolve("target").resolve("fory-kotlin-grpc-peer.jar").toString());
+    command.add("dart");
+    command.add("run");
+    command.add("bin/interop.dart");
     command.addAll(Arrays.asList(args));
-    PeerCommand peerCommand = newPeerCommand(kotlinRoot, command);
+    PeerCommand peerCommand = newPeerCommand(dartRoot, command);
     putEnv(peerCommand, "ENABLE_FORY_DEBUG_OUTPUT", "1");
     setLocalhostNoProxy(peerCommand);
     clearProxyEnv(peerCommand);

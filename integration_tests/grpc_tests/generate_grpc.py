@@ -38,6 +38,7 @@ OUTPUTS = {
     "rust": TEST_DIR / "rust/generated/src",
     "csharp": TEST_DIR / "csharp/generated",
     "kotlin": TEST_DIR / "kotlin/src/main/kotlin/generated",
+    "dart": TEST_DIR / "dart/lib/generated",
 }
 
 
@@ -81,6 +82,7 @@ def main() -> int:
                 f"--rust_out={OUTPUTS['rust']}",
                 f"--csharp_out={OUTPUTS['csharp']}",
                 f"--kotlin_out={OUTPUTS['kotlin']}",
+                f"--dart_out={OUTPUTS['dart']}",
                 "--grpc",
             ],
             env=env,

@@ -92,7 +92,7 @@ public final class JsonSharedRegistry {
       return new ScalarCodecs.EnumCodec(rawType);
     }
     if (rawType.isArray()) {
-      return new ArrayCodec(rawType.getComponentType(), localResolver);
+      return ArrayCodec.create(rawType.getComponentType(), localResolver);
     }
     if (rawType == Optional.class) {
       return new ScalarCodecs.OptionalCodec(

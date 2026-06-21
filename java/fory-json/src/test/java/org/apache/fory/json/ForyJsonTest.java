@@ -836,6 +836,21 @@ public class ForyJsonTest {
   }
 
   @Test
+  public void readPrimitiveArrayRoots() {
+    ForyJson json = ForyJson.builder().build();
+    assertEquals(json.toJson(new int[] {1, 2}), "[1,2]");
+    assertEquals(json.fromJson("[1,2]", int[].class), new int[] {1, 2});
+    assertEquals(
+        json.fromJson("[1,2]".getBytes(StandardCharsets.UTF_8), int[].class), new int[] {1, 2});
+    assertEquals(
+        json.fromJson("[true,false]".getBytes(StandardCharsets.UTF_8), boolean[].class),
+        new boolean[] {true, false});
+    assertEquals(json.fromJson("[1,-2,3]", byte[].class), new byte[] {1, -2, 3});
+    assertEquals(json.fromJson("[\"a\",\"你\"]", char[].class), new char[] {'a', '你'});
+    assertThrows(ForyJsonException.class, () -> json.fromJson("[1,null]", int[].class));
+  }
+
+  @Test
   public void rejectLeadingZero() {
     ForyJson json = ForyJson.builder().build();
     assertThrows(ForyJsonException.class, () -> json.fromJson("01", int.class));

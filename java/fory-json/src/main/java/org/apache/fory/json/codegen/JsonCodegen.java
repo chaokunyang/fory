@@ -286,7 +286,6 @@ public final class JsonCodegen {
     code.append("import org.apache.fory.json.codec.Utf8ObjectReader;\n");
     code.append("import org.apache.fory.json.meta.JsonFieldAccessor;\n");
     code.append("import org.apache.fory.json.meta.JsonFieldInfo;\n");
-    code.append("import org.apache.fory.json.meta.JsonFieldTable;\n");
     code.append("import org.apache.fory.json.reader.JsonReader;\n");
     code.append("import org.apache.fory.json.reader.Latin1StringJsonReader;\n");
     code.append("import org.apache.fory.json.reader.Utf16StringJsonReader;\n");
@@ -296,7 +295,6 @@ public final class JsonCodegen {
         .append(className)
         .append(
             " implements ObjectReader, Latin1ObjectReader, Utf16ObjectReader, Utf8ObjectReader {\n");
-    code.append("  private final String[] fieldNames;\n");
     code.append("  private final long[] fieldHashes;\n");
     for (int i = 0; i < properties.length; i++) {
       code.append("  private final JsonFieldInfo p").append(i).append(";\n");
@@ -318,14 +316,8 @@ public final class JsonCodegen {
         .append(className)
         .append(
             "(JsonFieldInfo[] properties, JsonCodec[] codecs, BaseObjectCodec[] objectCodecs) {\n");
-    code.append("    this.fieldNames = new String[properties.length];\n");
     code.append("    this.fieldHashes = new long[properties.length];\n");
     for (int i = 0; i < properties.length; i++) {
-      code.append("    this.fieldNames[")
-          .append(i)
-          .append("] = properties[")
-          .append(i)
-          .append("].name();\n");
       code.append("    this.fieldHashes[")
           .append(i)
           .append("] = properties[")
@@ -353,6 +345,7 @@ public final class JsonCodegen {
       }
     }
     code.append("  }\n");
+    appendFieldIndexMethod(code, properties);
     appendReadMethod(code, "read", "JsonReader", type, properties, GENERIC_READER, record);
     appendReadMethod(
         code, "readLatin1", "Latin1StringJsonReader", type, properties, LATIN1_READER, record);
@@ -361,6 +354,23 @@ public final class JsonCodegen {
     appendReadMethod(code, "readUtf8", "Utf8JsonReader", type, properties, UTF8_READER, record);
     code.append("}\n");
     return code.toString();
+  }
+
+  private static void appendFieldIndexMethod(StringBuilder code, JsonFieldInfo[] properties) {
+    code.append("  final int fieldIndex(long fieldHash) {\n");
+    for (int i = 0; i < properties.length; i++) {
+      code.append("    if (fieldHash == ")
+          .append(longLiteral(properties[i].nameHash()))
+          .append(") {\n");
+      code.append("      return ").append(i).append(";\n");
+      code.append("    }\n");
+    }
+    code.append("    return -1;\n");
+    code.append("  }\n");
+  }
+
+  private static String longLiteral(long value) {
+    return "0x" + Long.toHexString(value) + "L";
   }
 
   private void appendReadMethod(
@@ -386,14 +396,14 @@ public final class JsonCodegen {
     code.append("    if (").append(consumeCall(readerMode, '}')).append(") {\n");
     appendReturnObject(code, "      ", record);
     code.append("    }\n");
-    code.append("    JsonFieldTable fieldTable = owner.readTable();\n");
     code.append("    long[] localFieldHashes = fieldHashes;\n");
     code.append("    int expectedIndex = 0;\n");
     code.append("    do {\n");
+    code.append("      long fieldHash = reader.readFieldNameHash();\n");
     code.append("      int fieldIndex = expectedIndex < localFieldHashes.length\n");
-    code.append(
-        "          ? reader.readFieldIndex(fieldTable, localFieldHashes[expectedIndex], expectedIndex)\n");
-    code.append("          : reader.readFieldIndex(fieldTable);\n");
+    code.append("              && fieldHash == localFieldHashes[expectedIndex]\n");
+    code.append("          ? expectedIndex\n");
+    code.append("          : fieldIndex(fieldHash);\n");
     appendExpect(code, readerMode, ':', "      ");
     appendFieldSwitch(code, properties, readerMode, "      ", record);
     code.append("      if (fieldIndex >= 0) {\n");
@@ -430,7 +440,6 @@ public final class JsonCodegen {
       code.append("  }\n");
       return;
     }
-    code.append("    JsonFieldTable fieldTable = owner.readTable();\n");
     code.append("    long[] localFieldHashes = fieldHashes;\n");
     for (int i = 1; i < properties.length; i++) {
       code.append("    boolean skip").append(i).append(" = false;\n");
@@ -482,21 +491,11 @@ public final class JsonCodegen {
       code.append(indent).append("    skip").append(index + 1).append(" = true;\n");
       code.append(indent).append("  } else {\n");
       appendSlowConsumedReturn(
-          code,
-          slowMethod,
-          index,
-          "fieldTable.index(fieldHash" + index + ")",
-          indent + "    ",
-          record);
+          code, slowMethod, index, "fieldIndex(fieldHash" + index + ")", indent + "    ", record);
       code.append(indent).append("  }\n");
     } else {
       appendSlowConsumedReturn(
-          code,
-          slowMethod,
-          index,
-          "fieldTable.index(fieldHash" + index + ")",
-          indent + "  ",
-          record);
+          code, slowMethod, index, "fieldIndex(fieldHash" + index + ")", indent + "  ", record);
     }
     code.append(indent).append("} else {\n");
     appendExpect(code, readerMode, ':', indent + "  ");
@@ -587,13 +586,13 @@ public final class JsonCodegen {
     code.append("      ")
         .append(record ? "Object[]" : "Object")
         .append(" object, int expectedIndex) {\n");
-    code.append("    JsonFieldTable fieldTable = owner.readTable();\n");
     code.append("    long[] localFieldHashes = fieldHashes;\n");
     code.append("    do {\n");
+    code.append("      long fieldHash = reader.readFieldNameHash();\n");
     code.append("      int fieldIndex = expectedIndex < localFieldHashes.length\n");
-    code.append(
-        "          ? reader.readFieldIndex(fieldTable, localFieldHashes[expectedIndex], expectedIndex)\n");
-    code.append("          : reader.readFieldIndex(fieldTable);\n");
+    code.append("              && fieldHash == localFieldHashes[expectedIndex]\n");
+    code.append("          ? expectedIndex\n");
+    code.append("          : fieldIndex(fieldHash);\n");
     appendExpect(code, readerMode, ':', "      ");
     appendFieldSwitch(code, properties, readerMode, "      ", record);
     code.append("      if (fieldIndex >= 0) {\n");
@@ -610,7 +609,6 @@ public final class JsonCodegen {
     code.append("      ")
         .append(record ? "Object[]" : "Object")
         .append(" object, int expectedIndex, int firstFieldIndex) {\n");
-    code.append("    JsonFieldTable fieldTable = owner.readTable();\n");
     code.append("    long[] localFieldHashes = fieldHashes;\n");
     code.append("    int fieldIndex = firstFieldIndex;\n");
     code.append("    while (true) {\n");
@@ -623,10 +621,11 @@ public final class JsonCodegen {
     appendExpect(code, readerMode, '}', "        ");
     code.append("        return;\n");
     code.append("      }\n");
+    code.append("      long fieldHash = reader.readFieldNameHash();\n");
     code.append("      fieldIndex = expectedIndex < localFieldHashes.length\n");
-    code.append(
-        "          ? reader.readFieldIndex(fieldTable, localFieldHashes[expectedIndex], expectedIndex)\n");
-    code.append("          : reader.readFieldIndex(fieldTable);\n");
+    code.append("              && fieldHash == localFieldHashes[expectedIndex]\n");
+    code.append("          ? expectedIndex\n");
+    code.append("          : fieldIndex(fieldHash);\n");
     code.append("    }\n");
     code.append("  }\n");
   }
@@ -680,6 +679,19 @@ public final class JsonCodegen {
     return readerMode == GENERIC_READER ? "reader.readLong()" : "reader.readLongValue()";
   }
 
+  private static String readEnumCall(int readerMode, int id) {
+    switch (readerMode) {
+      case LATIN1_READER:
+        return "r" + id + ".readLatin1Enum(reader)";
+      case UTF16_READER:
+        return "r" + id + ".readUtf16Enum(reader)";
+      case UTF8_READER:
+        return "r" + id + ".readUtf8Enum(reader)";
+      default:
+        return "r" + id + ".readEnum(reader)";
+    }
+  }
+
   private static boolean usesWriteCodec(JsonFieldInfo property) {
     switch (property.writeKind()) {
       case ARRAY:
@@ -694,6 +706,7 @@ public final class JsonCodegen {
 
   private static boolean usesReadCodec(JsonFieldInfo property) {
     switch (property.readKind()) {
+      case ENUM:
       case ARRAY:
       case COLLECTION:
       case MAP:
@@ -735,7 +748,7 @@ public final class JsonCodegen {
         readString(code, id, indent, readerMode);
         return;
       case ENUM:
-        readEnum(code, rawType, id, indent, readerMode);
+        readEnum(code, id, indent, readerMode);
         return;
       case ARRAY:
       case COLLECTION:
@@ -767,7 +780,7 @@ public final class JsonCodegen {
         readRecordString(code, id, indent, readerMode);
         return;
       case ENUM:
-        readRecordEnum(code, rawType, id, indent, readerMode);
+        readRecordEnum(code, id, indent, readerMode);
         return;
       case ARRAY:
       case COLLECTION:
@@ -864,8 +877,7 @@ public final class JsonCodegen {
     code.append(indent).append("}\n");
   }
 
-  private static void readRecordEnum(
-      StringBuilder code, Class<?> rawType, int id, String indent, int readerMode) {
+  private static void readRecordEnum(StringBuilder code, int id, String indent, int readerMode) {
     code.append(indent).append("if (").append(tryReadNullCall(readerMode)).append(") {\n");
     code.append(indent).append("  object[").append(id).append("] = null;\n");
     code.append(indent).append("} else {\n");
@@ -873,8 +885,8 @@ public final class JsonCodegen {
         .append("  object[")
         .append(id)
         .append("] = ")
-        .append(sourceName(rawType))
-        .append(".valueOf(reader.readString());\n");
+        .append(readEnumCall(readerMode, id))
+        .append(";\n");
     code.append(indent).append("}\n");
   }
 
@@ -1004,8 +1016,7 @@ public final class JsonCodegen {
     code.append(indent).append("}\n");
   }
 
-  private static void readEnum(
-      StringBuilder code, Class<?> rawType, int id, String indent, int readerMode) {
+  private static void readEnum(StringBuilder code, int id, String indent, int readerMode) {
     code.append(indent).append("if (").append(tryReadNullCall(readerMode)).append(") {\n");
     code.append(indent).append("  a").append(id).append(".putObject(object, null);\n");
     code.append(indent).append("} else {\n");
@@ -1013,8 +1024,8 @@ public final class JsonCodegen {
         .append("  a")
         .append(id)
         .append(".putObject(object, ")
-        .append(sourceName(rawType))
-        .append(".valueOf(reader.readString()));\n");
+        .append(readEnumCall(readerMode, id))
+        .append(");\n");
     code.append(indent).append("}\n");
   }
 

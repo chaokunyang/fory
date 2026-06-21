@@ -32,7 +32,7 @@ public final class JsonFieldNameHash {
       long value = 0;
       for (int i = 0; i < length; i++) {
         char ch = name.charAt(i);
-        if (ch > 0xFF || (i == 0 && ch == 0)) {
+        if (ch > 0xFF || ch == 0) {
           latin1 = false;
           break;
         }

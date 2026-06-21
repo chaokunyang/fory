@@ -45,9 +45,7 @@ import java.util.Calendar;
 import java.util.Currency;
 import java.util.Date;
 import java.util.GregorianCalendar;
-import java.util.HashMap;
 import java.util.Locale;
-import java.util.Map;
 import java.util.Optional;
 import java.util.OptionalDouble;
 import java.util.OptionalInt;
@@ -61,7 +59,11 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.regex.Pattern;
 import org.apache.fory.json.ForyJsonException;
 import org.apache.fory.json.meta.JsonFieldAccessor;
+import org.apache.fory.json.meta.JsonFieldNameHash;
 import org.apache.fory.json.reader.JsonReader;
+import org.apache.fory.json.reader.Latin1StringJsonReader;
+import org.apache.fory.json.reader.Utf16StringJsonReader;
+import org.apache.fory.json.reader.Utf8JsonReader;
 import org.apache.fory.json.resolver.JsonTypeInfo;
 import org.apache.fory.json.resolver.JsonTypeResolver;
 import org.apache.fory.json.writer.JsonWriter;
@@ -1341,14 +1343,18 @@ public final class ScalarCodecs {
 
   public static final class EnumCodec extends AbstractJsonCodec {
     private final Class<?> type;
-    private final Map<String, Enum<?>> values;
+    private final long[] nameHashes;
+    private final Enum<?>[] values;
 
     EnumCodec(Class<?> type) {
       this.type = type;
       Enum<?>[] constants = (Enum<?>[]) type.getEnumConstants();
-      values = new HashMap<>(constants.length * 2);
-      for (Enum<?> constant : constants) {
-        values.put(constant.name(), constant);
+      nameHashes = new long[constants.length];
+      values = new Enum<?>[constants.length];
+      for (int i = 0; i < constants.length; i++) {
+        Enum<?> constant = constants[i];
+        nameHashes[i] = JsonFieldNameHash.hash(constant.name());
+        values[i] = constant;
       }
     }
 
@@ -1363,13 +1369,61 @@ public final class ScalarCodecs {
     }
 
     @Override
-    Object readNonNull(JsonReader reader, JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
-      String name = reader.readString();
-      Enum<?> value = values.get(name);
-      if (value == null) {
-        throw new ForyJsonException("Unknown enum value " + name + " for " + type);
+    public Object readLatin1(
+        Latin1StringJsonReader reader, JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
+      if (reader.tryReadNullToken()) {
+        return null;
       }
-      return value;
+      return readLatin1Enum(reader);
+    }
+
+    @Override
+    public Object readUtf16(
+        Utf16StringJsonReader reader, JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
+      if (reader.tryReadNullToken()) {
+        return null;
+      }
+      return readUtf16Enum(reader);
+    }
+
+    @Override
+    public Object readUtf8(
+        Utf8JsonReader reader, JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
+      if (reader.tryReadNullToken()) {
+        return null;
+      }
+      return readUtf8Enum(reader);
+    }
+
+    public Object readEnum(JsonReader reader) {
+      return enumValue(reader.readStringHash());
+    }
+
+    public Object readLatin1Enum(Latin1StringJsonReader reader) {
+      return enumValue(reader.readStringHash());
+    }
+
+    public Object readUtf16Enum(Utf16StringJsonReader reader) {
+      return enumValue(reader.readStringHash());
+    }
+
+    public Object readUtf8Enum(Utf8JsonReader reader) {
+      return enumValue(reader.readStringHash());
+    }
+
+    @Override
+    Object readNonNull(JsonReader reader, JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
+      return readEnum(reader);
+    }
+
+    private Enum<?> enumValue(long nameHash) {
+      long[] localHashes = nameHashes;
+      for (int i = 0; i < localHashes.length; i++) {
+        if (localHashes[i] == nameHash) {
+          return values[i];
+        }
+      }
+      throw new ForyJsonException("Unknown enum value for " + type);
     }
   }
 

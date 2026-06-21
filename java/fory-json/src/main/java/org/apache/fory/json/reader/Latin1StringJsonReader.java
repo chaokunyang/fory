@@ -19,7 +19,6 @@
 
 package org.apache.fory.json.reader;
 
-import java.nio.charset.StandardCharsets;
 import org.apache.fory.json.meta.JsonFieldInfo;
 import org.apache.fory.json.meta.JsonFieldNameHash;
 import org.apache.fory.json.meta.JsonFieldTable;
@@ -324,7 +323,7 @@ public final class Latin1StringJsonReader extends JsonReader {
     while (position < input.length) {
       int ch = input[position++] & 0xFF;
       if (ch == '"') {
-        return new String(input, start, position - 1 - start, StandardCharsets.ISO_8859_1);
+        return newLatin1String(start, position - 1);
       } else if (ch == '\\') {
         StringBuilder builder = new StringBuilder(input.length - start);
         appendLatin1(builder, start, position - 1);
@@ -355,6 +354,15 @@ public final class Latin1StringJsonReader extends JsonReader {
 
   @Override
   public long readFieldNameHash() {
+    return readQuotedStringHash();
+  }
+
+  @Override
+  public long readStringHash() {
+    return readQuotedStringHash();
+  }
+
+  private long readQuotedStringHash() {
     skipWhitespaceFast();
     byte[] bytes = input;
     int length = bytes.length;
@@ -373,7 +381,7 @@ public final class Latin1StringJsonReader extends JsonReader {
       if (ch == '\\') {
         char escaped = readEscapedFieldNameChar();
         hash = JsonFieldNameHash.update(hash, escaped);
-        latin1 = latin1 && escaped <= 0xFF && (nameLength != 0 || escaped != 0);
+        latin1 = latin1 && escaped <= 0xFF && escaped != 0;
         if (latin1 && nameLength < Long.BYTES) {
           value = JsonFieldNameHash.value(value, nameLength, escaped);
         }
@@ -399,7 +407,7 @@ public final class Latin1StringJsonReader extends JsonReader {
         throw error("Control character in string");
       }
       hash = JsonFieldNameHash.update(hash, (char) ch);
-      latin1 = latin1 && (nameLength != 0 || ch != 0);
+      latin1 = latin1 && ch != 0;
       if (latin1 && nameLength < Long.BYTES) {
         value = JsonFieldNameHash.value(value, nameLength, (char) ch);
       }
@@ -410,7 +418,14 @@ public final class Latin1StringJsonReader extends JsonReader {
 
   @Override
   protected String slice(int start, int end) {
-    return new String(input, start, end - start, StandardCharsets.ISO_8859_1);
+    return newLatin1String(start, end);
+  }
+
+  private String newLatin1String(int start, int end) {
+    int length = end - start;
+    byte[] bytes = new byte[length];
+    System.arraycopy(input, start, bytes, 0, length);
+    return StringSerializer.newLatin1StringZeroCopy(bytes);
   }
 
   private String readStringTail(StringBuilder builder) {

@@ -19,10 +19,10 @@
 
 package org.apache.fory.json.reader;
 
-import java.nio.charset.StandardCharsets;
 import org.apache.fory.json.meta.JsonFieldInfo;
 import org.apache.fory.json.meta.JsonFieldNameHash;
 import org.apache.fory.json.meta.JsonFieldTable;
+import org.apache.fory.serializer.StringSerializer;
 
 public final class Utf8JsonReader extends JsonReader {
   private static final byte[] EMPTY_BYTES = new byte[0];
@@ -316,7 +316,7 @@ public final class Utf8JsonReader extends JsonReader {
     while (position < input.length) {
       int b = input[position++] & 0xFF;
       if (b == '"') {
-        return new String(input, start, position - 1 - start, StandardCharsets.ISO_8859_1);
+        return newLatin1String(start, position - 1);
       } else if (b == '\\') {
         StringBuilder builder = new StringBuilder(input.length - start);
         appendAscii(builder, start, position - 1);
@@ -354,6 +354,15 @@ public final class Utf8JsonReader extends JsonReader {
 
   @Override
   public long readFieldNameHash() {
+    return readQuotedStringHash();
+  }
+
+  @Override
+  public long readStringHash() {
+    return readQuotedStringHash();
+  }
+
+  private long readQuotedStringHash() {
     skipWhitespaceFast();
     byte[] bytes = input;
     int length = bytes.length;
@@ -372,7 +381,7 @@ public final class Utf8JsonReader extends JsonReader {
       if (b == '\\') {
         char escaped = readEscapedFieldNameChar();
         hash = JsonFieldNameHash.update(hash, escaped);
-        latin1 = latin1 && escaped <= 0xFF && (nameLength != 0 || escaped != 0);
+        latin1 = latin1 && escaped <= 0xFF && escaped != 0;
         if (latin1 && nameLength < Long.BYTES) {
           value = JsonFieldNameHash.value(value, nameLength, escaped);
         }
@@ -399,7 +408,7 @@ public final class Utf8JsonReader extends JsonReader {
       }
       if (b < 0x80) {
         hash = JsonFieldNameHash.update(hash, (char) b);
-        latin1 = latin1 && (nameLength != 0 || b != 0);
+        latin1 = latin1 && b != 0;
         if (latin1 && nameLength < Long.BYTES) {
           value = JsonFieldNameHash.value(value, nameLength, (char) b);
         }
@@ -410,7 +419,7 @@ public final class Utf8JsonReader extends JsonReader {
       if (codePoint <= 0xFFFF) {
         char ch = (char) codePoint;
         hash = JsonFieldNameHash.update(hash, ch);
-        latin1 = latin1 && ch <= 0xFF && (nameLength != 0 || ch != 0);
+        latin1 = latin1 && ch <= 0xFF && ch != 0;
         if (latin1 && nameLength < Long.BYTES) {
           value = JsonFieldNameHash.value(value, nameLength, ch);
         }
@@ -427,11 +436,14 @@ public final class Utf8JsonReader extends JsonReader {
 
   @Override
   protected String slice(int start, int end) {
-    char[] chars = new char[end - start];
-    for (int i = start; i < end; i++) {
-      chars[i - start] = (char) (input[i] & 0xFF);
-    }
-    return new String(chars);
+    return newLatin1String(start, end);
+  }
+
+  private String newLatin1String(int start, int end) {
+    int length = end - start;
+    byte[] bytes = new byte[length];
+    System.arraycopy(input, start, bytes, 0, length);
+    return StringSerializer.newLatin1StringZeroCopy(bytes);
   }
 
   private String readStringTail(StringBuilder builder) {

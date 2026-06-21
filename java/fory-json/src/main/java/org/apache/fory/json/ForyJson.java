@@ -239,7 +239,7 @@ public final class ForyJson {
   private Object readLatin1Value(
       Latin1StringJsonReader reader, Type type, Class<?> fallback, JsonState state) {
     JsonTypeResolver resolver = state.typeResolver;
-    JsonTypeInfo typeInfo = resolver.getTypeInfo(type, fallback);
+    JsonTypeInfo typeInfo = state.rootTypeInfo(type, fallback);
     Object value = typeInfo.codec().readLatin1(reader, typeInfo, resolver);
     reader.finish();
     return value;
@@ -248,7 +248,7 @@ public final class ForyJson {
   private Object readUtf16Value(
       Utf16StringJsonReader reader, Type type, Class<?> fallback, JsonState state) {
     JsonTypeResolver resolver = state.typeResolver;
-    JsonTypeInfo typeInfo = resolver.getTypeInfo(type, fallback);
+    JsonTypeInfo typeInfo = state.rootTypeInfo(type, fallback);
     Object value = typeInfo.codec().readUtf16(reader, typeInfo, resolver);
     reader.finish();
     return value;
@@ -257,7 +257,7 @@ public final class ForyJson {
   private Object readUtf8Value(
       Utf8JsonReader reader, Type type, Class<?> fallback, JsonState state) {
     JsonTypeResolver resolver = state.typeResolver;
-    JsonTypeInfo typeInfo = resolver.getTypeInfo(type, fallback);
+    JsonTypeInfo typeInfo = state.rootTypeInfo(type, fallback);
     Object value = typeInfo.codec().readUtf8(reader, typeInfo, resolver);
     reader.finish();
     return value;
@@ -291,7 +291,8 @@ public final class ForyJson {
     private final Latin1StringJsonReader latin1Reader;
     private final Utf16StringJsonReader utf16Reader;
     private final JsonTypeResolver typeResolver;
-    private Class<?> lastRootType;
+    private Type lastRootType;
+    private Class<?> lastRootFallback;
     private JsonTypeInfo lastRootInfo;
 
     private JsonState(boolean writeNullFields, JsonSharedRegistry sharedRegistry) {
@@ -336,12 +337,17 @@ public final class ForyJson {
     }
 
     private JsonTypeInfo rootTypeInfo(Class<?> type) {
+      return rootTypeInfo(type, type);
+    }
+
+    private JsonTypeInfo rootTypeInfo(Type type, Class<?> fallback) {
       JsonTypeInfo typeInfo = lastRootInfo;
-      if (lastRootType == type && typeInfo != null) {
+      if (lastRootType == type && lastRootFallback == fallback && typeInfo != null) {
         return typeInfo;
       }
-      typeInfo = typeResolver.getTypeInfo(type, type);
+      typeInfo = typeResolver.getTypeInfo(type, fallback);
       lastRootType = type;
+      lastRootFallback = fallback;
       lastRootInfo = typeInfo;
       return typeInfo;
     }

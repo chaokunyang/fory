@@ -34,6 +34,7 @@ import java.util.concurrent.ConcurrentSkipListMap;
 import org.apache.fory.collection.Tuple2;
 import org.apache.fory.json.ForyJsonException;
 import org.apache.fory.json.JSONObject;
+import org.apache.fory.json.meta.JsonFieldNameHash;
 import org.apache.fory.json.reader.JsonReader;
 import org.apache.fory.json.reader.Latin1StringJsonReader;
 import org.apache.fory.json.reader.Utf16StringJsonReader;
@@ -858,15 +859,19 @@ public abstract class MapCodec extends AbstractJsonCodec {
 
   public static final class EnumKeyCodec implements MapKeyCodec {
     private final Class<?> type;
-    private final Map<String, Enum<?>> values;
+    private final long[] nameHashes;
+    private final Enum<?>[] values;
 
     @SuppressWarnings("unchecked")
     private EnumKeyCodec(Class<?> type) {
       this.type = type;
       Enum<?>[] constants = (Enum<?>[]) type.getEnumConstants();
-      values = new LinkedHashMap<>(constants.length * 2);
-      for (Enum<?> constant : constants) {
-        values.put(constant.name(), constant);
+      nameHashes = new long[constants.length];
+      values = new Enum<?>[constants.length];
+      for (int i = 0; i < constants.length; i++) {
+        Enum<?> constant = constants[i];
+        nameHashes[i] = JsonFieldNameHash.hash(constant.name());
+        values[i] = constant;
       }
     }
 
@@ -877,11 +882,22 @@ public abstract class MapCodec extends AbstractJsonCodec {
 
     @Override
     public Object fromName(String name) {
-      Enum<?> value = values.get(name);
-      if (value == null) {
-        throw new ForyJsonException("Unknown enum map key " + name + " for " + type);
+      return enumValue(JsonFieldNameHash.hash(name));
+    }
+
+    @Override
+    public Object readName(JsonReader reader) {
+      return enumValue(reader.readFieldNameHash());
+    }
+
+    private Enum<?> enumValue(long nameHash) {
+      long[] localHashes = nameHashes;
+      for (int i = 0; i < localHashes.length; i++) {
+        if (localHashes[i] == nameHash) {
+          return values[i];
+        }
       }
-      return value;
+      throw new ForyJsonException("Unknown enum map key for " + type);
     }
   }
 

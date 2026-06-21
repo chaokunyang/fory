@@ -251,6 +251,14 @@ public abstract class JsonReader {
   }
 
   public long readFieldNameHash() {
+    return readQuotedStringHash();
+  }
+
+  public long readStringHash() {
+    return readQuotedStringHash();
+  }
+
+  private long readQuotedStringHash() {
     skipWhitespace();
     if (position >= length() || charAt(position++) != '"') {
       throw error("Expected string");
@@ -267,7 +275,7 @@ public abstract class JsonReader {
       if (ch == '\\') {
         ch = readEscapedFieldNameChar();
         hash = JsonFieldNameHash.update(hash, ch);
-        latin1 = latin1 && ch <= 0xFF && (nameLength != 0 || ch != 0);
+        latin1 = latin1 && ch <= 0xFF && ch != 0;
         if (latin1 && nameLength < Long.BYTES) {
           value = JsonFieldNameHash.value(value, nameLength, ch);
         }
@@ -306,7 +314,7 @@ public abstract class JsonReader {
         throw error("Unpaired low surrogate in string");
       }
       hash = JsonFieldNameHash.update(hash, ch);
-      latin1 = latin1 && ch <= 0xFF && (nameLength != 0 || ch != 0);
+      latin1 = latin1 && ch <= 0xFF && ch != 0;
       if (latin1 && nameLength < Long.BYTES) {
         value = JsonFieldNameHash.value(value, nameLength, ch);
       }

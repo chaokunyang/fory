@@ -155,6 +155,15 @@ public class ForyJsonTest {
     public Short shortValue = Short.valueOf((short) 3);
   }
 
+  public static final class NumericBoundaries {
+    public int intMax;
+    public int intMin;
+    public long longMax;
+    public long longMin;
+    public int small;
+    public String text;
+  }
+
   public static final class NaturalValues {
     public Object bool = Boolean.TRUE;
     public Object list = Arrays.asList("a", Integer.valueOf(1), Boolean.FALSE);
@@ -730,6 +739,33 @@ public class ForyJsonTest {
   }
 
   @Test
+  public void readNumericBoundaries() {
+    ForyJson json = ForyJson.builder().build();
+    String latin1 =
+        "{\"intMax\":2147483647,\"intMin\":-2147483648,"
+            + "\"longMax\":9223372036854775807,\"longMin\":-9223372036854775808,"
+            + "\"small\":-7,\"text\":\"café\"}";
+    String utf16 = latin1.replace("café", ZH_TEXT);
+    assertNumericBoundaries(json.fromJson(latin1, NumericBoundaries.class), "café");
+    assertNumericBoundaries(json.fromJson(utf16, NumericBoundaries.class), ZH_TEXT);
+    assertNumericBoundaries(
+        json.fromJson(utf16.getBytes(StandardCharsets.UTF_8), NumericBoundaries.class), ZH_TEXT);
+
+    assertThrows(ForyJsonException.class, () -> json.fromJson("2147483648", int.class));
+    assertThrows(ForyJsonException.class, () -> json.fromJson("-2147483649", int.class));
+    assertThrows(ForyJsonException.class, () -> json.fromJson("1.0", int.class));
+    assertThrows(ForyJsonException.class, () -> json.fromJson("9223372036854775808", long.class));
+    assertThrows(
+        ForyJsonException.class,
+        () -> json.fromJson("-9223372036854775809".getBytes(StandardCharsets.UTF_8), long.class));
+    assertThrows(
+        ForyJsonException.class,
+        () ->
+            json.fromJson(
+                "{\"intMax\":2147483648,\"text\":\"" + ZH_TEXT + "\"}", NumericBoundaries.class));
+  }
+
+  @Test
   public void readTypeRefList() {
     ForyJson json = ForyJson.builder().build();
     List<TokenValues> values =
@@ -1186,6 +1222,15 @@ public class ForyJsonTest {
     assertEquals(value.names, new LinkedHashSet<>(Arrays.asList("alpha", ZH_TEXT)));
     assertTrue(value.numbers instanceof ArrayDeque);
     assertEquals(new ArrayList<>(value.numbers), Arrays.asList(1, 2));
+  }
+
+  private static void assertNumericBoundaries(NumericBoundaries value, String text) {
+    assertEquals(value.intMax, Integer.MAX_VALUE);
+    assertEquals(value.intMin, Integer.MIN_VALUE);
+    assertEquals(value.longMax, Long.MAX_VALUE);
+    assertEquals(value.longMin, Long.MIN_VALUE);
+    assertEquals(value.small, -7);
+    assertEquals(value.text, text);
   }
 
   private static Class<?> compileRecordClass(String simpleName, String source) throws Exception {

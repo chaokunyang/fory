@@ -439,6 +439,33 @@ public final class Utf16StringJsonReader extends JsonReader {
     return readQuotedStringHash();
   }
 
+  public long readPackedStringHash() {
+    int mark = position;
+    skipWhitespaceFast();
+    int inputLength = length;
+    int offset = position;
+    if (offset < inputLength && charAtFast(offset++) == '"') {
+      long value = 0;
+      int nameLength = 0;
+      while (offset < inputLength) {
+        char ch = charAtFast(offset++);
+        if (ch == '"') {
+          if (nameLength > 0) {
+            position = offset;
+            return value;
+          }
+          break;
+        }
+        if (ch == 0 || ch == '\\' || ch < 0x20 || ch > 0xFF || nameLength >= Long.BYTES) {
+          break;
+        }
+        value = JsonFieldNameHash.value(value, nameLength++, ch);
+      }
+    }
+    position = mark;
+    return readQuotedStringHash();
+  }
+
   private long readQuotedStringHash() {
     skipWhitespaceFast();
     return readQuotedStringHashToken();

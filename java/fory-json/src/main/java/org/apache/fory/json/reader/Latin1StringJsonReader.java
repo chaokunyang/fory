@@ -462,6 +462,34 @@ public final class Latin1StringJsonReader extends JsonReader {
     return readQuotedStringHash();
   }
 
+  public long readPackedStringHash() {
+    int mark = position;
+    skipWhitespaceFast();
+    byte[] bytes = input;
+    int length = bytes.length;
+    int offset = position;
+    if (offset < length && bytes[offset++] == '"') {
+      long value = 0;
+      int nameLength = 0;
+      while (offset < length) {
+        int ch = bytes[offset++] & 0xFF;
+        if (ch == '"') {
+          if (nameLength > 0) {
+            position = offset;
+            return value;
+          }
+          break;
+        }
+        if (ch == 0 || ch == '\\' || ch < 0x20 || nameLength >= Long.BYTES) {
+          break;
+        }
+        value = JsonFieldNameHash.value(value, nameLength++, (char) ch);
+      }
+    }
+    position = mark;
+    return readQuotedStringHash();
+  }
+
   private long readQuotedStringHash() {
     skipWhitespaceFast();
     return readQuotedStringHashToken();
@@ -505,7 +533,7 @@ public final class Latin1StringJsonReader extends JsonReader {
           throw error("Unpaired low surrogate escape");
         } else {
           if (latin1) {
-            if (escaped != 0 && nameLength < Long.BYTES) {
+            if (escaped <= 0xFF && escaped != 0 && nameLength < Long.BYTES) {
               value = JsonFieldNameHash.value(value, nameLength, escaped);
               nameLength++;
               continue;

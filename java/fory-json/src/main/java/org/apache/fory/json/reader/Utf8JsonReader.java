@@ -463,6 +463,34 @@ public final class Utf8JsonReader extends JsonReader {
     return readQuotedStringHash();
   }
 
+  public long readPackedStringHash() {
+    int mark = position;
+    skipWhitespaceFast();
+    byte[] bytes = input;
+    int length = bytes.length;
+    int offset = position;
+    if (offset < length && bytes[offset++] == '"') {
+      long value = 0;
+      int nameLength = 0;
+      while (offset < length) {
+        int ch = bytes[offset++] & 0xFF;
+        if (ch == '"') {
+          if (nameLength > 0) {
+            position = offset;
+            return value;
+          }
+          break;
+        }
+        if (ch == 0 || ch == '\\' || ch < 0x20 || ch >= 0x80 || nameLength >= Long.BYTES) {
+          break;
+        }
+        value = JsonFieldNameHash.value(value, nameLength++, (char) ch);
+      }
+    }
+    position = mark;
+    return readQuotedStringHash();
+  }
+
   private long readQuotedStringHash() {
     skipWhitespaceFast();
     return readQuotedStringHashToken();

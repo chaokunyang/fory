@@ -84,6 +84,14 @@ public class ForyJsonTest {
     SMALL
   }
 
+  public enum UnicodeKind {
+    你好
+  }
+
+  public static final class UnicodeEnumValue {
+    public UnicodeKind kind = UnicodeKind.你好;
+  }
+
   public static final class PublicFields {
     public boolean active = true;
     public int id = 7;
@@ -638,6 +646,20 @@ public class ForyJsonTest {
     assertEquals(escapedValue.你好, ZH_TEXT);
     assertEquals(bytesValue.café, EU_TEXT);
     assertEquals(bytesValue.你好, ZH_TEXT);
+  }
+
+  @Test
+  public void readUnicodeEnum() {
+    ForyJson json = ForyJson.builder().build();
+    String direct = "{\"kind\":\"你好\"}";
+    String escaped = "{\"kind\":\"\\u4f60\\u597d\"}";
+    assertEquals(
+        new String(json.toJsonBytes(new UnicodeEnumValue()), StandardCharsets.UTF_8), direct);
+    assertEquals(json.fromJson(direct, UnicodeEnumValue.class).kind, UnicodeKind.你好);
+    assertEquals(json.fromJson(escaped, UnicodeEnumValue.class).kind, UnicodeKind.你好);
+    assertEquals(
+        json.fromJson(direct.getBytes(StandardCharsets.UTF_8), UnicodeEnumValue.class).kind,
+        UnicodeKind.你好);
   }
 
   @Test

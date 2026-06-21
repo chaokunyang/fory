@@ -771,8 +771,6 @@ public final class JsonCodegen {
     code.append("import org.apache.fory.json.codec.GeneratedObjectWriter;\n");
     code.append("import org.apache.fory.json.codec.StringObjectWriter;\n");
     code.append("import org.apache.fory.json.codec.Utf8ObjectWriter;\n");
-    code.append("import org.apache.fory.json.writer.JsonNumberTokenCache;\n");
-    code.append("import org.apache.fory.json.writer.JsonStringTokenCache;\n");
     code.append("import org.apache.fory.json.writer.StringJsonWriter;\n");
     code.append("import org.apache.fory.json.writer.Utf8JsonWriter;\n");
     code.append("import org.apache.fory.reflect.InstanceFieldAccessors.InstanceAccessor;\n");
@@ -785,15 +783,11 @@ public final class JsonCodegen {
     boolean[] useInfo = new boolean[properties.length];
     boolean[] useAccessor = new boolean[properties.length];
     boolean[] usePrefix = new boolean[properties.length];
-    boolean[] useStringToken = new boolean[properties.length];
-    boolean[] useNumberToken = new boolean[properties.length];
     for (int i = 0; i < properties.length; i++) {
       JsonFieldInfo property = properties[i];
       useInfo[i] = true;
       useAccessor[i] = !canUseDirectField(property);
       usePrefix[i] = usesPrefix(property);
-      useStringToken[i] = property.writeKind() == JsonFieldKind.STRING;
-      useNumberToken[i] = usesNumberToken(property, objectStartFused && i == 0);
       if (useInfo[i]) {
         code.append("  private final JsonFieldInfo p").append(i).append(";\n");
         if (useAccessor[i]) {
@@ -808,12 +802,6 @@ public final class JsonCodegen {
           code.append("  private final byte[] s").append(i).append(";\n");
           code.append("  private final byte[] sc").append(i).append(";\n");
         }
-      }
-      if (useStringToken[i]) {
-        code.append("  private final JsonStringTokenCache st").append(i).append(";\n");
-      }
-      if (useNumberToken[i]) {
-        code.append("  private final JsonNumberTokenCache nt").append(i).append(";\n");
       }
     }
     code.append("  ")
@@ -856,20 +844,6 @@ public final class JsonCodegen {
               .append("].stringCommaNamePrefix();\n");
         }
       }
-      if (useStringToken[i]) {
-        code.append("    this.st")
-            .append(i)
-            .append(" = properties[")
-            .append(i)
-            .append("].stringTokenCache();\n");
-      }
-      if (useNumberToken[i]) {
-        code.append("    this.nt")
-            .append(i)
-            .append(" = properties[")
-            .append(i)
-            .append("].numberTokenCache();\n");
-      }
     }
     code.append("  }\n");
     writeMethod(code, typeName, properties, utf8, objectStartFused);
@@ -881,21 +855,6 @@ public final class JsonCodegen {
     JsonFieldKind kind = property.writeKind();
     return kind != JsonFieldKind.BOOLEAN && kind != JsonFieldKind.ENUM
         || writeNullFields && !property.writeRawType().isPrimitive();
-  }
-
-  private static boolean usesNumberToken(JsonFieldInfo property, boolean objectStartFused) {
-    if (objectStartFused) {
-      return false;
-    }
-    switch (property.writeKind()) {
-      case BYTE:
-      case SHORT:
-      case INT:
-      case LONG:
-        return true;
-      default:
-        return false;
-    }
   }
 
   private void writeMethod(
@@ -1042,10 +1001,10 @@ public final class JsonCodegen {
       case BYTE:
       case SHORT:
       case INT:
-        writeNumberToken(code, prop.substring(1), value, false, utf8, commaKnown, indent);
+        writeNumberField(code, prop.substring(1), value, false, utf8, commaKnown, indent);
         return;
       case LONG:
-        writeNumberToken(code, prop.substring(1), value, true, utf8, commaKnown, indent);
+        writeNumberField(code, prop.substring(1), value, true, utf8, commaKnown, indent);
         return;
       default:
         writeFieldName(code, Integer.parseInt(prop.substring(1)), utf8, commaKnown, "    ");
@@ -1053,7 +1012,7 @@ public final class JsonCodegen {
     }
   }
 
-  private static void writeNumberToken(
+  private static void writeNumberField(
       StringBuilder code,
       String id,
       String value,
@@ -1061,59 +1020,10 @@ public final class JsonCodegen {
       boolean utf8,
       boolean commaKnown,
       String indent) {
-    String cacheMethod = utf8 ? "writeUtf8Field" : "writeStringField";
     String writerMethod = longValue ? "writeLongField" : "writeIntField";
     String prefix = utf8 ? "u" : "s";
-    if (commaKnown) {
-      String commaCacheMethod = utf8 ? "writeUtf8CommaField" : "writeStringCommaField";
-      code.append(indent)
-          .append("if (!nt")
-          .append(id)
-          .append(".")
-          .append(commaCacheMethod)
-          .append("(writer, ")
-          .append(value)
-          .append(", ")
-          .append(prefix)
-          .append("c")
-          .append(id)
-          .append(")) {\n");
-      code.append(indent)
-          .append("  writer.")
-          .append(writerMethod)
-          .append("(")
-          .append(prefix)
-          .append(id)
-          .append(", ")
-          .append(prefix)
-          .append("c")
-          .append(id)
-          .append(", 1, ")
-          .append(value)
-          .append(");\n");
-      code.append(indent).append("}\n");
-      return;
-    }
-    code.append(indent).append("int fieldIndex").append(id).append(" = index++;\n");
     code.append(indent)
-        .append("if (!nt")
-        .append(id)
-        .append(".")
-        .append(cacheMethod)
-        .append("(writer, ")
-        .append(value)
-        .append(", fieldIndex")
-        .append(id)
-        .append(" != 0, ")
-        .append(prefix)
-        .append(id)
-        .append(", ")
-        .append(prefix)
-        .append("c")
-        .append(id)
-        .append(")) {\n");
-    code.append(indent)
-        .append("  writer.")
+        .append("writer.")
         .append(writerMethod)
         .append("(")
         .append(prefix)
@@ -1122,83 +1032,30 @@ public final class JsonCodegen {
         .append(prefix)
         .append("c")
         .append(id)
-        .append(", fieldIndex")
-        .append(id)
-        .append(", ")
+        .append(commaKnown ? ", 1, " : ", index++, ")
         .append(value)
         .append(");\n");
-    code.append(indent).append("}\n");
   }
 
-  private static void writeStringToken(
+  private static void writeStringField(
       StringBuilder code,
       String id,
       String value,
       boolean utf8,
       boolean commaKnown,
       String indent) {
-    String cacheMethod = utf8 ? "writeUtf8Field" : "writeStringField";
     String prefix = utf8 ? "u" : "s";
-    if (commaKnown) {
-      String commaCacheMethod = utf8 ? "writeUtf8CommaField" : "writeStringCommaField";
-      code.append(indent)
-          .append("if (!st")
-          .append(id)
-          .append(".")
-          .append(commaCacheMethod)
-          .append("(writer, ")
-          .append(value)
-          .append(", ")
-          .append(prefix)
-          .append("c")
-          .append(id)
-          .append(")) {\n");
-      code.append(indent)
-          .append("  writer.writeStringField(")
-          .append(prefix)
-          .append(id)
-          .append(", ")
-          .append(prefix)
-          .append("c")
-          .append(id)
-          .append(", 1, ")
-          .append(value)
-          .append(");\n");
-      code.append(indent).append("}\n");
-      return;
-    }
-    code.append(indent).append("int fieldIndex").append(id).append(" = index++;\n");
     code.append(indent)
-        .append("if (!st")
-        .append(id)
-        .append(".")
-        .append(cacheMethod)
-        .append("(writer, ")
-        .append(value)
-        .append(", fieldIndex")
-        .append(id)
-        .append(" != 0, ")
+        .append("writer.writeStringField(")
         .append(prefix)
         .append(id)
         .append(", ")
         .append(prefix)
         .append("c")
         .append(id)
-        .append(")) {\n");
-    code.append(indent)
-        .append("  writer.writeStringField(")
-        .append(prefix)
-        .append(id)
-        .append(", ")
-        .append(prefix)
-        .append("c")
-        .append(id)
-        .append(", fieldIndex")
-        .append(id)
-        .append(", ")
+        .append(commaKnown ? ", 1, " : ", index++, ")
         .append(value)
         .append(");\n");
-    code.append(indent).append("}\n");
   }
 
   private static void writeFieldName(
@@ -1238,15 +1095,15 @@ public final class JsonCodegen {
       case BYTE:
       case SHORT:
       case INT:
-        writeNumberToken(
+        writeNumberField(
             code, prop.substring(1), value + ".intValue()", false, utf8, commaKnown, indent);
         return;
       case LONG:
-        writeNumberToken(
+        writeNumberField(
             code, prop.substring(1), value + ".longValue()", true, utf8, commaKnown, indent);
         return;
       case STRING:
-        writeStringToken(code, prop.substring(1), value, utf8, commaKnown, indent);
+        writeStringField(code, prop.substring(1), value, utf8, commaKnown, indent);
         return;
       case ENUM:
         code.append(indent)

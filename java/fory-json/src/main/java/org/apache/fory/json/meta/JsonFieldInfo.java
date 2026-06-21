@@ -29,9 +29,7 @@ import org.apache.fory.json.codec.CodecUtils;
 import org.apache.fory.json.reader.JsonReader;
 import org.apache.fory.json.resolver.JsonTypeInfo;
 import org.apache.fory.json.resolver.JsonTypeResolver;
-import org.apache.fory.json.writer.JsonNumberTokenCache;
 import org.apache.fory.json.writer.JsonStringEscaper;
-import org.apache.fory.json.writer.JsonStringTokenCache;
 import org.apache.fory.json.writer.JsonWriter;
 import org.apache.fory.json.writer.StringJsonWriter;
 import org.apache.fory.json.writer.Utf8JsonWriter;
@@ -92,8 +90,6 @@ public final class JsonFieldInfo {
   private final byte[] utf8TrueCommaToken;
   private final byte[] utf8FalseNameToken;
   private final byte[] utf8FalseCommaToken;
-  private final JsonStringTokenCache stringTokenCache;
-  private final JsonNumberTokenCache numberTokenCache;
   private final long nameHash;
   private JsonTypeInfo writeTypeInfo;
   private JsonTypeInfo readTypeInfo;
@@ -171,8 +167,6 @@ public final class JsonFieldInfo {
       utf8FalseNameToken = null;
       utf8FalseCommaToken = null;
     }
-    stringTokenCache = writeKind == JsonFieldKind.STRING ? new JsonStringTokenCache() : null;
-    numberTokenCache = isIntegerKind(writeKind) ? new JsonNumberTokenCache() : null;
   }
 
   public String name() {
@@ -325,14 +319,6 @@ public final class JsonFieldInfo {
     return value
         ? (comma ? stringTrueCommaToken : stringTrueNameToken)
         : (comma ? stringFalseCommaToken : stringFalseNameToken);
-  }
-
-  public JsonStringTokenCache stringTokenCache() {
-    return stringTokenCache;
-  }
-
-  public JsonNumberTokenCache numberTokenCache() {
-    return numberTokenCache;
   }
 
   public byte[] utf8ElementEnumValue(Enum<?> value) {
@@ -1052,13 +1038,6 @@ public final class JsonFieldInfo {
       default:
         throw new ForyJsonException("Unsupported JSON field kind " + kind);
     }
-  }
-
-  private static boolean isIntegerKind(JsonFieldKind kind) {
-    return kind == JsonFieldKind.BYTE
-        || kind == JsonFieldKind.SHORT
-        || kind == JsonFieldKind.INT
-        || kind == JsonFieldKind.LONG;
   }
 
   private static Class<?> knownRawType(Type type) {

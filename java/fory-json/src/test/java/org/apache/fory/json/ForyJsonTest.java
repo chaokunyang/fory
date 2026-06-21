@@ -519,6 +519,21 @@ public class ForyJsonTest {
   }
 
   @Test
+  public void readGeneratedObjectCollection() {
+    ForyJson json = ForyJson.builder().build();
+    String input = "{\"values\":[{\"count\":1,\"name\":\"alpha\",\"tags\":[\"x\"],\"total\":2}]}";
+    TokenGroup stringValue = json.fromJson(input, TokenGroup.class);
+    TokenGroup utf8Value = json.fromJson(input.getBytes(StandardCharsets.UTF_8), TokenGroup.class);
+    assertEquals(stringValue.values.size(), 1);
+    assertEquals(stringValue.values.get(0).name, "alpha");
+    assertEquals(stringValue.values.get(0).tags, Arrays.asList("x"));
+    assertEquals(utf8Value.values.size(), 1);
+    assertEquals(utf8Value.values.get(0).total, 2);
+    assertEquals(json.hasGeneratedWriter(TokenGroup.class), true);
+    assertEquals(json.hasGeneratedWriter(TokenValues.class), true);
+  }
+
+  @Test
   public void escapeStrings() {
     ForyJson json = ForyJson.builder().build();
     PublicFields fields = new PublicFields();

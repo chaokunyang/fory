@@ -80,6 +80,39 @@ public final class StringJsonReader extends JsonReader {
     throw error("Expected boolean");
   }
 
+  public boolean readExpectedField(String expectedName) {
+    skipWhitespaceFast();
+    int savedPosition = position;
+    int length = input.length();
+    if (position >= length || input.charAt(position++) != '"') {
+      position = savedPosition;
+      return false;
+    }
+    int matchedLength = 0;
+    int expectedLength = expectedName.length();
+    while (position < length) {
+      char ch = input.charAt(position++);
+      if (ch == '"') {
+        if (matchedLength == expectedLength) {
+          return true;
+        }
+        position = savedPosition;
+        return false;
+      }
+      if (ch == '\\' || ch < 0x20 || ch >= 0x80) {
+        position = savedPosition;
+        return false;
+      }
+      if (matchedLength >= expectedLength || expectedName.charAt(matchedLength) != ch) {
+        position = savedPosition;
+        return false;
+      }
+      matchedLength++;
+    }
+    position = savedPosition;
+    return false;
+  }
+
   public int readIntValue() {
     skipWhitespaceFast();
     int start = position;

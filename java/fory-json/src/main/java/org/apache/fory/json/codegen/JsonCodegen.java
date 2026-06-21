@@ -292,6 +292,11 @@ public final class JsonCodegen {
       String readerType,
       JsonFieldInfo[] properties,
       int readerMode) {
+    if (readerMode != GENERIC_READER) {
+      appendFastRead(code, methodName, readerType, properties, readerMode);
+      appendSlowRead(code, methodName + "Slow", readerType, properties, readerMode);
+      return;
+    }
     code.append("  public Object ")
         .append(methodName)
         .append("(")
@@ -311,15 +316,7 @@ public final class JsonCodegen {
         "          ? reader.readFieldIndex(fieldTable, localFieldNames[expectedIndex], expectedIndex)\n");
     code.append("          : reader.readFieldIndex(fieldTable);\n");
     appendExpect(code, readerMode, ':', "      ");
-    code.append("      switch (fieldIndex) {\n");
-    for (int i = 0; i < properties.length; i++) {
-      code.append("        case ").append(i).append(":\n");
-      readField(code, properties[i], i, "          ", readerMode);
-      code.append("          break;\n");
-    }
-    code.append("        default:\n");
-    code.append("          reader.skipValue();\n");
-    code.append("      }\n");
+    appendFieldSwitch(code, properties, readerMode, "      ");
     code.append("      if (fieldIndex >= 0) {\n");
     code.append("        expectedIndex = fieldIndex + 1;\n");
     code.append("      }\n");
@@ -327,6 +324,98 @@ public final class JsonCodegen {
     appendExpect(code, readerMode, '}', "    ");
     code.append("    return object;\n");
     code.append("  }\n");
+  }
+
+  private void appendFastRead(
+      StringBuilder code,
+      String methodName,
+      String readerType,
+      JsonFieldInfo[] properties,
+      int readerMode) {
+    String slowMethod = methodName + "Slow";
+    code.append("  public Object ")
+        .append(methodName)
+        .append("(")
+        .append(readerType)
+        .append(" reader, BaseObjectCodec owner, JsonTypeResolver typeResolver) {\n");
+    code.append("    Object object = owner.newInstance();\n");
+    appendExpect(code, readerMode, '{', "    ");
+    code.append("    if (").append(consumeCall(readerMode, '}')).append(") {\n");
+    code.append("      return object;\n");
+    code.append("    }\n");
+    if (properties.length == 0) {
+      code.append("    ").append(slowMethod).append("(reader, owner, typeResolver, object, 0);\n");
+      code.append("    return object;\n");
+      code.append("  }\n");
+      return;
+    }
+    code.append("    String[] localFieldNames = fieldNames;\n");
+    for (int i = 0; i < properties.length; i++) {
+      code.append("    if (!reader.readExpectedField(localFieldNames[").append(i).append("])) {\n");
+      code.append("      ").append(slowMethod).append("(reader, owner, typeResolver, object, ");
+      code.append(i).append(");\n");
+      code.append("      return object;\n");
+      code.append("    }\n");
+      appendExpect(code, readerMode, ':', "    ");
+      readField(code, properties[i], i, "    ", readerMode);
+      if (i + 1 < properties.length) {
+        code.append("    if (!").append(consumeCall(readerMode, ',')).append(") {\n");
+        appendExpect(code, readerMode, '}', "      ");
+        code.append("      return object;\n");
+        code.append("    }\n");
+      } else {
+        code.append("    if (").append(consumeCall(readerMode, ',')).append(") {\n");
+        code.append("      ").append(slowMethod).append("(reader, owner, typeResolver, object, ");
+        code.append(properties.length).append(");\n");
+        code.append("    } else {\n");
+        appendExpect(code, readerMode, '}', "      ");
+        code.append("    }\n");
+      }
+    }
+    code.append("    return object;\n");
+    code.append("  }\n");
+  }
+
+  private void appendSlowRead(
+      StringBuilder code,
+      String methodName,
+      String readerType,
+      JsonFieldInfo[] properties,
+      int readerMode) {
+    code.append("  final void ")
+        .append(methodName)
+        .append("(")
+        .append(readerType)
+        .append(" reader, BaseObjectCodec owner, JsonTypeResolver typeResolver,\n");
+    code.append("      Object object, int expectedIndex) {\n");
+    code.append("    JsonFieldTable fieldTable = owner.readTable();\n");
+    code.append("    String[] localFieldNames = fieldNames;\n");
+    code.append("    do {\n");
+    code.append("      int fieldIndex = expectedIndex < localFieldNames.length\n");
+    code.append(
+        "          ? reader.readFieldIndex(fieldTable, localFieldNames[expectedIndex], expectedIndex)\n");
+    code.append("          : reader.readFieldIndex(fieldTable);\n");
+    appendExpect(code, readerMode, ':', "      ");
+    appendFieldSwitch(code, properties, readerMode, "      ");
+    code.append("      if (fieldIndex >= 0) {\n");
+    code.append("        expectedIndex = fieldIndex + 1;\n");
+    code.append("      }\n");
+    code.append("    } while (").append(consumeCall(readerMode, ',')).append(");\n");
+    appendExpect(code, readerMode, '}', "    ");
+    code.append("  }\n");
+  }
+
+  private void appendFieldSwitch(
+      StringBuilder code, JsonFieldInfo[] properties, int readerMode, String indent) {
+    code.append(indent).append("switch (fieldIndex) {\n");
+    for (int i = 0; i < properties.length; i++) {
+      code.append(indent).append("  case ").append(i).append(":\n");
+      readField(code, properties[i], i, indent + "    ", readerMode);
+      code.append(indent).append("    break;\n");
+    }
+    code.append(indent).append("  default:\n");
+    code.append(indent).append("    reader.skipValue();\n");
+    code.append(indent).append("}\n");
   }
 
   private static void appendExpect(StringBuilder code, int readerMode, char token, String indent) {

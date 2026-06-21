@@ -83,6 +83,39 @@ public final class Utf8JsonReader extends JsonReader {
     throw error("Expected boolean");
   }
 
+  public boolean readExpectedField(String expectedName) {
+    skipWhitespaceFast();
+    int savedPosition = position;
+    int length = input.length;
+    if (position >= length || input[position++] != '"') {
+      position = savedPosition;
+      return false;
+    }
+    int matchedLength = 0;
+    int expectedLength = expectedName.length();
+    while (position < length) {
+      int b = input[position++] & 0xFF;
+      if (b == '"') {
+        if (matchedLength == expectedLength) {
+          return true;
+        }
+        position = savedPosition;
+        return false;
+      }
+      if (b == '\\' || b < 0x20 || b >= 0x80) {
+        position = savedPosition;
+        return false;
+      }
+      if (matchedLength >= expectedLength || expectedName.charAt(matchedLength) != b) {
+        position = savedPosition;
+        return false;
+      }
+      matchedLength++;
+    }
+    position = savedPosition;
+    return false;
+  }
+
   public int readIntValue() {
     skipWhitespaceFast();
     int start = position;

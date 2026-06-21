@@ -979,6 +979,35 @@ public class ForyJsonTest {
   }
 
   @Test
+  public void readStringScanBoundaries() {
+    ForyJson json = ForyJson.builder().build();
+    for (int length : new int[] {7, 8, 15, 16, 23, 24}) {
+      String value = repeat('a', length);
+      String input = "\"" + value + "\"";
+      assertEquals(json.fromJson(input, String.class), value);
+      assertEquals(json.fromJson(input.getBytes(StandardCharsets.UTF_8), String.class), value);
+    }
+    String escapedValue = repeat('b', 16) + "\n";
+    String escapedInput = "\"" + repeat('b', 16) + "\\n\"";
+    assertEquals(json.fromJson(escapedInput, String.class), escapedValue);
+    assertEquals(
+        json.fromJson(escapedInput.getBytes(StandardCharsets.UTF_8), String.class), escapedValue);
+
+    String utf8Value = repeat('c', 16) + ZH_TEXT;
+    String utf8Input = "\"" + utf8Value + "\"";
+    assertEquals(
+        json.fromJson(utf8Input.getBytes(StandardCharsets.UTF_8), String.class), utf8Value);
+
+    String rawControl = "\"" + repeat('d', 16) + "\u001f\"";
+    assertThrows(ForyJsonException.class, () -> json.fromJson(rawControl, String.class));
+    assertThrows(
+        ForyJsonException.class,
+        () -> json.fromJson(rawControl.getBytes(StandardCharsets.UTF_8), String.class));
+    byte[] invalidUtf8 = {'"', 'a', (byte) 0xC0, (byte) 0xAF, '"'};
+    assertThrows(ForyJsonException.class, () -> json.fromJson(invalidUtf8, String.class));
+  }
+
+  @Test
   public void readPrimitiveArrayRoots() {
     ForyJson json = ForyJson.builder().build();
     assertEquals(json.toJson(new int[] {1, 2}), "[1,2]");
@@ -1200,6 +1229,12 @@ public class ForyJsonTest {
     assertEquals(json.fromJson(objectJson, PublicFields.class).name, text);
     assertEquals(
         json.fromJson(objectJson.getBytes(StandardCharsets.UTF_8), PublicFields.class).name, text);
+  }
+
+  private static String repeat(char ch, int length) {
+    char[] chars = new char[length];
+    Arrays.fill(chars, ch);
+    return new String(chars);
   }
 
   private static Map<String, Object> values() {

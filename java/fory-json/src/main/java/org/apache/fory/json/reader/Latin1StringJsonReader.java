@@ -22,10 +22,16 @@ package org.apache.fory.json.reader;
 import org.apache.fory.json.meta.JsonFieldInfo;
 import org.apache.fory.json.meta.JsonFieldNameHash;
 import org.apache.fory.json.meta.JsonFieldTable;
+import org.apache.fory.memory.LittleEndian;
 import org.apache.fory.serializer.StringSerializer;
 
 public final class Latin1StringJsonReader extends JsonReader {
   private static final byte[] EMPTY_BYTES = new byte[0];
+  private static final long BYTE_ONES = 0x0101010101010101L;
+  private static final long BYTE_HIGH_BITS = 0x8080808080808080L;
+  private static final long BACKSLASH_BYTES = 0x5c5c5c5c5c5c5c5cL;
+  private static final long CONTROL_LIMIT_BYTES = 0x2020202020202020L;
+  private static final long QUOTE_BYTES = 0x2222222222222222L;
 
   private byte[] input;
 
@@ -350,6 +356,7 @@ public final class Latin1StringJsonReader extends JsonReader {
       throw error("Expected string");
     }
     int start = position;
+    position = scanStringChars(position);
     while (position < input.length) {
       int ch = input[position++] & 0xFF;
       if (ch == '"') {
@@ -364,6 +371,32 @@ public final class Latin1StringJsonReader extends JsonReader {
       }
     }
     throw error("Unterminated string");
+  }
+
+  private int scanStringChars(int offset) {
+    byte[] bytes = input;
+    int end = bytes.length - Long.BYTES;
+    while (offset <= end) {
+      long word = LittleEndian.getInt64(bytes, offset);
+      // The word scan only skips bytes proven safe; the byte loop still owns token termination and
+      // validation once any special byte may be present.
+      if (hasStringStop(word)) {
+        break;
+      }
+      offset += Long.BYTES;
+    }
+    return offset;
+  }
+
+  private static boolean hasStringStop(long word) {
+    return hasByte(word, QUOTE_BYTES)
+        || hasByte(word, BACKSLASH_BYTES)
+        || ((word - CONTROL_LIMIT_BYTES) & ~word & BYTE_HIGH_BITS) != 0;
+  }
+
+  private static boolean hasByte(long word, long repeatedByte) {
+    long match = word ^ repeatedByte;
+    return ((match - BYTE_ONES) & ~match & BYTE_HIGH_BITS) != 0;
   }
 
   @Override

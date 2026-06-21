@@ -96,7 +96,6 @@ public final class JsonFieldInfo {
   private final byte[] utf8FalseNameToken;
   private final byte[] utf8FalseCommaToken;
   private final JsonStringTokenCache stringTokenCache;
-  private final JsonStringTokenCache elementStringTokenCache;
   private final JsonNumberTokenCache numberTokenCache;
   private final long nameHash;
   private JsonTypeInfo writeTypeInfo;
@@ -178,8 +177,6 @@ public final class JsonFieldInfo {
       utf8FalseCommaToken = null;
     }
     stringTokenCache = writeKind == JsonFieldKind.STRING ? new JsonStringTokenCache() : null;
-    elementStringTokenCache =
-        writeElementRawType == String.class ? new JsonStringTokenCache() : null;
     numberTokenCache = isIntegerKind(writeKind) ? new JsonNumberTokenCache() : null;
   }
 
@@ -412,10 +409,6 @@ public final class JsonFieldInfo {
 
   public JsonStringTokenCache stringTokenCache() {
     return stringTokenCache;
-  }
-
-  public JsonStringTokenCache elementStringTokenCache() {
-    return elementStringTokenCache;
   }
 
   public JsonNumberTokenCache numberTokenCache() {

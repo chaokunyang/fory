@@ -22,7 +22,6 @@ package org.apache.fory.json.codegen;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.util.Collection;
-import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.apache.fory.codegen.CodeGenerator;
@@ -173,10 +172,6 @@ public final class JsonCodegen {
         && property.writeRawType() != Object.class
         && property.writeTypeInfo().codec() instanceof BaseObjectCodec) {
       return property.writeRawType();
-    }
-    if (property.writeKind() == JsonFieldKind.COLLECTION
-        && isPojo(property.writeElementRawType())) {
-      return property.writeElementRawType();
     }
     return null;
   }
@@ -906,7 +901,6 @@ public final class JsonCodegen {
     boolean[] useObjectCodec = new boolean[properties.length];
     boolean[] usePrefix = new boolean[properties.length];
     boolean[] useStringToken = new boolean[properties.length];
-    boolean[] useElementToken = new boolean[properties.length];
     boolean[] useNumberToken = new boolean[properties.length];
     for (int i = 0; i < properties.length; i++) {
       JsonFieldInfo property = properties[i];
@@ -914,9 +908,6 @@ public final class JsonCodegen {
       useObjectCodec[i] = usesObjectCodec(property);
       usePrefix[i] = usesPrefix(property);
       useStringToken[i] = property.writeKind() == JsonFieldKind.STRING;
-      useElementToken[i] =
-          property.writeKind() == JsonFieldKind.COLLECTION
-              && property.writeElementRawType() == String.class;
       useNumberToken[i] = usesNumberToken(property, objectStartFused && i == 0);
       if (useInfo[i]) {
         code.append("  private final JsonFieldInfo p").append(i).append(";\n");
@@ -936,9 +927,6 @@ public final class JsonCodegen {
       }
       if (useStringToken[i]) {
         code.append("  private final JsonStringTokenCache st").append(i).append(";\n");
-      }
-      if (useElementToken[i]) {
-        code.append("  private final JsonStringTokenCache et").append(i).append(";\n");
       }
       if (useNumberToken[i]) {
         code.append("  private final JsonNumberTokenCache nt").append(i).append(";\n");
@@ -992,13 +980,6 @@ public final class JsonCodegen {
             .append(i)
             .append("].stringTokenCache();\n");
       }
-      if (useElementToken[i]) {
-        code.append("    this.et")
-            .append(i)
-            .append(" = properties[")
-            .append(i)
-            .append("].elementStringTokenCache();\n");
-      }
       if (useNumberToken[i]) {
         code.append("    this.nt")
             .append(i)
@@ -1021,8 +1002,6 @@ public final class JsonCodegen {
 
   private static boolean usesObjectCodec(JsonFieldInfo property) {
     switch (property.writeKind()) {
-      case COLLECTION:
-        return isPojo(property.writeElementRawType());
       case OBJECT:
         return property.writeRawType() != Object.class;
       default:
@@ -1419,6 +1398,7 @@ public final class JsonCodegen {
         writeScalar(code, kind, value, indent);
         return;
       case ARRAY:
+      case COLLECTION:
         code.append(indent)
             .append(prop)
             .append(".writeTypeInfo().codec().")
@@ -1426,9 +1406,6 @@ public final class JsonCodegen {
             .append("(writer, ")
             .append(value)
             .append(", typeResolver);\n");
-        return;
-      case COLLECTION:
-        writeCollection(code, ownerType, property, prop, value, utf8, indent);
         return;
       case MAP:
         code.append(indent)
@@ -1441,197 +1418,6 @@ public final class JsonCodegen {
         return;
       default:
         writeObject(code, ownerType, property, prop, value, utf8, indent);
-    }
-  }
-
-  private void writeCollection(
-      StringBuilder code,
-      Class<?> ownerType,
-      JsonFieldInfo property,
-      String prop,
-      String value,
-      boolean utf8,
-      String indent) {
-    Class<?> elementType = property.writeElementRawType();
-    boolean declaredList = List.class.isAssignableFrom(property.writeRawType());
-    if (elementType == String.class) {
-      code.append(indent)
-          .append("writer.writeArrayStart();\n")
-          .append(indent)
-          .append("int elementIndex = 0;\n")
-          .append(indent);
-      writeListBranchStart(code, value, declaredList);
-      code.append(indent)
-          .append("  java.util.List<?> list = (java.util.List<?>) ")
-          .append(value)
-          .append(";\n")
-          .append(indent)
-          .append("  int size = list.size();\n")
-          .append(indent)
-          .append("  for (; elementIndex < size; elementIndex++) {\n")
-          .append(indent)
-          .append("    writer.writeComma(elementIndex);\n")
-          .append(indent)
-          .append("    Object element = list.get(elementIndex);\n")
-          .append(indent)
-          .append("    if (element == null) {\n")
-          .append(indent)
-          .append("      writer.writeNull();\n")
-          .append(indent)
-          .append("    } else {\n")
-          .append(indent)
-          .append("      ")
-          .append("if (!et")
-          .append(prop.substring(1))
-          .append(utf8 ? ".writeUtf8Value" : ".writeStringValue")
-          .append("(writer, (String) element)) {\n")
-          .append(indent)
-          .append("        writer.writeString((String) element);\n")
-          .append(indent)
-          .append("      }\n")
-          .append(indent)
-          .append("    }\n")
-          .append(indent)
-          .append("  }\n")
-          .append(indent)
-          .append("} else {\n")
-          .append(indent)
-          .append("for (Object element : (java.util.Collection<?>) ")
-          .append(value)
-          .append(") {\n")
-          .append(indent)
-          .append("  writer.writeComma(elementIndex++);\n")
-          .append(indent)
-          .append("  if (element == null) {\n")
-          .append(indent)
-          .append("    writer.writeNull();\n")
-          .append(indent)
-          .append("  } else {\n")
-          .append(indent)
-          .append("    ")
-          .append("if (!et")
-          .append(prop.substring(1))
-          .append(utf8 ? ".writeUtf8Value" : ".writeStringValue")
-          .append("(writer, (String) element)) {\n")
-          .append(indent)
-          .append("      writer.writeString((String) element);\n")
-          .append(indent)
-          .append("    }\n")
-          .append(indent)
-          .append("  }\n")
-          .append(indent)
-          .append("}\n")
-          .append(indent)
-          .append("}\n")
-          .append(indent)
-          .append("writer.writeArrayEnd();\n");
-      return;
-    }
-    if (isPojo(elementType)) {
-      boolean hasElementCodec = elementType != ownerType;
-      code.append(indent)
-          .append("writer.writeArrayStart();\n")
-          .append(indent)
-          .append("int elementIndex = 0;\n")
-          .append(indent)
-          .append("BaseObjectCodec elementCodec = c")
-          .append(prop.substring(1))
-          .append(";\n")
-          .append(indent);
-      writeListBranchStart(code, value, declaredList);
-      code.append(indent)
-          .append("  java.util.List<?> list = (java.util.List<?>) ")
-          .append(value)
-          .append(";\n")
-          .append(indent)
-          .append("  int size = list.size();\n")
-          .append(indent)
-          .append("  for (; elementIndex < size; elementIndex++) {\n")
-          .append(indent)
-          .append("    writer.writeComma(elementIndex);\n")
-          .append(indent)
-          .append("    Object element = list.get(elementIndex);\n")
-          .append(indent)
-          .append("    if (element == null) {\n")
-          .append(indent)
-          .append("      writer.writeNull();\n")
-          .append(indent)
-          .append("    } else if (element.getClass() == ")
-          .append(sourceName(elementType))
-          .append(hasElementCodec ? ".class) {\n" : ".class && elementCodec != null) {\n")
-          .append(indent)
-          .append("      elementCodec.")
-          .append(utf8 ? "writeUtf8" : "writeString")
-          .append("(writer, element, typeResolver);\n")
-          .append(indent)
-          .append("    } else {\n");
-      writeResolvedValue(
-          code,
-          "elementTypeInfo" + prop.substring(1),
-          "element",
-          prop + ".writeElementType()",
-          utf8,
-          indent + "      ");
-      code.append(indent)
-          .append("    }\n")
-          .append(indent)
-          .append("  }\n")
-          .append(indent)
-          .append("} else {\n")
-          .append(indent)
-          .append("for (Object element : (java.util.Collection<?>) ")
-          .append(value)
-          .append(") {\n")
-          .append(indent)
-          .append("  writer.writeComma(elementIndex++);\n")
-          .append(indent)
-          .append("  if (element == null) {\n")
-          .append(indent)
-          .append("    writer.writeNull();\n")
-          .append(indent)
-          .append("  } else if (element.getClass() == ")
-          .append(sourceName(elementType))
-          .append(hasElementCodec ? ".class) {\n" : ".class && elementCodec != null) {\n")
-          .append(indent)
-          .append("    elementCodec.")
-          .append(utf8 ? "writeUtf8" : "writeString")
-          .append("(writer, element, typeResolver);\n")
-          .append(indent)
-          .append("  } else {\n");
-      writeResolvedValue(
-          code,
-          "elementTypeInfo" + prop.substring(1),
-          "element",
-          prop + ".writeElementType()",
-          utf8,
-          indent + "    ");
-      code.append(indent)
-          .append("  }\n")
-          .append(indent)
-          .append("}\n")
-          .append(indent)
-          .append("}\n")
-          .append(indent)
-          .append("writer.writeArrayEnd();\n");
-      return;
-    }
-    code.append(indent)
-        .append(prop)
-        .append(".writeTypeInfo().codec().")
-        .append(utf8 ? "writeUtf8" : "writeString")
-        .append("(writer, ")
-        .append(value)
-        .append(", typeResolver);\n");
-  }
-
-  private static void writeListBranchStart(StringBuilder code, String value, boolean declaredList) {
-    code.append("if (").append(value);
-    if (declaredList) {
-      code.append(" instanceof java.util.RandomAccess) {\n");
-    } else {
-      code.append(" instanceof java.util.List && ")
-          .append(value)
-          .append(" instanceof java.util.RandomAccess) {\n");
     }
   }
 

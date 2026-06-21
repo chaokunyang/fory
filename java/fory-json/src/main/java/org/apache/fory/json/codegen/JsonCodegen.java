@@ -359,30 +359,84 @@ public final class JsonCodegen {
       return;
     }
     code.append("    String[] localFieldNames = fieldNames;\n");
+    for (int i = 1; i < properties.length; i++) {
+      code.append("    boolean skip").append(i).append(" = false;\n");
+    }
     for (int i = 0; i < properties.length; i++) {
-      code.append("    if (!reader.readExpectedField(localFieldNames[").append(i).append("])) {\n");
-      code.append("      ").append(slowMethod).append("(reader, owner, typeResolver, object, ");
-      code.append(i).append(");\n");
-      code.append("      return object;\n");
-      code.append("    }\n");
-      appendExpect(code, readerMode, ':', "    ");
-      readField(code, properties[i], i, "    ", readerMode);
-      if (i + 1 < properties.length) {
-        code.append("    if (!").append(consumeCall(readerMode, ',')).append(") {\n");
-        appendExpect(code, readerMode, '}', "      ");
-        code.append("      return object;\n");
-        code.append("    }\n");
-      } else {
-        code.append("    if (").append(consumeCall(readerMode, ',')).append(") {\n");
-        code.append("      ").append(slowMethod).append("(reader, owner, typeResolver, object, ");
-        code.append(properties.length).append(");\n");
-        code.append("    } else {\n");
-        appendExpect(code, readerMode, '}', "      ");
+      String indent = "    ";
+      if (i > 0) {
+        code.append("    if (!skip").append(i).append(") {\n");
+        indent = "      ";
+      }
+      appendFastReadField(code, slowMethod, properties, i, indent, readerMode);
+      if (i > 0) {
         code.append("    }\n");
       }
     }
     code.append("    return object;\n");
     code.append("  }\n");
+  }
+
+  private void appendFastReadField(
+      StringBuilder code,
+      String slowMethod,
+      JsonFieldInfo[] properties,
+      int index,
+      String indent,
+      int readerMode) {
+    code.append(indent)
+        .append("if (!reader.readExpectedField(localFieldNames[")
+        .append(index)
+        .append("])) {\n");
+    if (index + 1 < properties.length) {
+      code.append(indent)
+          .append("  if (reader.readExpectedField(localFieldNames[")
+          .append(index + 1)
+          .append("])) {\n");
+      appendExpect(code, readerMode, ':', indent + "    ");
+      readField(code, properties[index + 1], index + 1, indent + "    ", readerMode);
+      appendFieldEnd(code, slowMethod, properties.length, index + 1, indent + "    ", readerMode);
+      code.append(indent).append("    skip").append(index + 1).append(" = true;\n");
+      code.append(indent).append("  } else {\n");
+      appendSlowReturn(code, slowMethod, index, indent + "    ");
+      code.append(indent).append("  }\n");
+    } else {
+      appendSlowReturn(code, slowMethod, index, indent + "  ");
+    }
+    code.append(indent).append("} else {\n");
+    appendExpect(code, readerMode, ':', indent + "  ");
+    readField(code, properties[index], index, indent + "  ", readerMode);
+    appendFieldEnd(code, slowMethod, properties.length, index, indent + "  ", readerMode);
+    code.append(indent).append("}\n");
+  }
+
+  private static void appendSlowReturn(
+      StringBuilder code, String slowMethod, int index, String indent) {
+    code.append(indent).append(slowMethod).append("(reader, owner, typeResolver, object, ");
+    code.append(index).append(");\n");
+    code.append(indent).append("return object;\n");
+  }
+
+  private static void appendFieldEnd(
+      StringBuilder code,
+      String slowMethod,
+      int propertyCount,
+      int index,
+      String indent,
+      int readerMode) {
+    if (index + 1 < propertyCount) {
+      code.append(indent).append("if (!").append(consumeCall(readerMode, ',')).append(") {\n");
+      appendExpect(code, readerMode, '}', indent + "  ");
+      code.append(indent).append("  return object;\n");
+      code.append(indent).append("}\n");
+    } else {
+      code.append(indent).append("if (").append(consumeCall(readerMode, ',')).append(") {\n");
+      code.append(indent).append("  ").append(slowMethod);
+      code.append("(reader, owner, typeResolver, object, ").append(propertyCount).append(");\n");
+      code.append(indent).append("} else {\n");
+      appendExpect(code, readerMode, '}', indent + "  ");
+      code.append(indent).append("}\n");
+    }
   }
 
   private void appendSlowRead(

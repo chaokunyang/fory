@@ -288,9 +288,9 @@ public final class JsonCodegen {
       }
     }
     code.append("  }\n");
-    appendReadMethod(code, "read", "JsonReader", properties, GENERIC_READER);
-    appendReadMethod(code, "readString", "StringJsonReader", properties, STRING_READER);
-    appendReadMethod(code, "readUtf8", "Utf8JsonReader", properties, UTF8_READER);
+    appendReadMethod(code, "read", "JsonReader", type, properties, GENERIC_READER);
+    appendReadMethod(code, "readString", "StringJsonReader", type, properties, STRING_READER);
+    appendReadMethod(code, "readUtf8", "Utf8JsonReader", type, properties, UTF8_READER);
     code.append("}\n");
     return code.toString();
   }
@@ -299,10 +299,11 @@ public final class JsonCodegen {
       StringBuilder code,
       String methodName,
       String readerType,
+      Class<?> type,
       JsonFieldInfo[] properties,
       int readerMode) {
     if (readerMode != GENERIC_READER) {
-      appendFastRead(code, methodName, readerType, properties, readerMode);
+      appendFastRead(code, methodName, readerType, type, properties, readerMode);
       appendSlowRead(code, methodName + "Slow", readerType, properties, readerMode);
       return;
     }
@@ -311,7 +312,7 @@ public final class JsonCodegen {
         .append("(")
         .append(readerType)
         .append(" reader, BaseObjectCodec owner, JsonTypeResolver typeResolver) {\n");
-    code.append("    Object object = owner.newInstance();\n");
+    appendNewObject(code, type);
     appendExpect(code, readerMode, '{', "    ");
     code.append("    if (").append(consumeCall(readerMode, '}')).append(") {\n");
     code.append("      return object;\n");
@@ -339,6 +340,7 @@ public final class JsonCodegen {
       StringBuilder code,
       String methodName,
       String readerType,
+      Class<?> type,
       JsonFieldInfo[] properties,
       int readerMode) {
     String slowMethod = methodName + "Slow";
@@ -347,7 +349,7 @@ public final class JsonCodegen {
         .append("(")
         .append(readerType)
         .append(" reader, BaseObjectCodec owner, JsonTypeResolver typeResolver) {\n");
-    code.append("    Object object = owner.newInstance();\n");
+    appendNewObject(code, type);
     appendExpect(code, readerMode, '{', "    ");
     code.append("    if (").append(consumeCall(readerMode, '}')).append(") {\n");
     code.append("      return object;\n");
@@ -408,6 +410,28 @@ public final class JsonCodegen {
     readField(code, properties[index], index, indent + "  ", readerMode);
     appendFieldEnd(code, slowMethod, properties.length, index, indent + "  ", readerMode);
     code.append(indent).append("}\n");
+  }
+
+  private static void appendNewObject(StringBuilder code, Class<?> type) {
+    if (canUseDirectNew(type)) {
+      String typeName = sourceName(type);
+      code.append("    ")
+          .append(typeName)
+          .append(" object = new ")
+          .append(typeName)
+          .append("();\n");
+    } else {
+      code.append("    Object object = owner.newInstance();\n");
+    }
+  }
+
+  private static boolean canUseDirectNew(Class<?> type) {
+    try {
+      Constructor<?> constructor = type.getConstructor();
+      return constructor.getExceptionTypes().length == 0;
+    } catch (NoSuchMethodException e) {
+      return false;
+    }
   }
 
   private static void appendSlowReturn(

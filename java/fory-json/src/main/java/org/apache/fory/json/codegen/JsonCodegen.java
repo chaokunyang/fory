@@ -187,7 +187,9 @@ public final class JsonCodegen {
         && property.readTypeInfo().codec() instanceof BaseObjectCodec) {
       return property.readRawType();
     }
-    if (property.readKind() == JsonFieldKind.COLLECTION && isPojo(property.readElementRawType())) {
+    if (property.readKind() == JsonFieldKind.COLLECTION
+        && property.readElementTypeInfo() != null
+        && property.readElementTypeInfo().codec() instanceof BaseObjectCodec) {
       return property.readElementRawType();
     }
     return null;
@@ -270,6 +272,7 @@ public final class JsonCodegen {
         .append(
             " implements ObjectReader, Latin1ObjectReader, Utf16ObjectReader, Utf8ObjectReader {\n");
     code.append("  private final String[] fieldNames;\n");
+    code.append("  private final long[] fieldHashes;\n");
     for (int i = 0; i < properties.length; i++) {
       code.append("  private final JsonFieldInfo p").append(i).append(";\n");
       code.append("  private final JsonFieldAccessor a").append(i).append(";\n");
@@ -281,12 +284,18 @@ public final class JsonCodegen {
         .append(className)
         .append("(JsonFieldInfo[] properties, BaseObjectCodec[] objectCodecs) {\n");
     code.append("    this.fieldNames = new String[properties.length];\n");
+    code.append("    this.fieldHashes = new long[properties.length];\n");
     for (int i = 0; i < properties.length; i++) {
       code.append("    this.fieldNames[")
           .append(i)
           .append("] = properties[")
           .append(i)
           .append("].name();\n");
+      code.append("    this.fieldHashes[")
+          .append(i)
+          .append("] = properties[")
+          .append(i)
+          .append("].nameHash();\n");
       code.append("    this.p").append(i).append(" = properties[").append(i).append("];\n");
       code.append("    this.a")
           .append(i)
@@ -329,12 +338,12 @@ public final class JsonCodegen {
     code.append("      return object;\n");
     code.append("    }\n");
     code.append("    JsonFieldTable fieldTable = owner.readTable();\n");
-    code.append("    String[] localFieldNames = fieldNames;\n");
+    code.append("    long[] localFieldHashes = fieldHashes;\n");
     code.append("    int expectedIndex = 0;\n");
     code.append("    do {\n");
-    code.append("      int fieldIndex = expectedIndex < localFieldNames.length\n");
+    code.append("      int fieldIndex = expectedIndex < localFieldHashes.length\n");
     code.append(
-        "          ? reader.readFieldIndex(fieldTable, localFieldNames[expectedIndex], expectedIndex)\n");
+        "          ? reader.readFieldIndex(fieldTable, localFieldHashes[expectedIndex], expectedIndex)\n");
     code.append("          : reader.readFieldIndex(fieldTable);\n");
     appendExpect(code, readerMode, ':', "      ");
     appendFieldSwitch(code, properties, readerMode, "      ");
@@ -371,7 +380,8 @@ public final class JsonCodegen {
       code.append("  }\n");
       return;
     }
-    code.append("    String[] localFieldNames = fieldNames;\n");
+    code.append("    JsonFieldTable fieldTable = owner.readTable();\n");
+    code.append("    long[] localFieldHashes = fieldHashes;\n");
     for (int i = 1; i < properties.length; i++) {
       code.append("    boolean skip").append(i).append(" = false;\n");
     }
@@ -398,23 +408,33 @@ public final class JsonCodegen {
       String indent,
       int readerMode) {
     code.append(indent)
-        .append("if (!reader.readExpectedField(localFieldNames[")
+        .append("long fieldHash")
         .append(index)
-        .append("])) {\n");
+        .append(" = reader.readFieldNameHash();\n");
+    code.append(indent)
+        .append("if (fieldHash")
+        .append(index)
+        .append(" != localFieldHashes[")
+        .append(index)
+        .append("]) {\n");
     if (index + 1 < properties.length) {
       code.append(indent)
-          .append("  if (reader.readExpectedField(localFieldNames[")
+          .append("  if (fieldHash")
+          .append(index)
+          .append(" == localFieldHashes[")
           .append(index + 1)
-          .append("])) {\n");
+          .append("]) {\n");
       appendExpect(code, readerMode, ':', indent + "    ");
       readField(code, properties[index + 1], index + 1, indent + "    ", readerMode);
       appendFieldEnd(code, slowMethod, properties.length, index + 1, indent + "    ", readerMode);
       code.append(indent).append("    skip").append(index + 1).append(" = true;\n");
       code.append(indent).append("  } else {\n");
-      appendSlowReturn(code, slowMethod, index, indent + "    ");
+      appendSlowConsumedReturn(
+          code, slowMethod, index, "fieldTable.index(fieldHash" + index + ")", indent + "    ");
       code.append(indent).append("  }\n");
     } else {
-      appendSlowReturn(code, slowMethod, index, indent + "  ");
+      appendSlowConsumedReturn(
+          code, slowMethod, index, "fieldTable.index(fieldHash" + index + ")", indent + "  ");
     }
     code.append(indent).append("} else {\n");
     appendExpect(code, readerMode, ':', indent + "  ");
@@ -449,6 +469,13 @@ public final class JsonCodegen {
       StringBuilder code, String slowMethod, int index, String indent) {
     code.append(indent).append(slowMethod).append("(reader, owner, typeResolver, object, ");
     code.append(index).append(");\n");
+    code.append(indent).append("return object;\n");
+  }
+
+  private static void appendSlowConsumedReturn(
+      StringBuilder code, String slowMethod, int index, String firstFieldIndex, String indent) {
+    code.append(indent).append(slowMethod).append("(reader, owner, typeResolver, object, ");
+    code.append(index).append(", ").append(firstFieldIndex).append(");\n");
     code.append(indent).append("return object;\n");
   }
 
@@ -487,11 +514,11 @@ public final class JsonCodegen {
         .append(" reader, BaseObjectCodec owner, JsonTypeResolver typeResolver,\n");
     code.append("      Object object, int expectedIndex) {\n");
     code.append("    JsonFieldTable fieldTable = owner.readTable();\n");
-    code.append("    String[] localFieldNames = fieldNames;\n");
+    code.append("    long[] localFieldHashes = fieldHashes;\n");
     code.append("    do {\n");
-    code.append("      int fieldIndex = expectedIndex < localFieldNames.length\n");
+    code.append("      int fieldIndex = expectedIndex < localFieldHashes.length\n");
     code.append(
-        "          ? reader.readFieldIndex(fieldTable, localFieldNames[expectedIndex], expectedIndex)\n");
+        "          ? reader.readFieldIndex(fieldTable, localFieldHashes[expectedIndex], expectedIndex)\n");
     code.append("          : reader.readFieldIndex(fieldTable);\n");
     appendExpect(code, readerMode, ':', "      ");
     appendFieldSwitch(code, properties, readerMode, "      ");
@@ -500,6 +527,31 @@ public final class JsonCodegen {
     code.append("      }\n");
     code.append("    } while (").append(consumeCall(readerMode, ',')).append(");\n");
     appendExpect(code, readerMode, '}', "    ");
+    code.append("  }\n");
+    code.append("  final void ")
+        .append(methodName)
+        .append("(")
+        .append(readerType)
+        .append(" reader, BaseObjectCodec owner, JsonTypeResolver typeResolver,\n");
+    code.append("      Object object, int expectedIndex, int firstFieldIndex) {\n");
+    code.append("    JsonFieldTable fieldTable = owner.readTable();\n");
+    code.append("    long[] localFieldHashes = fieldHashes;\n");
+    code.append("    int fieldIndex = firstFieldIndex;\n");
+    code.append("    while (true) {\n");
+    appendExpect(code, readerMode, ':', "      ");
+    appendFieldSwitch(code, properties, readerMode, "      ");
+    code.append("      if (fieldIndex >= 0) {\n");
+    code.append("        expectedIndex = fieldIndex + 1;\n");
+    code.append("      }\n");
+    code.append("      if (!").append(consumeCall(readerMode, ',')).append(") {\n");
+    appendExpect(code, readerMode, '}', "        ");
+    code.append("        return;\n");
+    code.append("      }\n");
+    code.append("      fieldIndex = expectedIndex < localFieldHashes.length\n");
+    code.append(
+        "          ? reader.readFieldIndex(fieldTable, localFieldHashes[expectedIndex], expectedIndex)\n");
+    code.append("          : reader.readFieldIndex(fieldTable);\n");
+    code.append("    }\n");
     code.append("  }\n");
   }
 
@@ -695,7 +747,8 @@ public final class JsonCodegen {
       readEnumList(code, elementType, id, indent, readerMode);
       return;
     }
-    if (isPojo(elementType)) {
+    if (property.readElementTypeInfo() != null
+        && property.readElementTypeInfo().codec() instanceof BaseObjectCodec) {
       readObjectList(code, id, indent, readerMode);
       return;
     }
@@ -1705,6 +1758,14 @@ public final class JsonCodegen {
     return type != null
         && type != Object.class
         && type != String.class
+        && type != Boolean.class
+        && type != Byte.class
+        && type != Short.class
+        && type != Integer.class
+        && type != Long.class
+        && type != Float.class
+        && type != Double.class
+        && type != Character.class
         && !type.isPrimitive()
         && !type.isEnum()
         && !type.isArray()

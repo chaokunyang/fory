@@ -21,6 +21,7 @@ package org.apache.fory.json.reader;
 
 import org.apache.fory.json.ForyJsonException;
 import org.apache.fory.json.meta.JsonFieldInfo;
+import org.apache.fory.json.meta.JsonFieldNameHash;
 import org.apache.fory.json.meta.JsonFieldTable;
 
 public abstract class JsonReader {
@@ -221,102 +222,81 @@ public abstract class JsonReader {
   }
 
   public JsonFieldInfo readField(JsonFieldTable table) {
-    skipWhitespace();
-    if (position >= length() || charAt(position++) != '"') {
-      throw error("Expected string");
-    }
-    int start = position;
-    int hash = 0;
-    while (position < length()) {
-      char ch = charAt(position++);
-      if (ch == '"') {
-        return table.get(this, start, position - 1, hash);
-      }
-      if (ch == '\\' || ch < 0x20 || ch >= 0x80) {
-        position = start - 1;
-        return table.get(readString());
-      }
-      hash = 31 * hash + ch;
-    }
-    throw error("Unterminated string");
+    return table.get(readFieldNameHash());
   }
 
   public int readFieldIndex(JsonFieldTable table) {
-    skipWhitespace();
-    if (position >= length() || charAt(position++) != '"') {
-      throw error("Expected string");
-    }
-    int start = position;
-    int hash = 0;
-    while (position < length()) {
-      char ch = charAt(position++);
-      if (ch == '"') {
-        return table.index(this, start, position - 1, hash);
-      }
-      if (ch == '\\' || ch < 0x20 || ch >= 0x80) {
-        position = start - 1;
-        return table.index(readString());
-      }
-      hash = 31 * hash + ch;
-    }
-    throw error("Unterminated string");
+    return table.index(readFieldNameHash());
   }
 
-  public int readFieldIndex(JsonFieldTable table, String expectedName, int expectedIndex) {
+  public int readFieldIndex(JsonFieldTable table, long expectedHash, int expectedIndex) {
+    long hash = readFieldNameHash();
+    return hash == expectedHash ? expectedIndex : table.index(hash);
+  }
+
+  public long readFieldNameHash() {
     skipWhitespace();
     if (position >= length() || charAt(position++) != '"') {
       throw error("Expected string");
     }
-    int start = position;
-    int matchedLength = 0;
-    int expectedLength = expectedName.length();
+    long hash = JsonFieldNameHash.MAGIC_HASH_CODE;
+    long value = 0;
+    int nameLength = 0;
+    boolean latin1 = true;
     while (position < length()) {
       char ch = charAt(position++);
       if (ch == '"') {
-        if (matchedLength == expectedLength) {
-          return expectedIndex;
+        return JsonFieldNameHash.finish(hash, value, nameLength, latin1);
+      }
+      if (ch == '\\') {
+        ch = readEscapedFieldNameChar();
+        hash = JsonFieldNameHash.update(hash, ch);
+        latin1 = latin1 && ch <= 0xFF && (nameLength != 0 || ch != 0);
+        if (latin1 && nameLength < Long.BYTES) {
+          value = JsonFieldNameHash.value(value, nameLength, ch);
         }
-        int end = position - 1;
-        return table.index(this, start, end, hashRange(start, end));
+        nameLength++;
+        if (Character.isHighSurrogate(ch)) {
+          if (position + 2 > length() || charAt(position) != '\\' || charAt(position + 1) != 'u') {
+            throw error("Unpaired high surrogate escape");
+          }
+          position += 2;
+          char low = readUnicodeEscape();
+          if (!Character.isLowSurrogate(low)) {
+            throw error("Unpaired high surrogate escape");
+          }
+          hash = JsonFieldNameHash.update(hash, low);
+          latin1 = false;
+          nameLength++;
+        } else if (Character.isLowSurrogate(ch)) {
+          throw error("Unpaired low surrogate escape");
+        }
+        continue;
       }
-      if (ch == '\\' || ch < 0x20 || ch >= 0x80) {
-        position = start - 1;
-        String name = readString();
-        return expectedName.equals(name) ? expectedIndex : table.index(name);
+      if (ch < 0x20) {
+        throw error("Control character in string");
       }
-      if (matchedLength >= expectedLength || expectedName.charAt(matchedLength) != ch) {
-        return fieldIndexFallback(table, start);
+      if (Character.isHighSurrogate(ch)) {
+        if (position >= length() || !Character.isLowSurrogate(charAt(position))) {
+          throw error("Unpaired high surrogate in string");
+        }
+        hash = JsonFieldNameHash.update(hash, ch);
+        hash = JsonFieldNameHash.update(hash, charAt(position++));
+        latin1 = false;
+        nameLength += 2;
+        continue;
       }
-      matchedLength++;
+      if (Character.isLowSurrogate(ch)) {
+        throw error("Unpaired low surrogate in string");
+      }
+      hash = JsonFieldNameHash.update(hash, ch);
+      latin1 = latin1 && ch <= 0xFF && (nameLength != 0 || ch != 0);
+      if (latin1 && nameLength < Long.BYTES) {
+        value = JsonFieldNameHash.value(value, nameLength, ch);
+      }
+      nameLength++;
     }
     throw error("Unterminated string");
-  }
-
-  private int fieldIndexFallback(JsonFieldTable table, int start) {
-    int hash = 0;
-    for (int i = start; i < position; i++) {
-      hash = 31 * hash + charAt(i);
-    }
-    while (position < length()) {
-      char ch = charAt(position++);
-      if (ch == '"') {
-        return table.index(this, start, position - 1, hash);
-      }
-      if (ch == '\\' || ch < 0x20 || ch >= 0x80) {
-        position = start - 1;
-        return table.index(readString());
-      }
-      hash = 31 * hash + ch;
-    }
-    throw error("Unterminated string");
-  }
-
-  private int hashRange(int start, int end) {
-    int hash = 0;
-    for (int i = start; i < end; i++) {
-      hash = 31 * hash + charAt(i);
-    }
-    return hash;
   }
 
   public final void skipValue() {
@@ -486,19 +466,6 @@ public abstract class JsonReader {
     }
   }
 
-  public boolean regionEquals(String value, int start, int end) {
-    int length = end - start;
-    if (value.length() != length) {
-      return false;
-    }
-    for (int i = 0; i < length; i++) {
-      if (charAt(start + i) != value.charAt(i)) {
-        return false;
-      }
-    }
-    return true;
-  }
-
   private void appendUnicodeEscape(StringBuilder builder) {
     char ch = readUnicodeEscape();
     if (Character.isHighSurrogate(ch)) {
@@ -519,7 +486,34 @@ public abstract class JsonReader {
     }
   }
 
-  private char readUnicodeEscape() {
+  protected final char readEscapedFieldNameChar() {
+    if (position >= length()) {
+      throw error("Unterminated escape");
+    }
+    char escaped = charAt(position++);
+    switch (escaped) {
+      case '"':
+      case '\\':
+      case '/':
+        return escaped;
+      case 'b':
+        return '\b';
+      case 'f':
+        return '\f';
+      case 'n':
+        return '\n';
+      case 'r':
+        return '\r';
+      case 't':
+        return '\t';
+      case 'u':
+        return readUnicodeEscape();
+      default:
+        throw error("Invalid escape");
+    }
+  }
+
+  protected final char readUnicodeEscape() {
     if (position + 4 > length()) {
       throw error("Short unicode escape");
     }

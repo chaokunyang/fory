@@ -29,6 +29,7 @@ import org.apache.fory.json.codec.JsonCodec;
 import org.apache.fory.json.codec.JsonSharedRegistry;
 import org.apache.fory.json.codec.ObjectCodec;
 import org.apache.fory.json.codec.ObjectCodecs;
+import org.apache.fory.reflect.TypeRef;
 
 /** Local JSON type dispatcher and cache used by one borrowed {@code ForyJson} state at a time. */
 public final class JsonTypeResolver {
@@ -93,11 +94,12 @@ public final class JsonTypeResolver {
   }
 
   private JsonTypeInfo buildTypeInfo(Class<?> rawType, Type declaredType) {
-    JsonCodec codec = sharedRegistry.createCodec(rawType, declaredType, this);
+    TypeRef<?> typeRef = typeRef(declaredType, rawType);
+    JsonCodec codec = sharedRegistry.createCodec(rawType, typeRef, this);
     if (codec == null) {
       codec = getObjectCodec(rawType);
     }
-    return new JsonTypeInfo(declaredType, rawType, sharedRegistry.kind(rawType), codec);
+    return new JsonTypeInfo(declaredType, typeRef, rawType, sharedRegistry.kind(rawType), codec);
   }
 
   private static Object typeInfoKey(Type declaredType, Class<?> rawType) {
@@ -105,5 +107,12 @@ public final class JsonTypeResolver {
       return rawType;
     }
     return declaredType;
+  }
+
+  private static TypeRef<?> typeRef(Type declaredType, Class<?> rawType) {
+    if (declaredType == null || declaredType == Object.class && rawType != Object.class) {
+      return TypeRef.of(rawType);
+    }
+    return TypeRef.of(declaredType);
   }
 }

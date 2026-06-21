@@ -22,17 +22,21 @@ package org.apache.fory.json.resolver;
 import java.lang.reflect.Type;
 import org.apache.fory.json.codec.JsonCodec;
 import org.apache.fory.json.meta.JsonFieldKind;
+import org.apache.fory.reflect.TypeRef;
 
 /** Immutable JSON type binding resolved and owned by {@link JsonTypeResolver}. */
 public final class JsonTypeInfo {
   private final Type type;
+  private final TypeRef<?> typeRef;
   private final Class<?> rawType;
   private final JsonFieldKind kind;
   private final JsonCodec codec;
   private final boolean primitive;
 
-  JsonTypeInfo(Type type, Class<?> rawType, JsonFieldKind kind, JsonCodec codec) {
+  JsonTypeInfo(
+      Type type, TypeRef<?> typeRef, Class<?> rawType, JsonFieldKind kind, JsonCodec codec) {
     this.type = type;
+    this.typeRef = typeRef;
     this.rawType = rawType;
     this.kind = kind;
     this.codec = codec;
@@ -41,6 +45,10 @@ public final class JsonTypeInfo {
 
   public Type type() {
     return type;
+  }
+
+  public TypeRef<?> typeRef() {
+    return typeRef;
   }
 
   public Class<?> rawType() {

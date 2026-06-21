@@ -19,7 +19,6 @@
 
 package org.apache.fory.json.codec;
 
-import java.lang.reflect.Type;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.net.URI;
@@ -61,6 +60,7 @@ import java.util.regex.Pattern;
 import org.apache.fory.json.codegen.JsonCodegen;
 import org.apache.fory.json.meta.JsonFieldKind;
 import org.apache.fory.json.resolver.JsonTypeResolver;
+import org.apache.fory.reflect.TypeRef;
 import org.apache.fory.type.BFloat16;
 import org.apache.fory.type.Float16;
 
@@ -79,7 +79,7 @@ public final class JsonSharedRegistry {
   }
 
   public JsonCodec createCodec(
-      Class<?> rawType, Type declaredType, JsonTypeResolver localResolver) {
+      Class<?> rawType, TypeRef<?> typeRef, JsonTypeResolver localResolver) {
     JsonCodec customCodec = customCodecs.get(rawType);
     if (customCodec != null) {
       return customCodec;
@@ -95,11 +95,12 @@ public final class JsonSharedRegistry {
       return new ArrayCodec(rawType.getComponentType(), localResolver);
     }
     if (rawType == Optional.class) {
-      return new ScalarCodecs.OptionalCodec(CodecUtils.elementType(declaredType), localResolver);
+      return new ScalarCodecs.OptionalCodec(
+          CodecUtils.elementType(typeRef.getType()), localResolver);
     }
     if (rawType == AtomicReference.class) {
       return new ScalarCodecs.AtomicReferenceCodec(
-          CodecUtils.elementType(declaredType), localResolver);
+          CodecUtils.elementType(typeRef.getType()), localResolver);
     }
     if (Calendar.class.isAssignableFrom(rawType)) {
       return ScalarCodecs.CalendarCodec.INSTANCE;
@@ -114,10 +115,10 @@ public final class JsonSharedRegistry {
       return ScalarCodecs.ByteBufferCodec.INSTANCE;
     }
     if (Collection.class.isAssignableFrom(rawType)) {
-      return new CollectionCodec(rawType, CodecUtils.elementType(declaredType), localResolver);
+      return CollectionCodec.create(rawType, typeRef, localResolver);
     }
     if (Map.class.isAssignableFrom(rawType)) {
-      return new MapCodec(rawType, declaredType, localResolver);
+      return MapCodec.create(rawType, typeRef, localResolver);
     }
     return null;
   }

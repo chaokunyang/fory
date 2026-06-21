@@ -21,6 +21,9 @@ package org.apache.fory.json.codec;
 
 import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
+import java.util.List;
+import org.apache.fory.collection.Tuple2;
+import org.apache.fory.reflect.TypeRef;
 
 public final class CodecUtils {
   private CodecUtils() {}
@@ -70,5 +73,21 @@ public final class CodecUtils {
       }
     }
     return String.class;
+  }
+
+  public static TypeRef<?> elementTypeRef(TypeRef<?> typeRef) {
+    List<TypeRef<?>> arguments = typeRef.getTypeArguments();
+    if (arguments.size() == 1) {
+      return arguments.get(0);
+    }
+    return TypeRef.of(Object.class);
+  }
+
+  public static Tuple2<TypeRef<?>, TypeRef<?>> mapKeyValueTypeRefs(TypeRef<?> typeRef) {
+    List<TypeRef<?>> arguments = typeRef.getTypeArguments();
+    if (arguments.size() == 2) {
+      return Tuple2.of(arguments.get(0), arguments.get(1));
+    }
+    return Tuple2.of(TypeRef.of(String.class), TypeRef.of(Object.class));
   }
 }

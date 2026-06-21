@@ -100,6 +100,7 @@ public final class JsonFieldInfo {
   private final JsonStringTokenCache stringTokenCache;
   private final JsonStringTokenCache elementStringTokenCache;
   private final JsonNumberTokenCache numberTokenCache;
+  private final long nameHash;
   private JsonTypeInfo writeTypeInfo;
   private JsonTypeInfo readTypeInfo;
   private JsonTypeInfo readElementTypeInfo;
@@ -113,6 +114,7 @@ public final class JsonFieldInfo {
       JsonFieldAccessor writeAccessor,
       JsonFieldAccessor readAccessor) {
     this.name = name;
+    nameHash = JsonFieldNameHash.hash(name);
     this.writeField = writeField;
     this.writeType = fieldType(writeField);
     this.writeRawType = fieldRawType(writeField);
@@ -186,6 +188,10 @@ public final class JsonFieldInfo {
 
   public String name() {
     return name;
+  }
+
+  public long nameHash() {
+    return nameHash;
   }
 
   public Field writeField() {

@@ -84,6 +84,11 @@ public class ForyJsonTest {
     public String name = "first";
   }
 
+  public static final class UnicodeFieldNames {
+    public String café = EU_TEXT;
+    public String 你好 = ZH_TEXT;
+  }
+
   public static final class MethodsIgnored {
     public int setterCalls;
     public String value = "field";
@@ -189,6 +194,15 @@ public class ForyJsonTest {
   public static final class MapKeyFields {
     public Map<Integer, String> intNames = intNames();
     public EnumMap<Kind, Integer> scores = enumScores();
+  }
+
+  public static final class FastContainers {
+    public List<Boolean> booleans = Arrays.asList(Boolean.TRUE, Boolean.FALSE);
+    public Map<String, Boolean> flags = flags();
+    public Map<Integer, String> intNames = intNames();
+    public List<Integer> ints = Arrays.asList(1, 2);
+    public List<String> names = Arrays.asList("alpha", ZH_TEXT);
+    public Map<String, Integer> scores = scores();
   }
 
   public static final class UnicodeValues {
@@ -531,6 +545,23 @@ public class ForyJsonTest {
   }
 
   @Test
+  public void readUnicodeFieldNames() {
+    ForyJson json = ForyJson.builder().build();
+    String direct = "{\"café\":\"" + EU_TEXT + "\",\"你好\":\"" + ZH_TEXT + "\"}";
+    String escaped = "{\"caf\\u00e9\":\"" + EU_TEXT + "\",\"\\u4f60\\u597d\":\"" + ZH_TEXT + "\"}";
+    UnicodeFieldNames directValue = json.fromJson(direct, UnicodeFieldNames.class);
+    UnicodeFieldNames escapedValue = json.fromJson(escaped, UnicodeFieldNames.class);
+    UnicodeFieldNames bytesValue =
+        json.fromJson(direct.getBytes(StandardCharsets.UTF_8), UnicodeFieldNames.class);
+    assertEquals(directValue.café, EU_TEXT);
+    assertEquals(directValue.你好, ZH_TEXT);
+    assertEquals(escapedValue.café, EU_TEXT);
+    assertEquals(escapedValue.你好, ZH_TEXT);
+    assertEquals(bytesValue.café, EU_TEXT);
+    assertEquals(bytesValue.你好, ZH_TEXT);
+  }
+
+  @Test
   public void writeLatin1NonAsciiBytes() {
     ForyJson json = ForyJson.builder().build();
     PublicFields fields = new PublicFields();
@@ -757,6 +788,43 @@ public class ForyJsonTest {
   }
 
   @Test
+  public void readFastContainerTypeRefs() {
+    ForyJson json = ForyJson.builder().build();
+    assertEquals(
+        json.fromJson("[\"alpha\",\"你好，Fory\"]", new TypeRef<List<String>>() {}),
+        Arrays.asList("alpha", ZH_TEXT));
+    assertEquals(json.fromJson("[1,2]", new TypeRef<List<Integer>>() {}), Arrays.asList(1, 2));
+    assertEquals(
+        json.fromJson("[true,false]", new TypeRef<List<Boolean>>() {}),
+        Arrays.asList(Boolean.TRUE, Boolean.FALSE));
+    assertEquals(
+        json.fromJson(
+            "{\"one\":1,\"two\":2}".getBytes(StandardCharsets.UTF_8),
+            new TypeRef<Map<String, Integer>>() {}),
+        scores());
+    assertEquals(
+        json.fromJson(
+            "{\"enabled\":true,\"disabled\":false}", new TypeRef<Map<String, Boolean>>() {}),
+        flags());
+    assertEquals(
+        json.fromJson("{\"1\":\"one\",\"2\":\"two\"}", new TypeRef<Map<Integer, String>>() {}),
+        intNames());
+  }
+
+  @Test
+  public void writeReadFastContainerFields() {
+    ForyJson json = ForyJson.builder().build();
+    String input =
+        "{\"booleans\":[true,false],\"flags\":{\"enabled\":true,\"disabled\":false},"
+            + "\"intNames\":{\"1\":\"one\",\"2\":\"two\"},\"ints\":[1,2],"
+            + "\"names\":[\"alpha\",\"你好，Fory\"],\"scores\":{\"one\":1,\"two\":2}}";
+    FastContainers read = json.fromJson(input, FastContainers.class);
+    assertFastContainers(read);
+    assertFastContainers(
+        json.fromJson(json.toJsonBytes(new FastContainers()), FastContainers.class));
+  }
+
+  @Test
   public void readScalarRoots() {
     ForyJson json = ForyJson.builder().build();
     assertEquals(json.fromJson("7", int.class), Integer.valueOf(7));
@@ -792,6 +860,13 @@ public class ForyJsonTest {
     scores.put("one", 1);
     scores.put("two", 2);
     return scores;
+  }
+
+  private static Map<String, Boolean> flags() {
+    Map<String, Boolean> flags = new LinkedHashMap<>();
+    flags.put("enabled", Boolean.TRUE);
+    flags.put("disabled", Boolean.FALSE);
+    return flags;
   }
 
   private static Map<Integer, String> intNames() {
@@ -906,6 +981,15 @@ public class ForyJsonTest {
             ZH_TEXT,
             EU_TEXT));
     assertEquals(value.zh, ZH_TEXT);
+  }
+
+  private static void assertFastContainers(FastContainers value) {
+    assertEquals(value.booleans, Arrays.asList(Boolean.TRUE, Boolean.FALSE));
+    assertEquals(value.flags, flags());
+    assertEquals(value.intNames, intNames());
+    assertEquals(value.ints, Arrays.asList(1, 2));
+    assertEquals(value.names, Arrays.asList("alpha", ZH_TEXT));
+    assertEquals(value.scores, scores());
   }
 
   private static void assertTextRoundTrip(ForyJson json, String text) {

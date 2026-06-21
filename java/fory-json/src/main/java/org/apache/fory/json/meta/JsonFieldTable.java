@@ -19,131 +19,84 @@
 
 package org.apache.fory.json.meta;
 
-import java.util.HashMap;
-import java.util.Map;
-import org.apache.fory.json.reader.JsonReader;
-import org.apache.fory.json.reader.Latin1StringJsonReader;
-import org.apache.fory.json.reader.Utf16StringJsonReader;
-import org.apache.fory.json.reader.Utf8JsonReader;
+import org.apache.fory.json.ForyJsonException;
 
 public final class JsonFieldTable {
-  private final Map<String, JsonFieldInfo> fields;
-  private final Map<String, Integer> indexes;
   private final String[] tableNames;
-  private final int[] tableHashes;
+  private final long[] tableHashes;
   private final JsonFieldInfo[] tableFields;
   private final int[] tableIndexes;
   private final int tableMask;
 
   public JsonFieldTable(JsonFieldInfo[] readFields) {
-    fields = new HashMap<>(readFields.length * 2);
-    indexes = new HashMap<>(readFields.length * 2);
     int tableSize = 1;
     while (tableSize < readFields.length * 4) {
       tableSize <<= 1;
     }
     tableNames = new String[tableSize];
-    tableHashes = new int[tableSize];
+    tableHashes = new long[tableSize];
     tableFields = new JsonFieldInfo[tableSize];
     tableIndexes = new int[tableSize];
     tableMask = tableSize - 1;
     for (int i = 0; i < readFields.length; i++) {
       JsonFieldInfo field = readFields[i];
-      String name = field.name();
-      fields.put(field.name(), field);
-      indexes.put(field.name(), i);
-      put(name, field, i);
+      put(field, i);
     }
   }
 
-  public JsonFieldInfo get(String name) {
-    return fields.get(name);
-  }
-
-  public JsonFieldInfo get(JsonReader reader, int start, int end, int hash) {
-    return getBySlice(reader, start, end, hash);
-  }
-
-  public JsonFieldInfo getLatin1(
-      Latin1StringJsonReader reader, int startByte, int endByte, int hash) {
-    return getBySlice(reader, startByte, endByte, hash);
-  }
-
-  public JsonFieldInfo getUtf16(
-      Utf16StringJsonReader reader, int startChar, int endChar, int hash) {
-    return getBySlice(reader, startChar, endChar, hash);
-  }
-
-  public JsonFieldInfo getUtf8(Utf8JsonReader reader, int startByte, int endByte, int hash) {
-    return getBySlice(reader, startByte, endByte, hash);
-  }
-
-  private JsonFieldInfo getBySlice(JsonReader reader, int start, int end, int hash) {
-    String[] localNames = tableNames;
-    int[] localHashes = tableHashes;
+  public JsonFieldInfo get(long hash) {
     JsonFieldInfo[] localFields = tableFields;
+    long[] localHashes = tableHashes;
     int mask = tableMask;
-    int index = hash & mask;
+    int index = index(hash, mask);
     while (true) {
-      String name = localNames[index];
-      if (name == null) {
+      JsonFieldInfo field = localFields[index];
+      if (field == null) {
         return null;
       }
-      if (localHashes[index] == hash && reader.regionEquals(name, start, end)) {
-        return localFields[index];
+      if (localHashes[index] == hash) {
+        return field;
       }
       index = (index + 1) & mask;
     }
   }
 
-  public int index(String name) {
-    Integer index = indexes.get(name);
-    return index == null ? -1 : index.intValue();
-  }
-
-  public int index(JsonReader reader, int start, int end, int hash) {
-    return indexBySlice(reader, start, end, hash);
-  }
-
-  public int indexLatin1(Latin1StringJsonReader reader, int startByte, int endByte, int hash) {
-    return indexBySlice(reader, startByte, endByte, hash);
-  }
-
-  public int indexUtf16(Utf16StringJsonReader reader, int startChar, int endChar, int hash) {
-    return indexBySlice(reader, startChar, endChar, hash);
-  }
-
-  public int indexUtf8(Utf8JsonReader reader, int startByte, int endByte, int hash) {
-    return indexBySlice(reader, startByte, endByte, hash);
-  }
-
-  private int indexBySlice(JsonReader reader, int start, int end, int hash) {
-    String[] localNames = tableNames;
-    int[] localHashes = tableHashes;
+  public int index(long hash) {
+    long[] localHashes = tableHashes;
     int[] localIndexes = tableIndexes;
+    JsonFieldInfo[] localFields = tableFields;
     int mask = tableMask;
-    int index = hash & mask;
+    int index = index(hash, mask);
     while (true) {
-      String name = localNames[index];
-      if (name == null) {
+      if (localFields[index] == null) {
         return -1;
       }
-      if (localHashes[index] == hash && reader.regionEquals(name, start, end)) {
+      if (localHashes[index] == hash) {
         return localIndexes[index];
       }
       index = (index + 1) & mask;
     }
   }
 
-  private void put(String name, JsonFieldInfo field, int fieldIndex) {
-    int hash = name.hashCode();
-    int index = hash & tableMask;
-    while (tableNames[index] != null) {
+  private void put(JsonFieldInfo field, int fieldIndex) {
+    String name = field.name();
+    long hash = field.nameHash();
+    int index = index(hash, tableMask);
+    while (tableFields[index] != null) {
+      if (tableHashes[index] == hash) {
+        throw new ForyJsonException(
+            "JSON field hash collision between " + tableNames[index] + " and " + name);
+      }
       index = (index + 1) & tableMask;
     }
     tableNames[index] = name;
     tableHashes[index] = hash;
     tableFields[index] = field;
     tableIndexes[index] = fieldIndex;
+  }
+
+  private static int index(long hash, int mask) {
+    long spread = hash ^ (hash >>> 32);
+    return ((int) spread) & mask;
   }
 }

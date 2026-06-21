@@ -37,6 +37,10 @@ public final class JsonTypeResolver {
   private final Map<Object, JsonTypeInfo> typeInfos = new HashMap<>();
   private final JsonSharedRegistry sharedRegistry;
 
+  private enum RuntimeObjectKey {
+    INSTANCE
+  }
+
   public JsonTypeResolver(JsonSharedRegistry sharedRegistry) {
     this.sharedRegistry = sharedRegistry;
   }
@@ -57,6 +61,15 @@ public final class JsonTypeResolver {
       return typeInfo;
     }
     return buildTypeInfo(key, rawType, declaredType);
+  }
+
+  public JsonTypeInfo getRuntimeTypeInfo(Class<?> runtimeType) {
+    Object key = runtimeType == Object.class ? RuntimeObjectKey.INSTANCE : runtimeType;
+    JsonTypeInfo typeInfo = typeInfos.get(key);
+    if (typeInfo != null) {
+      return typeInfo;
+    }
+    return buildRuntimeTypeInfo(key, runtimeType);
   }
 
   private BaseObjectCodec buildObjectCodec(Class<?> type) {
@@ -89,6 +102,25 @@ public final class JsonTypeResolver {
       return cached;
     }
     JsonTypeInfo typeInfo = buildTypeInfo(rawType, declaredType);
+    typeInfos.put(key, typeInfo);
+    return typeInfo;
+  }
+
+  private JsonTypeInfo buildRuntimeTypeInfo(Object key, Class<?> rawType) {
+    JsonTypeInfo cached = typeInfos.get(key);
+    if (cached != null) {
+      return cached;
+    }
+    TypeRef<?> typeRef = TypeRef.of(rawType);
+    JsonCodec codec =
+        rawType == Object.class
+            ? getObjectCodec(Object.class)
+            : sharedRegistry.createCodec(rawType, typeRef, this);
+    if (codec == null) {
+      codec = getObjectCodec(rawType);
+    }
+    JsonTypeInfo typeInfo =
+        new JsonTypeInfo(rawType, typeRef, rawType, sharedRegistry.kind(rawType), codec);
     typeInfos.put(key, typeInfo);
     return typeInfo;
   }

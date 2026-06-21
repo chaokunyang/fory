@@ -81,35 +81,20 @@ final class ScalarCodecs {
 
     @Override
     void writeNonNull(JsonWriter writer, Object value, JsonTypeResolver resolver) {
-      Class<?> valueClass = value.getClass();
-      if (valueClass == Object.class) {
-        resolver.getObjectCodec(Object.class).write(writer, value, resolver);
-      } else {
-        JsonTypeInfo typeInfo = resolver.getTypeInfo(valueClass, valueClass);
-        typeInfo.codec().write(writer, value, resolver);
-      }
+      JsonTypeInfo typeInfo = resolver.getRuntimeTypeInfo(value.getClass());
+      typeInfo.codec().write(writer, value, resolver);
     }
 
     @Override
     void writeStringNonNull(StringJsonWriter writer, Object value, JsonTypeResolver resolver) {
-      Class<?> valueClass = value.getClass();
-      if (valueClass == Object.class) {
-        resolver.getObjectCodec(Object.class).writeString(writer, value, resolver);
-      } else {
-        JsonTypeInfo typeInfo = resolver.getTypeInfo(valueClass, valueClass);
-        typeInfo.codec().writeString(writer, value, resolver);
-      }
+      JsonTypeInfo typeInfo = resolver.getRuntimeTypeInfo(value.getClass());
+      typeInfo.codec().writeString(writer, value, resolver);
     }
 
     @Override
     void writeUtf8NonNull(Utf8JsonWriter writer, Object value, JsonTypeResolver resolver) {
-      Class<?> valueClass = value.getClass();
-      if (valueClass == Object.class) {
-        resolver.getObjectCodec(Object.class).writeUtf8(writer, value, resolver);
-      } else {
-        JsonTypeInfo typeInfo = resolver.getTypeInfo(valueClass, valueClass);
-        typeInfo.codec().writeUtf8(writer, value, resolver);
-      }
+      JsonTypeInfo typeInfo = resolver.getRuntimeTypeInfo(value.getClass());
+      typeInfo.codec().writeUtf8(writer, value, resolver);
     }
 
     @Override

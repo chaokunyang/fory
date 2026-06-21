@@ -48,24 +48,12 @@ public final class GeneratedObjectCodec extends BaseObjectCodec {
 
   @Override
   void writeStringNonNull(StringJsonWriter writer, Object value, JsonTypeResolver resolver) {
-    Class<?> valueClass = value.getClass();
-    if (valueClass == type) {
-      stringWriter.writeString(writer, value, resolver);
-    } else {
-      JsonTypeInfo typeInfo = resolver.getTypeInfo(valueClass, valueClass);
-      typeInfo.codec().writeString(writer, value, resolver);
-    }
+    stringWriter.writeString(writer, value, resolver);
   }
 
   @Override
   void writeUtf8NonNull(Utf8JsonWriter writer, Object value, JsonTypeResolver resolver) {
-    Class<?> valueClass = value.getClass();
-    if (valueClass == type) {
-      utf8Writer.writeUtf8(writer, value, resolver);
-    } else {
-      JsonTypeInfo typeInfo = resolver.getTypeInfo(valueClass, valueClass);
-      typeInfo.codec().writeUtf8(writer, value, resolver);
-    }
+    utf8Writer.writeUtf8(writer, value, resolver);
   }
 
   @Override

@@ -160,6 +160,18 @@ public class ForyJsonTest {
     public Object value = new Object();
   }
 
+  public static class ParentValue {
+    public int parent = 1;
+  }
+
+  public static final class ChildValue extends ParentValue {
+    public int child = 2;
+  }
+
+  public static final class DeclaredParentField {
+    public ParentValue value = new ChildValue();
+  }
+
   public static final class TokenValues {
     public int count = 1;
     public String name = "alpha";
@@ -428,6 +440,19 @@ public class ForyJsonTest {
     assertEquals(json.toJson(new NaturalObjectValue()), expected);
     assertEquals(
         new String(json.toJsonBytes(new NaturalObjectValue()), StandardCharsets.UTF_8), expected);
+  }
+
+  @Test
+  public void writeDeclaredObjectFieldType() {
+    ForyJson json = ForyJson.builder().build();
+    String expected = "{\"value\":{\"parent\":1}}";
+    assertEquals(json.toJson(new DeclaredParentField()), expected);
+    assertEquals(
+        new String(json.toJsonBytes(new DeclaredParentField()), StandardCharsets.UTF_8), expected);
+    DeclaredParentField read =
+        json.fromJson("{\"value\":{\"child\":9,\"parent\":3}}", DeclaredParentField.class);
+    assertEquals(read.value.getClass(), ParentValue.class);
+    assertEquals(read.value.parent, 3);
   }
 
   @Test

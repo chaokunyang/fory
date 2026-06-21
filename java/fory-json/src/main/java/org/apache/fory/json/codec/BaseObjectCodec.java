@@ -142,35 +142,17 @@ public abstract class BaseObjectCodec extends AbstractJsonCodec {
 
   @Override
   final void writeNonNull(JsonWriter writer, Object value, JsonTypeResolver resolver) {
-    Class<?> valueClass = value.getClass();
-    if (valueClass == type) {
-      writeObject(writer, value, resolver);
-    } else {
-      JsonTypeInfo typeInfo = resolver.getTypeInfo(valueClass, valueClass);
-      typeInfo.codec().write(writer, value, resolver);
-    }
+    writeObject(writer, value, resolver);
   }
 
   @Override
   void writeStringNonNull(StringJsonWriter writer, Object value, JsonTypeResolver resolver) {
-    Class<?> valueClass = value.getClass();
-    if (valueClass == type) {
-      writeStringObject(writer, value, resolver);
-    } else {
-      JsonTypeInfo typeInfo = resolver.getTypeInfo(valueClass, valueClass);
-      typeInfo.codec().writeString(writer, value, resolver);
-    }
+    writeStringObject(writer, value, resolver);
   }
 
   @Override
   void writeUtf8NonNull(Utf8JsonWriter writer, Object value, JsonTypeResolver resolver) {
-    Class<?> valueClass = value.getClass();
-    if (valueClass == type) {
-      writeUtf8Object(writer, value, resolver);
-    } else {
-      JsonTypeInfo typeInfo = resolver.getTypeInfo(valueClass, valueClass);
-      typeInfo.codec().writeUtf8(writer, value, resolver);
-    }
+    writeUtf8Object(writer, value, resolver);
   }
 
   @Override

@@ -482,12 +482,52 @@ public final class JsonCodegen {
       readField(code, properties[index], index, indent + "  ", readerMode, record);
       appendFieldEnd(code, slowMethod, properties.length, index, indent + "  ", readerMode, record);
       code.append(indent).append("} else {\n");
-      appendFieldHashRead(code, index, indent + "  ");
-      appendFastReadFieldFromHash(
+      appendNextDirectFallback(
           code, slowMethod, properties, index, indent + "  ", readerMode, record);
       code.append(indent).append("}\n");
       return;
     }
+    appendNextDirectFallback(code, slowMethod, properties, index, indent, readerMode, record);
+  }
+
+  private void appendNextDirectFallback(
+      StringBuilder code,
+      String slowMethod,
+      JsonFieldInfo[] properties,
+      int index,
+      String indent,
+      int readerMode,
+      boolean record) {
+    int nextIndex = index + 1;
+    if (nextIndex < properties.length && isPackedName(properties[nextIndex].name())) {
+      code.append(indent)
+          .append("if (reader.tryReadFieldNameColon(")
+          .append(longLiteral(properties[nextIndex].nameHash()))
+          .append(", ")
+          .append(longLiteral(packedNameMask(properties[nextIndex].name().length())))
+          .append(", ")
+          .append(properties[nextIndex].name().length())
+          .append(")) {\n");
+      readField(code, properties[nextIndex], nextIndex, indent + "  ", readerMode, record);
+      appendFieldEnd(
+          code, slowMethod, properties.length, nextIndex, indent + "  ", readerMode, record);
+      code.append(indent).append("  skip").append(nextIndex).append(" = true;\n");
+      code.append(indent).append("} else {\n");
+      appendHashFallback(code, slowMethod, properties, index, indent + "  ", readerMode, record);
+      code.append(indent).append("}\n");
+      return;
+    }
+    appendHashFallback(code, slowMethod, properties, index, indent, readerMode, record);
+  }
+
+  private void appendHashFallback(
+      StringBuilder code,
+      String slowMethod,
+      JsonFieldInfo[] properties,
+      int index,
+      String indent,
+      int readerMode,
+      boolean record) {
     appendFieldHashRead(code, index, indent);
     appendFastReadFieldFromHash(code, slowMethod, properties, index, indent, readerMode, record);
   }

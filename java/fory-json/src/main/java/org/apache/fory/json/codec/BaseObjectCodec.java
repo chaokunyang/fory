@@ -69,25 +69,29 @@ public abstract class BaseObjectCodec extends AbstractJsonCodec {
     boolean writeExpose = hasWriteExpose(type);
     boolean readExpose = hasReadExpose(type);
     TreeMap<String, FieldBuilder> builders = new TreeMap<>();
-    for (Field field : type.getFields()) {
-      int modifiers = field.getModifiers();
-      if (!isEligibleField(field)) {
-        continue;
-      }
-      boolean write = includeWrite(field, writeExpose);
-      boolean read = !Modifier.isFinal(modifiers) && includeRead(field, readExpose);
-      if (!write && !read) {
-        continue;
-      }
-      FieldBuilder builder = new FieldBuilder(field.getName());
-      if (write) {
-        builder.setWriteField(field);
-      }
-      if (read) {
-        builder.setReadField(field);
-      }
-      if (builders.put(field.getName(), builder) != null) {
-        throw new ForyJsonException("Duplicate public JSON field " + field.getName());
+    for (Class<?> current = type;
+        current != null && current != Object.class;
+        current = current.getSuperclass()) {
+      for (Field field : current.getDeclaredFields()) {
+        int modifiers = field.getModifiers();
+        if (!isEligibleField(field)) {
+          continue;
+        }
+        boolean write = includeWrite(field, writeExpose);
+        boolean read = !Modifier.isFinal(modifiers) && includeRead(field, readExpose);
+        if (!write && !read) {
+          continue;
+        }
+        FieldBuilder builder = new FieldBuilder(field.getName());
+        if (write) {
+          builder.setWriteField(field);
+        }
+        if (read) {
+          builder.setReadField(field);
+        }
+        if (builders.put(field.getName(), builder) != null) {
+          throw new ForyJsonException("Duplicate JSON field " + field.getName());
+        }
       }
     }
     List<JsonFieldInfo> writes = new ArrayList<>();
@@ -173,9 +177,8 @@ public abstract class BaseObjectCodec extends AbstractJsonCodec {
       return object;
     }
     do {
-      String name = reader.readString();
+      JsonFieldInfo field = reader.readField(readTable);
       reader.expect(':');
-      JsonFieldInfo field = readTable.get(name);
       if (field == null) {
         reader.skipValue();
       } else {
@@ -273,20 +276,28 @@ public abstract class BaseObjectCodec extends AbstractJsonCodec {
   }
 
   private static boolean hasWriteExpose(Class<?> type) {
-    for (Field field : type.getFields()) {
-      if (isEligibleField(field) && field.isAnnotationPresent(Expose.class)) {
-        return true;
+    for (Class<?> current = type;
+        current != null && current != Object.class;
+        current = current.getSuperclass()) {
+      for (Field field : current.getDeclaredFields()) {
+        if (isEligibleField(field) && field.isAnnotationPresent(Expose.class)) {
+          return true;
+        }
       }
     }
     return false;
   }
 
   private static boolean hasReadExpose(Class<?> type) {
-    for (Field field : type.getFields()) {
-      if (isEligibleField(field)
-          && !Modifier.isFinal(field.getModifiers())
-          && field.isAnnotationPresent(Expose.class)) {
-        return true;
+    for (Class<?> current = type;
+        current != null && current != Object.class;
+        current = current.getSuperclass()) {
+      for (Field field : current.getDeclaredFields()) {
+        if (isEligibleField(field)
+            && !Modifier.isFinal(field.getModifiers())
+            && field.isAnnotationPresent(Expose.class)) {
+          return true;
+        }
       }
     }
     return false;

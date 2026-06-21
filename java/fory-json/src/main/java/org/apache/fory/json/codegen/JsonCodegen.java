@@ -126,7 +126,9 @@ public final class JsonCodegen {
 
   private boolean canCompile(JsonFieldInfo property) {
     Field field = property.writeField();
-    if (field == null || !isVisible(field.getDeclaringClass())) {
+    if (field == null
+        || !java.lang.reflect.Modifier.isPublic(field.getModifiers())
+        || !isVisible(field.getDeclaringClass())) {
       return false;
     }
     Class<?> rawType = property.writeRawType();

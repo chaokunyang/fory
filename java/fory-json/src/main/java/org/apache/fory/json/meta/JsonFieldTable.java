@@ -21,18 +21,62 @@ package org.apache.fory.json.meta;
 
 import java.util.HashMap;
 import java.util.Map;
+import org.apache.fory.json.reader.JsonReader;
 
 public final class JsonFieldTable {
   private final Map<String, JsonFieldInfo> fields;
+  private final String[] tableNames;
+  private final int[] tableHashes;
+  private final JsonFieldInfo[] tableFields;
+  private final int tableMask;
 
   public JsonFieldTable(JsonFieldInfo[] readFields) {
     fields = new HashMap<>(readFields.length * 2);
+    int tableSize = 1;
+    while (tableSize < readFields.length * 4) {
+      tableSize <<= 1;
+    }
+    tableNames = new String[tableSize];
+    tableHashes = new int[tableSize];
+    tableFields = new JsonFieldInfo[tableSize];
+    tableMask = tableSize - 1;
     for (JsonFieldInfo field : readFields) {
+      String name = field.name();
       fields.put(field.name(), field);
+      put(name, field);
     }
   }
 
   public JsonFieldInfo get(String name) {
     return fields.get(name);
+  }
+
+  public JsonFieldInfo get(JsonReader reader, int start, int end, int hash) {
+    String[] localNames = tableNames;
+    int[] localHashes = tableHashes;
+    JsonFieldInfo[] localFields = tableFields;
+    int mask = tableMask;
+    int index = hash & mask;
+    while (true) {
+      String name = localNames[index];
+      if (name == null) {
+        return null;
+      }
+      if (localHashes[index] == hash && reader.regionEquals(name, start, end)) {
+        return localFields[index];
+      }
+      index = (index + 1) & mask;
+    }
+  }
+
+  private void put(String name, JsonFieldInfo field) {
+    int hash = name.hashCode();
+    int index = hash & tableMask;
+    while (tableNames[index] != null) {
+      index = (index + 1) & tableMask;
+    }
+    tableNames[index] = name;
+    tableHashes[index] = hash;
+    tableFields[index] = field;
   }
 }

@@ -19,6 +19,8 @@
 
 package org.apache.fory.json.reader;
 
+import java.nio.charset.StandardCharsets;
+
 public final class Utf8JsonReader extends JsonReader {
   private final byte[] input;
 
@@ -42,7 +44,40 @@ public final class Utf8JsonReader extends JsonReader {
     if (position >= input.length || input[position++] != '"') {
       throw error("Expected string");
     }
-    StringBuilder builder = new StringBuilder();
+    int start = position;
+    while (position < input.length) {
+      int b = input[position++] & 0xFF;
+      if (b == '"') {
+        return new String(input, start, position - 1 - start, StandardCharsets.ISO_8859_1);
+      } else if (b == '\\') {
+        StringBuilder builder = new StringBuilder(input.length - start);
+        appendAscii(builder, start, position - 1);
+        appendEscape(builder);
+        return readStringTail(builder);
+      } else if (b < 0x20) {
+        throw error("Control character in string");
+      } else if (b < 0x80) {
+        continue;
+      } else {
+        StringBuilder builder = new StringBuilder(input.length - start);
+        appendAscii(builder, start, position - 1);
+        appendUtf8(builder, b);
+        return readStringTail(builder);
+      }
+    }
+    throw error("Unterminated string");
+  }
+
+  @Override
+  protected String slice(int start, int end) {
+    char[] chars = new char[end - start];
+    for (int i = start; i < end; i++) {
+      chars[i - start] = (char) (input[i] & 0xFF);
+    }
+    return new String(chars);
+  }
+
+  private String readStringTail(StringBuilder builder) {
     while (position < input.length) {
       int b = input[position++] & 0xFF;
       if (b == '"') {
@@ -60,13 +95,10 @@ public final class Utf8JsonReader extends JsonReader {
     throw error("Unterminated string");
   }
 
-  @Override
-  protected String slice(int start, int end) {
-    char[] chars = new char[end - start];
+  private void appendAscii(StringBuilder builder, int start, int end) {
     for (int i = start; i < end; i++) {
-      chars[i - start] = (char) (input[i] & 0xFF);
+      builder.append((char) (input[i] & 0xFF));
     }
-    return new String(chars);
   }
 
   private void appendUtf8(StringBuilder builder, int first) {

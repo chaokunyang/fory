@@ -236,7 +236,7 @@ final class ScalarCodecs {
 
     @Override
     Object readNonNull(JsonReader reader, JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
-      return Integer.parseInt(reader.readNumber());
+      return reader.readInt();
     }
 
     @Override
@@ -249,9 +249,9 @@ final class ScalarCodecs {
       if (reader.peekNull()) {
         readFieldDefault(reader, object, accessor, typeInfo, resolver);
       } else if (typeInfo.primitive()) {
-        accessor.putInt(object, Integer.parseInt(reader.readNumber()));
+        accessor.putInt(object, reader.readInt());
       } else {
-        accessor.putObject(object, Integer.parseInt(reader.readNumber()));
+        accessor.putObject(object, reader.readInt());
       }
     }
   }
@@ -273,7 +273,7 @@ final class ScalarCodecs {
 
     @Override
     Object readNonNull(JsonReader reader, JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
-      return Long.parseLong(reader.readNumber());
+      return reader.readLong();
     }
 
     @Override
@@ -286,9 +286,9 @@ final class ScalarCodecs {
       if (reader.peekNull()) {
         readFieldDefault(reader, object, accessor, typeInfo, resolver);
       } else if (typeInfo.primitive()) {
-        accessor.putLong(object, Long.parseLong(reader.readNumber()));
+        accessor.putLong(object, reader.readLong());
       } else {
-        accessor.putObject(object, Long.parseLong(reader.readNumber()));
+        accessor.putObject(object, reader.readLong());
       }
     }
   }
@@ -310,7 +310,11 @@ final class ScalarCodecs {
 
     @Override
     Object readNonNull(JsonReader reader, JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
-      return Short.parseShort(reader.readNumber());
+      int value = reader.readInt();
+      if (value < Short.MIN_VALUE || value > Short.MAX_VALUE) {
+        throw new ForyJsonException("Short overflow");
+      }
+      return (short) value;
     }
 
     @Override
@@ -323,9 +327,17 @@ final class ScalarCodecs {
       if (reader.peekNull()) {
         readFieldDefault(reader, object, accessor, typeInfo, resolver);
       } else if (typeInfo.primitive()) {
-        accessor.putShort(object, Short.parseShort(reader.readNumber()));
+        int value = reader.readInt();
+        if (value < Short.MIN_VALUE || value > Short.MAX_VALUE) {
+          throw new ForyJsonException("Short overflow");
+        }
+        accessor.putShort(object, (short) value);
       } else {
-        accessor.putObject(object, Short.parseShort(reader.readNumber()));
+        int value = reader.readInt();
+        if (value < Short.MIN_VALUE || value > Short.MAX_VALUE) {
+          throw new ForyJsonException("Short overflow");
+        }
+        accessor.putObject(object, (short) value);
       }
     }
   }
@@ -347,7 +359,11 @@ final class ScalarCodecs {
 
     @Override
     Object readNonNull(JsonReader reader, JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
-      return Byte.parseByte(reader.readNumber());
+      int value = reader.readInt();
+      if (value < Byte.MIN_VALUE || value > Byte.MAX_VALUE) {
+        throw new ForyJsonException("Byte overflow");
+      }
+      return (byte) value;
     }
 
     @Override
@@ -360,9 +376,17 @@ final class ScalarCodecs {
       if (reader.peekNull()) {
         readFieldDefault(reader, object, accessor, typeInfo, resolver);
       } else if (typeInfo.primitive()) {
-        accessor.putByte(object, Byte.parseByte(reader.readNumber()));
+        int value = reader.readInt();
+        if (value < Byte.MIN_VALUE || value > Byte.MAX_VALUE) {
+          throw new ForyJsonException("Byte overflow");
+        }
+        accessor.putByte(object, (byte) value);
       } else {
-        accessor.putObject(object, Byte.parseByte(reader.readNumber()));
+        int value = reader.readInt();
+        if (value < Byte.MIN_VALUE || value > Byte.MAX_VALUE) {
+          throw new ForyJsonException("Byte overflow");
+        }
+        accessor.putObject(object, (byte) value);
       }
     }
   }
@@ -756,7 +780,7 @@ final class ScalarCodecs {
 
     @Override
     Object readNonNull(JsonReader reader, JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
-      return new Date(Long.parseLong(reader.readNumber()));
+      return new Date(reader.readLong());
     }
   }
 
@@ -775,7 +799,7 @@ final class ScalarCodecs {
 
     @Override
     Object readNonNull(JsonReader reader, JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
-      return new java.sql.Date(Long.parseLong(reader.readNumber()));
+      return new java.sql.Date(reader.readLong());
     }
   }
 
@@ -794,7 +818,7 @@ final class ScalarCodecs {
 
     @Override
     Object readNonNull(JsonReader reader, JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
-      return new java.sql.Time(Long.parseLong(reader.readNumber()));
+      return new java.sql.Time(reader.readLong());
     }
   }
 
@@ -813,7 +837,7 @@ final class ScalarCodecs {
 
     @Override
     Object readNonNull(JsonReader reader, JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
-      return new java.sql.Timestamp(Long.parseLong(reader.readNumber()));
+      return new java.sql.Timestamp(reader.readLong());
     }
   }
 
@@ -833,7 +857,7 @@ final class ScalarCodecs {
     @Override
     Object readNonNull(JsonReader reader, JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
       Calendar calendar = new GregorianCalendar();
-      calendar.setTimeInMillis(Long.parseLong(reader.readNumber()));
+      calendar.setTimeInMillis(reader.readLong());
       return calendar;
     }
   }
@@ -1082,7 +1106,7 @@ final class ScalarCodecs {
 
     @Override
     Object readNonNull(JsonReader reader, JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
-      return new AtomicInteger(Integer.parseInt(reader.readNumber()));
+      return new AtomicInteger(reader.readInt());
     }
   }
 
@@ -1101,7 +1125,7 @@ final class ScalarCodecs {
 
     @Override
     Object readNonNull(JsonReader reader, JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
-      return new AtomicLong(Long.parseLong(reader.readNumber()));
+      return new AtomicLong(reader.readLong());
     }
   }
 
@@ -1194,7 +1218,7 @@ final class ScalarCodecs {
         reader.readNull();
         return OptionalInt.empty();
       }
-      return OptionalInt.of(Integer.parseInt(reader.readNumber()));
+      return OptionalInt.of(reader.readInt());
     }
 
     @Override
@@ -1214,7 +1238,7 @@ final class ScalarCodecs {
 
     @Override
     Object readNonNull(JsonReader reader, JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
-      return OptionalInt.of(Integer.parseInt(reader.readNumber()));
+      return OptionalInt.of(reader.readInt());
     }
   }
 
@@ -1227,7 +1251,7 @@ final class ScalarCodecs {
         reader.readNull();
         return OptionalLong.empty();
       }
-      return OptionalLong.of(Long.parseLong(reader.readNumber()));
+      return OptionalLong.of(reader.readLong());
     }
 
     @Override
@@ -1247,7 +1271,7 @@ final class ScalarCodecs {
 
     @Override
     Object readNonNull(JsonReader reader, JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
-      return OptionalLong.of(Long.parseLong(reader.readNumber()));
+      return OptionalLong.of(reader.readLong());
     }
   }
 
@@ -1307,7 +1331,7 @@ final class ScalarCodecs {
           if (size == bytes.length) {
             bytes = Arrays.copyOf(bytes, size << 1);
           }
-          int value = Integer.parseInt(reader.readNumber());
+          int value = reader.readInt();
           if (value < Byte.MIN_VALUE || value > 255) {
             throw new ForyJsonException("ByteBuffer element out of byte range: " + value);
           }

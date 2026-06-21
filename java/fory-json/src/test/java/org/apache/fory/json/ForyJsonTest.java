@@ -102,6 +102,14 @@ public class ForyJsonTest {
     }
   }
 
+  public static final class PrivateFields {
+    private static String staticValue = "static";
+    private transient String transientValue = "transient";
+    private int id = 11;
+    private String name = "private";
+    private String nullable;
+  }
+
   public static final class DirectionalIgnore {
     @JsonIgnore public int both = 1;
 
@@ -312,11 +320,31 @@ public class ForyJsonTest {
   @Test
   public void ignoreMethods() {
     ForyJson json = ForyJson.builder().build();
-    assertEquals(json.toJson(new MethodsIgnored()), "{\"setterCalls\":0,\"value\":\"field\"}");
+    assertEquals(
+        json.toJson(new MethodsIgnored()),
+        "{\"hidden\":\"hidden\",\"setterCalls\":0,\"value\":\"field\"}");
     MethodsIgnored value =
         json.fromJson("{\"hidden\":\"json\",\"value\":\"json\"}", MethodsIgnored.class);
+    assertEquals(value.hidden, "json");
     assertEquals(value.setterCalls, 0);
     assertEquals(value.value, "json");
+  }
+
+  @Test
+  public void writeDeclaredFields() {
+    ForyJson json = ForyJson.builder().build();
+    String expected = "{\"id\":11,\"name\":\"private\"}";
+    assertEquals(json.toJson(new PrivateFields()), expected);
+    assertEquals(
+        new String(json.toJsonBytes(new PrivateFields()), StandardCharsets.UTF_8), expected);
+    assertEquals(json.hasGeneratedWriter(PrivateFields.class), false);
+    PrivateFields value =
+        json.fromJson("{\"id\":12,\"name\":\"json\",\"nullable\":\"value\"}", PrivateFields.class);
+    assertEquals(value.id, 12);
+    assertEquals(value.name, "json");
+    assertEquals(value.nullable, "value");
+    assertEquals(value.transientValue, "transient");
+    assertEquals(PrivateFields.staticValue, "static");
   }
 
   @Test

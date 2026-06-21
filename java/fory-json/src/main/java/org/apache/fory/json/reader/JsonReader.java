@@ -20,6 +20,8 @@
 package org.apache.fory.json.reader;
 
 import org.apache.fory.json.ForyJsonException;
+import org.apache.fory.json.meta.JsonFieldInfo;
+import org.apache.fory.json.meta.JsonFieldTable;
 
 public abstract class JsonReader {
   protected int position;
@@ -77,6 +79,15 @@ public abstract class JsonReader {
     position += 4;
   }
 
+  public final boolean tryReadNull() {
+    skipWhitespace();
+    if (startsWith("null")) {
+      position += 4;
+      return true;
+    }
+    return false;
+  }
+
   public final boolean readBoolean() {
     skipWhitespace();
     if (startsWith("true")) {
@@ -111,6 +122,123 @@ public abstract class JsonReader {
       throw error("Expected number");
     }
     return slice(start, position);
+  }
+
+  public final int readInt() {
+    skipWhitespace();
+    int start = position;
+    int result = 0;
+    int limit = -Integer.MAX_VALUE;
+    boolean negative = false;
+    if (position < length() && charAt(position) == '-') {
+      negative = true;
+      limit = Integer.MIN_VALUE;
+      position++;
+    }
+    if (position >= length()) {
+      throw error("Expected digit");
+    }
+    char ch = charAt(position);
+    if (ch == '0') {
+      position++;
+      rejectLeadingDigit();
+      rejectFractionOrExponent();
+      return 0;
+    }
+    if (ch < '1' || ch > '9') {
+      throw error("Expected digit");
+    }
+    int multmin = limit / 10;
+    while (position < length()) {
+      ch = charAt(position);
+      if (ch < '0' || ch > '9') {
+        break;
+      }
+      int digit = ch - '0';
+      if (result < multmin) {
+        throw error("Integer overflow");
+      }
+      result *= 10;
+      if (result < limit + digit) {
+        throw error("Integer overflow");
+      }
+      result -= digit;
+      position++;
+    }
+    if (start == position || (negative && start + 1 == position)) {
+      throw error("Expected digit");
+    }
+    rejectFractionOrExponent();
+    return negative ? result : -result;
+  }
+
+  public final long readLong() {
+    skipWhitespace();
+    int start = position;
+    long result = 0;
+    long limit = -Long.MAX_VALUE;
+    boolean negative = false;
+    if (position < length() && charAt(position) == '-') {
+      negative = true;
+      limit = Long.MIN_VALUE;
+      position++;
+    }
+    if (position >= length()) {
+      throw error("Expected digit");
+    }
+    char ch = charAt(position);
+    if (ch == '0') {
+      position++;
+      rejectLeadingDigit();
+      rejectFractionOrExponent();
+      return 0;
+    }
+    if (ch < '1' || ch > '9') {
+      throw error("Expected digit");
+    }
+    long multmin = limit / 10;
+    while (position < length()) {
+      ch = charAt(position);
+      if (ch < '0' || ch > '9') {
+        break;
+      }
+      int digit = ch - '0';
+      if (result < multmin) {
+        throw error("Long overflow");
+      }
+      result *= 10;
+      if (result < limit + digit) {
+        throw error("Long overflow");
+      }
+      result -= digit;
+      position++;
+    }
+    if (start == position || (negative && start + 1 == position)) {
+      throw error("Expected digit");
+    }
+    rejectFractionOrExponent();
+    return negative ? result : -result;
+  }
+
+  public final JsonFieldInfo readField(JsonFieldTable table) {
+    skipWhitespace();
+    if (position >= length() || charAt(position++) != '"') {
+      throw error("Expected string");
+    }
+    int start = position;
+    int hash = 0;
+    while (position < length()) {
+      char ch = charAt(position++);
+      if (ch == '"') {
+        return table.get(this, start, position - 1, hash);
+      }
+      if (ch == '\\' || ch < 0x20 || ch >= 0x80) {
+        position = start - 1;
+        return table.get(readString());
+      }
+      hash = 31 * hash + ch;
+    }
+    throw error("Unterminated string");
   }
 
   public final void skipValue() {
@@ -260,6 +388,37 @@ public abstract class JsonReader {
     if (start == position) {
       throw error("Expected digit");
     }
+  }
+
+  private void rejectLeadingDigit() {
+    if (position < length()) {
+      char ch = charAt(position);
+      if (ch >= '0' && ch <= '9') {
+        throw error("Leading zero in number");
+      }
+    }
+  }
+
+  private void rejectFractionOrExponent() {
+    if (position < length()) {
+      char ch = charAt(position);
+      if (ch == '.' || ch == 'e' || ch == 'E') {
+        throw error("Expected integer");
+      }
+    }
+  }
+
+  public final boolean regionEquals(String value, int start, int end) {
+    int length = end - start;
+    if (value.length() != length) {
+      return false;
+    }
+    for (int i = 0; i < length; i++) {
+      if (charAt(start + i) != value.charAt(i)) {
+        return false;
+      }
+    }
+    return true;
   }
 
   private void appendUnicodeEscape(StringBuilder builder) {

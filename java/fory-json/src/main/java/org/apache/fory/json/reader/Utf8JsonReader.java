@@ -373,7 +373,7 @@ public final class Utf8JsonReader extends JsonReader {
     return readQuotedStringHash();
   }
 
-  public long readFieldNameHash(long expectedHash, int expectedLength) {
+  public boolean tryReadFieldNameColon(long expectedHash, int expectedLength) {
     int mark = position;
     skipWhitespaceFast();
     byte[] bytes = input;
@@ -385,17 +385,18 @@ public final class Utf8JsonReader extends JsonReader {
         int ch = bytes[offset++] & 0xFF;
         if (ch == 0 || ch == '"' || ch == '\\' || ch < 0x20 || ch >= 0x80) {
           position = mark;
-          return readQuotedStringHash();
+          return false;
         }
         value = JsonFieldNameHash.value(value, i, (char) ch);
       }
       if (value == expectedHash && bytes[offset] == '"') {
         position = offset + 1;
-        return expectedHash;
+        expectNextToken(':');
+        return true;
       }
     }
     position = mark;
-    return readQuotedStringHash();
+    return false;
   }
 
   @Override

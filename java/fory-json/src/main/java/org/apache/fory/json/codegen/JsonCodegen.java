@@ -467,7 +467,34 @@ public final class JsonCodegen {
       String indent,
       int readerMode,
       boolean record) {
-    appendFastFieldHash(code, properties[index], index, indent);
+    if (isPackedName(properties[index].name())) {
+      code.append(indent)
+          .append("if (reader.tryReadFieldNameColon(")
+          .append(longLiteral(properties[index].nameHash()))
+          .append(", ")
+          .append(properties[index].name().length())
+          .append(")) {\n");
+      readField(code, properties[index], index, indent + "  ", readerMode, record);
+      appendFieldEnd(code, slowMethod, properties.length, index, indent + "  ", readerMode, record);
+      code.append(indent).append("} else {\n");
+      appendFieldHashRead(code, index, indent + "  ");
+      appendFastReadFieldFromHash(
+          code, slowMethod, properties, index, indent + "  ", readerMode, record);
+      code.append(indent).append("}\n");
+      return;
+    }
+    appendFieldHashRead(code, index, indent);
+    appendFastReadFieldFromHash(code, slowMethod, properties, index, indent, readerMode, record);
+  }
+
+  private void appendFastReadFieldFromHash(
+      StringBuilder code,
+      String slowMethod,
+      JsonFieldInfo[] properties,
+      int index,
+      String indent,
+      int readerMode,
+      boolean record) {
     code.append(indent)
         .append("if (fieldHash")
         .append(index)
@@ -501,19 +528,11 @@ public final class JsonCodegen {
     code.append(indent).append("}\n");
   }
 
-  private static void appendFastFieldHash(
-      StringBuilder code, JsonFieldInfo property, int index, String indent) {
-    code.append(indent).append("long fieldHash").append(index).append(" = ");
-    if (isPackedName(property.name())) {
-      code.append("reader.readFieldNameHash(")
-          .append(longLiteral(property.nameHash()))
-          .append(", ")
-          .append(property.name().length())
-          .append(")");
-    } else {
-      code.append("reader.readFieldNameHash()");
-    }
-    code.append(";\n");
+  private static void appendFieldHashRead(StringBuilder code, int index, String indent) {
+    code.append(indent)
+        .append("long fieldHash")
+        .append(index)
+        .append(" = reader.readFieldNameHash();\n");
   }
 
   private static boolean isPackedName(String name) {

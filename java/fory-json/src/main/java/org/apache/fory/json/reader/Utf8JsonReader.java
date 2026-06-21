@@ -489,6 +489,26 @@ public final class Utf8JsonReader extends JsonReader {
   public boolean tryReadFieldNameColon(long expectedHash, long expectedMask, int expectedLength) {
     int mark = position;
     skipWhitespaceFast();
+    return tryReadFieldNameColonAt(mark, expectedHash, expectedMask, expectedLength);
+  }
+
+  public boolean tryReadNextFieldNameColon(
+      long expectedHash, long expectedMask, int expectedLength) {
+    int mark = position;
+    if (mark < input.length) {
+      int ch = input[mark] & 0xFF;
+      if (ch == '"') {
+        return tryReadFieldNameColonAt(mark, expectedHash, expectedMask, expectedLength);
+      }
+      if (!isWhitespace(ch)) {
+        return false;
+      }
+    }
+    return tryReadFieldNameColon(expectedHash, expectedMask, expectedLength);
+  }
+
+  private boolean tryReadFieldNameColonAt(
+      int mark, long expectedHash, long expectedMask, int expectedLength) {
     byte[] bytes = input;
     int offset = position;
     int nameOffset = offset + 1;

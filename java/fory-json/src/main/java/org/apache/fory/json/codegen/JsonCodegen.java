@@ -472,7 +472,7 @@ public final class JsonCodegen {
       boolean record) {
     if (isPackedName(properties[index].name())) {
       code.append(indent)
-          .append("if (reader.tryReadFieldNameColon(")
+          .append("if (reader.tryReadNextFieldNameColon(")
           .append(longLiteral(properties[index].nameHash()))
           .append(", ")
           .append(longLiteral(packedNameMask(properties[index].name().length())))
@@ -501,7 +501,7 @@ public final class JsonCodegen {
     int nextIndex = index + 1;
     if (nextIndex < properties.length && isPackedName(properties[nextIndex].name())) {
       code.append(indent)
-          .append("if (reader.tryReadFieldNameColon(")
+          .append("if (reader.tryReadNextFieldNameColon(")
           .append(longLiteral(properties[nextIndex].nameHash()))
           .append(", ")
           .append(longLiteral(packedNameMask(properties[nextIndex].name().length())))

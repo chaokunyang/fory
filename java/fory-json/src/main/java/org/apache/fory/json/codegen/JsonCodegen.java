@@ -467,10 +467,7 @@ public final class JsonCodegen {
       String indent,
       int readerMode,
       boolean record) {
-    code.append(indent)
-        .append("long fieldHash")
-        .append(index)
-        .append(" = reader.readFieldNameHash();\n");
+    appendFastFieldHash(code, properties[index], index, indent);
     code.append(indent)
         .append("if (fieldHash")
         .append(index)
@@ -502,6 +499,35 @@ public final class JsonCodegen {
     readField(code, properties[index], index, indent + "  ", readerMode, record);
     appendFieldEnd(code, slowMethod, properties.length, index, indent + "  ", readerMode, record);
     code.append(indent).append("}\n");
+  }
+
+  private static void appendFastFieldHash(
+      StringBuilder code, JsonFieldInfo property, int index, String indent) {
+    code.append(indent).append("long fieldHash").append(index).append(" = ");
+    if (isPackedName(property.name())) {
+      code.append("reader.readFieldNameHash(")
+          .append(longLiteral(property.nameHash()))
+          .append(", ")
+          .append(property.name().length())
+          .append(")");
+    } else {
+      code.append("reader.readFieldNameHash()");
+    }
+    code.append(";\n");
+  }
+
+  private static boolean isPackedName(String name) {
+    int length = name.length();
+    if (length == 0 || length > Long.BYTES) {
+      return false;
+    }
+    for (int i = 0; i < length; i++) {
+      char ch = name.charAt(i);
+      if (ch == 0 || ch > 0xFF) {
+        return false;
+      }
+    }
+    return true;
   }
 
   private static void appendNewObject(StringBuilder code, Class<?> type, boolean record) {

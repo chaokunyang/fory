@@ -249,14 +249,14 @@ public abstract class MapCodec extends AbstractJsonCodec {
         return null;
       }
       Map<Object, Object> map = newMap();
-      reader.expectToken('{');
-      if (!reader.consumeToken('}')) {
+      reader.expectNextToken('{');
+      if (!reader.consumeNextToken('}')) {
         do {
           String key = reader.readString();
-          reader.expectToken(':');
+          reader.expectNextToken(':');
           map.put(key, reader.tryReadNullToken() ? null : readLatin1Value(reader));
-        } while (reader.consumeToken(','));
-        reader.expectToken('}');
+        } while (reader.consumeNextToken(','));
+        reader.expectNextToken('}');
       }
       return map;
     }
@@ -268,14 +268,14 @@ public abstract class MapCodec extends AbstractJsonCodec {
         return null;
       }
       Map<Object, Object> map = newMap();
-      reader.expectToken('{');
-      if (!reader.consumeToken('}')) {
+      reader.expectNextToken('{');
+      if (!reader.consumeNextToken('}')) {
         do {
           String key = reader.readString();
-          reader.expectToken(':');
+          reader.expectNextToken(':');
           map.put(key, reader.tryReadNullToken() ? null : readUtf16Value(reader));
-        } while (reader.consumeToken(','));
-        reader.expectToken('}');
+        } while (reader.consumeNextToken(','));
+        reader.expectNextToken('}');
       }
       return map;
     }
@@ -287,14 +287,14 @@ public abstract class MapCodec extends AbstractJsonCodec {
         return null;
       }
       Map<Object, Object> map = newMap();
-      reader.expectToken('{');
-      if (!reader.consumeToken('}')) {
+      reader.expectNextToken('{');
+      if (!reader.consumeNextToken('}')) {
         do {
           String key = reader.readString();
-          reader.expectToken(':');
+          reader.expectNextToken(':');
           map.put(key, reader.tryReadNullToken() ? null : readUtf8Value(reader));
-        } while (reader.consumeToken(','));
-        reader.expectToken('}');
+        } while (reader.consumeNextToken(','));
+        reader.expectNextToken('}');
       }
       return map;
     }
@@ -757,14 +757,14 @@ public abstract class MapCodec extends AbstractJsonCodec {
         return null;
       }
       Map<Object, Object> map = newMap();
-      reader.expectToken('{');
-      if (!reader.consumeToken('}')) {
+      reader.expectNextToken('{');
+      if (!reader.consumeNextToken('}')) {
         do {
           Object key = keyCodec.readName(reader);
-          reader.expectToken(':');
+          reader.expectNextToken(':');
           map.put(key, reader.tryReadNullToken() ? null : reader.readString());
-        } while (reader.consumeToken(','));
-        reader.expectToken('}');
+        } while (reader.consumeNextToken(','));
+        reader.expectNextToken('}');
       }
       return map;
     }
@@ -776,14 +776,14 @@ public abstract class MapCodec extends AbstractJsonCodec {
         return null;
       }
       Map<Object, Object> map = newMap();
-      reader.expectToken('{');
-      if (!reader.consumeToken('}')) {
+      reader.expectNextToken('{');
+      if (!reader.consumeNextToken('}')) {
         do {
           Object key = keyCodec.readName(reader);
-          reader.expectToken(':');
+          reader.expectNextToken(':');
           map.put(key, reader.tryReadNullToken() ? null : reader.readString());
-        } while (reader.consumeToken(','));
-        reader.expectToken('}');
+        } while (reader.consumeNextToken(','));
+        reader.expectNextToken('}');
       }
       return map;
     }
@@ -795,14 +795,14 @@ public abstract class MapCodec extends AbstractJsonCodec {
         return null;
       }
       Map<Object, Object> map = newMap();
-      reader.expectToken('{');
-      if (!reader.consumeToken('}')) {
+      reader.expectNextToken('{');
+      if (!reader.consumeNextToken('}')) {
         do {
           Object key = keyCodec.readName(reader);
-          reader.expectToken(':');
+          reader.expectNextToken(':');
           map.put(key, reader.tryReadNullToken() ? null : reader.readString());
-        } while (reader.consumeToken(','));
-        reader.expectToken('}');
+        } while (reader.consumeNextToken(','));
+        reader.expectNextToken('}');
       }
       return map;
     }

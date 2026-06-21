@@ -194,12 +194,12 @@ public abstract class CollectionCodec extends AbstractJsonCodec {
         return null;
       }
       Collection<Object> collection = newCollection();
-      reader.expectToken('[');
-      if (!reader.consumeToken(']')) {
+      reader.expectNextToken('[');
+      if (!reader.consumeNextToken(']')) {
         do {
           collection.add(reader.tryReadNullToken() ? null : readLatin1Element(reader));
-        } while (reader.consumeToken(','));
-        reader.expectToken(']');
+        } while (reader.consumeNextToken(','));
+        reader.expectNextToken(']');
       }
       return collection;
     }
@@ -211,12 +211,12 @@ public abstract class CollectionCodec extends AbstractJsonCodec {
         return null;
       }
       Collection<Object> collection = newCollection();
-      reader.expectToken('[');
-      if (!reader.consumeToken(']')) {
+      reader.expectNextToken('[');
+      if (!reader.consumeNextToken(']')) {
         do {
           collection.add(reader.tryReadNullToken() ? null : readUtf16Element(reader));
-        } while (reader.consumeToken(','));
-        reader.expectToken(']');
+        } while (reader.consumeNextToken(','));
+        reader.expectNextToken(']');
       }
       return collection;
     }
@@ -228,12 +228,12 @@ public abstract class CollectionCodec extends AbstractJsonCodec {
         return null;
       }
       Collection<Object> collection = newCollection();
-      reader.expectToken('[');
-      if (!reader.consumeToken(']')) {
+      reader.expectNextToken('[');
+      if (!reader.consumeNextToken(']')) {
         do {
           collection.add(reader.tryReadNullToken() ? null : readUtf8Element(reader));
-        } while (reader.consumeToken(','));
-        reader.expectToken(']');
+        } while (reader.consumeNextToken(','));
+        reader.expectNextToken(']');
       }
       return collection;
     }
@@ -314,12 +314,12 @@ public abstract class CollectionCodec extends AbstractJsonCodec {
         return null;
       }
       Collection<Object> collection = newCollection();
-      reader.expectToken('[');
-      if (!reader.consumeToken(']')) {
+      reader.expectNextToken('[');
+      if (!reader.consumeNextToken(']')) {
         do {
           collection.add(elementCodec.readLatin1(reader, elementTypeInfo, resolver));
-        } while (reader.consumeToken(','));
-        reader.expectToken(']');
+        } while (reader.consumeNextToken(','));
+        reader.expectNextToken(']');
       }
       return collection;
     }
@@ -331,12 +331,12 @@ public abstract class CollectionCodec extends AbstractJsonCodec {
         return null;
       }
       Collection<Object> collection = newCollection();
-      reader.expectToken('[');
-      if (!reader.consumeToken(']')) {
+      reader.expectNextToken('[');
+      if (!reader.consumeNextToken(']')) {
         do {
           collection.add(elementCodec.readUtf16(reader, elementTypeInfo, resolver));
-        } while (reader.consumeToken(','));
-        reader.expectToken(']');
+        } while (reader.consumeNextToken(','));
+        reader.expectNextToken(']');
       }
       return collection;
     }
@@ -348,12 +348,12 @@ public abstract class CollectionCodec extends AbstractJsonCodec {
         return null;
       }
       Collection<Object> collection = newCollection();
-      reader.expectToken('[');
-      if (!reader.consumeToken(']')) {
+      reader.expectNextToken('[');
+      if (!reader.consumeNextToken(']')) {
         do {
           collection.add(elementCodec.readUtf8(reader, elementTypeInfo, resolver));
-        } while (reader.consumeToken(','));
-        reader.expectToken(']');
+        } while (reader.consumeNextToken(','));
+        reader.expectNextToken(']');
       }
       return collection;
     }
@@ -438,12 +438,12 @@ public abstract class CollectionCodec extends AbstractJsonCodec {
         return null;
       }
       Collection<Object> collection = newCollection();
-      reader.expectToken('[');
-      if (!reader.consumeToken(']')) {
+      reader.expectNextToken('[');
+      if (!reader.consumeNextToken(']')) {
         do {
           collection.add(elementCodec.readLatin1(reader, elementTypeInfo, resolver));
-        } while (reader.consumeToken(','));
-        reader.expectToken(']');
+        } while (reader.consumeNextToken(','));
+        reader.expectNextToken(']');
       }
       return collection;
     }
@@ -455,12 +455,12 @@ public abstract class CollectionCodec extends AbstractJsonCodec {
         return null;
       }
       Collection<Object> collection = newCollection();
-      reader.expectToken('[');
-      if (!reader.consumeToken(']')) {
+      reader.expectNextToken('[');
+      if (!reader.consumeNextToken(']')) {
         do {
           collection.add(elementCodec.readUtf16(reader, elementTypeInfo, resolver));
-        } while (reader.consumeToken(','));
-        reader.expectToken(']');
+        } while (reader.consumeNextToken(','));
+        reader.expectNextToken(']');
       }
       return collection;
     }
@@ -472,12 +472,12 @@ public abstract class CollectionCodec extends AbstractJsonCodec {
         return null;
       }
       Collection<Object> collection = newCollection();
-      reader.expectToken('[');
-      if (!reader.consumeToken(']')) {
+      reader.expectNextToken('[');
+      if (!reader.consumeNextToken(']')) {
         do {
           collection.add(elementCodec.readUtf8(reader, elementTypeInfo, resolver));
-        } while (reader.consumeToken(','));
-        reader.expectToken(']');
+        } while (reader.consumeNextToken(','));
+        reader.expectNextToken(']');
       }
       return collection;
     }

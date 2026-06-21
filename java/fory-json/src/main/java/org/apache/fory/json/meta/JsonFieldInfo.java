@@ -23,9 +23,7 @@ import java.lang.reflect.Field;
 import java.lang.reflect.Type;
 import java.nio.charset.StandardCharsets;
 import java.util.Collection;
-import java.util.List;
 import java.util.Map;
-import java.util.RandomAccess;
 import org.apache.fory.json.ForyJsonException;
 import org.apache.fory.json.codec.BaseObjectCodec;
 import org.apache.fory.json.codec.CodecUtils;
@@ -105,7 +103,6 @@ public final class JsonFieldInfo {
   private JsonTypeInfo readTypeInfo;
   private JsonTypeInfo readElementTypeInfo;
   private BaseObjectCodec writeObjectCodec;
-  private BaseObjectCodec writeElementObjectCodec;
 
   public JsonFieldInfo(
       String name,
@@ -815,92 +812,9 @@ public final class JsonFieldInfo {
     if (value == null) {
       writer.writeNull();
     } else {
-      writeStringCollectionValue(writer, value, typeResolver);
-    }
-    return true;
-  }
-
-  private void writeStringCollectionValue(
-      StringJsonWriter writer, Collection<?> value, JsonTypeResolver typeResolver) {
-    Class<?> elementRawType = writeElementRawType;
-    if (elementRawType == String.class) {
-      writer.writeArrayStart();
-      if (value instanceof List && value instanceof RandomAccess) {
-        List<?> list = (List<?>) value;
-        int size = list.size();
-        for (int i = 0; i < size; i++) {
-          writer.writeComma(i);
-          Object element = list.get(i);
-          if (element == null) {
-            writer.writeNull();
-          } else {
-            writer.writeString((String) element);
-          }
-        }
-      } else {
-        int index = 0;
-        for (Object element : value) {
-          writer.writeComma(index++);
-          if (element == null) {
-            writer.writeNull();
-          } else {
-            writer.writeString((String) element);
-          }
-        }
-      }
-      writer.writeArrayEnd();
-    } else if (elementRawType != null && elementRawType.isEnum()) {
-      writer.writeArrayStart();
-      int index = 0;
-      for (Object element : value) {
-        writer.writeComma(index++);
-        if (element == null) {
-          writer.writeNull();
-        } else {
-          writer.writeRawValue(stringElementEnumValue((Enum<?>) element));
-        }
-      }
-      writer.writeArrayEnd();
-    } else if (elementRawType != null && !isScalarType(elementRawType)) {
-      BaseObjectCodec objectCodec = writeElementObjectCodec;
-      if (objectCodec == null) {
-        objectCodec = typeResolver.getObjectCodec(elementRawType);
-        writeElementObjectCodec = objectCodec;
-      }
-      writer.writeArrayStart();
-      if (value instanceof List && value instanceof RandomAccess) {
-        List<?> list = (List<?>) value;
-        int size = list.size();
-        for (int i = 0; i < size; i++) {
-          writer.writeComma(i);
-          Object element = list.get(i);
-          if (element == null) {
-            writer.writeNull();
-          } else if (element.getClass() == elementRawType) {
-            objectCodec.writeString(writer, element, typeResolver);
-          } else {
-            JsonTypeInfo typeInfo = typeResolver.getTypeInfo(writeElementType, element.getClass());
-            typeInfo.codec().writeString(writer, element, typeResolver);
-          }
-        }
-      } else {
-        int index = 0;
-        for (Object element : value) {
-          writer.writeComma(index++);
-          if (element == null) {
-            writer.writeNull();
-          } else if (element.getClass() == elementRawType) {
-            objectCodec.writeString(writer, element, typeResolver);
-          } else {
-            JsonTypeInfo typeInfo = typeResolver.getTypeInfo(writeElementType, element.getClass());
-            typeInfo.codec().writeString(writer, element, typeResolver);
-          }
-        }
-      }
-      writer.writeArrayEnd();
-    } else {
       writeTypeInfo.codec().writeString(writer, value, typeResolver);
     }
+    return true;
   }
 
   private boolean writeStringMap(
@@ -1109,92 +1023,9 @@ public final class JsonFieldInfo {
     if (value == null) {
       writer.writeNull();
     } else {
-      writeUtf8CollectionValue(writer, value, typeResolver);
-    }
-    return true;
-  }
-
-  private void writeUtf8CollectionValue(
-      Utf8JsonWriter writer, Collection<?> value, JsonTypeResolver typeResolver) {
-    Class<?> elementRawType = writeElementRawType;
-    if (elementRawType == String.class) {
-      writer.writeArrayStart();
-      if (value instanceof List && value instanceof RandomAccess) {
-        List<?> list = (List<?>) value;
-        int size = list.size();
-        for (int i = 0; i < size; i++) {
-          writer.writeComma(i);
-          Object element = list.get(i);
-          if (element == null) {
-            writer.writeNull();
-          } else {
-            writer.writeString((String) element);
-          }
-        }
-      } else {
-        int index = 0;
-        for (Object element : value) {
-          writer.writeComma(index++);
-          if (element == null) {
-            writer.writeNull();
-          } else {
-            writer.writeString((String) element);
-          }
-        }
-      }
-      writer.writeArrayEnd();
-    } else if (elementRawType != null && elementRawType.isEnum()) {
-      writer.writeArrayStart();
-      int index = 0;
-      for (Object element : value) {
-        writer.writeComma(index++);
-        if (element == null) {
-          writer.writeNull();
-        } else {
-          writer.writeRawValue(utf8ElementEnumValue((Enum<?>) element));
-        }
-      }
-      writer.writeArrayEnd();
-    } else if (elementRawType != null && !isScalarType(elementRawType)) {
-      BaseObjectCodec objectCodec = writeElementObjectCodec;
-      if (objectCodec == null) {
-        objectCodec = typeResolver.getObjectCodec(elementRawType);
-        writeElementObjectCodec = objectCodec;
-      }
-      writer.writeArrayStart();
-      if (value instanceof List && value instanceof RandomAccess) {
-        List<?> list = (List<?>) value;
-        int size = list.size();
-        for (int i = 0; i < size; i++) {
-          writer.writeComma(i);
-          Object element = list.get(i);
-          if (element == null) {
-            writer.writeNull();
-          } else if (element.getClass() == elementRawType) {
-            objectCodec.writeUtf8(writer, element, typeResolver);
-          } else {
-            JsonTypeInfo typeInfo = typeResolver.getTypeInfo(writeElementType, element.getClass());
-            typeInfo.codec().writeUtf8(writer, element, typeResolver);
-          }
-        }
-      } else {
-        int index = 0;
-        for (Object element : value) {
-          writer.writeComma(index++);
-          if (element == null) {
-            writer.writeNull();
-          } else if (element.getClass() == elementRawType) {
-            objectCodec.writeUtf8(writer, element, typeResolver);
-          } else {
-            JsonTypeInfo typeInfo = typeResolver.getTypeInfo(writeElementType, element.getClass());
-            typeInfo.codec().writeUtf8(writer, element, typeResolver);
-          }
-        }
-      }
-      writer.writeArrayEnd();
-    } else {
       writeTypeInfo.codec().writeUtf8(writer, value, typeResolver);
     }
+    return true;
   }
 
   private boolean writeMap(

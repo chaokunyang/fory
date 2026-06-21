@@ -72,7 +72,7 @@ public abstract class ArrayCodec extends AbstractJsonCodec {
     writeNonNull(writer, value, resolver);
   }
 
-  private static final class IntArrayCodec extends ArrayCodec {
+  public static final class IntArrayCodec extends ArrayCodec {
     private static final IntArrayCodec INSTANCE = new IntArrayCodec();
 
     private IntArrayCodec() {
@@ -179,7 +179,7 @@ public abstract class ArrayCodec extends AbstractJsonCodec {
     }
   }
 
-  private static final class LongArrayCodec extends ArrayCodec {
+  public static final class LongArrayCodec extends ArrayCodec {
     private static final LongArrayCodec INSTANCE = new LongArrayCodec();
 
     private LongArrayCodec() {
@@ -286,7 +286,7 @@ public abstract class ArrayCodec extends AbstractJsonCodec {
     }
   }
 
-  private static final class BooleanArrayCodec extends ArrayCodec {
+  public static final class BooleanArrayCodec extends ArrayCodec {
     private static final BooleanArrayCodec INSTANCE = new BooleanArrayCodec();
 
     private BooleanArrayCodec() {
@@ -393,7 +393,7 @@ public abstract class ArrayCodec extends AbstractJsonCodec {
     }
   }
 
-  private static final class ShortArrayCodec extends ArrayCodec {
+  public static final class ShortArrayCodec extends ArrayCodec {
     private static final ShortArrayCodec INSTANCE = new ShortArrayCodec();
 
     private ShortArrayCodec() {
@@ -431,7 +431,7 @@ public abstract class ArrayCodec extends AbstractJsonCodec {
     }
   }
 
-  private static final class ByteArrayCodec extends ArrayCodec {
+  public static final class ByteArrayCodec extends ArrayCodec {
     private static final ByteArrayCodec INSTANCE = new ByteArrayCodec();
 
     private ByteArrayCodec() {
@@ -469,7 +469,7 @@ public abstract class ArrayCodec extends AbstractJsonCodec {
     }
   }
 
-  private static final class CharArrayCodec extends ArrayCodec {
+  public static final class CharArrayCodec extends ArrayCodec {
     private static final CharArrayCodec INSTANCE = new CharArrayCodec();
 
     private CharArrayCodec() {
@@ -507,7 +507,7 @@ public abstract class ArrayCodec extends AbstractJsonCodec {
     }
   }
 
-  private static final class FloatArrayCodec extends ArrayCodec {
+  public static final class FloatArrayCodec extends ArrayCodec {
     private static final FloatArrayCodec INSTANCE = new FloatArrayCodec();
 
     private FloatArrayCodec() {
@@ -545,7 +545,7 @@ public abstract class ArrayCodec extends AbstractJsonCodec {
     }
   }
 
-  private static final class DoubleArrayCodec extends ArrayCodec {
+  public static final class DoubleArrayCodec extends ArrayCodec {
     private static final DoubleArrayCodec INSTANCE = new DoubleArrayCodec();
 
     private DoubleArrayCodec() {
@@ -583,7 +583,7 @@ public abstract class ArrayCodec extends AbstractJsonCodec {
     }
   }
 
-  private static final class ObjectArrayCodec extends ArrayCodec {
+  public static final class ObjectArrayCodec extends ArrayCodec {
     private final JsonTypeInfo elementTypeInfo;
     private final JsonCodec elementCodec;
 

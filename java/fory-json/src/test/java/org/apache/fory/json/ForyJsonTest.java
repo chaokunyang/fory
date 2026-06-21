@@ -31,6 +31,9 @@ import java.net.URL;
 import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayDeque;
@@ -57,9 +60,13 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicInteger;
+import javax.tools.JavaCompiler;
+import javax.tools.ToolProvider;
 import org.apache.fory.json.annotation.JsonIgnore;
+import org.apache.fory.platform.JdkVersion;
 import org.apache.fory.reflect.TypeRef;
 import org.apache.fory.serializer.StringSerializer;
+import org.testng.SkipException;
 import org.testng.annotations.Test;
 
 public class ForyJsonTest {
@@ -926,6 +933,41 @@ public class ForyJsonTest {
   }
 
   @Test
+  public void writeReadRecordClass() throws Exception {
+    if (JdkVersion.MAJOR_VERSION < 17) {
+      throw new SkipException("Java record test requires JDK 17+");
+    }
+    Class<?> type =
+        compileRecordClass(
+            "JsonRecordValue",
+            "package org.apache.fory.json.records;\n"
+                + "import java.util.List;\n"
+                + "public record JsonRecordValue(int id, String name, List<String> tags, "
+                + "Child child) {\n"
+                + "  public record Child(String label) {}\n"
+                + "}\n");
+    Class<?> childType = Class.forName(type.getName() + "$Child", true, type.getClassLoader());
+    Object child = childType.getConstructor(String.class).newInstance("kid");
+    Object value =
+        type.getConstructor(int.class, String.class, List.class, childType)
+            .newInstance(7, ZH_TEXT, Arrays.asList("a", "b"), child);
+    ForyJson json = ForyJson.builder().build();
+    String expected =
+        "{\"child\":{\"label\":\"kid\"},\"id\":7,\"name\":\"你好，Fory\"," + "\"tags\":[\"a\",\"b\"]}";
+    assertEquals(json.toJson(value), expected);
+    assertEquals(new String(json.toJsonBytes(value), StandardCharsets.UTF_8), expected);
+    assertEquals(json.hasGeneratedWriter(type), true);
+    assertRecordValue(json.fromJson(expected, type), childType);
+    assertRecordValue(json.fromJson(expected.getBytes(StandardCharsets.UTF_8), type), childType);
+
+    Object missing = json.fromJson("{\"name\":\"missing\"}", type);
+    assertEquals(type.getMethod("id").invoke(missing), Integer.valueOf(0));
+    assertEquals(type.getMethod("name").invoke(missing), "missing");
+    assertEquals(type.getMethod("tags").invoke(missing), null);
+    assertEquals(type.getMethod("child").invoke(missing), null);
+  }
+
+  @Test
   public void readScalarRoots() {
     ForyJson json = ForyJson.builder().build();
     assertEquals(json.fromJson("7", int.class), Integer.valueOf(7));
@@ -1115,6 +1157,32 @@ public class ForyJsonTest {
     assertEquals(value.names, new LinkedHashSet<>(Arrays.asList("alpha", ZH_TEXT)));
     assertTrue(value.numbers instanceof ArrayDeque);
     assertEquals(new ArrayList<>(value.numbers), Arrays.asList(1, 2));
+  }
+
+  private static Class<?> compileRecordClass(String simpleName, String source) throws Exception {
+    JavaCompiler compiler = ToolProvider.getSystemJavaCompiler();
+    assertTrue(compiler != null);
+    Path output =
+        Paths.get(ForyJsonTest.class.getProtectionDomain().getCodeSource().getLocation().toURI());
+    Path sourceDir = Files.createTempDirectory("fory-json-record");
+    Files.createDirectories(sourceDir);
+    Path sourceFile = sourceDir.resolve(simpleName + ".java");
+    Files.write(sourceFile, source.getBytes(StandardCharsets.UTF_8));
+    int exit =
+        compiler.run(
+            null, null, null, "--release", "17", "-d", output.toString(), sourceFile.toString());
+    assertEquals(exit, 0);
+    return Class.forName(
+        "org.apache.fory.json.records." + simpleName, true, ForyJsonTest.class.getClassLoader());
+  }
+
+  private static void assertRecordValue(Object value, Class<?> childType) throws Exception {
+    Class<?> type = value.getClass();
+    assertEquals(type.getMethod("id").invoke(value), Integer.valueOf(7));
+    assertEquals(type.getMethod("name").invoke(value), ZH_TEXT);
+    assertEquals(type.getMethod("tags").invoke(value), Arrays.asList("a", "b"));
+    Object child = type.getMethod("child").invoke(value);
+    assertEquals(childType.getMethod("label").invoke(child), "kid");
   }
 
   private static void assertTextRoundTrip(ForyJson json, String text) {

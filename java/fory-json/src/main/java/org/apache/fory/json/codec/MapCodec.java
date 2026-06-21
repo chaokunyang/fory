@@ -188,7 +188,7 @@ public abstract class MapCodec extends AbstractJsonCodec {
     Map<Object, Object> newMap();
   }
 
-  private static final class GenericMapCodec extends MapCodec {
+  public static final class GenericMapCodec extends MapCodec {
     private final MapKeyCodec keyCodec;
     private final JsonTypeInfo valueTypeInfo;
     private final JsonCodec valueCodec;
@@ -236,7 +236,7 @@ public abstract class MapCodec extends AbstractJsonCodec {
     }
   }
 
-  private abstract static class StringKeyMapCodec extends MapCodec {
+  public abstract static class StringKeyMapCodec extends MapCodec {
     StringKeyMapCodec(TypeRef<?> typeRef, MapFactory factory) {
       super(typeRef, factory);
     }
@@ -305,7 +305,7 @@ public abstract class MapCodec extends AbstractJsonCodec {
     abstract Object readUtf8Value(Utf8JsonReader reader);
   }
 
-  private static final class StringStringMapCodec extends StringKeyMapCodec {
+  public static final class StringStringMapCodec extends StringKeyMapCodec {
     private StringStringMapCodec(TypeRef<?> typeRef, MapFactory factory) {
       super(typeRef, factory);
     }
@@ -368,7 +368,7 @@ public abstract class MapCodec extends AbstractJsonCodec {
     }
   }
 
-  private static final class StringBooleanMapCodec extends StringKeyMapCodec {
+  public static final class StringBooleanMapCodec extends StringKeyMapCodec {
     private StringBooleanMapCodec(TypeRef<?> typeRef, MapFactory factory) {
       super(typeRef, factory);
     }
@@ -431,7 +431,7 @@ public abstract class MapCodec extends AbstractJsonCodec {
     }
   }
 
-  private abstract static class StringNumberMapCodec extends StringKeyMapCodec {
+  public abstract static class StringNumberMapCodec extends StringKeyMapCodec {
     StringNumberMapCodec(TypeRef<?> typeRef, MapFactory factory) {
       super(typeRef, factory);
     }
@@ -511,7 +511,7 @@ public abstract class MapCodec extends AbstractJsonCodec {
     }
   }
 
-  private static final class StringIntMapCodec extends StringNumberMapCodec {
+  public static final class StringIntMapCodec extends StringNumberMapCodec {
     private StringIntMapCodec(TypeRef<?> typeRef, MapFactory factory) {
       super(typeRef, factory);
     }
@@ -542,7 +542,7 @@ public abstract class MapCodec extends AbstractJsonCodec {
     }
   }
 
-  private static final class StringLongMapCodec extends StringNumberMapCodec {
+  public static final class StringLongMapCodec extends StringNumberMapCodec {
     private StringLongMapCodec(TypeRef<?> typeRef, MapFactory factory) {
       super(typeRef, factory);
     }
@@ -573,7 +573,7 @@ public abstract class MapCodec extends AbstractJsonCodec {
     }
   }
 
-  private static final class StringShortMapCodec extends StringNumberMapCodec {
+  public static final class StringShortMapCodec extends StringNumberMapCodec {
     private StringShortMapCodec(TypeRef<?> typeRef, MapFactory factory) {
       super(typeRef, factory);
     }
@@ -604,7 +604,7 @@ public abstract class MapCodec extends AbstractJsonCodec {
     }
   }
 
-  private static final class StringByteMapCodec extends StringNumberMapCodec {
+  public static final class StringByteMapCodec extends StringNumberMapCodec {
     private StringByteMapCodec(TypeRef<?> typeRef, MapFactory factory) {
       super(typeRef, factory);
     }
@@ -635,7 +635,7 @@ public abstract class MapCodec extends AbstractJsonCodec {
     }
   }
 
-  private static final class StringFloatMapCodec extends StringNumberMapCodec {
+  public static final class StringFloatMapCodec extends StringNumberMapCodec {
     private StringFloatMapCodec(TypeRef<?> typeRef, MapFactory factory) {
       super(typeRef, factory);
     }
@@ -651,7 +651,7 @@ public abstract class MapCodec extends AbstractJsonCodec {
     }
   }
 
-  private static final class StringDoubleMapCodec extends StringNumberMapCodec {
+  public static final class StringDoubleMapCodec extends StringNumberMapCodec {
     private StringDoubleMapCodec(TypeRef<?> typeRef, MapFactory factory) {
       super(typeRef, factory);
     }
@@ -667,7 +667,7 @@ public abstract class MapCodec extends AbstractJsonCodec {
     }
   }
 
-  private static final class StringBigIntegerMapCodec extends StringNumberMapCodec {
+  public static final class StringBigIntegerMapCodec extends StringNumberMapCodec {
     private StringBigIntegerMapCodec(TypeRef<?> typeRef, MapFactory factory) {
       super(typeRef, factory);
     }
@@ -683,7 +683,7 @@ public abstract class MapCodec extends AbstractJsonCodec {
     }
   }
 
-  private static final class StringBigDecimalMapCodec extends StringNumberMapCodec {
+  public static final class StringBigDecimalMapCodec extends StringNumberMapCodec {
     private StringBigDecimalMapCodec(TypeRef<?> typeRef, MapFactory factory) {
       super(typeRef, factory);
     }
@@ -699,7 +699,7 @@ public abstract class MapCodec extends AbstractJsonCodec {
     }
   }
 
-  private static final class NumberStringMapCodec extends MapCodec {
+  public static final class NumberStringMapCodec extends MapCodec {
     private final MapKeyCodec keyCodec;
 
     private NumberStringMapCodec(TypeRef<?> typeRef, MapFactory factory, MapKeyCodec keyCodec) {
@@ -807,7 +807,7 @@ public abstract class MapCodec extends AbstractJsonCodec {
     }
   }
 
-  private interface MapKeyCodec {
+  public interface MapKeyCodec {
     MapKeyCodec STRING =
         new MapKeyCodec() {
           @Override
@@ -856,7 +856,7 @@ public abstract class MapCodec extends AbstractJsonCodec {
     }
   }
 
-  private static final class EnumKeyCodec implements MapKeyCodec {
+  public static final class EnumKeyCodec implements MapKeyCodec {
     private final Class<?> type;
     private final Map<String, Enum<?>> values;
 
@@ -885,7 +885,7 @@ public abstract class MapCodec extends AbstractJsonCodec {
     }
   }
 
-  private static final class IntKeyCodec implements MapKeyCodec {
+  public static final class IntKeyCodec implements MapKeyCodec {
     private static final IntKeyCodec INSTANCE = new IntKeyCodec();
 
     @Override
@@ -909,7 +909,7 @@ public abstract class MapCodec extends AbstractJsonCodec {
     }
   }
 
-  private static final class LongKeyCodec implements MapKeyCodec {
+  public static final class LongKeyCodec implements MapKeyCodec {
     private static final LongKeyCodec INSTANCE = new LongKeyCodec();
 
     @Override
@@ -933,7 +933,7 @@ public abstract class MapCodec extends AbstractJsonCodec {
     }
   }
 
-  private static final class ShortKeyCodec implements MapKeyCodec {
+  public static final class ShortKeyCodec implements MapKeyCodec {
     private static final ShortKeyCodec INSTANCE = new ShortKeyCodec();
 
     @Override
@@ -957,7 +957,7 @@ public abstract class MapCodec extends AbstractJsonCodec {
     }
   }
 
-  private static final class ByteKeyCodec implements MapKeyCodec {
+  public static final class ByteKeyCodec implements MapKeyCodec {
     private static final ByteKeyCodec INSTANCE = new ByteKeyCodec();
 
     @Override

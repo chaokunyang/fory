@@ -169,7 +169,7 @@ public abstract class CollectionCodec extends AbstractJsonCodec {
     Collection<Object> newCollection();
   }
 
-  private abstract static class DirectCollectionCodec extends CollectionCodec {
+  public abstract static class DirectCollectionCodec extends CollectionCodec {
     DirectCollectionCodec(TypeRef<?> typeRef, CollectionFactory factory) {
       super(typeRef, factory);
     }
@@ -253,7 +253,7 @@ public abstract class CollectionCodec extends AbstractJsonCodec {
     }
   }
 
-  private static final class GenericCollectionCodec extends CollectionCodec {
+  public static final class GenericCollectionCodec extends CollectionCodec {
     private final JsonTypeInfo elementTypeInfo;
     private final JsonCodec elementCodec;
 
@@ -359,7 +359,7 @@ public abstract class CollectionCodec extends AbstractJsonCodec {
     }
   }
 
-  private static final class ObjectCollectionCodec extends CollectionCodec {
+  public static final class ObjectCollectionCodec extends CollectionCodec {
     private final JsonTypeInfo elementTypeInfo;
     private final BaseObjectCodec elementCodec;
 
@@ -483,7 +483,7 @@ public abstract class CollectionCodec extends AbstractJsonCodec {
     }
   }
 
-  private static final class StringCollectionCodec extends DirectCollectionCodec {
+  public static final class StringCollectionCodec extends DirectCollectionCodec {
     private StringCollectionCodec(TypeRef<?> typeRef, CollectionFactory factory) {
       super(typeRef, factory);
     }
@@ -529,7 +529,7 @@ public abstract class CollectionCodec extends AbstractJsonCodec {
     }
   }
 
-  private static final class BooleanCollectionCodec extends DirectCollectionCodec {
+  public static final class BooleanCollectionCodec extends DirectCollectionCodec {
     private BooleanCollectionCodec(TypeRef<?> typeRef, CollectionFactory factory) {
       super(typeRef, factory);
     }
@@ -585,7 +585,7 @@ public abstract class CollectionCodec extends AbstractJsonCodec {
     }
   }
 
-  private abstract static class NumberCollectionCodec extends DirectCollectionCodec {
+  public abstract static class NumberCollectionCodec extends DirectCollectionCodec {
     NumberCollectionCodec(TypeRef<?> typeRef, CollectionFactory factory) {
       super(typeRef, factory);
     }
@@ -623,7 +623,7 @@ public abstract class CollectionCodec extends AbstractJsonCodec {
     abstract void writeNumber(JsonWriter writer, Object value);
   }
 
-  private static final class IntCollectionCodec extends NumberCollectionCodec {
+  public static final class IntCollectionCodec extends NumberCollectionCodec {
     private IntCollectionCodec(TypeRef<?> typeRef, CollectionFactory factory) {
       super(typeRef, factory);
     }
@@ -654,7 +654,7 @@ public abstract class CollectionCodec extends AbstractJsonCodec {
     }
   }
 
-  private static final class LongCollectionCodec extends NumberCollectionCodec {
+  public static final class LongCollectionCodec extends NumberCollectionCodec {
     private LongCollectionCodec(TypeRef<?> typeRef, CollectionFactory factory) {
       super(typeRef, factory);
     }
@@ -685,7 +685,7 @@ public abstract class CollectionCodec extends AbstractJsonCodec {
     }
   }
 
-  private static final class ShortCollectionCodec extends NumberCollectionCodec {
+  public static final class ShortCollectionCodec extends NumberCollectionCodec {
     private ShortCollectionCodec(TypeRef<?> typeRef, CollectionFactory factory) {
       super(typeRef, factory);
     }
@@ -716,7 +716,7 @@ public abstract class CollectionCodec extends AbstractJsonCodec {
     }
   }
 
-  private static final class ByteCollectionCodec extends NumberCollectionCodec {
+  public static final class ByteCollectionCodec extends NumberCollectionCodec {
     private ByteCollectionCodec(TypeRef<?> typeRef, CollectionFactory factory) {
       super(typeRef, factory);
     }
@@ -747,7 +747,7 @@ public abstract class CollectionCodec extends AbstractJsonCodec {
     }
   }
 
-  private static final class FloatCollectionCodec extends NumberCollectionCodec {
+  public static final class FloatCollectionCodec extends NumberCollectionCodec {
     private FloatCollectionCodec(TypeRef<?> typeRef, CollectionFactory factory) {
       super(typeRef, factory);
     }
@@ -763,7 +763,7 @@ public abstract class CollectionCodec extends AbstractJsonCodec {
     }
   }
 
-  private static final class DoubleCollectionCodec extends NumberCollectionCodec {
+  public static final class DoubleCollectionCodec extends NumberCollectionCodec {
     private DoubleCollectionCodec(TypeRef<?> typeRef, CollectionFactory factory) {
       super(typeRef, factory);
     }
@@ -779,7 +779,7 @@ public abstract class CollectionCodec extends AbstractJsonCodec {
     }
   }
 
-  private static final class BigIntegerCollectionCodec extends NumberCollectionCodec {
+  public static final class BigIntegerCollectionCodec extends NumberCollectionCodec {
     private BigIntegerCollectionCodec(TypeRef<?> typeRef, CollectionFactory factory) {
       super(typeRef, factory);
     }
@@ -795,7 +795,7 @@ public abstract class CollectionCodec extends AbstractJsonCodec {
     }
   }
 
-  private static final class BigDecimalCollectionCodec extends NumberCollectionCodec {
+  public static final class BigDecimalCollectionCodec extends NumberCollectionCodec {
     private BigDecimalCollectionCodec(TypeRef<?> typeRef, CollectionFactory factory) {
       super(typeRef, factory);
     }

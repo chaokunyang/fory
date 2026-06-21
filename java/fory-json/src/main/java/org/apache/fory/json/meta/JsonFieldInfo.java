@@ -91,6 +91,7 @@ public final class JsonFieldInfo {
   private final byte[] utf8FalseNameToken;
   private final byte[] utf8FalseCommaToken;
   private final long nameHash;
+  private int readIndex = -1;
   private JsonTypeInfo writeTypeInfo;
   private JsonTypeInfo readTypeInfo;
   private JsonTypeInfo readElementTypeInfo;
@@ -263,6 +264,18 @@ public final class JsonFieldInfo {
 
   public void read(JsonReader reader, Object object, JsonTypeResolver typeResolver) {
     readTypeInfo.codec().readField(reader, object, readAccessor, readTypeInfo, typeResolver);
+  }
+
+  public Object readValue(JsonReader reader, JsonTypeResolver typeResolver) {
+    return readTypeInfo.codec().read(reader, readTypeInfo, typeResolver);
+  }
+
+  public int readIndex() {
+    return readIndex;
+  }
+
+  public void setReadIndex(int readIndex) {
+    this.readIndex = readIndex;
   }
 
   public JsonTypeInfo writeTypeInfo() {

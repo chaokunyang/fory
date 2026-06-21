@@ -28,7 +28,7 @@ import org.apache.fory.json.writer.JsonWriter;
 import org.apache.fory.json.writer.StringJsonWriter;
 import org.apache.fory.json.writer.Utf8JsonWriter;
 
-abstract class AbstractJsonCodec implements JsonCodec {
+public abstract class AbstractJsonCodec implements JsonCodec {
   @Override
   public final void write(JsonWriter writer, Object value, JsonTypeResolver resolver) {
     if (value == null) {

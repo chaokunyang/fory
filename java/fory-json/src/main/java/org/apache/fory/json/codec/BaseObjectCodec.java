@@ -22,9 +22,12 @@ package org.apache.fory.json.codec;
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import java.util.TreeMap;
 import org.apache.fory.annotation.Expose;
+import org.apache.fory.annotation.Internal;
 import org.apache.fory.json.ForyJsonException;
 import org.apache.fory.json.annotation.JsonIgnore;
 import org.apache.fory.json.meta.JsonFieldAccessor;
@@ -38,6 +41,8 @@ import org.apache.fory.json.writer.StringJsonWriter;
 import org.apache.fory.json.writer.Utf8JsonWriter;
 import org.apache.fory.reflect.ObjectInstantiator;
 import org.apache.fory.reflect.ObjectInstantiators;
+import org.apache.fory.util.record.RecordInfo;
+import org.apache.fory.util.record.RecordUtils;
 
 public abstract class BaseObjectCodec extends AbstractJsonCodec {
   protected final Class<?> type;
@@ -45,6 +50,9 @@ public abstract class BaseObjectCodec extends AbstractJsonCodec {
   protected final JsonFieldInfo[] readFields;
   protected final JsonFieldTable readTable;
   protected final ObjectInstantiator<?> instantiator;
+  protected final boolean record;
+  private final RecordInfo recordInfo;
+  private final Object[] recordFieldDefaults;
 
   protected BaseObjectCodec(
       Class<?> type,
@@ -56,6 +64,18 @@ public abstract class BaseObjectCodec extends AbstractJsonCodec {
     this.readFields = readFields;
     readTable = new JsonFieldTable(readFields);
     this.instantiator = instantiator;
+    record = RecordUtils.isRecord(type);
+    if (record) {
+      List<String> fieldNames = new ArrayList<>(readFields.length);
+      for (JsonFieldInfo field : readFields) {
+        fieldNames.add(field.name());
+      }
+      recordInfo = new RecordInfo(type, fieldNames);
+      recordFieldDefaults = recordFieldDefaults(type, readFields, recordInfo);
+    } else {
+      recordInfo = null;
+      recordFieldDefaults = null;
+    }
   }
 
   public static ObjectCodec build(Class<?> type) {
@@ -66,8 +86,9 @@ public abstract class BaseObjectCodec extends AbstractJsonCodec {
         || type.isEnum()) {
       throw new ForyJsonException("Unsupported JSON object type " + type);
     }
+    boolean record = RecordUtils.isRecord(type);
     boolean writeExpose = hasWriteExpose(type);
-    boolean readExpose = hasReadExpose(type);
+    boolean readExpose = hasReadExpose(type, record);
     TreeMap<String, FieldBuilder> builders = new TreeMap<>();
     for (Class<?> current = type;
         current != null && current != Object.class;
@@ -78,7 +99,7 @@ public abstract class BaseObjectCodec extends AbstractJsonCodec {
           continue;
         }
         boolean write = includeWrite(field, writeExpose);
-        boolean read = !Modifier.isFinal(modifiers) && includeRead(field, readExpose);
+        boolean read = (record || !Modifier.isFinal(modifiers)) && includeRead(field, readExpose);
         if (!write && !read) {
           continue;
         }
@@ -97,16 +118,19 @@ public abstract class BaseObjectCodec extends AbstractJsonCodec {
     List<JsonFieldInfo> writes = new ArrayList<>();
     List<JsonFieldInfo> reads = new ArrayList<>();
     for (FieldBuilder builder : builders.values()) {
-      JsonFieldInfo field = builder.build();
+      JsonFieldInfo field = builder.build(record);
       if (builder.writeAccessor != null) {
         writes.add(field);
       }
-      if (builder.readAccessor != null) {
+      if (builder.readField != null) {
         reads.add(field);
       }
     }
     JsonFieldInfo[] writeArray = writes.toArray(new JsonFieldInfo[0]);
     JsonFieldInfo[] readArray = reads.toArray(new JsonFieldInfo[0]);
+    for (int i = 0; i < readArray.length; i++) {
+      readArray[i].setReadIndex(i);
+    }
     return new ObjectCodec(
         type, writeArray, readArray, ObjectInstantiators.createObjectInstantiator(type));
   }
@@ -127,6 +151,10 @@ public abstract class BaseObjectCodec extends AbstractJsonCodec {
     return readTable;
   }
 
+  public final boolean isRecord() {
+    return record;
+  }
+
   public final void resolveTypes(JsonTypeResolver typeResolver) {
     for (JsonFieldInfo field : writeFields) {
       field.resolveTypes(typeResolver);
@@ -138,6 +166,19 @@ public abstract class BaseObjectCodec extends AbstractJsonCodec {
 
   public final Object newInstance() {
     return instantiator.newInstance();
+  }
+
+  @Internal
+  public final Object[] newRecordFieldValues() {
+    return Arrays.copyOf(recordFieldDefaults, recordFieldDefaults.length);
+  }
+
+  @Internal
+  public final Object newRecord(Object[] values) {
+    Object[] arguments = RecordUtils.remapping(recordInfo, values);
+    Object object = instantiator.newInstanceWithArguments(arguments);
+    Arrays.fill(recordInfo.getRecordComponents(), null);
+    return object;
   }
 
   @Override
@@ -157,6 +198,9 @@ public abstract class BaseObjectCodec extends AbstractJsonCodec {
 
   @Override
   Object readNonNull(JsonReader reader, JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
+    if (record) {
+      return readRecord(reader, resolver);
+    }
     Object object = newInstance();
     reader.expect('{');
     if (reader.consume('}')) {
@@ -173,6 +217,24 @@ public abstract class BaseObjectCodec extends AbstractJsonCodec {
     } while (reader.consume(','));
     reader.expect('}');
     return object;
+  }
+
+  private Object readRecord(JsonReader reader, JsonTypeResolver resolver) {
+    Object[] values = newRecordFieldValues();
+    reader.expect('{');
+    if (!reader.consume('}')) {
+      do {
+        JsonFieldInfo field = reader.readField(readTable);
+        reader.expect(':');
+        if (field == null) {
+          reader.skipValue();
+        } else {
+          values[field.readIndex()] = field.readValue(reader, resolver);
+        }
+      } while (reader.consume(','));
+      reader.expect('}');
+    }
+    return newRecord(values);
   }
 
   protected final void writeObject(JsonWriter writer, Object value, JsonTypeResolver resolver) {
@@ -274,13 +336,13 @@ public abstract class BaseObjectCodec extends AbstractJsonCodec {
     return false;
   }
 
-  private static boolean hasReadExpose(Class<?> type) {
+  private static boolean hasReadExpose(Class<?> type, boolean record) {
     for (Class<?> current = type;
         current != null && current != Object.class;
         current = current.getSuperclass()) {
       for (Field field : current.getDeclaredFields()) {
         if (isEligibleField(field)
-            && !Modifier.isFinal(field.getModifiers())
+            && (record || !Modifier.isFinal(field.getModifiers()))
             && field.isAnnotationPresent(Expose.class)) {
           return true;
         }
@@ -317,6 +379,18 @@ public abstract class BaseObjectCodec extends AbstractJsonCodec {
     return !exposeMode || exposed;
   }
 
+  private static Object[] recordFieldDefaults(
+      Class<?> type, JsonFieldInfo[] readFields, RecordInfo recordInfo) {
+    Object[] defaults = new Object[readFields.length];
+    Object[] componentDefaults = recordInfo.getRecordComponentsDefaultValues();
+    Map<String, Integer> componentIndexes = RecordUtils.buildFieldToComponentMapping(type);
+    for (int i = 0; i < readFields.length; i++) {
+      Integer componentIndex = componentIndexes.get(readFields[i].name());
+      defaults[i] = componentIndex == null ? null : componentDefaults[componentIndex.intValue()];
+    }
+    return defaults;
+  }
+
   private static final class FieldBuilder {
     private final String name;
     private Field writeField;
@@ -342,9 +416,9 @@ public abstract class BaseObjectCodec extends AbstractJsonCodec {
       readField = field;
     }
 
-    private JsonFieldInfo build() {
+    private JsonFieldInfo build(boolean record) {
       writeAccessor = writeField == null ? null : JsonFieldAccessor.forField(writeField);
-      readAccessor = readField == null ? null : JsonFieldAccessor.forField(readField);
+      readAccessor = readField == null || record ? null : JsonFieldAccessor.forField(readField);
       return new JsonFieldInfo(name, writeField, readField, writeAccessor, readAccessor);
     }
   }

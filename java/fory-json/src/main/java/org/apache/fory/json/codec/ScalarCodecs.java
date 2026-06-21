@@ -71,10 +71,10 @@ import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.type.BFloat16;
 import org.apache.fory.type.Float16;
 
-final class ScalarCodecs {
+public final class ScalarCodecs {
   private ScalarCodecs() {}
 
-  static final class NaturalCodec extends AbstractJsonCodec {
+  public static final class NaturalCodec extends AbstractJsonCodec {
     static final NaturalCodec INSTANCE = new NaturalCodec();
 
     private NaturalCodec() {}
@@ -120,7 +120,7 @@ final class ScalarCodecs {
     }
   }
 
-  static final class StringCodec extends AbstractJsonCodec {
+  public static final class StringCodec extends AbstractJsonCodec {
     static final StringCodec INSTANCE = new StringCodec();
 
     private StringCodec() {}
@@ -141,7 +141,7 @@ final class ScalarCodecs {
     }
   }
 
-  static final class VoidCodec extends AbstractJsonCodec {
+  public static final class VoidCodec extends AbstractJsonCodec {
     static final VoidCodec INSTANCE = new VoidCodec();
 
     @Override
@@ -167,7 +167,7 @@ final class ScalarCodecs {
     }
   }
 
-  static final class BooleanCodec extends AbstractJsonCodec {
+  public static final class BooleanCodec extends AbstractJsonCodec {
     static final BooleanCodec INSTANCE = new BooleanCodec();
 
     private BooleanCodec() {}
@@ -204,7 +204,7 @@ final class ScalarCodecs {
     }
   }
 
-  static final class IntCodec extends AbstractJsonCodec {
+  public static final class IntCodec extends AbstractJsonCodec {
     static final IntCodec INSTANCE = new IntCodec();
 
     private IntCodec() {}
@@ -241,7 +241,7 @@ final class ScalarCodecs {
     }
   }
 
-  static final class LongCodec extends AbstractJsonCodec {
+  public static final class LongCodec extends AbstractJsonCodec {
     static final LongCodec INSTANCE = new LongCodec();
 
     private LongCodec() {}
@@ -278,7 +278,7 @@ final class ScalarCodecs {
     }
   }
 
-  static final class ShortCodec extends AbstractJsonCodec {
+  public static final class ShortCodec extends AbstractJsonCodec {
     static final ShortCodec INSTANCE = new ShortCodec();
 
     private ShortCodec() {}
@@ -327,7 +327,7 @@ final class ScalarCodecs {
     }
   }
 
-  static final class ByteCodec extends AbstractJsonCodec {
+  public static final class ByteCodec extends AbstractJsonCodec {
     static final ByteCodec INSTANCE = new ByteCodec();
 
     private ByteCodec() {}
@@ -376,7 +376,7 @@ final class ScalarCodecs {
     }
   }
 
-  static final class FloatCodec extends AbstractJsonCodec {
+  public static final class FloatCodec extends AbstractJsonCodec {
     static final FloatCodec INSTANCE = new FloatCodec();
 
     private FloatCodec() {}
@@ -413,7 +413,7 @@ final class ScalarCodecs {
     }
   }
 
-  static final class DoubleCodec extends AbstractJsonCodec {
+  public static final class DoubleCodec extends AbstractJsonCodec {
     static final DoubleCodec INSTANCE = new DoubleCodec();
 
     private DoubleCodec() {}
@@ -450,7 +450,7 @@ final class ScalarCodecs {
     }
   }
 
-  static final class CharCodec extends AbstractJsonCodec {
+  public static final class CharCodec extends AbstractJsonCodec {
     static final CharCodec INSTANCE = new CharCodec();
 
     private CharCodec() {}
@@ -494,7 +494,7 @@ final class ScalarCodecs {
     }
   }
 
-  abstract static class StringValueCodec extends AbstractJsonCodec {
+  public abstract static class StringValueCodec extends AbstractJsonCodec {
     @Override
     final void writeNonNull(JsonWriter writer, Object value, JsonTypeResolver resolver) {
       writer.writeString(toJsonString(value));
@@ -515,7 +515,7 @@ final class ScalarCodecs {
     abstract Object fromJsonString(String value);
   }
 
-  abstract static class NumberValueCodec extends AbstractJsonCodec {
+  public abstract static class NumberValueCodec extends AbstractJsonCodec {
     @Override
     final void writeNonNull(JsonWriter writer, Object value, JsonTypeResolver resolver) {
       writer.writeNumber(toJsonNumber(value));
@@ -536,7 +536,7 @@ final class ScalarCodecs {
     abstract Object fromJsonNumber(String value);
   }
 
-  static final class BigIntegerCodec extends NumberValueCodec {
+  public static final class BigIntegerCodec extends NumberValueCodec {
     static final BigIntegerCodec INSTANCE = new BigIntegerCodec();
 
     @Override
@@ -550,7 +550,7 @@ final class ScalarCodecs {
     }
   }
 
-  static final class BigDecimalCodec extends NumberValueCodec {
+  public static final class BigDecimalCodec extends NumberValueCodec {
     static final BigDecimalCodec INSTANCE = new BigDecimalCodec();
 
     @Override
@@ -564,7 +564,7 @@ final class ScalarCodecs {
     }
   }
 
-  static final class Float16Codec extends AbstractJsonCodec {
+  public static final class Float16Codec extends AbstractJsonCodec {
     static final Float16Codec INSTANCE = new Float16Codec();
 
     @Override
@@ -583,7 +583,7 @@ final class ScalarCodecs {
     }
   }
 
-  static final class BFloat16Codec extends AbstractJsonCodec {
+  public static final class BFloat16Codec extends AbstractJsonCodec {
     static final BFloat16Codec INSTANCE = new BFloat16Codec();
 
     @Override
@@ -602,7 +602,7 @@ final class ScalarCodecs {
     }
   }
 
-  static final class StringBuilderCodec extends StringValueCodec {
+  public static final class StringBuilderCodec extends StringValueCodec {
     static final StringBuilderCodec INSTANCE = new StringBuilderCodec();
 
     @Override
@@ -616,7 +616,7 @@ final class ScalarCodecs {
     }
   }
 
-  static final class StringBufferCodec extends StringValueCodec {
+  public static final class StringBufferCodec extends StringValueCodec {
     static final StringBufferCodec INSTANCE = new StringBufferCodec();
 
     @Override
@@ -630,7 +630,7 @@ final class ScalarCodecs {
     }
   }
 
-  static final class ClassCodec extends StringValueCodec {
+  public static final class ClassCodec extends StringValueCodec {
     static final ClassCodec INSTANCE = new ClassCodec();
 
     @Override
@@ -648,7 +648,7 @@ final class ScalarCodecs {
     }
   }
 
-  static final class CurrencyCodec extends StringValueCodec {
+  public static final class CurrencyCodec extends StringValueCodec {
     static final CurrencyCodec INSTANCE = new CurrencyCodec();
 
     @Override
@@ -662,7 +662,7 @@ final class ScalarCodecs {
     }
   }
 
-  static final class UriCodec extends StringValueCodec {
+  public static final class UriCodec extends StringValueCodec {
     static final UriCodec INSTANCE = new UriCodec();
 
     @Override
@@ -676,7 +676,7 @@ final class ScalarCodecs {
     }
   }
 
-  static final class UrlCodec extends StringValueCodec {
+  public static final class UrlCodec extends StringValueCodec {
     static final UrlCodec INSTANCE = new UrlCodec();
 
     @Override
@@ -694,7 +694,7 @@ final class ScalarCodecs {
     }
   }
 
-  static final class PatternCodec extends StringValueCodec {
+  public static final class PatternCodec extends StringValueCodec {
     static final PatternCodec INSTANCE = new PatternCodec();
 
     @Override
@@ -708,7 +708,7 @@ final class ScalarCodecs {
     }
   }
 
-  static final class UuidCodec extends StringValueCodec {
+  public static final class UuidCodec extends StringValueCodec {
     static final UuidCodec INSTANCE = new UuidCodec();
 
     @Override
@@ -722,7 +722,7 @@ final class ScalarCodecs {
     }
   }
 
-  static final class LocaleCodec extends StringValueCodec {
+  public static final class LocaleCodec extends StringValueCodec {
     static final LocaleCodec INSTANCE = new LocaleCodec();
 
     @Override
@@ -736,7 +736,7 @@ final class ScalarCodecs {
     }
   }
 
-  static final class CharsetCodec extends StringValueCodec {
+  public static final class CharsetCodec extends StringValueCodec {
     static final CharsetCodec INSTANCE = new CharsetCodec();
 
     @Override
@@ -750,7 +750,7 @@ final class ScalarCodecs {
     }
   }
 
-  static final class DateCodec extends AbstractJsonCodec {
+  public static final class DateCodec extends AbstractJsonCodec {
     static final DateCodec INSTANCE = new DateCodec();
 
     @Override
@@ -769,7 +769,7 @@ final class ScalarCodecs {
     }
   }
 
-  static final class SqlDateCodec extends AbstractJsonCodec {
+  public static final class SqlDateCodec extends AbstractJsonCodec {
     static final SqlDateCodec INSTANCE = new SqlDateCodec();
 
     @Override
@@ -788,7 +788,7 @@ final class ScalarCodecs {
     }
   }
 
-  static final class SqlTimeCodec extends AbstractJsonCodec {
+  public static final class SqlTimeCodec extends AbstractJsonCodec {
     static final SqlTimeCodec INSTANCE = new SqlTimeCodec();
 
     @Override
@@ -807,7 +807,7 @@ final class ScalarCodecs {
     }
   }
 
-  static final class TimestampCodec extends AbstractJsonCodec {
+  public static final class TimestampCodec extends AbstractJsonCodec {
     static final TimestampCodec INSTANCE = new TimestampCodec();
 
     @Override
@@ -826,7 +826,7 @@ final class ScalarCodecs {
     }
   }
 
-  static final class CalendarCodec extends AbstractJsonCodec {
+  public static final class CalendarCodec extends AbstractJsonCodec {
     static final CalendarCodec INSTANCE = new CalendarCodec();
 
     @Override
@@ -847,7 +847,7 @@ final class ScalarCodecs {
     }
   }
 
-  static final class TimeZoneCodec extends StringValueCodec {
+  public static final class TimeZoneCodec extends StringValueCodec {
     static final TimeZoneCodec INSTANCE = new TimeZoneCodec();
 
     @Override
@@ -861,7 +861,7 @@ final class ScalarCodecs {
     }
   }
 
-  static final class LocalDateCodec extends StringValueCodec {
+  public static final class LocalDateCodec extends StringValueCodec {
     static final LocalDateCodec INSTANCE = new LocalDateCodec();
 
     @Override
@@ -875,7 +875,7 @@ final class ScalarCodecs {
     }
   }
 
-  static final class LocalTimeCodec extends StringValueCodec {
+  public static final class LocalTimeCodec extends StringValueCodec {
     static final LocalTimeCodec INSTANCE = new LocalTimeCodec();
 
     @Override
@@ -889,7 +889,7 @@ final class ScalarCodecs {
     }
   }
 
-  static final class LocalDateTimeCodec extends StringValueCodec {
+  public static final class LocalDateTimeCodec extends StringValueCodec {
     static final LocalDateTimeCodec INSTANCE = new LocalDateTimeCodec();
 
     @Override
@@ -903,7 +903,7 @@ final class ScalarCodecs {
     }
   }
 
-  static final class InstantCodec extends StringValueCodec {
+  public static final class InstantCodec extends StringValueCodec {
     static final InstantCodec INSTANCE = new InstantCodec();
 
     @Override
@@ -917,7 +917,7 @@ final class ScalarCodecs {
     }
   }
 
-  static final class DurationCodec extends StringValueCodec {
+  public static final class DurationCodec extends StringValueCodec {
     static final DurationCodec INSTANCE = new DurationCodec();
 
     @Override
@@ -931,7 +931,7 @@ final class ScalarCodecs {
     }
   }
 
-  static final class ZoneOffsetCodec extends StringValueCodec {
+  public static final class ZoneOffsetCodec extends StringValueCodec {
     static final ZoneOffsetCodec INSTANCE = new ZoneOffsetCodec();
 
     @Override
@@ -945,7 +945,7 @@ final class ScalarCodecs {
     }
   }
 
-  static final class ZoneIdCodec extends StringValueCodec {
+  public static final class ZoneIdCodec extends StringValueCodec {
     static final ZoneIdCodec INSTANCE = new ZoneIdCodec();
 
     @Override
@@ -959,7 +959,7 @@ final class ScalarCodecs {
     }
   }
 
-  static final class ZonedDateTimeCodec extends StringValueCodec {
+  public static final class ZonedDateTimeCodec extends StringValueCodec {
     static final ZonedDateTimeCodec INSTANCE = new ZonedDateTimeCodec();
 
     @Override
@@ -973,7 +973,7 @@ final class ScalarCodecs {
     }
   }
 
-  static final class YearCodec extends StringValueCodec {
+  public static final class YearCodec extends StringValueCodec {
     static final YearCodec INSTANCE = new YearCodec();
 
     @Override
@@ -987,7 +987,7 @@ final class ScalarCodecs {
     }
   }
 
-  static final class YearMonthCodec extends StringValueCodec {
+  public static final class YearMonthCodec extends StringValueCodec {
     static final YearMonthCodec INSTANCE = new YearMonthCodec();
 
     @Override
@@ -1001,7 +1001,7 @@ final class ScalarCodecs {
     }
   }
 
-  static final class MonthDayCodec extends StringValueCodec {
+  public static final class MonthDayCodec extends StringValueCodec {
     static final MonthDayCodec INSTANCE = new MonthDayCodec();
 
     @Override
@@ -1015,7 +1015,7 @@ final class ScalarCodecs {
     }
   }
 
-  static final class PeriodCodec extends StringValueCodec {
+  public static final class PeriodCodec extends StringValueCodec {
     static final PeriodCodec INSTANCE = new PeriodCodec();
 
     @Override
@@ -1029,7 +1029,7 @@ final class ScalarCodecs {
     }
   }
 
-  static final class OffsetTimeCodec extends StringValueCodec {
+  public static final class OffsetTimeCodec extends StringValueCodec {
     static final OffsetTimeCodec INSTANCE = new OffsetTimeCodec();
 
     @Override
@@ -1043,7 +1043,7 @@ final class ScalarCodecs {
     }
   }
 
-  static final class OffsetDateTimeCodec extends StringValueCodec {
+  public static final class OffsetDateTimeCodec extends StringValueCodec {
     static final OffsetDateTimeCodec INSTANCE = new OffsetDateTimeCodec();
 
     @Override
@@ -1057,7 +1057,7 @@ final class ScalarCodecs {
     }
   }
 
-  static final class AtomicBooleanCodec extends AbstractJsonCodec {
+  public static final class AtomicBooleanCodec extends AbstractJsonCodec {
     static final AtomicBooleanCodec INSTANCE = new AtomicBooleanCodec();
 
     @Override
@@ -1076,7 +1076,7 @@ final class ScalarCodecs {
     }
   }
 
-  static final class AtomicIntegerCodec extends AbstractJsonCodec {
+  public static final class AtomicIntegerCodec extends AbstractJsonCodec {
     static final AtomicIntegerCodec INSTANCE = new AtomicIntegerCodec();
 
     @Override
@@ -1095,7 +1095,7 @@ final class ScalarCodecs {
     }
   }
 
-  static final class AtomicLongCodec extends AbstractJsonCodec {
+  public static final class AtomicLongCodec extends AbstractJsonCodec {
     static final AtomicLongCodec INSTANCE = new AtomicLongCodec();
 
     @Override
@@ -1114,7 +1114,7 @@ final class ScalarCodecs {
     }
   }
 
-  static final class AtomicReferenceCodec extends AbstractJsonCodec {
+  public static final class AtomicReferenceCodec extends AbstractJsonCodec {
     private final JsonTypeInfo valueTypeInfo;
     private final JsonCodec valueCodec;
 
@@ -1149,7 +1149,7 @@ final class ScalarCodecs {
     }
   }
 
-  static final class OptionalCodec extends AbstractJsonCodec {
+  public static final class OptionalCodec extends AbstractJsonCodec {
     private final JsonTypeInfo valueTypeInfo;
     private final JsonCodec valueCodec;
 
@@ -1194,7 +1194,7 @@ final class ScalarCodecs {
     }
   }
 
-  static final class OptionalIntCodec extends AbstractJsonCodec {
+  public static final class OptionalIntCodec extends AbstractJsonCodec {
     static final OptionalIntCodec INSTANCE = new OptionalIntCodec();
 
     @Override
@@ -1227,7 +1227,7 @@ final class ScalarCodecs {
     }
   }
 
-  static final class OptionalLongCodec extends AbstractJsonCodec {
+  public static final class OptionalLongCodec extends AbstractJsonCodec {
     static final OptionalLongCodec INSTANCE = new OptionalLongCodec();
 
     @Override
@@ -1260,7 +1260,7 @@ final class ScalarCodecs {
     }
   }
 
-  static final class OptionalDoubleCodec extends AbstractJsonCodec {
+  public static final class OptionalDoubleCodec extends AbstractJsonCodec {
     static final OptionalDoubleCodec INSTANCE = new OptionalDoubleCodec();
 
     @Override
@@ -1293,7 +1293,7 @@ final class ScalarCodecs {
     }
   }
 
-  static final class ByteBufferCodec extends AbstractJsonCodec {
+  public static final class ByteBufferCodec extends AbstractJsonCodec {
     static final ByteBufferCodec INSTANCE = new ByteBufferCodec();
 
     @Override
@@ -1339,7 +1339,7 @@ final class ScalarCodecs {
     }
   }
 
-  static final class EnumCodec extends AbstractJsonCodec {
+  public static final class EnumCodec extends AbstractJsonCodec {
     private final Class<?> type;
     private final Map<String, Enum<?>> values;
 

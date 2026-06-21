@@ -24,9 +24,9 @@ import org.apache.fory.json.meta.JsonFieldInfo;
 /** Immutable metadata carrier shared by generated JSON object writers. */
 public abstract class GeneratedObjectWriter {
   protected final JsonFieldInfo[] fields;
-  protected final BaseObjectCodec[] codecs;
+  protected final JsonCodec[] codecs;
 
-  protected GeneratedObjectWriter(JsonFieldInfo[] fields, BaseObjectCodec[] codecs) {
+  protected GeneratedObjectWriter(JsonFieldInfo[] fields, JsonCodec[] codecs) {
     this.fields = fields;
     this.codecs = codecs;
   }

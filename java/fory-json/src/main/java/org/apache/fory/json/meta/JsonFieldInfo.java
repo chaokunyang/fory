@@ -25,9 +25,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.Collection;
 import java.util.Map;
 import org.apache.fory.json.ForyJsonException;
-import org.apache.fory.json.codec.BaseObjectCodec;
 import org.apache.fory.json.codec.CodecUtils;
-import org.apache.fory.json.codec.JsonCodec;
 import org.apache.fory.json.reader.JsonReader;
 import org.apache.fory.json.resolver.JsonTypeInfo;
 import org.apache.fory.json.resolver.JsonTypeResolver;
@@ -101,7 +99,6 @@ public final class JsonFieldInfo {
   private JsonTypeInfo writeTypeInfo;
   private JsonTypeInfo readTypeInfo;
   private JsonTypeInfo readElementTypeInfo;
-  private BaseObjectCodec writeObjectCodec;
 
   public JsonFieldInfo(
       String name,
@@ -834,23 +831,8 @@ public final class JsonFieldInfo {
     writer.writeFieldName(this, index);
     if (value == null) {
       writer.writeNull();
-    } else if (writeRawType == Object.class) {
-      writeTypeInfo.codec().writeString(writer, value, typeResolver);
     } else {
-      JsonCodec codec = writeTypeInfo.codec();
-      if (!(codec instanceof BaseObjectCodec)) {
-        codec.writeString(writer, value, typeResolver);
-        return true;
-      }
-      BaseObjectCodec objectCodec = writeObjectCodec;
-      Class<?> valueClass = value.getClass();
-      if (objectCodec == null || objectCodec.type() != valueClass) {
-        objectCodec = typeResolver.getObjectCodec(valueClass);
-        if (valueClass == writeRawType) {
-          writeObjectCodec = objectCodec;
-        }
-      }
-      objectCodec.writeString(writer, value, typeResolver);
+      writeTypeInfo.codec().writeString(writer, value, typeResolver);
     }
     return true;
   }
@@ -1062,23 +1044,8 @@ public final class JsonFieldInfo {
     writer.writeFieldName(this);
     if (value == null) {
       writer.writeNull();
-    } else if (writeRawType == Object.class) {
-      writeTypeInfo.codec().write(writer, value, typeResolver);
     } else {
-      JsonCodec codec = writeTypeInfo.codec();
-      if (!(codec instanceof BaseObjectCodec)) {
-        codec.write(writer, value, typeResolver);
-        return true;
-      }
-      BaseObjectCodec objectCodec = writeObjectCodec;
-      Class<?> valueClass = value.getClass();
-      if (objectCodec == null || objectCodec.type() != valueClass) {
-        objectCodec = typeResolver.getObjectCodec(valueClass);
-        if (valueClass == writeRawType) {
-          writeObjectCodec = objectCodec;
-        }
-      }
-      objectCodec.write(writer, value, typeResolver);
+      writeTypeInfo.codec().write(writer, value, typeResolver);
     }
     return true;
   }
@@ -1092,23 +1059,8 @@ public final class JsonFieldInfo {
     writer.writeFieldName(this, index);
     if (value == null) {
       writer.writeNull();
-    } else if (writeRawType == Object.class) {
-      writeTypeInfo.codec().writeUtf8(writer, value, typeResolver);
     } else {
-      JsonCodec codec = writeTypeInfo.codec();
-      if (!(codec instanceof BaseObjectCodec)) {
-        codec.writeUtf8(writer, value, typeResolver);
-        return true;
-      }
-      BaseObjectCodec objectCodec = writeObjectCodec;
-      Class<?> valueClass = value.getClass();
-      if (objectCodec == null || objectCodec.type() != valueClass) {
-        objectCodec = typeResolver.getObjectCodec(valueClass);
-        if (valueClass == writeRawType) {
-          writeObjectCodec = objectCodec;
-        }
-      }
-      objectCodec.writeUtf8(writer, value, typeResolver);
+      writeTypeInfo.codec().writeUtf8(writer, value, typeResolver);
     }
     return true;
   }

@@ -144,33 +144,58 @@ public final class Utf8JsonReader extends JsonReader {
       throw error("Expected string");
     }
     int start = position;
-    int hash = 0;
     int matchedLength = 0;
     int expectedLength = expectedName.length();
-    boolean matched = true;
     while (position < length) {
       int b = bytes[position++] & 0xFF;
       if (b == '"') {
-        if (matched && matchedLength == expectedLength) {
+        if (matchedLength == expectedLength) {
           return expectedIndex;
         }
-        return table.index(this, start, position - 1, hash);
+        int end = position - 1;
+        return table.index(this, start, end, hashRange(start, end));
       }
       if (b == '\\' || b < 0x20 || b >= 0x80) {
         position = start - 1;
         String name = readString();
         return expectedName.equals(name) ? expectedIndex : table.index(name);
       }
-      if (matched) {
-        if (matchedLength >= expectedLength || expectedName.charAt(matchedLength) != b) {
-          matched = false;
-        } else {
-          matchedLength++;
-        }
+      if (matchedLength >= expectedLength || expectedName.charAt(matchedLength) != b) {
+        return fieldIndexFallback(table, start);
+      }
+      matchedLength++;
+    }
+    throw error("Unterminated string");
+  }
+
+  private int fieldIndexFallback(JsonFieldTable table, int start) {
+    int hash = 0;
+    byte[] bytes = input;
+    for (int i = start; i < position; i++) {
+      hash = 31 * hash + (bytes[i] & 0xFF);
+    }
+    int length = bytes.length;
+    while (position < length) {
+      int b = bytes[position++] & 0xFF;
+      if (b == '"') {
+        return table.index(this, start, position - 1, hash);
+      }
+      if (b == '\\' || b < 0x20 || b >= 0x80) {
+        position = start - 1;
+        return table.index(readString());
       }
       hash = 31 * hash + b;
     }
     throw error("Unterminated string");
+  }
+
+  private int hashRange(int start, int end) {
+    int hash = 0;
+    byte[] bytes = input;
+    for (int i = start; i < end; i++) {
+      hash = 31 * hash + (bytes[i] & 0xFF);
+    }
+    return hash;
   }
 
   @Override

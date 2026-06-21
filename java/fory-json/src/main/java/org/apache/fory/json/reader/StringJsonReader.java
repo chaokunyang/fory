@@ -145,33 +145,56 @@ public final class StringJsonReader extends JsonReader {
       throw error("Expected string");
     }
     int start = position;
-    int hash = 0;
     int matchedLength = 0;
     int expectedLength = expectedName.length();
-    boolean matched = true;
     while (position < length) {
       char ch = input.charAt(position++);
       if (ch == '"') {
-        if (matched && matchedLength == expectedLength) {
+        if (matchedLength == expectedLength) {
           return expectedIndex;
         }
-        return table.index(this, start, position - 1, hash);
+        int end = position - 1;
+        return table.index(this, start, end, hashRange(start, end));
       }
       if (ch == '\\' || ch < 0x20 || ch >= 0x80) {
         position = start - 1;
         String name = readString();
         return expectedName.equals(name) ? expectedIndex : table.index(name);
       }
-      if (matched) {
-        if (matchedLength >= expectedLength || expectedName.charAt(matchedLength) != ch) {
-          matched = false;
-        } else {
-          matchedLength++;
-        }
+      if (matchedLength >= expectedLength || expectedName.charAt(matchedLength) != ch) {
+        return fieldIndexFallback(table, start);
+      }
+      matchedLength++;
+    }
+    throw error("Unterminated string");
+  }
+
+  private int fieldIndexFallback(JsonFieldTable table, int start) {
+    int hash = 0;
+    for (int i = start; i < position; i++) {
+      hash = 31 * hash + input.charAt(i);
+    }
+    int length = input.length();
+    while (position < length) {
+      char ch = input.charAt(position++);
+      if (ch == '"') {
+        return table.index(this, start, position - 1, hash);
+      }
+      if (ch == '\\' || ch < 0x20 || ch >= 0x80) {
+        position = start - 1;
+        return table.index(readString());
       }
       hash = 31 * hash + ch;
     }
     throw error("Unterminated string");
+  }
+
+  private int hashRange(int start, int end) {
+    int hash = 0;
+    for (int i = start; i < end; i++) {
+      hash = 31 * hash + input.charAt(i);
+    }
+    return hash;
   }
 
   @Override

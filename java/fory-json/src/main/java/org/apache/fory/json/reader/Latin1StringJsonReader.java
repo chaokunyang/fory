@@ -94,6 +94,23 @@ public final class Latin1StringJsonReader extends JsonReader {
 
   public boolean tryReadNullToken() {
     skipWhitespaceFast();
+    return tryReadNullLiteral();
+  }
+
+  public boolean tryReadNextNullToken() {
+    if (position < input.length) {
+      int ch = input[position] & 0xFF;
+      if (ch == 'n') {
+        return tryReadNullLiteral();
+      }
+      if (!isWhitespace(ch)) {
+        return false;
+      }
+    }
+    return tryReadNullToken();
+  }
+
+  private boolean tryReadNullLiteral() {
     if (startsWithAscii("null")) {
       position += 4;
       return true;
@@ -103,6 +120,17 @@ public final class Latin1StringJsonReader extends JsonReader {
 
   public boolean readBooleanValue() {
     skipWhitespaceFast();
+    return readBooleanToken();
+  }
+
+  public boolean readNextBooleanValue() {
+    if (position < input.length && !isWhitespace(input[position] & 0xFF)) {
+      return readBooleanToken();
+    }
+    return readBooleanValue();
+  }
+
+  private boolean readBooleanToken() {
     if (startsWithAscii("true")) {
       position += 4;
       return true;
@@ -115,6 +143,17 @@ public final class Latin1StringJsonReader extends JsonReader {
 
   public int readIntValue() {
     skipWhitespaceFast();
+    return readIntToken();
+  }
+
+  public int readNextIntValue() {
+    if (position < input.length && !isWhitespace(input[position] & 0xFF)) {
+      return readIntToken();
+    }
+    return readIntValue();
+  }
+
+  private int readIntToken() {
     int start = position;
     int result = 0;
     int limit = -Integer.MAX_VALUE;
@@ -163,6 +202,17 @@ public final class Latin1StringJsonReader extends JsonReader {
 
   public long readLongValue() {
     skipWhitespaceFast();
+    return readLongToken();
+  }
+
+  public long readNextLongValue() {
+    if (position < input.length && !isWhitespace(input[position] & 0xFF)) {
+      return readLongToken();
+    }
+    return readLongValue();
+  }
+
+  private long readLongToken() {
     int start = position;
     long result = 0;
     long limit = -Long.MAX_VALUE;
@@ -344,11 +394,26 @@ public final class Latin1StringJsonReader extends JsonReader {
   @Override
   public String readNullableString() {
     skipWhitespaceFast();
-    if (startsWithAscii("null")) {
-      position += 4;
+    if (tryReadNullLiteral()) {
       return null;
     }
     return readStringToken();
+  }
+
+  public String readNextNullableString() {
+    if (position < input.length) {
+      int ch = input[position] & 0xFF;
+      if (ch == '"') {
+        return readStringToken();
+      }
+      if (ch == 'n' && tryReadNullLiteral()) {
+        return null;
+      }
+      if (!isWhitespace(ch)) {
+        return readStringToken();
+      }
+    }
+    return readNullableString();
   }
 
   private String readStringToken() {
@@ -463,8 +528,19 @@ public final class Latin1StringJsonReader extends JsonReader {
   }
 
   public long readPackedStringHash() {
-    int mark = position;
     skipWhitespaceFast();
+    return readPackedStringHashToken();
+  }
+
+  public long readNextPackedStringHash() {
+    if (position < input.length && !isWhitespace(input[position] & 0xFF)) {
+      return readPackedStringHashToken();
+    }
+    return readPackedStringHash();
+  }
+
+  private long readPackedStringHashToken() {
+    int mark = position;
     byte[] bytes = input;
     int length = bytes.length;
     int offset = position;
@@ -487,7 +563,7 @@ public final class Latin1StringJsonReader extends JsonReader {
       }
     }
     position = mark;
-    return readQuotedStringHash();
+    return readQuotedStringHashToken();
   }
 
   private long readQuotedStringHash() {
@@ -601,12 +677,16 @@ public final class Latin1StringJsonReader extends JsonReader {
   private void skipWhitespaceFast() {
     while (position < input.length) {
       int ch = input[position] & 0xFF;
-      if (ch == ' ' || ch == '\n' || ch == '\r' || ch == '\t') {
+      if (isWhitespace(ch)) {
         position++;
       } else {
         return;
       }
     }
+  }
+
+  private static boolean isWhitespace(int ch) {
+    return ch == ' ' || ch == '\n' || ch == '\r' || ch == '\t';
   }
 
   private boolean startsWithAscii(String value) {

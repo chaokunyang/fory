@@ -1403,12 +1403,24 @@ public final class ScalarCodecs {
       return enumValue(reader.readPackedStringHash());
     }
 
+    public Object readNextLatin1Enum(Latin1StringJsonReader reader) {
+      return enumValue(reader.readNextPackedStringHash());
+    }
+
     public Object readUtf16Enum(Utf16StringJsonReader reader) {
       return enumValue(reader.readPackedStringHash());
     }
 
+    public Object readNextUtf16Enum(Utf16StringJsonReader reader) {
+      return enumValue(reader.readNextPackedStringHash());
+    }
+
     public Object readUtf8Enum(Utf8JsonReader reader) {
       return enumValue(reader.readPackedStringHash());
+    }
+
+    public Object readNextUtf8Enum(Utf8JsonReader reader) {
+      return enumValue(reader.readNextPackedStringHash());
     }
 
     @Override

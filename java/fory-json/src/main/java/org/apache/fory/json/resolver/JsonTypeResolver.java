@@ -31,7 +31,12 @@ import org.apache.fory.json.codec.ObjectCodec;
 import org.apache.fory.json.codec.ObjectCodecs;
 import org.apache.fory.reflect.TypeRef;
 
-/** Local JSON type dispatcher and cache used by one borrowed {@code ForyJson} state at a time. */
+/**
+ * Local JSON type dispatcher and cache used by one borrowed {@code ForyJson} state at a time.
+ *
+ * <p>This cache is limited to schema/static metadata such as resolved codecs and object layouts.
+ * Runtime JSON values, including string or number tokens, must stay uncached.
+ */
 public final class JsonTypeResolver {
   private final IdentityHashMap<Class<?>, BaseObjectCodec> objectCodecs = new IdentityHashMap<>();
   private final Map<Object, JsonTypeInfo> typeInfos = new HashMap<>();

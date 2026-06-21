@@ -25,7 +25,6 @@ import java.util.concurrent.atomic.AtomicReferenceArray;
 import org.apache.fory.json.codec.CodecRegistry;
 import org.apache.fory.json.codec.GeneratedObjectCodec;
 import org.apache.fory.json.codec.JsonSharedRegistry;
-import org.apache.fory.json.reader.JsonReader;
 import org.apache.fory.json.reader.StringJsonReader;
 import org.apache.fory.json.reader.Utf8JsonReader;
 import org.apache.fory.json.resolver.JsonTypeInfo;
@@ -107,7 +106,7 @@ public final class ForyJson {
     PooledState entry = acquire();
     JsonState state = entry.state;
     try {
-      return castValue(readValue(state.stringReader(json), type, type, state), type);
+      return castValue(readStringValue(state.stringReader(json), type, type, state), type);
     } finally {
       state.clearReaders();
       release(entry);
@@ -120,7 +119,7 @@ public final class ForyJson {
     JsonState state = entry.state;
     try {
       Object value =
-          readValue(state.stringReader(json), typeRef.getType(), typeRef.getRawType(), state);
+          readStringValue(state.stringReader(json), typeRef.getType(), typeRef.getRawType(), state);
       return castValue(value, typeRef);
     } finally {
       state.clearReaders();
@@ -132,7 +131,7 @@ public final class ForyJson {
     PooledState entry = acquire();
     JsonState state = entry.state;
     try {
-      return castValue(readValue(state.utf8Reader(bytes), type, type, state), type);
+      return castValue(readUtf8Value(state.utf8Reader(bytes), type, type, state), type);
     } finally {
       state.clearReaders();
       release(entry);
@@ -145,7 +144,7 @@ public final class ForyJson {
     JsonState state = entry.state;
     try {
       Object value =
-          readValue(state.utf8Reader(bytes), typeRef.getType(), typeRef.getRawType(), state);
+          readUtf8Value(state.utf8Reader(bytes), typeRef.getType(), typeRef.getRawType(), state);
       return castValue(value, typeRef);
     } finally {
       state.clearReaders();
@@ -223,10 +222,20 @@ public final class ForyJson {
     return hash ^ (hash >>> 16);
   }
 
-  private Object readValue(JsonReader reader, Type type, Class<?> fallback, JsonState state) {
+  private Object readStringValue(
+      StringJsonReader reader, Type type, Class<?> fallback, JsonState state) {
     JsonTypeResolver resolver = state.typeResolver;
     JsonTypeInfo typeInfo = resolver.getTypeInfo(type, fallback);
-    Object value = typeInfo.codec().read(reader, typeInfo, resolver);
+    Object value = typeInfo.codec().readString(reader, typeInfo, resolver);
+    reader.finish();
+    return value;
+  }
+
+  private Object readUtf8Value(
+      Utf8JsonReader reader, Type type, Class<?> fallback, JsonState state) {
+    JsonTypeResolver resolver = state.typeResolver;
+    JsonTypeInfo typeInfo = resolver.getTypeInfo(type, fallback);
+    Object value = typeInfo.codec().readUtf8(reader, typeInfo, resolver);
     reader.finish();
     return value;
   }

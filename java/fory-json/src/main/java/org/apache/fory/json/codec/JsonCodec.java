@@ -21,6 +21,8 @@ package org.apache.fory.json.codec;
 
 import org.apache.fory.json.meta.JsonFieldAccessor;
 import org.apache.fory.json.reader.JsonReader;
+import org.apache.fory.json.reader.StringJsonReader;
+import org.apache.fory.json.reader.Utf8JsonReader;
 import org.apache.fory.json.resolver.JsonTypeInfo;
 import org.apache.fory.json.resolver.JsonTypeResolver;
 import org.apache.fory.json.writer.JsonWriter;
@@ -36,6 +38,15 @@ public interface JsonCodec {
   void writeUtf8(Utf8JsonWriter writer, Object value, JsonTypeResolver resolver);
 
   Object read(JsonReader reader, JsonTypeInfo typeInfo, JsonTypeResolver resolver);
+
+  default Object readString(
+      StringJsonReader reader, JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
+    return read(reader, typeInfo, resolver);
+  }
+
+  default Object readUtf8(Utf8JsonReader reader, JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
+    return read(reader, typeInfo, resolver);
+  }
 
   default void readField(
       JsonReader reader,

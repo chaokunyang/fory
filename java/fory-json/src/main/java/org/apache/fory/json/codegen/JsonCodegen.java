@@ -31,7 +31,9 @@ import org.apache.fory.json.ForyJsonException;
 import org.apache.fory.json.codec.BaseObjectCodec;
 import org.apache.fory.json.codec.ObjectCodecs;
 import org.apache.fory.json.codec.ObjectReader;
+import org.apache.fory.json.codec.StringObjectReader;
 import org.apache.fory.json.codec.StringObjectWriter;
+import org.apache.fory.json.codec.Utf8ObjectReader;
 import org.apache.fory.json.codec.Utf8ObjectWriter;
 import org.apache.fory.json.meta.JsonFieldInfo;
 import org.apache.fory.json.meta.JsonFieldKind;
@@ -40,6 +42,9 @@ import org.apache.fory.platform.JdkVersion;
 
 public final class JsonCodegen {
   private static final String PACKAGE = "org.apache.fory.json.codegen";
+  private static final int GENERIC_READER = 0;
+  private static final int STRING_READER = 1;
+  private static final int UTF8_READER = 2;
   private static final AtomicInteger ID = new AtomicInteger();
 
   private final boolean writeNullFields;
@@ -89,7 +94,8 @@ public final class JsonCodegen {
     if (reader == null) {
       return null;
     }
-    return new ObjectCodecs(stringWriter, utf8Writer, reader);
+    return new ObjectCodecs(
+        stringWriter, utf8Writer, reader, (StringObjectReader) reader, (Utf8ObjectReader) reader);
   }
 
   private Object compileWriter(
@@ -232,12 +238,18 @@ public final class JsonCodegen {
     code.append("package ").append(PACKAGE).append(";\n");
     code.append("import org.apache.fory.json.codec.BaseObjectCodec;\n");
     code.append("import org.apache.fory.json.codec.ObjectReader;\n");
+    code.append("import org.apache.fory.json.codec.StringObjectReader;\n");
+    code.append("import org.apache.fory.json.codec.Utf8ObjectReader;\n");
     code.append("import org.apache.fory.json.meta.JsonFieldAccessor;\n");
     code.append("import org.apache.fory.json.meta.JsonFieldInfo;\n");
     code.append("import org.apache.fory.json.meta.JsonFieldTable;\n");
     code.append("import org.apache.fory.json.reader.JsonReader;\n");
+    code.append("import org.apache.fory.json.reader.StringJsonReader;\n");
+    code.append("import org.apache.fory.json.reader.Utf8JsonReader;\n");
     code.append("import org.apache.fory.json.resolver.JsonTypeResolver;\n");
-    code.append("final class ").append(className).append(" implements ObjectReader {\n");
+    code.append("final class ")
+        .append(className)
+        .append(" implements ObjectReader, StringObjectReader, Utf8ObjectReader {\n");
     code.append("  private final String[] fieldNames;\n");
     for (int i = 0; i < properties.length; i++) {
       code.append("  private final JsonFieldInfo p").append(i).append(";\n");
@@ -267,11 +279,27 @@ public final class JsonCodegen {
       }
     }
     code.append("  }\n");
-    code.append("  public Object read(JsonReader reader, BaseObjectCodec owner, ")
-        .append("JsonTypeResolver typeResolver) {\n");
+    appendReadMethod(code, "read", "JsonReader", properties, GENERIC_READER);
+    appendReadMethod(code, "readString", "StringJsonReader", properties, STRING_READER);
+    appendReadMethod(code, "readUtf8", "Utf8JsonReader", properties, UTF8_READER);
+    code.append("}\n");
+    return code.toString();
+  }
+
+  private void appendReadMethod(
+      StringBuilder code,
+      String methodName,
+      String readerType,
+      JsonFieldInfo[] properties,
+      int readerMode) {
+    code.append("  public Object ")
+        .append(methodName)
+        .append("(")
+        .append(readerType)
+        .append(" reader, BaseObjectCodec owner, JsonTypeResolver typeResolver) {\n");
     code.append("    Object object = owner.newInstance();\n");
-    code.append("    reader.expect('{');\n");
-    code.append("    if (reader.consume('}')) {\n");
+    appendExpect(code, readerMode, '{', "    ");
+    code.append("    if (").append(consumeCall(readerMode, '}')).append(") {\n");
     code.append("      return object;\n");
     code.append("    }\n");
     code.append("    JsonFieldTable fieldTable = owner.readTable();\n");
@@ -282,11 +310,11 @@ public final class JsonCodegen {
     code.append(
         "          ? reader.readFieldIndex(fieldTable, localFieldNames[expectedIndex], expectedIndex)\n");
     code.append("          : reader.readFieldIndex(fieldTable);\n");
-    code.append("      reader.expect(':');\n");
+    appendExpect(code, readerMode, ':', "      ");
     code.append("      switch (fieldIndex) {\n");
     for (int i = 0; i < properties.length; i++) {
       code.append("        case ").append(i).append(":\n");
-      readField(code, properties[i], i, "          ");
+      readField(code, properties[i], i, "          ", readerMode);
       code.append("          break;\n");
     }
     code.append("        default:\n");
@@ -295,12 +323,42 @@ public final class JsonCodegen {
     code.append("      if (fieldIndex >= 0) {\n");
     code.append("        expectedIndex = fieldIndex + 1;\n");
     code.append("      }\n");
-    code.append("    } while (reader.consume(','));\n");
-    code.append("    reader.expect('}');\n");
+    code.append("    } while (").append(consumeCall(readerMode, ',')).append(");\n");
+    appendExpect(code, readerMode, '}', "    ");
     code.append("    return object;\n");
     code.append("  }\n");
-    code.append("}\n");
-    return code.toString();
+  }
+
+  private static void appendExpect(StringBuilder code, int readerMode, char token, String indent) {
+    code.append(indent).append(expectCall(readerMode, token)).append(";\n");
+  }
+
+  private static String expectCall(int readerMode, char token) {
+    return readerMode == GENERIC_READER
+        ? "reader.expect('" + token + "')"
+        : "reader.expectToken('" + token + "')";
+  }
+
+  private static String consumeCall(int readerMode, char token) {
+    return readerMode == GENERIC_READER
+        ? "reader.consume('" + token + "')"
+        : "reader.consumeToken('" + token + "')";
+  }
+
+  private static String tryReadNullCall(int readerMode) {
+    return readerMode == GENERIC_READER ? "reader.tryReadNull()" : "reader.tryReadNullToken()";
+  }
+
+  private static String readBooleanCall(int readerMode) {
+    return readerMode == GENERIC_READER ? "reader.readBoolean()" : "reader.readBooleanValue()";
+  }
+
+  private static String readIntCall(int readerMode) {
+    return readerMode == GENERIC_READER ? "reader.readInt()" : "reader.readIntValue()";
+  }
+
+  private static String readLongCall(int readerMode) {
+    return readerMode == GENERIC_READER ? "reader.readLong()" : "reader.readLongValue()";
   }
 
   private static boolean usesReadObjectCodec(JsonFieldInfo property) {
@@ -315,85 +373,107 @@ public final class JsonCodegen {
     }
   }
 
-  private void readField(StringBuilder code, JsonFieldInfo property, int id, String indent) {
+  private void readField(
+      StringBuilder code, JsonFieldInfo property, int id, String indent, int readerMode) {
     Class<?> rawType = property.readRawType();
     switch (property.readKind()) {
       case BOOLEAN:
-        readBoolean(code, rawType, id, indent);
+        readBoolean(code, rawType, id, indent, readerMode);
         return;
       case INT:
-        readInt(code, rawType, id, indent);
+        readInt(code, rawType, id, indent, readerMode);
         return;
       case LONG:
-        readLong(code, rawType, id, indent);
+        readLong(code, rawType, id, indent, readerMode);
         return;
       case STRING:
-        readString(code, id, indent);
+        readString(code, id, indent, readerMode);
         return;
       case ENUM:
-        readEnum(code, rawType, id, indent);
+        readEnum(code, rawType, id, indent, readerMode);
         return;
       case COLLECTION:
-        readCollection(code, property, id, indent);
+        readCollection(code, property, id, indent, readerMode);
         return;
       case OBJECT:
-        readObject(code, property, id, indent);
+        readObject(code, property, id, indent, readerMode);
         return;
       default:
         code.append(indent).append("p").append(id).append(".read(reader, object, typeResolver);\n");
     }
   }
 
-  private static void readBoolean(StringBuilder code, Class<?> rawType, int id, String indent) {
+  private static void readBoolean(
+      StringBuilder code, Class<?> rawType, int id, String indent, int readerMode) {
     if (rawType.isPrimitive()) {
       code.append(indent)
           .append("a")
           .append(id)
-          .append(".putBoolean(object, reader.readBoolean());\n");
+          .append(".putBoolean(object, ")
+          .append(readBooleanCall(readerMode))
+          .append(");\n");
       return;
     }
-    code.append(indent).append("if (reader.tryReadNull()) {\n");
+    code.append(indent).append("if (").append(tryReadNullCall(readerMode)).append(") {\n");
     code.append(indent).append("  a").append(id).append(".putObject(object, null);\n");
     code.append(indent).append("} else {\n");
     code.append(indent)
         .append("  a")
         .append(id)
-        .append(".putObject(object, Boolean.valueOf(reader.readBoolean()));\n");
+        .append(".putObject(object, Boolean.valueOf(")
+        .append(readBooleanCall(readerMode))
+        .append("));\n");
     code.append(indent).append("}\n");
   }
 
-  private static void readInt(StringBuilder code, Class<?> rawType, int id, String indent) {
+  private static void readInt(
+      StringBuilder code, Class<?> rawType, int id, String indent, int readerMode) {
     if (rawType.isPrimitive()) {
-      code.append(indent).append("a").append(id).append(".putInt(object, reader.readInt());\n");
+      code.append(indent)
+          .append("a")
+          .append(id)
+          .append(".putInt(object, ")
+          .append(readIntCall(readerMode))
+          .append(");\n");
       return;
     }
-    code.append(indent).append("if (reader.tryReadNull()) {\n");
+    code.append(indent).append("if (").append(tryReadNullCall(readerMode)).append(") {\n");
     code.append(indent).append("  a").append(id).append(".putObject(object, null);\n");
     code.append(indent).append("} else {\n");
     code.append(indent)
         .append("  a")
         .append(id)
-        .append(".putObject(object, Integer.valueOf(reader.readInt()));\n");
+        .append(".putObject(object, Integer.valueOf(")
+        .append(readIntCall(readerMode))
+        .append("));\n");
     code.append(indent).append("}\n");
   }
 
-  private static void readLong(StringBuilder code, Class<?> rawType, int id, String indent) {
+  private static void readLong(
+      StringBuilder code, Class<?> rawType, int id, String indent, int readerMode) {
     if (rawType.isPrimitive()) {
-      code.append(indent).append("a").append(id).append(".putLong(object, reader.readLong());\n");
+      code.append(indent)
+          .append("a")
+          .append(id)
+          .append(".putLong(object, ")
+          .append(readLongCall(readerMode))
+          .append(");\n");
       return;
     }
-    code.append(indent).append("if (reader.tryReadNull()) {\n");
+    code.append(indent).append("if (").append(tryReadNullCall(readerMode)).append(") {\n");
     code.append(indent).append("  a").append(id).append(".putObject(object, null);\n");
     code.append(indent).append("} else {\n");
     code.append(indent)
         .append("  a")
         .append(id)
-        .append(".putObject(object, Long.valueOf(reader.readLong()));\n");
+        .append(".putObject(object, Long.valueOf(")
+        .append(readLongCall(readerMode))
+        .append("));\n");
     code.append(indent).append("}\n");
   }
 
-  private static void readString(StringBuilder code, int id, String indent) {
-    code.append(indent).append("if (reader.tryReadNull()) {\n");
+  private static void readString(StringBuilder code, int id, String indent, int readerMode) {
+    code.append(indent).append("if (").append(tryReadNullCall(readerMode)).append(") {\n");
     code.append(indent).append("  a").append(id).append(".putObject(object, null);\n");
     code.append(indent).append("} else {\n");
     code.append(indent)
@@ -403,8 +483,9 @@ public final class JsonCodegen {
     code.append(indent).append("}\n");
   }
 
-  private static void readEnum(StringBuilder code, Class<?> rawType, int id, String indent) {
-    code.append(indent).append("if (reader.tryReadNull()) {\n");
+  private static void readEnum(
+      StringBuilder code, Class<?> rawType, int id, String indent, int readerMode) {
+    code.append(indent).append("if (").append(tryReadNullCall(readerMode)).append(") {\n");
     code.append(indent).append("  a").append(id).append(".putObject(object, null);\n");
     code.append(indent).append("} else {\n");
     code.append(indent)
@@ -416,53 +497,54 @@ public final class JsonCodegen {
     code.append(indent).append("}\n");
   }
 
-  private void readCollection(StringBuilder code, JsonFieldInfo property, int id, String indent) {
+  private void readCollection(
+      StringBuilder code, JsonFieldInfo property, int id, String indent, int readerMode) {
     Class<?> elementType = property.readElementRawType();
     if (elementType == String.class) {
-      readStringList(code, id, indent);
+      readStringList(code, id, indent, readerMode);
       return;
     }
     if (elementType != null && elementType.isEnum()) {
-      readEnumList(code, elementType, id, indent);
+      readEnumList(code, elementType, id, indent, readerMode);
       return;
     }
     if (isPojo(elementType)) {
-      readObjectList(code, id, indent);
+      readObjectList(code, id, indent, readerMode);
       return;
     }
     code.append(indent).append("p").append(id).append(".read(reader, object, typeResolver);\n");
   }
 
-  private static void readStringList(StringBuilder code, int id, String indent) {
-    code.append(indent).append("if (reader.tryReadNull()) {\n");
+  private static void readStringList(StringBuilder code, int id, String indent, int readerMode) {
+    code.append(indent).append("if (").append(tryReadNullCall(readerMode)).append(") {\n");
     code.append(indent).append("  a").append(id).append(".putObject(object, null);\n");
     code.append(indent).append("} else {\n");
     code.append(indent).append("  java.util.ArrayList list = new java.util.ArrayList();\n");
-    code.append(indent).append("  reader.expect('[');\n");
-    code.append(indent).append("  if (!reader.consume(']')) {\n");
+    code.append(indent).append("  ").append(expectCall(readerMode, '[')).append(";\n");
+    code.append(indent).append("  if (!").append(consumeCall(readerMode, ']')).append(") {\n");
     code.append(indent).append("    do {\n");
-    code.append(indent).append("      if (reader.tryReadNull()) {\n");
+    code.append(indent).append("      if (").append(tryReadNullCall(readerMode)).append(") {\n");
     code.append(indent).append("        list.add(null);\n");
     code.append(indent).append("      } else {\n");
     code.append(indent).append("        list.add(reader.readString());\n");
     code.append(indent).append("      }\n");
-    code.append(indent).append("    } while (reader.consume(','));\n");
-    code.append(indent).append("    reader.expect(']');\n");
+    code.append(indent).append("    } while (").append(consumeCall(readerMode, ',')).append(");\n");
+    code.append(indent).append("    ").append(expectCall(readerMode, ']')).append(";\n");
     code.append(indent).append("  }\n");
     code.append(indent).append("  a").append(id).append(".putObject(object, list);\n");
     code.append(indent).append("}\n");
   }
 
   private static void readEnumList(
-      StringBuilder code, Class<?> elementType, int id, String indent) {
-    code.append(indent).append("if (reader.tryReadNull()) {\n");
+      StringBuilder code, Class<?> elementType, int id, String indent, int readerMode) {
+    code.append(indent).append("if (").append(tryReadNullCall(readerMode)).append(") {\n");
     code.append(indent).append("  a").append(id).append(".putObject(object, null);\n");
     code.append(indent).append("} else {\n");
     code.append(indent).append("  java.util.ArrayList list = new java.util.ArrayList();\n");
-    code.append(indent).append("  reader.expect('[');\n");
-    code.append(indent).append("  if (!reader.consume(']')) {\n");
+    code.append(indent).append("  ").append(expectCall(readerMode, '[')).append(";\n");
+    code.append(indent).append("  if (!").append(consumeCall(readerMode, ']')).append(") {\n");
     code.append(indent).append("    do {\n");
-    code.append(indent).append("      if (reader.tryReadNull()) {\n");
+    code.append(indent).append("      if (").append(tryReadNullCall(readerMode)).append(") {\n");
     code.append(indent).append("        list.add(null);\n");
     code.append(indent).append("      } else {\n");
     code.append(indent)
@@ -470,15 +552,15 @@ public final class JsonCodegen {
         .append(sourceName(elementType))
         .append(".valueOf(reader.readString()));\n");
     code.append(indent).append("      }\n");
-    code.append(indent).append("    } while (reader.consume(','));\n");
-    code.append(indent).append("    reader.expect(']');\n");
+    code.append(indent).append("    } while (").append(consumeCall(readerMode, ',')).append(");\n");
+    code.append(indent).append("    ").append(expectCall(readerMode, ']')).append(";\n");
     code.append(indent).append("  }\n");
     code.append(indent).append("  a").append(id).append(".putObject(object, list);\n");
     code.append(indent).append("}\n");
   }
 
-  private static void readObjectList(StringBuilder code, int id, String indent) {
-    code.append(indent).append("if (reader.tryReadNull()) {\n");
+  private static void readObjectList(StringBuilder code, int id, String indent, int readerMode) {
+    code.append(indent).append("if (").append(tryReadNullCall(readerMode)).append(") {\n");
     code.append(indent).append("  a").append(id).append(".putObject(object, null);\n");
     code.append(indent).append("} else {\n");
     code.append(indent).append("  java.util.ArrayList list = new java.util.ArrayList();\n");
@@ -488,32 +570,34 @@ public final class JsonCodegen {
         .append(" == null ? owner : c")
         .append(id)
         .append(";\n");
-    code.append(indent).append("  reader.expect('[');\n");
-    code.append(indent).append("  if (!reader.consume(']')) {\n");
+    code.append(indent).append("  ").append(expectCall(readerMode, '[')).append(";\n");
+    code.append(indent).append("  if (!").append(consumeCall(readerMode, ']')).append(") {\n");
     code.append(indent).append("    do {\n");
-    code.append(indent).append("      if (reader.tryReadNull()) {\n");
+    code.append(indent).append("      if (").append(tryReadNullCall(readerMode)).append(") {\n");
     code.append(indent).append("        list.add(null);\n");
     code.append(indent).append("      } else {\n");
     code.append(indent)
-        .append("        list.add(elementCodec.read(reader, p")
+        .append("        list.add(elementCodec.")
+        .append(readObjectMethod(readerMode))
+        .append("(reader, p")
         .append(id)
         .append(".readElementTypeInfo(), typeResolver));\n");
     code.append(indent).append("      }\n");
-    code.append(indent).append("    } while (reader.consume(','));\n");
-    code.append(indent).append("    reader.expect(']');\n");
+    code.append(indent).append("    } while (").append(consumeCall(readerMode, ',')).append(");\n");
+    code.append(indent).append("    ").append(expectCall(readerMode, ']')).append(";\n");
     code.append(indent).append("  }\n");
     code.append(indent).append("  a").append(id).append(".putObject(object, list);\n");
     code.append(indent).append("}\n");
   }
 
   private static void readObject(
-      StringBuilder code, JsonFieldInfo property, int id, String indent) {
+      StringBuilder code, JsonFieldInfo property, int id, String indent, int readerMode) {
     if (property.readRawType() == Object.class
         || !(property.readTypeInfo().codec() instanceof BaseObjectCodec)) {
       code.append(indent).append("p").append(id).append(".read(reader, object, typeResolver);\n");
       return;
     }
-    code.append(indent).append("if (reader.tryReadNull()) {\n");
+    code.append(indent).append("if (").append(tryReadNullCall(readerMode)).append(") {\n");
     code.append(indent).append("  a").append(id).append(".putObject(object, null);\n");
     code.append(indent).append("} else {\n");
     code.append(indent)
@@ -525,10 +609,23 @@ public final class JsonCodegen {
     code.append(indent)
         .append("  a")
         .append(id)
-        .append(".putObject(object, objectCodec.read(reader, p")
+        .append(".putObject(object, objectCodec.")
+        .append(readObjectMethod(readerMode))
+        .append("(reader, p")
         .append(id)
         .append(".readTypeInfo(), typeResolver));\n");
     code.append(indent).append("}\n");
+  }
+
+  private static String readObjectMethod(int readerMode) {
+    switch (readerMode) {
+      case STRING_READER:
+        return "readString";
+      case UTF8_READER:
+        return "readUtf8";
+      default:
+        return "read";
+    }
   }
 
   private static String className(Class<?> type) {

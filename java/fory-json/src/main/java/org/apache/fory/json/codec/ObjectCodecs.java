@@ -23,12 +23,20 @@ public final class ObjectCodecs {
   private final StringObjectWriter stringWriter;
   private final Utf8ObjectWriter utf8Writer;
   private final ObjectReader reader;
+  private final StringObjectReader stringReader;
+  private final Utf8ObjectReader utf8Reader;
 
   public ObjectCodecs(
-      StringObjectWriter stringWriter, Utf8ObjectWriter utf8Writer, ObjectReader reader) {
+      StringObjectWriter stringWriter,
+      Utf8ObjectWriter utf8Writer,
+      ObjectReader reader,
+      StringObjectReader stringReader,
+      Utf8ObjectReader utf8Reader) {
     this.stringWriter = stringWriter;
     this.utf8Writer = utf8Writer;
     this.reader = reader;
+    this.stringReader = stringReader;
+    this.utf8Reader = utf8Reader;
   }
 
   public StringObjectWriter stringWriter() {
@@ -41,5 +49,13 @@ public final class ObjectCodecs {
 
   public ObjectReader reader() {
     return reader;
+  }
+
+  public StringObjectReader stringReader() {
+    return stringReader;
+  }
+
+  public Utf8ObjectReader utf8Reader() {
+    return utf8Reader;
   }
 }

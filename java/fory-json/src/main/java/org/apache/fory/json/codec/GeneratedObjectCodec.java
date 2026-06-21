@@ -20,6 +20,8 @@
 package org.apache.fory.json.codec;
 
 import org.apache.fory.json.reader.JsonReader;
+import org.apache.fory.json.reader.StringJsonReader;
+import org.apache.fory.json.reader.Utf8JsonReader;
 import org.apache.fory.json.resolver.JsonTypeInfo;
 import org.apache.fory.json.resolver.JsonTypeResolver;
 import org.apache.fory.json.writer.StringJsonWriter;
@@ -29,12 +31,16 @@ public final class GeneratedObjectCodec extends BaseObjectCodec {
   private final StringObjectWriter stringWriter;
   private final Utf8ObjectWriter utf8Writer;
   private final ObjectReader reader;
+  private final StringObjectReader stringReader;
+  private final Utf8ObjectReader utf8Reader;
 
   GeneratedObjectCodec(ObjectCodec base, ObjectCodecs codecs) {
     super(base.type, base.writeFields, base.readFields, base.instantiator);
     stringWriter = codecs.stringWriter();
     utf8Writer = codecs.utf8Writer();
     reader = codecs.reader();
+    stringReader = codecs.stringReader();
+    utf8Reader = codecs.utf8Reader();
   }
 
   @Override
@@ -62,5 +68,22 @@ public final class GeneratedObjectCodec extends BaseObjectCodec {
   @Override
   Object readNonNull(JsonReader input, JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
     return reader.read(input, this, resolver);
+  }
+
+  @Override
+  public Object readString(
+      StringJsonReader input, JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
+    if (input.tryReadNullToken()) {
+      return null;
+    }
+    return stringReader.readString(input, this, resolver);
+  }
+
+  @Override
+  public Object readUtf8(Utf8JsonReader input, JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
+    if (input.tryReadNullToken()) {
+      return null;
+    }
+    return utf8Reader.readUtf8(input, this, resolver);
   }
 }

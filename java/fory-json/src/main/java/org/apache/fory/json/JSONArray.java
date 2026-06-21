@@ -17,10 +17,20 @@
  * under the License.
  */
 
-module org.apache.fory.json {
-  requires org.apache.fory.core;
-  requires static java.sql;
+package org.apache.fory.json;
 
-  exports org.apache.fory.json;
-  exports org.apache.fory.json.annotation;
+import java.util.ArrayList;
+import java.util.Collection;
+
+/** Mutable JSON array container for dynamic JSON values. */
+public final class JSONArray extends ArrayList<Object> {
+  public JSONArray() {}
+
+  public JSONArray(int initialCapacity) {
+    super(initialCapacity);
+  }
+
+  public JSONArray(Collection<?> values) {
+    super(values);
+  }
 }

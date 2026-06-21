@@ -112,7 +112,9 @@ public final class JsonCodegen {
   }
 
   private static Class<?> nestedType(JsonFieldInfo property) {
-    if (property.writeKind() == JsonFieldKind.OBJECT && property.writeRawType() != Object.class) {
+    if (property.writeKind() == JsonFieldKind.OBJECT
+        && property.writeRawType() != Object.class
+        && property.writeTypeInfo().codec() instanceof BaseObjectCodec) {
       return property.writeRawType();
     }
     if (property.writeKind() == JsonFieldKind.COLLECTION
@@ -955,6 +957,16 @@ public final class JsonCodegen {
     Class<?> rawType = property.writeRawType();
     if (rawType == Object.class) {
       writeResolvedValue(code, "typeInfo" + prop.substring(1), value, "Object.class", utf8, indent);
+      return;
+    }
+    if (!(property.writeTypeInfo().codec() instanceof BaseObjectCodec)) {
+      code.append(indent)
+          .append(prop)
+          .append(".writeTypeInfo().codec().")
+          .append(utf8 ? "writeUtf8" : "writeString")
+          .append("(writer, ")
+          .append(value)
+          .append(", typeResolver);\n");
       return;
     }
     code.append(indent).append("if (").append(value).append(".getClass() == ");

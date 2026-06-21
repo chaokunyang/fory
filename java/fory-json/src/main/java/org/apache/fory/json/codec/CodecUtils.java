@@ -61,4 +61,14 @@ public final class CodecUtils {
     }
     return Object.class;
   }
+
+  public static Type mapKeyType(Type type) {
+    if (type instanceof ParameterizedType) {
+      Type[] arguments = ((ParameterizedType) type).getActualTypeArguments();
+      if (arguments.length == 2) {
+        return arguments[0];
+      }
+    }
+    return String.class;
+  }
 }

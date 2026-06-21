@@ -20,11 +20,18 @@
 package org.apache.fory.json.codec;
 
 import java.lang.reflect.Type;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.EnumSet;
 import java.util.LinkedHashSet;
+import java.util.NavigableSet;
+import java.util.Queue;
 import java.util.Set;
+import java.util.SortedSet;
+import java.util.TreeSet;
 import org.apache.fory.json.ForyJsonException;
+import org.apache.fory.json.JSONArray;
 import org.apache.fory.json.reader.JsonReader;
 import org.apache.fory.json.resolver.JsonTypeInfo;
 import org.apache.fory.json.resolver.JsonTypeResolver;
@@ -37,10 +44,11 @@ public final class CollectionCodec extends AbstractJsonCodec {
   private final Class<?> rawType;
   private final JsonTypeInfo elementTypeInfo;
   private final JsonCodec elementCodec;
+  private final Class<?> elementRawType;
 
   public CollectionCodec(Class<?> rawType, Type elementType, JsonTypeResolver resolver) {
     this.rawType = rawType;
-    Class<?> elementRawType = CodecUtils.rawType(elementType, Object.class);
+    elementRawType = CodecUtils.rawType(elementType, Object.class);
     elementTypeInfo = resolver.getTypeInfo(elementType, elementRawType);
     elementCodec = elementTypeInfo.codec();
   }
@@ -80,14 +88,14 @@ public final class CollectionCodec extends AbstractJsonCodec {
 
   @Override
   Object readNonNull(JsonReader reader, JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
-    Collection<Object> collection = newCollection(rawType);
+    Collection<Object> collection = newCollection(rawType, elementRawType);
     readInto(reader, collection, elementTypeInfo, elementCodec, resolver);
     return collection;
   }
 
   static Collection<Object> readUntyped(JsonReader reader, JsonTypeResolver resolver) {
     JsonTypeInfo elementInfo = resolver.getTypeInfo(Object.class, Object.class);
-    Collection<Object> collection = new ArrayList<>();
+    Collection<Object> collection = new JSONArray();
     readInto(reader, collection, elementInfo, elementInfo.codec(), resolver);
     return collection;
   }
@@ -108,10 +116,26 @@ public final class CollectionCodec extends AbstractJsonCodec {
   }
 
   @SuppressWarnings("unchecked")
-  private static Collection<Object> newCollection(Class<?> rawType) {
+  private static Collection<Object> newCollection(Class<?> rawType, Class<?> elementRawType) {
+    if (rawType == JSONArray.class) {
+      return new JSONArray();
+    }
+    if (rawType == EnumSet.class) {
+      if (!elementRawType.isEnum()) {
+        throw new ForyJsonException("EnumSet requires an enum element type");
+      }
+      return (Collection<Object>) EnumSet.noneOf((Class<? extends Enum>) elementRawType);
+    }
     if (rawType == UNTYPED_COLLECTION || rawType.isInterface()) {
+      if (NavigableSet.class.isAssignableFrom(rawType)
+          || SortedSet.class.isAssignableFrom(rawType)) {
+        return new TreeSet<>();
+      }
       if (Set.class.isAssignableFrom(rawType)) {
         return new LinkedHashSet<>();
+      }
+      if (Queue.class.isAssignableFrom(rawType)) {
+        return new ArrayDeque<>();
       }
       return new ArrayList<>();
     }

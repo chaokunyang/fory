@@ -21,17 +21,37 @@ package org.apache.fory.json;
 
 import static org.testng.Assert.assertEquals;
 import static org.testng.Assert.assertThrows;
+import static org.testng.Assert.assertTrue;
 
+import java.math.BigDecimal;
+import java.math.BigInteger;
+import java.net.MalformedURLException;
+import java.net.URI;
+import java.net.URL;
+import java.nio.ByteBuffer;
+import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
+import java.time.Instant;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Calendar;
+import java.util.Currency;
+import java.util.EnumMap;
+import java.util.GregorianCalendar;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
+import java.util.OptionalInt;
+import java.util.TimeZone;
+import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.apache.fory.json.annotation.JsonIgnore;
 import org.apache.fory.reflect.TypeRef;
 import org.testng.annotations.Test;
@@ -134,6 +154,32 @@ public class ForyJsonTest {
 
   public static final class CharValue {
     public char value;
+  }
+
+  public static final class CoreScalarFields {
+    public AtomicInteger atomicInt = new AtomicInteger(7);
+    public BigDecimal bigDecimal = new BigDecimal("12345.6789");
+    public BigInteger bigInteger = new BigInteger("12345678901234567890");
+    public StringBuilder builder = new StringBuilder("build");
+    public ByteBuffer bytes = ByteBuffer.wrap(new byte[] {1, -2, 3});
+    public Calendar calendar = calendar(123456789L);
+    public Charset charset = StandardCharsets.UTF_8;
+    public Currency currency = Currency.getInstance("EUR");
+    public LocalDate date = LocalDate.of(2026, 6, 21);
+    public Instant instant = Instant.parse("2026-06-21T01:02:03Z");
+    public Locale locale = Locale.forLanguageTag("zh-Hans-CN");
+    public Optional<String> maybe = Optional.of("yes");
+    public OptionalInt optionalInt = OptionalInt.of(4);
+    public TimeZone timeZone = TimeZone.getTimeZone("UTC");
+    public Class<?> type = PublicFields.class;
+    public URI uri = URI.create("https://fory.apache.org/json");
+    public URL url = url("https://fory.apache.org/");
+    public UUID uuid = UUID.fromString("123e4567-e89b-12d3-a456-426614174000");
+  }
+
+  public static final class MapKeyFields {
+    public Map<Integer, String> intNames = intNames();
+    public EnumMap<Kind, Integer> scores = enumScores();
   }
 
   public static final class UnicodeValues {
@@ -568,6 +614,105 @@ public class ForyJsonTest {
   }
 
   @Test
+  public void readJsonContainers() {
+    ForyJson json = ForyJson.builder().build();
+    JSONObject object =
+        json.fromJson("{\"name\":\"fory\",\"items\":[1,\"你好，Fory\"]}", JSONObject.class);
+    assertEquals(object.get("name"), "fory");
+    assertTrue(object.get("items") instanceof JSONArray);
+    JSONArray items = (JSONArray) object.get("items");
+    assertEquals(items.get(0), Long.valueOf(1));
+    assertEquals(items.get(1), ZH_TEXT);
+
+    Object natural = json.fromJson("{\"items\":[true]}", Object.class);
+    assertTrue(natural instanceof JSONObject);
+    assertTrue(((JSONObject) natural).get("items") instanceof JSONArray);
+  }
+
+  @Test
+  public void writeJsonContainers() {
+    ForyJson json = ForyJson.builder().build();
+    JSONObject object = new JSONObject();
+    JSONArray values = new JSONArray();
+    values.add(Integer.valueOf(1));
+    values.add(ZH_TEXT);
+    object.put("values", values);
+    object.put("name", "fory");
+    String expected = "{\"values\":[1,\"你好，Fory\"],\"name\":\"fory\"}";
+    assertEquals(json.toJson(object), expected);
+    assertEquals(new String(json.toJsonBytes(object), StandardCharsets.UTF_8), expected);
+  }
+
+  @Test
+  public void writeReadCoreScalarFields() {
+    ForyJson json = ForyJson.builder().build();
+    CoreScalarFields value = new CoreScalarFields();
+    String expected =
+        "{\"atomicInt\":7,\"bigDecimal\":12345.6789,\"bigInteger\":12345678901234567890,"
+            + "\"builder\":\"build\",\"bytes\":[1,-2,3],\"calendar\":123456789,"
+            + "\"charset\":\"UTF-8\",\"currency\":\"EUR\",\"date\":\"2026-06-21\","
+            + "\"instant\":\"2026-06-21T01:02:03Z\",\"locale\":\"zh-Hans-CN\","
+            + "\"maybe\":\"yes\",\"optionalInt\":4,\"timeZone\":\"UTC\",\"type\":\""
+            + PublicFields.class.getName()
+            + "\",\"uri\":\"https://fory.apache.org/json\","
+            + "\"url\":\"https://fory.apache.org/\","
+            + "\"uuid\":\"123e4567-e89b-12d3-a456-426614174000\"}";
+    assertEquals(json.toJson(value), expected);
+    assertEquals(new String(json.toJsonBytes(value), StandardCharsets.UTF_8), expected);
+    CoreScalarFields read = json.fromJson(expected, CoreScalarFields.class);
+    assertEquals(read.atomicInt.get(), 7);
+    assertEquals(read.bigDecimal, value.bigDecimal);
+    assertEquals(read.bigInteger, value.bigInteger);
+    assertEquals(read.builder.toString(), "build");
+    assertEquals(byteBufferBytes(read.bytes), new byte[] {1, -2, 3});
+    assertEquals(read.calendar.getTimeInMillis(), 123456789L);
+    assertEquals(read.charset, StandardCharsets.UTF_8);
+    assertEquals(read.currency, value.currency);
+    assertEquals(read.date, value.date);
+    assertEquals(read.instant, value.instant);
+    assertEquals(read.locale, value.locale);
+    assertEquals(read.maybe, Optional.of("yes"));
+    assertEquals(read.optionalInt.getAsInt(), 4);
+    assertEquals(read.timeZone.getID(), "UTC");
+    assertEquals(read.type, PublicFields.class);
+    assertEquals(read.uri, value.uri);
+    assertEquals(read.url, value.url);
+    assertEquals(read.uuid, value.uuid);
+  }
+
+  @Test
+  public void writeReadMapKeyFields() {
+    ForyJson json = ForyJson.builder().build();
+    String expected =
+        "{\"intNames\":{\"1\":\"one\",\"2\":\"two\"},\"scores\":{\"FAST\":1,\"SMALL\":2}}";
+    assertEquals(json.toJson(new MapKeyFields()), expected);
+    MapKeyFields read = json.fromJson(expected, MapKeyFields.class);
+    assertEquals(read.intNames, intNames());
+    assertEquals(read.scores, enumScores());
+  }
+
+  @Test
+  public void readTypeRefOptional() {
+    ForyJson json = ForyJson.builder().build();
+    Optional<TokenValues> value =
+        json.fromJson(
+            "{\"count\":9,\"name\":\"optional\",\"tags\":[\"a\"],\"total\":10}",
+            new TypeRef<Optional<TokenValues>>() {});
+    assertTrue(value.isPresent());
+    assertEquals(value.get().name, "optional");
+    assertEquals(value.get().tags, Arrays.asList("a"));
+    assertEquals(json.fromJson("null", new TypeRef<Optional<TokenValues>>() {}), Optional.empty());
+  }
+
+  @Test
+  public void readTypeRefMapKeys() {
+    ForyJson json = ForyJson.builder().build();
+    Map<Integer, String> value =
+        json.fromJson("{\"1\":\"one\",\"2\":\"two\"}", new TypeRef<Map<Integer, String>>() {});
+    assertEquals(value, intNames());
+  }
+
+  @Test
   public void readScalarRoots() {
     ForyJson json = ForyJson.builder().build();
     assertEquals(json.fromJson("7", int.class), Integer.valueOf(7));
@@ -603,6 +748,42 @@ public class ForyJsonTest {
     scores.put("one", 1);
     scores.put("two", 2);
     return scores;
+  }
+
+  private static Map<Integer, String> intNames() {
+    Map<Integer, String> values = new LinkedHashMap<>();
+    values.put(1, "one");
+    values.put(2, "two");
+    return values;
+  }
+
+  private static EnumMap<Kind, Integer> enumScores() {
+    EnumMap<Kind, Integer> values = new EnumMap<>(Kind.class);
+    values.put(Kind.FAST, 1);
+    values.put(Kind.SMALL, 2);
+    return values;
+  }
+
+  private static Calendar calendar(long millis) {
+    Calendar calendar = new GregorianCalendar();
+    calendar.setTimeZone(TimeZone.getTimeZone("UTC"));
+    calendar.setTimeInMillis(millis);
+    return calendar;
+  }
+
+  private static URL url(String value) {
+    try {
+      return new URL(value);
+    } catch (MalformedURLException e) {
+      throw new IllegalArgumentException(e);
+    }
+  }
+
+  private static byte[] byteBufferBytes(ByteBuffer buffer) {
+    ByteBuffer copy = buffer.duplicate();
+    byte[] bytes = new byte[copy.remaining()];
+    copy.get(bytes);
+    return bytes;
   }
 
   private static Map<String, String> unicodeMap() {

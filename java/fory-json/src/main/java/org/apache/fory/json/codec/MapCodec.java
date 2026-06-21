@@ -20,9 +20,17 @@
 package org.apache.fory.json.codec;
 
 import java.lang.reflect.Type;
+import java.util.EnumMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.NavigableMap;
+import java.util.SortedMap;
+import java.util.TreeMap;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.ConcurrentSkipListMap;
 import org.apache.fory.json.ForyJsonException;
+import org.apache.fory.json.JSONObject;
 import org.apache.fory.json.reader.JsonReader;
 import org.apache.fory.json.resolver.JsonTypeInfo;
 import org.apache.fory.json.resolver.JsonTypeResolver;
@@ -33,11 +41,17 @@ import org.apache.fory.json.writer.Utf8JsonWriter;
 public final class MapCodec extends AbstractJsonCodec {
   private static final Class<?> UNTYPED_MAP = LinkedHashMap.class;
   private final Class<?> rawType;
+  private final MapKeyCodec keyCodec;
+  private final Class<?> keyRawType;
   private final JsonTypeInfo valueTypeInfo;
   private final JsonCodec valueCodec;
 
-  public MapCodec(Class<?> rawType, Type valueType, JsonTypeResolver resolver) {
+  public MapCodec(Class<?> rawType, Type mapType, JsonTypeResolver resolver) {
     this.rawType = rawType;
+    Type keyType = CodecUtils.mapKeyType(mapType);
+    keyRawType = CodecUtils.rawType(keyType, String.class);
+    keyCodec = MapKeyCodec.of(keyRawType);
+    Type valueType = CodecUtils.mapValueType(mapType);
     Class<?> valueRawType = CodecUtils.rawType(valueType, Object.class);
     valueTypeInfo = resolver.getTypeInfo(valueType, valueRawType);
     valueCodec = valueTypeInfo.codec();
@@ -60,15 +74,15 @@ public final class MapCodec extends AbstractJsonCodec {
 
   @Override
   Object readNonNull(JsonReader reader, JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
-    Map<String, Object> map = newMap(rawType);
-    readInto(reader, map, valueTypeInfo, valueCodec, resolver);
+    Map<Object, Object> map = newMap(rawType, keyRawType);
+    readInto(reader, map, keyCodec, valueTypeInfo, valueCodec, resolver);
     return map;
   }
 
-  static Map<String, Object> readUntyped(JsonReader reader, JsonTypeResolver resolver) {
+  static Map<Object, Object> readUntyped(JsonReader reader, JsonTypeResolver resolver) {
     JsonTypeInfo valueInfo = resolver.getTypeInfo(Object.class, Object.class);
-    Map<String, Object> map = new LinkedHashMap<>();
-    readInto(reader, map, valueInfo, valueInfo.codec(), resolver);
+    Map<Object, Object> map = (Map<Object, Object>) (Map<?, ?>) new JSONObject();
+    readInto(reader, map, MapKeyCodec.STRING, valueInfo, valueInfo.codec(), resolver);
     return map;
   }
 
@@ -76,12 +90,8 @@ public final class MapCodec extends AbstractJsonCodec {
     writer.writeObjectStart();
     int index = 0;
     for (Map.Entry<?, ?> entry : map.entrySet()) {
-      Object key = entry.getKey();
-      if (!(key instanceof String)) {
-        throw new ForyJsonException("Only String map keys are supported for JSON, got " + key);
-      }
       writer.writeComma(index++);
-      writer.writeFieldName((String) key);
+      writer.writeFieldName(keyCodec.toName(entry.getKey()));
       valueCodec.write(writer, entry.getValue(), resolver);
     }
     writer.writeObjectEnd();
@@ -91,12 +101,8 @@ public final class MapCodec extends AbstractJsonCodec {
     writer.writeObjectStart();
     int index = 0;
     for (Map.Entry<?, ?> entry : map.entrySet()) {
-      Object key = entry.getKey();
-      if (!(key instanceof String)) {
-        throw new ForyJsonException("Only String map keys are supported for JSON, got " + key);
-      }
       writer.writeComma(index++);
-      writer.writeFieldName((String) key);
+      writer.writeFieldName(keyCodec.toName(entry.getKey()));
       valueCodec.writeString(writer, entry.getValue(), resolver);
     }
     writer.writeObjectEnd();
@@ -106,12 +112,8 @@ public final class MapCodec extends AbstractJsonCodec {
     writer.writeObjectStart();
     int index = 0;
     for (Map.Entry<?, ?> entry : map.entrySet()) {
-      Object key = entry.getKey();
-      if (!(key instanceof String)) {
-        throw new ForyJsonException("Only String map keys are supported for JSON, got " + key);
-      }
       writer.writeComma(index++);
-      writer.writeFieldName((String) key);
+      writer.writeFieldName(keyCodec.toName(entry.getKey()));
       valueCodec.writeUtf8(writer, entry.getValue(), resolver);
     }
     writer.writeObjectEnd();
@@ -119,7 +121,17 @@ public final class MapCodec extends AbstractJsonCodec {
 
   private static void readInto(
       JsonReader reader,
-      Map<String, Object> map,
+      Map<Object, Object> map,
+      JsonTypeInfo valueInfo,
+      JsonCodec valueCodec,
+      JsonTypeResolver resolver) {
+    readInto(reader, map, MapKeyCodec.STRING, valueInfo, valueCodec, resolver);
+  }
+
+  private static void readInto(
+      JsonReader reader,
+      Map<Object, Object> map,
+      MapKeyCodec keyCodec,
       JsonTypeInfo valueInfo,
       JsonCodec valueCodec,
       JsonTypeResolver resolver) {
@@ -128,21 +140,139 @@ public final class MapCodec extends AbstractJsonCodec {
       do {
         String name = reader.readString();
         reader.expect(':');
-        map.put(name, valueCodec.read(reader, valueInfo, resolver));
+        map.put(keyCodec.fromName(name), valueCodec.read(reader, valueInfo, resolver));
       } while (reader.consume(','));
       reader.expect('}');
     }
   }
 
   @SuppressWarnings("unchecked")
-  private static Map<String, Object> newMap(Class<?> rawType) {
+  private static Map<Object, Object> newMap(Class<?> rawType, Class<?> keyRawType) {
+    if (rawType == JSONObject.class) {
+      return (Map<Object, Object>) (Map<?, ?>) new JSONObject();
+    }
+    if (rawType == EnumMap.class) {
+      if (!keyRawType.isEnum()) {
+        throw new ForyJsonException("EnumMap requires an enum key type");
+      }
+      return new EnumMap(keyRawType);
+    }
     if (rawType == UNTYPED_MAP || rawType.isInterface()) {
+      if (ConcurrentMap.class.isAssignableFrom(rawType)) {
+        if (NavigableMap.class.isAssignableFrom(rawType)
+            || SortedMap.class.isAssignableFrom(rawType)) {
+          return new ConcurrentSkipListMap<>();
+        }
+        return new ConcurrentHashMap<>();
+      }
+      if (NavigableMap.class.isAssignableFrom(rawType)
+          || SortedMap.class.isAssignableFrom(rawType)) {
+        return new TreeMap<>();
+      }
       return new LinkedHashMap<>();
     }
     try {
-      return (Map<String, Object>) rawType.newInstance();
+      return (Map<Object, Object>) rawType.newInstance();
     } catch (ReflectiveOperationException e) {
       throw new ForyJsonException("Cannot create map " + rawType, e);
+    }
+  }
+
+  private interface MapKeyCodec {
+    MapKeyCodec STRING =
+        new MapKeyCodec() {
+          @Override
+          public String toName(Object key) {
+            if (!(key instanceof String)) {
+              throw new ForyJsonException("Expected String map key, got " + key);
+            }
+            return (String) key;
+          }
+
+          @Override
+          public Object fromName(String name) {
+            return name;
+          }
+        };
+
+    String toName(Object key);
+
+    Object fromName(String name);
+
+    static MapKeyCodec of(Class<?> rawType) {
+      if (rawType == String.class || rawType == Object.class) {
+        return STRING;
+      }
+      if (rawType.isEnum()) {
+        return new EnumKeyCodec(rawType);
+      }
+      if (rawType == int.class || rawType == Integer.class) {
+        return IntKeyCodec.INSTANCE;
+      }
+      if (rawType == long.class || rawType == Long.class) {
+        return LongKeyCodec.INSTANCE;
+      }
+      throw new ForyJsonException("Unsupported JSON map key type " + rawType);
+    }
+  }
+
+  private static final class EnumKeyCodec implements MapKeyCodec {
+    private final Class<?> type;
+    private final Map<String, Enum<?>> values;
+
+    @SuppressWarnings("unchecked")
+    private EnumKeyCodec(Class<?> type) {
+      this.type = type;
+      Enum<?>[] constants = (Enum<?>[]) type.getEnumConstants();
+      values = new LinkedHashMap<>(constants.length * 2);
+      for (Enum<?> constant : constants) {
+        values.put(constant.name(), constant);
+      }
+    }
+
+    @Override
+    public String toName(Object key) {
+      if (!type.isInstance(key)) {
+        throw new ForyJsonException("Expected " + type + " map key, got " + key);
+      }
+      return ((Enum<?>) key).name();
+    }
+
+    @Override
+    public Object fromName(String name) {
+      Enum<?> value = values.get(name);
+      if (value == null) {
+        throw new ForyJsonException("Unknown enum map key " + name + " for " + type);
+      }
+      return value;
+    }
+  }
+
+  private static final class IntKeyCodec implements MapKeyCodec {
+    private static final IntKeyCodec INSTANCE = new IntKeyCodec();
+
+    @Override
+    public String toName(Object key) {
+      return String.valueOf((Integer) key);
+    }
+
+    @Override
+    public Object fromName(String name) {
+      return Integer.valueOf(name);
+    }
+  }
+
+  private static final class LongKeyCodec implements MapKeyCodec {
+    private static final LongKeyCodec INSTANCE = new LongKeyCodec();
+
+    @Override
+    public String toName(Object key) {
+      return String.valueOf((Long) key);
+    }
+
+    @Override
+    public Object fromName(String name) {
+      return Long.valueOf(name);
     }
   }
 }

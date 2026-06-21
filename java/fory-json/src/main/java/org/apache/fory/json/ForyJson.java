@@ -24,6 +24,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.atomic.AtomicReferenceArray;
 import org.apache.fory.json.codec.CodecRegistry;
 import org.apache.fory.json.codec.GeneratedObjectCodec;
+import org.apache.fory.json.codec.JsonSharedRegistry;
 import org.apache.fory.json.reader.JsonReader;
 import org.apache.fory.json.reader.StringJsonReader;
 import org.apache.fory.json.reader.Utf8JsonReader;
@@ -43,7 +44,7 @@ public final class ForyJson {
   private static final int DEFAULT_POOL_SIZE =
       Math.max(1, Runtime.getRuntime().availableProcessors() * 4);
 
-  private final JsonTypeResolver typeResolver;
+  private final JsonSharedRegistry sharedRegistry;
   private final boolean writeNullFields;
   private final int poolSize;
   private final AtomicReference<PooledState> primarySlot;
@@ -51,13 +52,14 @@ public final class ForyJson {
 
   ForyJson(boolean writeNullFields, boolean codegenEnabled, CodecRegistry codecRegistry) {
     this.writeNullFields = writeNullFields;
-    typeResolver = new JsonTypeResolver(codegenEnabled, writeNullFields, codecRegistry);
+    sharedRegistry = new JsonSharedRegistry(codegenEnabled, writeNullFields, codecRegistry);
     poolSize = DEFAULT_POOL_SIZE;
     primarySlot =
-        new AtomicReference<>(new PooledState(new JsonState(writeNullFields), PRIMARY_SLOT));
+        new AtomicReference<>(
+            new PooledState(new JsonState(writeNullFields, sharedRegistry), PRIMARY_SLOT));
     slots = new AtomicReferenceArray<>(poolSize);
     for (int i = 0; i < poolSize; i++) {
-      slots.set(i, new PooledState(new JsonState(writeNullFields), i));
+      slots.set(i, new PooledState(new JsonState(writeNullFields, sharedRegistry), i));
     }
   }
 
@@ -73,8 +75,9 @@ public final class ForyJson {
       if (value == null) {
         writer.writeNull();
       } else {
-        JsonTypeInfo typeInfo = state.rootTypeInfo(typeResolver, value.getClass());
-        typeInfo.codec().writeString(writer, value, typeResolver);
+        JsonTypeResolver resolver = state.typeResolver;
+        JsonTypeInfo typeInfo = state.rootTypeInfo(value.getClass());
+        typeInfo.codec().writeString(writer, value, resolver);
       }
       return writer.toJson();
     } finally {
@@ -90,8 +93,9 @@ public final class ForyJson {
       if (value == null) {
         writer.writeNull();
       } else {
-        JsonTypeInfo typeInfo = state.rootTypeInfo(typeResolver, value.getClass());
-        typeInfo.codec().writeUtf8(writer, value, typeResolver);
+        JsonTypeResolver resolver = state.typeResolver;
+        JsonTypeInfo typeInfo = state.rootTypeInfo(value.getClass());
+        typeInfo.codec().writeUtf8(writer, value, resolver);
       }
       return writer.toJsonBytes();
     } finally {
@@ -100,27 +104,56 @@ public final class ForyJson {
   }
 
   public <T> T fromJson(String json, Class<T> type) {
-    return castValue(readValue(new StringJsonReader(json), type, type), type);
+    PooledState entry = acquire();
+    try {
+      return castValue(readValue(new StringJsonReader(json), type, type, entry.state), type);
+    } finally {
+      release(entry);
+    }
   }
 
   /** Parses JSON using a generic type captured by {@link TypeRef}. */
   public <T> T fromJson(String json, TypeRef<T> typeRef) {
-    Object value = readValue(new StringJsonReader(json), typeRef.getType(), typeRef.getRawType());
-    return castValue(value, typeRef);
+    PooledState entry = acquire();
+    try {
+      Object value =
+          readValue(
+              new StringJsonReader(json), typeRef.getType(), typeRef.getRawType(), entry.state);
+      return castValue(value, typeRef);
+    } finally {
+      release(entry);
+    }
   }
 
   public <T> T fromJson(byte[] bytes, Class<T> type) {
-    return castValue(readValue(new Utf8JsonReader(bytes), type, type), type);
+    PooledState entry = acquire();
+    try {
+      return castValue(readValue(new Utf8JsonReader(bytes), type, type, entry.state), type);
+    } finally {
+      release(entry);
+    }
   }
 
   /** Parses UTF-8 JSON bytes using a generic type captured by {@link TypeRef}. */
   public <T> T fromJson(byte[] bytes, TypeRef<T> typeRef) {
-    Object value = readValue(new Utf8JsonReader(bytes), typeRef.getType(), typeRef.getRawType());
-    return castValue(value, typeRef);
+    PooledState entry = acquire();
+    try {
+      Object value =
+          readValue(
+              new Utf8JsonReader(bytes), typeRef.getType(), typeRef.getRawType(), entry.state);
+      return castValue(value, typeRef);
+    } finally {
+      release(entry);
+    }
   }
 
   boolean hasGeneratedWriter(Class<?> type) {
-    return typeResolver.getObjectCodec(type) instanceof GeneratedObjectCodec;
+    PooledState entry = acquire();
+    try {
+      return entry.state.typeResolver.getObjectCodec(type) instanceof GeneratedObjectCodec;
+    } finally {
+      release(entry);
+    }
   }
 
   private PooledState acquire() {
@@ -133,7 +166,7 @@ public final class ForyJson {
     if (entry != null) {
       return entry;
     }
-    return new PooledState(new JsonState(writeNullFields), TEMPORARY_SLOT);
+    return new PooledState(new JsonState(writeNullFields, sharedRegistry), TEMPORARY_SLOT);
   }
 
   private void release(PooledState entry) {
@@ -184,9 +217,10 @@ public final class ForyJson {
     return hash ^ (hash >>> 16);
   }
 
-  private Object readValue(JsonReader reader, Type type, Class<?> fallback) {
-    JsonTypeInfo typeInfo = typeResolver.getTypeInfo(type, fallback);
-    Object value = typeInfo.codec().read(reader, typeInfo, typeResolver);
+  private Object readValue(JsonReader reader, Type type, Class<?> fallback, JsonState state) {
+    JsonTypeResolver resolver = state.typeResolver;
+    JsonTypeInfo typeInfo = resolver.getTypeInfo(type, fallback);
+    Object value = typeInfo.codec().read(reader, typeInfo, resolver);
     reader.finish();
     return value;
   }
@@ -215,12 +249,14 @@ public final class ForyJson {
   private static final class JsonState {
     private final Utf8JsonWriter utf8Writer;
     private final StringJsonWriter stringWriter;
+    private final JsonTypeResolver typeResolver;
     private Class<?> lastRootType;
     private JsonTypeInfo lastRootInfo;
 
-    private JsonState(boolean writeNullFields) {
+    private JsonState(boolean writeNullFields, JsonSharedRegistry sharedRegistry) {
       utf8Writer = new Utf8JsonWriter(writeNullFields, new byte[INITIAL_BUFFER_SIZE]);
       stringWriter = new StringJsonWriter(writeNullFields, new byte[INITIAL_BUFFER_SIZE]);
+      typeResolver = new JsonTypeResolver(sharedRegistry);
     }
 
     private StringJsonWriter stringWriter() {
@@ -237,12 +273,12 @@ public final class ForyJson {
       return buffer.length <= MAX_CACHED_BUFFER_SIZE ? buffer : new byte[INITIAL_BUFFER_SIZE];
     }
 
-    private JsonTypeInfo rootTypeInfo(JsonTypeResolver resolver, Class<?> type) {
+    private JsonTypeInfo rootTypeInfo(Class<?> type) {
       JsonTypeInfo typeInfo = lastRootInfo;
       if (lastRootType == type && typeInfo != null) {
         return typeInfo;
       }
-      typeInfo = resolver.getTypeInfo(type, type);
+      typeInfo = typeResolver.getTypeInfo(type, type);
       lastRootType = type;
       lastRootInfo = typeInfo;
       return typeInfo;

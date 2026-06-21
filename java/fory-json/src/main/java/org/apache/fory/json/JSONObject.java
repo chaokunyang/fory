@@ -17,10 +17,20 @@
  * under the License.
  */
 
-module org.apache.fory.json {
-  requires org.apache.fory.core;
-  requires static java.sql;
+package org.apache.fory.json;
 
-  exports org.apache.fory.json;
-  exports org.apache.fory.json.annotation;
+import java.util.LinkedHashMap;
+import java.util.Map;
+
+/** Mutable JSON object container for dynamic JSON values. */
+public final class JSONObject extends LinkedHashMap<String, Object> {
+  public JSONObject() {}
+
+  public JSONObject(int initialCapacity) {
+    super(initialCapacity);
+  }
+
+  public JSONObject(Map<String, ?> values) {
+    super(values);
+  }
 }

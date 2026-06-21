@@ -44,6 +44,8 @@ public abstract class JsonWriter {
 
   public abstract void writeDouble(double value);
 
+  public abstract void writeNumber(String value);
+
   public abstract void writeChar(char value);
 
   public abstract void writeString(String value);

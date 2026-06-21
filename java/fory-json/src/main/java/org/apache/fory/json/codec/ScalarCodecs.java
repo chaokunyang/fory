@@ -19,8 +19,46 @@
 
 package org.apache.fory.json.codec;
 
+import java.math.BigDecimal;
+import java.math.BigInteger;
+import java.net.MalformedURLException;
+import java.net.URI;
+import java.net.URL;
+import java.nio.ByteBuffer;
+import java.nio.charset.Charset;
+import java.time.Duration;
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
+import java.time.MonthDay;
+import java.time.OffsetDateTime;
+import java.time.OffsetTime;
+import java.time.Period;
+import java.time.Year;
+import java.time.YearMonth;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
+import java.time.ZonedDateTime;
+import java.util.Arrays;
+import java.util.Calendar;
+import java.util.Currency;
+import java.util.Date;
+import java.util.GregorianCalendar;
 import java.util.HashMap;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
+import java.util.OptionalDouble;
+import java.util.OptionalInt;
+import java.util.OptionalLong;
+import java.util.TimeZone;
+import java.util.UUID;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.regex.Pattern;
 import org.apache.fory.json.ForyJsonException;
 import org.apache.fory.json.meta.JsonFieldAccessor;
 import org.apache.fory.json.reader.JsonReader;
@@ -29,6 +67,9 @@ import org.apache.fory.json.resolver.JsonTypeResolver;
 import org.apache.fory.json.writer.JsonWriter;
 import org.apache.fory.json.writer.StringJsonWriter;
 import org.apache.fory.json.writer.Utf8JsonWriter;
+import org.apache.fory.reflect.ReflectionUtils;
+import org.apache.fory.type.BFloat16;
+import org.apache.fory.type.Float16;
 
 final class ScalarCodecs {
   private ScalarCodecs() {}
@@ -112,6 +153,32 @@ final class ScalarCodecs {
     @Override
     Object readNonNull(JsonReader reader, JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
       return reader.readString();
+    }
+  }
+
+  static final class VoidCodec extends AbstractJsonCodec {
+    static final VoidCodec INSTANCE = new VoidCodec();
+
+    @Override
+    public Object read(JsonReader reader, JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
+      reader.readNull();
+      return null;
+    }
+
+    @Override
+    void writeNonNull(JsonWriter writer, Object value, JsonTypeResolver resolver) {
+      writer.writeNull();
+    }
+
+    @Override
+    void writeUtf8NonNull(Utf8JsonWriter writer, Object value, JsonTypeResolver resolver) {
+      writer.writeNull();
+    }
+
+    @Override
+    Object readNonNull(JsonReader reader, JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
+      reader.readNull();
+      return null;
     }
   }
 
@@ -418,6 +485,851 @@ final class ScalarCodecs {
     }
   }
 
+  abstract static class StringValueCodec extends AbstractJsonCodec {
+    @Override
+    final void writeNonNull(JsonWriter writer, Object value, JsonTypeResolver resolver) {
+      writer.writeString(toJsonString(value));
+    }
+
+    @Override
+    final void writeUtf8NonNull(Utf8JsonWriter writer, Object value, JsonTypeResolver resolver) {
+      writer.writeString(toJsonString(value));
+    }
+
+    @Override
+    final Object readNonNull(JsonReader reader, JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
+      return fromJsonString(reader.readString());
+    }
+
+    abstract String toJsonString(Object value);
+
+    abstract Object fromJsonString(String value);
+  }
+
+  abstract static class NumberValueCodec extends AbstractJsonCodec {
+    @Override
+    final void writeNonNull(JsonWriter writer, Object value, JsonTypeResolver resolver) {
+      writer.writeNumber(toJsonNumber(value));
+    }
+
+    @Override
+    final void writeUtf8NonNull(Utf8JsonWriter writer, Object value, JsonTypeResolver resolver) {
+      writer.writeNumber(toJsonNumber(value));
+    }
+
+    @Override
+    final Object readNonNull(JsonReader reader, JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
+      return fromJsonNumber(reader.readNumber());
+    }
+
+    abstract String toJsonNumber(Object value);
+
+    abstract Object fromJsonNumber(String value);
+  }
+
+  static final class BigIntegerCodec extends NumberValueCodec {
+    static final BigIntegerCodec INSTANCE = new BigIntegerCodec();
+
+    @Override
+    String toJsonNumber(Object value) {
+      return value.toString();
+    }
+
+    @Override
+    Object fromJsonNumber(String value) {
+      return new BigInteger(value);
+    }
+  }
+
+  static final class BigDecimalCodec extends NumberValueCodec {
+    static final BigDecimalCodec INSTANCE = new BigDecimalCodec();
+
+    @Override
+    String toJsonNumber(Object value) {
+      return value.toString();
+    }
+
+    @Override
+    Object fromJsonNumber(String value) {
+      return new BigDecimal(value);
+    }
+  }
+
+  static final class Float16Codec extends AbstractJsonCodec {
+    static final Float16Codec INSTANCE = new Float16Codec();
+
+    @Override
+    void writeNonNull(JsonWriter writer, Object value, JsonTypeResolver resolver) {
+      writer.writeFloat(((Float16) value).floatValue());
+    }
+
+    @Override
+    void writeUtf8NonNull(Utf8JsonWriter writer, Object value, JsonTypeResolver resolver) {
+      writer.writeFloat(((Float16) value).floatValue());
+    }
+
+    @Override
+    Object readNonNull(JsonReader reader, JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
+      return Float16.valueOf(Float.parseFloat(reader.readNumber()));
+    }
+  }
+
+  static final class BFloat16Codec extends AbstractJsonCodec {
+    static final BFloat16Codec INSTANCE = new BFloat16Codec();
+
+    @Override
+    void writeNonNull(JsonWriter writer, Object value, JsonTypeResolver resolver) {
+      writer.writeFloat(((BFloat16) value).floatValue());
+    }
+
+    @Override
+    void writeUtf8NonNull(Utf8JsonWriter writer, Object value, JsonTypeResolver resolver) {
+      writer.writeFloat(((BFloat16) value).floatValue());
+    }
+
+    @Override
+    Object readNonNull(JsonReader reader, JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
+      return BFloat16.valueOf(Float.parseFloat(reader.readNumber()));
+    }
+  }
+
+  static final class StringBuilderCodec extends StringValueCodec {
+    static final StringBuilderCodec INSTANCE = new StringBuilderCodec();
+
+    @Override
+    String toJsonString(Object value) {
+      return value.toString();
+    }
+
+    @Override
+    Object fromJsonString(String value) {
+      return new StringBuilder(value);
+    }
+  }
+
+  static final class StringBufferCodec extends StringValueCodec {
+    static final StringBufferCodec INSTANCE = new StringBufferCodec();
+
+    @Override
+    String toJsonString(Object value) {
+      return value.toString();
+    }
+
+    @Override
+    Object fromJsonString(String value) {
+      return new StringBuffer(value);
+    }
+  }
+
+  static final class ClassCodec extends StringValueCodec {
+    static final ClassCodec INSTANCE = new ClassCodec();
+
+    @Override
+    String toJsonString(Object value) {
+      return ((Class<?>) value).getName();
+    }
+
+    @Override
+    Object fromJsonString(String value) {
+      try {
+        return ReflectionUtils.loadClass(value);
+      } catch (RuntimeException e) {
+        throw new ForyJsonException("Cannot load class " + value, e);
+      }
+    }
+  }
+
+  static final class CurrencyCodec extends StringValueCodec {
+    static final CurrencyCodec INSTANCE = new CurrencyCodec();
+
+    @Override
+    String toJsonString(Object value) {
+      return ((Currency) value).getCurrencyCode();
+    }
+
+    @Override
+    Object fromJsonString(String value) {
+      return Currency.getInstance(value);
+    }
+  }
+
+  static final class UriCodec extends StringValueCodec {
+    static final UriCodec INSTANCE = new UriCodec();
+
+    @Override
+    String toJsonString(Object value) {
+      return value.toString();
+    }
+
+    @Override
+    Object fromJsonString(String value) {
+      return URI.create(value);
+    }
+  }
+
+  static final class UrlCodec extends StringValueCodec {
+    static final UrlCodec INSTANCE = new UrlCodec();
+
+    @Override
+    String toJsonString(Object value) {
+      return value.toString();
+    }
+
+    @Override
+    Object fromJsonString(String value) {
+      try {
+        return new URL(value);
+      } catch (MalformedURLException e) {
+        throw new ForyJsonException("Invalid URL " + value, e);
+      }
+    }
+  }
+
+  static final class PatternCodec extends StringValueCodec {
+    static final PatternCodec INSTANCE = new PatternCodec();
+
+    @Override
+    String toJsonString(Object value) {
+      return ((Pattern) value).pattern();
+    }
+
+    @Override
+    Object fromJsonString(String value) {
+      return Pattern.compile(value);
+    }
+  }
+
+  static final class UuidCodec extends StringValueCodec {
+    static final UuidCodec INSTANCE = new UuidCodec();
+
+    @Override
+    String toJsonString(Object value) {
+      return value.toString();
+    }
+
+    @Override
+    Object fromJsonString(String value) {
+      return UUID.fromString(value);
+    }
+  }
+
+  static final class LocaleCodec extends StringValueCodec {
+    static final LocaleCodec INSTANCE = new LocaleCodec();
+
+    @Override
+    String toJsonString(Object value) {
+      return ((Locale) value).toLanguageTag();
+    }
+
+    @Override
+    Object fromJsonString(String value) {
+      return Locale.forLanguageTag(value);
+    }
+  }
+
+  static final class CharsetCodec extends StringValueCodec {
+    static final CharsetCodec INSTANCE = new CharsetCodec();
+
+    @Override
+    String toJsonString(Object value) {
+      return ((Charset) value).name();
+    }
+
+    @Override
+    Object fromJsonString(String value) {
+      return Charset.forName(value);
+    }
+  }
+
+  static final class DateCodec extends AbstractJsonCodec {
+    static final DateCodec INSTANCE = new DateCodec();
+
+    @Override
+    void writeNonNull(JsonWriter writer, Object value, JsonTypeResolver resolver) {
+      writer.writeLong(((Date) value).getTime());
+    }
+
+    @Override
+    void writeUtf8NonNull(Utf8JsonWriter writer, Object value, JsonTypeResolver resolver) {
+      writer.writeLong(((Date) value).getTime());
+    }
+
+    @Override
+    Object readNonNull(JsonReader reader, JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
+      return new Date(Long.parseLong(reader.readNumber()));
+    }
+  }
+
+  static final class SqlDateCodec extends AbstractJsonCodec {
+    static final SqlDateCodec INSTANCE = new SqlDateCodec();
+
+    @Override
+    void writeNonNull(JsonWriter writer, Object value, JsonTypeResolver resolver) {
+      writer.writeLong(((java.sql.Date) value).getTime());
+    }
+
+    @Override
+    void writeUtf8NonNull(Utf8JsonWriter writer, Object value, JsonTypeResolver resolver) {
+      writer.writeLong(((java.sql.Date) value).getTime());
+    }
+
+    @Override
+    Object readNonNull(JsonReader reader, JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
+      return new java.sql.Date(Long.parseLong(reader.readNumber()));
+    }
+  }
+
+  static final class SqlTimeCodec extends AbstractJsonCodec {
+    static final SqlTimeCodec INSTANCE = new SqlTimeCodec();
+
+    @Override
+    void writeNonNull(JsonWriter writer, Object value, JsonTypeResolver resolver) {
+      writer.writeLong(((java.sql.Time) value).getTime());
+    }
+
+    @Override
+    void writeUtf8NonNull(Utf8JsonWriter writer, Object value, JsonTypeResolver resolver) {
+      writer.writeLong(((java.sql.Time) value).getTime());
+    }
+
+    @Override
+    Object readNonNull(JsonReader reader, JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
+      return new java.sql.Time(Long.parseLong(reader.readNumber()));
+    }
+  }
+
+  static final class TimestampCodec extends AbstractJsonCodec {
+    static final TimestampCodec INSTANCE = new TimestampCodec();
+
+    @Override
+    void writeNonNull(JsonWriter writer, Object value, JsonTypeResolver resolver) {
+      writer.writeLong(((java.sql.Timestamp) value).getTime());
+    }
+
+    @Override
+    void writeUtf8NonNull(Utf8JsonWriter writer, Object value, JsonTypeResolver resolver) {
+      writer.writeLong(((java.sql.Timestamp) value).getTime());
+    }
+
+    @Override
+    Object readNonNull(JsonReader reader, JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
+      return new java.sql.Timestamp(Long.parseLong(reader.readNumber()));
+    }
+  }
+
+  static final class CalendarCodec extends AbstractJsonCodec {
+    static final CalendarCodec INSTANCE = new CalendarCodec();
+
+    @Override
+    void writeNonNull(JsonWriter writer, Object value, JsonTypeResolver resolver) {
+      writer.writeLong(((Calendar) value).getTimeInMillis());
+    }
+
+    @Override
+    void writeUtf8NonNull(Utf8JsonWriter writer, Object value, JsonTypeResolver resolver) {
+      writer.writeLong(((Calendar) value).getTimeInMillis());
+    }
+
+    @Override
+    Object readNonNull(JsonReader reader, JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
+      Calendar calendar = new GregorianCalendar();
+      calendar.setTimeInMillis(Long.parseLong(reader.readNumber()));
+      return calendar;
+    }
+  }
+
+  static final class TimeZoneCodec extends StringValueCodec {
+    static final TimeZoneCodec INSTANCE = new TimeZoneCodec();
+
+    @Override
+    String toJsonString(Object value) {
+      return ((TimeZone) value).getID();
+    }
+
+    @Override
+    Object fromJsonString(String value) {
+      return TimeZone.getTimeZone(value);
+    }
+  }
+
+  static final class LocalDateCodec extends StringValueCodec {
+    static final LocalDateCodec INSTANCE = new LocalDateCodec();
+
+    @Override
+    String toJsonString(Object value) {
+      return value.toString();
+    }
+
+    @Override
+    Object fromJsonString(String value) {
+      return LocalDate.parse(value);
+    }
+  }
+
+  static final class LocalTimeCodec extends StringValueCodec {
+    static final LocalTimeCodec INSTANCE = new LocalTimeCodec();
+
+    @Override
+    String toJsonString(Object value) {
+      return value.toString();
+    }
+
+    @Override
+    Object fromJsonString(String value) {
+      return LocalTime.parse(value);
+    }
+  }
+
+  static final class LocalDateTimeCodec extends StringValueCodec {
+    static final LocalDateTimeCodec INSTANCE = new LocalDateTimeCodec();
+
+    @Override
+    String toJsonString(Object value) {
+      return value.toString();
+    }
+
+    @Override
+    Object fromJsonString(String value) {
+      return LocalDateTime.parse(value);
+    }
+  }
+
+  static final class InstantCodec extends StringValueCodec {
+    static final InstantCodec INSTANCE = new InstantCodec();
+
+    @Override
+    String toJsonString(Object value) {
+      return value.toString();
+    }
+
+    @Override
+    Object fromJsonString(String value) {
+      return Instant.parse(value);
+    }
+  }
+
+  static final class DurationCodec extends StringValueCodec {
+    static final DurationCodec INSTANCE = new DurationCodec();
+
+    @Override
+    String toJsonString(Object value) {
+      return value.toString();
+    }
+
+    @Override
+    Object fromJsonString(String value) {
+      return Duration.parse(value);
+    }
+  }
+
+  static final class ZoneOffsetCodec extends StringValueCodec {
+    static final ZoneOffsetCodec INSTANCE = new ZoneOffsetCodec();
+
+    @Override
+    String toJsonString(Object value) {
+      return value.toString();
+    }
+
+    @Override
+    Object fromJsonString(String value) {
+      return ZoneOffset.of(value);
+    }
+  }
+
+  static final class ZoneIdCodec extends StringValueCodec {
+    static final ZoneIdCodec INSTANCE = new ZoneIdCodec();
+
+    @Override
+    String toJsonString(Object value) {
+      return ((ZoneId) value).getId();
+    }
+
+    @Override
+    Object fromJsonString(String value) {
+      return ZoneId.of(value);
+    }
+  }
+
+  static final class ZonedDateTimeCodec extends StringValueCodec {
+    static final ZonedDateTimeCodec INSTANCE = new ZonedDateTimeCodec();
+
+    @Override
+    String toJsonString(Object value) {
+      return value.toString();
+    }
+
+    @Override
+    Object fromJsonString(String value) {
+      return ZonedDateTime.parse(value);
+    }
+  }
+
+  static final class YearCodec extends StringValueCodec {
+    static final YearCodec INSTANCE = new YearCodec();
+
+    @Override
+    String toJsonString(Object value) {
+      return value.toString();
+    }
+
+    @Override
+    Object fromJsonString(String value) {
+      return Year.parse(value);
+    }
+  }
+
+  static final class YearMonthCodec extends StringValueCodec {
+    static final YearMonthCodec INSTANCE = new YearMonthCodec();
+
+    @Override
+    String toJsonString(Object value) {
+      return value.toString();
+    }
+
+    @Override
+    Object fromJsonString(String value) {
+      return YearMonth.parse(value);
+    }
+  }
+
+  static final class MonthDayCodec extends StringValueCodec {
+    static final MonthDayCodec INSTANCE = new MonthDayCodec();
+
+    @Override
+    String toJsonString(Object value) {
+      return value.toString();
+    }
+
+    @Override
+    Object fromJsonString(String value) {
+      return MonthDay.parse(value);
+    }
+  }
+
+  static final class PeriodCodec extends StringValueCodec {
+    static final PeriodCodec INSTANCE = new PeriodCodec();
+
+    @Override
+    String toJsonString(Object value) {
+      return value.toString();
+    }
+
+    @Override
+    Object fromJsonString(String value) {
+      return Period.parse(value);
+    }
+  }
+
+  static final class OffsetTimeCodec extends StringValueCodec {
+    static final OffsetTimeCodec INSTANCE = new OffsetTimeCodec();
+
+    @Override
+    String toJsonString(Object value) {
+      return value.toString();
+    }
+
+    @Override
+    Object fromJsonString(String value) {
+      return OffsetTime.parse(value);
+    }
+  }
+
+  static final class OffsetDateTimeCodec extends StringValueCodec {
+    static final OffsetDateTimeCodec INSTANCE = new OffsetDateTimeCodec();
+
+    @Override
+    String toJsonString(Object value) {
+      return value.toString();
+    }
+
+    @Override
+    Object fromJsonString(String value) {
+      return OffsetDateTime.parse(value);
+    }
+  }
+
+  static final class AtomicBooleanCodec extends AbstractJsonCodec {
+    static final AtomicBooleanCodec INSTANCE = new AtomicBooleanCodec();
+
+    @Override
+    void writeNonNull(JsonWriter writer, Object value, JsonTypeResolver resolver) {
+      writer.writeBoolean(((AtomicBoolean) value).get());
+    }
+
+    @Override
+    void writeUtf8NonNull(Utf8JsonWriter writer, Object value, JsonTypeResolver resolver) {
+      writer.writeBoolean(((AtomicBoolean) value).get());
+    }
+
+    @Override
+    Object readNonNull(JsonReader reader, JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
+      return new AtomicBoolean(reader.readBoolean());
+    }
+  }
+
+  static final class AtomicIntegerCodec extends AbstractJsonCodec {
+    static final AtomicIntegerCodec INSTANCE = new AtomicIntegerCodec();
+
+    @Override
+    void writeNonNull(JsonWriter writer, Object value, JsonTypeResolver resolver) {
+      writer.writeInt(((AtomicInteger) value).get());
+    }
+
+    @Override
+    void writeUtf8NonNull(Utf8JsonWriter writer, Object value, JsonTypeResolver resolver) {
+      writer.writeInt(((AtomicInteger) value).get());
+    }
+
+    @Override
+    Object readNonNull(JsonReader reader, JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
+      return new AtomicInteger(Integer.parseInt(reader.readNumber()));
+    }
+  }
+
+  static final class AtomicLongCodec extends AbstractJsonCodec {
+    static final AtomicLongCodec INSTANCE = new AtomicLongCodec();
+
+    @Override
+    void writeNonNull(JsonWriter writer, Object value, JsonTypeResolver resolver) {
+      writer.writeLong(((AtomicLong) value).get());
+    }
+
+    @Override
+    void writeUtf8NonNull(Utf8JsonWriter writer, Object value, JsonTypeResolver resolver) {
+      writer.writeLong(((AtomicLong) value).get());
+    }
+
+    @Override
+    Object readNonNull(JsonReader reader, JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
+      return new AtomicLong(Long.parseLong(reader.readNumber()));
+    }
+  }
+
+  static final class AtomicReferenceCodec extends AbstractJsonCodec {
+    private final JsonTypeInfo valueTypeInfo;
+    private final JsonCodec valueCodec;
+
+    AtomicReferenceCodec(java.lang.reflect.Type valueType, JsonTypeResolver resolver) {
+      Class<?> valueRawType = CodecUtils.rawType(valueType, Object.class);
+      valueTypeInfo = resolver.getTypeInfo(valueType, valueRawType);
+      valueCodec = valueTypeInfo.codec();
+    }
+
+    @Override
+    public Object read(JsonReader reader, JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
+      Object value =
+          reader.peekNull()
+              ? readNullValue(reader)
+              : valueCodec.read(reader, valueTypeInfo, resolver);
+      return new AtomicReference<>(value);
+    }
+
+    @Override
+    Object readNonNull(JsonReader reader, JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
+      return new AtomicReference<>(valueCodec.read(reader, valueTypeInfo, resolver));
+    }
+
+    @Override
+    void writeNonNull(JsonWriter writer, Object value, JsonTypeResolver resolver) {
+      valueCodec.write(writer, ((AtomicReference<?>) value).get(), resolver);
+    }
+
+    @Override
+    void writeUtf8NonNull(Utf8JsonWriter writer, Object value, JsonTypeResolver resolver) {
+      valueCodec.writeUtf8(writer, ((AtomicReference<?>) value).get(), resolver);
+    }
+  }
+
+  static final class OptionalCodec extends AbstractJsonCodec {
+    private final JsonTypeInfo valueTypeInfo;
+    private final JsonCodec valueCodec;
+
+    OptionalCodec(java.lang.reflect.Type valueType, JsonTypeResolver resolver) {
+      Class<?> valueRawType = CodecUtils.rawType(valueType, Object.class);
+      valueTypeInfo = resolver.getTypeInfo(valueType, valueRawType);
+      valueCodec = valueTypeInfo.codec();
+    }
+
+    @Override
+    public Object read(JsonReader reader, JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
+      if (reader.peekNull()) {
+        reader.readNull();
+        return Optional.empty();
+      }
+      return Optional.ofNullable(valueCodec.read(reader, valueTypeInfo, resolver));
+    }
+
+    @Override
+    Object readNonNull(JsonReader reader, JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
+      return Optional.ofNullable(valueCodec.read(reader, valueTypeInfo, resolver));
+    }
+
+    @Override
+    void writeNonNull(JsonWriter writer, Object value, JsonTypeResolver resolver) {
+      Optional<?> optional = (Optional<?>) value;
+      if (optional.isPresent()) {
+        valueCodec.write(writer, optional.get(), resolver);
+      } else {
+        writer.writeNull();
+      }
+    }
+
+    @Override
+    void writeUtf8NonNull(Utf8JsonWriter writer, Object value, JsonTypeResolver resolver) {
+      Optional<?> optional = (Optional<?>) value;
+      if (optional.isPresent()) {
+        valueCodec.writeUtf8(writer, optional.get(), resolver);
+      } else {
+        writer.writeNull();
+      }
+    }
+  }
+
+  static final class OptionalIntCodec extends AbstractJsonCodec {
+    static final OptionalIntCodec INSTANCE = new OptionalIntCodec();
+
+    @Override
+    public Object read(JsonReader reader, JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
+      if (reader.peekNull()) {
+        reader.readNull();
+        return OptionalInt.empty();
+      }
+      return OptionalInt.of(Integer.parseInt(reader.readNumber()));
+    }
+
+    @Override
+    void writeNonNull(JsonWriter writer, Object value, JsonTypeResolver resolver) {
+      OptionalInt optional = (OptionalInt) value;
+      if (optional.isPresent()) {
+        writer.writeInt(optional.getAsInt());
+      } else {
+        writer.writeNull();
+      }
+    }
+
+    @Override
+    void writeUtf8NonNull(Utf8JsonWriter writer, Object value, JsonTypeResolver resolver) {
+      writeNonNull(writer, value, resolver);
+    }
+
+    @Override
+    Object readNonNull(JsonReader reader, JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
+      return OptionalInt.of(Integer.parseInt(reader.readNumber()));
+    }
+  }
+
+  static final class OptionalLongCodec extends AbstractJsonCodec {
+    static final OptionalLongCodec INSTANCE = new OptionalLongCodec();
+
+    @Override
+    public Object read(JsonReader reader, JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
+      if (reader.peekNull()) {
+        reader.readNull();
+        return OptionalLong.empty();
+      }
+      return OptionalLong.of(Long.parseLong(reader.readNumber()));
+    }
+
+    @Override
+    void writeNonNull(JsonWriter writer, Object value, JsonTypeResolver resolver) {
+      OptionalLong optional = (OptionalLong) value;
+      if (optional.isPresent()) {
+        writer.writeLong(optional.getAsLong());
+      } else {
+        writer.writeNull();
+      }
+    }
+
+    @Override
+    void writeUtf8NonNull(Utf8JsonWriter writer, Object value, JsonTypeResolver resolver) {
+      writeNonNull(writer, value, resolver);
+    }
+
+    @Override
+    Object readNonNull(JsonReader reader, JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
+      return OptionalLong.of(Long.parseLong(reader.readNumber()));
+    }
+  }
+
+  static final class OptionalDoubleCodec extends AbstractJsonCodec {
+    static final OptionalDoubleCodec INSTANCE = new OptionalDoubleCodec();
+
+    @Override
+    public Object read(JsonReader reader, JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
+      if (reader.peekNull()) {
+        reader.readNull();
+        return OptionalDouble.empty();
+      }
+      return OptionalDouble.of(Double.parseDouble(reader.readNumber()));
+    }
+
+    @Override
+    void writeNonNull(JsonWriter writer, Object value, JsonTypeResolver resolver) {
+      OptionalDouble optional = (OptionalDouble) value;
+      if (optional.isPresent()) {
+        writer.writeDouble(optional.getAsDouble());
+      } else {
+        writer.writeNull();
+      }
+    }
+
+    @Override
+    void writeUtf8NonNull(Utf8JsonWriter writer, Object value, JsonTypeResolver resolver) {
+      writeNonNull(writer, value, resolver);
+    }
+
+    @Override
+    Object readNonNull(JsonReader reader, JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
+      return OptionalDouble.of(Double.parseDouble(reader.readNumber()));
+    }
+  }
+
+  static final class ByteBufferCodec extends AbstractJsonCodec {
+    static final ByteBufferCodec INSTANCE = new ByteBufferCodec();
+
+    @Override
+    void writeNonNull(JsonWriter writer, Object value, JsonTypeResolver resolver) {
+      writeBuffer(writer, (ByteBuffer) value);
+    }
+
+    @Override
+    void writeUtf8NonNull(Utf8JsonWriter writer, Object value, JsonTypeResolver resolver) {
+      writeBuffer(writer, (ByteBuffer) value);
+    }
+
+    @Override
+    Object readNonNull(JsonReader reader, JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
+      byte[] bytes = new byte[16];
+      int size = 0;
+      reader.expect('[');
+      if (!reader.consume(']')) {
+        do {
+          if (size == bytes.length) {
+            bytes = Arrays.copyOf(bytes, size << 1);
+          }
+          int value = Integer.parseInt(reader.readNumber());
+          if (value < Byte.MIN_VALUE || value > 255) {
+            throw new ForyJsonException("ByteBuffer element out of byte range: " + value);
+          }
+          bytes[size++] = (byte) value;
+        } while (reader.consume(','));
+        reader.expect(']');
+      }
+      return ByteBuffer.wrap(Arrays.copyOf(bytes, size));
+    }
+
+    private void writeBuffer(JsonWriter writer, ByteBuffer value) {
+      ByteBuffer buffer = value.duplicate();
+      writer.writeArrayStart();
+      int index = 0;
+      while (buffer.hasRemaining()) {
+        writer.writeComma(index++);
+        writer.writeInt(buffer.get());
+      }
+      writer.writeArrayEnd();
+    }
+  }
+
   static final class EnumCodec extends AbstractJsonCodec {
     private final Class<?> type;
     private final Map<String, Enum<?>> values;
@@ -450,5 +1362,10 @@ final class ScalarCodecs {
       }
       return value;
     }
+  }
+
+  private static Object readNullValue(JsonReader reader) {
+    reader.readNull();
+    return null;
   }
 }

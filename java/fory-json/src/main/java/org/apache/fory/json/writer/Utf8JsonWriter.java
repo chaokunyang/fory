@@ -152,6 +152,11 @@ public final class Utf8JsonWriter extends JsonWriter {
   }
 
   @Override
+  public void writeNumber(String value) {
+    writeAscii(value);
+  }
+
+  @Override
   public void writeChar(char value) {
     if (Character.isSurrogate(value)) {
       throw new ForyJsonException("JSON char cannot be a surrogate: " + Integer.toHexString(value));

@@ -20,26 +20,24 @@
 package org.apache.fory.json.resolver;
 
 import java.lang.reflect.Type;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
+import java.util.HashMap;
+import java.util.IdentityHashMap;
+import java.util.Map;
 import org.apache.fory.json.codec.BaseObjectCodec;
-import org.apache.fory.json.codec.CodecRegistry;
 import org.apache.fory.json.codec.CodecUtils;
-import org.apache.fory.json.codec.Codecs;
 import org.apache.fory.json.codec.JsonCodec;
+import org.apache.fory.json.codec.JsonSharedRegistry;
 import org.apache.fory.json.codec.ObjectCodec;
 import org.apache.fory.json.codec.ObjectWriters;
-import org.apache.fory.json.codegen.JsonCodegen;
 
+/** Local JSON type dispatcher and cache used by one borrowed {@code ForyJson} state at a time. */
 public final class JsonTypeResolver {
-  private final ConcurrentMap<Class<?>, BaseObjectCodec> objectCodecs = new ConcurrentHashMap<>();
-  private final ConcurrentMap<Object, JsonTypeInfo> typeInfos = new ConcurrentHashMap<>();
-  private final CodecRegistry registry;
-  private final JsonCodegen codegen;
+  private final IdentityHashMap<Class<?>, BaseObjectCodec> objectCodecs = new IdentityHashMap<>();
+  private final Map<Object, JsonTypeInfo> typeInfos = new HashMap<>();
+  private final JsonSharedRegistry sharedRegistry;
 
-  public JsonTypeResolver(boolean codegenEnabled, boolean writeNullFields, CodecRegistry registry) {
-    this.registry = registry.copy();
-    codegen = codegenEnabled ? new JsonCodegen(writeNullFields) : null;
+  public JsonTypeResolver(JsonSharedRegistry sharedRegistry) {
+    this.sharedRegistry = sharedRegistry;
   }
 
   public BaseObjectCodec getObjectCodec(Class<?> type) {
@@ -47,7 +45,7 @@ public final class JsonTypeResolver {
     if (codec != null) {
       return codec;
     }
-    return buildAndPublish(type);
+    return buildObjectCodec(type);
   }
 
   public JsonTypeInfo getTypeInfo(Type declaredType, Class<?> fallback) {
@@ -57,10 +55,10 @@ public final class JsonTypeResolver {
     if (typeInfo != null) {
       return typeInfo;
     }
-    return buildAndPublishTypeInfo(key, rawType, declaredType);
+    return buildTypeInfo(key, rawType, declaredType);
   }
 
-  private synchronized BaseObjectCodec buildAndPublish(Class<?> type) {
+  private BaseObjectCodec buildObjectCodec(Class<?> type) {
     BaseObjectCodec cached = objectCodecs.get(type);
     if (cached != null) {
       return cached;
@@ -71,13 +69,11 @@ public final class JsonTypeResolver {
     objectCodecs.put(type, codec);
     try {
       codec.resolveTypes(this);
-      if (codegen != null) {
-        ObjectWriters writers = codegen.compile(codec, this);
-        if (writers != null) {
-          BaseObjectCodec generated = codec.withWriters(writers);
-          objectCodecs.put(type, generated);
-          return generated;
-        }
+      ObjectWriters writers = sharedRegistry.compileObject(codec, this);
+      if (writers != null) {
+        BaseObjectCodec generated = codec.withWriters(writers);
+        objectCodecs.put(type, generated);
+        return generated;
       }
       return codec;
     } catch (RuntimeException | Error e) {
@@ -86,8 +82,7 @@ public final class JsonTypeResolver {
     }
   }
 
-  private synchronized JsonTypeInfo buildAndPublishTypeInfo(
-      Object key, Class<?> rawType, Type declaredType) {
+  private JsonTypeInfo buildTypeInfo(Object key, Class<?> rawType, Type declaredType) {
     JsonTypeInfo cached = typeInfos.get(key);
     if (cached != null) {
       return cached;
@@ -98,11 +93,11 @@ public final class JsonTypeResolver {
   }
 
   private JsonTypeInfo buildTypeInfo(Class<?> rawType, Type declaredType) {
-    JsonCodec codec = Codecs.forResolvedType(rawType, declaredType, this, registry);
+    JsonCodec codec = sharedRegistry.createCodec(rawType, declaredType, this);
     if (codec == null) {
       codec = getObjectCodec(rawType);
     }
-    return new JsonTypeInfo(declaredType, rawType, Codecs.kind(rawType), codec);
+    return new JsonTypeInfo(declaredType, rawType, sharedRegistry.kind(rawType), codec);
   }
 
   private static Object typeInfoKey(Type declaredType, Class<?> rawType) {

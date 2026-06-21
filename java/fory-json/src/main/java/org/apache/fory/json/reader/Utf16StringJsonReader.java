@@ -72,10 +72,26 @@ public final class Utf16StringJsonReader extends JsonReader {
     return false;
   }
 
+  public boolean consumeNextToken(char expected) {
+    if (position < length && charAtFast(position) == expected) {
+      position++;
+      return true;
+    }
+    return consumeToken(expected);
+  }
+
   public void expectToken(char expected) {
     if (!consumeToken(expected)) {
       throw error("Expected '" + expected + "'");
     }
+  }
+
+  public void expectNextToken(char expected) {
+    if (position < length && charAtFast(position) == expected) {
+      position++;
+      return;
+    }
+    expectToken(expected);
   }
 
   public boolean tryReadNullToken() {

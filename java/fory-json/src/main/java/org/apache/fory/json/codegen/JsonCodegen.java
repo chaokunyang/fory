@@ -680,13 +680,13 @@ public final class JsonCodegen {
   private static String expectCall(int readerMode, char token) {
     return readerMode == GENERIC_READER
         ? "reader.expect('" + token + "')"
-        : "reader.expectToken('" + token + "')";
+        : "reader.expectNextToken('" + token + "')";
   }
 
   private static String consumeCall(int readerMode, char token) {
     return readerMode == GENERIC_READER
         ? "reader.consume('" + token + "')"
-        : "reader.consumeToken('" + token + "')";
+        : "reader.consumeNextToken('" + token + "')";
   }
 
   private static String tryReadNullCall(int readerMode) {

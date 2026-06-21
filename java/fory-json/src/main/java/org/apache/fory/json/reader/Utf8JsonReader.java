@@ -57,10 +57,26 @@ public final class Utf8JsonReader extends JsonReader {
     return false;
   }
 
+  public boolean consumeNextToken(char expected) {
+    if (position < input.length && (input[position] & 0xFF) == expected) {
+      position++;
+      return true;
+    }
+    return consumeToken(expected);
+  }
+
   public void expectToken(char expected) {
     if (!consumeToken(expected)) {
       throw error("Expected '" + expected + "'");
     }
+  }
+
+  public void expectNextToken(char expected) {
+    if (position < input.length && (input[position] & 0xFF) == expected) {
+      position++;
+      return;
+    }
+    expectToken(expected);
   }
 
   public boolean tryReadNullToken() {

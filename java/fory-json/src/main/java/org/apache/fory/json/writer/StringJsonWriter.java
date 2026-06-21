@@ -196,6 +196,22 @@ public final class StringJsonWriter extends JsonWriter {
   }
 
   @Override
+  public void writeIntFieldName(int value) {
+    writeByteRaw((byte) '"');
+    writeInt(value);
+    writeByteRaw((byte) '"');
+    writeByteRaw((byte) ':');
+  }
+
+  @Override
+  public void writeLongFieldName(long value) {
+    writeByteRaw((byte) '"');
+    writeLong(value);
+    writeByteRaw((byte) '"');
+    writeByteRaw((byte) ':');
+  }
+
+  @Override
   public void writeFieldName(JsonFieldInfo field) {
     writeRaw(field.stringNamePrefix());
   }

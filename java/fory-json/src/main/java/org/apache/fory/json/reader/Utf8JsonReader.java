@@ -181,6 +181,122 @@ public final class Utf8JsonReader extends JsonReader {
   }
 
   @Override
+  public int readFieldNameInt() {
+    skipWhitespaceFast();
+    int nameStart = position;
+    if (position >= input.length || input[position++] != '"') {
+      throw error("Expected string");
+    }
+    int result = 0;
+    int limit = -Integer.MAX_VALUE;
+    boolean negative = false;
+    if (position < input.length && input[position] == '-') {
+      negative = true;
+      limit = Integer.MIN_VALUE;
+      position++;
+    }
+    if (position >= input.length) {
+      throw error("Unterminated string");
+    }
+    int ch = input[position] & 0xFF;
+    if (ch == '\\') {
+      position = nameStart;
+      return super.readFieldNameInt();
+    }
+    if (ch == '0') {
+      position++;
+      return readZeroIntName(nameStart);
+    }
+    if (ch < '1' || ch > '9') {
+      throw error("Expected integer field name");
+    }
+    int multmin = limit / 10;
+    do {
+      int digit = ch - '0';
+      if (result < multmin) {
+        throw error("Integer overflow");
+      }
+      result *= 10;
+      if (result < limit + digit) {
+        throw error("Integer overflow");
+      }
+      result -= digit;
+      position++;
+      if (position >= input.length) {
+        throw error("Unterminated string");
+      }
+      ch = input[position] & 0xFF;
+    } while (ch >= '0' && ch <= '9');
+    if (ch == '\\') {
+      position = nameStart;
+      return super.readFieldNameInt();
+    }
+    if (ch != '"') {
+      throw error("Expected integer field name");
+    }
+    position++;
+    return negative ? result : -result;
+  }
+
+  @Override
+  public long readFieldNameLong() {
+    skipWhitespaceFast();
+    int nameStart = position;
+    if (position >= input.length || input[position++] != '"') {
+      throw error("Expected string");
+    }
+    long result = 0;
+    long limit = -Long.MAX_VALUE;
+    boolean negative = false;
+    if (position < input.length && input[position] == '-') {
+      negative = true;
+      limit = Long.MIN_VALUE;
+      position++;
+    }
+    if (position >= input.length) {
+      throw error("Unterminated string");
+    }
+    int ch = input[position] & 0xFF;
+    if (ch == '\\') {
+      position = nameStart;
+      return super.readFieldNameLong();
+    }
+    if (ch == '0') {
+      position++;
+      return readZeroLongName(nameStart);
+    }
+    if (ch < '1' || ch > '9') {
+      throw error("Expected long field name");
+    }
+    long multmin = limit / 10;
+    do {
+      int digit = ch - '0';
+      if (result < multmin) {
+        throw error("Long overflow");
+      }
+      result *= 10;
+      if (result < limit + digit) {
+        throw error("Long overflow");
+      }
+      result -= digit;
+      position++;
+      if (position >= input.length) {
+        throw error("Unterminated string");
+      }
+      ch = input[position] & 0xFF;
+    } while (ch >= '0' && ch <= '9');
+    if (ch == '\\') {
+      position = nameStart;
+      return super.readFieldNameLong();
+    }
+    if (ch != '"') {
+      throw error("Expected long field name");
+    }
+    position++;
+    return negative ? result : -result;
+  }
+
+  @Override
   protected int length() {
     return input.length;
   }
@@ -432,5 +548,43 @@ public final class Utf8JsonReader extends JsonReader {
         throw error("Expected integer");
       }
     }
+  }
+
+  private int readZeroIntName(int nameStart) {
+    if (position >= input.length) {
+      throw error("Unterminated string");
+    }
+    int ch = input[position] & 0xFF;
+    if (ch == '\\') {
+      position = nameStart;
+      return super.readFieldNameInt();
+    }
+    if (ch >= '0' && ch <= '9') {
+      throw error("Leading zero in number");
+    }
+    if (ch != '"') {
+      throw error("Expected integer field name");
+    }
+    position++;
+    return 0;
+  }
+
+  private long readZeroLongName(int nameStart) {
+    if (position >= input.length) {
+      throw error("Unterminated string");
+    }
+    int ch = input[position] & 0xFF;
+    if (ch == '\\') {
+      position = nameStart;
+      return super.readFieldNameLong();
+    }
+    if (ch >= '0' && ch <= '9') {
+      throw error("Leading zero in number");
+    }
+    if (ch != '"') {
+      throw error("Expected long field name");
+    }
+    position++;
+    return 0L;
   }
 }

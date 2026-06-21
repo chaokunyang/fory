@@ -64,6 +64,9 @@ public abstract class MapCodec extends AbstractJsonCodec {
     Class<?> valueRawType = CodecUtils.rawType(valueType, Object.class);
     MapFactory factory = mapFactory(rawType, keyRawType);
     if (keyRawType == String.class || keyRawType == Object.class) {
+      if (valueRawType == String.class) {
+        return new StringStringMapCodec(typeRef, factory);
+      }
       if (valueRawType == Boolean.class || valueRawType == boolean.class) {
         return new StringBooleanMapCodec(typeRef, factory);
       }
@@ -115,7 +118,7 @@ public abstract class MapCodec extends AbstractJsonCodec {
   }
 
   private static void writeKey(JsonWriter writer, Object key, MapKeyCodec keyCodec) {
-    writer.writeFieldName(keyCodec.toName(key));
+    keyCodec.writeName(writer, key);
   }
 
   private static void readGeneric(
@@ -128,7 +131,7 @@ public abstract class MapCodec extends AbstractJsonCodec {
     reader.expect('{');
     if (!reader.consume('}')) {
       do {
-        Object key = keyCodec.fromName(reader.readString());
+        Object key = keyCodec.readName(reader);
         reader.expect(':');
         map.put(key, valueCodec.read(reader, valueInfo, resolver));
       } while (reader.consume(','));
@@ -300,6 +303,69 @@ public abstract class MapCodec extends AbstractJsonCodec {
     abstract Object readUtf16Value(Utf16StringJsonReader reader);
 
     abstract Object readUtf8Value(Utf8JsonReader reader);
+  }
+
+  private static final class StringStringMapCodec extends StringKeyMapCodec {
+    private StringStringMapCodec(TypeRef<?> typeRef, MapFactory factory) {
+      super(typeRef, factory);
+    }
+
+    @Override
+    void writeNonNull(JsonWriter writer, Object value, JsonTypeResolver resolver) {
+      writer.writeObjectStart();
+      int index = 0;
+      for (Map.Entry<?, ?> entry : ((Map<?, ?>) value).entrySet()) {
+        writer.writeComma(index++);
+        writer.writeFieldName((String) entry.getKey());
+        Object element = entry.getValue();
+        if (element == null) {
+          writer.writeNull();
+        } else {
+          writer.writeString((String) element);
+        }
+      }
+      writer.writeObjectEnd();
+    }
+
+    @Override
+    void writeStringNonNull(StringJsonWriter writer, Object value, JsonTypeResolver resolver) {
+      writeNonNull(writer, value, resolver);
+    }
+
+    @Override
+    void writeUtf8NonNull(Utf8JsonWriter writer, Object value, JsonTypeResolver resolver) {
+      writeNonNull(writer, value, resolver);
+    }
+
+    @Override
+    Object readNonNull(JsonReader reader, JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
+      Map<Object, Object> map = newMap();
+      reader.expect('{');
+      if (!reader.consume('}')) {
+        do {
+          String key = reader.readString();
+          reader.expect(':');
+          map.put(key, reader.tryReadNull() ? null : reader.readString());
+        } while (reader.consume(','));
+        reader.expect('}');
+      }
+      return map;
+    }
+
+    @Override
+    Object readLatin1Value(Latin1StringJsonReader reader) {
+      return reader.readString();
+    }
+
+    @Override
+    Object readUtf16Value(Utf16StringJsonReader reader) {
+      return reader.readString();
+    }
+
+    @Override
+    Object readUtf8Value(Utf8JsonReader reader) {
+      return reader.readString();
+    }
   }
 
   private static final class StringBooleanMapCodec extends StringKeyMapCodec {
@@ -647,7 +713,7 @@ public abstract class MapCodec extends AbstractJsonCodec {
       int index = 0;
       for (Map.Entry<?, ?> entry : ((Map<?, ?>) value).entrySet()) {
         writer.writeComma(index++);
-        writer.writeFieldName(keyCodec.toName(entry.getKey()));
+        writeKey(writer, entry.getKey(), keyCodec);
         Object element = entry.getValue();
         if (element == null) {
           writer.writeNull();
@@ -674,7 +740,7 @@ public abstract class MapCodec extends AbstractJsonCodec {
       reader.expect('{');
       if (!reader.consume('}')) {
         do {
-          Object key = keyCodec.fromName(reader.readString());
+          Object key = keyCodec.readName(reader);
           reader.expect(':');
           map.put(key, reader.tryReadNull() ? null : reader.readString());
         } while (reader.consume(','));
@@ -693,7 +759,7 @@ public abstract class MapCodec extends AbstractJsonCodec {
       reader.expectToken('{');
       if (!reader.consumeToken('}')) {
         do {
-          Object key = keyCodec.fromName(reader.readString());
+          Object key = keyCodec.readName(reader);
           reader.expectToken(':');
           map.put(key, reader.tryReadNullToken() ? null : reader.readString());
         } while (reader.consumeToken(','));
@@ -712,7 +778,7 @@ public abstract class MapCodec extends AbstractJsonCodec {
       reader.expectToken('{');
       if (!reader.consumeToken('}')) {
         do {
-          Object key = keyCodec.fromName(reader.readString());
+          Object key = keyCodec.readName(reader);
           reader.expectToken(':');
           map.put(key, reader.tryReadNullToken() ? null : reader.readString());
         } while (reader.consumeToken(','));
@@ -731,7 +797,7 @@ public abstract class MapCodec extends AbstractJsonCodec {
       reader.expectToken('{');
       if (!reader.consumeToken('}')) {
         do {
-          Object key = keyCodec.fromName(reader.readString());
+          Object key = keyCodec.readName(reader);
           reader.expectToken(':');
           map.put(key, reader.tryReadNullToken() ? null : reader.readString());
         } while (reader.consumeToken(','));
@@ -758,6 +824,14 @@ public abstract class MapCodec extends AbstractJsonCodec {
     String toName(Object key);
 
     Object fromName(String name);
+
+    default void writeName(JsonWriter writer, Object key) {
+      writer.writeFieldName(toName(key));
+    }
+
+    default Object readName(JsonReader reader) {
+      return fromName(reader.readString());
+    }
 
     static MapKeyCodec of(Class<?> rawType) {
       if (rawType == String.class || rawType == Object.class) {
@@ -823,6 +897,16 @@ public abstract class MapCodec extends AbstractJsonCodec {
     public Object fromName(String name) {
       return Integer.valueOf(name);
     }
+
+    @Override
+    public void writeName(JsonWriter writer, Object key) {
+      writer.writeIntFieldName((Integer) key);
+    }
+
+    @Override
+    public Object readName(JsonReader reader) {
+      return Integer.valueOf(reader.readFieldNameInt());
+    }
   }
 
   private static final class LongKeyCodec implements MapKeyCodec {
@@ -836,6 +920,16 @@ public abstract class MapCodec extends AbstractJsonCodec {
     @Override
     public Object fromName(String name) {
       return Long.valueOf(name);
+    }
+
+    @Override
+    public void writeName(JsonWriter writer, Object key) {
+      writer.writeLongFieldName((Long) key);
+    }
+
+    @Override
+    public Object readName(JsonReader reader) {
+      return Long.valueOf(reader.readFieldNameLong());
     }
   }
 
@@ -851,6 +945,16 @@ public abstract class MapCodec extends AbstractJsonCodec {
     public Object fromName(String name) {
       return Short.valueOf(readShort(Integer.parseInt(name)));
     }
+
+    @Override
+    public void writeName(JsonWriter writer, Object key) {
+      writer.writeIntFieldName((Short) key);
+    }
+
+    @Override
+    public Object readName(JsonReader reader) {
+      return Short.valueOf(readShort(reader.readFieldNameInt()));
+    }
   }
 
   private static final class ByteKeyCodec implements MapKeyCodec {
@@ -864,6 +968,16 @@ public abstract class MapCodec extends AbstractJsonCodec {
     @Override
     public Object fromName(String name) {
       return Byte.valueOf(readByte(Integer.parseInt(name)));
+    }
+
+    @Override
+    public void writeName(JsonWriter writer, Object key) {
+      writer.writeIntFieldName((Byte) key);
+    }
+
+    @Override
+    public Object readName(JsonReader reader) {
+      return Byte.valueOf(readByte(reader.readFieldNameInt()));
     }
   }
 

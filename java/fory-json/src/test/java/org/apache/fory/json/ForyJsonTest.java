@@ -785,6 +785,25 @@ public class ForyJsonTest {
     Map<Integer, String> value =
         json.fromJson("{\"1\":\"one\",\"2\":\"two\"}", new TypeRef<Map<Integer, String>>() {});
     assertEquals(value, intNames());
+
+    Map<Integer, String> escaped =
+        json.fromJson("{\"\\u0031\":\"one\"}", new TypeRef<Map<Integer, String>>() {});
+    assertEquals(escaped.get(1), "one");
+
+    Map<Long, String> longs =
+        json.fromJson(
+            "{\"-1\":\"negative\",\"9223372036854775807\":\"max\"}",
+            new TypeRef<Map<Long, String>>() {});
+    Map<Long, String> expected = new LinkedHashMap<>();
+    expected.put(-1L, "negative");
+    expected.put(Long.MAX_VALUE, "max");
+    assertEquals(longs, expected);
+    assertEquals(
+        json.fromJson(
+            "{\"-1\":\"negative\",\"9223372036854775807\":\"max\"}"
+                .getBytes(StandardCharsets.UTF_8),
+            new TypeRef<Map<Long, String>>() {}),
+        expected);
   }
 
   @Test
@@ -806,6 +825,14 @@ public class ForyJsonTest {
         json.fromJson(
             "{\"enabled\":true,\"disabled\":false}", new TypeRef<Map<String, Boolean>>() {}),
         flags());
+    Map<String, String> aliases = new LinkedHashMap<>();
+    aliases.put("zh", ZH_TEXT);
+    aliases.put("eu", EU_TEXT);
+    assertEquals(
+        json.fromJson(
+            "{\"zh\":\"你好，Fory\",\"eu\":\"café crème Österreich € ČšŽ\"}",
+            new TypeRef<Map<String, String>>() {}),
+        aliases);
     assertEquals(
         json.fromJson("{\"1\":\"one\",\"2\":\"two\"}", new TypeRef<Map<Integer, String>>() {}),
         intNames());

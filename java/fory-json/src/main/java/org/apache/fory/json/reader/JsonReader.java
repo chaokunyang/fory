@@ -221,6 +221,22 @@ public abstract class JsonReader {
     return negative ? result : -result;
   }
 
+  public int readFieldNameInt() {
+    try {
+      return Integer.parseInt(readString());
+    } catch (NumberFormatException e) {
+      throw new ForyJsonException("Invalid integer field name at JSON position " + position, e);
+    }
+  }
+
+  public long readFieldNameLong() {
+    try {
+      return Long.parseLong(readString());
+    } catch (NumberFormatException e) {
+      throw new ForyJsonException("Invalid long field name at JSON position " + position, e);
+    }
+  }
+
   public JsonFieldInfo readField(JsonFieldTable table) {
     return table.get(readFieldNameHash());
   }

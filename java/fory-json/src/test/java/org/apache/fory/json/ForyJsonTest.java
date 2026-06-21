@@ -337,7 +337,7 @@ public class ForyJsonTest {
     assertEquals(json.toJson(new PrivateFields()), expected);
     assertEquals(
         new String(json.toJsonBytes(new PrivateFields()), StandardCharsets.UTF_8), expected);
-    assertEquals(json.hasGeneratedWriter(PrivateFields.class), false);
+    assertEquals(json.hasGeneratedWriter(PrivateFields.class), true);
     PrivateFields value =
         json.fromJson("{\"id\":12,\"name\":\"json\",\"nullable\":\"value\"}", PrivateFields.class);
     assertEquals(value.id, 12);

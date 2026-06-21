@@ -197,6 +197,10 @@ public final class JsonFieldInfo {
     return writeKind;
   }
 
+  public JsonFieldAccessor writeAccessor() {
+    return writeAccessor;
+  }
+
   public Type writeElementType() {
     return writeElementType;
   }

@@ -126,9 +126,7 @@ public final class JsonCodegen {
 
   private boolean canCompile(JsonFieldInfo property) {
     Field field = property.writeField();
-    if (field == null
-        || !java.lang.reflect.Modifier.isPublic(field.getModifiers())
-        || !isVisible(field.getDeclaringClass())) {
+    if (field == null) {
       return false;
     }
     Class<?> rawType = property.writeRawType();
@@ -178,6 +176,7 @@ public final class JsonCodegen {
     StringBuilder code = new StringBuilder(4096);
     code.append("package ").append(PACKAGE).append(";\n");
     code.append("import org.apache.fory.json.codec.BaseObjectCodec;\n");
+    code.append("import org.apache.fory.json.meta.JsonFieldAccessor;\n");
     code.append("import org.apache.fory.json.meta.JsonFieldInfo;\n");
     code.append("import org.apache.fory.json.resolver.JsonTypeInfo;\n");
     code.append("import org.apache.fory.json.resolver.JsonTypeResolver;\n");
@@ -202,7 +201,7 @@ public final class JsonCodegen {
     boolean[] useNumberToken = new boolean[properties.length];
     for (int i = 0; i < properties.length; i++) {
       JsonFieldInfo property = properties[i];
-      useInfo[i] = usesFieldInfo(property);
+      useInfo[i] = true;
       useObjectCodec[i] = usesObjectCodec(property);
       usePrefix[i] = usesPrefix(property);
       useStringToken[i] = property.writeKind() == JsonFieldKind.STRING;
@@ -212,6 +211,7 @@ public final class JsonCodegen {
       useNumberToken[i] = usesNumberToken(property, objectStartFused && i == 0);
       if (useInfo[i]) {
         code.append("  private final JsonFieldInfo p").append(i).append(";\n");
+        code.append("  private final JsonFieldAccessor a").append(i).append(";\n");
       }
       if (useObjectCodec[i]) {
         code.append("  private final BaseObjectCodec c").append(i).append(";\n");
@@ -242,6 +242,11 @@ public final class JsonCodegen {
     for (int i = 0; i < properties.length; i++) {
       if (useInfo[i]) {
         code.append("    this.p").append(i).append(" = properties[").append(i).append("];\n");
+        code.append("    this.a")
+            .append(i)
+            .append(" = properties[")
+            .append(i)
+            .append("].writeAccessor();\n");
       }
       if (useObjectCodec[i]) {
         code.append("    this.c").append(i).append(" = objectCodecs[").append(i).append("];\n");
@@ -305,27 +310,6 @@ public final class JsonCodegen {
         || writeNullFields && !property.writeRawType().isPrimitive();
   }
 
-  private static boolean usesFieldInfo(JsonFieldInfo property) {
-    switch (property.writeKind()) {
-      case BYTE:
-      case SHORT:
-      case INT:
-      case LONG:
-      case STRING:
-      case BOOLEAN:
-      case ENUM:
-      case ARRAY:
-      case MAP:
-        return true;
-      case COLLECTION:
-        return property.writeElementRawType() != String.class;
-      case OBJECT:
-        return property.writeRawType() != Object.class;
-      default:
-        return false;
-    }
-  }
-
   private static boolean usesObjectCodec(JsonFieldInfo property) {
     switch (property.writeKind()) {
       case COLLECTION:
@@ -379,7 +363,7 @@ public final class JsonCodegen {
     for (int i = 0; i < properties.length; i++) {
       if (objectStartFused && i == 0) {
         writeObjectStartPrimitive(
-            code, properties[i], fieldExpr("object", properties[i].writeField()), utf8);
+            code, properties[i], fieldValue(properties[i], i, "object"), utf8);
       } else {
         writeProp(code, ownerType, properties[i], i, utf8, commaKnown);
       }
@@ -441,13 +425,7 @@ public final class JsonCodegen {
     String value = "v" + id;
     if (rawType.isPrimitive()) {
       writePrimitive(
-          code,
-          property,
-          prop,
-          fieldExpr("object", property.writeField()),
-          utf8,
-          commaKnown,
-          "    ");
+          code, property, prop, fieldValue(property, id, "object"), utf8, commaKnown, "    ");
       return;
     }
     code.append("    ");
@@ -455,7 +433,7 @@ public final class JsonCodegen {
         .append(" ")
         .append(value)
         .append(" = ")
-        .append(fieldExpr("object", property.writeField()))
+        .append(fieldValue(property, id, "object"))
         .append(";\n");
     if (writeNullFields) {
       if (isPrefixValue(property.writeKind())) {
@@ -1078,8 +1056,37 @@ public final class JsonCodegen {
         && !Map.class.isAssignableFrom(type);
   }
 
-  private static String fieldExpr(String object, Field field) {
-    return object + "." + field.getName();
+  private static String fieldValue(JsonFieldInfo property, int id, String object) {
+    String accessor = "a" + id;
+    if (!property.writeRawType().isPrimitive()) {
+      return "("
+          + sourceName(property.writeRawType())
+          + ") "
+          + accessor
+          + ".getObject("
+          + object
+          + ")";
+    }
+    switch (property.writeKind()) {
+      case BOOLEAN:
+        return accessor + ".getBoolean(" + object + ")";
+      case BYTE:
+        return accessor + ".getByte(" + object + ")";
+      case SHORT:
+        return accessor + ".getShort(" + object + ")";
+      case INT:
+        return accessor + ".getInt(" + object + ")";
+      case LONG:
+        return accessor + ".getLong(" + object + ")";
+      case FLOAT:
+        return accessor + ".getFloat(" + object + ")";
+      case DOUBLE:
+        return accessor + ".getDouble(" + object + ")";
+      case CHAR:
+        return accessor + ".getChar(" + object + ")";
+      default:
+        throw new ForyJsonException("Unsupported generated primitive kind " + property.writeKind());
+    }
   }
 
   private static String sourceName(Class<?> type) {

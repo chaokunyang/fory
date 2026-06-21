@@ -420,13 +420,24 @@ public final class Latin1StringJsonReader extends JsonReader {
     return readQuotedStringHash();
   }
 
-  public boolean tryReadFieldNameColon(long expectedHash, int expectedLength) {
+  public boolean tryReadFieldNameColon(long expectedHash, long expectedMask, int expectedLength) {
     int mark = position;
     skipWhitespaceFast();
     byte[] bytes = input;
     int offset = position;
-    int end = offset + expectedLength + 1;
-    if (end < bytes.length && bytes[offset++] == '"') {
+    int nameOffset = offset + 1;
+    int quoteOffset = nameOffset + expectedLength;
+    if (quoteOffset < bytes.length && bytes[offset] == '"') {
+      // A raw word match proves this exact generated field name. Misses fall through to the
+      // byte parser below, which keeps validation and escaped-name fallback in one owner.
+      if (nameOffset + Long.BYTES <= bytes.length
+          && (LittleEndian.getInt64(bytes, nameOffset) & expectedMask) == expectedHash
+          && bytes[quoteOffset] == '"') {
+        position = quoteOffset + 1;
+        expectNextToken(':');
+        return true;
+      }
+      offset = nameOffset;
       long value = 0;
       for (int i = 0; i < expectedLength; i++) {
         int ch = bytes[offset++] & 0xFF;

@@ -472,6 +472,8 @@ public final class JsonCodegen {
           .append("if (reader.tryReadFieldNameColon(")
           .append(longLiteral(properties[index].nameHash()))
           .append(", ")
+          .append(longLiteral(packedNameMask(properties[index].name().length())))
+          .append(", ")
           .append(properties[index].name().length())
           .append(")) {\n");
       readField(code, properties[index], index, indent + "  ", readerMode, record);
@@ -547,6 +549,10 @@ public final class JsonCodegen {
       }
     }
     return true;
+  }
+
+  private static long packedNameMask(int length) {
+    return length == Long.BYTES ? -1L : (1L << (length << 3)) - 1L;
   }
 
   private static void appendNewObject(StringBuilder code, Class<?> type, boolean record) {

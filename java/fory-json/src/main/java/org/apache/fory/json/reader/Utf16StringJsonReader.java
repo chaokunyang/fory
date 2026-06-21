@@ -409,7 +409,7 @@ public final class Utf16StringJsonReader extends JsonReader {
     return readQuotedStringHash();
   }
 
-  public boolean tryReadFieldNameColon(long expectedHash, int expectedLength) {
+  public boolean tryReadFieldNameColon(long expectedHash, long expectedMask, int expectedLength) {
     int mark = position;
     skipWhitespaceFast();
     int offset = position;

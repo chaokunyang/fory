@@ -19,19 +19,27 @@
 
 package org.apache.fory.json.codec;
 
-import org.apache.fory.json.meta.JsonFieldInfo;
-import org.apache.fory.reflect.ObjectInstantiator;
+public final class ObjectCodecs {
+  private final StringObjectWriter stringWriter;
+  private final Utf8ObjectWriter utf8Writer;
+  private final ObjectReader reader;
 
-public final class ObjectCodec extends BaseObjectCodec {
-  ObjectCodec(
-      Class<?> type,
-      JsonFieldInfo[] writeFields,
-      JsonFieldInfo[] readFields,
-      ObjectInstantiator<?> instantiator) {
-    super(type, writeFields, readFields, instantiator);
+  public ObjectCodecs(
+      StringObjectWriter stringWriter, Utf8ObjectWriter utf8Writer, ObjectReader reader) {
+    this.stringWriter = stringWriter;
+    this.utf8Writer = utf8Writer;
+    this.reader = reader;
   }
 
-  public GeneratedObjectCodec withCodecs(ObjectCodecs codecs) {
-    return new GeneratedObjectCodec(this, codecs);
+  public StringObjectWriter stringWriter() {
+    return stringWriter;
+  }
+
+  public Utf8ObjectWriter utf8Writer() {
+    return utf8Writer;
+  }
+
+  public ObjectReader reader() {
+    return reader;
   }
 }

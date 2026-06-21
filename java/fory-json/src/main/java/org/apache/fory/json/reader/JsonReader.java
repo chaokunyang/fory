@@ -220,7 +220,7 @@ public abstract class JsonReader {
     return negative ? result : -result;
   }
 
-  public final JsonFieldInfo readField(JsonFieldTable table) {
+  public JsonFieldInfo readField(JsonFieldTable table) {
     skipWhitespace();
     if (position >= length() || charAt(position++) != '"') {
       throw error("Expected string");
@@ -235,6 +235,62 @@ public abstract class JsonReader {
       if (ch == '\\' || ch < 0x20 || ch >= 0x80) {
         position = start - 1;
         return table.get(readString());
+      }
+      hash = 31 * hash + ch;
+    }
+    throw error("Unterminated string");
+  }
+
+  public int readFieldIndex(JsonFieldTable table) {
+    skipWhitespace();
+    if (position >= length() || charAt(position++) != '"') {
+      throw error("Expected string");
+    }
+    int start = position;
+    int hash = 0;
+    while (position < length()) {
+      char ch = charAt(position++);
+      if (ch == '"') {
+        return table.index(this, start, position - 1, hash);
+      }
+      if (ch == '\\' || ch < 0x20 || ch >= 0x80) {
+        position = start - 1;
+        return table.index(readString());
+      }
+      hash = 31 * hash + ch;
+    }
+    throw error("Unterminated string");
+  }
+
+  public int readFieldIndex(JsonFieldTable table, String expectedName, int expectedIndex) {
+    skipWhitespace();
+    if (position >= length() || charAt(position++) != '"') {
+      throw error("Expected string");
+    }
+    int start = position;
+    int hash = 0;
+    int matchedLength = 0;
+    int expectedLength = expectedName.length();
+    boolean matched = true;
+    while (position < length()) {
+      char ch = charAt(position++);
+      if (ch == '"') {
+        if (matched && matchedLength == expectedLength) {
+          return expectedIndex;
+        }
+        return table.index(this, start, position - 1, hash);
+      }
+      if (ch == '\\' || ch < 0x20 || ch >= 0x80) {
+        position = start - 1;
+        String name = readString();
+        return expectedName.equals(name) ? expectedIndex : table.index(name);
+      }
+      if (matched) {
+        if (matchedLength >= expectedLength || expectedName.charAt(matchedLength) != ch) {
+          matched = false;
+        } else {
+          matchedLength++;
+        }
       }
       hash = 31 * hash + ch;
     }
@@ -408,7 +464,7 @@ public abstract class JsonReader {
     }
   }
 
-  public final boolean regionEquals(String value, int start, int end) {
+  public boolean regionEquals(String value, int start, int end) {
     int length = end - start;
     if (value.length() != length) {
       return false;

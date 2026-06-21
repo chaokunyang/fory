@@ -19,6 +19,7 @@
 
 package org.apache.fory.json.codec;
 
+import org.apache.fory.json.reader.JsonReader;
 import org.apache.fory.json.resolver.JsonTypeInfo;
 import org.apache.fory.json.resolver.JsonTypeResolver;
 import org.apache.fory.json.writer.StringJsonWriter;
@@ -27,11 +28,13 @@ import org.apache.fory.json.writer.Utf8JsonWriter;
 public final class GeneratedObjectCodec extends BaseObjectCodec {
   private final StringObjectWriter stringWriter;
   private final Utf8ObjectWriter utf8Writer;
+  private final ObjectReader reader;
 
-  GeneratedObjectCodec(ObjectCodec base, ObjectWriters writers) {
+  GeneratedObjectCodec(ObjectCodec base, ObjectCodecs codecs) {
     super(base.type, base.writeFields, base.readFields, base.instantiator);
-    stringWriter = writers.stringWriter();
-    utf8Writer = writers.utf8Writer();
+    stringWriter = codecs.stringWriter();
+    utf8Writer = codecs.utf8Writer();
+    reader = codecs.reader();
   }
 
   @Override
@@ -54,5 +57,10 @@ public final class GeneratedObjectCodec extends BaseObjectCodec {
       JsonTypeInfo typeInfo = resolver.getTypeInfo(valueClass, valueClass);
       typeInfo.codec().writeUtf8(writer, value, resolver);
     }
+  }
+
+  @Override
+  Object readNonNull(JsonReader input, JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
+    return reader.read(input, this, resolver);
   }
 }

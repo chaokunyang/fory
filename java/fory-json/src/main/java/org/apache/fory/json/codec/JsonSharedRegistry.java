@@ -165,7 +165,7 @@ public final class JsonSharedRegistry {
     return JsonFieldKind.OBJECT;
   }
 
-  public ObjectWriters compileObject(BaseObjectCodec codec, JsonTypeResolver localResolver) {
+  public ObjectCodecs compileObject(BaseObjectCodec codec, JsonTypeResolver localResolver) {
     return codegen == null ? null : codegen.compile(codec, localResolver);
   }
 

@@ -119,6 +119,10 @@ public abstract class BaseObjectCodec extends AbstractJsonCodec {
     return writeFields;
   }
 
+  public final JsonFieldInfo[] readFields() {
+    return readFields;
+  }
+
   public final JsonFieldTable readTable() {
     return readTable;
   }
@@ -170,7 +174,7 @@ public abstract class BaseObjectCodec extends AbstractJsonCodec {
   }
 
   @Override
-  final Object readNonNull(JsonReader reader, JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
+  Object readNonNull(JsonReader reader, JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
     Object object = newInstance();
     reader.expect('{');
     if (reader.consume('}')) {

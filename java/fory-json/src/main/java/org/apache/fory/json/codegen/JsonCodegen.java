@@ -29,7 +29,8 @@ import org.apache.fory.codegen.CodeGenerator;
 import org.apache.fory.codegen.CompileUnit;
 import org.apache.fory.json.ForyJsonException;
 import org.apache.fory.json.codec.BaseObjectCodec;
-import org.apache.fory.json.codec.ObjectWriters;
+import org.apache.fory.json.codec.ObjectCodecs;
+import org.apache.fory.json.codec.ObjectReader;
 import org.apache.fory.json.codec.StringObjectWriter;
 import org.apache.fory.json.codec.Utf8ObjectWriter;
 import org.apache.fory.json.meta.JsonFieldInfo;
@@ -51,31 +52,44 @@ public final class JsonCodegen {
     codeGenerator = new CodeGenerator(jsonLoader);
   }
 
-  public ObjectWriters compile(BaseObjectCodec objectCodec, JsonTypeResolver typeResolver) {
+  public ObjectCodecs compile(BaseObjectCodec objectCodec, JsonTypeResolver typeResolver) {
     Class<?> type = objectCodec.type();
     if (!canCompile(type)) {
       return null;
     }
-    JsonFieldInfo[] properties = objectCodec.writeFields();
-    for (int i = 0; i < properties.length; i++) {
-      if (!canCompile(properties[i])) {
+    JsonFieldInfo[] writeProperties = objectCodec.writeFields();
+    for (int i = 0; i < writeProperties.length; i++) {
+      if (!canCompileWrite(writeProperties[i])) {
+        return null;
+      }
+    }
+    JsonFieldInfo[] readProperties = objectCodec.readFields();
+    for (int i = 0; i < readProperties.length; i++) {
+      if (!canCompileRead(readProperties[i])) {
         return null;
       }
     }
     String className = className(type);
-    BaseObjectCodec[] nestedCodecs = nestedCodecs(objectCodec, typeResolver);
+    BaseObjectCodec[] writeCodecs = writeCodecs(objectCodec, typeResolver);
     Utf8ObjectWriter utf8Writer =
-        (Utf8ObjectWriter) compileWriter(className + "_Utf8", type, properties, nestedCodecs, true);
+        (Utf8ObjectWriter)
+            compileWriter(className + "_Utf8", type, writeProperties, writeCodecs, true);
     if (utf8Writer == null) {
       return null;
     }
     StringObjectWriter stringWriter =
         (StringObjectWriter)
-            compileWriter(className + "_String", type, properties, nestedCodecs, false);
+            compileWriter(className + "_String", type, writeProperties, writeCodecs, false);
     if (stringWriter == null) {
       return null;
     }
-    return new ObjectWriters(stringWriter, utf8Writer);
+    BaseObjectCodec[] readCodecs = readCodecs(objectCodec, typeResolver);
+    ObjectReader reader =
+        (ObjectReader) compileReader(className + "_Reader", type, readProperties, readCodecs);
+    if (reader == null) {
+      return null;
+    }
+    return new ObjectCodecs(stringWriter, utf8Writer, reader);
   }
 
   private Object compileWriter(
@@ -97,13 +111,28 @@ public final class JsonCodegen {
     }
   }
 
-  private BaseObjectCodec[] nestedCodecs(
+  private Object compileReader(
+      String className, Class<?> type, JsonFieldInfo[] properties, BaseObjectCodec[] nestedCodecs) {
+    String code = genReaderCode(className, type, properties);
+    try {
+      CompileUnit unit = new CompileUnit(PACKAGE, className, code, JsonCodegen.class);
+      Class<?> readerClass = codeGenerator.compileAndLoad(unit, state -> state.lock.lock());
+      Constructor<?> constructor =
+          readerClass.getDeclaredConstructor(JsonFieldInfo[].class, BaseObjectCodec[].class);
+      constructor.setAccessible(true);
+      return constructor.newInstance(properties, nestedCodecs);
+    } catch (Throwable e) {
+      throw new ForyJsonException("Cannot compile generated JSON reader " + className, e);
+    }
+  }
+
+  private BaseObjectCodec[] writeCodecs(
       BaseObjectCodec objectCodec, JsonTypeResolver typeResolver) {
     JsonFieldInfo[] properties = objectCodec.writeFields();
     BaseObjectCodec[] nestedCodecs = new BaseObjectCodec[properties.length];
     Class<?> type = objectCodec.type();
     for (int i = 0; i < properties.length; i++) {
-      Class<?> nestedType = nestedType(properties[i]);
+      Class<?> nestedType = writeNestedType(properties[i]);
       if (nestedType != null && nestedType != type) {
         nestedCodecs[i] = typeResolver.getObjectCodec(nestedType);
       }
@@ -111,7 +140,20 @@ public final class JsonCodegen {
     return nestedCodecs;
   }
 
-  private static Class<?> nestedType(JsonFieldInfo property) {
+  private BaseObjectCodec[] readCodecs(BaseObjectCodec objectCodec, JsonTypeResolver typeResolver) {
+    JsonFieldInfo[] properties = objectCodec.readFields();
+    BaseObjectCodec[] nestedCodecs = new BaseObjectCodec[properties.length];
+    Class<?> type = objectCodec.type();
+    for (int i = 0; i < properties.length; i++) {
+      Class<?> nestedType = readNestedType(properties[i]);
+      if (nestedType != null && nestedType != type) {
+        nestedCodecs[i] = typeResolver.getObjectCodec(nestedType);
+      }
+    }
+    return nestedCodecs;
+  }
+
+  private static Class<?> writeNestedType(JsonFieldInfo property) {
     if (property.writeKind() == JsonFieldKind.OBJECT
         && property.writeRawType() != Object.class
         && property.writeTypeInfo().codec() instanceof BaseObjectCodec) {
@@ -124,7 +166,19 @@ public final class JsonCodegen {
     return null;
   }
 
-  private boolean canCompile(JsonFieldInfo property) {
+  private static Class<?> readNestedType(JsonFieldInfo property) {
+    if (property.readKind() == JsonFieldKind.OBJECT
+        && property.readRawType() != Object.class
+        && property.readTypeInfo().codec() instanceof BaseObjectCodec) {
+      return property.readRawType();
+    }
+    if (property.readKind() == JsonFieldKind.COLLECTION && isPojo(property.readElementRawType())) {
+      return property.readElementRawType();
+    }
+    return null;
+  }
+
+  private boolean canCompileWrite(JsonFieldInfo property) {
     Field field = property.writeField();
     if (field == null) {
       return false;
@@ -134,6 +188,18 @@ public final class JsonCodegen {
       return false;
     }
     Class<?> elementType = property.writeElementRawType();
+    return !isPojo(elementType) || isVisible(elementType);
+  }
+
+  private boolean canCompileRead(JsonFieldInfo property) {
+    if (property.readAccessor() == null) {
+      return false;
+    }
+    Class<?> rawType = property.readRawType();
+    if (rawType != null && !rawType.isPrimitive() && !isVisible(rawType)) {
+      return false;
+    }
+    Class<?> elementType = property.readElementRawType();
     return !isPojo(elementType) || isVisible(elementType);
   }
 
@@ -159,6 +225,310 @@ public final class JsonCodegen {
     } catch (ClassNotFoundException e) {
       return false;
     }
+  }
+
+  private String genReaderCode(String className, Class<?> type, JsonFieldInfo[] properties) {
+    StringBuilder code = new StringBuilder(4096);
+    code.append("package ").append(PACKAGE).append(";\n");
+    code.append("import org.apache.fory.json.codec.BaseObjectCodec;\n");
+    code.append("import org.apache.fory.json.codec.ObjectReader;\n");
+    code.append("import org.apache.fory.json.meta.JsonFieldAccessor;\n");
+    code.append("import org.apache.fory.json.meta.JsonFieldInfo;\n");
+    code.append("import org.apache.fory.json.meta.JsonFieldTable;\n");
+    code.append("import org.apache.fory.json.reader.JsonReader;\n");
+    code.append("import org.apache.fory.json.resolver.JsonTypeResolver;\n");
+    code.append("final class ").append(className).append(" implements ObjectReader {\n");
+    code.append("  private final String[] fieldNames;\n");
+    for (int i = 0; i < properties.length; i++) {
+      code.append("  private final JsonFieldInfo p").append(i).append(";\n");
+      code.append("  private final JsonFieldAccessor a").append(i).append(";\n");
+      if (usesReadObjectCodec(properties[i])) {
+        code.append("  private final BaseObjectCodec c").append(i).append(";\n");
+      }
+    }
+    code.append("  ")
+        .append(className)
+        .append("(JsonFieldInfo[] properties, BaseObjectCodec[] objectCodecs) {\n");
+    code.append("    this.fieldNames = new String[properties.length];\n");
+    for (int i = 0; i < properties.length; i++) {
+      code.append("    this.fieldNames[")
+          .append(i)
+          .append("] = properties[")
+          .append(i)
+          .append("].name();\n");
+      code.append("    this.p").append(i).append(" = properties[").append(i).append("];\n");
+      code.append("    this.a")
+          .append(i)
+          .append(" = properties[")
+          .append(i)
+          .append("].readAccessor();\n");
+      if (usesReadObjectCodec(properties[i])) {
+        code.append("    this.c").append(i).append(" = objectCodecs[").append(i).append("];\n");
+      }
+    }
+    code.append("  }\n");
+    code.append("  public Object read(JsonReader reader, BaseObjectCodec owner, ")
+        .append("JsonTypeResolver typeResolver) {\n");
+    code.append("    Object object = owner.newInstance();\n");
+    code.append("    reader.expect('{');\n");
+    code.append("    if (reader.consume('}')) {\n");
+    code.append("      return object;\n");
+    code.append("    }\n");
+    code.append("    JsonFieldTable fieldTable = owner.readTable();\n");
+    code.append("    String[] localFieldNames = fieldNames;\n");
+    code.append("    int expectedIndex = 0;\n");
+    code.append("    do {\n");
+    code.append("      int fieldIndex = expectedIndex < localFieldNames.length\n");
+    code.append(
+        "          ? reader.readFieldIndex(fieldTable, localFieldNames[expectedIndex], expectedIndex)\n");
+    code.append("          : reader.readFieldIndex(fieldTable);\n");
+    code.append("      reader.expect(':');\n");
+    code.append("      switch (fieldIndex) {\n");
+    for (int i = 0; i < properties.length; i++) {
+      code.append("        case ").append(i).append(":\n");
+      readField(code, properties[i], i, "          ");
+      code.append("          break;\n");
+    }
+    code.append("        default:\n");
+    code.append("          reader.skipValue();\n");
+    code.append("      }\n");
+    code.append("      if (fieldIndex >= 0) {\n");
+    code.append("        expectedIndex = fieldIndex + 1;\n");
+    code.append("      }\n");
+    code.append("    } while (reader.consume(','));\n");
+    code.append("    reader.expect('}');\n");
+    code.append("    return object;\n");
+    code.append("  }\n");
+    code.append("}\n");
+    return code.toString();
+  }
+
+  private static boolean usesReadObjectCodec(JsonFieldInfo property) {
+    switch (property.readKind()) {
+      case OBJECT:
+        return property.readRawType() != Object.class
+            && property.readTypeInfo().codec() instanceof BaseObjectCodec;
+      case COLLECTION:
+        return isPojo(property.readElementRawType());
+      default:
+        return false;
+    }
+  }
+
+  private void readField(StringBuilder code, JsonFieldInfo property, int id, String indent) {
+    Class<?> rawType = property.readRawType();
+    switch (property.readKind()) {
+      case BOOLEAN:
+        readBoolean(code, rawType, id, indent);
+        return;
+      case INT:
+        readInt(code, rawType, id, indent);
+        return;
+      case LONG:
+        readLong(code, rawType, id, indent);
+        return;
+      case STRING:
+        readString(code, id, indent);
+        return;
+      case ENUM:
+        readEnum(code, rawType, id, indent);
+        return;
+      case COLLECTION:
+        readCollection(code, property, id, indent);
+        return;
+      case OBJECT:
+        readObject(code, property, id, indent);
+        return;
+      default:
+        code.append(indent).append("p").append(id).append(".read(reader, object, typeResolver);\n");
+    }
+  }
+
+  private static void readBoolean(StringBuilder code, Class<?> rawType, int id, String indent) {
+    if (rawType.isPrimitive()) {
+      code.append(indent)
+          .append("a")
+          .append(id)
+          .append(".putBoolean(object, reader.readBoolean());\n");
+      return;
+    }
+    code.append(indent).append("if (reader.tryReadNull()) {\n");
+    code.append(indent).append("  a").append(id).append(".putObject(object, null);\n");
+    code.append(indent).append("} else {\n");
+    code.append(indent)
+        .append("  a")
+        .append(id)
+        .append(".putObject(object, Boolean.valueOf(reader.readBoolean()));\n");
+    code.append(indent).append("}\n");
+  }
+
+  private static void readInt(StringBuilder code, Class<?> rawType, int id, String indent) {
+    if (rawType.isPrimitive()) {
+      code.append(indent).append("a").append(id).append(".putInt(object, reader.readInt());\n");
+      return;
+    }
+    code.append(indent).append("if (reader.tryReadNull()) {\n");
+    code.append(indent).append("  a").append(id).append(".putObject(object, null);\n");
+    code.append(indent).append("} else {\n");
+    code.append(indent)
+        .append("  a")
+        .append(id)
+        .append(".putObject(object, Integer.valueOf(reader.readInt()));\n");
+    code.append(indent).append("}\n");
+  }
+
+  private static void readLong(StringBuilder code, Class<?> rawType, int id, String indent) {
+    if (rawType.isPrimitive()) {
+      code.append(indent).append("a").append(id).append(".putLong(object, reader.readLong());\n");
+      return;
+    }
+    code.append(indent).append("if (reader.tryReadNull()) {\n");
+    code.append(indent).append("  a").append(id).append(".putObject(object, null);\n");
+    code.append(indent).append("} else {\n");
+    code.append(indent)
+        .append("  a")
+        .append(id)
+        .append(".putObject(object, Long.valueOf(reader.readLong()));\n");
+    code.append(indent).append("}\n");
+  }
+
+  private static void readString(StringBuilder code, int id, String indent) {
+    code.append(indent).append("if (reader.tryReadNull()) {\n");
+    code.append(indent).append("  a").append(id).append(".putObject(object, null);\n");
+    code.append(indent).append("} else {\n");
+    code.append(indent)
+        .append("  a")
+        .append(id)
+        .append(".putObject(object, reader.readString());\n");
+    code.append(indent).append("}\n");
+  }
+
+  private static void readEnum(StringBuilder code, Class<?> rawType, int id, String indent) {
+    code.append(indent).append("if (reader.tryReadNull()) {\n");
+    code.append(indent).append("  a").append(id).append(".putObject(object, null);\n");
+    code.append(indent).append("} else {\n");
+    code.append(indent)
+        .append("  a")
+        .append(id)
+        .append(".putObject(object, ")
+        .append(sourceName(rawType))
+        .append(".valueOf(reader.readString()));\n");
+    code.append(indent).append("}\n");
+  }
+
+  private void readCollection(StringBuilder code, JsonFieldInfo property, int id, String indent) {
+    Class<?> elementType = property.readElementRawType();
+    if (elementType == String.class) {
+      readStringList(code, id, indent);
+      return;
+    }
+    if (elementType != null && elementType.isEnum()) {
+      readEnumList(code, elementType, id, indent);
+      return;
+    }
+    if (isPojo(elementType)) {
+      readObjectList(code, id, indent);
+      return;
+    }
+    code.append(indent).append("p").append(id).append(".read(reader, object, typeResolver);\n");
+  }
+
+  private static void readStringList(StringBuilder code, int id, String indent) {
+    code.append(indent).append("if (reader.tryReadNull()) {\n");
+    code.append(indent).append("  a").append(id).append(".putObject(object, null);\n");
+    code.append(indent).append("} else {\n");
+    code.append(indent).append("  java.util.ArrayList list = new java.util.ArrayList();\n");
+    code.append(indent).append("  reader.expect('[');\n");
+    code.append(indent).append("  if (!reader.consume(']')) {\n");
+    code.append(indent).append("    do {\n");
+    code.append(indent).append("      if (reader.tryReadNull()) {\n");
+    code.append(indent).append("        list.add(null);\n");
+    code.append(indent).append("      } else {\n");
+    code.append(indent).append("        list.add(reader.readString());\n");
+    code.append(indent).append("      }\n");
+    code.append(indent).append("    } while (reader.consume(','));\n");
+    code.append(indent).append("    reader.expect(']');\n");
+    code.append(indent).append("  }\n");
+    code.append(indent).append("  a").append(id).append(".putObject(object, list);\n");
+    code.append(indent).append("}\n");
+  }
+
+  private static void readEnumList(
+      StringBuilder code, Class<?> elementType, int id, String indent) {
+    code.append(indent).append("if (reader.tryReadNull()) {\n");
+    code.append(indent).append("  a").append(id).append(".putObject(object, null);\n");
+    code.append(indent).append("} else {\n");
+    code.append(indent).append("  java.util.ArrayList list = new java.util.ArrayList();\n");
+    code.append(indent).append("  reader.expect('[');\n");
+    code.append(indent).append("  if (!reader.consume(']')) {\n");
+    code.append(indent).append("    do {\n");
+    code.append(indent).append("      if (reader.tryReadNull()) {\n");
+    code.append(indent).append("        list.add(null);\n");
+    code.append(indent).append("      } else {\n");
+    code.append(indent)
+        .append("        list.add(")
+        .append(sourceName(elementType))
+        .append(".valueOf(reader.readString()));\n");
+    code.append(indent).append("      }\n");
+    code.append(indent).append("    } while (reader.consume(','));\n");
+    code.append(indent).append("    reader.expect(']');\n");
+    code.append(indent).append("  }\n");
+    code.append(indent).append("  a").append(id).append(".putObject(object, list);\n");
+    code.append(indent).append("}\n");
+  }
+
+  private static void readObjectList(StringBuilder code, int id, String indent) {
+    code.append(indent).append("if (reader.tryReadNull()) {\n");
+    code.append(indent).append("  a").append(id).append(".putObject(object, null);\n");
+    code.append(indent).append("} else {\n");
+    code.append(indent).append("  java.util.ArrayList list = new java.util.ArrayList();\n");
+    code.append(indent)
+        .append("  BaseObjectCodec elementCodec = c")
+        .append(id)
+        .append(" == null ? owner : c")
+        .append(id)
+        .append(";\n");
+    code.append(indent).append("  reader.expect('[');\n");
+    code.append(indent).append("  if (!reader.consume(']')) {\n");
+    code.append(indent).append("    do {\n");
+    code.append(indent).append("      if (reader.tryReadNull()) {\n");
+    code.append(indent).append("        list.add(null);\n");
+    code.append(indent).append("      } else {\n");
+    code.append(indent)
+        .append("        list.add(elementCodec.read(reader, p")
+        .append(id)
+        .append(".readElementTypeInfo(), typeResolver));\n");
+    code.append(indent).append("      }\n");
+    code.append(indent).append("    } while (reader.consume(','));\n");
+    code.append(indent).append("    reader.expect(']');\n");
+    code.append(indent).append("  }\n");
+    code.append(indent).append("  a").append(id).append(".putObject(object, list);\n");
+    code.append(indent).append("}\n");
+  }
+
+  private static void readObject(
+      StringBuilder code, JsonFieldInfo property, int id, String indent) {
+    if (property.readRawType() == Object.class
+        || !(property.readTypeInfo().codec() instanceof BaseObjectCodec)) {
+      code.append(indent).append("p").append(id).append(".read(reader, object, typeResolver);\n");
+      return;
+    }
+    code.append(indent).append("if (reader.tryReadNull()) {\n");
+    code.append(indent).append("  a").append(id).append(".putObject(object, null);\n");
+    code.append(indent).append("} else {\n");
+    code.append(indent)
+        .append("  BaseObjectCodec objectCodec = c")
+        .append(id)
+        .append(" == null ? owner : c")
+        .append(id)
+        .append(";\n");
+    code.append(indent)
+        .append("  a")
+        .append(id)
+        .append(".putObject(object, objectCodec.read(reader, p")
+        .append(id)
+        .append(".readTypeInfo(), typeResolver));\n");
+    code.append(indent).append("}\n");
   }
 
   private static String className(Class<?> type) {

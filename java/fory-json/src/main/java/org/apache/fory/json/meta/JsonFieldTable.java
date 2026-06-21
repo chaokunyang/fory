@@ -25,13 +25,16 @@ import org.apache.fory.json.reader.JsonReader;
 
 public final class JsonFieldTable {
   private final Map<String, JsonFieldInfo> fields;
+  private final Map<String, Integer> indexes;
   private final String[] tableNames;
   private final int[] tableHashes;
   private final JsonFieldInfo[] tableFields;
+  private final int[] tableIndexes;
   private final int tableMask;
 
   public JsonFieldTable(JsonFieldInfo[] readFields) {
     fields = new HashMap<>(readFields.length * 2);
+    indexes = new HashMap<>(readFields.length * 2);
     int tableSize = 1;
     while (tableSize < readFields.length * 4) {
       tableSize <<= 1;
@@ -39,11 +42,14 @@ public final class JsonFieldTable {
     tableNames = new String[tableSize];
     tableHashes = new int[tableSize];
     tableFields = new JsonFieldInfo[tableSize];
+    tableIndexes = new int[tableSize];
     tableMask = tableSize - 1;
-    for (JsonFieldInfo field : readFields) {
+    for (int i = 0; i < readFields.length; i++) {
+      JsonFieldInfo field = readFields[i];
       String name = field.name();
       fields.put(field.name(), field);
-      put(name, field);
+      indexes.put(field.name(), i);
+      put(name, field, i);
     }
   }
 
@@ -69,7 +75,30 @@ public final class JsonFieldTable {
     }
   }
 
-  private void put(String name, JsonFieldInfo field) {
+  public int index(String name) {
+    Integer index = indexes.get(name);
+    return index == null ? -1 : index.intValue();
+  }
+
+  public int index(JsonReader reader, int start, int end, int hash) {
+    String[] localNames = tableNames;
+    int[] localHashes = tableHashes;
+    int[] localIndexes = tableIndexes;
+    int mask = tableMask;
+    int index = hash & mask;
+    while (true) {
+      String name = localNames[index];
+      if (name == null) {
+        return -1;
+      }
+      if (localHashes[index] == hash && reader.regionEquals(name, start, end)) {
+        return localIndexes[index];
+      }
+      index = (index + 1) & mask;
+    }
+  }
+
+  private void put(String name, JsonFieldInfo field, int fieldIndex) {
     int hash = name.hashCode();
     int index = hash & tableMask;
     while (tableNames[index] != null) {
@@ -78,5 +107,6 @@ public final class JsonFieldTable {
     tableNames[index] = name;
     tableHashes[index] = hash;
     tableFields[index] = field;
+    tableIndexes[index] = fieldIndex;
   }
 }

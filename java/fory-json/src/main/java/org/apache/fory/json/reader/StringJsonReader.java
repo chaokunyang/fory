@@ -19,11 +19,29 @@
 
 package org.apache.fory.json.reader;
 
+import org.apache.fory.json.meta.JsonFieldInfo;
+import org.apache.fory.json.meta.JsonFieldTable;
+
 public final class StringJsonReader extends JsonReader {
-  private final String input;
+  private String input;
+
+  public StringJsonReader() {
+    input = "";
+  }
 
   public StringJsonReader(String input) {
     this.input = input;
+  }
+
+  public StringJsonReader reset(String input) {
+    this.input = input;
+    position = 0;
+    return this;
+  }
+
+  public void clear() {
+    input = "";
+    position = 0;
   }
 
   @Override
@@ -71,6 +89,103 @@ public final class StringJsonReader extends JsonReader {
       }
     }
     throw error("Unterminated string");
+  }
+
+  @Override
+  public JsonFieldInfo readField(JsonFieldTable table) {
+    skipWhitespace();
+    int length = input.length();
+    if (position >= length || input.charAt(position++) != '"') {
+      throw error("Expected string");
+    }
+    int start = position;
+    int hash = 0;
+    while (position < length) {
+      char ch = input.charAt(position++);
+      if (ch == '"') {
+        return table.get(this, start, position - 1, hash);
+      }
+      if (ch == '\\' || ch < 0x20 || ch >= 0x80) {
+        position = start - 1;
+        return table.get(readString());
+      }
+      hash = 31 * hash + ch;
+    }
+    throw error("Unterminated string");
+  }
+
+  @Override
+  public int readFieldIndex(JsonFieldTable table) {
+    skipWhitespace();
+    int length = input.length();
+    if (position >= length || input.charAt(position++) != '"') {
+      throw error("Expected string");
+    }
+    int start = position;
+    int hash = 0;
+    while (position < length) {
+      char ch = input.charAt(position++);
+      if (ch == '"') {
+        return table.index(this, start, position - 1, hash);
+      }
+      if (ch == '\\' || ch < 0x20 || ch >= 0x80) {
+        position = start - 1;
+        return table.index(readString());
+      }
+      hash = 31 * hash + ch;
+    }
+    throw error("Unterminated string");
+  }
+
+  @Override
+  public int readFieldIndex(JsonFieldTable table, String expectedName, int expectedIndex) {
+    skipWhitespace();
+    int length = input.length();
+    if (position >= length || input.charAt(position++) != '"') {
+      throw error("Expected string");
+    }
+    int start = position;
+    int hash = 0;
+    int matchedLength = 0;
+    int expectedLength = expectedName.length();
+    boolean matched = true;
+    while (position < length) {
+      char ch = input.charAt(position++);
+      if (ch == '"') {
+        if (matched && matchedLength == expectedLength) {
+          return expectedIndex;
+        }
+        return table.index(this, start, position - 1, hash);
+      }
+      if (ch == '\\' || ch < 0x20 || ch >= 0x80) {
+        position = start - 1;
+        String name = readString();
+        return expectedName.equals(name) ? expectedIndex : table.index(name);
+      }
+      if (matched) {
+        if (matchedLength >= expectedLength || expectedName.charAt(matchedLength) != ch) {
+          matched = false;
+        } else {
+          matchedLength++;
+        }
+      }
+      hash = 31 * hash + ch;
+    }
+    throw error("Unterminated string");
+  }
+
+  @Override
+  public boolean regionEquals(String value, int start, int end) {
+    int length = end - start;
+    if (value.length() != length) {
+      return false;
+    }
+    for (int i = 0; i < length; i++) {
+      if (input.charAt(start + i) != value.charAt(i)) {
+        return false;
+      }
+    }
+    return true;
   }
 
   @Override

@@ -28,7 +28,7 @@ import org.apache.fory.json.codec.CodecUtils;
 import org.apache.fory.json.codec.JsonCodec;
 import org.apache.fory.json.codec.JsonSharedRegistry;
 import org.apache.fory.json.codec.ObjectCodec;
-import org.apache.fory.json.codec.ObjectWriters;
+import org.apache.fory.json.codec.ObjectCodecs;
 
 /** Local JSON type dispatcher and cache used by one borrowed {@code ForyJson} state at a time. */
 public final class JsonTypeResolver {
@@ -69,9 +69,9 @@ public final class JsonTypeResolver {
     objectCodecs.put(type, codec);
     try {
       codec.resolveTypes(this);
-      ObjectWriters writers = sharedRegistry.compileObject(codec, this);
-      if (writers != null) {
-        BaseObjectCodec generated = codec.withWriters(writers);
+      ObjectCodecs codecs = sharedRegistry.compileObject(codec, this);
+      if (codecs != null) {
+        BaseObjectCodec generated = codec.withCodecs(codecs);
         objectCodecs.put(type, generated);
         return generated;
       }

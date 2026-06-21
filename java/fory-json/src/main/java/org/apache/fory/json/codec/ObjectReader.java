@@ -19,20 +19,9 @@
 
 package org.apache.fory.json.codec;
 
-public final class ObjectWriters {
-  private final StringObjectWriter stringWriter;
-  private final Utf8ObjectWriter utf8Writer;
+import org.apache.fory.json.reader.JsonReader;
+import org.apache.fory.json.resolver.JsonTypeResolver;
 
-  public ObjectWriters(StringObjectWriter stringWriter, Utf8ObjectWriter utf8Writer) {
-    this.stringWriter = stringWriter;
-    this.utf8Writer = utf8Writer;
-  }
-
-  public StringObjectWriter stringWriter() {
-    return stringWriter;
-  }
-
-  public Utf8ObjectWriter utf8Writer() {
-    return utf8Writer;
-  }
+public interface ObjectReader {
+  Object read(JsonReader reader, BaseObjectCodec owner, JsonTypeResolver typeResolver);
 }

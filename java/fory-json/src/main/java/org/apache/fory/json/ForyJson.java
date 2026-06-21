@@ -105,9 +105,11 @@ public final class ForyJson {
 
   public <T> T fromJson(String json, Class<T> type) {
     PooledState entry = acquire();
+    JsonState state = entry.state;
     try {
-      return castValue(readValue(new StringJsonReader(json), type, type, entry.state), type);
+      return castValue(readValue(state.stringReader(json), type, type, state), type);
     } finally {
+      state.clearReaders();
       release(entry);
     }
   }
@@ -115,21 +117,24 @@ public final class ForyJson {
   /** Parses JSON using a generic type captured by {@link TypeRef}. */
   public <T> T fromJson(String json, TypeRef<T> typeRef) {
     PooledState entry = acquire();
+    JsonState state = entry.state;
     try {
       Object value =
-          readValue(
-              new StringJsonReader(json), typeRef.getType(), typeRef.getRawType(), entry.state);
+          readValue(state.stringReader(json), typeRef.getType(), typeRef.getRawType(), state);
       return castValue(value, typeRef);
     } finally {
+      state.clearReaders();
       release(entry);
     }
   }
 
   public <T> T fromJson(byte[] bytes, Class<T> type) {
     PooledState entry = acquire();
+    JsonState state = entry.state;
     try {
-      return castValue(readValue(new Utf8JsonReader(bytes), type, type, entry.state), type);
+      return castValue(readValue(state.utf8Reader(bytes), type, type, state), type);
     } finally {
+      state.clearReaders();
       release(entry);
     }
   }
@@ -137,12 +142,13 @@ public final class ForyJson {
   /** Parses UTF-8 JSON bytes using a generic type captured by {@link TypeRef}. */
   public <T> T fromJson(byte[] bytes, TypeRef<T> typeRef) {
     PooledState entry = acquire();
+    JsonState state = entry.state;
     try {
       Object value =
-          readValue(
-              new Utf8JsonReader(bytes), typeRef.getType(), typeRef.getRawType(), entry.state);
+          readValue(state.utf8Reader(bytes), typeRef.getType(), typeRef.getRawType(), state);
       return castValue(value, typeRef);
     } finally {
+      state.clearReaders();
       release(entry);
     }
   }
@@ -249,6 +255,8 @@ public final class ForyJson {
   private static final class JsonState {
     private final Utf8JsonWriter utf8Writer;
     private final StringJsonWriter stringWriter;
+    private final Utf8JsonReader utf8Reader;
+    private final StringJsonReader stringReader;
     private final JsonTypeResolver typeResolver;
     private Class<?> lastRootType;
     private JsonTypeInfo lastRootInfo;
@@ -256,6 +264,8 @@ public final class ForyJson {
     private JsonState(boolean writeNullFields, JsonSharedRegistry sharedRegistry) {
       utf8Writer = new Utf8JsonWriter(writeNullFields, new byte[INITIAL_BUFFER_SIZE]);
       stringWriter = new StringJsonWriter(writeNullFields, new byte[INITIAL_BUFFER_SIZE]);
+      utf8Reader = new Utf8JsonReader();
+      stringReader = new StringJsonReader();
       typeResolver = new JsonTypeResolver(sharedRegistry);
     }
 
@@ -267,6 +277,19 @@ public final class ForyJson {
     private Utf8JsonWriter utf8Writer() {
       utf8Writer.reset(resetBuffer(utf8Writer.buffer()));
       return utf8Writer;
+    }
+
+    private StringJsonReader stringReader(String input) {
+      return stringReader.reset(input);
+    }
+
+    private Utf8JsonReader utf8Reader(byte[] input) {
+      return utf8Reader.reset(input);
+    }
+
+    private void clearReaders() {
+      stringReader.clear();
+      utf8Reader.clear();
     }
 
     private byte[] resetBuffer(byte[] buffer) {

@@ -71,9 +71,11 @@ public final class JsonFieldInfo {
   private final JsonFieldAccessor writeAccessor;
   private final JsonFieldAccessor readAccessor;
   private final Type writeElementType;
+  private final Type readElementType;
   private final Type writeMapValueType;
   private final Class<?> writeArrayComponentType;
   private final Class<?> writeElementRawType;
+  private final Class<?> readElementRawType;
   private final byte[] stringNamePrefix;
   private final byte[] stringCommaNamePrefix;
   private final byte[] utf8NamePrefix;
@@ -99,6 +101,7 @@ public final class JsonFieldInfo {
   private final JsonNumberTokenCache numberTokenCache;
   private JsonTypeInfo writeTypeInfo;
   private JsonTypeInfo readTypeInfo;
+  private JsonTypeInfo readElementTypeInfo;
   private BaseObjectCodec writeObjectCodec;
   private BaseObjectCodec writeElementObjectCodec;
 
@@ -122,10 +125,13 @@ public final class JsonFieldInfo {
     readKindId = readKind == null ? 0 : kindId(readKind);
     writeElementType =
         writeKind == JsonFieldKind.COLLECTION ? CodecUtils.elementType(writeType) : null;
+    readElementType =
+        readKind == JsonFieldKind.COLLECTION ? CodecUtils.elementType(readType) : null;
     writeMapValueType = writeKind == JsonFieldKind.MAP ? CodecUtils.mapValueType(writeType) : null;
     writeArrayComponentType =
         writeKind == JsonFieldKind.ARRAY ? writeRawType.getComponentType() : null;
     writeElementRawType = writeElementType == null ? null : knownRawType(writeElementType);
+    readElementRawType = readElementType == null ? null : knownRawType(readElementType);
     String stringPrefix = JsonStringEscaper.escapedNamePrefix(name, true);
     String utf8Prefix = JsonStringEscaper.escapedNamePrefix(name, false);
     stringNamePrefix = stringPrefix.getBytes(StandardCharsets.ISO_8859_1);
@@ -205,8 +211,16 @@ public final class JsonFieldInfo {
     return writeElementType;
   }
 
+  public Type readElementType() {
+    return readElementType;
+  }
+
   public Class<?> writeElementRawType() {
     return writeElementRawType;
+  }
+
+  public Class<?> readElementRawType() {
+    return readElementRawType;
   }
 
   public Type writeMapValueType() {
@@ -247,6 +261,9 @@ public final class JsonFieldInfo {
     }
     if (readRawType != null) {
       readTypeInfo = typeResolver.getTypeInfo(readType, readRawType);
+    }
+    if (readElementRawType != null) {
+      readElementTypeInfo = typeResolver.getTypeInfo(readElementType, readElementRawType);
     }
   }
 
@@ -299,6 +316,14 @@ public final class JsonFieldInfo {
 
   public JsonTypeInfo writeTypeInfo() {
     return writeTypeInfo;
+  }
+
+  public JsonTypeInfo readTypeInfo() {
+    return readTypeInfo;
+  }
+
+  public JsonTypeInfo readElementTypeInfo() {
+    return readElementTypeInfo;
   }
 
   private void readByte(JsonReader reader, Object object) {

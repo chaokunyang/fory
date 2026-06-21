@@ -33,18 +33,23 @@ import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Calendar;
 import java.util.Currency;
 import java.util.EnumMap;
+import java.util.EnumSet;
 import java.util.GregorianCalendar;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.OptionalInt;
+import java.util.Queue;
+import java.util.Set;
 import java.util.TimeZone;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
@@ -203,6 +208,12 @@ public class ForyJsonTest {
     public List<Integer> ints = Arrays.asList(1, 2);
     public List<String> names = Arrays.asList("alpha", ZH_TEXT);
     public Map<String, Integer> scores = scores();
+  }
+
+  public static final class GeneratedCollectionFields {
+    public EnumSet<Kind> kinds = EnumSet.of(Kind.FAST, Kind.SMALL);
+    public Set<String> names = new LinkedHashSet<>(Arrays.asList("alpha", ZH_TEXT));
+    public Queue<Integer> numbers = new ArrayDeque<>(Arrays.asList(1, 2));
   }
 
   public static final class UnicodeValues {
@@ -852,6 +863,17 @@ public class ForyJsonTest {
   }
 
   @Test
+  public void readGeneratedCollectionFields() {
+    ForyJson json = ForyJson.builder().build();
+    String input =
+        "{\"kinds\":[\"FAST\",\"SMALL\"],\"names\":[\"alpha\",\"你好，Fory\"]," + "\"numbers\":[1,2]}";
+    assertGeneratedCollections(json.fromJson(input, GeneratedCollectionFields.class));
+    assertGeneratedCollections(
+        json.fromJson(input.getBytes(StandardCharsets.UTF_8), GeneratedCollectionFields.class));
+    assertEquals(json.hasGeneratedWriter(GeneratedCollectionFields.class), true);
+  }
+
+  @Test
   public void readScalarRoots() {
     ForyJson json = ForyJson.builder().build();
     assertEquals(json.fromJson("7", int.class), Integer.valueOf(7));
@@ -1032,6 +1054,15 @@ public class ForyJsonTest {
     assertEquals(value.ints, Arrays.asList(1, 2));
     assertEquals(value.names, Arrays.asList("alpha", ZH_TEXT));
     assertEquals(value.scores, scores());
+  }
+
+  private static void assertGeneratedCollections(GeneratedCollectionFields value) {
+    assertTrue(value.kinds instanceof EnumSet);
+    assertEquals(value.kinds, EnumSet.of(Kind.FAST, Kind.SMALL));
+    assertTrue(value.names instanceof LinkedHashSet);
+    assertEquals(value.names, new LinkedHashSet<>(Arrays.asList("alpha", ZH_TEXT)));
+    assertTrue(value.numbers instanceof ArrayDeque);
+    assertEquals(new ArrayList<>(value.numbers), Arrays.asList(1, 2));
   }
 
   private static void assertTextRoundTrip(ForyJson json, String text) {

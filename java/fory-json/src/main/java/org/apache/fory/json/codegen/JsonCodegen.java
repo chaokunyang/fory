@@ -159,11 +159,6 @@ public final class JsonCodegen {
         && property.readTypeInfo().codec() instanceof BaseObjectCodec) {
       return property.readRawType();
     }
-    if (property.readKind() == JsonFieldKind.COLLECTION
-        && property.readElementTypeInfo() != null
-        && property.readElementTypeInfo().codec() instanceof BaseObjectCodec) {
-      return property.readElementRawType();
-    }
     return null;
   }
 
@@ -573,15 +568,9 @@ public final class JsonCodegen {
   }
 
   private static boolean usesReadObjectCodec(JsonFieldInfo property) {
-    switch (property.readKind()) {
-      case OBJECT:
-        return property.readRawType() != Object.class
-            && property.readTypeInfo().codec() instanceof BaseObjectCodec;
-      case COLLECTION:
-        return isPojo(property.readElementRawType());
-      default:
-        return false;
-    }
+    return property.readKind() == JsonFieldKind.OBJECT
+        && property.readRawType() != Object.class
+        && property.readTypeInfo().codec() instanceof BaseObjectCodec;
   }
 
   private void readField(
@@ -604,7 +593,7 @@ public final class JsonCodegen {
         readEnum(code, rawType, id, indent, readerMode);
         return;
       case COLLECTION:
-        readCollection(code, property, id, indent, readerMode);
+        readResolvedField(code, id, indent, readerMode);
         return;
       case OBJECT:
         readObject(code, property, id, indent, readerMode);
@@ -708,98 +697,17 @@ public final class JsonCodegen {
     code.append(indent).append("}\n");
   }
 
-  private void readCollection(
-      StringBuilder code, JsonFieldInfo property, int id, String indent, int readerMode) {
-    Class<?> elementType = property.readElementRawType();
-    if (elementType == String.class) {
-      readStringList(code, id, indent, readerMode);
-      return;
-    }
-    if (elementType != null && elementType.isEnum()) {
-      readEnumList(code, elementType, id, indent, readerMode);
-      return;
-    }
-    if (property.readElementTypeInfo() != null
-        && property.readElementTypeInfo().codec() instanceof BaseObjectCodec) {
-      readObjectList(code, id, indent, readerMode);
-      return;
-    }
-    code.append(indent).append("p").append(id).append(".read(reader, object, typeResolver);\n");
-  }
-
-  private static void readStringList(StringBuilder code, int id, String indent, int readerMode) {
-    code.append(indent).append("if (").append(tryReadNullCall(readerMode)).append(") {\n");
-    code.append(indent).append("  a").append(id).append(".putObject(object, null);\n");
-    code.append(indent).append("} else {\n");
-    code.append(indent).append("  java.util.ArrayList list = new java.util.ArrayList();\n");
-    code.append(indent).append("  ").append(expectCall(readerMode, '[')).append(";\n");
-    code.append(indent).append("  if (!").append(consumeCall(readerMode, ']')).append(") {\n");
-    code.append(indent).append("    do {\n");
-    code.append(indent).append("      if (").append(tryReadNullCall(readerMode)).append(") {\n");
-    code.append(indent).append("        list.add(null);\n");
-    code.append(indent).append("      } else {\n");
-    code.append(indent).append("        list.add(reader.readString());\n");
-    code.append(indent).append("      }\n");
-    code.append(indent).append("    } while (").append(consumeCall(readerMode, ',')).append(");\n");
-    code.append(indent).append("    ").append(expectCall(readerMode, ']')).append(";\n");
-    code.append(indent).append("  }\n");
-    code.append(indent).append("  a").append(id).append(".putObject(object, list);\n");
-    code.append(indent).append("}\n");
-  }
-
-  private static void readEnumList(
-      StringBuilder code, Class<?> elementType, int id, String indent, int readerMode) {
-    code.append(indent).append("if (").append(tryReadNullCall(readerMode)).append(") {\n");
-    code.append(indent).append("  a").append(id).append(".putObject(object, null);\n");
-    code.append(indent).append("} else {\n");
-    code.append(indent).append("  java.util.ArrayList list = new java.util.ArrayList();\n");
-    code.append(indent).append("  ").append(expectCall(readerMode, '[')).append(";\n");
-    code.append(indent).append("  if (!").append(consumeCall(readerMode, ']')).append(") {\n");
-    code.append(indent).append("    do {\n");
-    code.append(indent).append("      if (").append(tryReadNullCall(readerMode)).append(") {\n");
-    code.append(indent).append("        list.add(null);\n");
-    code.append(indent).append("      } else {\n");
+  private static void readResolvedField(StringBuilder code, int id, String indent, int readerMode) {
     code.append(indent)
-        .append("        list.add(")
-        .append(sourceName(elementType))
-        .append(".valueOf(reader.readString()));\n");
-    code.append(indent).append("      }\n");
-    code.append(indent).append("    } while (").append(consumeCall(readerMode, ',')).append(");\n");
-    code.append(indent).append("    ").append(expectCall(readerMode, ']')).append(";\n");
-    code.append(indent).append("  }\n");
-    code.append(indent).append("  a").append(id).append(".putObject(object, list);\n");
-    code.append(indent).append("}\n");
-  }
-
-  private static void readObjectList(StringBuilder code, int id, String indent, int readerMode) {
-    code.append(indent).append("if (").append(tryReadNullCall(readerMode)).append(") {\n");
-    code.append(indent).append("  a").append(id).append(".putObject(object, null);\n");
-    code.append(indent).append("} else {\n");
-    code.append(indent).append("  java.util.ArrayList list = new java.util.ArrayList();\n");
-    code.append(indent)
-        .append("  BaseObjectCodec elementCodec = c")
+        .append("a")
         .append(id)
-        .append(" == null ? owner : c")
+        .append(".putObject(object, p")
         .append(id)
-        .append(";\n");
-    code.append(indent).append("  ").append(expectCall(readerMode, '[')).append(";\n");
-    code.append(indent).append("  if (!").append(consumeCall(readerMode, ']')).append(") {\n");
-    code.append(indent).append("    do {\n");
-    code.append(indent).append("      if (").append(tryReadNullCall(readerMode)).append(") {\n");
-    code.append(indent).append("        list.add(null);\n");
-    code.append(indent).append("      } else {\n");
-    code.append(indent)
-        .append("        list.add(elementCodec.")
+        .append(".readTypeInfo().codec().")
         .append(readObjectMethod(readerMode))
         .append("(reader, p")
         .append(id)
-        .append(".readElementTypeInfo(), typeResolver));\n");
-    code.append(indent).append("      }\n");
-    code.append(indent).append("    } while (").append(consumeCall(readerMode, ',')).append(");\n");
-    code.append(indent).append("    ").append(expectCall(readerMode, ']')).append(";\n");
-    code.append(indent).append("  }\n");
-    code.append(indent).append("  a").append(id).append(".putObject(object, list);\n");
-    code.append(indent).append("}\n");
+        .append(".readTypeInfo(), typeResolver));\n");
   }
 
   private static void readObject(

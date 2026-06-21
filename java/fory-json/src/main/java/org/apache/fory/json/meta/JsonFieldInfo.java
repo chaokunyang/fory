@@ -64,7 +64,6 @@ public final class JsonFieldInfo {
   private final JsonFieldKind writeKind;
   private final JsonFieldKind readKind;
   private final int writeKindId;
-  private final int readKindId;
   private final JsonFieldAccessor writeAccessor;
   private final JsonFieldAccessor readAccessor;
   private final Type writeElementType;
@@ -118,7 +117,6 @@ public final class JsonFieldInfo {
     writeKind = writeRawType == null ? null : kind(writeRawType);
     readKind = readRawType == null ? null : kind(readRawType);
     writeKindId = writeKind == null ? 0 : kindId(writeKind);
-    readKindId = readKind == null ? 0 : kindId(readKind);
     writeElementType =
         writeKind == JsonFieldKind.COLLECTION ? CodecUtils.elementType(writeType) : null;
     readElementType =
@@ -270,50 +268,7 @@ public final class JsonFieldInfo {
   }
 
   public void read(JsonReader reader, Object object, JsonTypeResolver typeResolver) {
-    switch (readKindId) {
-      case KIND_BOOLEAN:
-        if (readRawType.isPrimitive()) {
-          readAccessor.putBoolean(object, reader.readBoolean());
-        } else if (reader.tryReadNull()) {
-          readAccessor.putObject(object, null);
-        } else {
-          readAccessor.putObject(object, Boolean.valueOf(reader.readBoolean()));
-        }
-        return;
-      case KIND_BYTE:
-        readByte(reader, object);
-        return;
-      case KIND_SHORT:
-        readShort(reader, object);
-        return;
-      case KIND_INT:
-        if (readRawType.isPrimitive()) {
-          readAccessor.putInt(object, reader.readInt());
-        } else if (reader.tryReadNull()) {
-          readAccessor.putObject(object, null);
-        } else {
-          readAccessor.putObject(object, Integer.valueOf(reader.readInt()));
-        }
-        return;
-      case KIND_LONG:
-        if (readRawType.isPrimitive()) {
-          readAccessor.putLong(object, reader.readLong());
-        } else if (reader.tryReadNull()) {
-          readAccessor.putObject(object, null);
-        } else {
-          readAccessor.putObject(object, Long.valueOf(reader.readLong()));
-        }
-        return;
-      case KIND_STRING:
-        if (reader.tryReadNull()) {
-          readAccessor.putObject(object, null);
-        } else {
-          readAccessor.putObject(object, reader.readString());
-        }
-        return;
-      default:
-        readTypeInfo.codec().readField(reader, object, readAccessor, readTypeInfo, typeResolver);
-    }
+    readTypeInfo.codec().readField(reader, object, readAccessor, readTypeInfo, typeResolver);
   }
 
   public JsonTypeInfo writeTypeInfo() {
@@ -326,38 +281,6 @@ public final class JsonFieldInfo {
 
   public JsonTypeInfo readElementTypeInfo() {
     return readElementTypeInfo;
-  }
-
-  private void readByte(JsonReader reader, Object object) {
-    if (!readRawType.isPrimitive() && reader.tryReadNull()) {
-      readAccessor.putObject(object, null);
-      return;
-    }
-    int value = reader.readInt();
-    if (value < Byte.MIN_VALUE || value > Byte.MAX_VALUE) {
-      throw new ForyJsonException("Byte overflow");
-    }
-    if (readRawType.isPrimitive()) {
-      readAccessor.putByte(object, (byte) value);
-    } else {
-      readAccessor.putObject(object, Byte.valueOf((byte) value));
-    }
-  }
-
-  private void readShort(JsonReader reader, Object object) {
-    if (!readRawType.isPrimitive() && reader.tryReadNull()) {
-      readAccessor.putObject(object, null);
-      return;
-    }
-    int value = reader.readInt();
-    if (value < Short.MIN_VALUE || value > Short.MAX_VALUE) {
-      throw new ForyJsonException("Short overflow");
-    }
-    if (readRawType.isPrimitive()) {
-      readAccessor.putShort(object, (short) value);
-    } else {
-      readAccessor.putObject(object, Short.valueOf((short) value));
-    }
   }
 
   public byte[] stringNamePrefix() {

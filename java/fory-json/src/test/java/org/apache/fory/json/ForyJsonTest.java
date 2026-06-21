@@ -344,6 +344,18 @@ public class ForyJsonTest {
   public void disableGeneratedWriter() {
     ForyJson json = ForyJson.builder().withCodegen(false).build();
     assertEquals(json.toJson(new PublicFields()), "{\"active\":true,\"id\":7,\"name\":\"fory\"}");
+    PublicFields fields =
+        json.fromJson("{\"active\":false,\"id\":8,\"name\":\"json\"}", PublicFields.class);
+    assertEquals(fields.active, false);
+    assertEquals(fields.id, 8);
+    assertEquals(fields.name, "json");
+    BoxedScalars scalars =
+        json.fromJson(
+            "{\"bool\":true,\"byteValue\":2,\"charValue\":\"x\",\"doubleValue\":2.5,"
+                + "\"floatValue\":1.5,\"intValue\":4,\"longValue\":5,\"shortValue\":3}",
+            BoxedScalars.class);
+    assertEquals(scalars.byteValue, Byte.valueOf((byte) 2));
+    assertEquals(scalars.shortValue, Short.valueOf((short) 3));
     assertEquals(json.hasGeneratedWriter(PublicFields.class), false);
   }
 

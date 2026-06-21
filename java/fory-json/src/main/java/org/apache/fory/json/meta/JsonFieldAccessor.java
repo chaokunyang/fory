@@ -27,6 +27,8 @@ public abstract class JsonFieldAccessor {
     throw new UnsupportedOperationException();
   }
 
+  public abstract FieldAccessor coreAccessor();
+
   public boolean getBoolean(Object target) {
     return (Boolean) getObject(target);
   }
@@ -104,6 +106,11 @@ public abstract class JsonFieldAccessor {
 
     private FieldJsonAccessor(FieldAccessor accessor) {
       this.accessor = accessor;
+    }
+
+    @Override
+    public FieldAccessor coreAccessor() {
+      return accessor;
     }
 
     @Override

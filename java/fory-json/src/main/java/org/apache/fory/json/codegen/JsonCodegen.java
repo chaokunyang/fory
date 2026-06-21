@@ -39,6 +39,8 @@ import org.apache.fory.json.meta.JsonFieldInfo;
 import org.apache.fory.json.meta.JsonFieldKind;
 import org.apache.fory.json.resolver.JsonTypeResolver;
 import org.apache.fory.platform.JdkVersion;
+import org.apache.fory.reflect.FieldAccessor;
+import org.apache.fory.reflect.InstanceFieldAccessors;
 
 public final class JsonCodegen {
   private static final String PACKAGE = "org.apache.fory.json.codegen";
@@ -189,6 +191,9 @@ public final class JsonCodegen {
     if (field == null) {
       return false;
     }
+    if (!isInstanceAccessor(property.writeFieldAccessor())) {
+      return false;
+    }
     Class<?> rawType = property.writeRawType();
     if (rawType != null && !rawType.isPrimitive() && !isVisible(rawType)) {
       return false;
@@ -213,6 +218,10 @@ public final class JsonCodegen {
     return JdkVersion.MAJOR_VERSION >= 15
         && CodeGenerator.sourcePublicAccessible(type)
         && isVisible(type);
+  }
+
+  private static boolean isInstanceAccessor(FieldAccessor accessor) {
+    return accessor instanceof InstanceFieldAccessors.InstanceAccessor;
   }
 
   private boolean isVisible(Class<?> type) {
@@ -732,7 +741,6 @@ public final class JsonCodegen {
     StringBuilder code = new StringBuilder(4096);
     code.append("package ").append(PACKAGE).append(";\n");
     code.append("import org.apache.fory.json.codec.BaseObjectCodec;\n");
-    code.append("import org.apache.fory.json.meta.JsonFieldAccessor;\n");
     code.append("import org.apache.fory.json.meta.JsonFieldInfo;\n");
     code.append("import org.apache.fory.json.resolver.JsonTypeInfo;\n");
     code.append("import org.apache.fory.json.resolver.JsonTypeResolver;\n");
@@ -743,6 +751,7 @@ public final class JsonCodegen {
     code.append("import org.apache.fory.json.writer.JsonStringTokenCache;\n");
     code.append("import org.apache.fory.json.writer.StringJsonWriter;\n");
     code.append("import org.apache.fory.json.writer.Utf8JsonWriter;\n");
+    code.append("import org.apache.fory.reflect.InstanceFieldAccessors.InstanceAccessor;\n");
     code.append("final class ")
         .append(className)
         .append(" extends GeneratedObjectWriter implements ")
@@ -767,7 +776,7 @@ public final class JsonCodegen {
       useNumberToken[i] = usesNumberToken(property, objectStartFused && i == 0);
       if (useInfo[i]) {
         code.append("  private final JsonFieldInfo p").append(i).append(";\n");
-        code.append("  private final JsonFieldAccessor a").append(i).append(";\n");
+        code.append("  private final InstanceAccessor a").append(i).append(";\n");
       }
       if (useObjectCodec[i]) {
         code.append("  private final BaseObjectCodec c").append(i).append(";\n");
@@ -800,9 +809,9 @@ public final class JsonCodegen {
         code.append("    this.p").append(i).append(" = properties[").append(i).append("];\n");
         code.append("    this.a")
             .append(i)
-            .append(" = properties[")
+            .append(" = (InstanceAccessor) properties[")
             .append(i)
-            .append("].writeAccessor();\n");
+            .append("].writeFieldAccessor();\n");
       }
       if (useObjectCodec[i]) {
         code.append("    this.c").append(i).append(" = objectCodecs[").append(i).append("];\n");

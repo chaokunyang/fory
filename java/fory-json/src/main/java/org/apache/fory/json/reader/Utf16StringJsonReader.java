@@ -339,7 +339,7 @@ public final class Utf16StringJsonReader extends JsonReader {
 
   @Override
   public String readString() {
-    skipWhitespace();
+    skipWhitespaceFast();
     if (position >= length || charAtFast(position++) != '"') {
       throw error("Expected string");
     }

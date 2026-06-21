@@ -324,7 +324,7 @@ public final class Utf8JsonReader extends JsonReader {
 
   @Override
   public String readString() {
-    skipWhitespace();
+    skipWhitespaceFast();
     if (position >= input.length || input[position++] != '"') {
       throw error("Expected string");
     }

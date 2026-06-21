@@ -340,6 +340,20 @@ public final class Utf16StringJsonReader extends JsonReader {
   @Override
   public String readString() {
     skipWhitespaceFast();
+    return readStringToken();
+  }
+
+  @Override
+  public String readNullableString() {
+    skipWhitespaceFast();
+    if (startsWithAscii("null")) {
+      position += 4;
+      return null;
+    }
+    return readStringToken();
+  }
+
+  private String readStringToken() {
     if (position >= length || charAtFast(position++) != '"') {
       throw error("Expected string");
     }
@@ -427,6 +441,10 @@ public final class Utf16StringJsonReader extends JsonReader {
 
   private long readQuotedStringHash() {
     skipWhitespaceFast();
+    return readQuotedStringHashToken();
+  }
+
+  private long readQuotedStringHashToken() {
     int inputLength = length;
     if (position >= inputLength || charAtFast(position++) != '"') {
       throw error("Expected string");

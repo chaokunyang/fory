@@ -33,6 +33,10 @@ public abstract class JsonReader {
 
   public abstract String readString();
 
+  public String readNullableString() {
+    return tryReadNull() ? null : readString();
+  }
+
   public final void skipWhitespace() {
     while (position < length()) {
       char ch = charAt(position);

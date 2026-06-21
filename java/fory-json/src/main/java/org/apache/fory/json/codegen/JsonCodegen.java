@@ -915,11 +915,7 @@ public final class JsonCodegen {
   }
 
   private static void readRecordString(StringBuilder code, int id, String indent, int readerMode) {
-    code.append(indent).append("if (").append(tryReadNullCall(readerMode)).append(") {\n");
-    code.append(indent).append("  object[").append(id).append("] = null;\n");
-    code.append(indent).append("} else {\n");
-    code.append(indent).append("  object[").append(id).append("] = reader.readString();\n");
-    code.append(indent).append("}\n");
+    code.append(indent).append("object[").append(id).append("] = reader.readNullableString();\n");
   }
 
   private static void readRecordEnum(StringBuilder code, int id, String indent, int readerMode) {
@@ -1051,14 +1047,10 @@ public final class JsonCodegen {
   }
 
   private static void readString(StringBuilder code, int id, String indent, int readerMode) {
-    code.append(indent).append("if (").append(tryReadNullCall(readerMode)).append(") {\n");
-    code.append(indent).append("  a").append(id).append(".putObject(object, null);\n");
-    code.append(indent).append("} else {\n");
     code.append(indent)
-        .append("  a")
+        .append("a")
         .append(id)
-        .append(".putObject(object, reader.readString());\n");
-    code.append(indent).append("}\n");
+        .append(".putObject(object, reader.readNullableString());\n");
   }
 
   private static void readEnum(StringBuilder code, int id, String indent, int readerMode) {

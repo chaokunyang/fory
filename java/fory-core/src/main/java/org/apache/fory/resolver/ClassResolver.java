@@ -1952,7 +1952,7 @@ public class ClassResolver extends TypeResolver {
           || extRegistry.registeredClassIdMap.get(cls) != null
           || shimDispatcher.contains(cls);
     } else {
-      return extRegistry.typeChecker.checkType(this, cls.getName());
+      return checkType(cls.getName());
     }
   }
 

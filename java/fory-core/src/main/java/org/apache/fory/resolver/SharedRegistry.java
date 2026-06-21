@@ -58,6 +58,7 @@ import org.apache.fory.type.DescriptorGrouper;
 public final class SharedRegistry {
   private static final int MAX_CACHED_ENCODED_META_STRINGS = 32768;
   private static final int MAX_CACHED_ENCODED_META_STRING_LENGTH = 2048;
+  private static final int MAX_CACHED_TYPE_CHECKER_CLASSES = 8192;
   private static final int MIN_REMOTE_TYPE_DEF_LIMIT = 8192;
 
   final ConcurrentIdentityMap<Class<?>, TypeDef> typeDefMap = new ConcurrentIdentityMap<>();
@@ -85,6 +86,14 @@ public final class SharedRegistry {
       new ConcurrentIdentityMap<>();
   final ConcurrentIdentityMap<Class<?>, Serializer<?>> registeredSerializerCache =
       new ConcurrentIdentityMap<>();
+  // Positive TypeChecker decisions are shared by class name across this registry's equivalent Fory
+  // instances. Do not include TypeResolver or TypeChecker identity in the key; SharedRegistry is
+  // already the sharing boundary for equivalent type-checking policy. Mutable checker owners must
+  // clear these entries when a policy change can make a previously accepted class forbidden. This
+  // cache is intentionally bounded; after it fills, duplicate TypeChecker calls are safer than
+  // retaining attacker-controlled class names without limit.
+  private final ConcurrentHashMap<String, Boolean> acceptedTypeCheckerClasses =
+      new ConcurrentHashMap<>();
   private final ConcurrentHashMap<Class<?>, ObjectInstantiator<?>> objectInstantiatorCache =
       new ConcurrentHashMap<>();
   private final ConcurrentHashMap<Class<?>, ObjectInstantiator<?>> objectStreamInstantiatorCache =
@@ -180,6 +189,29 @@ public final class SharedRegistry {
   TypeInfo cacheRegisteredTypeInfo(Class<?> type, TypeInfo typeInfo) {
     TypeInfo existing = registeredTypeInfoCache.putIfAbsent(type, typeInfo);
     return existing == null ? typeInfo : existing;
+  }
+
+  boolean isTypeAccepted(String className) {
+    return acceptedTypeCheckerClasses.containsKey(className);
+  }
+
+  void markTypeAccepted(String className) {
+    if (acceptedTypeCheckerClasses.size() >= MAX_CACHED_TYPE_CHECKER_CLASSES) {
+      return;
+    }
+    acceptedTypeCheckerClasses.putIfAbsent(className, true);
+  }
+
+  void clearCheckerCache() {
+    acceptedTypeCheckerClasses.clear();
+  }
+
+  void clearCheckerCacheForClass(String className) {
+    acceptedTypeCheckerClasses.remove(className);
+  }
+
+  void clearCheckerCacheForPrefix(String prefix) {
+    acceptedTypeCheckerClasses.keySet().removeIf(className -> className.startsWith(prefix));
   }
 
   TypeDef getOrCreateTypeDef(TypeDef typeDef) {

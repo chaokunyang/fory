@@ -412,7 +412,18 @@ public final class StringJsonWriter extends JsonWriter {
     int pos = position;
     bytes[pos++] = (byte) '"';
     int i = 0;
-    int upperBound = length & ~7;
+    int upperBound = length & ~15;
+    for (; i < upperBound; i += 16) {
+      long word0 = LittleEndian.getInt64(value, i);
+      long word1 = LittleEndian.getInt64(value, i + 8);
+      if (!isJsonAsciiWord(word0) || !isJsonAsciiWord(word1)) {
+        break;
+      }
+      LittleEndian.putInt64(bytes, pos, word0);
+      LittleEndian.putInt64(bytes, pos + 8, word1);
+      pos += 16;
+    }
+    upperBound = length & ~7;
     for (; i < upperBound; i += 8) {
       long word = LittleEndian.getInt64(value, i);
       if (!isJsonAsciiWord(word)) {

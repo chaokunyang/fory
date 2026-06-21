@@ -401,13 +401,13 @@ public final class Utf16StringJsonReader extends JsonReader {
       }
       if (ch == '\\') {
         ch = readEscapedFieldNameChar();
-        hash = JsonFieldNameHash.update(hash, ch);
-        latin1 = latin1 && ch <= 0xFF && ch != 0;
-        if (latin1 && nameLength < Long.BYTES) {
-          value = JsonFieldNameHash.value(value, nameLength, ch);
-        }
-        nameLength++;
         if (Character.isHighSurrogate(ch)) {
+          if (latin1) {
+            hash = JsonFieldNameHash.hashPacked(value, nameLength);
+            latin1 = false;
+          }
+          hash = JsonFieldNameHash.update(hash, ch);
+          nameLength++;
           if (position + 2 > inputLength
               || charAtFast(position) != '\\'
               || charAtFast(position + 1) != 'u') {
@@ -419,10 +419,21 @@ public final class Utf16StringJsonReader extends JsonReader {
             throw error("Unpaired high surrogate escape");
           }
           hash = JsonFieldNameHash.update(hash, low);
-          latin1 = false;
           nameLength++;
         } else if (Character.isLowSurrogate(ch)) {
           throw error("Unpaired low surrogate escape");
+        } else {
+          if (latin1) {
+            if (ch <= 0xFF && ch != 0 && nameLength < Long.BYTES) {
+              value = JsonFieldNameHash.value(value, nameLength, ch);
+              nameLength++;
+              continue;
+            }
+            hash = JsonFieldNameHash.hashPacked(value, nameLength);
+            latin1 = false;
+          }
+          hash = JsonFieldNameHash.update(hash, ch);
+          nameLength++;
         }
         continue;
       }
@@ -433,20 +444,28 @@ public final class Utf16StringJsonReader extends JsonReader {
         if (position >= inputLength || !Character.isLowSurrogate(charAtFast(position))) {
           throw error("Unpaired high surrogate in string");
         }
+        if (latin1) {
+          hash = JsonFieldNameHash.hashPacked(value, nameLength);
+          latin1 = false;
+        }
         hash = JsonFieldNameHash.update(hash, ch);
         hash = JsonFieldNameHash.update(hash, charAtFast(position++));
-        latin1 = false;
         nameLength += 2;
         continue;
       }
       if (Character.isLowSurrogate(ch)) {
         throw error("Unpaired low surrogate in string");
       }
-      hash = JsonFieldNameHash.update(hash, ch);
-      latin1 = latin1 && ch <= 0xFF && ch != 0;
-      if (latin1 && nameLength < Long.BYTES) {
-        value = JsonFieldNameHash.value(value, nameLength, ch);
+      if (latin1) {
+        if (ch <= 0xFF && ch != 0 && nameLength < Long.BYTES) {
+          value = JsonFieldNameHash.value(value, nameLength, ch);
+          nameLength++;
+          continue;
+        }
+        hash = JsonFieldNameHash.hashPacked(value, nameLength);
+        latin1 = false;
       }
+      hash = JsonFieldNameHash.update(hash, ch);
       nameLength++;
     }
     throw error("Unterminated string");

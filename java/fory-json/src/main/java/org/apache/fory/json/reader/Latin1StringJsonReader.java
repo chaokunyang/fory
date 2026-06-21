@@ -380,13 +380,13 @@ public final class Latin1StringJsonReader extends JsonReader {
       }
       if (ch == '\\') {
         char escaped = readEscapedFieldNameChar();
-        hash = JsonFieldNameHash.update(hash, escaped);
-        latin1 = latin1 && escaped <= 0xFF && escaped != 0;
-        if (latin1 && nameLength < Long.BYTES) {
-          value = JsonFieldNameHash.value(value, nameLength, escaped);
-        }
-        nameLength++;
         if (Character.isHighSurrogate(escaped)) {
+          if (latin1) {
+            hash = JsonFieldNameHash.hashPacked(value, nameLength);
+            latin1 = false;
+          }
+          hash = JsonFieldNameHash.update(hash, escaped);
+          nameLength++;
           if (position + 2 > length() || charAt(position) != '\\' || charAt(position + 1) != 'u') {
             throw error("Unpaired high surrogate escape");
           }
@@ -396,21 +396,37 @@ public final class Latin1StringJsonReader extends JsonReader {
             throw error("Unpaired high surrogate escape");
           }
           hash = JsonFieldNameHash.update(hash, low);
-          latin1 = false;
           nameLength++;
         } else if (Character.isLowSurrogate(escaped)) {
           throw error("Unpaired low surrogate escape");
+        } else {
+          if (latin1) {
+            if (escaped != 0 && nameLength < Long.BYTES) {
+              value = JsonFieldNameHash.value(value, nameLength, escaped);
+              nameLength++;
+              continue;
+            }
+            hash = JsonFieldNameHash.hashPacked(value, nameLength);
+            latin1 = false;
+          }
+          hash = JsonFieldNameHash.update(hash, escaped);
+          nameLength++;
         }
         continue;
       }
       if (ch < 0x20) {
         throw error("Control character in string");
       }
-      hash = JsonFieldNameHash.update(hash, (char) ch);
-      latin1 = latin1 && ch != 0;
-      if (latin1 && nameLength < Long.BYTES) {
-        value = JsonFieldNameHash.value(value, nameLength, (char) ch);
+      if (latin1) {
+        if (ch != 0 && nameLength < Long.BYTES) {
+          value = JsonFieldNameHash.value(value, nameLength, (char) ch);
+          nameLength++;
+          continue;
+        }
+        hash = JsonFieldNameHash.hashPacked(value, nameLength);
+        latin1 = false;
       }
+      hash = JsonFieldNameHash.update(hash, (char) ch);
       nameLength++;
     }
     throw error("Unterminated string");

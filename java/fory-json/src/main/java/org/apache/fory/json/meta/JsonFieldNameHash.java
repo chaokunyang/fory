@@ -57,6 +57,14 @@ public final class JsonFieldNameHash {
     return value | (((long) ch) << (length << 3));
   }
 
+  public static long hashPacked(long value, int length) {
+    long hash = MAGIC_HASH_CODE;
+    for (int i = 0; i < length; i++) {
+      hash = update(hash, (char) ((value >>> (i << 3)) & 0xFF));
+    }
+    return hash;
+  }
+
   public static long finish(long hash, long value, int length, boolean latin1) {
     return latin1 && length > 0 && length <= Long.BYTES && value != 0 ? value : hash;
   }

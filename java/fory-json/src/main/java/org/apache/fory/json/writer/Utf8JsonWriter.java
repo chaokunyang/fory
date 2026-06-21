@@ -282,6 +282,47 @@ public final class Utf8JsonWriter extends JsonWriter {
     writeStringNoEnsure(value);
   }
 
+  public void writeStringElement(int index, String value) {
+    int comma = index == 0 ? 0 : 1;
+    if (value == null) {
+      ensure(comma + 4);
+      if (comma != 0) {
+        buffer[position++] = ',';
+      }
+      writeAsciiNoEnsure("null");
+      return;
+    }
+    if (STRING_BYTES_BACKED) {
+      byte[] bytes = StringSerializer.getStringBytes(value);
+      byte coder = StringSerializer.getStringCoder(value);
+      int start = position;
+      if (StringSerializer.isLatin1Coder(coder)) {
+        ensure(comma + bytes.length + 2);
+        if (comma != 0) {
+          buffer[position++] = ',';
+        }
+        if (writeLatin1StringNoEnsure(bytes)) {
+          return;
+        }
+        position = start;
+      } else if (StringSerializer.isUtf16Coder(coder)) {
+        ensure(comma + (bytes.length >> 1) * 3 + 2);
+        if (comma != 0) {
+          buffer[position++] = ',';
+        }
+        if (writeUtf16StringNoEnsure(bytes)) {
+          return;
+        }
+        position = start;
+      }
+    }
+    ensure(comma + value.length() * 3 + 2);
+    if (comma != 0) {
+      buffer[position++] = ',';
+    }
+    writeStringNoEnsure(value);
+  }
+
   public void writeRawValue(byte[] value) {
     writeRaw(value);
   }

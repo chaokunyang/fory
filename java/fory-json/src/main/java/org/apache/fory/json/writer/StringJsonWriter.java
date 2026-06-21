@@ -298,6 +298,50 @@ public final class StringJsonWriter extends JsonWriter {
     writeStringNoEnsure(value);
   }
 
+  public void writeStringElement(int index, String value) {
+    int comma = index == 0 ? 0 : 1;
+    if (value == null) {
+      if (utf16) {
+        ensureUtf16(comma + 4);
+        if (comma != 0) {
+          utf16Buffer[position++] = ',';
+        }
+        writeAsciiNoEnsure("null");
+      } else {
+        ensure(comma + 4);
+        if (comma != 0) {
+          buffer[position++] = ',';
+        }
+        writeAsciiNoEnsure("null");
+      }
+      return;
+    }
+    if (utf16) {
+      ensureUtf16(comma + value.length() + 2);
+      if (comma != 0) {
+        utf16Buffer[position++] = ',';
+      }
+      writeStringUtf16(value);
+      return;
+    }
+    if (STRING_BYTES_BACKED) {
+      byte[] bytes = StringSerializer.getStringBytes(value);
+      if (StringSerializer.isLatin1Coder(StringSerializer.getStringCoder(value))) {
+        ensure(comma + bytes.length + 2);
+        if (comma != 0) {
+          buffer[position++] = ',';
+        }
+        writeLatin1StringNoEnsure(bytes);
+        return;
+      }
+    }
+    ensure(comma + value.length() * 6 + 2);
+    if (comma != 0) {
+      buffer[position++] = ',';
+    }
+    writeStringNoEnsure(value);
+  }
+
   public void writeRawValue(byte[] value) {
     writeRaw(value);
   }

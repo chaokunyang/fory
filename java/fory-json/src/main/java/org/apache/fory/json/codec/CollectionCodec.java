@@ -508,12 +508,7 @@ public abstract class CollectionCodec extends AbstractJsonCodec {
       writer.writeArrayStart();
       int index = 0;
       for (Object element : (Collection<?>) value) {
-        writer.writeComma(index++);
-        if (element == null) {
-          writer.writeNull();
-        } else {
-          writer.writeString((String) element);
-        }
+        writer.writeStringElement(index++, (String) element);
       }
       writer.writeArrayEnd();
     }
@@ -523,12 +518,7 @@ public abstract class CollectionCodec extends AbstractJsonCodec {
       writer.writeArrayStart();
       int index = 0;
       for (Object element : (Collection<?>) value) {
-        writer.writeComma(index++);
-        if (element == null) {
-          writer.writeNull();
-        } else {
-          writer.writeString((String) element);
-        }
+        writer.writeStringElement(index++, (String) element);
       }
       writer.writeArrayEnd();
     }

@@ -19,7 +19,6 @@
 
 package org.apache.fory.codegen.asm;
 
-import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 
 final class ByteVector {
@@ -49,13 +48,28 @@ final class ByteVector {
     data[length++] = (byte) value;
   }
 
+  // Classfile CONSTANT_Utf8 uses modified UTF-8, not java.nio UTF_8.
   void putUTF(String value) {
-    byte[] bytes = value.getBytes(StandardCharsets.UTF_8);
-    if (bytes.length > 65535) {
+    int utfLength = utfLength(value);
+    if (utfLength > 65535) {
       throw new IllegalArgumentException("UTF8 constant is too large: " + value);
     }
-    putShort(bytes.length);
-    putBytes(bytes);
+    putShort(utfLength);
+    ensure(utfLength);
+    int count = value.length();
+    for (int i = 0; i < count; i++) {
+      char c = value.charAt(i);
+      if (c >= 0x0001 && c <= 0x007f) {
+        data[length++] = (byte) c;
+      } else if (c <= 0x07ff) {
+        data[length++] = (byte) (0xc0 | ((c >> 6) & 0x1f));
+        data[length++] = (byte) (0x80 | (c & 0x3f));
+      } else {
+        data[length++] = (byte) (0xe0 | ((c >> 12) & 0x0f));
+        data[length++] = (byte) (0x80 | ((c >> 6) & 0x3f));
+        data[length++] = (byte) (0x80 | (c & 0x3f));
+      }
+    }
   }
 
   void putBytes(byte[] bytes) {
@@ -77,5 +91,21 @@ final class ByteVector {
       }
       data = Arrays.copyOf(data, newLength);
     }
+  }
+
+  private static int utfLength(String value) {
+    int utfLength = 0;
+    int count = value.length();
+    for (int i = 0; i < count; i++) {
+      char c = value.charAt(i);
+      if (c >= 0x0001 && c <= 0x007f) {
+        utfLength++;
+      } else if (c <= 0x07ff) {
+        utfLength += 2;
+      } else {
+        utfLength += 3;
+      }
+    }
+    return utfLength;
   }
 }

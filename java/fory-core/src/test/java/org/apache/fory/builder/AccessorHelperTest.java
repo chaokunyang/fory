@@ -36,7 +36,11 @@ import javax.fory.test.Accessor;
 import lombok.Data;
 import org.apache.fory.TestUtils;
 import org.apache.fory.builder.pkg.AccessLevelClass;
+import org.apache.fory.codegen.asm.ClassWriter;
+import org.apache.fory.codegen.asm.MethodWriter;
+import org.apache.fory.codegen.asm.Type;
 import org.apache.fory.platform.JdkVersion;
+import org.apache.fory.platform.internal.DefineClass;
 import org.apache.fory.test.bean.Foo;
 import org.apache.fory.test.bean.Struct;
 import org.apache.fory.type.Descriptor;
@@ -54,6 +58,30 @@ public class AccessorHelperTest {
   @Test
   public void genBytecode() {
     assertTrue(AccessorHelper.genBytecode(A.class).length > 0);
+  }
+
+  @Test
+  public void defineSupplementaryClassName() {
+    String suffix = new String(Character.toChars(0x10400));
+    String internalName = "org/apache/fory/builder/AccessorUtf" + System.nanoTime() + suffix;
+    ClassWriter writer =
+        new ClassWriter(
+            ClassWriter.ACC_PUBLIC | ClassWriter.ACC_FINAL | ClassWriter.ACC_SUPER,
+            internalName,
+            "java/lang/Object");
+    MethodWriter constructor =
+        writer.visitMethod(
+            ClassWriter.ACC_PUBLIC, "<init>", Type.methodDescriptor(Type.VOID), 1, 1);
+    constructor.aload(0).invokespecial("java/lang/Object", "<init>", "()V").returnVoid();
+
+    Class<?> cls =
+        DefineClass.defineClass(
+            internalName.replace('/', '.'),
+            AccessorHelperTest.class,
+            AccessorHelperTest.class.getClassLoader(),
+            AccessorHelperTest.class.getProtectionDomain(),
+            writer.toByteArray());
+    assertEquals(cls.getName(), internalName.replace('/', '.'));
   }
 
   @Test

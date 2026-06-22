@@ -642,12 +642,12 @@ public final class ForyBuilder {
     }
     if (ENABLE_CLASS_REGISTRATION_FORCIBLY) {
       if (!requireClassRegistration) {
-        LOG.warn("Class registration is enabled forcibly.");
+        LOG.info("Class registration is enabled forcibly.");
         requireClassRegistration = true;
       }
     }
     if (defaultJDKStreamSerializerType == JavaSerializer.class) {
-      LOG.warn(
+      LOG.info(
           "JDK serialization is used for types which customized java serialization by "
               + "implementing methods such as writeObject/readObject. This is not secure, try to "
               + "use {} instead, or implement a custom {}.",
@@ -681,7 +681,7 @@ public final class ForyBuilder {
         deserializeUnknownClass = false;
       }
       if (scopedMetaShareEnabled != null && scopedMetaShareEnabled) {
-        LOG.warn("Scoped meta share is for compatible mode only, disabling it");
+        LOG.info("Scoped meta share is for compatible mode only, disabling it");
       }
       scopedMetaShareEnabled = false;
       if (metaShareEnabled == null) {
@@ -693,7 +693,7 @@ public final class ForyBuilder {
     }
     if (!requireClassRegistration) {
       if (typeChecker == null) {
-        LOG.warn(
+        LOG.info(
             "Class registration isn't forced, unknown classes can be deserialized. "
                 + "If the environment isn't secure, please enable class registration by "
                 + "`ForyBuilder#requireClassRegistration(true)` or configure TypeChecker by "
@@ -710,7 +710,7 @@ public final class ForyBuilder {
         codeGenEnabled != null ? codeGenEnabled.booleanValue() : !runtimeCodegenUnsupported;
     if (runtimeCodegenUnsupported && resolvedCodegen) {
       if (Boolean.TRUE.equals(codeGenEnabled)) {
-        LOG.warn(
+        LOG.info(
             "The current platform does not support Fory runtime code generation; "
                 + "interpreter serializers will be used instead.");
       }

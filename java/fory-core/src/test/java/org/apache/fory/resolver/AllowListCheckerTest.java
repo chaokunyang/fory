@@ -128,7 +128,7 @@ public class AllowListCheckerTest {
       ByteArrayOutputStream output = new ByteArrayOutputStream();
       try (PrintStream capture = new PrintStream(output, true, StandardCharsets.UTF_8.name())) {
         System.setOut(capture);
-        LoggerFactory.setLogLevel(LogLevel.WARN_LEVEL);
+        LoggerFactory.setLogLevel(LogLevel.INFO_LEVEL);
 
         Fory.builder()
             .withXlang(false)

@@ -39,6 +39,7 @@ import org.apache.fory.codegen.CodeGenerator;
 import org.apache.fory.codegen.CompileUnit;
 import org.apache.fory.codegen.JaninoUtils;
 import org.apache.fory.codegen.javalangnameconflict.MethodSpiltObject;
+import org.apache.fory.platform.JdkVersion;
 import org.apache.fory.serializer.collection.CollectionSerializersTest;
 import org.apache.fory.test.bean.AccessBeans;
 import org.apache.fory.test.bean.BeanA;
@@ -226,6 +227,39 @@ public class ObjectCodecBuilderTest extends ForyTestBase {
     nestedContainer.map1 = map1;
     serDeCheck(fory, nestedContainer);
     checkMethodSize(NestedContainer.class, fory);
+  }
+
+  public static final class PrivateAccessorBean {
+    private int number;
+    private String text;
+    private final long finalValue = 7;
+
+    public PrivateAccessorBean() {}
+
+    PrivateAccessorBean(int number, String text) {
+      this.number = number;
+      this.text = text;
+    }
+  }
+
+  @Test
+  public void testPrivateFieldGeneratedAccessor() {
+    Fory fory =
+        Fory.builder()
+            .withXlang(false)
+            .requireClassRegistration(false)
+            .withCompatible(false)
+            .build();
+    String code = new ObjectCodecBuilder(PrivateAccessorBean.class, fory).genCode();
+    if (JdkVersion.MAJOR_VERSION >= 15) {
+      Assert.assertTrue(code.contains("AccessorHelper.getGetter"));
+      Assert.assertTrue(code.contains("AccessorHelper.getSetter"));
+    }
+    PrivateAccessorBean bean = new PrivateAccessorBean(42, "private");
+    PrivateAccessorBean copy = (PrivateAccessorBean) fory.deserialize(fory.serialize(bean));
+    Assert.assertEquals(copy.number, 42);
+    Assert.assertEquals(copy.text, "private");
+    Assert.assertEquals(copy.finalValue, 7);
   }
 
   @Test

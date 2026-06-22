@@ -24,7 +24,9 @@ import static org.testng.Assert.assertFalse;
 import static org.testng.Assert.assertSame;
 import static org.testng.Assert.assertTrue;
 
+import java.lang.invoke.MethodHandle;
 import java.lang.ref.WeakReference;
+import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -34,6 +36,7 @@ import javax.fory.test.Accessor;
 import lombok.Data;
 import org.apache.fory.TestUtils;
 import org.apache.fory.builder.pkg.AccessLevelClass;
+import org.apache.fory.platform.JdkVersion;
 import org.apache.fory.test.bean.Foo;
 import org.apache.fory.test.bean.Struct;
 import org.apache.fory.type.Descriptor;
@@ -49,9 +52,8 @@ public class AccessorHelperTest {
   }
 
   @Test
-  public void genCode() {
-    System.out.println(AccessorHelper.genCode(A.class));
-    ;
+  public void genBytecode() {
+    assertTrue(AccessorHelper.genBytecode(A.class).length > 0);
   }
 
   @Test
@@ -136,5 +138,53 @@ public class AccessorHelperTest {
     executorService.shutdown();
     assertTrue(executorService.awaitTermination(30, TimeUnit.SECONDS));
     assertFalse(hasException.get());
+  }
+
+  public static final class PrivateFields {
+    private int number = 1;
+    private String text = "old";
+    private final long finalValue = 7;
+  }
+
+  @Test
+  public void definePrivateFieldAccessor() throws Throwable {
+    Field number = PrivateFields.class.getDeclaredField("number");
+    Field text = PrivateFields.class.getDeclaredField("text");
+    Field finalValue = PrivateFields.class.getDeclaredField("finalValue");
+    if (JdkVersion.MAJOR_VERSION < 15) {
+      assertFalse(AccessorHelper.defineAccessor(number));
+      assertFalse(AccessorHelper.defineSetter(number));
+      return;
+    }
+    assertTrue(AccessorHelper.defineAccessor(number));
+    assertTrue(AccessorHelper.defineSetter(number));
+    assertTrue(AccessorHelper.isHiddenAccessor(number));
+    Class<?> accessorClass = AccessorHelper.getAccessorClass(number);
+    assertEquals(Class.class.getMethod("getNestHost").invoke(accessorClass), PrivateFields.class);
+
+    PrivateFields value = new PrivateFields();
+    Method numberGetter = accessorClass.getMethod("number", PrivateFields.class);
+    Method numberSetter = accessorClass.getMethod("number", PrivateFields.class, int.class);
+    assertEquals(numberGetter.invoke(null, value), 1);
+    numberSetter.invoke(null, value, 2);
+    assertEquals(value.number, 2);
+
+    MethodHandle numberGetHandle = AccessorHelper.getGetter(number);
+    MethodHandle numberSetHandle = AccessorHelper.getSetter(number);
+    assertEquals(AccessorHelper.getInt(numberGetHandle, value), 2);
+    AccessorHelper.putInt(numberSetHandle, value, 3);
+    assertEquals(value.number, 3);
+
+    MethodHandle textGetHandle = AccessorHelper.getGetter(text);
+    MethodHandle textSetHandle = AccessorHelper.getSetter(text);
+    assertEquals(AccessorHelper.getObject(textGetHandle, value), "old");
+    AccessorHelper.putObject(textSetHandle, value, "new");
+    assertEquals(value.text, "new");
+
+    assertTrue(AccessorHelper.defineAccessor(finalValue));
+    assertFalse(AccessorHelper.defineSetter(finalValue));
+    Method finalGetter =
+        AccessorHelper.getAccessorClass(finalValue).getMethod("finalValue", PrivateFields.class);
+    assertEquals(finalGetter.invoke(null, value), 7L);
   }
 }

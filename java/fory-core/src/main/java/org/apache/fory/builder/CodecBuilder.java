@@ -231,15 +231,8 @@ public abstract class CodecBuilder {
       return new Invoke(
           inputBeanExpr, descriptor.getReadMethod().getName(), fieldName, fieldType, fieldNullable);
     } else {
-      if (!Modifier.isPrivate(descriptor.getModifiers())) {
-        if (AccessorHelper.defineAccessor(descriptor.getField())) {
-          return new StaticInvoke(
-              AccessorHelper.getAccessorClass(descriptor.getField()),
-              fieldName,
-              fieldType,
-              fieldNullable,
-              inputBeanExpr);
-        }
+      if (AccessorHelper.defineAccessor(descriptor.getField())) {
+        return getByGeneratedAccessor(inputBeanExpr, descriptor, fieldType, fieldNullable);
       }
       if (descriptor.getReadMethod() != null
           && !Modifier.isPrivate(descriptor.getReadMethod().getModifiers())) {
@@ -341,6 +334,52 @@ public abstract class CodecBuilder {
           unsafeInvoke("getObject", OBJECT_TYPE, fieldNullable, inputObject, fieldOffsetExpr);
       return tryCastIfPublic(getObj, descriptor.getTypeRef(), fieldName);
     }
+  }
+
+  private Expression getByGeneratedAccessor(
+      Expression inputBeanExpr,
+      Descriptor descriptor,
+      TypeRef<?> fieldType,
+      boolean fieldNullable) {
+    Field field = descriptor.getField();
+    String fieldName = descriptor.getName();
+    if (!AccessorHelper.isHiddenAccessor(field)) {
+      return new StaticInvoke(
+          AccessorHelper.getAccessorClass(field),
+          fieldName,
+          fieldType,
+          fieldNullable,
+          inputBeanExpr);
+    }
+    Reference getter = getAccessorGetter(descriptor);
+    if (descriptor.getTypeRef().isPrimitive()) {
+      Preconditions.checkArgument(!fieldNullable);
+      return new StaticInvoke(
+          AccessorHelper.class,
+          accessorGetMethod(descriptor.getRawType()),
+          fieldType,
+          false,
+          getter,
+          inputBeanExpr);
+    }
+    StaticInvoke getObj =
+        new StaticInvoke(
+            AccessorHelper.class, "getObject", OBJECT_TYPE, fieldNullable, getter, inputBeanExpr);
+    return tryCastIfPublic(getObj, descriptor.getTypeRef(), fieldName);
+  }
+
+  private Reference getAccessorGetter(Descriptor descriptor) {
+    Field field = descriptor.getField();
+    return getOrCreateField(
+        true,
+        MethodHandle.class,
+        accessorHandleName(descriptor, "getter"),
+        () ->
+            new StaticInvoke(
+                AccessorHelper.class,
+                "getGetter",
+                TypeRef.of(MethodHandle.class),
+                getReflectField(field.getDeclaringClass(), field, false)));
   }
 
   private Expression fieldOffsetExpr(Class<?> cls, Descriptor descriptor) {
@@ -487,15 +526,8 @@ public abstract class CodecBuilder {
       }
       return new Invoke(bean, d.getWriteMethod().getName(), value);
     } else {
-      if (!d.isFinalField() && !Modifier.isPrivate(d.getModifiers())) {
-        if (AccessorHelper.defineSetter(d.getField())) {
-          Class<?> accessorClass = AccessorHelper.getAccessorClass(d.getField());
-          if (!memberRawType.isAssignableFrom(value.type().getRawType())) {
-            value = tryInlineCast(value, memberType);
-          }
-          return new StaticInvoke(
-              accessorClass, d.getName(), PRIMITIVE_VOID_TYPE, false, bean, value);
-        }
+      if (!d.isFinalField() && AccessorHelper.defineSetter(d.getField())) {
+        return setByGeneratedAccessor(bean, d, value, memberType, memberRawType);
       }
       if (d.getWriteMethod() != null && !Modifier.isPrivate(d.getWriteMethod().getModifiers())) {
         if (AccessorHelper.defineSetter(d.getWriteMethod())) {
@@ -558,6 +590,71 @@ public abstract class CodecBuilder {
     } else {
       return unsafeInvoke("putObject", bean, fieldOffsetExpr, value);
     }
+  }
+
+  private Expression setByGeneratedAccessor(
+      Expression bean,
+      Descriptor descriptor,
+      Expression value,
+      TypeRef<?> memberType,
+      Class<?> memberRawType) {
+    Field field = descriptor.getField();
+    if (!AccessorHelper.isHiddenAccessor(field)) {
+      Class<?> accessorClass = AccessorHelper.getAccessorClass(field);
+      if (!memberRawType.isAssignableFrom(value.type().getRawType())) {
+        value = tryInlineCast(value, memberType);
+      }
+      return new StaticInvoke(
+          accessorClass, descriptor.getName(), PRIMITIVE_VOID_TYPE, false, bean, value);
+    }
+    Reference setter = getAccessorSetter(descriptor);
+    if (descriptor.getTypeRef().isPrimitive()) {
+      Preconditions.checkArgument(getRawType(value.type()) == memberRawType);
+      return new StaticInvoke(
+          AccessorHelper.class,
+          accessorPutMethod(memberRawType),
+          PRIMITIVE_VOID_TYPE,
+          false,
+          setter,
+          bean,
+          value);
+    }
+    return new StaticInvoke(
+        AccessorHelper.class, "putObject", PRIMITIVE_VOID_TYPE, false, setter, bean, value);
+  }
+
+  private Reference getAccessorSetter(Descriptor descriptor) {
+    Field field = descriptor.getField();
+    return getOrCreateField(
+        true,
+        MethodHandle.class,
+        accessorHandleName(descriptor, "setter"),
+        () ->
+            new StaticInvoke(
+                AccessorHelper.class,
+                "getSetter",
+                TypeRef.of(MethodHandle.class),
+                getReflectField(field.getDeclaringClass(), field, false)));
+  }
+
+  private String accessorHandleName(Descriptor descriptor, String suffix) {
+    Field field = descriptor.getField();
+    String fieldName = descriptor.getName();
+    return (duplicatedFields.contains(fieldName)
+            ? field.getDeclaringClass().getName().replaceAll("\\.|\\$", "_") + "_"
+            : "")
+        + fieldName
+        + "_"
+        + suffix
+        + "_";
+  }
+
+  private static String accessorGetMethod(Class<?> type) {
+    return "get" + StringUtils.capitalize(type.toString());
+  }
+
+  private static String accessorPutMethod(Class<?> type) {
+    return "put" + StringUtils.capitalize(type.toString());
   }
 
   private Reference getReflectField(Class<?> cls, Field field) {

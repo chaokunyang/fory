@@ -21,38 +21,46 @@ package org.apache.fory.builder;
 
 import static org.apache.fory.codegen.CodeGenerator.sourcePkgLevelAccessible;
 
+import java.lang.invoke.MethodHandle;
+import java.lang.invoke.MethodType;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
-import java.util.Collection;
+import java.util.HashSet;
 import java.util.Map;
-import java.util.WeakHashMap;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import org.apache.fory.codegen.CodeGenerator;
-import org.apache.fory.codegen.CodegenContext;
-import org.apache.fory.codegen.CompileUnit;
-import org.apache.fory.codegen.JaninoUtils;
+import org.apache.fory.codegen.asm.ClassWriter;
+import org.apache.fory.codegen.asm.MethodWriter;
+import org.apache.fory.codegen.asm.Type;
+import org.apache.fory.collection.ClassValueCache;
+import org.apache.fory.exception.ForyException;
 import org.apache.fory.logging.Logger;
 import org.apache.fory.logging.LoggerFactory;
+import org.apache.fory.platform.AndroidSupport;
+import org.apache.fory.platform.JdkVersion;
+import org.apache.fory.platform.internal.DefineClass;
+import org.apache.fory.platform.internal._JDKAccess;
 import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.type.Descriptor;
 import org.apache.fory.util.ClassLoaderUtils;
 import org.apache.fory.util.Preconditions;
 import org.apache.fory.util.StringUtils;
-import org.apache.fory.util.record.RecordUtils;
 
 /**
- * Define accessor helper methods in beanClass's classloader and same package to avoid reflective
- * call overhead.
+ * Defines generated field accessor helpers in a target class's loader.
+ *
+ * <p>Source-visible fields use a normal same-package helper class so generated serializers can call
+ * direct static methods. Private fields use a JDK15+ hidden nestmate helper: a trusted lookup can
+ * define classes, but only hidden classes with the NESTMATE option become nestmates of an existing
+ * host. The hidden helper's own bytecode performs the private {@code getfield}/{@code putfield};
+ * generated source reaches it through cached {@link MethodHandle}s.
  */
 public class AccessorHelper {
   private static final Logger LOG = LoggerFactory.getLogger(AccessorHelper.class);
-  private static final WeakHashMap<Class<?>, Boolean> defineAccessorStatus = new WeakHashMap<>();
-  private static final WeakHashMap<Class<?>, Object> defineAccessorLock = new WeakHashMap<>();
-  private static final Object defineLock = new Object();
-
-  private static final String OBJ_NAME = "obj";
-  private static final String FIELD_VALUE = "fieldValue";
+  private static final ClassValueCache<AccessorState> accessorStates =
+      ClassValueCache.newClassKeyCache(32);
 
   // Must be static to be shared across the whole process life.
   private static final Map<String, Integer> idGenerator = new ConcurrentHashMap<>();
@@ -78,171 +86,543 @@ public class AccessorHelper {
     }
   }
 
-  /** Don't gen code for super classes. */
-  public static String genCode(Class<?> beanClass) {
-    CodegenContext ctx = new CodegenContext();
-    ctx.setPackage(CodeGenerator.getPackage(beanClass));
-    String className = accessorClassName(beanClass);
-    ctx.setClassName(className);
-    boolean isRecord = RecordUtils.isRecord(beanClass);
-    // filter out super classes
-    Collection<Descriptor> descriptors = Descriptor.getAllDescriptorsMap(beanClass, false).values();
-    for (Descriptor descriptor : descriptors) {
-      if (Modifier.isPrivate(descriptor.getModifiers())) {
-        continue;
-      }
-      boolean accessible = sourcePkgLevelAccessible(descriptor.getRawType());
-      {
-        // getter
-        String methodName = descriptor.getName();
-        String codeBody;
-        Class<?> returnType = accessible ? descriptor.getRawType() : Object.class;
-        if (isRecord) {
-          codeBody =
-              StringUtils.format(
-                  "return ${obj}.${fieldName}();",
-                  "obj",
-                  OBJ_NAME,
-                  "fieldName",
-                  descriptor.getName());
-        } else {
-          codeBody =
-              StringUtils.format(
-                  "return ${obj}.${fieldName};",
-                  "obj",
-                  OBJ_NAME,
-                  "fieldName",
-                  descriptor.getName());
-        }
-        ctx.addStaticMethod(methodName, codeBody, returnType, beanClass, OBJ_NAME);
-      }
-      if (accessible) {
-        String methodName = descriptor.getName();
-        String codeBody =
-            StringUtils.format(
-                "${obj}.${fieldName} = ${fieldValue};",
-                "obj",
-                OBJ_NAME,
-                "fieldName",
-                descriptor.getName(),
-                "fieldValue",
-                FIELD_VALUE);
-        ctx.addStaticMethod(
-            methodName,
-            codeBody,
-            void.class,
-            beanClass,
-            OBJ_NAME,
-            descriptor.getRawType(),
-            FIELD_VALUE);
-      }
-      // getter/setter may lose some inner state of an object, so we set them to null to avoid
-      // creating getter/setter accessor.
-    }
-
-    return ctx.genCode();
+  public static byte[] genBytecode(Class<?> beanClass) {
+    return genBytecode(beanClass, false);
   }
 
-  /** Don't define accessor for super classes, because they maybe in different package. */
   public static boolean defineAccessorClass(Class<?> beanClass) {
-    ClassLoader classLoader = beanClass.getClassLoader();
-    if (classLoader == null) {
-      // Maybe return null if this class was loaded by the bootstrap class loader.
-      return false;
-    }
-    String qualifiedClassName = qualifiedAccessorClassName(beanClass);
-    try {
-      classLoader.loadClass(qualifiedClassName);
-      return true;
-    } catch (ClassNotFoundException ignored) {
-      Object lock;
-      synchronized (defineLock) {
-        if (defineAccessorStatus.containsKey(beanClass)) {
-          return defineAccessorStatus.get(beanClass);
-        } else {
-          lock = getDefineLock(beanClass);
-        }
-      }
-      synchronized (lock) {
-        if (defineAccessorStatus.containsKey(beanClass)) {
-          return defineAccessorStatus.get(beanClass);
-        }
-        long startTime = System.nanoTime();
-        String code = genCode(beanClass);
-        long durationMs = (System.nanoTime() - startTime) / 1000_000;
-        LOG.info("Generate code {} take {} ms", qualifiedClassName, durationMs);
-        String pkg = CodeGenerator.getPackage(beanClass);
-        CompileUnit compileUnit = new CompileUnit(pkg, accessorClassName(beanClass), code);
-        Map<String, byte[]> classByteCodes = JaninoUtils.toBytecode(classLoader, compileUnit);
-        boolean succeed =
-            ClassLoaderUtils.tryDefineClassesInClassLoader(
-                    qualifiedClassName,
-                    beanClass,
-                    classLoader,
-                    classByteCodes.values().iterator().next())
-                != null;
-        defineAccessorStatus.put(beanClass, succeed);
-        if (!succeed) {
-          LOG.info("Define accessor {} in classloader {} failed.", qualifiedClassName, classLoader);
-        }
-        return succeed;
-      }
-    }
-  }
-
-  private static Object getDefineLock(Class<?> clazz) {
-    synchronized (defineLock) {
-      return defineAccessorLock.computeIfAbsent(clazz, k -> new Object());
-    }
+    return defineNormalAccessorClass(beanClass);
   }
 
   public static Class<?> getAccessorClass(Class<?> beanClass) {
     Preconditions.checkArgument(defineAccessorClass(beanClass));
-    ClassLoader classLoader = beanClass.getClassLoader();
-    String qualifiedClassName = qualifiedAccessorClassName(beanClass);
-    try {
-      return classLoader.loadClass(qualifiedClassName);
-    } catch (ClassNotFoundException e) {
-      throw new IllegalStateException("unreachable code", e);
-    }
+    return state(beanClass).normalClass;
   }
 
   /** Should be invoked only when {@link #defineAccessor} returns true. */
   public static Class<?> getAccessorClass(Field field) {
-    Class<?> beanClass = field.getDeclaringClass();
-    return getAccessorClass(beanClass);
+    if (useHiddenAccessor(field)) {
+      Preconditions.checkArgument(defineHiddenAccessorClass(field.getDeclaringClass()));
+      return state(field.getDeclaringClass()).hiddenClass;
+    }
+    return getAccessorClass(field.getDeclaringClass());
   }
 
   /** Should be invoked only when {@link #defineAccessor} returns true. */
   public static Class<?> getAccessorClass(Method method) {
-    Class<?> beanClass = method.getDeclaringClass();
-    return getAccessorClass(beanClass);
+    return getAccessorClass(method.getDeclaringClass());
+  }
+
+  public static boolean isHiddenAccessor(Field field) {
+    return useHiddenAccessor(field);
   }
 
   public static boolean defineAccessor(Field field) {
-    Class<?> beanClass = field.getDeclaringClass();
-    return defineAccessorClass(beanClass);
+    return useHiddenAccessor(field)
+        ? defineHiddenAccessorClass(field.getDeclaringClass())
+        : defineAccessorClass(field.getDeclaringClass());
   }
 
   public static boolean defineAccessor(Method method) {
-    Class<?> beanClass = method.getDeclaringClass();
-    return defineAccessorClass(beanClass);
+    if (Modifier.isPrivate(method.getModifiers())) {
+      return false;
+    }
+    return defineAccessorClass(method.getDeclaringClass());
   }
 
   public static boolean defineSetter(Field field) {
-    if (ReflectionUtils.isPrivate(field.getType()) || !sourcePkgLevelAccessible(field.getType())) {
+    if (Modifier.isFinal(field.getModifiers())) {
       return false;
     }
-    Class<?> beanClass = field.getDeclaringClass();
-    return defineAccessorClass(beanClass);
+    if (useHiddenAccessor(field)) {
+      return defineHiddenAccessorClass(field.getDeclaringClass());
+    }
+    if (!sourceSetterAccessible(field)) {
+      return false;
+    }
+    return defineAccessorClass(field.getDeclaringClass());
   }
 
   public static boolean defineSetter(Method method) {
-    if (ReflectionUtils.isPrivate(method.getReturnType())
-        || !sourcePkgLevelAccessible(method.getReturnType())) {
+    if (method.getParameterCount() != 1) {
       return false;
     }
-    Class<?> beanClass = method.getDeclaringClass();
-    return defineAccessorClass(beanClass);
+    Class<?> parameterType = method.getParameterTypes()[0];
+    if (Modifier.isPrivate(method.getModifiers())
+        || ReflectionUtils.isPrivate(parameterType)
+        || !sourcePkgLevelAccessible(parameterType)) {
+      return false;
+    }
+    return defineAccessorClass(method.getDeclaringClass());
+  }
+
+  public static MethodHandle getGetter(Field field) {
+    Preconditions.checkArgument(defineAccessor(field), field);
+    boolean hidden = useHiddenAccessor(field);
+    MethodHandle handle =
+        findStaticHandle(
+            getAccessorClass(field),
+            field.getName(),
+            MethodType.methodType(getterReturnType(field, hidden), field.getDeclaringClass()));
+    return adaptGetter(field, handle);
+  }
+
+  public static MethodHandle getSetter(Field field) {
+    Preconditions.checkArgument(defineSetter(field), field);
+    MethodHandle handle =
+        findStaticHandle(
+            getAccessorClass(field),
+            field.getName(),
+            MethodType.methodType(void.class, field.getDeclaringClass(), field.getType()));
+    return adaptSetter(field, handle);
+  }
+
+  public static Object getObject(MethodHandle getter, Object obj) {
+    try {
+      return getter.invokeExact(obj);
+    } catch (Throwable e) {
+      throw accessFailure(e);
+    }
+  }
+
+  public static void putObject(MethodHandle setter, Object obj, Object value) {
+    try {
+      setter.invokeExact(obj, value);
+    } catch (Throwable e) {
+      throw accessFailure(e);
+    }
+  }
+
+  public static boolean getBoolean(MethodHandle getter, Object obj) {
+    try {
+      return (boolean) getter.invokeExact(obj);
+    } catch (Throwable e) {
+      throw accessFailure(e);
+    }
+  }
+
+  public static void putBoolean(MethodHandle setter, Object obj, boolean value) {
+    try {
+      setter.invokeExact(obj, value);
+    } catch (Throwable e) {
+      throw accessFailure(e);
+    }
+  }
+
+  public static byte getByte(MethodHandle getter, Object obj) {
+    try {
+      return (byte) getter.invokeExact(obj);
+    } catch (Throwable e) {
+      throw accessFailure(e);
+    }
+  }
+
+  public static void putByte(MethodHandle setter, Object obj, byte value) {
+    try {
+      setter.invokeExact(obj, value);
+    } catch (Throwable e) {
+      throw accessFailure(e);
+    }
+  }
+
+  public static char getChar(MethodHandle getter, Object obj) {
+    try {
+      return (char) getter.invokeExact(obj);
+    } catch (Throwable e) {
+      throw accessFailure(e);
+    }
+  }
+
+  public static void putChar(MethodHandle setter, Object obj, char value) {
+    try {
+      setter.invokeExact(obj, value);
+    } catch (Throwable e) {
+      throw accessFailure(e);
+    }
+  }
+
+  public static short getShort(MethodHandle getter, Object obj) {
+    try {
+      return (short) getter.invokeExact(obj);
+    } catch (Throwable e) {
+      throw accessFailure(e);
+    }
+  }
+
+  public static void putShort(MethodHandle setter, Object obj, short value) {
+    try {
+      setter.invokeExact(obj, value);
+    } catch (Throwable e) {
+      throw accessFailure(e);
+    }
+  }
+
+  public static int getInt(MethodHandle getter, Object obj) {
+    try {
+      return (int) getter.invokeExact(obj);
+    } catch (Throwable e) {
+      throw accessFailure(e);
+    }
+  }
+
+  public static void putInt(MethodHandle setter, Object obj, int value) {
+    try {
+      setter.invokeExact(obj, value);
+    } catch (Throwable e) {
+      throw accessFailure(e);
+    }
+  }
+
+  public static long getLong(MethodHandle getter, Object obj) {
+    try {
+      return (long) getter.invokeExact(obj);
+    } catch (Throwable e) {
+      throw accessFailure(e);
+    }
+  }
+
+  public static void putLong(MethodHandle setter, Object obj, long value) {
+    try {
+      setter.invokeExact(obj, value);
+    } catch (Throwable e) {
+      throw accessFailure(e);
+    }
+  }
+
+  public static float getFloat(MethodHandle getter, Object obj) {
+    try {
+      return (float) getter.invokeExact(obj);
+    } catch (Throwable e) {
+      throw accessFailure(e);
+    }
+  }
+
+  public static void putFloat(MethodHandle setter, Object obj, float value) {
+    try {
+      setter.invokeExact(obj, value);
+    } catch (Throwable e) {
+      throw accessFailure(e);
+    }
+  }
+
+  public static double getDouble(MethodHandle getter, Object obj) {
+    try {
+      return (double) getter.invokeExact(obj);
+    } catch (Throwable e) {
+      throw accessFailure(e);
+    }
+  }
+
+  public static void putDouble(MethodHandle setter, Object obj, double value) {
+    try {
+      setter.invokeExact(obj, value);
+    } catch (Throwable e) {
+      throw accessFailure(e);
+    }
+  }
+
+  private static boolean defineNormalAccessorClass(Class<?> beanClass) {
+    if (AndroidSupport.IS_ANDROID || beanClass.getClassLoader() == null) {
+      return false;
+    }
+    AccessorState state = state(beanClass);
+    if (state.normalDefined) {
+      return true;
+    }
+    synchronized (state.lock) {
+      if (state.normalDefined) {
+        return true;
+      }
+      if (state.normalAttempted) {
+        return false;
+      }
+      state.normalAttempted = true;
+      String qualifiedClassName = qualifiedAccessorClassName(beanClass);
+      try {
+        state.normalClass = beanClass.getClassLoader().loadClass(qualifiedClassName);
+        state.normalDefined = true;
+        return true;
+      } catch (ClassNotFoundException ignored) {
+        long startTime = System.nanoTime();
+        byte[] bytecode = genBytecode(beanClass, false);
+        long durationMs = (System.nanoTime() - startTime) / 1000_000;
+        LOG.info("Generate accessor bytecode {} take {} ms", qualifiedClassName, durationMs);
+        state.normalClass =
+            ClassLoaderUtils.tryDefineClassesInClassLoader(
+                qualifiedClassName, beanClass, beanClass.getClassLoader(), bytecode);
+        state.normalDefined = state.normalClass != null;
+        if (!state.normalDefined) {
+          LOG.info(
+              "Define accessor {} in classloader {} failed.",
+              qualifiedClassName,
+              beanClass.getClassLoader());
+        }
+        return state.normalDefined;
+      }
+    }
+  }
+
+  private static boolean defineHiddenAccessorClass(Class<?> beanClass) {
+    if (AndroidSupport.IS_ANDROID
+        || beanClass.getClassLoader() == null
+        || JdkVersion.MAJOR_VERSION < 15) {
+      return false;
+    }
+    AccessorState state = state(beanClass);
+    if (state.hiddenDefined) {
+      return true;
+    }
+    synchronized (state.lock) {
+      if (state.hiddenDefined) {
+        return true;
+      }
+      if (state.hiddenAttempted) {
+        return false;
+      }
+      state.hiddenAttempted = true;
+      long startTime = System.nanoTime();
+      byte[] bytecode = genBytecode(beanClass, true);
+      long durationMs = (System.nanoTime() - startTime) / 1000_000;
+      LOG.info(
+          "Generate hidden accessor bytecode {} take {} ms",
+          hiddenAccessorClassName(beanClass),
+          durationMs);
+      state.hiddenClass = DefineClass.defineHiddenNestmate(beanClass, bytecode);
+      state.hiddenDefined = true;
+      return true;
+    }
+  }
+
+  private static byte[] genBytecode(Class<?> beanClass, boolean includePrivate) {
+    String internalName =
+        packagePrefix(beanClass, includePrivate)
+            + (includePrivate ? hiddenAccessorClassName(beanClass) : accessorClassName(beanClass));
+    ClassWriter writer =
+        new ClassWriter(
+            ClassWriter.ACC_PUBLIC | ClassWriter.ACC_FINAL | ClassWriter.ACC_SUPER,
+            internalName,
+            "java/lang/Object");
+    MethodWriter constructor =
+        writer.visitMethod(
+            ClassWriter.ACC_PUBLIC, "<init>", Type.methodDescriptor(Type.VOID), 1, 1);
+    constructor.aload(0).invokespecial("java/lang/Object", "<init>", "()V").returnVoid();
+    Set<String> methodKeys = new HashSet<>();
+    for (Descriptor descriptor : Descriptor.getAllDescriptorsMap(beanClass, false).values()) {
+      Field field = descriptor.getField();
+      if (field == null || Modifier.isStatic(field.getModifiers())) {
+        continue;
+      }
+      if (includePrivate || !Modifier.isPrivate(field.getModifiers())) {
+        genFieldGetter(writer, beanClass, field, includePrivate, methodKeys);
+      }
+      if ((includePrivate || sourceSetterAccessible(field))
+          && !Modifier.isFinal(field.getModifiers())) {
+        genFieldSetter(writer, beanClass, field, methodKeys);
+      }
+      if (!includePrivate) {
+        Method readMethod = descriptor.getReadMethod();
+        if (readMethod != null && !Modifier.isPrivate(readMethod.getModifiers())) {
+          genReadMethod(writer, beanClass, readMethod, methodKeys);
+        }
+        Method writeMethod = descriptor.getWriteMethod();
+        if (writeMethod != null && sourceSetterAccessible(writeMethod)) {
+          genWriteMethod(writer, beanClass, writeMethod, methodKeys);
+        }
+      }
+    }
+    return writer.toByteArray();
+  }
+
+  private static void genFieldGetter(
+      ClassWriter writer,
+      Class<?> beanClass,
+      Field field,
+      boolean includePrivate,
+      Set<String> methodKeys) {
+    Type beanType = Type.getType(beanClass);
+    Type fieldType = Type.getType(field.getType());
+    Type returnType = Type.getType(getterReturnType(field, includePrivate));
+    String descriptor = Type.methodDescriptor(returnType, beanType);
+    if (!methodKeys.add(field.getName() + descriptor)) {
+      return;
+    }
+    MethodWriter method =
+        writer.visitMethod(
+            ClassWriter.ACC_PUBLIC | ClassWriter.ACC_STATIC,
+            field.getName(),
+            descriptor,
+            Math.max(1, returnType.slots()),
+            1);
+    method
+        .aload(0)
+        .getfield(
+            Type.internalName(field.getDeclaringClass()), field.getName(), fieldType.descriptor())
+        .returnValue(returnType);
+  }
+
+  private static void genFieldSetter(
+      ClassWriter writer, Class<?> beanClass, Field field, Set<String> methodKeys) {
+    Type beanType = Type.getType(beanClass);
+    Type fieldType = Type.getType(field.getType());
+    String descriptor = Type.methodDescriptor(Type.VOID, beanType, fieldType);
+    if (!methodKeys.add(field.getName() + descriptor)) {
+      return;
+    }
+    MethodWriter method =
+        writer.visitMethod(
+            ClassWriter.ACC_PUBLIC | ClassWriter.ACC_STATIC,
+            field.getName(),
+            descriptor,
+            1 + fieldType.slots(),
+            1 + fieldType.slots());
+    method
+        .aload(0)
+        .load(fieldType, 1)
+        .putfield(
+            Type.internalName(field.getDeclaringClass()), field.getName(), fieldType.descriptor())
+        .returnVoid();
+  }
+
+  private static void genReadMethod(
+      ClassWriter writer, Class<?> beanClass, Method readMethod, Set<String> methodKeys) {
+    Type beanType = Type.getType(beanClass);
+    Type methodReturnType = Type.getType(readMethod.getReturnType());
+    Type returnType = Type.getType(getterReturnType(readMethod.getReturnType(), false));
+    String descriptor = Type.methodDescriptor(returnType, beanType);
+    if (!methodKeys.add(readMethod.getName() + descriptor)) {
+      return;
+    }
+    MethodWriter method =
+        writer.visitMethod(
+            ClassWriter.ACC_PUBLIC | ClassWriter.ACC_STATIC,
+            readMethod.getName(),
+            descriptor,
+            Math.max(1, returnType.slots()),
+            1);
+    method
+        .aload(0)
+        .invokevirtual(
+            Type.internalName(readMethod.getDeclaringClass()),
+            readMethod.getName(),
+            Type.methodDescriptor(methodReturnType))
+        .returnValue(returnType);
+  }
+
+  private static void genWriteMethod(
+      ClassWriter writer, Class<?> beanClass, Method writeMethod, Set<String> methodKeys) {
+    Type beanType = Type.getType(beanClass);
+    Type valueType = Type.getType(writeMethod.getParameterTypes()[0]);
+    Type returnType = Type.getType(writeMethod.getReturnType());
+    String descriptor = Type.methodDescriptor(Type.VOID, beanType, valueType);
+    if (!methodKeys.add(writeMethod.getName() + descriptor)) {
+      return;
+    }
+    MethodWriter method =
+        writer.visitMethod(
+            ClassWriter.ACC_PUBLIC | ClassWriter.ACC_STATIC,
+            writeMethod.getName(),
+            descriptor,
+            Math.max(1 + valueType.slots(), returnType.slots()),
+            1 + valueType.slots());
+    method
+        .aload(0)
+        .load(valueType, 1)
+        .invokevirtual(
+            Type.internalName(writeMethod.getDeclaringClass()),
+            writeMethod.getName(),
+            Type.methodDescriptor(returnType, valueType))
+        .pop(returnType)
+        .returnVoid();
+  }
+
+  private static MethodHandle findStaticHandle(
+      Class<?> accessorClass, String methodName, MethodType methodType) {
+    try {
+      return _JDKAccess._trustedLookup(accessorClass)
+          .findStatic(accessorClass, methodName, methodType);
+    } catch (IllegalAccessException | NoSuchMethodException e) {
+      throw new ForyException("Failed to find generated accessor " + methodName, e);
+    }
+  }
+
+  private static MethodHandle adaptGetter(Field field, MethodHandle handle) {
+    Class<?> fieldType = field.getType();
+    Class<?> returnType = fieldType.isPrimitive() ? fieldType : Object.class;
+    return handle.asType(MethodType.methodType(returnType, Object.class));
+  }
+
+  private static MethodHandle adaptSetter(Field field, MethodHandle handle) {
+    Class<?> fieldType = field.getType();
+    Class<?> valueType = fieldType.isPrimitive() ? fieldType : Object.class;
+    return handle.asType(MethodType.methodType(void.class, Object.class, valueType));
+  }
+
+  private static Class<?> getterReturnType(Field field, boolean hidden) {
+    return getterReturnType(field.getType(), hidden);
+  }
+
+  private static Class<?> getterReturnType(Class<?> valueType, boolean hidden) {
+    if (hidden || sourcePkgLevelAccessible(valueType)) {
+      return valueType;
+    }
+    return Object.class;
+  }
+
+  private static boolean useHiddenAccessor(Field field) {
+    return Modifier.isPrivate(field.getModifiers());
+  }
+
+  private static boolean sourceSetterAccessible(Field field) {
+    Class<?> fieldType = field.getType();
+    return !Modifier.isPrivate(field.getModifiers())
+        && !ReflectionUtils.isPrivate(fieldType)
+        && sourcePkgLevelAccessible(fieldType);
+  }
+
+  private static boolean sourceSetterAccessible(Method method) {
+    if (Modifier.isPrivate(method.getModifiers()) || method.getParameterCount() != 1) {
+      return false;
+    }
+    Class<?> parameterType = method.getParameterTypes()[0];
+    return !ReflectionUtils.isPrivate(parameterType) && sourcePkgLevelAccessible(parameterType);
+  }
+
+  private static String packagePrefix(Class<?> beanClass, boolean hidden) {
+    String pkgName =
+        hidden ? ReflectionUtils.getPackage(beanClass) : CodeGenerator.getPackage(beanClass);
+    if (StringUtils.isNotBlank(pkgName)) {
+      return pkgName.replace('.', '/') + "/";
+    }
+    return "";
+  }
+
+  private static String hiddenAccessorClassName(Class<?> beanClass) {
+    return accessorClassName(beanClass) + "Hidden";
+  }
+
+  private static AccessorState state(Class<?> beanClass) {
+    return accessorStates.get(beanClass, AccessorState::new);
+  }
+
+  private static RuntimeException accessFailure(Throwable e) {
+    if (e instanceof RuntimeException) {
+      return (RuntimeException) e;
+    }
+    if (e instanceof Error) {
+      throw (Error) e;
+    }
+    return new ForyException("Generated accessor invocation failed.", e);
+  }
+
+  private static final class AccessorState {
+    private final Object lock = new Object();
+    private volatile boolean normalAttempted;
+    private volatile boolean normalDefined;
+    private volatile Class<?> normalClass;
+    private volatile boolean hiddenAttempted;
+    private volatile boolean hiddenDefined;
+    private volatile Class<?> hiddenClass;
+
+    private AccessorState() {}
   }
 }

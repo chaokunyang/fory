@@ -176,24 +176,41 @@ public final class Utf16StringJsonReader extends JsonReader {
     }
     int result = ch - '0';
     offset++;
-    int digitCount = 1;
-    while (offset < inputLength) {
+    int safeEnd = offset + 8;
+    if (safeEnd > inputLength) {
+      safeEnd = inputLength;
+    }
+    while (offset < safeEnd) {
       ch = charAtFast(offset);
       if (ch < '0' || ch > '9') {
         break;
       }
-      int digit = ch - '0';
-      if (digitCount < 9) {
-        result = result * 10 + digit;
-      } else {
-        long value = (long) result * 10 + digit;
-        if (value > Integer.MAX_VALUE) {
-          position = offset;
-          throw error("Integer overflow");
-        }
-        result = (int) value;
+      result = result * 10 + (ch - '0');
+      offset++;
+    }
+    if (offset < inputLength) {
+      ch = charAtFast(offset);
+      if (ch >= '0' && ch <= '9') {
+        return readPositiveIntTail(offset, inputLength, result);
       }
-      digitCount++;
+    }
+    position = offset;
+    rejectFractionOrExponentFast();
+    return result;
+  }
+
+  private int readPositiveIntTail(int offset, int inputLength, int result) {
+    while (offset < inputLength) {
+      char ch = charAtFast(offset);
+      if (ch < '0' || ch > '9') {
+        break;
+      }
+      long value = (long) result * 10 + (ch - '0');
+      if (value > Integer.MAX_VALUE) {
+        position = offset;
+        throw error("Integer overflow");
+      }
+      result = (int) value;
       offset++;
     }
     position = offset;
@@ -272,23 +289,41 @@ public final class Utf16StringJsonReader extends JsonReader {
     }
     long result = ch - '0';
     offset++;
-    int digitCount = 1;
-    while (offset < inputLength) {
+    int safeEnd = offset + 17;
+    if (safeEnd > inputLength) {
+      safeEnd = inputLength;
+    }
+    while (offset < safeEnd) {
       ch = charAtFast(offset);
       if (ch < '0' || ch > '9') {
         break;
       }
-      int digit = ch - '0';
-      if (digitCount < 18) {
-        result = result * 10 + digit;
-      } else {
-        if (result > (Long.MAX_VALUE - digit) / 10) {
-          position = offset;
-          throw error("Long overflow");
-        }
-        result = result * 10 + digit;
+      result = result * 10 + (ch - '0');
+      offset++;
+    }
+    if (offset < inputLength) {
+      ch = charAtFast(offset);
+      if (ch >= '0' && ch <= '9') {
+        return readPositiveLongTail(offset, inputLength, result);
       }
-      digitCount++;
+    }
+    position = offset;
+    rejectFractionOrExponentFast();
+    return result;
+  }
+
+  private long readPositiveLongTail(int offset, int inputLength, long result) {
+    while (offset < inputLength) {
+      char ch = charAtFast(offset);
+      if (ch < '0' || ch > '9') {
+        break;
+      }
+      int digit = ch - '0';
+      if (result > (Long.MAX_VALUE - digit) / 10) {
+        position = offset;
+        throw error("Long overflow");
+      }
+      result = result * 10 + digit;
       offset++;
     }
     position = offset;

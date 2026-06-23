@@ -697,6 +697,21 @@ public final class Utf8JsonReader extends JsonReader {
     return tryReadFieldNameColon(expectedHash, expectedMask, expectedLength);
   }
 
+  public boolean tryReadNextFieldNameToken(
+      long prefix, long prefixMask, int suffix, int suffixLength, int tokenLength) {
+    byte[] bytes = input;
+    int mark = position;
+    if (mark + Long.BYTES <= bytes.length
+        && (LittleEndian.getInt64(bytes, mark) & prefixMask) == prefix
+        && ByteReaderUtils.fieldTokenSuffixMatches(
+            bytes, mark + Long.BYTES, suffix, suffixLength)) {
+      position = mark + tokenLength;
+      return true;
+    }
+    position = mark;
+    return false;
+  }
+
   private boolean tryReadFieldNameColonAt(
       int mark, long expectedHash, long expectedMask, int expectedLength) {
     byte[] bytes = input;

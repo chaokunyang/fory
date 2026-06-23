@@ -1123,6 +1123,22 @@ public final class JsonCodegen {
   }
 
   private static Expression tryReadNextFieldNameColon(int readerMode, JsonFieldInfo property) {
+    if (readerMode == LATIN1_READER || readerMode == UTF8_READER) {
+      String name = property.name();
+      int tokenLength = fieldNameTokenLength(name);
+      // This is a compact-JSON fast path. Whitespace, escapes, and UTF8 spellings that do not
+      // match the raw token fall through to the generated field-hash reader without consuming.
+      return new Expression.Invoke(
+              readerRef(readerMode),
+              "tryReadNextFieldNameToken",
+              TypeRef.of(boolean.class),
+              Expression.Literal.ofLong(fieldNameTokenPrefix(name)),
+              Expression.Literal.ofLong(fieldNameTokenPrefixMask(tokenLength)),
+              Expression.Literal.ofInt(fieldNameTokenSuffix(name)),
+              Expression.Literal.ofInt(fieldNameTokenSuffixLength(tokenLength)),
+              Expression.Literal.ofInt(tokenLength))
+          .inline();
+    }
     return new Expression.Invoke(
             readerRef(readerMode),
             "tryReadNextFieldNameColon",
@@ -1131,6 +1147,50 @@ public final class JsonCodegen {
             Expression.Literal.ofLong(packedNameMask(property.name().length())),
             Expression.Literal.ofInt(property.name().length()))
         .inline();
+  }
+
+  private static int fieldNameTokenLength(String name) {
+    return name.length() + 3;
+  }
+
+  private static long fieldNameTokenPrefix(String name) {
+    int tokenLength = fieldNameTokenLength(name);
+    int prefixLength = Math.min(tokenLength, Long.BYTES);
+    long value = 0;
+    for (int i = 0; i < prefixLength; i++) {
+      value |= (long) fieldNameTokenByte(name, i) << (i << 3);
+    }
+    return value;
+  }
+
+  private static long fieldNameTokenPrefixMask(int tokenLength) {
+    int prefixLength = Math.min(tokenLength, Long.BYTES);
+    return prefixLength == Long.BYTES ? -1L : (1L << (prefixLength << 3)) - 1;
+  }
+
+  private static int fieldNameTokenSuffix(String name) {
+    int tokenLength = fieldNameTokenLength(name);
+    int suffixLength = fieldNameTokenSuffixLength(tokenLength);
+    int value = 0;
+    for (int i = 0; i < suffixLength; i++) {
+      value |= fieldNameTokenByte(name, i + Long.BYTES) << (i << 3);
+    }
+    return value;
+  }
+
+  private static int fieldNameTokenSuffixLength(int tokenLength) {
+    return Math.max(0, tokenLength - Long.BYTES);
+  }
+
+  private static int fieldNameTokenByte(String name, int index) {
+    if (index == 0) {
+      return '"';
+    }
+    int nameLength = name.length();
+    if (index <= nameLength) {
+      return name.charAt(index - 1) & 0xFF;
+    }
+    return index == nameLength + 1 ? '"' : ':';
   }
 
   private static Expression slowCall(

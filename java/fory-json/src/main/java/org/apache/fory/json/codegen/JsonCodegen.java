@@ -265,12 +265,12 @@ public final class JsonCodegen {
     }
   }
 
-  private String codecTypeName(JsonCodec codec) {
+  private Class<?> codecFieldType(JsonCodec codec) {
     Class<?> type = codec.getClass();
     if (isPublicSourceType(type) && isVisible(type)) {
-      return sourceName(type);
+      return type;
     }
-    return sourceName(JsonCodec.class);
+    return JsonCodec.class;
   }
 
   private static boolean isPublicSourceType(Class<?> type) {
@@ -367,94 +367,24 @@ public final class JsonCodegen {
       }
     }
 
-    private ValueCode fieldValue(JsonFieldInfo property, String object) {
-      ctx.clearExprState();
-      Expression field =
-          getFieldValue(
-              new Reference(object, TypeRef.of(beanClass), false), writeDescriptor(property));
-      Code.ExprCode fieldCode = field.genCode(ctx);
-      String code = fieldCode.code();
-      String optimized = code == null ? "" : ctx.optimizeMethodCode(code);
-      return new ValueCode(optimized, fieldCode.value().toString());
+    private Expression fieldValue(JsonFieldInfo property, Expression object) {
+      return getFieldValue(object, writeDescriptor(property));
     }
 
-    private String newObjectCode(String objectName) {
-      ctx.clearExprState();
-      Code.ExprCode newObject = newBean().genCode(ctx);
-      StringBuilder code = new StringBuilder();
-      appendGeneratedCode(code, newObject.code(), "    ");
-      code.append("    ")
-          .append(sourceName(beanClass))
-          .append(" ")
-          .append(objectName)
-          .append(" = ")
-          .append(newObject.value())
-          .append(";\n");
-      return code.toString();
+    private Expression newObject() {
+      return newBean();
     }
 
-    private void appendSetField(
-        StringBuilder code,
-        JsonFieldInfo property,
-        String object,
-        String value,
-        TypeRef<?> valueType,
-        String indent) {
-      appendSetField(code, property, object, new Reference(value, valueType, false), indent);
-    }
-
-    private void appendSetNull(
-        StringBuilder code, JsonFieldInfo property, String object, String indent) {
-      appendSetField(
-          code,
-          property,
+    private Expression setField(JsonFieldInfo property, Expression object, Expression value) {
+      return setFieldValue(
           object,
-          new Expression.Null(TypeRef.of(property.readRawType()), false),
-          indent);
+          readDescriptor(property),
+          tryInlineCast(value, TypeRef.of(property.readField().getGenericType())));
     }
 
-    private void appendSetField(
-        StringBuilder code,
-        JsonFieldInfo property,
-        String object,
-        Expression value,
-        String indent) {
-      ctx.clearExprState();
-      Expression set =
-          setFieldValue(
-              new Reference(object, TypeRef.of(beanClass), false),
-              readDescriptor(property),
-              tryInlineCast(value, TypeRef.of(property.readField().getGenericType())));
-      Code.ExprCode setCode = set.genCode(ctx);
-      appendGeneratedCode(code, ctx.optimizeMethodCode(setCode.code()), indent);
-    }
-  }
-
-  private static final class ValueCode {
-    private final String code;
-    private final String value;
-
-    private ValueCode(String code, String value) {
-      this.code = code;
-      this.value = value;
-    }
-  }
-
-  private static void appendGeneratedCode(StringBuilder code, String generated, String indent) {
-    if (generated == null || generated.isEmpty()) {
-      return;
-    }
-    int start = 0;
-    int length = generated.length();
-    while (start < length) {
-      int end = generated.indexOf('\n', start);
-      if (end < 0) {
-        end = length;
-      }
-      if (end > start) {
-        code.append(indent).append(generated, start, end).append('\n');
-      }
-      start = end + 1;
+    private Expression setNull(JsonFieldInfo property, Expression object) {
+      return setField(
+          property, object, new Expression.Null(TypeRef.of(property.readRawType()), false));
     }
   }
 
@@ -477,12 +407,10 @@ public final class JsonCodegen {
         ctx.type(Utf16ObjectReader.class),
         ctx.type(Utf8ObjectReader.class));
     ctx.addField(long[].class, "fieldHashes");
-    StringBuilder constructor = new StringBuilder();
-    constructor.append("this.fieldHashes = new long[properties.length];\n");
     for (int i = 0; i < properties.length; i++) {
       ctx.addField(JsonFieldInfo.class, "p" + i);
       if (usesReadCodec(properties[i])) {
-        ctx.addField(codecTypeName(properties[i].readTypeInfo().codec()), "r" + i);
+        ctx.addField(codecFieldType(properties[i].readTypeInfo().codec()), "r" + i);
       }
       if (usesReadTypeField(properties[i])) {
         ctx.addField(JsonTypeInfo.class, "t" + i);
@@ -491,322 +419,416 @@ public final class JsonCodegen {
         ctx.addField(BaseObjectCodec.class, "c" + i);
       }
     }
-    for (int i = 0; i < properties.length; i++) {
-      constructor
-          .append("this.fieldHashes[")
-          .append(i)
-          .append("] = properties[")
-          .append(i)
-          .append("].nameHash();\n");
-      constructor.append("this.p").append(i).append(" = properties[").append(i).append("];\n");
-      if (usesReadCodec(properties[i])) {
-        constructor
-            .append("this.r")
-            .append(i)
-            .append(" = (")
-            .append(codecTypeName(properties[i].readTypeInfo().codec()))
-            .append(") codecs[")
-            .append(i)
-            .append("];\n");
-      }
-      if (usesReadTypeField(properties[i])) {
-        constructor
-            .append("this.t")
-            .append(i)
-            .append(" = properties[")
-            .append(i)
-            .append("].readTypeInfo();\n");
-      }
-      if (storesReadObjectCodec(type, properties[i])) {
-        constructor.append("this.c").append(i).append(" = objectCodecs[").append(i).append("];\n");
-      }
-    }
-    ctx.addConstructor(
-        constructor.toString(),
+    addGeneratedConstructor(
+        ctx,
+        readerConstructorExpression(type, properties),
         JsonFieldInfo[].class,
         "properties",
         JsonCodec[].class,
         "codecs",
         BaseObjectCodec[].class,
         "objectCodecs");
-    StringBuilder code = new StringBuilder(4096);
-    appendFieldIndexMethod(code, properties);
-    appendReadMethod(builder, code, "read", "JsonReader", type, properties, GENERIC_READER, record);
-    appendReadMethod(
-        builder,
-        code,
+    addGeneratedMethod(
+        ctx,
+        "final",
+        "fieldIndex",
+        fieldIndexExpression(properties),
+        int.class,
+        long.class,
+        "fieldHash");
+    addGeneratedMethod(
+        ctx,
+        "public",
+        "read",
+        readExpression(builder, type, properties, GENERIC_READER, record),
+        Object.class,
+        JsonReader.class,
+        "reader",
+        BaseObjectCodec.class,
+        "owner",
+        JsonTypeResolver.class,
+        "typeResolver");
+    addGeneratedMethod(
+        ctx,
+        "public",
         "readLatin1",
-        "Latin1StringJsonReader",
+        fastReadExpression(builder, "readLatin1Slow", type, properties, LATIN1_READER, record),
+        Object.class,
+        Latin1StringJsonReader.class,
+        "reader",
+        BaseObjectCodec.class,
+        "owner",
+        JsonTypeResolver.class,
+        "typeResolver");
+    addSlowReadMethods(
+        ctx,
+        builder,
+        "readLatin1Slow",
+        Latin1StringJsonReader.class,
         type,
         properties,
         LATIN1_READER,
         record);
-    appendReadMethod(
-        builder,
-        code,
+    addGeneratedMethod(
+        ctx,
+        "public",
         "readUtf16",
-        "Utf16StringJsonReader",
+        fastReadExpression(builder, "readUtf16Slow", type, properties, UTF16_READER, record),
+        Object.class,
+        Utf16StringJsonReader.class,
+        "reader",
+        BaseObjectCodec.class,
+        "owner",
+        JsonTypeResolver.class,
+        "typeResolver");
+    addSlowReadMethods(
+        ctx,
+        builder,
+        "readUtf16Slow",
+        Utf16StringJsonReader.class,
         type,
         properties,
         UTF16_READER,
         record);
-    appendReadMethod(
-        builder, code, "readUtf8", "Utf8JsonReader", type, properties, UTF8_READER, record);
-    return appendClassMethods(ctx.genCode(), code.toString());
+    addGeneratedMethod(
+        ctx,
+        "public",
+        "readUtf8",
+        fastReadExpression(builder, "readUtf8Slow", type, properties, UTF8_READER, record),
+        Object.class,
+        Utf8JsonReader.class,
+        "reader",
+        BaseObjectCodec.class,
+        "owner",
+        JsonTypeResolver.class,
+        "typeResolver");
+    addSlowReadMethods(
+        ctx, builder, "readUtf8Slow", Utf8JsonReader.class, type, properties, UTF8_READER, record);
+    return ctx.genCode();
   }
 
-  private static String appendClassMethods(String classCode, String methods) {
-    int end = classCode.lastIndexOf('}');
-    if (end < 0) {
-      throw new ForyJsonException("Generated class has no closing brace");
-    }
-    return classCode.substring(0, end) + methods + classCode.substring(end);
+  private void addSlowReadMethods(
+      CodegenContext ctx,
+      JsonCodecBuilder builder,
+      String methodName,
+      Class<?> readerType,
+      Class<?> type,
+      JsonFieldInfo[] properties,
+      int readerMode,
+      boolean record) {
+    Class<?> objectType = record ? Object[].class : type;
+    addGeneratedMethod(
+        ctx,
+        "final",
+        methodName,
+        slowReadExpression(builder, type, properties, readerMode, record),
+        void.class,
+        readerType,
+        "reader",
+        BaseObjectCodec.class,
+        "owner",
+        JsonTypeResolver.class,
+        "typeResolver",
+        objectType,
+        "object",
+        int.class,
+        "expectedIndex");
+    addGeneratedMethod(
+        ctx,
+        "final",
+        methodName,
+        slowReadFromFirstExpression(builder, type, properties, readerMode, record),
+        void.class,
+        readerType,
+        "reader",
+        BaseObjectCodec.class,
+        "owner",
+        JsonTypeResolver.class,
+        "typeResolver",
+        objectType,
+        "object",
+        int.class,
+        "expectedIndex",
+        int.class,
+        "firstFieldIndex");
   }
 
-  private static void appendFieldIndexMethod(StringBuilder code, JsonFieldInfo[] properties) {
-    code.append("  final int fieldIndex(long fieldHash) {\n");
+  private void addGeneratedConstructor(
+      CodegenContext ctx, Expression expression, Object... params) {
+    ctx.clearExprState();
+    Code.ExprCode body = expression.genCode(ctx);
+    String code = body.code();
+    code = code == null ? "" : ctx.optimizeMethodCode(code);
+    ctx.addConstructor(code, params);
+  }
+
+  private void addGeneratedMethod(
+      CodegenContext ctx,
+      String modifier,
+      String name,
+      Expression expression,
+      Class<?> returnType,
+      Object... params) {
+    ctx.clearExprState();
+    Code.ExprCode body = expression.genCode(ctx);
+    String code = body.code();
+    code = code == null ? "" : ctx.optimizeMethodCode(code);
+    ctx.addMethod(modifier, name, code, returnType, params);
+  }
+
+  private Expression readerConstructorExpression(Class<?> type, JsonFieldInfo[] properties) {
+    Expression.ListExpression expressions = new Expression.ListExpression();
+    Reference propertiesRef = new Reference("properties", TypeRef.of(JsonFieldInfo[].class));
+    Reference codecsRef = new Reference("codecs", TypeRef.of(JsonCodec[].class));
+    Reference objectCodecsRef = new Reference("objectCodecs", TypeRef.of(BaseObjectCodec[].class));
+    Reference hashes = new Reference("this.fieldHashes", TypeRef.of(long[].class));
+    expressions.add(
+        new Expression.Assign(
+            hashes,
+            new Expression.NewArray(
+                long.class,
+                new Expression.FieldValue(
+                    propertiesRef, "length", TypeRef.of(int.class), false, true))));
     for (int i = 0; i < properties.length; i++) {
-      code.append("    if (fieldHash == ")
-          .append(longLiteral(properties[i].nameHash()))
-          .append(") {\n");
-      code.append("      return ").append(i).append(";\n");
-      code.append("    }\n");
+      Expression id = Expression.Literal.ofInt(i);
+      Expression property = new Expression.ArrayValue(propertiesRef, id);
+      expressions.add(
+          new Expression.Assign(
+              new Reference("this.p" + i, TypeRef.of(JsonFieldInfo.class)), property));
+      expressions.add(
+          new Expression.AssignArrayElem(
+              hashes, new Expression.Invoke(property, "nameHash", TypeRef.of(long.class)), id));
+      if (usesReadCodec(properties[i])) {
+        Class<?> codecType = codecFieldType(properties[i].readTypeInfo().codec());
+        expressions.add(
+            new Expression.Assign(
+                new Reference("this.r" + i, TypeRef.of(codecType)),
+                new Expression.Cast(
+                    new Expression.ArrayValue(codecsRef, id), TypeRef.of(codecType))));
+      }
+      if (usesReadTypeField(properties[i])) {
+        expressions.add(
+            new Expression.Assign(
+                new Reference("this.t" + i, TypeRef.of(JsonTypeInfo.class)),
+                new Expression.Invoke(property, "readTypeInfo", TypeRef.of(JsonTypeInfo.class))));
+      }
+      if (storesReadObjectCodec(type, properties[i])) {
+        expressions.add(
+            new Expression.Assign(
+                new Reference("this.c" + i, TypeRef.of(BaseObjectCodec.class)),
+                new Expression.ArrayValue(objectCodecsRef, id)));
+      }
     }
-    code.append("    return -1;\n");
-    code.append("  }\n");
+    return expressions;
   }
 
-  private static String longLiteral(long value) {
-    return "0x" + Long.toHexString(value) + "L";
+  private Expression fieldIndexExpression(JsonFieldInfo[] properties) {
+    Expression.ListExpression expressions = new Expression.ListExpression();
+    Reference fieldHash = new Reference("fieldHash", TypeRef.of(long.class));
+    for (int i = 0; i < properties.length; i++) {
+      expressions.add(
+          new Expression.If(
+              eq(fieldHash, Expression.Literal.ofLong(properties[i].nameHash())),
+              new Expression.Return(Expression.Literal.ofInt(i))));
+    }
+    expressions.add(new Expression.Return(Expression.Literal.ofInt(-1)));
+    return expressions;
   }
 
-  private void appendReadMethod(
+  private Expression readExpression(
       JsonCodecBuilder builder,
-      StringBuilder code,
-      String methodName,
-      String readerType,
       Class<?> type,
       JsonFieldInfo[] properties,
       int readerMode,
       boolean record) {
-    if (readerMode != GENERIC_READER) {
-      appendFastRead(builder, code, methodName, readerType, type, properties, readerMode, record);
-      appendSlowRead(
-          builder, code, methodName + "Slow", readerType, type, properties, readerMode, record);
-      return;
-    }
-    code.append("  public Object ")
-        .append(methodName)
-        .append("(")
-        .append(readerType)
-        .append(" reader, BaseObjectCodec owner, JsonTypeResolver typeResolver) {\n");
-    appendNewObject(builder, code, type, record);
-    appendExpect(code, readerMode, '{', "    ");
-    code.append("    if (").append(consumeCall(readerMode, '}')).append(") {\n");
-    appendReturnObject(code, "      ", record);
-    code.append("    }\n");
-    code.append("    long[] localFieldHashes = fieldHashes;\n");
-    code.append("    int expectedIndex = 0;\n");
-    code.append("    do {\n");
-    code.append("      long fieldHash = reader.readFieldNameHash();\n");
-    code.append("      int fieldIndex = expectedIndex < localFieldHashes.length\n");
-    code.append("              && fieldHash == localFieldHashes[expectedIndex]\n");
-    code.append("          ? expectedIndex\n");
-    code.append("          : fieldIndex(fieldHash);\n");
-    appendExpect(code, readerMode, ':', "      ");
-    appendFieldSwitch(builder, code, type, properties, readerMode, "      ", record);
-    code.append("      if (fieldIndex >= 0) {\n");
-    code.append("        expectedIndex = fieldIndex + 1;\n");
-    code.append("      }\n");
-    code.append("    } while (").append(consumeCall(readerMode, ',')).append(");\n");
-    appendExpect(code, readerMode, '}', "    ");
-    appendReturnObject(code, "    ", record);
-    code.append("  }\n");
+    Expression object = objectExpression(builder, record);
+    Expression hashes =
+        new Expression.Variable("localFieldHashes", fieldRef("fieldHashes", long[].class));
+    Expression expectedIndex =
+        new Expression.Variable("expectedIndex", Expression.Literal.ofInt(0));
+    Expression.ListExpression expressions = new Expression.ListExpression();
+    expressions.add(object);
+    expressions.add(expectExpr(readerMode, '{'));
+    expressions.add(new Expression.If(consumeExpr(readerMode, '}'), returnObject(object, record)));
+    expressions.add(hashes);
+    expressions.add(expectedIndex);
+    Expression.ListExpression loop = new Expression.ListExpression();
+    loop.add(
+        readNextHashedField(
+            builder, type, properties, readerMode, object, hashes, expectedIndex, record));
+    loop.add(new Expression.If(not(consumeExpr(readerMode, ',')), new Expression.Break()));
+    expressions.add(new Expression.While(Expression.Literal.True, loop));
+    expressions.add(expectExpr(readerMode, '}'));
+    expressions.add(returnObject(object, record));
+    return expressions;
   }
 
-  private void appendFastRead(
+  private Expression fastReadExpression(
       JsonCodecBuilder builder,
-      StringBuilder code,
-      String methodName,
-      String readerType,
+      String slowMethod,
       Class<?> type,
       JsonFieldInfo[] properties,
       int readerMode,
       boolean record) {
-    String slowMethod = methodName + "Slow";
-    code.append("  public Object ")
-        .append(methodName)
-        .append("(")
-        .append(readerType)
-        .append(" reader, BaseObjectCodec owner, JsonTypeResolver typeResolver) {\n");
-    appendNewObject(builder, code, type, record);
-    appendExpect(code, readerMode, '{', "    ");
-    code.append("    if (").append(consumeCall(readerMode, '}')).append(") {\n");
-    appendReturnObject(code, "      ", record);
-    code.append("    }\n");
+    Expression object = objectExpression(builder, record);
+    Expression.ListExpression expressions = new Expression.ListExpression();
+    expressions.add(object);
+    expressions.add(expectExpr(readerMode, '{'));
+    expressions.add(new Expression.If(consumeExpr(readerMode, '}'), returnObject(object, record)));
     if (properties.length == 0) {
-      code.append("    ").append(slowMethod).append("(reader, owner, typeResolver, object, 0);\n");
-      appendReturnObject(code, "    ", record);
-      code.append("  }\n");
-      return;
+      expressions.add(slowCall(slowMethod, object, Expression.Literal.ofInt(0)));
+      expressions.add(returnObject(object, record));
+      return expressions;
     }
-    code.append("    long[] localFieldHashes = fieldHashes;\n");
+    Expression hashes =
+        new Expression.Variable("localFieldHashes", fieldRef("fieldHashes", long[].class));
+    expressions.add(hashes);
+    Expression[] skips = new Expression[properties.length];
     for (int i = 1; i < properties.length; i++) {
-      code.append("    boolean skip").append(i).append(" = false;\n");
+      skips[i] = new Expression.Variable("skip" + i, Expression.Literal.False);
+      expressions.add(skips[i]);
     }
     for (int i = 0; i < properties.length; i++) {
-      String indent = "    ";
-      if (i > 0) {
-        code.append("    if (!skip").append(i).append(") {\n");
-        indent = "      ";
-      }
-      appendFastReadField(
-          builder, code, slowMethod, type, properties, i, indent, readerMode, record);
-      if (i > 0) {
-        code.append("    }\n");
-      }
+      Expression read =
+          fastReadField(
+              builder, slowMethod, type, properties, i, readerMode, object, hashes, skips, record);
+      expressions.add(i == 0 ? read : new Expression.If(not(skips[i]), read));
     }
-    appendReturnObject(code, "    ", record);
-    code.append("  }\n");
+    expressions.add(returnObject(object, record));
+    return expressions;
   }
 
-  private void appendFastReadField(
+  private Expression fastReadField(
       JsonCodecBuilder builder,
-      StringBuilder code,
       String slowMethod,
       Class<?> type,
       JsonFieldInfo[] properties,
       int index,
-      String indent,
       int readerMode,
+      Expression object,
+      Expression hashes,
+      Expression[] skips,
       boolean record) {
     if (isPackedName(properties[index].name())) {
-      code.append(indent)
-          .append("if (reader.tryReadNextFieldNameColon(")
-          .append(longLiteral(properties[index].nameHash()))
-          .append(", ")
-          .append(longLiteral(packedNameMask(properties[index].name().length())))
-          .append(", ")
-          .append(properties[index].name().length())
-          .append(")) {\n");
-      readField(builder, code, type, properties[index], index, indent + "  ", readerMode, record);
-      appendFieldEnd(code, slowMethod, properties.length, index, indent + "  ", readerMode, record);
-      code.append(indent).append("} else {\n");
-      appendNextDirectFallback(
-          builder, code, slowMethod, type, properties, index, indent + "  ", readerMode, record);
-      code.append(indent).append("}\n");
-      return;
+      return new Expression.If(
+          tryReadNextFieldNameColon(readerMode, properties[index]),
+          new Expression.ListExpression(
+              readField(builder, type, properties[index], index, readerMode, object, record),
+              fieldEnd(slowMethod, properties.length, index, readerMode, object, record)),
+          nextDirectFallback(
+              builder,
+              slowMethod,
+              type,
+              properties,
+              index,
+              readerMode,
+              object,
+              hashes,
+              skips,
+              record));
     }
-    appendNextDirectFallback(
-        builder, code, slowMethod, type, properties, index, indent, readerMode, record);
+    return nextDirectFallback(
+        builder, slowMethod, type, properties, index, readerMode, object, hashes, skips, record);
   }
 
-  private void appendNextDirectFallback(
+  private Expression nextDirectFallback(
       JsonCodecBuilder builder,
-      StringBuilder code,
       String slowMethod,
       Class<?> type,
       JsonFieldInfo[] properties,
       int index,
-      String indent,
       int readerMode,
+      Expression object,
+      Expression hashes,
+      Expression[] skips,
       boolean record) {
     int nextIndex = index + 1;
     if (nextIndex < properties.length && isPackedName(properties[nextIndex].name())) {
-      code.append(indent)
-          .append("if (reader.tryReadNextFieldNameColon(")
-          .append(longLiteral(properties[nextIndex].nameHash()))
-          .append(", ")
-          .append(longLiteral(packedNameMask(properties[nextIndex].name().length())))
-          .append(", ")
-          .append(properties[nextIndex].name().length())
-          .append(")) {\n");
-      readField(
-          builder, code, type, properties[nextIndex], nextIndex, indent + "  ", readerMode, record);
-      appendFieldEnd(
-          code, slowMethod, properties.length, nextIndex, indent + "  ", readerMode, record);
-      code.append(indent).append("  skip").append(nextIndex).append(" = true;\n");
-      code.append(indent).append("} else {\n");
-      appendHashFallback(
-          builder, code, slowMethod, type, properties, index, indent + "  ", readerMode, record);
-      code.append(indent).append("}\n");
-      return;
+      return new Expression.If(
+          tryReadNextFieldNameColon(readerMode, properties[nextIndex]),
+          new Expression.ListExpression(
+              readField(
+                  builder, type, properties[nextIndex], nextIndex, readerMode, object, record),
+              fieldEnd(slowMethod, properties.length, nextIndex, readerMode, object, record),
+              new Expression.Assign(skips[nextIndex], Expression.Literal.True)),
+          hashFallback(
+              builder,
+              slowMethod,
+              type,
+              properties,
+              index,
+              readerMode,
+              object,
+              hashes,
+              skips,
+              record));
     }
-    appendHashFallback(
-        builder, code, slowMethod, type, properties, index, indent, readerMode, record);
+    return hashFallback(
+        builder, slowMethod, type, properties, index, readerMode, object, hashes, skips, record);
   }
 
-  private void appendHashFallback(
+  private Expression hashFallback(
       JsonCodecBuilder builder,
-      StringBuilder code,
       String slowMethod,
       Class<?> type,
       JsonFieldInfo[] properties,
       int index,
-      String indent,
       int readerMode,
+      Expression object,
+      Expression hashes,
+      Expression[] skips,
       boolean record) {
-    appendFieldHashRead(code, index, indent);
-    appendFastReadFieldFromHash(
-        builder, code, slowMethod, type, properties, index, indent, readerMode, record);
+    Expression fieldHash = readFieldNameHash(readerMode, "fieldHash" + index);
+    return new Expression.ListExpression(
+        fieldHash,
+        fastReadFieldFromHash(
+            builder,
+            slowMethod,
+            type,
+            properties,
+            index,
+            readerMode,
+            object,
+            hashes,
+            skips,
+            fieldHash,
+            record));
   }
 
-  private void appendFastReadFieldFromHash(
+  private Expression fastReadFieldFromHash(
       JsonCodecBuilder builder,
-      StringBuilder code,
       String slowMethod,
       Class<?> type,
       JsonFieldInfo[] properties,
       int index,
-      String indent,
       int readerMode,
+      Expression object,
+      Expression hashes,
+      Expression[] skips,
+      Expression fieldHash,
       boolean record) {
-    code.append(indent)
-        .append("if (fieldHash")
-        .append(index)
-        .append(" != localFieldHashes[")
-        .append(index)
-        .append("]) {\n");
+    Expression fallback;
     if (index + 1 < properties.length) {
-      code.append(indent)
-          .append("  if (fieldHash")
-          .append(index)
-          .append(" == localFieldHashes[")
-          .append(index + 1)
-          .append("]) {\n");
-      appendExpect(code, readerMode, ':', indent + "    ");
-      readField(
-          builder,
-          code,
-          type,
-          properties[index + 1],
-          index + 1,
-          indent + "    ",
-          readerMode,
-          record);
-      appendFieldEnd(
-          code, slowMethod, properties.length, index + 1, indent + "    ", readerMode, record);
-      code.append(indent).append("    skip").append(index + 1).append(" = true;\n");
-      code.append(indent).append("  } else {\n");
-      appendSlowConsumedReturn(
-          code, slowMethod, index, "fieldIndex(fieldHash" + index + ")", indent + "    ", record);
-      code.append(indent).append("  }\n");
+      fallback =
+          new Expression.If(
+              eq(fieldHash, arrayValue(hashes, index + 1)),
+              new Expression.ListExpression(
+                  expectExpr(readerMode, ':'),
+                  readField(
+                      builder, type, properties[index + 1], index + 1, readerMode, object, record),
+                  fieldEnd(slowMethod, properties.length, index + 1, readerMode, object, record),
+                  new Expression.Assign(skips[index + 1], Expression.Literal.True)),
+              slowConsumedReturn(slowMethod, index, fieldIndexInvoke(fieldHash), object, record));
     } else {
-      appendSlowConsumedReturn(
-          code, slowMethod, index, "fieldIndex(fieldHash" + index + ")", indent + "  ", record);
+      fallback = slowConsumedReturn(slowMethod, index, fieldIndexInvoke(fieldHash), object, record);
     }
-    code.append(indent).append("} else {\n");
-    appendExpect(code, readerMode, ':', indent + "  ");
-    readField(builder, code, type, properties[index], index, indent + "  ", readerMode, record);
-    appendFieldEnd(code, slowMethod, properties.length, index, indent + "  ", readerMode, record);
-    code.append(indent).append("}\n");
-  }
-
-  private static void appendFieldHashRead(StringBuilder code, int index, String indent) {
-    code.append(indent)
-        .append("long fieldHash")
-        .append(index)
-        .append(" = reader.readFieldNameHash();\n");
+    return new Expression.If(
+        ne(fieldHash, arrayValue(hashes, index)),
+        fallback,
+        new Expression.ListExpression(
+            expectExpr(readerMode, ':'),
+            readField(builder, type, properties[index], index, readerMode, object, record),
+            fieldEnd(slowMethod, properties.length, index, readerMode, object, record)));
   }
 
   private static boolean isPackedName(String name) {
@@ -827,186 +849,350 @@ public final class JsonCodegen {
     return length == Long.BYTES ? -1L : (1L << (length << 3)) - 1L;
   }
 
-  private static void appendNewObject(
-      JsonCodecBuilder builder, StringBuilder code, Class<?> type, boolean record) {
+  private Expression objectExpression(JsonCodecBuilder builder, boolean record) {
     if (record) {
-      code.append("    Object[] object = owner.newRecordFieldValues();\n");
-    } else {
-      code.append(builder.newObjectCode("object"));
+      return new Expression.Variable(
+          "object",
+          new Expression.Invoke(
+              ownerRef(), "newRecordFieldValues", TypeRef.of(Object[].class), false));
     }
+    return new Expression.Variable("object", builder.newObject());
   }
 
-  private static void appendReturnObject(StringBuilder code, String indent, boolean record) {
+  private Expression returnObject(Expression object, boolean record) {
     if (record) {
-      code.append(indent).append("return owner.newRecord(object);\n");
-    } else {
-      code.append(indent).append("return object;\n");
+      return new Expression.Return(
+          new Expression.Invoke(ownerRef(), "newRecord", TypeRef.of(Object.class), object));
     }
+    return new Expression.Return(object);
   }
 
-  private static void appendSlowConsumedReturn(
-      StringBuilder code,
-      String slowMethod,
-      int index,
-      String firstFieldIndex,
-      String indent,
-      boolean record) {
-    code.append(indent).append(slowMethod).append("(reader, owner, typeResolver, object, ");
-    code.append(index).append(", ").append(firstFieldIndex).append(");\n");
-    appendReturnObject(code, indent, record);
+  private Expression slowConsumedReturn(
+      String slowMethod, int index, Expression firstFieldIndex, Expression object, boolean record) {
+    return new Expression.ListExpression(
+        slowCall(slowMethod, object, Expression.Literal.ofInt(index), firstFieldIndex),
+        returnObject(object, record));
   }
 
-  private static void appendFieldEnd(
-      StringBuilder code,
+  private Expression fieldEnd(
       String slowMethod,
       int propertyCount,
       int index,
-      String indent,
       int readerMode,
+      Expression object,
       boolean record) {
     if (index + 1 < propertyCount) {
-      code.append(indent).append("if (!").append(consumeCall(readerMode, ',')).append(") {\n");
-      appendExpect(code, readerMode, '}', indent + "  ");
-      appendReturnObject(code, indent + "  ", record);
-      code.append(indent).append("}\n");
-    } else {
-      code.append(indent).append("if (").append(consumeCall(readerMode, ',')).append(") {\n");
-      code.append(indent).append("  ").append(slowMethod);
-      code.append("(reader, owner, typeResolver, object, ").append(propertyCount).append(");\n");
-      code.append(indent).append("} else {\n");
-      appendExpect(code, readerMode, '}', indent + "  ");
-      code.append(indent).append("}\n");
+      return new Expression.If(
+          not(consumeExpr(readerMode, ',')),
+          new Expression.ListExpression(expectExpr(readerMode, '}'), returnObject(object, record)));
     }
+    return new Expression.If(
+        consumeExpr(readerMode, ','),
+        slowCall(slowMethod, object, Expression.Literal.ofInt(propertyCount)),
+        expectExpr(readerMode, '}'));
   }
 
-  private void appendSlowRead(
+  private Expression slowReadExpression(
       JsonCodecBuilder builder,
-      StringBuilder code,
-      String methodName,
-      String readerType,
       Class<?> type,
       JsonFieldInfo[] properties,
       int readerMode,
       boolean record) {
-    String objectType = record ? "Object[]" : sourceName(type);
-    code.append("  final void ")
-        .append(methodName)
-        .append("(")
-        .append(readerType)
-        .append(" reader, BaseObjectCodec owner, JsonTypeResolver typeResolver,\n");
-    code.append("      ").append(objectType).append(" object, int expectedIndex) {\n");
-    code.append("    long[] localFieldHashes = fieldHashes;\n");
-    code.append("    do {\n");
-    code.append("      long fieldHash = reader.readFieldNameHash();\n");
-    code.append("      int fieldIndex = expectedIndex < localFieldHashes.length\n");
-    code.append("              && fieldHash == localFieldHashes[expectedIndex]\n");
-    code.append("          ? expectedIndex\n");
-    code.append("          : fieldIndex(fieldHash);\n");
-    appendExpect(code, readerMode, ':', "      ");
-    appendFieldSwitch(builder, code, type, properties, readerMode, "      ", record);
-    code.append("      if (fieldIndex >= 0) {\n");
-    code.append("        expectedIndex = fieldIndex + 1;\n");
-    code.append("      }\n");
-    code.append("    } while (").append(consumeCall(readerMode, ',')).append(");\n");
-    appendExpect(code, readerMode, '}', "    ");
-    code.append("  }\n");
-    code.append("  final void ")
-        .append(methodName)
-        .append("(")
-        .append(readerType)
-        .append(" reader, BaseObjectCodec owner, JsonTypeResolver typeResolver,\n");
-    code.append("      ")
-        .append(objectType)
-        .append(" object, int expectedIndex, int firstFieldIndex) {\n");
-    code.append("    long[] localFieldHashes = fieldHashes;\n");
-    code.append("    int fieldIndex = firstFieldIndex;\n");
-    code.append("    while (true) {\n");
-    appendExpect(code, readerMode, ':', "      ");
-    appendFieldSwitch(builder, code, type, properties, readerMode, "      ", record);
-    code.append("      if (fieldIndex >= 0) {\n");
-    code.append("        expectedIndex = fieldIndex + 1;\n");
-    code.append("      }\n");
-    code.append("      if (!").append(consumeCall(readerMode, ',')).append(") {\n");
-    appendExpect(code, readerMode, '}', "        ");
-    code.append("        return;\n");
-    code.append("      }\n");
-    code.append("      long fieldHash = reader.readFieldNameHash();\n");
-    code.append("      fieldIndex = expectedIndex < localFieldHashes.length\n");
-    code.append("              && fieldHash == localFieldHashes[expectedIndex]\n");
-    code.append("          ? expectedIndex\n");
-    code.append("          : fieldIndex(fieldHash);\n");
-    code.append("    }\n");
-    code.append("  }\n");
+    Expression object = objectParam(type, record);
+    Expression hashes =
+        new Expression.Variable("localFieldHashes", fieldRef("fieldHashes", long[].class));
+    Reference expectedIndex = new Reference("expectedIndex", TypeRef.of(int.class));
+    Expression.ListExpression expressions = new Expression.ListExpression();
+    expressions.add(hashes);
+    Expression.ListExpression loop = new Expression.ListExpression();
+    loop.add(
+        readNextHashedField(
+            builder, type, properties, readerMode, object, hashes, expectedIndex, record));
+    loop.add(new Expression.If(not(consumeExpr(readerMode, ',')), new Expression.Break()));
+    expressions.add(new Expression.While(Expression.Literal.True, loop));
+    expressions.add(expectExpr(readerMode, '}'));
+    return expressions;
   }
 
-  private void appendFieldSwitch(
+  private Expression slowReadFromFirstExpression(
       JsonCodecBuilder builder,
-      StringBuilder code,
       Class<?> type,
       JsonFieldInfo[] properties,
       int readerMode,
-      String indent,
       boolean record) {
-    code.append(indent).append("switch (fieldIndex) {\n");
+    Expression object = objectParam(type, record);
+    Expression hashes =
+        new Expression.Variable("localFieldHashes", fieldRef("fieldHashes", long[].class));
+    Reference expectedIndex = new Reference("expectedIndex", TypeRef.of(int.class));
+    Expression fieldIndex =
+        new Expression.Variable(
+            "fieldIndex", new Reference("firstFieldIndex", TypeRef.of(int.class)));
+    Expression.ListExpression expressions = new Expression.ListExpression();
+    expressions.add(hashes);
+    expressions.add(fieldIndex);
+    Expression.ListExpression loop = new Expression.ListExpression();
+    loop.add(expectExpr(readerMode, ':'));
+    loop.add(fieldSwitch(builder, type, properties, readerMode, object, fieldIndex, record));
+    loop.add(updateExpectedIndex(expectedIndex, fieldIndex));
+    loop.add(
+        new Expression.If(
+            not(consumeExpr(readerMode, ',')),
+            new Expression.ListExpression(expectExpr(readerMode, '}'), new Expression.Return())));
+    Expression fieldHash = readFieldNameHash(readerMode, "fieldHash");
+    loop.add(fieldHash);
+    loop.add(new Expression.Assign(fieldIndex, fieldIndexValue(expectedIndex, hashes, fieldHash)));
+    expressions.add(new Expression.While(Expression.Literal.True, loop));
+    return expressions;
+  }
+
+  private Expression readNextHashedField(
+      JsonCodecBuilder builder,
+      Class<?> type,
+      JsonFieldInfo[] properties,
+      int readerMode,
+      Expression object,
+      Expression hashes,
+      Expression expectedIndex,
+      boolean record) {
+    Expression fieldHash = readFieldNameHash(readerMode, "fieldHash");
+    Expression fieldIndex =
+        new Expression.Variable("fieldIndex", fieldIndexValue(expectedIndex, hashes, fieldHash));
+    return new Expression.ListExpression(
+        fieldHash,
+        fieldIndex,
+        expectExpr(readerMode, ':'),
+        fieldSwitch(builder, type, properties, readerMode, object, fieldIndex, record),
+        updateExpectedIndex(expectedIndex, fieldIndex));
+  }
+
+  private Expression fieldSwitch(
+      JsonCodecBuilder builder,
+      Class<?> type,
+      JsonFieldInfo[] properties,
+      int readerMode,
+      Expression object,
+      Expression fieldIndex,
+      boolean record) {
+    Expression.Switch.Case[] cases = new Expression.Switch.Case[properties.length];
     for (int i = 0; i < properties.length; i++) {
-      code.append(indent).append("  case ").append(i).append(":\n");
-      readField(builder, code, type, properties[i], i, indent + "    ", readerMode, record);
-      code.append(indent).append("    break;\n");
+      cases[i] =
+          new Expression.Switch.Case(
+              i,
+              new Expression.ListExpression(
+                  readField(builder, type, properties[i], i, readerMode, object, record),
+                  new Expression.Break()));
     }
-    code.append(indent).append("  default:\n");
-    code.append(indent).append("    reader.skipValue();\n");
-    code.append(indent).append("}\n");
+    return new Expression.Switch(
+        fieldIndex, cases, new Expression.Invoke(readerRef(readerMode), "skipValue"));
   }
 
-  private static void appendExpect(StringBuilder code, int readerMode, char token, String indent) {
-    code.append(indent).append(expectCall(readerMode, token)).append(";\n");
+  private Expression updateExpectedIndex(Expression expectedIndex, Expression fieldIndex) {
+    return new Expression.If(
+        ge(fieldIndex, Expression.Literal.ofInt(0)),
+        new Expression.Assign(
+            expectedIndex, new Expression.Add(fieldIndex, Expression.Literal.ofInt(1))));
   }
 
-  private static String expectCall(int readerMode, char token) {
-    return readerMode == GENERIC_READER
-        ? "reader.expect('" + token + "')"
-        : "reader.expectNextToken('" + token + "')";
+  private Expression fieldIndexValue(
+      Expression expectedIndex, Expression hashes, Expression fieldHash) {
+    return new Expression.Ternary(
+        and(
+            lt(
+                expectedIndex,
+                new Expression.FieldValue(hashes, "length", TypeRef.of(int.class), false, true)),
+            eq(fieldHash, new Expression.ArrayValue(hashes, expectedIndex))),
+        expectedIndex,
+        fieldIndexInvoke(fieldHash),
+        true,
+        TypeRef.of(int.class));
   }
 
-  private static String consumeCall(int readerMode, char token) {
-    return readerMode == GENERIC_READER
-        ? "reader.consume('" + token + "')"
-        : "reader.consumeNextToken('" + token + "')";
+  private static Expression objectParam(Class<?> type, boolean record) {
+    return record
+        ? new Reference("object", TypeRef.of(Object[].class))
+        : new Reference("object", TypeRef.of(type));
   }
 
-  private static String tryReadNullCall(int readerMode) {
-    return readerMode == GENERIC_READER ? "reader.tryReadNull()" : "reader.tryReadNextNullToken()";
+  private static Reference ownerRef() {
+    return new Reference("owner", TypeRef.of(BaseObjectCodec.class));
   }
 
-  private static String readBooleanCall(int readerMode) {
-    return readerMode == GENERIC_READER ? "reader.readBoolean()" : "reader.readNextBooleanValue()";
+  private static Reference typeResolverRef() {
+    return new Reference("typeResolver", TypeRef.of(JsonTypeResolver.class));
   }
 
-  private static String readIntCall(int readerMode) {
-    return readerMode == GENERIC_READER ? "reader.readInt()" : "reader.readNextIntValue()";
+  private static Reference fieldRef(String name, Class<?> type) {
+    return Reference.fieldRef(name, TypeRef.of(type));
   }
 
-  private static String readLongCall(int readerMode) {
-    return readerMode == GENERIC_READER ? "reader.readLong()" : "reader.readNextLongValue()";
+  private static Reference readerRef(int readerMode) {
+    return new Reference("reader", TypeRef.of(readerClass(readerMode)));
   }
 
-  private static String readStringCall(int readerMode) {
-    return readerMode == GENERIC_READER
-        ? "reader.readNullableString()"
-        : "reader.readNextNullableString()";
-  }
-
-  private static String readEnumCall(int readerMode, int id) {
+  private static Class<?> readerClass(int readerMode) {
     switch (readerMode) {
       case LATIN1_READER:
-        return "r" + id + ".readNextLatin1Enum(reader)";
+        return Latin1StringJsonReader.class;
       case UTF16_READER:
-        return "r" + id + ".readNextUtf16Enum(reader)";
+        return Utf16StringJsonReader.class;
       case UTF8_READER:
-        return "r" + id + ".readNextUtf8Enum(reader)";
+        return Utf8JsonReader.class;
       default:
-        return "r" + id + ".readEnum(reader)";
+        return JsonReader.class;
     }
+  }
+
+  private static Expression expectExpr(int readerMode, char token) {
+    return new Expression.Invoke(
+        readerRef(readerMode),
+        readerMode == GENERIC_READER ? "expect" : "expectNextToken",
+        Expression.Literal.ofChar(token));
+  }
+
+  private static Expression consumeExpr(int readerMode, char token) {
+    return new Expression.Invoke(
+            readerRef(readerMode),
+            readerMode == GENERIC_READER ? "consume" : "consumeNextToken",
+            TypeRef.of(boolean.class),
+            Expression.Literal.ofChar(token))
+        .inline();
+  }
+
+  private static Expression tryReadNullExpr(int readerMode) {
+    return new Expression.Invoke(
+            readerRef(readerMode),
+            readerMode == GENERIC_READER ? "tryReadNull" : "tryReadNextNullToken",
+            TypeRef.of(boolean.class))
+        .inline();
+  }
+
+  private static Expression readBooleanExpr(int readerMode) {
+    return new Expression.Invoke(
+            readerRef(readerMode),
+            readerMode == GENERIC_READER ? "readBoolean" : "readNextBooleanValue",
+            TypeRef.of(boolean.class))
+        .inline();
+  }
+
+  private static Expression readIntExpr(int readerMode) {
+    return new Expression.Invoke(
+            readerRef(readerMode),
+            readerMode == GENERIC_READER ? "readInt" : "readNextIntValue",
+            TypeRef.of(int.class))
+        .inline();
+  }
+
+  private static Expression readLongExpr(int readerMode) {
+    return new Expression.Invoke(
+            readerRef(readerMode),
+            readerMode == GENERIC_READER ? "readLong" : "readNextLongValue",
+            TypeRef.of(long.class))
+        .inline();
+  }
+
+  private static Expression readStringExpr(int readerMode) {
+    return new Expression.Invoke(
+            readerRef(readerMode),
+            readerMode == GENERIC_READER ? "readNullableString" : "readNextNullableString",
+            TypeRef.of(String.class),
+            true)
+        .inline();
+  }
+
+  private static Expression readFieldNameHash(int readerMode, String namePrefix) {
+    return new Expression.Invoke(
+        readerRef(readerMode), "readFieldNameHash", namePrefix, TypeRef.of(long.class), false);
+  }
+
+  private static Expression fieldIndexInvoke(Expression fieldHash) {
+    return new Expression.Invoke(
+            new Reference("this", TypeRef.of(Object.class)),
+            "fieldIndex",
+            "",
+            TypeRef.of(int.class),
+            false,
+            false,
+            fieldHash)
+        .inline();
+  }
+
+  private static Expression tryReadNextFieldNameColon(int readerMode, JsonFieldInfo property) {
+    return new Expression.Invoke(
+            readerRef(readerMode),
+            "tryReadNextFieldNameColon",
+            TypeRef.of(boolean.class),
+            Expression.Literal.ofLong(property.nameHash()),
+            Expression.Literal.ofLong(packedNameMask(property.name().length())),
+            Expression.Literal.ofInt(property.name().length()))
+        .inline();
+  }
+
+  private static Expression slowCall(
+      String slowMethod, Expression object, Expression expectedIndex) {
+    return slowCall(slowMethod, object, expectedIndex, null);
+  }
+
+  private static Expression slowCall(
+      String slowMethod, Expression object, Expression expectedIndex, Expression firstFieldIndex) {
+    if (firstFieldIndex == null) {
+      return new Expression.Invoke(
+          new Reference("this", TypeRef.of(Object.class)),
+          slowMethod,
+          "",
+          TypeRef.of(void.class),
+          false,
+          false,
+          readerRefForCall(),
+          ownerRef(),
+          typeResolverRef(),
+          object,
+          expectedIndex);
+    }
+    return new Expression.Invoke(
+        new Reference("this", TypeRef.of(Object.class)),
+        slowMethod,
+        "",
+        TypeRef.of(void.class),
+        false,
+        false,
+        readerRefForCall(),
+        ownerRef(),
+        typeResolverRef(),
+        object,
+        expectedIndex,
+        firstFieldIndex);
+  }
+
+  private static Reference readerRefForCall() {
+    return new Reference("reader");
+  }
+
+  private static Expression arrayValue(Expression array, int index) {
+    return new Expression.ArrayValue(array, Expression.Literal.ofInt(index));
+  }
+
+  private static Expression eq(Expression left, Expression right) {
+    return new Expression.Comparator("==", left, right, true);
+  }
+
+  private static Expression ne(Expression left, Expression right) {
+    return new Expression.Comparator("!=", left, right, true);
+  }
+
+  private static Expression lt(Expression left, Expression right) {
+    return new Expression.Comparator("<", left, right, true);
+  }
+
+  private static Expression ge(Expression left, Expression right) {
+    return new Expression.Comparator(">=", left, right, true);
+  }
+
+  private static Expression and(Expression left, Expression right) {
+    return new Expression.LogicalAnd(left, right);
+  }
+
+  private static Expression not(Expression expression) {
+    return new Expression.Not(expression);
   }
 
   private static boolean usesWriteCodec(JsonFieldInfo property) {
@@ -1057,396 +1243,285 @@ public final class JsonCodegen {
     return nestedType != null && nestedType != type;
   }
 
-  private void readField(
+  private Expression readField(
       JsonCodecBuilder builder,
-      StringBuilder code,
       Class<?> type,
       JsonFieldInfo property,
       int id,
-      String indent,
       int readerMode,
+      Expression object,
       boolean record) {
     if (record) {
-      readRecordField(code, type, property, id, indent, readerMode);
-      return;
+      return readRecordField(type, property, id, readerMode, object);
     }
     Class<?> rawType = property.readRawType();
     switch (property.readKind()) {
       case BOOLEAN:
-        readBoolean(builder, code, property, rawType, id, indent, readerMode);
-        return;
+        return readBoolean(builder, property, rawType, readerMode, object);
       case INT:
-        readInt(builder, code, property, rawType, id, indent, readerMode);
-        return;
+        return readInt(builder, property, rawType, readerMode, object);
       case LONG:
-        readLong(builder, code, property, rawType, id, indent, readerMode);
-        return;
+        return readLong(builder, property, rawType, readerMode, object);
       case STRING:
-        readString(builder, code, property, id, indent, readerMode);
-        return;
+        return builder.setField(property, object, readStringExpr(readerMode));
       case ENUM:
-        readEnum(builder, code, property, id, indent, readerMode);
-        return;
+        return readEnum(builder, property, id, readerMode, object);
       case ARRAY:
       case COLLECTION:
       case MAP:
-        readResolvedField(builder, code, property, id, indent, readerMode);
-        return;
+        return readResolvedField(builder, property, id, readerMode, object);
       case OBJECT:
-        readObject(builder, code, type, property, id, indent, readerMode);
-        return;
+        return readObject(builder, type, property, id, readerMode, object);
       default:
-        code.append(indent).append("p").append(id).append(".read(reader, object, typeResolver);\n");
+        return new Expression.Invoke(
+            fieldRef("p" + id, JsonFieldInfo.class),
+            "read",
+            readerRef(readerMode),
+            object,
+            typeResolverRef());
     }
   }
 
-  private void readRecordField(
-      StringBuilder code,
-      Class<?> type,
-      JsonFieldInfo property,
-      int id,
-      String indent,
-      int readerMode) {
+  private Expression readRecordField(
+      Class<?> type, JsonFieldInfo property, int id, int readerMode, Expression object) {
     Class<?> rawType = property.readRawType();
     switch (property.readKind()) {
       case BOOLEAN:
-        readRecordBoolean(code, rawType, id, indent, readerMode);
-        return;
+        return readRecordBoolean(rawType, id, readerMode, object);
       case INT:
-        readRecordInt(code, rawType, id, indent, readerMode);
-        return;
+        return readRecordInt(rawType, id, readerMode, object);
       case LONG:
-        readRecordLong(code, rawType, id, indent, readerMode);
-        return;
+        return readRecordLong(rawType, id, readerMode, object);
       case STRING:
-        readRecordString(code, id, indent, readerMode);
-        return;
+        return assignRecord(object, id, readStringExpr(readerMode));
       case ENUM:
-        readRecordEnum(code, id, indent, readerMode);
-        return;
+        return readRecordEnum(id, readerMode, object);
       case ARRAY:
       case COLLECTION:
       case MAP:
-        readRecordResolved(code, id, indent, readerMode);
-        return;
+        return assignRecord(object, id, readResolvedValue(property, id, readerMode));
       case OBJECT:
-        readRecordObject(code, type, property, id, indent, readerMode);
-        return;
+        return readRecordObject(type, property, id, readerMode, object);
       default:
-        code.append(indent)
-            .append("object[")
-            .append(id)
-            .append("] = p")
-            .append(id)
-            .append(".readValue(reader, typeResolver);\n");
+        return assignRecord(
+            object,
+            id,
+            new Expression.Invoke(
+                fieldRef("p" + id, JsonFieldInfo.class),
+                "readValue",
+                TypeRef.of(Object.class),
+                true,
+                readerRef(readerMode),
+                typeResolverRef()));
     }
   }
 
-  private static void readRecordBoolean(
-      StringBuilder code, Class<?> rawType, int id, String indent, int readerMode) {
+  private static Expression readRecordBoolean(
+      Class<?> rawType, int id, int readerMode, Expression object) {
+    Expression value = box(Boolean.class, readBooleanExpr(readerMode));
     if (rawType.isPrimitive()) {
-      code.append(indent)
-          .append("object[")
-          .append(id)
-          .append("] = Boolean.valueOf(")
-          .append(readBooleanCall(readerMode))
-          .append(");\n");
-      return;
+      return assignRecord(object, id, value);
     }
-    code.append(indent).append("if (").append(tryReadNullCall(readerMode)).append(") {\n");
-    code.append(indent).append("  object[").append(id).append("] = null;\n");
-    code.append(indent).append("} else {\n");
-    code.append(indent)
-        .append("  object[")
-        .append(id)
-        .append("] = Boolean.valueOf(")
-        .append(readBooleanCall(readerMode))
-        .append(");\n");
-    code.append(indent).append("}\n");
+    return new Expression.If(
+        tryReadNullExpr(readerMode),
+        assignRecord(object, id, new Expression.Null(TypeRef.of(Boolean.class), false)),
+        assignRecord(object, id, value));
   }
 
-  private static void readRecordInt(
-      StringBuilder code, Class<?> rawType, int id, String indent, int readerMode) {
+  private static Expression readRecordInt(
+      Class<?> rawType, int id, int readerMode, Expression object) {
+    Expression value = box(Integer.class, readIntExpr(readerMode));
     if (rawType.isPrimitive()) {
-      code.append(indent)
-          .append("object[")
-          .append(id)
-          .append("] = Integer.valueOf(")
-          .append(readIntCall(readerMode))
-          .append(");\n");
-      return;
+      return assignRecord(object, id, value);
     }
-    code.append(indent).append("if (").append(tryReadNullCall(readerMode)).append(") {\n");
-    code.append(indent).append("  object[").append(id).append("] = null;\n");
-    code.append(indent).append("} else {\n");
-    code.append(indent)
-        .append("  object[")
-        .append(id)
-        .append("] = Integer.valueOf(")
-        .append(readIntCall(readerMode))
-        .append(");\n");
-    code.append(indent).append("}\n");
+    return new Expression.If(
+        tryReadNullExpr(readerMode),
+        assignRecord(object, id, new Expression.Null(TypeRef.of(Integer.class), false)),
+        assignRecord(object, id, value));
   }
 
-  private static void readRecordLong(
-      StringBuilder code, Class<?> rawType, int id, String indent, int readerMode) {
+  private static Expression readRecordLong(
+      Class<?> rawType, int id, int readerMode, Expression object) {
+    Expression value = box(Long.class, readLongExpr(readerMode));
     if (rawType.isPrimitive()) {
-      code.append(indent)
-          .append("object[")
-          .append(id)
-          .append("] = Long.valueOf(")
-          .append(readLongCall(readerMode))
-          .append(");\n");
-      return;
+      return assignRecord(object, id, value);
     }
-    code.append(indent).append("if (").append(tryReadNullCall(readerMode)).append(") {\n");
-    code.append(indent).append("  object[").append(id).append("] = null;\n");
-    code.append(indent).append("} else {\n");
-    code.append(indent)
-        .append("  object[")
-        .append(id)
-        .append("] = Long.valueOf(")
-        .append(readLongCall(readerMode))
-        .append(");\n");
-    code.append(indent).append("}\n");
+    return new Expression.If(
+        tryReadNullExpr(readerMode),
+        assignRecord(object, id, new Expression.Null(TypeRef.of(Long.class), false)),
+        assignRecord(object, id, value));
   }
 
-  private static void readRecordString(StringBuilder code, int id, String indent, int readerMode) {
-    code.append(indent)
-        .append("object[")
-        .append(id)
-        .append("] = ")
-        .append(readStringCall(readerMode))
-        .append(";\n");
+  private static Expression readRecordEnum(int id, int readerMode, Expression object) {
+    return new Expression.If(
+        tryReadNullExpr(readerMode),
+        assignRecord(object, id, new Expression.Null(TypeRef.of(Object.class), false)),
+        assignRecord(object, id, readEnumValue(Object.class, id, readerMode)));
   }
 
-  private static void readRecordEnum(StringBuilder code, int id, String indent, int readerMode) {
-    code.append(indent).append("if (").append(tryReadNullCall(readerMode)).append(") {\n");
-    code.append(indent).append("  object[").append(id).append("] = null;\n");
-    code.append(indent).append("} else {\n");
-    code.append(indent)
-        .append("  object[")
-        .append(id)
-        .append("] = ")
-        .append(readEnumCall(readerMode, id))
-        .append(";\n");
-    code.append(indent).append("}\n");
+  private static Expression readRecordObject(
+      Class<?> type, JsonFieldInfo property, int id, int readerMode, Expression object) {
+    if (property.readRawType() == Object.class
+        || !(property.readTypeInfo().codec() instanceof BaseObjectCodec)) {
+      return assignRecord(
+          object,
+          id,
+          new Expression.Invoke(
+              fieldRef("p" + id, JsonFieldInfo.class),
+              "readValue",
+              TypeRef.of(Object.class),
+              true,
+              readerRef(readerMode),
+              typeResolverRef()));
+    }
+    return new Expression.If(
+        tryReadNullExpr(readerMode),
+        assignRecord(object, id, new Expression.Null(TypeRef.of(property.readRawType()), false)),
+        assignRecord(object, id, readObjectValue(type, property, id, readerMode)));
   }
 
-  private static void readRecordResolved(
-      StringBuilder code, int id, String indent, int readerMode) {
-    code.append(indent)
-        .append("object[")
-        .append(id)
-        .append("] = r")
-        .append(id)
-        .append(".")
-        .append(readObjectMethod(readerMode))
-        .append("(reader, t")
-        .append(id)
-        .append(", typeResolver);\n");
+  private static Expression readBoolean(
+      JsonCodecBuilder builder,
+      JsonFieldInfo property,
+      Class<?> rawType,
+      int readerMode,
+      Expression object) {
+    if (rawType.isPrimitive()) {
+      return builder.setField(property, object, readBooleanExpr(readerMode));
+    }
+    return new Expression.If(
+        tryReadNullExpr(readerMode),
+        builder.setNull(property, object),
+        builder.setField(property, object, box(Boolean.class, readBooleanExpr(readerMode))));
   }
 
-  private static void readRecordObject(
-      StringBuilder code,
+  private static Expression readInt(
+      JsonCodecBuilder builder,
+      JsonFieldInfo property,
+      Class<?> rawType,
+      int readerMode,
+      Expression object) {
+    if (rawType.isPrimitive()) {
+      return builder.setField(property, object, readIntExpr(readerMode));
+    }
+    return new Expression.If(
+        tryReadNullExpr(readerMode),
+        builder.setNull(property, object),
+        builder.setField(property, object, box(Integer.class, readIntExpr(readerMode))));
+  }
+
+  private static Expression readLong(
+      JsonCodecBuilder builder,
+      JsonFieldInfo property,
+      Class<?> rawType,
+      int readerMode,
+      Expression object) {
+    if (rawType.isPrimitive()) {
+      return builder.setField(property, object, readLongExpr(readerMode));
+    }
+    return new Expression.If(
+        tryReadNullExpr(readerMode),
+        builder.setNull(property, object),
+        builder.setField(property, object, box(Long.class, readLongExpr(readerMode))));
+  }
+
+  private static Expression readEnum(
+      JsonCodecBuilder builder, JsonFieldInfo property, int id, int readerMode, Expression object) {
+    return new Expression.If(
+        tryReadNullExpr(readerMode),
+        builder.setNull(property, object),
+        builder.setField(property, object, readEnumValue(property.readRawType(), id, readerMode)));
+  }
+
+  private static Expression readResolvedField(
+      JsonCodecBuilder builder, JsonFieldInfo property, int id, int readerMode, Expression object) {
+    return builder.setField(property, object, readResolvedValue(property, id, readerMode));
+  }
+
+  private static Expression readObject(
+      JsonCodecBuilder builder,
       Class<?> type,
       JsonFieldInfo property,
       int id,
-      String indent,
-      int readerMode) {
+      int readerMode,
+      Expression object) {
     if (property.readRawType() == Object.class
         || !(property.readTypeInfo().codec() instanceof BaseObjectCodec)) {
-      code.append(indent)
-          .append("object[")
-          .append(id)
-          .append("] = p")
-          .append(id)
-          .append(".readValue(reader, typeResolver);\n");
-      return;
+      return new Expression.Invoke(
+          fieldRef("p" + id, JsonFieldInfo.class),
+          "read",
+          readerRef(readerMode),
+          object,
+          typeResolverRef());
     }
-    code.append(indent).append("if (").append(tryReadNullCall(readerMode)).append(") {\n");
-    code.append(indent).append("  object[").append(id).append("] = null;\n");
-    code.append(indent).append("} else {\n");
-    String codec = property.readRawType() == type ? "owner" : "c" + id;
-    code.append(indent)
-        .append("  object[")
-        .append(id)
-        .append("] = ")
-        .append(codec)
-        .append(".")
-        .append(readObjectMethod(readerMode))
-        .append("(reader, t")
-        .append(id)
-        .append(", typeResolver);\n");
-    code.append(indent).append("}\n");
+    return new Expression.If(
+        tryReadNullExpr(readerMode),
+        builder.setNull(property, object),
+        builder.setField(property, object, readObjectValue(type, property, id, readerMode)));
   }
 
-  private static void readBoolean(
-      JsonCodecBuilder builder,
-      StringBuilder code,
-      JsonFieldInfo property,
-      Class<?> rawType,
-      int id,
-      String indent,
-      int readerMode) {
-    if (rawType.isPrimitive()) {
-      builder.appendSetField(
-          code, property, "object", readBooleanCall(readerMode), TypeRef.of(boolean.class), indent);
-      return;
+  private static Expression assignRecord(Expression object, int id, Expression value) {
+    return new Expression.AssignArrayElem(object, value, Expression.Literal.ofInt(id));
+  }
+
+  private static Expression box(Class<?> boxedType, Expression value) {
+    return new Expression.StaticInvoke(
+        boxedType, "valueOf", "", TypeRef.of(boxedType), false, true, false, value);
+  }
+
+  private static Expression readEnumValue(Class<?> enumType, int id, int readerMode) {
+    return new Expression.Cast(
+        new Expression.Invoke(
+            fieldRef("r" + id, JsonCodec.class),
+            readEnumMethod(readerMode),
+            "",
+            TypeRef.of(Object.class),
+            true,
+            false,
+            readerRef(readerMode)),
+        TypeRef.of(enumType));
+  }
+
+  private static Expression readResolvedValue(JsonFieldInfo property, int id, int readerMode) {
+    return new Expression.Cast(
+        new Expression.Invoke(
+            fieldRef("r" + id, JsonCodec.class),
+            readObjectMethod(readerMode),
+            TypeRef.of(Object.class),
+            true,
+            readerRef(readerMode),
+            fieldRef("t" + id, JsonTypeInfo.class),
+            typeResolverRef()),
+        TypeRef.of(property.readRawType()));
+  }
+
+  private static Expression readObjectValue(
+      Class<?> type, JsonFieldInfo property, int id, int readerMode) {
+    Expression codec =
+        property.readRawType() == type ? ownerRef() : fieldRef("c" + id, BaseObjectCodec.class);
+    return new Expression.Cast(
+        new Expression.Invoke(
+            codec,
+            readObjectMethod(readerMode),
+            TypeRef.of(Object.class),
+            true,
+            readerRef(readerMode),
+            fieldRef("t" + id, JsonTypeInfo.class),
+            typeResolverRef()),
+        TypeRef.of(property.readRawType()));
+  }
+
+  private static String readEnumMethod(int readerMode) {
+    switch (readerMode) {
+      case LATIN1_READER:
+        return "readNextLatin1Enum";
+      case UTF16_READER:
+        return "readNextUtf16Enum";
+      case UTF8_READER:
+        return "readNextUtf8Enum";
+      default:
+        return "readEnum";
     }
-    code.append(indent).append("if (").append(tryReadNullCall(readerMode)).append(") {\n");
-    builder.appendSetNull(code, property, "object", indent + "  ");
-    code.append(indent).append("} else {\n");
-    builder.appendSetField(
-        code,
-        property,
-        "object",
-        "Boolean.valueOf(" + readBooleanCall(readerMode) + ")",
-        TypeRef.of(Boolean.class),
-        indent + "  ");
-    code.append(indent).append("}\n");
-  }
-
-  private static void readInt(
-      JsonCodecBuilder builder,
-      StringBuilder code,
-      JsonFieldInfo property,
-      Class<?> rawType,
-      int id,
-      String indent,
-      int readerMode) {
-    if (rawType.isPrimitive()) {
-      builder.appendSetField(
-          code, property, "object", readIntCall(readerMode), TypeRef.of(int.class), indent);
-      return;
-    }
-    code.append(indent).append("if (").append(tryReadNullCall(readerMode)).append(") {\n");
-    builder.appendSetNull(code, property, "object", indent + "  ");
-    code.append(indent).append("} else {\n");
-    builder.appendSetField(
-        code,
-        property,
-        "object",
-        "Integer.valueOf(" + readIntCall(readerMode) + ")",
-        TypeRef.of(Integer.class),
-        indent + "  ");
-    code.append(indent).append("}\n");
-  }
-
-  private static void readLong(
-      JsonCodecBuilder builder,
-      StringBuilder code,
-      JsonFieldInfo property,
-      Class<?> rawType,
-      int id,
-      String indent,
-      int readerMode) {
-    if (rawType.isPrimitive()) {
-      builder.appendSetField(
-          code, property, "object", readLongCall(readerMode), TypeRef.of(long.class), indent);
-      return;
-    }
-    code.append(indent).append("if (").append(tryReadNullCall(readerMode)).append(") {\n");
-    builder.appendSetNull(code, property, "object", indent + "  ");
-    code.append(indent).append("} else {\n");
-    builder.appendSetField(
-        code,
-        property,
-        "object",
-        "Long.valueOf(" + readLongCall(readerMode) + ")",
-        TypeRef.of(Long.class),
-        indent + "  ");
-    code.append(indent).append("}\n");
-  }
-
-  private static void readString(
-      JsonCodecBuilder builder,
-      StringBuilder code,
-      JsonFieldInfo property,
-      int id,
-      String indent,
-      int readerMode) {
-    builder.appendSetField(
-        code, property, "object", readStringCall(readerMode), TypeRef.of(String.class), indent);
-  }
-
-  private static void readEnum(
-      JsonCodecBuilder builder,
-      StringBuilder code,
-      JsonFieldInfo property,
-      int id,
-      String indent,
-      int readerMode) {
-    code.append(indent).append("if (").append(tryReadNullCall(readerMode)).append(") {\n");
-    builder.appendSetNull(code, property, "object", indent + "  ");
-    code.append(indent).append("} else {\n");
-    builder.appendSetField(
-        code,
-        property,
-        "object",
-        "(" + sourceName(property.readRawType()) + ") " + readEnumCall(readerMode, id),
-        TypeRef.of(property.readRawType()),
-        indent + "  ");
-    code.append(indent).append("}\n");
-  }
-
-  private static void readResolvedField(
-      JsonCodecBuilder builder,
-      StringBuilder code,
-      JsonFieldInfo property,
-      int id,
-      String indent,
-      int readerMode) {
-    builder.appendSetField(
-        code,
-        property,
-        "object",
-        "("
-            + sourceName(property.readRawType())
-            + ") r"
-            + id
-            + "."
-            + readObjectMethod(readerMode)
-            + "(reader, t"
-            + id
-            + ", typeResolver)",
-        TypeRef.of(property.readRawType()),
-        indent);
-  }
-
-  private static void readObject(
-      JsonCodecBuilder builder,
-      StringBuilder code,
-      Class<?> type,
-      JsonFieldInfo property,
-      int id,
-      String indent,
-      int readerMode) {
-    if (property.readRawType() == Object.class
-        || !(property.readTypeInfo().codec() instanceof BaseObjectCodec)) {
-      code.append(indent).append("p").append(id).append(".read(reader, object, typeResolver);\n");
-      return;
-    }
-    code.append(indent).append("if (").append(tryReadNullCall(readerMode)).append(") {\n");
-    builder.appendSetNull(code, property, "object", indent + "  ");
-    code.append(indent).append("} else {\n");
-    String codec = property.readRawType() == type ? "owner" : "c" + id;
-    builder.appendSetField(
-        code,
-        property,
-        "object",
-        "("
-            + sourceName(property.readRawType())
-            + ") "
-            + codec
-            + "."
-            + readObjectMethod(readerMode)
-            + "(reader, t"
-            + id
-            + ", typeResolver)",
-        TypeRef.of(property.readRawType()),
-        indent + "  ");
-    code.append(indent).append("}\n");
   }
 
   private static String readObjectMethod(int readerMode) {
@@ -1481,69 +1556,49 @@ public final class JsonCodegen {
     ctx.addImports(StringJsonWriter.class, Utf8JsonWriter.class);
     ctx.extendsClasses(ctx.type(GeneratedObjectWriter.class));
     ctx.implementsInterfaces(ctx.type(utf8 ? Utf8ObjectWriter.class : StringObjectWriter.class));
-    String typeName = sourceName(type);
     boolean objectStartFused = canFuseObjectStart(properties);
     boolean[] useInfo = new boolean[properties.length];
     boolean[] usePrefix = new boolean[properties.length];
-    StringBuilder constructor = new StringBuilder("super(properties, codecs);\n");
     for (int i = 0; i < properties.length; i++) {
       JsonFieldInfo property = properties[i];
       useInfo[i] = true;
       usePrefix[i] = usesPrefix(property);
       if (useInfo[i]) {
         ctx.addField(JsonFieldInfo.class, "p" + i);
-        constructor.append("this.p").append(i).append(" = properties[").append(i).append("];\n");
       }
       if (usesWriteCodec(property)) {
-        ctx.addField(codecTypeName(property.writeTypeInfo().codec()), "c" + i);
-        constructor
-            .append("this.c")
-            .append(i)
-            .append(" = (")
-            .append(codecTypeName(property.writeTypeInfo().codec()))
-            .append(") codecs[")
-            .append(i)
-            .append("];\n");
+        ctx.addField(codecFieldType(property.writeTypeInfo().codec()), "c" + i);
       }
       if (usePrefix[i]) {
         if (utf8) {
           ctx.addField(byte[].class, "u" + i);
           ctx.addField(byte[].class, "uc" + i);
-          constructor
-              .append("this.u")
-              .append(i)
-              .append(" = properties[")
-              .append(i)
-              .append("].utf8NamePrefix();\n");
-          constructor
-              .append("this.uc")
-              .append(i)
-              .append(" = properties[")
-              .append(i)
-              .append("].utf8CommaNamePrefix();\n");
         } else {
           ctx.addField(byte[].class, "s" + i);
           ctx.addField(byte[].class, "sc" + i);
-          constructor
-              .append("this.s")
-              .append(i)
-              .append(" = properties[")
-              .append(i)
-              .append("].stringNamePrefix();\n");
-          constructor
-              .append("this.sc")
-              .append(i)
-              .append(" = properties[")
-              .append(i)
-              .append("].stringCommaNamePrefix();\n");
         }
       }
     }
-    ctx.addConstructor(
-        constructor.toString(), JsonFieldInfo[].class, "properties", JsonCodec[].class, "codecs");
-    StringBuilder code = new StringBuilder(4096);
-    writeMethod(builder, code, typeName, properties, utf8, objectStartFused);
-    return appendClassMethods(ctx.genCode(), code.toString());
+    addGeneratedConstructor(
+        ctx,
+        writerConstructorExpression(properties, utf8),
+        JsonFieldInfo[].class,
+        "properties",
+        JsonCodec[].class,
+        "codecs");
+    addGeneratedMethod(
+        ctx,
+        "public",
+        utf8 ? "writeUtf8" : "writeString",
+        writeExpression(builder, type, properties, utf8, objectStartFused),
+        void.class,
+        utf8 ? Utf8JsonWriter.class : StringJsonWriter.class,
+        "writer",
+        Object.class,
+        "value",
+        JsonTypeResolver.class,
+        "typeResolver");
+    return ctx.genCode();
   }
 
   private boolean usesPrefix(JsonFieldInfo property) {
@@ -1552,44 +1607,86 @@ public final class JsonCodegen {
         || writeNullFields && !property.writeRawType().isPrimitive();
   }
 
-  private void writeMethod(
+  private Expression writerConstructorExpression(JsonFieldInfo[] properties, boolean utf8) {
+    Expression.ListExpression expressions = new Expression.ListExpression();
+    Reference propertiesRef = new Reference("properties", TypeRef.of(JsonFieldInfo[].class));
+    Reference codecsRef = new Reference("codecs", TypeRef.of(JsonCodec[].class));
+    expressions.add(new Expression.SuperCall(propertiesRef, codecsRef));
+    for (int i = 0; i < properties.length; i++) {
+      Expression id = Expression.Literal.ofInt(i);
+      Expression property = new Expression.ArrayValue(propertiesRef, id);
+      expressions.add(
+          new Expression.Assign(
+              new Reference("this.p" + i, TypeRef.of(JsonFieldInfo.class)), property));
+      if (usesWriteCodec(properties[i])) {
+        Class<?> codecType = codecFieldType(properties[i].writeTypeInfo().codec());
+        expressions.add(
+            new Expression.Assign(
+                new Reference("this.c" + i, TypeRef.of(codecType)),
+                new Expression.Cast(
+                    new Expression.ArrayValue(codecsRef, id), TypeRef.of(codecType))));
+      }
+      if (usesPrefix(properties[i])) {
+        if (utf8) {
+          expressions.add(
+              new Expression.Assign(
+                  new Reference("this.u" + i, TypeRef.of(byte[].class)),
+                  new Expression.Invoke(property, "utf8NamePrefix", TypeRef.of(byte[].class))));
+          expressions.add(
+              new Expression.Assign(
+                  new Reference("this.uc" + i, TypeRef.of(byte[].class)),
+                  new Expression.Invoke(
+                      property, "utf8CommaNamePrefix", TypeRef.of(byte[].class))));
+        } else {
+          expressions.add(
+              new Expression.Assign(
+                  new Reference("this.s" + i, TypeRef.of(byte[].class)),
+                  new Expression.Invoke(property, "stringNamePrefix", TypeRef.of(byte[].class))));
+          expressions.add(
+              new Expression.Assign(
+                  new Reference("this.sc" + i, TypeRef.of(byte[].class)),
+                  new Expression.Invoke(
+                      property, "stringCommaNamePrefix", TypeRef.of(byte[].class))));
+        }
+      }
+    }
+    return expressions;
+  }
+
+  private Expression writeExpression(
       JsonCodecBuilder builder,
-      StringBuilder code,
-      String typeName,
+      Class<?> type,
       JsonFieldInfo[] properties,
       boolean utf8,
       boolean objectStartFused) {
-    String writerType = utf8 ? "Utf8JsonWriter" : "StringJsonWriter";
-    String method = utf8 ? "writeUtf8" : "writeString";
-    code.append("  public void ")
-        .append(method)
-        .append("(")
-        .append(writerType)
-        .append(" writer, Object value, JsonTypeResolver typeResolver) {\n");
-    code.append("    ")
-        .append(typeName)
-        .append(" object = (")
-        .append(typeName)
-        .append(") value;\n");
+    Expression object =
+        new Expression.Variable(
+            "object",
+            new Expression.Cast(
+                new Reference("value", TypeRef.of(Object.class)), TypeRef.of(type)));
+    Expression.ListExpression expressions = new Expression.ListExpression();
+    expressions.add(object);
+    Expression index = null;
     if (!objectStartFused) {
-      code.append("    writer.writeObjectStart();\n");
-      code.append("    int index = 0;\n");
+      expressions.add(new Expression.Invoke(writerRef(utf8), "writeObjectStart"));
+      index = new Expression.Variable("index", Expression.Literal.ofInt(0));
+      expressions.add(index);
     }
     boolean commaKnown = objectStartFused;
     for (int i = 0; i < properties.length; i++) {
       if (objectStartFused && i == 0) {
-        ValueCode field = builder.fieldValue(properties[i], "object");
-        appendGeneratedCode(code, field.code, "    ");
-        writeObjectStartPrimitive(code, properties[i], field.value, utf8);
+        expressions.add(
+            writeObjectStartPrimitive(
+                properties[i], builder.fieldValue(properties[i], object), utf8));
       } else {
-        writeProp(builder, code, properties[i], i, utf8, commaKnown);
+        expressions.add(writeProp(builder, properties[i], i, utf8, commaKnown, index, object));
       }
       if (writeNullFields || properties[i].writeRawType().isPrimitive()) {
         commaKnown = true;
       }
     }
-    code.append("    writer.writeObjectEnd();\n");
-    code.append("  }\n");
+    expressions.add(new Expression.Invoke(writerRef(utf8), "writeObjectEnd"));
+    return expressions;
   }
 
   private static boolean canFuseObjectStart(JsonFieldInfo[] properties) {
@@ -1607,284 +1704,306 @@ public final class JsonCodegen {
     }
   }
 
-  private static void writeObjectStartPrimitive(
-      StringBuilder code, JsonFieldInfo property, String value, boolean utf8) {
+  private static Expression writeObjectStartPrimitive(
+      JsonFieldInfo property, Expression value, boolean utf8) {
     switch (property.writeKind()) {
       case BYTE:
       case SHORT:
       case INT:
-        code.append("    writer.writeObjectIntField(")
-            .append(utf8 ? "u0, " : "s0, ")
-            .append(value)
-            .append(");\n");
-        return;
+        return new Expression.Invoke(
+            writerRef(utf8), "writeObjectIntField", prefixRef(utf8, false, 0), value);
       case LONG:
-        code.append("    writer.writeObjectLongField(")
-            .append(utf8 ? "u0, " : "s0, ")
-            .append(value)
-            .append(");\n");
-        return;
+        return new Expression.Invoke(
+            writerRef(utf8), "writeObjectLongField", prefixRef(utf8, false, 0), value);
       default:
         throw new ForyJsonException(
             "Unsupported generated object-start kind " + property.writeKind());
     }
   }
 
-  private void writeProp(
+  private Expression writeProp(
       JsonCodecBuilder builder,
-      StringBuilder code,
       JsonFieldInfo property,
       int id,
       boolean utf8,
-      boolean commaKnown) {
-    String prop = "p" + id;
+      boolean commaKnown,
+      Expression index,
+      Expression object) {
     Class<?> rawType = property.writeRawType();
-    String value = "v" + id;
-    ValueCode field = builder.fieldValue(property, "object");
-    appendGeneratedCode(code, field.code, "    ");
     if (rawType.isPrimitive()) {
-      writePrimitive(code, property, prop, field.value, utf8, commaKnown, "    ");
-      return;
+      return writePrimitive(
+          property, id, builder.fieldValue(property, object), utf8, commaKnown, index);
     }
-    code.append("    ");
-    code.append(sourceName(rawType))
-        .append(" ")
-        .append(value)
-        .append(" = ")
-        .append("(")
-        .append(sourceName(rawType))
-        .append(") ")
-        .append(field.value)
-        .append(";\n");
+    Expression value =
+        new Expression.Variable(
+            "v" + id,
+            new Expression.Cast(builder.fieldValue(property, object), TypeRef.of(rawType)));
+    Expression nullValue = new Expression.Null(TypeRef.of(rawType), false);
     if (writeNullFields) {
       if (isPrefixValue(property.writeKind())) {
-        code.append("    if (").append(value).append(" == null) {\n");
-        writeFieldName(code, id, utf8, commaKnown, "      ");
-        code.append("      writer.writeNull();\n");
-        code.append("    } else {\n");
-        writeValue(code, property, prop, value, utf8, commaKnown, "      ");
-        code.append("    }\n");
-      } else {
-        writeFieldName(code, id, utf8, commaKnown, "    ");
-        code.append("    if (").append(value).append(" == null) {\n");
-        code.append("      writer.writeNull();\n");
-        code.append("    } else {\n");
-        writeValue(code, property, prop, value, utf8, commaKnown, "      ");
-        code.append("    }\n");
+        return new Expression.ListExpression(
+            value,
+            new Expression.If(
+                eq(value, nullValue),
+                new Expression.ListExpression(
+                    writeFieldName(id, utf8, commaKnown, index),
+                    new Expression.Invoke(writerRef(utf8), "writeNull")),
+                writeValue(property, id, value, utf8, commaKnown, index)));
       }
-    } else {
-      code.append("    if (").append(value).append(" != null) {\n");
-      if (isPrefixValue(property.writeKind())) {
-        writeValue(code, property, prop, value, utf8, commaKnown, "      ");
-      } else {
-        writeFieldName(code, id, utf8, commaKnown, "      ");
-        writeValue(code, property, prop, value, utf8, commaKnown, "      ");
-      }
-      code.append("    }\n");
+      return new Expression.ListExpression(
+          value,
+          writeFieldName(id, utf8, commaKnown, index),
+          new Expression.If(
+              eq(value, nullValue),
+              new Expression.Invoke(writerRef(utf8), "writeNull"),
+              writeValue(property, id, value, utf8, true, index)));
     }
+    Expression write =
+        isPrefixValue(property.writeKind())
+            ? writeValue(property, id, value, utf8, commaKnown, index)
+            : new Expression.ListExpression(
+                writeFieldName(id, utf8, commaKnown, index),
+                writeValue(property, id, value, utf8, true, index));
+    return new Expression.ListExpression(value, new Expression.If(ne(value, nullValue), write));
   }
 
-  private void writePrimitive(
-      StringBuilder code,
+  private Expression writePrimitive(
       JsonFieldInfo property,
-      String prop,
-      String value,
+      int id,
+      Expression value,
       boolean utf8,
       boolean commaKnown,
-      String indent) {
+      Expression index) {
     switch (property.writeKind()) {
       case BOOLEAN:
-        code.append(indent)
-            .append("writer.writeRawValue(")
-            .append(prop)
-            .append(utf8 ? ".utf8BooleanFieldValue(" : ".stringBooleanFieldValue(")
-            .append(value)
-            .append(commaKnown ? ", true));\n" : ", index != 0));\n");
-        if (!commaKnown) {
-          code.append(indent).append("index++;\n");
-        }
-        return;
+        return writeRawFieldValue(
+            utf8, commaKnown, index, booleanFieldValue(id, value, utf8, commaKnown, index));
       case BYTE:
       case SHORT:
       case INT:
-        writeNumberField(code, prop.substring(1), value, false, utf8, commaKnown, indent);
-        return;
+        return writeNumberField(id, value, false, utf8, commaKnown, index);
       case LONG:
-        writeNumberField(code, prop.substring(1), value, true, utf8, commaKnown, indent);
-        return;
+        return writeNumberField(id, value, true, utf8, commaKnown, index);
       default:
-        writeFieldName(code, Integer.parseInt(prop.substring(1)), utf8, commaKnown, "    ");
-        writePrimitiveScalar(code, property.writeKind(), value, "    ");
+        return new Expression.ListExpression(
+            writeFieldName(id, utf8, commaKnown, index),
+            writePrimitiveScalar(property.writeKind(), value, utf8));
     }
   }
 
-  private static void writeNumberField(
-      StringBuilder code,
-      String id,
-      String value,
+  private static Expression writeNumberField(
+      int id,
+      Expression value,
       boolean longValue,
       boolean utf8,
       boolean commaKnown,
-      String indent) {
+      Expression index) {
     String writerMethod = longValue ? "writeLongField" : "writeIntField";
-    String prefix = utf8 ? "u" : "s";
-    code.append(indent)
-        .append("writer.")
-        .append(writerMethod)
-        .append("(")
-        .append(prefix)
-        .append(id)
-        .append(", ")
-        .append(prefix)
-        .append("c")
-        .append(id)
-        .append(commaKnown ? ", 1, " : ", index++, ")
-        .append(value)
-        .append(");\n");
-  }
-
-  private static void writeStringField(
-      StringBuilder code,
-      String id,
-      String value,
-      boolean utf8,
-      boolean commaKnown,
-      String indent) {
-    String prefix = utf8 ? "u" : "s";
-    code.append(indent)
-        .append("writer.writeStringField(")
-        .append(prefix)
-        .append(id)
-        .append(", ")
-        .append(prefix)
-        .append("c")
-        .append(id)
-        .append(commaKnown ? ", 1, " : ", index++, ")
-        .append(value)
-        .append(");\n");
-  }
-
-  private static void writeFieldName(
-      StringBuilder code, int id, boolean utf8, boolean commaKnown, String indent) {
-    code.append(indent)
-        .append("writer.writeRawValue(")
-        .append(commaKnown ? (utf8 ? "uc" : "sc") : "index == 0 ? " + (utf8 ? "u" : "s"))
-        .append(id)
-        .append(commaKnown ? "" : " : " + (utf8 ? "uc" : "sc") + id)
-        .append(");\n");
+    Expression.ListExpression expressions =
+        new Expression.ListExpression(
+            new Expression.Invoke(
+                writerRef(utf8),
+                writerMethod,
+                prefixRef(utf8, false, id),
+                prefixRef(utf8, true, id),
+                commaIndex(commaKnown, index),
+                value));
     if (!commaKnown) {
-      code.append(indent).append("index++;\n");
+      expressions.add(increment(index));
     }
+    return expressions;
   }
 
-  private void writeValue(
-      StringBuilder code,
+  private static Expression writeStringField(
+      int id, Expression value, boolean utf8, boolean commaKnown, Expression index) {
+    Expression.ListExpression expressions =
+        new Expression.ListExpression(
+            new Expression.Invoke(
+                writerRef(utf8),
+                "writeStringField",
+                prefixRef(utf8, false, id),
+                prefixRef(utf8, true, id),
+                commaIndex(commaKnown, index),
+                value));
+    if (!commaKnown) {
+      expressions.add(increment(index));
+    }
+    return expressions;
+  }
+
+  private static Expression writeFieldName(
+      int id, boolean utf8, boolean commaKnown, Expression index) {
+    Expression prefix =
+        commaKnown
+            ? prefixRef(utf8, true, id)
+            : new Expression.Ternary(
+                eq(index, Expression.Literal.ofInt(0)),
+                prefixRef(utf8, false, id),
+                prefixRef(utf8, true, id),
+                true,
+                TypeRef.of(byte[].class));
+    Expression.ListExpression expressions =
+        new Expression.ListExpression(
+            new Expression.Invoke(writerRef(utf8), "writeRawValue", prefix));
+    if (!commaKnown) {
+      expressions.add(increment(index));
+    }
+    return expressions;
+  }
+
+  private Expression writeValue(
       JsonFieldInfo property,
-      String prop,
-      String value,
+      int id,
+      Expression value,
       boolean utf8,
       boolean commaKnown,
-      String indent) {
+      Expression index) {
     JsonFieldKind kind = property.writeKind();
     switch (kind) {
       case BOOLEAN:
-        code.append(indent)
-            .append("writer.writeRawValue(")
-            .append(prop)
-            .append(utf8 ? ".utf8BooleanFieldValue(" : ".stringBooleanFieldValue(")
-            .append(value)
-            .append(commaKnown ? ".booleanValue(), true));\n" : ".booleanValue(), index != 0));\n");
-        if (!commaKnown) {
-          code.append(indent).append("index++;\n");
-        }
-        return;
+        return writeRawFieldValue(
+            utf8,
+            commaKnown,
+            index,
+            booleanFieldValue(
+                id,
+                new Expression.Invoke(value, "booleanValue", TypeRef.of(boolean.class)).inline(),
+                utf8,
+                commaKnown,
+                index));
       case BYTE:
       case SHORT:
       case INT:
-        writeNumberField(
-            code, prop.substring(1), value + ".intValue()", false, utf8, commaKnown, indent);
-        return;
+        return writeNumberField(
+            id,
+            new Expression.Invoke(value, "intValue", TypeRef.of(int.class)).inline(),
+            false,
+            utf8,
+            commaKnown,
+            index);
       case LONG:
-        writeNumberField(
-            code, prop.substring(1), value + ".longValue()", true, utf8, commaKnown, indent);
-        return;
+        return writeNumberField(
+            id,
+            new Expression.Invoke(value, "longValue", TypeRef.of(long.class)).inline(),
+            true,
+            utf8,
+            commaKnown,
+            index);
       case STRING:
-        writeStringField(code, prop.substring(1), value, utf8, commaKnown, indent);
-        return;
+        return writeStringField(id, value, utf8, commaKnown, index);
       case ENUM:
-        code.append(indent)
-            .append("writer.writeRawValue(")
-            .append(prop)
-            .append(utf8 ? ".utf8EnumFieldValue(" : ".stringEnumFieldValue(")
-            .append(value)
-            .append(commaKnown ? ", true));\n" : ", index != 0));\n");
-        if (!commaKnown) {
-          code.append(indent).append("index++;\n");
-        }
-        return;
+        return writeRawFieldValue(
+            utf8, commaKnown, index, enumFieldValue(id, value, utf8, commaKnown, index));
       case FLOAT:
       case DOUBLE:
       case CHAR:
-        writeScalar(code, kind, value, indent);
-        return;
+        return writeScalar(kind, value, utf8);
       case ARRAY:
       case COLLECTION:
-        writeCodec(code, prop.substring(1), value, utf8, indent);
-        return;
       case MAP:
-        writeCodec(code, prop.substring(1), value, utf8, indent);
-        return;
+        return writeCodec(id, value, utf8);
       default:
-        writeCodec(code, prop.substring(1), value, utf8, indent);
+        return writeCodec(id, value, utf8);
     }
   }
 
-  private static void writeCodec(
-      StringBuilder code, String id, String value, boolean utf8, String indent) {
-    code.append(indent)
-        .append("c")
-        .append(id)
-        .append(".")
-        .append(utf8 ? "writeUtf8" : "writeString")
-        .append("(writer, ")
-        .append(value)
-        .append(", typeResolver);\n");
+  private static Expression writeRawFieldValue(
+      boolean utf8, boolean commaKnown, Expression index, Expression value) {
+    Expression.ListExpression expressions =
+        new Expression.ListExpression(
+            new Expression.Invoke(writerRef(utf8), "writeRawValue", value));
+    if (!commaKnown) {
+      expressions.add(increment(index));
+    }
+    return expressions;
   }
 
-  private void writeScalar(StringBuilder code, JsonFieldKind kind, String value, String indent) {
+  private static Expression booleanFieldValue(
+      int id, Expression value, boolean utf8, boolean commaKnown, Expression index) {
+    return new Expression.Invoke(
+            fieldRef("p" + id, JsonFieldInfo.class),
+            utf8 ? "utf8BooleanFieldValue" : "stringBooleanFieldValue",
+            TypeRef.of(byte[].class),
+            value,
+            commaFlag(commaKnown, index))
+        .inline();
+  }
+
+  private static Expression enumFieldValue(
+      int id, Expression value, boolean utf8, boolean commaKnown, Expression index) {
+    return new Expression.Invoke(
+            fieldRef("p" + id, JsonFieldInfo.class),
+            utf8 ? "utf8EnumFieldValue" : "stringEnumFieldValue",
+            TypeRef.of(byte[].class),
+            value,
+            commaFlag(commaKnown, index))
+        .inline();
+  }
+
+  private static Expression writeCodec(int id, Expression value, boolean utf8) {
+    return new Expression.Invoke(
+        fieldRef("c" + id, JsonCodec.class),
+        utf8 ? "writeUtf8" : "writeString",
+        writerRef(utf8),
+        value,
+        typeResolverRef());
+  }
+
+  private Expression writeScalar(JsonFieldKind kind, Expression value, boolean utf8) {
     switch (kind) {
       case FLOAT:
-        code.append(indent).append("writer.writeFloat(").append(value).append(".floatValue());\n");
-        return;
+        return new Expression.Invoke(
+            writerRef(utf8),
+            "writeFloat",
+            new Expression.Invoke(value, "floatValue", TypeRef.of(float.class)).inline());
       case DOUBLE:
-        code.append(indent)
-            .append("writer.writeDouble(")
-            .append(value)
-            .append(".doubleValue());\n");
-        return;
+        return new Expression.Invoke(
+            writerRef(utf8),
+            "writeDouble",
+            new Expression.Invoke(value, "doubleValue", TypeRef.of(double.class)).inline());
       case CHAR:
-        code.append(indent).append("writer.writeChar(").append(value).append(".charValue());\n");
-        return;
+        return new Expression.Invoke(
+            writerRef(utf8),
+            "writeChar",
+            new Expression.Invoke(value, "charValue", TypeRef.of(char.class)).inline());
       default:
         throw new ForyJsonException("Unsupported generated scalar kind " + kind);
     }
   }
 
-  private void writePrimitiveScalar(
-      StringBuilder code, JsonFieldKind kind, String value, String indent) {
+  private Expression writePrimitiveScalar(JsonFieldKind kind, Expression value, boolean utf8) {
     switch (kind) {
       case FLOAT:
-        code.append(indent).append("writer.writeFloat(").append(value).append(");\n");
-        return;
+        return new Expression.Invoke(writerRef(utf8), "writeFloat", value);
       case DOUBLE:
-        code.append(indent).append("writer.writeDouble(").append(value).append(");\n");
-        return;
+        return new Expression.Invoke(writerRef(utf8), "writeDouble", value);
       case CHAR:
-        code.append(indent).append("writer.writeChar(").append(value).append(");\n");
-        return;
+        return new Expression.Invoke(writerRef(utf8), "writeChar", value);
       default:
         throw new ForyJsonException("Unsupported generated primitive kind " + kind);
     }
+  }
+
+  private static Reference writerRef(boolean utf8) {
+    return new Reference(
+        "writer", TypeRef.of(utf8 ? Utf8JsonWriter.class : StringJsonWriter.class));
+  }
+
+  private static Reference prefixRef(boolean utf8, boolean comma, int id) {
+    String prefix = utf8 ? (comma ? "uc" : "u") : (comma ? "sc" : "s");
+    return fieldRef(prefix + id, byte[].class);
+  }
+
+  private static Expression commaIndex(boolean commaKnown, Expression index) {
+    return commaKnown ? Expression.Literal.ofInt(1) : index;
+  }
+
+  private static Expression commaFlag(boolean commaKnown, Expression index) {
+    return commaKnown ? Expression.Literal.True : ne(index, Expression.Literal.ofInt(0));
+  }
+
+  private static Expression increment(Expression value) {
+    return new Expression.Assign(value, new Expression.Add(value, Expression.Literal.ofInt(1)));
   }
 
   private static boolean isPrefixValue(JsonFieldKind kind) {
@@ -1919,16 +2038,5 @@ public final class JsonCodegen {
   private static boolean isRecordField(JsonFieldInfo property) {
     Field field = property.writeField();
     return field != null && RecordUtils.isRecord(field.getDeclaringClass());
-  }
-
-  private static String sourceName(Class<?> type) {
-    if (type.isArray()) {
-      return sourceName(type.getComponentType()) + "[]";
-    }
-    String name = type.getCanonicalName();
-    if (name == null) {
-      throw new ForyJsonException("Class is not source accessible " + type);
-    }
-    return name;
   }
 }

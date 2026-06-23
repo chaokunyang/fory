@@ -6,7 +6,8 @@ Load `AGENTS.md` first. Do not load every file under `.agents/` by default; read
 
 - `repo-reference.md`: repo layout, protocol overview, compiler notes, and runtime map.
 - `docs-and-formatting.md`: docs, specs, markdown formatting, publishing notes, and generated-artifact rules.
-- `ci-and-pr.md`: GitHub Actions triage, PR expectations, and commit message format.
+- `ci-and-pr.md`: code review workflow, review red flags, validation guidance, GitHub Actions
+  triage, PR expectations, and commit message format.
 - `testing/integration-tests.md`: `integration_tests/` prerequisites, regeneration rules, and commands.
 
 ## Runtime References

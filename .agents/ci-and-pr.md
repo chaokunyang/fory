@@ -58,6 +58,7 @@ Typical flow:
 
 - Protocol, type mapping, xlang, `TypeMeta`, `TypeInfo`, reference tracking, schema evolution, or wire-format changes require the relevant `docs/specification/**` sections.
 - Runtime-specific changes require the matching `.agents/languages/*.md` file.
+- Runtime cleanup or cross-language alignment changes require comparing the changed ownership/API shape to the reference runtimes before judging drift, usually C++ then Rust or Java.
 - Cross-language changes require `.agents/testing/integration-tests.md`.
 - Documentation, public API, benchmark report, or generated-artifact changes require `.agents/docs-and-formatting.md`.
 

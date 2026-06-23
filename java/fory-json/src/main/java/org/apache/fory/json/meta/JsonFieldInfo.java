@@ -33,7 +33,6 @@ import org.apache.fory.json.writer.JsonStringEscaper;
 import org.apache.fory.json.writer.JsonWriter;
 import org.apache.fory.json.writer.StringJsonWriter;
 import org.apache.fory.json.writer.Utf8JsonWriter;
-import org.apache.fory.reflect.FieldAccessor;
 
 public final class JsonFieldInfo {
   private static final int KIND_BOOLEAN = 1;
@@ -198,10 +197,6 @@ public final class JsonFieldInfo {
     return writeAccessor;
   }
 
-  public FieldAccessor writeFieldAccessor() {
-    return writeAccessor.coreAccessor();
-  }
-
   public Type writeElementType() {
     return writeElementType;
   }
@@ -228,6 +223,10 @@ public final class JsonFieldInfo {
 
   public Type readType() {
     return readType;
+  }
+
+  public Field readField() {
+    return readAccessor == null ? null : readAccessor.field();
   }
 
   public Class<?> readRawType() {

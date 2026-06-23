@@ -1071,10 +1071,31 @@ jobs:
         with:
           bazelisk-cache: true
           bazelisk-version: "1.x"
+      - name: Compute Bazel C++ toolchain cache key
+        id: bazel-cpp-toolchain
+        shell: bash
+        run: |
+          {
+            echo "runner-os=${RUNNER_OS}"
+            echo "runner-arch=${RUNNER_ARCH}"
+            if [[ "${RUNNER_OS}" == "macOS" ]]; then
+              xcode-select -p
+              xcrun --sdk macosx --show-sdk-path
+              xcrun --find clang++
+              xcodebuild -version
+            else
+              command -v gcc || true
+              gcc --version || true
+              command -v g++ || true
+              g++ --version || true
+            fi
+          } > bazel-cpp-toolchain-key.txt
+          echo "key=$(shasum -a 256 bazel-cpp-toolchain-key.txt | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
       - name: Cache Bazel repository cache
         uses: actions/cache@v4
         with:
           # setup-bazel uses ~/.bazel on GitHub-hosted runners.
+          # local_config_cc records absolute host compiler and SDK include roots.
           path: |
             ~/.bazel/external
             ~/.cache/bazel/_bazel_*/*/external
@@ -1082,20 +1103,22 @@ jobs:
             ~/Library/Caches/bazel/external
             C:\users\runneradmin\.bazel\external
             C:\users\runneradmin\_bazel_runneradmin\*/external
-          key: bazel-repo-${{ runner.os }}-${{ runner.arch }}-py311-${{ hashFiles('WORKSPACE', '.bazelrc', 'bazel/**') }}
+          key: bazel-repo-${{ runner.os }}-${{ runner.arch }}-py311-${{ steps.bazel-cpp-toolchain.outputs.key }}-${{ hashFiles('MODULE.bazel', 'MODULE.bazel.lock', 'WORKSPACE', '.bazelversion', '.bazelrc', 'bazel/**') }}
           restore-keys: |
-            bazel-repo-${{ runner.os }}-${{ runner.arch }}-py311-
+            bazel-repo-${{ runner.os }}-${{ runner.arch }}-py311-${{ steps.bazel-cpp-toolchain.outputs.key }}-
       - name: Cache Bazel build outputs
         uses: actions/cache@v4
         with:
           # setup-bazel uses ~/.bazel on GitHub-hosted runners.
+          # Keep host toolchain identity in the key so depfiles generated with
+          # one Xcode/SDK path are not restored under another macOS image.
           path: |
             ~/.bazel
             ~/.cache/bazel
             ~/Library/Caches/bazel
             C:\users\runneradmin\.bazel
             C:\users\runneradmin\_bazel_runneradmin
-          key: bazel-build-cpp-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('cpp/**', 'BUILD', 'WORKSPACE') }}
+          key: bazel-build-cpp-${{ runner.os }}-${{ runner.arch }}-${{ steps.bazel-cpp-toolchain.outputs.key }}-${{ hashFiles('cpp/**', 'BUILD', 'WORKSPACE', 'MODULE.bazel', 'MODULE.bazel.lock', '.bazelversion', '.bazelrc', 'bazel/**') }}
       - name: Run C++ CI with Bazel
         run: python ./ci/run_ci.py cpp
       - name: Upload Bazel Test Logs

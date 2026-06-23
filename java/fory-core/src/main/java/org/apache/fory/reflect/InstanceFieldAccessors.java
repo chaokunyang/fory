@@ -36,15 +36,9 @@ import org.apache.fory.platform.internal._UnsafeUtils;
 import org.apache.fory.util.Preconditions;
 import sun.misc.Unsafe;
 
-/**
- * Non-record instance field accessor owner.
- *
- * <p>This class is public only so generated serializers can name {@link InstanceAccessor} as a
- * concrete field type on JDK25+. Callers must still create accessors through {@link
- * FieldAccessor#createAccessor(Field)} so platform dispatch stays centralized.
- */
+/** Non-record instance field accessor owner. */
 @Internal
-public final class InstanceFieldAccessors {
+final class InstanceFieldAccessors {
   private static final int BOOLEAN_ACCESS = 1;
   private static final int BYTE_ACCESS = 2;
   private static final int CHAR_ACCESS = 3;
@@ -119,8 +113,7 @@ public final class InstanceFieldAccessors {
     }
   }
 
-  /** Public only for generated serializers; use {@link FieldAccessor#createAccessor(Field)}. */
-  public static final class InstanceAccessor extends FieldAccessor {
+  static final class InstanceAccessor extends FieldAccessor {
     private static final Unsafe UNSAFE = _UnsafeUtils.UNSAFE;
 
     private final long fieldOffset;

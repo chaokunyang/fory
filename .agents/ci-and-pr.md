@@ -99,6 +99,10 @@ Typical flow:
 
 ## Review Validation Matrix
 
+Canonical runtime-specific command rules live in `.agents/languages/*.md`, and cross-language
+validation rules live in `.agents/testing/integration-tests.md`. This matrix is a review-oriented
+shortcut for spotting missing evidence.
+
 Use the smallest command set that proves the changed behavior. If protocol or xlang behavior changed, require the relevant cross-language tests even when the author did not run them yet.
 For review-only tasks, use this matrix to identify missing verification evidence and recommend
 commands; do not run these commands from a read-only review subagent. Run commands only during an

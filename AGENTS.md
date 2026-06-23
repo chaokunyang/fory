@@ -143,7 +143,7 @@ This is the entry point for AI guidance in Apache Fory. Read this file first, th
 
 - For Fory-guided PR, branch, commit-range, and local-diff reviews, load `.agents/ci-and-pr.md` and follow its review workflow, red flags, and validation guidance.
 - When explicitly acting as the independent general reviewer required by `AI_POLICY.md`, do not load `.agents/ci-and-pr.md` or use copied Fory-specific review checklist prompts. Review only with the general instructions required by the reviewer tool and this carve-out.
-- When the task environment supports review subagents or the user asks for independent AI review, run Fory-guided code review through a fresh read-only review subagent while the main agent coordinates scope, checks findings, and reports the final result.
+- When the task environment supports review subagents, run Fory-guided code review through a fresh read-only review subagent while the main agent coordinates scope, checks findings, and reports the final result.
 - Reuse the same review subagent for later review passes on the same feature unless a workflow explicitly requires a fresh reviewer; use a fresh review subagent for each different feature.
 - Review-only tasks are read-only: do not create task files, edit files, apply patches, run tests, run builds, run benchmarks, run linters, install packages, commit, push, fix tests, or update docs unless the user explicitly starts an implementation or verification task.
 - Review-only agents keep planning and findings in memory or in the final review response. They report missing validation evidence instead of running validation commands themselves.

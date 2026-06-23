@@ -580,27 +580,62 @@ public final class Utf8JsonReader extends JsonReader {
   }
 
   private String readStringToken() {
-    if (position >= input.length || input[position++] != '"') {
+    byte[] bytes = input;
+    int inputLength = bytes.length;
+    if (position >= inputLength || bytes[position++] != '"') {
       throw error("Expected string");
     }
     int start = position;
-    position = scanStringChars(position);
-    while (position < input.length) {
-      int b = input[position++] & 0xFF;
+    int offset = start;
+    int wordEnd = inputLength - Long.BYTES;
+    while (offset <= wordEnd) {
+      long stopMask = stringStopMask(LittleEndian.getInt64(bytes, offset));
+      if (stopMask == 0) {
+        offset += Long.BYTES;
+        continue;
+      }
+      int stop = offset + (Long.numberOfTrailingZeros(stopMask) >>> 3);
+      int b = bytes[stop] & 0xFF;
       if (b == '"') {
-        return newLatin1String(start, position - 1);
-      } else if (b == '\\') {
-        StringBuilder builder = new StringBuilder(input.length - start);
-        appendAscii(builder, start, position - 1);
+        position = stop + 1;
+        return newLatin1String(start, stop);
+      }
+      position = stop + 1;
+      if (b == '\\') {
+        StringBuilder builder = new StringBuilder(inputLength - start);
+        appendAscii(builder, start, stop);
         appendEscape(builder);
         return readStringTail(builder);
-      } else if (b < 0x20) {
+      }
+      if (b < 0x20) {
         throw error("Control character in string");
-      } else if (b < 0x80) {
-        continue;
-      } else {
-        StringBuilder builder = new StringBuilder(input.length - start);
-        appendAscii(builder, start, position - 1);
+      }
+      StringBuilder builder = new StringBuilder(inputLength - start);
+      appendAscii(builder, start, stop);
+      appendUtf8(builder, b);
+      return readStringTail(builder);
+    }
+    while (offset < inputLength) {
+      int b = bytes[offset++] & 0xFF;
+      if (b == '"') {
+        position = offset;
+        return newLatin1String(start, offset - 1);
+      }
+      if (b == '\\') {
+        position = offset;
+        StringBuilder builder = new StringBuilder(inputLength - start);
+        appendAscii(builder, start, offset - 1);
+        appendEscape(builder);
+        return readStringTail(builder);
+      }
+      if (b < 0x20) {
+        position = offset;
+        throw error("Control character in string");
+      }
+      if (b >= 0x80) {
+        position = offset;
+        StringBuilder builder = new StringBuilder(inputLength - start);
+        appendAscii(builder, start, offset - 1);
         appendUtf8(builder, b);
         return readStringTail(builder);
       }
@@ -608,31 +643,16 @@ public final class Utf8JsonReader extends JsonReader {
     throw error("Unterminated string");
   }
 
-  private int scanStringChars(int offset) {
-    byte[] bytes = input;
-    int end = bytes.length - Long.BYTES;
-    while (offset <= end) {
-      long word = LittleEndian.getInt64(bytes, offset);
-      // The word scan only skips bytes proven safe; the byte loop still owns token termination,
-      // escape handling, and UTF-8 validation once any special byte may be present.
-      if (hasStringStop(word)) {
-        break;
-      }
-      offset += Long.BYTES;
-    }
-    return offset;
+  private static long stringStopMask(long word) {
+    return (word & BYTE_HIGH_BITS)
+        | byteMatchMask(word, QUOTE_BYTES)
+        | byteMatchMask(word, BACKSLASH_BYTES)
+        | ((word - CONTROL_LIMIT_BYTES) & ~word & BYTE_HIGH_BITS);
   }
 
-  private static boolean hasStringStop(long word) {
-    return (word & BYTE_HIGH_BITS) != 0
-        || hasByte(word, QUOTE_BYTES)
-        || hasByte(word, BACKSLASH_BYTES)
-        || ((word - CONTROL_LIMIT_BYTES) & ~word & BYTE_HIGH_BITS) != 0;
-  }
-
-  private static boolean hasByte(long word, long repeatedByte) {
+  private static long byteMatchMask(long word, long repeatedByte) {
     long match = word ^ repeatedByte;
-    return ((match - BYTE_ONES) & ~match & BYTE_HIGH_BITS) != 0;
+    return (match - BYTE_ONES) & ~match & BYTE_HIGH_BITS;
   }
 
   @Override

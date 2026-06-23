@@ -587,51 +587,68 @@ public final class Latin1StringJsonReader extends JsonReader {
   }
 
   private String readStringToken() {
-    if (position >= input.length || input[position++] != '"') {
+    byte[] bytes = input;
+    int inputLength = bytes.length;
+    if (position >= inputLength || bytes[position++] != '"') {
       throw error("Expected string");
     }
     int start = position;
-    position = scanStringChars(position);
-    while (position < input.length) {
-      int ch = input[position++] & 0xFF;
+    int offset = start;
+    int wordEnd = inputLength - Long.BYTES;
+    while (offset <= wordEnd) {
+      long stopMask = stringStopMask(LittleEndian.getInt64(bytes, offset));
+      if (stopMask == 0) {
+        offset += Long.BYTES;
+        continue;
+      }
+      int stop = offset + (Long.numberOfTrailingZeros(stopMask) >>> 3);
+      int ch = bytes[stop] & 0xFF;
       if (ch == '"') {
-        return newLatin1String(start, position - 1);
-      } else if (ch == '\\') {
-        StringBuilder builder = new StringBuilder(input.length - start);
-        appendLatin1(builder, start, position - 1);
+        position = stop + 1;
+        return newLatin1String(start, stop);
+      }
+      position = stop + 1;
+      if (ch == '\\') {
+        StringBuilder builder = new StringBuilder(inputLength - start);
+        appendLatin1(builder, start, stop);
         appendEscape(builder);
         return readStringTail(builder);
-      } else if (ch < 0x20) {
+      }
+      if (ch < 0x20) {
+        throw error("Control character in string");
+      }
+      offset = stop + 1;
+    }
+    while (offset < inputLength) {
+      int ch = bytes[offset++] & 0xFF;
+      if (ch == '"') {
+        position = offset;
+        return newLatin1String(start, offset - 1);
+      }
+      if (ch == '\\') {
+        position = offset;
+        StringBuilder builder = new StringBuilder(inputLength - start);
+        appendLatin1(builder, start, offset - 1);
+        appendEscape(builder);
+        return readStringTail(builder);
+      }
+      if (ch < 0x20) {
+        position = offset;
         throw error("Control character in string");
       }
     }
     throw error("Unterminated string");
   }
 
-  private int scanStringChars(int offset) {
-    byte[] bytes = input;
-    int end = bytes.length - Long.BYTES;
-    while (offset <= end) {
-      long word = LittleEndian.getInt64(bytes, offset);
-      // The word scan only skips bytes proven safe; the byte loop still owns token termination and
-      // validation once any special byte may be present.
-      if (hasStringStop(word)) {
-        break;
-      }
-      offset += Long.BYTES;
-    }
-    return offset;
+  private static long stringStopMask(long word) {
+    return byteMatchMask(word, QUOTE_BYTES)
+        | byteMatchMask(word, BACKSLASH_BYTES)
+        | ((word - CONTROL_LIMIT_BYTES) & ~word & BYTE_HIGH_BITS);
   }
 
-  private static boolean hasStringStop(long word) {
-    return hasByte(word, QUOTE_BYTES)
-        || hasByte(word, BACKSLASH_BYTES)
-        || ((word - CONTROL_LIMIT_BYTES) & ~word & BYTE_HIGH_BITS) != 0;
-  }
-
-  private static boolean hasByte(long word, long repeatedByte) {
+  private static long byteMatchMask(long word, long repeatedByte) {
     long match = word ^ repeatedByte;
-    return ((match - BYTE_ONES) & ~match & BYTE_HIGH_BITS) != 0;
+    return (match - BYTE_ONES) & ~match & BYTE_HIGH_BITS;
   }
 
   @Override

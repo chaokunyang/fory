@@ -156,15 +156,55 @@ public final class Utf16StringJsonReader extends JsonReader {
   }
 
   private int readIntToken() {
-    int start = position;
-    int result = 0;
-    int limit = -Integer.MAX_VALUE;
-    boolean negative = false;
-    if (position < length && charAtFast(position) == '-') {
-      negative = true;
-      limit = Integer.MIN_VALUE;
-      position++;
+    int offset = position;
+    int inputLength = length;
+    if (offset >= inputLength) {
+      throw error("Expected digit");
     }
+    char ch = charAtFast(offset);
+    if (ch == '-') {
+      return readNegativeIntToken(offset);
+    }
+    if (ch == '0') {
+      position = offset + 1;
+      rejectLeadingDigitFast();
+      rejectFractionOrExponentFast();
+      return 0;
+    }
+    if (ch < '1' || ch > '9') {
+      throw error("Expected digit");
+    }
+    int result = ch - '0';
+    offset++;
+    int digitCount = 1;
+    while (offset < inputLength) {
+      ch = charAtFast(offset);
+      if (ch < '0' || ch > '9') {
+        break;
+      }
+      int digit = ch - '0';
+      if (digitCount < 9) {
+        result = result * 10 + digit;
+      } else {
+        long value = (long) result * 10 + digit;
+        if (value > Integer.MAX_VALUE) {
+          position = offset;
+          throw error("Integer overflow");
+        }
+        result = (int) value;
+      }
+      digitCount++;
+      offset++;
+    }
+    position = offset;
+    rejectFractionOrExponentFast();
+    return result;
+  }
+
+  private int readNegativeIntToken(int start) {
+    position = start + 1;
+    int result = 0;
+    int limit = Integer.MIN_VALUE;
     if (position >= length) {
       throw error("Expected digit");
     }
@@ -189,17 +229,14 @@ public final class Utf16StringJsonReader extends JsonReader {
         throw error("Integer overflow");
       }
       result *= 10;
-      if (result < limit + digit) {
+      if (result < Integer.MIN_VALUE + digit) {
         throw error("Integer overflow");
       }
       result -= digit;
       position++;
     }
-    if (start == position || (negative && start + 1 == position)) {
-      throw error("Expected digit");
-    }
     rejectFractionOrExponentFast();
-    return negative ? result : -result;
+    return result;
   }
 
   public long readLongValue() {
@@ -215,15 +252,54 @@ public final class Utf16StringJsonReader extends JsonReader {
   }
 
   private long readLongToken() {
-    int start = position;
-    long result = 0;
-    long limit = -Long.MAX_VALUE;
-    boolean negative = false;
-    if (position < length && charAtFast(position) == '-') {
-      negative = true;
-      limit = Long.MIN_VALUE;
-      position++;
+    int offset = position;
+    int inputLength = length;
+    if (offset >= inputLength) {
+      throw error("Expected digit");
     }
+    char ch = charAtFast(offset);
+    if (ch == '-') {
+      return readNegativeLongToken(offset);
+    }
+    if (ch == '0') {
+      position = offset + 1;
+      rejectLeadingDigitFast();
+      rejectFractionOrExponentFast();
+      return 0;
+    }
+    if (ch < '1' || ch > '9') {
+      throw error("Expected digit");
+    }
+    long result = ch - '0';
+    offset++;
+    int digitCount = 1;
+    while (offset < inputLength) {
+      ch = charAtFast(offset);
+      if (ch < '0' || ch > '9') {
+        break;
+      }
+      int digit = ch - '0';
+      if (digitCount < 18) {
+        result = result * 10 + digit;
+      } else {
+        if (result > (Long.MAX_VALUE - digit) / 10) {
+          position = offset;
+          throw error("Long overflow");
+        }
+        result = result * 10 + digit;
+      }
+      digitCount++;
+      offset++;
+    }
+    position = offset;
+    rejectFractionOrExponentFast();
+    return result;
+  }
+
+  private long readNegativeLongToken(int start) {
+    position = start + 1;
+    long result = 0;
+    long limit = Long.MIN_VALUE;
     if (position >= length) {
       throw error("Expected digit");
     }
@@ -248,17 +324,14 @@ public final class Utf16StringJsonReader extends JsonReader {
         throw error("Long overflow");
       }
       result *= 10;
-      if (result < limit + digit) {
+      if (result < Long.MIN_VALUE + digit) {
         throw error("Long overflow");
       }
       result -= digit;
       position++;
     }
-    if (start == position || (negative && start + 1 == position)) {
-      throw error("Expected digit");
-    }
     rejectFractionOrExponentFast();
-    return negative ? result : -result;
+    return result;
   }
 
   @Override

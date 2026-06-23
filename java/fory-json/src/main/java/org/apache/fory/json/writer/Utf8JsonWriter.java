@@ -41,17 +41,17 @@ public final class Utf8JsonWriter extends JsonWriter {
   private static final long BACKSLASH_BYTES_COMPLEMENT = ~0x5C5C5C5C5C5C5C5CL;
   private static final int INT_BACKSLASH_BYTES_COMPLEMENT = ~0x5C5C5C5C;
   private static final long UTF16_ASCII_MASK = 0xFF80FF80FF80FF80L;
-  private static final byte[] DIGIT_HUNDREDS = new byte[1000];
-  private static final byte[] DIGIT_TENS = new byte[1000];
-  private static final byte[] DIGIT_ONES = new byte[1000];
+  private static final int[] DIGIT_TRIPLES = new int[1000];
   private static final int[] DIGIT_QUADS = new int[10000];
   private static final boolean STRING_BYTES_BACKED = StringSerializer.isBytesBackedString();
 
   static {
     for (int i = 0; i < 1000; i++) {
-      DIGIT_HUNDREDS[i] = (byte) ('0' + i / 100);
-      DIGIT_TENS[i] = (byte) ('0' + (i / 10) % 10);
-      DIGIT_ONES[i] = (byte) ('0' + i % 10);
+      int c0 = '0' + i / 100;
+      int c1 = '0' + (i / 10) % 10;
+      int c2 = '0' + i % 10;
+      int skip = i < 10 ? 2 : i < 100 ? 1 : 0;
+      DIGIT_TRIPLES[i] = skip | (c0 << 8) | (c1 << 16) | (c2 << 24);
     }
     for (int i = 0; i < 10000; i++) {
       int high = i / 100;
@@ -768,6 +768,10 @@ public final class Utf8JsonWriter extends JsonWriter {
     int high = divide10000(value);
     int low = value - high * 10000;
     if (high < 10000) {
+      if (high >= 1000) {
+        position = writePadded8(bytes, pos, high, low);
+        return;
+      }
       pos = writeIntUpTo4(bytes, pos, high);
       position = writePadded4(bytes, pos, low);
       return;
@@ -775,8 +779,7 @@ public final class Utf8JsonWriter extends JsonWriter {
     int top = divide10000(high);
     int middle = high - top * 10000;
     pos = writeIntUpTo4(bytes, pos, top);
-    pos = writePadded4(bytes, pos, middle);
-    position = writePadded4(bytes, pos, low);
+    position = writePadded8(bytes, pos, middle, low);
   }
 
   private static int divide10000(int value) {
@@ -784,28 +787,27 @@ public final class Utf8JsonWriter extends JsonWriter {
   }
 
   private static int writeIntUpTo4(byte[] bytes, int pos, int value) {
-    if (value < 10) {
-      bytes[pos++] = DIGIT_ONES[value];
-    } else if (value < 100) {
-      bytes[pos++] = DIGIT_TENS[value];
-      bytes[pos++] = DIGIT_ONES[value];
-    } else if (value < 1000) {
-      pos = writePadded3(bytes, pos, value);
-    } else {
-      pos = writePadded4(bytes, pos, value);
+    if (value < 1000) {
+      return writeIntUpTo3(bytes, pos, value);
     }
-    return pos;
+    return writePadded4(bytes, pos, value);
   }
 
-  private static int writePadded3(byte[] bytes, int pos, int value) {
-    bytes[pos++] = DIGIT_HUNDREDS[value];
-    bytes[pos++] = DIGIT_TENS[value];
-    bytes[pos++] = DIGIT_ONES[value];
-    return pos;
+  private static int writeIntUpTo3(byte[] bytes, int pos, int value) {
+    int digits = DIGIT_TRIPLES[value];
+    int skip = digits & 0xFF;
+    LittleEndian.putInt32(bytes, pos, digits >>> ((skip + 1) << 3));
+    return pos + 3 - skip;
   }
 
   private static int writePadded4(byte[] bytes, int pos, int value) {
     LittleEndian.putInt32(bytes, pos, DIGIT_QUADS[value]);
     return pos + 4;
+  }
+
+  private static int writePadded8(byte[] bytes, int pos, int high, int low) {
+    long value = (DIGIT_QUADS[high] & 0xFFFFFFFFL) | ((DIGIT_QUADS[low] & 0xFFFFFFFFL) << 32);
+    LittleEndian.putInt64(bytes, pos, value);
+    return pos + 8;
   }
 }

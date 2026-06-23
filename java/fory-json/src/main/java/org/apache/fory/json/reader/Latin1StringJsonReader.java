@@ -28,10 +28,15 @@ import org.apache.fory.serializer.StringSerializer;
 public final class Latin1StringJsonReader extends JsonReader {
   private static final byte[] EMPTY_BYTES = new byte[0];
   private static final long BYTE_ONES = 0x0101010101010101L;
+  private static final int INT_BYTE_ONES = 0x01010101;
   private static final long BYTE_HIGH_BITS = 0x8080808080808080L;
+  private static final int INT_BYTE_HIGH_BITS = 0x80808080;
   private static final long BACKSLASH_BYTES = 0x5c5c5c5c5c5c5c5cL;
+  private static final int INT_BACKSLASH_BYTES = 0x5c5c5c5c;
   private static final long CONTROL_LIMIT_BYTES = 0x2020202020202020L;
+  private static final int INT_CONTROL_LIMIT_BYTES = 0x20202020;
   private static final long QUOTE_BYTES = 0x2222222222222222L;
+  private static final int INT_QUOTE_BYTES = 0x22222222;
 
   private byte[] input;
 
@@ -619,6 +624,30 @@ public final class Latin1StringJsonReader extends JsonReader {
       }
       offset = stop + 1;
     }
+    if (offset + Integer.BYTES <= inputLength) {
+      int stopMask = stringStopMask(LittleEndian.getInt32(bytes, offset));
+      if (stopMask == 0) {
+        offset += Integer.BYTES;
+      } else {
+        int stop = offset + (Integer.numberOfTrailingZeros(stopMask) >>> 3);
+        int ch = bytes[stop] & 0xFF;
+        if (ch == '"') {
+          position = stop + 1;
+          return newLatin1String(start, stop);
+        }
+        position = stop + 1;
+        if (ch == '\\') {
+          StringBuilder builder = new StringBuilder(inputLength - start);
+          appendLatin1(builder, start, stop);
+          appendEscape(builder);
+          return readStringTail(builder);
+        }
+        if (ch < 0x20) {
+          throw error("Control character in string");
+        }
+        offset = stop + 1;
+      }
+    }
     while (offset < inputLength) {
       int ch = bytes[offset++] & 0xFF;
       if (ch == '"') {
@@ -649,6 +678,17 @@ public final class Latin1StringJsonReader extends JsonReader {
   private static long byteMatchMask(long word, long repeatedByte) {
     long match = word ^ repeatedByte;
     return (match - BYTE_ONES) & ~match & BYTE_HIGH_BITS;
+  }
+
+  private static int stringStopMask(int word) {
+    return byteMatchMask(word, INT_QUOTE_BYTES)
+        | byteMatchMask(word, INT_BACKSLASH_BYTES)
+        | ((word - INT_CONTROL_LIMIT_BYTES) & ~word & INT_BYTE_HIGH_BITS);
+  }
+
+  private static int byteMatchMask(int word, int repeatedByte) {
+    int match = word ^ repeatedByte;
+    return (match - INT_BYTE_ONES) & ~match & INT_BYTE_HIGH_BITS;
   }
 
   @Override

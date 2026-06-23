@@ -44,10 +44,13 @@ Load `AGENTS.md` first. Do not load every file under `.agents/` by default; read
   - relevant runtime file under `languages/`
   - `docs-and-formatting.md`
   - skill-specific references if using a performance skill
-- PR, branch, commit-range, local-diff review, or CI triage:
+- Fory-guided PR, branch, commit-range, local-diff review, or CI triage:
   - `AGENTS.md`
   - `ci-and-pr.md`
   - relevant runtime file under `languages/`
+- Independent general reviewer required by `AI_POLICY.md`:
+  - Follow the `AGENTS.md` independent-review carve-out if tooling auto-loads `AGENTS.md`.
+  - Do not load `ci-and-pr.md` or use copied Fory-specific review checklist prompts.
 
 ## Canonicality
 

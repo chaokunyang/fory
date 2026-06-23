@@ -182,7 +182,7 @@ This is the canonical checklist for the PR template AI section.
 - [ ] If `yes`, I can explain and defend all important changes without AI help.
 - [ ] If `yes`, I reviewed AI-assisted code changes line by line before submission.
 - [ ] If `yes`, I completed line-by-line self-review first and fixed issues before requesting AI review.
-- [ ] If `yes`, I ran two fresh AI review agents on the current PR diff or current HEAD after the latest code changes: one Fory-guided reviewer using `AGENTS.md` and `.agents/ci-and-pr.md`, and one independent general reviewer in a separate clean-context review session that followed the `AGENTS.md` independent-review carve-out and was not pointed to `.agents/ci-and-pr.md` or any copied Fory-specific review checklist.
+- [ ] If `yes`, I ran two fresh AI review agents on the current PR diff or current HEAD after the latest code changes: one Fory-guided reviewer using `AGENTS.md` and `.agents/ci-and-pr.md`, and one independent general reviewer in a separate clean-context review session that was not pointed to `.agents/ci-and-pr.md` or any copied Fory-specific review checklist. If the independent reviewer's tooling auto-loaded `AGENTS.md`, it followed the independent-review carve-out there.
 - [ ] If `yes`, I addressed all AI review comments and repeated the review loop until both ai reviewers reported no further actionable comments.
 - [ ] If `yes`, I attached screenshot evidence of the final clean AI review results from both fresh reviewers on the current PR diff or current HEAD after the latest code changes in this PR body.
 - [ ] If `yes`, I ran adequate human verification and recorded evidence (checks run locally or in CI, pass/fail summary, and confirmation I reviewed results).

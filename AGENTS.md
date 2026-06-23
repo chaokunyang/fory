@@ -141,16 +141,9 @@ This is the entry point for AI guidance in Apache Fory. Read this file first, th
 
 ## Code Review Expectations
 
-- Load `.agents/ci-and-pr.md` for PR, branch, commit-range, and local-diff reviews, except when explicitly acting as the independent general reviewer required by `AI_POLICY.md`; that reviewer must avoid `.agents/ci-and-pr.md` and copied Fory-specific review checklist prompts so it remains independent.
-- Review findings must prioritize correctness, data corruption, security, protocol drift, performance regressions, public API growth, architecture drift, missing tests, and docs/spec gaps before style-only feedback.
-- Start reviews by identifying the exact target (`apache/main...HEAD`, PR branch, commit range, or file subset), refreshing `apache/main` when it is the baseline, and inspecting `git diff --stat` before deep patch review.
-- For protocol, xlang, `TypeMeta`, `TypeInfo`, ref tracking, schema evolution, type mapping, or wire-format changes, read the relevant `docs/specification/**` sections before judging behavior.
-- For benchmark or performance changes, review both the benchmark code and generated reports under `docs/benchmarks/**`; treat benchmark-shape changes, payload-specific shortcuts, and unverified performance claims as findings.
-- Check runtime ownership and API shape carefully: do not accept wrappers, carrier objects, pending-state stacks, side caches, mode booleans, one-line forwarding helpers, or public APIs that do not match the owning runtime concept.
-- Cross-language alignment reviews must compare affected runtimes while respecting language idioms; do not copy a reference-runtime bug into another runtime to make behavior appear consistent.
-- Tests must live in the owning subsystem and exercise the changed path directly. Protocol or xlang changes require the relevant cross-language matrix; performance-sensitive changes require benchmark or regression evidence.
-- Review output must list findings first, ordered by severity, with precise file/line evidence, concrete failure mode, and required fix or missing verification. If there are no findings, say so and call out residual risk or test gaps.
-- When the task environment supports review subagents or the user asks for independent AI review, run code review through a fresh read-only review subagent while the main agent coordinates scope, checks findings, and reports the final result.
+- For Fory-guided PR, branch, commit-range, and local-diff reviews, load `.agents/ci-and-pr.md` and follow its review workflow, red flags, and validation guidance.
+- When explicitly acting as the independent general reviewer required by `AI_POLICY.md`, do not load `.agents/ci-and-pr.md` or use copied Fory-specific review checklist prompts. Review only with the general instructions required by the reviewer tool and this carve-out.
+- When the task environment supports review subagents or the user asks for independent AI review, run Fory-guided code review through a fresh read-only review subagent while the main agent coordinates scope, checks findings, and reports the final result.
 - Reuse the same review subagent for later review passes on the same feature unless a workflow explicitly requires a fresh reviewer; use a fresh review subagent for each different feature.
 - Review-only tasks are read-only: do not edit files, apply patches, run tests, run builds, run benchmarks, run linters, install packages, commit, push, fix tests, or update docs unless the user explicitly starts an implementation or verification task.
 

@@ -23,6 +23,7 @@ import static org.testng.Assert.assertEquals;
 import static org.testng.Assert.assertThrows;
 import static org.testng.Assert.assertTrue;
 
+import java.lang.reflect.Field;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.net.MalformedURLException;
@@ -44,6 +45,7 @@ import java.util.Currency;
 import java.util.EnumMap;
 import java.util.EnumSet;
 import java.util.GregorianCalendar;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -64,6 +66,7 @@ import javax.tools.JavaCompiler;
 import javax.tools.ToolProvider;
 import org.apache.fory.json.annotation.JsonIgnore;
 import org.apache.fory.platform.JdkVersion;
+import org.apache.fory.reflect.FieldAccessor;
 import org.apache.fory.reflect.TypeRef;
 import org.apache.fory.serializer.StringSerializer;
 import org.testng.SkipException;
@@ -833,6 +836,26 @@ public class ForyJsonTest {
   }
 
   @Test
+  public void parsedContainersStartSmall() {
+    ForyJson json = ForyJson.builder().build();
+    JSONArray array = json.fromJson("[1]", JSONArray.class);
+    assertEquals(arrayCapacity(array), 1);
+    assertEquals(arrayCapacity(json.fromJson("[]", JSONArray.class)), 0);
+
+    List<Object> list = json.fromJson("[1]", new TypeRef<List<Object>>() {});
+    assertTrue(list instanceof ArrayList);
+    assertEquals(arrayCapacity((ArrayList<?>) list), 1);
+
+    JSONObject object = json.fromJson("{\"x\":1}", JSONObject.class);
+    assertEquals(mapCapacity(object), 2);
+    assertEquals(mapCapacity(json.fromJson("{}", JSONObject.class)), 0);
+
+    Map<String, Object> map = json.fromJson("{\"x\":1}", new TypeRef<Map<String, Object>>() {});
+    assertTrue(map instanceof LinkedHashMap);
+    assertEquals(mapCapacity((LinkedHashMap<?, ?>) map), 2);
+  }
+
+  @Test
   public void writeJsonContainers() {
     ForyJson json = ForyJson.builder().build();
     JSONObject object = new JSONObject();
@@ -1302,6 +1325,26 @@ public class ForyJsonTest {
     char[] chars = new char[length];
     Arrays.fill(chars, ch);
     return new String(chars);
+  }
+
+  private static int arrayCapacity(ArrayList<?> list) {
+    try {
+      Field field = ArrayList.class.getDeclaredField("elementData");
+      Object[] array = (Object[]) FieldAccessor.createAccessor(field).getObject(list);
+      return array.length;
+    } catch (Throwable cause) {
+      throw new SkipException("Cannot inspect ArrayList capacity on this runtime", cause);
+    }
+  }
+
+  private static int mapCapacity(HashMap<?, ?> map) {
+    try {
+      Field field = HashMap.class.getDeclaredField("table");
+      Object[] table = (Object[]) FieldAccessor.createAccessor(field).getObject(map);
+      return table == null ? 0 : table.length;
+    } catch (Throwable cause) {
+      throw new SkipException("Cannot inspect HashMap capacity on this runtime", cause);
+    }
   }
 
   private static Map<String, Object> values() {

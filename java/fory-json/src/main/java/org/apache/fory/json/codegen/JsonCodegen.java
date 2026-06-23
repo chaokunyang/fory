@@ -35,6 +35,7 @@ import org.apache.fory.codegen.Expression;
 import org.apache.fory.codegen.Expression.Reference;
 import org.apache.fory.json.ForyJsonException;
 import org.apache.fory.json.codec.BaseObjectCodec;
+import org.apache.fory.json.codec.CollectionCodec;
 import org.apache.fory.json.codec.GeneratedObjectWriter;
 import org.apache.fory.json.codec.JsonCodec;
 import org.apache.fory.json.codec.Latin1ObjectReader;
@@ -1412,8 +1413,9 @@ public final class JsonCodegen {
         return builder.setField(property, object, readStringExpr(readerMode, tokenValueRead));
       case ENUM:
         return readEnum(builder, property, id, readerMode, object, tokenValueRead);
-      case ARRAY:
       case COLLECTION:
+        return readCollection(builder, property, id, readerMode, object);
+      case ARRAY:
       case MAP:
         return readResolvedField(builder, property, id, readerMode, object);
       case OBJECT:
@@ -1447,8 +1449,9 @@ public final class JsonCodegen {
         return assignRecord(object, id, readStringExpr(readerMode, tokenValueRead));
       case ENUM:
         return readRecordEnum(id, readerMode, object, tokenValueRead);
-      case ARRAY:
       case COLLECTION:
+        return readRecordCollection(property, id, readerMode, object);
+      case ARRAY:
       case MAP:
         return assignRecord(object, id, readResolvedValue(property, id, readerMode));
       case OBJECT:
@@ -1532,6 +1535,17 @@ public final class JsonCodegen {
         assignRecord(object, id, readObjectValue(type, property, id, readerMode)));
   }
 
+  private static Expression readRecordCollection(
+      JsonFieldInfo property, int id, int readerMode, Expression object) {
+    if (readerMode == GENERIC_READER) {
+      return assignRecord(object, id, readResolvedValue(property, id, readerMode));
+    }
+    return new Expression.If(
+        tryReadNullExpr(readerMode),
+        assignRecord(object, id, new Expression.Null(TypeRef.of(property.readRawType()), false)),
+        assignRecord(object, id, readCollectionValue(property, id, readerMode)));
+  }
+
   private static Expression readBoolean(
       JsonCodecBuilder builder,
       JsonFieldInfo property,
@@ -1604,6 +1618,17 @@ public final class JsonCodegen {
     return builder.setField(property, object, readResolvedValue(property, id, readerMode));
   }
 
+  private static Expression readCollection(
+      JsonCodecBuilder builder, JsonFieldInfo property, int id, int readerMode, Expression object) {
+    if (readerMode == GENERIC_READER) {
+      return readResolvedField(builder, property, id, readerMode, object);
+    }
+    return new Expression.If(
+        tryReadNullExpr(readerMode),
+        builder.setNull(property, object),
+        builder.setField(property, object, readCollectionValue(property, id, readerMode)));
+  }
+
   private static Expression readObject(
       JsonCodecBuilder builder,
       Class<?> type,
@@ -1654,6 +1679,19 @@ public final class JsonCodegen {
         new Expression.Invoke(
             fieldRef("r" + id, JsonCodec.class),
             readObjectMethod(readerMode),
+            TypeRef.of(Object.class),
+            true,
+            readerRef(readerMode),
+            fieldRef("t" + id, JsonTypeInfo.class),
+            typeResolverRef()),
+        TypeRef.of(property.readRawType()));
+  }
+
+  private static Expression readCollectionValue(JsonFieldInfo property, int id, int readerMode) {
+    return new Expression.Cast(
+        new Expression.Invoke(
+            fieldRef("r" + id, CollectionCodec.class),
+            readObjectNonNullMethod(readerMode),
             TypeRef.of(Object.class),
             true,
             readerRef(readerMode),

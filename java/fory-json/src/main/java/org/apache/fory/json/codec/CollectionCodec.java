@@ -118,6 +118,15 @@ public abstract class CollectionCodec extends AbstractJsonCodec {
     return factory.newCollection();
   }
 
+  public abstract Object readLatin1NonNull(
+      Latin1StringJsonReader reader, JsonTypeInfo typeInfo, JsonTypeResolver resolver);
+
+  public abstract Object readUtf16NonNull(
+      Utf16StringJsonReader reader, JsonTypeInfo typeInfo, JsonTypeResolver resolver);
+
+  public abstract Object readUtf8NonNull(
+      Utf8JsonReader reader, JsonTypeInfo typeInfo, JsonTypeResolver resolver);
+
   private static void readGeneric(
       JsonReader reader,
       Collection<Object> collection,
@@ -193,6 +202,12 @@ public abstract class CollectionCodec extends AbstractJsonCodec {
       if (reader.tryReadNullToken()) {
         return null;
       }
+      return readLatin1NonNull(reader, typeInfo, resolver);
+    }
+
+    @Override
+    public final Object readLatin1NonNull(
+        Latin1StringJsonReader reader, JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
       Collection<Object> collection = newCollection();
       reader.expectNextToken('[');
       if (!reader.consumeNextToken(']')) {
@@ -209,6 +224,12 @@ public abstract class CollectionCodec extends AbstractJsonCodec {
       if (reader.tryReadNullToken()) {
         return null;
       }
+      return readUtf16NonNull(reader, typeInfo, resolver);
+    }
+
+    @Override
+    public final Object readUtf16NonNull(
+        Utf16StringJsonReader reader, JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
       Collection<Object> collection = newCollection();
       reader.expectNextToken('[');
       if (!reader.consumeNextToken(']')) {
@@ -225,6 +246,12 @@ public abstract class CollectionCodec extends AbstractJsonCodec {
       if (reader.tryReadNullToken()) {
         return null;
       }
+      return readUtf8NonNull(reader, typeInfo, resolver);
+    }
+
+    @Override
+    public final Object readUtf8NonNull(
+        Utf8JsonReader reader, JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
       Collection<Object> collection = newCollection();
       reader.expectNextToken('[');
       if (!reader.consumeNextToken(']')) {
@@ -326,6 +353,12 @@ public abstract class CollectionCodec extends AbstractJsonCodec {
       if (reader.tryReadNullToken()) {
         return null;
       }
+      return readLatin1NonNull(reader, typeInfo, resolver);
+    }
+
+    @Override
+    public Object readLatin1NonNull(
+        Latin1StringJsonReader reader, JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
       Collection<Object> collection = newCollection();
       reader.expectNextToken('[');
       if (!reader.consumeNextToken(']')) {
@@ -342,6 +375,12 @@ public abstract class CollectionCodec extends AbstractJsonCodec {
       if (reader.tryReadNullToken()) {
         return null;
       }
+      return readUtf16NonNull(reader, typeInfo, resolver);
+    }
+
+    @Override
+    public Object readUtf16NonNull(
+        Utf16StringJsonReader reader, JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
       Collection<Object> collection = newCollection();
       reader.expectNextToken('[');
       if (!reader.consumeNextToken(']')) {
@@ -358,6 +397,12 @@ public abstract class CollectionCodec extends AbstractJsonCodec {
       if (reader.tryReadNullToken()) {
         return null;
       }
+      return readUtf8NonNull(reader, typeInfo, resolver);
+    }
+
+    @Override
+    public Object readUtf8NonNull(
+        Utf8JsonReader reader, JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
       Collection<Object> collection = newCollection();
       reader.expectNextToken('[');
       if (!reader.consumeNextToken(']')) {
@@ -449,6 +494,12 @@ public abstract class CollectionCodec extends AbstractJsonCodec {
       if (reader.tryReadNullToken()) {
         return null;
       }
+      return readLatin1NonNull(reader, typeInfo, resolver);
+    }
+
+    @Override
+    public Object readLatin1NonNull(
+        Latin1StringJsonReader reader, JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
       Collection<Object> collection = newCollection();
       reader.expectNextToken('[');
       if (!reader.consumeNextToken(']')) {
@@ -468,6 +519,12 @@ public abstract class CollectionCodec extends AbstractJsonCodec {
       if (reader.tryReadNullToken()) {
         return null;
       }
+      return readUtf16NonNull(reader, typeInfo, resolver);
+    }
+
+    @Override
+    public Object readUtf16NonNull(
+        Utf16StringJsonReader reader, JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
       Collection<Object> collection = newCollection();
       reader.expectNextToken('[');
       if (!reader.consumeNextToken(']')) {
@@ -487,6 +544,12 @@ public abstract class CollectionCodec extends AbstractJsonCodec {
       if (reader.tryReadNullToken()) {
         return null;
       }
+      return readUtf8NonNull(reader, typeInfo, resolver);
+    }
+
+    @Override
+    public Object readUtf8NonNull(
+        Utf8JsonReader reader, JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
       Collection<Object> collection = newCollection();
       reader.expectNextToken('[');
       if (!reader.consumeNextToken(']')) {

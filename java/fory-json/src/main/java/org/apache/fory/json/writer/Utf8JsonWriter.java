@@ -446,6 +446,14 @@ public final class Utf8JsonWriter extends JsonWriter {
       LittleEndian.putInt64(bytes, pos, word);
       pos += 8;
     }
+    if (i + 4 <= length) {
+      int word = LittleEndian.getInt32(value, i);
+      if (isJsonAsciiInt(word)) {
+        LittleEndian.putInt32(bytes, pos, word);
+        pos += 4;
+        i += 4;
+      }
+    }
     for (; i < length; i++) {
       byte ch = value[i];
       if (isJsonAsciiByte(ch)) {

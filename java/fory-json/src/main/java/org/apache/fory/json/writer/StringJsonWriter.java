@@ -503,6 +503,14 @@ public final class StringJsonWriter extends JsonWriter {
       LittleEndian.putInt64(bytes, pos, word);
       pos += 8;
     }
+    if (i + 4 <= length) {
+      int word = LittleEndian.getInt32(value, i);
+      if (isJsonAsciiInt(word)) {
+        LittleEndian.putInt32(bytes, pos, word);
+        pos += 4;
+        i += 4;
+      }
+    }
     while (i < length) {
       byte ch = value[i];
       if (isJsonLatin1Byte(ch)) {

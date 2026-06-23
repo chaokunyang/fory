@@ -385,7 +385,7 @@ public abstract class MapCodec extends AbstractJsonCodec {
         if (element == null) {
           writer.writeNull();
         } else {
-          writer.writeBoolean((Boolean) element);
+          writer.writeBoolean((boolean) element);
         }
       }
       writer.writeObjectEnd();
@@ -409,7 +409,7 @@ public abstract class MapCodec extends AbstractJsonCodec {
         do {
           String key = reader.readString();
           reader.expect(':');
-          map.put(key, reader.tryReadNull() ? null : Boolean.valueOf(reader.readBoolean()));
+          map.put(key, reader.tryReadNull() ? null : reader.readBoolean());
         } while (reader.consume(','));
         reader.expect('}');
       }
@@ -418,17 +418,17 @@ public abstract class MapCodec extends AbstractJsonCodec {
 
     @Override
     Object readLatin1Value(Latin1StringJsonReader reader) {
-      return Boolean.valueOf(reader.readBooleanValue());
+      return reader.readBooleanValue();
     }
 
     @Override
     Object readUtf16Value(Utf16StringJsonReader reader) {
-      return Boolean.valueOf(reader.readBooleanValue());
+      return reader.readBooleanValue();
     }
 
     @Override
     Object readUtf8Value(Utf8JsonReader reader) {
-      return Boolean.valueOf(reader.readBooleanValue());
+      return reader.readBooleanValue();
     }
   }
 
@@ -519,27 +519,27 @@ public abstract class MapCodec extends AbstractJsonCodec {
 
     @Override
     void writeNumber(JsonWriter writer, Object value) {
-      writer.writeInt((Integer) value);
+      writer.writeInt((int) value);
     }
 
     @Override
     Object readNumber(JsonReader reader) {
-      return Integer.valueOf(reader.readInt());
+      return reader.readInt();
     }
 
     @Override
     Object readLatin1Number(Latin1StringJsonReader reader) {
-      return Integer.valueOf(reader.readIntValue());
+      return reader.readIntValue();
     }
 
     @Override
     Object readUtf16Number(Utf16StringJsonReader reader) {
-      return Integer.valueOf(reader.readIntValue());
+      return reader.readIntValue();
     }
 
     @Override
     Object readUtf8Number(Utf8JsonReader reader) {
-      return Integer.valueOf(reader.readIntValue());
+      return reader.readIntValue();
     }
   }
 
@@ -550,27 +550,27 @@ public abstract class MapCodec extends AbstractJsonCodec {
 
     @Override
     void writeNumber(JsonWriter writer, Object value) {
-      writer.writeLong((Long) value);
+      writer.writeLong((long) value);
     }
 
     @Override
     Object readNumber(JsonReader reader) {
-      return Long.valueOf(reader.readLong());
+      return reader.readLong();
     }
 
     @Override
     Object readLatin1Number(Latin1StringJsonReader reader) {
-      return Long.valueOf(reader.readLongValue());
+      return reader.readLongValue();
     }
 
     @Override
     Object readUtf16Number(Utf16StringJsonReader reader) {
-      return Long.valueOf(reader.readLongValue());
+      return reader.readLongValue();
     }
 
     @Override
     Object readUtf8Number(Utf8JsonReader reader) {
-      return Long.valueOf(reader.readLongValue());
+      return reader.readLongValue();
     }
   }
 
@@ -581,27 +581,27 @@ public abstract class MapCodec extends AbstractJsonCodec {
 
     @Override
     void writeNumber(JsonWriter writer, Object value) {
-      writer.writeInt((Short) value);
+      writer.writeInt((short) value);
     }
 
     @Override
     Object readNumber(JsonReader reader) {
-      return Short.valueOf(readShort(reader.readInt()));
+      return readShort(reader.readInt());
     }
 
     @Override
     Object readLatin1Number(Latin1StringJsonReader reader) {
-      return Short.valueOf(readShort(reader.readIntValue()));
+      return readShort(reader.readIntValue());
     }
 
     @Override
     Object readUtf16Number(Utf16StringJsonReader reader) {
-      return Short.valueOf(readShort(reader.readIntValue()));
+      return readShort(reader.readIntValue());
     }
 
     @Override
     Object readUtf8Number(Utf8JsonReader reader) {
-      return Short.valueOf(readShort(reader.readIntValue()));
+      return readShort(reader.readIntValue());
     }
   }
 
@@ -612,27 +612,27 @@ public abstract class MapCodec extends AbstractJsonCodec {
 
     @Override
     void writeNumber(JsonWriter writer, Object value) {
-      writer.writeInt((Byte) value);
+      writer.writeInt((byte) value);
     }
 
     @Override
     Object readNumber(JsonReader reader) {
-      return Byte.valueOf(readByte(reader.readInt()));
+      return readByte(reader.readInt());
     }
 
     @Override
     Object readLatin1Number(Latin1StringJsonReader reader) {
-      return Byte.valueOf(readByte(reader.readIntValue()));
+      return readByte(reader.readIntValue());
     }
 
     @Override
     Object readUtf16Number(Utf16StringJsonReader reader) {
-      return Byte.valueOf(readByte(reader.readIntValue()));
+      return readByte(reader.readIntValue());
     }
 
     @Override
     Object readUtf8Number(Utf8JsonReader reader) {
-      return Byte.valueOf(readByte(reader.readIntValue()));
+      return readByte(reader.readIntValue());
     }
   }
 
@@ -643,12 +643,12 @@ public abstract class MapCodec extends AbstractJsonCodec {
 
     @Override
     void writeNumber(JsonWriter writer, Object value) {
-      writer.writeFloat((Float) value);
+      writer.writeFloat((float) value);
     }
 
     @Override
     Object readNumber(JsonReader reader) {
-      return Float.valueOf(Float.parseFloat(reader.readNumber()));
+      return Float.parseFloat(reader.readNumber());
     }
   }
 
@@ -659,12 +659,12 @@ public abstract class MapCodec extends AbstractJsonCodec {
 
     @Override
     void writeNumber(JsonWriter writer, Object value) {
-      writer.writeDouble((Double) value);
+      writer.writeDouble((double) value);
     }
 
     @Override
     Object readNumber(JsonReader reader) {
-      return Double.valueOf(Double.parseDouble(reader.readNumber()));
+      return Double.parseDouble(reader.readNumber());
     }
   }
 
@@ -906,22 +906,22 @@ public abstract class MapCodec extends AbstractJsonCodec {
 
     @Override
     public String toName(Object key) {
-      return String.valueOf((Integer) key);
+      return String.valueOf((int) key);
     }
 
     @Override
     public Object fromName(String name) {
-      return Integer.valueOf(name);
+      return Integer.parseInt(name);
     }
 
     @Override
     public void writeName(JsonWriter writer, Object key) {
-      writer.writeIntFieldName((Integer) key);
+      writer.writeIntFieldName((int) key);
     }
 
     @Override
     public Object readName(JsonReader reader) {
-      return Integer.valueOf(reader.readFieldNameInt());
+      return reader.readFieldNameInt();
     }
   }
 
@@ -930,22 +930,22 @@ public abstract class MapCodec extends AbstractJsonCodec {
 
     @Override
     public String toName(Object key) {
-      return String.valueOf((Long) key);
+      return String.valueOf((long) key);
     }
 
     @Override
     public Object fromName(String name) {
-      return Long.valueOf(name);
+      return Long.parseLong(name);
     }
 
     @Override
     public void writeName(JsonWriter writer, Object key) {
-      writer.writeLongFieldName((Long) key);
+      writer.writeLongFieldName((long) key);
     }
 
     @Override
     public Object readName(JsonReader reader) {
-      return Long.valueOf(reader.readFieldNameLong());
+      return reader.readFieldNameLong();
     }
   }
 
@@ -954,22 +954,22 @@ public abstract class MapCodec extends AbstractJsonCodec {
 
     @Override
     public String toName(Object key) {
-      return String.valueOf((Short) key);
+      return String.valueOf((short) key);
     }
 
     @Override
     public Object fromName(String name) {
-      return Short.valueOf(readShort(Integer.parseInt(name)));
+      return readShort(Integer.parseInt(name));
     }
 
     @Override
     public void writeName(JsonWriter writer, Object key) {
-      writer.writeIntFieldName((Short) key);
+      writer.writeIntFieldName((short) key);
     }
 
     @Override
     public Object readName(JsonReader reader) {
-      return Short.valueOf(readShort(reader.readFieldNameInt()));
+      return readShort(reader.readFieldNameInt());
     }
   }
 
@@ -978,22 +978,22 @@ public abstract class MapCodec extends AbstractJsonCodec {
 
     @Override
     public String toName(Object key) {
-      return String.valueOf((Byte) key);
+      return String.valueOf((byte) key);
     }
 
     @Override
     public Object fromName(String name) {
-      return Byte.valueOf(readByte(Integer.parseInt(name)));
+      return readByte(Integer.parseInt(name));
     }
 
     @Override
     public void writeName(JsonWriter writer, Object key) {
-      writer.writeIntFieldName((Byte) key);
+      writer.writeIntFieldName((byte) key);
     }
 
     @Override
     public Object readName(JsonReader reader) {
-      return Byte.valueOf(readByte(reader.readFieldNameInt()));
+      return readByte(reader.readFieldNameInt());
     }
   }
 

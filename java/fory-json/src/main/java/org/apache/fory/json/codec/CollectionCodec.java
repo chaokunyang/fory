@@ -591,7 +591,7 @@ public abstract class CollectionCodec extends AbstractJsonCodec {
         if (element == null) {
           writer.writeNull();
         } else {
-          writer.writeBoolean((Boolean) element);
+          writer.writeBoolean((boolean) element);
         }
       }
       writer.writeArrayEnd();
@@ -606,7 +606,7 @@ public abstract class CollectionCodec extends AbstractJsonCodec {
         if (element == null) {
           writer.writeNull();
         } else {
-          writer.writeBoolean((Boolean) element);
+          writer.writeBoolean((boolean) element);
         }
       }
       writer.writeArrayEnd();
@@ -614,22 +614,22 @@ public abstract class CollectionCodec extends AbstractJsonCodec {
 
     @Override
     Object readElement(JsonReader reader) {
-      return Boolean.valueOf(reader.readBoolean());
+      return reader.readBoolean();
     }
 
     @Override
     Object readLatin1Element(Latin1StringJsonReader reader) {
-      return Boolean.valueOf(reader.readNextBooleanValue());
+      return reader.readNextBooleanValue();
     }
 
     @Override
     Object readUtf16Element(Utf16StringJsonReader reader) {
-      return Boolean.valueOf(reader.readNextBooleanValue());
+      return reader.readNextBooleanValue();
     }
 
     @Override
     Object readUtf8Element(Utf8JsonReader reader) {
-      return Boolean.valueOf(reader.readNextBooleanValue());
+      return reader.readNextBooleanValue();
     }
   }
 
@@ -678,27 +678,27 @@ public abstract class CollectionCodec extends AbstractJsonCodec {
 
     @Override
     void writeNumber(JsonWriter writer, Object value) {
-      writer.writeInt((Integer) value);
+      writer.writeInt((int) value);
     }
 
     @Override
     Object readElement(JsonReader reader) {
-      return Integer.valueOf(reader.readInt());
+      return reader.readInt();
     }
 
     @Override
     Object readLatin1Element(Latin1StringJsonReader reader) {
-      return Integer.valueOf(reader.readNextIntValue());
+      return reader.readNextIntValue();
     }
 
     @Override
     Object readUtf16Element(Utf16StringJsonReader reader) {
-      return Integer.valueOf(reader.readNextIntValue());
+      return reader.readNextIntValue();
     }
 
     @Override
     Object readUtf8Element(Utf8JsonReader reader) {
-      return Integer.valueOf(reader.readNextIntValue());
+      return reader.readNextIntValue();
     }
   }
 
@@ -709,27 +709,27 @@ public abstract class CollectionCodec extends AbstractJsonCodec {
 
     @Override
     void writeNumber(JsonWriter writer, Object value) {
-      writer.writeLong((Long) value);
+      writer.writeLong((long) value);
     }
 
     @Override
     Object readElement(JsonReader reader) {
-      return Long.valueOf(reader.readLong());
+      return reader.readLong();
     }
 
     @Override
     Object readLatin1Element(Latin1StringJsonReader reader) {
-      return Long.valueOf(reader.readNextLongValue());
+      return reader.readNextLongValue();
     }
 
     @Override
     Object readUtf16Element(Utf16StringJsonReader reader) {
-      return Long.valueOf(reader.readNextLongValue());
+      return reader.readNextLongValue();
     }
 
     @Override
     Object readUtf8Element(Utf8JsonReader reader) {
-      return Long.valueOf(reader.readNextLongValue());
+      return reader.readNextLongValue();
     }
   }
 
@@ -740,27 +740,27 @@ public abstract class CollectionCodec extends AbstractJsonCodec {
 
     @Override
     void writeNumber(JsonWriter writer, Object value) {
-      writer.writeInt((Short) value);
+      writer.writeInt((short) value);
     }
 
     @Override
     Object readElement(JsonReader reader) {
-      return Short.valueOf(readShort(reader.readInt()));
+      return readShort(reader.readInt());
     }
 
     @Override
     Object readLatin1Element(Latin1StringJsonReader reader) {
-      return Short.valueOf(readShort(reader.readNextIntValue()));
+      return readShort(reader.readNextIntValue());
     }
 
     @Override
     Object readUtf16Element(Utf16StringJsonReader reader) {
-      return Short.valueOf(readShort(reader.readNextIntValue()));
+      return readShort(reader.readNextIntValue());
     }
 
     @Override
     Object readUtf8Element(Utf8JsonReader reader) {
-      return Short.valueOf(readShort(reader.readNextIntValue()));
+      return readShort(reader.readNextIntValue());
     }
   }
 
@@ -771,27 +771,27 @@ public abstract class CollectionCodec extends AbstractJsonCodec {
 
     @Override
     void writeNumber(JsonWriter writer, Object value) {
-      writer.writeInt((Byte) value);
+      writer.writeInt((byte) value);
     }
 
     @Override
     Object readElement(JsonReader reader) {
-      return Byte.valueOf(readByte(reader.readInt()));
+      return readByte(reader.readInt());
     }
 
     @Override
     Object readLatin1Element(Latin1StringJsonReader reader) {
-      return Byte.valueOf(readByte(reader.readNextIntValue()));
+      return readByte(reader.readNextIntValue());
     }
 
     @Override
     Object readUtf16Element(Utf16StringJsonReader reader) {
-      return Byte.valueOf(readByte(reader.readNextIntValue()));
+      return readByte(reader.readNextIntValue());
     }
 
     @Override
     Object readUtf8Element(Utf8JsonReader reader) {
-      return Byte.valueOf(readByte(reader.readNextIntValue()));
+      return readByte(reader.readNextIntValue());
     }
   }
 
@@ -802,12 +802,12 @@ public abstract class CollectionCodec extends AbstractJsonCodec {
 
     @Override
     void writeNumber(JsonWriter writer, Object value) {
-      writer.writeFloat((Float) value);
+      writer.writeFloat((float) value);
     }
 
     @Override
     Object readElement(JsonReader reader) {
-      return Float.valueOf(Float.parseFloat(reader.readNumber()));
+      return Float.parseFloat(reader.readNumber());
     }
   }
 
@@ -818,12 +818,12 @@ public abstract class CollectionCodec extends AbstractJsonCodec {
 
     @Override
     void writeNumber(JsonWriter writer, Object value) {
-      writer.writeDouble((Double) value);
+      writer.writeDouble((double) value);
     }
 
     @Override
     Object readElement(JsonReader reader) {
-      return Double.valueOf(Double.parseDouble(reader.readNumber()));
+      return Double.parseDouble(reader.readNumber());
     }
   }
 

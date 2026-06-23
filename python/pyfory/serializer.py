@@ -1252,7 +1252,18 @@ class ReduceSerializer(Serializer):
             raise ValueError(f"Invalid reduce data format flag: {reduce_data[0]}")
 
 
-__skip_class_attr_names__ = ("__module__", "__qualname__", "__dict__", "__weakref__")
+# Python 3.14 stores lazy class annotations in an internal function that closes
+# over the class namespace. Serialize materialized annotations instead so the
+# class dictionary does not contain a self-reference through that closure.
+__skip_class_attr_names__ = (
+    "__module__",
+    "__qualname__",
+    "__dict__",
+    "__weakref__",
+    "__annotate__",
+    "__annotate_func__",
+    "__annotations_cache__",
+)
 
 
 class TypeSerializer(Serializer):
@@ -1315,6 +1326,14 @@ class TypeSerializer(Serializer):
             write_context.write_string(attr_names[i])
             class_method = class_methods[i]
             write_context.write_ref(class_method.__func__)
+
+        if (
+            "__annotations__" in cls.__dict__
+            or "__annotations_cache__" in cls.__dict__
+            or "__annotate__" in cls.__dict__
+            or "__annotate_func__" in cls.__dict__
+        ):
+            class_dict["__annotations__"] = dict(getattr(cls, "__annotations__", {}))
 
         write_context.write_ref(class_dict)
 

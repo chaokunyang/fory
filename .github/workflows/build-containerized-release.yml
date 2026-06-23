@@ -33,6 +33,7 @@ jobs:
           - cp311-cp311
           - cp312-cp312
           - cp313-cp313
+          - cp314-cp314
     steps:
       - uses: actions/checkout@v5
       - name: Set up Bazel

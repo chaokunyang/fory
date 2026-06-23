@@ -25,7 +25,7 @@ jobs:
     runs-on: windows-latest
     strategy:
       matrix:
-        python-version: ['3.8', '3.9', '3.10', '3.11', '3.12', '3.13']
+        python-version: ['3.8', '3.9', '3.10', '3.11', '3.12', '3.13', '3.14']
     steps:
       - uses: actions/checkout@v5
       - name: Bump version
@@ -71,7 +71,7 @@ jobs:
     runs-on: macos-15
     strategy:
       matrix:
-        python-version: ['3.8', '3.9', '3.10', '3.11', '3.12', '3.13']
+        python-version: ['3.8', '3.9', '3.10', '3.11', '3.12', '3.13', '3.14']
     steps:
       - uses: actions/checkout@v5
       - name: Bump version
@@ -118,7 +118,7 @@ jobs:
     runs-on: macos-15-intel
     strategy:
       matrix:
-        python-version: ['3.8', '3.9', '3.10', '3.11', '3.12', '3.13']
+        python-version: ['3.8', '3.9', '3.10', '3.11', '3.12', '3.13', '3.14']
     steps:
       - uses: actions/checkout@v5
       - name: Bump version
@@ -166,7 +166,7 @@ jobs:
     needs: [build-macos-arm64, build-macos-x86_64]
     strategy:
       matrix:
-        python-version: ['3.8', '3.9', '3.10', '3.11', '3.12', '3.13']
+        python-version: ['3.8', '3.9', '3.10', '3.11', '3.12', '3.13', '3.14']
     steps:
       - uses: actions/setup-python@v5
         with:

@@ -176,8 +176,8 @@ Load this file when changing anything under `java/` or when Java drives a cross-
   trusted-lookup initialization or cold setup, not inside string hot paths.
 - `FieldAccessor` owns field-accessor dispatch. `RecordFieldAccessors` owns record field access,
   and `InstanceFieldAccessors` owns non-record instance field access. Do not reintroduce a
-  `FieldAccessorFactory` layer. `InstanceFieldAccessors` is public only so generated serializers
-  can name its concrete nested accessor type; treat it as internal owner code, not user API.
+  `FieldAccessorFactory` layer. Treat `InstanceFieldAccessors` as package-owned implementation
+  code, not user API and not generated-serializer API.
 - Android non-record reflection field access belongs inside the root `InstanceFieldAccessors`
   owner. Do not keep a standalone `ReflectionFieldAccessor`; Java25 never needs that path, and
   record reflection fallback remains record-owned in `RecordFieldAccessors`. Keep `sun.misc.Unsafe`
@@ -196,11 +196,11 @@ Load this file when changing anything under `java/` or when Java drives a cross-
   hot-path try/catch blocks and do not call `FieldAccessor.checkObj`; VarHandle validates null and
   receiver type itself. Root Unsafe offset access may keep a debug-only `assert` receiver check
   because Unsafe does not validate the target object; do not add production receiver checks.
-- JDK25+ generated serializers should store field accessors as concrete
-  `InstanceFieldAccessors.InstanceAccessor` static final fields, initialized once through
-  `FieldAccessor.createAccessor(...)` and a static-init cast. This keeps platform dispatch out of
-  generated read/write hot paths and avoids `FieldAccessor` virtual dispatch on final/private field
-  get/set calls.
+- JDK25+ generated serializers should store per-field `static final VarHandle` fields and call
+  `VarHandleCodegenSupport` typed static helpers directly. Do not use `InstanceAccessor` wrappers,
+  hidden generated accessors, `MethodHandle` bridges, boxed primitive VarHandle calls, or dynamic
+  handle containers in generated read/write hot paths. Final field writes must use this path
+  regardless of public, protected, package, or private visibility.
 - `DefineClass#defineHiddenNestmate` belongs in the root `DefineClass` owner. Do not add a Java25
   overlay only to call `Lookup#defineHiddenClass` directly, and do not move it to `java9` because
   `Lookup#defineClass` defines normal package classes, not hidden nestmates. Root code must avoid

@@ -72,6 +72,15 @@ public final class MethodWriter {
     }
   }
 
+  private void load(int opcode, int compactOpcodeBase, int slot) {
+    if (slot >= 0 && slot <= 3) {
+      code.putByte(compactOpcodeBase + slot);
+    } else {
+      code.putByte(opcode);
+      code.putByte(slot);
+    }
+  }
+
   public MethodWriter invokespecial(String owner, String name, String descriptor) {
     code.putByte(0xb7);
     code.putShort(constantPool.methodRef(owner, name, descriptor));
@@ -126,14 +135,5 @@ public final class MethodWriter {
     out.putBytes(code.toByteArray());
     out.putShort(0); // exception table
     out.putShort(0); // code attributes
-  }
-
-  private void load(int opcode, int compactOpcodeBase, int slot) {
-    if (slot >= 0 && slot <= 3) {
-      code.putByte(compactOpcodeBase + slot);
-    } else {
-      code.putByte(opcode);
-      code.putByte(slot);
-    }
   }
 }

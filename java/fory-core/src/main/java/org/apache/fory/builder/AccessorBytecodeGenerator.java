@@ -75,6 +75,13 @@ final class AccessorBytecodeGenerator {
     return getterReturnType(field.getType(), hidden);
   }
 
+  private static Class<?> getterReturnType(Class<?> valueType, boolean hidden) {
+    if (hidden || sourcePkgLevelAccessible(valueType)) {
+      return valueType;
+    }
+    return Object.class;
+  }
+
   static boolean sourceSetterAccessible(Field field) {
     Class<?> fieldType = field.getType();
     return !Modifier.isPrivate(field.getModifiers())
@@ -190,13 +197,6 @@ final class AccessorBytecodeGenerator {
             Type.methodDescriptor(returnType, valueType))
         .pop(returnType)
         .returnVoid();
-  }
-
-  private static Class<?> getterReturnType(Class<?> valueType, boolean hidden) {
-    if (hidden || sourcePkgLevelAccessible(valueType)) {
-      return valueType;
-    }
-    return Object.class;
   }
 
   private AccessorBytecodeGenerator() {}

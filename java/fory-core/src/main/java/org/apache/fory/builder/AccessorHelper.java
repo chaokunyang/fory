@@ -82,6 +82,11 @@ public class AccessorHelper {
     return genBytecode(beanClass, false);
   }
 
+  private static byte[] genBytecode(Class<?> beanClass, boolean includePrivate) {
+    return AccessorBytecodeGenerator.generate(
+        beanClass, internalAccessorName(beanClass, includePrivate), includePrivate);
+  }
+
   public static boolean defineAccessorClass(Class<?> beanClass) {
     return defineNormalAccessorClass(beanClass);
   }
@@ -381,11 +386,6 @@ public class AccessorHelper {
     }
   }
 
-  private static byte[] genBytecode(Class<?> beanClass, boolean includePrivate) {
-    return AccessorBytecodeGenerator.generate(
-        beanClass, internalAccessorName(beanClass, includePrivate), includePrivate);
-  }
-
   private static MethodHandle findStaticHandle(
       Class<?> accessorClass, String methodName, MethodType methodType) {
     try {
@@ -446,6 +446,8 @@ public class AccessorHelper {
 
   private static final class AccessorState {
     private final Object lock = new Object();
+    // Generated serializers populate this during native-image analysis; keep fields image-heap
+    // safe and keep the type listed with AccessorHelper in native-image.properties.
     private volatile boolean normalAttempted;
     private volatile boolean normalDefined;
     private volatile Class<?> normalClass;

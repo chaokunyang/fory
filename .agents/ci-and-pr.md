@@ -115,7 +115,7 @@ implementation, CI-fix, or verification task, or when the user explicitly asks f
 - Repo-wide formatting/lint: `bash ci/format.sh --all`
 - Java: from `java/`, `mvn -T16 spotless:check`, `mvn -T16 checkstyle:check`, `mvn -T16 test`, or targeted `mvn -T16 test -Dtest=<Class>#<method>`
 - C#: from `csharp/`, `dotnet format Fory.sln --verify-no-changes`, `dotnet build Fory.sln -c Release --no-restore`, and `dotnet test Fory.sln -c Release`
-- C++: from repo root or `cpp/`, `bazel build //cpp/...` and `bazel test $(bazel query //cpp/...)`; only add `--config=x86_64` on `x86_64` or `amd64`
+- C++: from `cpp/`, `bazel build //cpp/...` and `bazel test $(bazel query //cpp/...)`; only add `--config=x86_64` on `x86_64` or `amd64`
 - Python: from `python/`, `ruff format .`, `ruff check .`, `ENABLE_FORY_CYTHON_SERIALIZATION=0 pytest -v -s .`, and `ENABLE_FORY_CYTHON_SERIALIZATION=1 pytest -v -s .`
 - Rust: from `rust/`, `cargo fmt --check`, `cargo clippy --all-targets --all-features -- -D warnings`, and `cargo test --features tests`
 - Swift: from `swift/`, `swiftlint lint --config .swiftlint.yml`, `swift build`, and `swift test`

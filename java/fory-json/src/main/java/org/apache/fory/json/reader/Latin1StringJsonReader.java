@@ -700,19 +700,22 @@ public final class Latin1StringJsonReader extends JsonReader {
     int nameOffset = offset + 1;
     int quoteOffset = nameOffset + expectedLength;
     if (quoteOffset < bytes.length && bytes[offset] == '"') {
-      // A raw word match proves this exact generated field name. Misses fall through to the
-      // byte parser below, which keeps validation and escaped-name fallback in one owner.
-      if (nameOffset + Long.BYTES <= bytes.length
-          && (LittleEndian.getInt64(bytes, nameOffset) & expectedMask) == expectedHash
-          && bytes[quoteOffset] == '"') {
-        int colonOffset = quoteOffset + 1;
-        if (colonOffset < bytes.length && bytes[colonOffset] == ':') {
-          position = colonOffset + 1;
-        } else {
-          position = colonOffset;
-          expectNextToken(':');
+      if (nameOffset + Long.BYTES <= bytes.length) {
+        if ((LittleEndian.getInt64(bytes, nameOffset) & expectedMask) == expectedHash
+            && bytes[quoteOffset] == '"') {
+          int colonOffset = quoteOffset + 1;
+          if (colonOffset < bytes.length && bytes[colonOffset] == ':') {
+            position = colonOffset + 1;
+          } else {
+            position = colonOffset;
+            expectNextToken(':');
+          }
+          return true;
         }
-        return true;
+        // Full raw-word misses cannot match this generated packed-name probe. Escaped field names
+        // are handled by the hash fallback after this direct probe fails.
+        position = mark;
+        return false;
       }
       offset = nameOffset;
       long value = 0;

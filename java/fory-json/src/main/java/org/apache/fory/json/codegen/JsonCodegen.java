@@ -50,6 +50,7 @@ import org.apache.fory.json.reader.JsonReader;
 import org.apache.fory.json.reader.Latin1StringJsonReader;
 import org.apache.fory.json.reader.Utf16StringJsonReader;
 import org.apache.fory.json.reader.Utf8JsonReader;
+import org.apache.fory.json.resolver.JsonTypeInfo;
 import org.apache.fory.json.resolver.JsonTypeResolver;
 import org.apache.fory.json.writer.StringJsonWriter;
 import org.apache.fory.json.writer.Utf8JsonWriter;
@@ -483,7 +484,10 @@ public final class JsonCodegen {
       if (usesReadCodec(properties[i])) {
         ctx.addField(codecTypeName(properties[i].readTypeInfo().codec()), "r" + i);
       }
-      if (usesReadObjectCodec(properties[i])) {
+      if (usesReadTypeField(properties[i])) {
+        ctx.addField(JsonTypeInfo.class, "t" + i);
+      }
+      if (storesReadObjectCodec(type, properties[i])) {
         ctx.addField(BaseObjectCodec.class, "c" + i);
       }
     }
@@ -505,7 +509,15 @@ public final class JsonCodegen {
             .append(i)
             .append("];\n");
       }
-      if (usesReadObjectCodec(properties[i])) {
+      if (usesReadTypeField(properties[i])) {
+        constructor
+            .append("this.t")
+            .append(i)
+            .append(" = properties[")
+            .append(i)
+            .append("].readTypeInfo();\n");
+      }
+      if (storesReadObjectCodec(type, properties[i])) {
         constructor.append("this.c").append(i).append(" = objectCodecs[").append(i).append("];\n");
       }
     }
@@ -602,7 +614,7 @@ public final class JsonCodegen {
     code.append("          ? expectedIndex\n");
     code.append("          : fieldIndex(fieldHash);\n");
     appendExpect(code, readerMode, ':', "      ");
-    appendFieldSwitch(builder, code, properties, readerMode, "      ", record);
+    appendFieldSwitch(builder, code, type, properties, readerMode, "      ", record);
     code.append("      if (fieldIndex >= 0) {\n");
     code.append("        expectedIndex = fieldIndex + 1;\n");
     code.append("      }\n");
@@ -648,7 +660,8 @@ public final class JsonCodegen {
         code.append("    if (!skip").append(i).append(") {\n");
         indent = "      ";
       }
-      appendFastReadField(builder, code, slowMethod, properties, i, indent, readerMode, record);
+      appendFastReadField(
+          builder, code, slowMethod, type, properties, i, indent, readerMode, record);
       if (i > 0) {
         code.append("    }\n");
       }
@@ -661,6 +674,7 @@ public final class JsonCodegen {
       JsonCodecBuilder builder,
       StringBuilder code,
       String slowMethod,
+      Class<?> type,
       JsonFieldInfo[] properties,
       int index,
       String indent,
@@ -675,22 +689,23 @@ public final class JsonCodegen {
           .append(", ")
           .append(properties[index].name().length())
           .append(")) {\n");
-      readField(builder, code, properties[index], index, indent + "  ", readerMode, record);
+      readField(builder, code, type, properties[index], index, indent + "  ", readerMode, record);
       appendFieldEnd(code, slowMethod, properties.length, index, indent + "  ", readerMode, record);
       code.append(indent).append("} else {\n");
       appendNextDirectFallback(
-          builder, code, slowMethod, properties, index, indent + "  ", readerMode, record);
+          builder, code, slowMethod, type, properties, index, indent + "  ", readerMode, record);
       code.append(indent).append("}\n");
       return;
     }
     appendNextDirectFallback(
-        builder, code, slowMethod, properties, index, indent, readerMode, record);
+        builder, code, slowMethod, type, properties, index, indent, readerMode, record);
   }
 
   private void appendNextDirectFallback(
       JsonCodecBuilder builder,
       StringBuilder code,
       String slowMethod,
+      Class<?> type,
       JsonFieldInfo[] properties,
       int index,
       String indent,
@@ -706,23 +721,26 @@ public final class JsonCodegen {
           .append(", ")
           .append(properties[nextIndex].name().length())
           .append(")) {\n");
-      readField(builder, code, properties[nextIndex], nextIndex, indent + "  ", readerMode, record);
+      readField(
+          builder, code, type, properties[nextIndex], nextIndex, indent + "  ", readerMode, record);
       appendFieldEnd(
           code, slowMethod, properties.length, nextIndex, indent + "  ", readerMode, record);
       code.append(indent).append("  skip").append(nextIndex).append(" = true;\n");
       code.append(indent).append("} else {\n");
       appendHashFallback(
-          builder, code, slowMethod, properties, index, indent + "  ", readerMode, record);
+          builder, code, slowMethod, type, properties, index, indent + "  ", readerMode, record);
       code.append(indent).append("}\n");
       return;
     }
-    appendHashFallback(builder, code, slowMethod, properties, index, indent, readerMode, record);
+    appendHashFallback(
+        builder, code, slowMethod, type, properties, index, indent, readerMode, record);
   }
 
   private void appendHashFallback(
       JsonCodecBuilder builder,
       StringBuilder code,
       String slowMethod,
+      Class<?> type,
       JsonFieldInfo[] properties,
       int index,
       String indent,
@@ -730,13 +748,14 @@ public final class JsonCodegen {
       boolean record) {
     appendFieldHashRead(code, index, indent);
     appendFastReadFieldFromHash(
-        builder, code, slowMethod, properties, index, indent, readerMode, record);
+        builder, code, slowMethod, type, properties, index, indent, readerMode, record);
   }
 
   private void appendFastReadFieldFromHash(
       JsonCodecBuilder builder,
       StringBuilder code,
       String slowMethod,
+      Class<?> type,
       JsonFieldInfo[] properties,
       int index,
       String indent,
@@ -757,7 +776,14 @@ public final class JsonCodegen {
           .append("]) {\n");
       appendExpect(code, readerMode, ':', indent + "    ");
       readField(
-          builder, code, properties[index + 1], index + 1, indent + "    ", readerMode, record);
+          builder,
+          code,
+          type,
+          properties[index + 1],
+          index + 1,
+          indent + "    ",
+          readerMode,
+          record);
       appendFieldEnd(
           code, slowMethod, properties.length, index + 1, indent + "    ", readerMode, record);
       code.append(indent).append("    skip").append(index + 1).append(" = true;\n");
@@ -771,7 +797,7 @@ public final class JsonCodegen {
     }
     code.append(indent).append("} else {\n");
     appendExpect(code, readerMode, ':', indent + "  ");
-    readField(builder, code, properties[index], index, indent + "  ", readerMode, record);
+    readField(builder, code, type, properties[index], index, indent + "  ", readerMode, record);
     appendFieldEnd(code, slowMethod, properties.length, index, indent + "  ", readerMode, record);
     code.append(indent).append("}\n");
   }
@@ -877,7 +903,7 @@ public final class JsonCodegen {
     code.append("          ? expectedIndex\n");
     code.append("          : fieldIndex(fieldHash);\n");
     appendExpect(code, readerMode, ':', "      ");
-    appendFieldSwitch(builder, code, properties, readerMode, "      ", record);
+    appendFieldSwitch(builder, code, type, properties, readerMode, "      ", record);
     code.append("      if (fieldIndex >= 0) {\n");
     code.append("        expectedIndex = fieldIndex + 1;\n");
     code.append("      }\n");
@@ -896,7 +922,7 @@ public final class JsonCodegen {
     code.append("    int fieldIndex = firstFieldIndex;\n");
     code.append("    while (true) {\n");
     appendExpect(code, readerMode, ':', "      ");
-    appendFieldSwitch(builder, code, properties, readerMode, "      ", record);
+    appendFieldSwitch(builder, code, type, properties, readerMode, "      ", record);
     code.append("      if (fieldIndex >= 0) {\n");
     code.append("        expectedIndex = fieldIndex + 1;\n");
     code.append("      }\n");
@@ -916,6 +942,7 @@ public final class JsonCodegen {
   private void appendFieldSwitch(
       JsonCodecBuilder builder,
       StringBuilder code,
+      Class<?> type,
       JsonFieldInfo[] properties,
       int readerMode,
       String indent,
@@ -923,7 +950,7 @@ public final class JsonCodegen {
     code.append(indent).append("switch (fieldIndex) {\n");
     for (int i = 0; i < properties.length; i++) {
       code.append(indent).append("  case ").append(i).append(":\n");
-      readField(builder, code, properties[i], i, indent + "    ", readerMode, record);
+      readField(builder, code, type, properties[i], i, indent + "    ", readerMode, record);
       code.append(indent).append("    break;\n");
     }
     code.append(indent).append("  default:\n");
@@ -1006,22 +1033,41 @@ public final class JsonCodegen {
     }
   }
 
+  private static boolean usesReadTypeField(JsonFieldInfo property) {
+    switch (property.readKind()) {
+      case ARRAY:
+      case COLLECTION:
+      case MAP:
+        return true;
+      case OBJECT:
+        return usesReadObjectCodec(property);
+      default:
+        return false;
+    }
+  }
+
   private static boolean usesReadObjectCodec(JsonFieldInfo property) {
     return property.readKind() == JsonFieldKind.OBJECT
         && property.readRawType() != Object.class
         && property.readTypeInfo().codec() instanceof BaseObjectCodec;
   }
 
+  private static boolean storesReadObjectCodec(Class<?> type, JsonFieldInfo property) {
+    Class<?> nestedType = readNestedType(property);
+    return nestedType != null && nestedType != type;
+  }
+
   private void readField(
       JsonCodecBuilder builder,
       StringBuilder code,
+      Class<?> type,
       JsonFieldInfo property,
       int id,
       String indent,
       int readerMode,
       boolean record) {
     if (record) {
-      readRecordField(code, property, id, indent, readerMode);
+      readRecordField(code, type, property, id, indent, readerMode);
       return;
     }
     Class<?> rawType = property.readRawType();
@@ -1047,7 +1093,7 @@ public final class JsonCodegen {
         readResolvedField(builder, code, property, id, indent, readerMode);
         return;
       case OBJECT:
-        readObject(builder, code, property, id, indent, readerMode);
+        readObject(builder, code, type, property, id, indent, readerMode);
         return;
       default:
         code.append(indent).append("p").append(id).append(".read(reader, object, typeResolver);\n");
@@ -1055,7 +1101,12 @@ public final class JsonCodegen {
   }
 
   private void readRecordField(
-      StringBuilder code, JsonFieldInfo property, int id, String indent, int readerMode) {
+      StringBuilder code,
+      Class<?> type,
+      JsonFieldInfo property,
+      int id,
+      String indent,
+      int readerMode) {
     Class<?> rawType = property.readRawType();
     switch (property.readKind()) {
       case BOOLEAN:
@@ -1079,7 +1130,7 @@ public final class JsonCodegen {
         readRecordResolved(code, id, indent, readerMode);
         return;
       case OBJECT:
-        readRecordObject(code, property, id, indent, readerMode);
+        readRecordObject(code, type, property, id, indent, readerMode);
         return;
       default:
         code.append(indent)
@@ -1191,13 +1242,18 @@ public final class JsonCodegen {
         .append(id)
         .append(".")
         .append(readObjectMethod(readerMode))
-        .append("(reader, p")
+        .append("(reader, t")
         .append(id)
-        .append(".readTypeInfo(), typeResolver);\n");
+        .append(", typeResolver);\n");
   }
 
   private static void readRecordObject(
-      StringBuilder code, JsonFieldInfo property, int id, String indent, int readerMode) {
+      StringBuilder code,
+      Class<?> type,
+      JsonFieldInfo property,
+      int id,
+      String indent,
+      int readerMode) {
     if (property.readRawType() == Object.class
         || !(property.readTypeInfo().codec() instanceof BaseObjectCodec)) {
       code.append(indent)
@@ -1211,20 +1267,17 @@ public final class JsonCodegen {
     code.append(indent).append("if (").append(tryReadNullCall(readerMode)).append(") {\n");
     code.append(indent).append("  object[").append(id).append("] = null;\n");
     code.append(indent).append("} else {\n");
-    code.append(indent)
-        .append("  BaseObjectCodec objectCodec = c")
-        .append(id)
-        .append(" == null ? owner : c")
-        .append(id)
-        .append(";\n");
+    String codec = property.readRawType() == type ? "owner" : "c" + id;
     code.append(indent)
         .append("  object[")
         .append(id)
-        .append("] = objectCodec.")
+        .append("] = ")
+        .append(codec)
+        .append(".")
         .append(readObjectMethod(readerMode))
-        .append("(reader, p")
+        .append("(reader, t")
         .append(id)
-        .append(".readTypeInfo(), typeResolver);\n");
+        .append(", typeResolver);\n");
     code.append(indent).append("}\n");
   }
 
@@ -1354,9 +1407,9 @@ public final class JsonCodegen {
             + id
             + "."
             + readObjectMethod(readerMode)
-            + "(reader, p"
+            + "(reader, t"
             + id
-            + ".readTypeInfo(), typeResolver)",
+            + ", typeResolver)",
         TypeRef.of(property.readRawType()),
         indent);
   }
@@ -1364,6 +1417,7 @@ public final class JsonCodegen {
   private static void readObject(
       JsonCodecBuilder builder,
       StringBuilder code,
+      Class<?> type,
       JsonFieldInfo property,
       int id,
       String indent,
@@ -1376,23 +1430,20 @@ public final class JsonCodegen {
     code.append(indent).append("if (").append(tryReadNullCall(readerMode)).append(") {\n");
     builder.appendSetNull(code, property, "object", indent + "  ");
     code.append(indent).append("} else {\n");
-    code.append(indent)
-        .append("  BaseObjectCodec objectCodec = c")
-        .append(id)
-        .append(" == null ? owner : c")
-        .append(id)
-        .append(";\n");
+    String codec = property.readRawType() == type ? "owner" : "c" + id;
     builder.appendSetField(
         code,
         property,
         "object",
         "("
             + sourceName(property.readRawType())
-            + ") objectCodec."
+            + ") "
+            + codec
+            + "."
             + readObjectMethod(readerMode)
-            + "(reader, p"
+            + "(reader, t"
             + id
-            + ".readTypeInfo(), typeResolver)",
+            + ", typeResolver)",
         TypeRef.of(property.readRawType()),
         indent + "  ");
     code.append(indent).append("}\n");

@@ -79,6 +79,22 @@ public abstract class JsonReader {
     throw error("Expected ',' or '}'");
   }
 
+  public final boolean consumeCommaOrEndArray() {
+    skipWhitespace();
+    if (position < length()) {
+      char ch = charAt(position);
+      if (ch == ',') {
+        position++;
+        return true;
+      }
+      if (ch == ']') {
+        position++;
+        return false;
+      }
+    }
+    throw error("Expected ',' or ']'");
+  }
+
   public final boolean peekNull() {
     skipWhitespace();
     return startsWith("null");

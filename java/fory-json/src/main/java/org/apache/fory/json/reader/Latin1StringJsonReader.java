@@ -122,6 +122,36 @@ public final class Latin1StringJsonReader extends JsonReader {
     throw error("Expected ',' or '}'");
   }
 
+  public boolean consumeNextCommaOrEndArray() {
+    if (position < input.length) {
+      int ch = input[position] & 0xFF;
+      if (ch == ',') {
+        position++;
+        return true;
+      }
+      if (ch == ']') {
+        position++;
+        return false;
+      }
+      if (!isWhitespace(ch)) {
+        throw error("Expected ',' or ']'");
+      }
+    }
+    skipWhitespaceFast();
+    if (position < input.length) {
+      int ch = input[position] & 0xFF;
+      if (ch == ',') {
+        position++;
+        return true;
+      }
+      if (ch == ']') {
+        position++;
+        return false;
+      }
+    }
+    throw error("Expected ',' or ']'");
+  }
+
   public boolean tryReadNullToken() {
     skipWhitespaceFast();
     return tryReadNullLiteral();

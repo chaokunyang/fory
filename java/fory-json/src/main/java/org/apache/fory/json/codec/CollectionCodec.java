@@ -126,8 +126,7 @@ public abstract class CollectionCodec extends AbstractJsonCodec {
     if (!reader.consume(']')) {
       do {
         collection.add(elementCodec.read(reader, elementInfo, resolver));
-      } while (reader.consume(','));
-      reader.expect(']');
+      } while (reader.consumeCommaOrEndArray());
     }
   }
 
@@ -181,8 +180,7 @@ public abstract class CollectionCodec extends AbstractJsonCodec {
       if (!reader.consume(']')) {
         do {
           collection.add(readNullableElement(reader));
-        } while (reader.consume(','));
-        reader.expect(']');
+        } while (reader.consumeCommaOrEndArray());
       }
       return collection;
     }
@@ -198,8 +196,7 @@ public abstract class CollectionCodec extends AbstractJsonCodec {
       if (!reader.consumeNextToken(']')) {
         do {
           collection.add(readNullableLatin1Element(reader));
-        } while (reader.consumeNextToken(','));
-        reader.expectNextToken(']');
+        } while (reader.consumeNextCommaOrEndArray());
       }
       return collection;
     }
@@ -215,8 +212,7 @@ public abstract class CollectionCodec extends AbstractJsonCodec {
       if (!reader.consumeNextToken(']')) {
         do {
           collection.add(readNullableUtf16Element(reader));
-        } while (reader.consumeNextToken(','));
-        reader.expectNextToken(']');
+        } while (reader.consumeNextCommaOrEndArray());
       }
       return collection;
     }
@@ -232,8 +228,7 @@ public abstract class CollectionCodec extends AbstractJsonCodec {
       if (!reader.consumeNextToken(']')) {
         do {
           collection.add(readNullableUtf8Element(reader));
-        } while (reader.consumeNextToken(','));
-        reader.expectNextToken(']');
+        } while (reader.consumeNextCommaOrEndArray());
       }
       return collection;
     }
@@ -334,8 +329,7 @@ public abstract class CollectionCodec extends AbstractJsonCodec {
       if (!reader.consumeNextToken(']')) {
         do {
           collection.add(elementCodec.readLatin1(reader, elementTypeInfo, resolver));
-        } while (reader.consumeNextToken(','));
-        reader.expectNextToken(']');
+        } while (reader.consumeNextCommaOrEndArray());
       }
       return collection;
     }
@@ -351,8 +345,7 @@ public abstract class CollectionCodec extends AbstractJsonCodec {
       if (!reader.consumeNextToken(']')) {
         do {
           collection.add(elementCodec.readUtf16(reader, elementTypeInfo, resolver));
-        } while (reader.consumeNextToken(','));
-        reader.expectNextToken(']');
+        } while (reader.consumeNextCommaOrEndArray());
       }
       return collection;
     }
@@ -368,8 +361,7 @@ public abstract class CollectionCodec extends AbstractJsonCodec {
       if (!reader.consumeNextToken(']')) {
         do {
           collection.add(elementCodec.readUtf8(reader, elementTypeInfo, resolver));
-        } while (reader.consumeNextToken(','));
-        reader.expectNextToken(']');
+        } while (reader.consumeNextCommaOrEndArray());
       }
       return collection;
     }
@@ -444,8 +436,7 @@ public abstract class CollectionCodec extends AbstractJsonCodec {
               reader.tryReadNull()
                   ? null
                   : elementCodec.readNonNull(reader, elementTypeInfo, resolver));
-        } while (reader.consume(','));
-        reader.expect(']');
+        } while (reader.consumeCommaOrEndArray());
       }
       return collection;
     }
@@ -464,8 +455,7 @@ public abstract class CollectionCodec extends AbstractJsonCodec {
               reader.tryReadNextNullToken()
                   ? null
                   : elementCodec.readLatin1NonNull(reader, elementTypeInfo, resolver));
-        } while (reader.consumeNextToken(','));
-        reader.expectNextToken(']');
+        } while (reader.consumeNextCommaOrEndArray());
       }
       return collection;
     }
@@ -484,8 +474,7 @@ public abstract class CollectionCodec extends AbstractJsonCodec {
               reader.tryReadNextNullToken()
                   ? null
                   : elementCodec.readUtf16NonNull(reader, elementTypeInfo, resolver));
-        } while (reader.consumeNextToken(','));
-        reader.expectNextToken(']');
+        } while (reader.consumeNextCommaOrEndArray());
       }
       return collection;
     }
@@ -504,8 +493,7 @@ public abstract class CollectionCodec extends AbstractJsonCodec {
               reader.tryReadNextNullToken()
                   ? null
                   : elementCodec.readUtf8NonNull(reader, elementTypeInfo, resolver));
-        } while (reader.consumeNextToken(','));
-        reader.expectNextToken(']');
+        } while (reader.consumeNextCommaOrEndArray());
       }
       return collection;
     }

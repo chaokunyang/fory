@@ -125,6 +125,37 @@ public final class Utf16StringJsonReader extends JsonReader {
     throw error("Expected ',' or '}'");
   }
 
+  public boolean consumeNextCommaOrEndArray() {
+    int inputLength = length;
+    if (position < inputLength) {
+      char ch = charAtFast(position);
+      if (ch == ',') {
+        position++;
+        return true;
+      }
+      if (ch == ']') {
+        position++;
+        return false;
+      }
+      if (!isWhitespace(ch)) {
+        throw error("Expected ',' or ']'");
+      }
+    }
+    skipWhitespaceFast();
+    if (position < inputLength) {
+      char ch = charAtFast(position);
+      if (ch == ',') {
+        position++;
+        return true;
+      }
+      if (ch == ']') {
+        position++;
+        return false;
+      }
+    }
+    throw error("Expected ',' or ']'");
+  }
+
   public boolean tryReadNullToken() {
     skipWhitespaceFast();
     return tryReadNullLiteral();

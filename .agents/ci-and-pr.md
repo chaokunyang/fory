@@ -1,6 +1,7 @@
 # CI And PR Guidance
 
-Load this file when triaging GitHub Actions, preparing a pull request, or writing commit messages.
+Load this file when reviewing PRs, branches, commit ranges, or local diffs; triaging GitHub
+Actions; preparing a pull request; or writing commit messages.
 
 ## Workflow Pointers
 
@@ -36,6 +37,13 @@ Typical flow:
 - Current-branch fixes should happen in the current workspace. Use extra worktrees for read-only baselines or isolated PR reviews unless the user asks for a separate implementation worktree.
 - Before pushing PR work, verify `git remote -v`, the current branch, and the PR head repository/branch; do not infer push targets from contributor names.
 - Do not stage or commit task scratch files such as `tasks/task-*.md`, `tasks/lessons.md`, or synthesis/plan notes unless the user explicitly asks to version them.
+
+## Review Subagents
+
+- When the task environment supports review subagents or the user asks for independent AI review, perform code review in a fresh read-only review subagent. The main agent coordinates scope, sanity-checks findings, and reports the final review.
+- Reuse the same review subagent for later review passes on the same feature unless the user or workflow requires a fresh reviewer. Start a fresh review subagent for a different feature, PR, issue, branch, commit range, local diff topic, or subsystem review.
+- Keep review subagents read-only. They must not edit files, apply patches, run tests, run builds, run benchmarks, run linters, install packages, commit, push, fix tests, update docs, or perform implementation work.
+- Review subagents report findings or an explicit no-findings result to the caller. The main agent decides whether any separate implementation, CI fixing, or verification task should happen.
 
 ## Review Workflow
 
@@ -91,6 +99,9 @@ Typical flow:
 ## Review Validation Matrix
 
 Use the smallest command set that proves the changed behavior. If protocol or xlang behavior changed, require the relevant cross-language tests even when the author did not run them yet.
+For review-only tasks, use this matrix to identify missing verification evidence and recommend
+commands; do not run these commands from a read-only review subagent. Run commands only during an
+implementation, CI-fix, or verification task, or when the user explicitly asks for command execution.
 
 - Repo-wide formatting/lint: `bash ci/format.sh --all`
 - Java: from `java/`, `mvn -T16 spotless:check`, `mvn -T16 checkstyle:check`, `mvn -T16 test`, or targeted `mvn -T16 test -Dtest=<Class>#<method>`

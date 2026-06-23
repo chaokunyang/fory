@@ -44,7 +44,7 @@ Load `AGENTS.md` first. Do not load every file under `.agents/` by default; read
   - relevant runtime file under `languages/`
   - `docs-and-formatting.md`
   - skill-specific references if using a performance skill
-- PR review or CI triage:
+- PR, branch, commit-range, local-diff review, or CI triage:
   - `AGENTS.md`
   - `ci-and-pr.md`
   - relevant runtime file under `languages/`

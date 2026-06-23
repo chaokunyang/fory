@@ -35,9 +35,9 @@ https://github.com/apache/fory/blob/main/AI_POLICY.md#9-contributor-checklist-fo
 
 - [ ] Substantial AI assistance was used in this PR: `yes` / `no`
 - [ ] If `yes`, I included a completed [AI Contribution Checklist](https://github.com/apache/fory/blob/main/AI_POLICY.md#9-contributor-checklist-for-ai-assisted-prs) in this PR description and the required `AI Usage Disclosure`.
-- [ ] If `yes`, my PR description includes the required `ai_review` summary and screenshot evidence of the final clean AI review results from the Fory-guided reviewer and the independent reviewer on the current PR diff or current HEAD after the latest code changes.
+- [ ] If `yes`, my PR description includes the required `ai_review` summary and screenshot evidence of the final clean AI review results from the Fory-guided reviewer and the independent general reviewer described in `AI_POLICY.md`.
 
-<!-- If substantial AI assistance = `yes`, paste the completed checklist and disclosure block here, including the final ai_review summary and screenshot evidence from the Fory-guided reviewer and the independent reviewer on the current PR diff or current HEAD after the latest code changes. -->
+<!-- If substantial AI assistance = `yes`, paste the completed checklist and disclosure block here, including the final ai_review summary and screenshot evidence from the Fory-guided reviewer and the independent general reviewer described in AI_POLICY.md. -->
 
 ## Does this PR introduce any user-facing change?
 

@@ -92,8 +92,8 @@ For substantial AI assistance, every PR MUST also provide verifiable evidence of
 
 - The contributor personally performs a line-by-line self-review first and fixes all issues found before requesting AI review.
 - The contributor then runs two fresh AI review agents on the current PR diff or current HEAD after the latest code changes:
-  - one reviewer MUST be a Fory-guided reviewer that follows `AGENTS.md` and the review workflow in `.agents/ci-and-pr.md`
-  - one reviewer MUST be an independent general reviewer that is not prompted with the Fory-specific review checklist
+  - one reviewer MUST be a Fory-guided reviewer prompted to follow `AGENTS.md` and the review workflow in `.agents/ci-and-pr.md`
+  - one reviewer MUST be an independent general reviewer in a separate clean-context review session; it MAY follow mandatory repository safety and contribution instructions required by its tooling, but it MUST NOT be pointed to `.agents/ci-and-pr.md` or any copied Fory-specific review checklist. If its tooling auto-loads `AGENTS.md`, it MUST follow the independent-review carve-out there instead of loading `.agents/ci-and-pr.md`.
 - The contributor addresses all actionable comments from both reviewers, reruns both reviewers on the updated diff, and repeats this loop until both reviewers report no further actionable comments.
 - The PR body MUST include the final clean AI review result from both reviewers plus screenshot evidence in the `AI Usage Disclosure`.
 - If the contributor cannot produce this evidence, the PR is not ready for maintainer review.
@@ -182,7 +182,7 @@ This is the canonical checklist for the PR template AI section.
 - [ ] If `yes`, I can explain and defend all important changes without AI help.
 - [ ] If `yes`, I reviewed AI-assisted code changes line by line before submission.
 - [ ] If `yes`, I completed line-by-line self-review first and fixed issues before requesting AI review.
-- [ ] If `yes`, I ran two fresh AI review agents on the current PR diff or current HEAD after the latest code changes: one Fory-guided reviewer using `AGENTS.md` and `.agents/ci-and-pr.md`, and one independent general reviewer not prompted with the Fory-specific review checklist.
+- [ ] If `yes`, I ran two fresh AI review agents on the current PR diff or current HEAD after the latest code changes: one Fory-guided reviewer using `AGENTS.md` and `.agents/ci-and-pr.md`, and one independent general reviewer in a separate clean-context review session that followed the `AGENTS.md` independent-review carve-out and was not pointed to `.agents/ci-and-pr.md` or any copied Fory-specific review checklist.
 - [ ] If `yes`, I addressed all AI review comments and repeated the review loop until both ai reviewers reported no further actionable comments.
 - [ ] If `yes`, I attached screenshot evidence of the final clean AI review results from both fresh reviewers on the current PR diff or current HEAD after the latest code changes in this PR body.
 - [ ] If `yes`, I ran adequate human verification and recorded evidence (checks run locally or in CI, pass/fail summary, and confirmation I reviewed results).

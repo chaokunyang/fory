@@ -7,7 +7,7 @@ This is the entry point for AI guidance in Apache Fory. Read this file first, th
 - `.agents/README.md`: routing table for selective loading.
 - `.agents/repo-reference.md`: repo layout, architecture, compiler notes, and key directories.
 - `.agents/docs-and-formatting.md`: documentation, specification, and markdown rules.
-- `.agents/ci-and-pr.md`: CI triage, PR expectations, and commit conventions.
+- `.agents/ci-and-pr.md`: code review workflow, CI triage, PR expectations, and commit conventions.
 - `.agents/testing/integration-tests.md`: `integration_tests/` prerequisites, regeneration rules, and commands.
 - `docs/security/index.md`: security model index.
 - `docs/security/threat-model.md`: project-level trust boundaries, non-goals,
@@ -141,6 +141,7 @@ This is the entry point for AI guidance in Apache Fory. Read this file first, th
 
 ## Code Review Expectations
 
+- Load `.agents/ci-and-pr.md` for PR, branch, commit-range, and local-diff reviews, except when explicitly acting as the independent general reviewer required by `AI_POLICY.md`; that reviewer must avoid `.agents/ci-and-pr.md` and copied Fory-specific review checklist prompts so it remains independent.
 - Review findings must prioritize correctness, data corruption, security, protocol drift, performance regressions, public API growth, architecture drift, missing tests, and docs/spec gaps before style-only feedback.
 - Start reviews by identifying the exact target (`apache/main...HEAD`, PR branch, commit range, or file subset), refreshing `apache/main` when it is the baseline, and inspecting `git diff --stat` before deep patch review.
 - For protocol, xlang, `TypeMeta`, `TypeInfo`, ref tracking, schema evolution, type mapping, or wire-format changes, read the relevant `docs/specification/**` sections before judging behavior.
@@ -149,7 +150,9 @@ This is the entry point for AI guidance in Apache Fory. Read this file first, th
 - Cross-language alignment reviews must compare affected runtimes while respecting language idioms; do not copy a reference-runtime bug into another runtime to make behavior appear consistent.
 - Tests must live in the owning subsystem and exercise the changed path directly. Protocol or xlang changes require the relevant cross-language matrix; performance-sensitive changes require benchmark or regression evidence.
 - Review output must list findings first, ordered by severity, with precise file/line evidence, concrete failure mode, and required fix or missing verification. If there are no findings, say so and call out residual risk or test gaps.
-- Review-only tasks are read-only: do not edit files, apply patches, commit, push, fix tests, or update docs unless the user explicitly starts an implementation task.
+- When the task environment supports review subagents or the user asks for independent AI review, run code review through a fresh read-only review subagent while the main agent coordinates scope, checks findings, and reports the final result.
+- Reuse the same review subagent for later review passes on the same feature unless a workflow explicitly requires a fresh reviewer; use a fresh review subagent for each different feature.
+- Review-only tasks are read-only: do not edit files, apply patches, run tests, run builds, run benchmarks, run linters, install packages, commit, push, fix tests, or update docs unless the user explicitly starts an implementation or verification task.
 
 ## Shared Validation Expectations
 

@@ -235,8 +235,8 @@ public final class StringJsonWriter extends JsonWriter {
     }
     byte[] prefix = index == 0 ? namePrefix : commaNamePrefix;
     ensure(prefix.length + 5);
-    writeRawNoEnsure(prefix);
-    writeAsciiNoEnsure(value ? "true" : "false");
+    writeRawLatin1NoEnsure(prefix);
+    writeAsciiLatin1NoEnsure(value ? "true" : "false");
   }
 
   public void writeIntField(byte[] namePrefix, byte[] commaNamePrefix, int index, int value) {
@@ -256,7 +256,7 @@ public final class StringJsonWriter extends JsonWriter {
       return;
     }
     ensure(prefix.length + 11);
-    writeRawNoEnsure(prefix);
+    writeRawLatin1NoEnsure(prefix);
     writeIntNoEnsure(value);
   }
 
@@ -269,7 +269,7 @@ public final class StringJsonWriter extends JsonWriter {
     }
     ensure(namePrefix.length + 12);
     buffer[position++] = (byte) '{';
-    writeRawNoEnsure(namePrefix);
+    writeRawLatin1NoEnsure(namePrefix);
     writeIntNoEnsure(value);
   }
 
@@ -290,7 +290,7 @@ public final class StringJsonWriter extends JsonWriter {
       return;
     }
     ensure(prefix.length + 20);
-    writeRawNoEnsure(prefix);
+    writeRawLatin1NoEnsure(prefix);
     writeLongNoEnsure(value);
   }
 
@@ -303,7 +303,7 @@ public final class StringJsonWriter extends JsonWriter {
     }
     ensure(namePrefix.length + 21);
     buffer[position++] = (byte) '{';
-    writeRawNoEnsure(namePrefix);
+    writeRawLatin1NoEnsure(namePrefix);
     writeLongNoEnsure(value);
   }
 
@@ -327,7 +327,7 @@ public final class StringJsonWriter extends JsonWriter {
       return;
     }
     ensure(prefix.length + value.length() * 6 + 2);
-    writeRawNoEnsure(prefix);
+    writeRawLatin1NoEnsure(prefix);
     writeStringNoEnsure(value);
   }
 
@@ -345,7 +345,7 @@ public final class StringJsonWriter extends JsonWriter {
         if (comma != 0) {
           buffer[position++] = ',';
         }
-        writeAsciiNoEnsure("null");
+        writeAsciiLatin1NoEnsure("null");
       }
       return;
     }
@@ -476,7 +476,7 @@ public final class StringJsonWriter extends JsonWriter {
     byte coder = StringSerializer.getStringCoder(value);
     if (StringSerializer.isLatin1Coder(coder)) {
       ensure(prefix.length + bytes.length + 2);
-      writeRawNoEnsure(prefix);
+      writeRawLatin1NoEnsure(prefix);
       writeLatin1StringNoEnsure(bytes);
       return true;
     }
@@ -665,6 +665,13 @@ public final class StringJsonWriter extends JsonWriter {
     }
   }
 
+  private void writeAsciiLatin1NoEnsure(String value) {
+    int length = value.length();
+    for (int i = 0; i < length; i++) {
+      buffer[position++] = (byte) value.charAt(i);
+    }
+  }
+
   private void writeRaw(byte[] bytes) {
     if (utf16) {
       ensureUtf16(bytes.length);
@@ -688,8 +695,19 @@ public final class StringJsonWriter extends JsonWriter {
     }
   }
 
+  private void writeRawLatin1NoEnsure(byte[] bytes) {
+    System.arraycopy(bytes, 0, buffer, position, bytes.length);
+    position += bytes.length;
+  }
+
   private void writeByteRaw(byte value) {
-    writeCharRaw((char) (value & 0xff));
+    if (utf16) {
+      ensureUtf16(1);
+      utf16Buffer[position++] = (char) (value & 0xff);
+    } else {
+      ensure(1);
+      buffer[position++] = value;
+    }
   }
 
   private void writeCharRaw(char value) {
@@ -792,7 +810,7 @@ public final class StringJsonWriter extends JsonWriter {
       return;
     }
     if (value == Integer.MIN_VALUE) {
-      writeRawNoEnsure(MIN_INT_BYTES);
+      writeRawLatin1NoEnsure(MIN_INT_BYTES);
       return;
     }
     if (value < 0) {
@@ -808,7 +826,7 @@ public final class StringJsonWriter extends JsonWriter {
       return;
     }
     if (value == Long.MIN_VALUE) {
-      writeRawNoEnsure(MIN_LONG_BYTES);
+      writeRawLatin1NoEnsure(MIN_LONG_BYTES);
       return;
     }
     if (value < 0) {

@@ -24,10 +24,10 @@ import java.util.Map;
 
 /** Mutable JSON object container for dynamic JSON values. */
 public final class JSONObject extends LinkedHashMap<String, Object> {
-  public JSONObject() {}
-
-  public JSONObject(int initialCapacity) {
-    super(initialCapacity);
+  public JSONObject() {
+    // JSON input has no trusted object size; start from zero to avoid default capacity
+    // amplification for many tiny objects.
+    super(0);
   }
 
   public JSONObject(Map<String, ?> values) {

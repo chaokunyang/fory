@@ -163,7 +163,7 @@ public abstract class MapCodec extends AbstractJsonCodec {
           || SortedMap.class.isAssignableFrom(rawType)) {
         return TreeMap::new;
       }
-      return LinkedHashMap::new;
+      return () -> new LinkedHashMap<>(0);
     }
     return () -> {
       try {

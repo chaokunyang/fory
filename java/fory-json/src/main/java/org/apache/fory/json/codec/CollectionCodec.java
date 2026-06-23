@@ -155,7 +155,7 @@ public abstract class CollectionCodec extends AbstractJsonCodec {
       if (Queue.class.isAssignableFrom(rawType)) {
         return ArrayDeque::new;
       }
-      return ArrayList::new;
+      return () -> new ArrayList<>(0);
     }
     return () -> {
       try {

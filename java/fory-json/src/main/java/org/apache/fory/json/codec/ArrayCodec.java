@@ -628,7 +628,7 @@ public abstract class ArrayCodec extends AbstractJsonCodec {
 
     @Override
     Object readNonNull(JsonReader reader, JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
-      List<Object> values = new ArrayList<>();
+      List<Object> values = new ArrayList<>(0);
       reader.expect('[');
       if (!reader.consume(']')) {
         do {

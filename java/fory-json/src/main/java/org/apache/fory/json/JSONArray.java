@@ -30,6 +30,10 @@ public final class JSONArray extends ArrayList<Object> {
     super(0);
   }
 
+  public JSONArray(int initialCapacity) {
+    super(initialCapacity);
+  }
+
   public JSONArray(Collection<?> values) {
     super(values);
   }

@@ -1502,7 +1502,7 @@ public final class JsonCodegen {
     return new Expression.Cast(
         new Expression.Invoke(
             codec,
-            readObjectMethod(readerMode),
+            readObjectNonNullMethod(readerMode),
             TypeRef.of(Object.class),
             true,
             readerRef(readerMode),
@@ -1532,6 +1532,19 @@ public final class JsonCodegen {
         return "readUtf16";
       case UTF8_READER:
         return "readUtf8";
+      default:
+        return "read";
+    }
+  }
+
+  private static String readObjectNonNullMethod(int readerMode) {
+    switch (readerMode) {
+      case LATIN1_READER:
+        return "readLatin1NonNull";
+      case UTF16_READER:
+        return "readUtf16NonNull";
+      case UTF8_READER:
+        return "readUtf8NonNull";
       default:
         return "read";
     }

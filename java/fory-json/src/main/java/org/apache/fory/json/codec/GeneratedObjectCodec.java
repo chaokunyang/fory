@@ -67,6 +67,12 @@ public final class GeneratedObjectCodec extends BaseObjectCodec {
     if (input.tryReadNullToken()) {
       return null;
     }
+    return readLatin1NonNull(input, typeInfo, resolver);
+  }
+
+  @Override
+  public Object readLatin1NonNull(
+      Latin1StringJsonReader input, JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
     return latin1Reader.readLatin1(input, this, resolver);
   }
 
@@ -76,6 +82,12 @@ public final class GeneratedObjectCodec extends BaseObjectCodec {
     if (input.tryReadNullToken()) {
       return null;
     }
+    return readUtf16NonNull(input, typeInfo, resolver);
+  }
+
+  @Override
+  public Object readUtf16NonNull(
+      Utf16StringJsonReader input, JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
     return utf16Reader.readUtf16(input, this, resolver);
   }
 
@@ -84,6 +96,12 @@ public final class GeneratedObjectCodec extends BaseObjectCodec {
     if (input.tryReadNullToken()) {
       return null;
     }
+    return readUtf8NonNull(input, typeInfo, resolver);
+  }
+
+  @Override
+  public Object readUtf8NonNull(
+      Utf8JsonReader input, JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
     return utf8Reader.readUtf8(input, this, resolver);
   }
 }

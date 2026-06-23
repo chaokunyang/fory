@@ -34,6 +34,9 @@ import org.apache.fory.json.meta.JsonFieldAccessor;
 import org.apache.fory.json.meta.JsonFieldInfo;
 import org.apache.fory.json.meta.JsonFieldTable;
 import org.apache.fory.json.reader.JsonReader;
+import org.apache.fory.json.reader.Latin1StringJsonReader;
+import org.apache.fory.json.reader.Utf16StringJsonReader;
+import org.apache.fory.json.reader.Utf8JsonReader;
 import org.apache.fory.json.resolver.JsonTypeInfo;
 import org.apache.fory.json.resolver.JsonTypeResolver;
 import org.apache.fory.json.writer.JsonWriter;
@@ -217,6 +220,24 @@ public abstract class BaseObjectCodec extends AbstractJsonCodec {
     } while (reader.consume(','));
     reader.expect('}');
     return object;
+  }
+
+  @Internal
+  public Object readLatin1NonNull(
+      Latin1StringJsonReader reader, JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
+    return readNonNull(reader, typeInfo, resolver);
+  }
+
+  @Internal
+  public Object readUtf16NonNull(
+      Utf16StringJsonReader reader, JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
+    return readNonNull(reader, typeInfo, resolver);
+  }
+
+  @Internal
+  public Object readUtf8NonNull(
+      Utf8JsonReader reader, JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
+    return readNonNull(reader, typeInfo, resolver);
   }
 
   private Object readRecord(JsonReader reader, JsonTypeResolver resolver) {

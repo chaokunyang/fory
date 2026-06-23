@@ -249,7 +249,7 @@ public abstract class CollectionCodec extends AbstractJsonCodec {
     }
 
     Object readNullableLatin1Element(Latin1StringJsonReader reader) {
-      return reader.tryReadNullToken() ? null : readLatin1Element(reader);
+      return reader.tryReadNextNullToken() ? null : readLatin1Element(reader);
     }
 
     Object readUtf16Element(Utf16StringJsonReader reader) {
@@ -257,7 +257,7 @@ public abstract class CollectionCodec extends AbstractJsonCodec {
     }
 
     Object readNullableUtf16Element(Utf16StringJsonReader reader) {
-      return reader.tryReadNullToken() ? null : readUtf16Element(reader);
+      return reader.tryReadNextNullToken() ? null : readUtf16Element(reader);
     }
 
     Object readUtf8Element(Utf8JsonReader reader) {
@@ -265,7 +265,7 @@ public abstract class CollectionCodec extends AbstractJsonCodec {
     }
 
     Object readNullableUtf8Element(Utf8JsonReader reader) {
-      return reader.tryReadNullToken() ? null : readUtf8Element(reader);
+      return reader.tryReadNextNullToken() ? null : readUtf8Element(reader);
     }
   }
 
@@ -440,7 +440,10 @@ public abstract class CollectionCodec extends AbstractJsonCodec {
       reader.expect('[');
       if (!reader.consume(']')) {
         do {
-          collection.add(elementCodec.read(reader, elementTypeInfo, resolver));
+          collection.add(
+              reader.tryReadNull()
+                  ? null
+                  : elementCodec.readNonNull(reader, elementTypeInfo, resolver));
         } while (reader.consume(','));
         reader.expect(']');
       }
@@ -457,7 +460,10 @@ public abstract class CollectionCodec extends AbstractJsonCodec {
       reader.expectNextToken('[');
       if (!reader.consumeNextToken(']')) {
         do {
-          collection.add(elementCodec.readLatin1(reader, elementTypeInfo, resolver));
+          collection.add(
+              reader.tryReadNextNullToken()
+                  ? null
+                  : elementCodec.readLatin1NonNull(reader, elementTypeInfo, resolver));
         } while (reader.consumeNextToken(','));
         reader.expectNextToken(']');
       }
@@ -474,7 +480,10 @@ public abstract class CollectionCodec extends AbstractJsonCodec {
       reader.expectNextToken('[');
       if (!reader.consumeNextToken(']')) {
         do {
-          collection.add(elementCodec.readUtf16(reader, elementTypeInfo, resolver));
+          collection.add(
+              reader.tryReadNextNullToken()
+                  ? null
+                  : elementCodec.readUtf16NonNull(reader, elementTypeInfo, resolver));
         } while (reader.consumeNextToken(','));
         reader.expectNextToken(']');
       }
@@ -491,7 +500,10 @@ public abstract class CollectionCodec extends AbstractJsonCodec {
       reader.expectNextToken('[');
       if (!reader.consumeNextToken(']')) {
         do {
-          collection.add(elementCodec.readUtf8(reader, elementTypeInfo, resolver));
+          collection.add(
+              reader.tryReadNextNullToken()
+                  ? null
+                  : elementCodec.readUtf8NonNull(reader, elementTypeInfo, resolver));
         } while (reader.consumeNextToken(','));
         reader.expectNextToken(']');
       }
@@ -551,17 +563,17 @@ public abstract class CollectionCodec extends AbstractJsonCodec {
 
     @Override
     Object readNullableLatin1Element(Latin1StringJsonReader reader) {
-      return reader.readNullableString();
+      return reader.readNextNullableString();
     }
 
     @Override
     Object readNullableUtf16Element(Utf16StringJsonReader reader) {
-      return reader.readNullableString();
+      return reader.readNextNullableString();
     }
 
     @Override
     Object readNullableUtf8Element(Utf8JsonReader reader) {
-      return reader.readNullableString();
+      return reader.readNextNullableString();
     }
   }
 
@@ -607,17 +619,17 @@ public abstract class CollectionCodec extends AbstractJsonCodec {
 
     @Override
     Object readLatin1Element(Latin1StringJsonReader reader) {
-      return Boolean.valueOf(reader.readBooleanValue());
+      return Boolean.valueOf(reader.readNextBooleanValue());
     }
 
     @Override
     Object readUtf16Element(Utf16StringJsonReader reader) {
-      return Boolean.valueOf(reader.readBooleanValue());
+      return Boolean.valueOf(reader.readNextBooleanValue());
     }
 
     @Override
     Object readUtf8Element(Utf8JsonReader reader) {
-      return Boolean.valueOf(reader.readBooleanValue());
+      return Boolean.valueOf(reader.readNextBooleanValue());
     }
   }
 
@@ -676,17 +688,17 @@ public abstract class CollectionCodec extends AbstractJsonCodec {
 
     @Override
     Object readLatin1Element(Latin1StringJsonReader reader) {
-      return Integer.valueOf(reader.readIntValue());
+      return Integer.valueOf(reader.readNextIntValue());
     }
 
     @Override
     Object readUtf16Element(Utf16StringJsonReader reader) {
-      return Integer.valueOf(reader.readIntValue());
+      return Integer.valueOf(reader.readNextIntValue());
     }
 
     @Override
     Object readUtf8Element(Utf8JsonReader reader) {
-      return Integer.valueOf(reader.readIntValue());
+      return Integer.valueOf(reader.readNextIntValue());
     }
   }
 
@@ -707,17 +719,17 @@ public abstract class CollectionCodec extends AbstractJsonCodec {
 
     @Override
     Object readLatin1Element(Latin1StringJsonReader reader) {
-      return Long.valueOf(reader.readLongValue());
+      return Long.valueOf(reader.readNextLongValue());
     }
 
     @Override
     Object readUtf16Element(Utf16StringJsonReader reader) {
-      return Long.valueOf(reader.readLongValue());
+      return Long.valueOf(reader.readNextLongValue());
     }
 
     @Override
     Object readUtf8Element(Utf8JsonReader reader) {
-      return Long.valueOf(reader.readLongValue());
+      return Long.valueOf(reader.readNextLongValue());
     }
   }
 
@@ -738,17 +750,17 @@ public abstract class CollectionCodec extends AbstractJsonCodec {
 
     @Override
     Object readLatin1Element(Latin1StringJsonReader reader) {
-      return Short.valueOf(readShort(reader.readIntValue()));
+      return Short.valueOf(readShort(reader.readNextIntValue()));
     }
 
     @Override
     Object readUtf16Element(Utf16StringJsonReader reader) {
-      return Short.valueOf(readShort(reader.readIntValue()));
+      return Short.valueOf(readShort(reader.readNextIntValue()));
     }
 
     @Override
     Object readUtf8Element(Utf8JsonReader reader) {
-      return Short.valueOf(readShort(reader.readIntValue()));
+      return Short.valueOf(readShort(reader.readNextIntValue()));
     }
   }
 
@@ -769,17 +781,17 @@ public abstract class CollectionCodec extends AbstractJsonCodec {
 
     @Override
     Object readLatin1Element(Latin1StringJsonReader reader) {
-      return Byte.valueOf(readByte(reader.readIntValue()));
+      return Byte.valueOf(readByte(reader.readNextIntValue()));
     }
 
     @Override
     Object readUtf16Element(Utf16StringJsonReader reader) {
-      return Byte.valueOf(readByte(reader.readIntValue()));
+      return Byte.valueOf(readByte(reader.readNextIntValue()));
     }
 
     @Override
     Object readUtf8Element(Utf8JsonReader reader) {
-      return Byte.valueOf(readByte(reader.readIntValue()));
+      return Byte.valueOf(readByte(reader.readNextIntValue()));
     }
   }
 

@@ -195,6 +195,10 @@ public final class Latin1StringJsonReader extends JsonReader {
     return readBooleanValue();
   }
 
+  public boolean readBooleanTokenValue() {
+    return readBooleanToken();
+  }
+
   private boolean readBooleanToken() {
     if (startsWithAscii("true")) {
       position += 4;
@@ -216,6 +220,10 @@ public final class Latin1StringJsonReader extends JsonReader {
       return readIntToken();
     }
     return readIntValue();
+  }
+
+  public int readIntTokenValue() {
+    return readIntToken();
   }
 
   private int readIntToken() {
@@ -330,6 +338,10 @@ public final class Latin1StringJsonReader extends JsonReader {
       return readLongToken();
     }
     return readLongValue();
+  }
+
+  public long readLongTokenValue() {
+    return readLongToken();
   }
 
   private long readLongToken() {
@@ -589,6 +601,13 @@ public final class Latin1StringJsonReader extends JsonReader {
       }
     }
     return readNullableString();
+  }
+
+  public String readNullableStringToken() {
+    if (tryReadNullLiteral()) {
+      return null;
+    }
+    return readStringToken();
   }
 
   private String readStringToken() {
@@ -853,6 +872,10 @@ public final class Latin1StringJsonReader extends JsonReader {
       return readPackedStringHashToken();
     }
     return readPackedStringHash();
+  }
+
+  public long readPackedStringHashTokenValue() {
+    return readPackedStringHashToken();
   }
 
   private long readPackedStringHashToken() {

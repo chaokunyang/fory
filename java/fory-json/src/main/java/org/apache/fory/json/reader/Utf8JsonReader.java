@@ -188,6 +188,10 @@ public final class Utf8JsonReader extends JsonReader {
     return readBooleanValue();
   }
 
+  public boolean readBooleanTokenValue() {
+    return readBooleanToken();
+  }
+
   private boolean readBooleanToken() {
     if (startsWithAscii("true")) {
       position += 4;
@@ -209,6 +213,10 @@ public final class Utf8JsonReader extends JsonReader {
       return readIntToken();
     }
     return readIntValue();
+  }
+
+  public int readIntTokenValue() {
+    return readIntToken();
   }
 
   private int readIntToken() {
@@ -323,6 +331,10 @@ public final class Utf8JsonReader extends JsonReader {
       return readLongToken();
     }
     return readLongValue();
+  }
+
+  public long readLongTokenValue() {
+    return readLongToken();
   }
 
   private long readLongToken() {
@@ -582,6 +594,13 @@ public final class Utf8JsonReader extends JsonReader {
       }
     }
     return readNullableString();
+  }
+
+  public String readNullableStringToken() {
+    if (tryReadNullLiteral()) {
+      return null;
+    }
+    return readStringToken();
   }
 
   private String readStringToken() {
@@ -861,6 +880,10 @@ public final class Utf8JsonReader extends JsonReader {
       return readPackedStringHashToken();
     }
     return readPackedStringHash();
+  }
+
+  public long readPackedStringHashTokenValue() {
+    return readPackedStringHashToken();
   }
 
   private long readPackedStringHashToken() {

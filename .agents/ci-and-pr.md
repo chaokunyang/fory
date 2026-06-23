@@ -37,6 +37,71 @@ Typical flow:
 - Before pushing PR work, verify `git remote -v`, the current branch, and the PR head repository/branch; do not infer push targets from contributor names.
 - Do not stage or commit task scratch files such as `tasks/task-*.md`, `tasks/lessons.md`, or synthesis/plan notes unless the user explicitly asks to version them.
 
+## Review Workflow
+
+1. Define the review target.
+
+- Determine whether the target is a GitHub PR, branch, commit range, local diff, or file subset.
+- For GitHub PR review, create and use a dedicated local worktree before checking out or fetching the PR branch unless the user explicitly asks to reuse the current workspace.
+- If reviewing against main, run `git fetch apache main` before diffing.
+- Inspect `git diff --stat` first, then inspect the full patch by touched subsystem.
+
+2. Load focused context.
+
+- Protocol, type mapping, xlang, `TypeMeta`, `TypeInfo`, reference tracking, schema evolution, or wire-format changes require the relevant `docs/specification/**` sections.
+- Runtime-specific changes require the matching `.agents/languages/*.md` file.
+- Cross-language changes require `.agents/testing/integration-tests.md`.
+- Documentation, public API, benchmark report, or generated-artifact changes require `.agents/docs-and-formatting.md`.
+
+3. Inspect in priority order.
+
+- Correctness, data corruption, security, and protocol drift.
+- Cross-language consistency and native/xlang behavior boundaries.
+- Performance regressions or invalid benchmark methodology.
+- Public API growth, legacy shims, wrapper layers, and architecture drift.
+- Missing tests, wrong test placement, and missing docs/spec updates.
+
+4. Validate each finding.
+
+- Tie every finding to exact changed lines.
+- Explain the concrete failure mode or regression risk.
+- State why the current code is wrong or incomplete, not only that it differs from another style.
+- Recommend the missing test, benchmark, spec update, or doc update when that is the gap.
+
+5. Report findings.
+
+- Findings come first and are ordered by severity.
+- Keep overview and change summary brief and secondary.
+- If there are no findings, say that explicitly and mention residual risks or testing gaps.
+- If review comments will be posted on GitHub, write them as concise inline comments with enough context for the author to act.
+
+## Review Red Flags
+
+- One runtime changes xlang or protocol behavior while other affected runtimes are not updated or explicitly ruled out.
+- Compatible-mode, type-mapping, or wire-format semantics are described from memory instead of current specs.
+- Runtime ownership moves into broad facades or helper layers instead of the resolver, context, buffer, stream, or runtime type that owns the state.
+- Removed APIs come back as aliases, shims, or thin wrappers without a clear user-owned reason.
+- Hot shared paths gain mode booleans, per-call allocations, callback objects, holder objects, wrapper round trips, or unnecessary forwarding helpers.
+- Benchmark-only flags, payload identity caches, fixture-specific shortcuts, or serializer-specific conversions inside timed loops change what is measured.
+- Benchmark comparisons are run concurrently on one host, based on smoke settings, or reported without regenerated `docs/benchmarks/**` artifacts when benchmark logic changed.
+- Stream read-loop comments or fixes assume `(0, nil)` from a socket reader must be fatal immediately.
+- Claimed cleanup is not backed by a full-tree search or exact command output.
+- Documentation overstates runtime support, benchmark conclusions, or competitive claims beyond the evidence in code and tests.
+
+## Review Validation Matrix
+
+Use the smallest command set that proves the changed behavior. If protocol or xlang behavior changed, require the relevant cross-language tests even when the author did not run them yet.
+
+- Repo-wide formatting/lint: `bash ci/format.sh --all`
+- Java: from `java/`, `mvn -T16 spotless:check`, `mvn -T16 checkstyle:check`, `mvn -T16 test`, or targeted `mvn -T16 test -Dtest=<Class>#<method>`
+- C#: from `csharp/`, `dotnet format Fory.sln --verify-no-changes`, `dotnet build Fory.sln -c Release --no-restore`, and `dotnet test Fory.sln -c Release`
+- C++: from repo root or `cpp/`, `bazel build //cpp/...` and `bazel test $(bazel query //cpp/...)`; only add `--config=x86_64` on `x86_64` or `amd64`
+- Python: from `python/`, `ruff format .`, `ruff check .`, `ENABLE_FORY_CYTHON_SERIALIZATION=0 pytest -v -s .`, and `ENABLE_FORY_CYTHON_SERIALIZATION=1 pytest -v -s .`
+- Rust: from `rust/`, `cargo fmt --check`, `cargo clippy --all-targets --all-features -- -D warnings`, and `cargo test --features tests`
+- Swift: from `swift/`, `swiftlint lint --config .swiftlint.yml`, `swift build`, and `swift test`
+- Go: from `go/fory/`, `go fmt ./...` and `go test -v ./...`
+- Xlang matrix triggers: for xlang behavior, type mapping, protocol bytes, compatible mode, `TypeMeta`, or cross-language container semantics, require `org.apache.fory.xlang.CPPXlangTest`, `org.apache.fory.xlang.CSharpXlangTest`, `org.apache.fory.xlang.RustXlangTest`, `org.apache.fory.xlang.GoXlangTest`, and `org.apache.fory.xlang.PythonXlangTest`; include `org.apache.fory.xlang.SwiftXlangTest` when Swift xlang behavior changes.
+
 ## Common CI Failures
 
 - Code style failures: run the relevant formatter (`clang-format`, `prettier`, `spotless:apply`, `dotnet format`, `cargo fmt`, and so on).

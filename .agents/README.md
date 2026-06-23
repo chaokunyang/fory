@@ -52,4 +52,6 @@ Load `AGENTS.md` first. Do not load every file under `.agents/` by default; read
 ## Canonicality
 
 - Treat the files in this directory as the canonical agent-specific guidance.
-- Existing skill reference matrices under `.agents/skills/` are task-focused quick references; when they overlap with runtime rules, prefer the matching file in `languages/` or `testing/`.
+- Review workflow, review red flags, and PR preparation rules belong in `ci-and-pr.md`;
+  runtime-specific details belong in `languages/`, and cross-language validation details belong in
+  `testing/`.

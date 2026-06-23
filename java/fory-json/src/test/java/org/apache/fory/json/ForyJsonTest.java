@@ -656,6 +656,7 @@ public class ForyJsonTest {
     ForyJson json = ForyJson.builder().build();
     String direct = "{\"kind\":\"你好\"}";
     String escaped = "{\"kind\":\"\\u4f60\\u597d\"}";
+    String asciiEscaped = "{\"kind\":\"F\\u0041ST\"}";
     assertEquals(
         new String(json.toJsonBytes(new UnicodeEnumValue()), StandardCharsets.UTF_8), direct);
     assertEquals(json.fromJson(direct, UnicodeEnumValue.class).kind, UnicodeKind.你好);
@@ -663,6 +664,9 @@ public class ForyJsonTest {
     assertEquals(
         json.fromJson(direct.getBytes(StandardCharsets.UTF_8), UnicodeEnumValue.class).kind,
         UnicodeKind.你好);
+    assertEquals(json.fromJson(asciiEscaped, Nested.class).kind, Kind.FAST);
+    assertEquals(
+        json.fromJson(asciiEscaped.getBytes(StandardCharsets.UTF_8), Nested.class).kind, Kind.FAST);
   }
 
   @Test

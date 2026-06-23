@@ -58,6 +58,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.regex.Pattern;
 import org.apache.fory.json.ForyJsonException;
+import org.apache.fory.json.meta.JsonAsciiToken;
 import org.apache.fory.json.meta.JsonFieldAccessor;
 import org.apache.fory.json.meta.JsonFieldNameHash;
 import org.apache.fory.json.reader.JsonReader;
@@ -1344,18 +1345,45 @@ public final class ScalarCodecs {
   public static final class EnumCodec extends AbstractJsonCodec {
     private final Class<?> type;
     private final long[] nameHashes;
+    private final long[] tokenPrefixes;
+    private final long[] tokenMasks;
+    private final int[] tokenSuffixes;
+    private final byte[] tokenSuffixLengths;
+    private final int[] tokenLengths;
     private final Enum<?>[] values;
+    private final Enum<?>[] tokenValues;
+    private final int tokenCount;
 
     EnumCodec(Class<?> type) {
       this.type = type;
       Enum<?>[] constants = (Enum<?>[]) type.getEnumConstants();
       nameHashes = new long[constants.length];
+      tokenPrefixes = new long[constants.length];
+      tokenMasks = new long[constants.length];
+      tokenSuffixes = new int[constants.length];
+      tokenSuffixLengths = new byte[constants.length];
+      tokenLengths = new int[constants.length];
       values = new Enum<?>[constants.length];
+      tokenValues = new Enum<?>[constants.length];
+      int localTokenCount = 0;
       for (int i = 0; i < constants.length; i++) {
         Enum<?> constant = constants[i];
-        nameHashes[i] = JsonFieldNameHash.hash(constant.name());
+        String name = constant.name();
+        nameHashes[i] = JsonFieldNameHash.hash(name);
         values[i] = constant;
+        String token = "\"" + name + "\"";
+        if (JsonAsciiToken.isPackable(token)) {
+          int tokenLength = token.length();
+          tokenPrefixes[localTokenCount] = JsonAsciiToken.prefix(token);
+          tokenMasks[localTokenCount] = JsonAsciiToken.prefixMask(tokenLength);
+          tokenSuffixes[localTokenCount] = JsonAsciiToken.suffix(token);
+          tokenSuffixLengths[localTokenCount] = (byte) JsonAsciiToken.suffixLength(tokenLength);
+          tokenLengths[localTokenCount] = tokenLength;
+          tokenValues[localTokenCount] = constant;
+          localTokenCount++;
+        }
       }
+      tokenCount = localTokenCount;
     }
 
     @Override
@@ -1404,10 +1432,18 @@ public final class ScalarCodecs {
     }
 
     public Object readNextLatin1Enum(Latin1StringJsonReader reader) {
+      Object value = readDirectLatin1EnumToken(reader);
+      if (value != null) {
+        return value;
+      }
       return enumValue(reader.readNextPackedStringHash());
     }
 
     public Object readLatin1EnumToken(Latin1StringJsonReader reader) {
+      Object value = readDirectLatin1EnumToken(reader);
+      if (value != null) {
+        return value;
+      }
       return enumValue(reader.readPackedStringHashTokenValue());
     }
 
@@ -1424,10 +1460,18 @@ public final class ScalarCodecs {
     }
 
     public Object readNextUtf8Enum(Utf8JsonReader reader) {
+      Object value = readDirectUtf8EnumToken(reader);
+      if (value != null) {
+        return value;
+      }
       return enumValue(reader.readNextPackedStringHash());
     }
 
     public Object readUtf8EnumToken(Utf8JsonReader reader) {
+      Object value = readDirectUtf8EnumToken(reader);
+      if (value != null) {
+        return value;
+      }
       return enumValue(reader.readPackedStringHashTokenValue());
     }
 
@@ -1444,6 +1488,68 @@ public final class ScalarCodecs {
         }
       }
       throw new ForyJsonException("Unknown enum value for " + type);
+    }
+
+    private Object readDirectLatin1EnumToken(Latin1StringJsonReader reader) {
+      for (int i = 0; i < tokenCount; i++) {
+        boolean matched;
+        switch (tokenSuffixLengths[i]) {
+          case 0:
+            matched =
+                reader.tryReadNextStringToken0(tokenPrefixes[i], tokenMasks[i], tokenLengths[i]);
+            break;
+          case 1:
+            matched =
+                reader.tryReadNextStringToken1(
+                    tokenPrefixes[i], tokenMasks[i], tokenSuffixes[i], tokenLengths[i]);
+            break;
+          case 2:
+            matched =
+                reader.tryReadNextStringToken2(
+                    tokenPrefixes[i], tokenMasks[i], tokenSuffixes[i], tokenLengths[i]);
+            break;
+          default:
+            matched =
+                reader.tryReadNextStringToken3(
+                    tokenPrefixes[i], tokenMasks[i], tokenSuffixes[i], tokenLengths[i]);
+            break;
+        }
+        if (matched) {
+          return tokenValues[i];
+        }
+      }
+      return null;
+    }
+
+    private Object readDirectUtf8EnumToken(Utf8JsonReader reader) {
+      for (int i = 0; i < tokenCount; i++) {
+        boolean matched;
+        switch (tokenSuffixLengths[i]) {
+          case 0:
+            matched =
+                reader.tryReadNextStringToken0(tokenPrefixes[i], tokenMasks[i], tokenLengths[i]);
+            break;
+          case 1:
+            matched =
+                reader.tryReadNextStringToken1(
+                    tokenPrefixes[i], tokenMasks[i], tokenSuffixes[i], tokenLengths[i]);
+            break;
+          case 2:
+            matched =
+                reader.tryReadNextStringToken2(
+                    tokenPrefixes[i], tokenMasks[i], tokenSuffixes[i], tokenLengths[i]);
+            break;
+          default:
+            matched =
+                reader.tryReadNextStringToken3(
+                    tokenPrefixes[i], tokenMasks[i], tokenSuffixes[i], tokenLengths[i]);
+            break;
+        }
+        if (matched) {
+          return tokenValues[i];
+        }
+      }
+      return null;
     }
   }
 

@@ -771,6 +771,14 @@ public final class Utf8JsonReader extends JsonReader {
   }
 
   public boolean tryReadNextFieldNameToken0(long prefix, long prefixMask, int tokenLength) {
+    return tryReadNextRawToken0(prefix, prefixMask, tokenLength);
+  }
+
+  public boolean tryReadNextStringToken0(long prefix, long prefixMask, int tokenLength) {
+    return tryReadNextRawToken0(prefix, prefixMask, tokenLength);
+  }
+
+  private boolean tryReadNextRawToken0(long prefix, long prefixMask, int tokenLength) {
     byte[] bytes = input;
     int mark = position;
     if (mark + Long.BYTES <= bytes.length
@@ -783,6 +791,15 @@ public final class Utf8JsonReader extends JsonReader {
 
   public boolean tryReadNextFieldNameToken1(
       long prefix, long prefixMask, int suffix, int tokenLength) {
+    return tryReadNextRawToken1(prefix, prefixMask, suffix, tokenLength);
+  }
+
+  public boolean tryReadNextStringToken1(
+      long prefix, long prefixMask, int suffix, int tokenLength) {
+    return tryReadNextRawToken1(prefix, prefixMask, suffix, tokenLength);
+  }
+
+  private boolean tryReadNextRawToken1(long prefix, long prefixMask, int suffix, int tokenLength) {
     byte[] bytes = input;
     int mark = position;
     int suffixOffset = mark + Long.BYTES;
@@ -797,6 +814,15 @@ public final class Utf8JsonReader extends JsonReader {
 
   public boolean tryReadNextFieldNameToken2(
       long prefix, long prefixMask, int suffix, int tokenLength) {
+    return tryReadNextRawToken2(prefix, prefixMask, suffix, tokenLength);
+  }
+
+  public boolean tryReadNextStringToken2(
+      long prefix, long prefixMask, int suffix, int tokenLength) {
+    return tryReadNextRawToken2(prefix, prefixMask, suffix, tokenLength);
+  }
+
+  private boolean tryReadNextRawToken2(long prefix, long prefixMask, int suffix, int tokenLength) {
     byte[] bytes = input;
     int mark = position;
     int suffixOffset = mark + Long.BYTES;
@@ -811,6 +837,15 @@ public final class Utf8JsonReader extends JsonReader {
 
   public boolean tryReadNextFieldNameToken3(
       long prefix, long prefixMask, int suffix, int tokenLength) {
+    return tryReadNextRawToken3(prefix, prefixMask, suffix, tokenLength);
+  }
+
+  public boolean tryReadNextStringToken3(
+      long prefix, long prefixMask, int suffix, int tokenLength) {
+    return tryReadNextRawToken3(prefix, prefixMask, suffix, tokenLength);
+  }
+
+  private boolean tryReadNextRawToken3(long prefix, long prefixMask, int suffix, int tokenLength) {
     byte[] bytes = input;
     int mark = position;
     int suffixOffset = mark + Long.BYTES;

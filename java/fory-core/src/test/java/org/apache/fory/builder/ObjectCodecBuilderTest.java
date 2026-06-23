@@ -293,6 +293,68 @@ public class ObjectCodecBuilderTest extends ForyTestBase {
     Assert.assertEquals(copy.privateValue, 3);
   }
 
+  public static class VarHandleDuplicateParent {
+    private final int value;
+
+    public VarHandleDuplicateParent() {
+      this(0);
+    }
+
+    VarHandleDuplicateParent(int value) {
+      this.value = value;
+    }
+
+    public int parentValue() {
+      return value;
+    }
+  }
+
+  public static final class VarHandleDuplicateChild extends VarHandleDuplicateParent {
+    private final int value;
+
+    public VarHandleDuplicateChild() {
+      this(0, 0);
+    }
+
+    VarHandleDuplicateChild(int parentValue, int childValue) {
+      super(parentValue);
+      this.value = childValue;
+    }
+
+    public int childValue() {
+      return value;
+    }
+  }
+
+  @Test
+  public void testJdk25DuplicateVarHandles() {
+    Fory fory =
+        Fory.builder()
+            .withXlang(false)
+            .requireClassRegistration(false)
+            .withCompatible(false)
+            .build();
+    String code = new ObjectCodecBuilder(VarHandleDuplicateChild.class, fory).genCode();
+    if (JdkVersion.MAJOR_VERSION >= 25) {
+      String parentHandle = duplicateValueVarHandleName(VarHandleDuplicateParent.class);
+      String childHandle = duplicateValueVarHandleName(VarHandleDuplicateChild.class);
+      Assert.assertTrue(code.contains(parentHandle));
+      Assert.assertTrue(code.contains(childHandle));
+      Assert.assertTrue(code.contains("VarHandleCodegenSupport.getInt(" + parentHandle));
+      Assert.assertTrue(code.contains("VarHandleCodegenSupport.getInt(" + childHandle));
+      Assert.assertTrue(code.contains("VarHandleCodegenSupport.setInt(" + parentHandle));
+      Assert.assertTrue(code.contains("VarHandleCodegenSupport.setInt(" + childHandle));
+    }
+    VarHandleDuplicateChild bean = new VarHandleDuplicateChild(1, 2);
+    VarHandleDuplicateChild copy = (VarHandleDuplicateChild) fory.deserialize(fory.serialize(bean));
+    Assert.assertEquals(copy.parentValue(), 1);
+    Assert.assertEquals(copy.childValue(), 2);
+  }
+
+  private static String duplicateValueVarHandleName(Class<?> declaringClass) {
+    return declaringClass.getName().replaceAll("\\.|\\$", "_") + "_value_varHandle_";
+  }
+
   @Test
   public void testAccessLevel() {
     Fory fory =

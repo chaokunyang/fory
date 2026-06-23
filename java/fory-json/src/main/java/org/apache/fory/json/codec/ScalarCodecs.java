@@ -1444,6 +1444,10 @@ public final class ScalarCodecs {
       if (value != null) {
         return value;
       }
+      return readLatin1EnumHashToken(reader);
+    }
+
+    public Object readLatin1EnumHashToken(Latin1StringJsonReader reader) {
       return enumValue(reader.readPackedStringHashTokenValue());
     }
 
@@ -1472,6 +1476,10 @@ public final class ScalarCodecs {
       if (value != null) {
         return value;
       }
+      return readUtf8EnumHashToken(reader);
+    }
+
+    public Object readUtf8EnumHashToken(Utf8JsonReader reader) {
       return enumValue(reader.readPackedStringHashTokenValue());
     }
 

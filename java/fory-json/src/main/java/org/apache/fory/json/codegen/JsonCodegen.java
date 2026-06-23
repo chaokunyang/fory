@@ -1230,6 +1230,30 @@ public final class JsonCodegen {
         .inline();
   }
 
+  private static Expression tryReadNextStringToken(int readerMode, String token) {
+    int tokenLength = token.length();
+    int suffixLength = JsonAsciiToken.suffixLength(tokenLength);
+    if (suffixLength == 0) {
+      return new Expression.Invoke(
+              readerRef(readerMode),
+              "tryReadNextStringToken0",
+              TypeRef.of(boolean.class),
+              Expression.Literal.ofLong(JsonAsciiToken.prefix(token)),
+              Expression.Literal.ofLong(JsonAsciiToken.prefixMask(tokenLength)),
+              Expression.Literal.ofInt(tokenLength))
+          .inline();
+    }
+    return new Expression.Invoke(
+            readerRef(readerMode),
+            "tryReadNextStringToken" + suffixLength,
+            TypeRef.of(boolean.class),
+            Expression.Literal.ofLong(JsonAsciiToken.prefix(token)),
+            Expression.Literal.ofLong(JsonAsciiToken.prefixMask(tokenLength)),
+            Expression.Literal.ofInt(JsonAsciiToken.suffix(token)),
+            Expression.Literal.ofInt(tokenLength))
+        .inline();
+  }
+
   private static String fieldNameToken(String name) {
     return "\"" + name + "\":";
   }
@@ -1569,10 +1593,38 @@ public final class JsonCodegen {
     return new Expression.If(
         tryReadNullExpr(readerMode),
         builder.setNull(property, object),
+        readEnumField(builder, property, id, readerMode, object, tokenValueRead));
+  }
+
+  private static Expression readEnumField(
+      JsonCodecBuilder builder,
+      JsonFieldInfo property,
+      int id,
+      int readerMode,
+      Expression object,
+      boolean tokenValueRead) {
+    Expression fallback =
         builder.setField(
             property,
             object,
-            readEnumValue(property.readRawType(), id, readerMode, tokenValueRead)));
+            readEnumValue(property.readRawType(), id, readerMode, tokenValueRead, true));
+    if (!tokenValueRead || (readerMode != LATIN1_READER && readerMode != UTF8_READER)) {
+      return fallback;
+    }
+    Enum<?>[] constants = (Enum<?>[]) property.readRawType().getEnumConstants();
+    for (int i = constants.length - 1; i >= 0; i--) {
+      Enum<?> constant = constants[i];
+      String token = "\"" + constant.name() + "\"";
+      if (!JsonAsciiToken.isPackable(token)) {
+        continue;
+      }
+      fallback =
+          new Expression.If(
+              tryReadNextStringToken(readerMode, token),
+              builder.setField(property, object, new Expression.EnumExpression(constant)),
+              fallback);
+    }
+    return fallback;
   }
 
   private static Expression readResolvedField(
@@ -1624,10 +1676,15 @@ public final class JsonCodegen {
 
   private static Expression readEnumValue(
       Class<?> enumType, int id, int readerMode, boolean tokenValueRead) {
+    return readEnumValue(enumType, id, readerMode, tokenValueRead, false);
+  }
+
+  private static Expression readEnumValue(
+      Class<?> enumType, int id, int readerMode, boolean tokenValueRead, boolean hashFallback) {
     return new Expression.Cast(
         new Expression.Invoke(
             fieldRef("r" + id, JsonCodec.class),
-            readEnumMethod(readerMode, tokenValueRead),
+            readEnumMethod(readerMode, tokenValueRead, hashFallback),
             "",
             TypeRef.of(Object.class),
             true,
@@ -1679,13 +1736,22 @@ public final class JsonCodegen {
   }
 
   private static String readEnumMethod(int readerMode, boolean tokenValueRead) {
+    return readEnumMethod(readerMode, tokenValueRead, false);
+  }
+
+  private static String readEnumMethod(
+      int readerMode, boolean tokenValueRead, boolean hashFallback) {
     switch (readerMode) {
       case LATIN1_READER:
-        return tokenValueRead ? "readLatin1EnumToken" : "readNextLatin1Enum";
+        return tokenValueRead
+            ? (hashFallback ? "readLatin1EnumHashToken" : "readLatin1EnumToken")
+            : "readNextLatin1Enum";
       case UTF16_READER:
         return "readNextUtf16Enum";
       case UTF8_READER:
-        return tokenValueRead ? "readUtf8EnumToken" : "readNextUtf8Enum";
+        return tokenValueRead
+            ? (hashFallback ? "readUtf8EnumHashToken" : "readUtf8EnumToken")
+            : "readNextUtf8Enum";
       default:
         return "readEnum";
     }

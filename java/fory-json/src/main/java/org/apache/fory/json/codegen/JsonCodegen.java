@@ -1126,16 +1126,26 @@ public final class JsonCodegen {
     if (readerMode == LATIN1_READER || readerMode == UTF8_READER) {
       String name = property.name();
       int tokenLength = fieldNameTokenLength(name);
+      int suffixLength = fieldNameTokenSuffixLength(tokenLength);
       // This is a compact-JSON fast path. Whitespace, escapes, and UTF8 spellings that do not
       // match the raw token fall through to the generated field-hash reader without consuming.
+      if (suffixLength == 0) {
+        return new Expression.Invoke(
+                readerRef(readerMode),
+                "tryReadNextFieldNameToken0",
+                TypeRef.of(boolean.class),
+                Expression.Literal.ofLong(fieldNameTokenPrefix(name)),
+                Expression.Literal.ofLong(fieldNameTokenPrefixMask(tokenLength)),
+                Expression.Literal.ofInt(tokenLength))
+            .inline();
+      }
       return new Expression.Invoke(
               readerRef(readerMode),
-              "tryReadNextFieldNameToken",
+              "tryReadNextFieldNameToken" + suffixLength,
               TypeRef.of(boolean.class),
               Expression.Literal.ofLong(fieldNameTokenPrefix(name)),
               Expression.Literal.ofLong(fieldNameTokenPrefixMask(tokenLength)),
               Expression.Literal.ofInt(fieldNameTokenSuffix(name)),
-              Expression.Literal.ofInt(fieldNameTokenSuffixLength(tokenLength)),
               Expression.Literal.ofInt(tokenLength))
           .inline();
     }

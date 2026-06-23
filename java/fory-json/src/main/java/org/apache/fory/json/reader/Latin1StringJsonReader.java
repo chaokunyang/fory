@@ -733,18 +733,59 @@ public final class Latin1StringJsonReader extends JsonReader {
     return tryReadFieldNameColon(expectedHash, expectedMask, expectedLength);
   }
 
-  public boolean tryReadNextFieldNameToken(
-      long prefix, long prefixMask, int suffix, int suffixLength, int tokenLength) {
+  public boolean tryReadNextFieldNameToken0(long prefix, long prefixMask, int tokenLength) {
     byte[] bytes = input;
     int mark = position;
     if (mark + Long.BYTES <= bytes.length
-        && (LittleEndian.getInt64(bytes, mark) & prefixMask) == prefix
-        && ByteReaderUtils.fieldTokenSuffixMatches(
-            bytes, mark + Long.BYTES, suffix, suffixLength)) {
+        && (LittleEndian.getInt64(bytes, mark) & prefixMask) == prefix) {
       position = mark + tokenLength;
       return true;
     }
-    position = mark;
+    return false;
+  }
+
+  public boolean tryReadNextFieldNameToken1(
+      long prefix, long prefixMask, int suffix, int tokenLength) {
+    byte[] bytes = input;
+    int mark = position;
+    int suffixOffset = mark + Long.BYTES;
+    if (mark + tokenLength <= bytes.length
+        && (LittleEndian.getInt64(bytes, mark) & prefixMask) == prefix
+        && (bytes[suffixOffset] & 0xFF) == suffix) {
+      position = mark + tokenLength;
+      return true;
+    }
+    return false;
+  }
+
+  public boolean tryReadNextFieldNameToken2(
+      long prefix, long prefixMask, int suffix, int tokenLength) {
+    byte[] bytes = input;
+    int mark = position;
+    int suffixOffset = mark + Long.BYTES;
+    if (mark + tokenLength <= bytes.length
+        && (LittleEndian.getInt64(bytes, mark) & prefixMask) == prefix
+        && ((bytes[suffixOffset] & 0xFF) | ((bytes[suffixOffset + 1] & 0xFF) << 8)) == suffix) {
+      position = mark + tokenLength;
+      return true;
+    }
+    return false;
+  }
+
+  public boolean tryReadNextFieldNameToken3(
+      long prefix, long prefixMask, int suffix, int tokenLength) {
+    byte[] bytes = input;
+    int mark = position;
+    int suffixOffset = mark + Long.BYTES;
+    if (mark + tokenLength <= bytes.length
+        && (LittleEndian.getInt64(bytes, mark) & prefixMask) == prefix
+        && ((bytes[suffixOffset] & 0xFF)
+                | ((bytes[suffixOffset + 1] & 0xFF) << 8)
+                | ((bytes[suffixOffset + 2] & 0xFF) << 16))
+            == suffix) {
+      position = mark + tokenLength;
+      return true;
+    }
     return false;
   }
 

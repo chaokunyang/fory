@@ -1342,10 +1342,11 @@ public final class JsonCodegen {
   private static boolean usesWriteCodec(JsonFieldInfo property) {
     switch (property.writeKind()) {
       case ARRAY:
-      case COLLECTION:
       case MAP:
       case OBJECT:
         return true;
+      case COLLECTION:
+        return property.writeElementRawType() != String.class;
       default:
         return false;
     }
@@ -2081,8 +2082,12 @@ public final class JsonCodegen {
       case CHAR:
         return writeScalar(kind, value, utf8);
       case ARRAY:
-      case COLLECTION:
       case MAP:
+        return writeCodec(id, value, utf8);
+      case COLLECTION:
+        if (property.writeElementRawType() == String.class) {
+          return writeStringCollection(value, utf8);
+        }
         return writeCodec(id, value, utf8);
       default:
         return writeCodec(id, value, utf8);
@@ -2129,6 +2134,18 @@ public final class JsonCodegen {
         writerRef(utf8),
         value,
         typeResolverRef());
+  }
+
+  private static Expression writeStringCollection(Expression value, boolean utf8) {
+    return new Expression.ListExpression(
+        new Expression.Invoke(writerRef(utf8), "writeArrayStart"),
+        new Expression.ForEach(
+            value,
+            TypeRef.of(String.class),
+            true,
+            (index, element) ->
+                new Expression.Invoke(writerRef(utf8), "writeStringElement", index, element)),
+        new Expression.Invoke(writerRef(utf8), "writeArrayEnd"));
   }
 
   private Expression writeScalar(JsonFieldKind kind, Expression value, boolean utf8) {

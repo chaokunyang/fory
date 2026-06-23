@@ -519,8 +519,13 @@ public final class Utf8JsonReader extends JsonReader {
       if (nameOffset + Long.BYTES <= bytes.length
           && (LittleEndian.getInt64(bytes, nameOffset) & expectedMask) == expectedHash
           && bytes[quoteOffset] == '"') {
-        position = quoteOffset + 1;
-        expectNextToken(':');
+        int colonOffset = quoteOffset + 1;
+        if (colonOffset < bytes.length && bytes[colonOffset] == ':') {
+          position = colonOffset + 1;
+        } else {
+          position = colonOffset;
+          expectNextToken(':');
+        }
         return true;
       }
       offset = nameOffset;
@@ -534,8 +539,13 @@ public final class Utf8JsonReader extends JsonReader {
         value = JsonFieldNameHash.value(value, i, (char) ch);
       }
       if (value == expectedHash && bytes[offset] == '"') {
-        position = offset + 1;
-        expectNextToken(':');
+        int colonOffset = offset + 1;
+        if (colonOffset < bytes.length && bytes[colonOffset] == ':') {
+          position = colonOffset + 1;
+        } else {
+          position = colonOffset;
+          expectNextToken(':');
+        }
         return true;
       }
     }

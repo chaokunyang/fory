@@ -510,8 +510,13 @@ public final class Utf16StringJsonReader extends JsonReader {
         value = JsonFieldNameHash.value(value, i, ch);
       }
       if (value == expectedHash && charAtFast(offset) == '"') {
-        position = offset + 1;
-        expectNextToken(':');
+        int colonOffset = offset + 1;
+        if (colonOffset < length && charAtFast(colonOffset) == ':') {
+          position = colonOffset + 1;
+        } else {
+          position = colonOffset;
+          expectNextToken(':');
+        }
         return true;
       }
     }

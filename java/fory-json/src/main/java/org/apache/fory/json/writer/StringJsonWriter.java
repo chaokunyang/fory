@@ -240,6 +240,15 @@ public final class StringJsonWriter extends JsonWriter {
       return;
     }
     byte[] prefix = index == 0 ? namePrefix : commaNamePrefix;
+    writeIntField(prefix, value);
+  }
+
+  public void writeIntField(byte[] prefix, int value) {
+    if (utf16) {
+      writeRaw(prefix);
+      writeInt(value);
+      return;
+    }
     ensure(prefix.length + 11);
     writeRawNoEnsure(prefix);
     writeIntNoEnsure(value);
@@ -265,6 +274,15 @@ public final class StringJsonWriter extends JsonWriter {
       return;
     }
     byte[] prefix = index == 0 ? namePrefix : commaNamePrefix;
+    writeLongField(prefix, value);
+  }
+
+  public void writeLongField(byte[] prefix, long value) {
+    if (utf16) {
+      writeRaw(prefix);
+      writeLong(value);
+      return;
+    }
     ensure(prefix.length + 20);
     writeRawNoEnsure(prefix);
     writeLongNoEnsure(value);
@@ -290,6 +308,15 @@ public final class StringJsonWriter extends JsonWriter {
       return;
     }
     byte[] prefix = index == 0 ? namePrefix : commaNamePrefix;
+    writeStringField(prefix, value);
+  }
+
+  public void writeStringField(byte[] prefix, String value) {
+    if (utf16) {
+      writeRaw(prefix);
+      writeString(value);
+      return;
+    }
     if (STRING_BYTES_BACKED && writeBytesBackedStringField(prefix, value)) {
       return;
     }

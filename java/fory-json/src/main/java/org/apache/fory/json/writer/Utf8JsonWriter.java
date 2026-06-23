@@ -249,6 +249,10 @@ public final class Utf8JsonWriter extends JsonWriter {
 
   public void writeIntField(byte[] namePrefix, byte[] commaNamePrefix, int index, int value) {
     byte[] prefix = index == 0 ? namePrefix : commaNamePrefix;
+    writeIntField(prefix, value);
+  }
+
+  public void writeIntField(byte[] prefix, int value) {
     ensure(prefix.length + 11);
     writeRawNoEnsure(prefix);
     writeIntNoEnsure(value);
@@ -263,6 +267,10 @@ public final class Utf8JsonWriter extends JsonWriter {
 
   public void writeLongField(byte[] namePrefix, byte[] commaNamePrefix, int index, long value) {
     byte[] prefix = index == 0 ? namePrefix : commaNamePrefix;
+    writeLongField(prefix, value);
+  }
+
+  public void writeLongField(byte[] prefix, long value) {
     ensure(prefix.length + 20);
     writeRawNoEnsure(prefix);
     writeLongNoEnsure(value);
@@ -277,6 +285,10 @@ public final class Utf8JsonWriter extends JsonWriter {
 
   public void writeStringField(byte[] namePrefix, byte[] commaNamePrefix, int index, String value) {
     byte[] prefix = index == 0 ? namePrefix : commaNamePrefix;
+    writeStringField(prefix, value);
+  }
+
+  public void writeStringField(byte[] prefix, String value) {
     if (STRING_BYTES_BACKED && writeBytesBackedStringField(prefix, value)) {
       return;
     }

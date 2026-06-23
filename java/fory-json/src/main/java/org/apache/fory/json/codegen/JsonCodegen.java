@@ -1878,6 +1878,9 @@ public final class JsonCodegen {
       boolean commaKnown,
       Expression index) {
     String writerMethod = longValue ? "writeLongField" : "writeIntField";
+    if (commaKnown) {
+      return new Expression.Invoke(writerRef(utf8), writerMethod, prefixRef(utf8, true, id), value);
+    }
     Expression.ListExpression expressions =
         new Expression.ListExpression(
             new Expression.Invoke(
@@ -1885,16 +1888,18 @@ public final class JsonCodegen {
                 writerMethod,
                 prefixRef(utf8, false, id),
                 prefixRef(utf8, true, id),
-                commaIndex(commaKnown, index),
+                index,
                 value));
-    if (!commaKnown) {
-      expressions.add(increment(index));
-    }
+    expressions.add(increment(index));
     return expressions;
   }
 
   private static Expression writeStringField(
       int id, Expression value, boolean utf8, boolean commaKnown, Expression index) {
+    if (commaKnown) {
+      return new Expression.Invoke(
+          writerRef(utf8), "writeStringField", prefixRef(utf8, true, id), value);
+    }
     Expression.ListExpression expressions =
         new Expression.ListExpression(
             new Expression.Invoke(
@@ -1902,11 +1907,9 @@ public final class JsonCodegen {
                 "writeStringField",
                 prefixRef(utf8, false, id),
                 prefixRef(utf8, true, id),
-                commaIndex(commaKnown, index),
+                index,
                 value));
-    if (!commaKnown) {
-      expressions.add(increment(index));
-    }
+    expressions.add(increment(index));
     return expressions;
   }
 
@@ -2071,10 +2074,6 @@ public final class JsonCodegen {
   private static Reference prefixRef(boolean utf8, boolean comma, int id) {
     String prefix = utf8 ? (comma ? "uc" : "u") : (comma ? "sc" : "s");
     return fieldRef(prefix + id, byte[].class);
-  }
-
-  private static Expression commaIndex(boolean commaKnown, Expression index) {
-    return commaKnown ? Expression.Literal.ofInt(1) : index;
   }
 
   private static Expression commaFlag(boolean commaKnown, Expression index) {

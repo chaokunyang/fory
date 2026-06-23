@@ -275,6 +275,11 @@ public class ObjectCodecBuilderTest extends ForyTestBase {
       Assert.assertTrue(code.contains("VarHandleCodegenSupport.setInt"));
       Assert.assertTrue(code.contains("VarHandleCodegenSupport.setLong"));
       Assert.assertTrue(code.contains("VarHandleCodegenSupport.setObject"));
+      Assert.assertTrue(code.contains("VarHandleCodegenSupport.setInt(publicFinal_varHandle_"));
+      Assert.assertTrue(code.contains("VarHandleCodegenSupport.setLong(protectedFinal_varHandle_"));
+      Assert.assertTrue(code.contains("VarHandleCodegenSupport.setObject(packageFinal_varHandle_"));
+      Assert.assertTrue(code.contains("VarHandleCodegenSupport.setObject(privateFinal_varHandle_"));
+      Assert.assertTrue(code.contains("VarHandleCodegenSupport.setInt(privateValue_varHandle_"));
       Assert.assertFalse(code.contains("FieldAccessor.createAccessor"));
       Assert.assertFalse(code.contains("_varHandle_.get("));
       Assert.assertFalse(code.contains("_varHandle_.set("));

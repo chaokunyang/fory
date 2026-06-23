@@ -92,6 +92,10 @@ public abstract class CodecBuilder {
   private static final String VAR_HANDLE_TYPE_NAME = "java.lang.invoke.VarHandle";
   private static final String VAR_HANDLE_SUPPORT =
       "org.apache.fory.builder.VarHandleCodegenSupport";
+  private static final Class<?> VAR_HANDLE_CLASS =
+      JdkVersion.MAJOR_VERSION >= 9 ? loadClass(VAR_HANDLE_TYPE_NAME) : Object.class;
+  private static final Class<?> VAR_HANDLE_SUPPORT_CLASS =
+      JdkVersion.MAJOR_VERSION >= 25 ? loadClass(VAR_HANDLE_SUPPORT) : Object.class;
 
   protected final CodegenContext ctx;
   protected final TypeRef<?> beanType;
@@ -315,15 +319,7 @@ public abstract class CodecBuilder {
       Expression inputObject, Class<?> cls, Descriptor descriptor) {
     String fieldName = descriptor.getName();
     if (JdkVersion.MAJOR_VERSION >= 25) {
-      boolean fieldNullable = fieldNullable(descriptor);
-      TypeRef<?> returnType =
-          descriptor.getTypeRef().isPrimitive() ? descriptor.getTypeRef() : OBJECT_TYPE;
-      Expression getValue =
-          new VarHandleFieldAccess(
-              getVarHandle(descriptor), inputObject, null, returnType, fieldNullable, fieldName);
-      return descriptor.getTypeRef().isPrimitive()
-          ? getValue
-          : tryCastIfPublic(getValue, descriptor.getTypeRef(), fieldName);
+      return varHandleGetField(inputObject, descriptor);
     }
     Expression fieldOffsetExpr = fieldOffsetExpr(cls, descriptor);
     boolean fieldNullable = fieldNullable(descriptor);
@@ -522,8 +518,14 @@ public abstract class CodecBuilder {
     if (descriptor.getTypeRef().isPrimitive()) {
       Preconditions.checkArgument(getRawType(value.type()) == getRawType(fieldType));
     }
-    return new VarHandleFieldAccess(
-        getVarHandle(descriptor), bean, value, PRIMITIVE_VOID_TYPE, false, descriptor.getName());
+    return new StaticInvoke(
+        varHandleSupportClass(),
+        varHandleSetMethod(fieldType),
+        PRIMITIVE_VOID_TYPE,
+        false,
+        getVarHandle(descriptor),
+        bean,
+        value);
   }
 
   private Reference getReflectField(Class<?> cls, Field field) {
@@ -580,19 +582,16 @@ public abstract class CodecBuilder {
                 : "")
             + fieldName
             + "_varHandle_";
-    Reference fieldRef = fieldMap.get(fieldHandleName);
-    if (fieldRef == null) {
-      String uniqueFieldName = ctx.newName(fieldHandleName);
-      ctx.addField(
-          true,
-          true,
-          VAR_HANDLE_TYPE_NAME,
-          uniqueFieldName,
-          new VarHandleInitExpression(getReflectField(field.getDeclaringClass(), field, false)));
-      fieldRef = new Reference(uniqueFieldName, OBJECT_TYPE);
-      fieldMap.put(fieldHandleName, fieldRef);
-    }
-    return fieldRef;
+    return getOrCreateField(
+        true,
+        varHandleClass(),
+        fieldHandleName,
+        () ->
+            new StaticInvoke(
+                varHandleSupportClass(),
+                "getVarHandle",
+                TypeRef.of(varHandleClass()),
+                getReflectField(field.getDeclaringClass(), field, false)));
   }
 
   protected Reference getOrCreateField(
@@ -607,142 +606,55 @@ public abstract class CodecBuilder {
     return fieldRef;
   }
 
-  private static final class VarHandleInitExpression extends Expression.AbstractExpression {
-    private final Expression field;
-
-    private VarHandleInitExpression(Expression field) {
-      super(field);
-      this.field = field;
-    }
-
-    @Override
-    public TypeRef<?> type() {
-      return OBJECT_TYPE;
-    }
-
-    @Override
-    public Code.ExprCode doGenCode(CodegenContext ctx) {
-      Code.ExprCode fieldCode = field.genCode(ctx);
-      StringBuilder code = new StringBuilder();
-      if (StringUtils.isNotBlank(fieldCode.code())) {
-        code.append(fieldCode.code()).append('\n');
-      }
-      String value = VAR_HANDLE_SUPPORT + ".getVarHandle(" + fieldCode.value() + ")";
-      return new Code.ExprCode(
-          code.toString(), Code.LiteralValue.FalseLiteral, Code.exprValue(Object.class, value));
-    }
+  private Expression varHandleGetField(Expression inputObject, Descriptor descriptor) {
+    TypeRef<?> returnType =
+        descriptor.getTypeRef().isPrimitive() ? descriptor.getTypeRef() : OBJECT_TYPE;
+    Expression getValue =
+        new StaticInvoke(
+            varHandleSupportClass(),
+            varHandleGetMethod(returnType),
+            descriptor.getName(),
+            returnType,
+            fieldNullable(descriptor),
+            getVarHandle(descriptor),
+            inputObject);
+    return descriptor.getTypeRef().isPrimitive()
+        ? getValue
+        : tryCastIfPublic(getValue, descriptor.getTypeRef(), descriptor.getName());
   }
 
-  private static final class VarHandleFieldAccess extends Expression.AbstractExpression {
-    private final Reference handle;
-    private final Expression bean;
-    private final Expression value;
-    private final TypeRef<?> type;
-    private final boolean nullable;
-    private final String valuePrefix;
-
-    private VarHandleFieldAccess(
-        Reference handle,
-        Expression bean,
-        Expression value,
-        TypeRef<?> type,
-        boolean nullable,
-        String valuePrefix) {
-      super(
-          value == null ? new Expression[] {handle, bean} : new Expression[] {handle, bean, value});
-      this.handle = handle;
-      this.bean = bean;
-      this.value = value;
-      this.type = type;
-      this.nullable = nullable;
-      this.valuePrefix = valuePrefix;
+  private static String varHandleGetMethod(TypeRef<?> type) {
+    if (type.isPrimitive()) {
+      return "get" + StringUtils.capitalize(getRawType(type).toString());
     }
+    return "getObject";
+  }
 
-    @Override
-    public TypeRef<?> type() {
-      return type;
+  private static String varHandleSetMethod(TypeRef<?> type) {
+    if (type.isPrimitive()) {
+      return "set" + StringUtils.capitalize(getRawType(type).toString());
     }
+    return "setObject";
+  }
 
-    @Override
-    public Code.ExprCode doGenCode(CodegenContext ctx) {
-      Code.ExprCode handleCode = handle.genCode(ctx);
-      Code.ExprCode beanCode = bean.genCode(ctx);
-      Code.ExprCode valueCode = value == null ? null : value.genCode(ctx);
-      StringBuilder code = new StringBuilder();
-      appendCode(code, handleCode);
-      appendCode(code, beanCode);
-      if (valueCode != null) {
-        appendCode(code, valueCode);
-        appendHelperCall(code, setMethod(value.type()), handleCode, beanCode, valueCode);
-        return new Code.ExprCode(code.toString(), null, null);
-      }
-      String returnType = ctx.type(type);
-      String[] freshNames = ctx.newNames(valuePrefix, valuePrefix + "IsNull");
-      String result = freshNames[0];
-      String isNull = freshNames[1];
-      if (nullable) {
-        code.append("boolean ").append(isNull).append(" = false;\n");
-      }
-      code.append(returnType).append(' ').append(result).append(" = ");
-      appendHelperCall(code, getMethod(type), handleCode, beanCode, null);
-      if (nullable) {
-        code.append('\n')
-            .append("if (")
-            .append(result)
-            .append(" == null) {\n")
-            .append("    ")
-            .append(isNull)
-            .append(" = true;\n")
-            .append("}");
-        return new Code.ExprCode(
-            code.toString(), Code.isNullVariable(isNull), Code.variable(getRawType(type), result));
-      }
-      return new Code.ExprCode(
-          code.toString(), Code.LiteralValue.FalseLiteral, Code.variable(getRawType(type), result));
-    }
+  // Keep the Java 8 baseline CodecBuilder linkable: guarded class constants do not resolve
+  // higher-JDK class names on older runtimes.
+  private static Class<?> varHandleClass() {
+    Preconditions.checkState(JdkVersion.MAJOR_VERSION >= 9, "VarHandle requires JDK9+");
+    return VAR_HANDLE_CLASS;
+  }
 
-    @Override
-    public boolean nullable() {
-      return nullable;
-    }
+  private static Class<?> varHandleSupportClass() {
+    Preconditions.checkState(
+        JdkVersion.MAJOR_VERSION >= 25, "VarHandle codegen support requires JDK25+");
+    return VAR_HANDLE_SUPPORT_CLASS;
+  }
 
-    private static void appendCode(StringBuilder code, Code.ExprCode exprCode) {
-      if (StringUtils.isNotBlank(exprCode.code())) {
-        code.append(exprCode.code()).append('\n');
-      }
-    }
-
-    private static String getMethod(TypeRef<?> type) {
-      if (type.isPrimitive()) {
-        return "get" + StringUtils.capitalize(getRawType(type).toString());
-      }
-      return "getObject";
-    }
-
-    private static String setMethod(TypeRef<?> type) {
-      if (type.isPrimitive()) {
-        return "set" + StringUtils.capitalize(getRawType(type).toString());
-      }
-      return "setObject";
-    }
-
-    private static void appendHelperCall(
-        StringBuilder code,
-        String methodName,
-        Code.ExprCode handleCode,
-        Code.ExprCode beanCode,
-        Code.ExprCode valueCode) {
-      code.append(VAR_HANDLE_SUPPORT)
-          .append('.')
-          .append(methodName)
-          .append('(')
-          .append(handleCode.value())
-          .append(", ")
-          .append(beanCode.value());
-      if (valueCode != null) {
-        code.append(", ").append(valueCode.value());
-      }
-      code.append(");");
+  private static Class<?> loadClass(String className) {
+    try {
+      return Class.forName(className, false, CodecBuilder.class.getClassLoader());
+    } catch (ClassNotFoundException e) {
+      throw new IllegalStateException("Cannot load generated-code helper class " + className, e);
     }
   }
 

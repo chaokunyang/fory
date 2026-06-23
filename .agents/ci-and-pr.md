@@ -93,6 +93,9 @@ Typical flow:
 - Hot shared paths gain mode booleans, per-call allocations, callback objects, holder objects, wrapper round trips, or unnecessary forwarding helpers.
 - Benchmark-only flags, payload identity caches, fixture-specific shortcuts, or serializer-specific conversions inside timed loops change what is measured.
 - Benchmark comparisons are run concurrently on one host, based on smoke settings, or reported without regenerated `docs/benchmarks/**` artifacts when benchmark logic changed.
+- Two objects appear to own one reader or writer index.
+- Stream bind or rebind paths do not detach stale backlinks.
+- Flush behavior depends on implicit side effects instead of one explicit owner.
 - Stream read-loop comments or fixes assume `(0, nil)` from a socket reader must be fatal immediately.
 - Claimed cleanup is not backed by a full-tree search or exact command output.
 - Documentation overstates runtime support, benchmark conclusions, or competitive claims beyond the evidence in code and tests.

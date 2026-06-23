@@ -113,6 +113,8 @@ public abstract class CollectionCodec extends AbstractJsonCodec {
   }
 
   final Collection<Object> newCollection() {
+    // JSON arrays do not carry a trusted size. Avoid speculative backing-array preallocation in
+    // parser hot paths; it can waste memory for small arrays and amplify untrusted input.
     return factory.newCollection();
   }
 

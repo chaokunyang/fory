@@ -59,8 +59,6 @@ import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.memory.NativeByteOrder;
 import org.apache.fory.platform.GraalvmSupport;
 import org.apache.fory.platform.JdkVersion;
-import org.apache.fory.reflect.FieldAccessor;
-import org.apache.fory.reflect.InstanceFieldAccessors.InstanceAccessor;
 import org.apache.fory.reflect.ObjectInstantiator;
 import org.apache.fory.reflect.ObjectInstantiators;
 import org.apache.fory.reflect.ReflectionUtils;
@@ -91,6 +89,9 @@ public abstract class CodecBuilder {
   static TypeRef<MemoryBuffer> bufferTypeRef = TypeRef.of(MemoryBuffer.class);
   static TypeRef<TypeInfo> classInfoTypeRef = TypeRef.of(TypeInfo.class);
   static TypeRef<TypeInfoHolder> classInfoHolderTypeRef = TypeRef.of(TypeInfoHolder.class);
+  private static final String VAR_HANDLE_TYPE_NAME = "java.lang.invoke.VarHandle";
+  private static final String VAR_HANDLE_SUPPORT =
+      "org.apache.fory.builder.VarHandleCodegenSupport";
 
   protected final CodegenContext ctx;
   protected final TypeRef<?> beanType;
@@ -314,18 +315,15 @@ public abstract class CodecBuilder {
       Expression inputObject, Class<?> cls, Descriptor descriptor) {
     String fieldName = descriptor.getName();
     if (JdkVersion.MAJOR_VERSION >= 25) {
-      Reference fieldAccessor = getFieldAccessor(descriptor);
       boolean fieldNullable = fieldNullable(descriptor);
-      if (descriptor.getTypeRef().isPrimitive()) {
-        Preconditions.checkArgument(!fieldNullable);
-        TypeRef<?> returnType = descriptor.getTypeRef();
-        String funcName = "get" + StringUtils.capitalize(descriptor.getRawType().toString());
-        return new Invoke(fieldAccessor, funcName, returnType, false, inputObject);
-      } else {
-        Invoke getObj =
-            new Invoke(fieldAccessor, "getObject", OBJECT_TYPE, fieldNullable, inputObject);
-        return tryCastIfPublic(getObj, descriptor.getTypeRef(), fieldName);
-      }
+      TypeRef<?> returnType =
+          descriptor.getTypeRef().isPrimitive() ? descriptor.getTypeRef() : OBJECT_TYPE;
+      Expression getValue =
+          new VarHandleFieldAccess(
+              getVarHandle(descriptor), inputObject, null, returnType, fieldNullable, fieldName);
+      return descriptor.getTypeRef().isPrimitive()
+          ? getValue
+          : tryCastIfPublic(getValue, descriptor.getTypeRef(), fieldName);
     }
     Expression fieldOffsetExpr = fieldOffsetExpr(cls, descriptor);
     boolean fieldNullable = fieldNullable(descriptor);
@@ -418,45 +416,6 @@ public abstract class CodecBuilder {
     }
   }
 
-  private Reference getFieldAccessor(Descriptor descriptor) {
-    Field field = descriptor.getField();
-    String fieldName = descriptor.getName();
-    String fieldAccessorName =
-        (duplicatedFields.contains(fieldName)
-                ? field.getDeclaringClass().getName().replaceAll("\\.|\\$", "_") + "_"
-                : "")
-            + fieldName
-            + "_accessor_";
-    if (JdkVersion.MAJOR_VERSION >= 25) {
-      // JDK25+ field writes go through the VarHandle-backed instance accessor. Keep the generated
-      // static field typed as the concrete final accessor so hot-path putX calls do not pay a
-      // FieldAccessor virtual dispatch. FieldAccessor.createAccessor still owns platform dispatch;
-      // this one-time cast happens only during generated-class initialization.
-      return getOrCreateField(
-          true,
-          InstanceAccessor.class,
-          fieldAccessorName,
-          () ->
-              new Cast(
-                  new StaticInvoke(
-                      FieldAccessor.class,
-                      "createAccessor",
-                      TypeRef.of(FieldAccessor.class),
-                      getReflectField(field.getDeclaringClass(), field, false)),
-                  TypeRef.of(InstanceAccessor.class)));
-    }
-    return getOrCreateField(
-        true,
-        FieldAccessor.class,
-        fieldAccessorName,
-        () ->
-            new StaticInvoke(
-                FieldAccessor.class,
-                "createAccessor",
-                TypeRef.of(FieldAccessor.class),
-                getReflectField(field.getDeclaringClass(), field, false)));
-  }
-
   /**
    * Returns an expression that deserialize data as a java bean of type {@link
    * CodecBuilder#beanClass}.
@@ -470,6 +429,11 @@ public abstract class CodecBuilder {
     Class<?> memberRawType = getRawType(memberType);
     if (value instanceof Inlineable) {
       ((Inlineable) value).inline();
+    }
+    if (JdkVersion.MAJOR_VERSION >= 25 && d.isFinalField()) {
+      // Final-field restoration must not fall through public-field or setter branches. Only the
+      // target-class trusted VarHandle supports JDK25+ final writes across all field visibilities.
+      return varHandleSetField(bean, d, value);
     }
     if (duplicatedFields.contains(fieldName) || !sourcePublicAccessible(beanClass)) {
       return unsafeSetField(bean, d, value);
@@ -540,14 +504,7 @@ public abstract class CodecBuilder {
   private Expression unsafeSetField(Expression bean, Descriptor descriptor, Expression value) {
     TypeRef<?> fieldType = descriptor.getTypeRef();
     if (JdkVersion.MAJOR_VERSION >= 25) {
-      Reference fieldAccessor = getFieldAccessor(descriptor);
-      if (descriptor.getTypeRef().isPrimitive()) {
-        Preconditions.checkArgument(getRawType(value.type()) == getRawType(fieldType));
-        String funcName = "put" + StringUtils.capitalize(getRawType(fieldType).toString());
-        return new Invoke(fieldAccessor, funcName, bean, value);
-      } else {
-        return new Invoke(fieldAccessor, "putObject", bean, value);
-      }
+      return varHandleSetField(bean, descriptor, value);
     }
     // Use Field in case the class has duplicate field name as `fieldName`.
     Expression fieldOffsetExpr = fieldOffsetExpr(beanClass, descriptor);
@@ -558,6 +515,15 @@ public abstract class CodecBuilder {
     } else {
       return unsafeInvoke("putObject", bean, fieldOffsetExpr, value);
     }
+  }
+
+  private Expression varHandleSetField(Expression bean, Descriptor descriptor, Expression value) {
+    TypeRef<?> fieldType = descriptor.getTypeRef();
+    if (descriptor.getTypeRef().isPrimitive()) {
+      Preconditions.checkArgument(getRawType(value.type()) == getRawType(fieldType));
+    }
+    return new VarHandleFieldAccess(
+        getVarHandle(descriptor), bean, value, PRIMITIVE_VOID_TYPE, false, descriptor.getName());
   }
 
   private Reference getReflectField(Class<?> cls, Field field) {
@@ -605,6 +571,30 @@ public abstract class CodecBuilder {
         });
   }
 
+  private Reference getVarHandle(Descriptor descriptor) {
+    Field field = descriptor.getField();
+    String fieldName = descriptor.getName();
+    String fieldHandleName =
+        (duplicatedFields.contains(fieldName)
+                ? field.getDeclaringClass().getName().replaceAll("\\.|\\$", "_") + "_"
+                : "")
+            + fieldName
+            + "_varHandle_";
+    Reference fieldRef = fieldMap.get(fieldHandleName);
+    if (fieldRef == null) {
+      String uniqueFieldName = ctx.newName(fieldHandleName);
+      ctx.addField(
+          true,
+          true,
+          VAR_HANDLE_TYPE_NAME,
+          uniqueFieldName,
+          new VarHandleInitExpression(getReflectField(field.getDeclaringClass(), field, false)));
+      fieldRef = new Reference(uniqueFieldName, OBJECT_TYPE);
+      fieldMap.put(fieldHandleName, fieldRef);
+    }
+    return fieldRef;
+  }
+
   protected Reference getOrCreateField(
       boolean isStatic, Class<?> type, String fieldName, Supplier<Expression> value) {
     Reference fieldRef = fieldMap.get(fieldName);
@@ -615,6 +605,145 @@ public abstract class CodecBuilder {
       fieldMap.put(fieldName, fieldRef);
     }
     return fieldRef;
+  }
+
+  private static final class VarHandleInitExpression extends Expression.AbstractExpression {
+    private final Expression field;
+
+    private VarHandleInitExpression(Expression field) {
+      super(field);
+      this.field = field;
+    }
+
+    @Override
+    public TypeRef<?> type() {
+      return OBJECT_TYPE;
+    }
+
+    @Override
+    public Code.ExprCode doGenCode(CodegenContext ctx) {
+      Code.ExprCode fieldCode = field.genCode(ctx);
+      StringBuilder code = new StringBuilder();
+      if (StringUtils.isNotBlank(fieldCode.code())) {
+        code.append(fieldCode.code()).append('\n');
+      }
+      String value = VAR_HANDLE_SUPPORT + ".getVarHandle(" + fieldCode.value() + ")";
+      return new Code.ExprCode(
+          code.toString(), Code.LiteralValue.FalseLiteral, Code.exprValue(Object.class, value));
+    }
+  }
+
+  private static final class VarHandleFieldAccess extends Expression.AbstractExpression {
+    private final Reference handle;
+    private final Expression bean;
+    private final Expression value;
+    private final TypeRef<?> type;
+    private final boolean nullable;
+    private final String valuePrefix;
+
+    private VarHandleFieldAccess(
+        Reference handle,
+        Expression bean,
+        Expression value,
+        TypeRef<?> type,
+        boolean nullable,
+        String valuePrefix) {
+      super(
+          value == null ? new Expression[] {handle, bean} : new Expression[] {handle, bean, value});
+      this.handle = handle;
+      this.bean = bean;
+      this.value = value;
+      this.type = type;
+      this.nullable = nullable;
+      this.valuePrefix = valuePrefix;
+    }
+
+    @Override
+    public TypeRef<?> type() {
+      return type;
+    }
+
+    @Override
+    public Code.ExprCode doGenCode(CodegenContext ctx) {
+      Code.ExprCode handleCode = handle.genCode(ctx);
+      Code.ExprCode beanCode = bean.genCode(ctx);
+      Code.ExprCode valueCode = value == null ? null : value.genCode(ctx);
+      StringBuilder code = new StringBuilder();
+      appendCode(code, handleCode);
+      appendCode(code, beanCode);
+      if (valueCode != null) {
+        appendCode(code, valueCode);
+        appendHelperCall(code, setMethod(value.type()), handleCode, beanCode, valueCode);
+        return new Code.ExprCode(code.toString(), null, null);
+      }
+      String returnType = ctx.type(type);
+      String[] freshNames = ctx.newNames(valuePrefix, valuePrefix + "IsNull");
+      String result = freshNames[0];
+      String isNull = freshNames[1];
+      if (nullable) {
+        code.append("boolean ").append(isNull).append(" = false;\n");
+      }
+      code.append(returnType).append(' ').append(result).append(" = ");
+      appendHelperCall(code, getMethod(type), handleCode, beanCode, null);
+      if (nullable) {
+        code.append('\n')
+            .append("if (")
+            .append(result)
+            .append(" == null) {\n")
+            .append("    ")
+            .append(isNull)
+            .append(" = true;\n")
+            .append("}");
+        return new Code.ExprCode(
+            code.toString(), Code.isNullVariable(isNull), Code.variable(getRawType(type), result));
+      }
+      return new Code.ExprCode(
+          code.toString(), Code.LiteralValue.FalseLiteral, Code.variable(getRawType(type), result));
+    }
+
+    @Override
+    public boolean nullable() {
+      return nullable;
+    }
+
+    private static void appendCode(StringBuilder code, Code.ExprCode exprCode) {
+      if (StringUtils.isNotBlank(exprCode.code())) {
+        code.append(exprCode.code()).append('\n');
+      }
+    }
+
+    private static String getMethod(TypeRef<?> type) {
+      if (type.isPrimitive()) {
+        return "get" + StringUtils.capitalize(getRawType(type).toString());
+      }
+      return "getObject";
+    }
+
+    private static String setMethod(TypeRef<?> type) {
+      if (type.isPrimitive()) {
+        return "set" + StringUtils.capitalize(getRawType(type).toString());
+      }
+      return "setObject";
+    }
+
+    private static void appendHelperCall(
+        StringBuilder code,
+        String methodName,
+        Code.ExprCode handleCode,
+        Code.ExprCode beanCode,
+        Code.ExprCode valueCode) {
+      code.append(VAR_HANDLE_SUPPORT)
+          .append('.')
+          .append(methodName)
+          .append('(')
+          .append(handleCode.value())
+          .append(", ")
+          .append(beanCode.value());
+      if (valueCode != null) {
+        code.append(", ").append(valueCode.value());
+      }
+      code.append(");");
+    }
   }
 
   /** Returns an Expression that create a new java object of type {@link CodecBuilder#beanClass}. */

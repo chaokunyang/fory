@@ -604,8 +604,14 @@ public final class Latin1StringJsonReader extends JsonReader {
   }
 
   public String readNullableStringToken() {
-    if (tryReadNullLiteral()) {
-      return null;
+    if (position < input.length) {
+      int ch = input[position] & 0xFF;
+      if (ch == '"') {
+        return readStringToken();
+      }
+      if (ch == 'n' && tryReadNullLiteral()) {
+        return null;
+      }
     }
     return readStringToken();
   }
@@ -633,7 +639,7 @@ public final class Latin1StringJsonReader extends JsonReader {
       }
       position = stop + 1;
       if (ch == '\\') {
-        StringBuilder builder = new StringBuilder(inputLength - start);
+        StringBuilder builder = newStringBuilder(start, stop);
         appendLatin1(builder, start, stop);
         appendEscape(builder);
         return readStringTail(builder);
@@ -656,7 +662,7 @@ public final class Latin1StringJsonReader extends JsonReader {
         }
         position = stop + 1;
         if (ch == '\\') {
-          StringBuilder builder = new StringBuilder(inputLength - start);
+          StringBuilder builder = newStringBuilder(start, stop);
           appendLatin1(builder, start, stop);
           appendEscape(builder);
           return readStringTail(builder);
@@ -675,7 +681,7 @@ public final class Latin1StringJsonReader extends JsonReader {
       }
       if (ch == '\\') {
         position = offset;
-        StringBuilder builder = new StringBuilder(inputLength - start);
+        StringBuilder builder = newStringBuilder(start, offset - 1);
         appendLatin1(builder, start, offset - 1);
         appendEscape(builder);
         return readStringTail(builder);
@@ -686,6 +692,10 @@ public final class Latin1StringJsonReader extends JsonReader {
       }
     }
     throw error("Unterminated string");
+  }
+
+  private StringBuilder newStringBuilder(int start, int stop) {
+    return new StringBuilder(Math.max(16, stop - start + 16));
   }
 
   private static long stringStopMask(long word) {

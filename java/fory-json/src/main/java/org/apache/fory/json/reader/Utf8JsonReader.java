@@ -597,8 +597,14 @@ public final class Utf8JsonReader extends JsonReader {
   }
 
   public String readNullableStringToken() {
-    if (tryReadNullLiteral()) {
-      return null;
+    if (position < input.length) {
+      int ch = input[position] & 0xFF;
+      if (ch == '"') {
+        return readStringToken();
+      }
+      if (ch == 'n' && tryReadNullLiteral()) {
+        return null;
+      }
     }
     return readStringToken();
   }
@@ -626,7 +632,7 @@ public final class Utf8JsonReader extends JsonReader {
       }
       position = stop + 1;
       if (b == '\\') {
-        StringBuilder builder = new StringBuilder(inputLength - start);
+        StringBuilder builder = newStringBuilder(start, stop);
         appendAscii(builder, start, stop);
         appendEscape(builder);
         return readStringTail(builder);
@@ -634,7 +640,7 @@ public final class Utf8JsonReader extends JsonReader {
       if (b < 0x20) {
         throw error("Control character in string");
       }
-      StringBuilder builder = new StringBuilder(inputLength - start);
+      StringBuilder builder = newStringBuilder(start, stop);
       appendAscii(builder, start, stop);
       appendUtf8(builder, b);
       return readStringTail(builder);
@@ -652,7 +658,7 @@ public final class Utf8JsonReader extends JsonReader {
         }
         position = stop + 1;
         if (b == '\\') {
-          StringBuilder builder = new StringBuilder(inputLength - start);
+          StringBuilder builder = newStringBuilder(start, stop);
           appendAscii(builder, start, stop);
           appendEscape(builder);
           return readStringTail(builder);
@@ -660,7 +666,7 @@ public final class Utf8JsonReader extends JsonReader {
         if (b < 0x20) {
           throw error("Control character in string");
         }
-        StringBuilder builder = new StringBuilder(inputLength - start);
+        StringBuilder builder = newStringBuilder(start, stop);
         appendAscii(builder, start, stop);
         appendUtf8(builder, b);
         return readStringTail(builder);
@@ -674,7 +680,7 @@ public final class Utf8JsonReader extends JsonReader {
       }
       if (b == '\\') {
         position = offset;
-        StringBuilder builder = new StringBuilder(inputLength - start);
+        StringBuilder builder = newStringBuilder(start, offset - 1);
         appendAscii(builder, start, offset - 1);
         appendEscape(builder);
         return readStringTail(builder);
@@ -685,13 +691,17 @@ public final class Utf8JsonReader extends JsonReader {
       }
       if (b >= 0x80) {
         position = offset;
-        StringBuilder builder = new StringBuilder(inputLength - start);
+        StringBuilder builder = newStringBuilder(start, offset - 1);
         appendAscii(builder, start, offset - 1);
         appendUtf8(builder, b);
         return readStringTail(builder);
       }
     }
     throw error("Unterminated string");
+  }
+
+  private StringBuilder newStringBuilder(int start, int stop) {
+    return new StringBuilder(Math.max(16, stop - start + 16));
   }
 
   private static long stringStopMask(long word) {

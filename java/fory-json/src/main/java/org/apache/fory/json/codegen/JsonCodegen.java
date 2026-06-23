@@ -656,9 +656,9 @@ public final class JsonCodegen {
     loop.add(
         readNextHashedField(
             builder, type, properties, readerMode, object, hashes, expectedIndex, record));
-    loop.add(new Expression.If(not(consumeExpr(readerMode, ',')), new Expression.Break()));
+    loop.add(
+        new Expression.If(not(consumeCommaOrEndObjectExpr(readerMode)), new Expression.Break()));
     expressions.add(new Expression.While(Expression.Literal.True, loop));
-    expressions.add(expectExpr(readerMode, '}'));
     expressions.add(returnObject(object, record));
     return expressions;
   }
@@ -883,13 +883,11 @@ public final class JsonCodegen {
       boolean record) {
     if (index + 1 < propertyCount) {
       return new Expression.If(
-          not(consumeExpr(readerMode, ',')),
-          new Expression.ListExpression(expectExpr(readerMode, '}'), returnObject(object, record)));
+          not(consumeCommaOrEndObjectExpr(readerMode)), returnObject(object, record));
     }
     return new Expression.If(
-        consumeExpr(readerMode, ','),
-        slowCall(slowMethod, object, Expression.Literal.ofInt(propertyCount)),
-        expectExpr(readerMode, '}'));
+        consumeCommaOrEndObjectExpr(readerMode),
+        slowCall(slowMethod, object, Expression.Literal.ofInt(propertyCount)));
   }
 
   private Expression slowReadExpression(
@@ -908,9 +906,9 @@ public final class JsonCodegen {
     loop.add(
         readNextHashedField(
             builder, type, properties, readerMode, object, hashes, expectedIndex, record));
-    loop.add(new Expression.If(not(consumeExpr(readerMode, ',')), new Expression.Break()));
+    loop.add(
+        new Expression.If(not(consumeCommaOrEndObjectExpr(readerMode)), new Expression.Break()));
     expressions.add(new Expression.While(Expression.Literal.True, loop));
-    expressions.add(expectExpr(readerMode, '}'));
     return expressions;
   }
 
@@ -935,9 +933,7 @@ public final class JsonCodegen {
     loop.add(fieldSwitch(builder, type, properties, readerMode, object, fieldIndex, record));
     loop.add(updateExpectedIndex(expectedIndex, fieldIndex));
     loop.add(
-        new Expression.If(
-            not(consumeExpr(readerMode, ',')),
-            new Expression.ListExpression(expectExpr(readerMode, '}'), new Expression.Return())));
+        new Expression.If(not(consumeCommaOrEndObjectExpr(readerMode)), new Expression.Return()));
     Expression fieldHash = readFieldNameHash(readerMode, "fieldHash");
     loop.add(fieldHash);
     loop.add(new Expression.Assign(fieldIndex, fieldIndexValue(expectedIndex, hashes, fieldHash)));
@@ -1055,6 +1051,16 @@ public final class JsonCodegen {
             readerMode == GENERIC_READER ? "consume" : "consumeNextToken",
             TypeRef.of(boolean.class),
             Expression.Literal.ofChar(token))
+        .inline();
+  }
+
+  private static Expression consumeCommaOrEndObjectExpr(int readerMode) {
+    return new Expression.Invoke(
+            readerRef(readerMode),
+            readerMode == GENERIC_READER
+                ? "consumeCommaOrEndObject"
+                : "consumeNextCommaOrEndObject",
+            TypeRef.of(boolean.class))
         .inline();
   }
 

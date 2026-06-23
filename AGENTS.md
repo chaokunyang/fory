@@ -141,7 +141,7 @@ This is the entry point for AI guidance in Apache Fory. Read this file first, th
 
 ## Code Review Expectations
 
-- For Fory-guided PR, branch, commit-range, and local-diff reviews, load `.agents/ci-and-pr.md` and follow its review workflow, red flags, and validation guidance.
+- For Apache Fory PR, branch, commit-range, and local-diff code reviews, load `.agents/ci-and-pr.md` and follow its review workflow, red flags, and validation guidance unless explicitly acting as the independent general reviewer required by `AI_POLICY.md`.
 - When explicitly acting as the independent general reviewer required by `AI_POLICY.md`, do not load `.agents/ci-and-pr.md` or use copied Fory-specific review checklist prompts. Still obey review-only safety rules, this carve-out, and any general instructions required by the reviewer tool.
 - When the task environment supports review subagents, run Fory-guided code review through a fresh read-only review subagent while the main agent coordinates scope, checks findings, and reports the final result.
 - Reuse the same review subagent for later review passes on the same feature unless a workflow explicitly requires a fresh reviewer; use a fresh review subagent for each different feature.

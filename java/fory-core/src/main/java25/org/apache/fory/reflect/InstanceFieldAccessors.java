@@ -280,5 +280,15 @@ final class InstanceFieldAccessors {
     public void putDouble(Object obj, double value) {
       handle.set(obj, value);
     }
+
+    @Override
+    public Object getObject(Object obj) {
+      return handle.get(obj);
+    }
+
+    @Override
+    public void putObject(Object obj, Object value) {
+      handle.set(obj, value);
+    }
   }
 }

@@ -26,7 +26,6 @@ import java.util.Map;
 import org.apache.fory.json.codec.BaseObjectCodec;
 import org.apache.fory.json.codec.CodecUtils;
 import org.apache.fory.json.codec.JsonCodec;
-import org.apache.fory.json.codec.JsonSharedRegistry;
 import org.apache.fory.json.codec.ObjectCodec;
 import org.apache.fory.json.codec.ObjectCodecs;
 import org.apache.fory.reflect.TypeRef;

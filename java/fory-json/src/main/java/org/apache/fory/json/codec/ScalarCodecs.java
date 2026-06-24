@@ -78,7 +78,7 @@ public final class ScalarCodecs {
   private ScalarCodecs() {}
 
   public static final class NaturalCodec extends AbstractJsonCodec {
-    static final NaturalCodec INSTANCE = new NaturalCodec();
+    public static final NaturalCodec INSTANCE = new NaturalCodec();
 
     private NaturalCodec() {}
 
@@ -124,7 +124,7 @@ public final class ScalarCodecs {
   }
 
   public static final class StringCodec extends AbstractJsonCodec {
-    static final StringCodec INSTANCE = new StringCodec();
+    public static final StringCodec INSTANCE = new StringCodec();
 
     private StringCodec() {}
 
@@ -145,7 +145,7 @@ public final class ScalarCodecs {
   }
 
   public static final class VoidCodec extends AbstractJsonCodec {
-    static final VoidCodec INSTANCE = new VoidCodec();
+    public static final VoidCodec INSTANCE = new VoidCodec();
 
     @Override
     public Object read(JsonReader reader, JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
@@ -171,7 +171,7 @@ public final class ScalarCodecs {
   }
 
   public static final class BooleanCodec extends AbstractJsonCodec {
-    static final BooleanCodec INSTANCE = new BooleanCodec();
+    public static final BooleanCodec INSTANCE = new BooleanCodec();
 
     private BooleanCodec() {}
 
@@ -208,7 +208,7 @@ public final class ScalarCodecs {
   }
 
   public static final class IntCodec extends AbstractJsonCodec {
-    static final IntCodec INSTANCE = new IntCodec();
+    public static final IntCodec INSTANCE = new IntCodec();
 
     private IntCodec() {}
 
@@ -245,7 +245,7 @@ public final class ScalarCodecs {
   }
 
   public static final class LongCodec extends AbstractJsonCodec {
-    static final LongCodec INSTANCE = new LongCodec();
+    public static final LongCodec INSTANCE = new LongCodec();
 
     private LongCodec() {}
 
@@ -282,7 +282,7 @@ public final class ScalarCodecs {
   }
 
   public static final class ShortCodec extends AbstractJsonCodec {
-    static final ShortCodec INSTANCE = new ShortCodec();
+    public static final ShortCodec INSTANCE = new ShortCodec();
 
     private ShortCodec() {}
 
@@ -331,7 +331,7 @@ public final class ScalarCodecs {
   }
 
   public static final class ByteCodec extends AbstractJsonCodec {
-    static final ByteCodec INSTANCE = new ByteCodec();
+    public static final ByteCodec INSTANCE = new ByteCodec();
 
     private ByteCodec() {}
 
@@ -380,7 +380,7 @@ public final class ScalarCodecs {
   }
 
   public static final class FloatCodec extends AbstractJsonCodec {
-    static final FloatCodec INSTANCE = new FloatCodec();
+    public static final FloatCodec INSTANCE = new FloatCodec();
 
     private FloatCodec() {}
 
@@ -417,7 +417,7 @@ public final class ScalarCodecs {
   }
 
   public static final class DoubleCodec extends AbstractJsonCodec {
-    static final DoubleCodec INSTANCE = new DoubleCodec();
+    public static final DoubleCodec INSTANCE = new DoubleCodec();
 
     private DoubleCodec() {}
 
@@ -454,7 +454,7 @@ public final class ScalarCodecs {
   }
 
   public static final class CharCodec extends AbstractJsonCodec {
-    static final CharCodec INSTANCE = new CharCodec();
+    public static final CharCodec INSTANCE = new CharCodec();
 
     private CharCodec() {}
 
@@ -540,7 +540,7 @@ public final class ScalarCodecs {
   }
 
   public static final class BigIntegerCodec extends NumberValueCodec {
-    static final BigIntegerCodec INSTANCE = new BigIntegerCodec();
+    public static final BigIntegerCodec INSTANCE = new BigIntegerCodec();
 
     @Override
     String toJsonNumber(Object value) {
@@ -554,7 +554,7 @@ public final class ScalarCodecs {
   }
 
   public static final class BigDecimalCodec extends NumberValueCodec {
-    static final BigDecimalCodec INSTANCE = new BigDecimalCodec();
+    public static final BigDecimalCodec INSTANCE = new BigDecimalCodec();
 
     @Override
     String toJsonNumber(Object value) {
@@ -568,7 +568,7 @@ public final class ScalarCodecs {
   }
 
   public static final class Float16Codec extends AbstractJsonCodec {
-    static final Float16Codec INSTANCE = new Float16Codec();
+    public static final Float16Codec INSTANCE = new Float16Codec();
 
     @Override
     void writeNonNull(JsonWriter writer, Object value, JsonTypeResolver resolver) {
@@ -587,7 +587,7 @@ public final class ScalarCodecs {
   }
 
   public static final class BFloat16Codec extends AbstractJsonCodec {
-    static final BFloat16Codec INSTANCE = new BFloat16Codec();
+    public static final BFloat16Codec INSTANCE = new BFloat16Codec();
 
     @Override
     void writeNonNull(JsonWriter writer, Object value, JsonTypeResolver resolver) {
@@ -606,7 +606,7 @@ public final class ScalarCodecs {
   }
 
   public static final class StringBuilderCodec extends StringValueCodec {
-    static final StringBuilderCodec INSTANCE = new StringBuilderCodec();
+    public static final StringBuilderCodec INSTANCE = new StringBuilderCodec();
 
     @Override
     String toJsonString(Object value) {
@@ -620,7 +620,7 @@ public final class ScalarCodecs {
   }
 
   public static final class StringBufferCodec extends StringValueCodec {
-    static final StringBufferCodec INSTANCE = new StringBufferCodec();
+    public static final StringBufferCodec INSTANCE = new StringBufferCodec();
 
     @Override
     String toJsonString(Object value) {
@@ -634,7 +634,7 @@ public final class ScalarCodecs {
   }
 
   public static final class ClassCodec extends StringValueCodec {
-    static final ClassCodec INSTANCE = new ClassCodec();
+    public static final ClassCodec INSTANCE = new ClassCodec();
 
     @Override
     String toJsonString(Object value) {
@@ -652,7 +652,7 @@ public final class ScalarCodecs {
   }
 
   public static final class CurrencyCodec extends StringValueCodec {
-    static final CurrencyCodec INSTANCE = new CurrencyCodec();
+    public static final CurrencyCodec INSTANCE = new CurrencyCodec();
 
     @Override
     String toJsonString(Object value) {
@@ -666,7 +666,7 @@ public final class ScalarCodecs {
   }
 
   public static final class UriCodec extends StringValueCodec {
-    static final UriCodec INSTANCE = new UriCodec();
+    public static final UriCodec INSTANCE = new UriCodec();
 
     @Override
     String toJsonString(Object value) {
@@ -680,7 +680,7 @@ public final class ScalarCodecs {
   }
 
   public static final class UrlCodec extends StringValueCodec {
-    static final UrlCodec INSTANCE = new UrlCodec();
+    public static final UrlCodec INSTANCE = new UrlCodec();
 
     @Override
     String toJsonString(Object value) {
@@ -698,7 +698,7 @@ public final class ScalarCodecs {
   }
 
   public static final class PatternCodec extends StringValueCodec {
-    static final PatternCodec INSTANCE = new PatternCodec();
+    public static final PatternCodec INSTANCE = new PatternCodec();
 
     @Override
     String toJsonString(Object value) {
@@ -712,7 +712,7 @@ public final class ScalarCodecs {
   }
 
   public static final class UuidCodec extends StringValueCodec {
-    static final UuidCodec INSTANCE = new UuidCodec();
+    public static final UuidCodec INSTANCE = new UuidCodec();
 
     @Override
     String toJsonString(Object value) {
@@ -726,7 +726,7 @@ public final class ScalarCodecs {
   }
 
   public static final class LocaleCodec extends StringValueCodec {
-    static final LocaleCodec INSTANCE = new LocaleCodec();
+    public static final LocaleCodec INSTANCE = new LocaleCodec();
 
     @Override
     String toJsonString(Object value) {
@@ -740,7 +740,7 @@ public final class ScalarCodecs {
   }
 
   public static final class CharsetCodec extends StringValueCodec {
-    static final CharsetCodec INSTANCE = new CharsetCodec();
+    public static final CharsetCodec INSTANCE = new CharsetCodec();
 
     @Override
     String toJsonString(Object value) {
@@ -754,7 +754,7 @@ public final class ScalarCodecs {
   }
 
   public static final class DateCodec extends AbstractJsonCodec {
-    static final DateCodec INSTANCE = new DateCodec();
+    public static final DateCodec INSTANCE = new DateCodec();
 
     @Override
     void writeNonNull(JsonWriter writer, Object value, JsonTypeResolver resolver) {
@@ -773,7 +773,7 @@ public final class ScalarCodecs {
   }
 
   public static final class SqlDateCodec extends AbstractJsonCodec {
-    static final SqlDateCodec INSTANCE = new SqlDateCodec();
+    public static final SqlDateCodec INSTANCE = new SqlDateCodec();
 
     @Override
     void writeNonNull(JsonWriter writer, Object value, JsonTypeResolver resolver) {
@@ -792,7 +792,7 @@ public final class ScalarCodecs {
   }
 
   public static final class SqlTimeCodec extends AbstractJsonCodec {
-    static final SqlTimeCodec INSTANCE = new SqlTimeCodec();
+    public static final SqlTimeCodec INSTANCE = new SqlTimeCodec();
 
     @Override
     void writeNonNull(JsonWriter writer, Object value, JsonTypeResolver resolver) {
@@ -811,7 +811,7 @@ public final class ScalarCodecs {
   }
 
   public static final class TimestampCodec extends AbstractJsonCodec {
-    static final TimestampCodec INSTANCE = new TimestampCodec();
+    public static final TimestampCodec INSTANCE = new TimestampCodec();
 
     @Override
     void writeNonNull(JsonWriter writer, Object value, JsonTypeResolver resolver) {
@@ -830,7 +830,7 @@ public final class ScalarCodecs {
   }
 
   public static final class CalendarCodec extends AbstractJsonCodec {
-    static final CalendarCodec INSTANCE = new CalendarCodec();
+    public static final CalendarCodec INSTANCE = new CalendarCodec();
 
     @Override
     void writeNonNull(JsonWriter writer, Object value, JsonTypeResolver resolver) {
@@ -851,7 +851,7 @@ public final class ScalarCodecs {
   }
 
   public static final class TimeZoneCodec extends StringValueCodec {
-    static final TimeZoneCodec INSTANCE = new TimeZoneCodec();
+    public static final TimeZoneCodec INSTANCE = new TimeZoneCodec();
 
     @Override
     String toJsonString(Object value) {
@@ -865,7 +865,7 @@ public final class ScalarCodecs {
   }
 
   public static final class LocalDateCodec extends StringValueCodec {
-    static final LocalDateCodec INSTANCE = new LocalDateCodec();
+    public static final LocalDateCodec INSTANCE = new LocalDateCodec();
 
     @Override
     String toJsonString(Object value) {
@@ -879,7 +879,7 @@ public final class ScalarCodecs {
   }
 
   public static final class LocalTimeCodec extends StringValueCodec {
-    static final LocalTimeCodec INSTANCE = new LocalTimeCodec();
+    public static final LocalTimeCodec INSTANCE = new LocalTimeCodec();
 
     @Override
     String toJsonString(Object value) {
@@ -893,7 +893,7 @@ public final class ScalarCodecs {
   }
 
   public static final class LocalDateTimeCodec extends StringValueCodec {
-    static final LocalDateTimeCodec INSTANCE = new LocalDateTimeCodec();
+    public static final LocalDateTimeCodec INSTANCE = new LocalDateTimeCodec();
 
     @Override
     String toJsonString(Object value) {
@@ -907,7 +907,7 @@ public final class ScalarCodecs {
   }
 
   public static final class InstantCodec extends StringValueCodec {
-    static final InstantCodec INSTANCE = new InstantCodec();
+    public static final InstantCodec INSTANCE = new InstantCodec();
 
     @Override
     String toJsonString(Object value) {
@@ -921,7 +921,7 @@ public final class ScalarCodecs {
   }
 
   public static final class DurationCodec extends StringValueCodec {
-    static final DurationCodec INSTANCE = new DurationCodec();
+    public static final DurationCodec INSTANCE = new DurationCodec();
 
     @Override
     String toJsonString(Object value) {
@@ -935,7 +935,7 @@ public final class ScalarCodecs {
   }
 
   public static final class ZoneOffsetCodec extends StringValueCodec {
-    static final ZoneOffsetCodec INSTANCE = new ZoneOffsetCodec();
+    public static final ZoneOffsetCodec INSTANCE = new ZoneOffsetCodec();
 
     @Override
     String toJsonString(Object value) {
@@ -949,7 +949,7 @@ public final class ScalarCodecs {
   }
 
   public static final class ZoneIdCodec extends StringValueCodec {
-    static final ZoneIdCodec INSTANCE = new ZoneIdCodec();
+    public static final ZoneIdCodec INSTANCE = new ZoneIdCodec();
 
     @Override
     String toJsonString(Object value) {
@@ -963,7 +963,7 @@ public final class ScalarCodecs {
   }
 
   public static final class ZonedDateTimeCodec extends StringValueCodec {
-    static final ZonedDateTimeCodec INSTANCE = new ZonedDateTimeCodec();
+    public static final ZonedDateTimeCodec INSTANCE = new ZonedDateTimeCodec();
 
     @Override
     String toJsonString(Object value) {
@@ -977,7 +977,7 @@ public final class ScalarCodecs {
   }
 
   public static final class YearCodec extends StringValueCodec {
-    static final YearCodec INSTANCE = new YearCodec();
+    public static final YearCodec INSTANCE = new YearCodec();
 
     @Override
     String toJsonString(Object value) {
@@ -991,7 +991,7 @@ public final class ScalarCodecs {
   }
 
   public static final class YearMonthCodec extends StringValueCodec {
-    static final YearMonthCodec INSTANCE = new YearMonthCodec();
+    public static final YearMonthCodec INSTANCE = new YearMonthCodec();
 
     @Override
     String toJsonString(Object value) {
@@ -1005,7 +1005,7 @@ public final class ScalarCodecs {
   }
 
   public static final class MonthDayCodec extends StringValueCodec {
-    static final MonthDayCodec INSTANCE = new MonthDayCodec();
+    public static final MonthDayCodec INSTANCE = new MonthDayCodec();
 
     @Override
     String toJsonString(Object value) {
@@ -1019,7 +1019,7 @@ public final class ScalarCodecs {
   }
 
   public static final class PeriodCodec extends StringValueCodec {
-    static final PeriodCodec INSTANCE = new PeriodCodec();
+    public static final PeriodCodec INSTANCE = new PeriodCodec();
 
     @Override
     String toJsonString(Object value) {
@@ -1033,7 +1033,7 @@ public final class ScalarCodecs {
   }
 
   public static final class OffsetTimeCodec extends StringValueCodec {
-    static final OffsetTimeCodec INSTANCE = new OffsetTimeCodec();
+    public static final OffsetTimeCodec INSTANCE = new OffsetTimeCodec();
 
     @Override
     String toJsonString(Object value) {
@@ -1047,7 +1047,7 @@ public final class ScalarCodecs {
   }
 
   public static final class OffsetDateTimeCodec extends StringValueCodec {
-    static final OffsetDateTimeCodec INSTANCE = new OffsetDateTimeCodec();
+    public static final OffsetDateTimeCodec INSTANCE = new OffsetDateTimeCodec();
 
     @Override
     String toJsonString(Object value) {
@@ -1061,7 +1061,7 @@ public final class ScalarCodecs {
   }
 
   public static final class AtomicBooleanCodec extends AbstractJsonCodec {
-    static final AtomicBooleanCodec INSTANCE = new AtomicBooleanCodec();
+    public static final AtomicBooleanCodec INSTANCE = new AtomicBooleanCodec();
 
     @Override
     void writeNonNull(JsonWriter writer, Object value, JsonTypeResolver resolver) {
@@ -1080,7 +1080,7 @@ public final class ScalarCodecs {
   }
 
   public static final class AtomicIntegerCodec extends AbstractJsonCodec {
-    static final AtomicIntegerCodec INSTANCE = new AtomicIntegerCodec();
+    public static final AtomicIntegerCodec INSTANCE = new AtomicIntegerCodec();
 
     @Override
     void writeNonNull(JsonWriter writer, Object value, JsonTypeResolver resolver) {
@@ -1099,7 +1099,7 @@ public final class ScalarCodecs {
   }
 
   public static final class AtomicLongCodec extends AbstractJsonCodec {
-    static final AtomicLongCodec INSTANCE = new AtomicLongCodec();
+    public static final AtomicLongCodec INSTANCE = new AtomicLongCodec();
 
     @Override
     void writeNonNull(JsonWriter writer, Object value, JsonTypeResolver resolver) {
@@ -1121,7 +1121,7 @@ public final class ScalarCodecs {
     private final JsonTypeInfo valueTypeInfo;
     private final JsonCodec valueCodec;
 
-    AtomicReferenceCodec(java.lang.reflect.Type valueType, JsonTypeResolver resolver) {
+    public AtomicReferenceCodec(java.lang.reflect.Type valueType, JsonTypeResolver resolver) {
       Class<?> valueRawType = CodecUtils.rawType(valueType, Object.class);
       valueTypeInfo = resolver.getTypeInfo(valueType, valueRawType);
       valueCodec = valueTypeInfo.codec();
@@ -1156,7 +1156,7 @@ public final class ScalarCodecs {
     private final JsonTypeInfo valueTypeInfo;
     private final JsonCodec valueCodec;
 
-    OptionalCodec(java.lang.reflect.Type valueType, JsonTypeResolver resolver) {
+    public OptionalCodec(java.lang.reflect.Type valueType, JsonTypeResolver resolver) {
       Class<?> valueRawType = CodecUtils.rawType(valueType, Object.class);
       valueTypeInfo = resolver.getTypeInfo(valueType, valueRawType);
       valueCodec = valueTypeInfo.codec();
@@ -1198,7 +1198,7 @@ public final class ScalarCodecs {
   }
 
   public static final class OptionalIntCodec extends AbstractJsonCodec {
-    static final OptionalIntCodec INSTANCE = new OptionalIntCodec();
+    public static final OptionalIntCodec INSTANCE = new OptionalIntCodec();
 
     @Override
     public Object read(JsonReader reader, JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
@@ -1231,7 +1231,7 @@ public final class ScalarCodecs {
   }
 
   public static final class OptionalLongCodec extends AbstractJsonCodec {
-    static final OptionalLongCodec INSTANCE = new OptionalLongCodec();
+    public static final OptionalLongCodec INSTANCE = new OptionalLongCodec();
 
     @Override
     public Object read(JsonReader reader, JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
@@ -1264,7 +1264,7 @@ public final class ScalarCodecs {
   }
 
   public static final class OptionalDoubleCodec extends AbstractJsonCodec {
-    static final OptionalDoubleCodec INSTANCE = new OptionalDoubleCodec();
+    public static final OptionalDoubleCodec INSTANCE = new OptionalDoubleCodec();
 
     @Override
     public Object read(JsonReader reader, JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
@@ -1297,7 +1297,7 @@ public final class ScalarCodecs {
   }
 
   public static final class ByteBufferCodec extends AbstractJsonCodec {
-    static final ByteBufferCodec INSTANCE = new ByteBufferCodec();
+    public static final ByteBufferCodec INSTANCE = new ByteBufferCodec();
 
     @Override
     void writeNonNull(JsonWriter writer, Object value, JsonTypeResolver resolver) {
@@ -1356,7 +1356,7 @@ public final class ScalarCodecs {
     private final Enum<?>[] tokenValues;
     private final int tokenCount;
 
-    EnumCodec(Class<?> type) {
+    public EnumCodec(Class<?> type) {
       this.type = type;
       Enum<?>[] constants = (Enum<?>[]) type.getEnumConstants();
       nameHashes = new long[constants.length];

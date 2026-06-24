@@ -17,11 +17,12 @@
  * under the License.
  */
 
-package org.apache.fory.json.codec;
+package org.apache.fory.json.resolver;
 
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import org.apache.fory.json.codec.JsonCodec;
 import org.apache.fory.util.Preconditions;
 
 /** Registry for user-supplied JSON codecs. */

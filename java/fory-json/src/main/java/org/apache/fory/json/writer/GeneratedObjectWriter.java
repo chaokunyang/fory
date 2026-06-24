@@ -17,11 +17,18 @@
  * under the License.
  */
 
-package org.apache.fory.json.codec;
+package org.apache.fory.json.writer;
 
-import org.apache.fory.json.reader.Utf8JsonReader;
-import org.apache.fory.json.resolver.JsonTypeResolver;
+import org.apache.fory.json.codec.JsonCodec;
+import org.apache.fory.json.meta.JsonFieldInfo;
 
-public interface Utf8ObjectReader {
-  Object readUtf8(Utf8JsonReader reader, BaseObjectCodec owner, JsonTypeResolver typeResolver);
+/** Immutable metadata carrier shared by generated JSON object writers. */
+public abstract class GeneratedObjectWriter {
+  protected final JsonFieldInfo[] fields;
+  protected final JsonCodec[] codecs;
+
+  protected GeneratedObjectWriter(JsonFieldInfo[] fields, JsonCodec[] codecs) {
+    this.fields = fields;
+    this.codecs = codecs;
+  }
 }

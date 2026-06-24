@@ -17,11 +17,10 @@
  * under the License.
  */
 
-package org.apache.fory.json.codec;
+package org.apache.fory.json.writer;
 
 import org.apache.fory.json.resolver.JsonTypeResolver;
-import org.apache.fory.json.writer.Utf8JsonWriter;
 
-public interface Utf8ObjectWriter {
-  void writeUtf8(Utf8JsonWriter writer, Object value, JsonTypeResolver typeResolver);
+public interface StringObjectWriter {
+  void writeString(StringJsonWriter writer, Object value, JsonTypeResolver typeResolver);
 }

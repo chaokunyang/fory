@@ -19,6 +19,13 @@
 
 package org.apache.fory.json.codec;
 
+import org.apache.fory.json.reader.Latin1ObjectReader;
+import org.apache.fory.json.reader.ObjectReader;
+import org.apache.fory.json.reader.Utf16ObjectReader;
+import org.apache.fory.json.reader.Utf8ObjectReader;
+import org.apache.fory.json.writer.StringObjectWriter;
+import org.apache.fory.json.writer.Utf8ObjectWriter;
+
 public final class ObjectCodecs {
   private final StringObjectWriter stringWriter;
   private final Utf8ObjectWriter utf8Writer;

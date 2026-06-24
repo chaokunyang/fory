@@ -19,8 +19,8 @@
 
 package org.apache.fory.json;
 
-import org.apache.fory.json.codec.CodecRegistry;
 import org.apache.fory.json.codec.JsonCodec;
+import org.apache.fory.json.resolver.CodecRegistry;
 
 /** Builder for {@link ForyJson}. */
 public final class ForyJsonBuilder {

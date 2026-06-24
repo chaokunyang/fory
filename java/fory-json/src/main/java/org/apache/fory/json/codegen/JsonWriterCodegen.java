@@ -24,15 +24,15 @@ import org.apache.fory.codegen.CodegenContext;
 import org.apache.fory.codegen.Expression;
 import org.apache.fory.codegen.Expression.Reference;
 import org.apache.fory.json.ForyJsonException;
-import org.apache.fory.json.codec.GeneratedObjectWriter;
 import org.apache.fory.json.codec.JsonCodec;
-import org.apache.fory.json.codec.StringObjectWriter;
-import org.apache.fory.json.codec.Utf8ObjectWriter;
 import org.apache.fory.json.meta.JsonFieldInfo;
 import org.apache.fory.json.meta.JsonFieldKind;
 import org.apache.fory.json.resolver.JsonTypeResolver;
+import org.apache.fory.json.writer.GeneratedObjectWriter;
 import org.apache.fory.json.writer.StringJsonWriter;
+import org.apache.fory.json.writer.StringObjectWriter;
 import org.apache.fory.json.writer.Utf8JsonWriter;
+import org.apache.fory.json.writer.Utf8ObjectWriter;
 import org.apache.fory.reflect.TypeRef;
 
 final class JsonWriterCodegen {

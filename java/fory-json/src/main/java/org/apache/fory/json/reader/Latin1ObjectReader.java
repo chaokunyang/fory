@@ -17,11 +17,12 @@
  * under the License.
  */
 
-package org.apache.fory.json.codec;
+package org.apache.fory.json.reader;
 
+import org.apache.fory.json.codec.BaseObjectCodec;
 import org.apache.fory.json.resolver.JsonTypeResolver;
-import org.apache.fory.json.writer.StringJsonWriter;
 
-public interface StringObjectWriter {
-  void writeString(StringJsonWriter writer, Object value, JsonTypeResolver typeResolver);
+public interface Latin1ObjectReader {
+  Object readLatin1(
+      Latin1StringJsonReader reader, BaseObjectCodec owner, JsonTypeResolver typeResolver);
 }

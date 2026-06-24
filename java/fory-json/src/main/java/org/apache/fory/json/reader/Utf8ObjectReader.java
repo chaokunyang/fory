@@ -17,12 +17,11 @@
  * under the License.
  */
 
-package org.apache.fory.json.codec;
+package org.apache.fory.json.reader;
 
-import org.apache.fory.json.reader.Utf16StringJsonReader;
+import org.apache.fory.json.codec.BaseObjectCodec;
 import org.apache.fory.json.resolver.JsonTypeResolver;
 
-public interface Utf16ObjectReader {
-  Object readUtf16(
-      Utf16StringJsonReader reader, BaseObjectCodec owner, JsonTypeResolver typeResolver);
+public interface Utf8ObjectReader {
+  Object readUtf8(Utf8JsonReader reader, BaseObjectCodec owner, JsonTypeResolver typeResolver);
 }

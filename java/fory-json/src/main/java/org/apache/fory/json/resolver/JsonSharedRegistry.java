@@ -17,7 +17,7 @@
  * under the License.
  */
 
-package org.apache.fory.json.codec;
+package org.apache.fory.json.resolver;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
@@ -57,9 +57,16 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.regex.Pattern;
+import org.apache.fory.json.codec.ArrayCodec;
+import org.apache.fory.json.codec.BaseObjectCodec;
+import org.apache.fory.json.codec.CodecUtils;
+import org.apache.fory.json.codec.CollectionCodec;
+import org.apache.fory.json.codec.JsonCodec;
+import org.apache.fory.json.codec.MapCodec;
+import org.apache.fory.json.codec.ObjectCodecs;
+import org.apache.fory.json.codec.ScalarCodecs;
 import org.apache.fory.json.codegen.JsonCodegen;
 import org.apache.fory.json.meta.JsonFieldKind;
-import org.apache.fory.json.resolver.JsonTypeResolver;
 import org.apache.fory.reflect.TypeRef;
 import org.apache.fory.type.BFloat16;
 import org.apache.fory.type.Float16;

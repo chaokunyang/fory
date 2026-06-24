@@ -20,13 +20,19 @@
 package org.apache.fory.json.codec;
 
 import org.apache.fory.json.reader.JsonReader;
+import org.apache.fory.json.reader.Latin1ObjectReader;
 import org.apache.fory.json.reader.Latin1StringJsonReader;
+import org.apache.fory.json.reader.ObjectReader;
+import org.apache.fory.json.reader.Utf16ObjectReader;
 import org.apache.fory.json.reader.Utf16StringJsonReader;
 import org.apache.fory.json.reader.Utf8JsonReader;
+import org.apache.fory.json.reader.Utf8ObjectReader;
 import org.apache.fory.json.resolver.JsonTypeInfo;
 import org.apache.fory.json.resolver.JsonTypeResolver;
 import org.apache.fory.json.writer.StringJsonWriter;
+import org.apache.fory.json.writer.StringObjectWriter;
 import org.apache.fory.json.writer.Utf8JsonWriter;
+import org.apache.fory.json.writer.Utf8ObjectWriter;
 
 public final class GeneratedObjectCodec extends BaseObjectCodec {
   private final StringObjectWriter stringWriter;

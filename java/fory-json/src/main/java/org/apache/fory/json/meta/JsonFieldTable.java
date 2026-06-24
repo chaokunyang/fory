@@ -78,6 +78,11 @@ public final class JsonFieldTable {
     }
   }
 
+  private static int index(long hash, int mask) {
+    long spread = hash ^ (hash >>> 32);
+    return ((int) spread) & mask;
+  }
+
   private void put(JsonFieldInfo field, int fieldIndex) {
     String name = field.name();
     long hash = field.nameHash();
@@ -93,10 +98,5 @@ public final class JsonFieldTable {
     tableHashes[index] = hash;
     tableFields[index] = field;
     tableIndexes[index] = fieldIndex;
-  }
-
-  private static int index(long hash, int mask) {
-    long spread = hash ^ (hash >>> 32);
-    return ((int) spread) & mask;
   }
 }

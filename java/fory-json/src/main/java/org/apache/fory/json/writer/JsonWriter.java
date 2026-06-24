@@ -52,11 +52,11 @@ public abstract class JsonWriter {
 
   public abstract void writeFieldName(String name);
 
+  public abstract void writeFieldName(JsonFieldInfo field);
+
   public abstract void writeIntFieldName(int value);
 
   public abstract void writeLongFieldName(long value);
-
-  public abstract void writeFieldName(JsonFieldInfo field);
 
   public abstract void writeObjectStart();
 

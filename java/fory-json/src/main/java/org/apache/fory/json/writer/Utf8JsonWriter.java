@@ -215,6 +215,15 @@ public final class Utf8JsonWriter extends JsonWriter {
   }
 
   @Override
+  public void writeFieldName(JsonFieldInfo field) {
+    writeRaw(field.utf8NamePrefix());
+  }
+
+  public void writeFieldName(JsonFieldInfo field, int index) {
+    writeRaw(index == 0 ? field.utf8NamePrefix() : field.utf8CommaNamePrefix());
+  }
+
+  @Override
   public void writeIntFieldName(int value) {
     writeByteRaw((byte) '"');
     writeInt(value);
@@ -228,15 +237,6 @@ public final class Utf8JsonWriter extends JsonWriter {
     writeLong(value);
     writeByteRaw((byte) '"');
     writeByteRaw((byte) ':');
-  }
-
-  @Override
-  public void writeFieldName(JsonFieldInfo field) {
-    writeRaw(field.utf8NamePrefix());
-  }
-
-  public void writeFieldName(JsonFieldInfo field, int index) {
-    writeRaw(index == 0 ? field.utf8NamePrefix() : field.utf8CommaNamePrefix());
   }
 
   public void writeBooleanField(

@@ -499,6 +499,21 @@ public final class JsonFieldInfo {
     }
   }
 
+  private boolean writeString(JsonWriter writer, Object object, int index) {
+    String value = (String) writeAccessor.getObject(object);
+    if (value == null && !writer.writeNullFields()) {
+      return false;
+    }
+    writer.writeComma(index);
+    writer.writeFieldName(this);
+    if (value == null) {
+      writer.writeNull();
+    } else {
+      writer.writeString(value);
+    }
+    return true;
+  }
+
   public boolean writeUtf8(
       Utf8JsonWriter writer, Object object, JsonTypeResolver typeResolver, int index) {
     switch (writeKindId) {
@@ -801,21 +816,6 @@ public final class JsonFieldInfo {
     }
     writer.writeFieldName(this, index);
     writeTypeInfo.codec().writeUtf8(writer, value, typeResolver);
-    return true;
-  }
-
-  private boolean writeString(JsonWriter writer, Object object, int index) {
-    String value = (String) writeAccessor.getObject(object);
-    if (value == null && !writer.writeNullFields()) {
-      return false;
-    }
-    writer.writeComma(index);
-    writer.writeFieldName(this);
-    if (value == null) {
-      writer.writeNull();
-    } else {
-      writer.writeString(value);
-    }
     return true;
   }
 

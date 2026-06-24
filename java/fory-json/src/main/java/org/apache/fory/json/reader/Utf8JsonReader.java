@@ -725,16 +725,16 @@ public final class Utf8JsonReader extends JsonReader {
         | ((word - CONTROL_LIMIT_BYTES) & ~word & BYTE_HIGH_BITS);
   }
 
-  private static long byteMatchMask(long word, long repeatedByte) {
-    long match = word ^ repeatedByte;
-    return (match - BYTE_ONES) & ~match & BYTE_HIGH_BITS;
-  }
-
   private static int stringStopMask(int word) {
     return (word & INT_BYTE_HIGH_BITS)
         | byteMatchMask(word, INT_QUOTE_BYTES)
         | byteMatchMask(word, INT_BACKSLASH_BYTES)
         | ((word - INT_CONTROL_LIMIT_BYTES) & ~word & INT_BYTE_HIGH_BITS);
+  }
+
+  private static long byteMatchMask(long word, long repeatedByte) {
+    long match = word ^ repeatedByte;
+    return (match - BYTE_ONES) & ~match & BYTE_HIGH_BITS;
   }
 
   private static int byteMatchMask(int word, int repeatedByte) {

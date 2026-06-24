@@ -111,6 +111,15 @@ public final class JsonTypeResolver {
     return typeInfo;
   }
 
+  private JsonTypeInfo buildTypeInfo(Class<?> rawType, Type declaredType) {
+    TypeRef<?> typeRef = typeRef(declaredType, rawType);
+    JsonCodec codec = sharedRegistry.createCodec(rawType, typeRef, this);
+    if (codec == null) {
+      codec = getObjectCodec(rawType);
+    }
+    return new JsonTypeInfo(declaredType, typeRef, rawType, sharedRegistry.kind(rawType), codec);
+  }
+
   private JsonTypeInfo buildRuntimeTypeInfo(Object key, Class<?> rawType) {
     JsonTypeInfo cached = typeInfos.get(key);
     if (cached != null) {
@@ -128,15 +137,6 @@ public final class JsonTypeResolver {
         new JsonTypeInfo(rawType, typeRef, rawType, sharedRegistry.kind(rawType), codec);
     typeInfos.put(key, typeInfo);
     return typeInfo;
-  }
-
-  private JsonTypeInfo buildTypeInfo(Class<?> rawType, Type declaredType) {
-    TypeRef<?> typeRef = typeRef(declaredType, rawType);
-    JsonCodec codec = sharedRegistry.createCodec(rawType, typeRef, this);
-    if (codec == null) {
-      codec = getObjectCodec(rawType);
-    }
-    return new JsonTypeInfo(declaredType, typeRef, rawType, sharedRegistry.kind(rawType), codec);
   }
 
   private static Object typeInfoKey(Type declaredType, Class<?> rawType) {

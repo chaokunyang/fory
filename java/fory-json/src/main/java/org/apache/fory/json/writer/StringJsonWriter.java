@@ -202,6 +202,15 @@ public final class StringJsonWriter extends JsonWriter {
   }
 
   @Override
+  public void writeFieldName(JsonFieldInfo field) {
+    writeRaw(field.stringNamePrefix());
+  }
+
+  public void writeFieldName(JsonFieldInfo field, int index) {
+    writeRaw(index == 0 ? field.stringNamePrefix() : field.stringCommaNamePrefix());
+  }
+
+  @Override
   public void writeIntFieldName(int value) {
     writeByteRaw((byte) '"');
     writeInt(value);
@@ -215,15 +224,6 @@ public final class StringJsonWriter extends JsonWriter {
     writeLong(value);
     writeByteRaw((byte) '"');
     writeByteRaw((byte) ':');
-  }
-
-  @Override
-  public void writeFieldName(JsonFieldInfo field) {
-    writeRaw(field.stringNamePrefix());
-  }
-
-  public void writeFieldName(JsonFieldInfo field, int index) {
-    writeRaw(index == 0 ? field.stringNamePrefix() : field.stringCommaNamePrefix());
   }
 
   public void writeBooleanField(

@@ -91,6 +91,10 @@ public final class Utf16StringJsonReader extends JsonReader {
       position++;
       return;
     }
+    expectNextTokenSlow(expected);
+  }
+
+  private void expectNextTokenSlow(char expected) {
     expectToken(expected);
   }
 
@@ -107,9 +111,13 @@ public final class Utf16StringJsonReader extends JsonReader {
         return false;
       }
       if (!isWhitespace(ch)) {
-        throw error("Expected ',' or '}'");
+        return consumeNextCommaOrEndObjectSlow(inputLength);
       }
     }
+    return consumeNextCommaOrEndObjectSlow(inputLength);
+  }
+
+  private boolean consumeNextCommaOrEndObjectSlow(int inputLength) {
     skipWhitespaceFast();
     if (position < inputLength) {
       char ch = charAtFast(position);
@@ -138,9 +146,13 @@ public final class Utf16StringJsonReader extends JsonReader {
         return false;
       }
       if (!isWhitespace(ch)) {
-        throw error("Expected ',' or ']'");
+        return consumeNextCommaOrEndArraySlow(inputLength);
       }
     }
+    return consumeNextCommaOrEndArraySlow(inputLength);
+  }
+
+  private boolean consumeNextCommaOrEndArraySlow(int inputLength) {
     skipWhitespaceFast();
     if (position < inputLength) {
       char ch = charAtFast(position);
@@ -684,14 +696,18 @@ public final class Utf16StringJsonReader extends JsonReader {
         if (colonOffset < length && charAtFast(colonOffset) == ':') {
           position = colonOffset + 1;
         } else {
-          position = colonOffset;
-          expectNextToken(':');
+          readFieldNameColon(colonOffset);
         }
         return true;
       }
     }
     position = mark;
     return false;
+  }
+
+  private void readFieldNameColon(int colonOffset) {
+    position = colonOffset;
+    expectNextToken(':');
   }
 
   @Override
@@ -733,6 +749,10 @@ public final class Utf16StringJsonReader extends JsonReader {
         value = JsonFieldNameHash.value(value, nameLength++, ch);
       }
     }
+    return readQuotedStringHashFromMark(mark);
+  }
+
+  private long readQuotedStringHashFromMark(int mark) {
     position = mark;
     return readQuotedStringHashToken();
   }

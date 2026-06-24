@@ -96,6 +96,10 @@ public final class Latin1StringJsonReader extends JsonReader {
       position++;
       return;
     }
+    expectNextTokenSlow(expected);
+  }
+
+  private void expectNextTokenSlow(char expected) {
     expectToken(expected);
   }
 
@@ -111,9 +115,13 @@ public final class Latin1StringJsonReader extends JsonReader {
         return false;
       }
       if (!isWhitespace(ch)) {
-        throw error("Expected ',' or '}'");
+        return consumeNextCommaOrEndObjectSlow();
       }
     }
+    return consumeNextCommaOrEndObjectSlow();
+  }
+
+  private boolean consumeNextCommaOrEndObjectSlow() {
     skipWhitespaceFast();
     if (position < input.length) {
       int ch = input[position];
@@ -141,9 +149,13 @@ public final class Latin1StringJsonReader extends JsonReader {
         return false;
       }
       if (!isWhitespace(ch)) {
-        throw error("Expected ',' or ']'");
+        return consumeNextCommaOrEndArraySlow();
       }
     }
+    return consumeNextCommaOrEndArraySlow();
+  }
+
+  private boolean consumeNextCommaOrEndArraySlow() {
     skipWhitespaceFast();
     if (position < input.length) {
       int ch = input[position];
@@ -639,17 +651,7 @@ public final class Latin1StringJsonReader extends JsonReader {
         position = stop + 1;
         return newLatin1String(start, stop);
       }
-      position = stop + 1;
-      if (ch == '\\') {
-        StringBuilder builder = newStringBuilder(start, stop);
-        appendLatin1(builder, start, stop);
-        appendEscape(builder);
-        return readStringTail(builder);
-      }
-      if (ch < 0x20) {
-        throw error("Control character in string");
-      }
-      offset = stop + 1;
+      return readStringStop(start, stop, ch);
     }
     if (offset + Integer.BYTES <= inputLength) {
       int stopMask = stringStopMask(LittleEndian.getInt32(bytes, offset));
@@ -662,17 +664,7 @@ public final class Latin1StringJsonReader extends JsonReader {
           position = stop + 1;
           return newLatin1String(start, stop);
         }
-        position = stop + 1;
-        if (ch == '\\') {
-          StringBuilder builder = newStringBuilder(start, stop);
-          appendLatin1(builder, start, stop);
-          appendEscape(builder);
-          return readStringTail(builder);
-        }
-        if (ch < 0x20) {
-          throw error("Control character in string");
-        }
-        offset = stop + 1;
+        return readStringStop(start, stop, ch);
       }
     }
     while (offset < inputLength) {
@@ -682,11 +674,7 @@ public final class Latin1StringJsonReader extends JsonReader {
         return newLatin1String(start, offset - 1);
       }
       if (ch == '\\') {
-        position = offset;
-        StringBuilder builder = newStringBuilder(start, offset - 1);
-        appendLatin1(builder, start, offset - 1);
-        appendEscape(builder);
-        return readStringTail(builder);
+        return readStringStop(start, offset - 1, ch);
       }
       if (ch < 0x20) {
         position = offset;
@@ -694,6 +682,17 @@ public final class Latin1StringJsonReader extends JsonReader {
       }
     }
     throw error("Unterminated string");
+  }
+
+  private String readStringStop(int start, int stop, int ch) {
+    position = stop + 1;
+    if (ch == '\\') {
+      StringBuilder builder = newStringBuilder(start, stop);
+      appendLatin1(builder, start, stop);
+      appendEscape(builder);
+      return readStringTail(builder);
+    }
+    throw error("Control character in string");
   }
 
   private StringBuilder newStringBuilder(int start, int stop) {
@@ -869,8 +868,7 @@ public final class Latin1StringJsonReader extends JsonReader {
           if (colonOffset < bytes.length && bytes[colonOffset] == ':') {
             position = colonOffset + 1;
           } else {
-            position = colonOffset;
-            expectNextToken(':');
+            readFieldNameColon(colonOffset);
           }
           return true;
         }
@@ -894,14 +892,18 @@ public final class Latin1StringJsonReader extends JsonReader {
         if (colonOffset < bytes.length && bytes[colonOffset] == ':') {
           position = colonOffset + 1;
         } else {
-          position = colonOffset;
-          expectNextToken(':');
+          readFieldNameColon(colonOffset);
         }
         return true;
       }
     }
     position = mark;
     return false;
+  }
+
+  private void readFieldNameColon(int colonOffset) {
+    position = colonOffset;
+    expectNextToken(':');
   }
 
   @Override
@@ -948,6 +950,10 @@ public final class Latin1StringJsonReader extends JsonReader {
         value = JsonFieldNameHash.value(value, nameLength++, (char) ch);
       }
     }
+    return readQuotedStringHashFromMark(mark);
+  }
+
+  private long readQuotedStringHashFromMark(int mark) {
     position = mark;
     return readQuotedStringHashToken();
   }

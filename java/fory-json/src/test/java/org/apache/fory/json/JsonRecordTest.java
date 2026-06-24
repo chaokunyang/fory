@@ -28,7 +28,7 @@ import org.apache.fory.platform.JdkVersion;
 import org.testng.SkipException;
 import org.testng.annotations.Test;
 
-public class ForyJsonRecordTest extends ForyJsonTestModels {
+public class JsonRecordTest extends ForyJsonTestModels {
   @Test
   public void writeReadRecordClass() throws Exception {
     if (JdkVersion.MAJOR_VERSION < 17) {

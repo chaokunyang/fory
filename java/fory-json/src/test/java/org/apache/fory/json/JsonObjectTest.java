@@ -30,7 +30,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import org.testng.annotations.Test;
 
-public class ForyJsonObjectTest extends ForyJsonTestModels {
+public class JsonObjectTest extends ForyJsonTestModels {
   @Test
   public void writePublicFields() {
     ForyJson json = ForyJson.builder().build();

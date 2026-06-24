@@ -26,7 +26,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.Optional;
 import org.testng.annotations.Test;
 
-public class ForyJsonScalarTest extends ForyJsonTestModels {
+public class JsonScalarTest extends ForyJsonTestModels {
   @Test
   public void writeBoxedScalars() {
     ForyJson json = ForyJson.builder().build();

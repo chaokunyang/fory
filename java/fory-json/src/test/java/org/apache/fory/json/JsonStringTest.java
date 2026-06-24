@@ -27,7 +27,7 @@ import java.nio.charset.StandardCharsets;
 import org.apache.fory.serializer.StringSerializer;
 import org.testng.annotations.Test;
 
-public class ForyJsonStringTest extends ForyJsonTestModels {
+public class JsonStringTest extends ForyJsonTestModels {
   @Test
   public void escapeStrings() {
     ForyJson json = ForyJson.builder().build();

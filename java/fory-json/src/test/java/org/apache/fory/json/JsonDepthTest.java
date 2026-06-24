@@ -28,7 +28,7 @@ import java.util.Map;
 import org.apache.fory.reflect.TypeRef;
 import org.testng.annotations.Test;
 
-public class ForyJsonDepthTest extends ForyJsonTestModels {
+public class JsonDepthTest extends ForyJsonTestModels {
   @Test
   public void defaultMaxDepth() {
     ForyJson json = ForyJson.builder().build();

@@ -25,7 +25,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import org.testng.annotations.Test;
 
-public class ForyJsonGeneratedCodecTest extends ForyJsonTestModels {
+public class JsonGeneratedCodecTest extends ForyJsonTestModels {
   @Test
   public void writeRecursiveGeneratedTypes() {
     ForyJson json = ForyJson.builder().build();

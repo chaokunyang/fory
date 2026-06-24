@@ -33,7 +33,7 @@ import java.util.Optional;
 import org.apache.fory.reflect.TypeRef;
 import org.testng.annotations.Test;
 
-public class ForyJsonContainerTest extends ForyJsonTestModels {
+public class JsonContainerTest extends ForyJsonTestModels {
   @Test
   public void writeNestedCollections() {
     ForyJson json = ForyJson.builder().build();

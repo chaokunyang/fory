@@ -26,6 +26,7 @@ import org.apache.fory.memory.LittleEndian;
 import org.apache.fory.serializer.StringSerializer;
 
 public final class Utf8JsonWriter extends JsonWriter {
+  private static final int RETAINED_CAPACITY = 8192;
   private static final byte[] MIN_INT_BYTES =
       "-2147483648".getBytes(java.nio.charset.StandardCharsets.ISO_8859_1);
   private static final byte[] MIN_LONG_BYTES =
@@ -76,17 +77,15 @@ public final class Utf8JsonWriter extends JsonWriter {
     this.buffer = buffer;
   }
 
-  public void reset(byte[] buffer) {
-    this.buffer = buffer;
+  public void reset() {
+    if (buffer.length > RETAINED_CAPACITY) {
+      buffer = new byte[RETAINED_CAPACITY];
+    }
     position = 0;
   }
 
   public byte[] toJsonBytes() {
     return Arrays.copyOf(buffer, position);
-  }
-
-  public byte[] buffer() {
-    return buffer;
   }
 
   @Override
@@ -101,34 +100,27 @@ public final class Utf8JsonWriter extends JsonWriter {
 
   @Override
   public void writeInt(int value) {
-    if (value == Integer.MIN_VALUE) {
-      writeAscii("-2147483648");
-      return;
-    }
-    if (value < 0) {
-      writeByteRaw((byte) '-');
-      value = -value;
-    }
-    writePositiveInt(value);
+    ensure(11);
+    writeIntNoEnsure(value);
   }
 
   @Override
   public void writeLong(long value) {
     if (value == Long.MIN_VALUE) {
-      writeAscii("-9223372036854775808");
+      writeRaw(MIN_LONG_BYTES);
       return;
     }
+    ensure(20);
     if (value < 0) {
-      writeByteRaw((byte) '-');
+      buffer[position++] = (byte) '-';
       value = -value;
     }
     if (value <= Integer.MAX_VALUE) {
-      writePositiveInt((int) value);
+      writePositiveIntNoEnsure((int) value);
       return;
     }
     int start = position;
     do {
-      ensure(1);
       buffer[position++] = (byte) ('0' + value % 10);
       value /= 10;
     } while (value != 0);
@@ -168,8 +160,18 @@ public final class Utf8JsonWriter extends JsonWriter {
 
   @Override
   public void writeString(String value) {
-    if (STRING_BYTES_BACKED && writeBytesBackedString(value)) {
-      return;
+    if (STRING_BYTES_BACKED) {
+      byte[] bytes = StringSerializer.getStringBytes(value);
+      byte stringCoder = StringSerializer.getStringCoder(value);
+      if (StringSerializer.isLatin1Coder(stringCoder)) {
+        if (writeLatin1String(bytes)) {
+          return;
+        }
+      } else if (StringSerializer.isUtf16Coder(stringCoder)) {
+        if (writeUtf16String(bytes)) {
+          return;
+        }
+      }
     }
     writeStringChars(value);
   }
@@ -293,8 +295,25 @@ public final class Utf8JsonWriter extends JsonWriter {
   }
 
   public void writeStringField(byte[] prefix, String value) {
-    if (STRING_BYTES_BACKED && writeBytesBackedStringField(prefix, value)) {
-      return;
+    if (STRING_BYTES_BACKED) {
+      byte[] bytes = StringSerializer.getStringBytes(value);
+      byte stringCoder = StringSerializer.getStringCoder(value);
+      int start = position;
+      if (StringSerializer.isLatin1Coder(stringCoder)) {
+        ensure(prefix.length + bytes.length + 2);
+        writeRawNoEnsure(prefix);
+        if (writeLatin1StringNoEnsure(bytes)) {
+          return;
+        }
+        position = start;
+      } else if (StringSerializer.isUtf16Coder(stringCoder)) {
+        ensure(prefix.length + (bytes.length >> 1) * 3 + 2);
+        writeRawNoEnsure(prefix);
+        if (writeUtf16StringNoEnsure(bytes)) {
+          return;
+        }
+        position = start;
+      }
     }
     writeStringFieldChars(prefix, value);
   }
@@ -311,8 +330,29 @@ public final class Utf8JsonWriter extends JsonWriter {
       writeNullStringElement(comma);
       return;
     }
-    if (STRING_BYTES_BACKED && writeBytesBackedStringElement(comma, value)) {
-      return;
+    if (STRING_BYTES_BACKED) {
+      byte[] bytes = StringSerializer.getStringBytes(value);
+      byte stringCoder = StringSerializer.getStringCoder(value);
+      int start = position;
+      if (StringSerializer.isLatin1Coder(stringCoder)) {
+        ensure(comma + bytes.length + 2);
+        if (comma != 0) {
+          buffer[position++] = ',';
+        }
+        if (writeLatin1StringNoEnsure(bytes)) {
+          return;
+        }
+        position = start;
+      } else if (StringSerializer.isUtf16Coder(stringCoder)) {
+        ensure(comma + (bytes.length >> 1) * 3 + 2);
+        if (comma != 0) {
+          buffer[position++] = ',';
+        }
+        if (writeUtf16StringNoEnsure(bytes)) {
+          return;
+        }
+        position = start;
+      }
     }
     writeStringElementChars(comma, value);
   }
@@ -323,32 +363,6 @@ public final class Utf8JsonWriter extends JsonWriter {
       buffer[position++] = ',';
     }
     writeAsciiNoEnsure("null");
-  }
-
-  private boolean writeBytesBackedStringElement(int comma, String value) {
-    byte[] bytes = StringSerializer.getStringBytes(value);
-    byte coder = StringSerializer.getStringCoder(value);
-    int start = position;
-    if (StringSerializer.isLatin1Coder(coder)) {
-      ensure(comma + bytes.length + 2);
-      if (comma != 0) {
-        buffer[position++] = ',';
-      }
-      if (writeLatin1StringNoEnsure(bytes)) {
-        return true;
-      }
-      position = start;
-    } else if (StringSerializer.isUtf16Coder(coder)) {
-      ensure(comma + (bytes.length >> 1) * 3 + 2);
-      if (comma != 0) {
-        buffer[position++] = ',';
-      }
-      if (writeUtf16StringNoEnsure(bytes)) {
-        return true;
-      }
-      position = start;
-    }
-    return false;
   }
 
   private void writeStringElementChars(int comma, String value) {
@@ -388,50 +402,6 @@ public final class Utf8JsonWriter extends JsonWriter {
     if (index != 0) {
       writeByteRaw((byte) ',');
     }
-  }
-
-  private boolean writeBytesBackedString(String value) {
-    byte[] bytes = StringSerializer.getStringBytes(value);
-    byte coder = StringSerializer.getStringCoder(value);
-    if (StringSerializer.isLatin1Coder(coder)) {
-      return writeLatin1String(bytes);
-    } else if (StringSerializer.isUtf16Coder(coder)) {
-      return writeUtf16String(bytes);
-    }
-    return false;
-  }
-
-  private boolean writeBytesBackedStringNoEnsure(String value) {
-    byte[] bytes = StringSerializer.getStringBytes(value);
-    byte coder = StringSerializer.getStringCoder(value);
-    if (StringSerializer.isLatin1Coder(coder)) {
-      return writeLatin1StringNoEnsure(bytes);
-    } else if (StringSerializer.isUtf16Coder(coder)) {
-      return writeUtf16StringNoEnsure(bytes);
-    }
-    return false;
-  }
-
-  private boolean writeBytesBackedStringField(byte[] prefix, String value) {
-    byte[] bytes = StringSerializer.getStringBytes(value);
-    byte coder = StringSerializer.getStringCoder(value);
-    int start = position;
-    if (StringSerializer.isLatin1Coder(coder)) {
-      ensure(prefix.length + bytes.length + 2);
-      writeRawNoEnsure(prefix);
-      if (writeLatin1StringNoEnsure(bytes)) {
-        return true;
-      }
-      position = start;
-    } else if (StringSerializer.isUtf16Coder(coder)) {
-      ensure(prefix.length + (bytes.length >> 1) * 3 + 2);
-      writeRawNoEnsure(prefix);
-      if (writeUtf16StringNoEnsure(bytes)) {
-        return true;
-      }
-      position = start;
-    }
-    return false;
   }
 
   private boolean writeLatin1String(byte[] value) {
@@ -603,8 +573,18 @@ public final class Utf8JsonWriter extends JsonWriter {
   }
 
   private void writeStringNoEnsure(String value) {
-    if (STRING_BYTES_BACKED && writeBytesBackedStringNoEnsure(value)) {
-      return;
+    if (STRING_BYTES_BACKED) {
+      byte[] bytes = StringSerializer.getStringBytes(value);
+      byte stringCoder = StringSerializer.getStringCoder(value);
+      if (StringSerializer.isLatin1Coder(stringCoder)) {
+        if (writeLatin1StringNoEnsure(bytes)) {
+          return;
+        }
+      } else if (StringSerializer.isUtf16Coder(stringCoder)) {
+        if (writeUtf16StringNoEnsure(bytes)) {
+          return;
+        }
+      }
     }
     writeStringCharsNoEnsure(value);
   }
@@ -747,11 +727,6 @@ public final class Utf8JsonWriter extends JsonWriter {
             | ((word >>> 8) & 0xFF00L)
             | ((word >>> 16) & 0xFF0000L)
             | ((word >>> 24) & 0xFF000000L));
-  }
-
-  private void writePositiveInt(int value) {
-    ensure(10);
-    writePositiveIntNoEnsure(value);
   }
 
   private void writeIntNoEnsure(int value) {

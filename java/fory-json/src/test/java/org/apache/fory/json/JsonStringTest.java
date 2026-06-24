@@ -23,7 +23,9 @@ import static org.testng.Assert.assertEquals;
 import static org.testng.Assert.assertThrows;
 import static org.testng.Assert.assertTrue;
 
+import java.lang.reflect.Field;
 import java.nio.charset.StandardCharsets;
+import org.apache.fory.json.writer.StringJsonWriter;
 import org.apache.fory.serializer.StringSerializer;
 import org.testng.annotations.Test;
 
@@ -85,6 +87,32 @@ public class JsonStringTest extends ForyJsonTestModels {
     ForyJson json = ForyJson.builder().build();
     assertTextRoundTrip(json, ZH_TEXT);
     assertTextRoundTrip(json, EU_TEXT);
+  }
+
+  @Test
+  public void stringWriterResetAfterMaterialize() {
+    StringJsonWriter writer = new StringJsonWriter(false, new byte[16]);
+    writer.writeString("你好，Fory");
+    String utf16Json = writer.toJson();
+    writer.reset();
+    writer.writeString("ascii");
+    assertEquals(utf16Json, "\"你好，Fory\"");
+    assertEquals(writer.toJson(), "\"ascii\"");
+    if (StringSerializer.isBytesBackedString()) {
+      assertTrue(StringSerializer.isUtf16Coder(StringSerializer.getStringCoder(utf16Json)));
+    }
+  }
+
+  @Test
+  public void stringWriterShrinksOnReset() throws Exception {
+    StringJsonWriter writer = new StringJsonWriter(false, new byte[16]);
+    writer.writeString(repeat('a', 9000) + "你好，Fory");
+    assertTrue(writerBufferLength(writer) > 8192);
+    writer.toJson();
+    writer.reset();
+    assertEquals(writerBufferLength(writer), 8192);
+    writer.writeString("café");
+    assertEquals(writer.toJson(), "\"café\"");
   }
 
   @Test
@@ -225,5 +253,11 @@ public class JsonStringTest extends ForyJsonTestModels {
     assertThrows(
         ForyJsonException.class,
         () -> json.fromJson("\"" + Character.toString('\uD800') + "\"", String.class));
+  }
+
+  private static int writerBufferLength(StringJsonWriter writer) throws Exception {
+    Field field = StringJsonWriter.class.getDeclaredField("buffer");
+    field.setAccessible(true);
+    return ((byte[]) field.get(writer)).length;
   }
 }

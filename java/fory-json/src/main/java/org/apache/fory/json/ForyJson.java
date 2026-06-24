@@ -39,7 +39,6 @@ import org.apache.fory.serializer.StringSerializer;
 public final class ForyJson {
   private static final int PREFERRED_SLOT_RETRIES = 2;
   private static final int INITIAL_BUFFER_SIZE = 8192;
-  private static final int MAX_CACHED_BUFFER_SIZE = 1024 * 1024;
   private static final int PRIMARY_SLOT = -1;
   private static final int TEMPORARY_SLOT = -2;
   private static final int DEFAULT_POOL_SIZE =
@@ -77,7 +76,7 @@ public final class ForyJson {
   public String toJson(Object value) {
     PooledState entry = acquire();
     JsonState state = entry.state;
-    StringJsonWriter writer = state.stringWriter();
+    StringJsonWriter writer = state.stringWriter;
     try {
       if (value == null) {
         writer.writeNull();
@@ -88,6 +87,7 @@ public final class ForyJson {
       }
       return writer.toJson();
     } finally {
+      writer.reset();
       release(entry);
     }
   }
@@ -95,7 +95,7 @@ public final class ForyJson {
   public byte[] toJsonBytes(Object value) {
     PooledState entry = acquire();
     JsonState state = entry.state;
-    Utf8JsonWriter writer = state.utf8Writer();
+    Utf8JsonWriter writer = state.utf8Writer;
     try {
       if (value == null) {
         writer.writeNull();
@@ -106,6 +106,7 @@ public final class ForyJson {
       }
       return writer.toJsonBytes();
     } finally {
+      writer.reset();
       release(entry);
     }
   }
@@ -311,16 +312,6 @@ public final class ForyJson {
       typeResolver = new JsonTypeResolver(sharedRegistry);
     }
 
-    private StringJsonWriter stringWriter() {
-      stringWriter.reset(resetBuffer(stringWriter.buffer()));
-      return stringWriter;
-    }
-
-    private Utf8JsonWriter utf8Writer() {
-      utf8Writer.reset(resetBuffer(utf8Writer.buffer()));
-      return utf8Writer;
-    }
-
     private Latin1StringJsonReader latin1Reader(String input, int maxDepth) {
       latin1Reader.reset(input);
       latin1Reader.resetDepth(maxDepth);
@@ -346,10 +337,6 @@ public final class ForyJson {
       latin1Reader.clear();
       utf16Reader.clear();
       utf8Reader.clear();
-    }
-
-    private byte[] resetBuffer(byte[] buffer) {
-      return buffer.length <= MAX_CACHED_BUFFER_SIZE ? buffer : new byte[INITIAL_BUFFER_SIZE];
     }
 
     private JsonTypeInfo rootTypeInfo(Class<?> type) {

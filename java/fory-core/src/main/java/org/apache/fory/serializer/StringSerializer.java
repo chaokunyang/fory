@@ -946,7 +946,7 @@ public final class StringSerializer extends ImmutableSerializer<String> {
   // coder param first to make inline call args
   // `(buffer.readByte(), buffer.readBytesWithSizeEmbedded())` work.
   public static String newBytesStringZeroCopy(byte coder, byte[] data) {
-    if (!JDK_INTERNAL_FIELD_ACCESS) {
+    if (!JDK_INTERNAL_FIELD_ACCESS || BYTES_STRING_ZERO_COPY_CTR == null) {
       return newBytesStringSlow(coder, data);
     }
     if (coder == LATIN1) {

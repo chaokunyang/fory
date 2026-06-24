@@ -339,12 +339,19 @@ final class InstanceFieldAccessors {
 
     @Override
     public Object getObject(Object obj) {
+      if (accessKind != OBJECT_ACCESS) {
+        return get(obj);
+      }
       checkObj(obj);
       return UNSAFE.getObject(obj, fieldOffset);
     }
 
     @Override
     public void putObject(Object obj, Object value) {
+      if (accessKind != OBJECT_ACCESS) {
+        set(obj, value);
+        return;
+      }
       checkObj(obj);
       UNSAFE.putObject(obj, fieldOffset, value);
     }

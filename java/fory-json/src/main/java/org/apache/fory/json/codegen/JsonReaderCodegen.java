@@ -30,11 +30,11 @@ import org.apache.fory.json.meta.JsonAsciiToken;
 import org.apache.fory.json.meta.JsonFieldInfo;
 import org.apache.fory.json.meta.JsonFieldKind;
 import org.apache.fory.json.reader.JsonReader;
+import org.apache.fory.json.reader.Latin1JsonReader;
 import org.apache.fory.json.reader.Latin1ObjectReader;
-import org.apache.fory.json.reader.Latin1StringJsonReader;
 import org.apache.fory.json.reader.ObjectReader;
+import org.apache.fory.json.reader.Utf16JsonReader;
 import org.apache.fory.json.reader.Utf16ObjectReader;
-import org.apache.fory.json.reader.Utf16StringJsonReader;
 import org.apache.fory.json.reader.Utf8JsonReader;
 import org.apache.fory.json.reader.Utf8ObjectReader;
 import org.apache.fory.json.resolver.JsonTypeInfo;
@@ -71,8 +71,8 @@ final class JsonReaderCodegen {
     ctx.addImports(
         BaseObjectCodec.class,
         JsonReader.class,
-        Latin1StringJsonReader.class,
-        Utf16StringJsonReader.class,
+        Latin1JsonReader.class,
+        Utf16JsonReader.class,
         Utf8JsonReader.class);
     ctx.implementsInterfaces(
         ctx.type(ObjectReader.class),
@@ -127,7 +127,7 @@ final class JsonReaderCodegen {
         "readLatin1",
         fastReadExpression(builder, "readLatin1Slow", type, properties, LATIN1_READER, record),
         Object.class,
-        Latin1StringJsonReader.class,
+        Latin1JsonReader.class,
         "reader",
         BaseObjectCodec.class,
         "owner",
@@ -137,7 +137,7 @@ final class JsonReaderCodegen {
         ctx,
         builder,
         "readLatin1Slow",
-        Latin1StringJsonReader.class,
+        Latin1JsonReader.class,
         type,
         properties,
         LATIN1_READER,
@@ -148,7 +148,7 @@ final class JsonReaderCodegen {
         "readUtf16",
         fastReadExpression(builder, "readUtf16Slow", type, properties, UTF16_READER, record),
         Object.class,
-        Utf16StringJsonReader.class,
+        Utf16JsonReader.class,
         "reader",
         BaseObjectCodec.class,
         "owner",
@@ -158,7 +158,7 @@ final class JsonReaderCodegen {
         ctx,
         builder,
         "readUtf16Slow",
-        Utf16StringJsonReader.class,
+        Utf16JsonReader.class,
         type,
         properties,
         UTF16_READER,
@@ -723,9 +723,9 @@ final class JsonReaderCodegen {
   private static Class<?> readerClass(int readerMode) {
     switch (readerMode) {
       case LATIN1_READER:
-        return Latin1StringJsonReader.class;
+        return Latin1JsonReader.class;
       case UTF16_READER:
-        return Utf16StringJsonReader.class;
+        return Utf16JsonReader.class;
       case UTF8_READER:
         return Utf8JsonReader.class;
       default:

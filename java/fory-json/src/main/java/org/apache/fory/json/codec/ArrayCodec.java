@@ -25,8 +25,8 @@ import java.util.Arrays;
 import java.util.List;
 import org.apache.fory.json.ForyJsonException;
 import org.apache.fory.json.reader.JsonReader;
-import org.apache.fory.json.reader.Latin1StringJsonReader;
-import org.apache.fory.json.reader.Utf16StringJsonReader;
+import org.apache.fory.json.reader.Latin1JsonReader;
+import org.apache.fory.json.reader.Utf16JsonReader;
 import org.apache.fory.json.reader.Utf8JsonReader;
 import org.apache.fory.json.resolver.JsonTypeInfo;
 import org.apache.fory.json.resolver.JsonTypeResolver;
@@ -114,7 +114,7 @@ public abstract class ArrayCodec extends AbstractJsonCodec {
 
     @Override
     public Object readLatin1(
-        Latin1StringJsonReader reader, JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
+        Latin1JsonReader reader, JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
       if (reader.tryReadNullToken()) {
         return null;
       }
@@ -140,7 +140,7 @@ public abstract class ArrayCodec extends AbstractJsonCodec {
 
     @Override
     public Object readUtf16(
-        Utf16StringJsonReader reader, JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
+        Utf16JsonReader reader, JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
       if (reader.tryReadNullToken()) {
         return null;
       }
@@ -233,7 +233,7 @@ public abstract class ArrayCodec extends AbstractJsonCodec {
 
     @Override
     public Object readLatin1(
-        Latin1StringJsonReader reader, JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
+        Latin1JsonReader reader, JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
       if (reader.tryReadNullToken()) {
         return null;
       }
@@ -259,7 +259,7 @@ public abstract class ArrayCodec extends AbstractJsonCodec {
 
     @Override
     public Object readUtf16(
-        Utf16StringJsonReader reader, JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
+        Utf16JsonReader reader, JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
       if (reader.tryReadNullToken()) {
         return null;
       }
@@ -352,7 +352,7 @@ public abstract class ArrayCodec extends AbstractJsonCodec {
 
     @Override
     public Object readLatin1(
-        Latin1StringJsonReader reader, JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
+        Latin1JsonReader reader, JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
       if (reader.tryReadNullToken()) {
         return null;
       }
@@ -378,7 +378,7 @@ public abstract class ArrayCodec extends AbstractJsonCodec {
 
     @Override
     public Object readUtf16(
-        Utf16StringJsonReader reader, JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
+        Utf16JsonReader reader, JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
       if (reader.tryReadNullToken()) {
         return null;
       }
@@ -707,13 +707,13 @@ public abstract class ArrayCodec extends AbstractJsonCodec {
     }
   }
 
-  private static void rejectNull(Latin1StringJsonReader reader) {
+  private static void rejectNull(Latin1JsonReader reader) {
     if (reader.tryReadNullToken()) {
       throw new ForyJsonException("Cannot read null into primitive array element");
     }
   }
 
-  private static void rejectNull(Utf16StringJsonReader reader) {
+  private static void rejectNull(Utf16JsonReader reader) {
     if (reader.tryReadNullToken()) {
       throw new ForyJsonException("Cannot read null into primitive array element");
     }

@@ -22,55 +22,50 @@ package org.apache.fory.json.reader;
 import org.apache.fory.json.meta.JsonFieldInfo;
 import org.apache.fory.json.meta.JsonFieldNameHash;
 import org.apache.fory.json.meta.JsonFieldTable;
-import org.apache.fory.memory.LittleEndian;
 import org.apache.fory.serializer.StringSerializer;
 
-public final class Latin1StringJsonReader extends JsonReader {
-  private static final byte[] EMPTY_BYTES = new byte[0];
-  private static final long BYTE_ONES = 0x0101010101010101L;
-  private static final int INT_BYTE_ONES = 0x01010101;
-  private static final long BYTE_HIGH_BITS = 0x8080808080808080L;
-  private static final int INT_BYTE_HIGH_BITS = 0x80808080;
-  private static final long BACKSLASH_BYTES = 0x5c5c5c5c5c5c5c5cL;
-  private static final int INT_BACKSLASH_BYTES = 0x5c5c5c5c;
-  private static final long CONTROL_LIMIT_BYTES = 0x2020202020202020L;
-  private static final int INT_CONTROL_LIMIT_BYTES = 0x20202020;
-  private static final long QUOTE_BYTES = 0x2222222222222222L;
-  private static final int INT_QUOTE_BYTES = 0x22222222;
+public final class Utf16JsonReader extends JsonReader {
+  private String input;
+  private byte[] bytes;
+  private int length;
 
-  // JSON syntax bytes are ASCII, so hot token checks can compare signed bytes directly.
-  // Latin1 string content and field-name hashing must keep unsigned byte conversion.
-  private byte[] input;
-
-  public Latin1StringJsonReader() {
-    input = EMPTY_BYTES;
+  public Utf16JsonReader() {
+    input = "";
+    bytes = null;
+    length = 0;
   }
 
-  public Latin1StringJsonReader(String input) {
+  public Utf16JsonReader(String input) {
     reset(input);
   }
 
-  public Latin1StringJsonReader reset(String input) {
-    if (!StringSerializer.isBytesBackedString()) {
-      throw new IllegalStateException("Latin1StringJsonReader requires byte-backed strings");
+  public Utf16JsonReader reset(String input) {
+    this.input = input;
+    if (StringSerializer.isBytesBackedString()) {
+      byte coder = StringSerializer.getStringCoder(input);
+      if (StringSerializer.isUtf16Coder(coder)) {
+        bytes = StringSerializer.getStringBytes(input);
+        length = bytes.length >>> 1;
+        position = 0;
+        return this;
+      }
     }
-    byte coder = StringSerializer.getStringCoder(input);
-    if (!StringSerializer.isLatin1Coder(coder)) {
-      throw new IllegalArgumentException("Latin1StringJsonReader requires a Latin1 string");
-    }
-    this.input = StringSerializer.getStringBytes(input);
+    bytes = null;
+    length = input.length();
     position = 0;
     return this;
   }
 
   public void clear() {
-    input = EMPTY_BYTES;
+    input = "";
+    bytes = null;
+    length = 0;
     position = 0;
   }
 
   public boolean consumeToken(char expected) {
     skipWhitespaceFast();
-    if (position < input.length && input[position] == expected) {
+    if (position < length && charAtFast(position) == expected) {
       position++;
       return true;
     }
@@ -78,7 +73,7 @@ public final class Latin1StringJsonReader extends JsonReader {
   }
 
   public boolean consumeNextToken(char expected) {
-    if (position < input.length && input[position] == expected) {
+    if (position < length && charAtFast(position) == expected) {
       position++;
       return true;
     }
@@ -92,7 +87,7 @@ public final class Latin1StringJsonReader extends JsonReader {
   }
 
   public void expectNextToken(char expected) {
-    if (position < input.length && input[position] == expected) {
+    if (position < length && charAtFast(position) == expected) {
       position++;
       return;
     }
@@ -104,8 +99,9 @@ public final class Latin1StringJsonReader extends JsonReader {
   }
 
   public boolean consumeNextCommaOrEndObject() {
-    if (position < input.length) {
-      int ch = input[position];
+    int inputLength = length;
+    if (position < inputLength) {
+      char ch = charAtFast(position);
       if (ch == ',') {
         position++;
         return true;
@@ -115,16 +111,16 @@ public final class Latin1StringJsonReader extends JsonReader {
         return false;
       }
       if (!isWhitespace(ch)) {
-        return consumeNextCommaOrEndObjectSlow();
+        return consumeNextCommaOrEndObjectSlow(inputLength);
       }
     }
-    return consumeNextCommaOrEndObjectSlow();
+    return consumeNextCommaOrEndObjectSlow(inputLength);
   }
 
-  private boolean consumeNextCommaOrEndObjectSlow() {
+  private boolean consumeNextCommaOrEndObjectSlow(int inputLength) {
     skipWhitespaceFast();
-    if (position < input.length) {
-      int ch = input[position];
+    if (position < inputLength) {
+      char ch = charAtFast(position);
       if (ch == ',') {
         position++;
         return true;
@@ -138,8 +134,9 @@ public final class Latin1StringJsonReader extends JsonReader {
   }
 
   public boolean consumeNextCommaOrEndArray() {
-    if (position < input.length) {
-      int ch = input[position];
+    int inputLength = length;
+    if (position < inputLength) {
+      char ch = charAtFast(position);
       if (ch == ',') {
         position++;
         return true;
@@ -149,16 +146,16 @@ public final class Latin1StringJsonReader extends JsonReader {
         return false;
       }
       if (!isWhitespace(ch)) {
-        return consumeNextCommaOrEndArraySlow();
+        return consumeNextCommaOrEndArraySlow(inputLength);
       }
     }
-    return consumeNextCommaOrEndArraySlow();
+    return consumeNextCommaOrEndArraySlow(inputLength);
   }
 
-  private boolean consumeNextCommaOrEndArraySlow() {
+  private boolean consumeNextCommaOrEndArraySlow(int inputLength) {
     skipWhitespaceFast();
-    if (position < input.length) {
-      int ch = input[position];
+    if (position < inputLength) {
+      char ch = charAtFast(position);
       if (ch == ',') {
         position++;
         return true;
@@ -177,8 +174,8 @@ public final class Latin1StringJsonReader extends JsonReader {
   }
 
   public boolean tryReadNextNullToken() {
-    if (position < input.length) {
-      int ch = input[position];
+    if (position < length) {
+      char ch = charAtFast(position);
       if (ch == 'n') {
         return tryReadNullLiteral();
       }
@@ -203,14 +200,10 @@ public final class Latin1StringJsonReader extends JsonReader {
   }
 
   public boolean readNextBooleanValue() {
-    if (position < input.length && !isWhitespace(input[position])) {
+    if (position < length && !isWhitespace(charAtFast(position))) {
       return readBooleanToken();
     }
     return readBooleanValue();
-  }
-
-  public boolean readBooleanTokenValue() {
-    return readBooleanToken();
   }
 
   private boolean readBooleanToken() {
@@ -230,24 +223,19 @@ public final class Latin1StringJsonReader extends JsonReader {
   }
 
   public int readNextIntValue() {
-    if (position < input.length && !isWhitespace(input[position])) {
+    if (position < length && !isWhitespace(charAtFast(position))) {
       return readIntToken();
     }
     return readIntValue();
   }
 
-  public int readIntTokenValue() {
-    return readIntToken();
-  }
-
   private int readIntToken() {
-    byte[] bytes = input;
     int offset = position;
-    int inputLength = bytes.length;
+    int inputLength = length;
     if (offset >= inputLength) {
       throw error("Expected digit");
     }
-    int ch = bytes[offset];
+    char ch = charAtFast(offset);
     if (ch == '-') {
       return readNegativeIntToken(offset);
     }
@@ -267,7 +255,7 @@ public final class Latin1StringJsonReader extends JsonReader {
       safeEnd = inputLength;
     }
     while (offset < safeEnd) {
-      ch = bytes[offset];
+      ch = charAtFast(offset);
       if (ch < '0' || ch > '9') {
         break;
       }
@@ -275,9 +263,9 @@ public final class Latin1StringJsonReader extends JsonReader {
       offset++;
     }
     if (offset < inputLength) {
-      ch = bytes[offset];
+      ch = charAtFast(offset);
       if (ch >= '0' && ch <= '9') {
-        return readPositiveIntTail(bytes, offset, inputLength, result);
+        return readPositiveIntTail(offset, inputLength, result);
       }
     }
     position = offset;
@@ -285,9 +273,9 @@ public final class Latin1StringJsonReader extends JsonReader {
     return result;
   }
 
-  private int readPositiveIntTail(byte[] bytes, int offset, int inputLength, int result) {
+  private int readPositiveIntTail(int offset, int inputLength, int result) {
     while (offset < inputLength) {
-      int ch = bytes[offset];
+      char ch = charAtFast(offset);
       if (ch < '0' || ch > '9') {
         break;
       }
@@ -308,10 +296,10 @@ public final class Latin1StringJsonReader extends JsonReader {
     position = start + 1;
     int result = 0;
     int limit = Integer.MIN_VALUE;
-    if (position >= input.length) {
+    if (position >= length) {
       throw error("Expected digit");
     }
-    int ch = input[position];
+    char ch = charAtFast(position);
     if (ch == '0') {
       position++;
       rejectLeadingDigitFast();
@@ -322,8 +310,8 @@ public final class Latin1StringJsonReader extends JsonReader {
       throw error("Expected digit");
     }
     int multmin = limit / 10;
-    while (position < input.length) {
-      ch = input[position];
+    while (position < length) {
+      ch = charAtFast(position);
       if (ch < '0' || ch > '9') {
         break;
       }
@@ -348,24 +336,19 @@ public final class Latin1StringJsonReader extends JsonReader {
   }
 
   public long readNextLongValue() {
-    if (position < input.length && !isWhitespace(input[position])) {
+    if (position < length && !isWhitespace(charAtFast(position))) {
       return readLongToken();
     }
     return readLongValue();
   }
 
-  public long readLongTokenValue() {
-    return readLongToken();
-  }
-
   private long readLongToken() {
-    byte[] bytes = input;
     int offset = position;
-    int inputLength = bytes.length;
+    int inputLength = length;
     if (offset >= inputLength) {
       throw error("Expected digit");
     }
-    int ch = bytes[offset];
+    char ch = charAtFast(offset);
     if (ch == '-') {
       return readNegativeLongToken(offset);
     }
@@ -385,7 +368,7 @@ public final class Latin1StringJsonReader extends JsonReader {
       safeEnd = inputLength;
     }
     while (offset < safeEnd) {
-      ch = bytes[offset];
+      ch = charAtFast(offset);
       if (ch < '0' || ch > '9') {
         break;
       }
@@ -393,9 +376,9 @@ public final class Latin1StringJsonReader extends JsonReader {
       offset++;
     }
     if (offset < inputLength) {
-      ch = bytes[offset];
+      ch = charAtFast(offset);
       if (ch >= '0' && ch <= '9') {
-        return readPositiveLongTail(bytes, offset, inputLength, result);
+        return readPositiveLongTail(offset, inputLength, result);
       }
     }
     position = offset;
@@ -403,9 +386,9 @@ public final class Latin1StringJsonReader extends JsonReader {
     return result;
   }
 
-  private long readPositiveLongTail(byte[] bytes, int offset, int inputLength, long result) {
+  private long readPositiveLongTail(int offset, int inputLength, long result) {
     while (offset < inputLength) {
-      int ch = bytes[offset];
+      char ch = charAtFast(offset);
       if (ch < '0' || ch > '9') {
         break;
       }
@@ -426,10 +409,10 @@ public final class Latin1StringJsonReader extends JsonReader {
     position = start + 1;
     long result = 0;
     long limit = Long.MIN_VALUE;
-    if (position >= input.length) {
+    if (position >= length) {
       throw error("Expected digit");
     }
-    int ch = input[position];
+    char ch = charAtFast(position);
     if (ch == '0') {
       position++;
       rejectLeadingDigitFast();
@@ -440,8 +423,8 @@ public final class Latin1StringJsonReader extends JsonReader {
       throw error("Expected digit");
     }
     long multmin = limit / 10;
-    while (position < input.length) {
-      ch = input[position];
+    while (position < length) {
+      ch = charAtFast(position);
       if (ch < '0' || ch > '9') {
         break;
       }
@@ -464,21 +447,21 @@ public final class Latin1StringJsonReader extends JsonReader {
   public int readFieldNameInt() {
     skipWhitespaceFast();
     int nameStart = position;
-    if (position >= input.length || input[position++] != '"') {
+    if (position >= length || charAtFast(position++) != '"') {
       throw error("Expected string");
     }
     int result = 0;
     int limit = -Integer.MAX_VALUE;
     boolean negative = false;
-    if (position < input.length && input[position] == '-') {
+    if (position < length && charAtFast(position) == '-') {
       negative = true;
       limit = Integer.MIN_VALUE;
       position++;
     }
-    if (position >= input.length) {
+    if (position >= length) {
       throw error("Unterminated string");
     }
-    int ch = input[position];
+    char ch = charAtFast(position);
     if (ch == '\\') {
       position = nameStart;
       return super.readFieldNameInt();
@@ -502,10 +485,10 @@ public final class Latin1StringJsonReader extends JsonReader {
       }
       result -= digit;
       position++;
-      if (position >= input.length) {
+      if (position >= length) {
         throw error("Unterminated string");
       }
-      ch = input[position];
+      ch = charAtFast(position);
     } while (ch >= '0' && ch <= '9');
     if (ch == '\\') {
       position = nameStart;
@@ -522,21 +505,21 @@ public final class Latin1StringJsonReader extends JsonReader {
   public long readFieldNameLong() {
     skipWhitespaceFast();
     int nameStart = position;
-    if (position >= input.length || input[position++] != '"') {
+    if (position >= length || charAtFast(position++) != '"') {
       throw error("Expected string");
     }
     long result = 0;
     long limit = -Long.MAX_VALUE;
     boolean negative = false;
-    if (position < input.length && input[position] == '-') {
+    if (position < length && charAtFast(position) == '-') {
       negative = true;
       limit = Long.MIN_VALUE;
       position++;
     }
-    if (position >= input.length) {
+    if (position >= length) {
       throw error("Unterminated string");
     }
-    int ch = input[position];
+    char ch = charAtFast(position);
     if (ch == '\\') {
       position = nameStart;
       return super.readFieldNameLong();
@@ -560,10 +543,10 @@ public final class Latin1StringJsonReader extends JsonReader {
       }
       result -= digit;
       position++;
-      if (position >= input.length) {
+      if (position >= length) {
         throw error("Unterminated string");
       }
-      ch = input[position];
+      ch = charAtFast(position);
     } while (ch >= '0' && ch <= '9');
     if (ch == '\\') {
       position = nameStart;
@@ -578,12 +561,12 @@ public final class Latin1StringJsonReader extends JsonReader {
 
   @Override
   protected int length() {
-    return input.length;
+    return length;
   }
 
   @Override
   protected char charAt(int index) {
-    return (char) (input[index] & 0xFF);
+    return charAtFast(index);
   }
 
   @Override
@@ -602,8 +585,8 @@ public final class Latin1StringJsonReader extends JsonReader {
   }
 
   public String readNextNullableString() {
-    if (position < input.length) {
-      int ch = input[position];
+    if (position < length) {
+      char ch = charAtFast(position);
       if (ch == '"') {
         return readStringToken();
       }
@@ -617,108 +600,39 @@ public final class Latin1StringJsonReader extends JsonReader {
     return readNullableString();
   }
 
-  public String readNullableStringToken() {
-    if (position < input.length) {
-      int ch = input[position];
-      if (ch == '"') {
-        return readStringToken();
-      }
-      if (ch == 'n' && tryReadNullLiteral()) {
-        return null;
-      }
-    }
-    return readStringToken();
-  }
-
   private String readStringToken() {
-    byte[] bytes = input;
-    int inputLength = bytes.length;
-    if (position >= inputLength || bytes[position++] != '"') {
+    if (position >= length || charAtFast(position++) != '"') {
       throw error("Expected string");
     }
     int start = position;
-    int offset = start;
-    int wordEnd = inputLength - Long.BYTES;
-    while (offset <= wordEnd) {
-      long stopMask = stringStopMask(LittleEndian.getInt64(bytes, offset));
-      if (stopMask == 0) {
-        offset += Long.BYTES;
-        continue;
-      }
-      int stop = offset + (Long.numberOfTrailingZeros(stopMask) >>> 3);
-      int ch = bytes[stop] & 0xFF;
+    StringBuilder builder = null;
+    while (position < length) {
+      char ch = charAtFast(position++);
       if (ch == '"') {
-        position = stop + 1;
-        return newLatin1String(start, stop);
-      }
-      return readStringStop(start, stop, ch);
-    }
-    if (offset + Integer.BYTES <= inputLength) {
-      int stopMask = stringStopMask(LittleEndian.getInt32(bytes, offset));
-      if (stopMask == 0) {
-        offset += Integer.BYTES;
-      } else {
-        int stop = offset + (Integer.numberOfTrailingZeros(stopMask) >>> 3);
-        int ch = bytes[stop] & 0xFF;
-        if (ch == '"') {
-          position = stop + 1;
-          return newLatin1String(start, stop);
+        if (builder == null) {
+          return input.substring(start, position - 1);
         }
-        return readStringStop(start, stop, ch);
-      }
-    }
-    while (offset < inputLength) {
-      int ch = bytes[offset++] & 0xFF;
-      if (ch == '"') {
-        position = offset;
-        return newLatin1String(start, offset - 1);
-      }
-      if (ch == '\\') {
-        return readStringStop(start, offset - 1, ch);
-      }
-      if (ch < 0x20) {
-        position = offset;
+        builder.append(input, start, position - 1);
+        return builder.toString();
+      } else if (ch == '\\') {
+        if (builder == null) {
+          builder = new StringBuilder();
+        }
+        builder.append(input, start, position - 1);
+        appendEscape(builder);
+        start = position;
+      } else if (ch < 0x20) {
         throw error("Control character in string");
+      } else if (Character.isHighSurrogate(ch)) {
+        if (position >= length || !Character.isLowSurrogate(charAtFast(position))) {
+          throw error("Unpaired high surrogate in string");
+        }
+        position++;
+      } else if (Character.isLowSurrogate(ch)) {
+        throw error("Unpaired low surrogate in string");
       }
     }
     throw error("Unterminated string");
-  }
-
-  private String readStringStop(int start, int stop, int ch) {
-    position = stop + 1;
-    if (ch == '\\') {
-      StringBuilder builder = newStringBuilder(start, stop);
-      appendLatin1(builder, start, stop);
-      appendEscape(builder);
-      return readStringTail(builder);
-    }
-    throw error("Control character in string");
-  }
-
-  private StringBuilder newStringBuilder(int start, int stop) {
-    return new StringBuilder(Math.max(16, stop - start + 16));
-  }
-
-  private static long stringStopMask(long word) {
-    return byteMatchMask(word, QUOTE_BYTES)
-        | byteMatchMask(word, BACKSLASH_BYTES)
-        | ((word - CONTROL_LIMIT_BYTES) & ~word & BYTE_HIGH_BITS);
-  }
-
-  private static int stringStopMask(int word) {
-    return byteMatchMask(word, INT_QUOTE_BYTES)
-        | byteMatchMask(word, INT_BACKSLASH_BYTES)
-        | ((word - INT_CONTROL_LIMIT_BYTES) & ~word & INT_BYTE_HIGH_BITS);
-  }
-
-  private static long byteMatchMask(long word, long repeatedByte) {
-    long match = word ^ repeatedByte;
-    return (match - BYTE_ONES) & ~match & BYTE_HIGH_BITS;
-  }
-
-  private static int byteMatchMask(int word, int repeatedByte) {
-    int match = word ^ repeatedByte;
-    return (match - INT_BYTE_ONES) & ~match & INT_BYTE_HIGH_BITS;
   }
 
   @Override
@@ -751,8 +665,8 @@ public final class Latin1StringJsonReader extends JsonReader {
   public boolean tryReadNextFieldNameColon(
       long expectedHash, long expectedMask, int expectedLength) {
     int mark = position;
-    if (mark < input.length) {
-      int ch = input[mark];
+    if (mark < length) {
+      char ch = charAtFast(mark);
       if (ch == '"') {
         return tryReadFieldNameColonAt(mark, expectedHash, expectedMask, expectedLength);
       }
@@ -763,133 +677,23 @@ public final class Latin1StringJsonReader extends JsonReader {
     return tryReadFieldNameColon(expectedHash, expectedMask, expectedLength);
   }
 
-  public boolean tryReadNextFieldNameToken0(long prefix, long prefixMask, int tokenLength) {
-    return tryReadNextRawToken0(prefix, prefixMask, tokenLength);
-  }
-
-  public boolean tryReadNextStringToken0(long prefix, long prefixMask, int tokenLength) {
-    return tryReadNextRawToken0(prefix, prefixMask, tokenLength);
-  }
-
-  private boolean tryReadNextRawToken0(long prefix, long prefixMask, int tokenLength) {
-    byte[] bytes = input;
-    int mark = position;
-    if (mark + Long.BYTES <= bytes.length
-        && (LittleEndian.getInt64(bytes, mark) & prefixMask) == prefix) {
-      position = mark + tokenLength;
-      return true;
-    }
-    return false;
-  }
-
-  public boolean tryReadNextFieldNameToken1(
-      long prefix, long prefixMask, int suffix, int tokenLength) {
-    return tryReadNextRawToken1(prefix, prefixMask, suffix, tokenLength);
-  }
-
-  public boolean tryReadNextStringToken1(
-      long prefix, long prefixMask, int suffix, int tokenLength) {
-    return tryReadNextRawToken1(prefix, prefixMask, suffix, tokenLength);
-  }
-
-  private boolean tryReadNextRawToken1(long prefix, long prefixMask, int suffix, int tokenLength) {
-    byte[] bytes = input;
-    int mark = position;
-    int suffixOffset = mark + Long.BYTES;
-    if (mark + tokenLength <= bytes.length
-        && (LittleEndian.getInt64(bytes, mark) & prefixMask) == prefix
-        && (bytes[suffixOffset] & 0xFF) == suffix) {
-      position = mark + tokenLength;
-      return true;
-    }
-    return false;
-  }
-
-  public boolean tryReadNextFieldNameToken2(
-      long prefix, long prefixMask, int suffix, int tokenLength) {
-    return tryReadNextRawToken2(prefix, prefixMask, suffix, tokenLength);
-  }
-
-  public boolean tryReadNextStringToken2(
-      long prefix, long prefixMask, int suffix, int tokenLength) {
-    return tryReadNextRawToken2(prefix, prefixMask, suffix, tokenLength);
-  }
-
-  private boolean tryReadNextRawToken2(long prefix, long prefixMask, int suffix, int tokenLength) {
-    byte[] bytes = input;
-    int mark = position;
-    int suffixOffset = mark + Long.BYTES;
-    if (mark + tokenLength <= bytes.length
-        && (LittleEndian.getInt64(bytes, mark) & prefixMask) == prefix
-        && ((bytes[suffixOffset] & 0xFF) | ((bytes[suffixOffset + 1] & 0xFF) << 8)) == suffix) {
-      position = mark + tokenLength;
-      return true;
-    }
-    return false;
-  }
-
-  public boolean tryReadNextFieldNameToken3(
-      long prefix, long prefixMask, int suffix, int tokenLength) {
-    return tryReadNextRawToken3(prefix, prefixMask, suffix, tokenLength);
-  }
-
-  public boolean tryReadNextStringToken3(
-      long prefix, long prefixMask, int suffix, int tokenLength) {
-    return tryReadNextRawToken3(prefix, prefixMask, suffix, tokenLength);
-  }
-
-  private boolean tryReadNextRawToken3(long prefix, long prefixMask, int suffix, int tokenLength) {
-    byte[] bytes = input;
-    int mark = position;
-    int suffixOffset = mark + Long.BYTES;
-    if (mark + tokenLength <= bytes.length
-        && (LittleEndian.getInt64(bytes, mark) & prefixMask) == prefix
-        && ((bytes[suffixOffset] & 0xFF)
-                | ((bytes[suffixOffset + 1] & 0xFF) << 8)
-                | ((bytes[suffixOffset + 2] & 0xFF) << 16))
-            == suffix) {
-      position = mark + tokenLength;
-      return true;
-    }
-    return false;
-  }
-
   private boolean tryReadFieldNameColonAt(
       int mark, long expectedHash, long expectedMask, int expectedLength) {
-    byte[] bytes = input;
     int offset = position;
-    int nameOffset = offset + 1;
-    int quoteOffset = nameOffset + expectedLength;
-    if (quoteOffset < bytes.length && bytes[offset] == '"') {
-      if (nameOffset + Long.BYTES <= bytes.length) {
-        if ((LittleEndian.getInt64(bytes, nameOffset) & expectedMask) == expectedHash
-            && bytes[quoteOffset] == '"') {
-          int colonOffset = quoteOffset + 1;
-          if (colonOffset < bytes.length && bytes[colonOffset] == ':') {
-            position = colonOffset + 1;
-          } else {
-            readFieldNameColon(colonOffset);
-          }
-          return true;
-        }
-        // Full raw-word misses cannot match this generated packed-name probe. Escaped field names
-        // are handled by the hash fallback after this direct probe fails.
-        position = mark;
-        return false;
-      }
-      offset = nameOffset;
+    int end = offset + expectedLength + 1;
+    if (end < length && charAtFast(offset++) == '"') {
       long value = 0;
       for (int i = 0; i < expectedLength; i++) {
-        int ch = bytes[offset++] & 0xFF;
-        if (ch == 0 || ch == '"' || ch == '\\' || ch < 0x20) {
+        char ch = charAtFast(offset++);
+        if (ch == 0 || ch == '"' || ch == '\\' || ch < 0x20 || ch > 0xFF) {
           position = mark;
           return false;
         }
-        value = JsonFieldNameHash.value(value, i, (char) ch);
+        value = JsonFieldNameHash.value(value, i, ch);
       }
-      if (value == expectedHash && bytes[offset] == '"') {
+      if (value == expectedHash && charAtFast(offset) == '"') {
         int colonOffset = offset + 1;
-        if (colonOffset < bytes.length && bytes[colonOffset] == ':') {
+        if (colonOffset < length && charAtFast(colonOffset) == ':') {
           position = colonOffset + 1;
         } else {
           readFieldNameColon(colonOffset);
@@ -917,26 +721,21 @@ public final class Latin1StringJsonReader extends JsonReader {
   }
 
   public long readNextPackedStringHash() {
-    if (position < input.length && !isWhitespace(input[position])) {
+    if (position < length && !isWhitespace(charAtFast(position))) {
       return readPackedStringHashToken();
     }
     return readPackedStringHash();
   }
 
-  public long readPackedStringHashTokenValue() {
-    return readPackedStringHashToken();
-  }
-
   private long readPackedStringHashToken() {
     int mark = position;
-    byte[] bytes = input;
-    int length = bytes.length;
+    int inputLength = length;
     int offset = position;
-    if (offset < length && bytes[offset++] == '"') {
+    if (offset < inputLength && charAtFast(offset++) == '"') {
       long value = 0;
       int nameLength = 0;
-      while (offset < length) {
-        int ch = bytes[offset++] & 0xFF;
+      while (offset < inputLength) {
+        char ch = charAtFast(offset++);
         if (ch == '"') {
           if (nameLength > 0) {
             position = offset;
@@ -944,10 +743,10 @@ public final class Latin1StringJsonReader extends JsonReader {
           }
           break;
         }
-        if (ch == 0 || ch == '\\' || ch < 0x20 || nameLength >= Long.BYTES) {
+        if (ch == 0 || ch == '\\' || ch < 0x20 || ch > 0xFF || nameLength >= Long.BYTES) {
           break;
         }
-        value = JsonFieldNameHash.value(value, nameLength++, (char) ch);
+        value = JsonFieldNameHash.value(value, nameLength++, ch);
       }
     }
     return readQuotedStringHashFromMark(mark);
@@ -964,30 +763,31 @@ public final class Latin1StringJsonReader extends JsonReader {
   }
 
   private long readQuotedStringHashToken() {
-    byte[] bytes = input;
-    int length = bytes.length;
-    if (position >= length || bytes[position++] != '"') {
+    int inputLength = length;
+    if (position >= inputLength || charAtFast(position++) != '"') {
       throw error("Expected string");
     }
     long hash = JsonFieldNameHash.MAGIC_HASH_CODE;
     long value = 0;
     int nameLength = 0;
     boolean latin1 = true;
-    while (position < length) {
-      int ch = bytes[position++] & 0xFF;
+    while (position < inputLength) {
+      char ch = charAtFast(position++);
       if (ch == '"') {
         return JsonFieldNameHash.finish(hash, value, nameLength, latin1);
       }
       if (ch == '\\') {
-        char escaped = readEscapedFieldNameChar();
-        if (Character.isHighSurrogate(escaped)) {
+        ch = readEscapedFieldNameChar();
+        if (Character.isHighSurrogate(ch)) {
           if (latin1) {
             hash = JsonFieldNameHash.hashPacked(value, nameLength);
             latin1 = false;
           }
-          hash = JsonFieldNameHash.update(hash, escaped);
+          hash = JsonFieldNameHash.update(hash, ch);
           nameLength++;
-          if (position + 2 > length() || charAt(position) != '\\' || charAt(position + 1) != 'u') {
+          if (position + 2 > inputLength
+              || charAtFast(position) != '\\'
+              || charAtFast(position + 1) != 'u') {
             throw error("Unpaired high surrogate escape");
           }
           position += 2;
@@ -997,19 +797,19 @@ public final class Latin1StringJsonReader extends JsonReader {
           }
           hash = JsonFieldNameHash.update(hash, low);
           nameLength++;
-        } else if (Character.isLowSurrogate(escaped)) {
+        } else if (Character.isLowSurrogate(ch)) {
           throw error("Unpaired low surrogate escape");
         } else {
           if (latin1) {
-            if (escaped <= 0xFF && escaped != 0 && nameLength < Long.BYTES) {
-              value = JsonFieldNameHash.value(value, nameLength, escaped);
+            if (ch <= 0xFF && ch != 0 && nameLength < Long.BYTES) {
+              value = JsonFieldNameHash.value(value, nameLength, ch);
               nameLength++;
               continue;
             }
             hash = JsonFieldNameHash.hashPacked(value, nameLength);
             latin1 = false;
           }
-          hash = JsonFieldNameHash.update(hash, escaped);
+          hash = JsonFieldNameHash.update(hash, ch);
           nameLength++;
         }
         continue;
@@ -1017,16 +817,32 @@ public final class Latin1StringJsonReader extends JsonReader {
       if (ch < 0x20) {
         throw error("Control character in string");
       }
+      if (Character.isHighSurrogate(ch)) {
+        if (position >= inputLength || !Character.isLowSurrogate(charAtFast(position))) {
+          throw error("Unpaired high surrogate in string");
+        }
+        if (latin1) {
+          hash = JsonFieldNameHash.hashPacked(value, nameLength);
+          latin1 = false;
+        }
+        hash = JsonFieldNameHash.update(hash, ch);
+        hash = JsonFieldNameHash.update(hash, charAtFast(position++));
+        nameLength += 2;
+        continue;
+      }
+      if (Character.isLowSurrogate(ch)) {
+        throw error("Unpaired low surrogate in string");
+      }
       if (latin1) {
-        if (ch != 0 && nameLength < Long.BYTES) {
-          value = JsonFieldNameHash.value(value, nameLength, (char) ch);
+        if (ch <= 0xFF && ch != 0 && nameLength < Long.BYTES) {
+          value = JsonFieldNameHash.value(value, nameLength, ch);
           nameLength++;
           continue;
         }
         hash = JsonFieldNameHash.hashPacked(value, nameLength);
         latin1 = false;
       }
-      hash = JsonFieldNameHash.update(hash, (char) ch);
+      hash = JsonFieldNameHash.update(hash, ch);
       nameLength++;
     }
     throw error("Unterminated string");
@@ -1034,41 +850,13 @@ public final class Latin1StringJsonReader extends JsonReader {
 
   @Override
   protected String slice(int start, int end) {
-    return newLatin1String(start, end);
-  }
-
-  private String newLatin1String(int start, int end) {
-    int length = end - start;
-    byte[] bytes = new byte[length];
-    System.arraycopy(input, start, bytes, 0, length);
-    return StringSerializer.newLatin1StringZeroCopy(bytes);
-  }
-
-  private String readStringTail(StringBuilder builder) {
-    while (position < input.length) {
-      int ch = input[position++] & 0xFF;
-      if (ch == '"') {
-        return builder.toString();
-      } else if (ch == '\\') {
-        appendEscape(builder);
-      } else if (ch < 0x20) {
-        throw error("Control character in string");
-      } else {
-        builder.append((char) ch);
-      }
-    }
-    throw error("Unterminated string");
-  }
-
-  private void appendLatin1(StringBuilder builder, int start, int end) {
-    for (int i = start; i < end; i++) {
-      builder.append((char) (input[i] & 0xFF));
-    }
+    return input.substring(start, end);
   }
 
   private void skipWhitespaceFast() {
-    while (position < input.length) {
-      int ch = input[position];
+    int inputLength = length;
+    while (position < inputLength) {
+      char ch = charAtFast(position);
       if (isWhitespace(ch)) {
         position++;
       } else {
@@ -1077,17 +865,17 @@ public final class Latin1StringJsonReader extends JsonReader {
     }
   }
 
-  private static boolean isWhitespace(int ch) {
+  private static boolean isWhitespace(char ch) {
     return ch == ' ' || ch == '\n' || ch == '\r' || ch == '\t';
   }
 
   private boolean startsWithAscii(String value) {
     int end = position + value.length();
-    if (end > input.length) {
+    if (end > length) {
       return false;
     }
     for (int i = 0; i < value.length(); i++) {
-      if (input[position + i] != value.charAt(i)) {
+      if (charAtFast(position + i) != value.charAt(i)) {
         return false;
       }
     }
@@ -1095,8 +883,8 @@ public final class Latin1StringJsonReader extends JsonReader {
   }
 
   private void rejectLeadingDigitFast() {
-    if (position < input.length) {
-      int ch = input[position];
+    if (position < length) {
+      char ch = charAtFast(position);
       if (ch >= '0' && ch <= '9') {
         throw error("Leading zero in number");
       }
@@ -1104,8 +892,8 @@ public final class Latin1StringJsonReader extends JsonReader {
   }
 
   private void rejectFractionOrExponentFast() {
-    if (position < input.length) {
-      int ch = input[position];
+    if (position < length) {
+      char ch = charAtFast(position);
       if (ch == '.' || ch == 'e' || ch == 'E') {
         throw error("Expected integer");
       }
@@ -1113,10 +901,10 @@ public final class Latin1StringJsonReader extends JsonReader {
   }
 
   private int readZeroIntName(int nameStart) {
-    if (position >= input.length) {
+    if (position >= length) {
       throw error("Unterminated string");
     }
-    int ch = input[position];
+    char ch = charAtFast(position);
     if (ch == '\\') {
       position = nameStart;
       return super.readFieldNameInt();
@@ -1132,10 +920,10 @@ public final class Latin1StringJsonReader extends JsonReader {
   }
 
   private long readZeroLongName(int nameStart) {
-    if (position >= input.length) {
+    if (position >= length) {
       throw error("Unterminated string");
     }
-    int ch = input[position];
+    char ch = charAtFast(position);
     if (ch == '\\') {
       position = nameStart;
       return super.readFieldNameLong();
@@ -1148,5 +936,12 @@ public final class Latin1StringJsonReader extends JsonReader {
     }
     position++;
     return 0L;
+  }
+
+  private char charAtFast(int index) {
+    byte[] localBytes = bytes;
+    return localBytes == null
+        ? input.charAt(index)
+        : StringSerializer.getBytesChar(localBytes, index << 1);
   }
 }

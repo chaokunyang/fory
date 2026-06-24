@@ -62,8 +62,8 @@ import org.apache.fory.json.meta.JsonAsciiToken;
 import org.apache.fory.json.meta.JsonFieldAccessor;
 import org.apache.fory.json.meta.JsonFieldNameHash;
 import org.apache.fory.json.reader.JsonReader;
-import org.apache.fory.json.reader.Latin1StringJsonReader;
-import org.apache.fory.json.reader.Utf16StringJsonReader;
+import org.apache.fory.json.reader.Latin1JsonReader;
+import org.apache.fory.json.reader.Utf16JsonReader;
 import org.apache.fory.json.reader.Utf8JsonReader;
 import org.apache.fory.json.resolver.JsonTypeInfo;
 import org.apache.fory.json.resolver.JsonTypeResolver;
@@ -1400,7 +1400,7 @@ public final class ScalarCodecs {
 
     @Override
     public Object readLatin1(
-        Latin1StringJsonReader reader, JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
+        Latin1JsonReader reader, JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
       if (reader.tryReadNullToken()) {
         return null;
       }
@@ -1409,7 +1409,7 @@ public final class ScalarCodecs {
 
     @Override
     public Object readUtf16(
-        Utf16StringJsonReader reader, JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
+        Utf16JsonReader reader, JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
       if (reader.tryReadNullToken()) {
         return null;
       }
@@ -1429,11 +1429,11 @@ public final class ScalarCodecs {
       return enumValue(reader.readStringHash());
     }
 
-    public Object readLatin1Enum(Latin1StringJsonReader reader) {
+    public Object readLatin1Enum(Latin1JsonReader reader) {
       return enumValue(reader.readPackedStringHash());
     }
 
-    public Object readNextLatin1Enum(Latin1StringJsonReader reader) {
+    public Object readNextLatin1Enum(Latin1JsonReader reader) {
       Object value = readDirectLatin1EnumToken(reader);
       if (value != null) {
         return value;
@@ -1441,7 +1441,7 @@ public final class ScalarCodecs {
       return enumValue(reader.readNextPackedStringHash());
     }
 
-    public Object readLatin1EnumToken(Latin1StringJsonReader reader) {
+    public Object readLatin1EnumToken(Latin1JsonReader reader) {
       Object value = readDirectLatin1EnumToken(reader);
       if (value != null) {
         return value;
@@ -1449,15 +1449,15 @@ public final class ScalarCodecs {
       return readLatin1EnumHashToken(reader);
     }
 
-    public Object readLatin1EnumHashToken(Latin1StringJsonReader reader) {
+    public Object readLatin1EnumHashToken(Latin1JsonReader reader) {
       return enumValue(reader.readPackedStringHashTokenValue());
     }
 
-    public Object readUtf16Enum(Utf16StringJsonReader reader) {
+    public Object readUtf16Enum(Utf16JsonReader reader) {
       return enumValue(reader.readPackedStringHash());
     }
 
-    public Object readNextUtf16Enum(Utf16StringJsonReader reader) {
+    public Object readNextUtf16Enum(Utf16JsonReader reader) {
       return enumValue(reader.readNextPackedStringHash());
     }
 
@@ -1500,7 +1500,7 @@ public final class ScalarCodecs {
       throw new ForyJsonException("Unknown enum value for " + type);
     }
 
-    private Object readDirectLatin1EnumToken(Latin1StringJsonReader reader) {
+    private Object readDirectLatin1EnumToken(Latin1JsonReader reader) {
       for (int i = 0; i < tokenCount; i++) {
         boolean matched;
         switch (tokenSuffixLengths[i]) {

@@ -20,11 +20,11 @@
 package org.apache.fory.json.codec;
 
 import org.apache.fory.json.reader.JsonReader;
+import org.apache.fory.json.reader.Latin1JsonReader;
 import org.apache.fory.json.reader.Latin1ObjectReader;
-import org.apache.fory.json.reader.Latin1StringJsonReader;
 import org.apache.fory.json.reader.ObjectReader;
+import org.apache.fory.json.reader.Utf16JsonReader;
 import org.apache.fory.json.reader.Utf16ObjectReader;
-import org.apache.fory.json.reader.Utf16StringJsonReader;
 import org.apache.fory.json.reader.Utf8JsonReader;
 import org.apache.fory.json.reader.Utf8ObjectReader;
 import org.apache.fory.json.resolver.JsonTypeInfo;
@@ -72,7 +72,7 @@ public final class GeneratedObjectCodec extends BaseObjectCodec {
 
   @Override
   public Object readLatin1(
-      Latin1StringJsonReader input, JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
+      Latin1JsonReader input, JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
     if (input.tryReadNullToken()) {
       return null;
     }
@@ -81,7 +81,7 @@ public final class GeneratedObjectCodec extends BaseObjectCodec {
 
   @Override
   public Object readLatin1NonNull(
-      Latin1StringJsonReader input, JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
+      Latin1JsonReader input, JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
     input.enterDepth();
     Object object = latin1Reader.readLatin1(input, this, resolver);
     input.exitDepth();
@@ -90,7 +90,7 @@ public final class GeneratedObjectCodec extends BaseObjectCodec {
 
   @Override
   public Object readUtf16(
-      Utf16StringJsonReader input, JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
+      Utf16JsonReader input, JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
     if (input.tryReadNullToken()) {
       return null;
     }
@@ -99,7 +99,7 @@ public final class GeneratedObjectCodec extends BaseObjectCodec {
 
   @Override
   public Object readUtf16NonNull(
-      Utf16StringJsonReader input, JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
+      Utf16JsonReader input, JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
     input.enterDepth();
     Object object = utf16Reader.readUtf16(input, this, resolver);
     input.exitDepth();

@@ -36,8 +36,8 @@ import org.apache.fory.json.ForyJsonException;
 import org.apache.fory.json.JSONObject;
 import org.apache.fory.json.meta.JsonFieldNameHash;
 import org.apache.fory.json.reader.JsonReader;
-import org.apache.fory.json.reader.Latin1StringJsonReader;
-import org.apache.fory.json.reader.Utf16StringJsonReader;
+import org.apache.fory.json.reader.Latin1JsonReader;
+import org.apache.fory.json.reader.Utf16JsonReader;
 import org.apache.fory.json.reader.Utf8JsonReader;
 import org.apache.fory.json.resolver.JsonTypeInfo;
 import org.apache.fory.json.resolver.JsonTypeResolver;
@@ -246,7 +246,7 @@ public abstract class MapCodec extends AbstractJsonCodec {
 
     @Override
     public final Object readLatin1(
-        Latin1StringJsonReader reader, JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
+        Latin1JsonReader reader, JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
       if (reader.tryReadNullToken()) {
         return null;
       }
@@ -267,7 +267,7 @@ public abstract class MapCodec extends AbstractJsonCodec {
 
     @Override
     public final Object readUtf16(
-        Utf16StringJsonReader reader, JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
+        Utf16JsonReader reader, JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
       if (reader.tryReadNullToken()) {
         return null;
       }
@@ -307,9 +307,9 @@ public abstract class MapCodec extends AbstractJsonCodec {
       return map;
     }
 
-    abstract Object readLatin1Value(Latin1StringJsonReader reader);
+    abstract Object readLatin1Value(Latin1JsonReader reader);
 
-    abstract Object readUtf16Value(Utf16StringJsonReader reader);
+    abstract Object readUtf16Value(Utf16JsonReader reader);
 
     abstract Object readUtf8Value(Utf8JsonReader reader);
   }
@@ -364,12 +364,12 @@ public abstract class MapCodec extends AbstractJsonCodec {
     }
 
     @Override
-    Object readLatin1Value(Latin1StringJsonReader reader) {
+    Object readLatin1Value(Latin1JsonReader reader) {
       return reader.readString();
     }
 
     @Override
-    Object readUtf16Value(Utf16StringJsonReader reader) {
+    Object readUtf16Value(Utf16JsonReader reader) {
       return reader.readString();
     }
 
@@ -429,12 +429,12 @@ public abstract class MapCodec extends AbstractJsonCodec {
     }
 
     @Override
-    Object readLatin1Value(Latin1StringJsonReader reader) {
+    Object readLatin1Value(Latin1JsonReader reader) {
       return reader.readBooleanValue();
     }
 
     @Override
-    Object readUtf16Value(Utf16StringJsonReader reader) {
+    Object readUtf16Value(Utf16JsonReader reader) {
       return reader.readBooleanValue();
     }
 
@@ -498,11 +498,11 @@ public abstract class MapCodec extends AbstractJsonCodec {
 
     abstract Object readNumber(JsonReader reader);
 
-    Object readLatin1Number(Latin1StringJsonReader reader) {
+    Object readLatin1Number(Latin1JsonReader reader) {
       return readNumber(reader);
     }
 
-    Object readUtf16Number(Utf16StringJsonReader reader) {
+    Object readUtf16Number(Utf16JsonReader reader) {
       return readNumber(reader);
     }
 
@@ -511,12 +511,12 @@ public abstract class MapCodec extends AbstractJsonCodec {
     }
 
     @Override
-    final Object readLatin1Value(Latin1StringJsonReader reader) {
+    final Object readLatin1Value(Latin1JsonReader reader) {
       return readLatin1Number(reader);
     }
 
     @Override
-    final Object readUtf16Value(Utf16StringJsonReader reader) {
+    final Object readUtf16Value(Utf16JsonReader reader) {
       return readUtf16Number(reader);
     }
 
@@ -542,12 +542,12 @@ public abstract class MapCodec extends AbstractJsonCodec {
     }
 
     @Override
-    Object readLatin1Number(Latin1StringJsonReader reader) {
+    Object readLatin1Number(Latin1JsonReader reader) {
       return reader.readIntValue();
     }
 
     @Override
-    Object readUtf16Number(Utf16StringJsonReader reader) {
+    Object readUtf16Number(Utf16JsonReader reader) {
       return reader.readIntValue();
     }
 
@@ -573,12 +573,12 @@ public abstract class MapCodec extends AbstractJsonCodec {
     }
 
     @Override
-    Object readLatin1Number(Latin1StringJsonReader reader) {
+    Object readLatin1Number(Latin1JsonReader reader) {
       return reader.readLongValue();
     }
 
     @Override
-    Object readUtf16Number(Utf16StringJsonReader reader) {
+    Object readUtf16Number(Utf16JsonReader reader) {
       return reader.readLongValue();
     }
 
@@ -604,12 +604,12 @@ public abstract class MapCodec extends AbstractJsonCodec {
     }
 
     @Override
-    Object readLatin1Number(Latin1StringJsonReader reader) {
+    Object readLatin1Number(Latin1JsonReader reader) {
       return readShort(reader.readIntValue());
     }
 
     @Override
-    Object readUtf16Number(Utf16StringJsonReader reader) {
+    Object readUtf16Number(Utf16JsonReader reader) {
       return readShort(reader.readIntValue());
     }
 
@@ -635,12 +635,12 @@ public abstract class MapCodec extends AbstractJsonCodec {
     }
 
     @Override
-    Object readLatin1Number(Latin1StringJsonReader reader) {
+    Object readLatin1Number(Latin1JsonReader reader) {
       return readByte(reader.readIntValue());
     }
 
     @Override
-    Object readUtf16Number(Utf16StringJsonReader reader) {
+    Object readUtf16Number(Utf16JsonReader reader) {
       return readByte(reader.readIntValue());
     }
 
@@ -768,7 +768,7 @@ public abstract class MapCodec extends AbstractJsonCodec {
 
     @Override
     public Object readLatin1(
-        Latin1StringJsonReader reader, JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
+        Latin1JsonReader reader, JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
       if (reader.tryReadNullToken()) {
         return null;
       }
@@ -789,7 +789,7 @@ public abstract class MapCodec extends AbstractJsonCodec {
 
     @Override
     public Object readUtf16(
-        Utf16StringJsonReader reader, JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
+        Utf16JsonReader reader, JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
       if (reader.tryReadNullToken()) {
         return null;
       }

@@ -60,6 +60,7 @@
 
   <modules>
     <module>fory-core</module>
+    <module>fory-json</module>
     <module>fory-annotation-processor</module>
     <module>fory-extensions</module>
     <module>fory-test-core</module>
@@ -101,9 +102,9 @@
                 <configuration>
                   <rules>
                     <requireJavaVersion>
-                      <version>[25,26)</version>
+                      <version>[25,)</version>
                       <message>
-                        Apache Fory JVM releases must run with JDK 25 so JDK25 multi-release classes are packaged.
+                        Apache Fory JVM releases must run with JDK 25+ so JDK25 multi-release classes are packaged.
                       </message>
                     </requireJavaVersion>
                   </rules>

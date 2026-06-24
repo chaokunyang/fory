@@ -336,6 +336,18 @@ final class InstanceFieldAccessors {
       checkObj(obj);
       UNSAFE.putDouble(obj, fieldOffset, value);
     }
+
+    @Override
+    public Object getObject(Object obj) {
+      checkObj(obj);
+      return UNSAFE.getObject(obj, fieldOffset);
+    }
+
+    @Override
+    public void putObject(Object obj, Object value) {
+      checkObj(obj);
+      UNSAFE.putObject(obj, fieldOffset, value);
+    }
   }
 
   static final class GeneratedAccessor extends FieldAccessor {

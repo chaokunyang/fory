@@ -703,12 +703,16 @@ public final class Utf8JsonWriter extends JsonWriter {
   private void ensure(int additional) {
     int minCapacity = position + additional;
     if (minCapacity > buffer.length) {
-      int newCapacity = buffer.length << 1;
-      while (newCapacity < minCapacity) {
-        newCapacity <<= 1;
-      }
-      buffer = Arrays.copyOf(buffer, newCapacity);
+      grow(minCapacity);
     }
+  }
+
+  private void grow(int minCapacity) {
+    int newCapacity = buffer.length << 1;
+    while (newCapacity < minCapacity) {
+      newCapacity <<= 1;
+    }
+    buffer = Arrays.copyOf(buffer, newCapacity);
   }
 
   private static char hex(int value) {

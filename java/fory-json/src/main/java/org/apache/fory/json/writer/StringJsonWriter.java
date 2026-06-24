@@ -812,34 +812,46 @@ public final class StringJsonWriter extends JsonWriter {
   private void ensure(int additional) {
     int minCapacity = position + additional;
     if (minCapacity > buffer.length) {
-      int newCapacity = buffer.length << 1;
-      while (newCapacity < minCapacity) {
-        newCapacity <<= 1;
-      }
-      buffer = Arrays.copyOf(buffer, newCapacity);
+      grow(minCapacity);
     }
+  }
+
+  private void grow(int minCapacity) {
+    int newCapacity = buffer.length << 1;
+    while (newCapacity < minCapacity) {
+      newCapacity <<= 1;
+    }
+    buffer = Arrays.copyOf(buffer, newCapacity);
   }
 
   private void ensureUtf16(int additional) {
     int minCapacity = position + additional;
     char[] chars = utf16Buffer;
     if (!utf16) {
-      int newCapacity = Math.max(buffer.length, minCapacity);
-      if (chars == null || chars.length < newCapacity) {
-        chars = new char[newCapacity];
-        utf16Buffer = chars;
-      }
-      for (int i = 0; i < position; i++) {
-        chars[i] = (char) (buffer[i] & 0xff);
-      }
-      utf16 = true;
+      upgradeToUtf16(chars, minCapacity);
     } else if (minCapacity > chars.length) {
-      int newCapacity = chars.length << 1;
-      while (newCapacity < minCapacity) {
-        newCapacity <<= 1;
-      }
-      utf16Buffer = Arrays.copyOf(chars, newCapacity);
+      growUtf16(chars, minCapacity);
     }
+  }
+
+  private void upgradeToUtf16(char[] chars, int minCapacity) {
+    int newCapacity = Math.max(buffer.length, minCapacity);
+    if (chars == null || chars.length < newCapacity) {
+      chars = new char[newCapacity];
+      utf16Buffer = chars;
+    }
+    for (int i = 0; i < position; i++) {
+      chars[i] = (char) (buffer[i] & 0xff);
+    }
+    utf16 = true;
+  }
+
+  private void growUtf16(char[] chars, int minCapacity) {
+    int newCapacity = chars.length << 1;
+    while (newCapacity < minCapacity) {
+      newCapacity <<= 1;
+    }
+    utf16Buffer = Arrays.copyOf(chars, newCapacity);
   }
 
   private static boolean isJsonLatin1(char ch) {

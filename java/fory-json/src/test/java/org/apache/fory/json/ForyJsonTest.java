@@ -102,6 +102,13 @@ public class ForyJsonTest {
     public String missing;
   }
 
+  public static final class DepthNode {
+    public int value;
+    public DepthNode child;
+    public List<DepthNode> children;
+    public Map<String, DepthNode> nodes;
+  }
+
   public static final class FirstIntField {
     public int count = 2;
     public String name = "first";
@@ -1131,6 +1138,95 @@ public class ForyJsonTest {
         () -> json.fromJson("\"" + Character.toString('\uD800') + "\"", String.class));
   }
 
+  @Test
+  public void defaultMaxDepth() {
+    ForyJson json = ForyJson.builder().build();
+    assertTrue(
+        json.fromJson(nestedArray(ForyJson.DEFAULT_MAX_DEPTH), Object.class) instanceof JSONArray);
+    assertThrows(
+        ForyJsonException.class,
+        () -> json.fromJson(nestedArray(ForyJson.DEFAULT_MAX_DEPTH + 1), Object.class));
+  }
+
+  @Test
+  public void readMaxDepth() {
+    ForyJson json = ForyJson.builder().maxDepth(2).build();
+    assertEquals(json.fromJson("{\"child\":{\"value\":1}}", DepthNode.class).child.value, 1);
+    assertThrows(
+        ForyJsonException.class,
+        () -> json.fromJson("{\"child\":{\"child\":{\"value\":1}}}", DepthNode.class));
+    assertThrows(
+        ForyJsonException.class,
+        () ->
+            json.fromJson(
+                "{\"child\":{\"child\":{\"value\":1}}}".getBytes(StandardCharsets.UTF_8),
+                DepthNode.class));
+  }
+
+  @Test
+  public void readContainerMaxDepth() {
+    ForyJson json = ForyJson.builder().maxDepth(2).build();
+    assertTrue(json.fromJson("[[1]]", Object.class) instanceof JSONArray);
+    assertThrows(ForyJsonException.class, () -> json.fromJson("[[[1]]]", Object.class));
+    assertEquals(
+        json.fromJson("{\"a\":{\"b\":1}}", new TypeRef<Map<String, Object>>() {}).size(), 1);
+    assertThrows(
+        ForyJsonException.class,
+        () -> json.fromJson("{\"a\":{\"b\":{\"c\":1}}}", new TypeRef<Map<String, Object>>() {}));
+
+    ForyJson nestedJson = ForyJson.builder().maxDepth(3).build();
+    assertEquals(
+        nestedJson
+            .fromJson("{\"children\":[{\"value\":2}]}", DepthNode.class)
+            .children
+            .get(0)
+            .value,
+        2);
+    assertThrows(
+        ForyJsonException.class,
+        () -> json.fromJson("{\"children\":[{\"value\":2}]}", DepthNode.class));
+    assertEquals(
+        nestedJson
+            .fromJson("{\"nodes\":{\"a\":{\"value\":3}}}", DepthNode.class)
+            .nodes
+            .get("a")
+            .value,
+        3);
+    assertThrows(
+        ForyJsonException.class,
+        () -> json.fromJson("{\"nodes\":{\"a\":{\"value\":3}}}", DepthNode.class));
+  }
+
+  @Test
+  public void readJsonObjectMaxDepth() {
+    ForyJson json = ForyJson.builder().maxDepth(2).build();
+    JSONObject object = json.fromJson("{\"items\":[1]}", JSONObject.class);
+    assertTrue(object.get("items") instanceof JSONArray);
+    assertThrows(
+        ForyJsonException.class, () -> json.fromJson("{\"items\":[{}]}", JSONObject.class));
+    assertThrows(ForyJsonException.class, () -> json.fromJson("[[{}]]", JSONArray.class));
+  }
+
+  @Test
+  public void readDepthReset() {
+    ForyJson json = ForyJson.builder().maxDepth(1).build();
+    assertThrows(
+        ForyJsonException.class, () -> json.fromJson("{\"child\":{\"value\":1}}", DepthNode.class));
+    assertEquals(json.fromJson("{\"value\":2}", DepthNode.class).value, 2);
+    assertThrows(
+        ForyJsonException.class,
+        () ->
+            json.fromJson(
+                "{\"child\":{\"value\":1}}".getBytes(StandardCharsets.UTF_8), DepthNode.class));
+    assertEquals(
+        json.fromJson("{\"value\":3}".getBytes(StandardCharsets.UTF_8), DepthNode.class).value, 3);
+  }
+
+  @Test
+  public void rejectInvalidMaxDepth() {
+    assertThrows(IllegalArgumentException.class, () -> ForyJson.builder().maxDepth(0));
+  }
+
   private static Map<String, Integer> scores() {
     Map<String, Integer> scores = new LinkedHashMap<>();
     scores.put("one", 1);
@@ -1333,6 +1429,18 @@ public class ForyJsonTest {
     char[] chars = new char[length];
     Arrays.fill(chars, ch);
     return new String(chars);
+  }
+
+  private static String nestedArray(int depth) {
+    StringBuilder builder = new StringBuilder(depth * 2 + 1);
+    for (int i = 0; i < depth; i++) {
+      builder.append('[');
+    }
+    builder.append('0');
+    for (int i = 0; i < depth; i++) {
+      builder.append(']');
+    }
+    return builder.toString();
   }
 
   private static int arrayCapacity(ArrayList<?> list) {

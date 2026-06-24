@@ -201,12 +201,16 @@ public abstract class BaseObjectCodec extends AbstractJsonCodec {
 
   @Override
   Object readNonNull(JsonReader reader, JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
+    reader.enterDepth();
     if (record) {
-      return readRecord(reader, resolver);
+      Object object = readRecord(reader, resolver);
+      reader.exitDepth();
+      return object;
     }
     Object object = newInstance();
     reader.expect('{');
     if (reader.consume('}')) {
+      reader.exitDepth();
       return object;
     }
     do {
@@ -219,6 +223,7 @@ public abstract class BaseObjectCodec extends AbstractJsonCodec {
       }
     } while (reader.consume(','));
     reader.expect('}');
+    reader.exitDepth();
     return object;
   }
 

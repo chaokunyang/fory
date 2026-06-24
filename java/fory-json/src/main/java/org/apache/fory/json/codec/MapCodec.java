@@ -129,6 +129,7 @@ public abstract class MapCodec extends AbstractJsonCodec {
       JsonTypeInfo valueInfo,
       JsonCodec valueCodec,
       JsonTypeResolver resolver) {
+    reader.enterDepth();
     reader.expect('{');
     if (!reader.consume('}')) {
       do {
@@ -138,6 +139,7 @@ public abstract class MapCodec extends AbstractJsonCodec {
       } while (reader.consume(','));
       reader.expect('}');
     }
+    reader.exitDepth();
   }
 
   @SuppressWarnings("unchecked")
@@ -248,6 +250,7 @@ public abstract class MapCodec extends AbstractJsonCodec {
       if (reader.tryReadNullToken()) {
         return null;
       }
+      reader.enterDepth();
       Map<Object, Object> map = newMap();
       reader.expectNextToken('{');
       if (!reader.consumeNextToken('}')) {
@@ -258,6 +261,7 @@ public abstract class MapCodec extends AbstractJsonCodec {
         } while (reader.consumeNextToken(','));
         reader.expectNextToken('}');
       }
+      reader.exitDepth();
       return map;
     }
 
@@ -267,6 +271,7 @@ public abstract class MapCodec extends AbstractJsonCodec {
       if (reader.tryReadNullToken()) {
         return null;
       }
+      reader.enterDepth();
       Map<Object, Object> map = newMap();
       reader.expectNextToken('{');
       if (!reader.consumeNextToken('}')) {
@@ -277,6 +282,7 @@ public abstract class MapCodec extends AbstractJsonCodec {
         } while (reader.consumeNextToken(','));
         reader.expectNextToken('}');
       }
+      reader.exitDepth();
       return map;
     }
 
@@ -286,6 +292,7 @@ public abstract class MapCodec extends AbstractJsonCodec {
       if (reader.tryReadNullToken()) {
         return null;
       }
+      reader.enterDepth();
       Map<Object, Object> map = newMap();
       reader.expectNextToken('{');
       if (!reader.consumeNextToken('}')) {
@@ -296,6 +303,7 @@ public abstract class MapCodec extends AbstractJsonCodec {
         } while (reader.consumeNextToken(','));
         reader.expectNextToken('}');
       }
+      reader.exitDepth();
       return map;
     }
 
@@ -340,6 +348,7 @@ public abstract class MapCodec extends AbstractJsonCodec {
 
     @Override
     Object readNonNull(JsonReader reader, JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
+      reader.enterDepth();
       Map<Object, Object> map = newMap();
       reader.expect('{');
       if (!reader.consume('}')) {
@@ -350,6 +359,7 @@ public abstract class MapCodec extends AbstractJsonCodec {
         } while (reader.consume(','));
         reader.expect('}');
       }
+      reader.exitDepth();
       return map;
     }
 
@@ -403,6 +413,7 @@ public abstract class MapCodec extends AbstractJsonCodec {
 
     @Override
     Object readNonNull(JsonReader reader, JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
+      reader.enterDepth();
       Map<Object, Object> map = newMap();
       reader.expect('{');
       if (!reader.consume('}')) {
@@ -413,6 +424,7 @@ public abstract class MapCodec extends AbstractJsonCodec {
         } while (reader.consume(','));
         reader.expect('}');
       }
+      reader.exitDepth();
       return map;
     }
 
@@ -467,6 +479,7 @@ public abstract class MapCodec extends AbstractJsonCodec {
 
     @Override
     final Object readNonNull(JsonReader reader, JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
+      reader.enterDepth();
       Map<Object, Object> map = newMap();
       reader.expect('{');
       if (!reader.consume('}')) {
@@ -477,6 +490,7 @@ public abstract class MapCodec extends AbstractJsonCodec {
         } while (reader.consume(','));
         reader.expect('}');
       }
+      reader.exitDepth();
       return map;
     }
 
@@ -737,6 +751,7 @@ public abstract class MapCodec extends AbstractJsonCodec {
 
     @Override
     Object readNonNull(JsonReader reader, JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
+      reader.enterDepth();
       Map<Object, Object> map = newMap();
       reader.expect('{');
       if (!reader.consume('}')) {
@@ -747,6 +762,7 @@ public abstract class MapCodec extends AbstractJsonCodec {
         } while (reader.consume(','));
         reader.expect('}');
       }
+      reader.exitDepth();
       return map;
     }
 
@@ -756,6 +772,7 @@ public abstract class MapCodec extends AbstractJsonCodec {
       if (reader.tryReadNullToken()) {
         return null;
       }
+      reader.enterDepth();
       Map<Object, Object> map = newMap();
       reader.expectNextToken('{');
       if (!reader.consumeNextToken('}')) {
@@ -766,6 +783,7 @@ public abstract class MapCodec extends AbstractJsonCodec {
         } while (reader.consumeNextToken(','));
         reader.expectNextToken('}');
       }
+      reader.exitDepth();
       return map;
     }
 
@@ -775,6 +793,7 @@ public abstract class MapCodec extends AbstractJsonCodec {
       if (reader.tryReadNullToken()) {
         return null;
       }
+      reader.enterDepth();
       Map<Object, Object> map = newMap();
       reader.expectNextToken('{');
       if (!reader.consumeNextToken('}')) {
@@ -785,6 +804,7 @@ public abstract class MapCodec extends AbstractJsonCodec {
         } while (reader.consumeNextToken(','));
         reader.expectNextToken('}');
       }
+      reader.exitDepth();
       return map;
     }
 
@@ -794,6 +814,7 @@ public abstract class MapCodec extends AbstractJsonCodec {
       if (reader.tryReadNullToken()) {
         return null;
       }
+      reader.enterDepth();
       Map<Object, Object> map = newMap();
       reader.expectNextToken('{');
       if (!reader.consumeNextToken('}')) {
@@ -804,6 +825,7 @@ public abstract class MapCodec extends AbstractJsonCodec {
         } while (reader.consumeNextToken(','));
         reader.expectNextToken('}');
       }
+      reader.exitDepth();
       return map;
     }
   }

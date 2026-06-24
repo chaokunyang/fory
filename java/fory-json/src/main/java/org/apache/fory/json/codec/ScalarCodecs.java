@@ -1311,6 +1311,7 @@ public final class ScalarCodecs {
 
     @Override
     Object readNonNull(JsonReader reader, JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
+      reader.enterDepth();
       byte[] bytes = new byte[16];
       int size = 0;
       reader.expect('[');
@@ -1327,6 +1328,7 @@ public final class ScalarCodecs {
         } while (reader.consume(','));
         reader.expect(']');
       }
+      reader.exitDepth();
       return ByteBuffer.wrap(Arrays.copyOf(bytes, size));
     }
 

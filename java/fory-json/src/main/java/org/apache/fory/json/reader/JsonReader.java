@@ -19,6 +19,7 @@
 
 package org.apache.fory.json.reader;
 
+import org.apache.fory.json.ForyJson;
 import org.apache.fory.json.ForyJsonException;
 import org.apache.fory.json.meta.JsonFieldInfo;
 import org.apache.fory.json.meta.JsonFieldNameHash;
@@ -26,12 +27,35 @@ import org.apache.fory.json.meta.JsonFieldTable;
 
 public abstract class JsonReader {
   protected int position;
+  private int depth;
+  private int maxDepth = ForyJson.DEFAULT_MAX_DEPTH;
 
   protected abstract int length();
 
   protected abstract char charAt(int index);
 
   public abstract String readString();
+
+  public final void resetDepth(int maxDepth) {
+    this.maxDepth = maxDepth;
+    depth = 0;
+  }
+
+  public final void clearDepth() {
+    depth = 0;
+  }
+
+  public final void enterDepth() {
+    int nextDepth = depth + 1;
+    if (nextDepth > maxDepth) {
+      throw error("JSON max depth " + maxDepth + " exceeded");
+    }
+    depth = nextDepth;
+  }
+
+  public final void exitDepth() {
+    depth--;
+  }
 
   public String readNullableString() {
     return tryReadNull() ? null : readString();
@@ -447,8 +471,10 @@ public abstract class JsonReader {
   }
 
   private void skipObject() {
+    enterDepth();
     expect('{');
     if (consume('}')) {
+      exitDepth();
       return;
     }
     do {
@@ -458,17 +484,21 @@ public abstract class JsonReader {
       skipValue();
     } while (consume(','));
     expect('}');
+    exitDepth();
   }
 
   private void skipArray() {
+    enterDepth();
     expect('[');
     if (consume(']')) {
+      exitDepth();
       return;
     }
     do {
       skipValue();
     } while (consume(','));
     expect(']');
+    exitDepth();
   }
 
   private boolean startsWith(String value) {

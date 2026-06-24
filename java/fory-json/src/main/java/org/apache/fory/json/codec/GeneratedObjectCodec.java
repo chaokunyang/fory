@@ -58,7 +58,10 @@ public final class GeneratedObjectCodec extends BaseObjectCodec {
 
   @Override
   Object readNonNull(JsonReader input, JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
-    return reader.read(input, this, resolver);
+    input.enterDepth();
+    Object object = reader.read(input, this, resolver);
+    input.exitDepth();
+    return object;
   }
 
   @Override
@@ -73,7 +76,10 @@ public final class GeneratedObjectCodec extends BaseObjectCodec {
   @Override
   public Object readLatin1NonNull(
       Latin1StringJsonReader input, JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
-    return latin1Reader.readLatin1(input, this, resolver);
+    input.enterDepth();
+    Object object = latin1Reader.readLatin1(input, this, resolver);
+    input.exitDepth();
+    return object;
   }
 
   @Override
@@ -88,7 +94,10 @@ public final class GeneratedObjectCodec extends BaseObjectCodec {
   @Override
   public Object readUtf16NonNull(
       Utf16StringJsonReader input, JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
-    return utf16Reader.readUtf16(input, this, resolver);
+    input.enterDepth();
+    Object object = utf16Reader.readUtf16(input, this, resolver);
+    input.exitDepth();
+    return object;
   }
 
   @Override
@@ -102,6 +111,9 @@ public final class GeneratedObjectCodec extends BaseObjectCodec {
   @Override
   public Object readUtf8NonNull(
       Utf8JsonReader input, JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
-    return utf8Reader.readUtf8(input, this, resolver);
+    input.enterDepth();
+    Object object = utf8Reader.readUtf8(input, this, resolver);
+    input.exitDepth();
+    return object;
   }
 }

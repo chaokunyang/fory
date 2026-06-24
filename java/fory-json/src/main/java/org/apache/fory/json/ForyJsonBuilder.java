@@ -26,6 +26,7 @@ import org.apache.fory.json.codec.JsonCodec;
 public final class ForyJsonBuilder {
   private boolean writeNullFields;
   private boolean codegenEnabled = true;
+  private int maxDepth = ForyJson.DEFAULT_MAX_DEPTH;
   private final CodecRegistry codecRegistry = new CodecRegistry();
 
   ForyJsonBuilder() {}
@@ -42,6 +43,15 @@ public final class ForyJsonBuilder {
     return this;
   }
 
+  /** Sets the maximum nested JSON object/array depth allowed while parsing. */
+  public ForyJsonBuilder maxDepth(int maxDepth) {
+    if (maxDepth < 1) {
+      throw new IllegalArgumentException("maxDepth must be positive");
+    }
+    this.maxDepth = maxDepth;
+    return this;
+  }
+
   /** Registers a custom JSON codec for {@code type}. */
   public <T> ForyJsonBuilder registerCodec(Class<T> type, JsonCodec codec) {
     codecRegistry.register(type, codec);
@@ -49,6 +59,6 @@ public final class ForyJsonBuilder {
   }
 
   public ForyJson build() {
-    return new ForyJson(writeNullFields, codegenEnabled, codecRegistry);
+    return new ForyJson(writeNullFields, codegenEnabled, maxDepth, codecRegistry);
   }
 }

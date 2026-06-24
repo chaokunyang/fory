@@ -45,14 +45,20 @@ public final class ForyJson {
   private static final int DEFAULT_POOL_SIZE =
       Math.max(1, Runtime.getRuntime().availableProcessors() * 4);
 
+  /** Default maximum nested JSON object/array depth accepted by parsers. */
+  public static final int DEFAULT_MAX_DEPTH = 20;
+
   private final JsonSharedRegistry sharedRegistry;
   private final boolean writeNullFields;
+  private final int maxDepth;
   private final int poolSize;
   private final AtomicReference<PooledState> primarySlot;
   private final AtomicReferenceArray<PooledState> slots;
 
-  ForyJson(boolean writeNullFields, boolean codegenEnabled, CodecRegistry codecRegistry) {
+  ForyJson(
+      boolean writeNullFields, boolean codegenEnabled, int maxDepth, CodecRegistry codecRegistry) {
     this.writeNullFields = writeNullFields;
+    this.maxDepth = maxDepth;
     sharedRegistry = new JsonSharedRegistry(codegenEnabled, writeNullFields, codecRegistry);
     poolSize = DEFAULT_POOL_SIZE;
     primarySlot =
@@ -132,7 +138,7 @@ public final class ForyJson {
     PooledState entry = acquire();
     JsonState state = entry.state;
     try {
-      return castValue(readUtf8Value(state.utf8Reader(bytes), type, type, state), type);
+      return castValue(readUtf8Value(state.utf8Reader(bytes, maxDepth), type, type, state), type);
     } finally {
       state.clearReaders();
       release(entry);
@@ -145,7 +151,8 @@ public final class ForyJson {
     JsonState state = entry.state;
     try {
       Object value =
-          readUtf8Value(state.utf8Reader(bytes), typeRef.getType(), typeRef.getRawType(), state);
+          readUtf8Value(
+              state.utf8Reader(bytes, maxDepth), typeRef.getType(), typeRef.getRawType(), state);
       return castValue(value, typeRef);
     } finally {
       state.clearReaders();
@@ -227,13 +234,13 @@ public final class ForyJson {
     if (StringSerializer.isBytesBackedString()) {
       byte coder = StringSerializer.getStringCoder(json);
       if (StringSerializer.isLatin1Coder(coder)) {
-        return readLatin1Value(state.latin1Reader(json), type, fallback, state);
+        return readLatin1Value(state.latin1Reader(json, maxDepth), type, fallback, state);
       }
       if (StringSerializer.isUtf16Coder(coder)) {
-        return readUtf16Value(state.utf16Reader(json), type, fallback, state);
+        return readUtf16Value(state.utf16Reader(json, maxDepth), type, fallback, state);
       }
     }
-    return readUtf16Value(state.utf16Reader(json), type, fallback, state);
+    return readUtf16Value(state.utf16Reader(json, maxDepth), type, fallback, state);
   }
 
   private Object readLatin1Value(
@@ -314,19 +321,28 @@ public final class ForyJson {
       return utf8Writer;
     }
 
-    private Latin1StringJsonReader latin1Reader(String input) {
-      return latin1Reader.reset(input);
+    private Latin1StringJsonReader latin1Reader(String input, int maxDepth) {
+      latin1Reader.reset(input);
+      latin1Reader.resetDepth(maxDepth);
+      return latin1Reader;
     }
 
-    private Utf16StringJsonReader utf16Reader(String input) {
-      return utf16Reader.reset(input);
+    private Utf16StringJsonReader utf16Reader(String input, int maxDepth) {
+      utf16Reader.reset(input);
+      utf16Reader.resetDepth(maxDepth);
+      return utf16Reader;
     }
 
-    private Utf8JsonReader utf8Reader(byte[] input) {
-      return utf8Reader.reset(input);
+    private Utf8JsonReader utf8Reader(byte[] input, int maxDepth) {
+      utf8Reader.reset(input);
+      utf8Reader.resetDepth(maxDepth);
+      return utf8Reader;
     }
 
     private void clearReaders() {
+      latin1Reader.clearDepth();
+      utf16Reader.clearDepth();
+      utf8Reader.clearDepth();
       latin1Reader.clear();
       utf16Reader.clear();
       utf8Reader.clear();

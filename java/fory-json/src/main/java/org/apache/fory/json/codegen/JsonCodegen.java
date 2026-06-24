@@ -230,9 +230,15 @@ public final class JsonCodegen {
   }
 
   private boolean canCompile(Class<?> type) {
-    return JdkVersion.MAJOR_VERSION >= 15
+    return supportsHiddenNestmateLoading()
         && CodeGenerator.sourcePublicAccessible(type)
         && isVisible(type);
+  }
+
+  private static boolean supportsHiddenNestmateLoading() {
+    // Generated JSON codecs are defined as hidden nestmates of JsonCodegen; JDK 8 must keep using
+    // the interpreter path because hidden classes are unavailable there.
+    return JdkVersion.MAJOR_VERSION >= 15;
   }
 
   private boolean isVisible(Class<?> type) {

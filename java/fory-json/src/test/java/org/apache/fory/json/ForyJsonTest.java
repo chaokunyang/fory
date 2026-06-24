@@ -327,7 +327,7 @@ public class ForyJsonTest {
     assertEquals(json.toJson(new FirstIntField()), expected);
     assertEquals(
         new String(json.toJsonBytes(new FirstIntField()), StandardCharsets.UTF_8), expected);
-    assertEquals(json.hasGeneratedWriter(FirstIntField.class), true);
+    assertGeneratedWhenSupported(json, FirstIntField.class);
   }
 
   @Test
@@ -371,7 +371,7 @@ public class ForyJsonTest {
   public void useGeneratedWriter() {
     ForyJson json = ForyJson.builder().build();
     assertEquals(json.toJson(new PublicFields()), "{\"active\":true,\"id\":7,\"name\":\"fory\"}");
-    assertEquals(json.hasGeneratedWriter(PublicFields.class), true);
+    assertGeneratedWhenSupported(json, PublicFields.class);
   }
 
   @Test
@@ -421,7 +421,7 @@ public class ForyJsonTest {
     assertEquals(json.toJson(new PrivateFields()), expected);
     assertEquals(
         new String(json.toJsonBytes(new PrivateFields()), StandardCharsets.UTF_8), expected);
-    assertEquals(json.hasGeneratedWriter(PrivateFields.class), true);
+    assertGeneratedWhenSupported(json, PrivateFields.class);
     PrivateFields value =
         json.fromJson("{\"id\":12,\"name\":\"json\",\"nullable\":\"value\"}", PrivateFields.class);
     assertEquals(value.id, 12);
@@ -453,8 +453,8 @@ public class ForyJsonTest {
     assertEquals(
         new String(json.toJsonBytes(value), StandardCharsets.UTF_8),
         "{\"child\":{\"name\":\"child\"},\"name\":\"parent\"}");
-    assertEquals(json.hasGeneratedWriter(RecursiveParent.class), true);
-    assertEquals(json.hasGeneratedWriter(RecursiveChild.class), true);
+    assertGeneratedWhenSupported(json, RecursiveParent.class);
+    assertGeneratedWhenSupported(json, RecursiveChild.class);
   }
 
   @Test
@@ -517,7 +517,7 @@ public class ForyJsonTest {
     String second = "{\"count\":7,\"name\":\"beta\",\"tags\":[\"z\",\"x\"],\"total\":9}";
     assertEquals(json.toJson(value), second);
     assertEquals(new String(json.toJsonBytes(value), StandardCharsets.UTF_8), second);
-    assertEquals(json.hasGeneratedWriter(TokenValues.class), true);
+    assertGeneratedWhenSupported(json, TokenValues.class);
   }
 
   @Test
@@ -548,8 +548,8 @@ public class ForyJsonTest {
             + "{\"count\":5,\"name\":\"gamma\",\"tags\":[\"y\",\"z\"],\"total\":6}]}";
     assertEquals(json.toJson(group), second);
     assertEquals(new String(json.toJsonBytes(group), StandardCharsets.UTF_8), second);
-    assertEquals(json.hasGeneratedWriter(TokenGroup.class), true);
-    assertEquals(json.hasGeneratedWriter(TokenValues.class), true);
+    assertGeneratedWhenSupported(json, TokenGroup.class);
+    assertGeneratedWhenSupported(json, TokenValues.class);
   }
 
   @Test
@@ -563,8 +563,8 @@ public class ForyJsonTest {
     assertEquals(stringValue.values.get(0).tags, Arrays.asList("x"));
     assertEquals(utf8Value.values.size(), 1);
     assertEquals(utf8Value.values.get(0).total, 2);
-    assertEquals(json.hasGeneratedWriter(TokenGroup.class), true);
-    assertEquals(json.hasGeneratedWriter(TokenValues.class), true);
+    assertGeneratedWhenSupported(json, TokenGroup.class);
+    assertGeneratedWhenSupported(json, TokenValues.class);
   }
 
   @Test
@@ -1025,7 +1025,7 @@ public class ForyJsonTest {
     assertGeneratedCollections(json.fromJson(input, GeneratedCollectionFields.class));
     assertGeneratedCollections(
         json.fromJson(input.getBytes(StandardCharsets.UTF_8), GeneratedCollectionFields.class));
-    assertEquals(json.hasGeneratedWriter(GeneratedCollectionFields.class), true);
+    assertGeneratedWhenSupported(json, GeneratedCollectionFields.class);
   }
 
   @Test
@@ -1052,7 +1052,7 @@ public class ForyJsonTest {
         "{\"child\":{\"label\":\"kid\"},\"id\":7,\"name\":\"你好，Fory\"," + "\"tags\":[\"a\",\"b\"]}";
     assertEquals(json.toJson(value), expected);
     assertEquals(new String(json.toJsonBytes(value), StandardCharsets.UTF_8), expected);
-    assertEquals(json.hasGeneratedWriter(type), true);
+    assertGeneratedWhenSupported(json, type);
     assertRecordValue(json.fromJson(expected, type), childType);
     assertRecordValue(json.fromJson(expected.getBytes(StandardCharsets.UTF_8), type), childType);
 
@@ -1423,6 +1423,10 @@ public class ForyJsonTest {
     assertEquals(json.fromJson(objectJson, PublicFields.class).name, text);
     assertEquals(
         json.fromJson(objectJson.getBytes(StandardCharsets.UTF_8), PublicFields.class).name, text);
+  }
+
+  private static void assertGeneratedWhenSupported(ForyJson json, Class<?> type) {
+    assertEquals(json.hasGeneratedWriter(type), JdkVersion.MAJOR_VERSION >= 15);
   }
 
   private static String repeat(char ch, int length) {

@@ -68,6 +68,10 @@ public class LittleEndian {
     return (long) BYTE_ARRAY_LONG.get(o, index);
   }
 
+  public static int getInt32(byte[] o, int index) {
+    return (int) BYTE_ARRAY_INT.get(o, index);
+  }
+
   public static void putInt32(byte[] o, int index, int value) {
     BYTE_ARRAY_INT.set(o, index, value);
   }

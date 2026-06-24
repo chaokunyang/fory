@@ -23,6 +23,5 @@ import org.apache.fory.json.codec.BaseObjectCodec;
 import org.apache.fory.json.resolver.JsonTypeResolver;
 
 public interface Latin1ObjectReader {
-  Object readLatin1(
-      Latin1JsonReader reader, BaseObjectCodec owner, JsonTypeResolver typeResolver);
+  Object readLatin1(Latin1JsonReader reader, BaseObjectCodec owner, JsonTypeResolver typeResolver);
 }

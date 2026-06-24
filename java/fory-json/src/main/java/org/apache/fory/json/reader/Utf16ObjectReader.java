@@ -23,6 +23,5 @@ import org.apache.fory.json.codec.BaseObjectCodec;
 import org.apache.fory.json.resolver.JsonTypeResolver;
 
 public interface Utf16ObjectReader {
-  Object readUtf16(
-      Utf16JsonReader reader, BaseObjectCodec owner, JsonTypeResolver typeResolver);
+  Object readUtf16(Utf16JsonReader reader, BaseObjectCodec owner, JsonTypeResolver typeResolver);
 }

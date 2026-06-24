@@ -89,8 +89,7 @@ public final class GeneratedObjectCodec extends BaseObjectCodec {
   }
 
   @Override
-  public Object readUtf16(
-      Utf16JsonReader input, JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
+  public Object readUtf16(Utf16JsonReader input, JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
     if (input.tryReadNullToken()) {
       return null;
     }

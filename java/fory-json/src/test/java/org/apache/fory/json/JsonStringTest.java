@@ -25,6 +25,15 @@ import static org.testng.Assert.assertTrue;
 
 import java.lang.reflect.Field;
 import java.nio.charset.StandardCharsets;
+import org.apache.fory.json.data.CharValue;
+import org.apache.fory.json.data.Kind;
+import org.apache.fory.json.data.Nested;
+import org.apache.fory.json.data.PublicFields;
+import org.apache.fory.json.data.UnicodeEnumValue;
+import org.apache.fory.json.data.UnicodeFieldNames;
+import org.apache.fory.json.data.UnicodeKind;
+import org.apache.fory.json.data.UnicodeMatrix;
+import org.apache.fory.json.data.UnicodeValues;
 import org.apache.fory.json.writer.StringJsonWriter;
 import org.apache.fory.serializer.StringSerializer;
 import org.testng.annotations.Test;

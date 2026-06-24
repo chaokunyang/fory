@@ -23,6 +23,11 @@ import static org.testng.Assert.assertEquals;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
+import org.apache.fory.json.data.GeneratedCollectionFields;
+import org.apache.fory.json.data.RecursiveChild;
+import org.apache.fory.json.data.RecursiveParent;
+import org.apache.fory.json.data.TokenGroup;
+import org.apache.fory.json.data.TokenValues;
 import org.testng.annotations.Test;
 
 public class JsonGeneratedCodecTest extends ForyJsonTestModels {

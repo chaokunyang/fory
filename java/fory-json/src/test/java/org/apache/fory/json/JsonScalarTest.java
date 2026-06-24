@@ -24,6 +24,12 @@ import static org.testng.Assert.assertThrows;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Optional;
+import org.apache.fory.json.data.BoxedScalars;
+import org.apache.fory.json.data.CoreScalarFields;
+import org.apache.fory.json.data.NaturalObjectValue;
+import org.apache.fory.json.data.NaturalValues;
+import org.apache.fory.json.data.NumericBoundaries;
+import org.apache.fory.json.data.PublicFields;
 import org.testng.annotations.Test;
 
 public class JsonScalarTest extends ForyJsonTestModels {

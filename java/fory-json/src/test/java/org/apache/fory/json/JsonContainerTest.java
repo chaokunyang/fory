@@ -30,6 +30,10 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import org.apache.fory.json.data.FastContainers;
+import org.apache.fory.json.data.MapKeyFields;
+import org.apache.fory.json.data.Nested;
+import org.apache.fory.json.data.TokenValues;
 import org.apache.fory.reflect.TypeRef;
 import org.testng.annotations.Test;
 

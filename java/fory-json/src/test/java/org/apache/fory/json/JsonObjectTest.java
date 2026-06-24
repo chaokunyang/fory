@@ -28,6 +28,14 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import org.apache.fory.json.data.BoxedScalars;
+import org.apache.fory.json.data.DeclaredParentField;
+import org.apache.fory.json.data.DirectionalIgnore;
+import org.apache.fory.json.data.FirstIntField;
+import org.apache.fory.json.data.MethodsIgnored;
+import org.apache.fory.json.data.ParentValue;
+import org.apache.fory.json.data.PrivateFields;
+import org.apache.fory.json.data.PublicFields;
 import org.testng.annotations.Test;
 
 public class JsonObjectTest extends ForyJsonTestModels {

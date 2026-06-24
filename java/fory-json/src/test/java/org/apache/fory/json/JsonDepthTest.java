@@ -25,6 +25,7 @@ import static org.testng.Assert.assertTrue;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
+import org.apache.fory.json.data.DepthNode;
 import org.apache.fory.reflect.TypeRef;
 import org.testng.annotations.Test;
 

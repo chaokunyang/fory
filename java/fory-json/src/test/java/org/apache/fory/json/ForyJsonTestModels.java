@@ -23,276 +23,45 @@ import static org.testng.Assert.assertEquals;
 import static org.testng.Assert.assertTrue;
 
 import java.lang.reflect.Field;
-import java.math.BigDecimal;
-import java.math.BigInteger;
-import java.net.MalformedURLException;
-import java.net.URI;
-import java.net.URL;
 import java.nio.ByteBuffer;
-import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.time.Instant;
-import java.time.LocalDate;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Calendar;
-import java.util.Currency;
 import java.util.EnumMap;
 import java.util.EnumSet;
-import java.util.GregorianCalendar;
 import java.util.HashMap;
-import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
-import java.util.Optional;
-import java.util.OptionalInt;
-import java.util.Queue;
-import java.util.Set;
-import java.util.TimeZone;
-import java.util.UUID;
-import java.util.concurrent.atomic.AtomicInteger;
 import javax.tools.JavaCompiler;
 import javax.tools.ToolProvider;
-import org.apache.fory.json.annotation.JsonIgnore;
+import org.apache.fory.json.data.FastContainers;
+import org.apache.fory.json.data.GeneratedCollectionFields;
+import org.apache.fory.json.data.JsonTestData;
+import org.apache.fory.json.data.Kind;
+import org.apache.fory.json.data.MethodsIgnored;
+import org.apache.fory.json.data.NumericBoundaries;
+import org.apache.fory.json.data.PrivateFields;
+import org.apache.fory.json.data.PublicFields;
+import org.apache.fory.json.data.TokenValues;
+import org.apache.fory.json.data.UnicodeMatrix;
 import org.apache.fory.platform.JdkVersion;
 import org.apache.fory.reflect.FieldAccessor;
 import org.testng.SkipException;
 
 public abstract class ForyJsonTestModels {
-  protected static final String TWO_BYTE_TEXT = "\u0100\u07ff\u03a9";
-  protected static final String THREE_BYTE_TEXT = "\u0800\u20ac\u4f60\ud7ff\ue000";
-  protected static final String SUPPLEMENTARY_TEXT = "\uD834\uDD1E\uD83D\uDE00\uD83C\uDF0D";
-  protected static final String MIXED_SCRIPT_TEXT =
-      "\u0100\u03a9\u0416\u05d0\u0627\u0905\u0e01\u4f60";
-  protected static final String COMBINING_TEXT = "e\u0301\u200d\uD83D\uDCBB";
-  protected static final String ZH_TEXT = "你好，Fory";
-  protected static final String EU_TEXT = "café crème Österreich € ČšŽ";
-
-  public enum Kind {
-    FAST,
-    SMALL
-  }
-
-  public enum UnicodeKind {
-    你好
-  }
-
-  public static final class UnicodeEnumValue {
-    public UnicodeKind kind = UnicodeKind.你好;
-  }
-
-  public static final class PublicFields {
-    public boolean active = true;
-    public int id = 7;
-    public String name = "fory";
-    public String missing;
-  }
-
-  public static final class DepthNode {
-    public int value;
-    public DepthNode child;
-    public List<DepthNode> children;
-    public Map<String, DepthNode> nodes;
-  }
-
-  public static final class FirstIntField {
-    public int count = 2;
-    public String name = "first";
-  }
-
-  public static final class UnicodeFieldNames {
-    public String café = EU_TEXT;
-    public String 你好 = ZH_TEXT;
-  }
-
-  public static final class MethodsIgnored {
-    public int setterCalls;
-    public String value = "field";
-    private String hidden = "hidden";
-
-    public String getHidden() {
-      return hidden;
-    }
-
-    public String getValue() {
-      return "getter";
-    }
-
-    public void setValue(String value) {
-      setterCalls++;
-      this.value = "setter:" + value;
-    }
-  }
-
-  public static final class PrivateFields {
-    private static String staticValue = "static";
-    private transient String transientValue = "transient";
-    private int id = 11;
-    private String name = "private";
-    private String nullable;
-  }
-
-  public static final class DirectionalIgnore {
-    @JsonIgnore public int both = 1;
-
-    @JsonIgnore(ignoreRead = true, ignoreWrite = false)
-    public int writeOnly = 2;
-
-    @JsonIgnore(ignoreRead = false, ignoreWrite = true)
-    public int readOnly = 3;
-  }
-
-  public static final class Nested {
-    public Kind kind = Kind.FAST;
-    public List<String> names = Arrays.asList("a", "b");
-    public Map<String, Integer> scores = scores();
-  }
-
-  public static final class BoxedScalars {
-    public Boolean bool = true;
-    public Byte byteValue = Byte.valueOf((byte) 2);
-    public Character charValue = Character.valueOf('x');
-    public Double doubleValue = Double.valueOf(2.5);
-    public Float floatValue = Float.valueOf(1.5f);
-    public Integer intValue = Integer.valueOf(4);
-    public Long longValue = Long.valueOf(5);
-    public Short shortValue = Short.valueOf((short) 3);
-  }
-
-  public static final class NumericBoundaries {
-    public int intMax;
-    public int intMin;
-    public long longMax;
-    public long longMin;
-    public int small;
-    public String text;
-  }
-
-  public static final class NaturalValues {
-    public Object bool = Boolean.TRUE;
-    public Object list = Arrays.asList("a", Integer.valueOf(1), Boolean.FALSE);
-    public Object map = values();
-    public Object number = Integer.valueOf(7);
-    public Object text = "fory";
-  }
-
-  public static final class NaturalObjectValue {
-    public Object value = new Object();
-  }
-
-  public static class ParentValue {
-    public int parent = 1;
-  }
-
-  public static final class ChildValue extends ParentValue {
-    public int child = 2;
-  }
-
-  public static final class DeclaredParentField {
-    public ParentValue value = new ChildValue();
-  }
-
-  public static final class TokenValues {
-    public int count = 1;
-    public String name = "alpha";
-    public List<String> tags = Arrays.asList("x", "y");
-    public long total = 2;
-  }
-
-  public static final class TokenGroup {
-    public List<TokenValues> values;
-  }
-
-  public static final class CharValue {
-    public char value;
-  }
-
-  public static final class CoreScalarFields {
-    public AtomicInteger atomicInt = new AtomicInteger(7);
-    public BigDecimal bigDecimal = new BigDecimal("12345.6789");
-    public BigInteger bigInteger = new BigInteger("12345678901234567890");
-    public StringBuilder builder = new StringBuilder("build");
-    public ByteBuffer bytes = ByteBuffer.wrap(new byte[] {1, -2, 3});
-    public Calendar calendar = calendar(123456789L);
-    public Charset charset = StandardCharsets.UTF_8;
-    public Currency currency = Currency.getInstance("EUR");
-    public LocalDate date = LocalDate.of(2026, 6, 21);
-    public Instant instant = Instant.parse("2026-06-21T01:02:03Z");
-    public Locale locale = Locale.forLanguageTag("zh-Hans-CN");
-    public Optional<String> maybe = Optional.of("yes");
-    public OptionalInt optionalInt = OptionalInt.of(4);
-    public TimeZone timeZone = TimeZone.getTimeZone("UTC");
-    public Class<?> type = PublicFields.class;
-    public URI uri = URI.create("https://fory.apache.org/json");
-    public URL url = url("https://fory.apache.org/");
-    public UUID uuid = UUID.fromString("123e4567-e89b-12d3-a456-426614174000");
-  }
-
-  public static final class MapKeyFields {
-    public Map<Integer, String> intNames = intNames();
-    public EnumMap<Kind, Integer> scores = enumScores();
-  }
-
-  public static final class FastContainers {
-    public List<Boolean> booleans = Arrays.asList(Boolean.TRUE, Boolean.FALSE);
-    public Map<String, Boolean> flags = flags();
-    public Map<Integer, String> intNames = intNames();
-    public List<Integer> ints = Arrays.asList(1, 2);
-    public List<String> names = Arrays.asList("alpha", ZH_TEXT);
-    public Map<String, Integer> scores = scores();
-  }
-
-  public static final class GeneratedCollectionFields {
-    public EnumSet<Kind> kinds = EnumSet.of(Kind.FAST, Kind.SMALL);
-    public Set<String> names = new LinkedHashSet<>(Arrays.asList("alpha", ZH_TEXT));
-    public Queue<Integer> numbers = new ArrayDeque<>(Arrays.asList(1, 2));
-  }
-
-  public static final class UnicodeValues {
-    public String first = "\u1234";
-    public String second = "music \uD834\uDD1E";
-    public List<String> tags = Arrays.asList("latin", "\u1234", "\uD83D\uDE00");
-  }
-
-  public static final class UnicodeMatrix {
-    public Character boxedChar = Character.valueOf('\u20ac');
-    public char charThreeByte = '\u4f60';
-    public char charTwoByte = '\u0100';
-    public char[] chars = {'\u0100', '\u07ff', '\u0800', '\u20ac', '\u4f60'};
-    public String combining = COMBINING_TEXT;
-    public String eu = EU_TEXT;
-    public String mixedScripts = MIXED_SCRIPT_TEXT;
-    public String supplementary = SUPPLEMENTARY_TEXT;
-    public String threeByte = THREE_BYTE_TEXT;
-    public String twoByte = TWO_BYTE_TEXT;
-    public Map<String, String> valueMap = unicodeMap();
-    public List<String> values =
-        Arrays.asList(
-            TWO_BYTE_TEXT,
-            THREE_BYTE_TEXT,
-            SUPPLEMENTARY_TEXT,
-            MIXED_SCRIPT_TEXT,
-            COMBINING_TEXT,
-            ZH_TEXT,
-            EU_TEXT);
-    public String zh = ZH_TEXT;
-  }
-
-  public static final class RecursiveParent {
-    public RecursiveChild child = new RecursiveChild();
-    public String name = "parent";
-  }
-
-  public static final class RecursiveChild {
-    public String name = "child";
-    public RecursiveParent parent;
-  }
+  protected static final String TWO_BYTE_TEXT = JsonTestData.TWO_BYTE_TEXT;
+  protected static final String THREE_BYTE_TEXT = JsonTestData.THREE_BYTE_TEXT;
+  protected static final String SUPPLEMENTARY_TEXT = JsonTestData.SUPPLEMENTARY_TEXT;
+  protected static final String MIXED_SCRIPT_TEXT = JsonTestData.MIXED_SCRIPT_TEXT;
+  protected static final String COMBINING_TEXT = JsonTestData.COMBINING_TEXT;
+  protected static final String ZH_TEXT = JsonTestData.ZH_TEXT;
+  protected static final String EU_TEXT = JsonTestData.EU_TEXT;
 
   protected static TokenValues tokenValue(int count, String name, List<String> tags, long total) {
     TokenValues value = new TokenValues();
@@ -304,70 +73,47 @@ public abstract class ForyJsonTestModels {
   }
 
   protected static String hiddenValue(MethodsIgnored value) {
-    return value.hidden;
+    return MethodsIgnored.hiddenValue(value);
   }
 
   protected static int privateId(PrivateFields value) {
-    return value.id;
+    return PrivateFields.id(value);
   }
 
   protected static String privateName(PrivateFields value) {
-    return value.name;
+    return PrivateFields.name(value);
   }
 
   protected static String privateNullable(PrivateFields value) {
-    return value.nullable;
+    return PrivateFields.nullable(value);
   }
 
   protected static String privateTransientValue(PrivateFields value) {
-    return value.transientValue;
+    return PrivateFields.transientValue(value);
   }
 
   protected static String privateStaticValue() {
-    return PrivateFields.staticValue;
+    return PrivateFields.staticValue();
   }
 
   protected static Map<String, Integer> scores() {
-    Map<String, Integer> scores = new LinkedHashMap<>();
-    scores.put("one", 1);
-    scores.put("two", 2);
-    return scores;
+    return JsonTestData.scores();
   }
 
   protected static Map<String, Boolean> flags() {
-    Map<String, Boolean> flags = new LinkedHashMap<>();
-    flags.put("enabled", Boolean.TRUE);
-    flags.put("disabled", Boolean.FALSE);
-    return flags;
+    return JsonTestData.flags();
   }
 
   protected static Map<Integer, String> intNames() {
-    Map<Integer, String> values = new LinkedHashMap<>();
-    values.put(1, "one");
-    values.put(2, "two");
-    return values;
+    return JsonTestData.intNames();
   }
 
   protected static EnumMap<Kind, Integer> enumScores() {
-    EnumMap<Kind, Integer> values = new EnumMap<>(Kind.class);
-    values.put(Kind.FAST, 1);
-    values.put(Kind.SMALL, 2);
-    return values;
+    return JsonTestData.enumScores();
   }
 
   protected static Calendar calendar(long millis) {
-    Calendar calendar = new GregorianCalendar();
-    calendar.setTimeZone(TimeZone.getTimeZone("UTC"));
-    calendar.setTimeInMillis(millis);
-    return calendar;
-  }
-
-  protected static URL url(String value) {
-    try {
-      return new URL(value);
-    } catch (MalformedURLException e) {
-      throw new IllegalArgumentException(e);
-    }
+    return JsonTestData.calendar(millis);
   }
 
   protected static byte[] byteBufferBytes(ByteBuffer buffer) {
@@ -378,12 +124,7 @@ public abstract class ForyJsonTestModels {
   }
 
   protected static Map<String, String> unicodeMap() {
-    Map<String, String> values = new LinkedHashMap<>();
-    values.put(TWO_BYTE_TEXT, THREE_BYTE_TEXT);
-    values.put(ZH_TEXT, EU_TEXT);
-    values.put("\u043a\u043b\u044e\u0447", "\uD83D\uDE00");
-    values.put("\u0645\u0631\u062d\u0628\u0627", "\u0928\u092e\u0938\u094d\u0924\u0947");
-    return values;
+    return JsonTestData.unicodeMap();
   }
 
   protected static String unicodeMatrixJson() {
@@ -431,10 +172,10 @@ public abstract class ForyJsonTestModels {
   }
 
   protected static void assertUnicodeMatrix(UnicodeMatrix value) {
-    assertEquals(value.boxedChar, Character.valueOf('\u20ac'));
-    assertEquals(value.charThreeByte, '\u4f60');
-    assertEquals(value.charTwoByte, '\u0100');
-    assertEquals(value.chars, new char[] {'\u0100', '\u07ff', '\u0800', '\u20ac', '\u4f60'});
+    assertEquals(value.boxedChar, Character.valueOf('€'));
+    assertEquals(value.charThreeByte, '你');
+    assertEquals(value.charTwoByte, 'Ā');
+    assertEquals(value.chars, new char[] {'Ā', '߿', 'ࠀ', '€', '你'});
     assertEquals(value.combining, COMBINING_TEXT);
     assertEquals(value.eu, EU_TEXT);
     assertEquals(value.mixedScripts, MIXED_SCRIPT_TEXT);
@@ -571,9 +312,6 @@ public abstract class ForyJsonTestModels {
   }
 
   protected static Map<String, Object> values() {
-    Map<String, Object> values = new LinkedHashMap<>();
-    values.put("name", "fory");
-    values.put("score", 9);
-    return values;
+    return JsonTestData.values();
   }
 }

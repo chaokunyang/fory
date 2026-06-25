@@ -55,6 +55,7 @@ import org.apache.fory.codegen.Expression.Invoke;
 import org.apache.fory.collection.BiMap;
 import org.apache.fory.collection.ConcurrentIdentityMap;
 import org.apache.fory.collection.IdentityMap;
+import org.apache.fory.collection.IdentityObjectIntMap;
 import org.apache.fory.collection.LongMap;
 import org.apache.fory.collection.Tuple2;
 import org.apache.fory.config.Config;
@@ -586,8 +587,9 @@ public abstract class TypeResolver {
     MemoryBuffer buffer = writeContext.getBuffer();
     MetaWriteContext metaWriteContext = writeContext.getMetaWriteContext();
     assert metaWriteContext != null : SET_META_WRITE_CONTEXT_MSG;
-    int newId = metaWriteContext.size();
-    int id = metaWriteContext.putOrGetMetaId(typeInfo.type);
+    IdentityObjectIntMap<Class<?>> classMap = metaWriteContext.classMap;
+    int newId = classMap.size;
+    int id = classMap.putOrGet(typeInfo.type, newId);
     if (id >= 0) {
       // Reference to previously written type: (index << 1) | 1, LSB=1
       buffer.writeVarUInt32((id << 1) | 1);

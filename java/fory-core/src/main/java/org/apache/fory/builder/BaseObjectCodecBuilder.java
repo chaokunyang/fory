@@ -1380,7 +1380,7 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
     Class<?> elemClass = TypeUtils.getRawType(elementType);
     boolean trackingRef = needWriteRef(elementType);
     Tuple2<Expression, Invoke> writeElementsHeader =
-        writeElementsHeader(elemClass, trackingRef, serializer, buffer, collection, size);
+        writeElementsHeader(elemClass, trackingRef, serializer, buffer, collection);
     Expression flags = writeElementsHeader.f0;
     builder.add(flags);
     boolean finalType = isMonomorphic(elemClass);
@@ -1520,9 +1520,7 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
       boolean trackingRef,
       Expression collectionSerializer,
       Expression buffer,
-      Expression value,
-      Expression size) {
-    boolean isList = List.class.isAssignableFrom(getRawType(value.type()));
+      Expression value) {
     if (isMonomorphic(elementType)) {
       Expression bitmap;
       if (trackingRef) {
@@ -1531,24 +1529,9 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
                 new Invoke(buffer, "writeByte", ofInt(CollectionFlags.DECL_SAME_TYPE_TRACKING_REF)),
                 ofInt(CollectionFlags.DECL_SAME_TYPE_TRACKING_REF));
       } else {
-        if (isList) {
-          bitmap =
-              new Invoke(
-                  collectionSerializer,
-                  "writeNullabilityHeader",
-                  PRIMITIVE_INT_TYPE,
-                  buffer,
-                  value,
-                  size);
-        } else {
-          bitmap =
-              new Invoke(
-                  collectionSerializer,
-                  "writeNullabilityHeader",
-                  PRIMITIVE_INT_TYPE,
-                  buffer,
-                  value);
-        }
+        bitmap =
+            new Invoke(
+                collectionSerializer, "writeNullabilityHeader", PRIMITIVE_INT_TYPE, buffer, value);
       }
       return Tuple2.of(bitmap, null);
     } else {
@@ -1577,28 +1560,15 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
                   classInfoHolder);
         }
       } else {
-        if (isList) {
-          bitmap =
-              new Invoke(
-                  collectionSerializer,
-                  "writeTypeNullabilityHeader",
-                  PRIMITIVE_INT_TYPE,
-                  writeContextRef(),
-                  value,
-                  size,
-                  elementTypeExpr,
-                  classInfoHolder);
-        } else {
-          bitmap =
-              new Invoke(
-                  collectionSerializer,
-                  "writeTypeNullabilityHeader",
-                  PRIMITIVE_INT_TYPE,
-                  writeContextRef(),
-                  value,
-                  elementTypeExpr,
-                  classInfoHolder);
-        }
+        bitmap =
+            new Invoke(
+                collectionSerializer,
+                "writeTypeNullabilityHeader",
+                PRIMITIVE_INT_TYPE,
+                writeContextRef(),
+                value,
+                elementTypeExpr,
+                classInfoHolder);
       }
       Invoke serializer = new Invoke(classInfoHolder, "getSerializer", SERIALIZER_TYPE);
       return Tuple2.of(bitmap, serializer);
@@ -2796,7 +2766,9 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
     ListExpression builder = new ListExpression();
     Expression readerIndex = new Invoke(buffer, "readerIndex", "readerIndex", PRIMITIVE_INT_TYPE);
     Expression flags =
-        cast(new Invoke(buffer, "_unsafeGetByte", PRIMITIVE_BYTE_TYPE, readerIndex), PRIMITIVE_INT_TYPE);
+        cast(
+            new Invoke(buffer, "_unsafeGetByte", PRIMITIVE_BYTE_TYPE, readerIndex),
+            PRIMITIVE_INT_TYPE);
     builder.add(readerIndex, flags, new Invoke(buffer, "_increaseReaderIndexUnsafe", ofInt(1)));
     Class<?> elemClass = TypeUtils.getRawType(elementType);
     walkPath.add(elementType.toString());

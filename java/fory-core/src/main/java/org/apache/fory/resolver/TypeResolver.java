@@ -827,7 +827,8 @@ public abstract class TypeResolver {
         break;
       case Types.COMPATIBLE_STRUCT:
       case Types.NAMED_COMPATIBLE_STRUCT:
-        typeInfo = readSharedClassTypeInfo(readContext, null);
+        typeInfo = readSharedClassTypeInfo(readContext, null, classInfoHolder.typeInfo);
+        updateCache = typeInfo != classInfoHolder.typeInfo;
         break;
       case Types.NAMED_ENUM:
       case Types.NAMED_STRUCT:
@@ -837,7 +838,8 @@ public abstract class TypeResolver {
           typeInfo = readTypeInfoFromBytes(readContext, classInfoHolder.typeInfo, typeId);
           updateCache = true;
         } else {
-          typeInfo = readSharedClassTypeInfo(readContext, null);
+          typeInfo = readSharedClassTypeInfo(readContext, null, classInfoHolder.typeInfo);
+          updateCache = typeInfo != classInfoHolder.typeInfo;
         }
         break;
       case Types.LIST:

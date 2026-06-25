@@ -125,7 +125,7 @@ public final class StringSerializer extends ImmutableSerializer<String> {
       if (compressString) {
         return new Invoke(strSerializer, "writeCompressedBytesString", buffer, str);
       } else {
-        return new StaticInvoke(StringSerializer.class, "writeBytesString", buffer, str);
+        return new StaticInvoke(StringSerializer.class, "writeBytesStringCodegen", buffer, str);
       }
     } else {
       if (!STRING_VALUE_FIELD_IS_CHARS) {
@@ -529,6 +529,45 @@ public final class StringSerializer extends ImmutableSerializer<String> {
     writeBytesString(buffer, coder, bytes);
   }
 
+  @Internal
+  @CodegenInvoke
+  public static void writeBytesStringCodegen(MemoryBuffer buffer, String value) {
+    byte[] bytes = (byte[]) getStringValue(value);
+    byte coder = getStringCoder(value);
+    writeBytesStringCodegen(buffer, coder, bytes);
+  }
+
+  private static void writeBytesStringCodegen(MemoryBuffer buffer, byte coder, byte[] bytes) {
+    if (!NativeByteOrder.IS_LITTLE_ENDIAN && coder == UTF16) {
+      writeBytesStringUTF16BE(buffer, bytes);
+      return;
+    }
+    int bytesLen = bytes.length;
+    long header = ((long) bytesLen << 2) | coder;
+    int writerIndex = buffer.writerIndex();
+    buffer.ensure(writerIndex + 9 + bytesLen);
+    final byte[] targetArray = buffer.getHeapMemory();
+    if (targetArray != null) {
+      final int targetIndex = buffer._unsafeHeapWriterIndex();
+      int arrIndex = targetIndex;
+      if (header >>> 7 == 0) {
+        targetArray[arrIndex++] = (byte) header;
+      } else if (header >>> 14 == 0) {
+        targetArray[arrIndex++] = (byte) ((header & 0x7F) | 0x80);
+        targetArray[arrIndex++] = (byte) (header >>> 7);
+      } else {
+        arrIndex += LittleEndian.putVarUint36Small(targetArray, arrIndex, header);
+      }
+      writerIndex += arrIndex - targetIndex;
+      System.arraycopy(bytes, 0, targetArray, arrIndex, bytesLen);
+    } else {
+      writerIndex += buffer._unsafePutVarUint36Small(writerIndex, header);
+      PlatformStringUtils.putBytes(buffer, writerIndex, bytes, bytesLen);
+    }
+    writerIndex += bytesLen;
+    buffer._unsafeWriterIndex(writerIndex);
+  }
+
   public static void writeBytesString(MemoryBuffer buffer, byte coder, byte[] bytes) {
     if (!NativeByteOrder.IS_LITTLE_ENDIAN && coder == UTF16) {
       writeBytesStringUTF16BE(buffer, bytes);
@@ -644,7 +683,7 @@ public final class StringSerializer extends ImmutableSerializer<String> {
     byte[] heapMemory = buffer.getHeapMemory();
     if (heapMemory != null) {
       final int arrIndex = buffer._unsafeHeapReaderIndex();
-      buffer.increaseReaderIndex(numBytes);
+      buffer._increaseReaderIndexUnsafe(numBytes);
       bytes = new byte[numBytes];
       System.arraycopy(heapMemory, arrIndex, bytes, 0, numBytes);
     } else {

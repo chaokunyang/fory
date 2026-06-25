@@ -61,6 +61,47 @@ public class StringSerializerTest extends ForyTestBase {
   }
 
   @Test
+  public void testCodegenByteStringWire() {
+    if (!stringValueIsBytes()) {
+      throw new SkipException("Skip when string value is not byte[]");
+    }
+    String[] values = {
+      "",
+      "a",
+      StringUtils.random(31),
+      StringUtils.random(40),
+      StringUtils.random(5000),
+      "你好",
+      "abc你好"
+    };
+    for (String value : values) {
+      int capacity = Math.max(64, value.length() * 8 + 64);
+      MemoryBuffer control = MemoryBuffer.newHeapBuffer(capacity);
+      MemoryBuffer codegen = MemoryBuffer.newHeapBuffer(capacity);
+      StringSerializer.writeBytesString(control, value);
+      StringSerializer.writeBytesStringCodegen(codegen, value);
+      Assert.assertEquals(
+          codegen.getBytes(0, codegen.writerIndex()),
+          control.getBytes(0, control.writerIndex()),
+          value);
+      Assert.assertEquals(
+          readJDK11String(MemoryBuffer.fromByteArray(codegen.getBytes(0, codegen.writerIndex()))),
+          value);
+    }
+  }
+
+  private static boolean stringValueIsBytes() {
+    try {
+      Field valueIsBytesField =
+          StringSerializer.class.getDeclaredField("STRING_VALUE_FIELD_IS_BYTES");
+      valueIsBytesField.setAccessible(true);
+      return (boolean) valueIsBytesField.get(null);
+    } catch (ReflectiveOperationException e) {
+      throw new RuntimeException(e);
+    }
+  }
+
+  @Test
   public void testJavaStringZeroCopy() {
     if (JdkVersion.MAJOR_VERSION >= 17) {
       throw new SkipException("Skip on jdk17+");

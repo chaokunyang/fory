@@ -1219,6 +1219,17 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
     }
   }
 
+  protected Expression readTypeInfoWithTarget(Class<?> cls) {
+    Reference classInfoHolderRef = addTypeInfoHolderField(cls);
+    return inlineInvoke(
+        typeResolverRef,
+        "readTypeInfo",
+        classInfoTypeRef,
+        readContextRef,
+        getClassExpr(cls),
+        classInfoHolderRef);
+  }
+
   protected TypeRef<?> getSerializerType(TypeRef<?> objType) {
     return getSerializerType(objType.getRawType());
   }
@@ -2783,8 +2794,10 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
   protected Expression readCollectionCodegen(
       Expression buffer, Expression collection, Expression size, TypeRef<?> elementType) {
     ListExpression builder = new ListExpression();
-    Invoke flags = new Invoke(buffer, "readByte", "flags", PRIMITIVE_INT_TYPE, false);
-    builder.add(flags);
+    Expression readerIndex = new Invoke(buffer, "readerIndex", "readerIndex", PRIMITIVE_INT_TYPE);
+    Expression flags =
+        cast(new Invoke(buffer, "_unsafeGetByte", PRIMITIVE_BYTE_TYPE, readerIndex), PRIMITIVE_INT_TYPE);
+    builder.add(readerIndex, flags, new Invoke(buffer, "_increaseReaderIndexUnsafe", ofInt(1)));
     Class<?> elemClass = TypeUtils.getRawType(elementType);
     walkPath.add(elementType.toString());
     boolean finalType = isMonomorphic(elemClass);
@@ -2816,7 +2829,7 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
       Literal isDeclTypeFlag = ofInt(CollectionFlags.IS_DECL_ELEMENT_TYPE);
       Expression isDeclType = eq(new BitAnd(flags, isDeclTypeFlag), isDeclTypeFlag);
       Invoke serializer =
-          inlineInvoke(readTypeInfo(elemClass, buffer), "getSerializer", SERIALIZER_TYPE);
+          inlineInvoke(readTypeInfoWithTarget(elemClass), "getSerializer", SERIALIZER_TYPE);
       TypeRef<?> serializerType = getSerializerType(elementType);
       Expression elemSerializer; // make it in scope of `if(sameElementClass)`
       boolean maybeDecl = typeResolver(r -> r.isSerializable(elemClass));

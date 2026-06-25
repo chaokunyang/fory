@@ -26,7 +26,7 @@ import org.apache.fory.collection.ClassValueCache;
 
 /**
  * Creates unique marker classes for each layer in a class hierarchy. These marker classes serve as
- * unique keys in {@code metaContext.classMap} to distinguish different layers during serialization.
+ * unique keys in {@code MetaWriteContext} to distinguish different layers during serialization.
  *
  * <p>For a class hierarchy {@code C extends B extends A}, this generator creates unique marker
  * classes for:

@@ -19,7 +19,6 @@
 
 package org.apache.fory.serializer;
 
-import org.apache.fory.collection.IdentityObjectIntMap;
 import org.apache.fory.collection.ObjectIntMap;
 import org.apache.fory.context.CopyContext;
 import org.apache.fory.context.MetaWriteContext;
@@ -87,9 +86,8 @@ public abstract class CompatibleLayerSerializerBase<T> extends AbstractObjectSer
     if (metaWriteContext == null) {
       return;
     }
-    IdentityObjectIntMap<Class<?>> classMap = metaWriteContext.classMap;
-    int newId = classMap.size;
-    int id = classMap.putOrGet(layerMarkerClass, newId);
+    int newId = metaWriteContext.size();
+    int id = metaWriteContext.putOrGetMetaId(layerMarkerClass);
     if (id >= 0) {
       buffer.writeVarUInt32((id << 1) | 1);
     } else {

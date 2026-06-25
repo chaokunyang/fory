@@ -701,6 +701,18 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
       Expression inputObject, Expression buffer, Descriptor descriptor, Expression serializer) {
     TypeRef<?> typeRef = descriptor.getTypeRef();
     Class<?> clz = getRawType(typeRef);
+    if (isEnumType(clz)) {
+      Expression enumSerializer =
+          cast(
+              serializer == null ? getSerializerForField(clz) : serializer,
+              TypeRef.of(EnumSerializer.class));
+      return new Invoke(
+          enumSerializer,
+          "writeValue",
+          writeContextRef(),
+          buffer,
+          cast(inputObject, TypeRef.of(Enum.class)));
+    }
     if (serializer != null) {
       return new Invoke(serializer, writeMethodName, writeContextRef(), inputObject);
     }
@@ -715,6 +727,10 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
 
   private Expression getSerializerForField(Class<?> cls) {
     return getOrCreateSerializer(cls, true);
+  }
+
+  private static boolean isEnumType(Class<?> cls) {
+    return cls != Enum.class && Enum.class.isAssignableFrom(cls);
   }
 
   protected Expression serializeForNullable(
@@ -885,6 +901,7 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
     Class<?> clz = getRawType(typeRef);
     Expression clsExpr = new Invoke(inputObject, "getClass", "cls", CLASS_TYPE);
     ListExpression writeClassAndObject = new ListExpression();
+    Expression exactClassWrite = exactClassWrite(inputObject, clz);
     Tuple2<Reference, Boolean> classInfoRef = addTypeInfoField(clz);
     Expression classInfo = classInfoRef.f0;
     if (classInfoRef.f1) {
@@ -904,12 +921,24 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
             PRIMITIVE_VOID_TYPE,
             writeContextRef(),
             inputObject));
+    Expression write =
+        exactClassWrite == null
+            ? writeClassAndObject
+            : new If(eq(clsExpr, getClassExpr(clz)), exactClassWrite, writeClassAndObject, false);
     return invokeGenerated(
-        ctx,
-        writeCutPoints(buffer, inputObject),
-        writeClassAndObject,
-        "writeClassAndObject",
-        false);
+        ctx, writeCutPoints(buffer, inputObject), write, "writeClassAndObject", false);
+  }
+
+  private Expression exactClassWrite(Expression inputObject, Class<?> clz) {
+    if (clz.isInterface() || Modifier.isAbstract(clz.getModifiers())) {
+      return null;
+    }
+    Reference typeInfo = addExactTypeInfoField(clz);
+    Expression serializer = getOrCreateSerializer(clz);
+    return new ListExpression(
+        typeResolver(r -> r.writeClassExpr(typeResolverRef, writeContextRef(), typeInfo)),
+        new Invoke(
+            serializer, writeMethodName, PRIMITIVE_VOID_TYPE, writeContextRef(), inputObject));
   }
 
   protected Expression writeTypeInfo(
@@ -1128,6 +1157,21 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
     return classInfoRef;
   }
 
+  protected Reference addExactTypeInfoField(Class<?> cls) {
+    String key = "exactClassInfo:" + cls;
+    Reference reference = (Reference) sharedFieldMap.get(key);
+    if (reference != null) {
+      return reference;
+    }
+    Expression classInfoExpr =
+        inlineInvoke(typeResolverRef, "getTypeInfo", classInfoTypeRef, getClassExpr(cls));
+    String name = ctx.newName(ctx.newName(cls) + "ExactTypeInfo");
+    ctx.addField(true, ctx.type(TypeInfo.class), name, classInfoExpr);
+    reference = fieldRef(name, classInfoTypeRef);
+    sharedFieldMap.put(key, reference);
+    return reference;
+  }
+
   protected Reference addTypeInfoHolderField(Class<?> cls) {
     // Final type need to write classinfo when meta share enabled.
     String key;
@@ -1325,7 +1369,7 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
     Class<?> elemClass = TypeUtils.getRawType(elementType);
     boolean trackingRef = needWriteRef(elementType);
     Tuple2<Expression, Invoke> writeElementsHeader =
-        writeElementsHeader(elemClass, trackingRef, serializer, buffer, collection);
+        writeElementsHeader(elemClass, trackingRef, serializer, buffer, collection, size);
     Expression flags = writeElementsHeader.f0;
     builder.add(flags);
     boolean finalType = isMonomorphic(elemClass);
@@ -1334,11 +1378,18 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
         builder.add(
             writeContainerElements(elementType, true, null, null, buffer, collection, size));
       } else {
+        Expression declSameNoNull =
+            eq(flags, ofInt(CollectionFlags.DECL_SAME_TYPE_NOT_HAS_NULL), "declSameNoNull");
         Literal hasNullFlag = ofInt(CollectionFlags.HAS_NULL);
         Expression hasNull = eq(new BitAnd(flags, hasNullFlag), hasNullFlag, "hasNull");
         builder.add(
+            declSameNoNull,
             hasNull,
-            writeContainerElements(elementType, false, null, hasNull, buffer, collection, size));
+            new If(
+                declSameNoNull,
+                writeContainerElements(elementType, false, null, null, buffer, collection, size),
+                writeContainerElements(elementType, false, null, hasNull, buffer, collection, size),
+                false));
       }
     } else {
       Literal flag = ofInt(CollectionFlags.IS_SAME_TYPE);
@@ -1398,9 +1449,28 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
                 differentTypeWrite);
       } else {
         // if declared elem type don't track ref, all elements must not write ref.
+        Expression declSameNoNull =
+            eq(flags, ofInt(CollectionFlags.DECL_SAME_TYPE_NOT_HAS_NULL), "declSameNoNull");
         Literal hasNullFlag = ofInt(CollectionFlags.HAS_NULL);
         Expression hasNull = eq(new BitAnd(flags, hasNullFlag), hasNullFlag, "hasNull");
-        builder.add(hasNull);
+        builder.add(declSameNoNull, hasNull);
+        Expression declaredNoNullWrite = null;
+        if (maybeDecl) {
+          declaredNoNullWrite =
+              invokeGenerated(
+                  ctx,
+                  writeCutPoints(buffer, collection, size),
+                  writeContainerElements(
+                      elementType,
+                      false,
+                      cast(getOrCreateSerializer(elemClass), serializerType),
+                      null,
+                      buffer,
+                      collection,
+                      size),
+                  "declSameNoNullWrite",
+                  false);
+        }
         ListExpression writeBuilder = new ListExpression(elemSerializer);
         writeBuilder.add(
             writeContainerElements(
@@ -1415,6 +1485,9 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
                 invokeGenerated(ctx, cutPoint, writeBuilder, "sameElementClassWrite", false),
                 writeContainerElements(
                     elementType, false, null, hasNull, buffer, collection, size));
+        if (declaredNoNullWrite != null) {
+          action = new If(declSameNoNull, declaredNoNullWrite, action, false);
+        }
       }
       builder.add(action);
     }
@@ -1436,7 +1509,9 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
       boolean trackingRef,
       Expression collectionSerializer,
       Expression buffer,
-      Expression value) {
+      Expression value,
+      Expression size) {
+    boolean isList = List.class.isAssignableFrom(getRawType(value.type()));
     if (isMonomorphic(elementType)) {
       Expression bitmap;
       if (trackingRef) {
@@ -1445,9 +1520,24 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
                 new Invoke(buffer, "writeByte", ofInt(CollectionFlags.DECL_SAME_TYPE_TRACKING_REF)),
                 ofInt(CollectionFlags.DECL_SAME_TYPE_TRACKING_REF));
       } else {
-        bitmap =
-            new Invoke(
-                collectionSerializer, "writeNullabilityHeader", PRIMITIVE_INT_TYPE, buffer, value);
+        if (isList) {
+          bitmap =
+              new Invoke(
+                  collectionSerializer,
+                  "writeNullabilityHeader",
+                  PRIMITIVE_INT_TYPE,
+                  buffer,
+                  value,
+                  size);
+        } else {
+          bitmap =
+              new Invoke(
+                  collectionSerializer,
+                  "writeNullabilityHeader",
+                  PRIMITIVE_INT_TYPE,
+                  buffer,
+                  value);
+        }
       }
       return Tuple2.of(bitmap, null);
     } else {
@@ -1476,15 +1566,28 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
                   classInfoHolder);
         }
       } else {
-        bitmap =
-            new Invoke(
-                collectionSerializer,
-                "writeTypeNullabilityHeader",
-                PRIMITIVE_INT_TYPE,
-                writeContextRef(),
-                value,
-                elementTypeExpr,
-                classInfoHolder);
+        if (isList) {
+          bitmap =
+              new Invoke(
+                  collectionSerializer,
+                  "writeTypeNullabilityHeader",
+                  PRIMITIVE_INT_TYPE,
+                  writeContextRef(),
+                  value,
+                  size,
+                  elementTypeExpr,
+                  classInfoHolder);
+        } else {
+          bitmap =
+              new Invoke(
+                  collectionSerializer,
+                  "writeTypeNullabilityHeader",
+                  PRIMITIVE_INT_TYPE,
+                  writeContextRef(),
+                  value,
+                  elementTypeExpr,
+                  classInfoHolder);
+        }
       }
       Invoke serializer = new Invoke(classInfoHolder, "getSerializer", SERIALIZER_TYPE);
       return Tuple2.of(bitmap, serializer);
@@ -2344,6 +2447,14 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
         return StringSerializer.readStringExpr(
             getOrCreateStringSerializer(), buffer, config.compressString());
       }
+      if (isEnumType(cls)) {
+        Expression enumSerializer =
+            cast(
+                serializer == null ? getSerializerForField(cls) : serializer,
+                TypeRef.of(EnumSerializer.class));
+        return new Invoke(
+            enumSerializer, "readValue", TypeRef.of(Enum.class), readContextRef(), buffer);
+      }
       Expression obj;
       if (usesPrimitiveListArrayProtocol(descriptor)) {
         serializer = getPrimitiveListArraySerializer(cls);
@@ -2588,14 +2699,20 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
                 || typeInfo.getTypeId() == Types.NAMED_COMPATIBLE_STRUCT)) {
           String name = ctx.newName(StringUtils.uncapitalize(rawType.getSimpleName()) + "Class");
           Expression clsExpr = staticClassFieldExpr(rawType, name);
+          Reference classInfoHolderRef = addTypeInfoHolderField(rawType);
           classInfo =
               inlineInvoke(
-                  typeResolverRef, "readTypeInfo", classInfoTypeRef, readContextRef, clsExpr);
+                  typeResolverRef,
+                  "readTypeInfo",
+                  classInfoTypeRef,
+                  readContextRef,
+                  clsExpr,
+                  classInfoHolderRef);
         } else {
           classInfo = readTypeInfo(getRawType(typeRef), buffer);
         }
       } else {
-        classInfo = readTypeInfo(getRawType(typeRef), buffer);
+        classInfo = readTypeInfo(rawType, buffer);
       }
       serializer = inlineInvoke(classInfo, "getSerializer", SERIALIZER_TYPE);
     }
@@ -2638,16 +2755,18 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
     Expression collection =
         new Invoke(serializer, "newCollection", COLLECTION_TYPE, readContextRef);
     Expression size = new Invoke(serializer, "getAndClearNumElements", "size", PRIMITIVE_INT_TYPE);
-    // if add branch by `ArrayList`, generated code will be > 325 bytes.
-    // and List#add is more likely be inlined if there is only one subclass.
     Expression hookRead = readCollectionCodegen(buffer, collection, size, elementType);
     hookRead = new Invoke(serializer, "onCollectionRead", OBJECT_TYPE, hookRead);
-    Expression action =
-        new If(
-            supportHook,
-            new ListExpression(collection, hookRead),
-            read(serializer, buffer, OBJECT_TYPE),
+    Expression fallbackAction = read(serializer, buffer, OBJECT_TYPE);
+    Expression fallbackRead =
+        invokeGenerated(
+            ctx,
+            readCutPoints(buffer, serializer),
+            new ListExpression(fallbackAction, new Return(fallbackAction)),
+            "readCollectionFallback",
             false);
+    Expression action =
+        new If(supportHook, new ListExpression(collection, hookRead), fallbackRead, false);
     if (invokeHint != null && invokeHint.genNewMethod) {
       invokeHint.add(buffer);
       invokeHint.add(readContextRef());

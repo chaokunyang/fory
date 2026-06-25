@@ -22,6 +22,7 @@ package org.apache.fory.serializer.collection;
 import java.lang.invoke.MethodHandle;
 import java.lang.reflect.Constructor;
 import java.util.Collection;
+import java.util.List;
 import org.apache.fory.Fory;
 import org.apache.fory.annotation.CodegenInvoke;
 import org.apache.fory.config.Config;
@@ -178,6 +179,44 @@ public abstract class CollectionLikeSerializer<T> extends Serializer<T> {
     return CollectionFlags.DECL_SAME_TYPE_NOT_HAS_NULL;
   }
 
+  /** Element type is final, write whether any elements is null. */
+  @CodegenInvoke
+  public int writeNullabilityHeader(MemoryBuffer buffer, List value, int size) {
+    switch (size) {
+      case 1:
+        if (value.get(0) == null) {
+          buffer.writeByte(CollectionFlags.DECL_SAME_TYPE_HAS_NULL);
+          return CollectionFlags.DECL_SAME_TYPE_HAS_NULL;
+        }
+        buffer.writeByte(CollectionFlags.DECL_SAME_TYPE_NOT_HAS_NULL);
+        return CollectionFlags.DECL_SAME_TYPE_NOT_HAS_NULL;
+      case 2:
+        if (value.get(0) == null || value.get(1) == null) {
+          buffer.writeByte(CollectionFlags.DECL_SAME_TYPE_HAS_NULL);
+          return CollectionFlags.DECL_SAME_TYPE_HAS_NULL;
+        }
+        buffer.writeByte(CollectionFlags.DECL_SAME_TYPE_NOT_HAS_NULL);
+        return CollectionFlags.DECL_SAME_TYPE_NOT_HAS_NULL;
+      case 3:
+        if (value.get(0) == null || value.get(1) == null || value.get(2) == null) {
+          buffer.writeByte(CollectionFlags.DECL_SAME_TYPE_HAS_NULL);
+          return CollectionFlags.DECL_SAME_TYPE_HAS_NULL;
+        }
+        buffer.writeByte(CollectionFlags.DECL_SAME_TYPE_NOT_HAS_NULL);
+        return CollectionFlags.DECL_SAME_TYPE_NOT_HAS_NULL;
+      default:
+        break;
+    }
+    for (int i = 0; i < size; i++) {
+      if (value.get(i) == null) {
+        buffer.writeByte(CollectionFlags.DECL_SAME_TYPE_HAS_NULL);
+        return CollectionFlags.DECL_SAME_TYPE_HAS_NULL;
+      }
+    }
+    buffer.writeByte(CollectionFlags.DECL_SAME_TYPE_NOT_HAS_NULL);
+    return CollectionFlags.DECL_SAME_TYPE_NOT_HAS_NULL;
+  }
+
   /**
    * Need to track elements ref, declared element type is not morphic, can't check elements
    * nullability.
@@ -284,6 +323,97 @@ public abstract class CollectionLikeSerializer<T> extends Serializer<T> {
     boolean hasDifferentClass = false;
     Class<?> elemClass = null;
     for (Object elem : value) {
+      if (elem == null) {
+        containsNull = true;
+      } else if (elemClass == null) {
+        elemClass = elem.getClass();
+      } else {
+        if (!hasDifferentClass && elem.getClass() != elemClass) {
+          hasDifferentClass = true;
+        }
+      }
+    }
+    if (containsNull) {
+      bitmap |= CollectionFlags.HAS_NULL;
+    }
+    if (hasDifferentClass) {
+      buffer.writeByte(bitmap);
+    } else {
+      // When serialize a collection with all elements null directly, the declare type
+      // will be equal to element type: null
+      if (elemClass == null) {
+        elemClass = Object.class;
+      }
+      bitmap |= CollectionFlags.IS_SAME_TYPE;
+      // Write class in case peer doesn't have this class.
+      if (!config.isMetaShareEnabled() && elemClass == declareElementType) {
+        bitmap |= CollectionFlags.IS_DECL_ELEMENT_TYPE;
+        buffer.writeByte(bitmap);
+      } else {
+        buffer.writeByte(bitmap);
+        TypeResolver typeResolver = this.typeResolver;
+        TypeInfo typeInfo = typeResolver.getTypeInfo(elemClass, cache);
+        typeResolver.writeTypeInfo(writeContext, typeInfo);
+      }
+    }
+    return bitmap;
+  }
+
+  /**
+   * Element type is not final by {@link ClassResolver#isMonomorphic}, need to write element type.
+   * Elements ref tracking is disabled, write whether any elements is null.
+   */
+  @CodegenInvoke
+  public int writeTypeNullabilityHeader(
+      WriteContext writeContext,
+      List value,
+      int size,
+      Class<?> declareElementType,
+      TypeInfoHolder cache) {
+    MemoryBuffer buffer = writeContext.getBuffer();
+    if (size > 0 && size <= 3) {
+      Object elem0 = value.get(0);
+      Object elem1 = size > 1 ? value.get(1) : null;
+      Object elem2 = size > 2 ? value.get(2) : null;
+      boolean containsNull =
+          elem0 == null || (size > 1 && elem1 == null) || (size > 2 && elem2 == null);
+      Class<?> elemClass =
+          elem0 != null ? elem0.getClass() : elem1 != null ? elem1.getClass() : null;
+      if (elemClass == null && elem2 != null) {
+        elemClass = elem2.getClass();
+      }
+      boolean hasDifferentClass =
+          elemClass != null
+              && ((elem0 != null && elem0.getClass() != elemClass)
+                  || (elem1 != null && elem1.getClass() != elemClass)
+                  || (elem2 != null && elem2.getClass() != elemClass));
+      int bitmap = containsNull ? CollectionFlags.HAS_NULL : 0;
+      if (hasDifferentClass) {
+        buffer.writeByte(bitmap);
+      } else {
+        if (elemClass == null) {
+          elemClass = Object.class;
+        }
+        bitmap |= CollectionFlags.IS_SAME_TYPE;
+        // Write class in case peer doesn't have this class.
+        if (!config.isMetaShareEnabled() && elemClass == declareElementType) {
+          bitmap |= CollectionFlags.IS_DECL_ELEMENT_TYPE;
+          buffer.writeByte(bitmap);
+        } else {
+          buffer.writeByte(bitmap);
+          TypeResolver typeResolver = this.typeResolver;
+          TypeInfo typeInfo = typeResolver.getTypeInfo(elemClass, cache);
+          typeResolver.writeTypeInfo(writeContext, typeInfo);
+        }
+      }
+      return bitmap;
+    }
+    int bitmap = 0;
+    boolean containsNull = false;
+    boolean hasDifferentClass = false;
+    Class<?> elemClass = null;
+    for (int i = 0; i < size; i++) {
+      Object elem = value.get(i);
       if (elem == null) {
         containsNull = true;
       } else if (elemClass == null) {

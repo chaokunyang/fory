@@ -19,8 +19,6 @@
 
 package org.apache.fory.context;
 
-import org.apache.fory.collection.IdentityObjectIntMap;
-
 /**
  * Write-side state for meta-share serialization.
  *
@@ -28,9 +26,93 @@ import org.apache.fory.collection.IdentityObjectIntMap;
  * already announced classes are not sent repeatedly.
  */
 public class MetaWriteContext {
+  private static final int INITIAL_CAPACITY = 8;
+  private static final int MISSING_ID = -1;
+
+  private Object[] keys = new Object[INITIAL_CAPACITY];
+  private int[] idsBySlot = new int[INITIAL_CAPACITY];
+  private int[] usedSlots = new int[INITIAL_CAPACITY];
+  private int mask = INITIAL_CAPACITY - 1;
+  private int threshold = INITIAL_CAPACITY >> 1;
+  private int size;
+
+  /** Returns the next protocol id that will be assigned to a new metadata key. */
+  public int size() {
+    return size;
+  }
+
   /**
-   * Classes whose definitions have already been announced to the peer, mapped to the protocol id
-   * used by the current or shared meta-share session.
+   * Returns the existing protocol id for {@code key}, or records it and returns {@code -1}.
+   *
+   * <p>Meta-share keys use identity semantics. Class objects and layer marker classes are already
+   * identity keys, and unknown-struct TypeDef ids historically used the same identity map path.
    */
-  public final IdentityObjectIntMap<Class<?>> classMap = new IdentityObjectIntMap<>(1, 0.5f);
+  public int putOrGetMetaId(Object key) {
+    if (key == null) {
+      throw new NullPointerException("Meta key must not be null");
+    }
+    int slot = locate(key, keys, mask);
+    if (slot >= 0) {
+      return idsBySlot[slot];
+    }
+    if (size >= threshold) {
+      resize(keys.length << 1);
+      slot = locate(key, keys, mask);
+    }
+    slot = -(slot + 1);
+    int id = size;
+    keys[slot] = key;
+    idsBySlot[slot] = id;
+    usedSlots[id] = slot;
+    size = id + 1;
+    return MISSING_ID;
+  }
+
+  /** Clears operation-local metadata ids while retaining reusable table storage. */
+  public void reset() {
+    int size = this.size;
+    if (size == 0) {
+      return;
+    }
+    Object[] keys = this.keys;
+    int[] usedSlots = this.usedSlots;
+    for (int i = 0; i < size; i++) {
+      keys[usedSlots[i]] = null;
+    }
+    this.size = 0;
+  }
+
+  private static int locate(Object key, Object[] keys, int mask) {
+    for (int slot = System.identityHashCode(key) & mask; ; slot = (slot + 1) & mask) {
+      Object other = keys[slot];
+      if (other == null) {
+        return -(slot + 1);
+      }
+      if (other == key) {
+        return slot;
+      }
+    }
+  }
+
+  private void resize(int newCapacity) {
+    Object[] oldKeys = keys;
+    int[] oldUsedSlots = usedSlots;
+    int oldSize = size;
+    Object[] newKeys = new Object[newCapacity];
+    int[] newIdsBySlot = new int[newCapacity];
+    int[] newUsedSlots = new int[newCapacity];
+    int newMask = newCapacity - 1;
+    for (int id = 0; id < oldSize; id++) {
+      Object key = oldKeys[oldUsedSlots[id]];
+      int slot = -(locate(key, newKeys, newMask) + 1);
+      newKeys[slot] = key;
+      newIdsBySlot[slot] = id;
+      newUsedSlots[id] = slot;
+    }
+    keys = newKeys;
+    idsBySlot = newIdsBySlot;
+    usedSlots = newUsedSlots;
+    mask = newMask;
+    threshold = newCapacity >> 1;
+  }
 }

@@ -21,7 +21,6 @@ package org.apache.fory.serializer;
 
 import java.util.ArrayList;
 import java.util.List;
-import org.apache.fory.collection.IdentityObjectIntMap;
 import org.apache.fory.collection.LongMap;
 import org.apache.fory.collection.MapEntry;
 import org.apache.fory.config.Config;
@@ -92,10 +91,9 @@ public final class UnknownClassSerializers {
     private void writeTypeDef(WriteContext writeContext, UnknownClass.UnknownStruct value) {
       MemoryBuffer buffer = writeContext.getBuffer();
       MetaWriteContext metaWriteContext = writeContext.getMetaWriteContext();
-      IdentityObjectIntMap classMap = metaWriteContext.classMap;
-      int newId = classMap.size;
+      int newId = metaWriteContext.size();
       // class not exist, use class def id for identity.
-      int id = classMap.putOrGet(value.typeDef.getId(), newId);
+      int id = metaWriteContext.putOrGetMetaId(value.typeDef.getId());
       if (id >= 0) {
         // Reference to previously written type: (index << 1) | 1, LSB=1
         buffer.writeVarUInt32((id << 1) | 1);

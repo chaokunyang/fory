@@ -295,7 +295,7 @@ public final class WriteContext {
       contextObjects.clear();
     }
     if (scopedMetaShareEnabled) {
-      metaWriteContext.classMap.clear();
+      metaWriteContext.reset();
     } else {
       metaWriteContext = null;
     }

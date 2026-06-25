@@ -557,6 +557,27 @@ public abstract class TypeResolver {
     }
   }
 
+  // Generated exact-class branches call this only after code generation resolves the TypeInfo to a
+  // compatible struct id. The wire body stays in writeSharedClassMeta; this helper only skips the
+  // generic type-id switch.
+  @Internal
+  public final void writeCompatibleTypeInfo(
+      WriteContext writeContext, MemoryBuffer buffer, TypeInfo typeInfo) {
+    assert isCompatibleStructTypeId(typeInfo.typeId);
+    buffer.writeUInt8(typeInfo.typeId);
+    writeSharedClassMeta(writeContext, buffer, typeInfo);
+  }
+
+  private static boolean isCompatibleStructTypeId(int typeId) {
+    switch (typeId) {
+      case Types.COMPATIBLE_STRUCT:
+      case Types.NAMED_COMPATIBLE_STRUCT:
+        return true;
+      default:
+        return false;
+    }
+  }
+
   static int toUserTypeId(long userTypeId) {
     Preconditions.checkArgument(
         userTypeId >= 0 && userTypeId <= MAX_USER_TYPE_ID,
@@ -576,6 +597,21 @@ public abstract class TypeResolver {
     return new Invoke(classResolverRef, "writeTypeInfo", buffer, classInfo);
   }
 
+  // Note: Thread safe for jit thread to call.
+  public Expression writeExactClassExpr(
+      Expression classResolverRef,
+      Expression writeContext,
+      Expression buffer,
+      Expression classInfo,
+      Class<?> cls) {
+    TypeInfo typeInfo = getTypeInfo(cls);
+    if (isCompatibleStructTypeId(typeInfo.typeId)) {
+      return new Invoke(
+          classResolverRef, "writeCompatibleTypeInfo", writeContext, buffer, classInfo);
+    }
+    return writeClassExpr(classResolverRef, writeContext, classInfo);
+  }
+
   /**
    * Writes shared class metadata using the meta-share protocol. Protocol: If class already written,
    * writes {@code (index << 1) | 1} (reference). If new class, writes {@code (index << 1)} followed
@@ -585,6 +621,11 @@ public abstract class TypeResolver {
    */
   protected final void writeSharedClassMeta(WriteContext writeContext, TypeInfo typeInfo) {
     MemoryBuffer buffer = writeContext.getBuffer();
+    writeSharedClassMeta(writeContext, buffer, typeInfo);
+  }
+
+  private void writeSharedClassMeta(
+      WriteContext writeContext, MemoryBuffer buffer, TypeInfo typeInfo) {
     MetaWriteContext metaWriteContext = writeContext.getMetaWriteContext();
     assert metaWriteContext != null : SET_META_WRITE_CONTEXT_MSG;
     IdentityObjectIntMap<Class<?>> classMap = metaWriteContext.classMap;

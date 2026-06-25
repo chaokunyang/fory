@@ -901,7 +901,7 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
     Class<?> clz = getRawType(typeRef);
     Expression clsExpr = new Invoke(inputObject, "getClass", "cls", CLASS_TYPE);
     ListExpression writeClassAndObject = new ListExpression();
-    Expression exactClassWrite = exactClassWrite(inputObject, clz);
+    Expression exactClassWrite = exactClassWrite(inputObject, buffer, clz);
     Tuple2<Reference, Boolean> classInfoRef = addTypeInfoField(clz);
     Expression classInfo = classInfoRef.f0;
     if (classInfoRef.f1) {
@@ -929,14 +929,15 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
         ctx, writeCutPoints(buffer, inputObject), write, "writeClassAndObject", false);
   }
 
-  private Expression exactClassWrite(Expression inputObject, Class<?> clz) {
+  private Expression exactClassWrite(Expression inputObject, Expression buffer, Class<?> clz) {
     if (clz.isInterface() || Modifier.isAbstract(clz.getModifiers())) {
       return null;
     }
     Reference typeInfo = addExactTypeInfoField(clz);
     Expression serializer = getOrCreateSerializer(clz);
     return new ListExpression(
-        typeResolver(r -> r.writeClassExpr(typeResolverRef, writeContextRef(), typeInfo)),
+        typeResolver(
+            r -> r.writeExactClassExpr(typeResolverRef, writeContextRef(), buffer, typeInfo, clz)),
         new Invoke(
             serializer, writeMethodName, PRIMITIVE_VOID_TYPE, writeContextRef(), inputObject));
   }

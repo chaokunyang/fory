@@ -1070,6 +1070,9 @@ def _resolve_release_doc_version(new_version: str, release_version: str = None):
     new_version = _strip_version_prefix(new_version)
     if _is_release_version(new_version):
         return new_version
+    dot_dev_version = _dot_dev_release_version(new_version)
+    if dot_dev_version:
+        return dot_dev_version
     base_match = re.match(r"^(\d+)\.(\d+)\.(\d+)", new_version)
     if not base_match:
         return None
@@ -1081,6 +1084,13 @@ def _resolve_release_doc_version(new_version: str, release_version: str = None):
     else:
         return None
     return f"{major}.{minor}.{patch}"
+
+
+def _dot_dev_release_version(v: str):
+    match = re.match(r"^(\d+\.\d+\.(\d+))\.dev\d*$", v, flags=re.IGNORECASE)
+    if match and int(match.group(2)) > 0:
+        return match.group(1)
+    return None
 
 
 def _release_doc_files():

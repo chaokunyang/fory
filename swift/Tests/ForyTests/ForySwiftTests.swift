@@ -382,6 +382,7 @@ func namedInitializerBuildsConfig() {
   #expect(defaultConfig.config.compatible == true)
   #expect(defaultConfig.config.checkClassVersion == false)
   #expect(defaultConfig.config.maxDepth == 5)
+  #expect(defaultConfig.config.maxContainerMemoryBytes == -1)
   #expect(defaultConfig.config.maxTypeFields == 512)
   #expect(defaultConfig.config.maxTypeMetaBytes == 4096)
   #expect(defaultConfig.config.maxSchemaVersionsPerType == 10)
@@ -391,6 +392,7 @@ func namedInitializerBuildsConfig() {
     ref: true,
     compatible: true,
     maxDepth: 7,
+    maxContainerMemoryBytes: 65_536,
     maxTypeFields: 31,
     maxTypeMetaBytes: 1234,
     maxSchemaVersionsPerType: 12,
@@ -400,6 +402,7 @@ func namedInitializerBuildsConfig() {
   #expect(explicitConfig.config.compatible == true)
   #expect(explicitConfig.config.checkClassVersion == false)
   #expect(explicitConfig.config.maxDepth == 7)
+  #expect(explicitConfig.config.maxContainerMemoryBytes == 65_536)
   #expect(explicitConfig.config.maxTypeFields == 31)
   #expect(explicitConfig.config.maxTypeMetaBytes == 1234)
   #expect(explicitConfig.config.maxSchemaVersionsPerType == 12)
@@ -410,6 +413,7 @@ func namedInitializerBuildsConfig() {
       trackRef: false,
       compatible: true,
       maxDepth: 9,
+      maxContainerMemoryBytes: 131_072,
       maxTypeFields: 41,
       maxTypeMetaBytes: 2048,
       maxSchemaVersionsPerType: 14,
@@ -419,6 +423,7 @@ func namedInitializerBuildsConfig() {
   #expect(configInit.config.compatible == true)
   #expect(configInit.config.checkClassVersion == false)
   #expect(configInit.config.maxDepth == 9)
+  #expect(configInit.config.maxContainerMemoryBytes == 131_072)
   #expect(configInit.config.maxTypeFields == 41)
   #expect(configInit.config.maxTypeMetaBytes == 2048)
   #expect(configInit.config.maxSchemaVersionsPerType == 14)

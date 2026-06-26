@@ -22,6 +22,7 @@ public struct Config {
   public let compatible: Bool
   public let checkClassVersion: Bool
   public let maxDepth: Int
+  public let maxContainerMemoryBytes: Int64
   public let maxTypeFields: Int
   public let maxTypeMetaBytes: Int
   public let maxSchemaVersionsPerType: Int
@@ -32,11 +33,15 @@ public struct Config {
     compatible: Bool? = nil,
     checkClassVersion: Bool? = nil,
     maxDepth: Int = 5,
+    maxContainerMemoryBytes: Int64 = -1,
     maxTypeFields: Int = 512,
     maxTypeMetaBytes: Int = 4096,
     maxSchemaVersionsPerType: Int = 10,
     maxAverageSchemaVersionsPerType: Int = 3
   ) {
+    precondition(
+      maxContainerMemoryBytes == -1 || maxContainerMemoryBytes > 0,
+      "maxContainerMemoryBytes must be positive or -1 for auto")
     precondition(maxTypeFields > 0, "maxTypeFields must be positive")
     precondition(maxTypeMetaBytes > 0, "maxTypeMetaBytes must be positive")
     precondition(maxSchemaVersionsPerType > 0, "maxSchemaVersionsPerType must be positive")
@@ -49,6 +54,7 @@ public struct Config {
     self.compatible = effectiveCompatible
     self.checkClassVersion = effectiveCheckClassVersion
     self.maxDepth = maxDepth
+    self.maxContainerMemoryBytes = maxContainerMemoryBytes
     self.maxTypeFields = maxTypeFields
     self.maxTypeMetaBytes = maxTypeMetaBytes
     self.maxSchemaVersionsPerType = maxSchemaVersionsPerType
@@ -72,6 +78,7 @@ public final class Fory {
     compatible: Bool? = nil,
     checkClassVersion: Bool? = nil,
     maxDepth: Int = 5,
+    maxContainerMemoryBytes: Int64 = -1,
     maxTypeFields: Int = 512,
     maxTypeMetaBytes: Int = 4096,
     maxSchemaVersionsPerType: Int = 10,
@@ -83,6 +90,7 @@ public final class Fory {
         compatible: compatible,
         checkClassVersion: checkClassVersion,
         maxDepth: maxDepth,
+        maxContainerMemoryBytes: maxContainerMemoryBytes,
         maxTypeFields: maxTypeFields,
         maxTypeMetaBytes: maxTypeMetaBytes,
         maxSchemaVersionsPerType: maxSchemaVersionsPerType,
@@ -465,8 +473,9 @@ public final class Fory {
   func withReusableReadContext<R>(
     data: Data,
     _ body: (ReadContext) throws -> R
-  ) rethrows -> R {
+  ) throws -> R {
     readContext.buffer.replace(with: data)
+    try readContext.initContainerMemoryBudgetKnown(rootBytes: data.count)
     defer {
       readContext.reset()
     }
@@ -528,6 +537,7 @@ public final class Fory {
   ) throws -> R {
     try typeResolver.finishRegistration()
     readContext.buffer.swapState(with: buffer)
+    try readContext.initContainerMemoryBudgetKnown(rootBytes: readContext.buffer.remaining)
     defer {
       readContext.buffer.swapState(with: buffer)
       readContext.reset()

@@ -531,6 +531,13 @@ export class WriteContext {
 
 export class ReadContext {
   private static readonly MIN_REMOTE_TYPE_META_LIMIT = 8192;
+  private static readonly KNOWN_ROOT_BUDGET_MULTIPLIER = 8;
+  private static readonly KNOWN_ROOT_BUDGET_SLACK_BYTES = 64 * 1024;
+  private static readonly COLLECTION_OBJECT_BYTES = 24;
+  private static readonly MAP_OBJECT_BYTES = 48;
+  private static readonly ARRAY_HEADER_BYTES = 16;
+  private static readonly MAP_ENTRY_BYTES = 32;
+  private static readonly REFERENCE_BYTES = 4;
 
   readonly reader: BinaryReader;
   readonly refReader: RefReader;
@@ -548,6 +555,9 @@ export class ReadContext {
 
   private _depth = 0;
   private _maxDepth: number;
+  private readonly maxContainerMemoryBytes: number;
+  private effectiveContainerMemoryBytes = 0;
+  private remainingContainerMemoryBytes = 0;
   private remoteSchemaVersionsByType: Map<string | number, number> | undefined
     = undefined;
 
@@ -559,6 +569,7 @@ export class ReadContext {
     this.refReader = new RefReader(this.reader);
     this.metaStringReader = new MetaStringReader();
     this._maxDepth = config.maxDepth ?? 50;
+    this.maxContainerMemoryBytes = config.maxContainerMemoryBytes;
   }
 
   reset(bytes: Uint8Array) {
@@ -567,6 +578,71 @@ export class ReadContext {
     this.metaStringReader.reset();
     this.typeMeta = [];
     this._depth = 0;
+    this.effectiveContainerMemoryBytes = this.maxContainerMemoryBytes > 0
+      ? this.maxContainerMemoryBytes
+      : bytes.byteLength * ReadContext.KNOWN_ROOT_BUDGET_MULTIPLIER
+      + ReadContext.KNOWN_ROOT_BUDGET_SLACK_BYTES;
+    this.remainingContainerMemoryBytes = this.effectiveContainerMemoryBytes;
+  }
+
+  reserveCollectionMemory(numElements: number) {
+    const bytes
+      = ReadContext.COLLECTION_OBJECT_BYTES
+      + numElements * ReadContext.REFERENCE_BYTES;
+    const remaining = this.remainingContainerMemoryBytes - bytes;
+    if (remaining < 0) {
+      this.throwContainerBudgetExceeded(bytes);
+    }
+    this.remainingContainerMemoryBytes = remaining;
+  }
+
+  reserveMapMemory(numElements: number) {
+    const bytes = ReadContext.MAP_OBJECT_BYTES
+      + numElements
+      * (
+        ReadContext.REFERENCE_BYTES * 2
+        + ReadContext.MAP_ENTRY_BYTES
+        + ReadContext.REFERENCE_BYTES * 3
+      );
+    const remaining = this.remainingContainerMemoryBytes - bytes;
+    if (remaining < 0) {
+      this.throwContainerBudgetExceeded(bytes);
+    }
+    this.remainingContainerMemoryBytes = remaining;
+  }
+
+  reserveTypedArrayMemory(numElements: number, elementBytes: number) {
+    const bytes = ReadContext.ARRAY_HEADER_BYTES + numElements * elementBytes;
+    const remaining = this.remainingContainerMemoryBytes - bytes;
+    if (remaining < 0) {
+      this.throwContainerBudgetExceeded(bytes);
+    }
+    this.remainingContainerMemoryBytes = remaining;
+  }
+
+  reserveContainerMemory(bytes: number) {
+    if (!Number.isSafeInteger(bytes) || bytes < 0) {
+      this.throwContainerMemoryOverflow(bytes);
+    }
+    const remaining = this.remainingContainerMemoryBytes - bytes;
+    if (remaining < 0) {
+      this.throwContainerBudgetExceeded(bytes);
+    }
+    this.remainingContainerMemoryBytes = remaining;
+  }
+
+  private throwContainerMemoryOverflow(bytes: number): never {
+    throw new Error(
+      `maxContainerMemoryBytes overflow: requested ${bytes} estimated container bytes`,
+    );
+  }
+
+  private throwContainerBudgetExceeded(bytes: number): never {
+    throw new Error(
+      `maxContainerMemoryBytes exceeded: requested ${bytes} estimated container bytes, `
+      + `${this.remainingContainerMemoryBytes} remaining, effective limit `
+      + `${this.effectiveContainerMemoryBytes}`,
+    );
   }
 
   isCompatible() {

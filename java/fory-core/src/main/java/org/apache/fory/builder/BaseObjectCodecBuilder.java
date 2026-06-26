@@ -1220,17 +1220,6 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
     }
   }
 
-  protected Expression readTypeInfoWithTarget(Class<?> cls) {
-    Reference classInfoHolderRef = addTypeInfoHolderField(cls);
-    return inlineInvoke(
-        typeResolverRef,
-        "readTypeInfo",
-        classInfoTypeRef,
-        readContextRef,
-        getClassExpr(cls),
-        classInfoHolderRef);
-  }
-
   protected TypeRef<?> getSerializerType(TypeRef<?> objType) {
     return getSerializerType(objType.getRawType());
   }
@@ -2681,15 +2670,9 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
                 || typeInfo.getTypeId() == Types.NAMED_COMPATIBLE_STRUCT)) {
           String name = ctx.newName(StringUtils.uncapitalize(rawType.getSimpleName()) + "Class");
           Expression clsExpr = staticClassFieldExpr(rawType, name);
-          Reference classInfoHolderRef = addTypeInfoHolderField(rawType);
           classInfo =
               inlineInvoke(
-                  typeResolverRef,
-                  "readTypeInfo",
-                  classInfoTypeRef,
-                  readContextRef,
-                  clsExpr,
-                  classInfoHolderRef);
+                  typeResolverRef, "readTypeInfo", classInfoTypeRef, readContextRef, clsExpr);
         } else {
           classInfo = readTypeInfo(getRawType(typeRef), buffer);
         }
@@ -2802,7 +2785,7 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
       Literal isDeclTypeFlag = ofInt(CollectionFlags.IS_DECL_ELEMENT_TYPE);
       Expression isDeclType = eq(new BitAnd(flags, isDeclTypeFlag), isDeclTypeFlag);
       Invoke serializer =
-          inlineInvoke(readTypeInfoWithTarget(elemClass), "getSerializer", SERIALIZER_TYPE);
+          inlineInvoke(readTypeInfo(elemClass, buffer), "getSerializer", SERIALIZER_TYPE);
       TypeRef<?> serializerType = getSerializerType(elementType);
       Expression elemSerializer; // make it in scope of `if(sameElementClass)`
       boolean maybeDecl = typeResolver(r -> r.isSerializable(elemClass));

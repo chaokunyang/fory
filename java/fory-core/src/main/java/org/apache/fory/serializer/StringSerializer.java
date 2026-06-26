@@ -125,7 +125,7 @@ public final class StringSerializer extends ImmutableSerializer<String> {
       if (compressString) {
         return new Invoke(strSerializer, "writeCompressedBytesString", buffer, str);
       } else {
-        return new StaticInvoke(StringSerializer.class, "writeBytesStringCodegen", buffer, str);
+        return new StaticInvoke(StringSerializer.class, "writeBytesString", buffer, str);
       }
     } else {
       if (!STRING_VALUE_FIELD_IS_CHARS) {
@@ -529,15 +529,7 @@ public final class StringSerializer extends ImmutableSerializer<String> {
     writeBytesString(buffer, coder, bytes);
   }
 
-  @Internal
-  @CodegenInvoke
-  public static void writeBytesStringCodegen(MemoryBuffer buffer, String value) {
-    byte[] bytes = (byte[]) getStringValue(value);
-    byte coder = getStringCoder(value);
-    writeBytesStringCodegen(buffer, coder, bytes);
-  }
-
-  private static void writeBytesStringCodegen(MemoryBuffer buffer, byte coder, byte[] bytes) {
+  public static void writeBytesString(MemoryBuffer buffer, byte coder, byte[] bytes) {
     if (!NativeByteOrder.IS_LITTLE_ENDIAN && coder == UTF16) {
       writeBytesStringUTF16BE(buffer, bytes);
       return;
@@ -558,34 +550,6 @@ public final class StringSerializer extends ImmutableSerializer<String> {
       } else {
         arrIndex += LittleEndian.putVarUint36Small(targetArray, arrIndex, header);
       }
-      writerIndex += arrIndex - targetIndex;
-      System.arraycopy(bytes, 0, targetArray, arrIndex, bytesLen);
-    } else {
-      writerIndex += buffer._unsafePutVarUint36Small(writerIndex, header);
-      PlatformStringUtils.putBytes(buffer, writerIndex, bytes, bytesLen);
-    }
-    writerIndex += bytesLen;
-    buffer._unsafeWriterIndex(writerIndex);
-  }
-
-  public static void writeBytesString(MemoryBuffer buffer, byte coder, byte[] bytes) {
-    if (!NativeByteOrder.IS_LITTLE_ENDIAN && coder == UTF16) {
-      writeBytesStringUTF16BE(buffer, bytes);
-      return;
-    }
-    int bytesLen = bytes.length;
-    long header = ((long) bytesLen << 2) | coder;
-    int writerIndex = buffer.writerIndex();
-    // The `ensure` ensure next operations are safe without bound checks,
-    // and inner heap buffer doesn't change.
-    buffer.ensure(writerIndex + 9 + bytesLen); // 1 byte coder + varint max 8 bytes
-    final byte[] targetArray = buffer.getHeapMemory();
-    if (targetArray != null) {
-      // Some JDK11 Unsafe.copyMemory will `copyMemoryChecks`, and
-      // jvm doesn't eliminate well in some jdk.
-      final int targetIndex = buffer._unsafeHeapWriterIndex();
-      int arrIndex = targetIndex;
-      arrIndex += LittleEndian.putVarUint36Small(targetArray, arrIndex, header);
       writerIndex += arrIndex - targetIndex;
       System.arraycopy(bytes, 0, targetArray, arrIndex, bytesLen);
     } else {

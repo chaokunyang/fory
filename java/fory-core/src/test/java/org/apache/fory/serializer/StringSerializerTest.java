@@ -61,7 +61,7 @@ public class StringSerializerTest extends ForyTestBase {
   }
 
   @Test
-  public void testCodegenByteStringWire() {
+  public void testBytesStringWire() {
     if (!stringValueIsBytes()) {
       throw new SkipException("Skip when string value is not byte[]");
     }
@@ -76,16 +76,10 @@ public class StringSerializerTest extends ForyTestBase {
     };
     for (String value : values) {
       int capacity = Math.max(64, value.length() * 8 + 64);
-      MemoryBuffer control = MemoryBuffer.newHeapBuffer(capacity);
-      MemoryBuffer codegen = MemoryBuffer.newHeapBuffer(capacity);
-      StringSerializer.writeBytesString(control, value);
-      StringSerializer.writeBytesStringCodegen(codegen, value);
+      MemoryBuffer buffer = MemoryBuffer.newHeapBuffer(capacity);
+      StringSerializer.writeBytesString(buffer, value);
       Assert.assertEquals(
-          codegen.getBytes(0, codegen.writerIndex()),
-          control.getBytes(0, control.writerIndex()),
-          value);
-      Assert.assertEquals(
-          readJDK11String(MemoryBuffer.fromByteArray(codegen.getBytes(0, codegen.writerIndex()))),
+          readJDK11String(MemoryBuffer.fromByteArray(buffer.getBytes(0, buffer.writerIndex()))),
           value);
     }
   }

@@ -745,60 +745,6 @@ public abstract class TypeResolver {
   }
 
   /**
-   * Read class info from buffer using a target class and generated field-local cache.
-   *
-   * <p>The holder caches only checked metadata owned by this resolver. It never caches payload
-   * data.
-   */
-  @CodegenInvoke
-  public final TypeInfo readTypeInfo(
-      ReadContext readContext, Class<?> targetClass, TypeInfoHolder classInfoHolder) {
-    MemoryBuffer buffer = readContext.getBuffer();
-    int typeId = buffer.readUInt8();
-    TypeInfo typeInfo;
-    boolean updateCache = false;
-    switch (typeId) {
-      case Types.ENUM:
-      case Types.STRUCT:
-      case Types.EXT:
-      case Types.TYPED_UNION:
-        typeInfo = readRegisteredTypeInfo(typeId, buffer.readVarUInt32(), classInfoHolder.typeInfo);
-        updateCache = typeInfo != classInfoHolder.typeInfo;
-        break;
-      case Types.COMPATIBLE_STRUCT:
-      case Types.NAMED_COMPATIBLE_STRUCT:
-        typeInfo = readSharedClassMeta(readContext, targetClass, classInfoHolder);
-        break;
-      case Types.NAMED_ENUM:
-      case Types.NAMED_STRUCT:
-      case Types.NAMED_EXT:
-      case Types.NAMED_UNION:
-        if (!metaContextShareEnabled) {
-          typeInfo = readTypeInfoFromBytes(readContext, classInfoHolder.typeInfo, typeId);
-          updateCache = true;
-        } else {
-          typeInfo = readSharedClassMeta(readContext, targetClass, classInfoHolder);
-        }
-        break;
-      case Types.LIST:
-        typeInfo = readListTypeInfo(readContext);
-        break;
-      case Types.TIMESTAMP:
-        typeInfo = readTimestampTypeInfo(readContext);
-        break;
-      default:
-        typeInfo = Objects.requireNonNull(getInternalTypeInfoByTypeId(typeId));
-    }
-    if (typeInfo.serializer == null) {
-      typeInfo = ensureSerializerForTypeInfo(typeInfo);
-    }
-    if (updateCache) {
-      classInfoHolder.typeInfo = typeInfo;
-    }
-    return typeInfo;
-  }
-
-  /**
    * Read class info from buffer with TypeInfo cache. This version is faster than {@link
    * #readTypeInfo(ReadContext)} because it uses the provided classInfoCache to reduce map lookups
    * when reading class from binary.
@@ -957,14 +903,6 @@ public abstract class TypeResolver {
   public final TypeInfo readSharedClassMeta(ReadContext readContext, Class<?> targetClass) {
     TypeInfo typeInfo = readSharedClassTypeInfo(readContext, targetClass);
     return adaptSharedClassTarget(typeInfo, targetClass);
-  }
-
-  private TypeInfo readSharedClassMeta(
-      ReadContext readContext, Class<?> targetClass, TypeInfoHolder classInfoHolder) {
-    TypeInfo typeInfo = readSharedClassTypeInfo(readContext, targetClass, classInfoHolder.typeInfo);
-    typeInfo = adaptSharedClassTarget(typeInfo, targetClass);
-    classInfoHolder.typeInfo = typeInfo;
-    return typeInfo;
   }
 
   private TypeInfo adaptSharedClassTarget(TypeInfo typeInfo, Class<?> targetClass) {

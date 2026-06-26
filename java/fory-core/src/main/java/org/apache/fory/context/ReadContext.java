@@ -541,20 +541,6 @@ public final class ReadContext {
     return refReader.getReadRef();
   }
 
-  /** Reads the root object for one deserialization operation. */
-  public Object readRootRef() {
-    if (trackingRef) {
-      return readRef(rootTypeInfoHolder);
-    }
-    MemoryBuffer buffer = this.buffer;
-    int headFlag = buffer.readByte();
-    if (headFlag >= Fory.NOT_NULL_VALUE_FLAG) {
-      TypeInfo typeInfo = typeResolver.readTypeInfo(this, rootTypeInfoHolder);
-      return readNonRef(typeInfo);
-    }
-    return null;
-  }
-
   /** Variant of {@link #readRef()} that uses already resolved {@link TypeInfo}. */
   public Object readRef(TypeInfo typeInfo) {
     int nextReadRefId = refReader.tryPreserveRefId(buffer);
@@ -594,6 +580,20 @@ public final class ReadContext {
       return null;
     }
     return (T) readNonRef(serializer);
+  }
+
+  /** Reads the root object for one deserialization operation. */
+  public Object readRootRef() {
+    if (trackingRef) {
+      return readRef(rootTypeInfoHolder);
+    }
+    MemoryBuffer buffer = this.buffer;
+    int headFlag = buffer.readByte();
+    if (headFlag >= Fory.NOT_NULL_VALUE_FLAG) {
+      TypeInfo typeInfo = typeResolver.readTypeInfo(this, rootTypeInfoHolder);
+      return readNonRef(typeInfo);
+    }
+    return null;
   }
 
   /** Reads a non-null, first-seen object together with its type metadata. */

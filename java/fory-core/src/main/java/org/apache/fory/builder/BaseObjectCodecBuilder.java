@@ -138,6 +138,7 @@ import org.apache.fory.serializer.PrimitiveSerializers.LongSerializer;
 import org.apache.fory.serializer.ReplaceResolveSerializer;
 import org.apache.fory.serializer.Serializer;
 import org.apache.fory.serializer.StringSerializer;
+import org.apache.fory.serializer.UnknownClassSerializers;
 import org.apache.fory.serializer.collection.CollectionFlags;
 import org.apache.fory.serializer.collection.CollectionLikeSerializer;
 import org.apache.fory.serializer.collection.CollectionSerializer;
@@ -702,16 +703,16 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
     TypeRef<?> typeRef = descriptor.getTypeRef();
     Class<?> clz = getRawType(typeRef);
     if (isEnumType(clz)) {
-      Expression enumSerializer =
-          cast(
-              serializer == null ? getSerializerForField(clz) : serializer,
-              TypeRef.of(EnumSerializer.class));
-      return new Invoke(
-          enumSerializer,
-          "writeValue",
-          writeContextRef(),
-          buffer,
-          cast(inputObject, TypeRef.of(Enum.class)));
+      Expression enumSerializer = serializer == null ? getSerializerForField(clz) : serializer;
+      if (hasEnumValueMethods(enumSerializer)) {
+        Class<?> serializerClass = getRawType(enumSerializer.type());
+        Expression value =
+            EnumSerializer.class.isAssignableFrom(serializerClass)
+                ? cast(inputObject, TypeRef.of(Enum.class))
+                : inputObject;
+        return new Invoke(enumSerializer, "writeValue", writeContextRef(), buffer, value);
+      }
+      return new Invoke(enumSerializer, writeMethodName, writeContextRef(), inputObject);
     }
     if (serializer != null) {
       return new Invoke(serializer, writeMethodName, writeContextRef(), inputObject);
@@ -731,6 +732,13 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
 
   private static boolean isEnumType(Class<?> cls) {
     return cls != Enum.class && Enum.class.isAssignableFrom(cls);
+  }
+
+  private static boolean hasEnumValueMethods(Expression serializer) {
+    Class<?> serializerClass = getRawType(serializer.type());
+    // UnknownEnumSerializer is enum-shaped but does not extend EnumSerializer.
+    return EnumSerializer.class.isAssignableFrom(serializerClass)
+        || UnknownClassSerializers.UnknownEnumSerializer.class.isAssignableFrom(serializerClass);
   }
 
   protected Expression serializeForNullable(
@@ -2419,10 +2427,12 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
             getOrCreateStringSerializer(), buffer, config.compressString());
       }
       if (isEnumType(cls)) {
-        Expression enumSerializer =
-            cast(
-                serializer == null ? getSerializerForField(cls) : serializer,
-                TypeRef.of(EnumSerializer.class));
+        Expression enumSerializer = serializer == null ? getSerializerForField(cls) : serializer;
+        if (!hasEnumValueMethods(enumSerializer)) {
+          return cast(
+              new Invoke(enumSerializer, readMethodName, OBJECT_TYPE, readContextRef()),
+              TypeRef.of(Enum.class));
+        }
         return new Invoke(
             enumSerializer, "readValue", TypeRef.of(Enum.class), readContextRef(), buffer);
       }

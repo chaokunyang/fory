@@ -464,30 +464,6 @@ public final class WriteContext {
     }
   }
 
-  /** Writes the root object for one serialization operation. */
-  public void writeRootRef(Object obj) {
-    if (trackingRef) {
-      writeRef(obj, rootTypeInfoHolder);
-      return;
-    }
-    MemoryBuffer buffer = this.buffer;
-    if (obj == null) {
-      buffer.writeByte(Fory.NULL_FLAG);
-      return;
-    }
-    buffer.writeByte(Fory.NOT_NULL_VALUE_FLAG);
-    TypeResolver resolver = typeResolver;
-    TypeInfo typeInfo = resolver.getTypeInfo(obj.getClass(), rootTypeInfoHolder);
-    if (crossLanguage && typeInfo.getType() == UnknownStruct.class) {
-      depth++;
-      typeInfo.getSerializer().write(this, obj);
-      depth--;
-      return;
-    }
-    resolver.writeTypeInfo(this, typeInfo);
-    writeData(typeInfo, obj);
-  }
-
   /** Variant of {@link #writeRef(Object)} that reuses a cached type-info holder. */
   public void writeRef(Object obj, TypeInfoHolder classInfoHolder) {
     MemoryBuffer buffer = this.buffer;
@@ -553,6 +529,30 @@ public final class WriteContext {
       serializer.write(this, obj);
       depth--;
     }
+  }
+
+  /** Writes the root object for one serialization operation. */
+  public void writeRootRef(Object obj) {
+    if (trackingRef) {
+      writeRef(obj, rootTypeInfoHolder);
+      return;
+    }
+    MemoryBuffer buffer = this.buffer;
+    if (obj == null) {
+      buffer.writeByte(Fory.NULL_FLAG);
+      return;
+    }
+    buffer.writeByte(Fory.NOT_NULL_VALUE_FLAG);
+    TypeResolver resolver = typeResolver;
+    TypeInfo typeInfo = resolver.getTypeInfo(obj.getClass(), rootTypeInfoHolder);
+    if (crossLanguage && typeInfo.getType() == UnknownStruct.class) {
+      depth++;
+      typeInfo.getSerializer().write(this, obj);
+      depth--;
+      return;
+    }
+    resolver.writeTypeInfo(this, typeInfo);
+    writeData(typeInfo, obj);
   }
 
   /**

@@ -151,7 +151,7 @@ public abstract class TypeResolver {
   final LongMap<TypeInfo> userTypeIdToTypeInfo = new LongMap<>(4, TYPE_ID_MAP_LOAD_FACTOR);
   // Cache for readTypeInfo(MemoryBuffer) - persists between calls to avoid reloading
   // dynamically created classes that can't be found by Class.forName
-  private TypeInfo typeInfoCache;
+  private TypeInfo typeInfoCache = NIL_TYPE_INFO;
   private boolean registrationFinished;
 
   protected TypeResolver(
@@ -851,7 +851,7 @@ public abstract class TypeResolver {
 
   private TypeInfo readRegisteredTypeInfo(int typeId, int userTypeId, TypeInfo cachedTypeInfo) {
     TypeInfo typeInfo = cachedTypeInfo;
-    if (typeInfo == null || typeInfo.typeId != typeId || typeInfo.userTypeId != userTypeId) {
+    if (typeInfo.typeId != typeId || typeInfo.userTypeId != userTypeId) {
       typeInfo = Objects.requireNonNull(userTypeIdToTypeInfo.get(userTypeId));
     }
     return typeInfo;

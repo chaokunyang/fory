@@ -804,46 +804,40 @@ public abstract class TypeResolver {
   public final TypeInfo readTypeInfo(ReadContext readContext, TypeInfoHolder classInfoHolder) {
     MemoryBuffer buffer = readContext.getBuffer();
     int typeId = buffer.readUInt8();
+    TypeInfo cachedTypeInfo = classInfoHolder.typeInfo;
     TypeInfo typeInfo;
-    boolean updateCache = false;
     switch (typeId) {
       case Types.ENUM:
       case Types.STRUCT:
       case Types.EXT:
       case Types.TYPED_UNION:
-        typeInfo = readRegisteredTypeInfo(typeId, buffer.readVarUInt32(), classInfoHolder.typeInfo);
-        updateCache = typeInfo != classInfoHolder.typeInfo;
+        typeInfo = readRegisteredTypeInfo(typeId, buffer.readVarUInt32(), cachedTypeInfo);
         break;
       case Types.COMPATIBLE_STRUCT:
       case Types.NAMED_COMPATIBLE_STRUCT:
-        typeInfo = readSharedClassTypeInfo(readContext, null, classInfoHolder.typeInfo);
-        updateCache = typeInfo != classInfoHolder.typeInfo;
+        typeInfo = readSharedClassTypeInfo(readContext, null, cachedTypeInfo);
         break;
       case Types.NAMED_ENUM:
       case Types.NAMED_STRUCT:
       case Types.NAMED_EXT:
       case Types.NAMED_UNION:
         if (!metaContextShareEnabled) {
-          typeInfo = readTypeInfoFromBytes(readContext, classInfoHolder.typeInfo, typeId);
-          updateCache = true;
+          typeInfo = readTypeInfoFromBytes(readContext, cachedTypeInfo, typeId);
         } else {
-          typeInfo = readSharedClassTypeInfo(readContext, null, classInfoHolder.typeInfo);
-          updateCache = typeInfo != classInfoHolder.typeInfo;
+          typeInfo = readSharedClassTypeInfo(readContext, null, cachedTypeInfo);
         }
         break;
       case Types.LIST:
-        typeInfo = readListTypeInfo(readContext);
-        break;
+        return readListTypeInfo(readContext);
       case Types.TIMESTAMP:
-        typeInfo = readTimestampTypeInfo(readContext);
-        break;
+        return readTimestampTypeInfo(readContext);
       default:
-        typeInfo = Objects.requireNonNull(getInternalTypeInfoByTypeId(typeId));
+        return Objects.requireNonNull(getInternalTypeInfoByTypeId(typeId));
     }
     if (typeInfo.serializer == null) {
       typeInfo = ensureSerializerForTypeInfo(typeInfo);
     }
-    if (updateCache) {
+    if (typeInfo != cachedTypeInfo) {
       classInfoHolder.typeInfo = typeInfo;
     }
     return typeInfo;
@@ -852,18 +846,10 @@ public abstract class TypeResolver {
   private TypeInfo readRegisteredTypeInfo(int typeId, int userTypeId, TypeInfo cachedTypeInfo) {
     TypeInfo typeInfo = cachedTypeInfo;
     if (typeInfo.typeId != typeId || typeInfo.userTypeId != userTypeId) {
-      typeInfo = Objects.requireNonNull(userTypeIdToTypeInfo.get(userTypeId));
+      typeInfo = userTypeIdToTypeInfo.get(userTypeId);
+      assert typeInfo != null;
     }
     return typeInfo;
-  }
-
-  /**
-   * Read class info using the provided cache. Returns cached TypeInfo if the namespace and type
-   * name bytes match.
-   */
-  protected final TypeInfo readTypeInfoByCache(
-      ReadContext readContext, TypeInfo typeInfoCache, int header) {
-    return readTypeInfoFromBytes(readContext, typeInfoCache, header);
   }
 
   /**

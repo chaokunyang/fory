@@ -221,10 +221,6 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
     descriptorDispatchId = new HashMap<>();
   }
 
-  void setSamePackageAccess(boolean samePackageAccess) {
-    ctx.setSamePackageAccess(samePackageAccess);
-  }
-
   // Must be static to be shared across the whole process life.
   private static final Map<String, Map<String, Integer>> idGenerator = new ConcurrentHashMap<>();
 

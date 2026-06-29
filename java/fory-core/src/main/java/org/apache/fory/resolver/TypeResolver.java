@@ -835,12 +835,16 @@ public abstract class TypeResolver {
         }
         break;
       case Types.LIST:
-        return readListTypeInfo(readContext);
+        typeInfo = readListTypeInfo(readContext);
+        break;
       case Types.TIMESTAMP:
-        return readTimestampTypeInfo(readContext);
+        typeInfo = readTimestampTypeInfo(readContext);
+        break;
       default:
-        return Objects.requireNonNull(getInternalTypeInfoByTypeId(typeId));
+        typeInfo = Objects.requireNonNull(getInternalTypeInfoByTypeId(typeId));
     }
+    // Do not return internal TypeInfo above before this check: lazy codegen can briefly clear a
+    // cached TypeInfo serializer while resolving recursive serializers.
     if (typeInfo.serializer == null) {
       typeInfo = ensureSerializerForTypeInfo(typeInfo);
     }

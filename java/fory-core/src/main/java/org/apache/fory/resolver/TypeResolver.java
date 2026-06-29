@@ -123,7 +123,7 @@ public abstract class TypeResolver {
   static final int INTERNAL_NATIVE_ID_LIMIT = 250;
   private static final GenericType OBJECT_GENERIC_TYPE = GenericType.build(Object.class);
   private static final float TYPE_ID_MAP_LOAD_FACTOR = 0.5f;
-  private static final int TYPE_INFO_CACHE_DEPTH_SLACK = 10;
+  static final int TYPE_INFO_CACHE_DEPTH_SLACK = 10;
   static final long MAX_USER_TYPE_ID = 0xffff_fffEL;
 
   private static final class TransformedTypeInfo {

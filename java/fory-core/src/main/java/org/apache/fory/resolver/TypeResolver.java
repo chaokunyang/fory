@@ -902,10 +902,6 @@ public abstract class TypeResolver {
 
   public final TypeInfo readSharedClassMeta(ReadContext readContext, Class<?> targetClass) {
     TypeInfo typeInfo = readSharedClassTypeInfo(readContext, targetClass);
-    return adaptSharedClassTarget(typeInfo, targetClass);
-  }
-
-  private TypeInfo adaptSharedClassTarget(TypeInfo typeInfo, Class<?> targetClass) {
     Class<?> readClass = typeInfo.getType();
     if (targetClass != readClass) {
       return getTargetTypeInfo(typeInfo, targetClass);

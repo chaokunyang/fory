@@ -2730,6 +2730,8 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
     Expression collection =
         new Invoke(serializer, "newCollection", COLLECTION_TYPE, readContextRef);
     Expression size = new Invoke(serializer, "getAndClearNumElements", "size", PRIMITIVE_INT_TYPE);
+    // Do not add an ArrayList-specific branch here: it pushes generated code over 325 bytes, and
+    // List#add is more likely to inline when the call site has only one receiver subclass.
     Expression hookRead = readCollectionCodegen(buffer, collection, size, elementType);
     hookRead = new Invoke(serializer, "onCollectionRead", OBJECT_TYPE, hookRead);
     Expression fallbackAction = read(serializer, buffer, OBJECT_TYPE);
@@ -2758,12 +2760,11 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
   protected Expression readCollectionCodegen(
       Expression buffer, Expression collection, Expression size, TypeRef<?> elementType) {
     ListExpression builder = new ListExpression();
-    Expression readerIndex = new Invoke(buffer, "readerIndex", "readerIndex", PRIMITIVE_INT_TYPE);
+    // The flags byte is the next encoded byte. Use the checked read path so truncated
+    // buffer-backed or stream-backed input fails before advancing the reader index.
     Expression flags =
-        cast(
-            new Invoke(buffer, "_unsafeGetByte", PRIMITIVE_BYTE_TYPE, readerIndex),
-            PRIMITIVE_INT_TYPE);
-    builder.add(readerIndex, flags, new Invoke(buffer, "_increaseReaderIndexUnsafe", ofInt(1)));
+        cast(new Invoke(buffer, "readByte", PRIMITIVE_BYTE_TYPE), PRIMITIVE_INT_TYPE);
+    builder.add(flags);
     Class<?> elemClass = TypeUtils.getRawType(elementType);
     walkPath.add(elementType.toString());
     boolean finalType = isMonomorphic(elemClass);

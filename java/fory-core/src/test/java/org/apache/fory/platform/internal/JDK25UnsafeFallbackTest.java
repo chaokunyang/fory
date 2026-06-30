@@ -23,8 +23,8 @@ import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
-import java.lang.invoke.VarHandle;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
@@ -86,8 +86,16 @@ public class JDK25UnsafeFallbackTest {
     return new String(outputStream.toByteArray(), StandardCharsets.UTF_8);
   }
 
-  private static void assertInvokeClosed(Class<?> probeClass) {
-    if (MethodHandles.Lookup.class.getModule().isOpen("java.lang.invoke", probeClass.getModule())) {
+  private static void assertInvokeClosed(Class<?> probeClass) throws ReflectiveOperationException {
+    Object javaBaseModule = Class.class.getMethod("getModule").invoke(MethodHandles.Lookup.class);
+    Object probeModule = Class.class.getMethod("getModule").invoke(probeClass);
+    Class<?> moduleClass = Class.forName("java.lang.Module");
+    boolean invokeOpen =
+        (boolean)
+            moduleClass
+                .getMethod("isOpen", String.class, moduleClass)
+                .invoke(javaBaseModule, "java.lang.invoke", probeModule);
+    if (invokeOpen) {
       throw new AssertionError("java.lang.invoke should not be open in this probe");
     }
   }
@@ -96,8 +104,8 @@ public class JDK25UnsafeFallbackTest {
     public static void main(String[] args) throws Throwable {
       assertInvokeClosed(StringFieldFallbackProbe.class);
       MethodHandles.Lookup stringLookup = _Lookup._trustedLookup(String.class);
-      VarHandle valueHandle = stringLookup.findVarHandle(String.class, "value", byte[].class);
-      byte[] value = (byte[]) valueHandle.get("trusted");
+      MethodHandle valueGetter = stringLookup.findGetter(String.class, "value", byte[].class);
+      byte[] value = (byte[]) valueGetter.invoke("trusted");
       if (value.length == 0) {
         throw new AssertionError("String value field was not read");
       }
@@ -109,13 +117,15 @@ public class JDK25UnsafeFallbackTest {
       assertInvokeClosed(PrivateFieldFallbackProbe.class);
       PrivateFieldTarget target = new PrivateFieldTarget();
       MethodHandles.Lookup targetLookup = _Lookup._trustedLookup(PrivateFieldTarget.class);
-      VarHandle fieldHandle =
-          targetLookup.findVarHandle(PrivateFieldTarget.class, "field", int.class);
-      if ((int) fieldHandle.get(target) != 7) {
+      MethodHandle fieldGetter =
+          targetLookup.findGetter(PrivateFieldTarget.class, "field", int.class);
+      MethodHandle fieldSetter =
+          targetLookup.findSetter(PrivateFieldTarget.class, "field", int.class);
+      if ((int) fieldGetter.invoke(target) != 7) {
         throw new AssertionError("Private field initial value was not read");
       }
-      fieldHandle.set(target, 42);
-      if ((int) fieldHandle.get(target) != 42) {
+      fieldSetter.invoke(target, 42);
+      if ((int) fieldGetter.invoke(target) != 42) {
         throw new AssertionError("Private field value was not written");
       }
     }

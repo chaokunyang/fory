@@ -28,6 +28,7 @@ import java.lang.invoke.MethodHandles;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
+import org.apache.fory.Fory;
 import org.apache.fory.TestUtils;
 import org.apache.fory.platform.JdkVersion;
 import org.testng.Assert;
@@ -50,6 +51,14 @@ public class JDK25UnsafeFallbackTest {
       throw new SkipException("Skip on jdk" + JdkVersion.MAJOR_VERSION);
     }
     runFallbackProbe(PrivateFieldFallbackProbe.class);
+  }
+
+  @Test
+  public void testForyRoundTripUnsafeFallback() throws Exception {
+    if (JdkVersion.MAJOR_VERSION != 25) {
+      throw new SkipException("Skip on jdk" + JdkVersion.MAJOR_VERSION);
+    }
+    runFallbackProbe(ForyRoundTripFallbackProbe.class);
   }
 
   private static void runFallbackProbe(Class<?> mainClass) throws Exception {
@@ -131,7 +140,40 @@ public class JDK25UnsafeFallbackTest {
     }
   }
 
+  public static final class ForyRoundTripFallbackProbe {
+    public static void main(String[] args) throws Throwable {
+      assertInvokeClosed(ForyRoundTripFallbackProbe.class);
+      Fory fory =
+          Fory.builder()
+              .withXlang(false)
+              .requireClassRegistration(false)
+              .withCompatible(false)
+              .build();
+      RoundTripTarget value = new RoundTripTarget(7, "trusted");
+      RoundTripTarget copy = (RoundTripTarget) fory.deserialize(fory.serialize(value));
+      copy.assertState(7, "trusted");
+    }
+  }
+
   private static final class PrivateFieldTarget {
     private int field = 7;
+  }
+
+  public static final class RoundTripTarget {
+    private int number = -1;
+    private String text = "unset";
+
+    public RoundTripTarget() {}
+
+    RoundTripTarget(int number, String text) {
+      this.number = number;
+      this.text = text;
+    }
+
+    private void assertState(int expectedNumber, String expectedText) {
+      if (number != expectedNumber || !expectedText.equals(text)) {
+        throw new AssertionError("Unexpected round-trip state " + number + ", " + text);
+      }
+    }
   }
 }

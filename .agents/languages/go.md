@@ -10,11 +10,15 @@ Load this file when changing `go/fory/` or Go xlang behavior.
 - Root deserialization container memory budgets are owned by `ReadContext`.
   `WithMaxContainerMemoryBytes` defaults to `-1 / auto`; byte-slice roots use
   `inputBytes * 8 + 64 KiB`, and `DeserializeFromReader`/`DeserializeFromStream`
-  use fixed `128 MiB`. Charge Go slices, maps, map-backed sets, LIST-encoded
-  inline/value slices, and generated container reads before allocation. Fixed
-  arrays are caller-owned and normally not charged; `arrayDynSerializer` charges
-  its temporary slice. Skip only dedicated string, binary, BufferObject,
-  primitive ARRAY slice, and primitive array owners with byte checks.
+  use fixed `128 MiB`. `ReadContext` may expose only raw byte reservation and
+  generic counted-byte arithmetic; slice/map formulas belong in handwritten or
+  generated serializer owners. Charge Go slices as `len * elemBytes`, maps as
+  `len * (keyBytes + valueBytes)`, map-backed sets, LIST-encoded inline/value
+  slices, and generated container reads before allocation. Empty containers with
+  no backing storage normally charge zero. Fixed arrays are caller-owned and
+  normally not charged; `arrayDynSerializer` charges its temporary slice. Skip
+  only dedicated string, binary, BufferObject, primitive ARRAY slice, and
+  primitive array owners with byte checks.
 - Set `FORY_PANIC_ON_ERROR=1` when debugging a failing Go test so you get the full call stack.
 - Do not set `FORY_PANIC_ON_ERROR=1` when running the full Go test suite, because some tests assert on error contents.
 

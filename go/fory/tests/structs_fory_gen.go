@@ -190,7 +190,7 @@ func (g *DynamicSliceDemo_ForyGenSerializer) ReadTyped(ctx *fory.ReadContext, v 
 			if ctx.HasError() {
 				return ctx.TakeError()
 			}
-			if !ctx.ReserveSliceMemory(sliceLen, int64(unsafe.Sizeof(*new(any)))) {
+			if !ctx.ReserveCountedContainerMemory(sliceLen, int64(unsafe.Sizeof(*new(any)))) {
 				return ctx.TakeError()
 			}
 			if sliceLen == 0 {
@@ -221,7 +221,7 @@ func (g *DynamicSliceDemo_ForyGenSerializer) ReadTyped(ctx *fory.ReadContext, v 
 				if ctx.HasError() {
 					return ctx.TakeError()
 				}
-				if !ctx.ReserveSliceMemory(sliceLen, int64(unsafe.Sizeof(*new(any)))) {
+				if !ctx.ReserveCountedContainerMemory(sliceLen, int64(unsafe.Sizeof(*new(any)))) {
 					return ctx.TakeError()
 				}
 				if sliceLen == 0 {
@@ -672,7 +672,7 @@ func (g *MapDemo_ForyGenSerializer) ReadTyped(ctx *fory.ReadContext, v *MapDemo)
 			if ctx.HasError() {
 				return ctx.TakeError()
 			}
-			if !ctx.ReserveMapMemory(mapLen, int64(unsafe.Sizeof(*new(int))), int64(unsafe.Sizeof(*new(int)))) {
+			if !ctx.ReserveCountedContainerMemory(mapLen, int64(unsafe.Sizeof(*new(int)))+int64(unsafe.Sizeof(*new(int)))) {
 				return ctx.TakeError()
 			}
 			if mapLen == 0 {
@@ -722,7 +722,7 @@ func (g *MapDemo_ForyGenSerializer) ReadTyped(ctx *fory.ReadContext, v *MapDemo)
 				if ctx.HasError() {
 					return ctx.TakeError()
 				}
-				if !ctx.ReserveMapMemory(mapLen, int64(unsafe.Sizeof(*new(int))), int64(unsafe.Sizeof(*new(int)))) {
+				if !ctx.ReserveCountedContainerMemory(mapLen, int64(unsafe.Sizeof(*new(int)))+int64(unsafe.Sizeof(*new(int)))) {
 					return ctx.TakeError()
 				}
 				if mapLen == 0 {
@@ -774,7 +774,7 @@ func (g *MapDemo_ForyGenSerializer) ReadTyped(ctx *fory.ReadContext, v *MapDemo)
 			if ctx.HasError() {
 				return ctx.TakeError()
 			}
-			if !ctx.ReserveMapMemory(mapLen, int64(unsafe.Sizeof(*new(string))), int64(unsafe.Sizeof(*new(int)))) {
+			if !ctx.ReserveCountedContainerMemory(mapLen, int64(unsafe.Sizeof(*new(string)))+int64(unsafe.Sizeof(*new(int)))) {
 				return ctx.TakeError()
 			}
 			if mapLen == 0 {
@@ -824,7 +824,7 @@ func (g *MapDemo_ForyGenSerializer) ReadTyped(ctx *fory.ReadContext, v *MapDemo)
 				if ctx.HasError() {
 					return ctx.TakeError()
 				}
-				if !ctx.ReserveMapMemory(mapLen, int64(unsafe.Sizeof(*new(string))), int64(unsafe.Sizeof(*new(int)))) {
+				if !ctx.ReserveCountedContainerMemory(mapLen, int64(unsafe.Sizeof(*new(string)))+int64(unsafe.Sizeof(*new(int)))) {
 					return ctx.TakeError()
 				}
 				if mapLen == 0 {
@@ -876,7 +876,7 @@ func (g *MapDemo_ForyGenSerializer) ReadTyped(ctx *fory.ReadContext, v *MapDemo)
 			if ctx.HasError() {
 				return ctx.TakeError()
 			}
-			if !ctx.ReserveMapMemory(mapLen, int64(unsafe.Sizeof(*new(string))), int64(unsafe.Sizeof(*new(string)))) {
+			if !ctx.ReserveCountedContainerMemory(mapLen, int64(unsafe.Sizeof(*new(string)))+int64(unsafe.Sizeof(*new(string)))) {
 				return ctx.TakeError()
 			}
 			if mapLen == 0 {
@@ -926,7 +926,7 @@ func (g *MapDemo_ForyGenSerializer) ReadTyped(ctx *fory.ReadContext, v *MapDemo)
 				if ctx.HasError() {
 					return ctx.TakeError()
 				}
-				if !ctx.ReserveMapMemory(mapLen, int64(unsafe.Sizeof(*new(string))), int64(unsafe.Sizeof(*new(string)))) {
+				if !ctx.ReserveCountedContainerMemory(mapLen, int64(unsafe.Sizeof(*new(string)))+int64(unsafe.Sizeof(*new(string)))) {
 					return ctx.TakeError()
 				}
 				if mapLen == 0 {
@@ -1287,7 +1287,7 @@ func (g *SliceDemo_ForyGenSerializer) ReadTyped(ctx *fory.ReadContext, v *SliceD
 			if ctx.HasError() {
 				return ctx.TakeError()
 			}
-			if !ctx.ReserveSliceMemory(sliceLen, int64(unsafe.Sizeof(*new(bool)))) {
+			if !ctx.ReserveCountedContainerMemory(sliceLen, int64(unsafe.Sizeof(*new(bool)))) {
 				return ctx.TakeError()
 			}
 			if sliceLen == 0 {
@@ -1329,7 +1329,7 @@ func (g *SliceDemo_ForyGenSerializer) ReadTyped(ctx *fory.ReadContext, v *SliceD
 				if ctx.HasError() {
 					return ctx.TakeError()
 				}
-				if !ctx.ReserveSliceMemory(sliceLen, int64(unsafe.Sizeof(*new(bool)))) {
+				if !ctx.ReserveCountedContainerMemory(sliceLen, int64(unsafe.Sizeof(*new(bool)))) {
 					return ctx.TakeError()
 				}
 				if sliceLen == 0 {
@@ -1373,7 +1373,7 @@ func (g *SliceDemo_ForyGenSerializer) ReadTyped(ctx *fory.ReadContext, v *SliceD
 			if ctx.HasError() {
 				return ctx.TakeError()
 			}
-			if !ctx.ReserveSliceMemory(sliceLen, int64(unsafe.Sizeof(*new(float64)))) {
+			if !ctx.ReserveCountedContainerMemory(sliceLen, int64(unsafe.Sizeof(*new(float64)))) {
 				return ctx.TakeError()
 			}
 			if sliceLen == 0 {
@@ -1415,7 +1415,7 @@ func (g *SliceDemo_ForyGenSerializer) ReadTyped(ctx *fory.ReadContext, v *SliceD
 				if ctx.HasError() {
 					return ctx.TakeError()
 				}
-				if !ctx.ReserveSliceMemory(sliceLen, int64(unsafe.Sizeof(*new(float64)))) {
+				if !ctx.ReserveCountedContainerMemory(sliceLen, int64(unsafe.Sizeof(*new(float64)))) {
 					return ctx.TakeError()
 				}
 				if sliceLen == 0 {
@@ -1459,7 +1459,7 @@ func (g *SliceDemo_ForyGenSerializer) ReadTyped(ctx *fory.ReadContext, v *SliceD
 			if ctx.HasError() {
 				return ctx.TakeError()
 			}
-			if !ctx.ReserveSliceMemory(sliceLen, int64(unsafe.Sizeof(*new(int32)))) {
+			if !ctx.ReserveCountedContainerMemory(sliceLen, int64(unsafe.Sizeof(*new(int32)))) {
 				return ctx.TakeError()
 			}
 			if sliceLen == 0 {
@@ -1501,7 +1501,7 @@ func (g *SliceDemo_ForyGenSerializer) ReadTyped(ctx *fory.ReadContext, v *SliceD
 				if ctx.HasError() {
 					return ctx.TakeError()
 				}
-				if !ctx.ReserveSliceMemory(sliceLen, int64(unsafe.Sizeof(*new(int32)))) {
+				if !ctx.ReserveCountedContainerMemory(sliceLen, int64(unsafe.Sizeof(*new(int32)))) {
 					return ctx.TakeError()
 				}
 				if sliceLen == 0 {
@@ -1545,7 +1545,7 @@ func (g *SliceDemo_ForyGenSerializer) ReadTyped(ctx *fory.ReadContext, v *SliceD
 			if ctx.HasError() {
 				return ctx.TakeError()
 			}
-			if !ctx.ReserveSliceMemory(sliceLen, int64(unsafe.Sizeof(*new(string)))) {
+			if !ctx.ReserveCountedContainerMemory(sliceLen, int64(unsafe.Sizeof(*new(string)))) {
 				return ctx.TakeError()
 			}
 			if sliceLen == 0 {
@@ -1595,7 +1595,7 @@ func (g *SliceDemo_ForyGenSerializer) ReadTyped(ctx *fory.ReadContext, v *SliceD
 				if ctx.HasError() {
 					return ctx.TakeError()
 				}
-				if !ctx.ReserveSliceMemory(sliceLen, int64(unsafe.Sizeof(*new(string)))) {
+				if !ctx.ReserveCountedContainerMemory(sliceLen, int64(unsafe.Sizeof(*new(string)))) {
 					return ctx.TakeError()
 				}
 				if sliceLen == 0 {

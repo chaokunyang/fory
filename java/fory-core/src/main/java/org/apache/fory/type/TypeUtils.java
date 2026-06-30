@@ -65,7 +65,6 @@ import java.util.OptionalLong;
 import java.util.Set;
 import java.util.TimeZone;
 import java.util.WeakHashMap;
-import java.util.stream.Collectors;
 import org.apache.fory.annotation.Ref;
 import org.apache.fory.collection.BFloat16List;
 import org.apache.fory.collection.BoolList;
@@ -574,11 +573,10 @@ public class TypeUtils {
   public static TypeRef<?> getElementType(TypeRef<?> typeRef) {
     if (typeRef.hasExplicitTypeArguments()) {
       List<TypeRef<?>> typeArguments = typeRef.getTypeArguments();
-      if (typeArguments.size() == 1) {
-        Class<?> rawType = getRawType(typeRef);
-        if (Iterable.class.isAssignableFrom(rawType) || isScalaCollectionClass(rawType)) {
-          return typeArguments.get(0);
-        }
+      Class<?> rawType = getRawType(typeRef);
+      if (typeArguments.size() == 1
+          && (Iterable.class.isAssignableFrom(rawType) || isScalaIterableClass(rawType))) {
+        return typeArguments.get(0);
       }
     }
     Type type = typeRef.getType();
@@ -593,8 +591,7 @@ public class TypeUtils {
         }
       }
     }
-    if (ScalaTypes.SCALA_AVAILABLE
-        && typeRef.getType().getTypeName().startsWith("scala.collection")) {
+    if (isScalaIterableClass(typeRef.getRawType())) {
       return ScalaTypes.getElementType(typeRef);
     }
     TypeRef<?> supertype = ((TypeRef<? extends Iterable<?>>) typeRef).getSupertype(Iterable.class);
@@ -611,12 +608,10 @@ public class TypeUtils {
   public static Tuple2<TypeRef<?>, TypeRef<?>> getMapKeyValueType(TypeRef<?> typeRef) {
     if (typeRef.hasExplicitTypeArguments()) {
       List<TypeRef<?>> typeArguments = typeRef.getTypeArguments();
-      if (typeArguments.size() == 2) {
-        Class<?> rawType = getRawType(typeRef);
-        if ((Map.class.isAssignableFrom(rawType) || isScalaCollectionClass(rawType))
-            && rawType.getTypeParameters().length == 2) {
-          return Tuple2.of(typeArguments.get(0), typeArguments.get(1));
-        }
+      Class<?> rawType = getRawType(typeRef);
+      if (typeArguments.size() == 2
+          && (Map.class.isAssignableFrom(rawType) || isScalaMapClass(rawType))) {
+        return Tuple2.of(typeArguments.get(0), typeArguments.get(1));
       }
     }
     Type type = typeRef.getType();
@@ -632,8 +627,7 @@ public class TypeUtils {
         }
       }
     }
-    if (ScalaTypes.SCALA_AVAILABLE
-        && typeRef.getType().getTypeName().startsWith("scala.collection")) {
+    if (isScalaMapClass(typeRef.getRawType())) {
       return ScalaTypes.getMapKeyValueType(typeRef);
     }
     @SuppressWarnings("unchecked")
@@ -643,8 +637,16 @@ public class TypeUtils {
     return Tuple2.of(keyType, valueType);
   }
 
-  private static boolean isScalaCollectionClass(Class<?> rawType) {
-    return ScalaTypes.SCALA_AVAILABLE && rawType.getName().startsWith("scala.collection");
+  private static boolean isScalaMapClass(Class<?> rawType) {
+    return ScalaTypes.SCALA_AVAILABLE
+        && rawType.getName().startsWith("scala.collection")
+        && ScalaTypes.getScalaMapType().isAssignableFrom(rawType);
+  }
+
+  private static boolean isScalaIterableClass(Class<?> rawType) {
+    return ScalaTypes.SCALA_AVAILABLE
+        && rawType.getName().startsWith("scala.collection")
+        && ScalaTypes.getScalaIterableType().isAssignableFrom(rawType);
   }
 
   public static void applyRefTrackingOverride(
@@ -656,14 +658,9 @@ public class TypeUtils {
     if (ref != null) {
       genericType.setTrackingRefOverride(ref.enable() && globalTrackingRef);
     }
-    Object[] typeUseArgs = TypeUseMetadata.typeUseArguments(typeUse);
-    if (typeUseArgs != null) {
-      GenericType[] typeParameters = genericType.getTypeParameters();
-      int len = Math.min(typeUseArgs.length, typeParameters.length);
-      for (int i = 0; i < len; i++) {
-        applyRefTrackingOverride(typeParameters[i], typeUseArgs[i], globalTrackingRef);
-      }
-    }
+    // Child type-use metadata is already folded into TypeRef explicit arguments. Replaying JVM
+    // type-use children here is unsafe because collection/map GenericType parameters are normalized
+    // to element or key/value, not necessarily the raw declared type-argument order.
   }
 
   public static TypeRef<?> getFieldTypeRef(Field field) {
@@ -1050,17 +1047,7 @@ public class TypeUtils {
 
   /** Returns generic type arguments of <code>typeToken</code>. */
   public static List<TypeRef<?>> getTypeArguments(TypeRef<?> typeRef) {
-    if (typeRef.hasExplicitTypeArguments()) {
-      return typeRef.getTypeArguments();
-    }
-    if (typeRef.getType() instanceof ParameterizedType) {
-      ParameterizedType parameterizedType = (ParameterizedType) typeRef.getType();
-      return Arrays.stream(parameterizedType.getActualTypeArguments())
-          .map(TypeRef::of)
-          .collect(Collectors.toList());
-    } else {
-      return new ArrayList<>();
-    }
+    return typeRef.getTypeArguments();
   }
 
   /**

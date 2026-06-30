@@ -60,13 +60,48 @@ class _Lookup {
   }
 
   private static Lookup loadImplLookup() {
+    Throwable reflectionError = null;
     try {
-      Field field = Lookup.class.getDeclaredField("IMPL_LOOKUP");
-      field.setAccessible(true);
-      return (Lookup) field.get(null);
+      return loadImplLookupByReflection();
     } catch (ReflectiveOperationException | RuntimeException e) {
-      throw new IllegalStateException(trustedLookupMessage(), e);
+      reflectionError = e;
     }
+    try {
+      return loadImplLookupByUnsafe();
+    } catch (ReflectiveOperationException | RuntimeException | LinkageError e) {
+      IllegalStateException failure =
+          new IllegalStateException(trustedLookupMessage(), reflectionError);
+      failure.addSuppressed(e);
+      throw failure;
+    }
+  }
+
+  private static Lookup loadImplLookupByReflection() throws ReflectiveOperationException {
+    Field field = Lookup.class.getDeclaredField("IMPL_LOOKUP");
+    field.setAccessible(true);
+    return (Lookup) field.get(null);
+  }
+
+  private static Lookup loadImplLookupByUnsafe() throws ReflectiveOperationException {
+    Class<?> unsafeClass = Class.forName(unsafeClassName());
+    Field unsafeField = unsafeClass.getDeclaredField("theUnsafe");
+    unsafeField.setAccessible(true);
+    Object unsafe = unsafeField.get(null);
+    Field implLookup = Lookup.class.getDeclaredField("IMPL_LOOKUP");
+    long fieldOffset =
+        (long) unsafeClass.getMethod("staticFieldOffset", Field.class).invoke(unsafe, implLookup);
+    Object fieldBase =
+        unsafeClass.getMethod("staticFieldBase", Field.class).invoke(unsafe, implLookup);
+    return (Lookup)
+        unsafeClass
+            .getMethod("getObject", Object.class, long.class)
+            .invoke(unsafe, fieldBase, fieldOffset);
+  }
+
+  private static String unsafeClassName() {
+    // Keep the Java 25 overlay free of a direct Unsafe class constant while still allowing the
+    // current-JDK compatibility fallback when java.lang.invoke is not open.
+    return "sun.misc.".concat("Unsafe");
   }
 
   private static MethodHandle constructorLookup() {

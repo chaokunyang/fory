@@ -8,10 +8,11 @@ Load this file when changing `go/fory/` or Go xlang behavior.
 - Changes under `go/` must pass formatting and tests.
 - The Go implementation focuses on reflection-based and codegen-based serialization.
 - Root deserialization graph memory budgets are owned by `ReadContext`.
-  `WithMaxGraphMemoryBytes` defaults to `-1 / auto`; byte-slice roots use
-  `inputBytes * 8 + 64 KiB`, and `DeserializeFromReader`/`DeserializeFromStream`
-  use fixed `128 MiB`. `ReadContext` may expose only raw byte reservation and
-  generic counted-byte arithmetic; slice, map, array, struct, and object
+  `WithMaxGraphMemoryBytes` uses a fixed `128 MiB` default; positive explicit
+  values override it, and explicit non-positive values intentionally disable
+  graph-memory enforcement. Byte-slice and stream roots use the same
+  configured/default budget behavior. `ReadContext` may expose only raw byte
+  reservation; slice, map, array, struct, and object
   formulas belong in handwritten or generated serializer owners. Reserve Go
   slices as `len * elemBytes`, maps as `len * (keyBytes + valueBytes)`,
   map-backed sets, and LIST-encoded inline/value slices in the owner that

@@ -38,7 +38,7 @@ const DEFAULT_MAX_TYPE_FIELDS = 512 as const;
 const DEFAULT_MAX_TYPE_META_BYTES = 4096 as const;
 const DEFAULT_MAX_SCHEMA_VERSIONS_PER_TYPE = 10 as const;
 const DEFAULT_MAX_AVERAGE_SCHEMA_VERSIONS_PER_TYPE = 3 as const;
-const DEFAULT_MAX_CONTAINER_MEMORY_BYTES = -1 as const;
+const DEFAULT_MAX_GRAPH_MEMORY_BYTES = -1 as const;
 export default class Fory {
   readonly typeResolver: TypeResolver;
   readonly anySerializer: Serializer;
@@ -78,49 +78,49 @@ export default class Fory {
         `maxTypeFields must be a positive integer but got ${maxTypeFields}`,
       );
     }
-    const maxTypeMetaBytes
-      = config?.maxTypeMetaBytes ?? DEFAULT_MAX_TYPE_META_BYTES;
+    const maxTypeMetaBytes =
+      config?.maxTypeMetaBytes ?? DEFAULT_MAX_TYPE_META_BYTES;
     if (!Number.isInteger(maxTypeMetaBytes) || maxTypeMetaBytes <= 0) {
       throw new Error(
         `maxTypeMetaBytes must be a positive integer but got ${maxTypeMetaBytes}`,
       );
     }
-    const maxSchemaVersionsPerType
-      = config?.maxSchemaVersionsPerType ?? DEFAULT_MAX_SCHEMA_VERSIONS_PER_TYPE;
+    const maxSchemaVersionsPerType =
+      config?.maxSchemaVersionsPerType ?? DEFAULT_MAX_SCHEMA_VERSIONS_PER_TYPE;
     if (
-      !Number.isInteger(maxSchemaVersionsPerType)
-      || maxSchemaVersionsPerType <= 0
+      !Number.isInteger(maxSchemaVersionsPerType) ||
+      maxSchemaVersionsPerType <= 0
     ) {
       throw new Error(
         `maxSchemaVersionsPerType must be a positive integer but got ${maxSchemaVersionsPerType}`,
       );
     }
-    const maxAverageSchemaVersionsPerType
-      = config?.maxAverageSchemaVersionsPerType
-      ?? DEFAULT_MAX_AVERAGE_SCHEMA_VERSIONS_PER_TYPE;
+    const maxAverageSchemaVersionsPerType =
+      config?.maxAverageSchemaVersionsPerType ??
+      DEFAULT_MAX_AVERAGE_SCHEMA_VERSIONS_PER_TYPE;
     if (
-      !Number.isInteger(maxAverageSchemaVersionsPerType)
-      || maxAverageSchemaVersionsPerType <= 0
+      !Number.isInteger(maxAverageSchemaVersionsPerType) ||
+      maxAverageSchemaVersionsPerType <= 0
     ) {
       throw new Error(
         `maxAverageSchemaVersionsPerType must be a positive integer but got ${maxAverageSchemaVersionsPerType}`,
       );
     }
-    const maxContainerMemoryBytes
-      = config?.maxContainerMemoryBytes ?? DEFAULT_MAX_CONTAINER_MEMORY_BYTES;
+    const maxGraphMemoryBytes =
+      config?.maxGraphMemoryBytes ?? DEFAULT_MAX_GRAPH_MEMORY_BYTES;
     if (
-      !Number.isSafeInteger(maxContainerMemoryBytes)
-      || (maxContainerMemoryBytes !== -1 && maxContainerMemoryBytes <= 0)
+      !Number.isSafeInteger(maxGraphMemoryBytes) ||
+      (maxGraphMemoryBytes !== -1 && maxGraphMemoryBytes <= 0)
     ) {
       throw new Error(
-        `maxContainerMemoryBytes must be -1 or a positive safe integer but got ${maxContainerMemoryBytes}`,
+        `maxGraphMemoryBytes must be -1 or a positive safe integer but got ${maxGraphMemoryBytes}`,
       );
     }
     return {
       ref: Boolean(config?.ref),
       useSliceString: Boolean(config?.useSliceString),
       maxDepth: config?.maxDepth,
-      maxContainerMemoryBytes,
+      maxGraphMemoryBytes,
       maxTypeFields,
       maxTypeMetaBytes,
       maxSchemaVersionsPerType,
@@ -194,8 +194,8 @@ export default class Fory {
   }
 
   private throwInvalidRootHeader(bitmap: number): never {
-    const knownFlags
-      = ConfigFlags.isCrossLanguageFlag | ConfigFlags.isOutOfBandFlag;
+    const knownFlags =
+      ConfigFlags.isCrossLanguageFlag | ConfigFlags.isOutOfBandFlag;
     if ((bitmap & ~knownFlags) !== 0) {
       throw new Error(
         `unsupported root header bitmap 0x${bitmap.toString(16)}`,

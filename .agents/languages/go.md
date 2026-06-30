@@ -7,18 +7,20 @@ Load this file when changing `go/fory/` or Go xlang behavior.
 - Run Go commands from within `go/fory/`.
 - Changes under `go/` must pass formatting and tests.
 - The Go implementation focuses on reflection-based and codegen-based serialization.
-- Root deserialization container memory budgets are owned by `ReadContext`.
-  `WithMaxContainerMemoryBytes` defaults to `-1 / auto`; byte-slice roots use
+- Root deserialization graph memory budgets are owned by `ReadContext`.
+  `WithMaxGraphMemoryBytes` defaults to `-1 / auto`; byte-slice roots use
   `inputBytes * 8 + 64 KiB`, and `DeserializeFromReader`/`DeserializeFromStream`
   use fixed `128 MiB`. `ReadContext` may expose only raw byte reservation and
-  generic counted-byte arithmetic; slice/map formulas belong in handwritten or
-  generated serializer owners. Charge Go slices as `len * elemBytes`, maps as
-  `len * (keyBytes + valueBytes)`, map-backed sets, LIST-encoded inline/value
-  slices, and generated container reads before allocation. Empty containers with
-  no backing storage normally charge zero. Fixed arrays are caller-owned and
-  normally not charged; `arrayDynSerializer` charges its temporary slice. Skip
-  only dedicated string, binary, BufferObject, primitive ARRAY slice, and
-  primitive array owners with byte checks.
+  generic counted-byte arithmetic; slice, map, array, struct, and object
+  formulas belong in handwritten or generated serializer owners. Reserve Go
+  slices as `len * elemBytes`, maps as `len * (keyBytes + valueBytes)`,
+  map-backed sets, and LIST-encoded inline/value slices in the owner that
+  allocates that storage. Root struct owners, pointer allocations, and generated
+  allocation entries reserve shallow value storage exactly once; nested inline
+  struct serializers do not charge their own self storage again. Fixed arrays
+  are caller-owned unless a read path materializes a temporary owner. Skip
+  dedicated string, binary, BufferObject, primitive scalar, primitive ARRAY
+  slice, and primitive array owners with byte checks.
 - Set `FORY_PANIC_ON_ERROR=1` when debugging a failing Go test so you get the full call stack.
 - Do not set `FORY_PANIC_ON_ERROR=1` when running the full Go test suite, because some tests assert on error contents.
 

@@ -34,7 +34,7 @@ import (
 
 var logger = log.New(os.Stdout, "", 0)
 
-func typeNeedsContainerReservation(t types.Type) bool {
+func typeNeedsGraphReservation(t types.Type) bool {
 	if _, ok := t.(*types.Slice); ok {
 		return true
 	}
@@ -295,9 +295,9 @@ func generateCodeForFile(pkg *packages.Package, structs []*StructInfo, sourceFil
 
 	// Determine which imports are needed
 	needsTime := false
-	needsReflect := false
+	needsReflect := len(structs) > 0
 	needsOptional := false
-	needsUnsafe := false
+	needsUnsafe := len(structs) > 0
 
 	for _, s := range structs {
 		for _, field := range s.Fields {
@@ -307,15 +307,13 @@ func generateCodeForFile(pkg *packages.Package, structs []*StructInfo, sourceFil
 			}
 			if field.IsOptional {
 				needsOptional = true
-				if field.OptionalElem != nil && typeNeedsContainerReservation(field.OptionalElem) {
+				if field.OptionalElem != nil && typeNeedsGraphReservation(field.OptionalElem) {
 					needsUnsafe = true
 				}
 			}
-			if typeNeedsContainerReservation(field.Type) {
+			if typeNeedsGraphReservation(field.Type) {
 				needsUnsafe = true
 			}
-			// We need reflect for the interface compatibility methods
-			needsReflect = true
 		}
 	}
 
@@ -570,9 +568,9 @@ func generateCode(pkg *packages.Package, structs []*StructInfo) error {
 
 	// Determine which imports are needed
 	needsTime := false
-	needsReflect := false
+	needsReflect := len(structs) > 0
 	needsOptional := false
-	needsUnsafe := false
+	needsUnsafe := len(structs) > 0
 
 	for _, s := range structs {
 		for _, field := range s.Fields {
@@ -582,15 +580,13 @@ func generateCode(pkg *packages.Package, structs []*StructInfo) error {
 			}
 			if field.IsOptional {
 				needsOptional = true
-				if field.OptionalElem != nil && typeNeedsContainerReservation(field.OptionalElem) {
+				if field.OptionalElem != nil && typeNeedsGraphReservation(field.OptionalElem) {
 					needsUnsafe = true
 				}
 			}
-			if typeNeedsContainerReservation(field.Type) {
+			if typeNeedsGraphReservation(field.Type) {
 				needsUnsafe = true
 			}
-			// We need reflect for the interface compatibility methods
-			needsReflect = true
 		}
 	}
 

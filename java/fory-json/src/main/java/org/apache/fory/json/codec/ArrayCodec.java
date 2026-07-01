@@ -58,6 +58,8 @@ public abstract class ArrayCodec extends AbstractJsonCodec {
       return FloatArrayCodec.INSTANCE;
     } else if (componentType == double.class) {
       return DoubleArrayCodec.INSTANCE;
+    } else if (componentType == String.class) {
+      return StringArrayCodec.INSTANCE;
     }
     return new ObjectArrayCodec(componentType, resolver.getTypeInfo(componentType, componentType));
   }
@@ -629,6 +631,145 @@ public abstract class ArrayCodec extends AbstractJsonCodec {
         values[size++] = Double.parseDouble(reader.readNumber());
       } while (reader.consume(','));
       reader.expect(']');
+      reader.exitDepth();
+      return Arrays.copyOf(values, size);
+    }
+  }
+
+  public static final class StringArrayCodec extends ArrayCodec {
+    private static final StringArrayCodec INSTANCE = new StringArrayCodec();
+
+    private StringArrayCodec() {
+      super(String.class);
+    }
+
+    @Override
+    void writeNonNull(JsonWriter writer, Object value, JsonTypeResolver resolver) {
+      String[] array = (String[]) value;
+      writer.writeArrayStart();
+      for (int i = 0; i < array.length; i++) {
+        writer.writeComma(i);
+        if (array[i] == null) {
+          writer.writeNull();
+        } else {
+          writer.writeString(array[i]);
+        }
+      }
+      writer.writeArrayEnd();
+    }
+
+    @Override
+    void writeStringNonNull(StringJsonWriter writer, Object value, JsonTypeResolver resolver) {
+      String[] array = (String[]) value;
+      writer.writeArrayStart();
+      for (int i = 0; i < array.length; i++) {
+        writer.writeStringElement(i, array[i]);
+      }
+      writer.writeArrayEnd();
+    }
+
+    @Override
+    void writeUtf8NonNull(Utf8JsonWriter writer, Object value, JsonTypeResolver resolver) {
+      String[] array = (String[]) value;
+      writer.writeArrayStart();
+      for (int i = 0; i < array.length; i++) {
+        writer.writeStringElement(i, array[i]);
+      }
+      writer.writeArrayEnd();
+    }
+
+    @Override
+    Object readNonNull(JsonReader reader, JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
+      reader.enterDepth();
+      reader.expect('[');
+      if (reader.consume(']')) {
+        reader.exitDepth();
+        return new String[0];
+      }
+      String[] values = new String[8];
+      int size = 0;
+      do {
+        if (size == values.length) {
+          values = Arrays.copyOf(values, values.length << 1);
+        }
+        values[size++] = reader.readNullableString();
+      } while (reader.consume(','));
+      reader.expect(']');
+      reader.exitDepth();
+      return Arrays.copyOf(values, size);
+    }
+
+    @Override
+    public Object readLatin1(
+        Latin1JsonReader reader, JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
+      if (reader.tryReadNullToken()) {
+        return null;
+      }
+      reader.enterDepth();
+      reader.expectNextToken('[');
+      if (reader.consumeNextToken(']')) {
+        reader.exitDepth();
+        return new String[0];
+      }
+      String[] values = new String[8];
+      int size = 0;
+      do {
+        if (size == values.length) {
+          values = Arrays.copyOf(values, values.length << 1);
+        }
+        values[size++] = reader.readNextNullableString();
+      } while (reader.consumeNextToken(','));
+      reader.expectNextToken(']');
+      reader.exitDepth();
+      return Arrays.copyOf(values, size);
+    }
+
+    @Override
+    public Object readUtf16(
+        Utf16JsonReader reader, JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
+      if (reader.tryReadNullToken()) {
+        return null;
+      }
+      reader.enterDepth();
+      reader.expectNextToken('[');
+      if (reader.consumeNextToken(']')) {
+        reader.exitDepth();
+        return new String[0];
+      }
+      String[] values = new String[8];
+      int size = 0;
+      do {
+        if (size == values.length) {
+          values = Arrays.copyOf(values, values.length << 1);
+        }
+        values[size++] = reader.readNextNullableString();
+      } while (reader.consumeNextToken(','));
+      reader.expectNextToken(']');
+      reader.exitDepth();
+      return Arrays.copyOf(values, size);
+    }
+
+    @Override
+    public Object readUtf8(
+        Utf8JsonReader reader, JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
+      if (reader.tryReadNullToken()) {
+        return null;
+      }
+      reader.enterDepth();
+      reader.expectNextToken('[');
+      if (reader.consumeNextToken(']')) {
+        reader.exitDepth();
+        return new String[0];
+      }
+      String[] values = new String[8];
+      int size = 0;
+      do {
+        if (size == values.length) {
+          values = Arrays.copyOf(values, values.length << 1);
+        }
+        values[size++] = reader.readNextNullableString();
+      } while (reader.consumeNextToken(','));
+      reader.expectNextToken(']');
       reader.exitDepth();
       return Arrays.copyOf(values, size);
     }

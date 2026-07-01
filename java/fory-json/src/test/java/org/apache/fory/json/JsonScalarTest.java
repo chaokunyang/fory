@@ -32,6 +32,7 @@ import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.Optional;
+import java.util.UUID;
 import org.apache.fory.json.codec.JsonCodec;
 import org.apache.fory.json.data.BoxedScalars;
 import org.apache.fory.json.data.CoreScalarFields;
@@ -178,6 +179,51 @@ public class JsonScalarTest extends ForyJsonTestModels {
     assertEquals(read.uri, value.uri);
     assertEquals(read.url, value.url);
     assertEquals(read.uuid, value.uuid);
+  }
+
+  @Test
+  public void writeUtf8ScalarFormats() {
+    ForyJson json = ForyJson.builder().build();
+    UUID uuid = UUID.fromString("123e4567-e89b-12d3-a456-426614174000");
+    assertEquals(
+        new String(json.toJsonBytes(uuid), StandardCharsets.UTF_8),
+        "\"123e4567-e89b-12d3-a456-426614174000\"");
+    assertEquals(
+        new String(json.toJsonBytes(LocalDate.of(2024, 2, 3)), StandardCharsets.UTF_8),
+        "\"2024-02-03\"");
+
+    OffsetDateTimeFields fields = new OffsetDateTimeFields();
+    fields.value = OffsetDateTime.of(2024, 2, 3, 4, 5, 0, 0, ZoneOffset.UTC);
+    assertEquals(
+        new String(json.toJsonBytes(fields), StandardCharsets.UTF_8),
+        "{\"value\":\"2024-02-03T04:05Z\"}");
+    fields.value = OffsetDateTime.of(2024, 2, 3, 4, 5, 0, 1_000_000, ZoneOffset.UTC);
+    assertEquals(
+        new String(json.toJsonBytes(fields), StandardCharsets.UTF_8),
+        "{\"value\":\"2024-02-03T04:05:00.001Z\"}");
+    fields.value = OffsetDateTime.of(2024, 2, 3, 4, 5, 6, 120_000_000, ZoneOffset.UTC);
+    assertEquals(
+        new String(json.toJsonBytes(fields), StandardCharsets.UTF_8),
+        "{\"value\":\"2024-02-03T04:05:06.120Z\"}");
+    fields.value = OffsetDateTime.of(2024, 2, 3, 4, 5, 6, 123_400_000, ZoneOffset.UTC);
+    assertEquals(
+        new String(json.toJsonBytes(fields), StandardCharsets.UTF_8),
+        "{\"value\":\"2024-02-03T04:05:06.123400Z\"}");
+    fields.value = OffsetDateTime.of(2024, 2, 3, 4, 5, 6, 1_000, ZoneOffset.UTC);
+    assertEquals(
+        new String(json.toJsonBytes(fields), StandardCharsets.UTF_8),
+        "{\"value\":\"2024-02-03T04:05:06.000001Z\"}");
+    fields.value = OffsetDateTime.of(2024, 2, 3, 4, 5, 6, 123456789, ZoneOffset.UTC);
+    assertEquals(
+        new String(json.toJsonBytes(fields), StandardCharsets.UTF_8),
+        "{\"value\":\"2024-02-03T04:05:06.123456789Z\"}");
+
+    OffsetDateTime offset =
+        OffsetDateTime.of(2024, 2, 3, 4, 5, 6, 123456789, ZoneOffset.ofHoursMinutes(8, 30));
+    fields.value = offset;
+    assertEquals(
+        new String(json.toJsonBytes(fields), StandardCharsets.UTF_8),
+        "{\"value\":\"" + offset + "\"}");
   }
 
   @Test

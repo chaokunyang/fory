@@ -509,7 +509,7 @@ public final class ScalarCodecs {
     }
 
     @Override
-    final void writeUtf8NonNull(Utf8JsonWriter writer, Object value, JsonTypeResolver resolver) {
+    void writeUtf8NonNull(Utf8JsonWriter writer, Object value, JsonTypeResolver resolver) {
       writer.writeString(toJsonString(value));
     }
 
@@ -746,6 +746,11 @@ public final class ScalarCodecs {
     }
 
     @Override
+    void writeUtf8NonNull(Utf8JsonWriter writer, Object value, JsonTypeResolver resolver) {
+      writer.writeUuid((UUID) value);
+    }
+
+    @Override
     Object fromJsonString(String value) {
       return UUID.fromString(value);
     }
@@ -896,6 +901,11 @@ public final class ScalarCodecs {
     @Override
     String toJsonString(Object value) {
       return value.toString();
+    }
+
+    @Override
+    void writeUtf8NonNull(Utf8JsonWriter writer, Object value, JsonTypeResolver resolver) {
+      writer.writeLocalDate((LocalDate) value);
     }
 
     @Override
@@ -1091,6 +1101,11 @@ public final class ScalarCodecs {
     @Override
     String toJsonString(Object value) {
       return value.toString();
+    }
+
+    @Override
+    void writeUtf8NonNull(Utf8JsonWriter writer, Object value, JsonTypeResolver resolver) {
+      writer.writeOffsetDateTime((OffsetDateTime) value);
     }
 
     @Override

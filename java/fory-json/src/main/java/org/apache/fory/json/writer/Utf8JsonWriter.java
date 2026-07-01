@@ -19,7 +19,10 @@
 
 package org.apache.fory.json.writer;
 
+import java.time.LocalDate;
+import java.time.OffsetDateTime;
 import java.util.Arrays;
+import java.util.UUID;
 import org.apache.fory.json.ForyJsonException;
 import org.apache.fory.json.meta.JsonFieldInfo;
 import org.apache.fory.memory.LittleEndian;
@@ -38,6 +41,8 @@ public final class Utf8JsonWriter extends JsonWriter {
   private static final int INT_ASCII_CONTROL_OFFSET = 0x60606060;
   private static final long ONE_BYTES = 0x0101010101010101L;
   private static final int INT_ONE_BYTES = 0x01010101;
+  private static final byte[] HEX_DIGITS =
+      "0123456789abcdef".getBytes(java.nio.charset.StandardCharsets.ISO_8859_1);
   private static final long QUOTE_BYTES_COMPLEMENT = ~0x2222222222222222L;
   private static final int INT_QUOTE_BYTES_COMPLEMENT = ~0x22222222;
   private static final long BACKSLASH_BYTES_COMPLEMENT = ~0x5C5C5C5C5C5C5C5CL;
@@ -166,6 +171,61 @@ public final class Utf8JsonWriter extends JsonWriter {
       }
     }
     writeStringChars(value);
+  }
+
+  public void writeUuid(UUID value) {
+    ensure(38);
+    byte[] bytes = buffer;
+    int pos = position;
+    bytes[pos++] = (byte) '"';
+    long high = value.getMostSignificantBits();
+    pos = writeHex(bytes, pos, high, 60, 8);
+    bytes[pos++] = (byte) '-';
+    pos = writeHex(bytes, pos, high, 28, 4);
+    bytes[pos++] = (byte) '-';
+    pos = writeHex(bytes, pos, high, 12, 4);
+    long low = value.getLeastSignificantBits();
+    bytes[pos++] = (byte) '-';
+    pos = writeHex(bytes, pos, low, 60, 4);
+    bytes[pos++] = (byte) '-';
+    pos = writeHex(bytes, pos, low, 44, 12);
+    bytes[pos++] = (byte) '"';
+    position = pos;
+  }
+
+  public void writeLocalDate(LocalDate value) {
+    int year = value.getYear();
+    if (year < 0 || year > 9999) {
+      writeString(value.toString());
+      return;
+    }
+    ensure(12);
+    byte[] bytes = buffer;
+    int pos = position;
+    bytes[pos++] = (byte) '"';
+    pos = writeLocalDate(bytes, pos, year, value.getMonthValue(), value.getDayOfMonth());
+    bytes[pos++] = (byte) '"';
+    position = pos;
+  }
+
+  public void writeOffsetDateTime(OffsetDateTime value) {
+    int year = value.getYear();
+    if (year < 0 || year > 9999 || value.getOffset().getTotalSeconds() != 0) {
+      writeString(value.toString());
+      return;
+    }
+    ensure(32);
+    byte[] bytes = buffer;
+    int pos = position;
+    bytes[pos++] = (byte) '"';
+    pos = writeLocalDate(bytes, pos, year, value.getMonthValue(), value.getDayOfMonth());
+    bytes[pos++] = (byte) 'T';
+    pos =
+        writeTime(
+            bytes, pos, value.getHour(), value.getMinute(), value.getSecond(), value.getNano());
+    bytes[pos++] = (byte) 'Z';
+    bytes[pos++] = (byte) '"';
+    position = pos;
   }
 
   private void writeStringChars(String value) {
@@ -784,6 +844,74 @@ public final class Utf8JsonWriter extends JsonWriter {
     int high = divide10000(value);
     int low = value - high * 10000;
     return writePadded8(bytes, pos, high, low);
+  }
+
+  private static int writeHex(byte[] bytes, int pos, long value, int shift, int count) {
+    for (int i = 0; i < count; i++) {
+      bytes[pos++] = HEX_DIGITS[(int) ((value >>> shift) & 0xF)];
+      shift -= 4;
+    }
+    return pos;
+  }
+
+  private static int writeLocalDate(byte[] bytes, int pos, int year, int month, int day) {
+    pos = writePadded4(bytes, pos, year);
+    bytes[pos++] = (byte) '-';
+    pos = writeTwoDigits(bytes, pos, month);
+    bytes[pos++] = (byte) '-';
+    return writeTwoDigits(bytes, pos, day);
+  }
+
+  private static int writeTime(byte[] bytes, int pos, int hour, int minute, int second, int nano) {
+    pos = writeTwoDigits(bytes, pos, hour);
+    bytes[pos++] = (byte) ':';
+    pos = writeTwoDigits(bytes, pos, minute);
+    if (second != 0 || nano != 0) {
+      bytes[pos++] = (byte) ':';
+      pos = writeTwoDigits(bytes, pos, second);
+      if (nano != 0) {
+        bytes[pos++] = (byte) '.';
+        pos = writeNano(bytes, pos, nano);
+      }
+    }
+    return pos;
+  }
+
+  private static int writeNano(byte[] bytes, int pos, int nano) {
+    if (nano % 1_000_000 == 0) {
+      return writePadded3(bytes, pos, nano / 1_000_000);
+    }
+    if (nano % 1000 == 0) {
+      int micros = nano / 1000;
+      int high = micros / 1000;
+      int low = micros - high * 1000;
+      pos = writePadded3(bytes, pos, high);
+      return writePadded3(bytes, pos, low);
+    }
+    int first = nano / 100000000;
+    int rem = nano - first * 100000000;
+    int middle = rem / 10000;
+    int low = rem - middle * 10000;
+    bytes[pos++] = (byte) ('0' + first);
+    pos = writePadded4(bytes, pos, middle);
+    return writePadded4(bytes, pos, low);
+  }
+
+  private static int writePadded3(byte[] bytes, int pos, int value) {
+    int high = value / 100;
+    int rem = value - high * 100;
+    int middle = rem / 10;
+    bytes[pos++] = (byte) ('0' + high);
+    bytes[pos++] = (byte) ('0' + middle);
+    bytes[pos++] = (byte) ('0' + (rem - middle * 10));
+    return pos;
+  }
+
+  private static int writeTwoDigits(byte[] bytes, int pos, int value) {
+    int high = value / 10;
+    bytes[pos++] = (byte) ('0' + high);
+    bytes[pos++] = (byte) ('0' + (value - high * 10));
+    return pos;
   }
 
   private static int divide10000(int value) {

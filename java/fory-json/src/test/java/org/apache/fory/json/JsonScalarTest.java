@@ -128,6 +128,24 @@ public class JsonScalarTest extends ForyJsonTestModels {
   }
 
   @Test
+  public void writeNumericBoundaries() {
+    ForyJson json = ForyJson.builder().build();
+    NumericBoundaries value = new NumericBoundaries();
+    value.intMax = Integer.MAX_VALUE;
+    value.intMin = Integer.MIN_VALUE;
+    value.longMax = Long.MAX_VALUE;
+    value.longMin = Long.MIN_VALUE;
+    value.small = -7;
+    value.text = "ok";
+    String expected =
+        "{\"intMax\":2147483647,\"intMin\":-2147483648,"
+            + "\"longMax\":9223372036854775807,\"longMin\":-9223372036854775808,"
+            + "\"small\":-7,\"text\":\"ok\"}";
+    assertEquals(json.toJson(value), expected);
+    assertEquals(new String(json.toJsonBytes(value), StandardCharsets.UTF_8), expected);
+  }
+
+  @Test
   public void writeReadCoreScalarFields() {
     ForyJson json = ForyJson.builder().build();
     CoreScalarFields value = new CoreScalarFields();

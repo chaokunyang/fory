@@ -31,6 +31,7 @@ public final class Utf8JsonWriter extends JsonWriter {
       "-2147483648".getBytes(java.nio.charset.StandardCharsets.ISO_8859_1);
   private static final byte[] MIN_LONG_BYTES =
       "-9223372036854775808".getBytes(java.nio.charset.StandardCharsets.ISO_8859_1);
+  private static final long EIGHT_DIGITS = 100_000_000L;
   private static final long HIGH_BITS = 0x8080808080808080L;
   private static final int INT_HIGH_BITS = 0x80808080;
   private static final long ASCII_CONTROL_OFFSET = 0x6060606060606060L;
@@ -115,16 +116,7 @@ public final class Utf8JsonWriter extends JsonWriter {
       buffer[position++] = (byte) '-';
       value = -value;
     }
-    if (value <= Integer.MAX_VALUE) {
-      writePositiveIntNoEnsure((int) value);
-      return;
-    }
-    int start = position;
-    do {
-      buffer[position++] = (byte) ('0' + value % 10);
-      value /= 10;
-    } while (value != 0);
-    reverse(start, position - 1);
+    writePositiveLongNoEnsure(value);
   }
 
   @Override
@@ -672,14 +664,6 @@ public final class Utf8JsonWriter extends JsonWriter {
     buffer[position++] = value;
   }
 
-  private void reverse(int start, int end) {
-    while (start < end) {
-      byte tmp = buffer[start];
-      buffer[start++] = buffer[end];
-      buffer[end--] = tmp;
-    }
-  }
-
   private void ensure(int additional) {
     int minCapacity = position + additional;
     if (minCapacity > buffer.length) {
@@ -750,40 +734,56 @@ public final class Utf8JsonWriter extends JsonWriter {
       buffer[position++] = (byte) '-';
       value = -value;
     }
+    writePositiveLongNoEnsure(value);
+  }
+
+  private void writePositiveIntNoEnsure(int value) {
+    position = writePositiveInt(buffer, position, value);
+  }
+
+  private void writePositiveLongNoEnsure(long value) {
     if (value <= Integer.MAX_VALUE) {
       writePositiveIntNoEnsure((int) value);
       return;
     }
-    int start = position;
-    do {
-      buffer[position++] = (byte) ('0' + value % 10);
-      value /= 10;
-    } while (value != 0);
-    reverse(start, position - 1);
-  }
-
-  private void writePositiveIntNoEnsure(int value) {
     byte[] bytes = buffer;
     int pos = position;
+    long high = value / EIGHT_DIGITS;
+    int low = (int) (value - high * EIGHT_DIGITS);
+    if (high <= Integer.MAX_VALUE) {
+      pos = writePositiveInt(bytes, pos, (int) high);
+    } else {
+      long top = high / EIGHT_DIGITS;
+      int middle = (int) (high - top * EIGHT_DIGITS);
+      pos = writePositiveInt(bytes, pos, (int) top);
+      pos = writePadded8Digits(bytes, pos, middle);
+    }
+    position = writePadded8Digits(bytes, pos, low);
+  }
+
+  private static int writePositiveInt(byte[] bytes, int pos, int value) {
     if (value < 10000) {
-      position = writeIntUpTo4(bytes, pos, value);
-      return;
+      return writeIntUpTo4(bytes, pos, value);
     }
     int high = divide10000(value);
     int low = value - high * 10000;
     if (high < 10000) {
       if (high >= 1000) {
-        position = writePadded8(bytes, pos, high, low);
-        return;
+        return writePadded8(bytes, pos, high, low);
       }
       pos = writeIntUpTo4(bytes, pos, high);
-      position = writePadded4(bytes, pos, low);
-      return;
+      return writePadded4(bytes, pos, low);
     }
     int top = divide10000(high);
     int middle = high - top * 10000;
     pos = writeIntUpTo4(bytes, pos, top);
-    position = writePadded8(bytes, pos, middle, low);
+    return writePadded8(bytes, pos, middle, low);
+  }
+
+  private static int writePadded8Digits(byte[] bytes, int pos, int value) {
+    int high = divide10000(value);
+    int low = value - high * 10000;
+    return writePadded8(bytes, pos, high, low);
   }
 
   private static int divide10000(int value) {

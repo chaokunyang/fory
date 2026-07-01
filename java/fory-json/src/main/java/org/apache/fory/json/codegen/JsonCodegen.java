@@ -305,6 +305,8 @@ public final class JsonCodegen {
       case COLLECTION:
       case MAP:
         return true;
+      case OBJECT:
+        return !usesReadObjectCodec(property);
       default:
         return false;
     }
@@ -317,7 +319,7 @@ public final class JsonCodegen {
       case MAP:
         return true;
       case OBJECT:
-        return usesReadObjectCodec(property);
+        return true;
       default:
         return false;
     }

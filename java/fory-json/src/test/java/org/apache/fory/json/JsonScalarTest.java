@@ -29,13 +29,25 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.Optional;
+import org.apache.fory.json.codec.JsonCodec;
 import org.apache.fory.json.data.BoxedScalars;
 import org.apache.fory.json.data.CoreScalarFields;
 import org.apache.fory.json.data.NaturalObjectValue;
 import org.apache.fory.json.data.NaturalValues;
 import org.apache.fory.json.data.NumericBoundaries;
 import org.apache.fory.json.data.PublicFields;
+import org.apache.fory.json.reader.JsonReader;
+import org.apache.fory.json.reader.Latin1JsonReader;
+import org.apache.fory.json.reader.Utf16JsonReader;
+import org.apache.fory.json.reader.Utf8JsonReader;
+import org.apache.fory.json.resolver.JsonTypeInfo;
+import org.apache.fory.json.resolver.JsonTypeResolver;
+import org.apache.fory.json.writer.JsonWriter;
+import org.apache.fory.json.writer.StringJsonWriter;
+import org.apache.fory.json.writer.Utf8JsonWriter;
 import org.testng.annotations.Test;
 
 public class JsonScalarTest extends ForyJsonTestModels {
@@ -225,9 +237,48 @@ public class JsonScalarTest extends ForyJsonTestModels {
     ForyJson json = ForyJson.builder().build();
     LocalDate expected = LocalDate.of(2023, 7, 2);
     assertEquals(json.fromJson("\"2023-07-02T16:00:00.000Z\"", LocalDate.class), expected);
+    assertEquals(
+        json.fromJson(
+            "\"2023-07-02T16:00:00.000Z\"".getBytes(StandardCharsets.UTF_8), LocalDate.class),
+        expected);
     LocalDateFields fields =
         json.fromJson("{\"value\":\"2023-07-02T16:00:00.000Z\"}", LocalDateFields.class);
     assertEquals(fields.value, expected);
+  }
+
+  @Test
+  public void readOffsetDateTime() {
+    ForyJson json = ForyJson.builder().build();
+    OffsetDateTime utc = OffsetDateTime.of(2024, 2, 3, 4, 5, 6, 0, ZoneOffset.UTC);
+    assertEquals(json.fromJson("\"2024-02-03T04:05:06Z\"", OffsetDateTime.class), utc);
+    assertEquals(
+        json.fromJson(
+            "\"2024-02-03T04:05:06\\u005A\"".getBytes(StandardCharsets.UTF_8),
+            OffsetDateTime.class),
+        utc);
+
+    OffsetDateTime nanos =
+        OffsetDateTime.of(2024, 2, 3, 4, 5, 6, 123456789, ZoneOffset.ofHoursMinutes(8, 30));
+    assertEquals(
+        json.fromJson(
+            "\"2024-02-03T04:05:06.123456789+08:30\"".getBytes(StandardCharsets.UTF_8),
+            OffsetDateTime.class),
+        nanos);
+
+    OffsetDateTime minutePrecision =
+        OffsetDateTime.of(2024, 2, 3, 4, 5, 0, 0, ZoneOffset.ofHoursMinutes(-5, -30));
+    OffsetDateTimeFields fields =
+        json.fromJson("{\"value\":\"2024-02-03T04:05-05:30\"}", OffsetDateTimeFields.class);
+    assertEquals(fields.value, minutePrecision);
+  }
+
+  @Test
+  public void objectFieldUsesUtf8Codec() {
+    ForyJson json =
+        ForyJson.builder().registerCodec(ModeAwareValue.class, new ModeAwareCodec()).build();
+    ModeAwareHolder holder =
+        json.fromJson("{\"value\":{}}".getBytes(StandardCharsets.UTF_8), ModeAwareHolder.class);
+    assertEquals(holder.value.mode, "utf8");
   }
 
   @Test
@@ -262,5 +313,65 @@ public class JsonScalarTest extends ForyJsonTestModels {
 
   public static final class LocalDateFields {
     public LocalDate value;
+  }
+
+  public static final class OffsetDateTimeFields {
+    public OffsetDateTime value;
+  }
+
+  public static final class ModeAwareHolder {
+    public ModeAwareValue value;
+  }
+
+  public static final class ModeAwareValue {
+    public final String mode;
+
+    ModeAwareValue(String mode) {
+      this.mode = mode;
+    }
+  }
+
+  private static final class ModeAwareCodec implements JsonCodec {
+    @Override
+    public void write(JsonWriter writer, Object value, JsonTypeResolver resolver) {
+      writer.writeNull();
+    }
+
+    @Override
+    public void writeString(StringJsonWriter writer, Object value, JsonTypeResolver resolver) {
+      writer.writeNull();
+    }
+
+    @Override
+    public void writeUtf8(Utf8JsonWriter writer, Object value, JsonTypeResolver resolver) {
+      writer.writeNull();
+    }
+
+    @Override
+    public Object read(JsonReader reader, JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
+      reader.skipValue();
+      return new ModeAwareValue("generic");
+    }
+
+    @Override
+    public Object readLatin1(
+        Latin1JsonReader reader, JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
+      reader.skipValue();
+      return new ModeAwareValue("latin1");
+    }
+
+    @Override
+    public Object readUtf16(
+        Utf16JsonReader reader, JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
+      reader.skipValue();
+      return new ModeAwareValue("utf16");
+    }
+
+    @Override
+    public Object readUtf8(
+        Utf8JsonReader reader, JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
+      reader.skipValue();
+      return new ModeAwareValue("utf8");
+    }
   }
 }

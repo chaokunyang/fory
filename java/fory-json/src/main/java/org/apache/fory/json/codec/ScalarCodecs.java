@@ -515,7 +515,10 @@ public final class ScalarCodecs {
 
     @Override
     final Object readNonNull(JsonReader reader, JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
-      String value = reader.readString();
+      return readStringValue(reader.readString(), typeInfo);
+    }
+
+    final Object readStringValue(String value, JsonTypeInfo typeInfo) {
       try {
         return fromJsonString(value);
       } catch (ForyJsonException e) {
@@ -897,10 +900,20 @@ public final class ScalarCodecs {
 
     @Override
     Object fromJsonString(String value) {
-      if (value.length() > 10 && value.charAt(10) == 'T') {
-        return LocalDate.parse(value.substring(0, 10));
+      return parseIsoLocalDate(value);
+    }
+
+    @Override
+    public Object readUtf8(
+        Utf8JsonReader reader, JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
+      if (reader.tryReadNullToken()) {
+        return null;
       }
-      return LocalDate.parse(value);
+      try {
+        return reader.readIsoLocalDate();
+      } catch (RuntimeException e) {
+        return readStringValue(reader.readString(), typeInfo);
+      }
     }
   }
 
@@ -1082,8 +1095,144 @@ public final class ScalarCodecs {
 
     @Override
     Object fromJsonString(String value) {
+      return parseIsoOffsetDateTime(value);
+    }
+
+    @Override
+    public Object readUtf8(
+        Utf8JsonReader reader, JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
+      if (reader.tryReadNullToken()) {
+        return null;
+      }
+      try {
+        return reader.readIsoOffsetDateTime();
+      } catch (RuntimeException e) {
+        return readStringValue(reader.readString(), typeInfo);
+      }
+    }
+  }
+
+  private static LocalDate parseIsoLocalDate(String value) {
+    int length = value.length();
+    if (length >= 10
+        && (length == 10 || value.charAt(10) == 'T')
+        && value.charAt(4) == '-'
+        && value.charAt(7) == '-') {
+      try {
+        return LocalDate.of(parse4(value, 0), parse2(value, 5), parse2(value, 8));
+      } catch (RuntimeException e) {
+        if (length > 10 && value.charAt(10) == 'T') {
+          return LocalDate.parse(value.substring(0, 10));
+        }
+        return LocalDate.parse(value);
+      }
+    }
+    return LocalDate.parse(value);
+  }
+
+  private static OffsetDateTime parseIsoOffsetDateTime(String value) {
+    try {
+      // java.time emits these ISO forms, and parsing them directly avoids DateTimeFormatter's
+      // parsed-field maps on JSON scalar hot paths. Uncommon forms still use the JDK parser.
+      return parseIsoOffsetDateTimeFast(value);
+    } catch (RuntimeException e) {
       return OffsetDateTime.parse(value);
     }
+  }
+
+  private static OffsetDateTime parseIsoOffsetDateTimeFast(String value) {
+    int length = value.length();
+    if (length < 17
+        || value.charAt(4) != '-'
+        || value.charAt(7) != '-'
+        || value.charAt(10) != 'T'
+        || value.charAt(13) != ':') {
+      throw new IllegalArgumentException();
+    }
+    int year = parse4(value, 0);
+    int month = parse2(value, 5);
+    int day = parse2(value, 8);
+    int hour = parse2(value, 11);
+    int minute = parse2(value, 14);
+    int second = 0;
+    int nano = 0;
+    int index = 16;
+    if (index < length && value.charAt(index) == ':') {
+      second = parse2(value, index + 1);
+      index += 3;
+      if (index < length && value.charAt(index) == '.') {
+        int fractionStart = index + 1;
+        int fractionEnd = fractionStart;
+        while (fractionEnd < length && isDigit(value.charAt(fractionEnd))) {
+          fractionEnd++;
+        }
+        if (fractionEnd == fractionStart || fractionEnd - fractionStart > 9) {
+          throw new IllegalArgumentException();
+        }
+        nano = parseNano(value, fractionStart, fractionEnd);
+        index = fractionEnd;
+      }
+    }
+    int offsetSeconds = parseOffsetSeconds(value, index);
+    return OffsetDateTime.of(
+        year, month, day, hour, minute, second, nano, ZoneOffset.ofTotalSeconds(offsetSeconds));
+  }
+
+  private static int parseOffsetSeconds(String value, int index) {
+    int length = value.length();
+    char offset = value.charAt(index);
+    if (offset == 'Z') {
+      if (index + 1 != length) {
+        throw new IllegalArgumentException();
+      }
+      return 0;
+    }
+    if (offset != '+' && offset != '-') {
+      throw new IllegalArgumentException();
+    }
+    if (index + 6 > length || value.charAt(index + 3) != ':') {
+      throw new IllegalArgumentException();
+    }
+    int hour = parse2(value, index + 1);
+    int minute = parse2(value, index + 4);
+    int second = 0;
+    int end = index + 6;
+    if (end < length) {
+      if (end + 3 != length || value.charAt(end) != ':') {
+        throw new IllegalArgumentException();
+      }
+      second = parse2(value, end + 1);
+    }
+    int total = hour * 3600 + minute * 60 + second;
+    return offset == '-' ? -total : total;
+  }
+
+  private static int parseNano(String value, int start, int end) {
+    int nano = 0;
+    for (int i = start; i < end; i++) {
+      nano = nano * 10 + value.charAt(i) - '0';
+    }
+    for (int i = end - start; i < 9; i++) {
+      nano *= 10;
+    }
+    return nano;
+  }
+
+  private static int parse4(String value, int index) {
+    return parse2(value, index) * 100 + parse2(value, index + 2);
+  }
+
+  private static int parse2(String value, int index) {
+    int high = value.charAt(index) - '0';
+    int low = value.charAt(index + 1) - '0';
+    if (high < 0 || high > 9 || low < 0 || low > 9) {
+      throw new IllegalArgumentException();
+    }
+    return high * 10 + low;
+  }
+
+  private static boolean isDigit(char c) {
+    return c >= '0' && c <= '9';
   }
 
   public static final class AtomicBooleanCodec extends AbstractJsonCodec {

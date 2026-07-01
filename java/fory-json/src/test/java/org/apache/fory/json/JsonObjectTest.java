@@ -126,7 +126,7 @@ public class JsonObjectTest extends ForyJsonTestModels {
     ForyJson json = ForyJson.builder().writeNullFields(true).build();
     assertEquals(
         json.toJson(new PublicFields()),
-        "{\"active\":true,\"id\":7,\"missing\":null,\"name\":\"fory\"}");
+        "{\"active\":true,\"id\":7,\"name\":\"fory\",\"missing\":null}");
   }
 
   @Test
@@ -134,7 +134,7 @@ public class JsonObjectTest extends ForyJsonTestModels {
     ForyJson json = ForyJson.builder().withPropertyDiscovery(false).build();
     assertEquals(
         json.toJson(new MethodsIgnored()),
-        "{\"hidden\":\"hidden\",\"setterCalls\":0,\"value\":\"field\"}");
+        "{\"setterCalls\":0,\"value\":\"field\",\"hidden\":\"hidden\"}");
     MethodsIgnored value =
         json.fromJson("{\"hidden\":\"json\",\"value\":\"json\"}", MethodsIgnored.class);
     assertEquals(hiddenValue(value), "json");

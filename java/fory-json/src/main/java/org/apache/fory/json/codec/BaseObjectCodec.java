@@ -25,9 +25,9 @@ import java.lang.reflect.Modifier;
 import java.lang.reflect.Type;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.TreeMap;
 import org.apache.fory.annotation.Expose;
 import org.apache.fory.annotation.Internal;
 import org.apache.fory.json.ForyJsonException;
@@ -94,7 +94,7 @@ public abstract class BaseObjectCodec extends AbstractJsonCodec {
     boolean record = RecordUtils.isRecord(type);
     boolean writeExpose = hasWriteExpose(type);
     boolean readExpose = hasReadExpose(type, record);
-    TreeMap<String, FieldBuilder> builders = new TreeMap<>();
+    LinkedHashMap<String, FieldBuilder> builders = new LinkedHashMap<>();
     addFields(type, record, writeExpose, readExpose, propertyDiscoveryEnabled, builders);
     if (propertyDiscoveryEnabled && !record) {
       addAccessors(type, writeExpose, readExpose, builders);
@@ -128,10 +128,15 @@ public abstract class BaseObjectCodec extends AbstractJsonCodec {
       boolean writeExpose,
       boolean readExpose,
       boolean propertyDiscoveryEnabled,
-      TreeMap<String, FieldBuilder> builders) {
+      LinkedHashMap<String, FieldBuilder> builders) {
+    List<Class<?>> hierarchy = new ArrayList<>();
     for (Class<?> current = type;
         current != null && current != Object.class;
         current = current.getSuperclass()) {
+      hierarchy.add(current);
+    }
+    for (int i = hierarchy.size() - 1; i >= 0; i--) {
+      Class<?> current = hierarchy.get(i);
       for (Field field : current.getDeclaredFields()) {
         int modifiers = field.getModifiers();
         if (!isEligibleField(field)) {
@@ -154,7 +159,7 @@ public abstract class BaseObjectCodec extends AbstractJsonCodec {
       Class<?> type,
       boolean writeExpose,
       boolean readExpose,
-      TreeMap<String, FieldBuilder> builders) {
+      LinkedHashMap<String, FieldBuilder> builders) {
     for (Method method : type.getMethods()) {
       if (!isEligibleAccessor(method)) {
         continue;

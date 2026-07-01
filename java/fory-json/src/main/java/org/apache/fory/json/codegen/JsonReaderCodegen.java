@@ -1017,6 +1017,8 @@ final class JsonReaderCodegen {
       case COLLECTION:
       case MAP:
         return true;
+      case OBJECT:
+        return !usesReadObjectCodec(property);
       default:
         return false;
     }
@@ -1029,7 +1031,7 @@ final class JsonReaderCodegen {
       case MAP:
         return true;
       case OBJECT:
-        return usesReadObjectCodec(property);
+        return true;
       default:
         return false;
     }
@@ -1175,16 +1177,7 @@ final class JsonReaderCodegen {
       Class<?> type, JsonFieldInfo property, int id, int readerMode, Expression object) {
     if (property.readRawType() == Object.class
         || !(property.readTypeInfo().codec() instanceof BaseObjectCodec)) {
-      return assignRecord(
-          object,
-          id,
-          new Expression.Invoke(
-              fieldRef("p" + id, JsonFieldInfo.class),
-              "readValue",
-              TypeRef.of(Object.class),
-              true,
-              readerRef(readerMode),
-              typeResolverRef()));
+      return assignRecord(object, id, readResolvedValue(property, id, readerMode));
     }
     return new Expression.If(
         tryReadNullExpr(readerMode),
@@ -1331,12 +1324,7 @@ final class JsonReaderCodegen {
       Expression object) {
     if (property.readRawType() == Object.class
         || !(property.readTypeInfo().codec() instanceof BaseObjectCodec)) {
-      return new Expression.Invoke(
-          fieldRef("p" + id, JsonFieldInfo.class),
-          "read",
-          readerRef(readerMode),
-          object,
-          typeResolverRef());
+      return readResolvedField(builder, property, id, readerMode, object);
     }
     return new Expression.If(
         tryReadNullExpr(readerMode),

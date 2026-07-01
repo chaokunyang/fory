@@ -19,6 +19,9 @@
 
 package org.apache.fory.json.reader;
 
+import java.time.LocalDate;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import org.apache.fory.json.meta.JsonFieldInfo;
 import org.apache.fory.json.meta.JsonFieldNameHash;
 import org.apache.fory.json.meta.JsonFieldTable;
@@ -623,6 +626,28 @@ public final class Utf8JsonReader extends JsonReader {
     return readStringToken();
   }
 
+  public LocalDate readIsoLocalDate() {
+    skipWhitespaceFast();
+    int mark = position;
+    try {
+      return readIsoLocalDateToken();
+    } catch (RuntimeException e) {
+      position = mark;
+      throw e;
+    }
+  }
+
+  public OffsetDateTime readIsoOffsetDateTime() {
+    skipWhitespaceFast();
+    int mark = position;
+    try {
+      return readIsoOffsetDateTimeToken();
+    } catch (RuntimeException e) {
+      position = mark;
+      throw e;
+    }
+  }
+
   private String readStringToken() {
     byte[] bytes = input;
     int inputLength = bytes.length;
@@ -678,6 +703,161 @@ public final class Utf8JsonReader extends JsonReader {
       }
     }
     throw error("Unterminated string");
+  }
+
+  private LocalDate readIsoLocalDateToken() {
+    byte[] bytes = input;
+    int offset = position;
+    int length = bytes.length;
+    if (offset + 12 > length || bytes[offset++] != '"') {
+      throw error("Expected string");
+    }
+    int dateStart = offset;
+    if (bytes[dateStart + 4] != '-' || bytes[dateStart + 7] != '-') {
+      throw new IllegalArgumentException();
+    }
+    int year = parse4(bytes, dateStart);
+    int month = parse2(bytes, dateStart + 5);
+    int day = parse2(bytes, dateStart + 8);
+    int end = dateStart + 10;
+    int ch = bytes[end];
+    if (ch == '"') {
+      position = end + 1;
+      return LocalDate.of(year, month, day);
+    }
+    if (ch == 'T') {
+      position = scanSimpleStringTail(bytes, end + 1);
+      return LocalDate.of(year, month, day);
+    }
+    throw new IllegalArgumentException();
+  }
+
+  private OffsetDateTime readIsoOffsetDateTimeToken() {
+    byte[] bytes = input;
+    int offset = position;
+    int length = bytes.length;
+    if (offset + 19 > length || bytes[offset++] != '"') {
+      throw error("Expected string");
+    }
+    int start = offset;
+    if (bytes[start + 4] != '-'
+        || bytes[start + 7] != '-'
+        || bytes[start + 10] != 'T'
+        || bytes[start + 13] != ':') {
+      throw new IllegalArgumentException();
+    }
+    int year = parse4(bytes, start);
+    int month = parse2(bytes, start + 5);
+    int day = parse2(bytes, start + 8);
+    int hour = parse2(bytes, start + 11);
+    int minute = parse2(bytes, start + 14);
+    int second = 0;
+    int nano = 0;
+    int index = start + 16;
+    if (index < length && bytes[index] == ':') {
+      second = parse2(bytes, index + 1);
+      index += 3;
+      if (index < length && bytes[index] == '.') {
+        int fractionStart = index + 1;
+        int fractionEnd = fractionStart;
+        while (fractionEnd < length && isDigit(bytes[fractionEnd])) {
+          fractionEnd++;
+        }
+        if (fractionEnd == fractionStart || fractionEnd - fractionStart > 9) {
+          throw new IllegalArgumentException();
+        }
+        nano = parseNano(bytes, fractionStart, fractionEnd);
+        index = fractionEnd;
+      }
+    }
+    long offsetAndEnd = parseOffsetAndEnd(bytes, index, length);
+    position = (int) offsetAndEnd;
+    return OffsetDateTime.of(
+        year,
+        month,
+        day,
+        hour,
+        minute,
+        second,
+        nano,
+        ZoneOffset.ofTotalSeconds((int) (offsetAndEnd >> 32)));
+  }
+
+  private int scanSimpleStringTail(byte[] bytes, int offset) {
+    int length = bytes.length;
+    while (offset < length) {
+      int b = bytes[offset++];
+      if (b == '"') {
+        return offset;
+      }
+      if (b == '\\' || b < 0x20 || b < 0) {
+        throw new IllegalArgumentException();
+      }
+    }
+    throw error("Unterminated string");
+  }
+
+  private static long parseOffsetAndEnd(byte[] bytes, int index, int length) {
+    int offset = bytes[index];
+    if (offset == 'Z') {
+      if (index + 1 >= length || bytes[index + 1] != '"') {
+        throw new IllegalArgumentException();
+      }
+      return ((long) (index + 2)) & 0xFFFF_FFFFL;
+    }
+    if (offset != '+' && offset != '-') {
+      throw new IllegalArgumentException();
+    }
+    if (index + 6 >= length || bytes[index + 3] != ':') {
+      throw new IllegalArgumentException();
+    }
+    int hour = parse2(bytes, index + 1);
+    int minute = parse2(bytes, index + 4);
+    int second = 0;
+    int end = index + 6;
+    if (bytes[end] == ':') {
+      if (end + 3 >= length) {
+        throw new IllegalArgumentException();
+      }
+      second = parse2(bytes, end + 1);
+      end += 3;
+    }
+    if (bytes[end] != '"') {
+      throw new IllegalArgumentException();
+    }
+    int total = hour * 3600 + minute * 60 + second;
+    if (offset == '-') {
+      total = -total;
+    }
+    return ((long) total << 32) | ((long) (end + 1) & 0xFFFF_FFFFL);
+  }
+
+  private static int parseNano(byte[] bytes, int start, int end) {
+    int nano = 0;
+    for (int i = start; i < end; i++) {
+      nano = nano * 10 + bytes[i] - '0';
+    }
+    for (int i = end - start; i < 9; i++) {
+      nano *= 10;
+    }
+    return nano;
+  }
+
+  private static int parse4(byte[] bytes, int index) {
+    return parse2(bytes, index) * 100 + parse2(bytes, index + 2);
+  }
+
+  private static int parse2(byte[] bytes, int index) {
+    int high = bytes[index] - '0';
+    int low = bytes[index + 1] - '0';
+    if (high < 0 || high > 9 || low < 0 || low > 9) {
+      throw new IllegalArgumentException();
+    }
+    return high * 10 + low;
+  }
+
+  private static boolean isDigit(byte b) {
+    return b >= '0' && b <= '9';
   }
 
   private String readStringStop(int start, int stop, int b) {

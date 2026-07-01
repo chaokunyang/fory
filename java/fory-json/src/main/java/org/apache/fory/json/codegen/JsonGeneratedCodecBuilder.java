@@ -121,12 +121,15 @@ final class JsonGeneratedCodecBuilder extends CodecBuilder {
   Expression fieldValue(JsonFieldInfo property, Expression object) {
     Method getter = property.writeGetter();
     if (getter != null) {
+      // JSON writers check the returned member value directly. Requesting expression-level null
+      // state here only emits an unused boolean for each nullable getter and bloats generated
+      // object writers enough to hurt C2 inlining.
       return new Expression.Invoke(
           object,
           getter.getName(),
           property.name(),
           TypeRef.of(getter.getGenericReturnType()),
-          !getter.getReturnType().isPrimitive());
+          false);
     }
     return getFieldValue(object, writeDescriptor(property));
   }

@@ -23,7 +23,9 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.UUID;
 import org.apache.fory.json.ForyJsonException;
 import org.apache.fory.json.meta.JsonFieldInfo;
@@ -384,6 +386,22 @@ public final class Utf8JsonWriter extends JsonWriter {
     ensure(prefix.length + value.length() * 3 + 2);
     writeRawNoEnsure(prefix);
     writeStringNoEnsure(value);
+  }
+
+  public void writeStringCollection(Collection<String> values) {
+    writeArrayStart();
+    if (values.getClass() == ArrayList.class) {
+      ArrayList<String> list = (ArrayList<String>) values;
+      for (int i = 0, size = list.size(); i < size; i++) {
+        writeStringElement(i, list.get(i));
+      }
+    } else {
+      int index = 0;
+      for (String value : values) {
+        writeStringElement(index++, value);
+      }
+    }
+    writeArrayEnd();
   }
 
   public void writeStringElement(int index, String value) {

@@ -525,6 +525,9 @@ final class JsonWriterCodegen {
   }
 
   private static Expression writeStringCollection(Expression value, boolean utf8) {
+    if (utf8) {
+      return new Expression.Invoke(writerRef(true), "writeStringCollection", value);
+    }
     return new Expression.ListExpression(
         new Expression.Invoke(writerRef(utf8), "writeArrayStart"),
         new Expression.ForEach(

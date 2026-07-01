@@ -20,6 +20,7 @@
 package org.apache.fory.json.meta;
 
 import java.lang.reflect.Field;
+import java.lang.reflect.Method;
 import java.lang.reflect.Type;
 import java.nio.charset.StandardCharsets;
 import java.util.Collection;
@@ -54,6 +55,9 @@ public final class JsonFieldInfo {
 
   private final String name;
   private final Field writeField;
+  private final Method writeGetter;
+  private final Field readField;
+  private final Method readSetter;
   private final Type writeType;
   private final Class<?> writeRawType;
   private final Type readType;
@@ -98,16 +102,21 @@ public final class JsonFieldInfo {
   public JsonFieldInfo(
       String name,
       Field writeField,
+      Method writeGetter,
       Field readField,
+      Method readSetter,
       JsonFieldAccessor writeAccessor,
       JsonFieldAccessor readAccessor) {
     this.name = name;
     nameHash = JsonFieldNameHash.hash(name);
     this.writeField = writeField;
-    this.writeType = fieldType(writeField);
-    this.writeRawType = fieldRawType(writeField);
-    this.readType = fieldType(readField);
-    this.readRawType = fieldRawType(readField);
+    this.writeGetter = writeGetter;
+    this.readField = readField;
+    this.readSetter = readSetter;
+    this.writeType = writeType(writeField, writeGetter);
+    this.writeRawType = writeRawType(writeField, writeGetter);
+    this.readType = readType(readField, readSetter);
+    this.readRawType = readRawType(readField, readSetter);
     this.writeAccessor = writeAccessor;
     this.readAccessor = readAccessor;
     writeKind = writeRawType == null ? null : kind(writeRawType);
@@ -181,6 +190,10 @@ public final class JsonFieldInfo {
     return writeField;
   }
 
+  public Method writeGetter() {
+    return writeGetter;
+  }
+
   public Type writeType() {
     return writeType;
   }
@@ -226,7 +239,11 @@ public final class JsonFieldInfo {
   }
 
   public Field readField() {
-    return readAccessor == null ? null : readAccessor.field();
+    return readField;
+  }
+
+  public Method readSetter() {
+    return readSetter;
   }
 
   public Class<?> readRawType() {
@@ -247,6 +264,22 @@ public final class JsonFieldInfo {
 
   private static Class<?> fieldRawType(Field field) {
     return field == null ? null : field.getType();
+  }
+
+  private static Type writeType(Field field, Method getter) {
+    return getter == null ? fieldType(field) : getter.getGenericReturnType();
+  }
+
+  private static Class<?> writeRawType(Field field, Method getter) {
+    return getter == null ? fieldRawType(field) : getter.getReturnType();
+  }
+
+  private static Type readType(Field field, Method setter) {
+    return setter == null ? fieldType(field) : setter.getGenericParameterTypes()[0];
+  }
+
+  private static Class<?> readRawType(Field field, Method setter) {
+    return setter == null ? fieldRawType(field) : setter.getParameterTypes()[0];
   }
 
   public void resolveTypes(JsonTypeResolver typeResolver) {

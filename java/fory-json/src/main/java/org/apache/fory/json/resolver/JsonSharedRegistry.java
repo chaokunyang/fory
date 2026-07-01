@@ -79,10 +79,15 @@ public final class JsonSharedRegistry {
   private final CodecRegistry customCodecs;
   private final IdentityHashMap<Class<?>, JsonCodec> exactCodecs;
   private final JsonCodegen codegen;
+  private final boolean propertyDiscoveryEnabled;
 
   public JsonSharedRegistry(
-      boolean codegenEnabled, boolean writeNullFields, CodecRegistry customCodecs) {
+      boolean codegenEnabled,
+      boolean writeNullFields,
+      boolean propertyDiscoveryEnabled,
+      CodecRegistry customCodecs) {
     this.customCodecs = customCodecs.copy();
+    this.propertyDiscoveryEnabled = propertyDiscoveryEnabled;
     exactCodecs = new IdentityHashMap<>();
     codegen = codegenEnabled ? new JsonCodegen(writeNullFields) : null;
     registerExactCodecs();
@@ -188,6 +193,10 @@ public final class JsonSharedRegistry {
 
   public ObjectCodecs compileObject(BaseObjectCodec codec, JsonTypeResolver localResolver) {
     return codegen == null ? null : codegen.compile(codec, localResolver);
+  }
+
+  boolean propertyDiscoveryEnabled() {
+    return propertyDiscoveryEnabled;
   }
 
   private void registerExactCodecs() {

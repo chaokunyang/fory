@@ -119,6 +119,15 @@ final class JsonGeneratedCodecBuilder extends CodecBuilder {
   }
 
   Expression fieldValue(JsonFieldInfo property, Expression object) {
+    Method getter = property.writeGetter();
+    if (getter != null) {
+      return new Expression.Invoke(
+          object,
+          getter.getName(),
+          property.name(),
+          TypeRef.of(getter.getGenericReturnType()),
+          !getter.getReturnType().isPrimitive());
+    }
     return getFieldValue(object, writeDescriptor(property));
   }
 
@@ -127,6 +136,15 @@ final class JsonGeneratedCodecBuilder extends CodecBuilder {
   }
 
   Expression setField(JsonFieldInfo property, Expression object, Expression value) {
+    Method setter = property.readSetter();
+    if (setter != null) {
+      Class<?> rawType = setter.getParameterTypes()[0];
+      TypeRef<?> typeRef = TypeRef.of(setter.getGenericParameterTypes()[0]);
+      if (!rawType.isAssignableFrom(value.type().getRawType())) {
+        value = tryInlineCast(value, typeRef);
+      }
+      return new Expression.Invoke(object, setter.getName(), value);
+    }
     return setFieldValue(
         object,
         readDescriptor(property),

@@ -55,10 +55,16 @@ public final class ForyJson {
   private final AtomicReferenceArray<PooledState> slots;
 
   ForyJson(
-      boolean writeNullFields, boolean codegenEnabled, int maxDepth, CodecRegistry codecRegistry) {
+      boolean writeNullFields,
+      boolean codegenEnabled,
+      boolean propertyDiscoveryEnabled,
+      int maxDepth,
+      CodecRegistry codecRegistry) {
     this.writeNullFields = writeNullFields;
     this.maxDepth = maxDepth;
-    sharedRegistry = new JsonSharedRegistry(codegenEnabled, writeNullFields, codecRegistry);
+    sharedRegistry =
+        new JsonSharedRegistry(
+            codegenEnabled, writeNullFields, propertyDiscoveryEnabled, codecRegistry);
     poolSize = DEFAULT_POOL_SIZE;
     primarySlot =
         new AtomicReference<>(

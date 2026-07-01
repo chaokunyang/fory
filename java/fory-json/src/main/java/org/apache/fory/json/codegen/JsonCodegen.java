@@ -21,6 +21,7 @@ package org.apache.fory.json.codegen;
 
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
+import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.util.Collection;
 import java.util.Map;
@@ -203,10 +204,10 @@ public final class JsonCodegen {
 
   private boolean canCompileWrite(JsonFieldInfo property) {
     Field field = property.writeField();
-    if (field == null) {
+    if (field == null && property.writeGetter() == null) {
       return false;
     }
-    if (!isRecordField(property) && property.writeField() == null) {
+    if (property.writeGetter() != null && !canCall(property.writeGetter())) {
       return false;
     }
     Class<?> rawType = property.writeRawType();
@@ -221,7 +222,12 @@ public final class JsonCodegen {
     if (!record && property.readAccessor() == null) {
       return false;
     }
-    if (!record && property.readAccessor().coreAccessor() == null) {
+    if (!record && property.readSetter() != null && !canCall(property.readSetter())) {
+      return false;
+    }
+    if (!record
+        && property.readSetter() == null
+        && property.readAccessor().coreAccessor() == null) {
       return false;
     }
     Class<?> rawType = property.readRawType();
@@ -234,6 +240,11 @@ public final class JsonCodegen {
 
   private boolean canCompile(Class<?> type) {
     return CodeGenerator.sourcePublicAccessible(type) && isVisible(type);
+  }
+
+  private boolean canCall(Method method) {
+    return Modifier.isPublic(method.getModifiers())
+        && CodeGenerator.sourcePublicAccessible(method.getDeclaringClass());
   }
 
   private boolean isVisible(Class<?> type) {

@@ -130,8 +130,8 @@ public class JsonObjectTest extends ForyJsonTestModels {
   }
 
   @Test
-  public void ignoreMethods() {
-    ForyJson json = ForyJson.builder().build();
+  public void fieldOnlyModeIgnoresMethods() {
+    ForyJson json = ForyJson.builder().withPropertyDiscovery(false).build();
     assertEquals(
         json.toJson(new MethodsIgnored()),
         "{\"hidden\":\"hidden\",\"setterCalls\":0,\"value\":\"field\"}");

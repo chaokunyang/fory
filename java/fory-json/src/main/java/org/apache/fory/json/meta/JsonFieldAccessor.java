@@ -20,6 +20,9 @@
 package org.apache.fory.json.meta;
 
 import java.lang.reflect.Field;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
+import org.apache.fory.json.ForyJsonException;
 import org.apache.fory.reflect.FieldAccessor;
 
 public abstract class JsonFieldAccessor {
@@ -27,9 +30,21 @@ public abstract class JsonFieldAccessor {
     throw new UnsupportedOperationException();
   }
 
-  public abstract Field field();
+  public Field field() {
+    return null;
+  }
 
-  public abstract FieldAccessor coreAccessor();
+  public Method getter() {
+    return null;
+  }
+
+  public Method setter() {
+    return null;
+  }
+
+  public FieldAccessor coreAccessor() {
+    return null;
+  }
 
   public boolean getBoolean(Object target) {
     return (Boolean) getObject(target);
@@ -101,6 +116,14 @@ public abstract class JsonFieldAccessor {
 
   public static JsonFieldAccessor forField(Field field) {
     return new FieldJsonAccessor(FieldAccessor.createAccessor(field));
+  }
+
+  public static JsonFieldAccessor forGetter(Method getter) {
+    return new GetterJsonAccessor(getter);
+  }
+
+  public static JsonFieldAccessor forSetter(Method setter) {
+    return new SetterJsonAccessor(setter);
   }
 
   private static final class FieldJsonAccessor extends JsonFieldAccessor {
@@ -209,5 +232,57 @@ public abstract class JsonFieldAccessor {
     public void putChar(Object target, char value) {
       accessor.putChar(target, value);
     }
+  }
+
+  private static final class GetterJsonAccessor extends JsonFieldAccessor {
+    private final Method getter;
+
+    private GetterJsonAccessor(Method getter) {
+      this.getter = getter;
+      getter.setAccessible(true);
+    }
+
+    @Override
+    public Method getter() {
+      return getter;
+    }
+
+    @Override
+    public Object getObject(Object target) {
+      try {
+        return getter.invoke(target);
+      } catch (IllegalAccessException | InvocationTargetException e) {
+        throw accessException(getter, e);
+      }
+    }
+  }
+
+  private static final class SetterJsonAccessor extends JsonFieldAccessor {
+    private final Method setter;
+
+    private SetterJsonAccessor(Method setter) {
+      this.setter = setter;
+      setter.setAccessible(true);
+    }
+
+    @Override
+    public Method setter() {
+      return setter;
+    }
+
+    @Override
+    public void putObject(Object target, Object value) {
+      try {
+        setter.invoke(target, value);
+      } catch (IllegalAccessException | InvocationTargetException e) {
+        throw accessException(setter, e);
+      }
+    }
+  }
+
+  private static ForyJsonException accessException(Method method, ReflectiveOperationException e) {
+    Throwable cause =
+        e instanceof InvocationTargetException ? ((InvocationTargetException) e).getCause() : e;
+    return new ForyJsonException("Cannot access JSON property method " + method, cause);
   }
 }

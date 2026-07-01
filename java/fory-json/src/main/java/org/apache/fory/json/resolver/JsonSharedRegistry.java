@@ -19,12 +19,14 @@
 
 package org.apache.fory.json.resolver;
 
+import java.io.File;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.net.URI;
 import java.net.URL;
 import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
+import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -121,6 +123,12 @@ public final class JsonSharedRegistry {
     if (ByteBuffer.class.isAssignableFrom(rawType)) {
       return ScalarCodecs.ByteBufferCodec.INSTANCE;
     }
+    if (File.class.isAssignableFrom(rawType)) {
+      return ScalarCodecs.FileCodec.INSTANCE;
+    }
+    if (Path.class.isAssignableFrom(rawType)) {
+      return ScalarCodecs.PathCodec.INSTANCE;
+    }
     if (Collection.class.isAssignableFrom(rawType)) {
       return CollectionCodec.create(rawType, typeRef, localResolver);
     }
@@ -209,8 +217,10 @@ public final class JsonSharedRegistry {
     exactCodecs.put(AtomicInteger.class, ScalarCodecs.AtomicIntegerCodec.INSTANCE);
     exactCodecs.put(AtomicLong.class, ScalarCodecs.AtomicLongCodec.INSTANCE);
     exactCodecs.put(Currency.class, ScalarCodecs.CurrencyCodec.INSTANCE);
+    exactCodecs.put(File.class, ScalarCodecs.FileCodec.INSTANCE);
     exactCodecs.put(URI.class, ScalarCodecs.UriCodec.INSTANCE);
     exactCodecs.put(URL.class, ScalarCodecs.UrlCodec.INSTANCE);
+    exactCodecs.put(Path.class, ScalarCodecs.PathCodec.INSTANCE);
     exactCodecs.put(Pattern.class, ScalarCodecs.PatternCodec.INSTANCE);
     exactCodecs.put(UUID.class, ScalarCodecs.UuidCodec.INSTANCE);
     exactCodecs.put(Locale.class, ScalarCodecs.LocaleCodec.INSTANCE);

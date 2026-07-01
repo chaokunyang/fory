@@ -22,7 +22,13 @@ package org.apache.fory.json;
 import static org.testng.Assert.assertEquals;
 import static org.testng.Assert.assertThrows;
 
+import java.io.File;
+import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.Optional;
 import org.apache.fory.json.data.BoxedScalars;
 import org.apache.fory.json.data.CoreScalarFields;
@@ -158,11 +164,82 @@ public class JsonScalarTest extends ForyJsonTestModels {
   }
 
   @Test
+  public void readUntypedLargeInteger() {
+    ForyJson json = ForyJson.builder().build();
+    BigInteger unsigned = new BigInteger("18446744073709550616");
+    assertEquals(json.fromJson(unsigned.toString(), Object.class), unsigned);
+    JSONObject object = json.fromJson("{\"count\":18446744073709550616}", JSONObject.class);
+    assertEquals(object.get("count"), unsigned);
+  }
+
+  @Test
+  public void readPrimitiveClassName() {
+    ForyJson json = ForyJson.builder().build();
+    assertEquals(json.toJson(int.class), "\"int\"");
+    assertEquals(json.fromJson("\"int\"", Class.class), int.class);
+    ClassArrayFields fields =
+        json.fromJson("{\"types\":[\"java.lang.String\",\"int\"]}", ClassArrayFields.class);
+    assertEquals(fields.types, new Class<?>[] {String.class, int.class});
+  }
+
+  @Test
+  public void writeReadFileAndPath() {
+    ForyJson json = ForyJson.builder().build();
+    File file = new File("/tmp/fory-json-file.txt");
+    Path path = Paths.get("/tmp/fory-json-path.txt");
+    assertEquals(json.toJson(file), "\"/tmp/fory-json-file.txt\"");
+    assertEquals(json.fromJson("\"/tmp/fory-json-file.txt\"", File.class), file);
+    assertEquals(json.toJson(path), "\"/tmp/fory-json-path.txt\"");
+    assertEquals(json.fromJson("\"/tmp/fory-json-path.txt\"", Path.class), path);
+
+    FilePathFields fields =
+        json.fromJson(
+            "{\"file\":\"/tmp/fory-json-file.txt\",\"path\":\"/tmp/fory-json-path.txt\"}",
+            FilePathFields.class);
+    assertEquals(fields.file, file);
+    assertEquals(fields.path, path);
+    assertEquals(
+        json.toJson(fields),
+        "{\"file\":\"/tmp/fory-json-file.txt\",\"path\":\"/tmp/fory-json-path.txt\"}");
+  }
+
+  @Test
+  public void readLocalDateFromDateTime() {
+    ForyJson json = ForyJson.builder().build();
+    LocalDate expected = LocalDate.of(2023, 7, 2);
+    assertEquals(json.fromJson("\"2023-07-02T16:00:00.000Z\"", LocalDate.class), expected);
+    LocalDateFields fields =
+        json.fromJson("{\"value\":\"2023-07-02T16:00:00.000Z\"}", LocalDateFields.class);
+    assertEquals(fields.value, expected);
+  }
+
+  @Test
+  public void wrapStringScalarParseErrors() {
+    ForyJson json = ForyJson.builder().build();
+    assertThrows(
+        ForyJsonException.class,
+        () -> json.fromJson("\"2024-02-03 04:05:06\"", LocalDateTime.class));
+  }
+
+  @Test
   public void rejectLeadingZero() {
     ForyJson json = ForyJson.builder().build();
     assertThrows(ForyJsonException.class, () -> json.fromJson("01", int.class));
     assertThrows(
         ForyJsonException.class,
         () -> json.fromJson("{\"id\":01}".getBytes(StandardCharsets.UTF_8), PublicFields.class));
+  }
+
+  public static final class ClassArrayFields {
+    public Class<?>[] types;
+  }
+
+  public static final class FilePathFields {
+    public File file;
+    public Path path;
+  }
+
+  public static final class LocalDateFields {
+    public LocalDate value;
   }
 }

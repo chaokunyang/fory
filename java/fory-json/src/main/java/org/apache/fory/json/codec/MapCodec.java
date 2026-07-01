@@ -60,11 +60,11 @@ public abstract class MapCodec extends AbstractJsonCodec {
   public static MapCodec create(Class<?> rawType, TypeRef<?> typeRef, JsonTypeResolver resolver) {
     Tuple2<TypeRef<?>, TypeRef<?>> keyValueTypeRefs = CodecUtils.mapKeyValueTypeRefs(typeRef);
     Type keyType = keyValueTypeRefs.f0.getType();
-    Class<?> keyRawType = CodecUtils.rawType(keyType, String.class);
+    Class<?> keyRawType = CodecUtils.rawType(keyType, Object.class);
     Type valueType = keyValueTypeRefs.f1.getType();
     Class<?> valueRawType = CodecUtils.rawType(valueType, Object.class);
     MapFactory factory = mapFactory(rawType, keyRawType);
-    if (keyRawType == String.class || keyRawType == Object.class) {
+    if (keyRawType == String.class) {
       if (valueRawType == String.class) {
         return new StringStringMapCodec(typeRef, factory);
       }
@@ -95,6 +95,10 @@ public abstract class MapCodec extends AbstractJsonCodec {
       if (valueRawType == BigDecimal.class) {
         return new StringBigDecimalMapCodec(typeRef, factory);
       }
+    }
+    if (keyRawType == Object.class) {
+      return new GenericMapCodec(
+          typeRef, factory, MapKeyCodec.OBJECT, valueType, valueRawType, resolver);
     }
     if (valueRawType == String.class && isNumericKey(keyRawType)) {
       return new NumberStringMapCodec(typeRef, factory, MapKeyCodec.of(keyRawType));
@@ -843,6 +847,30 @@ public abstract class MapCodec extends AbstractJsonCodec {
             return name;
           }
         };
+    MapKeyCodec OBJECT =
+        new MapKeyCodec() {
+          @Override
+          public String toName(Object key) {
+            if (key == null) {
+              throw new ForyJsonException("JSON map key cannot be null");
+            }
+            if (key instanceof String) {
+              return (String) key;
+            }
+            if (key instanceof Number || key instanceof Boolean || key instanceof Character) {
+              return key.toString();
+            }
+            if (key instanceof Enum) {
+              return ((Enum<?>) key).name();
+            }
+            throw new ForyJsonException("Unsupported JSON map key type " + key.getClass());
+          }
+
+          @Override
+          public Object fromName(String name) {
+            return name;
+          }
+        };
 
     String toName(Object key);
 
@@ -857,8 +885,11 @@ public abstract class MapCodec extends AbstractJsonCodec {
     }
 
     static MapKeyCodec of(Class<?> rawType) {
-      if (rawType == String.class || rawType == Object.class) {
+      if (rawType == String.class) {
         return STRING;
+      }
+      if (rawType == Object.class) {
+        return OBJECT;
       }
       if (rawType.isEnum()) {
         return new EnumKeyCodec(rawType);

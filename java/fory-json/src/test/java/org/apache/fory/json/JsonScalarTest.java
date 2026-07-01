@@ -23,6 +23,7 @@ import static org.testng.Assert.assertEquals;
 import static org.testng.Assert.assertThrows;
 
 import java.io.File;
+import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
@@ -231,10 +232,12 @@ public class JsonScalarTest extends ForyJsonTestModels {
     ForyJson json = ForyJson.builder().build();
     Utf8ScalarFields fields = new Utf8ScalarFields();
     fields.uuid = UUID.fromString("123e4567-e89b-12d3-a456-426614174000");
+    fields.decimal = new BigDecimal("12345.6789");
     fields.date = LocalDate.of(2024, 2, 3);
     fields.timestamp = OffsetDateTime.of(2024, 2, 3, 4, 5, 6, 123456789, ZoneOffset.UTC);
     String expected =
         "{\"uuid\":\"123e4567-e89b-12d3-a456-426614174000\","
+            + "\"decimal\":12345.6789,"
             + "\"date\":\"2024-02-03\","
             + "\"timestamp\":\"2024-02-03T04:05:06.123456789Z\"}";
     assertEquals(new String(json.toJsonBytes(fields), StandardCharsets.UTF_8), expected);
@@ -401,6 +404,7 @@ public class JsonScalarTest extends ForyJsonTestModels {
 
   public static final class Utf8ScalarFields {
     public UUID uuid;
+    public BigDecimal decimal;
     public LocalDate date;
     public OffsetDateTime timestamp;
   }

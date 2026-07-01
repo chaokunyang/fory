@@ -19,6 +19,7 @@
 
 package org.apache.fory.json.codegen;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.util.UUID;
@@ -518,6 +519,11 @@ final class JsonWriterCodegen {
       writerMethod = "writeLocalDate";
     } else if (rawType == OffsetDateTime.class) {
       writerMethod = "writeOffsetDateTime";
+    } else if (rawType == BigDecimal.class) {
+      return new Expression.Invoke(
+          writerRef(true),
+          "writeNumber",
+          new Expression.Invoke(value, "toString", TypeRef.of(String.class)).inline());
     } else {
       return null;
     }

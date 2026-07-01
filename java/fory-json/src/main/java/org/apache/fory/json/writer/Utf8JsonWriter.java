@@ -19,6 +19,8 @@
 
 package org.apache.fory.json.writer;
 
+import java.io.IOException;
+import java.io.OutputStream;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.util.Arrays;
@@ -92,6 +94,14 @@ public final class Utf8JsonWriter extends JsonWriter {
 
   public byte[] toJsonBytes() {
     return Arrays.copyOf(buffer, position);
+  }
+
+  public void writeTo(OutputStream output) {
+    try {
+      output.write(buffer, 0, position);
+    } catch (IOException e) {
+      throw new ForyJsonException("Cannot write JSON output", e);
+    }
   }
 
   @Override

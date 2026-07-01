@@ -19,7 +19,9 @@
 
 package org.apache.fory.json;
 
+import java.io.OutputStream;
 import java.lang.reflect.Type;
+import java.util.Objects;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.atomic.AtomicReferenceArray;
 import org.apache.fory.json.codec.GeneratedObjectCodec;
@@ -111,6 +113,27 @@ public final class ForyJson {
         typeInfo.codec().writeUtf8(writer, value, resolver);
       }
       return writer.toJsonBytes();
+    } finally {
+      writer.reset();
+      release(entry);
+    }
+  }
+
+  /** Serializes {@code value} as UTF-8 JSON to {@code output}. */
+  public void writeJsonTo(Object value, OutputStream output) {
+    Objects.requireNonNull(output, "output");
+    PooledState entry = acquire();
+    JsonState state = entry.state;
+    Utf8JsonWriter writer = state.utf8Writer;
+    try {
+      if (value == null) {
+        writer.writeNull();
+      } else {
+        JsonTypeResolver resolver = state.typeResolver;
+        JsonTypeInfo typeInfo = state.rootTypeInfo(value.getClass());
+        typeInfo.codec().writeUtf8(writer, value, resolver);
+      }
+      writer.writeTo(output);
     } finally {
       writer.reset();
       release(entry);

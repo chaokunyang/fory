@@ -56,8 +56,11 @@ import java.util.TimeZone;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicIntegerArray;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicLongArray;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.atomic.AtomicReferenceArray;
 import java.util.regex.Pattern;
 import org.apache.fory.json.ForyJsonException;
 import org.apache.fory.json.codec.ArrayCodec;
@@ -119,6 +122,10 @@ public final class JsonSharedRegistry {
     }
     if (rawType == AtomicReference.class) {
       return new ScalarCodecs.AtomicReferenceCodec(
+          CodecUtils.elementType(typeRef.getType()), localResolver);
+    }
+    if (rawType == AtomicReferenceArray.class) {
+      return new ScalarCodecs.AtomicReferenceArrayCodec(
           CodecUtils.elementType(typeRef.getType()), localResolver);
     }
     if (Calendar.class.isAssignableFrom(rawType)) {
@@ -228,7 +235,9 @@ public final class JsonSharedRegistry {
     exactCodecs.put(StringBuffer.class, ScalarCodecs.StringBufferCodec.INSTANCE);
     exactCodecs.put(AtomicBoolean.class, ScalarCodecs.AtomicBooleanCodec.INSTANCE);
     exactCodecs.put(AtomicInteger.class, ScalarCodecs.AtomicIntegerCodec.INSTANCE);
+    exactCodecs.put(AtomicIntegerArray.class, ScalarCodecs.AtomicIntegerArrayCodec.INSTANCE);
     exactCodecs.put(AtomicLong.class, ScalarCodecs.AtomicLongCodec.INSTANCE);
+    exactCodecs.put(AtomicLongArray.class, ScalarCodecs.AtomicLongArrayCodec.INSTANCE);
     exactCodecs.put(Currency.class, ScalarCodecs.CurrencyCodec.INSTANCE);
     exactCodecs.put(File.class, ScalarCodecs.FileCodec.INSTANCE);
     exactCodecs.put(URI.class, ScalarCodecs.UriCodec.INSTANCE);

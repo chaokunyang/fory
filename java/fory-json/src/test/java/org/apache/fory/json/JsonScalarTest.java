@@ -34,6 +34,10 @@ import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicReference;
 import org.apache.fory.json.codec.JsonCodec;
 import org.apache.fory.json.data.BoxedScalars;
 import org.apache.fory.json.data.CoreScalarFields;
@@ -50,6 +54,7 @@ import org.apache.fory.json.resolver.JsonTypeResolver;
 import org.apache.fory.json.writer.JsonWriter;
 import org.apache.fory.json.writer.StringJsonWriter;
 import org.apache.fory.json.writer.Utf8JsonWriter;
+import org.apache.fory.reflect.TypeRef;
 import org.testng.annotations.Test;
 
 public class JsonScalarTest extends ForyJsonTestModels {
@@ -180,6 +185,25 @@ public class JsonScalarTest extends ForyJsonTestModels {
     assertEquals(read.uri, value.uri);
     assertEquals(read.url, value.url);
     assertEquals(read.uuid, value.uuid);
+  }
+
+  @Test
+  public void writeReadAtomicScalars() {
+    ForyJson json = ForyJson.builder().build();
+    assertEquals(json.toJson(new AtomicBoolean(true)), "true");
+    assertEquals(json.fromJson("false", AtomicBoolean.class).get(), false);
+    assertEquals(json.toJson(new AtomicInteger(12)), "12");
+    assertEquals(json.fromJson("13", AtomicInteger.class).get(), 13);
+    assertEquals(json.toJson(new AtomicLong(14L)), "14");
+    assertEquals(json.fromJson("15", AtomicLong.class).get(), 15L);
+    assertEquals(json.toJson(new AtomicReference<>("value")), "\"value\"");
+
+    AtomicReference<String> value =
+        json.fromJson("\"typed\"", new TypeRef<AtomicReference<String>>() {});
+    assertEquals(value.get(), "typed");
+    AtomicReference<String> nullValue =
+        json.fromJson("null", new TypeRef<AtomicReference<String>>() {});
+    assertEquals(nullValue.get(), null);
   }
 
   @Test

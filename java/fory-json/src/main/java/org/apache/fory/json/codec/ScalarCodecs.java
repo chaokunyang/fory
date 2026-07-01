@@ -56,8 +56,11 @@ import java.util.TimeZone;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicIntegerArray;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicLongArray;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.atomic.AtomicReferenceArray;
 import java.util.regex.Pattern;
 import org.apache.fory.json.ForyJsonException;
 import org.apache.fory.json.meta.JsonAsciiToken;
@@ -1348,6 +1351,160 @@ public final class ScalarCodecs {
     @Override
     void writeUtf8NonNull(Utf8JsonWriter writer, Object value, JsonTypeResolver resolver) {
       valueCodec.writeUtf8(writer, ((AtomicReference<?>) value).get(), resolver);
+    }
+  }
+
+  public static final class AtomicIntegerArrayCodec extends AbstractJsonCodec {
+    public static final AtomicIntegerArrayCodec INSTANCE = new AtomicIntegerArrayCodec();
+
+    @Override
+    void writeNonNull(JsonWriter writer, Object value, JsonTypeResolver resolver) {
+      AtomicIntegerArray array = (AtomicIntegerArray) value;
+      writer.writeArrayStart();
+      for (int i = 0, length = array.length(); i < length; i++) {
+        writer.writeComma(i);
+        writer.writeInt(array.get(i));
+      }
+      writer.writeArrayEnd();
+    }
+
+    @Override
+    void writeUtf8NonNull(Utf8JsonWriter writer, Object value, JsonTypeResolver resolver) {
+      AtomicIntegerArray array = (AtomicIntegerArray) value;
+      writer.writeArrayStart();
+      for (int i = 0, length = array.length(); i < length; i++) {
+        writer.writeComma(i);
+        writer.writeInt(array.get(i));
+      }
+      writer.writeArrayEnd();
+    }
+
+    @Override
+    Object readNonNull(JsonReader reader, JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
+      reader.enterDepth();
+      reader.expect('[');
+      if (reader.consume(']')) {
+        reader.exitDepth();
+        return new AtomicIntegerArray(0);
+      }
+      int[] values = new int[8];
+      int size = 0;
+      do {
+        if (reader.tryReadNull()) {
+          throw new ForyJsonException("Cannot read null into AtomicIntegerArray element");
+        }
+        if (size == values.length) {
+          values = Arrays.copyOf(values, values.length << 1);
+        }
+        values[size++] = reader.readInt();
+      } while (reader.consume(','));
+      reader.expect(']');
+      reader.exitDepth();
+      return new AtomicIntegerArray(Arrays.copyOf(values, size));
+    }
+  }
+
+  public static final class AtomicLongArrayCodec extends AbstractJsonCodec {
+    public static final AtomicLongArrayCodec INSTANCE = new AtomicLongArrayCodec();
+
+    @Override
+    void writeNonNull(JsonWriter writer, Object value, JsonTypeResolver resolver) {
+      AtomicLongArray array = (AtomicLongArray) value;
+      writer.writeArrayStart();
+      for (int i = 0, length = array.length(); i < length; i++) {
+        writer.writeComma(i);
+        writer.writeLong(array.get(i));
+      }
+      writer.writeArrayEnd();
+    }
+
+    @Override
+    void writeUtf8NonNull(Utf8JsonWriter writer, Object value, JsonTypeResolver resolver) {
+      AtomicLongArray array = (AtomicLongArray) value;
+      writer.writeArrayStart();
+      for (int i = 0, length = array.length(); i < length; i++) {
+        writer.writeComma(i);
+        writer.writeLong(array.get(i));
+      }
+      writer.writeArrayEnd();
+    }
+
+    @Override
+    Object readNonNull(JsonReader reader, JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
+      reader.enterDepth();
+      reader.expect('[');
+      if (reader.consume(']')) {
+        reader.exitDepth();
+        return new AtomicLongArray(0);
+      }
+      long[] values = new long[8];
+      int size = 0;
+      do {
+        if (reader.tryReadNull()) {
+          throw new ForyJsonException("Cannot read null into AtomicLongArray element");
+        }
+        if (size == values.length) {
+          values = Arrays.copyOf(values, values.length << 1);
+        }
+        values[size++] = reader.readLong();
+      } while (reader.consume(','));
+      reader.expect(']');
+      reader.exitDepth();
+      return new AtomicLongArray(Arrays.copyOf(values, size));
+    }
+  }
+
+  public static final class AtomicReferenceArrayCodec extends AbstractJsonCodec {
+    private final JsonTypeInfo valueTypeInfo;
+    private final JsonCodec valueCodec;
+
+    public AtomicReferenceArrayCodec(java.lang.reflect.Type valueType, JsonTypeResolver resolver) {
+      Class<?> valueRawType = CodecUtils.rawType(valueType, Object.class);
+      valueTypeInfo = resolver.getTypeInfo(valueType, valueRawType);
+      valueCodec = valueTypeInfo.codec();
+    }
+
+    @Override
+    void writeNonNull(JsonWriter writer, Object value, JsonTypeResolver resolver) {
+      AtomicReferenceArray<?> array = (AtomicReferenceArray<?>) value;
+      writer.writeArrayStart();
+      for (int i = 0, length = array.length(); i < length; i++) {
+        writer.writeComma(i);
+        valueCodec.write(writer, array.get(i), resolver);
+      }
+      writer.writeArrayEnd();
+    }
+
+    @Override
+    void writeUtf8NonNull(Utf8JsonWriter writer, Object value, JsonTypeResolver resolver) {
+      AtomicReferenceArray<?> array = (AtomicReferenceArray<?>) value;
+      writer.writeArrayStart();
+      for (int i = 0, length = array.length(); i < length; i++) {
+        writer.writeComma(i);
+        valueCodec.writeUtf8(writer, array.get(i), resolver);
+      }
+      writer.writeArrayEnd();
+    }
+
+    @Override
+    Object readNonNull(JsonReader reader, JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
+      reader.enterDepth();
+      reader.expect('[');
+      if (reader.consume(']')) {
+        reader.exitDepth();
+        return new AtomicReferenceArray<>(0);
+      }
+      Object[] values = new Object[8];
+      int size = 0;
+      do {
+        if (size == values.length) {
+          values = Arrays.copyOf(values, values.length << 1);
+        }
+        values[size++] = valueCodec.read(reader, valueTypeInfo, resolver);
+      } while (reader.consume(','));
+      reader.expect(']');
+      reader.exitDepth();
+      return new AtomicReferenceArray<>(Arrays.copyOf(values, size));
     }
   }
 

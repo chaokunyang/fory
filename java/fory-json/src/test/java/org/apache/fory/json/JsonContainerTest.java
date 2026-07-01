@@ -31,6 +31,9 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicIntegerArray;
+import java.util.concurrent.atomic.AtomicLongArray;
+import java.util.concurrent.atomic.AtomicReferenceArray;
 import org.apache.fory.json.data.FastContainers;
 import org.apache.fory.json.data.MapKeyFields;
 import org.apache.fory.json.data.Nested;
@@ -261,6 +264,76 @@ public class JsonContainerTest extends ForyJsonTestModels {
     assertThrows(ForyJsonException.class, () -> json.fromJson("[1,null]", int[].class));
   }
 
+  @Test
+  public void writeReadBoxedPrimitiveArrays() {
+    ForyJson json = ForyJson.builder().build();
+    assertEquals(json.toJson(new Integer[] {1, null, -2}), "[1,null,-2]");
+    assertEquals(
+        json.fromJson("[1,null,-2]".getBytes(StandardCharsets.UTF_8), Integer[].class),
+        new Integer[] {1, null, -2});
+    assertEquals(
+        json.fromJson("[9223372036854775807,null,-9]", Long[].class),
+        new Long[] {Long.MAX_VALUE, null, -9L});
+    assertEquals(
+        json.fromJson("[true,null,false]".getBytes(StandardCharsets.UTF_8), Boolean[].class),
+        new Boolean[] {Boolean.TRUE, null, Boolean.FALSE});
+    assertEquals(
+        json.fromJson("[32767,null,-32768]", Short[].class),
+        new Short[] {Short.MAX_VALUE, null, Short.MIN_VALUE});
+    assertEquals(
+        json.fromJson("[127,null,-128]", Byte[].class),
+        new Byte[] {Byte.MAX_VALUE, null, Byte.MIN_VALUE});
+    assertEquals(
+        json.fromJson("[\"a\",null,\"你\"]", Character[].class), new Character[] {'a', null, '你'});
+    assertEquals(
+        json.fromJson("[1.5,null,-2.25]", Float[].class), new Float[] {1.5f, null, -2.25f});
+    assertEquals(
+        json.fromJson("[1.5,null,-2.25]".getBytes(StandardCharsets.UTF_8), Double[].class),
+        new Double[] {1.5d, null, -2.25d});
+    assertEquals(
+        new String(json.toJsonBytes(new Character[] {'x', null, '文'}), StandardCharsets.UTF_8),
+        "[\"x\",null,\"文\"]");
+
+    assertThrows(ForyJsonException.class, () -> json.fromJson("[128]", Byte[].class));
+    assertThrows(ForyJsonException.class, () -> json.fromJson("[\"ab\"]", Character[].class));
+  }
+
+  @Test
+  public void writeReadAtomicArrays() {
+    ForyJson json = ForyJson.builder().build();
+    assertEquals(json.toJson(new AtomicIntegerArray(new int[] {1, -2, 3})), "[1,-2,3]");
+    assertAtomicInts(json.fromJson("[1,-2,3]", AtomicIntegerArray.class), 1, -2, 3);
+    assertEquals(
+        new String(
+            json.toJsonBytes(new AtomicLongArray(new long[] {4L, -5L})), StandardCharsets.UTF_8),
+        "[4,-5]");
+    assertAtomicLongs(
+        json.fromJson("[4,-5]".getBytes(StandardCharsets.UTF_8), AtomicLongArray.class), 4L, -5L);
+
+    AtomicReferenceArray<String> refs =
+        new AtomicReferenceArray<>(new String[] {"a", null, ZH_TEXT});
+    assertEquals(json.toJson(refs), "[\"a\",null,\"你好，Fory\"]");
+    assertAtomicRefs(
+        json.fromJson(
+            "[\"a\",null,\"你好，Fory\"]".getBytes(StandardCharsets.UTF_8),
+            new TypeRef<AtomicReferenceArray<String>>() {}),
+        "a",
+        null,
+        ZH_TEXT);
+
+    String fieldsJson = "{\"ints\":[7,8],\"longs\":[9,-10],\"refs\":[\"b\",null]}";
+    AtomicArrayFields fields =
+        json.fromJson(fieldsJson.getBytes(StandardCharsets.UTF_8), AtomicArrayFields.class);
+    assertAtomicInts(fields.ints, 7, 8);
+    assertAtomicLongs(fields.longs, 9L, -10L);
+    assertAtomicRefs(fields.refs, "b", null);
+    assertEquals(json.toJson(fields), fieldsJson);
+
+    assertThrows(
+        ForyJsonException.class, () -> json.fromJson("[1,null]", AtomicIntegerArray.class));
+    assertThrows(ForyJsonException.class, () -> json.fromJson("[1,null]", AtomicLongArray.class));
+  }
+
   public static final class Shelf {
     public NoteList notes;
   }
@@ -274,4 +347,31 @@ public class JsonContainerTest extends ForyJsonTestModels {
   public static final class PaletteGroups extends HashMap<String, PaletteCodes> {}
 
   public static final class PaletteCodes extends HashMap<String, String> {}
+
+  public static final class AtomicArrayFields {
+    public AtomicIntegerArray ints = new AtomicIntegerArray(new int[] {7, 8});
+    public AtomicLongArray longs = new AtomicLongArray(new long[] {9L, -10L});
+    public AtomicReferenceArray<String> refs = new AtomicReferenceArray<>(new String[] {"b", null});
+  }
+
+  private static void assertAtomicInts(AtomicIntegerArray array, int... expected) {
+    assertEquals(array.length(), expected.length);
+    for (int i = 0; i < expected.length; i++) {
+      assertEquals(array.get(i), expected[i]);
+    }
+  }
+
+  private static void assertAtomicLongs(AtomicLongArray array, long... expected) {
+    assertEquals(array.length(), expected.length);
+    for (int i = 0; i < expected.length; i++) {
+      assertEquals(array.get(i), expected[i]);
+    }
+  }
+
+  private static void assertAtomicRefs(AtomicReferenceArray<String> array, String... expected) {
+    assertEquals(array.length(), expected.length);
+    for (int i = 0; i < expected.length; i++) {
+      assertEquals(array.get(i), expected[i]);
+    }
+  }
 }

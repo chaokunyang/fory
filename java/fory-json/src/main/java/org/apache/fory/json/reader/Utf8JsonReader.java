@@ -853,6 +853,13 @@ public final class Utf8JsonReader extends JsonReader {
         index = fractionEnd;
       }
     }
+    if (index < length && bytes[index] == 'Z') {
+      if (index + 1 >= length || bytes[index + 1] != '"') {
+        throw new IllegalArgumentException();
+      }
+      position = index + 2;
+      return OffsetDateTime.of(year, month, day, hour, minute, second, nano, ZoneOffset.UTC);
+    }
     long offsetAndEnd = parseOffsetAndEnd(bytes, index, length);
     position = (int) offsetAndEnd;
     return OffsetDateTime.of(

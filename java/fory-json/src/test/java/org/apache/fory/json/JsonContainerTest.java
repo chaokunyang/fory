@@ -26,6 +26,7 @@ import static org.testng.Assert.assertTrue;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -59,6 +60,22 @@ public class JsonContainerTest extends ForyJsonTestModels {
     assertEquals(values.get(0).tags, Arrays.asList("x", "y"));
     assertEquals(values.get(1).count, 3);
     assertEquals(values.get(1).total, 4);
+  }
+
+  @Test
+  public void readCollectionSubclassElementType() {
+    ForyJson json = ForyJson.builder().build();
+    Shelf shelf = json.fromJson("{\"notes\":[{\"title\":\"first\"}]}", Shelf.class);
+    assertEquals(shelf.notes.get(0).getClass(), Note.class);
+    assertEquals(shelf.notes.get(0).title, "first");
+  }
+
+  @Test
+  public void readMapSubclassValueType() {
+    ForyJson json = ForyJson.builder().build();
+    PaletteGroups groups = json.fromJson("{\"warm\":{\"primary\":\"red\"}}", PaletteGroups.class);
+    assertEquals(groups.get("warm").getClass(), PaletteCodes.class);
+    assertEquals(groups.get("warm").get("primary"), "red");
   }
 
   @Test
@@ -134,6 +151,14 @@ public class JsonContainerTest extends ForyJsonTestModels {
     MapKeyFields read = json.fromJson(expected, MapKeyFields.class);
     assertEquals(read.intNames, intNames());
     assertEquals(read.scores, enumScores());
+  }
+
+  @Test
+  public void writeRootMapNumericKeys() {
+    ForyJson json = ForyJson.builder().build();
+    Map<Integer, Integer> value =
+        json.fromJson("{\"7\":70,\"8\":80}", new TypeRef<Map<Integer, Integer>>() {});
+    assertEquals(json.toJson(new LinkedHashMap<>(value)), "{\"7\":70,\"8\":80}");
   }
 
   @Test
@@ -235,4 +260,18 @@ public class JsonContainerTest extends ForyJsonTestModels {
     assertEquals(json.fromJson("[\"a\",\"你\"]", char[].class), new char[] {'a', '你'});
     assertThrows(ForyJsonException.class, () -> json.fromJson("[1,null]", int[].class));
   }
+
+  public static final class Shelf {
+    public NoteList notes;
+  }
+
+  public static final class NoteList extends ArrayList<Note> {}
+
+  public static final class Note {
+    public String title;
+  }
+
+  public static final class PaletteGroups extends HashMap<String, PaletteCodes> {}
+
+  public static final class PaletteCodes extends HashMap<String, String> {}
 }

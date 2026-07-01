@@ -19,6 +19,7 @@
 
 package org.apache.fory.json.codec;
 
+import java.io.File;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.net.MalformedURLException;
@@ -26,6 +27,7 @@ import java.net.URI;
 import java.net.URL;
 import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
+import java.nio.file.Paths;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -70,7 +72,6 @@ import org.apache.fory.json.resolver.JsonTypeResolver;
 import org.apache.fory.json.writer.JsonWriter;
 import org.apache.fory.json.writer.StringJsonWriter;
 import org.apache.fory.json.writer.Utf8JsonWriter;
-import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.type.BFloat16;
 import org.apache.fory.type.Float16;
 
@@ -119,7 +120,11 @@ public final class ScalarCodecs {
       if (number.indexOf('.') >= 0 || number.indexOf('e') >= 0 || number.indexOf('E') >= 0) {
         return Double.parseDouble(number);
       }
-      return Long.parseLong(number);
+      try {
+        return Long.parseLong(number);
+      } catch (NumberFormatException e) {
+        return new BigInteger(number);
+      }
     }
   }
 
@@ -510,7 +515,15 @@ public final class ScalarCodecs {
 
     @Override
     final Object readNonNull(JsonReader reader, JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
-      return fromJsonString(reader.readString());
+      String value = reader.readString();
+      try {
+        return fromJsonString(value);
+      } catch (ForyJsonException e) {
+        throw e;
+      } catch (RuntimeException e) {
+        throw new ForyJsonException(
+            "Invalid " + typeInfo.rawType().getName() + " JSON string: " + value, e);
+      }
     }
 
     abstract String toJsonString(Object value);
@@ -633,21 +646,31 @@ public final class ScalarCodecs {
     }
   }
 
-  public static final class ClassCodec extends StringValueCodec {
-    public static final ClassCodec INSTANCE = new ClassCodec();
+  public static final class FileCodec extends StringValueCodec {
+    public static final FileCodec INSTANCE = new FileCodec();
 
     @Override
     String toJsonString(Object value) {
-      return ((Class<?>) value).getName();
+      return ((File) value).getPath();
     }
 
     @Override
     Object fromJsonString(String value) {
-      try {
-        return ReflectionUtils.loadClass(value);
-      } catch (RuntimeException e) {
-        throw new ForyJsonException("Cannot load class " + value, e);
-      }
+      return new File(value);
+    }
+  }
+
+  public static final class PathCodec extends StringValueCodec {
+    public static final PathCodec INSTANCE = new PathCodec();
+
+    @Override
+    String toJsonString(Object value) {
+      return value.toString();
+    }
+
+    @Override
+    Object fromJsonString(String value) {
+      return Paths.get(value);
     }
   }
 
@@ -874,6 +897,9 @@ public final class ScalarCodecs {
 
     @Override
     Object fromJsonString(String value) {
+      if (value.length() > 10 && value.charAt(10) == 'T') {
+        return LocalDate.parse(value.substring(0, 10));
+      }
       return LocalDate.parse(value);
     }
   }

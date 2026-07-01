@@ -21,7 +21,9 @@ package org.apache.fory.json.codec;
 
 import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
+import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 import org.apache.fory.collection.Tuple2;
 import org.apache.fory.reflect.TypeRef;
 
@@ -80,6 +82,15 @@ public final class CodecUtils {
     if (arguments.size() == 1) {
       return arguments.get(0);
     }
+    Class<?> rawType = typeRef.getRawType();
+    if (Collection.class.isAssignableFrom(rawType)) {
+      if (!typeRef.hasExplicitTypeArguments() && rawType.getTypeParameters().length > 0) {
+        return TypeRef.of(Object.class);
+      }
+      @SuppressWarnings({"rawtypes", "unchecked"})
+      TypeRef<?> collectionType = ((TypeRef) typeRef).getSupertype((Class) Collection.class);
+      return collectionType.resolveType(Collection.class.getTypeParameters()[0]);
+    }
     return TypeRef.of(Object.class);
   }
 
@@ -87,6 +98,16 @@ public final class CodecUtils {
     List<TypeRef<?>> arguments = typeRef.getTypeArguments();
     if (arguments.size() == 2) {
       return Tuple2.of(arguments.get(0), arguments.get(1));
+    }
+    Class<?> rawType = typeRef.getRawType();
+    if (Map.class.isAssignableFrom(rawType)) {
+      if (!typeRef.hasExplicitTypeArguments() && rawType.getTypeParameters().length > 0) {
+        return Tuple2.of(TypeRef.of(Object.class), TypeRef.of(Object.class));
+      }
+      @SuppressWarnings({"rawtypes", "unchecked"})
+      TypeRef<?> mapType = ((TypeRef) typeRef).getSupertype((Class) Map.class);
+      Type[] parameters = Map.class.getTypeParameters();
+      return Tuple2.of(mapType.resolveType(parameters[0]), mapType.resolveType(parameters[1]));
     }
     return Tuple2.of(TypeRef.of(String.class), TypeRef.of(Object.class));
   }

@@ -19,12 +19,14 @@
 
 package org.apache.fory.json.resolver;
 
+import java.io.File;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.net.URI;
 import java.net.URL;
 import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
+import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -57,6 +59,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.regex.Pattern;
+import org.apache.fory.json.ForyJsonException;
 import org.apache.fory.json.codec.ArrayCodec;
 import org.apache.fory.json.codec.BaseObjectCodec;
 import org.apache.fory.json.codec.CodecUtils;
@@ -95,6 +98,10 @@ public final class JsonSharedRegistry {
     if (codec != null) {
       return codec;
     }
+    if (rawType == Class.class) {
+      // JSON strings must not be treated as class-loading authority by the default codecs.
+      throw new ForyJsonException("Unsupported JSON type " + rawType);
+    }
     if (rawType.isEnum()) {
       return new ScalarCodecs.EnumCodec(rawType);
     }
@@ -120,6 +127,12 @@ public final class JsonSharedRegistry {
     }
     if (ByteBuffer.class.isAssignableFrom(rawType)) {
       return ScalarCodecs.ByteBufferCodec.INSTANCE;
+    }
+    if (File.class.isAssignableFrom(rawType)) {
+      return ScalarCodecs.FileCodec.INSTANCE;
+    }
+    if (Path.class.isAssignableFrom(rawType)) {
+      return ScalarCodecs.PathCodec.INSTANCE;
     }
     if (Collection.class.isAssignableFrom(rawType)) {
       return CollectionCodec.create(rawType, typeRef, localResolver);
@@ -202,15 +215,16 @@ public final class JsonSharedRegistry {
     exactCodecs.put(BigDecimal.class, ScalarCodecs.BigDecimalCodec.INSTANCE);
     exactCodecs.put(Float16.class, ScalarCodecs.Float16Codec.INSTANCE);
     exactCodecs.put(BFloat16.class, ScalarCodecs.BFloat16Codec.INSTANCE);
-    exactCodecs.put(Class.class, ScalarCodecs.ClassCodec.INSTANCE);
     exactCodecs.put(StringBuilder.class, ScalarCodecs.StringBuilderCodec.INSTANCE);
     exactCodecs.put(StringBuffer.class, ScalarCodecs.StringBufferCodec.INSTANCE);
     exactCodecs.put(AtomicBoolean.class, ScalarCodecs.AtomicBooleanCodec.INSTANCE);
     exactCodecs.put(AtomicInteger.class, ScalarCodecs.AtomicIntegerCodec.INSTANCE);
     exactCodecs.put(AtomicLong.class, ScalarCodecs.AtomicLongCodec.INSTANCE);
     exactCodecs.put(Currency.class, ScalarCodecs.CurrencyCodec.INSTANCE);
+    exactCodecs.put(File.class, ScalarCodecs.FileCodec.INSTANCE);
     exactCodecs.put(URI.class, ScalarCodecs.UriCodec.INSTANCE);
     exactCodecs.put(URL.class, ScalarCodecs.UrlCodec.INSTANCE);
+    exactCodecs.put(Path.class, ScalarCodecs.PathCodec.INSTANCE);
     exactCodecs.put(Pattern.class, ScalarCodecs.PatternCodec.INSTANCE);
     exactCodecs.put(UUID.class, ScalarCodecs.UuidCodec.INSTANCE);
     exactCodecs.put(Locale.class, ScalarCodecs.LocaleCodec.INSTANCE);

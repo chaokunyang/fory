@@ -72,7 +72,6 @@ import org.apache.fory.json.resolver.JsonTypeResolver;
 import org.apache.fory.json.writer.JsonWriter;
 import org.apache.fory.json.writer.StringJsonWriter;
 import org.apache.fory.json.writer.Utf8JsonWriter;
-import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.type.BFloat16;
 import org.apache.fory.type.Float16;
 
@@ -644,28 +643,6 @@ public final class ScalarCodecs {
     @Override
     Object fromJsonString(String value) {
       return new StringBuffer(value);
-    }
-  }
-
-  public static final class ClassCodec extends StringValueCodec {
-    public static final ClassCodec INSTANCE = new ClassCodec();
-
-    @Override
-    String toJsonString(Object value) {
-      return ((Class<?>) value).getName();
-    }
-
-    @Override
-    Object fromJsonString(String value) {
-      Class<?> primitive = primitiveType(value);
-      if (primitive != null) {
-        return primitive;
-      }
-      try {
-        return ReflectionUtils.loadClass(value);
-      } catch (RuntimeException e) {
-        throw new ForyJsonException("Cannot load class " + value, e);
-      }
     }
   }
 
@@ -1390,31 +1367,6 @@ public final class ScalarCodecs {
         writer.writeInt(buffer.get());
       }
       writer.writeArrayEnd();
-    }
-  }
-
-  private static Class<?> primitiveType(String name) {
-    switch (name) {
-      case "boolean":
-        return boolean.class;
-      case "byte":
-        return byte.class;
-      case "char":
-        return char.class;
-      case "short":
-        return short.class;
-      case "int":
-        return int.class;
-      case "long":
-        return long.class;
-      case "float":
-        return float.class;
-      case "double":
-        return double.class;
-      case "void":
-        return void.class;
-      default:
-        return null;
     }
   }
 

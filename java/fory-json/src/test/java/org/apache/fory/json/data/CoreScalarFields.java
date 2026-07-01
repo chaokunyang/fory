@@ -52,7 +52,6 @@ public final class CoreScalarFields {
   public Optional<String> maybe = Optional.of("yes");
   public OptionalInt optionalInt = OptionalInt.of(4);
   public TimeZone timeZone = TimeZone.getTimeZone("UTC");
-  public Class<?> type = PublicFields.class;
   public URI uri = URI.create("https://fory.apache.org/json");
   public URL url = JsonTestData.url("https://fory.apache.org/");
   public UUID uuid = UUID.fromString("123e4567-e89b-12d3-a456-426614174000");

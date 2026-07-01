@@ -59,6 +59,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.regex.Pattern;
+import org.apache.fory.json.ForyJsonException;
 import org.apache.fory.json.codec.ArrayCodec;
 import org.apache.fory.json.codec.BaseObjectCodec;
 import org.apache.fory.json.codec.CodecUtils;
@@ -96,6 +97,10 @@ public final class JsonSharedRegistry {
     JsonCodec codec = exactCodecs.get(rawType);
     if (codec != null) {
       return codec;
+    }
+    if (rawType == Class.class) {
+      // JSON strings must not be treated as class-loading authority by the default codecs.
+      throw new ForyJsonException("Unsupported JSON type " + rawType);
     }
     if (rawType.isEnum()) {
       return new ScalarCodecs.EnumCodec(rawType);
@@ -210,7 +215,6 @@ public final class JsonSharedRegistry {
     exactCodecs.put(BigDecimal.class, ScalarCodecs.BigDecimalCodec.INSTANCE);
     exactCodecs.put(Float16.class, ScalarCodecs.Float16Codec.INSTANCE);
     exactCodecs.put(BFloat16.class, ScalarCodecs.BFloat16Codec.INSTANCE);
-    exactCodecs.put(Class.class, ScalarCodecs.ClassCodec.INSTANCE);
     exactCodecs.put(StringBuilder.class, ScalarCodecs.StringBuilderCodec.INSTANCE);
     exactCodecs.put(StringBuffer.class, ScalarCodecs.StringBufferCodec.INSTANCE);
     exactCodecs.put(AtomicBoolean.class, ScalarCodecs.AtomicBooleanCodec.INSTANCE);

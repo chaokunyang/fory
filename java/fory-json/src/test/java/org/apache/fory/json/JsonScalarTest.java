@@ -124,9 +124,8 @@ public class JsonScalarTest extends ForyJsonTestModels {
             + "\"builder\":\"build\",\"bytes\":[1,-2,3],\"calendar\":123456789,"
             + "\"charset\":\"UTF-8\",\"currency\":\"EUR\",\"date\":\"2026-06-21\","
             + "\"instant\":\"2026-06-21T01:02:03Z\",\"locale\":\"zh-Hans-CN\","
-            + "\"maybe\":\"yes\",\"optionalInt\":4,\"timeZone\":\"UTC\",\"type\":\""
-            + PublicFields.class.getName()
-            + "\",\"uri\":\"https://fory.apache.org/json\","
+            + "\"maybe\":\"yes\",\"optionalInt\":4,\"timeZone\":\"UTC\","
+            + "\"uri\":\"https://fory.apache.org/json\","
             + "\"url\":\"https://fory.apache.org/\","
             + "\"uuid\":\"123e4567-e89b-12d3-a456-426614174000\"}";
     assertEquals(json.toJson(value), expected);
@@ -146,7 +145,6 @@ public class JsonScalarTest extends ForyJsonTestModels {
     assertEquals(read.maybe, Optional.of("yes"));
     assertEquals(read.optionalInt.getAsInt(), 4);
     assertEquals(read.timeZone.getID(), "UTC");
-    assertEquals(read.type, PublicFields.class);
     assertEquals(read.uri, value.uri);
     assertEquals(read.url, value.url);
     assertEquals(read.uuid, value.uuid);
@@ -173,13 +171,33 @@ public class JsonScalarTest extends ForyJsonTestModels {
   }
 
   @Test
-  public void readPrimitiveClassName() {
+  public void rejectClassTypeByDefault() {
     ForyJson json = ForyJson.builder().build();
-    assertEquals(json.toJson(int.class), "\"int\"");
-    assertEquals(json.fromJson("\"int\"", Class.class), int.class);
-    ClassArrayFields fields =
-        json.fromJson("{\"types\":[\"java.lang.String\",\"int\"]}", ClassArrayFields.class);
-    assertEquals(fields.types, new Class<?>[] {String.class, int.class});
+    assertThrows(ForyJsonException.class, () -> json.toJson(String.class));
+    assertThrows(ForyJsonException.class, () -> json.toJson(int.class));
+    assertThrows(ForyJsonException.class, () -> json.fromJson("\"java.lang.String\"", Class.class));
+    assertThrows(ForyJsonException.class, () -> json.fromJson("\"int\"", Class.class));
+  }
+
+  @Test
+  public void rejectClassFields() {
+    ForyJson json = ForyJson.builder().build();
+    assertThrows(ForyJsonException.class, () -> json.toJson(new ClassFieldHolder()));
+    assertThrows(
+        ForyJsonException.class,
+        () -> json.fromJson("{\"type\":\"java.lang.String\"}", ClassFieldHolder.class));
+  }
+
+  @Test
+  public void rejectClassArrays() {
+    ForyJson json = ForyJson.builder().build();
+    assertThrows(ForyJsonException.class, () -> json.toJson(new Class<?>[] {String.class}));
+    assertThrows(
+        ForyJsonException.class, () -> json.fromJson("[\"java.lang.String\"]", Class[].class));
+    assertThrows(ForyJsonException.class, () -> json.toJson(new ClassArrayFields()));
+    assertThrows(
+        ForyJsonException.class,
+        () -> json.fromJson("{\"types\":[\"java.lang.String\"]}", ClassArrayFields.class));
   }
 
   @Test
@@ -230,8 +248,12 @@ public class JsonScalarTest extends ForyJsonTestModels {
         () -> json.fromJson("{\"id\":01}".getBytes(StandardCharsets.UTF_8), PublicFields.class));
   }
 
+  public static final class ClassFieldHolder {
+    public Class<?> type = String.class;
+  }
+
   public static final class ClassArrayFields {
-    public Class<?>[] types;
+    public Class<?>[] types = new Class<?>[] {String.class};
   }
 
   public static final class FilePathFields {

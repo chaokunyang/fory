@@ -19,6 +19,9 @@
 
 package org.apache.fory.json.codegen;
 
+import java.time.LocalDate;
+import java.time.OffsetDateTime;
+import java.util.UUID;
 import org.apache.fory.codegen.Code;
 import org.apache.fory.codegen.CodegenContext;
 import org.apache.fory.codegen.Expression;
@@ -454,6 +457,9 @@ final class JsonWriterCodegen {
           return writeStringCollection(value, utf8);
         }
         return writeCodec(id, value, utf8);
+      case OBJECT:
+        Expression scalar = writeExactUtf8Scalar(property.writeRawType(), value, utf8);
+        return scalar == null ? writeCodec(id, value, utf8) : scalar;
       default:
         return writeCodec(id, value, utf8);
     }
@@ -499,6 +505,23 @@ final class JsonWriterCodegen {
         writerRef(utf8),
         value,
         typeResolverRef());
+  }
+
+  private static Expression writeExactUtf8Scalar(Class<?> rawType, Expression value, boolean utf8) {
+    if (!utf8) {
+      return null;
+    }
+    String writerMethod;
+    if (rawType == UUID.class) {
+      writerMethod = "writeUuid";
+    } else if (rawType == LocalDate.class) {
+      writerMethod = "writeLocalDate";
+    } else if (rawType == OffsetDateTime.class) {
+      writerMethod = "writeOffsetDateTime";
+    } else {
+      return null;
+    }
+    return new Expression.Invoke(writerRef(true), writerMethod, value);
   }
 
   private static Expression writeStringCollection(Expression value, boolean utf8) {

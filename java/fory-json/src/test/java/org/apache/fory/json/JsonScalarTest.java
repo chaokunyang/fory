@@ -227,6 +227,22 @@ public class JsonScalarTest extends ForyJsonTestModels {
   }
 
   @Test
+  public void writeGeneratedUtf8Scalars() {
+    ForyJson json = ForyJson.builder().build();
+    Utf8ScalarFields fields = new Utf8ScalarFields();
+    fields.uuid = UUID.fromString("123e4567-e89b-12d3-a456-426614174000");
+    fields.date = LocalDate.of(2024, 2, 3);
+    fields.timestamp = OffsetDateTime.of(2024, 2, 3, 4, 5, 6, 123456789, ZoneOffset.UTC);
+    String expected =
+        "{\"uuid\":\"123e4567-e89b-12d3-a456-426614174000\","
+            + "\"date\":\"2024-02-03\","
+            + "\"timestamp\":\"2024-02-03T04:05:06.123456789Z\"}";
+    assertEquals(new String(json.toJsonBytes(fields), StandardCharsets.UTF_8), expected);
+    assertEquals(json.toJson(fields), expected);
+    assertGeneratedWhenSupported(json, Utf8ScalarFields.class);
+  }
+
+  @Test
   public void readScalarRoots() {
     ForyJson json = ForyJson.builder().build();
     assertEquals(json.fromJson("7", int.class), Integer.valueOf(7));
@@ -381,6 +397,12 @@ public class JsonScalarTest extends ForyJsonTestModels {
 
   public static final class OffsetDateTimeFields {
     public OffsetDateTime value;
+  }
+
+  public static final class Utf8ScalarFields {
+    public UUID uuid;
+    public LocalDate date;
+    public OffsetDateTime timestamp;
   }
 
   public static final class ModeAwareHolder {

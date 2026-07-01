@@ -203,22 +203,21 @@ public class JsonScalarTest extends ForyJsonTestModels {
   @Test
   public void writeReadFileAndPath() {
     ForyJson json = ForyJson.builder().build();
-    File file = new File("/tmp/fory-json-file.txt");
-    Path path = Paths.get("/tmp/fory-json-path.txt");
-    assertEquals(json.toJson(file), "\"/tmp/fory-json-file.txt\"");
-    assertEquals(json.fromJson("\"/tmp/fory-json-file.txt\"", File.class), file);
-    assertEquals(json.toJson(path), "\"/tmp/fory-json-path.txt\"");
-    assertEquals(json.fromJson("\"/tmp/fory-json-path.txt\"", Path.class), path);
+    File file = new File("fory-json-file.txt");
+    Path path = Paths.get("fory-json-path.txt");
+    assertEquals(json.toJson(file), "\"fory-json-file.txt\"");
+    assertEquals(json.fromJson("\"fory-json-file.txt\"", File.class), file);
+    assertEquals(json.toJson(path), "\"fory-json-path.txt\"");
+    assertEquals(json.fromJson("\"fory-json-path.txt\"", Path.class), path);
 
     FilePathFields fields =
         json.fromJson(
-            "{\"file\":\"/tmp/fory-json-file.txt\",\"path\":\"/tmp/fory-json-path.txt\"}",
+            "{\"file\":\"fory-json-file.txt\",\"path\":\"fory-json-path.txt\"}",
             FilePathFields.class);
     assertEquals(fields.file, file);
     assertEquals(fields.path, path);
     assertEquals(
-        json.toJson(fields),
-        "{\"file\":\"/tmp/fory-json-file.txt\",\"path\":\"/tmp/fory-json-path.txt\"}");
+        json.toJson(fields), "{\"file\":\"fory-json-file.txt\",\"path\":\"fory-json-path.txt\"}");
   }
 
   @Test

@@ -581,6 +581,15 @@ public final class ScalarCodecs {
     Object fromJsonNumber(String value) {
       return new BigDecimal(value);
     }
+
+    @Override
+    public Object readUtf8(
+        Utf8JsonReader reader, JsonTypeInfo typeInfo, JsonTypeResolver resolver) {
+      if (reader.tryReadNullToken()) {
+        return null;
+      }
+      return reader.readBigDecimal();
+    }
   }
 
   public static final class Float16Codec extends AbstractJsonCodec {

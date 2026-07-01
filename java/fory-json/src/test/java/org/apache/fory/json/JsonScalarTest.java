@@ -254,6 +254,26 @@ public class JsonScalarTest extends ForyJsonTestModels {
     assertEquals(
         json.fromJson("\"\uD83D\uDE00\u1234\"".getBytes(StandardCharsets.UTF_8), String.class),
         "\uD83D\uDE00\u1234");
+    assertEquals(
+        json.fromJson("0.100".getBytes(StandardCharsets.UTF_8), BigDecimal.class),
+        new BigDecimal("0.100"));
+    assertEquals(
+        json.fromJson(
+            "12345678901234567890.123".getBytes(StandardCharsets.UTF_8), BigDecimal.class),
+        new BigDecimal("12345678901234567890.123"));
+  }
+
+  @Test
+  public void readGeneratedUtf8BigDecimal() {
+    ForyJson json = ForyJson.builder().build();
+    byte[] input =
+        ("{\"uuid\":\"123e4567-e89b-12d3-a456-426614174000\","
+                + "\"decimal\":0.12345678901234567,"
+                + "\"date\":\"2024-02-03\","
+                + "\"timestamp\":\"2024-02-03T04:05:06Z\"}")
+            .getBytes(StandardCharsets.UTF_8);
+    Utf8ScalarFields fields = json.fromJson(input, Utf8ScalarFields.class);
+    assertEquals(fields.decimal, new BigDecimal("0.12345678901234567"));
   }
 
   @Test

@@ -19,6 +19,7 @@
 
 package org.apache.fory.json.reader;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
@@ -354,6 +355,11 @@ public final class Utf8JsonReader extends JsonReader {
     return readLongToken();
   }
 
+  public BigDecimal readBigDecimal() {
+    skipWhitespaceFast();
+    return readBigDecimalToken();
+  }
+
   private long readLongToken() {
     byte[] bytes = input;
     int offset = position;
@@ -454,6 +460,83 @@ public final class Utf8JsonReader extends JsonReader {
     }
     rejectFractionOrExponentFast();
     return result;
+  }
+
+  private BigDecimal readBigDecimalToken() {
+    byte[] bytes = input;
+    int offset = position;
+    int start = offset;
+    int inputLength = bytes.length;
+    if (offset >= inputLength) {
+      return readBigDecimalFallback(start);
+    }
+    boolean negative = false;
+    int ch = bytes[offset];
+    if (ch == '-') {
+      negative = true;
+      offset++;
+      if (offset >= inputLength) {
+        return readBigDecimalFallback(start);
+      }
+      ch = bytes[offset];
+    }
+    long unscaled = 0;
+    int scale = 0;
+    if (ch == '0') {
+      offset++;
+      position = offset;
+      rejectLeadingDigitFast();
+    } else if (ch >= '1' && ch <= '9') {
+      do {
+        int digit = ch - '0';
+        if (unscaled > (Long.MAX_VALUE - digit) / 10) {
+          return readBigDecimalFallback(start);
+        }
+        unscaled = unscaled * 10 + digit;
+        offset++;
+        if (offset >= inputLength) {
+          break;
+        }
+        ch = bytes[offset];
+      } while (ch >= '0' && ch <= '9');
+    } else {
+      return readBigDecimalFallback(start);
+    }
+    if (offset < inputLength && bytes[offset] == '.') {
+      offset++;
+      int fractionStart = offset;
+      while (offset < inputLength) {
+        ch = bytes[offset];
+        if (ch < '0' || ch > '9') {
+          break;
+        }
+        int digit = ch - '0';
+        if (unscaled > (Long.MAX_VALUE - digit) / 10) {
+          return readBigDecimalFallback(start);
+        }
+        unscaled = unscaled * 10 + digit;
+        scale++;
+        offset++;
+      }
+      if (offset == fractionStart) {
+        return readBigDecimalFallback(start);
+      }
+    }
+    if (offset < inputLength) {
+      ch = bytes[offset];
+      if (ch == 'e' || ch == 'E') {
+        return readBigDecimalFallback(start);
+      }
+    }
+    position = offset;
+    return BigDecimal.valueOf(negative ? -unscaled : unscaled, scale);
+  }
+
+  private BigDecimal readBigDecimalFallback(int start) {
+    // Keep overflow and exponent forms on the existing string constructor path so the fast path
+    // only owns decimals that fit exactly as long + scale.
+    position = start;
+    return new BigDecimal(readNumber());
   }
 
   @Override

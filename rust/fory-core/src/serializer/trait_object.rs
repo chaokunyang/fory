@@ -314,8 +314,6 @@ macro_rules! register_trait_type {
 
             impl $crate::Serializer for Box<dyn $trait_name> {
                 type Target = Self;
-                const OWNER: $crate::SerializerOwner = $crate::SerializerOwner::Fory;
-
                 #[inline(always)]
                 fn write(
                     value: &Self,
@@ -543,8 +541,6 @@ macro_rules! register_trait_type {
 
             impl $crate::Serializer for [<$trait_name RcSerializer>] {
                 type Target = std::rc::Rc<dyn $trait_name>;
-                const OWNER: $crate::SerializerOwner = $crate::SerializerOwner::Fory;
-
                 #[inline(always)]
                 fn write(
                     value: &Self::Target,
@@ -873,8 +869,6 @@ macro_rules! register_trait_type {
 
             impl $crate::Serializer for [<$trait_name ArcSerializer>] {
                 type Target = std::sync::Arc<dyn $trait_name>;
-                const OWNER: $crate::SerializerOwner = $crate::SerializerOwner::Fory;
-
                 #[inline(always)]
                 fn write(
                     value: &Self::Target,

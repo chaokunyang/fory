@@ -20,7 +20,7 @@ use crate::context::{ReadContext, WriteContext};
 use crate::error::Error;
 use crate::meta::FieldType;
 use crate::serializer::util::read_basic_type_info;
-use crate::serializer::{Serializer, SerializerOwner};
+use crate::serializer::Serializer;
 use crate::type_id::{self, TypeId};
 use std::sync::Arc;
 
@@ -30,15 +30,11 @@ macro_rules! impl_unsigned_serializer {
         $writer:expr,
         $reader:expr,
         $type_id:expr,
-        $array_type_id:expr,
         $xlang:expr,
         $compatible_reader:expr
     ) => {
         impl Serializer for $ty {
             type Target = Self;
-
-            const OWNER: SerializerOwner = SerializerOwner::Fory;
-            const PRIMITIVE_ARRAY_TYPE_ID: Option<TypeId> = Some($array_type_id);
 
             #[inline(always)]
             fn write(value: &Self, context: &mut WriteContext) -> Result<(), Error> {
@@ -106,7 +102,6 @@ impl_unsigned_serializer!(
     Writer::write_u8,
     Reader::read_u8,
     TypeId::UINT8,
-    TypeId::BINARY,
     true,
     |context: &mut ReadContext, _: &FieldType| context.reader.read_u8()
 );
@@ -115,7 +110,6 @@ impl_unsigned_serializer!(
     Writer::write_u16,
     Reader::read_u16,
     TypeId::UINT16,
-    TypeId::UINT16_ARRAY,
     true,
     |context: &mut ReadContext, _: &FieldType| context.reader.read_u16()
 );
@@ -124,7 +118,6 @@ impl_unsigned_serializer!(
     Writer::write_var_u32,
     Reader::read_var_u32,
     TypeId::VAR_UINT32,
-    TypeId::UINT32_ARRAY,
     true,
     |context: &mut ReadContext, field_type: &FieldType| match field_type.type_id {
         type_id::UINT32 => context.reader.read_u32(),
@@ -137,7 +130,6 @@ impl_unsigned_serializer!(
     Writer::write_var_u64,
     Reader::read_var_u64,
     TypeId::VAR_UINT64,
-    TypeId::UINT64_ARRAY,
     true,
     |context: &mut ReadContext, field_type: &FieldType| match field_type.type_id {
         type_id::UINT64 => context.reader.read_u64(),
@@ -151,7 +143,6 @@ impl_unsigned_serializer!(
     Writer::write_u128,
     Reader::read_u128,
     TypeId::U128,
-    TypeId::U128_ARRAY,
     false,
     |context: &mut ReadContext, _: &FieldType| context.reader.read_u128()
 );
@@ -160,7 +151,6 @@ impl_unsigned_serializer!(
     Writer::write_usize,
     Reader::read_usize,
     TypeId::USIZE,
-    TypeId::USIZE_ARRAY,
     false,
     |context: &mut ReadContext, _: &FieldType| context.reader.read_usize()
 );

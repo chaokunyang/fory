@@ -221,7 +221,16 @@ built-in use EXT or NAMED_EXT. Serializer-provider separation does not replace
 runtime-owned built-in mappings.
 
 Static generated fields and serializer-selected roots should dispatch directly
-to the serializer selected by their schema. When a root is a transparent,
+to the serializer selected by their schema. A Rust field `with = S` selects the
+exact field node and requires `S::Target` to equal the declared field type.
+This accepts an ordinary, external structural, manual, or carrier serializer.
+For example, `with = VecSerializer<UserSerializer>` selects the structural
+`Vec<User>` field node, while `list(element(with = UserSerializer))` selects
+the child node recursively. Transparent fields select their exact carrier
+serializer, such as `OptionSerializer<UserSerializer>`. Both forms lower to
+the same carrier codec.
+
+When a root is a transparent,
 collection, fixed-array, map, or heterogeneous tuple composition containing
 selected external children, the binding should expose binding-owned,
 carrier-specific static serializers parameterized recursively by child
@@ -301,33 +310,31 @@ Rust's primitive collection selection must have one owner shared by ordinary
 types, carrier serializers, and derive. Type ID, body codec, reserved space,
 field metadata, and compatible reads cannot use independent tables. This
 includes canonical `u8` BINARY and the existing `isize`/`usize` dense-array
-types. Rust uses the doc-hidden
-`Serializer::PRIMITIVE_ARRAY_TYPE_ID` associated constant as that one
-declared source: canonical scalar serializers set it, while application and
-wrapping serializers inherit `None`. Rust 1.70 cannot select a codec type from
-an associated const, so the existing Vec and fixed-array codecs are the single
-owners of both primitive and object bodies. `SerializerCodec` exposes the
-declared kind only after exact self-provider and canonical scalar target
-validation, and the bulk-copy owner validates the concrete target again before
-unsafe copying. The Vec codec carries two existing schema choices as compile-time
+types. The private primitive-array/carrier owner derives the parent kind from
+the child codec's scalar `static_type_id()`, the exact Rust child target, and
+the carrier mode. Scalar serializers and codecs declare only scalar behavior
+and scalar wire IDs; neither public serializer contracts nor the generic codec
+contract exposes a parent-array kind. The same private mapping validates unsafe
+bulk copies and supplies compatible LIST/array element metadata.
+
+Rust 1.70 cannot select a codec type from an associated const, so the existing
+Vec and fixed-array codecs are the single owners of both primitive and object
+bodies. The Vec codec carries two established schema choices as compile-time
 consts. `STRUCTURAL_LIST` preserves unannotated and explicit `list(...)`
 generated fields as LIST even for canonical primitive children. Ordinary roots,
 Vec carrier serializers, `#[fory(bytes)]`, and `#[fory(array)]` disable it so
 the codec can consume the validated canonical child kind. `DENSE_ARRAY` is true
-only for explicit `#[fory(array)]`; it maps validated canonical `u8` BINARY to
+only for explicit `#[fory(array)]`; it maps canonical `u8` BINARY to
 `UINT8_ARRAY`. It is false for roots, carrier serializers, LIST fields, and
 `#[fory(bytes)]`. Consequently, an unannotated `Vec<i32>` field remains
 `LIST<VARINT32>`, an explicit fixed-element list remains `LIST<INT32>`, and
 ordinary or serializer-selected primitive Vec roots retain their dense-array or
-BINARY representation. These consts select established schemas inside the one
-Vec codec; they are not provider classification or runtime dispatch. Derive may
-validate the explicit primitive category but does not map Rust types to wire
-IDs. These inline identity checks are safety validation and must fold after
-monomorphization; they are not another kind-selection table. Derive always uses
-the same unified core carrier codec and maintains no ordinary-composition AST
-primitive table. An application-owned serializer uses structural LIST/EXT
-behavior according to its serializer, never a primitive specialization inferred
-merely from its `Target` or `SerializerOwner`.
+BINARY representation. An external structural or manual serializer targeting a
+primitive remains an object LIST child because its codec does not expose the
+canonical scalar wire ID. Derive may validate the explicit primitive category
+but does not map Rust types to wire IDs. Inline scalar-ID and exact-target
+checks must fold after monomorphization. Derive always uses the same unified
+core carrier codec and maintains no ordinary-composition AST primitive table.
 
 Registration is access-driven by the existing codec. A selected user serializer
 must be registered before schema construction or value processing accesses its
@@ -346,11 +353,12 @@ allocation, callback, or hot-path branch to change that behavior. An exact
 manual serializer for the whole container remains a separate opaque
 EXT/NAMED_EXT choice.
 
-If a transparent carrier serializer inherits an EXT wire kind from its child,
-registration must still reject the binding-owned carrier serializer before
-publishing resolver state. Any internal serializer-owner or kind classification used for
-this decision is cold implementation state, not a wire identity or hot-path
-branch.
+Carrier serializers have no independent registered identity. Structural
+registration requires the existing structural serializer contract and matching
+STRUCT/ENUM/UNION category. Manual registration requires an independent
+EXT/NAMED_EXT serializer and rejects transparent wrappers. Private built-in
+registration validates only its expected internal type ID. These semantic
+checks use the existing serializer contracts and wire categories.
 
 Dynamic values should resolve by the concrete target identity. When a runtime
 needs both directions, its serializer-provider-to-type-info and target-to-type-info

@@ -18,15 +18,12 @@
 use crate::context::{ReadContext, WriteContext};
 use crate::error::Error;
 use crate::serializer::util::read_basic_type_info;
-use crate::serializer::{Serializer, SerializerOwner};
+use crate::serializer::Serializer;
 use crate::type_id::TypeId;
 use std::sync::Arc;
 
 impl Serializer for bool {
     type Target = Self;
-
-    const OWNER: SerializerOwner = SerializerOwner::Fory;
-    const PRIMITIVE_ARRAY_TYPE_ID: Option<TypeId> = Some(TypeId::BOOL_ARRAY);
 
     #[inline(always)]
     fn write(value: &Self, context: &mut WriteContext) -> Result<(), Error> {

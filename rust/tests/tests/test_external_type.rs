@@ -155,18 +155,18 @@ struct UserV2Serializer {
 
 #[derive(ForyStruct)]
 struct CompatibleSharedV1(
-    #[fory(with = UserV1Serializer)] RcWeak<UserV1>,
-    #[fory(with = UserV1Serializer)] Rc<UserV1>,
-    #[fory(with = UserV1Serializer)] ArcWeak<UserV1>,
-    #[fory(with = UserV1Serializer)] Arc<UserV1>,
+    #[fory(with = RcWeakSerializer<UserV1Serializer>)] RcWeak<UserV1>,
+    #[fory(with = RcSerializer<UserV1Serializer>)] Rc<UserV1>,
+    #[fory(with = ArcWeakSerializer<UserV1Serializer>)] ArcWeak<UserV1>,
+    #[fory(with = ArcSerializer<UserV1Serializer>)] Arc<UserV1>,
 );
 
 #[derive(ForyStruct)]
 struct CompatibleSharedV2(
-    #[fory(with = UserV2Serializer)] RcWeak<UserV2>,
-    #[fory(with = UserV2Serializer)] Rc<UserV2>,
-    #[fory(with = UserV2Serializer)] ArcWeak<UserV2>,
-    #[fory(with = UserV2Serializer)] Arc<UserV2>,
+    #[fory(with = RcWeakSerializer<UserV2Serializer>)] RcWeak<UserV2>,
+    #[fory(with = RcSerializer<UserV2Serializer>)] Rc<UserV2>,
+    #[fory(with = ArcWeakSerializer<UserV2Serializer>)] ArcWeak<UserV2>,
+    #[fory(with = ArcSerializer<UserV2Serializer>)] Arc<UserV2>,
 );
 
 struct ExternalIdSerializer;
@@ -352,26 +352,40 @@ struct LocalUser {
     age: u32,
 }
 
+#[derive(ForyStruct, Debug, PartialEq)]
+struct DirectUserList {
+    #[fory(with = VecSerializer<UserSerializer>)]
+    users: Vec<User>,
+}
+
+#[derive(ForyStruct, Debug, PartialEq)]
+struct RecursiveUserList {
+    #[fory(list(element(with = UserSerializer)))]
+    users: Vec<User>,
+}
+
 #[derive(ForyStruct)]
 struct ExternalFields {
     #[fory(with = UserSerializer)]
     direct: User,
-    #[fory(with = UserSerializer)]
+    #[fory(with = OptionSerializer<UserSerializer>)]
     optional: Option<User>,
-    #[fory(with = UserSerializer)]
+    #[fory(with = BoxSerializer<UserSerializer>)]
     boxed: Box<User>,
-    #[fory(with = UserSerializer)]
+    #[fory(with = RcSerializer<UserSerializer>)]
     rc: Rc<User>,
-    #[fory(with = UserSerializer)]
+    #[fory(with = RcWeakSerializer<UserSerializer>)]
     rc_weak: RcWeak<User>,
-    #[fory(with = UserSerializer)]
+    #[fory(with = ArcSerializer<UserSerializer>)]
     arc: Arc<User>,
-    #[fory(with = UserSerializer)]
+    #[fory(with = ArcWeakSerializer<UserSerializer>)]
     arc_weak: ArcWeak<User>,
-    #[fory(with = UserSerializer)]
+    #[fory(with = RefCellSerializer<UserSerializer>)]
     cell: RefCell<User>,
-    #[fory(with = UserSerializer)]
+    #[fory(with = MutexSerializer<UserSerializer>)]
     mutex: Mutex<User>,
+    #[fory(with = VecSerializer<UserSerializer>)]
+    direct_vec: Vec<User>,
     #[fory(list(element(with = UserSerializer)))]
     vec: Vec<User>,
     #[fory(with = PackedUsersSerializer)]
@@ -1142,6 +1156,7 @@ fn recursive_field_codegen() {
         arc_weak: ArcWeak::from(&arc),
         cell: RefCell::new(ada.clone()),
         mutex: Mutex::new(grace.clone()),
+        direct_vec: values.clone(),
         vec: values.clone(),
         packed: values.clone(),
         deque: values.iter().cloned().collect(),
@@ -1170,6 +1185,7 @@ fn recursive_field_codegen() {
     ));
     assert_eq!(*decoded.cell.borrow(), *value.cell.borrow());
     assert_eq!(*decoded.mutex.lock().unwrap(), *value.mutex.lock().unwrap());
+    assert_eq!(decoded.direct_vec, value.direct_vec);
     assert_eq!(decoded.vec, value.vec);
     assert_eq!(decoded.packed, value.packed);
     assert_eq!(decoded.deque, value.deque);
@@ -1207,6 +1223,40 @@ fn recursive_field_codegen() {
         .deserialize_with::<UserWithFailingStateSerializer>(&bytes)
         .unwrap_err();
     assert!(error.to_string().contains("external id default rejected"));
+}
+
+#[test]
+fn direct_carrier_field() {
+    let users = vec![user("Ada", 37), user("Grace", 28)];
+    for compatible in [false, true] {
+        let mut direct = Fory::builder().xlang(false).compatible(compatible).build();
+        direct.register::<UserSerializer>(100).unwrap();
+        direct.register::<DirectUserList>(101).unwrap();
+
+        let mut recursive = Fory::builder().xlang(false).compatible(compatible).build();
+        recursive.register::<UserSerializer>(100).unwrap();
+        recursive.register::<RecursiveUserList>(101).unwrap();
+
+        let direct_value = DirectUserList {
+            users: users.clone(),
+        };
+        let recursive_value = RecursiveUserList {
+            users: users.clone(),
+        };
+        let direct_bytes = direct.serialize(&direct_value).unwrap();
+        let recursive_bytes = recursive.serialize(&recursive_value).unwrap();
+        assert_eq!(direct_bytes, recursive_bytes);
+        assert_eq!(
+            direct.deserialize::<DirectUserList>(&direct_bytes).unwrap(),
+            direct_value
+        );
+        assert_eq!(
+            recursive
+                .deserialize::<RecursiveUserList>(&recursive_bytes)
+                .unwrap(),
+            recursive_value
+        );
+    }
 }
 
 #[test]
@@ -1709,6 +1759,9 @@ fn registration_conflicts_are_atomic() {
 
     assert!(fory
         .register_serializer::<VecSerializer<UserSerializer>>(604)
+        .is_err());
+    assert!(fory
+        .register_serializer::<OptionSerializer<UserSerializer>>(605)
         .is_err());
     fory.register_serializer::<PackedUsersSerializer>(604)
         .unwrap();

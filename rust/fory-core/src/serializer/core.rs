@@ -25,17 +25,6 @@ use std::any::Any;
 use std::rc::Rc;
 use std::sync::Arc;
 
-/// Classifies serializers owned by applications and Fory.
-///
-/// This is an implementation classification used by derive validation and
-/// registration. It is not a wire identity or an application extension point.
-#[doc(hidden)]
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum SerializerOwner {
-    Application,
-    Fory,
-}
-
 #[cold]
 #[inline(never)]
 fn default_unavailable<S: Serializer>() -> Result<S::Target, Error> {
@@ -99,23 +88,6 @@ fn provider_field_type<S: Serializer, const NULLABLE: bool, const TRACK_REF: boo
 /// instantiated by Fory. Ordinary local types use `Target = Self`.
 pub trait Serializer: Sized + 'static {
     type Target: Sized + 'static;
-
-    /// Provider ownership used only by derive validation and registration.
-    #[doc(hidden)]
-    const OWNER: SerializerOwner = SerializerOwner::Application;
-
-    /// Compile-time validation for direct field `with` selection.
-    #[doc(hidden)]
-    const FIELD_SERIALIZER_CHECK: () = match Self::OWNER {
-        SerializerOwner::Application => (),
-        SerializerOwner::Fory => {
-            panic!("Fory-owned carrier serializers are not field `with` leaves")
-        }
-    };
-
-    /// Dense-array or BINARY kind for canonical Fory scalar serializers.
-    #[doc(hidden)]
-    const PRIMITIVE_ARRAY_TYPE_ID: Option<TypeId> = None;
 
     /// Write the target body only.
     fn write(value: &Self::Target, context: &mut WriteContext) -> Result<(), Error>;

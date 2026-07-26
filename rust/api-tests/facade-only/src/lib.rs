@@ -94,24 +94,6 @@
 //! ```
 //!
 //! ```compile_fail
-//! use fory::{ForyStruct, VecSerializer};
-//! use fory_external_model::User;
-//!
-//! #[derive(ForyStruct)]
-//! #[fory(target = User)]
-//! struct UserSerializer {
-//!     name: String,
-//!     age: u32,
-//! }
-//!
-//! #[derive(ForyStruct)]
-//! struct InvalidCarrierLeaf {
-//!     #[fory(with = VecSerializer<UserSerializer>)]
-//!     users: Vec<User>,
-//! }
-//! ```
-//!
-//! ```compile_fail
 //! use fory::ForyStruct;
 //! use fory_external_model::{Status, User};
 //!
@@ -436,7 +418,7 @@ mod tests {
         id: ExternalId,
         #[fory(with = UserSerializer)]
         user: User,
-        #[fory(with = UserSerializer)]
+        #[fory(with = OptionSerializer<UserSerializer>)]
         optional_user: Option<User>,
         #[fory(list(element(with = UserSerializer)))]
         users: Vec<User>,

@@ -18,7 +18,7 @@
 use crate::context::{ReadContext, WriteContext};
 use crate::error::Error;
 use crate::serializer::util::read_basic_type_info;
-use crate::serializer::{Serializer, SerializerOwner};
+use crate::serializer::Serializer;
 use crate::type_id::TypeId;
 use crate::types::{Date, Duration, Timestamp};
 use std::sync::Arc;
@@ -63,8 +63,6 @@ macro_rules! temporal_hooks {
 impl Serializer for Timestamp {
     type Target = Self;
 
-    const OWNER: SerializerOwner = SerializerOwner::Fory;
-
     #[inline(always)]
     fn write(value: &Self, context: &mut WriteContext) -> Result<(), Error> {
         context.writer.write_i64(value.seconds());
@@ -87,8 +85,6 @@ impl Serializer for Timestamp {
 
 impl Serializer for Date {
     type Target = Self;
-
-    const OWNER: SerializerOwner = SerializerOwner::Fory;
 
     #[inline(always)]
     fn write(value: &Self, context: &mut WriteContext) -> Result<(), Error> {
@@ -120,8 +116,6 @@ impl Serializer for Date {
 impl Serializer for Duration {
     type Target = Self;
 
-    const OWNER: SerializerOwner = SerializerOwner::Fory;
-
     #[inline(always)]
     fn write(value: &Self, context: &mut WriteContext) -> Result<(), Error> {
         context.writer.write_var_i64(value.seconds());
@@ -150,8 +144,6 @@ mod chrono_support {
     impl Serializer for NaiveDateTime {
         type Target = Self;
 
-        const OWNER: SerializerOwner = SerializerOwner::Fory;
-
         #[inline(always)]
         fn write(value: &Self, context: &mut WriteContext) -> Result<(), Error> {
             Timestamp::write(&Timestamp::from(*value), context)
@@ -173,8 +165,6 @@ mod chrono_support {
     impl Serializer for NaiveDate {
         type Target = Self;
 
-        const OWNER: SerializerOwner = SerializerOwner::Fory;
-
         #[inline(always)]
         fn write(value: &Self, context: &mut WriteContext) -> Result<(), Error> {
             Date::write(&Date::from(*value), context)
@@ -195,8 +185,6 @@ mod chrono_support {
 
     impl Serializer for ChronoDuration {
         type Target = Self;
-
-        const OWNER: SerializerOwner = SerializerOwner::Fory;
 
         #[inline(always)]
         fn write(value: &Self, context: &mut WriteContext) -> Result<(), Error> {

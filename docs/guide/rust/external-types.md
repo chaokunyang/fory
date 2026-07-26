@@ -215,7 +215,7 @@ attempting sync Arc materialization then returns an unsupported error.
 A static external value names its serializer explicitly:
 
 ```rust
-use fory::ForyStruct;
+use fory::{ForyStruct, MutexSerializer, RefCellSerializer};
 use std::cell::RefCell;
 use std::sync::Mutex;
 
@@ -227,21 +227,24 @@ struct Request {
     #[fory(with = UserSerializer)]
     user: third_party::User,
 
-    #[fory(with = UserSerializer)]
+    #[fory(with = RefCellSerializer<UserSerializer>)]
     mutable_user: RefCell<third_party::User>,
 
-    #[fory(with = UserSerializer)]
+    #[fory(with = MutexSerializer<UserSerializer>)]
     locked_user: Mutex<third_party::User>,
 }
 ```
 
-`Option`, `Box`, `Rc`, `Arc`, Fory weak-reference carriers, `RefCell`, and
-`Mutex` compose around the selected serializer without changing the application
-field type. `RefCell` and `Mutex` retain the child wire shape; serialization
-of these direct fields uses one borrow or lock, and deserialization constructs
-the holder directly without an additional heap owner. Compatible schema
-evolution remains active for an external structural serializer nested behind
-any of these wrappers.
+`with` selects one serializer whose target is the exact declared field type.
+For `Option`, `Box`, `Rc`, `Arc`, Fory weak-reference carriers, `RefCell`, and
+`Mutex`, select the corresponding carrier serializer around the child
+serializer. For example, use `OptionSerializer<UserSerializer>` for
+`Option<third_party::User>` and `ArcSerializer<UserSerializer>` for
+`Arc<third_party::User>`. `RefCell` and `Mutex` retain the child wire shape;
+serialization of these direct fields uses one borrow or lock, and
+deserialization constructs the holder directly without an additional heap
+owner. Compatible schema evolution remains active for an external structural
+serializer nested behind any of these wrappers.
 
 A skipped external field can use `#[fory(skip, with = UserSerializer)]`. In that
 case the serializer is used only for its fallible construction default; the
@@ -255,11 +258,14 @@ List elements, map children, and tuple positions select serializers at their own
 recursive schema nodes:
 
 ```rust
-use fory::ForyStruct;
+use fory::{ForyStruct, VecSerializer};
 use std::collections::HashMap;
 
 #[derive(ForyStruct)]
 struct Directory {
+    #[fory(with = VecSerializer<UserSerializer>)]
+    direct_users: Vec<third_party::User>,
+
     #[fory(list(element(with = UserSerializer)))]
     users: Vec<third_party::User>,
 
@@ -283,8 +289,11 @@ tuple metadata. Tuples are supported from arity 1 through 22.
 
 Recursive field selection covers `Vec`, `VecDeque`, `LinkedList`, `HashSet`,
 `BTreeSet`, `BinaryHeap`, fixed arrays, `HashMap`, `BTreeMap`, and tuple
-arities 1 through 22. A serializer annotation applies only to its declared node;
-it never silently propagates through a composite.
+arities 1 through 22. `direct_users` selects a carrier serializer for the exact
+Vec node; `users` selects the element serializer recursively. Both forms use the
+same built-in Vec codec and structural LIST representation. A serializer
+annotation applies only to its declared node; it never silently propagates
+through a composite.
 
 A node-local `#[fory(with = PackedUsersSerializer)]` may instead select one
 manual serializer whose exact target is the whole `Vec`, map, set, array, or
@@ -401,8 +410,8 @@ local type is its own serializer, so
 `HashMap<String, third_party::User>`.
 `ArraySerializer<S, N>` uses the same carrier selection as the chosen child
 serializer. A canonical primitive serializer such as `i32` retains its
-dense-array format, while an application serializer uses LIST even if its target
-is a primitive Rust type.
+dense-array format, while an external structural or manual child serializer
+uses LIST even if its target is a primitive Rust type.
 
 `VecSerializer<S>` also preserves the ordinary Vec format selected by its
 child. `VecSerializer<i32>` uses `INT32_ARRAY`,
@@ -421,9 +430,11 @@ Vec codec with compile-time schema selection.
 
 Fory never infers a serializer composition from a target type or from
 registration. Name every external child serializer explicitly in the carrier serializer
-type. Fields continue to use the inline `list(element(...))` or
-`map(key(...), value(...))` grammar, or indexed `tuple(element(...))` grammar,
-shown above; a Fory-owned carrier serializer is not a field `with` leaf.
+type. A field can select an exact carrier serializer with `with`, such as
+`#[fory(with = VecSerializer<UserSerializer>)]`. Use the inline
+`list(element(...))` or `map(key(...), value(...))` grammar, or indexed
+`tuple(element(...))` grammar, when serializers are selected at recursive child
+nodes.
 
 An exact whole-container or whole-tuple manual serializer remains a valid opaque
 root, but it uses EXT/NAMED_EXT instead of the built-in structural

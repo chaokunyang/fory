@@ -232,14 +232,20 @@ directly.
 
 ### External-Type Field Selection
 
-Use `with` when a field's value type is serialized by an external structural
-serializer or manual serializer:
+Use `with` to select a serializer whose target is the exact field type. The
+serializer can be external structural, manual, or a carrier composition:
 
 ```rust
+use fory::{ForyStruct, VecSerializer};
+use std::collections::HashMap;
+
 #[derive(ForyStruct)]
 struct Envelope {
     #[fory(with = UserSerializer)]
     user: third_party::User,
+
+    #[fory(with = VecSerializer<UserSerializer>)]
+    direct_users: Vec<third_party::User>,
 
     #[fory(list(element(with = UserSerializer)))]
     users: Vec<third_party::User>,
@@ -252,8 +258,10 @@ struct Envelope {
 }
 ```
 
-Each nested annotation applies only at that node. For example, a map key and
-value can select different serializers. Tuple indices are zero-based. See
+`with` selects a serializer whose target is the exact field node, so
+`direct_users` uses a carrier serializer for the whole Vec. Each recursive
+annotation applies only at its child node. For example, a map key and value can
+select different serializers. Tuple indices are zero-based. See
 [External-Type Serialization](external-types.md) for the complete recursive
 grammar and supported carriers.
 

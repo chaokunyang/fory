@@ -19,7 +19,7 @@ use crate::context::{ReadContext, WriteContext};
 use crate::error::Error;
 use crate::resolver::{RefFlag, RefMode};
 use crate::serializer::any::check_erased_target_type;
-use crate::serializer::{Serializer, SerializerOwner};
+use crate::serializer::Serializer;
 use crate::type_id::{self, TypeId};
 use crate::types::UnknownCase;
 use std::any::Any;
@@ -183,8 +183,6 @@ pub fn read_unknown_case_body(
 
 impl Serializer for UnknownCase {
     type Target = Self;
-
-    const OWNER: SerializerOwner = SerializerOwner::Fory;
 
     fn write_value(
         value: &Self,

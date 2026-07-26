@@ -39,9 +39,6 @@ macro_rules! impl_single_carrier_serializer {
         {
             type Target = $target<S::Target>;
 
-            const OWNER: $crate::serializer::SerializerOwner =
-                $crate::serializer::SerializerOwner::Fory;
-
             #[inline(always)]
             fn write(
                 value: &Self::Target,
@@ -351,9 +348,6 @@ macro_rules! impl_single_carrier_serializer {
             $(T: $($bounds)+,)?
         {
             type Target = Self;
-
-            const OWNER: $crate::serializer::SerializerOwner =
-                $crate::serializer::SerializerOwner::Fory;
 
             #[inline(always)]
             fn write(
@@ -836,8 +830,6 @@ pub use any::{read_box_any, write_box_any};
 pub use arc::ArcSerializer;
 pub use array::ArraySerializer;
 pub use box_::BoxSerializer;
-#[doc(hidden)]
-pub use core::SerializerOwner;
 pub use core::{read_data, write_data, Serializer, StructSerializer};
 pub use heap::BinaryHeapSerializer;
 pub use list::{LinkedListSerializer, VecDequeSerializer, VecSerializer};

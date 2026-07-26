@@ -21,7 +21,7 @@ use crate::meta::{
     MetaString, TypeMeta, NAMESPACE_ENCODER, NAMESPACE_ENCODINGS, TYPE_NAME_ENCODER,
     TYPE_NAME_ENCODINGS,
 };
-use crate::serializer::{Serializer, SerializerOwner, StructSerializer};
+use crate::serializer::{Serializer, StructSerializer};
 use crate::type_id::{get_ext_actual_type_id, is_enum_type_id};
 use crate::types::{Date, Duration, Timestamp};
 use crate::TypeId;
@@ -697,37 +697,19 @@ fn ensure_struct_category<S: StructSerializer>(union: bool, api: &str) -> Result
 #[inline(never)]
 fn ensure_ext_category<S: Serializer>() -> Result<(), Error> {
     let type_id = S::static_type_id();
-    if type_id == TypeId::EXT || type_id == TypeId::NAMED_EXT {
+    if (type_id == TypeId::EXT || type_id == TypeId::NAMED_EXT) && !S::is_wrapper_type() {
         return Ok(());
+    }
+    if S::is_wrapper_type() {
+        return Err(Error::not_allowed(format!(
+            "register_serializer requires an independent EXT serializer, but {} is a transparent wrapper",
+            std::any::type_name::<S>(),
+        )));
     }
     Err(Error::not_allowed(format!(
         "register_serializer requires an EXT serializer, but {} declares {:?}",
         std::any::type_name::<S>(),
         type_id,
-    )))
-}
-
-#[cold]
-#[inline(never)]
-fn ensure_application_owner<S: Serializer>() -> Result<(), Error> {
-    if S::OWNER == SerializerOwner::Application {
-        return Ok(());
-    }
-    Err(Error::not_allowed(format!(
-        "Fory-owned serializer {} cannot be registered as an application EXT serializer",
-        std::any::type_name::<S>(),
-    )))
-}
-
-#[cold]
-#[inline(never)]
-fn ensure_fory_owner<S: Serializer>() -> Result<(), Error> {
-    if S::OWNER == SerializerOwner::Fory {
-        return Ok(());
-    }
-    Err(Error::not_allowed(format!(
-        "application serializer {} cannot be seeded as a Fory built-in",
-        std::any::type_name::<S>(),
     )))
 }
 
@@ -1062,7 +1044,6 @@ impl TypeResolver {
     }
 
     pub fn register_serializer<S: Serializer>(&mut self, id: u32) -> Result<(), Error> {
-        ensure_application_owner::<S>()?;
         ensure_ext_category::<S>()?;
         self.register_ext_type::<S>(
             id,
@@ -1073,7 +1054,6 @@ impl TypeResolver {
     }
 
     pub fn register_serializer_by_name<S: Serializer>(&mut self, name: &str) -> Result<(), Error> {
-        ensure_application_owner::<S>()?;
         ensure_ext_category::<S>()?;
         let (namespace, type_name) = split_named_registration(name, "register_serializer_by_name")?;
         self.register_ext_type::<S>(0, get_ext_actual_type_id(0, true), namespace, type_name)
@@ -1085,7 +1065,6 @@ impl TypeResolver {
         &mut self,
         type_id: TypeId,
     ) -> Result<(), Error> {
-        ensure_fory_owner::<S>()?;
         if S::static_type_id() != type_id {
             return Err(Error::not_allowed(format!(
                 "Fory serializer {} declares {:?}, not {:?}",

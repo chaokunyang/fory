@@ -28,7 +28,7 @@
 //! - `bytes`: Binary blob schema for `Vec<u8>`
 //! - `map(key(...), value(...))`: Nested map key/value configuration
 //! - `tuple(element(index = N, ...))`: Sparse heterogeneous tuple configuration
-//! - `with = S`: Select an application serializer for this value node
+//! - `with = S`: Select a serializer for this exact value node
 
 use quote::ToTokens;
 use std::collections::HashMap;
@@ -58,7 +58,7 @@ pub struct ForyFieldMeta {
     pub map: Option<ForyMapMeta>,
     /// Sparse heterogeneous tuple position configuration.
     pub tuple: Option<ForyTupleMeta>,
-    /// Application serializer selected for this value node.
+    /// Serializer selected for this exact value node.
     pub with: Option<Type>,
 }
 

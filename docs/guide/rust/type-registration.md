@@ -77,10 +77,11 @@ fory.register::<UserSerializer>(101)?;
 ```
 
 The serializer's `Target` is the runtime value type. Registration does not
-require a separate external-type API. At fields, select child serializers with
-recursive `list`, `map`, or `tuple` annotations. At roots, compose carrier
-serializers such as `VecSerializer<UserSerializer>`. Carrier serializers are
-not registered.
+require a separate external-type API. At fields, `with` can select an exact
+carrier serializer such as `VecSerializer<UserSerializer>`, while recursive
+`list`, `map`, or `tuple` annotations select serializers at child nodes. At
+roots, compose the same carrier serializers. Carrier serializers are not
+registered.
 
 ## Registration Consistency
 

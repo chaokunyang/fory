@@ -67,41 +67,6 @@ pub use super::tuple::{
 #[doc(hidden)]
 pub use super::weak::{ArcWeakCodec, RcWeakCodec};
 
-#[inline(always)]
-fn canonical_primitive_array_id<S: Serializer>() -> Option<TypeId> {
-    let array_type_id = S::PRIMITIVE_ARRAY_TYPE_ID?;
-    let provider_type_id = std::any::TypeId::of::<S>();
-    let target_type_id = std::any::TypeId::of::<S::Target>();
-    if provider_type_id != target_type_id {
-        return None;
-    }
-    let matches_target = match array_type_id {
-        TypeId::BOOL_ARRAY => target_type_id == std::any::TypeId::of::<bool>(),
-        TypeId::INT8_ARRAY => target_type_id == std::any::TypeId::of::<i8>(),
-        TypeId::INT16_ARRAY => target_type_id == std::any::TypeId::of::<i16>(),
-        TypeId::INT32_ARRAY => target_type_id == std::any::TypeId::of::<i32>(),
-        TypeId::INT64_ARRAY => target_type_id == std::any::TypeId::of::<i64>(),
-        TypeId::FLOAT16_ARRAY => {
-            target_type_id == std::any::TypeId::of::<crate::types::float16::float16>()
-        }
-        TypeId::BFLOAT16_ARRAY => {
-            target_type_id == std::any::TypeId::of::<crate::types::bfloat16::bfloat16>()
-        }
-        TypeId::FLOAT32_ARRAY => target_type_id == std::any::TypeId::of::<f32>(),
-        TypeId::FLOAT64_ARRAY => target_type_id == std::any::TypeId::of::<f64>(),
-        TypeId::BINARY => target_type_id == std::any::TypeId::of::<u8>(),
-        TypeId::UINT16_ARRAY => target_type_id == std::any::TypeId::of::<u16>(),
-        TypeId::UINT32_ARRAY => target_type_id == std::any::TypeId::of::<u32>(),
-        TypeId::UINT64_ARRAY => target_type_id == std::any::TypeId::of::<u64>(),
-        TypeId::U128_ARRAY => target_type_id == std::any::TypeId::of::<u128>(),
-        TypeId::INT128_ARRAY => target_type_id == std::any::TypeId::of::<i128>(),
-        TypeId::USIZE_ARRAY => target_type_id == std::any::TypeId::of::<usize>(),
-        TypeId::ISIZE_ARRAY => target_type_id == std::any::TypeId::of::<isize>(),
-        _ => false,
-    };
-    matches_target.then_some(array_type_id)
-}
-
 pub(super) const TRACKING_REF: u8 = 0b1;
 pub(super) const HAS_NULL: u8 = 0b10;
 pub(super) const DECL_ELEMENT_TYPE: u8 = 0b100;
@@ -655,12 +620,6 @@ pub trait Codec<T: 'static>: 'static {
 
     fn default_value(context: &mut ReadContext) -> Result<T, Error>;
 
-    #[doc(hidden)]
-    #[inline(always)]
-    fn primitive_array_type_id() -> Option<TypeId> {
-        None
-    }
-
     fn write_type_info(context: &mut WriteContext) -> Result<(), Error>;
 
     fn read_type_info(context: &mut ReadContext) -> Result<(), Error>;
@@ -910,11 +869,6 @@ where
     #[inline(always)]
     fn read_type_info(context: &mut ReadContext) -> Result<(), Error> {
         S::read_type_info(context)
-    }
-
-    #[inline(always)]
-    fn primitive_array_type_id() -> Option<TypeId> {
-        canonical_primitive_array_id::<S>()
     }
 
     #[inline(always)]
@@ -1473,11 +1427,6 @@ macro_rules! signed_int_codec {
             fn static_type_id() -> TypeId {
                 TypeId::try_from(WIRE_TYPE_ID).unwrap_or(TypeId::UNKNOWN)
             }
-
-            #[inline(always)]
-            fn primitive_array_type_id() -> Option<TypeId> {
-                canonical_primitive_array_id::<$ty>()
-            }
         }
     };
 }
@@ -1593,8 +1542,7 @@ where
     if STRUCTURAL_LIST {
         return Ok(None);
     }
-    match C::primitive_array_type_id() {
-        Some(TypeId::BINARY) if DENSE_ARRAY => Ok(Some(TypeId::UINT8_ARRAY)),
+    match primitive_list::array_type_id::<T, C>(DENSE_ARRAY) {
         Some(type_id) => Ok(Some(type_id)),
         None if DENSE_ARRAY => Err(dense_array_requires_primitive::<T>()),
         None => Ok(None),
@@ -1861,7 +1809,7 @@ where
 
     #[inline(always)]
     fn reserved_space() -> usize {
-        if !STRUCTURAL_LIST && C::primitive_array_type_id().is_some() {
+        if !STRUCTURAL_LIST && primitive_list::array_type_id::<T, C>(DENSE_ARRAY).is_some() {
             primitive_list::reserved_space::<T>() + SIZE_OF_REF_AND_TYPE
         } else {
             std::mem::size_of::<u32>() + SIZE_OF_REF_AND_TYPE
@@ -2060,8 +2008,7 @@ where
         if STRUCTURAL_LIST {
             return TypeId::LIST;
         }
-        match C::primitive_array_type_id() {
-            Some(TypeId::BINARY) if DENSE_ARRAY => TypeId::UINT8_ARRAY,
+        match primitive_list::array_type_id::<T, C>(DENSE_ARRAY) {
             Some(type_id) => type_id,
             None => TypeId::LIST,
         }

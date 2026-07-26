@@ -19,7 +19,7 @@ use crate::buffer::{Reader, Writer};
 use crate::context::{ReadContext, WriteContext};
 use crate::error::Error;
 use crate::serializer::util::read_basic_type_info;
-use crate::serializer::{Serializer, SerializerOwner};
+use crate::serializer::Serializer;
 use crate::type_id::TypeId;
 use crate::types::Decimal;
 use num_bigint::{BigInt, Sign};
@@ -28,8 +28,6 @@ use std::sync::Arc;
 
 impl Serializer for Decimal {
     type Target = Self;
-
-    const OWNER: SerializerOwner = SerializerOwner::Fory;
 
     #[inline(always)]
     fn write(value: &Self, context: &mut WriteContext) -> Result<(), Error> {

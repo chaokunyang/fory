@@ -20,7 +20,7 @@ use crate::error::Error;
 use crate::meta::FieldType;
 use crate::resolver::{RefMode, TypeInfo, TypeResolver};
 use crate::serializer::codec::{Codec, OptionCodec, SerializerCodec};
-use crate::serializer::{Serializer, SerializerOwner};
+use crate::serializer::Serializer;
 use crate::type_id::TypeId;
 use std::marker::PhantomData;
 use std::rc::Rc;
@@ -32,8 +32,6 @@ type RootCodec<S> = OptionCodec<<S as Serializer>::Target, SerializerCodec<S, fa
 
 impl<S: Serializer> Serializer for OptionSerializer<S> {
     type Target = Option<S::Target>;
-
-    const OWNER: SerializerOwner = SerializerOwner::Fory;
 
     #[inline(always)]
     fn write(value: &Self::Target, context: &mut WriteContext) -> Result<(), Error> {
@@ -192,8 +190,6 @@ where
     T: Serializer<Target = T>,
 {
     type Target = Self;
-
-    const OWNER: SerializerOwner = SerializerOwner::Fory;
 
     #[inline(always)]
     fn write(value: &Self, context: &mut WriteContext) -> Result<(), Error> {

@@ -20,7 +20,7 @@ use crate::context::{ReadContext, WriteContext};
 use crate::error::Error;
 use crate::meta::FieldType;
 use crate::serializer::util::read_basic_type_info;
-use crate::serializer::{Serializer, SerializerOwner};
+use crate::serializer::Serializer;
 use crate::type_id::{self, TypeId};
 use crate::types::bfloat16::bfloat16;
 use crate::types::float16::float16;
@@ -32,15 +32,11 @@ macro_rules! impl_num_serializer {
         $writer:expr,
         $reader:expr,
         $type_id:expr,
-        $array_type_id:expr,
         $default:expr,
         $compatible_reader:expr
     ) => {
         impl Serializer for $ty {
             type Target = Self;
-
-            const OWNER: SerializerOwner = SerializerOwner::Fory;
-            const PRIMITIVE_ARRAY_TYPE_ID: Option<TypeId> = Some($array_type_id);
 
             #[inline(always)]
             fn write(value: &Self, context: &mut WriteContext) -> Result<(), Error> {
@@ -102,7 +98,6 @@ impl_num_serializer!(
     Writer::write_i8,
     Reader::read_i8,
     TypeId::INT8,
-    TypeId::INT8_ARRAY,
     0,
     |context: &mut ReadContext, _: &FieldType| context.reader.read_i8()
 );
@@ -111,7 +106,6 @@ impl_num_serializer!(
     Writer::write_i16,
     Reader::read_i16,
     TypeId::INT16,
-    TypeId::INT16_ARRAY,
     0,
     |context: &mut ReadContext, _: &FieldType| context.reader.read_i16()
 );
@@ -120,7 +114,6 @@ impl_num_serializer!(
     Writer::write_var_i32,
     Reader::read_var_i32,
     TypeId::VARINT32,
-    TypeId::INT32_ARRAY,
     0,
     |context: &mut ReadContext, field_type: &FieldType| match field_type.type_id {
         type_id::INT32 => context.reader.read_i32(),
@@ -133,7 +126,6 @@ impl_num_serializer!(
     Writer::write_var_i64,
     Reader::read_var_i64,
     TypeId::VARINT64,
-    TypeId::INT64_ARRAY,
     0,
     |context: &mut ReadContext, field_type: &FieldType| match field_type.type_id {
         type_id::INT64 => context.reader.read_i64(),
@@ -147,7 +139,6 @@ impl_num_serializer!(
     Writer::write_f32,
     Reader::read_f32,
     TypeId::FLOAT32,
-    TypeId::FLOAT32_ARRAY,
     0.0,
     |context: &mut ReadContext, _: &FieldType| context.reader.read_f32()
 );
@@ -156,7 +147,6 @@ impl_num_serializer!(
     Writer::write_f64,
     Reader::read_f64,
     TypeId::FLOAT64,
-    TypeId::FLOAT64_ARRAY,
     0.0,
     |context: &mut ReadContext, _: &FieldType| context.reader.read_f64()
 );
@@ -165,7 +155,6 @@ impl_num_serializer!(
     Writer::write_f16,
     Reader::read_f16,
     TypeId::FLOAT16,
-    TypeId::FLOAT16_ARRAY,
     float16::ZERO,
     |context: &mut ReadContext, _: &FieldType| context.reader.read_f16()
 );
@@ -174,7 +163,6 @@ impl_num_serializer!(
     Writer::write_bf16,
     Reader::read_bf16,
     TypeId::BFLOAT16,
-    TypeId::BFLOAT16_ARRAY,
     bfloat16::ZERO,
     |context: &mut ReadContext, _: &FieldType| context.reader.read_bf16()
 );
@@ -183,7 +171,6 @@ impl_num_serializer!(
     Writer::write_i128,
     Reader::read_i128,
     TypeId::INT128,
-    TypeId::INT128_ARRAY,
     0,
     |context: &mut ReadContext, _: &FieldType| context.reader.read_i128()
 );
@@ -192,7 +179,6 @@ impl_num_serializer!(
     Writer::write_isize,
     Reader::read_isize,
     TypeId::ISIZE,
-    TypeId::ISIZE_ARRAY,
     0,
     |context: &mut ReadContext, _: &FieldType| context.reader.read_isize()
 );

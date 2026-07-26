@@ -27,7 +27,7 @@ use crate::context::{ReadContext, WriteContext};
 use crate::error::Error;
 use crate::meta::FieldType;
 use crate::resolver::{RefFlag, RefMode, TypeInfo, TypeResolver};
-use crate::serializer::{Serializer, SerializerOwner};
+use crate::serializer::Serializer;
 use crate::type_id::{TypeId, SIZE_OF_REF_AND_TYPE};
 use std::borrow::Cow;
 use std::marker::PhantomData;
@@ -35,8 +35,6 @@ use std::rc::Rc;
 
 impl Serializer for () {
     type Target = Self;
-
-    const OWNER: SerializerOwner = SerializerOwner::Fory;
 
     #[inline(always)]
     fn write(_: &Self, _: &mut WriteContext) -> Result<(), Error> {
@@ -500,8 +498,6 @@ macro_rules! impl_tuple_codec {
         impl<$($S: Serializer,)+> Serializer for $provider<$($S,)+> {
             type Target = ($($S::Target,)+);
 
-            const OWNER: SerializerOwner = SerializerOwner::Fory;
-
             #[inline(always)]
             fn write(value: &Self::Target, context: &mut WriteContext) -> Result<(), Error> {
                 <$codec<
@@ -641,8 +637,6 @@ macro_rules! impl_tuple_codec {
             $($T: Serializer<Target = $T>,)+
         {
             type Target = Self;
-
-            const OWNER: SerializerOwner = SerializerOwner::Fory;
 
             #[inline(always)]
             fn write(value: &Self, context: &mut WriteContext) -> Result<(), Error> {

@@ -588,7 +588,7 @@ impl Fory {
     /// Serializes a value using the explicitly selected serializer.
     ///
     /// `record` must be exactly [`Serializer::Target`] for `S`. Register `S`
-    /// first when it is an application structural or manual serializer. Fory-owned
+    /// first when it is an independently registered structural or manual serializer. Fory-owned
     /// carrier serializers compose their child serializers and are not registered.
     pub fn serialize_with<S>(&self, record: &S::Target) -> Result<Vec<u8>, Error>
     where

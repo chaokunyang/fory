@@ -123,9 +123,9 @@
 //! - **`#[fory(target = path::Type)]`**: Makes the derived declaration an external structural
 //!   serializer for the target type. Generated code accesses and constructs the target directly;
 //!   the serializer declaration itself is never instantiated.
-//! - **`#[fory(with = SerializerType)]`**: Selects an application serializer for a field value
-//!   node. It composes recursively through transparent carriers and through `list`, `map`, and
-//!   `tuple` child metadata.
+//! - **`#[fory(with = SerializerType)]`**: Selects a serializer whose target is the exact field
+//!   value node. Use carrier serializers for exact wrapper or container nodes, and use `list`,
+//!   `map`, or `tuple` metadata to select serializers recursively at child nodes.
 //! - **`#[fory(default)]`**: Marks the fallible deserialization default `ForyUnion` variant.
 //!   `ForyUnion` requires exactly one default variant.
 //!

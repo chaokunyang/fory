@@ -19,14 +19,12 @@ use crate::context::{ReadContext, WriteContext};
 use crate::error::Error;
 use crate::meta::FieldType;
 use crate::resolver::TypeResolver;
-use crate::serializer::{Serializer, SerializerOwner};
+use crate::serializer::Serializer;
 use crate::type_id::TypeId;
 use std::marker::PhantomData;
 
 impl<T: 'static> Serializer for PhantomData<T> {
     type Target = Self;
-
-    const OWNER: SerializerOwner = SerializerOwner::Fory;
 
     #[inline(always)]
     fn write(_: &Self, _: &mut WriteContext) -> Result<(), Error> {

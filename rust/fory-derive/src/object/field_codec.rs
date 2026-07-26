@@ -28,15 +28,11 @@ use syn::{GenericArgument, PathArguments, Type};
 
 struct CodecSelection {
     ty: TokenStream,
-    owner_checks: Vec<TokenStream>,
 }
 
 impl CodecSelection {
     fn plain(ty: TokenStream) -> Self {
-        Self {
-            ty,
-            owner_checks: Vec::new(),
-        }
+        Self { ty }
     }
 }
 
@@ -44,7 +40,6 @@ pub(crate) struct ResolvedField<'a> {
     pub source: &'a SourceField<'a>,
     pub private_ident: syn::Ident,
     pub codec_ty: TokenStream,
-    pub owner_checks: Vec<TokenStream>,
     pub value_ty: &'a Type,
     pub field_id: i16,
     pub has_selected_provider: bool,
@@ -58,18 +53,9 @@ impl<'a> ResolvedField<'a> {
         quote! { <#codec_ty as fory_core::serializer::codec::Codec<#value_ty>> }
     }
 
-    fn validate_owners(&self) -> TokenStream {
-        let checks = &self.owner_checks;
-        quote! { #(#checks)* }
-    }
-
     pub fn reserved_space(&self) -> TokenStream {
-        let validation = self.validate_owners();
         let call = self.codec_call();
-        quote! {{
-            #validation
-            #call::reserved_space()
-        }}
+        quote! { #call::reserved_space() }
     }
 
     pub fn write_field(&self) -> TokenStream {
@@ -78,10 +64,8 @@ impl<'a> ResolvedField<'a> {
     }
 
     pub fn write_value_field(&self, value: TokenStream) -> TokenStream {
-        let validation = self.validate_owners();
         let call = self.codec_call();
         quote! {
-            #validation
             #call::write_field(#value, context)?;
         }
     }
@@ -92,10 +76,8 @@ impl<'a> ResolvedField<'a> {
         ref_mode: TokenStream,
         write_type_info: TokenStream,
     ) -> TokenStream {
-        let validation = self.validate_owners();
         let call = self.codec_call();
         quote! {
-            #validation
             #call::write_with_mode(
                 #value,
                 context,
@@ -107,11 +89,9 @@ impl<'a> ResolvedField<'a> {
     }
 
     pub fn read_field(&self) -> TokenStream {
-        let validation = self.validate_owners();
         let var = &self.private_ident;
         let call = self.codec_call();
         quote! {
-            #validation
             let #var = #call::read_field(context)?;
         }
     }
@@ -121,29 +101,19 @@ impl<'a> ResolvedField<'a> {
         ref_mode: TokenStream,
         read_type_info: TokenStream,
     ) -> TokenStream {
-        let validation = self.validate_owners();
         let call = self.codec_call();
-        quote! {{
-            #validation
-            #call::read_with_mode(context, #ref_mode, #read_type_info)?
-        }}
+        quote! { #call::read_with_mode(context, #ref_mode, #read_type_info)? }
     }
 
     pub fn default_value_expr(&self) -> TokenStream {
-        let validation = self.validate_owners();
         let call = self.codec_call();
-        quote! {{
-            #validation
-            #call::default_value(context)?
-        }}
+        quote! { #call::default_value(context)? }
     }
 
     pub fn declare_compatible_var(&self) -> TokenStream {
-        let validation = self.validate_owners();
         let var = &self.private_ident;
         let ty = self.value_ty;
         quote! {
-            #validation
             let mut #var: ::std::option::Option<#ty> = ::std::option::Option::None;
         }
     }
@@ -160,19 +130,16 @@ impl<'a> ResolvedField<'a> {
     }
 
     pub fn read_compatible_direct(&self) -> TokenStream {
-        let validation = self.validate_owners();
         let var = &self.private_ident;
         let call = self.codec_call();
         quote! {
-            #validation
             #var = ::std::option::Option::Some(#call::read_field(context)?);
         }
     }
 
     pub fn read_compatible_conversion(&self) -> TokenStream {
-        let validation = self.validate_owners();
         let var = &self.private_ident;
-        // A provider targeting a Rust scalar is still an EXT-shaped schema leaf. Keep it on the
+        // A selected serializer targeting a Rust scalar can still be an EXT-shaped schema leaf. Keep it on the
         // selected codec path instead of bypassing its body through scalar conversion.
         if !self.has_selected_provider {
             if let Some(read_scalar) = compatible_scalar_reader_for(self.value_ty) {
@@ -183,7 +150,6 @@ impl<'a> ResolvedField<'a> {
                     quote! { #call::static_type_id() as u32 }
                 };
                 return quote! {
-                    #validation
                     #var = ::std::option::Option::Some(#read_scalar(
                         context,
                         #local_type,
@@ -196,7 +162,6 @@ impl<'a> ResolvedField<'a> {
         }
         let call = self.codec_call();
         quote! {
-            #validation
             let remote_field_type = &_field.field_type;
             if let Some(value) = #call::read_compatible(
                 context,
@@ -224,12 +189,10 @@ impl<'a> ResolvedField<'a> {
     }
 
     pub fn field_info(&self) -> TokenStream {
-        let validation = self.validate_owners();
         let field_id = self.field_id;
         let name = &self.source.field_name;
         let call = self.codec_call();
         quote! {{
-            #validation
             fory_core::meta::FieldInfo::new_with_id(
                 #field_id,
                 #name,
@@ -243,28 +206,23 @@ pub(crate) struct SkippedField<'a> {
     pub source: &'a SourceField<'a>,
     pub private_ident: syn::Ident,
     pub codec_ty: TokenStream,
-    pub owner_checks: Vec<TokenStream>,
 }
 
 impl<'a> SkippedField<'a> {
     pub fn read_default(&self) -> TokenStream {
-        let checks = &self.owner_checks;
         let var = &self.private_ident;
         let ty = &self.source.field.ty;
         let codec_ty = &self.codec_ty;
         quote! {
-            #(#checks)*
             let #var =
                 <#codec_ty as fory_core::serializer::codec::Codec<#ty>>::default_value(context)?;
         }
     }
 
     pub fn default_value_expr(&self) -> TokenStream {
-        let checks = &self.owner_checks;
         let ty = &self.source.field.ty;
         let codec_ty = &self.codec_ty;
         quote! {{
-            #(#checks)*
             <#codec_ty as fory_core::serializer::codec::Codec<#ty>>::default_value(context)?
         }}
     }
@@ -306,7 +264,6 @@ pub(crate) fn build_bindings<'a>(
                     source,
                     private_ident,
                     codec_ty: selection.ty,
-                    owner_checks: selection.owner_checks,
                 }));
             }
             let field_id = if meta.uses_tag_id() {
@@ -318,7 +275,6 @@ pub(crate) fn build_bindings<'a>(
                 source,
                 private_ident,
                 codec_ty: selection.ty,
-                owner_checks: selection.owner_checks,
                 value_ty: &source.field.ty,
                 field_id,
                 has_selected_provider: meta.with.is_some(),
@@ -358,55 +314,43 @@ fn codec_selection_for(
         return dynamic_codec_for(ty, nullable, track_ref);
     }
 
+    if let Some(provider) = &meta.with {
+        return Ok(CodecSelection::plain(quote! {
+            fory_core::serializer::codec::SerializerCodec<
+                #provider,
+                #nullable,
+                #track_ref
+            >
+        }));
+    }
+
     if let Some(inner) = extract_option_inner_type(ty) {
         let child_meta = transparent_child_meta(meta);
-        let child = codec_for_child(&inner, &child_meta)?;
-        let child_ty = child.ty;
-        return Ok(CodecSelection {
-            ty: quote! {
-                fory_core::serializer::codec::OptionCodec<
-                    #inner,
-                    #child_ty,
-                    #track_ref
-                >
-            },
-            owner_checks: child.owner_checks,
-        });
+        let child_ty = codec_for_child(&inner, &child_meta)?.ty;
+        return Ok(CodecSelection::plain(quote! {
+            fory_core::serializer::codec::OptionCodec<
+                #inner,
+                #child_ty,
+                #track_ref
+            >
+        }));
     }
 
     if let Some((name, Some(args))) = type_name_and_args(ty) {
         if is_transparent_carrier(&name) {
             let inner = single_type_arg(args, ty, &name)?;
             let child_meta = transparent_child_meta(meta);
-            let child = codec_for_child(inner, &child_meta)?;
-            let child_ty = child.ty;
+            let child_ty = codec_for_child(inner, &child_meta)?.ty;
             let codec_ident = format_ident!("{name}Codec");
-            return Ok(CodecSelection {
-                ty: quote! {
-                    fory_core::serializer::codec::#codec_ident<
-                        #inner,
-                        #child_ty,
-                        #nullable,
-                        #track_ref
-                    >
-                },
-                owner_checks: child.owner_checks,
-            });
-        }
-    }
-
-    if let Some(provider) = &meta.with {
-        let check = application_provider_check(provider);
-        return Ok(CodecSelection {
-            ty: quote! {
-                fory_core::serializer::codec::SerializerCodec<
-                    #provider,
+            return Ok(CodecSelection::plain(quote! {
+                fory_core::serializer::codec::#codec_ident<
+                    #inner,
+                    #child_ty,
                     #nullable,
                     #track_ref
                 >
-            },
-            owner_checks: vec![check],
-        });
+            }));
+        }
     }
 
     if let Type::Array(array) = ty {
@@ -426,7 +370,6 @@ fn codec_selection_for(
                     #track_ref
                 >
             },
-            owner_checks: child.owner_checks,
         });
     }
 
@@ -462,7 +405,6 @@ fn codec_selection_for(
                         #track_ref
                     >
                 },
-                owner_checks: child.owner_checks,
             });
         }
         if is_map(&name) {
@@ -473,8 +415,6 @@ fn codec_selection_for(
             let key_codec = key.ty;
             let value_codec = value.ty;
             let codec_ident = format_ident!("{name}Codec");
-            let mut owner_checks = key.owner_checks;
-            owner_checks.extend(value.owner_checks);
             return Ok(CodecSelection {
                 ty: quote! {
                     fory_core::serializer::codec::#codec_ident<
@@ -486,7 +426,6 @@ fn codec_selection_for(
                         #track_ref
                     >
                 },
-                owner_checks,
             });
         }
     }
@@ -517,12 +456,6 @@ fn transparent_child_meta(meta: &ForyFieldMeta) -> ForyFieldMeta {
     child.r#ref = None;
     child.skip = false;
     child
-}
-
-fn application_provider_check(provider: &Type) -> TokenStream {
-    quote! {
-        let _ = <#provider as fory_core::Serializer>::FIELD_SERIALIZER_CHECK;
-    }
 }
 
 fn is_dynamic_trait_carrier(ty: &Type) -> bool {
@@ -607,13 +540,11 @@ fn tuple_codec_for(
     }
     let codec_ident = format_ident!("Tuple{}Codec", tuple.elems.len());
     let mut args = Vec::with_capacity(tuple.elems.len() * 2);
-    let mut owner_checks = Vec::new();
     for (index, elem_ty) in tuple.elems.iter().enumerate() {
         let child = codec_for_child(elem_ty, &meta.tuple_element_meta(index))?;
         let child_ty = child.ty;
         args.push(quote! { #elem_ty });
         args.push(child_ty);
-        owner_checks.extend(child.owner_checks);
     }
     Ok(CodecSelection {
         ty: quote! {
@@ -623,7 +554,6 @@ fn tuple_codec_for(
                 #track_ref
             >
         },
-        owner_checks,
     })
 }
 

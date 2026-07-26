@@ -18,33 +18,91 @@
 use crate::context::{ReadContext, WriteContext};
 use crate::error::Error;
 use crate::serializer::codec::Codec;
-use crate::type_id::TypeId;
+use crate::type_id::{self, TypeId};
 use std::mem::MaybeUninit;
 
 #[inline(always)]
-pub(super) fn canonical_target<T: 'static>(array_type_id: TypeId) -> bool {
+pub(super) fn array_type_id<T, C>(dense_u8: bool) -> Option<TypeId>
+where
+    T: 'static,
+    C: Codec<T>,
+{
     let target = std::any::TypeId::of::<T>();
-    match array_type_id {
-        TypeId::BOOL_ARRAY => target == std::any::TypeId::of::<bool>(),
-        TypeId::INT8_ARRAY => target == std::any::TypeId::of::<i8>(),
-        TypeId::INT16_ARRAY => target == std::any::TypeId::of::<i16>(),
-        TypeId::INT32_ARRAY => target == std::any::TypeId::of::<i32>(),
-        TypeId::INT64_ARRAY => target == std::any::TypeId::of::<i64>(),
-        TypeId::FLOAT16_ARRAY => target == std::any::TypeId::of::<crate::types::float16::float16>(),
-        TypeId::BFLOAT16_ARRAY => {
-            target == std::any::TypeId::of::<crate::types::bfloat16::bfloat16>()
+    match C::static_type_id() {
+        TypeId::BOOL if target == std::any::TypeId::of::<bool>() => Some(TypeId::BOOL_ARRAY),
+        TypeId::INT8 if target == std::any::TypeId::of::<i8>() => Some(TypeId::INT8_ARRAY),
+        TypeId::INT16 if target == std::any::TypeId::of::<i16>() => Some(TypeId::INT16_ARRAY),
+        TypeId::INT32 | TypeId::VARINT32 if target == std::any::TypeId::of::<i32>() => {
+            Some(TypeId::INT32_ARRAY)
         }
-        TypeId::FLOAT32_ARRAY => target == std::any::TypeId::of::<f32>(),
-        TypeId::FLOAT64_ARRAY => target == std::any::TypeId::of::<f64>(),
-        TypeId::BINARY | TypeId::UINT8_ARRAY => target == std::any::TypeId::of::<u8>(),
-        TypeId::UINT16_ARRAY => target == std::any::TypeId::of::<u16>(),
-        TypeId::UINT32_ARRAY => target == std::any::TypeId::of::<u32>(),
-        TypeId::UINT64_ARRAY => target == std::any::TypeId::of::<u64>(),
-        TypeId::U128_ARRAY => target == std::any::TypeId::of::<u128>(),
-        TypeId::INT128_ARRAY => target == std::any::TypeId::of::<i128>(),
-        TypeId::USIZE_ARRAY => target == std::any::TypeId::of::<usize>(),
-        TypeId::ISIZE_ARRAY => target == std::any::TypeId::of::<isize>(),
-        _ => false,
+        TypeId::INT64 | TypeId::VARINT64 | TypeId::TAGGED_INT64
+            if target == std::any::TypeId::of::<i64>() =>
+        {
+            Some(TypeId::INT64_ARRAY)
+        }
+        TypeId::FLOAT16 if target == std::any::TypeId::of::<crate::types::float16::float16>() => {
+            Some(TypeId::FLOAT16_ARRAY)
+        }
+        TypeId::BFLOAT16
+            if target == std::any::TypeId::of::<crate::types::bfloat16::bfloat16>() =>
+        {
+            Some(TypeId::BFLOAT16_ARRAY)
+        }
+        TypeId::FLOAT32 if target == std::any::TypeId::of::<f32>() => Some(TypeId::FLOAT32_ARRAY),
+        TypeId::FLOAT64 if target == std::any::TypeId::of::<f64>() => Some(TypeId::FLOAT64_ARRAY),
+        TypeId::UINT8 if target == std::any::TypeId::of::<u8>() => Some(if dense_u8 {
+            TypeId::UINT8_ARRAY
+        } else {
+            TypeId::BINARY
+        }),
+        TypeId::UINT16 if target == std::any::TypeId::of::<u16>() => Some(TypeId::UINT16_ARRAY),
+        TypeId::UINT32 | TypeId::VAR_UINT32 if target == std::any::TypeId::of::<u32>() => {
+            Some(TypeId::UINT32_ARRAY)
+        }
+        TypeId::UINT64 | TypeId::VAR_UINT64 | TypeId::TAGGED_UINT64
+            if target == std::any::TypeId::of::<u64>() =>
+        {
+            Some(TypeId::UINT64_ARRAY)
+        }
+        TypeId::U128 if target == std::any::TypeId::of::<u128>() => Some(TypeId::U128_ARRAY),
+        TypeId::INT128 if target == std::any::TypeId::of::<i128>() => Some(TypeId::INT128_ARRAY),
+        TypeId::USIZE if target == std::any::TypeId::of::<usize>() => Some(TypeId::USIZE_ARRAY),
+        TypeId::ISIZE if target == std::any::TypeId::of::<isize>() => Some(TypeId::ISIZE_ARRAY),
+        _ => None,
+    }
+}
+
+#[inline(always)]
+pub(super) fn element_type_id(array_type_id: u32) -> Option<u32> {
+    match array_type_id {
+        type_id::BOOL_ARRAY => Some(type_id::BOOL),
+        type_id::INT8_ARRAY => Some(type_id::INT8),
+        type_id::INT16_ARRAY => Some(type_id::INT16),
+        type_id::INT32_ARRAY => Some(type_id::INT32),
+        type_id::INT64_ARRAY => Some(type_id::INT64),
+        type_id::UINT8_ARRAY => Some(type_id::UINT8),
+        type_id::UINT16_ARRAY => Some(type_id::UINT16),
+        type_id::UINT32_ARRAY => Some(type_id::UINT32),
+        type_id::UINT64_ARRAY => Some(type_id::UINT64),
+        type_id::FLOAT16_ARRAY => Some(type_id::FLOAT16),
+        type_id::BFLOAT16_ARRAY => Some(type_id::BFLOAT16),
+        type_id::FLOAT32_ARRAY => Some(type_id::FLOAT32),
+        type_id::FLOAT64_ARRAY => Some(type_id::FLOAT64),
+        _ => None,
+    }
+}
+
+#[inline(always)]
+pub(super) fn element_size(array_type_id: u32) -> Option<usize> {
+    match array_type_id {
+        type_id::BOOL_ARRAY | type_id::INT8_ARRAY | type_id::UINT8_ARRAY => Some(1),
+        type_id::INT16_ARRAY
+        | type_id::UINT16_ARRAY
+        | type_id::FLOAT16_ARRAY
+        | type_id::BFLOAT16_ARRAY => Some(2),
+        type_id::INT32_ARRAY | type_id::UINT32_ARRAY | type_id::FLOAT32_ARRAY => Some(4),
+        type_id::INT64_ARRAY | type_id::UINT64_ARRAY | type_id::FLOAT64_ARRAY => Some(8),
+        _ => None,
     }
 }
 
@@ -103,8 +161,12 @@ fn primitive_type_mismatch(expected: u32, actual: u32) -> Error {
 }
 
 #[inline(always)]
-fn validate_target<T: 'static>(array_type_id: TypeId) -> Result<(), Error> {
-    if canonical_target::<T>(array_type_id) {
+fn validate_target<T, C>(array_type_id: TypeId) -> Result<(), Error>
+where
+    T: 'static,
+    C: Codec<T>,
+{
+    if self::array_type_id::<T, C>(array_type_id == TypeId::UINT8_ARRAY) == Some(array_type_id) {
         Ok(())
     } else {
         Err(invalid_primitive_target::<T>(array_type_id))
@@ -139,7 +201,7 @@ where
     T: 'static,
     C: Codec<T>,
 {
-    validate_target::<T>(array_type_id)?;
+    validate_target::<T, C>(array_type_id)?;
     check_xlang_kind(context, array_type_id)?;
     write_data_body::<T, C>(values, context)
 }
@@ -180,7 +242,7 @@ where
     T: 'static,
     C: Codec<T>,
 {
-    validate_target::<T>(array_type_id)?;
+    validate_target::<T, C>(array_type_id)?;
     if array_type_id == TypeId::BOOL_ARRAY {
         return read_bool_vec::<T>(context);
     }
@@ -301,7 +363,7 @@ where
     T: 'static,
     C: Codec<T>,
 {
-    validate_target::<T>(array_type_id)?;
+    validate_target::<T, C>(array_type_id)?;
     if array_type_id == TypeId::BOOL_ARRAY {
         return read_bool_array::<T, N>(context);
     }

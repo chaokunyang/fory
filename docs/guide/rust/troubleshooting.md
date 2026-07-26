@@ -81,9 +81,23 @@ impl Serializer for UserSerializer {
 }
 ```
 
-Use `#[fory(with = UserSerializer)]` for transparent holders such as
-`Option<User>` and `Box<User>`. Use the recursive collection syntax for element,
-map, and tuple positions:
+For a transparent holder, select the carrier serializer whose target is the
+exact field type:
+
+```rust
+#[fory(with = OptionSerializer<UserSerializer>)]
+user: Option<third_party::User>
+```
+
+For an exact container field, a carrier serializer is also valid:
+
+```rust
+#[fory(with = VecSerializer<UserSerializer>)]
+users: Vec<third_party::User>
+```
+
+Use recursive collection syntax when selecting an element, map child, or tuple
+position:
 
 ```rust
 #[fory(list(element(with = UserSerializer)))]

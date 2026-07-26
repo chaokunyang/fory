@@ -104,9 +104,6 @@ pub use fory_core::{
 pub use fory_derive::{ForyEnum, ForyRow, ForyStruct, ForyUnion};
 
 #[doc(hidden)]
-pub use fory_core::SerializerOwner;
-
-#[doc(hidden)]
 pub mod __private {
     pub use fory_core::*;
 }

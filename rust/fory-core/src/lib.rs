@@ -60,7 +60,6 @@ pub use crate::meta::{compute_field_hash, compute_struct_hash};
 pub use crate::resolver::{RefFlag, RefMode, TypeInfo, TypeResolver};
 pub use crate::serializer::trait_object::ForyObject;
 #[doc(hidden)]
-pub use crate::serializer::SerializerOwner;
 pub use crate::serializer::{
     read_data, write_data, ArcSerializer, ArcWeakSerializer, ArraySerializer, BTreeMapSerializer,
     BTreeSetSerializer, BinaryHeapSerializer, BoxSerializer, HashMapSerializer, HashSetSerializer,

@@ -24,7 +24,7 @@ use crate::context::{ReadContext, WriteContext};
 use crate::error::Error;
 use crate::meta::FieldType;
 use crate::resolver::{RefFlag, RefMode, TypeInfo, TypeResolver};
-use crate::serializer::{Serializer, SerializerOwner};
+use crate::serializer::Serializer;
 use crate::type_id::{need_to_write_type_for_field, TypeId, SIZE_OF_REF_AND_TYPE};
 use std::borrow::Cow;
 use std::collections::{BTreeMap, HashMap};
@@ -644,8 +644,6 @@ macro_rules! impl_map_serializer {
         {
             type Target = $target<KS::Target, VS::Target>;
 
-            const OWNER: SerializerOwner = SerializerOwner::Fory;
-
             #[inline(always)]
             fn write(value: &Self::Target, context: &mut WriteContext) -> Result<(), Error> {
                 <$codec<
@@ -834,8 +832,6 @@ macro_rules! impl_map_serializer {
             V: Serializer<Target = V>,
         {
             type Target = Self;
-
-            const OWNER: SerializerOwner = SerializerOwner::Fory;
 
             #[inline(always)]
             fn write(value: &Self, context: &mut WriteContext) -> Result<(), Error> {

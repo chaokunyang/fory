@@ -445,7 +445,7 @@ fn group_fields_by_type(fields: &[&Field]) -> FieldGroups {
             .filter(|c| !c.is_whitespace())
             .collect::<String>();
 
-        // A selected application serializer owns an EXT-shaped leaf even when its target is a
+        // A selected serializer can own an EXT-shaped leaf even when its target is a
         // canonical Rust scalar. Keep schema ordering aligned with the selected codec rather than
         // classifying the target's source syntax as a primitive field.
         if meta.with.is_some() {

@@ -19,6 +19,7 @@ use super::codec::{
     field_ref_mode, field_type_with_ref_flags, generic_field_type, same_numeric_family, Codec,
     CodecReadType,
 };
+use super::primitive_list;
 use crate::context::ReadContext;
 use crate::context::WriteContext;
 use crate::error::Error;
@@ -584,44 +585,12 @@ where
     }
 }
 
-fn primitive_array_element_type_id(type_id: u32) -> Option<u32> {
-    match type_id {
-        type_id::BOOL_ARRAY => Some(type_id::BOOL),
-        type_id::INT8_ARRAY => Some(type_id::INT8),
-        type_id::INT16_ARRAY => Some(type_id::INT16),
-        type_id::INT32_ARRAY => Some(type_id::INT32),
-        type_id::INT64_ARRAY => Some(type_id::INT64),
-        type_id::UINT8_ARRAY => Some(type_id::UINT8),
-        type_id::UINT16_ARRAY => Some(type_id::UINT16),
-        type_id::UINT32_ARRAY => Some(type_id::UINT32),
-        type_id::UINT64_ARRAY => Some(type_id::UINT64),
-        type_id::FLOAT16_ARRAY => Some(type_id::FLOAT16),
-        type_id::BFLOAT16_ARRAY => Some(type_id::BFLOAT16),
-        type_id::FLOAT32_ARRAY => Some(type_id::FLOAT32),
-        type_id::FLOAT64_ARRAY => Some(type_id::FLOAT64),
-        _ => None,
-    }
-}
-
-fn primitive_array_element_size(type_id: u32) -> Option<usize> {
-    match type_id {
-        type_id::BOOL_ARRAY | type_id::INT8_ARRAY | type_id::UINT8_ARRAY => Some(1),
-        type_id::INT16_ARRAY
-        | type_id::UINT16_ARRAY
-        | type_id::FLOAT16_ARRAY
-        | type_id::BFLOAT16_ARRAY => Some(2),
-        type_id::INT32_ARRAY | type_id::UINT32_ARRAY | type_id::FLOAT32_ARRAY => Some(4),
-        type_id::INT64_ARRAY | type_id::UINT64_ARRAY | type_id::FLOAT64_ARRAY => Some(8),
-        _ => None,
-    }
-}
-
 fn list_element_type_matches_array(
     list: &FieldType,
     array: &FieldType,
     require_unframed_element: bool,
 ) -> bool {
-    primitive_array_element_type_id(array.type_id).is_some_and(|element_type_id| {
+    primitive_list::element_type_id(array.type_id).is_some_and(|element_type_id| {
         if list.type_id != type_id::LIST
             || list.generics.len() != 1
             || list.nullable
@@ -662,13 +631,13 @@ where
 {
     let size_bytes = context.reader.read_var_u32()? as usize;
     let elem_size =
-        primitive_array_element_size(remote_field_type.type_id).ok_or_else(not_primitive_array)?;
+        primitive_list::element_size(remote_field_type.type_id).ok_or_else(not_primitive_array)?;
     if size_bytes % elem_size != 0 {
         return Err(invalid_primitive_array_len());
     }
     context.reader.check_bound(size_bytes)?;
     let len = size_bytes / elem_size;
-    let element_type_id = primitive_array_element_type_id(remote_field_type.type_id)
+    let element_type_id = primitive_list::element_type_id(remote_field_type.type_id)
         .ok_or_else(not_primitive_array)?;
     let element_type = FieldType::new(element_type_id, false, Vec::new());
     let mut vec = Vec::with_capacity(len);

@@ -19,7 +19,7 @@ use crate::context::{ReadContext, WriteContext};
 use crate::error::Error;
 use crate::meta::FieldType;
 use crate::resolver::{RefFlag, RefMode, TypeInfo, TypeResolver};
-use crate::serializer::{Serializer, SerializerOwner};
+use crate::serializer::Serializer;
 use crate::type_id::TypeId;
 use std::any::Any;
 use std::rc::Rc;
@@ -236,8 +236,6 @@ pub fn deserialize_any_box(context: &mut ReadContext) -> Result<Box<dyn Any>, Er
 
 impl Serializer for Box<dyn Any> {
     type Target = Self;
-    const OWNER: SerializerOwner = SerializerOwner::Fory;
-
     #[inline(always)]
     fn write(value: &Self, context: &mut WriteContext) -> Result<(), Error> {
         write_any_body(value.as_ref(), context, false)
@@ -417,8 +415,6 @@ pub fn read_box_any(
 
 impl Serializer for Rc<dyn Any> {
     type Target = Self;
-    const OWNER: SerializerOwner = SerializerOwner::Fory;
-
     #[inline(always)]
     fn write(value: &Self, context: &mut WriteContext) -> Result<(), Error> {
         write_any_body(value.as_ref(), context, false)
@@ -615,8 +611,6 @@ fn read_new_rc_any(
 
 impl Serializer for Arc<dyn Any + Send + Sync> {
     type Target = Self;
-    const OWNER: SerializerOwner = SerializerOwner::Fory;
-
     #[inline(always)]
     fn write(value: &Self, context: &mut WriteContext) -> Result<(), Error> {
         write_any_body(value.as_ref(), context, false)

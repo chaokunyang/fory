@@ -27,7 +27,7 @@ use crate::context::{ReadContext, WriteContext};
 use crate::error::Error;
 use crate::meta::FieldType;
 use crate::resolver::{RefFlag, RefMode, TypeInfo, TypeResolver};
-use crate::serializer::{Serializer, SerializerOwner};
+use crate::serializer::Serializer;
 use crate::type_id::{TypeId, SIZE_OF_REF_AND_TYPE};
 use std::borrow::Cow;
 use std::marker::PhantomData;
@@ -89,7 +89,7 @@ pub(super) fn try_init_array<T, E, const N: usize>(
 
 #[inline(always)]
 fn selected_array_type_id<T: 'static, C: Codec<T>>() -> Option<TypeId> {
-    C::primitive_array_type_id()
+    primitive_list::array_type_id::<T, C>(false)
 }
 
 #[cold]
@@ -443,8 +443,6 @@ pub struct ArraySerializer<S, const N: usize>(PhantomData<fn() -> S>);
 impl<S: Serializer, const N: usize> Serializer for ArraySerializer<S, N> {
     type Target = [S::Target; N];
 
-    const OWNER: SerializerOwner = SerializerOwner::Fory;
-
     #[inline(always)]
     fn write(value: &Self::Target, context: &mut WriteContext) -> Result<(), Error> {
         <RootArrayCodec<S, N> as Codec<Self::Target>>::write_data(value, context)
@@ -562,8 +560,6 @@ where
     T: Serializer<Target = T>,
 {
     type Target = Self;
-
-    const OWNER: SerializerOwner = SerializerOwner::Fory;
 
     #[inline(always)]
     fn write(value: &Self, context: &mut WriteContext) -> Result<(), Error> {

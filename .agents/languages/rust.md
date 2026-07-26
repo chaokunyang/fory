@@ -66,29 +66,27 @@ Load this file when changing `rust/` or Rust xlang behavior.
   bridge into the child carrier codec; do not expose `Codec` or add a parallel field/container
   implementation.
 - Preserve one canonical primitive Vec/fixed-array selection for type ID, body, reserved space,
-  derive metadata, and compatible reads. Use the doc-hidden
-  `Serializer::PRIMITIVE_ARRAY_TYPE_ID` associated constant as that one declared source: canonical
-  primitive serializers set it, while application and wrapping serializers inherit `None`.
-  `SerializerCodec<S>` may expose it to the unified Vec/array codec only after proving exact
-  self-provider and canonical scalar target identity. Revalidate the concrete target kind before
-  every unsafe bulk copy so an invalid internal declaration returns an error rather than copying an
-  arbitrary Rust type. Canonical primitive children retain dense-array/BINARY encodings, including
-  `u8` BINARY and the existing `isize`/`usize` array kinds; application serializers use LIST even
-  when their target is primitive. Rust 1.70 cannot select a codec type from an associated const, so
-  one unified `VecCodec` and one unified `ArrayCodec` own both primitive and object bodies. The Vec
-  codec has two compile-time schema consts. `STRUCTURAL_LIST` preserves unannotated and explicit
-  `list(...)` generated Vec fields as LIST, including canonical primitive children; ordinary roots,
-  `VecSerializer<S>`, `bytes`, and `array` disable it so they can consume the validated canonical
-  child kind. `DENSE_ARRAY` represents only existing explicit `#[fory(array)]` syntax and maps
-  validated canonical `u8` BINARY to `UINT8_ARRAY`; roots, carrier serializers, LIST fields, and
-  `bytes` pass false. Thus unannotated `Vec<i32>` remains `LIST<VARINT32>`, an explicit fixed
-  element remains `LIST<INT32>`, ordinary/serializer-selected primitive roots remain dense/BINARY,
-  and `bytes` remains BINARY. These consts select existing schemas inside one codec; they are not
-  provider classifications or runtime branches. Derive may validate the explicit primitive
-  category, but it must not map Rust types to wire IDs or maintain an ordinary-composition
-  classifier. Remove current runtime/AST classifier disagreements instead of copying them. Inline
-  safety validation must fold after monomorphization: optimized hot paths may not retain an owner
-  branch, dynamic lookup, or Rust `TypeId` comparison.
+  derive metadata, and compatible reads. The private primitive-array/carrier owner derives the
+  parent kind from the child codec's scalar `static_type_id()`, the exact Rust child target, and the
+  carrier mode. Scalar serializers declare only scalar behavior and scalar wire IDs; neither
+  `Serializer` nor `Codec` exposes a parent-array kind. Reuse the same private mapping to validate
+  every unsafe bulk copy and to adapt compatible LIST/array fields. Canonical primitive children
+  retain dense-array/BINARY encodings, including `u8` BINARY and the existing `isize`/`usize` array
+  kinds; an external structural or manual child serializer targeting a primitive remains LIST
+  because it does not expose that scalar wire ID. Rust 1.70 cannot select a codec type from an
+  associated const, so one unified `VecCodec` and one unified `ArrayCodec` own both primitive and
+  object bodies. The Vec codec has two compile-time schema consts. `STRUCTURAL_LIST` preserves
+  unannotated and explicit `list(...)` generated Vec fields as LIST, including canonical primitive
+  children; ordinary roots, `VecSerializer<S>`, `bytes`, and `array` disable it so they can consume
+  the validated canonical child kind. `DENSE_ARRAY` represents only existing explicit
+  `#[fory(array)]` syntax and maps canonical `u8` BINARY to `UINT8_ARRAY`; roots, carrier
+  serializers, LIST fields, and `bytes` pass false. Thus unannotated `Vec<i32>` remains
+  `LIST<VARINT32>`, an explicit fixed element remains `LIST<INT32>`, ordinary/serializer-selected
+  primitive roots remain dense/BINARY, and `bytes` remains BINARY. Derive may validate the explicit
+  primitive category, but it must not map Rust types to wire IDs or maintain an
+  ordinary-composition classifier. Inline target and scalar-ID checks must fold after
+  monomorphization; optimized hot paths may not retain a dynamic lookup or Rust `TypeId`
+  comparison.
 - `tuple(element(index = ..., ...))` is sparse and zero-based; unmentioned positions use ordinary
   serializers. Reject duplicate/out-of-range indexes and `index` outside tuple metadata. The
   same arity-specific codec owns ordinary tuples, annotated fields, and `TupleNSerializer` roots.
@@ -102,12 +100,15 @@ Load this file when changing `rust/` or Rust xlang behavior.
   insertion. `BTreeMap` requires `Ord` on the target key; remove its current unnecessary `Hash`
   bound rather than exposing that implementation accident through the serializer API.
 - Fory-owned carrier serializers are not registered and have no resolver entry, dynamic harness, or
-  wire identity. Use the doc-hidden application/Fory serializer owner only for compile-time field
-  validation and cold registration rejection, including transparent compositions over an EXT
-  leaf; never branch on it in serialization hot paths. Field `with` remains an
-  application-serializer leaf selection and rejects a Fory-owned carrier serializer, while the
-  recursive list/map/tuple grammar selects children. Require a selected user serializer's
-  registration only when the existing codec accesses its registered identity or
+  wire identity. A field `with` selects one serializer whose `Target` is exactly the declared field
+  node and accepts ordinary, external structural, manual, and carrier serializers. Transparent
+  fields therefore name their exact carrier serializer, such as
+  `OptionSerializer<UserSerializer>`, while recursive list/map/tuple annotations select child
+  nodes. Compile-time target equality comes from the existing `Codec<S::Target>` contract.
+  Registration rejects carrier serializers through the existing API semantics: structural APIs
+  require `StructSerializer` and the matching structural category, while manual registration
+  requires an independent EXT/NAMED_EXT serializer and rejects transparent wrappers. Require a
+  selected serializer's registration only when the existing codec accesses its registered identity or
   registration-backed metadata. `Serializer::write/read` are body-only and must not perform a
   reached-body registration check. Do not eagerly walk a root serializer tree: absent Options, empty
   collections/maps, empty weak values, zero-length arrays, and equivalent recursive no-child
@@ -117,13 +118,11 @@ Load this file when changing `rust/` or Rust xlang behavior.
   UNKNOWN-generic tuple `FieldType` does not declare positions, so its ordinary per-position type
   metadata owns any required child registration access. Do not add a third recursive hook,
   preflight lookup, reached-body/per-element check, or a second tuple-position selector.
-- Preserve the workspace Rust 1.70 minimum when emitting compile-time serializer-owner validation.
-  Expression-position inline const blocks require Rust 1.79; use the doc-hidden unit-valued
-  `Serializer::FIELD_SERIALIZER_CHECK` associated constant and reference it from generated code so
-  monomorphization performs the check without a runtime branch.
-- Do not add a runtime provider tree, public codec, provider object, container-specific root
-  method, per-element lookup, or `*_as` alias. `Option`, Box/Rc/Arc/weak references, `RefCell`, and
-  `Mutex` remain transparent around the selected child serializer and must not add an allocation.
+- Keep root serializer selection in `serialize_with`, `serialize_to_with`, `deserialize_with`, and
+  `deserialize_from_with`. Do not add a runtime provider tree, public codec, provider object,
+  container-specific root method, or per-element lookup. `Option`, Box/Rc/Arc/weak references,
+  `RefCell`, and `Mutex` remain transparent around the selected child serializer and must not add an
+  allocation.
   Direct/static and access-constrained polymorphic LIST/SET body writes use one borrow, lock, or
   weak upgrade. A non-polymorphic nullable holder preserves the existing LIST/SET null-header scan
   and then uses one body access without inspecting null again. MAP metadata and null flags precede
@@ -157,10 +156,10 @@ Load this file when changing `rust/` or Rust xlang behavior.
   access-constrained polymorphic holder once before its fixed-order metadata and access the body
   later.
 - Provider registration conflicts use exact target-index identity and must be order-independent.
-  Seed/reserve canonical Fory-owned dynamic targets before user registration and apply the same
-  check to later insertions. Do not classify generic target families through `type_name` or add a
-  target-kind marker hierarchy; an otherwise unowned exact container/tuple target may use one
-  manual EXT serializer.
+  Private built-in registration validates the expected internal type ID before publication, and
+  later user insertions use the same target-index conflict checks. Do not classify generic target
+  families through `type_name` or add a target-kind marker hierarchy; an
+  otherwise unowned exact container/tuple target may use one manual EXT serializer.
 - External structural serializers must access and construct their target directly. Do not create a temporary
   external structural serializer, mirror value, conversion hook, private-field workaround, or unsafe access path.
 - Because external structural serializer declarations are compile-time schemas rather than runtime
@@ -234,12 +233,6 @@ Load this file when changing `rust/` or Rust xlang behavior.
   root context closures can inflate code and stack frames and regress carrier result handling.
   Reserve `#[inline(always)]` for small forwarding or compile-time selection hooks whose bodies
   must disappear after monomorphization.
-- Benchmark unchanged ordinary Rust cases against fresh `apache/main` in adjacent baseline/current
-  pairs and require less than 1% retained-median slowdown. New external structural, manual, carrier
-  serializer, and application-trait APIs do not compile on `apache/main`; compare them branch-locally
-  with equivalent ordinary paths under identical schema/wire work and require less than 1% slowdown
-  and no extra allocation. Do not backport or shim new APIs into the baseline worktree, and label
-  equivalent-path comparisons separately from same-case cross-version comparisons.
 - If breakage is explicitly acceptable during a Rust module refactor, rewire macros, tests, and sibling crates directly to the new boundaries instead of adding compatibility re-exports.
 - For panic-safety in hot paths, preserve TLS context reuse. Add scoped guards or owned fallbacks rather than per-call context allocation, and reset reused contexts at entry and successful exit.
 - Compatible scalar, list-array, and binary/uint8-array adaptations are immediate-field-only. Keep recursive matched-field shape classification owned by `fory-core/src/meta/type_meta.rs`; collection elements, array elements, map keys, and map values must require exact nullability, ref tracking, generic arity, and type shape except documented user-type family normalization.

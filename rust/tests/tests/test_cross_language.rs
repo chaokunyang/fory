@@ -780,11 +780,11 @@ struct MyExt {
 impl Serializer for MyExt {
     type Target = Self;
 
-    fn write(value: &Self, context: &mut WriteContext) -> Result<(), Error> {
+    fn write_data(value: &Self, context: &mut WriteContext) -> Result<(), Error> {
         write_data::<i32>(&value.id, context)
     }
 
-    fn read(context: &mut ReadContext) -> Result<Self, Error> {
+    fn read_data(context: &mut ReadContext) -> Result<Self, Error> {
         Ok(Self {
             id: read_data::<i32>(context)?,
         })

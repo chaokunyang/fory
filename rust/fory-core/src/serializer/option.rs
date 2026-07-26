@@ -34,12 +34,12 @@ impl<S: Serializer> Serializer for OptionSerializer<S> {
     type Target = Option<S::Target>;
 
     #[inline(always)]
-    fn write(value: &Self::Target, context: &mut WriteContext) -> Result<(), Error> {
+    fn write_data(value: &Self::Target, context: &mut WriteContext) -> Result<(), Error> {
         <RootCodec<S> as Codec<Self::Target>>::write_data(value, context)
     }
 
     #[inline(always)]
-    fn read(context: &mut ReadContext) -> Result<Self::Target, Error> {
+    fn read_data(context: &mut ReadContext) -> Result<Self::Target, Error> {
         <RootCodec<S> as Codec<Self::Target>>::read_data(context)
     }
 
@@ -49,7 +49,7 @@ impl<S: Serializer> Serializer for OptionSerializer<S> {
     }
 
     #[inline(always)]
-    fn write_value(
+    fn write(
         value: &Self::Target,
         context: &mut WriteContext,
         ref_mode: RefMode,
@@ -91,7 +91,7 @@ impl<S: Serializer> Serializer for OptionSerializer<S> {
     }
 
     #[inline(always)]
-    fn read_value(
+    fn read(
         context: &mut ReadContext,
         ref_mode: RefMode,
         read_type_info: bool,
@@ -192,13 +192,13 @@ where
     type Target = Self;
 
     #[inline(always)]
-    fn write(value: &Self, context: &mut WriteContext) -> Result<(), Error> {
-        OptionSerializer::<T>::write(value, context)
+    fn write_data(value: &Self, context: &mut WriteContext) -> Result<(), Error> {
+        OptionSerializer::<T>::write_data(value, context)
     }
 
     #[inline(always)]
-    fn read(context: &mut ReadContext) -> Result<Self, Error> {
-        OptionSerializer::<T>::read(context)
+    fn read_data(context: &mut ReadContext) -> Result<Self, Error> {
+        OptionSerializer::<T>::read_data(context)
     }
 
     #[inline(always)]
@@ -207,14 +207,14 @@ where
     }
 
     #[inline(always)]
-    fn write_value(
+    fn write(
         value: &Self,
         context: &mut WriteContext,
         ref_mode: RefMode,
         write_type_info: bool,
         has_generics: bool,
     ) -> Result<(), Error> {
-        OptionSerializer::<T>::write_value(value, context, ref_mode, write_type_info, has_generics)
+        OptionSerializer::<T>::write(value, context, ref_mode, write_type_info, has_generics)
     }
 
     #[inline(always)]
@@ -243,12 +243,12 @@ where
     }
 
     #[inline(always)]
-    fn read_value(
+    fn read(
         context: &mut ReadContext,
         ref_mode: RefMode,
         read_type_info: bool,
     ) -> Result<Self, Error> {
-        OptionSerializer::<T>::read_value(context, ref_mode, read_type_info)
+        OptionSerializer::<T>::read(context, ref_mode, read_type_info)
     }
 
     #[inline(always)]

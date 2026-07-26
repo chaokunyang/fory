@@ -30,13 +30,13 @@ impl Serializer for Decimal {
     type Target = Self;
 
     #[inline(always)]
-    fn write(value: &Self, context: &mut WriteContext) -> Result<(), Error> {
+    fn write_data(value: &Self, context: &mut WriteContext) -> Result<(), Error> {
         context.writer.write_var_i32(value.scale);
         write_decimal_unscaled(&value.unscaled, &mut context.writer)
     }
 
     #[inline(always)]
-    fn read(context: &mut ReadContext) -> Result<Self, Error> {
+    fn read_data(context: &mut ReadContext) -> Result<Self, Error> {
         let scale = context.reader.read_var_i32()?;
         let unscaled = read_decimal_unscaled(&mut context.reader)?;
         Ok(Self { unscaled, scale })
@@ -54,7 +54,7 @@ impl Serializer for Decimal {
     fn read_arc_any(
         context: &mut ReadContext,
     ) -> Result<Arc<dyn std::any::Any + Send + Sync>, Error> {
-        Ok(Arc::new(Self::read(context)?))
+        Ok(Arc::new(Self::read_data(context)?))
     }
 
     #[inline(always)]

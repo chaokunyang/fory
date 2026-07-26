@@ -38,7 +38,7 @@ fn gen_write_named_variant_fields(
             .iter()
             .zip(field_idents.iter())
             .filter_map(|(binding, ident)| match binding {
-                FieldBinding::Codec(binding) => Some(binding.write_value_field(quote! { #ident })),
+                FieldBinding::Codec(binding) => Some(binding.write_field_value(quote! { #ident })),
                 FieldBinding::Skipped(_) => None,
             })
             .collect(),
@@ -99,7 +99,7 @@ fn gen_write_variant_fields(
             .iter()
             .zip(field_idents.iter())
             .filter_map(|(binding, ident)| match binding {
-                FieldBinding::Codec(binding) => Some(binding.write_value_field(quote! { #ident })),
+                FieldBinding::Codec(binding) => Some(binding.write_field_value(quote! { #ident })),
                 FieldBinding::Skipped(_) => None,
             })
             .collect(),
@@ -116,7 +116,7 @@ fn gen_write_variant_elements(
             .iter()
             .zip(field_idents.iter())
             .filter_map(|(binding, ident)| match binding {
-                FieldBinding::Codec(binding) => Some(binding.write_value_with_mode(
+                FieldBinding::Codec(binding) => Some(binding.write_with_mode(
                     quote! { #ident },
                     quote! { fory_core::RefMode::NullOnly },
                     quote! { true },
@@ -131,7 +131,7 @@ fn gen_write_variant_elements(
 fn gen_write_single_payload(source_fields: &[SourceField<'_>], value: TokenStream) -> TokenStream {
     match build_bindings(source_fields) {
         Ok(bindings) => match bindings.as_slice() {
-            [FieldBinding::Codec(binding)] => binding.write_value_with_mode(
+            [FieldBinding::Codec(binding)] => binding.write_with_mode(
                 value,
                 quote! { fory_core::RefMode::Tracking },
                 quote! { true },
@@ -183,13 +183,13 @@ fn gen_read_variant_elements(
                         let default_expr = binding.default_value_expr();
                         let index = serialized_index;
                         serialized_index += 1;
-                        let read_value = binding.read_with_mode_expr(
+                        let read_element = binding.read_with_mode_expr(
                             quote! { fory_core::RefMode::NullOnly },
                             quote! { true },
                         );
                         read_fields.push(quote! {
                             let #var = if #index < len {
-                                #read_value
+                                #read_element
                             } else {
                                 #default_expr
                             };

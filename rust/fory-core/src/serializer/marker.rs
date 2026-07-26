@@ -27,12 +27,12 @@ impl<T: 'static> Serializer for PhantomData<T> {
     type Target = Self;
 
     #[inline(always)]
-    fn write(_: &Self, _: &mut WriteContext) -> Result<(), Error> {
+    fn write_data(_: &Self, _: &mut WriteContext) -> Result<(), Error> {
         Ok(())
     }
 
     #[inline(always)]
-    fn read(_: &mut ReadContext) -> Result<Self, Error> {
+    fn read_data(_: &mut ReadContext) -> Result<Self, Error> {
         Ok(PhantomData)
     }
 

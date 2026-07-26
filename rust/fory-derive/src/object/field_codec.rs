@@ -60,17 +60,17 @@ impl<'a> ResolvedField<'a> {
 
     pub fn write_field(&self) -> TokenStream {
         let access = super::util::get_field_accessor(self.source.field, self.source.original_index);
-        self.write_value_field(quote! { &#access })
+        self.write_field_value(quote! { &#access })
     }
 
-    pub fn write_value_field(&self, value: TokenStream) -> TokenStream {
+    pub fn write_field_value(&self, value: TokenStream) -> TokenStream {
         let call = self.codec_call();
         quote! {
             #call::write_field(#value, context)?;
         }
     }
 
-    pub fn write_value_with_mode(
+    pub fn write_with_mode(
         &self,
         value: TokenStream,
         ref_mode: TokenStream,

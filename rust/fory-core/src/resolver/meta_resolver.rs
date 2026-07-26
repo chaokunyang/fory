@@ -363,11 +363,11 @@ mod tests {
     impl Serializer for LocalExt {
         type Target = Self;
 
-        fn write(_value: &Self, _context: &mut WriteContext) -> Result<(), Error> {
+        fn write_data(_value: &Self, _context: &mut WriteContext) -> Result<(), Error> {
             Ok(())
         }
 
-        fn read(_context: &mut ReadContext) -> Result<Self, Error> {
+        fn read_data(_context: &mut ReadContext) -> Result<Self, Error> {
             Ok(LocalExt)
         }
     }

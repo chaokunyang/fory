@@ -41,12 +41,12 @@ struct Point {
 impl Serializer for Point {
     type Target = Self;
 
-    fn write(value: &Self, context: &mut WriteContext) -> Result<(), Error> {
+    fn write_data(value: &Self, context: &mut WriteContext) -> Result<(), Error> {
         context.writer.write_i32(value.value);
         Ok(())
     }
 
-    fn read(context: &mut ReadContext) -> Result<Self, Error> {
+    fn read_data(context: &mut ReadContext) -> Result<Self, Error> {
         Ok(Self {
             value: context.reader.read_i32()?,
         })
@@ -67,8 +67,9 @@ assert_eq!(decoded, value);
 # Ok::<(), Error>(())
 ```
 
-`write` and `read` handle the EXT body. Fory supplies the root or field
-reference and type-information framing.
+`write_data` and `read_data` handle the EXT body. Fory's complete-value
+`write` and `read` operations supply the root or field reference and
+type-information framing.
 
 `default_value` is optional. Implement it only when a null or missing
 compatible field has a meaningful value. It receives the active `ReadContext`,
@@ -93,7 +94,7 @@ fn invalid_uuid(error: uuid::Error) -> Error {
 impl Serializer for UuidSerializer {
     type Target = uuid::Uuid;
 
-    fn write(
+    fn write_data(
         value: &uuid::Uuid,
         context: &mut WriteContext,
     ) -> Result<(), Error> {
@@ -101,7 +102,7 @@ impl Serializer for UuidSerializer {
         Ok(())
     }
 
-    fn read(context: &mut ReadContext) -> Result<uuid::Uuid, Error> {
+    fn read_data(context: &mut ReadContext) -> Result<uuid::Uuid, Error> {
         let bytes = context.reader.read_bytes(16)?;
         uuid::Uuid::from_slice(bytes).map_err(invalid_uuid)
     }
@@ -142,12 +143,12 @@ use std::sync::Arc;
 impl Serializer for Point {
     type Target = Self;
 
-    // Implement write, read, and any desired default as above.
+    // Implement write_data, read_data, and any desired default as above.
 
     fn read_arc_any(
         context: &mut ReadContext,
     ) -> Result<Arc<dyn Any + Send + Sync>, Error> {
-        Ok(Arc::new(Self::read(context)?))
+        Ok(Arc::new(Self::read_data(context)?))
     }
 }
 ```

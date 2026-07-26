@@ -33,7 +33,7 @@ impl Serializer for String {
     type Target = Self;
 
     #[inline(always)]
-    fn write(value: &Self, context: &mut WriteContext) -> Result<(), Error> {
+    fn write_data(value: &Self, context: &mut WriteContext) -> Result<(), Error> {
         let header = (value.len() as i32 as u64) << 2 | StrEncoding::Utf8 as u64;
         context.writer.write_var_u36_small(header);
         context.writer.write_utf8_string(value);
@@ -41,7 +41,7 @@ impl Serializer for String {
     }
 
     #[inline(always)]
-    fn read(context: &mut ReadContext) -> Result<Self, Error> {
+    fn read_data(context: &mut ReadContext) -> Result<Self, Error> {
         let header = context.reader.read_var_u36_small()?;
         let len = (header >> 2) as usize;
         match header & 0b11 {
@@ -65,7 +65,7 @@ impl Serializer for String {
     fn read_arc_any(
         context: &mut ReadContext,
     ) -> Result<Arc<dyn std::any::Any + Send + Sync>, Error> {
-        Ok(Arc::new(Self::read(context)?))
+        Ok(Arc::new(Self::read_data(context)?))
     }
 
     #[inline(always)]

@@ -174,12 +174,12 @@ struct ExternalIdSerializer;
 impl Serializer for ExternalIdSerializer {
     type Target = ExternalId;
 
-    fn write(value: &ExternalId, context: &mut WriteContext) -> Result<(), Error> {
+    fn write_data(value: &ExternalId, context: &mut WriteContext) -> Result<(), Error> {
         context.writer.write_u128(value.0);
         Ok(())
     }
 
-    fn read(context: &mut ReadContext) -> Result<ExternalId, Error> {
+    fn read_data(context: &mut ReadContext) -> Result<ExternalId, Error> {
         Ok(ExternalId(context.reader.read_u128()?))
     }
 
@@ -188,7 +188,7 @@ impl Serializer for ExternalIdSerializer {
     }
 
     fn read_arc_any(context: &mut ReadContext) -> Result<Arc<dyn Any + Send + Sync>, Error> {
-        Ok(Arc::new(Self::read(context)?))
+        Ok(Arc::new(Self::read_data(context)?))
     }
 }
 
@@ -205,12 +205,12 @@ struct FailingExternalIdSerializer;
 impl Serializer for FailingExternalIdSerializer {
     type Target = ExternalId;
 
-    fn write(value: &ExternalId, context: &mut WriteContext) -> Result<(), Error> {
-        ExternalIdSerializer::write(value, context)
+    fn write_data(value: &ExternalId, context: &mut WriteContext) -> Result<(), Error> {
+        ExternalIdSerializer::write_data(value, context)
     }
 
-    fn read(context: &mut ReadContext) -> Result<ExternalId, Error> {
-        ExternalIdSerializer::read(context)
+    fn read_data(context: &mut ReadContext) -> Result<ExternalId, Error> {
+        ExternalIdSerializer::read_data(context)
     }
 
     fn default_value(_context: &mut ReadContext) -> Result<ExternalId, Error> {
@@ -253,15 +253,15 @@ struct PackedUsersSerializer;
 impl Serializer for PackedUsersSerializer {
     type Target = Vec<User>;
 
-    fn write(value: &Vec<User>, context: &mut WriteContext) -> Result<(), Error> {
+    fn write_data(value: &Vec<User>, context: &mut WriteContext) -> Result<(), Error> {
         context.writer.write_var_u32(value.len() as u32);
         for user in value {
-            UserSerializer::write(user, context)?;
+            UserSerializer::write_data(user, context)?;
         }
         Ok(())
     }
 
-    fn read(context: &mut ReadContext) -> Result<Vec<User>, Error> {
+    fn read_data(context: &mut ReadContext) -> Result<Vec<User>, Error> {
         let len = context.reader.read_var_u32()? as usize;
         if context.reader.slice_after_cursor().len() < len {
             return Err(Error::invalid_data(
@@ -274,7 +274,7 @@ impl Serializer for PackedUsersSerializer {
         context.reserve_graph_memory(bytes)?;
         let mut users = Vec::with_capacity(len);
         for _ in 0..len {
-            users.push(UserSerializer::read(context)?);
+            users.push(UserSerializer::read_data(context)?);
         }
         Ok(users)
     }
@@ -289,13 +289,16 @@ struct PackedEntrySerializer;
 impl Serializer for PackedEntrySerializer {
     type Target = (String, User);
 
-    fn write(value: &Self::Target, context: &mut WriteContext) -> Result<(), Error> {
-        String::write(&value.0, context)?;
-        UserSerializer::write(&value.1, context)
+    fn write_data(value: &Self::Target, context: &mut WriteContext) -> Result<(), Error> {
+        String::write_data(&value.0, context)?;
+        UserSerializer::write_data(&value.1, context)
     }
 
-    fn read(context: &mut ReadContext) -> Result<Self::Target, Error> {
-        Ok((String::read(context)?, UserSerializer::read(context)?))
+    fn read_data(context: &mut ReadContext) -> Result<Self::Target, Error> {
+        Ok((
+            String::read_data(context)?,
+            UserSerializer::read_data(context)?,
+        ))
     }
 
     fn default_value(context: &mut ReadContext) -> Result<Self::Target, Error> {
@@ -311,12 +314,12 @@ struct I32Serializer;
 impl Serializer for I32Serializer {
     type Target = i32;
 
-    fn write(value: &i32, context: &mut WriteContext) -> Result<(), Error> {
+    fn write_data(value: &i32, context: &mut WriteContext) -> Result<(), Error> {
         context.writer.write_i32(*value);
         Ok(())
     }
 
-    fn read(context: &mut ReadContext) -> Result<i32, Error> {
+    fn read_data(context: &mut ReadContext) -> Result<i32, Error> {
         context.reader.read_i32()
     }
 
@@ -333,11 +336,11 @@ struct SilentValueSerializer;
 impl Serializer for SilentValueSerializer {
     type Target = SilentValue;
 
-    fn write(_value: &SilentValue, _context: &mut WriteContext) -> Result<(), Error> {
+    fn write_data(_value: &SilentValue, _context: &mut WriteContext) -> Result<(), Error> {
         Ok(())
     }
 
-    fn read(_context: &mut ReadContext) -> Result<SilentValue, Error> {
+    fn read_data(_context: &mut ReadContext) -> Result<SilentValue, Error> {
         Ok(SilentValue(0))
     }
 

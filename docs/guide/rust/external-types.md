@@ -32,18 +32,20 @@ A serializer implementation declares the Rust value type it handles:
 pub trait Serializer {
     type Target;
 
-    fn write(
+    fn write_data(
         value: &Self::Target,
         context: &mut WriteContext,
     ) -> Result<(), Error>;
 
-    fn read(context: &mut ReadContext) -> Result<Self::Target, Error>;
+    fn read_data(context: &mut ReadContext) -> Result<Self::Target, Error>;
 }
 ```
 
 For an ordinary local type, the type provides itself. For an external type, a
 local serializer supplies the behavior without wrapping or converting the
-application value.
+application value. These methods handle body data; Fory's complete-value
+`write` and `read` operations add the requested reference and type-information
+envelopes.
 
 When a root is a container such as `Vec<third_party::User>`, compose
 Fory-owned carrier serializers such as `VecSerializer<UserSerializer>`. These are
@@ -167,7 +169,7 @@ fn invalid_uuid(error: uuid::Error) -> Error {
 impl Serializer for UuidSerializer {
     type Target = uuid::Uuid;
 
-    fn write(
+    fn write_data(
         value: &uuid::Uuid,
         context: &mut WriteContext,
     ) -> Result<(), Error> {
@@ -175,7 +177,7 @@ impl Serializer for UuidSerializer {
         Ok(())
     }
 
-    fn read(context: &mut ReadContext) -> Result<uuid::Uuid, Error> {
+    fn read_data(context: &mut ReadContext) -> Result<uuid::Uuid, Error> {
         let bytes = context.reader.read_bytes(16)?;
         uuid::Uuid::from_slice(bytes).map_err(invalid_uuid)
     }
@@ -185,7 +187,7 @@ impl Serializer for UuidSerializer {
         context: &mut ReadContext,
     ) -> Result<Arc<dyn Any + Send + Sync>, Error> {
         let value: Arc<dyn Any + Send + Sync> =
-            Arc::new(Self::read(context)?);
+            Arc::new(Self::read_data(context)?);
         Ok(value)
     }
 }

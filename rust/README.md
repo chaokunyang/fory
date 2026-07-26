@@ -496,12 +496,12 @@ struct Point {
 impl Serializer for Point {
     type Target = Self;
 
-    fn write(value: &Self, context: &mut WriteContext) -> Result<(), Error> {
+    fn write_data(value: &Self, context: &mut WriteContext) -> Result<(), Error> {
         context.writer.write_i32(value.value);
         Ok(())
     }
 
-    fn read(context: &mut ReadContext) -> Result<Self, Error> {
+    fn read_data(context: &mut ReadContext) -> Result<Self, Error> {
         Ok(Self {
             value: context.reader.read_i32()?,
         })
@@ -518,6 +518,10 @@ let bytes = fory.serialize(&point)?;
 let decoded: Point = fory.deserialize(&bytes)?;
 assert_eq!(point, decoded);
 ```
+
+Manual serializers implement the body-only `write_data` and `read_data`
+operations. Fory's complete-value `write` and `read` operations add reference
+and type-information framing.
 
 ### 8. Row-Based Serialization
 

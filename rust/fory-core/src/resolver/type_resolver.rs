@@ -425,17 +425,17 @@ fn write_target_data<S: Serializer>(
     let target = value
         .downcast_ref::<S::Target>()
         .ok_or_else(|| target_downcast_error::<S>(value.type_id()))?;
-    S::write_with_generics(target, context, has_generics)
+    S::write_data_with_generics(target, context, has_generics)
 }
 
 fn read_target_box<S: Serializer>(context: &mut ReadContext) -> Result<Box<dyn Any>, Error> {
     reserve_dynamic_owner::<S>(context)?;
-    Ok(Box::new(S::read(context)?))
+    Ok(Box::new(S::read_data(context)?))
 }
 
 fn read_target_rc<S: Serializer>(context: &mut ReadContext) -> Result<Rc<dyn Any>, Error> {
     reserve_dynamic_owner::<S>(context)?;
-    Ok(Rc::new(S::read(context)?))
+    Ok(Rc::new(S::read_data(context)?))
 }
 
 fn read_target_arc<S: Serializer>(

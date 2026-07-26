@@ -1450,7 +1450,7 @@ else:
             fory.write_nullable(buffer, elem)
     else:
         for elem in elems:
-            fory.write_value(buffer, elem)
+            fory.write(buffer, elem)
 ```
 
 [`CollectionSerializer#writeElements`](https://github.com/apache/fory/blob/20a1a78b17a75a123a6f5b7094c06ff77defc0fe/java/fory-core/src/main/java/org/apache/fory/serializer/collection/CollectionLikeSerializer.java#L302)

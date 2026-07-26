@@ -45,7 +45,7 @@ pub fn write<S: Serializer>(
     if write_type_info {
         S::write_type_info(context)?;
     }
-    S::write(value, context)
+    S::write_data(value, context)
 }
 
 #[inline(always)]
@@ -89,7 +89,7 @@ pub fn read<S: Serializer>(
         if read_type_info {
             S::read_type_info(context)?;
         }
-        S::read(context)
+        S::read_data(context)
     } else if ref_flag == (RefFlag::Ref as i8) {
         Err(Error::invalid_ref("Invalid ref, enum type is not a ref"))
     } else {

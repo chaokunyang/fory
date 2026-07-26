@@ -34,7 +34,7 @@ macro_rules! temporal_hooks {
         fn read_arc_any(
             context: &mut ReadContext,
         ) -> Result<Arc<dyn std::any::Any + Send + Sync>, Error> {
-            Ok(Arc::new(Self::read(context)?))
+            Ok(Arc::new(Self::read_data(context)?))
         }
 
         #[inline(always)]
@@ -64,14 +64,14 @@ impl Serializer for Timestamp {
     type Target = Self;
 
     #[inline(always)]
-    fn write(value: &Self, context: &mut WriteContext) -> Result<(), Error> {
+    fn write_data(value: &Self, context: &mut WriteContext) -> Result<(), Error> {
         context.writer.write_i64(value.seconds());
         context.writer.write_u32(value.subsec_nanos());
         Ok(())
     }
 
     #[inline(always)]
-    fn read(context: &mut ReadContext) -> Result<Self, Error> {
+    fn read_data(context: &mut ReadContext) -> Result<Self, Error> {
         Timestamp::new(context.reader.read_i64()?, context.reader.read_u32()?)
     }
 
@@ -87,7 +87,7 @@ impl Serializer for Date {
     type Target = Self;
 
     #[inline(always)]
-    fn write(value: &Self, context: &mut WriteContext) -> Result<(), Error> {
+    fn write_data(value: &Self, context: &mut WriteContext) -> Result<(), Error> {
         let days = value.epoch_days();
         if context.is_xlang() {
             context.writer.write_var_i64(days);
@@ -101,7 +101,7 @@ impl Serializer for Date {
     }
 
     #[inline(always)]
-    fn read(context: &mut ReadContext) -> Result<Self, Error> {
+    fn read_data(context: &mut ReadContext) -> Result<Self, Error> {
         let days = if context.is_xlang() {
             context.reader.read_var_i64()?
         } else {
@@ -117,14 +117,14 @@ impl Serializer for Duration {
     type Target = Self;
 
     #[inline(always)]
-    fn write(value: &Self, context: &mut WriteContext) -> Result<(), Error> {
+    fn write_data(value: &Self, context: &mut WriteContext) -> Result<(), Error> {
         context.writer.write_var_i64(value.seconds());
         context.writer.write_i32(value.subsec_nanos() as i32);
         Ok(())
     }
 
     #[inline(always)]
-    fn read(context: &mut ReadContext) -> Result<Self, Error> {
+    fn read_data(context: &mut ReadContext) -> Result<Self, Error> {
         Duration::new(context.reader.read_var_i64()?, context.reader.read_i32()?)
     }
 
@@ -145,13 +145,13 @@ mod chrono_support {
         type Target = Self;
 
         #[inline(always)]
-        fn write(value: &Self, context: &mut WriteContext) -> Result<(), Error> {
-            Timestamp::write(&Timestamp::from(*value), context)
+        fn write_data(value: &Self, context: &mut WriteContext) -> Result<(), Error> {
+            Timestamp::write_data(&Timestamp::from(*value), context)
         }
 
         #[inline(always)]
-        fn read(context: &mut ReadContext) -> Result<Self, Error> {
-            Timestamp::read(context)?.try_into()
+        fn read_data(context: &mut ReadContext) -> Result<Self, Error> {
+            Timestamp::read_data(context)?.try_into()
         }
 
         temporal_hooks!(
@@ -166,13 +166,13 @@ mod chrono_support {
         type Target = Self;
 
         #[inline(always)]
-        fn write(value: &Self, context: &mut WriteContext) -> Result<(), Error> {
-            Date::write(&Date::from(*value), context)
+        fn write_data(value: &Self, context: &mut WriteContext) -> Result<(), Error> {
+            Date::write_data(&Date::from(*value), context)
         }
 
         #[inline(always)]
-        fn read(context: &mut ReadContext) -> Result<Self, Error> {
-            Date::read(context)?.try_into()
+        fn read_data(context: &mut ReadContext) -> Result<Self, Error> {
+            Date::read_data(context)?.try_into()
         }
 
         temporal_hooks!(
@@ -187,13 +187,13 @@ mod chrono_support {
         type Target = Self;
 
         #[inline(always)]
-        fn write(value: &Self, context: &mut WriteContext) -> Result<(), Error> {
-            Duration::write(&Duration::try_from(*value)?, context)
+        fn write_data(value: &Self, context: &mut WriteContext) -> Result<(), Error> {
+            Duration::write_data(&Duration::try_from(*value)?, context)
         }
 
         #[inline(always)]
-        fn read(context: &mut ReadContext) -> Result<Self, Error> {
-            Duration::read(context)?.try_into()
+        fn read_data(context: &mut ReadContext) -> Result<Self, Error> {
+            Duration::read_data(context)?.try_into()
         }
 
         temporal_hooks!(

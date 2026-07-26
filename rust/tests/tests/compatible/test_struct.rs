@@ -764,17 +764,17 @@ fn test_struct_with_generic() {
     impl<T: Serializer<Target = T>> Serializer for Wrapper<T> {
         type Target = Self;
 
-        fn write(value: &Self, context: &mut WriteContext) -> Result<(), Error> {
+        fn write_data(value: &Self, context: &mut WriteContext) -> Result<(), Error> {
             context.writer.write_var_u32(value.value.len() as u32);
             context.writer.write_utf8_string(&value.value);
-            T::write(&value.data, context)?;
+            T::write_data(&value.data, context)?;
             Ok(())
         }
 
-        fn read(context: &mut ReadContext) -> Result<Self, Error> {
+        fn read_data(context: &mut ReadContext) -> Result<Self, Error> {
             let len = context.reader.read_var_u32()? as usize;
             let value = context.reader.read_utf8_string(len)?;
-            let data = T::read(context)?;
+            let data = T::read_data(context)?;
             Ok(Self {
                 value,
                 _marker: PhantomData,

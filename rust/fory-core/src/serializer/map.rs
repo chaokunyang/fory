@@ -645,7 +645,7 @@ macro_rules! impl_map_serializer {
             type Target = $target<KS::Target, VS::Target>;
 
             #[inline(always)]
-            fn write(value: &Self::Target, context: &mut WriteContext) -> Result<(), Error> {
+            fn write_data(value: &Self::Target, context: &mut WriteContext) -> Result<(), Error> {
                 <$codec<
                     KS::Target,
                     VS::Target,
@@ -657,7 +657,7 @@ macro_rules! impl_map_serializer {
             }
 
             #[inline(always)]
-            fn read(context: &mut ReadContext) -> Result<Self::Target, Error> {
+            fn read_data(context: &mut ReadContext) -> Result<Self::Target, Error> {
                 <$codec<
                     KS::Target,
                     VS::Target,
@@ -681,7 +681,7 @@ macro_rules! impl_map_serializer {
             }
 
             #[inline(always)]
-            fn write_value(
+            fn write(
                 value: &Self::Target,
                 context: &mut WriteContext,
                 ref_mode: RefMode,
@@ -705,12 +705,19 @@ macro_rules! impl_map_serializer {
             }
 
             #[inline(always)]
-            fn write_with_generics(
+            fn write_data_with_generics(
                 value: &Self::Target,
                 context: &mut WriteContext,
                 has_generics: bool,
             ) -> Result<(), Error> {
-                Self::write_value(
+                <$codec<
+                    KS::Target,
+                    VS::Target,
+                    SerializerCodec<KS, false, false>,
+                    SerializerCodec<VS, false, false>,
+                    false,
+                    false,
+                > as Codec<Self::Target>>::write_with_mode(
                     value,
                     context,
                     RefMode::None,
@@ -720,7 +727,7 @@ macro_rules! impl_map_serializer {
             }
 
             #[inline(always)]
-            fn read_value(
+            fn read(
                 context: &mut ReadContext,
                 ref_mode: RefMode,
                 read_type_info: bool,
@@ -834,13 +841,13 @@ macro_rules! impl_map_serializer {
             type Target = Self;
 
             #[inline(always)]
-            fn write(value: &Self, context: &mut WriteContext) -> Result<(), Error> {
-                <$provider<K, V> as Serializer>::write(value, context)
+            fn write_data(value: &Self, context: &mut WriteContext) -> Result<(), Error> {
+                <$provider<K, V> as Serializer>::write_data(value, context)
             }
 
             #[inline(always)]
-            fn read(context: &mut ReadContext) -> Result<Self, Error> {
-                <$provider<K, V> as Serializer>::read(context)
+            fn read_data(context: &mut ReadContext) -> Result<Self, Error> {
+                <$provider<K, V> as Serializer>::read_data(context)
             }
 
             #[inline(always)]
@@ -849,14 +856,14 @@ macro_rules! impl_map_serializer {
             }
 
             #[inline(always)]
-            fn write_value(
+            fn write(
                 value: &Self,
                 context: &mut WriteContext,
                 ref_mode: RefMode,
                 write_type_info: bool,
                 has_generics: bool,
             ) -> Result<(), Error> {
-                <$provider<K, V> as Serializer>::write_value(
+                <$provider<K, V> as Serializer>::write(
                     value,
                     context,
                     ref_mode,
@@ -866,12 +873,12 @@ macro_rules! impl_map_serializer {
             }
 
             #[inline(always)]
-            fn write_with_generics(
+            fn write_data_with_generics(
                 value: &Self,
                 context: &mut WriteContext,
                 has_generics: bool,
             ) -> Result<(), Error> {
-                <$provider<K, V> as Serializer>::write_with_generics(
+                <$provider<K, V> as Serializer>::write_data_with_generics(
                     value,
                     context,
                     has_generics,
@@ -879,12 +886,12 @@ macro_rules! impl_map_serializer {
             }
 
             #[inline(always)]
-            fn read_value(
+            fn read(
                 context: &mut ReadContext,
                 ref_mode: RefMode,
                 read_type_info: bool,
             ) -> Result<Self, Error> {
-                <$provider<K, V> as Serializer>::read_value(
+                <$provider<K, V> as Serializer>::read(
                     context,
                     ref_mode,
                     read_type_info,

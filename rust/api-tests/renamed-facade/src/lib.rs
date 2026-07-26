@@ -64,12 +64,12 @@ mod tests {
     impl Serializer for ExternalIdSerializer {
         type Target = ExternalId;
 
-        fn write(value: &ExternalId, context: &mut WriteContext) -> Result<(), Error> {
+        fn write_data(value: &ExternalId, context: &mut WriteContext) -> Result<(), Error> {
             context.writer.write_u128(value.0);
             Ok(())
         }
 
-        fn read(context: &mut ReadContext) -> Result<ExternalId, Error> {
+        fn read_data(context: &mut ReadContext) -> Result<ExternalId, Error> {
             Ok(ExternalId(context.reader.read_u128()?))
         }
 

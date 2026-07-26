@@ -127,9 +127,9 @@ fn test_box_option() {
         .expect("Should deserialize Box<Option<String>>");
     assert_eq!(*value, *deserialized);
 
-    // Note: Box<Option<None>> is not supported due to the way Option's serializer works
-    // The Option serializer expects None cases to be handled at the serialize() level,
-    // not at the write() level, but Box calls write() directly on the inner type.
+    // Note: Box<Option<None>> is not supported due to the way Option's serializer works.
+    // The Option serializer expects None cases to be handled by complete-value framing,
+    // while Box serializes the nested body directly.
 }
 
 #[test]

@@ -74,7 +74,7 @@ where one int32 field is widened to int64.
 | `MediaContentList`  | List of shared `MediaContent` payloads                                 |
 
 The local package's separate `external_type_bench` Criterion target contains
-branch-local Rust external-type serialization comparisons. Its package
+Rust-local external-type serialization comparisons. Its package
 boundary preserves the xlang `serialization_bench` binary, dependency graph,
 and measurement shape. Each comparison has `self_serialize`,
 `selected_serialize`, `self_deserialize`, and `selected_deserialize` lanes.
@@ -104,11 +104,6 @@ cargo bench --manifest-path local/Cargo.toml --bench external_type_bench -- carr
 cargo bench --manifest-path local/Cargo.toml --bench external_type_bench -- external_command_compatible
 cargo bench --manifest-path local/Cargo.toml --bench external_type_bench -- dynamic_trait_arc
 ```
-
-For regression gates, run baseline and current cases sequentially. Existing
-ordinary cases compare directly with `apache/main`. APIs added for
-external-type serialization compare branch-locally with their equivalent self
-lane; do not add compatibility shims to the baseline checkout.
 
 ## Shared Proto Schema
 

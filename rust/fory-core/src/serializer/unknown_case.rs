@@ -33,7 +33,7 @@ pub fn write_unknown_case_body(
     if write_typed_unknown_case_body(context, unknown)? {
         return Ok(());
     }
-    <Arc<dyn Any + Send + Sync> as Serializer>::write_value(
+    <Arc<dyn Any + Send + Sync> as Serializer>::write(
         unknown.value_arc(),
         context,
         RefMode::Tracking,
@@ -184,7 +184,7 @@ pub fn read_unknown_case_body(
 impl Serializer for UnknownCase {
     type Target = Self;
 
-    fn write_value(
+    fn write(
         value: &Self,
         context: &mut WriteContext,
         ref_mode: RefMode,
@@ -196,11 +196,11 @@ impl Serializer for UnknownCase {
         write_unknown_case_body(context, value)
     }
 
-    fn write(value: &Self, context: &mut WriteContext) -> Result<(), Error> {
+    fn write_data(value: &Self, context: &mut WriteContext) -> Result<(), Error> {
         write_unknown_case_body(context, value)
     }
 
-    fn read_value(
+    fn read(
         context: &mut ReadContext,
         ref_mode: RefMode,
         read_type_info: bool,
@@ -210,7 +210,7 @@ impl Serializer for UnknownCase {
         read_unknown_case_body(context, 0)
     }
 
-    fn read(context: &mut ReadContext) -> Result<Self, Error> {
+    fn read_data(context: &mut ReadContext) -> Result<Self, Error> {
         read_unknown_case_body(context, 0)
     }
 

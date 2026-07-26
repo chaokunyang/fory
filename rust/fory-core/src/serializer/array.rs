@@ -444,12 +444,12 @@ impl<S: Serializer, const N: usize> Serializer for ArraySerializer<S, N> {
     type Target = [S::Target; N];
 
     #[inline(always)]
-    fn write(value: &Self::Target, context: &mut WriteContext) -> Result<(), Error> {
+    fn write_data(value: &Self::Target, context: &mut WriteContext) -> Result<(), Error> {
         <RootArrayCodec<S, N> as Codec<Self::Target>>::write_data(value, context)
     }
 
     #[inline(always)]
-    fn read(context: &mut ReadContext) -> Result<Self::Target, Error> {
+    fn read_data(context: &mut ReadContext) -> Result<Self::Target, Error> {
         <RootArrayCodec<S, N> as Codec<Self::Target>>::read_data(context)
     }
 
@@ -459,7 +459,7 @@ impl<S: Serializer, const N: usize> Serializer for ArraySerializer<S, N> {
     }
 
     #[inline(always)]
-    fn write_value(
+    fn write(
         value: &Self::Target,
         context: &mut WriteContext,
         ref_mode: RefMode,
@@ -476,7 +476,7 @@ impl<S: Serializer, const N: usize> Serializer for ArraySerializer<S, N> {
     }
 
     #[inline(always)]
-    fn write_with_generics(
+    fn write_data_with_generics(
         value: &Self::Target,
         context: &mut WriteContext,
         has_generics: bool,
@@ -491,7 +491,7 @@ impl<S: Serializer, const N: usize> Serializer for ArraySerializer<S, N> {
     }
 
     #[inline(always)]
-    fn read_value(
+    fn read(
         context: &mut ReadContext,
         ref_mode: RefMode,
         read_type_info: bool,
@@ -562,13 +562,13 @@ where
     type Target = Self;
 
     #[inline(always)]
-    fn write(value: &Self, context: &mut WriteContext) -> Result<(), Error> {
-        <ArraySerializer<T, N> as Serializer>::write(value, context)
+    fn write_data(value: &Self, context: &mut WriteContext) -> Result<(), Error> {
+        <ArraySerializer<T, N> as Serializer>::write_data(value, context)
     }
 
     #[inline(always)]
-    fn read(context: &mut ReadContext) -> Result<Self, Error> {
-        <ArraySerializer<T, N> as Serializer>::read(context)
+    fn read_data(context: &mut ReadContext) -> Result<Self, Error> {
+        <ArraySerializer<T, N> as Serializer>::read_data(context)
     }
 
     #[inline(always)]
@@ -577,14 +577,14 @@ where
     }
 
     #[inline(always)]
-    fn write_value(
+    fn write(
         value: &Self,
         context: &mut WriteContext,
         ref_mode: RefMode,
         write_type_info: bool,
         has_generics: bool,
     ) -> Result<(), Error> {
-        <ArraySerializer<T, N> as Serializer>::write_value(
+        <ArraySerializer<T, N> as Serializer>::write(
             value,
             context,
             ref_mode,
@@ -594,21 +594,25 @@ where
     }
 
     #[inline(always)]
-    fn write_with_generics(
+    fn write_data_with_generics(
         value: &Self,
         context: &mut WriteContext,
         has_generics: bool,
     ) -> Result<(), Error> {
-        <ArraySerializer<T, N> as Serializer>::write_with_generics(value, context, has_generics)
+        <ArraySerializer<T, N> as Serializer>::write_data_with_generics(
+            value,
+            context,
+            has_generics,
+        )
     }
 
     #[inline(always)]
-    fn read_value(
+    fn read(
         context: &mut ReadContext,
         ref_mode: RefMode,
         read_type_info: bool,
     ) -> Result<Self, Error> {
-        <ArraySerializer<T, N> as Serializer>::read_value(context, ref_mode, read_type_info)
+        <ArraySerializer<T, N> as Serializer>::read(context, ref_mode, read_type_info)
     }
 
     #[inline(always)]

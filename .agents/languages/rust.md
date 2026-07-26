@@ -109,15 +109,17 @@ Load this file when changing `rust/` or Rust xlang behavior.
   require `StructSerializer` and the matching structural category, while manual registration
   requires an independent EXT/NAMED_EXT serializer and rejects transparent wrappers. Require a
   selected serializer's registration only when the existing codec accesses its registered identity or
-  registration-backed metadata. `Serializer::write/read` are body-only and must not perform a
-  reached-body registration check. Do not eagerly walk a root serializer tree: absent Options, empty
-  collections/maps, empty weak values, zero-length arrays, and equivalent recursive no-child
-  branches may complete without leaf registration when they make no identity/metadata access. A
-  declared-type body path calls the selected serializer directly; its containing schema, when
-  present and declaring that child, owns the one prior registration/mismatch check. The existing
-  UNKNOWN-generic tuple `FieldType` does not declare positions, so its ordinary per-position type
-  metadata owns any required child registration access. Do not add a third recursive hook,
-  preflight lookup, reached-body/per-element check, or a second tuple-position selector.
+  registration-backed metadata. `Serializer::write_data/read_data` are body-only and must not
+  perform a reached-body registration check. `Serializer::write/read` are complete-value
+  operations, and `write_data_with_generics` remains a body-only generic-context operation. Do not
+  eagerly walk a root serializer tree: absent Options, empty collections/maps, empty weak values,
+  zero-length arrays, and equivalent recursive no-child branches may complete without leaf
+  registration when they make no identity/metadata access. A declared-type body path calls the
+  selected serializer directly; its containing schema, when present and declaring that child, owns
+  the one prior registration/mismatch check. The existing UNKNOWN-generic tuple `FieldType` does
+  not declare positions, so its ordinary per-position type metadata owns any required child
+  registration access. Do not add a third recursive hook, preflight lookup,
+  reached-body/per-element check, or a second tuple-position selector.
 - Keep root serializer selection in `serialize_with`, `serialize_to_with`, `deserialize_with`, and
   `deserialize_from_with`. Do not add a runtime provider tree, public codec, provider object,
   container-specific root method, or per-element lookup. `Option`, Box/Rc/Arc/weak references,
@@ -217,8 +219,9 @@ Load this file when changing `rust/` or Rust xlang behavior.
   `Default`; construct through selected codecs and context. `skip + with` selects the serializer
   codec only for construction default and needs no registration when it emits no metadata/body. Do
   not mark the default method itself universally cold: skipped-field construction is a normal read
-  path. Isolate unsupported default errors and genuinely cold null/missing/mismatch entrances
-  instead.
+  path. A complete read's null branch calls `Self::default_value(context)` directly; do not
+  interpose a cold forwarding helper. Keep the default unsupported-error constructor and other
+  genuinely cold mismatch failures cold and non-inlined.
 - Retain the static wrapper-shape hook used by existing list/tuple metadata generation. It must
   continue to default to the shared-reference hook; all existing shared-reference providers,
   Option, Box, RefCell, Mutex, and existing tuple wrappers must keep their current answers. Do not
@@ -228,11 +231,11 @@ Load this file when changing `rust/` or Rust xlang behavior.
   `#[cold]` and `#[inline(never)]`. Keep successful dynamic dispatch and normal non-null/matched
   paths hot. A generated structural compatible read is the normal path whenever compatible mode is
   enabled, so keep it out of cold sections even when it remains non-inlined.
-- Generated structural `Serializer::write` and `Serializer::read` bodies use ordinary `#[inline]`,
-  not `#[inline(always)]`. Small bodies remain compiler-inlineable, while forcing large bodies into
-  root context closures can inflate code and stack frames and regress carrier result handling.
-  Reserve `#[inline(always)]` for small forwarding or compile-time selection hooks whose bodies
-  must disappear after monomorphization.
+- Generated structural `Serializer::write_data` and `Serializer::read_data` bodies use ordinary
+  `#[inline]`, not `#[inline(always)]`. Small bodies remain compiler-inlineable, while forcing
+  large bodies into root context closures can inflate code and stack frames and regress carrier
+  result handling. Reserve `#[inline(always)]` for small complete-value forwarding or compile-time
+  selection hooks whose bodies must disappear after monomorphization.
 - If breakage is explicitly acceptable during a Rust module refactor, rewire macros, tests, and sibling crates directly to the new boundaries instead of adding compatibility re-exports.
 - For panic-safety in hot paths, preserve TLS context reuse. Add scoped guards or owned fallbacks rather than per-call context allocation, and reset reused contexts at entry and successful exit.
 - Compatible scalar, list-array, and binary/uint8-array adaptations are immediate-field-only. Keep recursive matched-field shape classification owned by `fory-core/src/meta/type_meta.rs`; collection elements, array elements, map keys, and map values must require exact nullability, ref tracking, generic arity, and type shape except documented user-type family normalization.

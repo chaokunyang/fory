@@ -37,12 +37,12 @@ impl Serializer for () {
     type Target = Self;
 
     #[inline(always)]
-    fn write(_: &Self, _: &mut WriteContext) -> Result<(), Error> {
+    fn write_data(_: &Self, _: &mut WriteContext) -> Result<(), Error> {
         Ok(())
     }
 
     #[inline(always)]
-    fn read(_: &mut ReadContext) -> Result<Self, Error> {
+    fn read_data(_: &mut ReadContext) -> Result<Self, Error> {
         Ok(())
     }
 
@@ -499,7 +499,7 @@ macro_rules! impl_tuple_codec {
             type Target = ($($S::Target,)+);
 
             #[inline(always)]
-            fn write(value: &Self::Target, context: &mut WriteContext) -> Result<(), Error> {
+            fn write_data(value: &Self::Target, context: &mut WriteContext) -> Result<(), Error> {
                 <$codec<
                     $($S::Target, SerializerCodec<$S, false, false>,)+
                     false,
@@ -508,7 +508,7 @@ macro_rules! impl_tuple_codec {
             }
 
             #[inline(always)]
-            fn read(context: &mut ReadContext) -> Result<Self::Target, Error> {
+            fn read_data(context: &mut ReadContext) -> Result<Self::Target, Error> {
                 <$codec<
                     $($S::Target, SerializerCodec<$S, false, false>,)+
                     false,
@@ -526,7 +526,7 @@ macro_rules! impl_tuple_codec {
             }
 
             #[inline(always)]
-            fn write_value(
+            fn write(
                 value: &Self::Target,
                 context: &mut WriteContext,
                 ref_mode: RefMode,
@@ -547,7 +547,7 @@ macro_rules! impl_tuple_codec {
             }
 
             #[inline(always)]
-            fn read_value(
+            fn read(
                 context: &mut ReadContext,
                 ref_mode: RefMode,
                 read_type_info: bool,
@@ -639,13 +639,13 @@ macro_rules! impl_tuple_codec {
             type Target = Self;
 
             #[inline(always)]
-            fn write(value: &Self, context: &mut WriteContext) -> Result<(), Error> {
-                <$provider<$($T,)+> as Serializer>::write(value, context)
+            fn write_data(value: &Self, context: &mut WriteContext) -> Result<(), Error> {
+                <$provider<$($T,)+> as Serializer>::write_data(value, context)
             }
 
             #[inline(always)]
-            fn read(context: &mut ReadContext) -> Result<Self, Error> {
-                <$provider<$($T,)+> as Serializer>::read(context)
+            fn read_data(context: &mut ReadContext) -> Result<Self, Error> {
+                <$provider<$($T,)+> as Serializer>::read_data(context)
             }
 
             #[inline(always)]
@@ -654,14 +654,14 @@ macro_rules! impl_tuple_codec {
             }
 
             #[inline(always)]
-            fn write_value(
+            fn write(
                 value: &Self,
                 context: &mut WriteContext,
                 ref_mode: RefMode,
                 write_type_info: bool,
                 has_generics: bool,
             ) -> Result<(), Error> {
-                <$provider<$($T,)+> as Serializer>::write_value(
+                <$provider<$($T,)+> as Serializer>::write(
                     value,
                     context,
                     ref_mode,
@@ -671,12 +671,12 @@ macro_rules! impl_tuple_codec {
             }
 
             #[inline(always)]
-            fn read_value(
+            fn read(
                 context: &mut ReadContext,
                 ref_mode: RefMode,
                 read_type_info: bool,
             ) -> Result<Self, Error> {
-                <$provider<$($T,)+> as Serializer>::read_value(
+                <$provider<$($T,)+> as Serializer>::read(
                     context,
                     ref_mode,
                     read_type_info,

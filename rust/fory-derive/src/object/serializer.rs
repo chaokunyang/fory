@@ -85,12 +85,12 @@ pub fn derive_serializer(
         variants_fields_info,
         read_compatible,
         variant_meta_types,
-        write_value,
-        write_body,
+        write_complete,
+        write_data,
         write_type_info,
-        read_value,
+        read_complete,
         read_with_type_info,
-        read_body,
+        read_data,
         read_type_info,
         default_value,
         reserved_space,
@@ -233,18 +233,18 @@ pub fn derive_serializer(
             // heuristic. Forcing them into root context closures inflates code
             // and stack frames enough to regress primitive carrier reads.
             #[inline]
-            fn write(
+            fn write_data(
                 value: &Self::Target,
                 context: &mut fory_core::WriteContext,
             ) -> ::std::result::Result<(), fory_core::Error> {
-                #write_body
+                #write_data
             }
 
             #[inline]
-            fn read(
+            fn read_data(
                 context: &mut fory_core::ReadContext,
             ) -> ::std::result::Result<Self::Target, fory_core::Error> {
-                #read_body
+                #read_data
             }
 
             #[inline(always)]
@@ -255,23 +255,23 @@ pub fn derive_serializer(
             }
 
             #[inline(always)]
-            fn write_value(
+            fn write(
                 value: &Self::Target,
                 context: &mut fory_core::WriteContext,
                 ref_mode: fory_core::RefMode,
                 write_type_info: bool,
-                _has_generics: bool,
+                has_generics: bool,
             ) -> ::std::result::Result<(), fory_core::Error> {
-                #write_value
+                #write_complete
             }
 
             #[inline(always)]
-            fn read_value(
+            fn read(
                 context: &mut fory_core::ReadContext,
                 ref_mode: fory_core::RefMode,
                 read_type_info: bool,
             ) -> ::std::result::Result<Self::Target, fory_core::Error> {
-                #read_value
+                #read_complete
             }
 
             #[inline(always)]
@@ -509,7 +509,7 @@ fn generate_send_sync_tokens(ast: &syn::DeriveInput) -> SendSyncTokens {
                 ::std::sync::Arc<dyn ::std::any::Any + Send + Sync>,
                 fory_core::Error,
             > {
-                let value = <Self as fory_core::Serializer>::read(context)?;
+                let value = <Self as fory_core::Serializer>::read_data(context)?;
                 Ok(::std::sync::Arc::new(value))
             }
         },

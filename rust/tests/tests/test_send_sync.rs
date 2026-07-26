@@ -214,12 +214,12 @@ fn manual_serializer_arc_any_read() {
     impl Serializer for ManualValue {
         type Target = Self;
 
-        fn write(value: &Self, context: &mut WriteContext) -> Result<(), Error> {
+        fn write_data(value: &Self, context: &mut WriteContext) -> Result<(), Error> {
             write_data::<i32>(&value.id, context)?;
             write_data::<String>(&value.name, context)
         }
 
-        fn read(context: &mut ReadContext) -> Result<Self, Error> {
+        fn read_data(context: &mut ReadContext) -> Result<Self, Error> {
             Ok(Self {
                 id: read_data::<i32>(context)?,
                 name: read_data::<String>(context)?,
@@ -227,7 +227,7 @@ fn manual_serializer_arc_any_read() {
         }
 
         fn read_arc_any(context: &mut ReadContext) -> Result<Arc<dyn Any + Send + Sync>, Error> {
-            Ok(Arc::new(Self::read(context)?))
+            Ok(Arc::new(Self::read_data(context)?))
         }
     }
 

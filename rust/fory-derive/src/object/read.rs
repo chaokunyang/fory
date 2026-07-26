@@ -253,7 +253,7 @@ pub fn gen_read() -> TokenStream {
                 if read_type_info {
                     <Self as fory_core::Serializer>::read_type_info(context)?;
                 }
-                <Self as fory_core::Serializer>::read(context)
+                <Self as fory_core::Serializer>::read_data(context)
             }
         } else if ref_flag == (fory_core::RefFlag::Null as i8) {
             <Self as fory_core::Serializer>::default_value(context)
@@ -281,7 +281,7 @@ pub fn gen_read_with_type_info() -> TokenStream {
             if context.is_compatible() {
                 <Self as fory_core::StructSerializer>::read_compatible(context, type_info)
             } else {
-                <Self as fory_core::Serializer>::read(context)
+                <Self as fory_core::Serializer>::read_data(context)
             }
         } else if ref_flag == (fory_core::RefFlag::Null as i8) {
             <Self as fory_core::Serializer>::default_value(context)
@@ -514,7 +514,7 @@ pub(crate) fn gen_read_compatible_target(
             let remote_meta = type_info.get_type_meta_ref();
             let remote_type_hash = remote_meta.get_hash();
             if remote_type_hash == local_type_hash {
-                return <Self as fory_core::Serializer>::read(context);
+                return <Self as fory_core::Serializer>::read_data(context);
             }
             #fields_binding
         }

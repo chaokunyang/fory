@@ -35,12 +35,6 @@ fn default_unavailable<S: Serializer>() -> Result<S::Target, Error> {
     )))
 }
 
-#[cold]
-#[inline(never)]
-fn cold_provider_default<S: Serializer>(context: &mut ReadContext) -> Result<S::Target, Error> {
-    S::default_value(context)
-}
-
 #[inline(always)]
 fn provider_field_type<S: Serializer, const NULLABLE: bool, const TRACK_REF: bool>(
     type_resolver: &TypeResolver,
@@ -90,10 +84,10 @@ pub trait Serializer: Sized + 'static {
     type Target: Sized + 'static;
 
     /// Write the target body only.
-    fn write(value: &Self::Target, context: &mut WriteContext) -> Result<(), Error>;
+    fn write_data(value: &Self::Target, context: &mut WriteContext) -> Result<(), Error>;
 
     /// Read the target body only.
-    fn read(context: &mut ReadContext) -> Result<Self::Target, Error>;
+    fn read_data(context: &mut ReadContext) -> Result<Self::Target, Error>;
 
     /// Construct a target for a null or missing local value.
     #[inline(always)]
@@ -102,9 +96,11 @@ pub trait Serializer: Sized + 'static {
         default_unavailable::<Self>()
     }
 
+    /// Write a complete value, including the requested reference and type
+    /// information envelopes, then write its body.
     #[doc(hidden)]
     #[inline(always)]
-    fn write_value(
+    fn write(
         value: &Self::Target,
         context: &mut WriteContext,
         ref_mode: RefMode,
@@ -117,18 +113,20 @@ pub trait Serializer: Sized + 'static {
         if write_type_info {
             Self::write_type_info(context)?;
         }
-        Self::write_with_generics(value, context, has_generics)
+        Self::write_data_with_generics(value, context, has_generics)
     }
 
+    /// Write only body data while preserving the carrier's generic-metadata
+    /// context.
     #[doc(hidden)]
     #[inline(always)]
-    fn write_with_generics(
+    fn write_data_with_generics(
         value: &Self::Target,
         context: &mut WriteContext,
         has_generics: bool,
     ) -> Result<(), Error> {
         let _ = has_generics;
-        Self::write(value, context)
+        Self::write_data(value, context)
     }
 
     /// Resolve and emit metadata for one dynamically selected concrete target.
@@ -156,12 +154,14 @@ pub trait Serializer: Sized + 'static {
         has_generics: bool,
     ) -> Result<(), Error> {
         let _ = type_info;
-        Self::write_value(value, context, ref_mode, false, has_generics)
+        Self::write(value, context, ref_mode, false, has_generics)
     }
 
+    /// Read a complete value, including the requested reference and type
+    /// information envelopes, then read its body.
     #[doc(hidden)]
     #[inline(always)]
-    fn read_value(
+    fn read(
         context: &mut ReadContext,
         ref_mode: RefMode,
         read_type_info: bool,
@@ -169,13 +169,13 @@ pub trait Serializer: Sized + 'static {
         if ref_mode != RefMode::None {
             let flag = context.reader.read_i8()?;
             if flag == RefFlag::Null as i8 {
-                return cold_provider_default::<Self>(context);
+                return Self::default_value(context);
             }
         }
         if read_type_info {
             Self::read_type_info(context)?;
         }
-        Self::read(context)
+        Self::read_data(context)
     }
 
     #[doc(hidden)]
@@ -186,7 +186,7 @@ pub trait Serializer: Sized + 'static {
         type_info: &Rc<TypeInfo>,
     ) -> Result<Self::Target, Error> {
         let _ = type_info;
-        Self::read_value(context, ref_mode, false)
+        Self::read(context, ref_mode, false)
     }
 
     /// Build field metadata for this serializer without exposing `Codec`.
@@ -206,7 +206,7 @@ pub trait Serializer: Sized + 'static {
         remote_field_type: &FieldType,
     ) -> Result<Self::Target, Error> {
         let _ = remote_field_type;
-        Self::read(context)
+        Self::read_data(context)
     }
 
     #[doc(hidden)]
@@ -352,10 +352,10 @@ pub fn write_data<S: Serializer>(
     value: &S::Target,
     context: &mut WriteContext,
 ) -> Result<(), Error> {
-    S::write(value, context)
+    S::write_data(value, context)
 }
 
 #[inline(always)]
 pub fn read_data<S: Serializer>(context: &mut ReadContext) -> Result<S::Target, Error> {
-    S::read(context)
+    S::read_data(context)
 }

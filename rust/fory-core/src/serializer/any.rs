@@ -237,20 +237,20 @@ pub fn deserialize_any_box(context: &mut ReadContext) -> Result<Box<dyn Any>, Er
 impl Serializer for Box<dyn Any> {
     type Target = Self;
     #[inline(always)]
-    fn write(value: &Self, context: &mut WriteContext) -> Result<(), Error> {
+    fn write_data(value: &Self, context: &mut WriteContext) -> Result<(), Error> {
         write_any_body(value.as_ref(), context, false)
     }
 
     #[cold]
     #[inline(never)]
-    fn read(_: &mut ReadContext) -> Result<Self, Error> {
+    fn read_data(_: &mut ReadContext) -> Result<Self, Error> {
         Err(Error::not_allowed(
             "Box<dyn Any> requires concrete type metadata",
         ))
     }
 
     #[inline(always)]
-    fn write_with_generics(
+    fn write_data_with_generics(
         value: &Self,
         context: &mut WriteContext,
         has_generics: bool,
@@ -278,7 +278,7 @@ impl Serializer for Box<dyn Any> {
     }
 
     #[inline(always)]
-    fn write_value(
+    fn write(
         value: &Self,
         context: &mut WriteContext,
         ref_mode: RefMode,
@@ -295,7 +295,7 @@ impl Serializer for Box<dyn Any> {
     }
 
     #[inline(always)]
-    fn read_value(
+    fn read(
         context: &mut ReadContext,
         ref_mode: RefMode,
         read_type_info: bool,
@@ -416,20 +416,20 @@ pub fn read_box_any(
 impl Serializer for Rc<dyn Any> {
     type Target = Self;
     #[inline(always)]
-    fn write(value: &Self, context: &mut WriteContext) -> Result<(), Error> {
+    fn write_data(value: &Self, context: &mut WriteContext) -> Result<(), Error> {
         write_any_body(value.as_ref(), context, false)
     }
 
     #[cold]
     #[inline(never)]
-    fn read(_: &mut ReadContext) -> Result<Self, Error> {
+    fn read_data(_: &mut ReadContext) -> Result<Self, Error> {
         Err(Error::not_allowed(
             "Rc<dyn Any> requires concrete type metadata",
         ))
     }
 
     #[inline(always)]
-    fn write_with_generics(
+    fn write_data_with_generics(
         value: &Self,
         context: &mut WriteContext,
         has_generics: bool,
@@ -457,7 +457,7 @@ impl Serializer for Rc<dyn Any> {
     }
 
     #[inline(always)]
-    fn write_value(
+    fn write(
         value: &Self,
         context: &mut WriteContext,
         ref_mode: RefMode,
@@ -482,7 +482,7 @@ impl Serializer for Rc<dyn Any> {
     }
 
     #[inline(always)]
-    fn read_value(
+    fn read(
         context: &mut ReadContext,
         ref_mode: RefMode,
         read_type_info: bool,
@@ -612,20 +612,20 @@ fn read_new_rc_any(
 impl Serializer for Arc<dyn Any + Send + Sync> {
     type Target = Self;
     #[inline(always)]
-    fn write(value: &Self, context: &mut WriteContext) -> Result<(), Error> {
+    fn write_data(value: &Self, context: &mut WriteContext) -> Result<(), Error> {
         write_any_body(value.as_ref(), context, false)
     }
 
     #[cold]
     #[inline(never)]
-    fn read(_: &mut ReadContext) -> Result<Self, Error> {
+    fn read_data(_: &mut ReadContext) -> Result<Self, Error> {
         Err(Error::not_allowed(
             "Arc<dyn Any + Send + Sync> requires concrete type metadata",
         ))
     }
 
     #[inline(always)]
-    fn write_with_generics(
+    fn write_data_with_generics(
         value: &Self,
         context: &mut WriteContext,
         has_generics: bool,
@@ -653,7 +653,7 @@ impl Serializer for Arc<dyn Any + Send + Sync> {
     }
 
     #[inline(always)]
-    fn write_value(
+    fn write(
         value: &Self,
         context: &mut WriteContext,
         ref_mode: RefMode,
@@ -678,7 +678,7 @@ impl Serializer for Arc<dyn Any + Send + Sync> {
     }
 
     #[inline(always)]
-    fn read_value(
+    fn read(
         context: &mut ReadContext,
         ref_mode: RefMode,
         read_type_info: bool,

@@ -213,6 +213,18 @@ The ownership split is:
 - `Fory` owns root framing and operation setup/reset
 - `TypeResolver` owns registration and dynamic lookup
 
+Rust names these serializer operation boundaries explicitly:
+
+- `Serializer::write` and `Serializer::read` process a complete value,
+  including the requested reference and type-information envelopes.
+- `Serializer::write_data` and `Serializer::read_data` process only the target
+  body.
+- `Serializer::write_data_with_generics` processes only body data while
+  preserving the carrier's existing generic-metadata context.
+- `write_with_type_info` and `read_with_type_info` remain complete-value
+  operations over already-resolved metadata, while
+  `read_data_with_field_type` remains body-only.
+
 Serializer-provider identity is a host implementation detail and is never
 encoded. External structural serializers use the same STRUCT, ENUM, or UNION
 metadata and value format as an equivalent directly supported target. Manual

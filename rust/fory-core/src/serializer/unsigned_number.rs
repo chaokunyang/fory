@@ -37,7 +37,7 @@ macro_rules! impl_unsigned_serializer {
             type Target = Self;
 
             #[inline(always)]
-            fn write(value: &Self, context: &mut WriteContext) -> Result<(), Error> {
+            fn write_data(value: &Self, context: &mut WriteContext) -> Result<(), Error> {
                 if !$xlang && context.is_xlang() {
                     return Err(Error::not_allowed(concat!(
                         stringify!($ty),
@@ -49,7 +49,7 @@ macro_rules! impl_unsigned_serializer {
             }
 
             #[inline(always)]
-            fn read(context: &mut ReadContext) -> Result<Self, Error> {
+            fn read_data(context: &mut ReadContext) -> Result<Self, Error> {
                 $reader(&mut context.reader)
             }
 
@@ -70,7 +70,7 @@ macro_rules! impl_unsigned_serializer {
             fn read_arc_any(
                 context: &mut ReadContext,
             ) -> Result<Arc<dyn std::any::Any + Send + Sync>, Error> {
-                Ok(Arc::new(Self::read(context)?))
+                Ok(Arc::new(Self::read_data(context)?))
             }
 
             #[inline(always)]

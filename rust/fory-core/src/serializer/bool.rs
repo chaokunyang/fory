@@ -26,13 +26,13 @@ impl Serializer for bool {
     type Target = Self;
 
     #[inline(always)]
-    fn write(value: &Self, context: &mut WriteContext) -> Result<(), Error> {
+    fn write_data(value: &Self, context: &mut WriteContext) -> Result<(), Error> {
         context.writer.write_u8(u8::from(*value));
         Ok(())
     }
 
     #[inline(always)]
-    fn read(context: &mut ReadContext) -> Result<Self, Error> {
+    fn read_data(context: &mut ReadContext) -> Result<Self, Error> {
         Ok(context.reader.read_u8()? == 1)
     }
 
@@ -45,7 +45,7 @@ impl Serializer for bool {
     fn read_arc_any(
         context: &mut ReadContext,
     ) -> Result<Arc<dyn std::any::Any + Send + Sync>, Error> {
-        Ok(Arc::new(Self::read(context)?))
+        Ok(Arc::new(Self::read_data(context)?))
     }
 
     #[inline(always)]

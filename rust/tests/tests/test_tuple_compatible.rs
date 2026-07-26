@@ -39,7 +39,7 @@ fn tuple_body<T: Serializer<Target = T>>(value: &T, track_ref: bool) -> Vec<u8> 
         ..Config::default()
     };
     let mut context = WriteContext::new(TypeResolver::default(), config);
-    T::write(value, &mut context).unwrap();
+    T::write_data(value, &mut context).unwrap();
     context.writer.dump()
 }
 

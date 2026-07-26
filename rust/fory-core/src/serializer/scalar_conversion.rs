@@ -91,7 +91,7 @@ where
 }
 
 macro_rules! scalar_target_reader {
-    ($read:ident, $read_option:ident, $ty:ty, $read_value:ident) => {
+    ($read:ident, $read_option:ident, $ty:ty, $read_scalar_value:ident) => {
         #[inline(never)]
         pub(super) fn $read(
             context: &mut ReadContext,
@@ -105,7 +105,7 @@ macro_rules! scalar_target_reader {
             // The doubled compatible arm is reached only after schema-pair
             // classification accepts a scalar pair. This dispatch only chooses
             // the remote wire-value reader.
-            $read_value(context, local_type, remote_field_type.type_id)
+            $read_scalar_value(context, local_type, remote_field_type.type_id)
         }
 
         #[inline(never)]
@@ -118,7 +118,7 @@ macro_rules! scalar_target_reader {
             if !read_present_ref(context, remote_field_type)? {
                 return Ok(None);
             }
-            $read_value(context, local_type, remote_field_type.type_id).map(Some)
+            $read_scalar_value(context, local_type, remote_field_type.type_id).map(Some)
         }
     };
 }
@@ -289,11 +289,11 @@ fn read_i64_cold(
             float_to_integral_num(value, remote_type, local_type, false)
         }
         type_id::STRING => {
-            let value = <String as Serializer>::read(context)?;
+            let value = <String as Serializer>::read_data(context)?;
             string_to_integral_num(&value, remote_type, local_type, false)
         }
         type_id::DECIMAL => {
-            let value = <Decimal as Serializer>::read(context)?;
+            let value = <Decimal as Serializer>::read_data(context)?;
             decimal_to_integral_num(&value, remote_type, local_type, false)
         }
         _ => Err(Error::invalid_data("invalid compatible scalar remote type")),
@@ -374,7 +374,7 @@ fn read_string_wire_value(
                 "invalid bool encoding",
             )),
         },
-        type_id::STRING => <String as Serializer>::read(context),
+        type_id::STRING => <String as Serializer>::read_data(context),
         type_id::INT8
         | type_id::INT16
         | type_id::INT32
@@ -607,11 +607,11 @@ fn read_float16_wire_value(
         type_id::FLOAT16 => checked_float16(context.reader.read_f16()?, remote_type, local_type),
         _ => match remote_type {
             type_id::STRING => {
-                let value = <String as Serializer>::read(context)?;
+                let value = <String as Serializer>::read_data(context)?;
                 string_to_float16_value(&value, remote_type, local_type)
             }
             type_id::DECIMAL => {
-                let value = <Decimal as Serializer>::read(context)?;
+                let value = <Decimal as Serializer>::read_data(context)?;
                 decimal_to_float16(&value, false, remote_type, local_type)
             }
             _ => {
@@ -632,11 +632,11 @@ fn read_bfloat16_wire_value(
         type_id::BFLOAT16 => checked_bfloat16(context.reader.read_bf16()?, remote_type, local_type),
         _ => match remote_type {
             type_id::STRING => {
-                let value = <String as Serializer>::read(context)?;
+                let value = <String as Serializer>::read_data(context)?;
                 string_to_bfloat16_value(&value, remote_type, local_type)
             }
             type_id::DECIMAL => {
-                let value = <Decimal as Serializer>::read(context)?;
+                let value = <Decimal as Serializer>::read_data(context)?;
                 decimal_to_bfloat16(&value, false, remote_type, local_type)
             }
             _ => {
@@ -688,10 +688,10 @@ fn read_decimal_wire_value(
             float_to_decimal_value(value, remote_type, local_type)
         }
         type_id::STRING => {
-            let value = <String as Serializer>::read(context)?;
+            let value = <String as Serializer>::read_data(context)?;
             string_to_decimal_value(&value, remote_type, local_type).map(|(decimal, _)| decimal)
         }
-        type_id::DECIMAL => canonical_decimal(<Decimal as Serializer>::read(context)?),
+        type_id::DECIMAL => canonical_decimal(<Decimal as Serializer>::read_data(context)?),
         _ => Err(Error::invalid_data("invalid compatible scalar remote type")),
     }
 }
@@ -709,11 +709,11 @@ fn read_bool_cold(
             float_to_bool_value(value, remote_type, local_type)
         }
         type_id::STRING => {
-            let value = <String as Serializer>::read(context)?;
+            let value = <String as Serializer>::read_data(context)?;
             string_to_bool_value(&value, remote_type, local_type)
         }
         type_id::DECIMAL => {
-            let value = <Decimal as Serializer>::read(context)?;
+            let value = <Decimal as Serializer>::read_data(context)?;
             decimal_to_bool_value(&value, remote_type, local_type)
         }
         _ => Err(Error::invalid_data("invalid compatible scalar remote type")),
@@ -733,7 +733,7 @@ fn read_string_cold(
             float_to_string(value, remote_type, local_type)
         }
         type_id::DECIMAL => {
-            let value = canonical_decimal(<Decimal as Serializer>::read(context)?)?;
+            let value = canonical_decimal(<Decimal as Serializer>::read_data(context)?)?;
             Ok(decimal_to_string(&value))
         }
         _ => Err(Error::invalid_data("invalid compatible scalar remote type")),
@@ -753,11 +753,11 @@ fn read_u64_cold(
             float_to_integral_num(value, remote_type, local_type, true)
         }
         type_id::STRING => {
-            let value = <String as Serializer>::read(context)?;
+            let value = <String as Serializer>::read_data(context)?;
             string_to_integral_num(&value, remote_type, local_type, true)
         }
         type_id::DECIMAL => {
-            let value = <Decimal as Serializer>::read(context)?;
+            let value = <Decimal as Serializer>::read_data(context)?;
             decimal_to_integral_num(&value, remote_type, local_type, true)
         }
         _ => Err(Error::invalid_data("invalid compatible scalar remote type")),
@@ -773,11 +773,11 @@ fn read_f32_cold(
 ) -> Result<f32, Error> {
     match remote_type {
         type_id::STRING => {
-            let value = <String as Serializer>::read(context)?;
+            let value = <String as Serializer>::read_data(context)?;
             string_to_f32_value(&value, remote_type, local_type)
         }
         type_id::DECIMAL => {
-            let value = <Decimal as Serializer>::read(context)?;
+            let value = <Decimal as Serializer>::read_data(context)?;
             decimal_to_f32(&value, false, remote_type, local_type)
         }
         _ => Err(Error::invalid_data("invalid compatible scalar remote type")),
@@ -793,11 +793,11 @@ fn read_f64_cold(
 ) -> Result<f64, Error> {
     match remote_type {
         type_id::STRING => {
-            let value = <String as Serializer>::read(context)?;
+            let value = <String as Serializer>::read_data(context)?;
             string_to_f64_value(&value, remote_type, local_type)
         }
         type_id::DECIMAL => {
-            let value = <Decimal as Serializer>::read(context)?;
+            let value = <Decimal as Serializer>::read_data(context)?;
             decimal_to_f64(&value, false, remote_type, local_type)
         }
         _ => Err(Error::invalid_data("invalid compatible scalar remote type")),
@@ -1120,8 +1120,8 @@ fn read_scalar_value(context: &mut ReadContext, type_id: u32) -> Result<ScalarVa
         type_id::BFLOAT16 => ScalarValue::Float(FloatValue::BF16(context.reader.read_bf16()?)),
         type_id::FLOAT32 => ScalarValue::Float(FloatValue::F32(context.reader.read_f32()?)),
         type_id::FLOAT64 => ScalarValue::Float(FloatValue::F64(context.reader.read_f64()?)),
-        type_id::STRING => ScalarValue::String(<String as Serializer>::read(context)?),
-        type_id::DECIMAL => ScalarValue::Decimal(<Decimal as Serializer>::read(context)?),
+        type_id::STRING => ScalarValue::String(<String as Serializer>::read_data(context)?),
+        type_id::DECIMAL => ScalarValue::Decimal(<Decimal as Serializer>::read_data(context)?),
         _ => {
             return Err(conversion_error(
                 type_id,

@@ -187,7 +187,7 @@ macro_rules! register_trait_type {
                 }
 
                 #[inline(always)]
-                fn write(
+                fn write_data(
                     value: &dyn $trait_name,
                     context: &mut $crate::WriteContext,
                     write_type_info: bool,
@@ -315,11 +315,11 @@ macro_rules! register_trait_type {
             impl $crate::Serializer for Box<dyn $trait_name> {
                 type Target = Self;
                 #[inline(always)]
-                fn write(
+                fn write_data(
                     value: &Self,
                     context: &mut $crate::WriteContext,
                 ) -> Result<(), $crate::Error> {
-                    [<$trait_name ForyDispatch>]::write(
+                    [<$trait_name ForyDispatch>]::write_data(
                         value.as_ref(),
                         context,
                         false,
@@ -329,7 +329,7 @@ macro_rules! register_trait_type {
 
                 #[cold]
                 #[inline(never)]
-                fn read(
+                fn read_data(
                     _context: &mut $crate::ReadContext,
                 ) -> Result<Self, $crate::Error> {
                     Err($crate::Error::not_allowed(concat!(
@@ -340,12 +340,12 @@ macro_rules! register_trait_type {
                 }
 
                 #[inline(always)]
-                fn write_with_generics(
+                fn write_data_with_generics(
                     value: &Self,
                     context: &mut $crate::WriteContext,
                     has_generics: bool,
                 ) -> Result<(), $crate::Error> {
-                    [<$trait_name ForyDispatch>]::write(
+                    [<$trait_name ForyDispatch>]::write_data(
                         value.as_ref(),
                         context,
                         false,
@@ -386,7 +386,7 @@ macro_rules! register_trait_type {
                 }
 
                 #[inline(always)]
-                fn write_value(
+                fn write(
                     value: &Self,
                     context: &mut $crate::WriteContext,
                     ref_mode: $crate::RefMode,
@@ -406,7 +406,7 @@ macro_rules! register_trait_type {
                 }
 
                 #[inline(always)]
-                fn read_value(
+                fn read(
                     context: &mut $crate::ReadContext,
                     ref_mode: $crate::RefMode,
                     read_type_info: bool,
@@ -542,11 +542,11 @@ macro_rules! register_trait_type {
             impl $crate::Serializer for [<$trait_name RcSerializer>] {
                 type Target = std::rc::Rc<dyn $trait_name>;
                 #[inline(always)]
-                fn write(
+                fn write_data(
                     value: &Self::Target,
                     context: &mut $crate::WriteContext,
                 ) -> Result<(), $crate::Error> {
-                    [<$trait_name ForyDispatch>]::write(
+                    [<$trait_name ForyDispatch>]::write_data(
                         value.as_ref(),
                         context,
                         false,
@@ -556,7 +556,7 @@ macro_rules! register_trait_type {
 
                 #[cold]
                 #[inline(never)]
-                fn read(
+                fn read_data(
                     _context: &mut $crate::ReadContext,
                 ) -> Result<Self::Target, $crate::Error> {
                     Err($crate::Error::not_allowed(concat!(
@@ -567,12 +567,12 @@ macro_rules! register_trait_type {
                 }
 
                 #[inline(always)]
-                fn write_with_generics(
+                fn write_data_with_generics(
                     value: &Self::Target,
                     context: &mut $crate::WriteContext,
                     has_generics: bool,
                 ) -> Result<(), $crate::Error> {
-                    [<$trait_name ForyDispatch>]::write(
+                    [<$trait_name ForyDispatch>]::write_data(
                         value.as_ref(),
                         context,
                         false,
@@ -617,7 +617,7 @@ macro_rules! register_trait_type {
                 }
 
                 #[inline(always)]
-                fn write_value(
+                fn write(
                     value: &Self::Target,
                     context: &mut $crate::WriteContext,
                     ref_mode: $crate::RefMode,
@@ -641,7 +641,7 @@ macro_rules! register_trait_type {
                 }
 
                 #[inline(always)]
-                fn read_value(
+                fn read(
                     context: &mut $crate::ReadContext,
                     ref_mode: $crate::RefMode,
                     read_type_info: bool,
@@ -870,11 +870,11 @@ macro_rules! register_trait_type {
             impl $crate::Serializer for [<$trait_name ArcSerializer>] {
                 type Target = std::sync::Arc<dyn $trait_name>;
                 #[inline(always)]
-                fn write(
+                fn write_data(
                     value: &Self::Target,
                     context: &mut $crate::WriteContext,
                 ) -> Result<(), $crate::Error> {
-                    [<$trait_name ForyDispatch>]::write(
+                    [<$trait_name ForyDispatch>]::write_data(
                         value.as_ref(),
                         context,
                         false,
@@ -884,7 +884,7 @@ macro_rules! register_trait_type {
 
                 #[cold]
                 #[inline(never)]
-                fn read(
+                fn read_data(
                     _context: &mut $crate::ReadContext,
                 ) -> Result<Self::Target, $crate::Error> {
                     Err($crate::Error::not_allowed(concat!(
@@ -895,12 +895,12 @@ macro_rules! register_trait_type {
                 }
 
                 #[inline(always)]
-                fn write_with_generics(
+                fn write_data_with_generics(
                     value: &Self::Target,
                     context: &mut $crate::WriteContext,
                     has_generics: bool,
                 ) -> Result<(), $crate::Error> {
-                    [<$trait_name ForyDispatch>]::write(
+                    [<$trait_name ForyDispatch>]::write_data(
                         value.as_ref(),
                         context,
                         false,
@@ -945,7 +945,7 @@ macro_rules! register_trait_type {
                 }
 
                 #[inline(always)]
-                fn write_value(
+                fn write(
                     value: &Self::Target,
                     context: &mut $crate::WriteContext,
                     ref_mode: $crate::RefMode,
@@ -969,7 +969,7 @@ macro_rules! register_trait_type {
                 }
 
                 #[inline(always)]
-                fn read_value(
+                fn read(
                     context: &mut $crate::ReadContext,
                     ref_mode: $crate::RefMode,
                     read_type_info: bool,
@@ -1170,7 +1170,7 @@ macro_rules! register_trait_type {
                 value: &$target,
                 context: &mut $crate::WriteContext,
             ) -> Result<(), $crate::Error> {
-                <$provider as $crate::Serializer>::write_value(
+                <$provider as $crate::Serializer>::write(
                     value,
                     context,
                     if TRACK_REF {
@@ -1207,14 +1207,14 @@ macro_rules! register_trait_type {
                 value: &$target,
                 context: &mut $crate::WriteContext,
             ) -> Result<(), $crate::Error> {
-                <$provider as $crate::Serializer>::write(value, context)
+                <$provider as $crate::Serializer>::write_data(value, context)
             }
 
             #[inline(always)]
             fn read_data(
                 context: &mut $crate::ReadContext,
             ) -> Result<$target, $crate::Error> {
-                <$provider as $crate::Serializer>::read(context)
+                <$provider as $crate::Serializer>::read_data(context)
             }
 
             #[inline(always)]
@@ -1237,7 +1237,7 @@ macro_rules! register_trait_type {
                 write_type_info: bool,
                 has_generics: bool,
             ) -> Result<(), $crate::Error> {
-                <$provider as $crate::Serializer>::write_value(
+                <$provider as $crate::Serializer>::write(
                     value,
                     context,
                     ref_mode,
@@ -1280,7 +1280,7 @@ macro_rules! register_trait_type {
                 ref_mode: $crate::RefMode,
                 read_type_info: bool,
             ) -> Result<$target, $crate::Error> {
-                <$provider as $crate::Serializer>::read_value(
+                <$provider as $crate::Serializer>::read(
                     context,
                     ref_mode,
                     read_type_info,

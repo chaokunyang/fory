@@ -349,7 +349,7 @@ fn only_field_type<T: StructSerializer>(type_resolver: &TypeResolver) -> FieldTy
 
 fn write_struct_data<T: Serializer<Target = T>>(value: &T) -> Vec<u8> {
     let mut context = WriteContext::new(TypeResolver::default(), Config::default());
-    T::write(value, &mut context).unwrap();
+    T::write_data(value, &mut context).unwrap();
     context.writer.dump()
 }
 

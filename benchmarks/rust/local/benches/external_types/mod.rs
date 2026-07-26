@@ -98,13 +98,13 @@ impl Serializer for LocalId {
     type Target = Self;
 
     #[inline(always)]
-    fn write(value: &Self, context: &mut WriteContext) -> Result<(), Error> {
+    fn write_data(value: &Self, context: &mut WriteContext) -> Result<(), Error> {
         context.writer.write_u128(value.0);
         Ok(())
     }
 
     #[inline(always)]
-    fn read(context: &mut ReadContext) -> Result<Self, Error> {
+    fn read_data(context: &mut ReadContext) -> Result<Self, Error> {
         Ok(Self(context.reader.read_u128()?))
     }
 
@@ -120,13 +120,13 @@ impl Serializer for ExternalIdSerializer {
     type Target = ExternalId;
 
     #[inline(always)]
-    fn write(value: &ExternalId, context: &mut WriteContext) -> Result<(), Error> {
+    fn write_data(value: &ExternalId, context: &mut WriteContext) -> Result<(), Error> {
         context.writer.write_u128(value.0);
         Ok(())
     }
 
     #[inline(always)]
-    fn read(context: &mut ReadContext) -> Result<ExternalId, Error> {
+    fn read_data(context: &mut ReadContext) -> Result<ExternalId, Error> {
         Ok(ExternalId(context.reader.read_u128()?))
     }
 
@@ -208,19 +208,19 @@ struct LocalPackedUsersSerializer;
 impl Serializer for LocalPackedUsersSerializer {
     type Target = Vec<LocalUser>;
 
-    fn write(value: &Self::Target, context: &mut WriteContext) -> Result<(), Error> {
+    fn write_data(value: &Self::Target, context: &mut WriteContext) -> Result<(), Error> {
         context.writer.write_var_u32(value.len() as u32);
         for user in value {
-            LocalUser::write(user, context)?;
+            LocalUser::write_data(user, context)?;
         }
         Ok(())
     }
 
-    fn read(context: &mut ReadContext) -> Result<Self::Target, Error> {
+    fn read_data(context: &mut ReadContext) -> Result<Self::Target, Error> {
         let len = read_container_len::<LocalUser>(context)?;
         let mut users = Vec::with_capacity(len);
         for _ in 0..len {
-            users.push(LocalUser::read(context)?);
+            users.push(LocalUser::read_data(context)?);
         }
         Ok(users)
     }
@@ -235,19 +235,19 @@ struct PackedUsersSerializer;
 impl Serializer for PackedUsersSerializer {
     type Target = Vec<User>;
 
-    fn write(value: &Self::Target, context: &mut WriteContext) -> Result<(), Error> {
+    fn write_data(value: &Self::Target, context: &mut WriteContext) -> Result<(), Error> {
         context.writer.write_var_u32(value.len() as u32);
         for user in value {
-            UserSerializer::write(user, context)?;
+            UserSerializer::write_data(user, context)?;
         }
         Ok(())
     }
 
-    fn read(context: &mut ReadContext) -> Result<Self::Target, Error> {
+    fn read_data(context: &mut ReadContext) -> Result<Self::Target, Error> {
         let len = read_container_len::<User>(context)?;
         let mut users = Vec::with_capacity(len);
         for _ in 0..len {
-            users.push(UserSerializer::read(context)?);
+            users.push(UserSerializer::read_data(context)?);
         }
         Ok(users)
     }

@@ -27,8 +27,8 @@ macro_rules! impl_single_carrier_serializer {
             "Statically composes `",
             stringify!($provider),
             "<S>` over `S::Target` for serializer-selected roots and nested carrier composition. ",
-            "Generated fields use recursive annotations backed by the same codec; this zero-sized ",
-            "carrier is not registered independently."
+            "Generated fields may select this exact carrier or recursively select child serializers; ",
+            "both forms use the same codec. This zero-sized carrier is not registered independently."
         )]
         pub struct $provider<S>(std::marker::PhantomData<fn() -> S>);
 
@@ -40,7 +40,7 @@ macro_rules! impl_single_carrier_serializer {
             type Target = $target<S::Target>;
 
             #[inline(always)]
-            fn write(
+            fn write_data(
                 value: &Self::Target,
                 context: &mut $crate::WriteContext,
             ) -> Result<(), $crate::Error> {
@@ -55,7 +55,7 @@ macro_rules! impl_single_carrier_serializer {
             }
 
             #[inline(always)]
-            fn write_with_generics(
+            fn write_data_with_generics(
                 value: &Self::Target,
                 context: &mut $crate::WriteContext,
                 has_generics: bool,
@@ -75,7 +75,7 @@ macro_rules! impl_single_carrier_serializer {
             }
 
             #[inline(always)]
-            fn read(
+            fn read_data(
                 context: &mut $crate::ReadContext,
             ) -> Result<Self::Target, $crate::Error> {
                 <$codec<
@@ -101,7 +101,7 @@ macro_rules! impl_single_carrier_serializer {
             }
 
             #[inline(always)]
-            fn write_value(
+            fn write(
                 value: &Self::Target,
                 context: &mut $crate::WriteContext,
                 ref_mode: $crate::RefMode,
@@ -161,7 +161,7 @@ macro_rules! impl_single_carrier_serializer {
             }
 
             #[inline(always)]
-            fn read_value(
+            fn read(
                 context: &mut $crate::ReadContext,
                 ref_mode: $crate::RefMode,
                 read_type_info: bool,
@@ -350,20 +350,20 @@ macro_rules! impl_single_carrier_serializer {
             type Target = Self;
 
             #[inline(always)]
-            fn write(
+            fn write_data(
                 value: &Self,
                 context: &mut $crate::WriteContext,
             ) -> Result<(), $crate::Error> {
-                <$provider<T> as $crate::serializer::Serializer>::write(value, context)
+                <$provider<T> as $crate::serializer::Serializer>::write_data(value, context)
             }
 
             #[inline(always)]
-            fn write_with_generics(
+            fn write_data_with_generics(
                 value: &Self,
                 context: &mut $crate::WriteContext,
                 has_generics: bool,
             ) -> Result<(), $crate::Error> {
-                <$provider<T> as $crate::serializer::Serializer>::write_with_generics(
+                <$provider<T> as $crate::serializer::Serializer>::write_data_with_generics(
                     value,
                     context,
                     has_generics,
@@ -371,10 +371,10 @@ macro_rules! impl_single_carrier_serializer {
             }
 
             #[inline(always)]
-            fn read(
+            fn read_data(
                 context: &mut $crate::ReadContext,
             ) -> Result<Self, $crate::Error> {
-                <$provider<T> as $crate::serializer::Serializer>::read(context)
+                <$provider<T> as $crate::serializer::Serializer>::read_data(context)
             }
 
             #[inline(always)]
@@ -385,14 +385,14 @@ macro_rules! impl_single_carrier_serializer {
             }
 
             #[inline(always)]
-            fn write_value(
+            fn write(
                 value: &Self,
                 context: &mut $crate::WriteContext,
                 ref_mode: $crate::RefMode,
                 write_type_info: bool,
                 has_generics: bool,
             ) -> Result<(), $crate::Error> {
-                <$provider<T> as $crate::serializer::Serializer>::write_value(
+                <$provider<T> as $crate::serializer::Serializer>::write(
                     value,
                     context,
                     ref_mode,
@@ -430,12 +430,12 @@ macro_rules! impl_single_carrier_serializer {
             }
 
             #[inline(always)]
-            fn read_value(
+            fn read(
                 context: &mut $crate::ReadContext,
                 ref_mode: $crate::RefMode,
                 read_type_info: bool,
             ) -> Result<Self, $crate::Error> {
-                <$provider<T> as $crate::serializer::Serializer>::read_value(
+                <$provider<T> as $crate::serializer::Serializer>::read(
                     context,
                     ref_mode,
                     read_type_info,

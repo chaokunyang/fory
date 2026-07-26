@@ -696,7 +696,7 @@ where
 
     #[inline(always)]
     fn write_field(value: &S::Target, context: &mut WriteContext) -> Result<(), Error> {
-        S::write_value(
+        S::write(
             value,
             context,
             serializer_ref_mode::<S, NULLABLE, TRACK_REF>(),
@@ -717,9 +717,9 @@ where
                     return Self::read_data_with_type_info(context, &type_info);
                 }
             }
-            return S::read(context);
+            return S::read_data(context);
         }
-        S::read_value(context, ref_mode, read_type_info)
+        S::read(context, ref_mode, read_type_info)
     }
 
     #[inline(always)]
@@ -742,12 +742,12 @@ where
 
     #[inline(always)]
     fn write_data(value: &S::Target, context: &mut WriteContext) -> Result<(), Error> {
-        S::write_with_generics(value, context, false)
+        S::write_data_with_generics(value, context, false)
     }
 
     #[inline(always)]
     fn read_data(context: &mut ReadContext) -> Result<S::Target, Error> {
-        S::read(context)
+        S::read_data(context)
     }
 
     #[inline(always)]
@@ -764,7 +764,7 @@ where
         type_info: &Rc<crate::TypeInfo>,
     ) -> Result<S::Target, Error> {
         if Self::type_info_exact(context, type_info)? {
-            return S::read(context);
+            return S::read_data(context);
         }
         S::read_with_type_info(context, RefMode::None, type_info)
     }
@@ -796,7 +796,7 @@ where
             }
             return S::read_data_with_field_type(context, remote_field_type);
         }
-        S::read_value(context, ref_mode, read_type_info)
+        S::read(context, ref_mode, read_type_info)
     }
 
     #[inline(always)]
@@ -807,7 +807,7 @@ where
         write_type_info: bool,
         has_generics: bool,
     ) -> Result<(), Error> {
-        S::write_value(value, context, ref_mode, write_type_info, has_generics)
+        S::write(value, context, ref_mode, write_type_info, has_generics)
     }
 
     #[inline(always)]
@@ -842,9 +842,9 @@ where
                     return Self::read_data_with_type_info(context, &type_info);
                 }
             }
-            return S::read(context);
+            return S::read_data(context);
         }
-        S::read_value(context, ref_mode, read_type_info)
+        S::read(context, ref_mode, read_type_info)
     }
 
     #[inline(always)]
@@ -2211,7 +2211,7 @@ macro_rules! any_codec {
 
             #[inline(always)]
             fn write_field(value: &$ty, context: &mut WriteContext) -> Result<(), Error> {
-                <$ty as Serializer>::write_value(
+                <$ty as Serializer>::write(
                     value,
                     context,
                     any_ref_mode::<NULLABLE, TRACK_REF>(),
@@ -2247,7 +2247,7 @@ macro_rules! any_codec {
 
             #[inline(always)]
             fn read_field(context: &mut ReadContext) -> Result<$ty, Error> {
-                <$ty as Serializer>::read_value(
+                <$ty as Serializer>::read(
                     context,
                     any_ref_mode::<NULLABLE, TRACK_REF>(),
                     codec_read_type_info_static::<$ty, Self>(context),
@@ -2256,12 +2256,12 @@ macro_rules! any_codec {
 
             #[inline(always)]
             fn write_data(value: &$ty, context: &mut WriteContext) -> Result<(), Error> {
-                <$ty as Serializer>::write_with_generics(value, context, false)
+                <$ty as Serializer>::write_data_with_generics(value, context, false)
             }
 
             #[inline(always)]
             fn read_data(context: &mut ReadContext) -> Result<$ty, Error> {
-                <$ty as Serializer>::read(context)
+                <$ty as Serializer>::read_data(context)
             }
 
             #[inline(always)]
@@ -2269,7 +2269,7 @@ macro_rules! any_codec {
                 context: &mut ReadContext,
                 remote_field_type: &FieldType,
             ) -> Result<$ty, Error> {
-                <$ty as Serializer>::read_value(
+                <$ty as Serializer>::read(
                     context,
                     field_ref_mode(remote_field_type),
                     codec_read_type_info::<$ty, Self>(context, remote_field_type),
@@ -2284,13 +2284,7 @@ macro_rules! any_codec {
                 write_type_info: bool,
                 has_generics: bool,
             ) -> Result<(), Error> {
-                <$ty as Serializer>::write_value(
-                    value,
-                    context,
-                    ref_mode,
-                    write_type_info,
-                    has_generics,
-                )
+                <$ty as Serializer>::write(value, context, ref_mode, write_type_info, has_generics)
             }
 
             #[inline(always)]
@@ -2299,7 +2293,7 @@ macro_rules! any_codec {
                 ref_mode: RefMode,
                 read_type_info: bool,
             ) -> Result<$ty, Error> {
-                <$ty as Serializer>::read_value(context, ref_mode, read_type_info)
+                <$ty as Serializer>::read(context, ref_mode, read_type_info)
             }
 
             #[inline(always)]

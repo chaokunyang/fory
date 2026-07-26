@@ -54,12 +54,12 @@ fn test_use() {
     impl Serializer for Item {
         type Target = Self;
 
-        fn write(value: &Self, context: &mut WriteContext) -> Result<(), Error> {
+        fn write_data(value: &Self, context: &mut WriteContext) -> Result<(), Error> {
             context.writer.write_i32(value.f1);
             Ok(())
         }
 
-        fn read(context: &mut ReadContext) -> Result<Self, Error> {
+        fn read_data(context: &mut ReadContext) -> Result<Self, Error> {
             Ok(Self {
                 f1: context.reader.read_i32()?,
                 f2: 0,

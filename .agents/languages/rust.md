@@ -229,6 +229,11 @@ Load this file when changing `rust/` or Rust xlang behavior.
   `#[cold]` and `#[inline(never)]`. Keep successful dynamic dispatch and normal non-null/matched
   paths hot. A generated structural compatible read is the normal path whenever compatible mode is
   enabled, so keep it out of cold sections even when it remains non-inlined.
+- Generated structural `Serializer::write` and `Serializer::read` bodies use ordinary `#[inline]`,
+  not `#[inline(always)]`. Small bodies remain compiler-inlineable, while forcing large bodies into
+  root context closures can inflate code and stack frames and regress carrier result handling.
+  Reserve `#[inline(always)]` for small forwarding or compile-time selection hooks whose bodies
+  must disappear after monomorphization.
 - Benchmark unchanged ordinary Rust cases against fresh `apache/main` in adjacent baseline/current
   pairs and require less than 1% retained-median slowdown. New external structural, manual, carrier
   serializer, and application-trait APIs do not compile on `apache/main`; compare them branch-locally

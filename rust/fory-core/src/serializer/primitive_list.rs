@@ -188,42 +188,54 @@ where
 }
 
 #[inline(always)]
-fn valid_bool_bytes(bytes: &[u8]) -> bool {
+// SAFETY: `dst` must be valid for `bytes.len()` writable bytes and
+// must not overlap `bytes`.
+unsafe fn copy_valid_bool_bytes(bytes: &[u8], dst: *mut u8) -> bool {
     const MASK64: u64 = 0xfefefefefefefefe;
     const MASK32: u32 = 0xfefefefe;
     const MASK16: u16 = 0xfefe;
 
-    unsafe {
-        if bytes.len() == 4 {
-            return std::ptr::read_unaligned(bytes.as_ptr().cast::<u32>()) & MASK32 == 0;
+    if bytes.len() == 4 {
+        let value = std::ptr::read_unaligned(bytes.as_ptr().cast::<u32>());
+        if value & MASK32 != 0 {
+            return false;
         }
-        if bytes.len() == 8 {
-            return std::ptr::read_unaligned(bytes.as_ptr().cast::<u64>()) & MASK64 == 0;
+        std::ptr::write_unaligned(dst.cast::<u32>(), value);
+        return true;
+    }
+    if bytes.len() == 8 {
+        let value = std::ptr::read_unaligned(bytes.as_ptr().cast::<u64>());
+        if value & MASK64 != 0 {
+            return false;
         }
+        std::ptr::write_unaligned(dst.cast::<u64>(), value);
+        return true;
     }
 
     let mut offset = 0;
-    unsafe {
-        while bytes.len() - offset >= 8 {
-            if std::ptr::read_unaligned(bytes.as_ptr().add(offset).cast::<u64>()) & MASK64 != 0 {
-                return false;
-            }
-            offset += 8;
+    while bytes.len() - offset >= 8 {
+        if std::ptr::read_unaligned(bytes.as_ptr().add(offset).cast::<u64>()) & MASK64 != 0 {
+            return false;
         }
-        if bytes.len() - offset >= 4 {
-            if std::ptr::read_unaligned(bytes.as_ptr().add(offset).cast::<u32>()) & MASK32 != 0 {
-                return false;
-            }
-            offset += 4;
-        }
-        if bytes.len() - offset >= 2 {
-            if std::ptr::read_unaligned(bytes.as_ptr().add(offset).cast::<u16>()) & MASK16 != 0 {
-                return false;
-            }
-            offset += 2;
-        }
-        offset == bytes.len() || bytes[offset] <= 1
+        offset += 8;
     }
+    if bytes.len() - offset >= 4 {
+        if std::ptr::read_unaligned(bytes.as_ptr().add(offset).cast::<u32>()) & MASK32 != 0 {
+            return false;
+        }
+        offset += 4;
+    }
+    if bytes.len() - offset >= 2 {
+        if std::ptr::read_unaligned(bytes.as_ptr().add(offset).cast::<u16>()) & MASK16 != 0 {
+            return false;
+        }
+        offset += 2;
+    }
+    if offset != bytes.len() && bytes[offset] > 1 {
+        return false;
+    }
+    std::ptr::copy_nonoverlapping(bytes.as_ptr(), dst, bytes.len());
+    true
 }
 
 fn read_bool_vec<T>(context: &mut ReadContext) -> Result<Vec<T>, Error>
@@ -239,13 +251,12 @@ where
     let len = size_bytes / element_size;
     let mut values: Vec<T> = Vec::with_capacity(len);
     let bytes = context.reader.read_bytes(size_bytes)?;
-    if !valid_bool_bytes(bytes) {
-        return Err(invalid_bool_value());
-    }
     unsafe {
-        // Exact target validation proves T is bool. Validation above proves
-        // every copied byte is a valid Rust bool representation.
-        std::ptr::copy_nonoverlapping(bytes.as_ptr(), values.as_mut_ptr().cast::<u8>(), size_bytes);
+        // Exact target validation proves T is bool. The fused copy validates
+        // every byte before the Vec length exposes initialized bool values.
+        if !copy_valid_bool_bytes(bytes, values.as_mut_ptr().cast::<u8>()) {
+            return Err(invalid_bool_value());
+        }
         values.set_len(len);
     }
     Ok(values)
@@ -256,6 +267,8 @@ where
     T: 'static,
     C: Codec<T>,
 {
+    #[cfg(target_endian = "little")]
+    let _ = std::marker::PhantomData::<C>;
     let size_bytes = context.reader.read_var_u32()? as usize;
     let element_size = std::mem::size_of::<T>();
     if size_bytes % element_size != 0 {
@@ -309,14 +322,13 @@ where
     }
     context.reader.check_bound(size_bytes)?;
     let bytes = context.reader.read_bytes(size_bytes)?;
-    if !valid_bool_bytes(bytes) {
-        return Err(invalid_bool_value());
-    }
     unsafe {
-        // Exact target validation proves T is bool. Validation above proves
-        // every copied byte is a valid Rust bool representation.
+        // Exact target validation proves T is bool. The fused copy validates
+        // every byte before the array is assumed initialized.
         let mut values = MaybeUninit::<[T; N]>::uninit();
-        std::ptr::copy_nonoverlapping(bytes.as_ptr(), values.as_mut_ptr().cast::<u8>(), size_bytes);
+        if !copy_valid_bool_bytes(bytes, values.as_mut_ptr().cast::<u8>()) {
+            return Err(invalid_bool_value());
+        }
         Ok(values.assume_init())
     }
 }
@@ -326,6 +338,8 @@ where
     T: 'static,
     C: Codec<T>,
 {
+    #[cfg(target_endian = "little")]
+    let _ = std::marker::PhantomData::<C>;
     let size_bytes = context.reader.read_var_u32()? as usize;
     let element_size = std::mem::size_of::<T>();
     let expected_bytes = N

@@ -67,6 +67,34 @@ fn test_array_bool() {
 }
 
 #[test]
+fn test_bool_vec_invalid() {
+    let fory = Fory::builder().xlang(false).compatible(false).build();
+    for len in [4, 8, 9] {
+        let mut bin = fory.serialize(&vec![false; len]).unwrap();
+        *bin.last_mut().unwrap() = 2;
+        let error = fory.deserialize::<Vec<bool>>(&bin).unwrap_err();
+        assert!(error.to_string().contains("Invalid bool array value"));
+    }
+}
+
+#[test]
+fn test_bool_array_invalid() {
+    macro_rules! assert_invalid {
+        ($fory:expr, $value:expr, $target:ty) => {{
+            let mut bin = $fory.serialize(&$value).unwrap();
+            *bin.last_mut().unwrap() = 2;
+            let error = $fory.deserialize::<$target>(&bin).unwrap_err();
+            assert!(error.to_string().contains("Invalid bool array value"));
+        }};
+    }
+
+    let fory = Fory::builder().xlang(false).compatible(false).build();
+    assert_invalid!(fory, [false; 4], [bool; 4]);
+    assert_invalid!(fory, [false; 8], [bool; 8]);
+    assert_invalid!(fory, [false; 9], [bool; 9]);
+}
+
+#[test]
 fn test_array_i8() {
     let fory = Fory::builder().xlang(false).compatible(false).build();
     let arr = [1i8, 2, 3, 4, 5, 6, 7, 8];

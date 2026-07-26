@@ -229,7 +229,10 @@ pub fn derive_serializer(
         impl #impl_generics fory_core::Serializer for #name #ty_generics #where_clause {
             type Target = #target_ty;
 
-            #[inline(always)]
+            // Keep large generated bodies under the compiler's normal inlining
+            // heuristic. Forcing them into root context closures inflates code
+            // and stack frames enough to regress primitive carrier reads.
+            #[inline]
             fn write(
                 value: &Self::Target,
                 context: &mut fory_core::WriteContext,
@@ -237,7 +240,7 @@ pub fn derive_serializer(
                 #write_body
             }
 
-            #[inline(always)]
+            #[inline]
             fn read(
                 context: &mut fory_core::ReadContext,
             ) -> ::std::result::Result<Self::Target, fory_core::Error> {

@@ -81,14 +81,17 @@ Future<void> _expectGenerationOutput({
   required String targetSource,
   required String declarationSource,
   required Matcher output,
+  String fixtureHeader = _fixtureHeader,
+  Map<String, String> additionalAssets = const <String, String>{},
 }) async {
   await testBuilder(
     foryBuilder(BuilderOptions.empty),
     <String, String>{
       ...(await _annotationAssets),
       'fory|test/external_target_fixture.dart': targetSource,
+      ...additionalAssets,
       'fory|test/external_serializer_fixture.dart':
-          '$_fixtureHeader\n$declarationSource',
+          '$fixtureHeader\n$declarationSource',
     },
     rootPackage: 'fory',
     generateFor: <String>{'fory|test/external_serializer_fixture.dart'},
@@ -544,6 +547,46 @@ abstract final class TargetSerializer {
       output: allOf(
         contains('final value = Target(_firstValue);'),
         contains('value.third = _thirdValue;'),
+      ),
+    );
+  });
+
+  test('renders prefixed re-exported generic target types', () async {
+    await _expectGenerationOutput(
+      targetSource: '''
+class User {
+  User(this.name);
+  final String name;
+}
+
+typedef UserAlias = User;
+
+class Box<T> {
+  Box(this.value);
+  final T value;
+}
+''',
+      additionalAssets: const <String, String>{
+        'fory|test/external_target_barrel.dart':
+            "export 'external_target_fixture.dart';",
+      },
+      fixtureHeader: '''
+import 'package:fory/src/annotation/fory_struct.dart';
+import 'external_target_barrel.dart' as api;
+
+part 'external_serializer_fixture.fory.dart';
+''',
+      declarationSource: '''
+@ForyStruct(target: api.Box<api.UserAlias>)
+abstract final class UserBoxSerializer {
+  late final api.UserAlias value;
+}
+''',
+      output: allOf(
+        contains('GeneratedStructSchema<api.Box<api.UserAlias>>'),
+        contains('type: api.UserAlias,'),
+        contains('api.UserAlias _valueValue'),
+        contains('final value = api.Box<api.UserAlias>(_valueValue);'),
       ),
     );
   });

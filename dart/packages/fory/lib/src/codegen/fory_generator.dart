@@ -86,8 +86,6 @@ final class ForyGenerator extends Generator {
     inPackage: 'fory',
   );
 
-  final Map<String, String> _importPrefixByLibraryIdentifier =
-      <String, String>{};
   final Map<Element, String?> _importPrefixByElement = <Element, String?>{};
 
   @override
@@ -481,7 +479,6 @@ final class ForyGenerator extends Generator {
   }
 
   void _buildImportPrefixMap(LibraryReader library) {
-    _importPrefixByLibraryIdentifier.clear();
     _importPrefixByElement.clear();
     for (final import in library.element.firstFragment.libraryImports) {
       final importedLibrary = import.importedLibrary;
@@ -490,10 +487,6 @@ final class ForyGenerator extends Generator {
         continue;
       }
       final normalizedPrefix = prefix == null || prefix.isEmpty ? null : prefix;
-      if (normalizedPrefix != null) {
-        _importPrefixByLibraryIdentifier[importedLibrary.identifier] =
-            normalizedPrefix;
-      }
       for (final importedElement in import.namespace.definedNames2.values) {
         if (!_importPrefixByElement.containsKey(importedElement) ||
             normalizedPrefix == null) {
@@ -4093,10 +4086,21 @@ GeneratedFieldType(
     if (nonNullable is DynamicType || nonNullable is InvalidType) {
       return 'Object';
     }
+    final alias = nonNullable.alias;
+    if (alias != null) {
+      final aliasElement = alias.element;
+      final prefix = _importPrefixByElement[aliasElement];
+      final elementName = aliasElement.displayName;
+      final baseName = prefix == null ? elementName : '$prefix.$elementName';
+      if (alias.typeArguments.isEmpty) {
+        return baseName;
+      }
+      final typeArguments = alias.typeArguments.map(_typeCodeString).join(', ');
+      return '$baseName<$typeArguments>';
+    }
     if (nonNullable is InterfaceType) {
       final element = nonNullable.element;
-      final prefix =
-          _importPrefixByLibraryIdentifier[element.library.identifier];
+      final prefix = _importPrefixByElement[element];
       final elementName = element.displayName;
       final baseName = prefix == null ? elementName : '$prefix.$elementName';
       if (nonNullable.typeArguments.isEmpty) {

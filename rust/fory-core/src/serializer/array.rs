@@ -234,7 +234,7 @@ macro_rules! read_object_array_body {
             RefMode::None
         };
 
-        if $C::is_polymorphic() || $C::is_shared_ref() {
+        if $C::IS_POLYMORPHIC || $C::IS_SHARED_REF {
             if same_type {
                 if declared {
                     return array_read_declared_dyn!(

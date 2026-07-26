@@ -74,6 +74,13 @@ Load this file when changing `rust/` or Rust xlang behavior.
   through an equivalent bridge or serializer write parameter. Do not add a metadata-only carrier
   adapter that delegates its body to a whole-target serializer; every carrier-specific
   implementation owns both value and field behavior.
+- Represent immutable value-serializer properties as the associated constants `IS_OPTIONAL`,
+  `IS_POLYMORPHIC`, `IS_SHARED_REF`, `IS_WRAPPER`, and `REQUIRES_SCOPED_ACCESS`. `Codec` inherits
+  them through `Serializer` and must not redeclare them. Keep `is_none(value)` and
+  `dynamic_type_id(value)` as functions because they inspect a concrete value. Weak-target expiry
+  is not Option absence. Transparent carriers propagate child constants only where their value
+  semantics require it; `RefCell`, `Mutex`, and weak serializers require scoped access, while
+  direct `Any` and application-trait serializers do not.
 - Preserve one canonical primitive Vec/fixed-array selection for type ID, body, reserved space,
   derive metadata, and compatible reads. The private primitive-array/carrier owner derives the
   parent kind from the child's scalar `static_type_id()`, the exact Rust child target, and the
@@ -103,7 +110,9 @@ Load this file when changing `rust/` or Rust xlang behavior.
   implementation with serializer and codec child bounds respectively.
   Preserve native non-compatible direct position bodies, compatible/xlang heterogeneous LIST
   bodies, the existing UNKNOWN-generic tuple `FieldType`, missing-position defaults, extra-position
-  skipping, and wrapper-shape answers. No serializer type or tuple index appears on the wire.
+  skipping, and wire behavior. Tuples are not transparent wrappers: keep `IS_WRAPPER = false` and
+  reject tuple serializers from manual EXT registration through their LIST category. No serializer
+  type or tuple index appears on the wire.
 - Keep shared LIST/SET loops in `serializer/collection.rs`, MAP chunk behavior in
   `serializer/map.rs`, and arity-generated heterogeneous tuple behavior in
   `serializer/tuple.rs`, parameterized by child serializers for value bodies and by the additional
@@ -123,9 +132,10 @@ Load this file when changing `rust/` or Rust xlang behavior.
   declared type and every carrier serializer constructor in its `with` tree must use its canonical
   terminal name, optionally qualified. Leaf serializer aliases, root carrier aliases, and carrier
   aliases used only by a skipped field's value-level default remain valid. The leaf adapter must
-  reject an aliased carrier during cold field-schema construction using existing carrier
-  category/wrapper semantics so it cannot silently emit a leaf schema. This check must not use
-  `type_name` or enter the value hot path. Compile-time target equality comes from
+  reject an aliased non-wrapper carrier during cold field-schema construction using its existing
+  wire category so it cannot silently emit a leaf schema. An aliased Fory-owned wrapper cannot be
+  registered independently and therefore fails the ordinary required-provider lookup. This check
+  must not use `type_name` or enter the value hot path. Compile-time target equality comes from
   `Codec<T>: Serializer<Target = T>`.
   Registration rejects carrier serializers through the existing API semantics: structural APIs
   require `StructSerializer` and the matching structural category, while manual registration
@@ -248,11 +258,13 @@ Load this file when changing `rust/` or Rust xlang behavior.
   path. A complete read's null branch calls `Self::default_value(context)` directly; do not
   interpose a cold forwarding helper. Keep the default unsupported-error constructor and other
   genuinely cold mismatch failures cold and non-inlined.
-- Retain the static wrapper-shape hook used by existing list/tuple metadata generation. It must
-  continue to default to the shared-reference hook; all existing shared-reference providers,
-  Option, Box, RefCell, Mutex, and existing tuple wrappers must keep their current answers. Do not
-  replace it with reflection, `type_name` classification, or a second provider-specific wrapper
-  system.
+- `IS_WRAPPER` identifies only Fory-owned wrapper serializers without an independent registration
+  identity: Option, Box, Rc, Arc, RcWeak, ArcWeak, RefCell, and Mutex. It is intrinsic to the outer
+  serializer and remains true over an EXT child. Lists, sets, maps, fixed arrays, and tuples are
+  false. A manual serializer targeting a wrapper-shaped Rust type also remains false because it
+  owns an independent opaque EXT body. Use this constant with the existing wire category for
+  manual EXT registration validation, its only runtime consumer; do not replace it with reflection,
+  `type_name` classification, target syntax inspection, or a second registration marker.
 - Mark cold failure and slow-path entrances reachable from Rust serialization hot paths with both
   `#[cold]` and `#[inline(never)]`. Keep successful dynamic dispatch and normal non-null/matched
   paths hot. A generated structural compatible read is the normal path whenever compatible mode is

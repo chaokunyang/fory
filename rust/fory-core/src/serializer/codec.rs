@@ -104,7 +104,7 @@ fn field_read_type_info<T: Serializer>(context: &ReadContext, field_type: &Field
     if context.is_compatible() {
         crate::serializer::util::field_need_read_type_info(field_type.type_id)
     } else {
-        T::is_polymorphic()
+        T::IS_POLYMORPHIC
     }
 }
 
@@ -113,7 +113,7 @@ fn field_write_type_info<T: Serializer>(context: &WriteContext) -> bool {
     if context.is_compatible() {
         crate::serializer::util::field_need_write_type_info(T::static_type_id())
     } else {
-        T::is_polymorphic()
+        T::IS_POLYMORPHIC
     }
 }
 
@@ -143,13 +143,10 @@ fn provider_field_type<S: Serializer, const NULLABLE: bool, const TRACK_REF: boo
     type_resolver: &TypeResolver,
 ) -> Result<FieldType, Error> {
     let static_type_id = serializer_static_field_type_id::<S>();
-    if S::is_option()
-        || (S::is_wrapper_type() && !S::is_polymorphic())
-        || matches!(
-            static_type_id,
-            type_id::LIST | type_id::SET | type_id::MAP | type_id::BINARY
-        )
-        || type_id::PRIMITIVE_ARRAY_TYPES.contains(&static_type_id)
+    if matches!(
+        static_type_id,
+        type_id::LIST | type_id::SET | type_id::MAP | type_id::BINARY
+    ) || type_id::PRIMITIVE_ARRAY_TYPES.contains(&static_type_id)
     {
         return Err(carrier_field_alias_error());
     }
@@ -221,7 +218,7 @@ fn serializer_read_type_info<T: Serializer>(context: &ReadContext) -> bool {
     if context.is_compatible() {
         crate::serializer::util::field_need_read_type_info(serializer_static_field_type_id::<T>())
     } else {
-        T::is_polymorphic()
+        T::IS_POLYMORPHIC
     }
 }
 
@@ -235,7 +232,7 @@ where
         field_type.type_id == type_id::UNKNOWN
             || crate::serializer::util::field_need_read_type_info(field_type.type_id)
     } else {
-        C::is_polymorphic()
+        C::IS_POLYMORPHIC
     }
 }
 
@@ -265,7 +262,7 @@ where
         let type_id = codec_static_field_type_id::<T, C>();
         type_id == type_id::UNKNOWN || crate::serializer::util::field_need_read_type_info(type_id)
     } else {
-        C::is_polymorphic()
+        C::IS_POLYMORPHIC
     }
 }
 
@@ -278,7 +275,7 @@ where
     if context.is_compatible() {
         crate::serializer::util::field_need_write_type_info(C::static_type_id())
     } else {
-        C::is_polymorphic()
+        C::IS_POLYMORPHIC
     }
 }
 
@@ -710,10 +707,15 @@ where
         S::reserved_space()
     }
 
-    #[inline(always)]
-    fn is_option() -> bool {
-        S::is_option()
-    }
+    const IS_OPTIONAL: bool = S::IS_OPTIONAL;
+
+    const IS_POLYMORPHIC: bool = S::IS_POLYMORPHIC;
+
+    const IS_SHARED_REF: bool = S::IS_SHARED_REF;
+
+    const IS_WRAPPER: bool = S::IS_WRAPPER;
+
+    const REQUIRES_SCOPED_ACCESS: bool = S::REQUIRES_SCOPED_ACCESS;
 
     #[inline(always)]
     fn is_none(value: &S::Target) -> bool {
@@ -721,28 +723,8 @@ where
     }
 
     #[inline(always)]
-    fn is_polymorphic() -> bool {
-        S::is_polymorphic()
-    }
-
-    #[inline(always)]
-    fn is_shared_ref() -> bool {
-        S::is_shared_ref()
-    }
-
-    #[inline(always)]
-    fn is_wrapper_type() -> bool {
-        S::is_wrapper_type()
-    }
-
-    #[inline(always)]
     fn dynamic_type_id(value: &S::Target) -> Result<Option<std::any::TypeId>, Error> {
         S::dynamic_type_id(value)
-    }
-
-    #[inline(always)]
-    fn dynamic_type_is_direct() -> bool {
-        S::dynamic_type_is_direct()
     }
 }
 
@@ -777,7 +759,7 @@ where
     fn read_field(context: &mut ReadContext) -> Result<S::Target, Error> {
         let ref_mode = serializer_ref_mode::<S, NULLABLE, TRACK_REF>();
         let read_type_info = serializer_read_type_info::<S>(context);
-        if ref_mode == RefMode::None && !S::is_polymorphic() {
+        if ref_mode == RefMode::None && !S::IS_POLYMORPHIC {
             if read_type_info {
                 if let Some(type_info) = read_value_type_info::<S>(context)? {
                     return Self::read_data_with_type_info(context, &type_info);
@@ -844,7 +826,7 @@ where
     ) -> Result<S::Target, Error> {
         let ref_mode = field_ref_mode(remote_field_type);
         let read_type_info = field_read_type_info::<S>(context, remote_field_type);
-        if ref_mode == RefMode::None && !S::is_polymorphic() {
+        if ref_mode == RefMode::None && !S::IS_POLYMORPHIC {
             if read_type_info {
                 if let Some(type_info) = read_value_type_info::<S>(context)? {
                     return Self::read_data_with_type_info(context, &type_info);
@@ -1073,29 +1055,19 @@ where
         C::static_type_id()
     }
 
-    #[inline(always)]
-    fn is_option() -> bool {
-        true
-    }
+    const IS_OPTIONAL: bool = true;
+
+    const IS_POLYMORPHIC: bool = C::IS_POLYMORPHIC;
+
+    const IS_SHARED_REF: bool = C::IS_SHARED_REF;
+
+    const IS_WRAPPER: bool = true;
+
+    const REQUIRES_SCOPED_ACCESS: bool = C::REQUIRES_SCOPED_ACCESS;
 
     #[inline(always)]
     fn is_none(value: &Option<T>) -> bool {
         value.is_none()
-    }
-
-    #[inline(always)]
-    fn is_polymorphic() -> bool {
-        C::is_polymorphic()
-    }
-
-    #[inline(always)]
-    fn is_shared_ref() -> bool {
-        C::is_shared_ref()
-    }
-
-    #[inline(always)]
-    fn is_wrapper_type() -> bool {
-        true
     }
 
     #[inline(always)]
@@ -1104,11 +1076,6 @@ where
             Some(value) => C::dynamic_type_id(value),
             None => Ok(None),
         }
-    }
-
-    #[inline(always)]
-    fn dynamic_type_is_direct() -> bool {
-        C::dynamic_type_is_direct()
     }
 }
 
@@ -1967,24 +1934,19 @@ macro_rules! any_codec {
                 TypeId::UNKNOWN
             }
 
-            #[inline(always)]
-            fn is_polymorphic() -> bool {
-                true
-            }
+            const IS_OPTIONAL: bool = <$ty as Serializer>::IS_OPTIONAL;
 
-            #[inline(always)]
-            fn is_shared_ref() -> bool {
-                <$ty as Serializer>::is_shared_ref()
-            }
+            const IS_POLYMORPHIC: bool = true;
+
+            const IS_SHARED_REF: bool = <$ty as Serializer>::IS_SHARED_REF;
+
+            const IS_WRAPPER: bool = <$ty as Serializer>::IS_WRAPPER;
+
+            const REQUIRES_SCOPED_ACCESS: bool = <$ty as Serializer>::REQUIRES_SCOPED_ACCESS;
 
             #[inline(always)]
             fn dynamic_type_id(value: &$ty) -> Result<Option<std::any::TypeId>, Error> {
                 <$ty as Serializer>::dynamic_type_id(value)
-            }
-
-            #[inline(always)]
-            fn dynamic_type_is_direct() -> bool {
-                <$ty as Serializer>::dynamic_type_is_direct()
             }
 
             #[inline(always)]
@@ -2094,6 +2056,8 @@ mod tests {
 
     struct MetadataProbeCodec;
 
+    struct PropertySerializer;
+
     thread_local! {
         static EXPECTED_FIELD: Cell<*const FieldType> =
             const { Cell::new(std::ptr::null()) };
@@ -2152,9 +2116,7 @@ mod tests {
             TypeId::INT8
         }
 
-        fn is_shared_ref() -> bool {
-            true
-        }
+        const IS_SHARED_REF: bool = true;
     }
 
     impl Codec<MetadataProbe> for MetadataProbeCodec {
@@ -2212,6 +2174,34 @@ mod tests {
             })
         }
     }
+
+    impl Serializer for PropertySerializer {
+        type Target = MetadataProbe;
+
+        const IS_OPTIONAL: bool = true;
+        const IS_POLYMORPHIC: bool = true;
+        const IS_SHARED_REF: bool = false;
+        const IS_WRAPPER: bool = true;
+        const REQUIRES_SCOPED_ACCESS: bool = true;
+
+        fn write_data(value: &MetadataProbe, context: &mut WriteContext) -> Result<(), Error> {
+            MetadataProbeCodec::write_data(value, context)
+        }
+
+        fn read_data(context: &mut ReadContext) -> Result<MetadataProbe, Error> {
+            MetadataProbeCodec::read_data(context)
+        }
+    }
+
+    const _: () = {
+        type Leaf = SerializerCodec<PropertySerializer, false, false>;
+
+        assert!(Leaf::IS_OPTIONAL == PropertySerializer::IS_OPTIONAL);
+        assert!(Leaf::IS_POLYMORPHIC == PropertySerializer::IS_POLYMORPHIC);
+        assert!(Leaf::IS_SHARED_REF == PropertySerializer::IS_SHARED_REF);
+        assert!(Leaf::IS_WRAPPER == PropertySerializer::IS_WRAPPER);
+        assert!(Leaf::REQUIRES_SCOPED_ACCESS == PropertySerializer::REQUIRES_SCOPED_ACCESS);
+    };
 
     type ProbeVecCodec = VecCodec<MetadataProbe, MetadataProbeCodec, true, false, false, false>;
 

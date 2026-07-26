@@ -15,7 +15,9 @@
 // specific language governing permissions and limitations
 // under the License.
 
-use fory_core::{register_trait_type, Fory, ForyObject, HashMapSerializer, VecSerializer};
+use fory_core::{
+    register_trait_type, Fory, ForyObject, HashMapSerializer, Serializer, VecSerializer,
+};
 use fory_derive::ForyStruct;
 use std::collections::HashMap;
 use std::rc::Rc;
@@ -48,6 +50,17 @@ impl Animal for Cat {
 }
 
 register_trait_type!(sync Animal, Dog, Cat);
+
+const _: () = {
+    assert!(AnimalRcSerializer::IS_POLYMORPHIC);
+    assert!(AnimalRcSerializer::IS_SHARED_REF);
+    assert!(AnimalRcSerializer::IS_WRAPPER);
+    assert!(!AnimalRcSerializer::REQUIRES_SCOPED_ACCESS);
+    assert!(AnimalArcSerializer::IS_POLYMORPHIC);
+    assert!(AnimalArcSerializer::IS_SHARED_REF);
+    assert!(AnimalArcSerializer::IS_WRAPPER);
+    assert!(!AnimalArcSerializer::REQUIRES_SCOPED_ACCESS);
+};
 
 #[derive(ForyStruct)]
 struct SharedZoo {

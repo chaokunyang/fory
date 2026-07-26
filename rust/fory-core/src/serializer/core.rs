@@ -174,34 +174,25 @@ pub trait Serializer: Sized + 'static {
     }
 
     #[doc(hidden)]
-    #[inline(always)]
-    fn is_option() -> bool {
-        false
-    }
+    const IS_OPTIONAL: bool = false;
+
+    #[doc(hidden)]
+    const IS_POLYMORPHIC: bool = false;
+
+    #[doc(hidden)]
+    const IS_SHARED_REF: bool = false;
+
+    #[doc(hidden)]
+    const IS_WRAPPER: bool = Self::IS_SHARED_REF;
+
+    #[doc(hidden)]
+    const REQUIRES_SCOPED_ACCESS: bool = false;
 
     #[doc(hidden)]
     #[inline(always)]
     fn is_none(value: &Self::Target) -> bool {
         let _ = value;
         false
-    }
-
-    #[doc(hidden)]
-    #[inline(always)]
-    fn is_polymorphic() -> bool {
-        false
-    }
-
-    #[doc(hidden)]
-    #[inline(always)]
-    fn is_shared_ref() -> bool {
-        false
-    }
-
-    #[doc(hidden)]
-    #[inline(always)]
-    fn is_wrapper_type() -> bool {
-        Self::is_shared_ref()
     }
 
     /// Return the concrete target selected by a polymorphic value.
@@ -212,14 +203,6 @@ pub trait Serializer: Sized + 'static {
     fn dynamic_type_id(value: &Self::Target) -> Result<Option<std::any::TypeId>, Error> {
         let _ = value;
         Ok(Some(std::any::TypeId::of::<Self::Target>()))
-    }
-
-    /// Whether dynamic target inspection requires no holder borrow, lock, or
-    /// weak upgrade.
-    #[doc(hidden)]
-    #[inline(always)]
-    fn dynamic_type_is_direct() -> bool {
-        true
     }
 }
 

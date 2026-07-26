@@ -691,10 +691,10 @@ fn ensure_struct_category<S: StructSerializer>(union: bool, api: &str) -> Result
 #[inline(never)]
 fn ensure_ext_category<S: Serializer>() -> Result<(), Error> {
     let type_id = S::static_type_id();
-    if (type_id == TypeId::EXT || type_id == TypeId::NAMED_EXT) && !S::is_wrapper_type() {
+    if (type_id == TypeId::EXT || type_id == TypeId::NAMED_EXT) && !S::IS_WRAPPER {
         return Ok(());
     }
-    if S::is_wrapper_type() {
+    if S::IS_WRAPPER {
         return Err(Error::not_allowed(format!(
             "register_serializer requires an independent EXT serializer, but {} is a transparent wrapper",
             std::any::type_name::<S>(),

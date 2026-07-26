@@ -183,10 +183,10 @@ macro_rules! write_map_data_body {
         let has_generics = $has_generics;
         let key_declared = has_generics && !need_to_write_type_for_field($KC::static_type_id());
         let value_declared = has_generics && !need_to_write_type_for_field($VC::static_type_id());
-        let key_polymorphic = $KC::is_polymorphic();
-        let value_polymorphic = $VC::is_polymorphic();
-        let key_shared = $KC::is_shared_ref();
-        let value_shared = $VC::is_shared_ref();
+        let key_polymorphic = $KC::IS_POLYMORPHIC;
+        let value_polymorphic = $VC::IS_POLYMORPHIC;
+        let key_shared = $KC::IS_SHARED_REF;
+        let value_shared = $VC::IS_SHARED_REF;
         let mut key_type = None;
         let mut value_type = None;
         let mut key_info = None;

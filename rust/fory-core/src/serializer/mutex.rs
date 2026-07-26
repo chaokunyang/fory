@@ -144,14 +144,19 @@ where
         C::static_type_id()
     }
 
-    #[inline(always)]
-    fn is_option() -> bool {
-        C::is_option()
-    }
+    const IS_OPTIONAL: bool = C::IS_OPTIONAL;
+
+    const IS_POLYMORPHIC: bool = C::IS_POLYMORPHIC;
+
+    const IS_SHARED_REF: bool = C::IS_SHARED_REF;
+
+    const IS_WRAPPER: bool = true;
+
+    const REQUIRES_SCOPED_ACCESS: bool = true;
 
     #[inline(always)]
     fn is_none(value: &Mutex<T>) -> bool {
-        if !C::is_option() {
+        if !C::IS_OPTIONAL {
             return false;
         }
         // Static inspection cannot return poison errors. Inspect the guarded
@@ -160,29 +165,9 @@ where
     }
 
     #[inline(always)]
-    fn is_polymorphic() -> bool {
-        C::is_polymorphic()
-    }
-
-    #[inline(always)]
-    fn is_shared_ref() -> bool {
-        C::is_shared_ref()
-    }
-
-    #[inline(always)]
-    fn is_wrapper_type() -> bool {
-        true
-    }
-
-    #[inline(always)]
     fn dynamic_type_id(value: &Mutex<T>) -> Result<Option<std::any::TypeId>, Error> {
         let value = lock_for_write(value)?;
         C::dynamic_type_id(&value)
-    }
-
-    #[inline(always)]
-    fn dynamic_type_is_direct() -> bool {
-        false
     }
 }
 

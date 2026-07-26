@@ -131,10 +131,15 @@ where
         C::static_type_id()
     }
 
-    #[inline(always)]
-    fn is_option() -> bool {
-        C::is_option()
-    }
+    const IS_OPTIONAL: bool = C::IS_OPTIONAL;
+
+    const IS_POLYMORPHIC: bool = C::IS_POLYMORPHIC;
+
+    const IS_SHARED_REF: bool = C::IS_SHARED_REF;
+
+    const IS_WRAPPER: bool = true;
+
+    const REQUIRES_SCOPED_ACCESS: bool = C::REQUIRES_SCOPED_ACCESS;
 
     #[inline(always)]
     fn is_none(value: &Box<T>) -> bool {
@@ -142,28 +147,8 @@ where
     }
 
     #[inline(always)]
-    fn is_polymorphic() -> bool {
-        C::is_polymorphic()
-    }
-
-    #[inline(always)]
-    fn is_shared_ref() -> bool {
-        C::is_shared_ref()
-    }
-
-    #[inline(always)]
-    fn is_wrapper_type() -> bool {
-        true
-    }
-
-    #[inline(always)]
     fn dynamic_type_id(value: &Box<T>) -> Result<Option<std::any::TypeId>, Error> {
         C::dynamic_type_id(value)
-    }
-
-    #[inline(always)]
-    fn dynamic_type_is_direct() -> bool {
-        C::dynamic_type_is_direct()
     }
 }
 

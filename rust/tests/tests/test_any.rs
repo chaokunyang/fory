@@ -16,7 +16,7 @@
 // under the License.
 
 use fory_core::fory::Fory;
-use fory_core::{ArcWeak, RcWeak};
+use fory_core::{ArcWeak, RcWeak, Serializer};
 use fory_derive::{ForyEnum, ForyStruct, ForyUnion};
 use std::any::Any;
 use std::cell::RefCell;
@@ -24,6 +24,20 @@ use std::collections::{HashMap, HashSet, LinkedList};
 use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 use std::vec;
+
+const _: () = {
+    assert!(<Box<dyn Any> as Serializer>::IS_POLYMORPHIC);
+    assert!(<Box<dyn Any> as Serializer>::IS_WRAPPER);
+    assert!(!<Box<dyn Any> as Serializer>::REQUIRES_SCOPED_ACCESS);
+    assert!(<Rc<dyn Any> as Serializer>::IS_POLYMORPHIC);
+    assert!(<Rc<dyn Any> as Serializer>::IS_SHARED_REF);
+    assert!(<Rc<dyn Any> as Serializer>::IS_WRAPPER);
+    assert!(!<Rc<dyn Any> as Serializer>::REQUIRES_SCOPED_ACCESS);
+    assert!(<Arc<dyn Any + Send + Sync> as Serializer>::IS_POLYMORPHIC);
+    assert!(<Arc<dyn Any + Send + Sync> as Serializer>::IS_SHARED_REF);
+    assert!(<Arc<dyn Any + Send + Sync> as Serializer>::IS_WRAPPER);
+    assert!(!<Arc<dyn Any + Send + Sync> as Serializer>::REQUIRES_SCOPED_ACCESS);
+};
 
 fn assert_erased_container_error(message: String) {
     assert!(
@@ -156,6 +170,7 @@ fn test_box_dyn_any() {
 #[test]
 fn test_rc_dyn_any() {
     let fory = Fory::builder().xlang(false).compatible(false).build();
+
     let value: Rc<dyn Any> = Rc::new("world".to_string());
     let bytes = fory.serialize(&value).unwrap();
     let deserialized: Rc<dyn Any> = fory.deserialize(&bytes).unwrap();
@@ -443,6 +458,33 @@ fn any_holder_collection_handoff() {
     assert_eq!(
         decoded[1].lock().unwrap().downcast_ref::<String>(),
         Some(&"four".to_string())
+    );
+
+    let values: Vec<Mutex<Option<Box<dyn Any>>>> = vec![
+        Mutex::new(Some(Box::new(5_i32))),
+        Mutex::new(None),
+        Mutex::new(Some(Box::new("six".to_string()))),
+    ];
+    let bytes = fory.serialize(&values).unwrap();
+    let decoded: Vec<Mutex<Option<Box<dyn Any>>>> = fory.deserialize(&bytes).unwrap();
+    assert_eq!(
+        decoded[0]
+            .lock()
+            .unwrap()
+            .as_ref()
+            .unwrap()
+            .downcast_ref::<i32>(),
+        Some(&5)
+    );
+    assert!(decoded[1].lock().unwrap().is_none());
+    assert_eq!(
+        decoded[2]
+            .lock()
+            .unwrap()
+            .as_ref()
+            .unwrap()
+            .downcast_ref::<String>(),
+        Some(&"six".to_string())
     );
 
     let values: Vec<RefCell<Option<Box<dyn Any>>>> = vec![RefCell::new(Some(Box::new(5_i32)))];

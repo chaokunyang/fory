@@ -228,6 +228,25 @@ Rust names these serializer operation boundaries explicitly:
 - `write_with_type_info` and `read_with_type_info` remain complete-value
   operations over already-resolved value metadata.
 
+Rust represents immutable value-serializer properties with five associated
+constants on `Serializer`:
+
+- `IS_OPTIONAL` means the selected value shape carries Option semantics;
+- `IS_POLYMORPHIC` means its concrete target is selected from the runtime
+  value;
+- `IS_SHARED_REF` means it uses the existing shared-reference wire behavior;
+- `IS_WRAPPER` means it is a Fory-owned wrapper serializer without an
+  independent registration identity; and
+- `REQUIRES_SCOPED_ACCESS` means inspecting or using the contained dynamic
+  value requires a borrow, lock, or weak upgrade.
+
+These are type-level value properties and must fold through monomorphization.
+`Codec<T>` inherits them through `Serializer<Target = T>` and does not
+redeclare them. `SerializerCodec<S>` forwards them from `S`. The
+value-dependent `is_none(value)` and `dynamic_type_id(value)` operations
+remain functions. `is_none` means only `Option::None`, including transparent
+Option propagation; weak-target expiry remains a separate weak-access result.
+
 `Serializer` has no field API or field-schema argument. In particular, it does
 not expose `FieldType`, field-compatible reads, declared-field generic state,
 field null/reference policy, or field encoding selection. Rust's internal
@@ -263,9 +282,11 @@ terminal name, optionally qualified. Leaf serializer aliases, root carrier
 aliases, and carrier aliases used only by a skipped field's value-level default
 remain valid. Derive recognizes the complete audited carrier syntax and lowers
 unknown types only as leaf serializers. The leaf adapter rejects an aliased
-carrier during cold field-schema construction using its existing carrier
-category or wrapper semantic, before resolver publication; it does not inspect
-runtime type names or add a value-path branch.
+non-wrapper carrier during cold field-schema construction using its existing
+wire category, before resolver publication. An aliased Fory-owned wrapper
+cannot be registered independently and therefore fails the ordinary
+required-provider lookup. The leaf adapter does not consume `IS_WRAPPER`,
+inspect runtime type names, or add a value-path branch.
 
 When a root is a transparent,
 collection, fixed-array, map, or heterogeneous tuple composition containing
@@ -407,9 +428,15 @@ opaque EXT/NAMED_EXT choice.
 Carrier serializers have no independent registered identity. Structural
 registration requires the existing structural serializer contract and matching
 STRUCT/ENUM/UNION category. Manual registration requires an independent
-EXT/NAMED_EXT serializer and rejects transparent wrappers. Private built-in
-registration validates only its expected internal type ID. These semantic
-checks use the existing serializer contracts and wire categories.
+EXT/NAMED_EXT serializer and rejects `IS_WRAPPER`. Option, Box, Rc, Arc,
+RcWeak, ArcWeak, RefCell, and Mutex carrier serializers set this property
+independently of their child's category. Lists, sets, maps, fixed arrays, and
+tuples keep it false and are rejected through their own wire category. A
+manual serializer targeting one of the same Rust shapes also keeps it false
+because it owns an independent opaque EXT body. Private built-in registration
+validates only its expected internal type ID. These semantic checks use the
+existing serializer contracts and wire categories. Manual EXT registration is
+the only runtime consumer of `IS_WRAPPER`.
 
 Dynamic values should resolve by the concrete target identity. When a runtime
 needs both directions, its serializer-provider-to-type-info and target-to-type-info
@@ -431,17 +458,21 @@ path. This handoff adds no wire field, runtime serializer instance, callback,
 schema tree, cache, or static-path branch.
 
 Dynamic target inspection is fallible and represents an absent value without a
-sentinel target identity. A polymorphic LIST/SET child that would need a
-`RefCell` borrow, `Mutex` lock, or weak upgrade merely to inspect its target
-skips target/null pre-inspection and writes each value through the existing
-heterogeneous path under one holder access. A non-polymorphic nullable holder
-preserves the existing LIST/SET null-header scan, then performs one body access
-without repeating null inspection. MAP metadata and null flags for both sides
-precede either body, so a nullable or access-constrained polymorphic MAP holder
+sentinel target identity. A LIST/SET owner may pre-inspect a child when
+`!C::IS_POLYMORPHIC || !C::REQUIRES_SCOPED_ACCESS`; this caller-local decision
+must not become another serializer capability. A polymorphic child that needs
+a `RefCell` borrow, `Mutex` lock, or weak upgrade skips target/null
+pre-inspection and writes each value through the existing heterogeneous path
+under one holder access. A non-polymorphic nullable holder preserves the
+existing LIST/SET null-header scan, then performs one body access without
+repeating null inspection. MAP metadata and null flags for both sides precede
+either body, so a nullable or access-constrained polymorphic MAP holder
 performs one short null/target inspection, releases the borrow, guard, or
 upgraded owner, and later performs its normal body access. Implementations must
 not retain that access across the other map side, stage body bytes, allocate a
-prepared value, invoke a callback, or change MAP wire order.
+prepared value, invoke a callback, or change MAP wire order. A weak wrapper
+does not keep its target alive; an operation requiring one coherent
+observation must retain its upgraded strong owner for that owned operation.
 
 If closed polymorphic membership needs the host target identity after a wire
 ID/name lookup, that shared harness or registration metadata must retain an

@@ -113,29 +113,19 @@ impl<S: Serializer> Serializer for OptionSerializer<S> {
         <RootSerializer<S> as Serializer>::reserved_space()
     }
 
-    #[inline(always)]
-    fn is_option() -> bool {
-        true
-    }
+    const IS_OPTIONAL: bool = true;
+
+    const IS_POLYMORPHIC: bool = <RootSerializer<S> as Serializer>::IS_POLYMORPHIC;
+
+    const IS_SHARED_REF: bool = <RootSerializer<S> as Serializer>::IS_SHARED_REF;
+
+    const IS_WRAPPER: bool = true;
+
+    const REQUIRES_SCOPED_ACCESS: bool = S::REQUIRES_SCOPED_ACCESS;
 
     #[inline(always)]
     fn is_none(value: &Self::Target) -> bool {
         value.is_none()
-    }
-
-    #[inline(always)]
-    fn is_polymorphic() -> bool {
-        <RootSerializer<S> as Serializer>::is_polymorphic()
-    }
-
-    #[inline(always)]
-    fn is_shared_ref() -> bool {
-        <RootSerializer<S> as Serializer>::is_shared_ref()
-    }
-
-    #[inline(always)]
-    fn is_wrapper_type() -> bool {
-        true
     }
 
     #[inline(always)]
@@ -144,11 +134,6 @@ impl<S: Serializer> Serializer for OptionSerializer<S> {
             Some(value) => S::dynamic_type_id(value),
             None => Ok(None),
         }
-    }
-
-    #[inline(always)]
-    fn dynamic_type_is_direct() -> bool {
-        S::dynamic_type_is_direct()
     }
 }
 
@@ -239,10 +224,15 @@ where
         OptionSerializer::<T>::reserved_space()
     }
 
-    #[inline(always)]
-    fn is_option() -> bool {
-        true
-    }
+    const IS_OPTIONAL: bool = true;
+
+    const IS_POLYMORPHIC: bool = OptionSerializer::<T>::IS_POLYMORPHIC;
+
+    const IS_SHARED_REF: bool = OptionSerializer::<T>::IS_SHARED_REF;
+
+    const IS_WRAPPER: bool = true;
+
+    const REQUIRES_SCOPED_ACCESS: bool = OptionSerializer::<T>::REQUIRES_SCOPED_ACCESS;
 
     #[inline(always)]
     fn is_none(value: &Self) -> bool {
@@ -250,27 +240,7 @@ where
     }
 
     #[inline(always)]
-    fn is_polymorphic() -> bool {
-        OptionSerializer::<T>::is_polymorphic()
-    }
-
-    #[inline(always)]
-    fn is_shared_ref() -> bool {
-        OptionSerializer::<T>::is_shared_ref()
-    }
-
-    #[inline(always)]
-    fn is_wrapper_type() -> bool {
-        true
-    }
-
-    #[inline(always)]
     fn dynamic_type_id(value: &Self) -> Result<Option<std::any::TypeId>, Error> {
         OptionSerializer::<T>::dynamic_type_id(value)
-    }
-
-    #[inline(always)]
-    fn dynamic_type_is_direct() -> bool {
-        OptionSerializer::<T>::dynamic_type_is_direct()
     }
 }

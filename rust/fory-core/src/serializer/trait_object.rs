@@ -449,10 +449,9 @@ macro_rules! register_trait_type {
                     $crate::type_id::SIZE_OF_REF_AND_TYPE
                 }
 
-                #[inline(always)]
-                fn is_polymorphic() -> bool {
-                    true
-                }
+                const IS_POLYMORPHIC: bool = true;
+
+                const IS_WRAPPER: bool = true;
 
                 #[inline(always)]
                 fn dynamic_type_id(
@@ -713,15 +712,11 @@ macro_rules! register_trait_type {
                     $crate::type_id::SIZE_OF_REF_AND_TYPE
                 }
 
-                #[inline(always)]
-                fn is_polymorphic() -> bool {
-                    true
-                }
+                const IS_POLYMORPHIC: bool = true;
 
-                #[inline(always)]
-                fn is_shared_ref() -> bool {
-                    true
-                }
+                const IS_SHARED_REF: bool = true;
+
+                const IS_WRAPPER: bool = true;
 
                 #[inline(always)]
                 fn dynamic_type_id(
@@ -1010,15 +1005,11 @@ macro_rules! register_trait_type {
                     $crate::type_id::SIZE_OF_REF_AND_TYPE
                 }
 
-                #[inline(always)]
-                fn is_polymorphic() -> bool {
-                    true
-                }
+                const IS_POLYMORPHIC: bool = true;
 
-                #[inline(always)]
-                fn is_shared_ref() -> bool {
-                    true
-                }
+                const IS_SHARED_REF: bool = true;
+
+                const IS_WRAPPER: bool = true;
 
                 #[inline(always)]
                 fn dynamic_type_id(
@@ -1163,15 +1154,16 @@ macro_rules! register_trait_type {
                 <$provider as $crate::Serializer>::reserved_space()
             }
 
-            #[inline(always)]
-            fn is_polymorphic() -> bool {
-                true
-            }
+            const IS_OPTIONAL: bool = <$provider as $crate::Serializer>::IS_OPTIONAL;
 
-            #[inline(always)]
-            fn is_shared_ref() -> bool {
-                <$provider as $crate::Serializer>::is_shared_ref()
-            }
+            const IS_POLYMORPHIC: bool = <$provider as $crate::Serializer>::IS_POLYMORPHIC;
+
+            const IS_SHARED_REF: bool = <$provider as $crate::Serializer>::IS_SHARED_REF;
+
+            const IS_WRAPPER: bool = <$provider as $crate::Serializer>::IS_WRAPPER;
+
+            const REQUIRES_SCOPED_ACCESS: bool =
+                <$provider as $crate::Serializer>::REQUIRES_SCOPED_ACCESS;
 
             #[inline(always)]
             fn dynamic_type_id(
@@ -1180,10 +1172,6 @@ macro_rules! register_trait_type {
                 <$provider as $crate::Serializer>::dynamic_type_id(value)
             }
 
-            #[inline(always)]
-            fn dynamic_type_is_direct() -> bool {
-                <$provider as $crate::Serializer>::dynamic_type_is_direct()
-            }
         }
 
         impl<const NULLABLE: bool, const TRACK_REF: bool>

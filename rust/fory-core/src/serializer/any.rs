@@ -296,10 +296,9 @@ impl Serializer for Box<dyn Any> {
         TypeId::UNKNOWN
     }
 
-    #[inline(always)]
-    fn is_polymorphic() -> bool {
-        true
-    }
+    const IS_POLYMORPHIC: bool = true;
+
+    const IS_WRAPPER: bool = true;
 
     #[inline(always)]
     fn dynamic_type_id(value: &Self) -> Result<Option<std::any::TypeId>, Error> {
@@ -463,15 +462,11 @@ impl Serializer for Rc<dyn Any> {
         TypeId::UNKNOWN
     }
 
-    #[inline(always)]
-    fn is_shared_ref() -> bool {
-        true
-    }
+    const IS_SHARED_REF: bool = true;
 
-    #[inline(always)]
-    fn is_polymorphic() -> bool {
-        true
-    }
+    const IS_POLYMORPHIC: bool = true;
+
+    const IS_WRAPPER: bool = true;
 
     #[inline(always)]
     fn dynamic_type_id(value: &Self) -> Result<Option<std::any::TypeId>, Error> {
@@ -640,15 +635,11 @@ impl Serializer for Arc<dyn Any + Send + Sync> {
         TypeId::UNKNOWN
     }
 
-    #[inline(always)]
-    fn is_shared_ref() -> bool {
-        true
-    }
+    const IS_SHARED_REF: bool = true;
 
-    #[inline(always)]
-    fn is_polymorphic() -> bool {
-        true
-    }
+    const IS_POLYMORPHIC: bool = true;
+
+    const IS_WRAPPER: bool = true;
 
     #[inline(always)]
     fn dynamic_type_id(value: &Self) -> Result<Option<std::any::TypeId>, Error> {

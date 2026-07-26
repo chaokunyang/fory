@@ -15,7 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-use fory_core::{register_trait_type, Fory, ForyObject};
+use fory_core::{register_trait_type, Fory, ForyObject, Serializer};
 use fory_derive::ForyStruct;
 use std::collections::HashMap;
 
@@ -72,6 +72,12 @@ impl Animal for Fox {
 }
 
 register_trait_type!(Animal, Dog, Cat);
+
+const _: () = {
+    assert!(<Box<dyn Animal> as Serializer>::IS_POLYMORPHIC);
+    assert!(<Box<dyn Animal> as Serializer>::IS_WRAPPER);
+    assert!(!<Box<dyn Animal> as Serializer>::REQUIRES_SCOPED_ACCESS);
+};
 
 #[derive(ForyStruct)]
 struct Zoo {
@@ -167,6 +173,12 @@ fn dynamic_trait_collections() {
     assert_eq!(decoded["dogs"][1].name(), "Finn");
     assert_eq!(decoded["mixed"][0].sound(), "meow");
     assert_eq!(decoded["mixed"][1].sound(), "woof");
+
+    let tuple = ("featured".to_string(), dog("Tuple"));
+    let bytes = fory.serialize(&tuple).unwrap();
+    let decoded: (String, Box<dyn Animal>) = fory.deserialize(&bytes).unwrap();
+    assert_eq!(decoded.0, "featured");
+    assert_eq!(decoded.1.name(), "Tuple");
 }
 
 #[test]

@@ -46,7 +46,7 @@ fn missing_rc_ref(ref_id: u32) -> Error {
 fn check_child<T: 'static, C: Serializer<Target = T>>() -> Result<(), Error> {
     // Nested shared owners would compete for reference framing and identity
     // while both wrappers remain transparent on the wire.
-    if C::is_shared_ref() {
+    if C::IS_SHARED_REF {
         Err(shared_rc_child())
     } else {
         Ok(())
@@ -248,29 +248,17 @@ where
         C::static_type_id()
     }
 
-    #[inline(always)]
-    fn is_polymorphic() -> bool {
-        C::is_polymorphic()
-    }
+    const IS_POLYMORPHIC: bool = C::IS_POLYMORPHIC;
 
-    #[inline(always)]
-    fn is_shared_ref() -> bool {
-        true
-    }
+    const IS_SHARED_REF: bool = true;
 
-    #[inline(always)]
-    fn is_wrapper_type() -> bool {
-        true
-    }
+    const IS_WRAPPER: bool = true;
+
+    const REQUIRES_SCOPED_ACCESS: bool = C::REQUIRES_SCOPED_ACCESS;
 
     #[inline(always)]
     fn dynamic_type_id(value: &Rc<T>) -> Result<Option<std::any::TypeId>, Error> {
         C::dynamic_type_id(value)
-    }
-
-    #[inline(always)]
-    fn dynamic_type_is_direct() -> bool {
-        C::dynamic_type_is_direct()
     }
 }
 

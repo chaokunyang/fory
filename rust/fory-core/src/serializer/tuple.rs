@@ -71,11 +71,11 @@ fn write_tuple_element<T: 'static, S: Serializer<Target = T>>(
     value: &T,
     context: &mut WriteContext,
 ) -> Result<(), Error> {
-    if S::is_option() || S::is_shared_ref() || S::static_type_id() == TypeId::UNKNOWN {
+    if S::IS_OPTIONAL || S::IS_SHARED_REF || S::static_type_id() == TypeId::UNKNOWN {
         S::write(
             value,
             context,
-            if S::is_shared_ref() {
+            if S::IS_SHARED_REF {
                 RefMode::Tracking
             } else {
                 RefMode::NullOnly
@@ -91,10 +91,10 @@ fn write_tuple_element<T: 'static, S: Serializer<Target = T>>(
 fn read_tuple_element<T: 'static, S: Serializer<Target = T>>(
     context: &mut ReadContext,
 ) -> Result<T, Error> {
-    if S::is_option() || S::is_shared_ref() || S::static_type_id() == TypeId::UNKNOWN {
+    if S::IS_OPTIONAL || S::IS_SHARED_REF || S::static_type_id() == TypeId::UNKNOWN {
         S::read(
             context,
-            if S::is_shared_ref() {
+            if S::IS_SHARED_REF {
                 RefMode::Tracking
             } else {
                 RefMode::NullOnly
@@ -445,10 +445,10 @@ macro_rules! impl_tuple_codec {
                 context.writer.write_var_u32(impl_tuple_codec!(@count $($T),+) as u32);
                 let mut header = 0u8;
                 $(
-                    if $C::is_option() {
+                    if $C::IS_OPTIONAL {
                         header |= HAS_NULL;
                     }
-                    if $C::is_shared_ref() {
+                    if $C::IS_SHARED_REF {
                         header |= TRACKING_REF;
                     }
                 )+
@@ -499,10 +499,6 @@ macro_rules! impl_tuple_codec {
                 std::mem::size_of::<u32>() + SIZE_OF_REF_AND_TYPE
             }
 
-            #[inline(always)]
-            fn is_wrapper_type() -> bool {
-                true
-            }
         }
 
         impl<
@@ -670,10 +666,6 @@ macro_rules! impl_tuple_codec {
                 std::mem::size_of::<u32>() + SIZE_OF_REF_AND_TYPE
             }
 
-            #[inline(always)]
-            fn is_wrapper_type() -> bool {
-                true
-            }
         }
 
         impl<$($T,)+> Serializer for ($($T,)+)
@@ -758,10 +750,6 @@ macro_rules! impl_tuple_codec {
                 std::mem::size_of::<u32>() + SIZE_OF_REF_AND_TYPE
             }
 
-            #[inline(always)]
-            fn is_wrapper_type() -> bool {
-                true
-            }
         }
     };
 

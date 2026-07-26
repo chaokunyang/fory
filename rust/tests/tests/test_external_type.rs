@@ -224,6 +224,26 @@ impl Serializer for ExternalIdSerializer {
     }
 }
 
+struct BoxExternalIdSerializer;
+
+impl Serializer for BoxExternalIdSerializer {
+    type Target = Box<ExternalId>;
+
+    fn write_data(value: &Self::Target, context: &mut WriteContext) -> Result<(), Error> {
+        ExternalIdSerializer::write_data(value, context)
+    }
+
+    fn read_data(context: &mut ReadContext) -> Result<Self::Target, Error> {
+        context.reserve_graph_memory(std::mem::size_of::<ExternalId>())?;
+        Ok(Box::new(ExternalIdSerializer::read_data(context)?))
+    }
+
+    fn default_value(context: &mut ReadContext) -> Result<Self::Target, Error> {
+        context.reserve_graph_memory(std::mem::size_of::<ExternalId>())?;
+        Ok(Box::new(ExternalIdSerializer::default_value(context)?))
+    }
+}
+
 #[derive(ForyStruct)]
 #[fory(target = UserWithState)]
 struct UserWithStateSerializer {
@@ -722,6 +742,59 @@ where
     assert_eq!(decoded.20, value.20);
     assert_eq!(decoded.21, value.21);
 }
+
+const _: () = {
+    type Optional = OptionSerializer<ExternalIdSerializer>;
+    type BoxedOptional = BoxSerializer<Optional>;
+    type CellOptional = RefCellSerializer<Optional>;
+    type MutexOptional = MutexSerializer<Optional>;
+
+    assert!(Optional::IS_OPTIONAL);
+    assert!(Optional::IS_WRAPPER);
+    assert!(!Optional::REQUIRES_SCOPED_ACCESS);
+    assert!(BoxedOptional::IS_OPTIONAL);
+    assert!(BoxedOptional::IS_WRAPPER);
+    assert!(!BoxedOptional::REQUIRES_SCOPED_ACCESS);
+    assert!(CellOptional::IS_OPTIONAL);
+    assert!(CellOptional::IS_WRAPPER);
+    assert!(CellOptional::REQUIRES_SCOPED_ACCESS);
+    assert!(MutexOptional::IS_OPTIONAL);
+    assert!(MutexOptional::IS_WRAPPER);
+    assert!(MutexOptional::REQUIRES_SCOPED_ACCESS);
+
+    assert!(!RcSerializer::<Optional>::IS_OPTIONAL);
+    assert!(RcSerializer::<Optional>::IS_SHARED_REF);
+    assert!(RcSerializer::<Optional>::IS_WRAPPER);
+    assert!(!RcSerializer::<Optional>::REQUIRES_SCOPED_ACCESS);
+    assert!(!ArcSerializer::<Optional>::IS_OPTIONAL);
+    assert!(ArcSerializer::<Optional>::IS_SHARED_REF);
+    assert!(ArcSerializer::<Optional>::IS_WRAPPER);
+    assert!(!ArcSerializer::<Optional>::REQUIRES_SCOPED_ACCESS);
+    assert!(RcWeakSerializer::<ExternalIdSerializer>::IS_SHARED_REF);
+    assert!(RcWeakSerializer::<ExternalIdSerializer>::IS_WRAPPER);
+    assert!(RcWeakSerializer::<ExternalIdSerializer>::REQUIRES_SCOPED_ACCESS);
+    assert!(ArcWeakSerializer::<ExternalIdSerializer>::IS_SHARED_REF);
+    assert!(ArcWeakSerializer::<ExternalIdSerializer>::IS_WRAPPER);
+    assert!(ArcWeakSerializer::<ExternalIdSerializer>::REQUIRES_SCOPED_ACCESS);
+
+    assert!(!VecSerializer::<ExternalIdSerializer>::IS_WRAPPER);
+    assert!(!ArraySerializer::<ExternalIdSerializer, 2>::IS_WRAPPER);
+    assert!(!HashMapSerializer::<String, ExternalIdSerializer>::IS_WRAPPER);
+    assert!(!Tuple2Serializer::<String, ExternalIdSerializer>::IS_WRAPPER);
+    assert!(!BoxExternalIdSerializer::IS_WRAPPER);
+
+    assert!(<Box<dyn Any> as Serializer>::IS_POLYMORPHIC);
+    assert!(<Box<dyn Any> as Serializer>::IS_WRAPPER);
+    assert!(!<Box<dyn Any> as Serializer>::REQUIRES_SCOPED_ACCESS);
+    assert!(AnimalRcSerializer::IS_POLYMORPHIC);
+    assert!(AnimalRcSerializer::IS_SHARED_REF);
+    assert!(AnimalRcSerializer::IS_WRAPPER);
+    assert!(!AnimalRcSerializer::REQUIRES_SCOPED_ACCESS);
+    assert!(SharedAnimalArcSerializer::IS_POLYMORPHIC);
+    assert!(SharedAnimalArcSerializer::IS_SHARED_REF);
+    assert!(SharedAnimalArcSerializer::IS_WRAPPER);
+    assert!(!SharedAnimalArcSerializer::REQUIRES_SCOPED_ACCESS);
+};
 
 #[test]
 fn structural_shapes() {
@@ -1987,11 +2060,32 @@ fn registration_conflicts_are_atomic() {
     assert!(fory
         .register_serializer::<VecSerializer<UserSerializer>>(604)
         .is_err());
-    assert!(fory
-        .register_serializer::<OptionSerializer<UserSerializer>>(605)
-        .is_err());
     fory.register_serializer::<PackedUsersSerializer>(604)
         .unwrap();
+
+    let error = fory
+        .register_serializer::<BoxSerializer<ExternalIdSerializer>>(605)
+        .unwrap_err();
+    assert!(error.to_string().contains("transparent wrapper"), "{error}");
+    fory.register_serializer::<BoxExternalIdSerializer>(605)
+        .unwrap();
+
+    let error = fory
+        .register_serializer::<Tuple2Serializer<String, UserSerializer>>(606)
+        .unwrap_err();
+    assert!(error.to_string().contains("declares LIST"), "{error}");
+    assert!(!error.to_string().contains("wrapper"), "{error}");
+    fory.register_serializer::<PackedEntrySerializer>(606)
+        .unwrap();
+
+    let error = fory
+        .register_serializer::<OptionSerializer<ExternalIdSerializer>>(607)
+        .unwrap_err();
+    assert!(error.to_string().contains("transparent wrapper"), "{error}");
+    fory.register_serializer::<ExternalIdSerializer>(607)
+        .unwrap();
+    roundtrip::<BoxExternalIdSerializer>(&fory, &Box::new(ExternalId(9)));
+    roundtrip::<PackedEntrySerializer>(&fory, &("entry".to_string(), user("Ada", 37)));
 
     let mut names = Fory::builder().xlang(false).compatible(false).build();
     names

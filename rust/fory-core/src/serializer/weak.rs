@@ -381,20 +381,13 @@ where
         C::static_type_id()
     }
 
-    #[inline(always)]
-    fn is_polymorphic() -> bool {
-        C::is_polymorphic()
-    }
+    const IS_POLYMORPHIC: bool = C::IS_POLYMORPHIC;
 
-    #[inline(always)]
-    fn is_shared_ref() -> bool {
-        true
-    }
+    const IS_SHARED_REF: bool = true;
 
-    #[inline(always)]
-    fn is_wrapper_type() -> bool {
-        true
-    }
+    const IS_WRAPPER: bool = true;
+
+    const REQUIRES_SCOPED_ACCESS: bool = true;
 
     #[inline(always)]
     fn dynamic_type_id(value: &RcWeak<T>) -> Result<Option<std::any::TypeId>, Error> {
@@ -402,11 +395,6 @@ where
             Some(value) => C::dynamic_type_id(&value),
             None => Ok(None),
         }
-    }
-
-    #[inline(always)]
-    fn dynamic_type_is_direct() -> bool {
-        false
     }
 }
 
@@ -771,20 +759,13 @@ where
         C::static_type_id()
     }
 
-    #[inline(always)]
-    fn is_polymorphic() -> bool {
-        C::is_polymorphic()
-    }
+    const IS_POLYMORPHIC: bool = C::IS_POLYMORPHIC;
 
-    #[inline(always)]
-    fn is_shared_ref() -> bool {
-        true
-    }
+    const IS_SHARED_REF: bool = true;
 
-    #[inline(always)]
-    fn is_wrapper_type() -> bool {
-        true
-    }
+    const IS_WRAPPER: bool = true;
+
+    const REQUIRES_SCOPED_ACCESS: bool = true;
 
     #[inline(always)]
     fn dynamic_type_id(value: &ArcWeak<T>) -> Result<Option<std::any::TypeId>, Error> {
@@ -792,11 +773,6 @@ where
             Some(value) => C::dynamic_type_id(&value),
             None => Ok(None),
         }
-    }
-
-    #[inline(always)]
-    fn dynamic_type_is_direct() -> bool {
-        false
     }
 }
 

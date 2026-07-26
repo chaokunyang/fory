@@ -218,15 +218,12 @@ macro_rules! impl_single_carrier_serializer {
                 > as $crate::serializer::Serializer>::reserved_space()
             }
 
-            #[inline(always)]
-            fn is_option() -> bool {
-                <$codec<
+            const IS_OPTIONAL: bool = <$codec<
                     S::Target,
                     S,
                     false,
                     false,
-                > as $crate::serializer::Serializer>::is_option()
-            }
+                > as $crate::serializer::Serializer>::IS_OPTIONAL;
 
             #[inline(always)]
             fn is_none(value: &Self::Target) -> bool {
@@ -238,30 +235,28 @@ macro_rules! impl_single_carrier_serializer {
                 > as $crate::serializer::Serializer>::is_none(value)
             }
 
-            #[inline(always)]
-            fn is_polymorphic() -> bool {
-                <$codec<
+            const IS_POLYMORPHIC: bool = <$codec<
                     S::Target,
                     S,
                     false,
                     false,
-                > as $crate::serializer::Serializer>::is_polymorphic()
-            }
+                > as $crate::serializer::Serializer>::IS_POLYMORPHIC;
 
-            #[inline(always)]
-            fn is_shared_ref() -> bool {
-                <$codec<
+            const IS_SHARED_REF: bool = <$codec<
                     S::Target,
                     S,
                     false,
                     false,
-                > as $crate::serializer::Serializer>::is_shared_ref()
-            }
+                > as $crate::serializer::Serializer>::IS_SHARED_REF;
 
-            #[inline(always)]
-            fn is_wrapper_type() -> bool {
-                $wrapper
-            }
+            const IS_WRAPPER: bool = $wrapper;
+
+            const REQUIRES_SCOPED_ACCESS: bool = <$codec<
+                    S::Target,
+                    S,
+                    false,
+                    false,
+                > as $crate::serializer::Serializer>::REQUIRES_SCOPED_ACCESS;
 
             #[inline(always)]
             fn dynamic_type_id(
@@ -277,15 +272,6 @@ macro_rules! impl_single_carrier_serializer {
                 )
             }
 
-            #[inline(always)]
-            fn dynamic_type_is_direct() -> bool {
-                <$codec<
-                    S::Target,
-                    S,
-                    false,
-                    false,
-                > as $crate::serializer::Serializer>::dynamic_type_is_direct()
-            }
         }
 
         impl<T> $crate::serializer::Serializer for $target<T>
@@ -406,30 +392,24 @@ macro_rules! impl_single_carrier_serializer {
                 <$provider<T> as $crate::serializer::Serializer>::reserved_space()
             }
 
-            #[inline(always)]
-            fn is_option() -> bool {
-                <$provider<T> as $crate::serializer::Serializer>::is_option()
-            }
+            const IS_OPTIONAL: bool =
+                <$provider<T> as $crate::serializer::Serializer>::IS_OPTIONAL;
 
             #[inline(always)]
             fn is_none(value: &Self) -> bool {
                 <$provider<T> as $crate::serializer::Serializer>::is_none(value)
             }
 
-            #[inline(always)]
-            fn is_polymorphic() -> bool {
-                <$provider<T> as $crate::serializer::Serializer>::is_polymorphic()
-            }
+            const IS_POLYMORPHIC: bool =
+                <$provider<T> as $crate::serializer::Serializer>::IS_POLYMORPHIC;
 
-            #[inline(always)]
-            fn is_shared_ref() -> bool {
-                <$provider<T> as $crate::serializer::Serializer>::is_shared_ref()
-            }
+            const IS_SHARED_REF: bool =
+                <$provider<T> as $crate::serializer::Serializer>::IS_SHARED_REF;
 
-            #[inline(always)]
-            fn is_wrapper_type() -> bool {
-                $wrapper
-            }
+            const IS_WRAPPER: bool = $wrapper;
+
+            const REQUIRES_SCOPED_ACCESS: bool =
+                <$provider<T> as $crate::serializer::Serializer>::REQUIRES_SCOPED_ACCESS;
 
             #[inline(always)]
             fn dynamic_type_id(
@@ -438,10 +418,6 @@ macro_rules! impl_single_carrier_serializer {
                 <$provider<T> as $crate::serializer::Serializer>::dynamic_type_id(value)
             }
 
-            #[inline(always)]
-            fn dynamic_type_is_direct() -> bool {
-                <$provider<T> as $crate::serializer::Serializer>::dynamic_type_is_direct()
-            }
         }
     };
 }

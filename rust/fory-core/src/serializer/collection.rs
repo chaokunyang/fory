@@ -200,16 +200,16 @@ macro_rules! write_collection_dyn_body {
         let has_generics = $has_generics;
         let elem_static_type_id = $C::static_type_id();
         let is_elem_declared = has_generics && !need_to_write_type_for_field(elem_static_type_id);
-        let elem_is_polymorphic = $C::is_polymorphic();
-        let elem_is_shared_ref = $C::is_shared_ref();
-        let dynamic_type_is_direct = !elem_is_polymorphic || $C::dynamic_type_is_direct();
+        let elem_is_polymorphic = $C::IS_POLYMORPHIC;
+        let elem_is_shared_ref = $C::IS_SHARED_REF;
+        let can_preinspect_dynamic_type = !elem_is_polymorphic || !$C::REQUIRES_SCOPED_ACCESS;
 
         let iter = $iter.into_iter();
-        let mut has_null = elem_is_polymorphic && !dynamic_type_is_direct;
-        let mut is_same_type = dynamic_type_is_direct;
+        let mut has_null = elem_is_polymorphic && !can_preinspect_dynamic_type;
+        let mut is_same_type = can_preinspect_dynamic_type;
         let mut first_type_id: Option<std::any::TypeId> = None;
 
-        if dynamic_type_is_direct {
+        if can_preinspect_dynamic_type {
             for item in iter.clone() {
                 if elem_is_polymorphic {
                     if let Some(dynamic_type_id) = $C::dynamic_type_id(item)? {
@@ -355,7 +355,7 @@ macro_rules! write_collection_body {
         }
         let body_offset = context.writer.len();
         let has_generics = $has_generics;
-        if $C::is_polymorphic() || $C::is_shared_ref() {
+        if $C::IS_POLYMORPHIC || $C::IS_SHARED_REF {
             write_collection_dyn_body!($layer, $T, $C, iter, context, has_generics)?;
             return check_collection_write_len::<$T, $count_allocates, $zst_no_backing>(
                 context,
@@ -367,7 +367,7 @@ macro_rules! write_collection_body {
         let mut has_null = false;
         let elem_static_type_id = $C::static_type_id();
         let is_elem_declared = has_generics && !need_to_write_type_for_field(elem_static_type_id);
-        if $C::is_option() {
+        if $C::IS_OPTIONAL {
             for item in iter.clone() {
                 if $C::is_none(item) {
                     has_null = true;
@@ -549,7 +549,7 @@ macro_rules! read_collection_body {
         if len == 0 {
             return Ok($R::from_iter(std::iter::empty()));
         }
-        if $C::is_polymorphic() || $C::is_shared_ref() {
+        if $C::IS_POLYMORPHIC || $C::IS_SHARED_REF {
             return read_collection_data_dyn_ref::<$R, $T, $C>(context, len);
         }
         let header = context.reader.read_u8()?;
@@ -646,7 +646,7 @@ where
         RefMode::None
     };
 
-    if C::is_polymorphic() || C::is_shared_ref() {
+    if C::IS_POLYMORPHIC || C::IS_SHARED_REF {
         if same_type {
             if declared {
                 let element_type = field_type_with_ref_flags(element_type, has_null, track_ref);

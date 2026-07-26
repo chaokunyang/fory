@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 # Licensed to the Apache Software Foundation (ASF) under one
 # or more contributor license agreements.  See the NOTICE file
 # distributed with this work for additional information
@@ -21,15 +20,15 @@ import os
 import platform
 import re
 import sys
+import time
 from collections import defaultdict
-from datetime import datetime
 from pathlib import Path
 
 import matplotlib.pyplot as plt
 from matplotlib.ticker import FuncFormatter
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from plot_style import (  # noqa: E402
+from plot_style import (
     BAR_EDGE_COLOR,
     GROUP_BAR_WIDTH,
     GROUP_X,
@@ -136,9 +135,9 @@ def get_system_info(log_file):
         info["CPU Cores (Logical)"] = psutil.cpu_count(logical=True)
         info["Total RAM (GB)"] = round(psutil.virtual_memory().total / (1024**3), 2)
     if os.path.exists(log_file):
-        info["Benchmark Date"] = datetime.fromtimestamp(
-            os.path.getmtime(log_file)
-        ).isoformat(timespec="seconds")
+        info["Benchmark Date"] = time.strftime(
+            "%Y-%m-%dT%H:%M:%S", time.localtime(os.path.getmtime(log_file))
+        )
     return info
 
 
@@ -303,7 +302,7 @@ def write_report(system_info, results, pair_results, sizes, output_dir, plot_pre
 
     report = [
         "# Rust Benchmark Performance Report\n\n",
-        f"_Generated on {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}_\n\n",
+        f"_Generated on {time.strftime('%Y-%m-%d %H:%M:%S')}_\n\n",
         "## How to Generate This Report\n\n",
         "```bash\n",
         "cd benchmarks/rust\n",

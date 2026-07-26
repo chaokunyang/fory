@@ -19,11 +19,13 @@
 Tests for xlang TypeDef implementation.
 """
 
-from __future__ import annotations
-
 import array
 import enum
 from dataclasses import dataclass, make_dataclass
+from typing import Dict, List, Optional
+
+# Fory resolves these model annotations at runtime, so keep Python 3.8-compatible typing aliases.
+# ruff: noqa: UP006, UP035, UP045
 
 import pytest
 
@@ -73,8 +75,8 @@ class TestTypeDef:
 
     name: str
     age: int
-    scores: list[float]
-    metadata: dict[str, str]
+    scores: List[float]
+    metadata: Dict[str, str]
 
 
 @dataclass
@@ -98,14 +100,14 @@ class LateTypeDefHolder:
 class NestedEncodingTypeDef:
     """TypeDef with nested primitive encoding overrides."""
 
-    values: dict[pyfory.FixedInt32, list[pyfory.TaggedInt64]]
+    values: Dict[pyfory.FixedInt32, List[pyfory.TaggedInt64]]
 
 
 @dataclass
 class PythonArrayTypeHints:
     """TypeDef with list and explicit array schema markers."""
 
-    values: list[pyfory.Int32]
+    values: List[pyfory.Int32]
     dense_values: pyfory.Array[pyfory.Int32]
     numpy_values: pyfory.NDArray[pyfory.UInt8]
     py_values: pyfory.PyArray[pyfory.Float64]
@@ -129,7 +131,7 @@ class UInt8ArrayPayload:
 
 @dataclass
 class Int32ListPayload:
-    payload: list[pyfory.FixedInt32]
+    payload: List[pyfory.FixedInt32]
 
 
 class IdLimitEnum(enum.Enum):
@@ -168,17 +170,17 @@ class IdLimitUnion:
 
 @dataclass
 class Int32VarintListPayload:
-    payload: list[pyfory.Int32]
+    payload: List[pyfory.Int32]
 
 
 @dataclass
 class NullableInt32ListPayload:
-    payload: list[pyfory.FixedInt32 | None]
+    payload: List[Optional[pyfory.FixedInt32]]
 
 
 @dataclass
 class StringListPayload:
-    payload: list[str]
+    payload: List[str]
 
 
 @dataclass
@@ -198,12 +200,12 @@ class Int32PyArrayPayload:
 
 @dataclass
 class NestedInt32ListPayload:
-    payload: list[list[pyfory.FixedInt32]]
+    payload: List[List[pyfory.FixedInt32]]
 
 
 @dataclass
 class NestedInt32ArrayPayload:
-    payload: list[pyfory.Array[pyfory.Int32]]
+    payload: List[pyfory.Array[pyfory.Int32]]
 
 
 def test_collection_field_type():

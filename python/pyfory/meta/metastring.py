@@ -15,10 +15,12 @@
 # specific language governing permissions and limitations
 # under the License.
 
-from __future__ import annotations
-
 from collections import namedtuple
 from enum import Enum
+from typing import List, Optional
+
+# Python 3.8 must be able to evaluate these public annotations at runtime.
+# ruff: noqa: UP006, UP035, UP045
 
 
 class Encoding(Enum):
@@ -271,7 +273,7 @@ class MetaStringEncoder:
         self.special_char1 = special_char1
         self.special_char2 = special_char2
 
-    def encode(self, input_string: str, encodings: list[Encoding] | None = None) -> MetaString:
+    def encode(self, input_string: str, encodings: Optional[List[Encoding]] = None) -> MetaString:
         """
         Encodes the input string into a MetaString object.
 
@@ -375,7 +377,7 @@ class MetaStringEncoder:
                 self.special_char2,
             )
 
-    def compute_encoding(self, input_string: str, encodings: list[Encoding] | None = None) -> Encoding:
+    def compute_encoding(self, input_string: str, encodings: Optional[List[Encoding]] = None) -> Encoding:
         """
         Determines the encoding type of the input string.
 
@@ -410,7 +412,7 @@ class MetaStringEncoder:
             return Encoding.UTF_8
         raise ValueError(f"No encoding found for string: {input_string}, encodings: {encodings}")
 
-    def _compute_statistics(self, chars: list[str]) -> Statistics:
+    def _compute_statistics(self, chars: List[str]) -> Statistics:
         """
         Computes statistics for the given characters to determine encoding possibilities.
 
@@ -483,7 +485,7 @@ class MetaStringEncoder:
         chars[0] = chars[0].lower()
         return self._encode_generic(chars, 5)
 
-    def _encode_all_to_lower_special(self, chars: list[str]) -> bytes:
+    def _encode_all_to_lower_special(self, chars: List[str]) -> bytes:
         """
         Encodes the input string using ALL_TO_LOWER_SPECIAL encoding.
 
@@ -502,7 +504,7 @@ class MetaStringEncoder:
                 new_chars.append(c)
         return self._encode_generic(new_chars, 5)
 
-    def _encode_generic(self, chars: list[str], bits_per_char: int) -> bytes:
+    def _encode_generic(self, chars: List[str], bits_per_char: int) -> bytes:
         """
         Generic encoding function for encoding characters into bytes.
 

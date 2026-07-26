@@ -72,6 +72,12 @@ fn invalid_primitive_len() -> Error {
 
 #[cold]
 #[inline(never)]
+fn invalid_bool_value() -> Error {
+    Error::invalid_data("Invalid bool array value")
+}
+
+#[cold]
+#[inline(never)]
 fn primitive_len_overflow() -> Error {
     Error::invalid_data("primitive array byte length overflows")
 }
@@ -123,6 +129,7 @@ fn check_xlang_kind(context: &WriteContext, array_type_id: TypeId) -> Result<(),
     }
 }
 
+#[inline(always)]
 pub(super) fn write_data<T, C>(
     values: &[T],
     context: &mut WriteContext,
@@ -132,10 +139,18 @@ where
     T: 'static,
     C: Codec<T>,
 {
-    #[cfg(target_endian = "little")]
-    let _ = std::marker::PhantomData::<C>;
     validate_target::<T>(array_type_id)?;
     check_xlang_kind(context, array_type_id)?;
+    write_data_body::<T, C>(values, context)
+}
+
+fn write_data_body<T, C>(values: &[T], context: &mut WriteContext) -> Result<(), Error>
+where
+    T: 'static,
+    C: Codec<T>,
+{
+    #[cfg(target_endian = "little")]
+    let _ = std::marker::PhantomData::<C>;
     let len_bytes = std::mem::size_of_val(values);
     context.writer.write_var_u32(len_bytes as u32);
     if values.is_empty() {
@@ -156,6 +171,7 @@ where
     Ok(())
 }
 
+#[inline(always)]
 pub(super) fn read_vec<T, C>(
     context: &mut ReadContext,
     array_type_id: TypeId,
@@ -165,6 +181,55 @@ where
     C: Codec<T>,
 {
     validate_target::<T>(array_type_id)?;
+    if array_type_id == TypeId::BOOL_ARRAY {
+        return read_bool_vec::<T>(context);
+    }
+    read_raw_vec::<T, C>(context)
+}
+
+#[inline(always)]
+fn valid_bool_bytes(bytes: &[u8]) -> bool {
+    const MASK64: u64 = 0xfefefefefefefefe;
+    const MASK32: u32 = 0xfefefefe;
+    const MASK16: u16 = 0xfefe;
+
+    unsafe {
+        if bytes.len() == 4 {
+            return std::ptr::read_unaligned(bytes.as_ptr().cast::<u32>()) & MASK32 == 0;
+        }
+        if bytes.len() == 8 {
+            return std::ptr::read_unaligned(bytes.as_ptr().cast::<u64>()) & MASK64 == 0;
+        }
+    }
+
+    let mut offset = 0;
+    unsafe {
+        while bytes.len() - offset >= 8 {
+            if std::ptr::read_unaligned(bytes.as_ptr().add(offset).cast::<u64>()) & MASK64 != 0 {
+                return false;
+            }
+            offset += 8;
+        }
+        if bytes.len() - offset >= 4 {
+            if std::ptr::read_unaligned(bytes.as_ptr().add(offset).cast::<u32>()) & MASK32 != 0 {
+                return false;
+            }
+            offset += 4;
+        }
+        if bytes.len() - offset >= 2 {
+            if std::ptr::read_unaligned(bytes.as_ptr().add(offset).cast::<u16>()) & MASK16 != 0 {
+                return false;
+            }
+            offset += 2;
+        }
+        offset == bytes.len() || bytes[offset] <= 1
+    }
+}
+
+fn read_bool_vec<T>(context: &mut ReadContext) -> Result<Vec<T>, Error>
+where
+    T: 'static,
+{
     let size_bytes = context.reader.read_var_u32()? as usize;
     let element_size = std::mem::size_of::<T>();
     if size_bytes % element_size != 0 {
@@ -172,13 +237,33 @@ where
     }
     context.reader.check_bound(size_bytes)?;
     let len = size_bytes / element_size;
-    let mut values = Vec::with_capacity(len);
-    if array_type_id == TypeId::BOOL_ARRAY {
-        for _ in 0..len {
-            values.push(C::read_data(context)?);
-        }
-        return Ok(values);
+    let mut values: Vec<T> = Vec::with_capacity(len);
+    let bytes = context.reader.read_bytes(size_bytes)?;
+    if !valid_bool_bytes(bytes) {
+        return Err(invalid_bool_value());
     }
+    unsafe {
+        // Exact target validation proves T is bool. Validation above proves
+        // every copied byte is a valid Rust bool representation.
+        std::ptr::copy_nonoverlapping(bytes.as_ptr(), values.as_mut_ptr().cast::<u8>(), size_bytes);
+        values.set_len(len);
+    }
+    Ok(values)
+}
+
+fn read_raw_vec<T, C>(context: &mut ReadContext) -> Result<Vec<T>, Error>
+where
+    T: 'static,
+    C: Codec<T>,
+{
+    let size_bytes = context.reader.read_var_u32()? as usize;
+    let element_size = std::mem::size_of::<T>();
+    if size_bytes % element_size != 0 {
+        return Err(invalid_primitive_len());
+    }
+    context.reader.check_bound(size_bytes)?;
+    let len = size_bytes / element_size;
+    let mut values: Vec<T> = Vec::with_capacity(len);
     #[cfg(target_endian = "little")]
     unsafe {
         // Readable bytes were proven before allocation and the exact canonical
@@ -194,6 +279,7 @@ where
     Ok(values)
 }
 
+#[inline(always)]
 pub(super) fn read_array<T, C, const N: usize>(
     context: &mut ReadContext,
     array_type_id: TypeId,
@@ -203,6 +289,16 @@ where
     C: Codec<T>,
 {
     validate_target::<T>(array_type_id)?;
+    if array_type_id == TypeId::BOOL_ARRAY {
+        return read_bool_array::<T, N>(context);
+    }
+    read_raw_array::<T, C, N>(context)
+}
+
+fn read_bool_array<T, const N: usize>(context: &mut ReadContext) -> Result<[T; N], Error>
+where
+    T: 'static,
+{
     let size_bytes = context.reader.read_var_u32()? as usize;
     let element_size = std::mem::size_of::<T>();
     let expected_bytes = N
@@ -212,11 +308,33 @@ where
         return Err(primitive_array_len_mismatch(expected_bytes, size_bytes));
     }
     context.reader.check_bound(size_bytes)?;
-
-    if array_type_id == TypeId::BOOL_ARRAY {
-        return super::array::try_init_array(|| C::read_data(context));
+    let bytes = context.reader.read_bytes(size_bytes)?;
+    if !valid_bool_bytes(bytes) {
+        return Err(invalid_bool_value());
     }
+    unsafe {
+        // Exact target validation proves T is bool. Validation above proves
+        // every copied byte is a valid Rust bool representation.
+        let mut values = MaybeUninit::<[T; N]>::uninit();
+        std::ptr::copy_nonoverlapping(bytes.as_ptr(), values.as_mut_ptr().cast::<u8>(), size_bytes);
+        Ok(values.assume_init())
+    }
+}
 
+fn read_raw_array<T, C, const N: usize>(context: &mut ReadContext) -> Result<[T; N], Error>
+where
+    T: 'static,
+    C: Codec<T>,
+{
+    let size_bytes = context.reader.read_var_u32()? as usize;
+    let element_size = std::mem::size_of::<T>();
+    let expected_bytes = N
+        .checked_mul(element_size)
+        .ok_or_else(primitive_len_overflow)?;
+    if size_bytes != expected_bytes {
+        return Err(primitive_array_len_mismatch(expected_bytes, size_bytes));
+    }
+    context.reader.check_bound(size_bytes)?;
     #[cfg(target_endian = "little")]
     unsafe {
         let mut values = MaybeUninit::<[T; N]>::uninit();

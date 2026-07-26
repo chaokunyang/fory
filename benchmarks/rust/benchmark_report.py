@@ -308,6 +308,7 @@ def write_report(system_info, results, pair_results, sizes, output_dir, plot_pre
         "```bash\n",
         "cd benchmarks/rust\n",
         "cargo bench --bench serialization_bench 2>&1 | tee results/cargo_bench.log\n",
+        "cargo bench --bench external_type_bench 2>&1 | tee -a results/cargo_bench.log\n",
         "cargo run --release --bin fory_profiler -- --print-all-serialized-sizes | tee results/serialized_sizes.txt\n",
         "python benchmark_report.py --log-file results/cargo_bench.log --size-file results/serialized_sizes.txt --output-dir results\n",
         "```\n\n",

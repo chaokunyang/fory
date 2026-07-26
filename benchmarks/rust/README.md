@@ -64,8 +64,9 @@ where one int32 field is widened to int64.
 | `SampleList`        | List of shared `Sample` payloads                                       |
 | `MediaContentList`  | List of shared `MediaContent` payloads                                 |
 
-The same Criterion target also contains branch-local Rust external-type
-serialization comparisons. Each comparison has `self_serialize`,
+The separate `external_type_bench` Criterion target contains branch-local Rust
+external-type serialization comparisons. Keeping it separate preserves the
+ordinary `serialization_bench` binary and measurement shape. Each comparison has `self_serialize`,
 `selected_serialize`, `self_deserialize`, and `selected_deserialize` lanes.
 The self lane uses an equivalent self-provided Rust target. The selected lane
 uses the external structural serializer, manual serializer, carrier serializer,
@@ -89,9 +90,9 @@ The matrix covers:
 Run one comparison case by its Criterion group name:
 
 ```bash
-cargo bench --bench serialization_bench -- carrier_map_nested
-cargo bench --bench serialization_bench -- external_command_compatible
-cargo bench --bench serialization_bench -- dynamic_trait_arc
+cargo bench --bench external_type_bench -- carrier_map_nested
+cargo bench --bench external_type_bench -- external_command_compatible
+cargo bench --bench external_type_bench -- dynamic_trait_arc
 ```
 
 For regression gates, run baseline and current cases sequentially. Existing
@@ -110,6 +111,7 @@ Run Criterion benchmarks:
 ```bash
 cd benchmarks/rust
 cargo bench --bench serialization_bench
+cargo bench --bench external_type_bench
 ```
 
 Print serialized sizes:
@@ -124,6 +126,7 @@ Generate the markdown report manually:
 ```bash
 cd benchmarks/rust
 cargo bench --bench serialization_bench 2>&1 | tee results/cargo_bench.log
+cargo bench --bench external_type_bench 2>&1 | tee -a results/cargo_bench.log
 cargo run --release --bin fory_profiler -- --print-all-serialized-sizes | tee results/serialized_sizes.txt
 python benchmark_report.py --log-file results/cargo_bench.log --size-file results/serialized_sizes.txt --output-dir results
 ```

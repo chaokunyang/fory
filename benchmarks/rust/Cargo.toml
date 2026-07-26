@@ -30,6 +30,11 @@ path = "benches/serialization_bench.rs"
 harness = false
 
 [[bench]]
+name = "external_type_bench"
+path = "benches/external_type_bench.rs"
+harness = false
+
+[[bench]]
 name = "buffer_write_bench"
 path = "benches/buffer_write_bench.rs"
 harness = false

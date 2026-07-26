@@ -1692,6 +1692,7 @@ where
     Ok(vec)
 }
 
+#[inline(always)]
 fn write_vec_data<T, C, const STRUCTURAL_LIST: bool, const DENSE_ARRAY: bool>(
     value: &Vec<T>,
     context: &mut WriteContext,
@@ -1704,6 +1705,18 @@ where
     if let Some(type_id) = selected_vec_type_id::<T, C, STRUCTURAL_LIST, DENSE_ARRAY>()? {
         return primitive_list::write_data::<T, C>(value, context, type_id);
     }
+    write_object_vec_data::<T, C>(value, context, has_generics)
+}
+
+fn write_object_vec_data<T, C>(
+    value: &Vec<T>,
+    context: &mut WriteContext,
+    has_generics: bool,
+) -> Result<(), Error>
+where
+    T: 'static,
+    C: Codec<T>,
+{
     let len = value.len();
     context.writer.write_var_u32(len as u32);
     if len == 0 {
@@ -1751,6 +1764,68 @@ where
         }
     }
     check_vec_write_len::<T>(context, body_offset, len)
+}
+
+#[inline(always)]
+fn read_vec_data<
+    T,
+    C,
+    const STRUCTURAL_LIST: bool,
+    const DENSE_ARRAY: bool,
+    const NULLABLE: bool,
+    const TRACK_REF: bool,
+>(
+    context: &mut ReadContext,
+) -> Result<Vec<T>, Error>
+where
+    T: 'static,
+    C: Codec<T>,
+{
+    if let Some(type_id) = selected_vec_type_id::<T, C, STRUCTURAL_LIST, DENSE_ARRAY>()? {
+        return primitive_list::read_vec::<T, C>(context, type_id);
+    }
+    read_object_vec_data::<T, C, STRUCTURAL_LIST, DENSE_ARRAY, NULLABLE, TRACK_REF>(context)
+}
+
+fn read_object_vec_data<
+    T,
+    C,
+    const STRUCTURAL_LIST: bool,
+    const DENSE_ARRAY: bool,
+    const NULLABLE: bool,
+    const TRACK_REF: bool,
+>(
+    context: &mut ReadContext,
+) -> Result<Vec<T>, Error>
+where
+    T: 'static,
+    C: Codec<T>,
+{
+    let len = context.reader.read_var_u32()?;
+    check_sequence_len::<T>(context, len)?;
+    reserve_graph_storage(context, len, std::mem::size_of::<T>())?;
+    if len == 0 {
+        return Ok(Vec::new());
+    }
+    let header = context.reader.read_u8()?;
+    if C::is_polymorphic() || C::is_shared_ref() {
+        let field_type =
+            VecCodec::<T, C, STRUCTURAL_LIST, DENSE_ARRAY, NULLABLE, TRACK_REF>::field_type(
+                context.get_type_resolver(),
+            )?;
+        return read_vec_dynamic_items::<T, C>(context, len, header, &field_type);
+    }
+    if (header & IS_SAME_TYPE) == 0 {
+        return Err(non_polymorphic_vec());
+    }
+    let read_type = if (header & DECL_ELEMENT_TYPE) == 0 {
+        let codec_read_type = C::read_type_info_value(context)?;
+        Some(element_read_type::<T, C>(context, codec_read_type)?)
+    } else {
+        None
+    };
+    let has_null = (header & HAS_NULL) != 0;
+    read_vec_items::<T, C>(context, len, has_null, read_type)
 }
 
 impl<
@@ -1842,36 +1917,14 @@ where
         read_vec_compatible_mismatch::<T, C>(context, local_field_type, remote_field_type)
     }
 
+    #[inline(always)]
     fn write_data(value: &Vec<T>, context: &mut WriteContext) -> Result<(), Error> {
         write_vec_data::<T, C, STRUCTURAL_LIST, DENSE_ARRAY>(value, context, false)
     }
 
+    #[inline(always)]
     fn read_data(context: &mut ReadContext) -> Result<Vec<T>, Error> {
-        if let Some(type_id) = selected_vec_type_id::<T, C, STRUCTURAL_LIST, DENSE_ARRAY>()? {
-            return primitive_list::read_vec::<T, C>(context, type_id);
-        }
-        let len = context.reader.read_var_u32()?;
-        check_sequence_len::<T>(context, len)?;
-        reserve_graph_storage(context, len, std::mem::size_of::<T>())?;
-        if len == 0 {
-            return Ok(Vec::new());
-        }
-        let header = context.reader.read_u8()?;
-        if C::is_polymorphic() || C::is_shared_ref() {
-            let field_type = Self::field_type(context.get_type_resolver())?;
-            return read_vec_dynamic_items::<T, C>(context, len, header, &field_type);
-        }
-        if (header & IS_SAME_TYPE) == 0 {
-            return Err(non_polymorphic_vec());
-        }
-        let read_type = if (header & DECL_ELEMENT_TYPE) == 0 {
-            let codec_read_type = C::read_type_info_value(context)?;
-            Some(element_read_type::<T, C>(context, codec_read_type)?)
-        } else {
-            None
-        };
-        let has_null = (header & HAS_NULL) != 0;
-        read_vec_items::<T, C>(context, len, has_null, read_type)
+        read_vec_data::<T, C, STRUCTURAL_LIST, DENSE_ARRAY, NULLABLE, TRACK_REF>(context)
     }
 
     fn read_data_with_type(

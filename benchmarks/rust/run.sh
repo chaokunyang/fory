@@ -156,11 +156,6 @@ build_filter() {
 mkdir -p "$OUTPUT_DIR"
 FILTER_REGEX="$(build_filter)"
 
-BENCH_CMD=(cargo bench --bench serialization_bench)
-if [[ -n "$FILTER_REGEX" ]]; then
-    BENCH_CMD+=(-- "$FILTER_REGEX")
-fi
-
 echo "============================================"
 echo "Fory Rust Benchmark"
 echo "============================================"
@@ -176,9 +171,16 @@ echo ""
 echo "============================================"
 echo "Running benchmarks..."
 echo "============================================"
-echo "Running: ${BENCH_CMD[*]}"
-echo ""
-"${BENCH_CMD[@]}" 2>&1 | tee "$LOG_FILE"
+: > "$LOG_FILE"
+for bench_target in serialization_bench external_type_bench; do
+    BENCH_CMD=(cargo bench --bench "$bench_target")
+    if [[ -n "$FILTER_REGEX" ]]; then
+        BENCH_CMD+=(-- "$FILTER_REGEX")
+    fi
+    echo "Running: ${BENCH_CMD[*]}"
+    echo ""
+    "${BENCH_CMD[@]}" 2>&1 | tee -a "$LOG_FILE"
+done
 
 echo ""
 echo "============================================"

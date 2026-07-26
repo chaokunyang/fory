@@ -18,8 +18,6 @@
 pub mod data;
 pub mod serializers;
 
-mod external_types;
-
 pub mod generated {
     include!(concat!(env!("OUT_DIR"), "/protobuf.rs"));
 }
@@ -77,7 +75,6 @@ pub fn run_serialization_benchmarks(c: &mut Criterion) {
         &protobuf_serializer,
         &msgpack_serializer,
     );
-    external_types::run_external_type_benchmarks(c);
 }
 
 fn run_benchmark_case<T>(
@@ -167,6 +164,7 @@ fn run_benchmark_case<T>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::data::BenchmarkCase;
 
     fn assert_round_trip<T>()
     where

@@ -16,11 +16,11 @@
 // under the License.
 
 use clap::{Parser, ValueEnum};
-use fory_benchmarks::data::{
+use fory_rust_xlang_benchmarks::data::{
     BenchmarkCase, DataKind, MediaContent, MediaContentList, NumericStruct, NumericStructList,
     Sample, SampleList, SchemaMismatchCase,
 };
-use fory_benchmarks::serializers::{
+use fory_rust_xlang_benchmarks::serializers::{
     fory::{schema_mismatch_enabled, ForySerializer},
     msgpack::MsgpackSerializer,
     protobuf::ProtobufSerializer,

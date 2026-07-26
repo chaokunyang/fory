@@ -639,7 +639,7 @@ Run benchmarks:
 
 ```bash
 cd benchmarks/rust
-cargo bench
+./run.sh
 ```
 
 ## Documentation

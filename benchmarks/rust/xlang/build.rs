@@ -15,16 +15,19 @@
 // specific language governing permissions and limitations
 // under the License.
 
-use criterion::{criterion_group, criterion_main, Criterion};
-use fory_benchmarks::run_serialization_benchmarks;
+fn main() {
+    let manifest_dir = std::path::PathBuf::from(
+        std::env::var_os("CARGO_MANIFEST_DIR")
+            .expect("Cargo must set CARGO_MANIFEST_DIR for benchmark code generation"),
+    );
+    let proto_dir = manifest_dir.join("../../proto");
+    let proto_files = [proto_dir.join("bench.proto")];
 
-fn config() -> Criterion {
-    Criterion::default()
-}
+    for proto_file in &proto_files {
+        println!("cargo:rerun-if-changed={}", proto_file.display());
+    }
 
-criterion_group! {
-    name = benches;
-    config = config();
-    targets = run_serialization_benchmarks
+    prost_build::Config::new()
+        .compile_protos(&proto_files, &[proto_dir])
+        .expect("failed to compile benchmarks/proto/bench.proto");
 }
-criterion_main!(benches);

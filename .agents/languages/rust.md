@@ -329,8 +329,16 @@ cargo doc --lib --no-deps --all-features
 
 # Run benchmarks
 cd <project_dir>/benchmarks/rust
-cargo bench
+./run.sh
 ```
+
+The Rust benchmark workspace has two independent package owners:
+`benchmarks/rust/xlang` owns shared xlang models, adapters, generated Protobuf
+code, `serialization_bench`, and `fory_profiler`;
+`benchmarks/rust/local` owns buffer, threaded, and external-type benchmarks.
+Neither package may depend on the other or contain the other package's models
+or monomorphizations. Use the member manifest explicitly when building or
+running one suite so the other package is not compiled.
 
 ## Java-Driven Xlang Test
 

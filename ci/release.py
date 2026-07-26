@@ -650,7 +650,7 @@ def bump_rust_version(new_version, release_version=None):
         "benchmarks/rust",
         "Cargo.toml",
         rust_version,
-        _update_cargo_package_version,
+        _update_rust_version,
     )
     _bump_version(
         "integration_tests/idl_tests/rust",

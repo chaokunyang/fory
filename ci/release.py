@@ -1035,8 +1035,7 @@ def _update_dart_readme_dependency_version(lines, v: str):
 
 
 def _update_dart_changelog(lines, v: str, workspace=False):
-    v = v.strip()
-    v = v.removeprefix("v")
+    v = _strip_version_prefix(v)
     heading = f"## {v}\n"
     if workspace:
         body = [
@@ -1287,8 +1286,7 @@ def _normalize_java_version(v: str) -> str:
 
 
 def _normalize_go_version(v: str) -> str:
-    v = v.strip()
-    v = v.removeprefix("v")
+    v = _strip_version_prefix(v)
     v = re.sub(r"-(alpha|beta|rc)(\d+)$", r"-\1.\2", v)
     if re.search(r"(?i)-(alpha|beta)\.0$", v):
         return f"v{v}"
@@ -1307,8 +1305,7 @@ def _normalize_go_version(v: str) -> str:
 
 
 def _normalize_cmake_version(v: str) -> str:
-    v = v.strip()
-    v = v.removeprefix("v")
+    v = _strip_version_prefix(v)
     v = re.split(r"[-+]", v, maxsplit=1)[0]
     return v
 
@@ -1338,8 +1335,7 @@ def _normalize_js_version(v: str) -> str:
 
 
 def _is_release_version(v: str) -> bool:
-    v = v.strip()
-    v = v.removeprefix("v")
+    v = _strip_version_prefix(v)
     return re.match(r"^\d+\.\d+\.\d+$", v) is not None
 
 

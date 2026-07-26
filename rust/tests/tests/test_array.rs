@@ -17,7 +17,7 @@
 
 use fory_core::fory::Fory;
 use fory_core::register_trait_type;
-use fory_core::serializer::Serializer;
+use fory_core::{ArraySerializer, ForyObject};
 use fory_derive::ForyStruct;
 use std::rc::Rc;
 
@@ -217,7 +217,7 @@ fn test_array_size_mismatch() {
 
 // Trait object tests
 
-trait Shape: Serializer {
+trait Shape: ForyObject {
     fn area(&self) -> f64;
     fn name(&self) -> &str;
 }
@@ -337,7 +337,7 @@ fn test_array_rc_trait_objects() {
     fory.register::<Circle>(9001).unwrap();
     fory.register::<Rectangle>(9002).unwrap();
 
-    // Create Rc<dyn Shape> instances and convert to wrappers
+    // Create the final Rc trait carriers directly.
     let circle1: Rc<dyn Shape> = Rc::new(Circle { radius: 2.0 });
     let rect: Rc<dyn Shape> = Rc::new(Rectangle {
         width: 3.0,
@@ -345,12 +345,7 @@ fn test_array_rc_trait_objects() {
     });
     let circle2: Rc<dyn Shape> = Rc::new(Circle { radius: 7.0 });
 
-    // Convert to wrapper types for serialization
-    let shapes: [ShapeRc; 3] = [
-        ShapeRc::from(circle1),
-        ShapeRc::from(rect),
-        ShapeRc::from(circle2),
-    ];
+    let shapes: [Rc<dyn Shape>; 3] = [circle1, rect, circle2];
 
     // Calculate expected areas
     let expected_areas: [f64; 3] = [
@@ -359,14 +354,16 @@ fn test_array_rc_trait_objects() {
         std::f64::consts::PI * 49.0, // Circle radius 7.0
     ];
 
-    let bin = fory.serialize(&shapes).unwrap();
-    let deserialized: [ShapeRc; 3] = fory.deserialize(&bin).expect("deserialize");
+    let bin = fory
+        .serialize_with::<ArraySerializer<ShapeRcSerializer, 3>>(&shapes)
+        .unwrap();
+    let deserialized = fory
+        .deserialize_with::<ArraySerializer<ShapeRcSerializer, 3>>(&bin)
+        .expect("deserialize");
 
-    // Verify by unwrapping and calling trait methods
     assert_eq!(deserialized.len(), 3);
     for i in 0..3 {
-        let shape: Rc<dyn Shape> = deserialized[i].clone().into();
-        assert!((shape.area() - expected_areas[i]).abs() < 0.001);
+        assert!((deserialized[i].area() - expected_areas[i]).abs() < 0.001);
     }
 }
 

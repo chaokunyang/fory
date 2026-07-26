@@ -222,9 +222,9 @@ fn test_homogeneous_tuple_unsigned() {
 fn test_tuple_type_id() {
     use fory_core::serializer::Serializer;
     use fory_core::type_id::TypeId;
-    assert_eq!(<(i32, i32)>::fory_static_type_id(), TypeId::LIST);
-    assert_eq!(<(i32, String)>::fory_static_type_id(), TypeId::LIST);
-    assert_eq!(<(i32,)>::fory_static_type_id(), TypeId::LIST);
+    assert_eq!(<(i32, i32)>::static_type_id(), TypeId::LIST);
+    assert_eq!(<(i32, String)>::static_type_id(), TypeId::LIST);
+    assert_eq!(<(i32,)>::static_type_id(), TypeId::LIST);
 }
 
 // Test tuples in xlang mode

@@ -833,7 +833,7 @@ class RustGenerator(RustServiceGeneratorMixin, BaseGenerator):
         lines.append("}")
         lines.append("")
 
-        if union.fields:
+        if self.union_supports_trait(union, "Default", parent_stack):
             default_field = union.fields[0]
             default_variant = self.get_union_case_identifier(union, default_field)
             default_pointer_type = self.get_field_pointer_type(default_field)
@@ -852,7 +852,7 @@ class RustGenerator(RustServiceGeneratorMixin, BaseGenerator):
             lines.append(f"impl ::std::default::Default for {union_name} {{")
             lines.append("    fn default() -> Self {")
             lines.append(
-                f"        Self::{default_variant}(<{default_type} as ::fory::ForyDefault>::fory_default())"
+                f"        Self::{default_variant}(<{default_type} as ::std::default::Default>::default())"
             )
             lines.append("    }")
             lines.append("}")
@@ -1012,8 +1012,6 @@ class RustGenerator(RustServiceGeneratorMixin, BaseGenerator):
         parent_stack: Optional[List[Message]] = None,
         visiting: Optional[Set[Tuple[str, str, int]]] = None,
     ) -> bool:
-        if trait == "Default":
-            return bool(union.fields)
         if visiting is None:
             visiting = set()
         key = ("union", trait, id(union))
@@ -1021,10 +1019,15 @@ class RustGenerator(RustServiceGeneratorMixin, BaseGenerator):
             return False
         visiting.add(key)
         lineage = parent_stack or []
-        result = all(
-            self.field_supports_trait(field, trait, lineage, visiting)
-            for field in union.fields
-        )
+        if trait == "Default":
+            result = bool(union.fields) and self.field_supports_trait(
+                union.fields[0], trait, lineage, visiting
+            )
+        else:
+            result = all(
+                self.field_supports_trait(field, trait, lineage, visiting)
+                for field in union.fields
+            )
         visiting.remove(key)
         return result
 

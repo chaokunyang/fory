@@ -24,12 +24,58 @@
 //! - Schema evolution scenarios
 
 use fory_core::fory::Fory;
+use fory_core::serializer::collection::{HAS_NULL, TRACKING_REF};
+use fory_core::{Config, Serializer, TypeResolver, WriteContext};
 use fory_derive::ForyStruct;
 use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 use std::sync::Arc;
 
 const PI_F64: f64 = std::f64::consts::PI;
+
+fn tuple_body<T: Serializer<Target = T>>(value: &T, track_ref: bool) -> Vec<u8> {
+    let config = Config {
+        track_ref,
+        ..Config::default()
+    };
+    let mut context = WriteContext::new(TypeResolver::default(), config);
+    T::write(value, &mut context).unwrap();
+    context.writer.dump()
+}
+
+#[test]
+fn tuple_headers_drive_ref_mode() {
+    let primitive = tuple_body(&(1i32, 2i32), false);
+    assert_eq!(&primitive[..2], &[2, 0]);
+
+    let nullable = tuple_body(&(Some(1i32), None::<i32>), false);
+    assert_eq!(&nullable[..2], &[2, HAS_NULL]);
+
+    let tracked = tuple_body(&(Rc::new(1i32), Rc::new(2i32)), true);
+    assert_eq!(&tracked[..2], &[2, TRACKING_REF]);
+
+    let mixed = tuple_body(&(Some(Rc::new(1i32)), None::<i32>), true);
+    assert_eq!(&mixed[..2], &[2, TRACKING_REF | HAS_NULL]);
+
+    let fory = Fory::builder()
+        .xlang(true)
+        .compatible(false)
+        .track_ref(true)
+        .build();
+    let bin = fory.serialize(&(1i32, 2i32, 3i32)).unwrap();
+    let value: (i32,) = fory.deserialize(&bin).unwrap();
+    assert_eq!(value, (1,));
+
+    let bin = fory
+        .serialize(&(Some(1i32), None::<i32>, Some(3i32)))
+        .unwrap();
+    let value: (Option<i32>, Option<i32>) = fory.deserialize(&bin).unwrap();
+    assert_eq!(value, (Some(1), None));
+
+    let bin = fory.serialize(&(Rc::new(1i32), Rc::new(2i32))).unwrap();
+    let value: (Rc<i32>, Rc<i32>) = fory.deserialize(&bin).unwrap();
+    assert_eq!((*value.0, *value.1), (1, 2));
+}
 
 /// Test 1: Direct tuple size mismatch - bidirectional serialization
 #[test]
@@ -272,7 +318,7 @@ fn test_tuple_arc_size_mismatch() {
     let short = (Arc::new(10i32), Arc::new(20i32));
     let bin = fory.serialize(&short).unwrap();
 
-    // Deserialize to longer tuple - Arc defaults are created via ForyDefault
+    // Deserialize to longer tuple - missing Arc fields use the provider default.
     let long: (Arc<i32>, Arc<i32>, Arc<i32>) = fory.deserialize(&bin).expect("deserialize");
     assert_eq!(*long.0, 10);
     assert_eq!(*long.1, 20);

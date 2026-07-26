@@ -15,313 +15,258 @@
 // specific language governing permissions and limitations
 // under the License.
 
-use crate::context::ReadContext;
-use crate::context::WriteContext;
+use super::codec::{Codec, SerializerCodec, VecCodec};
+use crate::context::{ReadContext, WriteContext};
 use crate::error::Error;
-use crate::resolver::TypeResolver;
-use crate::serializer::primitive_list;
-use crate::serializer::{ForyDefault, Serializer};
+use crate::meta::FieldType;
+use crate::resolver::{RefMode, TypeInfo, TypeResolver};
+use crate::serializer::{Serializer, SerializerOwner};
 use crate::type_id::TypeId;
 use std::collections::{LinkedList, VecDeque};
-use std::mem;
+use std::marker::PhantomData;
+use std::rc::Rc;
 
-use super::collection::{
-    read_collection_data, read_collection_type_info, read_vec_data, write_collection_data,
-    write_collection_type_info,
-};
+type RootVecCodec<S> = VecCodec<
+    <S as Serializer>::Target,
+    SerializerCodec<S, false, false>,
+    false,
+    false,
+    false,
+    false,
+>;
 
-#[inline(always)]
-pub(super) fn get_primitive_type_id<T: Serializer>() -> TypeId {
-    if T::fory_is_wrapper_type() {
-        return TypeId::UNKNOWN;
-    }
-    match T::fory_static_type_id() {
-        TypeId::BOOL => TypeId::BOOL_ARRAY,
-        TypeId::INT8 => TypeId::INT8_ARRAY,
-        TypeId::INT16 => TypeId::INT16_ARRAY,
-        // Handle both INT32 and VARINT32 (i32 uses VARINT32 in xlang mode)
-        TypeId::INT32 | TypeId::VARINT32 => TypeId::INT32_ARRAY,
-        // Handle INT64, VARINT64, and TAGGED_INT64 (i64 uses VARINT64 in xlang mode)
-        TypeId::INT64 | TypeId::VARINT64 | TypeId::TAGGED_INT64 => TypeId::INT64_ARRAY,
-        TypeId::FLOAT16 => TypeId::FLOAT16_ARRAY,
-        TypeId::BFLOAT16 => TypeId::BFLOAT16_ARRAY,
-        TypeId::FLOAT32 => TypeId::FLOAT32_ARRAY,
-        TypeId::FLOAT64 => TypeId::FLOAT64_ARRAY,
-        TypeId::UINT8 => TypeId::BINARY,
-        TypeId::UINT16 => TypeId::UINT16_ARRAY,
-        // Handle both UINT32 and VAR_UINT32 (u32 uses VAR_UINT32 in xlang mode)
-        TypeId::UINT32 | TypeId::VAR_UINT32 => TypeId::UINT32_ARRAY,
-        // Handle UINT64, VAR_UINT64, and TAGGED_UINT64 (u64 uses VAR_UINT64 in xlang mode)
-        TypeId::UINT64 | TypeId::VAR_UINT64 | TypeId::TAGGED_UINT64 => TypeId::UINT64_ARRAY,
-        TypeId::U128 => TypeId::U128_ARRAY,
-        TypeId::INT128 => TypeId::INT128_ARRAY,
-        TypeId::USIZE => TypeId::USIZE_ARRAY,
-        TypeId::ISIZE => TypeId::ISIZE_ARRAY,
-        _ => TypeId::UNKNOWN,
-    }
-}
+type FieldVecCodec<S, const NULLABLE: bool, const TRACK_REF: bool> = VecCodec<
+    <S as Serializer>::Target,
+    SerializerCodec<S, false, false>,
+    false,
+    false,
+    NULLABLE,
+    TRACK_REF,
+>;
 
-#[inline(always)]
-pub(super) fn is_primitive_type<T: Serializer>() -> bool {
-    if T::fory_is_wrapper_type() {
-        return false;
-    }
-    matches!(
-        T::fory_static_type_id(),
-        TypeId::BOOL
-            | TypeId::INT8
-            | TypeId::INT16
-            | TypeId::INT32
-            | TypeId::VARINT32
-            | TypeId::INT64
-            | TypeId::VARINT64
-            | TypeId::TAGGED_INT64
-            | TypeId::INT128
-            | TypeId::FLOAT16
-            | TypeId::BFLOAT16
-            | TypeId::FLOAT32
-            | TypeId::FLOAT64
-            | TypeId::UINT8
-            | TypeId::UINT16
-            | TypeId::UINT32
-            | TypeId::VAR_UINT32
-            | TypeId::UINT64
-            | TypeId::VAR_UINT64
-            | TypeId::TAGGED_UINT64
-            | TypeId::U128,
-    )
-}
+/// Statically serializes `Vec<S::Target>` at roots or recursive carrier nodes.
+///
+/// This zero-sized carrier composes the child serializer `S` and is not
+/// registered independently.
+pub struct VecSerializer<S>(PhantomData<fn() -> S>);
 
-impl<T: Serializer + ForyDefault> Serializer for Vec<T> {
+impl<S: Serializer> Serializer for VecSerializer<S> {
+    type Target = Vec<S::Target>;
+
+    const OWNER: SerializerOwner = SerializerOwner::Fory;
+
     #[inline(always)]
-    fn fory_write_data(&self, context: &mut WriteContext) -> Result<(), Error> {
-        if is_primitive_type::<T>() {
-            primitive_list::fory_write_data(self, context)
-        } else {
-            write_collection_data(self, context, false)
-        }
+    fn write(value: &Self::Target, context: &mut WriteContext) -> Result<(), Error> {
+        <RootVecCodec<S> as Codec<Self::Target>>::write_data(value, context)
     }
 
     #[inline(always)]
-    fn fory_write_data_generic(
-        &self,
+    fn read(context: &mut ReadContext) -> Result<Self::Target, Error> {
+        <RootVecCodec<S> as Codec<Self::Target>>::read_data(context)
+    }
+
+    #[inline(always)]
+    fn default_value(context: &mut ReadContext) -> Result<Self::Target, Error> {
+        <RootVecCodec<S> as Codec<Self::Target>>::default_value(context)
+    }
+
+    #[inline(always)]
+    fn write_value(
+        value: &Self::Target,
+        context: &mut WriteContext,
+        ref_mode: RefMode,
+        write_type_info: bool,
+        has_generics: bool,
+    ) -> Result<(), Error> {
+        <RootVecCodec<S> as Codec<Self::Target>>::write_with_mode(
+            value,
+            context,
+            ref_mode,
+            write_type_info,
+            has_generics,
+        )
+    }
+
+    #[inline(always)]
+    fn write_with_generics(
+        value: &Self::Target,
         context: &mut WriteContext,
         has_generics: bool,
     ) -> Result<(), Error> {
-        if is_primitive_type::<T>() {
-            primitive_list::fory_write_data(self, context)
-        } else {
-            write_collection_data(self, context, has_generics)
-        }
+        <RootVecCodec<S> as Codec<Self::Target>>::write_with_mode(
+            value,
+            context,
+            RefMode::None,
+            false,
+            has_generics,
+        )
     }
 
     #[inline(always)]
-    fn fory_write_type_info(context: &mut WriteContext) -> Result<(), Error> {
-        let id = get_primitive_type_id::<T>();
-        if id != TypeId::UNKNOWN {
-            primitive_list::fory_write_type_info(context, id)
-        } else {
-            write_collection_type_info(context, TypeId::LIST as u32)
-        }
+    fn read_value(
+        context: &mut ReadContext,
+        ref_mode: RefMode,
+        read_type_info: bool,
+    ) -> Result<Self::Target, Error> {
+        <RootVecCodec<S> as Codec<Self::Target>>::read_with_mode(context, ref_mode, read_type_info)
     }
 
     #[inline(always)]
-    fn fory_read_data(context: &mut ReadContext) -> Result<Self, Error> {
-        if is_primitive_type::<T>() {
-            primitive_list::fory_read_data(context)
-        } else {
-            read_vec_data(context)
-        }
+    fn read_with_type_info(
+        context: &mut ReadContext,
+        ref_mode: RefMode,
+        type_info: &Rc<TypeInfo>,
+    ) -> Result<Self::Target, Error> {
+        <RootVecCodec<S> as Codec<Self::Target>>::read_with_type_info(context, ref_mode, type_info)
     }
 
     #[inline(always)]
-    fn fory_read_type_info(context: &mut ReadContext) -> Result<(), Error> {
-        let id = get_primitive_type_id::<T>();
-        if id != TypeId::UNKNOWN {
-            primitive_list::fory_read_type_info(context, id)
-        } else {
-            read_collection_type_info(context, TypeId::LIST as u32)
-        }
+    fn field_type<const NULLABLE: bool, const TRACK_REF: bool>(
+        type_resolver: &TypeResolver,
+    ) -> Result<FieldType, Error> {
+        <FieldVecCodec<S, NULLABLE, TRACK_REF> as Codec<Self::Target>>::field_type(type_resolver)
     }
 
     #[inline(always)]
-    fn fory_reserved_space() -> usize {
-        if is_primitive_type::<T>() {
-            primitive_list::fory_reserved_space::<T>()
-        } else {
-            // size of the vec
-            mem::size_of::<u32>()
-        }
+    fn read_data_with_field_type(
+        context: &mut ReadContext,
+        remote_field_type: &FieldType,
+    ) -> Result<Self::Target, Error> {
+        <RootVecCodec<S> as Codec<Self::Target>>::read_data_with_type(context, remote_field_type)
     }
 
     #[inline(always)]
-    fn fory_get_type_id(_: &TypeResolver) -> Result<TypeId, Error> {
-        let id = get_primitive_type_id::<T>();
-        if id != TypeId::UNKNOWN {
-            Ok(id)
-        } else {
-            Ok(TypeId::LIST)
-        }
+    fn write_type_info(context: &mut WriteContext) -> Result<(), Error> {
+        <RootVecCodec<S> as Codec<Self::Target>>::write_type_info(context)
     }
 
     #[inline(always)]
-    fn fory_type_id_dyn(&self, _: &TypeResolver) -> Result<TypeId, Error> {
-        let id = get_primitive_type_id::<T>();
-        if id != TypeId::UNKNOWN {
-            Ok(id)
-        } else {
-            Ok(TypeId::LIST)
-        }
+    fn read_type_info(context: &mut ReadContext) -> Result<(), Error> {
+        <RootVecCodec<S> as Codec<Self::Target>>::read_type_info(context)
     }
 
     #[inline(always)]
-    fn fory_static_type_id() -> TypeId
-    where
-        Self: Sized,
-    {
-        let id = get_primitive_type_id::<T>();
-        if id != TypeId::UNKNOWN {
-            id
-        } else {
-            TypeId::LIST
-        }
+    fn static_type_id() -> TypeId {
+        <RootVecCodec<S> as Codec<Self::Target>>::static_type_id()
     }
 
     #[inline(always)]
-    fn as_any(&self) -> &dyn std::any::Any {
-        self
+    fn reserved_space() -> usize {
+        <RootVecCodec<S> as Codec<Self::Target>>::reserved_space()
     }
 }
 
-impl<T> ForyDefault for Vec<T> {
-    #[inline(always)]
-    fn fory_default() -> Self {
-        Vec::new()
-    }
-}
+impl<T> Serializer for Vec<T>
+where
+    T: Serializer<Target = T>,
+{
+    type Target = Self;
 
-impl<T: Serializer + ForyDefault> Serializer for VecDeque<T> {
-    #[inline(always)]
-    fn fory_write_data(&self, context: &mut WriteContext) -> Result<(), Error> {
-        write_collection_data(self, context, false)
-    }
+    const OWNER: SerializerOwner = SerializerOwner::Fory;
 
     #[inline(always)]
-    fn fory_write_data_generic(
-        &self,
+    fn write(value: &Self, context: &mut WriteContext) -> Result<(), Error> {
+        <VecSerializer<T> as Serializer>::write(value, context)
+    }
+
+    #[inline(always)]
+    fn read(context: &mut ReadContext) -> Result<Self, Error> {
+        <VecSerializer<T> as Serializer>::read(context)
+    }
+
+    #[inline(always)]
+    fn default_value(context: &mut ReadContext) -> Result<Self, Error> {
+        <VecSerializer<T> as Serializer>::default_value(context)
+    }
+
+    #[inline(always)]
+    fn write_value(
+        value: &Self,
+        context: &mut WriteContext,
+        ref_mode: RefMode,
+        write_type_info: bool,
+        has_generics: bool,
+    ) -> Result<(), Error> {
+        <VecSerializer<T> as Serializer>::write_value(
+            value,
+            context,
+            ref_mode,
+            write_type_info,
+            has_generics,
+        )
+    }
+
+    #[inline(always)]
+    fn write_with_generics(
+        value: &Self,
         context: &mut WriteContext,
         has_generics: bool,
     ) -> Result<(), Error> {
-        write_collection_data(self, context, has_generics)
+        <VecSerializer<T> as Serializer>::write_with_generics(value, context, has_generics)
     }
 
     #[inline(always)]
-    fn fory_write_type_info(context: &mut WriteContext) -> Result<(), Error> {
-        write_collection_type_info(context, TypeId::LIST as u32)
+    fn read_value(
+        context: &mut ReadContext,
+        ref_mode: RefMode,
+        read_type_info: bool,
+    ) -> Result<Self, Error> {
+        <VecSerializer<T> as Serializer>::read_value(context, ref_mode, read_type_info)
     }
 
     #[inline(always)]
-    fn fory_read_data(context: &mut ReadContext) -> Result<Self, Error> {
-        read_collection_data(context)
+    fn read_with_type_info(
+        context: &mut ReadContext,
+        ref_mode: RefMode,
+        type_info: &Rc<TypeInfo>,
+    ) -> Result<Self, Error> {
+        <VecSerializer<T> as Serializer>::read_with_type_info(context, ref_mode, type_info)
     }
 
     #[inline(always)]
-    fn fory_read_type_info(context: &mut ReadContext) -> Result<(), Error> {
-        read_collection_type_info(context, TypeId::LIST as u32)
+    fn field_type<const NULLABLE: bool, const TRACK_REF: bool>(
+        type_resolver: &TypeResolver,
+    ) -> Result<FieldType, Error> {
+        <VecSerializer<T> as Serializer>::field_type::<NULLABLE, TRACK_REF>(type_resolver)
     }
 
     #[inline(always)]
-    fn fory_reserved_space() -> usize {
-        mem::size_of::<u32>()
+    fn read_data_with_field_type(
+        context: &mut ReadContext,
+        remote_field_type: &FieldType,
+    ) -> Result<Self, Error> {
+        <VecSerializer<T> as Serializer>::read_data_with_field_type(context, remote_field_type)
     }
 
     #[inline(always)]
-    fn fory_get_type_id(_: &TypeResolver) -> Result<TypeId, Error> {
-        Ok(TypeId::LIST)
+    fn write_type_info(context: &mut WriteContext) -> Result<(), Error> {
+        <VecSerializer<T> as Serializer>::write_type_info(context)
     }
 
     #[inline(always)]
-    fn fory_type_id_dyn(&self, _: &TypeResolver) -> Result<TypeId, Error> {
-        Ok(TypeId::LIST)
+    fn read_type_info(context: &mut ReadContext) -> Result<(), Error> {
+        <VecSerializer<T> as Serializer>::read_type_info(context)
     }
 
     #[inline(always)]
-    fn fory_static_type_id() -> TypeId {
-        TypeId::LIST
+    fn static_type_id() -> TypeId {
+        <VecSerializer<T> as Serializer>::static_type_id()
     }
 
     #[inline(always)]
-    fn as_any(&self) -> &dyn std::any::Any {
-        self
+    fn reserved_space() -> usize {
+        <VecSerializer<T> as Serializer>::reserved_space()
     }
 }
 
-impl<T> ForyDefault for VecDeque<T> {
-    #[inline(always)]
-    fn fory_default() -> Self {
-        VecDeque::new()
-    }
-}
+impl_collection_carrier_codec!(VecDequeCodec, VecDeque, LIST, zst_no_backing = true);
+impl_collection_carrier_codec!(LinkedListCodec, LinkedList, LIST, zst_no_backing = false);
 
-impl<T: Serializer + ForyDefault> Serializer for LinkedList<T> {
-    #[inline(always)]
-    fn fory_write_data(&self, context: &mut WriteContext) -> Result<(), Error> {
-        write_collection_data(self, context, false)
-    }
+impl_single_carrier_serializer!(VecDequeSerializer, VecDeque, VecDequeCodec, wrapper = false);
 
-    #[inline(always)]
-    fn fory_write_data_generic(
-        &self,
-        context: &mut WriteContext,
-        has_generics: bool,
-    ) -> Result<(), Error> {
-        write_collection_data(self, context, has_generics)
-    }
-
-    #[inline(always)]
-    fn fory_write_type_info(context: &mut WriteContext) -> Result<(), Error> {
-        write_collection_type_info(context, TypeId::LIST as u32)
-    }
-
-    #[inline(always)]
-    fn fory_read_data(context: &mut ReadContext) -> Result<Self, Error> {
-        read_collection_data(context)
-    }
-
-    #[inline(always)]
-    fn fory_read_type_info(context: &mut ReadContext) -> Result<(), Error> {
-        read_collection_type_info(context, TypeId::LIST as u32)
-    }
-
-    #[inline(always)]
-    fn fory_reserved_space() -> usize {
-        mem::size_of::<u32>()
-    }
-
-    #[inline(always)]
-    fn fory_get_type_id(_: &TypeResolver) -> Result<TypeId, Error> {
-        Ok(TypeId::LIST)
-    }
-
-    #[inline(always)]
-    fn fory_type_id_dyn(&self, _: &TypeResolver) -> Result<TypeId, Error> {
-        Ok(TypeId::LIST)
-    }
-
-    #[inline(always)]
-    fn fory_static_type_id() -> TypeId {
-        TypeId::LIST
-    }
-
-    #[inline(always)]
-    fn as_any(&self) -> &dyn std::any::Any {
-        self
-    }
-}
-
-impl<T> ForyDefault for LinkedList<T> {
-    #[inline(always)]
-    fn fory_default() -> Self {
-        LinkedList::new()
-    }
-}
+impl_single_carrier_serializer!(
+    LinkedListSerializer,
+    LinkedList,
+    LinkedListCodec,
+    wrapper = false
+);

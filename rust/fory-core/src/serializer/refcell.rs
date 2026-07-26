@@ -15,47 +15,144 @@
 // specific language governing permissions and limitations
 // under the License.
 
-//! Serialization support for `RefCell<T>`.
-//!
-//! This module implements `Serializer` and `ForyDefault` for `std::cell::RefCell<T>`.
-//! It allows mutable reference containers to be part of serialized graphs, which is often
-//! necessary when modeling object structures with interior mutability (e.g. parent/child links).
-//!
-//! Unlike `Rc` and `Arc`, `RefCell` does not do reference counting, so this wrapper relies
-//! on the serialization of the contained `T` only.
-//!
-//! This is commonly used together with `Rc<RefCell<T>>` in graph structures.
-//!
-//! # Example
-//! ```rust
-//! use std::cell::RefCell;
-//! let cell = RefCell::new(42);
-//! // Can be serialized by the Fory framework
-//! ```
+use super::codec::{codec_read_type_info_static, codec_ref_mode, codec_write_type_info, Codec};
 use crate::context::{ReadContext, WriteContext};
 use crate::error::Error;
-use crate::resolver::RefMode;
-use crate::resolver::{TypeInfo, TypeResolver};
-use crate::serializer::{ForyDefault, Serializer};
+use crate::meta::FieldType;
+use crate::resolver::{RefMode, TypeInfo, TypeResolver};
 use crate::type_id::TypeId;
-use std::cell::RefCell;
+use std::cell::{Ref, RefCell};
+use std::marker::PhantomData;
 use std::rc::Rc;
 
-/// `Serializer` impl for `RefCell<T>`
-///
-/// Simply delegates to the serializer for `T`, allowing interior mutable
-/// containers to be included in serialized graphs.
-impl<T: Serializer + ForyDefault> Serializer for RefCell<T> {
+pub struct RefCellCodec<T, C, const NULLABLE: bool, const TRACK_REF: bool>(PhantomData<(T, C)>);
+
+#[inline(always)]
+fn borrow_for_write<T>(value: &RefCell<T>) -> Result<Ref<'_, T>, Error> {
+    match value.try_borrow() {
+        Ok(value) => Ok(value),
+        Err(_) => Err(refcell_borrow_error()),
+    }
+}
+
+#[cold]
+#[inline(never)]
+fn refcell_borrow_error() -> Error {
+    Error::invalid_data("cannot serialize RefCell while it is mutably borrowed")
+}
+
+impl<T, C, const NULLABLE: bool, const TRACK_REF: bool> Codec<RefCell<T>>
+    for RefCellCodec<T, C, NULLABLE, TRACK_REF>
+where
+    T: 'static,
+    C: Codec<T>,
+{
     #[inline(always)]
-    fn fory_read(
+    fn field_type(type_resolver: &TypeResolver) -> Result<FieldType, Error> {
+        let mut field_type = C::field_type(type_resolver)?;
+        field_type.nullable = NULLABLE;
+        field_type.track_ref = TRACK_REF;
+        Ok(field_type)
+    }
+
+    #[inline(always)]
+    fn reserved_space() -> usize {
+        C::reserved_space()
+    }
+
+    #[inline(always)]
+    fn write_field(value: &RefCell<T>, context: &mut WriteContext) -> Result<(), Error> {
+        let value = borrow_for_write(value)?;
+        C::write_with_mode(
+            &value,
+            context,
+            codec_ref_mode::<T, C, NULLABLE, TRACK_REF>(),
+            codec_write_type_info::<T, C>(context),
+            true,
+        )
+    }
+
+    #[inline(always)]
+    fn read_field(context: &mut ReadContext) -> Result<RefCell<T>, Error> {
+        Ok(RefCell::new(C::read_with_mode(
+            context,
+            codec_ref_mode::<T, C, NULLABLE, TRACK_REF>(),
+            codec_read_type_info_static::<T, C>(context),
+        )?))
+    }
+
+    #[inline(always)]
+    fn write_data(value: &RefCell<T>, context: &mut WriteContext) -> Result<(), Error> {
+        let value = borrow_for_write(value)?;
+        C::write_data(&value, context)
+    }
+
+    #[inline(always)]
+    fn read_data(context: &mut ReadContext) -> Result<RefCell<T>, Error> {
+        Ok(RefCell::new(C::read_data(context)?))
+    }
+
+    #[inline(always)]
+    fn read_data_with_type(
+        context: &mut ReadContext,
+        remote_data_type: &FieldType,
+    ) -> Result<RefCell<T>, Error> {
+        Ok(RefCell::new(C::read_data_with_type(
+            context,
+            remote_data_type,
+        )?))
+    }
+
+    #[inline(always)]
+    fn read_field_with_type(
+        context: &mut ReadContext,
+        remote_field_type: &FieldType,
+    ) -> Result<RefCell<T>, Error> {
+        Ok(RefCell::new(C::read_field_with_type(
+            context,
+            remote_field_type,
+        )?))
+    }
+
+    #[inline(always)]
+    fn write_with_mode(
+        value: &RefCell<T>,
+        context: &mut WriteContext,
+        ref_mode: RefMode,
+        write_type_info: bool,
+        has_generics: bool,
+    ) -> Result<(), Error> {
+        let value = borrow_for_write(value)?;
+        C::write_with_mode(&value, context, ref_mode, write_type_info, has_generics)
+    }
+
+    #[inline(always)]
+    fn write_type_info_value(
+        context: &mut WriteContext,
+        target_type_id: std::any::TypeId,
+    ) -> Result<Rc<TypeInfo>, Error> {
+        C::write_type_info_value(context, target_type_id)
+    }
+
+    #[inline(always)]
+    fn write_with_type_info(
+        value: &RefCell<T>,
+        context: &mut WriteContext,
+        ref_mode: RefMode,
+        type_info: &Rc<TypeInfo>,
+        has_generics: bool,
+    ) -> Result<(), Error> {
+        let value = borrow_for_write(value)?;
+        C::write_with_type_info(&value, context, ref_mode, type_info, has_generics)
+    }
+
+    #[inline(always)]
+    fn read_with_mode(
         context: &mut ReadContext,
         ref_mode: RefMode,
         read_type_info: bool,
-    ) -> Result<Self, Error>
-    where
-        Self: Sized + ForyDefault,
-    {
-        Ok(RefCell::new(T::fory_read(
+    ) -> Result<RefCell<T>, Error> {
+        Ok(RefCell::new(C::read_with_mode(
             context,
             ref_mode,
             read_type_info,
@@ -63,112 +160,86 @@ impl<T: Serializer + ForyDefault> Serializer for RefCell<T> {
     }
 
     #[inline(always)]
-    fn fory_read_with_type_info(
+    fn read_with_type_info(
         context: &mut ReadContext,
         ref_mode: RefMode,
-        type_info: Rc<TypeInfo>,
-    ) -> Result<Self, Error>
-    where
-        Self: Sized + ForyDefault,
-    {
-        Ok(RefCell::new(T::fory_read_with_type_info(
+        type_info: &Rc<TypeInfo>,
+    ) -> Result<RefCell<T>, Error> {
+        Ok(RefCell::new(C::read_with_type_info(
             context, ref_mode, type_info,
         )?))
     }
 
     #[inline(always)]
-    fn fory_read_data(context: &mut ReadContext) -> Result<Self, Error> {
-        Ok(RefCell::new(T::fory_read_data(context)?))
+    fn default_value(context: &mut ReadContext) -> Result<RefCell<T>, Error> {
+        Ok(RefCell::new(C::default_value(context)?))
     }
 
     #[inline(always)]
-    fn fory_read_type_info(context: &mut ReadContext) -> Result<(), Error> {
-        T::fory_read_type_info(context)
+    fn write_type_info(context: &mut WriteContext) -> Result<(), Error> {
+        C::write_type_info(context)
     }
 
     #[inline(always)]
-    fn fory_write(
-        &self,
-        context: &mut WriteContext,
-        ref_mode: RefMode,
-        write_type_info: bool,
-        has_generics: bool,
-    ) -> Result<(), Error> {
-        // Don't add ref tracking for RefCell itself, just delegate to inner type
-        // The inner type will handle its own ref tracking
-        T::fory_write(
-            &*self.borrow(),
-            context,
-            ref_mode,
-            write_type_info,
-            has_generics,
-        )
+    fn read_type_info(context: &mut ReadContext) -> Result<(), Error> {
+        C::read_type_info(context)
     }
 
     #[inline(always)]
-    fn fory_write_data_generic(
-        &self,
-        context: &mut WriteContext,
-        has_generics: bool,
-    ) -> Result<(), Error> {
-        T::fory_write_data_generic(&*self.borrow(), context, has_generics)
+    fn read_type_info_value(
+        context: &mut ReadContext,
+    ) -> Result<super::codec::CodecReadType, Error> {
+        C::read_type_info_value(context)
     }
 
     #[inline(always)]
-    fn fory_write_data(&self, context: &mut WriteContext) -> Result<(), Error> {
-        T::fory_write_data(&*self.borrow(), context)
+    fn static_type_id() -> TypeId {
+        C::static_type_id()
     }
 
     #[inline(always)]
-    fn fory_write_type_info(context: &mut WriteContext) -> Result<(), Error> {
-        T::fory_write_type_info(context)
+    fn is_option() -> bool {
+        C::is_option()
     }
 
     #[inline(always)]
-    fn fory_reserved_space() -> usize {
-        // RefCell is transparent, delegate to inner type
-        T::fory_reserved_space()
+    fn is_none(value: &RefCell<T>) -> bool {
+        if !C::is_option() {
+            return false;
+        }
+        // Codec inspection hooks cannot return borrow errors. Use conservative
+        // metadata here; the fallible write path reports the borrow conflict.
+        match value.try_borrow() {
+            Ok(value) => C::is_none(&value),
+            Err(_) => false,
+        }
     }
 
     #[inline(always)]
-    fn fory_get_type_id(type_resolver: &TypeResolver) -> Result<TypeId, Error> {
-        T::fory_get_type_id(type_resolver)
+    fn is_polymorphic() -> bool {
+        C::is_polymorphic()
     }
 
     #[inline(always)]
-    fn fory_get_type_info(type_resolver: &TypeResolver) -> Result<Rc<TypeInfo>, Error> {
-        T::fory_get_type_info(type_resolver)
+    fn is_shared_ref() -> bool {
+        C::is_shared_ref()
     }
 
     #[inline(always)]
-    fn fory_type_id_dyn(&self, type_resolver: &TypeResolver) -> Result<TypeId, Error> {
-        (*self.borrow()).fory_type_id_dyn(type_resolver)
-    }
-
-    #[inline(always)]
-    fn fory_static_type_id() -> TypeId
-    where
-        Self: Sized,
-    {
-        T::fory_static_type_id()
-    }
-
-    #[inline(always)]
-    fn fory_is_wrapper_type() -> bool
-    where
-        Self: Sized,
-    {
+    fn is_wrapper_type() -> bool {
         true
     }
 
     #[inline(always)]
-    fn as_any(&self) -> &dyn std::any::Any {
-        self
+    fn dynamic_type_id(value: &RefCell<T>) -> Result<Option<std::any::TypeId>, Error> {
+        let value = borrow_for_write(value)?;
+        C::dynamic_type_id(&value)
+    }
+
+    #[inline(always)]
+    fn dynamic_type_is_direct() -> bool {
+        false
     }
 }
 
-impl<T: ForyDefault> ForyDefault for RefCell<T> {
-    fn fory_default() -> Self {
-        RefCell::new(T::fory_default())
-    }
-}
+impl_single_carrier_serializer!(RefCellSerializer, RefCell, RefCellCodec, wrapper = true);

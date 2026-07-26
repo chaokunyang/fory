@@ -18,6 +18,8 @@
 pub mod data;
 pub mod serializers;
 
+mod external_types;
+
 pub mod generated {
     include!(concat!(env!("OUT_DIR"), "/protobuf.rs"));
 }
@@ -75,6 +77,7 @@ pub fn run_serialization_benchmarks(c: &mut Criterion) {
         &protobuf_serializer,
         &msgpack_serializer,
     );
+    external_types::run_external_type_benchmarks(c);
 }
 
 fn run_benchmark_case<T>(
@@ -100,7 +103,7 @@ fn run_benchmark_case<T>(
 
     let fory_bytes = fory_serializer.serialize(&data).unwrap();
     if mismatch {
-        let value: T::Read = fory_serializer.deserialize_as(&fory_bytes).unwrap();
+        let value: T::Read = fory_serializer.deserialize_value(&fory_bytes).unwrap();
         T::verify_mismatch(&value, &data);
     }
     group.bench_function("fory_deserialize", |b| {
@@ -108,7 +111,7 @@ fn run_benchmark_case<T>(
             if mismatch {
                 let value: T::Read = black_box(
                     fory_serializer
-                        .deserialize_as(black_box(&fory_bytes))
+                        .deserialize_value(black_box(&fory_bytes))
                         .unwrap(),
                 );
                 black_box(value);

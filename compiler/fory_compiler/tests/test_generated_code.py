@@ -1658,7 +1658,7 @@ def test_rust_generated_code_uses_absolute_paths():
     assert "#[fory(unknown)]" in rust_output
     assert "Unknown(::fory::UnknownCase)," in rust_output
     assert "#[fory(id = 1, default)]" in rust_output
-    assert "impl ::std::default::Default for Fory" in rust_output
+    assert "impl ::std::default::Default for Fory" not in rust_output
     assert "pub value: ::std::string::String," in rust_output
     assert "pub items: ::std::vec::Vec<::std::string::String>," in rust_output
     assert (
@@ -1693,10 +1693,55 @@ def test_rust_union_conflicting_payload_uses_self_path():
 
     rust_output = render_files(generate_files(schema, RustGenerator))
     assert "Dog(self::Dog)," in rust_output
-    assert (
-        "Self::Dog(<self::Dog as ::fory::ForyDefault>::fory_default())" in rust_output
-    )
+    assert "Self::Dog(<self::Dog as ::std::default::Default>::default())" in rust_output
     assert "Dog(Dog)," not in rust_output
+
+
+def test_rust_union_any_has_no_default():
+    schema = parse_fdl(
+        dedent(
+            """
+            package foo;
+
+            union DynamicValue {
+                any value = 1;
+            }
+
+            message Envelope {
+                DynamicValue value = 1;
+            }
+            """
+        )
+    )
+
+    rust_output = render_files(generate_files(schema, RustGenerator))
+    assert "impl ::std::default::Default for DynamicValue" not in rust_output
+    envelope_derive = rust_output.split("pub struct Envelope", maxsplit=1)[
+        0
+    ].splitlines()[-1]
+    assert "Default" not in envelope_derive
+
+
+def test_rust_union_uses_first_default():
+    schema = parse_fdl(
+        dedent(
+            """
+            package foo;
+
+            union Mixed {
+                string text = 1;
+                any dynamic = 2;
+            }
+            """
+        )
+    )
+
+    rust_output = render_files(generate_files(schema, RustGenerator))
+    assert "impl ::std::default::Default for Mixed" in rust_output
+    assert (
+        "Self::Text(<::std::string::String as ::std::default::Default>::default())"
+        in rust_output
+    )
 
 
 def test_rust_escapes_keywords():

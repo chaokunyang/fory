@@ -15,6 +15,226 @@ Load this file when changing `rust/` or Rust xlang behavior.
 - Runtime carriers belong in `types/`, and schema or type-hash helpers belong with metadata hashing rather than generic wire/type-id modules.
 - Rust derive-generated runtime paths are owned by the selected runtime crate: normal downstream crates depend on `fory`, and `fory-derive` must resolve that facade with `proc-macro-crate` and emit through `fory::__private`; direct lower-level crates may resolve `fory-core`. Do not add raw crate-path string attributes such as `#[fory(crate = "...")]`.
 - `fory-core` `macro_rules!` exports, including `register_trait_type!` and helpers, must use `$crate` for runtime paths so facade re-exports stay hygienic.
+- `register_trait_type!` owns the visibility of its generated named serializers. With no
+  visibility token they are private to the invocation module; explicit `$vis:vis` forms such as
+  `register_trait_type!(pub Animal, ...)` and `register_trait_type!(pub sync Animal, ...)` export
+  them. Thread that visibility through the existing generated serializer and codec items. Do not
+  emit unconditional `pub` or `pub(crate)` items, add a second macro, or introduce a runtime
+  registration path to solve private-trait visibility.
+- Use "external-type serialization" for this feature, "external structural serializer" for a
+  schema-derived serializer targeting another crate's type, "manual serializer" for customized
+  behavior, and "carrier serializer" for Fory's recursive generic serializers. "Serializer
+  provider" is acceptable only for the internal type-level role. Do not add a separate public marker,
+  derive, attribute, registration concept, example suffix, heading, test concept, alternate feature
+  name, or replacement abstraction for the same ownership role.
+- Rust external-type serialization uses one serializer-provider model: the serializer provider owns
+  static behavior and structural schema; `Serializer::Target` owns runtime identity, values, storage
+  size, downcasts, and dynamic registration. Serializer providers and external structural
+  serializers are never materialized. Changes to this surface must remain atomic rather than adding
+  a partial or parallel path.
+- Keep external selection node-local and explicit for static values: `with` selects a serializer at a
+  direct struct or enum-variant field node, recursive list elements, map key/value nodes, or sparse
+  zero-based heterogeneous tuple positions, while serializer-selected roots use the dedicated
+  `serialize_with`, `serialize_to_with`, `deserialize_with`, and `deserialize_from_with` APIs. A
+  root composition such as `Vec<third_party::User>` must use the Fory-owned
+  `VecSerializer<UserSerializer>` carrier serializer; never infer a child serializer from the
+  target type or registration. Provide semantic, recursively composable, zero-sized carrier
+  serializer families for
+  Option, Box/Rc/Arc/weak, RefCell, Mutex, Vec, VecDeque, LinkedList, HashSet, BTreeSet, BinaryHeap,
+  fixed arrays, HashMap, BTreeMap, and tuple arities 1 through 22. Each serializer's target is its
+  carrier over its child serializer targets. Do not add a user-declared structural root-container
+  serializer, derive, or unit declaration.
+- The audited static tuple family is `Tuple1Serializer<S0>` through
+  `Tuple22Serializer<S0, ..., S21>`. Generate those carrier serializers and their matching
+  arity-specific codecs from the tuple owner; do not add `Tuple0Serializer`, a tuple-serializer
+  trait, serializer list,
+  or runtime tuple descriptor. Unit `()` and `PhantomData<T>` have no serialized child and need no
+  serializer composition. `Cell<T>` is not currently serialized; derive's Send/Sync name recognition
+  is not codec support, so do not add `CellSerializer` or treat `Cell` as `RefCell`. Only Fory's
+  `RcWeak`/`ArcWeak`, not standard-library weak pointers, are supported.
+- Ordinary carrier serializers, Fory-owned carrier serializers, and recursive field annotations
+  must lower to the same carrier codecs. Carrier serializers inline-forward the complete required
+  hook surface and never copy a carrier loop or compatible-read algorithm. Where the current
+  carrier algorithm exists only in `Serializer`, move or parameterize it once into the matching
+  child-codec-driven carrier codec and replace the old body with forwarding. Delete
+  `CollectionSerializerCodec`, `MapSerializerCodec`, and their derive fallbacks after real
+  carrier-specific codecs replace them; they use child codecs only for metadata and cannot handle
+  an external child target. An ordinary serializer, external structural serializer, manual
+  serializer, or nested carrier serializer enters that same codec through `SerializerCodec<S>`.
+  Nested carrier serializers use only the hidden recursive `field_type` and
+  `read_data_with_field_type` serializer
+  bridge into the child carrier codec; do not expose `Codec` or add a parallel field/container
+  implementation.
+- Preserve one canonical primitive Vec/fixed-array selection for type ID, body, reserved space,
+  derive metadata, and compatible reads. Use the doc-hidden
+  `Serializer::PRIMITIVE_ARRAY_TYPE_ID` associated constant as that one declared source: canonical
+  primitive serializers set it, while application and wrapping serializers inherit `None`.
+  `SerializerCodec<S>` may expose it to the unified Vec/array codec only after proving exact
+  self-provider and canonical scalar target identity. Revalidate the concrete target kind before
+  every unsafe bulk copy so an invalid internal declaration returns an error rather than copying an
+  arbitrary Rust type. Canonical primitive children retain dense-array/BINARY encodings, including
+  `u8` BINARY and the existing `isize`/`usize` array kinds; application serializers use LIST even
+  when their target is primitive. Rust 1.70 cannot select a codec type from an associated const, so
+  one unified `VecCodec` and one unified `ArrayCodec` own both primitive and object bodies. The Vec
+  codec has two compile-time schema consts. `STRUCTURAL_LIST` preserves unannotated and explicit
+  `list(...)` generated Vec fields as LIST, including canonical primitive children; ordinary roots,
+  `VecSerializer<S>`, `bytes`, and `array` disable it so they can consume the validated canonical
+  child kind. `DENSE_ARRAY` represents only existing explicit `#[fory(array)]` syntax and maps
+  validated canonical `u8` BINARY to `UINT8_ARRAY`; roots, carrier serializers, LIST fields, and
+  `bytes` pass false. Thus unannotated `Vec<i32>` remains `LIST<VARINT32>`, an explicit fixed
+  element remains `LIST<INT32>`, ordinary/serializer-selected primitive roots remain dense/BINARY,
+  and `bytes` remains BINARY. These consts select existing schemas inside one codec; they are not
+  provider classifications or runtime branches. Derive may validate the explicit primitive
+  category, but it must not map Rust types to wire IDs or maintain an ordinary-composition
+  classifier. Remove current runtime/AST classifier disagreements instead of copying them. Inline
+  safety validation must fold after monomorphization: optimized hot paths may not retain an owner
+  branch, dynamic lookup, or Rust `TypeId` comparison.
+- `tuple(element(index = ..., ...))` is sparse and zero-based; unmentioned positions use ordinary
+  serializers. Reject duplicate/out-of-range indexes and `index` outside tuple metadata. The
+  same arity-specific codec owns ordinary tuples, annotated fields, and `TupleNSerializer` roots.
+  Preserve native non-compatible direct position bodies, compatible/xlang heterogeneous LIST
+  bodies, the existing UNKNOWN-generic tuple `FieldType`, missing-position defaults, extra-position
+  skipping, and wrapper-shape answers. No serializer type or tuple index appears on the wire.
+- Keep shared LIST/SET loops in `serializer/collection.rs`, MAP chunk behavior in
+  `serializer/map.rs`, and arity-generated heterogeneous tuple behavior in
+  `serializer/tuple.rs`, all parameterized by concrete child codecs without provider objects,
+  callbacks, function pointers, or erased builders. Carrier codecs own concrete allocation and
+  insertion. `BTreeMap` requires `Ord` on the target key; remove its current unnecessary `Hash`
+  bound rather than exposing that implementation accident through the serializer API.
+- Fory-owned carrier serializers are not registered and have no resolver entry, dynamic harness, or
+  wire identity. Use the doc-hidden application/Fory serializer owner only for compile-time field
+  validation and cold registration rejection, including transparent compositions over an EXT
+  leaf; never branch on it in serialization hot paths. Field `with` remains an
+  application-serializer leaf selection and rejects a Fory-owned carrier serializer, while the
+  recursive list/map/tuple grammar selects children. Require a selected user serializer's
+  registration only when the existing codec accesses its registered identity or
+  registration-backed metadata. `Serializer::write/read` are body-only and must not perform a
+  reached-body registration check. Do not eagerly walk a root serializer tree: absent Options, empty
+  collections/maps, empty weak values, zero-length arrays, and equivalent recursive no-child
+  branches may complete without leaf registration when they make no identity/metadata access. A
+  declared-type body path calls the selected serializer directly; its containing schema, when
+  present and declaring that child, owns the one prior registration/mismatch check. The existing
+  UNKNOWN-generic tuple `FieldType` does not declare positions, so its ordinary per-position type
+  metadata owns any required child registration access. Do not add a third recursive hook,
+  preflight lookup, reached-body/per-element check, or a second tuple-position selector.
+- Preserve the workspace Rust 1.70 minimum when emitting compile-time serializer-owner validation.
+  Expression-position inline const blocks require Rust 1.79; use the doc-hidden unit-valued
+  `Serializer::FIELD_SERIALIZER_CHECK` associated constant and reference it from generated code so
+  monomorphization performs the check without a runtime branch.
+- Do not add a runtime provider tree, public codec, provider object, container-specific root
+  method, per-element lookup, or `*_as` alias. `Option`, Box/Rc/Arc/weak references, `RefCell`, and
+  `Mutex` remain transparent around the selected child serializer and must not add an allocation.
+  Direct/static and access-constrained polymorphic LIST/SET body writes use one borrow, lock, or
+  weak upgrade. A non-polymorphic nullable holder preserves the existing LIST/SET null-header scan
+  and then uses one body access without inspecting null again. MAP metadata and null flags precede
+  both bodies, so a nullable or access-constrained polymorphic MAP holder performs one short
+  null/target inspection and later its normal body access; never retain a borrow/guard across the
+  other side, stage body bytes, allocate a prepared value, invoke a callback, or change MAP wire
+  order. A
+  node-local manual serializer may target one exact whole container or tuple as opaque EXT;
+  recursive list/map/tuple annotations or Fory-owned carrier serializer roots instead preserve the
+  structural carrier and select child serializers. Never combine both meanings at one node.
+  Registration must not silently replace static selection.
+- Static serializer paths must stay monomorphized and allocation-free. Dynamic dispatch looks up the
+  concrete target TypeId. When a registered provider has both provider and target resolver
+  indexes, they must point to that provider's one immutable `TypeInfo` and harness, not parallel
+  metadata or serializer paths.
+- Name provider-identity and target-identity lookups explicitly. Static schema paths use
+  `write_provider_type_info`/`get_provider_type_info`; dynamic `Any` and application-trait paths use
+  `write_target_type_info`/`get_target_type_info`. Remove ambiguous single-map lookup APIs instead
+  of probing one map and falling back to the other.
+- Preserve the existing homogeneous LIST/SET and MAP metadata owner for dynamic children. Its
+  doc-hidden codec/serializer handoff resolves and validates the concrete target once, retains the
+  returned `Rc<TypeInfo>` for that wire chunk, and borrows it for each body. Do not resolve again
+  per element/entry, clone the `Rc` per body, move membership/category validation into the carrier,
+  or add a callback, cache, provider instance, or runtime schema object. This dynamic handoff is
+  independent of the two recursive field-shape hooks and is not another field-selection path.
+  Dynamic target inspection is fallible and returns an optional concrete TypeId, where absence
+  means a null/expired value rather than a sentinel type. LIST/SET must skip target/null
+  pre-inspection for an access-constrained polymorphic child and use its existing per-value
+  metadata path. Its non-polymorphic nullable holder path must preserve the existing null-header
+  scan and avoid a second null inspection in the body loop. MAP must inspect a nullable or
+  access-constrained polymorphic holder once before its fixed-order metadata and access the body
+  later.
+- Provider registration conflicts use exact target-index identity and must be order-independent.
+  Seed/reserve canonical Fory-owned dynamic targets before user registration and apply the same
+  check to later insertions. Do not classify generic target families through `type_name` or add a
+  target-kind marker hierarchy; an otherwise unowned exact container/tuple target may use one
+  manual EXT serializer.
+- External structural serializers must access and construct their target directly. Do not create a temporary
+  external structural serializer, mirror value, conversion hook, private-field workaround, or unsafe access path.
+- Because external structural serializer declarations are compile-time schemas rather than runtime
+  values, generated target-owned code must keep their declared fields and variants valid under
+  `deny(dead_code)` with one private, allowed, type-check-only schema-use item. It may reference
+  constructors only inside uncalled closures, must never be invoked, and must not add a runtime
+  mirror, conversion, provider value, branch, or allocation.
+- An external structural enum serializer declaration owns its schema; derive cannot inspect or validate an external enum's
+  source declaration order. Explicit IDs and declaration-order fallback own xlang ENUM/UNION tags.
+  Native data enums retain the existing local `ForyUnion` ordinal/tag behavior; do not assign
+  explicit IDs a new native meaning or change existing native bytes.
+- The complete external-type implementation includes external structural serializers for native
+  Rust struct-style enums under
+  `xlang = false`: `ForyUnion` must support mixed unit, multi-field tuple, and multi-field named
+  variants in both compatibility modes, with recursive serializers on variant payload fields and
+  with the same native bytes as an equivalent local derive. Do not add another derive macro. A
+  multi-field variant has no xlang ENUM/UNION representation; reject its serializer on the cold,
+  fallible actual-type-ID registration path before publishing resolver state when `xlang = true`.
+  Never discard fields, synthesize hidden variant structs, or fall back to EXT.
+- Keep registration-family selection on the existing static category: STRUCT and ENUM use normal
+  structural registration, UNION uses union registration, and each family rejects the other
+  categories before publication. A native-only multi-field `ForyUnion` reports ENUM and uses normal
+  registration; an xlang-compatible `ForyUnion` reports UNION. Do not add a capability registry or
+  schema-kind hierarchy for this distinction.
+- A lossless external xlang-union target must represent the same runtime unknown carrier returned
+  by `ForyUnion`; the external structural serializer cannot invent a serializer-only target
+  variant. Use a dependency-free
+  generic external target such as `Value<U>` instantiated with `fory::UnknownCase` in tests and
+  examples.
+- Rust application trait objects use the object-safe `ForyObject` downcast surface, not
+  `Serializer`. Do not restore `Box<dyn Serializer>`, generated Rc/Arc value wrappers,
+  clone-on-write wrapper codecs, or first-concrete-type defaults. Dynamic Box/Rc/Arc reads must
+  allocate the requested final owner exactly once. Wire-resolved membership checks use a
+  zero-allocation optional target-TypeId accessor on the shared provider harness before
+  materialization; remote-compatible metadata must preserve that same local harness, while a
+  remote-only stub returns no target identity and enters a cold missing-registration error.
+  `Any` and application traits work in native and xlang modes only through mode-eligible concrete
+  serializers; their Rust carrier/trait identity never appears on the wire.
+- Manual serializers used through sync Arc dynamic carriers must implement the direct final-Arc
+  materializer hook. Do not allocate a Box first, and do not make non-Send/Sync serializers pretend
+  Arc materialization is supported.
+- `Rc`, `Arc`, `RcWeak`, and `ArcWeak` own only their reference envelope. After consuming it, a
+  compatible metadata-bearing structural child must still consume its inline `TypeInfo`, while a
+  declared recursive carrier child must receive the remote `FieldType` directly. Do not discard
+  either metadata form, read a second reference envelope, or add a lookup.
+- Manual serializers own allocation and proportional readable-byte/graph-memory checks inside their
+  opaque body. Serializer codecs own the outer envelope and only the carriers they materialize;
+  dynamic Box/Rc harnesses reserve before serializer reading and allocate the outer owner once
+  afterward. Dynamic Arc harnesses reserve first, then the serializer/structural Arc hook performs
+  the single Arc allocation. Neither path may duplicate body/backing allocation.
+- Fallible serializer/codec defaults are the only Fory default owner. Do not retain or reintroduce
+  `ForyDefault` bounds through scalar conversion, skips, carriers, collections, compatible reads,
+  registration, or root APIs. Every default receives the active `ReadContext` so its allocation
+  owner can reserve graph memory. Generated serializer defaults must not delegate to standard
+  `Default`; construct through selected codecs and context. `skip + with` selects the serializer
+  codec only for construction default and needs no registration when it emits no metadata/body. Do
+  not mark the default method itself universally cold: skipped-field construction is a normal read
+  path. Isolate unsupported default errors and genuinely cold null/missing/mismatch entrances
+  instead.
+- Retain the static wrapper-shape hook used by existing list/tuple metadata generation. It must
+  continue to default to the shared-reference hook; all existing shared-reference providers,
+  Option, Box, RefCell, Mutex, and existing tuple wrappers must keep their current answers. Do not
+  replace it with reflection, `type_name` classification, or a second provider-specific wrapper
+  system.
+- Mark cold failure and slow-path entrances reachable from Rust serialization hot paths with both
+  `#[cold]` and `#[inline(never)]`. Keep successful dynamic dispatch and normal non-null/matched
+  paths hot. A generated structural compatible read is the normal path whenever compatible mode is
+  enabled, so keep it out of cold sections even when it remains non-inlined.
+- Benchmark unchanged ordinary Rust cases against fresh `apache/main` in adjacent baseline/current
+  pairs and require less than 1% retained-median slowdown. New external structural, manual, carrier
+  serializer, and application-trait APIs do not compile on `apache/main`; compare them branch-locally
+  with equivalent ordinary paths under identical schema/wire work and require less than 1% slowdown
+  and no extra allocation. Do not backport or shim new APIs into the baseline worktree, and label
+  equivalent-path comparisons separately from same-case cross-version comparisons.
 - If breakage is explicitly acceptable during a Rust module refactor, rewire macros, tests, and sibling crates directly to the new boundaries instead of adding compatibility re-exports.
 - For panic-safety in hot paths, preserve TLS context reuse. Add scoped guards or owned fallbacks rather than per-call context allocation, and reset reused contexts at entry and successful exit.
 - Compatible scalar, list-array, and binary/uint8-array adaptations are immediate-field-only. Keep recursive matched-field shape classification owned by `fory-core/src/meta/type_meta.rs`; collection elements, array elements, map keys, and map values must require exact nullability, ref tracking, generic arity, and type shape except documented user-type family normalization.
@@ -39,10 +259,23 @@ Load this file when changing `rust/` or Rust xlang behavior.
   Root deserialization does not reserve root object memory.
   Dedicated primitive dense ARRAY `Vec<T>` readers, strings, binary, primitive scalars, and
   primitive fixed-array owners stay skipped and keep their byte checks.
-- Direct `Serializer` collection/map paths and derive `Codec` collection/map paths are separate
-  allocation owners. Keep reservations in both before `Vec::with_capacity`,
-  `HashMap::with_capacity`, or collection materialization. Empty non-leaf owners that allocate an
-  independent owner object or storage reserve nonzero shallow self cost.
+- Ordinary, external, manual, carrier-root, and derive field paths converge on the carrier codec.
+  Keep exactly one reservation before `Vec::with_capacity`, `HashMap::with_capacity`, or collection
+  materialization at that concrete owner. Do not restore a direct serializer collection/map route
+  or duplicate reservation. Empty non-leaf owners that allocate an independent owner object or
+  storage reserve nonzero shallow self cost.
+- Count-derived collection and map owners must prove at least the declared element or entry count
+  in readable post-count bytes exactly once before reservation or allocation. Their writers must
+  symmetrically reject any value whose complete post-count header, metadata, framing, and body are
+  shorter than that count, including non-zero-sized targets with compact or empty manual bodies.
+  Use one aggregate writer check per variable carrier, never a per-element branch, and do not
+  repeat the reader gate after metadata.
+- Fixed arrays do not allocate from their validated wire count and bypass the proportional gate.
+  Zero-sized children also bypass it for `Vec`, `VecDeque`, and `BinaryHeap`, whose representation
+  has no count-derived backing for those elements. `LinkedList`, `HashSet`, `BTreeSet`, `HashMap`,
+  and `BTreeMap` retain the gate for node, bucket, entry, or duplicate-processing work. Compile the
+  check out for fixed arrays and eligible zero-sized carriers. Do not add guessed node charges,
+  padding bytes, a global compact-body bypass, or another collection or map codec.
 
 ## Key Paths
 

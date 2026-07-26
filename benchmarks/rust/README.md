@@ -2,6 +2,12 @@
 
 This benchmark compares Rust serialization and deserialization throughput for Apache Fory and Protocol Buffers using the shared benchmark dataset defined in `benchmarks/proto/bench.proto`.
 
+## Prerequisites
+
+The benchmark build generates Rust code from the shared schema and requires a
+`protoc` executable on `PATH`, or the `PROTOC` environment variable set to an
+existing executable.
+
 ## Quick Start
 
 Run the complete Rust benchmark pipeline:
@@ -58,6 +64,41 @@ where one int32 field is widened to int64.
 | `SampleList`        | List of shared `Sample` payloads                                       |
 | `MediaContentList`  | List of shared `MediaContent` payloads                                 |
 
+The same Criterion target also contains branch-local Rust external-type
+serialization comparisons. Each comparison has `self_serialize`,
+`selected_serialize`, `self_deserialize`, and `selected_deserialize` lanes.
+The self lane uses an equivalent self-provided Rust target. The selected lane
+uses the external structural serializer, manual serializer, carrier serializer,
+or registered external target named by the case. Setup verifies byte equality
+before measuring the pair.
+
+The matrix covers:
+
+- direct roots, direct fields, skipped fields, and recursive list/map/tuple
+  field selection;
+- external structural serializers, manual leaf serializers, and exact
+  whole-container manual serializers;
+- Option, Box, Rc, Arc, Fory weak references, RefCell, Mutex, lists, sets,
+  heaps, fixed arrays, maps, and tuples;
+- map key-only, value-only, key-and-value, and nested carrier selection;
+- tuple arities 1 and 22 plus representative nested tuple composition;
+- `Vec<i32>`, `Vec<u8>`, and nested primitive Vec composition;
+- native struct-style enums in compatible and non-compatible modes;
+- Box, Rc, and Arc `dyn Any` plus arbitrary registered application traits.
+
+Run one comparison case by its Criterion group name:
+
+```bash
+cargo bench --bench serialization_bench -- carrier_map_nested
+cargo bench --bench serialization_bench -- external_command_compatible
+cargo bench --bench serialization_bench -- dynamic_trait_arc
+```
+
+For regression gates, run baseline and current cases sequentially. Existing
+ordinary cases compare directly with `apache/main`. APIs added for
+external-type serialization compare branch-locally with their equivalent self
+lane; do not add compatibility shims to the baseline checkout.
+
 ## Shared Proto Schema
 
 The Rust benchmark uses the shared protobuf definition at `benchmarks/proto/bench.proto`, the same benchmark schema used by the C++ benchmark suite.
@@ -86,6 +127,10 @@ cargo bench --bench serialization_bench 2>&1 | tee results/cargo_bench.log
 cargo run --release --bin fory_profiler -- --print-all-serialized-sizes | tee results/serialized_sizes.txt
 python benchmark_report.py --log-file results/cargo_bench.log --size-file results/serialized_sizes.txt --output-dir results
 ```
+
+When external-type comparison cases are present in the Criterion log, the
+report adds a table with self-provided and selected timings and their
+percentage delta. The existing cross-library plot and tables remain unchanged.
 
 ## Report Output
 

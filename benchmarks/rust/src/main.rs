@@ -146,18 +146,18 @@ where
         }
         Operation::Deserialize => {
             let bytes = serializer.serialize(value).unwrap();
-            let decoded: T::Read = serializer.deserialize_as(&bytes).unwrap();
+            let decoded: T::Read = serializer.deserialize_value(&bytes).unwrap();
             T::verify_mismatch(&decoded, value);
 
             for _ in 0..1000 {
                 let value: T::Read =
-                    black_box(serializer.deserialize_as(black_box(&bytes)).unwrap());
+                    black_box(serializer.deserialize_value(black_box(&bytes)).unwrap());
                 black_box(value);
             }
 
             for _ in 0..iterations {
                 let value: T::Read =
-                    black_box(serializer.deserialize_as(black_box(&bytes)).unwrap());
+                    black_box(serializer.deserialize_value(black_box(&bytes)).unwrap());
                 black_box(value);
             }
         }

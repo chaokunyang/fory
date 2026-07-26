@@ -48,6 +48,7 @@ harness = false
 fory = { path = "../../rust/fory" }
 fory-core = { path = "../../rust/fory-core" }
 fory-derive = { path = "../../rust/fory-derive" }
+fory-external-model = { path = "../../rust/api-tests/external-model" }
 prost = "0.12"
 criterion = "0.5"
 clap = { version = "4.0", features = ["derive"] }

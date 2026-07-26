@@ -15,115 +15,251 @@
 // specific language governing permissions and limitations
 // under the License.
 
-use crate::context::ReadContext;
-use crate::context::WriteContext;
-use crate::ensure;
+use crate::context::{ReadContext, WriteContext};
 use crate::error::Error;
-use crate::serializer::Serializer;
+use crate::serializer::codec::Codec;
 use crate::type_id::TypeId;
+use std::mem::MaybeUninit;
 
-pub fn fory_write_data<T: Serializer>(this: &[T], context: &mut WriteContext) -> Result<(), Error> {
-    // U128, USIZE, ISIZE, INT128 are Rust-specific and not supported in xlang mode
-    if context.is_xlang() {
-        match T::fory_static_type_id() {
-            TypeId::U128 => {
-                return Err(Error::not_allowed(
-                    "u128 is not supported in cross-language mode",
-                ));
-            }
-            TypeId::INT128 => {
-                return Err(Error::not_allowed(
-                    "i128 is not supported in cross-language mode",
-                ));
-            }
-            TypeId::USIZE => {
-                return Err(Error::not_allowed(
-                    "usize is not supported in cross-language mode",
-                ));
-            }
-            TypeId::ISIZE => {
-                return Err(Error::not_allowed(
-                    "isize is not supported in cross-language mode",
-                ));
-            }
-            _ => {}
+#[inline(always)]
+pub(super) fn canonical_target<T: 'static>(array_type_id: TypeId) -> bool {
+    let target = std::any::TypeId::of::<T>();
+    match array_type_id {
+        TypeId::BOOL_ARRAY => target == std::any::TypeId::of::<bool>(),
+        TypeId::INT8_ARRAY => target == std::any::TypeId::of::<i8>(),
+        TypeId::INT16_ARRAY => target == std::any::TypeId::of::<i16>(),
+        TypeId::INT32_ARRAY => target == std::any::TypeId::of::<i32>(),
+        TypeId::INT64_ARRAY => target == std::any::TypeId::of::<i64>(),
+        TypeId::FLOAT16_ARRAY => target == std::any::TypeId::of::<crate::types::float16::float16>(),
+        TypeId::BFLOAT16_ARRAY => {
+            target == std::any::TypeId::of::<crate::types::bfloat16::bfloat16>()
         }
+        TypeId::FLOAT32_ARRAY => target == std::any::TypeId::of::<f32>(),
+        TypeId::FLOAT64_ARRAY => target == std::any::TypeId::of::<f64>(),
+        TypeId::BINARY | TypeId::UINT8_ARRAY => target == std::any::TypeId::of::<u8>(),
+        TypeId::UINT16_ARRAY => target == std::any::TypeId::of::<u16>(),
+        TypeId::UINT32_ARRAY => target == std::any::TypeId::of::<u32>(),
+        TypeId::UINT64_ARRAY => target == std::any::TypeId::of::<u64>(),
+        TypeId::U128_ARRAY => target == std::any::TypeId::of::<u128>(),
+        TypeId::INT128_ARRAY => target == std::any::TypeId::of::<i128>(),
+        TypeId::USIZE_ARRAY => target == std::any::TypeId::of::<usize>(),
+        TypeId::ISIZE_ARRAY => target == std::any::TypeId::of::<isize>(),
+        _ => false,
     }
-    let len_bytes = std::mem::size_of_val(this);
+}
+
+#[cold]
+#[inline(never)]
+fn invalid_primitive_target<T: 'static>(array_type_id: TypeId) -> Error {
+    Error::type_error(format!(
+        "primitive array kind {:?} does not match Rust target {}",
+        array_type_id,
+        std::any::type_name::<T>(),
+    ))
+}
+
+#[cold]
+#[inline(never)]
+fn unsupported_array_kind(message: &'static str) -> Error {
+    Error::not_allowed(message)
+}
+
+#[cold]
+#[inline(never)]
+fn invalid_primitive_len() -> Error {
+    Error::invalid_data("Invalid data length")
+}
+
+#[cold]
+#[inline(never)]
+fn primitive_len_overflow() -> Error {
+    Error::invalid_data("primitive array byte length overflows")
+}
+
+#[cold]
+#[inline(never)]
+fn primitive_array_len_mismatch(expected: usize, actual: usize) -> Error {
+    Error::invalid_data(format!(
+        "Array length mismatch: expected {expected} bytes, got {actual}"
+    ))
+}
+
+#[cold]
+#[inline(never)]
+fn primitive_list_mismatch() -> Error {
+    Error::type_error("a primitive array cannot be read as an object LIST")
+}
+
+#[cold]
+#[inline(never)]
+fn primitive_type_mismatch(expected: u32, actual: u32) -> Error {
+    Error::type_mismatch(expected, actual)
+}
+
+#[inline(always)]
+fn validate_target<T: 'static>(array_type_id: TypeId) -> Result<(), Error> {
+    if canonical_target::<T>(array_type_id) {
+        Ok(())
+    } else {
+        Err(invalid_primitive_target::<T>(array_type_id))
+    }
+}
+
+#[inline(always)]
+fn check_xlang_kind(context: &WriteContext, array_type_id: TypeId) -> Result<(), Error> {
+    if !context.is_xlang() {
+        return Ok(());
+    }
+    let message = match array_type_id {
+        TypeId::U128_ARRAY => Some("u128 is not supported in cross-language mode"),
+        TypeId::INT128_ARRAY => Some("i128 is not supported in cross-language mode"),
+        TypeId::USIZE_ARRAY => Some("usize is not supported in cross-language mode"),
+        TypeId::ISIZE_ARRAY => Some("isize is not supported in cross-language mode"),
+        _ => None,
+    };
+    match message {
+        Some(message) => Err(unsupported_array_kind(message)),
+        None => Ok(()),
+    }
+}
+
+pub(super) fn write_data<T, C>(
+    values: &[T],
+    context: &mut WriteContext,
+    array_type_id: TypeId,
+) -> Result<(), Error>
+where
+    T: 'static,
+    C: Codec<T>,
+{
+    #[cfg(target_endian = "little")]
+    let _ = std::marker::PhantomData::<C>;
+    validate_target::<T>(array_type_id)?;
+    check_xlang_kind(context, array_type_id)?;
+    let len_bytes = std::mem::size_of_val(values);
     context.writer.write_var_u32(len_bytes as u32);
-
-    if !this.is_empty() {
-        #[cfg(target_endian = "little")]
-        {
-            // Fast path: direct memory copy on little-endian machines
-            unsafe {
-                context
-                    .writer
-                    .write_bytes_from_ptr(this.as_ptr() as *const u8, len_bytes);
-            }
-        }
-        #[cfg(target_endian = "big")]
-        {
-            // Slow path: element-by-element write on big-endian machines
-            for item in this {
-                item.write(context)?;
-            }
-        }
+    if values.is_empty() {
+        return Ok(());
+    }
+    #[cfg(target_endian = "little")]
+    unsafe {
+        // The exact Rust target/kind check above guarantees that these are
+        // canonical scalar bytes and contain no references or invalid padding.
+        context
+            .writer
+            .write_bytes_from_ptr(values.as_ptr().cast::<u8>(), len_bytes);
+    }
+    #[cfg(target_endian = "big")]
+    for value in values {
+        C::write_data(value, context)?;
     }
     Ok(())
 }
 
-pub fn fory_write_type_info(context: &mut WriteContext, type_id: TypeId) -> Result<(), Error> {
-    context.writer.write_u8(type_id as u8);
-    Ok(())
-}
-
-pub fn fory_read_data<T: Serializer>(context: &mut ReadContext) -> Result<Vec<T>, Error> {
+pub(super) fn read_vec<T, C>(
+    context: &mut ReadContext,
+    array_type_id: TypeId,
+) -> Result<Vec<T>, Error>
+where
+    T: 'static,
+    C: Codec<T>,
+{
+    validate_target::<T>(array_type_id)?;
     let size_bytes = context.reader.read_var_u32()? as usize;
-    if size_bytes % std::mem::size_of::<T>() != 0 {
-        return Err(Error::invalid_data("Invalid data length"));
+    let element_size = std::mem::size_of::<T>();
+    if size_bytes % element_size != 0 {
+        return Err(invalid_primitive_len());
     }
     context.reader.check_bound(size_bytes)?;
-    let len = size_bytes / std::mem::size_of::<T>();
-    let mut vec: Vec<T> = Vec::with_capacity(len);
+    let len = size_bytes / element_size;
+    let mut values = Vec::with_capacity(len);
+    if array_type_id == TypeId::BOOL_ARRAY {
+        for _ in 0..len {
+            values.push(C::read_data(context)?);
+        }
+        return Ok(values);
+    }
+    #[cfg(target_endian = "little")]
+    unsafe {
+        // Readable bytes were proven before allocation and the exact canonical
+        // non-bool scalar check above makes every copied bit pattern valid for T.
+        let bytes = context.reader.read_bytes(size_bytes)?;
+        std::ptr::copy_nonoverlapping(bytes.as_ptr(), values.as_mut_ptr().cast::<u8>(), size_bytes);
+        values.set_len(len);
+    }
+    #[cfg(target_endian = "big")]
+    for _ in 0..len {
+        values.push(C::read_data(context)?);
+    }
+    Ok(values)
+}
+
+pub(super) fn read_array<T, C, const N: usize>(
+    context: &mut ReadContext,
+    array_type_id: TypeId,
+) -> Result<[T; N], Error>
+where
+    T: 'static,
+    C: Codec<T>,
+{
+    validate_target::<T>(array_type_id)?;
+    let size_bytes = context.reader.read_var_u32()? as usize;
+    let element_size = std::mem::size_of::<T>();
+    let expected_bytes = N
+        .checked_mul(element_size)
+        .ok_or_else(primitive_len_overflow)?;
+    if size_bytes != expected_bytes {
+        return Err(primitive_array_len_mismatch(expected_bytes, size_bytes));
+    }
+    context.reader.check_bound(size_bytes)?;
+
+    if array_type_id == TypeId::BOOL_ARRAY {
+        return super::array::try_init_array(|| C::read_data(context));
+    }
 
     #[cfg(target_endian = "little")]
-    {
-        // Fast path: direct memory copy on little-endian machines
-        unsafe {
-            let dst_ptr = vec.as_mut_ptr() as *mut u8;
-            let src = context.reader.read_bytes(size_bytes)?;
-            std::ptr::copy_nonoverlapping(src.as_ptr(), dst_ptr, size_bytes);
-            vec.set_len(len);
-        }
+    unsafe {
+        let mut values = MaybeUninit::<[T; N]>::uninit();
+        let bytes = context.reader.read_bytes(size_bytes)?;
+        // The exact canonical non-bool scalar check makes every copied bit
+        // pattern valid for T, and readable bytes were proven above.
+        std::ptr::copy_nonoverlapping(bytes.as_ptr(), values.as_mut_ptr().cast::<u8>(), size_bytes);
+        Ok(values.assume_init())
     }
     #[cfg(target_endian = "big")]
     {
-        // Slow path: element-by-element read on big-endian machines
-        for _ in 0..len {
-            vec.push(T::read(context)?);
-        }
+        super::array::try_init_array(|| C::read_data(context))
     }
-    Ok(vec)
 }
 
-pub fn fory_read_type_info(context: &mut ReadContext, type_id: TypeId) -> Result<(), Error> {
-    let remote_type_id = context.reader.read_u8()? as u32;
-    if remote_type_id == TypeId::LIST as u32 {
-        return Err(Error::type_error(
-            "Vec<number> belongs to the `number_array` type, \
-                and Vec<Option<number>> belongs to the `list` type. \
-                You should not read data of type `list` as data of type `number_array`.",
-        ));
-    }
-    let local_type_id = type_id as u32;
-    ensure!(
-        local_type_id == remote_type_id,
-        Error::type_mismatch(local_type_id, remote_type_id)
-    );
+#[inline(always)]
+pub(super) fn write_type_info(
+    context: &mut WriteContext,
+    array_type_id: TypeId,
+) -> Result<(), Error> {
+    context.writer.write_u8(array_type_id as u8);
     Ok(())
 }
 
-pub fn fory_reserved_space<T>() -> usize {
+#[inline(always)]
+pub(super) fn read_type_info(
+    context: &mut ReadContext,
+    array_type_id: TypeId,
+) -> Result<(), Error> {
+    let remote_type_id = context.reader.read_u8()? as u32;
+    if remote_type_id == TypeId::LIST as u32 {
+        return Err(primitive_list_mismatch());
+    }
+    if array_type_id as u32 != remote_type_id {
+        return Err(primitive_type_mismatch(
+            array_type_id as u32,
+            remote_type_id,
+        ));
+    }
+    Ok(())
+}
+
+#[inline(always)]
+pub(super) fn reserved_space<T>() -> usize {
     std::mem::size_of::<T>()
 }

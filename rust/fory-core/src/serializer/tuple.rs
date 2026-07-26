@@ -15,507 +15,1087 @@
 // specific language governing permissions and limitations
 // under the License.
 
+use super::codec::{
+    compatible_field_pair, field_ref_mode, generic_field_type, Codec, SerializerCodec,
+};
+use super::collection::{
+    read_collection_type_info, write_collection_type_info, DECL_ELEMENT_TYPE, HAS_NULL,
+    IS_SAME_TYPE, TRACKING_REF,
+};
+use super::skip::{skip_any_value, skip_known_value};
 use crate::context::{ReadContext, WriteContext};
 use crate::error::Error;
-use crate::resolver::RefMode;
-use crate::resolver::TypeResolver;
-use crate::serializer::collection::{read_collection_type_info, write_collection_type_info};
-use crate::serializer::skip::skip_any_value;
-use crate::serializer::{ForyDefault, Serializer};
-use crate::type_id::TypeId;
-use std::mem;
+use crate::meta::FieldType;
+use crate::resolver::{RefFlag, RefMode, TypeInfo, TypeResolver};
+use crate::serializer::{Serializer, SerializerOwner};
+use crate::type_id::{TypeId, SIZE_OF_REF_AND_TYPE};
+use std::borrow::Cow;
+use std::marker::PhantomData;
+use std::rc::Rc;
 
-// Unit type () implementation - represents an empty/unit value with no data
 impl Serializer for () {
+    type Target = Self;
+
+    const OWNER: SerializerOwner = SerializerOwner::Fory;
+
     #[inline(always)]
-    fn fory_write_data(&self, _context: &mut WriteContext) -> Result<(), Error> {
-        // Unit type has no data to write
+    fn write(_: &Self, _: &mut WriteContext) -> Result<(), Error> {
         Ok(())
     }
 
     #[inline(always)]
-    fn fory_read_data(_context: &mut ReadContext) -> Result<Self, Error> {
-        // Unit type has no data to read
+    fn read(_: &mut ReadContext) -> Result<Self, Error> {
         Ok(())
     }
-    #[inline]
-    fn fory_read_data_as_send_sync_any(
-        context: &mut ReadContext,
-    ) -> Result<Box<dyn std::any::Any + Send + Sync>, Error>
-    where
-        Self: Sized + ForyDefault,
-    {
-        Ok(crate::serializer::box_send_sync(Self::fory_read_data(
-            context,
-        )?))
+
+    #[inline(always)]
+    fn default_value(_: &mut ReadContext) -> Result<Self, Error> {
+        Ok(())
     }
 
     #[inline(always)]
-    fn fory_reserved_space() -> usize {
-        0
+    fn field_type<const NULLABLE: bool, const TRACK_REF: bool>(
+        _: &TypeResolver,
+    ) -> Result<FieldType, Error> {
+        Ok(FieldType::new_with_ref(
+            TypeId::NONE as u32,
+            NULLABLE,
+            TRACK_REF,
+            Vec::new(),
+        ))
     }
 
     #[inline(always)]
-    fn fory_get_type_id(_: &TypeResolver) -> Result<TypeId, Error> {
-        // Use NONE - unit type has no runtime data, skip can return early
-        Ok(TypeId::NONE)
-    }
-
-    #[inline(always)]
-    fn fory_type_id_dyn(&self, _: &TypeResolver) -> Result<TypeId, Error> {
-        // Use NONE - unit type has no runtime data, skip can return early
-        Ok(TypeId::NONE)
-    }
-
-    #[inline(always)]
-    fn fory_static_type_id() -> TypeId {
-        // Use NONE - unit type has no runtime data, skip can return early
+    fn static_type_id() -> TypeId {
         TypeId::NONE
     }
 
     #[inline(always)]
-    fn as_any(&self) -> &dyn std::any::Any {
-        self
+    fn reserved_space() -> usize {
+        0
+    }
+
+    #[inline(always)]
+    fn read_arc_any(
+        _: &mut ReadContext,
+    ) -> Result<std::sync::Arc<dyn std::any::Any + Send + Sync>, Error> {
+        Ok(std::sync::Arc::new(()))
     }
 }
 
-impl ForyDefault for () {
-    #[inline(always)]
-    fn fory_default() -> Self {}
-}
-
-/// Helper function to write a tuple element based on its type characteristics.
-/// This handles the different serialization strategies for various element types.
 #[inline(always)]
-fn write_tuple_element<T: Serializer>(elem: &T, context: &mut WriteContext) -> Result<(), Error> {
-    if T::fory_is_option() || T::fory_is_shared_ref() || T::fory_static_type_id() == TypeId::UNKNOWN
-    {
-        // For Option, shared references, or unknown static types, use full write with ref tracking
-        let ref_mode = if T::fory_is_shared_ref() {
-            RefMode::Tracking
-        } else {
-            RefMode::NullOnly
-        };
-        elem.fory_write(context, ref_mode, false, false)
-    } else {
-        // For concrete types with known static type IDs, directly write data
-        elem.fory_write_data(context)
-    }
-}
-
-/// Helper function to read a tuple element based on its type characteristics.
-#[inline(always)]
-fn read_tuple_element<T: Serializer + ForyDefault>(
-    context: &mut ReadContext,
-    _has_generics: bool,
-) -> Result<T, Error> {
-    if T::fory_is_option() || T::fory_is_shared_ref() || T::fory_static_type_id() == TypeId::UNKNOWN
-    {
-        // For Option, shared references, or unknown static types, use full read with ref tracking
-        let ref_mode = if T::fory_is_shared_ref() {
-            RefMode::Tracking
-        } else {
-            RefMode::NullOnly
-        };
-        T::fory_read(context, ref_mode, false)
-    } else {
-        // For concrete types with known static type IDs, directly read data
-        T::fory_read_data(context)
-    }
-}
-
-impl<T0: Serializer + ForyDefault> Serializer for (T0,) {
-    #[inline(always)]
-    fn fory_write_data(&self, context: &mut WriteContext) -> Result<(), Error> {
-        if !context.is_compatible() && !context.is_xlang() {
-            // Non-compatible mode: write elements directly
-            write_tuple_element(&self.0, context)?;
-        } else {
-            // Compatible mode: use collection protocol (heterogeneous)
-            context.writer.write_var_u32(1);
-            let header = 0u8; // No IS_SAME_TYPE flag
-            context.writer.write_u8(header);
-            self.0.fory_write(context, RefMode::NullOnly, true, false)?;
-        }
-        Ok(())
-    }
-
-    #[inline(always)]
-    fn fory_write_type_info(context: &mut WriteContext) -> Result<(), Error> {
-        write_collection_type_info(context, TypeId::LIST as u32)
-    }
-
-    #[inline(always)]
-    fn fory_read_data(context: &mut ReadContext) -> Result<Self, Error> {
-        if !context.is_compatible() && !context.is_xlang() {
-            // Non-compatible mode: read elements directly
-            let elem0 = read_tuple_element::<T0>(context, false)?;
-            Ok((elem0,))
-        } else {
-            // Compatible mode: read collection protocol (heterogeneous)
-            let len = context.reader.read_var_u32()?;
-            let _header = context.reader.read_u8()?;
-
-            let elem0 = if len > 0 {
-                T0::fory_read(context, RefMode::NullOnly, true)?
+fn write_tuple_element<T: 'static, C: Codec<T>>(
+    value: &T,
+    context: &mut WriteContext,
+) -> Result<(), Error> {
+    if C::is_option() || C::is_shared_ref() || C::static_type_id() == TypeId::UNKNOWN {
+        C::write_with_mode(
+            value,
+            context,
+            if C::is_shared_ref() {
+                RefMode::Tracking
             } else {
-                T0::fory_default()
-            };
+                RefMode::NullOnly
+            },
+            false,
+            false,
+        )
+    } else {
+        C::write_data(value, context)
+    }
+}
 
-            // Skip any extra elements beyond the first
-            for _ in 1..len {
-                skip_any_value(context, true)?;
+#[inline(always)]
+fn read_tuple_element<T: 'static, C: Codec<T>>(context: &mut ReadContext) -> Result<T, Error> {
+    if C::is_option() || C::is_shared_ref() || C::static_type_id() == TypeId::UNKNOWN {
+        C::read_with_mode(
+            context,
+            if C::is_shared_ref() {
+                RefMode::Tracking
+            } else {
+                RefMode::NullOnly
+            },
+            false,
+        )
+    } else {
+        C::read_data(context)
+    }
+}
+
+#[inline(always)]
+fn tuple_ref_mode(header: u8) -> RefMode {
+    if (header & TRACKING_REF) != 0 {
+        RefMode::Tracking
+    } else if (header & HAS_NULL) != 0 {
+        RefMode::NullOnly
+    } else {
+        RefMode::None
+    }
+}
+
+#[inline(always)]
+fn read_tuple_value<T: 'static, C: Codec<T>>(
+    context: &mut ReadContext,
+    ref_mode: RefMode,
+    same_type: bool,
+    declared_type: Option<&FieldType>,
+    type_info: Option<&Rc<TypeInfo>>,
+    type_info_field: Option<&FieldType>,
+) -> Result<T, Error> {
+    if !same_type {
+        return C::read_with_mode(context, ref_mode, true);
+    }
+    if let Some(field_type) = declared_type {
+        let local_field_type = C::field_type(context.get_type_resolver())?;
+        return C::read_compatible(context, &local_field_type, field_type)?
+            .ok_or_else(tuple_type_mismatch);
+    }
+    if let (Some(type_info), Some(type_info_field)) = (type_info, type_info_field) {
+        let local_field_type = C::field_type(context.get_type_resolver())?;
+        if !compatible_field_pair(&local_field_type, type_info_field) {
+            return Err(tuple_type_mismatch());
+        }
+        return C::read_with_type_info(context, ref_mode, type_info);
+    }
+    Err(missing_tuple_metadata())
+}
+
+#[cold]
+#[inline(never)]
+fn tuple_type_mismatch() -> Error {
+    Error::type_error("same-type tuple element is incompatible with local position")
+}
+
+#[cold]
+#[inline(never)]
+fn missing_tuple_metadata() -> Error {
+    Error::invalid_data("same-type tuple metadata is missing")
+}
+
+#[cold]
+#[inline(never)]
+fn tuple_ref_mismatch() -> Error {
+    Error::invalid_data("tuple header conflicts with declared element metadata")
+}
+
+#[cold]
+#[inline(never)]
+fn skip_tuple_values(
+    context: &mut ReadContext,
+    count: u32,
+    ref_mode: RefMode,
+    same_type: bool,
+    declared_type: Option<&FieldType>,
+    type_info: Option<&Rc<TypeInfo>>,
+) -> Result<(), Error> {
+    if !same_type {
+        for _ in 0..count {
+            skip_any_value(context, ref_mode != RefMode::None)?;
+        }
+        return Ok(());
+    }
+    if let Some(field_type) = declared_type {
+        for _ in 0..count {
+            skip_known_value(context, Some(field_type), ref_mode, None)?;
+        }
+        return Ok(());
+    }
+    let type_info = type_info.ok_or_else(missing_tuple_metadata)?;
+    for _ in 0..count {
+        skip_known_value(context, None, ref_mode, Some(type_info))?;
+    }
+    Ok(())
+}
+
+macro_rules! impl_tuple_codec {
+    (
+        $codec:ident,
+        $provider:ident,
+        $(($T:ident, $C:ident, $S:ident, $index:tt)),+ $(,)?
+    ) => {
+        pub struct $codec<
+            $($T, $C,)+
+            const NULLABLE: bool,
+            const TRACK_REF: bool,
+        >(PhantomData<fn() -> ($($T, $C,)+)>);
+
+        impl<
+                $($T, $C,)+
+                const NULLABLE: bool,
+                const TRACK_REF: bool,
+            > $codec<$($T, $C,)+ NULLABLE, TRACK_REF>
+        where
+            $($T: 'static, $C: Codec<$T>,)+
+        {
+            // Debug builds must not inline recursively nested tuple readers
+            // into one generated compatible-struct frame; complex schemas can
+            // otherwise exhaust the test thread's stack.
+            #[cfg_attr(debug_assertions, inline(never))]
+            #[cfg_attr(not(debug_assertions), inline(always))]
+            fn read_tuple(
+                context: &mut ReadContext,
+                remote_data_type: Option<&FieldType>,
+            ) -> Result<($($T,)+), Error> {
+                if !context.is_compatible() && !context.is_xlang() {
+                    return Ok(($(read_tuple_element::<$T, $C>(context)?,)+));
+                }
+                let len = context.reader.read_var_u32()?;
+                context.reader.check_bound(len as usize)?;
+                if len == 0 {
+                    return Ok(($($C::default_value(context)?,)+));
+                }
+                let header = context.reader.read_u8()?;
+                let same_type = (header & IS_SAME_TYPE) != 0;
+                let ref_mode = tuple_ref_mode(header);
+                let declared = (header & DECL_ELEMENT_TYPE) != 0;
+                let declared_type = if same_type && declared {
+                    Some(match remote_data_type {
+                        Some(field_type) => {
+                            let field_type = generic_field_type(field_type, 0, "tuple")?;
+                            if field_ref_mode(field_type) != ref_mode {
+                                return Err(tuple_ref_mismatch());
+                            }
+                            Cow::Borrowed(field_type)
+                        }
+                        None => {
+                            let mut field_type = impl_tuple_codec!(
+                                @first_field_type context;
+                                $(($T, $C, $S, $index)),+
+                            )?;
+                            field_type.nullable = (header & HAS_NULL) != 0;
+                            field_type.track_ref = (header & TRACKING_REF) != 0;
+                            Cow::Owned(field_type)
+                        }
+                    })
+                } else {
+                    None
+                };
+                let type_info = if same_type && !declared {
+                    Some(context.read_any_type_info()?)
+                } else {
+                    None
+                };
+                let type_info_field = type_info.as_ref().map(|type_info| {
+                    FieldType::new_with_user_type_id(
+                        type_info.get_type_id() as u32,
+                        type_info.get_user_type_id(),
+                        ref_mode.is_nullable(),
+                        ref_mode.tracks_refs(),
+                        Vec::new(),
+                    )
+                });
+                let mut index = 0u32;
+                let value = ($({
+                    let value = if index < len {
+                        index += 1;
+                        read_tuple_value::<$T, $C>(
+                            context,
+                            ref_mode,
+                            same_type,
+                            declared_type.as_deref(),
+                            type_info.as_ref(),
+                            type_info_field.as_ref(),
+                        )?
+                    } else {
+                        $C::default_value(context)?
+                    };
+                    value
+                },)+);
+                skip_tuple_values(
+                    context,
+                    len - index,
+                    ref_mode,
+                    same_type,
+                    declared_type.as_deref(),
+                    type_info.as_ref(),
+                )?;
+                Ok(value)
+            }
+        }
+
+        impl<
+                $($T, $C,)+
+                const NULLABLE: bool,
+                const TRACK_REF: bool,
+            > Codec<($($T,)+)>
+            for $codec<$($T, $C,)+ NULLABLE, TRACK_REF>
+        where
+            $($T: 'static, $C: Codec<$T>,)+
+        {
+            #[inline(always)]
+            fn field_type(type_resolver: &TypeResolver) -> Result<FieldType, Error> {
+                let _ = type_resolver;
+                // Tuple positions carry their own type metadata in compatible and
+                // xlang bodies. LIST metadata has one homogeneous generic slot, so
+                // declaring position codecs here would truncate the schema on wire.
+                Ok(FieldType::new_with_ref(
+                    TypeId::LIST as u32,
+                    NULLABLE,
+                    TRACK_REF,
+                    vec![FieldType::new(TypeId::UNKNOWN as u32, true, Vec::new())],
+                ))
             }
 
-            Ok((elem0,))
-        }
-    }
-
-    #[inline(always)]
-    fn fory_read_type_info(context: &mut ReadContext) -> Result<(), Error> {
-        read_collection_type_info(context, TypeId::LIST as u32)
-    }
-
-    #[inline(always)]
-    fn fory_reserved_space() -> usize {
-        mem::size_of::<u32>()
-    }
-
-    #[inline(always)]
-    fn fory_get_type_id(_: &TypeResolver) -> Result<TypeId, Error> {
-        Ok(TypeId::LIST)
-    }
-
-    #[inline(always)]
-    fn fory_type_id_dyn(&self, _: &TypeResolver) -> Result<TypeId, Error> {
-        Ok(TypeId::LIST)
-    }
-
-    #[inline(always)]
-    fn fory_static_type_id() -> TypeId {
-        TypeId::LIST
-    }
-
-    #[inline(always)]
-    fn fory_is_wrapper_type() -> bool
-    where
-        Self: Sized,
-    {
-        true
-    }
-
-    #[inline(always)]
-    fn as_any(&self) -> &dyn std::any::Any {
-        self
-    }
-}
-
-impl<T0: ForyDefault> ForyDefault for (T0,) {
-    #[inline(always)]
-    fn fory_default() -> Self {
-        (T0::fory_default(),)
-    }
-}
-
-macro_rules! fory_tuple_field {
-    ($tuple:expr, T0) => {
-        $tuple.0
-    };
-    ($tuple:expr, T1) => {
-        $tuple.1
-    };
-    ($tuple:expr, T2) => {
-        $tuple.2
-    };
-    ($tuple:expr, T3) => {
-        $tuple.3
-    };
-    ($tuple:expr, T4) => {
-        $tuple.4
-    };
-    ($tuple:expr, T5) => {
-        $tuple.5
-    };
-    ($tuple:expr, T6) => {
-        $tuple.6
-    };
-    ($tuple:expr, T7) => {
-        $tuple.7
-    };
-    ($tuple:expr, T8) => {
-        $tuple.8
-    };
-    ($tuple:expr, T9) => {
-        $tuple.9
-    };
-    ($tuple:expr, T10) => {
-        $tuple.10
-    };
-    ($tuple:expr, T11) => {
-        $tuple.11
-    };
-    ($tuple:expr, T12) => {
-        $tuple.12
-    };
-    ($tuple:expr, T13) => {
-        $tuple.13
-    };
-    ($tuple:expr, T14) => {
-        $tuple.14
-    };
-    ($tuple:expr, T15) => {
-        $tuple.15
-    };
-    ($tuple:expr, T16) => {
-        $tuple.16
-    };
-    ($tuple:expr, T17) => {
-        $tuple.17
-    };
-    ($tuple:expr, T18) => {
-        $tuple.18
-    };
-    ($tuple:expr, T19) => {
-        $tuple.19
-    };
-    ($tuple:expr, T20) => {
-        $tuple.20
-    };
-    ($tuple:expr, T21) => {
-        $tuple.21
-    };
-    ($tuple:expr, T22) => {
-        $tuple.22
-    };
-    ($tuple:expr, T23) => {
-        $tuple.23
-    };
-    ($tuple:expr, T24) => {
-        $tuple.24
-    };
-    ($tuple:expr, T25) => {
-        $tuple.25
-    };
-    ($tuple:expr, T26) => {
-        $tuple.26
-    };
-    ($tuple:expr, T27) => {
-        $tuple.27
-    };
-    ($tuple:expr, T28) => {
-        $tuple.28
-    };
-    ($tuple:expr, T29) => {
-        $tuple.29
-    };
-    ($tuple:expr, T30) => {
-        $tuple.30
-    };
-    ($tuple:expr, T31) => {
-        $tuple.31
-    };
-    ($tuple:expr, T32) => {
-        $tuple.32
-    };
-    ($tuple:expr, T33) => {
-        $tuple.33
-    };
-    ($tuple:expr, T34) => {
-        $tuple.34
-    };
-    ($tuple:expr, T35) => {
-        $tuple.35
-    };
-    ($tuple:expr, T36) => {
-        $tuple.36
-    };
-    ($tuple:expr, T37) => {
-        $tuple.37
-    };
-    ($tuple:expr, T38) => {
-        $tuple.38
-    };
-    ($tuple:expr, T39) => {
-        $tuple.39
-    };
-    ($tuple:expr, T40) => {
-        $tuple.40
-    };
-}
-
-macro_rules! fory_tuple_count {
-    ($($name:ident),+ $(,)?) => {
-        0usize $(+ fory_tuple_count!(@one $name))*
-    };
-    (@one $name:ident) => { 1usize };
-}
-
-/// Macro to implement Serializer for tuples of various sizes.
-/// Fory supports tuples up to 22 elements, longer tuples are not allowed.
-///
-/// This handles two serialization modes:
-/// 1. Non-compatible mode: Write elements one by one without collection headers and type metadata
-/// 2. Compatible mode: Use full collection protocol with headers and type info (always heterogeneous)
-#[macro_export]
-macro_rules! impl_tuple_serializer {
-    // Multiple element tuples (2+)
-    ($T0:ident $(, $T:ident)+ $(,)?) => {
-        impl<$T0: Serializer + ForyDefault, $($T: Serializer + ForyDefault),*> Serializer for ($T0, $($T),*) {
             #[inline(always)]
-            fn fory_write_data(&self, context: &mut WriteContext) -> Result<(), Error> {
-                if !context.is_compatible() && !context.is_xlang() {
-                    // Non-compatible mode: write elements directly one by one
-                    write_tuple_element(&self.0, context)?;
-                    $(
-                        write_tuple_element(&fory_tuple_field!(self, $T), context)?;
-                    )*
-                } else {
-                    // Compatible mode: use collection protocol (always heterogeneous)
-                    let len = fory_tuple_count!($T0, $($T),*);
-                    context.writer.write_var_u32(len as u32);
+            fn reserved_space() -> usize {
+                std::mem::size_of::<u32>() + SIZE_OF_REF_AND_TYPE
+            }
 
-                    // Write header without IS_SAME_TYPE flag
-                    let header = 0u8;
-                    context.writer.write_u8(header);
-
-                    // Write each element with its type info
-                    self.0.fory_write(context, RefMode::NullOnly, true, false)?;
-                    $(
-                        fory_tuple_field!(self, $T).fory_write(context, RefMode::NullOnly, true, false)?;
-                    )*
+            #[inline(always)]
+            fn write_field(
+                value: &($($T,)+),
+                context: &mut WriteContext,
+            ) -> Result<(), Error> {
+                if NULLABLE || TRACK_REF {
+                    context.writer.write_i8(RefFlag::NotNullValue as i8);
                 }
+                Self::write_data(value, context)
+            }
+
+            #[inline(always)]
+            fn read_field(context: &mut ReadContext) -> Result<($($T,)+), Error> {
+                if (NULLABLE || TRACK_REF)
+                    && context.reader.read_i8()? == RefFlag::Null as i8
+                {
+                    return Self::default_value(context);
+                }
+                Self::read_data(context)
+            }
+
+            #[inline(always)]
+            fn write_data(
+                value: &($($T,)+),
+                context: &mut WriteContext,
+            ) -> Result<(), Error> {
+                if !context.is_compatible() && !context.is_xlang() {
+                    $(write_tuple_element::<$T, $C>(&value.$index, context)?;)+
+                    return Ok(());
+                }
+                context.writer.write_var_u32(impl_tuple_codec!(@count $($T),+) as u32);
+                let mut header = 0u8;
+                $(
+                    if $C::is_option() {
+                        header |= HAS_NULL;
+                    }
+                    if $C::is_shared_ref() {
+                        header |= TRACKING_REF;
+                    }
+                )+
+                context.writer.write_u8(header);
+                let ref_mode = tuple_ref_mode(header);
+                $(
+                    $C::write_with_mode(
+                        &value.$index,
+                        context,
+                        ref_mode,
+                        true,
+                        false,
+                    )?;
+                )+
                 Ok(())
             }
 
             #[inline(always)]
-            fn fory_write_type_info(context: &mut WriteContext) -> Result<(), Error> {
+            fn read_data(context: &mut ReadContext) -> Result<($($T,)+), Error> {
+                Self::read_tuple(context, None)
+            }
+
+            #[inline(always)]
+            fn read_data_with_type(
+                context: &mut ReadContext,
+                remote_data_type: &FieldType,
+            ) -> Result<($($T,)+), Error> {
+                Self::read_tuple(context, Some(remote_data_type))
+            }
+
+            #[inline(always)]
+            fn read_field_with_type(
+                context: &mut ReadContext,
+                remote_field_type: &FieldType,
+            ) -> Result<($($T,)+), Error> {
+                if field_ref_mode(remote_field_type) != RefMode::None
+                    && context.reader.read_i8()? == RefFlag::Null as i8
+                {
+                    return Self::default_value(context);
+                }
+                Self::read_data_with_type(context, remote_field_type)
+            }
+
+            #[inline(always)]
+            fn write_with_mode(
+                value: &($($T,)+),
+                context: &mut WriteContext,
+                ref_mode: RefMode,
+                write_type_info: bool,
+                _has_generics: bool,
+            ) -> Result<(), Error> {
+                if ref_mode != RefMode::None {
+                    context.writer.write_i8(RefFlag::NotNullValue as i8);
+                }
+                if write_type_info {
+                    Self::write_type_info(context)?;
+                }
+                Self::write_data(value, context)
+            }
+
+            #[inline(always)]
+            fn read_with_mode(
+                context: &mut ReadContext,
+                ref_mode: RefMode,
+                read_type_info: bool,
+            ) -> Result<($($T,)+), Error> {
+                if ref_mode != RefMode::None
+                    && context.reader.read_i8()? == RefFlag::Null as i8
+                {
+                    return Self::default_value(context);
+                }
+                if read_type_info {
+                    Self::read_type_info(context)?;
+                }
+                Self::read_data(context)
+            }
+
+            #[inline(always)]
+            fn read_with_type_info(
+                context: &mut ReadContext,
+                ref_mode: RefMode,
+                _type_info: &Rc<TypeInfo>,
+            ) -> Result<($($T,)+), Error> {
+                Self::read_with_mode(context, ref_mode, false)
+            }
+
+            #[inline(always)]
+            fn default_value(context: &mut ReadContext) -> Result<($($T,)+), Error> {
+                Ok(($($C::default_value(context)?,)+))
+            }
+
+            #[inline(always)]
+            fn write_type_info(context: &mut WriteContext) -> Result<(), Error> {
                 write_collection_type_info(context, TypeId::LIST as u32)
             }
 
             #[inline(always)]
-            fn fory_read_data(context: &mut ReadContext) -> Result<Self, Error> {
-                if !context.is_compatible() && !context.is_xlang() {
-                    // Non-compatible mode: read elements directly
-                    let elem0 = read_tuple_element::<$T0>(context, false)?;
-                    $(
-                        #[allow(non_snake_case)]
-                        let $T = read_tuple_element::<$T>(context, false)?;
-                    )*
-                    Ok((elem0, $($T),*))
-                } else {
-                    // Compatible mode: read collection protocol (always heterogeneous)
-                    // Handle flexible length: use defaults for missing elements, skip extras
-                    let len = context.reader.read_var_u32()?;
-                    let _header = context.reader.read_u8()?;
-
-                    // Track how many elements we've read
-                    let mut index = 0u32;
-
-                    // Read first element or use default
-                    let elem0 = if index < len {
-                        index += 1;
-                        $T0::fory_read(context, RefMode::NullOnly, true)?
-                    } else {
-                        $T0::fory_default()
-                    };
-
-                    // Read remaining elements or use defaults
-                    $(
-                        #[allow(non_snake_case)]
-                        let $T = if index < len {
-                            index += 1;
-                            $T::fory_read(context, RefMode::NullOnly, true)?
-                        } else {
-                            $T::fory_default()
-                        };
-                    )*
-
-                    // Skip any extra elements beyond what we expect
-                    for _ in index..len {
-                        skip_any_value(context, true)?;
-                    }
-
-                    Ok((elem0, $($T),*))
-                }
-            }
-
-            #[inline(always)]
-            fn fory_read_type_info(context: &mut ReadContext) -> Result<(), Error> {
+            fn read_type_info(context: &mut ReadContext) -> Result<(), Error> {
                 read_collection_type_info(context, TypeId::LIST as u32)
             }
 
             #[inline(always)]
-            fn fory_reserved_space() -> usize {
-                mem::size_of::<u32>() // Size for length
-            }
-
-            #[inline(always)]
-            fn fory_get_type_id(_: &TypeResolver) -> Result<TypeId, Error> {
-                Ok(TypeId::LIST)
-            }
-
-            #[inline(always)]
-            fn fory_type_id_dyn(&self, _: &TypeResolver) -> Result<TypeId, Error> {
-                Ok(TypeId::LIST)
-            }
-
-            #[inline(always)]
-            fn fory_static_type_id() -> TypeId {
+            fn static_type_id() -> TypeId {
                 TypeId::LIST
             }
 
             #[inline(always)]
-            fn fory_is_wrapper_type() -> bool
-                where
-                    Self: Sized, {
+            fn is_wrapper_type() -> bool {
                 true
-            }
-
-            #[inline(always)]
-            fn as_any(&self) -> &dyn std::any::Any {
-                self
             }
         }
 
-        impl<$T0: ForyDefault, $($T: ForyDefault),*> ForyDefault for ($T0, $($T),*) {
+        #[doc = concat!(
+            "Statically serializes the recursively formed tuple of each child serializer's ",
+            "`Target` at roots or recursive carrier nodes. This zero-sized carrier is not ",
+            "registered independently."
+        )]
+        pub struct $provider<$($S,)+>(PhantomData<fn() -> ($($S,)+)>);
+
+        impl<$($S: Serializer,)+> Serializer for $provider<$($S,)+> {
+            type Target = ($($S::Target,)+);
+
+            const OWNER: SerializerOwner = SerializerOwner::Fory;
+
             #[inline(always)]
-            fn fory_default() -> Self {
-                ($T0::fory_default(), $($T::fory_default()),*)
+            fn write(value: &Self::Target, context: &mut WriteContext) -> Result<(), Error> {
+                <$codec<
+                    $($S::Target, SerializerCodec<$S, false, false>,)+
+                    false,
+                    false,
+                > as Codec<Self::Target>>::write_data(value, context)
+            }
+
+            #[inline(always)]
+            fn read(context: &mut ReadContext) -> Result<Self::Target, Error> {
+                <$codec<
+                    $($S::Target, SerializerCodec<$S, false, false>,)+
+                    false,
+                    false,
+                > as Codec<Self::Target>>::read_data(context)
+            }
+
+            #[inline(always)]
+            fn default_value(context: &mut ReadContext) -> Result<Self::Target, Error> {
+                <$codec<
+                    $($S::Target, SerializerCodec<$S, false, false>,)+
+                    false,
+                    false,
+                > as Codec<Self::Target>>::default_value(context)
+            }
+
+            #[inline(always)]
+            fn write_value(
+                value: &Self::Target,
+                context: &mut WriteContext,
+                ref_mode: RefMode,
+                write_type_info: bool,
+                has_generics: bool,
+            ) -> Result<(), Error> {
+                <$codec<
+                    $($S::Target, SerializerCodec<$S, false, false>,)+
+                    false,
+                    false,
+                > as Codec<Self::Target>>::write_with_mode(
+                    value,
+                    context,
+                    ref_mode,
+                    write_type_info,
+                    has_generics,
+                )
+            }
+
+            #[inline(always)]
+            fn read_value(
+                context: &mut ReadContext,
+                ref_mode: RefMode,
+                read_type_info: bool,
+            ) -> Result<Self::Target, Error> {
+                <$codec<
+                    $($S::Target, SerializerCodec<$S, false, false>,)+
+                    false,
+                    false,
+                > as Codec<Self::Target>>::read_with_mode(
+                    context,
+                    ref_mode,
+                    read_type_info,
+                )
+            }
+
+            #[inline(always)]
+            fn read_with_type_info(
+                context: &mut ReadContext,
+                ref_mode: RefMode,
+                type_info: &Rc<TypeInfo>,
+            ) -> Result<Self::Target, Error> {
+                <$codec<
+                    $($S::Target, SerializerCodec<$S, false, false>,)+
+                    false,
+                    false,
+                > as Codec<Self::Target>>::read_with_type_info(
+                    context,
+                    ref_mode,
+                    type_info,
+                )
+            }
+
+            #[inline(always)]
+            fn field_type<const NULLABLE: bool, const TRACK_REF: bool>(
+                type_resolver: &TypeResolver,
+            ) -> Result<FieldType, Error> {
+                <$codec<
+                    $($S::Target, SerializerCodec<$S, false, false>,)+
+                    NULLABLE,
+                    TRACK_REF,
+                > as Codec<Self::Target>>::field_type(type_resolver)
+            }
+
+            #[inline(always)]
+            fn read_data_with_field_type(
+                context: &mut ReadContext,
+                remote_field_type: &FieldType,
+            ) -> Result<Self::Target, Error> {
+                <$codec<
+                    $($S::Target, SerializerCodec<$S, false, false>,)+
+                    false,
+                    false,
+                > as Codec<Self::Target>>::read_data_with_type(
+                    context,
+                    remote_field_type,
+                )
+            }
+
+            #[inline(always)]
+            fn write_type_info(context: &mut WriteContext) -> Result<(), Error> {
+                write_collection_type_info(context, TypeId::LIST as u32)
+            }
+
+            #[inline(always)]
+            fn read_type_info(context: &mut ReadContext) -> Result<(), Error> {
+                read_collection_type_info(context, TypeId::LIST as u32)
+            }
+
+            #[inline(always)]
+            fn static_type_id() -> TypeId {
+                TypeId::LIST
+            }
+
+            #[inline(always)]
+            fn reserved_space() -> usize {
+                std::mem::size_of::<u32>() + SIZE_OF_REF_AND_TYPE
+            }
+
+            #[inline(always)]
+            fn is_wrapper_type() -> bool {
+                true
+            }
+        }
+
+        impl<$($T,)+> Serializer for ($($T,)+)
+        where
+            $($T: Serializer<Target = $T>,)+
+        {
+            type Target = Self;
+
+            const OWNER: SerializerOwner = SerializerOwner::Fory;
+
+            #[inline(always)]
+            fn write(value: &Self, context: &mut WriteContext) -> Result<(), Error> {
+                <$provider<$($T,)+> as Serializer>::write(value, context)
+            }
+
+            #[inline(always)]
+            fn read(context: &mut ReadContext) -> Result<Self, Error> {
+                <$provider<$($T,)+> as Serializer>::read(context)
+            }
+
+            #[inline(always)]
+            fn default_value(context: &mut ReadContext) -> Result<Self, Error> {
+                <$provider<$($T,)+> as Serializer>::default_value(context)
+            }
+
+            #[inline(always)]
+            fn write_value(
+                value: &Self,
+                context: &mut WriteContext,
+                ref_mode: RefMode,
+                write_type_info: bool,
+                has_generics: bool,
+            ) -> Result<(), Error> {
+                <$provider<$($T,)+> as Serializer>::write_value(
+                    value,
+                    context,
+                    ref_mode,
+                    write_type_info,
+                    has_generics,
+                )
+            }
+
+            #[inline(always)]
+            fn read_value(
+                context: &mut ReadContext,
+                ref_mode: RefMode,
+                read_type_info: bool,
+            ) -> Result<Self, Error> {
+                <$provider<$($T,)+> as Serializer>::read_value(
+                    context,
+                    ref_mode,
+                    read_type_info,
+                )
+            }
+
+            #[inline(always)]
+            fn read_with_type_info(
+                context: &mut ReadContext,
+                ref_mode: RefMode,
+                type_info: &Rc<TypeInfo>,
+            ) -> Result<Self, Error> {
+                <$provider<$($T,)+> as Serializer>::read_with_type_info(
+                    context,
+                    ref_mode,
+                    type_info,
+                )
+            }
+
+            #[inline(always)]
+            fn field_type<const NULLABLE: bool, const TRACK_REF: bool>(
+                type_resolver: &TypeResolver,
+            ) -> Result<FieldType, Error> {
+                <$provider<$($T,)+> as Serializer>::field_type::<NULLABLE, TRACK_REF>(
+                    type_resolver,
+                )
+            }
+
+            #[inline(always)]
+            fn read_data_with_field_type(
+                context: &mut ReadContext,
+                remote_field_type: &FieldType,
+            ) -> Result<Self, Error> {
+                <$provider<$($T,)+> as Serializer>::read_data_with_field_type(
+                    context,
+                    remote_field_type,
+                )
+            }
+
+            #[inline(always)]
+            fn write_type_info(context: &mut WriteContext) -> Result<(), Error> {
+                <$provider<$($T,)+> as Serializer>::write_type_info(context)
+            }
+
+            #[inline(always)]
+            fn read_type_info(context: &mut ReadContext) -> Result<(), Error> {
+                <$provider<$($T,)+> as Serializer>::read_type_info(context)
+            }
+
+            #[inline(always)]
+            fn static_type_id() -> TypeId {
+                TypeId::LIST
+            }
+
+            #[inline(always)]
+            fn reserved_space() -> usize {
+                std::mem::size_of::<u32>() + SIZE_OF_REF_AND_TYPE
+            }
+
+            #[inline(always)]
+            fn is_wrapper_type() -> bool {
+                true
             }
         }
     };
+
+    (@count $head:ident $(, $tail:ident)*) => {
+        1usize $(+ impl_tuple_codec!(@one $tail))*
+    };
+    (@one $value:ident) => { 1usize };
+    (
+        @first_field_type $context:expr;
+        ($T:ident, $C:ident, $S:ident, $index:tt)
+        $(, ($rest_t:ident, $rest_c:ident, $rest_s:ident, $rest_index:tt))*
+    ) => {
+        <$C as Codec<$T>>::field_type($context.get_type_resolver())
+    };
 }
 
-// Implement Serializer for tuples of size 2-22
-impl_tuple_serializer!(T0, T1);
-impl_tuple_serializer!(T0, T1, T2);
-impl_tuple_serializer!(T0, T1, T2, T3);
-impl_tuple_serializer!(T0, T1, T2, T3, T4);
-impl_tuple_serializer!(T0, T1, T2, T3, T4, T5);
-impl_tuple_serializer!(T0, T1, T2, T3, T4, T5, T6);
-impl_tuple_serializer!(T0, T1, T2, T3, T4, T5, T6, T7);
-impl_tuple_serializer!(T0, T1, T2, T3, T4, T5, T6, T7, T8);
-impl_tuple_serializer!(T0, T1, T2, T3, T4, T5, T6, T7, T8, T9);
-impl_tuple_serializer!(T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10);
-impl_tuple_serializer!(T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11);
-impl_tuple_serializer!(T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12);
-impl_tuple_serializer!(T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13);
-impl_tuple_serializer!(T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14);
-impl_tuple_serializer!(T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15);
-impl_tuple_serializer!(T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16);
-impl_tuple_serializer!(
-    T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17
+impl_tuple_codec!(Tuple1Codec, Tuple1Serializer, (T0, C0, S0, 0));
+impl_tuple_codec!(
+    Tuple2Codec,
+    Tuple2Serializer,
+    (T0, C0, S0, 0),
+    (T1, C1, S1, 1)
 );
-impl_tuple_serializer!(
-    T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18
+impl_tuple_codec!(
+    Tuple3Codec,
+    Tuple3Serializer,
+    (T0, C0, S0, 0),
+    (T1, C1, S1, 1),
+    (T2, C2, S2, 2)
 );
-impl_tuple_serializer!(
-    T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18, T19
+impl_tuple_codec!(
+    Tuple4Codec,
+    Tuple4Serializer,
+    (T0, C0, S0, 0),
+    (T1, C1, S1, 1),
+    (T2, C2, S2, 2),
+    (T3, C3, S3, 3)
 );
-impl_tuple_serializer!(
-    T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18, T19, T20
+impl_tuple_codec!(
+    Tuple5Codec,
+    Tuple5Serializer,
+    (T0, C0, S0, 0),
+    (T1, C1, S1, 1),
+    (T2, C2, S2, 2),
+    (T3, C3, S3, 3),
+    (T4, C4, S4, 4)
 );
-impl_tuple_serializer!(
-    T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18, T19, T20,
-    T21
+impl_tuple_codec!(
+    Tuple6Codec,
+    Tuple6Serializer,
+    (T0, C0, S0, 0),
+    (T1, C1, S1, 1),
+    (T2, C2, S2, 2),
+    (T3, C3, S3, 3),
+    (T4, C4, S4, 4),
+    (T5, C5, S5, 5)
+);
+impl_tuple_codec!(
+    Tuple7Codec,
+    Tuple7Serializer,
+    (T0, C0, S0, 0),
+    (T1, C1, S1, 1),
+    (T2, C2, S2, 2),
+    (T3, C3, S3, 3),
+    (T4, C4, S4, 4),
+    (T5, C5, S5, 5),
+    (T6, C6, S6, 6)
+);
+impl_tuple_codec!(
+    Tuple8Codec,
+    Tuple8Serializer,
+    (T0, C0, S0, 0),
+    (T1, C1, S1, 1),
+    (T2, C2, S2, 2),
+    (T3, C3, S3, 3),
+    (T4, C4, S4, 4),
+    (T5, C5, S5, 5),
+    (T6, C6, S6, 6),
+    (T7, C7, S7, 7)
+);
+impl_tuple_codec!(
+    Tuple9Codec,
+    Tuple9Serializer,
+    (T0, C0, S0, 0),
+    (T1, C1, S1, 1),
+    (T2, C2, S2, 2),
+    (T3, C3, S3, 3),
+    (T4, C4, S4, 4),
+    (T5, C5, S5, 5),
+    (T6, C6, S6, 6),
+    (T7, C7, S7, 7),
+    (T8, C8, S8, 8)
+);
+impl_tuple_codec!(
+    Tuple10Codec,
+    Tuple10Serializer,
+    (T0, C0, S0, 0),
+    (T1, C1, S1, 1),
+    (T2, C2, S2, 2),
+    (T3, C3, S3, 3),
+    (T4, C4, S4, 4),
+    (T5, C5, S5, 5),
+    (T6, C6, S6, 6),
+    (T7, C7, S7, 7),
+    (T8, C8, S8, 8),
+    (T9, C9, S9, 9)
+);
+impl_tuple_codec!(
+    Tuple11Codec,
+    Tuple11Serializer,
+    (T0, C0, S0, 0),
+    (T1, C1, S1, 1),
+    (T2, C2, S2, 2),
+    (T3, C3, S3, 3),
+    (T4, C4, S4, 4),
+    (T5, C5, S5, 5),
+    (T6, C6, S6, 6),
+    (T7, C7, S7, 7),
+    (T8, C8, S8, 8),
+    (T9, C9, S9, 9),
+    (T10, C10, S10, 10)
+);
+impl_tuple_codec!(
+    Tuple12Codec,
+    Tuple12Serializer,
+    (T0, C0, S0, 0),
+    (T1, C1, S1, 1),
+    (T2, C2, S2, 2),
+    (T3, C3, S3, 3),
+    (T4, C4, S4, 4),
+    (T5, C5, S5, 5),
+    (T6, C6, S6, 6),
+    (T7, C7, S7, 7),
+    (T8, C8, S8, 8),
+    (T9, C9, S9, 9),
+    (T10, C10, S10, 10),
+    (T11, C11, S11, 11)
+);
+impl_tuple_codec!(
+    Tuple13Codec,
+    Tuple13Serializer,
+    (T0, C0, S0, 0),
+    (T1, C1, S1, 1),
+    (T2, C2, S2, 2),
+    (T3, C3, S3, 3),
+    (T4, C4, S4, 4),
+    (T5, C5, S5, 5),
+    (T6, C6, S6, 6),
+    (T7, C7, S7, 7),
+    (T8, C8, S8, 8),
+    (T9, C9, S9, 9),
+    (T10, C10, S10, 10),
+    (T11, C11, S11, 11),
+    (T12, C12, S12, 12)
+);
+impl_tuple_codec!(
+    Tuple14Codec,
+    Tuple14Serializer,
+    (T0, C0, S0, 0),
+    (T1, C1, S1, 1),
+    (T2, C2, S2, 2),
+    (T3, C3, S3, 3),
+    (T4, C4, S4, 4),
+    (T5, C5, S5, 5),
+    (T6, C6, S6, 6),
+    (T7, C7, S7, 7),
+    (T8, C8, S8, 8),
+    (T9, C9, S9, 9),
+    (T10, C10, S10, 10),
+    (T11, C11, S11, 11),
+    (T12, C12, S12, 12),
+    (T13, C13, S13, 13)
+);
+impl_tuple_codec!(
+    Tuple15Codec,
+    Tuple15Serializer,
+    (T0, C0, S0, 0),
+    (T1, C1, S1, 1),
+    (T2, C2, S2, 2),
+    (T3, C3, S3, 3),
+    (T4, C4, S4, 4),
+    (T5, C5, S5, 5),
+    (T6, C6, S6, 6),
+    (T7, C7, S7, 7),
+    (T8, C8, S8, 8),
+    (T9, C9, S9, 9),
+    (T10, C10, S10, 10),
+    (T11, C11, S11, 11),
+    (T12, C12, S12, 12),
+    (T13, C13, S13, 13),
+    (T14, C14, S14, 14)
+);
+impl_tuple_codec!(
+    Tuple16Codec,
+    Tuple16Serializer,
+    (T0, C0, S0, 0),
+    (T1, C1, S1, 1),
+    (T2, C2, S2, 2),
+    (T3, C3, S3, 3),
+    (T4, C4, S4, 4),
+    (T5, C5, S5, 5),
+    (T6, C6, S6, 6),
+    (T7, C7, S7, 7),
+    (T8, C8, S8, 8),
+    (T9, C9, S9, 9),
+    (T10, C10, S10, 10),
+    (T11, C11, S11, 11),
+    (T12, C12, S12, 12),
+    (T13, C13, S13, 13),
+    (T14, C14, S14, 14),
+    (T15, C15, S15, 15)
+);
+impl_tuple_codec!(
+    Tuple17Codec,
+    Tuple17Serializer,
+    (T0, C0, S0, 0),
+    (T1, C1, S1, 1),
+    (T2, C2, S2, 2),
+    (T3, C3, S3, 3),
+    (T4, C4, S4, 4),
+    (T5, C5, S5, 5),
+    (T6, C6, S6, 6),
+    (T7, C7, S7, 7),
+    (T8, C8, S8, 8),
+    (T9, C9, S9, 9),
+    (T10, C10, S10, 10),
+    (T11, C11, S11, 11),
+    (T12, C12, S12, 12),
+    (T13, C13, S13, 13),
+    (T14, C14, S14, 14),
+    (T15, C15, S15, 15),
+    (T16, C16, S16, 16)
+);
+impl_tuple_codec!(
+    Tuple18Codec,
+    Tuple18Serializer,
+    (T0, C0, S0, 0),
+    (T1, C1, S1, 1),
+    (T2, C2, S2, 2),
+    (T3, C3, S3, 3),
+    (T4, C4, S4, 4),
+    (T5, C5, S5, 5),
+    (T6, C6, S6, 6),
+    (T7, C7, S7, 7),
+    (T8, C8, S8, 8),
+    (T9, C9, S9, 9),
+    (T10, C10, S10, 10),
+    (T11, C11, S11, 11),
+    (T12, C12, S12, 12),
+    (T13, C13, S13, 13),
+    (T14, C14, S14, 14),
+    (T15, C15, S15, 15),
+    (T16, C16, S16, 16),
+    (T17, C17, S17, 17)
+);
+impl_tuple_codec!(
+    Tuple19Codec,
+    Tuple19Serializer,
+    (T0, C0, S0, 0),
+    (T1, C1, S1, 1),
+    (T2, C2, S2, 2),
+    (T3, C3, S3, 3),
+    (T4, C4, S4, 4),
+    (T5, C5, S5, 5),
+    (T6, C6, S6, 6),
+    (T7, C7, S7, 7),
+    (T8, C8, S8, 8),
+    (T9, C9, S9, 9),
+    (T10, C10, S10, 10),
+    (T11, C11, S11, 11),
+    (T12, C12, S12, 12),
+    (T13, C13, S13, 13),
+    (T14, C14, S14, 14),
+    (T15, C15, S15, 15),
+    (T16, C16, S16, 16),
+    (T17, C17, S17, 17),
+    (T18, C18, S18, 18)
+);
+impl_tuple_codec!(
+    Tuple20Codec,
+    Tuple20Serializer,
+    (T0, C0, S0, 0),
+    (T1, C1, S1, 1),
+    (T2, C2, S2, 2),
+    (T3, C3, S3, 3),
+    (T4, C4, S4, 4),
+    (T5, C5, S5, 5),
+    (T6, C6, S6, 6),
+    (T7, C7, S7, 7),
+    (T8, C8, S8, 8),
+    (T9, C9, S9, 9),
+    (T10, C10, S10, 10),
+    (T11, C11, S11, 11),
+    (T12, C12, S12, 12),
+    (T13, C13, S13, 13),
+    (T14, C14, S14, 14),
+    (T15, C15, S15, 15),
+    (T16, C16, S16, 16),
+    (T17, C17, S17, 17),
+    (T18, C18, S18, 18),
+    (T19, C19, S19, 19)
+);
+impl_tuple_codec!(
+    Tuple21Codec,
+    Tuple21Serializer,
+    (T0, C0, S0, 0),
+    (T1, C1, S1, 1),
+    (T2, C2, S2, 2),
+    (T3, C3, S3, 3),
+    (T4, C4, S4, 4),
+    (T5, C5, S5, 5),
+    (T6, C6, S6, 6),
+    (T7, C7, S7, 7),
+    (T8, C8, S8, 8),
+    (T9, C9, S9, 9),
+    (T10, C10, S10, 10),
+    (T11, C11, S11, 11),
+    (T12, C12, S12, 12),
+    (T13, C13, S13, 13),
+    (T14, C14, S14, 14),
+    (T15, C15, S15, 15),
+    (T16, C16, S16, 16),
+    (T17, C17, S17, 17),
+    (T18, C18, S18, 18),
+    (T19, C19, S19, 19),
+    (T20, C20, S20, 20)
+);
+impl_tuple_codec!(
+    Tuple22Codec,
+    Tuple22Serializer,
+    (T0, C0, S0, 0),
+    (T1, C1, S1, 1),
+    (T2, C2, S2, 2),
+    (T3, C3, S3, 3),
+    (T4, C4, S4, 4),
+    (T5, C5, S5, 5),
+    (T6, C6, S6, 6),
+    (T7, C7, S7, 7),
+    (T8, C8, S8, 8),
+    (T9, C9, S9, 9),
+    (T10, C10, S10, 10),
+    (T11, C11, S11, 11),
+    (T12, C12, S12, 12),
+    (T13, C13, S13, 13),
+    (T14, C14, S14, 14),
+    (T15, C15, S15, 15),
+    (T16, C16, S16, 16),
+    (T17, C17, S17, 17),
+    (T18, C18, S18, 18),
+    (T19, C19, S19, 19),
+    (T20, C20, S20, 20),
+    (T21, C21, S21, 21)
 );

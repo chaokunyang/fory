@@ -53,9 +53,15 @@ impl<'a> ResolvedField<'a> {
         quote! { <#codec_ty as fory_core::serializer::codec::Codec<#value_ty>> }
     }
 
+    #[inline]
+    fn serializer_call(&self) -> TokenStream {
+        let codec_ty = &self.codec_ty;
+        quote! { <#codec_ty as fory_core::Serializer> }
+    }
+
     pub fn reserved_space(&self) -> TokenStream {
         let call = self.codec_call();
-        quote! { #call::reserved_space() }
+        quote! { #call::field_reserved_space() }
     }
 
     pub fn write_field(&self) -> TokenStream {
@@ -101,12 +107,12 @@ impl<'a> ResolvedField<'a> {
         ref_mode: TokenStream,
         read_type_info: TokenStream,
     ) -> TokenStream {
-        let call = self.codec_call();
-        quote! { #call::read_with_mode(context, #ref_mode, #read_type_info)? }
+        let call = self.serializer_call();
+        quote! { #call::read(context, #ref_mode, #read_type_info)? }
     }
 
     pub fn default_value_expr(&self) -> TokenStream {
-        let call = self.codec_call();
+        let call = self.serializer_call();
         quote! { #call::default_value(context)? }
     }
 
@@ -143,7 +149,7 @@ impl<'a> ResolvedField<'a> {
         // selected codec path instead of bypassing its body through scalar conversion.
         if !self.has_selected_provider {
             if let Some(read_scalar) = compatible_scalar_reader_for(self.value_ty) {
-                let call = self.codec_call();
+                let call = self.serializer_call();
                 let local_type = if extract_option_inner_type(self.value_ty).is_some() {
                     quote! { local_field_type.type_id }
                 } else {
@@ -202,28 +208,25 @@ impl<'a> ResolvedField<'a> {
     }
 }
 
-pub(crate) struct SkippedField<'a> {
-    pub source: &'a SourceField<'a>,
+pub(crate) struct SkippedField {
     pub private_ident: syn::Ident,
     pub codec_ty: TokenStream,
 }
 
-impl<'a> SkippedField<'a> {
+impl SkippedField {
     pub fn read_default(&self) -> TokenStream {
         let var = &self.private_ident;
-        let ty = &self.source.field.ty;
         let codec_ty = &self.codec_ty;
         quote! {
             let #var =
-                <#codec_ty as fory_core::serializer::codec::Codec<#ty>>::default_value(context)?;
+                <#codec_ty as fory_core::Serializer>::default_value(context)?;
         }
     }
 
     pub fn default_value_expr(&self) -> TokenStream {
-        let ty = &self.source.field.ty;
         let codec_ty = &self.codec_ty;
         quote! {{
-            <#codec_ty as fory_core::serializer::codec::Codec<#ty>>::default_value(context)?
+            <#codec_ty as fory_core::Serializer>::default_value(context)?
         }}
     }
 
@@ -235,7 +238,7 @@ impl<'a> SkippedField<'a> {
 
 pub(crate) enum FieldBinding<'a> {
     Codec(ResolvedField<'a>),
-    Skipped(SkippedField<'a>),
+    Skipped(SkippedField),
 }
 
 impl FieldBinding<'_> {
@@ -261,7 +264,6 @@ pub(crate) fn build_bindings<'a>(
             let selection = codec_selection_for(&source.field.ty, &meta, nullable, track_ref)?;
             if meta.skip {
                 return Ok(FieldBinding::Skipped(SkippedField {
-                    source,
                     private_ident,
                     codec_ty: selection.ty,
                 }));
@@ -315,13 +317,7 @@ fn codec_selection_for(
     }
 
     if let Some(provider) = &meta.with {
-        return Ok(CodecSelection::plain(quote! {
-            fory_core::serializer::codec::SerializerCodec<
-                #provider,
-                #nullable,
-                #track_ref
-            >
-        }));
+        return selected_codec_for(ty, provider, nullable, track_ref);
     }
 
     if let Some(inner) = extract_option_inner_type(ty) {
@@ -437,6 +433,421 @@ fn codec_selection_for(
     Ok(CodecSelection::plain(quote! {
         fory_core::serializer::codec::SerializerCodec<#ty, #nullable, #track_ref>
     }))
+}
+
+// Stable derive cannot resolve aliases. Recurse only through syntactically
+// visible carrier constructors; every other selected type stays a leaf for
+// SerializerCodec's cold schema validation.
+fn selected_codec_for(
+    target: &Type,
+    provider: &Type,
+    nullable: bool,
+    track_ref: bool,
+) -> syn::Result<CodecSelection> {
+    if is_dynamic_trait_carrier(target) {
+        if is_dynamic_trait_carrier(provider) {
+            // Emit the selected self-provider's codec. The generated
+            // `Codec<Target>` bound then lets Rust prove that the selected
+            // dynamic carrier and trait exactly match the field type.
+            return dynamic_codec_for(provider, nullable, track_ref);
+        }
+        return Err(syn::Error::new_spanned(
+            provider,
+            "a dynamic Any or application-trait node must use its ordinary self-provider",
+        ));
+    }
+
+    if let Some((provider_name, provider_args)) = type_name_and_args(provider) {
+        if provider_name == "ArraySerializer" {
+            let (child_provider, len) = array_serializer_args(provider_args, provider)?;
+            let Type::Array(target_array) = target else {
+                return Err(carrier_target_error(provider, target, "[T; N]"));
+            };
+            let child = selected_child_codec(target_array.elem.as_ref(), child_provider)?;
+            let child_ty = child.ty;
+            let elem_ty = target_array.elem.as_ref();
+            return Ok(CodecSelection::plain(quote! {
+                fory_core::serializer::codec::ArrayCodec<
+                    #elem_ty,
+                    #child_ty,
+                    #len,
+                    #nullable,
+                    #track_ref
+                >
+            }));
+        }
+
+        if let Some(arity) = tuple_serializer_arity(&provider_name) {
+            if !(1..=22).contains(&arity) {
+                return Err(syn::Error::new_spanned(
+                    provider,
+                    "tuple carrier serializers support arities 1 through 22",
+                ));
+            }
+            let providers = exact_type_args(provider_args, provider, &provider_name, arity)?;
+            return selected_tuple_codec(target, provider, &providers, nullable, track_ref);
+        }
+
+        if let Some(target_name) = canonical_named_carrier(&provider_name) {
+            if is_map(target_name) {
+                let providers = exact_type_args(provider_args, provider, &provider_name, 2)?;
+                return selected_map_codec(
+                    target,
+                    provider,
+                    target_name,
+                    providers[0],
+                    providers[1],
+                    nullable,
+                    track_ref,
+                );
+            }
+            let providers = exact_type_args(provider_args, provider, &provider_name, 1)?;
+            return selected_one_child_codec(
+                target,
+                provider,
+                target_name,
+                providers[0],
+                nullable,
+                track_ref,
+            );
+        }
+
+        if is_named_carrier(&provider_name) {
+            if is_map(&provider_name) {
+                let providers = exact_type_args(provider_args, provider, &provider_name, 2)?;
+                return selected_map_codec(
+                    target,
+                    provider,
+                    &provider_name,
+                    providers[0],
+                    providers[1],
+                    nullable,
+                    track_ref,
+                );
+            }
+            let providers = exact_type_args(provider_args, provider, &provider_name, 1)?;
+            return selected_one_child_codec(
+                target,
+                provider,
+                &provider_name,
+                providers[0],
+                nullable,
+                track_ref,
+            );
+        }
+    }
+
+    if let Type::Array(provider_array) = provider {
+        let Type::Array(target_array) = target else {
+            return Err(carrier_target_error(provider, target, "[T; N]"));
+        };
+        let child = selected_child_codec(target_array.elem.as_ref(), provider_array.elem.as_ref())?;
+        let child_ty = child.ty;
+        let elem_ty = target_array.elem.as_ref();
+        let len = &provider_array.len;
+        return Ok(CodecSelection::plain(quote! {
+            fory_core::serializer::codec::ArrayCodec<
+                #elem_ty,
+                #child_ty,
+                #len,
+                #nullable,
+                #track_ref
+            >
+        }));
+    }
+
+    if let Type::Tuple(provider_tuple) = provider {
+        if provider_tuple.elems.is_empty() {
+            return leaf_selected_codec(provider, nullable, track_ref);
+        }
+        let providers: Vec<_> = provider_tuple.elems.iter().collect();
+        return selected_tuple_codec(target, provider, &providers, nullable, track_ref);
+    }
+
+    leaf_selected_codec(provider, nullable, track_ref)
+}
+
+fn selected_child_codec(target: &Type, provider: &Type) -> syn::Result<CodecSelection> {
+    let class = classify_field_type(target);
+    let meta = ForyFieldMeta::default();
+    selected_codec_for(
+        target,
+        provider,
+        meta.effective_nullable(class) || is_option_type(target),
+        meta.effective_ref(class),
+    )
+}
+
+fn leaf_selected_codec(
+    provider: &Type,
+    nullable: bool,
+    track_ref: bool,
+) -> syn::Result<CodecSelection> {
+    Ok(CodecSelection::plain(quote! {
+        fory_core::serializer::codec::SerializerCodec<
+            #provider,
+            #nullable,
+            #track_ref
+        >
+    }))
+}
+
+fn selected_one_child_codec(
+    target: &Type,
+    provider: &Type,
+    carrier: &str,
+    child_provider: &Type,
+    nullable: bool,
+    track_ref: bool,
+) -> syn::Result<CodecSelection> {
+    let (target_name, target_args) = type_name_and_args(target)
+        .ok_or_else(|| carrier_target_error(provider, target, &format!("{carrier}<T>")))?;
+    if target_name != carrier {
+        return Err(carrier_target_error(
+            provider,
+            target,
+            &format!("{carrier}<T>"),
+        ));
+    }
+    let target_children = exact_type_args(target_args, target, carrier, 1)?;
+    let child_target = target_children[0];
+    let child = selected_child_codec(child_target, child_provider)?;
+    let child_ty = child.ty;
+
+    if carrier == "Option" {
+        return Ok(CodecSelection::plain(quote! {
+            fory_core::serializer::codec::OptionCodec<
+                #child_target,
+                #child_ty,
+                #track_ref
+            >
+        }));
+    }
+
+    let codec_ident = format_ident!("{carrier}Codec");
+    if is_transparent_carrier(carrier) {
+        return Ok(CodecSelection::plain(quote! {
+            fory_core::serializer::codec::#codec_ident<
+                #child_target,
+                #child_ty,
+                #nullable,
+                #track_ref
+            >
+        }));
+    }
+
+    let vec_schema_args = if carrier == "Vec" {
+        quote! { false, false, }
+    } else {
+        quote! {}
+    };
+    Ok(CodecSelection::plain(quote! {
+        fory_core::serializer::codec::#codec_ident<
+            #child_target,
+            #child_ty,
+            #vec_schema_args
+            #nullable,
+            #track_ref
+        >
+    }))
+}
+
+fn selected_map_codec(
+    target: &Type,
+    provider: &Type,
+    carrier: &str,
+    key_provider: &Type,
+    value_provider: &Type,
+    nullable: bool,
+    track_ref: bool,
+) -> syn::Result<CodecSelection> {
+    let (target_name, target_args) = type_name_and_args(target)
+        .ok_or_else(|| carrier_target_error(provider, target, &format!("{carrier}<K, V>")))?;
+    if target_name != carrier {
+        return Err(carrier_target_error(
+            provider,
+            target,
+            &format!("{carrier}<K, V>"),
+        ));
+    }
+    let targets = exact_type_args(target_args, target, carrier, 2)?;
+    let key_target = targets[0];
+    let value_target = targets[1];
+    let key_codec = selected_child_codec(key_target, key_provider)?.ty;
+    let value_codec = selected_child_codec(value_target, value_provider)?.ty;
+    let codec_ident = format_ident!("{carrier}Codec");
+    Ok(CodecSelection::plain(quote! {
+        fory_core::serializer::codec::#codec_ident<
+            #key_target,
+            #value_target,
+            #key_codec,
+            #value_codec,
+            #nullable,
+            #track_ref
+        >
+    }))
+}
+
+fn selected_tuple_codec(
+    target: &Type,
+    provider: &Type,
+    providers: &[&Type],
+    nullable: bool,
+    track_ref: bool,
+) -> syn::Result<CodecSelection> {
+    if providers.len() > 22 {
+        return Err(syn::Error::new_spanned(
+            provider,
+            "tuple carrier serializers support arities 1 through 22",
+        ));
+    }
+    let Type::Tuple(target_tuple) = target else {
+        return Err(carrier_target_error(
+            provider,
+            target,
+            &format!("a {}-element tuple", providers.len()),
+        ));
+    };
+    if target_tuple.elems.len() != providers.len() {
+        return Err(syn::Error::new_spanned(
+            target,
+            format!(
+                "selected tuple serializer has arity {}, but the target tuple has arity {}",
+                providers.len(),
+                target_tuple.elems.len(),
+            ),
+        ));
+    }
+    let codec_ident = format_ident!("Tuple{}Codec", providers.len());
+    let mut args = Vec::with_capacity(providers.len() * 2);
+    for (target, provider) in target_tuple.elems.iter().zip(providers) {
+        let codec = selected_child_codec(target, provider)?.ty;
+        args.push(quote! { #target });
+        args.push(codec);
+    }
+    Ok(CodecSelection::plain(quote! {
+        fory_core::serializer::codec::#codec_ident<
+            #(#args,)*
+            #nullable,
+            #track_ref
+        >
+    }))
+}
+
+fn carrier_target_error(provider: &Type, target: &Type, expected: &str) -> syn::Error {
+    syn::Error::new_spanned(
+        target,
+        format!(
+            "carrier serializer {} requires target {expected}",
+            provider.to_token_stream()
+        ),
+    )
+}
+
+fn canonical_named_carrier(name: &str) -> Option<&'static str> {
+    match name {
+        "OptionSerializer" => Some("Option"),
+        "BoxSerializer" => Some("Box"),
+        "RcSerializer" => Some("Rc"),
+        "ArcSerializer" => Some("Arc"),
+        "RcWeakSerializer" => Some("RcWeak"),
+        "ArcWeakSerializer" => Some("ArcWeak"),
+        "RefCellSerializer" => Some("RefCell"),
+        "MutexSerializer" => Some("Mutex"),
+        "VecSerializer" => Some("Vec"),
+        "VecDequeSerializer" => Some("VecDeque"),
+        "LinkedListSerializer" => Some("LinkedList"),
+        "HashSetSerializer" => Some("HashSet"),
+        "BTreeSetSerializer" => Some("BTreeSet"),
+        "BinaryHeapSerializer" => Some("BinaryHeap"),
+        "HashMapSerializer" => Some("HashMap"),
+        "BTreeMapSerializer" => Some("BTreeMap"),
+        _ => None,
+    }
+}
+
+fn is_named_carrier(name: &str) -> bool {
+    name == "Option"
+        || is_transparent_carrier(name)
+        || is_one_child_collection(name)
+        || is_map(name)
+}
+
+fn tuple_serializer_arity(name: &str) -> Option<usize> {
+    name.strip_prefix("Tuple")?
+        .strip_suffix("Serializer")?
+        .parse()
+        .ok()
+}
+
+fn exact_type_args<'a>(
+    args: Option<&'a syn::punctuated::Punctuated<GenericArgument, syn::token::Comma>>,
+    ty: &Type,
+    owner: &str,
+    expected: usize,
+) -> syn::Result<Vec<&'a Type>> {
+    let Some(args) = args else {
+        return Err(syn::Error::new_spanned(
+            ty,
+            format!("{owner} requires exactly {expected} type argument(s)"),
+        ));
+    };
+    if args.len() != expected {
+        return Err(syn::Error::new_spanned(
+            ty,
+            format!("{owner} requires exactly {expected} type argument(s)"),
+        ));
+    }
+    args.iter()
+        .map(|arg| match arg {
+            GenericArgument::Type(ty) => Ok(ty),
+            _ => Err(syn::Error::new_spanned(
+                arg,
+                format!("{owner} requires exactly {expected} type argument(s)"),
+            )),
+        })
+        .collect()
+}
+
+fn array_serializer_args<'a>(
+    args: Option<&'a syn::punctuated::Punctuated<GenericArgument, syn::token::Comma>>,
+    ty: &Type,
+) -> syn::Result<(&'a Type, TokenStream)> {
+    let Some(args) = args else {
+        return Err(syn::Error::new_spanned(
+            ty,
+            "ArraySerializer requires one serializer type and one const length",
+        ));
+    };
+    if args.len() != 2 {
+        return Err(syn::Error::new_spanned(
+            ty,
+            "ArraySerializer requires one serializer type and one const length",
+        ));
+    }
+    let mut args = args.iter();
+    let child = match args.next().expect("length checked") {
+        GenericArgument::Type(child) => child,
+        arg => {
+            return Err(syn::Error::new_spanned(
+                arg,
+                "ArraySerializer requires one serializer type and one const length",
+            ));
+        }
+    };
+    let len = match args.next().expect("length checked") {
+        GenericArgument::Const(len) => quote! { #len },
+        // An unbraced const identifier is syntactically ambiguous to syn and is
+        // parsed as a type. Rust resolves it as the const generic at compile time.
+        GenericArgument::Type(len) => quote! { #len },
+        arg => {
+            return Err(syn::Error::new_spanned(
+                arg,
+                "ArraySerializer requires one serializer type and one const length",
+            ));
+        }
+    };
+    Ok((child, len))
 }
 
 fn codec_for_child(ty: &Type, meta: &ForyFieldMeta) -> syn::Result<CodecSelection> {
@@ -971,6 +1382,38 @@ mod tests {
     use super::*;
     use syn::parse_quote;
 
+    fn selected_codec(target: Type, provider: Type) -> String {
+        let class = classify_field_type(&target);
+        let meta = ForyFieldMeta {
+            with: Some(provider),
+            ..Default::default()
+        };
+        codec_type_for(
+            &target,
+            &meta,
+            meta.effective_nullable(class) || is_option_type(&target),
+            meta.effective_ref(class),
+        )
+        .unwrap()
+        .to_string()
+    }
+
+    fn selected_error(target: Type, provider: Type) -> String {
+        let class = classify_field_type(&target);
+        let meta = ForyFieldMeta {
+            with: Some(provider),
+            ..Default::default()
+        };
+        codec_type_for(
+            &target,
+            &meta,
+            meta.effective_nullable(class) || is_option_type(&target),
+            meta.effective_ref(class),
+        )
+        .unwrap_err()
+        .to_string()
+    }
+
     #[test]
     fn lowers_nested_external_list() {
         let ty: Type = parse_quote!(Vec<Vec<External>>);
@@ -984,6 +1427,7 @@ mod tests {
             .to_string();
         assert!(codec.contains("VecCodec"));
         assert!(codec.contains("ExternalSerializer"));
+        assert!(codec.contains("true , false , false , false"));
     }
 
     #[test]
@@ -999,25 +1443,362 @@ mod tests {
     }
 
     #[test]
-    fn lowers_all_transparent_carriers() {
-        for ty in [
-            parse_quote!(Option<External>),
-            parse_quote!(Box<External>),
-            parse_quote!(Rc<External>),
-            parse_quote!(Arc<External>),
-            parse_quote!(RcWeak<External>),
-            parse_quote!(ArcWeak<External>),
-            parse_quote!(RefCell<External>),
-            parse_quote!(Mutex<External>),
+    fn lowers_leaf_provider() {
+        let codec = selected_codec(parse_quote!(External), parse_quote!(ExternalSerializer));
+        assert_eq!(
+            codec,
+            quote! {
+                fory_core::serializer::codec::SerializerCodec<
+                    ExternalSerializer,
+                    false,
+                    false
+                >
+            }
+            .to_string()
+        );
+    }
+
+    #[test]
+    fn lowers_all_transparent_serializers() {
+        for (target, provider, codec_name) in [
+            (
+                "Option<External>",
+                "OptionSerializer<ExternalSerializer>",
+                "OptionCodec",
+            ),
+            (
+                "Box<External>",
+                "BoxSerializer<ExternalSerializer>",
+                "BoxCodec",
+            ),
+            (
+                "Rc<External>",
+                "RcSerializer<ExternalSerializer>",
+                "RcCodec",
+            ),
+            (
+                "Arc<External>",
+                "ArcSerializer<ExternalSerializer>",
+                "ArcCodec",
+            ),
+            (
+                "RcWeak<External>",
+                "RcWeakSerializer<ExternalSerializer>",
+                "RcWeakCodec",
+            ),
+            (
+                "ArcWeak<External>",
+                "ArcWeakSerializer<ExternalSerializer>",
+                "ArcWeakCodec",
+            ),
+            (
+                "RefCell<External>",
+                "RefCellSerializer<ExternalSerializer>",
+                "RefCellCodec",
+            ),
+            (
+                "Mutex<External>",
+                "MutexSerializer<ExternalSerializer>",
+                "MutexCodec",
+            ),
         ] {
-            let meta = ForyFieldMeta {
-                with: Some(parse_quote!(ExternalSerializer)),
-                ..Default::default()
-            };
-            let codec = codec_type_for(&ty, &meta, false, false)
-                .unwrap()
-                .to_string();
-            assert!(codec.contains("ExternalSerializer"));
+            let codec = selected_codec(
+                syn::parse_str(target).unwrap(),
+                syn::parse_str(provider).unwrap(),
+            );
+            assert!(codec.contains(codec_name), "{codec}");
+            assert!(
+                codec.contains("SerializerCodec < ExternalSerializer"),
+                "{codec}"
+            );
+            let provider_name = provider.split('<').next().expect("provider name");
+            assert!(
+                !codec.contains(&format!("SerializerCodec < {provider_name}")),
+                "{codec}"
+            );
         }
+    }
+
+    #[test]
+    fn lowers_all_collection_serializers() {
+        for (target, provider, codec_name) in [
+            (
+                "Vec<External>",
+                "VecSerializer<ExternalSerializer>",
+                "VecCodec",
+            ),
+            (
+                "VecDeque<External>",
+                "VecDequeSerializer<ExternalSerializer>",
+                "VecDequeCodec",
+            ),
+            (
+                "LinkedList<External>",
+                "LinkedListSerializer<ExternalSerializer>",
+                "LinkedListCodec",
+            ),
+            (
+                "HashSet<External>",
+                "HashSetSerializer<ExternalSerializer>",
+                "HashSetCodec",
+            ),
+            (
+                "BTreeSet<External>",
+                "BTreeSetSerializer<ExternalSerializer>",
+                "BTreeSetCodec",
+            ),
+            (
+                "BinaryHeap<External>",
+                "BinaryHeapSerializer<ExternalSerializer>",
+                "BinaryHeapCodec",
+            ),
+        ] {
+            let codec = selected_codec(
+                syn::parse_str(target).unwrap(),
+                syn::parse_str(provider).unwrap(),
+            );
+            assert!(codec.contains(codec_name), "{codec}");
+            assert!(
+                codec.contains("SerializerCodec < ExternalSerializer"),
+                "{codec}"
+            );
+        }
+    }
+
+    #[test]
+    fn direct_vec_schema_mode() {
+        let direct = selected_codec(
+            parse_quote!(Vec<External>),
+            parse_quote!(fory::VecSerializer<ExternalSerializer>),
+        );
+        assert!(direct.contains("false , false , false , false"), "{direct}");
+
+        let ty: Type = parse_quote!(Vec<External>);
+        let field: syn::Field = parse_quote!(
+            #[fory(list(element(with = ExternalSerializer)))]
+            value: Vec<External>
+        );
+        let meta = parse_field_meta(&field).unwrap();
+        let explicit = codec_type_for(&ty, &meta, false, false)
+            .unwrap()
+            .to_string();
+        assert!(
+            explicit.contains("true , false , false , false"),
+            "{explicit}"
+        );
+    }
+
+    #[test]
+    fn lowers_nested_selected_carriers() {
+        let codec = selected_codec(
+            parse_quote!(Vec<Option<External>>),
+            parse_quote!(fory::VecSerializer<fory::OptionSerializer<ExternalSerializer>>),
+        );
+        assert!(codec.contains("VecCodec < Option < External >"), "{codec}");
+        assert!(codec.contains("OptionCodec < External"), "{codec}");
+        assert!(
+            codec.contains("SerializerCodec < ExternalSerializer"),
+            "{codec}"
+        );
+        assert!(
+            !codec.contains("SerializerCodec < fory :: VecSerializer"),
+            "{codec}"
+        );
+    }
+
+    #[test]
+    fn lowers_map_serializers() {
+        for (target, provider, codec_name) in [
+            (
+                "HashMap<Key, External>",
+                "HashMapSerializer<KeySerializer, ExternalSerializer>",
+                "HashMapCodec",
+            ),
+            (
+                "BTreeMap<Key, External>",
+                "BTreeMapSerializer<KeySerializer, ExternalSerializer>",
+                "BTreeMapCodec",
+            ),
+        ] {
+            let codec = selected_codec(
+                syn::parse_str(target).unwrap(),
+                syn::parse_str(provider).unwrap(),
+            );
+            assert!(codec.contains(codec_name), "{codec}");
+            assert!(codec.contains("SerializerCodec < KeySerializer"), "{codec}");
+            assert!(
+                codec.contains("SerializerCodec < ExternalSerializer"),
+                "{codec}"
+            );
+        }
+    }
+
+    #[test]
+    fn lowers_nested_map_value() {
+        let codec = selected_codec(
+            parse_quote!(HashMap<Key, Vec<External>>),
+            parse_quote!(
+                HashMapSerializer<KeySerializer, VecSerializer<ExternalSerializer>>
+            ),
+        );
+        assert!(
+            codec.contains("HashMapCodec < Key , Vec < External >"),
+            "{codec}"
+        );
+        assert!(codec.contains("VecCodec < External"), "{codec}");
+        assert!(
+            codec.contains("SerializerCodec < ExternalSerializer"),
+            "{codec}"
+        );
+    }
+
+    #[test]
+    fn lowers_array_serializer_const() {
+        let codec = selected_codec(
+            parse_quote!([External; N]),
+            parse_quote!(ArraySerializer<ExternalSerializer, M>),
+        );
+        assert!(codec.contains("ArrayCodec < External"), "{codec}");
+        assert!(
+            codec.contains("SerializerCodec < ExternalSerializer"),
+            "{codec}"
+        );
+        assert!(codec.contains(", M , false , false"), "{codec}");
+    }
+
+    #[test]
+    fn lowers_tuple_serializers() {
+        for arity in 1..=22 {
+            let target_elements = (0..arity)
+                .map(|index| format!("T{index}"))
+                .collect::<Vec<_>>()
+                .join(", ");
+            let provider_elements = (0..arity)
+                .map(|index| format!("S{index}"))
+                .collect::<Vec<_>>()
+                .join(", ");
+            let target = if arity == 1 {
+                format!("({target_elements},)")
+            } else {
+                format!("({target_elements})")
+            };
+            let provider = format!("Tuple{arity}Serializer<{provider_elements}>");
+            let codec = selected_codec(
+                syn::parse_str(&target).unwrap(),
+                syn::parse_str(&provider).unwrap(),
+            );
+            assert!(codec.contains(&format!("Tuple{arity}Codec")), "{codec}");
+            for index in 0..arity {
+                assert!(
+                    codec.contains(&format!("SerializerCodec < S{index}")),
+                    "{codec}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn lowers_ordinary_carriers() {
+        let codec = selected_codec(
+            parse_quote!(Vec<Option<External>>),
+            parse_quote!(Vec<Option<External>>),
+        );
+        assert!(codec.contains("VecCodec < Option < External >"), "{codec}");
+        assert!(codec.contains("OptionCodec < External"), "{codec}");
+        assert!(codec.contains("SerializerCodec < External"), "{codec}");
+
+        let codec = selected_codec(
+            parse_quote!(HashMap<Key, External>),
+            parse_quote!(HashMap<Key, External>),
+        );
+        assert!(codec.contains("HashMapCodec < Key , External"), "{codec}");
+
+        let codec = selected_codec(parse_quote!([External; N]), parse_quote!([External; N]));
+        assert!(codec.contains("ArrayCodec < External"), "{codec}");
+
+        let codec = selected_codec(parse_quote!((Key, External)), parse_quote!((Key, External)));
+        assert!(codec.contains("Tuple2Codec < Key"), "{codec}");
+    }
+
+    #[test]
+    fn lowers_nested_dynamic() {
+        let codec = selected_codec(
+            parse_quote!(Vec<Box<dyn Animal>>),
+            parse_quote!(VecSerializer<Box<dyn Animal>>),
+        );
+        assert!(codec.contains("VecCodec < Box < dyn Animal >"), "{codec}");
+        assert!(codec.contains("AnimalBoxCodec"), "{codec}");
+        assert!(!codec.contains("SerializerCodec < Box < dyn Animal"));
+    }
+
+    #[test]
+    fn dynamic_provider_is_preserved() {
+        let codec = selected_codec(
+            parse_quote!(Vec<Box<dyn Animal>>),
+            parse_quote!(VecSerializer<Box<dyn Plant>>),
+        );
+        assert!(codec.contains("PlantBoxCodec"), "{codec}");
+        assert!(!codec.contains("AnimalBoxCodec"), "{codec}");
+    }
+
+    #[test]
+    fn carrier_alias_uses_leaf_codec() {
+        let codec = selected_codec(
+            parse_quote!(Vec<External>),
+            parse_quote!(Users<ExternalSerializer>),
+        );
+        // The leaf adapter's cold field-schema validation owns the targeted
+        // rejection because stable derive cannot resolve this alias.
+        assert!(codec.contains("SerializerCodec < Users < ExternalSerializer >"));
+        assert!(!codec.contains("VecCodec"));
+    }
+
+    #[test]
+    fn rejects_malformed_carrier_arity() {
+        for (target, provider, expected) in [
+            (
+                "Vec<External>",
+                "VecSerializer",
+                "VecSerializer requires exactly 1 type argument",
+            ),
+            (
+                "Vec<External>",
+                "VecSerializer<A, B>",
+                "VecSerializer requires exactly 1 type argument",
+            ),
+            (
+                "HashMap<Key, External>",
+                "HashMapSerializer<KeySerializer>",
+                "HashMapSerializer requires exactly 2 type argument",
+            ),
+            (
+                "[External; 4]",
+                "ArraySerializer<ExternalSerializer>",
+                "ArraySerializer requires one serializer type and one const length",
+            ),
+            (
+                "(A, B)",
+                "Tuple2Serializer<SA>",
+                "Tuple2Serializer requires exactly 2 type argument",
+            ),
+        ] {
+            let error = selected_error(
+                syn::parse_str(target).unwrap(),
+                syn::parse_str(provider).unwrap(),
+            );
+            assert!(error.contains(expected), "{error}");
+        }
+    }
+
+    #[test]
+    fn rejects_carrier_target_shape() {
+        let error = selected_error(
+            parse_quote!(Option<External>),
+            parse_quote!(VecSerializer<ExternalSerializer>),
+        );
+        assert!(error.contains("requires target Vec<T>"), "{error}");
+
+        let error = selected_error(parse_quote!((A,)), parse_quote!(Tuple2Serializer<SA, SB>));
+        assert!(error.contains("target tuple has arity 1"), "{error}");
     }
 }

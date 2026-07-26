@@ -17,9 +17,8 @@
 
 use crate::context::{ReadContext, WriteContext};
 use crate::error::Error;
-use crate::meta::FieldType;
-use crate::resolver::{RefMode, TypeInfo, TypeResolver};
-use crate::serializer::codec::{Codec, OptionCodec, SerializerCodec};
+use crate::resolver::{RefMode, TypeInfo};
+use crate::serializer::codec::OptionCodec;
 use crate::serializer::Serializer;
 use crate::type_id::TypeId;
 use std::marker::PhantomData;
@@ -28,24 +27,24 @@ use std::rc::Rc;
 /// Fory-owned static composition for `Option<S::Target>`.
 pub struct OptionSerializer<S>(PhantomData<fn() -> S>);
 
-type RootCodec<S> = OptionCodec<<S as Serializer>::Target, SerializerCodec<S, false, false>, false>;
+type RootSerializer<S> = OptionCodec<<S as Serializer>::Target, S, false>;
 
 impl<S: Serializer> Serializer for OptionSerializer<S> {
     type Target = Option<S::Target>;
 
     #[inline(always)]
     fn write_data(value: &Self::Target, context: &mut WriteContext) -> Result<(), Error> {
-        <RootCodec<S> as Codec<Self::Target>>::write_data(value, context)
+        <RootSerializer<S> as Serializer>::write_data(value, context)
     }
 
     #[inline(always)]
     fn read_data(context: &mut ReadContext) -> Result<Self::Target, Error> {
-        <RootCodec<S> as Codec<Self::Target>>::read_data(context)
+        <RootSerializer<S> as Serializer>::read_data(context)
     }
 
     #[inline(always)]
     fn default_value(context: &mut ReadContext) -> Result<Self::Target, Error> {
-        <RootCodec<S> as Codec<Self::Target>>::default_value(context)
+        <RootSerializer<S> as Serializer>::default_value(context)
     }
 
     #[inline(always)]
@@ -54,15 +53,8 @@ impl<S: Serializer> Serializer for OptionSerializer<S> {
         context: &mut WriteContext,
         ref_mode: RefMode,
         write_type_info: bool,
-        has_generics: bool,
     ) -> Result<(), Error> {
-        <RootCodec<S> as Codec<Self::Target>>::write_with_mode(
-            value,
-            context,
-            ref_mode,
-            write_type_info,
-            has_generics,
-        )
+        <RootSerializer<S> as Serializer>::write(value, context, ref_mode, write_type_info)
     }
 
     #[inline(always)]
@@ -70,7 +62,7 @@ impl<S: Serializer> Serializer for OptionSerializer<S> {
         context: &mut WriteContext,
         target_type_id: std::any::TypeId,
     ) -> Result<Rc<TypeInfo>, Error> {
-        <RootCodec<S> as Codec<Self::Target>>::write_type_info_value(context, target_type_id)
+        <RootSerializer<S> as Serializer>::write_type_info_value(context, target_type_id)
     }
 
     #[inline(always)]
@@ -79,15 +71,8 @@ impl<S: Serializer> Serializer for OptionSerializer<S> {
         context: &mut WriteContext,
         ref_mode: RefMode,
         type_info: &Rc<TypeInfo>,
-        has_generics: bool,
     ) -> Result<(), Error> {
-        <RootCodec<S> as Codec<Self::Target>>::write_with_type_info(
-            value,
-            context,
-            ref_mode,
-            type_info,
-            has_generics,
-        )
+        <RootSerializer<S> as Serializer>::write_with_type_info(value, context, ref_mode, type_info)
     }
 
     #[inline(always)]
@@ -96,7 +81,7 @@ impl<S: Serializer> Serializer for OptionSerializer<S> {
         ref_mode: RefMode,
         read_type_info: bool,
     ) -> Result<Self::Target, Error> {
-        <RootCodec<S> as Codec<Self::Target>>::read_with_mode(context, ref_mode, read_type_info)
+        <RootSerializer<S> as Serializer>::read(context, ref_mode, read_type_info)
     }
 
     #[inline(always)]
@@ -105,45 +90,27 @@ impl<S: Serializer> Serializer for OptionSerializer<S> {
         ref_mode: RefMode,
         type_info: &Rc<TypeInfo>,
     ) -> Result<Self::Target, Error> {
-        <RootCodec<S> as Codec<Self::Target>>::read_with_type_info(context, ref_mode, type_info)
-    }
-
-    #[inline(always)]
-    fn field_type<const NULLABLE: bool, const TRACK_REF: bool>(
-        type_resolver: &TypeResolver,
-    ) -> Result<FieldType, Error> {
-        let _ = NULLABLE;
-        <OptionCodec<S::Target, SerializerCodec<S, false, false>, TRACK_REF> as Codec<
-            Self::Target,
-        >>::field_type(type_resolver)
-    }
-
-    #[inline(always)]
-    fn read_data_with_field_type(
-        context: &mut ReadContext,
-        remote_field_type: &FieldType,
-    ) -> Result<Self::Target, Error> {
-        <RootCodec<S> as Codec<Self::Target>>::read_data_with_type(context, remote_field_type)
+        <RootSerializer<S> as Serializer>::read_with_type_info(context, ref_mode, type_info)
     }
 
     #[inline(always)]
     fn write_type_info(context: &mut WriteContext) -> Result<(), Error> {
-        <RootCodec<S> as Codec<Self::Target>>::write_type_info(context)
+        <RootSerializer<S> as Serializer>::write_type_info(context)
     }
 
     #[inline(always)]
     fn read_type_info(context: &mut ReadContext) -> Result<(), Error> {
-        <RootCodec<S> as Codec<Self::Target>>::read_type_info(context)
+        <RootSerializer<S> as Serializer>::read_type_info(context)
     }
 
     #[inline(always)]
     fn static_type_id() -> TypeId {
-        <RootCodec<S> as Codec<Self::Target>>::static_type_id()
+        <RootSerializer<S> as Serializer>::static_type_id()
     }
 
     #[inline(always)]
     fn reserved_space() -> usize {
-        <RootCodec<S> as Codec<Self::Target>>::reserved_space()
+        <RootSerializer<S> as Serializer>::reserved_space()
     }
 
     #[inline(always)]
@@ -158,12 +125,12 @@ impl<S: Serializer> Serializer for OptionSerializer<S> {
 
     #[inline(always)]
     fn is_polymorphic() -> bool {
-        <RootCodec<S> as Codec<Self::Target>>::is_polymorphic()
+        <RootSerializer<S> as Serializer>::is_polymorphic()
     }
 
     #[inline(always)]
     fn is_shared_ref() -> bool {
-        <RootCodec<S> as Codec<Self::Target>>::is_shared_ref()
+        <RootSerializer<S> as Serializer>::is_shared_ref()
     }
 
     #[inline(always)]
@@ -212,9 +179,8 @@ where
         context: &mut WriteContext,
         ref_mode: RefMode,
         write_type_info: bool,
-        has_generics: bool,
     ) -> Result<(), Error> {
-        OptionSerializer::<T>::write(value, context, ref_mode, write_type_info, has_generics)
+        OptionSerializer::<T>::write(value, context, ref_mode, write_type_info)
     }
 
     #[inline(always)]
@@ -231,15 +197,8 @@ where
         context: &mut WriteContext,
         ref_mode: RefMode,
         type_info: &Rc<TypeInfo>,
-        has_generics: bool,
     ) -> Result<(), Error> {
-        OptionSerializer::<T>::write_with_type_info(
-            value,
-            context,
-            ref_mode,
-            type_info,
-            has_generics,
-        )
+        OptionSerializer::<T>::write_with_type_info(value, context, ref_mode, type_info)
     }
 
     #[inline(always)]
@@ -258,21 +217,6 @@ where
         type_info: &Rc<TypeInfo>,
     ) -> Result<Self, Error> {
         OptionSerializer::<T>::read_with_type_info(context, ref_mode, type_info)
-    }
-
-    #[inline(always)]
-    fn field_type<const NULLABLE: bool, const TRACK_REF: bool>(
-        type_resolver: &TypeResolver,
-    ) -> Result<FieldType, Error> {
-        OptionSerializer::<T>::field_type::<NULLABLE, TRACK_REF>(type_resolver)
-    }
-
-    #[inline(always)]
-    fn read_data_with_field_type(
-        context: &mut ReadContext,
-        remote_field_type: &FieldType,
-    ) -> Result<Self, Error> {
-        OptionSerializer::<T>::read_data_with_field_type(context, remote_field_type)
     }
 
     #[inline(always)]

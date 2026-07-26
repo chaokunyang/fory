@@ -160,11 +160,8 @@ macro_rules! register_trait_type {
                     any: &dyn std::any::Any,
                     context: &mut $crate::WriteContext,
                     type_info: &std::rc::Rc<$crate::TypeInfo>,
-                    has_generics: bool,
                 ) -> Result<(), $crate::Error> {
-                    type_info
-                        .get_harness()
-                        .write_data(any, context, has_generics)
+                    type_info.get_harness().write_data(any, context)
                 }
 
                 #[inline(always)]
@@ -172,7 +169,6 @@ macro_rules! register_trait_type {
                     any: &dyn std::any::Any,
                     context: &mut $crate::WriteContext,
                     write_type_info: bool,
-                    has_generics: bool,
                 ) -> Result<(), $crate::Error> {
                     let type_info = Self::resolve_type_info(context, any.type_id())?;
                     let type_info = if write_type_info {
@@ -183,7 +179,7 @@ macro_rules! register_trait_type {
                     } else {
                         type_info
                     };
-                    Self::write_harness(any, context, &type_info, has_generics)
+                    Self::write_harness(any, context, &type_info)
                 }
 
                 #[inline(always)]
@@ -191,10 +187,9 @@ macro_rules! register_trait_type {
                     value: &dyn $trait_name,
                     context: &mut $crate::WriteContext,
                     write_type_info: bool,
-                    has_generics: bool,
                 ) -> Result<(), $crate::Error> {
                     let any = Self::checked_any(value)?;
-                    Self::write_checked(any, context, write_type_info, has_generics)
+                    Self::write_checked(any, context, write_type_info)
                 }
 
                 #[inline(always)]
@@ -323,7 +318,6 @@ macro_rules! register_trait_type {
                         value.as_ref(),
                         context,
                         false,
-                        false,
                     )
                 }
 
@@ -337,20 +331,6 @@ macro_rules! register_trait_type {
                         stringify!($trait_name),
                         "> requires concrete type metadata",
                     )))
-                }
-
-                #[inline(always)]
-                fn write_data_with_generics(
-                    value: &Self,
-                    context: &mut $crate::WriteContext,
-                    has_generics: bool,
-                ) -> Result<(), $crate::Error> {
-                    [<$trait_name ForyDispatch>]::write_data(
-                        value.as_ref(),
-                        context,
-                        false,
-                        has_generics,
-                    )
                 }
 
                 #[inline(always)]
@@ -370,7 +350,6 @@ macro_rules! register_trait_type {
                     context: &mut $crate::WriteContext,
                     ref_mode: $crate::RefMode,
                     type_info: &std::rc::Rc<$crate::TypeInfo>,
-                    has_generics: bool,
                 ) -> Result<(), $crate::Error> {
                     let any = [<$trait_name ForyDispatch>]::checked_any(value.as_ref())?;
                     [<$trait_name ForyDispatch>]::check_type_info(any.type_id(), type_info)?;
@@ -381,7 +360,6 @@ macro_rules! register_trait_type {
                         any,
                         context,
                         type_info,
-                        has_generics,
                     )
                 }
 
@@ -391,7 +369,6 @@ macro_rules! register_trait_type {
                     context: &mut $crate::WriteContext,
                     ref_mode: $crate::RefMode,
                     write_type_info: bool,
-                    has_generics: bool,
                 ) -> Result<(), $crate::Error> {
                     let any = [<$trait_name ForyDispatch>]::checked_any(value.as_ref())?;
                     if ref_mode != $crate::RefMode::None {
@@ -401,7 +378,6 @@ macro_rules! register_trait_type {
                         any,
                         context,
                         write_type_info,
-                        has_generics,
                     )
                 }
 
@@ -447,18 +423,6 @@ macro_rules! register_trait_type {
                     })();
                     context.dec_depth();
                     result
-                }
-
-                #[inline(always)]
-                fn field_type<const NULLABLE: bool, const TRACK_REF: bool>(
-                    _type_resolver: &$crate::TypeResolver,
-                ) -> Result<$crate::meta::FieldType, $crate::Error> {
-                    Ok($crate::meta::FieldType::new_with_ref(
-                        $crate::TypeId::UNKNOWN as u32,
-                        NULLABLE,
-                        TRACK_REF,
-                        Vec::new(),
-                    ))
                 }
 
                 #[inline(always)]
@@ -550,7 +514,6 @@ macro_rules! register_trait_type {
                         value.as_ref(),
                         context,
                         false,
-                        false,
                     )
                 }
 
@@ -564,20 +527,6 @@ macro_rules! register_trait_type {
                         stringify!($trait_name),
                         "> requires concrete type metadata",
                     )))
-                }
-
-                #[inline(always)]
-                fn write_data_with_generics(
-                    value: &Self::Target,
-                    context: &mut $crate::WriteContext,
-                    has_generics: bool,
-                ) -> Result<(), $crate::Error> {
-                    [<$trait_name ForyDispatch>]::write_data(
-                        value.as_ref(),
-                        context,
-                        false,
-                        has_generics,
-                    )
                 }
 
                 #[inline(always)]
@@ -597,7 +546,6 @@ macro_rules! register_trait_type {
                     context: &mut $crate::WriteContext,
                     ref_mode: $crate::RefMode,
                     type_info: &std::rc::Rc<$crate::TypeInfo>,
-                    has_generics: bool,
                 ) -> Result<(), $crate::Error> {
                     let any = [<$trait_name ForyDispatch>]::checked_any(value.as_ref())?;
                     [<$trait_name ForyDispatch>]::check_type_info(any.type_id(), type_info)?;
@@ -612,7 +560,6 @@ macro_rules! register_trait_type {
                         any,
                         context,
                         type_info,
-                        has_generics,
                     )
                 }
 
@@ -622,7 +569,6 @@ macro_rules! register_trait_type {
                     context: &mut $crate::WriteContext,
                     ref_mode: $crate::RefMode,
                     write_type_info: bool,
-                    has_generics: bool,
                 ) -> Result<(), $crate::Error> {
                     let any = [<$trait_name ForyDispatch>]::checked_any(value.as_ref())?;
                     if ref_mode != $crate::RefMode::None
@@ -636,7 +582,6 @@ macro_rules! register_trait_type {
                         any,
                         context,
                         write_type_info,
-                        has_generics,
                     )
                 }
 
@@ -742,18 +687,6 @@ macro_rules! register_trait_type {
                             Ok(value)
                         }
                     }
-                }
-
-                #[inline(always)]
-                fn field_type<const NULLABLE: bool, const TRACK_REF: bool>(
-                    _type_resolver: &$crate::TypeResolver,
-                ) -> Result<$crate::meta::FieldType, $crate::Error> {
-                    Ok($crate::meta::FieldType::new_with_ref(
-                        $crate::TypeId::UNKNOWN as u32,
-                        NULLABLE,
-                        TRACK_REF,
-                        Vec::new(),
-                    ))
                 }
 
                 #[inline(always)]
@@ -878,7 +811,6 @@ macro_rules! register_trait_type {
                         value.as_ref(),
                         context,
                         false,
-                        false,
                     )
                 }
 
@@ -892,20 +824,6 @@ macro_rules! register_trait_type {
                         stringify!($trait_name),
                         "> requires concrete type metadata",
                     )))
-                }
-
-                #[inline(always)]
-                fn write_data_with_generics(
-                    value: &Self::Target,
-                    context: &mut $crate::WriteContext,
-                    has_generics: bool,
-                ) -> Result<(), $crate::Error> {
-                    [<$trait_name ForyDispatch>]::write_data(
-                        value.as_ref(),
-                        context,
-                        false,
-                        has_generics,
-                    )
                 }
 
                 #[inline(always)]
@@ -925,7 +843,6 @@ macro_rules! register_trait_type {
                     context: &mut $crate::WriteContext,
                     ref_mode: $crate::RefMode,
                     type_info: &std::rc::Rc<$crate::TypeInfo>,
-                    has_generics: bool,
                 ) -> Result<(), $crate::Error> {
                     let any = [<$trait_name ForyDispatch>]::checked_any(value.as_ref())?;
                     [<$trait_name ForyDispatch>]::check_type_info(any.type_id(), type_info)?;
@@ -940,7 +857,6 @@ macro_rules! register_trait_type {
                         any,
                         context,
                         type_info,
-                        has_generics,
                     )
                 }
 
@@ -950,7 +866,6 @@ macro_rules! register_trait_type {
                     context: &mut $crate::WriteContext,
                     ref_mode: $crate::RefMode,
                     write_type_info: bool,
-                    has_generics: bool,
                 ) -> Result<(), $crate::Error> {
                     let any = [<$trait_name ForyDispatch>]::checked_any(value.as_ref())?;
                     if ref_mode != $crate::RefMode::None
@@ -964,7 +879,6 @@ macro_rules! register_trait_type {
                         any,
                         context,
                         write_type_info,
-                        has_generics,
                     )
                 }
 
@@ -1073,18 +987,6 @@ macro_rules! register_trait_type {
                 }
 
                 #[inline(always)]
-                fn field_type<const NULLABLE: bool, const TRACK_REF: bool>(
-                    _type_resolver: &$crate::TypeResolver,
-                ) -> Result<$crate::meta::FieldType, $crate::Error> {
-                    Ok($crate::meta::FieldType::new_with_ref(
-                        $crate::TypeId::UNKNOWN as u32,
-                        NULLABLE,
-                        TRACK_REF,
-                        Vec::new(),
-                    ))
-                }
-
-                #[inline(always)]
                 fn write_type_info(
                     _context: &mut $crate::WriteContext,
                 ) -> Result<(), $crate::Error> {
@@ -1143,6 +1045,147 @@ macro_rules! register_trait_type {
         #[doc(hidden)]
         $vis struct $codec<const NULLABLE: bool, const TRACK_REF: bool>;
 
+        impl<const NULLABLE: bool, const TRACK_REF: bool> $crate::Serializer
+            for $codec<NULLABLE, TRACK_REF>
+        {
+            type Target = $target;
+
+            #[inline(always)]
+            fn write_data(
+                value: &Self::Target,
+                context: &mut $crate::WriteContext,
+            ) -> Result<(), $crate::Error> {
+                <$provider as $crate::Serializer>::write_data(value, context)
+            }
+
+            #[inline(always)]
+            fn read_data(
+                context: &mut $crate::ReadContext,
+            ) -> Result<Self::Target, $crate::Error> {
+                <$provider as $crate::Serializer>::read_data(context)
+            }
+
+            #[inline(always)]
+            fn default_value(
+                context: &mut $crate::ReadContext,
+            ) -> Result<Self::Target, $crate::Error> {
+                <$provider as $crate::Serializer>::default_value(context)
+            }
+
+            #[inline(always)]
+            fn write(
+                value: &Self::Target,
+                context: &mut $crate::WriteContext,
+                ref_mode: $crate::RefMode,
+                write_type_info: bool,
+            ) -> Result<(), $crate::Error> {
+                <$provider as $crate::Serializer>::write(
+                    value,
+                    context,
+                    ref_mode,
+                    write_type_info,
+                )
+            }
+
+            #[inline(always)]
+            fn write_type_info_value(
+                context: &mut $crate::WriteContext,
+                target_type_id: std::any::TypeId,
+            ) -> Result<std::rc::Rc<$crate::TypeInfo>, $crate::Error> {
+                <$provider as $crate::Serializer>::write_type_info_value(
+                    context,
+                    target_type_id,
+                )
+            }
+
+            #[inline(always)]
+            fn write_with_type_info(
+                value: &Self::Target,
+                context: &mut $crate::WriteContext,
+                ref_mode: $crate::RefMode,
+                type_info: &std::rc::Rc<$crate::TypeInfo>,
+            ) -> Result<(), $crate::Error> {
+                <$provider as $crate::Serializer>::write_with_type_info(
+                    value,
+                    context,
+                    ref_mode,
+                    type_info,
+                )
+            }
+
+            #[inline(always)]
+            fn read(
+                context: &mut $crate::ReadContext,
+                ref_mode: $crate::RefMode,
+                read_type_info: bool,
+            ) -> Result<Self::Target, $crate::Error> {
+                <$provider as $crate::Serializer>::read(
+                    context,
+                    ref_mode,
+                    read_type_info,
+                )
+            }
+
+            #[inline(always)]
+            fn read_with_type_info(
+                context: &mut $crate::ReadContext,
+                ref_mode: $crate::RefMode,
+                type_info: &std::rc::Rc<$crate::TypeInfo>,
+            ) -> Result<Self::Target, $crate::Error> {
+                <$provider as $crate::Serializer>::read_with_type_info(
+                    context,
+                    ref_mode,
+                    type_info,
+                )
+            }
+
+            #[inline(always)]
+            fn write_type_info(
+                _context: &mut $crate::WriteContext,
+            ) -> Result<(), $crate::Error> {
+                Ok(())
+            }
+
+            #[inline(always)]
+            fn read_type_info(
+                _context: &mut $crate::ReadContext,
+            ) -> Result<(), $crate::Error> {
+                Ok(())
+            }
+
+            #[inline(always)]
+            fn static_type_id() -> $crate::TypeId {
+                $crate::TypeId::UNKNOWN
+            }
+
+            #[inline(always)]
+            fn reserved_space() -> usize {
+                <$provider as $crate::Serializer>::reserved_space()
+            }
+
+            #[inline(always)]
+            fn is_polymorphic() -> bool {
+                true
+            }
+
+            #[inline(always)]
+            fn is_shared_ref() -> bool {
+                <$provider as $crate::Serializer>::is_shared_ref()
+            }
+
+            #[inline(always)]
+            fn dynamic_type_id(
+                value: &Self::Target,
+            ) -> Result<Option<std::any::TypeId>, $crate::Error> {
+                <$provider as $crate::Serializer>::dynamic_type_id(value)
+            }
+
+            #[inline(always)]
+            fn dynamic_type_is_direct() -> bool {
+                <$provider as $crate::Serializer>::dynamic_type_is_direct()
+            }
+        }
+
         impl<const NULLABLE: bool, const TRACK_REF: bool>
             $crate::serializer::codec::Codec<$target>
             for $codec<NULLABLE, TRACK_REF>
@@ -1160,7 +1203,7 @@ macro_rules! register_trait_type {
             }
 
             #[inline(always)]
-            fn reserved_space() -> usize {
+            fn field_reserved_space() -> usize {
                 <$provider as $crate::Serializer>::reserved_space()
                     + $crate::type_id::SIZE_OF_REF_AND_TYPE
             }
@@ -1181,7 +1224,6 @@ macro_rules! register_trait_type {
                         $crate::RefMode::None
                     },
                     true,
-                    false,
                 )
             }
 
@@ -1189,7 +1231,7 @@ macro_rules! register_trait_type {
             fn read_field(
                 context: &mut $crate::ReadContext,
             ) -> Result<$target, $crate::Error> {
-                Self::read_with_mode(
+                <$provider as $crate::Serializer>::read(
                     context,
                     if TRACK_REF {
                         $crate::RefMode::Tracking
@@ -1203,26 +1245,11 @@ macro_rules! register_trait_type {
             }
 
             #[inline(always)]
-            fn write_data(
-                value: &$target,
-                context: &mut $crate::WriteContext,
-            ) -> Result<(), $crate::Error> {
-                <$provider as $crate::Serializer>::write_data(value, context)
-            }
-
-            #[inline(always)]
-            fn read_data(
-                context: &mut $crate::ReadContext,
-            ) -> Result<$target, $crate::Error> {
-                <$provider as $crate::Serializer>::read_data(context)
-            }
-
-            #[inline(always)]
             fn read_field_with_type(
                 context: &mut $crate::ReadContext,
                 remote_field_type: &$crate::meta::FieldType,
             ) -> Result<$target, $crate::Error> {
-                Self::read_with_mode(
+                <$provider as $crate::Serializer>::read(
                     context,
                     $crate::serializer::codec::field_ref_mode(remote_field_type),
                     true,
@@ -1235,25 +1262,13 @@ macro_rules! register_trait_type {
                 context: &mut $crate::WriteContext,
                 ref_mode: $crate::RefMode,
                 write_type_info: bool,
-                has_generics: bool,
+                _has_generics: bool,
             ) -> Result<(), $crate::Error> {
                 <$provider as $crate::Serializer>::write(
                     value,
                     context,
                     ref_mode,
                     write_type_info,
-                    has_generics,
-                )
-            }
-
-            #[inline(always)]
-            fn write_type_info_value(
-                context: &mut $crate::WriteContext,
-                target_type_id: std::any::TypeId,
-            ) -> Result<std::rc::Rc<$crate::TypeInfo>, $crate::Error> {
-                <$provider as $crate::Serializer>::write_type_info_value(
-                    context,
-                    target_type_id,
                 )
             }
 
@@ -1263,62 +1278,14 @@ macro_rules! register_trait_type {
                 context: &mut $crate::WriteContext,
                 ref_mode: $crate::RefMode,
                 type_info: &std::rc::Rc<$crate::TypeInfo>,
-                has_generics: bool,
+                _has_generics: bool,
             ) -> Result<(), $crate::Error> {
                 <$provider as $crate::Serializer>::write_with_type_info(
                     value,
                     context,
                     ref_mode,
                     type_info,
-                    has_generics,
                 )
-            }
-
-            #[inline(always)]
-            fn read_with_mode(
-                context: &mut $crate::ReadContext,
-                ref_mode: $crate::RefMode,
-                read_type_info: bool,
-            ) -> Result<$target, $crate::Error> {
-                <$provider as $crate::Serializer>::read(
-                    context,
-                    ref_mode,
-                    read_type_info,
-                )
-            }
-
-            #[inline(always)]
-            fn read_with_type_info(
-                context: &mut $crate::ReadContext,
-                ref_mode: $crate::RefMode,
-                type_info: &std::rc::Rc<$crate::TypeInfo>,
-            ) -> Result<$target, $crate::Error> {
-                <$provider as $crate::Serializer>::read_with_type_info(
-                    context,
-                    ref_mode,
-                    type_info,
-                )
-            }
-
-            #[inline(always)]
-            fn default_value(
-                context: &mut $crate::ReadContext,
-            ) -> Result<$target, $crate::Error> {
-                <$provider as $crate::Serializer>::default_value(context)
-            }
-
-            #[inline(always)]
-            fn write_type_info(
-                _context: &mut $crate::WriteContext,
-            ) -> Result<(), $crate::Error> {
-                Ok(())
-            }
-
-            #[inline(always)]
-            fn read_type_info(
-                _context: &mut $crate::ReadContext,
-            ) -> Result<(), $crate::Error> {
-                Ok(())
             }
 
             #[inline(always)]
@@ -1328,33 +1295,6 @@ macro_rules! register_trait_type {
                 context
                     .read_any_type_info()
                     .map($crate::serializer::codec::CodecReadType::TypeInfo)
-            }
-
-            #[inline(always)]
-            fn static_type_id() -> $crate::TypeId {
-                $crate::TypeId::UNKNOWN
-            }
-
-            #[inline(always)]
-            fn is_polymorphic() -> bool {
-                true
-            }
-
-            #[inline(always)]
-            fn is_shared_ref() -> bool {
-                <$provider as $crate::Serializer>::is_shared_ref()
-            }
-
-            #[inline(always)]
-            fn dynamic_type_id(
-                value: &$target,
-            ) -> Result<Option<std::any::TypeId>, $crate::Error> {
-                <$provider as $crate::Serializer>::dynamic_type_id(value)
-            }
-
-            #[inline(always)]
-            fn dynamic_type_is_direct() -> bool {
-                <$provider as $crate::Serializer>::dynamic_type_is_direct()
             }
         }
     };

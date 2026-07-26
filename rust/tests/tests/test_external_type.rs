@@ -169,6 +169,38 @@ struct CompatibleSharedV2(
     #[fory(with = ArcSerializer<UserV2Serializer>)] Arc<UserV2>,
 );
 
+#[derive(ForyStruct)]
+struct CompatibleCarriersV1 {
+    #[fory(with = VecSerializer<UserV1Serializer>)]
+    direct_list: Vec<UserV1>,
+    #[fory(list(element(with = UserV1Serializer)))]
+    recursive_list: Vec<UserV1>,
+    #[fory(with = HashMapSerializer<String, UserV1Serializer>)]
+    direct_map: HashMap<String, UserV1>,
+    #[fory(map(value(with = UserV1Serializer)))]
+    recursive_map: HashMap<String, UserV1>,
+    #[fory(with = Tuple2Serializer<String, UserV1Serializer>)]
+    direct_tuple: (String, UserV1),
+    #[fory(tuple(element(index = 1, with = UserV1Serializer)))]
+    recursive_tuple: (String, UserV1),
+}
+
+#[derive(ForyStruct)]
+struct CompatibleCarriersV2 {
+    #[fory(with = VecSerializer<UserV2Serializer>)]
+    direct_list: Vec<UserV2>,
+    #[fory(list(element(with = UserV2Serializer)))]
+    recursive_list: Vec<UserV2>,
+    #[fory(with = HashMapSerializer<String, UserV2Serializer>)]
+    direct_map: HashMap<String, UserV2>,
+    #[fory(map(value(with = UserV2Serializer)))]
+    recursive_map: HashMap<String, UserV2>,
+    #[fory(with = Tuple2Serializer<String, UserV2Serializer>)]
+    direct_tuple: (String, UserV2),
+    #[fory(tuple(element(index = 1, with = UserV2Serializer)))]
+    recursive_tuple: (String, UserV2),
+}
+
 struct ExternalIdSerializer;
 
 impl Serializer for ExternalIdSerializer {
@@ -365,6 +397,61 @@ struct DirectUserList {
 struct RecursiveUserList {
     #[fory(list(element(with = UserSerializer)))]
     users: Vec<User>,
+}
+
+#[derive(ForyStruct)]
+struct DirectCarrierFields {
+    #[fory(with = VecDequeSerializer<UserSerializer>)]
+    deque: VecDeque<User>,
+    #[fory(with = LinkedListSerializer<UserSerializer>)]
+    linked: LinkedList<User>,
+    #[fory(with = HashSetSerializer<UserSerializer>)]
+    hash_set: HashSet<User>,
+    #[fory(with = BTreeSetSerializer<UserSerializer>)]
+    tree_set: BTreeSet<User>,
+    #[fory(with = BinaryHeapSerializer<UserSerializer>)]
+    heap: BinaryHeap<User>,
+    #[fory(with = ArraySerializer<UserSerializer, 2>)]
+    array: [User; 2],
+    #[fory(with = HashMapSerializer<KeySerializer, UserSerializer>)]
+    hash_map: HashMap<Key, User>,
+    #[fory(with = BTreeMapSerializer<KeySerializer, UserSerializer>)]
+    tree_map: BTreeMap<Key, User>,
+    #[fory(with = Tuple1Serializer<UserSerializer>)]
+    tuple1: (User,),
+    #[fory(with = Tuple2Serializer<String, UserSerializer>)]
+    tuple2: (String, User),
+    #[fory(
+        with = HashMapSerializer<
+            KeySerializer,
+            VecSerializer<Tuple2Serializer<String, UserSerializer>>,
+        >
+    )]
+    nested: HashMap<Key, Vec<(String, User)>>,
+    #[fory(with = VecSerializer<Box<dyn Animal>>)]
+    animals: Vec<Box<dyn Animal>>,
+}
+
+type UserListSerializer = VecSerializer<UserSerializer>;
+
+#[derive(ForyStruct)]
+struct AliasedUserList {
+    #[fory(with = UserListSerializer)]
+    users: Vec<User>,
+}
+
+type SkippedUserListSerializer = VecSerializer<UserSerializer>;
+
+#[derive(ForyStruct, Debug, PartialEq)]
+struct SkippedCarrierDefaults {
+    #[fory(skip, with = SkippedUserListSerializer)]
+    users: Vec<User>,
+    #[fory(skip, with = HashMapSerializer<KeySerializer, UserSerializer>)]
+    by_key: HashMap<Key, User>,
+    #[fory(skip, with = ArraySerializer<UserSerializer, 2>)]
+    array: [User; 2],
+    #[fory(skip, with = Tuple2Serializer<String, UserSerializer>)]
+    tuple: (String, User),
 }
 
 #[derive(ForyStruct)]
@@ -1263,6 +1350,97 @@ fn direct_carrier_field() {
 }
 
 #[test]
+fn direct_carrier_field_family() {
+    let mut fory = configured_fory();
+    fory.register::<DirectCarrierFields>(190).unwrap();
+
+    let ada = user("Ada", 37);
+    let grace = user("Grace", 28);
+    let users = [ada.clone(), grace.clone()];
+    let value = DirectCarrierFields {
+        deque: users.iter().cloned().collect(),
+        linked: users.iter().cloned().collect(),
+        hash_set: users.iter().cloned().collect(),
+        tree_set: users.iter().cloned().collect(),
+        heap: users.iter().cloned().collect(),
+        array: [ada.clone(), grace.clone()],
+        hash_map: HashMap::from([(key("people", 1), ada.clone())]),
+        tree_map: BTreeMap::from([(key("people", 2), grace.clone())]),
+        tuple1: (ada.clone(),),
+        tuple2: ("lead".to_string(), grace.clone()),
+        nested: HashMap::from([(
+            key("team", 1),
+            vec![
+                ("lead".to_string(), ada.clone()),
+                ("reviewer".to_string(), grace.clone()),
+            ],
+        )]),
+        animals: vec![Box::new(ada.clone()), Box::new(grace.clone())],
+    };
+
+    let bytes = fory.serialize(&value).unwrap();
+    let decoded: DirectCarrierFields = fory.deserialize(&bytes).unwrap();
+    assert_eq!(decoded.deque, value.deque);
+    assert_eq!(decoded.linked, value.linked);
+    assert_eq!(decoded.hash_set, value.hash_set);
+    assert_eq!(decoded.tree_set, value.tree_set);
+    assert_eq!(decoded.heap.into_sorted_vec(), value.heap.into_sorted_vec());
+    assert_eq!(decoded.array, value.array);
+    assert_eq!(decoded.hash_map, value.hash_map);
+    assert_eq!(decoded.tree_map, value.tree_map);
+    assert_eq!(decoded.tuple1, value.tuple1);
+    assert_eq!(decoded.tuple2, value.tuple2);
+    assert_eq!(decoded.nested, value.nested);
+    assert_eq!(
+        decoded
+            .animals
+            .iter()
+            .map(|animal| animal.name())
+            .collect::<Vec<_>>(),
+        vec!["Ada", "Grace"]
+    );
+}
+
+#[test]
+fn carrier_alias_field_is_rejected() {
+    let mut fory = Fory::builder().xlang(false).compatible(false).build();
+    fory.register::<UserSerializer>(100).unwrap();
+    fory.register::<AliasedUserList>(101).unwrap();
+
+    let error = fory
+        .serialize(&AliasedUserList {
+            users: vec![user("Ada", 37)],
+        })
+        .unwrap_err();
+    assert!(error.to_string().contains("canonical carrier syntax"));
+}
+
+#[test]
+fn skipped_carrier_defaults() {
+    let mut fory = Fory::builder().xlang(false).compatible(false).build();
+    fory.register::<SkippedCarrierDefaults>(182).unwrap();
+
+    let value = SkippedCarrierDefaults {
+        users: vec![user("Ada", 37)],
+        by_key: HashMap::from([(key("people", 1), user("Grace", 28))]),
+        array: [user("Ada", 37), user("Grace", 28)],
+        tuple: ("lead".to_string(), user("Linus", 33)),
+    };
+    let bytes = fory.serialize(&value).unwrap();
+    let decoded: SkippedCarrierDefaults = fory.deserialize(&bytes).unwrap();
+    let default_user = user("", 0);
+    assert_eq!(
+        decoded,
+        SkippedCarrierDefaults {
+            users: Vec::new(),
+            by_key: HashMap::new(),
+            array: [default_user.clone(), default_user.clone()],
+            tuple: (String::new(), default_user),
+        }
+    );
+}
+
+#[test]
 fn primitive_carriers_match_roots() {
     let fory = Fory::builder().xlang(false).compatible(false).build();
 
@@ -1544,6 +1722,52 @@ fn compatible_external_schema() {
             age: 0,
         }
     );
+}
+
+#[test]
+fn compatible_carrier_schema() {
+    let mut writer = Fory::builder().xlang(false).compatible(true).build();
+    writer.register::<UserV1Serializer>(420).unwrap();
+    writer.register::<CompatibleCarriersV1>(421).unwrap();
+    let mut reader = Fory::builder().xlang(false).compatible(true).build();
+    reader.register::<UserV2Serializer>(420).unwrap();
+    reader.register::<CompatibleCarriersV2>(421).unwrap();
+
+    let ada = UserV1 {
+        name: "Ada".to_string(),
+    };
+    let grace = UserV1 {
+        name: "Grace".to_string(),
+    };
+    let bytes = writer
+        .serialize(&CompatibleCarriersV1 {
+            direct_list: vec![ada.clone()],
+            recursive_list: vec![grace.clone()],
+            direct_map: HashMap::from([("direct".to_string(), ada.clone())]),
+            recursive_map: HashMap::from([("recursive".to_string(), grace.clone())]),
+            direct_tuple: ("direct".to_string(), ada),
+            recursive_tuple: ("recursive".to_string(), grace),
+        })
+        .unwrap();
+    let decoded: CompatibleCarriersV2 = reader.deserialize(&bytes).unwrap();
+
+    let assert_user = |value: &UserV2, name: &str| {
+        assert_eq!(
+            value,
+            &UserV2 {
+                name: name.to_string(),
+                age: 0,
+            }
+        );
+    };
+    assert_user(&decoded.direct_list[0], "Ada");
+    assert_user(&decoded.recursive_list[0], "Grace");
+    assert_user(&decoded.direct_map["direct"], "Ada");
+    assert_user(&decoded.recursive_map["recursive"], "Grace");
+    assert_eq!(decoded.direct_tuple.0, "direct");
+    assert_user(&decoded.direct_tuple.1, "Ada");
+    assert_eq!(decoded.recursive_tuple.0, "recursive");
+    assert_user(&decoded.recursive_tuple.1, "Grace");
 }
 
 #[test]

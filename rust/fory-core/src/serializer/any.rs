@@ -17,8 +17,7 @@
 
 use crate::context::{ReadContext, WriteContext};
 use crate::error::Error;
-use crate::meta::FieldType;
-use crate::resolver::{RefFlag, RefMode, TypeInfo, TypeResolver};
+use crate::resolver::{RefFlag, RefMode, TypeInfo};
 use crate::serializer::Serializer;
 use crate::type_id::TypeId;
 use std::any::Any;
@@ -130,11 +129,6 @@ fn arc_any_metadata() -> Error {
     Error::invalid_data("Arc<dyn Any + Send + Sync> requires concrete type metadata")
 }
 
-#[inline(always)]
-fn erased_any_field_type<const NULLABLE: bool, const TRACK_REF: bool>() -> FieldType {
-    FieldType::new_with_ref(TypeId::UNKNOWN as u32, NULLABLE, TRACK_REF, Vec::new())
-}
-
 #[doc(hidden)]
 #[inline]
 pub fn check_erased_target_type(type_info: &TypeInfo) -> Result<(), Error> {
@@ -197,13 +191,9 @@ fn write_erased_any_type_info(
 }
 
 #[inline(always)]
-fn write_any_body(
-    value: &dyn Any,
-    context: &mut WriteContext,
-    has_generics: bool,
-) -> Result<(), Error> {
+fn write_any_body(value: &dyn Any, context: &mut WriteContext) -> Result<(), Error> {
     let type_info = get_erased_any_type_info(context, &value.type_id())?;
-    write_resolved_any_body(value, context, &type_info, has_generics)
+    write_resolved_any_body(value, context, &type_info)
 }
 
 #[inline(always)]
@@ -211,10 +201,9 @@ fn write_resolved_any_body(
     value: &dyn Any,
     context: &mut WriteContext,
     type_info: &Rc<TypeInfo>,
-    has_generics: bool,
 ) -> Result<(), Error> {
     check_resolved_target(value.type_id(), type_info)?;
-    write_any_harness(value, context, type_info, has_generics)
+    write_any_harness(value, context, type_info)
 }
 
 #[inline(always)]
@@ -222,11 +211,8 @@ fn write_any_harness(
     value: &dyn Any,
     context: &mut WriteContext,
     type_info: &Rc<TypeInfo>,
-    has_generics: bool,
 ) -> Result<(), Error> {
-    type_info
-        .get_harness()
-        .write_data(value, context, has_generics)
+    type_info.get_harness().write_data(value, context)
 }
 
 /// Reads a non-null `Box<dyn Any>` with concrete type metadata.
@@ -238,7 +224,7 @@ impl Serializer for Box<dyn Any> {
     type Target = Self;
     #[inline(always)]
     fn write_data(value: &Self, context: &mut WriteContext) -> Result<(), Error> {
-        write_any_body(value.as_ref(), context, false)
+        write_any_body(value.as_ref(), context)
     }
 
     #[cold]
@@ -247,15 +233,6 @@ impl Serializer for Box<dyn Any> {
         Err(Error::not_allowed(
             "Box<dyn Any> requires concrete type metadata",
         ))
-    }
-
-    #[inline(always)]
-    fn write_data_with_generics(
-        value: &Self,
-        context: &mut WriteContext,
-        has_generics: bool,
-    ) -> Result<(), Error> {
-        write_any_body(value.as_ref(), context, has_generics)
     }
 
     #[inline(always)]
@@ -272,9 +249,8 @@ impl Serializer for Box<dyn Any> {
         context: &mut WriteContext,
         ref_mode: RefMode,
         type_info: &Rc<TypeInfo>,
-        has_generics: bool,
     ) -> Result<(), Error> {
-        write_box_any_resolved(value.as_ref(), context, ref_mode, type_info, has_generics)
+        write_box_any_resolved(value.as_ref(), context, ref_mode, type_info)
     }
 
     #[inline(always)]
@@ -283,15 +259,8 @@ impl Serializer for Box<dyn Any> {
         context: &mut WriteContext,
         ref_mode: RefMode,
         write_type_info: bool,
-        has_generics: bool,
     ) -> Result<(), Error> {
-        write_box_any(
-            value.as_ref(),
-            context,
-            ref_mode,
-            write_type_info,
-            has_generics,
-        )
+        write_box_any(value.as_ref(), context, ref_mode, write_type_info)
     }
 
     #[inline(always)]
@@ -310,13 +279,6 @@ impl Serializer for Box<dyn Any> {
         type_info: &Rc<TypeInfo>,
     ) -> Result<Self, Error> {
         read_box_any(context, ref_mode, false, Some(type_info))
-    }
-
-    #[inline(always)]
-    fn field_type<const NULLABLE: bool, const TRACK_REF: bool>(
-        _: &TypeResolver,
-    ) -> Result<FieldType, Error> {
-        Ok(erased_any_field_type::<NULLABLE, TRACK_REF>())
     }
 
     #[inline(always)]
@@ -350,7 +312,6 @@ pub fn write_box_any(
     context: &mut WriteContext,
     ref_mode: RefMode,
     write_type_info: bool,
-    has_generics: bool,
 ) -> Result<(), Error> {
     let target_type_id = value.type_id();
     let type_info = get_erased_any_type_info(context, &target_type_id)?;
@@ -362,7 +323,7 @@ pub fn write_box_any(
     } else {
         type_info
     };
-    write_any_harness(value, context, &type_info, has_generics)
+    write_any_harness(value, context, &type_info)
 }
 
 #[inline(always)]
@@ -371,13 +332,12 @@ fn write_box_any_resolved(
     context: &mut WriteContext,
     ref_mode: RefMode,
     type_info: &Rc<TypeInfo>,
-    has_generics: bool,
 ) -> Result<(), Error> {
     check_resolved_target(value.type_id(), type_info)?;
     if ref_mode != RefMode::None {
         context.writer.write_i8(RefFlag::NotNullValue as i8);
     }
-    write_any_harness(value, context, type_info, has_generics)
+    write_any_harness(value, context, type_info)
 }
 
 pub fn read_box_any(
@@ -417,7 +377,7 @@ impl Serializer for Rc<dyn Any> {
     type Target = Self;
     #[inline(always)]
     fn write_data(value: &Self, context: &mut WriteContext) -> Result<(), Error> {
-        write_any_body(value.as_ref(), context, false)
+        write_any_body(value.as_ref(), context)
     }
 
     #[cold]
@@ -426,15 +386,6 @@ impl Serializer for Rc<dyn Any> {
         Err(Error::not_allowed(
             "Rc<dyn Any> requires concrete type metadata",
         ))
-    }
-
-    #[inline(always)]
-    fn write_data_with_generics(
-        value: &Self,
-        context: &mut WriteContext,
-        has_generics: bool,
-    ) -> Result<(), Error> {
-        write_any_body(value.as_ref(), context, has_generics)
     }
 
     #[inline(always)]
@@ -451,9 +402,8 @@ impl Serializer for Rc<dyn Any> {
         context: &mut WriteContext,
         ref_mode: RefMode,
         type_info: &Rc<TypeInfo>,
-        has_generics: bool,
     ) -> Result<(), Error> {
-        write_rc_any_resolved(value, context, ref_mode, type_info, has_generics)
+        write_rc_any_resolved(value, context, ref_mode, type_info)
     }
 
     #[inline(always)]
@@ -462,7 +412,6 @@ impl Serializer for Rc<dyn Any> {
         context: &mut WriteContext,
         ref_mode: RefMode,
         write_type_info: bool,
-        has_generics: bool,
     ) -> Result<(), Error> {
         if ref_mode != RefMode::None
             && context
@@ -478,7 +427,7 @@ impl Serializer for Rc<dyn Any> {
         } else {
             type_info
         };
-        write_any_harness(value.as_ref(), context, &type_info, has_generics)
+        write_any_harness(value.as_ref(), context, &type_info)
     }
 
     #[inline(always)]
@@ -497,13 +446,6 @@ impl Serializer for Rc<dyn Any> {
         type_info: &Rc<TypeInfo>,
     ) -> Result<Self, Error> {
         read_rc_any(context, ref_mode, false, Some(type_info))
-    }
-
-    #[inline(always)]
-    fn field_type<const NULLABLE: bool, const TRACK_REF: bool>(
-        _: &TypeResolver,
-    ) -> Result<FieldType, Error> {
-        Ok(erased_any_field_type::<NULLABLE, TRACK_REF>())
     }
 
     #[inline(always)]
@@ -543,7 +485,6 @@ fn write_rc_any_resolved(
     context: &mut WriteContext,
     ref_mode: RefMode,
     type_info: &Rc<TypeInfo>,
-    has_generics: bool,
 ) -> Result<(), Error> {
     let any = value.as_ref();
     check_resolved_target(any.type_id(), type_info)?;
@@ -554,7 +495,7 @@ fn write_rc_any_resolved(
     {
         return Ok(());
     }
-    write_any_harness(any, context, type_info, has_generics)
+    write_any_harness(any, context, type_info)
 }
 
 pub fn read_rc_any(
@@ -613,7 +554,7 @@ impl Serializer for Arc<dyn Any + Send + Sync> {
     type Target = Self;
     #[inline(always)]
     fn write_data(value: &Self, context: &mut WriteContext) -> Result<(), Error> {
-        write_any_body(value.as_ref(), context, false)
+        write_any_body(value.as_ref(), context)
     }
 
     #[cold]
@@ -622,15 +563,6 @@ impl Serializer for Arc<dyn Any + Send + Sync> {
         Err(Error::not_allowed(
             "Arc<dyn Any + Send + Sync> requires concrete type metadata",
         ))
-    }
-
-    #[inline(always)]
-    fn write_data_with_generics(
-        value: &Self,
-        context: &mut WriteContext,
-        has_generics: bool,
-    ) -> Result<(), Error> {
-        write_any_body(value.as_ref(), context, has_generics)
     }
 
     #[inline(always)]
@@ -647,9 +579,8 @@ impl Serializer for Arc<dyn Any + Send + Sync> {
         context: &mut WriteContext,
         ref_mode: RefMode,
         type_info: &Rc<TypeInfo>,
-        has_generics: bool,
     ) -> Result<(), Error> {
-        write_arc_any_resolved(value, context, ref_mode, type_info, has_generics)
+        write_arc_any_resolved(value, context, ref_mode, type_info)
     }
 
     #[inline(always)]
@@ -658,7 +589,6 @@ impl Serializer for Arc<dyn Any + Send + Sync> {
         context: &mut WriteContext,
         ref_mode: RefMode,
         write_type_info: bool,
-        has_generics: bool,
     ) -> Result<(), Error> {
         if ref_mode != RefMode::None
             && context
@@ -674,7 +604,7 @@ impl Serializer for Arc<dyn Any + Send + Sync> {
         } else {
             type_info
         };
-        write_any_harness(value.as_ref(), context, &type_info, has_generics)
+        write_any_harness(value.as_ref(), context, &type_info)
     }
 
     #[inline(always)]
@@ -693,13 +623,6 @@ impl Serializer for Arc<dyn Any + Send + Sync> {
         type_info: &Rc<TypeInfo>,
     ) -> Result<Self, Error> {
         read_arc_any(context, ref_mode, false, Some(type_info))
-    }
-
-    #[inline(always)]
-    fn field_type<const NULLABLE: bool, const TRACK_REF: bool>(
-        _: &TypeResolver,
-    ) -> Result<FieldType, Error> {
-        Ok(erased_any_field_type::<NULLABLE, TRACK_REF>())
     }
 
     #[inline(always)]
@@ -739,7 +662,6 @@ fn write_arc_any_resolved(
     context: &mut WriteContext,
     ref_mode: RefMode,
     type_info: &Rc<TypeInfo>,
-    has_generics: bool,
 ) -> Result<(), Error> {
     let any = value.as_ref();
     check_resolved_target(any.type_id(), type_info)?;
@@ -750,7 +672,7 @@ fn write_arc_any_resolved(
     {
         return Ok(());
     }
-    write_any_harness(any, context, type_info, has_generics)
+    write_any_harness(any, context, type_info)
 }
 
 pub fn read_arc_any(

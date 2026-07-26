@@ -49,7 +49,7 @@ fn supports_type_def(type_id: u32) -> bool {
     )
 }
 
-type WriteDataFn = fn(&dyn Any, &mut WriteContext, has_generics: bool) -> Result<(), Error>;
+type WriteDataFn = fn(&dyn Any, &mut WriteContext) -> Result<(), Error>;
 type ReadBoxAnyFn = fn(&mut ReadContext) -> Result<Box<dyn Any>, Error>;
 type ReadRcAnyFn = fn(&mut ReadContext) -> Result<Rc<dyn Any>, Error>;
 type ReadArcAnyFn = fn(&mut ReadContext) -> Result<std::sync::Arc<dyn Any + Send + Sync>, Error>;
@@ -135,13 +135,8 @@ impl Harness {
     }
 
     #[inline(always)]
-    pub fn write_data(
-        &self,
-        value: &dyn Any,
-        context: &mut WriteContext,
-        has_generics: bool,
-    ) -> Result<(), Error> {
-        (self.write_data_fn)(value, context, has_generics)
+    pub fn write_data(&self, value: &dyn Any, context: &mut WriteContext) -> Result<(), Error> {
+        (self.write_data_fn)(value, context)
     }
 
     #[inline(always)]
@@ -357,7 +352,7 @@ impl TypeInfo {
 // Stub functions for when a type doesn't exist locally
 #[cold]
 #[inline(never)]
-fn stub_write_data_fn(_: &dyn Any, _: &mut WriteContext, _: bool) -> Result<(), Error> {
+fn stub_write_data_fn(_: &dyn Any, _: &mut WriteContext) -> Result<(), Error> {
     Err(Error::type_error(
         "Cannot serialize unknown remote type - type not registered locally",
     ))
@@ -420,12 +415,11 @@ fn reserve_dynamic_owner<S: Serializer>(context: &mut ReadContext) -> Result<(),
 fn write_target_data<S: Serializer>(
     value: &dyn Any,
     context: &mut WriteContext,
-    has_generics: bool,
 ) -> Result<(), Error> {
     let target = value
         .downcast_ref::<S::Target>()
         .ok_or_else(|| target_downcast_error::<S>(value.type_id()))?;
-    S::write_data_with_generics(target, context, has_generics)
+    S::write_data(target, context)
 }
 
 fn read_target_box<S: Serializer>(context: &mut ReadContext) -> Result<Box<dyn Any>, Error> {

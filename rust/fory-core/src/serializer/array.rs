@@ -17,19 +17,19 @@
 
 use super::codec::{
     allows_missing_generics, field_ref_mode, field_types_compatible, generic_field_type, Codec,
-    CodecReadType, SerializerCodec,
+    CodecReadType,
 };
 use super::collection::{
-    write_collection_data, DECL_ELEMENT_TYPE, HAS_NULL, IS_SAME_TYPE, TRACKING_REF,
+    write_collection_data, write_collection_value_data, DECL_ELEMENT_TYPE, HAS_NULL, IS_SAME_TYPE,
+    TRACKING_REF,
 };
 use super::primitive_list;
 use crate::context::{ReadContext, WriteContext};
 use crate::error::Error;
 use crate::meta::FieldType;
 use crate::resolver::{RefFlag, RefMode, TypeInfo, TypeResolver};
-use crate::serializer::Serializer;
+use crate::serializer::{core::read_value_type_info, Serializer};
 use crate::type_id::{TypeId, SIZE_OF_REF_AND_TYPE};
-use std::borrow::Cow;
 use std::marker::PhantomData;
 use std::mem::MaybeUninit;
 use std::rc::Rc;
@@ -88,8 +88,8 @@ pub(super) fn try_init_array<T, E, const N: usize>(
 }
 
 #[inline(always)]
-fn selected_array_type_id<T: 'static, C: Codec<T>>() -> Option<TypeId> {
-    primitive_list::array_type_id::<T, C>(false)
+fn selected_array_type_id<T: 'static, S: Serializer<Target = T>>() -> Option<TypeId> {
+    primitive_list::array_type_id::<T, S>(false)
 }
 
 #[cold]
@@ -163,77 +163,195 @@ where
     })
 }
 
+macro_rules! array_read_declared_dyn {
+    (value, $T:ty, $S:ty, $N:ident, $context:expr, $remote:expr, $ref_mode:expr, $has_null:expr, $track_ref:expr) => {
+        try_init_array(|| <$S as Serializer>::read($context, $ref_mode, false))
+    };
+    (field, $T:ty, $C:ty, $N:ident, $context:expr, $remote:expr, $ref_mode:expr, $has_null:expr, $track_ref:expr) => {{
+        let element_type = generic_field_type($remote, 0, "array")?;
+        if field_ref_mode(element_type) != $ref_mode {
+            return Err(array_ref_mismatch());
+        }
+        try_init_array(|| <$C as Codec<$T>>::read_field_with_type($context, element_type))
+    }};
+}
+
+macro_rules! array_read_declared {
+    (value, $T:ty, $S:ty, $N:ident, $context:expr, $remote:expr, $has_null:expr) => {
+        try_init_array(|| {
+            if $has_null && $context.reader.read_i8()? == RefFlag::Null as i8 {
+                <$S as Serializer>::default_value($context)
+            } else {
+                <$S as Serializer>::read_data($context)
+            }
+        })
+    };
+    (field, $T:ty, $C:ty, $N:ident, $context:expr, $remote:expr, $has_null:expr) => {{
+        let element_type = generic_field_type($remote, 0, "array")?;
+        read_declared_items::<$T, $C, $N>($context, element_type, $has_null)
+    }};
+}
+
+macro_rules! array_read_typed {
+    (value, $T:ty, $S:ty, $N:ident, $context:expr, $has_null:expr) => {{
+        let type_info = read_value_type_info::<$S>($context)?;
+        try_init_array(|| {
+            if $has_null && $context.reader.read_i8()? == RefFlag::Null as i8 {
+                return <$S as Serializer>::default_value($context);
+            }
+            match type_info.as_ref() {
+                Some(type_info) => {
+                    <$S as Serializer>::read_with_type_info($context, RefMode::None, type_info)
+                }
+                None => <$S as Serializer>::read_data($context),
+            }
+        })
+    }};
+    (field, $T:ty, $C:ty, $N:ident, $context:expr, $has_null:expr) => {{
+        let read_type = <$C as Codec<$T>>::read_type_info_value($context)?;
+        read_typed_items::<$T, $C, $N>($context, &read_type, $has_null)
+    }};
+}
+
+macro_rules! read_object_array_body {
+    ($layer:ident, $T:ident, $C:ident, $N:ident, $context:expr, $remote:expr) => {{
+        let context = $context;
+        let len = context.reader.read_var_u32()?;
+        check_array_len(len, $N)?;
+        if $N == 0 {
+            return try_init_array(|| unreachable!());
+        }
+        let header = context.reader.read_u8()?;
+        let track_ref = (header & TRACKING_REF) != 0;
+        let same_type = (header & IS_SAME_TYPE) != 0;
+        let has_null = (header & HAS_NULL) != 0;
+        let declared = (header & DECL_ELEMENT_TYPE) != 0;
+        let ref_mode = if track_ref {
+            RefMode::Tracking
+        } else if has_null {
+            RefMode::NullOnly
+        } else {
+            RefMode::None
+        };
+
+        if $C::is_polymorphic() || $C::is_shared_ref() {
+            if same_type {
+                if declared {
+                    return array_read_declared_dyn!(
+                        $layer, $T, $C, $N, context, $remote, ref_mode, has_null, track_ref
+                    );
+                }
+                let type_info = context.read_any_type_info()?;
+                return try_init_array(|| {
+                    <$C as Serializer>::read_with_type_info(context, ref_mode, &type_info)
+                });
+            }
+            return try_init_array(|| <$C as Serializer>::read(context, ref_mode, true));
+        }
+
+        if !same_type {
+            return Err(non_polymorphic_array());
+        }
+        if declared {
+            return array_read_declared!($layer, $T, $C, $N, context, $remote, has_null);
+        }
+        array_read_typed!($layer, $T, $C, $N, context, has_null)
+    }};
+}
+
 #[inline(always)]
-fn read_object_array<T, C, const N: usize>(
+fn read_value_object_array<T, S, const N: usize>(context: &mut ReadContext) -> Result<[T; N], Error>
+where
+    T: 'static,
+    S: Serializer<Target = T>,
+{
+    read_object_array_body!(value, T, S, N, context, ())
+}
+
+#[inline(always)]
+fn read_field_object_array<T, C, const N: usize>(
     context: &mut ReadContext,
-    remote_field_type: Option<&FieldType>,
+    remote_field_type: &FieldType,
 ) -> Result<[T; N], Error>
 where
     T: 'static,
     C: Codec<T>,
 {
-    let len = context.reader.read_var_u32()?;
-    check_array_len(len, N)?;
-    if N == 0 {
-        return try_init_array(|| unreachable!());
-    }
-    let header = context.reader.read_u8()?;
-    let track_ref = (header & TRACKING_REF) != 0;
-    let same_type = (header & IS_SAME_TYPE) != 0;
-    let has_null = (header & HAS_NULL) != 0;
-    let declared = (header & DECL_ELEMENT_TYPE) != 0;
-    let ref_mode = if track_ref {
-        RefMode::Tracking
-    } else if has_null {
-        RefMode::NullOnly
-    } else {
-        RefMode::None
-    };
-
-    if C::is_polymorphic() || C::is_shared_ref() {
-        if same_type {
-            if declared {
-                let element_type = match remote_field_type {
-                    Some(field_type) => {
-                        let field_type = generic_field_type(field_type, 0, "array")?;
-                        if field_ref_mode(field_type) != ref_mode {
-                            return Err(array_ref_mismatch());
-                        }
-                        Cow::Borrowed(field_type)
-                    }
-                    None => {
-                        let mut field_type = C::field_type(context.get_type_resolver())?;
-                        field_type.nullable = has_null;
-                        field_type.track_ref = track_ref;
-                        Cow::Owned(field_type)
-                    }
-                };
-                return try_init_array(|| C::read_field_with_type(context, &element_type));
-            }
-            let type_info = context.read_any_type_info()?;
-            return try_init_array(|| C::read_with_type_info(context, ref_mode, &type_info));
-        }
-        return try_init_array(|| C::read_with_mode(context, ref_mode, true));
-    }
-
-    if !same_type {
-        return Err(non_polymorphic_array());
-    }
-    if declared {
-        let element_type = match remote_field_type {
-            Some(field_type) => Cow::Borrowed(generic_field_type(field_type, 0, "array")?),
-            None => Cow::Owned(C::field_type(context.get_type_resolver())?),
-        };
-        return read_declared_items::<T, C, N>(context, &element_type, has_null);
-    }
-    let read_type = C::read_type_info_value(context)?;
-    read_typed_items::<T, C, N>(context, &read_type, has_null)
+    read_object_array_body!(field, T, C, N, context, remote_field_type)
 }
 
 #[cold]
 #[inline(never)]
 fn array_ref_mismatch() -> Error {
     Error::invalid_data("array header conflicts with declared element metadata")
+}
+
+impl<T, S, const N: usize, const NULLABLE: bool, const TRACK_REF: bool> Serializer
+    for ArrayCodec<T, S, N, NULLABLE, TRACK_REF>
+where
+    T: 'static,
+    S: Serializer<Target = T>,
+{
+    type Target = [T; N];
+
+    #[inline(always)]
+    fn write_data(value: &Self::Target, context: &mut WriteContext) -> Result<(), Error> {
+        if let Some(type_id) = selected_array_type_id::<T, S>() {
+            return primitive_list::write_data::<T, S>(value, context, type_id);
+        }
+        write_collection_value_data::<T, S, _, false, true>(value.iter(), context)
+    }
+
+    #[inline(always)]
+    fn read_data(context: &mut ReadContext) -> Result<Self::Target, Error> {
+        if let Some(type_id) = selected_array_type_id::<T, S>() {
+            return primitive_list::read_array::<T, S, N>(context, type_id);
+        }
+        read_value_object_array::<T, S, N>(context)
+    }
+
+    #[inline(always)]
+    fn default_value(context: &mut ReadContext) -> Result<Self::Target, Error> {
+        try_init_array(|| S::default_value(context))
+    }
+
+    #[inline(always)]
+    fn write_type_info(context: &mut WriteContext) -> Result<(), Error> {
+        match selected_array_type_id::<T, S>() {
+            Some(type_id) => primitive_list::write_type_info(context, type_id),
+            None => {
+                context.writer.write_u8(TypeId::LIST as u8);
+                Ok(())
+            }
+        }
+    }
+
+    #[inline(always)]
+    fn read_type_info(context: &mut ReadContext) -> Result<(), Error> {
+        match selected_array_type_id::<T, S>() {
+            Some(type_id) => primitive_list::read_type_info(context, type_id),
+            None => {
+                let remote = context.reader.read_u8()? as u32;
+                if remote != TypeId::LIST as u32 {
+                    return Err(array_type_mismatch(TypeId::LIST as u32, remote));
+                }
+                Ok(())
+            }
+        }
+    }
+
+    #[inline(always)]
+    fn static_type_id() -> TypeId {
+        selected_array_type_id::<T, S>().unwrap_or(TypeId::LIST)
+    }
+
+    #[inline(always)]
+    fn reserved_space() -> usize {
+        match selected_array_type_id::<T, S>() {
+            Some(_) => std::mem::size_of::<T>() * N + SIZE_OF_REF_AND_TYPE,
+            None => std::mem::size_of::<u32>() + SIZE_OF_REF_AND_TYPE,
+        }
+    }
 }
 
 impl<T, C, const N: usize, const NULLABLE: bool, const TRACK_REF: bool> Codec<[T; N]>
@@ -261,20 +379,12 @@ where
     }
 
     #[inline(always)]
-    fn reserved_space() -> usize {
-        match selected_array_type_id::<T, C>() {
-            Some(_) => std::mem::size_of::<T>() * N + SIZE_OF_REF_AND_TYPE,
-            None => std::mem::size_of::<u32>() + SIZE_OF_REF_AND_TYPE,
-        }
-    }
-
-    #[inline(always)]
     fn write_field(value: &[T; N], context: &mut WriteContext) -> Result<(), Error> {
         if NULLABLE || TRACK_REF {
             context.writer.write_i8(RefFlag::NotNullValue as i8);
         }
         if selected_array_type_id::<T, C>().is_some() {
-            Self::write_data(value, context)
+            <Self as Serializer>::write_data(value, context)
         } else {
             write_collection_data::<T, C, _, false, true>(value.iter(), context, true)
         }
@@ -283,9 +393,9 @@ where
     #[inline(always)]
     fn read_field(context: &mut ReadContext) -> Result<[T; N], Error> {
         if (NULLABLE || TRACK_REF) && context.reader.read_i8()? == RefFlag::Null as i8 {
-            return Self::default_value(context);
+            return <Self as Serializer>::default_value(context);
         }
-        Self::read_data(context)
+        <Self as Serializer>::read_data(context)
     }
 
     #[inline(always)]
@@ -306,22 +416,6 @@ where
     }
 
     #[inline(always)]
-    fn write_data(value: &[T; N], context: &mut WriteContext) -> Result<(), Error> {
-        if let Some(type_id) = selected_array_type_id::<T, C>() {
-            return primitive_list::write_data::<T, C>(value, context, type_id);
-        }
-        write_collection_data::<T, C, _, false, true>(value.iter(), context, false)
-    }
-
-    #[inline(always)]
-    fn read_data(context: &mut ReadContext) -> Result<[T; N], Error> {
-        if let Some(type_id) = selected_array_type_id::<T, C>() {
-            return primitive_list::read_array::<T, C, N>(context, type_id);
-        }
-        read_object_array::<T, C, N>(context, None)
-    }
-
-    #[inline(always)]
     fn read_data_with_type(
         context: &mut ReadContext,
         remote_data_type: &FieldType,
@@ -331,7 +425,7 @@ where
                 return primitive_list::read_array::<T, C, N>(context, type_id);
             }
         }
-        read_object_array::<T, C, N>(context, Some(remote_data_type))
+        read_field_object_array::<T, C, N>(context, remote_data_type)
     }
 
     #[inline(always)]
@@ -342,7 +436,7 @@ where
         if field_ref_mode(remote_field_type) != RefMode::None
             && context.reader.read_i8()? == RefFlag::Null as i8
         {
-            return Self::default_value(context);
+            return <Self as Serializer>::default_value(context);
         }
         Self::read_data_with_type(context, remote_field_type)
     }
@@ -355,84 +449,20 @@ where
         write_type_info: bool,
         has_generics: bool,
     ) -> Result<(), Error> {
+        if selected_array_type_id::<T, C>().is_some() || !has_generics {
+            return <Self as Serializer>::write(value, context, ref_mode, write_type_info);
+        }
         if ref_mode != RefMode::None {
             context.writer.write_i8(RefFlag::NotNullValue as i8);
         }
         if write_type_info {
-            Self::write_type_info(context)?;
+            <Self as Serializer>::write_type_info(context)?;
         }
-        if selected_array_type_id::<T, C>().is_some() {
-            Self::write_data(value, context)
-        } else {
-            write_collection_data::<T, C, _, false, true>(value.iter(), context, has_generics)
-        }
-    }
-
-    #[inline(always)]
-    fn read_with_mode(
-        context: &mut ReadContext,
-        ref_mode: RefMode,
-        read_type_info: bool,
-    ) -> Result<[T; N], Error> {
-        if ref_mode != RefMode::None && context.reader.read_i8()? == RefFlag::Null as i8 {
-            return Self::default_value(context);
-        }
-        if read_type_info {
-            Self::read_type_info(context)?;
-        }
-        Self::read_data(context)
-    }
-
-    #[inline(always)]
-    fn read_with_type_info(
-        context: &mut ReadContext,
-        ref_mode: RefMode,
-        _type_info: &Rc<TypeInfo>,
-    ) -> Result<[T; N], Error> {
-        Self::read_with_mode(context, ref_mode, false)
-    }
-
-    #[inline(always)]
-    fn default_value(context: &mut ReadContext) -> Result<[T; N], Error> {
-        try_init_array(|| C::default_value(context))
-    }
-
-    #[inline(always)]
-    fn write_type_info(context: &mut WriteContext) -> Result<(), Error> {
-        match selected_array_type_id::<T, C>() {
-            Some(type_id) => primitive_list::write_type_info(context, type_id),
-            None => {
-                context.writer.write_u8(TypeId::LIST as u8);
-                Ok(())
-            }
-        }
-    }
-
-    #[inline(always)]
-    fn read_type_info(context: &mut ReadContext) -> Result<(), Error> {
-        match selected_array_type_id::<T, C>() {
-            Some(type_id) => primitive_list::read_type_info(context, type_id),
-            None => {
-                let remote = context.reader.read_u8()? as u32;
-                if remote != TypeId::LIST as u32 {
-                    return Err(array_type_mismatch(TypeId::LIST as u32, remote));
-                }
-                Ok(())
-            }
-        }
-    }
-
-    #[inline(always)]
-    fn static_type_id() -> TypeId {
-        selected_array_type_id::<T, C>().unwrap_or(TypeId::LIST)
+        write_collection_data::<T, C, _, false, true>(value.iter(), context, true)
     }
 }
 
-type RootArrayCodec<S, const N: usize> =
-    ArrayCodec<<S as Serializer>::Target, SerializerCodec<S, false, false>, N, false, false>;
-
-type FieldArrayCodec<S, const N: usize, const NULLABLE: bool, const TRACK_REF: bool> =
-    ArrayCodec<<S as Serializer>::Target, SerializerCodec<S, false, false>, N, NULLABLE, TRACK_REF>;
+type RootArrayCodec<S, const N: usize> = ArrayCodec<<S as Serializer>::Target, S, N, false, false>;
 
 /// Statically serializes `[S::Target; N]` at roots or recursive carrier nodes.
 ///
@@ -445,17 +475,17 @@ impl<S: Serializer, const N: usize> Serializer for ArraySerializer<S, N> {
 
     #[inline(always)]
     fn write_data(value: &Self::Target, context: &mut WriteContext) -> Result<(), Error> {
-        <RootArrayCodec<S, N> as Codec<Self::Target>>::write_data(value, context)
+        <RootArrayCodec<S, N> as Serializer>::write_data(value, context)
     }
 
     #[inline(always)]
     fn read_data(context: &mut ReadContext) -> Result<Self::Target, Error> {
-        <RootArrayCodec<S, N> as Codec<Self::Target>>::read_data(context)
+        <RootArrayCodec<S, N> as Serializer>::read_data(context)
     }
 
     #[inline(always)]
     fn default_value(context: &mut ReadContext) -> Result<Self::Target, Error> {
-        <RootArrayCodec<S, N> as Codec<Self::Target>>::default_value(context)
+        <RootArrayCodec<S, N> as Serializer>::default_value(context)
     }
 
     #[inline(always)]
@@ -464,30 +494,8 @@ impl<S: Serializer, const N: usize> Serializer for ArraySerializer<S, N> {
         context: &mut WriteContext,
         ref_mode: RefMode,
         write_type_info: bool,
-        has_generics: bool,
     ) -> Result<(), Error> {
-        <RootArrayCodec<S, N> as Codec<Self::Target>>::write_with_mode(
-            value,
-            context,
-            ref_mode,
-            write_type_info,
-            has_generics,
-        )
-    }
-
-    #[inline(always)]
-    fn write_data_with_generics(
-        value: &Self::Target,
-        context: &mut WriteContext,
-        has_generics: bool,
-    ) -> Result<(), Error> {
-        <RootArrayCodec<S, N> as Codec<Self::Target>>::write_with_mode(
-            value,
-            context,
-            RefMode::None,
-            false,
-            has_generics,
-        )
+        <RootArrayCodec<S, N> as Serializer>::write(value, context, ref_mode, write_type_info)
     }
 
     #[inline(always)]
@@ -496,11 +504,7 @@ impl<S: Serializer, const N: usize> Serializer for ArraySerializer<S, N> {
         ref_mode: RefMode,
         read_type_info: bool,
     ) -> Result<Self::Target, Error> {
-        <RootArrayCodec<S, N> as Codec<Self::Target>>::read_with_mode(
-            context,
-            ref_mode,
-            read_type_info,
-        )
+        <RootArrayCodec<S, N> as Serializer>::read(context, ref_mode, read_type_info)
     }
 
     #[inline(always)]
@@ -509,49 +513,27 @@ impl<S: Serializer, const N: usize> Serializer for ArraySerializer<S, N> {
         ref_mode: RefMode,
         type_info: &Rc<TypeInfo>,
     ) -> Result<Self::Target, Error> {
-        <RootArrayCodec<S, N> as Codec<Self::Target>>::read_with_type_info(
-            context, ref_mode, type_info,
-        )
-    }
-
-    #[inline(always)]
-    fn field_type<const NULLABLE: bool, const TRACK_REF: bool>(
-        type_resolver: &TypeResolver,
-    ) -> Result<FieldType, Error> {
-        <FieldArrayCodec<S, N, NULLABLE, TRACK_REF> as Codec<Self::Target>>::field_type(
-            type_resolver,
-        )
-    }
-
-    #[inline(always)]
-    fn read_data_with_field_type(
-        context: &mut ReadContext,
-        remote_field_type: &FieldType,
-    ) -> Result<Self::Target, Error> {
-        <RootArrayCodec<S, N> as Codec<Self::Target>>::read_data_with_type(
-            context,
-            remote_field_type,
-        )
+        <RootArrayCodec<S, N> as Serializer>::read_with_type_info(context, ref_mode, type_info)
     }
 
     #[inline(always)]
     fn write_type_info(context: &mut WriteContext) -> Result<(), Error> {
-        <RootArrayCodec<S, N> as Codec<Self::Target>>::write_type_info(context)
+        <RootArrayCodec<S, N> as Serializer>::write_type_info(context)
     }
 
     #[inline(always)]
     fn read_type_info(context: &mut ReadContext) -> Result<(), Error> {
-        <RootArrayCodec<S, N> as Codec<Self::Target>>::read_type_info(context)
+        <RootArrayCodec<S, N> as Serializer>::read_type_info(context)
     }
 
     #[inline(always)]
     fn static_type_id() -> TypeId {
-        <RootArrayCodec<S, N> as Codec<Self::Target>>::static_type_id()
+        <RootArrayCodec<S, N> as Serializer>::static_type_id()
     }
 
     #[inline(always)]
     fn reserved_space() -> usize {
-        <RootArrayCodec<S, N> as Codec<Self::Target>>::reserved_space()
+        <RootArrayCodec<S, N> as Serializer>::reserved_space()
     }
 }
 
@@ -582,28 +564,8 @@ where
         context: &mut WriteContext,
         ref_mode: RefMode,
         write_type_info: bool,
-        has_generics: bool,
     ) -> Result<(), Error> {
-        <ArraySerializer<T, N> as Serializer>::write(
-            value,
-            context,
-            ref_mode,
-            write_type_info,
-            has_generics,
-        )
-    }
-
-    #[inline(always)]
-    fn write_data_with_generics(
-        value: &Self,
-        context: &mut WriteContext,
-        has_generics: bool,
-    ) -> Result<(), Error> {
-        <ArraySerializer<T, N> as Serializer>::write_data_with_generics(
-            value,
-            context,
-            has_generics,
-        )
+        <ArraySerializer<T, N> as Serializer>::write(value, context, ref_mode, write_type_info)
     }
 
     #[inline(always)]
@@ -622,21 +584,6 @@ where
         type_info: &Rc<TypeInfo>,
     ) -> Result<Self, Error> {
         <ArraySerializer<T, N> as Serializer>::read_with_type_info(context, ref_mode, type_info)
-    }
-
-    #[inline(always)]
-    fn field_type<const NULLABLE: bool, const TRACK_REF: bool>(
-        type_resolver: &TypeResolver,
-    ) -> Result<FieldType, Error> {
-        <ArraySerializer<T, N> as Serializer>::field_type::<NULLABLE, TRACK_REF>(type_resolver)
-    }
-
-    #[inline(always)]
-    fn read_data_with_field_type(
-        context: &mut ReadContext,
-        remote_field_type: &FieldType,
-    ) -> Result<Self, Error> {
-        <ArraySerializer<T, N> as Serializer>::read_data_with_field_type(context, remote_field_type)
     }
 
     #[inline(always)]

@@ -38,7 +38,6 @@ pub fn write_unknown_case_body(
         context,
         RefMode::Tracking,
         true,
-        false,
     )
 }
 
@@ -189,7 +188,6 @@ impl Serializer for UnknownCase {
         context: &mut WriteContext,
         ref_mode: RefMode,
         write_type_info: bool,
-        _has_generics: bool,
     ) -> Result<(), Error> {
         let _ = ref_mode;
         let _ = write_type_info;

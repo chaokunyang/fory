@@ -67,6 +67,11 @@ pub fn derive_serializer(
     } else {
         quote! {}
     };
+    let write_data_attr = if is_external {
+        quote! { #[inline(never)] }
+    } else {
+        quote! { #[inline] }
+    };
 
     use crate::object::util::{clear_struct_context, set_struct_context};
     set_struct_context(&name.to_string(), attrs.debug_enabled);
@@ -229,10 +234,11 @@ pub fn derive_serializer(
         impl #impl_generics fory_core::Serializer for #name #ty_generics #where_clause {
             type Target = #target_ty;
 
-            // Keep large generated bodies under the compiler's normal inlining
-            // heuristic. Forcing them into root context closures inflates code
-            // and stack frames enough to regress primitive carrier reads.
-            #[inline]
+            // External structural serializers need a stable body boundary:
+            // recursive carrier composition would otherwise duplicate the
+            // generated body into every child monomorph. Self-owned serializers
+            // retain the normal heuristic so small bodies can still inline.
+            #write_data_attr
             fn write_data(
                 value: &Self::Target,
                 context: &mut fory_core::WriteContext,
@@ -260,7 +266,6 @@ pub fn derive_serializer(
                 context: &mut fory_core::WriteContext,
                 ref_mode: fory_core::RefMode,
                 write_type_info: bool,
-                has_generics: bool,
             ) -> ::std::result::Result<(), fory_core::Error> {
                 #write_complete
             }

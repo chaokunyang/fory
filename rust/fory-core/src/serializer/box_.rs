@@ -20,6 +20,7 @@ use crate::context::{ReadContext, WriteContext};
 use crate::error::Error;
 use crate::meta::FieldType;
 use crate::resolver::{RefMode, TypeInfo, TypeResolver};
+use crate::serializer::Serializer;
 use crate::type_id::TypeId;
 use std::marker::PhantomData;
 use std::rc::Rc;
@@ -35,43 +36,17 @@ fn reserve_box<T>(context: &mut ReadContext) -> Result<(), Error> {
     Ok(())
 }
 
-impl<T, C, const NULLABLE: bool, const TRACK_REF: bool> Codec<Box<T>>
+impl<T, C, const NULLABLE: bool, const TRACK_REF: bool> Serializer
     for BoxCodec<T, C, NULLABLE, TRACK_REF>
 where
     T: 'static,
-    C: Codec<T>,
+    C: Serializer<Target = T>,
 {
-    #[inline(always)]
-    fn field_type(type_resolver: &TypeResolver) -> Result<FieldType, Error> {
-        let mut field_type = C::field_type(type_resolver)?;
-        field_type.nullable = NULLABLE;
-        field_type.track_ref = TRACK_REF;
-        Ok(field_type)
-    }
+    type Target = Box<T>;
 
     #[inline(always)]
     fn reserved_space() -> usize {
         C::reserved_space()
-    }
-
-    #[inline(always)]
-    fn write_field(value: &Box<T>, context: &mut WriteContext) -> Result<(), Error> {
-        C::write_with_mode(
-            value,
-            context,
-            codec_ref_mode::<T, C, NULLABLE, TRACK_REF>(),
-            codec_write_type_info::<T, C>(context),
-            true,
-        )
-    }
-
-    #[inline(always)]
-    fn read_field(context: &mut ReadContext) -> Result<Box<T>, Error> {
-        Self::read_with_mode(
-            context,
-            codec_ref_mode::<T, C, NULLABLE, TRACK_REF>(),
-            codec_read_type_info_static::<T, C>(context),
-        )
     }
 
     #[inline(always)]
@@ -86,35 +61,13 @@ where
     }
 
     #[inline(always)]
-    fn read_data_with_type(
-        context: &mut ReadContext,
-        remote_data_type: &FieldType,
-    ) -> Result<Box<T>, Error> {
-        reserve_box::<T>(context)?;
-        Ok(Box::new(C::read_data_with_type(context, remote_data_type)?))
-    }
-
-    #[inline(always)]
-    fn read_field_with_type(
-        context: &mut ReadContext,
-        remote_field_type: &FieldType,
-    ) -> Result<Box<T>, Error> {
-        reserve_box::<T>(context)?;
-        Ok(Box::new(C::read_field_with_type(
-            context,
-            remote_field_type,
-        )?))
-    }
-
-    #[inline(always)]
-    fn write_with_mode(
+    fn write(
         value: &Box<T>,
         context: &mut WriteContext,
         ref_mode: RefMode,
         write_type_info: bool,
-        has_generics: bool,
     ) -> Result<(), Error> {
-        C::write_with_mode(value, context, ref_mode, write_type_info, has_generics)
+        C::write(value, context, ref_mode, write_type_info)
     }
 
     #[inline(always)]
@@ -131,23 +84,18 @@ where
         context: &mut WriteContext,
         ref_mode: RefMode,
         type_info: &Rc<TypeInfo>,
-        has_generics: bool,
     ) -> Result<(), Error> {
-        C::write_with_type_info(value, context, ref_mode, type_info, has_generics)
+        C::write_with_type_info(value, context, ref_mode, type_info)
     }
 
     #[inline(always)]
-    fn read_with_mode(
+    fn read(
         context: &mut ReadContext,
         ref_mode: RefMode,
         read_type_info: bool,
     ) -> Result<Box<T>, Error> {
         reserve_box::<T>(context)?;
-        Ok(Box::new(C::read_with_mode(
-            context,
-            ref_mode,
-            read_type_info,
-        )?))
+        Ok(Box::new(C::read(context, ref_mode, read_type_info)?))
     }
 
     #[inline(always)]
@@ -176,13 +124,6 @@ where
     #[inline(always)]
     fn read_type_info(context: &mut ReadContext) -> Result<(), Error> {
         C::read_type_info(context)
-    }
-
-    #[inline(always)]
-    fn read_type_info_value(
-        context: &mut ReadContext,
-    ) -> Result<super::codec::CodecReadType, Error> {
-        C::read_type_info_value(context)
     }
 
     #[inline(always)]
@@ -223,6 +164,96 @@ where
     #[inline(always)]
     fn dynamic_type_is_direct() -> bool {
         C::dynamic_type_is_direct()
+    }
+}
+
+impl<T, C, const NULLABLE: bool, const TRACK_REF: bool> Codec<Box<T>>
+    for BoxCodec<T, C, NULLABLE, TRACK_REF>
+where
+    T: 'static,
+    C: Codec<T>,
+{
+    #[inline(always)]
+    fn field_type(type_resolver: &TypeResolver) -> Result<FieldType, Error> {
+        let mut field_type = C::field_type(type_resolver)?;
+        field_type.nullable = NULLABLE;
+        field_type.track_ref = TRACK_REF;
+        Ok(field_type)
+    }
+
+    #[inline(always)]
+    fn field_reserved_space() -> usize {
+        C::field_reserved_space()
+    }
+
+    #[inline(always)]
+    fn write_field(value: &Box<T>, context: &mut WriteContext) -> Result<(), Error> {
+        Self::write_with_mode(
+            value,
+            context,
+            codec_ref_mode::<T, C, NULLABLE, TRACK_REF>(),
+            codec_write_type_info::<T, C>(context),
+            true,
+        )
+    }
+
+    #[inline(always)]
+    fn read_field(context: &mut ReadContext) -> Result<Box<T>, Error> {
+        <Self as Serializer>::read(
+            context,
+            codec_ref_mode::<T, C, NULLABLE, TRACK_REF>(),
+            codec_read_type_info_static::<T, C>(context),
+        )
+    }
+
+    #[inline(always)]
+    fn read_data_with_type(
+        context: &mut ReadContext,
+        remote_data_type: &FieldType,
+    ) -> Result<Box<T>, Error> {
+        reserve_box::<T>(context)?;
+        Ok(Box::new(C::read_data_with_type(context, remote_data_type)?))
+    }
+
+    #[inline(always)]
+    fn read_field_with_type(
+        context: &mut ReadContext,
+        remote_field_type: &FieldType,
+    ) -> Result<Box<T>, Error> {
+        reserve_box::<T>(context)?;
+        Ok(Box::new(C::read_field_with_type(
+            context,
+            remote_field_type,
+        )?))
+    }
+
+    #[inline(always)]
+    fn write_with_mode(
+        value: &Box<T>,
+        context: &mut WriteContext,
+        ref_mode: RefMode,
+        write_type_info: bool,
+        has_generics: bool,
+    ) -> Result<(), Error> {
+        C::write_with_mode(value, context, ref_mode, write_type_info, has_generics)
+    }
+
+    #[inline(always)]
+    fn write_with_type_info(
+        value: &Box<T>,
+        context: &mut WriteContext,
+        ref_mode: RefMode,
+        type_info: &Rc<TypeInfo>,
+        has_generics: bool,
+    ) -> Result<(), Error> {
+        <C as Codec<T>>::write_with_type_info(value, context, ref_mode, type_info, has_generics)
+    }
+
+    #[inline(always)]
+    fn read_type_info_value(
+        context: &mut ReadContext,
+    ) -> Result<super::codec::CodecReadType, Error> {
+        C::read_type_info_value(context)
     }
 }
 

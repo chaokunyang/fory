@@ -20,6 +20,7 @@ use crate::context::{ReadContext, WriteContext};
 use crate::error::Error;
 use crate::meta::FieldType;
 use crate::resolver::{RefMode, TypeInfo, TypeResolver};
+use crate::serializer::Serializer;
 use crate::type_id::TypeId;
 use std::cell::{Ref, RefCell};
 use std::marker::PhantomData;
@@ -41,6 +42,145 @@ fn refcell_borrow_error() -> Error {
     Error::invalid_data("cannot serialize RefCell while it is mutably borrowed")
 }
 
+impl<T, C, const NULLABLE: bool, const TRACK_REF: bool> Serializer
+    for RefCellCodec<T, C, NULLABLE, TRACK_REF>
+where
+    T: 'static,
+    C: Serializer<Target = T>,
+{
+    type Target = RefCell<T>;
+
+    #[inline(always)]
+    fn reserved_space() -> usize {
+        C::reserved_space()
+    }
+
+    #[inline(always)]
+    fn write_data(value: &RefCell<T>, context: &mut WriteContext) -> Result<(), Error> {
+        let value = borrow_for_write(value)?;
+        C::write_data(&value, context)
+    }
+
+    #[inline(always)]
+    fn read_data(context: &mut ReadContext) -> Result<RefCell<T>, Error> {
+        Ok(RefCell::new(C::read_data(context)?))
+    }
+
+    #[inline(always)]
+    fn write(
+        value: &RefCell<T>,
+        context: &mut WriteContext,
+        ref_mode: RefMode,
+        write_type_info: bool,
+    ) -> Result<(), Error> {
+        let value = borrow_for_write(value)?;
+        C::write(&value, context, ref_mode, write_type_info)
+    }
+
+    #[inline(always)]
+    fn write_type_info_value(
+        context: &mut WriteContext,
+        target_type_id: std::any::TypeId,
+    ) -> Result<Rc<TypeInfo>, Error> {
+        C::write_type_info_value(context, target_type_id)
+    }
+
+    #[inline(always)]
+    fn write_with_type_info(
+        value: &RefCell<T>,
+        context: &mut WriteContext,
+        ref_mode: RefMode,
+        type_info: &Rc<TypeInfo>,
+    ) -> Result<(), Error> {
+        let value = borrow_for_write(value)?;
+        C::write_with_type_info(&value, context, ref_mode, type_info)
+    }
+
+    #[inline(always)]
+    fn read(
+        context: &mut ReadContext,
+        ref_mode: RefMode,
+        read_type_info: bool,
+    ) -> Result<RefCell<T>, Error> {
+        Ok(RefCell::new(C::read(context, ref_mode, read_type_info)?))
+    }
+
+    #[inline(always)]
+    fn read_with_type_info(
+        context: &mut ReadContext,
+        ref_mode: RefMode,
+        type_info: &Rc<TypeInfo>,
+    ) -> Result<RefCell<T>, Error> {
+        Ok(RefCell::new(C::read_with_type_info(
+            context, ref_mode, type_info,
+        )?))
+    }
+
+    #[inline(always)]
+    fn default_value(context: &mut ReadContext) -> Result<RefCell<T>, Error> {
+        Ok(RefCell::new(C::default_value(context)?))
+    }
+
+    #[inline(always)]
+    fn write_type_info(context: &mut WriteContext) -> Result<(), Error> {
+        C::write_type_info(context)
+    }
+
+    #[inline(always)]
+    fn read_type_info(context: &mut ReadContext) -> Result<(), Error> {
+        C::read_type_info(context)
+    }
+
+    #[inline(always)]
+    fn static_type_id() -> TypeId {
+        C::static_type_id()
+    }
+
+    #[inline(always)]
+    fn is_option() -> bool {
+        C::is_option()
+    }
+
+    #[inline(always)]
+    fn is_none(value: &RefCell<T>) -> bool {
+        if !C::is_option() {
+            return false;
+        }
+        // Static inspection cannot return borrow errors. Use conservative
+        // metadata here; the fallible write path reports the borrow conflict.
+        match value.try_borrow() {
+            Ok(value) => C::is_none(&value),
+            Err(_) => false,
+        }
+    }
+
+    #[inline(always)]
+    fn is_polymorphic() -> bool {
+        C::is_polymorphic()
+    }
+
+    #[inline(always)]
+    fn is_shared_ref() -> bool {
+        C::is_shared_ref()
+    }
+
+    #[inline(always)]
+    fn is_wrapper_type() -> bool {
+        true
+    }
+
+    #[inline(always)]
+    fn dynamic_type_id(value: &RefCell<T>) -> Result<Option<std::any::TypeId>, Error> {
+        let value = borrow_for_write(value)?;
+        C::dynamic_type_id(&value)
+    }
+
+    #[inline(always)]
+    fn dynamic_type_is_direct() -> bool {
+        false
+    }
+}
+
 impl<T, C, const NULLABLE: bool, const TRACK_REF: bool> Codec<RefCell<T>>
     for RefCellCodec<T, C, NULLABLE, TRACK_REF>
 where
@@ -56,15 +196,14 @@ where
     }
 
     #[inline(always)]
-    fn reserved_space() -> usize {
-        C::reserved_space()
+    fn field_reserved_space() -> usize {
+        C::field_reserved_space()
     }
 
     #[inline(always)]
     fn write_field(value: &RefCell<T>, context: &mut WriteContext) -> Result<(), Error> {
-        let value = borrow_for_write(value)?;
-        C::write_with_mode(
-            &value,
+        Self::write_with_mode(
+            value,
             context,
             codec_ref_mode::<T, C, NULLABLE, TRACK_REF>(),
             codec_write_type_info::<T, C>(context),
@@ -74,22 +213,11 @@ where
 
     #[inline(always)]
     fn read_field(context: &mut ReadContext) -> Result<RefCell<T>, Error> {
-        Ok(RefCell::new(C::read_with_mode(
+        <Self as Serializer>::read(
             context,
             codec_ref_mode::<T, C, NULLABLE, TRACK_REF>(),
             codec_read_type_info_static::<T, C>(context),
-        )?))
-    }
-
-    #[inline(always)]
-    fn write_data(value: &RefCell<T>, context: &mut WriteContext) -> Result<(), Error> {
-        let value = borrow_for_write(value)?;
-        C::write_data(&value, context)
-    }
-
-    #[inline(always)]
-    fn read_data(context: &mut ReadContext) -> Result<RefCell<T>, Error> {
-        Ok(RefCell::new(C::read_data(context)?))
+        )
     }
 
     #[inline(always)]
@@ -127,14 +255,6 @@ where
     }
 
     #[inline(always)]
-    fn write_type_info_value(
-        context: &mut WriteContext,
-        target_type_id: std::any::TypeId,
-    ) -> Result<Rc<TypeInfo>, Error> {
-        C::write_type_info_value(context, target_type_id)
-    }
-
-    #[inline(always)]
     fn write_with_type_info(
         value: &RefCell<T>,
         context: &mut WriteContext,
@@ -143,46 +263,7 @@ where
         has_generics: bool,
     ) -> Result<(), Error> {
         let value = borrow_for_write(value)?;
-        C::write_with_type_info(&value, context, ref_mode, type_info, has_generics)
-    }
-
-    #[inline(always)]
-    fn read_with_mode(
-        context: &mut ReadContext,
-        ref_mode: RefMode,
-        read_type_info: bool,
-    ) -> Result<RefCell<T>, Error> {
-        Ok(RefCell::new(C::read_with_mode(
-            context,
-            ref_mode,
-            read_type_info,
-        )?))
-    }
-
-    #[inline(always)]
-    fn read_with_type_info(
-        context: &mut ReadContext,
-        ref_mode: RefMode,
-        type_info: &Rc<TypeInfo>,
-    ) -> Result<RefCell<T>, Error> {
-        Ok(RefCell::new(C::read_with_type_info(
-            context, ref_mode, type_info,
-        )?))
-    }
-
-    #[inline(always)]
-    fn default_value(context: &mut ReadContext) -> Result<RefCell<T>, Error> {
-        Ok(RefCell::new(C::default_value(context)?))
-    }
-
-    #[inline(always)]
-    fn write_type_info(context: &mut WriteContext) -> Result<(), Error> {
-        C::write_type_info(context)
-    }
-
-    #[inline(always)]
-    fn read_type_info(context: &mut ReadContext) -> Result<(), Error> {
-        C::read_type_info(context)
+        <C as Codec<T>>::write_with_type_info(&value, context, ref_mode, type_info, has_generics)
     }
 
     #[inline(always)]
@@ -190,55 +271,6 @@ where
         context: &mut ReadContext,
     ) -> Result<super::codec::CodecReadType, Error> {
         C::read_type_info_value(context)
-    }
-
-    #[inline(always)]
-    fn static_type_id() -> TypeId {
-        C::static_type_id()
-    }
-
-    #[inline(always)]
-    fn is_option() -> bool {
-        C::is_option()
-    }
-
-    #[inline(always)]
-    fn is_none(value: &RefCell<T>) -> bool {
-        if !C::is_option() {
-            return false;
-        }
-        // Codec inspection hooks cannot return borrow errors. Use conservative
-        // metadata here; the fallible write path reports the borrow conflict.
-        match value.try_borrow() {
-            Ok(value) => C::is_none(&value),
-            Err(_) => false,
-        }
-    }
-
-    #[inline(always)]
-    fn is_polymorphic() -> bool {
-        C::is_polymorphic()
-    }
-
-    #[inline(always)]
-    fn is_shared_ref() -> bool {
-        C::is_shared_ref()
-    }
-
-    #[inline(always)]
-    fn is_wrapper_type() -> bool {
-        true
-    }
-
-    #[inline(always)]
-    fn dynamic_type_id(value: &RefCell<T>) -> Result<Option<std::any::TypeId>, Error> {
-        let value = borrow_for_write(value)?;
-        C::dynamic_type_id(&value)
-    }
-
-    #[inline(always)]
-    fn dynamic_type_is_direct() -> bool {
-        false
     }
 }
 

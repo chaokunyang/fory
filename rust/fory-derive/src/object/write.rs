@@ -116,10 +116,6 @@ pub fn gen_write() -> TokenStream {
         if write_type_info {
             <Self as fory_core::Serializer>::write_type_info(context)?;
         }
-        <Self as fory_core::Serializer>::write_data_with_generics(
-            value,
-            context,
-            has_generics,
-        )
+        <Self as fory_core::Serializer>::write_data(value, context)
     }
 }

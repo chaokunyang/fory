@@ -59,7 +59,7 @@ pub(super) fn read_scalar_field<T, C>(
 ) -> Result<Option<T>, Error>
 where
     T: 'static,
-    C: Codec<T> + ?Sized,
+    C: Codec<T>,
 {
     if !scalar_field_types_compatible(local_field_type, remote_field_type) {
         return Ok(None);

@@ -17,7 +17,7 @@
 
 use crate::context::{ReadContext, WriteContext};
 use crate::error::Error;
-use crate::serializer::codec::Codec;
+use crate::serializer::Serializer;
 use crate::type_id::{self, TypeId};
 use std::mem::MaybeUninit;
 
@@ -25,7 +25,7 @@ use std::mem::MaybeUninit;
 pub(super) fn array_type_id<T, C>(dense_u8: bool) -> Option<TypeId>
 where
     T: 'static,
-    C: Codec<T>,
+    C: Serializer<Target = T>,
 {
     let target = std::any::TypeId::of::<T>();
     match C::static_type_id() {
@@ -164,7 +164,7 @@ fn primitive_type_mismatch(expected: u32, actual: u32) -> Error {
 fn validate_target<T, C>(array_type_id: TypeId) -> Result<(), Error>
 where
     T: 'static,
-    C: Codec<T>,
+    C: Serializer<Target = T>,
 {
     if self::array_type_id::<T, C>(array_type_id == TypeId::UINT8_ARRAY) == Some(array_type_id) {
         Ok(())
@@ -199,7 +199,7 @@ pub(super) fn write_data<T, C>(
 ) -> Result<(), Error>
 where
     T: 'static,
-    C: Codec<T>,
+    C: Serializer<Target = T>,
 {
     validate_target::<T, C>(array_type_id)?;
     check_xlang_kind(context, array_type_id)?;
@@ -209,7 +209,7 @@ where
 fn write_data_body<T, C>(values: &[T], context: &mut WriteContext) -> Result<(), Error>
 where
     T: 'static,
-    C: Codec<T>,
+    C: Serializer<Target = T>,
 {
     #[cfg(target_endian = "little")]
     let _ = std::marker::PhantomData::<C>;
@@ -240,7 +240,7 @@ pub(super) fn read_vec<T, C>(
 ) -> Result<Vec<T>, Error>
 where
     T: 'static,
-    C: Codec<T>,
+    C: Serializer<Target = T>,
 {
     validate_target::<T, C>(array_type_id)?;
     if array_type_id == TypeId::BOOL_ARRAY {
@@ -327,7 +327,7 @@ where
 fn read_raw_vec<T, C>(context: &mut ReadContext) -> Result<Vec<T>, Error>
 where
     T: 'static,
-    C: Codec<T>,
+    C: Serializer<Target = T>,
 {
     #[cfg(target_endian = "little")]
     let _ = std::marker::PhantomData::<C>;
@@ -361,7 +361,7 @@ pub(super) fn read_array<T, C, const N: usize>(
 ) -> Result<[T; N], Error>
 where
     T: 'static,
-    C: Codec<T>,
+    C: Serializer<Target = T>,
 {
     validate_target::<T, C>(array_type_id)?;
     if array_type_id == TypeId::BOOL_ARRAY {
@@ -398,7 +398,7 @@ where
 fn read_raw_array<T, C, const N: usize>(context: &mut ReadContext) -> Result<[T; N], Error>
 where
     T: 'static,
-    C: Codec<T>,
+    C: Serializer<Target = T>,
 {
     #[cfg(target_endian = "little")]
     let _ = std::marker::PhantomData::<C>;

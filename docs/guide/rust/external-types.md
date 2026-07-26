@@ -51,7 +51,8 @@ When a root is a container such as `Vec<third_party::User>`, compose
 Fory-owned carrier serializers such as `VecSerializer<UserSerializer>`. These are
 compile-time types and are never instantiated.
 
-There is no separate field serializer, adapter, encoder, or decoder trait.
+There is no separate public field serializer, adapter, encoder, or decoder
+trait.
 
 ## External structural serializers
 
@@ -248,6 +249,16 @@ deserialization constructs the holder directly without an additional heap
 owner. Compatible schema evolution remains active for an external structural
 serializer nested behind any of these wrappers.
 
+In a non-skipped derived field, keep every carrier constructor's canonical name
+visible, optionally with its module path. This applies both to the field's Rust
+type and to a `with` serializer tree. For example, write
+`Vec<third_party::User>` and `VecSerializer<UserSerializer>` directly instead
+of hiding either carrier tree behind a type alias or renamed import. Leaf
+serializer aliases remain valid. Carrier aliases also remain valid at roots,
+where Rust resolves the serializer type without field code generation. A
+skipped field may also use a carrier alias because it emits no field schema and
+uses only the selected serializer's default.
+
 A skipped external field can use `#[fory(skip, with = UserSerializer)]`. In that
 case the serializer is used only for its fallible construction default; the
 field contributes no schema or body bytes. Registration is unnecessary when
@@ -293,7 +304,7 @@ Recursive field selection covers `Vec`, `VecDeque`, `LinkedList`, `HashSet`,
 `BTreeSet`, `BinaryHeap`, fixed arrays, `HashMap`, `BTreeMap`, and tuple
 arities 1 through 22. `direct_users` selects a carrier serializer for the exact
 Vec node; `users` selects the element serializer recursively. Both forms use the
-same built-in Vec codec and structural LIST representation. A serializer
+same built-in Vec implementation and structural LIST representation. A serializer
 annotation applies only to its declared node; it never silently propagates
 through a composite.
 
@@ -406,7 +417,7 @@ carrier. Standard-library `Weak<T>` is also not an alias for Fory's
 
 Every child argument is another serializer type. It can be an ordinary serializer targeting itself,
 an external structural serializer, a manual leaf serializer, or another Fory-owned carrier
-serializer. All four forms use the carrier's same built-in codec. An ordinary
+serializer. All four forms preserve the carrier's built-in encoding. An ordinary
 local type is its own serializer, so
 `HashMapSerializer<String, UserSerializer>` targets
 `HashMap<String, third_party::User>`.
@@ -427,8 +438,8 @@ Generated fields keep their declared field schema. An unannotated `Vec<i32>`
 field is `LIST<VARINT32>`, and
 `#[fory(list(element(encoding = fixed)))] Vec<i32>` is `LIST<INT32>`.
 `#[fory(array)]` selects a dense array and `#[fory(bytes)]` selects BINARY. All
-of these forms, including `VecSerializer<S>` roots, execute the same built-in
-Vec codec with compile-time schema selection.
+of these forms, including `VecSerializer<S>` roots, preserve the built-in Vec
+encoding selected by their declared schema.
 
 Fory never infers a serializer composition from a target type or from
 registration. Name every external child serializer explicitly in the carrier serializer

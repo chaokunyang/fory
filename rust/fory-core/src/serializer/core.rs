@@ -17,7 +17,7 @@
 
 use crate::context::{ReadContext, WriteContext};
 use crate::error::Error;
-use crate::meta::{FieldInfo, FieldType};
+use crate::meta::FieldInfo;
 use crate::resolver::{RefFlag, RefMode, TypeInfo, TypeResolver};
 use crate::serializer::struct_;
 use crate::type_id::{self, TypeId};
@@ -33,47 +33,6 @@ fn default_unavailable<S: Serializer>() -> Result<S::Target, Error> {
         std::any::type_name::<S>(),
         std::any::type_name::<S::Target>(),
     )))
-}
-
-#[inline(always)]
-fn provider_field_type<S: Serializer, const NULLABLE: bool, const TRACK_REF: bool>(
-    type_resolver: &TypeResolver,
-) -> Result<FieldType, Error> {
-    if type_resolver.is_xlang() && S::static_type_id() == TypeId::UNION {
-        // Static union fields own the generic UNION schema. Registered union
-        // identity belongs only to root or dynamic type metadata.
-        return Ok(FieldType::new_with_ref(
-            TypeId::UNION as u32,
-            NULLABLE,
-            TRACK_REF,
-            Vec::new(),
-        ));
-    }
-
-    let type_info = type_resolver
-        .get_provider_type_info(&std::any::TypeId::of::<S>())
-        .map_err(Error::enhance_type_error::<S>)?;
-    let mut type_id = type_info.get_type_id() as u32;
-    let mut user_type_id = type_info.get_user_type_id();
-
-    // Registered union providers still normalize their field schema to the
-    // generic xlang UNION category.
-    if type_resolver.is_xlang()
-        && (type_id == TypeId::TYPED_UNION as u32 || type_id == TypeId::NAMED_UNION as u32)
-    {
-        type_id = TypeId::UNION as u32;
-        user_type_id = u32::MAX;
-    } else if type_id::is_internal_type(type_id) {
-        user_type_id = u32::MAX;
-    }
-
-    Ok(FieldType::new_with_user_type_id(
-        type_id,
-        user_type_id,
-        NULLABLE,
-        TRACK_REF,
-        Vec::new(),
-    ))
 }
 
 /// Static serialization behavior for one runtime [`Serializer::Target`].
@@ -105,7 +64,6 @@ pub trait Serializer: Sized + 'static {
         context: &mut WriteContext,
         ref_mode: RefMode,
         write_type_info: bool,
-        has_generics: bool,
     ) -> Result<(), Error> {
         if ref_mode != RefMode::None {
             context.writer.write_i8(RefFlag::NotNullValue as i8);
@@ -113,19 +71,6 @@ pub trait Serializer: Sized + 'static {
         if write_type_info {
             Self::write_type_info(context)?;
         }
-        Self::write_data_with_generics(value, context, has_generics)
-    }
-
-    /// Write only body data while preserving the carrier's generic-metadata
-    /// context.
-    #[doc(hidden)]
-    #[inline(always)]
-    fn write_data_with_generics(
-        value: &Self::Target,
-        context: &mut WriteContext,
-        has_generics: bool,
-    ) -> Result<(), Error> {
-        let _ = has_generics;
         Self::write_data(value, context)
     }
 
@@ -151,10 +96,9 @@ pub trait Serializer: Sized + 'static {
         context: &mut WriteContext,
         ref_mode: RefMode,
         type_info: &Rc<TypeInfo>,
-        has_generics: bool,
     ) -> Result<(), Error> {
         let _ = type_info;
-        Self::write(value, context, ref_mode, false, has_generics)
+        Self::write(value, context, ref_mode, false)
     }
 
     /// Read a complete value, including the requested reference and type
@@ -187,26 +131,6 @@ pub trait Serializer: Sized + 'static {
     ) -> Result<Self::Target, Error> {
         let _ = type_info;
         Self::read(context, ref_mode, false)
-    }
-
-    /// Build field metadata for this serializer without exposing `Codec`.
-    #[doc(hidden)]
-    #[inline(always)]
-    fn field_type<const NULLABLE: bool, const TRACK_REF: bool>(
-        type_resolver: &TypeResolver,
-    ) -> Result<FieldType, Error> {
-        provider_field_type::<Self, NULLABLE, TRACK_REF>(type_resolver)
-    }
-
-    /// Read body data when a containing carrier supplies recursive metadata.
-    #[doc(hidden)]
-    #[inline(always)]
-    fn read_data_with_field_type(
-        context: &mut ReadContext,
-        remote_field_type: &FieldType,
-    ) -> Result<Self::Target, Error> {
-        let _ = remote_field_type;
-        Self::read_data(context)
     }
 
     #[doc(hidden)]
@@ -297,6 +221,19 @@ pub trait Serializer: Sized + 'static {
     fn dynamic_type_is_direct() -> bool {
         true
     }
+}
+
+#[inline(always)]
+pub(super) fn read_value_type_info<S: Serializer>(
+    context: &mut ReadContext,
+) -> Result<Option<Rc<TypeInfo>>, Error> {
+    // Static built-in carrier headers are compact type IDs, not registered
+    // serializers. Compatible TypeInfo exists only for metadata-bearing IDs.
+    if context.is_compatible() && !type_id::is_internal_type(S::static_type_id() as u32) {
+        return context.read_any_type_info().map(Some);
+    }
+    S::read_type_info(context)?;
+    Ok(None)
 }
 
 /// Schema metadata and compatible reads for derive-generated serializers.

@@ -833,7 +833,7 @@ impl Fory {
             RefMode::NullOnly
         };
         // TypeMeta is written inline during serialization (streaming protocol)
-        S::write(record, context, ref_mode, true, false)?;
+        S::write(record, context, ref_mode, true)?;
         Ok(())
     }
 

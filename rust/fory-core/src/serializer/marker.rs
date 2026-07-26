@@ -17,8 +17,6 @@
 
 use crate::context::{ReadContext, WriteContext};
 use crate::error::Error;
-use crate::meta::FieldType;
-use crate::resolver::TypeResolver;
 use crate::serializer::Serializer;
 use crate::type_id::TypeId;
 use std::marker::PhantomData;
@@ -39,20 +37,6 @@ impl<T: 'static> Serializer for PhantomData<T> {
     #[inline(always)]
     fn default_value(_: &mut ReadContext) -> Result<Self, Error> {
         Ok(PhantomData)
-    }
-
-    #[inline(always)]
-    fn field_type<const NULLABLE: bool, const TRACK_REF: bool>(
-        _: &TypeResolver,
-    ) -> Result<FieldType, Error> {
-        // Marker metadata is intrinsic; consulting the resolver would require
-        // registering a zero-data field that is never accessed at runtime.
-        Ok(FieldType::new_with_ref(
-            TypeId::NONE as u32,
-            NULLABLE,
-            TRACK_REF,
-            Vec::new(),
-        ))
     }
 
     #[inline(always)]

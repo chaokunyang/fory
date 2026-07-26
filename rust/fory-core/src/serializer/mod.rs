@@ -28,7 +28,7 @@ macro_rules! impl_single_carrier_serializer {
             stringify!($provider),
             "<S>` over `S::Target` for serializer-selected roots and nested carrier composition. ",
             "Generated fields may select this exact carrier or recursively select child serializers; ",
-            "both forms use the same codec. This zero-sized carrier is not registered independently."
+            "both forms use the same carrier body implementation. This zero-sized carrier is not registered independently."
         )]
         pub struct $provider<S>(std::marker::PhantomData<fn() -> S>);
 
@@ -46,31 +46,11 @@ macro_rules! impl_single_carrier_serializer {
             ) -> Result<(), $crate::Error> {
                 <$codec<
                     S::Target,
-                    $crate::serializer::codec::SerializerCodec<S, false, false>,
+                    S,
                     false,
                     false,
-                > as $crate::serializer::codec::Codec<Self::Target>>::write_data(
+                > as $crate::serializer::Serializer>::write_data(
                     value, context,
-                )
-            }
-
-            #[inline(always)]
-            fn write_data_with_generics(
-                value: &Self::Target,
-                context: &mut $crate::WriteContext,
-                has_generics: bool,
-            ) -> Result<(), $crate::Error> {
-                <$codec<
-                    S::Target,
-                    $crate::serializer::codec::SerializerCodec<S, false, false>,
-                    false,
-                    false,
-                > as $crate::serializer::codec::Codec<Self::Target>>::write_with_mode(
-                    value,
-                    context,
-                    $crate::RefMode::None,
-                    false,
-                    has_generics,
                 )
             }
 
@@ -80,10 +60,10 @@ macro_rules! impl_single_carrier_serializer {
             ) -> Result<Self::Target, $crate::Error> {
                 <$codec<
                     S::Target,
-                    $crate::serializer::codec::SerializerCodec<S, false, false>,
+                    S,
                     false,
                     false,
-                > as $crate::serializer::codec::Codec<Self::Target>>::read_data(context)
+                > as $crate::serializer::Serializer>::read_data(context)
             }
 
             #[inline(always)]
@@ -92,10 +72,10 @@ macro_rules! impl_single_carrier_serializer {
             ) -> Result<Self::Target, $crate::Error> {
                 <$codec<
                     S::Target,
-                    $crate::serializer::codec::SerializerCodec<S, false, false>,
+                    S,
                     false,
                     false,
-                > as $crate::serializer::codec::Codec<Self::Target>>::default_value(
+                > as $crate::serializer::Serializer>::default_value(
                     context,
                 )
             }
@@ -106,19 +86,17 @@ macro_rules! impl_single_carrier_serializer {
                 context: &mut $crate::WriteContext,
                 ref_mode: $crate::RefMode,
                 write_type_info: bool,
-                has_generics: bool,
             ) -> Result<(), $crate::Error> {
                 <$codec<
                     S::Target,
-                    $crate::serializer::codec::SerializerCodec<S, false, false>,
+                    S,
                     false,
                     false,
-                > as $crate::serializer::codec::Codec<Self::Target>>::write_with_mode(
+                > as $crate::serializer::Serializer>::write(
                     value,
                     context,
                     ref_mode,
                     write_type_info,
-                    has_generics,
                 )
             }
 
@@ -129,10 +107,10 @@ macro_rules! impl_single_carrier_serializer {
             ) -> Result<std::rc::Rc<$crate::TypeInfo>, $crate::Error> {
                 <$codec<
                     S::Target,
-                    $crate::serializer::codec::SerializerCodec<S, false, false>,
+                    S,
                     false,
                     false,
-                > as $crate::serializer::codec::Codec<Self::Target>>::write_type_info_value(
+                > as $crate::serializer::Serializer>::write_type_info_value(
                     context,
                     target_type_id,
                 )
@@ -144,19 +122,17 @@ macro_rules! impl_single_carrier_serializer {
                 context: &mut $crate::WriteContext,
                 ref_mode: $crate::RefMode,
                 type_info: &std::rc::Rc<$crate::TypeInfo>,
-                has_generics: bool,
             ) -> Result<(), $crate::Error> {
                 <$codec<
                     S::Target,
-                    $crate::serializer::codec::SerializerCodec<S, false, false>,
+                    S,
                     false,
                     false,
-                > as $crate::serializer::codec::Codec<Self::Target>>::write_with_type_info(
+                > as $crate::serializer::Serializer>::write_with_type_info(
                     value,
                     context,
                     ref_mode,
                     type_info,
-                    has_generics,
                 )
             }
 
@@ -168,10 +144,10 @@ macro_rules! impl_single_carrier_serializer {
             ) -> Result<Self::Target, $crate::Error> {
                 <$codec<
                     S::Target,
-                    $crate::serializer::codec::SerializerCodec<S, false, false>,
+                    S,
                     false,
                     false,
-                > as $crate::serializer::codec::Codec<Self::Target>>::read_with_mode(
+                > as $crate::serializer::Serializer>::read(
                     context,
                     ref_mode,
                     read_type_info,
@@ -186,41 +162,11 @@ macro_rules! impl_single_carrier_serializer {
             ) -> Result<Self::Target, $crate::Error> {
                 <$codec<
                     S::Target,
-                    $crate::serializer::codec::SerializerCodec<S, false, false>,
+                    S,
                     false,
                     false,
-                > as $crate::serializer::codec::Codec<Self::Target>>::read_with_type_info(
+                > as $crate::serializer::Serializer>::read_with_type_info(
                     context, ref_mode, type_info,
-                )
-            }
-
-            #[inline(always)]
-            fn field_type<const NULLABLE: bool, const TRACK_REF: bool>(
-                type_resolver: &$crate::resolver::TypeResolver,
-            ) -> Result<$crate::meta::FieldType, $crate::Error> {
-                <$codec<
-                    S::Target,
-                    $crate::serializer::codec::SerializerCodec<S, false, false>,
-                    NULLABLE,
-                    TRACK_REF,
-                > as $crate::serializer::codec::Codec<Self::Target>>::field_type(
-                    type_resolver,
-                )
-            }
-
-            #[inline(always)]
-            fn read_data_with_field_type(
-                context: &mut $crate::ReadContext,
-                remote_field_type: &$crate::meta::FieldType,
-            ) -> Result<Self::Target, $crate::Error> {
-                <$codec<
-                    S::Target,
-                    $crate::serializer::codec::SerializerCodec<S, false, false>,
-                    false,
-                    false,
-                > as $crate::serializer::codec::Codec<Self::Target>>::read_data_with_type(
-                    context,
-                    remote_field_type,
                 )
             }
 
@@ -230,10 +176,10 @@ macro_rules! impl_single_carrier_serializer {
             ) -> Result<(), $crate::Error> {
                 <$codec<
                     S::Target,
-                    $crate::serializer::codec::SerializerCodec<S, false, false>,
+                    S,
                     false,
                     false,
-                > as $crate::serializer::codec::Codec<Self::Target>>::write_type_info(
+                > as $crate::serializer::Serializer>::write_type_info(
                     context,
                 )
             }
@@ -244,10 +190,10 @@ macro_rules! impl_single_carrier_serializer {
             ) -> Result<(), $crate::Error> {
                 <$codec<
                     S::Target,
-                    $crate::serializer::codec::SerializerCodec<S, false, false>,
+                    S,
                     false,
                     false,
-                > as $crate::serializer::codec::Codec<Self::Target>>::read_type_info(
+                > as $crate::serializer::Serializer>::read_type_info(
                     context,
                 )
             }
@@ -256,60 +202,60 @@ macro_rules! impl_single_carrier_serializer {
             fn static_type_id() -> $crate::TypeId {
                 <$codec<
                     S::Target,
-                    $crate::serializer::codec::SerializerCodec<S, false, false>,
+                    S,
                     false,
                     false,
-                > as $crate::serializer::codec::Codec<Self::Target>>::static_type_id()
+                > as $crate::serializer::Serializer>::static_type_id()
             }
 
             #[inline(always)]
             fn reserved_space() -> usize {
                 <$codec<
                     S::Target,
-                    $crate::serializer::codec::SerializerCodec<S, false, false>,
+                    S,
                     false,
                     false,
-                > as $crate::serializer::codec::Codec<Self::Target>>::reserved_space()
+                > as $crate::serializer::Serializer>::reserved_space()
             }
 
             #[inline(always)]
             fn is_option() -> bool {
                 <$codec<
                     S::Target,
-                    $crate::serializer::codec::SerializerCodec<S, false, false>,
+                    S,
                     false,
                     false,
-                > as $crate::serializer::codec::Codec<Self::Target>>::is_option()
+                > as $crate::serializer::Serializer>::is_option()
             }
 
             #[inline(always)]
             fn is_none(value: &Self::Target) -> bool {
                 <$codec<
                     S::Target,
-                    $crate::serializer::codec::SerializerCodec<S, false, false>,
+                    S,
                     false,
                     false,
-                > as $crate::serializer::codec::Codec<Self::Target>>::is_none(value)
+                > as $crate::serializer::Serializer>::is_none(value)
             }
 
             #[inline(always)]
             fn is_polymorphic() -> bool {
                 <$codec<
                     S::Target,
-                    $crate::serializer::codec::SerializerCodec<S, false, false>,
+                    S,
                     false,
                     false,
-                > as $crate::serializer::codec::Codec<Self::Target>>::is_polymorphic()
+                > as $crate::serializer::Serializer>::is_polymorphic()
             }
 
             #[inline(always)]
             fn is_shared_ref() -> bool {
                 <$codec<
                     S::Target,
-                    $crate::serializer::codec::SerializerCodec<S, false, false>,
+                    S,
                     false,
                     false,
-                > as $crate::serializer::codec::Codec<Self::Target>>::is_shared_ref()
+                > as $crate::serializer::Serializer>::is_shared_ref()
             }
 
             #[inline(always)]
@@ -323,10 +269,10 @@ macro_rules! impl_single_carrier_serializer {
             ) -> Result<Option<std::any::TypeId>, $crate::Error> {
                 <$codec<
                     S::Target,
-                    $crate::serializer::codec::SerializerCodec<S, false, false>,
+                    S,
                     false,
                     false,
-                > as $crate::serializer::codec::Codec<Self::Target>>::dynamic_type_id(
+                > as $crate::serializer::Serializer>::dynamic_type_id(
                     value,
                 )
             }
@@ -335,10 +281,10 @@ macro_rules! impl_single_carrier_serializer {
             fn dynamic_type_is_direct() -> bool {
                 <$codec<
                     S::Target,
-                    $crate::serializer::codec::SerializerCodec<S, false, false>,
+                    S,
                     false,
                     false,
-                > as $crate::serializer::codec::Codec<Self::Target>>::dynamic_type_is_direct()
+                > as $crate::serializer::Serializer>::dynamic_type_is_direct()
             }
         }
 
@@ -355,19 +301,6 @@ macro_rules! impl_single_carrier_serializer {
                 context: &mut $crate::WriteContext,
             ) -> Result<(), $crate::Error> {
                 <$provider<T> as $crate::serializer::Serializer>::write_data(value, context)
-            }
-
-            #[inline(always)]
-            fn write_data_with_generics(
-                value: &Self,
-                context: &mut $crate::WriteContext,
-                has_generics: bool,
-            ) -> Result<(), $crate::Error> {
-                <$provider<T> as $crate::serializer::Serializer>::write_data_with_generics(
-                    value,
-                    context,
-                    has_generics,
-                )
             }
 
             #[inline(always)]
@@ -390,14 +323,12 @@ macro_rules! impl_single_carrier_serializer {
                 context: &mut $crate::WriteContext,
                 ref_mode: $crate::RefMode,
                 write_type_info: bool,
-                has_generics: bool,
             ) -> Result<(), $crate::Error> {
                 <$provider<T> as $crate::serializer::Serializer>::write(
                     value,
                     context,
                     ref_mode,
                     write_type_info,
-                    has_generics,
                 )
             }
 
@@ -418,14 +349,12 @@ macro_rules! impl_single_carrier_serializer {
                 context: &mut $crate::WriteContext,
                 ref_mode: $crate::RefMode,
                 type_info: &std::rc::Rc<$crate::TypeInfo>,
-                has_generics: bool,
             ) -> Result<(), $crate::Error> {
                 <$provider<T> as $crate::serializer::Serializer>::write_with_type_info(
                     value,
                     context,
                     ref_mode,
                     type_info,
-                    has_generics,
                 )
             }
 
@@ -450,27 +379,6 @@ macro_rules! impl_single_carrier_serializer {
             ) -> Result<Self, $crate::Error> {
                 <$provider<T> as $crate::serializer::Serializer>::read_with_type_info(
                     context, ref_mode, type_info,
-                )
-            }
-
-            #[inline(always)]
-            fn field_type<const NULLABLE: bool, const TRACK_REF: bool>(
-                type_resolver: &$crate::resolver::TypeResolver,
-            ) -> Result<$crate::meta::FieldType, $crate::Error> {
-                <$provider<T> as $crate::serializer::Serializer>::field_type::<
-                    NULLABLE,
-                    TRACK_REF,
-                >(type_resolver)
-            }
-
-            #[inline(always)]
-            fn read_data_with_field_type(
-                context: &mut $crate::ReadContext,
-                remote_field_type: &$crate::meta::FieldType,
-            ) -> Result<Self, $crate::Error> {
-                <$provider<T> as $crate::serializer::Serializer>::read_data_with_field_type(
-                    context,
-                    remote_field_type,
                 )
             }
 
@@ -550,6 +458,84 @@ macro_rules! impl_collection_carrier_codec {
             std::marker::PhantomData<(T, C)>,
         );
 
+        impl<T, S, const NULLABLE: bool, const TRACK_REF: bool>
+            $crate::serializer::Serializer for $codec<T, S, NULLABLE, TRACK_REF>
+        where
+            T: 'static,
+            S: $crate::serializer::Serializer<Target = T>,
+            $(T: $($bounds)+,)?
+            $container<T>: FromIterator<T>,
+            for<'a> &'a $container<T>: IntoIterator<Item = &'a T>,
+            for<'a> <&'a $container<T> as IntoIterator>::IntoIter:
+                ExactSizeIterator + Clone,
+        {
+            type Target = $container<T>;
+
+            #[inline(always)]
+            fn reserved_space() -> usize {
+                std::mem::size_of::<u32>() + $crate::type_id::SIZE_OF_REF_AND_TYPE
+            }
+
+            #[inline(always)]
+            fn write_data(
+                value: &$container<T>,
+                context: &mut $crate::WriteContext,
+            ) -> Result<(), $crate::Error> {
+                $crate::serializer::collection::write_collection_value_data::<
+                    T,
+                    S,
+                    _,
+                    true,
+                    $zst_no_backing,
+                >(value, context)
+            }
+
+            #[inline(always)]
+            fn read_data(
+                context: &mut $crate::ReadContext,
+            ) -> Result<$container<T>, $crate::Error> {
+                $crate::serializer::collection::read_collection_value_data::<
+                    $container<T>,
+                    T,
+                    S,
+                    true,
+                    $zst_no_backing,
+                >(context)
+            }
+
+            #[inline(always)]
+            fn default_value(
+                _context: &mut $crate::ReadContext,
+            ) -> Result<$container<T>, $crate::Error> {
+                Ok($container::new())
+            }
+
+            #[inline(always)]
+            fn write_type_info(
+                context: &mut $crate::WriteContext,
+            ) -> Result<(), $crate::Error> {
+                $crate::serializer::collection::write_collection_type_info(
+                    context,
+                    $crate::TypeId::$wire_type as u32,
+                )
+            }
+
+            #[inline(always)]
+            fn read_type_info(
+                context: &mut $crate::ReadContext,
+            ) -> Result<(), $crate::Error> {
+                $crate::serializer::collection::read_collection_type_info(
+                    context,
+                    $crate::TypeId::$wire_type as u32,
+                )
+            }
+
+            #[inline(always)]
+            fn static_type_id() -> $crate::TypeId {
+                $crate::TypeId::$wire_type
+            }
+        }
+
         impl<T, C, const NULLABLE: bool, const TRACK_REF: bool>
             $crate::serializer::codec::Codec<$container<T>>
             for $codec<T, C, NULLABLE, TRACK_REF>
@@ -572,11 +558,6 @@ macro_rules! impl_collection_carrier_codec {
                     TRACK_REF,
                     vec![C::field_type(type_resolver)?],
                 ))
-            }
-
-            #[inline(always)]
-            fn reserved_space() -> usize {
-                std::mem::size_of::<u32>() + $crate::type_id::SIZE_OF_REF_AND_TYPE
             }
 
             #[inline(always)]
@@ -643,37 +624,6 @@ macro_rules! impl_collection_carrier_codec {
             }
 
             #[inline(always)]
-            fn write_data(
-                value: &$container<T>,
-                context: &mut $crate::WriteContext,
-            ) -> Result<(), $crate::Error> {
-                $crate::serializer::collection::write_collection_data::<
-                    T,
-                    C,
-                    _,
-                    true,
-                    $zst_no_backing,
-                >(
-                    value,
-                    context,
-                    false,
-                )
-            }
-
-            #[inline(always)]
-            fn read_data(
-                context: &mut $crate::ReadContext,
-            ) -> Result<$container<T>, $crate::Error> {
-                $crate::serializer::collection::read_collection_data::<
-                    $container<T>,
-                    T,
-                    C,
-                    true,
-                    $zst_no_backing,
-                >(context)
-            }
-
-            #[inline(always)]
             fn read_data_with_type(
                 context: &mut $crate::ReadContext,
                 remote_data_type: &$crate::meta::FieldType,
@@ -715,7 +665,7 @@ macro_rules! impl_collection_carrier_codec {
                         .write_i8($crate::RefFlag::NotNullValue as i8);
                 }
                 if write_type_info {
-                    Self::write_type_info(context)?;
+                    <Self as $crate::serializer::Serializer>::write_type_info(context)?;
                 }
                 $crate::serializer::collection::write_collection_data::<
                     T,
@@ -730,63 +680,6 @@ macro_rules! impl_collection_carrier_codec {
                 )
             }
 
-            #[inline(always)]
-            fn read_with_mode(
-                context: &mut $crate::ReadContext,
-                ref_mode: $crate::RefMode,
-                read_type_info: bool,
-            ) -> Result<$container<T>, $crate::Error> {
-                if ref_mode != $crate::RefMode::None
-                    && context.reader.read_i8()? == $crate::RefFlag::Null as i8
-                {
-                    return Ok($container::new());
-                }
-                if read_type_info {
-                    Self::read_type_info(context)?;
-                }
-                Self::read_data(context)
-            }
-
-            #[inline(always)]
-            fn read_with_type_info(
-                context: &mut $crate::ReadContext,
-                ref_mode: $crate::RefMode,
-                _type_info: &std::rc::Rc<$crate::TypeInfo>,
-            ) -> Result<$container<T>, $crate::Error> {
-                Self::read_with_mode(context, ref_mode, false)
-            }
-
-            #[inline(always)]
-            fn default_value(
-                _context: &mut $crate::ReadContext,
-            ) -> Result<$container<T>, $crate::Error> {
-                Ok($container::new())
-            }
-
-            #[inline(always)]
-            fn write_type_info(
-                context: &mut $crate::WriteContext,
-            ) -> Result<(), $crate::Error> {
-                $crate::serializer::collection::write_collection_type_info(
-                    context,
-                    $crate::TypeId::$wire_type as u32,
-                )
-            }
-
-            #[inline(always)]
-            fn read_type_info(
-                context: &mut $crate::ReadContext,
-            ) -> Result<(), $crate::Error> {
-                $crate::serializer::collection::read_collection_type_info(
-                    context,
-                    $crate::TypeId::$wire_type as u32,
-                )
-            }
-
-            #[inline(always)]
-            fn static_type_id() -> $crate::TypeId {
-                $crate::TypeId::$wire_type
-            }
         }
     };
 }

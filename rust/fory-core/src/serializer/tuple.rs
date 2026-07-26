@@ -15,9 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-use super::codec::{
-    compatible_field_pair, field_ref_mode, generic_field_type, Codec, SerializerCodec,
-};
+use super::codec::{compatible_field_pair, field_ref_mode, generic_field_type, Codec};
 use super::collection::{
     read_collection_type_info, write_collection_type_info, DECL_ELEMENT_TYPE, HAS_NULL,
     IS_SAME_TYPE, TRACKING_REF,
@@ -29,7 +27,6 @@ use crate::meta::FieldType;
 use crate::resolver::{RefFlag, RefMode, TypeInfo, TypeResolver};
 use crate::serializer::Serializer;
 use crate::type_id::{TypeId, SIZE_OF_REF_AND_TYPE};
-use std::borrow::Cow;
 use std::marker::PhantomData;
 use std::rc::Rc;
 
@@ -52,18 +49,6 @@ impl Serializer for () {
     }
 
     #[inline(always)]
-    fn field_type<const NULLABLE: bool, const TRACK_REF: bool>(
-        _: &TypeResolver,
-    ) -> Result<FieldType, Error> {
-        Ok(FieldType::new_with_ref(
-            TypeId::NONE as u32,
-            NULLABLE,
-            TRACK_REF,
-            Vec::new(),
-        ))
-    }
-
-    #[inline(always)]
     fn static_type_id() -> TypeId {
         TypeId::NONE
     }
@@ -82,33 +67,34 @@ impl Serializer for () {
 }
 
 #[inline(always)]
-fn write_tuple_element<T: 'static, C: Codec<T>>(
+fn write_tuple_element<T: 'static, S: Serializer<Target = T>>(
     value: &T,
     context: &mut WriteContext,
 ) -> Result<(), Error> {
-    if C::is_option() || C::is_shared_ref() || C::static_type_id() == TypeId::UNKNOWN {
-        C::write_with_mode(
+    if S::is_option() || S::is_shared_ref() || S::static_type_id() == TypeId::UNKNOWN {
+        S::write(
             value,
             context,
-            if C::is_shared_ref() {
+            if S::is_shared_ref() {
                 RefMode::Tracking
             } else {
                 RefMode::NullOnly
             },
             false,
-            false,
         )
     } else {
-        C::write_data(value, context)
+        S::write_data(value, context)
     }
 }
 
 #[inline(always)]
-fn read_tuple_element<T: 'static, C: Codec<T>>(context: &mut ReadContext) -> Result<T, Error> {
-    if C::is_option() || C::is_shared_ref() || C::static_type_id() == TypeId::UNKNOWN {
-        C::read_with_mode(
+fn read_tuple_element<T: 'static, S: Serializer<Target = T>>(
+    context: &mut ReadContext,
+) -> Result<T, Error> {
+    if S::is_option() || S::is_shared_ref() || S::static_type_id() == TypeId::UNKNOWN {
+        S::read(
             context,
-            if C::is_shared_ref() {
+            if S::is_shared_ref() {
                 RefMode::Tracking
             } else {
                 RefMode::NullOnly
@@ -116,7 +102,7 @@ fn read_tuple_element<T: 'static, C: Codec<T>>(context: &mut ReadContext) -> Res
             false,
         )
     } else {
-        C::read_data(context)
+        S::read_data(context)
     }
 }
 
@@ -141,7 +127,7 @@ fn read_tuple_value<T: 'static, C: Codec<T>>(
     type_info_field: Option<&FieldType>,
 ) -> Result<T, Error> {
     if !same_type {
-        return C::read_with_mode(context, ref_mode, true);
+        return C::read(context, ref_mode, true);
     }
     if let Some(field_type) = declared_type {
         let local_field_type = C::field_type(context.get_type_resolver())?;
@@ -205,6 +191,226 @@ fn skip_tuple_values(
     Ok(())
 }
 
+#[cold]
+#[inline(never)]
+fn skip_declared_tuple_values<T, S>(
+    context: &mut ReadContext,
+    count: u32,
+    ref_mode: RefMode,
+) -> Result<(), Error>
+where
+    T: 'static,
+    S: Serializer<Target = T>,
+{
+    for _ in 0..count {
+        let _ = S::read(context, ref_mode, false)?;
+    }
+    Ok(())
+}
+
+macro_rules! tuple_declared_type {
+    (value, $context:expr, $remote:expr, $same_type:expr, $declared:expr, $ref_mode:expr) => {
+        ()
+    };
+    (field, $context:expr, $remote:expr, $same_type:expr, $declared:expr, $ref_mode:expr) => {{
+        if $same_type && $declared {
+            let field_type = generic_field_type($remote, 0, "tuple")?;
+            if field_ref_mode(field_type) != $ref_mode {
+                return Err(tuple_ref_mismatch());
+            }
+            Some(field_type)
+        } else {
+            None
+        }
+    }};
+}
+
+macro_rules! tuple_type_info_field {
+    (value, $type_info:expr, $ref_mode:expr) => {
+        ()
+    };
+    (field, $type_info:expr, $ref_mode:expr) => {
+        $type_info.as_ref().map(|type_info| {
+            FieldType::new_with_user_type_id(
+                type_info.get_type_id() as u32,
+                type_info.get_user_type_id(),
+                $ref_mode.is_nullable(),
+                $ref_mode.tracks_refs(),
+                Vec::new(),
+            )
+        })
+    };
+}
+
+macro_rules! tuple_read_node {
+    (
+        value,
+        $T:ty,
+        $C:ty,
+        $context:expr,
+        $ref_mode:expr,
+        $same_type:expr,
+        $declared:expr,
+        $declared_type:expr,
+        $type_info:expr,
+        $type_info_field:expr
+    ) => {
+        if !$same_type {
+            <$C as Serializer>::read($context, $ref_mode, true)
+        } else if $declared {
+            <$C as Serializer>::read($context, $ref_mode, false)
+        } else {
+            <$C as Serializer>::read_with_type_info(
+                $context,
+                $ref_mode,
+                $type_info.as_ref().ok_or_else(missing_tuple_metadata)?,
+            )
+        }
+    };
+    (
+        field,
+        $T:ty,
+        $C:ty,
+        $context:expr,
+        $ref_mode:expr,
+        $same_type:expr,
+        $declared:expr,
+        $declared_type:expr,
+        $type_info:expr,
+        $type_info_field:expr
+    ) => {
+        read_tuple_value::<$T, $C>(
+            $context,
+            $ref_mode,
+            $same_type,
+            $declared_type,
+            $type_info.as_ref(),
+            $type_info_field.as_ref(),
+        )
+    };
+}
+
+macro_rules! tuple_skip_nodes {
+    (
+        value,
+        $context:expr,
+        $count:expr,
+        $ref_mode:expr,
+        $same_type:expr,
+        $declared:expr,
+        $declared_type:expr,
+        $type_info:expr;
+        ($T:ident, $C:ident, $S:ident, $index:tt)
+        $(, ($rest_t:ident, $rest_c:ident, $rest_s:ident, $rest_index:tt))*
+    ) => {
+        if $same_type && $declared {
+            skip_declared_tuple_values::<$T, $C>($context, $count, $ref_mode)
+        } else {
+            skip_tuple_values(
+                $context,
+                $count,
+                $ref_mode,
+                $same_type,
+                None,
+                $type_info.as_ref(),
+            )
+        }
+    };
+    (
+        field,
+        $context:expr,
+        $count:expr,
+        $ref_mode:expr,
+        $same_type:expr,
+        $declared:expr,
+        $declared_type:expr,
+        $type_info:expr;
+        $(($T:ident, $C:ident, $S:ident, $index:tt)),+
+    ) => {
+        skip_tuple_values(
+            $context,
+            $count,
+            $ref_mode,
+            $same_type,
+            $declared_type,
+            $type_info.as_ref(),
+        )
+    };
+}
+
+macro_rules! read_tuple_body {
+    (
+        $layer:ident,
+        $context:expr,
+        $remote:expr;
+        $(($T:ident, $C:ident, $S:ident, $index:tt)),+
+    ) => {{
+        let context = &mut *$context;
+        if !context.is_compatible() && !context.is_xlang() {
+            return Ok(($(read_tuple_element::<$T, $C>(context)?,)+));
+        }
+        let len = context.reader.read_var_u32()?;
+        context.reader.check_bound(len as usize)?;
+        if len == 0 {
+            return Ok(($($C::default_value(context)?,)+));
+        }
+        let header = context.reader.read_u8()?;
+        let same_type = (header & IS_SAME_TYPE) != 0;
+        let ref_mode = tuple_ref_mode(header);
+        let declared = (header & DECL_ELEMENT_TYPE) != 0;
+        let declared_type = tuple_declared_type!(
+            $layer,
+            context,
+            $remote,
+            same_type,
+            declared,
+            ref_mode
+        );
+        let type_info = if same_type && !declared {
+            Some(context.read_any_type_info()?)
+        } else {
+            None
+        };
+        let type_info_field =
+            tuple_type_info_field!($layer, type_info, ref_mode);
+        let _ = &declared_type;
+        let _ = &type_info_field;
+        let mut index = 0u32;
+        let value = ($({
+            let value = if index < len {
+                index += 1;
+                tuple_read_node!(
+                    $layer,
+                    $T,
+                    $C,
+                    context,
+                    ref_mode,
+                    same_type,
+                    declared,
+                    declared_type,
+                    type_info,
+                    type_info_field
+                )?
+            } else {
+                $C::default_value(context)?
+            };
+            value
+        },)+);
+        tuple_skip_nodes!(
+            $layer,
+            context,
+            len - index,
+            ref_mode,
+            same_type,
+            declared,
+            declared_type,
+            type_info;
+            $(($T, $C, $S, $index)),+
+        )?;
+        Ok(value)
+    }};
+}
+
 macro_rules! impl_tuple_codec {
     (
         $codec:ident,
@@ -221,93 +427,107 @@ macro_rules! impl_tuple_codec {
                 $($T, $C,)+
                 const NULLABLE: bool,
                 const TRACK_REF: bool,
-            > $codec<$($T, $C,)+ NULLABLE, TRACK_REF>
+            > Serializer for $codec<$($T, $C,)+ NULLABLE, TRACK_REF>
         where
-            $($T: 'static, $C: Codec<$T>,)+
+            $($T: 'static, $C: Serializer<Target = $T>,)+
         {
+            type Target = ($($T,)+);
+
+            #[inline(always)]
+            fn write_data(
+                value: &Self::Target,
+                context: &mut WriteContext,
+            ) -> Result<(), Error> {
+                if !context.is_compatible() && !context.is_xlang() {
+                    $(write_tuple_element::<$T, $C>(&value.$index, context)?;)+
+                    return Ok(());
+                }
+                context.writer.write_var_u32(impl_tuple_codec!(@count $($T),+) as u32);
+                let mut header = 0u8;
+                $(
+                    if $C::is_option() {
+                        header |= HAS_NULL;
+                    }
+                    if $C::is_shared_ref() {
+                        header |= TRACKING_REF;
+                    }
+                )+
+                context.writer.write_u8(header);
+                let ref_mode = tuple_ref_mode(header);
+                $(
+                    $C::write(&value.$index, context, ref_mode, true)?;
+                )+
+                Ok(())
+            }
+
             // Debug builds must not inline recursively nested tuple readers
             // into one generated compatible-struct frame; complex schemas can
             // otherwise exhaust the test thread's stack.
             #[cfg_attr(debug_assertions, inline(never))]
             #[cfg_attr(not(debug_assertions), inline(always))]
-            fn read_tuple(
-                context: &mut ReadContext,
-                remote_data_type: Option<&FieldType>,
-            ) -> Result<($($T,)+), Error> {
-                if !context.is_compatible() && !context.is_xlang() {
-                    return Ok(($(read_tuple_element::<$T, $C>(context)?,)+));
-                }
-                let len = context.reader.read_var_u32()?;
-                context.reader.check_bound(len as usize)?;
-                if len == 0 {
-                    return Ok(($($C::default_value(context)?,)+));
-                }
-                let header = context.reader.read_u8()?;
-                let same_type = (header & IS_SAME_TYPE) != 0;
-                let ref_mode = tuple_ref_mode(header);
-                let declared = (header & DECL_ELEMENT_TYPE) != 0;
-                let declared_type = if same_type && declared {
-                    Some(match remote_data_type {
-                        Some(field_type) => {
-                            let field_type = generic_field_type(field_type, 0, "tuple")?;
-                            if field_ref_mode(field_type) != ref_mode {
-                                return Err(tuple_ref_mismatch());
-                            }
-                            Cow::Borrowed(field_type)
-                        }
-                        None => {
-                            let mut field_type = impl_tuple_codec!(
-                                @first_field_type context;
-                                $(($T, $C, $S, $index)),+
-                            )?;
-                            field_type.nullable = (header & HAS_NULL) != 0;
-                            field_type.track_ref = (header & TRACKING_REF) != 0;
-                            Cow::Owned(field_type)
-                        }
-                    })
-                } else {
-                    None
-                };
-                let type_info = if same_type && !declared {
-                    Some(context.read_any_type_info()?)
-                } else {
-                    None
-                };
-                let type_info_field = type_info.as_ref().map(|type_info| {
-                    FieldType::new_with_user_type_id(
-                        type_info.get_type_id() as u32,
-                        type_info.get_user_type_id(),
-                        ref_mode.is_nullable(),
-                        ref_mode.tracks_refs(),
-                        Vec::new(),
-                    )
-                });
-                let mut index = 0u32;
-                let value = ($({
-                    let value = if index < len {
-                        index += 1;
-                        read_tuple_value::<$T, $C>(
-                            context,
-                            ref_mode,
-                            same_type,
-                            declared_type.as_deref(),
-                            type_info.as_ref(),
-                            type_info_field.as_ref(),
-                        )?
-                    } else {
-                        $C::default_value(context)?
-                    };
-                    value
-                },)+);
-                skip_tuple_values(
+            fn read_data(context: &mut ReadContext) -> Result<Self::Target, Error> {
+                read_tuple_body!(
+                    value,
                     context,
-                    len - index,
-                    ref_mode,
-                    same_type,
-                    declared_type.as_deref(),
-                    type_info.as_ref(),
-                )?;
-                Ok(value)
+                    ();
+                    $(($T, $C, $S, $index)),+
+                )
+            }
+
+            #[inline(always)]
+            fn default_value(context: &mut ReadContext) -> Result<Self::Target, Error> {
+                Ok(($($C::default_value(context)?,)+))
+            }
+
+            #[inline(always)]
+            fn write_type_info(context: &mut WriteContext) -> Result<(), Error> {
+                write_collection_type_info(context, TypeId::LIST as u32)
+            }
+
+            #[inline(always)]
+            fn read_type_info(context: &mut ReadContext) -> Result<(), Error> {
+                read_collection_type_info(context, TypeId::LIST as u32)
+            }
+
+            #[inline(always)]
+            fn static_type_id() -> TypeId {
+                TypeId::LIST
+            }
+
+            #[inline(always)]
+            fn reserved_space() -> usize {
+                std::mem::size_of::<u32>() + SIZE_OF_REF_AND_TYPE
+            }
+
+            #[inline(always)]
+            fn is_wrapper_type() -> bool {
+                true
+            }
+        }
+
+        impl<
+                $($T, $C,)+
+                const NULLABLE: bool,
+                const TRACK_REF: bool,
+            > $codec<$($T, $C,)+ NULLABLE, TRACK_REF>
+        where
+            $($T: 'static, $C: Codec<$T>,)+
+        {
+            // This is the field-only counterpart to `Serializer::read_data`.
+            // It consumes the remote tuple field schema without leaking
+            // `FieldType` into value-level serializer composition.
+            #[cfg_attr(debug_assertions, inline(never))]
+            #[cfg_attr(not(debug_assertions), inline(always))]
+            fn read_tuple_with_type(
+                context: &mut ReadContext,
+                remote_data_type: &FieldType,
+            ) -> Result<($($T,)+), Error> {
+                read_tuple_body!(
+                    field,
+                    context,
+                    remote_data_type;
+                    $(($T, $C, $S, $index)),+
+                )
             }
         }
 
@@ -335,11 +555,6 @@ macro_rules! impl_tuple_codec {
             }
 
             #[inline(always)]
-            fn reserved_space() -> usize {
-                std::mem::size_of::<u32>() + SIZE_OF_REF_AND_TYPE
-            }
-
-            #[inline(always)]
             fn write_field(
                 value: &($($T,)+),
                 context: &mut WriteContext,
@@ -347,7 +562,7 @@ macro_rules! impl_tuple_codec {
                 if NULLABLE || TRACK_REF {
                     context.writer.write_i8(RefFlag::NotNullValue as i8);
                 }
-                Self::write_data(value, context)
+                <Self as Serializer>::write_data(value, context)
             }
 
             #[inline(always)]
@@ -355,47 +570,9 @@ macro_rules! impl_tuple_codec {
                 if (NULLABLE || TRACK_REF)
                     && context.reader.read_i8()? == RefFlag::Null as i8
                 {
-                    return Self::default_value(context);
+                    return <Self as Serializer>::default_value(context);
                 }
-                Self::read_data(context)
-            }
-
-            #[inline(always)]
-            fn write_data(
-                value: &($($T,)+),
-                context: &mut WriteContext,
-            ) -> Result<(), Error> {
-                if !context.is_compatible() && !context.is_xlang() {
-                    $(write_tuple_element::<$T, $C>(&value.$index, context)?;)+
-                    return Ok(());
-                }
-                context.writer.write_var_u32(impl_tuple_codec!(@count $($T),+) as u32);
-                let mut header = 0u8;
-                $(
-                    if $C::is_option() {
-                        header |= HAS_NULL;
-                    }
-                    if $C::is_shared_ref() {
-                        header |= TRACKING_REF;
-                    }
-                )+
-                context.writer.write_u8(header);
-                let ref_mode = tuple_ref_mode(header);
-                $(
-                    $C::write_with_mode(
-                        &value.$index,
-                        context,
-                        ref_mode,
-                        true,
-                        false,
-                    )?;
-                )+
-                Ok(())
-            }
-
-            #[inline(always)]
-            fn read_data(context: &mut ReadContext) -> Result<($($T,)+), Error> {
-                Self::read_tuple(context, None)
+                <Self as Serializer>::read_data(context)
             }
 
             #[inline(always)]
@@ -403,7 +580,7 @@ macro_rules! impl_tuple_codec {
                 context: &mut ReadContext,
                 remote_data_type: &FieldType,
             ) -> Result<($($T,)+), Error> {
-                Self::read_tuple(context, Some(remote_data_type))
+                Self::read_tuple_with_type(context, remote_data_type)
             }
 
             #[inline(always)]
@@ -414,7 +591,7 @@ macro_rules! impl_tuple_codec {
                 if field_ref_mode(remote_field_type) != RefMode::None
                     && context.reader.read_i8()? == RefFlag::Null as i8
                 {
-                    return Self::default_value(context);
+                    return <Self as Serializer>::default_value(context);
                 }
                 Self::read_data_with_type(context, remote_field_type)
             }
@@ -427,64 +604,12 @@ macro_rules! impl_tuple_codec {
                 write_type_info: bool,
                 _has_generics: bool,
             ) -> Result<(), Error> {
-                if ref_mode != RefMode::None {
-                    context.writer.write_i8(RefFlag::NotNullValue as i8);
-                }
-                if write_type_info {
-                    Self::write_type_info(context)?;
-                }
-                Self::write_data(value, context)
-            }
-
-            #[inline(always)]
-            fn read_with_mode(
-                context: &mut ReadContext,
-                ref_mode: RefMode,
-                read_type_info: bool,
-            ) -> Result<($($T,)+), Error> {
-                if ref_mode != RefMode::None
-                    && context.reader.read_i8()? == RefFlag::Null as i8
-                {
-                    return Self::default_value(context);
-                }
-                if read_type_info {
-                    Self::read_type_info(context)?;
-                }
-                Self::read_data(context)
-            }
-
-            #[inline(always)]
-            fn read_with_type_info(
-                context: &mut ReadContext,
-                ref_mode: RefMode,
-                _type_info: &Rc<TypeInfo>,
-            ) -> Result<($($T,)+), Error> {
-                Self::read_with_mode(context, ref_mode, false)
-            }
-
-            #[inline(always)]
-            fn default_value(context: &mut ReadContext) -> Result<($($T,)+), Error> {
-                Ok(($($C::default_value(context)?,)+))
-            }
-
-            #[inline(always)]
-            fn write_type_info(context: &mut WriteContext) -> Result<(), Error> {
-                write_collection_type_info(context, TypeId::LIST as u32)
-            }
-
-            #[inline(always)]
-            fn read_type_info(context: &mut ReadContext) -> Result<(), Error> {
-                read_collection_type_info(context, TypeId::LIST as u32)
-            }
-
-            #[inline(always)]
-            fn static_type_id() -> TypeId {
-                TypeId::LIST
-            }
-
-            #[inline(always)]
-            fn is_wrapper_type() -> bool {
-                true
+                <Self as Serializer>::write(
+                    value,
+                    context,
+                    ref_mode,
+                    write_type_info,
+                )
             }
         }
 
@@ -501,109 +626,28 @@ macro_rules! impl_tuple_codec {
             #[inline(always)]
             fn write_data(value: &Self::Target, context: &mut WriteContext) -> Result<(), Error> {
                 <$codec<
-                    $($S::Target, SerializerCodec<$S, false, false>,)+
+                    $($S::Target, $S,)+
                     false,
                     false,
-                > as Codec<Self::Target>>::write_data(value, context)
+                > as Serializer>::write_data(value, context)
             }
 
             #[inline(always)]
             fn read_data(context: &mut ReadContext) -> Result<Self::Target, Error> {
                 <$codec<
-                    $($S::Target, SerializerCodec<$S, false, false>,)+
+                    $($S::Target, $S,)+
                     false,
                     false,
-                > as Codec<Self::Target>>::read_data(context)
+                > as Serializer>::read_data(context)
             }
 
             #[inline(always)]
             fn default_value(context: &mut ReadContext) -> Result<Self::Target, Error> {
                 <$codec<
-                    $($S::Target, SerializerCodec<$S, false, false>,)+
+                    $($S::Target, $S,)+
                     false,
                     false,
-                > as Codec<Self::Target>>::default_value(context)
-            }
-
-            #[inline(always)]
-            fn write(
-                value: &Self::Target,
-                context: &mut WriteContext,
-                ref_mode: RefMode,
-                write_type_info: bool,
-                has_generics: bool,
-            ) -> Result<(), Error> {
-                <$codec<
-                    $($S::Target, SerializerCodec<$S, false, false>,)+
-                    false,
-                    false,
-                > as Codec<Self::Target>>::write_with_mode(
-                    value,
-                    context,
-                    ref_mode,
-                    write_type_info,
-                    has_generics,
-                )
-            }
-
-            #[inline(always)]
-            fn read(
-                context: &mut ReadContext,
-                ref_mode: RefMode,
-                read_type_info: bool,
-            ) -> Result<Self::Target, Error> {
-                <$codec<
-                    $($S::Target, SerializerCodec<$S, false, false>,)+
-                    false,
-                    false,
-                > as Codec<Self::Target>>::read_with_mode(
-                    context,
-                    ref_mode,
-                    read_type_info,
-                )
-            }
-
-            #[inline(always)]
-            fn read_with_type_info(
-                context: &mut ReadContext,
-                ref_mode: RefMode,
-                type_info: &Rc<TypeInfo>,
-            ) -> Result<Self::Target, Error> {
-                <$codec<
-                    $($S::Target, SerializerCodec<$S, false, false>,)+
-                    false,
-                    false,
-                > as Codec<Self::Target>>::read_with_type_info(
-                    context,
-                    ref_mode,
-                    type_info,
-                )
-            }
-
-            #[inline(always)]
-            fn field_type<const NULLABLE: bool, const TRACK_REF: bool>(
-                type_resolver: &TypeResolver,
-            ) -> Result<FieldType, Error> {
-                <$codec<
-                    $($S::Target, SerializerCodec<$S, false, false>,)+
-                    NULLABLE,
-                    TRACK_REF,
-                > as Codec<Self::Target>>::field_type(type_resolver)
-            }
-
-            #[inline(always)]
-            fn read_data_with_field_type(
-                context: &mut ReadContext,
-                remote_field_type: &FieldType,
-            ) -> Result<Self::Target, Error> {
-                <$codec<
-                    $($S::Target, SerializerCodec<$S, false, false>,)+
-                    false,
-                    false,
-                > as Codec<Self::Target>>::read_data_with_type(
-                    context,
-                    remote_field_type,
-                )
+                > as Serializer>::default_value(context)
             }
 
             #[inline(always)]
@@ -659,14 +703,12 @@ macro_rules! impl_tuple_codec {
                 context: &mut WriteContext,
                 ref_mode: RefMode,
                 write_type_info: bool,
-                has_generics: bool,
             ) -> Result<(), Error> {
                 <$provider<$($T,)+> as Serializer>::write(
                     value,
                     context,
                     ref_mode,
                     write_type_info,
-                    has_generics,
                 )
             }
 
@@ -693,26 +735,6 @@ macro_rules! impl_tuple_codec {
                     context,
                     ref_mode,
                     type_info,
-                )
-            }
-
-            #[inline(always)]
-            fn field_type<const NULLABLE: bool, const TRACK_REF: bool>(
-                type_resolver: &TypeResolver,
-            ) -> Result<FieldType, Error> {
-                <$provider<$($T,)+> as Serializer>::field_type::<NULLABLE, TRACK_REF>(
-                    type_resolver,
-                )
-            }
-
-            #[inline(always)]
-            fn read_data_with_field_type(
-                context: &mut ReadContext,
-                remote_field_type: &FieldType,
-            ) -> Result<Self, Error> {
-                <$provider<$($T,)+> as Serializer>::read_data_with_field_type(
-                    context,
-                    remote_field_type,
                 )
             }
 
@@ -747,13 +769,6 @@ macro_rules! impl_tuple_codec {
         1usize $(+ impl_tuple_codec!(@one $tail))*
     };
     (@one $value:ident) => { 1usize };
-    (
-        @first_field_type $context:expr;
-        ($T:ident, $C:ident, $S:ident, $index:tt)
-        $(, ($rest_t:ident, $rest_c:ident, $rest_s:ident, $rest_index:tt))*
-    ) => {
-        <$C as Codec<$T>>::field_type($context.get_type_resolver())
-    };
 }
 
 impl_tuple_codec!(Tuple1Codec, Tuple1Serializer, (T0, C0, S0, 0));

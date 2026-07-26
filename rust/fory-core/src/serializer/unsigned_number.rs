@@ -18,10 +18,9 @@
 use crate::buffer::{Reader, Writer};
 use crate::context::{ReadContext, WriteContext};
 use crate::error::Error;
-use crate::meta::FieldType;
 use crate::serializer::util::read_basic_type_info;
 use crate::serializer::Serializer;
-use crate::type_id::{self, TypeId};
+use crate::type_id::TypeId;
 use std::sync::Arc;
 
 macro_rules! impl_unsigned_serializer {
@@ -30,8 +29,7 @@ macro_rules! impl_unsigned_serializer {
         $writer:expr,
         $reader:expr,
         $type_id:expr,
-        $xlang:expr,
-        $compatible_reader:expr
+        $xlang:expr
     ) => {
         impl Serializer for $ty {
             type Target = Self;
@@ -51,14 +49,6 @@ macro_rules! impl_unsigned_serializer {
             #[inline(always)]
             fn read_data(context: &mut ReadContext) -> Result<Self, Error> {
                 $reader(&mut context.reader)
-            }
-
-            #[inline(always)]
-            fn read_data_with_field_type(
-                context: &mut ReadContext,
-                remote_field_type: &FieldType,
-            ) -> Result<Self, Error> {
-                ($compatible_reader)(context, remote_field_type)
             }
 
             #[inline(always)]
@@ -97,60 +87,39 @@ macro_rules! impl_unsigned_serializer {
     };
 }
 
-impl_unsigned_serializer!(
-    u8,
-    Writer::write_u8,
-    Reader::read_u8,
-    TypeId::UINT8,
-    true,
-    |context: &mut ReadContext, _: &FieldType| context.reader.read_u8()
-);
+impl_unsigned_serializer!(u8, Writer::write_u8, Reader::read_u8, TypeId::UINT8, true);
 impl_unsigned_serializer!(
     u16,
     Writer::write_u16,
     Reader::read_u16,
     TypeId::UINT16,
-    true,
-    |context: &mut ReadContext, _: &FieldType| context.reader.read_u16()
+    true
 );
 impl_unsigned_serializer!(
     u32,
     Writer::write_var_u32,
     Reader::read_var_u32,
     TypeId::VAR_UINT32,
-    true,
-    |context: &mut ReadContext, field_type: &FieldType| match field_type.type_id {
-        type_id::UINT32 => context.reader.read_u32(),
-        type_id::VAR_UINT32 => context.reader.read_var_u32(),
-        remote => Err(Error::type_mismatch(type_id::VAR_UINT32, remote)),
-    }
+    true
 );
 impl_unsigned_serializer!(
     u64,
     Writer::write_var_u64,
     Reader::read_var_u64,
     TypeId::VAR_UINT64,
-    true,
-    |context: &mut ReadContext, field_type: &FieldType| match field_type.type_id {
-        type_id::UINT64 => context.reader.read_u64(),
-        type_id::VAR_UINT64 => context.reader.read_var_u64(),
-        type_id::TAGGED_UINT64 => context.reader.read_tagged_u64(),
-        remote => Err(Error::type_mismatch(type_id::VAR_UINT64, remote)),
-    }
+    true
 );
 impl_unsigned_serializer!(
     u128,
     Writer::write_u128,
     Reader::read_u128,
     TypeId::U128,
-    false,
-    |context: &mut ReadContext, _: &FieldType| context.reader.read_u128()
+    false
 );
 impl_unsigned_serializer!(
     usize,
     Writer::write_usize,
     Reader::read_usize,
     TypeId::USIZE,
-    false,
-    |context: &mut ReadContext, _: &FieldType| context.reader.read_usize()
+    false
 );

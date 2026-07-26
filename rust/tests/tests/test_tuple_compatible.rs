@@ -728,8 +728,6 @@ fn run_struct_tuple_element_decrease(xlang: bool) {
 
 /// Helper: Test struct with complex nested tuple evolution
 fn run_struct_nested_tuple_evolution(xlang: bool) {
-    type NestedTupleV2 = ((i32, String, Vec<i32>), (f64, bool, Option<String>));
-
     // V1: Struct with simple nested tuple
     #[derive(ForyStruct, Debug, PartialEq)]
     struct StructV1 {
@@ -741,7 +739,8 @@ fn run_struct_nested_tuple_evolution(xlang: bool) {
     #[derive(ForyStruct, Debug, PartialEq)]
     struct StructV2 {
         id: i32,
-        nested: NestedTupleV2,
+        #[allow(clippy::type_complexity)]
+        nested: ((i32, String, Vec<i32>), (f64, bool, Option<String>)),
     }
 
     // Use separate Fory instances with the same type ID
@@ -936,9 +935,6 @@ fn test_struct_complex_evolution_scenario_xlang() {
 /// - Multiple tuple fields evolving simultaneously
 /// - Mix of simple, nested, and collection-based tuples
 fn run_struct_complex_evolution_scenario(xlang: bool) {
-    type MetadataTupleV2 = ((String, i32, Vec<String>), (bool, f64, Option<i32>));
-    type AttributesTupleV2 = ((Vec<String>, HashMap<String, i32>), (Option<bool>,));
-
     // V1: Original schema with multiple tuple fields
     #[derive(ForyStruct, Debug, PartialEq)]
     struct DataRecordV1 {
@@ -956,6 +952,7 @@ fn run_struct_complex_evolution_scenario(xlang: bool) {
 
     // V2: Evolved schema with complex changes
     #[derive(ForyStruct, Debug, PartialEq)]
+    #[allow(clippy::type_complexity)]
     struct DataRecordV2 {
         id: i32,
         name: String,
@@ -964,13 +961,13 @@ fn run_struct_complex_evolution_scenario(xlang: bool) {
         // category reduced to single element (2 -> 1 elements)
         category: (String,),
         // metadata nested tuple expanded (both inner tuples gain elements)
-        metadata: MetadataTupleV2,
+        metadata: ((String, i32, Vec<String>), (bool, f64, Option<i32>)),
         // tags remains same
         tags: (Vec<String>, Vec<i32>),
         // NEW FIELD: status tuple added
         status: (bool, String, i32),
         // NEW FIELD: nested tuple with collections
-        attributes: AttributesTupleV2,
+        attributes: ((Vec<String>, HashMap<String, i32>), (Option<bool>,)),
     }
 
     // Use separate Fory instances with the same type ID
@@ -1067,10 +1064,8 @@ fn run_struct_complex_evolution_scenario(xlang: bool) {
     assert_eq!(v1.tags.1, vec![10, 20]);
 }
 
-type AttributeTuple = ((Option<bool>,), (Vec<String>, HashMap<String, i32>));
-
 #[test]
-fn test_tuple_alias() {
+fn test_nested_tuple_collection_evolution() {
     #[derive(ForyStruct, Debug, PartialEq)]
     #[allow(clippy::type_complexity)]
     struct DataRecordV1 {
@@ -1080,7 +1075,7 @@ fn test_tuple_alias() {
     #[derive(ForyStruct, Debug, PartialEq)]
     #[allow(clippy::type_complexity)]
     struct DataRecordV2 {
-        attrs: AttributeTuple,
+        attrs: ((Option<bool>,), (Vec<String>, HashMap<String, i32>)),
     }
 
     // Use separate Fory instances with the same type ID

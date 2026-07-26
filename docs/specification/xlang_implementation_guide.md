@@ -984,6 +984,38 @@ The public helper should be a thin generated wrapper around the Fory
 registration API, not a public global registry or a second unrelated
 registration API family.
 
+### Dart External Structural Serializers
+
+Dart external-type serialization extends `ForyStruct` with an optional
+compile-time `target` and named generative `constructor`. The annotated
+`abstract final` class is a schema declaration only. It has no runtime value or
+registration identity.
+
+The generator must analyze ordinary and external structs through one struct
+model and one emitter. Private generated symbol names come from the declaration
+name. Every runtime type position uses the target type: `Serializer<Target>`,
+`GeneratedStructSchema<Target>`, read and write signatures, constructor calls,
+schema `type`, and generated-module dispatch.
+
+For each declaration field, resolve an accessible target getter with the same
+name and exact instantiated Dart type. Constructor parameters and any
+post-construction setter must also match exactly. A public named generative
+constructor is selected only when the annotation names it. Factory
+constructors, abstract targets, open target types, and constructor-based direct
+self-references are rejected during generation.
+
+Generated code reads getters and invokes target constructors or setters
+directly. It must not allocate the declaration, copy values through an
+intermediate object, invoke runtime callbacks, perform member-name lookup, or
+branch on whether the struct is external. The existing generated struct,
+registration, resolver, field, collection, map, compatible-read, and reference
+paths remain the only runtime paths.
+
+Registration is keyed by `Target` through the generated module and the existing
+generated registration API. Direct roots, generated fields, dynamic values,
+and recursive collection/map children resolve the same target registration.
+Dart root collections retain their existing untyped outer runtime shapes.
+
 ## Directory Layout
 
 Under each Dart package `lib/` tree, only one nested source layer is allowed.

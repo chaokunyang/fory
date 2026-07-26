@@ -38,6 +38,8 @@ from pyfory.meta.typedef import (
     DynamicFieldType,
     FIELD_NAME_ENCODINGS,
     COMPRESS_META_FLAG,
+    REGISTER_BY_NAME_FLAG,
+    STRUCT_TYPEDEF_FLAG,
     META_SIZE_MASKS,
     TYPEDEF_HASH_MASK,
     TYPEDEF_HASH_SHIFT,
@@ -341,6 +343,15 @@ def test_decode_typedef_rejects_hash_consistent_malformed_body():
     encoded = prepend_header(b"\x00", False)
 
     with pytest.raises(Exception):
+        decode_typedef(Buffer(encoded), fory.type_resolver)
+
+
+def test_namespace_encoding():
+    fory = Fory(xlang=True, compatible=False)
+    body = bytes([STRUCT_TYPEDEF_FLAG | REGISTER_BY_NAME_FLAG, 0b11])
+    encoded = prepend_header(body, False)
+
+    with pytest.raises(ValueError, match="Invalid TypeDef namespace encoding"):
         decode_typedef(Buffer(encoded), fory.type_resolver)
 
 

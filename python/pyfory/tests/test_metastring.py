@@ -110,6 +110,15 @@ def test_encode_empty_string():
         assert decoded == ""
 
 
+def test_trailing_escape():
+    encoder = MetaStringEncoder(special_char1=".", special_char2="_")
+    decoder = MetaStringDecoder(special_char1=".", special_char2="_")
+    encoded = encoder._encode_lower_special("|")
+
+    with pytest.raises(ValueError, match="ALL_TO_LOWER_SPECIAL"):
+        decoder.decode(encoded, Encoding.ALL_TO_LOWER_SPECIAL)
+
+
 def test_encode_characters_outside_of_lower_special():
     encoder = MetaStringEncoder(special_char1=".", special_char2="_")
 

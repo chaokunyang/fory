@@ -249,6 +249,8 @@ class MetaStringDecoder:
                 skip = False
                 continue
             if char == "|":
+                if i + 1 >= len(decoded_str):
+                    raise ValueError("Invalid ALL_TO_LOWER_SPECIAL meta string: trailing escape")
                 result.append(decoded_str[i + 1].upper())
                 skip = True
             else:

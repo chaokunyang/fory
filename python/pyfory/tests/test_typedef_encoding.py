@@ -25,7 +25,6 @@ from dataclasses import dataclass, make_dataclass
 from typing import Dict, List, Optional
 
 # Fory resolves these model annotations at runtime, so keep Python 3.8-compatible typing aliases.
-# ruff: noqa: UP006, UP035, UP045
 
 import pytest
 

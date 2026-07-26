@@ -20,7 +20,6 @@ from enum import Enum
 from typing import List, Optional
 
 # Python 3.8 must be able to evaluate these public annotations at runtime.
-# ruff: noqa: UP006, UP035, UP045
 
 
 class Encoding(Enum):

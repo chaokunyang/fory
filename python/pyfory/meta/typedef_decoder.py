@@ -25,7 +25,6 @@ from dataclasses import make_dataclass
 from typing import Any, List
 
 # Python 3.8 must be able to evaluate these annotations at runtime.
-# ruff: noqa: UP006, UP035
 
 from pyfory.serialization import Buffer
 from pyfory.meta.typedef import TypeDef, FieldInfo, FieldType

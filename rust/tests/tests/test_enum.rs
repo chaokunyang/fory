@@ -22,6 +22,29 @@ use fory_derive::{ForyEnum, ForyStruct, ForyUnion};
 use std::collections::HashMap;
 
 #[test]
+fn union_declares_carrier_schema() {
+    #[derive(ForyUnion)]
+    enum ArrayListUnion {
+        #[fory(unknown)]
+        Unknown(fory_core::UnknownCase),
+        #[fory(id = 1, default)]
+        Values(#[fory(list(element(array)))] Vec<Vec<i32>>),
+    }
+
+    let value = ArrayListUnion::Values(vec![vec![11, 12], vec![13, 14]]);
+    let mut context = fory_core::WriteContext::new(
+        fory_core::resolver::TypeResolver::default(),
+        fory_core::Config::default(),
+    );
+    <ArrayListUnion as fory_core::Serializer>::write_data(&value, &mut context).unwrap();
+
+    assert_eq!(
+        context.writer.dump(),
+        vec![1, 255, 22, 2, 12, 8, 11, 0, 0, 0, 12, 0, 0, 0, 8, 13, 0, 0, 0, 14, 0, 0, 0,],
+    );
+}
+
+#[test]
 fn basic() {
     #[derive(ForyUnion, Debug, PartialEq)]
     enum Token {

@@ -120,6 +120,7 @@ fn gen_write_variant_elements(
                     quote! { #ident },
                     quote! { fory_core::RefMode::NullOnly },
                     quote! { true },
+                    quote! { false },
                 )),
                 FieldBinding::Skipped(_) => None,
             })
@@ -134,6 +135,10 @@ fn gen_write_single_payload(source_fields: &[SourceField<'_>], value: TokenStrea
             [FieldBinding::Codec(binding)] => binding.write_with_mode(
                 value,
                 quote! { fory_core::RefMode::Tracking },
+                quote! { true },
+                // The union case declaration owns the recursive payload schema.
+                // Losing this flag writes redundant child type metadata that
+                // monomorphic peer readers interpret as carrier body bytes.
                 quote! { true },
             ),
             [FieldBinding::Skipped(_)] => {

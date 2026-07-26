@@ -81,6 +81,7 @@ impl<'a> ResolvedField<'a> {
         value: TokenStream,
         ref_mode: TokenStream,
         write_type_info: TokenStream,
+        has_generics: TokenStream,
     ) -> TokenStream {
         let call = self.codec_call();
         quote! {
@@ -89,7 +90,7 @@ impl<'a> ResolvedField<'a> {
                 context,
                 #ref_mode,
                 #write_type_info,
-                false,
+                #has_generics,
             )?;
         }
     }

@@ -15,9 +15,10 @@
 # specific language governing permissions and limitations
 # under the License.
 
+from __future__ import annotations
+
 from collections import namedtuple
 from enum import Enum
-from typing import List
 
 
 class Encoding(Enum):
@@ -270,7 +271,7 @@ class MetaStringEncoder:
         self.special_char1 = special_char1
         self.special_char2 = special_char2
 
-    def encode(self, input_string: str, encodings: List[Encoding] = None) -> MetaString:
+    def encode(self, input_string: str, encodings: list[Encoding] | None = None) -> MetaString:
         """
         Encodes the input string into a MetaString object.
 
@@ -287,7 +288,7 @@ class MetaStringEncoder:
             return MetaString(
                 input_string,
                 Encoding.UTF_8,
-                bytes(),
+                b"",
                 0,
                 self.special_char1,
                 self.special_char2,
@@ -314,7 +315,7 @@ class MetaStringEncoder:
             return MetaString(
                 input_string,
                 Encoding.UTF_8,
-                bytes(),
+                b"",
                 0,
                 self.special_char1,
                 self.special_char2,
@@ -374,7 +375,7 @@ class MetaStringEncoder:
                 self.special_char2,
             )
 
-    def compute_encoding(self, input_string: str, encodings: List[Encoding] = None) -> Encoding:
+    def compute_encoding(self, input_string: str, encodings: list[Encoding] | None = None) -> Encoding:
         """
         Determines the encoding type of the input string.
 
@@ -409,7 +410,7 @@ class MetaStringEncoder:
             return Encoding.UTF_8
         raise ValueError(f"No encoding found for string: {input_string}, encodings: {encodings}")
 
-    def _compute_statistics(self, chars: List[str]) -> Statistics:
+    def _compute_statistics(self, chars: list[str]) -> Statistics:
         """
         Computes statistics for the given characters to determine encoding possibilities.
 
@@ -424,12 +425,12 @@ class MetaStringEncoder:
         digit_count = 0
         upper_count = 0
         for c in chars:
-            if can_lower_upper_digit_special_encoded:
-                if not (c.islower() or c.isupper() or c.isdigit() or c in {self.special_char1, self.special_char2}):
-                    can_lower_upper_digit_special_encoded = False
-            if can_lower_special_encoded:
-                if not (c.islower() or c in {".", "_", "$", "|"}):
-                    can_lower_special_encoded = False
+            if can_lower_upper_digit_special_encoded and not (
+                c.islower() or c.isupper() or c.isdigit() or c in {self.special_char1, self.special_char2}
+            ):
+                can_lower_upper_digit_special_encoded = False
+            if can_lower_special_encoded and not (c.islower() or c in {".", "_", "$", "|"}):
+                can_lower_special_encoded = False
             if c.isdigit():
                 digit_count += 1
             if c.isupper():
@@ -482,7 +483,7 @@ class MetaStringEncoder:
         chars[0] = chars[0].lower()
         return self._encode_generic(chars, 5)
 
-    def _encode_all_to_lower_special(self, chars: List[str]) -> bytes:
+    def _encode_all_to_lower_special(self, chars: list[str]) -> bytes:
         """
         Encodes the input string using ALL_TO_LOWER_SPECIAL encoding.
 
@@ -501,7 +502,7 @@ class MetaStringEncoder:
                 new_chars.append(c)
         return self._encode_generic(new_chars, 5)
 
-    def _encode_generic(self, chars: List[str], bits_per_char: int) -> bytes:
+    def _encode_generic(self, chars: list[str], bits_per_char: int) -> bytes:
         """
         Generic encoding function for encoding characters into bytes.
 

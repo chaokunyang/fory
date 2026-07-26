@@ -21,8 +21,10 @@ TypeDef decoder for xlang serialization.
 This module implements the decoding of TypeDef objects according to the xlang serialization specification.
 """
 
+from __future__ import annotations
+
 from dataclasses import make_dataclass
-from typing import List, Any
+from typing import Any
 from pyfory.serialization import Buffer
 from pyfory.meta.typedef import TypeDef, FieldInfo, FieldType
 from pyfory.meta.typedef import (
@@ -234,7 +236,7 @@ def read_typename(buffer: Buffer) -> str:
     return read_meta_string(buffer, TYPENAME_DECODER, TYPE_NAME_ENCODINGS, "type name")
 
 
-def read_meta_string(buffer: Buffer, decoder: MetaStringDecoder, encodings: List[Encoding], name_kind: str) -> str:
+def read_meta_string(buffer: Buffer, decoder: MetaStringDecoder, encodings: list[Encoding], name_kind: str) -> str:
     """Read a big meta string (namespace/typename) from the buffer using 6-bit size field."""
     # Read encoding and length combined in first byte
     header = buffer.read_uint8()
@@ -262,7 +264,7 @@ def read_meta_string(buffer: Buffer, decoder: MetaStringDecoder, encodings: List
         return ""
 
 
-def read_fields_info(buffer: Buffer, resolver, defined_class: str, num_fields: int) -> List[FieldInfo]:
+def read_fields_info(buffer: Buffer, resolver, defined_class: str, num_fields: int) -> list[FieldInfo]:
     """Read field information from the buffer."""
     field_infos = []
     for _ in range(num_fields):

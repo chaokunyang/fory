@@ -4119,11 +4119,12 @@ GeneratedFieldType(
   }
 
   String _typeReferenceLiteral(DartType type) {
-    final nonNullable = _withoutNullability(type);
-    if (nonNullable is DynamicType || nonNullable is InvalidType) {
+    if (type is DynamicType || type is InvalidType) {
       return 'Object';
     }
-    final alias = nonNullable.alias;
+    // Rebuilding a nullable interface type drops its alias, so preserve the
+    // visible alias before removing nullability from the underlying type.
+    final alias = type.alias;
     if (alias != null) {
       final aliasElement = alias.element;
       final prefix = _importPrefixByElement[aliasElement];
@@ -4135,6 +4136,7 @@ GeneratedFieldType(
       final typeArguments = alias.typeArguments.map(_typeCodeString).join(', ');
       return '$baseName<$typeArguments>';
     }
+    final nonNullable = _withoutNullability(type);
     if (nonNullable is InterfaceType) {
       final element = nonNullable.element;
       final prefix = _importPrefixByElement[element];

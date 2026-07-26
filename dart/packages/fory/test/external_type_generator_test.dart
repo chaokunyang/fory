@@ -552,7 +552,7 @@ abstract final class TargetSerializer {
     );
   });
 
-  test('renders prefixed re-exported generic target types', () async {
+  test('renders nullable prefixed re-exported types', () async {
     await _expectGenerationOutput(
       targetSource: '''
 class User {
@@ -564,12 +564,12 @@ typedef UserAlias = User;
 
 class Box<T> {
   Box(this.value);
-  final T value;
+  final T? value;
 }
 ''',
       additionalAssets: const <String, String>{
         'fory|test/external_target_barrel.dart':
-            "export 'external_target_fixture.dart';",
+            "export 'external_target_fixture.dart' show Box, UserAlias;",
       },
       fixtureHeader: '''
 import 'package:fory/src/annotation/fory_struct.dart';
@@ -580,13 +580,13 @@ part 'external_serializer_fixture.fory.dart';
       declarationSource: '''
 @ForyStruct(target: api.Box<api.UserAlias>)
 abstract final class UserBoxSerializer {
-  late final api.UserAlias value;
+  late final api.UserAlias? value;
 }
 ''',
       output: allOf(
         contains('GeneratedStructSchema<api.Box<api.UserAlias>>'),
         contains('type: api.UserAlias,'),
-        contains('api.UserAlias _valueValue'),
+        contains('api.UserAlias? _valueValue'),
         contains('final value = api.Box<api.UserAlias>(_valueValue);'),
       ),
     );

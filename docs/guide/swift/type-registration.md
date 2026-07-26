@@ -23,7 +23,8 @@ This page covers registration APIs for user-defined types.
 
 ## Why Registration Is Required
 
-User types (`struct`, `class`, enum/union, ext types) must be registered before serialization/deserialization.
+User serializers for structs, classes, enums, unions, and EXT targets must be
+registered before their registered identity is used.
 
 If a type is missing, deserialization fails with:
 
@@ -41,7 +42,19 @@ struct User {
 }
 
 let fory = Fory()
-fory.register(User.self, id: 1)
+try fory.register(User.self, id: 1)
+```
+
+For an external target, register its serializer:
+
+```swift
+@ForyStruct(target: ThirdParty.User.self)
+struct UserSerializer {
+    var name: String
+    var age: UInt32
+}
+
+try fory.register(UserSerializer.self, id: 1)
 ```
 
 ## Register by Name
@@ -66,7 +79,38 @@ Keep registration mapping consistent across peers:
 - ID mode: same type uses same numeric ID on all peers
 - Name mode: same type uses same namespace and type name on all peers
 - Do not mix ID and name mapping for the same logical type across services
+- Register only one serializer for one exact target on each `Fory` instance
+
+Registration closes after the first root serialization or deserialization.
+Complete all registrations before the first root operation.
+
+## Carrier Serializers
+
+Do not register `OptionalSerializer`, `ArraySerializer`, `SetSerializer`,
+`DictionarySerializer`, or `DynamicSerializer`.
+
+Carrier serializers preserve standard wire categories and have no independent
+user identity. Register user serializers reached through their children:
+
+```swift
+try fory.register(UserSerializer.self, id: 1)
+
+let data = try fory.serialize(
+    users,
+    with: ArraySerializer<UserSerializer>.self
+)
+```
+
+An empty root carrier can complete without reaching unused child identity. A
+registered containing struct still resolves user types present in its field
+schema.
+
+A manual serializer may instead own one opaque EXT body for a whole carrier.
+Register it normally. Static use remains explicit through `with:` and does not
+replace the structural carrier serializer.
 
 ## Dynamic Types and Registration
 
-When serializing dynamic values (`Any`, `AnyObject`, `any Serializer`) that contain user-defined types, the concrete types must still be registered.
+When serializing `Any`, `AnyObject`, or application protocol values, register
+each concrete target through its ordinary, external structural, or manual
+serializer. Select `DynamicSerializer<T>` explicitly at the root.

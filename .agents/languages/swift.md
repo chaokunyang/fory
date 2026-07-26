@@ -16,6 +16,30 @@ Load this file when changing `swift/` or Swift xlang behavior.
 - Prefer the user-requested or existing Foundation public value type when it is the intended Swift surface; do not invent Fory-prefixed wrappers only to avoid import ambiguity.
 - Preserve distinct temporal semantics. Timestamp values and day-only local dates should have protocol-accurate helper names and no stale aliases after a refactor.
 - When temporal or public-type refactors touch generated Swift code, sweep message fields, union payloads, macros, xlang harnesses, and integration fixtures together.
+- Keep `Serializer` as static value-level behavior for one exact `Target`. `FieldCodec` layers
+  field-only schema and compatibility behavior over that value behavior; `Serializer` must not
+  depend on `FieldCodec`.
+- Swift carrier serializers are exactly `OptionalSerializer`, `ArraySerializer`, `SetSerializer`,
+  and `DictionarySerializer`. Root and field composition use different static type trees but share
+  one carrier body and allocation owner.
+- External structural serializers extend `@ForyStruct`, `@ForyEnum`, and `@ForyUnion` through
+  `target:`. Fields and roots select serializers with `with`, and registration uses the existing
+  serializer registration API.
+- Arbitrary protocol roots explicitly select `DynamicSerializer<T>`. Do not add an unconstrained
+  dynamic root overload, runtime serializer value, provider instance, or wrapper collection.
+  Static carriers perform no target lookup; a homogeneous dynamic chunk resolves once, while a
+  truly heterogeneous chunk retains its required per-value lookup.
+- Preserve Swift's xlang-only union rule of zero or one associated value per known case. Use a
+  struct payload when a case has multiple logical fields.
+- Keep declared-child collection-header state in `FieldCodec`, not `Serializer`. Mark cold error
+  and validation entrances `@inline(never)`; successful work is not cold, although a measured
+  composite external structural success body may remain deliberately out of line.
+- `OptionalSerializer` has `isWrapper == true` because it has no independent registration
+  identity. A manual serializer targeting the same Swift shape remains false because it owns an
+  independent opaque EXT body.
+- A dynamic existential uses conservative reference-envelope capability, but graph slot accounting
+  uses its declared `MemoryLayout<T>.stride`; concrete reference ownership comes from resolved
+  `TypeInfo`.
 - Compatible scalar, list-array, and binary/uint8-array adaptations are immediate-field-only. Recursive matched-field comparison for collection elements, array elements, map keys, and map values must require exact nullability, ref tracking, generic arity, and type shape except documented user-type family normalization.
 - Root deserialization graph memory budget state belongs to `ReadContext`. Swift public roots are
   `Data` and `ByteBuffer`, and both use the same fixed default graph budget; do not add stream

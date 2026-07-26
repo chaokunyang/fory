@@ -39,7 +39,7 @@ struct Order {
 }
 
 let fory = Fory()
-fory.register(Order.self, id: 100)
+try fory.register(Order.self, id: 100)
 ```
 
 ### Name-based registration
@@ -52,7 +52,10 @@ try fory.register(Order.self, name: "com.example.Order")
 
 - Keep type registration mapping consistent across languages
 - Keep compatible mode enabled when independently evolving schemas. Swift enables it by default.
-- Register all user-defined concrete types used by dynamic fields (`Any`, `any Serializer`)
+- Register all user-defined concrete targets used by dynamic fields and
+  application protocol values
+- Use an external structural or manual serializer for a type owned by another
+  module
 
 ## Lists and Dense Arrays
 
@@ -76,6 +79,32 @@ numeric data.
 | `array<bfloat16>` | `@ArrayField(element: .bfloat16) var values: [BFloat16]` |
 | `array<float32>`  | `@ArrayField(element: .float32) var values: [Float]`     |
 | `array<float64>`  | `@ArrayField(element: .float64) var values: [Double]`    |
+
+`ArraySerializer<S>` also preserves the normal LIST mapping. An external or
+manual child does not change a list into a packed array based on target syntax.
+Packed arrays require the canonical bool or numeric field codec.
+
+## External Targets
+
+External structural serializers produce the same xlang STRUCT, ENUM, or UNION
+schema and value bytes as an equivalent ordinary Swift model:
+
+```swift
+@ForyStruct(target: ThirdParty.Order.self)
+struct OrderSerializer {
+    var id: Int64
+    var amount: Double
+}
+
+try fory.register(OrderSerializer.self, id: 100)
+```
+
+Use `.with(...)` in field metadata and `with:` at a root. See
+[External-Type Serialization](external-types.md).
+
+Swift has no native serialization mode. A known `@ForyUnion` case has zero or
+one associated value. Use a struct payload for a union alternative with
+multiple logical fields.
 
 ## Swift IDL Workflow
 

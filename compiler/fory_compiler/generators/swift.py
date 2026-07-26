@@ -134,13 +134,19 @@ class SwiftGenerator(BaseGenerator):
         self._schema_cache: Dict[Path, Schema] = {}
         self._equatable_cache: Dict[int, bool] = {}
         self._messages_requiring_class: Set[int] = set()
+        self._indirect_unions: Set[int] = set()
         self._build_qualified_type_name_index()
         self._collect_messages_requiring_class()
+        self._analyze_recursive_value_types()
 
     def generate(self) -> List[GeneratedFile]:
         return [self.generate_file()]
 
     def generate_file(self) -> GeneratedFile:
+        for type_def in self.collect_local_types():
+            if isinstance(type_def, (Message, Union)):
+                self._ensure_default_constructible(type_def)
+
         lines: List[str] = []
         lines.append(self.get_license_header("//"))
         lines.append("")
@@ -476,6 +482,78 @@ class SwiftGenerator(BaseGenerator):
         for nested in message.nested_messages:
             self._collect_messages_requiring_class_for_message(nested)
 
+    def _analyze_recursive_value_types(self) -> None:
+        value_types = [
+            type_def
+            for type_def in self.schema.get_all_types()
+            if isinstance(type_def, (Message, Union))
+        ]
+        value_types_by_id = {id(type_def): type_def for type_def in value_types}
+        dependencies: Dict[int, Set[int]] = {}
+
+        for type_def in value_types:
+            if isinstance(type_def, Message):
+                parent_stack = self._lineage_for_message(type_def)
+            else:
+                parent_stack = self._parent_stack_for_nested_type(type_def)
+
+            resolved_dependencies: Set[int] = set()
+            for field in type_def.fields:
+                if not isinstance(field.field_type, NamedType):
+                    continue
+                resolved = self._resolve_named_type(
+                    field.field_type.name,
+                    parent_stack,
+                )
+                if not isinstance(resolved, (Message, Union)):
+                    continue
+                if isinstance(resolved, Message) and self.message_is_class(resolved):
+                    continue
+                resolved_dependencies.add(id(resolved))
+            dependencies[id(type_def)] = resolved_dependencies
+
+        def reaches(
+            target: int,
+            current: int,
+            visited: Set[int],
+        ) -> bool:
+            for dependency in dependencies.get(current, set()):
+                if dependency == target:
+                    return True
+                if dependency in visited:
+                    continue
+                visited.add(dependency)
+                if reaches(target, dependency, visited):
+                    return True
+            return False
+
+        for type_def in value_types:
+            type_id = id(type_def)
+            if isinstance(type_def, Union) and reaches(type_id, type_id, {type_id}):
+                self._indirect_unions.add(type_id)
+
+        for type_def in value_types:
+            if not isinstance(type_def, Message) or self.message_is_class(type_def):
+                continue
+            type_id = id(type_def)
+            message_dependencies = {
+                dependency
+                for dependency in dependencies.get(type_id, set())
+                if isinstance(value_types_by_id.get(dependency), Message)
+            }
+            dependencies[type_id] = message_dependencies
+
+        for type_def in value_types:
+            if not isinstance(type_def, Message) or self.message_is_class(type_def):
+                continue
+            type_id = id(type_def)
+            if reaches(type_id, type_id, {type_id}):
+                type_name = self._qualified_type_path(type_def, type_def.name)
+                raise ValueError(
+                    f"Swift value message {type_name} is recursively stored; "
+                    "mark a cycle edge ref so the generated target is a class"
+                )
+
     def message_has_weak_field(self, message: Message) -> bool:
         for field in message.fields:
             if not field.ref:
@@ -784,40 +862,45 @@ class SwiftGenerator(BaseGenerator):
     def field_default_expression(
         self,
         field: Field,
-        type_name: str,
+        parent_stack: Optional[List[Message]] = None,
     ) -> Optional[str]:
         if self.is_weak_ref_field(field):
             return None
         if field.optional:
             return "nil"
 
-        field_type = field.field_type
+        return self.type_default_expression(field.field_type, parent_stack)
+
+    def type_default_expression(
+        self,
+        field_type: FieldType,
+        parent_stack: Optional[List[Message]] = None,
+    ) -> str:
+        parent_stack = parent_stack or []
         if isinstance(field_type, PrimitiveType):
-            if field_type.kind == PrimitiveKind.BOOL:
-                return "false"
-            if field_type.kind in {
-                PrimitiveKind.INT8,
-                PrimitiveKind.INT16,
-                PrimitiveKind.INT32,
-                PrimitiveKind.INT64,
-                PrimitiveKind.UINT8,
-                PrimitiveKind.UINT16,
-                PrimitiveKind.UINT32,
-                PrimitiveKind.UINT64,
-                PrimitiveKind.FLOAT16,
-                PrimitiveKind.FLOAT32,
-                PrimitiveKind.FLOAT64,
-            }:
-                return "0"
-            if field_type.kind == PrimitiveKind.BFLOAT16:
-                return "BFloat16.foryDefault()"
-            if field_type.kind == PrimitiveKind.STRING:
-                return '""'
-            if field_type.kind == PrimitiveKind.BYTES:
-                return "Data()"
-            if field_type.kind == PrimitiveKind.ANY:
-                return "ForyAnyNullValue()"
-            return f"{type_name}.foryDefault()"
+            defaults = {
+                PrimitiveKind.BOOL: "false",
+                PrimitiveKind.INT8: "0",
+                PrimitiveKind.INT16: "0",
+                PrimitiveKind.INT32: "0",
+                PrimitiveKind.INT64: "0",
+                PrimitiveKind.UINT8: "0",
+                PrimitiveKind.UINT16: "0",
+                PrimitiveKind.UINT32: "0",
+                PrimitiveKind.UINT64: "0",
+                PrimitiveKind.FLOAT16: "0",
+                PrimitiveKind.BFLOAT16: "BFloat16()",
+                PrimitiveKind.FLOAT32: "0",
+                PrimitiveKind.FLOAT64: "0",
+                PrimitiveKind.STRING: '""',
+                PrimitiveKind.BYTES: "Data()",
+                PrimitiveKind.DATE: "LocalDate()",
+                PrimitiveKind.TIMESTAMP: "Date(timeIntervalSince1970: 0)",
+                PrimitiveKind.DURATION: "Duration.zero",
+                PrimitiveKind.DECIMAL: "Decimal.zero",
+                PrimitiveKind.ANY: "ForyAnyNullValue()",
+            }
+            return defaults[field_type.kind]
 
         if isinstance(field_type, ListType):
             return "[]"
@@ -826,7 +909,115 @@ class SwiftGenerator(BaseGenerator):
         if isinstance(field_type, MapType):
             return "[:]"
 
-        return f"{type_name}.foryDefault()"
+        if not isinstance(field_type, NamedType):
+            raise ValueError(f"Unsupported Swift default type: {field_type!r}")
+
+        resolved = self._resolve_named_type(field_type.name, parent_stack)
+        if resolved is None:
+            raise ValueError(f"Unresolved Swift default type: {field_type.name}")
+        type_name = self._qualified_type_path(resolved, field_type.name)
+        if isinstance(resolved, Message):
+            return f"{type_name}()"
+        if isinstance(resolved, Enum):
+            if not resolved.values:
+                raise ValueError(f"Swift enum {field_type.name} has no default case")
+            value = resolved.values[0]
+            case_name = self.safe_enum_case_name(
+                self.strip_enum_prefix(resolved.name, value.name)
+            )
+            return f"{type_name}.{case_name}"
+        if isinstance(resolved, Union):
+            if not resolved.fields:
+                raise ValueError(f"Swift union {field_type.name} has no default case")
+            default_field = resolved.fields[0]
+            case_name = self.safe_enum_case_name(default_field.name)
+            declaration_stack = self._parent_stack_for_nested_type(resolved)
+            payload = self.type_default_expression(
+                default_field.field_type,
+                declaration_stack,
+            )
+            return f"{type_name}.{case_name}({payload})"
+        raise ValueError(f"Unsupported Swift default type: {field_type.name}")
+
+    def _ensure_default_constructible(
+        self,
+        type_def: TypingUnion[Message, Union],
+        stack: Optional[List[TypingUnion[Message, Union]]] = None,
+    ) -> None:
+        stack = stack or []
+        for index, ancestor in enumerate(stack):
+            if ancestor is not type_def:
+                continue
+            cycle = [*stack[index:], type_def]
+            names = [
+                self._qualified_type_path(item, self.schema_type_name(item))
+                for item in cycle
+            ]
+            raise ValueError(
+                "Swift generated default is recursive: "
+                f"{' -> '.join(names)}; first union cases and nonoptional "
+                "message fields must form a finite default"
+            )
+
+        next_stack = [*stack, type_def]
+        if isinstance(type_def, Union):
+            if not type_def.fields:
+                raise ValueError(f"Swift union {type_def.name} has no default case")
+            default_field = type_def.fields[0]
+            parent_stack = self._parent_stack_for_nested_type(type_def)
+            self._ensure_field_default_constructible(
+                default_field.field_type,
+                parent_stack,
+                next_stack,
+            )
+            return
+
+        parent_stack = self._lineage_for_message(type_def)
+        for field in type_def.fields:
+            if self.is_weak_ref_field(field) or field.optional:
+                continue
+            self._ensure_field_default_constructible(
+                field.field_type,
+                parent_stack,
+                next_stack,
+            )
+
+    def _ensure_field_default_constructible(
+        self,
+        field_type: FieldType,
+        parent_stack: List[Message],
+        stack: List[TypingUnion[Message, Union]],
+    ) -> None:
+        if isinstance(field_type, (PrimitiveType, ListType, ArrayType, MapType)):
+            return
+        if not isinstance(field_type, NamedType):
+            raise ValueError(f"Unsupported Swift default type: {field_type!r}")
+
+        resolved = self._resolve_named_type(field_type.name, parent_stack)
+        if resolved is None:
+            raise ValueError(f"Unresolved Swift default type: {field_type.name}")
+        if isinstance(resolved, (Message, Union)):
+            self._ensure_default_constructible(resolved, stack)
+
+    def _parent_stack_for_nested_type(
+        self,
+        target: TypingUnion[Enum, Union],
+    ) -> List[Message]:
+        def visit(message: Message, parents: List[Message]) -> Optional[List[Message]]:
+            nested_types = [*message.nested_enums, *message.nested_unions]
+            if any(nested is target for nested in nested_types):
+                return [*parents, message]
+            for nested in message.nested_messages:
+                result = visit(nested, [*parents, message])
+                if result is not None:
+                    return result
+            return None
+
+        for message in self.schema.messages:
+            result = visit(message, [])
+            if result is not None:
+                return result
+        return []
 
     def type_supports_equatable(
         self,
@@ -877,12 +1068,18 @@ class SwiftGenerator(BaseGenerator):
     ) -> bool:
         if visiting is None:
             visiting = set()
+        key = id(union)
+        if key in visiting:
+            return True
+        visiting.add(key)
         lineage = parent_stack or []
         for field in union.fields:
             if not self.type_supports_equatable(
                 field.field_type, parent_stack=lineage, visiting=visiting
             ):
+                visiting.remove(key)
                 return False
+        visiting.remove(key)
         return True
 
     def message_supports_equatable(
@@ -899,7 +1096,7 @@ class SwiftGenerator(BaseGenerator):
         if visiting is None:
             visiting = set()
         if key in visiting:
-            return False
+            return True
         visiting.add(key)
 
         lineage = self._lineage_for_message(message)
@@ -973,7 +1170,8 @@ class SwiftGenerator(BaseGenerator):
             if self.union_supports_equatable(union, parent_stack=parent_stack)
             else ""
         )
-        lines.append(f"{ind}public enum {type_name}{conformances} {{")
+        indirect = "indirect " if id(union) in self._indirect_unions else ""
+        lines.append(f"{ind}public {indirect}enum {type_name}{conformances} {{")
         lineage = parent_stack or []
         lines.append(f"{ind}{self.indent_str}@ForyUnknownCase")
         lines.append(f"{ind}{self.indent_str}case unknown(UnknownCase)")
@@ -1107,7 +1305,7 @@ class SwiftGenerator(BaseGenerator):
 
             field_type = self.field_swift_type(field, lineage)
             weak_prefix = "weak " if self.is_weak_ref_field(field) else ""
-            default_expr = self.field_default_expression(field, field_type)
+            default_expr = self.field_default_expression(field, lineage)
             if default_expr is None:
                 lines.append(f"{ind}public {weak_prefix}var {field_name}: {field_type}")
             else:
@@ -1142,7 +1340,7 @@ class SwiftGenerator(BaseGenerator):
             used_names.add(field_name)
 
             field_type = self.field_swift_type(field, lineage)
-            default_expr = self.field_default_expression(field, field_type)
+            default_expr = self.field_default_expression(field, lineage)
             if default_expr is None:
                 default_expr = "nil"
             params.append(f"{field_name}: {field_type} = {default_expr}")
@@ -1257,7 +1455,7 @@ class SwiftGenerator(BaseGenerator):
             type_name = self.schema_swift_type(type_def)
             if self.should_register_by_id(type_def):
                 lines.append(
-                    f"{ind}{self.indent_str * 2}fory.register({type_name}.self, id: {type_def.type_id})"
+                    f"{ind}{self.indent_str * 2}try fory.register({type_name}.self, id: {type_def.type_id})"
                 )
                 continue
 

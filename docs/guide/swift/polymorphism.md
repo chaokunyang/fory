@@ -19,29 +19,159 @@ license: |
   limitations under the License.
 ---
 
-Fory Swift supports dynamic serialization for `Any`, `AnyObject`, and `any Serializer`.
+Fory Swift supports dynamic serialization for `Any`, `AnyObject`, arbitrary
+application protocol existentials, and supported heterogeneous collections.
+Dynamic roots use explicit serializer selection.
 
-## Top-level Dynamic APIs
+## Dynamic Roots
 
 ```swift
 let fory = Fory()
 
 let dynamic: Any = Int32(7)
-let data = try fory.serialize(dynamic)
-let decoded: Any = try fory.deserialize(data)
+let data = try fory.serialize(
+    dynamic,
+    with: DynamicSerializer<Any>.self
+)
+let decoded = try fory.deserialize(
+    data,
+    with: DynamicSerializer<Any>.self
+)
 ```
 
-Equivalent overloads exist for:
+`AnyObject` selects `DynamicSerializer<AnyObject>`. Heterogeneous containers
+compose carrier serializers:
 
-- `AnyObject`
-- `any Serializer`
-- `AnyHashable`
-- `[Any]`
-- `[String: Any]`
-- `[Int32: Any]`
-- `[AnyHashable: Any]`
+```swift
+typealias AnyArraySerializer =
+    ArraySerializer<DynamicSerializer<Any>>
 
-## Dynamic Fields in Fory Model Types
+typealias StringAnyMapSerializer = DictionarySerializer<
+    String,
+    DynamicSerializer<Any>
+>
+```
+
+Use `DynamicSerializer<AnyHashable>` for an erased dynamic dictionary key.
+
+Use the exact heterogeneous shape for dynamic lists and maps: `[Any]`,
+`[String: Any]`, `[Int32: Any]`, or `[AnyHashable: Any]`. For example, write
+`["a", "b"] as [Any]` before storing that heterogeneous list in `Any`.
+Homogeneous lists and maps use their ordinary serializer or an explicitly
+selected carrier serializer. Exact primitive arrays keep their packed dynamic
+mapping.
+
+## Application Protocols
+
+Dynamic dispatch uses the concrete target's normal registration. No
+Fory-specific marker protocol is required:
+
+```swift
+protocol Animal {
+    var name: String { get }
+}
+
+@ForyStruct
+struct Dog: Animal {
+    var name: String = ""
+}
+
+@ForyStruct(target: ThirdParty.Cat.self)
+struct CatSerializer {
+    var name: String
+}
+
+let fory = Fory()
+try fory.register(Dog.self, id: 100)
+try fory.register(CatSerializer.self, id: 101)
+
+let input: any Animal = Dog(name: "Rex")
+let data = try fory.serialize(
+    input,
+    with: DynamicSerializer<any Animal>.self
+)
+let output = try fory.deserialize(
+    data,
+    with: DynamicSerializer<any Animal>.self
+)
+```
+
+Every concrete target must conform to the requested application protocol. A
+target that is unregistered or does not conform fails deserialization.
+Explicit `with:` prevents a concrete external value from selecting a serializer
+only because its target was registered.
+
+## Protocol Fields
+
+Application protocol fields are dynamic:
+
+```swift
+@ForyStruct
+struct Zoo {
+    var featured: any Animal
+    var animals: [any Animal]
+}
+```
+
+Register `Zoo` and every concrete target that may appear.
+
+Use an optional when the field needs a nil default:
+
+```swift
+@ForyStruct
+struct OptionalZoo {
+    var featured: (any Animal)? = nil
+}
+```
+
+## Protocol Root Carriers
+
+Use `DynamicSerializer<T>` as the child of a root carrier:
+
+```swift
+typealias AnimalArraySerializer =
+    ArraySerializer<DynamicSerializer<any Animal>>
+
+let data = try fory.serialize(
+    animals,
+    with: AnimalArraySerializer.self
+)
+
+let decoded = try fory.deserialize(
+    data,
+    with: AnimalArraySerializer.self
+)
+```
+
+Optional and map roots compose the same way:
+
+```swift
+typealias FeaturedSerializer =
+    OptionalSerializer<DynamicSerializer<any Animal>>
+
+typealias AnimalMapSerializer = DictionarySerializer<
+    String,
+    DynamicSerializer<any Animal>
+>
+```
+
+Swift's normal `Hashable` rules still apply to set elements and dictionary
+keys. Use `AnyHashable` for erased dynamic keys.
+
+## Explicitly Polymorphic Class Nodes
+
+An ordinary concrete field uses its statically selected serializer. Select
+`DynamicSerializer<Base>` when a class-typed field must preserve registered
+subclass identity:
+
+```swift
+@ForyField(with: DynamicSerializer<AnimalBase>.self)
+var animal: AnimalBase
+```
+
+Register every concrete subclass that may appear.
+
+## Dynamic `Any` Fields
 
 ```swift
 @ForyStruct
@@ -66,7 +196,7 @@ struct Address {
 }
 
 let fory = Fory()
-fory.register(Address.self, id: 100)
+try fory.register(Address.self, id: 100)
 ```
 
 ## Null Semantics
@@ -75,6 +205,8 @@ fory.register(Address.self, id: 100)
 - `AnyObject` null representation: `NSNull`
 - Optional dynamic values map to the corresponding null representation on decode
 
-## Current Limitations
+## Dynamic Type Requirements
 
-- `AnyHashable` keys must wrap values that are both `Hashable` and supported by Fory dynamic serialization
+- `AnyHashable` keys must wrap values that are both `Hashable` and supported by Fory dynamic serialization.
+- A root container whose static child does not select itself requires an
+  explicit carrier serializer.

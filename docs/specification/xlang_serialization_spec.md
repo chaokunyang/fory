@@ -127,6 +127,11 @@ wire identity.
   MUST preserve the selected child type ID and recursive `FieldType`; serializer
   composition
   MUST NOT replace a canonical primitive-array or binary mapping with LIST.
+  Conversely, a Swift `Array` carrier serializer MUST remain LIST because that
+  is Swift's canonical statically selected `Array` mapping. Swift dense
+  `@ArrayField` and dynamic exact primitive-array mappings are separate
+  canonical selections; a serializer whose target happens to be numeric does
+  not acquire either mapping.
 - A heterogeneous tuple/product carrier serializer MUST preserve the binding's
   existing direct tuple encoding and its existing xlang LIST encoding. Selected
   child positions MUST NOT add a serializer name, position index, generic schema node,

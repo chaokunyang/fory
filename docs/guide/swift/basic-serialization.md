@@ -47,8 +47,8 @@ struct Person: Equatable {
 }
 
 let fory = Fory()
-fory.register(Address.self, id: 100)
-fory.register(Person.self, id: 101)
+try fory.register(Address.self, id: 100)
+try fory.register(Person.self, id: 101)
 
 let person = Person(
     id: 42,
@@ -78,6 +78,50 @@ let fromBuffer: Person = try fory.deserialize(from: inputBuffer)
 assert(fromBuffer == person)
 ```
 
+## Selecting a Serializer
+
+Ordinary model values select themselves:
+
+```swift
+let data = try fory.serialize(person)
+let decoded: Person = try fory.deserialize(data)
+```
+
+When a separate serializer targets the value, use `with`:
+
+```swift
+try fory.register(UserSerializer.self, id: 200)
+
+let data = try fory.serialize(
+    externalUser,
+    with: UserSerializer.self
+)
+let decoded = try fory.deserialize(
+    data,
+    with: UserSerializer.self
+)
+```
+
+The same selection works with existing buffers:
+
+```swift
+var output = Data()
+try fory.serialize(
+    externalUser,
+    with: UserSerializer.self,
+    to: &output
+)
+
+let input = ByteBuffer(data: output)
+let decoded = try fory.deserialize(
+    from: input,
+    with: UserSerializer.self
+)
+```
+
+See [External-Type Serialization](external-types.md) for structural
+serializers, manual serializers, and recursive carrier roots.
+
 ## Built-in Supported Types
 
 ### Primitive and scalar
@@ -101,18 +145,25 @@ supports epoch-day and `Date` conversions through `fromEpochDay(_:)`,
 
 ### Collections
 
-- `[T]` where `T: Serializer`
-- `Set<T>` where `T: Serializer & Hashable`
-- `[K: V]` where `K: Serializer & Hashable`, `V: Serializer`
+- `[T]` where `T` selects itself as its serializer
+- `Set<T>` where `T` selects itself and is `Hashable`
+- `[K: V]` where `K` selects itself and is `Hashable`, and `V` selects itself
 - Optional variants (`T?`)
+
+External and manual children use:
+
+- `OptionalSerializer<S>`
+- `ArraySerializer<S>`
+- `SetSerializer<S>`
+- `DictionarySerializer<KS, VS>`
 
 ### Dynamic
 
-- `Any`
-- `AnyObject`
-- `any Serializer`
-- `AnyHashable`
-- `[Any]`
-- `[String: Any]`
-- `[Int32: Any]`
-- `[AnyHashable: Any]`
+- `DynamicSerializer<Any>`
+- `DynamicSerializer<AnyObject>`
+- `DynamicSerializer<AnyHashable>`
+- `DynamicSerializer<any Protocol>`
+- carrier serializers containing dynamic children
+
+Dynamic roots use explicit `with:` selection. See
+[Polymorphism and Dynamic Types](polymorphism.md).

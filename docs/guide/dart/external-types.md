@@ -137,9 +137,13 @@ abstract final class NodeSerializer {
 }
 ```
 
-A constructor-based target cannot decode a direct self-reference because the
-target does not exist until its constructor arguments have been read. Use a
-mutable two-phase target or a manual serializer for that shape.
+A constructor-based target cannot decode a statically known reference-tracked
+path back to itself because the target does not exist until its constructor
+arguments have been read. This includes the target nested as a `List` or `Set`
+element or as a `Map` key or value. Generation rejects these schemas. Use a
+mutable two-phase target or a manual serializer when cycles are required.
+Indirect cycles that cannot be determined from the declaration are also
+unsupported for constructor-based targets.
 
 Factory constructors, private constructors, abstract targets, external enums,
 external unions, records, extension types, and built-in collection types are

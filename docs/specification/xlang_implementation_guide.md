@@ -1001,8 +1001,10 @@ For each declaration field, resolve an accessible target getter with the same
 name and exact instantiated Dart type. Constructor parameters and any
 post-construction setter must also match exactly. A public named generative
 constructor is selected only when the annotation names it. Factory
-constructors, abstract targets, open target types, and constructor-based direct
-self-references are rejected during generation.
+constructors, abstract targets, open target types, and constructor-based
+reference-tracked paths back to the target are rejected during generation.
+The recursive check includes target elements, keys, and values nested in the
+supported list, set, and map field metadata.
 
 Generated code reads getters and invokes target constructors or setters
 directly. It must not allocate the declaration, copy values through an

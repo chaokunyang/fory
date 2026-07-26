@@ -823,14 +823,22 @@ final class ForyGenerator extends Generator {
       }
     }
 
+    // Constructor arguments are read before the target can be published, so a
+    // tracked path through carrier metadata cannot resolve back to this target.
     final selfRefField =
         fields
-            .where((field) => field.ref)
-            .where((field) => _sameType(field.type, targetType))
+            .where(
+              (field) => _hasTrackedTargetReference(
+                field.type,
+                field.fieldType,
+                targetType,
+              ),
+            )
             .firstOrNull;
     if (selfRefField != null) {
       throw InvalidGenerationSourceError(
-        'Constructor-based generated serializers cannot bind self references early. '
+        'Constructor-based generated serializers cannot bind '
+        'reference-tracked self paths before construction. '
         'Use a writable zero-required-argument generative constructor for '
         '$targetTypeLiteral or a manual serializer. Offending field: '
         '${declaration.displayName}.${selfRefField.name}.',
@@ -4008,6 +4016,35 @@ GeneratedFieldType(
 
   bool _sameType(DartType left, DartType right) =>
       _withoutNullability(left) == _withoutNullability(right);
+
+  bool _hasTrackedTargetReference(
+    DartType type,
+    _GeneratedFieldTypeSpec fieldType,
+    InterfaceType targetType,
+  ) {
+    if (fieldType.ref && _sameType(type, targetType)) {
+      return true;
+    }
+    final nonNullable = _withoutNullability(type);
+    if (nonNullable is! InterfaceType) {
+      return false;
+    }
+    final typeArguments = nonNullable.typeArguments;
+    final argumentCount =
+        typeArguments.length < fieldType.arguments.length
+            ? typeArguments.length
+            : fieldType.arguments.length;
+    for (var index = 0; index < argumentCount; index++) {
+      if (_hasTrackedTargetReference(
+        typeArguments[index],
+        fieldType.arguments[index],
+        targetType,
+      )) {
+        return true;
+      }
+    }
+    return false;
+  }
 
   bool? _autoDynamic(DartType type) {
     final nonNullable = _withoutNullability(type);

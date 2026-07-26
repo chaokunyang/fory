@@ -29,6 +29,7 @@ import 'package:test/test.dart';
 const String _fixtureHeader = '''
 import 'package:fory/src/annotation/fory_field.dart';
 import 'package:fory/src/annotation/fory_struct.dart';
+import 'package:fory/src/annotation/type_spec.dart';
 import 'external_target_fixture.dart';
 
 part 'external_serializer_fixture.fory.dart';
@@ -648,7 +649,83 @@ abstract final class TargetSerializer {
   late final Target? next;
 }
 ''',
-      message: 'cannot bind self references early',
+      message: 'cannot bind reference-tracked self paths',
+    );
+  });
+
+  test('rejects nested constructor self reference', () async {
+    await _expectGenerationError(
+      targetSource: '''
+class Target {
+  Target(this.children);
+  final List<Target> children;
+}
+''',
+      declarationSource: '''
+@ForyStruct(target: Target)
+abstract final class TargetSerializer {
+  @ListField(element: DeclaredType(ref: true))
+  late final List<Target> children;
+}
+''',
+      message: 'cannot bind reference-tracked self paths',
+    );
+  });
+
+  test('rejects set constructor self reference', () async {
+    await _expectGenerationError(
+      targetSource: '''
+class Target {
+  Target(this.children);
+  final Set<Target> children;
+}
+''',
+      declarationSource: '''
+@ForyStruct(target: Target)
+abstract final class TargetSerializer {
+  @SetField(element: DeclaredType(ref: true))
+  late final Set<Target> children;
+}
+''',
+      message: 'cannot bind reference-tracked self paths',
+    );
+  });
+
+  test('rejects map-key constructor self reference', () async {
+    await _expectGenerationError(
+      targetSource: '''
+class Target {
+  Target(this.children);
+  final Map<Target, String> children;
+}
+''',
+      declarationSource: '''
+@ForyStruct(target: Target)
+abstract final class TargetSerializer {
+  @MapField(key: DeclaredType(ref: true))
+  late final Map<Target, String> children;
+}
+''',
+      message: 'cannot bind reference-tracked self paths',
+    );
+  });
+
+  test('rejects map-value constructor self reference', () async {
+    await _expectGenerationError(
+      targetSource: '''
+class Target {
+  Target(this.children);
+  final Map<String, List<Target>> children;
+}
+''',
+      declarationSource: '''
+@ForyStruct(target: Target)
+abstract final class TargetSerializer {
+  @MapField(value: ListType(element: DeclaredType(ref: true)))
+  late final Map<String, List<Target>> children;
+}
+''',
+      message: 'cannot bind reference-tracked self paths',
     );
   });
 }

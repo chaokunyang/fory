@@ -19,6 +19,10 @@ Load this file when changing `dart/`.
   existing resolver, field, carrier, reference, and compatible-read paths. Do
   not add runtime declaration instances, callbacks, member lookup, target-copy
   objects, a second registration API, or a second carrier/root flow.
+- Constructor-based external structural serializers must reject every
+  statically provable reference-tracked path back to the target, including
+  paths through supported list, set, and map type arguments. Do not simulate
+  early publication with placeholders or final-field patching.
 - Keep root numeric wrapper defaults separate from generated field metadata. Root wrapper resolution belongs in the builtin resolver, while annotations and generated metadata choose fixed, tagged, or declared-field encodings.
 - Dart 64-bit carriers are optimized for each platform. Do not replace native extension-type wrappers with allocation-heavy classes or route web/native hot paths through `BigInt` unless the user approves a representation change.
 - In `Buffer`, cursor, serializer, and generated-code hot paths, prefer direct byte/local integer operations and conditional import/export files over callbacks, records, holder objects, wrapper round-trips, or runtime platform branches.

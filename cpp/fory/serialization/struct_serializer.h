@@ -4113,7 +4113,7 @@ FORY_ALWAYS_INLINE T read_primitive_at_checked(Buffer &buffer, uint32_t &offset,
 /// No lambda overhead - direct function call that will be inlined.
 /// Handles both standard varint and tagged encoding based on field config.
 template <typename T, size_t SortedPos>
-FORY_ALWAYS_INLINE bool read_single_varint_field(T &obj, Buffer &buffer,
+FORY_ALWAYS_INLINE void read_single_varint_field(T &obj, Buffer &buffer,
                                                  uint32_t &offset,
                                                  Error &error) {
   using Helpers = CompileTimeFieldHelpers<T>;
@@ -4134,9 +4134,6 @@ FORY_ALWAYS_INLINE bool read_single_varint_field(T &obj, Buffer &buffer,
       // use the reader that proves the 4-byte or 9-byte range first.
       result = read_configurable_int_at_checked<FieldType, T, original_index>(
           buffer, offset, error);
-      if (FORY_PREDICT_FALSE(!error.ok())) {
-        return false;
-      }
     } else {
       result = read_configurable_int_at<FieldType, T, original_index>(buffer,
                                                                       offset);
@@ -4150,7 +4147,6 @@ FORY_ALWAYS_INLINE bool read_single_varint_field(T &obj, Buffer &buffer,
   } else {
     obj.*field_ptr = result;
   }
-  return true;
 }
 
 /// Fast read consecutive varint primitive fields (int32, int64).
@@ -4159,14 +4155,14 @@ FORY_ALWAYS_INLINE bool read_single_varint_field(T &obj, Buffer &buffer,
 /// Optimized: tracks offset locally and updates reader_index once at the end.
 /// StartIdx is the sorted index to start reading from.
 template <typename T, size_t StartIdx, size_t... Is>
-FORY_ALWAYS_INLINE bool
+FORY_ALWAYS_INLINE void
 read_varint_primitive_fields(T &obj, Buffer &buffer, uint32_t &offset,
                              Error &error, std::index_sequence<Is...>) {
   // Read each varint field using helper function - no lambda overhead
   // Is are 0, 1, 2, ... so actual sorted position is StartIdx + Is
-  return (
-      read_single_varint_field<T, StartIdx + Is>(obj, buffer, offset, error) &&
-      ...);
+  // Checked tagged readers set Error without advancing a failed field's
+  // offset. Preserve lazy propagation; the root read boundary observes it.
+  (read_single_varint_field<T, StartIdx + Is>(obj, buffer, offset, error), ...);
 }
 
 /// Helper to read remaining fields starting from Offset
@@ -4222,11 +4218,9 @@ void read_struct_fields_impl(T &obj, ReadContext &ctx,
       }
       // Track offset locally for batch varint reading
       uint32_t offset = buffer.reader_index();
-      if (FORY_PREDICT_FALSE((!read_varint_primitive_fields<T, fixed_count>(
-              obj, buffer, offset, ctx.error(),
-              std::make_index_sequence<varint_count>{})))) {
-        return;
-      }
+      read_varint_primitive_fields<T, fixed_count>(
+          obj, buffer, offset, ctx.error(),
+          std::make_index_sequence<varint_count>{});
       // Update reader_index once after all varints
       buffer.reader_index(offset);
     }
@@ -4278,11 +4272,9 @@ read_struct_fields_impl_fast(T &obj, ReadContext &ctx,
     }
     // Track offset locally for batch varint reading
     uint32_t offset = buffer.reader_index();
-    if (FORY_PREDICT_FALSE((!read_varint_primitive_fields<T, fixed_count>(
-            obj, buffer, offset, ctx.error(),
-            std::make_index_sequence<varint_count>{})))) {
-      return;
-    }
+    read_varint_primitive_fields<T, fixed_count>(
+        obj, buffer, offset, ctx.error(),
+        std::make_index_sequence<varint_count>{});
     // Update reader_index once after all varints
     buffer.reader_index(offset);
   }

@@ -35,7 +35,6 @@ WARMUP="1"
 OUTPUT_DIR=""
 COPY_DOCS=true
 EXTERNAL_EQUIVALENCE=false
-EXTERNAL_FIRST=false
 ALLOCATION_ITERATIONS=""
 
 usage() {
@@ -54,7 +53,6 @@ Options:
   --output-dir <dir>           Base directory for benchmark outputs
   --no-copy-docs               Skip copying report/plots into docs/benchmarks/csharp
   --external-equivalence       Run ordinary/external Fory equivalence cases
-  --external-first             Run each external worker before its ordinary peer
   --allocation-iterations <n>  Measure allocations for each equivalence case
   --help                       Show this help
 USAGE
@@ -91,10 +89,6 @@ while [[ $# -gt 0 ]]; do
             EXTERNAL_EQUIVALENCE=true
             shift
             ;;
-        --external-first)
-            EXTERNAL_FIRST=true
-            shift
-            ;;
         --allocation-iterations)
             ALLOCATION_ITERATIONS="$2"
             shift 2
@@ -116,11 +110,6 @@ fi
 
 if [[ "$EXTERNAL_EQUIVALENCE" == false && -n "$ALLOCATION_ITERATIONS" ]]; then
     echo -e "${RED}--allocation-iterations requires --external-equivalence.${NC}"
-    exit 1
-fi
-
-if [[ "$EXTERNAL_EQUIVALENCE" == false && "$EXTERNAL_FIRST" == true ]]; then
-    echo -e "${RED}--external-first requires --external-equivalence.${NC}"
     exit 1
 fi
 
@@ -177,22 +166,16 @@ if [[ "$EXTERNAL_EQUIVALENCE" == true ]]; then
     fi
 
     echo -e "${YELLOW}[1/4] Restoring dependencies...${NC}"
-    dotnet restore ./Fory.CSharpBenchmark.csproj >/dev/null
+    dotnet restore ./Fory.ExternalTypeBenchmark.csproj >/dev/null
 
     echo -e "${YELLOW}[2/4] Building benchmark once...${NC}"
-    dotnet build -c Release --no-restore ./Fory.CSharpBenchmark.csproj
+    dotnet build -c Release --no-restore ./Fory.ExternalTypeBenchmark.csproj
 
     echo -e "${YELLOW}[3/4] Running isolated adjacent pairs...${NC}"
     MERGE_ARGS=(--output "$RESULT_JSON")
-    PAIR_ORDER=(ordinary external)
-    if [[ "$EXTERNAL_FIRST" == true ]]; then
-        PAIR_ORDER=(external ordinary)
-    fi
     for LANE in "${EXTERNAL_LANES[@]}"; do
-        ORDINARY_JSON="$SIDE_DIR/${LANE}-ordinary.json"
-        EXTERNAL_JSON="$SIDE_DIR/${LANE}-external.json"
+        MERGE_ARGS+=(--lane "$LANE")
         WORKER_ARGS=(
-            --external-equivalence
             --data "$LANE"
             --duration "$DURATION"
             --warmup "$WARMUP"
@@ -201,25 +184,34 @@ if [[ "$EXTERNAL_EQUIVALENCE" == true ]]; then
             WORKER_ARGS+=(--allocation-iterations "$ALLOCATION_ITERATIONS")
         fi
 
-        for IMPLEMENTATION in "${PAIR_ORDER[@]}"; do
-            if [[ "$IMPLEMENTATION" == ordinary ]]; then
-                SIDE_JSON="$ORDINARY_JSON"
+        for SAMPLE_INDEX in 1 2; do
+            if [[ "$SAMPLE_INDEX" == 1 ]]; then
+                PAIR_ORDER=(ordinary external)
             else
-                SIDE_JSON="$EXTERNAL_JSON"
+                PAIR_ORDER=(external ordinary)
             fi
-            echo "Running $LANE $IMPLEMENTATION worker..."
-            dotnet run -c Release --no-build \
-                --project ./Fory.CSharpBenchmark.csproj -- \
-                "${WORKER_ARGS[@]}" \
-                --external-implementation "$IMPLEMENTATION" \
-                --output "$SIDE_JSON"
-        done
 
-        MERGE_ARGS+=(
-            --lane "$LANE"
-            --input "$ORDINARY_JSON"
-            --input "$EXTERNAL_JSON"
-        )
+            SIDE_INPUTS=()
+            for IMPLEMENTATION in "${PAIR_ORDER[@]}"; do
+                SIDE_JSON="$SIDE_DIR/${LANE}-sample-${SAMPLE_INDEX}-${IMPLEMENTATION}.json"
+                SIDE_INPUTS+=("$SIDE_JSON")
+                echo "Running $LANE sample $SAMPLE_INDEX ${PAIR_ORDER[*]}: $IMPLEMENTATION worker..."
+                dotnet run -c Release --no-build \
+                    --project ./Fory.ExternalTypeBenchmark.csproj -- \
+                    "${WORKER_ARGS[@]}" \
+                    --external-implementation "$IMPLEMENTATION" \
+                    --output "$SIDE_JSON"
+            done
+
+            MERGE_ARGS+=(
+                --sample
+                "$LANE"
+                "$SAMPLE_INDEX"
+                "${PAIR_ORDER[0]}-${PAIR_ORDER[1]}"
+                "${SIDE_INPUTS[0]}"
+                "${SIDE_INPUTS[1]}"
+            )
+        done
     done
 
     echo -e "${YELLOW}[4/4] Validating and merging results...${NC}"

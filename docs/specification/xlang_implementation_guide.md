@@ -221,8 +221,7 @@ The ownership split is:
 
 #### C# target-keyed external serializers
 
-C# external-type serialization uses the existing target-keyed serializer
-resolver.
+C# external-type serialization uses the target-keyed serializer resolver.
 
 `ForyStructAttribute` and `ForyEnumAttribute` carry an optional `Target` type.
 A local non-generic abstract class supplies an external struct schema, while an
@@ -244,11 +243,11 @@ internal static class StatusSerializer
 
 These declarations are compile-time generator input only. They are never
 instantiated, reflected over by the runtime, registered, reference-published,
-or used as wire identities. The generator emits the existing
+or used as wire identities. The generator emits the canonical
 `Serializer<ThirdParty.User>` structural form and registers its generated
 factory under `ThirdParty.User`. External enums reuse
-`EnumSerializer<ThirdParty.Status>`. Application registration continues to use
-the existing target APIs:
+`EnumSerializer<ThirdParty.Status>`. Application registration uses the target
+APIs:
 
 ```csharp
 fory.Register<ThirdParty.User>(100);
@@ -263,47 +262,44 @@ factory keys, root lookup, and dynamic lookup use the target. The declaration
 supplies only field names, IDs, schema descriptors, nullability, and the
 structural `Evolving` setting.
 
-The existing
-`TypeResolver.RegisterGenerated<T, TSerializer>(bool? evolving = null)`
-generated-registration method carries `Evolving` into the target `TypeInfo`.
-Ordinary and external generated structs pass it explicitly; generated enums and
-unions omit it. The runtime must not recover the value by reflecting the
-external declaration, add a serializer capability interface, or create a
-second metadata registry. Multiple generated declarations for one target are
-rejected during generation when visible in one compilation and fail
-deterministically on the cold generated-factory registration path across
-assemblies. Explicit manual serializer registration retains the resolver's
-existing target replacement rules.
+Generated ordinary structs, enums, and unions use
+`TypeResolver.RegisterGenerated<T, TSerializer>()`. External generated structs use the
+`TypeResolver.RegisterGenerated<T, TSerializer>(bool evolving)` overload to
+carry declaration-owned `Evolving` into the target `TypeInfo`. The runtime must
+not recover the value by reflecting the external declaration, add a serializer
+capability interface, or create a second metadata registry. Multiple generated
+declarations for one target are rejected during generation when visible in one
+compilation and fail deterministically on the cold generated-factory
+registration path across assemblies. Explicit manual serializer registration
+uses the resolver's target replacement rules.
 
-External structural targets follow the current ordinary C# construction
-contract: an accessible concrete class or struct, legal parameterless
-construction, and directly readable and assignable members. Schema properties
-match target fields or properties by case-sensitive name and exact CLR/generic
-type. Explicit nullability must match; when target metadata is
-nullable-oblivious, the declaration supplies schema nullability. Immutable,
-constructor-only, factory-only, init-only, readonly, renamed, converted, or
-inaccessible shapes use the existing manual `Serializer<T>` path. Generated
+External structural targets require an accessible concrete class or struct,
+legal parameterless construction, and directly readable and assignable
+members. Schema properties match target fields or properties by case-sensitive
+name and exact CLR/generic type. Explicit nullability must match; when target
+metadata is nullable-oblivious, the declaration supplies schema nullability.
+Immutable, constructor-only, factory-only, init-only, readonly, renamed,
+converted, or inaccessible shapes use a manual `Serializer<T>`. Generated
 class reads allocate and publish the final target before recursive children;
-target structs remain inline values. The declaration is never a temporary graph
+target structs are inline values. The declaration is never a temporary graph
 owner.
 
-C# carrier composition remains target-based. The existing resolver recursively
+C# carrier composition is target-based. The resolver recursively
 binds `Nullable<T>`, one-dimensional `T[]`, `List<T>`, `LinkedList<T>`,
 `Queue<T>`, `Stack<T>`, `HashSet<T>`, `SortedSet<T>`,
 `ImmutableHashSet<T>`, `Dictionary<TKey, TValue>`,
 `SortedDictionary<TKey, TValue>`, `SortedList<TKey, TValue>`,
 `ConcurrentDictionary<TKey, TValue>`, and
 `NullableKeyDictionary<TKey, TValue>`. Ordinary generated targets, external
-structural serializers, manual serializers, fields, and roots therefore use
-the same existing carrier bodies. No carrier-provider family, field selector,
-root selector, callback, schema tree, per-element external dispatch, or
-additional allocation is added. Unsupported collection-interface, tuple,
-fixed-array, multidimensional-array, memory, and reference-wrapper families are
-not introduced by this feature.
+structural serializers, manual serializers, fields, and roots use the same
+carrier bodies. External-type serialization has no carrier-provider family,
+field selector, root selector, callback, schema tree, per-element external
+dispatch, or additional allocation. Collection-interface, tuple, fixed-array,
+multidimensional-array, memory, and reference-wrapper families are unsupported.
 
-Dynamic `object` values and existing unions continue to resolve concrete target
-types through `TypeResolver`. This does not add arbitrary statically typed
-interface or base-class polymorphism.
+Dynamic `object` values and unions resolve concrete target types through
+`TypeResolver`. Arbitrary statically typed interface or base-class polymorphism
+is unsupported.
 
 External and equivalent ordinary generated hot bodies must be
 instruction-shape equivalent apart from target/member metadata tokens. Target

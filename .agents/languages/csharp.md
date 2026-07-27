@@ -20,7 +20,7 @@ Load this file when changing `csharp/` or C# xlang behavior.
   use the actual target type. Never instantiate, register, reflect over, or
   reference-publish the declaration.
 - Keep one generator model/emitter and one resolver registration path for
-  ordinary and external C# targets. Registration stays on the existing
+  ordinary and external C# targets. Registration uses only the
   `Register<Target>` and `Register<Target, TSerializer>` APIs. Do not add
   external registration, field/root serializer selectors, provider objects,
   callbacks, runtime schema trees, carrier-provider types, per-element
@@ -30,10 +30,10 @@ Load this file when changing `csharp/` or C# xlang behavior.
   runtime or add a second metadata owner. Reject duplicate generated owners by
   target at compile time and deterministically on the cold cross-assembly
   factory-registration path. Last-writer-wins generated factories are
-  forbidden; existing explicit manual serializer replacement semantics remain
-  unchanged.
+  forbidden; explicit manual serializer replacement uses normal resolver
+  semantics.
 - External structural serializers use direct target construction and member
-  access under the existing mutable parameterless-construction contract.
+  access under the mutable parameterless-construction contract.
   Immutable, constructor-only, factory-only, readonly, init-only, renamed,
   converted, or inaccessible targets use a manual serializer. Derive
   allocation, reference publication, default value, and graph-memory behavior

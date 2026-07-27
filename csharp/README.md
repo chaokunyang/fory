@@ -203,7 +203,7 @@ byte[] payload = fory.Serialize(user);
 ThirdParty.User decoded = fory.Deserialize<ThirdParty.User>(payload);
 ```
 
-The target remains the runtime and registration type. See the
+The target is the runtime and registration type. See the
 [external-types guide](https://fory.apache.org/docs/guide/csharp/external-types/).
 
 ### 7. Manual Serializers

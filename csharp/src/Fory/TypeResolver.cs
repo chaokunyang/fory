@@ -119,22 +119,40 @@ public sealed class TypeResolver
     /// </summary>
     /// <typeparam name="T">Runtime target type.</typeparam>
     /// <typeparam name="TSerializer">Generated serializer type.</typeparam>
-    /// <param name="evolving">
-    /// Structural schema-evolution setting, or null when it does not apply.
-    /// </param>
     /// <exception cref="InvalidOperationException">
     /// Thrown when another generated serializer already owns the target type.
     /// </exception>
-    public static void RegisterGenerated<T, TSerializer>(bool? evolving = null)
+    public static void RegisterGenerated<T, TSerializer>()
         where TSerializer : Serializer<T>, new()
     {
-        Type type = typeof(T);
-        Func<TypeResolver, TypeInfo> factory = evolving switch
-        {
-            true => static _ => TypeInfo.Create(typeof(T), new TSerializer(), true),
-            false => static _ => TypeInfo.Create(typeof(T), new TSerializer(), false),
-            null => static _ => TypeInfo.Create(typeof(T), new TSerializer()),
-        };
+        RegisterGeneratedFactory(
+            typeof(T),
+            static _ => TypeInfo.Create(typeof(T), new TSerializer()));
+    }
+
+    /// <summary>
+    /// Registers an external structural serializer factory for a runtime target type.
+    /// This method is called by source-generated module initializers.
+    /// </summary>
+    /// <typeparam name="T">Runtime target type.</typeparam>
+    /// <typeparam name="TSerializer">Generated serializer type.</typeparam>
+    /// <param name="evolving">Structural schema-evolution setting declared by the serializer.</param>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when another generated serializer already owns the target type.
+    /// </exception>
+    public static void RegisterGenerated<T, TSerializer>(bool evolving)
+        where TSerializer : Serializer<T>, new()
+    {
+        Func<TypeResolver, TypeInfo> factory = evolving
+            ? static _ => TypeInfo.Create(typeof(T), new TSerializer(), true)
+            : static _ => TypeInfo.Create(typeof(T), new TSerializer(), false);
+        RegisterGeneratedFactory(typeof(T), factory);
+    }
+
+    private static void RegisterGeneratedFactory(
+        Type type,
+        Func<TypeResolver, TypeInfo> factory)
+    {
         if (!GeneratedFactories.TryAdd(type, factory))
         {
             ThrowDuplicateGeneratedSerializer(type);

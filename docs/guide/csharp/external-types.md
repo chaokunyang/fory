@@ -158,7 +158,7 @@ class containing only abstract get-only schema properties. Each property:
 - has the same CLR type and generic shape;
 - has matching explicit nullability when the target metadata provides it;
 - can be read and assigned directly by generated code;
-- may use the existing `ForyField` ID and schema descriptor options.
+- may use the standard `ForyField` ID and schema descriptor options.
 
 When target metadata is nullable-oblivious, the declaration selects schema
 nullability. Only members declared by the serializer are serialized; other
@@ -193,7 +193,7 @@ they do for an ordinary generated C# type.
 
 ## Dynamic Values and References
 
-After registering the target, it can appear in existing `object`-based dynamic
+After registering the target, it can appear in `object`-based dynamic
 roots, fields, collections, and maps. Register every concrete target that can
 appear dynamically.
 

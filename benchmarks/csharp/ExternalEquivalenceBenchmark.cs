@@ -68,12 +68,14 @@ internal static class ExternalEquivalenceBenchmark
     private const uint MapHolderTypeId = 105;
     private const int BatchSize = 256;
 
-    public static int Run(BenchmarkOptions options, JsonSerializerOptions jsonOptions)
+    public static int Run(
+        ExternalBenchmarkOptions options,
+        JsonSerializerOptions jsonOptions)
     {
-        string implementation = ImplementationName(options.ExternalImplementation);
+        string implementation = ImplementationName(options.Implementation);
         List<EquivalenceCase> cases = BuildCases(
             options,
-            options.ExternalImplementation);
+            options.Implementation);
         if (cases.Count == 0)
         {
             throw new ArgumentException("no external-equivalence benchmark cases selected");
@@ -127,7 +129,7 @@ internal static class ExternalEquivalenceBenchmark
 
     private static EquivalenceSideResult RunCase(
         EquivalenceCase benchmarkCase,
-        BenchmarkOptions options)
+        ExternalBenchmarkOptions options)
     {
         RunForDuration(benchmarkCase.Action, options.WarmupSeconds);
 
@@ -206,7 +208,7 @@ internal static class ExternalEquivalenceBenchmark
     }
 
     private static List<EquivalenceCase> BuildCases(
-        BenchmarkOptions options,
+        ExternalBenchmarkOptions options,
         ExternalImplementation implementation)
     {
         return implementation switch
@@ -218,7 +220,8 @@ internal static class ExternalEquivalenceBenchmark
         };
     }
 
-    private static List<EquivalenceCase> BuildOrdinaryCases(BenchmarkOptions options)
+    private static List<EquivalenceCase> BuildOrdinaryCases(
+        ExternalBenchmarkOptions options)
     {
         ForyRuntime writer = BuildFory();
         ForyRuntime reader = BuildFory();
@@ -302,12 +305,13 @@ internal static class ExternalEquivalenceBenchmark
         return cases;
     }
 
-    private static List<EquivalenceCase> BuildExternalCases(BenchmarkOptions options)
+    private static List<EquivalenceCase> BuildExternalCases(
+        ExternalBenchmarkOptions options)
     {
         ForyRuntime writer = BuildFory();
         ForyRuntime reader = BuildFory();
-        RegisterExternal(writer);
-        RegisterExternal(reader);
+        RegisterTargetTypes(writer);
+        RegisterTargetTypes(reader);
 
         List<EquivalenceCase> cases = [];
         AddCase(
@@ -400,7 +404,7 @@ internal static class ExternalEquivalenceBenchmark
         fory.Register<OrdinaryMapHolder>(MapHolderTypeId);
     }
 
-    private static void RegisterExternal(ForyRuntime fory)
+    private static void RegisterTargetTypes(ForyRuntime fory)
     {
         fory.Register<ExternalUser>(UserTypeId);
         fory.Register<ExternalPoint>(PointTypeId);
@@ -415,7 +419,7 @@ internal static class ExternalEquivalenceBenchmark
         ForyRuntime writer,
         ForyRuntime reader,
         Func<T, T, bool> valuesEqual,
-        BenchmarkOptions options,
+        ExternalBenchmarkOptions options,
         List<EquivalenceCase> cases)
     {
         if (!options.IsDataEnabled(dataType))

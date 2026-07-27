@@ -24,6 +24,7 @@ import math
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
+from statistics import median
 
 LANES = (
     "class-root",
@@ -36,6 +37,10 @@ LANES = (
 )
 OPERATIONS = ("serialize", "deserialize")
 IMPLEMENTATIONS = ("ordinary", "external")
+SAMPLE_ORDERS = (
+    ("ordinary", "external"),
+    ("external", "ordinary"),
+)
 TEXT_METADATA = (
     "RuntimeVersion",
     "OsDescription",
@@ -61,10 +66,15 @@ def parse_args(argv=None):
         help="Expected lane; repeat as needed. Defaults to all lanes.",
     )
     parser.add_argument(
-        "--input",
+        "--sample",
         action="append",
+        nargs=5,
         required=True,
-        help="Worker JSON path; repeat for every ordinary/external result.",
+        metavar=("LANE", "INDEX", "ORDER", "FIRST_INPUT", "SECOND_INPUT"),
+        help=(
+            "Balanced sample metadata and worker JSON paths; repeat for each lane "
+            "and sample."
+        ),
     )
     parser.add_argument("--output", required=True, help="Combined JSON output path.")
     return parser.parse_args(argv)
@@ -139,145 +149,286 @@ def decode_frame(value, owner: str, serialized_size: int) -> bytes:
     return frame
 
 
-def load_inputs(paths, expected_lanes):
+def sample_order_name(order) -> str:
+    return "-".join(order)
+
+
+def parse_sample_specs(raw_samples, expected_lanes):
+    expected_lane_set = set(expected_lanes)
+    expected_specs = {
+        (lane, index): order
+        for lane in expected_lanes
+        for index, order in enumerate(SAMPLE_ORDERS, start=1)
+    }
+    specs = {}
+    input_owners = {}
+
+    for raw_sample in raw_samples:
+        lane, raw_index, order_name, first_input, second_input = raw_sample
+        if lane not in expected_lane_set:
+            raise ValueError(f"sample lane is not expected: {lane!r}")
+        try:
+            sample_index = int(raw_index)
+        except ValueError as error:
+            raise ValueError(
+                f"sample index must be an integer: {raw_index!r}"
+            ) from error
+        if raw_index != str(sample_index):
+            raise ValueError(
+                f"sample index must use canonical decimal form: {raw_index!r}"
+            )
+
+        key = (lane, sample_index)
+        expected_order = expected_specs.get(key)
+        if expected_order is None:
+            raise ValueError(f"unexpected sample index for {lane}: {sample_index}")
+        if key in specs:
+            raise ValueError(f"duplicate sample for {lane}/{sample_index}")
+
+        expected_order_name = sample_order_name(expected_order)
+        if order_name != expected_order_name:
+            raise ValueError(
+                f"sample {lane}/{sample_index} order must be "
+                f"{expected_order_name}, got {order_name}"
+            )
+
+        paths = (
+            Path(
+                require_string(first_input, f"sample {lane}/{sample_index} first input")
+            ),
+            Path(
+                require_string(
+                    second_input,
+                    f"sample {lane}/{sample_index} second input",
+                )
+            ),
+        )
+        for path in paths:
+            normalized = path.resolve()
+            if normalized in input_owners:
+                raise ValueError(
+                    f"worker input {path} is reused by {input_owners[normalized]} "
+                    f"and {lane}/{sample_index}"
+                )
+            input_owners[normalized] = f"{lane}/{sample_index}"
+
+        specs[key] = {
+            "Order": expected_order,
+            "Paths": paths,
+        }
+
+    missing = set(expected_specs) - set(specs)
+    if missing:
+        raise ValueError(
+            "missing samples: "
+            + ", ".join(f"{lane}/{index}" for lane, index in sorted(missing))
+        )
+    return specs
+
+
+def load_worker(path: Path, expected_lane: str, expected_implementation: str):
+    with path.open("r", encoding="utf-8") as source:
+        document = require_object(json.load(source), str(path))
+
+    metadata = validate_metadata(document, path)
+    implementation = require_string(
+        document.get("Implementation"), f"{path}.Implementation"
+    )
+    if implementation != expected_implementation:
+        raise ValueError(
+            f"{path}.Implementation must be {expected_implementation}, "
+            f"got {implementation}"
+        )
+
+    raw_results = document.get("Results")
+    if not isinstance(raw_results, list) or len(raw_results) != len(OPERATIONS):
+        raise ValueError(f"{path}.Results must contain exactly two operations")
+
+    results = {}
+    for index, raw_result in enumerate(raw_results):
+        owner = f"{path}.Results[{index}]"
+        result = require_object(raw_result, owner)
+        lane = result.get("DataType")
+        if lane != expected_lane:
+            raise ValueError(f"{owner}.DataType must be {expected_lane}, got {lane!r}")
+        operation = result.get("Operation")
+        if operation not in OPERATIONS:
+            raise ValueError(f"{owner}.Operation must be serialize or deserialize")
+        if operation in results:
+            raise ValueError(
+                f"duplicate result for {expected_lane}/{operation} in {path}"
+            )
+
+        serialized_size = require_int(
+            result.get("SerializedSize"), f"{owner}.SerializedSize", 0
+        )
+        frame = decode_frame(
+            result.get("SerializedFrameBase64"),
+            f"{owner}.SerializedFrameBase64",
+            serialized_size,
+        )
+        measurement = validate_measurement(
+            result.get("Measurement"), f"{owner}.Measurement"
+        )
+        allocated = result.get("AllocatedBytesPerOperation")
+        if metadata["AllocationIterations"] == 0:
+            if allocated is not None:
+                raise ValueError(
+                    f"{owner}.AllocatedBytesPerOperation must be null when "
+                    "allocation measurement is disabled"
+                )
+        elif allocated is None:
+            raise ValueError(
+                f"{owner}.AllocatedBytesPerOperation is required when "
+                "allocation measurement is enabled"
+            )
+        else:
+            require_number(
+                allocated,
+                f"{owner}.AllocatedBytesPerOperation",
+                False,
+            )
+
+        results[operation] = {
+            "SerializedSize": serialized_size,
+            "Frame": frame,
+            "Measurement": measurement,
+            "AllocatedBytesPerOperation": allocated,
+        }
+
+    missing_operations = set(OPERATIONS) - set(results)
+    if missing_operations:
+        raise ValueError(
+            f"{path} is missing operations: {', '.join(sorted(missing_operations))}"
+        )
+    if (
+        results["serialize"]["SerializedSize"]
+        != results["deserialize"]["SerializedSize"]
+        or results["serialize"]["Frame"] != results["deserialize"]["Frame"]
+    ):
+        raise ValueError(
+            f"serialized frame differs between operations for "
+            f"{expected_implementation}/{expected_lane} in {path}"
+        )
+    return metadata, results
+
+
+def load_samples(specs, expected_lanes):
     metadata = None
     results = {}
-    expected_lane_set = set(expected_lanes)
 
-    for input_path in paths:
-        path = Path(input_path)
-        with path.open("r", encoding="utf-8") as source:
-            document = require_object(json.load(source), str(path))
-
-        current_metadata = validate_metadata(document, path)
-        if metadata is None:
-            metadata = current_metadata
-        elif current_metadata != metadata:
-            differences = [
-                field
-                for field in METADATA_FIELDS
-                if current_metadata[field] != metadata[field]
-            ]
-            raise ValueError(
-                f"{path} has incompatible metadata fields: {', '.join(differences)}"
-            )
-
-        implementation = require_string(
-            document.get("Implementation"), f"{path}.Implementation"
-        )
-        if implementation not in IMPLEMENTATIONS:
-            raise ValueError(f"{path}.Implementation must be ordinary or external")
-
-        raw_results = document.get("Results")
-        if not isinstance(raw_results, list) or not raw_results:
-            raise ValueError(f"{path}.Results must be a non-empty array")
-
-        for index, raw_result in enumerate(raw_results):
-            owner = f"{path}.Results[{index}]"
-            result = require_object(raw_result, owner)
-            lane = result.get("DataType")
-            if lane not in expected_lane_set:
-                raise ValueError(f"{owner}.DataType is not an expected lane: {lane!r}")
-            operation = result.get("Operation")
-            if operation not in OPERATIONS:
-                raise ValueError(f"{owner}.Operation must be serialize or deserialize")
-            key = (implementation, lane, operation)
-            if key in results:
-                raise ValueError(f"duplicate result for {'/'.join(key)}")
-
-            serialized_size = require_int(
-                result.get("SerializedSize"), f"{owner}.SerializedSize", 0
-            )
-            frame = decode_frame(
-                result.get("SerializedFrameBase64"),
-                f"{owner}.SerializedFrameBase64",
-                serialized_size,
-            )
-            measurement = validate_measurement(
-                result.get("Measurement"), f"{owner}.Measurement"
-            )
-            allocated = result.get("AllocatedBytesPerOperation")
-            if current_metadata["AllocationIterations"] == 0:
-                if allocated is not None:
-                    raise ValueError(
-                        f"{owner}.AllocatedBytesPerOperation must be null when "
-                        "allocation measurement is disabled"
-                    )
-            elif allocated is None:
+    for lane in expected_lanes:
+        for sample_index, expected_order in enumerate(SAMPLE_ORDERS, start=1):
+            spec = specs[(lane, sample_index)]
+            if spec["Order"] != expected_order:
                 raise ValueError(
-                    f"{owner}.AllocatedBytesPerOperation is required when "
-                    "allocation measurement is enabled"
+                    f"internal sample order mismatch for {lane}/{sample_index}"
                 )
-            else:
-                require_number(
-                    allocated,
-                    f"{owner}.AllocatedBytesPerOperation",
-                    False,
+            for implementation, path in zip(expected_order, spec["Paths"]):
+                current_metadata, worker_results = load_worker(
+                    path,
+                    lane,
+                    implementation,
                 )
+                if metadata is None:
+                    metadata = current_metadata
+                elif current_metadata != metadata:
+                    differences = [
+                        field
+                        for field in METADATA_FIELDS
+                        if current_metadata[field] != metadata[field]
+                    ]
+                    raise ValueError(
+                        f"{path} has incompatible metadata fields: "
+                        f"{', '.join(differences)}"
+                    )
 
-            results[key] = {
-                "SerializedSize": serialized_size,
-                "Frame": frame,
-                "Measurement": measurement,
-                "AllocatedBytesPerOperation": allocated,
-            }
+                for operation, result in worker_results.items():
+                    results[(implementation, lane, sample_index, operation)] = result
 
+    if metadata is None:
+        raise ValueError("no benchmark samples were loaded")
     return metadata, results
+
+
+def median_summary(samples) -> dict:
+    return {
+        "OperationsPerSecond": median(
+            sample["Measurement"]["OperationsPerSecond"] for sample in samples
+        ),
+        "AverageNanoseconds": median(
+            sample["Measurement"]["AverageNanoseconds"] for sample in samples
+        ),
+    }
 
 
 def merge_results(metadata: dict, results: dict, expected_lanes) -> dict:
     expected_keys = {
-        (implementation, lane, operation)
+        (implementation, lane, sample_index, operation)
         for implementation in IMPLEMENTATIONS
         for lane in expected_lanes
+        for sample_index in range(1, len(SAMPLE_ORDERS) + 1)
         for operation in OPERATIONS
     }
     missing = expected_keys - set(results)
     if missing:
         raise ValueError(
-            f"missing results: {', '.join('/'.join(key) for key in sorted(missing))}"
+            "missing results: "
+            + ", ".join(
+                f"{implementation}/{lane}/{sample_index}/{operation}"
+                for implementation, lane, sample_index, operation in sorted(missing)
+            )
+        )
+    unexpected = set(results) - expected_keys
+    if unexpected:
+        raise ValueError(
+            "unexpected results: "
+            + ", ".join(
+                f"{implementation}/{lane}/{sample_index}/{operation}"
+                for implementation, lane, sample_index, operation in sorted(unexpected)
+            )
         )
 
     combined_results = []
     for lane in expected_lanes:
-        for implementation in IMPLEMENTATIONS:
-            serialized = results[(implementation, lane, "serialize")]
-            deserialized = results[(implementation, lane, "deserialize")]
+        baseline = results[("ordinary", lane, 1, "serialize")]
+        lane_samples = [
+            results[(implementation, lane, sample_index, operation)]
+            for implementation in IMPLEMENTATIONS
+            for sample_index in range(1, len(SAMPLE_ORDERS) + 1)
+            for operation in OPERATIONS
+        ]
+        for sample in lane_samples:
             if (
-                serialized["SerializedSize"] != deserialized["SerializedSize"]
-                or serialized["Frame"] != deserialized["Frame"]
+                sample["SerializedSize"] != baseline["SerializedSize"]
+                or sample["Frame"] != baseline["Frame"]
             ):
-                raise ValueError(
-                    f"serialized frame differs between operations for "
-                    f"{implementation}/{lane}"
-                )
+                raise ValueError(f"serialized frame differs between samples for {lane}")
 
         for operation in OPERATIONS:
-            ordinary = results[("ordinary", lane, operation)]
-            external = results[("external", lane, operation)]
-            if ordinary["SerializedSize"] != external["SerializedSize"]:
+            ordinary_samples = [
+                results[("ordinary", lane, sample_index, operation)]
+                for sample_index in range(1, len(SAMPLE_ORDERS) + 1)
+            ]
+            external_samples = [
+                results[("external", lane, sample_index, operation)]
+                for sample_index in range(1, len(SAMPLE_ORDERS) + 1)
+            ]
+            operation_samples = ordinary_samples + external_samples
+            allocations = {
+                sample["AllocatedBytesPerOperation"] for sample in operation_samples
+            }
+            if len(allocations) != 1:
                 raise ValueError(
-                    f"serialized-size mismatch for {lane}/{operation}: "
-                    f"ordinary={ordinary['SerializedSize']}, "
-                    f"external={external['SerializedSize']}"
-                )
-            if ordinary["Frame"] != external["Frame"]:
-                raise ValueError(f"serialized-byte mismatch for {lane}/{operation}")
-            if (
-                ordinary["AllocatedBytesPerOperation"]
-                != external["AllocatedBytesPerOperation"]
-            ):
-                raise ValueError(
-                    f"allocation mismatch for {lane}/{operation}: "
-                    f"ordinary={ordinary['AllocatedBytesPerOperation']}, "
-                    f"external={external['AllocatedBytesPerOperation']}"
+                    f"allocation mismatch between samples for {lane}/{operation}"
                 )
 
-            ordinary_measurement = ordinary["Measurement"]
-            external_measurement = external["Measurement"]
+            allocated_bytes = operation_samples[0]["AllocatedBytesPerOperation"]
+            ordinary_median = median_summary(ordinary_samples)
+            external_median = median_summary(external_samples)
             slowdown = (
-                external_measurement["AverageNanoseconds"]
-                / ordinary_measurement["AverageNanoseconds"]
+                external_median["AverageNanoseconds"]
+                / ordinary_median["AverageNanoseconds"]
                 - 1.0
             ) * 100.0
             allocation_enabled = metadata["AllocationIterations"] > 0
@@ -285,16 +436,12 @@ def merge_results(metadata: dict, results: dict, expected_lanes) -> dict:
                 {
                     "DataType": lane,
                     "Operation": operation,
-                    "SerializedSize": ordinary["SerializedSize"],
-                    "Ordinary": ordinary_measurement,
-                    "External": external_measurement,
+                    "SerializedSize": baseline["SerializedSize"],
+                    "OrdinaryMedian": ordinary_median,
+                    "ExternalMedian": external_median,
                     "SlowdownPercent": slowdown,
-                    "OrdinaryAllocatedBytesPerOperation": ordinary[
-                        "AllocatedBytesPerOperation"
-                    ],
-                    "ExternalAllocatedBytesPerOperation": external[
-                        "AllocatedBytesPerOperation"
-                    ],
+                    "OrdinaryAllocatedBytesPerOperation": allocated_bytes,
+                    "ExternalAllocatedBytesPerOperation": allocated_bytes,
                     "AllocationEqual": True if allocation_enabled else None,
                 }
             )
@@ -302,12 +449,14 @@ def merge_results(metadata: dict, results: dict, expected_lanes) -> dict:
     return {
         "GeneratedAtUtc": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
         **metadata,
+        "SamplesPerImplementation": len(SAMPLE_ORDERS),
+        "SampleOrders": [sample_order_name(order) for order in SAMPLE_ORDERS],
         "Results": combined_results,
     }
 
 
 def print_summary(output: dict) -> None:
-    print("=== External-Type Equivalence Summary ===")
+    print("=== External-Type Equivalence Median Summary ===")
     for result in output["Results"]:
         allocation = ""
         if result["AllocationEqual"] is not None:
@@ -316,8 +465,8 @@ def print_summary(output: dict) -> None:
             )
         print(
             f"{result['DataType']}/{result['Operation']}: "
-            f"ordinary={result['Ordinary']['AverageNanoseconds']:.1f} ns/op, "
-            f"external={result['External']['AverageNanoseconds']:.1f} ns/op, "
+            f"ordinary={result['OrdinaryMedian']['AverageNanoseconds']:.1f} ns/op, "
+            f"external={result['ExternalMedian']['AverageNanoseconds']:.1f} ns/op, "
             f"slowdown={result['SlowdownPercent']:+.2f}%{allocation}"
         )
 
@@ -328,7 +477,8 @@ def main(argv=None) -> int:
     if len(lanes) != len(set(lanes)):
         raise ValueError("--lane may specify each lane only once")
 
-    metadata, results = load_inputs(args.input, lanes)
+    specs = parse_sample_specs(args.sample, lanes)
+    metadata, results = load_samples(specs, lanes)
     output = merge_results(metadata, results, lanes)
     output_path = Path(args.output)
     output_path.parent.mkdir(parents=True, exist_ok=True)

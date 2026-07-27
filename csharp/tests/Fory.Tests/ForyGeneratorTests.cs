@@ -346,6 +346,7 @@ public sealed class ForyGeneratorTests
             $"RegisterGenerated<{userType},",
             generated,
             StringComparison.Ordinal);
+        Assert.Contains(">(true);", generated, StringComparison.Ordinal);
         Assert.Contains("value.Name", generated, StringComparison.Ordinal);
         Assert.Contains("value.@event", generated, StringComparison.Ordinal);
         Assert.Contains(

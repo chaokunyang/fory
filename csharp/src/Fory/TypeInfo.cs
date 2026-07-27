@@ -96,10 +96,20 @@ public sealed class TypeInfo
         WireTypeId = wireTypeId;
     }
 
-    internal static TypeInfo Create<T>(
+    internal static TypeInfo Create<T>(Type type, Serializer<T> serializer)
+    {
+        return Create(type, serializer, generatedEvolving: null);
+    }
+
+    internal static TypeInfo Create<T>(Type type, Serializer<T> serializer, bool generatedEvolving)
+    {
+        return Create(type, serializer, (bool?)generatedEvolving);
+    }
+
+    private static TypeInfo Create<T>(
         Type type,
         Serializer<T> serializer,
-        bool? generatedEvolving = null)
+        bool? generatedEvolving)
     {
         Func<bool, IReadOnlyList<TypeMetaFieldInfo>> typeMetaFields =
             CreateTypeMetaFieldsProvider(serializer, out bool hasTypeMetaFieldsProvider);

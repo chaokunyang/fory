@@ -1091,14 +1091,14 @@ internal static class Program
     private static byte[] CaseCSharpExternalId(byte[] input)
     {
         ForyRuntime fory = BuildFory(compatible: true);
-        RegisterExternalById(fory);
+        RegisterCSharpTypesById(fory);
         return ExchangeExternalValues(input, fory, nameof(CaseCSharpExternalId));
     }
 
     private static byte[] CaseCSharpExternalName(byte[] input)
     {
         ForyRuntime fory = BuildFory(compatible: false);
-        RegisterExternalByName(fory);
+        RegisterCSharpTypesByName(fory);
         return ExchangeExternalValues(input, fory, nameof(CaseCSharpExternalName));
     }
 
@@ -1173,7 +1173,7 @@ internal static class Program
         fory.Register<SimpleStruct>("demo.simple_struct");
     }
 
-    private static void RegisterExternalById(ForyRuntime fory)
+    private static void RegisterCSharpTypesById(ForyRuntime fory)
     {
         fory.Register<XlangUser>(1301);
         fory.Register<XlangPoint>(1302);
@@ -1181,7 +1181,7 @@ internal static class Program
         fory.Register<XlangHolder>(1304);
     }
 
-    private static void RegisterExternalByName(ForyRuntime fory)
+    private static void RegisterCSharpTypesByName(ForyRuntime fory)
     {
         fory.Register<XlangUser>("csharp.external.User");
         fory.Register<XlangPoint>("csharp.external.Point");

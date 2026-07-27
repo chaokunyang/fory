@@ -50,13 +50,6 @@ internal sealed record BenchmarkOutput(
     double DurationSeconds,
     List<BenchmarkResult> Results);
 
-internal enum ExternalImplementation
-{
-    None,
-    Ordinary,
-    External,
-}
-
 internal sealed class BenchmarkOptions
 {
     private const string SchemaMismatchEnv = "FORY_BENCH_SCHEMA_MISMATCH";
@@ -71,12 +64,6 @@ internal sealed class BenchmarkOptions
 
     public string OutputPath { get; init; } = "benchmark_results.json";
 
-    public bool ExternalEquivalence { get; init; }
-
-    public ExternalImplementation ExternalImplementation { get; init; }
-
-    public int AllocationIterations { get; init; }
-
     public bool ShowHelp { get; init; }
 
     public bool SchemaMismatch { get; init; }
@@ -88,9 +75,6 @@ internal sealed class BenchmarkOptions
         double warmupSeconds = 1.0;
         double durationSeconds = 3.0;
         string outputPath = "benchmark_results.json";
-        bool externalEquivalence = false;
-        ExternalImplementation externalImplementation = ExternalImplementation.None;
-        int allocationIterations = 0;
         bool showHelp = false;
         bool schemaMismatch = Environment.GetEnvironmentVariable(SchemaMismatchEnv) == "1";
 
@@ -122,23 +106,6 @@ internal sealed class BenchmarkOptions
                     RequireValue(args, i);
                     outputPath = args[++i];
                     break;
-                case "--external-equivalence":
-                    externalEquivalence = true;
-                    break;
-                case "--external-implementation":
-                    RequireValue(args, i);
-                    if (externalImplementation != ExternalImplementation.None)
-                    {
-                        throw new ArgumentException(
-                            "--external-implementation may be specified only once");
-                    }
-
-                    externalImplementation = ParseExternalImplementation(args[++i]);
-                    break;
-                case "--allocation-iterations":
-                    RequireValue(args, i);
-                    allocationIterations = ParsePositiveInt(args[++i], "allocation-iterations");
-                    break;
                 default:
                     throw new ArgumentException($"unknown option: {args[i]}");
             }
@@ -151,9 +118,6 @@ internal sealed class BenchmarkOptions
             WarmupSeconds = warmupSeconds,
             DurationSeconds = durationSeconds,
             OutputPath = outputPath,
-            ExternalEquivalence = externalEquivalence,
-            ExternalImplementation = externalImplementation,
-            AllocationIterations = allocationIterations,
             ShowHelp = showHelp,
             SchemaMismatch = schemaMismatch,
         };
@@ -183,44 +147,6 @@ internal sealed class BenchmarkOptions
         }
     }
 
-    public void ValidateExternalEquivalence()
-    {
-        if (!ExternalEquivalence)
-        {
-            if (ExternalImplementation != ExternalImplementation.None)
-            {
-                throw new ArgumentException(
-                    "--external-implementation requires --external-equivalence");
-            }
-
-            if (AllocationIterations != 0)
-            {
-                throw new ArgumentException(
-                    "--allocation-iterations requires --external-equivalence");
-            }
-
-            return;
-        }
-
-        if (ExternalImplementation == ExternalImplementation.None)
-        {
-            throw new ArgumentException(
-                "--external-equivalence requires --external-implementation ordinary|external");
-        }
-
-        if (SerializerFilter.Count != 0)
-        {
-            throw new ArgumentException(
-                "--external-equivalence does not accept --serializer");
-        }
-
-        if (SchemaMismatch)
-        {
-            throw new ArgumentException(
-                "--external-equivalence does not support schema-mismatch mode");
-        }
-    }
-
     private static void RequireValue(string[] args, int index)
     {
         if (index + 1 >= args.Length)
@@ -237,37 +163,6 @@ internal sealed class BenchmarkOptions
         }
 
         return value;
-    }
-
-    private static int ParsePositiveInt(string text, string name)
-    {
-        if (!int.TryParse(
-                text,
-                NumberStyles.None,
-                CultureInfo.InvariantCulture,
-                out int value)
-            || value <= 0)
-        {
-            throw new ArgumentException($"{name} must be a positive integer, got '{text}'");
-        }
-
-        return value;
-    }
-
-    private static ExternalImplementation ParseExternalImplementation(string text)
-    {
-        if (string.Equals(text, "ordinary", StringComparison.OrdinalIgnoreCase))
-        {
-            return ExternalImplementation.Ordinary;
-        }
-
-        if (string.Equals(text, "external", StringComparison.OrdinalIgnoreCase))
-        {
-            return ExternalImplementation.External;
-        }
-
-        throw new ArgumentException(
-            $"external-implementation must be ordinary or external, got '{text}'");
     }
 }
 
@@ -298,29 +193,6 @@ internal static class Program
         {
             PrintUsage();
             return 0;
-        }
-
-        try
-        {
-            options.ValidateExternalEquivalence();
-        }
-        catch (Exception ex)
-        {
-            Console.Error.WriteLine($"invalid benchmark options: {ex.Message}");
-            return 1;
-        }
-
-        if (options.ExternalEquivalence)
-        {
-            try
-            {
-                return ExternalEquivalenceBenchmark.Run(options, JsonOptions);
-            }
-            catch (Exception ex)
-            {
-                Console.Error.WriteLine($"failed to run external-equivalence benchmarks: {ex}");
-                return 1;
-            }
         }
 
         List<BenchmarkCase> cases;
@@ -388,15 +260,10 @@ internal static class Program
         Console.WriteLine();
         Console.WriteLine("Options:");
         Console.WriteLine("  --data <struct|sample|mediacontent|structlist|samplelist|mediacontentlist>");
-        Console.WriteLine(
-            "         external: <class-root|struct-root|holder-field|list-field|list-root|map-field|map-root>");
         Console.WriteLine("  --serializer <fory|protobuf|msgpack>");
         Console.WriteLine("  --warmup <seconds>");
         Console.WriteLine("  --duration <seconds>");
         Console.WriteLine("  --output <path>");
-        Console.WriteLine("  --external-equivalence");
-        Console.WriteLine("  --external-implementation <ordinary|external>");
-        Console.WriteLine("  --allocation-iterations <count>");
         Console.WriteLine("  --help");
     }
 

@@ -37,7 +37,6 @@ Options:
   --duration <seconds>
   --warmup <seconds>
   --external-equivalence
-  --external-first
   --allocation-iterations <count>
 ```
 
@@ -69,13 +68,20 @@ fields, and list and map roots. Each ordinary/external pair uses the same Fory
 configuration, numeric registration IDs, field schemas, values, and native
 carrier serializers.
 
-The runner builds the benchmark once. For each selected lane, it launches an
-ordinary worker in a fresh process immediately followed by an external worker
-in another fresh process. Pass `--external-first` to reverse every pair. Each
-worker constructs, registers, validates, warms, times, and optionally measures
-allocations for only its selected implementation. Keeping the implementations
-in separate processes prevents shared reference-generic Dynamic PGO profiles
-from biasing the second implementation while retaining normal .NET tiering.
+`Fory.CSharpBenchmark.csproj` owns only the existing Fory, protobuf-net, and
+MessagePack benchmarks. `Fory.ExternalTypeBenchmark.csproj` is a parallel
+package that owns the external-type models and measurements. Building or
+running the ordinary benchmark therefore does not compile external-type models
+or their generated serializer instantiations.
+
+The runner builds the external-type benchmark once. For each selected lane, it
+launches two balanced adjacent pairs in fixed order: ordinary then external,
+followed by external then ordinary. Each of the four workers runs in a fresh
+process and constructs, registers, validates, warms, times, and optionally
+measures allocations for only its selected implementation. Keeping the
+implementations in separate processes prevents shared reference-generic
+Dynamic PGO profiles from biasing the second implementation while retaining
+normal .NET tiering.
 
 Use `--data` to select one of these lanes:
 
@@ -100,34 +106,31 @@ allocation counters start. Allocation results use
 
 Results are written to
 `build/external_equivalence_results.json`. Per-process results, including a
-Base64 proof frame, are written under
-`build/external_equivalence_sides/`. After every worker finishes, the merger
-rejects missing or duplicate lanes, incompatible runtime metadata, serialized
-size or byte differences, and allocation differences. This opt-in mode does
-not invoke the default Python report generator or update the published 36-case
-report.
+Base64 proof frame, are written under `build/external_equivalence_sides/` with
+the lane, one-based sample index, and implementation in each filename. After
+every worker finishes, the merger rejects missing, duplicate, reordered, or
+reused samples, incompatible runtime metadata, serialized size or byte
+differences, and allocation differences. It reports the median ordinary and
+external throughput and latency from the two samples per implementation. The
+combined JSON records the sample count and fixed pair orders. This opt-in mode
+does not invoke the default Python report generator or update the published
+36-case report.
 
 The benchmark executable requires exactly one implementation for direct worker
 use:
 
 ```bash
 dotnet run -c Release --no-build \
-  --project ./Fory.CSharpBenchmark.csproj -- \
-  --external-equivalence \
+  --project ./Fory.ExternalTypeBenchmark.csproj -- \
   --external-implementation ordinary \
   --data class-root \
   --duration 10 \
   --warmup 3 \
-  --output build/external_equivalence_sides/class-root-ordinary.json
+  --output build/external_equivalence_sides/class-root-direct-ordinary.json
 ```
 
 Use `ordinary` or `external`. `run.sh` owns the paired process ordering and
 normally supplies this selector.
-
-For a retained performance series, run equal numbers of ordinary-first and
-`--external-first` measurements, then compare the ordinary and external medians
-for every serialize and deserialize lane. Balancing pair order cancels
-systematic first-process or second-process drift.
 
 ## Schema Mismatch Mode
 

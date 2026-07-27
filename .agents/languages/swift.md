@@ -29,10 +29,12 @@ Load this file when changing `swift/` or Swift xlang behavior.
 - External structural serializers extend `@ForyStruct`, `@ForyEnum`, and `@ForyUnion` through
   `target:`. Fields and roots select serializers with `with`, and registration uses the existing
   serializer registration API.
-- Arbitrary protocol roots explicitly select `DynamicSerializer<T>`. Do not add an unconstrained
-  dynamic root overload, runtime serializer value, provider instance, or wrapper collection.
-  Static carriers perform no target lookup; a homogeneous dynamic chunk resolves once, while a
-  truly heterogeneous chunk retains its required per-value lookup.
+- Direct `Any` and `AnyObject` root overloads remain disfavored forwarding facades over
+  `DynamicSerializer<Any>` and `DynamicSerializer<AnyObject>`, including their Data-buffer forms.
+  Arbitrary protocol roots explicitly select `DynamicSerializer<T>`. Do not add an unconstrained
+  generic dynamic root overload, runtime serializer value, provider instance, or wrapper
+  collection. Static carriers perform no target lookup; a homogeneous dynamic chunk resolves once,
+  while a truly heterogeneous chunk retains its required per-value lookup.
 - A non-null MAP chunk size is 1 through 255; reject zero so decoding always advances. For a
   one-null entry, encode and decode the non-null side in complete-field order: reference envelope
   when present, undeclared `TypeInfo`, then body. Keep the writer, reader, compatible-field

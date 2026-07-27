@@ -532,10 +532,16 @@ allowlist, so Swift needs no marker protocol, protocol-specific registry,
 closed target-list macro, protocol wire identity, serializer value, or wrapper
 collection. Protocol roots and root carriers select the dynamic serializer
 explicitly, for example `DynamicSerializer<any Animal>` and
-`ArraySerializer<DynamicSerializer<any Animal>>`. No unconstrained dynamic root
-overload may infer a registered serializer for a concrete external value.
-`Any`, `AnyObject`, and heterogeneous container roots use the same explicit
-dynamic/carrier selection; Swift exposes no parallel convenience root flow.
+`ArraySerializer<DynamicSerializer<any Animal>>`. Swift retains direct `Any`
+and `AnyObject` root overloads for source compatibility. Those overloads
+forward to the same selected-serializer roots with `DynamicSerializer<Any>` or
+`DynamicSerializer<AnyObject>` and add no parallel codec, framing, lookup, or
+allocation path. Their append-to-Data and ByteBuffer forms follow the same
+rule. Because Swift permits every value to convert to `Any`, a concrete
+non-self-serializing value may enter registered dynamic-target lookup through
+the `Any` overload. Explicit `with:` selection names a separate static
+serializer when required. Swift exposes no unconstrained generic dynamic root,
+`any Serializer` root, or specialized heterogeneous-container root overload.
 
 `DynamicSerializer<T>` overrides complete-value reference handling. It resolves
 the concrete `TypeInfo` before deciding whether the target is a reference and

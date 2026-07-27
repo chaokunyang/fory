@@ -165,5 +165,6 @@ External and manual children use:
 - `DynamicSerializer<any Protocol>`
 - carrier serializers containing dynamic children
 
-Dynamic roots use explicit `with:` selection. See
-[Polymorphism and Dynamic Types](polymorphism.md).
+`Any` and `AnyObject` roots use direct root APIs. Arbitrary application
+protocol roots and recursive dynamic carriers use explicit `with:` selection.
+See [Polymorphism and Dynamic Types](polymorphism.md).

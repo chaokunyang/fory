@@ -163,6 +163,76 @@ public final class Fory {
         }
     }
 
+    /// Serializes an `Any` root through its concrete target serializer.
+    @_disfavoredOverload
+    @inlinable
+    @inline(__always)
+    public func serialize(_ value: Any) throws -> Data {
+        try serialize(value, with: DynamicSerializer<Any>.self)
+    }
+
+    /// Deserializes an `Any` root through its concrete target serializer.
+    @_disfavoredOverload
+    @inlinable
+    @inline(__always)
+    public func deserialize(_ data: Data, as _: Any.Type = Any.self) throws -> Any {
+        try deserialize(data, with: DynamicSerializer<Any>.self)
+    }
+
+    /// Appends an `Any` root serialized through its concrete target serializer.
+    @_disfavoredOverload
+    @inlinable
+    @inline(__always)
+    public func serialize(_ value: Any, to buffer: inout Data) throws {
+        try serialize(value, with: DynamicSerializer<Any>.self, to: &buffer)
+    }
+
+    /// Deserializes an `Any` root from a byte buffer through its concrete target serializer.
+    @_disfavoredOverload
+    @inlinable
+    @inline(__always)
+    public func deserialize(from buffer: ByteBuffer, as _: Any.Type = Any.self) throws -> Any {
+        try deserialize(from: buffer, with: DynamicSerializer<Any>.self)
+    }
+
+    /// Serializes an `AnyObject` root through its concrete target serializer.
+    @_disfavoredOverload
+    @inlinable
+    @inline(__always)
+    public func serialize(_ value: AnyObject) throws -> Data {
+        try serialize(value, with: DynamicSerializer<AnyObject>.self)
+    }
+
+    /// Deserializes an `AnyObject` root through its concrete target serializer.
+    @_disfavoredOverload
+    @inlinable
+    @inline(__always)
+    public func deserialize(
+        _ data: Data,
+        as _: AnyObject.Type = AnyObject.self
+    ) throws -> AnyObject {
+        try deserialize(data, with: DynamicSerializer<AnyObject>.self)
+    }
+
+    /// Appends an `AnyObject` root serialized through its concrete target serializer.
+    @_disfavoredOverload
+    @inlinable
+    @inline(__always)
+    public func serialize(_ value: AnyObject, to buffer: inout Data) throws {
+        try serialize(value, with: DynamicSerializer<AnyObject>.self, to: &buffer)
+    }
+
+    /// Deserializes an `AnyObject` root from a byte buffer through its concrete target serializer.
+    @_disfavoredOverload
+    @inlinable
+    @inline(__always)
+    public func deserialize(
+        from buffer: ByteBuffer,
+        as _: AnyObject.Type = AnyObject.self
+    ) throws -> AnyObject {
+        try deserialize(from: buffer, with: DynamicSerializer<AnyObject>.self)
+    }
+
     /// Serializes a root value with an explicitly selected serializer.
     public func serialize<S: Serializer>(
         _ value: S.Target,

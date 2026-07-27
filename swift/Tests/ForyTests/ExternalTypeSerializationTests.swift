@@ -839,6 +839,24 @@ func externalUnionPreservesUnknownCase() throws {
 }
 
 @Test
+func directExternalDynamicRoot() throws {
+    let fory = Fory(config: .init(trackRef: false, compatible: false))
+    try fory.register(UserSerializer.self, id: 126)
+
+    let value = User(name: "dynamic", age: 7)
+    let directData = try fory.serialize(value)
+    let dynamicValue: Any = value
+    let explicitData = try fory.serialize(
+        dynamicValue,
+        with: DynamicSerializer<Any>.self
+    )
+    #expect(directData == explicitData)
+
+    let decoded: Any = try fory.deserialize(directData)
+    #expect(decoded as? User == value)
+}
+
+@Test
 func dynamicTargetFailures() throws {
     let unregistered = Fory()
     let unregisteredValue: Any = User(name: "unregistered", age: 1)

@@ -208,8 +208,9 @@ Top-level and field-level dynamic serialization is supported for:
 - `[AnyHashable: Any]`
 
 If dynamic payloads contain user-defined concrete types, register those types before serialization/deserialization.
-Dynamic roots explicitly select `DynamicSerializer<T>` and the applicable
-carrier serializers.
+`Any` and `AnyObject` roots use direct APIs. Arbitrary application protocols
+and dynamic carriers explicitly select `DynamicSerializer<T>` and the
+applicable carrier serializers.
 
 ```swift
 import Fory
@@ -222,6 +223,10 @@ struct DynamicAddress {
 
 let fory = Fory()
 try fory.register(DynamicAddress.self, id: 410)
+
+let dynamic: Any = DynamicAddress(street: "main", zip: 94107)
+let dynamicData = try fory.serialize(dynamic)
+let dynamicOutput: Any = try fory.deserialize(dynamicData)
 
 let payload: [String: Any] = [
     "id": Int32(7),

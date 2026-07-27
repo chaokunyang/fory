@@ -113,4 +113,5 @@ replace the structural carrier serializer.
 
 When serializing `Any`, `AnyObject`, or application protocol values, register
 each concrete target through its ordinary, external structural, or manual
-serializer. Select `DynamicSerializer<T>` explicitly at the root.
+serializer. `Any` and `AnyObject` use direct root APIs; application protocols
+select `DynamicSerializer<T>` explicitly.

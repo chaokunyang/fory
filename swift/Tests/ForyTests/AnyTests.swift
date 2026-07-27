@@ -100,6 +100,48 @@ private func nestedDynamicAnyList(depth: Int) -> Any {
 }
 
 @Test
+func directDynamicRootsRoundTrip() throws {
+    let fory = Fory(config: .init(trackRef: true, compatible: false))
+    try fory.register(AnyObjectDynamicNode.self, id: 512)
+
+    let anyValue: Any = Int32(7)
+    let anyData = try fory.serialize(anyValue)
+    let explicitAnyData = try fory.serialize(
+        anyValue,
+        with: DynamicSerializer<Any>.self
+    )
+    #expect(anyData == explicitAnyData)
+
+    let anyDecoded: Any = try fory.deserialize(anyData)
+    #expect(anyDecoded as? Int32 == 7)
+
+    var anyBuffer = Data()
+    try fory.serialize(anyValue, to: &anyBuffer)
+    #expect(anyBuffer == explicitAnyData)
+    let bufferedAny: Any = try fory.deserialize(from: ByteBuffer(data: anyBuffer))
+    #expect(bufferedAny as? Int32 == 7)
+
+    let objectValue: AnyObject = AnyObjectDynamicNode(value: 8)
+    let objectData = try fory.serialize(objectValue)
+    let explicitObjectData = try fory.serialize(
+        objectValue,
+        with: DynamicSerializer<AnyObject>.self
+    )
+    #expect(objectData == explicitObjectData)
+
+    let objectDecoded: AnyObject = try fory.deserialize(objectData)
+    #expect((objectDecoded as? AnyObjectDynamicNode)?.value == 8)
+
+    var objectBuffer = Data()
+    try fory.serialize(objectValue, to: &objectBuffer)
+    #expect(objectBuffer == explicitObjectData)
+    let bufferedObject: AnyObject = try fory.deserialize(
+        from: ByteBuffer(data: objectBuffer)
+    )
+    #expect((bufferedObject as? AnyObjectDynamicNode)?.value == 8)
+}
+
+@Test
 func explicitDynamicRootsRoundTrip() throws {
     let fory = Fory(config: .init(trackRef: false, compatible: false))
     try fory.register(AnyHashableDynamicKey.self, id: 510)
@@ -405,6 +447,7 @@ func anyHashableMapPreservesTarget() throws {
     #expect(homogeneousMap?[AnyHashable("b")] as? Int32 == 20)
 }
 
+@Test
 func topLevelAllSupportedAnyTypesRoundTrip() throws {
     let fory = Fory(config: .init(trackRef: true, compatible: false))
     try fory.register(AnyHashableDynamicKey.self, id: 500)

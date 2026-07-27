@@ -21,7 +21,8 @@ license: |
 
 Fory Swift supports dynamic serialization for `Any`, `AnyObject`, arbitrary
 application protocol existentials, and supported heterogeneous collections.
-Dynamic roots use explicit serializer selection.
+`Any` and `AnyObject` roots use direct convenience APIs. Application protocols
+and recursively composed carriers select `DynamicSerializer` explicitly.
 
 ## Dynamic Roots
 
@@ -29,18 +30,20 @@ Dynamic roots use explicit serializer selection.
 let fory = Fory()
 
 let dynamic: Any = Int32(7)
-let data = try fory.serialize(
-    dynamic,
-    with: DynamicSerializer<Any>.self
-)
-let decoded = try fory.deserialize(
-    data,
-    with: DynamicSerializer<Any>.self
-)
+let data = try fory.serialize(dynamic)
+let decoded: Any = try fory.deserialize(data)
 ```
 
-`AnyObject` selects `DynamicSerializer<AnyObject>`. Heterogeneous containers
-compose carrier serializers:
+The equivalent explicit form is
+`with: DynamicSerializer<Any>.self`. It is useful when composing serializers,
+but is unnecessary for an `Any` root. `AnyObject` has the same direct root
+APIs and delegates to `DynamicSerializer<AnyObject>`.
+
+A concrete value that does not implement `Serializer` itself may also enter
+registered dynamic-target lookup through the `Any` overload. Use `with:` to
+name a separate serializer explicitly when static selection is required.
+
+Heterogeneous containers compose carrier serializers:
 
 ```swift
 typealias AnyArraySerializer =

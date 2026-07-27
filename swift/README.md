@@ -423,11 +423,11 @@ See `../docs/guide/swift/external-types.md`.
 
 ### 8. Manual Serializers
 
-Serializer selection follows provider ownership. A type that implements
-`Serializer` with `Target == Self` uses ordinary roots, generated fields, and
-carriers without `with:`. An application may give an external type one
-retroactive self-target conformance, but that conformance is process-global and
-must be the single binding for the `(Target, Serializer)` pair.
+A type that implements `Serializer` with `Target == Self` uses ordinary roots,
+generated fields, and carriers without `with:`. An application may give an
+external type one retroactive self-target conformance, but that conformance is
+process-global and must be the single binding for the `(Target, Serializer)`
+pair.
 
 A separate serializer whose `Target` is another type is selected explicitly at
 every required root, field, or carrier child. Use separate serializers for

@@ -65,8 +65,8 @@ If an application intentionally gives an external type one retroactive
 try fory.register(UUID.self, id: 2)
 ```
 
-Registration does not make a separate serializer the default. Select it
-explicitly at each root, field, or carrier child where it is required.
+After registering a separate serializer, select it explicitly at each root,
+field, or carrier child where it is required.
 
 ## Register by Name
 

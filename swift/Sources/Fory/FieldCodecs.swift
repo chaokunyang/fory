@@ -1105,6 +1105,23 @@ public enum ArrayFieldCodec<ElementCodec: FieldCodec>: FieldCodec {
         refMode: RefMode,
         readTypeInfo: Bool
     ) throws -> Target {
+        if refMode == .none {
+            return try readFieldDataAfterTypeInfo(context, readTypeInfo: readTypeInfo)
+        }
+        return try readFieldWithEnvelope(
+            context,
+            refMode: refMode,
+            readTypeInfo: readTypeInfo
+        )
+    }
+
+    // Keep the reference envelope out of generated `.none` packed-array reads.
+    @usableFromInline
+    internal static func readFieldWithEnvelope(
+        _ context: ReadContext,
+        refMode: RefMode,
+        readTypeInfo: Bool
+    ) throws -> Target {
         switch refMode {
         case .none:
             return try readFieldDataAfterTypeInfo(context, readTypeInfo: readTypeInfo)

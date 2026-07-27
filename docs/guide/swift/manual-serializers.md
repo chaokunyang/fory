@@ -31,8 +31,8 @@ A manual serializer is not limited to external types:
   explicitly everywhere it is needed.
 
 The same selection rules apply to roots, generated fields, optionals, arrays,
-sets, and dictionaries. Registering a separate serializer does not make it
-implicit.
+sets, and dictionaries. Register a separate serializer and select it explicitly
+where it is used.
 
 ## When to Use a Manual Serializer
 
@@ -225,9 +225,9 @@ assert(input == output)
 
 Another declaration, such as `UUIDBytesSerializer`, may target the same type
 with a different body. Fory cannot choose between separate serializers
-automatically. Registering one does not make it the default for `UUID`; select
-it with `with:` at roots and with the matching field annotation. Register only
-one implementation for the target on a given `Fory` instance.
+automatically. Select the desired serializer with `with:` at roots and with the
+matching field annotation. Register only one implementation for the target on
+a given `Fory` instance.
 
 The direct `Any` and `AnyObject` root conveniences remain dynamic operations.
 A registered serializer may be used for a concrete value passed as `Any`, but

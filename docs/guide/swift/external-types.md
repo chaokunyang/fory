@@ -27,9 +27,8 @@ Fory can access and construct directly. Use a
 [manual serializer](manual-serializers.md) when the target needs a customized
 encoding or has private construction invariants.
 
-An external structural serializer is a separate declaration, so roots, fields,
-and carrier children select it explicitly. Registering it does not make it the
-default for the target type.
+An external structural serializer is a separate declaration. Register it, then
+select it explicitly at roots, fields, and carrier children.
 
 For one application-owned global implementation, Swift also permits an
 external type to conform retroactively to `Serializer` with `Target == Self`.

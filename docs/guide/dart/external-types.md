@@ -230,7 +230,19 @@ An empty root collection contains no element type identity.
 
 ## Closed Generic Targets
 
-A serializer declaration can target one closed generic instantiation:
+Suppose the dependency exposes this generic class:
+
+```dart
+final class Box<T> {
+  const Box(this.value);
+
+  final T value;
+}
+```
+
+`Box<T>` is open because `T` is unresolved. Supplying a concrete type argument,
+such as `Box<String>`, produces a closed generic instantiation that code
+generation can analyze:
 
 ```dart
 @ForyStruct(target: third_party.Box<String>)
@@ -239,8 +251,11 @@ abstract final class StringBoxSerializer {
 }
 ```
 
-Register `third_party.Box<String>`. A different instantiation needs its own
-serializer declaration and registration.
+The generated serializer reconstructs values with
+`third_party.Box<String>(...)` and applies only to `Box<String>`. Register
+`third_party.Box<String>` as the target. A different instantiation such as
+`Box<int>` needs its own serializer declaration and registration; one
+declaration does not cover every `Box<T>`.
 
 ## Schema Evolution
 

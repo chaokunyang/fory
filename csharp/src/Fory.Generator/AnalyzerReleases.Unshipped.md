@@ -9,3 +9,10 @@ FORY004 | Fory | Error | Invalid Fory field id
 FORY005 | Fory | Error | Invalid Fory union type
 FORY006 | Fory | Error | Invalid Fory union case
 FORY007 | Fory | Error | Duplicate Fory union case id
+FORY008 | Fory | Error | Invalid external serializer declaration
+FORY009 | Fory | Error | Invalid external serializer target
+FORY010 | Fory | Error | Duplicate generated serializer target
+FORY011 | Fory | Error | Invalid external serializer member
+FORY012 | Fory | Error | External serializer member type mismatch
+FORY013 | Fory | Error | Unsupported extern alias
+FORY014 | Fory | Error | Enum value is outside the supported range

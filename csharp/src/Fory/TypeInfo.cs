@@ -96,14 +96,19 @@ public sealed class TypeInfo
         WireTypeId = wireTypeId;
     }
 
-    internal static TypeInfo Create<T>(Type type, Serializer<T> serializer)
+    internal static TypeInfo Create<T>(
+        Type type,
+        Serializer<T> serializer,
+        bool? generatedEvolving = null)
     {
         Func<bool, IReadOnlyList<TypeMetaFieldInfo>> typeMetaFields =
             CreateTypeMetaFieldsProvider(serializer, out bool hasTypeMetaFieldsProvider);
         (TypeId? builtInTypeId, UserTypeKind? userTypeKind, bool isDynamicType) = ResolveTypeShape(
             type,
             hasTypeMetaFieldsProvider);
-        bool evolving = ResolveStructEvolving(type, userTypeKind);
+        bool evolving = userTypeKind == Apache.Fory.UserTypeKind.Struct && generatedEvolving.HasValue
+            ? generatedEvolving.GetValueOrDefault()
+            : ResolveStructEvolving(type, userTypeKind);
         bool isNullableType = !type.IsValueType || Nullable.GetUnderlyingType(type) is not null;
         bool isRefType = type != typeof(string) && !type.IsValueType;
         long boxedValueBytes = BoxedValueBytes<T>();

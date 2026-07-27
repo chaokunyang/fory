@@ -36,6 +36,8 @@ Options:
   --serializer <fory|protobuf|msgpack>
   --duration <seconds>
   --warmup <seconds>
+  --external-equivalence
+  --allocation-iterations <count>
 ```
 
 Examples:
@@ -50,6 +52,81 @@ Examples:
 # Use longer runs for stable numbers
 ./run.sh --duration 10 --warmup 2
 ```
+
+## External-Type Equivalence
+
+The opt-in external-type mode compares generated serializers for ordinary
+benchmark models with external structural serializers for equivalent models
+from a Fory-free project:
+
+```bash
+./run.sh --external-equivalence --duration 10 --warmup 3
+```
+
+It covers direct class and struct roots, a direct holder field, list and map
+fields, and list and map roots. Each ordinary/external pair uses the same Fory
+configuration, numeric registration IDs, field schemas, values, and native
+carrier serializers.
+
+The runner builds the benchmark once. For each selected lane, it then launches
+an ordinary worker in a fresh process immediately followed by an external
+worker in another fresh process. Each worker constructs, registers, validates,
+warms, times, and optionally measures allocations for only its selected
+implementation. Keeping the implementations in separate processes prevents
+shared reference-generic Dynamic PGO profiles from biasing the second
+implementation while retaining normal .NET tiering.
+
+Use `--data` to select one of these lanes:
+
+- `class-root`
+- `struct-root`
+- `holder-field`
+- `list-field`
+- `list-root`
+- `map-field`
+- `map-root`
+
+Add a fixed allocation pass with:
+
+```bash
+./run.sh --external-equivalence --allocation-iterations 100000
+```
+
+Registration, serializer resolution, payload creation, delegates, metadata
+caches, and timed warmup for the selected implementation are completed before
+allocation counters start. Allocation results use
+`GC.GetAllocatedBytesForCurrentThread()` and report bytes per operation.
+
+Results are written to
+`build/external_equivalence_results.json`. Per-process results, including a
+Base64 proof frame, are written under
+`build/external_equivalence_sides/`. After every worker finishes, the merger
+rejects missing or duplicate lanes, incompatible runtime metadata, serialized
+size or byte differences, and allocation differences. This opt-in mode does
+not invoke the default Python report generator or update the published 36-case
+report.
+
+The benchmark executable requires exactly one implementation for direct worker
+use:
+
+```bash
+dotnet run -c Release --no-build \
+  --project ./Fory.CSharpBenchmark.csproj -- \
+  --external-equivalence \
+  --external-implementation ordinary \
+  --data class-root \
+  --duration 10 \
+  --warmup 3 \
+  --output build/external_equivalence_sides/class-root-ordinary.json
+```
+
+Use `ordinary` or `external`. `run.sh` owns the paired process ordering and
+normally supplies this selector.
+
+For the performance gate, run at least nine immediately adjacent
+ordinary/external pairs, discard only the first pair, and compare the retained
+median for every serialize and deserialize lane. Each external median must be
+within 1% of its ordinary equivalent.
 
 ## Schema Mismatch Mode
 

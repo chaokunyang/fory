@@ -13,6 +13,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Compile Remove="Fory.ExternalBenchmarkTypes/**/*.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="./Fory.ExternalBenchmarkTypes/Fory.ExternalBenchmarkTypes.csproj" />
     <ProjectReference Include="../../csharp/src/Fory/Fory.csproj" />
     <ProjectReference Include="../../csharp/src/Fory.Generator/Fory.Generator.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
   </ItemGroup>

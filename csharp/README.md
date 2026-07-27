@@ -183,7 +183,30 @@ Parallel.For(0, 128, i =>
 });
 ```
 
-### 6. Manual Serializers
+### 6. External Types
+
+Generate serializers for mutable third-party classes, structs, and enums with a
+local serializer declaration:
+
+```csharp
+[ForyStruct(Target = typeof(ThirdParty.User))]
+internal abstract class UserSerializer
+{
+    [ForyField(1)]
+    public abstract string Name { get; }
+}
+
+Fory fory = Fory.Builder().Build();
+fory.Register<ThirdParty.User>(300);
+
+byte[] payload = fory.Serialize(user);
+ThirdParty.User decoded = fory.Deserialize<ThirdParty.User>(payload);
+```
+
+The target remains the runtime and registration type. See the
+[external-types guide](https://fory.apache.org/docs/guide/csharp/external-types/).
+
+### 7. Manual Serializers
 
 Provide specialized encoding logic with `Serializer<T>`.
 

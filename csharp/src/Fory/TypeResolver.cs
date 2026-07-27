@@ -18,6 +18,7 @@
 using System.Collections.Concurrent;
 using System.Collections.Immutable;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using System.Threading;
 
 namespace Apache.Fory;
@@ -112,11 +113,39 @@ public sealed class TypeResolver
     private ulong _versionHash;
     private bool _finalized;
 
-    public static void RegisterGenerated<T, TSerializer>()
+    /// <summary>
+    /// Registers the generated serializer factory for a runtime target type.
+    /// This method is called by source-generated module initializers.
+    /// </summary>
+    /// <typeparam name="T">Runtime target type.</typeparam>
+    /// <typeparam name="TSerializer">Generated serializer type.</typeparam>
+    /// <param name="evolving">
+    /// Structural schema-evolution setting, or null when it does not apply.
+    /// </param>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when another generated serializer already owns the target type.
+    /// </exception>
+    public static void RegisterGenerated<T, TSerializer>(bool? evolving = null)
         where TSerializer : Serializer<T>, new()
     {
         Type type = typeof(T);
-        GeneratedFactories[type] = static _ => TypeInfo.Create(typeof(T), new TSerializer());
+        Func<TypeResolver, TypeInfo> factory = evolving switch
+        {
+            true => static _ => TypeInfo.Create(typeof(T), new TSerializer(), true),
+            false => static _ => TypeInfo.Create(typeof(T), new TSerializer(), false),
+            null => static _ => TypeInfo.Create(typeof(T), new TSerializer()),
+        };
+        if (!GeneratedFactories.TryAdd(type, factory))
+        {
+            ThrowDuplicateGeneratedSerializer(type);
+        }
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static void ThrowDuplicateGeneratedSerializer(Type type)
+    {
+        throw new InvalidOperationException(
+            $"a generated serializer is already registered for target type {type}");
     }
 
     private static UInt64Map<Type> CreateTypeMap(params (Type Key, Type Value)[] entries)

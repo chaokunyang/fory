@@ -418,8 +418,10 @@ See `../docs/guide/swift/external-types.md`.
 
 ### 8. Manual Serializers
 
-For a customized body, implement `Serializer` with an associated external
-`Target`.
+For a customized body on a type you own, implement `Serializer` directly with
+`Target == Self`; ordinary roots then need no `with:` argument. For a type owned
+by another module, use a separate serializer with that external `Target` and
+select it explicitly with `with:`.
 See `../docs/guide/swift/manual-serializers.md`.
 
 ## Cross-Language Serialization

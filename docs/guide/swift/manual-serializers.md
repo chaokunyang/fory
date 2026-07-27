@@ -23,6 +23,12 @@ Use a manual serializer when a target needs a customized wire body or cannot
 meet the direct-access requirements of an
 [external structural serializer](external-types.md).
 
+A manual serializer is not limited to external types:
+
+- If you own the target type, make that type conform to `Serializer` directly.
+- If another module owns the target type, declare a separate serializer whose
+  `Target` is the external type.
+
 ## When to Use a Manual Serializer
 
 - The target has private or immutable state.
@@ -32,7 +38,57 @@ meet the direct-access requirements of an
 - An external enum is not exhaustively switchable.
 - An external union cannot represent `UnknownCase`.
 
-## Implementing `Serializer`
+## User-Owned Targets
+
+When you own the target, implement `Serializer` on the target itself and set
+`Target` to the same type:
+
+```swift
+import Fory
+
+struct AccountID: Serializer, Equatable {
+    typealias Target = AccountID
+
+    let rawValue: UInt64
+
+    static var staticTypeId: TypeId {
+        .ext
+    }
+
+    static func writeData(
+        _ value: AccountID,
+        _ context: WriteContext
+    ) throws {
+        try UInt64.writeData(value.rawValue, context)
+    }
+
+    static func readData(
+        _ context: ReadContext
+    ) throws -> AccountID {
+        AccountID(rawValue: try UInt64.readData(context))
+    }
+}
+```
+
+Register and use the type through the ordinary root APIs:
+
+```swift
+let fory = Fory()
+try fory.register(AccountID.self, id: 300)
+
+let input = AccountID(rawValue: 42)
+let data = try fory.serialize(input)
+let output: AccountID = try fory.deserialize(data)
+
+assert(input == output)
+```
+
+No `with:` argument is needed because `AccountID.Target == AccountID`.
+
+## External Targets
+
+When another module owns the target, implement `Serializer` on a separate
+serializer declaration:
 
 ```swift
 import Foundation
@@ -73,7 +129,7 @@ public enum UUIDSerializer: Serializer {
 }
 ```
 
-## Register and Use
+Register the separate serializer and select it explicitly at the root:
 
 ```swift
 let fory = Fory()
@@ -86,17 +142,46 @@ let output = try fory.deserialize(data, with: UUIDSerializer.self)
 assert(input == output)
 ```
 
-## Use a Manual Serializer in a Field
+`UUID` is owned by Foundation, so it does not select `UUIDSerializer`
+implicitly. Registration makes the serializer available for type identity and
+dynamic dispatch; it does not change static root or field selection.
+
+## Fields and Carriers
+
+A field whose user-owned type implements `Serializer` needs no serializer
+selector:
 
 ```swift
 @ForyStruct
 struct Request {
+    var accountID: AccountID
+}
+```
+
+A separate serializer must be selected explicitly:
+
+```swift
+@ForyStruct
+struct ExternalRequest {
     @ForyField(with: UUIDSerializer.self)
     var requestID: UUID
 }
 ```
 
-Recursive carrier selection uses the same field syntax:
+Ordinary carriers containing self-serializing targets also select their
+children directly:
+
+```swift
+let accountIDs = [
+    AccountID(rawValue: 1),
+    AccountID(rawValue: 2),
+]
+let data = try fory.serialize(accountIDs)
+let output: [AccountID] = try fory.deserialize(data)
+```
+
+For an external child, recursive carrier selection uses the separate
+serializer:
 
 ```swift
 @ListField(element: .with(UUIDSerializer.self))
@@ -105,14 +190,16 @@ var requestIDs: [UUID]
 
 ## Manual Serializer Rules
 
-A manual serializer that replaces a noncanonical body uses `.ext`. Numeric
-registration produces EXT and name registration produces NAMED_EXT.
+A manual serializer uses `.ext` for its noncanonical body whether the target
+implements `Serializer` directly or uses a separate serializer declaration.
+Numeric registration produces EXT and name registration produces NAMED_EXT.
 
 Do not report `.structType`, `.enumType`, or `.typedUnion` from a manual
 serializer. Those categories are owned by `@ForyStruct`, `@ForyEnum`, and
 `@ForyUnion`.
 
-The serializer declaration is static behavior and is never instantiated.
+Serialization behavior is static. Fory does not instantiate a separate
+serializer object.
 
 `writeData` and `readData` process only the target body. Do not call a root
 `serialize` or `deserialize` method from either operation.

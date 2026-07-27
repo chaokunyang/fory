@@ -19,6 +19,10 @@ Load this file when changing `swift/` or Swift xlang behavior.
 - Keep `Serializer` as static value-level behavior for one exact `Target`. `FieldCodec` layers
   field-only schema and compatibility behavior over that value behavior; `Serializer` must not
   depend on `FieldCodec`.
+- Manual serialization is not external-only. A user-owned target implements `Serializer` with
+  `Target == Self` and uses ordinary root and field selection. A separate serializer targets an
+  external value and requires explicit `with` selection at static roots and fields; registration
+  must not silently replace either static selection path.
 - Swift carrier serializers are exactly `OptionalSerializer`, `ArraySerializer`, `SetSerializer`,
   and `DictionarySerializer`. Root and field composition use different static type trees but share
   one carrier body and allocation owner.

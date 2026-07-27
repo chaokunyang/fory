@@ -368,11 +368,13 @@ Likewise, standard-library weak pointers are not aliases for Fory's weak
 carriers.
 
 For Swift, `Serializer` follows the same exact-target ownership boundary with
-an associated `Target`. Ordinary Swift types use `Target == Self`; an external
-structural or manual serializer uses the external value type. Serializer
-operations are static and accept or return `Target`. Fory never instantiates a
-serializer declaration, and generated external structural code reads target
-properties and constructs the target directly.
+an associated `Target`. A user-owned structural or manual serializer uses
+`Target == Self`; a separate external structural or manual serializer uses the
+external value type. Serializer operations are static and accept or return
+`Target`. Fory never instantiates a separate serializer object, and generated
+external structural code reads target properties and constructs the target
+directly. Self-target roots select the target's serializer implicitly; roots
+using a separate serializer select it explicitly.
 
 Swift `StructSerializer` covers every structural registration category.
 Ordinary and external `@ForyStruct`, `@ForyEnum`, and `@ForyUnion` expansions

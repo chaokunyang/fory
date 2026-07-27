@@ -19,6 +19,7 @@ using System.Collections.Immutable;
 using System.Globalization;
 using System.Text;
 using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Text;
 
@@ -89,6 +90,62 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true);
 
+    private static readonly DiagnosticDescriptor InvalidExternalDeclaration = new(
+        id: "FORY008",
+        title: "Invalid external serializer declaration",
+        messageFormat: "Serializer declaration '{0}' is invalid: {1}",
+        category: "Fory",
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true);
+
+    private static readonly DiagnosticDescriptor InvalidExternalTarget = new(
+        id: "FORY009",
+        title: "Invalid external serializer target",
+        messageFormat: "External serializer target '{0}' is invalid: {1}",
+        category: "Fory",
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true);
+
+    private static readonly DiagnosticDescriptor DuplicateGeneratedTarget = new(
+        id: "FORY010",
+        title: "Duplicate generated serializer target",
+        messageFormat: "Runtime target '{0}' has multiple generated serializer declarations",
+        category: "Fory",
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true);
+
+    private static readonly DiagnosticDescriptor InvalidExternalMember = new(
+        id: "FORY011",
+        title: "Invalid external serializer member",
+        messageFormat: "Schema member '{0}' cannot bind target '{1}': {2}",
+        category: "Fory",
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true);
+
+    private static readonly DiagnosticDescriptor ExternalMemberTypeMismatch = new(
+        id: "FORY012",
+        title: "External serializer member type mismatch",
+        messageFormat: "Schema member '{0}' type '{1}' does not match target member type '{2}'",
+        category: "Fory",
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true);
+
+    private static readonly DiagnosticDescriptor UnsupportedExternalAlias = new(
+        id: "FORY013",
+        title: "Unsupported extern alias",
+        messageFormat: "Type '{0}' requires an extern alias that generated code cannot preserve",
+        category: "Fory",
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true);
+
+    private static readonly DiagnosticDescriptor EnumValueOutOfRange = new(
+        id: "FORY014",
+        title: "Enum value is outside the supported range",
+        messageFormat: "Enum member '{0}' has a value outside the supported unsigned 32-bit range",
+        category: "Fory",
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true);
+
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
         IncrementalValuesProvider<TypeModel?> typeModels = context.SyntaxProvider
@@ -119,7 +176,7 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
             return;
         }
 
-        Dictionary<string, TypeModel> models = new(StringComparer.Ordinal);
+        Dictionary<string, TypeModel> declarations = new(StringComparer.Ordinal);
         foreach (TypeModel? maybeModel in maybeModels)
         {
             if (maybeModel is null)
@@ -127,9 +184,18 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
                 continue;
             }
 
-            if (!maybeModel.Diagnostics.IsDefaultOrEmpty)
+            if (!declarations.ContainsKey(maybeModel.DeclarationName))
             {
-                foreach (Diagnostic diagnostic in maybeModel.Diagnostics)
+                declarations.Add(maybeModel.DeclarationName, maybeModel);
+            }
+        }
+
+        List<TypeModel> validModels = [];
+        foreach (TypeModel model in declarations.Values)
+        {
+            if (!model.Diagnostics.IsDefaultOrEmpty)
+            {
+                foreach (Diagnostic diagnostic in model.Diagnostics)
                 {
                     context.ReportDiagnostic(diagnostic);
                 }
@@ -137,7 +203,29 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
                 continue;
             }
 
-            models[maybeModel.TypeName] = maybeModel;
+            validModels.Add(model);
+        }
+
+        Dictionary<string, TypeModel> models = new(StringComparer.Ordinal);
+        foreach (IGrouping<string, TypeModel> targetGroup in validModels.GroupBy(
+                     model => model.TargetTypeName,
+                     StringComparer.Ordinal))
+        {
+            if (targetGroup.Skip(1).Any())
+            {
+                foreach (TypeModel model in targetGroup)
+                {
+                    context.ReportDiagnostic(Diagnostic.Create(
+                        DuplicateGeneratedTarget,
+                        model.DeclarationLocation,
+                        model.TargetTypeName));
+                }
+
+                continue;
+            }
+
+            TypeModel targetModel = targetGroup.First();
+            models.Add(targetModel.TargetTypeName, targetModel);
         }
 
         if (models.Count == 0)
@@ -182,17 +270,17 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
             if (model.Kind == DeclKind.Enum)
             {
                 sb.AppendLine(
-                    $"        global::Apache.Fory.TypeResolver.RegisterGenerated<{model.TypeName}, global::Apache.Fory.EnumSerializer<{model.TypeName}>>();");
+                    $"        global::Apache.Fory.TypeResolver.RegisterGenerated<{model.TargetTypeName}, global::Apache.Fory.EnumSerializer<{model.TargetTypeName}>>();");
             }
             else if (model.Kind == DeclKind.Union)
             {
                 sb.AppendLine(
-                    $"        global::Apache.Fory.TypeResolver.RegisterGenerated<{model.TypeName}, {model.SerializerName}>();");
+                    $"        global::Apache.Fory.TypeResolver.RegisterGenerated<{model.TargetTypeName}, {model.SerializerName}>();");
             }
             else
             {
                 sb.AppendLine(
-                    $"        global::Apache.Fory.TypeResolver.RegisterGenerated<{model.TypeName}, {model.SerializerName}>();");
+                    $"        global::Apache.Fory.TypeResolver.RegisterGeneratedStruct<{model.TargetTypeName}, {model.SerializerName}>({BoolLiteral(model.Evolving)});");
             }
         }
 
@@ -205,7 +293,7 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
     private static void EmitObjectSerializer(StringBuilder sb, TypeModel model)
     {
         sb.AppendLine(
-            $"file sealed class {model.SerializerName} : global::Apache.Fory.Serializer<{model.TypeName}>");
+            $"file sealed class {model.SerializerName} : global::Apache.Fory.Serializer<{model.TargetTypeName}>");
         sb.AppendLine("{");
         sb.AppendLine("    private static readonly object __ForyTypeMetaCacheLock = new();");
         sb.AppendLine("    private static ulong __ForyTypeMetaResolverVersion;");
@@ -335,7 +423,7 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
         sb.AppendLine("            }");
         sb.AppendLine();
         sb.AppendLine(
-            $"            global::Apache.Fory.TypeInfo typeInfo = typeResolver.GetTypeInfo<{model.TypeName}>();");
+            $"            global::Apache.Fory.TypeInfo typeInfo = typeResolver.GetTypeInfo<{model.TargetTypeName}>();");
         sb.AppendLine(
             "            __ForyNoRefTypeMetaHash = typeInfo.GetTypeMetaHeaderHash(false);");
         sb.AppendLine(
@@ -413,11 +501,11 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
         sb.AppendLine();
         if (model.Kind == DeclKind.Class)
         {
-            sb.AppendLine($"    public override {model.TypeName} DefaultValue => null!;");
+            sb.AppendLine($"    public override {model.TargetTypeName} DefaultValue => null!;");
         }
         else
         {
-            sb.AppendLine($"    public override {model.TypeName} DefaultValue => new {model.TypeName}();");
+            sb.AppendLine($"    public override {model.TargetTypeName} DefaultValue => new {model.TargetTypeName}();");
         }
 
         sb.AppendLine();
@@ -434,7 +522,7 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
         sb.AppendLine("    }");
         sb.AppendLine();
         sb.AppendLine(
-            $"    public override void WriteData(global::Apache.Fory.WriteContext context, in {model.TypeName} value, bool hasGenerics)");
+            $"    public override void WriteData(global::Apache.Fory.WriteContext context, in {model.TargetTypeName} value, bool hasGenerics)");
         sb.AppendLine("    {");
         sb.AppendLine("        _ = hasGenerics;");
         sb.AppendLine("        if (context.Compatible)");
@@ -478,11 +566,11 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
         if (model.Kind == DeclKind.Class)
         {
             sb.AppendLine(
-                $"    private {model.TypeName} {methodName}(global::Apache.Fory.ReadContext context, bool publishRef, uint refId)");
+                $"    private {model.TargetTypeName} {methodName}(global::Apache.Fory.ReadContext context, bool publishRef, uint refId)");
         }
         else
         {
-            sb.AppendLine($"    private {model.TypeName} {methodName}(global::Apache.Fory.ReadContext context)");
+            sb.AppendLine($"    private {model.TargetTypeName} {methodName}(global::Apache.Fory.ReadContext context)");
         }
 
         sb.AppendLine("    {");
@@ -498,7 +586,7 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
             sb.AppendLine("        // the storage they own.");
         }
 
-        sb.AppendLine($"        {model.TypeName} valueNoTypeMeta = new {model.TypeName}();");
+        sb.AppendLine($"        {model.TargetTypeName} valueNoTypeMeta = new {model.TargetTypeName}();");
         EmitRefPublication(sb, model, "valueNoTypeMeta", 2);
 
         foreach (MemberModel member in model.SortedMembers)
@@ -527,7 +615,7 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
         string accessibility)
     {
         sb.AppendLine("    [global::System.Runtime.CompilerServices.MethodImpl(global::System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]");
-        sb.AppendLine($"    {accessibility} override {model.TypeName} {methodName}(global::Apache.Fory.ReadContext context)");
+        sb.AppendLine($"    {accessibility} override {model.TargetTypeName} {methodName}(global::Apache.Fory.ReadContext context)");
         sb.AppendLine("    {");
         if (model.Kind == DeclKind.Class)
         {
@@ -539,13 +627,13 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
             sb.AppendLine("    }");
             sb.AppendLine();
             sb.AppendLine(
-                $"    private {model.TypeName} ReadReservedRefData(global::Apache.Fory.ReadContext context, uint refId)");
+                $"    private {model.TargetTypeName} ReadReservedRefData(global::Apache.Fory.ReadContext context, uint refId)");
             sb.AppendLine("    {");
             sb.AppendLine($"        return {methodName}Core(context, publishRef: true, refId);");
             sb.AppendLine("    }");
             sb.AppendLine();
             sb.AppendLine(
-                $"    public override {model.TypeName} Read(global::Apache.Fory.ReadContext context, global::Apache.Fory.RefMode refMode, bool readTypeInfo)");
+                $"    public override {model.TargetTypeName} Read(global::Apache.Fory.ReadContext context, global::Apache.Fory.RefMode refMode, bool readTypeInfo)");
             sb.AppendLine("    {");
             sb.AppendLine("        if (refMode != global::Apache.Fory.RefMode.None)");
             sb.AppendLine("        {");
@@ -557,7 +645,7 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
             sb.AppendLine("                case global::Apache.Fory.RefFlag.Ref:");
             sb.AppendLine("                    {");
             sb.AppendLine("                        uint refId = context.RefReader.ReadRefId(context.Reader);");
-            sb.AppendLine($"                        return context.RefReader.GetRef<{model.TypeName}>(refId);");
+            sb.AppendLine($"                        return context.RefReader.GetRef<{model.TargetTypeName}>(refId);");
             sb.AppendLine("                    }");
             sb.AppendLine("                case global::Apache.Fory.RefFlag.RefValue:");
             sb.AppendLine("                    {");
@@ -585,14 +673,14 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
             sb.AppendLine("    }");
             sb.AppendLine();
             sb.AppendLine(
-                $"    private {model.TypeName} {methodName}Core(global::Apache.Fory.ReadContext context, bool publishRef, uint refId)");
+                $"    private {model.TargetTypeName} {methodName}Core(global::Apache.Fory.ReadContext context, bool publishRef, uint refId)");
             sb.AppendLine("    {");
         }
 
         sb.AppendLine("        if (context.Compatible)");
         sb.AppendLine("        {");
         sb.AppendLine(
-            $"            global::Apache.Fory.TypeMeta? maybeTypeMeta = context.GetTypeMeta<{model.TypeName}>();");
+            $"            global::Apache.Fory.TypeMeta? maybeTypeMeta = context.GetTypeMeta<{model.TargetTypeName}>();");
         sb.AppendLine("            if (maybeTypeMeta is null)");
         sb.AppendLine("            {");
         if (model.Kind == DeclKind.Class)
@@ -619,7 +707,7 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
             sb.AppendLine("            // the storage they own.");
         }
 
-        sb.AppendLine($"            {model.TypeName} value = new {model.TypeName}();");
+        sb.AppendLine($"            {model.TargetTypeName} value = new {model.TargetTypeName}();");
         EmitRefPublication(sb, model, "value", 3);
 
         sb.AppendLine("            bool __ForyExactTypeMeta = __ForyMatchesCachedTypeMeta(typeMeta, context.TrackRef, context.TypeResolver);");
@@ -738,7 +826,7 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
             sb.AppendLine("        // the storage they own.");
         }
 
-        sb.AppendLine($"        {model.TypeName} valueSchema = new {model.TypeName}();");
+        sb.AppendLine($"        {model.TargetTypeName} valueSchema = new {model.TargetTypeName}();");
         EmitRefPublication(sb, model, "valueSchema", 2);
 
         foreach (MemberModel member in model.SortedMembers)
@@ -772,9 +860,9 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
     private static void EmitUnionSerializer(StringBuilder sb, TypeModel model)
     {
         sb.AppendLine(
-            $"file sealed class {model.SerializerName} : global::Apache.Fory.Serializer<{model.TypeName}>");
+            $"file sealed class {model.SerializerName} : global::Apache.Fory.Serializer<{model.TargetTypeName}>");
         sb.AppendLine("{");
-        sb.AppendLine($"    public override {model.TypeName} DefaultValue => null!;");
+        sb.AppendLine($"    public override {model.TargetTypeName} DefaultValue => null!;");
         sb.AppendLine();
         sb.AppendLine("    private static global::Apache.Fory.RefMode __ForyRefMode(bool nullable, bool trackRef)");
         sb.AppendLine("    {");
@@ -795,7 +883,7 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
         }
 
         sb.AppendLine(
-            $"    public override void WriteData(global::Apache.Fory.WriteContext context, in {model.TypeName} value, bool hasGenerics)");
+            $"    public override void WriteData(global::Apache.Fory.WriteContext context, in {model.TargetTypeName} value, bool hasGenerics)");
         sb.AppendLine("    {");
         sb.AppendLine("        _ = hasGenerics;");
         sb.AppendLine("        if (value is null)");
@@ -836,7 +924,7 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
         sb.AppendLine("        }");
         sb.AppendLine("    }");
         sb.AppendLine();
-        sb.AppendLine($"    public override {model.TypeName} ReadData(global::Apache.Fory.ReadContext context)");
+        sb.AppendLine($"    public override {model.TargetTypeName} ReadData(global::Apache.Fory.ReadContext context)");
         sb.AppendLine("    {");
         sb.AppendLine("        uint rawCaseId = context.Reader.ReadVarUInt32();");
         sb.AppendLine("        if (rawCaseId > int.MaxValue)");
@@ -854,7 +942,7 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
             sb.AppendLine($"            case {caseId}:");
             sb.AppendLine("            {");
             EmitReadUnionCasePayload(sb, unionCase, valueVar, 4);
-            sb.AppendLine($"                {model.TypeName} __foryUnion = new {unionCase.TypeName}({valueVar});");
+            sb.AppendLine($"                {model.TargetTypeName} __foryUnion = new {unionCase.TypeName}({valueVar});");
             sb.AppendLine("                return __foryUnion;");
             sb.AppendLine("            }");
         }
@@ -867,7 +955,7 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
         }
         else
         {
-            sb.AppendLine($"                {model.TypeName} __foryUnion = new {unknownCase.TypeName}(global::Apache.Fory.UnknownCaseSerializer.ReadPayload(context, caseId));");
+            sb.AppendLine($"                {model.TargetTypeName} __foryUnion = new {unknownCase.TypeName}(global::Apache.Fory.UnknownCaseSerializer.ReadPayload(context, caseId));");
             sb.AppendLine("                return __foryUnion;");
         }
 
@@ -1955,7 +2043,6 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
             member.Name,
             member.FieldIdentifier,
             member.OriginalIndex,
-            member.DeclKind,
             member.IsNullableValueType && member.TypeName.EndsWith("?", StringComparison.Ordinal)
                 ? member.TypeName.Substring(0, member.TypeName.Length - 1)
                 : StripNullableForTypeOf(member.TypeName),
@@ -2112,7 +2199,7 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
     private static void EmitWriteMember(StringBuilder sb, MemberModel member, bool compatibleMode)
     {
         string refModeExpr = BuildWriteRefModeExpression(member);
-        string memberAccess = $"value.{member.Name}";
+        string memberAccess = $"value.{EscapeIdentifier(member.Name)}";
         string hasGenerics = member.IsCollection ? "true" : "false";
         string writeTypeInfo = compatibleMode
             ? BuildFieldTypeInfoLiteral(member)
@@ -2231,7 +2318,7 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
         bool allowDirectRead)
     {
         string indent = new(' ', indentLevel * 2);
-        string assignmentTarget = $"{valueVar}.{member.Name}";
+        string assignmentTarget = $"{valueVar}.{EscapeIdentifier(member.Name)}";
         string typeOfTypeName = StripNullableForTypeOf(member.TypeName);
         switch (member.DynamicAnyKind)
         {
@@ -2833,77 +2920,248 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
 
     private static TypeModel? BuildTypeModel(GeneratorSyntaxContext context, CancellationToken cancellationToken)
     {
-        _ = cancellationToken;
         if (context.SemanticModel.GetDeclaredSymbol(context.Node, cancellationToken) is not INamedTypeSymbol typeSymbol)
         {
             return null;
         }
 
-        ForyAttributeKind attributeKind = GetForyAttributeKind(typeSymbol);
-        if (attributeKind == ForyAttributeKind.None)
+        AttributeData? attribute = GetForyAttribute(
+            typeSymbol,
+            out ForyAttributeKind attributeKind,
+            out bool hasConflictingAttributes);
+        if (attribute is null)
         {
             return null;
         }
 
-        string typeName = typeSymbol.ToDisplayString(FullNameFormat);
-        if (typeSymbol.TypeParameters.Length > 0)
+        string declarationName = typeSymbol.ToDisplayString(FullNameFormat);
+        string serializerName = "__ForySerializer_" + Sanitize(
+            typeSymbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat));
+        Location? declarationLocation = typeSymbol.Locations.FirstOrDefault(location => location.IsInSource);
+        bool evolving = GetEvolving(attribute);
+        if (hasConflictingAttributes)
         {
             return new TypeModel(
-                typeName,
-                string.Empty,
+                declarationName,
+                declarationName,
+                serializerName,
                 DeclKind.Unknown,
+                evolving,
+                declarationLocation,
+                ImmutableArray<MemberModel>.Empty,
+                ImmutableArray<MemberModel>.Empty,
+                ImmutableArray.Create(Diagnostic.Create(
+                    InvalidExternalDeclaration,
+                    declarationLocation,
+                    declarationName,
+                    "exactly one of ForyStruct, ForyEnum, or ForyUnion is allowed")));
+        }
+
+        Location? targetLocation = GetNamedArgumentLocation(attribute, "Target", cancellationToken) ??
+                                   declarationLocation;
+        ITypeSymbol? target = null;
+        bool invalidTargetValue = false;
+        foreach (KeyValuePair<string, TypedConstant> namedArgument in attribute.NamedArguments)
+        {
+            if (!string.Equals(namedArgument.Key, "Target", StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            if (namedArgument.Value.Value is ITypeSymbol targetSymbol)
+            {
+                target = targetSymbol;
+            }
+            else if (!namedArgument.Value.IsNull)
+            {
+                invalidTargetValue = true;
+            }
+
+            break;
+        }
+
+        if (invalidTargetValue)
+        {
+            return new TypeModel(
+                declarationName,
+                declarationName,
+                serializerName,
+                DeclKind.Unknown,
+                evolving,
+                declarationLocation,
+                ImmutableArray<MemberModel>.Empty,
+                ImmutableArray<MemberModel>.Empty,
+                ImmutableArray.Create(Diagnostic.Create(
+                    InvalidExternalTarget,
+                    targetLocation,
+                    "<unknown>",
+                    "Target must name one closed CLR type")));
+        }
+
+        if (target is null)
+        {
+            if (attributeKind == ForyAttributeKind.Struct &&
+                typeSymbol.TypeKind == TypeKind.Class &&
+                typeSymbol.IsAbstract)
+            {
+                return new TypeModel(
+                    declarationName,
+                    declarationName,
+                    serializerName,
+                    DeclKind.Unknown,
+                    evolving,
+                    declarationLocation,
+                    ImmutableArray<MemberModel>.Empty,
+                    ImmutableArray<MemberModel>.Empty,
+                    ImmutableArray.Create(Diagnostic.Create(
+                        InvalidExternalTarget,
+                        targetLocation,
+                        "<null>",
+                        "an abstract serializer declaration requires a non-null Target")));
+            }
+
+            return BuildOrdinaryTypeModel(
+                context.SemanticModel.Compilation,
+                typeSymbol,
+                attributeKind,
+                declarationName,
+                serializerName,
+                evolving,
+                declarationLocation);
+        }
+
+        return attributeKind switch
+        {
+            ForyAttributeKind.Struct => BuildExternalStructModel(
+                context.SemanticModel.Compilation,
+                typeSymbol,
+                target,
+                declarationName,
+                serializerName,
+                evolving,
+                declarationLocation,
+                targetLocation),
+            ForyAttributeKind.Enum => BuildExternalEnumModel(
+                context.SemanticModel.Compilation,
+                typeSymbol,
+                target,
+                declarationName,
+                serializerName,
+                declarationLocation,
+                targetLocation),
+            _ => new TypeModel(
+                declarationName,
+                declarationName,
+                serializerName,
+                DeclKind.Unknown,
+                evolving,
+                declarationLocation,
+                ImmutableArray<MemberModel>.Empty,
+                ImmutableArray<MemberModel>.Empty,
+                ImmutableArray.Create(Diagnostic.Create(
+                    InvalidExternalDeclaration,
+                    declarationLocation,
+                    declarationName,
+                    "Target is supported only by ForyStruct and ForyEnum"))),
+        };
+    }
+
+    private static TypeModel BuildOrdinaryTypeModel(
+        Compilation compilation,
+        INamedTypeSymbol typeSymbol,
+        ForyAttributeKind attributeKind,
+        string declarationName,
+        string serializerName,
+        bool evolving,
+        Location? declarationLocation)
+    {
+        if (HasGenericContext(typeSymbol))
+        {
+            return new TypeModel(
+                declarationName,
+                declarationName,
+                serializerName,
+                DeclKind.Unknown,
+                evolving,
+                declarationLocation,
                 ImmutableArray<MemberModel>.Empty,
                 ImmutableArray<MemberModel>.Empty,
                 ImmutableArray.Create(Diagnostic.Create(
                     GenericTypeNotSupported,
-                    typeSymbol.Locations.FirstOrDefault(),
-                    typeName)));
+                    declarationLocation,
+                    declarationName)));
         }
 
-        string serializerName = "__ForySerializer_" + Sanitize(typeSymbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat));
         if (attributeKind == ForyAttributeKind.Enum)
         {
             if (typeSymbol.TypeKind != TypeKind.Enum)
             {
-                return null;
+                return new TypeModel(
+                    declarationName,
+                    declarationName,
+                    serializerName,
+                    DeclKind.Unknown,
+                    evolving,
+                    declarationLocation,
+                    ImmutableArray<MemberModel>.Empty,
+                    ImmutableArray<MemberModel>.Empty,
+                    ImmutableArray.Create(Diagnostic.Create(
+                        InvalidExternalDeclaration,
+                        declarationLocation,
+                        declarationName,
+                        "ForyEnum without Target is valid only on an enum")));
             }
 
+            List<Diagnostic> enumDiagnostics = [];
+            ValidateEnumValues(typeSymbol, declarationLocation, enumDiagnostics);
             return new TypeModel(
-                typeName,
+                declarationName,
+                declarationName,
                 serializerName,
                 DeclKind.Enum,
+                evolving,
+                declarationLocation,
                 ImmutableArray<MemberModel>.Empty,
                 ImmutableArray<MemberModel>.Empty,
-                ImmutableArray<Diagnostic>.Empty);
+                enumDiagnostics.ToImmutableArray());
         }
 
         if (attributeKind == ForyAttributeKind.Union)
         {
             if (typeSymbol.TypeKind != TypeKind.Class)
             {
-                return null;
+                return new TypeModel(
+                    declarationName,
+                    declarationName,
+                    serializerName,
+                    DeclKind.Unknown,
+                    evolving,
+                    declarationLocation,
+                    ImmutableArray<MemberModel>.Empty,
+                    ImmutableArray<MemberModel>.Empty,
+                    ImmutableArray.Create(Diagnostic.Create(
+                        InvalidUnionType,
+                        declarationLocation,
+                        declarationName)));
             }
 
             List<Diagnostic> unionDiagnostics = [];
             ImmutableArray<UnionCaseModel> unionCases = BuildUnionCases(typeSymbol, unionDiagnostics);
             if (unionCases.IsEmpty)
             {
-                return new TypeModel(
-                    typeName,
-                    serializerName,
-                    DeclKind.Union,
-                    ImmutableArray<MemberModel>.Empty,
-                    ImmutableArray<MemberModel>.Empty,
-                    ImmutableArray.Create(Diagnostic.Create(
-                        InvalidUnionType,
-                        typeSymbol.Locations.FirstOrDefault(),
-                        typeName)));
+                unionDiagnostics.Add(Diagnostic.Create(
+                    InvalidUnionType,
+                    declarationLocation,
+                    declarationName));
             }
 
             return new TypeModel(
-                typeName,
+                declarationName,
+                declarationName,
                 serializerName,
                 DeclKind.Union,
+                evolving,
+                declarationLocation,
                 ImmutableArray<MemberModel>.Empty,
                 ImmutableArray<MemberModel>.Empty,
                 unionDiagnostics.ToImmutableArray(),
@@ -2916,24 +3174,39 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
             TypeKind.Class => DeclKind.Class,
             _ => DeclKind.Unknown,
         };
-
         if (kind == DeclKind.Unknown)
         {
-            return null;
-        }
-
-        if (kind == DeclKind.Class && !HasAccessibleParameterlessCtor(typeSymbol))
-        {
             return new TypeModel(
-                typeName,
+                declarationName,
+                declarationName,
                 serializerName,
                 kind,
+                evolving,
+                declarationLocation,
+                ImmutableArray<MemberModel>.Empty,
+                ImmutableArray<MemberModel>.Empty,
+                ImmutableArray.Create(Diagnostic.Create(
+                    InvalidExternalDeclaration,
+                    declarationLocation,
+                    declarationName,
+                    "ForyStruct without Target is valid only on a class or struct")));
+        }
+
+        if (kind == DeclKind.Class && !HasAccessibleParameterlessCtor(typeSymbol, compilation))
+        {
+            return new TypeModel(
+                declarationName,
+                declarationName,
+                serializerName,
+                kind,
+                evolving,
+                declarationLocation,
                 ImmutableArray<MemberModel>.Empty,
                 ImmutableArray<MemberModel>.Empty,
                 ImmutableArray.Create(Diagnostic.Create(
                     MissingCtor,
-                    typeSymbol.Locations.FirstOrDefault(),
-                    typeName)));
+                    declarationLocation,
+                    declarationName)));
         }
 
         List<Diagnostic> diagnostics = [];
@@ -2952,7 +3225,7 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
                     continue;
                 }
 
-                MemberModel? parsedField = BuildMemberModel(field.Name, field.Type, field, MemberDeclKind.Field, diagnostics);
+                MemberModel? parsedField = BuildMemberModel(field.Name, field.Type, field, diagnostics);
                 if (parsedField is not null)
                 {
                     members.Add(parsedField);
@@ -2983,7 +3256,6 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
                     property.Name,
                     property.Type,
                     property,
-                    MemberDeclKind.Property,
                     diagnostics);
                 if (parsedProperty is not null)
                 {
@@ -2997,7 +3269,893 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
             .ToImmutableArray();
         ImmutableArray<MemberModel> sorted = SortMembers(ordered);
 
-        return new TypeModel(typeName, serializerName, kind, ordered, sorted, diagnostics.ToImmutableArray());
+        return new TypeModel(
+            declarationName,
+            declarationName,
+            serializerName,
+            kind,
+            evolving,
+            declarationLocation,
+            ordered,
+            sorted,
+            diagnostics.ToImmutableArray());
+    }
+
+    private static TypeModel BuildExternalStructModel(
+        Compilation compilation,
+        INamedTypeSymbol declaration,
+        ITypeSymbol targetSymbol,
+        string declarationName,
+        string serializerName,
+        bool evolving,
+        Location? declarationLocation,
+        Location? targetLocation)
+    {
+        List<Diagnostic> diagnostics = [];
+        bool validDeclaration = ValidateExternalStructDeclaration(
+            declaration,
+            declarationName,
+            declarationLocation,
+            diagnostics);
+        bool validTarget = ValidateExternalStructTarget(
+            compilation,
+            declaration,
+            targetSymbol,
+            targetLocation,
+            diagnostics,
+            out INamedTypeSymbol? target,
+            out DeclKind targetKind);
+        string targetTypeName = targetSymbol.ToDisplayString(FullNameFormat);
+        List<MemberModel> members = [];
+        if (validDeclaration && validTarget)
+        {
+            foreach (IPropertySymbol schemaProperty in declaration.GetMembers().OfType<IPropertySymbol>())
+            {
+                if (schemaProperty.IsImplicitlyDeclared)
+                {
+                    continue;
+                }
+
+                if (!TryBindExternalMember(
+                        compilation,
+                        target!,
+                        schemaProperty,
+                        targetTypeName,
+                        diagnostics))
+                {
+                    continue;
+                }
+
+                int diagnosticCount = diagnostics.Count;
+                MemberModel? member = BuildMemberModel(
+                    schemaProperty.Name,
+                    schemaProperty.Type,
+                    schemaProperty,
+                    diagnostics);
+                if (member is not null)
+                {
+                    members.Add(member);
+                }
+                else if (diagnostics.Count == diagnosticCount)
+                {
+                    diagnostics.Add(Diagnostic.Create(
+                        InvalidExternalMember,
+                        schemaProperty.Locations.FirstOrDefault(location => location.IsInSource),
+                        schemaProperty.Name,
+                        targetTypeName,
+                        "the schema property type or descriptor is not supported"));
+                }
+            }
+        }
+
+        ImmutableArray<MemberModel> ordered = members
+            .OrderBy(member => member.OriginalIndex)
+            .ToImmutableArray();
+        return new TypeModel(
+            declarationName,
+            targetTypeName,
+            serializerName,
+            targetKind,
+            evolving,
+            declarationLocation,
+            ordered,
+            SortMembers(ordered),
+            diagnostics.ToImmutableArray());
+    }
+
+    private static TypeModel BuildExternalEnumModel(
+        Compilation compilation,
+        INamedTypeSymbol declaration,
+        ITypeSymbol targetSymbol,
+        string declarationName,
+        string serializerName,
+        Location? declarationLocation,
+        Location? targetLocation)
+    {
+        List<Diagnostic> diagnostics = [];
+        ValidateExternalEnumDeclaration(
+            declaration,
+            declarationName,
+            declarationLocation,
+            diagnostics);
+        INamedTypeSymbol? target = ValidateExternalEnumTarget(
+            compilation,
+            declaration,
+            targetSymbol,
+            targetLocation,
+            diagnostics);
+        if (target is not null)
+        {
+            ValidateEnumValues(target, targetLocation, diagnostics);
+        }
+
+        return new TypeModel(
+            declarationName,
+            targetSymbol.ToDisplayString(FullNameFormat),
+            serializerName,
+            DeclKind.Enum,
+            true,
+            declarationLocation,
+            ImmutableArray<MemberModel>.Empty,
+            ImmutableArray<MemberModel>.Empty,
+            diagnostics.ToImmutableArray());
+    }
+
+    private static bool ValidateExternalStructDeclaration(
+        INamedTypeSymbol declaration,
+        string declarationName,
+        Location? declarationLocation,
+        List<Diagnostic> diagnostics)
+    {
+        int initialDiagnosticCount = diagnostics.Count;
+        if (declaration.TypeKind != TypeKind.Class ||
+            !declaration.IsAbstract ||
+            declaration.IsStatic ||
+            declaration.IsRecord)
+        {
+            diagnostics.Add(Diagnostic.Create(
+                InvalidExternalDeclaration,
+                declarationLocation,
+                declarationName,
+                "ForyStruct with Target requires a non-record abstract class"));
+        }
+
+        if (HasGenericContext(declaration))
+        {
+            diagnostics.Add(Diagnostic.Create(
+                GenericTypeNotSupported,
+                declarationLocation,
+                declarationName));
+        }
+
+        if (declaration.BaseType?.SpecialType != SpecialType.System_Object)
+        {
+            diagnostics.Add(Diagnostic.Create(
+                InvalidExternalDeclaration,
+                declarationLocation,
+                declarationName,
+                "the declaration cannot have a base class other than object"));
+        }
+
+        foreach (ISymbol member in declaration.GetMembers())
+        {
+            if (member.IsImplicitlyDeclared ||
+                member is IMethodSymbol { AssociatedSymbol: not null })
+            {
+                continue;
+            }
+
+            if (member is IPropertySymbol property &&
+                property.IsAbstract &&
+                !property.IsStatic &&
+                !property.IsIndexer &&
+                property.GetMethod is { IsAbstract: true } &&
+                property.SetMethod is null)
+            {
+                continue;
+            }
+
+            diagnostics.Add(Diagnostic.Create(
+                InvalidExternalDeclaration,
+                member.Locations.FirstOrDefault(location => location.IsInSource) ?? declarationLocation,
+                declarationName,
+                $"member '{member.Name}' must be an abstract instance get-only schema property"));
+        }
+
+        return diagnostics.Count == initialDiagnosticCount;
+    }
+
+    private static bool ValidateExternalEnumDeclaration(
+        INamedTypeSymbol declaration,
+        string declarationName,
+        Location? declarationLocation,
+        List<Diagnostic> diagnostics)
+    {
+        int initialDiagnosticCount = diagnostics.Count;
+        if (declaration.TypeKind != TypeKind.Class || !declaration.IsStatic)
+        {
+            diagnostics.Add(Diagnostic.Create(
+                InvalidExternalDeclaration,
+                declarationLocation,
+                declarationName,
+                "ForyEnum with Target requires an empty static class"));
+        }
+
+        if (HasGenericContext(declaration))
+        {
+            diagnostics.Add(Diagnostic.Create(
+                GenericTypeNotSupported,
+                declarationLocation,
+                declarationName));
+        }
+
+        foreach (ISymbol member in declaration.GetMembers())
+        {
+            if (member.IsImplicitlyDeclared ||
+                member is IMethodSymbol { AssociatedSymbol: not null })
+            {
+                continue;
+            }
+
+            diagnostics.Add(Diagnostic.Create(
+                InvalidExternalDeclaration,
+                member.Locations.FirstOrDefault(location => location.IsInSource) ?? declarationLocation,
+                declarationName,
+                $"external enum declarations must be empty; found member '{member.Name}'"));
+        }
+
+        return diagnostics.Count == initialDiagnosticCount;
+    }
+
+    private static bool ValidateExternalStructTarget(
+        Compilation compilation,
+        INamedTypeSymbol declaration,
+        ITypeSymbol targetSymbol,
+        Location? targetLocation,
+        List<Diagnostic> diagnostics,
+        out INamedTypeSymbol? target,
+        out DeclKind targetKind)
+    {
+        int initialDiagnosticCount = diagnostics.Count;
+        target = targetSymbol as INamedTypeSymbol;
+        targetKind = DeclKind.Unknown;
+        string targetName = targetSymbol.ToDisplayString(FullNameFormat);
+        if (target is null || target.TypeKind == TypeKind.Error)
+        {
+            diagnostics.Add(Diagnostic.Create(
+                InvalidExternalTarget,
+                targetLocation,
+                targetName,
+                "Target must resolve to one closed class or struct"));
+            return false;
+        }
+
+        if (SymbolEqualityComparer.Default.Equals(declaration, target))
+        {
+            diagnostics.Add(Diagnostic.Create(
+                InvalidExternalTarget,
+                targetLocation,
+                targetName,
+                "the serializer declaration cannot target itself"));
+        }
+
+        if (ContainsOpenType(target))
+        {
+            diagnostics.Add(Diagnostic.Create(
+                InvalidExternalTarget,
+                targetLocation,
+                targetName,
+                "open generic targets are not supported"));
+        }
+
+        targetKind = target.TypeKind switch
+        {
+            TypeKind.Class => DeclKind.Class,
+            TypeKind.Struct => DeclKind.Struct,
+            _ => DeclKind.Unknown,
+        };
+        TypeClassification classification = ClassifyType(target);
+        if (targetKind == DeclKind.Unknown ||
+            target.IsStatic ||
+            target.IsAbstract ||
+            target.IsRefLikeType ||
+            target.IsReadOnly ||
+            classification.IsBuiltIn ||
+            classification.IsCollection ||
+            classification.IsMap ||
+            IsRuntimeOwnedTarget(target) ||
+            IsUnionType(target))
+        {
+            diagnostics.Add(Diagnostic.Create(
+                InvalidExternalTarget,
+                targetLocation,
+                targetName,
+                "Target must be a mutable concrete user class or struct"));
+        }
+
+        if (GetForyAttributeKind(target) == ForyAttributeKind.Struct)
+        {
+            diagnostics.Add(Diagnostic.Create(
+                InvalidExternalTarget,
+                targetLocation,
+                targetName,
+                "the target already owns a direct ForyStruct serializer"));
+        }
+
+        if (!compilation.IsSymbolAccessibleWithin(target, compilation.Assembly))
+        {
+            diagnostics.Add(Diagnostic.Create(
+                InvalidExternalTarget,
+                targetLocation,
+                targetName,
+                "the target is not accessible from generated code"));
+        }
+
+        if (RequiresExternAlias(target, compilation))
+        {
+            diagnostics.Add(Diagnostic.Create(
+                UnsupportedExternalAlias,
+                targetLocation,
+                targetName));
+        }
+
+        IMethodSymbol? constructor = FindAccessibleParameterlessCtor(target, compilation);
+        if (targetKind == DeclKind.Class && constructor is null)
+        {
+            diagnostics.Add(Diagnostic.Create(
+                MissingCtor,
+                targetLocation,
+                targetName));
+        }
+
+        if (HasRequiredMembers(target) && (constructor is null || !SetsRequiredMembers(constructor)))
+        {
+            diagnostics.Add(Diagnostic.Create(
+                InvalidExternalTarget,
+                targetLocation,
+                targetName,
+                "new Target() is illegal because required members are not satisfied by its parameterless constructor"));
+        }
+
+        return diagnostics.Count == initialDiagnosticCount;
+    }
+
+    private static INamedTypeSymbol? ValidateExternalEnumTarget(
+        Compilation compilation,
+        INamedTypeSymbol declaration,
+        ITypeSymbol targetSymbol,
+        Location? targetLocation,
+        List<Diagnostic> diagnostics)
+    {
+        string targetName = targetSymbol.ToDisplayString(FullNameFormat);
+        if (targetSymbol is not INamedTypeSymbol target ||
+            target.TypeKind == TypeKind.Error ||
+            target.TypeKind != TypeKind.Enum)
+        {
+            diagnostics.Add(Diagnostic.Create(
+                InvalidExternalTarget,
+                targetLocation,
+                targetName,
+                "ForyEnum Target must resolve to one closed enum"));
+            return null;
+        }
+
+        if (SymbolEqualityComparer.Default.Equals(declaration, target))
+        {
+            diagnostics.Add(Diagnostic.Create(
+                InvalidExternalTarget,
+                targetLocation,
+                targetName,
+                "the serializer declaration cannot target itself"));
+        }
+
+        if (ContainsOpenType(target))
+        {
+            diagnostics.Add(Diagnostic.Create(
+                InvalidExternalTarget,
+                targetLocation,
+                targetName,
+                "open generic targets are not supported"));
+        }
+
+        if (GetForyAttributeKind(target) == ForyAttributeKind.Enum)
+        {
+            diagnostics.Add(Diagnostic.Create(
+                InvalidExternalTarget,
+                targetLocation,
+                targetName,
+                "the target already owns a direct ForyEnum serializer"));
+        }
+
+        if (!compilation.IsSymbolAccessibleWithin(target, compilation.Assembly))
+        {
+            diagnostics.Add(Diagnostic.Create(
+                InvalidExternalTarget,
+                targetLocation,
+                targetName,
+                "the target is not accessible from generated code"));
+        }
+
+        if (RequiresExternAlias(target, compilation))
+        {
+            diagnostics.Add(Diagnostic.Create(
+                UnsupportedExternalAlias,
+                targetLocation,
+                targetName));
+        }
+
+        return target;
+    }
+
+    private static bool TryBindExternalMember(
+        Compilation compilation,
+        INamedTypeSymbol target,
+        IPropertySymbol schemaProperty,
+        string targetTypeName,
+        List<Diagnostic> diagnostics)
+    {
+        Location? location = schemaProperty.Locations.FirstOrDefault(sourceLocation => sourceLocation.IsInSource);
+        if (schemaProperty.Type.TypeKind is TypeKind.Pointer or TypeKind.FunctionPointer ||
+            schemaProperty.Type.IsRefLikeType)
+        {
+            diagnostics.Add(Diagnostic.Create(
+                InvalidExternalMember,
+                location,
+                schemaProperty.Name,
+                targetTypeName,
+                "the member type cannot be used by Serializer<T>"));
+            return false;
+        }
+
+        if (!TryFindTargetMember(target, schemaProperty.Name, out ISymbol? targetMember, out string reason))
+        {
+            diagnostics.Add(Diagnostic.Create(
+                InvalidExternalMember,
+                location,
+                schemaProperty.Name,
+                targetTypeName,
+                reason));
+            return false;
+        }
+
+        ITypeSymbol targetMemberType;
+        if (targetMember is IFieldSymbol field)
+        {
+            if (field.IsStatic ||
+                field.IsConst ||
+                field.IsReadOnly ||
+                field.IsFixedSizeBuffer ||
+                !compilation.IsSymbolAccessibleWithin(field, compilation.Assembly))
+            {
+                diagnostics.Add(Diagnostic.Create(
+                    InvalidExternalMember,
+                    location,
+                    schemaProperty.Name,
+                    targetTypeName,
+                    "the target field must be an accessible mutable instance field"));
+                return false;
+            }
+
+            targetMemberType = field.Type;
+        }
+        else if (targetMember is IPropertySymbol property)
+        {
+            if (property.IsStatic ||
+                property.IsIndexer ||
+                property.GetMethod is null ||
+                property.SetMethod is null ||
+                property.SetMethod.IsInitOnly ||
+                !compilation.IsSymbolAccessibleWithin(property.GetMethod, compilation.Assembly) ||
+                !compilation.IsSymbolAccessibleWithin(property.SetMethod, compilation.Assembly))
+            {
+                diagnostics.Add(Diagnostic.Create(
+                    InvalidExternalMember,
+                    location,
+                    schemaProperty.Name,
+                    targetTypeName,
+                    "the target property must have accessible get and non-init set accessors"));
+                return false;
+            }
+
+            targetMemberType = property.Type;
+        }
+        else
+        {
+            diagnostics.Add(Diagnostic.Create(
+                InvalidExternalMember,
+                location,
+                schemaProperty.Name,
+                targetTypeName,
+                "the matching target symbol is not a field or property"));
+            return false;
+        }
+
+        if (!ExternalMemberTypesMatch(schemaProperty.Type, targetMemberType))
+        {
+            diagnostics.Add(Diagnostic.Create(
+                ExternalMemberTypeMismatch,
+                location,
+                schemaProperty.Name,
+                schemaProperty.Type.ToDisplayString(FullNameFormat),
+                targetMemberType.ToDisplayString(FullNameFormat)));
+            return false;
+        }
+
+        if (RequiresExternAlias(schemaProperty.Type, compilation))
+        {
+            diagnostics.Add(Diagnostic.Create(
+                UnsupportedExternalAlias,
+                location,
+                schemaProperty.Type.ToDisplayString(FullNameFormat)));
+            return false;
+        }
+
+        return true;
+    }
+
+    private static bool TryFindTargetMember(
+        INamedTypeSymbol target,
+        string name,
+        out ISymbol? targetMember,
+        out string reason)
+    {
+        for (INamedTypeSymbol? current = target; current is not null; current = current.BaseType)
+        {
+            ImmutableArray<ISymbol> namedMembers = current.GetMembers(name);
+            if (namedMembers.IsEmpty)
+            {
+                continue;
+            }
+
+            if (namedMembers.Length != 1)
+            {
+                targetMember = null;
+                reason = "the target member name is ambiguous";
+                return false;
+            }
+
+            targetMember = namedMembers[0];
+            reason = string.Empty;
+            return true;
+        }
+
+        targetMember = null;
+        reason = "no target member has the same case-sensitive name";
+        return false;
+    }
+
+    private static bool ExternalMemberTypesMatch(ITypeSymbol declarationType, ITypeSymbol targetType)
+    {
+        if ((declarationType.TypeKind == TypeKind.Dynamic) != (targetType.TypeKind == TypeKind.Dynamic))
+        {
+            return false;
+        }
+
+        if (targetType.NullableAnnotation != NullableAnnotation.None &&
+            declarationType.NullableAnnotation != targetType.NullableAnnotation)
+        {
+            return false;
+        }
+
+        if (declarationType is IArrayTypeSymbol declarationArray &&
+            targetType is IArrayTypeSymbol targetArray)
+        {
+            return declarationArray.Rank == targetArray.Rank &&
+                   declarationArray.IsSZArray == targetArray.IsSZArray &&
+                   ExternalMemberTypesMatch(declarationArray.ElementType, targetArray.ElementType);
+        }
+
+        if (declarationType is IPointerTypeSymbol declarationPointer &&
+            targetType is IPointerTypeSymbol targetPointer)
+        {
+            return ExternalMemberTypesMatch(declarationPointer.PointedAtType, targetPointer.PointedAtType);
+        }
+
+        if (declarationType is INamedTypeSymbol declarationNamed &&
+            targetType is INamedTypeSymbol targetNamed)
+        {
+            if (!SymbolEqualityComparer.Default.Equals(
+                    declarationNamed.OriginalDefinition,
+                    targetNamed.OriginalDefinition) ||
+                declarationNamed.TypeArguments.Length != targetNamed.TypeArguments.Length)
+            {
+                return false;
+            }
+
+            if ((declarationNamed.ContainingType is null) != (targetNamed.ContainingType is null) ||
+                declarationNamed.ContainingType is not null &&
+                !ExternalMemberTypesMatch(declarationNamed.ContainingType, targetNamed.ContainingType!))
+            {
+                return false;
+            }
+
+            for (int i = 0; i < declarationNamed.TypeArguments.Length; i++)
+            {
+                if (!ExternalMemberTypesMatch(
+                        declarationNamed.TypeArguments[i],
+                        targetNamed.TypeArguments[i]))
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        return SymbolEqualityComparer.Default.Equals(declarationType, targetType);
+    }
+
+    private static bool HasGenericContext(INamedTypeSymbol type)
+    {
+        for (INamedTypeSymbol? current = type; current is not null; current = current.ContainingType)
+        {
+            if (current.TypeParameters.Length != 0)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool ContainsOpenType(ITypeSymbol type)
+    {
+        if (type.TypeKind == TypeKind.TypeParameter)
+        {
+            return true;
+        }
+
+        if (type is IArrayTypeSymbol array)
+        {
+            return ContainsOpenType(array.ElementType);
+        }
+
+        if (type is IPointerTypeSymbol pointer)
+        {
+            return ContainsOpenType(pointer.PointedAtType);
+        }
+
+        if (type is not INamedTypeSymbol named)
+        {
+            return false;
+        }
+
+        if (named.IsUnboundGenericType ||
+            named.ContainingType is not null && ContainsOpenType(named.ContainingType))
+        {
+            return true;
+        }
+
+        foreach (ITypeSymbol argument in named.TypeArguments)
+        {
+            if (ContainsOpenType(argument))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool IsRuntimeOwnedTarget(INamedTypeSymbol type)
+    {
+        if (type.SpecialType == SpecialType.System_Object)
+        {
+            return true;
+        }
+
+        string containingNamespace = type.ContainingNamespace.ToDisplayString();
+        if (string.Equals(containingNamespace, "System", StringComparison.Ordinal))
+        {
+            return type.Name is
+                "ArraySegment" or
+                "Memory" or
+                "Nullable" or
+                "ReadOnlyMemory" or
+                "Tuple" or
+                "ValueTuple";
+        }
+
+        return string.Equals(
+                   containingNamespace,
+                   "System.Collections.Generic",
+                   StringComparison.Ordinal) &&
+               string.Equals(type.Name, "KeyValuePair", StringComparison.Ordinal);
+    }
+
+    private static bool RequiresExternAlias(ITypeSymbol type, Compilation compilation)
+    {
+        if (type is IArrayTypeSymbol array)
+        {
+            return RequiresExternAlias(array.ElementType, compilation);
+        }
+
+        if (type is IPointerTypeSymbol pointer)
+        {
+            return RequiresExternAlias(pointer.PointedAtType, compilation);
+        }
+
+        if (type is not INamedTypeSymbol named)
+        {
+            return false;
+        }
+
+        if (AssemblyRequiresExternAlias(named.ContainingAssembly, compilation))
+        {
+            return true;
+        }
+
+        if (named.ContainingType is not null &&
+            RequiresExternAlias(named.ContainingType, compilation))
+        {
+            return true;
+        }
+
+        foreach (ITypeSymbol argument in named.TypeArguments)
+        {
+            if (RequiresExternAlias(argument, compilation))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool AssemblyRequiresExternAlias(IAssemblySymbol assembly, Compilation compilation)
+    {
+        if (SymbolEqualityComparer.Default.Equals(assembly, compilation.Assembly))
+        {
+            return false;
+        }
+
+        bool foundAssembly = false;
+        foreach (MetadataReference reference in compilation.References)
+        {
+            if (!SymbolEqualityComparer.Default.Equals(
+                    compilation.GetAssemblyOrModuleSymbol(reference),
+                    assembly))
+            {
+                continue;
+            }
+
+            foundAssembly = true;
+            if (reference.Properties.Aliases.IsDefaultOrEmpty)
+            {
+                return false;
+            }
+
+            foreach (string alias in reference.Properties.Aliases)
+            {
+                if (string.Equals(alias, "global", StringComparison.Ordinal))
+                {
+                    return false;
+                }
+            }
+        }
+
+        return foundAssembly;
+    }
+
+    private static IMethodSymbol? FindAccessibleParameterlessCtor(
+        INamedTypeSymbol type,
+        Compilation compilation)
+    {
+        foreach (IMethodSymbol constructor in type.InstanceConstructors)
+        {
+            if (constructor.Parameters.Length == 0 &&
+                compilation.IsSymbolAccessibleWithin(constructor, compilation.Assembly))
+            {
+                return constructor;
+            }
+        }
+
+        return null;
+    }
+
+    private static bool HasRequiredMembers(INamedTypeSymbol type)
+    {
+        for (INamedTypeSymbol? current = type; current is not null; current = current.BaseType)
+        {
+            foreach (ISymbol member in current.GetMembers())
+            {
+                if (member is IFieldSymbol { IsRequired: true } or
+                    IPropertySymbol { IsRequired: true })
+                {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    private static bool SetsRequiredMembers(IMethodSymbol constructor)
+    {
+        foreach (AttributeData attribute in constructor.GetAttributes())
+        {
+            if (string.Equals(
+                    attribute.AttributeClass?.ToDisplayString(),
+                    "System.Diagnostics.CodeAnalysis.SetsRequiredMembersAttribute",
+                    StringComparison.Ordinal))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static void ValidateEnumValues(
+        INamedTypeSymbol enumType,
+        Location? fallbackLocation,
+        List<Diagnostic> diagnostics)
+    {
+        foreach (IFieldSymbol field in enumType.GetMembers().OfType<IFieldSymbol>())
+        {
+            if (!field.HasConstantValue ||
+                IsSupportedEnumValue(field.ConstantValue))
+            {
+                continue;
+            }
+
+            diagnostics.Add(Diagnostic.Create(
+                EnumValueOutOfRange,
+                field.Locations.FirstOrDefault(location => location.IsInSource) ?? fallbackLocation,
+                $"{enumType.ToDisplayString(FullNameFormat)}.{field.Name}"));
+        }
+    }
+
+    private static bool IsSupportedEnumValue(object? value)
+    {
+        return value switch
+        {
+            byte => true,
+            ushort => true,
+            uint => true,
+            ulong unsignedValue => unsignedValue <= uint.MaxValue,
+            sbyte signedValue => signedValue >= 0,
+            short signedValue => signedValue >= 0,
+            int signedValue => signedValue >= 0,
+            long signedValue => signedValue is >= 0 and <= uint.MaxValue,
+            _ => false,
+        };
+    }
+
+    private static bool GetEvolving(AttributeData attribute)
+    {
+        foreach (KeyValuePair<string, TypedConstant> namedArgument in attribute.NamedArguments)
+        {
+            if (string.Equals(namedArgument.Key, "Evolving", StringComparison.Ordinal) &&
+                namedArgument.Value.Value is bool evolving)
+            {
+                return evolving;
+            }
+        }
+
+        return true;
+    }
+
+    private static Location? GetNamedArgumentLocation(
+        AttributeData attribute,
+        string argumentName,
+        CancellationToken cancellationToken)
+    {
+        if (attribute.ApplicationSyntaxReference?.GetSyntax(cancellationToken) is not AttributeSyntax attributeSyntax)
+        {
+            return null;
+        }
+
+        foreach (AttributeArgumentSyntax argument in attributeSyntax.ArgumentList?.Arguments ??
+                                                            default(SeparatedSyntaxList<AttributeArgumentSyntax>))
+        {
+            if (string.Equals(argument.NameEquals?.Name.Identifier.ValueText, argumentName, StringComparison.Ordinal))
+            {
+                return argument.Expression.GetLocation();
+            }
+        }
+
+        return attributeSyntax.GetLocation();
     }
 
     private static ImmutableArray<UnionCaseModel> BuildUnionCases(
@@ -3087,7 +4245,6 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
                 valueProperty.Name,
                 valueProperty.Type,
                 valueProperty,
-                MemberDeclKind.Property,
                 diagnostics,
                 schemaType,
                 parseFieldAttribute: false);
@@ -3244,42 +4401,71 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
                    StringComparison.Ordinal);
     }
 
-    private static ForyAttributeKind GetForyAttributeKind(INamedTypeSymbol typeSymbol)
+    private static AttributeData? GetForyAttribute(
+        INamedTypeSymbol typeSymbol,
+        out ForyAttributeKind attributeKind)
     {
+        return GetForyAttribute(typeSymbol, out attributeKind, out _);
+    }
+
+    private static AttributeData? GetForyAttribute(
+        INamedTypeSymbol typeSymbol,
+        out ForyAttributeKind attributeKind,
+        out bool hasConflict)
+    {
+        AttributeData? result = null;
+        attributeKind = ForyAttributeKind.None;
+        hasConflict = false;
         foreach (AttributeData attribute in typeSymbol.GetAttributes())
         {
             string? attrName = attribute.AttributeClass?.ToDisplayString();
+            ForyAttributeKind currentKind;
             if (string.Equals(attrName, "Apache.Fory.ForyStructAttribute", StringComparison.Ordinal))
             {
-                return ForyAttributeKind.Struct;
+                currentKind = ForyAttributeKind.Struct;
+            }
+            else if (string.Equals(attrName, "Apache.Fory.ForyEnumAttribute", StringComparison.Ordinal))
+            {
+                currentKind = ForyAttributeKind.Enum;
+            }
+            else if (string.Equals(attrName, "Apache.Fory.ForyUnionAttribute", StringComparison.Ordinal))
+            {
+                currentKind = ForyAttributeKind.Union;
+            }
+            else
+            {
+                continue;
             }
 
-            if (string.Equals(attrName, "Apache.Fory.ForyEnumAttribute", StringComparison.Ordinal))
+            if (result is not null)
             {
-                return ForyAttributeKind.Enum;
+                hasConflict = true;
+                continue;
             }
 
-            if (string.Equals(attrName, "Apache.Fory.ForyUnionAttribute", StringComparison.Ordinal))
-            {
-                return ForyAttributeKind.Union;
-            }
+            result = attribute;
+            attributeKind = currentKind;
         }
 
-        return ForyAttributeKind.None;
+        return result;
+    }
+
+    private static ForyAttributeKind GetForyAttributeKind(INamedTypeSymbol typeSymbol)
+    {
+        _ = GetForyAttribute(typeSymbol, out ForyAttributeKind attributeKind);
+        return attributeKind;
     }
 
     private static MemberModel? BuildMemberModel(
         string name,
         ITypeSymbol memberType,
         ISymbol memberSymbol,
-        MemberDeclKind memberDeclKind,
         List<Diagnostic> diagnostics)
     {
         return BuildMemberModel(
             name,
             memberType,
             memberSymbol,
-            memberDeclKind,
             diagnostics,
             schemaTypeOverride: null,
             parseFieldAttribute: true);
@@ -3289,7 +4475,6 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
         string name,
         ITypeSymbol memberType,
         ISymbol memberSymbol,
-        MemberDeclKind memberDeclKind,
         List<Diagnostic> diagnostics,
         SchemaTypeModel? schemaTypeOverride,
         bool parseFieldAttribute)
@@ -3297,6 +4482,7 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
         (bool isOptional, ITypeSymbol unwrappedType) = UnwrapNullable(memberType);
         short? fieldId = null;
         SchemaTypeModel? schemaType = schemaTypeOverride;
+        bool invalidSchemaType = false;
         if (parseFieldAttribute)
         {
             foreach (AttributeData attribute in memberSymbol.GetAttributes())
@@ -3333,9 +4519,32 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
                     if (namedArg.Value.Value is ITypeSymbol schemaSymbol)
                     {
                         schemaType = TryParseSchemaType(schemaSymbol);
+                        if (schemaType is null)
+                        {
+                            invalidSchemaType = true;
+                            diagnostics.Add(Diagnostic.Create(
+                                UnsupportedSchemaType,
+                                memberSymbol.Locations.FirstOrDefault(),
+                                memberSymbol.Name,
+                                memberType.ToDisplayString(FullNameFormat)));
+                        }
+                    }
+                    else if (!namedArg.Value.IsNull)
+                    {
+                        invalidSchemaType = true;
+                        diagnostics.Add(Diagnostic.Create(
+                            UnsupportedSchemaType,
+                            memberSymbol.Locations.FirstOrDefault(),
+                            memberSymbol.Name,
+                            memberType.ToDisplayString(FullNameFormat)));
                     }
                 }
             }
+        }
+
+        if (invalidSchemaType)
+        {
+            return null;
         }
 
         DynamicAnyKind dynamicAnyKind = ResolveDynamicAnyKind(unwrappedType);
@@ -3371,7 +4580,6 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
             name,
             ToSnakeCase(name),
             index,
-            memberDeclKind,
             typeName,
             isOptional,
             memberType is INamedTypeSymbol nts &&
@@ -3908,23 +5116,8 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
         return accessibility is Accessibility.Public or Accessibility.Internal or Accessibility.ProtectedOrInternal;
     }
 
-    private static bool HasAccessibleParameterlessCtor(INamedTypeSymbol type)
-    {
-        foreach (IMethodSymbol ctor in type.InstanceConstructors)
-        {
-            if (ctor.Parameters.Length != 0)
-            {
-                continue;
-            }
-
-            if (ctor.DeclaredAccessibility is Accessibility.Public or Accessibility.Internal or Accessibility.ProtectedOrInternal)
-            {
-                return true;
-            }
-        }
-
-        return false;
-    }
+    private static bool HasAccessibleParameterlessCtor(INamedTypeSymbol type, Compilation compilation) =>
+        FindAccessibleParameterlessCtor(type, compilation) is not null;
 
     private static SchemaTypeModel? TryParseSchemaType(ITypeSymbol symbol)
     {
@@ -4491,6 +5684,14 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
 
     private static string EscapeString(string value) => value.Replace("\\", "\\\\").Replace("\"", "\\\"");
 
+    private static string EscapeIdentifier(string value)
+    {
+        return SyntaxFacts.GetKeywordKind(value) != SyntaxKind.None
+            || SyntaxFacts.GetContextualKeywordKind(value) != SyntaxKind.None
+                ? "@" + value
+                : value;
+    }
+
     private static string ToSnakeCase(string name)
     {
         if (string.IsNullOrEmpty(name))
@@ -4650,17 +5851,23 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
     private sealed class TypeModel
     {
         public TypeModel(
-            string typeName,
+            string declarationName,
+            string targetTypeName,
             string serializerName,
             DeclKind kind,
+            bool evolving,
+            Location? declarationLocation,
             ImmutableArray<MemberModel> members,
             ImmutableArray<MemberModel> sortedMembers,
             ImmutableArray<Diagnostic> diagnostics,
             ImmutableArray<UnionCaseModel> unionCases = default)
         {
-            TypeName = typeName;
+            DeclarationName = declarationName;
+            TargetTypeName = targetTypeName;
             SerializerName = serializerName;
             Kind = kind;
+            Evolving = evolving;
+            DeclarationLocation = declarationLocation;
             Members = members;
             SortedMembers = sortedMembers;
             Diagnostics = diagnostics;
@@ -4669,9 +5876,12 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
                 : unionCases;
         }
 
-        public string TypeName { get; }
+        public string DeclarationName { get; }
+        public string TargetTypeName { get; }
         public string SerializerName { get; }
         public DeclKind Kind { get; }
+        public bool Evolving { get; }
+        public Location? DeclarationLocation { get; }
         public ImmutableArray<MemberModel> Members { get; }
         public ImmutableArray<MemberModel> SortedMembers { get; }
         public ImmutableArray<Diagnostic> Diagnostics { get; }
@@ -4684,7 +5894,6 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
             string name,
             string fieldIdentifier,
             int originalIndex,
-            MemberDeclKind declKind,
             string typeName,
             bool isNullable,
             bool isNullableValueType,
@@ -4705,7 +5914,6 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
             Name = name;
             FieldIdentifier = fieldIdentifier;
             OriginalIndex = originalIndex;
-            DeclKind = declKind;
             TypeName = typeName;
             IsNullable = isNullable;
             IsNullableValueType = isNullableValueType;
@@ -4727,7 +5935,6 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
         public string Name { get; }
         public string FieldIdentifier { get; }
         public int OriginalIndex { get; }
-        public MemberDeclKind DeclKind { get; }
         public string TypeName { get; }
         public bool IsNullable { get; }
         public bool IsNullableValueType { get; }
@@ -4761,12 +5968,6 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
         public string TypeName { get; }
         public bool IsUnknown { get; }
         public MemberModel? ValueMember { get; }
-    }
-
-    private enum MemberDeclKind
-    {
-        Field,
-        Property,
     }
 
     private enum DeclKind

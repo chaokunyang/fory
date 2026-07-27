@@ -19,6 +19,7 @@ using System.Buffers;
 using System.Collections.Immutable;
 using System.Runtime.CompilerServices;
 using Apache.Fory;
+using Fory.ExternalTypes;
 using ForyRuntime = Apache.Fory.Fory;
 using S = Apache.Fory.Schema.Types;
 
@@ -206,6 +207,51 @@ public sealed class GraphMemoryBudgetTests
 
         List<List<string>> value = Enumerable.Range(0, 3).Select(_ => new List<string>()).ToList();
         Assert.Equal(value.Count, NewFory().Deserialize<List<List<string>>>(Serialize(value)).Count);
+    }
+
+    [Fact]
+    public void ExternalStructRootBudget()
+    {
+        ExternalPoint value = new() { X = 1, Y = 2 };
+        ForyRuntime writer = ForyRuntime.Builder().Compatible(false).Build();
+        writer.Register<ExternalPoint>(1013);
+        byte[] bytes = writer.Serialize(value);
+        ForyRuntime reader = ForyRuntime.Builder()
+            .Compatible(false)
+            .MaxGraphMemoryBytes(1)
+            .Build();
+        reader.Register<ExternalPoint>(1013);
+
+        Assert.Equal(value, reader.Deserialize<ExternalPoint>(bytes));
+    }
+
+    [Fact]
+    public void ExternalStructListBudget()
+    {
+        List<ExternalPoint> value =
+        [
+            new ExternalPoint { X = 1, Y = 2 },
+            new ExternalPoint { X = 3, Y = 4 },
+        ];
+        ForyRuntime writer = ForyRuntime.Builder().Compatible(false).Build();
+        writer.Register<ExternalPoint>(1013);
+        byte[] bytes = writer.Serialize(value);
+        long required = ListBudget<ExternalPoint>(value.Count);
+
+        ForyRuntime tooSmall = ForyRuntime.Builder()
+            .Compatible(false)
+            .MaxGraphMemoryBytes(required - 1)
+            .Build();
+        tooSmall.Register<ExternalPoint>(1013);
+        Assert.Throws<InvalidDataException>(
+            () => tooSmall.Deserialize<List<ExternalPoint>>(bytes));
+
+        ForyRuntime exact = ForyRuntime.Builder()
+            .Compatible(false)
+            .MaxGraphMemoryBytes(required)
+            .Build();
+        exact.Register<ExternalPoint>(1013);
+        Assert.Equal(value, exact.Deserialize<List<ExternalPoint>>(bytes));
     }
 
     [Fact]

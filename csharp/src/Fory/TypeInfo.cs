@@ -98,12 +98,23 @@ public sealed class TypeInfo
 
     internal static TypeInfo Create<T>(Type type, Serializer<T> serializer)
     {
+        return Create(type, serializer, evolving: true);
+    }
+
+    internal static TypeInfo Create<T>(
+        Type type,
+        Serializer<T> serializer,
+        bool evolving)
+    {
         Func<bool, IReadOnlyList<TypeMetaFieldInfo>> typeMetaFields =
             CreateTypeMetaFieldsProvider(serializer, out bool hasTypeMetaFieldsProvider);
         (TypeId? builtInTypeId, UserTypeKind? userTypeKind, bool isDynamicType) = ResolveTypeShape(
             type,
             hasTypeMetaFieldsProvider);
-        bool evolving = ResolveStructEvolving(type, userTypeKind);
+        // Generated structural factories supply schema evolution explicitly;
+        // every other binding uses the canonical true default.
+        bool resolvedEvolving =
+            userTypeKind == Apache.Fory.UserTypeKind.Struct ? evolving : true;
         bool isNullableType = !type.IsValueType || Nullable.GetUnderlyingType(type) is not null;
         bool isRefType = type != typeof(string) && !type.IsValueType;
         long boxedValueBytes = BoxedValueBytes<T>();
@@ -116,7 +127,7 @@ public sealed class TypeInfo
             isNullableType,
             isRefType,
             serializer.DefaultObject,
-            evolving,
+            resolvedEvolving,
             isRegistered: false,
             userTypeId: null,
             registerByName: false,
@@ -165,18 +176,6 @@ public sealed class TypeInfo
     private static IReadOnlyList<TypeMetaFieldInfo> EmptyTypeMetaFieldsProvider(bool _)
     {
         return EmptyTypeMetaFields;
-    }
-
-    private static bool ResolveStructEvolving(Type type, UserTypeKind? userTypeKind)
-    {
-        if (userTypeKind != Apache.Fory.UserTypeKind.Struct)
-        {
-            return true;
-        }
-
-        Type structType = Nullable.GetUnderlyingType(type) ?? type;
-        ForyStructAttribute? attribute = structType.GetCustomAttribute<ForyStructAttribute>();
-        return attribute?.Evolving ?? true;
     }
 
     private static void WriteDataObject<T>(Serializer<T> serializer, WriteContext context, object? value, bool hasGenerics)

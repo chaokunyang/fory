@@ -34,6 +34,8 @@ DURATION="3"
 WARMUP="1"
 OUTPUT_DIR=""
 COPY_DOCS=true
+EXTERNAL_EQUIVALENCE=false
+ALLOCATION_ITERATIONS=""
 
 usage() {
     cat <<USAGE
@@ -50,6 +52,8 @@ Options:
   --warmup <seconds>           Warmup duration per benchmark (default: 1)
   --output-dir <dir>           Base directory for benchmark outputs
   --no-copy-docs               Skip copying report/plots into docs/benchmarks/csharp
+  --external-equivalence       Run ordinary/external Fory equivalence cases
+  --allocation-iterations <n>  Measure allocations for each equivalence case
   --help                       Show this help
 USAGE
     exit 0
@@ -81,6 +85,14 @@ while [[ $# -gt 0 ]]; do
             COPY_DOCS=false
             shift
             ;;
+        --external-equivalence)
+            EXTERNAL_EQUIVALENCE=true
+            shift
+            ;;
+        --allocation-iterations)
+            ALLOCATION_ITERATIONS="$2"
+            shift 2
+            ;;
         --help|-h)
             usage
             ;;
@@ -91,7 +103,33 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-if [[ "${FORY_BENCH_SCHEMA_MISMATCH:-0}" == "1" && "$SERIALIZER" != "fory" ]]; then
+if [[ "$EXTERNAL_EQUIVALENCE" == true && -n "$SERIALIZER" ]]; then
+    echo -e "${RED}--external-equivalence does not accept --serializer.${NC}"
+    exit 1
+fi
+
+if [[ "$EXTERNAL_EQUIVALENCE" == false && -n "$ALLOCATION_ITERATIONS" ]]; then
+    echo -e "${RED}--allocation-iterations requires --external-equivalence.${NC}"
+    exit 1
+fi
+
+if [[ "$EXTERNAL_EQUIVALENCE" == true && "${FORY_BENCH_SCHEMA_MISMATCH:-0}" == "1" ]]; then
+    echo -e "${RED}--external-equivalence does not support schema-mismatch mode.${NC}"
+    exit 1
+fi
+
+if [[ "$EXTERNAL_EQUIVALENCE" == true && -n "$DATA" ]]; then
+    case "$DATA" in
+        class-root|struct-root|holder-field|list-field|list-root|map-field|map-root)
+            ;;
+        *)
+            echo -e "${RED}Unknown external-equivalence data lane: $DATA${NC}"
+            exit 1
+            ;;
+    esac
+fi
+
+if [[ "$EXTERNAL_EQUIVALENCE" == false && "${FORY_BENCH_SCHEMA_MISMATCH:-0}" == "1" && "$SERIALIZER" != "fory" ]]; then
     echo -e "${RED}FORY_BENCH_SCHEMA_MISMATCH=1 supports only Fory benchmarks; rerun with --serializer fory.${NC}"
     exit 1
 fi
@@ -104,9 +142,88 @@ else
     REPORT_DIR="report"
 fi
 
+echo -e "${GREEN}=== Fory C# Benchmark ===${NC}"
+echo ""
+
+if [[ "$EXTERNAL_EQUIVALENCE" == true ]]; then
+    mkdir -p "$BUILD_DIR"
+    RESULT_JSON="$BUILD_DIR/external_equivalence_results.json"
+    SIDE_DIR="$BUILD_DIR/external_equivalence_sides"
+    mkdir -p "$SIDE_DIR"
+
+    if [[ -n "$DATA" ]]; then
+        EXTERNAL_LANES=("$DATA")
+    else
+        EXTERNAL_LANES=(
+            class-root
+            struct-root
+            holder-field
+            list-field
+            list-root
+            map-field
+            map-root
+        )
+    fi
+
+    echo -e "${YELLOW}[1/4] Restoring dependencies...${NC}"
+    dotnet restore ./Fory.ExternalTypeBenchmark.csproj >/dev/null
+
+    echo -e "${YELLOW}[2/4] Building benchmark once...${NC}"
+    dotnet build -c Release --no-restore ./Fory.ExternalTypeBenchmark.csproj
+
+    echo -e "${YELLOW}[3/4] Running isolated adjacent pairs...${NC}"
+    MERGE_ARGS=(--output "$RESULT_JSON")
+    for LANE in "${EXTERNAL_LANES[@]}"; do
+        MERGE_ARGS+=(--lane "$LANE")
+        WORKER_ARGS=(
+            --data "$LANE"
+            --duration "$DURATION"
+            --warmup "$WARMUP"
+        )
+        if [[ -n "$ALLOCATION_ITERATIONS" ]]; then
+            WORKER_ARGS+=(--allocation-iterations "$ALLOCATION_ITERATIONS")
+        fi
+
+        for SAMPLE_INDEX in 1 2; do
+            if [[ "$SAMPLE_INDEX" == 1 ]]; then
+                PAIR_ORDER=(ordinary external)
+            else
+                PAIR_ORDER=(external ordinary)
+            fi
+
+            SIDE_INPUTS=()
+            for IMPLEMENTATION in "${PAIR_ORDER[@]}"; do
+                SIDE_JSON="$SIDE_DIR/${LANE}-sample-${SAMPLE_INDEX}-${IMPLEMENTATION}.json"
+                SIDE_INPUTS+=("$SIDE_JSON")
+                echo "Running $LANE sample $SAMPLE_INDEX ${PAIR_ORDER[*]}: $IMPLEMENTATION worker..."
+                dotnet run -c Release --no-build \
+                    --project ./Fory.ExternalTypeBenchmark.csproj -- \
+                    "${WORKER_ARGS[@]}" \
+                    --external-implementation "$IMPLEMENTATION" \
+                    --output "$SIDE_JSON"
+            done
+
+            MERGE_ARGS+=(
+                --sample
+                "$LANE"
+                "$SAMPLE_INDEX"
+                "${PAIR_ORDER[0]}-${PAIR_ORDER[1]}"
+                "${SIDE_INPUTS[0]}"
+                "${SIDE_INPUTS[1]}"
+            )
+        done
+    done
+
+    echo -e "${YELLOW}[4/4] Validating and merging results...${NC}"
+    python3 external_equivalence_report.py "${MERGE_ARGS[@]}"
+    echo ""
+    echo -e "${GREEN}=== All done! ===${NC}"
+    echo "Results written to: $RESULT_JSON"
+    exit 0
+fi
+
 mkdir -p "$BUILD_DIR" "$REPORT_DIR"
 RESULT_JSON="$BUILD_DIR/benchmark_results.json"
-
 RUN_ARGS=(
     --output "$RESULT_JSON"
     --duration "$DURATION"
@@ -120,9 +237,6 @@ fi
 if [[ -n "$SERIALIZER" ]]; then
     RUN_ARGS+=(--serializer "$SERIALIZER")
 fi
-
-echo -e "${GREEN}=== Fory C# Benchmark ===${NC}"
-echo ""
 
 echo -e "${YELLOW}[1/3] Restoring dependencies...${NC}"
 dotnet restore ./Fory.CSharpBenchmark.csproj >/dev/null

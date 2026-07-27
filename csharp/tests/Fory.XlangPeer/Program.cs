@@ -19,6 +19,7 @@ using System.Buffers;
 using System.Numerics;
 using System.Text;
 using Apache.Fory;
+using Fory.ExternalTypes;
 using ForyRuntime = Apache.Fory.Fory;
 using S = Apache.Fory.Schema.Types;
 
@@ -243,6 +244,8 @@ internal static class Program
             "test_unsigned_schema_compatible" => CaseUnsignedSchemaCompatible(input),
             "test_nested_annotated_container_schema_consistent" => CaseNestedAnnotatedContainerSchemaConsistent(input),
             "test_nested_annotated_container_compatible" => CaseNestedAnnotatedContainerCompatible(input),
+            "test_csharp_external_id" => CaseCSharpExternalId(input),
+            "test_csharp_external_name" => CaseCSharpExternalName(input),
             _ => throw new InvalidOperationException($"unknown test case {caseName}"),
         };
     }
@@ -1085,6 +1088,69 @@ internal static class Program
         return RoundTripSingle<NestedAnnotatedContainerCompatible>(input, fory);
     }
 
+    private static byte[] CaseCSharpExternalId(byte[] input)
+    {
+        ForyRuntime fory = BuildFory(compatible: true);
+        RegisterCSharpTypesById(fory);
+        return ExchangeExternalValues(input, fory, nameof(CaseCSharpExternalId));
+    }
+
+    private static byte[] CaseCSharpExternalName(byte[] input)
+    {
+        ForyRuntime fory = BuildFory(compatible: false);
+        RegisterCSharpTypesByName(fory);
+        return ExchangeExternalValues(input, fory, nameof(CaseCSharpExternalName));
+    }
+
+    private static byte[] ExchangeExternalValues(
+        byte[] input,
+        ForyRuntime fory,
+        string caseName)
+    {
+        ReadOnlySequence<byte> sequence = new(input);
+        XlangUser user = fory.Deserialize<XlangUser>(ref sequence);
+        XlangPoint point = fory.Deserialize<XlangPoint>(ref sequence);
+        XlangStatus status = fory.Deserialize<XlangStatus>(ref sequence);
+        XlangHolder holder = fory.Deserialize<XlangHolder>(ref sequence);
+        List<XlangUser> users = fory.Deserialize<List<XlangUser>>(ref sequence);
+        Dictionary<string, XlangUser> usersByName =
+            fory.Deserialize<Dictionary<string, XlangUser>>(ref sequence);
+        EnsureConsumed(sequence, caseName);
+
+        EnsureUser(user, 7, "root", "class root");
+        Ensure(point.X == 3 && point.Y == -4, "struct root mismatch");
+        Ensure(status == XlangStatus.Done, "enum root mismatch");
+
+        Ensure(holder.Users.Count == 2, "holder list size mismatch");
+        EnsureUser(holder.Users[0], 11, "holder-a", "holder list element 0");
+        EnsureUser(holder.Users[1], 12, "holder-b", "holder list element 1");
+        Ensure(holder.UsersByName.Count == 2, "holder map size mismatch");
+        EnsureUser(holder.UsersByName["first"], 13, "map-a", "holder map first");
+        EnsureUser(holder.UsersByName["second"], 14, "map-b", "holder map second");
+
+        Ensure(users.Count == 2, "root list size mismatch");
+        EnsureUser(users[0], 21, "list-a", "root list element 0");
+        EnsureUser(users[1], 22, "list-b", "root list element 1");
+
+        Ensure(usersByName.Count == 2, "root map size mismatch");
+        EnsureUser(usersByName["left"], 31, "root-map-a", "root map left");
+        EnsureUser(usersByName["right"], 32, "root-map-b", "root map right");
+
+        List<byte> output = [];
+        Append(output, fory.Serialize(user));
+        Append(output, fory.Serialize(point));
+        Append(output, fory.Serialize(status));
+        Append(output, fory.Serialize(holder));
+        Append(output, fory.Serialize(users));
+        Append(output, fory.Serialize(usersByName));
+        return output.ToArray();
+    }
+
+    private static void EnsureUser(XlangUser user, int id, string name, string label)
+    {
+        Ensure(user.Id == id && user.Name == name, $"{label} mismatch");
+    }
+
     private static byte[] RoundTripSingle<T>(byte[] input, ForyRuntime fory)
     {
         ReadOnlySequence<byte> sequence = new(input);
@@ -1105,6 +1171,22 @@ internal static class Program
         fory.Register<Color>("demo.color");
         fory.Register<Item>("demo.item");
         fory.Register<SimpleStruct>("demo.simple_struct");
+    }
+
+    private static void RegisterCSharpTypesById(ForyRuntime fory)
+    {
+        fory.Register<XlangUser>(1301);
+        fory.Register<XlangPoint>(1302);
+        fory.Register<XlangStatus>(1303);
+        fory.Register<XlangHolder>(1304);
+    }
+
+    private static void RegisterCSharpTypesByName(ForyRuntime fory)
+    {
+        fory.Register<XlangUser>("csharp.external.User");
+        fory.Register<XlangPoint>("csharp.external.Point");
+        fory.Register<XlangStatus>("csharp.external.Status");
+        fory.Register<XlangHolder>("csharp.external.Holder");
     }
 
     private static ForyRuntime BuildFory(bool compatible, bool trackRef = false, bool checkStructVersion = false)

@@ -18,23 +18,36 @@
 namespace Apache.Fory;
 
 /// <summary>
-/// Marks a class or struct as a generated Fory struct type.
+/// Marks a class or struct for generated structural serialization, or declares an
+/// external structural serializer.
 /// </summary>
 [AttributeUsage(AttributeTargets.Class | AttributeTargets.Struct)]
 public sealed class ForyStructAttribute : Attribute
 {
     /// <summary>
-    /// Whether the annotated struct should use schema evolution metadata in compatible mode.
+    /// Gets or sets the external class or struct whose schema is declared by the annotated
+    /// serializer declaration. When null, the annotated class or struct is the serialized target.
+    /// </summary>
+    public Type? Target { get; set; }
+
+    /// <summary>
+    /// Gets or sets whether the generated structural serializer uses schema evolution metadata
+    /// in compatible mode.
     /// </summary>
     public bool Evolving { get; set; } = true;
 }
 
 /// <summary>
-/// Marks an enum as a generated Fory enum type.
+/// Marks an enum as a generated Fory enum type, or declares an external enum serializer.
 /// </summary>
-[AttributeUsage(AttributeTargets.Enum)]
+[AttributeUsage(AttributeTargets.Class | AttributeTargets.Enum)]
 public sealed class ForyEnumAttribute : Attribute
 {
+    /// <summary>
+    /// Gets or sets the external enum handled by the annotated serializer declaration.
+    /// When null, the annotated enum is the serialized target.
+    /// </summary>
+    public Type? Target { get; set; }
 }
 
 /// <summary>

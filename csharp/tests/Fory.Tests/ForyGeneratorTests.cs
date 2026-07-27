@@ -783,22 +783,28 @@ public sealed class ForyGeneratorTests
             leafGenerated,
             StringComparison.Ordinal);
         Assert.Contains("value.InternalValue", parentGenerated, StringComparison.Ordinal);
-        Assert.Contains(".F0(value)", childGenerated, StringComparison.Ordinal);
-        Assert.Contains(".F0(value)", leafGenerated, StringComparison.Ordinal);
         Assert.Contains(
-            $"{externalParentProvider}.G0(",
+            ".F0(((global::ParentModels.Parent)",
+            childGenerated,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            ".F0(((global::ParentModels.Parent)",
             leafGenerated,
             StringComparison.Ordinal);
         Assert.Contains(
-            $"{externalParentProvider}.S0(",
+            ".G0(((global::ParentModels.GenericBase",
             leafGenerated,
             StringComparison.Ordinal);
         Assert.Contains(
-            $"{externalMiddleProvider}.G0(",
+            ".S0(((global::ParentModels.GenericBase",
             leafGenerated,
             StringComparison.Ordinal);
         Assert.Contains(
-            $"{externalMiddleProvider}.S0(",
+            ".G0(((global::ChildModels.DynamicChild)",
+            leafGenerated,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            ".S0(((global::ChildModels.DynamicChild)",
             leafGenerated,
             StringComparison.Ordinal);
         Assert.Contains(
@@ -878,6 +884,15 @@ public sealed class ForyGeneratorTests
 
         [ForyGeneratedWireMember(0, typeof(Parent), "Value", "Value")]
         public static ref int F0(object value) => ref Storage;
+        """)]
+    [InlineData(
+        "Parent",
+        """
+        public static readonly long HierarchyShallowBytes;
+
+        [ForyGeneratedWireMember(0, typeof(Parent), "Value", "Value")]
+        public static ref int F0(Parent value) => ref value.Value;
+        public static ref int F0<T>(T value) where T : Parent => ref value.Value;
         """)]
     [InlineData(
         "Parent",

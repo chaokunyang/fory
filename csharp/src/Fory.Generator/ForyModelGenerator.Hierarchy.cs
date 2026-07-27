@@ -557,7 +557,15 @@ public sealed partial class ForyModelGenerator
             : WireMemberKind.Property;
         string expectedAccessorName =
             $"{(memberKind == WireMemberKind.Field ? "F" : "G")}{parsedOrdinal}";
+        ImmutableArray<IMethodSymbol> readCandidates = providerType
+            .GetMembers(expectedAccessorName)
+            .OfType<IMethodSymbol>()
+            .ToImmutableArray();
         if (fieldIdValue is < -1 or > short.MaxValue ||
+            readCandidates.Length != 1 ||
+            !SymbolEqualityComparer.Default.Equals(
+                readCandidates[0],
+                readAccessor) ||
             readAccessor.MethodKind != MethodKind.Ordinary ||
             readAccessor.Arity != 0 ||
             !readAccessor.IsStatic ||
@@ -709,7 +717,8 @@ public sealed partial class ForyModelGenerator
             memberKind == WireMemberKind.Property ? readAccessor.Name : null,
             setterName,
             schemaDescriptorType,
-            parsedOrdinal);
+            parsedOrdinal,
+            useDeclaringCast: true);
 
         ordinal = parsedOrdinal;
         member = parsed;

@@ -2115,7 +2115,7 @@ public sealed partial class ForyModelGenerator
             indent,
             allowDirectRead);
         sb.AppendLine(
-            $"{indent}{member.AccessorProviderTypeName}.{member.SetterAccessorName}({valueVar}, {fieldValueVar});");
+            $"{indent}{member.AccessorProviderTypeName}.{member.SetterAccessorName}({member.AccessReceiver(valueVar)}, {fieldValueVar});");
     }
 
     private static void EmitReadMemberAssignmentCore(

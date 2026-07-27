@@ -539,33 +539,36 @@ public sealed partial class ForyModelGenerator
 
         public string ReadExpression(string valueExpression)
         {
+            string receiver = AccessReceiver(valueExpression);
             if (FieldAccessorName is not null)
             {
-                return $"{AccessorProviderTypeName}.{FieldAccessorName}({valueExpression})";
+                return $"{AccessorProviderTypeName}.{FieldAccessorName}({receiver})";
             }
 
             if (GetterAccessorName is not null)
             {
-                return $"{AccessorProviderTypeName}.{GetterAccessorName}({valueExpression})";
+                return $"{AccessorProviderTypeName}.{GetterAccessorName}({receiver})";
             }
 
-            string receiver = !UseDeclaringCast || DeclaringType is null
-                ? valueExpression
-                : $"(({DeclaringType.ToDisplayString(FullNameFormat)}){valueExpression})";
             return $"{receiver}.{EscapeIdentifier(TargetMemberName)}";
         }
 
         public string AssignmentTarget(string valueExpression)
         {
+            string receiver = AccessReceiver(valueExpression);
             if (FieldAccessorName is not null)
             {
-                return $"{AccessorProviderTypeName}.{FieldAccessorName}({valueExpression})";
+                return $"{AccessorProviderTypeName}.{FieldAccessorName}({receiver})";
             }
 
-            string receiver = !UseDeclaringCast || DeclaringType is null
+            return $"{receiver}.{EscapeIdentifier(TargetMemberName)}";
+        }
+
+        public string AccessReceiver(string valueExpression)
+        {
+            return !UseDeclaringCast || DeclaringType is null
                 ? valueExpression
                 : $"(({DeclaringType.ToDisplayString(FullNameFormat)}){valueExpression})";
-            return $"{receiver}.{EscapeIdentifier(TargetMemberName)}";
         }
 
         public MemberModel WithCodeKey(string codeKey)

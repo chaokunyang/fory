@@ -107,7 +107,7 @@ echo "Preparing Dart benchmark package..."
 echo "============================================"
 dart pub get
 ./tool/generate_proto.sh
-dart run build_runner build --delete-conflicting-outputs
+dart run build_runner build
 
 echo ""
 echo "============================================"

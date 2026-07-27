@@ -19,6 +19,43 @@ Load this file when changing `dart/`.
   existing resolver, field, carrier, reference, and compatible-read paths. Do
   not add runtime declaration instances, callbacks, member lookup, target-copy
   objects, a second registration API, or a second carrier/root flow.
+- Ordinary `ForyStruct` generation must discover every real instance storage
+  field on the concrete superclass and applied-mixin chain before considering
+  Dart accessibility. Enumerate each instantiated hierarchy layer's declared
+  fields; do not use only the child `element.fields`, `allSupertypes`, member
+  lookup, import visibility, or privacy as field discovery.
+- Process each discovered ordinary field through one owner path: apply only
+  its declaration-owned `ForyField(ignore: true)`, substitute the concrete
+  generic type, resolve direct or companion access, prove construction, then
+  build the concrete child's one globally sorted flattened schema. Never omit
+  a non-ignored field because it is private, inaccessible, final, hidden, or
+  unsupported; report a generation error.
+- Public inherited fields and private inherited fields declared in the child's
+  library use direct generated access without a parent annotation.
+  Cross-library private storage requires
+  `ForyStruct(exposePrivateFields: true)` on a public hierarchy boundary in
+  that field's declaring library. That provider emits only public typed static
+  getter/setter access for its own library's private state; it owns no schema,
+  serializer, construction, registration, reference, or graph-memory state.
+  Each declaring library in a multi-library hierarchy must provide its own
+  boundary. A consumer annotation cannot authorize another library's field.
+- A non-ignored ordinary `final` or `late final` field must receive its decoded
+  value unchanged from the selected concrete-child constructor through
+  element-proven field formals, super formals, redirects, or explicit
+  initializer/super arguments. Names are not bindings. Do not post-set final
+  state, use reflection, or fall back when identity flow cannot be proven.
+- The concrete ordinary child owns one flattened schema, serializer,
+  constructor reconstruction, reference publication path, and graph-memory
+  object charge. Inherited reference metadata enters the existing recursive
+  reference analysis once. Do not add reference state, change `ReadContext` or
+  serializer reference-call contracts, or invoke a parent serializer for
+  inheritance.
+- Keep external target fields explicit. Ordinary hierarchy discovery and
+  `exposePrivateFields` must never scan or expose an external target hierarchy.
+- Across packages, generate and publish the provider library's `.fory.dart`
+  part before building a consumer that uses its private-field access companion.
+  A direct import or re-export must expose both the public boundary and
+  companion.
 - Constructor-based external structural serializers must reject every
   statically provable reference-tracked path back to the target, including
   paths through supported list, set, and map type arguments. Do not simulate

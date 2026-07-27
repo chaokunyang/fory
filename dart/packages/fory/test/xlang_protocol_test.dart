@@ -53,6 +53,24 @@ final class _SchemaRemoteB {}
 
 final class _SchemaRemoteC {}
 
+final class _DuplicateIdSchema {}
+
+final class _DuplicateNameSchema {}
+
+final class _InconsistentTagSchema {}
+
+final class _IdentityDomainLocal {}
+
+final class _IdentityDomainRemote {}
+
+final class _RemoteDuplicateIdLocal {}
+
+final class _RemoteDuplicateIdWriter {}
+
+final class _RemoteDuplicateNameLocal {}
+
+final class _RemoteDuplicateNameWriter {}
+
 final class _LateDartExt {}
 
 final class _LateDartHolder {}
@@ -106,6 +124,13 @@ GeneratedFieldInfo _generatedField(String name) => GeneratedFieldInfo(
   name: name,
   identifier: name,
   id: null,
+  fieldType: _intFieldType,
+);
+
+GeneratedFieldInfo _taggedField(int id) => GeneratedFieldInfo(
+  name: 'tagged$id',
+  identifier: '$id',
+  id: id,
   fieldType: _intFieldType,
 );
 
@@ -258,6 +283,92 @@ void _readTypeMeta(TypeResolver resolver, Uint8List bytes) {
   );
 }
 
+Uint8List _rewriteTypeDefBody(
+  Uint8List typeMetaBytes,
+  void Function(Uint8List body) rewrite,
+) {
+  final source = Buffer.wrap(typeMetaBytes);
+  final typeId = source.readVarUint32Small7();
+  final marker = source.readVarUint32Small14();
+  if (marker != 0) {
+    throw StateError('Expected an inline TypeDef.');
+  }
+  final header = TypeHeader(source.readInt64());
+  final bodyLength = header.readMetaSize(source);
+  final body = Uint8List.fromList(source.readBytes(bodyLength));
+  if (source.readableBytes != 0) {
+    throw StateError('Expected one complete TypeDef.');
+  }
+  rewrite(body);
+
+  final result = Buffer();
+  result.writeVarUint32Small7(typeId);
+  result.writeVarUint32(marker);
+  result.writeInt64(typeDefHeader(body));
+  if (body.length >= 0xff) {
+    result.writeVarUint32(body.length - 0xff);
+  }
+  result.writeBytes(body);
+  return result.toBytes();
+}
+
+void _replaceUniqueBytes(
+  Uint8List bytes,
+  List<int> source,
+  List<int> replacement,
+) {
+  if (source.length != replacement.length) {
+    throw ArgumentError('Replacement byte lengths must match.');
+  }
+  var match = -1;
+  for (var offset = 0; offset <= bytes.length - source.length; offset += 1) {
+    var equal = true;
+    for (var index = 0; index < source.length; index += 1) {
+      if (bytes[offset + index] != source[index]) {
+        equal = false;
+        break;
+      }
+    }
+    if (!equal) {
+      continue;
+    }
+    if (match >= 0) {
+      throw StateError('Expected a unique byte sequence.');
+    }
+    match = offset;
+  }
+  if (match < 0) {
+    throw StateError('Byte sequence was not found.');
+  }
+  bytes.setRange(match, match + replacement.length, replacement);
+}
+
+Uint8List _duplicateTaggedTypeDef(Uint8List validBytes) {
+  const tagOneHeader = (3 << 6) | (1 << 2);
+  const tagTwoHeader = (3 << 6) | (2 << 2);
+  return _rewriteTypeDefBody(
+    validBytes,
+    (body) => _replaceUniqueBytes(
+      body,
+      const <int>[tagTwoHeader, TypeIds.int32],
+      const <int>[tagOneHeader, TypeIds.int32],
+    ),
+  );
+}
+
+Uint8List _duplicateNamedTypeDef(Uint8List validBytes) {
+  final first = encodeFieldNameMetaString('alpha');
+  final second = encodeFieldNameMetaString('bravo');
+  if (first.encoding != second.encoding ||
+      first.bytes.length != second.bytes.length) {
+    throw StateError('Test field names must use the same encoding shape.');
+  }
+  return _rewriteTypeDefBody(
+    validBytes,
+    (body) => _replaceUniqueBytes(body, second.bytes, first.bytes),
+  );
+}
+
 void main() {
   group('xlang protocol regressions', () {
     test('deserializes NONE wire values as null', () {
@@ -387,6 +498,173 @@ void main() {
         _lateHolderTypeDefBytes(registerExtFirst: false),
         orderedEquals(_lateHolderTypeDefBytes(registerExtFirst: true)),
       );
+    });
+
+    test('rejects duplicate local field ids', () {
+      final resolver = TypeResolver(Config());
+      _rememberSchema(_DuplicateIdSchema, <GeneratedFieldInfo>[
+        _taggedField(1),
+        _taggedField(1),
+      ]);
+
+      expect(
+        () => resolver.registerGenerated(
+          _DuplicateIdSchema,
+          namespace: 'example',
+          typeName: 'DuplicateId',
+        ),
+        throwsA(
+          isA<ArgumentError>().having(
+            (error) => error.toString(),
+            'message',
+            contains('Duplicate field id 1'),
+          ),
+        ),
+      );
+    });
+
+    test('rejects duplicate local field names', () {
+      final resolver = TypeResolver(Config());
+      _rememberSchema(_DuplicateNameSchema, <GeneratedFieldInfo>[
+        _generatedField('value'),
+        _generatedMapField('value'),
+      ]);
+
+      expect(
+        () => resolver.registerGenerated(
+          _DuplicateNameSchema,
+          namespace: 'example',
+          typeName: 'DuplicateName',
+        ),
+        throwsA(
+          isA<ArgumentError>().having(
+            (error) => error.toString(),
+            'message',
+            contains('Duplicate field wire name value'),
+          ),
+        ),
+      );
+    });
+
+    test('rejects inconsistent local tagged identity', () {
+      final resolver = TypeResolver(Config());
+      _rememberSchema(_InconsistentTagSchema, <GeneratedFieldInfo>[
+        const GeneratedFieldInfo(
+          name: 'tagged',
+          identifier: '2',
+          id: 1,
+          fieldType: _intFieldType,
+        ),
+      ]);
+
+      expect(
+        () => resolver.registerGenerated(
+          _InconsistentTagSchema,
+          namespace: 'example',
+          typeName: 'InconsistentTag',
+        ),
+        throwsA(
+          isA<ArgumentError>().having(
+            (error) => error.toString(),
+            'message',
+            contains('textual identifier 2, which must match field id 1'),
+          ),
+        ),
+      );
+    });
+
+    test('keeps tagged ids separate from field names', () {
+      const name = 'example.IdentityDomains';
+      final reader = TypeResolver(Config());
+      _rememberSchema(_IdentityDomainLocal, <GeneratedFieldInfo>[
+        _taggedField(1),
+        _generatedMapField('1'),
+      ]);
+      reader.registerGenerated(
+        _IdentityDomainLocal,
+        namespace: 'example',
+        typeName: 'IdentityDomains',
+      );
+      final remote = _typeMetaBytes(
+        _IdentityDomainRemote,
+        name,
+        <GeneratedFieldInfo>[_generatedMapField('1'), _taggedField(1)],
+      );
+
+      _readTypeMeta(reader, remote);
+    });
+
+    test('rejects duplicate remote field ids before caching', () {
+      const name = 'example.RemoteDuplicateId';
+      final reader = TypeResolver(Config(maxSchemaVersionsPerType: 1));
+      _rememberSchema(_RemoteDuplicateIdLocal, <GeneratedFieldInfo>[
+        _generatedField('value'),
+      ]);
+      reader.registerGenerated(
+        _RemoteDuplicateIdLocal,
+        namespace: 'example',
+        typeName: 'RemoteDuplicateId',
+      );
+      final valid = _typeMetaBytes(
+        _RemoteDuplicateIdWriter,
+        name,
+        <GeneratedFieldInfo>[_taggedField(1), _taggedField(2)],
+      );
+      final duplicate = _duplicateTaggedTypeDef(valid);
+
+      expect(
+        () => _readTypeMeta(reader, duplicate),
+        throwsA(
+          isA<StateError>().having(
+            (error) => error.toString(),
+            'message',
+            contains('Duplicate field id 1'),
+          ),
+        ),
+      );
+      expect(
+        () => _readTypeMeta(reader, duplicate),
+        throwsA(isA<StateError>()),
+      );
+      _readTypeMeta(reader, valid);
+    });
+
+    test('rejects duplicate remote field names before caching', () {
+      const name = 'example.RemoteDuplicateName';
+      final reader = TypeResolver(Config(maxSchemaVersionsPerType: 1));
+      _rememberSchema(_RemoteDuplicateNameLocal, <GeneratedFieldInfo>[
+        _generatedField('value'),
+      ]);
+      reader.registerGenerated(
+        _RemoteDuplicateNameLocal,
+        namespace: 'example',
+        typeName: 'RemoteDuplicateName',
+      );
+      final valid = _typeMetaBytes(
+        _RemoteDuplicateNameWriter,
+        name,
+        <GeneratedFieldInfo>[
+          _generatedField('alpha'),
+          _generatedField('bravo'),
+        ],
+      );
+      final duplicate = _duplicateNamedTypeDef(valid);
+
+      expect(
+        () => _readTypeMeta(reader, duplicate),
+        throwsA(
+          isA<StateError>().having(
+            (error) => error.toString(),
+            'message',
+            contains('Duplicate field wire name alpha'),
+          ),
+        ),
+      );
+      expect(
+        () => _readTypeMeta(reader, duplicate),
+        throwsA(isA<StateError>()),
+      );
+      _readTypeMeta(reader, valid);
     });
 
     test('remote schema limit rejects extra versions', () {

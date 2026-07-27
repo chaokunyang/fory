@@ -219,31 +219,48 @@ bool _fieldTypeUsesNestedTypeDefinitions(FieldType fieldType) {
   return false;
 }
 
-void _validateFieldInfo(FieldInfo field) {
-  final id = field.id;
-  if (id != null && id < 0) {
-    throw ArgumentError('Field id for ${field.name} must be non-negative.');
-  }
-}
-
-List<FieldInfo> _validateFieldInfos(Iterable<FieldInfo> fields) {
-  final validated = <FieldInfo>[];
-  final usedIds = <int, String>{};
+String? _fieldIdentityError(List<FieldInfo> fields) {
+  final fieldsById = <int, FieldInfo>{};
+  final fieldsByName = <String, FieldInfo>{};
   for (final field in fields) {
-    _validateFieldInfo(field);
     final id = field.id;
     if (id != null) {
-      final existing = usedIds[id];
-      if (existing != null && existing != field.name) {
-        throw ArgumentError(
-          'Duplicate field id $id for fields $existing and ${field.name}.',
-        );
+      if (id < 0) {
+        return 'Field id $id must be non-negative.';
       }
-      usedIds[id] = field.name;
+      if (field.identifier != id.toString()) {
+        return 'Tagged field ${field.name} has textual identifier '
+            '${field.identifier}, which must match field id $id.';
+      }
+      final existing = fieldsById[id];
+      if (existing != null) {
+        return 'Duplicate field id $id for fields ${existing.name} and '
+            '${field.name}.';
+      }
+      fieldsById[id] = field;
+      continue;
     }
-    validated.add(field);
+    final identifier = field.identifier;
+    if (identifier.isEmpty) {
+      return 'Field wire name must not be empty.';
+    }
+    final existing = fieldsByName[identifier];
+    if (existing != null) {
+      return 'Duplicate field wire name $identifier for fields '
+          '${existing.name} and ${field.name}.';
+    }
+    fieldsByName[identifier] = field;
   }
-  return List<FieldInfo>.unmodifiable(validated);
+  return null;
+}
+
+List<FieldInfo> _validateLocalFieldInfos(List<FieldInfo> fields) {
+  final validated = List<FieldInfo>.unmodifiable(fields);
+  final error = _fieldIdentityError(validated);
+  if (error != null) {
+    throw ArgumentError(error);
+  }
+  return validated;
 }
 
 final class TypeResolver {
@@ -352,7 +369,7 @@ final class TypeResolver {
         resolvedTypeName == null ? null : typeNameMetaString(resolvedTypeName);
     final normalizedFields =
         registrationKind == RegistrationKind.struct
-            ? _validateFieldInfos(fields)
+            ? _validateLocalFieldInfos(fields)
             : const <FieldInfo>[];
     final resolved = TypeInfo(
       type: type,
@@ -1247,6 +1264,12 @@ final class TypeResolver {
       throw StateError('Invalid TypeDef metadata size.');
     }
     header.validateBodyHash(metaBody);
+    if (isStruct) {
+      final error = _fieldIdentityError(fields);
+      if (error != null) {
+        throw StateError('Invalid remote TypeDef: $error');
+      }
+    }
     final resolved =
         userTypeId != null
             ? resolveUserById(userTypeId)

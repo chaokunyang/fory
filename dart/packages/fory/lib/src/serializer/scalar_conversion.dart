@@ -101,23 +101,32 @@ CompatibleScalarConversion? compatibleScalarConversion(
   FieldInfo remoteField,
   FieldInfo localField,
 ) {
-  if (remoteField.fieldType.ref || localField.fieldType.ref) {
-    return null;
-  }
-  final exactScalarFieldType =
-      remoteField.fieldType.typeId == localField.fieldType.typeId &&
-      remoteField.fieldType.nullable == localField.fieldType.nullable &&
-      remoteField.fieldType.ref == localField.fieldType.ref;
-  if (exactScalarFieldType) {
-    return null;
-  }
-  if (!_supportsCompatibleScalarConversion(
-    remoteField.fieldType.typeId,
-    localField.fieldType.typeId,
+  if (!canConvertCompatibleScalarTypes(
+    remoteField.fieldType,
+    localField.fieldType,
   )) {
     return null;
   }
   return CompatibleScalarConversion(remoteField, localField);
+}
+
+bool canConvertCompatibleScalarTypes(
+  FieldType remoteType,
+  FieldType localType,
+) {
+  if (remoteType.ref || localType.ref) {
+    return false;
+  }
+  final exactScalarFieldType =
+      remoteType.typeId == localType.typeId &&
+      remoteType.nullable == localType.nullable;
+  if (exactScalarFieldType) {
+    return false;
+  }
+  return _supportsCompatibleScalarConversion(
+    remoteType.typeId,
+    localType.typeId,
+  );
 }
 
 CompatibleScalarReadDescriptor compatibleScalarReadDescriptor(
@@ -1243,7 +1252,7 @@ Never _throwScalarConversionError(
   Object cause,
 ) {
   throw InvalidDataException(
-    'Cannot convert compatible field ${conversion.localField.identifier} '
+    'Cannot convert compatible field ${conversion.localField.name} '
     'from type ${conversion.remoteField.fieldType.typeId} '
     'to type ${conversion.localField.fieldType.typeId}: $value',
     cause,

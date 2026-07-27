@@ -28,6 +28,20 @@ internal abstract class XlangUserSerializer
 
     [ForyField(2)]
     public abstract string Name { get; }
+
+    [ForyField(
+        Ignore = true,
+        TargetDeclaringType = typeof(XlangUser),
+        TargetMemberName = "<Id>k__BackingField",
+        TargetMemberKind = ForyTargetMemberKind.Field)]
+    public abstract int IdStorage { get; }
+
+    [ForyField(
+        Ignore = true,
+        TargetDeclaringType = typeof(XlangUser),
+        TargetMemberName = "<Name>k__BackingField",
+        TargetMemberKind = ForyTargetMemberKind.Field)]
+    public abstract string NameStorage { get; }
 }
 
 [ForyStruct(Target = typeof(XlangPoint))]
@@ -53,4 +67,18 @@ internal abstract class XlangHolderSerializer
 
     [ForyField(2)]
     public abstract Dictionary<string, XlangUser> UsersByName { get; }
+
+    [ForyField(
+        Ignore = true,
+        TargetDeclaringType = typeof(XlangHolder),
+        TargetMemberName = "<Users>k__BackingField",
+        TargetMemberKind = ForyTargetMemberKind.Field)]
+    public abstract List<XlangUser> UsersStorage { get; }
+
+    [ForyField(
+        Ignore = true,
+        TargetDeclaringType = typeof(XlangHolder),
+        TargetMemberName = "<UsersByName>k__BackingField",
+        TargetMemberKind = ForyTargetMemberKind.Field)]
+    public abstract Dictionary<string, XlangUser> UsersByNameStorage { get; }
 }

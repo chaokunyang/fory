@@ -246,6 +246,10 @@ internal static class Program
             "test_nested_annotated_container_compatible" => CaseNestedAnnotatedContainerCompatible(input),
             "test_csharp_external_id" => CaseCSharpExternalId(input),
             "test_csharp_external_name" => CaseCSharpExternalName(input),
+            "test_csharp_ordinary_inheritance_id" =>
+                CaseCSharpOrdinaryInheritanceId(input),
+            "test_csharp_external_inheritance_name" =>
+                CaseCSharpExternalInheritanceName(input),
             _ => throw new InvalidOperationException($"unknown test case {caseName}"),
         };
     }
@@ -1100,6 +1104,36 @@ internal static class Program
         ForyRuntime fory = BuildFory(compatible: false);
         RegisterCSharpTypesByName(fory);
         return ExchangeExternalValues(input, fory, nameof(CaseCSharpExternalName));
+    }
+
+    private static byte[] CaseCSharpOrdinaryInheritanceId(byte[] input)
+    {
+        ForyRuntime fory = BuildFory(compatible: true);
+        fory.Register<XlangOrdinaryLeaf>(1311);
+        ReadOnlySequence<byte> sequence = new(input);
+        XlangOrdinaryLeaf value =
+            fory.Deserialize<XlangOrdinaryLeaf>(ref sequence);
+        EnsureConsumed(sequence, nameof(CaseCSharpOrdinaryInheritanceId));
+        Ensure(value.Identifier == 17, "ordinary inherited identifier mismatch");
+        Ensure(value.Name == "ordinary", "ordinary inherited name mismatch");
+        Ensure(value.Score == 19, "ordinary leaf score mismatch");
+        return fory.Serialize<object?>(value);
+    }
+
+    private static byte[] CaseCSharpExternalInheritanceName(byte[] input)
+    {
+        ForyRuntime fory = BuildFory(compatible: false);
+        fory.Register<XlangExternalLeaf>("csharp.inheritance.ExternalLeaf");
+        ReadOnlySequence<byte> sequence = new(input);
+        XlangExternalLeaf value =
+            fory.Deserialize<XlangExternalLeaf>(ref sequence);
+        EnsureConsumed(sequence, nameof(CaseCSharpExternalInheritanceName));
+        Ensure(
+            value.ReadPrivateState() == (23L, "external", 29),
+            "external inherited private state mismatch");
+        Ensure(value.PublicValue == 31, "external inherited public value mismatch");
+        Ensure(value.LeafName == "leaf", "external leaf name mismatch");
+        return fory.Serialize<object?>(value);
     }
 
     private static byte[] ExchangeExternalValues(

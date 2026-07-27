@@ -3,7 +3,7 @@
 Rule ID | Category | Severity | Notes
 --------|----------|----------|------
 FORY001 | Fory | Error | Generic types are not supported by the Fory source generator
-FORY002 | Fory | Error | Missing parameterless constructor
+FORY002 | Fory | Error | Unsupported parameterless construction
 FORY003 | Fory | Error | Unsupported Field encoding
 FORY004 | Fory | Error | Invalid Fory field id
 FORY005 | Fory | Error | Invalid Fory union type
@@ -17,3 +17,8 @@ FORY012 | Fory | Error | External serializer member type mismatch
 FORY013 | Fory | Error | Unsupported extern alias
 FORY014 | Fory | Error | Enum value is outside the supported range
 FORY015 | Fory | Error | Invalid ignored Fory field
+FORY016 | Fory | Error | Duplicate structural field identity
+FORY017 | Fory | Error | Invalid abstract structural option
+FORY018 | Fory | Error | Unsupported shallow storage field
+FORY019 | Fory | Error | Missing hierarchy provider serializer API
+FORY020 | Fory | Error | Invalid inherited wire descriptor

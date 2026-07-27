@@ -36,8 +36,30 @@ internal abstract class UserSerializer
 {
     [ForyField(1)]
     public abstract string Name { get; }
+
+    [ForyField(
+        Ignore = true,
+        TargetDeclaringType = typeof(ThirdParty.User),
+        TargetMemberName = "<Name>k__BackingField",
+        TargetMemberKind = ForyTargetMemberKind.Field)]
+    public abstract string NameStorage { get; }
 }
 ```
+
+## Inherited Fields
+
+The concrete class serializer has one field list containing its own fields and
+the selected fields from every annotated base class. That same flattened list
+drives field ordering, schema hashes, and compatible metadata.
+
+Property overrides contribute one logical field. The nearest override carrying
+`[ForyField]` supplies the ID and schema descriptor. Fields and members hidden
+with `new` remain distinct and must use unique IDs or unique normalized names.
+Duplicate IDs and duplicate name-based identities are generation errors.
+
+Changing a wire member on an annotated base changes every derived schema.
+Rebuild assemblies containing derived serializers after updating the base
+package.
 
 ```csharp
 using Apache.Fory;

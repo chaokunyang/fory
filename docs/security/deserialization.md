@@ -289,24 +289,36 @@ dense-array contents; the child owner reserves its own shallow memory when it is
 
 ### External Structural Targets
 
-An external structural serializer does not own or necessarily expose the target type's complete
-storage layout. Its shallow graph-memory formula starts with every field declared by the external
-schema. A field marked `ignore` is a budget-only declaration: it contributes its declared storage
-width but must not enter wire metadata, generated reads or writes, target member access, or target
-construction.
+Wire members and physical storage are separate inputs. Properties, accessors, interfaces, and
+logical schema aliases are not physical fields and must not be charged as storage. A field that is
+both serialized and stored is counted once. A storage-only declaration contributes its field width
+but must not enter wire metadata or generated reads and writes.
 
-C# and Dart generators may additionally include public instance fields that are visible on the
-target at generation time. A public field represented by a schema declaration is counted once.
-Properties, accessors, interfaces, and runtime layout inspection must not be treated as additional
-stored fields. Swift macros cannot inspect another type's stored layout and therefore use only the
-external declaration.
+For C# ordinary classes, each directly annotated class owns the physical instance fields declared
+by that class. Its generated provider publishes the cumulative parent-provider value plus those
+direct fields. A concrete descendant uses the immediate provider value and its own direct fields;
+it must not enumerate referenced private metadata or reconstruct parent storage. The concrete
+object serializer reserves one shallow object owner plus this cumulative field storage.
 
-Other omitted target storage is outside this approximate formula. When it contains a large value
-field or enough fields to matter, the external declaration should list that storage and mark it
-ignored. The normal owner rules still apply: a reference target reserves its shallow owner and
-field storage, while an inline value target is charged by the holder that owns its storage. These
-formulas must be resolved during generation and must not add reflection, layout probing,
-allocation, or field enumeration to deserialization hot paths.
+A C# external declaration owns the exact third-party physical fields it lists. An exact field
+mapping contributes storage; an exact property mapping does not, and its backing field must be
+listed separately. An ignored mapping must identify one exact field and is storage-only.
+Discoverable unmapped public instance fields may be added once. A `BaseOnly` declaration can own
+the complete target and target-ancestor prefix used by an ordinary child. It must list every
+non-public physical field required by that prefix; the generator does not scan the referenced
+assembly for private layout.
+
+Exact external private identities are version-pinned package ABI assertions. Runtime wire access
+uses exact accessors and must not fall back to reflection, layout probing, or a different member.
+Storage-only private declarations have no runtime accessor, so the application must validate them
+against the pinned package version.
+
+Dart generators may additionally include public instance fields visible on the target at
+generation time. Swift macros cannot inspect another type's stored layout and therefore use only
+the external declaration. In every runtime, these formulas are resolved during generation and
+must not add reflection, layout probing, allocation, or field enumeration to deserialization hot
+paths. The normal owner rules still apply: a reference target reserves its shallow owner and field
+storage, while an inline value target is charged by the holder that owns its storage.
 
 ### Runtime-Specific Owner Notes
 

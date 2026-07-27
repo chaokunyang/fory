@@ -35,6 +35,34 @@ internal abstract class ExternalUserSerializer
 
     [ForyField(4)]
     public abstract List<ExternalUser> Links { get; }
+
+    [ForyField(
+        Ignore = true,
+        TargetDeclaringType = typeof(ExternalUser),
+        TargetMemberName = "<Id>k__BackingField",
+        TargetMemberKind = ForyTargetMemberKind.Field)]
+    public abstract int IdStorage { get; }
+
+    [ForyField(
+        Ignore = true,
+        TargetDeclaringType = typeof(ExternalUser),
+        TargetMemberName = "<Name>k__BackingField",
+        TargetMemberKind = ForyTargetMemberKind.Field)]
+    public abstract string NameStorage { get; }
+
+    [ForyField(
+        Ignore = true,
+        TargetDeclaringType = typeof(ExternalUser),
+        TargetMemberName = "<Friend>k__BackingField",
+        TargetMemberKind = ForyTargetMemberKind.Field)]
+    public abstract ExternalUser? FriendStorage { get; }
+
+    [ForyField(
+        Ignore = true,
+        TargetDeclaringType = typeof(ExternalUser),
+        TargetMemberName = "<Links>k__BackingField",
+        TargetMemberKind = ForyTargetMemberKind.Field)]
+    public abstract List<ExternalUser> LinksStorage { get; }
 }
 
 [ForyStruct(Target = typeof(ExternalPoint))]
@@ -57,6 +85,13 @@ internal abstract class ExternalStringBoxSerializer
 {
     [ForyField(1)]
     public abstract string Value { get; }
+
+    [ForyField(
+        Ignore = true,
+        TargetDeclaringType = typeof(ExternalBox<string>),
+        TargetMemberName = "<Value>k__BackingField",
+        TargetMemberKind = ForyTargetMemberKind.Field)]
+    public abstract string ValueStorage { get; }
 }
 
 [ForyStruct(Target = typeof(ExternalDerived))]
@@ -67,6 +102,20 @@ internal abstract class ExternalDerivedSerializer
 
     [ForyField(2)]
     public abstract string BaseName { get; }
+
+    [ForyField(
+        Ignore = true,
+        TargetDeclaringType = typeof(ExternalDerived),
+        TargetMemberName = "<Id>k__BackingField",
+        TargetMemberKind = ForyTargetMemberKind.Field)]
+    public abstract int IdStorage { get; }
+
+    [ForyField(
+        Ignore = true,
+        TargetDeclaringType = typeof(ExternalBase),
+        TargetMemberName = "<BaseName>k__BackingField",
+        TargetMemberKind = ForyTargetMemberKind.Field)]
+    public abstract string BaseNameStorage { get; }
 }
 
 [ForyStruct(Target = typeof(ExternalFields))]
@@ -80,6 +129,20 @@ internal abstract class ExternalFieldsSerializer
 
     [ForyField(3)]
     public abstract int @event { get; }
+
+    [ForyField(
+        Ignore = true,
+        TargetDeclaringType = typeof(ExternalFields),
+        TargetMemberName = "<Name>k__BackingField",
+        TargetMemberKind = ForyTargetMemberKind.Field)]
+    public abstract string NameStorage { get; }
+
+    [ForyField(
+        Ignore = true,
+        TargetDeclaringType = typeof(ExternalFields),
+        TargetMemberName = "<event>k__BackingField",
+        TargetMemberKind = ForyTargetMemberKind.Field)]
+    public abstract int EventStorage { get; }
 }
 
 [ForyStruct(Target = typeof(ExternalSchemaModel))]
@@ -102,6 +165,48 @@ internal abstract class ExternalSchemaSerializer
 
     [ForyField(6, Type = typeof(S.Map<S.Fixed<S.UInt32>, S.List<S.Tagged<S.UInt64>>>))]
     public abstract Dictionary<uint, List<ulong?>?> NestedValue { get; }
+
+    [ForyField(
+        Ignore = true,
+        TargetDeclaringType = typeof(ExternalSchemaModel),
+        TargetMemberName = "<FixedValue>k__BackingField",
+        TargetMemberKind = ForyTargetMemberKind.Field)]
+    public abstract int FixedValueStorage { get; }
+
+    [ForyField(
+        Ignore = true,
+        TargetDeclaringType = typeof(ExternalSchemaModel),
+        TargetMemberName = "<TaggedValue>k__BackingField",
+        TargetMemberKind = ForyTargetMemberKind.Field)]
+    public abstract long TaggedValueStorage { get; }
+
+    [ForyField(
+        Ignore = true,
+        TargetDeclaringType = typeof(ExternalSchemaModel),
+        TargetMemberName = "<ArrayValue>k__BackingField",
+        TargetMemberKind = ForyTargetMemberKind.Field)]
+    public abstract int[] ArrayValueStorage { get; }
+
+    [ForyField(
+        Ignore = true,
+        TargetDeclaringType = typeof(ExternalSchemaModel),
+        TargetMemberName = "<ListValue>k__BackingField",
+        TargetMemberKind = ForyTargetMemberKind.Field)]
+    public abstract List<int> ListValueStorage { get; }
+
+    [ForyField(
+        Ignore = true,
+        TargetDeclaringType = typeof(ExternalSchemaModel),
+        TargetMemberName = "<SetValue>k__BackingField",
+        TargetMemberKind = ForyTargetMemberKind.Field)]
+    public abstract HashSet<int> SetValueStorage { get; }
+
+    [ForyField(
+        Ignore = true,
+        TargetDeclaringType = typeof(ExternalSchemaModel),
+        TargetMemberName = "<NestedValue>k__BackingField",
+        TargetMemberKind = ForyTargetMemberKind.Field)]
+    public abstract Dictionary<uint, List<ulong?>?> NestedValueStorage { get; }
 }
 
 [ForyStruct(Target = typeof(ExternalVersionOne))]
@@ -112,6 +217,20 @@ internal abstract class ExternalVersionOneSerializer
 
     [ForyField(2)]
     public abstract string Name { get; }
+
+    [ForyField(
+        Ignore = true,
+        TargetDeclaringType = typeof(ExternalVersionOne),
+        TargetMemberName = "<Id>k__BackingField",
+        TargetMemberKind = ForyTargetMemberKind.Field)]
+    public abstract int IdStorage { get; }
+
+    [ForyField(
+        Ignore = true,
+        TargetDeclaringType = typeof(ExternalVersionOne),
+        TargetMemberName = "<Name>k__BackingField",
+        TargetMemberKind = ForyTargetMemberKind.Field)]
+    public abstract string NameStorage { get; }
 }
 
 [ForyStruct(Target = typeof(ExternalVersionTwo))]
@@ -125,6 +244,27 @@ internal abstract class ExternalVersionTwoSerializer
 
     [ForyField(3)]
     public abstract long Added { get; }
+
+    [ForyField(
+        Ignore = true,
+        TargetDeclaringType = typeof(ExternalVersionTwo),
+        TargetMemberName = "<Name>k__BackingField",
+        TargetMemberKind = ForyTargetMemberKind.Field)]
+    public abstract string NameStorage { get; }
+
+    [ForyField(
+        Ignore = true,
+        TargetDeclaringType = typeof(ExternalVersionTwo),
+        TargetMemberName = "<Id>k__BackingField",
+        TargetMemberKind = ForyTargetMemberKind.Field)]
+    public abstract int IdStorage { get; }
+
+    [ForyField(
+        Ignore = true,
+        TargetDeclaringType = typeof(ExternalVersionTwo),
+        TargetMemberName = "<Added>k__BackingField",
+        TargetMemberKind = ForyTargetMemberKind.Field)]
+    public abstract long AddedStorage { get; }
 }
 
 [ForyStruct(Target = typeof(ExternalVersionRenamed))]
@@ -135,6 +275,20 @@ internal abstract class ExternalVersionRenamedSerializer
 
     [ForyField(2)]
     public abstract string Name { get; }
+
+    [ForyField(
+        Ignore = true,
+        TargetDeclaringType = typeof(ExternalVersionRenamed),
+        TargetMemberName = "<Identifier>k__BackingField",
+        TargetMemberKind = ForyTargetMemberKind.Field)]
+    public abstract int IdentifierStorage { get; }
+
+    [ForyField(
+        Ignore = true,
+        TargetDeclaringType = typeof(ExternalVersionRenamed),
+        TargetMemberName = "<Name>k__BackingField",
+        TargetMemberKind = ForyTargetMemberKind.Field)]
+    public abstract string NameStorage { get; }
 }
 
 [ForyStruct(Target = typeof(ExternalEvolutionOff), Evolving = false)]
@@ -142,6 +296,13 @@ internal abstract class ExternalEvolutionOffSerializer
 {
     [ForyField(1)]
     public abstract int Value { get; }
+
+    [ForyField(
+        Ignore = true,
+        TargetDeclaringType = typeof(ExternalEvolutionOff),
+        TargetMemberName = "<Value>k__BackingField",
+        TargetMemberKind = ForyTargetMemberKind.Field)]
+    public abstract int ValueStorage { get; }
 }
 
 [ForyStruct(Target = typeof(ExternalBudgetModel))]
@@ -150,7 +311,11 @@ internal abstract class ExternalBudgetModelSerializer
     [ForyField(1)]
     public abstract int Value { get; }
 
-    [ForyField(Ignore = true)]
+    [ForyField(
+        Ignore = true,
+        TargetDeclaringType = typeof(ExternalBudgetModel),
+        TargetMemberName = "HiddenState",
+        TargetMemberKind = ForyTargetMemberKind.Field)]
     public abstract ExternalBudgetValue HiddenState { get; }
 }
 

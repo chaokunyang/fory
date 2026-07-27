@@ -182,6 +182,21 @@ private struct LocalFallbackStringBox: Equatable {
 }
 
 @ForyStruct
+private struct SkippedDynamicMapV1 {
+    @ForyField(id: 1)
+    var removed: [AnyHashable: Any] = [:]
+
+    @ForyField(id: 2)
+    var keep: Int32 = 0
+}
+
+@ForyStruct
+private struct SkippedDynamicMapV2 {
+    @ForyField(id: 2)
+    var keep: Int32 = 0
+}
+
+@ForyStruct
 private struct RemoteNestedFixedMapV1: Equatable {
     @ForyField(id: 1)
     @MapField(value: .list(element: .encoding(.fixed)))
@@ -383,6 +398,25 @@ func compatibleModeSupportsAddedAndRemovedFields() throws {
     let bytesFromV2 = try writerV2.serialize(sourceV2)
     let decodedAsV1: CompatibleProfileV1 = try readerV1.deserialize(bytesFromV2)
     #expect(decodedAsV1 == CompatibleProfileV1(id: sourceV2.id, name: sourceV2.name))
+}
+
+@Test
+func skipsDynamicMapNullEntries() throws {
+    let writer = Fory(config: .init(trackRef: true, compatible: true))
+    try writer.register(SkippedDynamicMapV1.self, id: 9962)
+
+    let reader = Fory(config: .init(trackRef: true, compatible: true))
+    try reader.register(SkippedDynamicMapV2.self, id: 9962)
+
+    let source = SkippedDynamicMapV1(
+        removed: [
+            AnyHashable(ForyAnyNullValue()): "value",
+            AnyHashable("null-value"): NSNull()
+        ],
+        keep: 37
+    )
+    let decoded: SkippedDynamicMapV2 = try reader.deserialize(try writer.serialize(source))
+    #expect(decoded.keep == source.keep)
 }
 
 @Test

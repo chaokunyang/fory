@@ -557,11 +557,11 @@ dynamic `TypeInfo` is scoped by the serializer that selected it, so
 substituting each other's scope identity.
 
 Swift rejects zero-sized non-null MAP chunks because they cannot advance the
-decoded entry count. For a one-null entry, the non-null side's undeclared
-`TypeInfo` precedes that side's reference envelope and body. The MAP reader
-reads and scopes that metadata before invoking the field reader with duplicate
-type-info reading disabled. Static and dynamic MAP branches use the same
-ordering and validation.
+decoded entry count. A one-null entry encodes its non-null side as a complete
+field value: its reference envelope when present, then undeclared `TypeInfo`,
+then its body. The MAP writer, reader, and compatible-field skipper use that
+complete-field order rather than the shared type-prefix order of non-null
+chunks. Static and dynamic MAP branches use the same ordering and validation.
 
 Dynamic Any and protocol paths operate directly on final target values and
 containers. Static composition never enters target lookup; dynamic lookup

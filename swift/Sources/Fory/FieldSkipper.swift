@@ -352,24 +352,22 @@ extension ReadContext {
             }
 
             if keyNull {
-                let valueTypeInfo = valueDeclared ? nil : try self.readTypeInfo()
                 _ = try readSkippedValue(
                     fieldType: valueType,
-                    typeInfo: valueTypeInfo,
+                    typeInfo: nil,
                     refMode: trackValueRef ? .tracking : .none,
-                    readTypeInfo: false
+                    readTypeInfo: !valueDeclared
                 )
                 readCount += 1
                 continue
             }
 
             if valueNull {
-                let keyTypeInfo = keyDeclared ? nil : try self.readTypeInfo()
                 _ = try readSkippedValue(
                     fieldType: keyType,
-                    typeInfo: keyTypeInfo,
+                    typeInfo: nil,
                     refMode: trackKeyRef ? .tracking : .none,
-                    readTypeInfo: false
+                    readTypeInfo: !keyDeclared
                 )
                 readCount += 1
                 continue

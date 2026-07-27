@@ -1235,55 +1235,23 @@ where Key.Target: Hashable {
                     continue
                 }
                 if keyIsNil {
-                    if valueDynamicType {
-                        let typeInfo = try writeDynamicTypeInfo(
-                            for: pair.value,
-                            context
-                        )
-                        try writeDynamicValue(
-                            pair.value,
-                            typeInfo: typeInfo,
-                            context,
-                            refMode: trackValueRef ? .tracking : .none
-                        )
-                    } else {
-                        if !valueDeclared {
-                            try ValueCodec.writeFieldTypeInfo(context)
-                        }
-                        try ValueCodec.writeField(
-                            pair.value,
-                            context,
-                            refMode: trackValueRef ? .tracking : .none,
-                            writeTypeInfo: false,
-                            hasDeclaredChildren: hasDeclaredChildren
-                        )
-                    }
+                    try ValueCodec.writeField(
+                        pair.value,
+                        context,
+                        refMode: trackValueRef ? .tracking : .none,
+                        writeTypeInfo: !valueDeclared,
+                        hasDeclaredChildren: hasDeclaredChildren
+                    )
                     continue
                 }
                 if valueIsNil {
-                    if keyDynamicType {
-                        let typeInfo = try writeDynamicTypeInfo(
-                            for: pair.key,
-                            context
-                        )
-                        try writeDynamicValue(
-                            pair.key,
-                            typeInfo: typeInfo,
-                            context,
-                            refMode: trackKeyRef ? .tracking : .none
-                        )
-                    } else {
-                        if !keyDeclared {
-                            try KeyCodec.writeFieldTypeInfo(context)
-                        }
-                        try KeyCodec.writeField(
-                            pair.key,
-                            context,
-                            refMode: trackKeyRef ? .tracking : .none,
-                            writeTypeInfo: false,
-                            hasDeclaredChildren: hasDeclaredChildren
-                        )
-                    }
+                    try KeyCodec.writeField(
+                        pair.key,
+                        context,
+                        refMode: trackKeyRef ? .tracking : .none,
+                        writeTypeInfo: !keyDeclared,
+                        hasDeclaredChildren: hasDeclaredChildren
+                    )
                     continue
                 }
 
@@ -1377,26 +1345,20 @@ where Key.Target: Hashable {
 
                 context.buffer.writeUInt8(header)
                 if !keyIsNil {
-                    if !keyDeclared {
-                        try KeyCodec.writeFieldTypeInfo(context)
-                    }
                     try KeyCodec.writeField(
                         pair.key,
                         context,
                         refMode: trackKeyRef ? .tracking : .none,
-                        writeTypeInfo: false,
+                        writeTypeInfo: !keyDeclared,
                         hasDeclaredChildren: hasDeclaredChildren
                     )
                 }
                 if !valueIsNil {
-                    if !valueDeclared {
-                        try ValueCodec.writeFieldTypeInfo(context)
-                    }
                     try ValueCodec.writeField(
                         pair.value,
                         context,
                         refMode: trackValueRef ? .tracking : .none,
-                        writeTypeInfo: false,
+                        writeTypeInfo: !valueDeclared,
                         hasDeclaredChildren: hasDeclaredChildren
                     )
                 }
@@ -1483,8 +1445,8 @@ where Key.Target: Hashable {
         map.reserveCapacity(totalLength)
         let keyDynamicType = KeyCodec.staticTypeId == .unknown
         let valueDynamicType = ValueCodec.staticTypeId == .unknown
-        // A one-null entry writes the non-null side's TypeInfo before its reference envelope.
-        // Read and scope that metadata separately so the field reader cannot consume it as a ref flag.
+        // A one-null entry uses complete-field order: ref envelope, optional TypeInfo, then body.
+        // Keep it distinct from non-null chunks, whose shared TypeInfo values precede all bodies.
         if keyDynamicType || valueDynamicType {
             var readCount = 0
             while readCount < totalLength {
@@ -1503,29 +1465,21 @@ where Key.Target: Hashable {
                     continue
                 }
                 if keyNull {
-                    let valueTypeInfo =
-                        valueDeclared ? nil : try ValueCodec.readFieldTypeInfo(context)
-                    let value = try ValueCodec.withFieldTypeInfo(valueTypeInfo, context) {
-                        try ValueCodec.readField(
-                            context,
-                            refMode: trackValueRef ? .tracking : .none,
-                            readTypeInfo: false
-                        )
-                    }
+                    let value = try ValueCodec.readField(
+                        context,
+                        refMode: trackValueRef ? .tracking : .none,
+                        readTypeInfo: !valueDeclared
+                    )
                     map[try KeyCodec.defaultValue(context)] = value
                     readCount += 1
                     continue
                 }
                 if valueNull {
-                    let keyTypeInfo =
-                        keyDeclared ? nil : try KeyCodec.readFieldTypeInfo(context)
-                    let key = try KeyCodec.withFieldTypeInfo(keyTypeInfo, context) {
-                        try KeyCodec.readField(
-                            context,
-                            refMode: trackKeyRef ? .tracking : .none,
-                            readTypeInfo: false
-                        )
-                    }
+                    let key = try KeyCodec.readField(
+                        context,
+                        refMode: trackKeyRef ? .tracking : .none,
+                        readTypeInfo: !keyDeclared
+                    )
                     map[key] = try ValueCodec.defaultValue(context)
                     readCount += 1
                     continue
@@ -1579,29 +1533,21 @@ where Key.Target: Hashable {
                 continue
             }
             if keyNull {
-                let valueTypeInfo =
-                    valueDeclared ? nil : try ValueCodec.readFieldTypeInfo(context)
-                let value = try ValueCodec.withFieldTypeInfo(valueTypeInfo, context) {
-                    try ValueCodec.readField(
-                        context,
-                        refMode: trackValueRef ? .tracking : .none,
-                        readTypeInfo: false
-                    )
-                }
+                let value = try ValueCodec.readField(
+                    context,
+                    refMode: trackValueRef ? .tracking : .none,
+                    readTypeInfo: !valueDeclared
+                )
                 map[try KeyCodec.defaultValue(context)] = value
                 readCount += 1
                 continue
             }
             if valueNull {
-                let keyTypeInfo =
-                    keyDeclared ? nil : try KeyCodec.readFieldTypeInfo(context)
-                let key = try KeyCodec.withFieldTypeInfo(keyTypeInfo, context) {
-                    try KeyCodec.readField(
-                        context,
-                        refMode: trackKeyRef ? .tracking : .none,
-                        readTypeInfo: false
-                    )
-                }
+                let key = try KeyCodec.readField(
+                    context,
+                    refMode: trackKeyRef ? .tracking : .none,
+                    readTypeInfo: !keyDeclared
+                )
                 map[key] = try ValueCodec.defaultValue(context)
                 readCount += 1
                 continue

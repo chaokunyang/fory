@@ -30,9 +30,9 @@ Load this file when changing `swift/` or Swift xlang behavior.
   Static carriers perform no target lookup; a homogeneous dynamic chunk resolves once, while a
   truly heterogeneous chunk retains its required per-value lookup.
 - A non-null MAP chunk size is 1 through 255; reject zero so decoding always advances. For a
-  one-null entry, read and scope the non-null side's undeclared `TypeInfo` before its reference
-  envelope and body, with duplicate type-info reading disabled. Keep static and dynamic MAP
-  branches aligned.
+  one-null entry, encode and decode the non-null side in complete-field order: reference envelope
+  when present, undeclared `TypeInfo`, then body. Keep the writer, reader, compatible-field
+  skipper, and static/dynamic MAP branches aligned.
 - Preserve Swift's xlang-only union rule of zero or one associated value per known case. Use a
   struct payload when a case has multiple logical fields.
 - Keep declared-child collection-header state in `FieldCodec`, not `Serializer`. Mark cold error

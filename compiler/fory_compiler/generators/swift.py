@@ -17,9 +17,12 @@
 
 """Swift code generator."""
 
-from pathlib import Path
-from typing import Dict, List, Optional, Set, Union as TypingUnion
+from __future__ import annotations
 
+from pathlib import Path
+from typing import ClassVar
+
+from fory_compiler.frontend.base import FrontendError
 from fory_compiler.frontend.utils import parse_idl_file
 from fory_compiler.generators.base import BaseGenerator, GeneratedFile
 from fory_compiler.ir.ast import (
@@ -44,7 +47,7 @@ class SwiftGenerator(BaseGenerator):
     language_name = "swift"
     file_extension = ".swift"
 
-    PRIMITIVE_MAP = {
+    PRIMITIVE_MAP: ClassVar[dict[PrimitiveKind, str]] = {
         PrimitiveKind.BOOL: "Bool",
         PrimitiveKind.INT8: "Int8",
         PrimitiveKind.INT16: "Int16",
@@ -67,7 +70,7 @@ class SwiftGenerator(BaseGenerator):
         PrimitiveKind.ANY: "Any",
     }
 
-    SWIFT_KEYWORDS = {
+    SWIFT_KEYWORDS: ClassVar[set[str]] = {
         "associatedtype",
         "class",
         "deinit",
@@ -130,16 +133,16 @@ class SwiftGenerator(BaseGenerator):
 
     def __init__(self, schema: Schema, options):
         super().__init__(schema, options)
-        self._qualified_type_names: Dict[int, str] = {}
-        self._schema_cache: Dict[Path, Schema] = {}
-        self._equatable_cache: Dict[int, bool] = {}
-        self._messages_requiring_class: Set[int] = set()
-        self._indirect_unions: Set[int] = set()
+        self._qualified_type_names: dict[int, str] = {}
+        self._schema_cache: dict[Path, Schema] = {}
+        self._equatable_cache: dict[int, bool] = {}
+        self._messages_requiring_class: set[int] = set()
+        self._indirect_unions: set[int] = set()
         self._build_qualified_type_name_index()
         self._collect_messages_requiring_class()
         self._analyze_recursive_value_types()
 
-    def generate(self) -> List[GeneratedFile]:
+    def generate(self) -> list[GeneratedFile]:
         return [self.generate_file()]
 
     def generate_file(self) -> GeneratedFile:
@@ -147,7 +150,7 @@ class SwiftGenerator(BaseGenerator):
             if isinstance(type_def, (Message, Union)):
                 self._ensure_default_constructible(type_def)
 
-        lines: List[str] = []
+        lines: list[str] = []
         lines.append(self.get_license_header("//"))
         lines.append("")
         lines.append("import Foundation")
@@ -210,7 +213,7 @@ class SwiftGenerator(BaseGenerator):
             return f"{self.schema.package.replace('.', '_')}.swift"
         return "generated.swift"
 
-    def get_namespace_components(self) -> List[str]:
+    def get_namespace_components(self) -> list[str]:
         return self._namespace_components_for_schema(self.schema)
 
     def namespace_path(self) -> str:
@@ -280,7 +283,7 @@ class SwiftGenerator(BaseGenerator):
             return (
                 Path(location.file).resolve() != Path(self.schema.source_file).resolve()
             )
-        except Exception:
+        except (OSError, RuntimeError):
             return location.file != self.schema.source_file
 
     def _normalize_import_path(self, path_str: str) -> str:
@@ -288,10 +291,10 @@ class SwiftGenerator(BaseGenerator):
             return path_str
         try:
             return str(Path(path_str).resolve())
-        except Exception:
+        except (OSError, RuntimeError):
             return path_str
 
-    def _load_schema(self, file_path: str) -> Optional[Schema]:
+    def _load_schema(self, file_path: str) -> Schema | None:
         if not file_path:
             return None
         path = Path(file_path).resolve()
@@ -299,12 +302,12 @@ class SwiftGenerator(BaseGenerator):
             return self._schema_cache[path]
         try:
             schema = parse_idl_file(path)
-        except Exception:
+        except (FrontendError, OSError, ValueError):
             return None
         self._schema_cache[path] = schema
         return schema
 
-    def _package_components_for_schema(self, schema: Schema) -> List[str]:
+    def _package_components_for_schema(self, schema: Schema) -> list[str]:
         package = schema.package
         if not package:
             return []
@@ -314,7 +317,7 @@ class SwiftGenerator(BaseGenerator):
             if part
         ]
 
-    def _namespace_components_for_schema(self, schema: Schema) -> List[str]:
+    def _namespace_components_for_schema(self, schema: Schema) -> list[str]:
         if self.get_namespace_style() != "enum":
             return []
         components = self._package_components_for_schema(schema)
@@ -346,13 +349,13 @@ class SwiftGenerator(BaseGenerator):
         ]
         return ".".join([top_level, *nested])
 
-    def _local_top_level_type_names(self, schema: Schema) -> Set[str]:
-        names: Set[str] = set()
-        source_path: Optional[Path] = None
+    def _local_top_level_type_names(self, schema: Schema) -> set[str]:
+        names: set[str] = set()
+        source_path: Path | None = None
         if schema.source_file:
             try:
                 source_path = Path(schema.source_file).resolve()
-            except Exception:
+            except (OSError, RuntimeError):
                 source_path = None
 
         for type_def in schema.enums + schema.unions + schema.messages:
@@ -363,7 +366,7 @@ class SwiftGenerator(BaseGenerator):
                     try:
                         if Path(type_file).resolve() != source_path:
                             continue
-                    except Exception:
+                    except (OSError, RuntimeError):
                         if type_file != schema.source_file:
                             continue
             names.add(self.safe_type_identifier(self.to_pascal_case(type_def.name)))
@@ -377,8 +380,8 @@ class SwiftGenerator(BaseGenerator):
             return self.namespace_path()
         return ".".join(self._namespace_components_for_schema(schema))
 
-    def _collect_imported_module_paths(self) -> List[str]:
-        by_file: Dict[str, str] = {}
+    def _collect_imported_module_paths(self) -> list[str]:
+        by_file: dict[str, str] = {}
         for type_def in self.schema.enums + self.schema.unions + self.schema.messages:
             if not self.is_imported_type(type_def):
                 continue
@@ -394,8 +397,8 @@ class SwiftGenerator(BaseGenerator):
                 continue
             by_file[normalized] = self._module_type_path_for_schema(schema)
 
-        ordered: List[str] = []
-        used_paths: Set[str] = set()
+        ordered: list[str] = []
+        used_paths: set[str] = set()
         if self.schema.source_file:
             base_dir = Path(self.schema.source_file).resolve().parent
             for imp in self.schema.imports:
@@ -410,8 +413,8 @@ class SwiftGenerator(BaseGenerator):
                 continue
             ordered.append(by_file[key])
 
-        deduped: List[str] = []
-        seen: Set[str] = set()
+        deduped: list[str] = []
+        seen: set[str] = set()
         for path in ordered:
             if path == self.module_type_path():
                 continue
@@ -427,7 +430,7 @@ class SwiftGenerator(BaseGenerator):
         for union in self.schema.unions:
             self._qualified_type_names[id(union)] = union.name
 
-        def visit_message(message: Message, parents: List[str]) -> None:
+        def visit_message(message: Message, parents: list[str]) -> None:
             path = ".".join(parents + [message.name])
             self._qualified_type_names[id(message)] = path
             for nested_enum in message.nested_enums:
@@ -453,7 +456,7 @@ class SwiftGenerator(BaseGenerator):
             self._messages_requiring_class.add(id(message))
 
         for field in message.fields:
-            ref_target_type: Optional[FieldType] = None
+            ref_target_type: FieldType | None = None
             has_ref_semantics = False
             if field.ref:
                 ref_target_type = field.field_type
@@ -489,7 +492,7 @@ class SwiftGenerator(BaseGenerator):
             if isinstance(type_def, (Message, Union))
         ]
         value_types_by_id = {id(type_def): type_def for type_def in value_types}
-        dependencies: Dict[int, Set[int]] = {}
+        dependencies: dict[int, set[int]] = {}
 
         for type_def in value_types:
             if isinstance(type_def, Message):
@@ -497,7 +500,7 @@ class SwiftGenerator(BaseGenerator):
             else:
                 parent_stack = self._parent_stack_for_nested_type(type_def)
 
-            resolved_dependencies: Set[int] = set()
+            resolved_dependencies: set[int] = set()
             for field in type_def.fields:
                 if not isinstance(field.field_type, NamedType):
                     continue
@@ -515,7 +518,7 @@ class SwiftGenerator(BaseGenerator):
         def reaches(
             target: int,
             current: int,
-            visited: Set[int],
+            visited: set[int],
         ) -> bool:
             for dependency in dependencies.get(current, set()):
                 if dependency == target:
@@ -568,8 +571,8 @@ class SwiftGenerator(BaseGenerator):
     def _resolve_named_type(
         self,
         name: str,
-        parent_stack: Optional[List[Message]] = None,
-    ) -> Optional[TypingUnion[Message, Enum, Union]]:
+        parent_stack: list[Message] | None = None,
+    ) -> Message | Enum | Union | None:
         parent_stack = parent_stack or []
         if "." in name:
             return self.schema.get_type(name)
@@ -590,7 +593,7 @@ class SwiftGenerator(BaseGenerator):
     def _declared_type_name(
         self,
         name: str,
-        parent_stack: Optional[List[Message]] = None,
+        parent_stack: list[Message] | None = None,
     ) -> str:
         type_name = self.safe_type_identifier(self.to_pascal_case(name))
         if parent_stack:
@@ -602,7 +605,7 @@ class SwiftGenerator(BaseGenerator):
 
     def _qualified_type_path(
         self,
-        resolved: Optional[TypingUnion[Message, Enum, Union]],
+        resolved: Message | Enum | Union | None,
         fallback_name: str,
     ) -> str:
         owner_schema = self.schema
@@ -624,7 +627,7 @@ class SwiftGenerator(BaseGenerator):
     def _named_type_reference(
         self,
         named_type: NamedType,
-        parent_stack: Optional[List[Message]] = None,
+        parent_stack: list[Message] | None = None,
         nullable: bool = False,
     ) -> str:
         resolved = self._resolve_named_type(named_type.name, parent_stack)
@@ -637,7 +640,7 @@ class SwiftGenerator(BaseGenerator):
         self,
         field_type: FieldType,
         nullable: bool = False,
-        parent_stack: Optional[List[Message]] = None,
+        parent_stack: list[Message] | None = None,
     ) -> str:
         parent_stack = parent_stack or []
         if isinstance(field_type, PrimitiveType):
@@ -691,7 +694,7 @@ class SwiftGenerator(BaseGenerator):
 
         return "Any"
 
-    def field_encoding_argument(self, field: Field) -> Optional[str]:
+    def field_encoding_argument(self, field: Field) -> str | None:
         field_type = field.field_type
         if not isinstance(field_type, PrimitiveType):
             return None
@@ -707,7 +710,7 @@ class SwiftGenerator(BaseGenerator):
         nullable: bool = False,
         *,
         array_element: bool = False,
-    ) -> Optional[str]:
+    ) -> str | None:
         if isinstance(field_type, PrimitiveType):
             return self.scalar_type_hint_expression(
                 field_type,
@@ -737,7 +740,7 @@ class SwiftGenerator(BaseGenerator):
             value_hint = self.type_hint_expression(
                 field_type.value_type, nullable=field_type.value_optional
             )
-            parts: List[str] = []
+            parts: list[str] = []
             if key_hint is not None:
                 parts.append(f"key: {key_hint}")
             if value_hint is not None:
@@ -754,7 +757,7 @@ class SwiftGenerator(BaseGenerator):
         nullable: bool = False,
         *,
         include_integer_encoding: bool = True,
-    ) -> Optional[str]:
+    ) -> str | None:
         kind = field_type.kind
         member_hints = {
             PrimitiveKind.BOOL: "bool",
@@ -789,7 +792,7 @@ class SwiftGenerator(BaseGenerator):
 
         name = callable_hint
         encoding = field_type.encoding_modifier
-        args: List[str] = []
+        args: list[str] = []
         if nullable:
             args.append("nullable: true")
         if include_integer_encoding and encoding is not None:
@@ -798,7 +801,7 @@ class SwiftGenerator(BaseGenerator):
             return f".{name}()"
         return f".{name}({', '.join(args)})"
 
-    def nested_field_attribute(self, field: Field) -> Optional[str]:
+    def nested_field_attribute(self, field: Field) -> str | None:
         field_type = field.field_type
         if isinstance(field_type, ListType):
             element_hint = self.type_hint_expression(
@@ -822,7 +825,7 @@ class SwiftGenerator(BaseGenerator):
             value_hint = self.type_hint_expression(
                 field_type.value_type, nullable=field_type.value_optional
             )
-            parts: List[str] = []
+            parts: list[str] = []
             if key_hint is not None:
                 parts.append(f"key: {key_hint}")
             if value_hint is not None:
@@ -833,7 +836,7 @@ class SwiftGenerator(BaseGenerator):
 
         return None
 
-    def message_field_id_argument(self, field: Field) -> Optional[int]:
+    def message_field_id_argument(self, field: Field) -> int | None:
         return field.tag_id
 
     def union_case_id_argument(self, field: Field) -> int:
@@ -849,7 +852,7 @@ class SwiftGenerator(BaseGenerator):
     def field_swift_type(
         self,
         field: Field,
-        parent_stack: List[Message],
+        parent_stack: list[Message],
     ) -> str:
         weak_ref = self.is_weak_ref_field(field)
         nullable = field.optional or weak_ref
@@ -862,8 +865,8 @@ class SwiftGenerator(BaseGenerator):
     def field_default_expression(
         self,
         field: Field,
-        parent_stack: Optional[List[Message]] = None,
-    ) -> Optional[str]:
+        parent_stack: list[Message] | None = None,
+    ) -> str | None:
         if self.is_weak_ref_field(field):
             return None
         if field.optional:
@@ -874,7 +877,7 @@ class SwiftGenerator(BaseGenerator):
     def type_default_expression(
         self,
         field_type: FieldType,
-        parent_stack: Optional[List[Message]] = None,
+        parent_stack: list[Message] | None = None,
     ) -> str:
         parent_stack = parent_stack or []
         if isinstance(field_type, PrimitiveType):
@@ -910,7 +913,7 @@ class SwiftGenerator(BaseGenerator):
             return "[:]"
 
         if not isinstance(field_type, NamedType):
-            raise ValueError(f"Unsupported Swift default type: {field_type!r}")
+            raise TypeError(f"Unsupported Swift default type: {field_type!r}")
 
         resolved = self._resolve_named_type(field_type.name, parent_stack)
         if resolved is None:
@@ -941,8 +944,8 @@ class SwiftGenerator(BaseGenerator):
 
     def _ensure_default_constructible(
         self,
-        type_def: TypingUnion[Message, Union],
-        stack: Optional[List[TypingUnion[Message, Union]]] = None,
+        type_def: Message | Union,
+        stack: list[Message | Union] | None = None,
     ) -> None:
         stack = stack or []
         for index, ancestor in enumerate(stack):
@@ -985,13 +988,13 @@ class SwiftGenerator(BaseGenerator):
     def _ensure_field_default_constructible(
         self,
         field_type: FieldType,
-        parent_stack: List[Message],
-        stack: List[TypingUnion[Message, Union]],
+        parent_stack: list[Message],
+        stack: list[Message | Union],
     ) -> None:
         if isinstance(field_type, (PrimitiveType, ListType, ArrayType, MapType)):
             return
         if not isinstance(field_type, NamedType):
-            raise ValueError(f"Unsupported Swift default type: {field_type!r}")
+            raise TypeError(f"Unsupported Swift default type: {field_type!r}")
 
         resolved = self._resolve_named_type(field_type.name, parent_stack)
         if resolved is None:
@@ -1001,9 +1004,9 @@ class SwiftGenerator(BaseGenerator):
 
     def _parent_stack_for_nested_type(
         self,
-        target: TypingUnion[Enum, Union],
-    ) -> List[Message]:
-        def visit(message: Message, parents: List[Message]) -> Optional[List[Message]]:
+        target: Enum | Union,
+    ) -> list[Message]:
+        def visit(message: Message, parents: list[Message]) -> list[Message] | None:
             nested_types = [*message.nested_enums, *message.nested_unions]
             if any(nested is target for nested in nested_types):
                 return [*parents, message]
@@ -1022,8 +1025,8 @@ class SwiftGenerator(BaseGenerator):
     def type_supports_equatable(
         self,
         field_type: FieldType,
-        parent_stack: Optional[List[Message]] = None,
-        visiting: Optional[Set[int]] = None,
+        parent_stack: list[Message] | None = None,
+        visiting: set[int] | None = None,
     ) -> bool:
         parent_stack = parent_stack or []
         if isinstance(field_type, PrimitiveType):
@@ -1056,15 +1059,13 @@ class SwiftGenerator(BaseGenerator):
             return self.message_supports_equatable(resolved, visiting=visiting)
         if isinstance(resolved, Union):
             return self.union_supports_equatable(resolved, visiting=visiting)
-        if isinstance(resolved, Enum):
-            return True
-        return False
+        return isinstance(resolved, Enum)
 
     def union_supports_equatable(
         self,
         union: Union,
-        parent_stack: Optional[List[Message]] = None,
-        visiting: Optional[Set[int]] = None,
+        parent_stack: list[Message] | None = None,
+        visiting: set[int] | None = None,
     ) -> bool:
         if visiting is None:
             visiting = set()
@@ -1085,7 +1086,7 @@ class SwiftGenerator(BaseGenerator):
     def message_supports_equatable(
         self,
         message: Message,
-        visiting: Optional[Set[int]] = None,
+        visiting: set[int] | None = None,
     ) -> bool:
         if self.message_is_class(message):
             return False
@@ -1112,10 +1113,10 @@ class SwiftGenerator(BaseGenerator):
         visiting.remove(key)
         return True
 
-    def _lineage_for_message(self, message: Message) -> List[Message]:
-        lineage: List[Message] = []
+    def _lineage_for_message(self, message: Message) -> list[Message]:
+        lineage: list[Message] = []
 
-        def visit(current: Message, parents: List[Message]) -> bool:
+        def visit(current: Message, parents: list[Message]) -> bool:
             if current is message:
                 lineage.extend(parents + [current])
                 return True
@@ -1133,9 +1134,9 @@ class SwiftGenerator(BaseGenerator):
         self,
         enum: Enum,
         indent: int = 0,
-        parent_stack: Optional[List[Message]] = None,
-    ) -> List[str]:
-        lines: List[str] = []
+        parent_stack: list[Message] | None = None,
+    ) -> list[str]:
+        lines: list[str] = []
         ind = self.indent_str * indent
         type_name = self._declared_type_name(enum.name, parent_stack)
         comment = self.format_type_id_comment(enum, f"{ind}//")
@@ -1156,9 +1157,9 @@ class SwiftGenerator(BaseGenerator):
         self,
         union: Union,
         indent: int = 0,
-        parent_stack: Optional[List[Message]] = None,
-    ) -> List[str]:
-        lines: List[str] = []
+        parent_stack: list[Message] | None = None,
+    ) -> list[str]:
+        lines: list[str] = []
         ind = self.indent_str * indent
         type_name = self._declared_type_name(union.name, parent_stack)
         comment = self.format_type_id_comment(union, f"{ind}//")
@@ -1199,9 +1200,9 @@ class SwiftGenerator(BaseGenerator):
         self,
         message: Message,
         indent: int = 0,
-        parent_stack: Optional[List[Message]] = None,
-    ) -> List[str]:
-        lines: List[str] = []
+        parent_stack: list[Message] | None = None,
+    ) -> list[str]:
+        lines: list[str] = []
         ind = self.indent_str * indent
         parent_stack = parent_stack or []
         lineage = parent_stack + [message]
@@ -1274,12 +1275,12 @@ class SwiftGenerator(BaseGenerator):
     def generate_message_fields(
         self,
         message: Message,
-        lineage: List[Message],
+        lineage: list[Message],
         indent: int,
-    ) -> List[str]:
-        lines: List[str] = []
+    ) -> list[str]:
+        lines: list[str] = []
         ind = self.indent_str * indent
-        used_names: Set[str] = set()
+        used_names: set[str] = set()
 
         for field in message.fields:
             field_name = self.safe_member_name(field.name)
@@ -1292,7 +1293,7 @@ class SwiftGenerator(BaseGenerator):
 
             encoding = self.field_encoding_argument(field)
             field_id = self.message_field_id_argument(field)
-            attr_parts: List[str] = []
+            attr_parts: list[str] = []
             if field_id is not None:
                 attr_parts.append(f"id: {field_id}")
             if encoding is not None:
@@ -1318,18 +1319,18 @@ class SwiftGenerator(BaseGenerator):
     def generate_struct_init(
         self,
         message: Message,
-        lineage: List[Message],
+        lineage: list[Message],
         indent: int,
-    ) -> List[str]:
+    ) -> list[str]:
         ind = self.indent_str * indent
-        lines: List[str] = []
+        lines: list[str] = []
         if not message.fields:
             lines.append(f"{ind}public init() {{}}")
             return lines
 
-        params: List[str] = []
-        assignments: List[str] = []
-        used_names: Set[str] = set()
+        params: list[str] = []
+        assignments: list[str] = []
+        used_names: set[str] = set()
         for field in message.fields:
             field_name = self.safe_member_name(field.name)
             suffix = 1
@@ -1356,9 +1357,9 @@ class SwiftGenerator(BaseGenerator):
         lines.append(f"{ind}}}")
         return lines
 
-    def generate_bytes_methods(self, type_name: str, indent: int) -> List[str]:
+    def generate_bytes_methods(self, type_name: str, indent: int) -> list[str]:
         ind = self.indent_str * indent
-        lines: List[str] = []
+        lines: list[str] = []
         module_path = self.module_type_path()
         lines.append(f"{ind}public func toBytes() throws -> Data {{")
         lines.append(
@@ -1375,8 +1376,8 @@ class SwiftGenerator(BaseGenerator):
         lines.append(f"{ind}}}")
         return lines
 
-    def collect_local_types(self) -> List[TypingUnion[Message, Enum, Union]]:
-        local: List[TypingUnion[Message, Enum, Union]] = []
+    def collect_local_types(self) -> list[Message | Enum | Union]:
+        local: list[Message | Enum | Union] = []
         for enum in self.schema.enums:
             if not self.is_imported_type(enum):
                 local.append(enum)
@@ -1385,10 +1386,8 @@ class SwiftGenerator(BaseGenerator):
                 local.append(union)
 
         def visit_message(message: Message) -> None:
-            for nested_enum in message.nested_enums:
-                local.append(nested_enum)
-            for nested_union in message.nested_unions:
-                local.append(nested_union)
+            local.extend(message.nested_enums)
+            local.extend(message.nested_unions)
             for nested_msg in message.nested_messages:
                 visit_message(nested_msg)
             local.append(message)
@@ -1402,18 +1401,18 @@ class SwiftGenerator(BaseGenerator):
 
     def schema_type_name(
         self,
-        type_def: TypingUnion[Message, Enum, Union],
+        type_def: Message | Enum | Union,
     ) -> str:
         return self._qualified_type_names.get(id(type_def), type_def.name)
 
     def schema_swift_type(
         self,
-        type_def: TypingUnion[Message, Enum, Union],
+        type_def: Message | Enum | Union,
     ) -> str:
         return self._qualified_type_path(type_def, self.schema_type_name(type_def))
 
-    def generate_module_type(self, indent: int = 0) -> List[str]:
-        lines: List[str] = []
+    def generate_module_type(self, indent: int = 0) -> list[str]:
+        lines: list[str] = []
         ind = self.indent_str * indent
         module_type_name = self._module_helper_name_for_schema(self.schema)
         lines.append(f"{ind}public enum {module_type_name} {{")

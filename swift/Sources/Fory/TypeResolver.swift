@@ -411,7 +411,8 @@ public final class TypeInfo: @unchecked Sendable {
         compatible ? compatibleWireTypeID : nativeWireTypeID
     }
 
-    func writeTypeInfo(_ context: WriteContext) throws {
+    @usableFromInline
+    internal func writeTypeInfo(_ context: WriteContext) throws {
         let wireTypeID = wireTypeID(compatible: context.compatible)
         context.writeStaticTypeInfo(wireTypeID)
         switch wireTypeID {

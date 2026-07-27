@@ -1061,6 +1061,8 @@ public enum ArrayFieldCodec<ElementCodec: FieldCodec>: FieldCodec {
         )
     }
 
+    @inlinable
+    @inline(__always)
     public static func writeField(
         _ value: Target,
         _ context: WriteContext,
@@ -1096,6 +1098,8 @@ public enum ArrayFieldCodec<ElementCodec: FieldCodec>: FieldCodec {
         try readField(context, refMode: refMode, readTypeInfo: false)
     }
 
+    @inlinable
+    @inline(__always)
     public static func readField(
         _ context: ReadContext,
         refMode: RefMode,
@@ -1149,7 +1153,9 @@ public enum ArrayFieldCodec<ElementCodec: FieldCodec>: FieldCodec {
         }
     }
 
-    private static func readFieldDataAfterTypeInfo(
+    @inlinable
+    @inline(__always)
+    internal static func readFieldDataAfterTypeInfo(
         _ context: ReadContext,
         readTypeInfo: Bool
     ) throws -> Target {

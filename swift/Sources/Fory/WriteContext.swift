@@ -131,8 +131,9 @@ public final class WriteContext {
         dynamicAnyDepth = nextDepth
     }
 
+    @usableFromInline
     @inline(__always)
-    func typeInfo<T: Serializer>(for type: T.Type) throws -> TypeInfo {
+    internal func typeInfo<T: Serializer>(for type: T.Type) throws -> TypeInfo {
         let typeID = ObjectIdentifier(type)
         if lastTypeInfo.serializerTypeID == typeID {
             return lastTypeInfo
@@ -153,8 +154,9 @@ public final class WriteContext {
         return info
     }
 
+    @usableFromInline
     @inline(__always)
-    func writeStaticTypeInfo(_ typeID: TypeId) {
+    internal func writeStaticTypeInfo(_ typeID: TypeId) {
         buffer.writeUInt8(UInt8(truncatingIfNeeded: typeID.rawValue))
     }
 

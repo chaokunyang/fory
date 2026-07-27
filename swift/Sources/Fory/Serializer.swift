@@ -169,6 +169,8 @@ public extension Serializer {
         }
     }
 
+    @inlinable
+    @inline(__always)
     static func writeTypeInfo(_ context: WriteContext) throws {
         guard staticTypeId.isUserTypeKind else {
             context.writeStaticTypeInfo(staticTypeId)

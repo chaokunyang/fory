@@ -39,6 +39,8 @@ public sealed class ForyStructAttribute : Attribute
 
 /// <summary>
 /// Marks an enum as a generated Fory enum type, or declares an external enum serializer.
+/// Enum numeric values are the wire tags and must be in the range
+/// <c>0</c> through <see cref="uint.MaxValue"/>.
 /// </summary>
 [AttributeUsage(AttributeTargets.Class | AttributeTargets.Enum)]
 public sealed class ForyEnumAttribute : Attribute
@@ -139,6 +141,12 @@ public sealed class ForyFieldAttribute : Attribute
     /// Optional Fory schema descriptor type from <c>Apache.Fory.Schema.Types</c>.
     /// </summary>
     public Type? Type { get; set; }
+
+    /// <summary>
+    /// Gets or sets whether an external serializer declaration excludes this member from
+    /// the wire schema while retaining its storage in the graph-memory estimate.
+    /// </summary>
+    public bool Ignore { get; set; }
 
     private static void ValidateId(short id)
     {

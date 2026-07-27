@@ -146,6 +146,14 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true);
 
+    private static readonly DiagnosticDescriptor InvalidIgnoredField = new(
+        id: "FORY015",
+        title: "Invalid ignored Fory field",
+        messageFormat: "Member '{0}' uses invalid [ForyField(Ignore = true)]: {1}",
+        category: "Fory",
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true);
+
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
         IncrementalValuesProvider<TypeModel?> typeModels = context.SyntaxProvider
@@ -206,10 +214,11 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
             validModels.Add(model);
         }
 
-        Dictionary<string, TypeModel> models = new(StringComparer.Ordinal);
-        foreach (IGrouping<string, TypeModel> targetGroup in validModels.GroupBy(
-                     model => model.TargetTypeName,
-                     StringComparer.Ordinal))
+        IEqualityComparer<ITypeSymbol> targetTypeComparer = RuntimeTypeComparer.Instance;
+        Dictionary<ITypeSymbol, TypeModel> models = new(targetTypeComparer);
+        foreach (IGrouping<ITypeSymbol, TypeModel> targetGroup in validModels.GroupBy(
+                     model => model.TargetType,
+                     targetTypeComparer))
         {
             if (targetGroup.Skip(1).Any())
             {
@@ -225,7 +234,7 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
             }
 
             TypeModel targetModel = targetGroup.First();
-            models.Add(targetModel.TargetTypeName, targetModel);
+            models.Add(targetModel.TargetType, targetModel);
         }
 
         if (models.Count == 0)
@@ -244,9 +253,10 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
         sb.AppendLine("}");
         sb.AppendLine();
 
-        foreach (KeyValuePair<string, TypeModel> entry in models.OrderBy(kv => kv.Key, StringComparer.Ordinal))
+        foreach (TypeModel model in models.Values
+                     .OrderBy(model => model.TargetTypeName, StringComparer.Ordinal)
+                     .ThenBy(model => model.DeclarationName, StringComparer.Ordinal))
         {
-            TypeModel model = entry.Value;
             if (model.Kind == DeclKind.Struct || model.Kind == DeclKind.Class)
             {
                 EmitObjectSerializer(sb, model);
@@ -264,9 +274,10 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
         sb.AppendLine("    [global::System.Runtime.CompilerServices.ModuleInitializer]");
         sb.AppendLine("    internal static void Register()");
         sb.AppendLine("    {");
-        foreach (KeyValuePair<string, TypeModel> entry in models.OrderBy(kv => kv.Key, StringComparer.Ordinal))
+        foreach (TypeModel model in models.Values
+                     .OrderBy(model => model.TargetTypeName, StringComparer.Ordinal)
+                     .ThenBy(model => model.DeclarationName, StringComparer.Ordinal))
         {
-            TypeModel model = entry.Value;
             if (model.Kind == DeclKind.Enum)
             {
                 sb.AppendLine(
@@ -2104,9 +2115,9 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
     private static string ModelGraphMemoryExpr(TypeModel model)
     {
         System.Collections.Generic.List<string> parts = new() { GraphObjectOwnerBytesExpr };
-        foreach (MemberModel member in model.SortedMembers)
+        foreach (GraphFieldModel field in model.GraphFields)
         {
-            parts.Add(FieldGraphMemoryExpr(member));
+            parts.Add(field.MemoryExpression);
         }
 
         return string.Join(" + ", parts);
@@ -2114,6 +2125,11 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
 
     private static string FieldGraphMemoryExpr(MemberModel member)
     {
+        if (member.IsNullableValueType)
+        {
+            return $"global::System.Runtime.CompilerServices.Unsafe.SizeOf<{member.TypeName}>()";
+        }
+
         if (member.Classification.IsPrimitive && member.Classification.PrimitiveSize > 0)
         {
             return $"{member.Classification.PrimitiveSize}";
@@ -2129,8 +2145,45 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
             return $"{member.FixedValueBytes}";
         }
 
-        string typeName = StripNullableForTypeOf(member.TypeName);
-        return $"global::System.Runtime.CompilerServices.Unsafe.SizeOf<{typeName}>()";
+        return $"global::System.Runtime.CompilerServices.Unsafe.SizeOf<{member.TypeName}>()";
+    }
+
+    private static string FieldGraphMemoryExpr(
+        ITypeSymbol fieldType,
+        IFieldSymbol? targetField = null)
+    {
+        if (targetField is { IsFixedSizeBuffer: true })
+        {
+            ITypeSymbol elementType = targetField.Type is IPointerTypeSymbol pointer
+                ? pointer.PointedAtType
+                : targetField.Type;
+            return $"({targetField.FixedSize} * {FieldGraphMemoryExpr(elementType)})";
+        }
+
+        if (fieldType.TypeKind is TypeKind.Pointer or TypeKind.FunctionPointer)
+        {
+            return "global::System.IntPtr.Size";
+        }
+
+        if (!fieldType.IsValueType)
+        {
+            return "4";
+        }
+
+        if (fieldType is INamedTypeSymbol nullableType &&
+            nullableType.OriginalDefinition.SpecialType == SpecialType.System_Nullable_T)
+        {
+            return $"global::System.Runtime.CompilerServices.Unsafe.SizeOf<{fieldType.ToDisplayString(FullNameFormat)}>()";
+        }
+
+        TypeClassification classification = ClassifyType(fieldType);
+        int fixedValueBytes = FixedGraphValueBytes(fieldType, classification);
+        if (fixedValueBytes > 0)
+        {
+            return fixedValueBytes.ToString(CultureInfo.InvariantCulture);
+        }
+
+        return $"global::System.Runtime.CompilerServices.Unsafe.SizeOf<{fieldType.ToDisplayString(FullNameFormat)}>()";
     }
 
     private static bool IsConstGraphMemoryExpr(string expression)
@@ -2944,6 +2997,7 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
             return new TypeModel(
                 declarationName,
                 declarationName,
+                typeSymbol,
                 serializerName,
                 DeclKind.Unknown,
                 evolving,
@@ -2985,6 +3039,7 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
             return new TypeModel(
                 declarationName,
                 declarationName,
+                typeSymbol,
                 serializerName,
                 DeclKind.Unknown,
                 evolving,
@@ -3007,6 +3062,7 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
                 return new TypeModel(
                     declarationName,
                     declarationName,
+                    typeSymbol,
                     serializerName,
                     DeclKind.Unknown,
                     evolving,
@@ -3052,6 +3108,7 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
             _ => new TypeModel(
                 declarationName,
                 declarationName,
+                target,
                 serializerName,
                 DeclKind.Unknown,
                 evolving,
@@ -3075,11 +3132,37 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
         bool evolving,
         Location? declarationLocation)
     {
+        ImmutableArray<Diagnostic> ignoredFieldDiagnostics = typeSymbol.GetMembers()
+            .Where(member =>
+                member is IFieldSymbol or IPropertySymbol &&
+                TryGetIgnoredField(member, out _))
+            .Select(member => Diagnostic.Create(
+                InvalidIgnoredField,
+                member.Locations.FirstOrDefault(location => location.IsInSource),
+                member.Name,
+                "Ignore is supported only by external ForyStruct serializer declarations"))
+            .ToImmutableArray();
+        if (!ignoredFieldDiagnostics.IsEmpty)
+        {
+            return new TypeModel(
+                declarationName,
+                declarationName,
+                typeSymbol,
+                serializerName,
+                DeclKind.Unknown,
+                evolving,
+                declarationLocation,
+                ImmutableArray<MemberModel>.Empty,
+                ImmutableArray<MemberModel>.Empty,
+                ignoredFieldDiagnostics);
+        }
+
         if (HasGenericContext(typeSymbol))
         {
             return new TypeModel(
                 declarationName,
                 declarationName,
+                typeSymbol,
                 serializerName,
                 DeclKind.Unknown,
                 evolving,
@@ -3099,6 +3182,7 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
                 return new TypeModel(
                     declarationName,
                     declarationName,
+                    typeSymbol,
                     serializerName,
                     DeclKind.Unknown,
                     evolving,
@@ -3117,6 +3201,7 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
             return new TypeModel(
                 declarationName,
                 declarationName,
+                typeSymbol,
                 serializerName,
                 DeclKind.Enum,
                 evolving,
@@ -3133,6 +3218,7 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
                 return new TypeModel(
                     declarationName,
                     declarationName,
+                    typeSymbol,
                     serializerName,
                     DeclKind.Unknown,
                     evolving,
@@ -3158,6 +3244,7 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
             return new TypeModel(
                 declarationName,
                 declarationName,
+                typeSymbol,
                 serializerName,
                 DeclKind.Union,
                 evolving,
@@ -3179,6 +3266,7 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
             return new TypeModel(
                 declarationName,
                 declarationName,
+                typeSymbol,
                 serializerName,
                 kind,
                 evolving,
@@ -3197,6 +3285,7 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
             return new TypeModel(
                 declarationName,
                 declarationName,
+                typeSymbol,
                 serializerName,
                 kind,
                 evolving,
@@ -3272,6 +3361,7 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
         return new TypeModel(
             declarationName,
             declarationName,
+            typeSymbol,
             serializerName,
             kind,
             evolving,
@@ -3307,6 +3397,8 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
             out DeclKind targetKind);
         string targetTypeName = targetSymbol.ToDisplayString(FullNameFormat);
         List<MemberModel> members = [];
+        List<GraphFieldModel> graphFields = [];
+        HashSet<ISymbol> countedTargetFields = new(SymbolEqualityComparer.Default);
         if (validDeclaration && validTarget)
         {
             foreach (IPropertySymbol schemaProperty in declaration.GetMembers().OfType<IPropertySymbol>())
@@ -3316,12 +3408,60 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
                     continue;
                 }
 
+                if (TryGetIgnoredField(schemaProperty, out AttributeData? fieldAttribute))
+                {
+                    if (IgnoredFieldHasWireOptions(fieldAttribute!))
+                    {
+                        diagnostics.Add(Diagnostic.Create(
+                            InvalidIgnoredField,
+                            schemaProperty.Locations.FirstOrDefault(location => location.IsInSource),
+                            schemaProperty.Name,
+                            "Id and Type cannot be combined with Ignore"));
+                        continue;
+                    }
+
+                    Location? ignoredLocation = schemaProperty.Locations.FirstOrDefault(
+                        location => location.IsInSource);
+                    if (schemaProperty.Type.IsRefLikeType)
+                    {
+                        diagnostics.Add(Diagnostic.Create(
+                            InvalidExternalMember,
+                            ignoredLocation,
+                            schemaProperty.Name,
+                            targetTypeName,
+                            "a ref-like type cannot represent target object storage"));
+                        continue;
+                    }
+
+                    if (RequiresExternAlias(schemaProperty.Type, compilation))
+                    {
+                        diagnostics.Add(Diagnostic.Create(
+                            UnsupportedExternalAlias,
+                            ignoredLocation,
+                            schemaProperty.Type.ToDisplayString(FullNameFormat)));
+                        continue;
+                    }
+
+                    IFieldSymbol? ignoredTargetField = MatchingPublicTargetField(
+                        target!,
+                        schemaProperty);
+                    graphFields.Add(new GraphFieldModel(
+                        FieldGraphMemoryExpr(schemaProperty.Type, ignoredTargetField)));
+                    if (ignoredTargetField is not null)
+                    {
+                        countedTargetFields.Add(ignoredTargetField);
+                    }
+
+                    continue;
+                }
+
                 if (!TryBindExternalMember(
                         compilation,
                         target!,
                         schemaProperty,
                         targetTypeName,
-                        diagnostics))
+                        diagnostics,
+                        out ISymbol? targetMember))
                 {
                     continue;
                 }
@@ -3335,6 +3475,13 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
                 if (member is not null)
                 {
                     members.Add(member);
+                    IFieldSymbol? targetField = targetMember as IFieldSymbol;
+                    graphFields.Add(new GraphFieldModel(
+                        FieldGraphMemoryExpr(schemaProperty.Type, targetField)));
+                    if (targetField is not null)
+                    {
+                        countedTargetFields.Add(targetField);
+                    }
                 }
                 else if (diagnostics.Count == diagnosticCount)
                 {
@@ -3346,6 +3493,17 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
                         "the schema property type or descriptor is not supported"));
                 }
             }
+
+            foreach (IFieldSymbol targetField in PublicInstanceFields(target!))
+            {
+                if (!countedTargetFields.Add(targetField))
+                {
+                    continue;
+                }
+
+                graphFields.Add(new GraphFieldModel(
+                    FieldGraphMemoryExpr(targetField.Type, targetField)));
+            }
         }
 
         ImmutableArray<MemberModel> ordered = members
@@ -3354,13 +3512,15 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
         return new TypeModel(
             declarationName,
             targetTypeName,
+            targetSymbol,
             serializerName,
             targetKind,
             evolving,
             declarationLocation,
             ordered,
             SortMembers(ordered),
-            diagnostics.ToImmutableArray());
+            diagnostics.ToImmutableArray(),
+            graphFields: graphFields.ToImmutableArray());
     }
 
     private static TypeModel BuildExternalEnumModel(
@@ -3392,6 +3552,7 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
         return new TypeModel(
             declarationName,
             targetSymbol.ToDisplayString(FullNameFormat),
+            targetSymbol,
             serializerName,
             DeclKind.Enum,
             true,
@@ -3692,8 +3853,10 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
         INamedTypeSymbol target,
         IPropertySymbol schemaProperty,
         string targetTypeName,
-        List<Diagnostic> diagnostics)
+        List<Diagnostic> diagnostics,
+        out ISymbol? targetMember)
     {
+        targetMember = null;
         Location? location = schemaProperty.Locations.FirstOrDefault(sourceLocation => sourceLocation.IsInSource);
         if (schemaProperty.Type.TypeKind is TypeKind.Pointer or TypeKind.FunctionPointer ||
             schemaProperty.Type.IsRefLikeType)
@@ -3707,7 +3870,7 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
             return false;
         }
 
-        if (!TryFindTargetMember(target, schemaProperty.Name, out ISymbol? targetMember, out string reason))
+        if (!TryFindTargetMember(target, schemaProperty.Name, out targetMember, out string reason))
         {
             diagnostics.Add(Diagnostic.Create(
                 InvalidExternalMember,
@@ -3791,6 +3954,50 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
         }
 
         return true;
+    }
+
+    private static IEnumerable<IFieldSymbol> PublicInstanceFields(INamedTypeSymbol target)
+    {
+        for (INamedTypeSymbol? current = target; current is not null; current = current.BaseType)
+        {
+            foreach (IFieldSymbol field in current.GetMembers()
+                         .OfType<IFieldSymbol>()
+                         .Where(field =>
+                             !field.IsImplicitlyDeclared &&
+                             !field.IsStatic &&
+                             !field.IsConst &&
+                             field.DeclaredAccessibility == Accessibility.Public)
+                         .OrderBy(field => field.MetadataName, StringComparer.Ordinal))
+            {
+                yield return field;
+            }
+        }
+    }
+
+    private static IFieldSymbol? MatchingPublicTargetField(
+        INamedTypeSymbol target,
+        IPropertySymbol schemaProperty)
+    {
+        if (!TryFindTargetMember(
+                target,
+                schemaProperty.Name,
+                out ISymbol? targetMember,
+                out _) ||
+            targetMember is not IFieldSymbol targetField)
+        {
+            return null;
+        }
+
+        if (targetField.IsImplicitlyDeclared ||
+            targetField.IsStatic ||
+            targetField.IsConst ||
+            targetField.DeclaredAccessibility != Accessibility.Public ||
+            !ExternalMemberTypesMatch(schemaProperty.Type, targetField.Type))
+        {
+            return null;
+        }
+
+        return targetField;
     }
 
     private static bool TryFindTargetMember(
@@ -4454,6 +4661,48 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
     {
         _ = GetForyAttribute(typeSymbol, out ForyAttributeKind attributeKind);
         return attributeKind;
+    }
+
+    private static bool TryGetIgnoredField(
+        ISymbol member,
+        out AttributeData? fieldAttribute)
+    {
+        fieldAttribute = null;
+        foreach (AttributeData attribute in member.GetAttributes())
+        {
+            if (!string.Equals(
+                    attribute.AttributeClass?.ToDisplayString(),
+                    "Apache.Fory.ForyFieldAttribute",
+                    StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            fieldAttribute = attribute;
+            foreach (KeyValuePair<string, TypedConstant> namedArgument in attribute.NamedArguments)
+            {
+                if (string.Equals(namedArgument.Key, "Ignore", StringComparison.Ordinal) &&
+                    namedArgument.Value.Value is true)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        return false;
+    }
+
+    private static bool IgnoredFieldHasWireOptions(AttributeData fieldAttribute)
+    {
+        if (!fieldAttribute.ConstructorArguments.IsEmpty)
+        {
+            return true;
+        }
+
+        return fieldAttribute.NamedArguments.Any(
+            argument => argument.Key is "Id" or "Type");
     }
 
     private static MemberModel? BuildMemberModel(
@@ -5848,11 +6097,163 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
         public ImmutableArray<FieldCodecModel> Generics { get; }
     }
 
+    private sealed class RuntimeTypeComparer : IEqualityComparer<ITypeSymbol>
+    {
+        // CLR registration erases source-only distinctions such as tuple names,
+        // dynamic, and native-integer aliases; equality and hashing must erase
+        // the same distinctions before selecting one generated owner.
+        public static readonly RuntimeTypeComparer Instance = new();
+
+        public bool Equals(ITypeSymbol? left, ITypeSymbol? right)
+        {
+            if (ReferenceEquals(left, right))
+            {
+                return true;
+            }
+
+            if (left is null || right is null)
+            {
+                return false;
+            }
+
+            if (IsDynamicOrObject(left) || IsDynamicOrObject(right))
+            {
+                return IsDynamicOrObject(left) && IsDynamicOrObject(right);
+            }
+
+            if (left is IArrayTypeSymbol || right is IArrayTypeSymbol)
+            {
+                if (left is not IArrayTypeSymbol leftArray ||
+                    right is not IArrayTypeSymbol rightArray)
+                {
+                    return false;
+                }
+
+                return leftArray.Rank == rightArray.Rank &&
+                       leftArray.IsSZArray == rightArray.IsSZArray &&
+                       Equals(leftArray.ElementType, rightArray.ElementType);
+            }
+
+            if (left is INamedTypeSymbol leftNamed &&
+                right is INamedTypeSymbol rightNamed)
+            {
+                return NamedEquals(
+                    NormalizeNamed(leftNamed),
+                    NormalizeNamed(rightNamed));
+            }
+
+            return SymbolEqualityComparer.Default.Equals(left, right);
+        }
+
+        public int GetHashCode(ITypeSymbol type)
+        {
+            if (IsDynamicOrObject(type))
+            {
+                return (int)SpecialType.System_Object;
+            }
+
+            if (type is IArrayTypeSymbol array)
+            {
+                int hash = CombineHash(17, (int)TypeKind.Array);
+                hash = CombineHash(hash, array.Rank);
+                hash = CombineHash(hash, array.IsSZArray ? 1 : 0);
+                return CombineHash(hash, GetHashCode(array.ElementType));
+            }
+
+            if (type is INamedTypeSymbol named)
+            {
+                return NamedHash(NormalizeNamed(named));
+            }
+
+            return SymbolEqualityComparer.Default.GetHashCode(type);
+        }
+
+        private bool NamedEquals(
+            INamedTypeSymbol left,
+            INamedTypeSymbol right)
+        {
+            if (!SymbolEqualityComparer.Default.Equals(
+                    left.OriginalDefinition,
+                    right.OriginalDefinition) ||
+                left.TypeArguments.Length != right.TypeArguments.Length)
+            {
+                return false;
+            }
+
+            INamedTypeSymbol? leftContaining = left.ContainingType;
+            INamedTypeSymbol? rightContaining = right.ContainingType;
+            if ((leftContaining is null) != (rightContaining is null) ||
+                leftContaining is not null &&
+                !Equals(leftContaining, rightContaining))
+            {
+                return false;
+            }
+
+            for (int i = 0; i < left.TypeArguments.Length; i++)
+            {
+                if (!Equals(left.TypeArguments[i], right.TypeArguments[i]))
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        private int NamedHash(INamedTypeSymbol type)
+        {
+            int hash = CombineHash(
+                23,
+                SymbolEqualityComparer.Default.GetHashCode(type.OriginalDefinition));
+            if (type.ContainingType is not null)
+            {
+                hash = CombineHash(hash, GetHashCode(type.ContainingType));
+            }
+
+            foreach (ITypeSymbol typeArgument in type.TypeArguments)
+            {
+                hash = CombineHash(hash, GetHashCode(typeArgument));
+            }
+
+            return hash;
+        }
+
+        private static INamedTypeSymbol NormalizeNamed(INamedTypeSymbol type)
+        {
+            type = NormalizeTuple(type);
+
+            if (type.IsNativeIntegerType &&
+                type.NativeIntegerUnderlyingType is INamedTypeSymbol nativeUnderlying)
+            {
+                return nativeUnderlying;
+            }
+
+            return type;
+        }
+
+        private static INamedTypeSymbol NormalizeTuple(INamedTypeSymbol type)
+        {
+            return type.TupleUnderlyingType ?? type;
+        }
+
+        private static bool IsDynamicOrObject(ITypeSymbol type)
+        {
+            return type.TypeKind == TypeKind.Dynamic ||
+                   type.SpecialType == SpecialType.System_Object;
+        }
+
+        private static int CombineHash(int current, int value)
+        {
+            return unchecked(current * 31 + value);
+        }
+    }
+
     private sealed class TypeModel
     {
         public TypeModel(
             string declarationName,
             string targetTypeName,
+            ITypeSymbol targetType,
             string serializerName,
             DeclKind kind,
             bool evolving,
@@ -5860,10 +6261,12 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
             ImmutableArray<MemberModel> members,
             ImmutableArray<MemberModel> sortedMembers,
             ImmutableArray<Diagnostic> diagnostics,
-            ImmutableArray<UnionCaseModel> unionCases = default)
+            ImmutableArray<UnionCaseModel> unionCases = default,
+            ImmutableArray<GraphFieldModel> graphFields = default)
         {
             DeclarationName = declarationName;
             TargetTypeName = targetTypeName;
+            TargetType = targetType;
             SerializerName = serializerName;
             Kind = kind;
             Evolving = evolving;
@@ -5874,10 +6277,16 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
             UnionCases = unionCases.IsDefault
                 ? ImmutableArray<UnionCaseModel>.Empty
                 : unionCases;
+            GraphFields = graphFields.IsDefault
+                ? sortedMembers
+                    .Select(member => new GraphFieldModel(FieldGraphMemoryExpr(member)))
+                    .ToImmutableArray()
+                : graphFields;
         }
 
         public string DeclarationName { get; }
         public string TargetTypeName { get; }
+        public ITypeSymbol TargetType { get; }
         public string SerializerName { get; }
         public DeclKind Kind { get; }
         public bool Evolving { get; }
@@ -5886,6 +6295,17 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
         public ImmutableArray<MemberModel> SortedMembers { get; }
         public ImmutableArray<Diagnostic> Diagnostics { get; }
         public ImmutableArray<UnionCaseModel> UnionCases { get; }
+        public ImmutableArray<GraphFieldModel> GraphFields { get; }
+    }
+
+    private sealed class GraphFieldModel
+    {
+        public GraphFieldModel(string memoryExpression)
+        {
+            MemoryExpression = memoryExpression;
+        }
+
+        public string MemoryExpression { get; }
     }
 
     private sealed class MemberModel

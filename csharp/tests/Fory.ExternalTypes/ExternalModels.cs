@@ -145,6 +145,41 @@ public sealed class ExternalEvolutionOff
     public int Value { get; set; }
 }
 
+public struct ExternalBudgetValue
+{
+    public long Left;
+
+    public long Right;
+}
+
+public class ExternalBudgetBase
+{
+    public ExternalBudgetValue BaseState;
+}
+
+public sealed class ExternalBudgetModel : ExternalBudgetBase
+{
+    public int Value;
+
+    public ExternalBudgetValue PublicState;
+
+    private readonly ExternalBudgetValue HiddenState;
+
+    public ExternalBudgetModel()
+    {
+    }
+
+    public ExternalBudgetModel(ExternalBudgetValue hiddenState)
+    {
+        HiddenState = hiddenState;
+    }
+
+    public ExternalBudgetValue ReadHiddenState()
+    {
+        return HiddenState;
+    }
+}
+
 public sealed class XlangUser
 {
     public int Id { get; set; }
@@ -162,8 +197,8 @@ public struct XlangPoint
 public enum XlangStatus : uint
 {
     Unknown = 0,
-    Ready = 1,
-    Done = 2,
+    Ready = 7,
+    Done = 23,
 }
 
 public sealed class XlangHolder

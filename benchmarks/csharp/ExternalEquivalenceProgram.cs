@@ -29,6 +29,8 @@ internal enum ExternalImplementation
 
 internal sealed class ExternalBenchmarkOptions
 {
+    public const int DefaultAllocationIterations = 100_000;
+
     public HashSet<string> DataFilter { get; init; } = [];
 
     public double WarmupSeconds { get; init; } = 1.0;
@@ -39,7 +41,7 @@ internal sealed class ExternalBenchmarkOptions
 
     public ExternalImplementation Implementation { get; init; }
 
-    public int AllocationIterations { get; init; }
+    public int AllocationIterations { get; init; } = DefaultAllocationIterations;
 
     public bool ShowHelp { get; init; }
 
@@ -50,7 +52,7 @@ internal sealed class ExternalBenchmarkOptions
         double durationSeconds = 3.0;
         string outputPath = "external_equivalence_results.json";
         ExternalImplementation implementation = ExternalImplementation.None;
-        int allocationIterations = 0;
+        int allocationIterations = DefaultAllocationIterations;
         bool showHelp = false;
 
         for (int i = 0; i < args.Length; i++)
@@ -225,7 +227,8 @@ internal static class ExternalEquivalenceProgram
         Console.WriteLine("  --duration <seconds>");
         Console.WriteLine("  --output <path>");
         Console.WriteLine("  --external-implementation <ordinary|external>");
-        Console.WriteLine("  --allocation-iterations <count>");
+        Console.WriteLine(
+            $"  --allocation-iterations <count> (default: {ExternalBenchmarkOptions.DefaultAllocationIterations})");
         Console.WriteLine("  --help");
     }
 }

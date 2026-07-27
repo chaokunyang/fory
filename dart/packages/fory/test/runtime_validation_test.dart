@@ -90,35 +90,35 @@ class ExplicitUnknownEnvelope {
 }
 
 @ForyStruct()
-class SkipEnvelope {
-  SkipEnvelope();
+class IgnoreEnvelope {
+  IgnoreEnvelope();
 
   String visible = '';
 
-  @ForyField(skip: true)
-  String skipped = 'local-default';
+  @ForyField(ignore: true)
+  String ignored = 'local-default';
 }
 
 @ForyStruct()
-class SkipCompatibleV1 {
-  SkipCompatibleV1();
+class IgnoreCompatibleV1 {
+  IgnoreCompatibleV1();
 
   @ForyField(id: 1)
   String visible = '';
 
   @ForyField(id: 2)
-  String skipped = 'writer-default';
+  String ignored = 'writer-default';
 }
 
 @ForyStruct()
-class SkipCompatibleV2 {
-  SkipCompatibleV2();
+class IgnoreCompatibleV2 {
+  IgnoreCompatibleV2();
 
   @ForyField(id: 1)
   String visible = '';
 
-  @ForyField(id: 2, skip: true)
-  String skipped = 'reader-default';
+  @ForyField(ignore: true)
+  String ignored = 'reader-default';
 }
 
 @ForyStruct()
@@ -170,24 +170,24 @@ void _registerValidationTypes(Fory fory) {
   );
   RuntimeValidationTestForyModule.register(
     fory,
-    SkipEnvelope,
-    name: 'validation.SkipEnvelope',
+    IgnoreEnvelope,
+    name: 'validation.IgnoreEnvelope',
   );
 }
 
-void _registerSkipV1(Fory fory) {
+void _registerIgnoreV1(Fory fory) {
   RuntimeValidationTestForyModule.register(
     fory,
-    SkipCompatibleV1,
-    name: 'validation.SkipCompatible',
+    IgnoreCompatibleV1,
+    name: 'validation.IgnoreCompatible',
   );
 }
 
-void _registerSkipV2(Fory fory) {
+void _registerIgnoreV2(Fory fory) {
   RuntimeValidationTestForyModule.register(
     fory,
-    SkipCompatibleV2,
-    name: 'validation.SkipCompatible',
+    IgnoreCompatibleV2,
+    name: 'validation.IgnoreCompatible',
   );
 }
 
@@ -236,20 +236,20 @@ void main() {
       );
     });
 
-    test('skip fields stay local only after round trip', () {
+    test('ignored fields stay local only after round trip', () {
       final fory = Fory();
       _registerValidationTypes(fory);
 
-      final roundTrip = fory.deserialize<SkipEnvelope>(
+      final roundTrip = fory.deserialize<IgnoreEnvelope>(
         fory.serialize(
-          SkipEnvelope()
+          IgnoreEnvelope()
             ..visible = 'kept'
-            ..skipped = 'discarded',
+            ..ignored = 'discarded',
         ),
       );
 
       expect(roundTrip.visible, equals('kept'));
-      expect(roundTrip.skipped, equals('local-default'));
+      expect(roundTrip.ignored, equals('local-default'));
     });
 
     test('dynamic fields preserve concrete runtime payload types', () {
@@ -289,22 +289,22 @@ void main() {
       expect(roundTrip.value, equals('dynamic-payload'));
     });
 
-    test('compatible mode ignores skipped fields from older writers', () {
+    test('compatible mode ignores fields from older writers', () {
       final writer = Fory(compatible: true);
       final reader = Fory(compatible: true);
-      _registerSkipV1(writer);
-      _registerSkipV2(reader);
+      _registerIgnoreV1(writer);
+      _registerIgnoreV2(reader);
 
-      final migrated = reader.deserialize<SkipCompatibleV2>(
+      final migrated = reader.deserialize<IgnoreCompatibleV2>(
         writer.serialize(
-          SkipCompatibleV1()
+          IgnoreCompatibleV1()
             ..visible = 'seen'
-            ..skipped = 'legacy',
+            ..ignored = 'legacy',
         ),
       );
 
       expect(migrated.visible, equals('seen'));
-      expect(migrated.skipped, equals('reader-default'));
+      expect(migrated.ignored, equals('reader-default'));
     });
   });
 

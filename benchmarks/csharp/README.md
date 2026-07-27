@@ -38,6 +38,7 @@ Options:
   --warmup <seconds>
   --external-equivalence
   --allocation-iterations <count>
+  --baseline-worktree <dir>
 ```
 
 Examples:
@@ -55,9 +56,9 @@ Examples:
 
 ## External-Type Equivalence
 
-The opt-in external-type mode compares generated serializers for ordinary
-benchmark models with external structural serializers for equivalent models
-from a Fory-free project:
+The opt-in external-type mode compares the latest `apache/main` ordinary
+serializer, the current ordinary serializer, and the current external
+structural serializer for equivalent models from a Fory-free project:
 
 ```bash
 ./run.sh --external-equivalence --duration 10 --warmup 3
@@ -74,13 +75,22 @@ package that owns the external-type models and measurements. Building or
 running the ordinary benchmark therefore does not compile external-type models
 or their generated serializer instantiations.
 
-The runner builds the external-type benchmark once. For each selected lane, it
-launches two balanced adjacent pairs in fixed order: ordinary then external,
-followed by external then ordinary. Each of the four workers runs in a fresh
-process and constructs, registers, validates, warms, times, and optionally
-measures allocations for only its selected implementation. Keeping the
+The runner fetches `apache/main` and reuses the dedicated sibling worktree
+`../fory-benchmark-baseline` by default. Use `--baseline-worktree` to select
+another dedicated path. If the worktree already exists, the runner refuses
+tracked changes before switching it to the fetched commit. It never resets or
+cleans the worktree, so untracked files are preserved and a conflicting file
+causes the switch to fail safely.
+
+The runner builds the baseline and current external-type benchmark projects
+separately. For each selected lane, it launches two balanced adjacent triples
+in fixed order: `apache-main ordinary external`, followed by
+`external ordinary apache-main`. Each of the six workers runs in a fresh
+process and constructs, registers, validates, warms, times, and measures
+allocations for only its selected implementation. Each baseline/current and
+ordinary/external comparison is therefore adjacent in both orders. Keeping the
 implementations in separate processes prevents shared reference-generic
-Dynamic PGO profiles from biasing the second implementation while retaining
+Dynamic PGO profiles from biasing a later implementation while retaining
 normal .NET tiering.
 
 Use `--data` to select one of these lanes:
@@ -93,7 +103,8 @@ Use `--data` to select one of these lanes:
 - `map-field`
 - `map-root`
 
-Add a fixed allocation pass with:
+Every worker runs a fixed allocation pass with 100,000 operations by default.
+To select another fixed count, use:
 
 ```bash
 ./run.sh --external-equivalence --allocation-iterations 100000
@@ -107,14 +118,17 @@ allocation counters start. Allocation results use
 Results are written to
 `build/external_equivalence_results.json`. Per-process results, including a
 Base64 proof frame, are written under `build/external_equivalence_sides/` with
-the lane, one-based sample index, and implementation in each filename. After
-every worker finishes, the merger rejects missing, duplicate, reordered, or
-reused samples, incompatible runtime metadata, serialized size or byte
-differences, and allocation differences. It reports the median ordinary and
-external throughput and latency from the two samples per implementation. The
-combined JSON records the sample count and fixed pair orders. This opt-in mode
-does not invoke the default Python report generator or update the published
-36-case report.
+the lane, one-based sample index, and role in each filename. After every worker
+finishes, the merger rejects missing, duplicate, reordered, or reused samples,
+incompatible runtime metadata, serialized size or byte differences, and
+unstable per-role allocation samples. It fails if current ordinary latency is
+more than 1% above `apache/main`, current external latency is more than 1% above
+current ordinary, current external latency is more than 1% above `apache/main`,
+current ordinary allocates more than `apache/main`, or current external
+allocation differs from current ordinary. The complete JSON, including commit
+provenance and every violation, is written before a regression returns a
+nonzero exit code. This opt-in mode does not invoke the default Python report
+generator or update the published 36-case report.
 
 The benchmark executable requires exactly one implementation for direct worker
 use:
@@ -126,6 +140,7 @@ dotnet run -c Release --no-build \
   --data class-root \
   --duration 10 \
   --warmup 3 \
+  --allocation-iterations 100000 \
   --output build/external_equivalence_sides/class-root-direct-ordinary.json
 ```
 

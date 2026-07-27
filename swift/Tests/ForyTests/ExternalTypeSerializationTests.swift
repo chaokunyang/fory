@@ -117,10 +117,19 @@ private struct CarrierSelections: Equatable {
 
 @ForyStruct(target: Node.self)
 private final class NodeSerializer {
+    @ForyField(ignore: false)
     var value: Int32 = 0
 
     @ForyField(with: OptionalSerializer<NodeSerializer>.self)
     var next: Node?
+
+    @ForyField(ignore: true)
+    var omittedState: (UInt64, UInt64) = (0, 0)
+}
+
+@ForyStruct(target: Node.self)
+private final class NodeValueSerializer {
+    var value: Int32 = 0
 }
 
 @ForyEnum(target: Status.self)
@@ -480,6 +489,64 @@ func externalClassCycleRoundTrip() throws {
     )
     #expect(decoded.value == 42)
     #expect(decoded.next === decoded)
+}
+
+@Test
+func externalIgnoredFieldBudget() throws {
+    let value = Node()
+    value.value = 42
+    let required =
+        2 * MemoryLayout<Int>.stride
+        + MemoryLayout<Int32>.stride
+        + 4
+        + MemoryLayout<(UInt64, UInt64)>.stride
+
+    for compatible in [false, true] {
+        let writer = Fory(
+            config: .init(
+                trackRef: false,
+                compatible: compatible
+            )
+        )
+        let bytes: Data
+        if compatible {
+            try writer.register(NodeValueSerializer.self, id: 142)
+            bytes = try writer.serialize(value, with: NodeValueSerializer.self)
+        } else {
+            try writer.register(NodeSerializer.self, id: 142)
+            bytes = try writer.serialize(value, with: NodeSerializer.self)
+        }
+
+        let limited = Fory(
+            config: .init(
+                trackRef: false,
+                compatible: compatible,
+                maxGraphMemoryBytes: Int64(required - 1)
+            )
+        )
+        try limited.register(NodeSerializer.self, id: 142)
+        #expect(throws: ForyError.self) {
+            let _: Node = try limited.deserialize(
+                bytes,
+                with: NodeSerializer.self
+            )
+        }
+
+        let exact = Fory(
+            config: .init(
+                trackRef: false,
+                compatible: compatible,
+                maxGraphMemoryBytes: Int64(required)
+            )
+        )
+        try exact.register(NodeSerializer.self, id: 142)
+        let decoded: Node = try exact.deserialize(
+            bytes,
+            with: NodeSerializer.self
+        )
+        #expect(decoded.value == value.value)
+        #expect(decoded.next == nil)
+    }
 }
 
 @Test

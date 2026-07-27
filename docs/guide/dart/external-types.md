@@ -104,7 +104,21 @@ Without a `constructor` option, generation uses the target's public unnamed
 generative constructor. Constructor parameters map to schema fields by name
 and must use exactly the same Dart types.
 
-Select a public named generative constructor when needed:
+For example, suppose the dependency exposes this immutable class:
+
+```dart
+final class Money {
+  const Money.fromParts({
+    required this.currency,
+    required this.units,
+  });
+
+  final String currency;
+  final int units;
+}
+```
+
+Select its public named generative constructor in the serializer declaration:
 
 ```dart
 @ForyStruct(
@@ -119,10 +133,24 @@ abstract final class MoneySerializer {
 }
 ```
 
+After decoding the fields, the generated serializer calls
+`third_party.Money.fromParts(currency: ..., units: ...)`.
+
 For a mutable target, a public generative constructor with no required
 arguments plus matching setters allows Fory to construct the target first and
 then assign its fields. This also supports cycles when reference tracking is
-enabled:
+enabled. For example, suppose the dependency exposes:
+
+```dart
+final class Node {
+  Node.empty();
+
+  late String label;
+  Node? next;
+}
+```
+
+Select `Node.empty` in the serializer declaration:
 
 ```dart
 @ForyStruct(
@@ -136,6 +164,9 @@ abstract final class NodeSerializer {
   late final third_party.Node? next;
 }
 ```
+
+The generated serializer can call `third_party.Node.empty()`, publish the new
+node for reference tracking, and then assign `label` and `next`.
 
 A constructor-based target cannot decode a statically known reference-tracked
 path back to itself because the target does not exist until its constructor

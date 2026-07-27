@@ -291,14 +291,3 @@ typealias Users = [ThirdParty.User]
 @ForyField(type: .list(element: .with(UserSerializer.self)))
 var users: Users
 ```
-
-## When to Use a Manual Serializer
-
-Use a manual serializer when:
-
-- a target field or initializer is inaccessible;
-- a class is immutable or has construction invariants;
-- an enum is not exhaustively switchable;
-- a union cannot represent `UnknownCase`;
-- the target needs a custom encoding;
-- the target needs custom validation or construction logic.

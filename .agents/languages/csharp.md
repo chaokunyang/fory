@@ -11,6 +11,45 @@ Load this file when changing `csharp/` or C# xlang behavior.
 - Use `dotnet format` to keep C# code style consistent.
 - Generated C# gRPC service companions are compiler-owned files that depend on application-provided gRPC packages, not `csharp/src/Fory`. Keep gRPC package references out of the Fory runtime package.
 - C# generated schema modules are source-file owners. Service companions must use that module's `ThreadSafeFory` and must not introduce namespace-owned aliases or duplicate serializer registration paths.
+- C# external-type serialization is target-keyed. A local
+  `ForyStruct(Target = typeof(...))` abstract serializer declaration owns only
+  compile-time schema metadata; an empty static
+  `ForyEnum(Target = typeof(...))` declaration selects the canonical target
+  enum serializer. Generated code, `Serializer<T>`, `TypeInfo`, registration,
+  roots, fields, dynamic values, references, graph memory, and carrier children
+  use the actual target type. Never instantiate, register, reflect over, or
+  reference-publish the declaration.
+- Keep one generator model/emitter and one resolver registration path for
+  ordinary and external C# targets. Registration stays on the existing
+  `Register<Target>` and `Register<Target, TSerializer>` APIs. Do not add
+  external registration, field/root serializer selectors, provider objects,
+  callbacks, runtime schema trees, carrier-provider types, per-element
+  external dispatch, or declaration-to-target conversion objects.
+- Generated structural registration must carry declaration-owned `Evolving`
+  directly into target `TypeInfo`; do not reflect the external declaration at
+  runtime or add a second metadata owner. Reject duplicate generated owners by
+  target at compile time and deterministically on the cold cross-assembly
+  factory-registration path. Last-writer-wins generated factories are
+  forbidden; existing explicit manual serializer replacement semantics remain
+  unchanged.
+- External structural serializers use direct target construction and member
+  access under the existing mutable parameterless-construction contract.
+  Immutable, constructor-only, factory-only, readonly, init-only, renamed,
+  converted, or inaccessible targets use a manual serializer. Derive
+  allocation, reference publication, default value, and graph-memory behavior
+  from the target class/struct kind, never the declaration kind.
+- External children compose through the concrete carrier serializers already
+  owned by `TypeResolver`: nullable structs, one-dimensional arrays, List,
+  LinkedList, Queue, Stack, HashSet, SortedSet, ImmutableHashSet, Dictionary,
+  SortedDictionary, SortedList, ConcurrentDictionary, and
+  NullableKeyDictionary. Do not add or claim unsupported collection-interface,
+  tuple, fixed-array, multidimensional-array, memory, or reference-wrapper
+  carriers.
+- External and equivalent ordinary generated hot bodies must have the same
+  work and allocation shape apart from target/member metadata tokens. External
+  target selection is compile-time only. Keep duplicate-target and validation
+  errors on no-inline cold entrances, but do not mark successful serializer
+  dispatch cold.
 - Compatible scalar, list-array, and binary/uint8-array adaptations are immediate-field-only. Recursive matched-field comparison for collection elements, array elements, map keys, and map values must require exact nullability, ref tracking, generic arity, and type shape except documented user-type family normalization.
 - Root deserialization graph memory budget state belongs to `ReadContext`. C# public roots are
   memory-backed today, but the graph budget uses the same fixed default for every root shape.

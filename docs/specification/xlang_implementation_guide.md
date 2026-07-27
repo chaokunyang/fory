@@ -219,6 +219,99 @@ The ownership split is:
 - `Fory` owns root framing and operation setup/reset
 - `TypeResolver` owns registration and dynamic lookup
 
+#### C# target-keyed external serializers
+
+C# external-type serialization uses the existing target-keyed serializer
+resolver.
+
+`ForyStructAttribute` and `ForyEnumAttribute` carry an optional `Target` type.
+A local non-generic abstract class supplies an external struct schema, while an
+empty non-generic static class selects an external enum target:
+
+```csharp
+[ForyStruct(Target = typeof(ThirdParty.User))]
+internal abstract class UserSerializer
+{
+    [ForyField(1)]
+    public abstract string Name { get; }
+}
+
+[ForyEnum(Target = typeof(ThirdParty.Status))]
+internal static class StatusSerializer
+{
+}
+```
+
+These declarations are compile-time generator input only. They are never
+instantiated, reflected over by the runtime, registered, reference-published,
+or used as wire identities. The generator emits the existing
+`Serializer<ThirdParty.User>` structural form and registers its generated
+factory under `ThirdParty.User`. External enums reuse
+`EnumSerializer<ThirdParty.Status>`. Application registration continues to use
+the existing target APIs:
+
+```csharp
+fory.Register<ThirdParty.User>(100);
+fory.Register<ThirdParty.Status>("example.Status");
+```
+
+The C# generator model must separate declaration identity from target identity,
+then reuse one structural serializer emitter for both ordinary and external
+targets. Runtime type positions, construction, member access, `TypeInfo`,
+compatible metadata, graph-memory ownership, reference publication, generated
+factory keys, root lookup, and dynamic lookup use the target. The declaration
+supplies only field names, IDs, schema descriptors, nullability, and the
+structural `Evolving` setting.
+
+The existing
+`TypeResolver.RegisterGenerated<T, TSerializer>(bool? evolving = null)`
+generated-registration method carries `Evolving` into the target `TypeInfo`.
+Ordinary and external generated structs pass it explicitly; generated enums and
+unions omit it. The runtime must not recover the value by reflecting the
+external declaration, add a serializer capability interface, or create a
+second metadata registry. Multiple generated declarations for one target are
+rejected during generation when visible in one compilation and fail
+deterministically on the cold generated-factory registration path across
+assemblies. Explicit manual serializer registration retains the resolver's
+existing target replacement rules.
+
+External structural targets follow the current ordinary C# construction
+contract: an accessible concrete class or struct, legal parameterless
+construction, and directly readable and assignable members. Schema properties
+match target fields or properties by case-sensitive name and exact CLR/generic
+type. Explicit nullability must match; when target metadata is
+nullable-oblivious, the declaration supplies schema nullability. Immutable,
+constructor-only, factory-only, init-only, readonly, renamed, converted, or
+inaccessible shapes use the existing manual `Serializer<T>` path. Generated
+class reads allocate and publish the final target before recursive children;
+target structs remain inline values. The declaration is never a temporary graph
+owner.
+
+C# carrier composition remains target-based. The existing resolver recursively
+binds `Nullable<T>`, one-dimensional `T[]`, `List<T>`, `LinkedList<T>`,
+`Queue<T>`, `Stack<T>`, `HashSet<T>`, `SortedSet<T>`,
+`ImmutableHashSet<T>`, `Dictionary<TKey, TValue>`,
+`SortedDictionary<TKey, TValue>`, `SortedList<TKey, TValue>`,
+`ConcurrentDictionary<TKey, TValue>`, and
+`NullableKeyDictionary<TKey, TValue>`. Ordinary generated targets, external
+structural serializers, manual serializers, fields, and roots therefore use
+the same existing carrier bodies. No carrier-provider family, field selector,
+root selector, callback, schema tree, per-element external dispatch, or
+additional allocation is added. Unsupported collection-interface, tuple,
+fixed-array, multidimensional-array, memory, and reference-wrapper families are
+not introduced by this feature.
+
+Dynamic `object` values and existing unions continue to resolve concrete target
+types through `TypeResolver`. This does not add arbitrary statically typed
+interface or base-class polymorphism.
+
+External and equivalent ordinary generated hot bodies must be
+instruction-shape equivalent apart from target/member metadata tokens. Target
+selection is compile-time only. Cold duplicate-target error construction must
+stay out of successful hot-path inlining, and any dedicated cold error entrance
+must be marked no-inline. Successful serializer dispatch must not be marked
+cold.
+
 Rust names these serializer operation boundaries explicitly:
 
 - `Serializer::write` and `Serializer::read` process a complete value,

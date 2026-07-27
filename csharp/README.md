@@ -183,9 +183,9 @@ Parallel.For(0, 128, i =>
 });
 ```
 
-### 6. Custom Serializers
+### 6. Manual Serializers
 
-Provide custom encoding logic with `Serializer<T>`.
+Provide specialized encoding logic with `Serializer<T>`.
 
 ```csharp
 public sealed class PointSerializer : Serializer<Point>

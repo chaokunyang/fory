@@ -203,6 +203,8 @@ try fory.register(Address.self, id: 100)
 
 - `Any` null representation: `ForyAnyNullValue`
 - `AnyObject` null representation: `NSNull`
+- `AnyHashable` dynamic null-key representation:
+  `AnyHashable(ForyAnyNullValue())`
 - Optional dynamic values map to the corresponding null representation on decode
 
 ## Dynamic Type Requirements

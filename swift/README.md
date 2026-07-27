@@ -249,6 +249,8 @@ Null decoding semantics:
 
 - `Any` null is represented as `ForyAnyNullValue`
 - `AnyObject` null is represented as `NSNull`
+- an `AnyHashable` dynamic null key is represented as
+  `AnyHashable(ForyAnyNullValue())`
 
 ### 4. Schema Evolution (Compatible Mode)
 

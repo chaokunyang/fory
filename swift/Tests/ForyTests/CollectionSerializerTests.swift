@@ -462,6 +462,27 @@ func mapRefKeyAndValueShareIdentity() throws {
 }
 
 @Test
+func staticMapNullsTrackRefs() throws {
+    let fory = Fory(config: .init(trackRef: true, compatible: false))
+    try fory.register(RefKeyNode.self, id: 9501)
+
+    let value: [RefKeyNode?: RefKeyNode?] = [
+        nil: RefKeyNode(id: 21),
+        RefKeyNode(id: 22): nil
+    ]
+    let decoded: [RefKeyNode?: RefKeyNode?] =
+        try fory.deserialize(try fory.serialize(value))
+
+    let nullKeyEntry = decoded.first { $0.key == nil }
+    #expect(nullKeyEntry != nil)
+    #expect(nullKeyEntry?.value?.id == 21)
+
+    let nullValueEntry = decoded.first { $0.key?.id == 22 }
+    #expect(nullValueEntry != nil)
+    #expect(nullValueEntry?.value == nil)
+}
+
+@Test
 func mapRefKeysChunkAcross255Entries() throws {
     let fory = Fory(config: .init(trackRef: true, compatible: true))
     try fory.register(RefKeyNode.self, id: 9501)
@@ -521,5 +542,33 @@ func collectionSerializersRejectMalformedPrimitivePayloads() throws {
         #expect(Bool(false))
     } catch {
         #expect("\(error)".contains("byte size mismatch"))
+    }
+}
+
+@Test
+func mapRejectsZeroChunks() throws {
+    func zeroChunkContext() -> ReadContext {
+        let buffer = ByteBuffer()
+        buffer.writeVarUInt32(1)
+        buffer.writeUInt8(MapHeader.declaredKeyType | MapHeader.declaredValueType)
+        buffer.writeUInt8(0)
+        let config = Config(trackRef: false, compatible: false)
+        let context = ReadContext(
+            buffer: buffer,
+            typeResolver: TypeResolver(config: config),
+            config: config
+        )
+        context.remainingGraphMemoryBytes = Int(config.maxGraphMemoryBytes)
+        return context
+    }
+
+    #expect(throws: invalidMapChunkSize(dynamic: false)) {
+        _ = try DictionarySerializer<Int32, Int32>.readData(zeroChunkContext())
+    }
+    #expect(throws: invalidMapChunkSize(dynamic: true)) {
+        _ = try DictionarySerializer<
+            DynamicSerializer<AnyHashable>,
+            DynamicSerializer<Any>
+        >.readData(zeroChunkContext())
     }
 }

@@ -17,7 +17,7 @@
 
 import Foundation
 
-public struct ForyAnyNullValue: Serializer {
+public struct ForyAnyNullValue: Hashable, Serializer {
     public typealias Target = Self
 
     public init() {}
@@ -126,6 +126,8 @@ private func dynamicDefault<T>(_ type: T.Type) throws -> T {
         value = ForyAnyNullValue()
     } else if type == AnyObject.self {
         value = NSNull()
+    } else if type == AnyHashable.self {
+        value = AnyHashable(ForyAnyNullValue())
     } else if let optionalType = type as? any DynamicOptional.Type {
         value = optionalType.dynamicNone
     } else {

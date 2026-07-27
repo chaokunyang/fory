@@ -554,6 +554,26 @@ func dynamicAnyListTracksRefs() throws {
 }
 
 @Test
+func dynamicMapNullsTrackRefs() throws {
+    let fory = Fory(config: .init(trackRef: true, compatible: false))
+    try fory.register(AnyHashableDynamicKey.self, id: 505)
+    try fory.register(AnyObjectDynamicNode.self, id: 506)
+
+    let nullKey = AnyHashable(ForyAnyNullValue())
+    let nullValueKey = AnyHashable(AnyHashableDynamicKey(id: 32))
+    let value: [AnyHashable: Any] = [
+        nullKey: AnyObjectDynamicNode(value: 31),
+        nullValueKey: NSNull()
+    ]
+
+    let payload = try fory.serialize(value, with: AnyHashableAnyMapSerializer.self)
+    let decoded = try fory.deserialize(payload, with: AnyHashableAnyMapSerializer.self)
+
+    #expect((decoded[nullKey] as? AnyObjectDynamicNode)?.value == 31)
+    #expect(decoded[nullValueKey] is ForyAnyNullValue)
+}
+
+@Test
 func dynamicAnyObjectTracksCycle() throws {
     let fory = Fory(config: .init(trackRef: true, compatible: false))
     try fory.register(AnyObjectDynamicGraphNode.self, id: 504)

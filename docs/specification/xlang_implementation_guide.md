@@ -556,6 +556,13 @@ dynamic `TypeInfo` is scoped by the serializer that selected it, so
 `AnyHashable` and `DynamicSerializer<T>` share one implementation without
 substituting each other's scope identity.
 
+Swift rejects zero-sized non-null MAP chunks because they cannot advance the
+decoded entry count. For a one-null entry, the non-null side's undeclared
+`TypeInfo` precedes that side's reference envelope and body. The MAP reader
+reads and scopes that metadata before invoking the field reader with duplicate
+type-info reading disabled. Static and dynamic MAP branches use the same
+ordering and validation.
+
 Dynamic Any and protocol paths operate directly on final target values and
 containers. Static composition never enters target lookup; dynamic lookup
 occurs only at an explicit dynamic boundary.
@@ -566,7 +573,8 @@ Assigning a homogeneous list or map to `Any` does not erase its concrete target
 identity and must not trigger a converted collection or a second collection
 codec. Homogeneous lists and maps use their ordinary or explicitly selected
 carrier serializer. Preseeded exact primitive arrays retain their packed
-dynamic mapping.
+dynamic mapping. A null dynamic key in `[AnyHashable: Any]` materializes as
+`AnyHashable(ForyAnyNullValue())`.
 
 When a carrier retains remote child metadata for a user-type field codec, the
 leaf codec enters the selected serializer without another envelope so its exact

@@ -1538,8 +1538,9 @@ The KV header is a single byte encoding metadata for both keys and values:
 
 #### Chunk Size
 
-- Maximum chunk size: 255 pairs (fits in 1 byte)
+- A non-null chunk size is from 1 through 255 pairs (fits in 1 byte); zero is invalid
 - When key or value is null, that entry is serialized as a separate chunk with implicit size 1 (chunk size byte is skipped)
+- For an entry with exactly one null side, type information for the non-null side, when not declared by the header, follows the header before that side's reference envelope and body
 - Reader tracks accumulated count against total map size to know when to stop reading chunks
 
 #### Why Chunk-Based Format?

@@ -1483,6 +1483,8 @@ where Key.Target: Hashable {
         map.reserveCapacity(totalLength)
         let keyDynamicType = KeyCodec.staticTypeId == .unknown
         let valueDynamicType = ValueCodec.staticTypeId == .unknown
+        // A one-null entry writes the non-null side's TypeInfo before its reference envelope.
+        // Read and scope that metadata separately so the field reader cannot consume it as a ref flag.
         if keyDynamicType || valueDynamicType {
             var readCount = 0
             while readCount < totalLength {
@@ -1501,28 +1503,36 @@ where Key.Target: Hashable {
                     continue
                 }
                 if keyNull {
-                    let value = try ValueCodec.readField(
-                        context,
-                        refMode: trackValueRef ? .tracking : .none,
-                        readTypeInfo: valueDynamicType || !valueDeclared
-                    )
+                    let valueTypeInfo =
+                        valueDeclared ? nil : try ValueCodec.readFieldTypeInfo(context)
+                    let value = try ValueCodec.withFieldTypeInfo(valueTypeInfo, context) {
+                        try ValueCodec.readField(
+                            context,
+                            refMode: trackValueRef ? .tracking : .none,
+                            readTypeInfo: false
+                        )
+                    }
                     map[try KeyCodec.defaultValue(context)] = value
                     readCount += 1
                     continue
                 }
                 if valueNull {
-                    let key = try KeyCodec.readField(
-                        context,
-                        refMode: trackKeyRef ? .tracking : .none,
-                        readTypeInfo: keyDynamicType || !keyDeclared
-                    )
+                    let keyTypeInfo =
+                        keyDeclared ? nil : try KeyCodec.readFieldTypeInfo(context)
+                    let key = try KeyCodec.withFieldTypeInfo(keyTypeInfo, context) {
+                        try KeyCodec.readField(
+                            context,
+                            refMode: trackKeyRef ? .tracking : .none,
+                            readTypeInfo: false
+                        )
+                    }
                     map[key] = try ValueCodec.defaultValue(context)
                     readCount += 1
                     continue
                 }
 
                 let chunkSize = Int(try context.buffer.readUInt8())
-                if chunkSize > totalLength - readCount {
+                if chunkSize == 0 || chunkSize > totalLength - readCount {
                     throw invalidMapChunkSize(dynamic: true)
                 }
                 let keyTypeInfo =
@@ -1569,28 +1579,36 @@ where Key.Target: Hashable {
                 continue
             }
             if keyNull {
-                let value = try ValueCodec.readField(
-                    context,
-                    refMode: trackValueRef ? .tracking : .none,
-                    readTypeInfo: !valueDeclared
-                )
+                let valueTypeInfo =
+                    valueDeclared ? nil : try ValueCodec.readFieldTypeInfo(context)
+                let value = try ValueCodec.withFieldTypeInfo(valueTypeInfo, context) {
+                    try ValueCodec.readField(
+                        context,
+                        refMode: trackValueRef ? .tracking : .none,
+                        readTypeInfo: false
+                    )
+                }
                 map[try KeyCodec.defaultValue(context)] = value
                 readCount += 1
                 continue
             }
             if valueNull {
-                let key = try KeyCodec.readField(
-                    context,
-                    refMode: trackKeyRef ? .tracking : .none,
-                    readTypeInfo: !keyDeclared
-                )
+                let keyTypeInfo =
+                    keyDeclared ? nil : try KeyCodec.readFieldTypeInfo(context)
+                let key = try KeyCodec.withFieldTypeInfo(keyTypeInfo, context) {
+                    try KeyCodec.readField(
+                        context,
+                        refMode: trackKeyRef ? .tracking : .none,
+                        readTypeInfo: false
+                    )
+                }
                 map[key] = try ValueCodec.defaultValue(context)
                 readCount += 1
                 continue
             }
 
             let chunkSize = Int(try context.buffer.readUInt8())
-            if chunkSize > totalLength - readCount {
+            if chunkSize == 0 || chunkSize > totalLength - readCount {
                 throw invalidMapChunkSize(dynamic: false)
             }
             let keyTypeInfo =
@@ -1677,8 +1695,8 @@ internal func invalidCollectionRefFlag(_ rawFlag: Int8) -> ForyError {
 internal func invalidMapChunkSize(dynamic: Bool) -> ForyError {
     ForyError.invalidData(
         dynamic
-            ? "map dynamic chunk size exceeds remaining entries"
-            : "map chunk size exceeds remaining entries"
+            ? "map dynamic chunk size must be positive and not exceed remaining entries"
+            : "map chunk size must be positive and not exceed remaining entries"
     )
 }
 

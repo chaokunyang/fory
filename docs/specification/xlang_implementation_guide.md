@@ -368,13 +368,26 @@ Likewise, standard-library weak pointers are not aliases for Fory's weak
 carriers.
 
 For Swift, `Serializer` follows the same exact-target ownership boundary with
-an associated `Target`. A user-owned structural or manual serializer uses
-`Target == Self`; a separate external structural or manual serializer uses the
-external value type. Serializer operations are static and accept or return
-`Target`. Fory never instantiates a separate serializer object, and generated
-external structural code reads target properties and constructs the target
-directly. Self-target roots select the target's serializer implicitly; roots
-using a separate serializer select it explicitly.
+an associated `Target`. A self-provided structural or manual serializer uses
+`Target == Self`; a separately provided structural or manual serializer names
+another target type. Serializer operations are static and accept or return
+`Target`. Fory never instantiates a serializer object, and generated external
+structural code reads target properties and constructs the target directly.
+
+Static selection follows provider ownership uniformly. A target that itself
+conforms to `Serializer` with `Target == Self` is selected implicitly at roots,
+generated fields, optionals, arrays, sets, and dictionaries. This includes an
+external type with an intentional retroactive conformance. A serializer type
+whose `Target` is another type must be selected explicitly at every static node
+where it is required. Registration does not infer that serializer, even if it
+is the only registered provider for the target, because Swift cannot
+reverse-infer a unique `S: Serializer` from `S.Target == T`.
+
+A retroactive conformance is process-global. `@retroactive` acknowledges
+Swift's ownership warning but does not make duplicate `(Target, Protocol)`
+conformances safe. Applications may use it when they intentionally own the
+single global binding; public libraries should generally use a separate
+serializer so applications can choose the implementation explicitly.
 
 Swift `StructSerializer` covers every structural registration category.
 Ordinary and external `@ForyStruct`, `@ForyEnum`, and `@ForyUnion` expansions
@@ -422,7 +435,8 @@ while field composition contains recursively lowered field codecs, and both
 call the same carrier body, allocation, insertion, reference, and compatible
 implementation. Ordinary `Optional`, `Array`, `Set`, and `Dictionary`
 conformances delegate to the same owners under exact self-target constraints.
-Carrier serializers are zero-state and unregistered.
+Those constraints apply equally to user-declared and retroactively conforming
+external children. Carrier serializers are zero-state and unregistered.
 
 The transparent Swift `OptionalSerializer` has no independent field-metadata
 identity. Its field-codec metadata scope delegates recursively to the wrapped
@@ -479,12 +493,15 @@ convert another module's unknown representation. A third-party union without
 this shape requires a manual serializer and does not claim structural-union
 wire equivalence.
 
-Swift field selection uses `@ForyField(with: S.self)` for one exact declared
-node and `.with(S.self)` inside `ForyFieldType` list, set, map, and union
-payload nodes. A selected optional or whole collection node names its exact
-carrier serializer. Canonical whole-carrier syntax is recursively lowered to
-the same field-codec tree as the structural field DSL. The compiler enforces
-that the selected serializer target equals the declared field node.
+An ordinary Swift generated field recursively selects a self-provided declared
+type without annotation. Swift field selection uses
+`@ForyField(with: S.self)` for one exact declared node and `.with(S.self)`
+inside `ForyFieldType` list, set, map, and union payload nodes when selecting a
+separate serializer or another deliberate override. A selected optional or
+whole collection node names its exact carrier serializer. Canonical
+whole-carrier syntax is recursively lowered to the same field-codec tree as the
+structural field DSL. The compiler enforces that the selected serializer target
+equals the declared field node.
 
 Swift root selection uses a serializer metatype:
 
@@ -496,7 +513,9 @@ fory.serialize(users, with: ArraySerializer<UserSerializer>.self)
 
 The `Data`, append-to-`Data`, and `ByteBuffer` forms share one root framing and
 the reusable contexts. Ordinary roots require `T.Target == T` and
-delegate to the same selected-serializer helper. There are no parallel
+delegate to the same selected-serializer helper. This admits every
+self-provider, including an intentional retroactive external conformance, but
+does not infer a separate serializer from registration. There are no parallel
 serializer-selection aliases or application-declared structural container
 schemas. The root facade retains its existing module boundary and inlining
 policy; static specialization belongs to serializer, generated-code, and

@@ -49,7 +49,10 @@ construction requirements.
 
 ## `@ForyField(with:)`
 
-Select one exact field node with a serializer:
+An unannotated field implicitly selects its declared type when that type
+implements `Serializer` with `Target == Self`, including an intentional
+retroactive external conformance. Use `with` to select a separate serializer
+for one exact field node:
 
 ```swift
 @ForyStruct
@@ -225,6 +228,6 @@ Fory model macros support dynamic fields and nested containers:
 - `[Int32: Any]`
 - `[AnyHashable: Any]`
 
-Other dictionary key types work when the key is `Hashable` and has an inferred
-serializer. For an external key type, select its serializer with
-`@MapField(key: .with(KeySerializer.self))`.
+Other dictionary key types work when the key is `Hashable` and is its own
+serializer provider. For an external key using a separate serializer, select
+it with `@MapField(key: .with(KeySerializer.self))`.

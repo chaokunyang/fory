@@ -80,14 +80,18 @@ assert(fromBuffer == person)
 
 ## Selecting a Serializer
 
-Ordinary model values select themselves:
+A type that implements `Serializer` with `Target == Self` selects itself:
 
 ```swift
 let data = try fory.serialize(person)
 let decoded: Person = try fory.deserialize(data)
 ```
 
-When a separate serializer targets the value, use `with`:
+This implicit selection composes through generated fields and ordinary
+optionals, arrays, sets, and dictionaries. It also applies when an application
+intentionally gives an external type one retroactive self-target conformance.
+
+When a separate serializer targets the value, select it with `with`:
 
 ```swift
 try fory.register(UserSerializer.self, id: 200)
@@ -120,7 +124,9 @@ let decoded = try fory.deserialize(
 ```
 
 See [External-Type Serialization](external-types.md) for structural
-serializers, manual serializers, and recursive carrier roots.
+serializers and recursive carrier roots. See
+[Manual Serializers](manual-serializers.md) for self-provided, retroactive, and
+separately provided manual implementations.
 
 ## Built-in Supported Types
 
@@ -150,7 +156,7 @@ supports epoch-day and `Date` conversions through `fromEpochDay(_:)`,
 - `[K: V]` where `K` selects itself and is `Hashable`, and `V` selects itself
 - Optional variants (`T?`)
 
-External and manual children use:
+Separately provided children use:
 
 - `OptionalSerializer<S>`
 - `ArraySerializer<S>`

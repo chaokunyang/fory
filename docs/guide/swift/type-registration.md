@@ -45,7 +45,8 @@ let fory = Fory()
 try fory.register(User.self, id: 1)
 ```
 
-For an external target, register its serializer:
+For an external structural serializer, register the separate serializer
+declaration:
 
 ```swift
 @ForyStruct(target: ThirdParty.User.self)
@@ -56,6 +57,18 @@ struct UserSerializer {
 
 try fory.register(UserSerializer.self, id: 1)
 ```
+
+If an application intentionally gives an external type one retroactive
+`Serializer` conformance with `Target == Self`, register the target itself:
+
+```swift
+try fory.register(UUID.self, id: 2)
+```
+
+Registration does not choose between serializer implementations. A
+self-provided target uses ordinary implicit selection. A separate serializer
+must still be selected explicitly at each root, field, or carrier child where
+it is required.
 
 ## Register by Name
 

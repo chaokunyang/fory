@@ -39,6 +39,14 @@ public struct ManualUser: Equatable, Hashable, NamedValue {
     }
 }
 
+public struct AccountID: Equatable, Hashable {
+    public var rawValue: UInt64
+
+    public init(rawValue: UInt64) {
+        self.rawValue = rawValue
+    }
+}
+
 public struct Profile: Equatable {
     public var name: String
     public var age: UInt32

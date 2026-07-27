@@ -19,8 +19,9 @@ import Foundation
 
 /// Static serialization behavior for one exact target type.
 ///
-/// Ordinary serializable types use themselves as `Target`. External structural
-/// and manual serializers name the external value type instead. Serializer
+/// A self-provided type uses itself as `Target`, including an external type
+/// with an intentional retroactive conformance. A separately provided
+/// structural or manual serializer names another target type. Serializer
 /// declarations are type-level behavior and are never instantiated by Fory.
 public protocol Serializer {
     /// The exact value type read and written by this serializer.

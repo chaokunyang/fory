@@ -20,6 +20,57 @@ import Foundation
 import Testing
 @testable import Fory
 
+// This test target belongs to the package that owns `Serializer`, so Swift
+// rejects `@retroactive` here. Downstream applications use the marker when
+// both the target type and protocol are imported.
+extension AccountID: Serializer {
+    public typealias Target = AccountID
+
+    public static var staticTypeId: TypeId { .ext }
+
+    public static func defaultValue(_: ReadContext) throws -> AccountID {
+        AccountID(rawValue: 0)
+    }
+
+    public static func writeData(
+        _ value: AccountID,
+        _ context: WriteContext
+    ) throws {
+        try UInt64.writeData(value.rawValue, context)
+    }
+
+    public static func readData(_ context: ReadContext) throws -> AccountID {
+        AccountID(rawValue: try UInt64.readData(context))
+    }
+}
+
+@ForyStruct
+private struct AccountHolder: Equatable {
+    var primary: AccountID
+    var backup: AccountID?
+    var accounts: [AccountID]
+    var uniqueAccounts: Set<AccountID>
+    var aliases: [AccountID: AccountID]
+}
+
+@ForyStruct
+private struct SelectedAccountHolder: Equatable {
+    @ForyField(with: AccountID.self)
+    var primary: AccountID
+
+    @ForyField(with: OptionalSerializer<AccountID>.self)
+    var backup: AccountID?
+
+    @ForyField(with: ArraySerializer<AccountID>.self)
+    var accounts: [AccountID]
+
+    @ForyField(with: SetSerializer<AccountID>.self)
+    var uniqueAccounts: Set<AccountID>
+
+    @ForyField(with: DictionarySerializer<AccountID, AccountID>.self)
+    var aliases: [AccountID: AccountID]
+}
+
 @ForyStruct(target: User.self)
 private struct UserSerializer {
     var name: String
@@ -257,6 +308,104 @@ private func makeGroup() -> Group {
         usersByKey: [key: first],
         groupedUsers: ["team": [first, nil, second]]
     )
+}
+
+@Test
+func retroactiveSerializerRoots() throws {
+    let fory = Fory(config: .init(trackRef: false, compatible: false))
+    try fory.register(AccountID.self, id: 140)
+
+    let primary = AccountID(rawValue: 7)
+    let secondary = AccountID(rawValue: 9)
+
+    let directBytes = try fory.serialize(primary)
+    let selectedDirectBytes = try fory.serialize(
+        primary,
+        with: AccountID.self
+    )
+    #expect(directBytes == selectedDirectBytes)
+    let decodedDirect: AccountID = try fory.deserialize(directBytes)
+    #expect(decodedDirect == primary)
+
+    let optional: AccountID? = secondary
+    let optionalBytes = try fory.serialize(optional)
+    let selectedOptionalBytes = try fory.serialize(
+        optional,
+        with: OptionalSerializer<AccountID>.self
+    )
+    #expect(optionalBytes == selectedOptionalBytes)
+    let decodedOptional: AccountID? = try fory.deserialize(optionalBytes)
+    #expect(decodedOptional == optional)
+
+    let accounts = [primary, secondary]
+    let arrayBytes = try fory.serialize(accounts)
+    let selectedArrayBytes = try fory.serialize(
+        accounts,
+        with: ArraySerializer<AccountID>.self
+    )
+    #expect(arrayBytes == selectedArrayBytes)
+    let decodedAccounts: [AccountID] = try fory.deserialize(arrayBytes)
+    #expect(decodedAccounts == accounts)
+
+    let uniqueAccounts: Set<AccountID> = [primary, secondary]
+    let setBytes = try fory.serialize(uniqueAccounts)
+    let selectedSetBytes = try fory.serialize(
+        uniqueAccounts,
+        with: SetSerializer<AccountID>.self
+    )
+    #expect(setBytes == selectedSetBytes)
+    let decodedSet: Set<AccountID> = try fory.deserialize(setBytes)
+    #expect(decodedSet == uniqueAccounts)
+
+    let aliases = [primary: secondary]
+    let mapBytes = try fory.serialize(aliases)
+    let selectedMapBytes = try fory.serialize(
+        aliases,
+        with: DictionarySerializer<AccountID, AccountID>.self
+    )
+    #expect(mapBytes == selectedMapBytes)
+    let decodedAliases: [AccountID: AccountID] = try fory.deserialize(mapBytes)
+    #expect(decodedAliases == aliases)
+}
+
+@Test
+func retroactiveSerializerFields() throws {
+    let primary = AccountID(rawValue: 7)
+    let secondary = AccountID(rawValue: 9)
+    let implicitValue = AccountHolder(
+        primary: primary,
+        backup: secondary,
+        accounts: [primary, secondary],
+        uniqueAccounts: [primary, secondary],
+        aliases: [primary: secondary]
+    )
+    let selectedValue = SelectedAccountHolder(
+        primary: implicitValue.primary,
+        backup: implicitValue.backup,
+        accounts: implicitValue.accounts,
+        uniqueAccounts: implicitValue.uniqueAccounts,
+        aliases: implicitValue.aliases
+    )
+
+    let implicit = Fory(config: .init(trackRef: false, compatible: true))
+    try implicit.register(AccountID.self, id: 140)
+    try implicit.register(AccountHolder.self, id: 141)
+
+    let selected = Fory(config: .init(trackRef: false, compatible: true))
+    try selected.register(AccountID.self, id: 140)
+    try selected.register(SelectedAccountHolder.self, id: 141)
+
+    #expect(
+        AccountHolder.foryFieldsInfo(trackRef: false)
+            == SelectedAccountHolder.foryFieldsInfo(trackRef: false)
+    )
+
+    let implicitBytes = try implicit.serialize(implicitValue)
+    let selectedBytes = try selected.serialize(selectedValue)
+    #expect(implicitBytes == selectedBytes)
+
+    let decoded: AccountHolder = try implicit.deserialize(implicitBytes)
+    #expect(decoded == implicitValue)
 }
 
 @Test

@@ -54,7 +54,8 @@ try fory.register(Order.self, name: "com.example.Order")
 - Keep compatible mode enabled when independently evolving schemas. Swift enables it by default.
 - Register all user-defined concrete targets used by dynamic fields and
   application protocol values
-- Use an external structural or manual serializer for a type owned by another
+- Use an external structural serializer, a separate manual serializer, or one
+  intentional retroactive self-target conformance for a type owned by another
   module
 
 ## Lists and Dense Arrays
@@ -101,6 +102,10 @@ try fory.register(OrderSerializer.self, id: 100)
 
 Use `.with(...)` in field metadata and `with:` at a root. See
 [External-Type Serialization](external-types.md).
+
+That explicit selection is required because the structural serializer is a
+separate declaration. An external type with one intentional retroactive
+`Target == Self` conformance instead uses ordinary roots, fields, and carriers.
 
 Swift has no native serialization mode. A known `@ForyUnion` case has zero or
 one associated value. Use a struct payload for a union alternative with

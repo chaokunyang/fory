@@ -19,16 +19,18 @@ Load this file when changing `swift/` or Swift xlang behavior.
 - Keep `Serializer` as static value-level behavior for one exact `Target`. `FieldCodec` layers
   field-only schema and compatibility behavior over that value behavior; `Serializer` must not
   depend on `FieldCodec`.
-- Manual serialization is not external-only. A user-owned target implements `Serializer` with
-  `Target == Self` and uses ordinary root and field selection. A separate serializer targets an
-  external value and requires explicit `with` selection at static roots and fields; registration
-  must not silently replace either static selection path.
+- Manual serialization is not external-only. Static selection follows provider ownership at every
+  root, field, and carrier node. A target with `Target == Self`, including an intentional
+  retroactive conformance on an external type, composes implicitly everywhere. A separate
+  serializer whose `Target` is another type composes explicitly everywhere; registration must not
+  infer it. Retroactive conformances are process-global, and `@retroactive` does not make duplicate
+  `(Target, Protocol)` conformances safe.
 - Swift carrier serializers are exactly `OptionalSerializer`, `ArraySerializer`, `SetSerializer`,
   and `DictionarySerializer`. Root and field composition use different static type trees but share
   one carrier body and allocation owner.
 - External structural serializers extend `@ForyStruct`, `@ForyEnum`, and `@ForyUnion` through
-  `target:`. Fields and roots select serializers with `with`, and registration uses the existing
-  serializer registration API.
+  `target:`. Because those declarations are separate from their targets, static nodes select them
+  with `with`, and registration uses the existing serializer registration API.
 - Direct `Any` and `AnyObject` root overloads remain disfavored forwarding facades over
   `DynamicSerializer<Any>` and `DynamicSerializer<AnyObject>`, including their Data-buffer forms.
   Arbitrary protocol roots explicitly select `DynamicSerializer<T>`. Do not add an unconstrained

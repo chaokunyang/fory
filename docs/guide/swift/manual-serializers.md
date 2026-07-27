@@ -25,9 +25,14 @@ meet the direct-access requirements of an
 
 A manual serializer is not limited to external types:
 
-- If you own the target type, make that type conform to `Serializer` directly.
-- If another module owns the target type, declare a separate serializer whose
-  `Target` is the external type.
+- A target that itself conforms to `Serializer` with `Target == Self` selects
+  that implementation implicitly everywhere.
+- A separate serializer whose `Target` is another type must be selected
+  explicitly everywhere it is needed.
+
+This ownership rule is the same for roots, generated fields, optionals, arrays,
+sets, and dictionaries. Registration does not change static serializer
+selection.
 
 ## When to Use a Manual Serializer
 
@@ -85,16 +90,92 @@ assert(input == output)
 
 No `with:` argument is needed because `AccountID.Target == AccountID`.
 
-## External Targets
+## One Global Serializer for an External Type
 
-When another module owns the target, implement `Serializer` on a separate
-serializer declaration:
+Swift permits an application to make an external type self-provided through a
+retroactive conformance:
 
 ```swift
 import Foundation
 import Fory
 
-public enum UUIDSerializer: Serializer {
+extension UUID: @retroactive Serializer {
+    public typealias Target = UUID
+
+    public static var staticTypeId: TypeId {
+        .ext
+    }
+
+    public static func defaultValue(
+        _ context: ReadContext
+    ) throws -> UUID {
+        _ = context
+        return UUID(
+            uuidString: "00000000-0000-0000-0000-000000000000"
+        )!
+    }
+
+    public static func writeData(
+        _ value: UUID,
+        _ context: WriteContext
+    ) throws {
+        try String.writeData(value.uuidString, context)
+    }
+
+    public static func readData(
+        _ context: ReadContext
+    ) throws -> UUID {
+        let raw = try String.readData(context)
+        guard let uuid = UUID(uuidString: raw) else {
+            throw ForyError.invalidData("invalid UUID string: \(raw)")
+        }
+        return uuid
+    }
+}
+```
+
+Register the external type itself:
+
+```swift
+try fory.register(UUID.self, id: 300)
+
+let input = UUID()
+let data = try fory.serialize(input)
+let output: UUID = try fory.deserialize(data)
+```
+
+Because `UUID.Target == UUID`, unannotated generated fields and ordinary
+carriers also select this implementation:
+
+```swift
+@ForyStruct
+struct Request {
+    var requestID: UUID
+}
+
+let input = [UUID(), UUID()]
+let data = try fory.serialize(input)
+let output: [UUID] = try fory.deserialize(data)
+```
+
+A retroactive conformance is process-global. Only one conformance for one
+`(Target, Protocol)` pair can safely exist. `@retroactive` acknowledges
+Swift's ownership warning but does not make duplicate conformances safe. Use
+this form only when the application intentionally owns the single global
+binding. Public libraries should generally provide a separate serializer
+instead.
+
+## Separate Serializers
+
+Use a separate serializer when a public library must not claim a process-global
+conformance or when an application needs multiple or alternative
+implementations. The target may be external or user-owned:
+
+```swift
+import Foundation
+import Fory
+
+public enum UUIDStringSerializer: Serializer {
     public typealias Target = UUID
 
     public static var staticTypeId: TypeId {
@@ -133,23 +214,30 @@ Register the separate serializer and select it explicitly at the root:
 
 ```swift
 let fory = Fory()
-try fory.register(UUIDSerializer.self, id: 300)
+try fory.register(UUIDStringSerializer.self, id: 300)
 
 let input = UUID()
-let data = try fory.serialize(input, with: UUIDSerializer.self)
-let output = try fory.deserialize(data, with: UUIDSerializer.self)
+let data = try fory.serialize(input, with: UUIDStringSerializer.self)
+let output = try fory.deserialize(data, with: UUIDStringSerializer.self)
 
 assert(input == output)
 ```
 
-`UUID` is owned by Foundation, so it does not select `UUIDSerializer`
-implicitly. Registration makes the serializer available for type identity and
-dynamic dispatch; it does not change static root or field selection.
+Another declaration, such as `UUIDBytesSerializer`, may target the same type
+with a different body. Swift cannot reverse-infer one of these serializers from
+`S.Target == UUID`. Registration makes the selected serializer available for
+type identity and dynamic dispatch; it never makes a separate serializer the
+implicit static choice. Register only one implementation for the target on a
+given `Fory` instance.
+
+The direct `Any` and `AnyObject` root conveniences remain dynamic operations.
+A concrete non-self-provided value can enter registered dynamic lookup through
+the `Any` overload, but that does not statically select a separate serializer
+and is not a replacement for `with:`.
 
 ## Fields and Carriers
 
-A field whose user-owned type implements `Serializer` needs no serializer
-selector:
+A field whose declared type is its own serializer provider needs no selector:
 
 ```swift
 @ForyStruct
@@ -163,13 +251,13 @@ A separate serializer must be selected explicitly:
 ```swift
 @ForyStruct
 struct ExternalRequest {
-    @ForyField(with: UUIDSerializer.self)
+    @ForyField(with: UUIDStringSerializer.self)
     var requestID: UUID
 }
 ```
 
-Ordinary carriers containing self-serializing targets also select their
-children directly:
+Ordinary carriers containing self-provided targets also select their children
+directly. This includes intentional retroactive conformances:
 
 ```swift
 let accountIDs = [
@@ -180,12 +268,21 @@ let data = try fory.serialize(accountIDs)
 let output: [AccountID] = try fory.deserialize(data)
 ```
 
-For an external child, recursive carrier selection uses the separate
+For a separately provided child, recursive carrier selection names that
 serializer:
 
 ```swift
-@ListField(element: .with(UUIDSerializer.self))
+@ListField(element: .with(UUIDStringSerializer.self))
 var requestIDs: [UUID]
+```
+
+At a root, use the matching carrier serializer:
+
+```swift
+let data = try fory.serialize(
+    requestIDs,
+    with: ArraySerializer<UUIDStringSerializer>.self
+)
 ```
 
 ## Manual Serializer Rules

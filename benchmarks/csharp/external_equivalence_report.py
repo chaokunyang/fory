@@ -322,9 +322,7 @@ def load_worker(path: Path, expected_lane: str, expected_implementation: str):
         )
         allocated = result.get("AllocatedBytesPerOperation")
         if allocated is None:
-            raise ValueError(
-                f"{owner}.AllocatedBytesPerOperation is required"
-            )
+            raise ValueError(f"{owner}.AllocatedBytesPerOperation is required")
         require_number(
             allocated,
             f"{owner}.AllocatedBytesPerOperation",
@@ -405,9 +403,7 @@ def median_summary(samples) -> dict:
 
 
 def stable_allocation(samples, owner: str):
-    allocations = {
-        sample["AllocatedBytesPerOperation"] for sample in samples
-    }
+    allocations = {sample["AllocatedBytesPerOperation"] for sample in samples}
     if len(allocations) != 1:
         raise ValueError(f"allocation mismatch between samples for {owner}")
     return next(iter(allocations))

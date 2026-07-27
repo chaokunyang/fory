@@ -114,7 +114,7 @@ public sealed class TypeResolver
     private bool _finalized;
 
     /// <summary>
-    /// Registers the generated serializer factory for a runtime target type.
+    /// Registers a generated enum or union serializer factory for a runtime target type.
     /// This method is called by source-generated module initializers.
     /// </summary>
     /// <typeparam name="T">Runtime target type.</typeparam>
@@ -131,16 +131,16 @@ public sealed class TypeResolver
     }
 
     /// <summary>
-    /// Registers an external structural serializer factory for a runtime target type.
+    /// Registers a generated structural serializer factory for a runtime target type.
     /// This method is called by source-generated module initializers.
     /// </summary>
     /// <typeparam name="T">Runtime target type.</typeparam>
     /// <typeparam name="TSerializer">Generated serializer type.</typeparam>
-    /// <param name="evolving">Structural schema-evolution setting declared by the serializer.</param>
+    /// <param name="evolving">Generated structural schema-evolution setting.</param>
     /// <exception cref="InvalidOperationException">
     /// Thrown when another generated serializer already owns the target type.
     /// </exception>
-    public static void RegisterGenerated<T, TSerializer>(bool evolving)
+    public static void RegisterGeneratedStruct<T, TSerializer>(bool evolving)
         where TSerializer : Serializer<T>, new()
     {
         Func<TypeResolver, TypeInfo> factory = evolving

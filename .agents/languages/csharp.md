@@ -25,10 +25,14 @@ Load this file when changing `csharp/` or C# xlang behavior.
   external registration, field/root serializer selectors, provider objects,
   callbacks, runtime schema trees, carrier-provider types, per-element
   external dispatch, or declaration-to-target conversion objects.
-- Generated structural registration must carry declaration-owned `Evolving`
-  directly into target `TypeInfo`; do not reflect the external declaration at
-  runtime or add a second metadata owner. Reject duplicate generated owners by
-  target at compile time and deterministically on the cold cross-assembly
+- Every generated struct uses
+  `RegisterGeneratedStruct<Target, TSerializer>(Evolving)` so generator-owned
+  schema evolution reaches target `TypeInfo` directly. Generated enum and
+  union factories use `RegisterGenerated<Target, TSerializer>()`. Do not
+  recover structural metadata through target reflection, hide structural
+  registration behind a boolean overload of the non-structural method, or add
+  a second metadata owner. Reject duplicate generated owners by target at
+  compile time and deterministically on the cold cross-assembly
   factory-registration path. Last-writer-wins generated factories are
   forbidden; explicit manual serializer replacement uses normal resolver
   semantics.

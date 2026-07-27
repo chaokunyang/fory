@@ -279,19 +279,8 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
             }
             else
             {
-                if (string.Equals(
-                        model.DeclarationName,
-                        model.TargetTypeName,
-                        StringComparison.Ordinal))
-                {
-                    sb.AppendLine(
-                        $"        global::Apache.Fory.TypeResolver.RegisterGenerated<{model.TargetTypeName}, {model.SerializerName}>();");
-                }
-                else
-                {
-                    sb.AppendLine(
-                        $"        global::Apache.Fory.TypeResolver.RegisterGenerated<{model.TargetTypeName}, {model.SerializerName}>({BoolLiteral(model.Evolving)});");
-                }
+                sb.AppendLine(
+                    $"        global::Apache.Fory.TypeResolver.RegisterGeneratedStruct<{model.TargetTypeName}, {model.SerializerName}>({BoolLiteral(model.Evolving)});");
             }
         }
 

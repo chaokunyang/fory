@@ -262,12 +262,13 @@ factory keys, root lookup, and dynamic lookup use the target. The declaration
 supplies only field names, IDs, schema descriptors, nullability, and the
 structural `Evolving` setting.
 
-Generated ordinary structs, enums, and unions use
-`TypeResolver.RegisterGenerated<T, TSerializer>()`. External generated structs use the
-`TypeResolver.RegisterGenerated<T, TSerializer>(bool evolving)` overload to
-carry declaration-owned `Evolving` into the target `TypeInfo`. The runtime must
-not recover the value by reflecting the external declaration, add a serializer
-capability interface, or create a second metadata registry. Multiple generated
+Every generated ordinary or external struct uses
+`TypeResolver.RegisterGeneratedStruct<T, TSerializer>(bool evolving)` to carry
+generator-owned `Evolving` into the target `TypeInfo`. Generated enums and
+unions use `TypeResolver.RegisterGenerated<T, TSerializer>()`. `TypeInfo` does
+not recover structural metadata by reflecting a target attribute. The runtime
+must not reflect the external declaration, add a serializer capability
+interface, or create a second metadata registry. Multiple generated
 declarations for one target are rejected during generation when visible in one
 compilation and fail deterministically on the cold generated-factory
 registration path across assemblies. Explicit manual serializer registration

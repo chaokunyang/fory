@@ -242,6 +242,8 @@ public sealed class ExternalTypeSerializationTests
         externalOff.Register<ExternalEvolutionOff>(6202);
         ForyRuntime ordinaryOff = ForyRuntime.Builder().Compatible(true).Build();
         ordinaryOff.Register<OrdinaryEvolutionOff>(6202);
+        Assert.False(new TypeResolver().GetTypeInfo<ExternalEvolutionOff>().Evolving);
+        Assert.False(new TypeResolver().GetTypeInfo<OrdinaryEvolutionOff>().Evolving);
         Assert.Equal(
             ordinaryOff.Serialize(new OrdinaryEvolutionOff { Value = 12 }),
             externalOff.Serialize(new ExternalEvolutionOff { Value = 12 }));
@@ -411,7 +413,9 @@ public sealed class ExternalTypeSerializationTests
     public void DuplicateFactoryIsRejected()
     {
         InvalidOperationException error = Assert.Throws<InvalidOperationException>(
-            () => TypeResolver.RegisterGenerated<ExternalUser, DuplicateExternalUserSerializer>());
+            () => TypeResolver.RegisterGeneratedStruct<
+                ExternalUser,
+                DuplicateExternalUserSerializer>(true));
         Assert.Contains(typeof(ExternalUser).ToString(), error.Message, StringComparison.Ordinal);
 
         ForyRuntime fory = NewFory(compatible: true);

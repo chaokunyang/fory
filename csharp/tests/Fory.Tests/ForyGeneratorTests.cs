@@ -332,6 +332,12 @@ public sealed class ForyGeneratorTests
             {
                 public Fory.ExternalTypes.ExternalPoint? Point { get; set; }
             }
+
+            [ForyStruct(Evolving = false)]
+            internal sealed class LocalEvolutionOff
+            {
+                public int Value { get; set; }
+            }
             """;
 
         string generated = GenerateSource(source);
@@ -343,17 +349,28 @@ public sealed class ForyGeneratorTests
         Assert.Contains($"{userType} value = new {userType}();", generated, StringComparison.Ordinal);
         Assert.Contains($"GetTypeMeta<{userType}>()", generated, StringComparison.Ordinal);
         Assert.Contains(
-            $"RegisterGenerated<{userType},",
-            generated,
-            StringComparison.Ordinal);
-        Assert.Contains(">(true);", generated, StringComparison.Ordinal);
+            generated.Split('\n'),
+            line =>
+                line.Contains(
+                    $"RegisterGeneratedStruct<{userType},",
+                    StringComparison.Ordinal)
+                && line.TrimEnd().EndsWith(">(true);", StringComparison.Ordinal));
         Assert.Contains("value.Name", generated, StringComparison.Ordinal);
         Assert.Contains("value.@event", generated, StringComparison.Ordinal);
         Assert.Contains(
-            "RegisterGenerated<global::Fory.ExternalTypes.ExternalEvolutionOff,",
-            generated,
-            StringComparison.Ordinal);
-        Assert.Contains(">(false);", generated, StringComparison.Ordinal);
+            generated.Split('\n'),
+            line =>
+                line.Contains(
+                    "RegisterGeneratedStruct<global::Fory.ExternalTypes.ExternalEvolutionOff,",
+                    StringComparison.Ordinal)
+                && line.TrimEnd().EndsWith(">(false);", StringComparison.Ordinal));
+        Assert.Contains(
+            generated.Split('\n'),
+            line =>
+                line.Contains(
+                    "RegisterGeneratedStruct<global::GeneratedDiagnostics.LocalEvolutionOff,",
+                    StringComparison.Ordinal)
+                && line.TrimEnd().EndsWith(">(false);", StringComparison.Ordinal));
         Assert.Contains(
             "EnumSerializer<global::Fory.ExternalTypes.ExternalStatus>",
             generated,

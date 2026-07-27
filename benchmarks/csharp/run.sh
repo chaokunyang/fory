@@ -35,6 +35,7 @@ WARMUP="1"
 OUTPUT_DIR=""
 COPY_DOCS=true
 EXTERNAL_EQUIVALENCE=false
+EXTERNAL_FIRST=false
 ALLOCATION_ITERATIONS=""
 
 usage() {
@@ -53,6 +54,7 @@ Options:
   --output-dir <dir>           Base directory for benchmark outputs
   --no-copy-docs               Skip copying report/plots into docs/benchmarks/csharp
   --external-equivalence       Run ordinary/external Fory equivalence cases
+  --external-first             Run each external worker before its ordinary peer
   --allocation-iterations <n>  Measure allocations for each equivalence case
   --help                       Show this help
 USAGE
@@ -89,6 +91,10 @@ while [[ $# -gt 0 ]]; do
             EXTERNAL_EQUIVALENCE=true
             shift
             ;;
+        --external-first)
+            EXTERNAL_FIRST=true
+            shift
+            ;;
         --allocation-iterations)
             ALLOCATION_ITERATIONS="$2"
             shift 2
@@ -110,6 +116,11 @@ fi
 
 if [[ "$EXTERNAL_EQUIVALENCE" == false && -n "$ALLOCATION_ITERATIONS" ]]; then
     echo -e "${RED}--allocation-iterations requires --external-equivalence.${NC}"
+    exit 1
+fi
+
+if [[ "$EXTERNAL_EQUIVALENCE" == false && "$EXTERNAL_FIRST" == true ]]; then
+    echo -e "${RED}--external-first requires --external-equivalence.${NC}"
     exit 1
 fi
 
@@ -173,6 +184,10 @@ if [[ "$EXTERNAL_EQUIVALENCE" == true ]]; then
 
     echo -e "${YELLOW}[3/4] Running isolated adjacent pairs...${NC}"
     MERGE_ARGS=(--output "$RESULT_JSON")
+    PAIR_ORDER=(ordinary external)
+    if [[ "$EXTERNAL_FIRST" == true ]]; then
+        PAIR_ORDER=(external ordinary)
+    fi
     for LANE in "${EXTERNAL_LANES[@]}"; do
         ORDINARY_JSON="$SIDE_DIR/${LANE}-ordinary.json"
         EXTERNAL_JSON="$SIDE_DIR/${LANE}-external.json"
@@ -186,19 +201,19 @@ if [[ "$EXTERNAL_EQUIVALENCE" == true ]]; then
             WORKER_ARGS+=(--allocation-iterations "$ALLOCATION_ITERATIONS")
         fi
 
-        echo "Running $LANE ordinary worker..."
-        dotnet run -c Release --no-build \
-            --project ./Fory.CSharpBenchmark.csproj -- \
-            "${WORKER_ARGS[@]}" \
-            --external-implementation ordinary \
-            --output "$ORDINARY_JSON"
-
-        echo "Running $LANE external worker..."
-        dotnet run -c Release --no-build \
-            --project ./Fory.CSharpBenchmark.csproj -- \
-            "${WORKER_ARGS[@]}" \
-            --external-implementation external \
-            --output "$EXTERNAL_JSON"
+        for IMPLEMENTATION in "${PAIR_ORDER[@]}"; do
+            if [[ "$IMPLEMENTATION" == ordinary ]]; then
+                SIDE_JSON="$ORDINARY_JSON"
+            else
+                SIDE_JSON="$EXTERNAL_JSON"
+            fi
+            echo "Running $LANE $IMPLEMENTATION worker..."
+            dotnet run -c Release --no-build \
+                --project ./Fory.CSharpBenchmark.csproj -- \
+                "${WORKER_ARGS[@]}" \
+                --external-implementation "$IMPLEMENTATION" \
+                --output "$SIDE_JSON"
+        done
 
         MERGE_ARGS+=(
             --lane "$LANE"

@@ -633,6 +633,9 @@ public sealed class ForyGeneratorTests
             {
                 [ForyField(1)]
                 private int _identifier;
+
+                [ForyField(2)]
+                protected abstract string ProtectedText { get; set; }
             }
 
             [ForyStruct]
@@ -670,9 +673,11 @@ public sealed class ForyGeneratorTests
             namespace ChildModels;
 
             [ForyStruct]
-            public sealed class Child : Parent
+            public class Child : Parent
             {
-                [ForyField(2)]
+                protected override string ProtectedText { get; set; } = string.Empty;
+
+                [ForyField(3)]
                 public int Value { get; set; }
             }
 
@@ -684,46 +689,137 @@ public sealed class ForyGeneratorTests
             }
 
             [ForyStruct]
-            public sealed class DynamicChild : GenericBase<object>
+            public class DynamicChild : GenericBase<object>
             {
                 [ForyField(6)]
                 public int Count { get; set; }
             }
             """;
-        CSharpCompilation compilation = CreateCompilation(
+        MetadataReference middleReference = CreateGeneratedReference(
+            "Fory.ChildModels",
             childSource,
-            includeExternalTypes: false,
+            out string childGenerated,
             // Roslyn permits duplicate references to the same provider assembly.
-            additionalReferences: [parentReference, parentReference],
-            assemblyName: "Fory.ChildModels");
-        GeneratorDriver driver = CSharpGeneratorDriver.Create(
-            new ForyModelGenerator());
-        driver = driver.RunGeneratorsAndUpdateCompilation(
-            compilation,
-            out Compilation output,
-            out ImmutableArray<Diagnostic> diagnostics);
+            additionalReferences: [parentReference, parentReference]);
+        const string leafSource = """
+            using Apache.Fory;
+            using ChildModels;
+            namespace LeafModels;
 
-        Assert.DoesNotContain(
-            diagnostics.Concat(output.GetDiagnostics()),
-            diagnostic => diagnostic.Severity == DiagnosticSeverity.Error);
-        string childGenerated = string.Join(
-            "\n",
-            driver.GetRunResult().Results
-                .SelectMany(result => result.GeneratedSources)
-                .Select(result => result.SourceText.ToString()));
+            [ForyStruct]
+            public sealed class Leaf : Child
+            {
+                [ForyField(7)]
+                public long LeafValue;
+            }
+
+            [ForyStruct]
+            public sealed class DynamicLeaf : DynamicChild
+            {
+                [ForyField(8)]
+                public long LeafValue;
+            }
+            """;
+        string leafGenerated = GenerateSource(
+            leafSource,
+            includeExternalTypes: false,
+            additionalReferences: [parentReference, middleReference],
+            assemblyName: "Fory.LeafModels");
+        static string ProviderName(
+            string generated,
+            string targetFragment)
+        {
+            string[] lines = generated.Split('\n');
+            int markerIndex = Array.FindIndex(
+                lines,
+                line =>
+                    line.Contains(
+                        "ForyGeneratedHierarchyProvider",
+                        StringComparison.Ordinal) &&
+                    line.Contains(targetFragment, StringComparison.Ordinal));
+            Assert.True(markerIndex >= 0);
+            return lines
+                .Skip(markerIndex + 1)
+                .First(line => line.Contains(" class ", StringComparison.Ordinal))
+                .Split(' ', StringSplitOptions.RemoveEmptyEntries)[3]
+                .TrimEnd('\r');
+        }
+
+        string ordinaryParentProvider =
+            ProviderName(parentGenerated, "ParentModels.Parent");
+        string externalParentProvider =
+            ProviderName(parentGenerated, "ParentModels.GenericBase");
+        string ordinaryMiddleProvider =
+            ProviderName(childGenerated, "ChildModels.Child");
+        string externalMiddleProvider =
+            ProviderName(childGenerated, "ChildModels.DynamicChild");
+
         Assert.Contains(
             "public static class __ForyHierarchy_",
             parentGenerated,
             StringComparison.Ordinal);
         Assert.Contains(
-            ".HierarchyShallowBytes + 4",
+            $"{ordinaryParentProvider}.HierarchyShallowBytes + 4 + 4",
             childGenerated,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            $"{externalParentProvider}.HierarchyShallowBytes + 4",
+            childGenerated,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            $"{ordinaryMiddleProvider}.HierarchyShallowBytes + 8",
+            leafGenerated,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            $"{externalMiddleProvider}.HierarchyShallowBytes + 8",
+            leafGenerated,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "\"_identifier\"",
+            leafGenerated,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "\"protected_text\"",
+            leafGenerated,
             StringComparison.Ordinal);
         Assert.Contains("value.InternalValue", parentGenerated, StringComparison.Ordinal);
         Assert.Contains(".F0(value)", childGenerated, StringComparison.Ordinal);
+        Assert.Contains(".F0(value)", leafGenerated, StringComparison.Ordinal);
+        Assert.Contains(
+            $"{externalParentProvider}.G0(",
+            leafGenerated,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            $"{externalParentProvider}.S0(",
+            leafGenerated,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            $"{externalMiddleProvider}.G0(",
+            leafGenerated,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            $"{externalMiddleProvider}.S0(",
+            leafGenerated,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "TypeMetaFieldInfo((short)4,",
+            leafGenerated,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "TypeMetaFieldInfo((short)6,",
+            leafGenerated,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "TypeMetaFieldInfo((short)8,",
+            leafGenerated,
+            StringComparison.Ordinal);
         Assert.DoesNotContain(
             "UnsafeAccessorKind.Field, Name = \"_identifier\"",
             childGenerated,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "UnsafeAccessorKind.Field, Name = \"_identifier\"",
+            leafGenerated,
             StringComparison.Ordinal);
     }
 
@@ -759,8 +855,74 @@ public sealed class ForyGeneratorTests
             diagnostic => diagnostic.Id == "FORY019");
     }
 
-    [Fact]
-    public void MalformedProviderIsRejected()
+    [Theory]
+    [InlineData("object", "")]
+    [InlineData(
+        "Parent",
+        """
+        public static readonly int HierarchyShallowBytes;
+        """)]
+    [InlineData(
+        "Parent",
+        """
+        public static readonly long HierarchyShallowBytes;
+
+        [ForyGeneratedWireMember(0, typeof(Parent), "Value", "Value")]
+        private static ref int F0(Parent value) => ref value.Value;
+        """)]
+    [InlineData(
+        "Parent",
+        """
+        public static readonly long HierarchyShallowBytes;
+        private static int Storage;
+
+        [ForyGeneratedWireMember(0, typeof(Parent), "Value", "Value")]
+        public static ref int F0(object value) => ref Storage;
+        """)]
+    [InlineData(
+        "Parent",
+        """
+        public static readonly long HierarchyShallowBytes;
+
+        [ForyGeneratedWireMember(
+            0,
+            typeof(Parent),
+            "Value",
+            "Value",
+            Slot = "Parent.Value")]
+        public static int G0(Parent value) => value.Value;
+        """)]
+    [InlineData(
+        "Parent",
+        """
+        public static readonly long HierarchyShallowBytes;
+
+        [ForyGeneratedWireMember(
+            0,
+            typeof(Parent),
+            "Value",
+            "Value",
+            Slot = "Parent.Value")]
+        public static int G0(Parent value) => value.Value;
+        public static void S0(Parent value, long fieldValue) { }
+        """)]
+    [InlineData(
+        "Parent",
+        """
+        public static readonly long HierarchyShallowBytes;
+
+        [ForyGeneratedWireMember(
+            0,
+            typeof(Parent),
+            "Value",
+            "Value",
+            Slot = "Parent.Value")]
+        public static string? G0(Parent value) => null;
+        public static void S0(Parent value, string fieldValue) { }
+        """)]
+    public void MalformedProviderIsRejected(
+        string markerTarget,
+        string providerMembers)
     {
         MetadataReference targetReference = CreateReference(
             "MalformedProviderTarget",
@@ -791,19 +953,26 @@ public sealed class ForyGeneratorTests
                 StringComparison.Ordinal))
             .Split(' ', StringSplitOptions.RemoveEmptyEntries)[3];
         string malformedSource = $$"""
+            #nullable enable
             using Apache.Fory;
+            using ParentModels;
             namespace Apache.Fory.Generated;
-            [ForyGeneratedHierarchyProvider(typeof(object))]
-            public abstract class {{providerName}}
+            [ForyGeneratedHierarchyProvider(typeof({{markerTarget}}))]
+            public static class {{providerName}}
             {
+            {{providerMembers}}
             }
             """;
-        MetadataReference foryReference = MetadataReference.CreateFromFile(
-            typeof(ForyStructAttribute).Assembly.Location);
-        MetadataReference malformedProvider = CreateReference(
-            "MalformedProvider",
+        CSharpCompilation malformedCompilation = CreateCompilation(
             malformedSource,
-            [foryReference]);
+            includeExternalTypes: false,
+            additionalReferences: [targetReference],
+            assemblyName: "MalformedProvider");
+        Assert.DoesNotContain(
+            malformedCompilation.GetDiagnostics(),
+            diagnostic => diagnostic.Severity == DiagnosticSeverity.Error);
+        MetadataReference malformedProvider =
+            malformedCompilation.ToMetadataReference();
         const string childSource = """
             using Apache.Fory;
             using ParentModels;
@@ -815,12 +984,19 @@ public sealed class ForyGeneratorTests
             }
             """;
 
+        Diagnostic[] diagnostics = GenerateDiagnostics(
+            childSource,
+            includeExternalTypes: false,
+            additionalReferences: [targetReference, malformedProvider])
+            .ToArray();
         Assert.Contains(
-            GenerateDiagnostics(
-                childSource,
-                includeExternalTypes: false,
-                additionalReferences: [targetReference, malformedProvider]),
+            diagnostics,
             diagnostic => diagnostic.Id == "FORY020");
+        Assert.DoesNotContain(
+            diagnostics,
+            diagnostic =>
+                diagnostic.Severity >= DiagnosticSeverity.Warning &&
+                diagnostic.Id != "FORY020");
     }
 
     [Fact]

@@ -350,6 +350,29 @@ public sealed partial class ForyModelGenerator
             return false;
         }
 
+        // Referenced providers are ordinary assembly metadata. Validate the complete generated ABI
+        // before copying any member name into child source.
+        ImmutableArray<ISymbol> shallowMembers =
+            providerType.GetMembers("HierarchyShallowBytes");
+        if (shallowMembers.Length != 1 ||
+            shallowMembers[0] is not IFieldSymbol shallowField ||
+            !shallowField.IsStatic ||
+            !shallowField.IsReadOnly ||
+            shallowField.Type.SpecialType != SpecialType.System_Int64 ||
+            !compilation.IsSymbolAccessibleWithin(
+                shallowField,
+                compilation.Assembly))
+        {
+            diagnostics.Add(Diagnostic.Create(
+                InvalidInheritedDescriptor,
+                consumer.DeclarationLocation,
+                consumer.TargetTypeName,
+                providerTypeName,
+                "HierarchyShallowBytes is not an accessible static readonly long field"));
+            provider = null;
+            return false;
+        }
+
         // Ordinary providers are owned by the target's direct annotation;
         // external providers target an unannotated third-party class.
         bool ordinaryProvider =
@@ -535,9 +558,20 @@ public sealed partial class ForyModelGenerator
         string expectedAccessorName =
             $"{(memberKind == WireMemberKind.Field ? "F" : "G")}{parsedOrdinal}";
         if (fieldIdValue is < -1 or > short.MaxValue ||
+            readAccessor.MethodKind != MethodKind.Ordinary ||
+            readAccessor.Arity != 0 ||
             !readAccessor.IsStatic ||
+            readAccessor.IsExtensionMethod ||
+            readAccessor.IsVararg ||
             readAccessor.ReturnsByRefReadonly ||
             readAccessor.Parameters.Length != 1 ||
+            readAccessor.Parameters[0].RefKind != RefKind.None ||
+            !RuntimeTypeComparer.Instance.Equals(
+                readAccessor.Parameters[0].Type,
+                declaringType) ||
+            !compilation.IsSymbolAccessibleWithin(
+                readAccessor,
+                compilation.Assembly) ||
             !string.Equals(
                 readAccessor.Name,
                 expectedAccessorName,
@@ -621,6 +655,48 @@ public sealed partial class ForyModelGenerator
             return false;
         }
 
+        string? setterName = null;
+        if (memberKind == WireMemberKind.Property)
+        {
+            ImmutableArray<IMethodSymbol> setterCandidates = providerType
+                .GetMembers($"S{parsedOrdinal}")
+                .OfType<IMethodSymbol>()
+                .ToImmutableArray();
+            IMethodSymbol? setter = setterCandidates.Length == 1
+                ? setterCandidates[0]
+                : null;
+            if (setter is null ||
+                setter.MethodKind != MethodKind.Ordinary ||
+                setter.Arity != 0 ||
+                !setter.IsStatic ||
+                setter.IsExtensionMethod ||
+                setter.IsVararg ||
+                !setter.ReturnsVoid ||
+                setter.Parameters.Length != 2 ||
+                setter.Parameters[0].RefKind != RefKind.None ||
+                setter.Parameters[1].RefKind != RefKind.None ||
+                !RuntimeTypeComparer.Instance.Equals(
+                    setter.Parameters[0].Type,
+                    declaringType) ||
+                !SymbolEqualityComparer.IncludeNullability.Equals(
+                    setter.Parameters[1].Type,
+                    readAccessor.ReturnType) ||
+                !compilation.IsSymbolAccessibleWithin(
+                    setter,
+                    compilation.Assembly))
+            {
+                diagnostics.Add(Diagnostic.Create(
+                    InvalidInheritedDescriptor,
+                    consumer.DeclarationLocation,
+                    consumer.TargetTypeName,
+                    providerType.ToDisplayString(FullNameFormat),
+                    $"property accessor '{readAccessor.Name}' has no matching writable accessor"));
+                return false;
+            }
+
+            setterName = setter.Name;
+        }
+
         string providerTypeName = providerType.ToDisplayString(FullNameFormat);
         parsed = parsed.WithDeclaration(
             readAccessor.ReturnType,
@@ -631,7 +707,7 @@ public sealed partial class ForyModelGenerator
             providerTypeName,
             memberKind == WireMemberKind.Field ? readAccessor.Name : null,
             memberKind == WireMemberKind.Property ? readAccessor.Name : null,
-            memberKind == WireMemberKind.Property ? $"S{parsedOrdinal}" : null,
+            setterName,
             schemaDescriptorType,
             parsedOrdinal);
 

@@ -252,10 +252,27 @@ abstract final class StringBoxSerializer {
 ```
 
 The generated serializer reconstructs values with
-`third_party.Box<String>(...)` and applies only to `Box<String>`. Register
-`third_party.Box<String>` as the target. A different instantiation such as
-`Box<int>` needs its own serializer declaration and registration; one
-declaration does not cover every `Box<T>`.
+`third_party.Box<String>(...)` and applies only to `Box<String>`. Register and
+use that exact target type directly:
+
+```dart
+final fory = Fory();
+ExternalSerializersForyModule.register(
+  fory,
+  third_party.Box<String>,
+  id: 102,
+);
+
+final input = const third_party.Box<String>('hello');
+final bytes = fory.serialize(input);
+final output = fory.deserialize<third_party.Box<String>>(bytes);
+
+print(output.value); // hello
+```
+
+Register `third_party.Box<String>`, not `StringBoxSerializer`. A different
+instantiation such as `Box<int>` needs its own serializer declaration and
+registration; one declaration does not cover every `Box<T>`.
 
 ## Schema Evolution
 

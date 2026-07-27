@@ -93,6 +93,16 @@ public sealed class ExternalDerived : ExternalBase
     public int Id { get; set; }
 }
 
+public class ExternalHiddenBase
+{
+    public int Value;
+}
+
+public sealed class ExternalHiddenDerived : ExternalHiddenBase
+{
+    public new int Value;
+}
+
 public sealed class ExternalFields
 {
     public int Count;
@@ -206,18 +216,6 @@ public class ExternalPrivateDerived : ExternalPrivateBase
 public class ExternalGenericBase<T>
 {
     public T Value { get; set; } = default!;
-}
-
-public abstract class ExternalNonConstructibleBase
-{
-    protected ExternalNonConstructibleBase(int seed)
-    {
-        ConstructorSeed = seed;
-    }
-
-    public int BaseValue;
-
-    public int ConstructorSeed { get; }
 }
 
 public sealed class XlangUser

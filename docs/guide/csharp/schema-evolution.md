@@ -30,10 +30,12 @@ Fory fory = Fory.Builder()
 
 Compatible mode writes type metadata that allows readers and writers with different struct definitions to interoperate.
 
-For an [external structural serializer](external-types.md), field names, field
-IDs, schema descriptors, and the `Evolving` setting come from the local
-serializer declaration. Register the third-party target with the same stable
-wire identity on every version.
+For a standalone
+[external structural serializer](external-types.md), field names, field IDs,
+schema descriptors, and the `Evolving` setting come from the local serializer
+declaration. Register the third-party target with the same stable wire identity
+on every version. Abstract ordinary classes and external `BaseOnly`
+declarations cannot set `Evolving`; each concrete descendant owns that setting.
 
 ## Inherited Schemas
 
@@ -45,10 +47,8 @@ declaration changes.
 
 Physical fields that are not wire members do not affect field ordering,
 schema hashes, or `TypeMeta`. Rebuild the assembly that owns the annotated base
-or external hierarchy declaration when those fields change so its generated
-shallow-storage value remains accurate. Referenced descendant serializers read
-that cumulative value from the base provider rather than copying it as a
-constant.
+or external hierarchy declaration when those fields change. Rebuild dependent
+descendant assemblies when the referenced package's assembly identity changes.
 
 Compatible readers also tolerate selected scalar field type changes when the value is lossless. A
 matched field can read between `bool`, `string`, numeric scalars, and `decimal` when the converted

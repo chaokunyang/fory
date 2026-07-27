@@ -27,22 +27,20 @@ Use `[ForyStruct]` to enable source-generated serializers. Use `[ForyField]` to 
 
 External-type serialization puts `Target` on a local abstract serializer
 declaration. Its properties own the field names, IDs, schema descriptors,
-nullability, and `Evolving` setting. The target supplies the runtime values and
+and nullability. A standalone declaration also owns its `Evolving` setting.
+An external `BaseOnly` declaration cannot set `Evolving`; each concrete
+descendant owns that setting. The target supplies the runtime values and
 directly accessed members.
 
 ```csharp
 [ForyStruct(Target = typeof(ThirdParty.User))]
 internal abstract class UserSerializer
 {
-    [ForyField(1)]
-    public abstract string Name { get; }
-
     [ForyField(
-        Ignore = true,
+        1,
         TargetDeclaringType = typeof(ThirdParty.User),
-        TargetMemberName = "<Name>k__BackingField",
-        TargetMemberKind = ForyTargetMemberKind.Field)]
-    public abstract string NameStorage { get; }
+        TargetMemberName = "<Name>k__BackingField")]
+    public abstract string Name { get; }
 }
 ```
 

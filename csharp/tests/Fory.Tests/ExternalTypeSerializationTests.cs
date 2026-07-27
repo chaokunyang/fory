@@ -53,6 +53,12 @@ public sealed class ExternalTypeSerializationTests
         Assert.Equal(2, derived.Id);
         Assert.Equal("base", derived.BaseName);
 
+        ExternalHiddenDerived hidden = new() { Value = 13 };
+        ((ExternalHiddenBase)hidden).Value = 11;
+        ExternalHiddenDerived decodedHidden = RoundTrip(fory, hidden);
+        Assert.Equal(11, ((ExternalHiddenBase)decodedHidden).Value);
+        Assert.Equal(0, decodedHidden.Value);
+
         ExternalFields fields = RoundTrip(
             fory,
             new ExternalFields { Count = 4, Name = "field", @event = 9 });
@@ -437,7 +443,8 @@ public sealed class ExternalTypeSerializationTests
             .Register<ExternalFields>(6106)
             .Register<ExternalSchemaModel>(6107)
             .Register<ExternalTargetsHolder>(6108)
-            .Register<ExternalDynamicHolder>(6109);
+            .Register<ExternalDynamicHolder>(6109)
+            .Register<ExternalHiddenDerived>(6110);
     }
 
     private static ForyRuntime NewOrdinaryFory(bool compatible)

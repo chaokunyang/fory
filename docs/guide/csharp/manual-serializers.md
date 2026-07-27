@@ -23,11 +23,11 @@ Use a manual serializer when a type is not generated with `[ForyStruct]` or
 requires specialized encoding.
 
 [External-type serialization](external-types.md) generates serializers for
-mutable third-party targets, including exact private fields or properties and
-renamed member mappings. Use a manual serializer for immutable,
-constructor-only, factory-only, readonly, init-only, converted, or custom-wire
-targets. On .NET 8, a private external member whose declaring type or signature
-is generic also requires a manual serializer.
+mutable third-party targets, including exact private or renamed fields. Use a
+manual serializer for immutable, constructor-only, factory-only, readonly,
+init-only, converted, or custom-wire targets. On .NET 8, a private external
+wire field whose declaring type or accessor signature is generic also requires
+a manual serializer. Exact storage-only mappings do not emit private accessors.
 
 ## Implement `Serializer<T>`
 

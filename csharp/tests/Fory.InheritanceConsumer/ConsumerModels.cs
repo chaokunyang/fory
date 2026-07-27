@@ -17,9 +17,18 @@
 
 using Apache.Fory;
 using Fory.ExternalTypes;
-using Fory.InheritanceConsumerA;
+using Fory.InheritanceProviders;
 
-namespace Fory.InheritanceConsumerB;
+namespace Fory.InheritanceConsumer;
+
+[ForyStruct]
+public class CrossAssemblyMiddle : SharedOrdinaryBase
+{
+    protected override string ProtectedText { get; set; } = string.Empty;
+
+    [ForyField(5)]
+    public int MiddleValue { get; set; }
+}
 
 [ForyStruct]
 public sealed class CrossAssemblyLeaf : CrossAssemblyMiddle
@@ -29,15 +38,15 @@ public sealed class CrossAssemblyLeaf : CrossAssemblyMiddle
 }
 
 [ForyStruct]
+public class ExternalMiddle : ExternalPrivateDerived
+{
+    [ForyField(4)]
+    public string MiddleValue { get; set; } = string.Empty;
+}
+
+[ForyStruct]
 public sealed class ExternalLeaf : ExternalMiddle
 {
     [ForyField(5)]
     public long LeafValue { get; set; }
-}
-
-[ForyStruct]
-public sealed class SecondExternalLeaf : ExternalPrivateDerived
-{
-    [ForyField(4)]
-    public bool LeafValue { get; set; }
 }

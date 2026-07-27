@@ -45,6 +45,24 @@ internal abstract class UserSerializer
 
     [ForyField(3)]
     public abstract string Name { get; }
+
+    [ForyField(
+        Ignore = true,
+        TargetDeclaringType = typeof(ExternalUser),
+        TargetMemberName = "<Id>k__BackingField")]
+    public abstract int IdStorage { get; }
+
+    [ForyField(
+        Ignore = true,
+        TargetDeclaringType = typeof(ExternalUser),
+        TargetMemberName = "<Score>k__BackingField")]
+    public abstract long ScoreStorage { get; }
+
+    [ForyField(
+        Ignore = true,
+        TargetDeclaringType = typeof(ExternalUser),
+        TargetMemberName = "<Name>k__BackingField")]
+    public abstract string NameStorage { get; }
 }
 
 [ForyStruct]

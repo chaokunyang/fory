@@ -220,15 +220,11 @@ local serializer declaration:
 [ForyStruct(Target = typeof(ThirdParty.User))]
 internal abstract class UserSerializer
 {
-    [ForyField(1)]
-    public abstract string Name { get; }
-
     [ForyField(
-        Ignore = true,
+        1,
         TargetDeclaringType = typeof(ThirdParty.User),
-        TargetMemberName = "<Name>k__BackingField",
-        TargetMemberKind = ForyTargetMemberKind.Field)]
-    public abstract string NameStorage { get; }
+        TargetMemberName = "<Name>k__BackingField")]
+    public abstract string Name { get; }
 }
 
 Fory fory = Fory.Builder().Build();

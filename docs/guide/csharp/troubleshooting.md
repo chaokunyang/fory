@@ -97,12 +97,11 @@ base.
 Fory does not inspect a referenced package's private fields to replace a
 missing declaration.
 
-## Private External Member Throws `MissingFieldException` or `MissingMethodException`
+## Private External Field Throws `MissingFieldException`
 
-**Cause**: An exact external member declaration no longer matches the installed
-package version. `TargetDeclaringType`, `TargetMemberName`,
-`TargetMemberKind`, or the declared CLR type differs from the package's private
-application binary interface.
+**Cause**: An exact external field declaration no longer matches the installed
+package version. `TargetDeclaringType`, `TargetMemberName`, or the declared CLR
+type differs from the package's private application binary interface.
 
 **Fix**: Check the member metadata against the exact package version, update
 the external declaration and its storage-only field entries, then rebuild.

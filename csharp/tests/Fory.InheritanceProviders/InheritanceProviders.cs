@@ -27,7 +27,7 @@ public abstract class SharedOrdinaryBase
     private int _privateValue;
 
     [ForyField(2)]
-    protected string ProtectedText { get; set; } = string.Empty;
+    protected abstract string ProtectedText { get; set; }
 
     [ForyField(3)]
     public long PublicBaseValue;
@@ -63,29 +63,19 @@ public abstract class SharedExternalHierarchy
     [ForyField(
         1,
         TargetDeclaringType = typeof(ExternalPrivateBase),
-        TargetMemberName = "_identifier",
-        TargetMemberKind = ForyTargetMemberKind.Field)]
+        TargetMemberName = "_identifier")]
     public abstract long Identifier { get; }
 
     [ForyField(
         2,
         TargetDeclaringType = typeof(ExternalPrivateBase),
-        TargetMemberName = "Secret",
-        TargetMemberKind = ForyTargetMemberKind.Property)]
+        TargetMemberName = "<Secret>k__BackingField")]
     public abstract string Secret { get; }
 
     [ForyField(
         Ignore = true,
         TargetDeclaringType = typeof(ExternalPrivateBase),
-        TargetMemberName = "<Secret>k__BackingField",
-        TargetMemberKind = ForyTargetMemberKind.Field)]
-    public abstract string SecretStorage { get; }
-
-    [ForyField(
-        Ignore = true,
-        TargetDeclaringType = typeof(ExternalPrivateBase),
-        TargetMemberName = "_cache",
-        TargetMemberKind = ForyTargetMemberKind.Field)]
+        TargetMemberName = "_cache")]
     public abstract int CacheStorage { get; }
 
     [ForyField(3)]

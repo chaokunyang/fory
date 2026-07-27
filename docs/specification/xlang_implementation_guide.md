@@ -240,31 +240,35 @@ complete set is validated and sorted by the protocol comparator. Hidden
 members retain their exact declaring type. A generated child never calls a
 parent serializer body and never encodes a base object as a nested value.
 
-Each ordinary class provider publishes a target-keyed compiler contract
+Each inheritable ordinary class publishes a target-keyed compiler contract
 containing:
 
-- a contract version and ordinary-provider marker;
-- its exact target and immediate parent provider type;
-- descriptors and any required exact accessors for directly declared wire
-  members; and
+- its exact target;
+- one descriptor on each deterministic accessor for a directly declared wire
+  member: fields use a writable `ref` accessor, while properties use a getter
+  plus a matching setter; and
 - a public static readonly cumulative `HierarchyShallowBytes` value.
 
 The provider's shallow value is the immediate parent provider value plus only
-the current class's directly declared physical instance fields. The concrete
+the current class's directly declared physical instance fields. A sealed
+concrete serializer uses the same cumulative expression privately and does not
+publish a provider marker, descriptors, or hierarchy value. The concrete
 serializer adds object self storage once. Properties never directly add
 storage, while private, readonly, compiler-generated, and non-wire instance
-fields do. Referenced child compilations consume only this public provider
+fields do. Referenced child compilations consume only an accessible provider
 contract; they do not import, enumerate, or reconstruct private parent fields.
+Provider-only targets emit a static provider; a concrete non-sealed
+serializer carries the same contract without a second type or forwarding path.
+An internal provider is available only to assemblies granted normal C#
+accessibility, such as through `InternalsVisibleTo`; an inaccessible or
+extern-alias-only contract does not own another compilation's hierarchy.
 
 The generator emits ordinary direct member access whenever C# accessibility
-allows it. An inaccessible member selected with `[ForyField]` uses an exact
-.NET `UnsafeAccessor` published by its declaring provider. Referenced provider
-descriptors carry exact declaring type, CLR member type, logical and metadata
-names, field ID, schema descriptor, nullability shape, override slot, member
-kind, and accessor identities. Missing, ambiguous, inaccessible, or malformed
-provider contracts fail generation.
+allows it. A provider publishes an accessor when a referenced child must reach
+declaration-owned state. The accessor signature preserves the member's CLR
+type and nullability metadata. Missing or ambiguous providers fail generation.
 
-An abstract ordinary class emits only its generated hierarchy API and does not
+An abstract ordinary class emits only its generated hierarchy provider and does not
 create a serializer instance or registration. Its property descriptors may
 publish unresolved abstract override slots; a concrete descendant must supply
 the callable implementation. Concrete classes require legal parameterless
@@ -279,15 +283,11 @@ while an empty non-generic static class selects an external enum target:
 [ForyStruct(Target = typeof(ThirdParty.User))]
 internal abstract class UserSerializer
 {
-    [ForyField(1)]
-    public abstract string Name { get; }
-
     [ForyField(
-        Ignore = true,
+        1,
         TargetDeclaringType = typeof(ThirdParty.User),
-        TargetMemberName = "<Name>k__BackingField",
-        TargetMemberKind = ForyTargetMemberKind.Field)]
-    public abstract string NameStorage { get; }
+        TargetMemberName = "<Name>k__BackingField")]
+    public abstract string Name { get; }
 }
 
 [ForyEnum(Target = typeof(ThirdParty.Status))]
@@ -302,28 +302,29 @@ or used as wire identities. Runtime type positions, construction, `TypeInfo`,
 metadata, reference publication, generated factory keys, roots, fields,
 dynamic values, and carriers use the target type.
 
-An external member may bind a visible same-name member or specify an exact
-`TargetDeclaringType`, `TargetMemberName`, and `TargetMemberKind`. A field
-mapping supplies wire access and physical storage. A property mapping supplies
-wire access only; its backing field must be declared separately. An ignored
-mapping must identify one exact physical field and supplies only shallow
-storage. Unmapped visible public instance fields are added to external shallow
-storage once. The generator never scans a referenced assembly for private
-fields.
+An external member may bind a visible same-name field or property. For external
+class targets, setting `TargetDeclaringType` and `TargetMemberName` instead
+declares one exact field on the target or a non-`object` ancestor. An exact wire mapping
+also supplies physical storage; `Ignore = true` supplies only shallow storage.
+External struct targets support visible member mappings only. Unmapped visible
+public instance fields are added to external class shallow storage once. The
+generator never discovers private fields from a referenced assembly.
 
 `BaseOnly = true` makes an external class declaration the terminal provider for
 a complete third-party hierarchy prefix. It may list exact target and
-target-ancestor fields or properties and publishes no standalone factory or
-registration. An ordinary child consumes this provider exactly as it consumes
-an ordinary parent provider. A `BaseOnly` target may be abstract or
-nonconstructible because only the concrete ordinary child is materialized.
+target-ancestor fields and publishes no standalone factory or registration. An
+ordinary child consumes this provider exactly as it consumes an ordinary
+parent provider. A `BaseOnly` target may be abstract or nonconstructible
+because only the concrete ordinary child is materialized.
 
 Exact private mappings are version-pinned package ABI declarations. Wire
-accessors fail with the CLR missing-field or missing-method error if the target
-ABI changes; there is no reflection or alternate-member fallback. On .NET 8,
-the generator rejects private wire access whose declaring owner or signature
-is generic. Visible closed-generic members and explicit storage-only field
-mappings remain supported.
+accessors fail with the CLR missing-field error if the target ABI changes;
+there is no reflection or alternate-member fallback. On .NET 8, the generator
+rejects private wire access whose declaring owner or signature is generic.
+Visible closed-generic members and explicit storage-only field mappings remain
+supported for class targets. An inaccessible pointer field cannot be
+distinguished from fixed-buffer storage without importing private layout, so an
+exact private pointer mapping is rejected.
 
 Standalone external structural targets require an accessible concrete class
 or struct, legal parameterless construction, and writable declared wire state.

@@ -23,25 +23,17 @@ namespace Apache.Fory.XlangPeer;
 [ForyStruct(Target = typeof(XlangUser))]
 internal abstract class XlangUserSerializer
 {
-    [ForyField(1)]
+    [ForyField(
+        1,
+        TargetDeclaringType = typeof(XlangUser),
+        TargetMemberName = "<Id>k__BackingField")]
     public abstract int Id { get; }
 
-    [ForyField(2)]
+    [ForyField(
+        2,
+        TargetDeclaringType = typeof(XlangUser),
+        TargetMemberName = "<Name>k__BackingField")]
     public abstract string Name { get; }
-
-    [ForyField(
-        Ignore = true,
-        TargetDeclaringType = typeof(XlangUser),
-        TargetMemberName = "<Id>k__BackingField",
-        TargetMemberKind = ForyTargetMemberKind.Field)]
-    public abstract int IdStorage { get; }
-
-    [ForyField(
-        Ignore = true,
-        TargetDeclaringType = typeof(XlangUser),
-        TargetMemberName = "<Name>k__BackingField",
-        TargetMemberKind = ForyTargetMemberKind.Field)]
-    public abstract string NameStorage { get; }
 }
 
 [ForyStruct(Target = typeof(XlangPoint))]
@@ -71,14 +63,12 @@ internal abstract class XlangHolderSerializer
     [ForyField(
         Ignore = true,
         TargetDeclaringType = typeof(XlangHolder),
-        TargetMemberName = "<Users>k__BackingField",
-        TargetMemberKind = ForyTargetMemberKind.Field)]
+        TargetMemberName = "<Users>k__BackingField")]
     public abstract List<XlangUser> UsersStorage { get; }
 
     [ForyField(
         Ignore = true,
         TargetDeclaringType = typeof(XlangHolder),
-        TargetMemberName = "<UsersByName>k__BackingField",
-        TargetMemberKind = ForyTargetMemberKind.Field)]
+        TargetMemberName = "<UsersByName>k__BackingField")]
     public abstract Dictionary<string, XlangUser> UsersByNameStorage { get; }
 }

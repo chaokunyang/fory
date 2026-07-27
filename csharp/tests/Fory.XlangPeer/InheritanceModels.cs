@@ -44,41 +44,6 @@ public sealed class XlangOrdinaryLeaf : XlangOrdinaryBase
     public long Score { get; set; }
 }
 
-[ForyStruct(Target = typeof(ExternalPrivateDerived), BaseOnly = true)]
-public abstract class XlangExternalHierarchy
-{
-    [ForyField(
-        1,
-        TargetDeclaringType = typeof(ExternalPrivateBase),
-        TargetMemberName = "_identifier",
-        TargetMemberKind = ForyTargetMemberKind.Field)]
-    public abstract long Identifier { get; }
-
-    [ForyField(
-        2,
-        TargetDeclaringType = typeof(ExternalPrivateBase),
-        TargetMemberName = "Secret",
-        TargetMemberKind = ForyTargetMemberKind.Property)]
-    public abstract string Secret { get; }
-
-    [ForyField(
-        Ignore = true,
-        TargetDeclaringType = typeof(ExternalPrivateBase),
-        TargetMemberName = "<Secret>k__BackingField",
-        TargetMemberKind = ForyTargetMemberKind.Field)]
-    public abstract string SecretStorage { get; }
-
-    [ForyField(
-        Ignore = true,
-        TargetDeclaringType = typeof(ExternalPrivateBase),
-        TargetMemberName = "_cache",
-        TargetMemberKind = ForyTargetMemberKind.Field)]
-    public abstract int CacheStorage { get; }
-
-    [ForyField(3)]
-    public abstract int PublicValue { get; }
-}
-
 [ForyStruct]
 public sealed class XlangExternalLeaf : ExternalPrivateDerived
 {

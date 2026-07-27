@@ -38,30 +38,34 @@ Load this file when changing `csharp/` or C# xlang behavior.
   semantics.
 - One concrete ordinary class serializer owns one flattened wire-member set.
   Every first-party class in the hierarchy must carry a direct `[ForyStruct]`
-  annotation. Each generated base provider publishes only its declared wire
-  descriptors/accessors and cumulative `HierarchyShallowBytes`; a child
-  consumes the immediate provider API and adds only its directly declared
-  physical fields. Do not scan referenced private metadata, reconstruct parent
-  storage, call parent serializer bodies, or derive storage from wire members.
+  annotation. Each inheritable generated base provider publishes only its
+  declared wire descriptors/accessors and cumulative `HierarchyShallowBytes`; a
+  child consumes the immediate accessible provider and adds only its
+  directly declared physical fields. A sealed serializer keeps its final
+  cumulative expression private. Do not scan referenced private metadata,
+  reconstruct parent storage, call parent serializer bodies, or derive storage
+  from wire members.
 - External structural serializers use direct target construction and member
-  access under the mutable parameterless-construction contract. Exact
-  `TargetDeclaringType`, `TargetMemberName`, and `TargetMemberKind` mappings
-  support renamed and inaccessible fields or properties. Constructor-only,
-  factory-only, readonly, init-only, converted, or custom-wire targets use a
-  manual serializer. Derive allocation, reference publication, default value,
-  and graph-memory behavior from the target class/struct kind, never the
-  declaration kind.
+  access under the mutable parameterless-construction contract. External class
+  targets may use exact `TargetDeclaringType` and `TargetMemberName` mappings
+  for renamed and inaccessible fields. External struct targets support visible
+  member mappings only. Constructor-only, factory-only, readonly, init-only,
+  converted, or custom-wire targets use a manual serializer. Derive allocation,
+  reference publication, default value, and graph-memory behavior from the
+  target class/struct kind, never the declaration kind.
 - An external class declaration owns the exact third-party wire and physical
-  fields it lists. A field mapping contributes storage; a property mapping
-  does not, and its backing field must be mapped separately. An ignored
-  mapping must identify one exact storage field. Add unmapped visible public
-  instance fields once, but never infer or scan private target layout. A
-  `BaseOnly` declaration may own the complete third-party hierarchy prefix and
-  publishes no standalone factory or registration.
+  fields it lists. An exact wire mapping contributes storage; an ignored
+  mapping contributes only storage. A visible property mapping contributes no
+  storage, so declare its backing field separately when it owns storage. Add
+  unmapped visible public instance fields once, but never infer or scan private
+  target layout. A `BaseOnly` declaration may own the complete third-party
+  hierarchy prefix and publishes no standalone factory or registration.
 - Keep external private ABI access exact and fallback-free. On .NET 8, reject
   a private wire accessor whose declaring type or signature is generic.
   Visible generic members and exact storage-only field mappings remain
-  supported.
+  supported for class targets. Reject inaccessible pointer storage because
+  referenced metadata cannot distinguish a pointer field from fixed-buffer
+  storage without scanning private layout.
 - External children compose through the concrete carrier serializers already
   owned by `TypeResolver`: nullable structs, one-dimensional arrays, List,
   LinkedList, Queue, Stack, HashSet, SortedSet, ImmutableHashSet, Dictionary,

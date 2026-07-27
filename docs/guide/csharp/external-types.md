@@ -49,32 +49,25 @@ using S = Apache.Fory.Schema.Types;
 [ForyStruct(Target = typeof(ThirdParty.User))]
 internal abstract class UserSerializer
 {
-    [ForyField(1)]
+    [ForyField(
+        1,
+        TargetDeclaringType = typeof(ThirdParty.User),
+        TargetMemberName = "<Name>k__BackingField")]
     public abstract string Name { get; }
 
-    [ForyField(2, Type = typeof(S.Int32))]
+    [ForyField(
+        2,
+        Type = typeof(S.Int32),
+        TargetDeclaringType = typeof(ThirdParty.User),
+        TargetMemberName = "<Age>k__BackingField")]
     public abstract int Age { get; }
-
-    [ForyField(
-        Ignore = true,
-        TargetDeclaringType = typeof(ThirdParty.User),
-        TargetMemberName = "<Name>k__BackingField",
-        TargetMemberKind = ForyTargetMemberKind.Field)]
-    public abstract string NameStorage { get; }
-
-    [ForyField(
-        Ignore = true,
-        TargetDeclaringType = typeof(ThirdParty.User),
-        TargetMemberName = "<Age>k__BackingField",
-        TargetMemberKind = ForyTargetMemberKind.Field)]
-    public abstract int AgeStorage { get; }
 }
 ```
 
-`Name` and `Age` define wire fields. Their properties do not themselves occupy
-object storage, so the two ignored mappings identify the exact backing fields
-used for graph-memory accounting. A public target field is discovered
-automatically and does not need a separate storage mapping.
+`Name` and `Age` are the logical wire names. Each declaration maps directly to
+the target's backing field, so the same declaration also accounts for its
+shallow object storage. A public target field can use the default same-name
+mapping.
 
 The declaration is generator input only. Do not instantiate or register
 `UserSerializer`.
@@ -96,9 +89,9 @@ internal abstract class PointSerializer
 ## Exact Member Mappings
 
 By default, a declaration property binds a visible target field or property
-with the same case-sensitive name. Use the `TargetDeclaringType`,
-`TargetMemberName`, and `TargetMemberKind` options to bind a renamed or
-inaccessible member:
+with the same case-sensitive name. For an external class target, set
+`TargetDeclaringType` and `TargetMemberName` together to bind an exact field
+declared by the target or one of its non-`object` base classes:
 
 ```csharp
 [ForyStruct(Target = typeof(ThirdParty.Account))]
@@ -107,45 +100,46 @@ internal abstract class AccountSerializer
     [ForyField(
         1,
         TargetDeclaringType = typeof(ThirdParty.Account),
-        TargetMemberName = "_identifier",
-        TargetMemberKind = ForyTargetMemberKind.Field)]
+        TargetMemberName = "_identifier")]
     public abstract long Id { get; }
 
     [ForyField(
         2,
         TargetDeclaringType = typeof(ThirdParty.Account),
-        TargetMemberName = "Secret",
-        TargetMemberKind = ForyTargetMemberKind.Property)]
+        TargetMemberName = "<Secret>k__BackingField")]
     public abstract string Credential { get; }
 
     [ForyField(
         Ignore = true,
         TargetDeclaringType = typeof(ThirdParty.Account),
-        TargetMemberName = "<Secret>k__BackingField",
-        TargetMemberKind = ForyTargetMemberKind.Field)]
-    public abstract string CredentialStorage { get; }
+        TargetMemberName = "_cache")]
+    public abstract int CacheStorage { get; }
 }
 ```
 
-The declaration property name is the logical schema name. The target options
-identify the exact package member:
+The declaration property name remains the logical schema name:
 
-- A field mapping is both a wire member and a physical storage field.
-- A property mapping is a wire member only. Map its backing field separately
-  when it has storage.
-- An ignored mapping must identify an exact field. It contributes storage but
-  never enters the wire schema or generated reads and writes.
-- Every non-public target field that should be included in the shallow
-  graph-memory estimate must be listed exactly once. Static fields are not
-  instance storage.
+- An exact field mapping is both a wire member and a physical storage field.
+- `Ignore = true` contributes an exact field to shallow storage without adding
+  it to the wire schema.
+- Every non-public instance field must be listed exactly once so the shallow
+  graph-memory estimate covers the target's complete instance storage. Static
+  fields are not instance storage.
 
 Fory does not inspect private members in the referenced package. An exact
 private mapping is an application-owned package ABI declaration. Pin and test
 the package version together with the declaration. If a mapped private field
-or property changes, the generated exact accessor fails with the CLR's
-missing-field or missing-method error; Fory does not fall back to reflection or
-another member. An ignored private field has no runtime accessor, so validate
-that storage declaration against the pinned package build.
+changes, the generated exact accessor fails with the CLR's missing-field error;
+Fory does not fall back to reflection or another member. An ignored private
+field has no runtime accessor, so validate that storage declaration against the
+pinned package build.
+
+External struct targets support visible field and property mappings only.
+Exact mappings and `Ignore` are class-only because value storage belongs to the
+holder that materializes the struct. An inaccessible pointer field is also
+rejected: without reading private package layout, the generator cannot
+distinguish pointer storage from a fixed buffer. Use a manual serializer for
+these shapes.
 
 ## Third-Party Base Classes
 
@@ -182,29 +176,19 @@ public abstract class VendorRecordHierarchy
     [ForyField(
         1,
         TargetDeclaringType = typeof(ThirdParty.VendorBase),
-        TargetMemberName = "_identifier",
-        TargetMemberKind = ForyTargetMemberKind.Field)]
+        TargetMemberName = "_identifier")]
     public abstract long Identifier { get; }
 
     [ForyField(
         2,
         TargetDeclaringType = typeof(ThirdParty.VendorBase),
-        TargetMemberName = "Secret",
-        TargetMemberKind = ForyTargetMemberKind.Property)]
+        TargetMemberName = "<Secret>k__BackingField")]
     public abstract string Secret { get; }
 
     [ForyField(
         Ignore = true,
         TargetDeclaringType = typeof(ThirdParty.VendorBase),
-        TargetMemberName = "<Secret>k__BackingField",
-        TargetMemberKind = ForyTargetMemberKind.Field)]
-    public abstract string SecretStorage { get; }
-
-    [ForyField(
-        Ignore = true,
-        TargetDeclaringType = typeof(ThirdParty.VendorBase),
-        TargetMemberName = "_cache",
-        TargetMemberKind = ForyTargetMemberKind.Field)]
+        TargetMemberName = "_cache")]
     public abstract int CacheStorage { get; }
 
     [ForyField(3)]
@@ -223,15 +207,13 @@ public sealed class LocalRecord : ThirdParty.VendorRecord
 }
 ```
 
-Register `LocalRecord`. A `BaseOnly` declaration publishes only the generated
-hierarchy API used by derived serializers; it does not generate a standalone
-serializer factory or registration for `ThirdParty.VendorRecord`.
+Register `LocalRecord`. Do not register `ThirdParty.VendorRecord`; a `BaseOnly`
+declaration exists only to support annotated derived classes.
 
-The provider declaration may list exact fields and properties from every
-third-party ancestor of its target. Fory does not walk private package metadata
-or reconstruct a parent budget in the child compilation. Put a public
-`BaseOnly` declaration in a shared referenced assembly when several consumer
-assemblies derive from the same third-party base.
+The provider declaration may list exact fields from every third-party ancestor
+of its target. Fory does not discover private package fields. Put a public
+`BaseOnly` declaration in a shared referenced assembly when consumer assemblies
+derive from the same third-party base.
 
 A `BaseOnly` target may be abstract or lack a parameterless constructor as
 long as each concrete annotated child has a legal parameterless construction
@@ -245,7 +227,7 @@ First-party bases use direct `[ForyStruct]` annotations instead. See
 An external structural declaration must be a non-generic abstract class
 containing only abstract get-only declaration properties. Each wire property:
 
-- binds a visible member by the same name or supplies an exact target mapping;
+- binds a visible member by the same name or an explicitly named exact field;
 - has the target member's CLR type and generic shape;
 - has matching explicit nullability when the target metadata provides it; and
 - may use the standard `ForyField` ID and schema descriptor options.
@@ -261,8 +243,8 @@ custom-wire targets require a [manual serializer](manual-serializers.md).
 
 Closed generic targets such as `ThirdParty.Box<string>` are supported. On
 .NET 8, a private wire member whose declaring type or signature is generic
-requires a manual serializer. Visible generic members and exact ignored field
-mappings remain supported. Open generic targets are not supported.
+requires a manual serializer. Visible generic members and exact ignored class
+field mappings remain supported. Open generic targets are not supported.
 
 ## Enum Targets
 
@@ -339,7 +321,7 @@ typed roots.
 
 ## Schema Evolution
 
-Set `Evolving` on the serializer declaration:
+Set `Evolving` on a standalone external serializer declaration:
 
 ```csharp
 [ForyStruct(
@@ -347,6 +329,9 @@ Set `Evolving` on the serializer declaration:
     Evolving = false)]
 internal abstract class UserSerializer
 {
+    [ForyField(
+        TargetDeclaringType = typeof(ThirdParty.User),
+        TargetMemberName = "<Name>k__BackingField")]
     public abstract string Name { get; }
 }
 ```
@@ -354,6 +339,10 @@ internal abstract class UserSerializer
 Field IDs, field names, schema descriptors, and `Evolving` come from the
 declaration. Compatible and schema-consistent modes otherwise behave exactly
 as they do for an ordinary generated C# type.
+
+A `BaseOnly` declaration cannot set `Evolving`; it does not create a root
+serializer. Each concrete annotated descendant owns its own `Evolving`
+setting.
 
 ## Dynamic Values and References
 

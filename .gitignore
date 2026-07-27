@@ -136,14 +136,8 @@ csharp/tests/Fory.XlangPeer/bin/
 csharp/tests/Fory.XlangPeer/obj/
 csharp/tests/Fory.InheritanceProviders/bin/
 csharp/tests/Fory.InheritanceProviders/obj/
-csharp/tests/Fory.InheritanceConsumerA/bin/
-csharp/tests/Fory.InheritanceConsumerA/obj/
-csharp/tests/Fory.InheritanceConsumerB/bin/
-csharp/tests/Fory.InheritanceConsumerB/obj/
-benchmarks/csharp/Fory.GeneratedClassBenchmarkProviders/bin/
-benchmarks/csharp/Fory.GeneratedClassBenchmarkProviders/obj/
-benchmarks/csharp/Fory.GeneratedClassBenchmarkTypes/bin/
-benchmarks/csharp/Fory.GeneratedClassBenchmarkTypes/obj/
+csharp/tests/Fory.InheritanceConsumer/bin/
+csharp/tests/Fory.InheritanceConsumer/obj/
 csharp/artifacts/
 
 tasks/

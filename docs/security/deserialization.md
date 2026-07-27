@@ -287,7 +287,7 @@ type-erased materialization paths reserve the shallow storage for the heap value
 Parents must not recursively include child object, collection, map, string, binary, or primitive
 dense-array contents; the child owner reserves its own shallow memory when it is materialized.
 
-### External Structural Targets
+### Generated Structural Targets
 
 Wire members and physical storage are separate inputs. Properties, accessors, interfaces, and
 logical schema aliases are not physical fields and must not be charged as storage. A field that is
@@ -295,18 +295,20 @@ both serialized and stored is counted once. A storage-only declaration contribut
 but must not enter wire metadata or generated reads and writes.
 
 For C# ordinary classes, each directly annotated class owns the physical instance fields declared
-by that class. Its generated provider publishes the cumulative parent-provider value plus those
-direct fields. A concrete descendant uses the immediate provider value and its own direct fields;
-it must not enumerate referenced private metadata or reconstruct parent storage. The concrete
-object serializer reserves one shallow object owner plus this cumulative field storage.
+by that class. An inheritable class provider publishes the cumulative parent-provider value plus
+those direct fields. A sealed concrete serializer uses the same cumulative expression privately.
+A concrete descendant uses the immediate accessible provider value and its own direct fields; it
+must not enumerate referenced private metadata or reconstruct parent storage. The concrete object
+serializer reserves one shallow object owner plus this cumulative field storage.
 
-A C# external declaration owns the exact third-party physical fields it lists. An exact field
-mapping contributes storage; an exact property mapping does not, and its backing field must be
-listed separately. An ignored mapping must identify one exact field and is storage-only.
+A C# external class declaration owns the exact third-party physical fields it lists. An exact
+field mapping contributes storage. A visible property mapping does not, so its backing field must
+be listed separately. An ignored mapping must identify one exact class field and is storage-only.
+External struct declarations support visible member mappings only.
 Discoverable unmapped public instance fields may be added once. A `BaseOnly` declaration can own
 the complete target and target-ancestor prefix used by an ordinary child. It must list every
-non-public physical field required by that prefix; the generator does not scan the referenced
-assembly for private layout.
+non-public physical field in that prefix; the generator does not scan the referenced assembly for
+private layout.
 
 Exact external private identities are version-pinned package ABI assertions. Runtime wire access
 uses exact accessors and must not fall back to reflection, layout probing, or a different member.

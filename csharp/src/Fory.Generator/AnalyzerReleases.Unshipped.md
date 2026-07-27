@@ -20,5 +20,8 @@ FORY015 | Fory | Error | Invalid ignored Fory field
 FORY016 | Fory | Error | Duplicate structural field identity
 FORY017 | Fory | Error | Invalid abstract structural option
 FORY018 | Fory | Error | Unsupported shallow storage field
-FORY019 | Fory | Error | Missing hierarchy provider serializer API
+FORY019 | Fory | Error | Missing generated hierarchy provider
 FORY020 | Fory | Error | Invalid inherited wire descriptor
+FORY021 | Fory | Error | Unsupported generated member type
+FORY022 | Fory | Error | Invalid ordinary structural member
+FORY023 | Fory | Error | Invalid generated declaration

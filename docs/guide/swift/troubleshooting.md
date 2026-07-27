@@ -40,9 +40,6 @@ For an external target, register its serializer:
 try fory.register(UserSerializer.self, id: 100)
 ```
 
-Do not register `OptionalSerializer`, `ArraySerializer`, `SetSerializer`,
-`DictionarySerializer`, or `DynamicSerializer`.
-
 ### `Type mismatch: expected ..., got ...`
 
 Cause: registration mapping or field type info differs across peers.

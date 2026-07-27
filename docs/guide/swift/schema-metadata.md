@@ -228,6 +228,6 @@ Fory model macros support dynamic fields and nested containers:
 - `[Int32: Any]`
 - `[AnyHashable: Any]`
 
-Other dictionary key types work when the key is `Hashable` and is its own
-serializer provider. For an external key using a separate serializer, select
-it with `@MapField(key: .with(KeySerializer.self))`.
+Other dictionary key types work when the key is `Hashable` and implements
+`Serializer` with `Target == Self`. For an external key using a separate
+serializer, select it with `@MapField(key: .with(KeySerializer.self))`.

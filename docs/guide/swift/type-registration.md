@@ -23,8 +23,8 @@ This page covers registration APIs for user-defined types.
 
 ## Why Registration Is Required
 
-User serializers for structs, classes, enums, unions, and EXT targets must be
-registered before their registered identity is used.
+Register user-defined structs, classes, enums, unions, and external targets
+before serialization or deserialization.
 
 If a type is missing, deserialization fails with:
 
@@ -65,10 +65,8 @@ If an application intentionally gives an external type one retroactive
 try fory.register(UUID.self, id: 2)
 ```
 
-Registration does not choose between serializer implementations. A
-self-provided target uses ordinary implicit selection. A separate serializer
-must still be selected explicitly at each root, field, or carrier child where
-it is required.
+Registration does not make a separate serializer the default. Select it
+explicitly at each root, field, or carrier child where it is required.
 
 ## Register by Name
 
@@ -92,35 +90,10 @@ Keep registration mapping consistent across peers:
 - ID mode: same type uses same numeric ID on all peers
 - Name mode: same type uses same namespace and type name on all peers
 - Do not mix ID and name mapping for the same logical type across services
-- Register only one serializer for one exact target on each `Fory` instance
+- Register only one serializer for each target type on a `Fory` instance
 
 Registration closes after the first root serialization or deserialization.
 Complete all registrations before the first root operation.
-
-## Carrier Serializers
-
-Do not register `OptionalSerializer`, `ArraySerializer`, `SetSerializer`,
-`DictionarySerializer`, or `DynamicSerializer`.
-
-Carrier serializers preserve standard wire categories and have no independent
-user identity. Register user serializers reached through their children:
-
-```swift
-try fory.register(UserSerializer.self, id: 1)
-
-let data = try fory.serialize(
-    users,
-    with: ArraySerializer<UserSerializer>.self
-)
-```
-
-An empty root carrier can complete without reaching unused child identity. A
-registered containing struct still resolves user types present in its field
-schema.
-
-A manual serializer may instead own one opaque EXT body for a whole carrier.
-Register it normally. Static use remains explicit through `with:` and does not
-replace the structural carrier serializer.
 
 ## Dynamic Types and Registration
 

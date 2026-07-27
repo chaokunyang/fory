@@ -81,9 +81,8 @@ numeric data.
 | `array<float32>`  | `@ArrayField(element: .float32) var values: [Float]`     |
 | `array<float64>`  | `@ArrayField(element: .float64) var values: [Double]`    |
 
-`ArraySerializer<S>` also preserves the normal LIST mapping. An external or
-manual child does not change a list into a packed array based on target syntax.
-Packed arrays require the canonical bool or numeric field codec.
+An array that uses a separate element serializer still uses normal list
+encoding. Use `@ArrayField` only for supported dense bool or numeric arrays.
 
 ## External Targets
 

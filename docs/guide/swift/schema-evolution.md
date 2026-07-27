@@ -75,7 +75,8 @@ assert(v2.phone == nil)
 
 ## External Targets
 
-An external structural serializer owns the local schema used for compatibility:
+An external structural serializer declaration defines the local schema used
+for compatibility:
 
 ```swift
 @ForyStruct(target: ThirdParty.User.self)

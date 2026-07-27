@@ -19,8 +19,8 @@ license: |
   limitations under the License.
 ---
 
-Use a manual serializer when a target needs a customized wire body or cannot
-meet the direct-access requirements of an
+Use a manual serializer when a target needs a custom encoding or cannot meet
+the direct-access requirements of an
 [external structural serializer](external-types.md).
 
 A manual serializer is not limited to external types:
@@ -30,16 +30,16 @@ A manual serializer is not limited to external types:
 - A separate serializer whose `Target` is another type must be selected
   explicitly everywhere it is needed.
 
-This ownership rule is the same for roots, generated fields, optionals, arrays,
-sets, and dictionaries. Registration does not change static serializer
-selection.
+The same selection rules apply to roots, generated fields, optionals, arrays,
+sets, and dictionaries. Registering a separate serializer does not make it
+implicit.
 
 ## When to Use a Manual Serializer
 
 - The target has private or immutable state.
 - The target must enforce construction invariants.
 - The target needs a specialized compact encoding.
-- The target needs a tuned allocation or validation path.
+- The target needs custom validation or construction logic.
 - An external enum is not exhaustively switchable.
 - An external union cannot represent `UnknownCase`.
 
@@ -92,8 +92,8 @@ No `with:` argument is needed because `AccountID.Target == AccountID`.
 
 ## One Global Serializer for an External Type
 
-Swift permits an application to make an external type self-provided through a
-retroactive conformance:
+Swift permits an application to make an external type implement `Serializer`
+through a retroactive conformance:
 
 ```swift
 import Foundation
@@ -158,12 +158,12 @@ let data = try fory.serialize(input)
 let output: [UUID] = try fory.deserialize(data)
 ```
 
-A retroactive conformance is process-global. Only one conformance for one
-`(Target, Protocol)` pair can safely exist. `@retroactive` acknowledges
-Swift's ownership warning but does not make duplicate conformances safe. Use
-this form only when the application intentionally owns the single global
-binding. Public libraries should generally provide a separate serializer
-instead.
+A retroactive conformance applies to the entire process. Swift allows only one
+`Serializer` conformance for a given type; `@retroactive` acknowledges the
+compiler warning but does not make competing conformances safe. Use this form
+only when the application intentionally chooses the single global
+implementation. Public libraries should generally provide a separate
+serializer instead.
 
 ## Separate Serializers
 
@@ -224,20 +224,19 @@ assert(input == output)
 ```
 
 Another declaration, such as `UUIDBytesSerializer`, may target the same type
-with a different body. Swift cannot reverse-infer one of these serializers from
-`S.Target == UUID`. Registration makes the selected serializer available for
-type identity and dynamic dispatch; it never makes a separate serializer the
-implicit static choice. Register only one implementation for the target on a
-given `Fory` instance.
+with a different body. Fory cannot choose between separate serializers
+automatically. Registering one does not make it the default for `UUID`; select
+it with `with:` at roots and with the matching field annotation. Register only
+one implementation for the target on a given `Fory` instance.
 
 The direct `Any` and `AnyObject` root conveniences remain dynamic operations.
-A concrete non-self-provided value can enter registered dynamic lookup through
-the `Any` overload, but that does not statically select a separate serializer
-and is not a replacement for `with:`.
+A registered serializer may be used for a concrete value passed as `Any`, but
+typed roots and fields still require `with:` for a separate serializer.
 
 ## Fields and Carriers
 
-A field whose declared type is its own serializer provider needs no selector:
+A field whose type directly implements `Serializer` with `Target == Self`
+needs no selector:
 
 ```swift
 @ForyStruct
@@ -256,8 +255,8 @@ struct ExternalRequest {
 }
 ```
 
-Ordinary carriers containing self-provided targets also select their children
-directly. This includes intentional retroactive conformances:
+Ordinary carriers containing types that directly implement `Serializer` need
+no selector. This includes intentional retroactive conformances:
 
 ```swift
 let accountIDs = [
@@ -268,8 +267,8 @@ let data = try fory.serialize(accountIDs)
 let output: [AccountID] = try fory.deserialize(data)
 ```
 
-For a separately provided child, recursive carrier selection names that
-serializer:
+For an element that uses a separate serializer, name it in the carrier
+annotation:
 
 ```swift
 @ListField(element: .with(UUIDStringSerializer.self))
@@ -287,63 +286,23 @@ let data = try fory.serialize(
 
 ## Manual Serializer Rules
 
-A manual serializer uses `.ext` for its noncanonical body whether the target
-implements `Serializer` directly or uses a separate serializer declaration.
-Numeric registration produces EXT and name registration produces NAMED_EXT.
-
-Do not report `.structType`, `.enumType`, or `.typedUnion` from a manual
-serializer. Those categories are owned by `@ForyStruct`, `@ForyEnum`, and
-`@ForyUnion`.
-
-Serialization behavior is static. Fory does not instantiate a separate
-serializer object.
+A manual serializer must return `.ext` from `staticTypeId`. The
+`.structType`, `.enumType`, and `.typedUnion` values are reserved for
+`@ForyStruct`, `@ForyEnum`, and `@ForyUnion`.
 
 `writeData` and `readData` process only the target body. Do not call a root
 `serialize` or `deserialize` method from either operation.
 
 ## Defaults
 
-`defaultValue(_:)` is fallible and receives the active read context. Implement
-it only when the target has a valid value for a null or missing field.
+Implement `defaultValue(_:)` only when the target has a valid value for a null
+or missing field.
 
-If creating a default allocates memory, reserve the target's graph memory
-before allocation.
+## Input Validation
 
-## Allocation Safety
-
-Before allocating from input-controlled data:
-
-1. validate encoded byte counts;
-2. validate collection or object limits;
-3. validate arithmetic for overflow;
-4. reserve graph memory for the final owner;
-5. allocate the final target once.
-
-Do not allocate a temporary model and convert it into the target.
+Reject invalid input with an appropriate `ForyError`.
 
 ## Manual Class Serializers
 
-A manual serializer for a cyclic class must override the complete-value `read`
-operation and integrate with Fory's reference APIs so repeated references
-resolve to the final target object. Do not deserialize through a temporary
-serializer, builder, or conversion wrapper.
-
-## Container Targets
-
-A manual serializer may target an entire optional, array, set, or dictionary
-when an application wants one opaque EXT body:
-
-```swift
-enum UserArraySerializer: Serializer {
-    typealias Target = [ThirdParty.User]
-    // One application-defined EXT body.
-}
-```
-
-This is different from `ArraySerializer<UserSerializer>`, which preserves the
-normal LIST schema and recursively selects `UserSerializer`. Static field and
-root selection remains explicit, so registering the opaque serializer does not
-change ordinary array serialization.
-
-A target that already has a seeded canonical dynamic identity, such as an exact
-primitive array, cannot be claimed by another serializer.
+For a cyclic class, override the complete-value `read` operation and use Fory's
+reference APIs so repeated references resolve to the same object.

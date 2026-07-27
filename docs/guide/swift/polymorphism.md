@@ -37,11 +37,11 @@ let decoded: Any = try fory.deserialize(data)
 The equivalent explicit form is
 `with: DynamicSerializer<Any>.self`. It is useful when composing serializers,
 but is unnecessary for an `Any` root. `AnyObject` has the same direct root
-APIs and delegates to `DynamicSerializer<AnyObject>`.
+APIs.
 
-A concrete value that does not implement `Serializer` itself may also enter
-registered dynamic-target lookup through the `Any` overload. Use `with:` to
-name a separate serializer explicitly when static selection is required.
+A concrete external value passed as `Any` may use its registered serializer.
+For typed roots and fields, select a separate serializer explicitly with
+`with:`.
 
 Heterogeneous containers compose carrier serializers:
 
@@ -60,14 +60,12 @@ Use `DynamicSerializer<AnyHashable>` for an erased dynamic dictionary key.
 Use the exact heterogeneous shape for dynamic lists and maps: `[Any]`,
 `[String: Any]`, `[Int32: Any]`, or `[AnyHashable: Any]`. For example, write
 `["a", "b"] as [Any]` before storing that heterogeneous list in `Any`.
-Homogeneous lists and maps use their ordinary serializer or an explicitly
-selected carrier serializer. Exact primitive arrays keep their packed dynamic
-mapping.
+Keep homogeneous lists and maps in their ordinary concrete types.
 
 ## Application Protocols
 
-Dynamic dispatch uses the concrete target's normal registration. No
-Fory-specific marker protocol is required:
+Register each concrete target that may appear. No Fory-specific marker
+protocol is required:
 
 ```swift
 protocol Animal {
@@ -101,8 +99,6 @@ let output = try fory.deserialize(
 
 Every concrete target must conform to the requested application protocol. A
 target that is unregistered or does not conform fails deserialization.
-Explicit `with:` prevents a concrete external value from selecting a serializer
-only because its target was registered.
 
 ## Protocol Fields
 
@@ -163,9 +159,8 @@ keys. Use `AnyHashable` for erased dynamic keys.
 
 ## Explicitly Polymorphic Class Nodes
 
-An ordinary concrete field uses its statically selected serializer. Select
-`DynamicSerializer<Base>` when a class-typed field must preserve registered
-subclass identity:
+Select `DynamicSerializer<Base>` when a class-typed field must preserve its
+concrete subclass:
 
 ```swift
 @ForyField(with: DynamicSerializer<AnimalBase>.self)
@@ -210,8 +205,7 @@ try fory.register(Address.self, id: 100)
   `AnyHashable(ForyAnyNullValue())`
 - Optional dynamic values map to the corresponding null representation on decode
 
-## Dynamic Type Requirements
+## `AnyHashable` Keys
 
-- `AnyHashable` keys must wrap values that are both `Hashable` and supported by Fory dynamic serialization.
-- A root container whose static child does not select itself requires an
-  explicit carrier serializer.
+`AnyHashable` keys must wrap values that are both `Hashable` and supported by
+Fory dynamic serialization.

@@ -125,8 +125,8 @@ let decoded = try fory.deserialize(
 
 See [External-Type Serialization](external-types.md) for structural
 serializers and recursive carrier roots. See
-[Manual Serializers](manual-serializers.md) for self-provided, retroactive, and
-separately provided manual implementations.
+[Manual Serializers](manual-serializers.md) for serializers implemented
+directly by a type, retroactive conformances, and separate manual serializers.
 
 ## Built-in Supported Types
 
@@ -151,12 +151,12 @@ supports epoch-day and `Date` conversions through `fromEpochDay(_:)`,
 
 ### Collections
 
-- `[T]` where `T` selects itself as its serializer
-- `Set<T>` where `T` selects itself and is `Hashable`
-- `[K: V]` where `K` selects itself and is `Hashable`, and `V` selects itself
-- Optional variants (`T?`)
+- Optionals and arrays whose values directly implement `Serializer`
+- Sets whose elements directly implement `Serializer` and are `Hashable`
+- Dictionaries whose keys and values directly implement `Serializer`, with
+  `Hashable` keys
 
-Separately provided children use:
+Children that use a separate serializer compose with:
 
 - `OptionalSerializer<S>`
 - `ArraySerializer<S>`
@@ -165,12 +165,12 @@ Separately provided children use:
 
 ### Dynamic
 
-- `DynamicSerializer<Any>`
-- `DynamicSerializer<AnyObject>`
-- `DynamicSerializer<AnyHashable>`
-- `DynamicSerializer<any Protocol>`
-- carrier serializers containing dynamic children
+- `Any` and `AnyObject`
+- `AnyHashable`
+- Arbitrary application protocol values
+- Supported heterogeneous arrays and dictionaries
 
 `Any` and `AnyObject` roots use direct root APIs. Arbitrary application
-protocol roots and recursive dynamic carriers use explicit `with:` selection.
+protocol roots and dynamic values nested in carriers use explicit `with:`
+selection.
 See [Polymorphism and Dynamic Types](polymorphism.md).

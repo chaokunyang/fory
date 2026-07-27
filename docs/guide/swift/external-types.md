@@ -25,11 +25,11 @@ another Swift module without modifying that type.
 Use an external structural serializer when the target exposes a schema that
 Fory can access and construct directly. Use a
 [manual serializer](manual-serializers.md) when the target needs a customized
-body or has private construction invariants.
+encoding or has private construction invariants.
 
 An external structural serializer is a separate declaration, so roots, fields,
-and carrier children select it explicitly. Registration never makes that
-separate serializer an implicit static choice.
+and carrier children select it explicitly. Registering it does not make it the
+default for the target type.
 
 For one application-owned global implementation, Swift also permits an
 external type to conform retroactively to `Serializer` with `Target == Self`.
@@ -190,8 +190,7 @@ selection. It may be combined with `id`.
 
 ## Root Carrier Composition
 
-Swift provides carrier serializers for every generic carrier supported by the
-runtime:
+Swift provides carrier serializers for its supported generic carriers:
 
 | Carrier serializer             | Target                   |
 | ------------------------------ | ------------------------ |
@@ -222,23 +221,8 @@ let decoded = try fory.deserialize(
 `SetSerializer` requires a hashable target element.
 `DictionarySerializer` requires a hashable target key.
 
-Carrier serializers preserve the normal Swift wire mapping:
-
-- `ArraySerializer` uses LIST;
-- `SetSerializer` uses SET;
-- `DictionarySerializer` uses MAP;
-- `OptionalSerializer` uses its wrapped serializer's value shape.
-
-Do not register carrier serializers. Register the selected user serializers
-that supply user type identity:
-
-```swift
-try fory.register(UserSerializer.self, id: 100)
-```
-
-An absent optional or empty root collection can be encoded without reaching an
-unused child registration. A registered containing struct still needs every
-user type referenced by its field schema.
+Carrier serializers use the same optional, array, set, and dictionary
+encodings as ordinary Swift values.
 
 ## Buffer APIs
 
@@ -308,10 +292,6 @@ typealias Users = [ThirdParty.User]
 var users: Users
 ```
 
-For a schema-bearing field, write a carrier serializer with its canonical
-`OptionalSerializer`, `ArraySerializer`, `SetSerializer`, or
-`DictionarySerializer` name so the macro can lower its child schema.
-
 ## When to Use a Manual Serializer
 
 Use a manual serializer when:
@@ -320,8 +300,5 @@ Use a manual serializer when:
 - a class is immutable or has construction invariants;
 - an enum is not exhaustively switchable;
 - a union cannot represent `UnknownCase`;
-- the wire body must differ from the structural schema;
-- the target needs specialized allocation or validation.
-
-External structural serializers never use reflection or conversion objects to
-bypass these requirements.
+- the target needs a custom encoding;
+- the target needs custom validation or construction logic.

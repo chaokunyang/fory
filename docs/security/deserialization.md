@@ -287,6 +287,27 @@ type-erased materialization paths reserve the shallow storage for the heap value
 Parents must not recursively include child object, collection, map, string, binary, or primitive
 dense-array contents; the child owner reserves its own shallow memory when it is materialized.
 
+### External Structural Targets
+
+An external structural serializer does not own or necessarily expose the target type's complete
+storage layout. Its shallow graph-memory formula starts with every field declared by the external
+schema. A field marked `ignore` is a budget-only declaration: it contributes its declared storage
+width but must not enter wire metadata, generated reads or writes, target member access, or target
+construction.
+
+C# and Dart generators may additionally include public instance fields that are visible on the
+target at generation time. A public field represented by a schema declaration is counted once.
+Properties, accessors, interfaces, and runtime layout inspection must not be treated as additional
+stored fields. Swift macros cannot inspect another type's stored layout and therefore use only the
+external declaration.
+
+Other omitted target storage is outside this approximate formula. When it contains a large value
+field or enough fields to matter, the external declaration should list that storage and mark it
+ignored. The normal owner rules still apply: a reference target reserves its shallow owner and
+field storage, while an inline value target is charged by the holder that owns its storage. These
+formulas must be resolved during generation and must not add reflection, layout probing,
+allocation, or field enumeration to deserialization hot paths.
+
 ### Runtime-Specific Owner Notes
 
 #### C++

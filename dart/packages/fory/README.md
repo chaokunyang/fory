@@ -111,7 +111,11 @@ abstract final class UserSerializer {
 }
 ```
 
-The declaration is schema-only. Register and serialize the target:
+The declaration is schema-only.
+Use `@ForyField(ignore: true)` for declaration-only storage that should count
+toward the graph-memory budget without being serialized.
+
+Register and serialize the target:
 
 ```dart
 ExternalSerializersForyModule.register(
@@ -200,7 +204,7 @@ class NodeList {
 
 | Option     | Description                                      |
 | ---------- | ------------------------------------------------ |
-| `skip`     | Skip the field during serialization              |
+| `ignore`   | Exclude the field from serialization             |
 | `id`       | Stable field ID for compatible-mode evolution    |
 | `nullable` | Override nullability inference                   |
 | `ref`      | Enable reference tracking for this field         |

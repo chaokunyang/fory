@@ -23,6 +23,11 @@ Load this file when changing `dart/`.
   statically provable reference-tracked path back to the target, including
   paths through supported list, set, and map type arguments. Do not simulate
   early publication with placeholders or final-field patching.
+- External object graph-memory formulas count all declaration fields plus
+  concrete public instance fields visible on the target, superclass, and mixin
+  storage paths. Ignored declaration fields are budget-only and must not enter
+  target access, construction, metadata, or wire code. Compute this union during
+  generation and emit one constant reservation.
 - Keep root numeric wrapper defaults separate from generated field metadata. Root wrapper resolution belongs in the builtin resolver, while annotations and generated metadata choose fixed, tagged, or declared-field encodings.
 - Dart 64-bit carriers are optimized for each platform. Do not replace native extension-type wrappers with allocation-heavy classes or route web/native hot paths through `BigInt` unless the user approves a representation change.
 - In `Buffer`, cursor, serializer, and generated-code hot paths, prefer direct byte/local integer operations and conditional import/export files over callbacks, records, holder objects, wrapper round-trips, or runtime platform branches.

@@ -20,7 +20,7 @@
 import 'package:fory/src/annotation/type_spec.dart';
 
 final class ForyField {
-  final bool skip;
+  final bool ignore;
   final int? id;
   final bool? nullable;
   final bool ref;
@@ -28,17 +28,24 @@ final class ForyField {
   final TypeSpec? type;
 
   const ForyField({
-    this.skip = false,
+    this.ignore = false,
     this.id,
     this.nullable,
     this.ref = false,
     this.dynamic,
     this.type,
-  });
+  }) : assert(
+         !ignore ||
+             (id == null &&
+                 nullable == null &&
+                 !ref &&
+                 dynamic == null &&
+                 type == null),
+         'Ignored fields cannot define wire metadata.',
+       );
 }
 
 final class ListField {
-  final bool skip;
   final int? id;
   final bool? nullable;
   final bool ref;
@@ -46,7 +53,6 @@ final class ListField {
   final TypeSpec? element;
 
   const ListField({
-    this.skip = false,
     this.id,
     this.nullable,
     this.ref = false,
@@ -56,7 +62,6 @@ final class ListField {
 }
 
 final class ArrayField {
-  final bool skip;
   final int? id;
   final bool? nullable;
   final bool ref;
@@ -64,7 +69,6 @@ final class ArrayField {
   final TypeSpec element;
 
   const ArrayField({
-    this.skip = false,
     this.id,
     this.nullable,
     this.ref = false,
@@ -74,7 +78,6 @@ final class ArrayField {
 }
 
 final class SetField {
-  final bool skip;
   final int? id;
   final bool? nullable;
   final bool ref;
@@ -82,7 +85,6 @@ final class SetField {
   final TypeSpec? element;
 
   const SetField({
-    this.skip = false,
     this.id,
     this.nullable,
     this.ref = false,
@@ -92,7 +94,6 @@ final class SetField {
 }
 
 final class MapField {
-  final bool skip;
   final int? id;
   final bool? nullable;
   final bool ref;
@@ -101,7 +102,6 @@ final class MapField {
   final TypeSpec? value;
 
   const MapField({
-    this.skip = false,
     this.id,
     this.nullable,
     this.ref = false,

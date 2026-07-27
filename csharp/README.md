@@ -199,6 +199,7 @@ internal abstract class UserSerializer
 Fory fory = Fory.Builder().Build();
 fory.Register<ThirdParty.User>(300);
 
+ThirdParty.User user = new() { Name = "Alice" };
 byte[] payload = fory.Serialize(user);
 ThirdParty.User decoded = fory.Deserialize<ThirdParty.User>(payload);
 ```

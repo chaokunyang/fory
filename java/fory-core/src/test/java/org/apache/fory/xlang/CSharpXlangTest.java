@@ -31,6 +31,7 @@ import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import lombok.Data;
 import org.apache.fory.Fory;
+import org.apache.fory.annotation.ForyEnumId;
 import org.apache.fory.annotation.ForyField;
 import org.apache.fory.annotation.ForyStruct;
 import org.apache.fory.memory.MemoryBuffer;
@@ -495,8 +496,13 @@ public class CSharpXlangTest extends XlangTestBase {
   }
 
   enum CSharpExternalStatus {
+    @ForyEnumId(0)
     UNKNOWN,
+
+    @ForyEnumId(7)
     READY,
+
+    @ForyEnumId(23)
     DONE,
   }
 

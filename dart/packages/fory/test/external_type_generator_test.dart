@@ -310,6 +310,20 @@ abstract final class TargetSerializer {
     );
   });
 
+  test('validates ignored schema field shape', () async {
+    await _expectGenerationError(
+      targetSource: 'class Target {}',
+      declarationSource: '''
+@ForyStruct(target: Target)
+abstract final class TargetSerializer {
+  @ForyField(ignore: true)
+  late String hidden;
+}
+''',
+      message: 'must be a late final field without an initializer',
+    );
+  });
+
   test('rejects duplicate target', () async {
     await _expectGenerationError(
       targetSource: '''
@@ -548,6 +562,48 @@ abstract final class TargetSerializer {
       output: allOf(
         contains('final value = Target(_firstValue);'),
         contains('value.third = _thirdValue;'),
+      ),
+    );
+  });
+
+  test('accounts for external target storage without serializing it', () async {
+    await _expectGenerationOutput(
+      targetSource: '''
+mixin TargetMixin {
+  final bool mixed = false;
+}
+
+class Base<T> {
+  Base(this.inherited);
+
+  final T inherited;
+}
+
+class Target extends Base<String> with TargetMixin {
+  Target(this.value, String inherited) : super(inherited);
+
+  final int value;
+  final String omitted = 'omitted';
+  final Object _hidden = Object();
+}
+''',
+      declarationSource: '''
+@ForyStruct(target: Target)
+abstract final class TargetSerializer {
+  late final int value;
+  late final String inherited;
+
+  @ForyField(ignore: true)
+  late final Object _hidden;
+}
+''',
+      output: allOf(
+        contains('context.reserveGraphMemory(44);'),
+        contains("name: 'value',"),
+        contains("name: 'inherited',"),
+        isNot(contains("name: 'omitted',")),
+        isNot(contains('_hidden')),
+        isNot(contains("name: 'mixed',")),
       ),
     );
   });

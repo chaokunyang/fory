@@ -16,3 +16,4 @@ FORY011 | Fory | Error | Invalid external serializer member
 FORY012 | Fory | Error | External serializer member type mismatch
 FORY013 | Fory | Error | Unsupported extern alias
 FORY014 | Fory | Error | Enum value is outside the supported range
+FORY015 | Fory | Error | Invalid ignored Fory field

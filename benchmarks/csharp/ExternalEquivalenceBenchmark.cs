@@ -44,7 +44,7 @@ internal sealed record EquivalenceSideResult(
     int SerializedSize,
     string SerializedFrameBase64,
     EquivalenceMeasurement Measurement,
-    double? AllocatedBytesPerOperation);
+    double AllocatedBytesPerOperation);
 
 internal sealed record EquivalenceSideOutput(
     string GeneratedAtUtc,
@@ -138,16 +138,12 @@ internal static class ExternalEquivalenceBenchmark
             benchmarkCase.Action,
             options.DurationSeconds);
 
-        double? bytesPerOperation = null;
-        if (options.AllocationIterations > 0)
-        {
-            CollectGarbage();
-            long allocatedBytes = MeasureAllocation(
-                benchmarkCase.Action,
-                options.AllocationIterations);
-            bytesPerOperation =
-                (double)allocatedBytes / options.AllocationIterations;
-        }
+        CollectGarbage();
+        long allocatedBytes = MeasureAllocation(
+            benchmarkCase.Action,
+            options.AllocationIterations);
+        double bytesPerOperation =
+            (double)allocatedBytes / options.AllocationIterations;
 
         return new EquivalenceSideResult(
             benchmarkCase.DataType,
@@ -582,11 +578,8 @@ internal static class ExternalEquivalenceBenchmark
             Console.WriteLine(
                 $"{result.DataType}/{result.Operation}: "
                 + $"{result.Measurement.AverageNanoseconds:N1} ns/op");
-            if (result.AllocatedBytesPerOperation.HasValue)
-            {
-                Console.WriteLine(
-                    $"  allocated={result.AllocatedBytesPerOperation:N2} B/op");
-            }
+            Console.WriteLine(
+                $"  allocated={result.AllocatedBytesPerOperation:N2} B/op");
         }
     }
 

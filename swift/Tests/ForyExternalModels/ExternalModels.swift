@@ -95,6 +95,7 @@ public struct Group: Equatable {
 public final class Node {
     public var value: Int32 = 0
     public var next: Node?
+    private var omittedState: (UInt64, UInt64) = (0, 0)
 
     public init() {}
 }

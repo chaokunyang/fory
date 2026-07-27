@@ -242,9 +242,11 @@ public struct ForyFieldType: Sendable {
 }
 
 @attached(peer)
-/// Configures a generated field and optionally selects its exact serializer.
+/// Configures a generated field, selects its exact serializer, or declares
+/// budget-only storage for an external structural serializer.
 public macro ForyField(
     id: Int? = nil,
+    ignore: Bool = false,
     encoding: ForyFieldEncoding? = nil,
     type: ForyFieldType? = nil,
     with serializer: Any.Type? = nil

@@ -21,6 +21,7 @@ import base64
 import binascii
 import json
 import math
+import re
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -36,11 +37,17 @@ LANES = (
     "map-root",
 )
 OPERATIONS = ("serialize", "deserialize")
-IMPLEMENTATIONS = ("ordinary", "external")
+ROLES = ("apache-main", "ordinary", "external")
+WORKER_IMPLEMENTATIONS = {
+    "apache-main": "ordinary",
+    "ordinary": "ordinary",
+    "external": "external",
+}
 SAMPLE_ORDERS = (
-    ("ordinary", "external"),
-    ("external", "ordinary"),
+    ("apache-main", "ordinary", "external"),
+    ("external", "ordinary", "apache-main"),
 )
+MAX_SLOWDOWN_PERCENT = 1.0
 TEXT_METADATA = (
     "RuntimeVersion",
     "OsDescription",
@@ -68,13 +75,36 @@ def parse_args(argv=None):
     parser.add_argument(
         "--sample",
         action="append",
-        nargs=5,
+        nargs=6,
         required=True,
-        metavar=("LANE", "INDEX", "ORDER", "FIRST_INPUT", "SECOND_INPUT"),
-        help=(
-            "Balanced sample metadata and worker JSON paths; repeat for each lane "
-            "and sample."
+        metavar=(
+            "LANE",
+            "INDEX",
+            "ORDER",
+            "FIRST_INPUT",
+            "SECOND_INPUT",
+            "THIRD_INPUT",
         ),
+        help=(
+            "Balanced apache-main/current-ordinary/current-external sample metadata "
+            "and worker JSON paths; repeat for each lane and sample."
+        ),
+    )
+    parser.add_argument(
+        "--apache-main-commit",
+        required=True,
+        help="Fetched apache/main commit used by baseline workers.",
+    )
+    parser.add_argument(
+        "--current-commit",
+        required=True,
+        help="Current worktree HEAD commit used by ordinary/external workers.",
+    )
+    parser.add_argument(
+        "--current-dirty",
+        required=True,
+        choices=("true", "false"),
+        help="Whether the current worktree had changes when workers were launched.",
     )
     parser.add_argument("--output", required=True, help="Combined JSON output path.")
     return parser.parse_args(argv)
@@ -110,6 +140,13 @@ def require_number(value, owner: str, positive: bool):
     return value
 
 
+def require_commit(value, owner: str) -> str:
+    commit = require_string(value, owner)
+    if re.fullmatch(r"[0-9a-f]{40}", commit) is None:
+        raise ValueError(f"{owner} must be a lowercase 40-character commit id")
+    return commit
+
+
 def validate_metadata(document: dict, path: Path) -> dict:
     owner = str(path)
     require_string(document.get("GeneratedAtUtc"), f"{owner}.GeneratedAtUtc")
@@ -121,7 +158,7 @@ def validate_metadata(document: dict, path: Path) -> dict:
     require_int(
         document.get("AllocationIterations"),
         f"{owner}.AllocationIterations",
-        0,
+        1,
     )
     return {field: document[field] for field in METADATA_FIELDS}
 
@@ -164,7 +201,14 @@ def parse_sample_specs(raw_samples, expected_lanes):
     input_owners = {}
 
     for raw_sample in raw_samples:
-        lane, raw_index, order_name, first_input, second_input = raw_sample
+        (
+            lane,
+            raw_index,
+            order_name,
+            first_input,
+            second_input,
+            third_input,
+        ) = raw_sample
         if lane not in expected_lane_set:
             raise ValueError(f"sample lane is not expected: {lane!r}")
         try:
@@ -200,6 +244,12 @@ def parse_sample_specs(raw_samples, expected_lanes):
                 require_string(
                     second_input,
                     f"sample {lane}/{sample_index} second input",
+                )
+            ),
+            Path(
+                require_string(
+                    third_input,
+                    f"sample {lane}/{sample_index} third input",
                 )
             ),
         )
@@ -271,23 +321,13 @@ def load_worker(path: Path, expected_lane: str, expected_implementation: str):
             result.get("Measurement"), f"{owner}.Measurement"
         )
         allocated = result.get("AllocatedBytesPerOperation")
-        if metadata["AllocationIterations"] == 0:
-            if allocated is not None:
-                raise ValueError(
-                    f"{owner}.AllocatedBytesPerOperation must be null when "
-                    "allocation measurement is disabled"
-                )
-        elif allocated is None:
-            raise ValueError(
-                f"{owner}.AllocatedBytesPerOperation is required when "
-                "allocation measurement is enabled"
-            )
-        else:
-            require_number(
-                allocated,
-                f"{owner}.AllocatedBytesPerOperation",
-                False,
-            )
+        if allocated is None:
+            raise ValueError(f"{owner}.AllocatedBytesPerOperation is required")
+        require_number(
+            allocated,
+            f"{owner}.AllocatedBytesPerOperation",
+            False,
+        )
 
         results[operation] = {
             "SerializedSize": serialized_size,
@@ -324,11 +364,11 @@ def load_samples(specs, expected_lanes):
                 raise ValueError(
                     f"internal sample order mismatch for {lane}/{sample_index}"
                 )
-            for implementation, path in zip(expected_order, spec["Paths"]):
+            for role, path in zip(expected_order, spec["Paths"]):
                 current_metadata, worker_results = load_worker(
                     path,
                     lane,
-                    implementation,
+                    WORKER_IMPLEMENTATIONS[role],
                 )
                 if metadata is None:
                     metadata = current_metadata
@@ -344,7 +384,7 @@ def load_samples(specs, expected_lanes):
                     )
 
                 for operation, result in worker_results.items():
-                    results[(implementation, lane, sample_index, operation)] = result
+                    results[(role, lane, sample_index, operation)] = result
 
     if metadata is None:
         raise ValueError("no benchmark samples were loaded")
@@ -362,10 +402,30 @@ def median_summary(samples) -> dict:
     }
 
 
-def merge_results(metadata: dict, results: dict, expected_lanes) -> dict:
+def stable_allocation(samples, owner: str):
+    allocations = {sample["AllocatedBytesPerOperation"] for sample in samples}
+    if len(allocations) != 1:
+        raise ValueError(f"allocation mismatch between samples for {owner}")
+    return next(iter(allocations))
+
+
+def slowdown_percent(candidate: dict, baseline: dict) -> float:
+    return (
+        candidate["AverageNanoseconds"] / baseline["AverageNanoseconds"] - 1.0
+    ) * 100.0
+
+
+def merge_results(
+    metadata: dict,
+    results: dict,
+    expected_lanes,
+    apache_main_commit: str,
+    current_commit: str,
+    current_dirty: bool,
+) -> dict:
     expected_keys = {
-        (implementation, lane, sample_index, operation)
-        for implementation in IMPLEMENTATIONS
+        (role, lane, sample_index, operation)
+        for role in ROLES
         for lane in expected_lanes
         for sample_index in range(1, len(SAMPLE_ORDERS) + 1)
         for operation in OPERATIONS
@@ -375,8 +435,8 @@ def merge_results(metadata: dict, results: dict, expected_lanes) -> dict:
         raise ValueError(
             "missing results: "
             + ", ".join(
-                f"{implementation}/{lane}/{sample_index}/{operation}"
-                for implementation, lane, sample_index, operation in sorted(missing)
+                f"{role}/{lane}/{sample_index}/{operation}"
+                for role, lane, sample_index, operation in sorted(missing)
             )
         )
     unexpected = set(results) - expected_keys
@@ -384,28 +444,33 @@ def merge_results(metadata: dict, results: dict, expected_lanes) -> dict:
         raise ValueError(
             "unexpected results: "
             + ", ".join(
-                f"{implementation}/{lane}/{sample_index}/{operation}"
-                for implementation, lane, sample_index, operation in sorted(unexpected)
+                f"{role}/{lane}/{sample_index}/{operation}"
+                for role, lane, sample_index, operation in sorted(unexpected)
             )
         )
 
     combined_results = []
+    violations = []
     for lane in expected_lanes:
-        baseline = results[("ordinary", lane, 1, "serialize")]
+        proof = results[("apache-main", lane, 1, "serialize")]
         lane_samples = [
-            results[(implementation, lane, sample_index, operation)]
-            for implementation in IMPLEMENTATIONS
+            results[(role, lane, sample_index, operation)]
+            for role in ROLES
             for sample_index in range(1, len(SAMPLE_ORDERS) + 1)
             for operation in OPERATIONS
         ]
         for sample in lane_samples:
             if (
-                sample["SerializedSize"] != baseline["SerializedSize"]
-                or sample["Frame"] != baseline["Frame"]
+                sample["SerializedSize"] != proof["SerializedSize"]
+                or sample["Frame"] != proof["Frame"]
             ):
                 raise ValueError(f"serialized frame differs between samples for {lane}")
 
         for operation in OPERATIONS:
+            apache_main_samples = [
+                results[("apache-main", lane, sample_index, operation)]
+                for sample_index in range(1, len(SAMPLE_ORDERS) + 1)
+            ]
             ordinary_samples = [
                 results[("ordinary", lane, sample_index, operation)]
                 for sample_index in range(1, len(SAMPLE_ORDERS) + 1)
@@ -414,43 +479,103 @@ def merge_results(metadata: dict, results: dict, expected_lanes) -> dict:
                 results[("external", lane, sample_index, operation)]
                 for sample_index in range(1, len(SAMPLE_ORDERS) + 1)
             ]
-            operation_samples = ordinary_samples + external_samples
-            allocations = {
-                sample["AllocatedBytesPerOperation"] for sample in operation_samples
-            }
-            if len(allocations) != 1:
-                raise ValueError(
-                    f"allocation mismatch between samples for {lane}/{operation}"
-                )
 
-            allocated_bytes = operation_samples[0]["AllocatedBytesPerOperation"]
+            apache_main_allocation = stable_allocation(
+                apache_main_samples,
+                f"apache-main/{lane}/{operation}",
+            )
+            ordinary_allocation = stable_allocation(
+                ordinary_samples,
+                f"ordinary/{lane}/{operation}",
+            )
+            external_allocation = stable_allocation(
+                external_samples,
+                f"external/{lane}/{operation}",
+            )
+
+            apache_main_median = median_summary(apache_main_samples)
             ordinary_median = median_summary(ordinary_samples)
             external_median = median_summary(external_samples)
-            slowdown = (
-                external_median["AverageNanoseconds"]
-                / ordinary_median["AverageNanoseconds"]
-                - 1.0
-            ) * 100.0
-            allocation_enabled = metadata["AllocationIterations"] > 0
+            ordinary_slowdown = slowdown_percent(
+                ordinary_median,
+                apache_main_median,
+            )
+            external_slowdown = slowdown_percent(
+                external_median,
+                ordinary_median,
+            )
+            external_vs_apache_main_slowdown = slowdown_percent(
+                external_median,
+                apache_main_median,
+            )
+
+            if ordinary_slowdown > MAX_SLOWDOWN_PERCENT:
+                violations.append(
+                    f"{lane}/{operation}: current ordinary is "
+                    f"{ordinary_slowdown:+.2f}% slower than apache/main "
+                    f"(limit: +{MAX_SLOWDOWN_PERCENT:.2f}%)"
+                )
+            if external_slowdown > MAX_SLOWDOWN_PERCENT:
+                violations.append(
+                    f"{lane}/{operation}: current external is "
+                    f"{external_slowdown:+.2f}% slower than current ordinary "
+                    f"(limit: +{MAX_SLOWDOWN_PERCENT:.2f}%)"
+                )
+            if external_vs_apache_main_slowdown > MAX_SLOWDOWN_PERCENT:
+                violations.append(
+                    f"{lane}/{operation}: current external is "
+                    f"{external_vs_apache_main_slowdown:+.2f}% slower than "
+                    f"apache/main (limit: +{MAX_SLOWDOWN_PERCENT:.2f}%)"
+                )
+            if ordinary_allocation > apache_main_allocation:
+                violations.append(
+                    f"{lane}/{operation}: current ordinary allocates "
+                    f"{ordinary_allocation:.2f} B/op, above apache/main "
+                    f"{apache_main_allocation:.2f} B/op"
+                )
+            if external_allocation != ordinary_allocation:
+                violations.append(
+                    f"{lane}/{operation}: current external allocation "
+                    f"{external_allocation:.2f} B/op differs from current ordinary "
+                    f"{ordinary_allocation:.2f} B/op"
+                )
+
             combined_results.append(
                 {
                     "DataType": lane,
                     "Operation": operation,
-                    "SerializedSize": baseline["SerializedSize"],
-                    "OrdinaryMedian": ordinary_median,
-                    "ExternalMedian": external_median,
-                    "SlowdownPercent": slowdown,
-                    "OrdinaryAllocatedBytesPerOperation": allocated_bytes,
-                    "ExternalAllocatedBytesPerOperation": allocated_bytes,
-                    "AllocationEqual": True if allocation_enabled else None,
+                    "SerializedSize": proof["SerializedSize"],
+                    "ApacheMainMedian": apache_main_median,
+                    "CurrentOrdinaryMedian": ordinary_median,
+                    "CurrentExternalMedian": external_median,
+                    "CurrentOrdinarySlowdownPercent": ordinary_slowdown,
+                    "CurrentExternalSlowdownPercent": external_slowdown,
+                    "ExternalVsApacheMainSlowdownPercent": (
+                        external_vs_apache_main_slowdown
+                    ),
+                    "ApacheMainAllocatedBytesPerOperation": apache_main_allocation,
+                    "CurrentOrdinaryAllocatedBytesPerOperation": ordinary_allocation,
+                    "CurrentExternalAllocatedBytesPerOperation": external_allocation,
+                    "CurrentOrdinaryAllocationWithinBaseline": (
+                        ordinary_allocation <= apache_main_allocation
+                    ),
+                    "CurrentExternalAllocationEqual": (
+                        external_allocation == ordinary_allocation
+                    ),
                 }
             )
 
     return {
         "GeneratedAtUtc": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+        "ApacheMainCommit": apache_main_commit,
+        "CurrentCommit": current_commit,
+        "CurrentDirty": current_dirty,
         **metadata,
-        "SamplesPerImplementation": len(SAMPLE_ORDERS),
+        "MaximumSlowdownPercent": MAX_SLOWDOWN_PERCENT,
+        "SamplesPerRole": len(SAMPLE_ORDERS),
         "SampleOrders": [sample_order_name(order) for order in SAMPLE_ORDERS],
+        "Passed": not violations,
+        "Violations": violations,
         "Results": combined_results,
     }
 
@@ -458,16 +583,19 @@ def merge_results(metadata: dict, results: dict, expected_lanes) -> dict:
 def print_summary(output: dict) -> None:
     print("=== External-Type Equivalence Median Summary ===")
     for result in output["Results"]:
-        allocation = ""
-        if result["AllocationEqual"] is not None:
-            allocation = (
-                f", allocated={result['OrdinaryAllocatedBytesPerOperation']:.2f} B/op"
-            )
         print(
             f"{result['DataType']}/{result['Operation']}: "
-            f"ordinary={result['OrdinaryMedian']['AverageNanoseconds']:.1f} ns/op, "
-            f"external={result['ExternalMedian']['AverageNanoseconds']:.1f} ns/op, "
-            f"slowdown={result['SlowdownPercent']:+.2f}%{allocation}"
+            f"apache-main={result['ApacheMainMedian']['AverageNanoseconds']:.1f} ns/op, "
+            f"ordinary={result['CurrentOrdinaryMedian']['AverageNanoseconds']:.1f} "
+            f"ns/op ({result['CurrentOrdinarySlowdownPercent']:+.2f}%), "
+            f"external={result['CurrentExternalMedian']['AverageNanoseconds']:.1f} "
+            f"ns/op (vs ordinary "
+            f"{result['CurrentExternalSlowdownPercent']:+.2f}%, vs apache-main "
+            f"{result['ExternalVsApacheMainSlowdownPercent']:+.2f}%), "
+            f"allocated="
+            f"{result['ApacheMainAllocatedBytesPerOperation']:.2f}/"
+            f"{result['CurrentOrdinaryAllocatedBytesPerOperation']:.2f}/"
+            f"{result['CurrentExternalAllocatedBytesPerOperation']:.2f} B/op"
         )
 
 
@@ -479,13 +607,24 @@ def main(argv=None) -> int:
 
     specs = parse_sample_specs(args.sample, lanes)
     metadata, results = load_samples(specs, lanes)
-    output = merge_results(metadata, results, lanes)
+    output = merge_results(
+        metadata,
+        results,
+        lanes,
+        require_commit(args.apache_main_commit, "--apache-main-commit"),
+        require_commit(args.current_commit, "--current-commit"),
+        args.current_dirty == "true",
+    )
     output_path = Path(args.output)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     with output_path.open("w", encoding="utf-8") as destination:
         json.dump(output, destination, indent=2)
         destination.write("\n")
     print_summary(output)
+    if not output["Passed"]:
+        for violation in output["Violations"]:
+            print(f"regression: {violation}", file=sys.stderr)
+        return 1
     return 0
 
 

@@ -42,6 +42,11 @@ Load this file when changing `csharp/` or C# xlang behavior.
   converted, or inaccessible targets use a manual serializer. Derive
   allocation, reference publication, default value, and graph-memory behavior
   from the target class/struct kind, never the declaration kind.
+- External class graph-memory formulas count external declaration fields plus
+  public instance fields visible on the target and its base classes. An external
+  declaration field marked ignored is budget-only and must not enter wire
+  metadata or generated target access. Resolve this field set in the generator;
+  do not inspect target layout in deserialization hot paths.
 - External children compose through the concrete carrier serializers already
   owned by `TypeResolver`: nullable structs, one-dimensional arrays, List,
   LinkedList, Queue, Stack, HashSet, SortedSet, ImmutableHashSet, Dictionary,

@@ -182,13 +182,16 @@ final class ForyGenerator extends Generator {
         element: element,
       );
     }
+    final declarationFields = element.fields
+        .where(_isStoredInstanceField)
+        .toList(growable: false);
 
     final targetType =
         annotatedTarget == null
             ? element.thisType
             : _validateExternalTarget(element, annotatedTarget);
     if (annotatedTarget != null) {
-      _validateExternalDeclaration(element, targetType);
+      _validateExternalDeclaration(element, targetType, declarationFields);
     }
     final targetTypeLiteral =
         annotatedTarget == null
@@ -202,16 +205,17 @@ final class ForyGenerator extends Generator {
       external: annotatedTarget != null,
     );
 
-    final fields = element.fields
-        .where(
-          (field) => !field.isStatic && identical(field.nonSynthetic, field),
-        )
-        .where((field) => !_isSkipped(field))
+    final fields = declarationFields
+        .where((field) => !_isIgnored(field))
         .map(
           (field) =>
               _analyzeField(element, targetType, targetTypeLiteral, field),
         )
         .toList(growable: false);
+    final graphFieldCount =
+        annotatedTarget == null
+            ? declarationFields.length
+            : _externalGraphFieldCount(element, targetType, declarationFields);
 
     final sortedFields = _sortFields(fields);
     final constructionModel = _buildConstructionModel(
@@ -228,6 +232,7 @@ final class ForyGenerator extends Generator {
       targetTypeLiteral: targetTypeLiteral,
       evolving: evolving,
       fields: sortedFields,
+      graphFieldCount: graphFieldCount,
       constructionModel: constructionModel,
     );
   }
@@ -303,6 +308,7 @@ final class ForyGenerator extends Generator {
   void _validateExternalDeclaration(
     ClassElement declaration,
     InterfaceType targetType,
+    List<FieldElement> declarationFields,
   ) {
     final targetName = targetType.getDisplayString();
     if (!declaration.isAbstract || !declaration.isFinal) {
@@ -321,12 +327,7 @@ final class ForyGenerator extends Generator {
         element: declaration,
       );
     }
-    for (final field in declaration.fields.where(
-      (field) =>
-          !field.isStatic &&
-          identical(field.nonSynthetic, field) &&
-          !_isSkipped(field),
-    )) {
+    for (final field in declarationFields) {
       if (!field.isLate || !field.isFinal || field.hasInitializer) {
         throw InvalidGenerationSourceError(
           'Schema field ${declaration.displayName}.${field.displayName} for '
@@ -1646,14 +1647,73 @@ final class ForyGenerator extends Generator {
   }
 
   int _graphObjectBytes(_GeneratedStructSpec structSpec) =>
-      _structObjectOwnerBytes + structSpec.fields.length * _referenceBytes;
+      _structObjectOwnerBytes + structSpec.graphFieldCount * _referenceBytes;
 
-  bool _isSkipped(FieldElement field) {
+  int _externalGraphFieldCount(
+    ClassElement declaration,
+    InterfaceType targetType,
+    List<FieldElement> declarationFields,
+  ) {
+    final publicFields = <FieldElement>[];
+    // Analyzer keeps each class's direct mixins separate from its superclass,
+    // so this visits every applied mixin storage slot exactly once.
+    for (
+      InterfaceType? current = targetType;
+      current != null;
+      current = current.superclass
+    ) {
+      _addPublicStoredFields(publicFields, current);
+      for (final mixin in current.mixins) {
+        _addPublicStoredFields(publicFields, mixin);
+      }
+    }
+
+    final claimed = <int>{};
+    for (final declarationField in declarationFields) {
+      final getter = targetType.lookUpGetter(
+        declarationField.displayName,
+        declaration.library,
+      );
+      final variable = getter?.variable;
+      if (variable is! FieldElement || !_isPublicStoredField(variable)) {
+        continue;
+      }
+      for (var index = 0; index < publicFields.length; index += 1) {
+        if (!claimed.contains(index) &&
+            identical(publicFields[index].baseElement, variable.baseElement)) {
+          claimed.add(index);
+          break;
+        }
+      }
+    }
+    return publicFields.length + declarationFields.length - claimed.length;
+  }
+
+  void _addPublicStoredFields(List<FieldElement> fields, InterfaceType type) {
+    fields.addAll(type.element.fields.where(_isPublicStoredField));
+  }
+
+  bool _isStoredInstanceField(FieldElement field) {
+    final baseField = field.baseElement;
+    return !field.isStatic &&
+        !field.isAbstract &&
+        !field.isExternal &&
+        (identical(baseField.nonSynthetic, baseField) ||
+            baseField.nonSynthetic is FieldFormalParameterElement);
+  }
+
+  bool _isPublicStoredField(FieldElement field) =>
+      field.isPublic && _isStoredInstanceField(field);
+
+  bool _isIgnored(FieldElement field) {
     final annotation = _fieldAnnotationOf(field);
-    if (annotation == null) {
+    final annotationType = annotation?.type;
+    if (annotation == null ||
+        annotationType == null ||
+        !_foryFieldChecker.isExactlyType(annotationType)) {
       return false;
     }
-    return ConstantReader(annotation).peek('skip')?.boolValue ?? false;
+    return ConstantReader(annotation).peek('ignore')?.boolValue ?? false;
   }
 
   String _fieldInfoLiteral(_GeneratedFieldSpec field) {
@@ -4243,6 +4303,7 @@ final class _GeneratedStructSpec {
   final String targetTypeLiteral;
   final bool evolving;
   final List<_GeneratedFieldSpec> fields;
+  final int graphFieldCount;
   final _ConstructionModel constructionModel;
 
   const _GeneratedStructSpec({
@@ -4251,6 +4312,7 @@ final class _GeneratedStructSpec {
     required this.targetTypeLiteral,
     required this.evolving,
     required this.fields,
+    required this.graphFieldCount,
     required this.constructionModel,
   });
 }

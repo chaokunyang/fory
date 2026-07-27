@@ -377,6 +377,50 @@ public sealed class ForyGeneratorTests
             StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void ExternalIgnoredFieldsOnlyAffectGraphMemory()
+    {
+        const string source = """
+            using Apache.Fory;
+            namespace GeneratedDiagnostics;
+
+            public struct LargeValue
+            {
+                public long Left;
+                public long Right;
+            }
+
+            public sealed class ExternalTarget
+            {
+                public int Value;
+                public LargeValue PublicState;
+                private readonly LargeValue HiddenState;
+
+                public LargeValue ReadHiddenState() => HiddenState;
+            }
+
+            [ForyStruct(Target = typeof(ExternalTarget))]
+            internal abstract class ExternalTargetSerializer
+            {
+                [ForyField(1)]
+                public abstract int Value { get; }
+
+                [ForyField(Ignore = true)]
+                public abstract LargeValue HiddenState { get; }
+            }
+            """;
+
+        string generated = GenerateSource(source);
+        const string largeValueSize =
+            "global::System.Runtime.CompilerServices.Unsafe.SizeOf<global::GeneratedDiagnostics.LargeValue>()";
+
+        Assert.Equal(
+            2,
+            generated.Split(largeValueSize, StringSplitOptions.None).Length - 1);
+        Assert.Contains("value.Value", generated, StringComparison.Ordinal);
+        Assert.DoesNotContain("HiddenState", generated, StringComparison.Ordinal);
+    }
+
     public static TheoryData<string, string> ExternalDiagnosticCases => new()
     {
         {
@@ -698,6 +742,33 @@ public sealed class ForyGeneratorTests
             """
             using Apache.Fory;
             namespace GeneratedDiagnostics;
+            [ForyStruct]
+            public sealed class InvalidTarget
+            {
+                [ForyField(Ignore = true)]
+                public int Value { get; set; }
+            }
+            """,
+            "FORY015"
+        },
+        {
+            """
+            using Apache.Fory;
+            namespace GeneratedDiagnostics;
+            public sealed class InvalidTarget { public int Value; }
+            [ForyStruct(Target = typeof(InvalidTarget))]
+            internal abstract class InvalidSerializer
+            {
+                [ForyField(1, Ignore = true)]
+                public abstract int Value { get; }
+            }
+            """,
+            "FORY015"
+        },
+        {
+            """
+            using Apache.Fory;
+            namespace GeneratedDiagnostics;
             public sealed class InvalidTarget { public int Value { get; set; } }
             public sealed class Outer<T>
             {
@@ -772,6 +843,131 @@ public sealed class ForyGeneratorTests
         Assert.Contains(
             driver.GetRunResult().Diagnostics.Concat(diagnostics),
             diagnostic => diagnostic.Id == "FORY013");
+    }
+
+    [Fact]
+    public void DynamicAndObjectTargetsAreDuplicate()
+    {
+        const string source = """
+            using Apache.Fory;
+            namespace GeneratedDiagnostics;
+
+            [ForyStruct(Target = typeof(Fory.ExternalTypes.ExternalBox<dynamic>))]
+            internal abstract class DynamicBoxSerializer
+            {
+            }
+
+            [ForyStruct(Target = typeof(Fory.ExternalTypes.ExternalBox<object>))]
+            internal abstract class ObjectBoxSerializer
+            {
+            }
+            """;
+        CSharpCompilation compilation = CreateCompilation(source);
+        GeneratorDriver driver = CSharpGeneratorDriver.Create(new ForyModelGenerator());
+        driver = driver.RunGeneratorsAndUpdateCompilation(
+            compilation,
+            out _,
+            out _);
+
+        Assert.Equal(
+            2,
+            driver.GetRunResult().Diagnostics
+                .Count(diagnostic => diagnostic.Id == "FORY010"));
+    }
+
+    [Fact]
+    public void TupleNamesShareTargetIdentity()
+    {
+        const string source = """
+            using Apache.Fory;
+            namespace GeneratedDiagnostics;
+
+            [ForyStruct(Target = typeof(
+                Fory.ExternalTypes.ExternalBox<(int Left, string Name)>))]
+            internal abstract class NamedTupleBoxSerializer
+            {
+            }
+
+            [ForyStruct(Target = typeof(
+                Fory.ExternalTypes.ExternalBox<(int X, string Y)>))]
+            internal abstract class OtherTupleBoxSerializer
+            {
+            }
+            """;
+        CSharpCompilation compilation = CreateCompilation(source);
+        GeneratorDriver driver = CSharpGeneratorDriver.Create(new ForyModelGenerator());
+        driver = driver.RunGeneratorsAndUpdateCompilation(
+            compilation,
+            out _,
+            out _);
+
+        Assert.Equal(
+            2,
+            driver.GetRunResult().Diagnostics
+                .Count(diagnostic => diagnostic.Id == "FORY010"));
+    }
+
+    [Fact]
+    public void NativeIntsShareTargetIdentity()
+    {
+        const string source = """
+            using Apache.Fory;
+            namespace GeneratedDiagnostics;
+
+            [ForyStruct(Target = typeof(Fory.ExternalTypes.ExternalBox<nint>))]
+            internal abstract class NativeIntBoxSerializer
+            {
+            }
+
+            [ForyStruct(Target = typeof(
+                Fory.ExternalTypes.ExternalBox<System.IntPtr>))]
+            internal abstract class IntPtrBoxSerializer
+            {
+            }
+            """;
+        CSharpCompilation compilation = CreateCompilation(source);
+        GeneratorDriver driver = CSharpGeneratorDriver.Create(new ForyModelGenerator());
+        driver = driver.RunGeneratorsAndUpdateCompilation(
+            compilation,
+            out _,
+            out _);
+
+        Assert.Equal(
+            2,
+            driver.GetRunResult().Diagnostics
+                .Count(diagnostic => diagnostic.Id == "FORY010"));
+    }
+
+    [Fact]
+    public void ArrayElementsShareTargetIdentity()
+    {
+        const string source = """
+            using Apache.Fory;
+            namespace GeneratedDiagnostics;
+
+            [ForyStruct(Target = typeof(
+                Fory.ExternalTypes.ExternalBox<dynamic[]>))]
+            internal abstract class DynamicArrayBoxSerializer
+            {
+            }
+
+            [ForyStruct(Target = typeof(
+                Fory.ExternalTypes.ExternalBox<object[]>))]
+            internal abstract class ObjectArrayBoxSerializer
+            {
+            }
+            """;
+        CSharpCompilation compilation = CreateCompilation(source);
+        GeneratorDriver driver = CSharpGeneratorDriver.Create(new ForyModelGenerator());
+        driver = driver.RunGeneratorsAndUpdateCompilation(
+            compilation,
+            out _,
+            out _);
+
+        Assert.Equal(
+            2,
+            driver.GetRunResult().Diagnostics
+                .Count(diagnostic => diagnostic.Id == "FORY010"));
     }
 
     [Fact]

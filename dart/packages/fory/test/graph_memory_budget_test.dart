@@ -56,6 +56,16 @@ class BudgetGeneratedEnvelope {
 }
 
 @ForyStruct()
+class BudgetIgnoredEnvelope {
+  BudgetIgnoredEnvelope();
+
+  int value = 0;
+
+  @ForyField(ignore: true)
+  Object? ignored;
+}
+
+@ForyStruct()
 class BudgetSelfNode {
   BudgetSelfNode();
 
@@ -111,6 +121,14 @@ void _registerGenerated(Fory fory) {
     fory,
     BudgetGeneratedEnvelope,
     name: 'test.BudgetGeneratedEnvelope',
+  );
+}
+
+void _registerIgnored(Fory fory) {
+  GraphMemoryBudgetTestForyModule.register(
+    fory,
+    BudgetIgnoredEnvelope,
+    name: 'test.BudgetIgnoredEnvelope',
   );
 }
 
@@ -239,6 +257,30 @@ void main() {
       expect(identical(roundTrip, roundTrip.next), isTrue);
       expect(roundTrip.children, hasLength(1));
       expect(identical(roundTrip, roundTrip.children.single), isTrue);
+    });
+
+    test('reserves ignored field storage', () {
+      final writer = Fory();
+      _registerIgnored(writer);
+      final bytes = writer.serialize(
+        BudgetIgnoredEnvelope()
+          ..value = 7
+          ..ignored = Object(),
+      );
+      final required = _objectGraphBytes(2);
+
+      final failingReader = Fory(maxGraphMemoryBytes: required - 1);
+      _registerIgnored(failingReader);
+      expect(
+        () => failingReader.deserialize<BudgetIgnoredEnvelope>(bytes),
+        _throwsGraphBudget,
+      );
+
+      final passingReader = Fory(maxGraphMemoryBytes: required);
+      _registerIgnored(passingReader);
+      final roundTrip = passingReader.deserialize<BudgetIgnoredEnvelope>(bytes);
+      expect(roundTrip.value, equals(7));
+      expect(roundTrip.ignored, isNull);
     });
 
     test('reserves map entries', () {

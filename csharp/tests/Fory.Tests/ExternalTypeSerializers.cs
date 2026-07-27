@@ -144,6 +144,16 @@ internal abstract class ExternalEvolutionOffSerializer
     public abstract int Value { get; }
 }
 
+[ForyStruct(Target = typeof(ExternalBudgetModel))]
+internal abstract class ExternalBudgetModelSerializer
+{
+    [ForyField(1)]
+    public abstract int Value { get; }
+
+    [ForyField(Ignore = true)]
+    public abstract ExternalBudgetValue HiddenState { get; }
+}
+
 [ForyStruct]
 internal sealed class OrdinaryUser
 {

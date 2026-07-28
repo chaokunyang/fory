@@ -34,7 +34,7 @@ import matplotlib.pyplot as plt
 from matplotlib.ticker import FuncFormatter
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from plot_style import (  # noqa: E402
+from plot_style import (
     BAR_EDGE_COLOR,
     GROUP_BAR_WIDTH,
     GROUP_X,
@@ -253,15 +253,19 @@ def winner_cell(values: dict) -> str:
 def build_xlang_section(results: dict, image_name: str) -> str:
     lines = [
         "## Xlang Benchmark\n\n",
-        "Run from `benchmarks/java/run.sh`. Raw JMH JSON stays under the ignored local "
-        "`benchmarks/java/reports/` directory; `throughput.png` and this xlang "
-        "section are synced into `docs/benchmarks/java/`.\n\n",
+        (
+            "Run from `benchmarks/java/run.sh`. Raw JMH JSON stays under the ignored local "
+            "`benchmarks/java/reports/` directory; `throughput.png` and this xlang "
+            "section are synced into `docs/benchmarks/java/`.\n\n"
+        ),
         "```bash\n",
         "cd benchmarks/java\n",
         "./run.sh\n",
         "```\n\n",
-        "JMH parameters: `-f 1 -wi 3 -i 3 -t 1 -w 3s -r 3s -bm thrpt -tu s`. "
-        "Higher throughput is better.\n\n",
+        (
+            "JMH parameters: `-f 1 -wi 3 -i 3 -t 1 -w 3s -r 3s -bm thrpt -tu s`. "
+            "Higher throughput is better.\n\n"
+        ),
         f"![Java Xlang Serialization Throughput]({image_name})\n\n",
         "| Data type | Operation | "
         + " | ".join(

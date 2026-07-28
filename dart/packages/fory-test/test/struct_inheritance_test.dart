@@ -99,6 +99,19 @@ void main() {
       });
     }
 
+    test('passes optional mutable state through construction', () {
+      final fory = Fory();
+      InheritanceModelsForyModule.register(fory, OptionalMutableChild, id: 405);
+
+      final result = fory.deserialize<OptionalMutableChild>(
+        fory.serialize(OptionalMutableChild(7, 19)),
+      );
+
+      expect(result.fixed, 7);
+      expect(result.inheritedMutable, 19);
+      expect(result.observedAtConstruction, 19);
+    });
+
     for (final compatible in <bool>[false, true]) {
       test('matches flat and inherited schemas compatible=$compatible', () {
         final privateFory = Fory(compatible: compatible);

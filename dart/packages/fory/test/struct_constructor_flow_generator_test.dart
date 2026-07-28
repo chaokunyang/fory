@@ -179,6 +179,32 @@ final class FinalAndWritableValue {
       );
     });
 
+    test('passes an optional writable identity flow', () async {
+      await _expectGenerationOutput(
+        source: '''
+class OptionalMutableBase {
+  int mutable;
+
+  OptionalMutableBase([int decoded = 0]) : mutable = decoded;
+}
+
+@ForyStruct()
+final class OptionalMutableChild extends OptionalMutableBase {
+  final int fixed;
+
+  OptionalMutableChild(this.fixed, [int decoded = 0]) : super(decoded);
+}
+''',
+        output: allOf(
+          contains(
+            'final value = OptionalMutableChild('
+            '_fixedValue, _mutableValue);',
+          ),
+          isNot(contains('value.mutable = _mutableValue;')),
+        ),
+      );
+    });
+
     test('omits an unbound optional named parameter', () async {
       await _expectGenerationOutput(
         source: '''
@@ -405,6 +431,24 @@ final class AmbiguousWritableValue {
   int second;
 
   AmbiguousWritableValue(int decoded)
+    : first = decoded,
+      second = decoded;
+}
+''',
+        message: 'has multiple writable identity-flow sources',
+      );
+    });
+
+    test('optional root with ambiguous writable fields', () async {
+      await _expectGenerationError(
+        source: '''
+@ForyStruct()
+final class AmbiguousOptionalValue {
+  final int fixed;
+  int first;
+  int second;
+
+  AmbiguousOptionalValue(this.fixed, [int decoded = 0])
     : first = decoded,
       second = decoded;
 }

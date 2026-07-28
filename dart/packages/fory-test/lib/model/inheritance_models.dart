@@ -39,6 +39,26 @@ final class CrossLibraryChild extends middle.PublicMiddleBoundary {
   String childMutable = '';
 }
 
+class OptionalMutableBase {
+  OptionalMutableBase([int decoded = 0])
+    : inheritedMutable = decoded,
+      observedAtConstruction = decoded;
+
+  @ForyField(id: 1)
+  int inheritedMutable;
+
+  @ForyField(ignore: true)
+  final int observedAtConstruction;
+}
+
+@ForyStruct()
+final class OptionalMutableChild extends OptionalMutableBase {
+  OptionalMutableChild(this.fixed, [int decoded = 0]) : super(decoded);
+
+  @ForyField(id: 2)
+  final int fixed;
+}
+
 @ForyStruct()
 final class XlangInheritedChild extends base.XlangInheritanceBoundary {
   XlangInheritedChild();

@@ -118,7 +118,7 @@ final class _OrdinaryConstructorAnalyzer {
     }
 
     for (final root in rootFrame.parameters) {
-      if (!root.parameter.isRequired || bindingByRoot.containsKey(root)) {
+      if (bindingByRoot.containsKey(root)) {
         continue;
       }
       _GeneratedFieldSpec? candidate;
@@ -135,16 +135,19 @@ final class _OrdinaryConstructorAnalyzer {
         ambiguousLabels.add(_fieldLabel(field));
       }
       if (candidate == null) {
-        _throwMissingRequiredSource(
-          declaration,
-          targetTypeLiteral,
-          root,
-          fields,
-        );
+        if (root.parameter.isRequired) {
+          _throwMissingRequiredSource(
+            declaration,
+            targetTypeLiteral,
+            root,
+            fields,
+          );
+        }
+        continue;
       }
       if (ambiguousLabels != null) {
         throw InvalidGenerationSourceError(
-          'Required constructor parameter ${root.parameter.displayName} on '
+          'Constructor parameter ${root.parameter.displayName} on '
           '$targetTypeLiteral has multiple writable identity-flow sources: '
           '${ambiguousLabels.join(', ')}. Select a constructor '
           'whose parameter flow identifies exactly one serialized field.',
@@ -155,10 +158,10 @@ final class _OrdinaryConstructorAnalyzer {
       final existingRoot = rootByArgumentField[field];
       if (existingRoot != null && !identical(existingRoot, root)) {
         throw InvalidGenerationSourceError(
-          'Serialized field ${_fieldLabel(field)} would supply both required '
-          'constructor parameters ${existingRoot.parameter.displayName} and '
+          'Serialized field ${_fieldLabel(field)} would supply constructor '
+          'parameters ${existingRoot.parameter.displayName} and '
           '${root.parameter.displayName} on $targetTypeLiteral. A field may '
-          'supply at most one required constructor argument.',
+          'supply at most one constructor argument.',
           element: field.declaration,
         );
       }
@@ -251,12 +254,11 @@ final class _OrdinaryConstructorAnalyzer {
       if (_isMixinApplicationConstructor(constructor)) {
         _addMixinForwardingEdges(frame, nextFrame, declaration);
       } else if (_isDeclaredConstructor(constructor)) {
-        // Field-formal elements completely prove a leaf constructor when
-        // every required argument and final field already has an exact
-        // storage edge. Resolve source only when an initializer or
-        // constructor hop is still needed for that proof; eager resolution
-        // makes the common flat-struct build pay for a whole resolved AST
-        // without changing the construction result.
+        // Summary elements completely prove a leaf constructor only when it
+        // has no optional parameters and every required argument and final
+        // field already has an exact storage edge. An explicit initializer
+        // may connect an optional parameter to mutable storage that must
+        // receive its decoded value during construction.
         if (nextFrame != null || !_summaryProvesLeaf(frame, fields)) {
           final node = await _astFor(constructor);
           if (node is ConstructorDeclaration) {
@@ -293,7 +295,7 @@ final class _OrdinaryConstructorAnalyzer {
     List<_GeneratedFieldSpec> fields,
   ) {
     for (final parameter in frame.parameters) {
-      if (parameter.parameter.isRequired && parameter.fieldTargets.isEmpty) {
+      if (parameter.parameter.isOptional || parameter.fieldTargets.isEmpty) {
         return false;
       }
     }

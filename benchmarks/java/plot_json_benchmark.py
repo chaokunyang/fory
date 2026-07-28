@@ -267,7 +267,7 @@ def render_report(
     library_names = ", ".join(SERIALIZER_LABELS[name] for name in serializers)
     lines = [
         "# Java JSON Benchmark Report\n\n",
-        f"The benchmark compares {library_names} using the same MediaContent data. "
+        f"The benchmark compares {library_names} using the same data. "
         "The String group excludes UTF-8 conversion. The UTF-8 bytes group uses "
         "direct byte-array APIs when available. "
         + (

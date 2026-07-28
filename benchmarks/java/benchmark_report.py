@@ -66,6 +66,8 @@ DATATYPE_ORDER = [
     "mediacontentlist",
 ]
 OPERATIONS = ["serialize", "deserialize"]
+DOCS_HEADER = "# Java Benchmarks"
+JSON_REPORT_LINK = "See the [Java JSON benchmark report](json/) for fory-json, Jackson, and Gson results."
 BENCHMARK_PATTERN = re.compile(
     r"(?:^|[.])BM_(?P<serializer>Fory|Protobuf|Flatbuffer)_"
     r"(?P<datatype>NumericStruct|Sample|MediaContent|NumericStructList|SampleList|MediaContentList)_"
@@ -303,6 +305,17 @@ def update_docs_readme(docs_output_dir: Path, section: str) -> Path:
     docs_readme = docs_output_dir / "README.md"
     if docs_readme.exists():
         content = docs_readme.read_text(encoding="utf-8").rstrip()
+        if JSON_REPORT_LINK not in content:
+            if content.startswith(DOCS_HEADER):
+                content = (
+                    DOCS_HEADER
+                    + "\n\n"
+                    + JSON_REPORT_LINK
+                    + "\n\n"
+                    + content[len(DOCS_HEADER) :].lstrip()
+                )
+            else:
+                content = JSON_REPORT_LINK + "\n\n" + content
         marker = "\n## Xlang Benchmark\n"
         if marker in content:
             prefix = content.split(marker, 1)[0].rstrip()
@@ -310,7 +323,7 @@ def update_docs_readme(docs_output_dir: Path, section: str) -> Path:
         else:
             content = content + "\n\n" + section
     else:
-        content = "# Java Benchmarks\n\n" + section
+        content = DOCS_HEADER + "\n\n" + JSON_REPORT_LINK + "\n\n" + section
     docs_readme.write_text(content.rstrip() + "\n", encoding="utf-8")
     run_prettier(docs_readme)
     return docs_readme

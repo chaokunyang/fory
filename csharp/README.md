@@ -238,7 +238,7 @@ ThirdParty.User decoded = fory.Deserialize<ThirdParty.User>(payload);
 The target is the runtime and registration type. See the
 [external-types guide](https://fory.apache.org/docs/guide/csharp/external-types/).
 
-### 8. Manual Serializers
+### 8. Custom Serializers
 
 Provide specialized encoding logic with `Serializer<T>`.
 

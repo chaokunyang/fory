@@ -269,7 +269,7 @@ Generic containers such as `Vec<T>`, `HashMap<K, V>`, `HashSet<T>`, and
 `LinkedList<T>` are not supported directly as top-level erased `Any` payloads
 behind any of those carriers. This also includes primitive vector encodings such
 as `Vec<u8>`. Wrap the container in a registered derived type, or register an
-exact-target manual serializer when an opaque EXT/NAMED_EXT representation is
+exact-target custom serializer when an opaque EXT/NAMED_EXT representation is
 appropriate.
 
 **Basic Trait Object Serialization Example:**
@@ -472,12 +472,12 @@ let decoded: (i32, String, bool, Vec<i32>) = fory.deserialize(&bytes)?;
 assert_eq!(data, decoded);
 ```
 
-### 7. Manual Serializers
+### 7. Custom Serializers
 
-For a type that needs an opaque encoding, implement `Serializer` manually. A
+For a type that needs an opaque encoding, implement a custom `Serializer`. A
 separate serializer type can also target a type from another crate; see the
 [external-type serialization guide](../docs/guide/rust/external-types.md).
-Manual serializers work in native and xlang modes when the chosen EXT identity
+Custom serializers work in native and xlang modes when the chosen EXT identity
 and opaque body format are supported by every peer. The example below uses
 native mode.
 
@@ -519,7 +519,7 @@ let decoded: Point = fory.deserialize(&bytes)?;
 assert_eq!(point, decoded);
 ```
 
-Manual serializers implement the body-only `write_data` and `read_data`
+Custom serializers implement the body-only `write_data` and `read_data`
 operations. Fory's complete-value `write` and `read` operations add reference
 and type-information framing.
 

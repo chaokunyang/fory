@@ -24,23 +24,23 @@ import 'package:test/test.dart';
 
 part 'runtime_validation_test.fory.dart';
 
-final class PlainManualValue {
-  PlainManualValue(this.value);
+final class PlainCustomValue {
+  PlainCustomValue(this.value);
 
   final String value;
 }
 
-final class PlainManualValueSerializer extends Serializer<PlainManualValue> {
-  const PlainManualValueSerializer();
+final class PlainCustomValueSerializer extends Serializer<PlainCustomValue> {
+  const PlainCustomValueSerializer();
 
   @override
-  void write(WriteContext context, PlainManualValue value) {
+  void write(WriteContext context, PlainCustomValue value) {
     context.writeString(value.value);
   }
 
   @override
-  PlainManualValue read(ReadContext context) {
-    return PlainManualValue(context.readString());
+  PlainCustomValue read(ReadContext context) {
+    return PlainCustomValue(context.readString());
   }
 }
 
@@ -310,7 +310,7 @@ void main() {
       );
     });
 
-    test('rejects unregistered generated and manual values', () {
+    test('rejects unregistered generated and custom values', () {
       final fory = Fory();
 
       expect(
@@ -324,12 +324,12 @@ void main() {
         ),
       );
       expect(
-        () => fory.serialize(PlainManualValue('manual')),
+        () => fory.serialize(PlainCustomValue('custom')),
         throwsA(
           isA<StateError>().having(
             (error) => error.toString(),
             'message',
-            contains('Type PlainManualValue is not registered.'),
+            contains('Type PlainCustomValue is not registered.'),
           ),
         ),
       );
@@ -355,8 +355,8 @@ void main() {
         );
         expect(
           () => fory.registerSerializer(
-            PlainManualValue,
-            const PlainManualValueSerializer(),
+            PlainCustomValue,
+            const PlainCustomValueSerializer(),
           ),
           throwsA(
             isA<ArgumentError>().having(
@@ -368,8 +368,8 @@ void main() {
         );
         expect(
           () => fory.registerSerializer(
-            PlainManualValue,
-            const PlainManualValueSerializer(),
+            PlainCustomValue,
+            const PlainCustomValueSerializer(),
             name: '',
           ),
           throwsA(
@@ -382,8 +382,8 @@ void main() {
         );
         expect(
           () => fory.registerSerializer(
-            PlainManualValue,
-            const PlainManualValueSerializer(),
+            PlainCustomValue,
+            const PlainCustomValueSerializer(),
             name: 'validation.',
           ),
           throwsA(
@@ -396,10 +396,10 @@ void main() {
         );
         expect(
           () => fory.registerSerializer(
-            PlainManualValue,
-            const PlainManualValueSerializer(),
+            PlainCustomValue,
+            const PlainCustomValueSerializer(),
             id: 1,
-            name: 'validation.PlainManualValue',
+            name: 'validation.PlainCustomValue',
           ),
           throwsA(
             isA<ArgumentError>().having(

@@ -41,7 +41,7 @@ import 'package:fory/src/types/uint64.dart';
 
 /// Read-side serializer context.
 ///
-/// Generated and manual serializers receive this during a single
+/// Generated and custom serializers receive this during a single
 /// deserialization operation. Application code normally interacts with [Fory]
 /// instead of preparing contexts directly.
 final class ReadContext {

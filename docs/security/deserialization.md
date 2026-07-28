@@ -354,7 +354,7 @@ Count-derived Rust collection and map owners require at least the declared eleme
 readable bytes after the count. Apply that gate exactly once before reservation or allocation; do
 not repeat it after reading shared metadata. Their serializers must symmetrically reject a value
 when its complete post-count header, metadata, framing, and body are shorter than the count,
-including a non-zero-sized target whose manual serializer emits a compact or empty body. Use one
+including a non-zero-sized target whose custom serializer emits a compact or empty body. Use one
 aggregate writer check per variable carrier, never a per-element check.
 
 Fixed arrays do not allocate from their validated wire count and omit this proportional gate.

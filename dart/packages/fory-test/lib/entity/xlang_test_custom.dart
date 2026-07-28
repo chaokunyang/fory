@@ -25,7 +25,7 @@ import 'package:fory/fory.dart';
 
 import 'xlang_test_models.dart';
 
-bool registerXlangManualType(Fory fory, Type type, {int? id, String? name}) {
+bool registerXlangCustomType(Fory fory, Type type, {int? id, String? name}) {
   if (type == MyExt) {
     fory.registerSerializer(
       MyExt,

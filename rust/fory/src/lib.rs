@@ -40,7 +40,7 @@
 //!
 //! A local serializer can target a type owned by another crate. External structural
 //! serializers use `#[fory(target = path::Type)]`; opaque or invariant-bearing targets use a
-//! manual [`Serializer`]. The serializer is selected explicitly at a field with
+//! custom [`Serializer`]. The serializer is selected explicitly at a field with
 //! `#[fory(with = UserSerializer)]` or at a root with the `*_with` API family:
 //!
 //! ```rust,ignore

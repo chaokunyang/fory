@@ -29,7 +29,7 @@ public struct User: Equatable, Hashable, NamedValue {
     }
 }
 
-public struct ManualUser: Equatable, Hashable, NamedValue {
+public struct CustomUser: Equatable, Hashable, NamedValue {
     public var name: String
     public var age: UInt32
 

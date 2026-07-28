@@ -10,7 +10,7 @@ Load this file when changing `dart/`.
 - Do not design different user-facing generated-registration behavior for Dart VM and Flutter/no-mirrors. Cross-platform registration flow must stay consistent.
 - Users must never be required to call private generated helpers such as `_ensure...` or `_install...`.
 - If `Fory.register(...)` cannot be made self-sufficient across Dart platforms, use an explicit public wrapper API rather than splitting VM and Flutter behavior.
-- Generated registration is ownership-based: generated types register through `Fory.register(...)`, manual serializers use `Fory.registerSerializer(...)`, and generated descriptors/support helpers stay internal.
+- Generated registration is ownership-based: generated types register through `Fory.register(...)`, custom serializers use `Fory.registerSerializer(...)`, and generated descriptors/support helpers stay internal.
 - Dart external-type serialization uses `ForyStruct.target` on an `abstract final`
   schema declaration. The declaration is compile-time input only; generated
   serializers, schemas, and module dispatch are parameterized and registered

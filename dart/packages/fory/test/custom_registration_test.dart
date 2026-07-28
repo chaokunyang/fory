@@ -20,27 +20,27 @@
 import 'package:fory/fory.dart';
 import 'package:test/test.dart';
 
-final class ManualValue {
-  ManualValue(this.name, this.score);
+final class CustomValue {
+  CustomValue(this.name, this.score);
 
   final String name;
   final Int64 score;
 }
 
-final class ManualValueSerializer extends Serializer<ManualValue> {
-  const ManualValueSerializer();
+final class CustomValueSerializer extends Serializer<CustomValue> {
+  const CustomValueSerializer();
 
   @override
-  void write(WriteContext context, ManualValue value) {
+  void write(WriteContext context, CustomValue value) {
     final buffer = context.buffer;
     buffer.writeUtf8(value.name);
     buffer.writeInt64(value.score);
   }
 
   @override
-  ManualValue read(ReadContext context) {
+  CustomValue read(ReadContext context) {
     final buffer = context.buffer;
-    return ManualValue(buffer.readUtf8(), buffer.readInt64());
+    return CustomValue(buffer.readUtf8(), buffer.readInt64());
   }
 }
 
@@ -112,17 +112,17 @@ final class RefValueFlagValueSerializer extends Serializer<RefValueFlagValue> {
 }
 
 void main() {
-  test('registers manual serializer through public api', () {
+  test('registers custom serializer through public api', () {
     final fory = Fory();
     fory.registerSerializer(
-      ManualValue,
-      const ManualValueSerializer(),
-      name: 'manual.ManualValue',
+      CustomValue,
+      const CustomValueSerializer(),
+      name: 'custom.CustomValue',
     );
 
-    final value = ManualValue('alpha', Int64(99));
+    final value = CustomValue('alpha', Int64(99));
     final bytes = fory.serialize(value);
-    final roundTrip = fory.deserialize<ManualValue>(bytes);
+    final roundTrip = fory.deserialize<CustomValue>(bytes);
     expect(roundTrip.name, equals('alpha'));
     expect(roundTrip.score, equals(Int64(99)));
   });
@@ -132,12 +132,12 @@ void main() {
     fory.registerSerializer(
       RefPayload,
       const RefPayloadSerializer(),
-      name: 'manual.RefPayload',
+      name: 'custom.RefPayload',
     );
     fory.registerSerializer(
       NonRefThenRefValue,
       const NonRefThenRefValueSerializer(),
-      name: 'manual.NonRefThenRefValue',
+      name: 'custom.NonRefThenRefValue',
     );
 
     final payload = RefPayload('shared');
@@ -157,12 +157,12 @@ void main() {
       fory.registerSerializer(
         RefPayload,
         const RefPayloadSerializer(),
-        name: 'manual.RefPayload',
+        name: 'custom.RefPayload',
       );
       fory.registerSerializer(
         RefValueFlagValue,
         const RefValueFlagValueSerializer(),
-        name: 'manual.RefValueFlagValue',
+        name: 'custom.RefValueFlagValue',
       );
 
       final roundTrip = fory.deserialize<RefValueFlagValue>(

@@ -654,7 +654,7 @@ final class ForyGenerator extends Generator {
       final remedy =
           external
               ? 'Expose that constructor, select another public named '
-                  'generative constructor, or use a manual serializer.'
+                  'generative constructor, or use a custom serializer.'
               : 'Add an accessible generative constructor.';
       throw InvalidGenerationSourceError(
         'Target $targetTypeLiteral for ${declaration.displayName} has no '
@@ -668,7 +668,7 @@ final class ForyGenerator extends Generator {
       throw InvalidGenerationSourceError(
         'Target constructor $targetTypeLiteral$selected selected by '
         '${declaration.displayName} must be generative, not a factory. Select '
-        'a public generative constructor or use a manual serializer.',
+        'a public generative constructor or use a custom serializer.',
         element: declaration,
       );
     }
@@ -739,7 +739,7 @@ final class ForyGenerator extends Generator {
         'ForyStruct.target ${targetType.getDisplayString()} on '
         '${declaration.displayName} contains a type that cannot be rendered '
         'from the declaration library. Import a public closed class type '
-        'directly or use a manual serializer.',
+        'directly or use a custom serializer.',
         element: declaration,
       );
     }
@@ -959,7 +959,7 @@ final class ForyGenerator extends Generator {
           '${field.displayName} has unsupported effective type '
           '${type.getDisplayString()}. Mark the field with '
           '@ForyField(ignore: true), use a supported serializable type, or '
-          'use a manual serializer.',
+          'use a custom serializer.',
           element: field,
         );
       }
@@ -974,7 +974,7 @@ final class ForyGenerator extends Generator {
         '${field.displayName} has unsupported effective type '
         '${type.getDisplayString()}. Mark the field with '
         '@ForyField(ignore: true), use a supported serializable type, or use '
-        'a manual serializer.',
+        'a custom serializer.',
         element: field,
       );
     }
@@ -1116,7 +1116,7 @@ final class ForyGenerator extends Generator {
       'field with @ForyField(ignore: true), set '
       '@ForyStruct(ignoreInheritedPrivateFields: true) on '
       '${child.displayName} to omit all inherited private storage, or use a '
-      'manual serializer.',
+      'custom serializer.',
       element: field,
     );
   }
@@ -1893,7 +1893,7 @@ final class ForyGenerator extends Generator {
         'Fory struct declaration ${declaration.displayName} targets '
         '$targetTypeLiteral, which must expose an accessible '
         'instance getter named ${field.displayName}. Expose the getter or use '
-        'a manual serializer.',
+        'a custom serializer.',
         element: field,
       );
     }
@@ -2206,7 +2206,7 @@ final class ForyGenerator extends Generator {
           '${_constructorReference(targetTypeLiteral, constructorName)} and '
           'target $targetTypeLiteral has no accessible exact-type setter. '
           'Expose a matching setter, map the field through the constructor, or '
-          'use a manual serializer.',
+          'use a custom serializer.',
           element: declaration,
         );
       }
@@ -2253,7 +2253,7 @@ final class ForyGenerator extends Generator {
       'Constructor-based generated serializers cannot bind '
       'reference-tracked self paths before construction. Use a writable '
       'zero-parameter generative constructor for $targetTypeLiteral '
-      'or a manual serializer. Offending field: '
+      'or a custom serializer. Offending field: '
       '$fieldOwner.${selfRefField.name}.',
       element: declaration,
     );

@@ -75,7 +75,7 @@ pip install -e ".[dev,format]"
 system and offers the same object surface as pickle/cloudpickle, but with **significantly better
 performance, smaller data size, and enhanced security features**.
 
-The binary protocol and API are similar to Fory's xlang mode, but Python native mode can serialize any Python object—including global functions, local functions, lambdas, local classes and types with customized serialization using `__getstate__/__reduce__/__reduce_ex__`, which are not allowed in xlang mode.
+The binary protocol and API are similar to Fory's xlang mode, but Python native mode can serialize any Python object—including global functions, local functions, lambdas, local classes and types with custom serialization using `__getstate__/__reduce__/__reduce_ex__`, which are not allowed in xlang mode.
 
 To use Python native mode, create `Fory` with `xlang=False`. Use this mode when replacing pickle or
 cloudpickle for pure Python applications:
@@ -442,7 +442,7 @@ for buffer_obj in buffer_objects:
 
 `pyfory` supports cross-language object graph serialization, allowing you to serialize data in Python and deserialize it in Java, Go, Rust, or other supported languages.
 
-The binary protocol and API are similar to `pyfory`'s Python native mode, but Python native mode can serialize any Python object—including global functions, local functions, lambdas, local classes, and types with customized serialization using `__getstate__/__reduce__/__reduce_ex__`, which are not allowed in xlang mode.
+The binary protocol and API are similar to `pyfory`'s Python native mode, but Python native mode can serialize any Python object—including global functions, local functions, lambdas, local classes, and types with custom serialization using `__getstate__/__reduce__/__reduce_ex__`, which are not allowed in xlang mode.
 
 Xlang mode is the default. Set `xlang=True` explicitly in cross-language examples so the mode choice is visible:
 

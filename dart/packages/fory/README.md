@@ -3,7 +3,7 @@
 Apache Fory™ Dart is the Dart xlang implementation for
 [Apache Fory™](https://github.com/apache/fory). It reads and writes Fory's
 cross-language wire format and is designed around generated serializers for
-annotated Dart models, with manual serializers available for advanced use
+annotated Dart models, with custom serializers available for advanced use
 cases.
 
 ## Features
@@ -15,7 +15,7 @@ cases.
 - External structural serializers for classes owned by another package
 - Compatible mode for schema evolution
 - Optional reference tracking for shared and circular object graphs
-- Manual serializers for custom payloads, construction, and unions
+- Custom serializers for custom payloads, construction, and unions
 - Explicit exact-width value classes for `Int64`, `Uint64`, `Float32`,
   `LocalDate`, and `Timestamp`, plus `Duration` support
 
@@ -251,7 +251,7 @@ reference protocol.
 Map<String, List<int?>> nested = <String, List<int?>>{};
 ```
 
-## Manual Serializers
+## Custom Serializers
 
 Use `Serializer<T>` when a type needs custom wire behavior, field conversion,
 or construction that generated ordinary or external structural serializers

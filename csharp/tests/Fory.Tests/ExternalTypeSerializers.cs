@@ -347,7 +347,7 @@ internal sealed class OrdinaryEvolutionOff
     public int Value { get; set; }
 }
 
-internal sealed class ExternalFieldsManualSerializer : Serializer<ExternalFields>
+internal sealed class ExternalFieldsCustomSerializer : Serializer<ExternalFields>
 {
     public override ExternalFields DefaultValue => null!;
 

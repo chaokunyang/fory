@@ -100,7 +100,7 @@ public sealed class Fory
     }
 
     /// <summary>
-    /// Registers a user type by numeric type identifier with a manual serializer.
+    /// Registers a user type by numeric type identifier with a custom serializer.
     /// </summary>
     /// <typeparam name="T">Type to register.</typeparam>
     /// <typeparam name="TSerializer">Serializer implementation used for <typeparamref name="T"/>.</typeparam>
@@ -115,7 +115,7 @@ public sealed class Fory
     }
 
     /// <summary>
-    /// Registers a user type by name with a manual serializer.
+    /// Registers a user type by name with a custom serializer.
     /// </summary>
     /// <typeparam name="T">Type to register.</typeparam>
     /// <typeparam name="TSerializer">Serializer implementation used for <typeparamref name="T"/>.</typeparam>
@@ -131,7 +131,7 @@ public sealed class Fory
     }
 
     /// <summary>
-    /// Registers a user type by namespace and name with a manual serializer.
+    /// Registers a user type by namespace and name with a custom serializer.
     /// </summary>
     /// <typeparam name="T">Type to register.</typeparam>
     /// <typeparam name="TSerializer">Serializer implementation used for <typeparamref name="T"/>.</typeparam>

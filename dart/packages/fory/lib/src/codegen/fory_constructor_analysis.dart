@@ -54,7 +54,7 @@ final class _OrdinaryConstructorAnalyzer {
           'and cannot receive its decoded value from '
           '$targetTypeLiteral(). Mark the field with '
           '@ForyField(ignore: true), remove the initializer and add an '
-          'identity-preserving constructor path, or use a manual serializer.',
+          'identity-preserving constructor path, or use a custom serializer.',
           element: field.declaration,
         );
       }
@@ -179,7 +179,7 @@ final class _OrdinaryConstructorAnalyzer {
           'Constructor $targetTypeLiteral() cannot pass parameter '
           '${parameter.displayName} after an omitted optional positional '
           'parameter. Use named parameters, remove the positional gap, mark '
-          'the final field with @ForyField(ignore: true), or use a manual '
+          'the final field with @ForyField(ignore: true), or use a custom '
           'serializer.',
           element: declaration,
         );
@@ -728,7 +728,7 @@ final class _OrdinaryConstructorAnalyzer {
       'must receive its decoded value unchanged through a field formal, '
       'constructor initializer, redirect, or super-constructor forwarding.'
       '$detail Mark the field with @ForyField(ignore: true), add an exact '
-      'identity path, or use a manual serializer.',
+      'identity path, or use a custom serializer.',
       element: field.declaration,
     );
   }
@@ -761,7 +761,7 @@ final class _OrdinaryConstructorAnalyzer {
       '$targetTypeLiteral has no serialized field connected by an exact '
       'identity-preserving path.$nameDetail$proofDetail Add a direct '
       'parameter-to-field flow, select a zero-required-argument constructor, '
-      'or use a manual serializer.',
+      'or use a custom serializer.',
       element: declaration,
     );
   }

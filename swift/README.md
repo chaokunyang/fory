@@ -421,7 +421,7 @@ let data = try fory.serialize(
 
 See `../docs/guide/swift/external-types.md`.
 
-### 8. Manual Serializers
+### 8. Custom Serializers
 
 A type that implements `Serializer` with `Target == Self` uses ordinary roots,
 generated fields, and carriers without `with:`. An application may give an
@@ -432,7 +432,7 @@ pair.
 A separate serializer whose `Target` is another type is selected explicitly at
 every required root, field, or carrier child. Use separate serializers for
 public libraries and for multiple or alternative implementations.
-See `../docs/guide/swift/manual-serializers.md`.
+See `../docs/guide/swift/custom-serializers.md`.
 
 ## Cross-Language Serialization
 
@@ -485,7 +485,7 @@ ENABLE_FORY_DEBUG_OUTPUT=1 FORY_SWIFT_JAVA_CI=1 mvn -T16 test -Dtest=org.apache.
 - [Type Registration](../docs/guide/swift/type-registration.md)
 - [Schema Evolution](../docs/guide/swift/schema-evolution.md)
 - [External-Type Serialization](../docs/guide/swift/external-types.md)
-- [Manual Serializers](../docs/guide/swift/manual-serializers.md)
+- [Custom Serializers](../docs/guide/swift/custom-serializers.md)
 - [Xlang Serialization](../docs/guide/swift/xlang-serialization.md)
 - [Xlang Specification](../docs/specification/xlang_serialization_spec.md)
 - [Xlang Type Mapping](../docs/specification/xlang_type_mapping.md)

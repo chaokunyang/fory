@@ -679,8 +679,8 @@ public final class ForyBuilder {
     }
     if (defaultJDKStreamSerializerType == JavaSerializer.class) {
       LOG.info(
-          "JDK serialization is used for types which customized java serialization by "
-              + "implementing methods such as writeObject/readObject. This is not secure, try to "
+          "JDK serialization is used for types with custom Java serialization methods such as "
+              + "writeObject/readObject. This is not secure, try to "
               + "use {} instead, or implement a custom {}.",
           ObjectStreamSerializer.class,
           Serializer.class);

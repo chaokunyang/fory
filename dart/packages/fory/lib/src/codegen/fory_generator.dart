@@ -20,8 +20,8 @@
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:analyzer/dart/constant/value.dart';
 import 'package:analyzer/dart/ast/ast.dart';
+import 'package:analyzer/dart/constant/value.dart';
 import 'package:analyzer/dart/element/element.dart';
 import 'package:analyzer/dart/element/nullability_suffix.dart';
 import 'package:analyzer/dart/element/type.dart';
@@ -353,7 +353,6 @@ final class ForyGenerator extends Generator {
           targetType,
           targetTypeLiteral,
           field,
-          index,
           indexedCodegenNames ? 'field$index' : field.displayName,
         ),
       );
@@ -894,7 +893,6 @@ final class ForyGenerator extends Generator {
     return _createGeneratedFieldSpec(
       annotationField: field,
       effectiveType: effectiveType,
-      storageIndex: discovered.storageIndex,
       codegenName: codegenName,
       writable: !field.isFinal,
       access: access,
@@ -1022,7 +1020,6 @@ final class ForyGenerator extends Generator {
     required _DiscoveredField discovered,
   }) {
     final field = discovered.declaration;
-    var sawAuthorizedBoundary = false;
     final authorizedHelpers = <String>{};
     for (final layer in hierarchy.layers.reversed) {
       if (layer.index < discovered.layer.index) {
@@ -1052,7 +1049,6 @@ final class ForyGenerator extends Generator {
       if (!carriesField) {
         continue;
       }
-      sawAuthorizedBoundary = true;
       final helperName = _privateAccessHelperName(boundary);
       authorizedHelpers.add(helperName);
       final reference = _companionReferenceFromChild(
@@ -1067,7 +1063,7 @@ final class ForyGenerator extends Generator {
 
     final helperNames = authorizedHelpers.toList()..sort();
     final authorization =
-        sawAuthorizedBoundary
+        helperNames.isNotEmpty
             ? 'An authorized public boundary exists, but its generated '
                 'companion is not visible through the child library imports '
                 'and re-exports. Expected ${helperNames.join(' or ')}.'
@@ -1868,7 +1864,6 @@ final class ForyGenerator extends Generator {
     InterfaceType targetType,
     String targetTypeLiteral,
     FieldElement field,
-    int storageIndex,
     String codegenName,
   ) {
     final getter = targetType.lookUpGetter(
@@ -1920,7 +1915,6 @@ final class ForyGenerator extends Generator {
     return _createGeneratedFieldSpec(
       annotationField: field,
       effectiveType: field.type,
-      storageIndex: storageIndex,
       codegenName: codegenName,
       writable: setter != null,
       access: _FieldAccessPlan.direct(field.displayName),
@@ -1930,7 +1924,6 @@ final class ForyGenerator extends Generator {
   _GeneratedFieldSpec _createGeneratedFieldSpec({
     required FieldElement annotationField,
     required DartType effectiveType,
-    required int storageIndex,
     required String codegenName,
     required bool writable,
     required _FieldAccessPlan access,
@@ -1966,9 +1959,6 @@ final class ForyGenerator extends Generator {
           rawFieldId == null ? _toSnakeCase(annotationField.displayName) : null,
       id: rawFieldId,
       writable: writable,
-      isFinal: annotationField.isFinal,
-      hasInitializer: annotationField.hasInitializer,
-      storageIndex: storageIndex,
       codegenName: codegenName,
       declaration: annotationField.baseElement,
       access: access,
@@ -5881,9 +5871,6 @@ final class _GeneratedFieldSpec {
   final String? wireName;
   final int? id;
   final bool writable;
-  final bool isFinal;
-  final bool hasInitializer;
-  final int storageIndex;
   final String codegenName;
   final FieldElement declaration;
   final _FieldAccessPlan access;
@@ -5896,9 +5883,6 @@ final class _GeneratedFieldSpec {
     required this.wireName,
     required this.id,
     required this.writable,
-    required this.isFinal,
-    required this.hasInitializer,
-    required this.storageIndex,
     required this.codegenName,
     required this.declaration,
     required this.access,

@@ -577,30 +577,5 @@ void main() {
       expect(schemaFingerprint(inherited), equals(schemaFingerprint(flat)));
       expect(schemaHash(inherited), equals(schemaHash(flat)));
     });
-
-    for (final compatible in <bool>[false, true]) {
-      test('matches flat wire bytes compatible=$compatible', () {
-        final inheritedFory = Fory(compatible: compatible);
-        final flatFory = Fory(compatible: compatible);
-        _registerHierarchy(inheritedFory, BudgetHierarchyChild);
-        _registerHierarchy(flatFory, BudgetHierarchyFlat);
-
-        final inherited =
-            BudgetHierarchyChild()
-              ..baseValue = 30
-              ..mixinValue = 10
-              ..childValue = 20;
-        final flat =
-            BudgetHierarchyFlat()
-              ..baseValue = 30
-              ..mixinValue = 10
-              ..childValue = 20;
-
-        expect(
-          inheritedFory.serialize(inherited),
-          orderedEquals(flatFory.serialize(flat)),
-        );
-      });
-    }
   });
 }

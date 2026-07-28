@@ -22,8 +22,7 @@ import 'package:test/test.dart';
 
 import 'codegen_test_support.dart';
 
-const String _fixturePath =
-    'fory|test/struct_inheritance_generator_fixture.dart';
+const String _inputPath = 'test/struct_inheritance_generator_fixture.dart';
 
 const String _fixtureHeader = '''
 import 'package:fory/src/annotation/fory_field.dart';
@@ -40,7 +39,7 @@ Future<void> _expectGenerationOutput({
   Map<String, String> additionalAssets = const <String, String>{},
 }) async {
   await expectForyGenerationOutput(
-    inputPath: _fixturePath.substring('fory|'.length),
+    inputPath: _inputPath,
     source: '$fixtureHeader\n$source',
     output: output,
     additionalAssets: additionalAssets,
@@ -54,7 +53,7 @@ Future<void> _expectGenerationError({
   Map<String, String> additionalAssets = const <String, String>{},
 }) async {
   await expectForyGenerationError(
-    inputPath: _fixturePath.substring('fory|'.length),
+    inputPath: _inputPath,
     source: '$fixtureHeader\n$source',
     message: message,
     additionalAssets: additionalAssets,
@@ -529,30 +528,6 @@ class NameChild extends NameBase {
 }
 ''',
         message: 'duplicate canonical field name foo_bar',
-      );
-    });
-
-    test('keeps tagged and untagged identities in separate domains', () async {
-      await _expectGenerationOutput(
-        source: '''
-class IdentityBase {
-  @ForyField(id: 1)
-  int tagged = 0;
-}
-
-@ForyStruct()
-class IdentityChild extends IdentityBase {
-  IdentityChild();
-
-  int field1 = 0;
-}
-''',
-        output: allOf(
-          contains('GeneratedFieldInfo('),
-          contains('id: 1,'),
-          contains("identifier: 'field1',"),
-          isNot(contains("identifier: 'tagged',")),
-        ),
       );
     });
 

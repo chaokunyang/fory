@@ -1443,12 +1443,13 @@ names without element identity are not proof. A declaration initializer on a
 non-ignored final field is unsupported because the decoded value cannot own
 that slot. There is no post-construction final write, reflection, or fallback.
 
-Mutable fields require an exact setter and are restored after construction.
-Required constructor parameters must have one unambiguous field source.
-Optional named parameters may be omitted; an omitted optional positional
-parameter cannot be followed by a passed positional parameter. Constructor
-arguments and assignments use storage identity or stable field indices rather
-than field-name strings.
+Mutable fields connected to selected constructor parameters are initialized
+once through the same exact identity flow. Remaining mutable fields require an
+exact setter and are restored after construction. Required constructor
+parameters must have one unambiguous field source. Optional named parameters
+may be omitted; an omitted optional positional parameter cannot be followed by
+a passed positional parameter. Constructor arguments and assignments are
+matched by resolved storage-field identity rather than field-name strings.
 
 The concrete child owns one `GeneratedStructSchema`, one canonical field sort,
 one serializer and descriptor cache, one reconstruction, one reference

@@ -224,12 +224,13 @@ final class GenericStringChild extends GenericBase<String> {
       );
     });
 
-    test('keeps post-construction writes in canonical field order', () async {
+    test('writes only unbound mutable fields', () async {
       await _expectGenerationOutput(
         source: '''
 @ForyStruct()
 final class CanonicalPostWrites {
   int zeta;
+  int beta = 0;
   int alpha = 0;
 
   CanonicalPostWrites(this.zeta);
@@ -237,9 +238,12 @@ final class CanonicalPostWrites {
 ''',
         output: predicate<String>((generated) {
           final alphaWrite = generated.indexOf('value.alpha = _alphaValue;');
-          final zetaWrite = generated.indexOf('value.zeta = _zetaValue;');
-          return alphaWrite >= 0 && zetaWrite >= 0 && alphaWrite < zetaWrite;
-        }, 'writes mutable fields in canonical schema order'),
+          final betaWrite = generated.indexOf('value.beta = _betaValue;');
+          return alphaWrite >= 0 &&
+              betaWrite >= 0 &&
+              alphaWrite < betaWrite &&
+              !generated.contains('value.zeta = _zetaValue;');
+        }, 'writes unbound mutable fields in canonical schema order'),
       );
     });
   });

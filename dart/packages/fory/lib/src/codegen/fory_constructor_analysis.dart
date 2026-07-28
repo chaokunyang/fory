@@ -24,8 +24,7 @@ final class _OrdinaryConstructorAnalyzer {
 
   final Map<ConstructorElement, Future<AstNode?>> _astByConstructor =
       Map<ConstructorElement, Future<AstNode?>>.identity();
-  final Map<_ConstructorKey, _ConstructorFrame> _frames =
-      <_ConstructorKey, _ConstructorFrame>{};
+  final List<_ConstructorFrame> _frames = <_ConstructorFrame>[];
 
   _OrdinaryConstructorAnalyzer({required this.buildStep});
 
@@ -55,7 +54,7 @@ final class _OrdinaryConstructorAnalyzer {
     }
 
     for (final field in fields) {
-      if (field.isFinal && field.hasInitializer) {
+      if (field.declaration.isFinal && field.declaration.hasInitializer) {
         throw InvalidGenerationSourceError(
           'Final field ${_fieldLabel(field)} has a declaration initializer '
           'and cannot receive its decoded value from '
@@ -199,7 +198,7 @@ final class _OrdinaryConstructorAnalyzer {
 
     final postConstructionFields = Set<_GeneratedFieldSpec>.identity();
     for (final field in fields) {
-      if (field.writable) {
+      if (field.writable && !rootByArgumentField.containsKey(field)) {
         postConstructionFields.add(field);
       }
     }
@@ -228,13 +227,8 @@ final class _OrdinaryConstructorAnalyzer {
         element: declaration,
       );
     }
-    final cached = _frames[key];
-    if (cached != null) {
-      return cached;
-    }
-
     final frame = _ConstructorFrame(constructor);
-    _frames[key] = frame;
+    _frames.add(frame);
     active.add(key);
     try {
       final redirected = constructor.redirectedConstructor;
@@ -331,7 +325,7 @@ final class _OrdinaryConstructorAnalyzer {
       if (parameter is FieldFormalParameterElement) {
         final fieldElement = parameter.field;
         if (fieldElement == null) {
-          frame.issues.add(
+          frame.recordIssue(
             'field formal ${parameter.displayName} has no resolved storage '
             'field',
           );
@@ -345,7 +339,7 @@ final class _OrdinaryConstructorAnalyzer {
       if (parameter is SuperFormalParameterElement) {
         final targetElement = parameter.superConstructorParameter;
         if (nextFrame == null || targetElement == null) {
-          frame.issues.add(
+          frame.recordIssue(
             'super formal ${parameter.displayName} has no resolved target '
             'parameter',
           );
@@ -353,7 +347,7 @@ final class _OrdinaryConstructorAnalyzer {
         }
         final target = nextFrame.parameterFor(targetElement);
         if (target == null) {
-          frame.issues.add(
+          frame.recordIssue(
             'super formal ${parameter.displayName} does not identify a '
             'parameter on ${_constructorLabel(nextFrame.constructor)}',
           );
@@ -419,7 +413,7 @@ final class _OrdinaryConstructorAnalyzer {
           declaredConstructor.baseElement,
           frame.constructor.baseElement,
         )) {
-      frame.issues.add(
+      frame.recordIssue(
         'resolved constructor AST does not identify '
         '${_constructorLabel(frame.constructor)}',
       );
@@ -433,12 +427,12 @@ final class _OrdinaryConstructorAnalyzer {
         _addFieldInitializerEdge(frame, initializer, fields);
       } else if (initializer is RedirectingConstructorInvocation) {
         if (redirectInvocation != null) {
-          frame.issues.add('multiple redirecting constructor invocations');
+          frame.recordIssue('multiple redirecting constructor invocations');
         }
         redirectInvocation = initializer;
       } else if (initializer is SuperConstructorInvocation) {
         if (superInvocation != null) {
-          frame.issues.add('multiple super-constructor invocations');
+          frame.recordIssue('multiple super-constructor invocations');
         }
         superInvocation = initializer;
       }
@@ -451,7 +445,7 @@ final class _OrdinaryConstructorAnalyzer {
       case _ConstructorHop.redirect:
         final invocation = redirectInvocation;
         if (invocation == null) {
-          frame.issues.add(
+          frame.recordIssue(
             'redirect target ${_constructorLabel(nextFrame.constructor)} '
             'requires an explicit resolved invocation',
           );
@@ -484,7 +478,7 @@ final class _OrdinaryConstructorAnalyzer {
   ) {
     final fieldElement = initializer.fieldName.element;
     if (fieldElement is! FieldElement) {
-      frame.issues.add(
+      frame.recordIssue(
         'field initializer ${initializer.fieldName.name} has no resolved '
         'storage field',
       );
@@ -497,7 +491,7 @@ final class _OrdinaryConstructorAnalyzer {
     final source = _directParameter(initializer.expression, frame);
     if (source == null) {
       if (!field.writable) {
-        frame.issues.add(
+        frame.recordIssue(
           'initializer for ${_fieldLabel(field)} transforms or does not '
           'directly reference a constructor parameter',
         );
@@ -518,7 +512,7 @@ final class _OrdinaryConstructorAnalyzer {
           invokedConstructor.baseElement,
           targetFrame.constructor.baseElement,
         )) {
-      frame.issues.add(
+      frame.recordIssue(
         'resolved invocation does not identify '
         '${_constructorLabel(targetFrame.constructor)}',
       );
@@ -527,14 +521,14 @@ final class _OrdinaryConstructorAnalyzer {
     for (final argument in arguments) {
       final correspondingParameter = argument.correspondingParameter;
       if (correspondingParameter == null) {
-        frame.issues.add(
+        frame.recordIssue(
           'constructor argument has no resolved target parameter',
         );
         continue;
       }
       final target = targetFrame.parameterFor(correspondingParameter);
       if (target == null) {
-        frame.issues.add(
+        frame.recordIssue(
           'constructor argument does not map to an instantiated parameter on '
           '${_constructorLabel(targetFrame.constructor)}',
         );
@@ -544,7 +538,7 @@ final class _OrdinaryConstructorAnalyzer {
           argument is NamedExpression ? argument.expression : argument;
       final source = _directParameter(value, frame);
       if (source == null) {
-        frame.issues.add(
+        frame.recordIssue(
           'argument for ${target.parameter.displayName} transforms or does '
           'not directly reference a constructor parameter',
         );
@@ -560,7 +554,7 @@ final class _OrdinaryConstructorAnalyzer {
     _GeneratedFieldSpec field,
   ) {
     if (source.parameter.type != field.type) {
-      frame.issues.add(
+      frame.recordIssue(
         'parameter ${source.parameter.displayName} has type '
         '${source.parameter.type.getDisplayString()}, but '
         '${_fieldLabel(field)} has type ${field.type.getDisplayString()}',
@@ -576,7 +570,7 @@ final class _OrdinaryConstructorAnalyzer {
     _ParameterNode target,
   ) {
     if (source.parameter.type != target.parameter.type) {
-      frame.issues.add(
+      frame.recordIssue(
         'parameter ${source.parameter.displayName} on '
         '${_constructorLabel(frame.constructor)} has type '
         '${source.parameter.type.getDisplayString()}, but target parameter '
@@ -720,15 +714,14 @@ final class _OrdinaryConstructorAnalyzer {
 
   String? _firstProofProblem() {
     String? firstIssue;
-    for (final frame in _frames.values) {
+    for (final frame in _frames) {
       final unavailable = frame.unavailableProof;
       if (unavailable != null) {
         return '$unavailable for ${_constructorLabel(frame.constructor)}';
       }
-      if (firstIssue == null && frame.issues.isNotEmpty) {
-        firstIssue =
-            '${frame.issues.first} in '
-            '${_constructorLabel(frame.constructor)}';
+      final issue = frame.firstIssue;
+      if (firstIssue == null && issue != null) {
+        firstIssue = '$issue in ${_constructorLabel(frame.constructor)}';
       }
     }
     return firstIssue;
@@ -776,7 +769,7 @@ final class _ConstructorKey {
 final class _ConstructorFrame {
   final ConstructorElement constructor;
   final List<_ParameterNode> parameters;
-  final List<String> issues = <String>[];
+  String? firstIssue;
   String? unavailableProof;
 
   _ConstructorFrame(this.constructor)
@@ -784,6 +777,10 @@ final class _ConstructorFrame {
         for (final parameter in constructor.formalParameters)
           _ParameterNode(parameter),
       ];
+
+  void recordIssue(String issue) {
+    firstIssue ??= issue;
+  }
 
   _ParameterNode? parameterFor(FormalParameterElement element) {
     final base = element.baseElement;

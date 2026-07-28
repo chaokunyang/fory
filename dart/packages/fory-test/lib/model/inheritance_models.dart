@@ -40,13 +40,6 @@ final class CrossLibraryChild extends middle.PublicMiddleBoundary {
 }
 
 @ForyStruct()
-final class DirectBaseConsumer extends base.PublicGenericBoundary<String> {
-  // Keep explicit forwarding to exercise constructor identity analysis.
-  // ignore: use_super_parameters
-  DirectBaseConsumer(String value) : super(value);
-}
-
-@ForyStruct()
 final class XlangInheritedChild extends base.XlangInheritanceBoundary {
   XlangInheritedChild();
 

@@ -55,28 +55,7 @@ Future<String> generateForySource({
   required String source,
   Map<String, String> additionalAssets = const <String, String>{},
 }) async {
-  String? generated;
-  final outputs = <String, Matcher>{
-    'fory|${foryGeneratedPath(inputPath)}': decodedMatches(
-      predicate<String>((content) {
-        generated = content;
-        return true;
-      }),
-    ),
-  };
-  for (final entry in additionalAssets.entries) {
-    if (!entry.key.startsWith('fory|') ||
-        !entry.key.endsWith('.dart') ||
-        !entry.value.contains("part '") ||
-        !entry.value.contains('@ForyStruct')) {
-      continue;
-    }
-    final dependencyPath = entry.key.substring('fory|'.length);
-    outputs['fory|${foryGeneratedPath(dependencyPath)}'] = decodedMatches(
-      anything,
-    );
-  }
-  await testBuilder(
+  final result = await testBuilder(
     foryBuilder(BuilderOptions.empty),
     <String, String>{
       ...(await _annotationAssets),
@@ -85,9 +64,13 @@ Future<String> generateForySource({
     },
     rootPackage: 'fory',
     generateFor: <String>{'fory|$inputPath'},
-    outputs: outputs,
+    outputs: null,
+    flattenOutput: true,
   );
-  return generated!;
+  expect(result.succeeded, isTrue, reason: result.errors.join('\n'));
+  return result.readerWriter.testing.readString(
+    AssetId('fory', foryGeneratedPath(inputPath)),
+  );
 }
 
 Future<void> expectForyGenerationOutput({
@@ -96,18 +79,13 @@ Future<void> expectForyGenerationOutput({
   required Matcher output,
   Map<String, String> additionalAssets = const <String, String>{},
 }) async {
-  await testBuilder(
-    foryBuilder(BuilderOptions.empty),
-    <String, String>{
-      ...(await _annotationAssets),
-      ...additionalAssets,
-      'fory|$inputPath': source,
-    },
-    rootPackage: 'fory',
-    generateFor: <String>{'fory|$inputPath'},
-    outputs: <String, Matcher>{
-      'fory|${foryGeneratedPath(inputPath)}': decodedMatches(output),
-    },
+  expect(
+    await generateForySource(
+      inputPath: inputPath,
+      source: source,
+      additionalAssets: additionalAssets,
+    ),
+    output,
   );
 }
 
@@ -118,7 +96,7 @@ Future<void> expectForyGenerationError({
   Map<String, String> additionalAssets = const <String, String>{},
 }) async {
   final logs = <String>[];
-  await testBuilder(
+  final result = await testBuilder(
     foryBuilder(BuilderOptions.empty),
     <String, String>{
       ...(await _annotationAssets),
@@ -129,6 +107,7 @@ Future<void> expectForyGenerationError({
     generateFor: <String>{'fory|$inputPath'},
     onLog: (record) => logs.add(record.message),
   );
+  expect(result.succeeded, isFalse);
   expect(logs.join('\n'), contains(message));
 }
 

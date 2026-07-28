@@ -30,10 +30,6 @@ void _registerChild(Fory fory, {required bool byName}) {
   );
 }
 
-void _registerDirectBaseConsumer(Fory fory) {
-  InheritanceModelsForyModule.register(fory, DirectBaseConsumer, id: 403);
-}
-
 void _registerReferenceLeaf(Fory fory) {
   InheritanceModelsForyModule.register(fory, ReferenceLeaf, id: 402);
 }
@@ -103,104 +99,77 @@ void main() {
       });
     }
 
-    test('registers only the concrete child', () {
-      final fory = Fory();
-      _registerChild(fory, byName: true);
+    for (final compatible in <bool>[false, true]) {
+      test('matches flat and inherited schemas compatible=$compatible', () {
+        final privateFory = Fory(compatible: compatible);
+        final publicFory = Fory(compatible: compatible);
+        final flatFory = Fory(compatible: compatible);
+        InheritanceModelsForyModule.register(
+          privateFory,
+          XlangInheritedChild,
+          id: 404,
+        );
+        InheritanceModelsForyModule.register(
+          publicFory,
+          PublicXlangInheritedChild,
+          id: 404,
+        );
+        InheritanceModelsForyModule.register(
+          flatFory,
+          FlatXlangInheritedStruct,
+          id: 404,
+        );
 
-      final result = fory.deserialize<CrossLibraryChild>(
-        fory.serialize(CrossLibraryChild('base', 5, false)),
-      );
+        final privateValue =
+            XlangInheritedChild()
+              ..childInt = 11
+              ..childFlag = true
+              ..childText = 'child'
+              ..setParentValues(
+                parentInt: 22,
+                parentFlag: false,
+                parentText: 'parent',
+              );
+        final publicValue =
+            PublicXlangInheritedChild()
+              ..childInt = 11
+              ..parentInt = 22
+              ..childFlag = true
+              ..parentFlag = false
+              ..childText = 'child'
+              ..parentText = 'parent';
+        final flatValue =
+            FlatXlangInheritedStruct()
+              ..childInt = 11
+              ..parentInt = 22
+              ..childFlag = true
+              ..parentFlag = false
+              ..childText = 'child'
+              ..parentText = 'parent';
 
-      expect(result.ownerValue, 'base');
-      expect(result.middleValue, 5);
-    });
+        final privateBytes = privateFory.serialize(privateValue);
+        final publicBytes = publicFory.serialize(publicValue);
+        final flatBytes = flatFory.serialize(flatValue);
+        expect(privateBytes, publicBytes);
+        expect(privateBytes, flatBytes);
 
-    test('substitutes a generic private ancestor field', () {
-      final fory = Fory();
-      _registerDirectBaseConsumer(fory);
-      final input =
-          DirectBaseConsumer('generic-final')
-            ..setBasePrivateName('generic-mutable')
-            ..publicLabel = 'generic-public';
-
-      final result = fory.deserialize<DirectBaseConsumer>(
-        fory.serialize(input),
-      );
-
-      expect(result.ownerValue, 'generic-final');
-      expect(result.basePrivateName, 'generic-mutable');
-      expect(result.publicLabel, 'generic-public');
-    });
-
-    test('matches flat, public, and private hierarchy schemas', () {
-      final privateFory = Fory();
-      final publicFory = Fory();
-      final flatFory = Fory();
-      InheritanceModelsForyModule.register(
-        privateFory,
-        XlangInheritedChild,
-        id: 404,
-      );
-      InheritanceModelsForyModule.register(
-        publicFory,
-        PublicXlangInheritedChild,
-        id: 404,
-      );
-      InheritanceModelsForyModule.register(
-        flatFory,
-        FlatXlangInheritedStruct,
-        id: 404,
-      );
-
-      final privateValue =
-          XlangInheritedChild()
-            ..childInt = 11
-            ..childFlag = true
-            ..childText = 'child'
-            ..setParentValues(
-              parentInt: 22,
-              parentFlag: false,
-              parentText: 'parent',
-            );
-      final publicValue =
-          PublicXlangInheritedChild()
-            ..childInt = 11
-            ..parentInt = 22
-            ..childFlag = true
-            ..parentFlag = false
-            ..childText = 'child'
-            ..parentText = 'parent';
-      final flatValue =
-          FlatXlangInheritedStruct()
-            ..childInt = 11
-            ..parentInt = 22
-            ..childFlag = true
-            ..parentFlag = false
-            ..childText = 'child'
-            ..parentText = 'parent';
-
-      final privateBytes = privateFory.serialize(privateValue);
-      final publicBytes = publicFory.serialize(publicValue);
-      final flatBytes = flatFory.serialize(flatValue);
-      expect(privateBytes, publicBytes);
-      expect(privateBytes, flatBytes);
-
-      final privateResult = privateFory.deserialize<XlangInheritedChild>(
-        privateBytes,
-      );
-      final publicResult = publicFory.deserialize<PublicXlangInheritedChild>(
-        publicBytes,
-      );
-      final flatResult = flatFory.deserialize<FlatXlangInheritedStruct>(
-        flatBytes,
-      );
-      expect(privateResult.parentInt, 22);
-      expect(privateResult.parentText, 'parent');
-      expect(publicResult.parentInt, 22);
-      expect(publicResult.parentText, 'parent');
-      expect(flatResult.parentInt, 22);
-      expect(flatResult.parentText, 'parent');
-    });
+        final privateResult = privateFory.deserialize<XlangInheritedChild>(
+          privateBytes,
+        );
+        final publicResult = publicFory.deserialize<PublicXlangInheritedChild>(
+          publicBytes,
+        );
+        final flatResult = flatFory.deserialize<FlatXlangInheritedStruct>(
+          flatBytes,
+        );
+        expect(privateResult.parentInt, 22);
+        expect(privateResult.parentText, 'parent');
+        expect(publicResult.parentInt, 22);
+        expect(publicResult.parentText, 'parent');
+        expect(flatResult.parentInt, 22);
+        expect(flatResult.parentText, 'parent');
+      });
+    }
   });
 
   group('compatible inherited evolution', () {

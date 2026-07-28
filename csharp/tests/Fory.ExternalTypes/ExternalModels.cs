@@ -93,6 +93,16 @@ public sealed class ExternalDerived : ExternalBase
     public int Id { get; set; }
 }
 
+public class ExternalHiddenBase
+{
+    public int Value;
+}
+
+public sealed class ExternalHiddenDerived : ExternalHiddenBase
+{
+    public new int Value;
+}
+
 public sealed class ExternalFields
 {
     public int Count;
@@ -178,6 +188,34 @@ public sealed class ExternalBudgetModel : ExternalBudgetBase
     {
         return HiddenState;
     }
+}
+
+public class ExternalPrivateBase
+{
+    private long _identifier;
+    private string Secret { get; set; } = string.Empty;
+    private readonly int _cache = 29;
+
+    public void SetPrivateState(long identifier, string secret)
+    {
+        _identifier = identifier;
+        Secret = secret;
+    }
+
+    public (long Identifier, string Secret, int Cache) ReadPrivateState()
+    {
+        return (_identifier, Secret, _cache);
+    }
+}
+
+public class ExternalPrivateDerived : ExternalPrivateBase
+{
+    public int PublicValue;
+}
+
+public class ExternalGenericBase<T>
+{
+    public T Value { get; set; } = default!;
 }
 
 public sealed class XlangUser

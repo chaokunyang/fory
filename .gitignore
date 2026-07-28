@@ -134,6 +134,10 @@ csharp/tests/Fory.ExternalTypes/bin/
 csharp/tests/Fory.ExternalTypes/obj/
 csharp/tests/Fory.XlangPeer/bin/
 csharp/tests/Fory.XlangPeer/obj/
+csharp/tests/Fory.InheritanceProviders/bin/
+csharp/tests/Fory.InheritanceProviders/obj/
+csharp/tests/Fory.InheritanceConsumer/bin/
+csharp/tests/Fory.InheritanceConsumer/obj/
 csharp/artifacts/
 
 tasks/

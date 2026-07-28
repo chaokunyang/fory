@@ -411,6 +411,49 @@ public class CSharpXlangTest extends XlangTestBase {
     assertExternalRoundTrip(fory, "test_csharp_external_name");
   }
 
+  @Test(groups = "xlang", dataProvider = "enableCodegenParallel")
+  public void testCSharpOrdinaryInheritanceId(boolean enableCodegen) throws IOException {
+    Fory fory =
+        Fory.builder().withXlang(true).withCompatible(true).withCodegen(enableCodegen).build();
+    fory.register(CSharpOrdinaryInheritance.class, 1311);
+    CSharpOrdinaryInheritance value = new CSharpOrdinaryInheritance();
+    value.identifier = 17;
+    value.name = "ordinary";
+    value.score = 19;
+
+    MemoryBuffer buffer = MemoryUtils.buffer(128);
+    fory.serialize(buffer, value);
+    ExecutionContext ctx =
+        prepareExecution(
+            "test_csharp_ordinary_inheritance_id", buffer.getBytes(0, buffer.writerIndex()));
+    runPeer(ctx);
+
+    Assert.assertEquals(
+        (CSharpOrdinaryInheritance) fory.deserialize(readBuffer(ctx.dataFile())), value);
+  }
+
+  @Test(groups = "xlang", dataProvider = "enableCodegenParallel")
+  public void testCSharpExternalInheritanceName(boolean enableCodegen) throws IOException {
+    Fory fory =
+        Fory.builder().withXlang(true).withCompatible(false).withCodegen(enableCodegen).build();
+    fory.register(CSharpExternalInheritance.class, "csharp.inheritance.ExternalLeaf");
+    CSharpExternalInheritance value = new CSharpExternalInheritance();
+    value.identifier = 23;
+    value.secret = "external";
+    value.publicValue = 31;
+    value.leafName = "leaf";
+
+    MemoryBuffer buffer = MemoryUtils.buffer(128);
+    fory.serialize(buffer, value);
+    ExecutionContext ctx =
+        prepareExecution(
+            "test_csharp_external_inheritance_name", buffer.getBytes(0, buffer.writerIndex()));
+    runPeer(ctx);
+
+    Assert.assertEquals(
+        (CSharpExternalInheritance) fory.deserialize(readBuffer(ctx.dataFile())), value);
+  }
+
   @SuppressWarnings("unchecked")
   private void assertExternalRoundTrip(Fory fory, String caseName) throws IOException {
     CSharpExternalUser user = newExternalUser(7, "root");
@@ -514,5 +557,34 @@ public class CSharpXlangTest extends XlangTestBase {
 
     @ForyField(id = 2)
     Map<String, CSharpExternalUser> usersByName;
+  }
+
+  @Data
+  @ForyStruct
+  static class CSharpOrdinaryInheritance {
+    @ForyField(id = 1)
+    int identifier;
+
+    @ForyField(id = 2)
+    String name;
+
+    @ForyField(id = 3)
+    long score;
+  }
+
+  @Data
+  @ForyStruct
+  static class CSharpExternalInheritance {
+    @ForyField(id = 1)
+    long identifier;
+
+    @ForyField(id = 2)
+    String secret;
+
+    @ForyField(id = 3)
+    int publicValue;
+
+    @ForyField(id = 4)
+    String leafName;
   }
 }

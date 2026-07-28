@@ -23,10 +23,16 @@ namespace Apache.Fory.XlangPeer;
 [ForyStruct(Target = typeof(XlangUser))]
 internal abstract class XlangUserSerializer
 {
-    [ForyField(1)]
+    [ForyField(
+        1,
+        TargetDeclaringType = typeof(XlangUser),
+        TargetMemberName = "<Id>k__BackingField")]
     public abstract int Id { get; }
 
-    [ForyField(2)]
+    [ForyField(
+        2,
+        TargetDeclaringType = typeof(XlangUser),
+        TargetMemberName = "<Name>k__BackingField")]
     public abstract string Name { get; }
 }
 
@@ -53,4 +59,16 @@ internal abstract class XlangHolderSerializer
 
     [ForyField(2)]
     public abstract Dictionary<string, XlangUser> UsersByName { get; }
+
+    [ForyField(
+        Ignore = true,
+        TargetDeclaringType = typeof(XlangHolder),
+        TargetMemberName = "<Users>k__BackingField")]
+    public abstract List<XlangUser> UsersStorage { get; }
+
+    [ForyField(
+        Ignore = true,
+        TargetDeclaringType = typeof(XlangHolder),
+        TargetMemberName = "<UsersByName>k__BackingField")]
+    public abstract Dictionary<string, XlangUser> UsersByNameStorage { get; }
 }

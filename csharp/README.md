@@ -11,6 +11,7 @@ The C# implementation provides high-performance object graph serialization for .
 - High-performance binary serialization for .NET 8+
 - Cross-language compatibility with Java, Python, C++, Go, Rust, and JavaScript
 - Source-generator-based serializers for `[ForyStruct]` types, plus `[ForyEnum]` and `[ForyUnion]` registration
+- Flattened class inheritance schemas, including explicitly selected private base state
 - Field-level schema descriptors with `[ForyField(Type = typeof(...))]`
 - Optional shared/circular reference tracking (`TrackRef(true)`)
 - Compatible mode for schema evolution
@@ -101,7 +102,34 @@ fory.Register<Address>(100);
 fory.Register<Person>(101);
 ```
 
-### 2. Shared and Circular References
+### 2. Class Inheritance
+
+Annotate every first-party class in a serializable hierarchy directly. The
+concrete serializer flattens inherited fields and properties into one schema:
+
+```csharp
+[ForyStruct]
+public abstract class Entity
+{
+    [ForyField(1)]
+    private long _id;
+
+    public long Id => _id;
+}
+
+[ForyStruct]
+public sealed class User : Entity
+{
+    [ForyField(2)]
+    public string Name { get; set; } = string.Empty;
+}
+```
+
+An inaccessible base member is serialized only when it has `[ForyField]`.
+Unmodifiable third-party bases use an external `BaseOnly` declaration. See the
+[class inheritance guide](https://fory.apache.org/docs/guide/csharp/basic-serialization/#class-inheritance).
+
+### 3. Shared and Circular References
 
 Enable reference tracking to preserve object identity.
 
@@ -123,7 +151,7 @@ Node decoded = fory.Deserialize<Node>(fory.Serialize(node));
 System.Diagnostics.Debug.Assert(object.ReferenceEquals(decoded, decoded.Next));
 ```
 
-### 3. Schema Evolution
+### 4. Schema Evolution
 
 Compatible mode allows schema changes between writer and reader.
 
@@ -150,7 +178,7 @@ fory2.Register<TwoFields>(300);
 TwoFields decoded = fory2.Deserialize<TwoFields>(fory1.Serialize(new OneField { F1 = "hello" }));
 ```
 
-### 4. Dynamic Object Serialization
+### 5. Dynamic Object Serialization
 
 Use dynamic APIs for unknown/heterogeneous payloads.
 
@@ -168,7 +196,7 @@ byte[] payload = fory.Serialize<object?>(map);
 object? decoded = fory.Deserialize<object?>(payload);
 ```
 
-### 5. Thread-Safe Fory
+### 6. Thread-Safe Fory
 
 `Fory` is single-thread optimized. Use `ThreadSafeFory` for concurrent access.
 
@@ -183,7 +211,7 @@ Parallel.For(0, 128, i =>
 });
 ```
 
-### 6. External Types
+### 7. External Types
 
 Generate serializers for mutable third-party classes, structs, and enums with a
 local serializer declaration:
@@ -192,7 +220,10 @@ local serializer declaration:
 [ForyStruct(Target = typeof(ThirdParty.User))]
 internal abstract class UserSerializer
 {
-    [ForyField(1)]
+    [ForyField(
+        1,
+        TargetDeclaringType = typeof(ThirdParty.User),
+        TargetMemberName = "<Name>k__BackingField")]
     public abstract string Name { get; }
 }
 
@@ -207,7 +238,7 @@ ThirdParty.User decoded = fory.Deserialize<ThirdParty.User>(payload);
 The target is the runtime and registration type. See the
 [external-types guide](https://fory.apache.org/docs/guide/csharp/external-types/).
 
-### 7. Manual Serializers
+### 8. Manual Serializers
 
 Provide specialized encoding logic with `Serializer<T>`.
 

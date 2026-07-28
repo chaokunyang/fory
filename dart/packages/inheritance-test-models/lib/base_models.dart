@@ -90,3 +90,26 @@ abstract class XlangInheritanceBoundary {
     _parentText = parentText;
   }
 }
+
+class UnexposedPrivateBase {
+  String _basePrivate = 'base-private-default';
+
+  @ForyField(id: 30)
+  String basePublic = '';
+
+  String get basePrivate => _basePrivate;
+
+  void setBasePrivate(String value) {
+    _basePrivate = value;
+  }
+}
+
+mixin UnexposedPrivateMixin {
+  String _mixinPrivate = 'mixin-private-default';
+
+  String get mixinPrivate => _mixinPrivate;
+
+  void setMixinPrivate(String value) {
+    _mixinPrivate = value;
+  }
+}

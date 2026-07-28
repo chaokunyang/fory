@@ -147,14 +147,8 @@ final class ForyGenerator extends Generator {
     );
     for (final element in annotatedClasses) {
       final options = _structOptions(element);
-      final ownsSerializer =
-          options.target != null ||
-          (_ownsOrdinarySerializer(element) && element.typeParameters.isEmpty);
-      if (!ownsSerializer) {
-        _validateProviderOnly(element, options);
-      }
-      if (options.exposePrivateFields) {
-        if (options.target != null) {
+      if (options.target != null) {
+        if (options.exposePrivateFields) {
           throw InvalidGenerationSourceError(
             'ForyStruct.exposePrivateFields cannot be used with '
             'ForyStruct.target. External structural declarations retain an '
@@ -162,6 +156,22 @@ final class ForyGenerator extends Generator {
             element: element,
           );
         }
+        if (options.ignoreInheritedPrivateFields) {
+          throw InvalidGenerationSourceError(
+            'ForyStruct.ignoreInheritedPrivateFields cannot be used with '
+            'ForyStruct.target. External structural declarations retain an '
+            'explicit field model.',
+            element: element,
+          );
+        }
+      }
+      final ownsSerializer =
+          options.target != null ||
+          (_ownsOrdinarySerializer(element) && element.typeParameters.isEmpty);
+      if (!ownsSerializer) {
+        _validateProviderOnly(element, options);
+      }
+      if (options.exposePrivateFields) {
         companionSpecs.add(
           await _analyzePrivateAccessCompanion(element, buildStep),
         );
@@ -260,6 +270,8 @@ final class ForyGenerator extends Generator {
     final evolving = objectReader.peek('evolving')?.boolValue ?? true;
     final exposePrivateFields =
         objectReader.peek('exposePrivateFields')?.boolValue ?? false;
+    final ignoreInheritedPrivateFields =
+        objectReader.peek('ignoreInheritedPrivateFields')?.boolValue ?? false;
     final targetReader = objectReader.peek('target');
     final annotatedTarget =
         targetReader == null || targetReader.isNull
@@ -275,6 +287,7 @@ final class ForyGenerator extends Generator {
       target: annotatedTarget,
       constructorName: constructorName,
       exposePrivateFields: exposePrivateFields,
+      ignoreInheritedPrivateFields: ignoreInheritedPrivateFields,
     );
     _structOptionsByElement[element] = options;
     return options;
@@ -288,6 +301,14 @@ final class ForyGenerator extends Generator {
       throw InvalidGenerationSourceError(
         'ForyStruct.target is valid only on an external serializer '
         'declaration class.',
+        element: element,
+      );
+    }
+    if (options.ignoreInheritedPrivateFields) {
+      throw InvalidGenerationSourceError(
+        'ForyStruct.ignoreInheritedPrivateFields is valid only on an '
+        'ordinary concrete declaration that owns a generated flattened '
+        'schema. ${element.displayName} is provider-only.',
         element: element,
       );
     }
@@ -416,6 +437,16 @@ final class ForyGenerator extends Generator {
     final includedNames = <String>[];
     for (final field in discovered) {
       if (_isIgnored(field.declaration)) {
+        continue;
+      }
+      if (options.ignoreInheritedPrivateFields &&
+          field.declaration.isPrivate &&
+          // Declaration ownership determines whether storage is inherited;
+          // an applied mixin layer is never owned by the concrete child.
+          !identical(
+            field.declaration.enclosingElement.baseElement,
+            element.baseElement,
+          )) {
         continue;
       }
       included.add(field);
@@ -1082,7 +1113,10 @@ final class ForyGenerator extends Generator {
       'by ${field.library.uri}, while generating ${child.displayName} in '
       '${child.library.uri}. $authorization$consumerPermission Import a '
       'qualifying boundary together with its generated companion, mark the '
-      'field with @ForyField(ignore: true), or use a manual serializer.',
+      'field with @ForyField(ignore: true), set '
+      '@ForyStruct(ignoreInheritedPrivateFields: true) on '
+      '${child.displayName} to omit all inherited private storage, or use a '
+      'manual serializer.',
       element: field,
     );
   }
@@ -5759,12 +5793,14 @@ final class _StructOptions {
   final DartType? target;
   final String? constructorName;
   final bool exposePrivateFields;
+  final bool ignoreInheritedPrivateFields;
 
   const _StructOptions({
     required this.evolving,
     required this.target,
     required this.constructorName,
     required this.exposePrivateFields,
+    required this.ignoreInheritedPrivateFields,
   });
 }
 

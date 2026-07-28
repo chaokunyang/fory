@@ -194,6 +194,36 @@ class ConcreteSurface {
       expect(normal, isNot(contains(r'$ConcreteSurfaceForyFieldAccess')));
     });
 
+    test(
+      'keeps concrete omission and companion ownership independent',
+      () async {
+        const inputPath = 'test/concrete_omission_provider.dart';
+        final output = await _generate(
+          inputPath: inputPath,
+          source: _librarySource(inputPath, '''
+class ConcreteBase {
+  int _baseSecret = 0;
+}
+
+@ForyStruct(
+  exposePrivateFields: true,
+  ignoreInheritedPrivateFields: true,
+)
+class ConcreteBoundary extends ConcreteBase {
+  int _ownSecret = 0;
+}
+'''),
+        );
+
+        expect(output, contains("identifier: '_own_secret',"));
+        expect(output, isNot(contains("identifier: '_base_secret',")));
+        expect(output, contains('=> value._baseSecret;'));
+        expect(output, contains('value._baseSecret = fieldValue;'));
+        expect(output, contains('=> value._ownSecret;'));
+        expect(output, contains('value._ownSecret = fieldValue;'));
+      },
+    );
+
     test('exposePrivateFields defaults to false', () async {
       const inputPath = 'test/default_false.dart';
       await _expectGenerationError(
@@ -208,27 +238,36 @@ abstract class Boundary {
       );
     });
 
-    test('consumer annotation cannot authorize parent storage', () async {
-      const inputPath = 'test/consumer_annotation.dart';
-      await _expectGenerationError(
-        inputPath: inputPath,
-        source: _librarySource(inputPath, '''
-@ForyStruct(exposePrivateFields: true)
+    test('unexposed parent remains strict by default', () async {
+      const cases = <({String name, String annotation})>[
+        (name: 'default', annotation: '@ForyStruct()'),
+        (
+          name: 'consumer_exposure',
+          annotation: '@ForyStruct(exposePrivateFields: true)',
+        ),
+      ];
+      for (final testCase in cases) {
+        final inputPath = 'test/${testCase.name}_unexposed_parent.dart';
+        await _expectGenerationError(
+          inputPath: inputPath,
+          source: _librarySource(inputPath, '''
+${testCase.annotation}
 class Child extends Boundary {
   int _childSecret = 0;
 }
 ''', directives: "import 'unexposed_parent.dart';"),
-        additionalAssets: <String, String>{
-          'fory|test/unexposed_parent.dart': '''
+          additionalAssets: const <String, String>{
+            'fory|test/unexposed_parent.dart': '''
 abstract class Boundary {
   int _parentSecret = 0;
 }
 ''',
-        },
-        message:
-            'No public hierarchy boundary in the declaring library is '
-            'annotated with @ForyStruct(exposePrivateFields: true)',
-      );
+          },
+          message:
+              'No public hierarchy boundary in the declaring library is '
+              'annotated with @ForyStruct(exposePrivateFields: true)',
+        );
+      }
     });
 
     test('external target cannot expose private fields', () async {
@@ -247,6 +286,26 @@ abstract final class TargetSchema {
 '''),
         message:
             'ForyStruct.exposePrivateFields cannot be used with '
+            'ForyStruct.target',
+      );
+    });
+
+    test('external target cannot ignore inherited private fields', () async {
+      const inputPath = 'test/external_inherited_private_omission.dart';
+      await _expectGenerationError(
+        inputPath: inputPath,
+        source: _librarySource(inputPath, '''
+class Target {
+  int value = 0;
+}
+
+@ForyStruct(target: Target, ignoreInheritedPrivateFields: true)
+abstract final class TargetSchema {
+  late final int value;
+}
+'''),
+        message:
+            'ForyStruct.ignoreInheritedPrivateFields cannot be used with '
             'ForyStruct.target',
       );
     });
@@ -328,6 +387,58 @@ abstract class Boundary {
 }
 '''),
           message: testCase.message,
+        );
+      }
+    });
+
+    test('provider-only declarations cannot own omission policy', () async {
+      const cases = <({String name, String declaration})>[
+        (
+          name: 'abstract',
+          declaration: '''
+@ForyStruct(
+  exposePrivateFields: true,
+  ignoreInheritedPrivateFields: true,
+)
+abstract class Boundary {
+  int _secret = 0;
+}
+''',
+        ),
+        (
+          name: 'generic',
+          declaration: '''
+@ForyStruct(
+  exposePrivateFields: true,
+  ignoreInheritedPrivateFields: true,
+)
+class Boundary<T> {
+  int _secret = 0;
+}
+''',
+        ),
+        (
+          name: 'mixin',
+          declaration: '''
+@ForyStruct(
+  exposePrivateFields: true,
+  ignoreInheritedPrivateFields: true,
+)
+mixin Boundary {
+  int _secret = 0;
+}
+''',
+        ),
+      ];
+
+      for (final testCase in cases) {
+        final inputPath = 'test/${testCase.name}_omission_provider.dart';
+        await _expectGenerationError(
+          inputPath: inputPath,
+          source: _librarySource(inputPath, testCase.declaration),
+          message:
+              'ForyStruct.ignoreInheritedPrivateFields is valid only on an '
+              'ordinary concrete declaration',
         );
       }
     });
@@ -490,6 +601,52 @@ abstract class Boundary {
 
   group('consumer resolution', () {
     final providerSource = _providerSource();
+
+    test('omits unexposed inherited private storage', () async {
+      const inputPath = 'test/omitting_unexposed_consumer.dart';
+      final output = await _generate(
+        inputPath: inputPath,
+        source: _librarySource(inputPath, '''
+@ForyStruct(ignoreInheritedPrivateFields: true)
+class Child extends UnexposedParent {
+  int _childSecret = 0;
+}
+''', directives: "import 'unexposed_parent.dart';"),
+        additionalAssets: const <String, String>{
+          'fory|test/unexposed_parent.dart': '''
+class UnexposedParent {
+  int _secret = 0;
+  int inheritedPublic = 0;
+}
+''',
+        },
+      );
+
+      expect(output, contains("identifier: '_child_secret',"));
+      expect(output, contains("identifier: 'inherited_public',"));
+      expect(output, isNot(contains("identifier: '_secret',")));
+      expect(output, isNot(contains('ForyFieldAccess')));
+    });
+
+    test('omits private storage even when a companion exists', () async {
+      const inputPath = 'test/omitting_exposed_consumer.dart';
+      final output = await _generate(
+        inputPath: inputPath,
+        source: _librarySource(inputPath, '''
+@ForyStruct(ignoreInheritedPrivateFields: true)
+class Child extends Boundary {
+  int value = 0;
+}
+''', directives: "import 'private_provider.dart';"),
+        additionalAssets: <String, String>{
+          'fory|test/private_provider.dart': providerSource,
+        },
+      );
+
+      expect(output, contains("identifier: 'value',"));
+      expect(output, isNot(contains("identifier: '_secret',")));
+      expect(output, isNot(contains(r'$BoundaryForyFieldAccess')));
+    });
 
     test('resolves direct, prefixed, re-exported, and shown helpers', () async {
       final cases = <

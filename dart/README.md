@@ -96,12 +96,8 @@ final roundTrip = fory.deserialize<Person>(bytes);
 ```
 
 Ordinary annotated classes serialize one flattened view of their concrete
-superclass and applied-mixin storage. Public and same-library private inherited
-fields need no parent annotation. A declaring library that intentionally
-exposes private state to generated serializers in other libraries marks a
-public hierarchy boundary with `@ForyStruct(exposePrivateFields: true)`.
-`@ForyField(ignore: true)` on the field declaration is the only way to omit
-ordinary storage.
+superclass and applied-mixin storage. See
+[Struct Inheritance](../docs/guide/dart/inheritance.md) for details.
 
 ## Development
 

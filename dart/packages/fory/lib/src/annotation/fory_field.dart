@@ -22,13 +22,15 @@ import 'package:fory/src/annotation/type_spec.dart';
 /// Configures serialization for the storage field on which it is declared.
 ///
 /// Field metadata remains attached to its declaration when an ordinary
-/// `ForyStruct` inherits the field. Every discovered ordinary storage field is
-/// serialized unless that declaring field sets [ignore] to `true`.
+/// `ForyStruct` inherits the field. [ignore] is the declaration-owned,
+/// per-field omission option. A concrete child may separately omit all
+/// ancestor-declared private storage through
+/// `ForyStruct.ignoreInheritedPrivateFields`.
 final class ForyField {
   /// Whether to omit this field from the serialized schema.
   ///
-  /// This is the only supported way to omit an ordinary instance storage
-  /// field. Ignored storage still contributes to shallow graph-memory
+  /// This is the only declaration-owned way to omit an ordinary instance
+  /// storage field. Ignored storage still contributes to shallow graph-memory
   /// accounting.
   final bool ignore;
 

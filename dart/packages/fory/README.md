@@ -93,67 +93,24 @@ dart run build_runner build
 
 ## Ordinary Struct Inheritance
 
-An ordinary `@ForyStruct()` includes all instance storage from its concrete
-superclass and applied-mixin chain. The concrete child has one flattened schema
-and one generated serializer; parent fields are globally ordered with child
-fields rather than encoded as a nested parent object.
-
-Public inherited fields and private inherited fields declared in the same Dart
-library need no annotation on the parent. Field metadata stays with the field
-declaration, and `@ForyField(ignore: true)` on that declaration is the only way
-to omit storage from the generated schema.
-
-Private fields declared in another Dart library require an explicit opt-in from
-that declaring library:
-
 ```dart
-// package:model_owner/base.dart
-import 'package:fory/fory.dart';
-
-part 'base.fory.dart';
-
-@ForyStruct(exposePrivateFields: true)
-abstract class AccountBase {
-  AccountBase(String tenantId) : _tenantId = tenantId;
-
-  final String _tenantId;
-
-  String get tenantId => _tenantId;
+class MessageBase {
+  int sequence = 0;
 }
-```
-
-The concrete child uses the normal annotation:
-
-```dart
-// lib/account.dart
-import 'package:fory/fory.dart';
-import 'package:model_owner/base.dart';
-
-part 'account.fory.dart';
 
 @ForyStruct()
-final class Account extends AccountBase {
-  Account(String tenantId) : super(tenantId);
+class TextMessage extends MessageBase {
+  TextMessage();
+
+  String text = '';
 }
 ```
 
-Run code generation in the package that declares `AccountBase` before building
-a dependent package. The provider's published source must include its generated
-`.fory.dart` part. A barrel import is also valid when it re-exports both the
-public boundary and its generated access companion.
-
-`exposePrivateFields` controls only cross-library access to private state. It
-does not enable field discovery, affect same-library private fields, or grant a
-child permission to expose private state owned by another library. If private
-fields come from multiple libraries, each declaring library must opt in
-independently.
-
-Every non-ignored `final` or `late final` field must receive its decoded value
-unchanged through the concrete child's generative constructor chain. Fory
-accepts initializing formals, super formals, redirects, and direct constructor
-initializers that preserve the exact field value. A matching parameter name
-alone is not sufficient. Generation fails for inaccessible, hidden,
-unsupported, or unconstructable storage instead of silently dropping it.
+The generated `TextMessage` schema contains both `sequence` and `text`.
+Superclass and applied-mixin fields are flattened into one child serializer.
+See [Struct Inheritance](https://fory.apache.org/docs/guide/dart/inheritance)
+for private fields, mixins, constructors, and
+`ignoreInheritedPrivateFields`.
 
 ## External-Type Serialization
 
@@ -198,7 +155,8 @@ registration. Select a public named generative constructor with
 `constructor: 'name'` when the unnamed constructor is not appropriate.
 External declarations remain explicit schemas: they may list an accessible
 inherited target property, but Fory does not scan the external target's
-hierarchy automatically, and `exposePrivateFields` is not valid with `target`.
+hierarchy automatically. Neither `exposePrivateFields` nor
+`ignoreInheritedPrivateFields` is valid with `target`.
 
 ## Type Registration
 
@@ -266,8 +224,9 @@ class NodeList {
 }
 ```
 
-Inherited field metadata enters this same reference analysis. Inheritance does
-not add a second reference owner or change the runtime reference protocol.
+Included inherited field metadata enters this same reference analysis.
+Inheritance does not add a second reference owner or change the runtime
+reference protocol.
 
 ## Field Annotations
 
@@ -393,9 +352,9 @@ The main exported API includes:
 
 - `Fory` — main serialization facade
 - `Config` — Fory configuration
-- `ForyStruct`, including `target`, `constructor`, and
-  `exposePrivateFields`, plus `ForyField`, `ListField`, `SetField`, and
-  `MapField` — struct annotations
+- `ForyStruct`, including `target`, `constructor`, `exposePrivateFields`, and
+  `ignoreInheritedPrivateFields`, plus `ForyField`, `ListField`, `SetField`,
+  and `MapField` — struct annotations
 - `ForyUnion` — union type annotation
 - `Serializer`, `UnionSerializer`, `EnumSerializer` — serializer base classes
 - `Buffer`, `WriteContext`, `ReadContext` — low-level I/O

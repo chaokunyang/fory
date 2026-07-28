@@ -99,6 +99,38 @@ void main() {
       });
     }
 
+    for (final compatible in <bool>[false, true]) {
+      test('omits inherited private fields compatible=$compatible', () {
+        final fory = Fory(compatible: compatible);
+        InheritanceModelsForyModule.register(
+          fory,
+          IgnoringPrivateChild,
+          id: compatible ? null : 407,
+          name: compatible ? 'inheritance.IgnoringPrivateChild' : null,
+        );
+
+        final input =
+            IgnoringPrivateChild()
+              ..setBasePrivate('base-private')
+              ..setMixinPrivate('mixin-private')
+              ..setMiddlePrivate('middle-private')
+              ..basePublic = 'base-public'
+              ..middlePublic = 'middle-public'
+              ..childPublic = 'child-public';
+
+        final result = fory.deserialize<IgnoringPrivateChild>(
+          fory.serialize(input),
+        );
+
+        expect(result.basePrivate, 'base-private-default');
+        expect(result.mixinPrivate, 'mixin-private-default');
+        expect(result.middlePrivate, 'middle-private-default');
+        expect(result.basePublic, 'base-public');
+        expect(result.middlePublic, 'middle-public');
+        expect(result.childPublic, 'child-public');
+      });
+    }
+
     test('passes optional mutable state through construction', () {
       final fory = Fory();
       InheritanceModelsForyModule.register(fory, OptionalMutableChild, id: 405);

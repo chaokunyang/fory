@@ -19,14 +19,35 @@
 
 import 'package:fory/src/annotation/type_spec.dart';
 
+/// Configures serialization for the storage field on which it is declared.
+///
+/// Field metadata remains attached to its declaration when an ordinary
+/// `ForyStruct` inherits the field. Every discovered ordinary storage field is
+/// serialized unless that declaring field sets [ignore] to `true`.
 final class ForyField {
+  /// Whether to omit this field from the serialized schema.
+  ///
+  /// This is the only supported way to omit an ordinary instance storage
+  /// field. Ignored storage still contributes to shallow graph-memory
+  /// accounting.
   final bool ignore;
+
+  /// The stable numeric field identity used for schema evolution.
   final int? id;
+
+  /// An optional override for the field's inferred nullability.
   final bool? nullable;
+
+  /// Whether references through this field preserve object identity.
   final bool ref;
+
+  /// Whether values carry their concrete runtime type.
   final bool? dynamic;
+
+  /// An optional exact wire-type description.
   final TypeSpec? type;
 
+  /// Creates field-level serialization metadata.
   const ForyField({
     this.ignore = false,
     this.id,

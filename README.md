@@ -561,7 +561,7 @@ Dart uses the xlang wire format directly. Generate the companion file before
 running:
 
 ```bash
-dart run build_runner build --delete-conflicting-outputs
+dart run build_runner build
 ```
 
 **Swift**

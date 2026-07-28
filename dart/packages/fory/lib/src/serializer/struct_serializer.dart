@@ -46,10 +46,8 @@ final class StructSerializer extends Serializer<Object?> {
           ),
         ),
       );
-  late final Map<String, SerializationFieldInfo> _localFieldsByIdentifier =
-      <String, SerializationFieldInfo>{
-        for (final field in _localFields) field.identifier: field,
-      };
+  Map<int, SerializationFieldInfo>? _localFieldsById;
+  Map<String, SerializationFieldInfo>? _localFieldsByName;
   final Map<TypeDef, CompatibleStructReadLayout> _compatibleReadLayouts =
       Map<TypeDef, CompatibleStructReadLayout>.identity();
   TypeDef? _lastCompatibleRemoteTypeDef;
@@ -172,6 +170,9 @@ final class StructSerializer extends Serializer<Object?> {
   }
 
   CompatibleStructReadLayout _buildCompatibleReadLayout(TypeDef remoteTypeDef) {
+    _ensureLocalFieldMaps();
+    final localFieldsById = _localFieldsById!;
+    final localFieldsByName = _localFieldsByName!;
     final fields = <CompatibleStructReadField>[];
     for (
       var remoteIndex = 0;
@@ -179,7 +180,11 @@ final class StructSerializer extends Serializer<Object?> {
       remoteIndex += 1
     ) {
       final remoteField = remoteTypeDef.fields[remoteIndex];
-      final localField = _localFieldsByIdentifier[remoteField.identifier];
+      final remoteId = remoteField.id;
+      final localField =
+          remoteId == null
+              ? localFieldsByName[remoteField.identifier]
+              : localFieldsById[remoteId];
       if (localField == null) {
         fields.add(
           CompatibleStructReadField(
@@ -256,6 +261,24 @@ final class StructSerializer extends Serializer<Object?> {
     _lastCompatibleReadLayout = layout;
     return layout;
   }
+
+  void _ensureLocalFieldMaps() {
+    if (_localFieldsById != null) {
+      return;
+    }
+    final fieldsById = <int, SerializationFieldInfo>{};
+    final fieldsByName = <String, SerializationFieldInfo>{};
+    for (final field in _localFields) {
+      final id = field.id;
+      if (id == null) {
+        fieldsByName[field.identifier] = field;
+      } else {
+        fieldsById[id] = field;
+      }
+    }
+    _localFieldsById = fieldsById;
+    _localFieldsByName = fieldsByName;
+  }
 }
 
 bool _topLevelListArrayPair(FieldInfo localField, FieldInfo remoteField) {
@@ -309,11 +332,7 @@ bool _compatibleFieldType(
         localType.arguments.length == remoteType.arguments.length) {
       return true;
     }
-    return compatibleScalarConversion(
-          FieldInfo(name: '', identifier: '', id: null, fieldType: remoteType),
-          FieldInfo(name: '', identifier: '', id: null, fieldType: localType),
-        ) !=
-        null;
+    return canConvertCompatibleScalarTypes(remoteType, localType);
   }
   if (_isStructTypeId(localType.typeId) &&
       _isStructTypeId(remoteType.typeId) &&

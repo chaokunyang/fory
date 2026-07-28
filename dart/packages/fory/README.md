@@ -11,6 +11,7 @@ cases.
 - Cross-language serialization with the Fory xlang format
 - Dart VM/AOT, Flutter, and web platform support
 - Generated serializers for annotated structs and enums
+- Flattened superclass and mixin storage for ordinary generated structs
 - External structural serializers for classes owned by another package
 - Compatible mode for schema evolution
 - Optional reference tracking for shared and circular object graphs
@@ -87,8 +88,72 @@ void main() {
 Generate the companion file before running the program:
 
 ```bash
-dart run build_runner build --delete-conflicting-outputs
+dart run build_runner build
 ```
+
+## Ordinary Struct Inheritance
+
+An ordinary `@ForyStruct()` includes all instance storage from its concrete
+superclass and applied-mixin chain. The concrete child has one flattened schema
+and one generated serializer; parent fields are globally ordered with child
+fields rather than encoded as a nested parent object.
+
+Public inherited fields and private inherited fields declared in the same Dart
+library need no annotation on the parent. Field metadata stays with the field
+declaration, and `@ForyField(ignore: true)` on that declaration is the only way
+to omit storage from the generated schema.
+
+Private fields declared in another Dart library require an explicit opt-in from
+that declaring library:
+
+```dart
+// package:model_owner/base.dart
+import 'package:fory/fory.dart';
+
+part 'base.fory.dart';
+
+@ForyStruct(exposePrivateFields: true)
+abstract class AccountBase {
+  AccountBase(String tenantId) : _tenantId = tenantId;
+
+  final String _tenantId;
+
+  String get tenantId => _tenantId;
+}
+```
+
+The concrete child uses the normal annotation:
+
+```dart
+// lib/account.dart
+import 'package:fory/fory.dart';
+import 'package:model_owner/base.dart';
+
+part 'account.fory.dart';
+
+@ForyStruct()
+final class Account extends AccountBase {
+  Account(String tenantId) : super(tenantId);
+}
+```
+
+Run code generation in the package that declares `AccountBase` before building
+a dependent package. The provider's published source must include its generated
+`.fory.dart` part. A barrel import is also valid when it re-exports both the
+public boundary and its generated access companion.
+
+`exposePrivateFields` controls only cross-library access to private state. It
+does not enable field discovery, affect same-library private fields, or grant a
+child permission to expose private state owned by another library. If private
+fields come from multiple libraries, each declaring library must opt in
+independently.
+
+Every non-ignored `final` or `late final` field must receive its decoded value
+unchanged through the concrete child's generative constructor chain. Fory
+accepts initializing formals, super formals, redirects, and direct constructor
+initializers that preserve the exact field value. A matching parameter name
+alone is not sufficient. Generation fails for inaccessible, hidden,
+unsupported, or unconstructable storage instead of silently dropping it.
 
 ## External-Type Serialization
 
@@ -131,6 +196,9 @@ final decoded = fory.deserialize<third_party.User>(bytes);
 Fields and nested `List`, `Set`, and `Map` values use the same target
 registration. Select a public named generative constructor with
 `constructor: 'name'` when the unnamed constructor is not appropriate.
+External declarations remain explicit schemas: they may list an accessible
+inherited target property, but Fory does not scan the external target's
+hierarchy automatically, and `exposePrivateFields` is not valid with `target`.
 
 ## Type Registration
 
@@ -198,17 +266,20 @@ class NodeList {
 }
 ```
 
+Inherited field metadata enters this same reference analysis. Inheritance does
+not add a second reference owner or change the runtime reference protocol.
+
 ## Field Annotations
 
 `@ForyField()` controls per-field serialization behavior:
 
-| Option     | Description                                      |
-| ---------- | ------------------------------------------------ |
-| `ignore`   | Exclude the field from serialization             |
-| `id`       | Stable field ID for compatible-mode evolution    |
-| `nullable` | Override nullability inference                   |
-| `ref`      | Enable reference tracking for this field         |
-| `dynamic`  | Control whether runtime type metadata is written |
+| Option     | Description                                         |
+| ---------- | --------------------------------------------------- |
+| `ignore`   | Exclude the declaring storage field from the schema |
+| `id`       | Stable field ID for compatible-mode evolution       |
+| `nullable` | Override nullability inference                      |
+| `ref`      | Enable reference tracking for this field            |
+| `dynamic`  | Control whether runtime type metadata is written    |
 
 `type:` is the canonical override surface for nested field semantics:
 
@@ -224,7 +295,8 @@ Map<String, List<int?>> nested = <String, List<int?>>{};
 ## Manual Serializers
 
 Use `Serializer<T>` when a type needs custom wire behavior, field conversion,
-or construction that an external structural serializer cannot express.
+or construction that generated ordinary or external structural serializers
+cannot prove.
 
 ```dart
 import 'package:fory/fory.dart';
@@ -321,8 +393,9 @@ The main exported API includes:
 
 - `Fory` — main serialization facade
 - `Config` — Fory configuration
-- `ForyStruct`, including `target` and `constructor`, plus `ForyField`,
-  `ListField`, `SetField`, and `MapField` — struct annotations
+- `ForyStruct`, including `target`, `constructor`, and
+  `exposePrivateFields`, plus `ForyField`, `ListField`, `SetField`, and
+  `MapField` — struct annotations
 - `ForyUnion` — union type annotation
 - `Serializer`, `UnionSerializer`, `EnumSerializer` — serializer base classes
 - `Buffer`, `WriteContext`, `ReadContext` — low-level I/O

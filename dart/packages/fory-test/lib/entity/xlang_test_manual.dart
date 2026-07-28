@@ -103,7 +103,7 @@ const GeneratedFieldType _refOverrideElementFieldType = GeneratedFieldType(
 const List<GeneratedFieldInfo>
 _refOverrideContainerForyFieldInfo = <GeneratedFieldInfo>[
   // Keep this manual fixture in the same protocol order as generated structs:
-  // all fields are non-primitive, so field identifiers order the wire payload.
+  // all fields are non-primitive, so wire names order the payload.
   GeneratedFieldInfo(
     name: 'listField',
     identifier: 'list_field',

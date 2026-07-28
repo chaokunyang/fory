@@ -1742,11 +1742,15 @@ jobs:
         run: |
           (
             cd dart/packages/fory
-            dart run build_runner build --delete-conflicting-outputs
+            dart run build_runner build
+          )
+          (
+            cd dart/packages/inheritance-test-models
+            dart run build_runner build
           )
           (
             cd dart/packages/fory-test
-            dart run build_runner build --delete-conflicting-outputs
+            dart run build_runner build
           )
       - name: Run Dart Xlang Test
         env:
@@ -1781,16 +1785,37 @@ jobs:
         run: |
           (
             cd dart/packages/fory
-            dart run build_runner build --delete-conflicting-outputs
+            dart run build_runner build
+          )
+          (
+            cd dart/packages/inheritance-test-models
+            dart run build_runner build
           )
           (
             cd dart/packages/fory-test
-            dart run build_runner build --delete-conflicting-outputs
+            dart run build_runner build
           )
-      - name: Run tests
+      - name: Run VM tests
+        run: |
+          (
+            cd dart/packages/fory
+            dart test
+          )
+          (
+            cd dart/packages/fory-test
+            dart test
+          )
+      - name: Run inheritance AOT and JavaScript smoke
         run: |
           cd dart/packages/fory-test
-          dart test
+          dart compile exe \
+            -o "$RUNNER_TEMP/fory_inheritance_smoke" \
+            tool/inheritance_smoke.dart
+          "$RUNNER_TEMP/fory_inheritance_smoke"
+          dart compile js --fatal-warnings --no-source-maps -O2 \
+            -o "$RUNNER_TEMP/fory_inheritance_smoke.js" \
+            tool/inheritance_smoke.dart
+          node "$RUNNER_TEMP/fory_inheritance_smoke.js"
       - name: Run web tests
         run: |
           cd dart/packages/fory
@@ -1910,7 +1935,7 @@ jobs:
       - name: Generate Flutter smoke code
         run: |
           cd "$FLUTTER_SMOKE_DIR"
-          dart run build_runner build --delete-conflicting-outputs
+          dart run build_runner build
       - name: Run Flutter smoke tests
         run: |
           cd "$FLUTTER_SMOKE_DIR"

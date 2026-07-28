@@ -15,23 +15,20 @@
 # specific language governing permissions and limitations
 # under the License.
 
-name: fory_dart
-description: Apache Fory Dart workspace for the runtime package, generated serializers, and integration tests.
-version: 1.5.0-dev
-# repository: https://github.com/my_org/my_repo
+name: inheritance_test_models
+description: Provider-owned Dart hierarchy models used by Fory inheritance tests.
+version: 1.0.0
+publish_to: none
+
+resolution: workspace
 
 environment:
   sdk: ^3.7.0
 
-# Add regular dependencies here.
 dependencies:
-  fory: 1.5.0-dev
-  build_runner: ">=2.7.0 <3.0.0"
+  fory:
+    path: ../fory
+
 dev_dependencies:
+  build_runner: ">=2.7.0 <3.0.0"
   lints: ^6.1.0
-  test: ^1.31.1
-workspace:
-  - packages/external-type-test-models
-  - packages/fory
-  - packages/fory-test
-  - packages/inheritance-test-models

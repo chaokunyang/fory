@@ -134,8 +134,6 @@ final class GeneratedStructFieldDescriptor {
     required this.usesDeclaredType,
   });
 
-  String get name => field.name;
-
   meta_types.FieldType get fieldType => field.fieldType;
 }
 

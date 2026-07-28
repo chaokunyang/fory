@@ -993,11 +993,11 @@ fn registration_by_name() {
         .unwrap();
     roundtrip::<ValueSerializer>(&union, &Value::Count(42));
 
-    let mut manual = Fory::builder().xlang(false).compatible(false).build();
-    manual
+    let mut custom = Fory::builder().xlang(false).compatible(false).build();
+    custom
         .register_serializer_by_name::<ExternalIdSerializer>("example.ExternalId")
         .unwrap();
-    roundtrip::<ExternalIdSerializer>(&manual, &ExternalId(9));
+    roundtrip::<ExternalIdSerializer>(&custom, &ExternalId(9));
 }
 
 #[test]

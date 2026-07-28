@@ -396,23 +396,23 @@ public sealed class ExternalTypeSerializationTests
     }
 
     [Fact]
-    public void ManualSerializerReplacesGenerated()
+    public void CustomSerializerReplacesGenerated()
     {
-        ExternalFields value = new() { Count = 19, Name = "manual" };
+        ExternalFields value = new() { Count = 19, Name = "custom" };
         ForyRuntime generated = ForyRuntime.Builder().Build();
         generated.Register<ExternalFields>(6106);
         byte[] generatedBytes = generated.Serialize(value);
 
-        ForyRuntime manual = ForyRuntime.Builder().Build();
-        manual.Register<ExternalFields, ExternalFieldsManualSerializer>(6106);
-        byte[] manualBytes = manual.Serialize(value);
-        ExternalFields decoded = manual.Deserialize<ExternalFields>(manualBytes);
+        ForyRuntime custom = ForyRuntime.Builder().Build();
+        custom.Register<ExternalFields, ExternalFieldsCustomSerializer>(6106);
+        byte[] customBytes = custom.Serialize(value);
+        ExternalFields decoded = custom.Deserialize<ExternalFields>(customBytes);
 
-        Assert.NotEqual(generatedBytes, manualBytes);
+        Assert.NotEqual(generatedBytes, customBytes);
         Assert.Equal(value.Count, decoded.Count);
         Assert.Equal(value.Name, decoded.Name);
         Assert.Throws<InvalidDataException>(
-            () => generated.Register<ExternalFields, ExternalFieldsManualSerializer>(6107));
+            () => generated.Register<ExternalFields, ExternalFieldsCustomSerializer>(6107));
     }
 
     [Fact]

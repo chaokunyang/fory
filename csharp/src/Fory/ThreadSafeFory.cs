@@ -81,7 +81,7 @@ public sealed class ThreadSafeFory : IDisposable
     }
 
     /// <summary>
-    /// Registers a user type by numeric type identifier with a manual serializer for all thread-local runtimes.
+    /// Registers a user type by numeric type identifier with a custom serializer for all thread-local runtimes.
     /// </summary>
     /// <typeparam name="T">Type to register.</typeparam>
     /// <typeparam name="TSerializer">Serializer implementation used for <typeparamref name="T"/>.</typeparam>
@@ -95,7 +95,7 @@ public sealed class ThreadSafeFory : IDisposable
     }
 
     /// <summary>
-    /// Registers a user type by name with a manual serializer for all thread-local runtimes.
+    /// Registers a user type by name with a custom serializer for all thread-local runtimes.
     /// </summary>
     /// <typeparam name="T">Type to register.</typeparam>
     /// <typeparam name="TSerializer">Serializer implementation used for <typeparamref name="T"/>.</typeparam>
@@ -110,7 +110,7 @@ public sealed class ThreadSafeFory : IDisposable
     }
 
     /// <summary>
-    /// Registers a user type by namespace and name with a manual serializer for all thread-local runtimes.
+    /// Registers a user type by namespace and name with a custom serializer for all thread-local runtimes.
     /// </summary>
     /// <typeparam name="T">Type to register.</typeparam>
     /// <typeparam name="TSerializer">Serializer implementation used for <typeparamref name="T"/>.</typeparam>

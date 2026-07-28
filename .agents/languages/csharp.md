@@ -34,7 +34,7 @@ Load this file when changing `csharp/` or C# xlang behavior.
   a second metadata owner. Reject duplicate generated owners by target at
   compile time and deterministically on the cold cross-assembly
   factory-registration path. Last-writer-wins generated factories are
-  forbidden; explicit manual serializer replacement uses normal resolver
+  forbidden; explicit custom serializer replacement uses normal resolver
   semantics.
 - One concrete ordinary class serializer owns one flattened wire-member set.
   Every first-party class in the hierarchy must carry a direct `[ForyStruct]`
@@ -50,7 +50,7 @@ Load this file when changing `csharp/` or C# xlang behavior.
   targets may use exact `TargetDeclaringType` and `TargetMemberName` mappings
   for renamed and inaccessible fields. External struct targets support visible
   member mappings only. Constructor-only, factory-only, readonly, init-only,
-  converted, or custom-wire targets use a manual serializer. Derive allocation,
+  converted, or custom-wire targets use a custom serializer. Derive allocation,
   reference publication, default value, and graph-memory behavior from the
   target class/struct kind, never the declaration kind.
 - An external class declaration owns the exact third-party wire and physical

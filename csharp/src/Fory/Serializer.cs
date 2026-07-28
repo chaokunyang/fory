@@ -19,7 +19,7 @@ namespace Apache.Fory;
 
 /// <summary>
 /// Base contract for serializers of <typeparamref name="T"/>. Applications subclass it to
-/// implement a manual serializer.
+/// implement a custom serializer.
 /// </summary>
 /// <typeparam name="T">Runtime value type handled by this serializer.</typeparam>
 public abstract class Serializer<T>

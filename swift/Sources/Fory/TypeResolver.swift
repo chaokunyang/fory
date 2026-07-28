@@ -1165,7 +1165,7 @@ final class TypeResolver {
 
         guard typeID == .ext else {
             throw ForyError.invalidData(
-                "manual serializer \(type) must use EXT type identity")
+                "custom serializer \(type) must use EXT type identity")
         }
     }
 

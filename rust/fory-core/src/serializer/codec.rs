@@ -17,7 +17,7 @@
 
 //! Internal field codecs used by macro-generated serializers.
 //!
-//! Manual serialization belongs in [`crate::Serializer`]. Codecs are
+//! Custom serialization belongs in [`crate::Serializer`]. Codecs are
 //! Fory-owned building blocks that allow generated code to apply field-local and
 //! nested collection configuration without creating wrapper value types.
 

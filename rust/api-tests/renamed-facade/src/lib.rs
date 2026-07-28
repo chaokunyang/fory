@@ -205,7 +205,7 @@ mod tests {
     }
 
     #[test]
-    fn renamed_manual_and_trait_roots() {
+    fn renamed_custom_and_trait_roots() {
         let mut fory = Fory::builder().xlang(false).compatible(false).build();
         register_types(&mut fory);
 

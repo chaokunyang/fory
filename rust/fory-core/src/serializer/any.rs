@@ -59,7 +59,7 @@ fn is_erased_any_container_type(type_id: TypeId) -> bool {
 fn unsupported_erased_any_container() -> Error {
     Error::type_error(
         "built-in list, set, map, binary, and primitive-array values cannot be top-level erased \
-         Any or application-trait payloads; register an exact manual EXT serializer for the whole \
+         Any or application-trait payloads; register an exact custom EXT serializer for the whole \
          target or wrap it in a registered structural type",
     )
 }

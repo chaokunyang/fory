@@ -87,7 +87,7 @@ const (
 	NAMED_STRUCT = 29
 	// NAMED_COMPATIBLE_STRUCT a compatible_struct whose type mapping will be encoded as a name
 	NAMED_COMPATIBLE_STRUCT = 30
-	// EXT a type which will be serialized by a customized serializer
+	// EXT a type which will be serialized by a custom serializer
 	EXT = 31
 	// NAMED_EXT an ext type whose type mapping will be encoded as a name
 	NAMED_EXT = 32

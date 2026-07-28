@@ -588,7 +588,7 @@ impl Fory {
     /// Serializes a value using the explicitly selected serializer.
     ///
     /// `record` must be exactly [`Serializer::Target`] for `S`. Register `S`
-    /// first when it is an independently registered structural or manual serializer. Fory-owned
+    /// first when it is an independently registered structural or custom serializer. Fory-owned
     /// carrier serializers compose their child serializers and are not registered.
     pub fn serialize_with<S>(&self, record: &S::Target) -> Result<Vec<u8>, Error>
     where
@@ -930,13 +930,13 @@ impl Fory {
         self.type_resolver.register_union_by_name::<S>(name)
     }
 
-    /// Registers a manual serializer with a numeric type ID.
+    /// Registers a custom serializer with a numeric type ID.
     ///
     /// # Type Parameters
     ///
-    /// * `S` - The manual EXT serializer to register.
+    /// * `S` - The custom EXT serializer to register.
     ///   Unlike `register()`, this does not require `StructSerializer`, making it suitable
-    ///   for non-struct types or types with manual serialization logic.
+    ///   for non-struct types or types with custom serialization logic.
     ///
     /// # Arguments
     ///
@@ -944,7 +944,7 @@ impl Fory {
     ///
     /// # Use Cases
     ///
-    /// Use this method for a manual serializer that declares the EXT
+    /// Use this method for a custom serializer that declares the EXT
     /// wire category and implements opaque, hand-written serialization for its target.
     ///
     /// # Examples
@@ -960,11 +960,11 @@ impl Fory {
         self.type_resolver.register_serializer::<S>(id)
     }
 
-    /// Registers a manual serializer with a qualified type name.
+    /// Registers a custom serializer with a qualified type name.
     ///
     /// # Type Parameters
     ///
-    /// * `S` - The manual EXT serializer to register.
+    /// * `S` - The custom EXT serializer to register.
     ///
     /// # Arguments
     ///

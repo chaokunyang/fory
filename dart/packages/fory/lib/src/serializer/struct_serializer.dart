@@ -345,7 +345,7 @@ bool _compatibleFieldType(
   final sameWireFamily =
       localType.typeId == remoteType.typeId ||
       _compatibleUnknownUserType(localType, remoteType) ||
-      _compatibleGeneratedManualUserType(localType, remoteType) ||
+      _compatibleGeneratedCustomUserType(localType, remoteType) ||
       (_isStructTypeId(localType.typeId) && _isStructTypeId(remoteType.typeId));
   if (!sameWireFamily ||
       localType.arguments.length != remoteType.arguments.length) {
@@ -396,14 +396,14 @@ bool _isStructTypeId(int typeId) =>
     typeId == TypeIds.namedStruct ||
     typeId == TypeIds.namedCompatibleStruct;
 
-bool _isManualUserTypeId(int typeId) =>
+bool _isCustomUserTypeId(int typeId) =>
     typeId == TypeIds.ext ||
     typeId == TypeIds.namedExt ||
     typeId == TypeIds.union ||
     typeId == TypeIds.typedUnion ||
     typeId == TypeIds.namedUnion;
 
-bool _compatibleGeneratedManualUserType(
+bool _compatibleGeneratedCustomUserType(
   FieldType localType,
   FieldType remoteType,
 ) {
@@ -411,8 +411,8 @@ bool _compatibleGeneratedManualUserType(
     return false;
   }
   return (_isStructTypeId(localType.typeId) &&
-          _isManualUserTypeId(remoteType.typeId)) ||
-      (_isManualUserTypeId(localType.typeId) &&
+          _isCustomUserTypeId(remoteType.typeId)) ||
+      (_isCustomUserTypeId(localType.typeId) &&
           _isStructTypeId(remoteType.typeId));
 }
 

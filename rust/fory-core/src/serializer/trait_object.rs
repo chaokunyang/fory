@@ -35,7 +35,7 @@ impl<T: Any> ForyObject for T {
 /// Generates serializers for a closed set of concrete application-trait targets.
 ///
 /// The listed types are runtime target types. Their registered ordinary serializer,
-/// external structural serializer, or manual serializer determines wire behavior.
+/// external structural serializer, or custom serializer determines wire behavior.
 ///
 /// ```rust,ignore
 /// use fory::{register_trait_type, ForyObject};

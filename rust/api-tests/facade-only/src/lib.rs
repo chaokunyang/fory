@@ -479,7 +479,7 @@ mod tests {
     }
 
     #[test]
-    fn external_and_manual_roots() {
+    fn external_and_custom_roots() {
         let mut fory = Fory::builder().xlang(false).compatible(false).build();
         register_types(&mut fory);
 

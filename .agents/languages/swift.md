@@ -19,7 +19,7 @@ Load this file when changing `swift/` or Swift xlang behavior.
 - Keep `Serializer` as static value-level behavior for one exact `Target`. `FieldCodec` layers
   field-only schema and compatibility behavior over that value behavior; `Serializer` must not
   depend on `FieldCodec`.
-- Manual serialization is not external-only. Static selection follows provider ownership at every
+- Custom serialization is not external-only. Static selection follows provider ownership at every
   root, field, and carrier node. A target with `Target == Self`, including an intentional
   retroactive conformance on an external type, composes implicitly everywhere. A separate
   serializer whose `Target` is another type composes explicitly everywhere; registration must not
@@ -52,7 +52,7 @@ Load this file when changing `swift/` or Swift xlang behavior.
   and validation entrances `@inline(never)`; successful work is not cold, although a measured
   composite external structural success body may remain deliberately out of line.
 - `OptionalSerializer` has `isWrapper == true` because it has no independent registration
-  identity. A manual serializer targeting the same Swift shape remains false because it owns an
+  identity. A custom serializer targeting the same Swift shape remains false because it owns an
   independent opaque EXT body.
 - A dynamic existential uses conservative reference-envelope capability, but graph slot accounting
   uses its declared `MemoryLayout<T>.stride`; concrete reference ownership comes from resolved

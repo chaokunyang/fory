@@ -34,7 +34,7 @@ import 'package:fory/src/serializer/serializer.dart';
 ///
 /// Typical usage is:
 /// 1. create a [Fory] instance
-/// 2. register generated types or register manual serializers
+/// 2. register generated types or register custom serializers
 /// 3. call [serialize] and [deserialize]
 ///
 /// The Dart runtime only supports xlang payloads.
@@ -225,7 +225,7 @@ final class Fory {
   ///
   /// Generated struct and enum registration should normally flow through the
   /// generated Fory module, which installs generated metadata into the
-  /// internal registry before calling this method. For manual serializers,
+  /// internal registry before calling this method. For custom serializers,
   /// including unions, use [registerSerializer].
   void register(Type type, {int? id, String? name}) {
     _typeResolver.registerGenerated(
@@ -236,7 +236,7 @@ final class Fory {
     );
   }
 
-  /// Registers a manual serializer for [type].
+  /// Registers a custom serializer for [type].
   ///
   /// Exactly one registration mode is required:
   /// - pass [id] for id-based registration, or
@@ -245,7 +245,7 @@ final class Fory {
   /// [name] may include a namespace prefix separated by `.`, such as
   /// `example.Person`. The final segment is the type name.
   ///
-  /// This is the advanced escape hatch for external types, manual unions, or
+  /// This is the advanced escape hatch for external types, custom unions, or
   /// custom wire behavior. Prefer [register] for generated types.
   void registerSerializer(
     Type type,

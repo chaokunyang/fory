@@ -102,19 +102,17 @@ class BudgetHierarchyBase {
   @ForyField(id: 30, type: Int32Type())
   int baseValue = 0;
 
-  @ForyField(ignore: true)
-  int ignoredBase = 0;
+  int _ignoredBase = 0;
 }
 
 mixin BudgetHierarchyMixin {
   @ForyField(id: 10, type: Int32Type())
   int mixinValue = 0;
 
-  @ForyField(ignore: true)
-  int ignoredMixin = 0;
+  int _ignoredMixin = 0;
 }
 
-@ForyStruct()
+@ForyStruct(ignoreInheritedPrivateFields: true)
 class BudgetHierarchyChild extends BudgetHierarchyBase
     with BudgetHierarchyMixin {
   BudgetHierarchyChild();
@@ -373,9 +371,9 @@ void main() {
       final bytes = writer.serialize(
         BudgetHierarchyChild()
           ..baseValue = 30
-          ..ignoredBase = 31
+          .._ignoredBase = 31
           ..mixinValue = 10
-          ..ignoredMixin = 11
+          .._ignoredMixin = 11
           ..childValue = 20,
       );
       final required = _objectGraphBytes(5);
@@ -393,8 +391,8 @@ void main() {
       expect(roundTrip.baseValue, equals(30));
       expect(roundTrip.mixinValue, equals(10));
       expect(roundTrip.childValue, equals(20));
-      expect(roundTrip.ignoredBase, isZero);
-      expect(roundTrip.ignoredMixin, isZero);
+      expect(roundTrip._ignoredBase, isZero);
+      expect(roundTrip._ignoredMixin, isZero);
     });
 
     test('reserves map entries', () {
@@ -520,8 +518,8 @@ void main() {
       expect(roundTrip.baseValue, isZero);
       expect(roundTrip.mixinValue, isZero);
       expect(roundTrip.childValue, equals(20));
-      expect(roundTrip.ignoredBase, isZero);
-      expect(roundTrip.ignoredMixin, isZero);
+      expect(roundTrip._ignoredBase, isZero);
+      expect(roundTrip._ignoredMixin, isZero);
     });
 
     test('skips strings binary and dense typed arrays', () {

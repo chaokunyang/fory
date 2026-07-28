@@ -50,3 +50,17 @@ abstract class PublicMiddleBoundary extends PublicGenericBoundary<String>
     _sharedName = value;
   }
 }
+
+class UnexposedPrivateMiddle extends UnexposedPrivateBase
+    with UnexposedPrivateMixin {
+  String _middlePrivate = 'middle-private-default';
+
+  @ForyField(id: 20)
+  String middlePublic = '';
+
+  String get middlePrivate => _middlePrivate;
+
+  void setMiddlePrivate(String value) {
+    _middlePrivate = value;
+  }
+}

@@ -39,6 +39,14 @@ final class CrossLibraryChild extends middle.PublicMiddleBoundary {
   String childMutable = '';
 }
 
+@ForyStruct(ignoreInheritedPrivateFields: true)
+final class IgnoringPrivateChild extends middle.UnexposedPrivateMiddle {
+  IgnoringPrivateChild();
+
+  @ForyField(id: 10)
+  String childPublic = '';
+}
+
 class OptionalMutableBase {
   OptionalMutableBase([int decoded = 0])
     : inheritedMutable = decoded,

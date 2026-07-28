@@ -368,6 +368,86 @@ class PrivateFinalChild extends PrivateFinalParent {
       );
     });
 
+    test('filters inherited private storage before schema analysis', () async {
+      await _expectGenerationOutput(
+        source: '''
+class PolicyBase {
+  Object? _baseSecret;
+  Object? inheritedPublic;
+}
+
+mixin PolicyMixin {
+  @ForyField(ref: true)
+  Object? _mixinSecret;
+
+  Object? mixinPublic;
+}
+
+@ForyStruct(ignoreInheritedPrivateFields: true)
+class PolicyChild extends PolicyBase with PolicyMixin {
+  PolicyChild();
+
+  Object? _childPrivate;
+  Object? childPublic;
+}
+''',
+        output: allOf(
+          _wireFieldsInOrder(const <String>[
+            '_child_private',
+            'child_public',
+            'inherited_public',
+            'mixin_public',
+          ]),
+          contains('needsRootRef: false,'),
+          isNot(contains("identifier: '_base_secret',")),
+          isNot(contains("identifier: '_mixin_secret',")),
+          isNot(contains('context.reference(value);')),
+        ),
+      );
+    });
+
+    test('does not inherit the parent omission policy', () async {
+      await _expectGenerationOutput(
+        source: '''
+class PolicyRoot {
+  Object? _rootSecret;
+}
+
+@ForyStruct(ignoreInheritedPrivateFields: true)
+class PolicyParent extends PolicyRoot {
+  PolicyParent();
+}
+
+@ForyStruct()
+class PolicyChild extends PolicyParent {
+  PolicyChild();
+}
+''',
+        output: allOf(
+          _containsOnce("identifier: '_root_secret',"),
+          contains('value._rootSecret'),
+        ),
+      );
+    });
+
+    test('keeps strict construction after private filtering', () async {
+      await _expectGenerationError(
+        source: '''
+class RequiredPrivateBase {
+  RequiredPrivateBase(int decoded) : _secret = decoded;
+
+  final int _secret;
+}
+
+@ForyStruct(ignoreInheritedPrivateFields: true)
+class RequiredPrivateChild extends RequiredPrivateBase {
+  RequiredPrivateChild(int decoded) : super(decoded);
+}
+''',
+        message: 'has no serialized field connected by an exact',
+      );
+    });
+
     test(
       'ignores only declaration-owned fields before access checks',
       () async {

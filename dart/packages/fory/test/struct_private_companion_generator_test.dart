@@ -865,9 +865,9 @@ abstract class Boundary {
       expect(output, isNot(contains('static _Count ')));
     });
 
-    test('renders a single-positional record signature exactly', () async {
+    test('rejects record signatures unsupported by ordinary structs', () async {
       const inputPath = 'test/record_signature.dart';
-      final output = await _generate(
+      await _expectGenerationError(
         inputPath: inputPath,
         source: _librarySource(inputPath, '''
 @ForyStruct(exposePrivateFields: true)
@@ -875,11 +875,7 @@ abstract class Boundary {
   (int,) _value = (0,);
 }
 '''),
-      );
-
-      expect(
-        output,
-        matches(RegExp(r'static \(int,\) \$g[0-9a-f]{16}\(Boundary value\)')),
+        message: 'ordinary ForyStruct fields do not support record types',
       );
     });
 

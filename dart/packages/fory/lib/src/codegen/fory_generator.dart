@@ -1426,6 +1426,14 @@ final class ForyGenerator extends Generator {
         element: boundary,
       );
     }
+    if (type is RecordType || type.isDartCoreRecord) {
+      throw InvalidGenerationSourceError(
+        'Private-field companion for ${boundary.displayName} cannot expose '
+        'record type ${type.getDisplayString()} because ordinary ForyStruct '
+        'fields do not support record types.',
+        element: boundary,
+      );
+    }
     final nullable =
         type.nullabilitySuffix == NullabilitySuffix.question ? '?' : '';
     final alias = type.alias;
@@ -1482,33 +1490,6 @@ final class ForyGenerator extends Generator {
         );
       }
       return '${type.element.displayName}$nullable';
-    }
-    if (type is RecordType) {
-      final positional = <String>[];
-      for (final field in type.positionalFields) {
-        positional.add(
-          _companionTypeCode(
-            field.type,
-            boundary,
-            allowedTypeParameters: allowedTypeParameters,
-            requireNamespace: requireNamespace,
-            useAlias: useAlias,
-          ),
-        );
-      }
-      final named = <String>[];
-      for (final field in type.namedFields) {
-        named.add(
-          '${_companionTypeCode(field.type, boundary, allowedTypeParameters: allowedTypeParameters, requireNamespace: requireNamespace, useAlias: useAlias)} '
-          '${field.name}',
-        );
-      }
-      final components = <String>[
-        ...positional,
-        if (named.isNotEmpty) '{${named.join(', ')}}',
-      ];
-      final trailingComma = positional.length == 1 && named.isEmpty ? ',' : '';
-      return '(${components.join(', ')}$trailingComma)$nullable';
     }
     throw InvalidGenerationSourceError(
       'Private-field companion for ${boundary.displayName} cannot render '

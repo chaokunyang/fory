@@ -505,7 +505,7 @@ final class _OrdinaryConstructorAnalyzer {
     _ConstructorFrame frame,
     _ConstructorFrame targetFrame,
     ConstructorElement? invokedConstructor,
-    Iterable<Expression> arguments,
+    Iterable<AstNode> arguments,
   ) {
     if (invokedConstructor == null ||
         !identical(
@@ -518,24 +518,32 @@ final class _OrdinaryConstructorAnalyzer {
       );
       return;
     }
+    var positionalIndex = 0;
     for (final argument in arguments) {
-      final correspondingParameter = argument.correspondingParameter;
-      if (correspondingParameter == null) {
+      final firstToken = argument.beginToken;
+      final named = firstToken.next?.lexeme == ':';
+      final target = _invocationTarget(
+        targetFrame,
+        firstToken.lexeme,
+        named,
+        positionalIndex,
+      );
+      if (!named) {
+        positionalIndex += 1;
+      }
+      if (target == null) {
         frame.recordIssue(
           'constructor argument has no resolved target parameter',
         );
         continue;
       }
-      final target = targetFrame.parameterFor(correspondingParameter);
-      if (target == null) {
+      final value = _invocationValue(argument, named);
+      if (value == null) {
         frame.recordIssue(
-          'constructor argument does not map to an instantiated parameter on '
-          '${_constructorLabel(targetFrame.constructor)}',
+          'constructor argument has no resolved value expression',
         );
         continue;
       }
-      final value =
-          argument is NamedExpression ? argument.expression : argument;
       final source = _directParameter(value, frame);
       if (source == null) {
         frame.recordIssue(
@@ -546,6 +554,52 @@ final class _OrdinaryConstructorAnalyzer {
       }
       _addParameterEdge(frame, source, target);
     }
+  }
+
+  _ParameterNode? _invocationTarget(
+    _ConstructorFrame frame,
+    String argumentName,
+    bool named,
+    int positionalIndex,
+  ) {
+    var currentPositionalIndex = 0;
+    for (final parameter in frame.parameters) {
+      if (named) {
+        if (parameter.parameter.isNamed &&
+            parameter.parameter.displayName == argumentName) {
+          return parameter;
+        }
+        continue;
+      }
+      if (!parameter.parameter.isPositional) {
+        continue;
+      }
+      if (currentPositionalIndex == positionalIndex) {
+        return parameter;
+      }
+      currentPositionalIndex += 1;
+    }
+    return null;
+  }
+
+  Expression? _invocationValue(AstNode argument, bool named) {
+    if (!named) {
+      return argument is Expression ? argument : null;
+    }
+    // Supported analyzer versions use different public node types for named
+    // arguments. Dart grammar still gives both representations exactly one
+    // direct value expression after the name and colon.
+    Expression? value;
+    for (final child in argument.childEntities) {
+      if (child is! Expression) {
+        continue;
+      }
+      if (value != null) {
+        return null;
+      }
+      value = child;
+    }
+    return value;
   }
 
   void _addFieldEdge(

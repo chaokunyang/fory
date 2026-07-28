@@ -59,6 +59,23 @@ final class OptionalMutableChild extends OptionalMutableBase {
   final int fixed;
 }
 
+class AllWritableOptionalBase {
+  AllWritableOptionalBase([int decoded = 0])
+    : inheritedMutable = decoded,
+      observedAtConstruction = decoded;
+
+  @ForyField(id: 1)
+  int inheritedMutable;
+
+  @ForyField(ignore: true)
+  final int observedAtConstruction;
+}
+
+@ForyStruct()
+final class AllWritableOptionalChild extends AllWritableOptionalBase {
+  AllWritableOptionalChild([super.decoded]);
+}
+
 @ForyStruct()
 final class XlangInheritedChild extends base.XlangInheritanceBoundary {
   XlangInheritedChild();

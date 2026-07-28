@@ -112,6 +112,22 @@ void main() {
       expect(result.observedAtConstruction, 19);
     });
 
+    test('analyzes optional flow for all-writable state', () {
+      final fory = Fory();
+      InheritanceModelsForyModule.register(
+        fory,
+        AllWritableOptionalChild,
+        id: 406,
+      );
+
+      final result = fory.deserialize<AllWritableOptionalChild>(
+        fory.serialize(AllWritableOptionalChild(23)),
+      );
+
+      expect(result.inheritedMutable, 23);
+      expect(result.observedAtConstruction, 23);
+    });
+
     for (final compatible in <bool>[false, true]) {
       test('matches flat and inherited schemas compatible=$compatible', () {
         final privateFory = Fory(compatible: compatible);

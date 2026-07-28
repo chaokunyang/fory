@@ -875,7 +875,35 @@ abstract class Boundary {
   (int,) _value = (0,);
 }
 '''),
-        message: 'ordinary ForyStruct fields do not support record types',
+        message: 'ordinary ForyStruct fields do not support that type',
+      );
+    });
+
+    test('rejects nominal Function signatures', () async {
+      const inputPath = 'test/function_signature.dart';
+      await _expectGenerationError(
+        inputPath: inputPath,
+        source: _librarySource(inputPath, '''
+@ForyStruct(exposePrivateFields: true)
+abstract class Boundary {
+  Function _callback = () {};
+}
+'''),
+        message: 'Companion signatures must be exact, public, and non-callback',
+      );
+    });
+
+    test('rejects Null signatures unsupported by ordinary structs', () async {
+      const inputPath = 'test/null_signature.dart';
+      await _expectGenerationError(
+        inputPath: inputPath,
+        source: _librarySource(inputPath, '''
+@ForyStruct(exposePrivateFields: true)
+abstract class Boundary {
+  Null _value;
+}
+'''),
+        message: 'ordinary ForyStruct fields do not support that type',
       );
     });
 

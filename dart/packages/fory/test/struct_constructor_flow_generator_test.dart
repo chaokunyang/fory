@@ -205,6 +205,47 @@ final class OptionalMutableChild extends OptionalMutableBase {
       );
     });
 
+    test('analyzes optional flow for an all-writable struct', () async {
+      await _expectGenerationOutput(
+        source: '''
+@ForyStruct()
+final class AllWritableOptionalValue {
+  int value;
+
+  @ForyField(ignore: true)
+  final int observedAtConstruction;
+
+  AllWritableOptionalValue([int decoded = 0])
+    : value = decoded,
+      observedAtConstruction = decoded;
+}
+''',
+        output: allOf(
+          contains('final value = AllWritableOptionalValue(_valueValue);'),
+          isNot(contains('value.value = _valueValue;')),
+        ),
+      );
+    });
+
+    test('keeps an unbound optional constructor mutable', () async {
+      await _expectGenerationOutput(
+        source: '''
+@ForyStruct()
+final class UnboundOptionalSelf {
+  UnboundOptionalSelf({int ignored = 0});
+
+  @ForyField(ref: true)
+  UnboundOptionalSelf? next;
+}
+''',
+        output: allOf(
+          contains('final value = UnboundOptionalSelf();'),
+          contains('context.reference(value);'),
+          isNot(contains('ignored:')),
+        ),
+      );
+    });
+
     test('omits an unbound optional named parameter', () async {
       await _expectGenerationOutput(
         source: '''

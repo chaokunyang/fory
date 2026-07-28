@@ -1418,7 +1418,10 @@ final class ForyGenerator extends Generator {
     bool requireNamespace = true,
     bool useAlias = true,
   }) {
-    if (type is DynamicType || type is FunctionType || type is InvalidType) {
+    if (type is DynamicType ||
+        type is FunctionType ||
+        type is InvalidType ||
+        type.isDartCoreFunction) {
       throw InvalidGenerationSourceError(
         'Private-field companion for ${boundary.displayName} cannot expose '
         '${type.getDisplayString()}. Companion signatures must be exact, '
@@ -1426,11 +1429,11 @@ final class ForyGenerator extends Generator {
         element: boundary,
       );
     }
-    if (type is RecordType || type.isDartCoreRecord) {
+    if (type is RecordType || type.isDartCoreRecord || type.isDartCoreNull) {
       throw InvalidGenerationSourceError(
         'Private-field companion for ${boundary.displayName} cannot expose '
-        'record type ${type.getDisplayString()} because ordinary ForyStruct '
-        'fields do not support record types.',
+        '${type.getDisplayString()} because ordinary ForyStruct fields do '
+        'not support that type.',
         element: boundary,
       );
     }
@@ -2215,7 +2218,7 @@ final class ForyGenerator extends Generator {
     throw InvalidGenerationSourceError(
       'Constructor-based generated serializers cannot bind '
       'reference-tracked self paths before construction. Use a writable '
-      'zero-required-argument generative constructor for $targetTypeLiteral '
+      'zero-parameter generative constructor for $targetTypeLiteral '
       'or a manual serializer. Offending field: '
       '$fieldOwner.${selfRefField.name}.',
       element: declaration,

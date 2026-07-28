@@ -34,23 +34,17 @@ final class _OrdinaryConstructorAnalyzer {
     required ConstructorElement constructor,
     required List<_GeneratedFieldSpec> fields,
   }) async {
-    var mutableConstruction = true;
-    for (final parameter in constructor.formalParameters) {
-      if (!parameter.isOptional) {
-        mutableConstruction = false;
-        break;
-      }
-    }
-    if (mutableConstruction) {
+    if (constructor.formalParameters.isEmpty) {
+      var mutableConstruction = true;
       for (final field in fields) {
         if (!field.writable) {
           mutableConstruction = false;
           break;
         }
       }
-    }
-    if (mutableConstruction) {
-      return const _ConstructionModel.mutable(constructorName: null);
+      if (mutableConstruction) {
+        return const _ConstructionModel.mutable(constructorName: null);
+      }
     }
 
     for (final field in fields) {
@@ -197,6 +191,10 @@ final class _OrdinaryConstructorAnalyzer {
           named: parameter.isNamed,
         ),
       );
+    }
+
+    if (bindingByRoot.isEmpty) {
+      return const _ConstructionModel.mutable(constructorName: null);
     }
 
     final postConstructionFields = Set<_GeneratedFieldSpec>.identity();

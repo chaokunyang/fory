@@ -34,7 +34,7 @@ import matplotlib.pyplot as plt
 from matplotlib.ticker import FuncFormatter
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from plot_style import (  # noqa: E402
+from plot_style import (
     BAR_EDGE_COLOR,
     GROUP_BAR_WIDTH,
     GROUP_X,
@@ -66,6 +66,8 @@ DATATYPE_ORDER = [
     "mediacontentlist",
 ]
 OPERATIONS = ["serialize", "deserialize"]
+DOCS_HEADER = "# Java Benchmarks"
+JSON_REPORT_LINK = "See the [Java JSON benchmark report](json/) for fory-json, Jackson, and Gson results."
 BENCHMARK_PATTERN = re.compile(
     r"(?:^|[.])BM_(?P<serializer>Fory|Protobuf|Flatbuffer)_"
     r"(?P<datatype>NumericStruct|Sample|MediaContent|NumericStructList|SampleList|MediaContentList)_"
@@ -251,15 +253,19 @@ def winner_cell(values: dict) -> str:
 def build_xlang_section(results: dict, image_name: str) -> str:
     lines = [
         "## Xlang Benchmark\n\n",
-        "Run from `benchmarks/java/run.sh`. Raw JMH JSON stays under the ignored local "
-        "`benchmarks/java/reports/` directory; `throughput.png` and this xlang "
-        "section are synced into `docs/benchmarks/java/`.\n\n",
+        (
+            "Run from `benchmarks/java/run.sh`. Raw JMH JSON stays under the ignored local "
+            "`benchmarks/java/reports/` directory; `throughput.png` and this xlang "
+            "section are synced into `docs/benchmarks/java/`.\n\n"
+        ),
         "```bash\n",
         "cd benchmarks/java\n",
         "./run.sh\n",
         "```\n\n",
-        "JMH parameters: `-f 1 -wi 3 -i 3 -t 1 -w 3s -r 3s -bm thrpt -tu s`. "
-        "Higher throughput is better.\n\n",
+        (
+            "JMH parameters: `-f 1 -wi 3 -i 3 -t 1 -w 3s -r 3s -bm thrpt -tu s`. "
+            "Higher throughput is better.\n\n"
+        ),
         f"![Java Xlang Serialization Throughput]({image_name})\n\n",
         "| Data type | Operation | "
         + " | ".join(
@@ -303,6 +309,17 @@ def update_docs_readme(docs_output_dir: Path, section: str) -> Path:
     docs_readme = docs_output_dir / "README.md"
     if docs_readme.exists():
         content = docs_readme.read_text(encoding="utf-8").rstrip()
+        if JSON_REPORT_LINK not in content:
+            if content.startswith(DOCS_HEADER):
+                content = (
+                    DOCS_HEADER
+                    + "\n\n"
+                    + JSON_REPORT_LINK
+                    + "\n\n"
+                    + content[len(DOCS_HEADER) :].lstrip()
+                )
+            else:
+                content = JSON_REPORT_LINK + "\n\n" + content
         marker = "\n## Xlang Benchmark\n"
         if marker in content:
             prefix = content.split(marker, 1)[0].rstrip()
@@ -310,7 +327,7 @@ def update_docs_readme(docs_output_dir: Path, section: str) -> Path:
         else:
             content = content + "\n\n" + section
     else:
-        content = "# Java Benchmarks\n\n" + section
+        content = DOCS_HEADER + "\n\n" + JSON_REPORT_LINK + "\n\n" + section
     docs_readme.write_text(content.rstrip() + "\n", encoding="utf-8")
     run_prettier(docs_readme)
     return docs_readme

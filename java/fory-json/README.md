@@ -10,6 +10,26 @@ system must exchange ordinary JSON with browsers, APIs, logs, configuration, or 
 implementation. Use the Fory binary protocol when you need cross-language schema metadata,
 reference identity, circular graphs, or Fory's binary-only features.
 
+## Performance
+
+The benchmark compares fory-json with Jackson and Gson using String and UTF-8 byte APIs. The String
+group excludes UTF-8 conversion. Gson's byte results include its required String/UTF-8 conversion.
+Higher throughput is better.
+
+<p align="center">
+<img src="../../docs/benchmarks/java/json/string_throughput.png" width="49%" alt="Java JSON String throughput">
+<img src="../../docs/benchmarks/java/json/utf8_bytes_throughput.png" width="49%" alt="Java JSON UTF-8 bytes throughput">
+</p>
+
+| Representation | Operation   | fory-json ops/sec | Jackson ops/sec | Gson ops/sec |
+| -------------- | ----------- | ----------------: | --------------: | -----------: |
+| String         | Serialize   |         7,387,465 |       2,049,368 |    1,084,042 |
+| String         | Deserialize |         2,897,955 |       1,074,885 |      902,772 |
+| UTF-8 bytes    | Serialize   |        10,375,498 |       1,868,614 |    1,037,211 |
+| UTF-8 bytes    | Deserialize |         3,077,158 |       1,268,397 |      933,079 |
+
+See the [full benchmark report](../../docs/benchmarks/java/json/).
+
 ## Requirements and installation
 
 Fory JSON supports Java 8 and later on standard JDKs, GraalVM native images, and Android. Java

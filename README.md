@@ -812,13 +812,12 @@ optimized for maximum performance across JSON encoding, decoding, and Java
 object mapping. It supports Java 8 and later on standard JDKs, GraalVM native
 images, and Android, with Java records supported on Java 17 and later.
 
-### Performance
-
-[Full benchmark report](docs/benchmarks/java/json/)
+**Performance**
 
 The benchmark compares fory-json with Jackson and Gson using String and UTF-8 byte APIs. The String
 group excludes UTF-8 conversion. Gson's byte results include its required String/UTF-8 conversion.
-Higher throughput is better.
+Higher throughput is better. See the [full benchmark report](docs/benchmarks/java/json/) for more
+details.
 
 <p align="center">
 <img src="docs/benchmarks/java/json/string_throughput.png" width="49%" alt="Java JSON String throughput">

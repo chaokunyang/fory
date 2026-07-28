@@ -48,26 +48,6 @@ public class DartXlangTest extends XlangTestBase {
   private static final File DART_FORY_TEST_WORK_DIR = new File("../../dart/packages/fory-test");
   private static final File DART_INHERITANCE_PROVIDER_WORK_DIR =
       new File("../../dart/packages/inheritance-test-models");
-  private static final File DART_XLANG_SOURCE_FILE =
-      new File(DART_FORY_TEST_WORK_DIR, "lib/entity/xlang_test_models.dart");
-  private static final File DART_XLANG_GENERATED_FILE =
-      new File(DART_FORY_TEST_WORK_DIR, "lib/entity/xlang_test_models.fory.dart");
-  private static final File DART_EXTERNAL_SOURCE_FILE =
-      new File(DART_FORY_TEST_WORK_DIR, "lib/model/external_serializers.dart");
-  private static final File DART_EXTERNAL_GENERATED_FILE =
-      new File(DART_FORY_TEST_WORK_DIR, "lib/model/external_serializers.fory.dart");
-  private static final File DART_INHERITANCE_SOURCE_FILE =
-      new File(DART_FORY_TEST_WORK_DIR, "lib/model/inheritance_models.dart");
-  private static final File DART_INHERITANCE_GENERATED_FILE =
-      new File(DART_FORY_TEST_WORK_DIR, "lib/model/inheritance_models.fory.dart");
-  private static final File DART_INHERITANCE_BASE_SOURCE_FILE =
-      new File(DART_INHERITANCE_PROVIDER_WORK_DIR, "lib/base_models.dart");
-  private static final File DART_INHERITANCE_BASE_GENERATED_FILE =
-      new File(DART_INHERITANCE_PROVIDER_WORK_DIR, "lib/base_models.fory.dart");
-  private static final File DART_INHERITANCE_MIDDLE_SOURCE_FILE =
-      new File(DART_INHERITANCE_PROVIDER_WORK_DIR, "lib/middle_models.dart");
-  private static final File DART_INHERITANCE_MIDDLE_GENERATED_FILE =
-      new File(DART_INHERITANCE_PROVIDER_WORK_DIR, "lib/middle_models.fory.dart");
   private static final String DART_MODULE =
       "packages/fory-test/test/cross_lang_test/xlang_test_main.dart";
   private static final List<String> DART_CODEGEN_COMMAND =
@@ -113,27 +93,11 @@ public class DartXlangTest extends XlangTestBase {
   }
 
   private static synchronized void ensureGeneratedXlangSpecs() {
-    boolean providerReady =
-        generatedAfter(DART_INHERITANCE_BASE_GENERATED_FILE, DART_INHERITANCE_BASE_SOURCE_FILE)
-            && generatedAfter(
-                DART_INHERITANCE_MIDDLE_GENERATED_FILE, DART_INHERITANCE_MIDDLE_SOURCE_FILE);
-    boolean consumerReady =
-        generatedAfter(DART_XLANG_GENERATED_FILE, DART_XLANG_SOURCE_FILE)
-            && generatedAfter(DART_EXTERNAL_GENERATED_FILE, DART_EXTERNAL_SOURCE_FILE)
-            && generatedAfter(
-                DART_INHERITANCE_GENERATED_FILE,
-                DART_INHERITANCE_SOURCE_FILE,
-                DART_INHERITANCE_BASE_GENERATED_FILE,
-                DART_INHERITANCE_MIDDLE_GENERATED_FILE);
-    if (providerReady && consumerReady) {
-      return;
-    }
-    if (!providerReady
-        && !TestUtils.executeCommand(
-            DART_CODEGEN_COMMAND,
-            DART_SETUP_TIMEOUT_SECONDS,
-            Collections.emptyMap(),
-            DART_INHERITANCE_PROVIDER_WORK_DIR)) {
+    if (!TestUtils.executeCommand(
+        DART_CODEGEN_COMMAND,
+        DART_SETUP_TIMEOUT_SECONDS,
+        Collections.emptyMap(),
+        DART_INHERITANCE_PROVIDER_WORK_DIR)) {
       throw new IllegalStateException(
           "Failed to generate Dart inheritance providers by command: "
               + String.join(" ", DART_CODEGEN_COMMAND));
@@ -147,18 +111,6 @@ public class DartXlangTest extends XlangTestBase {
           "Failed to generate Dart xlang specs by command: "
               + String.join(" ", DART_CODEGEN_COMMAND));
     }
-  }
-
-  private static boolean generatedAfter(File output, File... inputs) {
-    if (!output.isFile()) {
-      return false;
-    }
-    for (File input : inputs) {
-      if (!input.isFile() || output.lastModified() < input.lastModified()) {
-        return false;
-      }
-    }
-    return true;
   }
 
   // ============================================================================

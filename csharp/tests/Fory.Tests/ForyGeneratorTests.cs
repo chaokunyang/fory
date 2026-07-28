@@ -872,6 +872,19 @@ public sealed class ForyGeneratorTests
         "Parent",
         """
         public static readonly long HierarchyShallowBytes;
+        """)]
+    [InlineData(
+        "Parent",
+        """
+        public static readonly long HierarchyShallowBytes;
+
+        [ForyGeneratedWireMember(1, typeof(Parent), "Value", "Value")]
+        public static ref int F1(Parent value) => ref value.Value;
+        """)]
+    [InlineData(
+        "Parent",
+        """
+        public static readonly long HierarchyShallowBytes;
 
         [ForyGeneratedWireMember(0, typeof(Parent), "Value", "Value")]
         private static ref int F0(Parent value) => ref value.Value;
@@ -972,7 +985,7 @@ public sealed class ForyGeneratorTests
             using Apache.Fory;
             using ParentModels;
             namespace Apache.Fory.Generated;
-            [ForyGeneratedHierarchyProvider(typeof({{markerTarget}}))]
+            [ForyGeneratedHierarchyProvider(typeof({{markerTarget}}), 1)]
             public static class {{providerName}}
             {
             {{providerMembers}}

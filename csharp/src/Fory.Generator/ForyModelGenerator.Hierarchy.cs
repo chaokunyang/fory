@@ -336,8 +336,10 @@ public sealed partial class ForyModelGenerator
                 "Apache.Fory.ForyGeneratedHierarchyProviderAttribute",
                 StringComparison.Ordinal));
         if (marker is null ||
-            marker.ConstructorArguments.Length != 1 ||
+            marker.ConstructorArguments.Length != 2 ||
             marker.ConstructorArguments[0].Value is not INamedTypeSymbol markerTarget ||
+            marker.ConstructorArguments[1].Value is not int declaredWireMemberCount ||
+            declaredWireMemberCount < 0 ||
             !RuntimeTypeComparer.Instance.Equals(markerTarget, expectedTarget))
         {
             diagnostics.Add(Diagnostic.Create(
@@ -345,7 +347,7 @@ public sealed partial class ForyModelGenerator
                 consumer.DeclarationLocation,
                 consumer.TargetTypeName,
                 providerTypeName,
-                "the provider marker does not bind the expected target"));
+                "the provider marker is malformed or does not bind the expected target"));
             provider = null;
             return false;
         }
@@ -406,6 +408,7 @@ public sealed partial class ForyModelGenerator
                 providerType,
                 expectedTarget,
                 ordinaryProvider,
+                declaredWireMemberCount,
                 diagnostics,
                 out ImmutableArray<MemberModel> declaredMembers))
         {
@@ -427,6 +430,7 @@ public sealed partial class ForyModelGenerator
         INamedTypeSymbol providerType,
         INamedTypeSymbol providerTarget,
         bool ordinaryProvider,
+        int declaredWireMemberCount,
         List<Diagnostic> diagnostics,
         out ImmutableArray<MemberModel> members)
     {
@@ -477,6 +481,33 @@ public sealed partial class ForyModelGenerator
         }
 
         parsedMembers.Sort((left, right) => left.Ordinal.CompareTo(right.Ordinal));
+        if (parsedMembers.Count != declaredWireMemberCount)
+        {
+            diagnostics.Add(Diagnostic.Create(
+                InvalidInheritedDescriptor,
+                consumer.DeclarationLocation,
+                consumer.TargetTypeName,
+                providerType.ToDisplayString(FullNameFormat),
+                $"provider declares {declaredWireMemberCount} wire members but publishes {parsedMembers.Count} descriptors"));
+            members = ImmutableArray<MemberModel>.Empty;
+            return false;
+        }
+
+        for (int ordinal = 0; ordinal < parsedMembers.Count; ordinal++)
+        {
+            if (parsedMembers[ordinal].Ordinal != ordinal)
+            {
+                diagnostics.Add(Diagnostic.Create(
+                    InvalidInheritedDescriptor,
+                    consumer.DeclarationLocation,
+                    consumer.TargetTypeName,
+                    providerType.ToDisplayString(FullNameFormat),
+                    $"wire descriptor ordinal {parsedMembers[ordinal].Ordinal} is not contiguous"));
+                members = ImmutableArray<MemberModel>.Empty;
+                return false;
+            }
+        }
+
         members = parsedMembers
             .Select(entry => entry.Member)
             .ToImmutableArray();

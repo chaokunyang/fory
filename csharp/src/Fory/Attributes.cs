@@ -206,15 +206,29 @@ public sealed class ForyGeneratedHierarchyProviderAttribute : Attribute
     /// Initializes a generated hierarchy provider for <paramref name="targetType"/>.
     /// </summary>
     /// <param name="targetType">The exact class hierarchy target supplied by the provider.</param>
-    public ForyGeneratedHierarchyProviderAttribute(Type targetType)
+    /// <param name="wireMemberCount">The number of declaration-owned wire members.</param>
+    public ForyGeneratedHierarchyProviderAttribute(
+        Type targetType,
+        int wireMemberCount)
     {
+        if (wireMemberCount < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(wireMemberCount));
+        }
+
         TargetType = targetType;
+        WireMemberCount = wireMemberCount;
     }
 
     /// <summary>
     /// Gets the exact class hierarchy target supplied by the provider.
     /// </summary>
     public Type TargetType { get; }
+
+    /// <summary>
+    /// Gets the number of declaration-owned wire members.
+    /// </summary>
+    public int WireMemberCount { get; }
 }
 
 /// <summary>

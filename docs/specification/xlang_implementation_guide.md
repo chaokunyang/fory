@@ -244,6 +244,7 @@ Each inheritable ordinary class publishes a target-keyed compiler contract
 containing:
 
 - its exact target;
+- its exact directly declared wire-member count;
 - one descriptor on each deterministic accessor for a directly declared wire
   member: fields use a writable `ref` accessor, while properties use a getter
   plus a matching setter; and

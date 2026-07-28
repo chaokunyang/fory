@@ -38,13 +38,13 @@ Load this file when changing `csharp/` or C# xlang behavior.
   semantics.
 - One concrete ordinary class serializer owns one flattened wire-member set.
   Every first-party class in the hierarchy must carry a direct `[ForyStruct]`
-  annotation. Each inheritable generated base provider publishes only its
-  declared wire descriptors/accessors and cumulative `HierarchyShallowBytes`; a
-  child consumes the immediate accessible provider and adds only its
-  directly declared physical fields. A sealed serializer keeps its final
-  cumulative expression private. Do not scan referenced private metadata,
-  reconstruct parent storage, call parent serializer bodies, or derive storage
-  from wire members.
+  annotation. Each inheritable generated base provider publishes only its exact
+  declared wire-descriptor count, descriptors/accessors, and cumulative
+  `HierarchyShallowBytes`; a child consumes the immediate accessible provider
+  and adds only its directly declared physical fields. A sealed serializer
+  keeps its final cumulative expression private. Do not scan referenced private
+  metadata, reconstruct parent storage, call parent serializer bodies, or derive
+  storage from wire members.
 - External structural serializers use direct target construction and member
   access under the mutable parameterless-construction contract. External class
   targets may use exact `TargetDeclaringType` and `TargetMemberName` mappings

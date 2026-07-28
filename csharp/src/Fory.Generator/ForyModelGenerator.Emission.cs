@@ -31,7 +31,7 @@ public sealed partial class ForyModelGenerator
             if (model.PublishesHierarchy)
             {
                 sb.AppendLine(
-                    $"[global::Apache.Fory.ForyGeneratedHierarchyProvider(typeof({model.TargetTypeName}))]");
+                    $"[global::Apache.Fory.ForyGeneratedHierarchyProvider(typeof({model.TargetTypeName}), {model.DeclaredMembers.Length})]");
                 sb.AppendLine("[global::System.Runtime.CompilerServices.CompilerGenerated]");
                 sb.AppendLine(
                     "[global::System.ComponentModel.EditorBrowsable(global::System.ComponentModel.EditorBrowsableState.Never)]");

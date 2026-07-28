@@ -2577,7 +2577,7 @@ public sealed partial class ForyModelGenerator
         foreach (MemberModel member in ordered)
         {
             string piece =
-                $"\"{EscapeString(BuildSchemaFieldIdentifier(member))},\" + {BuildSchemaFieldTypeFingerprintExpression(member.TypeMeta, "trackRef", includeNullable: true)} + \";\"";
+                $"\"{EscapeString(BuildSchemaFieldIdentifier(member))},\" + {BuildSchemaFieldTypeFingerprint(member.TypeMeta, "trackRef", includeNullable: true)} + \";\"";
             if (!first)
             {
                 sb.Append(" + ");
@@ -2597,7 +2597,7 @@ public sealed partial class ForyModelGenerator
             : member.FieldIdentifier;
     }
 
-    private static string BuildSchemaFieldTypeFingerprintExpression(
+    private static string BuildSchemaFieldTypeFingerprint(
         TypeMetaFieldTypeModel model,
         string trackRefExpr,
         bool includeNullable)
@@ -2616,14 +2616,14 @@ public sealed partial class ForyModelGenerator
 
         if (model.Generics.Length == 1)
         {
-            string child = BuildSchemaFieldTypeFingerprintExpression(model.Generics[0], "false", includeNullable: false);
+            string child = BuildSchemaFieldTypeFingerprint(model.Generics[0], "false", includeNullable: false);
             return $"{prefix} + \"[\" + {child} + \"]\"";
         }
 
         if (model.Generics.Length == 2)
         {
-            string key = BuildSchemaFieldTypeFingerprintExpression(model.Generics[0], "false", includeNullable: false);
-            string value = BuildSchemaFieldTypeFingerprintExpression(model.Generics[1], "false", includeNullable: false);
+            string key = BuildSchemaFieldTypeFingerprint(model.Generics[0], "false", includeNullable: false);
+            string value = BuildSchemaFieldTypeFingerprint(model.Generics[1], "false", includeNullable: false);
             return $"{prefix} + \"[\" + {key} + \"|\" + {value} + \"]\"";
         }
 

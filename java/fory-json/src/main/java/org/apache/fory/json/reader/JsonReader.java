@@ -190,6 +190,8 @@ public abstract class JsonReader {
           throw errorAt("Expected ':'", cursor);
         }
         cursor = scanWhitespace(cursor + 1);
+        // The hash selects only the declared discriminator-property candidate. The complete
+        // decoded member name must match before this field can control subtype selection.
         if (fieldHash == info.propertyHash()
             && matchesScannedString(fieldStart, fieldEnd, info.property())) {
           if (found >= 0) {
@@ -201,6 +203,8 @@ public abstract class JsonReader {
           int valueStart = cursor;
           int valueEnd = scanStringEnd(valueStart);
           int candidate = info.nameIndex(scanStringHash(valueStart, valueEnd));
+          // Logical subtype names use the same two-stage contract: select by hash, then compare the
+          // complete decoded name before returning the closed-table class index.
           if (candidate < 0 || !matchesScannedString(valueStart, valueEnd, info.name(candidate))) {
             throw errorAt("Unknown JSON subtype discriminator", valueStart);
           }
@@ -243,7 +247,12 @@ public abstract class JsonReader {
 
   protected abstract boolean matchesScannedString(int start, int end, String expected);
 
-  /** Reads one subtype name from a fixed validated table without materializing a String. */
+  /**
+   * Reads one wrapper subtype name from a fixed validated table without materializing a String.
+   *
+   * <p>Concrete readers may use the decoded-name hash to select a candidate, but must compare the
+   * complete decoded name before returning its closed-table class index.
+   */
   public abstract int readSubtypeName(JsonSubtypeScanInfo info);
 
   private final AsciiStringView asciiStringView = new AsciiStringView(this);

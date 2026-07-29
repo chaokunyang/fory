@@ -29,8 +29,9 @@ package org.apache.fory.json.meta;
  * input collision grants no additional field or enum capability because the input could select the
  * same target by sending its canonical JSON name.
  *
- * <p>Closed-subtype lookup uses this key only to select a candidate. It must compare the complete
- * decoded discriminator property and logical subtype name before selecting a class.
+ * <p>For both inline-property and wrapper inclusions, closed-subtype lookup uses this key only to
+ * select a candidate. It still compares the complete decoded discriminator property and logical
+ * subtype name before selecting a class.
  */
 public final class JsonFieldNameHash {
   public static final long MAGIC_HASH_CODE = 0xcbf29ce484222325L;

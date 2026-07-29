@@ -6,6 +6,12 @@ Load this file when changing anything under `java/` or when Java drives a cross-
 
 - Run all Maven commands from within `java/`.
 - Changes under `java/` must pass code style checks and tests.
+- When changes are limited to `fory-json` or `fory-format`, do not run `fory-core`
+  tests. Install the changed module and its reactor dependencies with
+  `-am install -DskipTests`, then run `test` with only the changed module selected
+  and without `-am`. In particular, never use `-pl fory-json -am test` or
+  `-pl fory-format -am test`, because Maven propagates the test phase to
+  `fory-core`.
 - If tests already passed and the only later change is Maven Spotless formatting, do not rerun
   tests solely because of that formatting pass. Verify formatting with `spotless:check` and inspect
   the diff/status instead.

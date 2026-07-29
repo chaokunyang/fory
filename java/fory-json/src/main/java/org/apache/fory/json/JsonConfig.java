@@ -37,11 +37,10 @@ import org.apache.fory.json.resolver.CodecRegistry;
  *
  * <p>Scalar settings are fixed at construction. The codec registry is builder-owned mutable input
  * and is copied immediately by the runtime's shared registry; the JSON runtime never mutates it.
- * The type checker uses identity semantics because checker instances may carry different user
- * policy despite sharing a class. {@link #getCodegenHash()} identifies only settings that can
- * change generated source; runtime-only settings such as depth and asynchronous scheduling do not
- * fragment generated class names. Concurrency, per-reader field-name cache, and retained
- * writer-buffer limits are also runtime-only and do not fragment generated class names.
+ * {@link #getCodegenHash()} identifies only settings that can change generated source; runtime-only
+ * settings such as depth and asynchronous scheduling do not fragment generated class names.
+ * Concurrency, per-reader field-name cache, and retained writer-buffer limits are also runtime-only
+ * and do not fragment generated class names.
  */
 public final class JsonConfig {
   private static final int MAX_CACHED_FIELD_NAMES = 1 << 29;
@@ -60,7 +59,6 @@ public final class JsonConfig {
   private final Map<Class<?>, Class<?>> mixins;
   private final JsonTypeChecker typeChecker;
   private final JsonTypeCheckContext typeCheckContext;
-  private final String codecRegistryKey;
   private final CodegenKey codegenKey;
   private transient int codegenHash;
 
@@ -94,7 +92,7 @@ public final class JsonConfig {
     this.mixins = immutableMixins(mixins);
     this.typeChecker = typeChecker;
     typeCheckContext = new JsonTypeCheckContext();
-    codecRegistryKey = codecRegistry.codegenKey();
+    String codecRegistryKey = codecRegistry.codegenKey();
     codegenKey =
         new CodegenKey(
             writeNullFields,
@@ -169,48 +167,6 @@ public final class JsonConfig {
 
   public JsonTypeCheckContext typeCheckContext() {
     return typeCheckContext;
-  }
-
-  @Override
-  public boolean equals(Object other) {
-    if (this == other) {
-      return true;
-    }
-    if (other == null || getClass() != other.getClass()) {
-      return false;
-    }
-    JsonConfig that = (JsonConfig) other;
-    return writeNullFields == that.writeNullFields
-        && codegenEnabled == that.codegenEnabled
-        && asyncCompilationEnabled == that.asyncCompilationEnabled
-        && propertyDiscoveryEnabled == that.propertyDiscoveryEnabled
-        && propertyNamingStrategy == that.propertyNamingStrategy
-        && classLoader == that.classLoader
-        && maxDepth == that.maxDepth
-        && maxCachedFieldNames == that.maxCachedFieldNames
-        && concurrencyLevel == that.concurrencyLevel
-        && bufferSizeLimitBytes == that.bufferSizeLimitBytes
-        && typeChecker == that.typeChecker
-        && Objects.equals(codecRegistryKey, that.codecRegistryKey)
-        && mixins.equals(that.mixins);
-  }
-
-  @Override
-  public int hashCode() {
-    int result = Boolean.hashCode(writeNullFields);
-    result = 31 * result + Boolean.hashCode(codegenEnabled);
-    result = 31 * result + Boolean.hashCode(asyncCompilationEnabled);
-    result = 31 * result + Boolean.hashCode(propertyDiscoveryEnabled);
-    result = 31 * result + propertyNamingStrategy.hashCode();
-    result = 31 * result + System.identityHashCode(classLoader);
-    result = 31 * result + maxDepth;
-    result = 31 * result + maxCachedFieldNames;
-    result = 31 * result + concurrencyLevel;
-    result = 31 * result + bufferSizeLimitBytes;
-    result = 31 * result + System.identityHashCode(typeChecker);
-    result = 31 * result + codecRegistryKey.hashCode();
-    result = 31 * result + mixins.hashCode();
-    return result;
   }
 
   private static Map<Class<?>, Class<?>> immutableMixins(Map<Class<?>, Class<?>> registrations) {

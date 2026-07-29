@@ -19,6 +19,8 @@
 
 package org.apache.fory.json;
 
+import static org.apache.fory.json.JsonTestSupport.generatedCodecId;
+import static org.apache.fory.json.JsonTestSupport.generatedUtf8WriterClass;
 import static org.testng.Assert.assertEquals;
 import static org.testng.Assert.assertNotEquals;
 import static org.testng.Assert.assertThrows;
@@ -189,14 +191,20 @@ public class JsonMixinTest extends ForyJsonTestModels {
             .registerMixin(FirstNameMixin.class)
             .build();
     ForyJson equivalent = newJsonBuilder().registerMixin(FirstNameMixin.class).build();
-    assertEquals(JsonTestSupport.config(repeated), JsonTestSupport.config(equivalent));
-    assertEquals(
-        JsonTestSupport.config(repeated).getCodegenHash(),
-        JsonTestSupport.config(equivalent).getCodegenHash());
-    assertNotEquals(JsonTestSupport.config(first), JsonTestSupport.config(second));
-    assertNotEquals(
-        JsonTestSupport.config(first).getCodegenHash(),
-        JsonTestSupport.config(second).getCodegenHash());
+    assertEquals(repeated.toJson(new NameTarget("repeat")), "{\"first\":\"repeat\"}");
+    assertEquals(equivalent.toJson(new NameTarget("equal")), "{\"first\":\"equal\"}");
+    if (codegenEnabled()) {
+      first.toJsonBytes(new NameTarget("first"));
+      second.toJsonBytes(new NameTarget("second"));
+      repeated.toJsonBytes(new NameTarget("repeat"));
+      equivalent.toJsonBytes(new NameTarget("equal"));
+      assertEquals(
+          generatedCodecId(generatedUtf8WriterClass(repeated, NameTarget.class)),
+          generatedCodecId(generatedUtf8WriterClass(equivalent, NameTarget.class)));
+      assertNotEquals(
+          generatedCodecId(generatedUtf8WriterClass(first, NameTarget.class)),
+          generatedCodecId(generatedUtf8WriterClass(second, NameTarget.class)));
+    }
     assertGeneratedWhenSupported(first, NameTarget.class);
     assertGeneratedWhenSupported(second, NameTarget.class);
   }

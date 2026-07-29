@@ -196,9 +196,11 @@ ForyJson json =
         .build();
 ```
 
-`withConcurrencyLevel` configures the number of reusable operation states, not a maximum number of
-concurrent callers. When all reusable states are busy, Fory JSON creates a temporary state rather
-than serializing callers through one global lock.
+`withConcurrencyLevel` sets the maximum number of root operations that execute concurrently.
+Additional callers wait until one of those fixed execution states is available. Root APIs on one
+`ForyJson` instance are not reentrant: a custom codec must continue through the concrete reader or
+writer passed to it instead of calling `toJson`, `toJsonBytes`, `writeJsonTo`, or `fromJson` on that
+instance.
 
 ## Java object mapping
 
@@ -360,7 +362,7 @@ original key type. Null map keys are rejected.
 | `withClassLoader(loader)`              | Snapshotted thread context loader, then Fory JSON loader | Resolve annotation-declared subtype class names                      |
 | `maxDepth(int)`                        | `20`                                                     | Maximum nested object/array depth for reads and writes               |
 | `withMaxCachedFieldNames(int)`         | `DEFAULT_MAX_CACHED_FIELD_NAMES` (`8192`)                | Field-name cache entries per reader; zero disables caching           |
-| `withConcurrencyLevel(int)`            | `max(1, 2 * processors)`                                 | Number of reusable concurrent operation states                       |
+| `withConcurrencyLevel(int)`            | `max(1, 2 * processors)`                                 | Maximum concurrent root operations                                   |
 | `withBufferSizeLimitBytes(int)`        | 2 MiB                                                    | Maximum reusable capacity retained by each pooled writer             |
 | `registerCodec(type, codec)`           | None                                                     | Replace the exact class's complete JSON codec                        |
 | `registerMixin(mixinType)`             | None                                                     | Apply one annotation Mixin to its exact declared target              |
@@ -754,12 +756,11 @@ position it, and `JsonPropertyOrder` selects it by Java logical property name. T
 property order remains intact. Parent fields are matched before flattened fields, which are matched
 before dynamic Any handling.
 
-Fory rejects duplicate or hash-colliding final names, recursive chains made only of unwrapped
-properties, parameterized children, JSON Any children, polymorphic or custom-codec child roots,
-and scalar, array, collection, or Map children. Use `JsonAnyProperty`, `JsonAnyGetter`, or
-`JsonAnySetter` to flatten a Map. `JsonProperty.value`, non-default `JsonProperty.include`, and
-`JsonCodec` are not valid on an unwrapped property; ordinary child leaf properties may still use
-them.
+Fory rejects duplicate final names, recursive chains made only of unwrapped properties,
+parameterized children, JSON Any children, polymorphic or custom-codec child roots, and scalar,
+array, collection, or Map children. Use `JsonAnyProperty`, `JsonAnyGetter`, or `JsonAnySetter` to
+flatten a Map. `JsonProperty.value`, non-default `JsonProperty.include`, and `JsonCodec` are not
+valid on an unwrapped property; ordinary child leaf properties may still use them.
 
 ### Dynamic object members
 
@@ -854,15 +855,11 @@ Dynamic keys are exact JSON member names and retain Map iteration order. A null 
 members, and a null Map value writes JSON null regardless of fixed-property null settings. Null and
 non-String output keys are rejected. Raw Maps, wildcard or unresolved keys, and non-String key
 types are invalid. Declared fixed members, including members excluded from reading, are not
-delivered to an Any input. An output key is rejected when its Fory field-name hash conflicts with a
-fixed property; this also covers differently spelled hash collisions. Fory does not inspect an Any
-Map for a key whose name or Fory field-name hash conflicts with an inline subtype discriminator. An
-exact-name output key writes a duplicate JSON member; on input, a differently spelled hash
-collision is classified as the discriminator by the child field table. Applications must keep
-dynamic keys distinct from the active discriminator by both name and hash. Fixed input lookup is
-also hash-based, so a differently spelled colliding name follows the fixed member instead of Any
-handling. Repeated unknown input names replace the prior Map value, while an any-setter is invoked
-for every occurrence. Escaped input names are decoded before delivery.
+delivered to an Any input. An output key that conflicts with a fixed property is rejected. Fory
+does not inspect an Any Map for a key that duplicates an inline subtype discriminator; such a key
+writes a duplicate JSON member. Applications must keep dynamic keys distinct from the active
+discriminator. Repeated unknown input names replace the prior Map value, while an any-setter is
+invoked for every occurrence. Escaped input names are decoded before delivery.
 
 ### `JsonCreator`
 

@@ -527,7 +527,7 @@ public class JsonAsyncCompilationTest {
     CountDownLatch releaseRoot = new CountDownLatch(1);
     CodecRegistry codecs = new CodecRegistry();
     codecs.register(BlockingValue.class, new BlockingCodec(rootEntered, releaseRoot));
-    ControlledJson controlled = controlledJson(codecs);
+    ControlledJson controlled = controlledJson(codecs, 2);
     AtomicReference<Throwable> firstFailure = new AtomicReference<>();
     Thread first =
         new Thread(
@@ -1273,6 +1273,11 @@ public class JsonAsyncCompilationTest {
   }
 
   private static ControlledJson controlledJson(CodecRegistry codecs) throws Exception {
+    return controlledJson(codecs, 1);
+  }
+
+  private static ControlledJson controlledJson(CodecRegistry codecs, int concurrencyLevel)
+      throws Exception {
     JsonConfig config =
         new JsonConfig(
             false,
@@ -1283,7 +1288,7 @@ public class JsonAsyncCompilationTest {
             JsonAsyncCompilationTest.class.getClassLoader(),
             ForyJson.DEFAULT_MAX_DEPTH,
             ForyJson.DEFAULT_MAX_CACHED_FIELD_NAMES,
-            1,
+            concurrencyLevel,
             2 * 1024 * 1024,
             codecs,
             Collections.<Class<?>, Class<?>>emptyMap(),

@@ -146,9 +146,8 @@ import org.apache.fory.util.record.RecordUtils;
  * <p>Accepted type-check results are cached by class name up to a bounded 8192-entry shared cache.
  * Once full, new names are checked on every resolution rather than growing attacker-controlled
  * state. Common short field names admitted by reader-local caches are published here for
- * best-effort String reference reuse across readers. Reader-local admission is the only field-name
- * capacity gate; the shared field-name map has no explicit limit. Source-generated model companions
- * and JIT-generated class futures are shared here; concrete JIT codec instances, ordinary type
+ * best-effort String reference reuse across readers. Source-generated model companions and
+ * JIT-generated class futures are shared here; concrete JIT codec instances, ordinary type
  * bindings, graph construction, JIT locks, and publication remain resolver-local. A fresh {@link
  * JsonJITContext} is therefore created for every pooled JSON state.
  */
@@ -197,6 +196,9 @@ public final class JsonSharedRegistry {
   private final ConcurrentHashMap<Class<?>, CompletableFuture<Class<?>>> utf8ReaderClasses;
   private final ConcurrentHashMap<Type, CompletableFuture<Class<?>>> utf8CollectionWriterClasses;
   private final ConcurrentHashMap<Type, CompletableFuture<Class<?>>> utf8CollectionReaderClasses;
+  // Only ForyJson's fixed-pool reader-local caches publish production entries here, and each reader
+  // owns its configured entry limit. This reference-reuse table does not own a second capacity
+  // policy.
   private final ConcurrentHashMap<Long, CachedFieldName> cachedFieldNames;
 
   public JsonSharedRegistry(JsonConfig config) {

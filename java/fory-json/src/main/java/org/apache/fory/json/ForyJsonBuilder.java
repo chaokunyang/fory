@@ -153,7 +153,11 @@ public final class ForyJsonBuilder {
     return this;
   }
 
-  /** Sets the number of reusable execution states available to concurrent root operations. */
+  /**
+   * Sets the maximum number of root operations that can execute concurrently.
+   *
+   * <p>Additional callers wait until an execution state becomes available.
+   */
   public ForyJsonBuilder withConcurrencyLevel(int concurrencyLevel) {
     if (concurrencyLevel < 1) {
       throw new IllegalArgumentException("concurrencyLevel must be positive");

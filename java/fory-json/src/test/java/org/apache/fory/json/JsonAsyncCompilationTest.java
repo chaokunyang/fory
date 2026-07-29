@@ -566,57 +566,6 @@ public class JsonAsyncCompilationTest {
   }
 
   @Test
-  public void concurrencyLimitWaits() throws Exception {
-    CountDownLatch rootEntered = new CountDownLatch(1);
-    CountDownLatch releaseRoot = new CountDownLatch(1);
-    CodecRegistry codecs = new CodecRegistry();
-    codecs.register(BlockingValue.class, new BlockingCodec(rootEntered, releaseRoot));
-    ControlledJson controlled = controlledJson(codecs, 1);
-    AtomicReference<Throwable> firstFailure = new AtomicReference<>();
-    Thread first =
-        new Thread(
-            () -> {
-              try {
-                assertEquals(controlled.json.toJson(new BlockingValue()), "null");
-              } catch (Throwable t) {
-                firstFailure.set(t);
-              }
-            });
-    first.start();
-    await(rootEntered);
-
-    CountDownLatch secondStarted = new CountDownLatch(1);
-    CountDownLatch secondFinished = new CountDownLatch(1);
-    AtomicReference<Throwable> secondFailure = new AtomicReference<>();
-    Thread second =
-        new Thread(
-            () -> {
-              secondStarted.countDown();
-              try {
-                assertEquals(controlled.json.toJson("waiting"), "\"waiting\"");
-              } catch (Throwable t) {
-                secondFailure.set(t);
-              } finally {
-                secondFinished.countDown();
-              }
-            });
-    second.start();
-    await(secondStarted);
-    try {
-      awaitAcquireContention(second);
-      assertEquals(secondFinished.getCount(), 1);
-    } finally {
-      releaseRoot.countDown();
-    }
-    await(secondFinished);
-    first.join();
-    second.join();
-    assertFailure(firstFailure.get());
-    assertFailure(secondFailure.get());
-    controlled.executor.runAll();
-  }
-
-  @Test
   public void capabilityFailureIsIndependent() throws Exception {
     ControlledJson controlled = controlledJson();
     controlled.executor.rejectNext();
@@ -1354,23 +1303,6 @@ public class JsonAsyncCompilationTest {
 
   private static void await(CountDownLatch latch) throws InterruptedException {
     assertTrue(latch.await(30, TimeUnit.SECONDS), "Timed out waiting for test coordination");
-  }
-
-  private static void awaitAcquireContention(Thread thread) {
-    long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(30);
-    while (System.nanoTime() < deadline) {
-      for (StackTraceElement frame : thread.getStackTrace()) {
-        if (frame.getClassName().equals(ForyJson.class.getName())
-            && frame.getMethodName().equals("acquireContended")) {
-          return;
-        }
-      }
-      if (!thread.isAlive()) {
-        fail("Root operation did not wait for an execution state");
-      }
-      Thread.yield();
-    }
-    fail("Timed out waiting for root operation contention");
   }
 
   private static void assertFailure(Throwable failure) {

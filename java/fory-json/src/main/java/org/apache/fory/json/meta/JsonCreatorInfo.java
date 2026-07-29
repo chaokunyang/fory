@@ -87,7 +87,7 @@ public final class JsonCreatorInfo {
 
   public int index(long hash) {
     // Creator arity is deliberately finite and normally small. A linear exact-hash table avoids a
-    // second object graph and is allocation-free; construction rejects every hash collision.
+    // second object graph and is allocation-free.
     for (int i = 0; i < hashes.length; i++) {
       if (hashes[i] == hash) {
         return i;

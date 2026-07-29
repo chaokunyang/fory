@@ -527,7 +527,7 @@ public class JsonAsyncCompilationTest {
     CountDownLatch releaseRoot = new CountDownLatch(1);
     CodecRegistry codecs = new CodecRegistry();
     codecs.register(BlockingValue.class, new BlockingCodec(rootEntered, releaseRoot));
-    ControlledJson controlled = controlledJson(codecs);
+    ControlledJson controlled = controlledJson(codecs, 2);
     AtomicReference<Throwable> firstFailure = new AtomicReference<>();
     Thread first =
         new Thread(
@@ -562,6 +562,57 @@ public class JsonAsyncCompilationTest {
     releaseRoot.countDown();
     first.join();
     assertFailure(firstFailure.get());
+    controlled.executor.runAll();
+  }
+
+  @Test
+  public void concurrencyLimitWaits() throws Exception {
+    CountDownLatch rootEntered = new CountDownLatch(1);
+    CountDownLatch releaseRoot = new CountDownLatch(1);
+    CodecRegistry codecs = new CodecRegistry();
+    codecs.register(BlockingValue.class, new BlockingCodec(rootEntered, releaseRoot));
+    ControlledJson controlled = controlledJson(codecs, 1);
+    AtomicReference<Throwable> firstFailure = new AtomicReference<>();
+    Thread first =
+        new Thread(
+            () -> {
+              try {
+                assertEquals(controlled.json.toJson(new BlockingValue()), "null");
+              } catch (Throwable t) {
+                firstFailure.set(t);
+              }
+            });
+    first.start();
+    await(rootEntered);
+
+    CountDownLatch secondStarted = new CountDownLatch(1);
+    CountDownLatch secondFinished = new CountDownLatch(1);
+    AtomicReference<Throwable> secondFailure = new AtomicReference<>();
+    Thread second =
+        new Thread(
+            () -> {
+              secondStarted.countDown();
+              try {
+                assertEquals(controlled.json.toJson("waiting"), "\"waiting\"");
+              } catch (Throwable t) {
+                secondFailure.set(t);
+              } finally {
+                secondFinished.countDown();
+              }
+            });
+    second.start();
+    await(secondStarted);
+    try {
+      awaitAcquireContention(second);
+      assertEquals(secondFinished.getCount(), 1);
+    } finally {
+      releaseRoot.countDown();
+    }
+    await(secondFinished);
+    first.join();
+    second.join();
+    assertFailure(firstFailure.get());
+    assertFailure(secondFailure.get());
     controlled.executor.runAll();
   }
 
@@ -1273,6 +1324,11 @@ public class JsonAsyncCompilationTest {
   }
 
   private static ControlledJson controlledJson(CodecRegistry codecs) throws Exception {
+    return controlledJson(codecs, 1);
+  }
+
+  private static ControlledJson controlledJson(CodecRegistry codecs, int concurrencyLevel)
+      throws Exception {
     JsonConfig config =
         new JsonConfig(
             false,
@@ -1283,7 +1339,7 @@ public class JsonAsyncCompilationTest {
             JsonAsyncCompilationTest.class.getClassLoader(),
             ForyJson.DEFAULT_MAX_DEPTH,
             ForyJson.DEFAULT_MAX_CACHED_FIELD_NAMES,
-            1,
+            concurrencyLevel,
             2 * 1024 * 1024,
             codecs,
             Collections.<Class<?>, Class<?>>emptyMap(),
@@ -1298,6 +1354,23 @@ public class JsonAsyncCompilationTest {
 
   private static void await(CountDownLatch latch) throws InterruptedException {
     assertTrue(latch.await(30, TimeUnit.SECONDS), "Timed out waiting for test coordination");
+  }
+
+  private static void awaitAcquireContention(Thread thread) {
+    long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(30);
+    while (System.nanoTime() < deadline) {
+      for (StackTraceElement frame : thread.getStackTrace()) {
+        if (frame.getClassName().equals(ForyJson.class.getName())
+            && frame.getMethodName().equals("acquireContended")) {
+          return;
+        }
+      }
+      if (!thread.isAlive()) {
+        fail("Root operation did not wait for an execution state");
+      }
+      Thread.yield();
+    }
+    fail("Timed out waiting for root operation contention");
   }
 
   private static void assertFailure(Throwable failure) {

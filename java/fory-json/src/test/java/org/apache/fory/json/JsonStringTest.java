@@ -258,11 +258,11 @@ public class JsonStringTest extends ForyJsonTestModels {
     utf8Writer.reset();
     assertEquals(writerBufferLength(utf8Writer), bufferLimit);
 
-    JsonConfig defaultConfig = JsonTestSupport.config(ForyJson.builder().build());
+    ForyJson defaults = ForyJson.builder().build();
     assertEquals(
-        defaultConfig.concurrencyLevel(),
-        Math.max(1, Runtime.getRuntime().availableProcessors() * 2));
-    assertEquals(defaultConfig.bufferSizeLimitBytes(), 2 * 1024 * 1024);
+        pooledStateCount(defaults), Math.max(1, Runtime.getRuntime().availableProcessors() * 2));
+    assertEquals(writerBufferLimit(currentStateField(defaults, "stringWriter")), 2 * 1024 * 1024);
+    assertEquals(writerBufferLimit(currentStateField(defaults, "utf8Writer")), 2 * 1024 * 1024);
     assertThrows(IllegalArgumentException.class, () -> ForyJson.builder().withConcurrencyLevel(0));
     assertThrows(
         IllegalArgumentException.class, () -> ForyJson.builder().withBufferSizeLimitBytes(0));
@@ -553,6 +553,12 @@ public class JsonStringTest extends ForyJsonTestModels {
     Field field = writer.getClass().getDeclaredField("buffer");
     field.setAccessible(true);
     return ((byte[]) field.get(writer)).length;
+  }
+
+  private static int writerBufferLimit(Object writer) throws Exception {
+    Field field = writer.getClass().getDeclaredField("bufferSizeLimitBytes");
+    field.setAccessible(true);
+    return field.getInt(writer);
   }
 
   private static int readerBufferLength(Object reader) throws Exception {

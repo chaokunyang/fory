@@ -19,7 +19,8 @@
 
 package org.apache.fory.json;
 
-import static org.apache.fory.json.JsonTestSupport.currentTypeResolver;
+import static org.apache.fory.json.JsonTestSupport.generatedCodecId;
+import static org.apache.fory.json.JsonTestSupport.generatedUtf8WriterClass;
 import static org.apache.fory.json.JsonTestSupport.newLatin1Reader;
 import static org.apache.fory.json.JsonTestSupport.newUtf8Reader;
 import static org.testng.Assert.assertEquals;
@@ -46,7 +47,6 @@ import org.apache.fory.json.meta.JsonAsciiToken;
 import org.apache.fory.json.meta.JsonFieldNameHash;
 import org.apache.fory.json.reader.Latin1JsonReader;
 import org.apache.fory.json.reader.Utf8JsonReader;
-import org.apache.fory.json.resolver.JsonTypeResolver;
 import org.testng.annotations.Test;
 
 public class JsonGeneratedCodecTest extends ForyJsonTestModels {
@@ -202,10 +202,10 @@ public class JsonGeneratedCodecTest extends ForyJsonTestModels {
       return;
     }
 
-    Class<?> firstCodecClass = generatedCodecClass(first, PublicFields.class);
-    Class<?> secondCodecClass = generatedCodecClass(second, PublicFields.class);
-    Class<?> writeNullCodecClass = generatedCodecClass(writeNullFields, PublicFields.class);
-    Class<?> snakeCaseCodecClass = generatedCodecClass(snakeCase, PublicFields.class);
+    Class<?> firstCodecClass = generatedUtf8WriterClass(first, PublicFields.class);
+    Class<?> secondCodecClass = generatedUtf8WriterClass(second, PublicFields.class);
+    Class<?> writeNullCodecClass = generatedUtf8WriterClass(writeNullFields, PublicFields.class);
+    Class<?> snakeCaseCodecClass = generatedUtf8WriterClass(snakeCase, PublicFields.class);
     assertEquals(firstCodecClass.getPackage().getName(), PublicFields.class.getPackage().getName());
     assertEquals(
         secondCodecClass.getPackage().getName(), PublicFields.class.getPackage().getName());
@@ -213,9 +213,9 @@ public class JsonGeneratedCodecTest extends ForyJsonTestModels {
     assertGeneratedName(secondCodecClass, PublicFields.class, "Utf8Writer");
     assertGeneratedName(writeNullCodecClass, PublicFields.class, "Utf8Writer");
     assertGeneratedName(snakeCaseCodecClass, PublicFields.class, "Utf8Writer");
-    assertEquals(generatedId(secondCodecClass), generatedId(firstCodecClass));
-    assertNotEquals(generatedId(writeNullCodecClass), generatedId(firstCodecClass));
-    assertNotEquals(generatedId(snakeCaseCodecClass), generatedId(firstCodecClass));
+    assertEquals(generatedCodecId(secondCodecClass), generatedCodecId(firstCodecClass));
+    assertNotEquals(generatedCodecId(writeNullCodecClass), generatedCodecId(firstCodecClass));
+    assertNotEquals(generatedCodecId(snakeCaseCodecClass), generatedCodecId(firstCodecClass));
   }
 
   @Test
@@ -306,7 +306,7 @@ public class JsonGeneratedCodecTest extends ForyJsonTestModels {
     expected.append('}');
     assertEquals(new String(json.toJsonBytes(value), StandardCharsets.UTF_8), expected.toString());
 
-    Class<?> generated = generatedCodecClass(json, WideWriterFields.class);
+    Class<?> generated = generatedUtf8WriterClass(json, WideWriterFields.class);
     int groups = 0;
     for (Method method : generated.getDeclaredMethods()) {
       if (method.getName().startsWith("writeUtf8Group")) {
@@ -446,28 +446,12 @@ public class JsonGeneratedCodecTest extends ForyJsonTestModels {
     assertEquals(value.set.iterator().next().name, name + 10);
   }
 
-  private static Class<?> generatedCodecClass(ForyJson json, Class<?> type) throws Exception {
-    JsonTypeResolver typeResolver = currentTypeResolver(json);
-    Object owner = typeResolver.getObjectCodec(type);
-    Object codec = typeResolver.getTypeInfo(type, type).utf8Writer();
-    assertTrue(codec != owner, codec.getClass().getName());
-    return codec.getClass();
-  }
-
   private static void assertGeneratedName(
       Class<?> generatedClass, Class<?> valueType, String role) {
     String simpleName = generatedClass.getSimpleName();
     assertTrue(simpleName.startsWith(valueType.getSimpleName()), generatedClass.getName());
     assertTrue(simpleName.contains(role + GENERATED_SUFFIX), generatedClass.getName());
     assertFalse(simpleName.contains(GENERATED_SUFFIX + "_"), generatedClass.getName());
-    assertTrue(generatedId(generatedClass) >= 0, generatedClass.getName());
-  }
-
-  private static int generatedId(Class<?> generatedClass) {
-    String simpleName = generatedClass.getSimpleName();
-    int suffixStart = simpleName.lastIndexOf(GENERATED_SUFFIX);
-    assertTrue(suffixStart >= 0, generatedClass.getName());
-    String id = simpleName.substring(suffixStart + GENERATED_SUFFIX.length());
-    return id.isEmpty() ? 0 : Integer.parseInt(id);
+    assertTrue(generatedCodecId(generatedClass) >= 0, generatedClass.getName());
   }
 }

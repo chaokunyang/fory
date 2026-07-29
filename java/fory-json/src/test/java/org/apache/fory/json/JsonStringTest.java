@@ -23,7 +23,6 @@ import static org.apache.fory.json.JsonTestSupport.currentStateField;
 import static org.apache.fory.json.JsonTestSupport.newLatin1Reader;
 import static org.apache.fory.json.JsonTestSupport.newStringWriter;
 import static org.apache.fory.json.JsonTestSupport.newUtf16Reader;
-import static org.apache.fory.json.JsonTestSupport.pooledStateCount;
 import static org.testng.Assert.assertEquals;
 import static org.testng.Assert.assertFalse;
 import static org.testng.Assert.assertThrows;
@@ -234,16 +233,14 @@ public class JsonStringTest extends ForyJsonTestModels {
   }
 
   @Test
-  public void builderRuntimeLimits() throws Exception {
+  public void writerBufferLimit() throws Exception {
     int bufferLimit = 64 * 1024;
     ForyJson json =
         ForyJson.builder()
             .withAsyncCompilation(false)
-            .withConcurrencyLevel(3)
+            .withConcurrencyLevel(1)
             .withBufferSizeLimitBytes(bufferLimit)
             .build();
-    assertEquals(pooledStateCount(json), 3);
-    assertEquals(pooledStateCount(ForyJson.builder().withConcurrencyLevel(1).build()), 1);
 
     String value = repeat('a', bufferLimit + 1);
     StringJsonWriter stringWriter = (StringJsonWriter) currentStateField(json, "stringWriter");
@@ -259,11 +256,8 @@ public class JsonStringTest extends ForyJsonTestModels {
     assertEquals(writerBufferLength(utf8Writer), bufferLimit);
 
     ForyJson defaults = ForyJson.builder().build();
-    assertEquals(
-        pooledStateCount(defaults), Math.max(1, Runtime.getRuntime().availableProcessors() * 2));
     assertEquals(writerBufferLimit(currentStateField(defaults, "stringWriter")), 2 * 1024 * 1024);
     assertEquals(writerBufferLimit(currentStateField(defaults, "utf8Writer")), 2 * 1024 * 1024);
-    assertThrows(IllegalArgumentException.class, () -> ForyJson.builder().withConcurrencyLevel(0));
     assertThrows(
         IllegalArgumentException.class, () -> ForyJson.builder().withBufferSizeLimitBytes(0));
   }

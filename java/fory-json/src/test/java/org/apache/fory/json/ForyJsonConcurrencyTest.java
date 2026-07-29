@@ -19,7 +19,9 @@
 
 package org.apache.fory.json;
 
+import static org.apache.fory.json.JsonTestSupport.pooledStateCount;
 import static org.testng.Assert.assertEquals;
+import static org.testng.Assert.assertThrows;
 import static org.testng.Assert.assertTrue;
 import static org.testng.Assert.fail;
 
@@ -32,6 +34,16 @@ import org.apache.fory.json.writer.JsonWriter;
 import org.testng.annotations.Test;
 
 public class ForyJsonConcurrencyTest {
+  @Test
+  public void configuredStateCount() {
+    assertEquals(pooledStateCount(ForyJson.builder().withConcurrencyLevel(3).build()), 3);
+    assertEquals(pooledStateCount(ForyJson.builder().withConcurrencyLevel(1).build()), 1);
+    assertEquals(
+        pooledStateCount(ForyJson.builder().build()),
+        Math.max(1, Runtime.getRuntime().availableProcessors() * 2));
+    assertThrows(IllegalArgumentException.class, () -> ForyJson.builder().withConcurrencyLevel(0));
+  }
+
   @Test
   public void concurrencyLimitWaits() throws Exception {
     CountDownLatch rootEntered = new CountDownLatch(1);

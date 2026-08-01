@@ -111,9 +111,6 @@ comparator while the object is only partially initialized. If later fields affec
 the container's hash buckets or ordering become invalid. The object may still appear during
 iteration even though `contains()` or `get()` cannot find it.
 
-If this appeared to work previously, it relied on incidental field serialization order. Fory does
-not guarantee Java declaration order or an application-defined field order.
-
 When a set view is required, serialize the cyclic references as a list and derive a transient set
 after deserialization:
 

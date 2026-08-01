@@ -83,6 +83,7 @@ public final class ForyJson {
   public static final int DEFAULT_MAX_CACHED_FIELD_NAMES = 8192;
 
   private final int homeSlotMask;
+  private final JsonConfig config;
   private final PooledState[] slots;
 
   ForyJson(JsonConfig config) {
@@ -90,6 +91,7 @@ public final class ForyJson {
   }
 
   ForyJson(JsonConfig config, JsonSharedRegistry sharedRegistry) {
+    this.config = config;
     int poolSize = config.concurrencyLevel();
     homeSlotMask = Integer.highestOneBit(poolSize) - 1;
     // This fixed array is the only JsonState owner. Each state's three readers own their configured
@@ -104,6 +106,10 @@ public final class ForyJson {
   /** Returns a builder initialized with the documented default configuration. */
   public static ForyJsonBuilder builder() {
     return new ForyJsonBuilder();
+  }
+
+  JsonConfig config() {
+    return config;
   }
 
   /**

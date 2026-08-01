@@ -26,11 +26,15 @@ import java.lang.reflect.Executable;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.Map;
 import org.apache.fory.annotation.Internal;
 import org.apache.fory.json.ForyJsonException;
 import org.apache.fory.json.codec.GeneratedJsonCodec;
 import org.apache.fory.json.resolver.JsonTypeResolver;
 import org.apache.fory.platform.AndroidSupport;
+import org.apache.fory.platform.GraalvmSupport;
 import org.apache.fory.platform.internal._JDKAccess;
 
 /**
@@ -44,6 +48,9 @@ import org.apache.fory.platform.internal._JDKAccess;
  */
 @Internal
 public final class JsonCreatorInfo {
+  private static Map<Executable, MethodHandle> nativeInvokers = new HashMap<>();
+  private static boolean nativeInvokersFrozen;
+
   private final Class<?> ownerType;
   private final Executable executable;
   private final JsonCreatorFieldInfo[] fields;
@@ -164,6 +171,14 @@ public final class JsonCreatorInfo {
       executable.setAccessible(true);
       return null;
     }
+    if (GraalvmSupport.isGraalRuntime()) {
+      MethodHandle invoker = nativeInvokers.get(executable);
+      if (invoker == null) {
+        throw new ForyJsonException(
+            "Missing Native Image Fory JSON creator metadata for " + executable);
+      }
+      return invoker;
+    }
     try {
       MethodHandle target =
           executable instanceof Constructor
@@ -178,5 +193,38 @@ public final class JsonCreatorInfo {
     } catch (IllegalAccessException e) {
       throw new ForyJsonException("Cannot access JSON creator for " + ownerType.getName(), e);
     }
+  }
+
+  /** Prepares one object creator handle for Native Image runtime metadata construction. */
+  @Internal
+  public static synchronized void prepareNativeInvoker(Class<?> ownerType, Executable executable) {
+    if (!GraalvmSupport.isGraalBuildTime() || nativeInvokersFrozen) {
+      throw new IllegalStateException("Fory JSON native creator cache is not writable");
+    }
+    nativeInvokers.putIfAbsent(
+        executable, buildInvoker(ownerType, executable, executable.getParameterCount()));
+  }
+
+  /** Caches one generated constructor invoker for Native Image runtime metadata construction. */
+  @Internal
+  public static synchronized void prepareNativeConstructor(
+      Constructor<?> constructor, MethodHandle invoker) {
+    if (!GraalvmSupport.isGraalBuildTime() || nativeInvokersFrozen) {
+      throw new IllegalStateException("Fory JSON native creator cache is not writable");
+    }
+    nativeInvokers.putIfAbsent(constructor, invoker);
+  }
+
+  /** Freezes all Native Image object creator handles after hosted analysis. */
+  @Internal
+  public static synchronized void freezeNativeInvokers() {
+    if (nativeInvokersFrozen) {
+      return;
+    }
+    nativeInvokers =
+        nativeInvokers.isEmpty()
+            ? Collections.emptyMap()
+            : Collections.unmodifiableMap(new HashMap<>(nativeInvokers));
+    nativeInvokersFrozen = true;
   }
 }

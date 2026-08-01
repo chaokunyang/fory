@@ -17,29 +17,39 @@
  * under the License.
  */
 
-package org.apache.fory.json.codec;
+package org.apache.fory.json;
 
 import java.lang.reflect.AnnotatedElement;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Executable;
 import java.lang.reflect.Field;
 import java.lang.reflect.GenericArrayType;
+import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.lang.reflect.Parameter;
 import java.lang.reflect.ParameterizedType;
+import java.lang.reflect.RecordComponent;
 import java.lang.reflect.Type;
 import java.lang.reflect.TypeVariable;
 import java.lang.reflect.WildcardType;
 import java.math.BigDecimal;
 import java.math.BigInteger;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Comparator;
+import java.util.HashMap;
 import java.util.IdentityHashMap;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
-import org.apache.fory.json.ForyJson;
+import org.apache.fory.json.annotation.ForyJsonProvider;
+import org.apache.fory.json.annotation.JsonAnySetter;
 import org.apache.fory.json.annotation.JsonBase64;
 import org.apache.fory.json.annotation.JsonCodec;
 import org.apache.fory.json.annotation.JsonCreator;
@@ -48,17 +58,24 @@ import org.apache.fory.json.annotation.JsonSubTypes;
 import org.apache.fory.json.annotation.JsonType;
 import org.apache.fory.json.annotation.JsonUnwrapped;
 import org.apache.fory.json.annotation.JsonValue;
-import org.apache.fory.json.resolver.GeneratedJsonCodecFactories;
+import org.apache.fory.json.codec.Base64ByteArrayCodec;
+import org.apache.fory.json.codec.ObjectCodec;
+import org.apache.fory.json.meta.JsonCreatorInfo;
+import org.apache.fory.json.meta.JsonFieldAccessor;
 import org.apache.fory.json.resolver.JsonSharedRegistry;
 import org.apache.fory.json.resolver.JsonSharedRegistry.JsonMixinView;
+import org.apache.fory.json.resolver.JsonStringValueCodec;
+import org.apache.fory.json.resolver.JsonTypeResolver;
 import org.apache.fory.platform.GraalvmSupport;
+import org.apache.fory.reflect.ObjectInstantiators;
 import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.reflect.TypeRef;
+import org.apache.fory.util.record.RecordUtils;
 import org.graalvm.nativeimage.hosted.Feature;
 import org.graalvm.nativeimage.hosted.RuntimeClassInitialization;
 import org.graalvm.nativeimage.hosted.RuntimeReflection;
 
-/** Registers reachable Fory JSON models for GraalVM native image reflection. */
+/** Prepares reachable Fory JSON models and provider-selected codecs for Native Image. */
 final class ForyJsonGraalVMFeature implements Feature {
   private static final String[] SQL_TYPES = {
     "java.sql.Date", "java.sql.Time", "java.sql.Timestamp"
@@ -69,22 +86,36 @@ final class ForyJsonGraalVMFeature implements Feature {
   private final Set<Class<?>> processedDeclarations = ConcurrentHashMap.newKeySet();
   private final Set<Class<?>> processedModels = ConcurrentHashMap.newKeySet();
   private final Set<Class<?>> processedMixins = ConcurrentHashMap.newKeySet();
+  private final Map<Class<?>, Set<Class<?>>> reachableMixins = new LinkedHashMap<>();
+  private final Set<Class<?>> processedProviders = ConcurrentHashMap.newKeySet();
   private final Set<Class<?>> processedCodecs = ConcurrentHashMap.newKeySet();
   private final Set<Class<?>> processedContainers = ConcurrentHashMap.newKeySet();
+  private final Map<Executable, Class<?>> creators = new LinkedHashMap<>();
+  private final Set<Executable> preparedCreators = new LinkedHashSet<>();
+  private final Set<Constructor<?>> generatedConstructors = new LinkedHashSet<>();
+  private final Set<Constructor<?>> preparedGeneratedConstructors = new LinkedHashSet<>();
+  private final Map<JsonCodegenKey, HostedConfiguration> hostedConfigurations =
+      new LinkedHashMap<>();
+  private final Set<GenerationKey> processedGenerations = new LinkedHashSet<>();
 
   @Override
   public String getDescription() {
-    return "Registers reachable Fory JSON models for GraalVM native image";
+    return "Prepares reachable Fory JSON models for GraalVM Native Image";
   }
 
   @Override
   public void beforeAnalysis(BeforeAnalysisAccess access) {
-    RuntimeClassInitialization.initializeAtBuildTime(GeneratedJsonCodecFactories.class);
-    // Exact target-Mixin keys are retained in the frozen factory table and therefore become image
-    // heap objects together with the table. Derive the private key name from its enclosing class so
-    // relocated/shaded packages remain valid.
+    RuntimeClassInitialization.initializeAtBuildTime(JsonCodegenKey.class);
+    RuntimeClassInitialization.initializeAtBuildTime(JsonGeneratedClassRegistry.class);
     RuntimeClassInitialization.initializeAtBuildTime(
-        GeneratedJsonCodecFactories.class.getName() + "$Key");
+        JsonGeneratedClassRegistry.class.getDeclaredClasses());
+    RuntimeClassInitialization.initializeAtBuildTime(JsonFieldAccessor.class);
+    RuntimeClassInitialization.initializeAtBuildTime(JsonFieldAccessor.class.getDeclaredClasses());
+    RuntimeClassInitialization.initializeAtBuildTime(JsonCreatorInfo.class);
+    RuntimeClassInitialization.initializeAtBuildTime(JsonStringValueCodec.class);
+    RuntimeClassInitialization.initializeAtBuildTime(
+        JsonStringValueCodec.class.getDeclaredClasses());
+    RuntimeClassInitialization.initializeAtBuildTime(ObjectCodec.AnyInfo.class);
     // Hosted Mixin discovery deliberately reuses the runtime's structural resolver so build-time
     // reachability and runtime semantics cannot drift. Its static state contains only the immutable
     // supported-annotation set and is therefore safe to initialize in the image builder.
@@ -102,8 +133,10 @@ final class ForyJsonGraalVMFeature implements Feature {
     if (!reachableTypes.contains(ForyJson.class)) {
       return;
     }
-    boolean changed = false;
-    for (Class<?> type : reachableTypes) {
+    boolean changed = prepareNativeHandles();
+    List<Class<?>> orderedTypes = new ArrayList<>(reachableTypes);
+    orderedTypes.sort(Comparator.comparing(Class::getName));
+    for (Class<?> type : orderedTypes) {
       if (processedReachableTypes.add(type)) {
         changed |= registerContainer(type);
         changed |= registerDeclarations(type);
@@ -114,15 +147,216 @@ final class ForyJsonGraalVMFeature implements Feature {
         if (mixin != null) {
           changed |= registerMixin(access, type, mixin.target());
         }
+        if (type.getDeclaredAnnotation(ForyJsonProvider.class) != null) {
+          changed |= registerProvider(type);
+        }
         if (type == ForyJson.class) {
           registerBuiltInTypes(access);
           changed = true;
         }
       }
     }
+    changed |= generateConfigurations(access);
     if (changed) {
       access.requireAnalysisIteration();
     }
+  }
+
+  private boolean registerProvider(Class<?> providerClass) {
+    if (!processedProviders.add(providerClass)) {
+      return false;
+    }
+    int modifiers = providerClass.getModifiers();
+    if (!Modifier.isPublic(modifiers)
+        || Modifier.isAbstract(modifiers)
+        || providerClass.isInterface()
+        || providerClass.isEnum()) {
+      throw providerFailure(
+          providerClass, "must be a public concrete class", null);
+    }
+    Constructor<?> constructor;
+    try {
+      constructor = providerClass.getConstructor();
+    } catch (NoSuchMethodException e) {
+      throw providerFailure(providerClass, "must have a public no-argument constructor", e);
+    }
+    Object provider;
+    try {
+      provider = constructor.newInstance();
+    } catch (ReflectiveOperationException | RuntimeException e) {
+      throw providerFailure(providerClass, "cannot be constructed", unwrap(e));
+    }
+    List<Method> methods = providerMethods(providerClass);
+    if (methods.isEmpty()) {
+      throw providerFailure(providerClass, "does not declare an effective ForyJson method", null);
+    }
+    boolean changed = false;
+    for (Method method : methods) {
+      if (Modifier.isStatic(method.getModifiers()) || method.getParameterCount() != 0) {
+        throw providerFailure(
+            providerClass,
+            "method must be a non-static zero-argument instance method: " + method,
+            null);
+      }
+      ForyJson json;
+      try {
+        json = (ForyJson) method.invoke(provider);
+      } catch (ReflectiveOperationException | RuntimeException e) {
+        throw providerFailure(
+            providerClass, "cannot invoke provider method " + method, unwrap(e));
+      }
+      if (json == null) {
+        throw providerFailure(providerClass, "provider method returned null: " + method, null);
+      }
+      JsonConfig config = json.config();
+      if (!config.codegenEnabled()) {
+        throw providerFailure(
+            providerClass, "provider method returned a codegen-disabled ForyJson: " + method, null);
+      }
+      JsonCodegenKey key = config.codegenKey();
+      if (!hostedConfigurations.containsKey(key)) {
+        hostedConfigurations.put(key, new HostedConfiguration(config));
+        changed = true;
+      }
+    }
+    return changed;
+  }
+
+  private static List<Method> providerMethods(Class<?> providerClass) {
+    Map<MethodSignature, Method> effective = new HashMap<>();
+    for (Method method : providerClass.getMethods()) {
+      if (method.isBridge()
+          || method.isSynthetic()
+          || method.getReturnType() != ForyJson.class) {
+        continue;
+      }
+      MethodSignature signature = new MethodSignature(method);
+      Method previous = effective.get(signature);
+      if (previous == null
+          || previous.getDeclaringClass().isAssignableFrom(method.getDeclaringClass())) {
+        effective.put(signature, method);
+      } else if (!method.getDeclaringClass().isAssignableFrom(previous.getDeclaringClass())
+          && method.getDeclaringClass().getName().compareTo(previous.getDeclaringClass().getName())
+              < 0) {
+        effective.put(signature, method);
+      }
+    }
+    ArrayList<Method> methods = new ArrayList<>(effective.values());
+    methods.sort(
+        Comparator.comparing(Method::getName)
+            .thenComparing(method -> method.getDeclaringClass().getName())
+            .thenComparing(Method::toGenericString));
+    return methods;
+  }
+
+  private boolean generateConfigurations(DuringAnalysisAccess access) {
+    boolean changed = false;
+    for (Map.Entry<JsonCodegenKey, HostedConfiguration> entry :
+        hostedConfigurations.entrySet()) {
+      HostedConfiguration configuration = entry.getValue();
+      LinkedHashSet<Class<?>> selectedModels = new LinkedHashSet<>(processedModels);
+      for (Map.Entry<Class<?>, Set<Class<?>>> mixin : reachableMixins.entrySet()) {
+        if (mixin.getValue().contains(configuration.mixins.get(mixin.getKey()))) {
+          selectedModels.add(mixin.getKey());
+        }
+      }
+      ArrayList<Class<?>> models = new ArrayList<>(selectedModels);
+      models.sort(Comparator.comparing(Class::getName));
+      for (Class<?> model : models) {
+        GenerationKey generation = new GenerationKey(entry.getKey(), model);
+        if (!processedGenerations.add(generation)) {
+          continue;
+        }
+        try {
+          configuration.resolver.getTypeInfo(model, model);
+        } catch (RuntimeException | LinkageError e) {
+          throw new IllegalStateException(
+              "Cannot generate Fory JSON codecs for " + model.getName(), e);
+        }
+        Set<Class<?>> generatedClasses =
+            JsonGeneratedClassRegistry.register(
+                entry.getKey(), configuration.registry.generatedClasses());
+        for (Class<?> generatedClass : generatedClasses) {
+          registerGeneratedClass(generatedClass);
+        }
+        changed = true;
+      }
+    }
+    return changed;
+  }
+
+  private void registerGeneratedClass(Class<?> generatedClass) {
+    // Generated codecs contain only instance state and are defined during analysis, after native
+    // image class-initialization policy has been fixed.
+    RuntimeReflection.register(generatedClass);
+    Constructor<?>[] constructors = generatedClass.getDeclaredConstructors();
+    if (constructors.length == 0) {
+      throw new IllegalStateException(
+          "Generated Fory JSON class has no constructor: " + generatedClass.getName());
+    }
+    RuntimeReflection.register(constructors);
+    for (Constructor<?> constructor : constructors) {
+      RuntimeReflection.registerConstructorLookup(
+          generatedClass, constructor.getParameterTypes());
+      generatedConstructors.add(constructor);
+    }
+  }
+
+  private boolean prepareNativeHandles() {
+    boolean changed = false;
+    for (Map.Entry<Executable, Class<?>> entry : creators.entrySet()) {
+      Executable executable = entry.getKey();
+      if (!preparedCreators.add(executable)) {
+        continue;
+      }
+      Class<?> ownerType = entry.getValue();
+      boolean stringCreator =
+          executable.getParameterCount() == 1
+              && executable.getParameterTypes()[0] == String.class;
+      if (executable instanceof Constructor<?>) {
+        JsonCreatorCodegen.Invokers invokers =
+            JsonCreatorCodegen.create((Constructor<?>) executable);
+        RuntimeReflection.register(invokers.type);
+        RuntimeReflection.register(invokers.creatorMethod);
+        JsonCreatorInfo.prepareNativeConstructor(
+            (Constructor<?>) executable, invokers.creator);
+        if (stringCreator) {
+          RuntimeReflection.register(invokers.stringMethod);
+          JsonStringValueCodec.prepareNativeConstructor(
+              (Constructor<?>) executable, invokers.stringCreator);
+        }
+      } else {
+        JsonCreatorInfo.prepareNativeInvoker(ownerType, executable);
+        if (stringCreator) {
+          JsonStringValueCodec.prepareNativeCreator(ownerType, executable);
+        }
+      }
+      RuntimeReflection.register(executable);
+      changed = true;
+    }
+    for (Constructor<?> constructor : generatedConstructors) {
+      if (preparedGeneratedConstructors.add(constructor)) {
+        ReflectionUtils.getCtrHandle(
+            constructor.getDeclaringClass(), constructor.getParameterTypes());
+        RuntimeReflection.register(constructor);
+        changed = true;
+      }
+    }
+    return changed;
+  }
+
+  private static IllegalStateException providerFailure(
+      Class<?> providerClass, String reason, Throwable cause) {
+    String message = "Invalid @ForyJsonProvider " + providerClass.getName() + ": " + reason;
+    return cause == null
+        ? new IllegalStateException(message)
+        : new IllegalStateException(message, cause);
+  }
+
+  private static Throwable unwrap(Throwable throwable) {
+    return throwable instanceof InvocationTargetException && throwable.getCause() != null
+        ? throwable.getCause()
+        : throwable;
   }
 
   private boolean registerModel(DuringAnalysisAccess access, Class<?> type) {
@@ -136,11 +370,15 @@ final class ForyJsonGraalVMFeature implements Feature {
         && !Collection.class.isAssignableFrom(type)
         && !Map.class.isAssignableFrom(type)) {
       registerModelHierarchy(access, type);
-      if (!type.isRecord() && GraalvmSupport.needReflectionRegisterForCreation(type)) {
-        RuntimeReflection.registerForReflectiveInstantiation(type);
+      if (type.isRecord()) {
+        prepareRecord(type);
+      } else if (!Modifier.isAbstract(type.getModifiers())) {
+        ObjectInstantiators.getObjectInstantiator(type);
+        if (GraalvmSupport.needReflectionRegisterForCreation(type)) {
+          RuntimeReflection.registerForReflectiveInstantiation(type);
+        }
       }
     }
-    registerGeneratedCodec(access, type, null);
     registerSubtypes(access, type);
     return true;
   }
@@ -150,6 +388,7 @@ final class ForyJsonGraalVMFeature implements Feature {
     if (!processedMixins.add(mixinType)) {
       return false;
     }
+    reachableMixins.computeIfAbsent(targetType, ignored -> new LinkedHashSet<>()).add(mixinType);
     JsonMixinView annotations = JsonSharedRegistry.resolveMixin(targetType, mixinType);
     RuntimeReflection.register(mixinType);
     if (annotations.isEmpty()) {
@@ -179,12 +418,15 @@ final class ForyJsonGraalVMFeature implements Feature {
     // effective annotations visible here as hosted reachability facts.
     if (!intrinsicTarget && !hasTypeCodec && !hasJsonValue && subTypes == null) {
       registerModelHierarchy(access, targetType, annotations);
-      if (!targetType.isRecord()
-          && GraalvmSupport.needReflectionRegisterForCreation(targetType)) {
-        RuntimeReflection.registerForReflectiveInstantiation(targetType);
+      if (targetType.isRecord()) {
+        prepareRecord(targetType);
+      } else if (!Modifier.isAbstract(targetType.getModifiers())) {
+        ObjectInstantiators.getObjectInstantiator(targetType);
+        if (GraalvmSupport.needReflectionRegisterForCreation(targetType)) {
+          RuntimeReflection.registerForReflectiveInstantiation(targetType);
+        }
       }
     }
-    registerGeneratedCodec(access, targetType, mixinType);
     if (!hasTypeCodec && !hasJsonValue) {
       registerSubtypes(access, targetType, annotations);
     }
@@ -226,6 +468,9 @@ final class ForyJsonGraalVMFeature implements Feature {
         if (annotation(annotations, field, JsonValue.class) != null) {
           hasValue = true;
           RuntimeReflection.register(field);
+          // JsonValueDeclaration deliberately coalesces a Record component's propagated field and
+          // accessor annotations to the backing field on the interpreted path.
+          JsonFieldAccessor.prepareField(field);
           if (Runtime.version().feature() <= 24) {
             access.registerAsUnsafeAccessed(field);
           }
@@ -237,6 +482,7 @@ final class ForyJsonGraalVMFeature implements Feature {
       if (annotation(annotations, method, JsonValue.class) != null) {
         hasValue = true;
         RuntimeReflection.register(method);
+        JsonFieldAccessor.prepareGetter(method);
         registerOccurrenceCodecs(annotations, method);
       }
     }
@@ -248,6 +494,7 @@ final class ForyJsonGraalVMFeature implements Feature {
             && annotation(annotations, method, JsonValue.class) != null) {
           hasValue = true;
           RuntimeReflection.register(method);
+          JsonFieldAccessor.prepareGetter(method);
           registerOccurrenceCodecs(annotations, method);
         }
       }
@@ -255,14 +502,17 @@ final class ForyJsonGraalVMFeature implements Feature {
     if (!hasValue) {
       return false;
     }
+    if (type.isRecord()) {
+      prepareRecord(type);
+    }
     for (Constructor<?> constructor : type.getDeclaredConstructors()) {
       if (annotation(annotations, constructor, JsonCreator.class) != null) {
-        RuntimeReflection.register(constructor);
+        registerCreator(type, constructor);
       }
     }
     for (Method method : type.getDeclaredMethods()) {
       if (annotation(annotations, method, JsonCreator.class) != null) {
-        RuntimeReflection.register(method);
+        registerCreator(type, method);
       }
     }
     return true;
@@ -282,61 +532,13 @@ final class ForyJsonGraalVMFeature implements Feature {
     }
   }
 
-  private void registerGeneratedCodec(
-      DuringAnalysisAccess access, Class<?> type, Class<?> mixinType) {
-    String codecName =
-        mixinType == null
-            ? JsonSharedRegistry.generatedCodecBinaryName(type)
-            : JsonSharedRegistry.generatedMixinCodecBinaryName(mixinType, type);
-    Class<?> codecClass = access.findClassByName(codecName);
-    if (codecClass == null) {
-      return;
-    }
-    if (!GeneratedJsonCodec.class.isAssignableFrom(codecClass)) {
-      throw new IllegalStateException(
-          codecName + " does not extend " + GeneratedJsonCodec.class.getName());
-    }
-    try {
-      if (!Modifier.isPublic(codecClass.getModifiers())) {
-        throw new IllegalStateException("Generated JSON codec must be public: " + codecName);
-      }
-      codecClass.getConstructor();
-    } catch (NoSuchMethodException e) {
-      throw new IllegalStateException(
-          "Generated JSON codec must have a public no-argument constructor: " + codecName, e);
-    }
-    String factoryName = codecName + "$Factory";
-    Class<?> factoryClass = access.findClassByName(factoryName);
-    if (factoryClass == null || !GeneratedJsonCodecFactory.class.isAssignableFrom(factoryClass)) {
-      throw new IllegalStateException(
-          "Missing generated JSON codec factory " + factoryName + " for " + type.getName());
-    }
-    int modifiers = factoryClass.getModifiers();
-    if (!Modifier.isPublic(modifiers)
-        || !Modifier.isStatic(modifiers)
-        || !Modifier.isFinal(modifiers)) {
-      throw new IllegalStateException(
-          "Generated JSON codec factory must be public static final: " + factoryName);
-    }
-    try {
-      GeneratedJsonCodecFactory factory =
-          (GeneratedJsonCodecFactory) ReflectionUtils.getCtrHandle(factoryClass).invoke();
-      GeneratedJsonCodec<?> codec =
-          JsonSharedRegistry.validateGeneratedCodec(type, factory.create());
-      if (codec.validatedRecord() != type.isRecord()) {
-        throw new IllegalStateException(
-            "Generated JSON codec Record metadata does not match " + type.getName());
-      }
-      GeneratedJsonCodecFactories.register(type, mixinType, factory);
-    } catch (Throwable e) {
-      throw new IllegalStateException(
-          "Cannot initialize generated JSON codec factory " + factoryName, e);
-    }
-  }
-
   @Override
   public void afterAnalysis(AfterAnalysisAccess access) {
-    GeneratedJsonCodecFactories.freeze();
+    JsonGeneratedClassRegistry.freeze();
+    JsonFieldAccessor.freezeNativeAccessors();
+    JsonCreatorInfo.freezeNativeInvokers();
+    JsonStringValueCodec.freezeNativeCreators();
+    ObjectCodec.freezeNativeAnySetters();
   }
 
   private void registerModelHierarchy(DuringAnalysisAccess access, Class<?> type) {
@@ -350,16 +552,17 @@ final class ForyJsonGraalVMFeature implements Feature {
     for (Class<?> current = type;
         current != null && current != Object.class;
         current = current.getSuperclass()) {
-      // ObjectCodecBuilder still reads semantic annotations, generic types, and exact creator
-      // signatures at image runtime. Register that metadata here instead of routing JSON models
-      // through the core Fory feature, whose Record registration initializes RecordUtils and would
-      // reintroduce the native-Record path that generated JSON companions replace.
+      // Runtime configurations still select members from semantic reflection metadata. Accessor
+      // construction itself is hosted and cached below.
       RuntimeReflection.register(current);
       RuntimeReflection.register(current.getDeclaredFields());
       RuntimeReflection.register(current.getDeclaredMethods());
       RuntimeReflection.register(current.getDeclaredConstructors());
       for (Field field : current.getDeclaredFields()) {
         if (isJsonField(field)) {
+          if (!record) {
+            JsonFieldAccessor.prepareField(field);
+          }
           if (!current.isRecord() && Runtime.version().feature() <= 24) {
             access.registerAsUnsafeAccessed(field);
           }
@@ -371,15 +574,20 @@ final class ForyJsonGraalVMFeature implements Feature {
           }
         }
       }
+      for (Method method : current.getDeclaredMethods()) {
+        if (annotation(annotations, method, JsonValue.class) != null) {
+          prepareMethodAccessors(annotations, method);
+        }
+      }
     }
     for (Method method : type.getMethods()) {
       boolean mixinSelector = hasMixinSelector(annotations, method);
-      if (ObjectCodecBuilder.usesJsonMetadata(method, record)
-          || mixinSelector) {
+      if (ObjectCodec.usesJsonMetadata(method, record) || mixinSelector) {
+        prepareMethodAccessors(annotations, method);
         if (method.getDeclaringClass().isInterface()) {
           RuntimeReflection.register(method);
         }
-        if (ObjectCodecBuilder.usesJsonReturn(method)
+        if (ObjectCodec.usesJsonReturn(method)
             || mixinSelector && method.getReturnType() != void.class) {
           registerOccurrenceCodecs(annotations, method);
           Type resolvedType = ownerType.resolveType(method.getGenericReturnType()).getType();
@@ -388,7 +596,7 @@ final class ForyJsonGraalVMFeature implements Feature {
             registerNestedModel(access, resolvedType);
           }
         }
-        if (ObjectCodecBuilder.usesJsonParameters(method)
+        if (ObjectCodec.usesJsonParameters(method)
             || mixinSelector && method.getParameterCount() != 0) {
           registerParameterCodecs(annotations, method.getParameters());
           registerResolvedParameterTypes(ownerType, method.getParameters());
@@ -397,8 +605,8 @@ final class ForyJsonGraalVMFeature implements Feature {
       }
     }
     for (Constructor<?> constructor : type.getDeclaredConstructors()) {
-      if (annotation(annotations, constructor, JsonCreator.class) != null
-          || hasMixinSelector(annotations, constructor)) {
+      if (annotation(annotations, constructor, JsonCreator.class) != null) {
+        registerCreator(type, constructor);
         registerParameterCodecs(annotations, constructor.getParameters());
         registerResolvedParameterTypes(ownerType, constructor.getParameters());
         registerUnwrappedParameters(
@@ -406,12 +614,53 @@ final class ForyJsonGraalVMFeature implements Feature {
       }
     }
     for (Method method : type.getDeclaredMethods()) {
-      if (annotation(annotations, method, JsonCreator.class) != null
-          || hasMixinSelector(annotations, method)) {
+      if (annotation(annotations, method, JsonCreator.class) != null) {
+        registerCreator(type, method);
         registerParameterCodecs(annotations, method.getParameters());
         registerResolvedParameterTypes(ownerType, method.getParameters());
         registerUnwrappedParameters(access, ownerType, annotations, method.getParameters());
       }
+    }
+  }
+
+  private void prepareRecord(Class<?> type) {
+    RuntimeReflection.registerAllRecordComponents(type);
+    RecordUtils.prepareRecordComponentGetters(type);
+    for (RecordComponent component : type.getRecordComponents()) {
+      JsonFieldAccessor.prepareGetter(component.getAccessor());
+    }
+    Constructor<?> constructor = RecordUtils.getRecordConstructor(type).f0;
+    registerCreator(type, constructor);
+  }
+
+  private void registerCreator(Class<?> ownerType, Executable executable) {
+    RuntimeReflection.register(executable);
+    if (executable instanceof Constructor<?>) {
+      RuntimeReflection.registerConstructorLookup(ownerType, executable.getParameterTypes());
+    } else {
+      Method method = (Method) executable;
+      RuntimeReflection.registerMethodLookup(
+          method.getDeclaringClass(), method.getName(), method.getParameterTypes());
+    }
+    Class<?> previous = creators.putIfAbsent(executable, ownerType);
+    if (previous != null && previous != ownerType) {
+      throw new IllegalStateException(
+          "Conflicting Fory JSON creator owners for " + executable);
+    }
+  }
+
+  private static void prepareMethodAccessors(JsonMixinView annotations, Method method) {
+    int modifiers = method.getModifiers();
+    if (Modifier.isStatic(modifiers) || method.isSynthetic() || method.isBridge()) {
+      return;
+    }
+    if (method.getParameterCount() == 0 && method.getReturnType() != void.class) {
+      JsonFieldAccessor.prepareGetter(method);
+    } else if (method.getParameterCount() == 1 && method.getReturnType() == void.class) {
+      JsonFieldAccessor.prepareSetter(method);
+    }
+    if (annotation(annotations, method, JsonAnySetter.class) != null) {
+      ObjectCodec.prepareNativeAnySetter(method);
     }
   }
 
@@ -555,7 +804,9 @@ final class ForyJsonGraalVMFeature implements Feature {
     }
     RuntimeReflection.register(codecClass);
     try {
-      RuntimeReflection.register(codecClass.getConstructor());
+      Constructor<?> constructor = codecClass.getConstructor();
+      RuntimeReflection.register(constructor);
+      ReflectionUtils.getCtrHandle(codecClass, new Class<?>[0]);
     } catch (NoSuchMethodException e) {
       throw new IllegalStateException(
           "JSON codec class must have a public no-argument constructor: " + codecClass.getName(),
@@ -573,7 +824,9 @@ final class ForyJsonGraalVMFeature implements Feature {
       return false;
     }
     try {
-      RuntimeReflection.register(rawType.getConstructor());
+      Constructor<?> constructor = rawType.getConstructor();
+      RuntimeReflection.register(constructor);
+      ReflectionUtils.getCtrHandle(rawType, new Class<?>[0]);
       return true;
     } catch (NoSuchMethodException ignored) {
       // CollectionCodec and MapCodec preserve the same runtime failure for a concrete container
@@ -606,7 +859,9 @@ final class ForyJsonGraalVMFeature implements Feature {
       if (type != null) {
         RuntimeReflection.register(type);
         try {
-          RuntimeReflection.register(type.getConstructor(long.class));
+          Constructor<?> constructor = type.getConstructor(long.class);
+          RuntimeReflection.register(constructor);
+          ReflectionUtils.getCtrHandle(type, long.class);
         } catch (NoSuchMethodException e) {
           throw new IllegalStateException("Missing Fory JSON SQL constructor for " + className, e);
         }
@@ -657,5 +912,71 @@ final class ForyJsonGraalVMFeature implements Feature {
       return rawType instanceof Class<?> ? (Class<?>) rawType : null;
     }
     return null;
+  }
+
+  private static final class HostedConfiguration {
+    private final JsonSharedRegistry registry;
+    private final JsonTypeResolver resolver;
+    private final Map<Class<?>, Class<?>> mixins;
+
+    private HostedConfiguration(JsonConfig config) {
+      registry = JsonSharedRegistry.forHostedCodegen(config);
+      resolver = new JsonTypeResolver(registry);
+      mixins = config.mixins();
+    }
+  }
+
+  private static final class MethodSignature {
+    private final String name;
+    private final Class<?>[] parameterTypes;
+
+    private MethodSignature(Method method) {
+      name = method.getName();
+      parameterTypes = method.getParameterTypes();
+    }
+
+    @Override
+    public boolean equals(Object other) {
+      if (this == other) {
+        return true;
+      }
+      if (!(other instanceof MethodSignature)) {
+        return false;
+      }
+      MethodSignature that = (MethodSignature) other;
+      return name.equals(that.name) && Arrays.equals(parameterTypes, that.parameterTypes);
+    }
+
+    @Override
+    public int hashCode() {
+      return 31 * name.hashCode() + Arrays.hashCode(parameterTypes);
+    }
+  }
+
+  private static final class GenerationKey {
+    private final JsonCodegenKey configuration;
+    private final Class<?> model;
+
+    private GenerationKey(JsonCodegenKey configuration, Class<?> model) {
+      this.configuration = configuration;
+      this.model = model;
+    }
+
+    @Override
+    public boolean equals(Object other) {
+      if (this == other) {
+        return true;
+      }
+      if (!(other instanceof GenerationKey)) {
+        return false;
+      }
+      GenerationKey that = (GenerationKey) other;
+      return configuration.equals(that.configuration) && model == that.model;
+    }
+
+    @Override
+    public int hashCode() {
+      return 31 * configuration.hashCode() + System.identityHashCode(model);
+    }
   }
 }

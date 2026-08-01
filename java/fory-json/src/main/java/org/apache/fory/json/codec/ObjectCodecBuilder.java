@@ -63,6 +63,7 @@ import org.apache.fory.json.meta.JsonFieldAccessor;
 import org.apache.fory.json.meta.JsonFieldInfo;
 import org.apache.fory.json.meta.JsonFieldNameHash;
 import org.apache.fory.json.resolver.JsonSharedRegistry;
+import org.apache.fory.platform.GraalvmSupport;
 import org.apache.fory.reflect.ObjectInstantiator;
 import org.apache.fory.reflect.ObjectInstantiators;
 import org.apache.fory.reflect.TypeRef;
@@ -340,7 +341,11 @@ final class ObjectCodecBuilder {
                 annotations)
             : null;
     ObjectInstantiator<?> instantiator =
-        creatorInfo == null ? ObjectInstantiators.createObjectInstantiator(type) : null;
+        creatorInfo == null
+            ? GraalvmSupport.isGraalRuntime()
+                ? ObjectInstantiators.getObjectInstantiator(type)
+                : ObjectInstantiators.createObjectInstantiator(type)
+            : null;
     String[] skipped = hasAny ? skippedNames.toArray(new String[0]) : null;
     JsonUnwrappedInfo unwrappedInfo =
         hasUnwrapped

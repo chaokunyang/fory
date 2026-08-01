@@ -25,6 +25,10 @@ import java.lang.reflect.Constructor;
 import java.lang.reflect.Executable;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.Map;
+import org.apache.fory.annotation.Internal;
 import org.apache.fory.json.ForyJsonException;
 import org.apache.fory.json.codec.GeneratedJsonCodec;
 import org.apache.fory.json.codec.JsonValueCodec;
@@ -35,10 +39,13 @@ import org.apache.fory.json.reader.Utf8JsonReader;
 import org.apache.fory.json.writer.StringJsonWriter;
 import org.apache.fory.json.writer.Utf8JsonWriter;
 import org.apache.fory.platform.AndroidSupport;
+import org.apache.fory.platform.GraalvmSupport;
 import org.apache.fory.platform.internal._JDKAccess;
+import org.apache.fory.reflect.ReflectionUtils;
 
 /** Complete String representation selected by one effective {@code JsonValue} member. */
-final class JsonStringValueCodec implements JsonValueCodec<Object> {
+@Internal
+public final class JsonStringValueCodec implements JsonValueCodec<Object> {
   private final Class<?> ownerType;
   private final JsonFieldAccessor accessor;
   private final ValueCreator creator;
@@ -132,6 +139,9 @@ final class JsonStringValueCodec implements JsonValueCodec<Object> {
   }
 
   private abstract static class ValueCreator {
+    private static Map<Executable, MethodHandle> nativeInvokers = new HashMap<>();
+    private static boolean nativeInvokersFrozen;
+
     final Class<?> ownerType;
 
     private ValueCreator(Class<?> ownerType) {
@@ -175,17 +185,57 @@ final class JsonStringValueCodec implements JsonValueCodec<Object> {
     }
 
     private static MethodHandle buildInvoker(Class<?> ownerType, Executable executable) {
+      if (GraalvmSupport.isGraalRuntime()) {
+        MethodHandle invoker = nativeInvokers.get(executable);
+        if (invoker == null) {
+          throw new ForyJsonException(
+              "Missing Native Image Fory JSON String creator metadata for " + executable);
+        }
+        return invoker;
+      }
       try {
         MethodHandle target =
             executable instanceof Constructor
-                ? _JDKAccess._trustedLookup(ownerType)
-                    .unreflectConstructor((Constructor<?>) executable)
+                ? ReflectionUtils.getCtrHandle(ownerType, executable.getParameterTypes())
                 : _JDKAccess._trustedLookup(ownerType).unreflect((Method) executable);
         return target.asType(MethodType.methodType(Object.class, String.class));
       } catch (IllegalAccessException e) {
         throw new ForyJsonException("Cannot access JSON creator for " + ownerType.getName(), e);
       }
     }
+  }
+
+  /** Prepares one complete-String creator handle for Native Image runtime metadata construction. */
+  @Internal
+  public static synchronized void prepareNativeCreator(Class<?> ownerType, Executable executable) {
+    if (!GraalvmSupport.isGraalBuildTime() || ValueCreator.nativeInvokersFrozen) {
+      throw new IllegalStateException("Fory JSON native String creator cache is not writable");
+    }
+    ValueCreator.nativeInvokers.putIfAbsent(
+        executable, ValueCreator.buildInvoker(ownerType, executable));
+  }
+
+  /** Caches one generated one-String constructor invoker for Native Image runtime use. */
+  @Internal
+  public static synchronized void prepareNativeConstructor(
+      Constructor<?> constructor, MethodHandle invoker) {
+    if (!GraalvmSupport.isGraalBuildTime() || ValueCreator.nativeInvokersFrozen) {
+      throw new IllegalStateException("Fory JSON native String creator cache is not writable");
+    }
+    ValueCreator.nativeInvokers.putIfAbsent(constructor, invoker);
+  }
+
+  /** Freezes all Native Image complete-String creator handles after hosted analysis. */
+  @Internal
+  public static synchronized void freezeNativeCreators() {
+    if (ValueCreator.nativeInvokersFrozen) {
+      return;
+    }
+    ValueCreator.nativeInvokers =
+        ValueCreator.nativeInvokers.isEmpty()
+            ? Collections.emptyMap()
+            : Collections.unmodifiableMap(new HashMap<>(ValueCreator.nativeInvokers));
+    ValueCreator.nativeInvokersFrozen = true;
   }
 
   private static final class GeneratedCreator extends ValueCreator {

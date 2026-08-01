@@ -49,7 +49,6 @@ import javax.tools.ToolProvider;
 import org.apache.fory.json.ForyJson;
 import org.apache.fory.json.ForyJsonException;
 import org.apache.fory.json.codec.GeneratedJsonCodec;
-import org.apache.fory.json.codec.GeneratedJsonCodecFactory;
 import org.apache.fory.json.meta.JsonAnySetterAccessor;
 import org.apache.fory.json.meta.JsonFieldAccessor;
 import org.testng.SkipException;
@@ -58,8 +57,6 @@ import org.testng.annotations.Test;
 public class JsonTypeProcessorTest {
   private static final String RULE_PREFIX = "META-INF/proguard/fory-json-";
   private static final String MIXIN_RULE_PREFIX = "META-INF/proguard/fory-json-mixin-";
-  private static final String NATIVE_IMAGE_PREFIX =
-      "META-INF/native-image/org.apache.fory/fory-json-";
 
   @Test
   public void unannotatedType() throws Exception {
@@ -82,8 +79,6 @@ public class JsonTypeProcessorTest {
     String companion = "test.EmptyMixin_ForyJsonMixin_test_x2e_Target_ForyJsonCodec";
     assertFalse(result.hasGeneratedSource(companion.replace('.', '/') + ".java"));
     assertFalse(result.hasGeneratedResource(MIXIN_RULE_PREFIX + "test.EmptyMixin.pro"));
-    assertFalse(
-        result.hasGeneratedResource(NATIVE_IMAGE_PREFIX + companion + "/native-image.properties"));
   }
 
   @Test
@@ -505,10 +500,6 @@ public class JsonTypeProcessorTest {
     assertFalse(rules.contains("test.Plain_ForyJsonCodec$Factory"), rules);
     assertFalse(rules.contains("-keep,allowoptimization,allowobfuscation class test.Plain"), rules);
     assertTrue(result.hasGeneratedSource("test/Plain_ForyJsonCodec.java"));
-    assertEquals(
-        result.generatedResource(
-            NATIVE_IMAGE_PREFIX + "test.Plain_ForyJsonCodec/native-image.properties"),
-        "Args=--initialize-at-build-time=test.Plain_ForyJsonCodec$Factory\n");
   }
 
   @Test
@@ -553,14 +544,6 @@ public class JsonTypeProcessorTest {
     anySetter.put(model, "answer", 42);
     Field extra = modelType.getField("extra");
     assertEquals(((Map<?, ?>) extra.get(model)).get("answer"), 42);
-
-    GeneratedJsonCodecFactory factory =
-        (GeneratedJsonCodecFactory)
-            loader
-                .loadClass("test.GeneratedModel_ForyJsonCodec$Factory")
-                .getConstructor()
-                .newInstance();
-    assertEquals(factory.create().type(), modelType);
   }
 
   @Test

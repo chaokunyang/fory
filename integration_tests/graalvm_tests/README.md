@@ -1,17 +1,21 @@
 # GraalVM Native Image Tests
 
-Examples and tests for Fory serialization in GraalVM Native Image. The Fory JSON
-entry point covers direct `JsonType` models and runtime registration of exact
-`JsonMixin` target/source mappings. Native-image hosted analysis resolves each mapping and registers
-its generated factory when present. The built executables then execute direct and Mixin mappings at
-runtime; the module-path run verifies the same factories through JPMS.
+Examples and tests for Fory serialization in GraalVM Native Image. The Fory JSON entry points are
+compiled with annotation processing disabled. They cover direct `JsonType` models, exact
+`JsonMixin` target/source mappings, provider-selected hosted codec generation, configuration
+fallback to interpreted codecs, and a separate image with no reachable `ForyJsonProvider`.
 
 ## Test
 
 ```bash
-mvn clean -DskipTests=true -Pnative package
+mvn -DmainClass=org.apache.fory.graalvm.ForyJsonExample clean -DskipTests=true -Dexec.skip=true -Pnative package
 ./target/main
-mvn clean -DskipTests=true -Pnative-module package
+mvn -DmainClass=org.apache.fory.graalvm.ForyJsonExample clean -DskipTests=true -Pnative-module package
+./target/main-module
+
+mvn -DmainClass=org.apache.fory.graalvm.ForyJsonNoProviderExample clean -DskipTests=true -Dexec.skip=true -Pnative package
+./target/main
+mvn -DmainClass=org.apache.fory.graalvm.ForyJsonNoProviderExample clean -DskipTests=true -Pnative-module package
 ./target/main-module
 ```
 

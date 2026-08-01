@@ -35,12 +35,11 @@ import org.apache.fory.json.resolver.CodecRegistry;
 /**
  * Build configuration used to create all pooled states of one {@link ForyJson} instance.
  *
- * <p>Scalar settings are fixed at construction. The codec registry is builder-owned mutable input
- * and is copied immediately by the runtime's shared registry; the JSON runtime never mutates it.
- * {@link #getCodegenHash()} identifies only settings that can change generated source; runtime-only
- * settings such as depth and asynchronous scheduling do not fragment generated class names.
- * Concurrency, per-reader field-name cache, and retained writer-buffer limits are also runtime-only
- * and do not fragment generated class names.
+ * <p>Scalar settings and the codec registry are snapshotted at construction; the JSON runtime never
+ * observes later builder mutation. {@link #getCodegenHash()} identifies only settings that can
+ * change generated source; runtime-only settings such as depth and asynchronous scheduling do not
+ * fragment generated class names. Concurrency, per-reader field-name cache, and retained
+ * writer-buffer limits are also runtime-only and do not fragment generated class names.
  */
 public final class JsonConfig {
   private static final int MAX_CACHED_FIELD_NAMES = 1 << 29;
@@ -59,7 +58,7 @@ public final class JsonConfig {
   private final Map<Class<?>, Class<?>> mixins;
   private final JsonTypeChecker typeChecker;
   private final JsonTypeCheckContext typeCheckContext;
-  private final CodegenKey codegenKey;
+  private final JsonCodegenKey codegenKey;
   private transient int codegenHash;
 
   JsonConfig(
@@ -88,13 +87,13 @@ public final class JsonConfig {
     this.maxCachedFieldNames = maxCachedFieldNames;
     this.concurrencyLevel = concurrencyLevel;
     this.bufferSizeLimitBytes = bufferSizeLimitBytes;
-    this.codecRegistry = codecRegistry;
+    this.codecRegistry = codecRegistry.copy();
     this.mixins = immutableMixins(mixins);
     this.typeChecker = typeChecker;
     typeCheckContext = new JsonTypeCheckContext();
-    String codecRegistryKey = codecRegistry.codegenKey();
+    String codecRegistryKey = this.codecRegistry.codegenKey();
     codegenKey =
-        new CodegenKey(
+        new JsonCodegenKey(
             writeNullFields,
             propertyDiscoveryEnabled,
             propertyNamingStrategy,
@@ -200,7 +199,7 @@ public final class JsonConfig {
   // Equal generated source inputs share one map entry, following core generated-code naming model.
   // This process-wide map retains only immutable configuration text and integers, never user
   // classes, codec instances, class loaders, or generated classes.
-  private static final ConcurrentMap<CodegenKey, Integer> CODEGEN_ID_MAP =
+  private static final ConcurrentMap<JsonCodegenKey, Integer> CODEGEN_ID_MAP =
       new ConcurrentHashMap<>();
 
   public int getCodegenHash() {
@@ -210,48 +209,9 @@ public final class JsonConfig {
     return codegenHash;
   }
 
-  private static final class CodegenKey {
-    private final boolean writeNullFields;
-    private final boolean propertyDiscoveryEnabled;
-    private final PropertyNamingStrategy propertyNamingStrategy;
-    private final String codecRegistryKey;
-    private final String mixinKey;
-
-    private CodegenKey(
-        boolean writeNullFields,
-        boolean propertyDiscoveryEnabled,
-        PropertyNamingStrategy propertyNamingStrategy,
-        String codecRegistryKey,
-        String mixinKey) {
-      this.writeNullFields = writeNullFields;
-      this.propertyDiscoveryEnabled = propertyDiscoveryEnabled;
-      this.propertyNamingStrategy = propertyNamingStrategy;
-      this.codecRegistryKey = codecRegistryKey;
-      this.mixinKey = mixinKey;
-    }
-
-    @Override
-    public boolean equals(Object other) {
-      if (this == other) {
-        return true;
-      }
-      if (other == null || getClass() != other.getClass()) {
-        return false;
-      }
-      CodegenKey that = (CodegenKey) other;
-      return writeNullFields == that.writeNullFields
-          && propertyDiscoveryEnabled == that.propertyDiscoveryEnabled
-          && propertyNamingStrategy == that.propertyNamingStrategy
-          && Objects.equals(codecRegistryKey, that.codecRegistryKey)
-          && Objects.equals(mixinKey, that.mixinKey);
-    }
-
-    @Override
-    public int hashCode() {
-      int result =
-          Objects.hash(
-              writeNullFields, propertyDiscoveryEnabled, propertyNamingStrategy, codecRegistryKey);
-      return 31 * result + mixinKey.hashCode();
-    }
+  /** Returns the immutable generated-source identity for this configuration. */
+  @Internal
+  public JsonCodegenKey codegenKey() {
+    return codegenKey;
   }
 }

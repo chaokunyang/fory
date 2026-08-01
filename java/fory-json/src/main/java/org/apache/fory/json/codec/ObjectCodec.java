@@ -25,6 +25,8 @@ import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.lang.reflect.Type;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.Map;
 import org.apache.fory.annotation.Internal;
 import org.apache.fory.json.ForyJsonException;
@@ -50,6 +52,7 @@ import org.apache.fory.json.resolver.JsonTypeResolver;
 import org.apache.fory.json.writer.StringJsonWriter;
 import org.apache.fory.json.writer.Utf8JsonWriter;
 import org.apache.fory.platform.AndroidSupport;
+import org.apache.fory.platform.GraalvmSupport;
 import org.apache.fory.platform.internal._JDKAccess;
 import org.apache.fory.reflect.ObjectInstantiator;
 import org.apache.fory.reflect.TypeRef;
@@ -154,6 +157,36 @@ public class ObjectCodec<T> implements JsonValueCodec<T> {
         skippedNames,
         unwrappedInfo,
         instantiator);
+  }
+
+  /** Prepares one {@code JsonAnySetter} handle for Native Image runtime metadata construction. */
+  @Internal
+  public static void prepareNativeAnySetter(Method method) {
+    AnyInfo.prepareNativeSetter(method);
+  }
+
+  /** Freezes all Native Image {@code JsonAnySetter} handles after hosted analysis. */
+  @Internal
+  public static void freezeNativeAnySetters() {
+    AnyInfo.freezeNativeSetters();
+  }
+
+  /** Returns whether hosted metadata must retain this method for object discovery. */
+  @Internal
+  public static boolean usesJsonMetadata(Method method, boolean record) {
+    return ObjectCodecBuilder.usesJsonMetadata(method, record);
+  }
+
+  /** Returns whether hosted metadata must retain this method's return type. */
+  @Internal
+  public static boolean usesJsonReturn(Method method) {
+    return ObjectCodecBuilder.usesJsonReturn(method);
+  }
+
+  /** Returns whether hosted metadata must retain this method's parameter types. */
+  @Internal
+  public static boolean usesJsonParameters(Method method) {
+    return ObjectCodecBuilder.usesJsonParameters(method);
   }
 
   public final Class<?> type() {
@@ -1392,6 +1425,9 @@ public class ObjectCodec<T> implements JsonValueCodec<T> {
 
   @Internal
   public static final class AnyInfo {
+    private static Map<Method, MethodHandle> nativeSetterHandles = new HashMap<>();
+    private static boolean nativeSetterHandlesFrozen;
+
     private final Field writeField;
     private final Method writeGetter;
     private final Field readField;
@@ -1566,11 +1602,37 @@ public class ObjectCodec<T> implements JsonValueCodec<T> {
     }
 
     private static MethodHandle methodHandle(Method method) {
+      if (GraalvmSupport.isGraalRuntime()) {
+        MethodHandle handle = nativeSetterHandles.get(method);
+        if (handle == null) {
+          throw new ForyJsonException(
+              "Missing Native Image Fory JSON Any setter metadata for " + method);
+        }
+        return handle;
+      }
       try {
         return _JDKAccess._trustedLookup(method.getDeclaringClass()).unreflect(method);
       } catch (IllegalAccessException e) {
         throw new ForyJsonException("Cannot access @JsonAnySetter " + method, e);
       }
+    }
+
+    private static synchronized void prepareNativeSetter(Method method) {
+      if (!GraalvmSupport.isGraalBuildTime() || nativeSetterHandlesFrozen) {
+        throw new IllegalStateException("Fory JSON native Any setter cache is not writable");
+      }
+      nativeSetterHandles.putIfAbsent(method, methodHandle(method));
+    }
+
+    private static synchronized void freezeNativeSetters() {
+      if (nativeSetterHandlesFrozen) {
+        return;
+      }
+      nativeSetterHandles =
+          nativeSetterHandles.isEmpty()
+              ? Collections.emptyMap()
+              : Collections.unmodifiableMap(new HashMap<>(nativeSetterHandles));
+      nativeSetterHandlesFrozen = true;
     }
   }
 

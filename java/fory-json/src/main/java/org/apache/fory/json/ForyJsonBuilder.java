@@ -76,7 +76,9 @@ public final class ForyJsonBuilder {
 
   /**
    * Enables generated object codecs for supported classes. Enabled by default and automatically
-   * disabled on Android and in a GraalVM native image.
+   * disabled on Android. In a GraalVM native image, generated codecs are available only for
+   * configurations returned by a reachable {@link
+   * org.apache.fory.json.annotation.ForyJsonProvider}; other configurations use interpreted codecs.
    */
   public ForyJsonBuilder withCodegen(boolean codegenEnabled) {
     this.codegenEnabled = codegenEnabled;
@@ -248,9 +250,9 @@ public final class ForyJsonBuilder {
         fixedClassLoader = ForyJson.class.getClassLoader();
       }
     }
-    boolean effectiveCodegen =
-        codegenEnabled && !AndroidSupport.IS_ANDROID && !GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE;
-    boolean effectiveAsyncCompilation = asyncCompilationEnabled && effectiveCodegen;
+    boolean effectiveCodegen = codegenEnabled && !AndroidSupport.IS_ANDROID;
+    boolean effectiveAsyncCompilation =
+        asyncCompilationEnabled && effectiveCodegen && !GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE;
     return new ForyJson(
         new JsonConfig(
             writeNullFields,

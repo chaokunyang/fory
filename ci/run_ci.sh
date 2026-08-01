@@ -80,7 +80,7 @@ install_jdks() {
 }
 
 run_graalvm_tests() {
-  local main_class="$1"
+  local main_classes=("$@")
   local java_version
   local java_major
   java_version=$(java -version 2>&1 | awk -F '"' '/version/ {print $2; exit}')
@@ -102,14 +102,16 @@ run_graalvm_tests() {
     -Dmaven.test.skip=true \
     -Dmaven.source.skip=true \
     -Dmaven.javadoc.skip=true
-  echo "Start to build GraalVM JPMS native image for $main_class"
   cd "$ROOT"/integration_tests/graalvm_tests
-  mvn -DmainClass="$main_class" -DskipTests=true -Dassembly.skipAssembly=true \
-    --no-transfer-progress -Pnative-module clean package
-  echo "Built GraalVM JPMS native image"
-  echo "Start to run GraalVM JPMS native image"
-  ./target/main-module
-  echo "Execute GraalVM tests for $main_class succeed!"
+  for main_class in "${main_classes[@]}"; do
+    echo "Start to build GraalVM JPMS native image for $main_class"
+    mvn -DmainClass="$main_class" -DskipTests=true -Dassembly.skipAssembly=true \
+      --no-transfer-progress -Pnative-module clean package
+    echo "Built GraalVM JPMS native image"
+    echo "Start to run GraalVM JPMS native image"
+    ./target/main-module
+    echo "Execute GraalVM tests for $main_class succeed!"
+  done
 }
 
 graalvm_test() {
@@ -117,7 +119,9 @@ graalvm_test() {
 }
 
 graalvm_json_tests() {
-  run_graalvm_tests org.apache.fory.graalvm.ForyJsonExample
+  run_graalvm_tests \
+    org.apache.fory.graalvm.ForyJsonExample \
+    org.apache.fory.graalvm.ForyJsonNoProviderExample
 }
 
 jdk25_access_options() {

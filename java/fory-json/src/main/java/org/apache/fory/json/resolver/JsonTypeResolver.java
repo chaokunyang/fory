@@ -41,6 +41,7 @@ import org.apache.fory.collection.IdentityMap;
 import org.apache.fory.collection.Tuple2;
 import org.apache.fory.json.ForyJsonException;
 import org.apache.fory.json.annotation.JsonCodec;
+import org.apache.fory.json.annotation.JsonFormat;
 import org.apache.fory.json.codec.ArrayCodec;
 import org.apache.fory.json.codec.ClosedSubtypeCodec;
 import org.apache.fory.json.codec.CodecUtils;
@@ -331,6 +332,22 @@ public final class JsonTypeResolver {
     return annotationTypeInfo(declaredType, rawType, codecClass);
   }
 
+  @Internal
+  public JsonTypeInfo getTypeInfo(Type declaredType, Class<?> fallback, JsonFormat annotation) {
+    Class<?> rawType = CodecUtils.rawType(declaredType, fallback);
+    ResolutionSnapshot snapshot = beginResolution();
+    try {
+      JsonTypeInfo result = resolveTypeInfo(declaredType, rawType, annotation);
+      completeResolution(snapshot);
+      return result;
+    } catch (RuntimeException | Error e) {
+      rollbackResolution(snapshot);
+      throw e;
+    } finally {
+      endResolution();
+    }
+  }
+
   private JsonTypeInfo resolveTypeInfo(Type declaredType, Class<?> rawType, Object key) {
     JsonTypeInfo typeInfo = customTypeInfo(declaredType, rawType);
     if (typeInfo != null) {
@@ -451,6 +468,74 @@ public final class JsonTypeResolver {
     throw invalidCodecConfig(rawType, "does not support child codecs");
   }
 
+  private JsonTypeInfo resolveTypeInfo(Type declaredType, Class<?> rawType, JsonFormat annotation) {
+    if (ScalarCodecs.supportsDateTimeFormat(rawType)) {
+      return formatTypeInfo(declaredType, rawType, annotation);
+    }
+    if (sharedRegistry.customCodec(rawType) != null
+        || sharedRegistry.codecDeclaration(rawType) != null
+        || sharedRegistry.valueDeclaration(rawType) != null
+        || sharedRegistry.subTypesInfo(rawType) != null) {
+      throw invalidFormatConfig(rawType, "a complete representation hides its direct child");
+    }
+    sharedRegistry.checkSecure(rawType);
+    TypeRef<?> typeRef = typeRef(declaredType, rawType);
+    if (rawType.isArray()) {
+      Type elementType =
+          declaredType instanceof GenericArrayType
+              ? ((GenericArrayType) declaredType).getGenericComponentType()
+              : rawType.getComponentType();
+      requireConcreteChild(elementType, rawType, "element", "@JsonFormat");
+      Class<?> elementRawType = CodecUtils.rawType(elementType, rawType.getComponentType());
+      JsonTypeInfo elementInfo = formatTypeInfo(elementType, elementRawType, annotation);
+      return newTypeInfo(declaredType, rawType, ArrayCodec.create(rawType, elementInfo));
+    }
+    if (rawType == AtomicReferenceArray.class) {
+      TypeRef<?> elementType = directElementType(typeRef, rawType, "element", "@JsonFormat");
+      JsonTypeInfo elementInfo =
+          formatTypeInfo(elementType.getType(), elementType.getRawType(), annotation);
+      return newTypeInfo(
+          declaredType, rawType, new ScalarCodecs.AtomicReferenceArrayCodec(elementInfo));
+    }
+    if (Collection.class.isAssignableFrom(rawType)) {
+      TypeRef<?> elementType = directElementType(typeRef, rawType, "element", "@JsonFormat");
+      JsonTypeInfo elementInfo =
+          formatTypeInfo(elementType.getType(), elementType.getRawType(), annotation);
+      return newTypeInfo(
+          declaredType,
+          rawType,
+          CollectionCodec.create(rawType, elementType.getRawType(), elementInfo, this));
+    }
+    if (Map.class.isAssignableFrom(rawType)) {
+      requireTypeArguments(typeRef, rawType, "@JsonFormat");
+      Tuple2<TypeRef<?>, TypeRef<?>> children = CodecUtils.mapKeyValueTypeRefs(typeRef);
+      TypeRef<?> valueType = children.f1;
+      requireConcreteChild(valueType.getType(), rawType, "value", "@JsonFormat");
+      JsonTypeInfo valueInfo =
+          formatTypeInfo(valueType.getType(), valueType.getRawType(), annotation);
+      Class<?> keyRawType = children.f0.getRawType();
+      checkMapKeySecure(keyRawType);
+      return newTypeInfo(declaredType, rawType, MapCodec.create(rawType, keyRawType, valueInfo));
+    }
+    if (rawType == Optional.class || rawType == AtomicReference.class) {
+      TypeRef<?> contentType = directElementType(typeRef, rawType, "content", "@JsonFormat");
+      JsonTypeInfo contentInfo =
+          formatTypeInfo(contentType.getType(), contentType.getRawType(), annotation);
+      JsonValueCodec<?> codec =
+          rawType == Optional.class
+              ? new ScalarCodecs.OptionalCodec(contentInfo)
+              : new ScalarCodecs.AtomicReferenceCodec(contentInfo);
+      return newTypeInfo(declaredType, rawType, codec);
+    }
+    throw invalidFormatConfig(rawType, "requires a date/time value or supported direct wrapper");
+  }
+
+  private JsonTypeInfo formatTypeInfo(Type type, Class<?> rawType, JsonFormat annotation) {
+    sharedRegistry.checkSecure(rawType);
+    JsonValueCodec<?> codec = ScalarCodecs.dateTimeFormatCodec(rawType, annotation.pattern());
+    return newTypeInfo(type, rawType, JsonFieldKind.OBJECT, codec, true);
+  }
+
   private JsonTypeInfo customTypeInfo(Type declaredType, Class<?> rawType) {
     JsonValueCodec<?> codec = sharedRegistry.customCodec(rawType);
     if (codec != null) {
@@ -481,25 +566,40 @@ public final class JsonTypeResolver {
   }
 
   private static TypeRef<?> directElementType(TypeRef<?> typeRef, Class<?> rawType, String slot) {
-    requireTypeArguments(typeRef, rawType);
+    return directElementType(typeRef, rawType, slot, "@JsonCodec");
+  }
+
+  private static TypeRef<?> directElementType(
+      TypeRef<?> typeRef, Class<?> rawType, String slot, String annotation) {
+    requireTypeArguments(typeRef, rawType, annotation);
     TypeRef<?> elementType = CodecUtils.elementTypeRef(typeRef);
-    requireConcreteChild(elementType.getType(), rawType, slot);
+    requireConcreteChild(elementType.getType(), rawType, slot, annotation);
     return elementType;
   }
 
   private static void requireTypeArguments(TypeRef<?> typeRef, Class<?> rawType) {
+    requireTypeArguments(typeRef, rawType, "@JsonCodec");
+  }
+
+  private static void requireTypeArguments(
+      TypeRef<?> typeRef, Class<?> rawType, String annotation) {
     if (!typeRef.hasExplicitTypeArguments() && rawType.getTypeParameters().length != 0) {
-      throw invalidCodecConfig(rawType, "child codecs require concrete type arguments");
+      throw invalidConfig(rawType, annotation, "direct child requires concrete type arguments");
     }
   }
 
   private static void requireConcreteChild(Type type, Class<?> rawType, String slot) {
+    requireConcreteChild(type, rawType, slot, "@JsonCodec");
+  }
+
+  private static void requireConcreteChild(
+      Type type, Class<?> rawType, String slot, String annotation) {
     if (type instanceof TypeVariable || type instanceof WildcardType) {
-      throw invalidCodecConfig(rawType, slot + " requires a concrete direct child type");
+      throw invalidConfig(rawType, annotation, slot + " requires a concrete direct child type");
     }
     if (type instanceof ParameterizedType
         && !(((ParameterizedType) type).getRawType() instanceof Class)) {
-      throw invalidCodecConfig(rawType, slot + " requires a concrete direct child type");
+      throw invalidConfig(rawType, annotation, slot + " requires a concrete direct child type");
     }
   }
 
@@ -511,7 +611,17 @@ public final class JsonTypeResolver {
   }
 
   private static ForyJsonException invalidCodecConfig(Class<?> rawType, String reason) {
-    return new ForyJsonException("Invalid @JsonCodec for " + rawType.getTypeName() + ": " + reason);
+    return invalidConfig(rawType, "@JsonCodec", reason);
+  }
+
+  private static ForyJsonException invalidFormatConfig(Class<?> rawType, String reason) {
+    return invalidConfig(rawType, "@JsonFormat", reason);
+  }
+
+  private static ForyJsonException invalidConfig(
+      Class<?> rawType, String annotation, String reason) {
+    return new ForyJsonException(
+        "Invalid " + annotation + " for " + rawType.getTypeName() + ": " + reason);
   }
 
   private void rejectConflictingValue(Class<?> rawType) {

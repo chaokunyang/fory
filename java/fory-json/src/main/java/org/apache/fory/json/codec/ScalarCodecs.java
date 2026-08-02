@@ -115,6 +115,16 @@ public final class ScalarCodecs {
 
   private ScalarCodecs() {}
 
+  @Internal
+  public static boolean supportsDateTimeFormat(Class<?> type) {
+    return DateTimeFormatCodec.supports(type);
+  }
+
+  @Internal
+  public static JsonValueCodec<?> dateTimeFormatCodec(Class<?> type, String pattern) {
+    return DateTimeFormatCodec.create(type, pattern);
+  }
+
   public static final class NaturalCodec implements JsonValueCodec<Object> {
     public static final NaturalCodec INSTANCE = new NaturalCodec();
 

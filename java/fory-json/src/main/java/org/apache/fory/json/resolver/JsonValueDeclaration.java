@@ -33,6 +33,7 @@ import org.apache.fory.json.annotation.JsonAnyGetter;
 import org.apache.fory.json.annotation.JsonAnyProperty;
 import org.apache.fory.json.annotation.JsonBase64;
 import org.apache.fory.json.annotation.JsonCodec;
+import org.apache.fory.json.annotation.JsonFormat;
 import org.apache.fory.json.annotation.JsonIgnore;
 import org.apache.fory.json.annotation.JsonProperty;
 import org.apache.fory.json.annotation.JsonRawValue;
@@ -190,6 +191,7 @@ final class JsonValueDeclaration {
     }
     if (registry.annotation(type, field, JsonCodec.class) != null
         || registry.annotation(type, field, JsonBase64.class) != null
+        || registry.annotation(type, field, JsonFormat.class) != null
         || registry.annotation(type, field, JsonAnyProperty.class) != null
         || registry.annotation(type, field, JsonUnwrapped.class) != null
         || registry.annotation(type, field, JsonIgnore.class) != null) {

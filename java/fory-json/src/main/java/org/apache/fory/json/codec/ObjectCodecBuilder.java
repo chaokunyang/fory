@@ -45,6 +45,7 @@ import org.apache.fory.json.annotation.JsonAnySetter;
 import org.apache.fory.json.annotation.JsonBase64;
 import org.apache.fory.json.annotation.JsonCodec;
 import org.apache.fory.json.annotation.JsonCreator;
+import org.apache.fory.json.annotation.JsonFormat;
 import org.apache.fory.json.annotation.JsonIgnore;
 import org.apache.fory.json.annotation.JsonProperty;
 import org.apache.fory.json.annotation.JsonPropertyOrder;
@@ -113,6 +114,13 @@ final class ObjectCodecBuilder {
     if (anyBuilder != null && anyBuilder.hasJsonProperty) {
       throw new ForyJsonException(
           "@JsonProperty is not supported on JSON Any logical property "
+              + anyBuilder.name
+              + " on "
+              + type.getName());
+    }
+    if (anyBuilder != null && anyBuilder.formatAnnotation != null) {
+      throw new ForyJsonException(
+          "@JsonFormat is not supported on JSON Any logical property "
               + anyBuilder.name
               + " on "
               + type.getName());
@@ -1051,7 +1059,8 @@ final class ObjectCodecBuilder {
               resolved,
               rawTypes[i],
               builder.codecAnnotation(),
-              builder.valueCodecClass()));
+              builder.valueCodecClass(),
+              builder.formatAnnotation()));
     }
     JsonCreatorFieldInfo[] fieldArray = fields.toArray(new JsonCreatorFieldInfo[0]);
     rejectCreatorHashCollisions(fieldArray);
@@ -1144,7 +1153,8 @@ final class ObjectCodecBuilder {
                   resolved,
                   rawTypes[i],
                   codecAnnotation,
-                  valueCodecClass));
+                  valueCodecClass,
+                  builder.formatAnnotation()));
         }
       }
     } else {
@@ -1201,12 +1211,13 @@ final class ObjectCodecBuilder {
                 : builder.codecAnnotation();
         Class<? extends JsonValueCodec<?>> valueCodecClass =
             builder == null ? null : builder.valueCodecClass();
+        JsonFormat formatAnnotation = builder == null ? null : builder.formatAnnotation();
         JsonUnwrapped unwrapped =
             builder == null
                 ? annotations.get(parameters[i], JsonUnwrapped.class)
                 : builder.unwrappedAnnotation;
         if (unwrapped != null) {
-          if (codecAnnotation != null || valueCodecClass != null) {
+          if (codecAnnotation != null || valueCodecClass != null || formatAnnotation != null) {
             throw new ForyJsonException(
                 "Value codecs are not supported on @JsonUnwrapped creator property " + jsonName);
           }
@@ -1227,7 +1238,13 @@ final class ObjectCodecBuilder {
         } else {
           fields.add(
               new JsonCreatorFieldInfo(
-                  jsonName, i, resolved, rawTypes[i], codecAnnotation, valueCodecClass));
+                  jsonName,
+                  i,
+                  resolved,
+                  rawTypes[i],
+                  codecAnnotation,
+                  valueCodecClass,
+                  formatAnnotation));
         }
       }
     }
@@ -1356,6 +1373,9 @@ final class ObjectCodecBuilder {
     boolean hasAnyField = false;
     for (Class<?> current = type; current != null; current = current.getSuperclass()) {
       for (Field field : current.getDeclaredFields()) {
+        if (annotations.has(field, JsonFormat.class)) {
+          validateFormatField(field, annotations);
+        }
         if (annotations.has(field, JsonBase64.class)) {
           validateBase64Field(field, annotations);
         }
@@ -1668,6 +1688,24 @@ final class ObjectCodecBuilder {
     JsonIgnore ignore = annotations.get(field, JsonIgnore.class);
     if (ignore != null && ignore.ignoreRead() && ignore.ignoreWrite()) {
       throw new ForyJsonException("@JsonBase64 has no JSON read or write direction: " + field);
+    }
+  }
+
+  private static void validateFormatField(Field field, Annotations annotations) {
+    if (!isEligibleField(field)) {
+      throw new ForyJsonException("Invalid @JsonFormat field " + field);
+    }
+    if (annotations.has(field, JsonCodec.class)
+        || annotations.has(field, JsonBase64.class)
+        || annotations.has(field, JsonRawValue.class)
+        || annotations.has(field, JsonAnyProperty.class)
+        || annotations.has(field, JsonUnwrapped.class)
+        || annotations.has(field, JsonValue.class)) {
+      throw new ForyJsonException("Conflicting JSON annotations on @JsonFormat field " + field);
+    }
+    JsonIgnore ignore = annotations.get(field, JsonIgnore.class);
+    if (ignore != null && ignore.ignoreRead() && ignore.ignoreWrite()) {
+      throw new ForyJsonException("@JsonFormat has no JSON read or write direction: " + field);
     }
   }
 
@@ -2177,6 +2215,8 @@ final class ObjectCodecBuilder {
     private int creatorArgumentIndex = -1;
     private JsonCodec codecAnnotation;
     private Class<? extends JsonValueCodec<?>> valueCodecClass;
+    private JsonFormat formatAnnotation;
+    private AnnotatedElement formatSource;
     private AnnotatedElement codecSource;
     private JsonUnwrapped unwrappedAnnotation;
     private AnnotatedElement unwrappedSource;
@@ -2205,6 +2245,7 @@ final class ObjectCodecBuilder {
       if (readSink) {
         readField = field;
       }
+      mergeFormat(field);
       mergeAnnotation(type, field);
       if (annotations.has(field, JsonAnyProperty.class)) {
         if (!writeSource && !readSink) {
@@ -2285,6 +2326,7 @@ final class ObjectCodecBuilder {
           || codecAnnotation != null
           || rawValueSource != null
           || valueCodecClass != null
+          || formatAnnotation != null
           || unwrappedAnnotation != null;
     }
 
@@ -2364,7 +2406,7 @@ final class ObjectCodecBuilder {
           throw new ForyJsonException(
               "@JsonRawValue requires an exact String write source for property " + name);
         }
-        if (codecAnnotation != null || valueCodecClass != null) {
+        if (codecAnnotation != null || valueCodecClass != null || formatAnnotation != null) {
           throw new ForyJsonException(
               "@JsonRawValue cannot coexist with a value codec for property " + name);
         }
@@ -2381,6 +2423,7 @@ final class ObjectCodecBuilder {
           ownerType,
           codecAnnotation,
           valueCodecClass,
+          formatAnnotation,
           rawValue);
     }
 
@@ -2403,7 +2446,10 @@ final class ObjectCodecBuilder {
                 + "."
                 + name);
       }
-      if (codecAnnotation != null || valueCodecClass != null || rawValueSource != null) {
+      if (codecAnnotation != null
+          || valueCodecClass != null
+          || formatAnnotation != null
+          || rawValueSource != null) {
         throw new ForyJsonException(
             "Value representation annotations are not supported on @JsonUnwrapped property "
                 + type.getName()
@@ -2463,10 +2509,19 @@ final class ObjectCodecBuilder {
       return valueCodecClass;
     }
 
+    private JsonFormat formatAnnotation() {
+      return formatAnnotation;
+    }
+
     private void mergeAnnotation(Class<?> type, AnnotatedElement source) {
       mergeCodec(source);
-      if (annotations.has(source, JsonRawValue.class) && rawValueSource == null) {
-        rawValueSource = source;
+      if (annotations.has(source, JsonRawValue.class)) {
+        if (formatAnnotation != null) {
+          throw formatConflict(source, "@JsonRawValue");
+        }
+        if (rawValueSource == null) {
+          rawValueSource = source;
+        }
       }
       mergeUnwrapped(source);
       JsonProperty property = annotations.get(source, JsonProperty.class);
@@ -2582,6 +2637,9 @@ final class ObjectCodecBuilder {
       if (declared == null) {
         return;
       }
+      if (formatAnnotation != null) {
+        throw formatConflict(source, "@JsonUnwrapped");
+      }
       if (unwrappedAnnotation != null
           && (!unwrappedAnnotation.prefix().equals(declared.prefix())
               || !unwrappedAnnotation.suffix().equals(declared.suffix()))) {
@@ -2602,6 +2660,9 @@ final class ObjectCodecBuilder {
     private void mergeCodec(AnnotatedElement source) {
       JsonCodec declared = annotations.get(source, JsonCodec.class);
       if (annotations.has(source, JsonBase64.class)) {
+        if (formatAnnotation != null) {
+          throw formatConflict(source, "@JsonBase64");
+        }
         if (declared != null || codecAnnotation != null) {
           throw new ForyJsonException(
               "@JsonBase64 cannot coexist with @JsonCodec for property " + name);
@@ -2611,6 +2672,9 @@ final class ObjectCodecBuilder {
           codecSource = source;
         }
         return;
+      }
+      if (declared != null && formatAnnotation != null) {
+        throw formatConflict(source, "@JsonCodec");
       }
       if (declared != null && valueCodecClass != null) {
         throw new ForyJsonException(
@@ -2632,6 +2696,47 @@ final class ObjectCodecBuilder {
         codecAnnotation = declared;
         codecSource = source;
       }
+    }
+
+    private void mergeFormat(AnnotatedElement source) {
+      JsonFormat declared = annotations.get(source, JsonFormat.class);
+      if (declared == null) {
+        return;
+      }
+      if (codecAnnotation != null || valueCodecClass != null) {
+        throw formatConflict(source, "a value codec");
+      }
+      if (rawValueSource != null) {
+        throw formatConflict(source, "@JsonRawValue");
+      }
+      if (unwrappedAnnotation != null) {
+        throw formatConflict(source, "@JsonUnwrapped");
+      }
+      if (formatAnnotation != null && !formatAnnotation.equals(declared)) {
+        throw new ForyJsonException(
+            "Conflicting @JsonFormat declarations for property "
+                + name
+                + " from "
+                + formatSource
+                + " and "
+                + source);
+      }
+      if (formatAnnotation == null) {
+        formatAnnotation = declared;
+        formatSource = source;
+      }
+    }
+
+    private ForyJsonException formatConflict(AnnotatedElement source, String annotation) {
+      return new ForyJsonException(
+          "@JsonFormat cannot coexist with "
+              + annotation
+              + " for property "
+              + name
+              + " from "
+              + formatSource
+              + " and "
+              + source);
     }
 
     private void validateTypes(TypeRef<?> ownerType) {

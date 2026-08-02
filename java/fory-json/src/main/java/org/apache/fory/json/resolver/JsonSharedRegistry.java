@@ -541,13 +541,13 @@ public final class JsonSharedRegistry {
       return null;
     }
     Class<?> mixinType = mixinType(type);
-    boolean directGenerated = type.getDeclaredAnnotation(JsonType.class) != null;
-    if (!directGenerated && mixinType == null) {
+    boolean directType = type.getDeclaredAnnotation(JsonType.class) != null;
+    if (!directType && mixinType == null) {
       return null;
     }
     try {
       GeneratedJsonCodec<?> codec = generatedCodecIfPresent(type, mixinType);
-      if (codec == null && (directGenerated || mixinType != null && AndroidSupport.IS_ANDROID)) {
+      if (codec == null && (directType || mixinType != null && AndroidSupport.IS_ANDROID)) {
         throw missingGeneratedCodec(type, mixinType, "JSON object model");
       }
       return codec;
@@ -670,6 +670,7 @@ public final class JsonSharedRegistry {
     String[] creatorNames;
     Class<?>[] creatorTypes;
     String creatorFactory;
+    Method[] validatorMethods;
     boolean record;
     try {
       declaredType = codec.type();
@@ -678,6 +679,7 @@ public final class JsonSharedRegistry {
       creatorNames = codec.creatorParameterNames();
       creatorTypes = codec.creatorParameterTypes();
       creatorFactory = codec.creatorFactoryName();
+      validatorMethods = codec.validatorMethods();
       record = codec.isRecord();
     } catch (RuntimeException | LinkageError e) {
       throw new ForyJsonException(
@@ -697,6 +699,7 @@ public final class JsonSharedRegistry {
     Executable creator =
         validateGeneratedCreator(
             type, memberAccessors, creatorNames, creatorTypes, creatorFactory, record);
+    validateGeneratedValidators(type, validatorMethods);
     if (!AndroidSupport.IS_ANDROID && RecordUtils.isRecord(type) != record) {
       throw invalidGeneratedCodec(type, "isRecord() does not match the runtime model class");
     }
@@ -708,8 +711,35 @@ public final class JsonSharedRegistry {
         creatorTypes,
         creatorFactory,
         creator,
-        record);
+        record,
+        validatorMethods);
     return codec;
+  }
+
+  private static void validateGeneratedValidators(Class<?> type, Method[] methods) {
+    if (methods == null) {
+      return;
+    }
+    Set<Method> unique = new HashSet<>();
+    for (Method method : methods) {
+      if (method == null) {
+        throw invalidGeneratedCodec(type, "validatorMethods() contains null");
+      }
+      int modifiers = method.getModifiers();
+      if (!method.getDeclaringClass().isAssignableFrom(type)
+          || !Modifier.isPublic(modifiers)
+          || Modifier.isStatic(modifiers)
+          || Modifier.isAbstract(modifiers)
+          || method.isSynthetic()
+          || method.isBridge()
+          || method.getParameterCount() != 0
+          || method.getReturnType() != void.class) {
+        throw invalidGeneratedCodec(type, "generated validator has an invalid shape");
+      }
+      if (!unique.add(method)) {
+        throw invalidGeneratedCodec(type, "duplicate generated validator " + method);
+      }
+    }
   }
 
   private static void validateGeneratedAccessor(

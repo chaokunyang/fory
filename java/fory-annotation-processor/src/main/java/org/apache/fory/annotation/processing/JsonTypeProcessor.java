@@ -71,6 +71,7 @@ final class JsonTypeProcessor {
   private static final String JSON_RAW_VALUE = JSON_PACKAGE + ".annotation.JsonRawValue";
   private static final String JSON_BASE64 = JSON_PACKAGE + ".annotation.JsonBase64";
   private static final String JSON_UNWRAPPED = JSON_PACKAGE + ".annotation.JsonUnwrapped";
+  private static final String JSON_VALIDATOR = JSON_PACKAGE + ".annotation.JsonValidator";
   private static final String BASE64_CODEC = JSON_PACKAGE + ".codec.Base64ByteArrayCodec";
   private static final String JSON_ANY_GETTER = JSON_PACKAGE + ".annotation.JsonAnyGetter";
   private static final String JSON_ANY_SETTER = JSON_PACKAGE + ".annotation.JsonAnySetter";
@@ -131,6 +132,7 @@ final class JsonTypeProcessor {
             model.companionHasCreator = generated.hasCreator;
             model.companionHasCreatorFactory = generated.hasCreatorFactory;
             model.companionIsRecord = generated.record;
+            model.companionHasValidators = generated.hasValidators;
             for (GeneratedJsonCodecSourceWriter.MemberRule member : generated.r8Members) {
               model.addR8Member(new R8Member(member.ownerBinaryName, member.declaration));
             }
@@ -242,6 +244,7 @@ final class JsonTypeProcessor {
           model.companionHasCreator = generated.hasCreator;
           model.companionHasCreatorFactory = generated.hasCreatorFactory;
           model.companionIsRecord = generated.record;
+          model.companionHasValidators = generated.hasValidators;
           for (GeneratedJsonCodecSourceWriter.MemberRule member : generated.r8Members) {
             model.addR8Member(new R8Member(member.ownerBinaryName, member.declaration));
           }
@@ -636,6 +639,11 @@ final class JsonTypeProcessor {
       if (model.companionIsRecord) {
         builder.append("  public boolean isRecord();\n");
       }
+      if (model.companionHasValidators) {
+        builder
+            .append("  public java.lang.reflect.Method[] validatorMethods();\n")
+            .append("  public void invokeValidators(java.lang.Object);\n");
+      }
       builder.append("}\n");
     }
     return builder.toString();
@@ -866,6 +874,7 @@ final class JsonTypeProcessor {
         || hasAnnotation(annotations, method, JSON_VALUE)
         || hasAnnotation(annotations, method, JSON_RAW_VALUE)
         || hasAnnotation(annotations, method, JSON_BASE64)
+        || hasAnnotation(annotations, method, JSON_VALIDATOR)
         || hasJsonAnnotations(annotations, method.getParameters())) {
       return true;
     }
@@ -1140,6 +1149,7 @@ final class JsonTypeProcessor {
     boolean companionHasCreator;
     boolean companionHasCreatorFactory;
     boolean companionIsRecord;
+    boolean companionHasValidators;
 
     Model(TypeElement target, String binaryName) {
       this.target = target;

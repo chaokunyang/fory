@@ -2193,7 +2193,7 @@ public final class JsonTypeResolver {
     if (initialCodec instanceof CollectionCodec) {
       collectionCodecs.put(typeInfo, (CollectionCodec<?>) initialCodec);
     }
-    if (initialCodec.getClass() == ObjectCodec.class
+    if (initialCodec instanceof ObjectCodec
         && typeInfo.type() instanceof Class
         && typeInfo.rawType() != Object.class) {
       ObjectCodec<?> owner = (ObjectCodec<?>) initialCodec;

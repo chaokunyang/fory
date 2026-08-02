@@ -17,12 +17,18 @@ security boundary.
 ## Scope
 
 This model applies to deserializing Fory binary data from untrusted or
-partially trusted sources.
+partially trusted sources. Its resource, policy, and cleanup boundaries also
+apply to Java Fory JSON. The Java Fory JSON subsection under
+[Graph Memory Budget](#graph-memory-budget) defines that format's accounting
+scope without changing binary Fory behavior.
 
 It does not treat the semantic content of a successfully deserialized value as a
 Fory security boundary. A sender can always construct protocol-valid data whose
 value is chosen by that sender. Application authorization, object-level business
 rules, and domain-specific validation remain application responsibilities.
+Java Fory JSON applications can enforce those rules with `JsonValidator` or in
+a `JsonCreator`, but the selected business invariant remains an application
+policy rather than a Fory protocol security boundary.
 
 This model also does not cover trusted in-memory formats. Row format and other
 memory-format paths are trusted-data paths unless a runtime explicitly exposes
@@ -367,6 +373,38 @@ elements of the outer collection that actually owns those slots. Pointer, box, s
 type-erased materialization paths reserve the shallow storage for the heap value they allocate.
 Parents must not recursively include child object, collection, map, string, binary, or primitive
 dense-array contents; the child owner reserves its own shallow memory when it is materialized.
+
+### Java Fory JSON
+
+Java Fory JSON uses `ForyJsonBuilder.withMaxGraphMemoryBytes` to configure this per-root gate. The
+default is the fixed `ForyJson.DEFAULT_MAX_GRAPH_MEMORY_BYTES` value of 128 MiB, and explicit values
+must be positive. String and UTF-8 byte-array root reads use the same configured limit. Every root
+read starts with the complete limit, and success or failure cannot reduce the next root operation's
+budget. The limit is not derived from input length.
+
+Built-in Java JSON accounting includes shallow POJO and record storage, collections and sets plus
+candidate element-reference slots, maps plus candidate key/value-reference slots, and reference
+arrays plus their slots. Natural `JsonObject` and `JsonArray` values follow the same map and
+collection rules. Candidate slots are reserved before the corresponding container mutation;
+repeated set elements and duplicate or overwritten map members are therefore charged per input
+occurrence. A reference array is charged even when its elements are leaves, and an object is charged
+even when all of its properties are leaves. `AtomicReference`, `AtomicReferenceArray`, and generic
+`Optional<T>` values include wrapper and reference storage; primitive optionals and atomic primitive
+values are leaves.
+
+Dedicated Java JSON leaf codecs are excluded from graph accounting: null, strings, characters,
+booleans, numeric values including arbitrary-precision numbers, enums, temporal and other scalar
+values, binary values, primitive arrays, and other dense primitive arrays. Byte-availability and
+grammar checks still apply to those values independently of graph accounting.
+
+A custom Java JSON codec that materializes composite graph owners must call
+`JsonReader.reserveGraphMemory` with its application-defined byte estimate for each composite
+application object, collection, map, or reference array. Collection and map reference storage must
+be reserved before a mutation that may grow it. A custom scalar or other dedicated leaf
+representation makes no reservation. The budget cannot include custom allocations that the codec
+does not reserve, application constructor or validator internals, temporary parsing storage, or
+unrelated process memory. Applications must therefore combine this approximate gate with transport
+input limits, timeouts, and other resource controls appropriate to their trust boundary.
 
 ### Generated Structural Targets
 

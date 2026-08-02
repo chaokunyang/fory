@@ -402,7 +402,7 @@ public final class Utf8JsonReader extends JsonReader {
   }
 
   public void clear() {
-    reset();
+    clearRootState();
     input = EMPTY_BYTES;
     position = 0;
     if (stringDecodeBuffer.length > RETAINED_STRING_DECODE_BUFFER_SIZE) {

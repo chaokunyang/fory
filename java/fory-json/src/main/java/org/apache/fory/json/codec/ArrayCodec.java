@@ -31,6 +31,7 @@ import org.apache.fory.json.resolver.JsonTypeInfo;
 import org.apache.fory.json.resolver.JsonTypeResolver;
 import org.apache.fory.json.writer.StringJsonWriter;
 import org.apache.fory.json.writer.Utf8JsonWriter;
+import org.apache.fory.serializer.GraphMemoryEstimates;
 
 /**
  * Codec family for Java primitive, boxed, String, and object arrays.
@@ -42,6 +43,7 @@ import org.apache.fory.json.writer.Utf8JsonWriter;
  * and growth because JSON carries no trusted element count.
  */
 public abstract class ArrayCodec<T> implements JsonValueCodec<T> {
+  private static final int REFERENCE_ARRAY_BYTES = GraphMemoryEstimates.objectArrayBytes();
   final Class<?> componentType;
 
   ArrayCodec(Class<?> componentType) {
@@ -115,6 +117,12 @@ public abstract class ArrayCodec<T> implements JsonValueCodec<T> {
   private static <T> ArrayCodec<T> bind(ArrayCodec<?> codec) {
     // The factory has matched the runtime array class to this exact singleton implementation.
     return (ArrayCodec<T>) codec;
+  }
+
+  private static void finishReferenceArray(JsonReader reader, int size) {
+    reader.reserveGraphMemory(
+        REFERENCE_ARRAY_BYTES + (long) GraphMemoryEstimates.REFERENCE_BYTES * size);
+    reader.exitDepth();
   }
 
   public static final class IntArrayCodec extends ArrayCodec<int[]> {
@@ -1276,27 +1284,27 @@ public abstract class ArrayCodec<T> implements JsonValueCodec<T> {
       reader.enterDepth();
       reader.expectNextToken('[');
       if (reader.consumeNextToken(']')) {
-        reader.exitDepth();
+        finishReferenceArray(reader, 0);
         return new String[0];
       }
       String v0 = reader.readNextNullableString();
       if (!reader.consumeNextCommaOrEndArray()) {
-        reader.exitDepth();
+        finishReferenceArray(reader, 1);
         return new String[] {v0};
       }
       String v1 = reader.readNextNullableString();
       if (!reader.consumeNextCommaOrEndArray()) {
-        reader.exitDepth();
+        finishReferenceArray(reader, 2);
         return new String[] {v0, v1};
       }
       String v2 = reader.readNextNullableString();
       if (!reader.consumeNextCommaOrEndArray()) {
-        reader.exitDepth();
+        finishReferenceArray(reader, 3);
         return new String[] {v0, v1, v2};
       }
       String v3 = reader.readNextNullableString();
       if (!reader.consumeNextCommaOrEndArray()) {
-        reader.exitDepth();
+        finishReferenceArray(reader, 4);
         return new String[] {v0, v1, v2, v3};
       }
       return readLatin1Tail(reader, v0, v1, v2, v3);
@@ -1306,27 +1314,27 @@ public abstract class ArrayCodec<T> implements JsonValueCodec<T> {
         Latin1JsonReader reader, String v0, String v1, String v2, String v3) {
       String v4 = reader.readNextNullableString();
       if (!reader.consumeNextCommaOrEndArray()) {
-        reader.exitDepth();
+        finishReferenceArray(reader, 5);
         return new String[] {v0, v1, v2, v3, v4};
       }
       String v5 = reader.readNextNullableString();
       if (!reader.consumeNextCommaOrEndArray()) {
-        reader.exitDepth();
+        finishReferenceArray(reader, 6);
         return new String[] {v0, v1, v2, v3, v4, v5};
       }
       String v6 = reader.readNextNullableString();
       if (!reader.consumeNextCommaOrEndArray()) {
-        reader.exitDepth();
+        finishReferenceArray(reader, 7);
         return new String[] {v0, v1, v2, v3, v4, v5, v6};
       }
       String v7 = reader.readNextNullableString();
       if (!reader.consumeNextCommaOrEndArray()) {
-        reader.exitDepth();
+        finishReferenceArray(reader, 8);
         return new String[] {v0, v1, v2, v3, v4, v5, v6, v7};
       }
       String v8 = reader.readNextNullableString();
       if (!reader.consumeNextCommaOrEndArray()) {
-        reader.exitDepth();
+        finishReferenceArray(reader, 9);
         return new String[] {v0, v1, v2, v3, v4, v5, v6, v7, v8};
       }
       return readLatin1LongTail(reader, v0, v1, v2, v3, v4, v5, v6, v7, v8);
@@ -1360,7 +1368,7 @@ public abstract class ArrayCodec<T> implements JsonValueCodec<T> {
         }
         values[size++] = reader.readNextNullableString();
       } while (reader.consumeNextCommaOrEndArray());
-      reader.exitDepth();
+      finishReferenceArray(reader, size);
       return Arrays.copyOf(values, size);
     }
 
@@ -1372,27 +1380,27 @@ public abstract class ArrayCodec<T> implements JsonValueCodec<T> {
       reader.enterDepth();
       reader.expectNextToken('[');
       if (reader.consumeNextToken(']')) {
-        reader.exitDepth();
+        finishReferenceArray(reader, 0);
         return new String[0];
       }
       String v0 = reader.readNextNullableString();
       if (!reader.consumeNextCommaOrEndArray()) {
-        reader.exitDepth();
+        finishReferenceArray(reader, 1);
         return new String[] {v0};
       }
       String v1 = reader.readNextNullableString();
       if (!reader.consumeNextCommaOrEndArray()) {
-        reader.exitDepth();
+        finishReferenceArray(reader, 2);
         return new String[] {v0, v1};
       }
       String v2 = reader.readNextNullableString();
       if (!reader.consumeNextCommaOrEndArray()) {
-        reader.exitDepth();
+        finishReferenceArray(reader, 3);
         return new String[] {v0, v1, v2};
       }
       String v3 = reader.readNextNullableString();
       if (!reader.consumeNextCommaOrEndArray()) {
-        reader.exitDepth();
+        finishReferenceArray(reader, 4);
         return new String[] {v0, v1, v2, v3};
       }
       return readUtf16Tail(reader, v0, v1, v2, v3);
@@ -1402,27 +1410,27 @@ public abstract class ArrayCodec<T> implements JsonValueCodec<T> {
         Utf16JsonReader reader, String v0, String v1, String v2, String v3) {
       String v4 = reader.readNextNullableString();
       if (!reader.consumeNextCommaOrEndArray()) {
-        reader.exitDepth();
+        finishReferenceArray(reader, 5);
         return new String[] {v0, v1, v2, v3, v4};
       }
       String v5 = reader.readNextNullableString();
       if (!reader.consumeNextCommaOrEndArray()) {
-        reader.exitDepth();
+        finishReferenceArray(reader, 6);
         return new String[] {v0, v1, v2, v3, v4, v5};
       }
       String v6 = reader.readNextNullableString();
       if (!reader.consumeNextCommaOrEndArray()) {
-        reader.exitDepth();
+        finishReferenceArray(reader, 7);
         return new String[] {v0, v1, v2, v3, v4, v5, v6};
       }
       String v7 = reader.readNextNullableString();
       if (!reader.consumeNextCommaOrEndArray()) {
-        reader.exitDepth();
+        finishReferenceArray(reader, 8);
         return new String[] {v0, v1, v2, v3, v4, v5, v6, v7};
       }
       String v8 = reader.readNextNullableString();
       if (!reader.consumeNextCommaOrEndArray()) {
-        reader.exitDepth();
+        finishReferenceArray(reader, 9);
         return new String[] {v0, v1, v2, v3, v4, v5, v6, v7, v8};
       }
       return readUtf16LongTail(reader, v0, v1, v2, v3, v4, v5, v6, v7, v8);
@@ -1456,7 +1464,7 @@ public abstract class ArrayCodec<T> implements JsonValueCodec<T> {
         }
         values[size++] = reader.readNextNullableString();
       } while (reader.consumeNextCommaOrEndArray());
-      reader.exitDepth();
+      finishReferenceArray(reader, size);
       return Arrays.copyOf(values, size);
     }
 
@@ -1468,27 +1476,27 @@ public abstract class ArrayCodec<T> implements JsonValueCodec<T> {
       reader.enterDepth();
       reader.expectNextToken('[');
       if (reader.consumeNextToken(']')) {
-        reader.exitDepth();
+        finishReferenceArray(reader, 0);
         return new String[0];
       }
       String v0 = reader.readNextNullableString();
       if (!reader.consumeNextCommaOrEndArray()) {
-        reader.exitDepth();
+        finishReferenceArray(reader, 1);
         return new String[] {v0};
       }
       String v1 = reader.readNextNullableString();
       if (!reader.consumeNextCommaOrEndArray()) {
-        reader.exitDepth();
+        finishReferenceArray(reader, 2);
         return new String[] {v0, v1};
       }
       String v2 = reader.readNextNullableString();
       if (!reader.consumeNextCommaOrEndArray()) {
-        reader.exitDepth();
+        finishReferenceArray(reader, 3);
         return new String[] {v0, v1, v2};
       }
       String v3 = reader.readNextNullableString();
       if (!reader.consumeNextCommaOrEndArray()) {
-        reader.exitDepth();
+        finishReferenceArray(reader, 4);
         return new String[] {v0, v1, v2, v3};
       }
       return readUtf8Tail(reader, v0, v1, v2, v3);
@@ -1498,27 +1506,27 @@ public abstract class ArrayCodec<T> implements JsonValueCodec<T> {
         Utf8JsonReader reader, String v0, String v1, String v2, String v3) {
       String v4 = reader.readNextNullableString();
       if (!reader.consumeNextCommaOrEndArray()) {
-        reader.exitDepth();
+        finishReferenceArray(reader, 5);
         return new String[] {v0, v1, v2, v3, v4};
       }
       String v5 = reader.readNextNullableString();
       if (!reader.consumeNextCommaOrEndArray()) {
-        reader.exitDepth();
+        finishReferenceArray(reader, 6);
         return new String[] {v0, v1, v2, v3, v4, v5};
       }
       String v6 = reader.readNextNullableString();
       if (!reader.consumeNextCommaOrEndArray()) {
-        reader.exitDepth();
+        finishReferenceArray(reader, 7);
         return new String[] {v0, v1, v2, v3, v4, v5, v6};
       }
       String v7 = reader.readNextNullableString();
       if (!reader.consumeNextCommaOrEndArray()) {
-        reader.exitDepth();
+        finishReferenceArray(reader, 8);
         return new String[] {v0, v1, v2, v3, v4, v5, v6, v7};
       }
       String v8 = reader.readNextNullableString();
       if (!reader.consumeNextCommaOrEndArray()) {
-        reader.exitDepth();
+        finishReferenceArray(reader, 9);
         return new String[] {v0, v1, v2, v3, v4, v5, v6, v7, v8};
       }
       return readUtf8LongTail(reader, v0, v1, v2, v3, v4, v5, v6, v7, v8);
@@ -1554,7 +1562,7 @@ public abstract class ArrayCodec<T> implements JsonValueCodec<T> {
         }
         values[size++] = reader.readNextNullableString();
       } while (reader.consumeNextCommaOrEndArray());
-      reader.exitDepth();
+      finishReferenceArray(reader, size);
       return Arrays.copyOf(values, size);
     }
   }
@@ -1636,6 +1644,8 @@ public abstract class ArrayCodec<T> implements JsonValueCodec<T> {
             values[size++] = codec.readLatin1(reader);
           } while (reader.consumeNextCommaOrEndArray());
         }
+        reader.reserveGraphMemory(
+            REFERENCE_ARRAY_BYTES + (long) GraphMemoryEstimates.REFERENCE_BYTES * size);
         T array = newArray(size);
         System.arraycopy(values, 0, array, 0, size);
         success = true;
@@ -1676,6 +1686,8 @@ public abstract class ArrayCodec<T> implements JsonValueCodec<T> {
             values[size++] = codec.readUtf16(reader);
           } while (reader.consumeNextCommaOrEndArray());
         }
+        reader.reserveGraphMemory(
+            REFERENCE_ARRAY_BYTES + (long) GraphMemoryEstimates.REFERENCE_BYTES * size);
         T array = newArray(size);
         System.arraycopy(values, 0, array, 0, size);
         success = true;
@@ -1716,6 +1728,8 @@ public abstract class ArrayCodec<T> implements JsonValueCodec<T> {
             values[size++] = codec.readUtf8(reader);
           } while (reader.consumeNextCommaOrEndArray());
         }
+        reader.reserveGraphMemory(
+            REFERENCE_ARRAY_BYTES + (long) GraphMemoryEstimates.REFERENCE_BYTES * size);
         T array = newArray(size);
         System.arraycopy(values, 0, array, 0, size);
         success = true;
@@ -1957,7 +1971,7 @@ public abstract class ArrayCodec<T> implements JsonValueCodec<T> {
       reader.enterDepth();
       reader.expectNextToken('[');
       if (reader.consumeNextToken(']')) {
-        reader.exitDepth();
+        finishReferenceArray(reader, 0);
         return new Integer[0];
       }
       Integer[] values = new Integer[8];
@@ -1970,7 +1984,7 @@ public abstract class ArrayCodec<T> implements JsonValueCodec<T> {
             reader.tryReadNextNullToken() ? null : Integer.valueOf(reader.readIntValue());
       } while (reader.consumeNextToken(','));
       reader.expectNextToken(']');
-      reader.exitDepth();
+      finishReferenceArray(reader, size);
       return Arrays.copyOf(values, size);
     }
 
@@ -1982,7 +1996,7 @@ public abstract class ArrayCodec<T> implements JsonValueCodec<T> {
       reader.enterDepth();
       reader.expectNextToken('[');
       if (reader.consumeNextToken(']')) {
-        reader.exitDepth();
+        finishReferenceArray(reader, 0);
         return new Integer[0];
       }
       Integer[] values = new Integer[8];
@@ -1995,7 +2009,7 @@ public abstract class ArrayCodec<T> implements JsonValueCodec<T> {
             reader.tryReadNextNullToken() ? null : Integer.valueOf(reader.readIntValue());
       } while (reader.consumeNextToken(','));
       reader.expectNextToken(']');
-      reader.exitDepth();
+      finishReferenceArray(reader, size);
       return Arrays.copyOf(values, size);
     }
 
@@ -2007,7 +2021,7 @@ public abstract class ArrayCodec<T> implements JsonValueCodec<T> {
       reader.enterDepth();
       reader.expectNextToken('[');
       if (reader.consumeNextToken(']')) {
-        reader.exitDepth();
+        finishReferenceArray(reader, 0);
         return new Integer[0];
       }
       Integer[] values = new Integer[8];
@@ -2020,7 +2034,7 @@ public abstract class ArrayCodec<T> implements JsonValueCodec<T> {
             reader.tryReadNextNullToken() ? null : Integer.valueOf(reader.readIntValue());
       } while (reader.consumeNextToken(','));
       reader.expectNextToken(']');
-      reader.exitDepth();
+      finishReferenceArray(reader, size);
       return Arrays.copyOf(values, size);
     }
   }
@@ -2080,7 +2094,7 @@ public abstract class ArrayCodec<T> implements JsonValueCodec<T> {
       reader.enterDepth();
       reader.expectNextToken('[');
       if (reader.consumeNextToken(']')) {
-        reader.exitDepth();
+        finishReferenceArray(reader, 0);
         return new Long[0];
       }
       Long[] values = new Long[8];
@@ -2093,7 +2107,7 @@ public abstract class ArrayCodec<T> implements JsonValueCodec<T> {
             reader.tryReadNextNullToken() ? null : Long.valueOf(reader.readLongValue());
       } while (reader.consumeNextToken(','));
       reader.expectNextToken(']');
-      reader.exitDepth();
+      finishReferenceArray(reader, size);
       return Arrays.copyOf(values, size);
     }
 
@@ -2105,7 +2119,7 @@ public abstract class ArrayCodec<T> implements JsonValueCodec<T> {
       reader.enterDepth();
       reader.expectNextToken('[');
       if (reader.consumeNextToken(']')) {
-        reader.exitDepth();
+        finishReferenceArray(reader, 0);
         return new Long[0];
       }
       Long[] values = new Long[8];
@@ -2118,7 +2132,7 @@ public abstract class ArrayCodec<T> implements JsonValueCodec<T> {
             reader.tryReadNextNullToken() ? null : Long.valueOf(reader.readLongValue());
       } while (reader.consumeNextToken(','));
       reader.expectNextToken(']');
-      reader.exitDepth();
+      finishReferenceArray(reader, size);
       return Arrays.copyOf(values, size);
     }
 
@@ -2130,7 +2144,7 @@ public abstract class ArrayCodec<T> implements JsonValueCodec<T> {
       reader.enterDepth();
       reader.expectNextToken('[');
       if (reader.consumeNextToken(']')) {
-        reader.exitDepth();
+        finishReferenceArray(reader, 0);
         return new Long[0];
       }
       Long[] values = new Long[8];
@@ -2143,7 +2157,7 @@ public abstract class ArrayCodec<T> implements JsonValueCodec<T> {
             reader.tryReadNextNullToken() ? null : Long.valueOf(reader.readLongValue());
       } while (reader.consumeNextToken(','));
       reader.expectNextToken(']');
-      reader.exitDepth();
+      finishReferenceArray(reader, size);
       return Arrays.copyOf(values, size);
     }
   }
@@ -2203,7 +2217,7 @@ public abstract class ArrayCodec<T> implements JsonValueCodec<T> {
       reader.enterDepth();
       reader.expectNextToken('[');
       if (reader.consumeNextToken(']')) {
-        reader.exitDepth();
+        finishReferenceArray(reader, 0);
         return new Boolean[0];
       }
       Boolean[] values = new Boolean[8];
@@ -2216,7 +2230,7 @@ public abstract class ArrayCodec<T> implements JsonValueCodec<T> {
             reader.tryReadNextNullToken() ? null : Boolean.valueOf(reader.readBooleanValue());
       } while (reader.consumeNextToken(','));
       reader.expectNextToken(']');
-      reader.exitDepth();
+      finishReferenceArray(reader, size);
       return Arrays.copyOf(values, size);
     }
 
@@ -2228,7 +2242,7 @@ public abstract class ArrayCodec<T> implements JsonValueCodec<T> {
       reader.enterDepth();
       reader.expectNextToken('[');
       if (reader.consumeNextToken(']')) {
-        reader.exitDepth();
+        finishReferenceArray(reader, 0);
         return new Boolean[0];
       }
       Boolean[] values = new Boolean[8];
@@ -2241,7 +2255,7 @@ public abstract class ArrayCodec<T> implements JsonValueCodec<T> {
             reader.tryReadNextNullToken() ? null : Boolean.valueOf(reader.readBooleanValue());
       } while (reader.consumeNextToken(','));
       reader.expectNextToken(']');
-      reader.exitDepth();
+      finishReferenceArray(reader, size);
       return Arrays.copyOf(values, size);
     }
 
@@ -2253,7 +2267,7 @@ public abstract class ArrayCodec<T> implements JsonValueCodec<T> {
       reader.enterDepth();
       reader.expectNextToken('[');
       if (reader.consumeNextToken(']')) {
-        reader.exitDepth();
+        finishReferenceArray(reader, 0);
         return new Boolean[0];
       }
       Boolean[] values = new Boolean[8];
@@ -2266,7 +2280,7 @@ public abstract class ArrayCodec<T> implements JsonValueCodec<T> {
             reader.tryReadNextNullToken() ? null : Boolean.valueOf(reader.readBooleanValue());
       } while (reader.consumeNextToken(','));
       reader.expectNextToken(']');
-      reader.exitDepth();
+      finishReferenceArray(reader, size);
       return Arrays.copyOf(values, size);
     }
   }
@@ -2326,7 +2340,7 @@ public abstract class ArrayCodec<T> implements JsonValueCodec<T> {
       reader.enterDepth();
       reader.expectNextToken('[');
       if (reader.consumeNextToken(']')) {
-        reader.exitDepth();
+        finishReferenceArray(reader, 0);
         return new Short[0];
       }
       Short[] values = new Short[8];
@@ -2339,7 +2353,7 @@ public abstract class ArrayCodec<T> implements JsonValueCodec<T> {
             reader.tryReadNextNullToken() ? null : Short.valueOf(readShort(reader.readIntValue()));
       } while (reader.consumeNextToken(','));
       reader.expectNextToken(']');
-      reader.exitDepth();
+      finishReferenceArray(reader, size);
       return Arrays.copyOf(values, size);
     }
 
@@ -2351,7 +2365,7 @@ public abstract class ArrayCodec<T> implements JsonValueCodec<T> {
       reader.enterDepth();
       reader.expectNextToken('[');
       if (reader.consumeNextToken(']')) {
-        reader.exitDepth();
+        finishReferenceArray(reader, 0);
         return new Short[0];
       }
       Short[] values = new Short[8];
@@ -2364,7 +2378,7 @@ public abstract class ArrayCodec<T> implements JsonValueCodec<T> {
             reader.tryReadNextNullToken() ? null : Short.valueOf(readShort(reader.readIntValue()));
       } while (reader.consumeNextToken(','));
       reader.expectNextToken(']');
-      reader.exitDepth();
+      finishReferenceArray(reader, size);
       return Arrays.copyOf(values, size);
     }
 
@@ -2376,7 +2390,7 @@ public abstract class ArrayCodec<T> implements JsonValueCodec<T> {
       reader.enterDepth();
       reader.expectNextToken('[');
       if (reader.consumeNextToken(']')) {
-        reader.exitDepth();
+        finishReferenceArray(reader, 0);
         return new Short[0];
       }
       Short[] values = new Short[8];
@@ -2389,7 +2403,7 @@ public abstract class ArrayCodec<T> implements JsonValueCodec<T> {
             reader.tryReadNextNullToken() ? null : Short.valueOf(readShort(reader.readIntValue()));
       } while (reader.consumeNextToken(','));
       reader.expectNextToken(']');
-      reader.exitDepth();
+      finishReferenceArray(reader, size);
       return Arrays.copyOf(values, size);
     }
   }
@@ -2449,7 +2463,7 @@ public abstract class ArrayCodec<T> implements JsonValueCodec<T> {
       reader.enterDepth();
       reader.expectNextToken('[');
       if (reader.consumeNextToken(']')) {
-        reader.exitDepth();
+        finishReferenceArray(reader, 0);
         return new Byte[0];
       }
       Byte[] values = new Byte[8];
@@ -2462,7 +2476,7 @@ public abstract class ArrayCodec<T> implements JsonValueCodec<T> {
             reader.tryReadNextNullToken() ? null : Byte.valueOf(readByte(reader.readIntValue()));
       } while (reader.consumeNextToken(','));
       reader.expectNextToken(']');
-      reader.exitDepth();
+      finishReferenceArray(reader, size);
       return Arrays.copyOf(values, size);
     }
 
@@ -2474,7 +2488,7 @@ public abstract class ArrayCodec<T> implements JsonValueCodec<T> {
       reader.enterDepth();
       reader.expectNextToken('[');
       if (reader.consumeNextToken(']')) {
-        reader.exitDepth();
+        finishReferenceArray(reader, 0);
         return new Byte[0];
       }
       Byte[] values = new Byte[8];
@@ -2487,7 +2501,7 @@ public abstract class ArrayCodec<T> implements JsonValueCodec<T> {
             reader.tryReadNextNullToken() ? null : Byte.valueOf(readByte(reader.readIntValue()));
       } while (reader.consumeNextToken(','));
       reader.expectNextToken(']');
-      reader.exitDepth();
+      finishReferenceArray(reader, size);
       return Arrays.copyOf(values, size);
     }
 
@@ -2499,7 +2513,7 @@ public abstract class ArrayCodec<T> implements JsonValueCodec<T> {
       reader.enterDepth();
       reader.expectNextToken('[');
       if (reader.consumeNextToken(']')) {
-        reader.exitDepth();
+        finishReferenceArray(reader, 0);
         return new Byte[0];
       }
       Byte[] values = new Byte[8];
@@ -2512,7 +2526,7 @@ public abstract class ArrayCodec<T> implements JsonValueCodec<T> {
             reader.tryReadNextNullToken() ? null : Byte.valueOf(readByte(reader.readIntValue()));
       } while (reader.consumeNextToken(','));
       reader.expectNextToken(']');
-      reader.exitDepth();
+      finishReferenceArray(reader, size);
       return Arrays.copyOf(values, size);
     }
   }
@@ -2572,7 +2586,7 @@ public abstract class ArrayCodec<T> implements JsonValueCodec<T> {
       reader.enterDepth();
       reader.expectNextToken('[');
       if (reader.consumeNextToken(']')) {
-        reader.exitDepth();
+        finishReferenceArray(reader, 0);
         return new Character[0];
       }
       Character[] values = new Character[8];
@@ -2585,7 +2599,7 @@ public abstract class ArrayCodec<T> implements JsonValueCodec<T> {
         values[size++] = element == null ? null : Character.valueOf(readChar(element));
       } while (reader.consumeNextToken(','));
       reader.expectNextToken(']');
-      reader.exitDepth();
+      finishReferenceArray(reader, size);
       return Arrays.copyOf(values, size);
     }
 
@@ -2597,7 +2611,7 @@ public abstract class ArrayCodec<T> implements JsonValueCodec<T> {
       reader.enterDepth();
       reader.expectNextToken('[');
       if (reader.consumeNextToken(']')) {
-        reader.exitDepth();
+        finishReferenceArray(reader, 0);
         return new Character[0];
       }
       Character[] values = new Character[8];
@@ -2610,7 +2624,7 @@ public abstract class ArrayCodec<T> implements JsonValueCodec<T> {
         values[size++] = element == null ? null : Character.valueOf(readChar(element));
       } while (reader.consumeNextToken(','));
       reader.expectNextToken(']');
-      reader.exitDepth();
+      finishReferenceArray(reader, size);
       return Arrays.copyOf(values, size);
     }
 
@@ -2622,7 +2636,7 @@ public abstract class ArrayCodec<T> implements JsonValueCodec<T> {
       reader.enterDepth();
       reader.expectNextToken('[');
       if (reader.consumeNextToken(']')) {
-        reader.exitDepth();
+        finishReferenceArray(reader, 0);
         return new Character[0];
       }
       Character[] values = new Character[8];
@@ -2635,7 +2649,7 @@ public abstract class ArrayCodec<T> implements JsonValueCodec<T> {
         values[size++] = element == null ? null : Character.valueOf(readChar(element));
       } while (reader.consumeNextToken(','));
       reader.expectNextToken(']');
-      reader.exitDepth();
+      finishReferenceArray(reader, size);
       return Arrays.copyOf(values, size);
     }
   }
@@ -2695,7 +2709,7 @@ public abstract class ArrayCodec<T> implements JsonValueCodec<T> {
       reader.enterDepth();
       reader.expectNextToken('[');
       if (reader.consumeNextToken(']')) {
-        reader.exitDepth();
+        finishReferenceArray(reader, 0);
         return new Float[0];
       }
       Float[] values = new Float[8];
@@ -2707,7 +2721,7 @@ public abstract class ArrayCodec<T> implements JsonValueCodec<T> {
         values[size++] =
             reader.tryReadNextNullToken() ? null : Float.valueOf(reader.readNextFloatValue());
       } while (reader.consumeNextCommaOrEndArray());
-      reader.exitDepth();
+      finishReferenceArray(reader, size);
       return Arrays.copyOf(values, size);
     }
 
@@ -2719,7 +2733,7 @@ public abstract class ArrayCodec<T> implements JsonValueCodec<T> {
       reader.enterDepth();
       reader.expectNextToken('[');
       if (reader.consumeNextToken(']')) {
-        reader.exitDepth();
+        finishReferenceArray(reader, 0);
         return new Float[0];
       }
       Float[] values = new Float[8];
@@ -2731,7 +2745,7 @@ public abstract class ArrayCodec<T> implements JsonValueCodec<T> {
         values[size++] =
             reader.tryReadNextNullToken() ? null : Float.valueOf(reader.readNextFloatValue());
       } while (reader.consumeNextCommaOrEndArray());
-      reader.exitDepth();
+      finishReferenceArray(reader, size);
       return Arrays.copyOf(values, size);
     }
 
@@ -2743,7 +2757,7 @@ public abstract class ArrayCodec<T> implements JsonValueCodec<T> {
       reader.enterDepth();
       reader.expectNextToken('[');
       if (reader.consumeNextToken(']')) {
-        reader.exitDepth();
+        finishReferenceArray(reader, 0);
         return new Float[0];
       }
       Float[] values = new Float[8];
@@ -2755,7 +2769,7 @@ public abstract class ArrayCodec<T> implements JsonValueCodec<T> {
         values[size++] =
             reader.tryReadNextNullToken() ? null : Float.valueOf(reader.readNextFloatValue());
       } while (reader.consumeNextCommaOrEndArray());
-      reader.exitDepth();
+      finishReferenceArray(reader, size);
       return Arrays.copyOf(values, size);
     }
   }
@@ -2815,7 +2829,7 @@ public abstract class ArrayCodec<T> implements JsonValueCodec<T> {
       reader.enterDepth();
       reader.expectNextToken('[');
       if (reader.consumeNextToken(']')) {
-        reader.exitDepth();
+        finishReferenceArray(reader, 0);
         return new Double[0];
       }
       Double[] values = new Double[8];
@@ -2827,7 +2841,7 @@ public abstract class ArrayCodec<T> implements JsonValueCodec<T> {
         values[size++] =
             reader.tryReadNextNullToken() ? null : Double.valueOf(reader.readNextDoubleValue());
       } while (reader.consumeNextCommaOrEndArray());
-      reader.exitDepth();
+      finishReferenceArray(reader, size);
       return Arrays.copyOf(values, size);
     }
 
@@ -2839,7 +2853,7 @@ public abstract class ArrayCodec<T> implements JsonValueCodec<T> {
       reader.enterDepth();
       reader.expectNextToken('[');
       if (reader.consumeNextToken(']')) {
-        reader.exitDepth();
+        finishReferenceArray(reader, 0);
         return new Double[0];
       }
       Double[] values = new Double[8];
@@ -2851,7 +2865,7 @@ public abstract class ArrayCodec<T> implements JsonValueCodec<T> {
         values[size++] =
             reader.tryReadNextNullToken() ? null : Double.valueOf(reader.readNextDoubleValue());
       } while (reader.consumeNextCommaOrEndArray());
-      reader.exitDepth();
+      finishReferenceArray(reader, size);
       return Arrays.copyOf(values, size);
     }
 
@@ -2863,7 +2877,7 @@ public abstract class ArrayCodec<T> implements JsonValueCodec<T> {
       reader.enterDepth();
       reader.expectNextToken('[');
       if (reader.consumeNextToken(']')) {
-        reader.exitDepth();
+        finishReferenceArray(reader, 0);
         return new Double[0];
       }
       Double[] values = new Double[8];
@@ -2875,7 +2889,7 @@ public abstract class ArrayCodec<T> implements JsonValueCodec<T> {
         values[size++] =
             reader.tryReadNextNullToken() ? null : Double.valueOf(reader.readNextDoubleValue());
       } while (reader.consumeNextCommaOrEndArray());
-      reader.exitDepth();
+      finishReferenceArray(reader, size);
       return Arrays.copyOf(values, size);
     }
   }

@@ -57,12 +57,14 @@ import org.apache.fory.json.annotation.JsonMixin;
 import org.apache.fory.json.annotation.JsonSubTypes;
 import org.apache.fory.json.annotation.JsonType;
 import org.apache.fory.json.annotation.JsonUnwrapped;
+import org.apache.fory.json.annotation.JsonValidator;
 import org.apache.fory.json.annotation.JsonValue;
 import org.apache.fory.json.codec.Base64ByteArrayCodec;
 import org.apache.fory.json.codec.ObjectCodec;
 import org.apache.fory.json.codegen.JsonCodegenKey;
 import org.apache.fory.json.meta.JsonCreatorInfo;
 import org.apache.fory.json.meta.JsonFieldAccessor;
+import org.apache.fory.json.meta.JsonValidatorInfo;
 import org.apache.fory.json.resolver.JsonGeneratedClassRegistry;
 import org.apache.fory.json.resolver.JsonSharedRegistry;
 import org.apache.fory.json.resolver.JsonSharedRegistry.JsonMixinView;
@@ -542,6 +544,10 @@ final class ForyJsonGraalVMFeature implements Feature {
       boolean mixinSelector = hasMixinSelector(annotations, method);
       if (ObjectCodec.usesJsonMetadata(method, record) || mixinSelector) {
         resolveMethodAccessors(annotations, method);
+        if (annotation(annotations, method, JsonValidator.class) != null) {
+          RuntimeReflection.register(method);
+          JsonValidatorInfo.validatorHandle(method);
+        }
         if (method.getDeclaringClass().isInterface()) {
           RuntimeReflection.register(method);
         }

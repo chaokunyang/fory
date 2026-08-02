@@ -47,6 +47,7 @@ import org.apache.fory.json.annotation.JsonRawValue;
 import org.apache.fory.json.annotation.JsonSubTypes;
 import org.apache.fory.json.annotation.JsonType;
 import org.apache.fory.json.annotation.JsonUnwrapped;
+import org.apache.fory.json.annotation.JsonValidator;
 import org.apache.fory.json.annotation.JsonValue;
 import org.apache.fory.json.codec.JsonValueCodec;
 import org.apache.fory.json.reader.Latin1JsonReader;
@@ -140,6 +141,20 @@ public class JsonMixinTest extends ForyJsonTestModels {
     ValueTarget decoded = valueJson.fromJson("\"read\"", ValueTarget.class);
     assertEquals(decoded.text(), "read");
     assertEquals(decoded.route, "factory");
+  }
+
+  @Test
+  public void validatorAnnotations() {
+    ForyJson added = newJsonBuilder().registerMixin(ValidatorMixin.class).build();
+    ValidatorTarget value = added.fromJson("{\"id\":7}", ValidatorTarget.class);
+    assertEquals(value.validations, 1);
+
+    ForyJson direct = newJson();
+    assertEquals(direct.fromJson("{\"id\":8}", RemoveValidatorTarget.class).validations, 1);
+    ForyJson removed = newJsonBuilder().registerMixin(RemoveValidatorMixin.class).build();
+    assertEquals(removed.fromJson("{\"id\":8}", RemoveValidatorTarget.class).validations, 0);
+    assertGeneratedWhenSupported(added, ValidatorTarget.class);
+    assertGeneratedWhenSupported(removed, RemoveValidatorTarget.class);
   }
 
   @Test
@@ -576,6 +591,40 @@ public class JsonMixinTest extends ForyJsonTestModels {
 
     @JsonCreator
     ValueTarget create(String value);
+  }
+
+  public static final class ValidatorTarget {
+    public int id;
+    public transient int validations;
+
+    public void checkValid() {
+      if (id <= 0) {
+        throw new IllegalArgumentException("invalid id");
+      }
+      validations++;
+    }
+  }
+
+  @JsonMixin(target = ValidatorTarget.class)
+  public abstract static class ValidatorMixin {
+    @JsonValidator
+    public abstract void checkValid();
+  }
+
+  public static final class RemoveValidatorTarget {
+    public int id;
+    public transient int validations;
+
+    @JsonValidator
+    public void checkValid() {
+      validations++;
+    }
+  }
+
+  @JsonMixin(target = RemoveValidatorTarget.class)
+  public abstract static class RemoveValidatorMixin {
+    @JsonMixinRemove(JsonValidator.class)
+    public abstract void checkValid();
   }
 
   public interface Shape {}

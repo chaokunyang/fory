@@ -39,6 +39,7 @@ import org.apache.fory.json.annotation.JsonCodec;
 import org.apache.fory.json.annotation.JsonCreator;
 import org.apache.fory.json.annotation.JsonFormat;
 import org.apache.fory.json.annotation.JsonRawValue;
+import org.apache.fory.json.annotation.JsonValidator;
 import org.apache.fory.json.annotation.JsonValue;
 import org.apache.fory.platform.AndroidSupport;
 import org.apache.fory.platform.JdkVersion;
@@ -47,7 +48,9 @@ import org.testng.annotations.Test;
 public class JsonAndroidRuntimeTest {
   @Test
   public void normalJvm() {
-    assertRoundTrips(ForyJson.builder().withCodegen(false).build());
+    ForyJson json = ForyJson.builder().withCodegen(false).build();
+    assertRoundTrips(json);
+    assertValidators(json);
   }
 
   @Test
@@ -133,6 +136,28 @@ public class JsonAndroidRuntimeTest {
     assertEquals(decodedFormat.instants, format.instants);
   }
 
+  private static void assertValidators(ForyJson json) {
+    AndroidValidated valid = json.fromJson("{\"value\":12}", AndroidValidated.class);
+    assertTrue(valid.validatorInvoked());
+    try {
+      json.fromJson("{\"value\":-1}", AndroidValidated.class);
+      throw new AssertionError("Invalid AndroidValidated input must fail validation");
+    } catch (ForyJsonException e) {
+      assertTrue(e.getCause() instanceof IllegalArgumentException, e.toString());
+    }
+  }
+
+  private static void assertGeneratedValidatorRequired(ForyJson json) {
+    try {
+      json.fromJson("{\"value\":12}", AndroidValidated.class);
+      throw new AssertionError("Android validators must use generated operations");
+    } catch (ForyJsonException e) {
+      assertTrue(
+          e.getMessage().contains("Generated JSON validator operations are required"),
+          e.toString());
+    }
+  }
+
   private static List<String> javaCommand(String classPath, Class<?> mainClass) {
     List<String> command =
         new ArrayList<>(
@@ -167,6 +192,7 @@ public class JsonAndroidRuntimeTest {
       ForyJson json = ForyJson.builder().withCodegen(true).withAsyncCompilation(true).build();
       assertFalse(ForyJsonTestModels.hasGeneratedCapability(json, AndroidModel.class));
       assertRoundTrips(json);
+      assertGeneratedValidatorRequired(json);
       System.out.println("RESULT:ok");
     }
   }
@@ -246,5 +272,22 @@ public class JsonAndroidRuntimeTest {
 
     @JsonFormat(pattern = "uuuu-MM-dd HH:mm:ss XXX", timezone = "Asia/Shanghai")
     public List<Instant> instants;
+  }
+
+  public static final class AndroidValidated {
+    public int value;
+    private boolean validatorInvoked;
+
+    @JsonValidator
+    public void validate() {
+      validatorInvoked = true;
+      if (value < 0) {
+        throw new IllegalArgumentException("value must not be negative");
+      }
+    }
+
+    public boolean validatorInvoked() {
+      return validatorInvoked;
+    }
   }
 }

@@ -547,6 +547,91 @@ public class JsonTypeProcessorTest {
   }
 
   @Test
+  public void generatedValidators() throws Throwable {
+    CompilationResult result =
+        compile(
+            "test.ValidatedModel",
+            "package test;\n"
+                + "import org.apache.fory.json.annotation.*;\n"
+                + "class ValidatedBase {\n"
+                + "  public int calls;\n"
+                + "  @JsonValidator public void validateBase() { calls++; }\n"
+                + "}\n"
+                + "@JsonType public final class ValidatedModel extends ValidatedBase {\n"
+                + "  public boolean fail;\n"
+                + "  @JsonValidator public void validateModel() {\n"
+                + "    calls++;\n"
+                + "    if (fail) throw new IllegalStateException(\"invalid\");\n"
+                + "  }\n"
+                + "}\n");
+    assertTrue(result.success, result.diagnostics());
+    ClassLoader loader = result.classLoader();
+    Class<?> modelType = loader.loadClass("test.ValidatedModel");
+    GeneratedJsonCodec<?> codec = generatedCodec(loader, "test.ValidatedModel_ForyJsonCodec");
+    Method[] validators = codec.validatorMethods();
+    assertEquals(validators.length, 2);
+    List<String> names = new ArrayList<>();
+    for (Method validator : validators) {
+      names.add(validator.getName());
+    }
+    Collections.sort(names);
+    assertEquals(names, Arrays.asList("validateBase", "validateModel"));
+
+    Object model = modelType.getConstructor().newInstance();
+    codec.invokeValidators(model);
+    Field calls = modelType.getField("calls");
+    calls.setAccessible(true);
+    assertEquals(calls.getInt(model), 2);
+    modelType.getField("fail").setBoolean(model, true);
+    try {
+      codec.invokeValidators(model);
+      throw new AssertionError("Expected validator failure");
+    } catch (ForyJsonException e) {
+      assertTrue(e.getMessage().contains("test.ValidatedModel"), e.getMessage());
+      assertTrue(e.getMessage().contains("validateModel"), e.getMessage());
+      assertTrue(e.getCause() instanceof IllegalStateException);
+    }
+
+    String rules = result.generatedResource(RULE_PREFIX + "test.ValidatedModel.pro");
+    assertTrue(rules.contains("void validateBase();"), rules);
+    assertTrue(rules.contains("void validateModel();"), rules);
+    assertTrue(rules.contains("java.lang.reflect.Method[] validatorMethods();"), rules);
+    assertTrue(rules.contains("void invokeValidators(java.lang.Object);"), rules);
+  }
+
+  @Test
+  public void generatedMixinValidator() throws Throwable {
+    CompilationResult result =
+        compile(
+            "test.MixinValidatedModel",
+            "package test;\n"
+                + "import org.apache.fory.json.annotation.*;\n"
+                + "public final class MixinValidatedModel {\n"
+                + "  public int calls;\n"
+                + "  public void verify() { calls++; }\n"
+                + "}\n"
+                + "@JsonMixin(target = MixinValidatedModel.class)\n"
+                + "interface ValidationMixin {\n"
+                + "  @JsonValidator void verify();\n"
+                + "}\n");
+    assertTrue(result.success, result.diagnostics());
+    ClassLoader loader = result.classLoader();
+    Class<?> modelType = loader.loadClass("test.MixinValidatedModel");
+    String companion =
+        "test.ValidationMixin_ForyJsonMixin_test_x2e_MixinValidatedModel_ForyJsonCodec";
+    GeneratedJsonCodec<?> codec = generatedCodec(loader, companion);
+    assertEquals(codec.validatorMethods().length, 1);
+    assertEquals(codec.validatorMethods()[0], modelType.getMethod("verify"));
+    Object model = modelType.getConstructor().newInstance();
+    codec.invokeValidators(model);
+    assertEquals(modelType.getField("calls").getInt(model), 1);
+
+    String rules = result.generatedResource(MIXIN_RULE_PREFIX + "test.ValidationMixin.pro");
+    assertTrue(rules.contains("void verify();"), rules);
+    assertTrue(rules.contains("@interface org.apache.fory.json.annotation.JsonValidator"), rules);
+  }
+
+  @Test
   public void hiddenFieldAccessors() throws Exception {
     CompilationResult result =
         compile(

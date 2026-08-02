@@ -43,6 +43,7 @@ import org.apache.fory.codegen.CompileState;
 import org.apache.fory.graalvm.closed.ClosedJsonConfigs;
 import org.apache.fory.graalvm.closed.ClosedJsonRecord;
 import org.apache.fory.json.ForyJson;
+import org.apache.fory.json.ForyJsonException;
 import org.apache.fory.json.PropertyNamingStrategy;
 import org.apache.fory.json.annotation.ForyJsonProvider;
 import org.apache.fory.json.annotation.JsonAnyGetter;
@@ -60,6 +61,7 @@ import org.apache.fory.json.annotation.JsonRawValue;
 import org.apache.fory.json.annotation.JsonSubTypes;
 import org.apache.fory.json.annotation.JsonType;
 import org.apache.fory.json.annotation.JsonUnwrapped;
+import org.apache.fory.json.annotation.JsonValidator;
 import org.apache.fory.json.annotation.JsonValue;
 import org.apache.fory.json.codec.JsonValueCodec;
 import org.apache.fory.json.codec.MapKeyCodec;
@@ -78,6 +80,8 @@ public final class ForyJsonExample {
       "Fory JSON is using interpreted codecs because the current configuration was not included "
           + "in this native image. Return this configuration from a reachable "
           + "@ForyJsonProvider to enable generated codecs.";
+  // Portable lower bound: the 8-byte object base plus one 4-byte int field.
+  private static final long GRAPH_BUDGET_VALUE_BYTES = 12;
 
   private ForyJsonExample() {}
 
@@ -100,6 +104,8 @@ public final class ForyJsonExample {
         testContainerRoots();
         testGenericProperties();
         testUnwrapped();
+        testValidator();
+        testGraphMemoryBudget();
         testMixin();
         testMixinValue();
         testMixinValueRecord();
@@ -519,6 +525,34 @@ public final class ForyJsonExample {
         recordJson.equals("{\"id\":16,\"child_name\":\"record\",\"child_rank\":17}"));
     UnwrappedRootRecord decodedRecord = json.fromJson(recordJson, UnwrappedRootRecord.class);
     Preconditions.checkArgument(decodedRecord.equals(record));
+  }
+
+  private static void testValidator() {
+    ForyJson json = newProviderJson();
+    ValidatedValue value = json.fromJson("{\"value\":21}", ValidatedValue.class);
+    Preconditions.checkArgument(value.value == 21);
+    Preconditions.checkArgument(value.validatorInvoked());
+    try {
+      json.fromJson("{\"value\":0}", ValidatedValue.class);
+      throw new AssertionError("Invalid native JSON input must fail validation");
+    } catch (ForyJsonException expected) {
+      Preconditions.checkArgument(expected.getCause() instanceof IllegalArgumentException);
+    }
+  }
+
+  private static void testGraphMemoryBudget() {
+    String text = "{\"value\":34}";
+    ForyJson exact = ForyJson.builder().withMaxGraphMemoryBytes(GRAPH_BUDGET_VALUE_BYTES).build();
+    Preconditions.checkArgument(exact.fromJson(text, GraphBudgetValue.class).value == 34);
+
+    ForyJson insufficient =
+        ForyJson.builder().withMaxGraphMemoryBytes(GRAPH_BUDGET_VALUE_BYTES - 1).build();
+    try {
+      insufficient.fromJson(text, GraphBudgetValue.class);
+      throw new AssertionError("An undersized graph memory budget must reject the object");
+    } catch (ForyJsonException expected) {
+      // Expected: malformed and resource-limit error details are not a public contract.
+    }
   }
 
   private static void testBigDecimal() {
@@ -981,6 +1015,27 @@ public final class ForyJsonExample {
   public static final class ConfigValue {
     public String camelName;
     public String nullValue;
+  }
+
+  @JsonType
+  public static final class ValidatedValue {
+    public int value;
+    private boolean validatorInvoked;
+
+    @JsonValidator
+    public void validate() {
+      validatorInvoked = true;
+      Preconditions.checkArgument(value > 0);
+    }
+
+    public boolean validatorInvoked() {
+      return validatorInvoked;
+    }
+  }
+
+  @JsonType
+  public static final class GraphBudgetValue {
+    public int value;
   }
 
   @JsonType

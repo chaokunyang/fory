@@ -658,4 +658,9 @@ public class UnionSerializer extends Serializer<Union> {
     }
     return builder.toString();
   }
+
+  @Override
+  public final boolean readBodyAlwaysAdvances() {
+    return true;
+  }
 }

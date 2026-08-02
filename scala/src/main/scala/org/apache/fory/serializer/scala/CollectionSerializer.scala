@@ -64,7 +64,10 @@ abstract class AbstractScalaCollectionSerializer[A, T <: Iterable[A]](
     readContext.reserveGraphMemory(ScalaCollectionOwnerBytes + numElements.toLong * ReferenceBytes)
     setNumElements(numElements)
     val factory = readContext.readRef().asInstanceOf[Factory[A, T]]
-    buffer.checkReadableBytes(numElements)
+    val requiredReadable = numElements - readContext.remainingUnbackedContainerItems()
+    if (requiredReadable > 0) {
+      buffer.checkReadableBytes(requiredReadable)
+    }
     val builder = factory.newBuilder
     builder.sizeHint(numElements)
     new JavaCollectionBuilder[A, T](builder)

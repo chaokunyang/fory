@@ -72,6 +72,7 @@ public final class ReadContext {
   private boolean peerOutOfBandEnabled;
   private int depth;
   private long remainingGraphMemoryBytes;
+  private int remainingUnbackedContainerItems;
 
   /**
    * Creates read-side runtime state for one {@code Fory} instance.
@@ -114,6 +115,7 @@ public final class ReadContext {
     this.peerOutOfBandEnabled = peerOutOfBandEnabled;
     this.outOfBandBuffers = outOfBandBuffers == null ? null : outOfBandBuffers.iterator();
     remainingGraphMemoryBytes = config.maxGraphMemoryBytes();
+    remainingUnbackedContainerItems = config.maxUnbackedContainerItems();
   }
 
   /**
@@ -311,6 +313,7 @@ public final class ReadContext {
     generics.reset();
     depth = 0;
     remainingGraphMemoryBytes = 0;
+    remainingUnbackedContainerItems = 0;
   }
 
   /** Returns the immutable runtime configuration for this context. */
@@ -333,6 +336,34 @@ public final class ReadContext {
       throwInvalidGraphMemory(bytes, remaining);
     }
     remainingGraphMemoryBytes = remaining - bytes;
+  }
+
+  /** Returns the remaining root allowance for container items not backed by input bytes. */
+  public final int remainingUnbackedContainerItems() {
+    return remainingUnbackedContainerItems;
+  }
+
+  /** Deducts completed container work that was not backed by input bytes. */
+  public final void reserveUnbackedContainerItems(int items) {
+    int remaining = remainingUnbackedContainerItems;
+    if (items < 0 || items > remaining) {
+      throwInvalidUnbackedContainerItems(items, remaining);
+    }
+    remainingUnbackedContainerItems = remaining - items;
+  }
+
+  private void throwInvalidUnbackedContainerItems(int items, int remaining) {
+    if (items < 0) {
+      throw new InsecureException(
+          "Unbacked container item request must be non-negative, but got " + items + '.');
+    }
+    throw new InsecureException(
+        "Container read work exceeds maxUnbackedContainerItems remaining budget "
+            + remaining
+            + " items out of effective limit "
+            + config.maxUnbackedContainerItems()
+            + ". If the data is trusted, increase "
+            + "ForyBuilder#withMaxUnbackedContainerItems.");
   }
 
   private void throwInvalidGraphMemory(long bytes, long remaining) {

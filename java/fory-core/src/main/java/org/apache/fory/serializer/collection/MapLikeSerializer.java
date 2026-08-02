@@ -795,6 +795,12 @@ public abstract class MapLikeSerializer<T> extends Serializer<T> {
       valueSerializer =
           typeResolver.readTypeInfo(readContext, state.valueTypeInfoReadCache).getSerializer();
     }
+    boolean bodyAlwaysAdvances =
+        trackKeyRef
+            || trackValueRef
+            || keySerializer.readBodyAlwaysAdvances()
+            || valueSerializer.readBodyAlwaysAdvances();
+    int bodyStart = bodyAlwaysAdvances ? 0 : buffer.readerIndex();
     readContext.increaseDepth();
     for (int i = 0; i < chunkSize; i++) {
       Object key =
@@ -809,6 +815,9 @@ public abstract class MapLikeSerializer<T> extends Serializer<T> {
       size--;
     }
     readContext.decreaseDepth();
+    if (!bodyAlwaysAdvances) {
+      reserveUnbackedEntries(readContext, chunkSize, buffer.readerIndex() - bodyStart);
+    }
     return size > 0 ? (size << 8) | buffer.readUnsignedByte() : 0;
   }
 
@@ -846,6 +855,12 @@ public abstract class MapLikeSerializer<T> extends Serializer<T> {
     } else {
       valueSerializer = valueGenericType.getSerializer(typeResolver);
     }
+    boolean bodyAlwaysAdvances =
+        trackKeyRef
+            || trackValueRef
+            || keySerializer.readBodyAlwaysAdvances()
+            || valueSerializer.readBodyAlwaysAdvances();
+    int bodyStart = bodyAlwaysAdvances ? 0 : buffer.readerIndex();
     for (int i = 0; i < chunkSize; i++) {
       generics.pushGenericType(keyGenericType, readContext.getDepth());
       readContext.increaseDepth();
@@ -865,6 +880,9 @@ public abstract class MapLikeSerializer<T> extends Serializer<T> {
       generics.popGenericType(readContext.getDepth());
       map.put(key, value);
       size--;
+    }
+    if (!bodyAlwaysAdvances) {
+      reserveUnbackedEntries(readContext, chunkSize, buffer.readerIndex() - bodyStart);
     }
     return size > 0 ? (size << 8) | buffer.readUnsignedByte() : 0;
   }
@@ -987,11 +1005,11 @@ public abstract class MapLikeSerializer<T> extends Serializer<T> {
   protected final int readMapSize(ReadContext readContext, MemoryBuffer buffer) {
     int numElements = buffer.readVarUInt32Small7();
     checkMapSize(numElements);
-    if (numElements > Integer.MAX_VALUE / 2) {
-      throwInvalidMapBodySize(numElements);
+    int requiredReadable = numElements - readContext.remainingUnbackedContainerItems();
+    if (requiredReadable > 0) {
+      buffer.checkReadableBytes(requiredReadable);
     }
     readContext.reserveGraphMemory(mapOwnerBytes + (long) numElements * 2 * REFERENCE_BYTES);
-    buffer.checkReadableBytes(numElements << 1);
     return numElements;
   }
 
@@ -1019,8 +1037,16 @@ public abstract class MapLikeSerializer<T> extends Serializer<T> {
     throw new DeserializationException("Map size must be non-negative: " + numElements);
   }
 
-  private void throwInvalidMapBodySize(int numElements) {
-    throw new DeserializationException("Map size is too large to read: " + numElements);
+  private static void reserveUnbackedEntries(
+      ReadContext readContext, int entries, int consumedBytes) {
+    if (consumedBytes < entries) {
+      readContext.reserveUnbackedContainerItems(entries - consumedBytes);
+    }
+  }
+
+  @Override
+  public final boolean readBodyAlwaysAdvances() {
+    return true;
   }
 
   public abstract T onMapCopy(Map map);

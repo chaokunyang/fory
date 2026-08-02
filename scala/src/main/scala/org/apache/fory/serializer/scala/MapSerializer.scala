@@ -22,7 +22,6 @@ package org.apache.fory.serializer.scala
 import org.apache.fory.collection.MapEntry
 import org.apache.fory.context.ReadContext
 import org.apache.fory.context.WriteContext
-import org.apache.fory.exception.DeserializationException
 import org.apache.fory.resolver.TypeResolver
 import org.apache.fory.serializer.collection.MapLikeSerializer
 
@@ -59,14 +58,14 @@ abstract class AbstractScalaMapSerializer[K, V, T](typeResolver: TypeResolver, c
     val buffer = readContext.getBuffer
     val numElements = buffer.readVarUInt32Small7()
     checkMapSize(numElements)
-    if (numElements > Integer.MAX_VALUE / 2) {
-      throw new DeserializationException("Map size is too large to read: " + numElements)
-    }
     readContext.reserveGraphMemory(
       ScalaMapOwnerBytes + numElements.toLong * 2L * ReferenceBytes)
     setNumElements(numElements)
     val factory = readContext.readRef().asInstanceOf[Factory[(K, V), T]]
-    buffer.checkReadableBytes(numElements << 1)
+    val requiredReadable = numElements - readContext.remainingUnbackedContainerItems()
+    if (requiredReadable > 0) {
+      buffer.checkReadableBytes(requiredReadable)
+    }
     val builder = factory.newBuilder
     builder.sizeHint(numElements)
     new MapBuilder[K, V, T](builder)

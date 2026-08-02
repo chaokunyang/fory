@@ -258,4 +258,9 @@ public final class DecimalSerializer extends ImmutableSerializer<BigDecimal> imp
     }
     return bigEndian;
   }
+
+  @Override
+  public boolean readBodyAlwaysAdvances() {
+    return true;
+  }
 }

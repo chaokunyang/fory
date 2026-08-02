@@ -153,6 +153,27 @@ public class ObjectCodecBuilder extends BaseObjectCodecBuilder {
   }
 
   @Override
+  protected boolean generatedReadBodyAlwaysAdvances() {
+    if (classVersionHash != null) {
+      return true;
+    }
+    for (Descriptor descriptor : objectCodecOptimizer.descriptorGrouper.getSortedDescriptors()) {
+      Class<?> fieldType = descriptor.getRawType();
+      if (fieldType.isPrimitive()
+          || TypeUtils.isBoxed(fieldType)
+          || fieldType == Float16.class
+          || fieldType == BFloat16.class
+          || descriptor.isTrackingRef()
+          || descriptor.isNullable()
+          || !isMonomorphic(descriptor)
+          || registeredReadBodyAlwaysAdvances(fieldType)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  @Override
   protected String codecSuffix() {
     return "";
   }

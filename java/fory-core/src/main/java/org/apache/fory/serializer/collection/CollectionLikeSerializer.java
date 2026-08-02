@@ -48,6 +48,7 @@ import org.apache.fory.util.Preconditions;
 @SuppressWarnings({"unchecked", "rawtypes"})
 public abstract class CollectionLikeSerializer<T> extends Serializer<T> {
   private static final int REFERENCE_BYTES = GraphMemoryEstimates.REFERENCE_BYTES;
+  private static final int UNBACKED_CHECK_INTERVAL = 1024;
 
   private MethodHandle constructor;
   private int numElements;
@@ -578,8 +579,11 @@ public abstract class CollectionLikeSerializer<T> extends Serializer<T> {
   protected final int readCollectionSize(ReadContext readContext, MemoryBuffer buffer) {
     int numElements = buffer.readVarUInt32Small7();
     checkCollectionSize(numElements);
+    int requiredReadable = numElements - readContext.remainingUnbackedContainerItems();
+    if (requiredReadable > 0) {
+      buffer.checkReadableBytes(requiredReadable);
+    }
     readContext.reserveGraphMemory(collectionOwnerBytes + (long) numElements * REFERENCE_BYTES);
-    buffer.checkReadableBytes(numElements);
     return numElements;
   }
 
@@ -665,8 +669,12 @@ public abstract class CollectionLikeSerializer<T> extends Serializer<T> {
       }
     } else {
       if ((flags & CollectionFlags.HAS_NULL) != CollectionFlags.HAS_NULL) {
-        for (int i = 0; i < numElements; i++) {
-          collection.add(serializer.read(readContext, RefMode.NONE));
+        if (serializer.readBodyAlwaysAdvances()) {
+          for (int i = 0; i < numElements; i++) {
+            collection.add(serializer.read(readContext, RefMode.NONE));
+          }
+        } else {
+          readUnbackedSameTypeElements(readContext, serializer, collection, numElements);
         }
       } else {
         MemoryBuffer buffer = readContext.getBuffer();
@@ -680,6 +688,36 @@ public abstract class CollectionLikeSerializer<T> extends Serializer<T> {
       }
     }
     readContext.decreaseDepth();
+  }
+
+  private static <T extends Collection> void readUnbackedSameTypeElements(
+      ReadContext readContext, Serializer serializer, T collection, int numElements) {
+    MemoryBuffer buffer = readContext.getBuffer();
+    int checkpoint = buffer.readerIndex();
+    for (int i = 0; i < numElements; i++) {
+      collection.add(serializer.read(readContext, RefMode.NONE));
+      int completed = i + 1;
+      if ((completed & (UNBACKED_CHECK_INTERVAL - 1)) == 0) {
+        int current = buffer.readerIndex();
+        int consumed = current - checkpoint;
+        if (consumed < UNBACKED_CHECK_INTERVAL) {
+          readContext.reserveUnbackedContainerItems(UNBACKED_CHECK_INTERVAL - consumed);
+        }
+        checkpoint = current;
+      }
+    }
+    int tail = numElements & (UNBACKED_CHECK_INTERVAL - 1);
+    if (tail != 0) {
+      int consumed = buffer.readerIndex() - checkpoint;
+      if (consumed < tail) {
+        readContext.reserveUnbackedContainerItems(tail - consumed);
+      }
+    }
+  }
+
+  @Override
+  public final boolean readBodyAlwaysAdvances() {
+    return true;
   }
 
   /** Read elements whose type are different. */

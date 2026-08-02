@@ -33,6 +33,7 @@ import { Decimal } from "./types/decimal";
 import { BFloat16Array } from "./types/bfloat16";
 import { BoolArray } from "./types/boolArray";
 import { isFloat16Array } from "./types/float16";
+import { getUnknownTypeMeta, UnknownStructSerializer } from "./unknownStruct";
 
 const uninitSerialize = {
   _initialized: false,
@@ -124,6 +125,7 @@ export default class TypeResolver {
   private bfloat16ArraySerializer: null | Serializer = null;
   private float32ArraySerializer: null | Serializer = null;
   private float64ArraySerializer: null | Serializer = null;
+  private unknownStructSerializer!: UnknownStructSerializer;
 
   constructor(readonly config: Config) {
     this.trackingRef = config.ref;
@@ -132,6 +134,13 @@ export default class TypeResolver {
   bindContexts(writeContext: WriteContext, readContext: ReadContext) {
     this.writeContext = writeContext;
     this.readContext = readContext;
+    this.unknownStructSerializer = new UnknownStructSerializer(this, writeContext, readContext);
+  }
+
+  getUnknownStructSerializer(typeMeta?: import("./meta/TypeMeta").TypeMeta) {
+    return typeMeta === undefined
+      ? this.unknownStructSerializer
+      : this.unknownStructSerializer.bind(typeMeta);
   }
 
   isCompatible() {
@@ -439,6 +448,10 @@ export default class TypeResolver {
 
     if (v instanceof Set) {
       return this.setSerializer;
+    }
+
+    if (getUnknownTypeMeta(v) !== undefined) {
+      return this.unknownStructSerializer;
     }
 
     if (typeof v === "object" && v !== null && ForyTypeInfoSymbol in v) {

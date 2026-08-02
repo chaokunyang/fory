@@ -573,18 +573,24 @@ internal static class CollectionReadCodec
         uint refId)
     {
         int length = ReadLength<T>(context, QueueOwnerBytes);
+        if (length == 0)
+        {
+            Queue<T> empty = new(length);
+            if (publishRef)
+            {
+                context.RefReader.StoreRefAt(refId, empty);
+            }
+
+            return empty;
+        }
+
+        byte header = ReadHeader(context, length);
         Queue<T> values = new(length);
         if (publishRef)
         {
             context.RefReader.StoreRefAt(refId, values);
         }
 
-        if (length == 0)
-        {
-            return values;
-        }
-
-        byte header = ReadHeader(context, length);
         ReadElements(elementSerializer, context, length, header, new QueueSink<T>(values));
         return values;
     }
@@ -606,18 +612,24 @@ internal static class CollectionReadCodec
         uint refId)
     {
         int length = ReadLength<T>(context, StackOwnerBytes);
+        if (length == 0)
+        {
+            Stack<T> empty = new(length);
+            if (publishRef)
+            {
+                context.RefReader.StoreRefAt(refId, empty);
+            }
+
+            return empty;
+        }
+
+        byte header = ReadHeader(context, length);
         Stack<T> values = new(length);
         if (publishRef)
         {
             context.RefReader.StoreRefAt(refId, values);
         }
 
-        if (length == 0)
-        {
-            return values;
-        }
-
-        byte header = ReadHeader(context, length);
         ReadElements(elementSerializer, context, length, header, new StackSink<T>(values));
         return values;
     }

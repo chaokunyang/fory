@@ -58,7 +58,9 @@ public class KotlinArrayDequeSerializer<E>(
   override fun newCollection(readContext: ReadContext): Collection<E> {
     val numElements = readCollectionSize(readContext, readContext.buffer)
     setNumElements(numElements)
-    return ArrayDequeBuilder<E>(ArrayDeque<E>(numElements))
+    val arrayDeque = ArrayDeque<E>(numElements)
+    readContext.reference(arrayDeque)
+    return ArrayDequeBuilder<E>(arrayDeque)
   }
 }
 

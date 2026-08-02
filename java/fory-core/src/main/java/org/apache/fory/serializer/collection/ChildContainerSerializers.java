@@ -710,6 +710,11 @@ public class ChildContainerSerializers {
       if (typeInfo == null) {
         throw new ForyException("Invalid layer metadata reference id " + index);
       }
+      if (typeInfo.getType() != localSerializer.getType()) {
+        throw new ForyException(
+            "Layer " + localSerializer.getType().getName() + " does not match its TypeDef");
+      }
+      checkLayerTypeDef(localSerializer, typeInfo.getTypeDef());
       return getLayerSerializer(typeResolver, localSerializer, typeInfo);
     }
     long id = buffer.readInt64();
@@ -727,11 +732,25 @@ public class ChildContainerSerializers {
     byte[] encoded = TypeDef.readTypeDefBytes(typeResolver, buffer, typeDefId);
     Class<?> layerClass = localSerializer.getType();
     typeResolver.checkClassForDeserialization(layerClass);
-    TypeDef typeDef =
-        Arrays.equals(encoded, localTypeDef.getEncoded())
-            ? localTypeDef
-            : typeResolver.cacheRemoteTypeDef(TypeDef.readTypeDef(typeResolver, encoded));
+    TypeDef typeDef;
+    if (Arrays.equals(encoded, localTypeDef.getEncoded())) {
+      typeDef = localTypeDef;
+    } else {
+      typeDef = TypeDef.readTypeDef(typeResolver, encoded);
+      // The local slot is the layer identity owner. Reject a different root before publishing its
+      // metadata to the checked remote TypeDef cache.
+      checkLayerTypeDef(localSerializer, typeDef);
+      typeDef = typeResolver.cacheRemoteTypeDef(typeDef);
+    }
     return new TypeInfo(layerClass, typeDef);
+  }
+
+  private static void checkLayerTypeDef(
+      CompatibleLayerSerializerBase localSerializer, TypeDef typeDef) {
+    Class<?> layerClass = localSerializer.getType();
+    if (typeDef == null || typeDef.getClassSpec().type != layerClass) {
+      throw new ForyException("Layer " + layerClass.getName() + " does not match its TypeDef");
+    }
   }
 
   private static CompatibleLayerSerializerBase getLayerSerializer(

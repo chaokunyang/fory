@@ -34,6 +34,12 @@ Deliver measurable performance improvements in Apache Fory without protocol drif
 - Never add public hacky API for performance shortcuts; keep optimization helpers internal/private and conceptually clean.
 - Do not hide regressions behind unsafe compiler flags or benchmark-only code paths.
 - Keep optimization surfaces nested-safe; avoid root-only shortcuts unless they are architecturally valid and requested.
+- Do not add reader-side validation solely to produce an earlier or more precise malformed-input
+  error. A necessary crash, panic, undefined-behavior, out-of-bounds, resource-amplification,
+  no-progress, state-pollution, type, or policy guard must keep its hot success path to a primitive
+  branch and move exception allocation and message formatting into a cold no-inline helper when
+  supported. If an existing bounds-safe downstream operation already raises a controlled root
+  error, do not duplicate its validation on the hot path.
 
 ## Execute Workflow
 

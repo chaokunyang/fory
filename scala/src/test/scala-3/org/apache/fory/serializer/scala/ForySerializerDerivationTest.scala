@@ -31,13 +31,14 @@ import org.apache.fory.annotation.{
   UInt8Type
 }
 import org.apache.fory.config.Int64Encoding
+import org.apache.fory.exception.InsecureException
 import org.apache.fory.memory.MemoryBuffer
 import org.apache.fory.meta.TypeDef
 import org.apache.fory.reflect.{FieldAccessor, ObjectInstantiators}
 import org.apache.fory.scala.ForySerializer
 import org.apache.fory.scala.ForyScala
 import org.apache.fory.scala.register
-import org.apache.fory.serializer.StaticGeneratedStructSerializer
+import org.apache.fory.serializer.{GraphMemoryEstimates, StaticGeneratedStructSerializer}
 import org.apache.fory.`type`.{Types, TypeUtils}
 import org.apache.fory.`type`.union.UnknownCase
 import org.scalatest.matchers.should.Matchers
@@ -174,6 +175,13 @@ object ForySerializerDerivationTest {
     var name: String = ""
   }
 
+  @ForyStruct
+  final class StoredState(@ForyField(id = 1) val id: Int) derives ForySerializer {
+    private val localOnly: Long = 17L
+
+    def localOnlyValue: Long = localOnly
+  }
+
   @ForyUnion
   enum SearchTarget derives ForySerializer {
     @ForyUnknownCase
@@ -238,6 +246,18 @@ object ForySerializerDerivationTest {
     fory
   }
 
+  def graphBudgetFory(maxGraphMemoryBytes: Long): Fory = {
+    val fory = ForyScala.builder()
+      .withXlang(true)
+      .withRefTracking(true)
+      .withMaxGraphMemoryBytes(maxGraphMemoryBytes)
+      .requireClassRegistration(true)
+      .suppressClassRegistrationWarnings(false)
+      .build()
+    ForySerializer.register(fory, classOf[StoredState], "scala_test.StoredState")
+    fory
+  }
+
   def newAccessorValue[T](cls: Class[T], values: (String, AnyRef)*): T = {
     val value = ObjectInstantiators.getObjectInstantiator(cls).newInstance()
     values.foreach { (fieldName, fieldValue) =>
@@ -257,6 +277,19 @@ class ForySerializerDerivationTest extends AnyWordSpec with Matchers {
         Person("Ada", 36, Some("ada@example.com"))
       fory.deserialize(fory.serialize(Person("Grace", 85, None))) shouldEqual
         Person("Grace", 85, None)
+    }
+
+    "reserve generated physical storage" in {
+      val value = new StoredState(7)
+      val required = GraphMemoryEstimates.shallowObjectBytes(classOf[StoredState]).toLong
+      val bytes = graphBudgetFory(required).serialize(value)
+
+      intercept[InsecureException] {
+        graphBudgetFory(required - 1).deserialize(bytes)
+      }
+      val restored = graphBudgetFory(required).deserialize(bytes).asInstanceOf[StoredState]
+      restored.id shouldBe value.id
+      restored.localOnlyValue shouldBe value.localOnlyValue
     }
 
     "register derived structs with dotted names" in {

@@ -134,7 +134,8 @@ public static class FieldSkipper
     private static object? ReadInlineTypedPayload(ReadContext context)
     {
         TypeInfo typeInfo = context.TypeResolver.ReadAnyTypeInfo(context);
-        return context.TypeResolver.ReadAnyValue(typeInfo, context);
+        context.TypeResolver.SkipAnyValue(typeInfo, context);
+        return null;
     }
 
     private static object? ReadInlineTypedPayload(ReadContext context, uint refId)
@@ -148,7 +149,8 @@ public static class FieldSkipper
         switch (refMode)
         {
             case RefMode.None:
-                return context.TypeResolver.ReadAnyValue(typeInfo, context);
+                context.TypeResolver.SkipAnyValue(typeInfo, context);
+                return null;
             case RefMode.NullOnly:
                 {
                     sbyte flag = context.Reader.ReadInt8();
@@ -162,7 +164,8 @@ public static class FieldSkipper
                         throw new InvalidDataException($"unexpected nullOnly flag {flag}");
                     }
 
-                    return context.TypeResolver.ReadAnyValue(typeInfo, context);
+                    context.TypeResolver.SkipAnyValue(typeInfo, context);
+                    return null;
                 }
             case RefMode.Tracking:
                 {
@@ -182,7 +185,8 @@ public static class FieldSkipper
                                 return context.TypeResolver.ReadAnyValue(typeInfo, context, reservedRefId);
                             }
                         case RefFlag.NotNullValue:
-                            return context.TypeResolver.ReadAnyValue(typeInfo, context);
+                            context.TypeResolver.SkipAnyValue(typeInfo, context);
+                            return null;
                         default:
                             throw new RefException($"invalid ref flag {(sbyte)flag}");
                     }
@@ -349,6 +353,13 @@ public static class FieldSkipper
             elementTypeInfo = context.TypeResolver.ReadAnyTypeInfo(context);
         }
 
+        if (elementRefMode == RefMode.None && elementTypeInfo?.WireTypeId == TypeId.None)
+        {
+            // Same-type None elements have no per-element envelope or payload, so the
+            // declared count does not imply any bytes to skip.
+            return;
+        }
+
         for (int i = 0; i < length; i++)
         {
             SkipValue(context, elementType, elementRefMode, elementTypeInfo);
@@ -413,6 +424,11 @@ public static class FieldSkipper
             }
 
             int chunkSize = context.Reader.ReadUInt8();
+            if (chunkSize == 0 || chunkSize > totalLength - readCount)
+            {
+                ThrowInvalidChunkSize(chunkSize, totalLength - readCount);
+            }
+
             TypeInfo? keyChunkTypeInfo = null;
             if (!keyDeclared)
             {
@@ -441,5 +457,12 @@ public static class FieldSkipper
 
             readCount += chunkSize;
         }
+    }
+
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+    private static void ThrowInvalidChunkSize(int chunkSize, int remaining)
+    {
+        throw new InvalidDataException(
+            $"invalid map chunk size {chunkSize} with {remaining} entries remaining");
     }
 }

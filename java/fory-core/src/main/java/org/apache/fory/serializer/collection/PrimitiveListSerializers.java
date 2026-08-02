@@ -43,6 +43,7 @@ import org.apache.fory.exception.DeserializationException;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.memory.NativeByteOrder;
 import org.apache.fory.resolver.TypeResolver;
+import org.apache.fory.serializer.GraphMemoryEstimates;
 import org.apache.fory.serializer.PrimitiveArraySerializers;
 import org.apache.fory.serializer.Serializer;
 import org.apache.fory.serializer.Shareable;
@@ -934,6 +935,10 @@ public class PrimitiveListSerializers {
 
   public static final class BoxedArrayAsListSerializer extends Serializer<List<?>>
       implements Shareable {
+    private static final int REFERENCE_BYTES = GraphMemoryEstimates.REFERENCE_BYTES;
+    private static final int ARRAY_LIST_OWNER_BYTES =
+        GraphMemoryEstimates.shallowObjectBytes(ArrayList.class);
+
     private final int typeId;
     private final String fieldName;
     private final Serializer<?> arraySerializer;
@@ -985,7 +990,7 @@ public class PrimitiveListSerializers {
     @Override
     public List<?> read(ReadContext readContext) {
       Object primitiveArray = arraySerializer.read(readContext);
-      return toBoxedList(primitiveArray);
+      return toBoxedList(readContext, primitiveArray);
     }
 
     @Override
@@ -1026,24 +1031,24 @@ public class PrimitiveListSerializers {
       }
     }
 
-    private List<?> toBoxedList(Object primitiveArray) {
+    private List<?> toBoxedList(ReadContext readContext, Object primitiveArray) {
       if (primitiveArray instanceof boolean[]) {
         boolean[] values = (boolean[]) primitiveArray;
-        ArrayList<Boolean> list = new ArrayList<>(values.length);
+        ArrayList<Boolean> list = newBoxedList(readContext, values.length);
         for (boolean value : values) {
           list.add(value);
         }
         return list;
       } else if (primitiveArray instanceof byte[]) {
         byte[] values = (byte[]) primitiveArray;
-        ArrayList<Object> list = new ArrayList<>(values.length);
+        ArrayList<Object> list = newBoxedList(readContext, values.length);
         for (byte value : values) {
           list.add(typeId == Types.UINT8_ARRAY ? Byte.toUnsignedInt(value) : value);
         }
         return list;
       } else if (primitiveArray instanceof short[]) {
         short[] values = (short[]) primitiveArray;
-        ArrayList<Object> list = new ArrayList<>(values.length);
+        ArrayList<Object> list = newBoxedList(readContext, values.length);
         for (short value : values) {
           if (typeId == Types.UINT16_ARRAY) {
             list.add(Short.toUnsignedInt(value));
@@ -1058,34 +1063,39 @@ public class PrimitiveListSerializers {
         return list;
       } else if (primitiveArray instanceof int[]) {
         int[] values = (int[]) primitiveArray;
-        ArrayList<Object> list = new ArrayList<>(values.length);
+        ArrayList<Object> list = newBoxedList(readContext, values.length);
         for (int value : values) {
           list.add(typeId == Types.UINT32_ARRAY ? Integer.toUnsignedLong(value) : value);
         }
         return list;
       } else if (primitiveArray instanceof long[]) {
         long[] values = (long[]) primitiveArray;
-        ArrayList<Long> list = new ArrayList<>(values.length);
+        ArrayList<Long> list = newBoxedList(readContext, values.length);
         for (long value : values) {
           list.add(value);
         }
         return list;
       } else if (primitiveArray instanceof float[]) {
         float[] values = (float[]) primitiveArray;
-        ArrayList<Float> list = new ArrayList<>(values.length);
+        ArrayList<Float> list = newBoxedList(readContext, values.length);
         for (float value : values) {
           list.add(value);
         }
         return list;
       } else if (primitiveArray instanceof double[]) {
         double[] values = (double[]) primitiveArray;
-        ArrayList<Double> list = new ArrayList<>(values.length);
+        ArrayList<Double> list = newBoxedList(readContext, values.length);
         for (double value : values) {
           list.add(value);
         }
         return list;
       }
       throw new IllegalStateException("Unsupported array value " + primitiveArray.getClass());
+    }
+
+    private static <T> ArrayList<T> newBoxedList(ReadContext readContext, int size) {
+      readContext.reserveGraphMemory(ARRAY_LIST_OWNER_BYTES + (long) size * REFERENCE_BYTES);
+      return new ArrayList<>(size);
     }
 
     private boolean[] toBooleanArray(List<?> value) {

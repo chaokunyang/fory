@@ -29,10 +29,55 @@ This is the entry point for AI guidance in Apache Fory. Read this file first, th
 ## Agent Operating Rules
 
 - Preserve architecture. Do not introduce new layers, parallel flows, or public APIs unless explicitly requested; prefer local repair in the existing owner over shared-infra expansion, and stop if a fix conflicts with an ADR, spec, or invariant.
+- Do not change an existing `RefReader`/`RefWriter` architecture or API to support compatible skip. Compatible skip must not add alternate reference slots or tables, alternate reference lookup or publication methods, or forwarding APIs in read/write contexts, builders, serializers, or generated-code plumbing. Keep ordinary reference publication and lookup unchanged and resolve the case in the existing compatible generated owner. For an authorized removed-field read of an unregistered Struct, the empty object created by the skip reader is that path's final owner: publish that same object for `RefValue`, consume the Struct fields, and let later `RefFlag` values resolve to it. This preserves reference numbering and identity without registering the Struct; an independent dynamic root still requires normal registration. Do not add parallel reference state, a sentinel, a rejection, or a common-path branch for this case.
 - Respect ownership. Keep logic, state, and helpers in their natural owner, and do not move serializer-local, context-local, runtime-type-local, or protocol-local problems into global utilities.
 - Check the spec before implementation. For wire behavior and xlang mapping, use the specs as the source of truth and never copy one runtime's bug into another runtime just to make tests pass.
 - Do not make assumptions about runtime behavior, ownership, registration, metadata construction, protocol semantics, or test coverage. Read the current code, owning docs/specs, and relevant tests before making a design judgment or implementation decision. If the evidence is incomplete, inspect more or state the uncertainty explicitly instead of filling gaps from memory or analogy with another runtime.
 - For untrusted deserialization, read `docs/security/deserialization.md` before changing allocation, stream filling, skip, reference, metadata, or policy validation behavior. Variable-length deserialization must not allocate or reserve backing/output capacity from attacker-declared lengths or counts before the byte owner has proven proportional readable bytes with `checkReadableBytes` or the runtime equivalent. Root graph memory reservation is accounting only and may happen before that byte check, but it must not replace the byte check.
+- Malformed input must surface as a controlled root-operation error and still run
+  root cleanup, but the exact exception type, error code, message, detection
+  layer, and detection point are not contracts unless a public API or
+  specification explicitly says otherwise. An existing bounded downstream
+  buffer, type, reference, depth, or serializer error is sufficient. Do not add
+  hot-path branches, helper APIs, allocations, or generated-code expansion
+  solely to make an error earlier, more specific, or more uniform, and do not
+  write tests that force such error normalization.
+- Never add a reader-side check solely to produce a more precise malformed-input
+  error. Retain or add a check only when the unchecked path has a concrete
+  consequence such as a crash, panic, undefined behavior, out-of-bounds access,
+  disproportionate work, no progress, persistent state pollution, or a real
+  type or policy violation. If a necessary check is reachable from a hot or
+  generated path, keep the success path to a primitive branch and move exception
+  creation, message formatting, and other failure work into a cold no-inline
+  helper when the language supports it. A bounds-safe downstream operation that
+  already raises a controlled root error is sufficient; do not duplicate it for
+  error precision.
+- Before reporting or fixing a robustness finding, prove that the current path
+  causes at least one concrete consequence: crash, panic, undefined behavior,
+  or out-of-bounds access; disproportionate allocation, CPU work, or stream
+  growth; a no-progress loop; persistent state, reference-table, or cache
+  pollution; later-root corruption or a failed-root cleanup leak; or a concrete
+  type, registration, callable, or deserialization-policy violation. Protocol
+  strictness alone is out of scope. Do not change code merely because a
+  malformed or noncanonical flag, enum value, marker, length form, or reserved
+  value is accepted, rejected late, decoded differently, or produces a less
+  precise error.
+- Arbitrary-precision binary Decimal codecs accept only scales in
+  `[-10_000, 10_000]` and an absolute unscaled magnitude of at most `10_000`
+  binary bytes. The Java standalone `BigInteger` serializer uses the same
+  magnitude limit. This is a value-range rule, not a wire-format change:
+  `magnitude` means the canonical unsigned bytes of the absolute value, not a
+  signed two's-complement prefix, protocol headers, decimal digits, or the Fory
+  JSON `10_000`-character limit. Readers must validate the range before
+  allocating magnitude storage, constructing arbitrary-precision values, or
+  expanding scale, while retaining the existing readable-byte, negative-length,
+  overflow, and canonical checks. Writers must validate symmetrically before
+  emitting any part of the value and before materializing an oversized
+  magnitude. Compare scale directly with both bounds; do not use `abs(scale)`,
+  which can overflow for the minimum integer. Fixed-range Decimal carriers keep
+  their stricter native ranges and reject oversized magnitudes before copying or
+  construction. Compatible scalar conversion keeps its independent `256`-digit
+  and scale/output-expansion limits.
 - Root deserialization graph memory budgets are approximate gates for materialized graph owners,
   not exact heap accounting, input byte accounting, or raw element counts. `maxGraphMemoryBytes`
   defaults to fixed `128 MiB`; positive values override the default; explicit non-positive values
@@ -73,7 +118,17 @@ This is the entry point for AI guidance in Apache Fory. Read this file first, th
 - When a user corrects a non-obvious invariant, encode it in the nearest source comment before continuing, and also update `AGENTS.md`, `.agents/**`, docs, or specs when the rule is reusable beyond one file. Do not rely only on chat history, task notes, commit messages, or benchmark logs for corrections that protect security, protocol behavior, ownership, naming, or hot-path performance.
 - Reject semantic hacks. Do not bypass broken semantics by deleting cases, simplifying callers, adding coercion hooks, or using workaround fallbacks; fix the underlying bug and prove it with focused tests.
 - Protect hot paths. Avoid per-call allocations, callback objects, result tuples or records, unnecessary runtime branches, and wrapper-class substitutions in hot codec/runtime paths; prefer conditional imports and allocation-free concrete implementations where they fit the language.
+- Decoder depth and the generic-type stack paired with that depth use root-operation failure cleanup. Nested decoders decrement depth and pop generic types only after successful child reads; do not add nested `try/finally` to restore them after exceptions. The root operation's `finally`/reset must clear both decoder depth and the generic-type stack.
 - Keep public APIs minimal. Public APIs must match user ownership and mental model, not internal implementation details; generated flows stay type-owned, while custom serializer registration stays explicit.
+- A Fory instance may register types or serializers only before its first root
+  serialization or deserialization operation. Starting either operation
+  permanently freezes that instance's registry, including when the operation
+  fails. Every later registration attempt must fail before mutating resolver
+  maps, generated descriptors, metadata, serializers, or caches. Do not support
+  post-use registration through cache invalidation, descriptor refresh,
+  serializer rebinding, metadata rebuilding, or other late-registration
+  machinery. Registration-order finalization before the first root operation
+  remains registration-owned and must not create a runtime invalidation path.
 - Use semantic naming only. Name things after protocol or domain concepts, not history, runtime origin, or workaround style; avoid vague names such as `Internal`, `java_style_*`, `Runtime`, `Session`, `Plan`, `Payload`, or `Binding` when they do not name the real concept. Keep class, method, function, and variable names concise; do not encode the whole scenario or implementation history into one identifier. Never name a class or method with a `Plan` suffix; use the real domain concept instead. For Fory codec/read APIs, do not use generic `payload` naming; name the exact owner and data shape, such as bytes, body, frame, field, string, list, map, compressed bytes, or primitive-array encoding.
 - Keep one implementation path. Do not keep parallel helpers, serializers, harnesses, wrappers, or registration flows for the same concept; extend the existing owner path instead of inventing another one.
 - Follow current scope exactly. The latest explicit user instruction overrides earlier plans, and when scope narrows, remove leaked out-of-scope edits immediately.

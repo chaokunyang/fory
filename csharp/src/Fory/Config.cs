@@ -86,7 +86,7 @@ public sealed class Config
     public bool CheckStructVersion { get; }
 
     /// <summary>
-    /// Gets the maximum allowed nesting depth for dynamic object payload reads.
+    /// Gets the maximum allowed nesting depth for recursive value reads and received TypeMeta field types.
     /// </summary>
     public int MaxDepth { get; }
 
@@ -171,7 +171,7 @@ public sealed class ForyBuilder
     }
 
     /// <summary>
-    /// Sets the maximum supported dynamic object nesting depth during deserialization.
+    /// Sets the maximum supported recursive value and received TypeMeta field-type nesting depth.
     /// </summary>
     /// <param name="value">Depth limit. Must be greater than <c>0</c>.</param>
     /// <returns>The same builder instance.</returns>

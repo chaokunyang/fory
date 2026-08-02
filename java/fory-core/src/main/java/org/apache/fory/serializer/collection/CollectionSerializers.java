@@ -160,6 +160,8 @@ public class CollectionSerializers {
   }
 
   public static final class ArraysAsListSerializer extends CollectionSerializer<List<?>> {
+    private final int listViewOwnerBytes;
+
     private static final class ArrayAccess {
       private static final FieldAccessor ACCESSOR;
 
@@ -175,6 +177,7 @@ public class CollectionSerializers {
 
     public ArraysAsListSerializer(TypeResolver typeResolver, Class<List<?>> cls) {
       super(typeResolver, cls, typeResolver.getConfig().isXlang(), ARRAY_LIST_OWNER_BYTES);
+      listViewOwnerBytes = GraphMemoryEstimates.shallowObjectBytes(cls);
     }
 
     @Override
@@ -206,6 +209,7 @@ public class CollectionSerializers {
       } else {
         Object[] array = (Object[]) readContext.readRef();
         Preconditions.checkNotNull(array);
+        readContext.reserveGraphMemory(listViewOwnerBytes);
         return Arrays.asList(array);
       }
     }

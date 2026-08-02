@@ -70,10 +70,9 @@ func writeSliceRefAndType(ctx *WriteContext, refMode RefMode, writeType bool, va
 	return false
 }
 
-// readSliceRefAndType handles reference and type reading for slice serializers.
-// Returns (true, 0) if a reference was resolved (value already set).
-// Returns (false, typeId) if data should be written and typeId was read (if readType=true).
-func readSliceRefAndType(ctx *ReadContext, refMode RefMode, readType bool, value reflect.Value) (bool, uint32) {
+// readSliceOrArrayRef handles null and reference framing for LIST wire values.
+// Array targets publish a slice view so back-references share caller-owned storage.
+func readSliceOrArrayRef(ctx *ReadContext, refMode RefMode, value reflect.Value) bool {
 	buf := ctx.Buffer()
 	ctxErr := ctx.Err()
 	switch refMode {
@@ -81,24 +80,65 @@ func readSliceRefAndType(ctx *ReadContext, refMode RefMode, readType bool, value
 		refID, refErr := ctx.RefResolver().TryPreserveRefId(buf)
 		if refErr != nil {
 			ctx.SetError(FromError(refErr))
-			return true, 0
+			return true
 		}
 		if refID < int32(NotNullValueFlag) {
-			obj := ctx.RefResolver().GetReadObject(refID)
-			if obj.IsValid() {
-				value.Set(obj)
+			if refID == int32(NullFlag) {
+				return true
 			}
-			return true, 0
+			obj := ctx.RefResolver().GetReadObject(refID)
+			if !obj.IsValid() {
+				ctx.SetError(InvalidRefIdError(refID))
+				return true
+			}
+			if value.Kind() != reflect.Array {
+				assignReadRef(ctx, refID, value)
+				return true
+			}
+			if obj.Kind() != reflect.Array && obj.Kind() != reflect.Slice {
+				ctx.SetError(DeserializationErrorf("array reference owner must be an array or slice, got %v", obj.Kind()))
+				return true
+			}
+			if obj.Len() != value.Len() {
+				ctx.SetError(DeserializationErrorf("array reference owner length %d does not match target length %d", obj.Len(), value.Len()))
+				return true
+			}
+			if obj.Type().Elem() != value.Type().Elem() {
+				ctx.SetError(DeserializationErrorf("array reference owner element type %v does not match target element type %v", obj.Type().Elem(), value.Type().Elem()))
+				return true
+			}
+			reflect.Copy(value, obj)
+			return true
+		}
+		if refID >= 0 && value.Kind() == reflect.Array {
+			if !value.CanAddr() {
+				ctx.SetError(DeserializationErrorf("array reference target %v is not addressable", value.Type()))
+				return true
+			}
+			if !publishReadRef(ctx, refID, value.Slice(0, value.Len())) {
+				return true
+			}
 		}
 	case RefModeNullOnly:
 		flag := buf.ReadInt8(ctxErr)
 		if flag == NullFlag {
-			return true, 0
+			return true
 		}
+	}
+	return false
+}
+
+// readSliceRefAndType handles reference and type reading for slice serializers.
+// Returns (true, 0) if a reference was resolved (value already set).
+// Returns (false, typeId) if data should be written and typeId was read (if readType=true).
+func readSliceRefAndType(ctx *ReadContext, refMode RefMode, readType bool, value reflect.Value) (bool, uint32) {
+	done := readSliceOrArrayRef(ctx, refMode, value)
+	if done || ctx.HasError() {
+		return true, 0
 	}
 	var typeId uint32
 	if readType {
-		typeId = uint32(buf.ReadUint8(ctxErr))
+		typeId = uint32(ctx.Buffer().ReadUint8(ctx.Err()))
 	}
 	return false, typeId
 }
@@ -114,6 +154,14 @@ func isNull(v reflect.Value) bool {
 		return v.IsNil() // Check if reference types are nil
 	default:
 		return false // Value types are never null
+	}
+}
+
+func publishOuterSliceRef(ctx *ReadContext, refMode RefMode, value reflect.Value) {
+	// Publish only after ReadData installs the final slice header. Even a zero-length
+	// owner must consume its pending ID so a following back-reference can resolve it.
+	if refMode == RefModeTracking && value.Kind() == reflect.Slice && !ctx.HasError() {
+		ctx.RefResolver().Reference(value)
 	}
 }
 
@@ -305,6 +353,9 @@ func (s *sliceSerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode, ty
 }
 
 func (s *sliceSerializer) ReadData(ctx *ReadContext, value reflect.Value) {
+	if ctx.HasError() || !ctx.enterDepth() {
+		return
+	}
 	buf := ctx.Buffer()
 	ctxErr := ctx.Err()
 	length := ctx.ReadCollectionLength()
@@ -312,6 +363,10 @@ func (s *sliceSerializer) ReadData(ctx *ReadContext, value reflect.Value) {
 		return
 	}
 	isArrayType := value.Type().Kind() == reflect.Array
+	if isArrayType && length != value.Len() {
+		ctx.SetError(DeserializationErrorf("array length %d does not match serialized length %d", value.Len(), length))
+		return
+	}
 
 	if !isArrayType {
 		if length < 0 {
@@ -329,7 +384,9 @@ func (s *sliceSerializer) ReadData(ctx *ReadContext, value reflect.Value) {
 	if length == 0 {
 		if !isArrayType {
 			value.Set(reflect.MakeSlice(value.Type(), 0, 0))
+			ctx.RefResolver().Reference(value)
 		}
+		ctx.decDepth()
 		return
 	}
 
@@ -345,16 +402,19 @@ func (s *sliceSerializer) ReadData(ctx *ReadContext, value reflect.Value) {
 	if (collectFlag & CollectionIsSameType) != 0 {
 		if (collectFlag & CollectionIsDeclElementType) == 0 {
 			elemTypeInfo := ctx.TypeResolver().ReadTypeInfo(buf, ctxErr)
-			if elemTypeInfo != nil && elemTypeInfo.Serializer != nil {
-				elemSerializer = elemTypeInfo.Serializer
-				elemType := value.Type().Elem()
-				if elemTypeInfo.Type != nil {
-					_, elemSerializer = wrapMapSerializerIfNeeded(elemType, elemTypeInfo.Type, elemSerializer, elemTypeInfo.ValueBytes)
-				}
-				if elemType.Kind() != reflect.Ptr {
-					if ptrSer, ok := elemSerializer.(*ptrToValueSerializer); ok {
-						elemSerializer = ptrSer.valueSerializer
-					}
+			elemType := value.Type().Elem()
+			elemSerializer = serializerForConcreteType(elemType, elemTypeInfo, ctxErr)
+			if ctxErr.HasError() {
+				return
+			}
+			_, elemSerializer = wrapMapSerializerIfNeeded(
+				ctx, elemType, elemTypeInfo.Type, elemSerializer, elemTypeInfo.ValueBytes)
+			if ctx.HasError() {
+				return
+			}
+			if elemType.Kind() != reflect.Ptr {
+				if ptrSer, ok := elemSerializer.(*ptrToValueSerializer); ok {
+					elemSerializer = ptrSer.valueSerializer
 				}
 			}
 		}
@@ -373,13 +433,7 @@ func (s *sliceSerializer) ReadData(ctx *ReadContext, value reflect.Value) {
 	declaredGenericDispatch := (collectFlag&CollectionIsDeclElementType) != 0 && serializerNeedsGenericDispatch(elemSerializer)
 
 	// Handle slice vs array allocation
-	if isArrayType {
-		// For arrays, verify the length matches (arrays have fixed size)
-		if value.Len() < length {
-			ctx.SetError(FromError(fmt.Errorf("array length %d is smaller than serialized length %d", value.Len(), length)))
-			return
-		}
-	} else {
+	if !isArrayType {
 		if !buf.CheckReadable(length, ctxErr) {
 			return
 		}
@@ -390,7 +444,9 @@ func (s *sliceSerializer) ReadData(ctx *ReadContext, value reflect.Value) {
 			value.Set(value.Slice(0, length))
 		}
 	}
-	ctx.RefResolver().Reference(value)
+	if !isArrayType {
+		ctx.RefResolver().Reference(value)
+	}
 
 	elemRefMode := RefModeNone
 	if trackRefs {
@@ -415,6 +471,7 @@ func (s *sliceSerializer) ReadData(ctx *ReadContext, value reflect.Value) {
 				}
 			}
 		}
+		ctx.decDepth()
 		return
 	}
 
@@ -453,4 +510,5 @@ func (s *sliceSerializer) ReadData(ctx *ReadContext, value reflect.Value) {
 			return
 		}
 	}
+	ctx.decDepth()
 }

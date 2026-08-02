@@ -800,6 +800,27 @@ fn primitive_element_type_matches(array_element_type_id: u32, list_element_type_
         || same_numeric_family(array_element_type_id, list_element_type_id)
 }
 
+#[inline(always)]
+fn primitive_element_min_wire_size(element_type_id: u32) -> Option<usize> {
+    match element_type_id {
+        type_id::BOOL
+        | type_id::INT8
+        | type_id::UINT8
+        | type_id::VARINT32
+        | type_id::VARINT64
+        | type_id::VAR_UINT32
+        | type_id::VAR_UINT64 => Some(1),
+        type_id::INT16 | type_id::UINT16 | type_id::FLOAT16 | type_id::BFLOAT16 => Some(2),
+        type_id::INT32
+        | type_id::UINT32
+        | type_id::FLOAT32
+        | type_id::TAGGED_INT64
+        | type_id::TAGGED_UINT64 => Some(4),
+        type_id::INT64 | type_id::UINT64 | type_id::FLOAT64 => Some(8),
+        _ => None,
+    }
+}
+
 fn read_primitive_array_with_codec<T, C>(
     context: &mut ReadContext,
     remote_field_type: &FieldType,
@@ -818,6 +839,7 @@ where
     let len = size_bytes / elem_size;
     let element_type_id = primitive_list::element_type_id(remote_field_type.type_id)
         .ok_or_else(not_primitive_array)?;
+    reserve_collection_storage(context, len as u32, std::mem::size_of::<T>())?;
     let element_type = FieldType::new(element_type_id, false, Vec::new());
     let mut vec = Vec::with_capacity(len);
     for _ in 0..len {
@@ -837,7 +859,6 @@ where
     let element_type = generic_field_type(remote_field_type, 0, "list")?;
     let len = context.reader.read_var_u32()?;
     let len_usize = len as usize;
-    context.reader.check_bound(len_usize)?;
     if len == 0 {
         return Ok(Vec::new());
     }
@@ -862,6 +883,17 @@ where
             "array-compatible list must declare element type",
         ));
     }
+    // Validate the header before measuring unread element data. The minimum
+    // wire-width proof must finish before destination storage is reserved.
+    let element_min_size =
+        primitive_element_min_wire_size(element_type.type_id).ok_or_else(|| {
+            list_array_error("array-compatible list element is not a supported primitive type")
+        })?;
+    let min_size_bytes = len_usize
+        .checked_mul(element_min_size)
+        .ok_or_else(invalid_primitive_array_len)?;
+    context.reader.check_bound(min_size_bytes)?;
+    reserve_collection_storage(context, len, std::mem::size_of::<T>())?;
     let mut vec = Vec::with_capacity(len_usize);
     for _ in 0..len {
         vec.push(C::read_data_with_type(context, element_type)?);
@@ -935,4 +967,61 @@ where
         return read_list_as_primitive_vec::<T, C>(context, remote_field_type).map(Some);
     }
     Ok(None)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::serializer::codec::{I32Codec, I64Codec};
+    use crate::{Config, Reader, TypeResolver};
+
+    #[test]
+    fn list_array_checks_fixed_width_body() {
+        let bytes = [2, IS_SAME_TYPE | DECL_ELEMENT_TYPE, 1, 0, 0, 0];
+        let config = Config::default();
+        let mut context = ReadContext::new(TypeResolver::default(), config);
+        let graph_memory = 2 * std::mem::size_of::<i32>();
+        context.remaining_graph_memory_bytes = graph_memory;
+        context.attach_reader(Reader::new(&bytes));
+        let remote = FieldType::new(
+            type_id::LIST,
+            false,
+            vec![FieldType::new(type_id::INT32, false, Vec::new())],
+        );
+
+        let error = read_list_as_primitive_vec::<
+            i32,
+            I32Codec<{ type_id::INT32 as u8 }, false, false>,
+        >(&mut context, &remote)
+        .unwrap_err();
+
+        assert!(matches!(error, Error::BufferOutOfBound(..)));
+        assert_eq!(context.reader.get_cursor(), 2);
+        assert_eq!(context.remaining_graph_memory_bytes, graph_memory);
+    }
+
+    #[test]
+    fn list_array_checks_tagged_body() {
+        let bytes = [2, IS_SAME_TYPE | DECL_ELEMENT_TYPE, 0, 0, 0, 0];
+        let config = Config::default();
+        let mut context = ReadContext::new(TypeResolver::default(), config);
+        let graph_memory = 2 * std::mem::size_of::<i64>();
+        context.remaining_graph_memory_bytes = graph_memory;
+        context.attach_reader(Reader::new(&bytes));
+        let remote = FieldType::new(
+            type_id::LIST,
+            false,
+            vec![FieldType::new(type_id::TAGGED_INT64, false, Vec::new())],
+        );
+
+        let error = read_list_as_primitive_vec::<
+            i64,
+            I64Codec<{ type_id::TAGGED_INT64 as u8 }, false, false>,
+        >(&mut context, &remote)
+        .unwrap_err();
+
+        assert!(matches!(error, Error::BufferOutOfBound(..)));
+        assert_eq!(context.reader.get_cursor(), 2);
+        assert_eq!(context.remaining_graph_memory_bytes, graph_memory);
+    }
 }

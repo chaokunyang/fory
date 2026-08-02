@@ -66,10 +66,31 @@ deserialization policies.
 
 An application explicitly trusts a class when it registers that class or
 registers a serializer for that class. Both operations are configuration-time
-trust decisions under the class-registration policy. The existence of a
-serializer that Fory discovered, selected, or generated without an explicit
-application registration is serialization mechanics only and does not by
-itself authorize the class.
+trust decisions under the class-registration policy. Explicitly selecting a
+static root serializer or static root target at the deserialization call is
+also an application authorization decision for that root path. Authorization
+of that statically selected root does not depend on a separate registration
+lookup; any registration needed to access registered identity or
+registration-backed metadata remains access-driven.
+
+Explicitly declaring or selecting a static field codec is itself an application
+authorization decision for that field; the codec does not need to be registered
+separately for authorization. Registering an enclosing class or schema also
+authorizes the statically declared field codecs and serializers that belong to
+that registered owner. This applies equally to declared Array, Set, Map, Struct,
+and other statically composed field paths. Those declared field paths do not
+require independent registration merely because their bodies are decoded
+without another type lookup. Likewise, an encoded declared-type marker does not
+create a registration bypass when it can only invoke the codec already selected
+by the authorized root or enclosing schema.
+
+These static authorization paths do not authorize an arbitrary alternative
+chosen by encoded type metadata. A dynamic or polymorphic type selected by
+input must still pass the active registration and deserialization-policy checks
+for that type. A serializer that Fory merely discovers or generates, and that
+is not reached through an explicitly selected static root or a registered
+enclosing owner, is serialization mechanics only and does not by itself
+authorize a dynamically selected class.
 
 Disabling registration or dynamic-type checks for trusted data is a caller
 configuration choice. That choice only removes the arbitrary-type materialization
@@ -121,6 +142,42 @@ Deserialization code must prevent the following outcomes for untrusted input:
 When a path cannot produce one of these outcomes, earlier rejection of malformed
 bytes is normally a correctness or interoperability choice, not a security
 requirement.
+
+## Robustness Scope Gate
+
+Before reporting or fixing a deserialization robustness finding, establish a
+concrete consequence in the current implementation:
+
+- Crash, panic, undefined behavior, or out-of-bounds access.
+- Disproportionate allocation, CPU work, or stream growth.
+- A no-progress loop.
+- Persistent state, reference-table, or cache pollution.
+- Later-root corruption or a failed-root cleanup leak.
+- A concrete type, registration, callable, or deserialization-policy violation.
+
+Protocol strictness alone is outside this gate. Do not change code merely
+because a malformed or noncanonical flag, enum value, marker, length form, or
+reserved value is accepted, rejected late, decoded differently, or produces a
+less precise error. Such validation is actionable only when it prevents one of
+the concrete consequences above or implements an explicit public contract.
+
+## Controlled Deserialization Errors
+
+When a decoder determines that input is invalid for the active owner path, the
+root operation must return an error and run its normal failure cleanup. This is
+an outcome requirement, not an error-taxonomy requirement.
+
+Unless a public API or specification explicitly promises otherwise, Fory does
+not require a particular exception type, error code, message, detection layer,
+input offset, or earliest possible detection point. An existing bounded
+downstream buffer-underflow, type, reference, depth, or serializer error is a
+valid rejection. A decoder does not need a new local check merely to replace
+that controlled failure with a more specific or more uniform error.
+
+Tests for malformed input should prove that the root operation fails, cleanup
+remains correct, and any relevant security invariant is preserved. They should
+not pin an exact error type or message when doing so would require additional
+successful-path validation that protects no security boundary.
 
 ## Non-Security Semantics
 
@@ -535,6 +592,7 @@ Reference tracking validation is security-relevant when malformed input can:
 Reference tracking validation is not required merely because a malformed flag is
 not rejected at the earliest possible byte. Lazy rejection is acceptable when
 the root operation still returns an error and no security invariant is violated.
+The downstream error does not need to be a dedicated reference-protocol error.
 
 ## Error Propagation And Cleanup
 
@@ -564,6 +622,8 @@ validation solely for strictness when it introduces:
 - Wrapper objects or result carriers on success paths.
 - Extra copying for buffer-backed string, binary, or primitive-array reads.
 - Branches that do not protect a security invariant.
+- Helper calls or generated-code expansion whose only purpose is to normalize
+  an eventual error's type, message, location, or timing.
 
 Prefer owner-local checks that can be inlined and that already use information
 available in the current serializer. Do not move serializer-owned semantics into

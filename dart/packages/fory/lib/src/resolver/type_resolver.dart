@@ -25,6 +25,8 @@ import 'package:fory/src/codegen/generated_registry.dart';
 import 'package:fory/src/config.dart';
 import 'package:fory/src/context/meta_string_reader.dart';
 import 'package:fory/src/context/meta_string_writer.dart';
+import 'package:fory/src/context/read_context.dart';
+import 'package:fory/src/context/write_context.dart';
 import 'package:fory/src/meta/field_info.dart';
 import 'package:fory/src/meta/field_type.dart';
 import 'package:fory/src/meta/meta_string.dart';
@@ -155,6 +157,74 @@ final class TypeInfo {
   Int64 get cachedTypeDefHeader => remoteTypeDef?.header ?? typeDef!.header;
 }
 
+abstract final class _RemoteEnumField {}
+
+abstract final class _RemoteUnionField {}
+
+final TypeInfo _unknownRemoteEnumTypeInfo = TypeInfo(
+  type: _RemoteEnumField,
+  kind: RegistrationKind.enumType,
+  typeId: TypeIds.enumById,
+  supportsRef: false,
+  needsRootRef: false,
+  usesNestedTypeDefinitions: false,
+  evolving: false,
+  fields: const <FieldInfo>[],
+  serializer: const _UnknownRemoteFieldSerializer('enum'),
+  structSerializer: null,
+  userTypeId: null,
+  namespace: null,
+  typeName: null,
+  encodedNamespace: null,
+  encodedTypeName: null,
+  typeDef: null,
+  remoteTypeDef: null,
+);
+
+final TypeInfo _unknownRemoteUnionTypeInfo = TypeInfo(
+  type: _RemoteUnionField,
+  kind: RegistrationKind.union,
+  typeId: TypeIds.union,
+  supportsRef: true,
+  needsRootRef: false,
+  usesNestedTypeDefinitions: false,
+  evolving: false,
+  fields: const <FieldInfo>[],
+  serializer: const _UnknownRemoteFieldSerializer('union'),
+  structSerializer: null,
+  userTypeId: null,
+  namespace: null,
+  typeName: null,
+  encodedNamespace: null,
+  encodedTypeName: null,
+  typeDef: null,
+  remoteTypeDef: null,
+);
+
+final class _UnknownRemoteFieldSerializer extends Serializer<Object?> {
+  final String kind;
+
+  const _UnknownRemoteFieldSerializer(this.kind);
+
+  @override
+  @pragma('vm:never-inline')
+  void write(WriteContext context, Object? value) {
+    throw StateError('Unknown remote $kind fields cannot be written.');
+  }
+
+  @override
+  @pragma('vm:never-inline')
+  Object? read(ReadContext context) {
+    // Remote TypeDef carries only ENUM/UNION here, not the selected codec
+    // identity. Null/back-reference envelopes do not call this body. A fresh
+    // body must fail before an unrelated local serializer shifts the stream.
+    throw StateError(
+      'Cannot read an unmatched compatible $kind field without its declared '
+      'serializer.',
+    );
+  }
+}
+
 bool usesDeclaredTypeInfo(
   bool compatible,
   FieldType fieldType,
@@ -265,6 +335,7 @@ List<FieldInfo> _validateLocalFieldInfos(List<FieldInfo> fields) {
 
 final class TypeResolver {
   static const int _minRemoteTypeMetaLimit = 8192;
+  static const int _maxRemoteTypeMetaKeys = 8192;
 
   final Config config;
   final TypeMetaDecoder _typeMetaDecoder = const TypeMetaDecoder();
@@ -274,7 +345,10 @@ final class TypeResolver {
   final List<_NamedTypeReadCacheEntry?> _namedTypeLookupCache =
       List<_NamedTypeReadCacheEntry?>.filled(128, null);
   final Map<Type, TypeInfo> _runtimeTypeValueCache = <Type, TypeInfo>{};
-  final Map<Type, TypeInfo> _registeredByType = <Type, TypeInfo>{};
+  final Map<Type, TypeInfo> _typeInfoByType = <Type, TypeInfo>{
+    _RemoteEnumField: _unknownRemoteEnumTypeInfo,
+    _RemoteUnionField: _unknownRemoteUnionTypeInfo,
+  };
   final Map<int, TypeInfo> _registeredById = <int, TypeInfo>{};
   final Map<String, TypeInfo> _registeredByName = <String, TypeInfo>{};
   final Map<EncodedMetaString, Map<EncodedMetaString, TypeInfo>>
@@ -404,6 +478,10 @@ final class TypeResolver {
       namespace: resolvedNamespace,
       typeName: resolvedTypeName,
     );
+    // Pre-use registration order may change direct bindings retained by other
+    // registered structs. Rebuild their final metadata on this cold path. The
+    // owning Fory instance rejects registration after the first root operation,
+    // so no read/write cache can require invalidation here.
     _rebuildRegisteredTypeDefs();
   }
 
@@ -414,8 +492,13 @@ final class TypeResolver {
     // registered TypeDefs on the registration cold path instead of constructing
     // them lazily from read/write hot paths.
     final seen = Set<TypeInfo>.identity();
-    for (final resolved in _registeredByType.values) {
+    for (final resolved in _typeInfoByType.values) {
       if (!seen.add(resolved)) {
+        continue;
+      }
+      if (resolved.userTypeId == null && resolved.typeName == null) {
+        // Wire-only remote field markers participate in ordinary TypeInfo
+        // lookup but are not application registrations and have no TypeDef.
         continue;
       }
       final typeDef = _buildTypeDef(
@@ -475,6 +558,14 @@ final class TypeResolver {
     return encoded;
   }
 
+  EncodedMetaString canonicalizeEncodedMetaString(EncodedMetaString candidate) {
+    if (candidate.bytes.isEmpty) {
+      return EncodedMetaString.empty;
+    }
+    final key = _EncodedMetaStringKey(candidate.encoding, candidate.bytes);
+    return _internedEncodedMetaStrings[key] ?? candidate;
+  }
+
   TypeInfo resolveValue(Object value) {
     final runtimeType = value.runtimeType;
     final cached = _runtimeTypeValueCache[runtimeType];
@@ -487,7 +578,7 @@ final class TypeResolver {
   }
 
   TypeInfo _resolveValueSlow(Object value, Type runtimeType) {
-    final registered = _registeredByType[runtimeType];
+    final registered = _typeInfoByType[runtimeType];
     if (registered != null) {
       return registered;
     }
@@ -631,7 +722,7 @@ final class TypeResolver {
       case TypeIds.float64Array:
         return _builtin(_builtinTypeForFieldType(fieldType), fieldType.typeId);
       default:
-        return _registeredByType[fieldType.type];
+        return _typeInfoByType[fieldType.type];
     }
   }
 
@@ -660,14 +751,14 @@ final class TypeResolver {
   }
 
   TypeInfo resolvedRegisteredType(Type type) {
-    final resolved = _registeredByType[type];
+    final resolved = _typeInfoByType[type];
     if (resolved == null) {
       throw StateError('Type $type is not registered.');
     }
     return resolved;
   }
 
-  TypeInfo? expectedRootType<T>() => _registeredByType[T];
+  TypeInfo? expectedRootType<T>() => _typeInfoByType[T];
 
   TypeInfo resolveUserByEncodedName(
     EncodedMetaString namespace,
@@ -1362,17 +1453,22 @@ final class TypeResolver {
         'maxSchemaVersionsPerType=${config.maxSchemaVersionsPerType}.',
       );
     }
+    if (versionsForType == 0 &&
+        _remoteSchemaVersionsByType.length >= _maxRemoteTypeMetaKeys) {
+      throw StateError(
+        'Remote schema logical type limit exceeded. The data may be '
+        'malicious.',
+      );
+    }
     final acceptedTypeCount =
         versionsForType == 0
             ? _remoteSchemaVersionsByType.length + 1
             : _remoteSchemaVersionsByType.length;
-    final averageLimit =
-        acceptedTypeCount * config.maxAverageSchemaVersionsPerType;
-    final globalLimit =
-        averageLimit > _minRemoteTypeMetaLimit
-            ? averageLimit
-            : _minRemoteTypeMetaLimit;
-    if (_totalAcceptedSchemaVersions >= globalLimit) {
+    // Division preserves `total >= typeCount * average` without producing an
+    // unsafe integer on Dart's JavaScript targets.
+    if (_totalAcceptedSchemaVersions >= _minRemoteTypeMetaLimit &&
+        _totalAcceptedSchemaVersions ~/ acceptedTypeCount >=
+            config.maxAverageSchemaVersionsPerType) {
       throw StateError(
         'Remote schema version limit exceeded globally. The data may be '
         'malicious. If the data is not malicious, please increase '
@@ -1399,9 +1495,11 @@ final class TypeResolver {
       size += source.readVarUint32Small7();
     }
     source.checkReadableBytes(size);
-    return internEncodedMetaString(
-      Uint8List.fromList(source.readBytes(size)),
-      encoding: decodeEncoding(compactEncoding),
+    return canonicalizeEncodedMetaString(
+      EncodedMetaString(
+        Uint8List.fromList(source.readBytes(size)),
+        decodeEncoding(compactEncoding),
+      ),
     );
   }
 
@@ -1443,16 +1541,25 @@ final class TypeResolver {
     required int typeId,
     required bool nullable,
     required bool ref,
+    int nestedDepth = 0,
   }) {
+    if (nestedDepth > config.maxDepth) {
+      _throwTypeDefDepthExceeded();
+    }
     final arguments = <FieldType>[];
     if (typeId == TypeIds.list || typeId == TypeIds.set) {
-      arguments.add(_readNestedFieldType(source));
+      arguments.add(_readNestedFieldType(source, nestedDepth + 1));
     } else if (typeId == TypeIds.map) {
-      arguments.add(_readNestedFieldType(source));
-      arguments.add(_readNestedFieldType(source));
+      arguments.add(_readNestedFieldType(source, nestedDepth + 1));
+      arguments.add(_readNestedFieldType(source, nestedDepth + 1));
     }
     return FieldType(
-      type: Object,
+      type:
+          typeId == TypeIds.enumById
+              ? _RemoteEnumField
+              : typeId == TypeIds.union
+              ? _RemoteUnionField
+              : Object,
       declaredTypeName: null,
       typeId: typeId,
       nullable: nullable,
@@ -1462,13 +1569,21 @@ final class TypeResolver {
     );
   }
 
-  FieldType _readNestedFieldType(Buffer source) {
+  FieldType _readNestedFieldType(Buffer source, int nestedDepth) {
     final encoded = source.readVarUint32Small7();
     return _readTypeDefFieldType(
       source,
       typeId: encoded >>> 2,
       nullable: ((encoded >> 1) & 1) == 1,
       ref: (encoded & 1) == 1,
+      nestedDepth: nestedDepth,
+    );
+  }
+
+  @pragma('vm:never-inline')
+  Never _throwTypeDefDepthExceeded() {
+    throw StateError(
+      'TypeDef field depth exceeded maxDepth ${config.maxDepth}.',
     );
   }
 
@@ -1780,7 +1895,7 @@ final class TypeResolver {
     required String? namespace,
     required String? typeName,
   }) {
-    _registeredByType[type] = resolved;
+    _typeInfoByType[type] = resolved;
     if (id != null) {
       _registeredById[id] = resolved;
       return;

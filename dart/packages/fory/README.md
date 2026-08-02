@@ -186,6 +186,9 @@ Exactly one registration mode is required:
 Use `.` inside `name` to add a namespace prefix, for example `example.Person`.
 
 Keep the same registration identity on every peer that exchanges the type.
+Finish all generated and custom serializer registration before the first root
+read or write. A `Fory` instance permanently rejects registration after that
+point; create a new instance for a different registry.
 
 ## Configuration
 

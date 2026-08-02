@@ -31,6 +31,10 @@ const REFERENCE_BYTES = 4;
 // charged separately by count below; this is not a Fory wire header or a V8 layout probe.
 const ARRAY_LIST_OWNER_BYTES = 6 * REFERENCE_BYTES;
 
+type SchemaIdentitySerializer = Serializer & {
+  getTypeIdentity?: (value: any) => unknown;
+};
+
 export type CompatibleCollectionArrayReadAction = {
   target: "array" | "list";
   elementTypeId: number;
@@ -102,6 +106,39 @@ function compatibleArrayCollectionExpr(elementTypeId: number, len: string): stri
   }
 }
 
+function compatibleMinElementBytes(typeId: number): number {
+  // This is the remote list element's encoded width, not the target typed-array slot width.
+  // Varints may use one byte, while tagged 64-bit integers always use at least four. Uint32
+  // element counts times the largest fixed width (8) remain exactly representable by Number.
+  switch (typeId) {
+    case TypeId.BOOL:
+    case TypeId.INT8:
+    case TypeId.VARINT32:
+    case TypeId.VARINT64:
+    case TypeId.UINT8:
+    case TypeId.VAR_UINT32:
+    case TypeId.VAR_UINT64:
+      return 1;
+    case TypeId.INT16:
+    case TypeId.UINT16:
+    case TypeId.FLOAT16:
+    case TypeId.BFLOAT16:
+      return 2;
+    case TypeId.INT32:
+    case TypeId.UINT32:
+    case TypeId.FLOAT32:
+    case TypeId.TAGGED_INT64:
+    case TypeId.TAGGED_UINT64:
+      return 4;
+    case TypeId.INT64:
+    case TypeId.UINT64:
+    case TypeId.FLOAT64:
+      return 8;
+    default:
+      throw new Error(`Unsupported compatible list element type ${typeId}`);
+  }
+}
+
 function compatibleArrayPutAccessor(
   elementTypeId: number,
   result: string,
@@ -119,10 +156,11 @@ function compatibleArrayPutAccessor(
   }
 }
 
-class CollectionAnySerializer {
+export class CollectionAnySerializer {
   constructor(
     private writeContext: WriteContext,
     private readContext: ReadContext,
+    private declaredSerializer: Serializer | null = null,
   ) {}
 
   private readSerializerWithDepth(serializer: Serializer, fromRef: boolean) {
@@ -138,6 +176,8 @@ class CollectionAnySerializer {
     let serializer: Serializer | null | undefined = null;
     let includeNone = false;
     let trackingRef = false;
+    let sample: any = undefined;
+    let typeIdentity: unknown = undefined;
 
     for (const item of arr) {
       if (item === undefined || item === null) {
@@ -152,14 +192,26 @@ class CollectionAnySerializer {
         trackingRef = current.needToWriteRef();
       }
       if (isSame) {
-        if (serializer !== null && serializer !== undefined && current !== serializer) {
+        const currentIdentity = (current as SchemaIdentitySerializer).getTypeIdentity?.(item);
+        if (
+          serializer !== null &&
+          serializer !== undefined &&
+          (current !== serializer || currentIdentity !== typeIdentity)
+        ) {
           isSame = false;
         } else {
           serializer = current;
+          sample = item;
+          typeIdentity = currentIdentity;
         }
       }
     }
 
+    // An all-null dynamic collection has no common type information to write.
+    // Use per-element null frames instead.
+    if (serializer === null || serializer === undefined) {
+      isSame = false;
+    }
     if (isSame) {
       flag |= CollectionFlags.SAME_TYPE;
     }
@@ -176,6 +228,7 @@ class CollectionAnySerializer {
       flag,
       includeNone,
       trackingRef,
+      sample,
     };
   }
 
@@ -184,9 +237,10 @@ class CollectionAnySerializer {
     if (size === 0) {
       return;
     }
-    const { serializer, isSame, includeNone, trackingRef } = this.writeElementsHeader(value);
+    const { serializer, isSame, includeNone, trackingRef, sample } =
+      this.writeElementsHeader(value);
     if (isSame) {
-      serializer!.writeTypeInfo(value);
+      serializer!.writeTypeInfo(sample);
       if (trackingRef) {
         for (const item of value) {
           if (!serializer!.writeRefOrNull(item)) {
@@ -210,8 +264,12 @@ class CollectionAnySerializer {
     } else {
       if (trackingRef) {
         for (const item of value) {
-          const serializer = this.writeContext.typeResolver.getSerializerByData(item);
-          serializer?.writeRef(item);
+          if (item === null || item === undefined) {
+            this.writeContext.writer.writeInt8(RefFlags.NullFlag);
+          } else {
+            const serializer = this.writeContext.typeResolver.getSerializerByData(item);
+            serializer!.writeRef(item);
+          }
         }
       } else if (includeNone) {
         for (const item of value) {
@@ -232,50 +290,109 @@ class CollectionAnySerializer {
     }
   }
 
+  writeDeclared(value: any, size: number) {
+    this.writeContext.writer.writeVarUint32Small7(size);
+    if (size === 0) {
+      return;
+    }
+    const serializer = this.declaredSerializer!;
+    let flags = CollectionFlags.SAME_TYPE | CollectionFlags.DECL_ELEMENT_TYPE;
+    if (serializer.needToWriteRef()) {
+      flags |= CollectionFlags.TRACKING_REF;
+    }
+    for (const item of value) {
+      if (item === null || item === undefined) {
+        flags |= CollectionFlags.HAS_NULL;
+        break;
+      }
+    }
+    this.writeContext.writer.writeUint8(flags);
+    if (flags & CollectionFlags.TRACKING_REF) {
+      for (const item of value) {
+        if (!serializer.writeRefOrNull(item)) {
+          serializer.write(item);
+        }
+      }
+    } else if (flags & CollectionFlags.HAS_NULL) {
+      for (const item of value) {
+        if (item === null || item === undefined) {
+          this.writeContext.writer.writeInt8(RefFlags.NullFlag);
+        } else {
+          this.writeContext.writer.writeInt8(RefFlags.NotNullValueFlag);
+          serializer.write(item);
+        }
+      }
+    } else {
+      for (const item of value) {
+        serializer.write(item);
+      }
+    }
+  }
+
   read(
     accessor: (result: any, index: number, v: any) => void,
     createCollection: (len: number) => any,
     fromRef: boolean,
   ): any {
-    void fromRef;
     const len = this.readContext.reader.readVarUint32Small7();
     this.readContext.reserveGraphMemory(ARRAY_LIST_OWNER_BYTES + len * REFERENCE_BYTES);
     if (len === 0) {
-      return createCollection(len);
+      const result = createCollection(len);
+      if (fromRef) {
+        this.readContext.reference(result);
+      }
+      return result;
     }
     const flags = this.readContext.reader.readUint8();
-    this.readContext.reader.checkReadableBytes(len);
     const result = createCollection(len);
+    if (fromRef) {
+      this.readContext.reference(result);
+    }
     // IMPORTANT: collection readers must obey the ref/null bits written on the
     // wire, not local TypeScript metadata that may imply a different ref
     // policy. Shared xlang tests intentionally deserialize one ref policy and
     // then serialize another local payload. DO NOT REMOVE this comment.
     const isSame = flags & CollectionFlags.SAME_TYPE;
+    const isDeclared = flags & CollectionFlags.DECL_ELEMENT_TYPE;
     const includeNone = flags & CollectionFlags.HAS_NULL;
     const refTracking = flags & CollectionFlags.TRACKING_REF;
 
     if (isSame) {
-      const serializer = AnyHelper.detectSerializer(this.readContext);
+      const serializer = isDeclared
+        ? this.declaredSerializer!
+        : AnyHelper.detectSerializer(this.readContext);
       if (refTracking) {
         for (let i = 0; i < len; i++) {
-          serializer.readRef();
           const refFlag = this.readContext.readRefFlag();
-          if (refFlag === RefFlags.RefFlag) {
-            const refId = this.readContext.reader.readVarUInt32();
-            accessor(result, i, this.readContext.getReadRef(refId));
-          } else if (refFlag === RefFlags.RefValueFlag) {
-            accessor(result, i, this.readSerializerWithDepth(serializer!, true));
-          } else {
-            accessor(result, i, null);
+          switch (refFlag) {
+            case RefFlags.NotNullValueFlag:
+              accessor(result, i, this.readSerializerWithDepth(serializer, false));
+              break;
+            case RefFlags.RefValueFlag:
+              accessor(result, i, this.readSerializerWithDepth(serializer, true));
+              break;
+            case RefFlags.RefFlag:
+              accessor(
+                result,
+                i,
+                this.readContext.getReadRef(this.readContext.reader.readVarUInt32()),
+              );
+              break;
+            case RefFlags.NullFlag:
+              accessor(result, i, null);
+              break;
           }
         }
       } else if (includeNone) {
         for (let i = 0; i < len; i++) {
           const flag = this.readContext.reader.readInt8();
-          if (flag === RefFlags.NullFlag) {
-            accessor(result, i, null);
-          } else {
-            accessor(result, i, this.readSerializerWithDepth(serializer!, false));
+          switch (flag) {
+            case RefFlags.NullFlag:
+              accessor(result, i, null);
+              break;
+            case RefFlags.NotNullValueFlag:
+              accessor(result, i, this.readSerializerWithDepth(serializer, false));
+              break;
           }
         }
       } else {
@@ -286,17 +403,42 @@ class CollectionAnySerializer {
     } else {
       if (refTracking) {
         for (let i = 0; i < len; i++) {
-          const itemSerializer = AnyHelper.detectSerializer(this.readContext);
-          accessor(result, i, itemSerializer!.readRef());
+          const refFlag = this.readContext.readRefFlag();
+          switch (refFlag) {
+            case RefFlags.NotNullValueFlag:
+            case RefFlags.RefValueFlag: {
+              const itemSerializer = AnyHelper.detectSerializer(this.readContext);
+              accessor(
+                result,
+                i,
+                this.readSerializerWithDepth(itemSerializer, refFlag === RefFlags.RefValueFlag),
+              );
+              break;
+            }
+            case RefFlags.RefFlag:
+              accessor(
+                result,
+                i,
+                this.readContext.getReadRef(this.readContext.reader.readVarUInt32()),
+              );
+              break;
+            case RefFlags.NullFlag:
+              accessor(result, i, null);
+              break;
+          }
         }
       } else if (includeNone) {
         for (let i = 0; i < len; i++) {
           const flag = this.readContext.reader.readInt8();
-          if (flag === RefFlags.NullFlag) {
-            accessor(result, i, null);
-          } else {
-            const itemSerializer = AnyHelper.detectSerializer(this.readContext);
-            accessor(result, i, this.readSerializerWithDepth(itemSerializer!, false));
+          switch (flag) {
+            case RefFlags.NullFlag:
+              accessor(result, i, null);
+              break;
+            case RefFlags.NotNullValueFlag: {
+              const itemSerializer = AnyHelper.detectSerializer(this.readContext);
+              accessor(result, i, this.readSerializerWithDepth(itemSerializer, false));
+              break;
+            }
           }
         }
       } else {
@@ -422,6 +564,11 @@ export abstract class CollectionSerializerGenerator extends BaseSerializerGenera
     const useDeclaredStructElementReader = TypeId.structType(this.innerGenerator.getTypeId()!);
     const compatibleReadAction = getCompatibleCollectionArrayReadAction(this.typeInfo);
     const compatibleListToArray = compatibleReadAction?.target === "array";
+    const checkReadableBytes = compatibleListToArray
+      ? this.builder.reader.checkReadableBytes(
+          `${len} * ${compatibleMinElementBytes(this.innerGenerator.getTypeId()!)}`,
+        )
+      : "";
     const newCollection = compatibleListToArray
       ? compatibleArrayCollectionExpr(compatibleReadAction!.elementTypeId, len)
       : this.newCollection(len);
@@ -464,7 +611,7 @@ export abstract class CollectionSerializerGenerator extends BaseSerializerGenera
             if (${len} > 0) {
                 ${flags} = ${this.builder.reader.readUint8()};
                 ${rejectCompatiblePayload}
-                ${this.builder.reader.checkReadableBytes(len)}
+                ${checkReadableBytes}
             }
             const ${result} = ${newCollection};
             ${this.maybeReference(result, refState)}
@@ -497,16 +644,20 @@ export abstract class CollectionSerializerGenerator extends BaseSerializerGenera
                     }
                 } else if (${flags} & ${CollectionFlags.HAS_NULL}) {
                     for (let ${idx} = 0; ${idx} < ${len}; ${idx}++) {
-                        if (${this.builder.reader.readInt8()} == ${RefFlags.NullFlag}) {
-                            ${putAccessor("null", idx)}
-                        } else {
-                            if (${elemSerializer}) {
-                                ${innerIsLeaf ? "" : `${readContextName}.incReadDepth();`}
-                                ${putAccessor(`${elemSerializer}.read(false)`, idx)}
-                                ${innerIsLeaf ? "" : `${readContextName}.decReadDepth();`}
-                            } else {
-                                ${readInnerElement((x: any) => `${putAccessor(x, idx)}`, "false")}
-                            }
+                        const ${refFlag} = ${this.builder.reader.readInt8()};
+                        switch (${refFlag}) {
+                            case ${RefFlags.NullFlag}:
+                                ${putAccessor("null", idx)}
+                                break;
+                            case ${RefFlags.NotNullValueFlag}:
+                                if (${elemSerializer}) {
+                                    ${innerIsLeaf ? "" : `${readContextName}.incReadDepth();`}
+                                    ${putAccessor(`${elemSerializer}.read(false)`, idx)}
+                                    ${innerIsLeaf ? "" : `${readContextName}.decReadDepth();`}
+                                } else {
+                                    ${readInnerElement((x: any) => `${putAccessor(x, idx)}`, "false")}
+                                }
+                                break;
                         }
                     }
                 } else {

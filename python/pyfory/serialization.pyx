@@ -42,6 +42,7 @@ from pyfory._fory import (
     NOT_NULL_INT64_FLAG,
 )
 from pyfory.meta.typedef_decoder import decode_typedef
+from pyfory.meta.typedef import is_struct_typedef_kind
 from pyfory.meta.metastring import MetaStringDecoder
 from pyfory.policy import DEFAULT_POLICY
 from pyfory.resolver import NULL_FLAG, NOT_NULL_VALUE_FLAG
@@ -541,6 +542,38 @@ cdef class TypeResolver:
             type_def = typeinfo.type_def
         write_context.write_bytes(type_def.encoded)
 
+    cpdef _write_unknown_struct_type_info(
+        self, WriteContext write_context, object type_def
+    ):
+        cdef MetaShareWriteContext meta_context
+        cdef object encoded
+        cdef uint8_t type_id
+        cdef uint64_t type_addr
+        cdef pair[uint64_t, int32_t] *entry
+        cdef int32_t index
+        if (
+            not is_struct_typedef_kind(type_def.type_id)
+            or not is_type_share_meta(<TypeId>type_def.type_id)
+        ):
+            raise TypeError("UnknownStruct requires a shared Struct TypeDef")
+        encoded = type_def.encoded
+        if type(encoded) is not bytes or len(encoded) < 8:
+            raise TypeError("UnknownStruct requires an encoded TypeDef")
+        meta_context = write_context.meta_share_context
+        if meta_context is None:
+            raise TypeError("UnknownStruct requires compatible metadata sharing")
+        type_id = type_def.type_id
+        type_addr = <uint64_t><PyObject *>type_def
+        write_context.write_uint8(type_id)
+        entry = meta_context.class_map.find(type_addr)
+        if entry != NULL:
+            write_context.write_var_uint32((deref(entry).second << 1) | 1)
+            return
+        index = meta_context.class_map.size()
+        meta_context.class_map[type_addr] = index
+        write_context.write_var_uint32(index << 1)
+        write_context.write_bytes(encoded)
+
     cpdef inline TypeInfo read_shared_type_meta(self, ReadContext read_context, type_id=None):
         cdef MetaShareReadContext meta_context = read_context.meta_share_context
         cdef uint32_t index_marker
@@ -575,6 +608,7 @@ cdef class TypeResolver:
         cdef TypeInfo typeinfo
         cdef object type_def
         cdef object type_key
+        cdef object name
         type_def = decode_typedef(buffer, self.resolver, header=header)
         typeinfo = self.resolver._local_type_info_for_typedef(type_def)
         if typeinfo is not None:
@@ -586,7 +620,22 @@ cdef class TypeResolver:
             ):
                 self._meta_shared_type_info[header] = typeinfo
                 return typeinfo
+        elif not is_struct_typedef_kind(type_def.type_id):
+            name = (
+                type_def.namespace + "." + type_def.typename
+                if type_def.namespace
+                else type_def.typename
+            )
+            raise ValueError(f"TypeDef {name} is not registered")
         type_key = self.resolver._check_remote_type_def_limit(type_def)
+        if typeinfo is None:
+            # Compatible metadata authorizes only this fixed framework owner;
+            # it never loads or manufactures the sender-named Python class.
+            from pyfory.struct import UnknownStruct
+
+            type_def.cls = UnknownStruct
+        else:
+            self.resolver._bind_local_type_def(type_def, typeinfo)
         typeinfo = self.resolver._build_type_info_from_typedef(type_def)
         self._meta_shared_type_info[header] = typeinfo
         self.resolver._record_remote_type_def(type_key)
@@ -603,11 +652,55 @@ cdef class TypeResolver:
             self._c_meta_hash_to_type_info.find(hash_key)
         )
         cdef TypeInfo typeinfo
+        # Slow resolution may populate and rehash this map, invalidating entry.
+        cdef bint cache_slot_empty = (
+            entry == NULL or deref(entry).second == NULL
+        )
         if entry != NULL and deref(entry).second != NULL:
-            return <TypeInfo>deref(entry).second
+            typeinfo = <TypeInfo>deref(entry).second
+            if (
+                _encoded_meta_string_matches(
+                    ns_metabytes,
+                    typeinfo.namespace_bytes,
+                )
+                and _encoded_meta_string_matches(
+                    type_metabytes,
+                    typeinfo.typename_bytes,
+                )
+            ):
+                return typeinfo
         typeinfo = self.resolver._load_metabytes_to_type_info(ns_metabytes, type_metabytes)
-        self._c_meta_hash_to_type_info[hash_key] = <PyObject *>typeinfo
+        if (
+            cache_slot_empty
+            # The Python resolver owns the bounded accepted-alias set. The
+            # compiled mirror must not retain aliases that owner declined.
+            and self._ns_type_to_type_info.get(
+                (ns_metabytes, type_metabytes)
+            ) is typeinfo
+            and _encoded_meta_string_matches(
+                ns_metabytes,
+                typeinfo.namespace_bytes,
+            )
+            and _encoded_meta_string_matches(
+                type_metabytes,
+                typeinfo.typename_bytes,
+            )
+        ):
+            self._c_meta_hash_to_type_info[hash_key] = <PyObject *>typeinfo
         return typeinfo
+
+
+cdef inline bint _encoded_meta_string_matches(object left, object right):
+    if left is right:
+        return True
+    if left is None or right is None:
+        return False
+    return (
+        left.hashcode == right.hashcode
+        and left.encoding == right.encoding
+        and left.length == right.length
+        and left.data == right.data
+    )
 
 
 cdef inline void _skip_typedef_fast(Buffer buffer, int64_t header):

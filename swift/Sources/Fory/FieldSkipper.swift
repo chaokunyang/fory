@@ -52,6 +52,16 @@ extension ReadContext {
         refMode: RefMode,
         readTypeInfo: Bool
     ) throws -> Any? {
+        if refMode == .tracking,
+            fieldType.typeID != TypeId.unknown.rawValue,
+            let typeInfo,
+            typeInfo.isRefType
+        {
+            // A static same-type reference body has one tracking envelope, owned by its registered
+            // reader so it can publish the reference before reading children. Dynamic fields keep
+            // their outer envelope here because their concrete TypeInfo writes a second envelope.
+            return try typeInfo.readDeclared(self)
+        }
         switch refMode {
         case .none:
             return try readSkippedFieldPayload(
@@ -109,11 +119,11 @@ extension ReadContext {
         readTypeInfo: Bool
     ) throws -> Any {
         if let typeInfo {
-            return try readAnyValue(typeInfo: typeInfo)
+            return try readSkippedTypeInfoValue(fieldType: fieldType, typeInfo: typeInfo)
         }
         if readTypeInfo {
             let typeInfo = try self.readTypeInfo()
-            return try readAnyValue(typeInfo: typeInfo)
+            return try readSkippedTypeInfoValue(fieldType: fieldType, typeInfo: typeInfo)
         }
 
         guard let resolvedTypeID = TypeId(rawValue: fieldType.typeID) else {
@@ -225,6 +235,23 @@ extension ReadContext {
         }
     }
 
+    @inline(__always)
+    private func readSkippedTypeInfoValue(
+        fieldType: TypeMeta.FieldType,
+        typeInfo: TypeInfo
+    ) throws -> Any {
+        if fieldType.typeID != TypeId.unknown.rawValue, typeInfo.isRefType {
+            // Static collection/map framing already consumed or omitted the operation envelope.
+            // Reading the retained reference TypeInfo as a complete dynamic value would consume
+            // the first body byte as a second reference flag.
+            return try typeInfo.readBody(self)
+        }
+        if fieldType.typeID != TypeId.unknown.rawValue {
+            return try typeInfo.readDeclared(self)
+        }
+        return try readAnyValue(typeInfo: typeInfo)
+    }
+
     private func readSkippedCollection(
         fieldType: TypeMeta.FieldType
     ) throws -> [Any] {
@@ -246,6 +273,12 @@ extension ReadContext {
         var typeInfo: TypeInfo?
         if sameType, !declared {
             typeInfo = try self.readTypeInfo()
+        }
+        // NONE has no element body, so iterating an untrusted shared count cannot make progress.
+        if sameType, !trackRef, !hasNull,
+            (declared ? TypeId(rawValue: elementFieldType.typeID) : typeInfo?.typeID) == TypeId.none
+        {
+            return []
         }
 
         for _ in 0..<length {
@@ -374,11 +407,8 @@ extension ReadContext {
             }
 
             let chunkSize = Int(try buffer.readUInt8())
-            if chunkSize <= 0 {
-                throw ForyError.invalidData("invalid map chunk size \(chunkSize)")
-            }
-            if chunkSize > (totalLength - readCount) {
-                throw ForyError.invalidData("map chunk size exceeds remaining entries")
+            if chunkSize <= 0 || chunkSize > (totalLength - readCount) {
+                throw invalidMapChunkSize(dynamic: false)
             }
 
             let keyTypeInfo = keyDeclared ? nil : try self.readTypeInfo()
@@ -405,11 +435,17 @@ extension ReadContext {
     }
 
     private func readSkippedUnion() throws -> Any {
+        // An unknown compatible union has no statically bound case payload here.
+        // Count this dynamic skip owner, then let the selected payload count its own
+        // TypeInfo materialization. Static union readers do not enter this path.
+        try enterDynamicAnyDepth()
         _ = try buffer.readVarUInt32()
-        return try DynamicSerializer<Any>.read(
+        let value = try DynamicSerializer<Any>.read(
             self,
             refMode: .tracking,
             readTypeInfo: true
         )
+        leaveDynamicAnyDepth()
+        return value
     }
 }

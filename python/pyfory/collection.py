@@ -43,6 +43,10 @@ _TUPLE_OWNER_BYTES = 3 * _REFERENCE_BYTES
 _DICT_OWNER_BYTES = 8 * _REFERENCE_BYTES
 
 
+def _raise_invalid_map_chunk_size(chunk_size, remaining):
+    raise ValueError(f"Invalid map chunk size {chunk_size}, remaining entries {remaining}")
+
+
 def _needs_element_type_info(type_id):
     return type_id in {
         TypeId.STRUCT,
@@ -347,10 +351,16 @@ class MapSerializer(Serializer):
         value_serializer=None,
         key_tracking_ref=None,
         value_tracking_ref=None,
+        key_write_type_info=False,
+        value_write_type_info=False,
     ):
         super().__init__(type_resolver, type_)
         self.key_serializer = key_serializer
         self.value_serializer = value_serializer
+        # Compatible evolving child schemas need dynamic write framing, while this
+        # reader must still accept declared chunks from an exact peer.
+        self.key_write_serializer = None if key_write_type_info else key_serializer
+        self.value_write_serializer = None if value_write_type_info else value_serializer
         self.key_tracking_ref = False
         self.value_tracking_ref = False
         if key_serializer is not None:
@@ -369,8 +379,8 @@ class MapSerializer(Serializer):
             return
         type_resolver = self.type_resolver
         ref_writer = write_context.ref_writer
-        key_serializer = self.key_serializer
-        value_serializer = self.value_serializer
+        key_serializer = self.key_write_serializer
+        value_serializer = self.value_write_serializer
 
         items_iter = iter(obj.items())
         key, value = next(items_iter)
@@ -462,8 +472,8 @@ class MapSerializer(Serializer):
                     has_next = False
                     break
 
-            key_serializer = self.key_serializer
-            value_serializer = self.value_serializer
+            key_serializer = self.key_write_serializer
+            value_serializer = self.value_write_serializer
             write_context.put_uint8(chunk_size_offset, chunk_size)
             write_context.exit_flush_barrier()
             write_context.try_flush()
@@ -534,6 +544,8 @@ class MapSerializer(Serializer):
             key_is_declared_type = (chunk_header & KEY_DECL_TYPE) != 0
             value_is_declared_type = (chunk_header & VALUE_DECL_TYPE) != 0
             chunk_size = read_context.read_uint8()
+            if chunk_size == 0 or chunk_size > size:
+                _raise_invalid_map_chunk_size(chunk_size, size)
             if not key_is_declared_type:
                 key_serializer = self.type_resolver.read_type_info(read_context).serializer
             if not value_is_declared_type:

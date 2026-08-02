@@ -333,6 +333,9 @@ fn skip_collection(context: &mut ReadContext, field_type: &FieldType) -> Result<
         type_info = None;
         default_elem_type
     };
+    if elem_type.type_id == types::NONE && !track_ref && !has_null {
+        return Ok(());
+    }
     context.inc_depth()?;
     let null_only = has_null && !track_ref;
     for _ in 0..length {
@@ -1031,5 +1034,42 @@ pub fn skip_enum_variant(
                 variant_type
             )))
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{Config, Reader, TypeResolver, Writer};
+
+    const SENTINEL: u8 = 0xa5;
+
+    fn assert_declared_none_collection_skip(collection_type: u32) {
+        let mut bytes = Vec::new();
+        {
+            let mut writer = Writer::from_buffer(&mut bytes);
+            writer.write_var_u32(u32::MAX);
+            writer.write_u8(IS_SAME_TYPE | DECL_ELEMENT_TYPE);
+            writer.write_u8(SENTINEL);
+        }
+
+        let mut context = ReadContext::new(TypeResolver::default(), Config::default());
+        context.attach_reader(Reader::new(&bytes));
+        let element_type = FieldType::new(types::NONE, false, Vec::new());
+        let field_type = FieldType::new(collection_type, false, vec![element_type]);
+
+        skip_collection(&mut context, &field_type).unwrap();
+        assert_eq!(context.reader.read_u8().unwrap(), SENTINEL);
+        assert_eq!(context.reader.get_cursor(), bytes.len());
+    }
+
+    #[test]
+    fn skips_declared_none_list() {
+        assert_declared_none_collection_skip(types::LIST);
+    }
+
+    #[test]
+    fn skips_declared_none_set() {
+        assert_declared_none_collection_skip(types::SET);
     }
 }

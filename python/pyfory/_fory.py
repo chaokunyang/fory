@@ -160,8 +160,11 @@ class Fory:
                 circular references. When enabled, duplicate objects are stored once.
                 Disabled by default for better performance.
 
-            strict: Require type registration before serialization (default: True). When
-                disabled, unknown types can be deserialized, which may be insecure if
+            strict: Require registration before loading or instantiating application
+                classes (default: True). Compatible metadata for an unregistered remote
+                Struct uses the fixed data-only UnknownStruct carrier instead of loading
+                or generating the sender-named class. When strict mode is disabled,
+                dynamic application types can be deserialized, which may be insecure if
                 malicious code exists in __new__/__init__/__eq__/__hash__ methods.
                 **WARNING**: Only disable in trusted environments. When disabling strict
                 mode, you should provide a custom `policy` parameter to control which types

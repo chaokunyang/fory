@@ -525,24 +525,7 @@ impl<'a> ReadContext<'a> {
                     // Read type meta inline using streaming protocol
                     self.read_type_meta()
                 } else {
-                    let namespace = self.read_meta_string()?.to_owned();
-                    let type_name = self.read_meta_string()?.to_owned();
-                    let rc_namespace = Rc::from(namespace.clone());
-                    let rc_type_name = Rc::from(type_name.clone());
-                    self.type_resolver
-                        .get_type_info_by_meta_string_name(rc_namespace, rc_type_name)
-                        .or_else(|| {
-                            self.type_resolver.get_type_info_by_name(
-                                namespace.original.as_str(),
-                                type_name.original.as_str(),
-                            )
-                        })
-                        .ok_or_else(|| {
-                            Error::type_error(format!(
-                                "Name harness not found: namespace='{}', type='{}'",
-                                namespace.original, type_name.original
-                            ))
-                        })
+                    self.read_named_type_info()
                 }
             }
             _ => self
@@ -550,6 +533,28 @@ impl<'a> ReadContext<'a> {
                 .get_type_info_by_id(fory_type_id)
                 .ok_or_else(|| Error::type_error("ID harness not found")),
         }
+    }
+
+    // Name decoding and resolver fallback allocate; keep them out of the common ID and compatible
+    // dispatch body without marking successful named dispatch as cold.
+    #[inline(never)]
+    fn read_named_type_info(&mut self) -> Result<Rc<TypeInfo>, Error> {
+        let namespace = self.read_meta_string()?.to_owned();
+        let type_name = self.read_meta_string()?.to_owned();
+        let rc_namespace = Rc::from(namespace.clone());
+        let rc_type_name = Rc::from(type_name.clone());
+        self.type_resolver
+            .get_type_info_by_meta_string_name(rc_namespace, rc_type_name)
+            .or_else(|| {
+                self.type_resolver
+                    .get_type_info_by_name(namespace.original.as_str(), type_name.original.as_str())
+            })
+            .ok_or_else(|| {
+                Error::type_error(format!(
+                    "Name harness not found: namespace='{}', type='{}'",
+                    namespace.original, type_name.original
+                ))
+            })
     }
 
     #[inline(always)]
@@ -590,6 +595,8 @@ impl<'a> ReadContext<'a> {
 
     #[inline(always)]
     pub fn dec_depth(&mut self) {
+        // Nested readers decrement only after their child completed successfully. An error keeps
+        // the failed path's depth until the root reset owns all read-side cleanup.
         self.current_depth = self.current_depth.saturating_sub(1);
     }
 
@@ -598,6 +605,7 @@ impl<'a> ReadContext<'a> {
         self.meta_resolver.reset();
         self.meta_string_resolver.reset();
         self.ref_reader.reset();
+        // Root reset is the only failure-cleanup owner for read depth.
         self.current_depth = 0;
     }
 }

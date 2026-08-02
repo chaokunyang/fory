@@ -21,11 +21,23 @@
 #include <gtest/gtest.h>
 #include <map>
 #include <memory>
+#include <optional>
 #include <string>
 #include <unordered_map>
 #include <vector>
 
 using namespace fory::serialization;
+
+struct RemoteMapV1 {
+  int32_t value{};
+  int32_t removed{};
+  FORY_STRUCT(RemoteMapV1, value, removed);
+};
+
+struct RemoteMapV2 {
+  int32_t value{};
+  FORY_STRUCT(RemoteMapV2, value);
+};
 
 // Helper function to test roundtrip serialization
 template <typename T> void test_map_roundtrip(const T &original) {
@@ -324,6 +336,70 @@ TEST(MapSerializerTest, NullChunksPreserveSharedRefs) {
   EXPECT_EQ(null_key_value.get(), pair_key.get());
 }
 
+TEST(MapSerializerTest, NullSideNestedOwnerPreservesRefs) {
+  auto writer =
+      Fory::builder().xlang(true).compatible(true).track_ref(true).build();
+  auto reader =
+      Fory::builder().xlang(true).compatible(true).track_ref(true).build();
+  using WriterMap = std::map<std::optional<int32_t>, std::shared_ptr<int32_t>>;
+  using ReaderMap =
+      std::map<std::optional<int32_t>, std::optional<std::shared_ptr<int32_t>>>;
+  using WriterRoot = std::tuple<WriterMap, int32_t>;
+  using ReaderRoot = std::tuple<ReaderMap, int32_t>;
+  auto shared = std::make_shared<int32_t>(17);
+  WriterMap original{{std::nullopt, shared}, {1, shared}};
+  auto bytes = writer.serialize(WriterRoot{std::move(original), 11});
+  ASSERT_TRUE(bytes.ok()) << bytes.error().to_string();
+
+  auto decoded = reader.deserialize<ReaderRoot>(*bytes);
+  ASSERT_TRUE(decoded.ok()) << decoded.error().to_string();
+  const ReaderMap &map = std::get<0>(*decoded);
+  ASSERT_EQ(map.size(), 2U);
+  ASSERT_TRUE(map.at(std::nullopt).has_value());
+  ASSERT_TRUE(map.at(1).has_value());
+  ASSERT_TRUE(*map.at(std::nullopt));
+  EXPECT_EQ(**map.at(std::nullopt), 17);
+  EXPECT_EQ(*map.at(std::nullopt), *map.at(1));
+  EXPECT_EQ(std::get<1>(*decoded), 11);
+
+  using WriterKeyMap =
+      std::map<std::shared_ptr<int32_t>, std::shared_ptr<int32_t>>;
+  using ReaderKeyMap = std::map<std::optional<std::shared_ptr<int32_t>>,
+                                std::shared_ptr<int32_t>>;
+  using WriterKeyRoot = std::tuple<WriterKeyMap, int32_t>;
+  using ReaderKeyRoot = std::tuple<ReaderKeyMap, int32_t>;
+  auto first_key = std::make_shared<int32_t>(23);
+  auto second_key = std::make_shared<int32_t>(29);
+  if (second_key < first_key) {
+    std::swap(first_key, second_key);
+  }
+  WriterKeyMap key_original;
+  key_original.emplace(first_key, nullptr);
+  key_original.emplace(second_key, first_key);
+  auto key_bytes = writer.serialize(WriterKeyRoot{std::move(key_original), 13});
+  ASSERT_TRUE(key_bytes.ok()) << key_bytes.error().to_string();
+
+  auto key_decoded = reader.deserialize<ReaderKeyRoot>(*key_bytes);
+  ASSERT_TRUE(key_decoded.ok()) << key_decoded.error().to_string();
+  const ReaderKeyMap &key_map = std::get<0>(*key_decoded);
+  ASSERT_EQ(key_map.size(), 2U);
+  std::shared_ptr<int32_t> null_value_key;
+  std::shared_ptr<int32_t> alias_value;
+  for (const auto &[key, value] : key_map) {
+    ASSERT_TRUE(key.has_value());
+    ASSERT_TRUE(*key);
+    if (value) {
+      alias_value = value;
+    } else {
+      null_value_key = *key;
+    }
+  }
+  ASSERT_TRUE(null_value_key);
+  ASSERT_TRUE(alias_value);
+  EXPECT_EQ(null_value_key, alias_value);
+  EXPECT_EQ(std::get<1>(*key_decoded), 13);
+}
+
 // ============================================================================
 // Protocol Compliance Tests
 // ============================================================================
@@ -372,6 +448,55 @@ TEST(MapSerializerTest, VerifyChunkedEncoding) {
   ASSERT_TRUE(deserialize_result.ok());
   auto deserialized = deserialize_result.value();
   EXPECT_EQ(map, deserialized);
+}
+
+TEST(MapSerializerTest, SameTypeUsesRemoteReadBinding) {
+  auto writer =
+      Fory::builder().xlang(true).compatible(true).track_ref(true).build();
+  auto reader =
+      Fory::builder().xlang(true).compatible(true).track_ref(true).build();
+  auto owner_reader =
+      Fory::builder().xlang(true).compatible(true).track_ref(true).build();
+  ASSERT_TRUE(writer.register_struct<RemoteMapV1>("remote", "MapValue").ok());
+  ASSERT_TRUE(reader.register_struct<RemoteMapV2>("remote", "MapValue").ok());
+  ASSERT_TRUE(
+      owner_reader.register_struct<RemoteMapV2>("remote", "MapValue").ok());
+  using WriterMap =
+      std::map<std::optional<int32_t>, std::shared_ptr<RemoteMapV1>>;
+  using ReaderMap = std::map<int32_t, RemoteMapV2>;
+  using WriterRoot = std::tuple<WriterMap, int32_t>;
+  using ReaderRoot = std::tuple<ReaderMap, int32_t>;
+  WriterMap original;
+  original.emplace(std::nullopt,
+                   std::make_shared<RemoteMapV1>(RemoteMapV1{13, 130}));
+  original.emplace(1, std::make_shared<RemoteMapV1>(RemoteMapV1{7, 70}));
+  original.emplace(2, std::make_shared<RemoteMapV1>(RemoteMapV1{9, 90}));
+  auto bytes = writer.serialize(WriterRoot{std::move(original), 11});
+  ASSERT_TRUE(bytes.ok()) << bytes.error().to_string();
+
+  auto values = reader.deserialize<ReaderRoot>(*bytes);
+  ASSERT_TRUE(values.ok()) << values.error().to_string();
+  const ReaderMap &map = std::get<0>(*values);
+  ASSERT_EQ(map.size(), 3U);
+  EXPECT_EQ(map.at(0).value, 13);
+  EXPECT_EQ(map.at(1).value, 7);
+  EXPECT_EQ(map.at(2).value, 9);
+  EXPECT_EQ(std::get<1>(*values), 11);
+
+  using OwnerMap =
+      std::map<std::optional<int32_t>, std::shared_ptr<RemoteMapV2>>;
+  using OwnerRoot = std::tuple<OwnerMap, int32_t>;
+  auto owners = owner_reader.deserialize<OwnerRoot>(*bytes);
+  ASSERT_TRUE(owners.ok()) << owners.error().to_string();
+  const OwnerMap &owner_map = std::get<0>(*owners);
+  ASSERT_EQ(owner_map.size(), 3U);
+  ASSERT_TRUE(owner_map.at(std::nullopt));
+  ASSERT_TRUE(owner_map.at(1));
+  ASSERT_TRUE(owner_map.at(2));
+  EXPECT_EQ(owner_map.at(std::nullopt)->value, 13);
+  EXPECT_EQ(owner_map.at(1)->value, 7);
+  EXPECT_EQ(owner_map.at(2)->value, 9);
+  EXPECT_EQ(std::get<1>(*owners), 11);
 }
 
 // ============================================================================

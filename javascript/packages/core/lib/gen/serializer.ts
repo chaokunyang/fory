@@ -56,6 +56,7 @@ export interface SerializerGenerator {
 
   getType(): number;
   getTypeId(): number | undefined;
+  readDataAlwaysAdvances(): boolean;
 }
 
 export enum RefStateType {
@@ -183,6 +184,17 @@ export abstract class BaseSerializerGenerator implements SerializerGenerator {
 
   getInternalTypeId() {
     return this.getTypeId();
+  }
+
+  readDataAlwaysAdvances(): boolean {
+    const typeId = this.getTypeId();
+    return (
+      typeId !== TypeId.UNKNOWN &&
+      typeId !== TypeId.NONE &&
+      !TypeId.structType(typeId!) &&
+      typeId !== TypeId.EXT &&
+      typeId !== TypeId.NAMED_EXT
+    );
   }
 
   abstract read(assignStmt: (v: string) => string, refState: string): string;
@@ -335,6 +347,7 @@ export abstract class BaseSerializerGenerator implements SerializerGenerator {
             return {
               _initialized: true,
               fixedSize: ${this.getFixedSize()},
+              readDataAlwaysAdvances: ${this.readDataAlwaysAdvances()},
               needToWriteRef: () => ${this.needToWriteRef()},
               getTypeId: () => ${this.getTypeId()},
               getUserTypeId: () => ${this.getUserTypeId()},

@@ -78,6 +78,7 @@ function preparedOwners(typeMeta: TypeMeta): PreparedOwners {
 class FieldBodySerializer implements Serializer {
   readonly _initialized = true;
   readonly fixedSize = 8;
+  readonly readDataAlwaysAdvances = false;
   private readonly typeInfo;
 
   constructor(
@@ -145,6 +146,7 @@ class FieldBodySerializer implements Serializer {
 export class UnknownStructSerializer implements Serializer {
   readonly _initialized = true;
   readonly fixedSize = 8;
+  readonly readDataAlwaysAdvances = false;
   readonly trackingRef: boolean;
   private readonly typeInfo = Type.any();
   private boundTypeMeta: TypeMeta | undefined;

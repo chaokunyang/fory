@@ -1830,6 +1830,29 @@ public sealed partial class ForyModelGenerator
                (codec.Kind == FieldCodecKind.Map || codec.Generics.Any(HasMapCodec));
     }
 
+    private static bool ReadBodyAlwaysAdvances(TypeModel model)
+    {
+        return model.SortedMembers.Any(FieldReadAlwaysAdvances);
+    }
+
+    private static bool FieldReadAlwaysAdvances(MemberModel member)
+    {
+        if (member.IsNullable ||
+            member.NeedsFieldTypeInfo ||
+            member.DynamicAnyKind != DynamicAnyKind.None)
+        {
+            return true;
+        }
+
+        if (member.FieldCodec is not null)
+        {
+            return member.FieldCodec.Kind != FieldCodecKind.Scalar;
+        }
+
+        return CanUseDirectBuiltInFieldAccess(member) &&
+               TryBuildDirectPayloadRead(member.Classification.TypeId, out _);
+    }
+
     private static void EmitMapChunkError(StringBuilder sb, int indentLevel)
     {
         string indent = new(' ', indentLevel * 4);

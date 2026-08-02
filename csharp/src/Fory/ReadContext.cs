@@ -43,6 +43,7 @@ public sealed class ReadContext
     private readonly Config _config;
     private long _totalAcceptedSchemaVersions;
     internal long _remainingGraphMemoryBytes;
+    internal long _remainingUnbackedContainerItems;
 
     public ReadContext(
         ByteReader reader,
@@ -132,6 +133,40 @@ public sealed class ReadContext
 
         throw new InvalidDataException(
             $"estimated graph memory request {bytes} bytes exceeds MaxGraphMemoryBytes remaining budget {remaining} bytes out of effective limit {_config.MaxGraphMemoryBytes} bytes");
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal void CheckUnbackedContainerAllocation(int count)
+    {
+        long requiredReadable = count - _remainingUnbackedContainerItems;
+        if (requiredReadable > 0)
+        {
+            Reader.CheckBound((int)requiredReadable);
+        }
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal void SettleUnbackedContainerItems(int items, int bytesRead)
+    {
+        int unbackedItems = items - bytesRead;
+        if (unbackedItems <= 0)
+        {
+            return;
+        }
+
+        long remaining = _remainingUnbackedContainerItems - unbackedItems;
+        _remainingUnbackedContainerItems = remaining;
+        if (remaining < 0)
+        {
+            ThrowUnbackedContainerLimit();
+        }
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private void ThrowUnbackedContainerLimit()
+    {
+        throw new InvalidDataException(
+            $"count-driven container work exceeds MaxUnbackedContainerItems {_config.MaxUnbackedContainerItems}");
     }
 
     internal void ResetFor(ByteReader reader)
@@ -525,5 +560,6 @@ public sealed class ReadContext
         _hasFirstTypeMetaRef = false;
         _typeMetaRefs.Clear();
         _readMetaStrings.Clear();
+        _remainingUnbackedContainerItems = 0;
     }
 }

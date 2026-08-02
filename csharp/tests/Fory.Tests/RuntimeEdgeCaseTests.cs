@@ -216,7 +216,7 @@ public sealed class RuntimeEdgeCaseTests
     }
 
     [Fact]
-    public void CompatibleNoneListSkipHandlesMaxCount()
+    public void CompatibleNoneListSkipUsesBudget()
     {
         ByteWriter writer = new();
         writer.WriteVarUInt32(int.MaxValue);
@@ -226,18 +226,50 @@ public sealed class RuntimeEdgeCaseTests
         byte[] payload = writer.ToArray();
 
         ByteReader reader = new(payload);
-        Config config = ForyRuntime.Builder().Compatible(true).Build().Config;
+        Config config = ForyRuntime.Builder()
+            .Compatible(true)
+            .MaxUnbackedContainerItems(0)
+            .Build().Config;
         ReadContext context = new(reader, new TypeResolver(), config);
+        context._remainingUnbackedContainerItems = config.MaxUnbackedContainerItems;
         TypeMetaFieldType elementType =
             new((uint)TypeId.Unknown, nullable: false);
         TypeMetaFieldType listType =
             new((uint)TypeId.List, nullable: false, generics: [elementType]);
 
-        FieldSkipper.SkipFieldValue(context, listType);
-
+        Assert.Throws<InvalidDataException>(
+            () => FieldSkipper.SkipFieldValue(context, listType));
         Assert.Equal(payload.Length - 1, reader.Cursor);
-        Assert.Equal(0xA5, reader.ReadUInt8());
-        Assert.Equal(0, reader.Remaining);
+    }
+
+    [Fact]
+    public void CompatibleNoneMapSkipUsesBudget()
+    {
+        ByteWriter writer = new();
+        writer.WriteVarUInt32(3);
+        writer.WriteUInt8(
+            DictionaryBits.DeclaredKeyType |
+            DictionaryBits.DeclaredValueType);
+        writer.WriteUInt8(3);
+        writer.WriteUInt8(0xA5);
+        byte[] payload = writer.ToArray();
+
+        Config config = ForyRuntime.Builder()
+            .Compatible(true)
+            .MaxUnbackedContainerItems(2)
+            .Build().Config;
+        ByteReader reader = new(payload);
+        ReadContext context = new(reader, new TypeResolver(), config);
+        context._remainingUnbackedContainerItems = config.MaxUnbackedContainerItems;
+        TypeMetaFieldType noneType = new((uint)TypeId.None, nullable: false);
+        TypeMetaFieldType mapType = new(
+            (uint)TypeId.Map,
+            nullable: false,
+            generics: [noneType, noneType]);
+
+        Assert.Throws<InvalidDataException>(
+            () => FieldSkipper.SkipFieldValue(context, mapType));
+        Assert.Equal(payload.Length - 1, reader.Cursor);
     }
 
     [Theory]

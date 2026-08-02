@@ -125,7 +125,11 @@ public sealed class TypeResolver
     {
         RegisterGeneratedFactory(
             typeof(T),
-            static _ => TypeInfo.Create(typeof(T), new TSerializer()));
+            static _ => TypeInfo.Create(
+                typeof(T),
+                new TSerializer(),
+                evolving: true,
+                readBodyAlwaysAdvances: true));
     }
 
     /// <summary>
@@ -135,15 +139,22 @@ public sealed class TypeResolver
     /// <typeparam name="T">Runtime target type.</typeparam>
     /// <typeparam name="TSerializer">Generated serializer type.</typeparam>
     /// <param name="evolving">Generated structural schema-evolution setting.</param>
+    /// <param name="readBodyAlwaysAdvances">Whether every successful generated body read consumes input.</param>
     /// <exception cref="InvalidOperationException">
     /// Thrown when another generated serializer already owns the target type.
     /// </exception>
-    public static void RegisterGeneratedStruct<T, TSerializer>(bool evolving)
+    public static void RegisterGeneratedStruct<T, TSerializer>(
+        bool evolving,
+        bool readBodyAlwaysAdvances)
         where TSerializer : Serializer<T>, new()
     {
-        Func<TypeResolver, TypeInfo> factory = evolving
-            ? static _ => TypeInfo.Create(typeof(T), new TSerializer(), true)
-            : static _ => TypeInfo.Create(typeof(T), new TSerializer(), false);
+        Func<TypeResolver, TypeInfo> factory = (evolving, readBodyAlwaysAdvances) switch
+        {
+            (true, true) => static _ => TypeInfo.Create(typeof(T), new TSerializer(), true, true),
+            (true, false) => static _ => TypeInfo.Create(typeof(T), new TSerializer(), true, false),
+            (false, true) => static _ => TypeInfo.Create(typeof(T), new TSerializer(), false, true),
+            _ => static _ => TypeInfo.Create(typeof(T), new TSerializer(), false, false),
+        };
         RegisterGeneratedFactory(typeof(T), factory);
     }
 
@@ -1771,6 +1782,31 @@ public sealed class TypeResolver
         {
             return generatedFactory(this);
         }
+
+        TypeInfo typeInfo = CreateFrameworkBinding(type);
+        if (Nullable.GetUnderlyingType(type) is not null)
+        {
+            // Nullable<T>.ReadData delegates to the currently registered T serializer. Keep the
+            // fact conservative because T may have an explicitly registered zero-byte codec.
+            return typeInfo;
+        }
+
+        if (typeInfo.BuiltInTypeId is TypeId builtInTypeId &&
+            builtInTypeId is not TypeId.Unknown and not TypeId.None)
+        {
+            return typeInfo.WithAdvancingReadBody();
+        }
+
+        if (typeInfo.UserTypeKind is UserTypeKind.Enum or UserTypeKind.TypedUnion)
+        {
+            return typeInfo.WithAdvancingReadBody();
+        }
+
+        return typeInfo;
+    }
+
+    private TypeInfo CreateFrameworkBinding(Type type)
+    {
 
         if (type == typeof(bool))
         {

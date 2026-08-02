@@ -286,7 +286,18 @@ public abstract class DictionaryLikeSerializer<TDictionary, TKey, TValue> : Seri
         }
 
         ReserveMapStorage(context, totalLength);
-        context.Reader.CheckBound(totalLength);
+        bool keyReadAlwaysAdvances = keyTypeInfo.ReadBodyAlwaysAdvancesFor(keySerializer);
+        bool valueReadAlwaysAdvances = valueTypeInfo.ReadBodyAlwaysAdvancesFor(valueSerializer);
+        bool mapReadAlwaysAdvances = keyReadAlwaysAdvances || valueReadAlwaysAdvances;
+        if (mapReadAlwaysAdvances)
+        {
+            context.Reader.CheckBound(totalLength);
+        }
+        else
+        {
+            context.CheckUnbackedContainerAllocation(totalLength);
+        }
+
         TDictionary map = CreateMap(totalLength);
         if (publishRef)
         {
@@ -352,6 +363,12 @@ public abstract class DictionaryLikeSerializer<TDictionary, TKey, TValue> : Seri
 
             if (keyDynamicType || valueDynamicType)
             {
+                bool guardUnbackedItems = !trackKeyRef &&
+                                           !trackValueRef &&
+                                           keyDeclared &&
+                                           valueDeclared &&
+                                           !mapReadAlwaysAdvances;
+                int checkpoint = guardUnbackedItems ? context.Reader.Cursor : 0;
                 for (int i = 0; i < chunkSize; i++)
                 {
                     TypeInfo? keyTypeInfoForRead = null;
@@ -410,6 +427,13 @@ public abstract class DictionaryLikeSerializer<TDictionary, TKey, TValue> : Seri
                     SetValue(map, key, value);
                 }
 
+                if (guardUnbackedItems)
+                {
+                    context.SettleUnbackedContainerItems(
+                        chunkSize,
+                        context.Reader.Cursor - checkpoint);
+                }
+
                 readCount += chunkSize;
                 continue;
             }
@@ -424,11 +448,23 @@ public abstract class DictionaryLikeSerializer<TDictionary, TKey, TValue> : Seri
                 context.TypeResolver.ReadTypeInfo(valueSerializer, context);
             }
 
+            bool guardChunk = !trackKeyRef &&
+                              !trackValueRef &&
+                              !mapReadAlwaysAdvances;
+            int chunkCheckpoint = guardChunk ? context.Reader.Cursor : 0;
+
             for (int i = 0; i < chunkSize; i++)
             {
                 TKey key = keySerializer.Read(context, trackKeyRef ? RefMode.Tracking : RefMode.None, false);
                 TValue value = ReadValueElement(context, trackValueRef, false, valueSerializer);
                 SetValue(map, key, value);
+            }
+
+            if (guardChunk)
+            {
+                context.SettleUnbackedContainerItems(
+                    chunkSize,
+                    context.Reader.Cursor - chunkCheckpoint);
             }
 
             if (!keyDeclared)

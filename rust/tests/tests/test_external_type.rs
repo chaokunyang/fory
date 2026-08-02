@@ -401,12 +401,9 @@ impl Serializer for SilentValueSerializer {
     }
 }
 
-#[test]
-fn generated_body_progress() {
-    assert!(UserSerializer::READ_DATA_ALWAYS_ADVANCES);
-    assert!(!MarkerSerializer::READ_DATA_ALWAYS_ADVANCES);
-    assert!(!SilentValueSerializer::READ_DATA_ALWAYS_ADVANCES);
-}
+const _: [(); 1] = [(); UserSerializer::READ_DATA_ALWAYS_ADVANCES as usize];
+const _: [(); 0] = [(); MarkerSerializer::READ_DATA_ALWAYS_ADVANCES as usize];
+const _: [(); 0] = [(); SilentValueSerializer::READ_DATA_ALWAYS_ADVANCES as usize];
 
 #[derive(ForyStruct, Clone, Debug, PartialEq)]
 struct LocalUser {

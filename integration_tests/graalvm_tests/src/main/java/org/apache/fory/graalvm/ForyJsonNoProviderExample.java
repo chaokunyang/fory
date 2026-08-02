@@ -31,6 +31,7 @@ import org.apache.fory.json.annotation.JsonCodec;
 import org.apache.fory.json.annotation.JsonCreator;
 import org.apache.fory.json.annotation.JsonProperty;
 import org.apache.fory.json.annotation.JsonType;
+import org.apache.fory.json.annotation.JsonValue;
 import org.apache.fory.json.codec.JsonValueCodec;
 import org.apache.fory.json.codec.ObjectCodec;
 import org.apache.fory.json.reader.Latin1JsonReader;
@@ -92,6 +93,14 @@ public final class ForyJsonNoProviderExample {
             .equals("\u4f60"));
     Preconditions.checkArgument(
         json.fromJson(encoded.getBytes(StandardCharsets.UTF_8), Model.class).equals(value));
+    Preconditions.checkArgument(
+        json.toJson(new DirectValueRecord("record-value")).equals("\"record-value\""));
+    Preconditions.checkArgument(
+        json.fromJson("\"decoded-record\"", DirectValueRecord.class)
+            .equals(new DirectValueRecord("decoded-record")));
+    Preconditions.checkArgument(json.toJson(DirectValueEnum.READY).equals("\"ready\""));
+    Preconditions.checkArgument(
+        json.fromJson("\"done\"", DirectValueEnum.class) == DirectValueEnum.DONE);
   }
 
   private static int countOccurrences(String value, String target) {
@@ -216,6 +225,39 @@ public final class ForyJsonNoProviderExample {
 
   @JsonType
   public record RecordValue(int rank, String text) {}
+
+  @JsonType
+  public record DirectValueRecord(@JsonValue String value) {
+    @JsonCreator
+    public DirectValueRecord {}
+  }
+
+  @JsonType
+  public enum DirectValueEnum {
+    READY("ready"),
+    DONE("done");
+
+    private final String value;
+
+    DirectValueEnum(String value) {
+      this.value = value;
+    }
+
+    @JsonValue
+    public String value() {
+      return value;
+    }
+
+    @JsonCreator
+    public static DirectValueEnum fromValue(String value) {
+      for (DirectValueEnum candidate : values()) {
+        if (candidate.value.equals(value)) {
+          return candidate;
+        }
+      }
+      throw new IllegalArgumentException("Unknown direct enum value " + value);
+    }
+  }
 
   @JsonType
   public static final class FactoryValue {

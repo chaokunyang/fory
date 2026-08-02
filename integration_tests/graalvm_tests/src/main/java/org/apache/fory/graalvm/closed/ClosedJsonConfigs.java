@@ -33,11 +33,28 @@ public final class ClosedJsonConfigs extends ClosedJsonConfigParent implements I
 }
 
 class ClosedJsonConfigParent {
+  public ForyJson aRestrictedConfiguration() {
+    return ForyJson.builder()
+        .writeNullFields(true)
+        .withPropertyNamingStrategy(PropertyNamingStrategy.SNAKE_CASE)
+        .registerCodec(CodegenProbeValue.class, new CodegenProbeCodec())
+        .withTypeChecker((className, context) -> false)
+        .build();
+  }
+
   public ForyJson generatedConfiguration() {
     return ForyJson.builder()
         .writeNullFields(true)
         .withPropertyNamingStrategy(PropertyNamingStrategy.SNAKE_CASE)
         .registerCodec(CodegenProbeValue.class, new CodegenProbeCodec())
         .build();
+  }
+
+  public ForyJson ignoredOverload(boolean ignored) {
+    throw new AssertionError("Provider overload must not be invoked");
+  }
+
+  public static ForyJson ignoredStaticMethod() {
+    throw new AssertionError("Static provider helper must not be invoked");
   }
 }

@@ -195,12 +195,6 @@ final class ForyJsonGraalVMFeature implements Feature {
     }
     boolean changed = false;
     for (Method method : methods) {
-      if (Modifier.isStatic(method.getModifiers()) || method.getParameterCount() != 0) {
-        throw providerFailure(
-            providerClass,
-            "method must be a non-static zero-argument instance method: " + method,
-            null);
-      }
       MethodHandle providerMethod = providerMethod(providerClass, method);
       ForyJson json;
       try {
@@ -247,6 +241,8 @@ final class ForyJsonGraalVMFeature implements Feature {
     for (Method method : providerClass.getMethods()) {
       if (method.isBridge()
           || method.isSynthetic()
+          || Modifier.isStatic(method.getModifiers())
+          || method.getParameterCount() != 0
           || method.getReturnType() != ForyJson.class) {
         continue;
       }
@@ -332,9 +328,18 @@ final class ForyJsonGraalVMFeature implements Feature {
     RuntimeReflection.register(type);
     registerContainer(type);
     registerDeclarations(type);
-    if (!type.isEnum()
-        && !Collection.class.isAssignableFrom(type)
-        && !Map.class.isAssignableFrom(type)) {
+    JsonCodec directTypeCodec = type.getDeclaredAnnotation(JsonCodec.class);
+    boolean hasTypeCodec =
+        directTypeCodec != null || hasInheritedTypeCodec(type, null);
+    boolean hasJsonValue =
+        (!hasTypeCodec || isCompleteTypeCodec(directTypeCodec))
+            && registerJsonValueDeclarations(access, type, null);
+    JsonSubTypes subTypes = type.getDeclaredAnnotation(JsonSubTypes.class);
+    boolean intrinsicType =
+        type.isEnum()
+            || Collection.class.isAssignableFrom(type)
+            || Map.class.isAssignableFrom(type);
+    if (!intrinsicType && !hasTypeCodec && !hasJsonValue && subTypes == null) {
       registerModelHierarchy(access, type);
       if (type.isRecord()) {
         prepareRecord(type);
@@ -345,7 +350,9 @@ final class ForyJsonGraalVMFeature implements Feature {
         }
       }
     }
-    registerSubtypes(access, type);
+    if (!hasTypeCodec && !hasJsonValue) {
+      registerSubtypes(access, type);
+    }
     return true;
   }
 

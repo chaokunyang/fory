@@ -216,8 +216,11 @@ public final class JsonSharedRegistry {
   private JsonSharedRegistry(
       JsonConfig config, ExecutorService compilationService, boolean hostedCodegen) {
     this.customCodecs = config.codecRegistry();
-    typeChecker = config.typeChecker();
-    typeCheckContext = config.typeCheckContext();
+    // Hosted compilation produces classes shared by configurations with the same source shape.
+    // Runtime type policy is intentionally not part of that shape and remains enforced by each
+    // runtime resolver before it installs a generated capability.
+    typeChecker = hostedCodegen ? null : config.typeChecker();
+    typeCheckContext = hostedCodegen ? null : config.typeCheckContext();
     typeCheckCache = typeChecker == null ? null : new ConcurrentHashMap<>();
     typeCheckCacheLock = typeChecker == null ? null : new Object();
     this.propertyDiscoveryEnabled = config.propertyDiscoveryEnabled();

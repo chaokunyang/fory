@@ -329,7 +329,6 @@ final class ForyJsonGraalVMFeature implements Feature {
     if (!processedModels.add(type)) {
       return false;
     }
-    GraalvmSupport.registerClass(type);
     RuntimeReflection.register(type);
     registerContainer(type);
     registerDeclarations(type);
@@ -368,7 +367,6 @@ final class ForyJsonGraalVMFeature implements Feature {
     registerDeclarations(targetType);
     JsonCodec directTypeCodec = annotations.annotation(targetType, JsonCodec.class);
     registerCodecs(directTypeCodec);
-    GraalvmSupport.registerClass(targetType);
     RuntimeReflection.register(targetType);
     registerContainer(targetType);
     boolean intrinsicTarget =
@@ -601,7 +599,6 @@ final class ForyJsonGraalVMFeature implements Feature {
   }
 
   private void registerCreator(Class<?> ownerType, Executable executable) {
-    GraalvmSupport.registerClass(executable.getDeclaringClass());
     RuntimeReflection.register(executable);
     JsonCreatorInfo.prepareNativeCreator(ownerType, executable);
   }

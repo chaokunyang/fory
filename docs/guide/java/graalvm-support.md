@@ -184,10 +184,10 @@ Child codecs act on one direct level. `elementCodec` supports `Collection`, Java
 `valueCodec` support Map keys and values. A complete `value` codec cannot be combined with a child
 codec.
 
-An annotation codec must have the same public no-argument constructor required on the JVM. In a
-named module, export or open its package to `org.apache.fory.json`. A codec instance supplied
-through `registerCodec` is constructed by the application and needs no annotation-constructor
-metadata.
+An annotation codec must have a public no-argument constructor. Fory prepares that constructor
+during Native Image construction, so application modules do not need to export or open the codec
+package. A codec instance supplied through `registerCodec` is constructed by the application and
+needs no annotation-constructor metadata.
 
 ## Basic Usage
 

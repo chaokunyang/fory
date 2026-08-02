@@ -504,6 +504,7 @@ class DecimalSerializer(Serializer):
     def __init__(self, type_resolver, type_):
         super().__init__(type_resolver, type_)
         self.need_to_write_ref = False
+        self.read_data_always_advances = True
 
     def write(self, write_context, value: decimal.Decimal):
         scale, unscaled = _decimal_parts(value)
@@ -1071,6 +1072,10 @@ class PythonNDArraySerializer(NDArraySerializer):
 
 
 class BytesSerializer(Serializer):
+    def __init__(self, type_resolver, type_):
+        super().__init__(type_resolver, type_)
+        self.read_data_always_advances = True
+
     def write(self, write_context, value):
         if write_context.buffer_callback is None:
             write_context.write_bytes_and_size(value)

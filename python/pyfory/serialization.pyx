@@ -118,6 +118,8 @@ cdef class Config:
             Mainly covers materialized collections, maps, arrays, structs, and objects. Leaf values
             are gated by unread input bytes instead, and actual process memory can be higher.
             Defaults to 128 MiB and must be a positive byte limit.
+        max_unbacked_container_items: Maximum repeated collection/map reads not backed
+            by input bytes per root. Defaults to 8192 and must be non-negative.
         field_nullable: Treats struct/dataclass fields as nullable by default.
         policy: Deserialization policy used for security-sensitive checks.
         meta_compressor: Optional typedef/meta compressor implementation.
@@ -135,6 +137,7 @@ cdef class Config:
     cdef public int32_t max_schema_versions_per_type
     cdef public int32_t max_average_schema_versions_per_type
     cdef public int64_t max_graph_memory_bytes
+    cdef public int64_t max_unbacked_container_items
     cdef public bint field_nullable
     cdef public object policy
     cdef public object meta_compressor
@@ -154,6 +157,7 @@ cdef class Config:
         max_schema_versions_per_type,
         max_average_schema_versions_per_type,
         max_graph_memory_bytes,
+        max_unbacked_container_items,
         field_nullable,
         policy,
         meta_compressor,
@@ -177,6 +181,8 @@ cdef class Config:
                 Mainly covers materialized collections, maps, arrays, structs, and objects. Leaf
                 values are gated by unread input bytes instead, and actual process memory can be
                 higher. Defaults to 128 MiB and must be a positive byte limit.
+            max_unbacked_container_items: Maximum repeated collection/map reads not backed
+                by input bytes per root. Defaults to 8192 and must be non-negative.
             field_nullable: Treat all struct fields as nullable by default.
             policy: Deserialization policy implementation.
             meta_compressor: Optional typedef/meta compressor.
@@ -202,11 +208,18 @@ cdef class Config:
             or max_graph_memory_bytes > 9223372036854775807
         ):
             raise ValueError("max_graph_memory_bytes must be in range [1, 9223372036854775807]")
+        if (
+            not isinstance(max_unbacked_container_items, int)
+            or max_unbacked_container_items < 0
+            or max_unbacked_container_items > 9223372036854775807
+        ):
+            raise ValueError("max_unbacked_container_items must be in range [0, 9223372036854775807]")
         self.max_type_fields = max_type_fields
         self.max_type_meta_bytes = max_type_meta_bytes
         self.max_schema_versions_per_type = max_schema_versions_per_type
         self.max_average_schema_versions_per_type = max_average_schema_versions_per_type
         self.max_graph_memory_bytes = max_graph_memory_bytes
+        self.max_unbacked_container_items = max_unbacked_container_items
         self.field_nullable = field_nullable
         self.policy = policy
         self.meta_compressor = meta_compressor
@@ -741,6 +754,7 @@ cdef class Serializer:
     cdef readonly TypeResolver type_resolver
     cdef readonly object type_
     cdef public bint need_to_write_ref
+    cdef public bint read_data_always_advances
 
     def __init__(self, TypeResolver type_resolver, type_):
         """
@@ -754,6 +768,7 @@ cdef class Serializer:
         type_ = normalize_fory_type(type_)
         self.type_ = type_
         self.need_to_write_ref = self.type_resolver.track_ref and not _is_primitive_type(type_)
+        self.read_data_always_advances = False
 
     cpdef write(self, WriteContext write_context, value):
         raise NotImplementedError(f"write method not implemented in {type(self)}")
@@ -765,6 +780,12 @@ cdef class Serializer:
     @classmethod
     def support_subclass(cls) -> bool:
         return False
+
+
+cdef class _PrimitiveSerializer(Serializer):
+    def __init__(self, type_resolver, type_):
+        super().__init__(type_resolver, type_)
+        self.read_data_always_advances = True
 
 
 @cython.final
@@ -781,6 +802,7 @@ cdef class EnumSerializer(Serializer):
         cdef uint32_t wire_value
         super().__init__(type_resolver, type_)
         self.need_to_write_ref = False
+        self.read_data_always_advances = True
         self._members = tuple(type_)
         self._wire_value_by_member = {member: idx for idx, member in enumerate(self._members)}
         self._member_by_wire_value = {idx: member for idx, member in enumerate(self._members)}
@@ -822,6 +844,10 @@ cdef class EnumSerializer(Serializer):
 
 @cython.final
 cdef class SliceSerializer(Serializer):
+    def __init__(self, type_resolver, type_):
+        super().__init__(type_resolver, type_)
+        self.read_data_always_advances = True
+
     cpdef inline write(self, WriteContext write_context, v):
         cdef slice value = v
         start, stop, step = value.start, value.stop, value.step
@@ -940,6 +966,7 @@ cdef class Fory:
     cdef public bint field_nullable
     cdef public int32_t max_depth
     cdef public int64_t max_graph_memory_bytes
+    cdef public int64_t max_unbacked_container_items
     cdef public object policy
     cdef public Config config
     cdef public TypeResolver type_resolver
@@ -959,6 +986,7 @@ cdef class Fory:
         max_schema_versions_per_type=10,
         max_average_schema_versions_per_type=3,
         max_graph_memory_bytes=128 * 1024 * 1024,
+        max_unbacked_container_items=8192,
         policy=None,
         field_nullable=False,
         meta_compressor=None,
@@ -981,6 +1009,8 @@ cdef class Fory:
                 Mainly covers materialized collections, maps, arrays, structs, and objects. Leaf
                 values are gated by unread input bytes instead, and actual process memory can be
                 higher. Defaults to 128 MiB and must be a positive byte limit.
+            max_unbacked_container_items: Maximum repeated collection/map reads not backed
+                by input bytes per root. Defaults to 8192 and must be non-negative.
             policy: Optional deserialization policy implementation.
             field_nullable: Treat struct fields as nullable by default.
             meta_compressor: Optional typedef/meta compressor implementation.
@@ -1004,7 +1034,14 @@ cdef class Fory:
             or max_graph_memory_bytes > 9223372036854775807
         ):
             raise ValueError("max_graph_memory_bytes must be in range [1, 9223372036854775807]")
+        if (
+            not isinstance(max_unbacked_container_items, int)
+            or max_unbacked_container_items < 0
+            or max_unbacked_container_items > 9223372036854775807
+        ):
+            raise ValueError("max_unbacked_container_items must be in range [0, 9223372036854775807]")
         self.max_graph_memory_bytes = max_graph_memory_bytes
+        self.max_unbacked_container_items = max_unbacked_container_items
         self.config = Config(
             xlang=xlang,
             track_ref=ref,
@@ -1018,6 +1055,7 @@ cdef class Fory:
             max_schema_versions_per_type=max_schema_versions_per_type,
             max_average_schema_versions_per_type=max_average_schema_versions_per_type,
             max_graph_memory_bytes=max_graph_memory_bytes,
+            max_unbacked_container_items=max_unbacked_container_items,
             field_nullable=field_nullable,
             policy=self.policy,
             meta_compressor=meta_compressor,
@@ -1200,6 +1238,7 @@ cdef class Fory:
         )
         read_context.peer_out_of_band_enabled = peer_out_of_band_enabled
         read_context.remaining_graph_memory_bytes = self.max_graph_memory_bytes
+        read_context.remaining_unbacked_container_items = self.max_unbacked_container_items
         read_context.depth = 0
         return read_context.read_ref()
 

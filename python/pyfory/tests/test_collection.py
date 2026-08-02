@@ -28,6 +28,42 @@ import pyfory
 from pyfory.collection import KEY_DECL_TYPE, VALUE_DECL_TYPE
 
 
+class EmptyValue:
+    pass
+
+
+class EmptyValueSerializer(pyfory.Serializer):
+    def write(self, write_context, value):
+        pass
+
+    def read(self, read_context):
+        return EmptyValue()
+
+
+@dataclass
+class EmptyStruct:
+    pass
+
+
+@dataclass
+class AdvancingStruct:
+    value: pyfory.Int32
+
+
+def _empty_value_fory(limit):
+    fory = pyfory.Fory(
+        xlang=True,
+        compatible=False,
+        max_unbacked_container_items=limit,
+    )
+    fory.register_type(
+        EmptyValue,
+        name="test.EmptyValue",
+        serializer=EmptyValueSerializer(fory.type_resolver, EmptyValue),
+    )
+    return fory
+
+
 class TestListWithNone:
     """Test list serialization with None elements."""
 
@@ -409,3 +445,67 @@ def test_invalid_map_chunk_size(chunk_size):
             serializer.read(fory.read_context)
     finally:
         fory.reset_read()
+
+
+def test_unbacked_collection_budget():
+    fory = _empty_value_fory(2)
+    rejected = fory.serialize([EmptyValue(), EmptyValue(), EmptyValue()])
+    accepted = fory.serialize([EmptyValue(), EmptyValue()])
+
+    with pytest.raises(ValueError):
+        fory.deserialize(rejected)
+    assert len(fory.deserialize(accepted)) == 2
+
+
+def test_custom_serializer_progress_default():
+    fory = pyfory.Fory(xlang=True, compatible=False)
+    serializer = EmptyValueSerializer(fory.type_resolver, int)
+    assert not serializer.read_data_always_advances
+
+
+def test_unbacked_collection_tail():
+    fory = _empty_value_fory(1024)
+    data = fory.serialize([EmptyValue() for _ in range(1025)])
+    with pytest.raises(ValueError):
+        fory.deserialize(data)
+
+
+def test_unbacked_map_budget():
+    fory = _empty_value_fory(2)
+    data = fory.serialize(
+        {
+            EmptyValue(): EmptyValue(),
+            EmptyValue(): EmptyValue(),
+            EmptyValue(): EmptyValue(),
+        }
+    )
+    with pytest.raises(ValueError):
+        fory.deserialize(data)
+
+
+def test_generated_struct_progress():
+    empty_fory = pyfory.Fory(
+        xlang=True,
+        compatible=True,
+        max_unbacked_container_items=2,
+    )
+    empty_fory.register_type(EmptyStruct, name="test.EmptyStruct")
+    empty_data = empty_fory.serialize([EmptyStruct(), EmptyStruct(), EmptyStruct()])
+    with pytest.raises(ValueError):
+        empty_fory.deserialize(empty_data)
+
+    advancing_fory = pyfory.Fory(
+        xlang=True,
+        compatible=True,
+        max_unbacked_container_items=0,
+    )
+    advancing_fory.register_type(AdvancingStruct, name="test.AdvancingStruct")
+    values = [AdvancingStruct(1), AdvancingStruct(2), AdvancingStruct(3)]
+    assert advancing_fory.deserialize(advancing_fory.serialize(values)) == values
+
+
+def test_unbacked_budget_config():
+    assert pyfory.Fory().max_unbacked_container_items == 8192
+    assert pyfory.Fory(max_unbacked_container_items=0).max_unbacked_container_items == 0
+    with pytest.raises(ValueError):
+        pyfory.Fory(max_unbacked_container_items=-1)

@@ -805,6 +805,8 @@ cdef class ReadContext:
     cdef readonly int32_t max_depth
     cdef int64_t max_graph_memory_bytes
     cdef int64_t remaining_graph_memory_bytes
+    cdef int64_t max_unbacked_container_items
+    cdef int64_t remaining_unbacked_container_items
     cdef readonly RefReader ref_reader
     cdef readonly MetaStringReader meta_string_reader
     cdef readonly MetaShareReadContext meta_share_context
@@ -827,6 +829,8 @@ cdef class ReadContext:
         self.max_depth = config.max_depth
         self.max_graph_memory_bytes = config.max_graph_memory_bytes
         self.remaining_graph_memory_bytes = 0
+        self.max_unbacked_container_items = config.max_unbacked_container_items
+        self.remaining_unbacked_container_items = 0
         self.ref_reader = RefReader(self.track_ref)
         self.meta_string_reader = MetaStringReader(self.type_resolver.shared_registry)
         self.meta_share_context = MetaShareReadContext() if config.scoped_meta_share_enabled else None
@@ -851,6 +855,7 @@ cdef class ReadContext:
         self.unsupported_objects = iter(unsupported_objects) if unsupported_objects is not None else None
         self.peer_out_of_band_enabled = peer_out_of_band_enabled
         self.remaining_graph_memory_bytes = self.max_graph_memory_bytes
+        self.remaining_unbacked_container_items = self.max_unbacked_container_items
         self.depth = 0
 
     cpdef inline reset(self):
@@ -867,6 +872,7 @@ cdef class ReadContext:
         self.unsupported_objects = None
         self.peer_out_of_band_enabled = False
         self.remaining_graph_memory_bytes = 0
+        self.remaining_unbacked_container_items = 0
         self.depth = 0
         if buffer is not None:
             buffer.shrink_input_buffer()
@@ -894,6 +900,28 @@ cdef class ReadContext:
         if num_bytes > _MAX_GRAPH_MEMORY_BYTES:
             raise ValueError("Estimated graph memory overflow")
         self.reserve_graph_memory_c(<int64_t>num_bytes)
+
+    cdef void _raise_unbacked_container_items(self, int64_t num_items, int64_t remaining):
+        cdef int64_t used
+        if num_items < 0:
+            raise ValueError("Unbacked container item count is negative")
+        used = self.max_unbacked_container_items - remaining
+        raise ValueError(
+            f"Unbacked container item budget exceeded: requested {num_items} items, "
+            f"used {used} items, limit {self.max_unbacked_container_items} items. "
+            "Increase Fory(..., max_unbacked_container_items=...) for trusted larger payloads."
+        )
+
+    cdef inline void reserve_unbacked_container_items_c(self, int64_t num_items):
+        cdef int64_t remaining = self.remaining_unbacked_container_items
+        if num_items < 0 or num_items > remaining:
+            self._raise_unbacked_container_items(num_items, remaining)
+        self.remaining_unbacked_container_items = remaining - num_items
+
+    cpdef inline reserve_unbacked_container_items(self, num_items):
+        if not isinstance(num_items, int) or num_items < 0 or num_items > 9223372036854775807:
+            raise ValueError("Unbacked container item count must be in int64 range")
+        self.reserve_unbacked_container_items_c(<int64_t>num_items)
 
     cpdef inline add_context_object(self, key, obj):
         self.context_objects[id(key)] = obj

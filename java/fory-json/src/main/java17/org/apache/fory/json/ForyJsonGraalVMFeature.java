@@ -61,6 +61,7 @@ import org.apache.fory.json.annotation.JsonValue;
 import org.apache.fory.json.codec.Base64ByteArrayCodec;
 import org.apache.fory.json.codec.ObjectCodec;
 import org.apache.fory.json.codec.ScalarCodecs;
+import org.apache.fory.json.meta.JsonCreatorInfo;
 import org.apache.fory.json.meta.JsonFieldAccessor;
 import org.apache.fory.json.resolver.JsonSharedRegistry;
 import org.apache.fory.json.resolver.JsonSharedRegistry.JsonMixinView;
@@ -90,6 +91,7 @@ final class ForyJsonGraalVMFeature implements Feature {
   private final Set<Class<?>> processedProviders = ConcurrentHashMap.newKeySet();
   private final Set<Class<?>> processedCodecs = ConcurrentHashMap.newKeySet();
   private final Set<Class<?>> processedContainers = ConcurrentHashMap.newKeySet();
+  private final Set<Executable> processedCreators = new LinkedHashSet<>();
   // JsonCodegenKey stays loader-free so runtime configurations can reproduce it. Hosted resolvers
   // remain loader-specific, while JsonGeneratedClassRegistry merges their generated capabilities.
   private final Map<JsonCodegenKey, ArrayList<HostedConfiguration>> hostedConfigurations =
@@ -490,12 +492,12 @@ final class ForyJsonGraalVMFeature implements Feature {
     }
     for (Constructor<?> constructor : type.getDeclaredConstructors()) {
       if (annotation(annotations, constructor, JsonCreator.class) != null) {
-        registerCreator(constructor);
+        registerCreator(type, constructor);
       }
     }
     for (Method method : type.getDeclaredMethods()) {
       if (annotation(annotations, method, JsonCreator.class) != null) {
-        registerCreator(method);
+        registerCreator(type, method);
       }
     }
     return true;
@@ -519,6 +521,7 @@ final class ForyJsonGraalVMFeature implements Feature {
   public void afterAnalysis(AfterAnalysisAccess access) {
     JsonGeneratedClassRegistry.freeze();
     JsonFieldAccessor.freezeNativeAccessors();
+    JsonCreatorInfo.freezeNativeCreators();
     ObjectCodec.freezeNativeAnySetters();
   }
 
@@ -587,7 +590,7 @@ final class ForyJsonGraalVMFeature implements Feature {
     }
     for (Constructor<?> constructor : type.getDeclaredConstructors()) {
       if (annotation(annotations, constructor, JsonCreator.class) != null) {
-        registerCreator(constructor);
+        registerCreator(type, constructor);
         registerParameterCodecs(annotations, constructor.getParameters());
         registerResolvedParameterTypes(ownerType, constructor.getParameters());
         registerUnwrappedParameters(
@@ -596,7 +599,7 @@ final class ForyJsonGraalVMFeature implements Feature {
     }
     for (Method method : type.getDeclaredMethods()) {
       if (annotation(annotations, method, JsonCreator.class) != null) {
-        registerCreator(method);
+        registerCreator(type, method);
         registerParameterCodecs(annotations, method.getParameters());
         registerResolvedParameterTypes(ownerType, method.getParameters());
         registerUnwrappedParameters(access, ownerType, annotations, method.getParameters());
@@ -611,11 +614,14 @@ final class ForyJsonGraalVMFeature implements Feature {
       JsonFieldAccessor.prepareGetter(component.getAccessor());
     }
     Constructor<?> constructor = RecordUtils.getRecordConstructor(type).f0;
-    registerCreator(constructor);
+    registerCreator(type, constructor);
   }
 
-  private void registerCreator(Executable executable) {
-    RuntimeReflection.register(executable);
+  private void registerCreator(Class<?> ownerType, Executable executable) {
+    if (processedCreators.add(executable)) {
+      RuntimeReflection.register(executable);
+      JsonCreatorInfo.prepareNativeCreator(ownerType, executable);
+    }
   }
 
   private static void prepareMethodAccessors(JsonMixinView annotations, Method method) {

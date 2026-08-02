@@ -20,20 +20,24 @@
 package org.apache.fory.json.meta;
 
 import java.lang.invoke.MethodHandle;
+import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodType;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Executable;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.Map;
 import org.apache.fory.annotation.Internal;
 import org.apache.fory.json.ForyJsonException;
 import org.apache.fory.json.codec.GeneratedJsonCodec;
 import org.apache.fory.json.resolver.JsonTypeResolver;
 import org.apache.fory.platform.AndroidSupport;
 import org.apache.fory.platform.GraalvmSupport;
+import org.apache.fory.platform.JdkVersion;
 import org.apache.fory.platform.internal._JDKAccess;
-import org.apache.fory.util.ExceptionUtils;
 
 /**
  * Immutable ordered construction metadata for one JSON object codec.
@@ -46,16 +50,11 @@ import org.apache.fory.util.ExceptionUtils;
  */
 @Internal
 public final class JsonCreatorInfo {
-  private static final MethodHandle NATIVE_CONSTRUCTOR_INVOKER =
-      prepareNativeInvoker(
-          Constructor.class,
-          "newInstanceWithCaller",
-          MethodType.methodType(Object.class, Object[].class, boolean.class, Class.class));
-  private static final MethodHandle NATIVE_FACTORY_INVOKER =
-      prepareNativeInvoker(
-          Method.class,
-          "invoke",
-          MethodType.methodType(Object.class, Object.class, Object[].class, Class.class));
+  private static final MethodHandle CONSTRUCTOR_REFLECTION_INVOKER =
+      prepareConstructorReflectionInvoker();
+  private static Map<Executable, MethodHandle> nativeInvokers = new HashMap<>();
+  private static Map<Executable, MethodHandle> nativeStringInvokers = new HashMap<>();
+  private static boolean nativeCreatorsFrozen;
 
   private final Class<?> ownerType;
   private final Executable executable;
@@ -77,7 +76,7 @@ public final class JsonCreatorInfo {
     this.defaults = defaults;
     this.generatedCodec = generatedCodec;
     invoker =
-        generatedCodec == null && !GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE
+        generatedCodec == null
             ? buildInvoker(ownerType, executable, executable.getParameterCount())
             : null;
     hashes = new long[fields.length];
@@ -130,17 +129,15 @@ public final class JsonCreatorInfo {
       return invoke(arguments);
     }
     try {
-      Object value;
-      if (executable instanceof Constructor) {
-        value = invokeConstructor((Constructor<?>) executable, arguments);
-      } else {
-        value = invokeFactory((Method) executable, arguments);
-      }
+      Object value =
+          executable instanceof Constructor
+              ? ((Constructor<?>) executable).newInstance(arguments)
+              : ((Method) executable).invoke(null, arguments);
       return requireResult(value);
-    } catch (Throwable cause) {
-      if (cause instanceof InvocationTargetException) {
-        cause = cause.getCause();
-      }
+    } catch (InstantiationException | IllegalAccessException e) {
+      throw new ForyJsonException("Failed to invoke JSON creator for " + ownerType.getName(), e);
+    } catch (InvocationTargetException e) {
+      Throwable cause = e.getCause();
       if (cause instanceof Error) {
         throw (Error) cause;
       }
@@ -153,12 +150,22 @@ public final class JsonCreatorInfo {
     try {
       value = (Object) invoker.invokeExact(arguments);
     } catch (Throwable cause) {
+      cause = creatorCause(cause);
       if (cause instanceof Error) {
         throw (Error) cause;
       }
       throw new ForyJsonException("JSON creator failed for " + ownerType.getName(), cause);
     }
     return requireResult(value);
+  }
+
+  private Throwable creatorCause(Throwable cause) {
+    return GraalvmSupport.isGraalRuntime()
+            && JdkVersion.MAJOR_VERSION >= 25
+            && executable instanceof Constructor
+            && cause instanceof InvocationTargetException
+        ? cause.getCause()
+        : cause;
   }
 
   private Object requireResult(Object value) {
@@ -177,6 +184,13 @@ public final class JsonCreatorInfo {
       executable.setAccessible(true);
       return null;
     }
+    if (GraalvmSupport.isGraalRuntime()) {
+      MethodHandle invoker = nativeInvokers.get(executable);
+      if (invoker == null) {
+        throw missingNativeCreator(executable);
+      }
+      return invoker;
+    }
     MethodHandle target = creatorTarget(ownerType, executable);
     // The interpreted reader already owns one trusted fixed-size argument array. Spread that
     // exact array into the creator without a second carrier or per-call reflective access check.
@@ -188,59 +202,94 @@ public final class JsonCreatorInfo {
   /** Returns the one-String-argument creator used by a JsonValue representation. */
   @Internal
   public static MethodHandle stringCreatorHandle(Class<?> ownerType, Executable executable) {
+    if (GraalvmSupport.isGraalRuntime()) {
+      MethodHandle invoker = nativeStringInvokers.get(executable);
+      if (invoker == null) {
+        throw missingNativeCreator(executable);
+      }
+      return invoker;
+    }
     return creatorTarget(ownerType, executable)
         .asType(MethodType.methodType(Object.class, String.class));
   }
 
-  /** Invokes a creator constructor using the prepared Native Image access path when required. */
+  /** Prepares the exact Native Image runtime handle for one registered creator. */
   @Internal
-  public static Object invokeConstructor(Constructor<?> constructor, Object[] arguments) {
-    if (!GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE) {
-      try {
-        return constructor.newInstance(arguments);
-      } catch (Throwable e) {
-        throw ExceptionUtils.throwException(e);
-      }
+  public static synchronized void prepareNativeCreator(Class<?> ownerType, Executable executable) {
+    if (!GraalvmSupport.isGraalBuildTime() || nativeCreatorsFrozen) {
+      throw new IllegalStateException("Fory JSON native creator cache is not writable");
     }
-    try {
-      // Creator validation already requires a public executable. Checking access as the declaring
-      // class preserves that contract without requiring its package to be exported or open.
-      Class<?> caller = constructor.getDeclaringClass();
-      return (Object) NATIVE_CONSTRUCTOR_INVOKER.invokeExact(constructor, arguments, true, caller);
-    } catch (Throwable e) {
-      throw ExceptionUtils.throwException(e);
+    MethodHandle target;
+    MethodHandle invoker;
+    if (executable instanceof Constructor && JdkVersion.MAJOR_VERSION >= 25) {
+      target = constructorReflectionTarget(ownerType, (Constructor<?>) executable);
+      invoker = target;
+    } else {
+      target = creatorTarget(ownerType, executable);
+      invoker =
+          target
+              .asSpreader(Object[].class, executable.getParameterCount())
+              .asType(MethodType.methodType(Object.class, Object[].class));
+    }
+    nativeInvokers.putIfAbsent(executable, invoker);
+    if (executable.getParameterCount() == 1 && executable.getParameterTypes()[0] == String.class) {
+      if (!(executable instanceof Constructor) || JdkVersion.MAJOR_VERSION < 25) {
+        nativeStringInvokers.putIfAbsent(
+            executable, target.asType(MethodType.methodType(Object.class, String.class)));
+      }
     }
   }
 
-  /** Invokes a static creator method using the prepared Native Image access path when required. */
+  /** Freezes all Native Image creator handles after hosted analysis. */
   @Internal
-  public static Object invokeFactory(Method factory, Object[] arguments) {
-    if (!GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE) {
-      try {
-        return factory.invoke(null, arguments);
-      } catch (Throwable e) {
-        throw ExceptionUtils.throwException(e);
-      }
+  public static synchronized void freezeNativeCreators() {
+    if (nativeCreatorsFrozen) {
+      return;
     }
-    try {
-      // Method.invoke is caller-sensitive; use the declaring class for the same module-access
-      // contract as constructor invocation above.
-      Class<?> caller = factory.getDeclaringClass();
-      return (Object) NATIVE_FACTORY_INVOKER.invokeExact(factory, (Object) null, arguments, caller);
-    } catch (Throwable e) {
-      throw ExceptionUtils.throwException(e);
-    }
+    nativeInvokers = immutable(nativeInvokers);
+    nativeStringInvokers = immutable(nativeStringInvokers);
+    nativeCreatorsFrozen = true;
   }
 
-  private static MethodHandle prepareNativeInvoker(
-      Class<?> ownerType, String name, MethodType methodType) {
-    if (!GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE) {
+  private static Map<Executable, MethodHandle> immutable(Map<Executable, MethodHandle> invokers) {
+    return invokers.isEmpty()
+        ? Collections.emptyMap()
+        : Collections.unmodifiableMap(new HashMap<>(invokers));
+  }
+
+  private static ForyJsonException missingNativeCreator(Executable executable) {
+    return new ForyJsonException(
+        "Missing Native Image Fory JSON creator metadata for " + executable);
+  }
+
+  /** Returns the prepared array-argument creator used by GraalVM 25 constructors. */
+  @Internal
+  public static MethodHandle arrayCreatorHandle(Class<?> ownerType, Executable executable) {
+    return buildInvoker(ownerType, executable, executable.getParameterCount());
+  }
+
+  private static MethodHandle constructorReflectionTarget(
+      Class<?> ownerType, Constructor<?> constructor) {
+    return MethodHandles.insertArguments(
+        CONSTRUCTOR_REFLECTION_INVOKER.bindTo(constructor), 1, true, ownerType);
+  }
+
+  private static MethodHandle prepareConstructorReflectionInvoker() {
+    if (!GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE || JdkVersion.MAJOR_VERSION < 25) {
       return null;
     }
     try {
-      return _JDKAccess._trustedLookup(ownerType).findVirtual(ownerType, name, methodType);
+      // GraalVM 25 implements direct constructor MethodHandles through a reflection bridge whose
+      // synthetic caller cannot access concealed model packages. Preserve the executable's normal
+      // public access contract by supplying its declaring class as the caller. The resulting
+      // per-executable handle is prepared at image build time and performs no runtime lookup.
+      return _JDKAccess._trustedLookup(Constructor.class)
+          .findVirtual(
+              Constructor.class,
+              "newInstanceWithCaller",
+              MethodType.methodType(Object.class, Object[].class, boolean.class, Class.class));
     } catch (NoSuchMethodException | IllegalAccessException e) {
-      throw new ForyJsonException("Cannot prepare Native Image JSON creator invocation", e);
+      throw new ForyJsonException("Cannot prepare GraalVM 25 JSON constructor invocation", e);
     }
   }
 

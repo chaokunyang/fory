@@ -21,6 +21,7 @@ package org.apache.fory.graalvm.closed;
 
 import org.apache.fory.graalvm.ForyJsonExample.CodegenProbeCodec;
 import org.apache.fory.graalvm.ForyJsonExample.CodegenProbeValue;
+import org.apache.fory.graalvm.ForyJsonExample.CoreCompileStateMixin;
 import org.apache.fory.graalvm.ForyJsonExample.InheritedJsonConfig;
 import org.apache.fory.json.ForyJson;
 import org.apache.fory.json.PropertyNamingStrategy;
@@ -38,6 +39,7 @@ class ClosedJsonConfigParent {
         .writeNullFields(true)
         .withPropertyNamingStrategy(PropertyNamingStrategy.SNAKE_CASE)
         .registerCodec(CodegenProbeValue.class, new CodegenProbeCodec())
+        .registerMixin(CoreCompileStateMixin.class)
         .withTypeChecker((className, context) -> false)
         .build();
   }
@@ -47,6 +49,7 @@ class ClosedJsonConfigParent {
         .writeNullFields(true)
         .withPropertyNamingStrategy(PropertyNamingStrategy.SNAKE_CASE)
         .registerCodec(CodegenProbeValue.class, new CodegenProbeCodec())
+        .registerMixin(CoreCompileStateMixin.class)
         .build();
   }
 

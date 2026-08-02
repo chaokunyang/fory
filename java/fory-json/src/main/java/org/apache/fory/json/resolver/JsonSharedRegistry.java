@@ -252,7 +252,10 @@ public final class JsonSharedRegistry {
     this.hostedCodegen = hostedCodegen;
     boolean createCompiler =
         codegenEnabled && (hostedCodegen || !GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE);
-    codegen = createCompiler ? new JsonCodegen(config.getCodegenHash(), classLoader) : null;
+    codegen =
+        createCompiler
+            ? new JsonCodegen(config.getCodegenHash(), classLoader, hostedCodegen)
+            : null;
     nativeCodegenKey =
         codegenEnabled && GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE ? config.codegenKey() : null;
     asyncCompilationEnabled = createCompiler && !hostedCodegen && config.asyncCompilationEnabled();

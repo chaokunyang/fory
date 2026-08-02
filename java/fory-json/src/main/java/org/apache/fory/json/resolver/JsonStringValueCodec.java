@@ -148,11 +148,6 @@ final class JsonStringValueCodec implements JsonValueCodec<Object> {
       return result;
     }
 
-    final ForyJsonException invocationFailure(Throwable cause) {
-      return new ForyJsonException(
-          "Failed to invoke JSON creator for " + ownerType.getName(), cause);
-    }
-
     final ForyJsonException creatorFailure(Throwable cause) {
       if (cause instanceof Error) {
         throw (Error) cause;
@@ -165,14 +160,10 @@ final class JsonStringValueCodec implements JsonValueCodec<Object> {
       if (generatedCodec != null) {
         return new GeneratedCreator(ownerType, generatedCodec);
       }
-      if (GraalvmSupport.isGraalBuildTime()) {
+      if (GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE) {
         return executable instanceof Constructor
             ? new ConstructorCreator(ownerType, (Constructor<?>) executable)
             : new FactoryCreator(ownerType, (Method) executable);
-      }
-      Constructor<?> nativeConstructor = JsonCreatorInfo.nativeConstructor(executable);
-      if (nativeConstructor != null) {
-        return new ConstructorCreator(ownerType, nativeConstructor);
       }
       if (!AndroidSupport.IS_ANDROID) {
         return new MethodHandleCreator(ownerType, buildInvoker(ownerType, executable));
@@ -236,11 +227,9 @@ final class JsonStringValueCodec implements JsonValueCodec<Object> {
     @Override
     Object create(String value) {
       try {
-        return requireResult(constructor.newInstance(value));
-      } catch (InstantiationException | IllegalAccessException e) {
-        throw invocationFailure(e);
-      } catch (InvocationTargetException e) {
-        throw creatorFailure(e.getCause());
+        return requireResult(JsonCreatorInfo.invokeConstructor(constructor, new Object[] {value}));
+      } catch (Throwable cause) {
+        throw creatorFailure(cause instanceof InvocationTargetException ? cause.getCause() : cause);
       }
     }
   }
@@ -256,11 +245,9 @@ final class JsonStringValueCodec implements JsonValueCodec<Object> {
     @Override
     Object create(String value) {
       try {
-        return requireResult(factory.invoke(null, value));
-      } catch (IllegalAccessException e) {
-        throw invocationFailure(e);
-      } catch (InvocationTargetException e) {
-        throw creatorFailure(e.getCause());
+        return requireResult(JsonCreatorInfo.invokeFactory(factory, new Object[] {value}));
+      } catch (Throwable cause) {
+        throw creatorFailure(cause instanceof InvocationTargetException ? cause.getCause() : cause);
       }
     }
   }

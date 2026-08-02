@@ -37,6 +37,8 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.atomic.AtomicReferenceArray;
+import java.util.concurrent.locks.Lock;
+import org.apache.fory.codegen.CompileState;
 import org.apache.fory.graalvm.closed.ClosedJsonConfigs;
 import org.apache.fory.graalvm.closed.ClosedJsonRecord;
 import org.apache.fory.json.ForyJson;
@@ -46,6 +48,7 @@ import org.apache.fory.json.annotation.JsonAnyProperty;
 import org.apache.fory.json.annotation.JsonBase64;
 import org.apache.fory.json.annotation.JsonCodec;
 import org.apache.fory.json.annotation.JsonCreator;
+import org.apache.fory.json.annotation.JsonIgnore;
 import org.apache.fory.json.annotation.JsonMixin;
 import org.apache.fory.json.annotation.JsonProperty;
 import org.apache.fory.json.annotation.JsonPropertyOrder;
@@ -129,6 +132,8 @@ public final class ForyJsonExample {
             .registerCodec(CodegenProbeValue.class, new CodegenProbeCodec())
             .build(),
         false);
+    testIndependentChildCodegen();
+    testExternalModuleMixin();
   }
 
   private static ForyJson newProviderJson() {
@@ -136,11 +141,12 @@ public final class ForyJsonExample {
         .writeNullFields(true)
         .withPropertyNamingStrategy(PropertyNamingStrategy.SNAKE_CASE)
         .registerCodec(CodegenProbeValue.class, new CodegenProbeCodec())
+        .registerMixin(CoreCompileStateMixin.class)
         .build();
   }
 
   private static void exerciseCodegenConfiguration(ForyJson json, boolean generated) {
-    CodegenProbeCodec.expectGenerated = generated;
+    CodegenProbeCodec.expect(CodegenProbeModel.class, generated);
     CodegenProbeModel value = new CodegenProbeModel();
     value.id = 41;
     value.probe = new CodegenProbeValue("probe");
@@ -174,10 +180,42 @@ public final class ForyJsonExample {
   }
 
   private static void testClosedPackage() {
-    ForyJson json = ForyJson.builder().build();
     ClosedJsonRecord value = new ClosedJsonRecord(17, "closed");
+    ForyJson interpreted = ForyJson.builder().build();
+    String interpretedJson = interpreted.toJson(value);
+    Preconditions.checkArgument(
+        interpreted.fromJson(interpretedJson, ClosedJsonRecord.class).equals(value));
+
+    ForyJson generated = newProviderJson();
+    String generatedJson = generated.toJson(value);
+    Preconditions.checkArgument(
+        generated.fromJson(generatedJson, ClosedJsonRecord.class).equals(value));
+  }
+
+  private static void testIndependentChildCodegen() {
+    CodegenProbeCodec.expect(PublicChild.class, true);
+    ForyJson json = newProviderJson();
+    PackagePrivateOwner value = new PackagePrivateOwner();
+    value.child.name = "child";
+    value.child.probe = new CodegenProbeValue("probe");
     String encoded = json.toJson(value);
-    Preconditions.checkArgument(json.fromJson(encoded, ClosedJsonRecord.class).equals(value));
+    Preconditions.checkArgument(
+        json.fromJson(encoded, PackagePrivateOwner.class).child.name.equals("child"));
+    String utf16 = encoded.replace(":\"probe\"", ":\"你\"");
+    Preconditions.checkArgument(
+        json.fromJson(utf16, PackagePrivateOwner.class).child.probe.value.equals("你"));
+    byte[] utf8 = json.toJsonBytes(value);
+    Preconditions.checkArgument(
+        json.fromJson(utf8, PackagePrivateOwner.class).child.probe.value.equals("probe"));
+  }
+
+  private static void testExternalModuleMixin() {
+    ForyJson json = newProviderJson();
+    CompileState value = new CompileState();
+    value.finished = true;
+    String encoded = json.toJson(value);
+    Preconditions.checkArgument(encoded.equals("{\"finished\":true}"));
+    Preconditions.checkArgument(json.fromJson(encoded, CompileState.class).finished);
   }
 
   private static void testMixin() {
@@ -496,57 +534,43 @@ public final class ForyJsonExample {
   }
 
   public static final class CodegenProbeCodec implements JsonValueCodec<CodegenProbeValue> {
+    private static Class<?> expectedType;
     private static boolean expectGenerated;
 
     public CodegenProbeCodec() {}
 
+    private static void expect(Class<?> type, boolean generated) {
+      expectedType = type;
+      expectGenerated = generated;
+    }
+
     @Override
     public void writeString(StringJsonWriter writer, CodegenProbeValue value) {
-      checkCapability(
-          writer
-              .typeResolver()
-              .getTypeInfo(CodegenProbeModel.class, CodegenProbeModel.class)
-              .stringWriter());
+      checkCapability(writer.typeResolver().getTypeInfo(expectedType, expectedType).stringWriter());
       writer.writeString(value == null ? null : value.value);
     }
 
     @Override
     public void writeUtf8(Utf8JsonWriter writer, CodegenProbeValue value) {
-      checkCapability(
-          writer
-              .typeResolver()
-              .getTypeInfo(CodegenProbeModel.class, CodegenProbeModel.class)
-              .utf8Writer());
+      checkCapability(writer.typeResolver().getTypeInfo(expectedType, expectedType).utf8Writer());
       writer.writeString(value == null ? null : value.value);
     }
 
     @Override
     public CodegenProbeValue readLatin1(Latin1JsonReader reader) {
-      checkCapability(
-          reader
-              .typeResolver()
-              .getTypeInfo(CodegenProbeModel.class, CodegenProbeModel.class)
-              .latin1Reader());
+      checkCapability(reader.typeResolver().getTypeInfo(expectedType, expectedType).latin1Reader());
       return reader.tryReadNullToken() ? null : new CodegenProbeValue(reader.readString());
     }
 
     @Override
     public CodegenProbeValue readUtf16(Utf16JsonReader reader) {
-      checkCapability(
-          reader
-              .typeResolver()
-              .getTypeInfo(CodegenProbeModel.class, CodegenProbeModel.class)
-              .utf16Reader());
+      checkCapability(reader.typeResolver().getTypeInfo(expectedType, expectedType).utf16Reader());
       return reader.tryReadNullToken() ? null : new CodegenProbeValue(reader.readString());
     }
 
     @Override
     public CodegenProbeValue readUtf8(Utf8JsonReader reader) {
-      checkCapability(
-          reader
-              .typeResolver()
-              .getTypeInfo(CodegenProbeModel.class, CodegenProbeModel.class)
-              .utf8Reader());
+      checkCapability(reader.typeResolver().getTypeInfo(expectedType, expectedType).utf8Reader());
       return reader.tryReadNullToken() ? null : new CodegenProbeValue(reader.readString());
     }
 
@@ -554,6 +578,30 @@ public final class ForyJsonExample {
       boolean generated = !(capability instanceof ObjectCodec<?>);
       Preconditions.checkArgument(generated == expectGenerated);
     }
+  }
+
+  @JsonType
+  static final class PackagePrivateOwner {
+    public PublicChild child = new PublicChild();
+
+    PackagePrivateOwner() {}
+  }
+
+  @JsonType
+  public static final class PublicChild {
+    public String name;
+
+    @JsonCodec(CodegenProbeCodec.class)
+    public CodegenProbeValue probe;
+
+    public PublicChild() {}
+  }
+
+  @JsonMixin(target = CompileState.class)
+  public abstract static class CoreCompileStateMixin {
+    @JsonIgnore private Lock lock;
+    @JsonProperty private boolean finished;
+    @JsonIgnore private Map<String, byte[]> result;
   }
 
   public static class Parent {

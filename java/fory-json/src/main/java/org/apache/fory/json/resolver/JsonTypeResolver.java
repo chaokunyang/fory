@@ -356,6 +356,21 @@ public final class JsonTypeResolver {
     }
   }
 
+  /** Generates every hosted capability rooted at an explicitly selected Native Image model. */
+  @Internal
+  public void generateHostedCodecs(Class<?> type) {
+    if (!sharedRegistry.hostedCodegen()) {
+      throw new IllegalStateException("Hosted JSON codec generation requires a hosted registry");
+    }
+    JsonTypeInfo typeInfo = getTypeInfo(type, type);
+    ArrayList<JsonTypeInfo> roots = new ArrayList<>(1);
+    roots.add(typeInfo);
+    // A preceding selected model may already have resolved this type inside an uncodegenable graph.
+    // Cached metadata is still a generation root; otherwise that earlier graph can suppress every
+    // capability for an independently eligible annotated model.
+    requestCapabilities(roots);
+  }
+
   private JsonTypeInfo resolveTypeInfo(Type declaredType, Class<?> rawType, Object key) {
     JsonTypeInfo typeInfo = customTypeInfo(declaredType, rawType);
     if (typeInfo != null) {
@@ -1782,7 +1797,18 @@ public final class JsonTypeResolver {
   private void requestCapabilities(ArrayList<JsonTypeInfo> roots) {
     for (CapabilityKind kind : CapabilityKind.values()) {
       CapabilityGraph graph = new CapabilityGraph(kind);
-      if (graph.addRoots(roots) && !graph.ordered.isEmpty()) {
+      for (int i = 0; i < roots.size(); i++) {
+        JsonTypeInfo root = roots.get(i);
+        // Probe each cold root independently so an interpreter-only graph cannot reject unrelated
+        // eligible roots. Successful roots are then rebuilt into one graph to preserve the existing
+        // atomic parent/child publication boundary.
+        CapabilityGraph candidate = new CapabilityGraph(kind);
+        if (candidate.addDependency(root) && !graph.addDependency(root)) {
+          throw new IllegalStateException(
+              "Cannot merge eligible JSON capability graph for " + root.type());
+        }
+      }
+      if (!graph.ordered.isEmpty()) {
         requestGraph(graph);
       }
     }
@@ -1829,15 +1855,6 @@ public final class JsonTypeResolver {
 
     private CapabilityGraph(CapabilityKind kind) {
       this.kind = kind;
-    }
-
-    private boolean addRoots(ArrayList<JsonTypeInfo> roots) {
-      for (int i = 0; i < roots.size(); i++) {
-        if (!addDependency(roots.get(i))) {
-          return false;
-        }
-      }
-      return true;
     }
 
     private boolean addDependency(JsonTypeInfo typeInfo) {

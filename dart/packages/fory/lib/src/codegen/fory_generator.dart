@@ -2346,6 +2346,9 @@ final class ForyGenerator extends Generator {
       )
       ..writeln(
         '  usesNestedTypeDefinitions: ${_structUsesNestedTypeDefinitions(structSpec)},',
+      )
+      ..writeln(
+        '  readBodyAlwaysAdvances: ${_structReadBodyAlwaysAdvances(structSpec)},',
       );
     output
       ..writeln('  fields: $metadataListName,')
@@ -5766,6 +5769,30 @@ GeneratedFieldType(
       }
     }
     return false;
+  }
+
+  bool _structReadBodyAlwaysAdvances(_GeneratedStructSpec structSpec) {
+    for (final field in structSpec.fields) {
+      if (field.fieldType.nullable ||
+          field.fieldType.ref ||
+          _isGeneratedDynamicField(field) ||
+          _fieldBodyAlwaysAdvances(field.fieldType)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  bool _fieldBodyAlwaysAdvances(_GeneratedFieldTypeSpec fieldType) {
+    final typeId = fieldType.typeId;
+    return _isPrimitiveTypeId(typeId) ||
+        _isBuiltInTypeId(typeId) ||
+        TypeIds.isContainer(typeId) ||
+        typeId == TypeIds.enumById ||
+        typeId == TypeIds.namedEnum ||
+        typeId == TypeIds.union ||
+        typeId == TypeIds.typedUnion ||
+        typeId == TypeIds.namedUnion;
   }
 
   bool _fieldTypeUsesNestedTypeDefinitions(_GeneratedFieldTypeSpec fieldType) {

@@ -774,17 +774,16 @@ final class ForyJsonGraalVMFeature implements Feature {
         || !processedContainers.add(rawType)) {
       return false;
     }
+    registerContainerFields(rawType);
     try {
       Constructor<?> constructor = rawType.getConstructor();
       RuntimeReflection.register(constructor);
       ReflectionUtils.getCtrHandle(rawType, new Class<?>[0]);
-      registerContainerFields(rawType);
-      return true;
     } catch (NoSuchMethodException ignored) {
-      // CollectionCodec and MapCodec preserve the same runtime failure for a concrete container
-      // without a public no-argument constructor.
-      return false;
+      // Dedicated factories create supported containers such as EnumMap and EnumSet without a
+      // public no-argument constructor. Other concrete containers preserve the runtime failure.
     }
+    return true;
   }
 
   private void registerContainerFields(Class<?> type) {

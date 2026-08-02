@@ -25,7 +25,10 @@ import static org.testng.Assert.assertNotNull;
 import static org.testng.Assert.assertNotSame;
 import static org.testng.Assert.assertTrue;
 
+import java.io.ByteArrayOutputStream;
+import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.net.URL;
@@ -51,6 +54,7 @@ import org.apache.fory.json.ForyJsonException;
 import org.apache.fory.json.codec.GeneratedJsonCodec;
 import org.apache.fory.json.meta.JsonAnySetterAccessor;
 import org.apache.fory.json.meta.JsonFieldAccessor;
+import org.apache.fory.platform.JdkVersion;
 import org.testng.SkipException;
 import org.testng.annotations.Test;
 
@@ -597,6 +601,53 @@ public class JsonTypeProcessorTest {
     assertTrue(rules.contains("void validateModel();"), rules);
     assertTrue(rules.contains("java.lang.reflect.Method[] validatorMethods();"), rules);
     assertTrue(rules.contains("void invokeValidators(java.lang.Object);"), rules);
+  }
+
+  @Test
+  public void generatedAndroidValidator() throws Exception {
+    CompilationResult result =
+        compile(
+            "test.AndroidValidated",
+            "package test;\n"
+                + "import org.apache.fory.json.*;\n"
+                + "import org.apache.fory.json.annotation.*;\n"
+                + "import org.apache.fory.platform.AndroidSupport;\n"
+                + "@JsonType public final class AndroidValidated {\n"
+                + "  public int value;\n"
+                + "  boolean invoked;\n"
+                + "  @JsonValidator public void validate() {\n"
+                + "    invoked = true;\n"
+                + "    if (value < 0) throw new IllegalArgumentException(\"negative\");\n"
+                + "  }\n"
+                + "}\n"
+                + "final class AndroidValidatorMain {\n"
+                + "  public static void main(String[] args) {\n"
+                + "    if (!AndroidSupport.IS_ANDROID) throw new AssertionError();\n"
+                + "    ForyJson json = ForyJson.builder().build();\n"
+                + "    AndroidValidated value = json.fromJson(\"{\\\"value\\\":1}\", "
+                + "AndroidValidated.class);\n"
+                + "    if (!value.invoked) throw new AssertionError();\n"
+                + "    try {\n"
+                + "      json.fromJson(\"{\\\"value\\\":-1}\", AndroidValidated.class);\n"
+                + "      throw new AssertionError();\n"
+                + "    } catch (ForyJsonException expected) {\n"
+                + "      if (!(expected.getCause() instanceof IllegalArgumentException)) "
+                + "throw expected;\n"
+                + "    }\n"
+                + "    System.out.println(\"RESULT:ok\");\n"
+                + "  }\n"
+                + "}\n");
+    assertTrue(result.success, result.diagnostics());
+
+    ProcessBuilder processBuilder =
+        new ProcessBuilder(javaCommand(result.classRoot, "test.AndroidValidatorMain"))
+            .redirectErrorStream(true);
+    processBuilder.environment().put("FORY_ANDROID_ENABLED", "1");
+    processBuilder.environment().remove("FORY_PANIC_ON_ERROR");
+    Process process = processBuilder.start();
+    String output = readFully(process.getInputStream());
+    assertEquals(process.waitFor(), 0, output);
+    assertTrue(output.contains("RESULT:ok"), output);
   }
 
   @Test
@@ -1887,6 +1938,34 @@ public class JsonTypeProcessorTest {
   private static GeneratedJsonCodec<?> generatedCodec(ClassLoader loader, String name)
       throws Exception {
     return (GeneratedJsonCodec<?>) loader.loadClass(name).getConstructor().newInstance();
+  }
+
+  private static List<String> javaCommand(Path classRoot, String mainClass) {
+    List<String> command =
+        new ArrayList<>(
+            Collections.singletonList(
+                System.getProperty("java.home")
+                    + File.separator
+                    + "bin"
+                    + File.separator
+                    + "java"));
+    if (JdkVersion.MAJOR_VERSION >= 25) {
+      command.add("--add-opens=java.base/java.lang.invoke=ALL-UNNAMED");
+    }
+    command.add("-cp");
+    command.add(classRoot + File.pathSeparator + System.getProperty("java.class.path"));
+    command.add(mainClass);
+    return command;
+  }
+
+  private static String readFully(InputStream inputStream) throws IOException {
+    ByteArrayOutputStream output = new ByteArrayOutputStream();
+    byte[] buffer = new byte[1024];
+    int read;
+    while ((read = inputStream.read(buffer)) != -1) {
+      output.write(buffer, 0, read);
+    }
+    return new String(output.toByteArray(), StandardCharsets.UTF_8);
   }
 
   private static void assertRoundTrips(

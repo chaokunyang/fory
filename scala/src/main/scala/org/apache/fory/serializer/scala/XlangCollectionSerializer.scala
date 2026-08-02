@@ -530,6 +530,8 @@ private final class XlangOptionMapBuilder[K, V, T](
 
 final class ScalaOptionSerializer(typeResolver: TypeResolver, cls: Class[_])
   extends Serializer[Option[Any]](typeResolver.getConfig, cls.asInstanceOf[Class[Option[Any]]]) {
+  override def readBodyAlwaysAdvances(): Boolean = true
+
   override def write(writeContext: WriteContext, value: Option[Any]): Unit = {
     writeContext.writeRef(value.orNull)
   }

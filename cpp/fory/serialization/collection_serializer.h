@@ -442,7 +442,13 @@ inline bool reserve_collection(Container &result, ReadContext &ctx,
                                                    elem_bytes))) {
     return false;
   }
-  if (FORY_PREDICT_FALSE(!ctx.buffer().ensure_readable(length, ctx.error()))) {
+  const size_t allowance = ctx.remaining_unbacked_container_items();
+  const uint32_t required_readable =
+      static_cast<size_t>(length) > allowance
+          ? static_cast<uint32_t>(static_cast<size_t>(length) - allowance)
+          : 0;
+  if (FORY_PREDICT_FALSE(
+          !ctx.buffer().ensure_readable(required_readable, ctx.error()))) {
     return false;
   }
   if constexpr (has_reserve_v<Container>) {
@@ -471,7 +477,13 @@ inline bool reserve_collection(std::vector<bool, Alloc> &result,
   if (FORY_PREDICT_FALSE(!ctx.reserve_graph_memory(packed_bytes))) {
     return false;
   }
-  if (FORY_PREDICT_FALSE(!ctx.buffer().ensure_readable(length, ctx.error()))) {
+  const size_t allowance = ctx.remaining_unbacked_container_items();
+  const uint32_t required_readable =
+      element_count > allowance
+          ? static_cast<uint32_t>(element_count - allowance)
+          : 0;
+  if (FORY_PREDICT_FALSE(
+          !ctx.buffer().ensure_readable(required_readable, ctx.error()))) {
     return false;
   }
   result.reserve(length);
@@ -488,6 +500,167 @@ inline void collection_insert(Container &result, T &&elem) {
   } else {
     result.insert(std::forward<T>(elem));
   }
+}
+
+template <typename T, typename Container>
+inline bool read_declared_same_type_collection(Container &result,
+                                               ReadContext &ctx,
+                                               uint32_t length) {
+  if constexpr (read_data_always_advances_v<T>) {
+    for (uint32_t i = 0; i < length; ++i) {
+      if (FORY_PREDICT_FALSE(ctx.has_error())) {
+        return false;
+      }
+      auto elem = Serializer<T>::read(ctx, RefMode::None, false);
+      collection_insert(result, std::move(elem));
+    }
+    return true;
+  }
+
+  uint32_t checkpoint_item = 0;
+  uint64_t checkpoint_byte = ctx.buffer().logical_reader_index();
+  for (uint32_t i = 0; i < length; ++i) {
+    if (FORY_PREDICT_FALSE(ctx.has_error())) {
+      return false;
+    }
+    auto elem = Serializer<T>::read(ctx, RefMode::None, false);
+    collection_insert(result, std::move(elem));
+    const uint32_t completed = i + 1;
+    if ((completed & 1023U) == 0) {
+      if (FORY_PREDICT_FALSE(!detail::settle_unbacked_container_items(
+              ctx, completed - checkpoint_item, checkpoint_byte))) {
+        return false;
+      }
+      checkpoint_item = completed;
+      checkpoint_byte = ctx.buffer().logical_reader_index();
+    }
+  }
+  return checkpoint_item == length ||
+         detail::settle_unbacked_container_items(ctx, length - checkpoint_item,
+                                                 checkpoint_byte);
+}
+
+template <typename T, typename Alloc>
+inline bool
+read_declared_same_type_collection(std::forward_list<T, Alloc> &result,
+                                   ReadContext &ctx, uint32_t length) {
+  auto tail = result.before_begin();
+  uint32_t checkpoint_item = 0;
+  uint64_t checkpoint_byte = 0;
+  if constexpr (!read_data_always_advances_v<T>) {
+    checkpoint_byte = ctx.buffer().logical_reader_index();
+  }
+  for (uint32_t i = 0; i < length; ++i) {
+    if (FORY_PREDICT_FALSE(ctx.has_error())) {
+      return false;
+    }
+    auto elem = Serializer<T>::read(ctx, RefMode::None, false);
+    tail = result.insert_after(tail, std::move(elem));
+    if constexpr (!read_data_always_advances_v<T>) {
+      const uint32_t completed = i + 1;
+      if ((completed & 1023U) == 0) {
+        if (FORY_PREDICT_FALSE(!detail::settle_unbacked_container_items(
+                ctx, completed - checkpoint_item, checkpoint_byte))) {
+          return false;
+        }
+        checkpoint_item = completed;
+        checkpoint_byte = ctx.buffer().logical_reader_index();
+      }
+    }
+  }
+  if constexpr (!read_data_always_advances_v<T>) {
+    return checkpoint_item == length ||
+           detail::settle_unbacked_container_items(
+               ctx, length - checkpoint_item, checkpoint_byte);
+  }
+  return true;
+}
+
+template <bool MeasureProgress, typename T, typename Container>
+inline bool read_same_type_info_collection_body(Container &result,
+                                                ReadContext &ctx,
+                                                uint32_t length,
+                                                const TypeInfo &type_info) {
+  uint32_t checkpoint_item = 0;
+  uint64_t checkpoint_byte = 0;
+  if constexpr (MeasureProgress) {
+    checkpoint_byte = ctx.buffer().logical_reader_index();
+  }
+  for (uint32_t i = 0; i < length; ++i) {
+    if (FORY_PREDICT_FALSE(ctx.has_error())) {
+      return false;
+    }
+    auto elem =
+        Serializer<T>::read_with_type_info(ctx, RefMode::None, type_info);
+    collection_insert(result, std::move(elem));
+    if constexpr (MeasureProgress) {
+      const uint32_t completed = i + 1;
+      if ((completed & 1023U) == 0) {
+        if (FORY_PREDICT_FALSE(!detail::settle_unbacked_container_items(
+                ctx, completed - checkpoint_item, checkpoint_byte))) {
+          return false;
+        }
+        checkpoint_item = completed;
+        checkpoint_byte = ctx.buffer().logical_reader_index();
+      }
+    }
+  }
+  if constexpr (MeasureProgress) {
+    return checkpoint_item == length ||
+           detail::settle_unbacked_container_items(
+               ctx, length - checkpoint_item, checkpoint_byte);
+  }
+  return true;
+}
+
+template <bool MeasureProgress, typename T, typename Alloc>
+inline bool
+read_same_type_info_collection_body(std::forward_list<T, Alloc> &result,
+                                    ReadContext &ctx, uint32_t length,
+                                    const TypeInfo &type_info) {
+  auto tail = result.before_begin();
+  uint32_t checkpoint_item = 0;
+  uint64_t checkpoint_byte = 0;
+  if constexpr (MeasureProgress) {
+    checkpoint_byte = ctx.buffer().logical_reader_index();
+  }
+  for (uint32_t i = 0; i < length; ++i) {
+    if (FORY_PREDICT_FALSE(ctx.has_error())) {
+      return false;
+    }
+    auto elem =
+        Serializer<T>::read_with_type_info(ctx, RefMode::None, type_info);
+    tail = result.insert_after(tail, std::move(elem));
+    if constexpr (MeasureProgress) {
+      const uint32_t completed = i + 1;
+      if ((completed & 1023U) == 0) {
+        if (FORY_PREDICT_FALSE(!detail::settle_unbacked_container_items(
+                ctx, completed - checkpoint_item, checkpoint_byte))) {
+          return false;
+        }
+        checkpoint_item = completed;
+        checkpoint_byte = ctx.buffer().logical_reader_index();
+      }
+    }
+  }
+  if constexpr (MeasureProgress) {
+    return checkpoint_item == length ||
+           detail::settle_unbacked_container_items(
+               ctx, length - checkpoint_item, checkpoint_byte);
+  }
+  return true;
+}
+
+template <typename T, typename Container>
+inline bool read_same_type_info_collection(Container &result, ReadContext &ctx,
+                                           uint32_t length,
+                                           const TypeInfo &type_info) {
+  if (type_info.harness.read_data_always_advances) {
+    return read_same_type_info_collection_body<false, T>(result, ctx, length,
+                                                         type_info);
+  }
+  return read_same_type_info_collection_body<true, T>(result, ctx, length,
+                                                      type_info);
 }
 
 /// Read a same-type group using the exact TypeInfo retained from its header.
@@ -523,14 +696,7 @@ inline void read_collection_with_type_info(Container &result, ReadContext &ctx,
         }
       }
     } else {
-      for (uint32_t i = 0; i < length; ++i) {
-        if (FORY_PREDICT_FALSE(ctx.has_error())) {
-          return;
-        }
-        auto elem =
-            Serializer<T>::read_with_type_info(ctx, RefMode::None, type_info);
-        tail = result.insert_after(tail, std::move(elem));
-      }
+      (void)read_same_type_info_collection<T>(result, ctx, length, type_info);
     }
   } else {
     if (track_ref) {
@@ -558,14 +724,7 @@ inline void read_collection_with_type_info(Container &result, ReadContext &ctx,
         }
       }
     } else {
-      for (uint32_t i = 0; i < length; ++i) {
-        if (FORY_PREDICT_FALSE(ctx.has_error())) {
-          return;
-        }
-        auto elem =
-            Serializer<T>::read_with_type_info(ctx, RefMode::None, type_info);
-        collection_insert(result, std::move(elem));
-      }
+      (void)read_same_type_info_collection<T>(result, ctx, length, type_info);
     }
   }
 }
@@ -658,6 +817,8 @@ inline Container read_collection_data_slow(ReadContext &ctx, uint32_t length) {
         }
       }
     } else if (!has_null) {
+      uint32_t checkpoint_item = 0;
+      uint64_t checkpoint_byte = ctx.buffer().logical_reader_index();
       for (uint32_t i = 0; i < length; ++i) {
         if (FORY_PREDICT_FALSE(ctx.has_error())) {
           return result;
@@ -676,6 +837,20 @@ inline Container read_collection_data_slow(ReadContext &ctx, uint32_t length) {
           auto elem = Serializer<T>::read(ctx, RefMode::None, false);
           collection_insert(result, std::move(elem));
         }
+        const uint32_t completed = i + 1;
+        if ((completed & 1023U) == 0) {
+          if (FORY_PREDICT_FALSE(!detail::settle_unbacked_container_items(
+                  ctx, completed - checkpoint_item, checkpoint_byte))) {
+            return result;
+          }
+          checkpoint_item = completed;
+          checkpoint_byte = ctx.buffer().logical_reader_index();
+        }
+      }
+      if (checkpoint_item != length &&
+          FORY_PREDICT_FALSE(!detail::settle_unbacked_container_items(
+              ctx, length - checkpoint_item, checkpoint_byte))) {
+        return result;
       }
     } else {
       // Has null elements
@@ -1178,13 +1353,7 @@ struct Serializer<
 
       // Fast path: no tracking, no nulls, elements have declared type
       if (!track_ref && !has_null && is_same_type) {
-        for (uint32_t i = 0; i < length; ++i) {
-          if (FORY_PREDICT_FALSE(ctx.has_error())) {
-            return result;
-          }
-          auto elem = Serializer<T>::read(ctx, RefMode::None, false);
-          result.push_back(std::move(elem));
-        }
+        (void)read_declared_same_type_collection<T>(result, ctx, length);
         return result;
       }
 
@@ -1469,13 +1638,7 @@ template <typename T, typename Alloc> struct Serializer<std::list<T, Alloc>> {
 
       // Fast path: no tracking, no nulls, elements have declared type
       if (!track_ref && !has_null && is_same_type) {
-        for (uint32_t i = 0; i < length; ++i) {
-          if (FORY_PREDICT_FALSE(ctx.has_error())) {
-            return result;
-          }
-          auto elem = Serializer<T>::read(ctx, RefMode::None, false);
-          result.push_back(std::move(elem));
-        }
+        (void)read_declared_same_type_collection<T>(result, ctx, length);
         return result;
       }
 
@@ -1666,13 +1829,7 @@ template <typename T, typename Alloc> struct Serializer<std::deque<T, Alloc>> {
 
       // Fast path: no tracking, no nulls, elements have declared type
       if (!track_ref && !has_null && is_same_type) {
-        for (uint32_t i = 0; i < length; ++i) {
-          if (FORY_PREDICT_FALSE(ctx.has_error())) {
-            return result;
-          }
-          auto elem = Serializer<T>::read(ctx, RefMode::None, false);
-          result.push_back(std::move(elem));
-        }
+        (void)read_declared_same_type_collection<T>(result, ctx, length);
         return result;
       }
 
@@ -1866,13 +2023,7 @@ struct Serializer<std::forward_list<T, Alloc>> {
       }
       // Fast path: no tracking, no nulls, elements have declared type
       if (!track_ref && !has_null && is_same_type) {
-        for (uint32_t i = 0; i < length; ++i) {
-          if (FORY_PREDICT_FALSE(ctx.has_error())) {
-            return result;
-          }
-          auto elem = Serializer<T>::read(ctx, RefMode::None, false);
-          tail = result.insert_after(tail, std::move(elem));
-        }
+        (void)read_declared_same_type_collection<T>(result, ctx, length);
       } else {
         // General path: handle HAS_NULL and/or TRACKING_REF
         for (uint32_t i = 0; i < length; ++i) {
@@ -2188,13 +2339,7 @@ struct Serializer<std::set<T, Args...>> {
       }
 
       if (!track_ref && !has_null && is_same_type) {
-        for (uint32_t i = 0; i < size; ++i) {
-          if (FORY_PREDICT_FALSE(ctx.has_error())) {
-            return result;
-          }
-          auto elem = Serializer<T>::read(ctx, RefMode::None, false);
-          result.insert(std::move(elem));
-        }
+        (void)read_declared_same_type_collection<T>(result, ctx, size);
         return result;
       }
 
@@ -2372,13 +2517,7 @@ struct Serializer<std::unordered_set<T, Args...>> {
       }
 
       if (!track_ref && !has_null && is_same_type) {
-        for (uint32_t i = 0; i < size; ++i) {
-          if (FORY_PREDICT_FALSE(ctx.has_error())) {
-            return result;
-          }
-          auto elem = Serializer<T>::read(ctx, RefMode::None, false);
-          result.insert(std::move(elem));
-        }
+        (void)read_declared_same_type_collection<T>(result, ctx, size);
         return result;
       }
 

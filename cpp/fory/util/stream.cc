@@ -226,6 +226,7 @@ void StdInputStream::shrink_buffer() {
       std::memmove(data_.data(), data_.data() + read_pos,
                    static_cast<size_t>(remaining));
     }
+    buffer_->discarded_reader_bytes_ += read_pos;
     buffer_->reader_index_ = 0;
     buffer_->size_ = remaining;
     buffer_->writer_index_ = remaining;

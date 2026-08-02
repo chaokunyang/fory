@@ -113,7 +113,13 @@ inline bool reserve_map(MapType &map, ReadContext &ctx, uint32_t length) {
   if (FORY_PREDICT_FALSE((!reserve_map_storage<elem_bytes>(ctx, length)))) {
     return false;
   }
-  if (FORY_PREDICT_FALSE(!ctx.buffer().ensure_readable(length, ctx.error()))) {
+  const size_t allowance = ctx.remaining_unbacked_container_items();
+  const uint32_t required_readable =
+      static_cast<size_t>(length) > allowance
+          ? static_cast<uint32_t>(static_cast<size_t>(length) - allowance)
+          : 0;
+  if (FORY_PREDICT_FALSE(
+          !ctx.buffer().ensure_readable(required_readable, ctx.error()))) {
     return false;
   }
   MapReserver<MapType>::reserve(map, length);
@@ -179,12 +185,13 @@ inline T read_map_value(ReadContext &ctx, bool read_ref,
 
 template <bool KeyHasTypeInfo, bool ValueHasTypeInfo, typename K, typename V,
           typename MapType>
-inline void read_map_chunk(MapType &result, ReadContext &ctx,
-                           uint8_t chunk_size, bool key_read_ref,
-                           bool value_read_ref, const TypeInfo *key_type_info,
-                           const TypeInfo *value_type_info,
-                           Harness::ReadAsFn key_reader = nullptr,
-                           Harness::ReadAsFn value_reader = nullptr) {
+inline void read_map_chunk_body(MapType &result, ReadContext &ctx,
+                                uint8_t chunk_size, bool key_read_ref,
+                                bool value_read_ref,
+                                const TypeInfo *key_type_info,
+                                const TypeInfo *value_type_info,
+                                Harness::ReadAsFn key_reader,
+                                Harness::ReadAsFn value_reader) {
   for (uint8_t i = 0; i < chunk_size; ++i) {
     K key = read_map_value<KeyHasTypeInfo, K>(ctx, key_read_ref, key_type_info,
                                               key_reader);
@@ -198,6 +205,48 @@ inline void read_map_chunk(MapType &result, ReadContext &ctx,
     }
     result.emplace(std::move(key), std::move(value));
   }
+}
+
+template <bool KeyHasTypeInfo, bool ValueHasTypeInfo, typename K, typename V,
+          typename MapType>
+inline void read_map_chunk(MapType &result, ReadContext &ctx,
+                           uint8_t chunk_size, bool key_read_ref,
+                           bool value_read_ref, const TypeInfo *key_type_info,
+                           const TypeInfo *value_type_info,
+                           Harness::ReadAsFn key_reader = nullptr,
+                           Harness::ReadAsFn value_reader = nullptr) {
+  if constexpr ((!KeyHasTypeInfo && read_data_always_advances_v<K>) ||
+                (!ValueHasTypeInfo && read_data_always_advances_v<V>)) {
+    read_map_chunk_body<KeyHasTypeInfo, ValueHasTypeInfo, K, V>(
+        result, ctx, chunk_size, key_read_ref, value_read_ref, key_type_info,
+        value_type_info, key_reader, value_reader);
+    return;
+  }
+
+  bool always_advances = key_read_ref || value_read_ref;
+  if constexpr (KeyHasTypeInfo) {
+    always_advances =
+        always_advances || key_type_info->harness.read_data_always_advances;
+  }
+  if constexpr (ValueHasTypeInfo) {
+    always_advances =
+        always_advances || value_type_info->harness.read_data_always_advances;
+  }
+  if (always_advances) {
+    read_map_chunk_body<KeyHasTypeInfo, ValueHasTypeInfo, K, V>(
+        result, ctx, chunk_size, key_read_ref, value_read_ref, key_type_info,
+        value_type_info, key_reader, value_reader);
+    return;
+  }
+
+  const uint64_t start = ctx.buffer().logical_reader_index();
+  read_map_chunk_body<KeyHasTypeInfo, ValueHasTypeInfo, K, V>(
+      result, ctx, chunk_size, key_read_ref, value_read_ref, key_type_info,
+      value_type_info, key_reader, value_reader);
+  if (FORY_PREDICT_FALSE(ctx.has_error())) {
+    return;
+  }
+  (void)detail::settle_unbacked_container_items(ctx, chunk_size, start);
 }
 
 template <typename K, typename V, typename MapType>
@@ -781,6 +830,10 @@ inline MapType read_map_data_fast(ReadContext &ctx, uint32_t length) {
     if (FORY_PREDICT_FALSE(ctx.has_error())) {
       return MapType{};
     }
+    if (FORY_PREDICT_FALSE(!detail::check_map_chunk_size(
+            ctx, chunk_size, length - len_counter))) {
+      return MapType{};
+    }
 
     // Read type info if not declared
     const bool key_declared = (header & DECL_KEY_TYPE) != 0;
@@ -802,27 +855,13 @@ inline MapType read_map_data_fast(ReadContext &ctx, uint32_t length) {
       }
     }
 
-    uint32_t cur_len = len_counter + chunk_size;
-    if (cur_len > length) {
-      ctx.set_error(Error::invalid_data("Chunk size exceeds total map length"));
-      return MapType{};
-    }
     if (key_type_info == nullptr && value_type_info == nullptr &&
         !track_key_ref && !track_value_ref) {
       // Keep the fully declared local fast path identical to the original
       // direct loop. Remote TypeInfo and sender ref modes take the selected
       // operation path below once per chunk.
-      for (uint8_t i = 0; i < chunk_size; ++i) {
-        K key = Serializer<K>::read_data(ctx);
-        if (FORY_PREDICT_FALSE(ctx.has_error())) {
-          return MapType{};
-        }
-        V value = Serializer<V>::read_data(ctx);
-        if (FORY_PREDICT_FALSE(ctx.has_error())) {
-          return MapType{};
-        }
-        result.emplace(std::move(key), std::move(value));
-      }
+      read_map_chunk<false, false, K, V>(result, ctx, chunk_size, false, false,
+                                         nullptr, nullptr);
     } else if (!track_key_ref && !track_value_ref) {
       read_selected_map_chunk<K, V>(result, ctx, chunk_size, false, false,
                                     key_type_info, value_type_info);
@@ -921,6 +960,10 @@ inline MapType read_map_data_slow(ReadContext &ctx, uint32_t length) {
     if (FORY_PREDICT_FALSE(ctx.has_error())) {
       return MapType{};
     }
+    if (FORY_PREDICT_FALSE(!detail::check_map_chunk_size(
+            ctx, chunk_size, length - len_counter))) {
+      return MapType{};
+    }
     bool key_declared = (header & DECL_KEY_TYPE) != 0;
     bool value_declared = (header & DECL_VALUE_TYPE) != 0;
     bool track_key_ref = (header & TRACKING_KEY_REF) != 0;
@@ -973,11 +1016,6 @@ inline MapType read_map_data_slow(ReadContext &ctx, uint32_t length) {
       }
     }
 
-    uint32_t cur_len = len_counter + chunk_size;
-    if (cur_len > length) {
-      ctx.set_error(Error::invalid_data("Chunk size exceeds total map length"));
-      return MapType{};
-    }
     // Read chunk_size pairs.
     // IMPORTANT: in cross-language serialization, the SENDER determines
     // whether key/value ref flags are present in the wire header. Local C++

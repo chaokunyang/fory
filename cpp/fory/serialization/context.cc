@@ -437,6 +437,8 @@ ReadContext::ReadContext(const Config &config,
       type_resolver_(std::move(type_resolver)), current_dyn_depth_(0) {
   FORY_CHECK(config.max_graph_memory_bytes > 0)
       << "max_graph_memory_bytes must be positive";
+  FORY_CHECK(config.max_unbacked_container_items >= 0)
+      << "max_unbacked_container_items must be non-negative";
 }
 
 ReadContext::~ReadContext() = default;
@@ -760,6 +762,15 @@ bool ReadContext::set_graph_memory_exceeded(size_t bytes, size_t remaining) {
   return false;
 }
 
+bool ReadContext::set_unbacked_container_items_exceeded(size_t items,
+                                                        size_t remaining) {
+  set_error(Error::invalid_data(
+      "container read work request " + std::to_string(items) +
+      " items exceeds max_unbacked_container_items remaining budget " +
+      std::to_string(remaining) + " items"));
+  return false;
+}
+
 void ReadContext::reset() {
   // Clear error state first
   error_ = Error();
@@ -768,6 +779,7 @@ void ReadContext::reset() {
   ref_reader_.reset();
   reading_type_infos_.clear();
   current_dyn_depth_ = 0;
+  remaining_unbacked_container_items_ = 0;
   // Root deserialization overwrites the remaining graph budget before any
   // serializer can reserve, so reset avoids an extra hot cleanup store here.
   if (meta_string_table_active_) {

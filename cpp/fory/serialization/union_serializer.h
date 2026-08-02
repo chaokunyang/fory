@@ -916,6 +916,7 @@ template <typename R, typename Arg> struct UnionFactoryArg<R (*)(Arg)> {
 template <typename T>
 struct Serializer<T, std::enable_if_t<detail::is_union_type_v<T>>> {
   static constexpr TypeId type_id = TypeId::UNION;
+  static constexpr bool read_data_always_advances = true;
 
   static inline void write_type_info(WriteContext &ctx) {
     auto type_info_res = ctx.type_resolver().template get_type_info<T>();

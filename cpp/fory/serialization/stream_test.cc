@@ -24,6 +24,7 @@
 #include <sstream>
 #include <streambuf>
 #include <string>
+#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -200,6 +201,28 @@ TEST(StreamSerializationTest, StructRoundTrip) {
   auto result = fory.deserialize<StreamEnvelope>(stream);
   ASSERT_TRUE(result.ok()) << result.error().to_string();
   EXPECT_EQ(result.value(), original);
+}
+
+TEST(StreamSerializationTest, UnbackedBudgetUsesLogicalPosition) {
+  auto fory = Fory::builder()
+                  .xlang(true)
+                  .compatible(false)
+                  .track_ref(false)
+                  .max_unbacked_container_items(0)
+                  .build();
+  std::vector<std::tuple<std::string>> values;
+  values.reserve(2048);
+  for (size_t i = 0; i < 2048; ++i) {
+    values.emplace_back("value-" + std::to_string(i));
+  }
+
+  auto bytes = fory.serialize(values);
+  ASSERT_TRUE(bytes.ok()) << bytes.error().to_string();
+  OneByteIStream source(std::move(bytes).value());
+  StdInputStream stream(source, 16);
+  auto decoded = fory.deserialize<std::vector<std::tuple<std::string>>>(stream);
+  ASSERT_TRUE(decoded.ok()) << decoded.error().to_string();
+  EXPECT_EQ(decoded.value(), values);
 }
 
 TEST(StreamSerializationTest, SequentialDeserializeFromSingleStream) {

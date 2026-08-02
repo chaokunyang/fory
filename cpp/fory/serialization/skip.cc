@@ -164,6 +164,25 @@ void skip_schema_or_type_info(ReadContext &ctx, const FieldType &field_type,
   }
   skip_field_value(ctx, field_type, RefMode::None);
 }
+
+bool skip_body_always_advances(const FieldType &field_type,
+                               const TypeInfo *type_info) {
+  const uint32_t raw_type_id =
+      type_info == nullptr ? field_type.type_id : type_info->type_id;
+  if (raw_type_id >= static_cast<uint32_t>(TypeId::BOUND)) {
+    return false;
+  }
+  const TypeId type_id = static_cast<TypeId>(raw_type_id);
+  if (is_struct_type(type_id)) {
+    // Compatible TypeInfo may select a remote schema whose body differs from
+    // the registered local Struct, so a local Struct trait is not proof here.
+    return false;
+  }
+  if (is_ext_type(type_id)) {
+    return type_info != nullptr && type_info->harness.read_data_always_advances;
+  }
+  return type_id != TypeId::UNKNOWN && type_id != TypeId::NONE;
+}
 } // namespace
 
 void skip_varint(ReadContext &ctx) {
@@ -222,23 +241,19 @@ void skip_list(ReadContext &ctx, const FieldType &field_type) {
     elem_type.nullable = false;
   }
 
-  const uint32_t elem_type_id = elem_type.type_id;
-  const bool declared_none =
-      is_declared_type && elem_type_id == static_cast<uint32_t>(TypeId::NONE);
-  const bool runtime_none =
-      !is_declared_type && same_type_info != nullptr &&
-      same_type_info->type_id == static_cast<uint32_t>(TypeId::NONE) &&
-      (elem_type_id == static_cast<uint32_t>(TypeId::UNKNOWN) ||
-       elem_type_id == static_cast<uint32_t>(TypeId::NONE));
-  if (!track_ref && !has_null && is_same_type &&
-      (declared_none || runtime_none)) {
-    return;
-  }
-
   auto depth_res = ctx.increase_dyn_depth();
   if (FORY_PREDICT_FALSE(!depth_res.ok())) {
     ctx.set_error(std::move(depth_res).error());
     return;
+  }
+
+  const bool measure_progress =
+      !track_ref && !has_null && is_same_type &&
+      !skip_body_always_advances(elem_type, same_type_info);
+  uint32_t checkpoint_item = 0;
+  uint64_t checkpoint_byte = 0;
+  if (measure_progress) {
+    checkpoint_byte = ctx.buffer().logical_reader_index();
   }
 
   // skip each element
@@ -263,6 +278,22 @@ void skip_list(ReadContext &ctx, const FieldType &field_type) {
     if (FORY_PREDICT_FALSE(ctx.has_error())) {
       return;
     }
+    if (measure_progress) {
+      const uint32_t completed = i + 1;
+      if ((completed & 1023U) == 0) {
+        if (FORY_PREDICT_FALSE(!detail::settle_unbacked_container_items(
+                ctx, completed - checkpoint_item, checkpoint_byte))) {
+          return;
+        }
+        checkpoint_item = completed;
+        checkpoint_byte = ctx.buffer().logical_reader_index();
+      }
+    }
+  }
+  if (measure_progress && checkpoint_item != length &&
+      FORY_PREDICT_FALSE(!detail::settle_unbacked_container_items(
+          ctx, length - checkpoint_item, checkpoint_byte))) {
+    return;
   }
   ctx.decrease_dyn_depth();
 }
@@ -363,8 +394,8 @@ void skip_map(ReadContext &ctx, const FieldType &field_type) {
     if (FORY_PREDICT_FALSE(ctx.has_error())) {
       return;
     }
-    if (read_count + chunk_size > total_length) {
-      ctx.set_error(Error::invalid_data("Chunk size exceeds total map length"));
+    if (FORY_PREDICT_FALSE(!detail::check_map_chunk_size(
+            ctx, chunk_size, total_length - read_count))) {
       return;
     }
 
@@ -387,6 +418,13 @@ void skip_map(ReadContext &ctx, const FieldType &field_type) {
         return;
       }
     }
+
+    const bool measure_progress =
+        !key_track_ref && !value_track_ref &&
+        !skip_body_always_advances(key_type, key_type_info) &&
+        !skip_body_always_advances(value_type, value_type_info);
+    const uint64_t chunk_start =
+        measure_progress ? ctx.buffer().logical_reader_index() : 0;
 
     // skip key-value pairs in this chunk
     for (uint8_t i = 0; i < chunk_size; ++i) {
@@ -411,6 +449,12 @@ void skip_map(ReadContext &ctx, const FieldType &field_type) {
           return;
         }
       }
+    }
+
+    if (measure_progress &&
+        FORY_PREDICT_FALSE(!detail::settle_unbacked_container_items(
+            ctx, chunk_size, chunk_start))) {
+      return;
     }
 
     read_count += chunk_size;

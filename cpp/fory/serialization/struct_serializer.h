@@ -1459,6 +1459,48 @@ template <typename T> struct CompileTimeFieldHelpers {
     }
   }
 
+  // This is intentionally a one-field proof, not a recursive Struct graph
+  // classification. A field envelope or a declared serializer body that is
+  // independently known to advance is enough to prove this Struct body
+  // advances; an unframed Struct field remains unknown.
+  template <size_t Index>
+  static constexpr bool field_read_data_always_advances() {
+    if constexpr (FieldCount == 0) {
+      return false;
+    } else {
+      using FieldType = ValueType<Index>;
+      constexpr TypeId field_type = static_cast<TypeId>(field_type_id<Index>());
+      if constexpr (field_nullable<Index>() || field_track_ref<Index>() ||
+                    is_nullable_v<FieldType>) {
+        return true;
+      } else if constexpr (is_struct_type(field_type)) {
+        return false;
+      } else if constexpr (is_ext_type(field_type) ||
+                           field_type == TypeId::NONE) {
+        return declared_read_data_always_advances<FieldType>::value;
+      } else if constexpr (field_type == TypeId::UNKNOWN) {
+        return field_dynamic_value<Index>() != 0 ||
+               declared_read_data_always_advances<FieldType>::value;
+      } else {
+        return read_data_always_advances_v<FieldType>;
+      }
+    }
+  }
+
+  template <size_t... Indices>
+  static constexpr bool
+  any_field_read_data_always_advances(std::index_sequence<Indices...>) {
+    if constexpr (FieldCount == 0) {
+      return false;
+    } else {
+      return (field_read_data_always_advances<Indices>() || ...);
+    }
+  }
+
+  static constexpr bool read_data_always_advances =
+      any_field_read_data_always_advances(
+          std::make_index_sequence<FieldCount>{});
+
   /// Returns true if the field needs per-field type info in compatible mode.
   /// This matches write_single_field/read_single_field logic:
   /// - struct/ext fields always write type info in compatible mode
@@ -4404,6 +4446,8 @@ read_struct_fields_compatible(T &obj, ReadContext &ctx,
 template <typename T>
 struct Serializer<T, std::enable_if_t<is_fory_serializable_v<T>>> {
   static constexpr TypeId type_id = TypeId::STRUCT;
+  static constexpr bool read_data_always_advances =
+      detail::CompileTimeFieldHelpers<T>::read_data_always_advances;
 
   /// write type info only (type_id and meta index if applicable).
   /// This is used by collection serializers to write element type info.

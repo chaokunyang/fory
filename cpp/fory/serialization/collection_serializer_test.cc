@@ -27,6 +27,7 @@
 #include <optional>
 #include <string>
 #include <tuple>
+#include <variant>
 #include <vector>
 
 namespace fory {
@@ -76,6 +77,24 @@ struct RemoteCollectionV2 {
   int32_t value{};
   FORY_STRUCT(RemoteCollectionV2, value);
 };
+
+struct EmptyProgressStruct {
+  FORY_STRUCT(EmptyProgressStruct);
+};
+
+struct NestedEmptyProgressStruct {
+  EmptyProgressStruct value;
+  FORY_STRUCT(NestedEmptyProgressStruct, value);
+};
+
+struct PositiveProgressStruct {
+  int32_t value{};
+  FORY_STRUCT(PositiveProgressStruct, value);
+};
+
+static_assert(!read_data_always_advances_v<EmptyProgressStruct>);
+static_assert(!read_data_always_advances_v<NestedEmptyProgressStruct>);
+static_assert(read_data_always_advances_v<PositiveProgressStruct>);
 
 namespace {
 
@@ -708,6 +727,47 @@ TEST(CollectionSerializerTest, ForwardListEmptyRoundTrip) {
 
   auto deserialized = std::move(deserialize_result).value();
   EXPECT_TRUE(deserialized.strings.empty());
+}
+
+TEST(CollectionSerializerTest, UnbackedItemBudget) {
+  Config config;
+  EXPECT_EQ(config.max_unbacked_container_items, 8192);
+  EXPECT_DEATH((void)Fory::builder().max_unbacked_container_items(-1),
+               "max_unbacked_container_items");
+
+  auto fory = Fory::builder()
+                  .xlang(true)
+                  .compatible(false)
+                  .track_ref(false)
+                  .max_unbacked_container_items(4)
+                  .build();
+
+  auto excessive = fory.serialize(std::vector<std::monostate>(5));
+  ASSERT_TRUE(excessive.ok()) << excessive.error().to_string();
+  auto rejected = fory.deserialize<std::vector<std::monostate>>(*excessive);
+  EXPECT_FALSE(rejected.ok());
+
+  auto allowed = fory.serialize(std::vector<std::monostate>(4));
+  ASSERT_TRUE(allowed.ok()) << allowed.error().to_string();
+  auto decoded = fory.deserialize<std::vector<std::monostate>>(*allowed);
+  ASSERT_TRUE(decoded.ok()) << decoded.error().to_string();
+  EXPECT_EQ(decoded->size(), 4u);
+
+  auto positive_fory = Fory::builder()
+                           .xlang(true)
+                           .compatible(false)
+                           .track_ref(false)
+                           .max_unbacked_container_items(0)
+                           .build();
+  ASSERT_TRUE(positive_fory.register_struct<PositiveProgressStruct>(902).ok());
+  std::vector<PositiveProgressStruct> positive{{1}, {2}, {3}};
+  auto positive_bytes = positive_fory.serialize(positive);
+  ASSERT_TRUE(positive_bytes.ok()) << positive_bytes.error().to_string();
+  auto positive_decoded =
+      positive_fory.deserialize<std::vector<PositiveProgressStruct>>(
+          *positive_bytes);
+  ASSERT_TRUE(positive_decoded.ok()) << positive_decoded.error().to_string();
+  EXPECT_EQ(positive_decoded->size(), positive.size());
 }
 
 } // namespace

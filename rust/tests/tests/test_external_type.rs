@@ -401,6 +401,13 @@ impl Serializer for SilentValueSerializer {
     }
 }
 
+#[test]
+fn generated_body_progress() {
+    assert!(UserSerializer::READ_DATA_ALWAYS_ADVANCES);
+    assert!(!MarkerSerializer::READ_DATA_ALWAYS_ADVANCES);
+    assert!(!SilentValueSerializer::READ_DATA_ALWAYS_ADVANCES);
+}
+
 #[derive(ForyStruct, Clone, Debug, PartialEq)]
 struct LocalUser {
     name: String,
@@ -1194,9 +1201,7 @@ fn zero_body_carrier_bounds() {
     roundtrip::<BTreeSetSerializer<MarkerSerializer>>(&fory, &markers.iter().copied().collect());
 
     let linked: LinkedList<Marker> = markers.iter().copied().collect();
-    assert!(fory
-        .serialize_with::<LinkedListSerializer<MarkerSerializer>>(&linked)
-        .is_err());
+    roundtrip::<LinkedListSerializer<MarkerSerializer>>(&fory, &linked);
 }
 
 #[test]
@@ -1214,35 +1219,50 @@ fn non_zst_zero_body_bounds() {
             .unwrap(),
         fixed
     );
-    assert!(fory
-        .deserialize_with::<VecSerializer<SilentValueSerializer>>(&fixed_bytes)
-        .is_err());
-
     let values = vec![SilentValue(0); 256];
-    let error = fory
+    let values_bytes = fory
         .serialize_with::<VecSerializer<SilentValueSerializer>>(&values)
-        .unwrap_err();
-    assert!(error.to_string().contains("proportional encoded bytes"));
+        .unwrap();
 
     let hash_map: HashMap<_, _> = (0u64..256)
         .map(|id| (SilentValue(id), SilentValue(id)))
         .collect();
-    let error = fory
+    let hash_bytes = fory
         .serialize_with::<HashMapSerializer<SilentValueSerializer, SilentValueSerializer>>(
             &hash_map,
         )
-        .unwrap_err();
-    assert!(error.to_string().contains("proportional encoded bytes"));
+        .unwrap();
 
     let tree_map: BTreeMap<_, _> = (0u64..256)
         .map(|id| (SilentValue(id), SilentValue(id)))
         .collect();
-    let error = fory
+    let tree_bytes = fory
         .serialize_with::<BTreeMapSerializer<SilentValueSerializer, SilentValueSerializer>>(
             &tree_map,
         )
-        .unwrap_err();
-    assert!(error.to_string().contains("proportional encoded bytes"));
+        .unwrap();
+
+    let mut limited = Fory::builder()
+        .xlang(false)
+        .compatible(false)
+        .max_unbacked_container_items(255)
+        .build();
+    limited
+        .register_serializer::<SilentValueSerializer>(181)
+        .unwrap();
+    assert!(limited
+        .deserialize_with::<VecSerializer<SilentValueSerializer>>(&values_bytes)
+        .is_err());
+    assert!(limited
+        .deserialize_with::<HashMapSerializer<SilentValueSerializer, SilentValueSerializer>>(
+            &hash_bytes,
+        )
+        .is_err());
+    assert!(limited
+        .deserialize_with::<BTreeMapSerializer<SilentValueSerializer, SilentValueSerializer>>(
+            &tree_bytes,
+        )
+        .is_err());
 }
 
 #[test]

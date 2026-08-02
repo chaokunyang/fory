@@ -188,6 +188,13 @@ pub trait Serializer: Sized + 'static {
     #[doc(hidden)]
     const REQUIRES_SCOPED_ACCESS: bool = false;
 
+    /// Whether every successful `read_data` call consumes at least one input byte.
+    ///
+    /// Custom serializers are conservative by default. Implementations may opt in
+    /// only when this property holds for every value they can read.
+    #[doc(hidden)]
+    const READ_DATA_ALWAYS_ADVANCES: bool = false;
+
     #[doc(hidden)]
     #[inline(always)]
     fn is_none(value: &Self::Target) -> bool {

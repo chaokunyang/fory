@@ -19,6 +19,7 @@
 
 package org.apache.fory.json.annotation;
 
+import java.lang.annotation.Documented;
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
@@ -33,8 +34,9 @@ import org.apache.fory.json.ForyJson;
  * ForyJson} is invoked once while the native image is built. This includes inherited superclass
  * methods and public interface default methods. The returned configurations select the generated
  * object codecs included in the image; configurations not returned by a provider continue to use
- * interpreted codecs.
+ * interpreted codecs. The provider package does not need to be exported or opened to Fory.
  */
+@Documented
 @Retention(RetentionPolicy.RUNTIME)
 @Target(ElementType.TYPE)
 public @interface ForyJsonProvider {}

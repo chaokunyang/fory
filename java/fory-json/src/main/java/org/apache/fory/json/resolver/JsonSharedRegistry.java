@@ -175,6 +175,7 @@ public final class JsonSharedRegistry {
   private final Object typeCheckCacheLock;
   private final JsonCodegen codegen;
   private final JsonCodegenKey nativeCodegenKey;
+  private final boolean hostedCodegen;
   private final boolean asyncCompilationEnabled;
   private final ExecutorService compilationService;
   private final boolean propertyDiscoveryEnabled;
@@ -214,7 +215,7 @@ public final class JsonSharedRegistry {
 
   private JsonSharedRegistry(
       JsonConfig config, ExecutorService compilationService, boolean hostedCodegen) {
-    this.customCodecs = config.codecRegistry().copy();
+    this.customCodecs = config.codecRegistry();
     typeChecker = config.typeChecker();
     typeCheckContext = config.typeCheckContext();
     typeCheckCache = typeChecker == null ? null : new ConcurrentHashMap<>();
@@ -245,6 +246,7 @@ public final class JsonSharedRegistry {
     utf8CollectionReaderClasses = new ConcurrentHashMap<>();
     cachedFieldNames = new ConcurrentHashMap<>();
     boolean codegenEnabled = config.codegenEnabled();
+    this.hostedCodegen = hostedCodegen;
     boolean createCompiler =
         codegenEnabled && (hostedCodegen || !GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE);
     codegen = createCompiler ? new JsonCodegen(config.getCodegenHash(), classLoader) : null;
@@ -403,6 +405,10 @@ public final class JsonSharedRegistry {
     return codegen != null || nativeConfiguration() != null;
   }
 
+  boolean hostedCodegen() {
+    return hostedCodegen;
+  }
+
   boolean missingNativeConfiguration() {
     return nativeCodegenKey != null && nativeConfiguration() == null;
   }
@@ -539,10 +545,7 @@ public final class JsonSharedRegistry {
     }
     try {
       GeneratedJsonCodec<?> codec = generatedCodecIfPresent(type, mixinType);
-      if (codec == null
-          && (directGenerated
-              || mixinType != null
-                  && (AndroidSupport.IS_ANDROID || GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE))) {
+      if (codec == null && (directGenerated || mixinType != null && AndroidSupport.IS_ANDROID)) {
         throw missingGeneratedCodec(type, mixinType, "JSON object model");
       }
       return codec;
@@ -693,9 +696,7 @@ public final class JsonSharedRegistry {
     Executable creator =
         validateGeneratedCreator(
             type, memberAccessors, creatorNames, creatorTypes, creatorFactory, record);
-    if (!AndroidSupport.IS_ANDROID
-        && !GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE
-        && RecordUtils.isRecord(type) != record) {
+    if (!AndroidSupport.IS_ANDROID && RecordUtils.isRecord(type) != record) {
       throw invalidGeneratedCodec(type, "isRecord() does not match the runtime model class");
     }
     codec.initializeValidated(

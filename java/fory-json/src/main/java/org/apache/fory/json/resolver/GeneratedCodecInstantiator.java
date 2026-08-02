@@ -20,6 +20,7 @@
 package org.apache.fory.json.resolver;
 
 import java.lang.invoke.MethodHandle;
+import java.lang.invoke.MethodType;
 import java.lang.reflect.Constructor;
 import org.apache.fory.json.ForyJsonException;
 import org.apache.fory.json.codec.Latin1ReaderCodec;
@@ -31,11 +32,22 @@ import org.apache.fory.json.codec.Utf8WriterCodec;
 import org.apache.fory.json.meta.JsonFieldInfo;
 import org.apache.fory.json.meta.JsonFieldTable;
 import org.apache.fory.platform.AndroidSupport;
+import org.apache.fory.platform.GraalvmSupport;
+import org.apache.fory.platform.internal._JDKAccess;
 import org.apache.fory.reflect.ReflectionUtils;
 
 /** Invokes generated codec constructor contracts selected and owned by {@link JsonTypeResolver}. */
 final class GeneratedCodecInstantiator {
   private GeneratedCodecInstantiator() {}
+
+  private static MethodHandle constructor(Class<?> type, Class<?>... parameterTypes)
+      throws NoSuchMethodException, IllegalAccessException {
+    if (GraalvmSupport.isGraalRuntime()) {
+      return ReflectionUtils.getCtrHandle(type, parameterTypes);
+    }
+    return _JDKAccess._trustedLookup(type)
+        .findConstructor(type, MethodType.methodType(void.class, parameterTypes));
+  }
 
   @SuppressWarnings("unchecked")
   static StringWriterCodec<Object> instantiateStringWriter(
@@ -48,7 +60,7 @@ final class GeneratedCodecInstantiator {
         return (StringWriterCodec<Object>) constructor.newInstance(fields, codecs);
       }
       MethodHandle constructor =
-          ReflectionUtils.getCtrHandle(type, JsonFieldInfo[].class, StringWriterCodec[].class);
+          constructor(type, JsonFieldInfo[].class, StringWriterCodec[].class);
       return (StringWriterCodec<Object>) constructor.invoke(fields, codecs);
     } catch (Throwable e) {
       throw new ForyJsonException("Cannot instantiate generated JSON String writer", e);
@@ -70,8 +82,7 @@ final class GeneratedCodecInstantiator {
         return (StringWriterCodec<Object>) constructor.newInstance(owner, fields, codecs);
       }
       MethodHandle constructor =
-          ReflectionUtils.getCtrHandle(
-              type, ObjectCodec.class, JsonFieldInfo[].class, StringWriterCodec[].class);
+          constructor(type, ObjectCodec.class, JsonFieldInfo[].class, StringWriterCodec[].class);
       return (StringWriterCodec<Object>) constructor.invoke(owner, fields, codecs);
     } catch (Throwable e) {
       throw new ForyJsonException("Cannot instantiate generated JSON Any String writer", e);
@@ -97,7 +108,7 @@ final class GeneratedCodecInstantiator {
         return (StringWriterCodec<Object>) constructor.newInstance(owner, fields, codecs, anyCodec);
       }
       MethodHandle constructor =
-          ReflectionUtils.getCtrHandle(
+          constructor(
               type,
               ObjectCodec.class,
               JsonFieldInfo[].class,
@@ -119,8 +130,7 @@ final class GeneratedCodecInstantiator {
         constructor.setAccessible(true);
         return (Utf8WriterCodec<Object>) constructor.newInstance(fields, codecs);
       }
-      MethodHandle constructor =
-          ReflectionUtils.getCtrHandle(type, JsonFieldInfo[].class, Utf8WriterCodec[].class);
+      MethodHandle constructor = constructor(type, JsonFieldInfo[].class, Utf8WriterCodec[].class);
       return (Utf8WriterCodec<Object>) constructor.invoke(fields, codecs);
     } catch (Throwable e) {
       throw new ForyJsonException("Cannot instantiate generated JSON UTF8 writer", e);
@@ -142,8 +152,7 @@ final class GeneratedCodecInstantiator {
         return (Utf8WriterCodec<Object>) constructor.newInstance(owner, fields, codecs);
       }
       MethodHandle constructor =
-          ReflectionUtils.getCtrHandle(
-              type, ObjectCodec.class, JsonFieldInfo[].class, Utf8WriterCodec[].class);
+          constructor(type, ObjectCodec.class, JsonFieldInfo[].class, Utf8WriterCodec[].class);
       return (Utf8WriterCodec<Object>) constructor.invoke(owner, fields, codecs);
     } catch (Throwable e) {
       throw new ForyJsonException("Cannot instantiate generated JSON Any UTF8 writer", e);
@@ -169,7 +178,7 @@ final class GeneratedCodecInstantiator {
         return (Utf8WriterCodec<Object>) constructor.newInstance(owner, fields, codecs, anyCodec);
       }
       MethodHandle constructor =
-          ReflectionUtils.getCtrHandle(
+          constructor(
               type,
               ObjectCodec.class,
               JsonFieldInfo[].class,
@@ -196,8 +205,7 @@ final class GeneratedCodecInstantiator {
         return (Latin1ReaderCodec<Object>) constructor.newInstance(owner, fields, codecs);
       }
       MethodHandle constructor =
-          ReflectionUtils.getCtrHandle(
-              type, ObjectCodec.class, JsonFieldInfo[].class, Latin1ReaderCodec[].class);
+          constructor(type, ObjectCodec.class, JsonFieldInfo[].class, Latin1ReaderCodec[].class);
       return (Latin1ReaderCodec<Object>) constructor.invoke(owner, fields, codecs);
     } catch (Throwable e) {
       throw new ForyJsonException("Cannot instantiate generated JSON Latin1 reader", e);
@@ -226,7 +234,7 @@ final class GeneratedCodecInstantiator {
             constructor.newInstance(owner, readTable, fields, codecs, selfReader);
       }
       MethodHandle constructor =
-          ReflectionUtils.getCtrHandle(
+          constructor(
               type,
               ObjectCodec.class,
               JsonFieldTable.class,
@@ -264,7 +272,7 @@ final class GeneratedCodecInstantiator {
             constructor.newInstance(owner, readTable, fields, codecs, selfReader, anyCodec);
       }
       MethodHandle constructor =
-          ReflectionUtils.getCtrHandle(
+          constructor(
               type,
               ObjectCodec.class,
               JsonFieldTable.class,
@@ -294,8 +302,7 @@ final class GeneratedCodecInstantiator {
         return (Utf16ReaderCodec<Object>) constructor.newInstance(owner, fields, codecs);
       }
       MethodHandle constructor =
-          ReflectionUtils.getCtrHandle(
-              type, ObjectCodec.class, JsonFieldInfo[].class, Utf16ReaderCodec[].class);
+          constructor(type, ObjectCodec.class, JsonFieldInfo[].class, Utf16ReaderCodec[].class);
       return (Utf16ReaderCodec<Object>) constructor.invoke(owner, fields, codecs);
     } catch (Throwable e) {
       throw new ForyJsonException("Cannot instantiate generated JSON UTF16 reader", e);
@@ -324,7 +331,7 @@ final class GeneratedCodecInstantiator {
             constructor.newInstance(owner, readTable, fields, codecs, selfReader);
       }
       MethodHandle constructor =
-          ReflectionUtils.getCtrHandle(
+          constructor(
               type,
               ObjectCodec.class,
               JsonFieldTable.class,
@@ -362,7 +369,7 @@ final class GeneratedCodecInstantiator {
             constructor.newInstance(owner, readTable, fields, codecs, selfReader, anyCodec);
       }
       MethodHandle constructor =
-          ReflectionUtils.getCtrHandle(
+          constructor(
               type,
               ObjectCodec.class,
               JsonFieldTable.class,
@@ -392,8 +399,7 @@ final class GeneratedCodecInstantiator {
         return (Utf8ReaderCodec<Object>) constructor.newInstance(owner, fields, codecs);
       }
       MethodHandle constructor =
-          ReflectionUtils.getCtrHandle(
-              type, ObjectCodec.class, JsonFieldInfo[].class, Utf8ReaderCodec[].class);
+          constructor(type, ObjectCodec.class, JsonFieldInfo[].class, Utf8ReaderCodec[].class);
       return (Utf8ReaderCodec<Object>) constructor.invoke(owner, fields, codecs);
     } catch (Throwable e) {
       throw new ForyJsonException("Cannot instantiate generated JSON UTF8 reader", e);
@@ -409,7 +415,7 @@ final class GeneratedCodecInstantiator {
         constructor.setAccessible(true);
         return (Utf8WriterCodec<Object>) constructor.newInstance(fallback);
       }
-      MethodHandle constructor = ReflectionUtils.getCtrHandle(type, Utf8WriterCodec.class);
+      MethodHandle constructor = constructor(type, Utf8WriterCodec.class);
       return (Utf8WriterCodec<Object>) constructor.invoke(fallback);
     } catch (Throwable e) {
       throw new ForyJsonException("Cannot instantiate generated JSON UTF8 collection writer", e);
@@ -426,8 +432,7 @@ final class GeneratedCodecInstantiator {
         constructor.setAccessible(true);
         return (Utf8WriterCodec<Object>) constructor.newInstance(fallback, elementWriter);
       }
-      MethodHandle constructor =
-          ReflectionUtils.getCtrHandle(type, Utf8WriterCodec.class, Utf8WriterCodec.class);
+      MethodHandle constructor = constructor(type, Utf8WriterCodec.class, Utf8WriterCodec.class);
       return (Utf8WriterCodec<Object>) constructor.invoke(fallback, elementWriter);
     } catch (Throwable e) {
       throw new ForyJsonException("Cannot instantiate generated JSON UTF8 collection writer", e);
@@ -443,7 +448,7 @@ final class GeneratedCodecInstantiator {
         constructor.setAccessible(true);
         return (Utf8ReaderCodec<Object>) constructor.newInstance(elementReader);
       }
-      MethodHandle constructor = ReflectionUtils.getCtrHandle(type, Utf8ReaderCodec.class);
+      MethodHandle constructor = constructor(type, Utf8ReaderCodec.class);
       return (Utf8ReaderCodec<Object>) constructor.invoke(elementReader);
     } catch (Throwable e) {
       throw new ForyJsonException("Cannot instantiate generated JSON UTF8 collection reader", e);
@@ -472,7 +477,7 @@ final class GeneratedCodecInstantiator {
             constructor.newInstance(owner, readTable, fields, codecs, selfReader);
       }
       MethodHandle constructor =
-          ReflectionUtils.getCtrHandle(
+          constructor(
               type,
               ObjectCodec.class,
               JsonFieldTable.class,
@@ -510,7 +515,7 @@ final class GeneratedCodecInstantiator {
             constructor.newInstance(owner, readTable, fields, codecs, selfReader, anyCodec);
       }
       MethodHandle constructor =
-          ReflectionUtils.getCtrHandle(
+          constructor(
               type,
               ObjectCodec.class,
               JsonFieldTable.class,

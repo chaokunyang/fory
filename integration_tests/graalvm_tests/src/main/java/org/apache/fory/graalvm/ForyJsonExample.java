@@ -37,6 +37,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.atomic.AtomicReferenceArray;
+import org.apache.fory.graalvm.closed.ClosedJsonConfigs;
 import org.apache.fory.graalvm.closed.ClosedJsonRecord;
 import org.apache.fory.json.ForyJson;
 import org.apache.fory.json.PropertyNamingStrategy;
@@ -64,7 +65,7 @@ import org.apache.fory.json.writer.Utf8JsonWriter;
 import org.apache.fory.platform.GraalvmSupport;
 import org.apache.fory.util.Preconditions;
 
-/** Native-image acceptance coverage for the complete interpreted Fory JSON path. */
+/** Native-image acceptance coverage for hosted code generation and interpreter fallback. */
 public final class ForyJsonExample {
   private static final String NATIVE_INTERPRETER_MESSAGE =
       "Fory JSON is using interpreted codecs because the current configuration was not included "
@@ -79,7 +80,8 @@ public final class ForyJsonExample {
     try (PrintStream testOut = new PrintStream(captured, true, StandardCharsets.UTF_8)) {
       System.setOut(testOut);
       try {
-        Preconditions.checkArgument(JsonConfigs.class.isAnnotationPresent(ForyJsonProvider.class));
+        Preconditions.checkArgument(
+            ClosedJsonConfigs.class.isAnnotationPresent(ForyJsonProvider.class));
         if (GraalvmSupport.isGraalRuntime()) {
           testHostedCodegenConfigurations();
         }
@@ -142,12 +144,15 @@ public final class ForyJsonExample {
     CodegenProbeModel value = new CodegenProbeModel();
     value.id = 41;
     value.probe = new CodegenProbeValue("probe");
+    value.children.add(new CodegenProbeChild("child"));
     String encoded = json.toJson(value);
     Preconditions.checkArgument(encoded.contains("probe"));
     String utf8 = new String(json.toJsonBytes(value), StandardCharsets.UTF_8);
     Preconditions.checkArgument(utf8.contains("probe"));
     Preconditions.checkArgument(
         json.fromJson(encoded, CodegenProbeModel.class).probe.value.equals("probe"));
+    Preconditions.checkArgument(
+        json.fromJson(encoded, CodegenProbeModel.class).children.get(0).name.equals("child"));
     String utf16 = encoded.replace(":\"probe\"", ":\"\u4f60\"");
     Preconditions.checkArgument(
         json.fromJson(utf16, CodegenProbeModel.class).probe.value.equals("\u4f60"));
@@ -459,18 +464,6 @@ public final class ForyJsonExample {
     }
   }
 
-  public static class ParentJsonConfigs {
-    public ForyJson generatedConfiguration() {
-      return newProviderJson();
-    }
-  }
-
-  @ForyJsonProvider
-  public static final class JsonConfigs extends ParentJsonConfigs
-      implements InheritedJsonConfig {
-    public JsonConfigs() {}
-  }
-
   @JsonType
   public static final class CodegenProbeModel {
     public int id;
@@ -478,7 +471,20 @@ public final class ForyJsonExample {
     @JsonCodec(CodegenProbeCodec.class)
     public CodegenProbeValue probe;
 
+    public List<CodegenProbeChild> children = new ArrayList<>();
+
     public CodegenProbeModel() {}
+  }
+
+  @JsonType
+  public static final class CodegenProbeChild {
+    public String name;
+
+    public CodegenProbeChild() {}
+
+    public CodegenProbeChild(String name) {
+      this.name = name;
+    }
   }
 
   public static final class CodegenProbeValue {

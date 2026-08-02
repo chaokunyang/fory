@@ -22,7 +22,11 @@ package org.apache.fory.graalvm;
 import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import org.apache.fory.json.ForyJson;
+import org.apache.fory.json.annotation.JsonAnyGetter;
+import org.apache.fory.json.annotation.JsonAnySetter;
 import org.apache.fory.json.annotation.JsonCodec;
 import org.apache.fory.json.annotation.JsonCreator;
 import org.apache.fory.json.annotation.JsonProperty;
@@ -53,7 +57,6 @@ public final class ForyJsonNoProviderExample {
       System.setOut(testOut);
       try {
         exercise(ForyJson.builder().build());
-        exercise(ForyJson.builder().withFieldMode(true).build());
       } finally {
         System.setOut(originalOut);
       }
@@ -73,7 +76,12 @@ public final class ForyJsonNoProviderExample {
   }
 
   private static void exercise(ForyJson json) {
-    Model value = new Model(7, new Probe("value"));
+    Bean bean = new Bean();
+    bean.setName("bean");
+    bean.putExtra("dynamic", "extra");
+    Model value =
+        new Model(
+            7, new Probe("value"), bean, new RecordValue(8, "record"), FactoryValue.create(9));
     String encoded = json.toJson(value);
     Preconditions.checkArgument(json.toJsonBytes(value).length != 0);
     Preconditions.checkArgument(json.fromJson(encoded, Model.class).equals(value));
@@ -103,11 +111,22 @@ public final class ForyJsonNoProviderExample {
     @JsonCodec(ProbeCodec.class)
     private final Probe probe;
 
+    private final Bean bean;
+    private final RecordValue record;
+    private final FactoryValue factory;
+
     @JsonCreator
     public Model(
-        @JsonProperty("id") int id, @JsonProperty("probe") Probe probe) {
+        @JsonProperty("id") int id,
+        @JsonProperty("probe") Probe probe,
+        @JsonProperty("bean") Bean bean,
+        @JsonProperty("record") RecordValue record,
+        @JsonProperty("factory") FactoryValue factory) {
       this.id = id;
       this.probe = probe;
+      this.bean = bean;
+      this.record = record;
+      this.factory = factory;
     }
 
     public int getId() {
@@ -116,6 +135,18 @@ public final class ForyJsonNoProviderExample {
 
     public Probe getProbe() {
       return probe;
+    }
+
+    public Bean getBean() {
+      return bean;
+    }
+
+    public RecordValue getRecord() {
+      return record;
+    }
+
+    public FactoryValue getFactory() {
+      return factory;
     }
 
     @Override
@@ -127,12 +158,90 @@ public final class ForyJsonNoProviderExample {
         return false;
       }
       Model that = (Model) other;
-      return id == that.id && probe.equals(that.probe);
+      return id == that.id
+          && probe.equals(that.probe)
+          && bean.equals(that.bean)
+          && record.equals(that.record)
+          && factory.equals(that.factory);
     }
 
     @Override
     public int hashCode() {
-      return 31 * id + probe.hashCode();
+      int result = 31 * id + probe.hashCode();
+      result = 31 * result + bean.hashCode();
+      result = 31 * result + record.hashCode();
+      return 31 * result + factory.hashCode();
+    }
+  }
+
+  @JsonType
+  public static final class Bean {
+    private String name;
+    private final transient Map<String, String> extra = new LinkedHashMap<>();
+
+    public Bean() {}
+
+    public String getName() {
+      return name;
+    }
+
+    public void setName(String name) {
+      this.name = name;
+    }
+
+    @JsonAnyGetter
+    public Map<String, String> extra() {
+      return extra;
+    }
+
+    @JsonAnySetter
+    public void putExtra(String key, String value) {
+      extra.put(key, value);
+    }
+
+    @Override
+    public boolean equals(Object other) {
+      if (!(other instanceof Bean)) {
+        return false;
+      }
+      Bean that = (Bean) other;
+      return name.equals(that.name) && extra.equals(that.extra);
+    }
+
+    @Override
+    public int hashCode() {
+      return 31 * name.hashCode() + extra.hashCode();
+    }
+  }
+
+  @JsonType
+  public record RecordValue(int rank, String text) {}
+
+  @JsonType
+  public static final class FactoryValue {
+    private final int code;
+
+    private FactoryValue(int code) {
+      this.code = code;
+    }
+
+    @JsonCreator
+    public static FactoryValue create(@JsonProperty("code") int code) {
+      return new FactoryValue(code);
+    }
+
+    public int getCode() {
+      return code;
+    }
+
+    @Override
+    public boolean equals(Object other) {
+      return other instanceof FactoryValue && code == ((FactoryValue) other).code;
+    }
+
+    @Override
+    public int hashCode() {
+      return code;
     }
   }
 
@@ -159,8 +268,7 @@ public final class ForyJsonNoProviderExample {
 
     @Override
     public void writeString(StringJsonWriter writer, Probe value) {
-      checkInterpreted(
-          writer.typeResolver().getTypeInfo(Model.class, Model.class).stringWriter());
+      checkInterpreted(writer.typeResolver().getTypeInfo(Model.class, Model.class).stringWriter());
       writer.writeString(value == null ? null : value.value);
     }
 

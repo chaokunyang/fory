@@ -27,7 +27,6 @@ import java.util.Map;
 import java.util.Set;
 import org.apache.fory.annotation.Internal;
 import org.apache.fory.json.resolver.JsonSharedRegistry.GeneratedClasses;
-import org.apache.fory.reflect.TypeRef;
 
 /** Frozen Native Image mapping from JSON configuration semantics to generated classes. */
 @Internal
@@ -84,8 +83,8 @@ public final class JsonGeneratedClassRegistry {
     private final Map<Class<?>, Class<?>> latin1Readers;
     private final Map<Class<?>, Class<?>> utf16Readers;
     private final Map<Class<?>, Class<?>> utf8Readers;
-    private final Map<String, Class<?>> utf8CollectionWriters;
-    private final Map<String, Class<?>> utf8CollectionReaders;
+    private final Map<Type, Class<?>> utf8CollectionWriters;
+    private final Map<Type, Class<?>> utf8CollectionReaders;
 
     private Configuration(MutableConfiguration source) {
       stringWriters = immutable(source.stringWriters);
@@ -118,11 +117,11 @@ public final class JsonGeneratedClassRegistry {
     }
 
     public Class<?> utf8CollectionWriter(Type type) {
-      return utf8CollectionWriters.get(typeKey(type));
+      return utf8CollectionWriters.get(type);
     }
 
     public Class<?> utf8CollectionReader(Type type) {
-      return utf8CollectionReaders.get(typeKey(type));
+      return utf8CollectionReaders.get(type);
     }
 
     private static <K> Map<K, Class<?>> immutable(Map<K, Class<?>> classes) {
@@ -138,8 +137,8 @@ public final class JsonGeneratedClassRegistry {
     private final Map<Class<?>, Class<?>> latin1Readers = new HashMap<>();
     private final Map<Class<?>, Class<?>> utf16Readers = new HashMap<>();
     private final Map<Class<?>, Class<?>> utf8Readers = new HashMap<>();
-    private final Map<String, Class<?>> utf8CollectionWriters = new HashMap<>();
-    private final Map<String, Class<?>> utf8CollectionReaders = new HashMap<>();
+    private final Map<Type, Class<?>> utf8CollectionWriters = new HashMap<>();
+    private final Map<Type, Class<?>> utf8CollectionReaders = new HashMap<>();
 
     private void merge(GeneratedClasses source, Set<Class<?>> added) {
       merge(source.stringWriters(), stringWriters, added);
@@ -147,25 +146,14 @@ public final class JsonGeneratedClassRegistry {
       merge(source.latin1Readers(), latin1Readers, added);
       merge(source.utf16Readers(), utf16Readers, added);
       merge(source.utf8Readers(), utf8Readers, added);
-      mergeTypes(source.utf8CollectionWriters(), utf8CollectionWriters, added);
-      mergeTypes(source.utf8CollectionReaders(), utf8CollectionReaders, added);
-    }
-
-    private Configuration freeze() {
-      return new Configuration(this);
+      merge(source.utf8CollectionWriters(), utf8CollectionWriters, added);
+      merge(source.utf8CollectionReaders(), utf8CollectionReaders, added);
     }
 
     private static <K> void merge(
         Map<K, Class<?>> source, Map<K, Class<?>> target, Set<Class<?>> added) {
       for (Map.Entry<K, Class<?>> entry : source.entrySet()) {
         merge(entry.getKey(), entry.getValue(), target, added);
-      }
-    }
-
-    private static void mergeTypes(
-        Map<Type, Class<?>> source, Map<String, Class<?>> target, Set<Class<?>> added) {
-      for (Map.Entry<Type, Class<?>> entry : source.entrySet()) {
-        merge(typeKey(entry.getKey()), entry.getValue(), target, added);
       }
     }
 
@@ -178,9 +166,9 @@ public final class JsonGeneratedClassRegistry {
         throw new IllegalStateException("Conflicting generated Fory JSON classes for " + key);
       }
     }
-  }
 
-  private static String typeKey(Type type) {
-    return TypeRef.of(type).getTypeKey();
+    private Configuration freeze() {
+      return new Configuration(this);
+    }
   }
 }

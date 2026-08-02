@@ -27,7 +27,7 @@ import org.apache.fory.annotation.Internal;
 public final class JsonCodegenKey {
   private final boolean writeNullFields;
   private final boolean propertyDiscoveryEnabled;
-  private final PropertyNamingStrategy propertyNamingStrategy;
+  private final String propertyNamingStrategy;
   private final String codecRegistryKey;
   private final String mixinKey;
 
@@ -39,7 +39,7 @@ public final class JsonCodegenKey {
       String mixinKey) {
     this.writeNullFields = writeNullFields;
     this.propertyDiscoveryEnabled = propertyDiscoveryEnabled;
-    this.propertyNamingStrategy = propertyNamingStrategy;
+    this.propertyNamingStrategy = propertyNamingStrategy.name();
     this.codecRegistryKey = codecRegistryKey;
     this.mixinKey = mixinKey;
   }
@@ -55,7 +55,7 @@ public final class JsonCodegenKey {
     JsonCodegenKey that = (JsonCodegenKey) other;
     return writeNullFields == that.writeNullFields
         && propertyDiscoveryEnabled == that.propertyDiscoveryEnabled
-        && propertyNamingStrategy == that.propertyNamingStrategy
+        && propertyNamingStrategy.equals(that.propertyNamingStrategy)
         && codecRegistryKey.equals(that.codecRegistryKey)
         && mixinKey.equals(that.mixinKey);
   }

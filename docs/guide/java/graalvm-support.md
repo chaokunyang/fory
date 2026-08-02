@@ -69,9 +69,9 @@ public class JsonExample {
 ```
 
 This is sufficient for correct native execution. During image construction, Fory JSON retains the
-model metadata and prepares its field, property, creator, record, and `JsonAnySetter` access
-handles. At runtime, `ForyJson.builder().build()` can therefore use interpreted codecs without
-application reflection configuration or build-time initialization.
+model metadata and prepares its field, property, creator, record, and `JsonAnySetter` access. At
+runtime, `ForyJson.builder().build()` can therefore use interpreted codecs without application
+reflection configuration, package exports or opens, or build-time initialization.
 
 To include generated codecs for a configuration, return that completed configuration from a
 reachable `@ForyJsonProvider`:
@@ -106,7 +106,8 @@ configurations are generated once.
 
 Provider objects exist only while the image is built. Prefer a dedicated configuration class with
 instance fields and methods as shown above; no application `native-image.properties` entry is
-needed. Static provider methods and fields are not supported.
+needed, and the provider package does not need to be exported or opened to Fory. Static provider
+methods and fields are not supported.
 
 Only configurations returned by a provider receive generated codecs. The default configuration is
 not generated implicitly. If a codegen-enabled runtime configuration was not included, Fory JSON
@@ -139,8 +140,8 @@ public class JsonExample {
 
 `JsonMixin` is a build-time entry point for its exact declared target, so the target does not need
 `JsonType` solely to use the Mixin. The registered Mixin class literal must be reachable from the
-application. The Native Image Feature retains the target metadata and prepares the same access
-handles as it does for a direct `JsonType` model. A provider configuration generates the Mixin
+application. The Native Image Feature retains the target metadata and prepares the same access as
+it does for a direct `JsonType` model. A provider configuration generates the Mixin
 target only when that exact Mixin is registered in the returned `ForyJson`.
 
 Only one source is enabled for an exact target in a built `ForyJson`. Later registration replaces

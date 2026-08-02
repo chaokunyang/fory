@@ -302,7 +302,7 @@ an existing runtime.
 
 In a GraalVM native image, runtime compilation and asynchronous compilation are unavailable.
 Configurations returned by a reachable `ForyJsonProvider` use codecs generated while the image is
-built; other configurations use interpreted codecs with build-time-prepared access handles. Every
+built; other configurations use interpreted codecs with build-time-prepared access metadata. Every
 other builder option keeps the behavior described above.
 
 ## Annotations
@@ -1176,9 +1176,10 @@ no-argument constructor. One instance is shared by all annotated sites and concu
 the built `ForyJson`, so it must be thread-safe. Use `registerCodec(Target.class, instance)` when a
 complete-value codec needs configuration.
 
-In a named Java module, export or open the codec package to `org.apache.fory.json`. When an inherited
-type-declaration codec is used for a more specific target, every decoded value must be null or
-assignable to that target.
+Outside GraalVM Native Image, a named Java module must export or open the codec package to
+`org.apache.fory.json`. Native Image prepares annotation-codec constructors during image
+construction and does not require that package access. When an inherited type-declaration codec is
+used for a more specific target, every decoded value must be null or assignable to that target.
 
 The annotation has the same FIELD, METHOD, and PARAMETER behavior on the JVM, Android, and GraalVM
 Native Image. Ordinary Android classes may omit `JsonType` and provide equivalent exact rules.

@@ -1789,6 +1789,10 @@ public final class JsonTypeResolver {
   }
 
   private void requestGraph(CapabilityGraph graph) {
+    if (sharedRegistry.hostedCodegen()) {
+      graph.classesReady().join();
+      return;
+    }
     if (sharedRegistry.nativeGeneratedClasses()) {
       graph.loadNativeClasses();
       graph.publish();

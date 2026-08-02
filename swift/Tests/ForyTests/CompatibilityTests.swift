@@ -444,7 +444,7 @@ func skipsDynamicMapNullEntries() throws {
 }
 
 @Test
-func compatibleNoneCollectionSkip() throws {
+func compatibleNoneCollectionUsesBudget() throws {
     let sentinel: UInt8 = 0xA5
     let fieldType = TypeMeta.FieldType(
         typeID: TypeId.list.rawValue,
@@ -456,7 +456,7 @@ func compatibleNoneCollectionSkip() throws {
 
     for declared in [true, false] {
         let buffer = ByteBuffer()
-        buffer.writeVarUInt32(UInt32.max)
+        buffer.writeVarUInt32(3)
         buffer.writeUInt8(
             CollectionHeader.sameType
                 | (declared ? CollectionHeader.declaredElementType : 0)
@@ -467,13 +467,20 @@ func compatibleNoneCollectionSkip() throws {
         let sentinelIndex = buffer.count
         buffer.writeUInt8(sentinel)
 
-        let config = Config(trackRef: false, compatible: true)
+        let config = Config(
+            trackRef: false,
+            compatible: true,
+            maxUnbackedContainerItems: 2
+        )
         let context = ReadContext(
             buffer: buffer,
             typeResolver: TypeResolver(config: config),
             config: config
         )
-        try context.skipFieldValue(fieldType)
+        context.remainingUnbackedContainerItems = config.maxUnbackedContainerItems
+        #expect(throws: (any Error).self) {
+            try context.skipFieldValue(fieldType)
+        }
 
         #expect(buffer.getCursor() == sentinelIndex)
         #expect(try buffer.readUInt8() == sentinel)

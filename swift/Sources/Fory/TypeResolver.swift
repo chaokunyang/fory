@@ -289,6 +289,7 @@ public final class TypeInfo: @unchecked Sendable {
     public private(set) var typeDefHeaderHash: UInt64?
     public private(set) var typeDefHasUserTypeFields: Bool
     let isRefType: Bool
+    let readDataAlwaysAdvances: Bool
 
     private let writer: (Any, WriteContext) throws -> Void
     private let reader: (ReadContext) throws -> Any
@@ -317,6 +318,7 @@ public final class TypeInfo: @unchecked Sendable {
         typeDefHeaderHash: UInt64? = nil,
         typeDefHasUserTypeFields: Bool = true,
         isRefType: Bool,
+        readDataAlwaysAdvances: Bool = false,
         dynamicBoxBytes: Int = 0,
         writer: @escaping (Any, WriteContext) throws -> Void,
         reader: @escaping (ReadContext) throws -> Any,
@@ -339,6 +341,7 @@ public final class TypeInfo: @unchecked Sendable {
         self.typeDefHeaderHash = typeDefHeaderHash
         self.typeDefHasUserTypeFields = typeDefHasUserTypeFields
         self.isRefType = isRefType
+        self.readDataAlwaysAdvances = readDataAlwaysAdvances
         self.dynamicBoxBytes = dynamicBoxBytes
         self.writer = writer
         self.reader = reader
@@ -402,6 +405,7 @@ public final class TypeInfo: @unchecked Sendable {
             namespace: MetaString.empty(specialChar1: ".", specialChar2: "_"),
             typeName: MetaString.empty(specialChar1: "$", specialChar2: "_"),
             isRefType: false,
+            readDataAlwaysAdvances: typeID.readDataAlwaysAdvances,
             writer: { _, _ in
                 throw ForyError.invalidData("dynamic type \(typeID) uses runtime-only encode path")
             },
@@ -416,6 +420,13 @@ public final class TypeInfo: @unchecked Sendable {
     }
 
     convenience init(dynamic typeInfo: TypeInfo, compatibleTypeMeta: TypeMeta) {
+        let remoteSchemaCanChangeBody: Bool
+        switch typeInfo.typeID {
+        case .structType, .compatibleStruct, .namedStruct, .namedCompatibleStruct:
+            remoteSchemaCanChangeBody = true
+        default:
+            remoteSchemaCanChangeBody = false
+        }
         self.init(
             serializerTypeID: typeInfo.serializerTypeID,
             targetTypeID: typeInfo.targetTypeID,
@@ -432,6 +443,7 @@ public final class TypeInfo: @unchecked Sendable {
             typeDefHeaderHash: typeInfo.typeDefHeaderHash,
             typeDefHasUserTypeFields: typeInfo.typeDefHasUserTypeFields,
             isRefType: typeInfo.isRefType,
+            readDataAlwaysAdvances: !remoteSchemaCanChangeBody && typeInfo.readDataAlwaysAdvances,
             dynamicBoxBytes: typeInfo.dynamicBoxBytes,
             writer: typeInfo.writer,
             reader: typeInfo.reader,
@@ -719,6 +731,7 @@ final class TypeResolver {
             typeName: MetaString.empty(specialChar1: "$", specialChar2: "_"),
             typeDefHasUserTypeFields: false,
             isRefType: S.isRefType,
+            readDataAlwaysAdvances: S.readDataAlwaysAdvances,
             dynamicBoxBytes: registeredDynamicBoxBytes(for: S.self),
             writer: { value, context in
                 try writeRegisteredValue(value, context, as: S.self)
@@ -760,6 +773,7 @@ final class TypeResolver {
             typeName: MetaString.empty(specialChar1: "$", specialChar2: "_"),
             typeDefHasUserTypeFields: false,
             isRefType: false,
+            readDataAlwaysAdvances: typeID.readDataAlwaysAdvances,
             writer: { _, _ in
                 throw ForyError.invalidData("wire-only dynamic type \(typeID) cannot be written")
             },
@@ -785,6 +799,7 @@ final class TypeResolver {
             typeName: MetaString.empty(specialChar1: "$", specialChar2: "_"),
             typeDefHasUserTypeFields: false,
             isRefType: false,
+            readDataAlwaysAdvances: true,
             writer: { value, context in
                 guard let array = value as? [Element] else {
                     try builtinTargetMismatch(value, expected: arrayType)
@@ -870,6 +885,7 @@ final class TypeResolver {
                 try registeredFields(for: T.self, trackRef: trackRef, resolver: resolver)
             },
             isRefType: T.isRefType,
+            readDataAlwaysAdvances: T.readDataAlwaysAdvances,
             dynamicBoxBytes: registeredDynamicBoxBytes(for: T.self),
             writer: { value, context in
                 try writeRegisteredValue(value, context, as: T.self)
@@ -941,6 +957,7 @@ final class TypeResolver {
                 try registeredFields(for: T.self, trackRef: trackRef, resolver: resolver)
             },
             isRefType: T.isRefType,
+            readDataAlwaysAdvances: T.readDataAlwaysAdvances,
             dynamicBoxBytes: registeredDynamicBoxBytes(for: T.self),
             writer: { value, context in
                 try writeRegisteredValue(value, context, as: T.self)

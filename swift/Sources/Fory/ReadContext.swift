@@ -47,6 +47,7 @@ public final class ReadContext {
     private var lastTypeInfo = TypeInfo.uncached
     private let config: Config
     var remainingGraphMemoryBytes = 0
+    var remainingUnbackedContainerItems = 0
 
     init(
         buffer: ByteBuffer,
@@ -72,6 +73,23 @@ public final class ReadContext {
             try throwGraphMemoryExceeded(bytes: bytes)
         }
         remainingGraphMemoryBytes -= bytes
+    }
+
+    @usableFromInline
+    @inline(__always)
+    internal func reserveUnbackedContainerItems(_ items: Int) throws {
+        if _slowPath(items > remainingUnbackedContainerItems) {
+            try throwUnbackedContainerItemsExceeded(items: items)
+        }
+        remainingUnbackedContainerItems -= items
+    }
+
+    @inline(never)
+    private func throwUnbackedContainerItemsExceeded(items: Int) throws -> Never {
+        throw ForyError.invalidData(
+            "container read work request \(items) items exceeds maxUnbackedContainerItems "
+                + "remaining budget \(remainingUnbackedContainerItems) items"
+        )
     }
 
     @inline(never)
@@ -701,5 +719,6 @@ public final class ReadContext {
         }
         compatibleTypeDefTypeInfos.reset()
         metaStrings.resetReleasingUsedElements()
+        remainingUnbackedContainerItems = 0
     }
 }

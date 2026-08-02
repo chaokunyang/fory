@@ -114,6 +114,18 @@ This is the entry point for AI guidance in Apache Fory. Read this file first, th
   guess allocator, bucket-table, node, debug, or map-entry overhead unless it is a documented
   lower-bound owner allocation. Do not add dynamic stream bytes-read accounting or nested hot-path
   cleanup just for this budget.
+- Count-driven collection and map reads use one root-shared unbacked-container item allowance.
+  The public language-equivalent `maxUnbackedContainerItems` default is `8192`; values are
+  non-negative and zero is strict. For an exact repeated body that is compile-time or generated
+  proven to consume at least one byte, retain the direct loop and proportional readable-count gate
+  with no allowance access, cursor snapshot, or periodic branch. Before count-derived allocation
+  for an uncertain body, require readable bytes for `max(0, count - remaining allowance)` without
+  replacing graph-memory accounting. In the existing single collection loop, settle actual body
+  progress every 1024 completed elements and at the tail; maps settle only at their existing chunk
+  boundaries, with one entry counted as one item. Compatible skip shares the same root allowance
+  but invents no graph owner. Root reset alone clears the allowance. Writers must continue to emit
+  valid compact empty bodies; do not reject, pad, split, or change wire encoding for this reader
+  policy. Do not add an outer batching loop, probe reads, `isEmptyType`, or RefReader/RefWriter APIs.
 - For remote TypeDef/TypeMeta reads, the checked metadata cache is the only owner of remote "already validated" state. Cache hit means the header was previously parsed, body/hash-validated, policy-checked, and published by that cache, so the hot path must skip the body and use cached metadata without extra validation, hashing, limit checks, exact-local checks, allocation, or policy work. A known expected local TypeDef/TypeMeta header/hash match is a local-schema hit, not a remote cache miss: it may skip the body and use the local TypeInfo/TypeMeta without schema-version counting or cache publish. Cache miss is the only path that parses and validates non-local metadata, enforces limits, performs exact-local byte comparison when needed, and publishes remote metadata to the cache. Do not add nullable accepted-header fields, sentinel headers, per-TypeInfo markers, pending metadata state, parallel header-low/header-high slots, or parallel acceptance state for this decision. If a runtime needs a metadata hit hint, cache the concrete checked metadata owner object, such as the TypeInfo, TypeDef, or TypeMeta used by that runtime, and compare its validated header identity directly.
 - When a user corrects a non-obvious invariant, encode it in the nearest source comment before continuing, and also update `AGENTS.md`, `.agents/**`, docs, or specs when the rule is reusable beyond one file. Do not rely only on chat history, task notes, commit messages, or benchmark logs for corrections that protect security, protocol behavior, ownership, naming, or hot-path performance.
 - Reject semantic hacks. Do not bypass broken semantics by deleting cases, simplifying callers, adding coercion hooks, or using workaround fallbacks; fix the underlying bug and prove it with focused tests.

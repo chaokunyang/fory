@@ -274,18 +274,42 @@ Large valid collection inputs are allowed. If the input contains many encoded
 elements, proportional deserialization is expected.
 
 The security requirement is to avoid disproportionate preallocation from a
-declared logical count before enough input bytes justify that capacity. For a
-non-empty container, a reader that will allocate or reserve from the declared
-count should call `checkReadableBytes(logicalCount)` or the runtime equivalent
-before that allocation. The check remains byte-owner-only: it does not decode
-the whole container, validate element semantics, or replace chunk validation.
-Readers that do not preallocate from the logical count may still grow
-proportionally as elements are actually read.
+declared logical count before enough input bytes justify that capacity. When
+the repeated element or entry body is proven to consume at least one byte, a
+reader that allocates or reserves from the declared count should call
+`checkReadableBytes(logicalCount)` or the runtime equivalent before that
+allocation. When the body may consume no bytes, the readable-byte requirement
+may exclude the root operation's remaining unbacked-container allowance. The
+reader must still account for actual input progress while reading the
+container. The byte check does not decode the whole container, validate element
+semantics, or replace chunk validation. Readers that do not preallocate from
+the logical count may still grow proportionally as elements are actually read.
 
 Map or collection chunk validation is security-relevant only when missing
 validation can cause a no-progress loop, unbounded resource growth, retained
 state, or success across a Fory policy boundary. Protocol-allowed chunk
 segmentation is normal input and is not a security issue by itself.
+
+## Unbacked Container Work Budget
+
+Runtimes enforce a root-scoped limit on count-driven collection elements and
+map entries whose repeated read bodies are not backed by input progress. The
+public option is named `maxUnbackedContainerItems` or the language-equivalent
+spelling. Its default is `8192`; values must be non-negative, and zero is a
+strict limit rather than an unlimited sentinel.
+
+The allowance is shared by all nested collections, maps, and compatible field
+skip operations in one root read. Collection readers account for completed
+items every 1024 elements and at the final partial window. Map readers account
+at existing protocol chunk boundaries. Bytes actually consumed by the repeated
+item bodies offset the completed item count in the same window. The budget does
+not add framing, reject values on write, change reference publication, or
+replace graph-memory accounting.
+
+Readers whose exact repeated operation is known to consume at least one byte
+retain their direct loop and proportional readable-byte check. Generated and
+compiled serializers should remove budget access and periodic branches from
+those proven-positive paths.
 
 ## Graph Memory Budget
 

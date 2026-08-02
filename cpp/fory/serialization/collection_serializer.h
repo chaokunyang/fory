@@ -477,13 +477,7 @@ inline bool reserve_collection(std::vector<bool, Alloc> &result,
   if (FORY_PREDICT_FALSE(!ctx.reserve_graph_memory(packed_bytes))) {
     return false;
   }
-  const size_t allowance = ctx.remaining_unbacked_container_items();
-  const uint32_t required_readable =
-      element_count > allowance
-          ? static_cast<uint32_t>(element_count - allowance)
-          : 0;
-  if (FORY_PREDICT_FALSE(
-          !ctx.buffer().ensure_readable(required_readable, ctx.error()))) {
+  if (FORY_PREDICT_FALSE(!ctx.buffer().ensure_readable(length, ctx.error()))) {
     return false;
   }
   result.reserve(length);

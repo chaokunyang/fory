@@ -312,18 +312,21 @@ Load this file when changing `rust/` or Rust xlang behavior.
   `HashMap::with_capacity`, or collection materialization at that concrete owner. Do not restore a
   duplicate collection/map body route or duplicate reservation. Empty non-leaf owners that
   allocate an independent owner object or storage reserve nonzero shallow self cost.
-- Count-derived collection and map owners must prove at least the declared element or entry count
-  in readable post-count bytes exactly once before reservation or allocation. Their writers must
-  symmetrically reject any value whose complete post-count header, metadata, framing, and body are
-  shorter than that count, including non-zero-sized targets with compact or empty custom bodies.
-  Use one aggregate writer check per variable carrier, never a per-element branch, and do not
-  repeat the reader gate after metadata.
-- Fixed arrays do not allocate from their validated wire count and bypass the proportional gate.
-  Zero-sized children also bypass it for `Vec`, `VecDeque`, and `BinaryHeap`, whose representation
-  has no count-derived backing for those elements. `LinkedList`, `HashSet`, `BTreeSet`, `HashMap`,
-  and `BTreeMap` retain the gate for node, bucket, entry, or duplicate-processing work. Compile the
-  check out for fixed arrays and eligible zero-sized carriers. Do not add guessed node charges,
-  padding bytes, a global compact-body bypass, or another collection or map codec.
+- Count-derived collection and map owners whose exact repeated body is compile-time proven to
+  consume a byte must retain the direct readable-count gate with no unbacked-budget access. An
+  uncertain owner may exclude the root operation's remaining unbacked-container allowance from
+  that preallocation byte check, then must settle actual item/body byte progress in its one
+  existing loop: every 1024 collection items plus the tail, and at existing map chunk boundaries.
+  The allowance is root-shared, defaults to `8192`, and zero is strict. Writers must keep compact
+  empty bodies valid; do not reject, pad, or change their wire encoding for this reader policy.
+- Fixed arrays do not allocate from their validated wire count and bypass the preallocation gate.
+  Zero-sized children also bypass that gate for `Vec`, `VecDeque`, and `BinaryHeap`, whose
+  representation has no count-derived backing for those elements, but their repeated read work
+  still uses the root unbacked-container budget when the body is not proven to advance.
+  `LinkedList`, `HashSet`, `BTreeSet`, `HashMap`, and `BTreeMap` retain the allocation gate for node,
+  bucket, entry, or duplicate-processing work. Compile proven-positive budget access out after
+  monomorphization. Do not add guessed node charges, padding bytes, a second container loop, or
+  another collection or map codec.
 
 ## Key Paths
 

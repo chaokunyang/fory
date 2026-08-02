@@ -23,13 +23,22 @@ import (
 )
 
 const (
-	CollectionDefaultFlag       = 0b0000
-	CollectionTrackingRef       = 0b0001
-	CollectionHasNull           = 0b0010
-	CollectionIsDeclElementType = 0b0100
-	CollectionIsSameType        = 0b1000
-	CollectionDeclSameType      = CollectionIsSameType | CollectionIsDeclElementType
+	CollectionDefaultFlag          = 0b0000
+	CollectionTrackingRef          = 0b0001
+	CollectionHasNull              = 0b0010
+	CollectionIsDeclElementType    = 0b0100
+	CollectionIsSameType           = 0b1000
+	CollectionDeclSameType         = CollectionIsSameType | CollectionIsDeclElementType
+	unbackedContainerCheckInterval = 1024
 )
+
+func checkUnbackedContainerAllocation(ctx *ReadContext, count int) bool {
+	required := int64(count) - ctx.remainingUnbackedContainerItems
+	if required <= 0 {
+		return true
+	}
+	return ctx.Buffer().CheckReadable(int(required), ctx.Err())
+}
 
 func needsElemTypeInfo(typeID TypeId) bool {
 	switch typeID {
@@ -431,10 +440,15 @@ func (s *sliceSerializer) ReadData(ctx *ReadContext, value reflect.Value) {
 	trackRefs := (collectFlag & CollectionTrackingRef) != 0
 	hasNull := (collectFlag & CollectionHasNull) != 0
 	declaredGenericDispatch := (collectFlag&CollectionIsDeclElementType) != 0 && serializerNeedsGenericDispatch(elemSerializer)
+	bodyAlwaysAdvances := trackRefs || hasNull || serializerReadDataAlwaysAdvances(elemSerializer)
 
 	// Handle slice vs array allocation
 	if !isArrayType {
-		if !buf.CheckReadable(length, ctxErr) {
+		if bodyAlwaysAdvances {
+			if !buf.CheckReadable(length, ctxErr) {
+				return
+			}
+		} else if !checkUnbackedContainerAllocation(ctx, length) {
 			return
 		}
 		// For slices, allocate or resize as needed
@@ -455,6 +469,29 @@ func (s *sliceSerializer) ReadData(ctx *ReadContext, value reflect.Value) {
 
 	if !trackRefs && !hasNull {
 		if declaredGenericDispatch {
+			if !bodyAlwaysAdvances {
+				checkpoint := buf.logicalReaderIndex()
+				for i := 0; i < length; i++ {
+					elem := value.Index(i)
+					elemSerializer.Read(ctx, RefModeNone, false, true, elem)
+					if ctx.HasError() {
+						return
+					}
+					if (i+1)&(unbackedContainerCheckInterval-1) == 0 {
+						if !ctx.settleUnbackedContainerItems(unbackedContainerCheckInterval, checkpoint) {
+							return
+						}
+						checkpoint = buf.logicalReaderIndex()
+					}
+				}
+				if tail := length & (unbackedContainerCheckInterval - 1); tail != 0 {
+					if !ctx.settleUnbackedContainerItems(tail, checkpoint) {
+						return
+					}
+				}
+				ctx.decDepth()
+				return
+			}
 			for i := 0; i < length; i++ {
 				elem := value.Index(i)
 				elemSerializer.Read(ctx, RefModeNone, false, true, elem)
@@ -463,6 +500,29 @@ func (s *sliceSerializer) ReadData(ctx *ReadContext, value reflect.Value) {
 				}
 			}
 		} else {
+			if !bodyAlwaysAdvances {
+				checkpoint := buf.logicalReaderIndex()
+				for i := 0; i < length; i++ {
+					elem := value.Index(i)
+					elemSerializer.ReadData(ctx, elem)
+					if ctx.HasError() {
+						return
+					}
+					if (i+1)&(unbackedContainerCheckInterval-1) == 0 {
+						if !ctx.settleUnbackedContainerItems(unbackedContainerCheckInterval, checkpoint) {
+							return
+						}
+						checkpoint = buf.logicalReaderIndex()
+					}
+				}
+				if tail := length & (unbackedContainerCheckInterval - 1); tail != 0 {
+					if !ctx.settleUnbackedContainerItems(tail, checkpoint) {
+						return
+					}
+				}
+				ctx.decDepth()
+				return
+			}
 			for i := 0; i < length; i++ {
 				elem := value.Index(i)
 				elemSerializer.ReadData(ctx, elem)

@@ -404,7 +404,18 @@ func (s setSerializer) ReadData(ctx *ReadContext, value reflect.Value) {
 	if ctx.HasError() {
 		return
 	}
-	if !buf.CheckReadable(length, err) {
+	bodySerializer := s.elemSerializer
+	if bodySerializer == nil && elemTypeInfo != nil {
+		bodySerializer = elemTypeInfo.Serializer
+	}
+	bodyAlwaysAdvances := (collectFlag&CollectionIsSameType) == 0 ||
+		(collectFlag&(CollectionTrackingRef|CollectionHasNull)) != 0 ||
+		serializerReadDataAlwaysAdvances(bodySerializer)
+	if bodyAlwaysAdvances {
+		if !buf.CheckReadable(length, err) {
+			return
+		}
+	} else if !checkUnbackedContainerAllocation(ctx, length) {
 		return
 	}
 	if length < 0 {
@@ -479,6 +490,34 @@ func (s setSerializer) readSameType(ctx *ReadContext, buf *ByteBuffer, value ref
 				boxedStructBytes = int64(structSer.valueBytes)
 			}
 		}
+	}
+	if !trackRefs && !hasNull && !serializerReadDataAlwaysAdvances(serializer) {
+		checkpoint := buf.logicalReaderIndex()
+		for i := 0; i < length; i++ {
+			if boxedStructBytes > 0 && !ctx.ReserveGraphMemory(boxedStructBytes) {
+				return
+			}
+			elem := reflect.New(elemType).Elem()
+			readSerializerData(ctx, serializer, declaredGenericDispatch, elem)
+			if ctx.HasError() {
+				return
+			}
+			if !setMapKey(ctx, value, elem, keyType) {
+				return
+			}
+			if (i+1)&(unbackedContainerCheckInterval-1) == 0 {
+				if !ctx.settleUnbackedContainerItems(unbackedContainerCheckInterval, checkpoint) {
+					return
+				}
+				checkpoint = buf.logicalReaderIndex()
+			}
+		}
+		if tail := length & (unbackedContainerCheckInterval - 1); tail != 0 {
+			if !ctx.settleUnbackedContainerItems(tail, checkpoint) {
+				return
+			}
+		}
+		return
 	}
 
 	for i := 0; i < length; i++ {

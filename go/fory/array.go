@@ -212,6 +212,31 @@ func (s *arrayConcreteValueSerializer) ReadData(ctx *ReadContext, value reflect.
 		}
 	}
 
+	bodyAlwaysAdvances := trackRefs || hasNull || serializerReadDataAlwaysAdvances(s.elemSerializer)
+	if !bodyAlwaysAdvances {
+		checkpoint := buf.logicalReaderIndex()
+		for i := 0; i < length; i++ {
+			elem := value.Index(i)
+			s.elemSerializer.ReadData(ctx, elem)
+			if ctx.HasError() {
+				return
+			}
+			if (i+1)&(unbackedContainerCheckInterval-1) == 0 {
+				if !ctx.settleUnbackedContainerItems(unbackedContainerCheckInterval, checkpoint) {
+					return
+				}
+				checkpoint = buf.logicalReaderIndex()
+			}
+		}
+		if tail := length & (unbackedContainerCheckInterval - 1); tail != 0 {
+			if !ctx.settleUnbackedContainerItems(tail, checkpoint) {
+				return
+			}
+		}
+		ctx.decDepth()
+		return
+	}
+
 	for i := 0; i < length && i < value.Len(); i++ {
 		elem := value.Index(i)
 

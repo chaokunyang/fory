@@ -26,11 +26,12 @@ import (
 )
 
 type ByteBuffer struct {
-	data        []byte // Most accessed field first for cache locality
-	writerIndex int
-	readerIndex int
-	reader      io.Reader
-	bufferSize  int
+	data              []byte // Most accessed field first for cache locality
+	writerIndex       int
+	readerIndex       int
+	reader            io.Reader
+	bufferSize        int
+	discardedByteBase uint64
 }
 
 func NewByteBuffer(data []byte) *ByteBuffer {
@@ -69,6 +70,7 @@ func (b *ByteBuffer) fill(n int, errOut *Error) bool {
 	}
 
 	if b.readerIndex > 0 {
+		b.discardedByteBase += uint64(b.readerIndex)
 		copy(b.data, b.data[b.readerIndex:])
 		b.writerIndex -= b.readerIndex
 		b.readerIndex = 0
@@ -516,12 +518,17 @@ func (b *ByteBuffer) ReaderIndex() int {
 	return b.readerIndex
 }
 
+func (b *ByteBuffer) logicalReaderIndex() uint64 {
+	return b.discardedByteBase + uint64(b.readerIndex)
+}
+
 func (b *ByteBuffer) SetReaderIndex(index int) {
 	b.readerIndex = index
 }
 
 func (b *ByteBuffer) Reset() {
 	b.readerIndex = 0
+	b.discardedByteBase = 0
 	b.writerIndex = 0
 	b.reader = nil
 	// Keep the underlying buffer if it's reasonable sized to reduce allocations
@@ -533,6 +540,7 @@ func (b *ByteBuffer) Reset() {
 
 func (b *ByteBuffer) ResetWithReader(r io.Reader, bufferSize int) {
 	b.readerIndex = 0
+	b.discardedByteBase = 0
 	b.writerIndex = 0
 	b.reader = r
 	if bufferSize <= 0 {
@@ -1670,9 +1678,11 @@ func (b *ByteBuffer) Skip(length int, err *Error) {
 		}
 		available := len(b.data) - b.readerIndex
 		b.readerIndex = len(b.data)
-		if !b.discardFromReader(length-available, err) {
+		discarded := length - available
+		if !b.discardFromReader(discarded, err) {
 			return
 		}
+		b.discardedByteBase += uint64(discarded)
 		return
 	}
 	b.readerIndex += length

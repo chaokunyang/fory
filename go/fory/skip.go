@@ -247,6 +247,13 @@ func readKnownTypeInfoForSkip(ctx *ReadContext, typeID uint32) *TypeInfo {
 	return typeInfo
 }
 
+func skipBodyAlwaysAdvances(fieldDef FieldDef, typeInfo *TypeInfo) bool {
+	if typeInfo != nil && serializerReadDataAlwaysAdvances(typeInfo.Serializer) {
+		return true
+	}
+	return fieldDef.typeSpec != nil && typeIDReadDataAlwaysAdvances(fieldDef.typeSpec.TypeId())
+}
+
 // skipCollection skips a collection (list/set) value
 // Uses context error state for deferred error checking.
 func skipCollection(ctx *ReadContext, fieldDef FieldDef) {
@@ -315,17 +322,33 @@ func skipCollection(ctx *ReadContext, fieldDef FieldDef) {
 		}
 	}
 
-	// NONE has no element body; without ref/null flags, count does not affect the cursor.
-	if isSameType && elemDef.typeSpec.TypeID == NONE && !trackRef && !hasNull {
-		ctx.decDepth()
-		return
-	}
-
-	for i := uint32(0); i < length; i++ {
-		// Read ref flag if collection has ref tracking enabled
-		skipValue(ctx, elemDef, trackRef || hasNull, false, elemTypeInfo)
-		if ctx.HasError() {
-			return
+	bodyAlwaysAdvances := !isSameType || trackRef || hasNull ||
+		skipBodyAlwaysAdvances(elemDef, elemTypeInfo)
+	if bodyAlwaysAdvances {
+		for i := uint32(0); i < length; i++ {
+			skipValue(ctx, elemDef, trackRef || hasNull, false, elemTypeInfo)
+			if ctx.HasError() {
+				return
+			}
+		}
+	} else {
+		checkpoint := ctx.buffer.logicalReaderIndex()
+		for i := uint32(0); i < length; i++ {
+			skipValue(ctx, elemDef, false, false, elemTypeInfo)
+			if ctx.HasError() {
+				return
+			}
+			if (i+1)&(unbackedContainerCheckInterval-1) == 0 {
+				if !ctx.settleUnbackedContainerItems(unbackedContainerCheckInterval, checkpoint) {
+					return
+				}
+				checkpoint = ctx.buffer.logicalReaderIndex()
+			}
+		}
+		if tail := int(length & (unbackedContainerCheckInterval - 1)); tail != 0 {
+			if !ctx.settleUnbackedContainerItems(tail, checkpoint) {
+				return
+			}
 		}
 	}
 	ctx.decDepth()
@@ -521,6 +544,13 @@ func skipMap(ctx *ReadContext, fieldDef FieldDef) {
 		// Check if ref tracking is enabled for keys and values
 		keyTrackRef := (header & TRACKING_KEY_REF) != 0
 		valueTrackRef := (header & TRACKING_VALUE_REF) != 0
+		bodyAlwaysAdvances := keyTrackRef || valueTrackRef ||
+			skipBodyAlwaysAdvances(keyDef, keyTypeInfo) ||
+			skipBodyAlwaysAdvances(valueDef, valueTypeInfo)
+		var checkpoint uint64
+		if !bodyAlwaysAdvances {
+			checkpoint = ctx.buffer.logicalReaderIndex()
+		}
 
 		for i := byte(0); i < chunkSize; i++ {
 			skipValue(ctx, keyDef, keyTrackRef, false, keyTypeInfo)
@@ -531,6 +561,10 @@ func skipMap(ctx *ReadContext, fieldDef FieldDef) {
 			if ctx.HasError() {
 				return
 			}
+		}
+		if !bodyAlwaysAdvances &&
+			!ctx.settleUnbackedContainerItems(int(chunkSize), checkpoint) {
+			return
 		}
 		lenCounter += uint32(chunkSize)
 	}

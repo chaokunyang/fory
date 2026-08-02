@@ -1101,10 +1101,6 @@ public final class JsonSharedRegistry {
       this.overlay = overlay;
     }
 
-    public boolean isEmpty() {
-      return overlay.isEmpty();
-    }
-
     public Set<AnnotatedElement> sourceDeclarations() {
       return overlay.sourceDeclarations();
     }

@@ -132,6 +132,7 @@ public final class ForyJsonExample {
             .registerCodec(CodegenProbeValue.class, new CodegenProbeCodec())
             .build(),
         false);
+    testEmptyMixinCodegen();
     testIndependentChildCodegen();
     testExternalModuleMixin();
   }
@@ -142,7 +143,18 @@ public final class ForyJsonExample {
         .withPropertyNamingStrategy(PropertyNamingStrategy.SNAKE_CASE)
         .registerCodec(CodegenProbeValue.class, new CodegenProbeCodec())
         .registerMixin(CoreCompileStateMixin.class)
+        .registerMixin(EmptyMixin.class)
         .build();
+  }
+
+  private static void testEmptyMixinCodegen() {
+    CodegenProbeCodec.expect(EmptyMixinTarget.class, true);
+    ForyJson json = newProviderJson();
+    EmptyMixinTarget value = new EmptyMixinTarget();
+    value.probe = new CodegenProbeValue("empty-mixin");
+    String encoded = json.toJson(value);
+    Preconditions.checkArgument(
+        json.fromJson(encoded, EmptyMixinTarget.class).probe.value.equals("empty-mixin"));
   }
 
   private static void exerciseCodegenConfiguration(ForyJson json, boolean generated) {
@@ -522,6 +534,31 @@ public final class ForyJsonExample {
 
     public CodegenProbeChild(String name) {
       this.name = name;
+    }
+  }
+
+  public static final class EmptyMixinTarget {
+    @JsonCodec(CodegenProbeCodec.class)
+    private CodegenProbeValue probe;
+
+    public EmptyMixinTarget() {}
+  }
+
+  @JsonMixin(target = EmptyMixinTarget.class)
+  public interface EmptyMixin {}
+
+  /** Hosted-only loader which makes the first equivalent provider unable to compile one model. */
+  public static final class CodegenRejectingClassLoader extends ClassLoader {
+    public CodegenRejectingClassLoader() {
+      super(ForyJsonExample.class.getClassLoader());
+    }
+
+    @Override
+    protected Class<?> loadClass(String name, boolean resolve) throws ClassNotFoundException {
+      if (name.equals(CodegenProbeModel.class.getName())) {
+        throw new ClassNotFoundException(name);
+      }
+      return super.loadClass(name, resolve);
     }
   }
 

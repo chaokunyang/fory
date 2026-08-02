@@ -1507,22 +1507,25 @@ public final class JsonTypeResolver {
   }
 
   private boolean canCompile(ObjectCodec<?> owner, CapabilityKind kind) {
-    if (codegen != null) {
-      return kind == CapabilityKind.STRING_WRITER || kind == CapabilityKind.UTF8_WRITER
-          ? codegen.canCompileWriter(owner)
-          : codegen.canCompileReader(owner);
+    if (nativeObjectClass(owner.type(), kind) != null) {
+      return true;
     }
-    return nativeObjectClass(owner.type(), kind) != null;
+    return codegen != null
+        && (kind == CapabilityKind.STRING_WRITER || kind == CapabilityKind.UTF8_WRITER
+            ? codegen.canCompileWriter(owner)
+            : codegen.canCompileReader(owner));
   }
 
   private boolean canCompileCollection(JsonTypeInfo typeInfo, CapabilityKind kind) {
-    if (codegen != null) {
+    Type type = typeInfo.type();
+    boolean generated =
+        kind == CapabilityKind.UTF8_WRITER
+            ? sharedRegistry.nativeUtf8CollectionWriterClass(type) != null
+            : sharedRegistry.nativeUtf8CollectionReaderClass(type) != null;
+    if (generated) {
       return true;
     }
-    Type type = typeInfo.type();
-    return kind == CapabilityKind.UTF8_WRITER
-        ? sharedRegistry.nativeUtf8CollectionWriterClass(type) != null
-        : sharedRegistry.nativeUtf8CollectionReaderClass(type) != null;
+    return codegen != null;
   }
 
   private Class<?> nativeObjectClass(Class<?> type, CapabilityKind kind) {
@@ -1960,6 +1963,15 @@ public final class JsonTypeResolver {
         CapabilityNode node = ordered.get(i);
         if (node.subtypeOwner != null) {
           continue;
+        }
+        if (sharedRegistry.hostedCodegen()) {
+          // Another provider loader may already have generated this capability under the same
+          // source key. Reuse it while still walking the graph so this loader can add missing
+          // types.
+          node.generatedClass = nativeGeneratedClass(node, kind);
+          if (node.generatedClass != null) {
+            continue;
+          }
         }
         node.classFuture = generatedClass(node, kind);
         futures.add(node.classFuture);

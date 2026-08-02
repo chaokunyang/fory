@@ -29,6 +29,7 @@ import org.apache.fory.json.annotation.JsonAnyGetter;
 import org.apache.fory.json.annotation.JsonAnySetter;
 import org.apache.fory.json.annotation.JsonCodec;
 import org.apache.fory.json.annotation.JsonCreator;
+import org.apache.fory.json.annotation.JsonMixin;
 import org.apache.fory.json.annotation.JsonProperty;
 import org.apache.fory.json.annotation.JsonType;
 import org.apache.fory.json.annotation.JsonValue;
@@ -101,6 +102,16 @@ public final class ForyJsonNoProviderExample {
     Preconditions.checkArgument(json.toJson(DirectValueEnum.READY).equals("\"ready\""));
     Preconditions.checkArgument(
         json.fromJson("\"done\"", DirectValueEnum.class) == DirectValueEnum.DONE);
+
+    ForyJson emptyMixinJson = ForyJson.builder().registerMixin(EmptyMixin.class).build();
+    EmptyMixinTarget emptyMixin = new EmptyMixinTarget();
+    emptyMixin.setName("empty-mixin");
+    String emptyMixinEncoded = emptyMixinJson.toJson(emptyMixin);
+    Preconditions.checkArgument(
+        emptyMixinJson
+            .fromJson(emptyMixinEncoded, EmptyMixinTarget.class)
+            .getName()
+            .equals("empty-mixin"));
   }
 
   private static int countOccurrences(String value, String target) {
@@ -112,6 +123,23 @@ public final class ForyJsonNoProviderExample {
     }
     return count;
   }
+
+  public static final class EmptyMixinTarget {
+    private String name;
+
+    public EmptyMixinTarget() {}
+
+    public String getName() {
+      return name;
+    }
+
+    public void setName(String name) {
+      this.name = name;
+    }
+  }
+
+  @JsonMixin(target = EmptyMixinTarget.class)
+  public interface EmptyMixin {}
 
   @JsonType
   public static final class Model {

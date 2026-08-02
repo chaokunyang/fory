@@ -90,9 +90,10 @@ final class ForyJsonGraalVMFeature implements Feature {
   private final Set<Class<?>> processedProviders = ConcurrentHashMap.newKeySet();
   private final Set<Class<?>> processedCodecs = ConcurrentHashMap.newKeySet();
   private final Set<Class<?>> processedContainers = ConcurrentHashMap.newKeySet();
-  private final Map<JsonCodegenKey, HostedConfiguration> hostedConfigurations =
+  // JsonCodegenKey stays loader-free so runtime configurations can reproduce it. Hosted resolvers
+  // remain loader-specific, while JsonGeneratedClassRegistry merges their generated capabilities.
+  private final Map<JsonCodegenKey, ArrayList<HostedConfiguration>> hostedConfigurations =
       new LinkedHashMap<>();
-  private final Set<GenerationKey> processedGenerations = new LinkedHashSet<>();
 
   @Override
   public String getDescription() {
@@ -210,8 +211,21 @@ final class ForyJsonGraalVMFeature implements Feature {
             providerClass, "provider method returned a codegen-disabled ForyJson: " + method, null);
       }
       JsonCodegenKey key = config.codegenKey();
-      if (!hostedConfigurations.containsKey(key)) {
-        hostedConfigurations.put(key, new HostedConfiguration(config));
+      ArrayList<HostedConfiguration> configurations = hostedConfigurations.get(key);
+      if (configurations == null) {
+        configurations = new ArrayList<>();
+        hostedConfigurations.put(key, configurations);
+      }
+      ClassLoader classLoader = config.classLoader();
+      boolean knownLoader = false;
+      for (HostedConfiguration configuration : configurations) {
+        if (configuration.classLoader == classLoader) {
+          knownLoader = true;
+          break;
+        }
+      }
+      if (!knownLoader) {
+        configurations.add(new HostedConfiguration(config));
         changed = true;
       }
     }
@@ -266,35 +280,35 @@ final class ForyJsonGraalVMFeature implements Feature {
 
   private boolean generateConfigurations(DuringAnalysisAccess access) {
     boolean changed = false;
-    for (Map.Entry<JsonCodegenKey, HostedConfiguration> entry :
+    for (Map.Entry<JsonCodegenKey, ArrayList<HostedConfiguration>> entry :
         hostedConfigurations.entrySet()) {
-      HostedConfiguration configuration = entry.getValue();
-      LinkedHashSet<Class<?>> selectedModels = new LinkedHashSet<>(processedModels);
-      for (Map.Entry<Class<?>, Set<Class<?>>> mixin : reachableMixins.entrySet()) {
-        if (mixin.getValue().contains(configuration.mixins.get(mixin.getKey()))) {
-          selectedModels.add(mixin.getKey());
+      for (HostedConfiguration configuration : entry.getValue()) {
+        LinkedHashSet<Class<?>> selectedModels = new LinkedHashSet<>(processedModels);
+        for (Map.Entry<Class<?>, Set<Class<?>>> mixin : reachableMixins.entrySet()) {
+          if (mixin.getValue().contains(configuration.mixins.get(mixin.getKey()))) {
+            selectedModels.add(mixin.getKey());
+          }
         }
-      }
-      ArrayList<Class<?>> models = new ArrayList<>(selectedModels);
-      models.sort(Comparator.comparing(Class::getName));
-      for (Class<?> model : models) {
-        GenerationKey generation = new GenerationKey(entry.getKey(), model);
-        if (!processedGenerations.add(generation)) {
-          continue;
+        ArrayList<Class<?>> models = new ArrayList<>(selectedModels);
+        models.sort(Comparator.comparing(Class::getName));
+        for (Class<?> model : models) {
+          if (!configuration.processedModels.add(model)) {
+            continue;
+          }
+          try {
+            configuration.resolver.generateHostedCodecs(model);
+          } catch (RuntimeException | LinkageError e) {
+            throw new IllegalStateException(
+                "Cannot generate Fory JSON codecs for " + model.getName(), e);
+          }
+          Set<Class<?>> generatedClasses =
+              JsonGeneratedClassRegistry.register(
+                  entry.getKey(), configuration.registry.generatedClasses());
+          for (Class<?> generatedClass : generatedClasses) {
+            registerGeneratedClass(generatedClass);
+          }
+          changed = true;
         }
-        try {
-          configuration.resolver.generateHostedCodecs(model);
-        } catch (RuntimeException | LinkageError e) {
-          throw new IllegalStateException(
-              "Cannot generate Fory JSON codecs for " + model.getName(), e);
-        }
-        Set<Class<?>> generatedClasses =
-            JsonGeneratedClassRegistry.register(
-                entry.getKey(), configuration.registry.generatedClasses());
-        for (Class<?> generatedClass : generatedClasses) {
-          registerGeneratedClass(generatedClass);
-        }
-        changed = true;
       }
     }
     return changed;
@@ -363,9 +377,6 @@ final class ForyJsonGraalVMFeature implements Feature {
     reachableMixins.computeIfAbsent(targetType, ignored -> new LinkedHashSet<>()).add(mixinType);
     JsonMixinView annotations = JsonSharedRegistry.resolveMixin(targetType, mixinType);
     RuntimeReflection.register(mixinType);
-    if (annotations.isEmpty()) {
-      return true;
-    }
     registerReflectiveDeclarations(annotations.sourceDeclarations());
     registerReflectiveDeclarations(annotations.targetDeclarations());
     // Retain every directly declared hierarchy codec plus the exact Mixin replacement. Runtime
@@ -873,11 +884,14 @@ final class ForyJsonGraalVMFeature implements Feature {
   }
 
   private static final class HostedConfiguration {
+    private final ClassLoader classLoader;
     private final JsonSharedRegistry registry;
     private final JsonTypeResolver resolver;
     private final Map<Class<?>, Class<?>> mixins;
+    private final Set<Class<?>> processedModels = new LinkedHashSet<>();
 
     private HostedConfiguration(JsonConfig config) {
+      classLoader = config.classLoader();
       registry = JsonSharedRegistry.forHostedCodegen(config);
       resolver = new JsonTypeResolver(registry);
       mixins = config.mixins();
@@ -911,30 +925,4 @@ final class ForyJsonGraalVMFeature implements Feature {
     }
   }
 
-  private static final class GenerationKey {
-    private final JsonCodegenKey configuration;
-    private final Class<?> model;
-
-    private GenerationKey(JsonCodegenKey configuration, Class<?> model) {
-      this.configuration = configuration;
-      this.model = model;
-    }
-
-    @Override
-    public boolean equals(Object other) {
-      if (this == other) {
-        return true;
-      }
-      if (!(other instanceof GenerationKey)) {
-        return false;
-      }
-      GenerationKey that = (GenerationKey) other;
-      return configuration.equals(that.configuration) && model == that.model;
-    }
-
-    @Override
-    public int hashCode() {
-      return 31 * configuration.hashCode() + System.identityHashCode(model);
-    }
-  }
 }

@@ -431,19 +431,17 @@ Boxed, reference-counted, and type-erased materialization paths reserve `size_of
 payload they create. Compile-time `size_of::<T>()` formulas are acceptable in those allocation
 owners, but value serializers should not add a parallel self-reserve for the same `T`.
 
-Count-derived Rust collection and map owners require at least the declared element or entry count in
-readable bytes after the count. Apply that gate exactly once before reservation or allocation; do
-not repeat it after reading shared metadata. Their serializers must symmetrically reject a value
-when its complete post-count header, metadata, framing, and body are shorter than the count,
-including a non-zero-sized target whose custom serializer emits a compact or empty body. Use one
-aggregate writer check per variable carrier, never a per-element check.
+Before count-derived allocation, Rust owners whose exact repeated operation is proven to consume at
+least one byte retain the full readable-byte gate. Uncertain owners require readable bytes only for
+the portion of the count not covered by the remaining unbacked-item allowance. Apply the selected
+gate exactly once at the allocation owner; do not repeat it after reading shared metadata. Writers
+continue to encode legal compact or empty bodies and do not enforce this reader-side allowance.
 
-Fixed arrays do not allocate from their validated wire count and omit this proportional gate.
-`Vec`, `VecDeque`, and `BinaryHeap` also omit it for zero-sized elements because they create no
-count-derived backing allocation in that case. `LinkedList`, `HashSet`, `BTreeSet`, `HashMap`, and
-`BTreeMap` retain the gate for node, bucket, entry, or duplicate-processing work. Implementations
-must not substitute guessed node costs, padding bytes, a global compact-body bypass, or a second
-collection or map codec.
+Fixed arrays do not allocate from their validated wire count and omit the allocation gate. `Vec`,
+`VecDeque`, and `BinaryHeap` also omit it for zero-sized elements because they create no
+count-derived backing allocation in that case. Node, bucket, and entry owners retain the gate where
+the declared count drives allocation. Implementations must not substitute guessed allocation costs,
+padding bytes, a global compact-body bypass, or a second collection or map codec.
 
 #### Swift
 

@@ -47,10 +47,15 @@ internal let unbackedContainerCheckInterval = 1024
 internal func ensureContainerAllocation(
     _ context: ReadContext,
     count: Int,
+    bodyAlwaysAdvances: Bool,
     label: String
 ) throws {
-    let allowance = context.remainingUnbackedContainerItems
-    try context.ensureRemainingBytes(count > allowance ? count - allowance : 0, label: label)
+    if bodyAlwaysAdvances {
+        try context.ensureRemainingBytes(count, label: label)
+    } else {
+        let allowance = context.remainingUnbackedContainerItems
+        try context.ensureRemainingBytes(count > allowance ? count - allowance : 0, label: label)
+    }
 }
 
 @usableFromInline
@@ -764,9 +769,13 @@ public enum ArraySerializer<Element: Serializer>: Serializer {
             ownerBytes: ownerBytes,
             count: length
         )
-        try ensureContainerAllocation(context, count: length, label: "array")
-
         if !sameType {
+            try ensureContainerAllocation(
+                context,
+                count: length,
+                bodyAlwaysAdvances: true,
+                label: "array"
+            )
             let refMode = RefMode.from(nullable: hasNull, trackRef: trackRef)
             return try readArrayTrackingInitialization(
                 count: length
@@ -785,6 +794,15 @@ public enum ArraySerializer<Element: Serializer>: Serializer {
         }
 
         let elementTypeInfo = declared ? nil : try Codec.readFieldTypeInfo(context)
+        let bodyAlwaysAdvances =
+            trackRef || hasNull
+            || fieldReadAlwaysAdvances(Codec.self, declared: declared, typeInfo: elementTypeInfo)
+        try ensureContainerAllocation(
+            context,
+            count: length,
+            bodyAlwaysAdvances: bodyAlwaysAdvances,
+            label: "array"
+        )
         return try Codec.withFieldTypeInfo(elementTypeInfo, context) {
             if trackRef {
                 return try readArrayTrackingInitialization(
@@ -825,7 +843,7 @@ public enum ArraySerializer<Element: Serializer>: Serializer {
                 }
             }
 
-            if fieldReadAlwaysAdvances(Codec.self, declared: declared, typeInfo: elementTypeInfo) {
+            if bodyAlwaysAdvances {
                 return try readArrayTrackingInitialization(
                     count: length
                 ) { destination, initializedCount in
@@ -1101,11 +1119,15 @@ public enum SetSerializer<Element: Serializer>: Serializer where Element.Target:
         let hasNull = (header & CollectionHeader.hasNull) != 0
         let declared = (header & CollectionHeader.declaredElementType) != 0
         let sameType = (header & CollectionHeader.sameType) != 0
-        try ensureContainerAllocation(context, count: length, label: "set")
-
-        var result = Set<Codec.Target>()
-        result.reserveCapacity(length)
         if !sameType {
+            try ensureContainerAllocation(
+                context,
+                count: length,
+                bodyAlwaysAdvances: true,
+                label: "set"
+            )
+            var result = Set<Codec.Target>()
+            result.reserveCapacity(length)
             let refMode = RefMode.from(nullable: hasNull, trackRef: trackRef)
             for _ in 0..<length {
                 result.insert(
@@ -1120,6 +1142,17 @@ public enum SetSerializer<Element: Serializer>: Serializer where Element.Target:
         }
 
         let elementTypeInfo = declared ? nil : try Codec.readFieldTypeInfo(context)
+        let bodyAlwaysAdvances =
+            trackRef || hasNull
+            || fieldReadAlwaysAdvances(Codec.self, declared: declared, typeInfo: elementTypeInfo)
+        try ensureContainerAllocation(
+            context,
+            count: length,
+            bodyAlwaysAdvances: bodyAlwaysAdvances,
+            label: "set"
+        )
+        var result = Set<Codec.Target>()
+        result.reserveCapacity(length)
         return try Codec.withFieldTypeInfo(elementTypeInfo, context) {
             if trackRef {
                 for _ in 0..<length {
@@ -1142,11 +1175,7 @@ public enum SetSerializer<Element: Serializer>: Serializer where Element.Target:
                         throw invalidCollectionRefFlag(refFlag)
                     }
                 }
-            } else if fieldReadAlwaysAdvances(
-                Codec.self,
-                declared: declared,
-                typeInfo: elementTypeInfo
-            ) {
+            } else if bodyAlwaysAdvances {
                 for _ in 0..<length {
                     result.insert(try Codec.readFieldData(context))
                 }
@@ -1653,7 +1682,12 @@ where Key.Target: Hashable {
             return [:]
         }
 
-        try ensureContainerAllocation(context, count: totalLength, label: "map")
+        try ensureContainerAllocation(
+            context,
+            count: totalLength,
+            bodyAlwaysAdvances: false,
+            label: "map"
+        )
         var map: [KeyCodec.Target: ValueCodec.Target] = [:]
         map.reserveCapacity(totalLength)
         let keyDynamicType = KeyCodec.staticTypeId == .unknown

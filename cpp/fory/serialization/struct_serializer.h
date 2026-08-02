@@ -888,6 +888,63 @@ template <typename ValueType, typename StructT, size_t Index, int8_t NodeIndex>
 ValueType read_configured_value(ReadContext &ctx, RefMode ref_mode,
                                 bool read_type);
 
+template <typename ValueType, typename StructT, size_t Index, int8_t NodeIndex>
+inline constexpr bool configured_read_data_always_advances() {
+  if constexpr (is_optional_v<ValueType>) {
+    using Inner = typename ValueType::value_type;
+    constexpr FieldNodeKind kind =
+        configured_node_kind<StructT, Index, NodeIndex>();
+    constexpr int8_t child =
+        kind == FieldNodeKind::Inner
+            ? configured_node_child<StructT, Index, NodeIndex, 0>()
+            : NodeIndex;
+    return configured_read_data_always_advances<Inner, StructT, Index, child>();
+  }
+  return read_data_always_advances_v<ValueType>;
+}
+
+template <bool MeasureProgress, typename Container, typename StructT,
+          size_t Index, int8_t ElemNode>
+inline bool read_configured_list_items(Container &result, ReadContext &ctx,
+                                       uint32_t length, RefMode elem_ref_mode) {
+  using Elem = element_type_t<Container>;
+  uint32_t checkpoint_item = 0;
+  uint64_t checkpoint_byte = 0;
+  if constexpr (MeasureProgress) {
+    checkpoint_byte = ctx.buffer().logical_reader_index();
+  }
+  for (uint32_t i = 0; i < length; ++i) {
+    if constexpr (ElemNode >= 0) {
+      auto elem = read_configured_value<Elem, StructT, Index, ElemNode>(
+          ctx, elem_ref_mode, false);
+      collection_insert(result, std::move(elem));
+    } else {
+      auto elem = Serializer<Elem>::read(ctx, elem_ref_mode, false);
+      collection_insert(result, std::move(elem));
+    }
+    if (FORY_PREDICT_FALSE(ctx.has_error())) {
+      return false;
+    }
+    if constexpr (MeasureProgress) {
+      const uint32_t completed = i + 1;
+      if ((completed & 1023U) == 0) {
+        if (FORY_PREDICT_FALSE(!detail::settle_unbacked_container_items(
+                ctx, completed - checkpoint_item, checkpoint_byte))) {
+          return false;
+        }
+        checkpoint_item = completed;
+        checkpoint_byte = ctx.buffer().logical_reader_index();
+      }
+    }
+  }
+  if constexpr (MeasureProgress) {
+    return checkpoint_item == length ||
+           detail::settle_unbacked_container_items(
+               ctx, length - checkpoint_item, checkpoint_byte);
+  }
+  return true;
+}
+
 template <typename Container, typename StructT, size_t Index, int8_t NodeIndex,
           int8_t ElemNode>
 void write_configured_list_data(const Container &coll, WriteContext &ctx) {
@@ -944,21 +1001,38 @@ Container read_configured_list_data(ReadContext &ctx) {
       return result;
     }
   }
-  if (FORY_PREDICT_FALSE(!reserve_collection(result, ctx, length))) {
-    return result;
-  }
+  constexpr bool body_always_advances = []() constexpr {
+    if constexpr (ElemNode >= 0) {
+      return configured_read_data_always_advances<Elem, StructT, Index,
+                                                  ElemNode>();
+    }
+    return read_data_always_advances_v<Elem>;
+  }();
   const RefMode elem_ref_mode =
       track_ref ? RefMode::Tracking
                 : (has_null ? RefMode::NullOnly : RefMode::None);
-  for (uint32_t i = 0; i < length; ++i) {
-    if constexpr (ElemNode >= 0) {
-      auto elem = read_configured_value<Elem, StructT, Index, ElemNode>(
-          ctx, elem_ref_mode, false);
-      collection_insert(result, std::move(elem));
-    } else {
-      auto elem = Serializer<Elem>::read(ctx, elem_ref_mode, false);
-      collection_insert(result, std::move(elem));
+  if constexpr (body_always_advances) {
+    if (FORY_PREDICT_FALSE(!reserve_collection<true>(result, ctx, length))) {
+      return result;
     }
+  } else if (elem_ref_mode != RefMode::None) {
+    if (FORY_PREDICT_FALSE(!reserve_collection<true>(result, ctx, length))) {
+      return result;
+    }
+  } else if (FORY_PREDICT_FALSE(!reserve_collection(result, ctx, length))) {
+    return result;
+  }
+  if constexpr (body_always_advances) {
+    (void)
+        read_configured_list_items<false, Container, StructT, Index, ElemNode>(
+            result, ctx, length, elem_ref_mode);
+  } else if (elem_ref_mode != RefMode::None) {
+    (void)
+        read_configured_list_items<false, Container, StructT, Index, ElemNode>(
+            result, ctx, length, elem_ref_mode);
+  } else {
+    (void)read_configured_list_items<true, Container, StructT, Index, ElemNode>(
+        result, ctx, length, elem_ref_mode);
   }
   return result;
 }
@@ -1100,6 +1174,46 @@ void write_configured_map_data(const MapType &map, WriteContext &ctx) {
   }
 }
 
+template <bool MeasureProgress, typename MapType, typename StructT,
+          size_t Index, int8_t KeyNode, int8_t ValueNode>
+inline bool read_configured_map_chunk(MapType &result, ReadContext &ctx,
+                                      uint8_t chunk_size) {
+  using Key = key_type_t<MapType>;
+  using Value = mapped_type_t<MapType>;
+  uint64_t checkpoint_byte = 0;
+  if constexpr (MeasureProgress) {
+    checkpoint_byte = ctx.buffer().logical_reader_index();
+  }
+  for (uint8_t i = 0; i < chunk_size; ++i) {
+    Key key = [&]() {
+      if constexpr (KeyNode >= 0) {
+        return read_configured_value<Key, StructT, Index, KeyNode>(
+            ctx, RefMode::None, false);
+      }
+      return Serializer<Key>::read_data(ctx);
+    }();
+    if (FORY_PREDICT_FALSE(ctx.has_error())) {
+      return false;
+    }
+    Value value = [&]() {
+      if constexpr (ValueNode >= 0) {
+        return read_configured_value<Value, StructT, Index, ValueNode>(
+            ctx, RefMode::None, false);
+      }
+      return Serializer<Value>::read_data(ctx);
+    }();
+    if (FORY_PREDICT_FALSE(ctx.has_error())) {
+      return false;
+    }
+    result.emplace(std::move(key), std::move(value));
+  }
+  if constexpr (MeasureProgress) {
+    return detail::settle_unbacked_container_items(ctx, chunk_size,
+                                                   checkpoint_byte);
+  }
+  return true;
+}
+
 template <typename MapType, typename StructT, size_t Index, int8_t KeyNode,
           int8_t ValueNode>
 MapType read_configured_map_data(ReadContext &ctx) {
@@ -1110,7 +1224,24 @@ MapType read_configured_map_data(ReadContext &ctx) {
   if (length == 0) {
     return result;
   }
-  if (FORY_PREDICT_FALSE(!reserve_map(result, ctx, length))) {
+  constexpr bool key_always_advances = []() constexpr {
+    if constexpr (KeyNode >= 0) {
+      return configured_read_data_always_advances<Key, StructT, Index,
+                                                  KeyNode>();
+    }
+    return read_data_always_advances_v<Key>;
+  }();
+  constexpr bool value_always_advances = []() constexpr {
+    if constexpr (ValueNode >= 0) {
+      return configured_read_data_always_advances<Value, StructT, Index,
+                                                  ValueNode>();
+    }
+    return read_data_always_advances_v<Value>;
+  }();
+  constexpr bool entry_always_advances =
+      key_always_advances || value_always_advances;
+  if (FORY_PREDICT_FALSE(
+          !reserve_map<entry_always_advances>(result, ctx, length))) {
     return result;
   }
   uint32_t read_count = 0;
@@ -1118,6 +1249,10 @@ MapType read_configured_map_data(ReadContext &ctx) {
     uint8_t header = ctx.read_uint8(ctx.error());
     uint8_t chunk_size = ctx.read_uint8(ctx.error());
     if (FORY_PREDICT_FALSE(ctx.has_error())) {
+      return result;
+    }
+    if (FORY_PREDICT_FALSE(!detail::check_map_chunk_size(
+            ctx, chunk_size, length - read_count))) {
       return result;
     }
     const bool key_decl = (header & DECL_KEY_TYPE) != 0;
@@ -1128,32 +1263,23 @@ MapType read_configured_map_data(ReadContext &ctx) {
     if (!value_decl) {
       (void)ctx.read_any_type_info(ctx.error());
     }
-    for (uint8_t i = 0; i < chunk_size && read_count < length; ++i) {
-      Key key = [&]() {
-        if constexpr (KeyNode >= 0) {
-          return read_configured_value<Key, StructT, Index, KeyNode>(
-              ctx, RefMode::None, false);
-        } else {
-          return Serializer<Key>::read_data(ctx);
-        }
-      }();
-      if (FORY_PREDICT_FALSE(ctx.has_error())) {
-        return result;
-      }
-      Value value = [&]() {
-        if constexpr (ValueNode >= 0) {
-          return read_configured_value<Value, StructT, Index, ValueNode>(
-              ctx, RefMode::None, false);
-        } else {
-          return Serializer<Value>::read_data(ctx);
-        }
-      }();
-      if (FORY_PREDICT_FALSE(ctx.has_error())) {
-        return result;
-      }
-      result.emplace(std::move(key), std::move(value));
-      ++read_count;
+    if (FORY_PREDICT_FALSE(ctx.has_error())) {
+      return result;
     }
+    if constexpr (entry_always_advances) {
+      if (FORY_PREDICT_FALSE(
+              (!read_configured_map_chunk<false, MapType, StructT, Index,
+                                          KeyNode, ValueNode>(result, ctx,
+                                                              chunk_size)))) {
+        return result;
+      }
+    } else if (FORY_PREDICT_FALSE(
+                   (!read_configured_map_chunk<true, MapType, StructT, Index,
+                                               KeyNode, ValueNode>(
+                       result, ctx, chunk_size)))) {
+      return result;
+    }
+    read_count += chunk_size;
   }
   return result;
 }

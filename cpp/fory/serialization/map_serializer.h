@@ -95,7 +95,7 @@ inline bool reserve_map_storage(ReadContext &ctx, uint32_t length) {
   return ctx.reserve_graph_memory(static_cast<size_t>(length) * elem_bytes);
 }
 
-template <typename MapType>
+template <bool BodyAlwaysAdvances = false, typename MapType>
 inline bool reserve_map(MapType &map, ReadContext &ctx, uint32_t length) {
   // Lazy error propagation may continue into later readers; do not let that
   // path retain attacker-controlled capacity after an earlier read failure.
@@ -113,11 +113,14 @@ inline bool reserve_map(MapType &map, ReadContext &ctx, uint32_t length) {
   if (FORY_PREDICT_FALSE((!reserve_map_storage<elem_bytes>(ctx, length)))) {
     return false;
   }
-  const size_t allowance = ctx.remaining_unbacked_container_items();
-  const uint32_t required_readable =
-      static_cast<size_t>(length) > allowance
-          ? static_cast<uint32_t>(static_cast<size_t>(length) - allowance)
-          : 0;
+  uint32_t required_readable = length;
+  if constexpr (!BodyAlwaysAdvances) {
+    const size_t allowance = ctx.remaining_unbacked_container_items();
+    required_readable =
+        static_cast<size_t>(length) > allowance
+            ? static_cast<uint32_t>(static_cast<size_t>(length) - allowance)
+            : 0;
+  }
   if (FORY_PREDICT_FALSE(
           !ctx.buffer().ensure_readable(required_readable, ctx.error()))) {
     return false;

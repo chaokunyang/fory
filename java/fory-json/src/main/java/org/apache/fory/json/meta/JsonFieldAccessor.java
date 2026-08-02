@@ -32,6 +32,7 @@ import org.apache.fory.platform.AndroidSupport;
 import org.apache.fory.platform.GraalvmSupport;
 import org.apache.fory.platform.internal._JDKAccess;
 import org.apache.fory.reflect.FieldAccessor;
+import org.apache.fory.util.record.RecordUtils;
 
 /**
  * Uniform interpreted object-member access for fields, getters, and setters.
@@ -164,7 +165,7 @@ public abstract class JsonFieldAccessor {
     // native image. JSON retains the semantic field identity but must cache the component accessor
     // MethodHandle here so interpreted codecs never perform runtime reflection.
     JsonFieldAccessor accessor =
-        field.getDeclaringClass().isRecord()
+        RecordUtils.isRecord(field.getDeclaringClass())
             ? new RecordFieldJsonAccessor(field)
             : new FieldJsonAccessor(FieldAccessor.createAccessor(field));
     putPrepared(nativeFields, field, accessor);

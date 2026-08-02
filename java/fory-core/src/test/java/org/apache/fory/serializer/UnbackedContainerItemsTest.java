@@ -22,6 +22,7 @@ package org.apache.fory.serializer;
 import static org.testng.Assert.assertEquals;
 import static org.testng.Assert.assertFalse;
 import static org.testng.Assert.assertThrows;
+import static org.testng.Assert.assertTrue;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -43,6 +44,10 @@ public class UnbackedContainerItemsTest {
 
   public static final class PositiveHolder {
     public List<Integer> values;
+  }
+
+  public static final class PositiveMapHolder {
+    public Map<Integer, Empty> values;
   }
 
   public static final class MapHolder {
@@ -116,8 +121,13 @@ public class UnbackedContainerItemsTest {
   @Test
   public void testPositiveGeneratedLoopHasNoBudgetCheck() {
     Fory fory = Fory.builder().withXlang(false).requireClassRegistration(false).build();
-    String code = new ObjectCodecBuilder(PositiveHolder.class, fory).genCode();
-    assertFalse(code.contains("reserveUnbackedContainerItems"));
+    String collectionCode = new ObjectCodecBuilder(PositiveHolder.class, fory).genCode();
+    assertFalse(collectionCode.contains("reserveUnbackedContainerItems"));
+    assertTrue(collectionCode.contains(".newCollection(readContext1, true)"), collectionCode);
+
+    String mapCode = new ObjectCodecBuilder(PositiveMapHolder.class, fory).genCode();
+    assertFalse(mapCode.contains("reserveUnbackedContainerItems"));
+    assertTrue(mapCode.contains(".newMap(readContext2, true)"), mapCode);
   }
 
   private static Fory newFory(int maxItems) {

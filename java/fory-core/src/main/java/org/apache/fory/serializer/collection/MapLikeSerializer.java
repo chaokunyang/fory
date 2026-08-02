@@ -589,7 +589,7 @@ public abstract class MapLikeSerializer<T> extends Serializer<T> {
 
   @Override
   public T read(ReadContext readContext) {
-    Map map = newMap(readContext);
+    Map map = newMap(readContext, false);
     int size = getAndClearNumElements();
     readElements(readContext, size, map);
     return onMapRead(map);
@@ -930,10 +930,13 @@ public abstract class MapLikeSerializer<T> extends Serializer<T> {
    *
    * <p>without default constructor, created list will have elementData as null, adding elements
    * will raise NPE.
+   *
+   * @param bodyAlwaysAdvances whether at least one generated declared key/value operation always
+   *     consumes input
    */
-  public Map newMap(ReadContext readContext) {
+  public Map newMap(ReadContext readContext, boolean bodyAlwaysAdvances) {
     MemoryBuffer buffer = readContext.getBuffer();
-    numElements = readMapSize(readContext, buffer);
+    numElements = readMapSize(readContext, buffer, bodyAlwaysAdvances);
     if (AndroidSupport.IS_ANDROID) {
       try {
         Constructor<?> constructor = type.getDeclaredConstructor();
@@ -989,8 +992,8 @@ public abstract class MapLikeSerializer<T> extends Serializer<T> {
 
   /**
    * Get and reset numElements of deserializing collection. Should be called after {@link
-   * #newMap(ReadContext)}. Nested read may overwrite this element, reset is necessary to avoid use
-   * wrong value by mistake.
+   * #newMap(ReadContext, boolean)}. Nested read may overwrite this element, reset is necessary to
+   * avoid use wrong value by mistake.
    */
   public int getAndClearNumElements() {
     int size = numElements;
@@ -1002,12 +1005,17 @@ public abstract class MapLikeSerializer<T> extends Serializer<T> {
     this.numElements = numElements;
   }
 
-  protected final int readMapSize(ReadContext readContext, MemoryBuffer buffer) {
+  protected final int readMapSize(
+      ReadContext readContext, MemoryBuffer buffer, boolean bodyAlwaysAdvances) {
     int numElements = buffer.readVarUInt32Small7();
     checkMapSize(numElements);
-    int requiredReadable = numElements - readContext.remainingUnbackedContainerItems();
-    if (requiredReadable > 0) {
-      buffer.checkReadableBytes(requiredReadable);
+    if (bodyAlwaysAdvances) {
+      buffer.checkReadableBytes(numElements);
+    } else {
+      int requiredReadable = numElements - readContext.remainingUnbackedContainerItems();
+      if (requiredReadable > 0) {
+        buffer.checkReadableBytes(requiredReadable);
+      }
     }
     readContext.reserveGraphMemory(mapOwnerBytes + (long) numElements * 2 * REFERENCE_BYTES);
     return numElements;

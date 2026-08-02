@@ -42,8 +42,13 @@ abstract class AbstractScalaXlangCollectionSerializer[A, T <: scala.collection.I
     }
   }
 
-  override def newCollection(readContext: ReadContext): util.Collection[_] = {
-    val numElements = readCollectionSize(readContext, readContext.getBuffer)
+  override def newCollection(
+      readContext: ReadContext,
+      bodyAlwaysAdvances: Boolean): util.Collection[_] = {
+    val numElements = readCollectionSize(
+      readContext,
+      readContext.getBuffer,
+      bodyAlwaysAdvances)
     setNumElements(numElements)
     val builder = newBuilder(numElements)
     if (ScalaXlangCollectionShape.hasOptionElement(readContext)) {
@@ -363,8 +368,10 @@ abstract class AbstractScalaXlangMapSerializer[K, V, T <: scala.collection.Map[K
     }
   }
 
-  override def newMap(readContext: ReadContext): util.Map[_, _] = {
-    val numElements = readMapSize(readContext, readContext.getBuffer)
+  override def newMap(
+      readContext: ReadContext,
+      bodyAlwaysAdvances: Boolean): util.Map[_, _] = {
+    val numElements = readMapSize(readContext, readContext.getBuffer, bodyAlwaysAdvances)
     setNumElements(numElements)
     val builder =
       ScalaXlangCollectionShape.mapBuilder[K, V, T](cls, numElements)

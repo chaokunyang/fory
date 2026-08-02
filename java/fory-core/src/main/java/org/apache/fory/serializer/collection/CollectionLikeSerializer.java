@@ -448,7 +448,7 @@ public abstract class CollectionLikeSerializer<T> extends Serializer<T> {
 
   @Override
   public T read(ReadContext readContext) {
-    Collection collection = newCollection(readContext);
+    Collection collection = newCollection(readContext, false);
     int numElements = getAndClearNumElements();
     if (numElements != 0) {
       readElements(readContext, collection, numElements);
@@ -474,10 +474,13 @@ public abstract class CollectionLikeSerializer<T> extends Serializer<T> {
    *
    * <p>without default constructor, created list will have elementData as null, adding elements
    * will raise NPE.
+   *
+   * @param bodyAlwaysAdvances whether the generated declared element operation always consumes
+   *     input
    */
-  public Collection newCollection(ReadContext readContext) {
+  public Collection newCollection(ReadContext readContext, boolean bodyAlwaysAdvances) {
     MemoryBuffer buffer = readContext.getBuffer();
-    numElements = readCollectionSize(readContext, buffer);
+    numElements = readCollectionSize(readContext, buffer, bodyAlwaysAdvances);
     if (AndroidSupport.IS_ANDROID) {
       try {
         Constructor<?> constructor = type.getDeclaredConstructor();
@@ -563,8 +566,8 @@ public abstract class CollectionLikeSerializer<T> extends Serializer<T> {
 
   /**
    * Get and reset numElements of deserializing collection. Should be called after {@link
-   * #newCollection(ReadContext)}. Nested read may overwrite this element, reset is necessary to
-   * avoid use wrong value by mistake.
+   * #newCollection(ReadContext, boolean)}. Nested read may overwrite this element, reset is
+   * necessary to avoid use wrong value by mistake.
    */
   public int getAndClearNumElements() {
     int size = numElements;
@@ -576,12 +579,17 @@ public abstract class CollectionLikeSerializer<T> extends Serializer<T> {
     this.numElements = numElements;
   }
 
-  protected final int readCollectionSize(ReadContext readContext, MemoryBuffer buffer) {
+  protected final int readCollectionSize(
+      ReadContext readContext, MemoryBuffer buffer, boolean bodyAlwaysAdvances) {
     int numElements = buffer.readVarUInt32Small7();
     checkCollectionSize(numElements);
-    int requiredReadable = numElements - readContext.remainingUnbackedContainerItems();
-    if (requiredReadable > 0) {
-      buffer.checkReadableBytes(requiredReadable);
+    if (bodyAlwaysAdvances) {
+      buffer.checkReadableBytes(numElements);
+    } else {
+      int requiredReadable = numElements - readContext.remainingUnbackedContainerItems();
+      if (requiredReadable > 0) {
+        buffer.checkReadableBytes(requiredReadable);
+      }
     }
     readContext.reserveGraphMemory(collectionOwnerBytes + (long) numElements * REFERENCE_BYTES);
     return numElements;

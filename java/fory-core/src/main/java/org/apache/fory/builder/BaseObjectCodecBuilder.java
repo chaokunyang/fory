@@ -2736,8 +2736,16 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
           serializer.type());
     }
     Invoke supportHook = inlineInvoke(serializer, "supportCodegenHook", PRIMITIVE_BOOLEAN_TYPE);
+    boolean bodyAlwaysAdvances =
+        isMonomorphic(elementType.getRawType())
+            && registeredReadBodyAlwaysAdvances(elementType.getRawType());
     Expression collection =
-        new Invoke(serializer, "newCollection", COLLECTION_TYPE, readContextRef);
+        new Invoke(
+            serializer,
+            "newCollection",
+            COLLECTION_TYPE,
+            readContextRef,
+            Literal.ofBoolean(bodyAlwaysAdvances));
     Expression size = new Invoke(serializer, "getAndClearNumElements", "size", PRIMITIVE_INT_TYPE);
     // Do not add an ArrayList-specific branch here: it pushes generated code over 325 bytes, and
     // List#add is more likely to inline when the call site has only one receiver subclass.
@@ -3103,7 +3111,16 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
     Expression mapSerializer = serializer;
     Invoke supportHook = inlineInvoke(serializer, "supportCodegenHook", PRIMITIVE_BOOLEAN_TYPE);
     ListExpression expressions = new ListExpression();
-    Expression newMap = new Invoke(serializer, "newMap", MAP_TYPE, readContextRef);
+    Class<?> keyCls = keyType.getRawType();
+    Class<?> valueCls = valueType.getRawType();
+    boolean keyMonomorphic = isMonomorphic(keyCls);
+    boolean valueMonomorphic = isMonomorphic(valueCls);
+    boolean bodyAlwaysAdvances =
+        (keyMonomorphic && registeredReadBodyAlwaysAdvances(keyCls))
+            || (valueMonomorphic && registeredReadBodyAlwaysAdvances(valueCls));
+    Expression newMap =
+        new Invoke(
+            serializer, "newMap", MAP_TYPE, readContextRef, Literal.ofBoolean(bodyAlwaysAdvances));
     Expression size = new Invoke(serializer, "getAndClearNumElements", "size", PRIMITIVE_INT_TYPE);
     Expression chunkHeader =
         new If(
@@ -3111,10 +3128,6 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
             ofInt(0),
             inlineInvoke(buffer, "readUnsignedByte", PRIMITIVE_INT_TYPE));
     expressions.add(newMap, size, chunkHeader);
-    Class<?> keyCls = keyType.getRawType();
-    Class<?> valueCls = valueType.getRawType();
-    boolean keyMonomorphic = isMonomorphic(keyCls);
-    boolean valueMonomorphic = isMonomorphic(valueCls);
     boolean refKey = needWriteRef(keyType);
     boolean refValue = needWriteRef(valueType);
     boolean inline = keyMonomorphic && valueMonomorphic && (!refKey || !refValue);

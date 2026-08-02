@@ -149,9 +149,9 @@ public class CollectionSerializers {
     }
 
     @Override
-    public ArrayList newCollection(ReadContext readContext) {
+    public ArrayList newCollection(ReadContext readContext, boolean bodyAlwaysAdvances) {
       MemoryBuffer buffer = readContext.getBuffer();
-      int numElements = readCollectionSize(readContext, buffer);
+      int numElements = readCollectionSize(readContext, buffer, bodyAlwaysAdvances);
       setNumElements(numElements);
       ArrayList arrayList = new ArrayList(numElements);
       readContext.reference(arrayList);
@@ -215,9 +215,9 @@ public class CollectionSerializers {
     }
 
     @Override
-    public ArrayList newCollection(ReadContext readContext) {
+    public ArrayList newCollection(ReadContext readContext, boolean bodyAlwaysAdvances) {
       MemoryBuffer buffer = readContext.getBuffer();
-      int numElements = readCollectionSize(readContext, buffer);
+      int numElements = readCollectionSize(readContext, buffer, bodyAlwaysAdvances);
       setNumElements(numElements);
       ArrayList arrayList = new ArrayList(numElements);
       readContext.reference(arrayList);
@@ -231,9 +231,9 @@ public class CollectionSerializers {
     }
 
     @Override
-    public HashSet newCollection(ReadContext readContext) {
+    public HashSet newCollection(ReadContext readContext, boolean bodyAlwaysAdvances) {
       MemoryBuffer buffer = readContext.getBuffer();
-      int numElements = readCollectionSize(readContext, buffer);
+      int numElements = readCollectionSize(readContext, buffer, bodyAlwaysAdvances);
       setNumElements(numElements);
       HashSet hashSet = new HashSet(numElements);
       readContext.reference(hashSet);
@@ -247,9 +247,9 @@ public class CollectionSerializers {
     }
 
     @Override
-    public LinkedHashSet newCollection(ReadContext readContext) {
+    public LinkedHashSet newCollection(ReadContext readContext, boolean bodyAlwaysAdvances) {
       MemoryBuffer buffer = readContext.getBuffer();
-      int numElements = readCollectionSize(readContext, buffer);
+      int numElements = readCollectionSize(readContext, buffer, bodyAlwaysAdvances);
       setNumElements(numElements);
       LinkedHashSet hashSet = new LinkedHashSet(numElements);
       readContext.reference(hashSet);
@@ -296,9 +296,9 @@ public class CollectionSerializers {
 
     @SuppressWarnings("unchecked")
     @Override
-    public T newCollection(ReadContext readContext) {
+    public T newCollection(ReadContext readContext, boolean bodyAlwaysAdvances) {
       MemoryBuffer buffer = readContext.getBuffer();
-      int numElements = readCollectionSize(readContext, buffer);
+      int numElements = readCollectionSize(readContext, buffer, bodyAlwaysAdvances);
       setNumElements(numElements);
       T collection;
       Comparator comparator = config.isXlang() ? null : (Comparator) readContext.readRef();
@@ -383,9 +383,9 @@ public class CollectionSerializers {
     }
 
     @Override
-    public Collection newCollection(ReadContext readContext) {
+    public Collection newCollection(ReadContext readContext, boolean bodyAlwaysAdvances) {
       MemoryBuffer buffer = readContext.getBuffer();
-      int numElements = readCollectionSize(readContext, buffer);
+      int numElements = readCollectionSize(readContext, buffer, bodyAlwaysAdvances);
       setNumElements(numElements);
       return new CollectionContainer<>(numElements);
     }
@@ -417,9 +417,9 @@ public class CollectionSerializers {
     }
 
     @Override
-    public Collection newCollection(ReadContext readContext) {
+    public Collection newCollection(ReadContext readContext, boolean bodyAlwaysAdvances) {
       MemoryBuffer buffer = readContext.getBuffer();
-      int numElements = readCollectionSize(readContext, buffer);
+      int numElements = readCollectionSize(readContext, buffer, bodyAlwaysAdvances);
       setNumElements(numElements);
       return new CollectionContainer<>(numElements);
     }
@@ -573,9 +573,10 @@ public class CollectionSerializers {
     }
 
     @Override
-    public ConcurrentSkipListSet newCollection(ReadContext readContext) {
+    public ConcurrentSkipListSet newCollection(
+        ReadContext readContext, boolean bodyAlwaysAdvances) {
       MemoryBuffer buffer = readContext.getBuffer();
-      int numElements = readCollectionSize(readContext, buffer);
+      int numElements = readCollectionSize(readContext, buffer, bodyAlwaysAdvances);
       setNumElements(numElements);
       if (config.isXlang()) {
         ConcurrentSkipListSet skipListSet = new ConcurrentSkipListSet();
@@ -630,7 +631,7 @@ public class CollectionSerializers {
     }
 
     @Override
-    public Collection newCollection(ReadContext readContext) {
+    public Collection newCollection(ReadContext readContext, boolean bodyAlwaysAdvances) {
       MemoryBuffer buffer = readContext.getBuffer();
       final TypeInfo mapTypeInfo = typeResolver.readTypeInfo(readContext);
       final MapLikeSerializer mapSerializer = (MapLikeSerializer) mapTypeInfo.getSerializer();
@@ -639,7 +640,7 @@ public class CollectionSerializers {
       Set set;
       if (buffer.readBoolean()) {
         readContext.preserveRefId(refId);
-        Map map = mapSerializer.newMap(readContext);
+        Map map = mapSerializer.newMap(readContext, false);
         readContext.reserveGraphMemory(SET_FROM_MAP_OWNER_BYTES);
         set = Collections.newSetFromMap(map);
         setNumElements(mapSerializer.getAndClearNumElements());
@@ -748,7 +749,7 @@ public class CollectionSerializers {
     }
 
     @Override
-    public Collection newCollection(ReadContext readContext) {
+    public Collection newCollection(ReadContext readContext, boolean bodyAlwaysAdvances) {
       throw new IllegalStateException(
           "Should not be invoked since we set supportCodegenHook to false");
     }
@@ -761,9 +762,9 @@ public class CollectionSerializers {
     }
 
     @Override
-    public Vector newCollection(ReadContext readContext) {
+    public Vector newCollection(ReadContext readContext, boolean bodyAlwaysAdvances) {
       MemoryBuffer buffer = readContext.getBuffer();
-      int numElements = readCollectionSize(readContext, buffer);
+      int numElements = readCollectionSize(readContext, buffer, bodyAlwaysAdvances);
       setNumElements(numElements);
       Vector<Object> vector = new Vector<>(numElements);
       readContext.reference(vector);
@@ -778,9 +779,9 @@ public class CollectionSerializers {
     }
 
     @Override
-    public ArrayDeque newCollection(ReadContext readContext) {
+    public ArrayDeque newCollection(ReadContext readContext, boolean bodyAlwaysAdvances) {
       MemoryBuffer buffer = readContext.getBuffer();
-      int numElements = readCollectionSize(readContext, buffer);
+      int numElements = readCollectionSize(readContext, buffer, bodyAlwaysAdvances);
       setNumElements(numElements);
       ArrayDeque deque = new ArrayDeque(numElements);
       readContext.reference(deque);
@@ -823,7 +824,7 @@ public class CollectionSerializers {
     public EnumSet read(ReadContext readContext) {
       MemoryBuffer buffer = readContext.getBuffer();
       Class elemClass = typeResolver.readTypeInfo(readContext).getType();
-      int length = readCollectionSize(readContext, buffer);
+      int length = readCollectionSize(readContext, buffer, true);
       EnumSet object = EnumSet.noneOf(elemClass);
       Serializer elemSerializer = typeResolver.getSerializer(elemClass);
       for (int i = 0; i < length; i++) {
@@ -897,10 +898,10 @@ public class CollectionSerializers {
     }
 
     @Override
-    public PriorityQueue newCollection(ReadContext readContext) {
+    public PriorityQueue newCollection(ReadContext readContext, boolean bodyAlwaysAdvances) {
       assert !config.isXlang();
       MemoryBuffer buffer = readContext.getBuffer();
-      int numElements = readCollectionSize(readContext, buffer);
+      int numElements = readCollectionSize(readContext, buffer, bodyAlwaysAdvances);
       setNumElements(numElements);
       Comparator comparator = (Comparator) readContext.readRef();
       PriorityQueue queue = new PriorityQueue(comparator);
@@ -958,9 +959,9 @@ public class CollectionSerializers {
     }
 
     @Override
-    public ArrayBlockingQueue newCollection(ReadContext readContext) {
+    public ArrayBlockingQueue newCollection(ReadContext readContext, boolean bodyAlwaysAdvances) {
       MemoryBuffer buffer = readContext.getBuffer();
-      int numElements = readCollectionSize(readContext, buffer);
+      int numElements = readCollectionSize(readContext, buffer, bodyAlwaysAdvances);
       setNumElements(numElements);
       int capacity = buffer.readVarUInt32Small7();
       checkBoundedQueueCapacity(numElements, capacity);
@@ -1026,9 +1027,9 @@ public class CollectionSerializers {
     }
 
     @Override
-    public LinkedBlockingQueue newCollection(ReadContext readContext) {
+    public LinkedBlockingQueue newCollection(ReadContext readContext, boolean bodyAlwaysAdvances) {
       MemoryBuffer buffer = readContext.getBuffer();
-      int numElements = readCollectionSize(readContext, buffer);
+      int numElements = readCollectionSize(readContext, buffer, bodyAlwaysAdvances);
       setNumElements(numElements);
       int capacity = buffer.readVarUInt32Small7();
       checkBoundedQueueCapacity(numElements, capacity);
@@ -1189,8 +1190,9 @@ public class CollectionSerializers {
     }
 
     @Override
-    public List newCollection(ReadContext readContext) {
-      int numElements = readCollectionSize(readContext, readContext.getBuffer());
+    public List newCollection(ReadContext readContext, boolean bodyAlwaysAdvances) {
+      int numElements =
+          readCollectionSize(readContext, readContext.getBuffer(), bodyAlwaysAdvances);
       setNumElements(numElements);
       ArrayList list = new ArrayList(numElements);
       readContext.reference(list);
@@ -1204,8 +1206,9 @@ public class CollectionSerializers {
     }
 
     @Override
-    public Set newCollection(ReadContext readContext) {
-      int numElements = readCollectionSize(readContext, readContext.getBuffer());
+    public Set newCollection(ReadContext readContext, boolean bodyAlwaysAdvances) {
+      int numElements =
+          readCollectionSize(readContext, readContext.getBuffer(), bodyAlwaysAdvances);
       setNumElements(numElements);
       HashSet set = new HashSet(numElements);
       readContext.reference(set);

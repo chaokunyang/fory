@@ -54,7 +54,9 @@ abstract class AbstractScalaMapSerializer[K, V, T](typeResolver: TypeResolver, c
 
   def onMapWrite(writeContext: WriteContext, value: T): util.Map[_, _]
 
-  override def newMap(readContext: ReadContext): util.Map[_, _] = {
+  override def newMap(
+      readContext: ReadContext,
+      bodyAlwaysAdvances: Boolean): util.Map[_, _] = {
     val buffer = readContext.getBuffer
     val numElements = buffer.readVarUInt32Small7()
     checkMapSize(numElements)
@@ -62,9 +64,13 @@ abstract class AbstractScalaMapSerializer[K, V, T](typeResolver: TypeResolver, c
       ScalaMapOwnerBytes + numElements.toLong * 2L * ReferenceBytes)
     setNumElements(numElements)
     val factory = readContext.readRef().asInstanceOf[Factory[(K, V), T]]
-    val requiredReadable = numElements - readContext.remainingUnbackedContainerItems()
-    if (requiredReadable > 0) {
-      buffer.checkReadableBytes(requiredReadable)
+    if (bodyAlwaysAdvances) {
+      buffer.checkReadableBytes(numElements)
+    } else {
+      val requiredReadable = numElements - readContext.remainingUnbackedContainerItems()
+      if (requiredReadable > 0) {
+        buffer.checkReadableBytes(requiredReadable)
+      }
     }
     val builder = factory.newBuilder
     builder.sizeHint(numElements)

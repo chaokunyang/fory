@@ -1632,7 +1632,7 @@ where Key.Target: Hashable {
                     KeyCodec.self, declared: keyDeclared, typeInfo: keyTypeInfo)
                 || fieldReadAlwaysAdvances(
                     ValueCodec.self, declared: valueDeclared, typeInfo: valueTypeInfo)
-            let chunkStart = context.buffer.cursor
+            let chunkStart = alwaysAdvances ? 0 : context.buffer.cursor
             for _ in 0..<chunkSize {
                 let key = try KeyCodec.withFieldTypeInfo(keyTypeInfo, context) {
                     try KeyCodec.readField(
@@ -1757,7 +1757,7 @@ where Key.Target: Hashable {
                     KeyCodec.self, declared: keyDeclared, typeInfo: keyTypeInfo)
                 || fieldReadAlwaysAdvances(
                     ValueCodec.self, declared: valueDeclared, typeInfo: valueTypeInfo)
-            let chunkStart = context.buffer.cursor
+            let chunkStart = alwaysAdvances ? 0 : context.buffer.cursor
             for _ in 0..<chunkSize {
                 let key = try KeyCodec.withFieldTypeInfo(keyTypeInfo, context) {
                     try KeyCodec.readField(

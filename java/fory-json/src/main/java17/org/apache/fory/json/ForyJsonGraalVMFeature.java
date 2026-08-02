@@ -778,11 +778,24 @@ final class ForyJsonGraalVMFeature implements Feature {
       Constructor<?> constructor = rawType.getConstructor();
       RuntimeReflection.register(constructor);
       ReflectionUtils.getCtrHandle(rawType, new Class<?>[0]);
+      registerContainerFields(rawType);
       return true;
     } catch (NoSuchMethodException ignored) {
       // CollectionCodec and MapCodec preserve the same runtime failure for a concrete container
       // without a public no-argument constructor.
       return false;
+    }
+  }
+
+  private void registerContainerFields(Class<?> type) {
+    for (Class<?> current = type;
+        current != null && current != Object.class;
+        current = current.getSuperclass()) {
+      // CollectionCodec and MapCodec derive the retained-owner estimate from the complete physical
+      // field hierarchy at image runtime. Retaining only the constructor would silently reduce the
+      // graph-memory charge for custom concrete containers.
+      RuntimeReflection.register(current);
+      RuntimeReflection.register(current.getDeclaredFields());
     }
   }
 

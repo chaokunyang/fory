@@ -114,6 +114,19 @@ public class JsonGraphMemoryBudgetTest extends ForyJsonTestModels {
   }
 
   @Test
+  public void concreteContainerFields() {
+    TypeRef<FieldList<String>> listType = new TypeRef<FieldList<String>>() {};
+    int listBytes = shallow(FieldList.class);
+    assertEquals(listBytes - shallow(PlainList.class), Long.BYTES + Integer.BYTES);
+    assertEquals(assertTypeBudget("[]", listType, listBytes), new FieldList<>());
+
+    TypeRef<FieldMap<String, String>> mapType = new TypeRef<FieldMap<String, String>>() {};
+    int mapBytes = shallow(FieldMap.class);
+    assertEquals(mapBytes - shallow(PlainMap.class), Long.BYTES + Integer.BYTES);
+    assertEquals(assertTypeBudget("{}", mapType, mapBytes), new FieldMap<>());
+  }
+
+  @Test
   public void naturalContainerOwners() {
     long arrayBytes = shallow(JsonArray.class) + 2L * REF_BYTES;
     Object array = assertClassBudget("[1,2]", Object.class, arrayBytes);
@@ -387,6 +400,26 @@ public class JsonGraphMemoryBudgetTest extends ForyJsonTestModels {
       puts++;
       return super.put(key, value);
     }
+  }
+
+  public static final class PlainList<E> extends ArrayList<E> {}
+
+  public static class FieldListBase<E> extends ArrayList<E> {
+    private long inheritedField;
+  }
+
+  public static final class FieldList<E> extends FieldListBase<E> {
+    private int directField;
+  }
+
+  public static final class PlainMap<K, V> extends LinkedHashMap<K, V> {}
+
+  public static class FieldMapBase<K, V> extends LinkedHashMap<K, V> {
+    private long inheritedField;
+  }
+
+  public static final class FieldMap<K, V> extends FieldMapBase<K, V> {
+    private int directField;
   }
 
   public static final class CountingAny {

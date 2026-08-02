@@ -106,6 +106,7 @@ public final class ForyJsonExample {
         testUnwrapped();
         testValidator();
         testGraphMemoryBudget();
+        testContainerGraphBudget();
         testMixin();
         testMixinValue();
         testMixinValueRecord();
@@ -555,6 +556,46 @@ public final class ForyJsonExample {
     }
   }
 
+  private static void testContainerGraphBudget() {
+    long plainListBytes = minimumGraphBudget("[]", PlainGraphList.class);
+    long fieldListBytes = minimumGraphBudget("[]", FieldGraphList.class);
+    Preconditions.checkArgument(fieldListBytes == plainListBytes + Long.BYTES + Integer.BYTES);
+
+    long plainMapBytes = minimumGraphBudget("{}", PlainGraphMap.class);
+    long fieldMapBytes = minimumGraphBudget("{}", FieldGraphMap.class);
+    Preconditions.checkArgument(fieldMapBytes == plainMapBytes + Long.BYTES + Integer.BYTES);
+  }
+
+  private static long minimumGraphBudget(String input, Class<?> type) {
+    long low = 1;
+    long high = 4096;
+    while (low < high) {
+      long middle = low + (high - low) / 2;
+      if (fitsGraphBudget(input, type, middle)) {
+        high = middle;
+      } else {
+        low = middle + 1;
+      }
+    }
+    Preconditions.checkArgument(fitsGraphBudget(input, type, low));
+    return low;
+  }
+
+  private static boolean fitsGraphBudget(String input, Class<?> type, long budget) {
+    ForyJson json =
+        ForyJson.builder()
+            .withCodegen(false)
+            .withConcurrencyLevel(1)
+            .withMaxGraphMemoryBytes(budget)
+            .build();
+    try {
+      json.fromJson(input, type);
+      return true;
+    } catch (ForyJsonException expected) {
+      return false;
+    }
+  }
+
   private static void testBigDecimal() {
     ForyJson json = ForyJson.builder().build();
     BigDecimalHolder value = new BigDecimalHolder();
@@ -785,6 +826,38 @@ public final class ForyJsonExample {
 
   public static final class StringMap extends HashMap<String, String> {
     public StringMap() {}
+  }
+
+  public static final class PlainGraphList extends ArrayList<String> {
+    public PlainGraphList() {}
+  }
+
+  public static class FieldGraphListBase extends ArrayList<String> {
+    private long inheritedField;
+
+    public FieldGraphListBase() {}
+  }
+
+  public static final class FieldGraphList extends FieldGraphListBase {
+    private int directField;
+
+    public FieldGraphList() {}
+  }
+
+  public static final class PlainGraphMap extends LinkedHashMap<String, String> {
+    public PlainGraphMap() {}
+  }
+
+  public static class FieldGraphMapBase extends LinkedHashMap<String, String> {
+    private long inheritedField;
+
+    public FieldGraphMapBase() {}
+  }
+
+  public static final class FieldGraphMap extends FieldGraphMapBase {
+    private int directField;
+
+    public FieldGraphMap() {}
   }
 
   public abstract static class GenericProperty<T> {

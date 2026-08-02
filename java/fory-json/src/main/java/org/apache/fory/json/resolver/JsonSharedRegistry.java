@@ -660,8 +660,7 @@ public final class JsonSharedRegistry {
   public static GeneratedJsonCodec<?> validateGeneratedCodec(
       Class<?> type, GeneratedJsonCodec<?> codec) {
     if (codec == null) {
-      throw new ForyJsonException(
-          "Generated JSON codec factory returned null for " + type.getName());
+      throw new ForyJsonException("Generated JSON codec is null for " + type.getName());
     }
     Class<?> declaredType;
     JsonFieldAccessor[] accessors;

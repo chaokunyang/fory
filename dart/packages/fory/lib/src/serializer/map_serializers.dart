@@ -304,6 +304,9 @@ Map<K, V> readTypedMapPayload<K, V>(
     final keyDeclared = (header & MapFlags.keyDeclaredType) != 0;
     final valueDeclared = (header & MapFlags.valueDeclaredType) != 0;
     final chunkSize = context.buffer.readUint8();
+    if (chunkSize == 0 || chunkSize > remaining) {
+      _throwInvalidMapChunk(chunkSize, remaining);
+    }
     final keyTypeInfo = keyDeclared ? null : context.readTypeMetaValue();
     final valueTypeInfo = valueDeclared ? null : context.readTypeMetaValue();
     final tracksDepth =
@@ -355,6 +358,13 @@ Map<K, V> readTypedMapPayload<K, V>(
     remaining -= chunkSize;
   }
   return result;
+}
+
+@pragma('vm:never-inline')
+Never _throwInvalidMapChunk(int chunkSize, int remaining) {
+  throw StateError(
+    'Invalid map chunk size $chunkSize with $remaining entries remaining.',
+  );
 }
 
 void _writeNullChunk(

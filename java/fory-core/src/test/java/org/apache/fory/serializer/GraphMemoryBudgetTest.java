@@ -36,9 +36,12 @@ import org.apache.fory.Fory;
 import org.apache.fory.ForyTestBase;
 import org.apache.fory.collection.Int32List;
 import org.apache.fory.context.ReadContext;
+import org.apache.fory.context.WriteContext;
 import org.apache.fory.exception.DeserializationException;
 import org.apache.fory.exception.InsecureException;
 import org.apache.fory.memory.MemoryBuffer;
+import org.apache.fory.serializer.collection.PrimitiveListSerializers;
+import org.apache.fory.type.Types;
 import org.testng.annotations.Test;
 
 public class GraphMemoryBudgetTest extends ForyTestBase {
@@ -227,6 +230,27 @@ public class GraphMemoryBudgetTest extends ForyTestBase {
   }
 
   @Test
+  public void testBoxedArrayAsListBudget() {
+    List<Boolean> value = Arrays.asList(true, false, true);
+    byte[] bytes = boxedArrayAsListBytes(value);
+    long required = collectionBytes(value.size());
+
+    assertThrows(InsecureException.class, () -> readBoxedArrayAsList(required - 1, bytes));
+    assertEquals(readBoxedArrayAsList(required, bytes), value);
+  }
+
+  @Test
+  public void testArraysAsListBudget() {
+    List<Object> value = Arrays.asList(null, null, null);
+    byte[] bytes = builder().build().serialize(value);
+    long required =
+        objectArrayBytes(value.size()) + GraphMemoryEstimates.shallowObjectBytes(value.getClass());
+
+    assertThrows(InsecureException.class, () -> newFory(required - 1).deserialize(bytes));
+    assertEquals(newFory(required).deserialize(bytes), value);
+  }
+
+  @Test
   public void testScalarOwnersSkipBudget() {
     Fory fory = newFory(1);
     assertEquals(fory.deserialize(fory.serialize("graph budget")), "graph budget");
@@ -281,6 +305,44 @@ public class GraphMemoryBudgetTest extends ForyTestBase {
     ReadContext readContext = fory.getReadContext();
     readContext.prepare(buffer, null, false);
     return readContext;
+  }
+
+  private static byte[] boxedArrayAsListBytes(List<Boolean> value) {
+    Fory fory = newXlangFory(DEFAULT_GRAPH_MEMORY_BYTES);
+    MemoryBuffer buffer = MemoryBuffer.newHeapBuffer(8);
+    WriteContext writeContext = fory.getWriteContext();
+    writeContext.prepare(buffer, null);
+    try {
+      boxedArrayAsListSerializer(fory).write(writeContext, value);
+      return buffer.getBytes(0, buffer.writerIndex());
+    } finally {
+      writeContext.reset();
+    }
+  }
+
+  private static List<?> readBoxedArrayAsList(long maxGraphMemoryBytes, byte[] bytes) {
+    Fory fory = newXlangFory(maxGraphMemoryBytes);
+    ReadContext readContext = fory.getReadContext();
+    readContext.prepare(MemoryBuffer.fromByteArray(bytes), null, false);
+    try {
+      return boxedArrayAsListSerializer(fory).read(readContext);
+    } finally {
+      readContext.reset();
+    }
+  }
+
+  private static PrimitiveListSerializers.BoxedArrayAsListSerializer boxedArrayAsListSerializer(
+      Fory fory) {
+    return new PrimitiveListSerializers.BoxedArrayAsListSerializer(
+        fory.getTypeResolver(), Types.BOOL_ARRAY, "values");
+  }
+
+  private static Fory newXlangFory(long maxGraphMemoryBytes) {
+    return builder()
+        .withXlang(true)
+        .withCodegen(false)
+        .withMaxGraphMemoryBytes(maxGraphMemoryBytes)
+        .build();
   }
 
   private static long collectionBytes(int numElements) {

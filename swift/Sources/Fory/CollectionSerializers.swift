@@ -126,11 +126,27 @@ internal func readArrayUninitialized<Element>(
     count: Int,
     _ initializer: (UnsafeMutablePointer<Element>) throws -> Void
 ) rethrows -> [Element] {
+    // This fast path is only safe for trivially destructible elements. Nontrivial elements must
+    // update Array's initialized prefix after each successful initialization so a later throw
+    // releases that prefix.
     try [Element](unsafeUninitializedCapacity: count) { destination, initializedCount in
         if count > 0 {
             try initializer(destination.baseAddress!)
         }
         initializedCount = count
+    }
+}
+
+@usableFromInline
+@inline(__always)
+internal func readArrayTrackingInitialization<Element>(
+    count: Int,
+    _ initializer: (UnsafeMutablePointer<Element>, inout Int) throws -> Void
+) rethrows -> [Element] {
+    try [Element](unsafeUninitializedCapacity: count) { destination, initializedCount in
+        if count > 0 {
+            try initializer(destination.baseAddress!, &initializedCount)
+        }
     }
 }
 
@@ -710,7 +726,9 @@ public enum ArraySerializer<Element: Serializer>: Serializer {
 
         if !sameType {
             let refMode = RefMode.from(nullable: hasNull, trackRef: trackRef)
-            return try readArrayUninitialized(count: length) { destination in
+            return try readArrayTrackingInitialization(
+                count: length
+            ) { destination, initializedCount in
                 for index in 0..<length {
                     destination.advanced(by: index).initialize(
                         to: try Codec.readField(
@@ -719,6 +737,7 @@ public enum ArraySerializer<Element: Serializer>: Serializer {
                             readTypeInfo: true
                         )
                     )
+                    initializedCount = index + 1
                 }
             }
         }
@@ -726,7 +745,9 @@ public enum ArraySerializer<Element: Serializer>: Serializer {
         let elementTypeInfo = declared ? nil : try Codec.readFieldTypeInfo(context)
         return try Codec.withFieldTypeInfo(elementTypeInfo, context) {
             if trackRef {
-                return try readArrayUninitialized(count: length) { destination in
+                return try readArrayTrackingInitialization(
+                    count: length
+                ) { destination, initializedCount in
                     for index in 0..<length {
                         destination.advanced(by: index).initialize(
                             to: try Codec.readField(
@@ -735,12 +756,15 @@ public enum ArraySerializer<Element: Serializer>: Serializer {
                                 readTypeInfo: false
                             )
                         )
+                        initializedCount = index + 1
                     }
                 }
             }
 
             if hasNull {
-                return try readArrayUninitialized(count: length) { destination in
+                return try readArrayTrackingInitialization(
+                    count: length
+                ) { destination, initializedCount in
                     for index in 0..<length {
                         let refFlag = try buffer.readInt8()
                         if refFlag == RefFlag.null.rawValue {
@@ -754,15 +778,19 @@ public enum ArraySerializer<Element: Serializer>: Serializer {
                         } else {
                             throw invalidCollectionRefFlag(refFlag)
                         }
+                        initializedCount = index + 1
                     }
                 }
             }
 
-            return try readArrayUninitialized(count: length) { destination in
+            return try readArrayTrackingInitialization(
+                count: length
+            ) { destination, initializedCount in
                 for index in 0..<length {
                     destination.advanced(by: index).initialize(
                         to: try Codec.readFieldData(context)
                     )
+                    initializedCount = index + 1
                 }
             }
         }

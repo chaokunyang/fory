@@ -3111,7 +3111,8 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
     Expression keyIsDeclaredType = neq(bitand(chunkHeader, ofInt(KEY_DECL_TYPE)), ofInt(0));
     Expression valueIsDeclaredType = neq(bitand(chunkHeader, ofInt(VALUE_DECL_TYPE)), ofInt(0));
     Expression chunkSize = new Invoke(buffer, "readUnsignedByte", "chunkSize", PRIMITIVE_INT_TYPE);
-    expressions.add(chunkSize);
+    expressions.add(
+        chunkSize, new StaticInvoke(MapLikeSerializer.class, "checkChunkSize", chunkSize, size));
     if (trackingKeyRef) {
       expressions.add(trackKeyRef);
     }

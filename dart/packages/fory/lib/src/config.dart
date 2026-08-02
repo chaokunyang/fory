@@ -81,14 +81,17 @@ final class Config {
         defaultMaxAverageSchemaVersionsPerType,
     int maxGraphMemoryBytes = defaultMaxGraphMemoryBytes,
   }) : checkStructVersion = compatible ? false : checkStructVersion,
-       maxDepth = _positive(maxDepth, 'maxDepth'),
-       maxTypeFields = _positive(maxTypeFields, 'maxTypeFields'),
-       maxTypeMetaBytes = _positive(maxTypeMetaBytes, 'maxTypeMetaBytes'),
-       maxSchemaVersionsPerType = _positive(
+       maxDepth = _positiveSafeInteger(maxDepth, 'maxDepth'),
+       maxTypeFields = _positiveSafeInteger(maxTypeFields, 'maxTypeFields'),
+       maxTypeMetaBytes = _positiveSafeInteger(
+         maxTypeMetaBytes,
+         'maxTypeMetaBytes',
+       ),
+       maxSchemaVersionsPerType = _positiveSafeInteger(
          maxSchemaVersionsPerType,
          'maxSchemaVersionsPerType',
        ),
-       maxAverageSchemaVersionsPerType = _positive(
+       maxAverageSchemaVersionsPerType = _positiveSafeInteger(
          maxAverageSchemaVersionsPerType,
          'maxAverageSchemaVersionsPerType',
        ),
@@ -96,13 +99,6 @@ final class Config {
          maxGraphMemoryBytes,
          'maxGraphMemoryBytes',
        );
-
-  static int _positive(int value, String name) {
-    if (value <= 0) {
-      throw ArgumentError.value(value, name, 'must be positive');
-    }
-    return value;
-  }
 
   static int _positiveSafeInteger(int value, String name) {
     const maxSafeInteger = 9007199254740991;

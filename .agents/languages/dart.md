@@ -98,7 +98,19 @@ Load this file when changing `dart/`.
 - Do not add parallel header-low/header-high slot caches or multi-slot recent caches in TypeMeta hot paths to chase benchmark gaps. Header-cache hits must use the concrete checked cache owner directly; if a hit hint is needed, cache one TypeInfo/TypeMeta object and compare the validated header identity on that object, not separate low/high header fields or benchmark-pattern state.
 - If Dart TypeMeta cache ownership changes, keep the invariant in a source comment near the hit path: a checked metadata-cache hit skips the body and must not grow low-bit sentinels, accepted-header fields, parallel header slots, or benchmark-pattern state.
 - Dart expected-type TypeDef reads should compare the expected `TypeInfo` object's cached local TypeDef header before consulting the parsed-metadata map. A match is a direct local-schema hit: skip the remote body, add the expected type to the per-read shared type table, and do not publish to `ParsedTypeMetaCache`, record a remote schema version, or parse/hash the body.
-- Dart local TypeDef construction is a registration-time two-stage process: first record the current `TypeInfo`, then eagerly rebuild local TypeDefs and struct serializers for all registered user types from the complete current registry. Do not move local TypeDef construction back into read/write hot paths or cache-miss workarounds; late registrations must refresh earlier TypeDefs on the registration cold path.
+- Dart local TypeDef construction is registration-owned: record registrations
+  and finalize their dependent TypeDefs and struct serializers before the first
+  root read or write. The first `serialize`, `serializeTo`, `serializeBuiltin`,
+  `serializeBuiltinTo`, `deserialize`, or `deserializeFrom` call permanently
+  freezes that `Fory` instance's resolver;
+  later type or serializer registration must fail before mutation. Do not keep
+  late-registration cache invalidation, generated-field refresh, parsed-metadata
+  eviction, schema-counter rollback, or serializer rebinding paths. Do not move
+  local TypeDef construction into read/write hot paths or cache-miss workarounds.
+  Generated registration must enforce this boundary before updating
+  `GeneratedTypeCatalog`; route catalog publication and resolver registration
+  through one Fory-owned internal operation instead of exposing a check-only
+  registry-state method.
 - Codegen must support private fields through same-library `part` generation. If generated file naming changes from `*.fory.dart`, update builder config, source `part` directives, analysis exclusions, docs, CI snippets, and stale artifacts together.
 - Keep generated Dart outputs (`*.fory.dart`) and Dart `pubspec.lock` files untracked in this repo.
 - For generated numeric or xlang changes, test root values and generated required/nullable fields across schema-consistent and compatible serializers, metadata type IDs, rejection paths, and every affected encoding mode.

@@ -559,15 +559,7 @@ public class FieldTypes {
     }
 
     public static FieldType read(MemoryBuffer buffer, TypeResolver resolver) {
-      // Header format:
-      // - bit 0: trackingRef
-      // - bit 1: nullable
-      // - bits 2+: type kind
-      int header = buffer.readUInt8();
-      boolean trackingRef = (header & 0b1) != 0;
-      boolean nullable = (header & 0b10) != 0;
-      int kind = header >>> 2;
-      return read(buffer, resolver, nullable, trackingRef, kind);
+      return read(buffer, resolver, 0, resolver.getConfig().maxDepth());
     }
 
     /** Read field type info. */
@@ -577,27 +569,56 @@ public class FieldTypes {
         boolean nullable,
         boolean trackingRef,
         int kind) {
-      if (kind == 0) {
+      return read(
+          buffer, resolver, nullable, trackingRef, kind, 0, resolver.getConfig().maxDepth());
+    }
+
+    private static FieldType read(
+        MemoryBuffer buffer, TypeResolver resolver, int depth, int maxDepth) {
+      int header = buffer.readUInt8();
+      boolean trackingRef = (header & 0b1) != 0;
+      boolean nullable = (header & 0b10) != 0;
+      int kind = header >>> 2;
+      return read(buffer, resolver, nullable, trackingRef, kind, depth, maxDepth);
+    }
+
+    private static FieldType read(
+        MemoryBuffer buffer,
+        TypeResolver resolver,
+        boolean nullable,
+        boolean trackingRef,
+        int kind,
+        int depth,
+        int maxDepth) {
+      if (kind == KIND_OBJECT) {
         return new ObjectFieldType(Types.UNKNOWN, nullable, trackingRef);
-      } else if (kind == 1) {
+      } else if (kind == KIND_MAP) {
+        checkDepth(depth, maxDepth);
         return new MapFieldType(
-            -1, nullable, trackingRef, read(buffer, resolver), read(buffer, resolver));
-      } else if (kind == 2) {
-        return new CollectionFieldType(-1, nullable, trackingRef, read(buffer, resolver));
-      } else if (kind == 3) {
-        int dims = buffer.readVarUInt32Small7();
-        if (dims <= 0 || dims > MAX_ARRAY_DIMS) {
-          throw new DeserializationException("Invalid array dimensions in TypeDef: " + dims);
+            -1,
+            nullable,
+            trackingRef,
+            read(buffer, resolver, depth + 1, maxDepth),
+            read(buffer, resolver, depth + 1, maxDepth));
+      } else if (kind == KIND_COLLECTION) {
+        checkDepth(depth, maxDepth);
+        return new CollectionFieldType(
+            -1, nullable, trackingRef, read(buffer, resolver, depth + 1, maxDepth));
+      } else if (kind == KIND_ARRAY) {
+        int dimensions = buffer.readVarUInt32Small7();
+        if (dimensions <= 0 || dimensions > MAX_ARRAY_DIMS) {
+          throw new DeserializationException("Invalid array dimensions in TypeDef: " + dimensions);
         }
-        return new ArrayFieldType(-1, nullable, trackingRef, read(buffer, resolver), dims);
-      } else if (kind == 4) {
+        checkDepth(depth, maxDepth);
+        return new ArrayFieldType(
+            -1, nullable, trackingRef, read(buffer, resolver, depth + 1, maxDepth), dimensions);
+      } else if (kind == KIND_ENUM) {
         return new EnumFieldType(nullable, -1, -1);
-      } else if (kind == 5) {
+      } else if (kind == KIND_REGISTERED) {
         int actualTypeId = buffer.readUInt8();
         return new RegisteredFieldType(nullable, trackingRef, actualTypeId, -1);
-      } else {
-        throw new IllegalStateException("Unexpected field type kind: " + kind);
       }
+      throw new IllegalStateException("Unexpected field type kind: " + kind);
     }
 
     public final void writeCrossLanguage(MemoryBuffer buffer, boolean writeFlags) {
@@ -631,11 +652,7 @@ public class FieldTypes {
     }
 
     public static FieldType readCrossLanguage(MemoryBuffer buffer, XtypeResolver resolver) {
-      int typeId = buffer.readVarUInt32Small7();
-      boolean trackingRef = (typeId & 0b1) != 0;
-      boolean nullable = (typeId & 0b10) != 0;
-      typeId = typeId >>> 2;
-      return readCrossLanguage(buffer, resolver, typeId, nullable, trackingRef);
+      return readCrossLanguage(buffer, resolver, 0, resolver.getConfig().maxDepth());
     }
 
     public static FieldType readCrossLanguage(
@@ -644,18 +661,44 @@ public class FieldTypes {
         int typeId,
         boolean nullable,
         boolean trackingRef) {
+      return readCrossLanguage(
+          buffer, resolver, typeId, nullable, trackingRef, 0, resolver.getConfig().maxDepth());
+    }
+
+    private static FieldType readCrossLanguage(
+        MemoryBuffer buffer, XtypeResolver resolver, int depth, int maxDepth) {
+      int typeId = buffer.readVarUInt32Small7();
+      boolean trackingRef = (typeId & 0b1) != 0;
+      boolean nullable = (typeId & 0b10) != 0;
+      typeId = typeId >>> 2;
+      return readCrossLanguage(buffer, resolver, typeId, nullable, trackingRef, depth, maxDepth);
+    }
+
+    private static FieldType readCrossLanguage(
+        MemoryBuffer buffer,
+        XtypeResolver resolver,
+        int typeId,
+        boolean nullable,
+        boolean trackingRef,
+        int depth,
+        int maxDepth) {
       switch (typeId) {
         case Types.LIST:
         case Types.SET:
+          checkDepth(depth, maxDepth);
           return new CollectionFieldType(
-              typeId, nullable, trackingRef, readCrossLanguage(buffer, resolver));
+              typeId,
+              nullable,
+              trackingRef,
+              readCrossLanguage(buffer, resolver, depth + 1, maxDepth));
         case Types.MAP:
+          checkDepth(depth, maxDepth);
           return new MapFieldType(
               typeId,
               nullable,
               trackingRef,
-              readCrossLanguage(buffer, resolver),
-              readCrossLanguage(buffer, resolver));
+              readCrossLanguage(buffer, resolver, depth + 1, maxDepth),
+              readCrossLanguage(buffer, resolver, depth + 1, maxDepth));
         case Types.ENUM:
           return new EnumFieldType(nullable, typeId, -1);
         case Types.UNION:
@@ -683,6 +726,17 @@ public class FieldTypes {
               return new ObjectFieldType(typeId, nullable, trackingRef);
             }
           }
+      }
+    }
+
+    private static void checkDepth(int depth, int maxDepth) {
+      // Container nodes consume depth; a leaf after maxDepth containers remains valid.
+      if (depth >= maxDepth) {
+        throw new DeserializationException(
+            "Field type metadata nesting exceeds max depth "
+                + maxDepth
+                + ". The data may be malicious. If the data is not malicious, please increase "
+                + "ForyBuilder#withMaxDepth.");
       }
     }
   }

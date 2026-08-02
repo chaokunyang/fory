@@ -131,9 +131,17 @@ FORY_ALWAYS_INLINE bool read_null_only_flag(ReadContext &ctx,
   if (flag == NULL_FLAG) {
     return false;
   }
-  // NotNullValue or RefValue both mean "continue reading" for non-trackable
-  // types
-  if (flag == NOT_NULL_VALUE_FLAG || flag == REF_VALUE_FLAG) {
+  if (flag == NOT_NULL_VALUE_FLAG) {
+    return true;
+  }
+  if (flag == REF_VALUE_FLAG) {
+    // A non-reference local value cannot publish an owner for this slot, but
+    // the sender still assigned the slot. Preserve its ID before nested
+    // reference owners allocate so later back-references retain wire numbering.
+    // NullOnly is used for per-value null envelopes and does not own a slot.
+    if (ref_mode == RefMode::Tracking && ctx.track_ref()) {
+      ctx.ref_reader().reserve_ref_id();
+    }
     return true;
   }
   if (flag == REF_FLAG) {

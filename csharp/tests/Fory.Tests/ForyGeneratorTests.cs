@@ -174,6 +174,72 @@ public sealed class ForyGeneratorTests
     }
 
     [Fact]
+    public void DepthGuardGeneration()
+    {
+        const string source = """
+            using System.Collections.Generic;
+            using Apache.Fory;
+
+            namespace GeneratedDiagnostics;
+
+            [ForyEnum]
+            public enum State
+            {
+                Ready,
+            }
+
+            [ForyStruct]
+            public sealed class Leaf
+            {
+                public int Value { get; set; }
+            }
+
+            [ForyStruct]
+            public sealed class Acyclic
+            {
+                public Leaf Leaf { get; set; } = new();
+                public List<Leaf> Leaves { get; set; } = [];
+                public State State { get; set; }
+                public Unknown Unknown { get; set; } = new();
+            }
+
+            public sealed class Unknown
+            {
+                public int Value { get; set; }
+            }
+
+            [ForyStruct]
+            public sealed class Recursive
+            {
+                public List<Recursive> Children { get; set; } = [];
+            }
+            """;
+
+        string generated = GenerateSource(source);
+
+        Assert.DoesNotContain(
+            "ReadNested<global::GeneratedDiagnostics.Leaf>",
+            generated,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "ReadNestedData<global::System.Collections.Generic.List<global::GeneratedDiagnostics.Leaf>>",
+            generated,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "ReadNestedData<global::GeneratedDiagnostics.State>",
+            generated,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "ReadNestedData<global::System.Collections.Generic.List<global::GeneratedDiagnostics.Recursive>>",
+            generated,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "ReadNested<global::GeneratedDiagnostics.Unknown>",
+            generated,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void CompatibleBinaryListChecksBeforeCapacity()
     {
         const string source = """

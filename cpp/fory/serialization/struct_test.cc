@@ -1013,6 +1013,34 @@ TEST(StructComprehensiveTest, NamedStructElementTypeInfo) {
   EXPECT_EQ(items, deser_result.value());
 }
 
+TEST(StructComprehensiveTest, LongNamedStructElementTypeInfo) {
+  std::vector<NamedItem> items{{1, "alpha"}, {2, "beta"}};
+  const std::string namespace_name =
+      "org.apache.fory.serialization.longnamespace";
+  const std::string type_name = "RecursiveCollectionNode";
+
+  auto fory =
+      Fory::builder().xlang(true).compatible(false).track_ref(false).build();
+  ASSERT_TRUE(fory.register_struct<NamedItem>(namespace_name, type_name).ok());
+  auto type_info = fory.type_resolver().get_type_info<NamedItem>();
+  ASSERT_TRUE(type_info.ok());
+  ASSERT_NE(type_info.value()->encoded_namespace, nullptr);
+  ASSERT_NE(type_info.value()->encoded_type_name, nullptr);
+  ASSERT_GT(type_info.value()->encoded_namespace->bytes.size(), 16);
+  ASSERT_GT(type_info.value()->encoded_type_name->bytes.size(), 16);
+  EXPECT_NE(type_info.value()->encoded_namespace->hash, 0);
+  EXPECT_NE(type_info.value()->encoded_type_name->hash, 0);
+
+  auto serialized = fory.serialize(items);
+  ASSERT_TRUE(serialized.ok()) << serialized.error().to_string();
+
+  std::vector<uint8_t> bytes = std::move(serialized).value();
+  auto deserialized =
+      fory.deserialize<std::vector<NamedItem>>(bytes.data(), bytes.size());
+  ASSERT_TRUE(deserialized.ok()) << deserialized.error().to_string();
+  EXPECT_EQ(items, deserialized.value());
+}
+
 TEST(StructComprehensiveTest, MapStructEmpty) {
   test_roundtrip(MapStruct{{}, {}, {}});
 }

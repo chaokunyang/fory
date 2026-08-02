@@ -77,6 +77,25 @@ bool consume_ref_flag(ReadContext &ctx, bool tracking_ref, bool null_only) {
   return false;
 }
 
+void skip_fields(ReadContext &ctx, const std::vector<FieldInfo> &field_infos) {
+  if (field_infos.empty()) {
+    return;
+  }
+  auto depth_res = ctx.increase_dyn_depth();
+  if (FORY_PREDICT_FALSE(!depth_res.ok())) {
+    ctx.set_error(std::move(depth_res).error());
+    return;
+  }
+  for (const auto &field_info : field_infos) {
+    skip_field_value(ctx, field_info.field_type,
+                     field_info.field_type.ref_mode);
+    if (FORY_PREDICT_FALSE(ctx.has_error())) {
+      return;
+    }
+  }
+  ctx.decrease_dyn_depth();
+}
+
 void skip_struct_data(ReadContext &ctx, const TypeInfo &type_info) {
   if (!type_info.type_meta) {
     ctx.set_error(Error::type_error("TypeMeta not found for struct skip"));
@@ -88,13 +107,7 @@ void skip_struct_data(ReadContext &ctx, const TypeInfo &type_info) {
       return;
     }
   }
-  const auto &field_infos = type_info.type_meta->get_field_infos();
-  for (const auto &fi : field_infos) {
-    skip_field_value(ctx, fi.field_type, fi.field_type.ref_mode);
-    if (FORY_PREDICT_FALSE(ctx.has_error())) {
-      return;
-    }
-  }
+  skip_fields(ctx, type_info.type_meta->get_field_infos());
 }
 
 void skip_ext_data(ReadContext &ctx, const TypeInfo &type_info) {
@@ -109,13 +122,13 @@ void skip_ext_data(ReadContext &ctx, const TypeInfo &type_info) {
     ctx.set_error(std::move(depth_res).error());
     return;
   }
-  DynDepthGuard dyn_depth_guard(ctx);
   void *ptr = type_info.harness.read_data_fn(ctx);
   if (FORY_PREDICT_FALSE(ctx.has_error())) {
     destroy_harness_value(type_info, ptr);
     return;
   }
   destroy_harness_value(type_info, ptr);
+  ctx.decrease_dyn_depth();
 }
 
 void skip_data_with_type_info(ReadContext &ctx, const TypeInfo *type_info) {
@@ -172,7 +185,7 @@ void skip_string(ReadContext &ctx) {
 
 void skip_list(ReadContext &ctx, const FieldType &field_type) {
   // Read list length
-  uint64_t length = ctx.read_var_uint64(ctx.error());
+  uint32_t length = ctx.read_var_uint32(ctx.error());
   if (FORY_PREDICT_FALSE(ctx.has_error())) {
     return;
   }
@@ -209,8 +222,27 @@ void skip_list(ReadContext &ctx, const FieldType &field_type) {
     elem_type.nullable = false;
   }
 
+  const uint32_t elem_type_id = elem_type.type_id;
+  const bool declared_none =
+      is_declared_type && elem_type_id == static_cast<uint32_t>(TypeId::NONE);
+  const bool runtime_none =
+      !is_declared_type && same_type_info != nullptr &&
+      same_type_info->type_id == static_cast<uint32_t>(TypeId::NONE) &&
+      (elem_type_id == static_cast<uint32_t>(TypeId::UNKNOWN) ||
+       elem_type_id == static_cast<uint32_t>(TypeId::NONE));
+  if (!track_ref && !has_null && is_same_type &&
+      (declared_none || runtime_none)) {
+    return;
+  }
+
+  auto depth_res = ctx.increase_dyn_depth();
+  if (FORY_PREDICT_FALSE(!depth_res.ok())) {
+    ctx.set_error(std::move(depth_res).error());
+    return;
+  }
+
   // skip each element
-  for (uint64_t i = 0; i < length; ++i) {
+  for (uint32_t i = 0; i < length; ++i) {
     bool has_value = consume_ref_flag(ctx, track_ref, has_null);
     if (FORY_PREDICT_FALSE(ctx.has_error())) {
       return;
@@ -232,6 +264,7 @@ void skip_list(ReadContext &ctx, const FieldType &field_type) {
       return;
     }
   }
+  ctx.decrease_dyn_depth();
 }
 
 void skip_set(ReadContext &ctx, const FieldType &field_type) {
@@ -258,6 +291,12 @@ void skip_map(ReadContext &ctx, const FieldType &field_type) {
     // Unknown types
     key_type.set_type_id(static_cast<uint32_t>(TypeId::UNKNOWN));
     value_type.set_type_id(static_cast<uint32_t>(TypeId::UNKNOWN));
+  }
+
+  auto depth_res = ctx.increase_dyn_depth();
+  if (FORY_PREDICT_FALSE(!depth_res.ok())) {
+    ctx.set_error(std::move(depth_res).error());
+    return;
   }
 
   uint64_t read_count = 0;
@@ -376,6 +415,7 @@ void skip_map(ReadContext &ctx, const FieldType &field_type) {
 
     read_count += chunk_size;
   }
+  ctx.decrease_dyn_depth();
 }
 
 void skip_struct(ReadContext &ctx, const FieldType &) {
@@ -459,15 +499,7 @@ void skip_struct(ReadContext &ctx, const FieldType &) {
     return;
   }
 
-  const auto &field_infos = type_info->type_meta->get_field_infos();
-
-  for (const auto &fi : field_infos) {
-    // Use precomputed ref_mode from field metadata
-    skip_field_value(ctx, fi.field_type, fi.field_type.ref_mode);
-    if (FORY_PREDICT_FALSE(ctx.has_error())) {
-      return;
-    }
-  }
+  skip_fields(ctx, type_info->type_meta->get_field_infos());
 }
 
 void skip_ext(ReadContext &ctx, const FieldType &) {
@@ -546,7 +578,6 @@ void skip_ext(ReadContext &ctx, const FieldType &) {
     ctx.set_error(std::move(depth_res).error());
     return;
   }
-  DynDepthGuard dyn_depth_guard(ctx);
 
   // The harness allocates with the registered concrete type, so skipped values
   // must be destroyed through the paired harness hook.
@@ -556,6 +587,7 @@ void skip_ext(ReadContext &ctx, const FieldType &) {
     return;
   }
   destroy_harness_value(*type_info, ptr);
+  ctx.decrease_dyn_depth();
 }
 
 void skip_unknown(ReadContext &ctx) {
@@ -575,6 +607,22 @@ void skip_unknown(ReadContext &ctx) {
   TypeId actual_tid = static_cast<TypeId>(type_info->type_id);
 
   switch (actual_tid) {
+  case TypeId::UNKNOWN: {
+    auto depth_res = ctx.increase_dyn_depth();
+    if (FORY_PREDICT_FALSE(!depth_res.ok())) {
+      ctx.set_error(std::move(depth_res).error());
+      return;
+    }
+    FieldType actual_field_type;
+    actual_field_type.set_type_id(type_info->type_id);
+    actual_field_type.nullable = false;
+    skip_field_value(ctx, actual_field_type, RefMode::None);
+    if (FORY_PREDICT_FALSE(ctx.has_error())) {
+      return;
+    }
+    ctx.decrease_dyn_depth();
+    return;
+  }
   case TypeId::STRUCT:
   case TypeId::COMPATIBLE_STRUCT:
   case TypeId::NAMED_STRUCT:
@@ -585,14 +633,7 @@ void skip_unknown(ReadContext &ctx) {
           Error::type_error("TypeMeta not found for UNKNOWN struct skip"));
       return;
     }
-    const auto &field_infos = type_info->type_meta->get_field_infos();
-    for (const auto &fi : field_infos) {
-      // Use precomputed ref_mode from field metadata
-      skip_field_value(ctx, fi.field_type, fi.field_type.ref_mode);
-      if (FORY_PREDICT_FALSE(ctx.has_error())) {
-        return;
-      }
-    }
+    skip_fields(ctx, type_info->type_meta->get_field_infos());
     return;
   }
   default: {
@@ -608,6 +649,12 @@ void skip_unknown(ReadContext &ctx) {
 }
 
 void skip_union(ReadContext &ctx) {
+  auto depth_res = ctx.increase_dyn_depth();
+  if (FORY_PREDICT_FALSE(!depth_res.ok())) {
+    ctx.set_error(std::move(depth_res).error());
+    return;
+  }
+
   // Read the variant index
   (void)ctx.read_var_uint32(ctx.error());
   if (FORY_PREDICT_FALSE(ctx.has_error())) {
@@ -615,7 +662,11 @@ void skip_union(ReadContext &ctx) {
   }
   // Read ref flag for the union value (Any-style).
   bool has_value = consume_ref_flag(ctx, true, false);
-  if (FORY_PREDICT_FALSE(ctx.has_error()) || !has_value) {
+  if (FORY_PREDICT_FALSE(ctx.has_error())) {
+    return;
+  }
+  if (!has_value) {
+    ctx.decrease_dyn_depth();
     return;
   }
 
@@ -635,6 +686,10 @@ void skip_union(ReadContext &ctx) {
   alt_field_type.set_type_id(type_info->type_id);
   alt_field_type.nullable = false;
   skip_field_value(ctx, alt_field_type, RefMode::None);
+  if (FORY_PREDICT_FALSE(ctx.has_error())) {
+    return;
+  }
+  ctx.decrease_dyn_depth();
 }
 
 void skip_field_value(ReadContext &ctx, const FieldType &field_type,

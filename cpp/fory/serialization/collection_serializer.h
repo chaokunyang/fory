@@ -82,26 +82,6 @@ struct CollectionHeader {
         (byte & 0b1000) != 0, // is_same_type
     };
   }
-
-  /// Create default header for non-polymorphic, non-null collections
-  static inline CollectionHeader default_header(bool track_ref) {
-    return {
-        track_ref, // track_ref
-        false,     // has_null
-        true,      // is_declared_type
-        true,      // is_same_type
-    };
-  }
-
-  /// Create header for potentially polymorphic collections
-  static inline CollectionHeader polymorphic_header(bool track_ref) {
-    return {
-        track_ref, // track_ref
-        true,      // has_null
-        false,     // is_declared_type
-        false,     // is_same_type
-    };
-  }
 };
 
 // ============================================================================
@@ -115,6 +95,23 @@ template <typename T> inline constexpr bool need_type_for_collection_elem() {
          tid == TypeId::NAMED_STRUCT ||
          tid == TypeId::NAMED_COMPATIBLE_STRUCT || tid == TypeId::EXT ||
          tid == TypeId::NAMED_EXT;
+}
+
+template <typename T>
+FORY_ALWAYS_INLINE const TypeInfo *
+read_collection_element_type_info(ReadContext &ctx) {
+  const TypeInfo *type_info = ctx.read_any_type_info(ctx.error());
+  if (FORY_PREDICT_FALSE(ctx.has_error())) {
+    return nullptr;
+  }
+  using ElemType = nullable_element_t<T>;
+  constexpr uint32_t expected =
+      static_cast<uint32_t>(Serializer<ElemType>::type_id);
+  if (FORY_PREDICT_FALSE(!type_id_matches(type_info->type_id, expected))) {
+    ctx.set_error(Error::type_mismatch(type_info->type_id, expected));
+    return nullptr;
+  }
+  return type_info;
 }
 
 /// write collection data for non-polymorphic, non-shared-ref elements.
@@ -493,6 +490,86 @@ inline void collection_insert(Container &result, T &&elem) {
   }
 }
 
+/// Read a same-type group using the exact TypeInfo retained from its header.
+/// Compatible metadata may include remote-only fields; decoding the repeated
+/// bodies with the local serializer would leave those fields in the stream.
+template <typename T, typename Container>
+inline void read_collection_with_type_info(Container &result, ReadContext &ctx,
+                                           uint32_t length, bool track_ref,
+                                           bool has_null,
+                                           const TypeInfo &type_info) {
+  if constexpr (is_forward_list_v<Container>) {
+    auto tail = result.before_begin();
+    if (track_ref) {
+      for (uint32_t i = 0; i < length; ++i) {
+        if (FORY_PREDICT_FALSE(ctx.has_error())) {
+          return;
+        }
+        auto elem = Serializer<T>::read_with_type_info(ctx, RefMode::Tracking,
+                                                       type_info);
+        tail = result.insert_after(tail, std::move(elem));
+      }
+    } else if (has_null) {
+      for (uint32_t i = 0; i < length; ++i) {
+        if (FORY_PREDICT_FALSE(ctx.has_error())) {
+          return;
+        }
+        if (!read_null_only_flag(ctx, RefMode::NullOnly)) {
+          tail = result.emplace_after(tail);
+        } else {
+          auto elem =
+              Serializer<T>::read_with_type_info(ctx, RefMode::None, type_info);
+          tail = result.insert_after(tail, std::move(elem));
+        }
+      }
+    } else {
+      for (uint32_t i = 0; i < length; ++i) {
+        if (FORY_PREDICT_FALSE(ctx.has_error())) {
+          return;
+        }
+        auto elem =
+            Serializer<T>::read_with_type_info(ctx, RefMode::None, type_info);
+        tail = result.insert_after(tail, std::move(elem));
+      }
+    }
+  } else {
+    if (track_ref) {
+      for (uint32_t i = 0; i < length; ++i) {
+        if (FORY_PREDICT_FALSE(ctx.has_error())) {
+          return;
+        }
+        auto elem = Serializer<T>::read_with_type_info(ctx, RefMode::Tracking,
+                                                       type_info);
+        collection_insert(result, std::move(elem));
+      }
+    } else if (has_null) {
+      for (uint32_t i = 0; i < length; ++i) {
+        if (FORY_PREDICT_FALSE(ctx.has_error())) {
+          return;
+        }
+        if (!read_null_only_flag(ctx, RefMode::NullOnly)) {
+          if constexpr (has_push_back_v<Container, T>) {
+            collection_insert(result, T{});
+          }
+        } else {
+          auto elem =
+              Serializer<T>::read_with_type_info(ctx, RefMode::None, type_info);
+          collection_insert(result, std::move(elem));
+        }
+      }
+    } else {
+      for (uint32_t i = 0; i < length; ++i) {
+        if (FORY_PREDICT_FALSE(ctx.has_error())) {
+          return;
+        }
+        auto elem =
+            Serializer<T>::read_with_type_info(ctx, RefMode::None, type_info);
+        collection_insert(result, std::move(elem));
+      }
+    }
+  }
+}
+
 /// Read collection data for polymorphic or shared-ref elements.
 template <typename T, typename Container>
 inline Container read_collection_data_slow(ReadContext &ctx, uint32_t length) {
@@ -547,6 +624,14 @@ inline Container read_collection_data_slow(ReadContext &ctx, uint32_t length) {
 
   if (FORY_PREDICT_FALSE(!reserve_collection(result, ctx, length))) {
     return result;
+  }
+
+  if constexpr (!elem_is_polymorphic) {
+    if (is_same_type && elem_type_info != nullptr) {
+      read_collection_with_type_info<T>(result, ctx, length, track_ref,
+                                        has_null, *elem_type_info);
+      return result;
+    }
   }
 
   // Read elements
@@ -1075,20 +1160,18 @@ struct Serializer<
       // Read element type info if IS_SAME_TYPE is set but IS_DECL_ELEMENT_TYPE
       // is not.
       if (is_same_type && !is_decl_type) {
-        const TypeInfo *elem_type_info = ctx.read_any_type_info(ctx.error());
+        const TypeInfo *elem_type_info =
+            read_collection_element_type_info<T>(ctx);
         if (FORY_PREDICT_FALSE(ctx.has_error())) {
           return std::vector<T, Alloc>();
         }
-        using ElemType = nullable_element_t<T>;
-        uint32_t expected =
-            static_cast<uint32_t>(Serializer<ElemType>::type_id);
-        if (!type_id_matches(elem_type_info->type_id, expected)) {
-          ctx.set_error(
-              Error::type_mismatch(elem_type_info->type_id, expected));
-          return std::vector<T, Alloc>();
+        if (FORY_PREDICT_FALSE(!reserve_collection(result, ctx, length))) {
+          return result;
         }
+        read_collection_with_type_info<T>(result, ctx, length, track_ref,
+                                          has_null, *elem_type_info);
+        return result;
       }
-
       if (FORY_PREDICT_FALSE(!reserve_collection(result, ctx, length))) {
         return result;
       }
@@ -1368,20 +1451,18 @@ template <typename T, typename Alloc> struct Serializer<std::list<T, Alloc>> {
       // Read element type info if IS_SAME_TYPE is set but IS_DECL_ELEMENT_TYPE
       // is not.
       if (is_same_type && !is_decl_type) {
-        const TypeInfo *elem_type_info = ctx.read_any_type_info(ctx.error());
+        const TypeInfo *elem_type_info =
+            read_collection_element_type_info<T>(ctx);
         if (FORY_PREDICT_FALSE(ctx.has_error())) {
           return std::list<T, Alloc>();
         }
-        using ElemType = nullable_element_t<T>;
-        uint32_t expected =
-            static_cast<uint32_t>(Serializer<ElemType>::type_id);
-        if (!type_id_matches(elem_type_info->type_id, expected)) {
-          ctx.set_error(
-              Error::type_mismatch(elem_type_info->type_id, expected));
-          return std::list<T, Alloc>();
+        if (FORY_PREDICT_FALSE(!reserve_collection(result, ctx, length))) {
+          return result;
         }
+        read_collection_with_type_info<T>(result, ctx, length, track_ref,
+                                          has_null, *elem_type_info);
+        return result;
       }
-
       if (FORY_PREDICT_FALSE(!reserve_collection(result, ctx, length))) {
         return result;
       }
@@ -1567,20 +1648,18 @@ template <typename T, typename Alloc> struct Serializer<std::deque<T, Alloc>> {
       // Read element type info if IS_SAME_TYPE is set but IS_DECL_ELEMENT_TYPE
       // is not.
       if (is_same_type && !is_decl_type) {
-        const TypeInfo *elem_type_info = ctx.read_any_type_info(ctx.error());
+        const TypeInfo *elem_type_info =
+            read_collection_element_type_info<T>(ctx);
         if (FORY_PREDICT_FALSE(ctx.has_error())) {
           return std::deque<T, Alloc>();
         }
-        using ElemType = nullable_element_t<T>;
-        uint32_t expected =
-            static_cast<uint32_t>(Serializer<ElemType>::type_id);
-        if (!type_id_matches(elem_type_info->type_id, expected)) {
-          ctx.set_error(
-              Error::type_mismatch(elem_type_info->type_id, expected));
-          return std::deque<T, Alloc>();
+        if (FORY_PREDICT_FALSE(!reserve_collection(result, ctx, length))) {
+          return result;
         }
+        read_collection_with_type_info<T>(result, ctx, length, track_ref,
+                                          has_null, *elem_type_info);
+        return result;
       }
-
       if (FORY_PREDICT_FALSE(!reserve_collection(result, ctx, length))) {
         return result;
       }
@@ -1770,20 +1849,18 @@ struct Serializer<std::forward_list<T, Alloc>> {
       // Read element type info if IS_SAME_TYPE is set but IS_DECL_ELEMENT_TYPE
       // is not.
       if (is_same_type && !is_decl_type) {
-        const TypeInfo *elem_type_info = ctx.read_any_type_info(ctx.error());
+        const TypeInfo *elem_type_info =
+            read_collection_element_type_info<T>(ctx);
         if (FORY_PREDICT_FALSE(ctx.has_error())) {
           return result;
         }
-        using ElemType = nullable_element_t<T>;
-        uint32_t expected =
-            static_cast<uint32_t>(Serializer<ElemType>::type_id);
-        if (!type_id_matches(elem_type_info->type_id, expected)) {
-          ctx.set_error(
-              Error::type_mismatch(elem_type_info->type_id, expected));
-          return std::forward_list<T, Alloc>();
+        if (FORY_PREDICT_FALSE(!reserve_collection(result, ctx, length))) {
+          return result;
         }
+        read_collection_with_type_info<T>(result, ctx, length, track_ref,
+                                          has_null, *elem_type_info);
+        return result;
       }
-
       if (FORY_PREDICT_FALSE(!reserve_collection(result, ctx, length))) {
         return result;
       }
@@ -2094,18 +2171,18 @@ struct Serializer<std::set<T, Args...>> {
       bool is_same_type = (bitmap & COLL_IS_SAME_TYPE) != 0;
 
       if (is_same_type && !is_decl_type) {
-        const TypeInfo *elem_type_info = ctx.read_any_type_info(ctx.error());
+        const TypeInfo *elem_type_info =
+            read_collection_element_type_info<T>(ctx);
         if (FORY_PREDICT_FALSE(ctx.has_error())) {
           return result;
         }
-        uint32_t expected = static_cast<uint32_t>(Serializer<T>::type_id);
-        if (!type_id_matches(elem_type_info->type_id, expected)) {
-          ctx.set_error(
-              Error::type_mismatch(elem_type_info->type_id, expected));
+        if (FORY_PREDICT_FALSE(!reserve_collection(result, ctx, size))) {
           return result;
         }
+        read_collection_with_type_info<T>(result, ctx, size, track_ref,
+                                          has_null, *elem_type_info);
+        return result;
       }
-
       if (FORY_PREDICT_FALSE(!reserve_collection(result, ctx, size))) {
         return result;
       }
@@ -2278,18 +2355,18 @@ struct Serializer<std::unordered_set<T, Args...>> {
       bool is_same_type = (bitmap & COLL_IS_SAME_TYPE) != 0;
 
       if (is_same_type && !is_decl_type) {
-        const TypeInfo *elem_type_info = ctx.read_any_type_info(ctx.error());
+        const TypeInfo *elem_type_info =
+            read_collection_element_type_info<T>(ctx);
         if (FORY_PREDICT_FALSE(ctx.has_error())) {
           return result;
         }
-        uint32_t expected = static_cast<uint32_t>(Serializer<T>::type_id);
-        if (!type_id_matches(elem_type_info->type_id, expected)) {
-          ctx.set_error(
-              Error::type_mismatch(elem_type_info->type_id, expected));
+        if (FORY_PREDICT_FALSE(!reserve_collection(result, ctx, size))) {
           return result;
         }
+        read_collection_with_type_info<T>(result, ctx, size, track_ref,
+                                          has_null, *elem_type_info);
+        return result;
       }
-
       if (FORY_PREDICT_FALSE(!reserve_collection(result, ctx, size))) {
         return result;
       }

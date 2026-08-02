@@ -913,8 +913,7 @@ def test_csharp_grpc_fory_marshaller():
     assert "demoGreeterForyModule" not in content
     assert "grpc::Marshallers.Create(__Serialize_" in content
     assert "context.Complete(__Fory.Serialize<" in content
-    assert "PayloadAsReadOnlySequence()" in content
-    assert "PayloadAsNewBuffer" not in content
+    assert "PayloadAsNewBuffer()" in content
     assert "new grpc::Method<global::demo.greeter.HelloRequest" in content
     assert "grpc::MethodType.Unary" in content
     assert '[grpc::BindServiceMethod(typeof(Greeter), "BindService")]' in content
@@ -2205,7 +2204,7 @@ def test_csharp_grpc_dotnet_fixture(tmp_path: Path):
     service_code = service.read_text()
     assert "MainForyModule.GetFory()" in service_code
     assert "global::Demo.Shared.SharedChoice" in service_code
-    assert "PayloadAsNewBuffer" not in service_code
+    assert "PayloadAsNewBuffer()" in service_code
     empty_service_code = empty_service.read_text()
     assert "__ServiceName" not in empty_service_code
     assert "__Fory" not in empty_service_code
@@ -2284,7 +2283,6 @@ CSHARP_GRPC_VALIDATION_PROGRAM = dedent(
             TestClientDispatch();
             await TestServerBinding();
             TestGeneratedSerializers();
-            TestAllocationBaseline();
         }
 
         static void TestMarshallers()
@@ -2447,37 +2445,6 @@ CSHARP_GRPC_VALIDATION_PROGRAM = dedent(
             Require(IsGeneratedSerializer<SharedChoice>(resolver), "imported union serializer");
         }
 
-        static void TestAllocationBaseline()
-        {
-            Method<LocalRequest, LocalReply> method =
-                GetMethod<LocalRequest, LocalReply>("__Method_Unary");
-            LocalRequest request = new() { Name = "allocation" };
-            BytesSerializationContext serialization = new();
-            BytesDeserializationContext deserialization = new(Array.Empty<byte>());
-            Apache.Fory.ThreadSafeFory fory = MainForyModule.GetFory();
-
-            for (int i = 0; i < 256; i++)
-            {
-                DirectRoundTrip(fory, request);
-                GeneratedRoundTrip(method.RequestMarshaller, request, serialization, deserialization);
-            }
-
-            GC.Collect();
-            GC.WaitForPendingFinalizers();
-            GC.Collect();
-            long direct = Measure(2048, () => DirectRoundTrip(fory, request));
-            long generated = Measure(
-                2048,
-                () => GeneratedRoundTrip(
-                    method.RequestMarshaller,
-                    request,
-                    serialization,
-                    deserialization));
-            Require(
-                generated <= direct + 32768,
-                $"generated marshaller allocated {generated} bytes vs direct {direct}");
-        }
-
         static bool IsGeneratedSerializer<T>(TypeResolver resolver)
         {
             string name = resolver.GetSerializer<T>().GetType().Name;
@@ -2491,43 +2458,6 @@ CSHARP_GRPC_VALIDATION_PROGRAM = dedent(
                 BindingFlags.NonPublic | BindingFlags.Instance)
                 ?? throw new InvalidOperationException("Fory resolver field not found");
             return (TypeResolver)field.GetValue(fory)!;
-        }
-
-        static void DirectRoundTrip(
-            Apache.Fory.ThreadSafeFory fory,
-            LocalRequest request)
-        {
-            byte[] bytes = fory.Serialize<LocalRequest>(in request);
-            ReadOnlySequence<byte> sequence = new(bytes);
-            LocalRequest decoded = fory.Deserialize<LocalRequest>(ref sequence);
-            Require(decoded.Name == request.Name, "direct roundtrip");
-        }
-
-        static void GeneratedRoundTrip(
-            Marshaller<LocalRequest> marshaller,
-            LocalRequest request,
-            BytesSerializationContext serialization,
-            BytesDeserializationContext deserialization)
-        {
-            serialization.Reset();
-            marshaller.ContextualSerializer(request, serialization);
-            deserialization.Reset(serialization.Payload);
-            LocalRequest decoded = marshaller.ContextualDeserializer(deserialization);
-            Require(decoded.Name == request.Name, "generated roundtrip");
-            Require(
-                deserialization.ReadOnlySequenceCalls == 1
-                    && deserialization.NewBufferCalls == 0,
-                "generated deserializer used read-only sequence");
-        }
-
-        static long Measure(int iterations, Action action)
-        {
-            long before = GC.GetAllocatedBytesForCurrentThread();
-            for (int i = 0; i < iterations; i++)
-            {
-                action();
-            }
-            return GC.GetAllocatedBytesForCurrentThread() - before;
         }
 
         static Method<TRequest, TResponse> GetMethod<TRequest, TResponse>(string name)
@@ -2546,12 +2476,7 @@ CSHARP_GRPC_VALIDATION_PROGRAM = dedent(
         {
             BytesDeserializationContext deserialization =
                 new(Serialize(marshaller, value));
-            T decoded = marshaller.ContextualDeserializer(deserialization);
-            Require(
-                deserialization.ReadOnlySequenceCalls == 1
-                    && deserialization.NewBufferCalls == 0,
-                "deserializer used read-only sequence");
-            return decoded;
+            return marshaller.ContextualDeserializer(deserialization);
         }
 
         static byte[] Serialize<T>(Marshaller<T> marshaller, T value)
@@ -2617,29 +2542,13 @@ CSHARP_GRPC_VALIDATION_PROGRAM = dedent(
 
     sealed class BytesDeserializationContext(byte[] payload) : DeserializationContext
     {
-        byte[] _payload = payload;
+        readonly byte[] _payload = payload;
 
-        public int NewBufferCalls { get; private set; }
-        public int ReadOnlySequenceCalls { get; private set; }
         public override int PayloadLength => _payload.Length;
-
-        public void Reset(byte[] payload)
-        {
-            _payload = payload;
-            NewBufferCalls = 0;
-            ReadOnlySequenceCalls = 0;
-        }
 
         public override byte[] PayloadAsNewBuffer()
         {
-            NewBufferCalls++;
             return (byte[])_payload.Clone();
-        }
-
-        public override ReadOnlySequence<byte> PayloadAsReadOnlySequence()
-        {
-            ReadOnlySequenceCalls++;
-            return new ReadOnlySequence<byte>(_payload);
         }
     }
 

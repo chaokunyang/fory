@@ -676,6 +676,11 @@ public sealed class NullableKeyDictionarySerializer<TKey, TValue> : Serializer<N
             }
 
             int chunkSize = context.Reader.ReadUInt8();
+            if (chunkSize == 0 || chunkSize > totalLength - readCount)
+            {
+                ThrowInvalidChunkSize(chunkSize, totalLength - readCount);
+            }
+
             if (keyDynamicType || valueDynamicType)
             {
                 for (int i = 0; i < chunkSize; i++)
@@ -771,6 +776,13 @@ public sealed class NullableKeyDictionarySerializer<TKey, TValue> : Serializer<N
         }
 
         return map;
+    }
+
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+    private static void ThrowInvalidChunkSize(int chunkSize, int remaining)
+    {
+        throw new InvalidDataException(
+            $"invalid nullable-key map chunk size {chunkSize} with {remaining} entries remaining");
     }
 
     private static void WriteDynamicMapPairs(

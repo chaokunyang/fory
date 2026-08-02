@@ -211,8 +211,12 @@ pub(super) fn read_value_type_info<S: Serializer>(
     context: &mut ReadContext,
 ) -> Result<Option<Rc<TypeInfo>>, Error> {
     // Static built-in carrier headers are compact type IDs, not registered
-    // serializers. Compatible TypeInfo exists only for metadata-bearing IDs.
-    if context.is_compatible() && !type_id::is_internal_type(S::static_type_id() as u32) {
+    // serializers. Compatible metadata and native polymorphic collection/map
+    // groups require a retained TypeInfo for their body reads; native static
+    // serializers keep their direct validated path.
+    if (context.is_compatible() || S::IS_POLYMORPHIC)
+        && !type_id::is_internal_type(S::static_type_id() as u32)
+    {
         return context.read_any_type_info().map(Some);
     }
     S::read_type_info(context)?;

@@ -110,6 +110,67 @@ private struct AliasAnnotatedFieldCodecHolder: Equatable {
     var data: MapAlias = [:]
 }
 
+private final class ArrayReleaseCounter: @unchecked Sendable {
+    private let lock = NSLock()
+    private var count = 0
+
+    func increment() {
+        lock.lock()
+        count += 1
+        lock.unlock()
+    }
+
+    func decrement() {
+        lock.lock()
+        count -= 1
+        lock.unlock()
+    }
+
+    func reset() {
+        lock.lock()
+        count = 0
+        lock.unlock()
+    }
+
+    var value: Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return count
+    }
+}
+
+private let arrayReleaseCounter = ArrayReleaseCounter()
+
+private final class ArrayReleaseProbe {
+    init() {
+        arrayReleaseCounter.increment()
+    }
+
+    deinit {
+        arrayReleaseCounter.decrement()
+    }
+}
+
+private enum ArrayReleaseProbeCodec: FieldCodec {
+    typealias Target = ArrayReleaseProbe
+
+    static var staticTypeId: TypeId { .ext }
+    static var isRefType: Bool { true }
+
+    static func defaultValue(_: ReadContext) throws -> ArrayReleaseProbe {
+        ArrayReleaseProbe()
+    }
+
+    static func writeData(_: ArrayReleaseProbe, _: WriteContext) throws {}
+
+    static func readData(_ context: ReadContext) throws -> ArrayReleaseProbe {
+        guard try context.buffer.readUInt8() == 0 else {
+            throw ForyError.invalidData("array release probe failure")
+        }
+        return ArrayReleaseProbe()
+    }
+}
+
 @Test
 func primitiveArraysDefaultToListTypeIDsAndRoundTrip() throws {
     #expect([Bool].staticTypeId == .list)
@@ -219,6 +280,28 @@ func floatingPointArraysPreserveBits() throws {
     #expect(decodedBFloat16s.map(\.rawValue) == bfloat16s.map(\.rawValue))
     #expect(decodedFloats.map(\.bitPattern) == floats.map(\.bitPattern))
     #expect(decodedDoubles.map(\.bitPattern) == doubles.map(\.bitPattern))
+}
+
+@Test
+func genericArrayReleasesInitializedPrefix() {
+    arrayReleaseCounter.reset()
+    let buffer = ByteBuffer()
+    buffer.writeVarUInt32(2)
+    buffer.writeUInt8(CollectionHeader.sameType | CollectionHeader.declaredElementType)
+    buffer.writeUInt8(0)
+    buffer.writeUInt8(1)
+    let config = Config(trackRef: false, compatible: false)
+    let context = ReadContext(
+        buffer: buffer,
+        typeResolver: TypeResolver(config: config),
+        config: config
+    )
+    context.remainingGraphMemoryBytes = Int(config.maxGraphMemoryBytes)
+
+    #expect(throws: ForyError.invalidData("array release probe failure")) {
+        _ = try ArraySerializer<ArrayReleaseProbeCodec>.readData(context)
+    }
+    #expect(arrayReleaseCounter.value == 0)
 }
 
 @Test

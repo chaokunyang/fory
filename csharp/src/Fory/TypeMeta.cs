@@ -179,6 +179,7 @@ public sealed class TypeMetaFieldType : IEquatable<TypeMetaFieldType>
 
     internal static TypeMetaFieldType Read(
         ByteReader reader,
+        int remainingDepth,
         bool readFlags,
         bool? nullable = null,
         bool? trackRef = null)
@@ -203,14 +204,24 @@ public sealed class TypeMetaFieldType : IEquatable<TypeMetaFieldType>
 
         if (typeId is (uint)global::Apache.Fory.TypeId.List or (uint)global::Apache.Fory.TypeId.Set)
         {
-            TypeMetaFieldType element = Read(reader, true);
+            if (remainingDepth <= 0)
+            {
+                throw new InvalidDataException("TypeMeta generic nesting exceeds MaxDepth");
+            }
+
+            TypeMetaFieldType element = Read(reader, remainingDepth - 1, true);
             return new TypeMetaFieldType(typeId, resolvedNullable, resolvedTrackRef, [element]);
         }
 
         if (typeId == (uint)global::Apache.Fory.TypeId.Map)
         {
-            TypeMetaFieldType key = Read(reader, true);
-            TypeMetaFieldType value = Read(reader, true);
+            if (remainingDepth <= 0)
+            {
+                throw new InvalidDataException("TypeMeta generic nesting exceeds MaxDepth");
+            }
+
+            TypeMetaFieldType key = Read(reader, remainingDepth - 1, true);
+            TypeMetaFieldType value = Read(reader, remainingDepth - 1, true);
             return new TypeMetaFieldType(typeId, resolvedNullable, resolvedTrackRef, [key, value]);
         }
 
@@ -335,7 +346,7 @@ public sealed class TypeMetaFieldInfo : IEquatable<TypeMetaFieldInfo>
         writer.WriteBytes(encoded.Bytes);
     }
 
-    internal static TypeMetaFieldInfo Read(ByteReader reader)
+    internal static TypeMetaFieldInfo Read(ByteReader reader, int maxDepth)
     {
         byte header = reader.ReadUInt8();
         int encodingFlags = (header >> 6) & 0b11;
@@ -349,7 +360,7 @@ public sealed class TypeMetaFieldInfo : IEquatable<TypeMetaFieldInfo>
 
         bool nullable = (header & 0b10) != 0;
         bool trackRef = (header & 0b1) != 0;
-        TypeMetaFieldType fieldType = TypeMetaFieldType.Read(reader, false, nullable, trackRef);
+        TypeMetaFieldType fieldType = TypeMetaFieldType.Read(reader, maxDepth, false, nullable, trackRef);
 
         if (encodingFlags == 3)
         {
@@ -396,6 +407,7 @@ public sealed class TypeMeta : IEquatable<TypeMeta>
 {
     private const int DefaultMaxTypeFields = 512;
     private const int DefaultMaxTypeMetaBytes = 4096;
+    private const int DefaultMaxDepth = 20;
 
     private bool _hasAssignedFieldIds;
 
@@ -489,15 +501,15 @@ public sealed class TypeMeta : IEquatable<TypeMeta>
 
     public static TypeMeta Decode(byte[] bytes)
     {
-        return Decode(new ByteReader(bytes), DefaultMaxTypeFields, DefaultMaxTypeMetaBytes);
+        return Decode(new ByteReader(bytes), DefaultMaxTypeFields, DefaultMaxTypeMetaBytes, DefaultMaxDepth);
     }
 
     public static TypeMeta Decode(ByteReader reader)
     {
-        return Decode(reader, DefaultMaxTypeFields, DefaultMaxTypeMetaBytes);
+        return Decode(reader, DefaultMaxTypeFields, DefaultMaxTypeMetaBytes, DefaultMaxDepth);
     }
 
-    internal static TypeMeta Decode(ByteReader reader, int maxTypeFields, int maxTypeMetaBytes)
+    internal static TypeMeta Decode(ByteReader reader, int maxTypeFields, int maxTypeMetaBytes, int maxDepth)
     {
         ulong header = reader.ReadUInt64();
         ValidateGlobalHeader(header);
@@ -558,7 +570,7 @@ public sealed class TypeMeta : IEquatable<TypeMeta>
         List<TypeMetaFieldInfo> fields = new(numFields);
         for (int i = 0; i < numFields; i++)
         {
-            fields.Add(TypeMetaFieldInfo.Read(bodyReader));
+            fields.Add(TypeMetaFieldInfo.Read(bodyReader, maxDepth));
         }
 
         if (!isStruct && fields.Count != 0)

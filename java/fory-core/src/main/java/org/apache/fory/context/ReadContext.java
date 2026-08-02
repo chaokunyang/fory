@@ -308,6 +308,7 @@ public final class ReadContext {
     buffer = null;
     outOfBandBuffers = null;
     peerOutOfBandEnabled = false;
+    generics.reset();
     depth = 0;
     remainingGraphMemoryBytes = 0;
   }
@@ -470,7 +471,12 @@ public final class ReadContext {
     this.depth = depth;
   }
 
-  /** Increases the logical object-graph depth by one and enforces the configured max depth. */
+  /**
+   * Increases the logical object-graph depth by one and enforces the configured max depth.
+   *
+   * <p>Nested decoders decrease depth only after a successful child read. Root-operation reset owns
+   * exceptional cleanup, so nested decoder paths must not use {@code try/finally} to restore depth.
+   */
   public void increaseDepth() {
     if ((depth += 1) > maxDepth) {
       throw new InsecureException(

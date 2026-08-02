@@ -533,6 +533,7 @@ class ReadContext:
         self.depth = 0
 
     def reset(self):
+        buffer = self.buffer
         self.ref_reader.reset()
         self.meta_string_reader.reset()
         if self.meta_share_context is not None:
@@ -545,6 +546,8 @@ class ReadContext:
         self.peer_out_of_band_enabled = False
         self._remaining_graph_memory_bytes = 0
         self.depth = 0
+        if buffer is not None:
+            buffer.shrink_input_buffer()
 
     def reserve_graph_memory(self, num_bytes):
         if num_bytes < 0:
@@ -632,7 +635,8 @@ class ReadContext:
         return self.read_non_ref(serializer=serializer)
 
     def read_nullable(self, serializer=None):
-        if self.buffer.read_int8() == NULL_FLAG:
+        head_flag = self.buffer.read_int8()
+        if head_flag == NULL_FLAG:
             return None
         return self.read_non_ref(serializer=serializer)
 

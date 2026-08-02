@@ -1742,6 +1742,25 @@ private func readPackedArrayElementCount(
     return count
 }
 
+@inline(__always)
+private func minimumListElementBytes(_ rawTypeID: UInt32) throws -> Int {
+    guard let typeID = TypeId(rawValue: rawTypeID) else {
+        throw ForyError.invalidData("unsupported compatible list element type id \(rawTypeID)")
+    }
+    switch typeID {
+    case .bool, .int8, .uint8, .varint32, .varUInt32, .varint64, .varUInt64:
+        return 1
+    case .int16, .uint16, .float16, .bfloat16:
+        return 2
+    case .int32, .uint32, .float32, .taggedInt64, .taggedUInt64:
+        return 4
+    case .int64, .uint64, .float64:
+        return 8
+    default:
+        throw ForyError.invalidData("unsupported compatible list element type id \(rawTypeID)")
+    }
+}
+
 @inline(never)
 private func readListPayloadAsArray<ElementCodec: FieldCodec>(
     _ context: ReadContext,
@@ -1815,7 +1834,14 @@ private func readListPayloadAsArrayPayload<ElementCodec: FieldCodec>(
     } else {
         throw ForyError.invalidData("compatible list-to-array field requires declared elements")
     }
-    try context.ensureRemainingBytes(length, label: "array")
+    // Prove the remote element encoding before the dense target reserves storage.
+    // Variable-width integer encodings use their protocol minimum so compact values remain valid.
+    let elementBytes = try minimumListElementBytes(remoteElementTypeID)
+    let (requiredBytes, overflow) = length.multipliedReportingOverflow(by: elementBytes)
+    if overflow {
+        throw ForyError.invalidData("compatible list payload size overflows")
+    }
+    try context.ensureRemainingBytes(requiredBytes, label: "array")
     var result: [ElementCodec.Target] = []
     result.reserveCapacity(length)
     return try ElementCodec.withFieldTypeInfo(elementTypeInfo, context) {

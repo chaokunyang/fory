@@ -25,6 +25,7 @@ from typing import List, Dict, Set, Optional
 import pytest
 
 import pyfory
+from pyfory.collection import KEY_DECL_TYPE, VALUE_DECL_TYPE
 
 
 class TestListWithNone:
@@ -390,3 +391,21 @@ class TestEdgeCases:
         data = [1, "string", 3.14, None, True, [1, 2], {"a": 1}]
         result = fory.loads(fory.dumps(data))
         assert result == data
+
+
+@pytest.mark.parametrize("chunk_size", [0, 3])
+def test_invalid_map_chunk_size(chunk_size):
+    fory = pyfory.Fory(xlang=True, ref=False, compatible=False, strict=False)
+    serializer = fory.type_resolver.get_serializer(dict)
+    buffer = pyfory.Buffer.allocate(16)
+    buffer.write_var_uint32(2)
+    buffer.write_uint8(KEY_DECL_TYPE | VALUE_DECL_TYPE)
+    buffer.write_uint8(chunk_size)
+    buffer.set_reader_index(0)
+    fory.read_context.prepare(buffer)
+
+    try:
+        with pytest.raises(ValueError):
+            serializer.read(fory.read_context)
+    finally:
+        fory.reset_read()

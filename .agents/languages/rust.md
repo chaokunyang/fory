@@ -279,6 +279,11 @@ Load this file when changing `rust/` or Rust xlang behavior.
   compile-time selection hooks whose bodies must disappear after monomorphization.
 - If breakage is explicitly acceptable during a Rust module refactor, rewire macros, tests, and sibling crates directly to the new boundaries instead of adding compatibility re-exports.
 - For panic-safety in hot paths, preserve TLS context reuse. Add scoped guards or owned fallbacks rather than per-call context allocation, and reset reused contexts at entry and successful exit.
+- Read depth and per-root generic/reference state use root reset as their only failure-cleanup
+  owner. Nested readers and skippers increment depth before reading children and decrement only
+  after every child succeeds; an error must retain the failed path's depth and transient state until
+  root reset. Do not use `Drop`, RAII, scope guards, or match-error cleanup to decrement or pop that
+  read-side state on failure. This rule does not change write-side cleanup.
 - Compatible scalar, list-array, and binary/uint8-array adaptations are immediate-field-only. Keep recursive matched-field shape classification owned by `fory-core/src/meta/type_meta.rs`; collection elements, array elements, map keys, and map values must require exact nullability, ref tracking, generic arity, and type shape except documented user-type family normalization.
 - Root deserialization graph memory budget state belongs to `ReadContext` and is initialized by the
   root `Fory` read methods before the header is consumed. Use the fixed `128 MiB` default unless a

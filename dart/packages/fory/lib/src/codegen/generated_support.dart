@@ -171,14 +171,15 @@ void registerGeneratedEnum(
   int? id,
   String? name,
 }) {
-  GeneratedTypeCatalog.remember(
+  fory.registerGenerated(
     schema.type,
     GeneratedTypeEntry(
       kind: GeneratedTypeKind.enumType,
       serializerFactory: schema.serializerFactory,
     ),
+    id: id,
+    name: name,
   );
-  fory.register(schema.type, id: id, name: name);
 }
 
 @internal
@@ -188,7 +189,7 @@ void registerGeneratedStruct<T>(
   int? id,
   String? name,
 }) {
-  GeneratedTypeCatalog.remember(
+  fory.registerGenerated(
     schema.type,
     GeneratedTypeEntry(
       kind: GeneratedTypeKind.struct,
@@ -198,8 +199,9 @@ void registerGeneratedStruct<T>(
       usesNestedTypeDefinitions: schema.usesNestedTypeDefinitions,
       fields: schema.fieldInfos,
     ),
+    id: id,
+    name: name,
   );
-  fory.register(schema.type, id: id, name: name);
 }
 
 @internal
@@ -530,14 +532,30 @@ Object readGeneratedStructDirectValue(
   } else {
     resolved = context.readTypeMetaValue(declared);
   }
+  final structSerializer = resolved.structSerializer;
+  if (structSerializer == null) {
+    // An explicit custom registration before the first root operation may
+    // replace a generated child binding. The finalized TypeInfo owns that
+    // operation; only an ordinary generated-struct binding uses the direct
+    // path below.
+    return _readGeneratedCustomField(context, resolved, field.fieldType);
+  }
   context.increaseDepth();
-  final structSerializer = resolved.structSerializer!;
   final value =
       resolved.remoteTypeDef == null
           ? structSerializer.readValue(context, resolved)
           : structSerializer.readGeneratedCompatibleValue(context, resolved);
   context.decreaseDepth();
   return value;
+}
+
+@pragma('vm:never-inline')
+Object _readGeneratedCustomField(
+  ReadContext context,
+  resolver.TypeInfo resolved,
+  meta_types.FieldType fieldType,
+) {
+  return context.readResolvedValue(resolved, fieldType)!;
 }
 
 @internal

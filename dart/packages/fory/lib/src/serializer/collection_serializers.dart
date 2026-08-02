@@ -546,7 +546,11 @@ Object _readCompatibleListAsArrayField(
     );
   }
   final elementResolved = context.typeResolver.resolveFieldType(elementType);
-  context.buffer.checkReadableBytes(size);
+  // The remote list count sizes the dense target allocation, so prove the
+  // remote element encoding's minimum bytes before allocating it.
+  context.buffer.checkReadableBytes(
+    size * _minimumEncodedElementBytes(elementType.typeId),
+  );
   final result = _newArrayValue(arrayTypeId, size);
   for (var index = 0; index < size; index += 1) {
     _setArrayValue(
@@ -585,6 +589,26 @@ int _compatibleArrayElementTypeId(int typeId) {
     TypeIds.varUint32 => TypeIds.uint32,
     TypeIds.varUint64 || TypeIds.taggedUint64 => TypeIds.uint64,
     _ => typeId,
+  };
+}
+
+int _minimumEncodedElementBytes(int typeId) {
+  return switch (typeId) {
+    TypeIds.boolType ||
+    TypeIds.int8 ||
+    TypeIds.varInt32 ||
+    TypeIds.uint8 ||
+    TypeIds.varUint32 ||
+    TypeIds.varInt64 ||
+    TypeIds.varUint64 => 1,
+    TypeIds.int16 || TypeIds.uint16 || TypeIds.float16 || TypeIds.bfloat16 => 2,
+    TypeIds.int32 ||
+    TypeIds.taggedInt64 ||
+    TypeIds.uint32 ||
+    TypeIds.taggedUint64 ||
+    TypeIds.float32 => 4,
+    TypeIds.int64 || TypeIds.uint64 || TypeIds.float64 => 8,
+    _ => throw StateError('Unsupported compatible list element type $typeId.'),
   };
 }
 

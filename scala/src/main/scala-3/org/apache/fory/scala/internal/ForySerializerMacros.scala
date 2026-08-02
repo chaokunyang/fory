@@ -109,19 +109,6 @@ object ForySerializerMacros {
       annotations.foldRight(boxed)((annotation, current) => AnnotatedType(current, annotation))
     }
 
-    def graphFieldBytes(tpe: TypeRepr): Long = {
-      val base = peelAnnotations(tpe.widen)._1.dealias
-      if base =:= TypeRepr.of[Boolean] then 1L
-      else if base =:= TypeRepr.of[Byte] then 1L
-      else if base =:= TypeRepr.of[Char] then 2L
-      else if base =:= TypeRepr.of[Short] then 2L
-      else if base =:= TypeRepr.of[Int] then 4L
-      else if base =:= TypeRepr.of[Float] then 4L
-      else if base =:= TypeRepr.of[Long] then 8L
-      else if base =:= TypeRepr.of[Double] then 8L
-      else 4L
-    }
-
     def classFor(tpe: TypeRepr): Expr[Class[?]] = {
       val normalized = peelAnnotations(tpe.widen)._1.dealias
       val fullName = normalized.typeSymbol.fullName
@@ -220,10 +207,6 @@ object ForySerializerMacros {
         !privateField,
         constructorOwned || (field.flags.is(Flags.Mutable) && !privateField))
     }
-    val referenceBytes: Long = 4L
-    val objectOwnerBytes: Long = 3L * referenceBytes
-    val objectGraphMemoryBytes: Long =
-      objectOwnerBytes + fields.map(field => graphFieldBytes(field.sourceType)).sum
     val hasNestedCompatibleStructFields =
       fields.exists(field => hasNestedCompatibleStruct(field.sourceType))
 
@@ -1029,6 +1012,7 @@ object ForySerializerMacros {
         serializerExpr: Expr[StaticGeneratedStructSerializer[T]],
         resolverExpr: Expr[TypeResolver],
         fieldsByIdExpr: Expr[Array[FieldGroups.SerializationFieldInfo]],
+        graphMemoryBytesExpr: Expr[Long],
         readContextExpr: Expr[org.apache.fory.context.ReadContext],
         instantiatorExpr: Expr[org.apache.fory.reflect.ObjectInstantiator[T]],
         fieldAccessorsExpr: Expr[Array[org.apache.fory.reflect.FieldAccessor]]): Expr[T] = {
@@ -1146,7 +1130,7 @@ object ForySerializerMacros {
       Block(
         localDefs ++ maskDefs,
         Block(
-          '{ $readContextExpr.reserveGraphMemory(${ Expr(objectGraphMemoryBytes) }) }.asTerm ::
+          '{ $readContextExpr.reserveGraphMemory($graphMemoryBytesExpr) }.asTerm ::
             readLoop.asTerm :: defaultAssignments.toList,
           constructFromLocals(localFields, instantiatorExpr, fieldAccessorsExpr).asTerm))
         .asExprOf[T]
@@ -1159,6 +1143,7 @@ object ForySerializerMacros {
         classVersionHashExpr: Expr[Int],
         allFieldsExpr: Expr[Array[FieldGroups.SerializationFieldInfo]],
         allFieldIdsExpr: Expr[Array[Int]],
+        graphMemoryBytesExpr: Expr[Long],
         readContextExpr: Expr[org.apache.fory.context.ReadContext],
         instantiatorExpr: Expr[org.apache.fory.reflect.ObjectInstantiator[T]],
         fieldAccessorsExpr: Expr[Array[org.apache.fory.reflect.FieldAccessor]]): Expr[T] = {
@@ -1169,7 +1154,7 @@ object ForySerializerMacros {
           if $resolverExpr.checkClassVersion() then {
             $serializerExpr.checkClassVersion(buffer.readInt32(), $classVersionHashExpr)
           }
-          $readContextExpr.reserveGraphMemory(${ Expr(objectGraphMemoryBytes) })
+          $readContextExpr.reserveGraphMemory($graphMemoryBytesExpr)
           val obj = $instantiatorExpr.newInstance()
           $readContextExpr.reference(obj)
           var i = 0
@@ -1195,7 +1180,7 @@ object ForySerializerMacros {
           if $resolverExpr.checkClassVersion() then {
             $serializerExpr.checkClassVersion(buffer.readInt32(), $classVersionHashExpr)
           }
-          $readContextExpr.reserveGraphMemory(${ Expr(objectGraphMemoryBytes) })
+          $readContextExpr.reserveGraphMemory($graphMemoryBytesExpr)
           val values = new Array[Any]($descriptorsExpr.size())
           var i = 0
           while i < $allFieldsExpr.length do {
@@ -1215,6 +1200,7 @@ object ForySerializerMacros {
         descriptorsExpr: Expr[java.util.List[Descriptor]],
         fieldsByIdExpr: Expr[Array[FieldGroups.SerializationFieldInfo]],
         sameSchemaCompatibleExpr: Expr[Boolean],
+        graphMemoryBytesExpr: Expr[Long],
         readContextExpr: Expr[org.apache.fory.context.ReadContext],
         instantiatorExpr: Expr[org.apache.fory.reflect.ObjectInstantiator[T]],
         fieldAccessorsExpr: Expr[Array[org.apache.fory.reflect.FieldAccessor]]): Expr[T] = {
@@ -1224,7 +1210,7 @@ object ForySerializerMacros {
           if $sameSchemaCompatibleExpr then {
             $serializerExpr.read($readContextExpr)
           } else {
-            $readContextExpr.reserveGraphMemory(${ Expr(objectGraphMemoryBytes) })
+            $readContextExpr.reserveGraphMemory($graphMemoryBytesExpr)
             val obj = $instantiatorExpr.newInstance()
             $readContextExpr.reference(obj)
             val remoteFields = $serializerExpr.getRemoteFields()
@@ -1256,6 +1242,7 @@ object ForySerializerMacros {
                 serializerExpr,
                 resolverExpr,
                 fieldsByIdExpr,
+                graphMemoryBytesExpr,
                 readContextExpr,
                 instantiatorExpr,
                 fieldAccessorsExpr)
@@ -1326,6 +1313,10 @@ object ForySerializerMacros {
             private val generatedObjectInstantiator
                 : org.apache.fory.reflect.ObjectInstantiator[T] =
               resolver.getObjectInstantiator(cls)
+            // Match the base serializer's physical instance estimate, including storage-only fields
+            // that must not be added to generated wire metadata.
+            private val generatedObjectGraphMemoryBytes: Long =
+              org.apache.fory.serializer.GraphMemoryEstimates.shallowObjectBytes(cls).toLong
             private val generatedFieldAccessors
                 : Array[org.apache.fory.reflect.FieldAccessor] =
               ${ fieldAccessors('cls) }
@@ -1383,6 +1374,7 @@ object ForySerializerMacros {
                   'classVersionHash,
                   'allFields,
                   'allFieldIds,
+                  'generatedObjectGraphMemoryBytes,
                   'readContext,
                   'generatedObjectInstantiator,
                   'generatedFieldAccessors)
@@ -1396,6 +1388,7 @@ object ForySerializerMacros {
                   'descriptors,
                   'fieldsById,
                   'sameSchemaCompatible,
+                  'generatedObjectGraphMemoryBytes,
                   'readContext,
                   'generatedObjectInstantiator,
                   'generatedFieldAccessors)

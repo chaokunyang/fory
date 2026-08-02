@@ -786,6 +786,7 @@ public abstract class MapLikeSerializer<T> extends Serializer<T> {
     boolean keyIsDeclaredType = (chunkHeader & KEY_DECL_TYPE) != 0;
     boolean valueIsDeclaredType = (chunkHeader & VALUE_DECL_TYPE) != 0;
     int chunkSize = buffer.readUnsignedByte();
+    checkChunkSize(chunkSize, size);
     if (!keyIsDeclaredType) {
       keySerializer =
           typeResolver.readTypeInfo(readContext, state.keyTypeInfoReadCache).getSerializer();
@@ -831,6 +832,7 @@ public abstract class MapLikeSerializer<T> extends Serializer<T> {
     boolean keyIsDeclaredType = (chunkHeader & KEY_DECL_TYPE) != 0;
     boolean valueIsDeclaredType = (chunkHeader & VALUE_DECL_TYPE) != 0;
     int chunkSize = buffer.readUnsignedByte();
+    checkChunkSize(chunkSize, size);
     Serializer keySerializer, valueSerializer;
     if (!keyIsDeclaredType) {
       keySerializer =
@@ -999,6 +1001,18 @@ public abstract class MapLikeSerializer<T> extends Serializer<T> {
     if (numElements < 0) {
       throwInvalidMapSize(numElements);
     }
+  }
+
+  @CodegenInvoke
+  public static void checkChunkSize(int chunkSize, long remainingSize) {
+    if (chunkSize == 0 || chunkSize > remainingSize) {
+      throwInvalidChunkSize(chunkSize, remainingSize);
+    }
+  }
+
+  private static void throwInvalidChunkSize(int chunkSize, long remainingSize) {
+    throw new DeserializationException(
+        "Map chunk size must be between 1 and remaining size " + remainingSize + ": " + chunkSize);
   }
 
   private void throwInvalidMapSize(int numElements) {

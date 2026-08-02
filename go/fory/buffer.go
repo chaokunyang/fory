@@ -108,6 +108,14 @@ func (b *ByteBuffer) fill(n int, errOut *Error) bool {
 		}
 		spare := b.data[len(b.data):cap(b.data)]
 		readBytes, err := b.reader.Read(spare)
+		if readBytes < 0 || readBytes > len(spare) {
+			if errOut != nil {
+				*errOut = DeserializationErrorf(
+					"stream reader returned invalid byte count %d for buffer size %d",
+					readBytes, len(spare))
+			}
+			return false
+		}
 		if readBytes > 0 {
 			b.data = b.data[:len(b.data)+readBytes]
 			b.writerIndex += readBytes
@@ -137,22 +145,48 @@ func (b *ByteBuffer) fill(n int, errOut *Error) bool {
 
 func (b *ByteBuffer) discardFromReader(length int, errOut *Error) bool {
 	var scratch [8192]byte
+	const maxConsecutiveEmptyReads = 100
+	emptyReads := 0
 	for length > 0 {
 		n := length
 		if n > len(scratch) {
 			n = len(scratch)
 		}
-		readBytes, err := io.ReadFull(b.reader, scratch[:n])
-		length -= readBytes
-		if err != nil {
-			if errOut != nil {
-				if err == io.EOF || err == io.ErrUnexpectedEOF {
-					*errOut = BufferOutOfBoundError(b.readerIndex, n, readBytes)
-				} else {
-					*errOut = DeserializationError(fmt.Sprintf("stream read error: %v", err))
+		readBytes := 0
+		for readBytes < n {
+			count, readErr := b.reader.Read(scratch[readBytes:n])
+			if count < 0 || count > n-readBytes {
+				if errOut != nil {
+					*errOut = DeserializationErrorf("stream reader returned invalid byte count %d", count)
 				}
+				return false
 			}
-			return false
+			readBytes += count
+			length -= count
+			if readBytes == n {
+				break
+			}
+			if readErr != nil {
+				if errOut != nil {
+					if readErr == io.EOF || readErr == io.ErrUnexpectedEOF {
+						*errOut = BufferOutOfBoundError(b.readerIndex, n, readBytes)
+					} else {
+						*errOut = DeserializationError(fmt.Sprintf("stream read error: %v", readErr))
+					}
+				}
+				return false
+			}
+			if count == 0 {
+				emptyReads++
+				if emptyReads >= maxConsecutiveEmptyReads {
+					if errOut != nil {
+						*errOut = DeserializationError(fmt.Sprintf("stream read error: %v", io.ErrNoProgress))
+					}
+					return false
+				}
+			} else {
+				emptyReads = 0
+			}
 		}
 	}
 	return true
@@ -1580,30 +1614,6 @@ func (b *ByteBuffer) continueReadVarUint32(readIdx int, bulkRead, value uint32, 
 	}
 	b.readerIndex = readIdx
 	return value
-}
-
-func (b *ByteBuffer) readVaruint36Slow(err *Error) uint64 {
-	var shift uint
-	var result uint64
-	for {
-		if b.readerIndex >= len(b.data) {
-			if !b.fill(1, err) {
-				return 0
-			}
-		}
-		b0 := b.data[b.readerIndex]
-		b.readerIndex++
-		result |= uint64(b0&0x7F) << shift
-		if b0&0x80 == 0 {
-			break
-		}
-		shift += 7
-		if shift >= 35 {
-			*err = DeserializationError("varuint36 overflow")
-			return 0
-		}
-	}
-	return result
 }
 
 // unsafeGetInt32 reads little-endian int32 at index

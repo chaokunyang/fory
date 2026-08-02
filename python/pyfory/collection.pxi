@@ -50,6 +50,13 @@ cdef int64_t _SET_OWNER_BYTES = 6 * sizeof(PyObject*)
 cdef int64_t _DICT_OWNER_BYTES = 8 * sizeof(PyObject*)
 ctypedef PyObject *PyObjectPtr
 
+
+cdef void raise_invalid_map_chunk_size(int chunk_size, int remaining):
+    raise ValueError(
+        f"Invalid map chunk size {chunk_size}, remaining entries {remaining}"
+    )
+
+
 cdef class ListSerializer
 
 
@@ -312,9 +319,7 @@ cdef class CollectionSerializer(Serializer):
                     obj = ref_reader.get_read_ref()
                 else:
                     obj = serializer.read(read_context)
-                    if ref_id >= 0 and ref_reader.read_objects[ref_id] == NULL:
-                        Py_INCREF(obj)
-                        ref_reader.read_objects[ref_id] = <PyObject *>obj
+                    ref_reader.set_read_ref(ref_id, obj)
                 Py_INCREF(obj)
                 if is_list:
                     PyList_SET_ITEM(collection_, i, obj)
@@ -328,9 +333,7 @@ cdef class CollectionSerializer(Serializer):
                 obj = ref_reader.get_read_ref()
             else:
                 obj = serializer.read(read_context)
-                if ref_id >= 0 and ref_reader.read_objects[ref_id] == NULL:
-                    Py_INCREF(obj)
-                    ref_reader.read_objects[ref_id] = <PyObject *>obj
+                ref_reader.set_read_ref(ref_id, obj)
             self._add_element(collection_, i, obj)
         read_context.decrease_depth()
 
@@ -448,9 +451,7 @@ cdef inline object get_next_element(
         return ref_reader.get_read_ref()
     typeinfo = type_resolver.read_type_info(read_context)
     obj = typeinfo.serializer.read(read_context)
-    if ref_id >= 0 and ref_reader.read_objects[ref_id] == NULL:
-        Py_INCREF(obj)
-        ref_reader.read_objects[ref_id] = <PyObject *>obj
+    ref_reader.set_read_ref(ref_id, obj)
     return obj
 
 
@@ -814,6 +815,8 @@ cdef class MapSerializer(Serializer):
     # Map serializers can point at either Cython or Python serializer instances.
     cdef Serializer key_serializer
     cdef Serializer value_serializer
+    cdef Serializer key_write_serializer
+    cdef Serializer value_write_serializer
     cdef bint key_tracking_ref
     cdef bint value_tracking_ref
     cdef FlatIntMap[uint64_t, PyObjectPtr] _key_typeinfo_cache
@@ -827,10 +830,16 @@ cdef class MapSerializer(Serializer):
         value_serializer=None,
         key_tracking_ref=None,
         value_tracking_ref=None,
+        key_write_type_info=False,
+        value_write_type_info=False,
     ):
         super().__init__(type_resolver, type_)
         self.key_serializer = key_serializer
         self.value_serializer = value_serializer
+        # Compatible evolving child schemas need dynamic write framing, while this
+        # reader must still accept declared chunks from an exact peer.
+        self.key_write_serializer = None if key_write_type_info else key_serializer
+        self.value_write_serializer = None if value_write_type_info else value_serializer
         self._key_typeinfo_cache = FlatIntMap[uint64_t, PyObjectPtr](4)
         self._value_typeinfo_cache = FlatIntMap[uint64_t, PyObjectPtr](4)
         self.key_tracking_ref = False
@@ -854,8 +863,8 @@ cdef class MapSerializer(Serializer):
         cdef int64_t value_addr
         cdef Py_ssize_t pos = 0
         cdef RefWriter ref_writer = write_context.ref_writer
-        cdef Serializer key_serializer = self.key_serializer
-        cdef Serializer value_serializer = self.value_serializer
+        cdef Serializer key_serializer = self.key_write_serializer
+        cdef Serializer value_serializer = self.value_write_serializer
         cdef object key
         cdef object value
         cdef type key_cls
@@ -1061,8 +1070,8 @@ cdef class MapSerializer(Serializer):
                 Py_INCREF(key)
                 value = int2obj(value_addr)
                 Py_INCREF(value)
-            key_serializer = self.key_serializer
-            value_serializer = self.value_serializer
+            key_serializer = self.key_write_serializer
+            value_serializer = self.value_write_serializer
             buffer.put_uint8(chunk_size_offset, chunk_size)
             write_context.exit_flush_barrier()
             write_context.try_flush()
@@ -1117,9 +1126,7 @@ cdef class MapSerializer(Serializer):
                                 key = ref_reader.get_read_ref()
                             else:
                                 key = self._read_obj(key_serializer, read_context)
-                                if ref_id >= 0 and ref_reader.read_objects[ref_id] == NULL:
-                                    Py_INCREF(key)
-                                    ref_reader.read_objects[ref_id] = <PyObject *>key
+                                ref_reader.set_read_ref(ref_id, key)
                         else:
                             key = self._read_obj_no_ref(key_serializer, read_context)
                     else:
@@ -1134,9 +1141,7 @@ cdef class MapSerializer(Serializer):
                                 value = ref_reader.get_read_ref()
                             else:
                                 value = self._read_obj(value_serializer, read_context)
-                                if ref_id >= 0 and ref_reader.read_objects[ref_id] == NULL:
-                                    Py_INCREF(value)
-                                    ref_reader.read_objects[ref_id] = <PyObject *>value
+                                ref_reader.set_read_ref(ref_id, value)
                         else:
                             value = self._read_obj_no_ref(value_serializer, read_context)
                     else:
@@ -1159,6 +1164,8 @@ cdef class MapSerializer(Serializer):
             key_is_declared_type = (chunk_header & KEY_DECL_TYPE) != 0
             value_is_declared_type = (chunk_header & VALUE_DECL_TYPE) != 0
             chunk_size = read_context.read_uint8()
+            if chunk_size == 0 or chunk_size > size:
+                raise_invalid_map_chunk_size(chunk_size, size)
             if not key_is_declared_type:
                 key_serializer = self.type_resolver.read_type_info(read_context).serializer
             if not value_is_declared_type:
@@ -1172,9 +1179,7 @@ cdef class MapSerializer(Serializer):
                         key = ref_reader.get_read_ref()
                     else:
                         key = self._read_obj(key_serializer, read_context)
-                        if ref_id >= 0 and ref_reader.read_objects[ref_id] == NULL:
-                            Py_INCREF(key)
-                            ref_reader.read_objects[ref_id] = <PyObject *>key
+                        ref_reader.set_read_ref(ref_id, key)
                 else:
                     if key_serializer_type is StringSerializer:
                         key = read_context.read_string()
@@ -1220,9 +1225,7 @@ cdef class MapSerializer(Serializer):
                         value = ref_reader.get_read_ref()
                     else:
                         value = self._read_obj(value_serializer, read_context)
-                        if ref_id >= 0 and ref_reader.read_objects[ref_id] == NULL:
-                            Py_INCREF(value)
-                            ref_reader.read_objects[ref_id] = <PyObject *>value
+                        ref_reader.set_read_ref(ref_id, value)
                 else:
                     if value_serializer_type is StringSerializer:
                         value = read_context.read_string()

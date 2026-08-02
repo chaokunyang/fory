@@ -217,6 +217,31 @@ private func readCompatibleRegisteredValue<S: Serializer>(
     }
 }
 
+@inline(__always)
+private func readRegisteredBody<S: Serializer>(
+    _ context: ReadContext,
+    as _: S.Type,
+    remoteTypeInfo: TypeInfo?
+) throws -> Any {
+    if let remoteTypeInfo {
+        return try context.withTypeInfo(remoteTypeInfo, for: S.self) {
+            try S.read(context, refMode: .none, readTypeInfo: false)
+        }
+    }
+    return try S.read(context, refMode: .none, readTypeInfo: false)
+}
+
+private func registeredBodyReader<S: Serializer>(
+    for _: S.Type
+) -> ((ReadContext, TypeInfo?) throws -> Any)? {
+    guard S.isRefType else {
+        return nil
+    }
+    return { context, remoteTypeInfo in
+        try readRegisteredBody(context, as: S.self, remoteTypeInfo: remoteTypeInfo)
+    }
+}
+
 private func registeredFields<S: Serializer>(
     for serializer: S.Type,
     trackRef: Bool,
@@ -228,6 +253,20 @@ private func registeredFields<S: Serializer>(
     return try structural.foryFieldsInfo(trackRef: trackRef) { type in
         try resolver.fieldTypeID(for: type)
     }
+}
+
+@inline(__always)
+private func registeredDynamicBoxBytes<S: Serializer>(for _: S.Type) -> Int {
+    if S.isRefType {
+        return 0
+    }
+    let inlineBytes = 3 * MemoryLayout<UnsafeRawPointer>.size
+    if MemoryLayout<S.Target>.size <= inlineBytes
+        && MemoryLayout<S.Target>.alignment <= MemoryLayout<UnsafeRawPointer>.alignment
+    {
+        return 0
+    }
+    return MemoryLayout<S.Target>.stride
 }
 
 public final class TypeInfo: @unchecked Sendable {
@@ -258,6 +297,8 @@ public final class TypeInfo: @unchecked Sendable {
     private let compatibleWireTypeID: TypeId
     private var typeMetaFieldsBuilder: ((TypeResolver) throws -> [TypeMeta.FieldInfo])?
     private let remoteCompatibleTypeMeta: TypeMeta?
+    private let bodyReader: ((ReadContext, TypeInfo?) throws -> Any)?
+    let dynamicBoxBytes: Int
 
     init(
         serializerTypeID: ObjectIdentifier,
@@ -276,9 +317,11 @@ public final class TypeInfo: @unchecked Sendable {
         typeDefHeaderHash: UInt64? = nil,
         typeDefHasUserTypeFields: Bool = true,
         isRefType: Bool,
+        dynamicBoxBytes: Int = 0,
         writer: @escaping (Any, WriteContext) throws -> Void,
         reader: @escaping (ReadContext) throws -> Any,
-        compatibleReader: @escaping (ReadContext, TypeInfo) throws -> Any
+        compatibleReader: @escaping (ReadContext, TypeInfo) throws -> Any,
+        bodyReader: ((ReadContext, TypeInfo?) throws -> Any)? = nil
     ) {
         self.serializerTypeID = serializerTypeID
         self.targetTypeID = targetTypeID
@@ -296,9 +339,11 @@ public final class TypeInfo: @unchecked Sendable {
         self.typeDefHeaderHash = typeDefHeaderHash
         self.typeDefHasUserTypeFields = typeDefHasUserTypeFields
         self.isRefType = isRefType
+        self.dynamicBoxBytes = dynamicBoxBytes
         self.writer = writer
         self.reader = reader
         self.compatibleReader = compatibleReader
+        self.bodyReader = bodyReader
         nativeWireTypeID = resolveRegisteredWireTypeID(
             declaredTypeID: typeID,
             registerByName: registerByName,
@@ -387,9 +432,11 @@ public final class TypeInfo: @unchecked Sendable {
             typeDefHeaderHash: typeInfo.typeDefHeaderHash,
             typeDefHasUserTypeFields: typeInfo.typeDefHasUserTypeFields,
             isRefType: typeInfo.isRefType,
+            dynamicBoxBytes: typeInfo.dynamicBoxBytes,
             writer: typeInfo.writer,
             reader: typeInfo.reader,
-            compatibleReader: typeInfo.compatibleReader
+            compatibleReader: typeInfo.compatibleReader,
+            bodyReader: typeInfo.bodyReader
         )
     }
 
@@ -491,19 +538,63 @@ public final class TypeInfo: @unchecked Sendable {
 
     @inline(__always)
     func readDynamic(_ context: ReadContext, typeInfo: TypeInfo? = nil) throws -> Any {
+        // maxDepth bounds nested values selected through Any. Statically declared
+        // children follow their schema and must not consume this dynamic-only depth.
+        try context.enterDynamicAnyDepth()
+        if dynamicBoxBytes != 0 {
+            try context.reserveGraphMemory(dynamicBoxBytes)
+        }
+        let value = try readValue(context, typeInfo: typeInfo)
+        context.leaveDynamicAnyDepth()
+        return value
+    }
+
+    @inline(__always)
+    func readDeclared(_ context: ReadContext) throws -> Any {
+        // Compatible field metadata has already selected this serializer. Keep
+        // registered envelope semantics without counting a dynamic Any owner.
+        if dynamicBoxBytes != 0 {
+            try context.reserveGraphMemory(dynamicBoxBytes)
+        }
+        return try readValue(context, typeInfo: nil)
+    }
+
+    @inline(__always)
+    private func readValue(_ context: ReadContext, typeInfo: TypeInfo?) throws -> Any {
+        let value: Any
         if let typeInfo {
-            return try compatibleReader(context, typeInfo)
+            value = try compatibleReader(context, typeInfo)
+        } else if context.compatible
+            && (compatibleWireTypeID == .compatibleStruct
+                || compatibleWireTypeID == .namedCompatibleStruct)
+        {
+            value = try compatibleReader(context, self)
+        } else if remoteCompatibleTypeMeta != nil {
+            value = try compatibleReader(context, self)
+        } else {
+            value = try reader(context)
+        }
+        return value
+    }
+
+    @inline(__always)
+    func readBody(_ context: ReadContext) throws -> Any {
+        guard let bodyReader else {
+            throw ForyError.invalidData("type \(typeID) has no registered body reader")
+        }
+        if dynamicBoxBytes != 0 {
+            try context.reserveGraphMemory(dynamicBoxBytes)
         }
         if context.compatible
             && (compatibleWireTypeID == .compatibleStruct
                 || compatibleWireTypeID == .namedCompatibleStruct)
         {
-            return try compatibleReader(context, self)
+            return try bodyReader(context, self)
         }
         if remoteCompatibleTypeMeta != nil {
-            return try compatibleReader(context, self)
+            return try bodyReader(context, self)
         }
-        return try reader(context)
+        return try bodyReader(context, nil)
     }
 }
 
@@ -513,7 +604,8 @@ private struct TypeNameKey: Hashable {
 }
 
 final class TypeResolver {
-    private static let minRemoteTypeMetaLimit = 8192
+    private static let minRemoteTypeMetaVersions = 8192
+    private static let maxRemoteTypeMetaKeys = 8192
 
     private let trackRef: Bool
     private var registrationFinished = false
@@ -627,6 +719,7 @@ final class TypeResolver {
             typeName: MetaString.empty(specialChar1: "$", specialChar2: "_"),
             typeDefHasUserTypeFields: false,
             isRefType: S.isRefType,
+            dynamicBoxBytes: registeredDynamicBoxBytes(for: S.self),
             writer: { value, context in
                 try writeRegisteredValue(value, context, as: S.self)
             },
@@ -722,11 +815,16 @@ final class TypeResolver {
         builtinTypeInfoByID[index] = typeInfo
     }
 
-    @inline(never)
+    @inline(__always)
     func finishRegistration() throws {
         if registrationFinished {
             return
         }
+        try finishRegistrationSlow()
+    }
+
+    @inline(never)
+    private func finishRegistrationSlow() throws {
         for typeInfo in registeredTypeInfos {
             try typeInfo.finalizeTypeMeta(resolver: self)
         }
@@ -772,6 +870,7 @@ final class TypeResolver {
                 try registeredFields(for: T.self, trackRef: trackRef, resolver: resolver)
             },
             isRefType: T.isRefType,
+            dynamicBoxBytes: registeredDynamicBoxBytes(for: T.self),
             writer: { value, context in
                 try writeRegisteredValue(value, context, as: T.self)
             },
@@ -780,7 +879,8 @@ final class TypeResolver {
             },
             compatibleReader: { context, remoteTypeInfo in
                 try readCompatibleRegisteredValue(context, as: T.self, remoteTypeInfo: remoteTypeInfo)
-            }
+            },
+            bodyReader: registeredBodyReader(for: T.self)
         )
 
         if let existing = bySerializerType.value(
@@ -841,6 +941,7 @@ final class TypeResolver {
                 try registeredFields(for: T.self, trackRef: trackRef, resolver: resolver)
             },
             isRefType: T.isRefType,
+            dynamicBoxBytes: registeredDynamicBoxBytes(for: T.self),
             writer: { value, context in
                 try writeRegisteredValue(value, context, as: T.self)
             },
@@ -849,7 +950,8 @@ final class TypeResolver {
             },
             compatibleReader: { context, remoteTypeInfo in
                 try readCompatibleRegisteredValue(context, as: T.self, remoteTypeInfo: remoteTypeInfo)
-            }
+            },
+            bodyReader: registeredBodyReader(for: T.self)
         )
 
         if let existing = bySerializerType.value(
@@ -922,11 +1024,12 @@ final class TypeResolver {
             typeInfoByHeader.set(localTypeInfo, for: header)
             return localTypeInfo
         }
-        let remoteSchemaKey = try checkRemoteTypeMetaLimit(typeMeta, config: config)
         guard let localTypeMeta = localTypeInfo.typeMeta else {
             throw ForyError.invalidData("local type metadata for \(localTypeInfo.typeID) is not finalized")
         }
         let canonicalTypeMeta = try typeMeta.assigningFieldIDs(from: localTypeMeta)
+        // Failed compatibility checks must not consult or mutate persistent remote accounting.
+        let remoteSchemaKey = try checkRemoteTypeMetaLimit(typeMeta, config: config)
         let typeInfo = TypeInfo(dynamic: localTypeInfo, compatibleTypeMeta: canonicalTypeMeta)
         typeInfoByHeader.set(typeInfo, for: header)
         recordRemoteTypeMeta(remoteSchemaKey)
@@ -943,6 +1046,14 @@ final class TypeResolver {
         }
 
         let versionsForType = remoteSchemaVersionsByType[key] ?? 0
+        let isNewType = versionsForType == 0
+        let acceptedTypeCount = remoteSchemaVersionsByType.count
+        // Filling the key table must not disable schema evolution for accepted logical types.
+        if isNewType && acceptedTypeCount >= Self.maxRemoteTypeMetaKeys {
+            throw ForyError.invalidData(
+                "remote TypeMeta logical type limit exceeded. The data may be malicious"
+            )
+        }
         let maxSchemaVersionsPerType = config.maxSchemaVersionsPerType
         if versionsForType >= maxSchemaVersionsPerType {
             throw ForyError.invalidData(
@@ -951,14 +1062,14 @@ final class TypeResolver {
                     + "maxSchemaVersionsPerType=\(maxSchemaVersionsPerType)"
             )
         }
-        let acceptedTypeCount =
-            versionsForType == 0 ? remoteSchemaVersionsByType.count + 1 : remoteSchemaVersionsByType.count
+        // The preceding fixed cap proves this addition cannot overflow.
+        let resultingTypeCount = acceptedTypeCount + (isNewType ? 1 : 0)
         let maxAverageSchemaVersionsPerType = config.maxAverageSchemaVersionsPerType
-        let globalLimit = max(
-            Self.minRemoteTypeMetaLimit,
-            acceptedTypeCount * maxAverageSchemaVersionsPerType
-        )
-        if totalAcceptedSchemaVersions >= globalLimit {
+        if totalAcceptedSchemaVersions == Int.max
+            || (totalAcceptedSchemaVersions >= Self.minRemoteTypeMetaVersions
+                && totalAcceptedSchemaVersions / resultingTypeCount
+                    >= maxAverageSchemaVersionsPerType)
+        {
             throw ForyError.invalidData(
                 "remote schema version limit exceeded globally. The data may be malicious. "
                     + "If the data is not malicious, please increase "
@@ -970,6 +1081,7 @@ final class TypeResolver {
 
     private func recordRemoteTypeMeta(_ key: String) {
         let versionsForType = remoteSchemaVersionsByType[key] ?? 0
+        // The per-type and total checks prove both cold-path increments are representable.
         remoteSchemaVersionsByType[key] = versionsForType + 1
         totalAcceptedSchemaVersions += 1
     }

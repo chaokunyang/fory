@@ -21,7 +21,8 @@ namespace Apache.Fory;
 
 public sealed class ReadContext
 {
-    private const int MinRemoteTypeMetaLimit = 8192;
+    private const long MinRemoteTypeMetaVersions = 8192;
+    private const int MaxRemoteTypeMetaKeys = 8192;
 
     private readonly ReusableArray<TypeMeta> _typeMetaRefs = new();
     private readonly UInt64Map<TypeMeta> _typeMetasByHeader = new();
@@ -37,10 +38,10 @@ public sealed class ReadContext
     internal UInt64Map<TypeMeta>? _typeMetaByType;
     internal Type? _cachedTypeMetaType;
     internal TypeMeta? _cachedTypeMeta;
-    internal int _currentDynamicReadDepth;
+    private int _remainingDynamicReadDepth;
     private readonly Dictionary<object, int> _remoteSchemaVersionsByType = [];
     private readonly Config _config;
-    private int _totalAcceptedSchemaVersions;
+    private long _totalAcceptedSchemaVersions;
     internal long _remainingGraphMemoryBytes;
 
     public ReadContext(
@@ -57,6 +58,7 @@ public sealed class ReadContext
         CheckStructVersion = config.CheckStructVersion;
         RefReader = new RefReader();
         _maxDynamicReadDepth = config.MaxDepth;
+        _remainingDynamicReadDepth = _maxDynamicReadDepth;
         _config = config;
     }
 
@@ -192,6 +194,9 @@ public sealed class ReadContext
 
     internal bool TryGetTypeMetaByHeader(ulong header, out TypeMeta typeMeta)
     {
+        // This map is the sole accepted-metadata owner. Remote entries are published only after
+        // cold validation and limit checks; exact-local entries are published only after byte
+        // identity is proven. A hit therefore skips parsing, validation, and accounting.
         // UInt64Map reserves ulong.MaxValue as its empty-slot marker. A valid
         // cached TypeMeta header cannot use reserved global-header bits, but an
         // attacker-controlled cache lookup can happen before cold-path header
@@ -241,7 +246,16 @@ public sealed class ReadContext
         {
             throw new InvalidDataException("remote metadata is missing type identity");
         }
-        _remoteSchemaVersionsByType.TryGetValue(typeKey, out int versionsForType);
+        bool hasTypeKey =
+            _remoteSchemaVersionsByType.TryGetValue(typeKey, out int versionsForType);
+        if (!hasTypeKey &&
+            _remoteSchemaVersionsByType.Count >= MaxRemoteTypeMetaKeys)
+        {
+            throw new InvalidDataException(
+                $"Remote TypeMeta logical type limit exceeded: {_remoteSchemaVersionsByType.Count} >= {MaxRemoteTypeMetaKeys}. " +
+                "The data may be malicious.");
+        }
+
         int maxSchemaVersionsPerType = _config.MaxSchemaVersionsPerType;
         if (versionsForType >= maxSchemaVersionsPerType)
         {
@@ -250,14 +264,12 @@ public sealed class ReadContext
                 "The data may be malicious. If the data is not malicious, please increase MaxSchemaVersionsPerType.");
         }
 
-        int acceptedTypeCount = versionsForType == 0
+        long acceptedTypeCount = !hasTypeKey
             ? _remoteSchemaVersionsByType.Count + 1
             : _remoteSchemaVersionsByType.Count;
         int maxAverageSchemaVersionsPerType = _config.MaxAverageSchemaVersionsPerType;
-        long globalLimit = Math.Max(
-            MinRemoteTypeMetaLimit,
-            (long)acceptedTypeCount * maxAverageSchemaVersionsPerType);
-        if (_totalAcceptedSchemaVersions >= globalLimit)
+        if (_totalAcceptedSchemaVersions >= MinRemoteTypeMetaVersions &&
+            _totalAcceptedSchemaVersions / acceptedTypeCount >= maxAverageSchemaVersionsPerType)
         {
             throw new InvalidDataException(
                 $"Remote schema version limit exceeded: {_totalAcceptedSchemaVersions} metadata versions for " +
@@ -362,7 +374,7 @@ public sealed class ReadContext
     [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
     internal TypeMeta DecodeTypeMeta()
     {
-        return TypeMeta.Decode(Reader, _config.MaxTypeFields, _config.MaxTypeMetaBytes);
+        return TypeMeta.Decode(Reader, _config.MaxTypeFields, _config.MaxTypeMetaBytes, _config.MaxDepth);
     }
 
     internal void StoreTypeMeta(Type type, TypeMeta typeMeta)
@@ -466,22 +478,37 @@ public sealed class ReadContext
         _readTypeInfoByType.Remove(TypeMapKey.Get(type));
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     internal void IncreaseReadDepth()
     {
-        _currentDynamicReadDepth += 1;
-        if (_currentDynamicReadDepth > _maxDynamicReadDepth)
+        // Keep a countdown so the successful nested hot path needs one state load/store and a
+        // sign check. Failed roots retain the negative value until root-owned reset restores it.
+        int remaining = _remainingDynamicReadDepth - 1;
+        _remainingDynamicReadDepth = remaining;
+        if (remaining < 0)
         {
-            throw new InvalidDataException(
-                $"maximum dynamic object nesting depth ({_maxDynamicReadDepth}) exceeded. current depth: {_currentDynamicReadDepth}");
+            ThrowReadDepthExceeded(_maxDynamicReadDepth - remaining);
         }
     }
 
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private void ThrowReadDepthExceeded(int depth)
+    {
+        throw new InvalidDataException(
+            $"maximum dynamic object nesting depth ({_maxDynamicReadDepth}) exceeded. current depth: {depth}");
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     internal void DecreaseReadDepth()
     {
-        if (_currentDynamicReadDepth > 0)
-        {
-            _currentDynamicReadDepth -= 1;
-        }
+        _remainingDynamicReadDepth += 1;
+    }
+
+    internal int CurrentReadDepth => _maxDynamicReadDepth - _remainingDynamicReadDepth;
+
+    internal void ResetReadDepth()
+    {
+        _remainingDynamicReadDepth = _maxDynamicReadDepth;
     }
 
     internal void Reset()
@@ -493,7 +520,7 @@ public sealed class ReadContext
         _readTypeInfoByType.ClearKeys();
         _cachedTypeMetaType = null;
         _cachedTypeMeta = null;
-        _currentDynamicReadDepth = 0;
+        ResetReadDepth();
         _firstTypeMetaRef = null;
         _hasFirstTypeMetaRef = false;
         _typeMetaRefs.Clear();

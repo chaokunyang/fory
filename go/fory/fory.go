@@ -234,6 +234,7 @@ func New(opts ...Option) *Fory {
 	f.writeCtx.xlang = f.config.IsXlang
 
 	f.readCtx = NewReadContext(f.config.TrackRef)
+	f.readCtx.maxDepth = f.config.MaxDepth
 	f.readCtx.typeResolver = f.typeResolver
 	f.readCtx.refResolver = f.refResolver
 	f.readCtx.compatible = f.config.Compatible
@@ -527,6 +528,9 @@ func (f *Fory) RegisterExtensionByName(type_ any, name string, serializer Extens
 func (f *Fory) Reset() {
 	f.writeCtx.Reset()
 	f.readCtx.Reset()
+	if f.metaContext != nil {
+		f.metaContext.Reset()
+	}
 }
 
 // ============================================================================
@@ -546,6 +550,9 @@ func (f *Fory) Reset() {
 // For thread-safe usage, use threadsafe.Fory which copies the data internally.
 func (f *Fory) Serialize(value any) ([]byte, error) {
 	defer f.resetWriteState()
+	if !validateRootDecimal(f.writeCtx.Err(), value) {
+		return nil, f.writeCtx.TakeError()
+	}
 	// WriteData protocol header
 	writeHeader(f.writeCtx, f.config)
 
@@ -609,6 +616,9 @@ func (f *Fory) resetWriteState() {
 // Returns error if serialization fails.
 func (f *Fory) SerializeTo(buf *ByteBuffer, value any) error {
 	defer f.resetWriteState()
+	if !validateRootDecimal(f.writeCtx.Err(), value) {
+		return f.writeCtx.TakeError()
+	}
 
 	// Temporarily swap buffer
 	origBuffer := f.writeCtx.buffer
@@ -725,6 +735,9 @@ func (f *Fory) SerializeWithCallback(buffer *ByteBuffer, v any, callback func(Bu
 			f.writeCtx.outOfBand = false
 		}
 	}()
+	if !validateRootDecimal(f.writeCtx.Err(), v) {
+		return f.writeCtx.TakeError()
+	}
 	f.writeCtx.buffer = buffer
 	if f.metaContext != nil {
 		f.metaContext.Reset()
@@ -750,14 +763,16 @@ func (f *Fory) SerializeWithCallback(buffer *ByteBuffer, v any, callback func(Bu
 // DeserializeWithCallbackBuffers deserializes from buffer into the provided value (for streaming/cross-language use).
 // The third parameter is optional external buffers for out-of-band data (can be nil).
 func (f *Fory) DeserializeWithCallbackBuffers(buffer *ByteBuffer, v any, buffers []*ByteBuffer) error {
-	// Reset context and use the provided buffer
+	// Use the caller buffer only for this root; later stream roots reuse the
+	// original internal buffer.
+	origBuffer := f.readCtx.buffer
 	f.readCtx.buffer = buffer
 	defer func() {
 		f.readCtx.Reset()
 		if f.metaContext != nil {
 			f.metaContext.Reset()
 		}
-		f.readCtx.buffer = nil
+		f.readCtx.buffer = origBuffer
 		f.readCtx.outOfBandBuffers = nil
 	}()
 	// Set up out-of-band buffers if provided
@@ -881,11 +896,14 @@ func readHeaderSlow(ctx *ReadContext, bitmap byte) {
 // For thread-safe usage, use threadsafe.Serialize which copies the data internally.
 func Serialize[T any](f *Fory, value T) ([]byte, error) {
 	defer f.resetWriteState()
+	v := any(value)
+	if !validateRootDecimal(f.writeCtx.Err(), v) {
+		return nil, f.writeCtx.TakeError()
+	}
 	// WriteData protocol header
 	writeHeader(f.writeCtx, f.config)
 
 	// Fast path: type switch for common types (Go compiler can optimize this)
-	v := any(value)
 	var err error
 	switch val := v.(type) {
 	case bool:
@@ -928,7 +946,7 @@ func Serialize[T any](f *Fory, value T) ([]byte, error) {
 	case Decimal:
 		f.writeCtx.buffer.WriteInt8(NotNullValueFlag)
 		f.writeCtx.WriteTypeId(DECIMAL)
-		writeDecimalParts(f.writeCtx.buffer, val.Scale, &val.Unscaled)
+		writeValidDecimalParts(f.writeCtx.buffer, val.Scale, &val.Unscaled)
 	case string:
 		f.writeCtx.buffer.WriteInt8(NotNullValueFlag)
 		f.writeCtx.WriteTypeId(STRING)
@@ -1033,8 +1051,10 @@ func Serialize[T any](f *Fory, value T) ([]byte, error) {
 // For structs, it reads directly into the struct fields.
 // Note: Fory instance is NOT thread-safe. Use ThreadSafeFory for concurrent use.
 func Deserialize[T any](f *Fory, data []byte, target *T) error {
-	// Reuse context, reset and set new data
-	f.readCtx.Reset()
+	// Generic roots share the same reusable read and metadata owners as the
+	// method API, so both entry and every exit must start from a root-clean state.
+	f.resetReadState()
+	defer f.resetReadState()
 	f.readCtx.SetData(data)
 	f.readCtx.remainingGraphMemoryBytes = f.config.MaxGraphMemoryBytes
 

@@ -453,7 +453,6 @@ cdef class DataClassSerializer(Serializer):
                 self._apply_missing_defaults_slots(obj)
             else:
                 self._apply_missing_defaults_dict(obj.__dict__)
-        read_context.buffer.shrink_input_buffer()
         return obj
 
     cdef inline void _read_dict(self, ReadContext read_context, object obj):
@@ -486,7 +485,7 @@ cdef class DataClassSerializer(Serializer):
             for i in range(field_count):
                 field_info = &self._field_runtime_infos[i]
                 if field_info.field_exists == 0 or field_info.assign == 0:
-                    self._read_missing_field_value(read_context, field_info)
+                    self._read_field_value(read_context, field_info)
                     continue
                 field_value = self._read_field_value(read_context, field_info)
                 field_name = <object>field_info.field_name
@@ -496,7 +495,7 @@ cdef class DataClassSerializer(Serializer):
         for i in range(field_count):
             field_info = &self._field_runtime_infos[i]
             if field_info.field_exists == 0 or field_info.assign == 0:
-                self._read_missing_field_value(read_context, field_info)
+                self._read_field_value(read_context, field_info)
                 continue
             field_value = self._read_field_value(read_context, field_info)
             field_name = <object>field_info.field_name
@@ -538,7 +537,7 @@ cdef class DataClassSerializer(Serializer):
             for i in range(field_count):
                 field_info = &self._field_runtime_infos[i]
                 if field_info.field_exists == 0 or field_info.assign == 0:
-                    self._read_missing_field_value(read_context, field_info)
+                    self._read_field_value(read_context, field_info)
                     continue
                 field_value = self._read_field_value(read_context, field_info)
                 field_name = <object>field_info.field_name
@@ -548,7 +547,7 @@ cdef class DataClassSerializer(Serializer):
         for i in range(field_count):
             field_info = &self._field_runtime_infos[i]
             if field_info.field_exists == 0 or field_info.assign == 0:
-                self._read_missing_field_value(read_context, field_info)
+                self._read_field_value(read_context, field_info)
                 continue
             field_value = self._read_field_value(read_context, field_info)
             field_name = <object>field_info.field_name
@@ -560,15 +559,6 @@ cdef class DataClassSerializer(Serializer):
                     field_name,
                     self._validate_or_default(field_name, field_value, field_info),
                 )
-
-    cdef inline object _read_missing_field_value(self, ReadContext read_context, FieldRuntimeInfo *field_info):
-        cdef object resolver = self.type_resolver.resolver
-        cdef object previous = resolver._allow_unregistered_typedef
-        resolver._allow_unregistered_typedef = True
-        try:
-            return self._read_field_value(read_context, field_info)
-        finally:
-            resolver._allow_unregistered_typedef = previous
 
     cdef inline object _read_field_value(self, ReadContext read_context, FieldRuntimeInfo *field_info):
         cdef uint8_t type_id = field_info.basic_type_id

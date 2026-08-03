@@ -152,6 +152,23 @@ public class JsonGraphMemoryBudgetTest extends ForyJsonTestModels {
   }
 
   @Test
+  public void referenceArrayBatches() {
+    String input = childArray(1024);
+    long budget = 1023L * shallow(CountingChild.class);
+    CountingChild.creations = 0;
+    assertThrows(
+        ForyJsonException.class,
+        () -> jsonWithBudget(budget).fromJson(input, CountingChild[].class));
+    assertEquals(CountingChild.creations, 1023);
+
+    TypeRef<AtomicReferenceArray<CountingChild>> type =
+        new TypeRef<AtomicReferenceArray<CountingChild>>() {};
+    CountingChild.creations = 0;
+    assertThrows(ForyJsonException.class, () -> jsonWithBudget(budget).fromJson(input, type));
+    assertEquals(CountingChild.creations, 1023);
+  }
+
+  @Test
   public void unwrappedOwners() {
     long parentBytes = shallow(UnwrappedValue.class);
     UnwrappedValue absent = assertClassBudget("{}", UnwrappedValue.class, parentBytes);
@@ -351,6 +368,18 @@ public class JsonGraphMemoryBudgetTest extends ForyJsonTestModels {
 
   private static long linkedHashSetBytes(int slots) {
     return shallow(LinkedHashSet.class) + shallow(LinkedHashMap.class) + (long) slots * REF_BYTES;
+  }
+
+  private static String childArray(int size) {
+    StringBuilder input = new StringBuilder(size * 16);
+    input.append('[');
+    for (int i = 0; i < size; i++) {
+      if (i != 0) {
+        input.append(',');
+      }
+      input.append("{\"number\":").append(i).append('}');
+    }
+    return input.append(']').toString();
   }
 
   public static class MutableValue {

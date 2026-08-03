@@ -2974,6 +2974,10 @@ public final class ScalarCodecs {
     private static final int SHALLOW_BYTES =
         GraphMemoryEstimates.shallowObjectBytes(AtomicReferenceArray.class);
     private static final int ARRAY_BYTES = GraphMemoryEstimates.objectArrayBytes();
+    private static final int REFERENCE_BYTES = GraphMemoryEstimates.REFERENCE_BYTES;
+    private static final int REFERENCE_BATCH_SIZE = 1024;
+    private static final int REFERENCE_BATCH_MASK = REFERENCE_BATCH_SIZE - 1;
+    private static final int REFERENCE_BATCH_BYTES = REFERENCE_BATCH_SIZE * REFERENCE_BYTES;
 
     private final JsonTypeInfo valueTypeInfo;
 
@@ -3041,6 +3045,7 @@ public final class ScalarCodecs {
       int size = 0;
       Utf16ReaderCodec<Object> codec = valueTypeInfo.utf16Reader();
       do {
+        reserveReferenceBatch(reader, size);
         if (size == values.length) {
           values = Arrays.copyOf(values, values.length << 1);
         }
@@ -3065,6 +3070,7 @@ public final class ScalarCodecs {
       int size = 0;
       Utf8ReaderCodec<Object> codec = valueTypeInfo.utf8Reader();
       do {
+        reserveReferenceBatch(reader, size);
         if (size == values.length) {
           values = Arrays.copyOf(values, values.length << 1);
         }
@@ -3085,6 +3091,7 @@ public final class ScalarCodecs {
       Object[] values = new Object[8];
       int size = 0;
       do {
+        reserveReferenceBatch(reader, size);
         if (size == values.length) {
           values = Arrays.copyOf(values, values.length << 1);
         }
@@ -3096,8 +3103,15 @@ public final class ScalarCodecs {
 
     private static void finishArray(JsonReader reader, int size) {
       reader.reserveGraphMemory(
-          SHALLOW_BYTES + ARRAY_BYTES + (long) GraphMemoryEstimates.REFERENCE_BYTES * size);
+          SHALLOW_BYTES + ARRAY_BYTES + (size & REFERENCE_BATCH_MASK) * REFERENCE_BYTES);
       reader.exitDepth();
+    }
+
+    private static void reserveReferenceBatch(JsonReader reader, int size) {
+      // The final owner charge settles only the tail; complete 1024-slot batches are charged here.
+      if ((size & REFERENCE_BATCH_MASK) == REFERENCE_BATCH_MASK) {
+        reader.reserveGraphMemory(REFERENCE_BATCH_BYTES);
+      }
     }
   }
 

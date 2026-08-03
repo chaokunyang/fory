@@ -19,12 +19,15 @@
 
 package org.apache.fory.android;
 
+import java.time.Instant;
 import java.util.Arrays;
+import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.atomic.AtomicReferenceArray;
 import org.apache.fory.json.ForyJson;
 import org.apache.fory.json.annotation.JsonCreator;
+import org.apache.fory.json.annotation.JsonFormat;
 import org.apache.fory.json.annotation.JsonMixin;
 import org.apache.fory.json.annotation.JsonProperty;
 import org.apache.fory.json.annotation.JsonPropertyOrder;
@@ -102,6 +105,23 @@ public final class AndroidJsonScenarios {
     checkEquals(
         "decoded-value",
         json.fromJson("\"decoded-value\"", GeneratedJsonValueRecord.class).value());
+  }
+
+  public static void generatedFormatTimezone() {
+    ForyJson json = ForyJson.builder().build();
+    Instant instant = Instant.parse("2024-01-02T03:04:05Z");
+    FormatTimezoneModel value = new FormatTimezoneModel();
+    value.instant = instant;
+    value.instants = Arrays.asList(instant, instant.plusSeconds(3600));
+    String encoded = json.toJson(value);
+    checkEquals(
+        "{\"instant\":\"2024-01-02 11:04:05 +08:00\","
+            + "\"instants\":[\"2024-01-02 11:04:05 +08:00\","
+            + "\"2024-01-02 12:04:05 +08:00\"]}",
+        encoded);
+    FormatTimezoneModel decoded = json.fromJson(encoded, FormatTimezoneModel.class);
+    checkEquals(instant, decoded.instant);
+    checkEquals(value.instants, decoded.instants);
   }
 
   public static void manualCodecs() {
@@ -426,6 +446,15 @@ public final class AndroidJsonScenarios {
 
     @JsonCreator
     GeneratedJsonMixinValueRecordAnnotations(String value) {}
+  }
+
+  @JsonType
+  public static final class FormatTimezoneModel {
+    @JsonFormat(pattern = "uuuu-MM-dd HH:mm:ss XXX", timezone = "Asia/Shanghai")
+    public Instant instant;
+
+    @JsonFormat(pattern = "uuuu-MM-dd HH:mm:ss XXX", timezone = "Asia/Shanghai")
+    public List<Instant> instants;
   }
 
   private static void check(boolean condition) {

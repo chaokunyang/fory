@@ -27,6 +27,7 @@ import java.nio.charset.StandardCharsets;
 import java.sql.Date;
 import java.sql.Time;
 import java.sql.Timestamp;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -50,6 +51,7 @@ import org.apache.fory.json.annotation.JsonAnySetter;
 import org.apache.fory.json.annotation.JsonBase64;
 import org.apache.fory.json.annotation.JsonCodec;
 import org.apache.fory.json.annotation.JsonCreator;
+import org.apache.fory.json.annotation.JsonFormat;
 import org.apache.fory.json.annotation.JsonIgnore;
 import org.apache.fory.json.annotation.JsonMixin;
 import org.apache.fory.json.annotation.JsonProperty;
@@ -105,6 +107,7 @@ public final class ForyJsonExample {
         testMixinCodec();
         testBigDecimal();
         testSqlTypes();
+        testFormatTimezone();
         testClosedPackage();
       } finally {
         System.setOut(originalOut);
@@ -538,6 +541,24 @@ public final class ForyJsonExample {
     Preconditions.checkArgument(decoded.date.getTime() == 1_000L);
     Preconditions.checkArgument(decoded.time.getTime() == 2_000L);
     Preconditions.checkArgument(decoded.timestamp.getTime() == 3_000L);
+  }
+
+  private static void testFormatTimezone() {
+    ForyJson json = ForyJson.builder().build();
+    Instant instant = Instant.parse("2024-01-02T03:04:05Z");
+    FormatTimezoneValues value = new FormatTimezoneValues();
+    value.instant = instant;
+    value.instants = List.of(instant, instant.plusSeconds(3600));
+    String expected =
+        "{\"instant\":\"2024-01-02 11:04:05 +08:00\","
+            + "\"instants\":[\"2024-01-02 11:04:05 +08:00\","
+            + "\"2024-01-02 12:04:05 +08:00\"]}";
+    Preconditions.checkArgument(json.toJson(value).equals(expected));
+    byte[] bytes = json.toJsonBytes(value);
+    Preconditions.checkArgument(new String(bytes, StandardCharsets.UTF_8).equals(expected));
+    FormatTimezoneValues decoded = json.fromJson(bytes, FormatTimezoneValues.class);
+    Preconditions.checkArgument(decoded.instant.equals(instant));
+    Preconditions.checkArgument(decoded.instants.equals(value.instants));
   }
 
   public interface InheritedJsonConfig {
@@ -1199,6 +1220,15 @@ public final class ForyJsonExample {
     public Date date;
     public Time time;
     public Timestamp timestamp;
+  }
+
+  @JsonType
+  public static final class FormatTimezoneValues {
+    @JsonFormat(pattern = "uuuu-MM-dd HH:mm:ss XXX", timezone = "Asia/Shanghai")
+    public Instant instant;
+
+    @JsonFormat(pattern = "uuuu-MM-dd HH:mm:ss XXX", timezone = "Asia/Shanghai")
+    public List<Instant> instants;
   }
 
   @JsonMixin(target = JsonMixinTarget.class)

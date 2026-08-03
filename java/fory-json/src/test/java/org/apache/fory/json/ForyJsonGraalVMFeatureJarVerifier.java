@@ -66,7 +66,11 @@ public final class ForyJsonGraalVMFeatureJarVerifier {
           + "org.apache.fory.json.reader,"
           + "org.apache.fory.json.resolver,"
           + "org.apache.fory.json.writer";
-  private static final String RUNTIME_TARGETS = "org.apache.fory.json.codec.ScalarCodecs";
+  private static final String RUNTIME_TARGETS =
+      "org.apache.fory.json.codec.ScalarCodecs$HijrahDateCodec$Formatter,"
+          + "org.apache.fory.json.codec.ScalarCodecs$JapaneseDateCodec$Formatter,"
+          + "org.apache.fory.json.codec.ScalarCodecs$MinguoDateCodec$Formatter,"
+          + "org.apache.fory.json.codec.ScalarCodecs$ThaiBuddhistDateCodec$Formatter";
   private static final String NATIVE_IMAGE_ARGS =
       FEATURE_OPTION
           + " "

@@ -74,6 +74,7 @@ public class JsonFormatAnnotationTest extends ForyJsonTestModels {
   private static final String LOCAL_TIMESTAMP_PATTERN = "uuuu-MM-dd HH:mm:ss";
   private static final String TIMESTAMP_PATTERN = "uuuu-MM-dd HH:mm:ss XXX";
   private static final String ZONED_TIMESTAMP_PATTERN = "uuuu-MM-dd HH:mm:ss VV";
+  private static final String ZONE_NAME_TIMESTAMP_PATTERN = "uuuu-MM-dd HH:mm:ss z";
 
   @Factory(dataProvider = "enableCodegen")
   public JsonFormatAnnotationTest(boolean codegen) {
@@ -170,7 +171,8 @@ public class JsonFormatAnnotationTest extends ForyJsonTestModels {
     String input =
         "{\"local\":\"2024-01-02 11:04:05\","
             + "\"explicit\":\"2024-01-02 07:04:05 +04:00\","
-            + "\"explicitZone\":\"2024-01-02 04:04:05 Europe/Paris\"}";
+            + "\"explicitZone\":\"2024-01-02 04:04:05 Europe/Paris\","
+            + "\"zoneName\":\"2024-11-03 01:30:00 EST\"}";
     OffsetTimezoneFields value = json.fromJson(input, OffsetTimezoneFields.class);
     Instant instant = Instant.parse("2024-01-02T03:04:05Z");
     assertEquals(value.local.toInstant(), instant);
@@ -179,6 +181,8 @@ public class JsonFormatAnnotationTest extends ForyJsonTestModels {
     assertEquals(value.explicit.getOffset(), ZoneOffset.ofHours(4));
     assertEquals(value.explicitZone.toInstant(), instant);
     assertEquals(value.explicitZone.getOffset(), ZoneOffset.ofHours(1));
+    assertEquals(value.zoneName.toInstant(), Instant.parse("2024-11-03T06:30:00Z"));
+    assertEquals(value.zoneName.getOffset(), ZoneOffset.ofHours(-5));
     assertGeneratedWhenSupported(json, OffsetTimezoneFields.class);
   }
 
@@ -452,6 +456,9 @@ public class JsonFormatAnnotationTest extends ForyJsonTestModels {
 
     @JsonFormat(pattern = ZONED_TIMESTAMP_PATTERN, timezone = "Asia/Shanghai")
     public OffsetDateTime explicitZone;
+
+    @JsonFormat(pattern = ZONE_NAME_TIMESTAMP_PATTERN, timezone = "Asia/Shanghai")
+    public OffsetDateTime zoneName;
   }
 
   public static final class CreatorField {

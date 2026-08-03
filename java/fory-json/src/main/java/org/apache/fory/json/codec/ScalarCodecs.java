@@ -100,19 +100,6 @@ import org.apache.fory.type.Float16;
  * decimal timestamps.
  */
 public final class ScalarCodecs {
-  private static final DateTimeFormatter YEAR_MONTH_FORMATTER =
-      DateTimeFormatter.ofPattern("uuuu-MM");
-  private static final DateTimeFormatter MONTH_DAY_FORMATTER =
-      DateTimeFormatter.ofPattern("--MM-dd");
-  private static final DateTimeFormatter HIJRAH_DATE_FORMATTER =
-      DateTimeFormatter.ISO_LOCAL_DATE.withChronology(HijrahChronology.INSTANCE);
-  private static final DateTimeFormatter JAPANESE_DATE_FORMATTER =
-      DateTimeFormatter.ISO_LOCAL_DATE.withChronology(JapaneseChronology.INSTANCE);
-  private static final DateTimeFormatter MINGUO_DATE_FORMATTER =
-      DateTimeFormatter.ISO_LOCAL_DATE.withChronology(MinguoChronology.INSTANCE);
-  private static final DateTimeFormatter THAI_BUDDHIST_DATE_FORMATTER =
-      DateTimeFormatter.ISO_LOCAL_DATE.withChronology(ThaiBuddhistChronology.INSTANCE);
-
   private ScalarCodecs() {}
 
   @Internal
@@ -2109,12 +2096,16 @@ public final class ScalarCodecs {
   public static final class YearMonthCodec implements JsonValueCodec<YearMonth> {
     public static final YearMonthCodec INSTANCE = new YearMonthCodec();
 
+    private static final class Formatter {
+      private static final DateTimeFormatter INSTANCE = DateTimeFormatter.ofPattern("uuuu-MM");
+    }
+
     @Override
     public void writeString(StringJsonWriter writer, YearMonth value) {
       if (value == null) {
         writer.writeNull();
       } else {
-        writer.writeTemporal(value, YEAR_MONTH_FORMATTER);
+        writer.writeTemporal(value, Formatter.INSTANCE);
       }
     }
 
@@ -2123,7 +2114,7 @@ public final class ScalarCodecs {
       if (value == null) {
         writer.writeNull();
       } else {
-        writer.writeTemporal(value, YEAR_MONTH_FORMATTER);
+        writer.writeTemporal(value, Formatter.INSTANCE);
       }
     }
 
@@ -2146,12 +2137,16 @@ public final class ScalarCodecs {
   public static final class MonthDayCodec implements JsonValueCodec<MonthDay> {
     public static final MonthDayCodec INSTANCE = new MonthDayCodec();
 
+    private static final class Formatter {
+      private static final DateTimeFormatter INSTANCE = DateTimeFormatter.ofPattern("--MM-dd");
+    }
+
     @Override
     public void writeString(StringJsonWriter writer, MonthDay value) {
       if (value == null) {
         writer.writeNull();
       } else {
-        writer.writeTemporal(value, MONTH_DAY_FORMATTER);
+        writer.writeTemporal(value, Formatter.INSTANCE);
       }
     }
 
@@ -2160,7 +2155,7 @@ public final class ScalarCodecs {
       if (value == null) {
         writer.writeNull();
       } else {
-        writer.writeTemporal(value, MONTH_DAY_FORMATTER);
+        writer.writeTemporal(value, Formatter.INSTANCE);
       }
     }
 
@@ -2291,15 +2286,22 @@ public final class ScalarCodecs {
     }
   }
 
+  // Registry publication initializes chronology codec classes. Keep formatter setup behind
+  // method-use holders because JDK chronology initialization may require runtime environment state.
   public static final class HijrahDateCodec implements JsonValueCodec<HijrahDate> {
     public static final HijrahDateCodec INSTANCE = new HijrahDateCodec();
+
+    private static final class Formatter {
+      private static final DateTimeFormatter INSTANCE =
+          DateTimeFormatter.ISO_LOCAL_DATE.withChronology(HijrahChronology.INSTANCE);
+    }
 
     @Override
     public void writeString(StringJsonWriter writer, HijrahDate value) {
       if (value == null) {
         writer.writeNull();
       } else {
-        writer.writeString(HIJRAH_DATE_FORMATTER.format(value));
+        writer.writeString(Formatter.INSTANCE.format(value));
       }
     }
 
@@ -2308,7 +2310,7 @@ public final class ScalarCodecs {
       if (value == null) {
         writer.writeNull();
       } else {
-        writer.writeString(HIJRAH_DATE_FORMATTER.format(value));
+        writer.writeString(Formatter.INSTANCE.format(value));
       }
     }
 
@@ -2319,7 +2321,7 @@ public final class ScalarCodecs {
         return null;
       }
       try {
-        return HijrahDate.from(HIJRAH_DATE_FORMATTER.parse(value));
+        return HijrahDate.from(Formatter.INSTANCE.parse(value));
       } catch (RuntimeException e) {
         throw invalidString(HijrahDate.class, value, e);
       }
@@ -2332,7 +2334,7 @@ public final class ScalarCodecs {
         return null;
       }
       try {
-        return HijrahDate.from(HIJRAH_DATE_FORMATTER.parse(value));
+        return HijrahDate.from(Formatter.INSTANCE.parse(value));
       } catch (RuntimeException e) {
         throw invalidString(HijrahDate.class, value, e);
       }
@@ -2345,7 +2347,7 @@ public final class ScalarCodecs {
         return null;
       }
       try {
-        return HijrahDate.from(HIJRAH_DATE_FORMATTER.parse(value));
+        return HijrahDate.from(Formatter.INSTANCE.parse(value));
       } catch (RuntimeException e) {
         throw invalidString(HijrahDate.class, value, e);
       }
@@ -2355,12 +2357,17 @@ public final class ScalarCodecs {
   public static final class JapaneseDateCodec implements JsonValueCodec<JapaneseDate> {
     public static final JapaneseDateCodec INSTANCE = new JapaneseDateCodec();
 
+    private static final class Formatter {
+      private static final DateTimeFormatter INSTANCE =
+          DateTimeFormatter.ISO_LOCAL_DATE.withChronology(JapaneseChronology.INSTANCE);
+    }
+
     @Override
     public void writeString(StringJsonWriter writer, JapaneseDate value) {
       if (value == null) {
         writer.writeNull();
       } else {
-        writer.writeString(JAPANESE_DATE_FORMATTER.format(value));
+        writer.writeString(Formatter.INSTANCE.format(value));
       }
     }
 
@@ -2369,7 +2376,7 @@ public final class ScalarCodecs {
       if (value == null) {
         writer.writeNull();
       } else {
-        writer.writeString(JAPANESE_DATE_FORMATTER.format(value));
+        writer.writeString(Formatter.INSTANCE.format(value));
       }
     }
 
@@ -2380,7 +2387,7 @@ public final class ScalarCodecs {
         return null;
       }
       try {
-        return JapaneseDate.from(JAPANESE_DATE_FORMATTER.parse(value));
+        return JapaneseDate.from(Formatter.INSTANCE.parse(value));
       } catch (RuntimeException e) {
         throw invalidString(JapaneseDate.class, value, e);
       }
@@ -2393,7 +2400,7 @@ public final class ScalarCodecs {
         return null;
       }
       try {
-        return JapaneseDate.from(JAPANESE_DATE_FORMATTER.parse(value));
+        return JapaneseDate.from(Formatter.INSTANCE.parse(value));
       } catch (RuntimeException e) {
         throw invalidString(JapaneseDate.class, value, e);
       }
@@ -2406,7 +2413,7 @@ public final class ScalarCodecs {
         return null;
       }
       try {
-        return JapaneseDate.from(JAPANESE_DATE_FORMATTER.parse(value));
+        return JapaneseDate.from(Formatter.INSTANCE.parse(value));
       } catch (RuntimeException e) {
         throw invalidString(JapaneseDate.class, value, e);
       }
@@ -2416,12 +2423,17 @@ public final class ScalarCodecs {
   public static final class MinguoDateCodec implements JsonValueCodec<MinguoDate> {
     public static final MinguoDateCodec INSTANCE = new MinguoDateCodec();
 
+    private static final class Formatter {
+      private static final DateTimeFormatter INSTANCE =
+          DateTimeFormatter.ISO_LOCAL_DATE.withChronology(MinguoChronology.INSTANCE);
+    }
+
     @Override
     public void writeString(StringJsonWriter writer, MinguoDate value) {
       if (value == null) {
         writer.writeNull();
       } else {
-        writer.writeString(MINGUO_DATE_FORMATTER.format(value));
+        writer.writeString(Formatter.INSTANCE.format(value));
       }
     }
 
@@ -2430,7 +2442,7 @@ public final class ScalarCodecs {
       if (value == null) {
         writer.writeNull();
       } else {
-        writer.writeString(MINGUO_DATE_FORMATTER.format(value));
+        writer.writeString(Formatter.INSTANCE.format(value));
       }
     }
 
@@ -2441,7 +2453,7 @@ public final class ScalarCodecs {
         return null;
       }
       try {
-        return MinguoDate.from(MINGUO_DATE_FORMATTER.parse(value));
+        return MinguoDate.from(Formatter.INSTANCE.parse(value));
       } catch (RuntimeException e) {
         throw invalidString(MinguoDate.class, value, e);
       }
@@ -2454,7 +2466,7 @@ public final class ScalarCodecs {
         return null;
       }
       try {
-        return MinguoDate.from(MINGUO_DATE_FORMATTER.parse(value));
+        return MinguoDate.from(Formatter.INSTANCE.parse(value));
       } catch (RuntimeException e) {
         throw invalidString(MinguoDate.class, value, e);
       }
@@ -2467,7 +2479,7 @@ public final class ScalarCodecs {
         return null;
       }
       try {
-        return MinguoDate.from(MINGUO_DATE_FORMATTER.parse(value));
+        return MinguoDate.from(Formatter.INSTANCE.parse(value));
       } catch (RuntimeException e) {
         throw invalidString(MinguoDate.class, value, e);
       }
@@ -2477,12 +2489,17 @@ public final class ScalarCodecs {
   public static final class ThaiBuddhistDateCodec implements JsonValueCodec<ThaiBuddhistDate> {
     public static final ThaiBuddhistDateCodec INSTANCE = new ThaiBuddhistDateCodec();
 
+    private static final class Formatter {
+      private static final DateTimeFormatter INSTANCE =
+          DateTimeFormatter.ISO_LOCAL_DATE.withChronology(ThaiBuddhistChronology.INSTANCE);
+    }
+
     @Override
     public void writeString(StringJsonWriter writer, ThaiBuddhistDate value) {
       if (value == null) {
         writer.writeNull();
       } else {
-        writer.writeString(THAI_BUDDHIST_DATE_FORMATTER.format(value));
+        writer.writeString(Formatter.INSTANCE.format(value));
       }
     }
 
@@ -2491,7 +2508,7 @@ public final class ScalarCodecs {
       if (value == null) {
         writer.writeNull();
       } else {
-        writer.writeString(THAI_BUDDHIST_DATE_FORMATTER.format(value));
+        writer.writeString(Formatter.INSTANCE.format(value));
       }
     }
 
@@ -2502,7 +2519,7 @@ public final class ScalarCodecs {
         return null;
       }
       try {
-        return ThaiBuddhistDate.from(THAI_BUDDHIST_DATE_FORMATTER.parse(value));
+        return ThaiBuddhistDate.from(Formatter.INSTANCE.parse(value));
       } catch (RuntimeException e) {
         throw invalidString(ThaiBuddhistDate.class, value, e);
       }
@@ -2515,7 +2532,7 @@ public final class ScalarCodecs {
         return null;
       }
       try {
-        return ThaiBuddhistDate.from(THAI_BUDDHIST_DATE_FORMATTER.parse(value));
+        return ThaiBuddhistDate.from(Formatter.INSTANCE.parse(value));
       } catch (RuntimeException e) {
         throw invalidString(ThaiBuddhistDate.class, value, e);
       }
@@ -2528,7 +2545,7 @@ public final class ScalarCodecs {
         return null;
       }
       try {
-        return ThaiBuddhistDate.from(THAI_BUDDHIST_DATE_FORMATTER.parse(value));
+        return ThaiBuddhistDate.from(Formatter.INSTANCE.parse(value));
       } catch (RuntimeException e) {
         throw invalidString(ThaiBuddhistDate.class, value, e);
       }

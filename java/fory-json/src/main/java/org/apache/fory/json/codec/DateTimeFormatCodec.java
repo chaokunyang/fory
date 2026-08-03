@@ -41,6 +41,7 @@ import java.time.chrono.MinguoDate;
 import java.time.chrono.ThaiBuddhistChronology;
 import java.time.chrono.ThaiBuddhistDate;
 import java.time.format.DateTimeFormatter;
+import java.time.temporal.ChronoField;
 import java.time.temporal.TemporalAccessor;
 import java.time.temporal.TemporalQueries;
 import java.util.Locale;
@@ -201,9 +202,15 @@ final class DateTimeFormatCodec implements JsonValueCodec<Object> {
     LocalDateTime dateTime = LocalDateTime.from(parsed);
     ZoneOffset offset = parsed.query(TemporalQueries.offset());
     // An effective region ZoneId does not synthesize OFFSET_SECONDS. Keep an explicit offset
-    // authoritative and derive only a missing one from the effective parsed zone.
+    // authoritative. The rule-owned offset is allocation-free for historical second-level offsets;
+    // only reconstruct it when a zone name selected the other offset during an overlap.
     if (offset == null) {
       offset = parsed.query(TemporalQueries.zone()).getRules().getOffset(dateTime);
+      long localEpochSeconds = dateTime.toEpochSecond(ZoneOffset.UTC);
+      long instantSeconds = parsed.getLong(ChronoField.INSTANT_SECONDS);
+      if (localEpochSeconds - offset.getTotalSeconds() != instantSeconds) {
+        offset = ZoneOffset.ofTotalSeconds(Math.toIntExact(localEpochSeconds - instantSeconds));
+      }
     }
     return OffsetDateTime.of(dateTime, offset);
   }

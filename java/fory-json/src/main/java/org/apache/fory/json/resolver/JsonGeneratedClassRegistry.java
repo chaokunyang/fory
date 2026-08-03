@@ -17,7 +17,7 @@
  * under the License.
  */
 
-package org.apache.fory.json;
+package org.apache.fory.json.resolver;
 
 import java.lang.reflect.Type;
 import java.util.Collections;
@@ -26,6 +26,7 @@ import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Set;
 import org.apache.fory.annotation.Internal;
+import org.apache.fory.json.codegen.JsonCodegenKey;
 import org.apache.fory.json.resolver.JsonSharedRegistry.GeneratedClasses;
 
 /** Frozen Native Image mapping from JSON configuration semantics to generated classes. */
@@ -37,11 +38,13 @@ public final class JsonGeneratedClassRegistry {
 
   private JsonGeneratedClassRegistry() {}
 
-  static synchronized Set<Class<?>> register(
-      JsonCodegenKey key, GeneratedClasses generatedClasses) {
+  /** Publishes one hosted configuration's generated classes during Native Image analysis. */
+  public static synchronized Set<Class<?>> register(
+      JsonCodegenKey key, JsonSharedRegistry hostedRegistry) {
     if (frozen) {
       throw new IllegalStateException("Fory JSON generated class registry is frozen");
     }
+    GeneratedClasses generatedClasses = hostedRegistry.generatedClasses();
     MutableConfiguration configuration = pending.get(key);
     if (configuration == null) {
       configuration = new MutableConfiguration();
@@ -53,7 +56,8 @@ public final class JsonGeneratedClassRegistry {
     return added;
   }
 
-  static synchronized void freeze() {
+  /** Finalizes generated class lookup after Native Image analysis. */
+  public static synchronized void freeze() {
     if (frozen) {
       return;
     }
@@ -69,15 +73,11 @@ public final class JsonGeneratedClassRegistry {
     return Collections.unmodifiableMap(snapshot);
   }
 
-  /** Returns the immutable generated classes for {@code key}, or {@code null}. */
-  @Internal
-  public static Configuration configuration(JsonCodegenKey key) {
+  static Configuration configuration(JsonCodegenKey key) {
     return configurations.get(key);
   }
 
-  /** Immutable generated classes for one configuration. */
-  @Internal
-  public static final class Configuration {
+  static final class Configuration {
     private final Map<Class<?>, Class<?>> stringWriters;
     private final Map<Class<?>, Class<?>> utf8Writers;
     private final Map<Class<?>, Class<?>> latin1Readers;
@@ -96,31 +96,31 @@ public final class JsonGeneratedClassRegistry {
       utf8CollectionReaders = immutable(source.utf8CollectionReaders);
     }
 
-    public Class<?> stringWriter(Class<?> type) {
+    Class<?> stringWriter(Class<?> type) {
       return stringWriters.get(type);
     }
 
-    public Class<?> utf8Writer(Class<?> type) {
+    Class<?> utf8Writer(Class<?> type) {
       return utf8Writers.get(type);
     }
 
-    public Class<?> latin1Reader(Class<?> type) {
+    Class<?> latin1Reader(Class<?> type) {
       return latin1Readers.get(type);
     }
 
-    public Class<?> utf16Reader(Class<?> type) {
+    Class<?> utf16Reader(Class<?> type) {
       return utf16Readers.get(type);
     }
 
-    public Class<?> utf8Reader(Class<?> type) {
+    Class<?> utf8Reader(Class<?> type) {
       return utf8Readers.get(type);
     }
 
-    public Class<?> utf8CollectionWriter(Type type) {
+    Class<?> utf8CollectionWriter(Type type) {
       return utf8CollectionWriters.get(type);
     }
 
-    public Class<?> utf8CollectionReader(Type type) {
+    Class<?> utf8CollectionReader(Type type) {
       return utf8CollectionReaders.get(type);
     }
 

@@ -17,10 +17,11 @@
  * under the License.
  */
 
-package org.apache.fory.json;
+package org.apache.fory.json.codegen;
 
 import java.util.Objects;
 import org.apache.fory.annotation.Internal;
+import org.apache.fory.json.PropertyNamingStrategy;
 
 /** Immutable identity for settings which can change generated Fory JSON source. */
 @Internal
@@ -31,7 +32,7 @@ public final class JsonCodegenKey {
   private final String codecRegistryKey;
   private final String mixinKey;
 
-  JsonCodegenKey(
+  public JsonCodegenKey(
       boolean writeNullFields,
       boolean propertyDiscoveryEnabled,
       PropertyNamingStrategy propertyNamingStrategy,

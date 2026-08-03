@@ -30,6 +30,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.apache.fory.annotation.Internal;
+import org.apache.fory.json.codegen.JsonCodegenKey;
 import org.apache.fory.json.resolver.CodecRegistry;
 
 /**

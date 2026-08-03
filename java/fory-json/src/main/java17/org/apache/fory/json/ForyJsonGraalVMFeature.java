@@ -60,8 +60,10 @@ import org.apache.fory.json.annotation.JsonUnwrapped;
 import org.apache.fory.json.annotation.JsonValue;
 import org.apache.fory.json.codec.Base64ByteArrayCodec;
 import org.apache.fory.json.codec.ObjectCodec;
+import org.apache.fory.json.codegen.JsonCodegenKey;
 import org.apache.fory.json.meta.JsonCreatorInfo;
 import org.apache.fory.json.meta.JsonFieldAccessor;
+import org.apache.fory.json.resolver.JsonGeneratedClassRegistry;
 import org.apache.fory.json.resolver.JsonSharedRegistry;
 import org.apache.fory.json.resolver.JsonSharedRegistry.JsonMixinView;
 import org.apache.fory.json.resolver.JsonTypeResolver;
@@ -282,8 +284,7 @@ final class ForyJsonGraalVMFeature implements Feature {
                 "Cannot generate Fory JSON codecs for " + model.getName(), e);
           }
           Set<Class<?>> generatedClasses =
-              JsonGeneratedClassRegistry.register(
-                  entry.getKey(), configuration.registry.generatedClasses());
+              JsonGeneratedClassRegistry.register(entry.getKey(), configuration.registry);
           for (Class<?> generatedClass : generatedClasses) {
             registerGeneratedClass(generatedClass);
           }

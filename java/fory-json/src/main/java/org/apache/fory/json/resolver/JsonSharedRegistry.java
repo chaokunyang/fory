@@ -98,10 +98,7 @@ import org.apache.fory.codegen.CodeGenerator;
 import org.apache.fory.codegen.GeneratedClassNames;
 import org.apache.fory.exception.InsecureException;
 import org.apache.fory.json.ForyJsonException;
-import org.apache.fory.json.JsonCodegenKey;
 import org.apache.fory.json.JsonConfig;
-import org.apache.fory.json.JsonGeneratedClassRegistry;
-import org.apache.fory.json.JsonGeneratedClassRegistry.Configuration;
 import org.apache.fory.json.JsonTypeCheckContext;
 import org.apache.fory.json.JsonTypeChecker;
 import org.apache.fory.json.PropertyNamingStrategy;
@@ -122,10 +119,12 @@ import org.apache.fory.json.codec.ObjectCodec;
 import org.apache.fory.json.codec.ScalarCodecs;
 import org.apache.fory.json.codec.SqlJsonCodecs;
 import org.apache.fory.json.codegen.JsonCodegen;
+import org.apache.fory.json.codegen.JsonCodegenKey;
 import org.apache.fory.json.codegen.JsonJITContext;
 import org.apache.fory.json.meta.JsonAnySetterAccessor;
 import org.apache.fory.json.meta.JsonFieldAccessor;
 import org.apache.fory.json.meta.JsonFieldKind;
+import org.apache.fory.json.resolver.JsonGeneratedClassRegistry.Configuration;
 import org.apache.fory.platform.AndroidSupport;
 import org.apache.fory.platform.GraalvmSupport;
 import org.apache.fory.reflect.ReflectionUtils;
@@ -276,8 +275,7 @@ public final class JsonSharedRegistry {
   }
 
   /** Returns a complete immutable snapshot of every synchronously generated class. */
-  @Internal
-  public GeneratedClasses generatedClasses() {
+  GeneratedClasses generatedClasses() {
     if (codegen == null || asyncCompilationEnabled) {
       throw new IllegalStateException("Generated class snapshots require synchronous codegen");
     }
@@ -309,9 +307,7 @@ public final class JsonSharedRegistry {
     return Collections.unmodifiableMap(classes);
   }
 
-  /** Immutable hosted snapshot of generated classes for one configuration. */
-  @Internal
-  public static final class GeneratedClasses {
+  static final class GeneratedClasses {
     private final Map<Class<?>, Class<?>> stringWriters;
     private final Map<Class<?>, Class<?>> utf8Writers;
     private final Map<Class<?>, Class<?>> latin1Readers;
@@ -337,31 +333,31 @@ public final class JsonSharedRegistry {
       this.utf8CollectionReaders = utf8CollectionReaders;
     }
 
-    public Map<Class<?>, Class<?>> stringWriters() {
+    Map<Class<?>, Class<?>> stringWriters() {
       return stringWriters;
     }
 
-    public Map<Class<?>, Class<?>> utf8Writers() {
+    Map<Class<?>, Class<?>> utf8Writers() {
       return utf8Writers;
     }
 
-    public Map<Class<?>, Class<?>> latin1Readers() {
+    Map<Class<?>, Class<?>> latin1Readers() {
       return latin1Readers;
     }
 
-    public Map<Class<?>, Class<?>> utf16Readers() {
+    Map<Class<?>, Class<?>> utf16Readers() {
       return utf16Readers;
     }
 
-    public Map<Class<?>, Class<?>> utf8Readers() {
+    Map<Class<?>, Class<?>> utf8Readers() {
       return utf8Readers;
     }
 
-    public Map<Type, Class<?>> utf8CollectionWriters() {
+    Map<Type, Class<?>> utf8CollectionWriters() {
       return utf8CollectionWriters;
     }
 
-    public Map<Type, Class<?>> utf8CollectionReaders() {
+    Map<Type, Class<?>> utf8CollectionReaders() {
       return utf8CollectionReaders;
     }
   }

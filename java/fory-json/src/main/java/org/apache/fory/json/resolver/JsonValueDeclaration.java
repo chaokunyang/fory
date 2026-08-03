@@ -174,10 +174,7 @@ final class JsonValueDeclaration {
         && (registry.annotation(type, field, JsonRawValue.class) != null)
             == (registry.annotation(type, method, JsonRawValue.class) != null)) {
       members.clear();
-      members.add(
-          generatedCodec != null && generatedCodec.validatedAccessor(method) != null
-              ? method
-              : field);
+      members.add(method);
     }
   }
 

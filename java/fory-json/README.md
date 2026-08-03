@@ -376,8 +376,11 @@ transport boundary when parsing untrusted input.
 
 Builder mutation after `build()` does not modify an existing `ForyJson` runtime.
 
-On Android and in a GraalVM native image, runtime code generation and asynchronous compilation are
-automatically disabled. Every other builder option keeps the behavior described above.
+On Android, runtime code generation and asynchronous compilation are disabled. In a GraalVM native
+image, runtime compilation is unavailable; configurations returned by a reachable
+`ForyJsonProvider` use codecs generated while the image is built, and other configurations use
+interpreted codecs with build-time-prepared access metadata. Every other builder option keeps the
+behavior described above.
 
 ## JSON annotations
 
@@ -388,13 +391,15 @@ and `JsonValue`. `JsonType` is a separate build-time generation marker. They are
 not Jackson, Gson, or Fory binary-protocol compatibility annotations.
 
 `JsonType` asks the annotation processor to generate direct property and creator operations plus
-exact retention rules. It is not inherited, so annotate each eligible concrete model that needs a
-generated companion. A directly annotated `JsonValue` Record also receives a companion for its
-value accessor and canonical constructor. Ordinary unannotated classes may still use reflection; on
-Android they need application-authored exact R8 rules. Android-desugared Records require
-processor-generated operations from either a direct `JsonType` declaration or a compiled exact
-`JsonMixin` pair. A directly annotated model that uses the default object codec fails during codec
-creation if its generated companion is missing.
+exact retention rules on the JVM and Android. It is not inherited, so annotate each eligible
+concrete model that needs a generated companion on those runtimes. A directly annotated
+`JsonValue` Record also receives a companion for its value accessor and canonical constructor.
+Ordinary unannotated classes may still use reflection; on Android they need application-authored
+exact R8 rules. Android-desugared Records require processor-generated operations from either a
+direct `JsonType` declaration or a compiled exact `JsonMixin` pair. Outside Native Image, a
+directly annotated model that uses the default object codec fails during codec creation if its
+generated companion is missing. GraalVM Native Image discovers `JsonType` directly and does not use
+annotation-processor output.
 See the [GraalVM guide](../../docs/guide/java/graalvm-support.md) and
 [Android guide](../../docs/guide/java/android-support.md) for the platform workflows.
 
@@ -454,9 +459,9 @@ A `JsonCodec` supplied by a Mixin is the target's effective annotation. An exact
 `registerCodec` registration still wins, while the effective type annotation wins over a built-in
 mapping.
 
-On Android and GraalVM Native Image, compile non-empty Mixins with the Fory annotation processor
-so required generated operations and platform configuration are available. See the platform guides
-linked above.
+On Android, compile non-empty Mixins with the Fory annotation processor so required generated
+operations and platform configuration are available. GraalVM Native Image discovers reachable
+Mixins directly. See the platform guides linked above.
 
 ### `JsonProperty`
 
@@ -1290,9 +1295,10 @@ no-argument constructor. One instance is shared by all annotated sites and concu
 the built `ForyJson`, so it must be thread-safe. Use `registerCodec(Target.class, instance)` when a
 complete-value codec needs configuration.
 
-In a named Java module, export or open the codec package to `org.apache.fory.json`. When an inherited
-type-declaration codec is used for a more specific target, every decoded value must be null or
-assignable to that target.
+Outside GraalVM Native Image, a named Java module must export or open the codec package to
+`org.apache.fory.json`. Native Image prepares annotation-codec constructors during image
+construction and does not require that package access. When an inherited type-declaration codec is
+used for a more specific target, every decoded value must be null or assignable to that target.
 
 The annotation has the same FIELD, METHOD, and PARAMETER behavior on the JVM, Android, and GraalVM
 Native Image. Ordinary Android classes may omit `JsonType` and provide equivalent exact rules.

@@ -26,7 +26,10 @@ import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.lang.reflect.Type;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 import org.apache.fory.annotation.Internal;
+import org.apache.fory.collection.ClassValueCache;
 import org.apache.fory.json.ForyJsonException;
 import org.apache.fory.json.PropertyNamingStrategy;
 import org.apache.fory.json.annotation.JsonCodec;
@@ -50,6 +53,7 @@ import org.apache.fory.json.resolver.JsonTypeResolver;
 import org.apache.fory.json.writer.StringJsonWriter;
 import org.apache.fory.json.writer.Utf8JsonWriter;
 import org.apache.fory.platform.AndroidSupport;
+import org.apache.fory.platform.GraalvmSupport;
 import org.apache.fory.platform.internal._JDKAccess;
 import org.apache.fory.reflect.ObjectInstantiator;
 import org.apache.fory.reflect.TypeRef;
@@ -154,6 +158,24 @@ public class ObjectCodec<T> implements JsonValueCodec<T> {
         skippedNames,
         unwrappedInfo,
         instantiator);
+  }
+
+  /** Returns whether hosted metadata must retain this method for object discovery. */
+  @Internal
+  public static boolean usesJsonMetadata(Method method, boolean record) {
+    return ObjectCodecBuilder.usesJsonMetadata(method, record);
+  }
+
+  /** Returns whether hosted metadata must retain this method's return type. */
+  @Internal
+  public static boolean usesJsonReturn(Method method) {
+    return ObjectCodecBuilder.usesJsonReturn(method);
+  }
+
+  /** Returns whether hosted metadata must retain this method's parameter types. */
+  @Internal
+  public static boolean usesJsonParameters(Method method) {
+    return ObjectCodecBuilder.usesJsonParameters(method);
   }
 
   public final Class<?> type() {
@@ -1392,6 +1414,11 @@ public class ObjectCodec<T> implements JsonValueCodec<T> {
 
   @Internal
   public static final class AnyInfo {
+    // Hosted discovery and runtime codec construction both resolve Any setters through
+    // anySetterHandle, so the image heap owns the single cache of prepared handles.
+    private static final ClassValueCache<ConcurrentMap<Method, MethodHandle>>
+        NATIVE_SETTER_HANDLES = ClassValueCache.newClassKeyCache(32);
+
     private final Field writeField;
     private final Method writeGetter;
     private final Field readField;
@@ -1439,7 +1466,7 @@ public class ObjectCodec<T> implements JsonValueCodec<T> {
       setterHandle =
           readSetter == null || generatedSetter != null || AndroidSupport.IS_ANDROID
               ? null
-              : methodHandle(readSetter);
+              : anySetterHandle(readSetter);
       if (readSetter != null && generatedSetter == null && AndroidSupport.IS_ANDROID) {
         readSetter.setAccessible(true);
       }
@@ -1565,7 +1592,18 @@ public class ObjectCodec<T> implements JsonValueCodec<T> {
       }
     }
 
-    private static MethodHandle methodHandle(Method method) {
+    /** Returns the invocation handle for one {@code JsonAnySetter} method. */
+    @Internal
+    public static MethodHandle anySetterHandle(Method method) {
+      if (GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE) {
+        ConcurrentMap<Method, MethodHandle> handles =
+            NATIVE_SETTER_HANDLES.get(method.getDeclaringClass(), ConcurrentHashMap::new);
+        return handles.computeIfAbsent(method, AnyInfo::newAnySetterHandle);
+      }
+      return newAnySetterHandle(method);
+    }
+
+    private static MethodHandle newAnySetterHandle(Method method) {
       try {
         return _JDKAccess._trustedLookup(method.getDeclaringClass()).unreflect(method);
       } catch (IllegalAccessException e) {

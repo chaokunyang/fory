@@ -19,6 +19,7 @@
 
 package org.apache.fory.json.codec;
 
+import java.lang.invoke.MethodHandle;
 import java.lang.reflect.Type;
 import java.math.BigDecimal;
 import java.math.BigInteger;
@@ -46,6 +47,8 @@ import org.apache.fory.json.resolver.JsonTypeResolver;
 import org.apache.fory.json.writer.JsonWriter;
 import org.apache.fory.json.writer.StringJsonWriter;
 import org.apache.fory.json.writer.Utf8JsonWriter;
+import org.apache.fory.platform.GraalvmSupport;
+import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.reflect.TypeRef;
 
 /**
@@ -314,6 +317,16 @@ public abstract class MapCodec<T extends Map<?, ?>> implements JsonValueCodec<T>
         return TreeMap::new;
       }
       return () -> new LinkedHashMap<>(0);
+    }
+    if (GraalvmSupport.isGraalRuntime()) {
+      MethodHandle constructor = ReflectionUtils.getCtrHandle(rawType, new Class<?>[0]);
+      return () -> {
+        try {
+          return (Map<Object, Object>) constructor.invoke();
+        } catch (Throwable e) {
+          throw new ForyJsonException("Cannot create map " + rawType, e);
+        }
+      };
     }
     return () -> {
       try {

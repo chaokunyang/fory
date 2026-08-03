@@ -764,18 +764,7 @@ final class GeneratedJsonCodecSourceWriter {
     if (model.anySetter != null) {
       renderAnySetter(source, model.anySetter);
     }
-    source
-        .append("  public static final class Factory\n")
-        .append("      implements org.apache.fory.json.codec.GeneratedJsonCodecFactory {\n")
-        .append("    public Factory() {}\n\n")
-        .append("    @Override\n")
-        .append("    public org.apache.fory.json.codec.GeneratedJsonCodec<?> create() {\n")
-        .append("      return new ")
-        .append(model.simpleName)
-        .append("();\n")
-        .append("    }\n")
-        .append("  }\n")
-        .append("}\n");
+    source.append("}\n");
     return source.toString();
   }
 

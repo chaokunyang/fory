@@ -67,6 +67,8 @@ import org.apache.fory.json.meta.JsonCreatorInfo;
 import org.apache.fory.json.meta.JsonFieldInfo;
 import org.apache.fory.json.meta.JsonFieldKind;
 import org.apache.fory.json.meta.JsonFieldTable;
+import org.apache.fory.logging.Logger;
+import org.apache.fory.logging.LoggerFactory;
 import org.apache.fory.reflect.TypeRef;
 
 /**
@@ -88,6 +90,12 @@ import org.apache.fory.reflect.TypeRef;
  * raw-class JIT dispatch.
  */
 public final class JsonTypeResolver {
+  private static final Logger LOG = LoggerFactory.getLogger(JsonTypeResolver.class);
+  private static final String NATIVE_INTERPRETER_MESSAGE =
+      "Fory JSON is using interpreted codecs because the current configuration was not included "
+          + "in this native image. Return this configuration from a reachable "
+          + "@ForyJsonProvider to enable generated codecs.";
+
   private final Map<Object, ObjectCodec<?>> objectCodecs;
   private final Map<Object, JsonTypeInfo> typeInfos;
   private final JsonSharedRegistry sharedRegistry;
@@ -346,6 +354,21 @@ public final class JsonTypeResolver {
     } finally {
       endResolution();
     }
+  }
+
+  /** Generates every hosted capability rooted at an explicitly selected Native Image model. */
+  @Internal
+  public void generateHostedCodecs(Class<?> type) {
+    if (!sharedRegistry.hostedCodegen()) {
+      throw new IllegalStateException("Hosted JSON codec generation requires a hosted registry");
+    }
+    JsonTypeInfo typeInfo = getTypeInfo(type, type);
+    ArrayList<JsonTypeInfo> roots = new ArrayList<>(1);
+    roots.add(typeInfo);
+    // A preceding selected model may already have resolved this type inside an uncodegenable graph.
+    // Cached metadata is still a generation root; otherwise that earlier graph can suppress every
+    // capability for an independently eligible annotated model.
+    requestCapabilities(roots);
   }
 
   private JsonTypeInfo resolveTypeInfo(Type declaredType, Class<?> rawType, Object key) {
@@ -646,7 +669,7 @@ public final class JsonTypeResolver {
   }
 
   private void completeResolution(ResolutionSnapshot snapshot) {
-    if (snapshot == null || codegen == null) {
+    if (snapshot == null) {
       return;
     }
     ArrayList<JsonTypeInfo> roots = new ArrayList<>();
@@ -655,9 +678,25 @@ public final class JsonTypeResolver {
         roots.add(entry.getValue());
       }
     }
-    if (!roots.isEmpty()) {
-      requestCapabilities(roots);
+    if (roots.isEmpty()) {
+      return;
     }
+    if (!sharedRegistry.generatedCapabilitiesEnabled()) {
+      if (sharedRegistry.missingNativeConfiguration() && containsObjectModel(roots)) {
+        LOG.warnOnce(NATIVE_INTERPRETER_MESSAGE);
+      }
+      return;
+    }
+    requestCapabilities(roots);
+  }
+
+  private boolean containsObjectModel(ArrayList<JsonTypeInfo> roots) {
+    for (int i = 0; i < roots.size(); i++) {
+      if (canonicalObjectOwner(roots.get(i)) != null) {
+        return true;
+      }
+    }
+    return false;
   }
 
   private void rollbackResolution(ResolutionSnapshot snapshot) {
@@ -1468,9 +1507,42 @@ public final class JsonTypeResolver {
   }
 
   private boolean canCompile(ObjectCodec<?> owner, CapabilityKind kind) {
-    return kind == CapabilityKind.STRING_WRITER || kind == CapabilityKind.UTF8_WRITER
-        ? codegen.canCompileWriter(owner)
-        : codegen.canCompileReader(owner);
+    if (nativeObjectClass(owner.type(), kind) != null) {
+      return true;
+    }
+    return codegen != null
+        && (kind == CapabilityKind.STRING_WRITER || kind == CapabilityKind.UTF8_WRITER
+            ? codegen.canCompileWriter(owner)
+            : codegen.canCompileReader(owner));
+  }
+
+  private boolean canCompileCollection(JsonTypeInfo typeInfo, CapabilityKind kind) {
+    Type type = typeInfo.type();
+    boolean generated =
+        kind == CapabilityKind.UTF8_WRITER
+            ? sharedRegistry.nativeUtf8CollectionWriterClass(type) != null
+            : sharedRegistry.nativeUtf8CollectionReaderClass(type) != null;
+    if (generated) {
+      return true;
+    }
+    return codegen != null;
+  }
+
+  private Class<?> nativeObjectClass(Class<?> type, CapabilityKind kind) {
+    switch (kind) {
+      case STRING_WRITER:
+        return sharedRegistry.nativeStringWriterClass(type);
+      case UTF8_WRITER:
+        return sharedRegistry.nativeUtf8WriterClass(type);
+      case LATIN1_READER:
+        return sharedRegistry.nativeLatin1ReaderClass(type);
+      case UTF16_READER:
+        return sharedRegistry.nativeUtf16ReaderClass(type);
+      case UTF8_READER:
+        return sharedRegistry.nativeUtf8ReaderClass(type);
+      default:
+        throw new IllegalStateException("Unknown JSON capability kind " + kind);
+    }
   }
 
   private static Object currentCapability(JsonTypeInfo typeInfo, CapabilityKind kind) {
@@ -1517,6 +1589,22 @@ public final class JsonTypeResolver {
       default:
         throw new IllegalStateException("Unknown JSON capability kind " + kind);
     }
+  }
+
+  private Class<?> nativeGeneratedClass(CapabilityNode node, CapabilityKind kind) {
+    if (node.subtypeOwner != null) {
+      throw new IllegalStateException("Inline subtype readers reuse child generated classes");
+    }
+    if (node.collectionOwner != null) {
+      if (kind == CapabilityKind.UTF8_WRITER) {
+        return sharedRegistry.nativeUtf8CollectionWriterClass(node.typeInfo.type());
+      }
+      if (kind == CapabilityKind.UTF8_READER) {
+        return sharedRegistry.nativeUtf8CollectionReaderClass(node.typeInfo.type());
+      }
+      throw new IllegalStateException("Unsupported generated JSON collection capability " + kind);
+    }
+    return nativeObjectClass(node.objectOwner.type(), kind);
   }
 
   private Object newCapability(
@@ -1712,13 +1800,33 @@ public final class JsonTypeResolver {
   private void requestCapabilities(ArrayList<JsonTypeInfo> roots) {
     for (CapabilityKind kind : CapabilityKind.values()) {
       CapabilityGraph graph = new CapabilityGraph(kind);
-      if (graph.addRoots(roots) && !graph.ordered.isEmpty()) {
+      for (int i = 0; i < roots.size(); i++) {
+        JsonTypeInfo root = roots.get(i);
+        // Probe each cold root independently so an interpreter-only graph cannot reject unrelated
+        // eligible roots. Successful roots are then rebuilt into one graph to preserve the existing
+        // atomic parent/child publication boundary.
+        CapabilityGraph candidate = new CapabilityGraph(kind);
+        if (candidate.addDependency(root) && !graph.addDependency(root)) {
+          throw new IllegalStateException(
+              "Cannot merge eligible JSON capability graph for " + root.type());
+        }
+      }
+      if (!graph.ordered.isEmpty()) {
         requestGraph(graph);
       }
     }
   }
 
   private void requestGraph(CapabilityGraph graph) {
+    if (sharedRegistry.hostedCodegen()) {
+      graph.classesReady().join();
+      return;
+    }
+    if (sharedRegistry.nativeGeneratedClasses()) {
+      graph.loadNativeClasses();
+      graph.publish();
+      return;
+    }
     jitContext.registerJITFuture(
         () -> graph.classesReady().thenApply(ignored -> graph),
         new JsonJITContext.JITCallback<CapabilityGraph>() {
@@ -1750,15 +1858,6 @@ public final class JsonTypeResolver {
 
     private CapabilityGraph(CapabilityKind kind) {
       this.kind = kind;
-    }
-
-    private boolean addRoots(ArrayList<JsonTypeInfo> roots) {
-      for (int i = 0; i < roots.size(); i++) {
-        if (!addDependency(roots.get(i))) {
-          return false;
-        }
-      }
-      return true;
     }
 
     private boolean addDependency(JsonTypeInfo typeInfo) {
@@ -1845,7 +1944,7 @@ public final class JsonTypeResolver {
         return existing.complete;
       }
       JsonTypeInfo element = declaredCollectionElement(typeInfo);
-      if (element == null) {
+      if (element == null || !canCompileCollection(typeInfo, kind)) {
         return false;
       }
       CapabilityNode node = new CapabilityNode(typeInfo, owner, initial);
@@ -1865,10 +1964,32 @@ public final class JsonTypeResolver {
         if (node.subtypeOwner != null) {
           continue;
         }
+        if (sharedRegistry.hostedCodegen()) {
+          // Another provider loader may already have generated this capability under the same
+          // source key. Reuse it while still walking the graph so this loader can add missing
+          // types.
+          node.generatedClass = nativeGeneratedClass(node, kind);
+          if (node.generatedClass != null) {
+            continue;
+          }
+        }
         node.classFuture = generatedClass(node, kind);
         futures.add(node.classFuture);
       }
       return CompletableFuture.allOf(futures.toArray(new CompletableFuture<?>[0]));
+    }
+
+    private void loadNativeClasses() {
+      for (int i = 0; i < ordered.size(); i++) {
+        CapabilityNode node = ordered.get(i);
+        if (node.subtypeOwner == null) {
+          node.generatedClass = nativeGeneratedClass(node, kind);
+          if (node.generatedClass == null) {
+            throw new IllegalStateException(
+                "Missing generated Fory JSON class for " + node.typeInfo.type());
+          }
+        }
+      }
     }
 
     private void publish() {
@@ -1889,7 +2010,8 @@ public final class JsonTypeResolver {
         }
         Class<?> generatedClass = null;
         if (node.subtypeOwner == null) {
-          generatedClass = node.classFuture.getNow(null);
+          generatedClass =
+              node.generatedClass == null ? node.classFuture.getNow(null) : node.generatedClass;
           if (generatedClass == null) {
             throw new IllegalStateException("Generated JSON class is not ready");
           }
@@ -1921,6 +2043,7 @@ public final class JsonTypeResolver {
     private final Object initial;
     private boolean complete;
     private CompletableFuture<Class<?>> classFuture;
+    private Class<?> generatedClass;
     private Object instance;
 
     private CapabilityNode(JsonTypeInfo typeInfo, ObjectCodec<Object> owner, Object initial) {

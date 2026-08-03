@@ -49,9 +49,9 @@ import org.apache.fory.json.resolver.JsonTypeResolver;
  * Representation-neutral JSON cursor and common scalar parsing owner.
  *
  * <p>The base class retains the resolver used by dynamic codecs, the current code-unit position,
- * configured and current container depth, a reusable ASCII token view, and a fixed workspace for
- * exact floating-point boundary correction. Concrete readers own input storage, string decoding,
- * field-name probes, and direct primitive numeric fast paths for their representation.
+ * configured and current container depth, reusable creator and numeric workspaces, and an ASCII
+ * token view. Concrete readers own input storage, string decoding, field-name probes, and direct
+ * primitive numeric fast paths for their representation.
  *
  * <p>Primitive {@code int}, {@code long}, {@code float}, and {@code double} parsing does not
  * materialize a String or arbitrary-precision number. Precision-sensitive floating input uses the
@@ -256,6 +256,7 @@ public abstract class JsonReader {
   public abstract int readSubtypeName(JsonSubtypeScanInfo info);
 
   private final AsciiStringView asciiStringView = new AsciiStringView(this);
+  private final Object[] creatorArguments = new Object[1];
   // Primitive floating fallback reuses this exact-boundary workspace. Reader construction is the
   // cold owner so the first precision-sensitive scalar cannot allocate on the numeric hot path.
   private final byte[] decimalBoundaryDigits = new byte[DECIMAL_BOUNDARY_DIGITS];
@@ -270,6 +271,19 @@ public abstract class JsonReader {
    */
   public final JsonTypeResolver typeResolver() {
     return typeResolver;
+  }
+
+  /** Returns this reader's reusable one-value creator argument array. */
+  @Internal
+  public final Object[] creatorArguments(Object value) {
+    creatorArguments[0] = value;
+    return creatorArguments;
+  }
+
+  /** Releases the value retained by {@link #creatorArguments(Object)}. */
+  @Internal
+  public final void clearCreatorArguments() {
+    creatorArguments[0] = null;
   }
 
   protected abstract int length();

@@ -28,6 +28,7 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -115,12 +116,21 @@ public class JsonAndroidRuntimeTest {
     AndroidFormat format = new AndroidFormat();
     format.value = LocalDate.of(2024, 1, 2);
     format.values = Arrays.asList(LocalDate.of(2024, 1, 3), LocalDate.of(2024, 1, 4));
+    format.instant = Instant.parse("2024-01-02T03:04:05Z");
+    format.instants = Arrays.asList(format.instant, format.instant.plusSeconds(3600));
     String formatJson = json.toJson(format);
     assertTrue(formatJson.contains("\"value\":\"02/01/2024\""), formatJson);
     assertTrue(formatJson.contains("\"values\":[\"03/01/2024\",\"04/01/2024\"]"), formatJson);
+    assertTrue(formatJson.contains("\"instant\":\"2024-01-02 11:04:05 +08:00\""), formatJson);
+    assertTrue(
+        formatJson.contains(
+            "\"instants\":[\"2024-01-02 11:04:05 +08:00\"," + "\"2024-01-02 12:04:05 +08:00\"]"),
+        formatJson);
     AndroidFormat decodedFormat = json.fromJson(formatJson, AndroidFormat.class);
     assertEquals(decodedFormat.value, format.value);
     assertEquals(decodedFormat.values, format.values);
+    assertEquals(decodedFormat.instant, format.instant);
+    assertEquals(decodedFormat.instants, format.instants);
   }
 
   private static List<String> javaCommand(String classPath, Class<?> mainClass) {
@@ -230,5 +240,11 @@ public class JsonAndroidRuntimeTest {
 
     @JsonFormat(pattern = "dd/MM/uuuu")
     public List<LocalDate> values;
+
+    @JsonFormat(pattern = "uuuu-MM-dd HH:mm:ss XXX", timezone = "Asia/Shanghai")
+    public Instant instant;
+
+    @JsonFormat(pattern = "uuuu-MM-dd HH:mm:ss XXX", timezone = "Asia/Shanghai")
+    public List<Instant> instants;
   }
 }

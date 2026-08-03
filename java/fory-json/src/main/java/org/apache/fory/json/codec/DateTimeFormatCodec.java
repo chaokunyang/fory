@@ -19,6 +19,7 @@
 
 package org.apache.fory.json.codec;
 
+import java.time.DateTimeException;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -28,6 +29,8 @@ import java.time.OffsetDateTime;
 import java.time.OffsetTime;
 import java.time.Year;
 import java.time.YearMonth;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.time.chrono.HijrahChronology;
 import java.time.chrono.HijrahDate;
@@ -39,6 +42,7 @@ import java.time.chrono.ThaiBuddhistChronology;
 import java.time.chrono.ThaiBuddhistDate;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.TemporalAccessor;
+import java.time.temporal.TemporalQueries;
 import java.util.Locale;
 import org.apache.fory.json.ForyJsonException;
 import org.apache.fory.json.reader.Latin1JsonReader;
@@ -63,12 +67,13 @@ final class DateTimeFormatCodec implements JsonValueCodec<Object> {
   private static final int JAPANESE_DATE = 12;
   private static final int MINGUO_DATE = 13;
   private static final int THAI_BUDDHIST_DATE = 14;
+  private static final int OFFSET_DATE_TIME_WITH_ZONE = 15;
 
   private final Class<?> type;
   private final int kind;
   private final DateTimeFormatter formatter;
 
-  static JsonValueCodec<?> create(Class<?> type, String pattern) {
+  static JsonValueCodec<?> create(Class<?> type, String pattern, String timezone) {
     if (pattern.isEmpty()) {
       throw invalidPattern(type, pattern, null);
     }
@@ -79,9 +84,24 @@ final class DateTimeFormatCodec implements JsonValueCodec<Object> {
     } catch (IllegalArgumentException e) {
       throw invalidPattern(type, pattern, e);
     }
-    if (kind == INSTANT) {
-      formatter = formatter.withZone(java.time.ZoneOffset.UTC);
-    } else if (kind == HIJRAH_DATE) {
+    if (timezone.isEmpty()) {
+      if (kind == INSTANT) {
+        formatter = formatter.withZone(ZoneOffset.UTC);
+      }
+    } else {
+      if (kind != INSTANT && kind != ZONED_DATE_TIME && kind != OFFSET_DATE_TIME) {
+        throw unsupportedTimezone(type);
+      }
+      try {
+        formatter = formatter.withZone(ZoneId.of(timezone));
+      } catch (DateTimeException e) {
+        throw invalidTimezone(type, timezone, e);
+      }
+      if (kind == OFFSET_DATE_TIME) {
+        kind = OFFSET_DATE_TIME_WITH_ZONE;
+      }
+    }
+    if (kind == HIJRAH_DATE) {
       formatter = formatter.withChronology(HijrahChronology.INSTANCE);
     } else if (kind == JAPANESE_DATE) {
       formatter = formatter.withChronology(JapaneseChronology.INSTANCE);
@@ -159,6 +179,8 @@ final class DateTimeFormatCodec implements JsonValueCodec<Object> {
           return OffsetTime.from(parsed);
         case OFFSET_DATE_TIME:
           return OffsetDateTime.from(parsed);
+        case OFFSET_DATE_TIME_WITH_ZONE:
+          return parseOffsetDateTime(parsed);
         case HIJRAH_DATE:
           return HijrahDate.from(parsed);
         case JAPANESE_DATE:
@@ -173,6 +195,17 @@ final class DateTimeFormatCodec implements JsonValueCodec<Object> {
     } catch (RuntimeException e) {
       throw invalidValue(type, value, e);
     }
+  }
+
+  private OffsetDateTime parseOffsetDateTime(TemporalAccessor parsed) {
+    LocalDateTime dateTime = LocalDateTime.from(parsed);
+    ZoneOffset offset = parsed.query(TemporalQueries.offset());
+    // An effective region ZoneId does not synthesize OFFSET_SECONDS. Keep an explicit offset
+    // authoritative and derive only a missing one from the effective parsed zone.
+    if (offset == null) {
+      offset = parsed.query(TemporalQueries.zone()).getRules().getOffset(dateTime);
+    }
+    return OffsetDateTime.of(dateTime, offset);
   }
 
   static boolean supports(Class<?> type) {
@@ -241,6 +274,16 @@ final class DateTimeFormatCodec implements JsonValueCodec<Object> {
   private static ForyJsonException invalidPattern(Class<?> type, String pattern, Throwable cause) {
     return new ForyJsonException(
         "Invalid @JsonFormat pattern for " + type.getTypeName() + ": " + pattern, cause);
+  }
+
+  private static ForyJsonException invalidTimezone(
+      Class<?> type, String timezone, Throwable cause) {
+    return new ForyJsonException(
+        "Invalid @JsonFormat timezone for " + type.getTypeName() + ": " + timezone, cause);
+  }
+
+  private static ForyJsonException unsupportedTimezone(Class<?> type) {
+    return new ForyJsonException("@JsonFormat timezone is not supported for " + type.getTypeName());
   }
 
   private static ForyJsonException invalidValue(

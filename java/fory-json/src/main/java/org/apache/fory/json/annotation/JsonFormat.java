@@ -36,8 +36,10 @@ import java.lang.annotation.Target;
  * java.time.MonthDay}, {@link java.time.OffsetTime}, {@link java.time.OffsetDateTime}, {@link
  * java.time.chrono.HijrahDate}, {@link java.time.chrono.JapaneseDate}, {@link
  * java.time.chrono.MinguoDate}, and {@link java.time.chrono.ThaiBuddhistDate}. Instant values use
- * UTC; zoned and offset values use the zone or offset carried by the value. The pattern must retain
- * enough information to reconstruct the declared type.
+ * UTC; zoned and offset values use the zone or offset carried by the value. An explicit {@link
+ * #timezone()} overrides that behavior for {@code Instant}, {@code ZonedDateTime}, and {@code
+ * OffsetDateTime}; it is rejected for other date/time types. The pattern must retain enough
+ * information to reconstruct the declared type.
  *
  * <p>Formatting is applied in both JSON directions. Arrays and collections apply it to their direct
  * element, maps to their direct value, and optional and atomic-reference wrappers to their direct
@@ -50,4 +52,12 @@ import java.lang.annotation.Target;
 public @interface JsonFormat {
   /** Returns the required date/time pattern. */
   String pattern();
+
+  /**
+   * Returns the optional {@link java.time.ZoneId} identifier used for formatting and parsing {@link
+   * java.time.Instant}, {@link java.time.ZonedDateTime}, and {@link java.time.OffsetDateTime}
+   * values. An empty value keeps the declared value's zone or offset, except that {@code Instant}
+   * continues to use UTC.
+   */
+  String timezone() default "";
 }

@@ -121,8 +121,9 @@ public final class ScalarCodecs {
   }
 
   @Internal
-  public static JsonValueCodec<?> dateTimeFormatCodec(Class<?> type, String pattern) {
-    return DateTimeFormatCodec.create(type, pattern);
+  public static JsonValueCodec<?> dateTimeFormatCodec(
+      Class<?> type, String pattern, String timezone) {
+    return DateTimeFormatCodec.create(type, pattern, timezone);
   }
 
   public static final class NaturalCodec implements JsonValueCodec<Object> {

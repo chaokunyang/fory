@@ -33,7 +33,7 @@ import java.net.URLClassLoader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.time.LocalDate;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -790,20 +790,22 @@ public class JsonTypeProcessorTest {
         compile(
             "test.FormatRecord",
             "package test;\n"
-                + "import java.time.LocalDate;\n"
+                + "import java.time.Instant;\n"
                 + "import org.apache.fory.json.annotation.*;\n"
                 + "@JsonType public record FormatRecord(\n"
-                + "    @JsonFormat(pattern = \"dd/MM/uuuu\") LocalDate value) {}\n");
+                + "    @JsonFormat(pattern = \"uuuu-MM-dd HH:mm:ss XXX\", "
+                + "timezone = \"Asia/Shanghai\") Instant value) {}\n");
     assertTrue(result.success, result.diagnostics());
     String rules = result.generatedResource(RULE_PREFIX + "test.FormatRecord.pro");
     assertTrue(rules.contains("@interface org.apache.fory.json.annotation.JsonFormat"), rules);
     ClassLoader loader = result.classLoader();
     Class<?> type = loader.loadClass("test.FormatRecord");
-    Object value = type.getConstructor(LocalDate.class).newInstance(LocalDate.of(2024, 1, 2));
+    Instant instant = Instant.parse("2024-01-02T03:04:05Z");
+    Object value = type.getConstructor(Instant.class).newInstance(instant);
     for (ForyJson json : jsonRuntimes(loader)) {
-      assertEquals(json.toJson(value), "{\"value\":\"02/01/2024\"}");
-      Object decoded = json.fromJson("{\"value\":\"03/01/2024\"}", type);
-      assertEquals(type.getMethod("value").invoke(decoded), LocalDate.of(2024, 1, 3));
+      assertEquals(json.toJson(value), "{\"value\":\"2024-01-02 11:04:05 +08:00\"}");
+      Object decoded = json.fromJson("{\"value\":\"2024-01-02 12:04:05 +08:00\"}", type);
+      assertEquals(type.getMethod("value").invoke(decoded), instant.plusSeconds(3600));
     }
   }
 
@@ -813,11 +815,12 @@ public class JsonTypeProcessorTest {
         compile(
             "test.FormatTarget",
             "package test;\n"
-                + "import java.time.LocalDate;\n"
+                + "import java.time.Instant;\n"
                 + "import org.apache.fory.json.annotation.*;\n"
-                + "public final class FormatTarget { public LocalDate value; }\n"
+                + "public final class FormatTarget { public Instant value; }\n"
                 + "@JsonMixin(target = FormatTarget.class) abstract class FormatMixin {\n"
-                + "  @JsonFormat(pattern = \"dd/MM/uuuu\") LocalDate value;\n"
+                + "  @JsonFormat(pattern = \"uuuu-MM-dd HH:mm:ss XXX\", "
+                + "timezone = \"Asia/Shanghai\") Instant value;\n"
                 + "}\n");
     assertTrue(result.success, result.diagnostics());
     String base = "FormatMixin_ForyJsonMixin_test_x2e_FormatTarget";
@@ -828,7 +831,8 @@ public class JsonTypeProcessorTest {
     Class<?> target = loader.loadClass("test.FormatTarget");
     Class<?> mixin = loader.loadClass("test.FormatMixin");
     Object value = target.getConstructor().newInstance();
-    target.getField("value").set(value, LocalDate.of(2024, 1, 2));
+    Instant instant = Instant.parse("2024-01-02T03:04:05Z");
+    target.getField("value").set(value, instant);
     for (boolean codegen : new boolean[] {false, true}) {
       ForyJson json =
           ForyJson.builder()
@@ -837,9 +841,9 @@ public class JsonTypeProcessorTest {
               .withClassLoader(loader)
               .registerMixin(mixin)
               .build();
-      assertEquals(json.toJson(value), "{\"value\":\"02/01/2024\"}");
-      Object decoded = json.fromJson("{\"value\":\"03/01/2024\"}", target);
-      assertEquals(target.getField("value").get(decoded), LocalDate.of(2024, 1, 3));
+      assertEquals(json.toJson(value), "{\"value\":\"2024-01-02 11:04:05 +08:00\"}");
+      Object decoded = json.fromJson("{\"value\":\"2024-01-02 12:04:05 +08:00\"}", target);
+      assertEquals(target.getField("value").get(decoded), instant.plusSeconds(3600));
     }
   }
 

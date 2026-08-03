@@ -555,7 +555,8 @@ public final class JsonTypeResolver {
 
   private JsonTypeInfo formatTypeInfo(Type type, Class<?> rawType, JsonFormat annotation) {
     sharedRegistry.checkSecure(rawType);
-    JsonValueCodec<?> codec = ScalarCodecs.dateTimeFormatCodec(rawType, annotation.pattern());
+    JsonValueCodec<?> codec =
+        ScalarCodecs.dateTimeFormatCodec(rawType, annotation.pattern(), annotation.timezone());
     return newTypeInfo(type, rawType, JsonFieldKind.OBJECT, codec, true);
   }
 

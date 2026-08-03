@@ -71,6 +71,9 @@ import org.testng.annotations.Test;
 
 public class JsonFormatAnnotationTest extends ForyJsonTestModels {
   private static final String DATE_PATTERN = "dd/MM/uuuu";
+  private static final String LOCAL_TIMESTAMP_PATTERN = "uuuu-MM-dd HH:mm:ss";
+  private static final String TIMESTAMP_PATTERN = "uuuu-MM-dd HH:mm:ss XXX";
+  private static final String ZONED_TIMESTAMP_PATTERN = "uuuu-MM-dd HH:mm:ss VV";
 
   @Factory(dataProvider = "enableCodegen")
   public JsonFormatAnnotationTest(boolean codegen) {
@@ -139,6 +142,47 @@ public class JsonFormatAnnotationTest extends ForyJsonTestModels {
   }
 
   @Test
+  public void timezoneRoundTrip() {
+    ForyJson json = newJson();
+    Instant instant = Instant.parse("2024-01-02T03:04:05Z");
+    TimezoneFields value = new TimezoneFields();
+    value.instant = instant;
+    value.zonedDateTime = instant.atZone(ZoneId.of("Europe/Paris"));
+    value.offsetDateTime = instant.atOffset(ZoneOffset.ofHours(-4));
+    value.values = Arrays.asList(instant, instant.plusSeconds(3600));
+    String expected =
+        "{\"instant\":\"2024-01-02 11:04:05\","
+            + "\"zonedDateTime\":\"2024-01-02 11:04:05 +08:00\","
+            + "\"offsetDateTime\":\"2024-01-02 11:04:05 +08:00\","
+            + "\"values\":[\"2024-01-02 11:04:05 +08:00\","
+            + "\"2024-01-02 12:04:05 +08:00\"]}";
+    assertEquals(json.toJson(value), expected);
+    assertEquals(new String(json.toJsonBytes(value), StandardCharsets.UTF_8), expected);
+    assertTimezoneFields(json.fromJson(expected, TimezoneFields.class), instant);
+    assertTimezoneFields(
+        json.fromJson(expected.getBytes(StandardCharsets.UTF_8), TimezoneFields.class), instant);
+    assertGeneratedWhenSupported(json, TimezoneFields.class);
+  }
+
+  @Test
+  public void offsetTimezoneParsing() {
+    ForyJson json = newJson();
+    String input =
+        "{\"local\":\"2024-01-02 11:04:05\","
+            + "\"explicit\":\"2024-01-02 07:04:05 +04:00\","
+            + "\"explicitZone\":\"2024-01-02 04:04:05 Europe/Paris\"}";
+    OffsetTimezoneFields value = json.fromJson(input, OffsetTimezoneFields.class);
+    Instant instant = Instant.parse("2024-01-02T03:04:05Z");
+    assertEquals(value.local.toInstant(), instant);
+    assertEquals(value.local.getOffset(), ZoneOffset.ofHours(8));
+    assertEquals(value.explicit.toInstant(), instant);
+    assertEquals(value.explicit.getOffset(), ZoneOffset.ofHours(4));
+    assertEquals(value.explicitZone.toInstant(), instant);
+    assertEquals(value.explicitZone.getOffset(), ZoneOffset.ofHours(1));
+    assertGeneratedWhenSupported(json, OffsetTimezoneFields.class);
+  }
+
+  @Test
   public void creatorRoundTrip() {
     ForyJson json = newJson();
     CreatorField value = new CreatorField(LocalDate.of(2024, 1, 2));
@@ -158,15 +202,17 @@ public class JsonFormatAnnotationTest extends ForyJsonTestModels {
         compileRecordClass(
             "JsonFormatRecord",
             "package org.apache.fory.json.records;\n"
-                + "import java.time.LocalDate;\n"
+                + "import java.time.Instant;\n"
                 + "import org.apache.fory.json.annotation.JsonFormat;\n"
                 + "public record JsonFormatRecord("
-                + "@JsonFormat(pattern = \"dd/MM/uuuu\") LocalDate value) {}\n");
-    Object value = type.getConstructor(LocalDate.class).newInstance(LocalDate.of(2024, 1, 2));
+                + "@JsonFormat(pattern = \"uuuu-MM-dd HH:mm:ss XXX\", "
+                + "timezone = \"Asia/Shanghai\") Instant value) {}\n");
+    Instant value = Instant.parse("2024-01-02T03:04:05Z");
+    Object record = type.getConstructor(Instant.class).newInstance(value);
     for (ForyJson json : new ForyJson[] {newJson(), newJsonBuilder().withFieldMode(true).build()}) {
-      assertEquals(json.toJson(value), "{\"value\":\"02/01/2024\"}");
-      Object decoded = json.fromJson("{\"value\":\"03/01/2024\"}", type);
-      assertEquals(type.getMethod("value").invoke(decoded), LocalDate.of(2024, 1, 3));
+      assertEquals(json.toJson(record), "{\"value\":\"2024-01-02 11:04:05 +08:00\"}");
+      Object decoded = json.fromJson("{\"value\":\"2024-01-02 12:04:05 +08:00\"}", type);
+      assertEquals(type.getMethod("value").invoke(decoded), value.plusSeconds(3600));
     }
   }
 
@@ -174,11 +220,11 @@ public class JsonFormatAnnotationTest extends ForyJsonTestModels {
   public void mixinRoundTrip() {
     ForyJson mixinJson = newJsonBuilder().registerMixin(FormatMixin.class).build();
     MixinTarget value = new MixinTarget();
-    value.value = LocalDate.of(2024, 1, 2);
-    assertEquals(mixinJson.toJson(value), "{\"value\":\"02/01/2024\"}");
+    value.value = Instant.parse("2024-01-02T03:04:05Z");
+    assertEquals(mixinJson.toJson(value), "{\"value\":\"2024-01-02 11:04:05 +08:00\"}");
     assertEquals(
-        mixinJson.fromJson("{\"value\":\"03/01/2024\"}", MixinTarget.class).value,
-        LocalDate.of(2024, 1, 3));
+        mixinJson.fromJson("{\"value\":\"2024-01-02 12:04:05 +08:00\"}", MixinTarget.class).value,
+        value.value.plusSeconds(3600));
 
     ForyJson removalJson = newJsonBuilder().registerMixin(RemoveFormatMixin.class).build();
     IntrinsicTarget intrinsic = new IntrinsicTarget();
@@ -219,6 +265,11 @@ public class JsonFormatAnnotationTest extends ForyJsonTestModels {
     ForyJson json = newJson();
     assertThrows(ForyJsonException.class, () -> json.toJson(new EmptyPattern()));
     assertThrows(ForyJsonException.class, () -> json.toJson(new InvalidPattern()));
+    ForyJsonException timezoneError =
+        expectThrows(ForyJsonException.class, () -> json.toJson(new InvalidTimezone()));
+    assertTrue(timezoneError.getMessage().contains("timezone"), timezoneError.getMessage());
+    assertThrows(ForyJsonException.class, () -> json.toJson(new LocalTimezone()));
+    assertThrows(ForyJsonException.class, () -> json.toJson(new OffsetTimeTimezone()));
     assertThrows(ForyJsonException.class, () -> json.toJson(new StringFormat()));
     assertThrows(ForyJsonException.class, () -> json.toJson(new DurationFormat()));
     assertThrows(ForyJsonException.class, () -> json.toJson(new LegacyDateFormat()));
@@ -252,6 +303,15 @@ public class JsonFormatAnnotationTest extends ForyJsonTestModels {
     assertEquals(value.atomicArray.length(), 2);
     assertEquals(value.atomicArray.get(0), LocalDate.of(2024, 1, 8));
     assertEquals(value.atomicArray.get(1), null);
+  }
+
+  private static void assertTimezoneFields(TimezoneFields value, Instant instant) {
+    assertEquals(value.instant, instant);
+    assertEquals(value.zonedDateTime.toInstant(), instant);
+    assertEquals(value.zonedDateTime.getZone(), ZoneId.of("Asia/Shanghai"));
+    assertEquals(value.offsetDateTime.toInstant(), instant);
+    assertEquals(value.offsetDateTime.getOffset(), ZoneOffset.ofHours(8));
+    assertEquals(value.values, Arrays.asList(instant, instant.plusSeconds(3600)));
   }
 
   private static TemporalFields temporalFields() {
@@ -369,6 +429,31 @@ public class JsonFormatAnnotationTest extends ForyJsonTestModels {
     public ThaiBuddhistDate thaiBuddhistDate;
   }
 
+  public static final class TimezoneFields {
+    @JsonFormat(pattern = LOCAL_TIMESTAMP_PATTERN, timezone = "Asia/Shanghai")
+    public Instant instant;
+
+    @JsonFormat(pattern = TIMESTAMP_PATTERN, timezone = "Asia/Shanghai")
+    public ZonedDateTime zonedDateTime;
+
+    @JsonFormat(pattern = TIMESTAMP_PATTERN, timezone = "Asia/Shanghai")
+    public OffsetDateTime offsetDateTime;
+
+    @JsonFormat(pattern = TIMESTAMP_PATTERN, timezone = "Asia/Shanghai")
+    public List<Instant> values;
+  }
+
+  public static final class OffsetTimezoneFields {
+    @JsonFormat(pattern = LOCAL_TIMESTAMP_PATTERN, timezone = "Asia/Shanghai")
+    public OffsetDateTime local;
+
+    @JsonFormat(pattern = TIMESTAMP_PATTERN, timezone = "Asia/Shanghai")
+    public OffsetDateTime explicit;
+
+    @JsonFormat(pattern = ZONED_TIMESTAMP_PATTERN, timezone = "Asia/Shanghai")
+    public OffsetDateTime explicitZone;
+  }
+
   public static final class CreatorField {
     @JsonFormat(pattern = DATE_PATTERN)
     public final LocalDate value;
@@ -380,13 +465,13 @@ public class JsonFormatAnnotationTest extends ForyJsonTestModels {
   }
 
   public static final class MixinTarget {
-    public LocalDate value;
+    public Instant value;
   }
 
   @JsonMixin(target = MixinTarget.class)
   public abstract static class FormatMixin {
-    @JsonFormat(pattern = DATE_PATTERN)
-    LocalDate value;
+    @JsonFormat(pattern = TIMESTAMP_PATTERN, timezone = "Asia/Shanghai")
+    Instant value;
   }
 
   public static final class IntrinsicTarget {
@@ -462,6 +547,21 @@ public class JsonFormatAnnotationTest extends ForyJsonTestModels {
   public static final class InvalidPattern {
     @JsonFormat(pattern = "invalid")
     public LocalDate value;
+  }
+
+  public static final class InvalidTimezone {
+    @JsonFormat(pattern = TIMESTAMP_PATTERN, timezone = "Not/AZone")
+    public Instant value;
+  }
+
+  public static final class LocalTimezone {
+    @JsonFormat(pattern = DATE_PATTERN, timezone = "UTC")
+    public LocalDate value;
+  }
+
+  public static final class OffsetTimeTimezone {
+    @JsonFormat(pattern = "HH:mm:ss XXX", timezone = "UTC")
+    public OffsetTime value;
   }
 
   public static final class StringFormat {

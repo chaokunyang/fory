@@ -205,26 +205,39 @@ class CollectionSerializer(Serializer):
     def read(self, read_context):
         length = read_context.read_var_uint32()
         read_context.reserve_graph_memory(self.owner_bytes + length * _REFERENCE_BYTES)
-        _ensure_container_allocation(read_context, length)
-        collection_ = self.new_instance(read_context, self.type_)
         if length == 0:
-            return collection_
+            return self.new_instance(read_context, self.type_)
         collect_flag = read_context.read_int8()
         # IMPORTANT: collection readers must obey the ref/null bits written on
         # the wire, not the local Python element annotation or runtime type
         # that may imply a different ref policy. Shared xlang tests
         # intentionally deserialize one ref policy and then serialize another
         # local payload. DO NOT REMOVE this comment.
+        serializer = None
         if (collect_flag & COLL_IS_SAME_TYPE) != 0:
             if (collect_flag & COLL_IS_DECL_ELEMENT_TYPE) == 0:
                 typeinfo = self.type_resolver.read_type_info(read_context)
                 serializer = typeinfo.serializer
             else:
                 serializer = self.elem_serializer
+        body_always_advances = (
+            (collect_flag & (COLL_TRACKING_REF | COLL_HAS_NULL)) != 0
+            or (collect_flag & COLL_IS_SAME_TYPE) == 0
+            or serializer.read_data_always_advances
+        )
+        if body_always_advances:
+            read_context.check_readable_bytes(length)
+        else:
+            _ensure_container_allocation(read_context, length)
+        collection_ = self.new_instance(read_context, self.type_)
+        if (collect_flag & COLL_IS_SAME_TYPE) != 0:
             if (collect_flag & COLL_TRACKING_REF) != 0:
                 self._read_same_type_ref(read_context, length, collection_, serializer)
             elif (collect_flag & COLL_HAS_NULL) == 0:
-                self._read_same_type_no_ref(read_context, length, collection_, serializer)
+                if body_always_advances:
+                    self._read_same_type_no_ref(read_context, length, collection_, serializer)
+                else:
+                    self._read_same_type_no_ref_guarded(read_context, length, collection_, serializer)
             else:
                 self._read_same_type_has_null(read_context, length, collection_, serializer)
         else:
@@ -239,11 +252,12 @@ class CollectionSerializer(Serializer):
 
     def _read_same_type_no_ref(self, read_context, length, collection_, serializer):
         read_context.increase_depth()
-        if serializer.read_data_always_advances:
-            for _ in range(length):
-                self._add_element(collection_, read_context.read_no_ref(serializer=serializer))
-            read_context.decrease_depth()
-            return
+        for _ in range(length):
+            self._add_element(collection_, read_context.read_no_ref(serializer=serializer))
+        read_context.decrease_depth()
+
+    def _read_same_type_no_ref_guarded(self, read_context, length, collection_, serializer):
+        read_context.increase_depth()
         window_start = read_context.get_reader_index()
         window_items = 0
         for _ in range(length):
@@ -509,7 +523,16 @@ class MapSerializer(Serializer):
     def read(self, read_context):
         size = read_context.read_var_uint32()
         read_context.reserve_graph_memory(_DICT_OWNER_BYTES + size * 2 * _REFERENCE_BYTES)
-        _ensure_container_allocation(read_context, size)
+        if size:
+            if (
+                self.key_write_serializer is not None
+                and self.key_write_serializer.read_data_always_advances
+                or self.value_write_serializer is not None
+                and self.value_write_serializer.read_data_always_advances
+            ):
+                read_context.check_readable_bytes(size)
+            else:
+                _ensure_container_allocation(read_context, size)
         map_ = {}
         ref_reader = read_context.ref_reader
         read_context.reference(map_)

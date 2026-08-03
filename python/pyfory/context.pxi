@@ -1213,16 +1213,20 @@ cdef class ReadContext:
     cpdef read_bytes_and_size(self):
         return self.buffer.read_bytes_and_size()
 
-    cpdef check_readable_bytes(self, int32_t length):
-        cdef Buffer buffer
+    cdef void _raise_invalid_readable_bytes(self, int32_t length):
+        raise_fory_error(CErrorCode.InvalidData, f"Readable byte count {length} is negative")
+
+    cdef inline void check_readable_bytes_c(self, int32_t length):
         if length < 0:
-            raise_fory_error(CErrorCode.InvalidData, f"Readable byte count {length} is negative")
+            self._raise_invalid_readable_bytes(length)
         if length == 0:
             return
-        buffer = self.buffer
-        if not self.c_buffer.ensure_readable(<uint32_t>length, buffer._error):
-            if not buffer._error.ok():
-                buffer._raise_if_error()
+        if not self.c_buffer.ensure_readable(<uint32_t>length, self.buffer._error):
+            if not self.buffer._error.ok():
+                self.buffer._raise_if_error()
+
+    cpdef check_readable_bytes(self, int32_t length):
+        self.check_readable_bytes_c(length)
 
     cpdef inline int32_t get_reader_index(self):
         return self.buffer.get_reader_index()

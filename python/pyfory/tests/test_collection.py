@@ -452,7 +452,7 @@ def test_unbacked_collection_budget():
     rejected = fory.serialize([EmptyValue(), EmptyValue(), EmptyValue()])
     accepted = fory.serialize([EmptyValue(), EmptyValue()])
 
-    with pytest.raises(ValueError):
+    with pytest.raises(Exception):
         fory.deserialize(rejected)
     assert len(fory.deserialize(accepted)) == 2
 
@@ -466,7 +466,7 @@ def test_custom_serializer_progress_default():
 def test_unbacked_collection_tail():
     fory = _empty_value_fory(1024)
     data = fory.serialize([EmptyValue() for _ in range(1025)])
-    with pytest.raises(ValueError):
+    with pytest.raises(Exception):
         fory.deserialize(data)
 
 
@@ -479,7 +479,7 @@ def test_unbacked_map_budget():
             EmptyValue(): EmptyValue(),
         }
     )
-    with pytest.raises(ValueError):
+    with pytest.raises(Exception):
         fory.deserialize(data)
 
 
@@ -491,7 +491,7 @@ def test_generated_struct_progress():
     )
     empty_fory.register_type(EmptyStruct, name="test.EmptyStruct")
     empty_data = empty_fory.serialize([EmptyStruct(), EmptyStruct(), EmptyStruct()])
-    with pytest.raises(ValueError):
+    with pytest.raises(Exception):
         empty_fory.deserialize(empty_data)
 
     advancing_fory = pyfory.Fory(

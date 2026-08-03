@@ -153,10 +153,10 @@ public abstract class JsonReader {
     1.0f, 10.0f, 100.0f, 1_000.0f, 10_000.0f, 100_000.0f, 1_000_000.0f, 10_000_000.0f
   };
 
+  private final JsonConfig config;
   private final JsonTypeResolver typeResolver;
   protected int position;
   private final int maxDepth;
-  private final long maxGraphMemoryBytes;
   private int depth;
   private long remainingGraphMemoryBytes;
 
@@ -264,9 +264,9 @@ public abstract class JsonReader {
   private final byte[] decimalBoundaryDigits = new byte[DECIMAL_BOUNDARY_DIGITS];
 
   protected JsonReader(JsonConfig config, JsonTypeResolver typeResolver) {
+    this.config = config;
     this.typeResolver = Objects.requireNonNull(typeResolver, "typeResolver");
     maxDepth = config.maxDepth();
-    maxGraphMemoryBytes = config.maxGraphMemoryBytes();
   }
 
   /**
@@ -343,7 +343,7 @@ public abstract class JsonReader {
 
   protected final void reset() {
     depth = 0;
-    remainingGraphMemoryBytes = maxGraphMemoryBytes;
+    remainingGraphMemoryBytes = config.maxGraphMemoryBytes();
   }
 
   protected final void clearRootState() {
@@ -391,7 +391,7 @@ public abstract class JsonReader {
             + " bytes exceeds maxGraphMemoryBytes remaining budget "
             + remaining
             + " bytes out of configured limit "
-            + maxGraphMemoryBytes
+            + config.maxGraphMemoryBytes()
             + " bytes; increase ForyJsonBuilder#withMaxGraphMemoryBytes for trusted data");
   }
 

@@ -408,6 +408,8 @@ final class Utf8CollectionReaderCodegen {
     code.append("reader.exitDepth();\n");
     code.append("if (list != null) {\n");
     code.append("  return list;\n}\n");
+    // list remains null only for the staged prefix, so size is at most eight and the generated int
+    // reservation cannot overflow.
     code.append(reserveArrayList("size", ""));
     code.append("list = new ArrayList(size);\n");
     code.append("switch (size) {\n");
@@ -427,7 +429,7 @@ final class Utf8CollectionReaderCodegen {
     return indent
         + "reader.reserveGraphMemory("
         + ARRAY_LIST_OWNER_BYTES
-        + "L + (long) "
+        + " + "
         + size
         + " * "
         + REFERENCE_BYTES

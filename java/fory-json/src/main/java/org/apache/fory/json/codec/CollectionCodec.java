@@ -83,7 +83,9 @@ import org.apache.fory.serializer.GraphMemoryEstimates;
 public abstract class CollectionCodec<T extends Collection<?>> implements JsonValueCodec<T> {
   private static final Class<?> UNTYPED_COLLECTION = ArrayList.class;
   private static final int REFERENCE_BYTES = GraphMemoryEstimates.REFERENCE_BYTES;
-  private static final int ARRAY_LIST_OWNER_BYTES =
+  // Fixed-size ArrayList reads reserve inline at allocation branches so this Java 8 target selects
+  // the int budget path without a forwarding accessor.
+  static final int ARRAY_LIST_OWNER_BYTES =
       GraphMemoryEstimates.shallowObjectBytes(ArrayList.class);
   private static final int JSON_ARRAY_OWNER_BYTES =
       GraphMemoryEstimates.shallowObjectBytes(JsonArray.class);
@@ -391,13 +393,6 @@ public abstract class CollectionCodec<T extends Collection<?>> implements JsonVa
         || name.startsWith("java.util.Collections$Unmodifiable");
   }
 
-  private static void reserveCollection(JsonReader reader, int ownerBytes, int size) {
-    // Staged readers may combine only candidates already proven by an array separator. The
-    // combined reservation must precede final owner construction; every later candidate is
-    // reserved before its child read and the mutation that can grow retained storage.
-    reader.reserveGraphMemory(ownerBytes + (long) size * REFERENCE_BYTES);
-  }
-
   private static int collectionOwnerBytes(Class<?> type) {
     if (LinkedHashSet.class.isAssignableFrom(type)) {
       return Math.addExact(
@@ -541,13 +536,13 @@ public abstract class CollectionCodec<T extends Collection<?>> implements JsonVa
       reader.expectNextToken('[');
       if (reader.consumeNextToken(']')) {
         reader.exitDepth();
-        reserveCollection(reader, ARRAY_LIST_OWNER_BYTES, 0);
+        reader.reserveGraphMemory(ARRAY_LIST_OWNER_BYTES);
         return new ArrayList<>(0);
       }
       Object e0 = readLatin1Element(reader);
       if (!reader.consumeNextCommaOrEndArray()) {
         reader.exitDepth();
-        reserveCollection(reader, ARRAY_LIST_OWNER_BYTES, 1);
+        reader.reserveGraphMemory(ARRAY_LIST_OWNER_BYTES + REFERENCE_BYTES);
         ArrayList<Object> list = new ArrayList<>(1);
         list.add(e0);
         return list;
@@ -555,7 +550,7 @@ public abstract class CollectionCodec<T extends Collection<?>> implements JsonVa
       Object e1 = readLatin1Element(reader);
       if (!reader.consumeNextCommaOrEndArray()) {
         reader.exitDepth();
-        reserveCollection(reader, ARRAY_LIST_OWNER_BYTES, 2);
+        reader.reserveGraphMemory(ARRAY_LIST_OWNER_BYTES + 2 * REFERENCE_BYTES);
         ArrayList<Object> list = new ArrayList<>(2);
         list.add(e0);
         list.add(e1);
@@ -564,7 +559,7 @@ public abstract class CollectionCodec<T extends Collection<?>> implements JsonVa
       Object e2 = readLatin1Element(reader);
       if (!reader.consumeNextCommaOrEndArray()) {
         reader.exitDepth();
-        reserveCollection(reader, ARRAY_LIST_OWNER_BYTES, 3);
+        reader.reserveGraphMemory(ARRAY_LIST_OWNER_BYTES + 3 * REFERENCE_BYTES);
         ArrayList<Object> list = new ArrayList<>(3);
         list.add(e0);
         list.add(e1);
@@ -574,7 +569,7 @@ public abstract class CollectionCodec<T extends Collection<?>> implements JsonVa
       Object e3 = readLatin1Element(reader);
       if (!reader.consumeNextCommaOrEndArray()) {
         reader.exitDepth();
-        reserveCollection(reader, ARRAY_LIST_OWNER_BYTES, 4);
+        reader.reserveGraphMemory(ARRAY_LIST_OWNER_BYTES + 4 * REFERENCE_BYTES);
         ArrayList<Object> list = new ArrayList<>(4);
         list.add(e0);
         list.add(e1);
@@ -590,7 +585,7 @@ public abstract class CollectionCodec<T extends Collection<?>> implements JsonVa
       Object e4 = readLatin1Element(reader);
       if (!reader.consumeNextCommaOrEndArray()) {
         reader.exitDepth();
-        reserveCollection(reader, ARRAY_LIST_OWNER_BYTES, 5);
+        reader.reserveGraphMemory(ARRAY_LIST_OWNER_BYTES + 5 * REFERENCE_BYTES);
         ArrayList<Object> list = new ArrayList<>(5);
         list.add(e0);
         list.add(e1);
@@ -602,7 +597,7 @@ public abstract class CollectionCodec<T extends Collection<?>> implements JsonVa
       Object e5 = readLatin1Element(reader);
       if (!reader.consumeNextCommaOrEndArray()) {
         reader.exitDepth();
-        reserveCollection(reader, ARRAY_LIST_OWNER_BYTES, 6);
+        reader.reserveGraphMemory(ARRAY_LIST_OWNER_BYTES + 6 * REFERENCE_BYTES);
         ArrayList<Object> list = new ArrayList<>(6);
         list.add(e0);
         list.add(e1);
@@ -620,7 +615,7 @@ public abstract class CollectionCodec<T extends Collection<?>> implements JsonVa
       Object e6 = readLatin1Element(reader);
       if (!reader.consumeNextCommaOrEndArray()) {
         reader.exitDepth();
-        reserveCollection(reader, ARRAY_LIST_OWNER_BYTES, 7);
+        reader.reserveGraphMemory(ARRAY_LIST_OWNER_BYTES + 7 * REFERENCE_BYTES);
         ArrayList<Object> list = new ArrayList<>(7);
         list.add(e0);
         list.add(e1);
@@ -634,7 +629,7 @@ public abstract class CollectionCodec<T extends Collection<?>> implements JsonVa
       Object e7 = readLatin1Element(reader);
       if (!reader.consumeNextCommaOrEndArray()) {
         reader.exitDepth();
-        reserveCollection(reader, ARRAY_LIST_OWNER_BYTES, 8);
+        reader.reserveGraphMemory(ARRAY_LIST_OWNER_BYTES + 8 * REFERENCE_BYTES);
         ArrayList<Object> list = new ArrayList<>(8);
         list.add(e0);
         list.add(e1);
@@ -646,7 +641,7 @@ public abstract class CollectionCodec<T extends Collection<?>> implements JsonVa
         list.add(e7);
         return list;
       }
-      reserveCollection(reader, ARRAY_LIST_OWNER_BYTES, 9);
+      reader.reserveGraphMemory(ARRAY_LIST_OWNER_BYTES + 9 * REFERENCE_BYTES);
       ArrayList<Object> list = new ArrayList<>(9);
       list.add(e0);
       list.add(e1);
@@ -670,13 +665,13 @@ public abstract class CollectionCodec<T extends Collection<?>> implements JsonVa
       reader.expectNextToken('[');
       if (reader.consumeNextToken(']')) {
         reader.exitDepth();
-        reserveCollection(reader, ARRAY_LIST_OWNER_BYTES, 0);
+        reader.reserveGraphMemory(ARRAY_LIST_OWNER_BYTES);
         return new ArrayList<>(0);
       }
       Object e0 = readUtf16Element(reader);
       if (!reader.consumeNextCommaOrEndArray()) {
         reader.exitDepth();
-        reserveCollection(reader, ARRAY_LIST_OWNER_BYTES, 1);
+        reader.reserveGraphMemory(ARRAY_LIST_OWNER_BYTES + REFERENCE_BYTES);
         ArrayList<Object> list = new ArrayList<>(1);
         list.add(e0);
         return list;
@@ -684,7 +679,7 @@ public abstract class CollectionCodec<T extends Collection<?>> implements JsonVa
       Object e1 = readUtf16Element(reader);
       if (!reader.consumeNextCommaOrEndArray()) {
         reader.exitDepth();
-        reserveCollection(reader, ARRAY_LIST_OWNER_BYTES, 2);
+        reader.reserveGraphMemory(ARRAY_LIST_OWNER_BYTES + 2 * REFERENCE_BYTES);
         ArrayList<Object> list = new ArrayList<>(2);
         list.add(e0);
         list.add(e1);
@@ -693,7 +688,7 @@ public abstract class CollectionCodec<T extends Collection<?>> implements JsonVa
       Object e2 = readUtf16Element(reader);
       if (!reader.consumeNextCommaOrEndArray()) {
         reader.exitDepth();
-        reserveCollection(reader, ARRAY_LIST_OWNER_BYTES, 3);
+        reader.reserveGraphMemory(ARRAY_LIST_OWNER_BYTES + 3 * REFERENCE_BYTES);
         ArrayList<Object> list = new ArrayList<>(3);
         list.add(e0);
         list.add(e1);
@@ -703,7 +698,7 @@ public abstract class CollectionCodec<T extends Collection<?>> implements JsonVa
       Object e3 = readUtf16Element(reader);
       if (!reader.consumeNextCommaOrEndArray()) {
         reader.exitDepth();
-        reserveCollection(reader, ARRAY_LIST_OWNER_BYTES, 4);
+        reader.reserveGraphMemory(ARRAY_LIST_OWNER_BYTES + 4 * REFERENCE_BYTES);
         ArrayList<Object> list = new ArrayList<>(4);
         list.add(e0);
         list.add(e1);
@@ -719,7 +714,7 @@ public abstract class CollectionCodec<T extends Collection<?>> implements JsonVa
       Object e4 = readUtf16Element(reader);
       if (!reader.consumeNextCommaOrEndArray()) {
         reader.exitDepth();
-        reserveCollection(reader, ARRAY_LIST_OWNER_BYTES, 5);
+        reader.reserveGraphMemory(ARRAY_LIST_OWNER_BYTES + 5 * REFERENCE_BYTES);
         ArrayList<Object> list = new ArrayList<>(5);
         list.add(e0);
         list.add(e1);
@@ -731,7 +726,7 @@ public abstract class CollectionCodec<T extends Collection<?>> implements JsonVa
       Object e5 = readUtf16Element(reader);
       if (!reader.consumeNextCommaOrEndArray()) {
         reader.exitDepth();
-        reserveCollection(reader, ARRAY_LIST_OWNER_BYTES, 6);
+        reader.reserveGraphMemory(ARRAY_LIST_OWNER_BYTES + 6 * REFERENCE_BYTES);
         ArrayList<Object> list = new ArrayList<>(6);
         list.add(e0);
         list.add(e1);
@@ -749,7 +744,7 @@ public abstract class CollectionCodec<T extends Collection<?>> implements JsonVa
       Object e6 = readUtf16Element(reader);
       if (!reader.consumeNextCommaOrEndArray()) {
         reader.exitDepth();
-        reserveCollection(reader, ARRAY_LIST_OWNER_BYTES, 7);
+        reader.reserveGraphMemory(ARRAY_LIST_OWNER_BYTES + 7 * REFERENCE_BYTES);
         ArrayList<Object> list = new ArrayList<>(7);
         list.add(e0);
         list.add(e1);
@@ -763,7 +758,7 @@ public abstract class CollectionCodec<T extends Collection<?>> implements JsonVa
       Object e7 = readUtf16Element(reader);
       if (!reader.consumeNextCommaOrEndArray()) {
         reader.exitDepth();
-        reserveCollection(reader, ARRAY_LIST_OWNER_BYTES, 8);
+        reader.reserveGraphMemory(ARRAY_LIST_OWNER_BYTES + 8 * REFERENCE_BYTES);
         ArrayList<Object> list = new ArrayList<>(8);
         list.add(e0);
         list.add(e1);
@@ -775,7 +770,7 @@ public abstract class CollectionCodec<T extends Collection<?>> implements JsonVa
         list.add(e7);
         return list;
       }
-      reserveCollection(reader, ARRAY_LIST_OWNER_BYTES, 9);
+      reader.reserveGraphMemory(ARRAY_LIST_OWNER_BYTES + 9 * REFERENCE_BYTES);
       ArrayList<Object> list = new ArrayList<>(9);
       list.add(e0);
       list.add(e1);
@@ -799,13 +794,13 @@ public abstract class CollectionCodec<T extends Collection<?>> implements JsonVa
       reader.expectNextToken('[');
       if (reader.consumeNextToken(']')) {
         reader.exitDepth();
-        reserveCollection(reader, ARRAY_LIST_OWNER_BYTES, 0);
+        reader.reserveGraphMemory(ARRAY_LIST_OWNER_BYTES);
         return new ArrayList<>(0);
       }
       Object e0 = readUtf8Element(reader);
       if (!reader.consumeNextCommaOrEndArray()) {
         reader.exitDepth();
-        reserveCollection(reader, ARRAY_LIST_OWNER_BYTES, 1);
+        reader.reserveGraphMemory(ARRAY_LIST_OWNER_BYTES + REFERENCE_BYTES);
         ArrayList<Object> list = new ArrayList<>(1);
         list.add(e0);
         return list;
@@ -813,7 +808,7 @@ public abstract class CollectionCodec<T extends Collection<?>> implements JsonVa
       Object e1 = readUtf8Element(reader);
       if (!reader.consumeNextCommaOrEndArray()) {
         reader.exitDepth();
-        reserveCollection(reader, ARRAY_LIST_OWNER_BYTES, 2);
+        reader.reserveGraphMemory(ARRAY_LIST_OWNER_BYTES + 2 * REFERENCE_BYTES);
         ArrayList<Object> list = new ArrayList<>(2);
         list.add(e0);
         list.add(e1);
@@ -822,7 +817,7 @@ public abstract class CollectionCodec<T extends Collection<?>> implements JsonVa
       Object e2 = readUtf8Element(reader);
       if (!reader.consumeNextCommaOrEndArray()) {
         reader.exitDepth();
-        reserveCollection(reader, ARRAY_LIST_OWNER_BYTES, 3);
+        reader.reserveGraphMemory(ARRAY_LIST_OWNER_BYTES + 3 * REFERENCE_BYTES);
         ArrayList<Object> list = new ArrayList<>(3);
         list.add(e0);
         list.add(e1);
@@ -832,7 +827,7 @@ public abstract class CollectionCodec<T extends Collection<?>> implements JsonVa
       Object e3 = readUtf8Element(reader);
       if (!reader.consumeNextCommaOrEndArray()) {
         reader.exitDepth();
-        reserveCollection(reader, ARRAY_LIST_OWNER_BYTES, 4);
+        reader.reserveGraphMemory(ARRAY_LIST_OWNER_BYTES + 4 * REFERENCE_BYTES);
         ArrayList<Object> list = new ArrayList<>(4);
         list.add(e0);
         list.add(e1);
@@ -848,7 +843,7 @@ public abstract class CollectionCodec<T extends Collection<?>> implements JsonVa
       Object e4 = readUtf8Element(reader);
       if (!reader.consumeNextCommaOrEndArray()) {
         reader.exitDepth();
-        reserveCollection(reader, ARRAY_LIST_OWNER_BYTES, 5);
+        reader.reserveGraphMemory(ARRAY_LIST_OWNER_BYTES + 5 * REFERENCE_BYTES);
         ArrayList<Object> list = new ArrayList<>(5);
         list.add(e0);
         list.add(e1);
@@ -860,7 +855,7 @@ public abstract class CollectionCodec<T extends Collection<?>> implements JsonVa
       Object e5 = readUtf8Element(reader);
       if (!reader.consumeNextCommaOrEndArray()) {
         reader.exitDepth();
-        reserveCollection(reader, ARRAY_LIST_OWNER_BYTES, 6);
+        reader.reserveGraphMemory(ARRAY_LIST_OWNER_BYTES + 6 * REFERENCE_BYTES);
         ArrayList<Object> list = new ArrayList<>(6);
         list.add(e0);
         list.add(e1);
@@ -878,7 +873,7 @@ public abstract class CollectionCodec<T extends Collection<?>> implements JsonVa
       Object e6 = readUtf8Element(reader);
       if (!reader.consumeNextCommaOrEndArray()) {
         reader.exitDepth();
-        reserveCollection(reader, ARRAY_LIST_OWNER_BYTES, 7);
+        reader.reserveGraphMemory(ARRAY_LIST_OWNER_BYTES + 7 * REFERENCE_BYTES);
         ArrayList<Object> list = new ArrayList<>(7);
         list.add(e0);
         list.add(e1);
@@ -892,7 +887,7 @@ public abstract class CollectionCodec<T extends Collection<?>> implements JsonVa
       Object e7 = readUtf8Element(reader);
       if (!reader.consumeNextCommaOrEndArray()) {
         reader.exitDepth();
-        reserveCollection(reader, ARRAY_LIST_OWNER_BYTES, 8);
+        reader.reserveGraphMemory(ARRAY_LIST_OWNER_BYTES + 8 * REFERENCE_BYTES);
         ArrayList<Object> list = new ArrayList<>(8);
         list.add(e0);
         list.add(e1);
@@ -904,7 +899,7 @@ public abstract class CollectionCodec<T extends Collection<?>> implements JsonVa
         list.add(e7);
         return list;
       }
-      reserveCollection(reader, ARRAY_LIST_OWNER_BYTES, 9);
+      reader.reserveGraphMemory(ARRAY_LIST_OWNER_BYTES + 9 * REFERENCE_BYTES);
       ArrayList<Object> list = new ArrayList<>(9);
       list.add(e0);
       list.add(e1);
@@ -1158,13 +1153,13 @@ public abstract class CollectionCodec<T extends Collection<?>> implements JsonVa
       reader.expectNextToken('[');
       if (reader.consumeNextToken(']')) {
         reader.exitDepth();
-        reserveCollection(reader, ARRAY_LIST_OWNER_BYTES, 0);
+        reader.reserveGraphMemory(ARRAY_LIST_OWNER_BYTES);
         return new ArrayList<>(0);
       }
       Object e0 = codec.readLatin1(reader);
       if (!reader.consumeNextCommaOrEndArray()) {
         reader.exitDepth();
-        reserveCollection(reader, ARRAY_LIST_OWNER_BYTES, 1);
+        reader.reserveGraphMemory(ARRAY_LIST_OWNER_BYTES + REFERENCE_BYTES);
         ArrayList<Object> list = new ArrayList<>(1);
         list.add(e0);
         return list;
@@ -1172,7 +1167,7 @@ public abstract class CollectionCodec<T extends Collection<?>> implements JsonVa
       Object e1 = codec.readLatin1(reader);
       if (!reader.consumeNextCommaOrEndArray()) {
         reader.exitDepth();
-        reserveCollection(reader, ARRAY_LIST_OWNER_BYTES, 2);
+        reader.reserveGraphMemory(ARRAY_LIST_OWNER_BYTES + 2 * REFERENCE_BYTES);
         ArrayList<Object> list = new ArrayList<>(2);
         list.add(e0);
         list.add(e1);
@@ -1181,7 +1176,7 @@ public abstract class CollectionCodec<T extends Collection<?>> implements JsonVa
       Object e2 = codec.readLatin1(reader);
       if (!reader.consumeNextCommaOrEndArray()) {
         reader.exitDepth();
-        reserveCollection(reader, ARRAY_LIST_OWNER_BYTES, 3);
+        reader.reserveGraphMemory(ARRAY_LIST_OWNER_BYTES + 3 * REFERENCE_BYTES);
         ArrayList<Object> list = new ArrayList<>(3);
         list.add(e0);
         list.add(e1);
@@ -1191,7 +1186,7 @@ public abstract class CollectionCodec<T extends Collection<?>> implements JsonVa
       Object e3 = codec.readLatin1(reader);
       if (!reader.consumeNextCommaOrEndArray()) {
         reader.exitDepth();
-        reserveCollection(reader, ARRAY_LIST_OWNER_BYTES, 4);
+        reader.reserveGraphMemory(ARRAY_LIST_OWNER_BYTES + 4 * REFERENCE_BYTES);
         ArrayList<Object> list = new ArrayList<>(4);
         list.add(e0);
         list.add(e1);
@@ -1206,7 +1201,7 @@ public abstract class CollectionCodec<T extends Collection<?>> implements JsonVa
       Object e4 = codec.readLatin1(reader);
       if (!reader.consumeNextCommaOrEndArray()) {
         reader.exitDepth();
-        reserveCollection(reader, ARRAY_LIST_OWNER_BYTES, 5);
+        reader.reserveGraphMemory(ARRAY_LIST_OWNER_BYTES + 5 * REFERENCE_BYTES);
         ArrayList<Object> list = new ArrayList<>(5);
         list.add(e0);
         list.add(e1);
@@ -1218,7 +1213,7 @@ public abstract class CollectionCodec<T extends Collection<?>> implements JsonVa
       Object e5 = codec.readLatin1(reader);
       if (!reader.consumeNextCommaOrEndArray()) {
         reader.exitDepth();
-        reserveCollection(reader, ARRAY_LIST_OWNER_BYTES, 6);
+        reader.reserveGraphMemory(ARRAY_LIST_OWNER_BYTES + 6 * REFERENCE_BYTES);
         ArrayList<Object> list = new ArrayList<>(6);
         list.add(e0);
         list.add(e1);
@@ -1243,7 +1238,7 @@ public abstract class CollectionCodec<T extends Collection<?>> implements JsonVa
       Object e6 = codec.readLatin1(reader);
       if (!reader.consumeNextCommaOrEndArray()) {
         reader.exitDepth();
-        reserveCollection(reader, ARRAY_LIST_OWNER_BYTES, 7);
+        reader.reserveGraphMemory(ARRAY_LIST_OWNER_BYTES + 7 * REFERENCE_BYTES);
         ArrayList<Object> list = new ArrayList<>(7);
         list.add(e0);
         list.add(e1);
@@ -1257,7 +1252,7 @@ public abstract class CollectionCodec<T extends Collection<?>> implements JsonVa
       Object e7 = codec.readLatin1(reader);
       if (!reader.consumeNextCommaOrEndArray()) {
         reader.exitDepth();
-        reserveCollection(reader, ARRAY_LIST_OWNER_BYTES, 8);
+        reader.reserveGraphMemory(ARRAY_LIST_OWNER_BYTES + 8 * REFERENCE_BYTES);
         ArrayList<Object> list = new ArrayList<>(8);
         list.add(e0);
         list.add(e1);
@@ -1269,7 +1264,7 @@ public abstract class CollectionCodec<T extends Collection<?>> implements JsonVa
         list.add(e7);
         return list;
       }
-      reserveCollection(reader, ARRAY_LIST_OWNER_BYTES, 8);
+      reader.reserveGraphMemory(ARRAY_LIST_OWNER_BYTES + 8 * REFERENCE_BYTES);
       ArrayList<Object> list = new ArrayList<>(9);
       list.add(e0);
       list.add(e1);
@@ -1293,13 +1288,13 @@ public abstract class CollectionCodec<T extends Collection<?>> implements JsonVa
       reader.expectNextToken('[');
       if (reader.consumeNextToken(']')) {
         reader.exitDepth();
-        reserveCollection(reader, ARRAY_LIST_OWNER_BYTES, 0);
+        reader.reserveGraphMemory(ARRAY_LIST_OWNER_BYTES);
         return new ArrayList<>(0);
       }
       Object e0 = codec.readUtf16(reader);
       if (!reader.consumeNextCommaOrEndArray()) {
         reader.exitDepth();
-        reserveCollection(reader, ARRAY_LIST_OWNER_BYTES, 1);
+        reader.reserveGraphMemory(ARRAY_LIST_OWNER_BYTES + REFERENCE_BYTES);
         ArrayList<Object> list = new ArrayList<>(1);
         list.add(e0);
         return list;
@@ -1307,7 +1302,7 @@ public abstract class CollectionCodec<T extends Collection<?>> implements JsonVa
       Object e1 = codec.readUtf16(reader);
       if (!reader.consumeNextCommaOrEndArray()) {
         reader.exitDepth();
-        reserveCollection(reader, ARRAY_LIST_OWNER_BYTES, 2);
+        reader.reserveGraphMemory(ARRAY_LIST_OWNER_BYTES + 2 * REFERENCE_BYTES);
         ArrayList<Object> list = new ArrayList<>(2);
         list.add(e0);
         list.add(e1);
@@ -1316,7 +1311,7 @@ public abstract class CollectionCodec<T extends Collection<?>> implements JsonVa
       Object e2 = codec.readUtf16(reader);
       if (!reader.consumeNextCommaOrEndArray()) {
         reader.exitDepth();
-        reserveCollection(reader, ARRAY_LIST_OWNER_BYTES, 3);
+        reader.reserveGraphMemory(ARRAY_LIST_OWNER_BYTES + 3 * REFERENCE_BYTES);
         ArrayList<Object> list = new ArrayList<>(3);
         list.add(e0);
         list.add(e1);
@@ -1326,7 +1321,7 @@ public abstract class CollectionCodec<T extends Collection<?>> implements JsonVa
       Object e3 = codec.readUtf16(reader);
       if (!reader.consumeNextCommaOrEndArray()) {
         reader.exitDepth();
-        reserveCollection(reader, ARRAY_LIST_OWNER_BYTES, 4);
+        reader.reserveGraphMemory(ARRAY_LIST_OWNER_BYTES + 4 * REFERENCE_BYTES);
         ArrayList<Object> list = new ArrayList<>(4);
         list.add(e0);
         list.add(e1);
@@ -1347,7 +1342,7 @@ public abstract class CollectionCodec<T extends Collection<?>> implements JsonVa
       Object e4 = codec.readUtf16(reader);
       if (!reader.consumeNextCommaOrEndArray()) {
         reader.exitDepth();
-        reserveCollection(reader, ARRAY_LIST_OWNER_BYTES, 5);
+        reader.reserveGraphMemory(ARRAY_LIST_OWNER_BYTES + 5 * REFERENCE_BYTES);
         ArrayList<Object> list = new ArrayList<>(5);
         list.add(e0);
         list.add(e1);
@@ -1359,7 +1354,7 @@ public abstract class CollectionCodec<T extends Collection<?>> implements JsonVa
       Object e5 = codec.readUtf16(reader);
       if (!reader.consumeNextCommaOrEndArray()) {
         reader.exitDepth();
-        reserveCollection(reader, ARRAY_LIST_OWNER_BYTES, 6);
+        reader.reserveGraphMemory(ARRAY_LIST_OWNER_BYTES + 6 * REFERENCE_BYTES);
         ArrayList<Object> list = new ArrayList<>(6);
         list.add(e0);
         list.add(e1);
@@ -1384,7 +1379,7 @@ public abstract class CollectionCodec<T extends Collection<?>> implements JsonVa
       Object e6 = codec.readUtf16(reader);
       if (!reader.consumeNextCommaOrEndArray()) {
         reader.exitDepth();
-        reserveCollection(reader, ARRAY_LIST_OWNER_BYTES, 7);
+        reader.reserveGraphMemory(ARRAY_LIST_OWNER_BYTES + 7 * REFERENCE_BYTES);
         ArrayList<Object> list = new ArrayList<>(7);
         list.add(e0);
         list.add(e1);
@@ -1398,7 +1393,7 @@ public abstract class CollectionCodec<T extends Collection<?>> implements JsonVa
       Object e7 = codec.readUtf16(reader);
       if (!reader.consumeNextCommaOrEndArray()) {
         reader.exitDepth();
-        reserveCollection(reader, ARRAY_LIST_OWNER_BYTES, 8);
+        reader.reserveGraphMemory(ARRAY_LIST_OWNER_BYTES + 8 * REFERENCE_BYTES);
         ArrayList<Object> list = new ArrayList<>(8);
         list.add(e0);
         list.add(e1);
@@ -1410,7 +1405,7 @@ public abstract class CollectionCodec<T extends Collection<?>> implements JsonVa
         list.add(e7);
         return list;
       }
-      reserveCollection(reader, ARRAY_LIST_OWNER_BYTES, 8);
+      reader.reserveGraphMemory(ARRAY_LIST_OWNER_BYTES + 8 * REFERENCE_BYTES);
       ArrayList<Object> list = new ArrayList<>(9);
       list.add(e0);
       list.add(e1);
@@ -1434,13 +1429,13 @@ public abstract class CollectionCodec<T extends Collection<?>> implements JsonVa
       reader.expectNextToken('[');
       if (reader.consumeNextToken(']')) {
         reader.exitDepth();
-        reserveCollection(reader, ARRAY_LIST_OWNER_BYTES, 0);
+        reader.reserveGraphMemory(ARRAY_LIST_OWNER_BYTES);
         return new ArrayList<>(0);
       }
       Object e0 = codec.readUtf8(reader);
       if (!reader.consumeNextCommaOrEndArray()) {
         reader.exitDepth();
-        reserveCollection(reader, ARRAY_LIST_OWNER_BYTES, 1);
+        reader.reserveGraphMemory(ARRAY_LIST_OWNER_BYTES + REFERENCE_BYTES);
         ArrayList<Object> list = new ArrayList<>(1);
         list.add(e0);
         return list;
@@ -1448,7 +1443,7 @@ public abstract class CollectionCodec<T extends Collection<?>> implements JsonVa
       Object e1 = codec.readUtf8(reader);
       if (!reader.consumeNextCommaOrEndArray()) {
         reader.exitDepth();
-        reserveCollection(reader, ARRAY_LIST_OWNER_BYTES, 2);
+        reader.reserveGraphMemory(ARRAY_LIST_OWNER_BYTES + 2 * REFERENCE_BYTES);
         ArrayList<Object> list = new ArrayList<>(2);
         list.add(e0);
         list.add(e1);
@@ -1457,7 +1452,7 @@ public abstract class CollectionCodec<T extends Collection<?>> implements JsonVa
       Object e2 = codec.readUtf8(reader);
       if (!reader.consumeNextCommaOrEndArray()) {
         reader.exitDepth();
-        reserveCollection(reader, ARRAY_LIST_OWNER_BYTES, 3);
+        reader.reserveGraphMemory(ARRAY_LIST_OWNER_BYTES + 3 * REFERENCE_BYTES);
         ArrayList<Object> list = new ArrayList<>(3);
         list.add(e0);
         list.add(e1);
@@ -1467,7 +1462,7 @@ public abstract class CollectionCodec<T extends Collection<?>> implements JsonVa
       Object e3 = codec.readUtf8(reader);
       if (!reader.consumeNextCommaOrEndArray()) {
         reader.exitDepth();
-        reserveCollection(reader, ARRAY_LIST_OWNER_BYTES, 4);
+        reader.reserveGraphMemory(ARRAY_LIST_OWNER_BYTES + 4 * REFERENCE_BYTES);
         ArrayList<Object> list = new ArrayList<>(4);
         list.add(e0);
         list.add(e1);
@@ -1488,7 +1483,7 @@ public abstract class CollectionCodec<T extends Collection<?>> implements JsonVa
       Object e4 = codec.readUtf8(reader);
       if (!reader.consumeNextCommaOrEndArray()) {
         reader.exitDepth();
-        reserveCollection(reader, ARRAY_LIST_OWNER_BYTES, 5);
+        reader.reserveGraphMemory(ARRAY_LIST_OWNER_BYTES + 5 * REFERENCE_BYTES);
         ArrayList<Object> list = new ArrayList<>(5);
         list.add(e0);
         list.add(e1);
@@ -1500,7 +1495,7 @@ public abstract class CollectionCodec<T extends Collection<?>> implements JsonVa
       Object e5 = codec.readUtf8(reader);
       if (!reader.consumeNextCommaOrEndArray()) {
         reader.exitDepth();
-        reserveCollection(reader, ARRAY_LIST_OWNER_BYTES, 6);
+        reader.reserveGraphMemory(ARRAY_LIST_OWNER_BYTES + 6 * REFERENCE_BYTES);
         ArrayList<Object> list = new ArrayList<>(6);
         list.add(e0);
         list.add(e1);
@@ -1525,7 +1520,7 @@ public abstract class CollectionCodec<T extends Collection<?>> implements JsonVa
       Object e6 = codec.readUtf8(reader);
       if (!reader.consumeNextCommaOrEndArray()) {
         reader.exitDepth();
-        reserveCollection(reader, ARRAY_LIST_OWNER_BYTES, 7);
+        reader.reserveGraphMemory(ARRAY_LIST_OWNER_BYTES + 7 * REFERENCE_BYTES);
         ArrayList<Object> list = new ArrayList<>(7);
         list.add(e0);
         list.add(e1);
@@ -1539,7 +1534,7 @@ public abstract class CollectionCodec<T extends Collection<?>> implements JsonVa
       Object e7 = codec.readUtf8(reader);
       if (!reader.consumeNextCommaOrEndArray()) {
         reader.exitDepth();
-        reserveCollection(reader, ARRAY_LIST_OWNER_BYTES, 8);
+        reader.reserveGraphMemory(ARRAY_LIST_OWNER_BYTES + 8 * REFERENCE_BYTES);
         ArrayList<Object> list = new ArrayList<>(8);
         list.add(e0);
         list.add(e1);
@@ -1551,7 +1546,7 @@ public abstract class CollectionCodec<T extends Collection<?>> implements JsonVa
         list.add(e7);
         return list;
       }
-      reserveCollection(reader, ARRAY_LIST_OWNER_BYTES, 8);
+      reader.reserveGraphMemory(ARRAY_LIST_OWNER_BYTES + 8 * REFERENCE_BYTES);
       ArrayList<Object> list = new ArrayList<>(9);
       list.add(e0);
       list.add(e1);

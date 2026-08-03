@@ -157,7 +157,7 @@ fory = { version = "1.5.0", features = ["chrono"] }
 | `#[derive(ForyStruct)]` | Object graph serialization            |
 | `#[derive(ForyRow)]`    | Standard Row Format for named structs |
 
-`ForyRow` has a separate type set and returns borrowed, fallible field views. See [Row Format](row-format.md) for supported types, nullability, and examples.
+`ForyRow` has a separate type set and returns borrowed field views. Row reads and field access use `Result` to report invalid row data. See [Row Format](row-format.md) for supported types, nullability, and examples.
 
 ## Serialization APIs
 

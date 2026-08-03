@@ -67,7 +67,7 @@ fn main() -> Result<(), Error> {
     let row_data = to_row(&profile)?;
     let row = from_row::<UserProfile>(&row_data)?;
 
-    // Every getter is fallible because it validates the referenced bytes.
+    // Getters return Result and validate the referenced bytes.
     assert_eq!(row.id()?, 12345);
     assert_eq!(row.username()?, "alice");
     assert_eq!(row.email()?, Some("alice@example.com"));
@@ -129,7 +129,7 @@ Fixed arrays require the encoded element count to equal `N`. `BTreeMap` keys mus
 
 For the normative layout and size formulas, see the [Row Format Specification](https://fory.apache.org/docs/specification/row_format_spec).
 
-## Fallible Access
+## Validation and Errors
 
 `from_row`, generated field getters, and array `get` calls return `Result`. They reject truncated fixed regions, invalid counts, out-of-range offsets and sizes, invalid UTF-8, fixed-array length mismatches, and mismatched map key/value counts.
 
@@ -154,7 +154,7 @@ assert!(scores.get(scores.len()).is_err());
 | Feature      | `#[derive(ForyRow)]`                   | `#[derive(ForyStruct)]`      |
 | ------------ | -------------------------------------- | ---------------------------- |
 | Read result  | Borrowed view                          | Owned Rust value             |
-| Field access | Fallible getter                        | Normal struct access         |
+| Field access | Getter returning `Result`              | Normal struct access         |
 | Schema order | Source declaration order               | Object-format schema rules   |
 | Best for     | Selective access to Standard Row bytes | General object serialization |
 

@@ -296,7 +296,7 @@ fn derive_serializer(input: DeriveInput) -> TokenStream {
 ///
 /// This macro accepts named structs whose fields implement `RowValue`. It
 /// implements `RowValue` and the root `Row` marker, preserves field declaration
-/// order, and generates fallible borrowed field getters.
+/// order, and generates borrowed field getters that return `Result`.
 ///
 /// # Example
 ///

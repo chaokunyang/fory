@@ -576,7 +576,7 @@ fn main() -> Result<(), Error> {
 }
 ```
 
-`#[derive(ForyRow)]` supports named structs, including generic structs, and encodes fields in source declaration order. `Option<T>` supplies field or array-element nullability without changing `T`'s slot width. Generated field getters and array `get` calls are fallible because variable ranges and UTF-8 are validated when accessed.
+`#[derive(ForyRow)]` supports named structs, including generic structs, and encodes fields in source declaration order. `Option<T>` supplies field or array-element nullability without changing `T`'s slot width. Generated field getters and array `get` calls return `Result`, validating variable ranges and UTF-8 when accessed.
 
 Supported fixed-width values are `bool`, `i8`, `i16`, `i32`, `i64`, `f32`, `f64`, `Date`, `Timestamp`, and `Duration`. Supported variable-width values are UTF-8 `String`/`&str`, binary `Vec<u8>`/`&[u8]`, fixed and dynamic arrays over supported element types, `BTreeMap`, nested derived structs, and `Option<T>`. `Vec<u8>` uses the binary encoding rather than the Standard Array encoding. `Float16` and `Decimal` are not supported by Row Format because the standard specification does not define complete interoperable encodings for them.
 

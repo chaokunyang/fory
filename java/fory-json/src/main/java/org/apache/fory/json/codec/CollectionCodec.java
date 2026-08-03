@@ -630,11 +630,10 @@ public abstract class CollectionCodec<T extends Collection<?>> implements JsonVa
         list.add(e3);
         return list;
       }
-      return readLatin1ArrayListTail(reader, e0, e1, e2, e3);
-    }
-
-    private ArrayList<Object> readLatin1ArrayListTail(
-        Latin1JsonReader reader, Object e0, Object e1, Object e2, Object e3) {
+      // Keep this real exact-allocation prefix in the collection owner. Splitting here makes each
+      // method smaller than C2's hot-inline limit, so a generated caller can absorb the collection
+      // and element closure solely according to compilation order. The uncommon longer tail stays
+      // separate below.
       Object e4 = readLatin1Element(reader);
       if (!reader.consumeNextCommaOrEndArray()) {
         reader.exitDepth();

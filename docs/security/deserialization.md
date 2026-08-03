@@ -375,6 +375,18 @@ type-erased materialization paths reserve the shallow storage for the heap value
 Parents must not recursively include child object, collection, map, string, binary, or primitive
 dense-array contents; the child owner reserves its own shallow memory when it is materialized.
 
+### Java Fory Core
+
+Java Fory core primitive-array serializers reserve the portable array header plus the logical
+length multiplied by the primitive storage width. Primitive-list serializers reserve the returned
+list's shallow owner, the backing-array header, and the same primitive storage. These known-length
+paths reserve once after their existing proportional readable-byte check and before allocation;
+they do not use incremental batches. Compressed inputs use the decompressed logical length, while
+temporary compressed arrays remain construction scratch outside the retained graph budget.
+Float16 and BFloat16 dense-array carriers also include their wrapper's shallow owner. When a boxed
+list conversion first decodes a primitive array, the array's reservation remains as credit toward
+the final list estimate, and the conversion reserves only a positive remaining difference.
+
 ### Java Fory JSON
 
 Java Fory JSON uses `ForyJsonBuilder.withMaxGraphMemoryBytes` to configure this per-root gate. The

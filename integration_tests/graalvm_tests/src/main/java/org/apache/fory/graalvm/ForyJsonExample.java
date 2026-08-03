@@ -44,7 +44,9 @@ import org.apache.fory.graalvm.closed.ClosedJsonRecord;
 import org.apache.fory.json.ForyJson;
 import org.apache.fory.json.PropertyNamingStrategy;
 import org.apache.fory.json.annotation.ForyJsonProvider;
+import org.apache.fory.json.annotation.JsonAnyGetter;
 import org.apache.fory.json.annotation.JsonAnyProperty;
+import org.apache.fory.json.annotation.JsonAnySetter;
 import org.apache.fory.json.annotation.JsonBase64;
 import org.apache.fory.json.annotation.JsonCodec;
 import org.apache.fory.json.annotation.JsonCreator;
@@ -123,16 +125,14 @@ public final class ForyJsonExample {
   }
 
   private static void testHostedCodegenConfigurations() {
+    ForyJson providerJson = newProviderJson();
+    ForyJson interpretedJson = newInterpretedJson();
     exerciseCodegenConfiguration(ForyJson.builder().build(), false);
-    exerciseCodegenConfiguration(newProviderJson(), true);
-    exerciseCodegenConfiguration(
-        ForyJson.builder()
-            .withFieldMode(true)
-            .withPropertyNamingStrategy(PropertyNamingStrategy.SNAKE_CASE)
-            .registerCodec(CodegenProbeValue.class, new CodegenProbeCodec())
-            .build(),
-        false);
-    testEmptyMixinCodegen();
+    exerciseCodegenConfiguration(providerJson, true);
+    exerciseCodegenConfiguration(interpretedJson, false);
+    testEmptyMixin(providerJson, true);
+    testEmptyMixin(interpretedJson, false);
+    testInterpretedMetadata(interpretedJson);
     testIndependentChildCodegen();
     testExternalModuleMixin();
   }
@@ -147,14 +147,46 @@ public final class ForyJsonExample {
         .build();
   }
 
-  private static void testEmptyMixinCodegen() {
-    CodegenProbeCodec.expect(EmptyMixinTarget.class, true);
-    ForyJson json = newProviderJson();
+  private static ForyJson newInterpretedJson() {
+    return ForyJson.builder()
+        .withPropertyNamingStrategy(PropertyNamingStrategy.SNAKE_CASE)
+        .registerCodec(CodegenProbeValue.class, new CodegenProbeCodec())
+        .registerMixin(EmptyMixin.class)
+        .registerMixin(InterpretedMixin.class)
+        .build();
+  }
+
+  private static void testEmptyMixin(ForyJson json, boolean generated) {
+    CodegenProbeCodec.expect(EmptyMixinTarget.class, generated);
     EmptyMixinTarget value = new EmptyMixinTarget();
     value.probe = new CodegenProbeValue("empty-mixin");
     String encoded = json.toJson(value);
     Preconditions.checkArgument(
         json.fromJson(encoded, EmptyMixinTarget.class).probe.value.equals("empty-mixin"));
+  }
+
+  private static void testInterpretedMetadata(ForyJson json) {
+    InterpretedMixinTarget mixinValue = new InterpretedMixinTarget();
+    mixinValue.setName("empty-mixin");
+    String mixinJson = json.toJson(mixinValue);
+    Preconditions.checkArgument(
+        json.fromJson(mixinJson, InterpretedMixinTarget.class).getName().equals("empty-mixin"));
+
+    InterpretedBean bean = new InterpretedBean();
+    bean.setName("bean");
+    bean.putExtra("dynamic", "extra");
+    InterpretedBean decoded = json.fromJson(json.toJson(bean), InterpretedBean.class);
+    Preconditions.checkArgument(decoded.getName().equals("bean"));
+    Preconditions.checkArgument(decoded.extra().equals(Map.of("dynamic", "extra")));
+
+    DirectValueRecord record = new DirectValueRecord("record-value");
+    Preconditions.checkArgument(json.toJson(record).equals("\"record-value\""));
+    Preconditions.checkArgument(
+        json.fromJson("\"decoded-record\"", DirectValueRecord.class)
+            .equals(new DirectValueRecord("decoded-record")));
+    Preconditions.checkArgument(json.toJson(DirectValueEnum.READY).equals("\"ready\""));
+    Preconditions.checkArgument(
+        json.fromJson("\"done\"", DirectValueEnum.class) == DirectValueEnum.DONE);
   }
 
   private static void exerciseCodegenConfiguration(ForyJson json, boolean generated) {
@@ -437,6 +469,7 @@ public final class ForyJsonExample {
     Preconditions.checkArgument(
         Arrays.equals(
             json.fromJson("{\"value\":\"AQID\"}", Base64Bytes.class).value, new byte[] {1, 2, 3}));
+
   }
 
   private static void testSubtypes() {
@@ -546,6 +579,49 @@ public final class ForyJsonExample {
 
   @JsonMixin(target = EmptyMixinTarget.class)
   public interface EmptyMixin {}
+
+  public static final class InterpretedMixinTarget {
+    private String name;
+
+    public InterpretedMixinTarget() {}
+
+    public String getName() {
+      return name;
+    }
+
+    public void setName(String name) {
+      this.name = name;
+    }
+  }
+
+  @JsonMixin(target = InterpretedMixinTarget.class)
+  public interface InterpretedMixin {}
+
+  @JsonType
+  public static final class InterpretedBean {
+    private String name;
+    private final transient Map<String, String> extra = new LinkedHashMap<>();
+
+    public InterpretedBean() {}
+
+    public String getName() {
+      return name;
+    }
+
+    public void setName(String name) {
+      this.name = name;
+    }
+
+    @JsonAnyGetter
+    public Map<String, String> extra() {
+      return extra;
+    }
+
+    @JsonAnySetter
+    public void putExtra(String key, String value) {
+      extra.put(key, value);
+    }
+  }
 
   /** Hosted-only loader which makes the first equivalent provider unable to compile one model. */
   public static final class CodegenRejectingClassLoader extends ClassLoader {
@@ -835,6 +911,39 @@ public final class ForyJsonExample {
     @JsonValue
     public String value() {
       return value;
+    }
+  }
+
+  @JsonType
+  public record DirectValueRecord(@JsonValue String value) {
+    @JsonCreator
+    public DirectValueRecord {}
+  }
+
+  @JsonType
+  public enum DirectValueEnum {
+    READY("ready"),
+    DONE("done");
+
+    private final String value;
+
+    DirectValueEnum(String value) {
+      this.value = value;
+    }
+
+    @JsonValue
+    public String value() {
+      return value;
+    }
+
+    @JsonCreator
+    public static DirectValueEnum fromValue(String value) {
+      for (DirectValueEnum candidate : values()) {
+        if (candidate.value.equals(value)) {
+          return candidate;
+        }
+      }
+      throw new IllegalArgumentException(value);
     }
   }
 

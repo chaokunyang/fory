@@ -67,6 +67,7 @@ public sealed class UnbackedContainerBudgetTests
 {
     private const uint EmptyStubTypeId = 1050;
     private const uint SparseStubTypeId = 1051;
+    private const uint EvolvingTypeId = 1052;
 
     [Fact]
     public void ConfigRange()
@@ -115,6 +116,72 @@ public sealed class UnbackedContainerBudgetTests
         Assert.False(resolver.GetTypeInfo<BudgetEmpty>().ReadBodyAlwaysAdvances);
         Assert.True(resolver.GetTypeInfo<BudgetItem>().ReadBodyAlwaysAdvances);
         Assert.True(resolver.GetTypeInfo<List<BudgetEmpty>>().ReadBodyAlwaysAdvances);
+    }
+
+    [Fact]
+    public void RemoteTypeMetaProgressFacts()
+    {
+        Assert.True(RemoteTypeMeta(new TypeMetaFieldType((uint)TypeId.Int32, false))
+            .ReadBodyAlwaysAdvances);
+        Assert.True(RemoteTypeMeta(new TypeMetaFieldType((uint)TypeId.List, false))
+            .ReadBodyAlwaysAdvances);
+        Assert.True(RemoteTypeMeta(new TypeMetaFieldType((uint)TypeId.Struct, true))
+            .ReadBodyAlwaysAdvances);
+        Assert.False(RemoteTypeMeta().ReadBodyAlwaysAdvances);
+        Assert.False(RemoteTypeMeta(new TypeMetaFieldType((uint)TypeId.None, false))
+            .ReadBodyAlwaysAdvances);
+        Assert.False(RemoteTypeMeta(new TypeMetaFieldType((uint)TypeId.Struct, false))
+            .ReadBodyAlwaysAdvances);
+    }
+
+    [Fact]
+    public void CompatibleCollectionUsesRemoteProgress()
+    {
+        ForyRuntime positiveWriter = NewCompatible<BudgetItem>(EvolvingTypeId, 0);
+        ForyRuntime emptyReader = NewCompatible<BudgetEmpty>(EvolvingTypeId, 0);
+        byte[] positive = positiveWriter.Serialize(
+            Enumerable.Range(0, 3).Select(i => new BudgetItem { Id = i }).ToList());
+        Assert.Equal(3, emptyReader.Deserialize<List<BudgetEmpty>>(positive).Count);
+
+        ForyRuntime emptyWriter = NewCompatible<BudgetEmpty>(EvolvingTypeId, 0);
+        ForyRuntime positiveReader = NewCompatible<BudgetItem>(EvolvingTypeId, 0);
+        byte[] empty = emptyWriter.Serialize(
+            Enumerable.Range(0, 3).Select(_ => new BudgetEmpty()).ToList());
+        Assert.ThrowsAny<ForyException>(
+            () => positiveReader.Deserialize<List<BudgetItem>>(empty));
+    }
+
+    [Fact]
+    public void CompatibleMapUsesRemoteProgress()
+    {
+        ForyRuntime positiveWriter = NewCompatible<BudgetItem>(EvolvingTypeId, 0);
+        ForyRuntime emptyReader = NewCompatible<BudgetEmpty>(EvolvingTypeId, 0);
+        Dictionary<BudgetItem, BudgetItem> positive = Enumerable.Range(0, 3).ToDictionary(
+            i => new BudgetItem { Id = i },
+            i => new BudgetItem { Id = i + 10 });
+        Assert.Equal(
+            3,
+            emptyReader.Deserialize<Dictionary<BudgetEmpty, BudgetEmpty>>(
+                positiveWriter.Serialize(positive)).Count);
+        Assert.Equal(
+            3,
+            emptyReader.Deserialize<NullableKeyDictionary<BudgetEmpty, BudgetEmpty>>(
+                positiveWriter.Serialize(
+                    new NullableKeyDictionary<BudgetItem, BudgetItem>(positive))).Count);
+
+        ForyRuntime emptyWriter = NewCompatible<BudgetEmpty>(EvolvingTypeId, 0);
+        ForyRuntime positiveReader = NewCompatible<BudgetItem>(EvolvingTypeId, 0);
+        Dictionary<BudgetEmpty, BudgetEmpty> empty = Enumerable.Range(0, 3).ToDictionary(
+            _ => new BudgetEmpty(),
+            _ => new BudgetEmpty());
+        byte[] encoded = emptyWriter.Serialize(empty);
+        Assert.ThrowsAny<ForyException>(
+            () => positiveReader.Deserialize<Dictionary<BudgetItem, BudgetItem>>(encoded));
+        byte[] nullableEncoded = emptyWriter.Serialize(
+            new NullableKeyDictionary<BudgetEmpty, BudgetEmpty>(empty));
+        Assert.ThrowsAny<ForyException>(
+            () => positiveReader.Deserialize<NullableKeyDictionary<BudgetItem, BudgetItem>>(
+                nullableEncoded));
     }
 
     [Fact]
@@ -219,5 +286,32 @@ public sealed class UnbackedContainerBudgetTests
             .Build();
         fory.Register<SparseStub, SparseStubSerializer>(SparseStubTypeId);
         return fory;
+    }
+
+    private static ForyRuntime NewCompatible<T>(uint typeId, long maxUnbackedContainerItems)
+    {
+        ForyRuntime fory = ForyRuntime.Builder()
+            .Compatible(true)
+            .MaxUnbackedContainerItems(maxUnbackedContainerItems)
+            .Build();
+        fory.Register<T>(typeId);
+        return fory;
+    }
+
+    private static TypeMeta RemoteTypeMeta(params TypeMetaFieldType[] fieldTypes)
+    {
+        TypeMetaFieldInfo[] fields = new TypeMetaFieldInfo[fieldTypes.Length];
+        for (int i = 0; i < fieldTypes.Length; i++)
+        {
+            fields[i] = new TypeMetaFieldInfo((short)i, $"field{i}", fieldTypes[i]);
+        }
+
+        return new TypeMeta(
+            (uint)TypeId.CompatibleStruct,
+            EvolvingTypeId,
+            MetaString.Empty('.', '_'),
+            MetaString.Empty('$', '_'),
+            false,
+            fields);
     }
 }

@@ -715,6 +715,12 @@ public sealed class TypeInfo
         return ReadBodyAlwaysAdvances && ReferenceEquals(_serializer, serializer);
     }
 
+    internal bool ReadBodyAlwaysAdvancesFor<T>(Serializer<T> serializer, TypeMeta? typeMeta)
+    {
+        return ReferenceEquals(_serializer, serializer) &&
+               (typeMeta?.ReadBodyAlwaysAdvances ?? ReadBodyAlwaysAdvances);
+    }
+
     internal void WriteDataObject(WriteContext context, object? value, bool hasGenerics)
     {
         _writeDataObject(context, value, hasGenerics);
@@ -862,6 +868,11 @@ public sealed class TypeInfo
 
     internal TypeInfo WithWireTypeInfo(TypeId wireTypeId, TypeMeta? typeMeta = null)
     {
+        bool readBodyAlwaysAdvances =
+            typeMeta is not null &&
+            wireTypeId is TypeId.CompatibleStruct or TypeId.NamedCompatibleStruct
+                ? typeMeta.ReadBodyAlwaysAdvances
+                : ReadBodyAlwaysAdvances;
         return new TypeInfo(
             Type,
             _serializer,
@@ -872,7 +883,7 @@ public sealed class TypeInfo
             IsRefType,
             DefaultObject,
             Evolving,
-            ReadBodyAlwaysAdvances,
+            readBodyAlwaysAdvances,
             IsRegistered,
             UserTypeId,
             RegisterByName,

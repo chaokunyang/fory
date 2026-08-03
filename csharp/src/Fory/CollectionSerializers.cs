@@ -308,12 +308,21 @@ internal static class CollectionReadCodec
         bool readBodyAlwaysAdvances = false;
         if (sameType && !trackRef && !hasNull)
         {
-            TypeInfo? resolvedTypeInfo = !declared && typeof(T) == typeof(object)
-                ? context.GetReadTypeInfo(typeof(T))
-                : null;
-            readBodyAlwaysAdvances = resolvedTypeInfo?.ReadBodyAlwaysAdvances ??
-                                     context.TypeResolver.GetTypeInfo<T>()
-                                         .ReadBodyAlwaysAdvancesFor(elementSerializer);
+            readBodyAlwaysAdvances = context.TypeResolver.GetTypeInfo<T>()
+                .ReadBodyAlwaysAdvancesFor(elementSerializer);
+            if (!declared)
+            {
+                if (typeof(T) == typeof(object))
+                {
+                    readBodyAlwaysAdvances = context.GetReadTypeInfo(typeof(T))?
+                        .ReadBodyAlwaysAdvances ?? readBodyAlwaysAdvances;
+                }
+                else if (context.Compatible)
+                {
+                    readBodyAlwaysAdvances = context.GetTypeMeta<T>()?
+                        .ReadBodyAlwaysAdvances ?? readBodyAlwaysAdvances;
+                }
+            }
         }
 
         bool guardUnbackedItems = sameType && !trackRef && !hasNull && !readBodyAlwaysAdvances;

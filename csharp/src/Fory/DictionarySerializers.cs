@@ -289,7 +289,14 @@ public abstract class DictionaryLikeSerializer<TDictionary, TKey, TValue> : Seri
         bool keyReadAlwaysAdvances = keyTypeInfo.ReadBodyAlwaysAdvancesFor(keySerializer);
         bool valueReadAlwaysAdvances = valueTypeInfo.ReadBodyAlwaysAdvancesFor(valueSerializer);
         bool mapReadAlwaysAdvances = keyReadAlwaysAdvances || valueReadAlwaysAdvances;
-        if (mapReadAlwaysAdvances)
+        bool keyMayHaveRemoteSchema = context.Compatible &&
+                                      keyTypeInfo.UserTypeKind == UserTypeKind.Struct &&
+                                      keyTypeInfo.Evolving;
+        bool valueMayHaveRemoteSchema = context.Compatible &&
+                                        valueTypeInfo.UserTypeKind == UserTypeKind.Struct &&
+                                        valueTypeInfo.Evolving;
+        if (keyReadAlwaysAdvances && !keyMayHaveRemoteSchema ||
+            valueReadAlwaysAdvances && !valueMayHaveRemoteSchema)
         {
             context.Reader.CheckBound(totalLength);
         }
@@ -448,9 +455,18 @@ public abstract class DictionaryLikeSerializer<TDictionary, TKey, TValue> : Seri
                 context.TypeResolver.ReadTypeInfo(valueSerializer, context);
             }
 
+            TypeMeta? keyTypeMeta = !keyDeclared && context.Compatible
+                ? context.GetTypeMeta<TKey>()
+                : null;
+            TypeMeta? valueTypeMeta = !valueDeclared && context.Compatible
+                ? context.GetTypeMeta<TValue>()
+                : null;
+            bool chunkReadAlwaysAdvances =
+                keyTypeInfo.ReadBodyAlwaysAdvancesFor(keySerializer, keyTypeMeta) ||
+                valueTypeInfo.ReadBodyAlwaysAdvancesFor(valueSerializer, valueTypeMeta);
             bool guardChunk = !trackKeyRef &&
                               !trackValueRef &&
-                              !mapReadAlwaysAdvances;
+                              !chunkReadAlwaysAdvances;
             int chunkCheckpoint = guardChunk ? context.Reader.Cursor : 0;
 
             for (int i = 0; i < chunkSize; i++)

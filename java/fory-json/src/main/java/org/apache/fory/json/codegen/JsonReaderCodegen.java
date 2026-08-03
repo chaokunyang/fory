@@ -125,6 +125,10 @@ abstract class JsonReaderCodegen {
     return false;
   }
 
+  boolean rawFieldNameDispatch() {
+    return false;
+  }
+
   abstract boolean isDirectName(String name, boolean tokenValueRead);
 
   abstract Expression tryReadNextFieldNameColon(JsonFieldInfo property, boolean tokenValueRead);
@@ -2884,8 +2888,8 @@ abstract class JsonReaderCodegen {
     expressions.add(hashes);
     expressions.add(fieldIndex);
     Expression anyMapCreated = anyMapCreatedFlag(expressions);
+    expressions.add(expectExpr(':'));
     Expression.ListExpression loop = new Expression.ListExpression();
-    loop.add(expectExpr(':'));
     loop.add(
         fieldSwitch(
             builder,
@@ -2912,16 +2916,21 @@ abstract class JsonReaderCodegen {
     if (fieldStart != null) {
       loop.add(fieldStart);
     }
-    Expression fieldHash = readFieldNameHash("fieldHash");
-    loop.add(fieldHash);
-    loop.add(assignSlowFieldIndex(fieldIndex, expectedIndex, hashes, fieldHash, properties));
-    if (any != null) {
-      loop.add(
-          new Expression.Assign(
-              new Reference("firstFieldHash", TypeRef.of(long.class)), fieldHash));
-      loop.add(
-          new Expression.Assign(
-              new Reference("firstFieldStart", TypeRef.of(int.class)), fieldStart));
+    if (any == null && rawFieldNameDispatch() && hasDirectFieldName(properties)) {
+      loop.add(readDirectFieldIndex(fieldIndex, expectedIndex, hashes, properties));
+    } else {
+      Expression fieldHash = readFieldNameHash("fieldHash");
+      loop.add(fieldHash);
+      loop.add(assignSlowFieldIndex(fieldIndex, expectedIndex, hashes, fieldHash, properties));
+      loop.add(expectExpr(':'));
+      if (any != null) {
+        loop.add(
+            new Expression.Assign(
+                new Reference("firstFieldHash", TypeRef.of(long.class)), fieldHash));
+        loop.add(
+            new Expression.Assign(
+                new Reference("firstFieldStart", TypeRef.of(int.class)), fieldStart));
+      }
     }
     expressions.add(new Expression.While(Expression.Literal.True, loop));
     return expressions;
@@ -2935,6 +2944,9 @@ abstract class JsonReaderCodegen {
       Expression hashes,
       Expression expectedIndex,
       Expression anyMapCreated) {
+    if (any == null && rawFieldNameDispatch() && hasDirectFieldName(properties)) {
+      return readNextDirectField(builder, type, properties, object, hashes, expectedIndex);
+    }
     Expression fieldStart =
         any == null
             ? null
@@ -2956,6 +2968,98 @@ abstract class JsonReaderCodegen {
             builder, type, properties, object, fieldIndex, fieldHash, fieldStart, anyMapCreated),
         updateExpectedIndex(expectedIndex, fieldIndex));
     return expressions;
+  }
+
+  private Expression readNextDirectField(
+      JsonGeneratedCodecBuilder builder,
+      Class<?> type,
+      JsonFieldInfo[] properties,
+      Expression object,
+      Expression hashes,
+      Expression expectedIndex) {
+    Reference fieldIndex = new Reference("fieldIndex", TypeRef.of(int.class));
+    return new Expression.ListExpression(
+        new Expression.Variable("fieldIndex", Expression.Literal.ofInt(JsonFieldTable.UNKNOWN)),
+        readDirectFieldIndex(fieldIndex, expectedIndex, hashes, properties),
+        fieldSwitch(builder, type, properties, object, fieldIndex),
+        updateExpectedIndex(expectedIndex, fieldIndex));
+  }
+
+  private Expression readDirectFieldIndex(
+      Expression fieldIndex,
+      Expression expectedIndex,
+      Expression hashes,
+      JsonFieldInfo[] properties) {
+    int unresolved = JsonFieldTable.UNKNOWN;
+    Expression prefix =
+        new Expression.Invoke(
+            readerRef(), "readFieldNamePrefix", "fieldPrefix", TypeRef.of(int.class), false);
+    Expression fieldHash = readFieldNameHash("fieldHash");
+    Expression fallback =
+        new Expression.ListExpression(
+            fieldHash,
+            assignSlowFieldIndex(fieldIndex, expectedIndex, hashes, fieldHash, properties),
+            expectExpr(':'));
+    // Keep classification and complete token verification in the generated slow owner. On a miss
+    // the token matcher leaves the name unread, so one existing hash path retains every escaped,
+    // aliased, unknown, and malformed-name behavior without adding a second scanner owner.
+    return new Expression.ListExpression(
+        prefix,
+        new Expression.Assign(fieldIndex, Expression.Literal.ofInt(unresolved)),
+        directFieldNameSwitch(fieldIndex, prefix, properties),
+        new Expression.If(eq(fieldIndex, Expression.Literal.ofInt(unresolved)), fallback));
+  }
+
+  private boolean hasDirectFieldName(JsonFieldInfo[] properties) {
+    for (JsonFieldInfo property : properties) {
+      if (!property.name().isEmpty() && isDirectName(property.name(), true)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private Expression directFieldNameSwitch(
+      Expression fieldIndex, Expression prefix, JsonFieldInfo[] properties) {
+    int[] keys = new int[properties.length];
+    int keyCount = 0;
+    for (JsonFieldInfo property : properties) {
+      if (property.name().isEmpty() || !isDirectName(property.name(), true)) {
+        continue;
+      }
+      int key = (int) JsonAsciiToken.prefix(fieldNameToken(property.name()));
+      boolean found = false;
+      for (int i = 0; i < keyCount; i++) {
+        if (keys[i] == key) {
+          found = true;
+          break;
+        }
+      }
+      if (!found) {
+        keys[keyCount++] = key;
+      }
+    }
+    Expression.Switch.Case[] cases = new Expression.Switch.Case[keyCount];
+    for (int keyIndex = 0; keyIndex < keyCount; keyIndex++) {
+      int key = keys[keyIndex];
+      Expression resolve = new Expression.Empty();
+      for (int field = properties.length - 1; field >= 0; field--) {
+        JsonFieldInfo property = properties[field];
+        if (!property.name().isEmpty()
+            && isDirectName(property.name(), true)
+            && (int) JsonAsciiToken.prefix(fieldNameToken(property.name())) == key) {
+          resolve =
+              new Expression.If(
+                  tryReadNextFieldNameColon(property, true),
+                  new Expression.Assign(fieldIndex, Expression.Literal.ofInt(field)),
+                  resolve);
+        }
+      }
+      cases[keyIndex] =
+          new Expression.Switch.Case(
+              key, new Expression.ListExpression(resolve, new Expression.Break()));
+    }
+    return new Expression.Switch(prefix, cases, null);
   }
 
   private Expression fieldSwitch(

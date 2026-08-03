@@ -255,6 +255,45 @@ public class JsonGeneratedCodecTest extends ForyJsonTestModels {
     assertEquals(mismatch.readNextNullableString(), "pit");
   }
 
+  @Test
+  public void readFieldNamePrefix() {
+    String input = " \n\t\"alpha\":1";
+    int expected = (int) JsonAsciiToken.prefix("\"alpha\":");
+    Latin1JsonReader latin1 = newLatin1Reader(latin1Bytes(input));
+    assertEquals(latin1.readFieldNamePrefix(), expected);
+    assertEquals(latin1.position(), 3);
+    assertTrue(
+        latin1.tryReadNextFieldNameToken0(
+            JsonAsciiToken.prefix("\"alpha\":"), -1L, "\"alpha\":".length()));
+    assertEquals(latin1.readIntTokenValue(), 1);
+
+    Utf8JsonReader utf8 = newUtf8Reader(input.getBytes(StandardCharsets.UTF_8));
+    assertEquals(utf8.readFieldNamePrefix(), expected);
+    assertEquals(utf8.position(), 3);
+    assertTrue(
+        utf8.tryReadNextFieldNameToken0(
+            JsonAsciiToken.prefix("\"alpha\":"), -1L, "\"alpha\":".length()));
+    assertEquals(utf8.readIntTokenValue(), 1);
+
+    Latin1JsonReader truncatedLatin1 = newLatin1Reader(" \"a");
+    assertEquals(truncatedLatin1.readFieldNamePrefix(), 0);
+    assertEquals(truncatedLatin1.position(), 1);
+    Utf8JsonReader truncatedUtf8 = newUtf8Reader(" \"a".getBytes(StandardCharsets.UTF_8));
+    assertEquals(truncatedUtf8.readFieldNamePrefix(), 0);
+    assertEquals(truncatedUtf8.position(), 1);
+  }
+
+  @Test
+  public void readGeneratedFieldPrefixCollision() {
+    ForyJson json = newJson(true);
+    String input = "{\"unknown\":0, \"alpine\":2, \"\\u0061lpha\":1, \"alpha\" :4, \"altar\":3}";
+    PrefixFields latin1 = json.fromJson(input, PrefixFields.class);
+    assertPrefixFields(latin1);
+    PrefixFields utf8 = json.fromJson(input.getBytes(StandardCharsets.UTF_8), PrefixFields.class);
+    assertPrefixFields(utf8);
+    assertGeneratedWhenSupported(json, PrefixFields.class, true);
+  }
+
   @Test(dataProvider = "enableCodegen")
   public void readGeneratedLongAsciiFields(boolean codegen) {
     ForyJson json = newJson(codegen);
@@ -343,6 +382,12 @@ public class JsonGeneratedCodecTest extends ForyJsonTestModels {
     assertEquals(value.shortName, "core");
   }
 
+  private static void assertPrefixFields(PrefixFields value) {
+    assertEquals(value.alpha, 4);
+    assertEquals(value.alpine, 2);
+    assertEquals(value.altar, 3);
+  }
+
   private static byte[] latin1Bytes(String value) {
     return value.getBytes(StandardCharsets.ISO_8859_1);
   }
@@ -352,6 +397,12 @@ public class JsonGeneratedCodecTest extends ForyJsonTestModels {
     public double longitude;
     public String favoriteFruit;
     public String shortName;
+  }
+
+  public static class PrefixFields {
+    public int alpha;
+    public int alpine;
+    public int altar;
   }
 
   public static class WideFields {

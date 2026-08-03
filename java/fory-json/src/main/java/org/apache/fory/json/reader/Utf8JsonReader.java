@@ -2513,6 +2513,23 @@ public final class Utf8JsonReader extends JsonReader {
     return readQuotedStringHash();
   }
 
+  /**
+   * Returns the raw four-byte prefix at the next field name after consuming legal whitespace.
+   *
+   * <p>Generated object readers use this only as a discriminator before a complete field-token
+   * check. A miss leaves the name unread so the ordinary hash parser retains escape, UTF-8, alias,
+   * unknown-field, and malformed-input handling.
+   */
+  @Internal
+  public int readFieldNamePrefix() {
+    skipWhitespaceFast();
+    int offset = position;
+    if (offset <= input.length - Integer.BYTES) {
+      return LittleEndian.getInt32(input, offset);
+    }
+    return 0;
+  }
+
   public boolean tryReadFieldNameColon(long expectedHash, long expectedMask, int expectedLength) {
     int mark = position;
     skipWhitespaceFast();

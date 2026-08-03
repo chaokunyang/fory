@@ -141,6 +141,12 @@ Load this file when changing anything under `java/` or when Java drives a cross-
   such a method into a wrapper, add its body back into the caller budget, or manufacture a boundary
   with padding, `@DontInline`, `CompileCommand`, fake receivers, or JVM flags. Keep escape,
   malformed-input, Unicode, arbitrary-length, and other cold fallback work in separate methods.
+- Generated Latin1 and UTF-8 JSON readers classify arbitrary-order known fields by a bounded raw
+  prefix and verify the complete compile-time field token in the generated slow owner. A prefix or
+  token miss must leave the name unread and use the existing hash/table path for escapes, aliases,
+  unknown names, collisions, and malformed input. Keep Any-property and UTF-16 readers on their
+  existing hash paths. Do not extract the classifier into an independent scanner owner, add a
+  declaration-order assumption, or replace complete token verification with prefix equality.
 - Generated UTF-8 object writers own their C2 boundaries in their actual emitted bytecode. A split
   writer keeps object framing and the final declaration-order field range in public `writeUtf8`;
   every preceding range is a direct private final helper. Cold source generation compiles each

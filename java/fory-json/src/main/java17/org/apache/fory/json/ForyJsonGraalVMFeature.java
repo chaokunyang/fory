@@ -544,7 +544,8 @@ final class ForyJsonGraalVMFeature implements Feature {
       boolean mixinSelector = hasMixinSelector(annotations, method);
       if (ObjectCodec.usesJsonMetadata(method, record) || mixinSelector) {
         resolveMethodAccessors(annotations, method);
-        if (annotation(annotations, method, JsonValidator.class) != null) {
+        if (annotation(annotations, method, JsonValidator.class) != null
+            && JsonValidatorInfo.isValidatorMethod(method)) {
           RuntimeReflection.register(method);
           JsonValidatorInfo.validatorHandle(method);
         }

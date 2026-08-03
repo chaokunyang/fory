@@ -1525,12 +1525,7 @@ final class ObjectCodecBuilder {
   }
 
   private static void validateValidator(Method method) {
-    int modifiers = method.getModifiers();
-    if (!Modifier.isPublic(modifiers)
-        || Modifier.isStatic(modifiers)
-        || Modifier.isAbstract(modifiers)
-        || method.getParameterCount() != 0
-        || method.getReturnType() != void.class) {
+    if (!JsonValidatorInfo.isValidatorMethod(method)) {
       throw new ForyJsonException("Invalid @JsonValidator method " + method);
     }
   }

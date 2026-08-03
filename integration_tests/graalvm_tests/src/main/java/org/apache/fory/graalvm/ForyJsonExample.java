@@ -202,6 +202,10 @@ public final class ForyJsonExample {
     Preconditions.checkArgument(json.toJson(DirectValueEnum.READY).equals("\"ready\""));
     Preconditions.checkArgument(
         json.fromJson("\"done\"", DirectValueEnum.class) == DirectValueEnum.DONE);
+
+    ValidatedValue validated = json.fromJson("{\"value\":22}", ValidatedValue.class);
+    Preconditions.checkArgument(validated.value == 22);
+    Preconditions.checkArgument(validated.validatorInvoked());
   }
 
   private static void exerciseCodegenConfiguration(ForyJson json, boolean generated) {

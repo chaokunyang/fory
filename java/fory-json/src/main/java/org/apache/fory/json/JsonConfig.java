@@ -38,9 +38,9 @@ import org.apache.fory.json.resolver.CodecRegistry;
  *
  * <p>Scalar settings and the codec registry are snapshotted at construction; the JSON runtime never
  * observes later builder mutation. {@link #getCodegenHash()} identifies only settings that can
- * settings such as depth, graph memory, and asynchronous scheduling do not fragment generated class
- * names. Concurrency, per-reader field-name cache, and retained writer-buffer limits are also
- * runtime-only and do not fragment generated class names.
+ * change generated source; runtime-only settings such as depth, graph memory, and asynchronous
+ * scheduling do not fragment generated class names. Concurrency, per-reader field-name cache, and
+ * retained writer-buffer limits are also runtime-only and do not fragment generated class names.
  */
 public final class JsonConfig {
   private static final int MAX_CACHED_FIELD_NAMES = 1 << 29;

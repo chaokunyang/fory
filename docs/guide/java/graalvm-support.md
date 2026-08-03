@@ -158,9 +158,10 @@ built with.
 
 The `fory-json` artifact activates its Native Image Feature automatically. `@JsonType` is not
 inherited, so annotate every concrete runtime model. An annotated base with a class-literal
-`@JsonSubTypes` table registers its listed subtypes automatically. Reachable concrete `Collection`
-and `Map` root types are supported when they have the public no-argument constructor required by
-Fory JSON. A class referenced only by a runtime string is not reachable;
+`@JsonSubTypes` table registers its listed subtypes automatically. Dedicated supported containers,
+including `EnumMap` and `EnumSet`, use their built-in factories. Other reachable concrete
+`Collection` and `Map` root types require a public no-argument constructor. A class referenced only
+by a runtime string is not reachable;
 `JsonSubTypes.Type.className` is therefore unsupported in a native image.
 
 Do not add application reflection configuration as a replacement for the generated configuration.

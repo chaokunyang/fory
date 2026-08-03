@@ -22,6 +22,7 @@ package org.apache.fory.json.meta;
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodType;
 import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import org.apache.fory.annotation.Internal;
@@ -127,6 +128,19 @@ public final class JsonValidatorInfo {
       return validators.computeIfAbsent(method, JsonValidatorInfo::newValidatorHandle);
     }
     return newValidatorHandle(method);
+  }
+
+  /** Returns whether {@code method} has the supported validator shape. */
+  @Internal
+  public static boolean isValidatorMethod(Method method) {
+    int modifiers = method.getModifiers();
+    return Modifier.isPublic(modifiers)
+        && !Modifier.isStatic(modifiers)
+        && !Modifier.isAbstract(modifiers)
+        && !method.isSynthetic()
+        && !method.isBridge()
+        && method.getParameterCount() == 0
+        && method.getReturnType() == void.class;
   }
 
   private static MethodHandle newValidatorHandle(Method method) {

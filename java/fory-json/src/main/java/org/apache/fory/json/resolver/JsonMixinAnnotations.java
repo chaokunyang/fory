@@ -58,6 +58,7 @@ import org.apache.fory.json.annotation.JsonRawValue;
 import org.apache.fory.json.annotation.JsonSubTypes;
 import org.apache.fory.json.annotation.JsonType;
 import org.apache.fory.json.annotation.JsonUnwrapped;
+import org.apache.fory.json.annotation.JsonValidator;
 import org.apache.fory.json.annotation.JsonValue;
 
 /** Resolves immutable annotation overlays for the exact Mixins enabled by one runtime. */
@@ -78,6 +79,7 @@ final class JsonMixinAnnotations {
         JsonRawValue.class,
         JsonSubTypes.class,
         JsonUnwrapped.class,
+        JsonValidator.class,
         JsonValue.class
       };
 

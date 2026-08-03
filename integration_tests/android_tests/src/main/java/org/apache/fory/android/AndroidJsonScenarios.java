@@ -26,6 +26,7 @@ import java.util.Optional;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.atomic.AtomicReferenceArray;
 import org.apache.fory.json.ForyJson;
+import org.apache.fory.json.ForyJsonException;
 import org.apache.fory.json.annotation.JsonCreator;
 import org.apache.fory.json.annotation.JsonFormat;
 import org.apache.fory.json.annotation.JsonMixin;
@@ -122,6 +123,27 @@ public final class AndroidJsonScenarios {
     FormatTimezoneModel decoded = json.fromJson(encoded, FormatTimezoneModel.class);
     checkEquals(instant, decoded.instant);
     checkEquals(value.instants, decoded.instants);
+  }
+
+  public static void generatedValidator() {
+    try {
+      Class.forName(
+          "org.apache.fory.android.GeneratedJsonValidated_ForyJsonCodec",
+          false,
+          GeneratedJsonValidated.class.getClassLoader());
+    } catch (ClassNotFoundException e) {
+      throw new AssertionError("generated validator JSON codec was removed", e);
+    }
+    ForyJson json = ForyJson.builder().build();
+    GeneratedJsonValidated valid = json.fromJson("{\"value\":36}", GeneratedJsonValidated.class);
+    checkEquals(36, valid.value);
+    check(valid.validatorInvoked());
+    try {
+      json.fromJson("{\"value\":-1}", GeneratedJsonValidated.class);
+      throw new AssertionError("invalid generated validator input must fail");
+    } catch (ForyJsonException e) {
+      check(e.getCause() instanceof IllegalArgumentException);
+    }
   }
 
   public static void manualCodecs() {

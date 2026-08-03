@@ -51,6 +51,7 @@ import org.apache.fory.json.annotation.JsonProperty;
 import org.apache.fory.json.annotation.JsonPropertyOrder;
 import org.apache.fory.json.annotation.JsonRawValue;
 import org.apache.fory.json.annotation.JsonUnwrapped;
+import org.apache.fory.json.annotation.JsonValidator;
 import org.apache.fory.json.annotation.JsonValue;
 import org.apache.fory.json.codec.JsonUnwrappedInfo.Declaration;
 import org.apache.fory.json.codec.JsonUnwrappedInfo.WriteSpec;
@@ -62,6 +63,7 @@ import org.apache.fory.json.meta.JsonCreatorInfo;
 import org.apache.fory.json.meta.JsonFieldAccessor;
 import org.apache.fory.json.meta.JsonFieldInfo;
 import org.apache.fory.json.meta.JsonFieldNameHash;
+import org.apache.fory.json.meta.JsonValidatorInfo;
 import org.apache.fory.json.resolver.JsonSharedRegistry;
 import org.apache.fory.platform.GraalvmSupport;
 import org.apache.fory.reflect.ObjectInstantiator;
@@ -88,6 +90,8 @@ final class ObjectCodecBuilder {
     boolean hasAnyField =
         validateMemberAnnotations(
             type, propertyDiscoveryEnabled, record, generatedCodec, annotations);
+    JsonValidatorInfo validatorInfo =
+        JsonValidatorInfo.create(type, findValidators(type, annotations), generatedCodec);
     LinkedHashMap<String, FieldBuilder> builders = new LinkedHashMap<>();
     addFields(type, record, propertyDiscoveryEnabled, hasAnyField, builders, annotations);
     if (record) {
@@ -360,7 +364,23 @@ final class ObjectCodecBuilder {
         anyInfo,
         skipped,
         unwrappedInfo,
-        instantiator);
+        instantiator,
+        validatorInfo);
+  }
+
+  private static Method[] findValidators(Class<?> type, Annotations annotations) {
+    List<Method> validators = null;
+    for (Method method : type.getMethods()) {
+      if (!method.isSynthetic()
+          && !method.isBridge()
+          && annotations.has(method, JsonValidator.class)) {
+        if (validators == null) {
+          validators = new ArrayList<>();
+        }
+        validators.add(method);
+      }
+    }
+    return validators == null ? null : validators.toArray(new Method[0]);
   }
 
   private static boolean hasUnwrappedProperty(Map<String, FieldBuilder> builders) {
@@ -911,7 +931,8 @@ final class ObjectCodecBuilder {
         || method.isAnnotationPresent(JsonAnySetter.class)
         || method.isAnnotationPresent(JsonValue.class)
         || method.isAnnotationPresent(JsonRawValue.class)
-        || method.isAnnotationPresent(JsonBase64.class)) {
+        || method.isAnnotationPresent(JsonBase64.class)
+        || method.isAnnotationPresent(JsonValidator.class)) {
       return true;
     }
     return !record
@@ -1459,6 +1480,9 @@ final class ObjectCodecBuilder {
           }
           validateAnySetter(method, annotations);
         }
+        if (annotations.has(method, JsonValidator.class)) {
+          validateValidator(method);
+        }
       }
     }
     // Generated Record parameter annotations are checked by the source processor against fields
@@ -1493,8 +1517,17 @@ final class ObjectCodecBuilder {
             type, method, propertyDiscoveryEnabled, record, generatedCodec, annotations);
       }
       validateUnwrappedParameters(type, method, propertyDiscoveryEnabled, record, annotations);
+      if (annotations.has(method, JsonValidator.class)) {
+        validateValidator(method);
+      }
     }
     return hasAnyField;
+  }
+
+  private static void validateValidator(Method method) {
+    if (!JsonValidatorInfo.isValidatorMethod(method)) {
+      throw new ForyJsonException("Invalid @JsonValidator method " + method);
+    }
   }
 
   private static void validateUnwrappedMethod(

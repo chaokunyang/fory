@@ -95,8 +95,12 @@ the value reserves the storage it owns.
 Treat `maxGraphMemoryBytes` and runtime-named equivalents as approximate gates, mainly for
 materialized collection, map, array, struct, and object owners. Actual process memory can be higher.
 Dedicated string, binary, primitive scalar, primitive array, and dense primitive-array leaf values
-are skipped by this graph budget and must remain gated by unread input bytes: if remaining bytes are
-insufficient, the leaf value must not be read or created.
+are skipped unless a runtime-specific owner rule includes them. Java Fory core primitive arrays and
+primitive lists reserve their retained owners once from the validated logical length; compressed
+paths use the decompressed length. Java Fory JSON primitive arrays decoded from JSON arrays reserve
+their array header plus actual primitive storage; a `byte[]` handled by a JSON binary or Base64
+codec remains a binary leaf. Values skipped by this graph budget must remain gated by unread input
+bytes: if remaining bytes are insufficient, the value must not be read or created.
 
 ## Runtime Map
 

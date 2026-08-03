@@ -63,6 +63,7 @@ final class JsonMixinAnnotations {
   private static final String JSON_RAW_VALUE = JSON_PACKAGE + ".annotation.JsonRawValue";
   private static final String JSON_SUB_TYPES = JSON_PACKAGE + ".annotation.JsonSubTypes";
   private static final String JSON_UNWRAPPED = JSON_PACKAGE + ".annotation.JsonUnwrapped";
+  private static final String JSON_VALIDATOR = JSON_PACKAGE + ".annotation.JsonValidator";
   private static final String JSON_VALUE = JSON_PACKAGE + ".annotation.JsonValue";
 
   private static final Set<String> MAPPING_ANNOTATIONS =
@@ -82,6 +83,7 @@ final class JsonMixinAnnotations {
                   JSON_RAW_VALUE,
                   JSON_SUB_TYPES,
                   JSON_UNWRAPPED,
+                  JSON_VALIDATOR,
                   JSON_VALUE)));
 
   private final TypeElement target;

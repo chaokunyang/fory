@@ -60,10 +60,10 @@ import org.apache.fory.json.resolver.JsonTypeResolver;
  * not inherit that resource policy.
  *
  * <p>Readers are mutable and confined to one borrowed {@code ForyJson} state. Concrete reset
- * methods borrow an input and reset the cursor and depth; {@code clear()} detaches that input
- * before the state returns to the pool. A failed nested parse may leave depth nonzero because the
- * root cleanup resets it; nested codec paths intentionally avoid cleanup-only {@code try/finally}
- * regions.
+ * methods borrow an input and reset the cursor, depth, and graph-memory budget; {@code clear()}
+ * detaches that input and clears the root state before the state returns to the pool. A failed
+ * nested parse may leave depth nonzero because the root cleanup resets it; nested codec paths
+ * intentionally avoid cleanup-only {@code try/finally} regions.
  */
 public abstract class JsonReader {
   private static final int MAX_BIG_NUMBER_LENGTH = 10_000;
@@ -153,10 +153,12 @@ public abstract class JsonReader {
     1.0f, 10.0f, 100.0f, 1_000.0f, 10_000.0f, 100_000.0f, 1_000_000.0f, 10_000_000.0f
   };
 
+  private final JsonConfig config;
   private final JsonTypeResolver typeResolver;
   protected int position;
   private final int maxDepth;
   private int depth;
+  private long remainingGraphMemoryBytes;
 
   /**
    * Scans one complete object for a closed-subtype string discriminator without consuming input.
@@ -262,6 +264,7 @@ public abstract class JsonReader {
   private final byte[] decimalBoundaryDigits = new byte[DECIMAL_BOUNDARY_DIGITS];
 
   protected JsonReader(JsonConfig config, JsonTypeResolver typeResolver) {
+    this.config = config;
     this.typeResolver = Objects.requireNonNull(typeResolver, "typeResolver");
     maxDepth = config.maxDepth();
   }
@@ -340,6 +343,51 @@ public abstract class JsonReader {
 
   protected final void reset() {
     depth = 0;
+    remainingGraphMemoryBytes = config.maxGraphMemoryBytes();
+  }
+
+  /**
+   * Reserves estimated graph memory before an owner or its retained storage is materialized.
+   *
+   * <p>Custom codecs use this raw byte API before allocating a composite owner and at their bounded
+   * batch boundaries for retained container storage. Dedicated leaf values do not reserve graph
+   * memory.
+   */
+  public final void reserveGraphMemory(long bytes) {
+    long remaining = remainingGraphMemoryBytes;
+    long nextRemaining = remaining - bytes;
+    if ((bytes | nextRemaining) < 0) {
+      throwInvalidGraphMemory(bytes, remaining);
+    }
+    remainingGraphMemoryBytes = nextRemaining;
+  }
+
+  /**
+   * Reserves estimated graph memory before an owner or its retained storage is materialized.
+   *
+   * <p>This overload keeps the common integer-estimate path to one comparison and subtraction.
+   */
+  public final void reserveGraphMemory(int bytes) {
+    long remaining = remainingGraphMemoryBytes;
+    if (bytes < 0 || remaining < bytes) {
+      throwInvalidGraphMemory(bytes, remaining);
+    }
+    remainingGraphMemoryBytes = remaining - bytes;
+  }
+
+  private void throwInvalidGraphMemory(long bytes, long remaining) {
+    if (bytes < 0) {
+      throw new ForyJsonException(
+          "Estimated graph memory must be non-negative, but got " + bytes + " bytes");
+    }
+    throw new ForyJsonException(
+        "Estimated graph memory request "
+            + bytes
+            + " bytes exceeds maxGraphMemoryBytes remaining budget "
+            + remaining
+            + " bytes out of configured limit "
+            + config.maxGraphMemoryBytes()
+            + " bytes; increase ForyJsonBuilder#withMaxGraphMemoryBytes for trusted data");
   }
 
   public final void enterDepth() {

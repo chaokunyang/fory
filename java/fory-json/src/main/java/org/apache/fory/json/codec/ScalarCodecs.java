@@ -75,6 +75,7 @@ import org.apache.fory.annotation.Internal;
 import org.apache.fory.json.ForyJsonException;
 import org.apache.fory.json.meta.JsonAsciiToken;
 import org.apache.fory.json.meta.JsonFieldNameHash;
+import org.apache.fory.json.reader.JsonReader;
 import org.apache.fory.json.reader.Latin1JsonReader;
 import org.apache.fory.json.reader.Utf16JsonReader;
 import org.apache.fory.json.reader.Utf8JsonReader;
@@ -82,6 +83,7 @@ import org.apache.fory.json.resolver.JsonTypeInfo;
 import org.apache.fory.json.resolver.JsonTypeResolver;
 import org.apache.fory.json.writer.StringJsonWriter;
 import org.apache.fory.json.writer.Utf8JsonWriter;
+import org.apache.fory.serializer.GraphMemoryEstimates;
 import org.apache.fory.type.BFloat16;
 import org.apache.fory.type.Float16;
 
@@ -2664,6 +2666,9 @@ public final class ScalarCodecs {
   }
 
   public static final class AtomicReferenceCodec implements JsonValueCodec<AtomicReference<?>> {
+    private static final int SHALLOW_BYTES =
+        GraphMemoryEstimates.shallowObjectBytes(AtomicReference.class);
+
     private final JsonTypeInfo valueTypeInfo;
 
     public AtomicReferenceCodec(java.lang.reflect.Type valueType, JsonTypeResolver resolver) {
@@ -2697,25 +2702,34 @@ public final class ScalarCodecs {
     @Override
     public AtomicReference<?> readLatin1(Latin1JsonReader reader) {
       if (reader.tryReadNullToken()) {
+        reader.reserveGraphMemory(SHALLOW_BYTES);
         return new AtomicReference<>();
       }
-      return new AtomicReference<>(valueTypeInfo.latin1Reader().readLatin1(reader));
+      Object value = valueTypeInfo.latin1Reader().readLatin1(reader);
+      reader.reserveGraphMemory(SHALLOW_BYTES);
+      return new AtomicReference<>(value);
     }
 
     @Override
     public AtomicReference<?> readUtf16(Utf16JsonReader reader) {
       if (reader.tryReadNullToken()) {
+        reader.reserveGraphMemory(SHALLOW_BYTES);
         return new AtomicReference<>();
       }
-      return new AtomicReference<>(valueTypeInfo.utf16Reader().readUtf16(reader));
+      Object value = valueTypeInfo.utf16Reader().readUtf16(reader);
+      reader.reserveGraphMemory(SHALLOW_BYTES);
+      return new AtomicReference<>(value);
     }
 
     @Override
     public AtomicReference<?> readUtf8(Utf8JsonReader reader) {
       if (reader.tryReadNullToken()) {
+        reader.reserveGraphMemory(SHALLOW_BYTES);
         return new AtomicReference<>();
       }
-      return new AtomicReference<>(valueTypeInfo.utf8Reader().readUtf8(reader));
+      Object value = valueTypeInfo.utf8Reader().readUtf8(reader);
+      reader.reserveGraphMemory(SHALLOW_BYTES);
+      return new AtomicReference<>(value);
     }
   }
 
@@ -2957,6 +2971,14 @@ public final class ScalarCodecs {
 
   public static final class AtomicReferenceArrayCodec
       implements JsonValueCodec<AtomicReferenceArray<?>> {
+    private static final int SHALLOW_BYTES =
+        GraphMemoryEstimates.shallowObjectBytes(AtomicReferenceArray.class);
+    private static final int ARRAY_BYTES = GraphMemoryEstimates.objectArrayBytes();
+    private static final int REFERENCE_BYTES = GraphMemoryEstimates.REFERENCE_BYTES;
+    private static final int REFERENCE_BATCH_SIZE = 1024;
+    private static final int REFERENCE_BATCH_MASK = REFERENCE_BATCH_SIZE - 1;
+    private static final int REFERENCE_BATCH_BYTES = REFERENCE_BATCH_SIZE * REFERENCE_BYTES;
+
     private final JsonTypeInfo valueTypeInfo;
 
     public AtomicReferenceArrayCodec(java.lang.reflect.Type valueType, JsonTypeResolver resolver) {
@@ -3016,19 +3038,20 @@ public final class ScalarCodecs {
       reader.enterDepth();
       reader.expectNextToken('[');
       if (reader.consumeNextToken(']')) {
-        reader.exitDepth();
+        finishArray(reader, 0);
         return new AtomicReferenceArray<>(0);
       }
       Object[] values = new Object[8];
       int size = 0;
       Utf16ReaderCodec<Object> codec = valueTypeInfo.utf16Reader();
       do {
+        reserveReferenceBatch(reader, size);
         if (size == values.length) {
           values = Arrays.copyOf(values, values.length << 1);
         }
         values[size++] = codec.readUtf16(reader);
       } while (reader.consumeNextCommaOrEndArray());
-      reader.exitDepth();
+      finishArray(reader, size);
       return new AtomicReferenceArray<>(Arrays.copyOf(values, size));
     }
 
@@ -3040,19 +3063,20 @@ public final class ScalarCodecs {
       reader.enterDepth();
       reader.expectNextToken('[');
       if (reader.consumeNextToken(']')) {
-        reader.exitDepth();
+        finishArray(reader, 0);
         return new AtomicReferenceArray<>(0);
       }
       Object[] values = new Object[8];
       int size = 0;
       Utf8ReaderCodec<Object> codec = valueTypeInfo.utf8Reader();
       do {
+        reserveReferenceBatch(reader, size);
         if (size == values.length) {
           values = Arrays.copyOf(values, values.length << 1);
         }
         values[size++] = codec.readUtf8(reader);
       } while (reader.consumeNextCommaOrEndArray());
-      reader.exitDepth();
+      finishArray(reader, size);
       return new AtomicReferenceArray<>(Arrays.copyOf(values, size));
     }
 
@@ -3061,23 +3085,40 @@ public final class ScalarCodecs {
       reader.enterDepth();
       reader.expectNextToken('[');
       if (reader.consumeNextToken(']')) {
-        reader.exitDepth();
+        finishArray(reader, 0);
         return new AtomicReferenceArray<>(0);
       }
       Object[] values = new Object[8];
       int size = 0;
       do {
+        reserveReferenceBatch(reader, size);
         if (size == values.length) {
           values = Arrays.copyOf(values, values.length << 1);
         }
         values[size++] = codec.readLatin1(reader);
       } while (reader.consumeNextCommaOrEndArray());
-      reader.exitDepth();
+      finishArray(reader, size);
       return new AtomicReferenceArray<>(Arrays.copyOf(values, size));
+    }
+
+    private static void finishArray(JsonReader reader, int size) {
+      reader.reserveGraphMemory(
+          SHALLOW_BYTES + ARRAY_BYTES + (size & REFERENCE_BATCH_MASK) * REFERENCE_BYTES);
+      reader.exitDepth();
+    }
+
+    private static void reserveReferenceBatch(JsonReader reader, int size) {
+      // The final owner charge settles only the tail; complete 1024-slot batches are charged here.
+      if ((size & REFERENCE_BATCH_MASK) == REFERENCE_BATCH_MASK) {
+        reader.reserveGraphMemory(REFERENCE_BATCH_BYTES);
+      }
     }
   }
 
   public static final class OptionalCodec implements JsonValueCodec<Optional<?>> {
+    private static final int SHALLOW_BYTES =
+        GraphMemoryEstimates.shallowObjectBytes(Optional.class);
+
     private final JsonTypeInfo valueTypeInfo;
 
     public OptionalCodec(java.lang.reflect.Type valueType, JsonTypeResolver resolver) {
@@ -3123,7 +3164,12 @@ public final class ScalarCodecs {
       if (reader.tryReadNullToken()) {
         return Optional.empty();
       }
-      return Optional.ofNullable(valueTypeInfo.latin1Reader().readLatin1(reader));
+      Object value = valueTypeInfo.latin1Reader().readLatin1(reader);
+      if (value == null) {
+        return Optional.empty();
+      }
+      reader.reserveGraphMemory(SHALLOW_BYTES);
+      return Optional.of(value);
     }
 
     @Override
@@ -3131,7 +3177,12 @@ public final class ScalarCodecs {
       if (reader.tryReadNullToken()) {
         return Optional.empty();
       }
-      return Optional.ofNullable(valueTypeInfo.utf16Reader().readUtf16(reader));
+      Object value = valueTypeInfo.utf16Reader().readUtf16(reader);
+      if (value == null) {
+        return Optional.empty();
+      }
+      reader.reserveGraphMemory(SHALLOW_BYTES);
+      return Optional.of(value);
     }
 
     @Override
@@ -3139,7 +3190,12 @@ public final class ScalarCodecs {
       if (reader.tryReadNullToken()) {
         return Optional.empty();
       }
-      return Optional.ofNullable(valueTypeInfo.utf8Reader().readUtf8(reader));
+      Object value = valueTypeInfo.utf8Reader().readUtf8(reader);
+      if (value == null) {
+        return Optional.empty();
+      }
+      reader.reserveGraphMemory(SHALLOW_BYTES);
+      return Optional.of(value);
     }
   }
 

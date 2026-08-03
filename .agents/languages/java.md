@@ -45,6 +45,26 @@ Load this file when changing anything under `java/` or when Java drives a cross-
   object-array owners reserve nonzero shallow self cost plus reference storage;
   referenced object serializers reserve their own nonzero shallow self memory
   plus shallow field storage when materialized.
+  Unknown-length JSON collections and maps reserve reference storage in exact
+  1024-item batches before reading each batch's final child, then reserve the
+  remaining tail after the loop. Generated collection readers must use the same
+  batching; owner-specific paths such as object any-map reads keep their own
+  stronger timing.
+  Java Fory core primitive-array serializers reserve the portable array header
+  plus `length * primitive width` once after the existing readable-byte check
+  and before allocation. Primitive-list serializers reserve list shallow
+  storage, the array header, and primitive storage on the same schedule.
+  Compressed paths use the decompressed logical length; Float16/BFloat16 array
+  carriers also include their wrapper owner. Do not batch these known-length
+  core paths. A boxed-list conversion that first materializes a primitive array
+  keeps that pre-allocation reservation and adds only the positive difference
+  to the final list estimate; do not bypass the array reservation or charge
+  both full estimates.
+  Java JSON primitive-array codecs reserve the portable array header plus actual primitive storage.
+  Reserve primitive storage in exact 1024-element batches before each batch's final element and
+  reserve the tail before the returned array is allocated or published. Resolve custom primitive
+  component width once during codec construction. A `byte[]` handled by a binary or Base64 codec
+  remains a binary leaf.
   Treat the option as an approximate collection/map/array/struct/object gate, not an exact heap
   cap. Leaf values skipped by graph budgeting remain gated by unread input bytes.
   Reference fields use the 4-byte fallback when the JVM reference size is not

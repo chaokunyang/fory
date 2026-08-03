@@ -57,12 +57,14 @@ import org.apache.fory.json.annotation.JsonMixin;
 import org.apache.fory.json.annotation.JsonSubTypes;
 import org.apache.fory.json.annotation.JsonType;
 import org.apache.fory.json.annotation.JsonUnwrapped;
+import org.apache.fory.json.annotation.JsonValidator;
 import org.apache.fory.json.annotation.JsonValue;
 import org.apache.fory.json.codec.Base64ByteArrayCodec;
 import org.apache.fory.json.codec.ObjectCodec;
 import org.apache.fory.json.codegen.JsonCodegenKey;
 import org.apache.fory.json.meta.JsonCreatorInfo;
 import org.apache.fory.json.meta.JsonFieldAccessor;
+import org.apache.fory.json.meta.JsonValidatorInfo;
 import org.apache.fory.json.resolver.JsonGeneratedClassRegistry;
 import org.apache.fory.json.resolver.JsonSharedRegistry;
 import org.apache.fory.json.resolver.JsonSharedRegistry.JsonMixinView;
@@ -542,6 +544,11 @@ final class ForyJsonGraalVMFeature implements Feature {
       boolean mixinSelector = hasMixinSelector(annotations, method);
       if (ObjectCodec.usesJsonMetadata(method, record) || mixinSelector) {
         resolveMethodAccessors(annotations, method);
+        if (annotation(annotations, method, JsonValidator.class) != null
+            && JsonValidatorInfo.isValidatorMethod(method)) {
+          RuntimeReflection.register(method);
+          JsonValidatorInfo.validatorHandle(method);
+        }
         if (method.getDeclaringClass().isInterface()) {
           RuntimeReflection.register(method);
         }
@@ -768,15 +775,27 @@ final class ForyJsonGraalVMFeature implements Feature {
         || !processedContainers.add(rawType)) {
       return false;
     }
+    registerContainerFields(rawType);
     try {
       Constructor<?> constructor = rawType.getConstructor();
       RuntimeReflection.register(constructor);
       ReflectionUtils.getCtrHandle(rawType, new Class<?>[0]);
-      return true;
     } catch (NoSuchMethodException ignored) {
-      // CollectionCodec and MapCodec preserve the same runtime failure for a concrete container
-      // without a public no-argument constructor.
-      return false;
+      // Dedicated factories create supported containers such as EnumMap and EnumSet without a
+      // public no-argument constructor. Other concrete containers preserve the runtime failure.
+    }
+    return true;
+  }
+
+  private void registerContainerFields(Class<?> type) {
+    for (Class<?> current = type;
+        current != null && current != Object.class;
+        current = current.getSuperclass()) {
+      // CollectionCodec and MapCodec derive the retained-owner estimate from the complete physical
+      // field hierarchy at image runtime. Retaining only the constructor would silently reduce the
+      // graph-memory charge for custom concrete containers.
+      RuntimeReflection.register(current);
+      RuntimeReflection.register(current.getDeclaredFields());
     }
   }
 

@@ -17,12 +17,18 @@ security boundary.
 ## Scope
 
 This model applies to deserializing Fory binary data from untrusted or
-partially trusted sources.
+partially trusted sources. Its resource, policy, and cleanup boundaries also
+apply to Java Fory JSON. The Java Fory JSON subsection under
+[Graph Memory Budget](#graph-memory-budget) defines that format's accounting
+scope without changing binary Fory behavior.
 
 It does not treat the semantic content of a successfully deserialized value as a
 Fory security boundary. A sender can always construct protocol-valid data whose
 value is chosen by that sender. Application authorization, object-level business
 rules, and domain-specific validation remain application responsibilities.
+Java Fory JSON applications can enforce those rules with `JsonValidator` or in
+a `JsonCreator`, but the selected business invariant remains an application
+policy rather than a Fory protocol security boundary.
 
 This model also does not cover trusted in-memory formats. Row format and other
 memory-format paths are trusted-data paths unless a runtime explicitly exposes
@@ -346,7 +352,8 @@ Graph budget accounting should:
   and use primitive/value field widths for inline storage;
 - preserve existing byte-availability checks before backing allocation or capacity reservation;
 - skip enum/union as separate owners and skip dedicated string, binary, primitive scalar, primitive
-  array, and primitive dense-array leaf owners.
+  array, and primitive dense-array leaf owners unless a runtime-specific owner section explicitly
+  includes them.
 
 Skipped leaf owners must still be gated by remaining input bytes. If the unread input does not
 contain enough bytes for a string, binary value, primitive scalar, primitive array, or primitive
@@ -367,6 +374,54 @@ elements of the outer collection that actually owns those slots. Pointer, box, s
 type-erased materialization paths reserve the shallow storage for the heap value they allocate.
 Parents must not recursively include child object, collection, map, string, binary, or primitive
 dense-array contents; the child owner reserves its own shallow memory when it is materialized.
+
+### Java Fory Core
+
+Java Fory core primitive-array serializers reserve the portable array header plus the logical
+length multiplied by the primitive storage width. Primitive-list serializers reserve the returned
+list's shallow owner, the backing-array header, and the same primitive storage. These known-length
+paths reserve once after their existing proportional readable-byte check and before allocation;
+they do not use incremental batches. Compressed inputs use the decompressed logical length, while
+temporary compressed arrays remain construction scratch outside the retained graph budget.
+Float16 and BFloat16 dense-array carriers also include their wrapper's shallow owner. When a boxed
+list conversion first decodes a primitive array, the array's reservation remains as credit toward
+the final list estimate, and the conversion reserves only a positive remaining difference.
+
+### Java Fory JSON
+
+Java Fory JSON uses `ForyJsonBuilder.withMaxGraphMemoryBytes` to configure this per-root gate. The
+default is the fixed `ForyJson.DEFAULT_MAX_GRAPH_MEMORY_BYTES` value of 128 MiB, and explicit values
+must be positive. String and UTF-8 byte-array root reads use the same configured limit. Every root
+read starts with the complete limit, and success or failure cannot reduce the next root operation's
+budget. The limit is not derived from input length.
+
+Built-in Java JSON accounting includes shallow POJO and record storage, collections and sets plus
+candidate element-reference slots, maps plus candidate key/value-reference slots, reference arrays
+plus their slots, and Java primitive arrays plus their primitive storage. Natural `JsonObject` and
+`JsonArray` values follow the same map and collection rules. Unknown-length collection, map, and
+array storage is reserved in 1024-item batches before each batch's final child and at the tail.
+Repeated set elements and duplicate or overwritten map members are therefore charged per input
+occurrence. A reference array is charged even when its elements are leaves, and an object is charged
+even when all of its properties are leaves. Primitive arrays decoded from JSON arrays reserve the
+portable array header and actual Java primitive width using the same batch schedule.
+`AtomicReference`, `AtomicReferenceArray`, and generic `Optional<T>` values include wrapper and
+reference storage; primitive optionals and atomic primitive values are leaves.
+
+Dedicated Java JSON leaf codecs are excluded from graph accounting: null, strings, characters,
+booleans, numeric values including arbitrary-precision numbers, enums, temporal and other scalar
+values, and binary values. A `byte[]` handled by a binary or Base64 codec remains a binary leaf;
+the same Java carrier decoded from a JSON numeric array is a primitive-array owner. Byte-availability
+and grammar checks still apply independently of graph accounting.
+
+A custom Java JSON codec that materializes composite graph owners must call
+`JsonReader.reserveGraphMemory` with its application-defined byte estimate for each composite
+application object, collection, map, or reference array. Unknown-length retained storage should be
+reserved in bounded batches before each batch's final child and at the tail; a codec may use
+stronger timing. A custom scalar or other dedicated leaf representation makes no reservation. The
+budget cannot include custom allocations that the codec does not reserve, application constructor
+or validator internals, temporary parsing storage, or unrelated process memory. Applications must
+therefore combine this approximate gate with transport input limits, timeouts, and other resource
+controls appropriate to their trust boundary.
 
 ### Generated Structural Targets
 

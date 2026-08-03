@@ -41,9 +41,9 @@ import org.apache.fory.platform.GraalvmSupport;
  * supported, use JavaBean property discovery, use {@link PropertyNamingStrategy#LOWER_CAMEL_CASE},
  * snapshot the current thread context class loader, allow a nesting depth of 20, cache up to 8192
  * common field names in each reader, use twice the available processors as the pooled-state
- * concurrency level, retain writer buffers up to 2 MiB, and install no custom type checker. Field
- * mode disables getter and setter discovery but continues to discover eligible instance fields
- * across the class hierarchy.
+ * concurrency level, apply a fixed 128 MiB graph-memory gate to each root read, retain writer
+ * buffers up to 2 MiB, and install no custom type checker. Field mode disables getter and setter
+ * discovery but continues to discover eligible instance fields across the class hierarchy.
  */
 public final class ForyJsonBuilder {
   private boolean writeNullFields;
@@ -54,6 +54,7 @@ public final class ForyJsonBuilder {
   private ClassLoader classLoader;
   private int maxDepth = ForyJson.DEFAULT_MAX_DEPTH;
   private int maxCachedFieldNames = ForyJson.DEFAULT_MAX_CACHED_FIELD_NAMES;
+  private long maxGraphMemoryBytes = ForyJson.DEFAULT_MAX_GRAPH_MEMORY_BYTES;
   private int concurrencyLevel = Math.max(1, Runtime.getRuntime().availableProcessors() * 2);
   private int bufferSizeLimitBytes = 2 * 1024 * 1024;
   private JsonTypeChecker typeChecker;
@@ -152,6 +153,23 @@ public final class ForyJsonBuilder {
   public ForyJsonBuilder withMaxCachedFieldNames(int maxCachedFieldNames) {
     JsonConfig.validateMaxCachedFieldNames(maxCachedFieldNames);
     this.maxCachedFieldNames = maxCachedFieldNames;
+    return this;
+  }
+
+  /**
+   * Sets the approximate graph-memory gate for one root deserialization.
+   *
+   * <p>The estimate covers materialized object, collection, map, reference-array, and
+   * primitive-array owners. Leaf values such as strings, numbers, and binary data are not charged.
+   * A {@code byte[]} handled by a binary or Base64 codec remains a binary leaf. The default is a
+   * fixed 128 MiB; actual process memory can be higher than this limit.
+   *
+   * @param maxGraphMemoryBytes a positive byte limit
+   * @throws IllegalArgumentException if {@code maxGraphMemoryBytes} is not positive
+   */
+  public ForyJsonBuilder withMaxGraphMemoryBytes(long maxGraphMemoryBytes) {
+    JsonConfig.validateMaxGraphMemoryBytes(maxGraphMemoryBytes);
+    this.maxGraphMemoryBytes = maxGraphMemoryBytes;
     return this;
   }
 
@@ -263,6 +281,7 @@ public final class ForyJsonBuilder {
             fixedClassLoader,
             maxDepth,
             maxCachedFieldNames,
+            maxGraphMemoryBytes,
             concurrencyLevel,
             bufferSizeLimitBytes,
             codecRegistry,

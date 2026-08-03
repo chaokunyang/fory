@@ -325,8 +325,8 @@ public final class JsonCodegen {
               new JsonGeneratedCodecBuilder(generatedPackage, className, type);
           Latin1ReaderCodegen reader = new Latin1ReaderCodegen(this, resolver, groupEnds);
           return any == null || any.readField() == null && any.readSetter() == null
-              ? reader.genReaderCode(builder, type, properties, codec.creatorInfo())
-              : reader.genAnyReaderCode(builder, type, properties, codec.creatorInfo(), any);
+              ? reader.genReaderCode(builder, codec, properties, codec.creatorInfo())
+              : reader.genAnyReaderCode(builder, codec, properties, codec.creatorInfo(), any);
         };
     return compileReaderClass(
         type,
@@ -359,8 +359,8 @@ public final class JsonCodegen {
               new JsonGeneratedCodecBuilder(generatedPackage, className, type);
           Utf16ReaderCodegen reader = new Utf16ReaderCodegen(this, resolver, groupEnds);
           return any == null || any.readField() == null && any.readSetter() == null
-              ? reader.genReaderCode(builder, type, properties, codec.creatorInfo())
-              : reader.genAnyReaderCode(builder, type, properties, codec.creatorInfo(), any);
+              ? reader.genReaderCode(builder, codec, properties, codec.creatorInfo())
+              : reader.genAnyReaderCode(builder, codec, properties, codec.creatorInfo(), any);
         };
     return compileReaderClass(
         type,
@@ -395,8 +395,8 @@ public final class JsonCodegen {
           Utf8ReaderCodegen reader =
               new Utf8ReaderCodegen(this, resolver, finalDependencies, groupEnds);
           return any == null || any.readField() == null && any.readSetter() == null
-              ? reader.genReaderCode(builder, type, properties, codec.creatorInfo())
-              : reader.genAnyReaderCode(builder, type, properties, codec.creatorInfo(), any);
+              ? reader.genReaderCode(builder, codec, properties, codec.creatorInfo())
+              : reader.genAnyReaderCode(builder, codec, properties, codec.creatorInfo(), any);
         };
     return compileReaderClass(
         type,

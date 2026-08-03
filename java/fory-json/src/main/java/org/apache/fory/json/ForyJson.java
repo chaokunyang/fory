@@ -82,6 +82,9 @@ public final class ForyJson {
   /** Default maximum number of short, unescaped ASCII field names cached by each JSON reader. */
   public static final int DEFAULT_MAX_CACHED_FIELD_NAMES = 8192;
 
+  /** Default approximate graph-memory gate for one root JSON deserialization. */
+  public static final long DEFAULT_MAX_GRAPH_MEMORY_BYTES = 128L * 1024 * 1024;
+
   private final int homeSlotMask;
   private final JsonConfig config;
   private final PooledState[] slots;

@@ -73,6 +73,7 @@ abstract class JsonReaderCodegen {
   private final int[] fastReadGroupEnds;
   private AnyInfo any;
   private Class<?> ownerType;
+  private ObjectCodec<?> objectOwner;
   private boolean storesSelfReader;
 
   JsonReaderCodegen(JsonCodegen codegen, JsonTypeResolver resolver) {
@@ -147,9 +148,11 @@ abstract class JsonReaderCodegen {
 
   String genReaderCode(
       JsonGeneratedCodecBuilder builder,
-      Class<?> type,
+      ObjectCodec<?> owner,
       JsonFieldInfo[] properties,
       JsonCreatorInfo creatorInfo) {
+    Class<?> type = owner.type();
+    objectOwner = owner;
     ownerType = type;
     if (creatorInfo != null) {
       return genCreatorReaderCode(builder, type, creatorInfo);
@@ -164,6 +167,9 @@ abstract class JsonReaderCodegen {
     // Generated readers retain immutable lookup metadata directly. Creator-backed readers are
     // selected above and consume the exact executable owned by JsonCreatorInfo.
     ctx.addField(JsonFieldTable.class, "readTable");
+    if (owner.hasValidators()) {
+      ctx.addField(ObjectCodec.class, "owner");
+    }
     ctx.addField(long[].class, "fieldHashes");
     for (int i = 0; i < properties.length; i++) {
       if (usesReadInfo(properties[i])) {
@@ -235,10 +241,12 @@ abstract class JsonReaderCodegen {
 
   String genAnyReaderCode(
       JsonGeneratedCodecBuilder builder,
-      Class<?> type,
+      ObjectCodec<?> owner,
       JsonFieldInfo[] properties,
       JsonCreatorInfo creatorInfo,
       AnyInfo any) {
+    Class<?> type = owner.type();
+    objectOwner = owner;
     this.any = any;
     ownerType = type;
     storesSelfReader =
@@ -300,6 +308,7 @@ abstract class JsonReaderCodegen {
       Class<?> type,
       ObjectCodec<?> owner,
       JsonUnwrappedInfo unwrapped) {
+    objectOwner = owner;
     AnyInfo ownerAny = owner.anyInfo();
     this.any =
         ownerAny != null && (ownerAny.readField() != null || ownerAny.readSetter() != null)
@@ -419,7 +428,11 @@ abstract class JsonReaderCodegen {
             "groupPresent",
             new Expression.NewArray(boolean.class, Expression.Literal.ofInt(groups.length)));
     Expression.ListExpression body = new Expression.ListExpression();
-    body.add(new Expression.Invoke(readerRef(), "enterDepth"), root, workspaces, present);
+    body.add(new Expression.Invoke(readerRef(), "enterDepth"));
+    if (!rootArray) {
+      body.add(reserveObject(owner));
+    }
+    body.add(root, workspaces, present);
     Expression anyMap = anyMap(builder, root, rootArray);
     if (anyMap != null) {
       body.add(anyMap);
@@ -447,14 +460,11 @@ abstract class JsonReaderCodegen {
     if (anyCreated != null) {
       // Rebuild the member expression with the shared flag after declaring it.
       body = new Expression.ListExpression();
-      body.add(
-          new Expression.Invoke(readerRef(), "enterDepth"),
-          root,
-          workspaces,
-          present,
-          anyMap,
-          anyCreated,
-          expectExpr('{'));
+      body.add(new Expression.Invoke(readerRef(), "enterDepth"));
+      if (!rootArray) {
+        body.add(reserveObject(owner));
+      }
+      body.add(root, workspaces, present, anyMap, anyCreated, expectExpr('{'));
       members =
           unwrappedMembers(
               builder,
@@ -475,8 +485,22 @@ abstract class JsonReaderCodegen {
     if (groups.length != 0) {
       body.add(finishUnwrappedGroups(type, root, workspaces, present, rootArray));
     }
+    if (rootArray) {
+      body.add(reserveObject(owner));
+    }
     Expression finishedRoot = finishUnwrappedRoot(root, type, rootCreator);
-    body.add(new Expression.Invoke(readerRef(), "exitDepth"), new Expression.Return(finishedRoot));
+    body.add(new Expression.Invoke(readerRef(), "exitDepth"));
+    if (owner.hasValidators()) {
+      Expression finished =
+          new Expression.Variable(
+              "finishedObject", new Expression.Cast(finishedRoot, TypeRef.of(type)));
+      body.add(
+          finished,
+          new Expression.Invoke(ownerRef(), "validateObject", finished),
+          new Expression.Return(finished));
+    } else {
+      body.add(new Expression.Return(finishedRoot));
+    }
     Code.ExprCode generated = body.genCode(ctx);
     String code = generated.code();
     code = code == null ? "" : ctx.optimizeMethodCode(code);
@@ -658,6 +682,7 @@ abstract class JsonReaderCodegen {
         new Expression.If(
             consumeExpr('}'),
             new Expression.ListExpression(
+                reserveObject(objectOwner),
                 new Expression.Invoke(readerRef(), "exitDepth"),
                 new Expression.Return(createValue(type, arguments)))));
 
@@ -706,13 +731,15 @@ abstract class JsonReaderCodegen {
         new Expression.Variable(
             "finishedAnyMap",
             new Expression.Cast(
-                new Expression.Invoke(ownerRef(), "finishAnyMap", TypeRef.of(Map.class), anyMap),
+                new Expression.Invoke(
+                    ownerRef(), "finishAnyMap", TypeRef.of(Map.class), readerRef(), anyMap),
                 TypeRef.of(parameterTypes[any.constructionIndex()])));
     expressions.add(
         new Expression.If(
             ne(anyMap, new Expression.Null(TypeRef.of(Map.class), false)),
             new Expression.ListExpression(
                 finished, new Expression.Assign(arguments[any.constructionIndex()], finished))));
+    expressions.add(reserveObject(objectOwner));
     expressions.add(new Expression.Invoke(readerRef(), "exitDepth"));
     expressions.add(new Expression.Return(createValue(type, arguments)));
     return expressions;
@@ -740,10 +767,13 @@ abstract class JsonReaderCodegen {
     Expression create =
         new Expression.Assign(
             anyMap,
-            new Expression.Invoke(ownerRef(), "newAnyMap", TypeRef.of(Map.class), false).inline());
+            new Expression.Invoke(
+                    ownerRef(), "newAnyMap", TypeRef.of(Map.class), false, readerRef())
+                .inline());
     Expression read =
         new Expression.ListExpression(
             name,
+            new Expression.Invoke(ownerRef(), "reserveAnyEntry", readerRef()),
             value,
             new Expression.If(
                 eq(anyMap, new Expression.Null(TypeRef.of(Map.class), false)), create),
@@ -781,10 +811,12 @@ abstract class JsonReaderCodegen {
         .append(";\n")
         .append("} catch (Throwable e) {\n  throw owner.creatorFailure(e);\n}\n");
     if (executable instanceof Method) {
-      body.append("return (").append(typeName).append(") owner.requireCreatorResult(value);");
-    } else {
-      body.append("return value;");
+      body.append("value = (").append(typeName).append(") owner.requireCreatorResult(value);\n");
     }
+    if (objectOwner.hasValidators()) {
+      body.append("owner.validateObject(value);\n");
+    }
+    body.append("return value;");
     ctx.addMethod("private final", "createValue", body.toString(), type, parameters);
   }
 
@@ -882,6 +914,7 @@ abstract class JsonReaderCodegen {
         new Expression.If(
             consumeExpr('}'),
             new Expression.ListExpression(
+                reserveObject(objectOwner),
                 new Expression.Invoke(readerRef(), "exitDepth"),
                 new Expression.Return(createValue(type, arguments)))));
 
@@ -917,6 +950,7 @@ abstract class JsonReaderCodegen {
             not(consumeExpr(',')),
             new Expression.ListExpression(expectExpr('}'), new Expression.Break())));
     expressions.add(new Expression.While(Expression.Literal.True, loop));
+    expressions.add(reserveObject(objectOwner));
     expressions.add(new Expression.Invoke(readerRef(), "exitDepth"));
     expressions.add(new Expression.Return(createValue(type, arguments)));
     return expressions;
@@ -1333,7 +1367,7 @@ abstract class JsonReaderCodegen {
     expressions.add(
         new Expression.Assign(
             new Reference("this.readTable", TypeRef.of(JsonFieldTable.class)), table));
-    if (any != null) {
+    if (any != null || objectOwner.hasValidators()) {
       expressions.add(
           new Expression.Assign(new Reference("this.owner", TypeRef.of(ObjectCodec.class)), owner));
     }
@@ -1912,6 +1946,7 @@ abstract class JsonReaderCodegen {
             TypeRef.of(void.class),
             false,
             false,
+            readerRef(),
             Expression.Literal.ofInt(group.readIndex()),
             workspaces,
             present));
@@ -1936,7 +1971,7 @@ abstract class JsonReaderCodegen {
             + "}\n"
             + "while (true) {\n"
             + "  if (!present[current]) {\n"
-            + "    initUnwrappedGroup(current, workspaces, present);\n"
+            + "    initUnwrappedGroup(reader, current, workspaces, present);\n"
             + "  }\n"
             + "  if (current == target) {\n"
             + "    return;\n"
@@ -1951,6 +1986,8 @@ abstract class JsonReaderCodegen {
         "ensureUnwrappedGroup",
         ensureBody,
         void.class,
+        readerType(),
+        "reader",
         int.class,
         "target",
         Object[].class,
@@ -1971,11 +2008,21 @@ abstract class JsonReaderCodegen {
       StringBuilder body = new StringBuilder("switch (groupIndex) {\n");
       for (int i = start; i < end; i++) {
         ObjectCodec<?> child = groups[i].childCodec();
-        body.append("case ").append(i).append(":\n  workspaces[").append(i).append("] = ");
+        body.append("case ").append(i).append(":\n");
         if (child.creatorInfo() != null) {
-          body.append("this.groupCodecs[").append(i).append("].creatorInfo().newArguments();\n");
+          body.append("  workspaces[")
+              .append(i)
+              .append("] = this.groupCodecs[")
+              .append(i)
+              .append("].creatorInfo().newArguments();\n");
         } else {
-          body.append("this.groupCodecs[").append(i).append("].newInstance();\n");
+          body.append("  reader.reserveGraphMemory(")
+              .append(child.graphMemoryBytes())
+              .append(");\n  workspaces[")
+              .append(i)
+              .append("] = this.groupCodecs[")
+              .append(i)
+              .append("].newInstance();\n");
         }
         body.append("  present[").append(i).append("] = true;\n  return;\n");
       }
@@ -1985,6 +2032,8 @@ abstract class JsonReaderCodegen {
           unwrappedGroupInitMethod(start),
           body.toString(),
           void.class,
+          readerType(),
+          "reader",
           int.class,
           "groupIndex",
           Object[].class,
@@ -1996,7 +2045,7 @@ abstract class JsonReaderCodegen {
           .append(chunk)
           .append(":\n  ")
           .append(unwrappedGroupInitMethod(start))
-          .append("(groupIndex, workspaces, present);\n  return;\n");
+          .append("(reader, groupIndex, workspaces, present);\n  return;\n");
     }
     dispatch.append("default:\n  throw new IllegalArgumentException();\n}");
     ctx.addMethod(
@@ -2004,6 +2053,8 @@ abstract class JsonReaderCodegen {
         "initUnwrappedGroup",
         dispatch.toString(),
         void.class,
+        readerType(),
+        "reader",
         int.class,
         "groupIndex",
         Object[].class,
@@ -2045,6 +2096,8 @@ abstract class JsonReaderCodegen {
           new Expression.Switch(
               new Reference("groupIndex", TypeRef.of(int.class)), cases, new Expression.Empty()),
           void.class,
+          readerType(),
+          "reader",
           rootWorkspaceType,
           "root",
           Object[].class,
@@ -2062,6 +2115,7 @@ abstract class JsonReaderCodegen {
                       TypeRef.of(void.class),
                       false,
                       false,
+                      readerRef(),
                       new Reference("root", TypeRef.of(rootWorkspaceType)),
                       new Reference("workspaces", TypeRef.of(Object[].class)),
                       new Reference("groupIndex", TypeRef.of(int.class))),
@@ -2079,6 +2133,8 @@ abstract class JsonReaderCodegen {
         "finishUnwrappedGroup",
         new Expression.Switch(chunk, dispatchCases, new Expression.Empty()),
         void.class,
+        readerType(),
+        "reader",
         rootWorkspaceType,
         "root",
         Object[].class,
@@ -2088,7 +2144,7 @@ abstract class JsonReaderCodegen {
     String body =
         "for (int i = this.groupCodecs.length - 1; i >= 0; i--) {\n"
             + "  if (present[i]) {\n"
-            + "    finishUnwrappedGroup(root, workspaces, i);\n"
+            + "    finishUnwrappedGroup(reader, root, workspaces, i);\n"
             + "  }\n"
             + "}";
     ctx.addMethod(
@@ -2096,6 +2152,8 @@ abstract class JsonReaderCodegen {
         "finishUnwrappedGroups",
         body,
         void.class,
+        readerType(),
+        "reader",
         rootWorkspaceType,
         "root",
         Object[].class,
@@ -2126,22 +2184,42 @@ abstract class JsonReaderCodegen {
     } else {
       child = workspace;
     }
+    Expression finishedChild =
+        new Expression.Variable(
+            "finishedGroup" + index, new Expression.Cast(child, TypeRef.of(childCodec.type())));
     Group parent = group.parent();
     ObjectCodec<?> parentCodec = group.parentCodec();
     Expression parentWorkspace =
         parent == null
             ? root
             : new Expression.ArrayValue(workspaces, Expression.Literal.ofInt(parent.readIndex()));
+    Expression assignment;
     if (parentCodec.creatorInfo() != null) {
-      return new Expression.AssignArrayElem(
-          new Expression.Cast(parentWorkspace, TypeRef.of(Object[].class)),
-          child,
-          Expression.Literal.ofInt(group.declaration().constructionIndex()));
+      assignment =
+          new Expression.AssignArrayElem(
+              new Expression.Cast(parentWorkspace, TypeRef.of(Object[].class)),
+              finishedChild,
+              Expression.Literal.ofInt(group.declaration().constructionIndex()));
+    } else {
+      assignment =
+          builder.setUnwrapped(
+              group.declaration(),
+              new Expression.Cast(parentWorkspace, TypeRef.of(parentCodec.type())),
+              finishedChild);
     }
-    return builder.setUnwrapped(
-        group.declaration(),
-        new Expression.Cast(parentWorkspace, TypeRef.of(parentCodec.type())),
-        new Expression.Cast(child, TypeRef.of(childCodec.type())));
+    Expression.ListExpression expressions = new Expression.ListExpression();
+    if (childCodec.creatorInfo() != null) {
+      expressions.add(reserveObject(childCodec));
+    }
+    expressions.add(finishedChild);
+    if (childCodec.hasValidators()) {
+      Expression groupCodec =
+          new Expression.ArrayValue(
+              fieldRef("groupCodecs", ObjectCodec[].class), Expression.Literal.ofInt(index));
+      expressions.add(new Expression.Invoke(groupCodec, "validateObject", finishedChild));
+    }
+    expressions.add(assignment);
+    return expressions;
   }
 
   private Expression finishUnwrappedGroups(
@@ -2158,6 +2236,7 @@ abstract class JsonReaderCodegen {
         TypeRef.of(void.class),
         false,
         false,
+        readerRef(),
         new Expression.Cast(root, TypeRef.of(rootWorkspaceType)),
         workspaces,
         present);
@@ -2183,6 +2262,7 @@ abstract class JsonReaderCodegen {
     Expression object = objectExpression(builder);
     Expression.ListExpression expressions = new Expression.ListExpression();
     expressions.add(new Expression.Invoke(readerRef(), "enterDepth"));
+    expressions.add(reserveObject(objectOwner));
     expressions.add(object);
     Expression anyMap = anyMap(builder, object);
     if (anyMap != null) {
@@ -2223,6 +2303,7 @@ abstract class JsonReaderCodegen {
     Expression object = objectExpression(builder);
     Expression.ListExpression expressions = new Expression.ListExpression();
     expressions.add(new Expression.Invoke(readerRef(), "enterDepth"));
+    expressions.add(reserveObject(objectOwner));
     expressions.add(object);
     Expression anyMap = anyMap(builder, object);
     if (anyMap != null) {
@@ -2581,8 +2662,19 @@ abstract class JsonReaderCodegen {
     return builder.newObject();
   }
 
+  private Expression reserveObject(ObjectCodec<?> codec) {
+    return new Expression.Invoke(
+        readerRef(), "reserveGraphMemory", Expression.Literal.ofInt(codec.graphMemoryBytes()));
+  }
+
   private Expression returnObject(Expression object) {
     Expression exitDepth = new Expression.Invoke(readerRef(), "exitDepth");
+    if (objectOwner.hasValidators()) {
+      return new Expression.ListExpression(
+          exitDepth,
+          new Expression.Invoke(ownerRef(), "validateObject", object),
+          new Expression.Return(object));
+    }
     return new Expression.ListExpression(exitDepth, new Expression.Return(object));
   }
 
@@ -2755,7 +2847,8 @@ abstract class JsonReaderCodegen {
         new Expression.Variable(
             "finishedAnyMap",
             new Expression.Cast(
-                new Expression.Invoke(ownerRef(), "finishAnyMap", TypeRef.of(Map.class), map),
+                new Expression.Invoke(
+                    ownerRef(), "finishAnyMap", TypeRef.of(Map.class), readerRef(), map),
                 TypeRef.of(Map.class)));
     Expression store;
     if (creatorWorkspace) {
@@ -3015,9 +3108,9 @@ abstract class JsonReaderCodegen {
             "anyValue",
             new Expression.Invoke(
                 anyReaderRef(), readMethod(), TypeRef.of(Object.class), readerRef()));
-    Expression write;
+    Expression read;
     if (any.readSetter() != null) {
-      write =
+      Expression write =
           new Expression.Invoke(
               new Reference("this", TypeRef.of(Object.class)),
               "callAnySetter",
@@ -3028,6 +3121,7 @@ abstract class JsonReaderCodegen {
               object,
               name,
               value);
+      read = new Expression.ListExpression(name, value, write);
     } else {
       Reference map = new Reference("anyMap", TypeRef.of(Map.class));
       Expression create =
@@ -3035,7 +3129,8 @@ abstract class JsonReaderCodegen {
               ? new Expression.ListExpression(
                   new Expression.Assign(
                       map,
-                      new Expression.Invoke(ownerRef(), "newAnyMap", TypeRef.of(Map.class), false)
+                      new Expression.Invoke(
+                              ownerRef(), "newAnyMap", TypeRef.of(Map.class), false, readerRef())
                           .inline()),
                   new Expression.Assign(anyMapCreated, Expression.Literal.True))
               : Modifier.isFinal(any.readField().getModifiers())
@@ -3051,16 +3146,25 @@ abstract class JsonReaderCodegen {
                       new Expression.Assign(
                           map,
                           new Expression.Invoke(
-                                  ownerRef(), "newAnyMap", TypeRef.of(Map.class), false)
+                                  ownerRef(),
+                                  "newAnyMap",
+                                  TypeRef.of(Map.class),
+                                  false,
+                                  readerRef())
                               .inline()),
                       new Expression.Assign(anyMapCreated, Expression.Literal.True));
       Expression put = new Expression.Invoke(ownerRef(), "putAnyMap", map, name, value);
-      write =
+      Expression write =
           new Expression.ListExpression(
               new Expression.If(eq(map, new Expression.Null(TypeRef.of(Map.class), false)), create),
               put);
+      read =
+          new Expression.ListExpression(
+              name,
+              new Expression.Invoke(ownerRef(), "reserveAnyEntry", readerRef()),
+              value,
+              write);
     }
-    Expression read = new Expression.ListExpression(name, value, write);
     return new Expression.If(
         reserved,
         skip,

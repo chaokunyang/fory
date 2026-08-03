@@ -38,9 +38,9 @@ import org.apache.fory.json.resolver.CodecRegistry;
  *
  * <p>Scalar settings and the codec registry are snapshotted at construction; the JSON runtime never
  * observes later builder mutation. {@link #getCodegenHash()} identifies only settings that can
- * change generated source; runtime-only settings such as depth and asynchronous scheduling do not
- * fragment generated class names. Concurrency, per-reader field-name cache, and retained
- * writer-buffer limits are also runtime-only and do not fragment generated class names.
+ * change generated source; runtime-only settings such as depth, graph memory, and asynchronous
+ * scheduling do not fragment generated class names. Concurrency, per-reader field-name cache, and
+ * retained writer-buffer limits are also runtime-only and do not fragment generated class names.
  */
 public final class JsonConfig {
   private static final int MAX_CACHED_FIELD_NAMES = 1 << 29;
@@ -53,6 +53,7 @@ public final class JsonConfig {
   private final ClassLoader classLoader;
   private final int maxDepth;
   private final int maxCachedFieldNames;
+  private final long maxGraphMemoryBytes;
   private final int concurrencyLevel;
   private final int bufferSizeLimitBytes;
   private final CodecRegistry codecRegistry;
@@ -71,6 +72,7 @@ public final class JsonConfig {
       ClassLoader classLoader,
       int maxDepth,
       int maxCachedFieldNames,
+      long maxGraphMemoryBytes,
       int concurrencyLevel,
       int bufferSizeLimitBytes,
       CodecRegistry codecRegistry,
@@ -86,6 +88,8 @@ public final class JsonConfig {
     this.maxDepth = maxDepth;
     validateMaxCachedFieldNames(maxCachedFieldNames);
     this.maxCachedFieldNames = maxCachedFieldNames;
+    validateMaxGraphMemoryBytes(maxGraphMemoryBytes);
+    this.maxGraphMemoryBytes = maxGraphMemoryBytes;
     this.concurrencyLevel = concurrencyLevel;
     this.bufferSizeLimitBytes = bufferSizeLimitBytes;
     this.codecRegistry = codecRegistry.copy();
@@ -136,10 +140,21 @@ public final class JsonConfig {
     return maxCachedFieldNames;
   }
 
+  /** Returns the approximate root-operation graph-memory gate in bytes. */
+  public long maxGraphMemoryBytes() {
+    return maxGraphMemoryBytes;
+  }
+
   static void validateMaxCachedFieldNames(int maxCachedFieldNames) {
     if (maxCachedFieldNames < 0 || maxCachedFieldNames > MAX_CACHED_FIELD_NAMES) {
       throw new IllegalArgumentException(
           "maxCachedFieldNames must be between 0 and " + MAX_CACHED_FIELD_NAMES);
+    }
+  }
+
+  static void validateMaxGraphMemoryBytes(long maxGraphMemoryBytes) {
+    if (maxGraphMemoryBytes <= 0) {
+      throw new IllegalArgumentException("maxGraphMemoryBytes must be positive");
     }
   }
 

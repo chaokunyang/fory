@@ -30,6 +30,8 @@ import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.EnumMap;
+import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -43,6 +45,7 @@ import org.apache.fory.codegen.CompileState;
 import org.apache.fory.graalvm.closed.ClosedJsonConfigs;
 import org.apache.fory.graalvm.closed.ClosedJsonRecord;
 import org.apache.fory.json.ForyJson;
+import org.apache.fory.json.ForyJsonException;
 import org.apache.fory.json.PropertyNamingStrategy;
 import org.apache.fory.json.annotation.ForyJsonProvider;
 import org.apache.fory.json.annotation.JsonAnyGetter;
@@ -60,6 +63,7 @@ import org.apache.fory.json.annotation.JsonRawValue;
 import org.apache.fory.json.annotation.JsonSubTypes;
 import org.apache.fory.json.annotation.JsonType;
 import org.apache.fory.json.annotation.JsonUnwrapped;
+import org.apache.fory.json.annotation.JsonValidator;
 import org.apache.fory.json.annotation.JsonValue;
 import org.apache.fory.json.codec.JsonValueCodec;
 import org.apache.fory.json.codec.MapKeyCodec;
@@ -70,6 +74,7 @@ import org.apache.fory.json.reader.Utf8JsonReader;
 import org.apache.fory.json.writer.StringJsonWriter;
 import org.apache.fory.json.writer.Utf8JsonWriter;
 import org.apache.fory.platform.GraalvmSupport;
+import org.apache.fory.serializer.GraphMemoryEstimates;
 import org.apache.fory.util.Preconditions;
 
 /** Native-image acceptance coverage for hosted code generation and interpreter fallback. */
@@ -78,6 +83,9 @@ public final class ForyJsonExample {
       "Fory JSON is using interpreted codecs because the current configuration was not included "
           + "in this native image. Return this configuration from a reachable "
           + "@ForyJsonProvider to enable generated codecs.";
+  // Portable lower bound: the 8-byte object base plus one 4-byte int field.
+  private static final long GRAPH_BUDGET_VALUE_BYTES = 12;
+  private static final int REF_BYTES = GraphMemoryEstimates.REFERENCE_BYTES;
 
   private ForyJsonExample() {}
 
@@ -100,6 +108,10 @@ public final class ForyJsonExample {
         testContainerRoots();
         testGenericProperties();
         testUnwrapped();
+        testValidator();
+        testGraphMemoryBudget();
+        testContainerGraphBudget();
+        testSpecialContainerBudget();
         testMixin();
         testMixinValue();
         testMixinValueRecord();
@@ -190,6 +202,10 @@ public final class ForyJsonExample {
     Preconditions.checkArgument(json.toJson(DirectValueEnum.READY).equals("\"ready\""));
     Preconditions.checkArgument(
         json.fromJson("\"done\"", DirectValueEnum.class) == DirectValueEnum.DONE);
+
+    ValidatedValue validated = json.fromJson("{\"value\":22}", ValidatedValue.class);
+    Preconditions.checkArgument(validated.value == 22);
+    Preconditions.checkArgument(validated.validatorInvoked());
   }
 
   private static void exerciseCodegenConfiguration(ForyJson json, boolean generated) {
@@ -521,6 +537,107 @@ public final class ForyJsonExample {
     Preconditions.checkArgument(decodedRecord.equals(record));
   }
 
+  private static void testValidator() {
+    ForyJson json = newProviderJson();
+    ValidatedValue value = json.fromJson("{\"value\":21}", ValidatedValue.class);
+    Preconditions.checkArgument(value.value == 21);
+    Preconditions.checkArgument(value.validatorInvoked());
+    try {
+      json.fromJson("{\"value\":0}", ValidatedValue.class);
+      throw new AssertionError("Invalid native JSON input must fail validation");
+    } catch (ForyJsonException expected) {
+      Preconditions.checkArgument(expected.getCause() instanceof IllegalArgumentException);
+    }
+  }
+
+  private static void testGraphMemoryBudget() {
+    String text = "{\"value\":34}";
+    ForyJson exact = ForyJson.builder().withMaxGraphMemoryBytes(GRAPH_BUDGET_VALUE_BYTES).build();
+    Preconditions.checkArgument(exact.fromJson(text, GraphBudgetValue.class).value == 34);
+
+    ForyJson insufficient =
+        ForyJson.builder().withMaxGraphMemoryBytes(GRAPH_BUDGET_VALUE_BYTES - 1).build();
+    try {
+      insufficient.fromJson(text, GraphBudgetValue.class);
+      throw new AssertionError("An undersized graph memory budget must reject the object");
+    } catch (ForyJsonException expected) {
+      // Expected: malformed and resource-limit error details are not a public contract.
+    }
+  }
+
+  private static void testContainerGraphBudget() {
+    long plainListBytes = minimumGraphBudget("[]", PlainGraphList.class);
+    long fieldListBytes = minimumGraphBudget("[]", FieldGraphList.class);
+    Preconditions.checkArgument(fieldListBytes == plainListBytes + Long.BYTES + Integer.BYTES);
+
+    long plainMapBytes = minimumGraphBudget("{}", PlainGraphMap.class);
+    long fieldMapBytes = minimumGraphBudget("{}", FieldGraphMap.class);
+    Preconditions.checkArgument(fieldMapBytes == plainMapBytes + Long.BYTES + Integer.BYTES);
+  }
+
+  private static void testSpecialContainerBudget() {
+    int enumMapShallow = GraphMemoryEstimates.shallowObjectBytes(EnumMap.class);
+    int regularSetShallow =
+        GraphMemoryEstimates.shallowObjectBytes(EnumSet.noneOf(Status.class).getClass());
+    int jumboSetShallow =
+        GraphMemoryEstimates.shallowObjectBytes(EnumSet.noneOf(BudgetJumboKey.class).getClass());
+    Preconditions.checkArgument(enumMapShallow > 2 * REF_BYTES);
+    Preconditions.checkArgument(regularSetShallow > 2 * REF_BYTES);
+    Preconditions.checkArgument(jumboSetShallow > 2 * REF_BYTES);
+
+    long enumMapBytes =
+        GraphMemoryEstimates.shallowObjectBytes(GraphBudgetEnumMap.class)
+            + enumMapShallow
+            + GraphMemoryEstimates.objectArrayBytes()
+            + (long) Status.values().length * REF_BYTES;
+    Preconditions.checkArgument(
+        minimumGraphBudget("{\"value\":{}}", GraphBudgetEnumMap.class) == enumMapBytes);
+
+    long regularSetBytes =
+        GraphMemoryEstimates.shallowObjectBytes(GraphBudgetRegularSet.class) + regularSetShallow;
+    Preconditions.checkArgument(
+        minimumGraphBudget("{\"value\":[]}", GraphBudgetRegularSet.class) == regularSetBytes);
+
+    long jumboWords = (BudgetJumboKey.values().length + Long.SIZE - 1L) / Long.SIZE * Long.BYTES;
+    long jumboSetBytes =
+        GraphMemoryEstimates.shallowObjectBytes(GraphBudgetJumboSet.class)
+            + jumboSetShallow
+            + GraphMemoryEstimates.objectArrayBytes()
+            + jumboWords;
+    Preconditions.checkArgument(
+        minimumGraphBudget("{\"value\":[]}", GraphBudgetJumboSet.class) == jumboSetBytes);
+  }
+
+  private static long minimumGraphBudget(String input, Class<?> type) {
+    long low = 1;
+    long high = 4096;
+    while (low < high) {
+      long middle = low + (high - low) / 2;
+      if (fitsGraphBudget(input, type, middle)) {
+        high = middle;
+      } else {
+        low = middle + 1;
+      }
+    }
+    Preconditions.checkArgument(fitsGraphBudget(input, type, low));
+    return low;
+  }
+
+  private static boolean fitsGraphBudget(String input, Class<?> type, long budget) {
+    ForyJson json =
+        ForyJson.builder()
+            .withCodegen(false)
+            .withConcurrencyLevel(1)
+            .withMaxGraphMemoryBytes(budget)
+            .build();
+    try {
+      json.fromJson(input, type);
+      return true;
+    } catch (ForyJsonException expected) {
+      return false;
+    }
+  }
+
   private static void testBigDecimal() {
     ForyJson json = ForyJson.builder().build();
     BigDecimalHolder value = new BigDecimalHolder();
@@ -753,6 +870,38 @@ public final class ForyJsonExample {
     public StringMap() {}
   }
 
+  public static final class PlainGraphList extends ArrayList<String> {
+    public PlainGraphList() {}
+  }
+
+  public static class FieldGraphListBase extends ArrayList<String> {
+    private long inheritedField;
+
+    public FieldGraphListBase() {}
+  }
+
+  public static final class FieldGraphList extends FieldGraphListBase {
+    private int directField;
+
+    public FieldGraphList() {}
+  }
+
+  public static final class PlainGraphMap extends LinkedHashMap<String, String> {
+    public PlainGraphMap() {}
+  }
+
+  public static class FieldGraphMapBase extends LinkedHashMap<String, String> {
+    private long inheritedField;
+
+    public FieldGraphMapBase() {}
+  }
+
+  public static final class FieldGraphMap extends FieldGraphMapBase {
+    private int directField;
+
+    public FieldGraphMap() {}
+  }
+
   public abstract static class GenericProperty<T> {
     private Object value;
 
@@ -981,6 +1130,110 @@ public final class ForyJsonExample {
   public static final class ConfigValue {
     public String camelName;
     public String nullValue;
+  }
+
+  @JsonType
+  public static final class ValidatedValue {
+    public int value;
+    private boolean validatorInvoked;
+
+    @JsonValidator
+    public void validate() {
+      validatorInvoked = true;
+      Preconditions.checkArgument(value > 0);
+    }
+
+    public boolean validatorInvoked() {
+      return validatorInvoked;
+    }
+  }
+
+  @JsonType
+  public static final class GraphBudgetValue {
+    public int value;
+  }
+
+  @JsonType
+  public static final class GraphBudgetEnumMap {
+    public EnumMap<Status, String> value;
+  }
+
+  @JsonType
+  public static final class GraphBudgetRegularSet {
+    public EnumSet<Status> value;
+  }
+
+  @JsonType
+  public static final class GraphBudgetJumboSet {
+    public EnumSet<BudgetJumboKey> value;
+  }
+
+  public enum BudgetJumboKey {
+    V00,
+    V01,
+    V02,
+    V03,
+    V04,
+    V05,
+    V06,
+    V07,
+    V08,
+    V09,
+    V10,
+    V11,
+    V12,
+    V13,
+    V14,
+    V15,
+    V16,
+    V17,
+    V18,
+    V19,
+    V20,
+    V21,
+    V22,
+    V23,
+    V24,
+    V25,
+    V26,
+    V27,
+    V28,
+    V29,
+    V30,
+    V31,
+    V32,
+    V33,
+    V34,
+    V35,
+    V36,
+    V37,
+    V38,
+    V39,
+    V40,
+    V41,
+    V42,
+    V43,
+    V44,
+    V45,
+    V46,
+    V47,
+    V48,
+    V49,
+    V50,
+    V51,
+    V52,
+    V53,
+    V54,
+    V55,
+    V56,
+    V57,
+    V58,
+    V59,
+    V60,
+    V61,
+    V62,
+    V63,
+    V64
   }
 
   @JsonType

@@ -17,6 +17,8 @@ Deliver measurable performance improvements in Apache Fory without protocol drif
 - Benchmark sequentially on the same machine state (one benchmark process at a time).
 - Compare old/new benchmark results case-by-case in adjacent pairs: run one case on `apache/main`,
   then immediately run that same case on the current branch before moving to the next case.
+- Under high or variable host load, run multiple short adjacent baseline/current pairs. Keep each
+  process short and alternate sides instead of lengthening one run or batching all baseline runs.
 - Keep only measured wins or explicitly requested architecture cleanups.
 - Revert speculative changes that do not pay off.
 - Align with reference runtimes (usually C++ first, then Rust/Java) when behavior and ownership models differ.
@@ -53,7 +55,9 @@ Deliver measurable performance improvements in Apache Fory without protocol drif
 
 - Identify one primary KPI (for example `Struct Serialize ns/op` or ops/sec).
 - Benchmark current `HEAD`.
-- If a reference commit is provided, benchmark it once and persist the result in a file (for example `tasks/perf_baselines/<id>.md`) to avoid repeated reruns.
+- If a reference commit is provided, persist its built benchmark artifact and commit identity. Treat
+  stored numbers as historical context, not a substitute for an adjacent baseline run in each
+  comparison pair.
 
 3. Profile the hotspot.
 
@@ -83,7 +87,15 @@ Deliver measurable performance improvements in Apache Fory without protocol drif
 - Run targeted benchmark at least twice sequentially.
 - Pair each baseline case with the matching current-branch case before starting another case, so
   both measurements see closer machine load conditions.
-- Use longer duration when signal is noisy.
+- When host load is high or pair results conflict, use several short baseline/current pairs with the
+  same warmup and measurement settings. Run `baseline, current, baseline, current` as separate
+  processes; never run all baseline samples before all current samples.
+- Record every pair while it runs. Exclude a pair only with objective contamination evidence such as
+  a competing process, load spike, interruption, or throughput collapse; record the exclusion and
+  do not cherry-pick by direction.
+- Compare paired deltas using their median and dispersion. Do not optimize from a single pair,
+  non-adjacent samples, or a contaminated result. If the retained pairs do not establish a stable
+  signal, stop and wait for a cleaner window instead of changing code against the apparent result.
 - Run one short full-suite sanity benchmark to catch collateral regressions.
 
 8. Decide keep or revert.
@@ -101,6 +113,8 @@ Deliver measurable performance improvements in Apache Fory without protocol drif
 10. Re-plan on instability.
 
 - Stop and re-plan when benchmark runs conflict, machine contention is suspected, or profile does not match hypothesis.
+- On a busy machine, re-plan the measurement schedule to multiple short adjacent pairs before
+  forming an optimization hypothesis from benchmark deltas.
 - Re-ground on current `HEAD` after reset/rebase/checkout events before making further changes.
 
 ## Apply Decision Rules

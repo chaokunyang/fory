@@ -155,6 +155,11 @@ public class CompatibleCodecBuilder extends ObjectCodecBuilder {
     this.defaultValueFields = defaultValueFields;
   }
 
+  @Override
+  protected boolean generatedReadBodyAlwaysAdvances() {
+    return typeDef.readBodyAlwaysAdvances();
+  }
+
   // Must be static to be shared across the whole process life.
   private static final Map<Long, Integer> idGenerator = new ConcurrentHashMap<>();
 

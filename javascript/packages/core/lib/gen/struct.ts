@@ -587,6 +587,30 @@ class StructSerializerGenerator extends BaseSerializerGenerator {
     return JS_STRUCT_OWNER_BYTES + this.sortedProps.length * REFERENCE_BYTES;
   }
 
+  readDataAlwaysAdvances(): boolean {
+    if (!this.builder.resolver.isCompatible()) {
+      return true;
+    }
+    for (const { typeInfo } of this.sortedProps) {
+      if (
+        toRefMode(typeInfo.trackingRef, typeInfo.nullable) !== RefMode.NONE ||
+        !this.builder.resolver.isMonomorphic(typeInfo, typeInfo.dynamic) ||
+        getCompatibleScalarReadAction(typeInfo) !== undefined
+      ) {
+        return true;
+      }
+      // Query only the serializer already bound for the declared field. A
+      // recursive placeholder remains unknown and selects the guarded loop;
+      // do not recursively walk the schema graph here.
+      if (
+        this.builder.resolver.getSerializerByTypeInfo(typeInfo)?.readDataAlwaysAdvances === true
+      ) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   private readFieldAssign(result: string, fieldName: string, expr: string): string {
     if (fieldName === "__proto__") {
       return `Object.defineProperty(${result}, "__proto__", { value: ${expr}, writable: true, enumerable: true, configurable: true })`;

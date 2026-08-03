@@ -29,6 +29,7 @@ public sealed class Config
         bool checkStructVersion,
         int maxDepth,
         long maxGraphMemoryBytes,
+        long maxUnbackedContainerItems,
         int maxTypeFields,
         int maxTypeMetaBytes,
         int maxSchemaVersionsPerType,
@@ -58,12 +59,17 @@ public sealed class Config
         {
             throw new ArgumentOutOfRangeException(nameof(maxGraphMemoryBytes), "MaxGraphMemoryBytes must be greater than 0.");
         }
+        if (maxUnbackedContainerItems < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(maxUnbackedContainerItems), "MaxUnbackedContainerItems must be non-negative.");
+        }
 
         TrackRef = trackRef;
         Compatible = compatible;
         CheckStructVersion = checkStructVersion;
         MaxDepth = maxDepth;
         MaxGraphMemoryBytes = maxGraphMemoryBytes;
+        MaxUnbackedContainerItems = maxUnbackedContainerItems;
         MaxTypeFields = maxTypeFields;
         MaxTypeMetaBytes = maxTypeMetaBytes;
         MaxSchemaVersionsPerType = maxSchemaVersionsPerType;
@@ -102,6 +108,12 @@ public sealed class Config
     public long MaxGraphMemoryBytes { get; }
 
     /// <summary>
+    /// Gets the maximum count-driven collection and map items that may be read without
+    /// proportional input progress during one root deserialization.
+    /// </summary>
+    public long MaxUnbackedContainerItems { get; }
+
+    /// <summary>
     /// Gets the maximum accepted field count in one received struct TypeMeta.
     /// </summary>
     public int MaxTypeFields { get; }
@@ -132,6 +144,7 @@ public sealed class ForyBuilder
     private bool _checkStructVersion;
     private int _maxDepth = 20;
     private long _maxGraphMemoryBytes = 128L * 1024 * 1024;
+    private long _maxUnbackedContainerItems = 8192;
     private int _maxTypeFields = 512;
     private int _maxTypeMetaBytes = 4096;
     private int _maxSchemaVersionsPerType = 10;
@@ -208,6 +221,23 @@ public sealed class ForyBuilder
     }
 
     /// <summary>
+    /// Sets the maximum count-driven collection and map items that may be read without
+    /// proportional input progress during one root deserialization.
+    /// </summary>
+    /// <param name="value">Root allowance. Must be non-negative; zero is strict.</param>
+    /// <returns>The same builder instance.</returns>
+    public ForyBuilder MaxUnbackedContainerItems(long value)
+    {
+        if (value < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(value), "MaxUnbackedContainerItems must be non-negative.");
+        }
+
+        _maxUnbackedContainerItems = value;
+        return this;
+    }
+
+    /// <summary>
     /// Sets the maximum accepted field count in one received struct TypeMeta.
     /// </summary>
     public ForyBuilder MaxTypeFields(int value)
@@ -274,6 +304,7 @@ public sealed class ForyBuilder
             checkStructVersion: compatible ? false : _checkStructVersion,
             maxDepth: _maxDepth,
             maxGraphMemoryBytes: _maxGraphMemoryBytes,
+            maxUnbackedContainerItems: _maxUnbackedContainerItems,
             maxTypeFields: _maxTypeFields,
             maxTypeMetaBytes: _maxTypeMetaBytes,
             maxSchemaVersionsPerType: _maxSchemaVersionsPerType,

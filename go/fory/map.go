@@ -371,9 +371,9 @@ func (s mapSerializer) ReadData(ctx *ReadContext, value reflect.Value) {
 	if ctx.HasError() {
 		return
 	}
-	// The first chunk header is already consumed, and a KV_NULL entry has no
-	// body. Every remaining entry still needs at least one header byte.
-	if !buf.CheckReadable(size-1, ctxErr) {
+	// The first chunk header can back one entry. The remaining allocation must be
+	// covered by unread bytes or the root's compact-container allowance.
+	if !checkUnbackedContainerAllocation(ctx, size-1) {
 		return
 	}
 	if value.IsNil() {
@@ -724,6 +724,13 @@ func (s mapSerializer) readChunk(ctx *ReadContext, mapVal reflect.Value, header 
 			}
 		}
 	}
+	bodyAlwaysAdvances := trackKeyRef || trackValRef ||
+		serializerReadDataAlwaysAdvances(keySer) ||
+		serializerReadDataAlwaysAdvances(valSer)
+	var checkpoint uint64
+	if !bodyAlwaysAdvances {
+		checkpoint = buf.logicalReaderIndex()
+	}
 
 	for i := 0; i < chunkSize; i++ {
 		if !reserveMapBox(ctx, keyBoxBytes, trackKeyRef) {
@@ -756,6 +763,9 @@ func (s mapSerializer) readChunk(ctx *ReadContext, mapVal reflect.Value, header 
 			return 0
 		}
 		size--
+	}
+	if !bodyAlwaysAdvances && !ctx.settleUnbackedContainerItems(chunkSize, checkpoint) {
+		return 0
 	}
 
 	return size

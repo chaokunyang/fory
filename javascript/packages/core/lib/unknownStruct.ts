@@ -140,6 +140,8 @@ class FieldBodySerializer implements Serializer {
       this.owner.readContext.reader.readVarUint32Small7();
     }
   };
+
+  readonly readDataAlwaysAdvances = false;
 }
 
 export class UnknownStructSerializer implements Serializer {
@@ -264,6 +266,8 @@ export class UnknownStructSerializer implements Serializer {
     this.bind(typeMeta);
     return this;
   };
+
+  readonly readDataAlwaysAdvances = false;
 
   readFramed(serializer: Serializer, withTypeInfo: boolean) {
     const flag = this.readContext.reader.readInt8();

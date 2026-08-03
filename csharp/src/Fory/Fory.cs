@@ -261,6 +261,7 @@ public sealed class Fory
         ReadContext readContext = _readContext;
         readContext.ResetFor(reader);
         readContext._remainingGraphMemoryBytes = Config.MaxGraphMemoryBytes;
+        readContext._remainingUnbackedContainerItems = Config.MaxUnbackedContainerItems;
         try
         {
             ReadHead(reader);
@@ -275,6 +276,7 @@ public sealed class Fory
             readContext._cachedTypeMetaType = null;
             readContext._cachedTypeMeta = null;
             readContext.ResetReadDepth();
+            readContext._remainingUnbackedContainerItems = 0;
             return value;
         }
         catch

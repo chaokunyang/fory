@@ -171,6 +171,34 @@ private enum ArrayReleaseProbeCodec: FieldCodec {
     }
 }
 
+private struct EmptyReadValue: Hashable {
+    let value: UInt8
+}
+
+private enum EmptyReadValueSerializer: Serializer {
+    typealias Target = EmptyReadValue
+
+    static var staticTypeId: TypeId { .ext }
+
+    static func defaultValue(_: ReadContext) throws -> EmptyReadValue {
+        EmptyReadValue(value: 0)
+    }
+
+    static func writeData(_: EmptyReadValue, _: WriteContext) throws {}
+
+    static func readData(_: ReadContext) throws -> EmptyReadValue {
+        EmptyReadValue(value: 0)
+    }
+}
+
+@ForyStruct
+private struct EmptyReadStruct {}
+
+@ForyStruct
+private struct AdvancingReadStruct {
+    var value: Int32 = 0
+}
+
 @Test
 func primitiveArraysDefaultToListTypeIDsAndRoundTrip() throws {
     #expect([Bool].staticTypeId == .list)
@@ -653,5 +681,205 @@ func mapRejectsZeroChunks() throws {
             DynamicSerializer<AnyHashable>,
             DynamicSerializer<Any>
         >.readData(zeroChunkContext())
+    }
+}
+
+@Test
+func unbackedCollectionBudget() throws {
+    let fory = Fory(
+        config: Config(
+            trackRef: false,
+            compatible: false,
+            maxUnbackedContainerItems: 2
+        ))
+    try fory.register(EmptyReadValueSerializer.self, id: 9701)
+
+    let oversized = [EmptyReadValue](repeating: .init(value: 0), count: 3)
+    let oversizedBytes = try fory.serialize(
+        oversized,
+        with: ArraySerializer<EmptyReadValueSerializer>.self
+    )
+    #expect(throws: (any Error).self) {
+        let _: [EmptyReadValue] = try fory.deserialize(
+            oversizedBytes,
+            with: ArraySerializer<EmptyReadValueSerializer>.self
+        )
+    }
+
+    let valid = [EmptyReadValue](repeating: .init(value: 0), count: 2)
+    let validBytes = try fory.serialize(
+        valid,
+        with: ArraySerializer<EmptyReadValueSerializer>.self
+    )
+    let decoded: [EmptyReadValue] = try fory.deserialize(
+        validBytes,
+        with: ArraySerializer<EmptyReadValueSerializer>.self
+    )
+    #expect(decoded == valid)
+}
+
+@Test
+func unbackedCollectionTail() throws {
+    let fory = Fory(
+        config: Config(
+            trackRef: false,
+            compatible: false,
+            maxUnbackedContainerItems: 1024
+        ))
+    try fory.register(EmptyReadValueSerializer.self, id: 9702)
+    let values = [EmptyReadValue](repeating: .init(value: 0), count: 1025)
+    let bytes = try fory.serialize(
+        values,
+        with: ArraySerializer<EmptyReadValueSerializer>.self
+    )
+    #expect(throws: (any Error).self) {
+        let _: [EmptyReadValue] = try fory.deserialize(
+            bytes,
+            with: ArraySerializer<EmptyReadValueSerializer>.self
+        )
+    }
+}
+
+@Test
+func unbackedMapBudget() throws {
+    let fory = Fory(
+        config: Config(
+            trackRef: false,
+            compatible: false,
+            maxUnbackedContainerItems: 2
+        ))
+    try fory.register(EmptyReadValueSerializer.self, id: 9703)
+    let values = Dictionary(
+        uniqueKeysWithValues: (0..<3).map {
+            (EmptyReadValue(value: UInt8($0)), EmptyReadValue(value: UInt8($0)))
+        })
+    let bytes = try fory.serialize(
+        values,
+        with: DictionarySerializer<EmptyReadValueSerializer, EmptyReadValueSerializer>.self
+    )
+    #expect(throws: (any Error).self) {
+        let _: [EmptyReadValue: EmptyReadValue] = try fory.deserialize(
+            bytes,
+            with: DictionarySerializer<EmptyReadValueSerializer, EmptyReadValueSerializer>.self
+        )
+    }
+}
+
+@Test
+func unbackedSetBudget() throws {
+    let fory = Fory(
+        config: Config(
+            trackRef: false,
+            compatible: false,
+            maxUnbackedContainerItems: 2
+        ))
+    try fory.register(EmptyReadValueSerializer.self, id: 9704)
+    let values = Set((0..<3).map { EmptyReadValue(value: UInt8($0)) })
+    let bytes = try fory.serialize(
+        values,
+        with: SetSerializer<EmptyReadValueSerializer>.self
+    )
+    #expect(throws: (any Error).self) {
+        let _: Set<EmptyReadValue> = try fory.deserialize(
+            bytes,
+            with: SetSerializer<EmptyReadValueSerializer>.self
+        )
+    }
+}
+
+@Test
+func advancingContainersIgnoreZeroBudget() throws {
+    let fory = Fory(
+        config: Config(
+            trackRef: false,
+            compatible: false,
+            maxUnbackedContainerItems: 0
+        ))
+    let values: [Int32] = [1, 2, 3]
+    #expect(try fory.deserialize(try fory.serialize(values)) == values)
+}
+
+@Test
+func generatedReadProgress() throws {
+    #expect(!EmptyReadStruct.readDataAlwaysAdvances)
+    #expect(AdvancingReadStruct.readDataAlwaysAdvances)
+    #expect(!EmptyReadValueSerializer.readDataAlwaysAdvances)
+    #expect(fieldReadAlwaysAdvances(Int32VarintCodec.self, declared: false, typeInfo: nil))
+
+    let fory = Fory(config: Config(trackRef: false, compatible: true))
+    try fory.register(AdvancingReadStruct.self, id: 9705)
+    try fory.typeResolver.finishRegistration()
+    let local = try fory.typeResolver.requireTypeInfo(for: AdvancingReadStruct.self)
+    let emptyMeta = try TypeMeta(
+        typeID: TypeId.compatibleStruct.rawValue,
+        userTypeID: 9705,
+        namespace: .empty(specialChar1: ".", specialChar2: "_"),
+        typeName: .empty(specialChar1: "$", specialChar2: "_"),
+        registerByName: false,
+        fields: []
+    )
+    let scalarMeta = try TypeMeta(
+        typeID: TypeId.compatibleStruct.rawValue,
+        userTypeID: 9705,
+        namespace: .empty(specialChar1: ".", specialChar2: "_"),
+        typeName: .empty(specialChar1: "$", specialChar2: "_"),
+        registerByName: false,
+        fields: [
+            TypeMeta.FieldInfo(
+                fieldID: nil,
+                fieldName: "value",
+                fieldType: TypeMeta.FieldType(
+                    typeID: TypeId.int32.rawValue,
+                    nullable: false
+                )
+            )
+        ]
+    )
+    #expect(!TypeInfo(dynamic: local, compatibleTypeMeta: emptyMeta).readDataAlwaysAdvances)
+    #expect(TypeInfo(dynamic: local, compatibleTypeMeta: scalarMeta).readDataAlwaysAdvances)
+}
+
+@Test
+func skippedContainersUseUnbackedBudget() throws {
+    let config = Config(maxUnbackedContainerItems: 2)
+
+    let collectionBuffer = ByteBuffer(bytes: [
+        3,
+        CollectionHeader.sameType | CollectionHeader.declaredElementType
+    ])
+    let collectionContext = ReadContext(
+        buffer: collectionBuffer,
+        typeResolver: TypeResolver(config: config),
+        config: config
+    )
+    collectionContext.remainingUnbackedContainerItems = 2
+    let none = TypeMeta.FieldType(typeID: TypeId.none.rawValue, nullable: false)
+    let list = TypeMeta.FieldType(
+        typeID: TypeId.list.rawValue,
+        nullable: false,
+        generics: [none]
+    )
+    #expect(throws: (any Error).self) {
+        try collectionContext.skipFieldValue(list)
+    }
+
+    let mapBuffer = ByteBuffer(bytes: [
+        3,
+        MapHeader.declaredKeyType | MapHeader.declaredValueType,
+        3
+    ])
+    let mapContext = ReadContext(
+        buffer: mapBuffer,
+        typeResolver: TypeResolver(config: config),
+        config: config
+    )
+    mapContext.remainingUnbackedContainerItems = 2
+    let map = TypeMeta.FieldType(
+        typeID: TypeId.map.rawValue,
+        nullable: false,
+        generics: [none, none]
+    )
+    #expect(throws: (any Error).self) {
+        try mapContext.skipFieldValue(map)
     }
 }

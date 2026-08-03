@@ -545,6 +545,8 @@ export class ReadContext {
   private _maxDepth: number;
   private readonly maxGraphMemoryBytes: number;
   private remainingGraphMemoryBytes = 0;
+  private readonly maxUnbackedContainerItems: number;
+  private remainingUnbackedContainerItems = 0;
   private remoteSchemaVersionsByType: Map<string | number, number> | undefined = undefined;
 
   constructor(
@@ -556,6 +558,7 @@ export class ReadContext {
     this.metaStringReader = new MetaStringReader();
     this._maxDepth = config.maxDepth ?? 50;
     this.maxGraphMemoryBytes = config.maxGraphMemoryBytes;
+    this.maxUnbackedContainerItems = config.maxUnbackedContainerItems;
   }
 
   reset(bytes: Uint8Array) {
@@ -565,11 +568,13 @@ export class ReadContext {
     this.typeMeta = [];
     this._depth = 0;
     this.remainingGraphMemoryBytes = this.maxGraphMemoryBytes;
+    this.remainingUnbackedContainerItems = this.maxUnbackedContainerItems;
   }
 
   resetReadDepth() {
     // Root reads call this in finally; nested readers retain depth when a child throws.
     this._depth = 0;
+    this.remainingUnbackedContainerItems = 0;
   }
 
   reserveGraphMemory(bytes: number) {
@@ -600,6 +605,33 @@ export class ReadContext {
       `maxGraphMemoryBytes exceeded: requested ${bytes} estimated graph bytes, ` +
         `${this.remainingGraphMemoryBytes} remaining, effective limit ` +
         `${this.maxGraphMemoryBytes}`,
+    );
+  }
+
+  checkUnbackedContainerAllocation(items: number) {
+    const requiredReadable = items - this.remainingUnbackedContainerItems;
+    if (requiredReadable > 0) {
+      this.reader.checkReadableBytes(requiredReadable);
+    }
+  }
+
+  settleUnbackedContainerItems(items: number, startCursor: number) {
+    const consumed = this.reader.readGetCursor() - startCursor;
+    if (consumed >= items) {
+      return;
+    }
+    const unbackedItems = items - consumed;
+    if (unbackedItems <= this.remainingUnbackedContainerItems) {
+      this.remainingUnbackedContainerItems -= unbackedItems;
+      return;
+    }
+    this.throwUnbackedContainerLimit(unbackedItems);
+  }
+
+  private throwUnbackedContainerLimit(items: number): never {
+    throw new Error(
+      `maxUnbackedContainerItems exceeded: requested ${items}, ` +
+        `${this.remainingUnbackedContainerItems} remaining`,
     );
   }
 

@@ -62,6 +62,7 @@ class UnionSerializer(Serializer):
 
     def __init__(self, type_resolver, type_, alternative_types):
         super().__init__(type_resolver, type_)
+        self.read_data_always_advances = True
         self.type_resolver = type_resolver
         if isinstance(alternative_types, dict):
             self._typing_union = False

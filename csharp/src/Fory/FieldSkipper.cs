@@ -19,6 +19,8 @@ namespace Apache.Fory;
 
 public static class FieldSkipper
 {
+    private const int UnbackedCheckInterval = 1024;
+
     public static void SkipFieldValue(ReadContext context, TypeMetaFieldType fieldType)
     {
         SkipValue(context, fieldType, RefModeExtensions.From(fieldType.Nullable, fieldType.TrackRef));
@@ -293,6 +295,8 @@ public static class FieldSkipper
             case (uint)TypeId.Map:
                 SkipMap(context, fieldType);
                 return;
+            case (uint)TypeId.None:
+                return;
             case (uint)TypeId.Enum:
             case (uint)TypeId.NamedEnum:
                 _ = context.Reader.ReadVarUInt32();
@@ -353,16 +357,34 @@ public static class FieldSkipper
             elementTypeInfo = context.TypeResolver.ReadAnyTypeInfo(context);
         }
 
-        if (elementRefMode == RefMode.None && elementTypeInfo?.WireTypeId == TypeId.None)
+        bool guardUnbackedItems = elementRefMode == RefMode.None &&
+                                  !ReadBodyAlwaysAdvances(elementType, elementTypeInfo);
+        if (!guardUnbackedItems)
         {
-            // Same-type None elements have no per-element envelope or payload, so the
-            // declared count does not imply any bytes to skip.
+            for (int i = 0; i < length; i++)
+            {
+                SkipValue(context, elementType, elementRefMode, elementTypeInfo);
+            }
+
             return;
         }
 
+        int checkpoint = context.Reader.Cursor;
         for (int i = 0; i < length; i++)
         {
             SkipValue(context, elementType, elementRefMode, elementTypeInfo);
+            if (((i + 1) & (UnbackedCheckInterval - 1)) == 0)
+            {
+                int cursor = context.Reader.Cursor;
+                context.SettleUnbackedContainerItems(UnbackedCheckInterval, cursor - checkpoint);
+                checkpoint = cursor;
+            }
+        }
+
+        int tail = length & (UnbackedCheckInterval - 1);
+        if (tail != 0)
+        {
+            context.SettleUnbackedContainerItems(tail, context.Reader.Cursor - checkpoint);
         }
     }
 
@@ -449,14 +471,40 @@ public static class FieldSkipper
                 valueChunkTypeInfo = context.TypeResolver.ReadAnyTypeInfo(context);
             }
 
+            bool guardChunk = !trackKeyRef &&
+                              !trackValueRef &&
+                              !ReadBodyAlwaysAdvances(keyType, keyChunkTypeInfo) &&
+                              !ReadBodyAlwaysAdvances(valueType, valueChunkTypeInfo);
+            int checkpoint = guardChunk ? context.Reader.Cursor : 0;
+
             for (int i = 0; i < chunkSize; i++)
             {
                 SkipValue(context, keyType, trackKeyRef ? RefMode.Tracking : RefMode.None, keyChunkTypeInfo);
                 SkipValue(context, valueType, trackValueRef ? RefMode.Tracking : RefMode.None, valueChunkTypeInfo);
             }
 
+            if (guardChunk)
+            {
+                context.SettleUnbackedContainerItems(
+                    chunkSize,
+                    context.Reader.Cursor - checkpoint);
+            }
+
             readCount += chunkSize;
         }
+    }
+
+    private static bool ReadBodyAlwaysAdvances(
+        TypeMetaFieldType fieldType,
+        TypeInfo? resolvedTypeInfo)
+    {
+        if (resolvedTypeInfo is not null)
+        {
+            return resolvedTypeInfo.ReadBodyAlwaysAdvances;
+        }
+
+        uint typeId = fieldType.TypeId;
+        return typeId is >= 1 and <= 26 or >= 33 and <= 35 or >= 37 and <= 56;
     }
 
     [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]

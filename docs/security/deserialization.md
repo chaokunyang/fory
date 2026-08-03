@@ -274,18 +274,42 @@ Large valid collection inputs are allowed. If the input contains many encoded
 elements, proportional deserialization is expected.
 
 The security requirement is to avoid disproportionate preallocation from a
-declared logical count before enough input bytes justify that capacity. For a
-non-empty container, a reader that will allocate or reserve from the declared
-count should call `checkReadableBytes(logicalCount)` or the runtime equivalent
-before that allocation. The check remains byte-owner-only: it does not decode
-the whole container, validate element semantics, or replace chunk validation.
-Readers that do not preallocate from the logical count may still grow
-proportionally as elements are actually read.
+declared logical count before enough input bytes justify that capacity. When
+the repeated element or entry body is proven to consume at least one byte, a
+reader that allocates or reserves from the declared count should call
+`checkReadableBytes(logicalCount)` or the runtime equivalent before that
+allocation. When the body may consume no bytes, the readable-byte requirement
+may exclude the root operation's remaining unbacked-container allowance. The
+reader must still account for actual input progress while reading the
+container. The byte check does not decode the whole container, validate element
+semantics, or replace chunk validation. Readers that do not preallocate from
+the logical count may still grow proportionally as elements are actually read.
 
 Map or collection chunk validation is security-relevant only when missing
 validation can cause a no-progress loop, unbounded resource growth, retained
 state, or success across a Fory policy boundary. Protocol-allowed chunk
 segmentation is normal input and is not a security issue by itself.
+
+## Unbacked Container Work Budget
+
+Runtimes enforce a root-scoped limit on count-driven collection elements and
+map entries whose repeated read bodies are not backed by input progress. The
+public option is named `maxUnbackedContainerItems` or the language-equivalent
+spelling. Its default is `8192`; values must be non-negative, and zero is a
+strict limit rather than an unlimited sentinel.
+
+The allowance is shared by all nested collections, maps, and compatible field
+skip operations in one root read. Collection readers account for completed
+items every 1024 elements and at the final partial window. Map readers account
+at existing protocol chunk boundaries. Bytes actually consumed by the repeated
+item bodies offset the completed item count in the same window. The budget does
+not add framing, reject values on write, change reference publication, or
+replace graph-memory accounting.
+
+Readers whose exact repeated operation is known to consume at least one byte
+retain their direct loop and proportional readable-byte check. Generated and
+compiled serializers should remove budget access and periodic branches from
+those proven-positive paths.
 
 ## Graph Memory Budget
 
@@ -407,19 +431,17 @@ Boxed, reference-counted, and type-erased materialization paths reserve `size_of
 payload they create. Compile-time `size_of::<T>()` formulas are acceptable in those allocation
 owners, but value serializers should not add a parallel self-reserve for the same `T`.
 
-Count-derived Rust collection and map owners require at least the declared element or entry count in
-readable bytes after the count. Apply that gate exactly once before reservation or allocation; do
-not repeat it after reading shared metadata. Their serializers must symmetrically reject a value
-when its complete post-count header, metadata, framing, and body are shorter than the count,
-including a non-zero-sized target whose custom serializer emits a compact or empty body. Use one
-aggregate writer check per variable carrier, never a per-element check.
+Before count-derived allocation, Rust owners whose exact repeated operation is proven to consume at
+least one byte retain the full readable-byte gate. Uncertain owners require readable bytes only for
+the portion of the count not covered by the remaining unbacked-item allowance. Apply the selected
+gate exactly once at the allocation owner; do not repeat it after reading shared metadata. Writers
+continue to encode legal compact or empty bodies and do not enforce this reader-side allowance.
 
-Fixed arrays do not allocate from their validated wire count and omit this proportional gate.
-`Vec`, `VecDeque`, and `BinaryHeap` also omit it for zero-sized elements because they create no
-count-derived backing allocation in that case. `LinkedList`, `HashSet`, `BTreeSet`, `HashMap`, and
-`BTreeMap` retain the gate for node, bucket, entry, or duplicate-processing work. Implementations
-must not substitute guessed node costs, padding bytes, a global compact-body bypass, or a second
-collection or map codec.
+Fixed arrays do not allocate from their validated wire count and omit the allocation gate. `Vec`,
+`VecDeque`, and `BinaryHeap` also omit it for zero-sized elements because they create no
+count-derived backing allocation in that case. Node, bucket, and entry owners retain the gate where
+the declared count drives allocation. Implementations must not substitute guessed allocation costs,
+padding bytes, a global compact-body bypass, or a second collection or map codec.
 
 #### Swift
 

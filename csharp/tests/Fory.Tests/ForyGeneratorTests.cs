@@ -277,6 +277,74 @@ public sealed class ForyGeneratorTests
     }
 
     [Fact]
+    public void GeneratedReadProgressFacts()
+    {
+        const string source = """
+            using System.Collections.Generic;
+            using Apache.Fory;
+            using S = Apache.Fory.Schema.Types;
+
+            namespace GeneratedDiagnostics;
+
+            [ForyStruct]
+            public sealed class Empty
+            {
+            }
+
+            [ForyStruct]
+            public sealed class Scalar
+            {
+                public int Value { get; set; }
+            }
+
+            [ForyStruct]
+            public sealed class DynamicCollection
+            {
+                public List<int> Values { get; set; } = [];
+            }
+
+            [ForyStruct]
+            public sealed class FixedCollection
+            {
+                [ForyField(Type = typeof(S.List<S.Int32>))]
+                public List<int> Values { get; set; } = [];
+            }
+            """;
+
+        string generated = GenerateSource(source);
+
+        Assert.EndsWith(
+            ", false);",
+            GeneratedRegistration(generated, "Empty"),
+            StringComparison.Ordinal);
+        Assert.EndsWith(
+            ", true);",
+            GeneratedRegistration(generated, "Scalar"),
+            StringComparison.Ordinal);
+        Assert.EndsWith(
+            ", false);",
+            GeneratedRegistration(generated, "DynamicCollection"),
+            StringComparison.Ordinal);
+        Assert.EndsWith(
+            ", true);",
+            GeneratedRegistration(generated, "FixedCollection"),
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "UnbackedContainer",
+            generated,
+            StringComparison.Ordinal);
+
+        static string GeneratedRegistration(string generated, string typeName)
+        {
+            return generated.Split('\n')
+                .Single(line => line.Contains(
+                    $"RegisterGeneratedStruct<global::GeneratedDiagnostics.{typeName},",
+                    StringComparison.Ordinal))
+                .Trim();
+        }
+    }
+
+    [Fact]
     public void ExternalTargetsUseOneEmitter()
     {
         const string source = """
@@ -492,7 +560,7 @@ public sealed class ForyGeneratorTests
                 line.Contains(
                     $"RegisterGeneratedStruct<{userType},",
                     StringComparison.Ordinal)
-                && line.TrimEnd().EndsWith(">(true);", StringComparison.Ordinal));
+                && line.TrimEnd().EndsWith(">(true, true);", StringComparison.Ordinal));
         Assert.Contains(
             "UnsafeAccessorKind.Field, Name = \"<Name>k__BackingField\"",
             generated,
@@ -507,14 +575,14 @@ public sealed class ForyGeneratorTests
                 line.Contains(
                     "RegisterGeneratedStruct<global::Fory.ExternalTypes.ExternalEvolutionOff,",
                     StringComparison.Ordinal)
-                && line.TrimEnd().EndsWith(">(false);", StringComparison.Ordinal));
+                && line.TrimEnd().EndsWith(">(false, true);", StringComparison.Ordinal));
         Assert.Contains(
             generated.Split('\n'),
             line =>
                 line.Contains(
                     "RegisterGeneratedStruct<global::GeneratedDiagnostics.LocalEvolutionOff,",
                     StringComparison.Ordinal)
-                && line.TrimEnd().EndsWith(">(false);", StringComparison.Ordinal));
+                && line.TrimEnd().EndsWith(">(false, true);", StringComparison.Ordinal));
         Assert.Contains(
             "EnumSerializer<global::Fory.ExternalTypes.ExternalStatus>",
             generated,

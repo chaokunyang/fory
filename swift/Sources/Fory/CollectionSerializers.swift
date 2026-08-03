@@ -39,6 +39,54 @@ enum MapHeader {
 @usableFromInline
 internal let storedReferenceBytes = 4
 
+@usableFromInline
+internal let unbackedContainerCheckInterval = 1024
+
+@usableFromInline
+@inline(__always)
+internal func ensureContainerAllocation(
+    _ context: ReadContext,
+    count: Int,
+    bodyAlwaysAdvances: Bool,
+    label: String
+) throws {
+    if bodyAlwaysAdvances {
+        try context.ensureRemainingBytes(count, label: label)
+    } else {
+        let allowance = context.remainingUnbackedContainerItems
+        try context.ensureRemainingBytes(count > allowance ? count - allowance : 0, label: label)
+    }
+}
+
+@usableFromInline
+@inline(__always)
+internal func settleUnbackedContainerItems(
+    _ context: ReadContext,
+    completed: Int,
+    startCursor: Int
+) throws {
+    let consumed = context.buffer.cursor - startCursor
+    if completed > consumed {
+        try context.reserveUnbackedContainerItems(completed - consumed)
+    }
+}
+
+@usableFromInline
+@inline(__always)
+internal func fieldReadAlwaysAdvances<Codec: FieldCodec>(
+    _ codec: Codec.Type,
+    declared: Bool,
+    typeInfo: TypeInfo?
+) -> Bool {
+    if codec.staticTypeId == .unknown {
+        return typeInfo?.readDataAlwaysAdvances == true
+    }
+    // A static reader returns nil only after validating the exact wire type or
+    // the exact local Struct header; a remote compatible schema returns TypeInfo.
+    return codec.readDataAlwaysAdvances
+        && (declared || typeInfo?.readDataAlwaysAdvances ?? true)
+}
+
 @inlinable
 @inline(__always)
 internal func storedElementBytes<Element: Serializer>(_ type: Element.Type) -> Int {
@@ -575,6 +623,7 @@ public enum ArraySerializer<Element: Serializer>: Serializer {
     public typealias Target = [Element.Target]
 
     public static var staticTypeId: TypeId { .list }
+    public static var readDataAlwaysAdvances: Bool { true }
 
     public static func defaultValue(_: ReadContext) throws -> Target { [] }
 
@@ -722,9 +771,13 @@ public enum ArraySerializer<Element: Serializer>: Serializer {
             ownerBytes: ownerBytes,
             count: length
         )
-        try context.ensureRemainingBytes(length, label: "array")
-
         if !sameType {
+            try ensureContainerAllocation(
+                context,
+                count: length,
+                bodyAlwaysAdvances: true,
+                label: "array"
+            )
             let refMode = RefMode.from(nullable: hasNull, trackRef: trackRef)
             return try readArrayTrackingInitialization(
                 count: length
@@ -743,6 +796,15 @@ public enum ArraySerializer<Element: Serializer>: Serializer {
         }
 
         let elementTypeInfo = declared ? nil : try Codec.readFieldTypeInfo(context)
+        let bodyAlwaysAdvances =
+            trackRef || hasNull
+            || fieldReadAlwaysAdvances(Codec.self, declared: declared, typeInfo: elementTypeInfo)
+        try ensureContainerAllocation(
+            context,
+            count: length,
+            bodyAlwaysAdvances: bodyAlwaysAdvances,
+            label: "array"
+        )
         return try Codec.withFieldTypeInfo(elementTypeInfo, context) {
             if trackRef {
                 return try readArrayTrackingInitialization(
@@ -783,14 +845,40 @@ public enum ArraySerializer<Element: Serializer>: Serializer {
                 }
             }
 
+            if bodyAlwaysAdvances {
+                return try readArrayTrackingInitialization(
+                    count: length
+                ) { destination, initializedCount in
+                    for index in 0..<length {
+                        destination.advanced(by: index).initialize(
+                            to: try Codec.readFieldData(context)
+                        )
+                        initializedCount = index + 1
+                    }
+                }
+            }
+
             return try readArrayTrackingInitialization(
                 count: length
             ) { destination, initializedCount in
+                var windowStart = buffer.cursor
+                var windowItems = 0
                 for index in 0..<length {
                     destination.advanced(by: index).initialize(
                         to: try Codec.readFieldData(context)
                     )
                     initializedCount = index + 1
+                    windowItems += 1
+                    if windowItems == unbackedContainerCheckInterval {
+                        try settleUnbackedContainerItems(
+                            context, completed: windowItems, startCursor: windowStart)
+                        windowStart = buffer.cursor
+                        windowItems = 0
+                    }
+                }
+                if windowItems != 0 {
+                    try settleUnbackedContainerItems(
+                        context, completed: windowItems, startCursor: windowStart)
                 }
             }
         }
@@ -854,6 +942,10 @@ extension Array: Serializer where Element: Serializer, Element.Target == Element
 
     @inlinable
     @inline(__always)
+    public static var readDataAlwaysAdvances: Bool { true }
+
+    @inlinable
+    @inline(__always)
     public static func defaultValue(_ context: ReadContext) throws -> Self {
         try ArraySerializer<Element>.defaultValue(context)
     }
@@ -888,6 +980,7 @@ public enum SetSerializer<Element: Serializer>: Serializer where Element.Target:
     public typealias Target = Set<Element.Target>
 
     public static var staticTypeId: TypeId { .set }
+    public static var readDataAlwaysAdvances: Bool { true }
 
     public static func defaultValue(_: ReadContext) throws -> Target { [] }
 
@@ -1028,11 +1121,15 @@ public enum SetSerializer<Element: Serializer>: Serializer where Element.Target:
         let hasNull = (header & CollectionHeader.hasNull) != 0
         let declared = (header & CollectionHeader.declaredElementType) != 0
         let sameType = (header & CollectionHeader.sameType) != 0
-        try context.ensureRemainingBytes(length, label: "set")
-
-        var result = Set<Codec.Target>()
-        result.reserveCapacity(length)
         if !sameType {
+            try ensureContainerAllocation(
+                context,
+                count: length,
+                bodyAlwaysAdvances: true,
+                label: "set"
+            )
+            var result = Set<Codec.Target>()
+            result.reserveCapacity(length)
             let refMode = RefMode.from(nullable: hasNull, trackRef: trackRef)
             for _ in 0..<length {
                 result.insert(
@@ -1047,6 +1144,17 @@ public enum SetSerializer<Element: Serializer>: Serializer where Element.Target:
         }
 
         let elementTypeInfo = declared ? nil : try Codec.readFieldTypeInfo(context)
+        let bodyAlwaysAdvances =
+            trackRef || hasNull
+            || fieldReadAlwaysAdvances(Codec.self, declared: declared, typeInfo: elementTypeInfo)
+        try ensureContainerAllocation(
+            context,
+            count: length,
+            bodyAlwaysAdvances: bodyAlwaysAdvances,
+            label: "set"
+        )
+        var result = Set<Codec.Target>()
+        result.reserveCapacity(length)
         return try Codec.withFieldTypeInfo(elementTypeInfo, context) {
             if trackRef {
                 for _ in 0..<length {
@@ -1069,9 +1177,26 @@ public enum SetSerializer<Element: Serializer>: Serializer where Element.Target:
                         throw invalidCollectionRefFlag(refFlag)
                     }
                 }
-            } else {
+            } else if bodyAlwaysAdvances {
                 for _ in 0..<length {
                     result.insert(try Codec.readFieldData(context))
+                }
+            } else {
+                var windowStart = buffer.cursor
+                var windowItems = 0
+                for _ in 0..<length {
+                    result.insert(try Codec.readFieldData(context))
+                    windowItems += 1
+                    if windowItems == unbackedContainerCheckInterval {
+                        try settleUnbackedContainerItems(
+                            context, completed: windowItems, startCursor: windowStart)
+                        windowStart = buffer.cursor
+                        windowItems = 0
+                    }
+                }
+                if windowItems != 0 {
+                    try settleUnbackedContainerItems(
+                        context, completed: windowItems, startCursor: windowStart)
                 }
             }
             return result
@@ -1137,6 +1262,10 @@ where Element: Serializer & Hashable, Element.Target == Element {
 
     @inlinable
     @inline(__always)
+    public static var readDataAlwaysAdvances: Bool { true }
+
+    @inlinable
+    @inline(__always)
     public static func defaultValue(_ context: ReadContext) throws -> Self {
         try SetSerializer<Element>.defaultValue(context)
     }
@@ -1173,6 +1302,7 @@ where Key.Target: Hashable {
     public typealias Target = [Key.Target: Value.Target]
 
     public static var staticTypeId: TypeId { .map }
+    public static var readDataAlwaysAdvances: Bool { true }
 
     public static func defaultValue(_: ReadContext) throws -> Target { [:] }
 
@@ -1444,6 +1574,92 @@ where Key.Target: Hashable {
         }
     }
 
+    @usableFromInline
+    internal static func readDynamicEntries<KeyCodec: FieldCodec, ValueCodec: FieldCodec>(
+        _ context: ReadContext,
+        into map: inout [KeyCodec.Target: ValueCodec.Target],
+        keyCodec _: KeyCodec.Type,
+        valueCodec _: ValueCodec.Type,
+        count: Int
+    ) throws
+    where
+        KeyCodec.Target == Key.Target,
+        ValueCodec.Target == Value.Target
+    {
+        var readCount = 0
+        while readCount < count {
+            let header = try context.buffer.readUInt8()
+            let trackKeyRef = (header & MapHeader.trackingKeyRef) != 0
+            let keyNull = (header & MapHeader.keyNull) != 0
+            let keyDeclared = (header & MapHeader.declaredKeyType) != 0
+            let trackValueRef = (header & MapHeader.trackingValueRef) != 0
+            let valueNull = (header & MapHeader.valueNull) != 0
+            let valueDeclared = (header & MapHeader.declaredValueType) != 0
+
+            if keyNull && valueNull {
+                map[try KeyCodec.defaultValue(context)] = try ValueCodec.defaultValue(context)
+                readCount += 1
+                continue
+            }
+            if keyNull {
+                let value = try ValueCodec.readField(
+                    context,
+                    refMode: trackValueRef ? .tracking : .none,
+                    readTypeInfo: !valueDeclared
+                )
+                map[try KeyCodec.defaultValue(context)] = value
+                readCount += 1
+                continue
+            }
+            if valueNull {
+                let key = try KeyCodec.readField(
+                    context,
+                    refMode: trackKeyRef ? .tracking : .none,
+                    readTypeInfo: !keyDeclared
+                )
+                map[key] = try ValueCodec.defaultValue(context)
+                readCount += 1
+                continue
+            }
+
+            let chunkSize = Int(try context.buffer.readUInt8())
+            if chunkSize == 0 || chunkSize > count - readCount {
+                throw invalidMapChunkSize(dynamic: true)
+            }
+            let keyTypeInfo = keyDeclared ? nil : try KeyCodec.readFieldTypeInfo(context)
+            let valueTypeInfo = valueDeclared ? nil : try ValueCodec.readFieldTypeInfo(context)
+            let alwaysAdvances =
+                trackKeyRef || trackValueRef
+                || fieldReadAlwaysAdvances(
+                    KeyCodec.self, declared: keyDeclared, typeInfo: keyTypeInfo)
+                || fieldReadAlwaysAdvances(
+                    ValueCodec.self, declared: valueDeclared, typeInfo: valueTypeInfo)
+            let chunkStart = alwaysAdvances ? 0 : context.buffer.cursor
+            for _ in 0..<chunkSize {
+                let key = try KeyCodec.withFieldTypeInfo(keyTypeInfo, context) {
+                    try KeyCodec.readField(
+                        context,
+                        refMode: trackKeyRef ? .tracking : .none,
+                        readTypeInfo: false
+                    )
+                }
+                let value = try ValueCodec.withFieldTypeInfo(valueTypeInfo, context) {
+                    try ValueCodec.readField(
+                        context,
+                        refMode: trackValueRef ? .tracking : .none,
+                        readTypeInfo: false
+                    )
+                }
+                map[key] = value
+            }
+            if !alwaysAdvances {
+                try settleUnbackedContainerItems(
+                    context, completed: chunkSize, startCursor: chunkStart)
+            }
+            readCount += chunkSize
+        }
+    }
+
     @inlinable
     internal static func readEntries<KeyCodec: FieldCodec, ValueCodec: FieldCodec>(
         _ context: ReadContext,
@@ -1468,7 +1684,12 @@ where Key.Target: Hashable {
             return [:]
         }
 
-        try context.ensureRemainingBytes(totalLength, label: "map")
+        try ensureContainerAllocation(
+            context,
+            count: totalLength,
+            bodyAlwaysAdvances: false,
+            label: "map"
+        )
         var map: [KeyCodec.Target: ValueCodec.Target] = [:]
         map.reserveCapacity(totalLength)
         let keyDynamicType = KeyCodec.staticTypeId == .unknown
@@ -1476,70 +1697,13 @@ where Key.Target: Hashable {
         // A one-null entry uses complete-field order: ref envelope, optional TypeInfo, then body.
         // Keep it distinct from non-null chunks, whose shared TypeInfo values precede all bodies.
         if keyDynamicType || valueDynamicType {
-            var readCount = 0
-            while readCount < totalLength {
-                let header = try context.buffer.readUInt8()
-                let trackKeyRef = (header & MapHeader.trackingKeyRef) != 0
-                let keyNull = (header & MapHeader.keyNull) != 0
-                let keyDeclared = (header & MapHeader.declaredKeyType) != 0
-                let trackValueRef = (header & MapHeader.trackingValueRef) != 0
-                let valueNull = (header & MapHeader.valueNull) != 0
-                let valueDeclared = (header & MapHeader.declaredValueType) != 0
-
-                if keyNull && valueNull {
-                    map[try KeyCodec.defaultValue(context)] =
-                        try ValueCodec.defaultValue(context)
-                    readCount += 1
-                    continue
-                }
-                if keyNull {
-                    let value = try ValueCodec.readField(
-                        context,
-                        refMode: trackValueRef ? .tracking : .none,
-                        readTypeInfo: !valueDeclared
-                    )
-                    map[try KeyCodec.defaultValue(context)] = value
-                    readCount += 1
-                    continue
-                }
-                if valueNull {
-                    let key = try KeyCodec.readField(
-                        context,
-                        refMode: trackKeyRef ? .tracking : .none,
-                        readTypeInfo: !keyDeclared
-                    )
-                    map[key] = try ValueCodec.defaultValue(context)
-                    readCount += 1
-                    continue
-                }
-
-                let chunkSize = Int(try context.buffer.readUInt8())
-                if chunkSize == 0 || chunkSize > totalLength - readCount {
-                    throw invalidMapChunkSize(dynamic: true)
-                }
-                let keyTypeInfo =
-                    keyDeclared ? nil : try KeyCodec.readFieldTypeInfo(context)
-                let valueTypeInfo =
-                    valueDeclared ? nil : try ValueCodec.readFieldTypeInfo(context)
-                for _ in 0..<chunkSize {
-                    let key = try KeyCodec.withFieldTypeInfo(keyTypeInfo, context) {
-                        try KeyCodec.readField(
-                            context,
-                            refMode: trackKeyRef ? .tracking : .none,
-                            readTypeInfo: false
-                        )
-                    }
-                    let value = try ValueCodec.withFieldTypeInfo(valueTypeInfo, context) {
-                        try ValueCodec.readField(
-                            context,
-                            refMode: trackValueRef ? .tracking : .none,
-                            readTypeInfo: false
-                        )
-                    }
-                    map[key] = value
-                }
-                readCount += chunkSize
-            }
+            try readDynamicEntries(
+                context,
+                into: &map,
+                keyCodec: KeyCodec.self,
+                valueCodec: ValueCodec.self,
+                count: totalLength
+            )
             return map
         }
 
@@ -1589,6 +1753,13 @@ where Key.Target: Hashable {
                 keyDeclared ? nil : try KeyCodec.readFieldTypeInfo(context)
             let valueTypeInfo =
                 valueDeclared ? nil : try ValueCodec.readFieldTypeInfo(context)
+            let alwaysAdvances =
+                trackKeyRef || trackValueRef
+                || fieldReadAlwaysAdvances(
+                    KeyCodec.self, declared: keyDeclared, typeInfo: keyTypeInfo)
+                || fieldReadAlwaysAdvances(
+                    ValueCodec.self, declared: valueDeclared, typeInfo: valueTypeInfo)
+            let chunkStart = alwaysAdvances ? 0 : context.buffer.cursor
             for _ in 0..<chunkSize {
                 let key = try KeyCodec.withFieldTypeInfo(keyTypeInfo, context) {
                     try KeyCodec.readField(
@@ -1605,6 +1776,10 @@ where Key.Target: Hashable {
                     )
                 }
                 map[key] = value
+            }
+            if !alwaysAdvances {
+                try settleUnbackedContainerItems(
+                    context, completed: chunkSize, startCursor: chunkStart)
             }
             readCount += chunkSize
         }
@@ -1626,6 +1801,10 @@ where
     public static var staticTypeId: TypeId {
         DictionarySerializer<Key, Value>.staticTypeId
     }
+
+    @inlinable
+    @inline(__always)
+    public static var readDataAlwaysAdvances: Bool { true }
 
     @inlinable
     @inline(__always)

@@ -53,6 +53,7 @@ func (s *structSerializer) initialize(typeResolver *TypeResolver) error {
 			return err
 		}
 	}
+	s.readDataAlwaysAdvances = s.computeReadDataAlwaysAdvances()
 	// Compute struct hash
 	s.structHash = s.computeHash()
 	if s.tempValue == nil {

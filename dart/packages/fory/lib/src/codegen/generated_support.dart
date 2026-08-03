@@ -144,6 +144,7 @@ final class GeneratedStructSchema<T> {
   final bool evolving;
   final bool needsRootRef;
   final bool usesNestedTypeDefinitions;
+  final bool readBodyAlwaysAdvances;
   final List<GeneratedFieldInfo> fields;
 
   GeneratedStructSchema({
@@ -152,6 +153,7 @@ final class GeneratedStructSchema<T> {
     required this.evolving,
     required this.needsRootRef,
     required this.usesNestedTypeDefinitions,
+    required this.readBodyAlwaysAdvances,
     required this.fields,
   });
 
@@ -176,6 +178,7 @@ void registerGeneratedEnum(
     GeneratedTypeEntry(
       kind: GeneratedTypeKind.enumType,
       serializerFactory: schema.serializerFactory,
+      readBodyAlwaysAdvances: true,
     ),
     id: id,
     name: name,
@@ -197,6 +200,7 @@ void registerGeneratedStruct<T>(
       evolving: schema.evolving,
       needsRootRef: schema.needsRootRef,
       usesNestedTypeDefinitions: schema.usesNestedTypeDefinitions,
+      readBodyAlwaysAdvances: schema.readBodyAlwaysAdvances,
       fields: schema.fieldInfos,
     ),
     id: id,

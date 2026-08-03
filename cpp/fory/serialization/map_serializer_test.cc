@@ -24,9 +24,76 @@
 #include <optional>
 #include <string>
 #include <unordered_map>
+#include <variant>
 #include <vector>
 
 using namespace fory::serialization;
+
+struct ZeroKey {
+  int id{};
+  bool operator<(const ZeroKey &other) const { return id < other.id; }
+};
+
+namespace fory {
+namespace serialization {
+
+template <> struct Serializer<ZeroKey> {
+  static constexpr TypeId type_id = TypeId::EXT;
+
+  static void write_type_info(WriteContext &ctx) {
+    auto type_info = ctx.type_resolver().get_type_info<ZeroKey>();
+    if (!type_info.ok()) {
+      ctx.set_error(std::move(type_info).error());
+      return;
+    }
+    auto result = ctx.write_any_type_info(type_info.value()->type_id,
+                                          std::type_index(typeid(ZeroKey)));
+    if (!result.ok()) {
+      ctx.set_error(std::move(result).error());
+    }
+  }
+
+  static void read_type_info(ReadContext &ctx) {
+    (void)ctx.read_any_type_info(ctx.error());
+  }
+
+  static void write(const ZeroKey &value, WriteContext &ctx, RefMode ref_mode,
+                    bool write_type, bool = false) {
+    write_not_null_ref_flag(ctx, ref_mode);
+    if (write_type) {
+      write_type_info(ctx);
+    }
+    write_data(value, ctx);
+  }
+
+  static void write_data(const ZeroKey &, WriteContext &) {}
+  static void write_data_generic(const ZeroKey &value, WriteContext &ctx,
+                                 bool) {
+    write_data(value, ctx);
+  }
+
+  static ZeroKey read(ReadContext &ctx, RefMode ref_mode, bool read_type) {
+    if (!read_null_only_flag(ctx, ref_mode)) {
+      return {};
+    }
+    if (read_type) {
+      (void)ctx.read_any_type_info(ctx.error());
+    }
+    return {};
+  }
+
+  static ZeroKey read_data(ReadContext &) { return {}; }
+  static ZeroKey read_data_generic(ReadContext &ctx, bool) {
+    return read_data(ctx);
+  }
+  static ZeroKey read_with_type_info(ReadContext &ctx, RefMode ref_mode,
+                                     const TypeInfo &) {
+    return read(ctx, ref_mode, false);
+  }
+};
+
+} // namespace serialization
+} // namespace fory
 
 struct RemoteMapV1 {
   int32_t value{};
@@ -1024,6 +1091,31 @@ TEST(MapSerializerTest, LargeMapWithPolymorphicValues) {
   ASSERT_NE(deserialized[299], nullptr);
   EXPECT_EQ(deserialized[299]->type_name(), "DerivedValueY");
   EXPECT_EQ(deserialized[299]->name, "value_y_299");
+}
+
+TEST(MapSerializerTest, UnbackedEntryBudget) {
+  auto fory = Fory::builder()
+                  .xlang(true)
+                  .compatible(false)
+                  .track_ref(false)
+                  .max_unbacked_container_items(3)
+                  .build();
+  ASSERT_TRUE(fory.register_extension_type<ZeroKey>(901).ok());
+
+  std::map<ZeroKey, ZeroKey> values;
+  for (int i = 0; i < 4; ++i) {
+    values.emplace(ZeroKey{i}, ZeroKey{i});
+  }
+  auto bytes = fory.serialize(values);
+  ASSERT_TRUE(bytes.ok()) << bytes.error().to_string();
+  auto rejected = fory.deserialize<std::map<ZeroKey, ZeroKey>>(*bytes);
+  EXPECT_FALSE(rejected.ok());
+
+  values.erase(ZeroKey{3});
+  bytes = fory.serialize(values);
+  ASSERT_TRUE(bytes.ok()) << bytes.error().to_string();
+  auto allowed = fory.deserialize<std::map<ZeroKey, ZeroKey>>(*bytes);
+  EXPECT_TRUE(allowed.ok()) << allowed.error().to_string();
 }
 
 int main(int argc, char **argv) {

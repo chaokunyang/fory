@@ -59,6 +59,9 @@ object ForySerializerDerivationTest {
   final case class SearchUser(@ForyField(id = 1) name: String) derives ForySerializer
 
   @ForyStruct
+  final case class EmptyProgress() derives ForySerializer
+
+  @ForyStruct
   final case class CollectionBox(
       @ForyField(id = 1) names: List[String],
       @ForyField(id = 2) tags: Set[String],
@@ -219,6 +222,7 @@ object ForySerializerDerivationTest {
       .build()
     ForySerializer.register(fory, classOf[Person], "scala_test.Person")
     ForySerializer.register(fory, classOf[SearchUser], "scala_test.SearchUser")
+    ForySerializer.register(fory, classOf[EmptyProgress], "scala_test.EmptyProgress")
     ForySerializer.register(fory, classOf[CollectionBox], "scala_test.CollectionBox")
     ForySerializer.register(
       fory,
@@ -328,6 +332,10 @@ class ForySerializerDerivationTest extends AnyWordSpec with Matchers {
         summon[ForySerializer[CollectionBox]]
           .createSerializer(fory.getTypeResolver)
           .asInstanceOf[StaticGeneratedStructSerializer[CollectionBox]]
+      serializer.readBodyAlwaysAdvances() shouldBe true
+      summon[ForySerializer[EmptyProgress]]
+        .createSerializer(fory.getTypeResolver)
+        .readBodyAlwaysAdvances() shouldBe false
       val tags = serializer.getGeneratedDescriptors.asScala.find(_.getName == "tags").get
       val tagMeta = TypeUtils.getElementType(tags.getTypeRef).getTypeExtMeta
       if tagMeta != null then {

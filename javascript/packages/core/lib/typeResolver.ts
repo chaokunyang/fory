@@ -90,6 +90,7 @@ const uninitSerialize = {
   readTypeInfo: () => {
     throw new Error("uninitSerialize");
   },
+  readDataAlwaysAdvances: false,
 };
 
 export default class TypeResolver {
@@ -313,6 +314,7 @@ export default class TypeResolver {
   regenerateReadSerializer(typeInfo: TypeInfo) {
     const serializer = this.generateReadSerializer(typeInfo);
     return this.registerSerializer(typeInfo, {
+      readDataAlwaysAdvances: serializer.readDataAlwaysAdvances,
       getHash: serializer.getHash,
       getTypeInfo: serializer.getTypeInfo,
       read: serializer.read,

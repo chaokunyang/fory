@@ -234,6 +234,10 @@ class UnknownStructSerializer(Serializer):
         self._basic_fields = tuple(
             not dynamic and isinstance(serializer, _BASIC_FIELD_SERIALIZERS) for dynamic, serializer in zip(self._dynamic_fields, serializers)
         )
+        self.read_data_always_advances = any(
+            field_type.is_nullable or field_type.is_tracking_ref or dynamic or (serializer is not None and serializer.read_data_always_advances)
+            for field_type, serializer, dynamic in zip(self._field_types, serializers, self._dynamic_fields)
+        )
         field_count = len(self._field_names)
         self._graph_memory_bytes = (
             _SLOTTED_STRUCT_OWNER_BYTES + 2 * _REFERENCE_BYTES + _INSTANCE_DICT_OWNER_BYTES + field_count * 2 * _REFERENCE_BYTES
@@ -688,6 +692,14 @@ class DataClassSerializer(Serializer):
             and isinstance(self._serializers[index], self._BASIC_SERIALIZERS)
             for index, field_name in enumerate(self._field_names)
         ]
+        self.read_data_always_advances = not self.type_resolver.compatible or any(
+            self._basic_field_flags[index]
+            or self._nullable_fields.get(field_name, False)
+            or self._ref_fields.get(field_name, False)
+            or self._dynamic_fields.get(field_name, False)
+            or (self._serializers[index] is not None and self._serializers[index].read_data_always_advances)
+            for index, field_name in enumerate(self._field_names)
+        )
         if self._has_slots:
             self._graph_memory_bytes = _SLOTTED_STRUCT_OWNER_BYTES + len(self._field_names) * _REFERENCE_BYTES
         else:

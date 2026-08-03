@@ -75,6 +75,12 @@ public struct ForyStructMacro: MemberMacro, ExtensionMacro {
         let staticTypeIDDecl: DeclSyntax = """
             \(raw: accessPrefix)static var staticTypeId: TypeId { .structType }
             """
+        let readProgressDecl: DeclSyntax = DeclSyntax(
+            stringLiteral: buildReadProgressDecl(
+                fields: parsed.fields,
+                accessPrefix: accessPrefix
+            )
+        )
         let evolvingDecl: DeclSyntax = """
             \(raw: accessPrefix)static var foryEvolving: Bool { \(raw: objectConfig.evolving ? "true" : "false") }
             """
@@ -145,6 +151,7 @@ public struct ForyStructMacro: MemberMacro, ExtensionMacro {
         return [
             targetDecl,
             staticTypeIDDecl,
+            readProgressDecl,
             evolvingDecl,
             referenceTrackDecl,
             referenceTargetValidationDecl,
@@ -620,6 +627,9 @@ private func buildOrdinalEnumDecls(
     let staticTypeIDDecl: DeclSyntax = """
         \(raw: accessPrefix)static var staticTypeId: TypeId { .enumType }
         """
+    let readProgressDecl: DeclSyntax = """
+        \(raw: accessPrefix)static var readDataAlwaysAdvances: Bool { true }
+        """
     let writeWrapperDecl: DeclSyntax = DeclSyntax(stringLiteral: buildWriteWrapperDecl(accessPrefix: accessPrefix))
     let readWrapperDecl: DeclSyntax = DeclSyntax(
         stringLiteral: buildStructReadWrapperDecl(
@@ -681,6 +691,7 @@ private func buildOrdinalEnumDecls(
         targetDecl,
         defaultDecl,
         staticTypeIDDecl,
+        readProgressDecl,
         writeWrapperDecl,
         readWrapperDecl,
         invalidRefFlagDecl,
@@ -856,6 +867,9 @@ private func buildTaggedUnionEnumDecls(
     let staticTypeIDDecl: DeclSyntax = """
         \(raw: accessPrefix)static var staticTypeId: TypeId { .typedUnion }
         """
+    let readProgressDecl: DeclSyntax = """
+        \(raw: accessPrefix)static var readDataAlwaysAdvances: Bool { true }
+        """
     let writeWrapperDecl: DeclSyntax = DeclSyntax(stringLiteral: buildWriteWrapperDecl(accessPrefix: accessPrefix))
     let readWrapperDecl: DeclSyntax = DeclSyntax(
         stringLiteral: buildStructReadWrapperDecl(
@@ -908,6 +922,7 @@ private func buildTaggedUnionEnumDecls(
         targetDecl,
         defaultDecl,
         staticTypeIDDecl,
+        readProgressDecl,
         writeWrapperDecl,
         readWrapperDecl,
         invalidRefFlagDecl,
@@ -3513,6 +3528,23 @@ private func classifyType(
     }
 
     return .init(typeID: 27, isPrimitive: false, isBuiltIn: false, isCollection: false, isMap: false, isCompressedNumeric: false, primitiveSize: 0)
+}
+
+private func buildReadProgressDecl(fields: [ParsedField], accessPrefix: String) -> String {
+    let terms = fields.compactMap { field -> String? in
+        if field.isOptional {
+            return "true"
+        }
+        if let codec = field.customCodecType {
+            return "\(codec).readDataAlwaysAdvances"
+        }
+        if classifyType(field.typeText).isBuiltIn {
+            return "\(field.typeText).readDataAlwaysAdvances"
+        }
+        return nil
+    }
+    let expression = terms.isEmpty ? "false" : terms.joined(separator: " || ")
+    return "\(accessPrefix)static var readDataAlwaysAdvances: Bool { \(expression) }"
 }
 
 private func parseArrayElement(_ type: String) -> String? {

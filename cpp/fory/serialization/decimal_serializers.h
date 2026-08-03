@@ -170,6 +170,7 @@ inline bool can_use_small_decimal_encoding(const Decimal &decimal,
 
 template <> struct Serializer<Decimal> {
   static constexpr TypeId type_id = TypeId::DECIMAL;
+  static constexpr bool read_data_always_advances = true;
 
   static inline void write_type_info(WriteContext &ctx) {
     ctx.write_uint8(static_cast<uint8_t>(type_id));

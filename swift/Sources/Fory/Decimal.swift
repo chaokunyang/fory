@@ -232,6 +232,7 @@ extension Decimal: Serializer {
     public static var staticTypeId: TypeId {
         .decimal
     }
+    public static var readDataAlwaysAdvances: Bool { true }
 
     public static func writeData(_ value: Self, _ context: WriteContext) throws {
         let state = foundationDecimalWireState(value)

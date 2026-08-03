@@ -66,6 +66,38 @@ inline bool is_little_endian_system() {
   return *reinterpret_cast<uint8_t *>(&test) == 1;
 }
 
+namespace detail {
+
+FORY_ALWAYS_INLINE bool
+settle_unbacked_container_items(ReadContext &ctx, size_t completed_items,
+                                uint64_t start_position) {
+  const uint64_t consumed =
+      ctx.buffer().logical_reader_index() - start_position;
+  if (consumed >= completed_items) {
+    return true;
+  }
+  return ctx.reserve_unbacked_container_items(completed_items -
+                                              static_cast<size_t>(consumed));
+}
+
+FORY_NOINLINE inline bool
+fail_map_chunk_size(ReadContext &ctx, uint8_t chunk_size, uint64_t remaining) {
+  ctx.set_error(Error::invalid_data(
+      "Map chunk size must be between 1 and remaining size " +
+      std::to_string(remaining) + ": " + std::to_string(chunk_size)));
+  return false;
+}
+
+FORY_ALWAYS_INLINE bool
+check_map_chunk_size(ReadContext &ctx, uint8_t chunk_size, uint64_t remaining) {
+  if (FORY_PREDICT_FALSE(chunk_size == 0 || chunk_size > remaining)) {
+    return fail_map_chunk_size(ctx, chunk_size, remaining);
+  }
+  return true;
+}
+
+} // namespace detail
+
 // ============================================================================
 // Header Reading
 // ============================================================================

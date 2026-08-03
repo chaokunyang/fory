@@ -42,14 +42,30 @@ type structSerializer struct {
 	fieldDefs []FieldDef  // for type_def compatibility
 
 	// Mode flags (set at init)
-	isCompatibleMode bool // true when compatible=true
-	typeDefDiffers   bool // true when compatible=true AND remote TypeDef != local (requires ordered read)
+	isCompatibleMode       bool // true when compatible=true
+	typeDefDiffers         bool // true when compatible=true AND remote TypeDef != local (requires ordered read)
+	readDataAlwaysAdvances bool
 
 	// Initialization state
 	initialized bool
 
 	// Cached addressable value for non-addressable writes.
 	tempValue *reflect.Value
+}
+
+func (s *structSerializer) computeReadDataAlwaysAdvances() bool {
+	if !s.isCompatibleMode || s.fieldGroup.FixedSize > 0 || len(s.fieldGroup.PrimitiveVarintFields) > 0 {
+		return true
+	}
+	for i := range s.fieldGroup.RemainingFields {
+		field := &s.fieldGroup.RemainingFields[i]
+		if field.RefMode != RefModeNone ||
+			(field.Meta != nil && field.Meta.WriteType) ||
+			serializerReadDataAlwaysAdvances(field.Serializer) {
+			return true
+		}
+	}
+	return false
 }
 
 // newStructSerializerFromTypeDef creates a new structSerializer with the given parameters.

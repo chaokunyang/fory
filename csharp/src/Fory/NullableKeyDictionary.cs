@@ -618,7 +618,25 @@ public sealed class NullableKeyDictionarySerializer<TKey, TValue> : Serializer<N
         }
 
         ReserveMapStorage(context, totalLength);
-        context.Reader.CheckBound(totalLength);
+        bool keyReadAlwaysAdvances = keyTypeInfo.ReadBodyAlwaysAdvancesFor(keySerializer);
+        bool valueReadAlwaysAdvances = valueTypeInfo.ReadBodyAlwaysAdvancesFor(valueSerializer);
+        bool mapReadAlwaysAdvances = keyReadAlwaysAdvances || valueReadAlwaysAdvances;
+        bool keyMayHaveRemoteSchema = context.Compatible &&
+                                      keyTypeInfo.UserTypeKind == UserTypeKind.Struct &&
+                                      keyTypeInfo.Evolving;
+        bool valueMayHaveRemoteSchema = context.Compatible &&
+                                        valueTypeInfo.UserTypeKind == UserTypeKind.Struct &&
+                                        valueTypeInfo.Evolving;
+        if (keyReadAlwaysAdvances && !keyMayHaveRemoteSchema ||
+            valueReadAlwaysAdvances && !valueMayHaveRemoteSchema)
+        {
+            context.Reader.CheckBound(totalLength);
+        }
+        else
+        {
+            context.CheckUnbackedContainerAllocation(totalLength);
+        }
+
         NullableKeyDictionary<TKey, TValue> map = new(totalLength);
         if (publishRef)
         {
@@ -683,6 +701,12 @@ public sealed class NullableKeyDictionarySerializer<TKey, TValue> : Serializer<N
 
             if (keyDynamicType || valueDynamicType)
             {
+                bool guardUnbackedItems = !trackKeyRef &&
+                                           !trackValueRef &&
+                                           keyDeclared &&
+                                           valueDeclared &&
+                                           !mapReadAlwaysAdvances;
+                int checkpoint = guardUnbackedItems ? context.Reader.Cursor : 0;
                 for (int i = 0; i < chunkSize; i++)
                 {
                     TypeInfo? keyTypeInfoForRead = null;
@@ -741,6 +765,13 @@ public sealed class NullableKeyDictionarySerializer<TKey, TValue> : Serializer<N
                     map[key] = valueRead;
                 }
 
+                if (guardUnbackedItems)
+                {
+                    context.SettleUnbackedContainerItems(
+                        chunkSize,
+                        context.Reader.Cursor - checkpoint);
+                }
+
                 readCount += chunkSize;
                 continue;
             }
@@ -755,11 +786,32 @@ public sealed class NullableKeyDictionarySerializer<TKey, TValue> : Serializer<N
                 context.TypeResolver.ReadTypeInfo(valueSerializer, context);
             }
 
+            TypeMeta? keyTypeMeta = !keyDeclared && context.Compatible
+                ? context.GetTypeMeta<TKey>()
+                : null;
+            TypeMeta? valueTypeMeta = !valueDeclared && context.Compatible
+                ? context.GetTypeMeta<TValue>()
+                : null;
+            bool chunkReadAlwaysAdvances =
+                keyTypeInfo.ReadBodyAlwaysAdvancesFor(keySerializer, keyTypeMeta) ||
+                valueTypeInfo.ReadBodyAlwaysAdvancesFor(valueSerializer, valueTypeMeta);
+            bool guardChunk = !trackKeyRef &&
+                              !trackValueRef &&
+                              !chunkReadAlwaysAdvances;
+            int chunkCheckpoint = guardChunk ? context.Reader.Cursor : 0;
+
             for (int i = 0; i < chunkSize; i++)
             {
                 TKey key = keySerializer.Read(context, trackKeyRef ? RefMode.Tracking : RefMode.None, false);
                 TValue valueRead = ReadValueElement(context, trackValueRef, false, valueSerializer);
                 map[key] = valueRead;
+            }
+
+            if (guardChunk)
+            {
+                context.SettleUnbackedContainerItems(
+                    chunkSize,
+                    context.Reader.Cursor - chunkCheckpoint);
             }
 
             if (!keyDeclared)

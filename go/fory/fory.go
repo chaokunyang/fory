@@ -70,6 +70,7 @@ type Config struct {
 	IsXlang                         bool
 	Compatible                      bool // Schema evolution compatibility mode
 	MaxGraphMemoryBytes             int64
+	MaxUnbackedContainerItems       int64
 	MaxTypeFields                   int
 	MaxTypeMetaBytes                int
 	MaxSchemaVersionsPerType        int
@@ -84,6 +85,7 @@ func defaultConfig() Config {
 		IsXlang:                         true,
 		MaxTypeFields:                   512,
 		MaxGraphMemoryBytes:             128 * 1024 * 1024,
+		MaxUnbackedContainerItems:       8192,
 		MaxTypeMetaBytes:                4096,
 		MaxSchemaVersionsPerType:        10,
 		MaxAverageSchemaVersionsPerType: 3,
@@ -123,6 +125,18 @@ func WithMaxGraphMemoryBytes(size int64) Option {
 	}
 	return func(f *Fory) {
 		f.config.MaxGraphMemoryBytes = size
+	}
+}
+
+// WithMaxUnbackedContainerItems limits collection elements and map entries
+// whose repeated reads are not backed by input bytes in one root operation.
+// Zero is a strict limit.
+func WithMaxUnbackedContainerItems(items int64) Option {
+	if items < 0 {
+		panic("MaxUnbackedContainerItems must be non-negative")
+	}
+	return func(f *Fory) {
+		f.config.MaxUnbackedContainerItems = items
 	}
 }
 
@@ -581,6 +595,7 @@ func (f *Fory) Deserialize(data []byte, v any) error {
 	f.readCtx.SetData(data)
 	target := reflect.ValueOf(v).Elem()
 	f.readCtx.remainingGraphMemoryBytes = f.config.MaxGraphMemoryBytes
+	f.readCtx.remainingUnbackedContainerItems = f.config.MaxUnbackedContainerItems
 
 	readHeader(f.readCtx)
 	if f.readCtx.HasError() {
@@ -676,6 +691,7 @@ func (f *Fory) DeserializeFrom(buf *ByteBuffer, v any) error {
 	f.readCtx.buffer = buf
 	target := reflect.ValueOf(v).Elem()
 	f.readCtx.remainingGraphMemoryBytes = f.config.MaxGraphMemoryBytes
+	f.readCtx.remainingUnbackedContainerItems = f.config.MaxUnbackedContainerItems
 
 	readHeader(f.readCtx)
 	if f.readCtx.HasError() {
@@ -794,6 +810,7 @@ func (f *Fory) DeserializeWithCallbackBuffers(buffer *ByteBuffer, v any, buffers
 
 	target := rv.Elem()
 	f.readCtx.remainingGraphMemoryBytes = f.config.MaxGraphMemoryBytes
+	f.readCtx.remainingUnbackedContainerItems = f.config.MaxUnbackedContainerItems
 
 	// ReadData and validate header
 	readHeader(f.readCtx)
@@ -1057,6 +1074,7 @@ func Deserialize[T any](f *Fory, data []byte, target *T) error {
 	defer f.resetReadState()
 	f.readCtx.SetData(data)
 	f.readCtx.remainingGraphMemoryBytes = f.config.MaxGraphMemoryBytes
+	f.readCtx.remainingUnbackedContainerItems = f.config.MaxUnbackedContainerItems
 
 	var targetVal reflect.Value
 	var targetType reflect.Type

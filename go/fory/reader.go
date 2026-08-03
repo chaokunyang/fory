@@ -29,22 +29,23 @@ import (
 
 // ReadContext holds all state needed during deserialization.
 type ReadContext struct {
-	buffer                    *ByteBuffer
-	refReader                 *RefReader
-	trackRef                  bool // Cached flag to avoid indirection
-	xlang                     bool // Cross-language serialization mode
-	rootHeader                byte
-	compatible                bool          // Schema evolution compatibility mode
-	typeResolver              *TypeResolver // For complex type deserialization
-	refResolver               *RefResolver  // For reference tracking in native-mode paths
-	outOfBandBuffers          []*ByteBuffer // Out-of-band buffers for deserialization
-	outOfBandIndex            int           // Current index into out-of-band buffers
-	depth                     int           // Current nesting depth for cycle detection
-	maxDepth                  int           // Maximum allowed nesting depth
-	err                       Error         // Accumulated error state for deferred checking
-	lastTypePtr               uintptr
-	lastTypeInfo              *TypeInfo
-	remainingGraphMemoryBytes int64
+	buffer                          *ByteBuffer
+	refReader                       *RefReader
+	trackRef                        bool // Cached flag to avoid indirection
+	xlang                           bool // Cross-language serialization mode
+	rootHeader                      byte
+	compatible                      bool          // Schema evolution compatibility mode
+	typeResolver                    *TypeResolver // For complex type deserialization
+	refResolver                     *RefResolver  // For reference tracking in native-mode paths
+	outOfBandBuffers                []*ByteBuffer // Out-of-band buffers for deserialization
+	outOfBandIndex                  int           // Current index into out-of-band buffers
+	depth                           int           // Current nesting depth for cycle detection
+	maxDepth                        int           // Maximum allowed nesting depth
+	err                             Error         // Accumulated error state for deferred checking
+	lastTypePtr                     uintptr
+	lastTypeInfo                    *TypeInfo
+	remainingGraphMemoryBytes       int64
+	remainingUnbackedContainerItems int64
 }
 
 // IsXlang returns whether cross-language serialization mode is enabled
@@ -69,6 +70,7 @@ func (c *ReadContext) Reset() {
 	c.outOfBandIndex = 0
 	c.depth = 0
 	c.err = Error{} // Clear error state
+	c.remainingUnbackedContainerItems = 0
 	// Graph budget state is overwritten by each root read before deserialization.
 	// Avoid extra reset stores on the successful root hot path.
 	if c.refResolver != nil {
@@ -100,6 +102,30 @@ func (c *ReadContext) rejectGraphMemoryReservation(bytes int64) bool {
 	return false
 }
 
+func (c *ReadContext) reserveUnbackedContainerItems(items int64) bool {
+	if uint64(items) <= uint64(c.remainingUnbackedContainerItems) {
+		c.remainingUnbackedContainerItems -= items
+		return true
+	}
+	return c.rejectUnbackedContainerItems(items)
+}
+
+//go:noinline
+func (c *ReadContext) rejectUnbackedContainerItems(items int64) bool {
+	c.SetError(DeserializationErrorf(
+		"unbacked container item request %d exceeds remaining budget %d",
+		items, c.remainingUnbackedContainerItems))
+	return false
+}
+
+func (c *ReadContext) settleUnbackedContainerItems(items int, start uint64) bool {
+	consumed := c.buffer.logicalReaderIndex() - start
+	if consumed >= uint64(items) {
+		return true
+	}
+	return c.reserveUnbackedContainerItems(int64(uint64(items) - consumed))
+}
+
 // SetData sets new input data (for buffer reuse)
 // Reuses existing buffer to avoid allocation
 func (c *ReadContext) SetData(data []byte) {
@@ -108,6 +134,7 @@ func (c *ReadContext) SetData(data []byte) {
 	} else {
 		c.buffer.data = data
 		c.buffer.readerIndex = 0
+		c.buffer.discardedByteBase = 0
 		c.buffer.writerIndex = len(data)
 		c.buffer.reader = nil
 	}

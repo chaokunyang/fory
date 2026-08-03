@@ -213,4 +213,9 @@ public abstract class Serializer<T> {
   public boolean isImmutable() {
     return immutable;
   }
+
+  /** Returns whether every successful non-null body read consumes at least one input byte. */
+  public boolean readBodyAlwaysAdvances() {
+    return false;
+  }
 }

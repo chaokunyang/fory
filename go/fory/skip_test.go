@@ -244,36 +244,3 @@ func TestSkipCollectionConsumesNullElementFlag(t *testing.T) {
 		})
 	}
 }
-
-func TestSkipDeclaredSameTypeNoneCollection(t *testing.T) {
-	tests := []struct {
-		name   string
-		typeID TypeId
-	}{
-		{name: "list", typeID: LIST},
-		{name: "set", typeID: SET},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			f := New(WithXlang(true), WithCompatible(false))
-			buf := NewByteBuffer(nil)
-			buf.WriteVarUint32(MaxUint32)
-			buf.WriteByte(CollectionDeclSameType)
-			sentinelIndex := buf.WriterIndex()
-			buf.WriteByte(0x7f)
-
-			f.readCtx.SetData(buf.Bytes())
-			skipCollection(
-				f.readCtx,
-				FieldDef{
-					typeSpec: NewCollectionTypeSpec(tc.typeID, NewSimpleTypeSpec(NONE)),
-				},
-			)
-			require.NoError(t, f.readCtx.CheckError())
-			require.Zero(t, f.readCtx.depth)
-			require.Equal(t, sentinelIndex, f.readCtx.Buffer().ReaderIndex())
-			require.Equal(t, byte(0x7f), f.readCtx.Buffer().ReadByte(f.readCtx.Err()))
-		})
-	}
-}

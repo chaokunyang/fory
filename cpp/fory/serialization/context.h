@@ -498,6 +498,19 @@ public:
     return true;
   }
 
+  FORY_ALWAYS_INLINE size_t remaining_unbacked_container_items() const {
+    return remaining_unbacked_container_items_;
+  }
+
+  FORY_ALWAYS_INLINE bool reserve_unbacked_container_items(size_t items) {
+    const size_t remaining = remaining_unbacked_container_items_;
+    if (FORY_PREDICT_FALSE(items > remaining)) {
+      return set_unbacked_container_items_exceeded(items, remaining);
+    }
+    remaining_unbacked_container_items_ = remaining - items;
+    return true;
+  }
+
   // ===========================================================================
   // Read methods with Error& parameter
   // All methods accept Error& as parameter for reduced overhead.
@@ -659,6 +672,8 @@ private:
   check_remote_type_meta_limit(const TypeMeta &type_meta);
   void record_remote_type_meta(const std::string &type_key);
   FORY_NOINLINE bool set_graph_memory_exceeded(size_t bytes, size_t remaining);
+  FORY_NOINLINE bool set_unbacked_container_items_exceeded(size_t items,
+                                                           size_t remaining);
 
   // Error state - accumulated during deserialization, checked at the end
   Error error_;
@@ -669,6 +684,7 @@ private:
   RefReader ref_reader_;
   uint32_t current_dyn_depth_;
   size_t remaining_graph_memory_bytes_ = 0;
+  size_t remaining_unbacked_container_items_ = 0;
 
   // Meta sharing state (for compatible mode)
   // Persistent cache storage for TypeInfo objects keyed by meta header.

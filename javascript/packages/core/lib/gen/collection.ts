@@ -344,10 +344,6 @@ export class CollectionAnySerializer {
       return result;
     }
     const flags = this.readContext.reader.readUint8();
-    const result = createCollection(len);
-    if (fromRef) {
-      this.readContext.reference(result);
-    }
     // IMPORTANT: collection readers must obey the ref/null bits written on the
     // wire, not local TypeScript metadata that may imply a different ref
     // policy. Shared xlang tests intentionally deserialize one ref policy and
@@ -356,20 +352,37 @@ export class CollectionAnySerializer {
     const isDeclared = flags & CollectionFlags.DECL_ELEMENT_TYPE;
     const includeNone = flags & CollectionFlags.HAS_NULL;
     const refTracking = flags & CollectionFlags.TRACKING_REF;
-
+    let serializer: Serializer | null = null;
     if (isSame) {
-      const serializer = isDeclared
+      serializer = isDeclared
         ? this.declaredSerializer!
         : AnyHelper.detectSerializer(this.readContext);
+    }
+    const bodyAlwaysAdvances =
+      !isSame ||
+      Boolean(refTracking) ||
+      Boolean(includeNone) ||
+      serializer?.readDataAlwaysAdvances === true;
+    if (bodyAlwaysAdvances) {
+      this.readContext.reader.checkReadableBytes(len);
+    } else {
+      this.readContext.checkUnbackedContainerAllocation(len);
+    }
+    const result = createCollection(len);
+    if (fromRef) {
+      this.readContext.reference(result);
+    }
+
+    if (isSame) {
       if (refTracking) {
         for (let i = 0; i < len; i++) {
           const refFlag = this.readContext.readRefFlag();
           switch (refFlag) {
             case RefFlags.NotNullValueFlag:
-              accessor(result, i, this.readSerializerWithDepth(serializer, false));
+              accessor(result, i, this.readSerializerWithDepth(serializer!, false));
               break;
             case RefFlags.RefValueFlag:
-              accessor(result, i, this.readSerializerWithDepth(serializer, true));
+              accessor(result, i, this.readSerializerWithDepth(serializer!, true));
               break;
             case RefFlags.RefFlag:
               accessor(
@@ -391,13 +404,28 @@ export class CollectionAnySerializer {
               accessor(result, i, null);
               break;
             case RefFlags.NotNullValueFlag:
-              accessor(result, i, this.readSerializerWithDepth(serializer, false));
+              accessor(result, i, this.readSerializerWithDepth(serializer!, false));
               break;
           }
         }
       } else {
-        for (let i = 0; i < len; i++) {
-          accessor(result, i, this.readSerializerWithDepth(serializer!, false));
+        if (bodyAlwaysAdvances) {
+          for (let i = 0; i < len; i++) {
+            accessor(result, i, this.readSerializerWithDepth(serializer!, false));
+          }
+        } else {
+          let checkpoint = this.readContext.reader.readGetCursor();
+          for (let i = 0; i < len; i++) {
+            accessor(result, i, this.readSerializerWithDepth(serializer!, false));
+            if (((i + 1) & 1023) === 0) {
+              this.readContext.settleUnbackedContainerItems(1024, checkpoint);
+              checkpoint = this.readContext.reader.readGetCursor();
+            }
+          }
+          const tail = len & 1023;
+          if (tail !== 0) {
+            this.readContext.settleUnbackedContainerItems(tail, checkpoint);
+          }
         }
       }
     } else {
@@ -559,12 +587,18 @@ export abstract class CollectionSerializerGenerator extends BaseSerializerGenera
     const idx = this.scope.uniqueName("idx");
     const refFlag = this.scope.uniqueName("refFlag");
     const elemSerializer = this.scope.uniqueName("elemSerializer");
+    const bodyAlwaysAdvances = this.scope.uniqueName("bodyAlwaysAdvances");
+    const checkpoint = this.scope.uniqueName("checkpoint");
+    const tail = this.scope.uniqueName("tail");
     const anyHelper = this.builder.getExternal(AnyHelper.name);
     const readContextName = this.builder.getReadContextName();
     const useDeclaredStructElementReader = TypeId.structType(this.innerGenerator.getTypeId()!);
+    const declaredElementType = this.isDeclaredElementType();
+    const staticBodyAlwaysAdvances = this.innerGenerator.readDataAlwaysAdvances();
+    const needsProgressChoice = !declaredElementType || !staticBodyAlwaysAdvances;
     const compatibleReadAction = getCompatibleCollectionArrayReadAction(this.typeInfo);
     const compatibleListToArray = compatibleReadAction?.target === "array";
-    const checkReadableBytes = compatibleListToArray
+    const compatibleReadableCheck = compatibleListToArray
       ? this.builder.reader.checkReadableBytes(
           `${len} * ${compatibleMinElementBytes(this.innerGenerator.getTypeId()!)}`,
         )
@@ -604,22 +638,79 @@ export abstract class CollectionSerializerGenerator extends BaseSerializerGenera
           .readEmbed()
           .readTypeInfo((expr: string) => `${elemSerializer} = ${expr};`)
       : `${elemSerializer} = ${anyHelper}.detectSerializer(${readContextName});`;
+    const plainLoop = (guarded: boolean) => {
+      const settle = guarded
+        ? `
+          if (((${idx} + 1) & 1023) === 0) {
+            ${readContextName}.settleUnbackedContainerItems(1024, ${checkpoint});
+            ${checkpoint} = ${this.builder.reader.readGetCursor()};
+          }
+        `
+        : "";
+      return `
+        if (${elemSerializer}) {
+          for (let ${idx} = 0; ${idx} < ${len}; ${idx}++) {
+            ${innerIsLeaf ? "" : `${readContextName}.incReadDepth();`}
+            ${putAccessor(`${elemSerializer}.read(false)`, idx)}
+            ${innerIsLeaf ? "" : `${readContextName}.decReadDepth();`}
+            ${settle}
+          }
+        } else {
+          for (let ${idx} = 0; ${idx} < ${len}; ${idx}++) {
+            ${readInnerElement((x: any) => `${putAccessor(x, idx)}`, "false")}
+            ${settle}
+          }
+        }
+      `;
+    };
+    const guardedPlainLoop = `
+      let ${checkpoint} = ${this.builder.reader.readGetCursor()};
+      ${plainLoop(true)}
+      const ${tail} = ${len} & 1023;
+      if (${tail} !== 0) {
+        ${readContextName}.settleUnbackedContainerItems(${tail}, ${checkpoint});
+      }
+    `;
+    const plainRead = needsProgressChoice
+      ? `
+        if (${bodyAlwaysAdvances}) {
+          ${plainLoop(false)}
+        } else {
+          ${guardedPlainLoop}
+        }
+      `
+      : plainLoop(false);
+    const progressState = needsProgressChoice ? `let ${bodyAlwaysAdvances} = true;` : "";
+    const allocationCheck = compatibleListToArray
+      ? compatibleReadableCheck
+      : needsProgressChoice
+        ? `
+          ${bodyAlwaysAdvances} = Boolean(${flags} & (${CollectionFlags.TRACKING_REF} | ${CollectionFlags.HAS_NULL})) ||
+            (${elemSerializer} ? ${elemSerializer}.readDataAlwaysAdvances === true : ${staticBodyAlwaysAdvances});
+          if (${bodyAlwaysAdvances}) {
+            ${this.builder.reader.checkReadableBytes(len)};
+          } else {
+            ${readContextName}.checkUnbackedContainerAllocation(${len});
+          }
+        `
+        : this.builder.reader.checkReadableBytes(len);
     return `
             const ${len} = ${this.builder.reader.readVarUint32Small7()};
             ${reserveMemory}
             let ${flags} = 0;
+            let ${elemSerializer} = null;
+            ${progressState}
             if (${len} > 0) {
                 ${flags} = ${this.builder.reader.readUint8()};
                 ${rejectCompatiblePayload}
-                ${checkReadableBytes}
+                if (!(${flags} & ${CollectionFlags.DECL_ELEMENT_TYPE})) {
+                    ${readElementTypeInfo}
+                }
+                ${allocationCheck}
             }
             const ${result} = ${newCollection};
             ${this.maybeReference(result, refState)}
             if (${len} > 0) {
-                let ${elemSerializer} = null;
-                if (!(${flags} & ${CollectionFlags.DECL_ELEMENT_TYPE})) {
-                    ${readElementTypeInfo}
-                }
                 if (${flags} & ${CollectionFlags.TRACKING_REF}) {
                     for (let ${idx} = 0; ${idx} < ${len}; ${idx}++) {
                         const ${refFlag} = ${this.builder.reader.readInt8()};
@@ -661,17 +752,7 @@ export abstract class CollectionSerializerGenerator extends BaseSerializerGenera
                         }
                     }
                 } else {
-                    if (${elemSerializer}) {
-                        for (let ${idx} = 0; ${idx} < ${len}; ${idx}++) {
-                            ${innerIsLeaf ? "" : `${readContextName}.incReadDepth();`}
-                            ${putAccessor(`${elemSerializer}.read(false)`, idx)}
-                            ${innerIsLeaf ? "" : `${readContextName}.decReadDepth();`}
-                        }
-                    } else {
-                        for (let ${idx} = 0; ${idx} < ${len}; ${idx}++) {
-                            ${readInnerElement((x: any) => `${putAccessor(x, idx)}`, "false")}
-                        }
-                    }
+                    ${plainRead}
                 }
             }
             ${accessor(result)}

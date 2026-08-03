@@ -695,7 +695,8 @@ public class MapSerializersTest extends ForyTestBase {
     MemoryBuffer buffer = MemoryUtils.buffer(8);
     buffer.writeVarUInt32Small7(2);
     Assert.expectThrows(
-        IndexOutOfBoundsException.class, () -> withReadContext(fory, buffer, serializer::newMap));
+        IndexOutOfBoundsException.class,
+        () -> withReadContext(fory, buffer, context -> serializer.newMap(context, false)));
   }
 
   @Test(dataProvider = "foryCopyConfig")

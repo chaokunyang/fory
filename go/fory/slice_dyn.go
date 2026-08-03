@@ -425,8 +425,16 @@ func (s *sliceDynSerializer) readData(ctx *ReadContext, value reflect.Value, exp
 		if ctx.HasError() {
 			return
 		}
-		if !buf.CheckReadable(length, ctxErr) {
-			return
+		bodyAlwaysAdvances := (collectFlag&(CollectionTrackingRef|CollectionHasNull)) != 0 ||
+			serializerReadDataAlwaysAdvances(elemSerializer)
+		if !allocatedByCaller {
+			if bodyAlwaysAdvances {
+				if !buf.CheckReadable(length, ctxErr) {
+					return
+				}
+			} else if !checkUnbackedContainerAllocation(ctx, length) {
+				return
+			}
 		}
 		if !allocatedByCaller {
 			value.Set(reflect.MakeSlice(sliceType, length, length))
@@ -473,7 +481,6 @@ func (s *sliceDynSerializer) readSameType(ctx *ReadContext, buf *ByteBuffer, val
 	if ctx.HasError() {
 		return
 	}
-
 	// Check if element is a named struct type (needs pointer for circular ref support)
 	isNamedStruct := false
 	if _, ok := serializer.(*structSerializer); ok && elemType.Kind() == reflect.Struct {
@@ -488,6 +495,32 @@ func (s *sliceDynSerializer) readSameType(ctx *ReadContext, buf *ByteBuffer, val
 				boxedStructBytes = int64(structSer.valueBytes)
 			}
 		}
+	}
+	if !trackRefs && !hasNull && !serializerReadDataAlwaysAdvances(serializer) {
+		checkpoint := buf.logicalReaderIndex()
+		for i := 0; i < length; i++ {
+			if boxedStructBytes > 0 && !ctx.ReserveGraphMemory(boxedStructBytes) {
+				return
+			}
+			elem := reflect.New(elemType).Elem()
+			serializer.ReadData(ctx, elem)
+			if ctx.HasError() {
+				return
+			}
+			value.Index(i).Set(elem)
+			if (i+1)&(unbackedContainerCheckInterval-1) == 0 {
+				if !ctx.settleUnbackedContainerItems(unbackedContainerCheckInterval, checkpoint) {
+					return
+				}
+				checkpoint = buf.logicalReaderIndex()
+			}
+		}
+		if tail := length & (unbackedContainerCheckInterval - 1); tail != 0 {
+			if !ctx.settleUnbackedContainerItems(tail, checkpoint) {
+				return
+			}
+		}
+		return
 	}
 
 	for i := 0; i < length; i++ {

@@ -291,6 +291,7 @@ cdef class DataClassSerializer(Serializer):
         self._field_runtime_infos.clear()
         self._has_missing_fields = False
         self._has_validation_fields = False
+        self.read_data_always_advances = not self.type_resolver.compatible
         current_fields = set(self._get_field_names(self.type_))
         self._field_runtime_infos.reserve(len(self._field_names))
         self._assign_fields = [
@@ -320,6 +321,17 @@ cdef class DataClassSerializer(Serializer):
             runtime_info.track_ref = 1 if is_tracking_ref else 0
             runtime_info.is_dynamic = 1 if is_dynamic else 0
             runtime_info.compatible_scalar = 1 if isinstance(serializer, CompatibleScalarFieldSerializer) else 0
+            if (
+                not self.read_data_always_advances
+                and (
+                    runtime_info.basic_type_id != _BASIC_FIELD_NOT_INLINE
+                    or is_nullable
+                    or is_tracking_ref
+                    or is_dynamic
+                    or (serializer is not None and serializer.read_data_always_advances)
+                )
+            ):
+                self.read_data_always_advances = True
             runtime_info.field_exists = 1 if field_name in current_fields else 0
             runtime_info.assign = 1 if assign else 0
             if runtime_info.field_exists == 0 or runtime_info.assign == 0:

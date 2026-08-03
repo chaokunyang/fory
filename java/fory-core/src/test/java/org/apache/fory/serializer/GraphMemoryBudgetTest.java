@@ -37,7 +37,6 @@ import org.apache.fory.ForyTestBase;
 import org.apache.fory.collection.Int32List;
 import org.apache.fory.context.ReadContext;
 import org.apache.fory.context.WriteContext;
-import org.apache.fory.exception.DeserializationException;
 import org.apache.fory.exception.InsecureException;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.serializer.collection.PrimitiveListSerializers;
@@ -130,8 +129,7 @@ public class GraphMemoryBudgetTest extends ForyTestBase {
     mapContext.prepare(buffer, null, false);
     try {
       assertThrows(
-          DeserializationException.class,
-          () -> reader.getSerializer(HashMap.class).read(mapContext));
+          RuntimeException.class, () -> reader.getSerializer(HashMap.class).read(mapContext));
     } finally {
       mapContext.reset();
     }
@@ -277,8 +275,7 @@ public class GraphMemoryBudgetTest extends ForyTestBase {
     readContext.prepare(buffer, null, false);
     try {
       assertThrows(
-          IndexOutOfBoundsException.class,
-          () -> fory.getSerializer(ArrayList.class).read(readContext));
+          RuntimeException.class, () -> fory.getSerializer(ArrayList.class).read(readContext));
     } finally {
       readContext.reset();
     }

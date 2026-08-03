@@ -381,6 +381,7 @@ pub struct ReadContext<'a> {
     check_struct_version: bool,
     check_string_read: bool,
     pub(crate) remaining_graph_memory_bytes: usize,
+    pub(crate) remaining_unbacked_container_items: usize,
 
     // Context-specific fields
     pub reader: Reader<'a>,
@@ -411,6 +412,7 @@ impl<'a> ReadContext<'a> {
             check_struct_version: config.check_struct_version,
             check_string_read: config.check_string_read,
             remaining_graph_memory_bytes: 0,
+            remaining_unbacked_container_items: 0,
             reader: Reader::default(),
             meta_resolver: MetaReaderResolver::default(),
             meta_string_resolver: MetaStringReaderResolver::default(),
@@ -478,6 +480,23 @@ impl<'a> ReadContext<'a> {
             ));
         }
         self.remaining_graph_memory_bytes = remaining - bytes;
+        Ok(())
+    }
+
+    #[inline(always)]
+    #[doc(hidden)]
+    pub fn remaining_unbacked_container_items(&self) -> usize {
+        self.remaining_unbacked_container_items
+    }
+
+    #[inline(always)]
+    #[doc(hidden)]
+    pub fn reserve_unbacked_container_items(&mut self, items: usize) -> Result<(), Error> {
+        let remaining = self.remaining_unbacked_container_items;
+        if items > remaining {
+            return Err(unbacked_container_items_exceeded(items, remaining));
+        }
+        self.remaining_unbacked_container_items = remaining - items;
         Ok(())
     }
 
@@ -607,6 +626,7 @@ impl<'a> ReadContext<'a> {
         self.ref_reader.reset();
         // Root reset is the only failure-cleanup owner for read depth.
         self.current_depth = 0;
+        self.remaining_unbacked_container_items = 0;
     }
 }
 
@@ -616,5 +636,13 @@ fn graph_memory_exceeded(bytes: usize, remaining: usize, limit: usize) -> Error 
     Error::invalid_data(format!(
         "estimated graph memory request {} bytes exceeds max_graph_memory_bytes remaining budget {} bytes out of effective limit {} bytes",
         bytes, remaining, limit
+    ))
+}
+
+#[cold]
+#[inline(never)]
+fn unbacked_container_items_exceeded(items: usize, remaining: usize) -> Error {
+    Error::invalid_data(format!(
+        "container read work request {items} items exceeds max_unbacked_container_items remaining budget {remaining} items"
     ))
 }

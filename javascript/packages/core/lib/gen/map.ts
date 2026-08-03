@@ -297,6 +297,7 @@ export class MapAnySerializer {
   read(fromRef: boolean): any {
     let count = this.readContext.reader.readVarUint32Small7();
     this.readContext.reserveGraphMemory(JS_MAP_OWNER_BYTES + count * 2 * REFERENCE_BYTES);
+    this.readContext.checkUnbackedContainerAllocation(count);
     const result = new Map();
     if (fromRef) {
       this.readContext.reference(result);
@@ -336,11 +337,23 @@ export class MapAnySerializer {
         }
       }
 
+      const bodyAlwaysAdvances =
+        Boolean(keyHeader & MapFlags.HAS_NULL) ||
+        Boolean(valueHeader & MapFlags.HAS_NULL) ||
+        Boolean(keyHeader & MapFlags.TRACKING_REF) ||
+        Boolean(valueHeader & MapFlags.TRACKING_REF) ||
+        keySerializer?.readDataAlwaysAdvances === true ||
+        valueSerializer?.readDataAlwaysAdvances === true;
+      const checkpoint = bodyAlwaysAdvances ? 0 : this.readContext.reader.readGetCursor();
+
       for (let index = 0; index < chunkSize; index++) {
         const key = this.readElement(keyHeader, keySerializer);
         const value = this.readElement(valueHeader, valueSerializer);
         result.set(key, value);
         count--;
+      }
+      if (!bodyAlwaysAdvances) {
+        this.readContext.settleUnbackedContainerItems(chunkSize, checkpoint);
       }
     }
     return result;
@@ -511,6 +524,10 @@ export class MapSerializerGenerator extends BaseSerializerGenerator {
   private readSpecificType(accessor: (expr: string) => string, refState: string) {
     const count = this.scope.uniqueName("count");
     const result = this.scope.uniqueName("result");
+    const checkpoint = this.scope.uniqueName("checkpoint");
+    const bodyAlwaysAdvances = this.scope.uniqueName("bodyAlwaysAdvances");
+    const staticBodyAlwaysAdvances =
+      this.keyGenerator.readDataAlwaysAdvances() || this.valueGenerator.readDataAlwaysAdvances();
     // Skip depth tracking for leaf key/value types.
     const keyIsLeaf = TypeId.isLeafTypeId(this.keyGenerator.getTypeId()!);
     const valueIsLeaf = TypeId.isLeafTypeId(this.valueGenerator.getTypeId()!);
@@ -544,6 +561,11 @@ export class MapSerializerGenerator extends BaseSerializerGenerator {
     return `
       let ${count} = ${this.builder.reader.readVarUint32Small7()};
       ${readContextName}.reserveGraphMemory(${JS_MAP_OWNER_BYTES} + ${count} * 2 * ${REFERENCE_BYTES});
+      ${
+        staticBodyAlwaysAdvances
+          ? this.builder.reader.checkReadableBytes(count)
+          : `${readContextName}.checkUnbackedContainerAllocation(${count});`
+      }
       const ${result} = new Map();
       if (${refState}) {
         ${this.builder.referenceResolver.reference(result)}
@@ -574,6 +596,17 @@ export class MapSerializerGenerator extends BaseSerializerGenerator {
           if (!${valueDeclaredType}) {
             ${valueSerializer} = ${anyHelper}.detectSerializer(${readContextName});
           }
+        }
+        ${
+          staticBodyAlwaysAdvances
+            ? ""
+            : `
+              const ${bodyAlwaysAdvances} = Boolean(keyIncludeNone) || Boolean(valueIncludeNone) ||
+                Boolean(keyTrackingRef) || Boolean(valueTrackingRef) ||
+                ${keySerializer}?.readDataAlwaysAdvances === true ||
+                ${valueSerializer}?.readDataAlwaysAdvances === true;
+              const ${checkpoint} = ${bodyAlwaysAdvances} ? 0 : ${this.builder.reader.readGetCursor()};
+            `
         }
         for (let index = 0; index < chunkSize; index++) {
           let key;
@@ -669,6 +702,15 @@ export class MapSerializerGenerator extends BaseSerializerGenerator {
             value
           );
           ${count}--;
+        }
+        ${
+          staticBodyAlwaysAdvances
+            ? ""
+            : `
+              if (!${bodyAlwaysAdvances}) {
+                ${readContextName}.settleUnbackedContainerItems(chunkSize, ${checkpoint});
+              }
+            `
         }
       }
       ${accessor(result)}

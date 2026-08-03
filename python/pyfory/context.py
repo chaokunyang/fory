@@ -473,6 +473,8 @@ class ReadContext:
         "max_depth",
         "_max_graph_memory_bytes",
         "_remaining_graph_memory_bytes",
+        "_max_unbacked_container_items",
+        "remaining_unbacked_container_items",
         "ref_reader",
         "meta_string_reader",
         "meta_share_context",
@@ -495,6 +497,8 @@ class ReadContext:
         self.max_depth = config.max_depth
         self._max_graph_memory_bytes = config.max_graph_memory_bytes
         self._remaining_graph_memory_bytes = 0
+        self._max_unbacked_container_items = config.max_unbacked_container_items
+        self.remaining_unbacked_container_items = 0
         self.ref_reader = MapRefReader() if self.track_ref else NoRefReader()
         self.meta_string_reader = MetaStringReader(type_resolver.shared_registry)
         self.meta_share_context = MetaShareReadContext() if config.scoped_meta_share_enabled else None
@@ -530,6 +534,7 @@ class ReadContext:
         self.unsupported_objects = iter(unsupported_objects) if unsupported_objects is not None else None
         self.peer_out_of_band_enabled = peer_out_of_band_enabled
         self._remaining_graph_memory_bytes = self._max_graph_memory_bytes
+        self.remaining_unbacked_container_items = self._max_unbacked_container_items
         self.depth = 0
 
     def reset(self):
@@ -545,6 +550,7 @@ class ReadContext:
         self.unsupported_objects = None
         self.peer_out_of_band_enabled = False
         self._remaining_graph_memory_bytes = 0
+        self.remaining_unbacked_container_items = 0
         self.depth = 0
         if buffer is not None:
             buffer.shrink_input_buffer()
@@ -563,6 +569,22 @@ class ReadContext:
                 "Increase Fory(..., max_graph_memory_bytes=...) for trusted larger payloads."
             )
         self._remaining_graph_memory_bytes = remaining - num_bytes
+
+    def reserve_unbacked_container_items(self, num_items):
+        remaining = self.remaining_unbacked_container_items
+        if num_items > remaining:
+            self._raise_unbacked_container_items(num_items, remaining)
+        self.remaining_unbacked_container_items = remaining - num_items
+
+    def _raise_unbacked_container_items(self, num_items, remaining):
+        if num_items < 0:
+            raise ValueError("Unbacked container item count is negative")
+        used = self._max_unbacked_container_items - remaining
+        raise ValueError(
+            f"Unbacked container item budget exceeded: requested {num_items} items, "
+            f"used {used} items, limit {self._max_unbacked_container_items} items. "
+            "Increase Fory(..., max_unbacked_container_items=...) for trusted larger payloads."
+        )
 
     def add_context_object(self, key, obj):
         self.context_objects[id(key)] = obj

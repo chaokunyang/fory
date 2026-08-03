@@ -110,6 +110,11 @@ public final class PrimitiveArraySerializers {
       super(typeResolver.getConfig(), cls);
       this.config = typeResolver.getConfig();
     }
+
+    @Override
+    public final boolean readBodyAlwaysAdvances() {
+      return true;
+    }
   }
 
   private static void throwNegativeBinarySize(int size) {

@@ -32,6 +32,17 @@ extension ReadContext {
         return TypeId.needsTypeInfoForField(resolved)
     }
 
+    @inline(__always)
+    private func skippedFieldReadAlwaysAdvances(
+        _ fieldType: TypeMeta.FieldType,
+        typeInfo: TypeInfo?
+    ) -> Bool {
+        if let typeInfo {
+            return typeInfo.readDataAlwaysAdvances
+        }
+        return TypeId(rawValue: fieldType.typeID)?.readDataAlwaysAdvances == true
+    }
+
     private func readSkippedFieldValue(
         fieldType: TypeMeta.FieldType,
         typeInfo: TypeInfo? = nil,
@@ -274,10 +285,39 @@ extension ReadContext {
         if sameType, !declared {
             typeInfo = try self.readTypeInfo()
         }
-        // NONE has no element body, so iterating an untrusted shared count cannot make progress.
-        if sameType, !trackRef, !hasNull,
-            (declared ? TypeId(rawValue: elementFieldType.typeID) : typeInfo?.typeID) == TypeId.none
-        {
+
+        if sameType, !trackRef, !hasNull {
+            if skippedFieldReadAlwaysAdvances(elementFieldType, typeInfo: typeInfo) {
+                for _ in 0..<length {
+                    _ = try readSkippedFieldPayload(
+                        fieldType: elementFieldType,
+                        typeInfo: typeInfo,
+                        readTypeInfo: false
+                    )
+                }
+                return []
+            }
+
+            var windowStart = buffer.cursor
+            var windowItems = 0
+            for _ in 0..<length {
+                _ = try readSkippedFieldPayload(
+                    fieldType: elementFieldType,
+                    typeInfo: typeInfo,
+                    readTypeInfo: false
+                )
+                windowItems += 1
+                if windowItems == unbackedContainerCheckInterval {
+                    try settleUnbackedContainerItems(
+                        self, completed: windowItems, startCursor: windowStart)
+                    windowStart = buffer.cursor
+                    windowItems = 0
+                }
+            }
+            if windowItems != 0 {
+                try settleUnbackedContainerItems(
+                    self, completed: windowItems, startCursor: windowStart)
+            }
             return []
         }
 
@@ -298,12 +338,6 @@ extension ReadContext {
                     if refFlag != RefFlag.notNullValue.rawValue {
                         throw ForyError.invalidData("invalid collection nullability flag \(refFlag)")
                     }
-                    _ = try readSkippedFieldPayload(
-                        fieldType: elementFieldType,
-                        typeInfo: typeInfo,
-                        readTypeInfo: false
-                    )
-                } else {
                     _ = try readSkippedFieldPayload(
                         fieldType: elementFieldType,
                         typeInfo: typeInfo,
@@ -413,20 +447,43 @@ extension ReadContext {
 
             let keyTypeInfo = keyDeclared ? nil : try self.readTypeInfo()
             let valueTypeInfo = valueDeclared ? nil : try self.readTypeInfo()
-
-            for _ in 0..<chunkSize {
-                _ = try readSkippedValue(
-                    fieldType: keyType,
-                    typeInfo: keyTypeInfo,
-                    refMode: trackKeyRef ? .tracking : .none,
-                    readTypeInfo: false
-                )
-                _ = try readSkippedValue(
-                    fieldType: valueType,
-                    typeInfo: valueTypeInfo,
-                    refMode: trackValueRef ? .tracking : .none,
-                    readTypeInfo: false
-                )
+            let alwaysAdvances =
+                trackKeyRef || trackValueRef
+                || skippedFieldReadAlwaysAdvances(keyType, typeInfo: keyTypeInfo)
+                || skippedFieldReadAlwaysAdvances(valueType, typeInfo: valueTypeInfo)
+            if alwaysAdvances {
+                for _ in 0..<chunkSize {
+                    _ = try readSkippedValue(
+                        fieldType: keyType,
+                        typeInfo: keyTypeInfo,
+                        refMode: trackKeyRef ? .tracking : .none,
+                        readTypeInfo: false
+                    )
+                    _ = try readSkippedValue(
+                        fieldType: valueType,
+                        typeInfo: valueTypeInfo,
+                        refMode: trackValueRef ? .tracking : .none,
+                        readTypeInfo: false
+                    )
+                }
+            } else {
+                let chunkStart = buffer.cursor
+                for _ in 0..<chunkSize {
+                    _ = try readSkippedValue(
+                        fieldType: keyType,
+                        typeInfo: keyTypeInfo,
+                        refMode: .none,
+                        readTypeInfo: false
+                    )
+                    _ = try readSkippedValue(
+                        fieldType: valueType,
+                        typeInfo: valueTypeInfo,
+                        refMode: .none,
+                        readTypeInfo: false
+                    )
+                }
+                try settleUnbackedContainerItems(
+                    self, completed: chunkSize, startCursor: chunkStart)
             }
             readCount += chunkSize
         }

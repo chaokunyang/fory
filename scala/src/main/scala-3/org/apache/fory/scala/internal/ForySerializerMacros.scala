@@ -308,6 +308,44 @@ object ForySerializerMacros {
       }
     }
 
+    def typeReadBodyAlwaysAdvances(tpe: TypeRepr): Boolean = {
+      val normalized = peelAnnotations(tpe.widen)._1.dealias
+      val fullName = normalized.typeSymbol.fullName
+      val boxedScalar = Set(
+        "java.lang.Boolean",
+        "java.lang.Byte",
+        "java.lang.Character",
+        "java.lang.Short",
+        "java.lang.Integer",
+        "java.lang.Long",
+        "java.lang.Float",
+        "java.lang.Double")
+      val framedValue = Set(
+        "java.math.BigDecimal",
+        "java.math.BigInteger",
+        "java.time.Duration",
+        "java.time.Instant",
+        "java.time.LocalDate")
+      wireTypeId(normalized) != Types.UNKNOWN ||
+      normalized =:= TypeRepr.of[Char] ||
+      boxedScalar.contains(fullName) ||
+      framedValue.contains(fullName) ||
+      fullName == "scala.Array" ||
+      isScalaEnumType(normalized) ||
+      hasAnnotation[ForyUnion](normalized.typeSymbol) ||
+      normalized.baseClasses.exists { base =>
+        val name = base.fullName
+        name == "scala.collection.Iterable" ||
+        name == "scala.collection.Map" ||
+        name == "java.util.Collection" ||
+        name == "java.util.Map"
+      }
+    }
+
+    val generatedReadBodyAlwaysAdvances = fields.exists { field =>
+      field.nullable || field.trackingRef || typeReadBodyAlwaysAdvances(field.wireType)
+    }
+
     def descriptor(field: FieldMeta): Expr[Descriptor] = {
       '{
         new Descriptor(
@@ -1329,6 +1367,10 @@ object ForySerializerMacros {
 
             override def getGeneratedDescriptors(): java.util.List[Descriptor] = descriptors
 
+            override def readBodyAlwaysAdvances(): Boolean =
+              ${ Expr(generatedReadBodyAlwaysAdvances) } &&
+                (remoteTypeDef == null || sameSchemaCompatible)
+
             override def copySerializer(
                 typeResolver: TypeResolver,
                 typeClass: Class[?],
@@ -1975,6 +2017,8 @@ object ForySerializerMacros {
               val caseId = buffer.readVarUInt32()
               ${ readDispatch('caseId, 'readContext, 'resolver, 'caseFieldInfos) }
             }
+
+            override def readBodyAlwaysAdvances(): Boolean = true
 
             override def copy(copyContext: org.apache.fory.context.CopyContext, value: T): T = {
               val copied = ${ copyDispatch('value, 'copyContext, 'caseFieldInfos) }

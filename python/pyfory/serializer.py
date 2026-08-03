@@ -504,6 +504,7 @@ class DecimalSerializer(Serializer):
     def __init__(self, type_resolver, type_):
         super().__init__(type_resolver, type_)
         self.need_to_write_ref = False
+        self.read_data_always_advances = True
 
     def write(self, write_context, value: decimal.Decimal):
         scale, unscaled = _decimal_parts(value)
@@ -641,6 +642,7 @@ class PyArraySerializer(Serializer):
 
     def __init__(self, type_resolver, ftype, type_id: str):
         super().__init__(type_resolver, ftype)
+        self.read_data_always_advances = True
         self.typecode = typeid_code[type_id]
         self.itemsize, ftype, self.type_id = typecode_dict[self.typecode]
 
@@ -728,6 +730,7 @@ class ForyArrayListAdapterSerializer(Serializer):
         self.wrapper_serializer = wrapper_serializer
         self.field_name = field_name or "<array>"
         self.need_to_write_ref = False
+        self.read_data_always_advances = True
 
     def _copy_list_to_wrapper(self, value):
         if type(value) is not list:
@@ -764,6 +767,7 @@ class ForyArrayFieldSerializer(Serializer):
         self.pyarray_serializer = self._build_pyarray_serializer(type_resolver, type_id)
         self.ndarray_serializer = self._build_ndarray_serializer(type_resolver, type_id)
         self.need_to_write_ref = False
+        self.read_data_always_advances = True
 
     def _build_pyarray_serializer(self, type_resolver, type_id):
         typecode = typeid_code.get(type_id)
@@ -828,6 +832,7 @@ class DynamicPyArraySerializer(Serializer):
 
     def __init__(self, type_resolver, cls):
         super().__init__(type_resolver, cls)
+        self.read_data_always_advances = True
 
     def write(self, buffer, value):
         try:
@@ -910,6 +915,7 @@ class Numpy1DArraySerializer(Serializer):
 
     def __init__(self, type_resolver, ftype, dtype):
         super().__init__(type_resolver, ftype)
+        self.read_data_always_advances = True
         self.dtype = dtype
         self.itemsize, self.typecode, _, self.type_id = _np_dtypes_dict[self.dtype]
 
@@ -955,6 +961,10 @@ def _is_numpy_1d_array_serializer(serializer):
 
 
 class NDArraySerializer(Serializer):
+    def __init__(self, type_resolver, type_):
+        super().__init__(type_resolver, type_)
+        self.read_data_always_advances = True
+
     def write(self, buffer, value):
         # Write concrete 1D primitive ndarray using type id + bytes payload.
         dtype_info = _np_dtypes_dict.get(value.dtype)
@@ -1071,6 +1081,10 @@ class PythonNDArraySerializer(NDArraySerializer):
 
 
 class BytesSerializer(Serializer):
+    def __init__(self, type_resolver, type_):
+        super().__init__(type_resolver, type_)
+        self.read_data_always_advances = True
+
     def write(self, write_context, value):
         if write_context.buffer_callback is None:
             write_context.write_bytes_and_size(value)
@@ -1936,6 +1950,7 @@ class NonExistEnumSerializer(Serializer):
     def __init__(self, type_resolver):
         super().__init__(type_resolver, NonExistEnum)
         self.need_to_write_ref = False
+        self.read_data_always_advances = True
 
     @classmethod
     def support_subclass(cls) -> bool:

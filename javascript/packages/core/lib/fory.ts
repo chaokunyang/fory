@@ -39,6 +39,7 @@ const DEFAULT_MAX_TYPE_META_BYTES = 4096 as const;
 const DEFAULT_MAX_SCHEMA_VERSIONS_PER_TYPE = 10 as const;
 const DEFAULT_MAX_AVERAGE_SCHEMA_VERSIONS_PER_TYPE = 3 as const;
 const DEFAULT_MAX_GRAPH_MEMORY_BYTES = 128 * 1024 * 1024;
+const DEFAULT_MAX_UNBACKED_CONTAINER_ITEMS = 8192 as const;
 export default class Fory {
   readonly typeResolver: TypeResolver;
   readonly anySerializer: Serializer;
@@ -100,11 +101,19 @@ export default class Fory {
         `maxGraphMemoryBytes must be in range [1, ${Number.MAX_SAFE_INTEGER}] but got ${maxGraphMemoryBytes}`,
       );
     }
+    const maxUnbackedContainerItems =
+      config?.maxUnbackedContainerItems ?? DEFAULT_MAX_UNBACKED_CONTAINER_ITEMS;
+    if (!Number.isSafeInteger(maxUnbackedContainerItems) || maxUnbackedContainerItems < 0) {
+      throw new Error(
+        `maxUnbackedContainerItems must be in range [0, ${Number.MAX_SAFE_INTEGER}] but got ${maxUnbackedContainerItems}`,
+      );
+    }
     return {
       ref: Boolean(config?.ref),
       useSliceString: Boolean(config?.useSliceString),
       maxDepth: config?.maxDepth,
       maxGraphMemoryBytes,
+      maxUnbackedContainerItems,
       maxTypeFields,
       maxTypeMetaBytes,
       maxSchemaVersionsPerType,

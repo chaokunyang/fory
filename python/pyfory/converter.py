@@ -472,6 +472,7 @@ class CompatibleScalarFieldSerializer(Serializer):
         self.remote_type_id = remote_type_id
         self.local_type_id = local_type_id
         self.field_name = field_name
+        self.read_data_always_advances = remote_serializer.read_data_always_advances
 
     def write(self, write_context, value):
         raise NotImplementedError("compatible scalar field serializer is read-only")
@@ -490,6 +491,7 @@ class CompatibleArrayToListFieldSerializer(Serializer):
         self.remote_array_serializer = remote_array_serializer
         self.elem_serializer = elem_serializer
         self.need_to_write_ref = False
+        self.read_data_always_advances = remote_array_serializer.read_data_always_advances
 
     def write(self, buffer, value):
         raise TypeError("compatible array-to-list field serializer is read-only")
@@ -510,6 +512,7 @@ class CompatibleListToArrayFieldSerializer(Serializer):
         self.min_elem_bytes = _MIN_LIST_ELEMENT_BYTES[remote_elem_type_id]
         self.field_name = field_name or "<array>"
         self.need_to_write_ref = False
+        self.read_data_always_advances = True
 
     def write(self, buffer, value):
         raise TypeError("compatible list-to-array field serializer is read-only")

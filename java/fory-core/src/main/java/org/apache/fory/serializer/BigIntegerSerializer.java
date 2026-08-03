@@ -95,4 +95,9 @@ public final class BigIntegerSerializer extends ImmutableSerializer<BigInteger>
           "BigInteger magnitude exceeds " + DecimalSerializer.MAX_MAGNITUDE_BYTES + " bytes");
     }
   }
+
+  @Override
+  public boolean readBodyAlwaysAdvances() {
+    return true;
+  }
 }

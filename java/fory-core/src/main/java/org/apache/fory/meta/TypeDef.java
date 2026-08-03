@@ -79,12 +79,21 @@ public class TypeDef implements Serializable {
   // be same too.
   private final long id;
   private final byte[] encoded;
+  private final boolean readBodyAlwaysAdvances;
 
   TypeDef(ClassSpec classSpec, List<FieldInfo> fieldsInfo, long id, byte[] encoded) {
     this.classSpec = classSpec;
     this.fieldsInfo = fieldsInfo;
     this.id = id;
     this.encoded = encoded;
+    boolean readBodyAlwaysAdvances = false;
+    for (FieldInfo fieldInfo : fieldsInfo) {
+      if (fieldInfo.getFieldType().readBodyAlwaysAdvances()) {
+        readBodyAlwaysAdvances = true;
+        break;
+      }
+    }
+    this.readBodyAlwaysAdvances = readBodyAlwaysAdvances;
   }
 
   public static void skipTypeDef(MemoryBuffer buffer, long id) {
@@ -136,6 +145,12 @@ public class TypeDef implements Serializable {
 
   public int getFieldCount() {
     return fieldsInfo.size();
+  }
+
+  /** Returns whether this exact schema body always consumes at least one input byte. */
+  @Internal
+  public boolean readBodyAlwaysAdvances() {
+    return readBodyAlwaysAdvances;
   }
 
   public boolean isNamed() {

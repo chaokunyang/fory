@@ -29,6 +29,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import org.apache.fory.Fory;
+import org.apache.fory.annotation.ForyField;
+import org.apache.fory.annotation.ForyStruct;
 import org.apache.fory.builder.ObjectCodecBuilder;
 import org.apache.fory.context.ReadContext;
 import org.apache.fory.context.WriteContext;
@@ -48,6 +50,24 @@ public class UnbackedContainerItemsTest {
 
   public static final class PositiveMapHolder {
     public Map<Integer, Empty> values;
+  }
+
+  @ForyStruct
+  public static class PositiveStruct {
+    @ForyField(id = 1)
+    public int value;
+  }
+
+  @ForyStruct
+  public static class PositiveStructHolder {
+    @ForyField(id = 1)
+    public List<PositiveStruct> values;
+  }
+
+  @ForyStruct
+  public static class PositiveContainerStruct {
+    @ForyField(id = 1)
+    public List<Empty> values;
   }
 
   public static final class MapHolder {
@@ -128,6 +148,33 @@ public class UnbackedContainerItemsTest {
     String mapCode = new ObjectCodecBuilder(PositiveMapHolder.class, fory).genCode();
     assertFalse(mapCode.contains("reserveUnbackedContainerItems"));
     assertTrue(mapCode.contains(".newMap(readContext2, true)"), mapCode);
+  }
+
+  @Test
+  public void testStructProgressProof() {
+    Fory fory = Fory.builder().withXlang(true).requireClassRegistration(false).build();
+    fory.register(Empty.class, "test.empty");
+    fory.register(PositiveStruct.class, "test.positive_struct");
+    fory.register(PositiveStructHolder.class, "test.positive_struct_holder");
+    fory.register(PositiveContainerStruct.class, "test.positive_container_struct");
+
+    assertTrue(
+        fory.getTypeResolver().getTypeDef(PositiveStruct.class, true).readBodyAlwaysAdvances());
+    assertTrue(
+        fory.getTypeResolver()
+            .getTypeDef(PositiveContainerStruct.class, true)
+            .readBodyAlwaysAdvances());
+    assertFalse(fory.getTypeResolver().getTypeDef(Empty.class, true).readBodyAlwaysAdvances());
+    String code = new ObjectCodecBuilder(PositiveStructHolder.class, fory).genCode();
+    int readCollection = code.indexOf("private Object readCollection(");
+    int declaredRead = code.indexOf("& 4) == 4", readCollection);
+    int remoteRead = code.indexOf("_f_typeResolver.readTypeInfo", declaredRead);
+    int dynamicProgressCheck = code.indexOf(".readBodyAlwaysAdvances()", remoteRead);
+    assertTrue(readCollection >= 0 && declaredRead > readCollection, code);
+    assertTrue(remoteRead > declaredRead && dynamicProgressCheck > remoteRead, code);
+    String declaredPath = code.substring(declaredRead, remoteRead);
+    assertFalse(declaredPath.contains("readBodyAlwaysAdvances"), declaredPath);
+    assertFalse(declaredPath.contains("reserveUnbackedContainerItems"), declaredPath);
   }
 
   private static Fory newFory(int maxItems) {

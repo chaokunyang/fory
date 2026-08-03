@@ -472,6 +472,10 @@ public class FieldTypes {
       return typeId;
     }
 
+    boolean readBodyAlwaysAdvances() {
+      return nullable || trackingRef;
+    }
+
     private int typeKind() {
       if (this instanceof RegisteredFieldType) {
         return KIND_REGISTERED;
@@ -753,6 +757,26 @@ public class FieldTypes {
     }
 
     @Override
+    boolean readBodyAlwaysAdvances() {
+      if (super.readBodyAlwaysAdvances()
+          || Types.isPrimitiveType(typeId)
+          || Types.isPrimitiveArray(typeId)) {
+        return true;
+      }
+      switch (typeId) {
+        case Types.STRING:
+        case Types.DURATION:
+        case Types.TIMESTAMP:
+        case Types.DATE:
+        case Types.DECIMAL:
+        case Types.BINARY:
+          return true;
+        default:
+          return false;
+      }
+    }
+
+    @Override
     public TypeRef<?> toTypeToken(TypeResolver resolver, TypeRef<?> declared) {
       Class<?> cls;
       int internalTypeId = typeId;
@@ -1005,6 +1029,11 @@ public class FieldTypes {
     }
 
     @Override
+    boolean readBodyAlwaysAdvances() {
+      return true;
+    }
+
+    @Override
     public TypeRef<?> toTypeToken(TypeResolver resolver, TypeRef<?> declared) {
       Class<?> declaredClass;
       TypeRef<?> declElementType;
@@ -1117,6 +1146,11 @@ public class FieldTypes {
     }
 
     @Override
+    boolean readBodyAlwaysAdvances() {
+      return true;
+    }
+
+    @Override
     public TypeRef<?> toTypeToken(TypeResolver classResolver, TypeRef<?> declared) {
       TypeRef<?> keyDecl = null;
       TypeRef<?> valueDecl = null;
@@ -1190,6 +1224,11 @@ public class FieldTypes {
     }
 
     @Override
+    boolean readBodyAlwaysAdvances() {
+      return true;
+    }
+
+    @Override
     public TypeRef<?> toTypeToken(TypeResolver classResolver, TypeRef<?> declared) {
       if (declared != null) {
         return TypeRef.of(
@@ -1229,6 +1268,11 @@ public class FieldTypes {
       super(typeId, -1, nullable, trackingRef);
       this.componentType = componentType;
       this.dimensions = dimensions;
+    }
+
+    @Override
+    boolean readBodyAlwaysAdvances() {
+      return true;
     }
 
     @Override
@@ -1354,6 +1398,11 @@ public class FieldTypes {
 
     public UnionFieldType(boolean nullable, boolean trackingRef) {
       super(Types.UNION, -1, nullable, trackingRef);
+    }
+
+    @Override
+    boolean readBodyAlwaysAdvances() {
+      return true;
     }
 
     @Override

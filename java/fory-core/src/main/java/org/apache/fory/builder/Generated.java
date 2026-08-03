@@ -131,6 +131,11 @@ public interface Generated {
     }
 
     @Override
+    public final boolean readBodyAlwaysAdvances() {
+      return typeDef.readBodyAlwaysAdvances();
+    }
+
+    @Override
     public final Object read(ReadContext readContext) {
       return readCompatible(readContext);
     }

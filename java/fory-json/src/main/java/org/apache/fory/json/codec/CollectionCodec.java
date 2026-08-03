@@ -1616,16 +1616,9 @@ public abstract class CollectionCodec<T extends Collection<?>> implements JsonVa
         list.add(e3);
         return list;
       }
-      return readUtf8ArrayListTail(reader, codec, e0, e1, e2, e3);
-    }
-
-    private ArrayList<Object> readUtf8ArrayListTail(
-        Utf8JsonReader reader,
-        Utf8ReaderCodec<Object> codec,
-        Object e0,
-        Object e1,
-        Object e2,
-        Object e3) {
+      // Keep the fifth exact-allocation lane in the collection owner. If this lane is split after
+      // four elements, both resulting methods fall below C2's hot-inline limit and let an outer
+      // fallback caller absorb the object-element closure according to compilation order.
       Object e4 = codec.readUtf8(reader);
       if (!reader.consumeNextCommaOrEndArray()) {
         reader.exitDepth();
@@ -1638,6 +1631,17 @@ public abstract class CollectionCodec<T extends Collection<?>> implements JsonVa
         list.add(e4);
         return list;
       }
+      return readUtf8ArrayListTail(reader, codec, e0, e1, e2, e3, e4);
+    }
+
+    private ArrayList<Object> readUtf8ArrayListTail(
+        Utf8JsonReader reader,
+        Utf8ReaderCodec<Object> codec,
+        Object e0,
+        Object e1,
+        Object e2,
+        Object e3,
+        Object e4) {
       Object e5 = codec.readUtf8(reader);
       if (!reader.consumeNextCommaOrEndArray()) {
         reader.exitDepth();

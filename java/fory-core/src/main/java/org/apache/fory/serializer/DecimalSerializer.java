@@ -260,7 +260,7 @@ public final class DecimalSerializer extends ImmutableSerializer<BigDecimal> imp
   }
 
   @Override
-  public boolean readBodyAlwaysAdvances() {
+  public boolean readDataAlwaysAdvances() {
     return true;
   }
 }

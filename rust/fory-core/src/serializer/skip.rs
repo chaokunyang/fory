@@ -20,8 +20,8 @@ use crate::ensure;
 use crate::error::Error;
 use crate::meta::FieldType;
 use crate::serializer::collection::{
-    field_body_always_advances, settle_unbacked_items, DECL_ELEMENT_TYPE, HAS_NULL, IS_SAME_TYPE,
-    TRACKING_REF,
+    field_read_data_always_advances, settle_unbacked_items, DECL_ELEMENT_TYPE, HAS_NULL,
+    IS_SAME_TYPE, TRACKING_REF,
 };
 use crate::serializer::util;
 use crate::type_id as types;
@@ -338,7 +338,7 @@ fn skip_collection(context: &mut ReadContext, field_type: &FieldType) -> Result<
     };
     context.inc_depth()?;
     let null_only = has_null && !track_ref;
-    if track_ref || has_null || field_body_always_advances(elem_type) {
+    if track_ref || has_null || field_read_data_always_advances(elem_type) {
         for _ in 0..length {
             skip_value(
                 context,
@@ -520,11 +520,11 @@ fn skip_map(context: &mut ReadContext, field_type: &FieldType) -> Result<(), Err
         };
 
         context.inc_depth()?;
-        let always_advances = key_track_ref
+        let entry_read_always_advances = key_track_ref
             || value_track_ref
-            || field_body_always_advances(key_type)
-            || field_body_always_advances(value_type);
-        if always_advances {
+            || field_read_data_always_advances(key_type)
+            || field_read_data_always_advances(value_type);
+        if entry_read_always_advances {
             for _ in 0..chunk_size {
                 skip_value(
                     context,

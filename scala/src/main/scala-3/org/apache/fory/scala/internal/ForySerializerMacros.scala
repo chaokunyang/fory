@@ -308,7 +308,7 @@ object ForySerializerMacros {
       }
     }
 
-    def typeReadBodyAlwaysAdvances(tpe: TypeRepr): Boolean = {
+    def typeReadDataAlwaysAdvances(tpe: TypeRepr): Boolean = {
       val normalized = peelAnnotations(tpe.widen)._1.dealias
       val fullName = normalized.typeSymbol.fullName
       val boxedScalar = Set(
@@ -342,8 +342,8 @@ object ForySerializerMacros {
       }
     }
 
-    val generatedReadBodyAlwaysAdvances = fields.exists { field =>
-      field.nullable || field.trackingRef || typeReadBodyAlwaysAdvances(field.wireType)
+    val generatedReadDataAlwaysAdvances = fields.exists { field =>
+      field.nullable || field.trackingRef || typeReadDataAlwaysAdvances(field.wireType)
     }
 
     def descriptor(field: FieldMeta): Expr[Descriptor] = {
@@ -1367,8 +1367,8 @@ object ForySerializerMacros {
 
             override def getGeneratedDescriptors(): java.util.List[Descriptor] = descriptors
 
-            override def readBodyAlwaysAdvances(): Boolean =
-              ${ Expr(generatedReadBodyAlwaysAdvances) } &&
+            override def readDataAlwaysAdvances(): Boolean =
+              ${ Expr(generatedReadDataAlwaysAdvances) } &&
                 (remoteTypeDef == null || sameSchemaCompatible)
 
             override def copySerializer(
@@ -2018,7 +2018,7 @@ object ForySerializerMacros {
               ${ readDispatch('caseId, 'readContext, 'resolver, 'caseFieldInfos) }
             }
 
-            override def readBodyAlwaysAdvances(): Boolean = true
+            override def readDataAlwaysAdvances(): Boolean = true
 
             override def copy(copyContext: org.apache.fory.context.CopyContext, value: T): T = {
               val copied = ${ copyDispatch('value, 'copyContext, 'caseFieldInfos) }

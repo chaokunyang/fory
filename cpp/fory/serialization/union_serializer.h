@@ -536,17 +536,17 @@ Container read_union_configured_list_data(ReadContext &ctx) {
       return result;
     }
   }
-  constexpr bool body_always_advances = []() constexpr {
+  constexpr bool element_read_data_always_advances = []() constexpr {
     if constexpr (ElemNode >= 0) {
       return union_read_data_always_advances<Elem, SpecProvider, ElemNode>();
     }
     return read_data_always_advances_v<Elem>;
   }();
-  if (FORY_PREDICT_FALSE(
-          !reserve_collection<body_always_advances>(result, ctx, length))) {
+  if (FORY_PREDICT_FALSE(!reserve_collection<element_read_data_always_advances>(
+          result, ctx, length))) {
     return result;
   }
-  if constexpr (body_always_advances) {
+  if constexpr (element_read_data_always_advances) {
     (void)read_union_list_items<false, Container, SpecProvider, ElemNode>(
         result, ctx, length);
   } else {
@@ -655,22 +655,22 @@ MapType read_union_configured_map_data(ReadContext &ctx) {
   if (length == 0) {
     return result;
   }
-  constexpr bool key_always_advances = []() constexpr {
+  constexpr bool key_read_data_always_advances = []() constexpr {
     if constexpr (KeyNode >= 0) {
       return union_read_data_always_advances<Key, SpecProvider, KeyNode>();
     }
     return read_data_always_advances_v<Key>;
   }();
-  constexpr bool value_always_advances = []() constexpr {
+  constexpr bool value_read_data_always_advances = []() constexpr {
     if constexpr (ValueNode >= 0) {
       return union_read_data_always_advances<Value, SpecProvider, ValueNode>();
     }
     return read_data_always_advances_v<Value>;
   }();
-  constexpr bool entry_always_advances =
-      key_always_advances || value_always_advances;
+  constexpr bool entry_read_data_always_advances =
+      key_read_data_always_advances || value_read_data_always_advances;
   if (FORY_PREDICT_FALSE(
-          !reserve_map<entry_always_advances>(result, ctx, length))) {
+          !reserve_map<entry_read_data_always_advances>(result, ctx, length))) {
     return result;
   }
   uint32_t read_count = 0;
@@ -695,7 +695,7 @@ MapType read_union_configured_map_data(ReadContext &ctx) {
     if (FORY_PREDICT_FALSE(ctx.has_error())) {
       return result;
     }
-    if constexpr (entry_always_advances) {
+    if constexpr (entry_read_data_always_advances) {
       if (FORY_PREDICT_FALSE(
               (!read_union_map_chunk<false, MapType, SpecProvider, KeyNode,
                                      ValueNode>(result, ctx, chunk_size)))) {

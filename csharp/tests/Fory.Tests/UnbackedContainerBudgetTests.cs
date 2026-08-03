@@ -113,25 +113,25 @@ public sealed class UnbackedContainerBudgetTests
     {
         TypeResolver resolver = new();
 
-        Assert.False(resolver.GetTypeInfo<BudgetEmpty>().ReadBodyAlwaysAdvances);
-        Assert.True(resolver.GetTypeInfo<BudgetItem>().ReadBodyAlwaysAdvances);
-        Assert.True(resolver.GetTypeInfo<List<BudgetEmpty>>().ReadBodyAlwaysAdvances);
+        Assert.False(resolver.GetTypeInfo<BudgetEmpty>().ReadDataAlwaysAdvances);
+        Assert.True(resolver.GetTypeInfo<BudgetItem>().ReadDataAlwaysAdvances);
+        Assert.True(resolver.GetTypeInfo<List<BudgetEmpty>>().ReadDataAlwaysAdvances);
     }
 
     [Fact]
     public void RemoteTypeMetaProgressFacts()
     {
         Assert.True(RemoteTypeMeta(new TypeMetaFieldType((uint)TypeId.Int32, false))
-            .ReadBodyAlwaysAdvances);
+            .ReadDataAlwaysAdvances);
         Assert.True(RemoteTypeMeta(new TypeMetaFieldType((uint)TypeId.List, false))
-            .ReadBodyAlwaysAdvances);
+            .ReadDataAlwaysAdvances);
         Assert.True(RemoteTypeMeta(new TypeMetaFieldType((uint)TypeId.Struct, true))
-            .ReadBodyAlwaysAdvances);
-        Assert.False(RemoteTypeMeta().ReadBodyAlwaysAdvances);
+            .ReadDataAlwaysAdvances);
+        Assert.False(RemoteTypeMeta().ReadDataAlwaysAdvances);
         Assert.False(RemoteTypeMeta(new TypeMetaFieldType((uint)TypeId.None, false))
-            .ReadBodyAlwaysAdvances);
+            .ReadDataAlwaysAdvances);
         Assert.False(RemoteTypeMeta(new TypeMetaFieldType((uint)TypeId.Struct, false))
-            .ReadBodyAlwaysAdvances);
+            .ReadDataAlwaysAdvances);
     }
 
     [Fact]

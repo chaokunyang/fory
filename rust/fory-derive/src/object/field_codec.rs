@@ -43,7 +43,7 @@ pub(crate) struct ResolvedField<'a> {
     pub value_ty: &'a Type,
     pub field_id: i16,
     pub has_selected_provider: bool,
-    pub read_data_always_advances: TokenStream,
+    pub read_always_advances: TokenStream,
 }
 
 impl<'a> ResolvedField<'a> {
@@ -275,7 +275,7 @@ pub(crate) fn build_bindings<'a>(
             } else {
                 -1
             };
-            let read_data_always_advances = if track_ref || is_option_type(&source.field.ty) {
+            let field_read_always_advances = if track_ref || is_option_type(&source.field.ty) {
                 quote! { true }
             } else if meta.with.is_some() || codec_body_is_known(&source.field.ty) {
                 let codec_ty = &selection.ty;
@@ -290,7 +290,7 @@ pub(crate) fn build_bindings<'a>(
                 value_ty: &source.field.ty,
                 field_id,
                 has_selected_provider: meta.with.is_some(),
-                read_data_always_advances,
+                read_always_advances: field_read_always_advances,
             }))
         })
         .collect()
@@ -301,7 +301,7 @@ pub(crate) fn struct_read_data_always_advances(
 ) -> syn::Result<TokenStream> {
     let bindings = build_bindings(source_fields)?;
     let fields = bindings.iter().filter_map(|binding| match binding {
-        FieldBinding::Codec(field) => Some(&field.read_data_always_advances),
+        FieldBinding::Codec(field) => Some(&field.read_always_advances),
         FieldBinding::Skipped(_) => None,
     });
     Ok(quote! { false #(|| #fields)* })

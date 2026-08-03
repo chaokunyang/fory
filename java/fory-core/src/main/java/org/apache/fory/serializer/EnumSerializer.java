@@ -340,7 +340,7 @@ public class EnumSerializer extends ImmutableSerializer<Enum> implements Shareab
   }
 
   @Override
-  public final boolean readBodyAlwaysAdvances() {
+  public final boolean readDataAlwaysAdvances() {
     return true;
   }
 }

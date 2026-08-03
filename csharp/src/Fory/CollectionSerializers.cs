@@ -305,27 +305,27 @@ internal static class CollectionReadCodec
             context.TypeResolver.ReadTypeInfo(elementSerializer, context);
         }
 
-        bool readBodyAlwaysAdvances = false;
+        bool elementReadAlwaysAdvances = false;
         if (sameType && !trackRef && !hasNull)
         {
-            readBodyAlwaysAdvances = context.TypeResolver.GetTypeInfo<T>()
-                .ReadBodyAlwaysAdvancesFor(elementSerializer);
+            elementReadAlwaysAdvances = context.TypeResolver.GetTypeInfo<T>()
+                .ReadDataAlwaysAdvancesFor(elementSerializer);
             if (!declared)
             {
                 if (typeof(T) == typeof(object))
                 {
-                    readBodyAlwaysAdvances = context.GetReadTypeInfo(typeof(T))?
-                        .ReadBodyAlwaysAdvances ?? readBodyAlwaysAdvances;
+                    elementReadAlwaysAdvances = context.GetReadTypeInfo(typeof(T))?
+                        .ReadDataAlwaysAdvances ?? elementReadAlwaysAdvances;
                 }
                 else if (context.Compatible)
                 {
-                    readBodyAlwaysAdvances = context.GetTypeMeta<T>()?
-                        .ReadBodyAlwaysAdvances ?? readBodyAlwaysAdvances;
+                    elementReadAlwaysAdvances = context.GetTypeMeta<T>()?
+                        .ReadDataAlwaysAdvances ?? elementReadAlwaysAdvances;
                 }
             }
         }
 
-        bool guardUnbackedItems = sameType && !trackRef && !hasNull && !readBodyAlwaysAdvances;
+        bool guardUnbackedItems = sameType && !trackRef && !hasNull && !elementReadAlwaysAdvances;
         if (guardUnbackedItems)
         {
             context.CheckUnbackedContainerAllocation(length);

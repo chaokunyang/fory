@@ -168,11 +168,11 @@ void main() {
     );
 
     expect(
-      GeneratedTypeCatalog.lookup(BudgetEmpty)!.readBodyAlwaysAdvances,
+      GeneratedTypeCatalog.lookup(BudgetEmpty)!.readDataAlwaysAdvances,
       isFalse,
     );
     expect(
-      GeneratedTypeCatalog.lookup(BudgetScalar)!.readBodyAlwaysAdvances,
+      GeneratedTypeCatalog.lookup(BudgetScalar)!.readDataAlwaysAdvances,
       isTrue,
     );
   });

@@ -532,7 +532,7 @@ cdef class ListSerializer(CollectionSerializer):
         cdef int32_t ref_id
         cdef int64_t i
         cdef int64_t graph_bytes
-        cdef bint body_always_advances
+        cdef bint element_read_always_advances
         if len_ < 0:
             raise ValueError("Container element count is negative")
         graph_bytes = _LIST_OWNER_BYTES + <int64_t>len_ * _REFERENCE_BYTES
@@ -567,12 +567,12 @@ cdef class ListSerializer(CollectionSerializer):
                 elem_serializer = typeinfo.serializer
             else:
                 typeinfo = self.elem_type_info
-        body_always_advances = (
+        element_read_always_advances = (
             (collect_flag & (COLL_TRACKING_REF | COLL_HAS_NULL)) != 0
             or (collect_flag & COLL_IS_SAME_TYPE) == 0
             or elem_serializer.read_data_always_advances
         )
-        if body_always_advances:
+        if element_read_always_advances:
             read_context.check_readable_bytes_c(len_)
         else:
             ensure_container_allocation(read_context, len_)
@@ -585,7 +585,7 @@ cdef class ListSerializer(CollectionSerializer):
                     self._read_primitive_fastpath(read_context, len_, list_, type_id)
                     return list_
                 if (collect_flag & COLL_TRACKING_REF) == 0:
-                    if body_always_advances:
+                    if element_read_always_advances:
                         self._read_same_type_no_ref(read_context, len_, list_, elem_serializer)
                     else:
                         self._read_same_type_no_ref_guarded(read_context, len_, list_, elem_serializer)
@@ -680,7 +680,7 @@ cdef class TupleSerializer(CollectionSerializer):
         cdef int8_t head_flag
         cdef int64_t i
         cdef int64_t graph_bytes
-        cdef bint body_always_advances
+        cdef bint element_read_always_advances
         if len_ < 0:
             raise ValueError("Container element count is negative")
         graph_bytes = _TUPLE_OWNER_BYTES + <int64_t>len_ * _REFERENCE_BYTES
@@ -709,12 +709,12 @@ cdef class TupleSerializer(CollectionSerializer):
                 elem_serializer = typeinfo.serializer
             else:
                 typeinfo = self.elem_type_info
-        body_always_advances = (
+        element_read_always_advances = (
             (collect_flag & (COLL_TRACKING_REF | COLL_HAS_NULL)) != 0
             or (collect_flag & COLL_IS_SAME_TYPE) == 0
             or elem_serializer.read_data_always_advances
         )
-        if body_always_advances:
+        if element_read_always_advances:
             read_context.check_readable_bytes_c(len_)
         else:
             ensure_container_allocation(read_context, len_)
@@ -726,7 +726,7 @@ cdef class TupleSerializer(CollectionSerializer):
                     self._read_primitive_fastpath(read_context, len_, tuple_, type_id)
                     return tuple_
                 if (collect_flag & COLL_TRACKING_REF) == 0:
-                    if body_always_advances:
+                    if element_read_always_advances:
                         self._read_same_type_no_ref(read_context, len_, tuple_, elem_serializer)
                     else:
                         self._read_same_type_no_ref_guarded(read_context, len_, tuple_, elem_serializer)
@@ -828,7 +828,7 @@ cdef class SetSerializer(CollectionSerializer):
         cdef int32_t ref_id
         cdef int64_t i
         cdef int64_t graph_bytes
-        cdef bint body_always_advances
+        cdef bint element_read_always_advances
 
         len_ = buffer.read_var_uint32()
         if len_ < 0:
@@ -860,12 +860,12 @@ cdef class SetSerializer(CollectionSerializer):
                 elem_serializer = typeinfo.serializer
             else:
                 typeinfo = self.elem_type_info
-        body_always_advances = (
+        element_read_always_advances = (
             (collect_flag & (COLL_TRACKING_REF | COLL_HAS_NULL)) != 0
             or (collect_flag & COLL_IS_SAME_TYPE) == 0
             or elem_serializer.read_data_always_advances
         )
-        if body_always_advances:
+        if element_read_always_advances:
             read_context.check_readable_bytes_c(len_)
         else:
             ensure_container_allocation(read_context, len_)
@@ -878,7 +878,7 @@ cdef class SetSerializer(CollectionSerializer):
                     self._read_primitive_fastpath(read_context, len_, instance, type_id)
                     return instance
                 if (collect_flag & COLL_TRACKING_REF) == 0:
-                    if body_always_advances:
+                    if element_read_always_advances:
                         self._read_same_type_no_ref(read_context, len_, instance, elem_serializer)
                     else:
                         self._read_same_type_no_ref_guarded(read_context, len_, instance, elem_serializer)
@@ -1017,8 +1017,6 @@ cdef class MapSerializer(Serializer):
         cdef int32_t chunk_size_offset
         cdef int32_t chunk_header
         cdef int32_t chunk_size
-        cdef bint always_advances
-        cdef uint32_t chunk_start
         cdef bint key_write_ref
         cdef bint value_write_ref
         # Map chunking needs Buffer for header patching and raw CBuffer* for the
@@ -1221,7 +1219,7 @@ cdef class MapSerializer(Serializer):
         cdef dict map_
         cdef int8_t chunk_header = 0
         cdef int64_t graph_bytes
-        cdef bint allocation_always_advances
+        cdef bint entry_read_data_always_advances
         if size < 0:
             raise ValueError("Map entry count is negative")
         graph_bytes = _DICT_OWNER_BYTES + <int64_t>size * (2 * _REFERENCE_BYTES)
@@ -1229,14 +1227,14 @@ cdef class MapSerializer(Serializer):
         if size == 0:
             map_ = {}
         else:
-            allocation_always_advances = (
+            entry_read_data_always_advances = (
                 self.key_write_serializer is not None
                 and self.key_write_serializer.read_data_always_advances
             ) or (
                 self.value_write_serializer is not None
                 and self.value_write_serializer.read_data_always_advances
             )
-            if allocation_always_advances:
+            if entry_read_data_always_advances:
                 read_context.check_readable_bytes_c(size)
             else:
                 ensure_container_allocation(read_context, size)
@@ -1253,6 +1251,8 @@ cdef class MapSerializer(Serializer):
         cdef bint track_value_ref
         cdef bint key_is_declared_type
         cdef bint value_is_declared_type
+        cdef bint entry_read_always_advances
+        cdef uint32_t chunk_start
         cdef type key_serializer_type
         cdef type value_serializer_type
         cdef int32_t chunk_size
@@ -1320,13 +1320,13 @@ cdef class MapSerializer(Serializer):
                 key_serializer = self.type_resolver.read_type_info(read_context).serializer
             if not value_is_declared_type:
                 value_serializer = self.type_resolver.read_type_info(read_context).serializer
-            always_advances = (
+            entry_read_always_advances = (
                 track_key_ref
                 or track_value_ref
                 or key_serializer.read_data_always_advances
                 or value_serializer.read_data_always_advances
             )
-            if not always_advances:
+            if not entry_read_always_advances:
                 chunk_start = read_context.c_buffer.reader_index()
             key_serializer_type = type(key_serializer)
             value_serializer_type = type(value_serializer)
@@ -1425,7 +1425,7 @@ cdef class MapSerializer(Serializer):
                         value = read_context.read_non_ref(value_serializer)
                 map_[key] = value
                 size -= 1
-            if not always_advances:
+            if not entry_read_always_advances:
                 settle_unbacked_container_items(read_context, chunk_size, chunk_start)
             if size != 0:
                 chunk_header = read_context.read_uint8()

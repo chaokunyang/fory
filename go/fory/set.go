@@ -408,10 +408,10 @@ func (s setSerializer) ReadData(ctx *ReadContext, value reflect.Value) {
 	if bodySerializer == nil && elemTypeInfo != nil {
 		bodySerializer = elemTypeInfo.Serializer
 	}
-	bodyAlwaysAdvances := (collectFlag&CollectionIsSameType) == 0 ||
+	elementReadAlwaysAdvances := (collectFlag&CollectionIsSameType) == 0 ||
 		(collectFlag&(CollectionTrackingRef|CollectionHasNull)) != 0 ||
 		serializerReadDataAlwaysAdvances(bodySerializer)
-	if bodyAlwaysAdvances {
+	if elementReadAlwaysAdvances {
 		if !buf.CheckReadable(length, err) {
 			return
 		}

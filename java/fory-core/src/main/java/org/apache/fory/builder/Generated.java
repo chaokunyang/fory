@@ -131,8 +131,8 @@ public interface Generated {
     }
 
     @Override
-    public final boolean readBodyAlwaysAdvances() {
-      return typeDef.readBodyAlwaysAdvances();
+    public final boolean readDataAlwaysAdvances() {
+      return typeDef.readDataAlwaysAdvances();
     }
 
     @Override

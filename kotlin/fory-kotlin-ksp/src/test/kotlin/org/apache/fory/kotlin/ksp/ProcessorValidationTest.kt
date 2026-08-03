@@ -130,10 +130,10 @@ class ProcessorValidationTest {
     assertFalse(source.contains("NATURAL_ORDER_COMPARATOR"))
     assertFalse(source.contains("requireXlangNaturalOrdering"))
     assertFalse(source.contains("trackConstructorRefRead(readContext, buffer)"))
-    assertTrue(source.contains("private const val READ_BODY_ALWAYS_ADVANCES: Boolean = true"))
+    assertTrue(source.contains("private const val READ_DATA_ALWAYS_ADVANCES: Boolean = true"))
     assertTrue(
       source.contains(
-        "override fun readBodyAlwaysAdvances(): Boolean = READ_BODY_ALWAYS_ADVANCES && (typeDef == null || sameSchemaCompatible)"
+        "override fun readDataAlwaysAdvances(): Boolean = READ_DATA_ALWAYS_ADVANCES && (typeDef == null || sameSchemaCompatible)"
       )
     )
   }
@@ -1198,7 +1198,7 @@ class ProcessorValidationTest {
         .write()
 
     assertTrue(source.contains("internal class InternalHolder_ForySerializer"))
-    assertTrue(source.contains("private const val READ_BODY_ALWAYS_ADVANCES: Boolean = false"))
+    assertTrue(source.contains("private const val READ_DATA_ALWAYS_ADVANCES: Boolean = false"))
   }
 
   @Test
@@ -1767,7 +1767,7 @@ class ProcessorValidationTest {
     assertTrue(source.contains("UnionSerializer.copyCaseValue(copyContext"))
     assertTrue(source.contains("UnionSerializer.copyUnknownValue(copyContext, value.value)"))
     assertTrue(source.contains("UnionSerializer.writeUnknownValue(writeContext"))
-    assertTrue(source.contains("override fun readBodyAlwaysAdvances(): Boolean = true"))
+    assertTrue(source.contains("override fun readDataAlwaysAdvances(): Boolean = true"))
     assertTrue(source.contains("TypeRef.of<Any>(Int::class.javaPrimitiveType!!"))
     assertTrue(!source.contains("UInt::class.java"))
     assertTrue(source.contains("buffer.writeUInt8(Types.VAR_UINT32)"))

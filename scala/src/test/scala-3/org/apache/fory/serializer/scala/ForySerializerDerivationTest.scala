@@ -332,10 +332,10 @@ class ForySerializerDerivationTest extends AnyWordSpec with Matchers {
         summon[ForySerializer[CollectionBox]]
           .createSerializer(fory.getTypeResolver)
           .asInstanceOf[StaticGeneratedStructSerializer[CollectionBox]]
-      serializer.readBodyAlwaysAdvances() shouldBe true
+      serializer.readDataAlwaysAdvances() shouldBe true
       summon[ForySerializer[EmptyProgress]]
         .createSerializer(fory.getTypeResolver)
-        .readBodyAlwaysAdvances() shouldBe false
+        .readDataAlwaysAdvances() shouldBe false
       val tags = serializer.getGeneratedDescriptors.asScala.find(_.getName == "tags").get
       val tagMeta = TypeUtils.getElementType(tags.getTypeRef).getTypeExtMeta
       if tagMeta != null then {

@@ -30,7 +30,7 @@ import org.apache.fory.serializer.Shareable
 @OptIn(ExperimentalUuidApi::class)
 public class UuidSerializer(config: Config) :
   ImmutableSerializer<Uuid>(config, Uuid::class.java), Shareable {
-  override fun readBodyAlwaysAdvances(): Boolean = true
+  override fun readDataAlwaysAdvances(): Boolean = true
 
   override fun write(writeContext: WriteContext, value: Uuid) {
     val buffer = writeContext.buffer

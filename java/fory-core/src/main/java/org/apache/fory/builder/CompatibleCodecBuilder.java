@@ -156,8 +156,8 @@ public class CompatibleCodecBuilder extends ObjectCodecBuilder {
   }
 
   @Override
-  protected boolean generatedReadBodyAlwaysAdvances() {
-    return typeDef.readBodyAlwaysAdvances();
+  protected boolean generatedReadDataAlwaysAdvances() {
+    return typeDef.readDataAlwaysAdvances();
   }
 
   // Must be static to be shared across the whole process life.

@@ -1001,7 +1001,7 @@ Container read_configured_list_data(ReadContext &ctx) {
       return result;
     }
   }
-  constexpr bool body_always_advances = []() constexpr {
+  constexpr bool element_read_data_always_advances = []() constexpr {
     if constexpr (ElemNode >= 0) {
       return configured_read_data_always_advances<Elem, StructT, Index,
                                                   ElemNode>();
@@ -1011,7 +1011,7 @@ Container read_configured_list_data(ReadContext &ctx) {
   const RefMode elem_ref_mode =
       track_ref ? RefMode::Tracking
                 : (has_null ? RefMode::NullOnly : RefMode::None);
-  if constexpr (body_always_advances) {
+  if constexpr (element_read_data_always_advances) {
     if (FORY_PREDICT_FALSE(!reserve_collection<true>(result, ctx, length))) {
       return result;
     }
@@ -1022,7 +1022,7 @@ Container read_configured_list_data(ReadContext &ctx) {
   } else if (FORY_PREDICT_FALSE(!reserve_collection(result, ctx, length))) {
     return result;
   }
-  if constexpr (body_always_advances) {
+  if constexpr (element_read_data_always_advances) {
     (void)
         read_configured_list_items<false, Container, StructT, Index, ElemNode>(
             result, ctx, length, elem_ref_mode);
@@ -1224,24 +1224,24 @@ MapType read_configured_map_data(ReadContext &ctx) {
   if (length == 0) {
     return result;
   }
-  constexpr bool key_always_advances = []() constexpr {
+  constexpr bool key_read_data_always_advances = []() constexpr {
     if constexpr (KeyNode >= 0) {
       return configured_read_data_always_advances<Key, StructT, Index,
                                                   KeyNode>();
     }
     return read_data_always_advances_v<Key>;
   }();
-  constexpr bool value_always_advances = []() constexpr {
+  constexpr bool value_read_data_always_advances = []() constexpr {
     if constexpr (ValueNode >= 0) {
       return configured_read_data_always_advances<Value, StructT, Index,
                                                   ValueNode>();
     }
     return read_data_always_advances_v<Value>;
   }();
-  constexpr bool entry_always_advances =
-      key_always_advances || value_always_advances;
+  constexpr bool entry_read_data_always_advances =
+      key_read_data_always_advances || value_read_data_always_advances;
   if (FORY_PREDICT_FALSE(
-          !reserve_map<entry_always_advances>(result, ctx, length))) {
+          !reserve_map<entry_read_data_always_advances>(result, ctx, length))) {
     return result;
   }
   uint32_t read_count = 0;
@@ -1266,7 +1266,7 @@ MapType read_configured_map_data(ReadContext &ctx) {
     if (FORY_PREDICT_FALSE(ctx.has_error())) {
       return result;
     }
-    if constexpr (entry_always_advances) {
+    if constexpr (entry_read_data_always_advances) {
       if (FORY_PREDICT_FALSE(
               (!read_configured_map_chunk<false, MapType, StructT, Index,
                                           KeyNode, ValueNode>(result, ctx,
@@ -1589,8 +1589,7 @@ template <typename T> struct CompileTimeFieldHelpers {
   // classification. A field envelope or a declared serializer body that is
   // independently known to advance is enough to prove this Struct body
   // advances; an unframed Struct field remains unknown.
-  template <size_t Index>
-  static constexpr bool field_read_data_always_advances() {
+  template <size_t Index> static constexpr bool field_read_always_advances() {
     if constexpr (FieldCount == 0) {
       return false;
     } else {
@@ -1618,17 +1617,16 @@ template <typename T> struct CompileTimeFieldHelpers {
 
   template <size_t... Indices>
   static constexpr bool
-  any_field_read_data_always_advances(std::index_sequence<Indices...>) {
+  any_field_read_always_advances(std::index_sequence<Indices...>) {
     if constexpr (FieldCount == 0) {
       return false;
     } else {
-      return (field_read_data_always_advances<Indices>() || ...);
+      return (field_read_always_advances<Indices>() || ...);
     }
   }
 
   static constexpr bool read_data_always_advances =
-      any_field_read_data_always_advances(
-          std::make_index_sequence<FieldCount>{});
+      any_field_read_always_advances(std::make_index_sequence<FieldCount>{});
 
   /// Returns true if the field needs per-field type info in compatible mode.
   /// This matches write_single_field/read_single_field logic:

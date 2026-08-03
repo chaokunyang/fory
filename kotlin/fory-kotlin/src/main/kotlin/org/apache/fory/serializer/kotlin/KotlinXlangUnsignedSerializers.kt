@@ -56,7 +56,7 @@ public object KotlinXlangUnsignedSerializers {
 
   private class UByteXlangSerializer(config: Config) :
     ImmutableSerializer<UByte>(config, UByte::class.java, false, true), Shareable {
-    override fun readBodyAlwaysAdvances(): Boolean = true
+    override fun readDataAlwaysAdvances(): Boolean = true
 
     override fun write(writeContext: WriteContext, value: UByte) {
       writeContext.buffer.writeByte(value.toInt())
@@ -67,7 +67,7 @@ public object KotlinXlangUnsignedSerializers {
 
   private class UShortXlangSerializer(config: Config) :
     ImmutableSerializer<UShort>(config, UShort::class.java, false, true), Shareable {
-    override fun readBodyAlwaysAdvances(): Boolean = true
+    override fun readDataAlwaysAdvances(): Boolean = true
 
     override fun write(writeContext: WriteContext, value: UShort) {
       writeContext.buffer.writeInt16(value.toShort())
@@ -78,7 +78,7 @@ public object KotlinXlangUnsignedSerializers {
 
   private class FixedUIntXlangSerializer(config: Config) :
     ImmutableSerializer<UInt>(config, UInt::class.java, false, true), Shareable {
-    override fun readBodyAlwaysAdvances(): Boolean = true
+    override fun readDataAlwaysAdvances(): Boolean = true
 
     override fun write(writeContext: WriteContext, value: UInt) {
       writeContext.buffer.writeInt32(value.toInt())
@@ -89,7 +89,7 @@ public object KotlinXlangUnsignedSerializers {
 
   private class VarUIntXlangSerializer(config: Config) :
     ImmutableSerializer<UInt>(config, UInt::class.java, false, true), Shareable {
-    override fun readBodyAlwaysAdvances(): Boolean = true
+    override fun readDataAlwaysAdvances(): Boolean = true
 
     override fun write(writeContext: WriteContext, value: UInt) {
       writeContext.buffer.writeVarUInt32(value.toInt())
@@ -100,7 +100,7 @@ public object KotlinXlangUnsignedSerializers {
 
   private class FixedULongXlangSerializer(config: Config) :
     ImmutableSerializer<ULong>(config, ULong::class.java, false, true), Shareable {
-    override fun readBodyAlwaysAdvances(): Boolean = true
+    override fun readDataAlwaysAdvances(): Boolean = true
 
     override fun write(writeContext: WriteContext, value: ULong) {
       writeContext.buffer.writeInt64(value.toLong())
@@ -111,7 +111,7 @@ public object KotlinXlangUnsignedSerializers {
 
   private class VarULongXlangSerializer(config: Config) :
     ImmutableSerializer<ULong>(config, ULong::class.java, false, true), Shareable {
-    override fun readBodyAlwaysAdvances(): Boolean = true
+    override fun readDataAlwaysAdvances(): Boolean = true
 
     override fun write(writeContext: WriteContext, value: ULong) {
       writeContext.buffer.writeVarUInt64(value.toLong())
@@ -123,7 +123,7 @@ public object KotlinXlangUnsignedSerializers {
 
   private class TaggedULongXlangSerializer(config: Config) :
     ImmutableSerializer<ULong>(config, ULong::class.java, false, true), Shareable {
-    override fun readBodyAlwaysAdvances(): Boolean = true
+    override fun readDataAlwaysAdvances(): Boolean = true
 
     override fun write(writeContext: WriteContext, value: ULong) {
       writeContext.buffer.writeTaggedUInt64(value.toLong())

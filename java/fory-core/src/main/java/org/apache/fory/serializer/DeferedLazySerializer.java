@@ -52,8 +52,8 @@ public class DeferedLazySerializer extends Serializer {
   }
 
   @Override
-  public boolean readBodyAlwaysAdvances() {
-    return getSerializer().readBodyAlwaysAdvances();
+  public boolean readDataAlwaysAdvances() {
+    return getSerializer().readDataAlwaysAdvances();
   }
 
   private Serializer getSerializer() {

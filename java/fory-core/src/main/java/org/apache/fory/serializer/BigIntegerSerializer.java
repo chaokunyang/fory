@@ -97,7 +97,7 @@ public final class BigIntegerSerializer extends ImmutableSerializer<BigInteger>
   }
 
   @Override
-  public boolean readBodyAlwaysAdvances() {
+  public boolean readDataAlwaysAdvances() {
     return true;
   }
 }

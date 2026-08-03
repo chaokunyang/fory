@@ -182,8 +182,8 @@ public class ChildContainerSerializers {
       return value;
     }
 
-    public Collection newCollection(ReadContext readContext, boolean bodyAlwaysAdvances) {
-      Collection collection = super.newCollection(readContext, bodyAlwaysAdvances);
+    public Collection newCollection(ReadContext readContext, boolean elementReadAlwaysAdvances) {
+      Collection collection = super.newCollection(readContext, elementReadAlwaysAdvances);
       readAndSetFields(readContext, typeResolver, collection, slotsSerializers);
       return collection;
     }
@@ -216,8 +216,8 @@ public class ChildContainerSerializers {
     }
 
     @Override
-    public T newCollection(ReadContext readContext, boolean bodyAlwaysAdvances) {
-      T collection = (T) super.newCollection(readContext, bodyAlwaysAdvances);
+    public T newCollection(ReadContext readContext, boolean elementReadAlwaysAdvances) {
+      T collection = (T) super.newCollection(readContext, elementReadAlwaysAdvances);
       int numElements = getAndClearNumElements();
       setNumElements(numElements);
       collection.ensureCapacity(numElements);
@@ -250,9 +250,9 @@ public class ChildContainerSerializers {
     }
 
     @Override
-    public T newCollection(ReadContext readContext, boolean bodyAlwaysAdvances) {
+    public T newCollection(ReadContext readContext, boolean elementReadAlwaysAdvances) {
       MemoryBuffer buffer = readContext.getBuffer();
-      int numElements = readCollectionSize(readContext, buffer, bodyAlwaysAdvances);
+      int numElements = readCollectionSize(readContext, buffer, elementReadAlwaysAdvances);
       setNumElements(numElements);
       int refId = readContext.lastPreservedRefId();
       Comparator comparator = (Comparator) readContext.readRef();
@@ -296,9 +296,9 @@ public class ChildContainerSerializers {
     }
 
     @Override
-    public T newCollection(ReadContext readContext, boolean bodyAlwaysAdvances) {
+    public T newCollection(ReadContext readContext, boolean elementReadAlwaysAdvances) {
       MemoryBuffer buffer = readContext.getBuffer();
-      int numElements = readCollectionSize(readContext, buffer, bodyAlwaysAdvances);
+      int numElements = readCollectionSize(readContext, buffer, elementReadAlwaysAdvances);
       setNumElements(numElements);
       int refId = readContext.lastPreservedRefId();
       Comparator comparator = (Comparator) readContext.readRef();
@@ -353,8 +353,8 @@ public class ChildContainerSerializers {
     }
 
     @Override
-    public Map newMap(ReadContext readContext, boolean bodyAlwaysAdvances) {
-      Map map = super.newMap(readContext, bodyAlwaysAdvances);
+    public Map newMap(ReadContext readContext, boolean entryReadAlwaysAdvances) {
+      Map map = super.newMap(readContext, entryReadAlwaysAdvances);
       readAndSetFields(readContext, typeResolver, map, slotsSerializers);
       return map;
     }
@@ -404,9 +404,9 @@ public class ChildContainerSerializers {
     }
 
     @Override
-    public Map newMap(ReadContext readContext, boolean bodyAlwaysAdvances) {
+    public Map newMap(ReadContext readContext, boolean entryReadAlwaysAdvances) {
       MemoryBuffer buffer = readContext.getBuffer();
-      int numElements = readMapSize(readContext, buffer, bodyAlwaysAdvances);
+      int numElements = readMapSize(readContext, buffer, entryReadAlwaysAdvances);
       setNumElements(numElements);
       int refId = readContext.lastPreservedRefId();
       Comparator comparator = (Comparator) readContext.readRef();

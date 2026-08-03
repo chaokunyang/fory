@@ -425,10 +425,10 @@ func (s *sliceDynSerializer) readData(ctx *ReadContext, value reflect.Value, exp
 		if ctx.HasError() {
 			return
 		}
-		bodyAlwaysAdvances := (collectFlag&(CollectionTrackingRef|CollectionHasNull)) != 0 ||
+		elementReadAlwaysAdvances := (collectFlag&(CollectionTrackingRef|CollectionHasNull)) != 0 ||
 			serializerReadDataAlwaysAdvances(elemSerializer)
 		if !allocatedByCaller {
-			if bodyAlwaysAdvances {
+			if elementReadAlwaysAdvances {
 				if !buf.CheckReadable(length, ctxErr) {
 					return
 				}

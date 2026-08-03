@@ -247,7 +247,7 @@ func readKnownTypeInfoForSkip(ctx *ReadContext, typeID uint32) *TypeInfo {
 	return typeInfo
 }
 
-func skipBodyAlwaysAdvances(fieldDef FieldDef, typeInfo *TypeInfo) bool {
+func fieldReadAlwaysAdvances(fieldDef FieldDef, typeInfo *TypeInfo) bool {
 	if typeInfo != nil && serializerReadDataAlwaysAdvances(typeInfo.Serializer) {
 		return true
 	}
@@ -322,9 +322,9 @@ func skipCollection(ctx *ReadContext, fieldDef FieldDef) {
 		}
 	}
 
-	bodyAlwaysAdvances := !isSameType || trackRef || hasNull ||
-		skipBodyAlwaysAdvances(elemDef, elemTypeInfo)
-	if bodyAlwaysAdvances {
+	elementReadAlwaysAdvances := !isSameType || trackRef || hasNull ||
+		fieldReadAlwaysAdvances(elemDef, elemTypeInfo)
+	if elementReadAlwaysAdvances {
 		for i := uint32(0); i < length; i++ {
 			skipValue(ctx, elemDef, trackRef || hasNull, false, elemTypeInfo)
 			if ctx.HasError() {
@@ -544,11 +544,11 @@ func skipMap(ctx *ReadContext, fieldDef FieldDef) {
 		// Check if ref tracking is enabled for keys and values
 		keyTrackRef := (header & TRACKING_KEY_REF) != 0
 		valueTrackRef := (header & TRACKING_VALUE_REF) != 0
-		bodyAlwaysAdvances := keyTrackRef || valueTrackRef ||
-			skipBodyAlwaysAdvances(keyDef, keyTypeInfo) ||
-			skipBodyAlwaysAdvances(valueDef, valueTypeInfo)
+		entryReadAlwaysAdvances := keyTrackRef || valueTrackRef ||
+			fieldReadAlwaysAdvances(keyDef, keyTypeInfo) ||
+			fieldReadAlwaysAdvances(valueDef, valueTypeInfo)
 		var checkpoint uint64
-		if !bodyAlwaysAdvances {
+		if !entryReadAlwaysAdvances {
 			checkpoint = ctx.buffer.logicalReaderIndex()
 		}
 
@@ -562,7 +562,7 @@ func skipMap(ctx *ReadContext, fieldDef FieldDef) {
 				return
 			}
 		}
-		if !bodyAlwaysAdvances &&
+		if !entryReadAlwaysAdvances &&
 			!ctx.settleUnbackedContainerItems(int(chunkSize), checkpoint) {
 			return
 		}

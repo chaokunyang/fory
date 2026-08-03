@@ -220,12 +220,12 @@ class CollectionSerializer(Serializer):
                 serializer = typeinfo.serializer
             else:
                 serializer = self.elem_serializer
-        body_always_advances = (
+        element_read_always_advances = (
             (collect_flag & (COLL_TRACKING_REF | COLL_HAS_NULL)) != 0
             or (collect_flag & COLL_IS_SAME_TYPE) == 0
             or serializer.read_data_always_advances
         )
-        if body_always_advances:
+        if element_read_always_advances:
             read_context.check_readable_bytes(length)
         else:
             _ensure_container_allocation(read_context, length)
@@ -234,7 +234,7 @@ class CollectionSerializer(Serializer):
             if (collect_flag & COLL_TRACKING_REF) != 0:
                 self._read_same_type_ref(read_context, length, collection_, serializer)
             elif (collect_flag & COLL_HAS_NULL) == 0:
-                if body_always_advances:
+                if element_read_always_advances:
                     self._read_same_type_no_ref(read_context, length, collection_, serializer)
                 else:
                     self._read_same_type_no_ref_guarded(read_context, length, collection_, serializer)
@@ -600,10 +600,10 @@ class MapSerializer(Serializer):
                 key_serializer = self.type_resolver.read_type_info(read_context).serializer
             if not value_is_declared_type:
                 value_serializer = self.type_resolver.read_type_info(read_context).serializer
-            always_advances = (
+            entry_read_always_advances = (
                 track_key_ref or track_value_ref or key_serializer.read_data_always_advances or value_serializer.read_data_always_advances
             )
-            if not always_advances:
+            if not entry_read_always_advances:
                 chunk_start = read_context.get_reader_index()
             for _ in range(chunk_size):
                 if track_key_ref:
@@ -626,7 +626,7 @@ class MapSerializer(Serializer):
                     value = self._read_obj_no_ref(value_serializer, read_context)
                 map_[key] = value
                 size -= 1
-            if not always_advances:
+            if not entry_read_always_advances:
                 _settle_unbacked_container_items(read_context, chunk_size, chunk_start)
             if size != 0:
                 chunk_header = read_context.read_uint8()

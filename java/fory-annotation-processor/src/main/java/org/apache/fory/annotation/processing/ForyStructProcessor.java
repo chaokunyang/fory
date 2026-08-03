@@ -478,11 +478,11 @@ public final class ForyStructProcessor extends AbstractProcessor {
         nullable,
         trackingRef,
         hasTrackingRefMetadata,
-        readBodyAlwaysAdvances(field.asType(), nullable, trackingRef),
+        fieldReadAlwaysAdvances(field.asType(), nullable, trackingRef),
         foryField.dynamic);
   }
 
-  private boolean readBodyAlwaysAdvances(TypeMirror type, boolean nullable, boolean trackingRef) {
+  private boolean fieldReadAlwaysAdvances(TypeMirror type, boolean nullable, boolean trackingRef) {
     TypeKind kind = type.getKind();
     if (nullable || trackingRef || kind.isPrimitive() || kind == TypeKind.ARRAY) {
       return true;

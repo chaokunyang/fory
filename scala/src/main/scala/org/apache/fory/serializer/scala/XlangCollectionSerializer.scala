@@ -44,11 +44,11 @@ abstract class AbstractScalaXlangCollectionSerializer[A, T <: scala.collection.I
 
   override def newCollection(
       readContext: ReadContext,
-      bodyAlwaysAdvances: Boolean): util.Collection[_] = {
+      elementReadAlwaysAdvances: Boolean): util.Collection[_] = {
     val numElements = readCollectionSize(
       readContext,
       readContext.getBuffer,
-      bodyAlwaysAdvances)
+      elementReadAlwaysAdvances)
     setNumElements(numElements)
     val builder = newBuilder(numElements)
     if (ScalaXlangCollectionShape.hasOptionElement(readContext)) {
@@ -370,8 +370,8 @@ abstract class AbstractScalaXlangMapSerializer[K, V, T <: scala.collection.Map[K
 
   override def newMap(
       readContext: ReadContext,
-      bodyAlwaysAdvances: Boolean): util.Map[_, _] = {
-    val numElements = readMapSize(readContext, readContext.getBuffer, bodyAlwaysAdvances)
+      entryReadAlwaysAdvances: Boolean): util.Map[_, _] = {
+    val numElements = readMapSize(readContext, readContext.getBuffer, entryReadAlwaysAdvances)
     setNumElements(numElements)
     val builder =
       ScalaXlangCollectionShape.mapBuilder[K, V, T](cls, numElements)
@@ -537,7 +537,7 @@ private final class XlangOptionMapBuilder[K, V, T](
 
 final class ScalaOptionSerializer(typeResolver: TypeResolver, cls: Class[_])
   extends Serializer[Option[Any]](typeResolver.getConfig, cls.asInstanceOf[Class[Option[Any]]]) {
-  override def readBodyAlwaysAdvances(): Boolean = true
+  override def readDataAlwaysAdvances(): Boolean = true
 
   override def write(writeContext: WriteContext, value: Option[Any]): Unit = {
     writeContext.writeRef(value.orNull)

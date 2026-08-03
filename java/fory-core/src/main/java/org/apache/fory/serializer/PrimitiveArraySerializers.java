@@ -112,7 +112,7 @@ public final class PrimitiveArraySerializers {
     }
 
     @Override
-    public final boolean readBodyAlwaysAdvances() {
+    public final boolean readDataAlwaysAdvances() {
       return true;
     }
   }

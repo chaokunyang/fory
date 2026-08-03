@@ -18,7 +18,7 @@
 use super::codec::{
     field_ref_mode, field_type_with_ref_flags, generic_field_type, Codec, CodecReadType,
 };
-use super::collection::{field_body_always_advances, settle_unbacked_items};
+use super::collection::{field_read_data_always_advances, settle_unbacked_items};
 use crate::context::{ReadContext, WriteContext};
 use crate::error::Error;
 use crate::meta::FieldType;
@@ -546,7 +546,7 @@ macro_rules! map_read_entry {
     };
 }
 
-macro_rules! map_entry_always_advances {
+macro_rules! entry_read_data_always_advances {
     (value, $T:ty, $S:ty, $read_type:expr) => {
         <$S as Serializer>::READ_DATA_ALWAYS_ADVANCES
             && $read_type
@@ -558,7 +558,7 @@ macro_rules! map_entry_always_advances {
             && match $read_type {
                 EntryReadType::Direct => true,
                 EntryReadType::TypeInfo(type_info) => type_info.has_exact_local_schema(),
-                EntryReadType::Field(field_type) => field_body_always_advances(field_type),
+                EntryReadType::Field(field_type) => field_read_data_always_advances(field_type),
             }
     };
 }
@@ -689,11 +689,11 @@ macro_rules! read_map_data_body {
                 1,
                 value_tracked
             )?;
-            let always_advances = key_tracked
+            let entry_read_always_advances = key_tracked
                 || value_tracked
-                || map_entry_always_advances!($layer, $K, $KC, &key_type)
-                || map_entry_always_advances!($layer, $V, $VC, &value_type);
-            if always_advances {
+                || entry_read_data_always_advances!($layer, $K, $KC, &key_type)
+                || entry_read_data_always_advances!($layer, $V, $VC, &value_type);
+            if entry_read_always_advances {
                 while read < end {
                     let key = map_read_entry!($layer, $K, $KC, context, &key_type, key_tracked)?;
                     let value =

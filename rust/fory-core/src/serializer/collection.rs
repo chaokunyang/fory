@@ -49,13 +49,13 @@ fn count_needs_bytes<T, const COUNT_ALLOCATES: bool, const ZST_NO_BACKING: bool>
 fn check_collection_len<T, const COUNT_ALLOCATES: bool, const ZST_NO_BACKING: bool>(
     context: &ReadContext,
     len: u32,
-    body_always_advances: bool,
+    element_read_always_advances: bool,
 ) -> Result<(), Error> {
     let len = len as usize;
     // Fixed arrays do not allocate from the wire count. Variable Vec-like ZST
     // owners also have no count-derived backing, while node and bucket owners do.
     if count_needs_bytes::<T, COUNT_ALLOCATES, ZST_NO_BACKING>() {
-        let required = if body_always_advances {
+        let required = if element_read_always_advances {
             len
         } else {
             len.saturating_sub(context.remaining_unbacked_container_items())
@@ -66,7 +66,7 @@ fn check_collection_len<T, const COUNT_ALLOCATES: bool, const ZST_NO_BACKING: bo
 }
 
 #[inline(always)]
-pub(super) fn field_body_always_advances(field_type: &FieldType) -> bool {
+pub(super) fn field_read_data_always_advances(field_type: &FieldType) -> bool {
     matches!(
         field_type.type_id,
         type_id::BOOL..=type_id::NAMED_ENUM
@@ -87,7 +87,7 @@ pub(super) fn settle_unbacked_items(
 }
 
 #[inline(always)]
-fn value_read_always_advances<S: Serializer>(
+fn value_read_data_always_advances<S: Serializer>(
     read_type: Option<&std::rc::Rc<crate::TypeInfo>>,
 ) -> bool {
     S::READ_DATA_ALWAYS_ADVANCES
@@ -95,10 +95,12 @@ fn value_read_always_advances<S: Serializer>(
 }
 
 #[inline(always)]
-fn codec_read_always_advances<T: 'static, C: Codec<T>>(read_type: Option<&CodecReadType>) -> bool {
+fn codec_read_data_always_advances<T: 'static, C: Codec<T>>(
+    read_type: Option<&CodecReadType>,
+) -> bool {
     C::READ_DATA_ALWAYS_ADVANCES
         && read_type.map_or(true, |read_type| match read_type {
-            CodecReadType::Field(field_type) => field_body_always_advances(field_type),
+            CodecReadType::Field(field_type) => field_read_data_always_advances(field_type),
             CodecReadType::TypeInfo(type_info) => type_info.has_exact_local_schema(),
         })
 }
@@ -539,12 +541,12 @@ macro_rules! collection_read_element {
     };
 }
 
-macro_rules! collection_read_always_advances {
+macro_rules! element_read_data_always_advances {
     (value, $T:ty, $S:ty, $read_type:expr) => {
-        value_read_always_advances::<$S>($read_type)
+        value_read_data_always_advances::<$S>($read_type)
     };
     (field, $T:ty, $C:ty, $read_type:expr) => {
-        codec_read_always_advances::<$T, $C>($read_type)
+        codec_read_data_always_advances::<$T, $C>($read_type)
     };
 }
 
@@ -603,15 +605,15 @@ macro_rules! read_collection_body {
         if (header & IS_SAME_TYPE) == 0 {
             return Err(non_polymorphic_collection());
         }
-        let body_always_advances =
-            has_null || collection_read_always_advances!($layer, $T, $C, read_type.as_ref());
+        let element_read_always_advances =
+            has_null || element_read_data_always_advances!($layer, $T, $C, read_type.as_ref());
         check_collection_len::<$T, $count_allocates, $zst_no_backing>(
             context,
             len,
-            body_always_advances,
+            element_read_always_advances,
         )?;
         if !has_null {
-            if body_always_advances {
+            if element_read_always_advances {
                 (0..len)
                     .map(|_| collection_read_element!($layer, $T, $C, context, read_type.as_ref()))
                     .collect::<Result<$R, Error>>()
@@ -706,14 +708,15 @@ where
         if same_type {
             if declared {
                 let element_type = field_type_with_ref_flags(element_type, has_null, track_ref);
-                let body_always_advances = ref_mode != RefMode::None
-                    || (C::READ_DATA_ALWAYS_ADVANCES && field_body_always_advances(&element_type));
+                let element_read_always_advances = ref_mode != RefMode::None
+                    || (C::READ_DATA_ALWAYS_ADVANCES
+                        && field_read_data_always_advances(&element_type));
                 check_collection_len::<T, COUNT_ALLOCATES, ZST_NO_BACKING>(
                     context,
                     len,
-                    body_always_advances,
+                    element_read_always_advances,
                 )?;
-                if body_always_advances {
+                if element_read_always_advances {
                     return (0..len)
                         .map(|_| C::read_field_with_type(context, &element_type))
                         .collect::<Result<R, Error>>();
@@ -727,14 +730,14 @@ where
                 );
             }
             let type_info = context.read_any_type_info()?;
-            let body_always_advances = ref_mode != RefMode::None
+            let element_read_always_advances = ref_mode != RefMode::None
                 || (C::READ_DATA_ALWAYS_ADVANCES && type_info.has_exact_local_schema());
             check_collection_len::<T, COUNT_ALLOCATES, ZST_NO_BACKING>(
                 context,
                 len,
-                body_always_advances,
+                element_read_always_advances,
             )?;
-            if body_always_advances {
+            if element_read_always_advances {
                 return (0..len)
                     .map(|_| C::read_with_type_info(context, ref_mode, &type_info))
                     .collect::<Result<R, Error>>();
@@ -769,14 +772,14 @@ where
                 })
                 .collect::<Result<R, Error>>();
         }
-        let body_always_advances =
-            C::READ_DATA_ALWAYS_ADVANCES && field_body_always_advances(element_type);
+        let element_read_data_always_advances =
+            C::READ_DATA_ALWAYS_ADVANCES && field_read_data_always_advances(element_type);
         check_collection_len::<T, COUNT_ALLOCATES, ZST_NO_BACKING>(
             context,
             len,
-            body_always_advances,
+            element_read_data_always_advances,
         )?;
-        if body_always_advances {
+        if element_read_data_always_advances {
             return (0..len)
                 .map(|_| C::read_data_with_type(context, element_type))
                 .collect::<Result<R, Error>>();
@@ -810,13 +813,14 @@ where
             })
             .collect::<Result<R, Error>>()
     } else {
-        let body_always_advances = codec_read_always_advances::<T, C>(Some(&read_type));
+        let element_read_data_always_advances =
+            codec_read_data_always_advances::<T, C>(Some(&read_type));
         check_collection_len::<T, COUNT_ALLOCATES, ZST_NO_BACKING>(
             context,
             len,
-            body_always_advances,
+            element_read_data_always_advances,
         )?;
-        if body_always_advances {
+        if element_read_data_always_advances {
             (0..len)
                 .map(|_| match &read_type {
                     super::codec::CodecReadType::Field(field_type) => {
@@ -884,14 +888,14 @@ where
     // Read elements
     if is_same_type {
         if is_declared {
-            let body_always_advances =
+            let element_read_always_advances =
                 elem_ref_mode != RefMode::None || C::READ_DATA_ALWAYS_ADVANCES;
             check_collection_len::<T, COUNT_ALLOCATES, ZST_NO_BACKING>(
                 context,
                 len,
-                body_always_advances,
+                element_read_always_advances,
             )?;
-            if body_always_advances {
+            if element_read_always_advances {
                 (0..len)
                     .map(|_| C::read(context, elem_ref_mode, false))
                     .collect::<Result<R, Error>>()
@@ -906,14 +910,14 @@ where
             }
         } else {
             let type_info = context.read_any_type_info()?;
-            let body_always_advances = elem_ref_mode != RefMode::None
+            let element_read_always_advances = elem_ref_mode != RefMode::None
                 || (C::READ_DATA_ALWAYS_ADVANCES && type_info.has_exact_local_schema());
             check_collection_len::<T, COUNT_ALLOCATES, ZST_NO_BACKING>(
                 context,
                 len,
-                body_always_advances,
+                element_read_always_advances,
             )?;
-            if body_always_advances {
+            if element_read_always_advances {
                 (0..len)
                     .map(|_| C::read_with_type_info(context, elem_ref_mode, &type_info))
                     .collect::<Result<R, Error>>()

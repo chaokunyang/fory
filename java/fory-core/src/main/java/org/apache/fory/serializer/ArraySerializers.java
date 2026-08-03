@@ -168,7 +168,7 @@ public final class ArraySerializers {
     }
 
     @Override
-    public boolean readBodyAlwaysAdvances() {
+    public boolean readDataAlwaysAdvances() {
       return true;
     }
   }
@@ -250,7 +250,7 @@ public final class ArraySerializers {
     }
 
     @Override
-    public final boolean readBodyAlwaysAdvances() {
+    public final boolean readDataAlwaysAdvances() {
       return true;
     }
   }
@@ -535,7 +535,7 @@ public final class ArraySerializers {
         value[i] = serializer.read(readContext, RefMode.TRACKING);
       }
     } else if ((flags & CollectionFlags.HAS_NULL) != CollectionFlags.HAS_NULL) {
-      if (serializer.readBodyAlwaysAdvances()) {
+      if (serializer.readDataAlwaysAdvances()) {
         for (int i = 0; i < numElements; i++) {
           value[i] = serializer.read(readContext, RefMode.NONE);
         }
@@ -719,7 +719,7 @@ public final class ArraySerializers {
     }
 
     @Override
-    public boolean readBodyAlwaysAdvances() {
+    public boolean readDataAlwaysAdvances() {
       return true;
     }
   }

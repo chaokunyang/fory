@@ -235,7 +235,7 @@ export type CustomSerializer<T> = {
 export type Serializer<T = any> = {
   _initialized?: boolean;
   fixedSize: number;
-  /** Whether every successful read() body consumes at least one input byte. */
+  /** Whether every successful serializer data read consumes at least one input byte. */
   readDataAlwaysAdvances: boolean;
   getTypeInfo: () => TypeInfo;
   needToWriteRef: () => boolean;

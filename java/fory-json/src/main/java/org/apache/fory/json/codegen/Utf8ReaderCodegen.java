@@ -95,6 +95,11 @@ final class Utf8ReaderCodegen extends JsonReaderCodegen {
   }
 
   @Override
+  boolean directSlowFieldIndex() {
+    return true;
+  }
+
+  @Override
   Expression consumeCommaOrEndObjectExpr() {
     Expression comma =
         new Expression.Invoke(readerRef(), "tryConsumeNextComma", TypeRef.of(boolean.class))

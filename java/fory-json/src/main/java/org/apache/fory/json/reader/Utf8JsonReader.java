@@ -2086,6 +2086,11 @@ public final class Utf8JsonReader extends JsonReader {
     }
     int start = position;
     int offset = start;
+    // Keep seven real bounded probes in the token owner. Besides covering ordinary Strings through
+    // 56 bytes without a helper call, this keeps the complete scanner behind a natural C2 boundary
+    // so nullable wrappers and generated object readers cannot absorb duplicate token closures.
+    // A loop or forwarding helper would shrink this owner and restore compilation-order
+    // sensitivity.
     if (offset + Long.BYTES <= inputLength) {
       long stopMask = stringStopMask(LittleEndian.getInt64(bytes, offset));
       if (stopMask != 0) {
@@ -2104,6 +2109,34 @@ public final class Utf8JsonReader extends JsonReader {
             return readStringWordStop(start, offset, stopMask);
           }
           offset += Long.BYTES;
+          if (offset + Long.BYTES <= inputLength) {
+            stopMask = stringStopMask(LittleEndian.getInt64(bytes, offset));
+            if (stopMask != 0) {
+              return readStringWordStop(start, offset, stopMask);
+            }
+            offset += Long.BYTES;
+            if (offset + Long.BYTES <= inputLength) {
+              stopMask = stringStopMask(LittleEndian.getInt64(bytes, offset));
+              if (stopMask != 0) {
+                return readStringWordStop(start, offset, stopMask);
+              }
+              offset += Long.BYTES;
+              if (offset + Long.BYTES <= inputLength) {
+                stopMask = stringStopMask(LittleEndian.getInt64(bytes, offset));
+                if (stopMask != 0) {
+                  return readStringWordStop(start, offset, stopMask);
+                }
+                offset += Long.BYTES;
+                if (offset + Long.BYTES <= inputLength) {
+                  stopMask = stringStopMask(LittleEndian.getInt64(bytes, offset));
+                  if (stopMask != 0) {
+                    return readStringWordStop(start, offset, stopMask);
+                  }
+                  offset += Long.BYTES;
+                }
+              }
+            }
+          }
         }
       }
     }

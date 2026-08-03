@@ -2840,6 +2840,16 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
                   false));
       Expression sameTypeRead = remoteSameTypeRead;
       if (maybeDecl) {
+        // Keep remote serializer resolution and its guarded fallback outside the generated local
+        // declared-type method. Inlining both branches can push that common method past HotSpot's
+        // 325-byte inline limit even though the declared branch has compile-time progress proof.
+        Expression remoteRead =
+            invokeGenerated(
+                ctx,
+                readCutPoints(buffer, collection, size, hasNull, trackRef),
+                remoteSameTypeRead,
+                "remoteSameTypeElemsRead",
+                false);
         sameTypeRead =
             new If(
                 isDeclType,
@@ -2853,7 +2863,7 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
                     trackingRef,
                     trackRef,
                     declaredBodyAlwaysAdvances),
-                remoteSameTypeRead,
+                remoteRead,
                 false);
       }
       Expression action;

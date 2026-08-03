@@ -166,13 +166,15 @@ public class UnbackedContainerItemsTest {
             .readBodyAlwaysAdvances());
     assertFalse(fory.getTypeResolver().getTypeDef(Empty.class, true).readBodyAlwaysAdvances());
     String code = new ObjectCodecBuilder(PositiveStructHolder.class, fory).genCode();
+    int remoteRead = code.indexOf("private void remoteSameTypeElemsRead(");
+    int dynamicProgressCheck = code.indexOf(".readBodyAlwaysAdvances()", remoteRead);
     int readCollection = code.indexOf("private Object readCollection(");
     int declaredRead = code.indexOf("& 4) == 4", readCollection);
-    int remoteRead = code.indexOf("_f_typeResolver.readTypeInfo", declaredRead);
-    int dynamicProgressCheck = code.indexOf(".readBodyAlwaysAdvances()", remoteRead);
-    assertTrue(readCollection >= 0 && declaredRead > readCollection, code);
-    assertTrue(remoteRead > declaredRead && dynamicProgressCheck > remoteRead, code);
-    String declaredPath = code.substring(declaredRead, remoteRead);
+    int remoteCall = code.indexOf("this.remoteSameTypeElemsRead(", declaredRead);
+    assertTrue(remoteRead >= 0 && dynamicProgressCheck > remoteRead, code);
+    assertTrue(
+        readCollection >= 0 && declaredRead > readCollection && remoteCall > declaredRead, code);
+    String declaredPath = code.substring(declaredRead, remoteCall);
     assertFalse(declaredPath.contains("readBodyAlwaysAdvances"), declaredPath);
     assertFalse(declaredPath.contains("reserveUnbackedContainerItems"), declaredPath);
   }

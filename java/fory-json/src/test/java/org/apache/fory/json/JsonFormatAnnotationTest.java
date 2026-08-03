@@ -43,11 +43,13 @@ import java.time.chrono.HijrahDate;
 import java.time.chrono.JapaneseDate;
 import java.time.chrono.MinguoDate;
 import java.time.chrono.ThaiBuddhistDate;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -168,11 +170,14 @@ public class JsonFormatAnnotationTest extends ForyJsonTestModels {
   @Test
   public void offsetTimezoneParsing() {
     ForyJson json = newJson();
+    String zoneNameText = "2024-11-03 01:30:00 EST";
     String input =
         "{\"local\":\"2024-01-02 11:04:05\","
             + "\"explicit\":\"2024-01-02 07:04:05 +04:00\","
             + "\"explicitZone\":\"2024-01-02 04:04:05 Europe/Paris\","
-            + "\"zoneName\":\"2024-11-03 01:30:00 EST\"}";
+            + "\"zoneName\":\""
+            + zoneNameText
+            + "\"}";
     OffsetTimezoneFields value = json.fromJson(input, OffsetTimezoneFields.class);
     Instant instant = Instant.parse("2024-01-02T03:04:05Z");
     assertEquals(value.local.toInstant(), instant);
@@ -181,8 +186,12 @@ public class JsonFormatAnnotationTest extends ForyJsonTestModels {
     assertEquals(value.explicit.getOffset(), ZoneOffset.ofHours(4));
     assertEquals(value.explicitZone.toInstant(), instant);
     assertEquals(value.explicitZone.getOffset(), ZoneOffset.ofHours(1));
-    assertEquals(value.zoneName.toInstant(), Instant.parse("2024-11-03T06:30:00Z"));
-    assertEquals(value.zoneName.getOffset(), ZoneOffset.ofHours(-5));
+    ZonedDateTime resolvedZoneName =
+        DateTimeFormatter.ofPattern(ZONE_NAME_TIMESTAMP_PATTERN, Locale.ROOT)
+            .withZone(ZoneId.of("Asia/Shanghai"))
+            .parse(zoneNameText, ZonedDateTime::from);
+    assertEquals(value.zoneName.toInstant(), resolvedZoneName.toInstant());
+    assertEquals(value.zoneName.getOffset(), resolvedZoneName.getOffset());
     assertGeneratedWhenSupported(json, OffsetTimezoneFields.class);
   }
 

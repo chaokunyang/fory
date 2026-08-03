@@ -165,8 +165,8 @@ void skip_schema_or_type_info(ReadContext &ctx, const FieldType &field_type,
   skip_field_value(ctx, field_type, RefMode::None);
 }
 
-bool skip_body_always_advances(const FieldType &field_type,
-                               const TypeInfo *type_info) {
+bool field_read_always_advances(const FieldType &field_type,
+                                const TypeInfo *type_info) {
   const uint32_t raw_type_id =
       type_info == nullptr ? field_type.type_id : type_info->type_id;
   if (raw_type_id >= static_cast<uint32_t>(TypeId::BOUND)) {
@@ -249,7 +249,7 @@ void skip_list(ReadContext &ctx, const FieldType &field_type) {
 
   const bool measure_progress =
       !track_ref && !has_null && is_same_type &&
-      !skip_body_always_advances(elem_type, same_type_info);
+      !field_read_always_advances(elem_type, same_type_info);
   uint32_t checkpoint_item = 0;
   uint64_t checkpoint_byte = 0;
   if (measure_progress) {
@@ -421,8 +421,8 @@ void skip_map(ReadContext &ctx, const FieldType &field_type) {
 
     const bool measure_progress =
         !key_track_ref && !value_track_ref &&
-        !skip_body_always_advances(key_type, key_type_info) &&
-        !skip_body_always_advances(value_type, value_type_info);
+        !field_read_always_advances(key_type, key_type_info) &&
+        !field_read_always_advances(value_type, value_type_info);
     const uint64_t chunk_start =
         measure_progress ? ctx.buffer().logical_reader_index() : 0;
 

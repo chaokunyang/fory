@@ -87,7 +87,7 @@ public class ForyStructProcessorTest {
               .build();
       Object serializer = fory.getTypeResolver().getTypeInfo(type).getSerializer();
       Assert.assertEquals(serializer.getClass().getName(), serializerType.getName());
-      Assert.assertTrue(((StaticGeneratedStructSerializer<?>) serializer).readBodyAlwaysAdvances());
+      Assert.assertTrue(((StaticGeneratedStructSerializer<?>) serializer).readDataAlwaysAdvances());
       Object roundTrip = fory.deserialize(fory.serialize(value));
       Assert.assertEquals(getField(type, roundTrip, "id"), 7);
       Assert.assertEquals(getField(type, roundTrip, "name"), "fory");
@@ -129,7 +129,7 @@ public class ForyStructProcessorTest {
               serializerType
                   .getConstructor(org.apache.fory.resolver.TypeResolver.class, Class.class)
                   .newInstance(fory.getTypeResolver(), type);
-      Assert.assertFalse(serializer.readBodyAlwaysAdvances());
+      Assert.assertFalse(serializer.readDataAlwaysAdvances());
     }
   }
 

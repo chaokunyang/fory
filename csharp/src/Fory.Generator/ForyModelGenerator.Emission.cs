@@ -1830,7 +1830,7 @@ public sealed partial class ForyModelGenerator
                (codec.Kind == FieldCodecKind.Map || codec.Generics.Any(HasMapCodec));
     }
 
-    private static bool ReadBodyAlwaysAdvances(TypeModel model)
+    private static bool ReadDataAlwaysAdvances(TypeModel model)
     {
         return model.SortedMembers.Any(FieldReadAlwaysAdvances);
     }

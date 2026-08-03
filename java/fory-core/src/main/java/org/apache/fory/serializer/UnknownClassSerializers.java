@@ -94,8 +94,8 @@ public final class UnknownClassSerializers {
     }
 
     @Override
-    public boolean readBodyAlwaysAdvances() {
-      return typeDef != null && typeDef.readBodyAlwaysAdvances();
+    public boolean readDataAlwaysAdvances() {
+      return typeDef != null && typeDef.readDataAlwaysAdvances();
     }
 
     /**

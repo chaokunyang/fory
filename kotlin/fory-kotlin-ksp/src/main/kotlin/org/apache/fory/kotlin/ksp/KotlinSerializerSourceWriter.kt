@@ -109,8 +109,8 @@ internal class KotlinSerializerSourceWriter(private val struct: KotlinSourceStru
       .append(struct.hasCompatStructFields)
       .append("\n\n")
     builder
-      .append("    private const val READ_BODY_ALWAYS_ADVANCES: Boolean = ")
-      .append(struct.fields.any(::fieldReadBodyAlwaysAdvances))
+      .append("    private const val READ_DATA_ALWAYS_ADVANCES: Boolean = ")
+      .append(struct.fields.any(::fieldReadAlwaysAdvances))
       .append("\n\n")
     builder.append("    @JvmField\n")
     builder.append("    public val DESCRIPTORS: List<Descriptor> = buildDescriptors()\n\n")
@@ -428,7 +428,7 @@ internal class KotlinSerializerSourceWriter(private val struct: KotlinSourceStru
 
   private fun writeRead() {
     builder.append(
-      "  override fun readBodyAlwaysAdvances(): Boolean = READ_BODY_ALWAYS_ADVANCES && (typeDef == null || sameSchemaCompatible)\n\n"
+      "  override fun readDataAlwaysAdvances(): Boolean = READ_DATA_ALWAYS_ADVANCES && (typeDef == null || sameSchemaCompatible)\n\n"
     )
     builder
       .append("  override fun read(readContext: ReadContext): ")
@@ -460,10 +460,10 @@ internal class KotlinSerializerSourceWriter(private val struct: KotlinSourceStru
     writeConstructorRead()
   }
 
-  private fun fieldReadBodyAlwaysAdvances(field: KotlinSourceField): Boolean =
-    field.nullable || field.trackingRef || typeReadBodyAlwaysAdvances(field.type)
+  private fun fieldReadAlwaysAdvances(field: KotlinSourceField): Boolean =
+    field.nullable || field.trackingRef || typeReadDataAlwaysAdvances(field.type)
 
-  private fun typeReadBodyAlwaysAdvances(type: KotlinSourceTypeNode): Boolean =
+  private fun typeReadDataAlwaysAdvances(type: KotlinSourceTypeNode): Boolean =
     type.primitive ||
       type.enum ||
       type.union ||

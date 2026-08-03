@@ -358,7 +358,7 @@ public static class FieldSkipper
         }
 
         bool guardUnbackedItems = elementRefMode == RefMode.None &&
-                                  !ReadBodyAlwaysAdvances(elementType, elementTypeInfo);
+                                  !FieldReadAlwaysAdvances(elementType, elementTypeInfo);
         if (!guardUnbackedItems)
         {
             for (int i = 0; i < length; i++)
@@ -473,8 +473,8 @@ public static class FieldSkipper
 
             bool guardChunk = !trackKeyRef &&
                               !trackValueRef &&
-                              !ReadBodyAlwaysAdvances(keyType, keyChunkTypeInfo) &&
-                              !ReadBodyAlwaysAdvances(valueType, valueChunkTypeInfo);
+                              !FieldReadAlwaysAdvances(keyType, keyChunkTypeInfo) &&
+                              !FieldReadAlwaysAdvances(valueType, valueChunkTypeInfo);
             int checkpoint = guardChunk ? context.Reader.Cursor : 0;
 
             for (int i = 0; i < chunkSize; i++)
@@ -494,13 +494,13 @@ public static class FieldSkipper
         }
     }
 
-    private static bool ReadBodyAlwaysAdvances(
+    private static bool FieldReadAlwaysAdvances(
         TypeMetaFieldType fieldType,
         TypeInfo? resolvedTypeInfo)
     {
         if (resolvedTypeInfo is not null)
         {
-            return resolvedTypeInfo.ReadBodyAlwaysAdvances;
+            return resolvedTypeInfo.ReadDataAlwaysAdvances;
         }
 
         uint typeId = fieldType.TypeId;

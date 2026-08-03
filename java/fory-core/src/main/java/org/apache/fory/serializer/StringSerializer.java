@@ -1379,7 +1379,7 @@ public final class StringSerializer extends ImmutableSerializer<String> {
   }
 
   @Override
-  public boolean readBodyAlwaysAdvances() {
+  public boolean readDataAlwaysAdvances() {
     return true;
   }
 }

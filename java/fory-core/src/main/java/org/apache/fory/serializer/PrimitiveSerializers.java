@@ -43,7 +43,7 @@ public class PrimitiveSerializers {
     }
 
     @Override
-    public final boolean readBodyAlwaysAdvances() {
+    public final boolean readDataAlwaysAdvances() {
       return true;
     }
   }
@@ -58,7 +58,7 @@ public class PrimitiveSerializers {
     }
 
     @Override
-    public final boolean readBodyAlwaysAdvances() {
+    public final boolean readDataAlwaysAdvances() {
       return true;
     }
   }

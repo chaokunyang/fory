@@ -321,8 +321,8 @@ Map<K, V> readTypedMapPayload<K, V>(
         !valueTrackRef &&
         resolvedKeyTypeInfo != null &&
         resolvedValueTypeInfo != null &&
-        !resolvedKeyTypeInfo.readBodyAlwaysAdvances &&
-        !resolvedValueTypeInfo.readBodyAlwaysAdvances;
+        !resolvedKeyTypeInfo.readDataAlwaysAdvances &&
+        !resolvedValueTypeInfo.readDataAlwaysAdvances;
     final checkpoint =
         guardUnbackedItems ? bufferReaderIndex(context.buffer) : 0;
     if (tracksDepth) {

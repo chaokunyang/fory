@@ -618,17 +618,17 @@ public sealed class NullableKeyDictionarySerializer<TKey, TValue> : Serializer<N
         }
 
         ReserveMapStorage(context, totalLength);
-        bool keyReadAlwaysAdvances = keyTypeInfo.ReadBodyAlwaysAdvancesFor(keySerializer);
-        bool valueReadAlwaysAdvances = valueTypeInfo.ReadBodyAlwaysAdvancesFor(valueSerializer);
-        bool mapReadAlwaysAdvances = keyReadAlwaysAdvances || valueReadAlwaysAdvances;
+        bool keyReadDataAlwaysAdvances = keyTypeInfo.ReadDataAlwaysAdvancesFor(keySerializer);
+        bool valueReadDataAlwaysAdvances = valueTypeInfo.ReadDataAlwaysAdvancesFor(valueSerializer);
+        bool entryReadDataAlwaysAdvances = keyReadDataAlwaysAdvances || valueReadDataAlwaysAdvances;
         bool keyMayHaveRemoteSchema = context.Compatible &&
                                       keyTypeInfo.UserTypeKind == UserTypeKind.Struct &&
                                       keyTypeInfo.Evolving;
         bool valueMayHaveRemoteSchema = context.Compatible &&
                                         valueTypeInfo.UserTypeKind == UserTypeKind.Struct &&
                                         valueTypeInfo.Evolving;
-        if (keyReadAlwaysAdvances && !keyMayHaveRemoteSchema ||
-            valueReadAlwaysAdvances && !valueMayHaveRemoteSchema)
+        if (keyReadDataAlwaysAdvances && !keyMayHaveRemoteSchema ||
+            valueReadDataAlwaysAdvances && !valueMayHaveRemoteSchema)
         {
             context.Reader.CheckBound(totalLength);
         }
@@ -705,7 +705,7 @@ public sealed class NullableKeyDictionarySerializer<TKey, TValue> : Serializer<N
                                            !trackValueRef &&
                                            keyDeclared &&
                                            valueDeclared &&
-                                           !mapReadAlwaysAdvances;
+                                           !entryReadDataAlwaysAdvances;
                 int checkpoint = guardUnbackedItems ? context.Reader.Cursor : 0;
                 for (int i = 0; i < chunkSize; i++)
                 {
@@ -792,12 +792,12 @@ public sealed class NullableKeyDictionarySerializer<TKey, TValue> : Serializer<N
             TypeMeta? valueTypeMeta = !valueDeclared && context.Compatible
                 ? context.GetTypeMeta<TValue>()
                 : null;
-            bool chunkReadAlwaysAdvances =
-                keyTypeInfo.ReadBodyAlwaysAdvancesFor(keySerializer, keyTypeMeta) ||
-                valueTypeInfo.ReadBodyAlwaysAdvancesFor(valueSerializer, valueTypeMeta);
+            bool chunkReadDataAlwaysAdvances =
+                keyTypeInfo.ReadDataAlwaysAdvancesFor(keySerializer, keyTypeMeta) ||
+                valueTypeInfo.ReadDataAlwaysAdvancesFor(valueSerializer, valueTypeMeta);
             bool guardChunk = !trackKeyRef &&
                               !trackValueRef &&
-                              !chunkReadAlwaysAdvances;
+                              !chunkReadDataAlwaysAdvances;
             int chunkCheckpoint = guardChunk ? context.Reader.Cursor : 0;
 
             for (int i = 0; i < chunkSize; i++)

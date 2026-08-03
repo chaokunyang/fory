@@ -59,14 +59,14 @@ abstract class AbstractScalaCollectionSerializer[A, T <: Iterable[A]](
 
   override def newCollection(
       readContext: ReadContext,
-      bodyAlwaysAdvances: Boolean): util.Collection[_] = {
+      elementReadAlwaysAdvances: Boolean): util.Collection[_] = {
     val buffer = readContext.getBuffer
     val numElements = buffer.readVarUInt32Small7()
     checkCollectionSize(numElements)
     readContext.reserveGraphMemory(ScalaCollectionOwnerBytes + numElements.toLong * ReferenceBytes)
     setNumElements(numElements)
     val factory = readContext.readRef().asInstanceOf[Factory[A, T]]
-    if (bodyAlwaysAdvances) {
+    if (elementReadAlwaysAdvances) {
       buffer.checkReadableBytes(numElements)
     } else {
       val requiredReadable = numElements - readContext.remainingUnbackedContainerItems()

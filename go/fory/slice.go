@@ -440,11 +440,11 @@ func (s *sliceSerializer) ReadData(ctx *ReadContext, value reflect.Value) {
 	trackRefs := (collectFlag & CollectionTrackingRef) != 0
 	hasNull := (collectFlag & CollectionHasNull) != 0
 	declaredGenericDispatch := (collectFlag&CollectionIsDeclElementType) != 0 && serializerNeedsGenericDispatch(elemSerializer)
-	bodyAlwaysAdvances := trackRefs || hasNull || serializerReadDataAlwaysAdvances(elemSerializer)
+	elementReadAlwaysAdvances := trackRefs || hasNull || serializerReadDataAlwaysAdvances(elemSerializer)
 
 	// Handle slice vs array allocation
 	if !isArrayType {
-		if bodyAlwaysAdvances {
+		if elementReadAlwaysAdvances {
 			if !buf.CheckReadable(length, ctxErr) {
 				return
 			}
@@ -469,7 +469,7 @@ func (s *sliceSerializer) ReadData(ctx *ReadContext, value reflect.Value) {
 
 	if !trackRefs && !hasNull {
 		if declaredGenericDispatch {
-			if !bodyAlwaysAdvances {
+			if !elementReadAlwaysAdvances {
 				checkpoint := buf.logicalReaderIndex()
 				for i := 0; i < length; i++ {
 					elem := value.Index(i)
@@ -500,7 +500,7 @@ func (s *sliceSerializer) ReadData(ctx *ReadContext, value reflect.Value) {
 				}
 			}
 		} else {
-			if !bodyAlwaysAdvances {
+			if !elementReadAlwaysAdvances {
 				checkpoint := buf.logicalReaderIndex()
 				for i := 0; i < length; i++ {
 					elem := value.Index(i)

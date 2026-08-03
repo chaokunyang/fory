@@ -162,7 +162,7 @@ _refOverrideContainerForySchema = GeneratedStructSchema<RefOverrideContainer>(
   evolving: true,
   needsRootRef: true,
   usesNestedTypeDefinitions: true,
-  readBodyAlwaysAdvances: true,
+  readDataAlwaysAdvances: true,
   fields: _refOverrideContainerForyFieldInfo,
 );
 

@@ -475,12 +475,12 @@ public abstract class CollectionLikeSerializer<T> extends Serializer<T> {
    * <p>without default constructor, created list will have elementData as null, adding elements
    * will raise NPE.
    *
-   * @param bodyAlwaysAdvances whether the generated declared element operation always consumes
-   *     input
+   * @param elementReadAlwaysAdvances whether the generated declared element operation always
+   *     consumes input
    */
-  public Collection newCollection(ReadContext readContext, boolean bodyAlwaysAdvances) {
+  public Collection newCollection(ReadContext readContext, boolean elementReadAlwaysAdvances) {
     MemoryBuffer buffer = readContext.getBuffer();
-    numElements = readCollectionSize(readContext, buffer, bodyAlwaysAdvances);
+    numElements = readCollectionSize(readContext, buffer, elementReadAlwaysAdvances);
     if (AndroidSupport.IS_ANDROID) {
       try {
         Constructor<?> constructor = type.getDeclaredConstructor();
@@ -580,10 +580,10 @@ public abstract class CollectionLikeSerializer<T> extends Serializer<T> {
   }
 
   protected final int readCollectionSize(
-      ReadContext readContext, MemoryBuffer buffer, boolean bodyAlwaysAdvances) {
+      ReadContext readContext, MemoryBuffer buffer, boolean elementReadAlwaysAdvances) {
     int numElements = buffer.readVarUInt32Small7();
     checkCollectionSize(numElements);
-    if (bodyAlwaysAdvances) {
+    if (elementReadAlwaysAdvances) {
       buffer.checkReadableBytes(numElements);
     } else {
       int requiredReadable = numElements - readContext.remainingUnbackedContainerItems();
@@ -677,7 +677,7 @@ public abstract class CollectionLikeSerializer<T> extends Serializer<T> {
       }
     } else {
       if ((flags & CollectionFlags.HAS_NULL) != CollectionFlags.HAS_NULL) {
-        if (serializer.readBodyAlwaysAdvances()) {
+        if (serializer.readDataAlwaysAdvances()) {
           for (int i = 0; i < numElements; i++) {
             collection.add(serializer.read(readContext, RefMode.NONE));
           }
@@ -724,7 +724,7 @@ public abstract class CollectionLikeSerializer<T> extends Serializer<T> {
   }
 
   @Override
-  public final boolean readBodyAlwaysAdvances() {
+  public final boolean readDataAlwaysAdvances() {
     return true;
   }
 

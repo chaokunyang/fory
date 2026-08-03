@@ -95,7 +95,7 @@ inline bool reserve_map_storage(ReadContext &ctx, uint32_t length) {
   return ctx.reserve_graph_memory(static_cast<size_t>(length) * elem_bytes);
 }
 
-template <bool BodyAlwaysAdvances = false, typename MapType>
+template <bool EntryReadAlwaysAdvances = false, typename MapType>
 inline bool reserve_map(MapType &map, ReadContext &ctx, uint32_t length) {
   // Lazy error propagation may continue into later readers; do not let that
   // path retain attacker-controlled capacity after an earlier read failure.
@@ -114,7 +114,7 @@ inline bool reserve_map(MapType &map, ReadContext &ctx, uint32_t length) {
     return false;
   }
   uint32_t required_readable = length;
-  if constexpr (!BodyAlwaysAdvances) {
+  if constexpr (!EntryReadAlwaysAdvances) {
     const size_t allowance = ctx.remaining_unbacked_container_items();
     required_readable =
         static_cast<size_t>(length) > allowance
@@ -226,16 +226,18 @@ inline void read_map_chunk(MapType &result, ReadContext &ctx,
     return;
   }
 
-  bool always_advances = key_read_ref || value_read_ref;
+  bool entry_read_always_advances = key_read_ref || value_read_ref;
   if constexpr (KeyHasTypeInfo) {
-    always_advances =
-        always_advances || key_type_info->harness.read_data_always_advances;
+    entry_read_always_advances =
+        entry_read_always_advances ||
+        key_type_info->harness.read_data_always_advances;
   }
   if constexpr (ValueHasTypeInfo) {
-    always_advances =
-        always_advances || value_type_info->harness.read_data_always_advances;
+    entry_read_always_advances =
+        entry_read_always_advances ||
+        value_type_info->harness.read_data_always_advances;
   }
-  if (always_advances) {
+  if (entry_read_always_advances) {
     read_map_chunk_body<KeyHasTypeInfo, ValueHasTypeInfo, K, V>(
         result, ctx, chunk_size, key_read_ref, value_read_ref, key_type_info,
         value_type_info, key_reader, value_reader);
@@ -775,10 +777,10 @@ inline MapType read_map_data_fast(ReadContext &ctx, uint32_t length) {
   if (length == 0) {
     return result;
   }
-  constexpr bool entry_always_advances =
+  constexpr bool entry_read_data_always_advances =
       read_data_always_advances_v<K> || read_data_always_advances_v<V>;
   if (FORY_PREDICT_FALSE(
-          !reserve_map<entry_always_advances>(result, ctx, length))) {
+          !reserve_map<entry_read_data_always_advances>(result, ctx, length))) {
     return result;
   }
 
@@ -897,10 +899,10 @@ inline MapType read_map_data_slow(ReadContext &ctx, uint32_t length) {
   if (length == 0) {
     return result;
   }
-  constexpr bool entry_always_advances =
+  constexpr bool entry_read_data_always_advances =
       read_data_always_advances_v<K> || read_data_always_advances_v<V>;
   if (FORY_PREDICT_FALSE(
-          !reserve_map<entry_always_advances>(result, ctx, length))) {
+          !reserve_map<entry_read_data_always_advances>(result, ctx, length))) {
     return result;
   }
 

@@ -724,11 +724,11 @@ func (s mapSerializer) readChunk(ctx *ReadContext, mapVal reflect.Value, header 
 			}
 		}
 	}
-	bodyAlwaysAdvances := trackKeyRef || trackValRef ||
+	entryReadAlwaysAdvances := trackKeyRef || trackValRef ||
 		serializerReadDataAlwaysAdvances(keySer) ||
 		serializerReadDataAlwaysAdvances(valSer)
 	var checkpoint uint64
-	if !bodyAlwaysAdvances {
+	if !entryReadAlwaysAdvances {
 		checkpoint = buf.logicalReaderIndex()
 	}
 
@@ -764,7 +764,7 @@ func (s mapSerializer) readChunk(ctx *ReadContext, mapVal reflect.Value, header 
 		}
 		size--
 	}
-	if !bodyAlwaysAdvances && !ctx.settleUnbackedContainerItems(chunkSize, checkpoint) {
+	if !entryReadAlwaysAdvances && !ctx.settleUnbackedContainerItems(chunkSize, checkpoint) {
 		return 0
 	}
 

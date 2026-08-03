@@ -795,12 +795,12 @@ public abstract class MapLikeSerializer<T> extends Serializer<T> {
       valueSerializer =
           typeResolver.readTypeInfo(readContext, state.valueTypeInfoReadCache).getSerializer();
     }
-    boolean bodyAlwaysAdvances =
+    boolean entryReadAlwaysAdvances =
         trackKeyRef
             || trackValueRef
-            || keySerializer.readBodyAlwaysAdvances()
-            || valueSerializer.readBodyAlwaysAdvances();
-    int bodyStart = bodyAlwaysAdvances ? 0 : buffer.readerIndex();
+            || keySerializer.readDataAlwaysAdvances()
+            || valueSerializer.readDataAlwaysAdvances();
+    int bodyStart = entryReadAlwaysAdvances ? 0 : buffer.readerIndex();
     readContext.increaseDepth();
     for (int i = 0; i < chunkSize; i++) {
       Object key =
@@ -815,7 +815,7 @@ public abstract class MapLikeSerializer<T> extends Serializer<T> {
       size--;
     }
     readContext.decreaseDepth();
-    if (!bodyAlwaysAdvances) {
+    if (!entryReadAlwaysAdvances) {
       reserveUnbackedEntries(readContext, chunkSize, buffer.readerIndex() - bodyStart);
     }
     return size > 0 ? (size << 8) | buffer.readUnsignedByte() : 0;
@@ -855,12 +855,12 @@ public abstract class MapLikeSerializer<T> extends Serializer<T> {
     } else {
       valueSerializer = valueGenericType.getSerializer(typeResolver);
     }
-    boolean bodyAlwaysAdvances =
+    boolean entryReadAlwaysAdvances =
         trackKeyRef
             || trackValueRef
-            || keySerializer.readBodyAlwaysAdvances()
-            || valueSerializer.readBodyAlwaysAdvances();
-    int bodyStart = bodyAlwaysAdvances ? 0 : buffer.readerIndex();
+            || keySerializer.readDataAlwaysAdvances()
+            || valueSerializer.readDataAlwaysAdvances();
+    int bodyStart = entryReadAlwaysAdvances ? 0 : buffer.readerIndex();
     for (int i = 0; i < chunkSize; i++) {
       generics.pushGenericType(keyGenericType, readContext.getDepth());
       readContext.increaseDepth();
@@ -881,7 +881,7 @@ public abstract class MapLikeSerializer<T> extends Serializer<T> {
       map.put(key, value);
       size--;
     }
-    if (!bodyAlwaysAdvances) {
+    if (!entryReadAlwaysAdvances) {
       reserveUnbackedEntries(readContext, chunkSize, buffer.readerIndex() - bodyStart);
     }
     return size > 0 ? (size << 8) | buffer.readUnsignedByte() : 0;
@@ -931,12 +931,12 @@ public abstract class MapLikeSerializer<T> extends Serializer<T> {
    * <p>without default constructor, created list will have elementData as null, adding elements
    * will raise NPE.
    *
-   * @param bodyAlwaysAdvances whether at least one generated declared key/value operation always
-   *     consumes input
+   * @param entryReadAlwaysAdvances whether at least one generated declared key/value operation
+   *     always consumes input
    */
-  public Map newMap(ReadContext readContext, boolean bodyAlwaysAdvances) {
+  public Map newMap(ReadContext readContext, boolean entryReadAlwaysAdvances) {
     MemoryBuffer buffer = readContext.getBuffer();
-    numElements = readMapSize(readContext, buffer, bodyAlwaysAdvances);
+    numElements = readMapSize(readContext, buffer, entryReadAlwaysAdvances);
     if (AndroidSupport.IS_ANDROID) {
       try {
         Constructor<?> constructor = type.getDeclaredConstructor();
@@ -1006,10 +1006,10 @@ public abstract class MapLikeSerializer<T> extends Serializer<T> {
   }
 
   protected final int readMapSize(
-      ReadContext readContext, MemoryBuffer buffer, boolean bodyAlwaysAdvances) {
+      ReadContext readContext, MemoryBuffer buffer, boolean entryReadAlwaysAdvances) {
     int numElements = buffer.readVarUInt32Small7();
     checkMapSize(numElements);
-    if (bodyAlwaysAdvances) {
+    if (entryReadAlwaysAdvances) {
       buffer.checkReadableBytes(numElements);
     } else {
       int requiredReadable = numElements - readContext.remainingUnbackedContainerItems();
@@ -1053,7 +1053,7 @@ public abstract class MapLikeSerializer<T> extends Serializer<T> {
   }
 
   @Override
-  public final boolean readBodyAlwaysAdvances() {
+  public final boolean readDataAlwaysAdvances() {
     return true;
   }
 

@@ -1897,7 +1897,7 @@ public class CollectionSerializersTest extends ForyTestBase {
     }
 
     @Override
-    public Collection newCollection(ReadContext readContext, boolean bodyAlwaysAdvances) {
+    public Collection newCollection(ReadContext readContext, boolean elementReadAlwaysAdvances) {
       MemoryBuffer buffer = readContext.getBuffer();
       int numElements = buffer.readVarUInt32();
       setNumElements(numElements);

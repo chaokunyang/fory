@@ -60,7 +60,7 @@ public class TimeSerializers {
     }
 
     @Override
-    public final boolean readBodyAlwaysAdvances() {
+    public final boolean readDataAlwaysAdvances() {
       return true;
     }
   }
@@ -79,7 +79,7 @@ public class TimeSerializers {
     }
 
     @Override
-    public final boolean readBodyAlwaysAdvances() {
+    public final boolean readDataAlwaysAdvances() {
       return true;
     }
   }

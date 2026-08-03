@@ -212,8 +212,8 @@ func (s *arrayConcreteValueSerializer) ReadData(ctx *ReadContext, value reflect.
 		}
 	}
 
-	bodyAlwaysAdvances := trackRefs || hasNull || serializerReadDataAlwaysAdvances(s.elemSerializer)
-	if !bodyAlwaysAdvances {
+	elementReadAlwaysAdvances := trackRefs || hasNull || serializerReadDataAlwaysAdvances(s.elemSerializer)
+	if !elementReadAlwaysAdvances {
 		checkpoint := buf.logicalReaderIndex()
 		for i := 0; i < length; i++ {
 			elem := value.Index(i)

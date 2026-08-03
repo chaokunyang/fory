@@ -380,8 +380,8 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
         ROOT_OBJECT_NAME);
     ctx.overrideMethod(
         readMethodName, decodeCode, Object.class, ReadContext.class, READ_CONTEXT_NAME);
-    if (generatedReadBodyAlwaysAdvances()) {
-      ctx.overrideMethod("readBodyAlwaysAdvances", "return true;", boolean.class);
+    if (generatedReadDataAlwaysAdvances()) {
+      ctx.overrideMethod("readDataAlwaysAdvances", "return true;", boolean.class);
     }
     registerJITNotifyCallback();
     ctx.addConstructor(
@@ -397,7 +397,7 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
     return "";
   }
 
-  protected boolean generatedReadBodyAlwaysAdvances() {
+  protected boolean generatedReadDataAlwaysAdvances() {
     return false;
   }
 
@@ -2737,16 +2737,16 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
           serializer.type());
     }
     Invoke supportHook = inlineInvoke(serializer, "supportCodegenHook", PRIMITIVE_BOOLEAN_TYPE);
-    boolean bodyAlwaysAdvances =
+    boolean elementReadAlwaysAdvances =
         isMonomorphic(elementType.getRawType())
-            && registeredReadBodyAlwaysAdvances(elementType.getRawType());
+            && registeredReadDataAlwaysAdvances(elementType.getRawType());
     Expression collection =
         new Invoke(
             serializer,
             "newCollection",
             COLLECTION_TYPE,
             readContextRef,
-            Literal.ofBoolean(bodyAlwaysAdvances));
+            Literal.ofBoolean(elementReadAlwaysAdvances));
     Expression size = new Invoke(serializer, "getAndClearNumElements", "size", PRIMITIVE_INT_TYPE);
     // Do not add an ArrayList-specific branch here: it pushes generated code over 325 bytes, and
     // List#add is more likely to inline when the call site has only one receiver subclass.
@@ -2820,7 +2820,8 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
       Expression remoteElemSerializer = uninline(cast(remoteSerializer.inline(), serializerType));
       Expression declaredElemSerializer =
           maybeDecl ? cast(getOrCreateSerializer(elemClass), serializerType) : null;
-      boolean declaredBodyAlwaysAdvances = maybeDecl && registeredReadBodyAlwaysAdvances(elemClass);
+      boolean declaredElementReadAlwaysAdvances =
+          maybeDecl && registeredReadDataAlwaysAdvances(elemClass);
       builder.add(sameElementClass);
       Literal hasNullFlag = ofInt(CollectionFlags.HAS_NULL);
       Expression hasNull = eq(new BitAnd(flags, hasNullFlag), hasNullFlag, "hasNull");
@@ -2862,7 +2863,7 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
                     size,
                     trackingRef,
                     trackRef,
-                    declaredBodyAlwaysAdvances),
+                    declaredElementReadAlwaysAdvances),
                 remoteRead,
                 false);
       }
@@ -2915,10 +2916,10 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
       Expression size,
       boolean trackingRef,
       Expression trackRef,
-      boolean bodyAlwaysAdvances) {
+      boolean elementReadAlwaysAdvances) {
     Expression noRefRead =
         readSameTypeContainerElements(
-            elementType, serializer, hasNull, buffer, collection, size, bodyAlwaysAdvances);
+            elementType, serializer, hasNull, buffer, collection, size, elementReadAlwaysAdvances);
     if (!trackingRef) {
       return noRefRead;
     }
@@ -2977,7 +2978,7 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
         buffer,
         collection,
         size,
-        serializer == null && registeredReadBodyAlwaysAdvances(elementType.getRawType()));
+        serializer == null && registeredReadDataAlwaysAdvances(elementType.getRawType()));
   }
 
   private Expression readSameTypeContainerElements(
@@ -2987,8 +2988,8 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
       Expression buffer,
       Expression collection,
       Expression size,
-      boolean bodyAlwaysAdvances) {
-    if (bodyAlwaysAdvances) {
+      boolean elementReadAlwaysAdvances) {
+    if (elementReadAlwaysAdvances) {
       return readContainerElements(
           elementType, false, serializer, hasNull, buffer, collection, size);
     }
@@ -3004,7 +3005,7 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
               false);
       guarded =
           new If(
-              inlineInvoke(serializer, "readBodyAlwaysAdvances", PRIMITIVE_BOOLEAN_TYPE),
+              inlineInvoke(serializer, "readDataAlwaysAdvances", PRIMITIVE_BOOLEAN_TYPE),
               readContainerElements(
                   elementType, false, serializer, Literal.False, buffer, collection, size),
               guarded,
@@ -3020,7 +3021,7 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
             false);
   }
 
-  protected final boolean registeredReadBodyAlwaysAdvances(Class<?> type) {
+  protected final boolean registeredReadDataAlwaysAdvances(Class<?> type) {
     TypeInfo typeInfo = typeResolver(r -> r.getTypeInfo(type, false));
     Serializer<?> serializer = typeInfo == null ? null : typeInfo.getSerializer();
     if (serializer == null) {
@@ -3031,7 +3032,7 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
             || serializer instanceof LazyInitBeanSerializer
             || serializer instanceof ObjectSerializer;
     if (!inspectDeclaredStruct) {
-      return serializer.readBodyAlwaysAdvances();
+      return serializer.readDataAlwaysAdvances();
     }
     // Deferred/lazy serializers describe construction timing, not the generated body shape.
     // Inspect the declared schema here so codegen does not retain guarded loops for ordinary
@@ -3040,7 +3041,7 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
     if (typeDef == null) {
       typeDef = typeResolver(r -> r.getTypeDef(type, true));
     }
-    return typeDef.readBodyAlwaysAdvances();
+    return typeDef.readDataAlwaysAdvances();
   }
 
   private Expression readGuardedContainerElements(
@@ -3191,12 +3192,16 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
     Class<?> valueCls = valueType.getRawType();
     boolean keyMonomorphic = isMonomorphic(keyCls);
     boolean valueMonomorphic = isMonomorphic(valueCls);
-    boolean bodyAlwaysAdvances =
-        (keyMonomorphic && registeredReadBodyAlwaysAdvances(keyCls))
-            || (valueMonomorphic && registeredReadBodyAlwaysAdvances(valueCls));
+    boolean entryReadAlwaysAdvances =
+        (keyMonomorphic && registeredReadDataAlwaysAdvances(keyCls))
+            || (valueMonomorphic && registeredReadDataAlwaysAdvances(valueCls));
     Expression newMap =
         new Invoke(
-            serializer, "newMap", MAP_TYPE, readContextRef, Literal.ofBoolean(bodyAlwaysAdvances));
+            serializer,
+            "newMap",
+            MAP_TYPE,
+            readContextRef,
+            Literal.ofBoolean(entryReadAlwaysAdvances));
     Expression size = new Invoke(serializer, "getAndClearNumElements", "size", PRIMITIVE_INT_TYPE);
     Expression chunkHeader =
         new If(
@@ -3394,41 +3399,47 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
                   new Invoke(map, "put", keyAction, valueAction),
                   new Assign(size, subtract(size, ofInt(1))));
             });
-    boolean keyBodyAlwaysAdvances =
-        keyMonomorphic && registeredReadBodyAlwaysAdvances(keyTypeRawType);
-    boolean valueBodyAlwaysAdvances =
-        valueMonomorphic && registeredReadBodyAlwaysAdvances(valueTypeRawType);
-    if (keyBodyAlwaysAdvances || valueBodyAlwaysAdvances) {
+    boolean keyReadDataAlwaysAdvances =
+        keyMonomorphic && registeredReadDataAlwaysAdvances(keyTypeRawType);
+    boolean valueReadDataAlwaysAdvances =
+        valueMonomorphic && registeredReadDataAlwaysAdvances(valueTypeRawType);
+    if (keyReadDataAlwaysAdvances || valueReadDataAlwaysAdvances) {
       expressions.add(readKeyValues);
     } else {
-      Expression bodyAlwaysAdvances = null;
+      Expression entryReadAlwaysAdvances = null;
       if (trackingKeyRef) {
-        bodyAlwaysAdvances = trackKeyRef;
+        entryReadAlwaysAdvances = trackKeyRef;
       }
       if (trackingValueRef) {
-        bodyAlwaysAdvances =
-            bodyAlwaysAdvances == null ? trackValueRef : or(bodyAlwaysAdvances, trackValueRef);
+        entryReadAlwaysAdvances =
+            entryReadAlwaysAdvances == null
+                ? trackValueRef
+                : or(entryReadAlwaysAdvances, trackValueRef);
       }
       if (!keyMonomorphic) {
         Expression keyAdvances =
-            inlineInvoke(keySerializerExpr, "readBodyAlwaysAdvances", PRIMITIVE_BOOLEAN_TYPE);
-        if (registeredReadBodyAlwaysAdvances(keyTypeRawType)) {
+            inlineInvoke(keySerializerExpr, "readDataAlwaysAdvances", PRIMITIVE_BOOLEAN_TYPE);
+        if (registeredReadDataAlwaysAdvances(keyTypeRawType)) {
           keyAdvances = or(keyIsDeclaredType, keyAdvances);
         }
-        bodyAlwaysAdvances =
-            bodyAlwaysAdvances == null ? keyAdvances : or(bodyAlwaysAdvances, keyAdvances);
+        entryReadAlwaysAdvances =
+            entryReadAlwaysAdvances == null
+                ? keyAdvances
+                : or(entryReadAlwaysAdvances, keyAdvances);
       }
       if (!valueMonomorphic) {
         Expression valueAdvances =
-            inlineInvoke(valueSerializerExpr, "readBodyAlwaysAdvances", PRIMITIVE_BOOLEAN_TYPE);
-        if (registeredReadBodyAlwaysAdvances(valueTypeRawType)) {
+            inlineInvoke(valueSerializerExpr, "readDataAlwaysAdvances", PRIMITIVE_BOOLEAN_TYPE);
+        if (registeredReadDataAlwaysAdvances(valueTypeRawType)) {
           valueAdvances = or(valueIsDeclaredType, valueAdvances);
         }
-        bodyAlwaysAdvances =
-            bodyAlwaysAdvances == null ? valueAdvances : or(bodyAlwaysAdvances, valueAdvances);
+        entryReadAlwaysAdvances =
+            entryReadAlwaysAdvances == null
+                ? valueAdvances
+                : or(entryReadAlwaysAdvances, valueAdvances);
       }
       expressions.add(
-          guardUnbackedMapEntries(buffer, chunkSize, readKeyValues, bodyAlwaysAdvances));
+          guardUnbackedMapEntries(buffer, chunkSize, readKeyValues, entryReadAlwaysAdvances));
     }
 
     if (inline) {
@@ -3465,15 +3476,15 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
       Expression buffer,
       Expression chunkSize,
       Expression readEntries,
-      Expression bodyAlwaysAdvances) {
+      Expression entryReadAlwaysAdvances) {
     Variable bodyStart;
     ListExpression result = new ListExpression();
-    if (bodyAlwaysAdvances == null) {
+    if (entryReadAlwaysAdvances == null) {
       bodyStart =
           new Variable(
               "bodyStart", new Invoke(buffer, "readerIndex", "readerIndex", PRIMITIVE_INT_TYPE));
     } else {
-      Variable progress = new Variable("bodyAlwaysAdvances", bodyAlwaysAdvances);
+      Variable progress = new Variable("entryReadAlwaysAdvances", entryReadAlwaysAdvances);
       result.add(progress);
       bodyStart =
           new Variable(
@@ -3497,7 +3508,8 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
             new If(
                 gt(chunkSize, consumed),
                 invokeReadContext("reserveUnbackedContainerItems", subtract(chunkSize, consumed))));
-    result.add(bodyAlwaysAdvances == null ? settle : new If(neq(bodyStart, ofInt(-1)), settle));
+    result.add(
+        entryReadAlwaysAdvances == null ? settle : new If(neq(bodyStart, ofInt(-1)), settle));
     return result;
   }
 

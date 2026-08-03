@@ -115,7 +115,7 @@ final class TypeInfo {
   final bool supportsRef;
   final bool needsRootRef;
   final bool usesNestedTypeDefinitions;
-  final bool readBodyAlwaysAdvances;
+  final bool readDataAlwaysAdvances;
   final bool evolving;
   final List<FieldInfo> fields;
   final Serializer<Object?> serializer;
@@ -135,7 +135,7 @@ final class TypeInfo {
     required this.supportsRef,
     required this.needsRootRef,
     required this.usesNestedTypeDefinitions,
-    required this.readBodyAlwaysAdvances,
+    required this.readDataAlwaysAdvances,
     required this.evolving,
     required this.fields,
     required this.serializer,
@@ -170,7 +170,7 @@ final TypeInfo _unknownRemoteEnumTypeInfo = TypeInfo(
   supportsRef: false,
   needsRootRef: false,
   usesNestedTypeDefinitions: false,
-  readBodyAlwaysAdvances: false,
+  readDataAlwaysAdvances: false,
   evolving: false,
   fields: const <FieldInfo>[],
   serializer: const _UnknownRemoteFieldSerializer('enum'),
@@ -191,7 +191,7 @@ final TypeInfo _unknownRemoteUnionTypeInfo = TypeInfo(
   supportsRef: true,
   needsRootRef: false,
   usesNestedTypeDefinitions: false,
-  readBodyAlwaysAdvances: false,
+  readDataAlwaysAdvances: false,
   evolving: false,
   fields: const <FieldInfo>[],
   serializer: const _UnknownRemoteFieldSerializer('union'),
@@ -293,7 +293,7 @@ bool _fieldTypeUsesNestedTypeDefinitions(FieldType fieldType) {
   return false;
 }
 
-bool _fieldsReadBodyAlwaysAdvances(List<FieldInfo> fields) {
+bool _fieldsReadDataAlwaysAdvances(List<FieldInfo> fields) {
   for (final field in fields) {
     final fieldType = field.fieldType;
     final typeId = fieldType.typeId;
@@ -415,7 +415,7 @@ final class TypeResolver {
       fields: entry.fields,
       needsRootRef: entry.needsRootRef,
       usesNestedTypeDefinitions: entry.usesNestedTypeDefinitions,
-      readBodyAlwaysAdvances: entry.readBodyAlwaysAdvances,
+      readDataAlwaysAdvances: entry.readDataAlwaysAdvances,
       id: id,
       namespace: namespace,
       typeName: typeName,
@@ -447,7 +447,7 @@ final class TypeResolver {
     bool evolving = true,
     bool? needsRootRef,
     bool? usesNestedTypeDefinitions,
-    bool readBodyAlwaysAdvances = false,
+    bool readDataAlwaysAdvances = false,
     List<FieldInfo> fields = const <FieldInfo>[],
     int? id,
     String? namespace,
@@ -482,8 +482,8 @@ final class TypeResolver {
               ? usesNestedTypeDefinitions ??
                   _fieldsUseNestedTypeDefinitions(normalizedFields)
               : true,
-      readBodyAlwaysAdvances:
-          readBodyAlwaysAdvances || registrationKind == RegistrationKind.union,
+      readDataAlwaysAdvances:
+          readDataAlwaysAdvances || registrationKind == RegistrationKind.union,
       evolving: registrationKind == RegistrationKind.struct ? evolving : false,
       fields: normalizedFields,
       serializer: payloadSerializer,
@@ -1433,8 +1433,8 @@ final class TypeResolver {
       usesNestedTypeDefinitions: resolved.usesNestedTypeDefinitions,
       // Compatible field dispatch follows the received schema. Derive this
       // one-level fact from the remote fields instead of retaining the local
-      // generated body's answer; nested Struct and ext bodies stay conservative.
-      readBodyAlwaysAdvances: _fieldsReadBodyAlwaysAdvances(fields),
+      // generated readData answer; nested Struct and ext bodies stay conservative.
+      readDataAlwaysAdvances: _fieldsReadDataAlwaysAdvances(fields),
       evolving: resolved.evolving,
       fields: resolved.fields,
       serializer: resolved.serializer,
@@ -1728,7 +1728,7 @@ final class TypeResolver {
       supportsRef: TypeIds.supportsRef(typeId),
       needsRootRef: false,
       usesNestedTypeDefinitions: false,
-      readBodyAlwaysAdvances: typeId != TypeIds.none,
+      readDataAlwaysAdvances: typeId != TypeIds.none,
       evolving: false,
       fields: const <FieldInfo>[],
       serializer: _builtinSerializerFor(typeId, type),

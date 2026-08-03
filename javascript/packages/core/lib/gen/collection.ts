@@ -358,12 +358,12 @@ export class CollectionAnySerializer {
         ? this.declaredSerializer!
         : AnyHelper.detectSerializer(this.readContext);
     }
-    const bodyAlwaysAdvances =
+    const elementReadAlwaysAdvances =
       !isSame ||
       Boolean(refTracking) ||
       Boolean(includeNone) ||
       serializer?.readDataAlwaysAdvances === true;
-    if (bodyAlwaysAdvances) {
+    if (elementReadAlwaysAdvances) {
       this.readContext.reader.checkReadableBytes(len);
     } else {
       this.readContext.checkUnbackedContainerAllocation(len);
@@ -409,7 +409,7 @@ export class CollectionAnySerializer {
           }
         }
       } else {
-        if (bodyAlwaysAdvances) {
+        if (elementReadAlwaysAdvances) {
           for (let i = 0; i < len; i++) {
             accessor(result, i, this.readSerializerWithDepth(serializer!, false));
           }
@@ -587,15 +587,15 @@ export abstract class CollectionSerializerGenerator extends BaseSerializerGenera
     const idx = this.scope.uniqueName("idx");
     const refFlag = this.scope.uniqueName("refFlag");
     const elemSerializer = this.scope.uniqueName("elemSerializer");
-    const bodyAlwaysAdvances = this.scope.uniqueName("bodyAlwaysAdvances");
+    const elementReadAlwaysAdvances = this.scope.uniqueName("elementReadAlwaysAdvances");
     const checkpoint = this.scope.uniqueName("checkpoint");
     const tail = this.scope.uniqueName("tail");
     const anyHelper = this.builder.getExternal(AnyHelper.name);
     const readContextName = this.builder.getReadContextName();
     const useDeclaredStructElementReader = TypeId.structType(this.innerGenerator.getTypeId()!);
     const declaredElementType = this.isDeclaredElementType();
-    const staticBodyAlwaysAdvances = this.innerGenerator.readDataAlwaysAdvances();
-    const needsProgressChoice = !declaredElementType || !staticBodyAlwaysAdvances;
+    const staticReadDataAlwaysAdvances = this.innerGenerator.readDataAlwaysAdvances();
+    const needsProgressChoice = !declaredElementType || !staticReadDataAlwaysAdvances;
     const compatibleReadAction = getCompatibleCollectionArrayReadAction(this.typeInfo);
     const compatibleListToArray = compatibleReadAction?.target === "array";
     const compatibleReadableCheck = compatibleListToArray
@@ -673,21 +673,21 @@ export abstract class CollectionSerializerGenerator extends BaseSerializerGenera
     `;
     const plainRead = needsProgressChoice
       ? `
-        if (${bodyAlwaysAdvances}) {
+        if (${elementReadAlwaysAdvances}) {
           ${plainLoop(false)}
         } else {
           ${guardedPlainLoop}
         }
       `
       : plainLoop(false);
-    const progressState = needsProgressChoice ? `let ${bodyAlwaysAdvances} = true;` : "";
+    const progressState = needsProgressChoice ? `let ${elementReadAlwaysAdvances} = true;` : "";
     const allocationCheck = compatibleListToArray
       ? compatibleReadableCheck
       : needsProgressChoice
         ? `
-          ${bodyAlwaysAdvances} = Boolean(${flags} & (${CollectionFlags.TRACKING_REF} | ${CollectionFlags.HAS_NULL})) ||
-            (${elemSerializer} ? ${elemSerializer}.readDataAlwaysAdvances === true : ${staticBodyAlwaysAdvances});
-          if (${bodyAlwaysAdvances}) {
+          ${elementReadAlwaysAdvances} = Boolean(${flags} & (${CollectionFlags.TRACKING_REF} | ${CollectionFlags.HAS_NULL})) ||
+            (${elemSerializer} ? ${elemSerializer}.readDataAlwaysAdvances === true : ${staticReadDataAlwaysAdvances});
+          if (${elementReadAlwaysAdvances}) {
             ${this.builder.reader.checkReadableBytes(len)};
           } else {
             ${readContextName}.checkUnbackedContainerAllocation(${len});

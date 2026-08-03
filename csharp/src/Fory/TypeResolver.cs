@@ -129,7 +129,7 @@ public sealed class TypeResolver
                 typeof(T),
                 new TSerializer(),
                 evolving: true,
-                readBodyAlwaysAdvances: true));
+                readDataAlwaysAdvances: true));
     }
 
     /// <summary>
@@ -139,16 +139,16 @@ public sealed class TypeResolver
     /// <typeparam name="T">Runtime target type.</typeparam>
     /// <typeparam name="TSerializer">Generated serializer type.</typeparam>
     /// <param name="evolving">Generated structural schema-evolution setting.</param>
-    /// <param name="readBodyAlwaysAdvances">Whether every successful generated body read consumes input.</param>
+    /// <param name="readDataAlwaysAdvances">Whether every successful generated ReadData call consumes input.</param>
     /// <exception cref="InvalidOperationException">
     /// Thrown when another generated serializer already owns the target type.
     /// </exception>
     public static void RegisterGeneratedStruct<T, TSerializer>(
         bool evolving,
-        bool readBodyAlwaysAdvances)
+        bool readDataAlwaysAdvances)
         where TSerializer : Serializer<T>, new()
     {
-        Func<TypeResolver, TypeInfo> factory = (evolving, readBodyAlwaysAdvances) switch
+        Func<TypeResolver, TypeInfo> factory = (evolving, readDataAlwaysAdvances) switch
         {
             (true, true) => static _ => TypeInfo.Create(typeof(T), new TSerializer(), true, true),
             (true, false) => static _ => TypeInfo.Create(typeof(T), new TSerializer(), true, false),
@@ -1794,12 +1794,12 @@ public sealed class TypeResolver
         if (typeInfo.BuiltInTypeId is TypeId builtInTypeId &&
             builtInTypeId is not TypeId.Unknown and not TypeId.None)
         {
-            return typeInfo.WithAdvancingReadBody();
+            return typeInfo.WithAdvancingReadData();
         }
 
         if (typeInfo.UserTypeKind is UserTypeKind.Enum or UserTypeKind.TypedUnion)
         {
-            return typeInfo.WithAdvancingReadBody();
+            return typeInfo.WithAdvancingReadData();
         }
 
         return typeInfo;

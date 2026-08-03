@@ -337,14 +337,14 @@ export class MapAnySerializer {
         }
       }
 
-      const bodyAlwaysAdvances =
+      const entryReadAlwaysAdvances =
         Boolean(keyHeader & MapFlags.HAS_NULL) ||
         Boolean(valueHeader & MapFlags.HAS_NULL) ||
         Boolean(keyHeader & MapFlags.TRACKING_REF) ||
         Boolean(valueHeader & MapFlags.TRACKING_REF) ||
         keySerializer?.readDataAlwaysAdvances === true ||
         valueSerializer?.readDataAlwaysAdvances === true;
-      const checkpoint = bodyAlwaysAdvances ? 0 : this.readContext.reader.readGetCursor();
+      const checkpoint = entryReadAlwaysAdvances ? 0 : this.readContext.reader.readGetCursor();
 
       for (let index = 0; index < chunkSize; index++) {
         const key = this.readElement(keyHeader, keySerializer);
@@ -352,7 +352,7 @@ export class MapAnySerializer {
         result.set(key, value);
         count--;
       }
-      if (!bodyAlwaysAdvances) {
+      if (!entryReadAlwaysAdvances) {
         this.readContext.settleUnbackedContainerItems(chunkSize, checkpoint);
       }
     }
@@ -525,8 +525,8 @@ export class MapSerializerGenerator extends BaseSerializerGenerator {
     const count = this.scope.uniqueName("count");
     const result = this.scope.uniqueName("result");
     const checkpoint = this.scope.uniqueName("checkpoint");
-    const bodyAlwaysAdvances = this.scope.uniqueName("bodyAlwaysAdvances");
-    const staticBodyAlwaysAdvances =
+    const entryReadAlwaysAdvances = this.scope.uniqueName("entryReadAlwaysAdvances");
+    const staticReadDataAlwaysAdvances =
       this.keyGenerator.readDataAlwaysAdvances() || this.valueGenerator.readDataAlwaysAdvances();
     // Skip depth tracking for leaf key/value types.
     const keyIsLeaf = TypeId.isLeafTypeId(this.keyGenerator.getTypeId()!);
@@ -562,7 +562,7 @@ export class MapSerializerGenerator extends BaseSerializerGenerator {
       let ${count} = ${this.builder.reader.readVarUint32Small7()};
       ${readContextName}.reserveGraphMemory(${JS_MAP_OWNER_BYTES} + ${count} * 2 * ${REFERENCE_BYTES});
       ${
-        staticBodyAlwaysAdvances
+        staticReadDataAlwaysAdvances
           ? this.builder.reader.checkReadableBytes(count)
           : `${readContextName}.checkUnbackedContainerAllocation(${count});`
       }
@@ -598,14 +598,14 @@ export class MapSerializerGenerator extends BaseSerializerGenerator {
           }
         }
         ${
-          staticBodyAlwaysAdvances
+          staticReadDataAlwaysAdvances
             ? ""
             : `
-              const ${bodyAlwaysAdvances} = Boolean(keyIncludeNone) || Boolean(valueIncludeNone) ||
+              const ${entryReadAlwaysAdvances} = Boolean(keyIncludeNone) || Boolean(valueIncludeNone) ||
                 Boolean(keyTrackingRef) || Boolean(valueTrackingRef) ||
                 ${keySerializer}?.readDataAlwaysAdvances === true ||
                 ${valueSerializer}?.readDataAlwaysAdvances === true;
-              const ${checkpoint} = ${bodyAlwaysAdvances} ? 0 : ${this.builder.reader.readGetCursor()};
+              const ${checkpoint} = ${entryReadAlwaysAdvances} ? 0 : ${this.builder.reader.readGetCursor()};
             `
         }
         for (let index = 0; index < chunkSize; index++) {
@@ -704,10 +704,10 @@ export class MapSerializerGenerator extends BaseSerializerGenerator {
           ${count}--;
         }
         ${
-          staticBodyAlwaysAdvances
+          staticReadDataAlwaysAdvances
             ? ""
             : `
-              if (!${bodyAlwaysAdvances}) {
+              if (!${entryReadAlwaysAdvances}) {
                 ${readContextName}.settleUnbackedContainerItems(chunkSize, ${checkpoint});
               }
             `

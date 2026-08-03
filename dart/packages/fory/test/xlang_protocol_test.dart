@@ -276,7 +276,7 @@ TypeInfo _cachedTypeInfo(Int64 header) {
     supportsRef: false,
     needsRootRef: false,
     usesNestedTypeDefinitions: false,
-    readBodyAlwaysAdvances: false,
+    readDataAlwaysAdvances: false,
     evolving: false,
     fields: const <FieldInfo>[],
     serializer: const _CacheTestSerializer(),

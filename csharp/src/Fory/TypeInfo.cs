@@ -63,7 +63,7 @@ public sealed class TypeInfo
         bool isRefType,
         object? defaultObject,
         bool evolving,
-        bool readBodyAlwaysAdvances,
+        bool readDataAlwaysAdvances,
         bool isRegistered,
         uint? userTypeId,
         bool registerByName,
@@ -89,7 +89,7 @@ public sealed class TypeInfo
         IsRefType = isRefType;
         DefaultObject = defaultObject;
         Evolving = evolving;
-        ReadBodyAlwaysAdvances = readBodyAlwaysAdvances;
+        ReadDataAlwaysAdvances = readDataAlwaysAdvances;
         IsRegistered = isRegistered;
         UserTypeId = userTypeId;
         RegisterByName = registerByName;
@@ -107,7 +107,7 @@ public sealed class TypeInfo
 
     internal static TypeInfo Create<T>(Type type, Serializer<T> serializer)
     {
-        return Create(type, serializer, evolving: true, readBodyAlwaysAdvances: false);
+        return Create(type, serializer, evolving: true, readDataAlwaysAdvances: false);
     }
 
     internal static TypeInfo Create<T>(
@@ -115,14 +115,14 @@ public sealed class TypeInfo
         Serializer<T> serializer,
         bool evolving)
     {
-        return Create(type, serializer, evolving, readBodyAlwaysAdvances: false);
+        return Create(type, serializer, evolving, readDataAlwaysAdvances: false);
     }
 
     internal static TypeInfo Create<T>(
         Type type,
         Serializer<T> serializer,
         bool evolving,
-        bool readBodyAlwaysAdvances)
+        bool readDataAlwaysAdvances)
     {
         Type? nullableType = Nullable.GetUnderlyingType(type);
         if (nullableType is not null)
@@ -154,7 +154,7 @@ public sealed class TypeInfo
             isRefType,
             serializer.DefaultObject,
             resolvedEvolving,
-            readBodyAlwaysAdvances,
+            readDataAlwaysAdvances,
             isRegistered: false,
             userTypeId: null,
             registerByName: false,
@@ -198,7 +198,7 @@ public sealed class TypeInfo
             isRefType: false,
             serializer.DefaultObject,
             resolvedEvolving,
-            readBodyAlwaysAdvances: false,
+            readDataAlwaysAdvances: false,
             isRegistered: false,
             userTypeId: null,
             registerByName: false,
@@ -694,7 +694,7 @@ public sealed class TypeInfo
 
     internal bool Evolving { get; }
 
-    internal bool ReadBodyAlwaysAdvances { get; }
+    internal bool ReadDataAlwaysAdvances { get; }
 
     internal TypeId? WireTypeId { get; }
 
@@ -710,15 +710,15 @@ public sealed class TypeInfo
         throw new InvalidDataException($"serializer type mismatch for {typeof(T)}");
     }
 
-    internal bool ReadBodyAlwaysAdvancesFor<T>(Serializer<T> serializer)
+    internal bool ReadDataAlwaysAdvancesFor<T>(Serializer<T> serializer)
     {
-        return ReadBodyAlwaysAdvances && ReferenceEquals(_serializer, serializer);
+        return ReadDataAlwaysAdvances && ReferenceEquals(_serializer, serializer);
     }
 
-    internal bool ReadBodyAlwaysAdvancesFor<T>(Serializer<T> serializer, TypeMeta? typeMeta)
+    internal bool ReadDataAlwaysAdvancesFor<T>(Serializer<T> serializer, TypeMeta? typeMeta)
     {
         return ReferenceEquals(_serializer, serializer) &&
-               (typeMeta?.ReadBodyAlwaysAdvances ?? ReadBodyAlwaysAdvances);
+               (typeMeta?.ReadDataAlwaysAdvances ?? ReadDataAlwaysAdvances);
     }
 
     internal void WriteDataObject(WriteContext context, object? value, bool hasGenerics)
@@ -795,7 +795,7 @@ public sealed class TypeInfo
             IsRefType,
             DefaultObject,
             Evolving,
-            ReadBodyAlwaysAdvances,
+            ReadDataAlwaysAdvances,
             isRegistered: true,
             userTypeId: userTypeId,
             registerByName: false,
@@ -824,7 +824,7 @@ public sealed class TypeInfo
             IsRefType,
             DefaultObject,
             Evolving,
-            ReadBodyAlwaysAdvances,
+            ReadDataAlwaysAdvances,
             isRegistered: true,
             userTypeId: null,
             registerByName: true,
@@ -868,11 +868,11 @@ public sealed class TypeInfo
 
     internal TypeInfo WithWireTypeInfo(TypeId wireTypeId, TypeMeta? typeMeta = null)
     {
-        bool readBodyAlwaysAdvances =
+        bool readDataAlwaysAdvances =
             typeMeta is not null &&
             wireTypeId is TypeId.CompatibleStruct or TypeId.NamedCompatibleStruct
-                ? typeMeta.ReadBodyAlwaysAdvances
-                : ReadBodyAlwaysAdvances;
+                ? typeMeta.ReadDataAlwaysAdvances
+                : ReadDataAlwaysAdvances;
         return new TypeInfo(
             Type,
             _serializer,
@@ -883,7 +883,7 @@ public sealed class TypeInfo
             IsRefType,
             DefaultObject,
             Evolving,
-            readBodyAlwaysAdvances,
+            readDataAlwaysAdvances,
             IsRegistered,
             UserTypeId,
             RegisterByName,
@@ -900,9 +900,9 @@ public sealed class TypeInfo
             typeMeta);
     }
 
-    internal TypeInfo WithAdvancingReadBody()
+    internal TypeInfo WithAdvancingReadData()
     {
-        if (ReadBodyAlwaysAdvances)
+        if (ReadDataAlwaysAdvances)
         {
             return this;
         }
@@ -917,7 +917,7 @@ public sealed class TypeInfo
             IsRefType,
             DefaultObject,
             Evolving,
-            readBodyAlwaysAdvances: true,
+            readDataAlwaysAdvances: true,
             IsRegistered,
             UserTypeId,
             RegisterByName,

@@ -472,7 +472,7 @@ public class FieldTypes {
       return typeId;
     }
 
-    boolean readBodyAlwaysAdvances() {
+    boolean fieldReadAlwaysAdvances() {
       return nullable || trackingRef;
     }
 
@@ -757,8 +757,8 @@ public class FieldTypes {
     }
 
     @Override
-    boolean readBodyAlwaysAdvances() {
-      if (super.readBodyAlwaysAdvances()
+    boolean fieldReadAlwaysAdvances() {
+      if (super.fieldReadAlwaysAdvances()
           || Types.isPrimitiveType(typeId)
           || Types.isPrimitiveArray(typeId)) {
         return true;
@@ -1029,7 +1029,7 @@ public class FieldTypes {
     }
 
     @Override
-    boolean readBodyAlwaysAdvances() {
+    boolean fieldReadAlwaysAdvances() {
       return true;
     }
 
@@ -1146,7 +1146,7 @@ public class FieldTypes {
     }
 
     @Override
-    boolean readBodyAlwaysAdvances() {
+    boolean fieldReadAlwaysAdvances() {
       return true;
     }
 
@@ -1224,7 +1224,7 @@ public class FieldTypes {
     }
 
     @Override
-    boolean readBodyAlwaysAdvances() {
+    boolean fieldReadAlwaysAdvances() {
       return true;
     }
 
@@ -1271,7 +1271,7 @@ public class FieldTypes {
     }
 
     @Override
-    boolean readBodyAlwaysAdvances() {
+    boolean fieldReadAlwaysAdvances() {
       return true;
     }
 
@@ -1401,7 +1401,7 @@ public class FieldTypes {
     }
 
     @Override
-    boolean readBodyAlwaysAdvances() {
+    boolean fieldReadAlwaysAdvances() {
       return true;
     }
 

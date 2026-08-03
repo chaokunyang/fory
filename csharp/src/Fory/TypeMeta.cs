@@ -135,7 +135,7 @@ public sealed class TypeMetaFieldType : IEquatable<TypeMetaFieldType>
 
     public IReadOnlyList<TypeMetaFieldType> Generics { get; }
 
-    internal bool ReadBodyAlwaysAdvances =>
+    internal bool FieldReadAlwaysAdvances =>
         Nullable ||
         TrackRef ||
         TypeId is >= (uint)global::Apache.Fory.TypeId.Bool and <= (uint)global::Apache.Fory.TypeId.Map ||
@@ -455,7 +455,7 @@ public sealed class TypeMeta : IEquatable<TypeMeta>
         Fields = fields;
         Compressed = compressed;
         HeaderHash = headerHash;
-        ReadBodyAlwaysAdvances = fields.Any(static field => field.FieldType.ReadBodyAlwaysAdvances);
+        ReadDataAlwaysAdvances = fields.Any(static field => field.FieldType.FieldReadAlwaysAdvances);
     }
 
     public uint? TypeId { get; }
@@ -474,7 +474,7 @@ public sealed class TypeMeta : IEquatable<TypeMeta>
 
     public ulong HeaderHash { get; }
 
-    internal bool ReadBodyAlwaysAdvances { get; }
+    internal bool ReadDataAlwaysAdvances { get; }
 
     internal void EnsureAssignedFieldIds(IReadOnlyList<TypeMetaFieldInfo> localFieldInfos)
     {

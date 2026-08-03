@@ -181,7 +181,7 @@ internal class UnionSerializerSourceWriter(private val union: KotlinSourceUnion)
   }
 
   private fun writeRead() {
-    builder.append("  override fun readBodyAlwaysAdvances(): Boolean = true\n\n")
+    builder.append("  override fun readDataAlwaysAdvances(): Boolean = true\n\n")
     builder
       .append("  override fun read(readContext: ReadContext): ")
       .append(union.typeName)

@@ -1168,7 +1168,7 @@ _PreparedListRead _prepareListRead(
       !trackRef &&
       !hasNull &&
       directTypeInfo != null &&
-      !directTypeInfo.readBodyAlwaysAdvances;
+      !directTypeInfo.readDataAlwaysAdvances;
   return _PreparedListRead(
     size: size,
     trackRef: trackRef,

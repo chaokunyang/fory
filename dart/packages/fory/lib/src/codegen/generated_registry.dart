@@ -31,7 +31,7 @@ final class GeneratedTypeEntry {
   final bool evolving;
   final bool needsRootRef;
   final bool usesNestedTypeDefinitions;
-  final bool readBodyAlwaysAdvances;
+  final bool readDataAlwaysAdvances;
   final List<FieldInfo> fields;
 
   const GeneratedTypeEntry({
@@ -40,7 +40,7 @@ final class GeneratedTypeEntry {
     this.evolving = true,
     this.needsRootRef = false,
     this.usesNestedTypeDefinitions = true,
-    this.readBodyAlwaysAdvances = false,
+    this.readDataAlwaysAdvances = false,
     this.fields = const <FieldInfo>[],
   });
 }

@@ -153,7 +153,7 @@ public class ObjectCodecBuilder extends BaseObjectCodecBuilder {
   }
 
   @Override
-  protected boolean generatedReadBodyAlwaysAdvances() {
+  protected boolean generatedReadDataAlwaysAdvances() {
     if (classVersionHash != null) {
       return true;
     }
@@ -166,7 +166,7 @@ public class ObjectCodecBuilder extends BaseObjectCodecBuilder {
           || descriptor.isTrackingRef()
           || descriptor.isNullable()
           || !isMonomorphic(descriptor)
-          || registeredReadBodyAlwaysAdvances(fieldType)) {
+          || registeredReadDataAlwaysAdvances(fieldType)) {
         return true;
       }
     }

@@ -419,7 +419,7 @@ struct has_reserve<Container,
 template <typename Container>
 inline constexpr bool has_reserve_v = has_reserve<Container>::value;
 
-template <bool BodyAlwaysAdvances = false, typename Container>
+template <bool ElementReadAlwaysAdvances = false, typename Container>
 inline bool reserve_collection(Container &result, ReadContext &ctx,
                                uint32_t length) {
   // Lazy error propagation may continue into later readers; do not let that
@@ -443,7 +443,7 @@ inline bool reserve_collection(Container &result, ReadContext &ctx,
     return false;
   }
   uint32_t required_readable = length;
-  if constexpr (!BodyAlwaysAdvances) {
+  if constexpr (!ElementReadAlwaysAdvances) {
     const size_t allowance = ctx.remaining_unbacked_container_items();
     required_readable =
         static_cast<size_t>(length) > allowance
@@ -460,7 +460,7 @@ inline bool reserve_collection(Container &result, ReadContext &ctx,
   return true;
 }
 
-template <bool BodyAlwaysAdvances = true, typename Alloc>
+template <bool ElementReadAlwaysAdvances = true, typename Alloc>
 inline bool reserve_collection(std::vector<bool, Alloc> &result,
                                ReadContext &ctx, uint32_t length) {
   if (FORY_PREDICT_FALSE(ctx.has_error())) {
@@ -492,15 +492,16 @@ FORY_ALWAYS_INLINE bool
 reserve_collection_for_read(Container &result, ReadContext &ctx,
                             uint32_t length, bool track_ref, bool has_null,
                             bool is_same_type, const TypeInfo *type_info) {
-  bool body_always_advances = track_ref || has_null || !is_same_type;
-  if (!body_always_advances) {
+  bool element_read_always_advances = track_ref || has_null || !is_same_type;
+  if (!element_read_always_advances) {
     if (type_info != nullptr) {
-      body_always_advances = type_info->harness.read_data_always_advances;
+      element_read_always_advances =
+          type_info->harness.read_data_always_advances;
     } else if constexpr (read_data_always_advances_v<T>) {
-      body_always_advances = true;
+      element_read_always_advances = true;
     }
   }
-  if (body_always_advances) {
+  if (element_read_always_advances) {
     return reserve_collection<true>(result, ctx, length);
   }
   return reserve_collection(result, ctx, length);

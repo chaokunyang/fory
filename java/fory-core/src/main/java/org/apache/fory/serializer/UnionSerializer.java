@@ -660,7 +660,7 @@ public class UnionSerializer extends Serializer<Union> {
   }
 
   @Override
-  public final boolean readBodyAlwaysAdvances() {
+  public final boolean readDataAlwaysAdvances() {
     return true;
   }
 }

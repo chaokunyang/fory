@@ -71,6 +71,11 @@ public final class TypeMeta: Equatable, @unchecked Sendable {
             self.generics = generics
         }
 
+        internal var readDataAlwaysAdvances: Bool {
+            nullable || trackRef
+                || TypeId(rawValue: typeID)?.readDataAlwaysAdvances == true
+        }
+
         fileprivate func write(
             _ buffer: ByteBuffer,
             writeFlags: Bool,
@@ -310,6 +315,13 @@ public final class TypeMeta: Equatable, @unchecked Sendable {
     public let fields: [FieldInfo]
     public let compressed: Bool
     public let headerHash: UInt64
+
+    internal var readDataAlwaysAdvances: Bool {
+        for field in fields where field.fieldType.readDataAlwaysAdvances {
+            return true
+        }
+        return false
+    }
 
     public init(
         typeID: UInt32?,

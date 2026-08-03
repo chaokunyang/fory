@@ -800,10 +800,43 @@ func advancingContainersIgnoreZeroBudget() throws {
 }
 
 @Test
-func generatedReadProgress() {
+func generatedReadProgress() throws {
     #expect(!EmptyReadStruct.readDataAlwaysAdvances)
     #expect(AdvancingReadStruct.readDataAlwaysAdvances)
     #expect(!EmptyReadValueSerializer.readDataAlwaysAdvances)
+    #expect(fieldReadAlwaysAdvances(Int32VarintCodec.self, declared: false, typeInfo: nil))
+
+    let fory = Fory(config: Config(trackRef: false, compatible: true))
+    try fory.register(AdvancingReadStruct.self, id: 9705)
+    try fory.typeResolver.finishRegistration()
+    let local = try fory.typeResolver.requireTypeInfo(for: AdvancingReadStruct.self)
+    let emptyMeta = try TypeMeta(
+        typeID: TypeId.compatibleStruct.rawValue,
+        userTypeID: 9705,
+        namespace: .empty(specialChar1: ".", specialChar2: "_"),
+        typeName: .empty(specialChar1: "$", specialChar2: "_"),
+        registerByName: false,
+        fields: []
+    )
+    let scalarMeta = try TypeMeta(
+        typeID: TypeId.compatibleStruct.rawValue,
+        userTypeID: 9705,
+        namespace: .empty(specialChar1: ".", specialChar2: "_"),
+        typeName: .empty(specialChar1: "$", specialChar2: "_"),
+        registerByName: false,
+        fields: [
+            TypeMeta.FieldInfo(
+                fieldID: nil,
+                fieldName: "value",
+                fieldType: TypeMeta.FieldType(
+                    typeID: TypeId.int32.rawValue,
+                    nullable: false
+                )
+            )
+        ]
+    )
+    #expect(!TypeInfo(dynamic: local, compatibleTypeMeta: emptyMeta).readDataAlwaysAdvances)
+    #expect(TypeInfo(dynamic: local, compatibleTypeMeta: scalarMeta).readDataAlwaysAdvances)
 }
 
 @Test

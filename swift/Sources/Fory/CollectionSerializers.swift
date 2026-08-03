@@ -81,8 +81,10 @@ internal func fieldReadAlwaysAdvances<Codec: FieldCodec>(
     if codec.staticTypeId == .unknown {
         return typeInfo?.readDataAlwaysAdvances == true
     }
+    // A static reader returns nil only after validating the exact wire type or
+    // the exact local Struct header; a remote compatible schema returns TypeInfo.
     return codec.readDataAlwaysAdvances
-        && (declared || typeInfo?.readDataAlwaysAdvances == true)
+        && (declared || typeInfo?.readDataAlwaysAdvances ?? true)
 }
 
 @inlinable

@@ -443,7 +443,10 @@ public final class TypeInfo: @unchecked Sendable {
             typeDefHeaderHash: typeInfo.typeDefHeaderHash,
             typeDefHasUserTypeFields: typeInfo.typeDefHasUserTypeFields,
             isRefType: typeInfo.isRefType,
-            readDataAlwaysAdvances: !remoteSchemaCanChangeBody && typeInfo.readDataAlwaysAdvances,
+            readDataAlwaysAdvances:
+                remoteSchemaCanChangeBody
+                ? compatibleTypeMeta.readDataAlwaysAdvances
+                : typeInfo.readDataAlwaysAdvances,
             dynamicBoxBytes: typeInfo.dynamicBoxBytes,
             writer: typeInfo.writer,
             reader: typeInfo.reader,

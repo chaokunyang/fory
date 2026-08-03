@@ -86,7 +86,7 @@ fn expand_row(
     let mut view_generics = SelfTypeRewriter {
         source_path: source_path.clone(),
     }
-    .fold_generics(row_generics.clone());
+    .fold_generics(ast.generics.clone());
     view_generics.params.insert(
         0,
         GenericParam::Lifetime(LifetimeParam::new(row_lifetime.clone())),
@@ -118,7 +118,10 @@ fn expand_row(
             ) -> ::core::result::Result<
                 <#field_ty as #runtime_root::row::RowValue>::View<#row_lifetime>,
                 #runtime_root::error::Error,
-            > {
+            >
+            where
+                #field_ty: #runtime_root::row::RowValue,
+            {
                 self.struct_data.get::<#field_ty>(#index)
             }
         });
@@ -126,7 +129,7 @@ fn expand_row(
 
     Ok(quote! {
         #[doc = #view_doc]
-        #visibility struct #view #view_impl_generics #view_where_clause {
+        #visibility struct #view #view_generics {
             struct_data: #runtime_root::row::StructView<#row_lifetime>,
             _marker: ::core::marker::PhantomData<fn() -> *const #name #ty_generics>,
         }

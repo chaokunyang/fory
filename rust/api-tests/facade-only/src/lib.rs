@@ -348,6 +348,43 @@
 //!     pub value: i64,
 //! }
 //! ```
+//!
+//! Public Row views do not expose private field types in declaration bounds:
+//!
+//! ```
+//! #![deny(private_bounds)]
+//! use fory::ForyRow;
+//!
+//! #[derive(ForyRow)]
+//! struct PrivateChild {
+//!     value: i32,
+//! }
+//!
+//! #[derive(ForyRow)]
+//! pub struct PublicParent {
+//!     child: PrivateChild,
+//! }
+//! ```
+//!
+//! Generated Row views preserve generic parameter defaults:
+//!
+//! ```
+//! use fory::{from_row, to_row, ForyRow};
+//!
+//! #[derive(ForyRow)]
+//! struct DefaultSchema<T = i32, const N: usize = 2> {
+//!     value: T,
+//!     values: [T; N],
+//! }
+//!
+//! let value: DefaultSchema = DefaultSchema {
+//!     value: 7,
+//!     values: [8, 9],
+//! };
+//! let bytes = to_row(&value).unwrap();
+//! let view: DefaultSchemaRowView<'_> = from_row::<DefaultSchema>(&bytes).unwrap();
+//! assert_eq!(view.value().unwrap(), 7);
+//! ```
 
 use fory::ForyRow;
 

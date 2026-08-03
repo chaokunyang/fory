@@ -775,7 +775,10 @@ inline MapType read_map_data_fast(ReadContext &ctx, uint32_t length) {
   if (length == 0) {
     return result;
   }
-  if (FORY_PREDICT_FALSE(!reserve_map(result, ctx, length))) {
+  constexpr bool entry_always_advances =
+      read_data_always_advances_v<K> || read_data_always_advances_v<V>;
+  if (FORY_PREDICT_FALSE(
+          !reserve_map<entry_always_advances>(result, ctx, length))) {
     return result;
   }
 
@@ -894,7 +897,10 @@ inline MapType read_map_data_slow(ReadContext &ctx, uint32_t length) {
   if (length == 0) {
     return result;
   }
-  if (FORY_PREDICT_FALSE(!reserve_map(result, ctx, length))) {
+  constexpr bool entry_always_advances =
+      read_data_always_advances_v<K> || read_data_always_advances_v<V>;
+  if (FORY_PREDICT_FALSE(
+          !reserve_map<entry_always_advances>(result, ctx, length))) {
     return result;
   }
 

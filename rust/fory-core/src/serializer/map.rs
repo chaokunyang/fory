@@ -595,7 +595,13 @@ macro_rules! read_map_data_body {
         let context = $context;
         let len = context.reader.read_var_u32()?;
         let capacity = len as usize;
-        let required = capacity.saturating_sub(context.remaining_unbacked_container_items());
+        let required = if <$KC as Serializer>::READ_DATA_ALWAYS_ADVANCES
+            || <$VC as Serializer>::READ_DATA_ALWAYS_ADVANCES
+        {
+            capacity
+        } else {
+            capacity.saturating_sub(context.remaining_unbacked_container_items())
+        };
         context.reader.check_bound(required)?;
         let elem_bytes = std::mem::size_of::<$K>()
             .checked_add(std::mem::size_of::<$V>())

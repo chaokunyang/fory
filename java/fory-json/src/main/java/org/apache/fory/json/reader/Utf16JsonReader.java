@@ -366,7 +366,7 @@ public final class Utf16JsonReader extends JsonReader {
   }
 
   public void clear() {
-    clearRootState();
+    reset();
     input = "";
     bytes = null;
     length = 0;

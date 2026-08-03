@@ -323,7 +323,7 @@ public final class Latin1JsonReader extends JsonReader {
   }
 
   public void clear() {
-    clearRootState();
+    reset();
     input = EMPTY_BYTES;
     position = 0;
     if (stringDecodeBuffer.length > RETAINED_STRING_DECODE_BUFFER_SIZE) {

@@ -346,11 +346,6 @@ public abstract class JsonReader {
     remainingGraphMemoryBytes = config.maxGraphMemoryBytes();
   }
 
-  protected final void clearRootState() {
-    depth = 0;
-    remainingGraphMemoryBytes = 0;
-  }
-
   /**
    * Reserves estimated graph memory before an owner or its retained storage is materialized.
    *

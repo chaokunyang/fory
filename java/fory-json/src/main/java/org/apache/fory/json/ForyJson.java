@@ -36,7 +36,6 @@ import org.apache.fory.json.resolver.JsonTypeInfo;
 import org.apache.fory.json.resolver.JsonTypeResolver;
 import org.apache.fory.json.writer.StringJsonWriter;
 import org.apache.fory.json.writer.Utf8JsonWriter;
-import org.apache.fory.platform.GraalvmSupport;
 import org.apache.fory.reflect.TypeRef;
 import org.apache.fory.serializer.StringSerializer;
 
@@ -92,7 +91,7 @@ public final class ForyJson {
   }
 
   ForyJson(JsonConfig config, JsonSharedRegistry sharedRegistry) {
-    this.config = GraalvmSupport.isGraalBuildTime() ? config : null;
+    this.config = config;
     int poolSize = config.concurrencyLevel();
     homeSlotMask = Integer.highestOneBit(poolSize) - 1;
     // This fixed array is the only JsonState owner. Each state's three readers own their configured
@@ -110,10 +109,6 @@ public final class ForyJson {
   }
 
   JsonConfig config() {
-    if (config == null) {
-      throw new IllegalStateException(
-          "Fory JSON configuration is available only during native-image build");
-    }
     return config;
   }
 

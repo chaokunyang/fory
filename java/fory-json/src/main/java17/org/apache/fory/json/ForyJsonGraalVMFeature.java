@@ -60,7 +60,6 @@ import org.apache.fory.json.annotation.JsonUnwrapped;
 import org.apache.fory.json.annotation.JsonValue;
 import org.apache.fory.json.codec.Base64ByteArrayCodec;
 import org.apache.fory.json.codec.ObjectCodec;
-import org.apache.fory.json.codec.ScalarCodecs;
 import org.apache.fory.json.meta.JsonCreatorInfo;
 import org.apache.fory.json.meta.JsonFieldAccessor;
 import org.apache.fory.json.resolver.JsonSharedRegistry;
@@ -73,7 +72,6 @@ import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.reflect.TypeRef;
 import org.apache.fory.util.record.RecordUtils;
 import org.graalvm.nativeimage.hosted.Feature;
-import org.graalvm.nativeimage.hosted.RuntimeClassInitialization;
 import org.graalvm.nativeimage.hosted.RuntimeReflection;
 
 /** Prepares reachable Fory JSON models and provider-selected codecs for Native Image. */
@@ -104,27 +102,7 @@ final class ForyJsonGraalVMFeature implements Feature {
 
   @Override
   public void beforeAnalysis(BeforeAnalysisAccess access) {
-    String jsonPackage = ForyJson.class.getPackage().getName();
-    // GraalVM 21 requires the Fory JSON implementation used by hosted codegen to have an explicit
-    // build-time initialization policy. Keep application models and the ScalarCodecs temporal
-    // formatters out of that policy: the latter capture JDK chronology instances which GraalVM 25
-    // initializes at runtime.
-    RuntimeClassInitialization.initializeAtBuildTime(
-        ForyJson.class,
-        ForyJsonBuilder.class,
-        JsonCodegenKey.class,
-        JsonConfig.class,
-        JsonGeneratedClassRegistry.class,
-        JsonGeneratedClassRegistry.Configuration.class,
-        PropertyNamingStrategy.class);
-    RuntimeClassInitialization.initializeAtBuildTime(
-        jsonPackage + ".codegen",
-        jsonPackage + ".codec",
-        jsonPackage + ".meta",
-        jsonPackage + ".reader",
-        jsonPackage + ".resolver",
-        jsonPackage + ".writer");
-    RuntimeClassInitialization.initializeAtRunTime(ScalarCodecs.class);
+    // native-image.properties owns class initialization; this Feature owns reachability metadata.
     access.registerSubtypeReachabilityHandler(this::processReachableType, Object.class);
   }
 

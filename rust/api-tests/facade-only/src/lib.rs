@@ -322,19 +322,62 @@
 //!     value: Box<dyn Any>,
 //! }
 //! ```
+//!
+//! A generated Row view preserves each source field's visibility:
+//!
+//! ```compile_fail
+//! use fory::{from_row, to_row};
+//! use fory_facade_api_tests::VisibilitySchema;
+//!
+//! let bytes = to_row(&VisibilitySchema::new(1, 2)).unwrap();
+//! let view = from_row::<VisibilitySchema>(&bytes).unwrap();
+//! let _ = view.hidden();
+//! ```
+//!
+//! Generated public Row views and public field methods satisfy strict documentation lints:
+//!
+//! ```
+//! #![doc = "Generated Row view documentation check."]
+//! #![deny(missing_docs)]
+//! use fory::ForyRow;
+//!
+//! /// A documented row schema.
+//! #[derive(ForyRow)]
+//! pub struct DocumentedSchema {
+//!     /// A documented field.
+//!     pub value: i64,
+//! }
+//! ```
+
+use fory::ForyRow;
+
+/// A public Row schema used to verify generated field visibility.
+#[derive(ForyRow)]
+pub struct VisibilitySchema {
+    /// A public field.
+    pub visible: i64,
+    hidden: i64,
+}
+
+impl VisibilitySchema {
+    /// Creates a visibility test row.
+    pub fn new(visible: i64, hidden: i64) -> Self {
+        Self { visible, hidden }
+    }
+}
 
 #[cfg(test)]
 mod tests {
     use fory::{
         from_row, register_trait_type, to_row, ArcSerializer, ArcWeakSerializer, ArraySerializer,
-        BTreeMapSerializer, BTreeSetSerializer, BinaryHeapSerializer, BoxSerializer, Error, Fory,
-        ForyEnum, ForyObject, ForyRow, ForyStruct, ForyUnion, HashMapSerializer, HashSetSerializer,
-        LinkedListSerializer, MutexSerializer, OptionSerializer, RcSerializer, RcWeakSerializer,
-        ReadContext, Reader, RefCellSerializer, Serializer, VecDequeSerializer, VecSerializer,
-        WriteContext,
+        ArrayView, BTreeMapSerializer, BTreeSetSerializer, BinaryHeapSerializer, BoxSerializer,
+        Error, Fory, ForyEnum, ForyObject, ForyRow, ForyStruct, ForyUnion, HashMapSerializer,
+        HashSetSerializer, LinkedListSerializer, MapView, MutexSerializer, OptionSerializer,
+        RcSerializer, RcWeakSerializer, ReadContext, Reader, RefCellSerializer, Row, Serializer,
+        VecDequeSerializer, VecSerializer, WriteContext,
     };
     use fory_external_model::{Command, ExternalId, Key, Marker, Point, Status, User, Value};
-    use std::collections::HashMap;
+    use std::collections::{BTreeMap, HashMap};
     use std::rc::Rc;
     use std::sync::Arc;
 
@@ -433,6 +476,12 @@ mod tests {
         id: i64,
         name: String,
     }
+
+    fn assert_row_api<T: Row>() {}
+
+    fn assert_array_view(_: &ArrayView<'_, i32>) {}
+
+    fn assert_map_view(_: &MapView<'_, String, i32>) {}
 
     trait Animal: ForyObject {
         fn name(&self) -> &str;
@@ -621,6 +670,7 @@ mod tests {
 
     #[test]
     fn facade_row_derive_roundtrip() {
+        assert_row_api::<RowUser>();
         let value = RowUser {
             id: 7,
             name: "Grace".to_string(),
@@ -629,6 +679,14 @@ mod tests {
         let decoded = from_row::<RowUser>(&row).unwrap();
         assert_eq!(decoded.id().unwrap(), 7);
         assert_eq!(decoded.name().unwrap(), "Grace");
+
+        let array_bytes = to_row(&vec![1i32]).unwrap();
+        let array = from_row::<Vec<i32>>(&array_bytes).unwrap();
+        assert_array_view(&array);
+
+        let map_bytes = to_row(&BTreeMap::from([("one".to_owned(), 1i32)])).unwrap();
+        let map = from_row::<BTreeMap<String, i32>>(&map_bytes).unwrap();
+        assert_map_view(&map);
     }
 
     #[test]

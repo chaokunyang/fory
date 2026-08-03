@@ -64,6 +64,7 @@ fn expand_row(
     let name = &ast.ident;
     let visibility = &ast.vis;
     let view = format_ident!("{}RowView", name);
+    let view_doc = format!("A zero-copy Standard Row Format view of `{name}`.");
     let num_fields = fields.len();
     let row_lifetime = row_lifetime(ast);
 
@@ -99,6 +100,8 @@ fn expand_row(
         let ident = field.ident.as_ref().ok_or_else(|| {
             syn::Error::new_spanned(field, "ForyRow requires named struct fields")
         })?;
+        let field_visibility = &field.vis;
+        let field_doc = format!("Reads the `{ident}` field from this row view.");
         let ty = &field.ty;
         let field_ty = SelfTypeRewriter {
             source_path: source_path.clone(),
@@ -108,7 +111,9 @@ fn expand_row(
             struct_writer.write(#index, &self.#ident)?;
         });
         field_methods.push(quote! {
-            #visibility fn #ident(
+            #[doc = #field_doc]
+            #[inline]
+            #field_visibility fn #ident(
                 &self,
             ) -> ::core::result::Result<
                 <#field_ty as #runtime_root::row::RowValue>::View<#row_lifetime>,
@@ -120,6 +125,7 @@ fn expand_row(
     }
 
     Ok(quote! {
+        #[doc = #view_doc]
         #visibility struct #view #view_impl_generics #view_where_clause {
             struct_data: #runtime_root::row::StructView<#row_lifetime>,
             _marker: ::core::marker::PhantomData<fn() -> *const #name #ty_generics>,

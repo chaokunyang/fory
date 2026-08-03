@@ -121,7 +121,7 @@
 //! The macro generates:
 //! - A `RowValue` implementation and a root `Row` marker implementation
 //! - A borrowed view type whose visibility matches the source struct
-//! - One declaration-order field method per source field
+//! - One declaration-order field method preserving each source field's visibility
 //! - Field methods returning `Result<<Field as RowValue>::View<'_>, Error>`
 //!
 //! ## Attributes

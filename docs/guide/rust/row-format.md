@@ -67,7 +67,7 @@ fn main() -> Result<(), Error> {
     let row_data = to_row(&profile)?;
     let row = from_row::<UserProfile>(&row_data)?;
 
-    // Getters return Result and validate the referenced bytes.
+    // Field methods return Result and validate the referenced bytes.
     assert_eq!(row.id()?, 12345);
     assert_eq!(row.username()?, "alice");
     assert_eq!(row.email()?, Some("alice@example.com"));
@@ -92,7 +92,7 @@ fn main() -> Result<(), Error> {
 
 `Option<T>` declares a nullable field or array element. `None` sets the corresponding null bit, and the field method returns `None` without reading a value body. `Some(value)` uses the same fixed slot width as `T`.
 
-`#[derive(ForyRow)]` supports named structs, including generic structs. Fields are encoded in source declaration order. The derive generates a borrowed `StructNameRowView` type whose visibility matches the source struct, and every generated field method returns `Result<_, Error>`.
+`#[derive(ForyRow)]` supports named structs, including generic structs. Fields are encoded in source declaration order. The derive generates a borrowed `StructNameRowView` type whose visibility matches the source struct. Each generated field method preserves the corresponding field's visibility and returns `Result<_, Error>`.
 
 Changing field order or field types changes the Row Format schema. Coordinate such changes across all producers and consumers.
 
@@ -154,7 +154,7 @@ assert!(scores.get(scores.len()).is_err());
 | Feature      | `#[derive(ForyRow)]`                   | `#[derive(ForyStruct)]`      |
 | ------------ | -------------------------------------- | ---------------------------- |
 | Read result  | Borrowed view                          | Owned Rust value             |
-| Field access | Getter returning `Result`              | Normal struct access         |
+| Field access | Field method returning `Result`        | Normal struct access         |
 | Schema order | Source declaration order               | Object-format schema rules   |
 | Best for     | Selective access to Standard Row bytes | General object serialization |
 

@@ -50,6 +50,11 @@ Load this file when changing anything under `java/` or when Java drives a cross-
   remaining tail after the loop. Generated collection readers must use the same
   batching; owner-specific paths such as object any-map reads keep their own
   stronger timing.
+  Java JSON primitive-array codecs reserve the portable array header plus actual primitive storage.
+  Reserve primitive storage in exact 1024-element batches before each batch's final element and
+  reserve the tail before the returned array is allocated or published. Resolve custom primitive
+  component width once during codec construction. A `byte[]` handled by a binary or Base64 codec
+  remains a binary leaf.
   Treat the option as an approximate collection/map/array/struct/object gate, not an exact heap
   cap. Leaf values skipped by graph budgeting remain gated by unread input bytes.
   Reference fields use the 4-byte fallback when the JVM reference size is not

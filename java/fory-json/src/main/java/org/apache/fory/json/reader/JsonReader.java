@@ -349,9 +349,9 @@ public abstract class JsonReader {
   /**
    * Reserves estimated graph memory before an owner or its retained storage is materialized.
    *
-   * <p>Custom codecs use this raw byte API before allocating a composite owner and before a
-   * collection or map mutation that may grow its retained reference storage. Dedicated leaf values
-   * do not reserve graph memory.
+   * <p>Custom codecs use this raw byte API before allocating a composite owner and at their bounded
+   * batch boundaries for retained container storage. Dedicated leaf values do not reserve graph
+   * memory.
    */
   public final void reserveGraphMemory(long bytes) {
     long remaining = remainingGraphMemoryBytes;

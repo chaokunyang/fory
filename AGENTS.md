@@ -108,7 +108,11 @@ This is the entry point for AI guidance in Apache Fory. Read this file first, th
   query; primitive/value fields use their storage width. Parents do not recursively include child
   object, collection, map, string, binary, or primitive dense-array contents. Skip enum/union as
   separate owners and skip dedicated string, binary, primitive scalar, primitive array, and
-  primitive dense-array leaf owners. Leaf values skipped by the graph budget must remain gated by
+  primitive dense-array leaf owners unless a runtime-specific owner rule includes them. Java Fory
+  JSON primitive arrays decoded from JSON arrays reserve their array header plus primitive storage
+  in 1024-element batches and at the tail; a `byte[]` handled by a binary or Base64 codec remains a
+  binary leaf.
+  Leaf values skipped by the graph budget must remain gated by
   byte-availability checks on the unread input; if remaining bytes are insufficient, the leaf value
   must not be read or created. Actual process memory can be higher than the graph budget. Do not
   guess allocator, bucket-table, node, debug, or map-entry overhead unless it is a documented

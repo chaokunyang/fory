@@ -1293,15 +1293,16 @@ or UTF-8 byte-array root starts with the full configured limit, including after 
 failure.
 
 The graph budget includes shallow POJO and record storage, collections and sets plus candidate
-element-reference slots, maps plus candidate key/value-reference slots, and reference arrays plus
-their slots. Natural `JsonObject` and `JsonArray` values use the same rules. Repeated set elements
-and duplicate or overwritten map members consume candidate-slot budget for every occurrence.
-Dedicated leaves are excluded: null, strings, characters, booleans, numbers including big numbers,
-enums, temporal and other scalar values, binary values, primitive arrays, and other dense primitive
-arrays. A reference array still counts when its elements are leaves, and an object still counts
-when all properties are leaves. `AtomicReference`, `AtomicReferenceArray`, and generic `Optional<T>`
-values include wrapper and reference storage; primitive optionals and atomic primitive values are
-leaves.
+element-reference slots, maps plus candidate key/value-reference slots, reference arrays plus their
+slots, and Java primitive arrays plus their primitive storage. Natural `JsonObject` and `JsonArray`
+values use the same rules. Repeated set elements and duplicate or overwritten map members consume
+candidate-slot budget for every occurrence. Dedicated leaves are excluded: null, strings,
+characters, booleans, numbers including big numbers, enums, temporal and other scalar values, and
+binary values. A `byte[]` decoded from a JSON numeric array counts as a primitive array, while a
+`byte[]` handled by a binary or Base64 codec remains a binary leaf. A reference array still counts
+when its elements are leaves, and an object still counts when all properties are leaves.
+`AtomicReference`, `AtomicReferenceArray`, and generic `Optional<T>` values include wrapper and
+reference storage; primitive optionals and atomic primitive values are leaves.
 
 This is a portable approximate estimate, not exact JVM heap accounting. Custom-codec allocations
 that the codec does not reserve, application constructor or validator work, temporary parsing

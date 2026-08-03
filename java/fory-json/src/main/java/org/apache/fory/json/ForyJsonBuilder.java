@@ -159,9 +159,10 @@ public final class ForyJsonBuilder {
   /**
    * Sets the approximate graph-memory gate for one root deserialization.
    *
-   * <p>The estimate covers materialized object, collection, map, and reference-array owners. Leaf
-   * values such as strings, numbers, binary data, and dense primitive arrays are not charged. The
-   * default is a fixed 128 MiB; actual process memory can be higher than this limit.
+   * <p>The estimate covers materialized object, collection, map, reference-array, and
+   * primitive-array owners. Leaf values such as strings, numbers, and binary data are not charged.
+   * A {@code byte[]} handled by a binary or Base64 codec remains a binary leaf. The default is a
+   * fixed 128 MiB; actual process memory can be higher than this limit.
    *
    * @param maxGraphMemoryBytes a positive byte limit
    * @throws IllegalArgumentException if {@code maxGraphMemoryBytes} is not positive

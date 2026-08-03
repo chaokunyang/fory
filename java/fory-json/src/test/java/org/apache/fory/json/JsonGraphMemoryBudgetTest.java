@@ -41,7 +41,10 @@ import org.apache.fory.json.annotation.JsonAnyProperty;
 import org.apache.fory.json.annotation.JsonCreator;
 import org.apache.fory.json.annotation.JsonSubTypes;
 import org.apache.fory.json.annotation.JsonUnwrapped;
+import org.apache.fory.json.codec.AbstractJsonValueCodec;
 import org.apache.fory.json.codec.Base64ByteArrayCodec;
+import org.apache.fory.json.reader.JsonReader;
+import org.apache.fory.json.writer.JsonWriter;
 import org.apache.fory.reflect.TypeRef;
 import org.apache.fory.serializer.GraphMemoryEstimates;
 import org.testng.annotations.Factory;
@@ -166,6 +169,51 @@ public class JsonGraphMemoryBudgetTest extends ForyJsonTestModels {
     CountingChild.creations = 0;
     assertThrows(ForyJsonException.class, () -> jsonWithBudget(budget).fromJson(input, type));
     assertEquals(CountingChild.creations, 1023);
+  }
+
+  @Test
+  public void primitiveArrayOwners() {
+    int headerBytes = GraphMemoryEstimates.objectArrayBytes();
+    assertEquals(assertClassBudget("[]", int[].class, headerBytes), new int[0]);
+    assertEquals(
+        assertClassBudget("[true]", boolean[].class, headerBytes + Byte.BYTES),
+        new boolean[] {true});
+    assertEquals(assertClassBudget("[1]", byte[].class, headerBytes + Byte.BYTES), new byte[] {1});
+    assertEquals(
+        assertClassBudget("[2]", short[].class, headerBytes + Short.BYTES), new short[] {2});
+    assertEquals(assertClassBudget("[3]", int[].class, headerBytes + Integer.BYTES), new int[] {3});
+    assertEquals(assertClassBudget("[4]", long[].class, headerBytes + Long.BYTES), new long[] {4});
+    assertEquals(
+        assertClassBudget("[5.5]", float[].class, headerBytes + Float.BYTES), new float[] {5.5f});
+    assertEquals(
+        assertClassBudget("[6.5]", double[].class, headerBytes + Double.BYTES),
+        new double[] {6.5d});
+    assertEquals(
+        assertClassBudget("[\"值\"]", char[].class, headerBytes + Character.BYTES),
+        new char[] {'值'});
+    assertEquals(
+        assertClassBytesBudget(
+            "[7]".getBytes(StandardCharsets.UTF_8), int[].class, headerBytes + Integer.BYTES),
+        new int[] {7});
+  }
+
+  @Test
+  public void primitiveArrayBatches() {
+    int headerBytes = GraphMemoryEstimates.objectArrayBytes();
+    int[] values =
+        assertClassBudget(intArray(1024), int[].class, headerBytes + 1024L * Integer.BYTES);
+    assertEquals(values.length, 1024);
+    assertEquals(values[1023], 1023);
+
+    long budget = headerBytes + 1023L * Integer.BYTES;
+    CountingIntCodec.reads = 0;
+    ForyJson json =
+        newJsonBuilder()
+            .withMaxGraphMemoryBytes(budget)
+            .registerCodec(int.class, new CountingIntCodec())
+            .build();
+    assertThrows(ForyJsonException.class, () -> json.fromJson(intArray(1024), int[].class));
+    assertEquals(CountingIntCodec.reads, 1023);
   }
 
   @Test
@@ -308,11 +356,10 @@ public class JsonGraphMemoryBudgetTest extends ForyJsonTestModels {
   }
 
   @Test
-  public void leavesAreUncharged() {
+  public void dedicatedLeavesAreUncharged() {
     ForyJson json = jsonWithBudget(1);
     assertEquals(json.fromJson("123", Long.class), Long.valueOf(123));
     assertEquals(json.fromJson("\"a long leaf string\"", String.class), "a long leaf string");
-    assertEquals(json.fromJson("[1,2,3,4]", int[].class), new int[] {1, 2, 3, 4});
 
     ForyJson base64 =
         newJsonBuilder()
@@ -409,6 +456,18 @@ public class JsonGraphMemoryBudgetTest extends ForyJsonTestModels {
     return input.append('}').toString();
   }
 
+  private static String intArray(int size) {
+    StringBuilder input = new StringBuilder(size * 4);
+    input.append('[');
+    for (int i = 0; i < size; i++) {
+      if (i != 0) {
+        input.append(',');
+      }
+      input.append(i);
+    }
+    return input.append(']').toString();
+  }
+
   public static class MutableValue {
     public int number;
     public String text;
@@ -435,6 +494,21 @@ public class JsonGraphMemoryBudgetTest extends ForyJsonTestModels {
     public CountingChild(int number) {
       creations++;
       this.number = number;
+    }
+  }
+
+  private static final class CountingIntCodec extends AbstractJsonValueCodec<Integer> {
+    static int reads;
+
+    @Override
+    public void write(JsonWriter writer, Integer value) {
+      writer.writeInt(value.intValue());
+    }
+
+    @Override
+    public Integer read(JsonReader reader) {
+      reads++;
+      return Integer.valueOf(reader.readInt());
     }
   }
 

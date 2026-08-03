@@ -352,7 +352,8 @@ Graph budget accounting should:
   and use primitive/value field widths for inline storage;
 - preserve existing byte-availability checks before backing allocation or capacity reservation;
 - skip enum/union as separate owners and skip dedicated string, binary, primitive scalar, primitive
-  array, and primitive dense-array leaf owners.
+  array, and primitive dense-array leaf owners unless a runtime-specific owner section explicitly
+  includes them.
 
 Skipped leaf owners must still be gated by remaining input bytes. If the unread input does not
 contain enough bytes for a string, binary value, primitive scalar, primitive array, or primitive
@@ -383,28 +384,32 @@ read starts with the complete limit, and success or failure cannot reduce the ne
 budget. The limit is not derived from input length.
 
 Built-in Java JSON accounting includes shallow POJO and record storage, collections and sets plus
-candidate element-reference slots, maps plus candidate key/value-reference slots, and reference
-arrays plus their slots. Natural `JsonObject` and `JsonArray` values follow the same map and
-collection rules. Candidate slots are reserved before the corresponding container mutation;
-repeated set elements and duplicate or overwritten map members are therefore charged per input
+candidate element-reference slots, maps plus candidate key/value-reference slots, reference arrays
+plus their slots, and Java primitive arrays plus their primitive storage. Natural `JsonObject` and
+`JsonArray` values follow the same map and collection rules. Unknown-length collection, map, and
+array storage is reserved in 1024-item batches before each batch's final child and at the tail.
+Repeated set elements and duplicate or overwritten map members are therefore charged per input
 occurrence. A reference array is charged even when its elements are leaves, and an object is charged
-even when all of its properties are leaves. `AtomicReference`, `AtomicReferenceArray`, and generic
-`Optional<T>` values include wrapper and reference storage; primitive optionals and atomic primitive
-values are leaves.
+even when all of its properties are leaves. Primitive arrays decoded from JSON arrays reserve the
+portable array header and actual Java primitive width using the same batch schedule.
+`AtomicReference`, `AtomicReferenceArray`, and generic `Optional<T>` values include wrapper and
+reference storage; primitive optionals and atomic primitive values are leaves.
 
 Dedicated Java JSON leaf codecs are excluded from graph accounting: null, strings, characters,
 booleans, numeric values including arbitrary-precision numbers, enums, temporal and other scalar
-values, binary values, primitive arrays, and other dense primitive arrays. Byte-availability and
-grammar checks still apply to those values independently of graph accounting.
+values, and binary values. A `byte[]` handled by a binary or Base64 codec remains a binary leaf;
+the same Java carrier decoded from a JSON numeric array is a primitive-array owner. Byte-availability
+and grammar checks still apply independently of graph accounting.
 
 A custom Java JSON codec that materializes composite graph owners must call
 `JsonReader.reserveGraphMemory` with its application-defined byte estimate for each composite
-application object, collection, map, or reference array. Collection and map reference storage must
-be reserved before a mutation that may grow it. A custom scalar or other dedicated leaf
-representation makes no reservation. The budget cannot include custom allocations that the codec
-does not reserve, application constructor or validator internals, temporary parsing storage, or
-unrelated process memory. Applications must therefore combine this approximate gate with transport
-input limits, timeouts, and other resource controls appropriate to their trust boundary.
+application object, collection, map, or reference array. Unknown-length retained storage should be
+reserved in bounded batches before each batch's final child and at the tail; a codec may use
+stronger timing. A custom scalar or other dedicated leaf representation makes no reservation. The
+budget cannot include custom allocations that the codec does not reserve, application constructor
+or validator internals, temporary parsing storage, or unrelated process memory. Applications must
+therefore combine this approximate gate with transport input limits, timeouts, and other resource
+controls appropriate to their trust boundary.
 
 ### Generated Structural Targets
 

@@ -78,7 +78,6 @@ function preparedOwners(typeMeta: TypeMeta): PreparedOwners {
 class FieldBodySerializer implements Serializer {
   readonly _initialized = true;
   readonly fixedSize = 8;
-  readonly readDataAlwaysAdvances = false;
   private readonly typeInfo;
 
   constructor(
@@ -141,12 +140,13 @@ class FieldBodySerializer implements Serializer {
       this.owner.readContext.reader.readVarUint32Small7();
     }
   };
+
+  readonly readDataAlwaysAdvances = false;
 }
 
 export class UnknownStructSerializer implements Serializer {
   readonly _initialized = true;
   readonly fixedSize = 8;
-  readonly readDataAlwaysAdvances = false;
   readonly trackingRef: boolean;
   private readonly typeInfo = Type.any();
   private boundTypeMeta: TypeMeta | undefined;
@@ -266,6 +266,8 @@ export class UnknownStructSerializer implements Serializer {
     this.bind(typeMeta);
     return this;
   };
+
+  readonly readDataAlwaysAdvances = false;
 
   readFramed(serializer: Serializer, withTypeInfo: boolean) {
     const flag = this.readContext.reader.readInt8();

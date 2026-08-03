@@ -38,7 +38,6 @@ import { getUnknownTypeMeta, UnknownStructSerializer } from "./unknownStruct";
 const uninitSerialize = {
   _initialized: false,
   fixedSize: 0,
-  readDataAlwaysAdvances: false,
   getTypeInfo: () => {
     throw new Error("uninitSerialize");
   },
@@ -91,6 +90,7 @@ const uninitSerialize = {
   readTypeInfo: () => {
     throw new Error("uninitSerialize");
   },
+  readDataAlwaysAdvances: false,
 };
 
 export default class TypeResolver {

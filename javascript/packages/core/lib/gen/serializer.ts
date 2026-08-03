@@ -340,6 +340,8 @@ export abstract class BaseSerializerGenerator implements SerializerGenerator {
         ${this.readTypeInfo()}
       };
     `;
+    // Append read-only capability metadata so existing writer properties keep
+    // their object-layout order on serialization hot paths.
     return `
         return function (typeResolver, external, typeInfo, options) {
             ${this.scope.generate()}
@@ -347,7 +349,6 @@ export abstract class BaseSerializerGenerator implements SerializerGenerator {
             return {
               _initialized: true,
               fixedSize: ${this.getFixedSize()},
-              readDataAlwaysAdvances: ${this.readDataAlwaysAdvances()},
               needToWriteRef: () => ${this.needToWriteRef()},
               getTypeId: () => ${this.getTypeId()},
               getUserTypeId: () => ${this.getUserTypeId()},
@@ -366,6 +367,7 @@ export abstract class BaseSerializerGenerator implements SerializerGenerator {
               readRefWithoutTypeInfo,
               readNoRef,
               readTypeInfo,
+              readDataAlwaysAdvances: ${this.readDataAlwaysAdvances()},
             };
         }
         `;

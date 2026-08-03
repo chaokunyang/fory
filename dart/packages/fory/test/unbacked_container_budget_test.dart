@@ -190,6 +190,47 @@ void main() {
     expect((_generatedFory(3).deserialize<Object?>(bytes) as List).length, 3);
   });
 
+  test('compatible collection uses remote progress', () {
+    final positiveWriter = _generatedSchemaFory(BudgetScalar, 0);
+    final emptyReader = _generatedSchemaFory(BudgetEmpty, 0);
+    final positive = positiveWriter.serialize(
+      List<BudgetScalar>.generate(3, (index) => BudgetScalar()..value = index),
+    );
+    expect((emptyReader.deserialize<Object?>(positive) as List).length, 3);
+
+    final emptyWriter = _generatedSchemaFory(BudgetEmpty, 0);
+    final positiveReader = _generatedSchemaFory(BudgetScalar, 0);
+    final empty = emptyWriter.serialize(
+      List<BudgetEmpty>.generate(3, (_) => BudgetEmpty()),
+    );
+    expect(() => positiveReader.deserialize<Object?>(empty), throwsA(anything));
+  });
+
+  test('compatible map uses remote progress', () {
+    final positiveWriter = _generatedSchemaFory(BudgetScalar, 0);
+    final emptyReader = _generatedSchemaFory(BudgetEmpty, 0);
+    final positive = <BudgetScalar, BudgetScalar>{
+      for (var index = 0; index < 3; index += 1)
+        _budgetScalar(index): _budgetScalar(index + 10),
+    };
+    expect(
+      (emptyReader.deserialize<Object?>(positiveWriter.serialize(positive))
+              as Map)
+          .length,
+      3,
+    );
+
+    final emptyWriter = _generatedSchemaFory(BudgetEmpty, 0);
+    final positiveReader = _generatedSchemaFory(BudgetScalar, 0);
+    final empty = <BudgetEmpty, BudgetEmpty>{
+      for (var index = 0; index < 3; index += 1) BudgetEmpty(): BudgetEmpty(),
+    };
+    expect(
+      () => positiveReader.deserialize<Object?>(emptyWriter.serialize(empty)),
+      throwsA(anything),
+    );
+  });
+
   test('positive bodies do not spend budget', () {
     final fory = Fory(maxUnbackedContainerItems: 0);
     final values = List<int>.generate(10000, (index) => index);
@@ -227,3 +268,15 @@ Fory _generatedFory(int maxItems) {
   );
   return fory;
 }
+
+Fory _generatedSchemaFory(Type type, int maxItems) {
+  final fory = Fory(maxUnbackedContainerItems: maxItems);
+  UnbackedContainerBudgetTestForyModule.register(
+    fory,
+    type,
+    name: 'budget.RemoteProgress',
+  );
+  return fory;
+}
+
+BudgetScalar _budgetScalar(int value) => BudgetScalar()..value = value;

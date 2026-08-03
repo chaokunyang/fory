@@ -293,6 +293,23 @@ bool _fieldTypeUsesNestedTypeDefinitions(FieldType fieldType) {
   return false;
 }
 
+bool _fieldsReadBodyAlwaysAdvances(List<FieldInfo> fields) {
+  for (final field in fields) {
+    final fieldType = field.fieldType;
+    final typeId = fieldType.typeId;
+    if (fieldType.nullable ||
+        fieldType.ref ||
+        fieldType.isDynamic ||
+        TypeIds.isContainer(typeId) ||
+        (TypeIds.isBasicValue(typeId) && typeId != TypeIds.none) ||
+        typeId == TypeIds.enumById ||
+        typeId == TypeIds.union) {
+      return true;
+    }
+  }
+  return false;
+}
+
 String? _fieldIdentityError(List<FieldInfo> fields) {
   final fieldsById = <int, FieldInfo>{};
   final fieldsByName = <String, FieldInfo>{};
@@ -1414,11 +1431,10 @@ final class TypeResolver {
       supportsRef: resolved.supportsRef,
       needsRootRef: resolved.needsRootRef,
       usesNestedTypeDefinitions: resolved.usesNestedTypeDefinitions,
-      // Compatible field dispatch follows the received schema. A local
-      // generated body that advances for its own fields can consume zero bytes
-      // when every remote field is absent, so only an exact local TypeDef may
-      // retain the local proof.
-      readBodyAlwaysAdvances: false,
+      // Compatible field dispatch follows the received schema. Derive this
+      // one-level fact from the remote fields instead of retaining the local
+      // generated body's answer; nested Struct and ext bodies stay conservative.
+      readBodyAlwaysAdvances: _fieldsReadBodyAlwaysAdvances(fields),
       evolving: resolved.evolving,
       fields: resolved.fields,
       serializer: resolved.serializer,

@@ -2941,8 +2941,13 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
     Expression guarded =
         readGuardedContainerElements(elementType, serializer, buffer, collection, size);
     if (serializer != null) {
-      // Each branch needs its own loop expression because code generation memoizes expression
-      // identity; sharing one loop would emit it only in the first generated branch.
+      guarded =
+          invokeGenerated(
+              ctx,
+              readCutPoints(buffer, collection, size, serializer),
+              guarded,
+              "guardedElemsRead",
+              false);
       guarded =
           new If(
               inlineInvoke(serializer, "readBodyAlwaysAdvances", PRIMITIVE_BOOLEAN_TYPE),

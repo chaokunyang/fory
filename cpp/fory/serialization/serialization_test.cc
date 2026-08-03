@@ -799,7 +799,7 @@ TEST(SerializationTest, SkipNestedCollectionsChecksDepth) {
   EXPECT_EQ(next_buffer.reader_index(), next_buffer.writer_index());
 }
 
-TEST(SerializationTest, SkipNoneListIgnoresElementCount) {
+TEST(SerializationTest, SkipNoneListConsumesBudget) {
   Config config;
   ReadContext ctx(config, std::make_unique<TypeResolver>());
   Buffer buffer;
@@ -810,8 +810,7 @@ TEST(SerializationTest, SkipNoneListIgnoresElementCount) {
   FieldType list(static_cast<uint32_t>(TypeId::LIST), false, false,
                  {FieldType(static_cast<uint32_t>(TypeId::NONE), false)});
   skip_field_value(ctx, list, RefMode::None);
-  ASSERT_FALSE(ctx.has_error()) << ctx.error().to_string();
-  EXPECT_EQ(ctx.buffer().reader_index(), buffer.writer_index());
+  ASSERT_TRUE(ctx.has_error());
 }
 
 // ============================================================================

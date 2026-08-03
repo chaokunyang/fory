@@ -31,6 +31,9 @@ final class Utf8CollectionReaderCodegen {
   private static final int ARRAY_LIST_OWNER_BYTES =
       GraphMemoryEstimates.shallowObjectBytes(ArrayList.class);
   private static final int REFERENCE_BYTES = GraphMemoryEstimates.REFERENCE_BYTES;
+  private static final int REFERENCE_BATCH_SIZE = 1024;
+  private static final int REFERENCE_BATCH_MASK = REFERENCE_BATCH_SIZE - 1;
+  private static final int REFERENCE_BATCH_BYTES = REFERENCE_BATCH_SIZE * REFERENCE_BYTES;
   // The ninth value remains scalar until the following separator proves whether the list ends or
   // continues. Exact size nine therefore allocates nine slots, while a continuation starts at the
   // same capacity 13 that ArrayList growth would have selected, without creating and copying a
@@ -312,10 +315,17 @@ final class Utf8CollectionReaderCodegen {
         + "}\n"
         + "list.add(element);\n"
         + "nextElement = reader.consumeNextStringArrayElement();\n"
+        + "int pendingSize = 0;\n"
         + "while (nextElement != Utf8JsonReader.STRING_ARRAY_END) {\n"
-        + "  reader.reserveGraphMemory("
-        + REFERENCE_BYTES
+        + "  if ((pendingSize & "
+        + REFERENCE_BATCH_MASK
+        + ") == "
+        + REFERENCE_BATCH_MASK
+        + ") {\n"
+        + "    reader.reserveGraphMemory("
+        + REFERENCE_BATCH_BYTES
         + ");\n"
+        + "  }\n"
         + "  String loopElement;\n"
         + "  if (nextElement == Utf8JsonReader.STRING_ARRAY_QUOTED) {\n"
         + readQuotedStringElement(ctx, "quotedElement", "LoopQuoted")
@@ -324,7 +334,16 @@ final class Utf8CollectionReaderCodegen {
         + "    loopElement = (String) elementReader.readUtf8(reader);\n"
         + "  }\n"
         + "  list.add(loopElement);\n"
+        + "  pendingSize++;\n"
         + "  nextElement = reader.consumeNextStringArrayElement();\n"
+        + "}\n"
+        + "int tailSize = pendingSize & "
+        + REFERENCE_BATCH_MASK
+        + ";\n"
+        + "if (tailSize != 0) {\n"
+        + "  reader.reserveGraphMemory(tailSize * "
+        + REFERENCE_BYTES
+        + ");\n"
         + "}\n"
         + "reader.exitDepth();\n"
         + "return list;";
@@ -402,12 +421,30 @@ final class Utf8CollectionReaderCodegen {
     }
     code.append("        list.add(element);\n    }\n");
     code.append("  } else {\n");
-    code.append("    reader.reserveGraphMemory(").append(REFERENCE_BYTES).append(");\n");
+    code.append("    if (((size - ")
+        .append(ARRAY_LIST_PREFIX_SIZE)
+        .append(") & ")
+        .append(REFERENCE_BATCH_MASK)
+        .append(") == ")
+        .append(REFERENCE_BATCH_MASK)
+        .append(") {\n");
+    code.append("      reader.reserveGraphMemory(").append(REFERENCE_BATCH_BYTES).append(");\n");
+    code.append("    }\n");
     code.append("    list.add(elementReader.readUtf8(reader));\n  }\n");
     code.append("  size++;\n} while (reader.consumeNextCommaOrEndArray());\n");
-    code.append("reader.exitDepth();\n");
     code.append("if (list != null) {\n");
+    // Tail reservation can fail, so depth stays active until the complete collection succeeds.
+    code.append("  int tailSize = (size - ")
+        .append(ARRAY_LIST_PREFIX_SIZE)
+        .append(") & ")
+        .append(REFERENCE_BATCH_MASK)
+        .append(";\n");
+    code.append("  if (tailSize != 0) {\n");
+    code.append("    reader.reserveGraphMemory(tailSize * ").append(REFERENCE_BYTES).append(");\n");
+    code.append("  }\n");
+    code.append("  reader.exitDepth();\n");
     code.append("  return list;\n}\n");
+    code.append("reader.exitDepth();\n");
     // list remains null only for the staged prefix, so size is at most eight and the generated int
     // reservation cannot overflow.
     code.append(reserveArrayList("size", ""));

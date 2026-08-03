@@ -45,6 +45,11 @@ Load this file when changing anything under `java/` or when Java drives a cross-
   object-array owners reserve nonzero shallow self cost plus reference storage;
   referenced object serializers reserve their own nonzero shallow self memory
   plus shallow field storage when materialized.
+  Unknown-length JSON collections and maps reserve reference storage in exact
+  1024-item batches before reading each batch's final child, then reserve the
+  remaining tail after the loop. Generated collection readers must use the same
+  batching; owner-specific paths such as object any-map reads keep their own
+  stronger timing.
   Treat the option as an approximate collection/map/array/struct/object gate, not an exact heap
   cap. Leaf values skipped by graph budgeting remain gated by unread input bytes.
   Reference fields use the 4-byte fallback when the JVM reference size is not

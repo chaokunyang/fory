@@ -69,6 +69,12 @@ import org.apache.fory.serializer.GraphMemoryEstimates;
 public abstract class MapCodec<T extends Map<?, ?>> implements JsonValueCodec<T> {
   private static final Class<?> UNTYPED_MAP = LinkedHashMap.class;
   private static final int REFERENCE_BYTES = GraphMemoryEstimates.REFERENCE_BYTES;
+  private static final int ENTRY_BYTES = 2 * REFERENCE_BYTES;
+  // Reserve before each batch's final entry read. This leaves at most 1023 key/value slot pairs
+  // pending while avoiding a graph-budget call for every entry.
+  private static final int ENTRY_BATCH_SIZE = 1024;
+  private static final int ENTRY_BATCH_MASK = ENTRY_BATCH_SIZE - 1;
+  private static final int ENTRY_BATCH_BYTES = ENTRY_BATCH_SIZE * ENTRY_BYTES;
   private static final int JSON_OBJECT_OWNER_BYTES =
       GraphMemoryEstimates.shallowObjectBytes(JsonObject.class);
   private static final MapKeyCodec STRING_KEY_CODEC =
@@ -200,14 +206,22 @@ public abstract class MapCodec<T extends Map<?, ?>> implements JsonValueCodec<T>
     Latin1ReaderCodec<Object> codec = valueInfo.latin1Reader();
     reader.enterDepth();
     reader.expectNextToken('{');
+    int size = 0;
     if (!reader.consumeNextToken('}')) {
       do {
+        if ((size & ENTRY_BATCH_MASK) == ENTRY_BATCH_MASK) {
+          reader.reserveGraphMemory(ENTRY_BATCH_BYTES);
+        }
         Object key = reader.readFieldName();
         reader.expectNextToken(':');
-        reserveEntry(reader);
         map.put(key, codec.readLatin1(reader));
+        size++;
       } while (reader.consumeNextToken(','));
       reader.expectNextToken('}');
+    }
+    int tailSize = size & ENTRY_BATCH_MASK;
+    if (tailSize != 0) {
+      reader.reserveGraphMemory(tailSize * ENTRY_BYTES);
     }
     reader.exitDepth();
     return map;
@@ -220,14 +234,22 @@ public abstract class MapCodec<T extends Map<?, ?>> implements JsonValueCodec<T>
     Utf16ReaderCodec<Object> codec = valueInfo.utf16Reader();
     reader.enterDepth();
     reader.expectNextToken('{');
+    int size = 0;
     if (!reader.consumeNextToken('}')) {
       do {
+        if ((size & ENTRY_BATCH_MASK) == ENTRY_BATCH_MASK) {
+          reader.reserveGraphMemory(ENTRY_BATCH_BYTES);
+        }
         Object key = reader.readFieldName();
         reader.expectNextToken(':');
-        reserveEntry(reader);
         map.put(key, codec.readUtf16(reader));
+        size++;
       } while (reader.consumeNextToken(','));
       reader.expectNextToken('}');
+    }
+    int tailSize = size & ENTRY_BATCH_MASK;
+    if (tailSize != 0) {
+      reader.reserveGraphMemory(tailSize * ENTRY_BYTES);
     }
     reader.exitDepth();
     return map;
@@ -240,14 +262,22 @@ public abstract class MapCodec<T extends Map<?, ?>> implements JsonValueCodec<T>
     Utf8ReaderCodec<Object> codec = valueInfo.utf8Reader();
     reader.enterDepth();
     reader.expectNextToken('{');
+    int size = 0;
     if (!reader.consumeNextToken('}')) {
       do {
+        if ((size & ENTRY_BATCH_MASK) == ENTRY_BATCH_MASK) {
+          reader.reserveGraphMemory(ENTRY_BATCH_BYTES);
+        }
         Object key = reader.readFieldName();
         reader.expectNextToken(':');
-        reserveEntry(reader);
         map.put(key, codec.readUtf8(reader));
+        size++;
       } while (reader.consumeNextToken(','));
       reader.expectNextToken('}');
+    }
+    int tailSize = size & ENTRY_BATCH_MASK;
+    if (tailSize != 0) {
+      reader.reserveGraphMemory(tailSize * ENTRY_BYTES);
     }
     reader.exitDepth();
     return map;
@@ -433,7 +463,8 @@ public abstract class MapCodec<T extends Map<?, ?>> implements JsonValueCodec<T>
   }
 
   static void reserveEntry(JsonReader reader) {
-    reader.reserveGraphMemory(2 * REFERENCE_BYTES);
+    // ObjectCodec's any-map path owns its stronger per-entry reservation timing.
+    reader.reserveGraphMemory(ENTRY_BYTES);
   }
 
   abstract static class MapFactory {
@@ -511,14 +542,22 @@ public abstract class MapCodec<T extends Map<?, ?>> implements JsonValueCodec<T>
       Map<Object, Object> map = newMap(reader);
       Latin1ReaderCodec<Object> codec = valueTypeInfo.latin1Reader();
       reader.expectNextToken('{');
+      int size = 0;
       if (!reader.consumeNextToken('}')) {
         do {
+          if ((size & ENTRY_BATCH_MASK) == ENTRY_BATCH_MASK) {
+            reader.reserveGraphMemory(ENTRY_BATCH_BYTES);
+          }
           Object key = keyCodec.readName(reader);
           reader.expectNextToken(':');
-          reserveEntry(reader);
           map.put(key, codec.readLatin1(reader));
+          size++;
         } while (reader.consumeNextToken(','));
         reader.expectNextToken('}');
+      }
+      int tailSize = size & ENTRY_BATCH_MASK;
+      if (tailSize != 0) {
+        reader.reserveGraphMemory(tailSize * ENTRY_BYTES);
       }
       reader.exitDepth();
       return finishMap(reader, map);
@@ -533,14 +572,22 @@ public abstract class MapCodec<T extends Map<?, ?>> implements JsonValueCodec<T>
       Map<Object, Object> map = newMap(reader);
       Utf16ReaderCodec<Object> codec = valueTypeInfo.utf16Reader();
       reader.expectNextToken('{');
+      int size = 0;
       if (!reader.consumeNextToken('}')) {
         do {
+          if ((size & ENTRY_BATCH_MASK) == ENTRY_BATCH_MASK) {
+            reader.reserveGraphMemory(ENTRY_BATCH_BYTES);
+          }
           Object key = keyCodec.readName(reader);
           reader.expectNextToken(':');
-          reserveEntry(reader);
           map.put(key, codec.readUtf16(reader));
+          size++;
         } while (reader.consumeNextToken(','));
         reader.expectNextToken('}');
+      }
+      int tailSize = size & ENTRY_BATCH_MASK;
+      if (tailSize != 0) {
+        reader.reserveGraphMemory(tailSize * ENTRY_BYTES);
       }
       reader.exitDepth();
       return finishMap(reader, map);
@@ -555,14 +602,22 @@ public abstract class MapCodec<T extends Map<?, ?>> implements JsonValueCodec<T>
       Map<Object, Object> map = newMap(reader);
       Utf8ReaderCodec<Object> codec = valueTypeInfo.utf8Reader();
       reader.expectNextToken('{');
+      int size = 0;
       if (!reader.consumeNextToken('}')) {
         do {
+          if ((size & ENTRY_BATCH_MASK) == ENTRY_BATCH_MASK) {
+            reader.reserveGraphMemory(ENTRY_BATCH_BYTES);
+          }
           Object key = keyCodec.readName(reader);
           reader.expectNextToken(':');
-          reserveEntry(reader);
           map.put(key, codec.readUtf8(reader));
+          size++;
         } while (reader.consumeNextToken(','));
         reader.expectNextToken('}');
+      }
+      int tailSize = size & ENTRY_BATCH_MASK;
+      if (tailSize != 0) {
+        reader.reserveGraphMemory(tailSize * ENTRY_BYTES);
       }
       reader.exitDepth();
       return finishMap(reader, map);
@@ -582,14 +637,22 @@ public abstract class MapCodec<T extends Map<?, ?>> implements JsonValueCodec<T>
       reader.enterDepth();
       Map<Object, Object> map = newMap(reader);
       reader.expectNextToken('{');
+      int size = 0;
       if (!reader.consumeNextToken('}')) {
         do {
+          if ((size & ENTRY_BATCH_MASK) == ENTRY_BATCH_MASK) {
+            reader.reserveGraphMemory(ENTRY_BATCH_BYTES);
+          }
           String key = reader.readFieldName();
           reader.expectNextToken(':');
-          reserveEntry(reader);
           map.put(key, readLatin1Value(reader));
+          size++;
         } while (reader.consumeNextToken(','));
         reader.expectNextToken('}');
+      }
+      int tailSize = size & ENTRY_BATCH_MASK;
+      if (tailSize != 0) {
+        reader.reserveGraphMemory(tailSize * ENTRY_BYTES);
       }
       reader.exitDepth();
       return finishMap(reader, map);
@@ -603,14 +666,22 @@ public abstract class MapCodec<T extends Map<?, ?>> implements JsonValueCodec<T>
       reader.enterDepth();
       Map<Object, Object> map = newMap(reader);
       reader.expectNextToken('{');
+      int size = 0;
       if (!reader.consumeNextToken('}')) {
         do {
+          if ((size & ENTRY_BATCH_MASK) == ENTRY_BATCH_MASK) {
+            reader.reserveGraphMemory(ENTRY_BATCH_BYTES);
+          }
           String key = reader.readFieldName();
           reader.expectNextToken(':');
-          reserveEntry(reader);
           map.put(key, readUtf16Value(reader));
+          size++;
         } while (reader.consumeNextToken(','));
         reader.expectNextToken('}');
+      }
+      int tailSize = size & ENTRY_BATCH_MASK;
+      if (tailSize != 0) {
+        reader.reserveGraphMemory(tailSize * ENTRY_BYTES);
       }
       reader.exitDepth();
       return finishMap(reader, map);
@@ -624,14 +695,22 @@ public abstract class MapCodec<T extends Map<?, ?>> implements JsonValueCodec<T>
       reader.enterDepth();
       Map<Object, Object> map = newMap(reader);
       reader.expectNextToken('{');
+      int size = 0;
       if (!reader.consumeNextToken('}')) {
         do {
+          if ((size & ENTRY_BATCH_MASK) == ENTRY_BATCH_MASK) {
+            reader.reserveGraphMemory(ENTRY_BATCH_BYTES);
+          }
           String key = reader.readFieldName();
           reader.expectNextToken(':');
-          reserveEntry(reader);
           map.put(key, readUtf8Value(reader));
+          size++;
         } while (reader.consumeNextToken(','));
         reader.expectNextToken('}');
+      }
+      int tailSize = size & ENTRY_BATCH_MASK;
+      if (tailSize != 0) {
+        reader.reserveGraphMemory(tailSize * ENTRY_BYTES);
       }
       reader.exitDepth();
       return finishMap(reader, map);
@@ -1055,14 +1134,22 @@ public abstract class MapCodec<T extends Map<?, ?>> implements JsonValueCodec<T>
       reader.enterDepth();
       Map<Object, Object> map = newMap(reader);
       reader.expectNextToken('{');
+      int size = 0;
       if (!reader.consumeNextToken('}')) {
         do {
+          if ((size & ENTRY_BATCH_MASK) == ENTRY_BATCH_MASK) {
+            reader.reserveGraphMemory(ENTRY_BATCH_BYTES);
+          }
           Object key = keyCodec.readName(reader);
           reader.expectNextToken(':');
-          reserveEntry(reader);
           map.put(key, reader.readNullableString());
+          size++;
         } while (reader.consumeNextToken(','));
         reader.expectNextToken('}');
+      }
+      int tailSize = size & ENTRY_BATCH_MASK;
+      if (tailSize != 0) {
+        reader.reserveGraphMemory(tailSize * ENTRY_BYTES);
       }
       reader.exitDepth();
       return finishMap(reader, map);
@@ -1076,14 +1163,22 @@ public abstract class MapCodec<T extends Map<?, ?>> implements JsonValueCodec<T>
       reader.enterDepth();
       Map<Object, Object> map = newMap(reader);
       reader.expectNextToken('{');
+      int size = 0;
       if (!reader.consumeNextToken('}')) {
         do {
+          if ((size & ENTRY_BATCH_MASK) == ENTRY_BATCH_MASK) {
+            reader.reserveGraphMemory(ENTRY_BATCH_BYTES);
+          }
           Object key = keyCodec.readName(reader);
           reader.expectNextToken(':');
-          reserveEntry(reader);
           map.put(key, reader.readNullableString());
+          size++;
         } while (reader.consumeNextToken(','));
         reader.expectNextToken('}');
+      }
+      int tailSize = size & ENTRY_BATCH_MASK;
+      if (tailSize != 0) {
+        reader.reserveGraphMemory(tailSize * ENTRY_BYTES);
       }
       reader.exitDepth();
       return finishMap(reader, map);
@@ -1097,14 +1192,22 @@ public abstract class MapCodec<T extends Map<?, ?>> implements JsonValueCodec<T>
       reader.enterDepth();
       Map<Object, Object> map = newMap(reader);
       reader.expectNextToken('{');
+      int size = 0;
       if (!reader.consumeNextToken('}')) {
         do {
+          if ((size & ENTRY_BATCH_MASK) == ENTRY_BATCH_MASK) {
+            reader.reserveGraphMemory(ENTRY_BATCH_BYTES);
+          }
           Object key = keyCodec.readName(reader);
           reader.expectNextToken(':');
-          reserveEntry(reader);
           map.put(key, reader.readNullableString());
+          size++;
         } while (reader.consumeNextToken(','));
         reader.expectNextToken('}');
+      }
+      int tailSize = size & ENTRY_BATCH_MASK;
+      if (tailSize != 0) {
+        reader.reserveGraphMemory(tailSize * ENTRY_BYTES);
       }
       reader.exitDepth();
       return finishMap(reader, map);

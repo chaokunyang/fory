@@ -213,27 +213,42 @@ public class JsonGraphMemoryBudgetTest extends ForyJsonTestModels {
   @Test
   public void candidateSlotsGateChildren() {
     TypeRef<CountingList<CountingChild>> listType = new TypeRef<CountingList<CountingChild>>() {};
-    long listBudget = shallow(CountingList.class) + REF_BYTES + shallow(CountingChild.class);
+    String listInput = childArray(1024);
+    long listBudget = shallow(CountingList.class) + 1023L * shallow(CountingChild.class);
     ForyJson listJson = jsonWithBudget(listBudget);
     CountingChild.creations = 0;
     CountingList.adds = 0;
-    assertThrows(
-        ForyJsonException.class,
-        () -> listJson.fromJson("[{\"number\":1},{\"number\":2}]", listType));
-    assertEquals(CountingChild.creations, 1);
-    assertEquals(CountingList.adds, 1);
+    assertThrows(ForyJsonException.class, () -> listJson.fromJson(listInput, listType));
+    assertEquals(CountingChild.creations, 1023);
+    assertEquals(CountingList.adds, 1023);
 
     TypeRef<CountingMap<String, CountingChild>> mapType =
         new TypeRef<CountingMap<String, CountingChild>>() {};
-    long mapBudget = shallow(CountingMap.class) + 2L * REF_BYTES + shallow(CountingChild.class);
+    String mapInput = childMap(1024);
+    long mapBudget = shallow(CountingMap.class) + 1023L * shallow(CountingChild.class);
     ForyJson mapJson = jsonWithBudget(mapBudget);
     CountingChild.creations = 0;
     CountingMap.puts = 0;
+    assertThrows(ForyJsonException.class, () -> mapJson.fromJson(mapInput, mapType));
+    assertEquals(CountingChild.creations, 1023);
+    assertEquals(CountingMap.puts, 1023);
+  }
+
+  @Test
+  public void stagedCollectionBatches() {
+    TypeRef<List<CountingChild>> type = new TypeRef<List<CountingChild>>() {};
+    int prefixSize = codegenEnabled() ? 9 : 8;
+    int completed = prefixSize + 1023;
+    String input = childArray(completed + 1);
+    long budget =
+        shallow(ArrayList.class)
+            + (long) prefixSize * REF_BYTES
+            + (long) completed * shallow(CountingChild.class);
+    CountingChild.creations = 0;
     assertThrows(
         ForyJsonException.class,
-        () -> mapJson.fromJson("{\"first\":{\"number\":1},\"second\":{\"number\":2}}", mapType));
-    assertEquals(CountingChild.creations, 1);
-    assertEquals(CountingMap.puts, 1);
+        () -> jsonWithBudget(budget).fromJson(input.getBytes(StandardCharsets.UTF_8), type));
+    assertEquals(CountingChild.creations, completed);
   }
 
   @Test
@@ -380,6 +395,18 @@ public class JsonGraphMemoryBudgetTest extends ForyJsonTestModels {
       input.append("{\"number\":").append(i).append('}');
     }
     return input.append(']').toString();
+  }
+
+  private static String childMap(int size) {
+    StringBuilder input = new StringBuilder(size * 24);
+    input.append('{');
+    for (int i = 0; i < size; i++) {
+      if (i != 0) {
+        input.append(',');
+      }
+      input.append("\"v").append(i).append("\":{\"number\":").append(i).append('}');
+    }
+    return input.append('}').toString();
   }
 
   public static class MutableValue {

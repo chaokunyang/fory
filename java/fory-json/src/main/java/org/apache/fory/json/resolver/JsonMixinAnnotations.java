@@ -48,6 +48,7 @@ import org.apache.fory.json.annotation.JsonAnySetter;
 import org.apache.fory.json.annotation.JsonBase64;
 import org.apache.fory.json.annotation.JsonCodec;
 import org.apache.fory.json.annotation.JsonCreator;
+import org.apache.fory.json.annotation.JsonFormat;
 import org.apache.fory.json.annotation.JsonIgnore;
 import org.apache.fory.json.annotation.JsonMixin;
 import org.apache.fory.json.annotation.JsonMixinRemove;
@@ -70,6 +71,7 @@ final class JsonMixinAnnotations {
         JsonBase64.class,
         JsonCodec.class,
         JsonCreator.class,
+        JsonFormat.class,
         JsonIgnore.class,
         JsonProperty.class,
         JsonPropertyOrder.class,

@@ -28,6 +28,7 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -35,6 +36,7 @@ import java.util.List;
 import org.apache.fory.json.annotation.JsonBase64;
 import org.apache.fory.json.annotation.JsonCodec;
 import org.apache.fory.json.annotation.JsonCreator;
+import org.apache.fory.json.annotation.JsonFormat;
 import org.apache.fory.json.annotation.JsonRawValue;
 import org.apache.fory.json.annotation.JsonValue;
 import org.apache.fory.platform.AndroidSupport;
@@ -109,6 +111,16 @@ public class JsonAndroidRuntimeTest {
         json.fromJson("{\"body\":\"text\",\"bytes\":\"AQID\"}", AndroidRaw.class);
     assertEquals(decodedRaw.body, "text");
     assertEquals(decodedRaw.bytes, new byte[] {1, 2, 3});
+
+    AndroidFormat format = new AndroidFormat();
+    format.value = LocalDate.of(2024, 1, 2);
+    format.values = Arrays.asList(LocalDate.of(2024, 1, 3), LocalDate.of(2024, 1, 4));
+    String formatJson = json.toJson(format);
+    assertTrue(formatJson.contains("\"value\":\"02/01/2024\""), formatJson);
+    assertTrue(formatJson.contains("\"values\":[\"03/01/2024\",\"04/01/2024\"]"), formatJson);
+    AndroidFormat decodedFormat = json.fromJson(formatJson, AndroidFormat.class);
+    assertEquals(decodedFormat.value, format.value);
+    assertEquals(decodedFormat.values, format.values);
   }
 
   private static List<String> javaCommand(String classPath, Class<?> mainClass) {
@@ -210,5 +222,13 @@ public class JsonAndroidRuntimeTest {
   public static final class AndroidRaw {
     @JsonRawValue public String body;
     @JsonBase64 public byte[] bytes;
+  }
+
+  public static final class AndroidFormat {
+    @JsonFormat(pattern = "dd/MM/uuuu")
+    public LocalDate value;
+
+    @JsonFormat(pattern = "dd/MM/uuuu")
+    public List<LocalDate> values;
   }
 }

@@ -350,6 +350,21 @@ public abstract class JsonReader {
     return tryReadNull() ? null : readString();
   }
 
+  /**
+   * Reads nullable date/time text without materializing an ASCII string.
+   *
+   * <p>The returned view is reused by this reader and must be parsed before another reader method
+   * is called. Escaped or non-ASCII input falls back to an ordinary String.
+   */
+  @Internal
+  public final CharSequence readDateTimeText() {
+    if (tryReadNull()) {
+      return null;
+    }
+    CharSequence value = tryReadAsciiStringView();
+    return value == null ? readString() : value;
+  }
+
   /** Reads a nullable Base64 JSON string directly into its decoded bytes. */
   public final byte[] readBase64() {
     if (tryReadNull()) {

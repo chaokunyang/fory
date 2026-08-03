@@ -56,6 +56,7 @@ final class JsonMixinAnnotations {
   private static final String JSON_BASE64 = JSON_PACKAGE + ".annotation.JsonBase64";
   private static final String JSON_CODEC = JSON_PACKAGE + ".annotation.JsonCodec";
   private static final String JSON_CREATOR = JSON_PACKAGE + ".annotation.JsonCreator";
+  private static final String JSON_FORMAT = JSON_PACKAGE + ".annotation.JsonFormat";
   private static final String JSON_IGNORE = JSON_PACKAGE + ".annotation.JsonIgnore";
   private static final String JSON_PROPERTY = JSON_PACKAGE + ".annotation.JsonProperty";
   private static final String JSON_PROPERTY_ORDER = JSON_PACKAGE + ".annotation.JsonPropertyOrder";
@@ -74,6 +75,7 @@ final class JsonMixinAnnotations {
                   JSON_BASE64,
                   JSON_CODEC,
                   JSON_CREATOR,
+                  JSON_FORMAT,
                   JSON_IGNORE,
                   JSON_PROPERTY,
                   JSON_PROPERTY_ORDER,

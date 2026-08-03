@@ -33,6 +33,7 @@ import java.net.URLClassLoader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -797,6 +798,66 @@ public class JsonTypeProcessorTest {
         "test.EncodedCreator",
         new Class<?>[] {byte[].class},
         new Object[] {new byte[] {1, 2, 3}});
+  }
+
+  @Test
+  public void formatRecordPipeline() throws Exception {
+    assumeJava16Source();
+    CompilationResult result =
+        compile(
+            "test.FormatRecord",
+            "package test;\n"
+                + "import java.time.LocalDate;\n"
+                + "import org.apache.fory.json.annotation.*;\n"
+                + "@JsonType public record FormatRecord(\n"
+                + "    @JsonFormat(pattern = \"dd/MM/uuuu\") LocalDate value) {}\n");
+    assertTrue(result.success, result.diagnostics());
+    String rules = result.generatedResource(RULE_PREFIX + "test.FormatRecord.pro");
+    assertTrue(rules.contains("@interface org.apache.fory.json.annotation.JsonFormat"), rules);
+    ClassLoader loader = result.classLoader();
+    Class<?> type = loader.loadClass("test.FormatRecord");
+    Object value = type.getConstructor(LocalDate.class).newInstance(LocalDate.of(2024, 1, 2));
+    for (ForyJson json : jsonRuntimes(loader)) {
+      assertEquals(json.toJson(value), "{\"value\":\"02/01/2024\"}");
+      Object decoded = json.fromJson("{\"value\":\"03/01/2024\"}", type);
+      assertEquals(type.getMethod("value").invoke(decoded), LocalDate.of(2024, 1, 3));
+    }
+  }
+
+  @Test
+  public void formatMixinPipeline() throws Exception {
+    CompilationResult result =
+        compile(
+            "test.FormatTarget",
+            "package test;\n"
+                + "import java.time.LocalDate;\n"
+                + "import org.apache.fory.json.annotation.*;\n"
+                + "public final class FormatTarget { public LocalDate value; }\n"
+                + "@JsonMixin(target = FormatTarget.class) abstract class FormatMixin {\n"
+                + "  @JsonFormat(pattern = \"dd/MM/uuuu\") LocalDate value;\n"
+                + "}\n");
+    assertTrue(result.success, result.diagnostics());
+    String base = "FormatMixin_ForyJsonMixin_test_x2e_FormatTarget";
+    assertTrue(result.hasGeneratedSource("test/" + base + "_ForyJsonCodec.java"));
+    String rules = result.generatedResource(MIXIN_RULE_PREFIX + "test.FormatMixin.pro");
+    assertTrue(rules.contains("@interface org.apache.fory.json.annotation.JsonFormat"), rules);
+    ClassLoader loader = result.classLoader();
+    Class<?> target = loader.loadClass("test.FormatTarget");
+    Class<?> mixin = loader.loadClass("test.FormatMixin");
+    Object value = target.getConstructor().newInstance();
+    target.getField("value").set(value, LocalDate.of(2024, 1, 2));
+    for (boolean codegen : new boolean[] {false, true}) {
+      ForyJson json =
+          ForyJson.builder()
+              .withCodegen(codegen)
+              .withAsyncCompilation(false)
+              .withClassLoader(loader)
+              .registerMixin(mixin)
+              .build();
+      assertEquals(json.toJson(value), "{\"value\":\"02/01/2024\"}");
+      Object decoded = json.fromJson("{\"value\":\"03/01/2024\"}", target);
+      assertEquals(target.getField("value").get(decoded), LocalDate.of(2024, 1, 3));
+    }
   }
 
   @Test

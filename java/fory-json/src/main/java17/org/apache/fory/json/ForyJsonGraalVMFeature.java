@@ -155,8 +155,7 @@ final class ForyJsonGraalVMFeature implements Feature {
         || Modifier.isAbstract(modifiers)
         || providerClass.isInterface()
         || providerClass.isEnum()) {
-      throw providerFailure(
-          providerClass, "must be a public concrete class", null);
+      throw providerFailure(providerClass, "must be a public concrete class", null);
     }
     Constructor<?> constructor;
     try {
@@ -323,8 +322,7 @@ final class ForyJsonGraalVMFeature implements Feature {
     registerContainer(type);
     registerDeclarations(type);
     JsonCodec directTypeCodec = type.getDeclaredAnnotation(JsonCodec.class);
-    boolean hasTypeCodec =
-        directTypeCodec != null || hasInheritedTypeCodec(type, null);
+    boolean hasTypeCodec = directTypeCodec != null || hasInheritedTypeCodec(type, null);
     boolean hasJsonValue =
         (!hasTypeCodec || isCompleteTypeCodec(directTypeCodec))
             && registerJsonValueDeclarations(access, type, null);
@@ -336,7 +334,7 @@ final class ForyJsonGraalVMFeature implements Feature {
     if (!intrinsicType && !hasTypeCodec && !hasJsonValue && subTypes == null) {
       registerModelHierarchy(access, type);
       if (type.isRecord()) {
-        prepareRecord(type);
+        registerRecord(type);
       } else if (!Modifier.isAbstract(type.getModifiers())) {
         ObjectInstantiators.getObjectInstantiator(type);
         if (GraalvmSupport.needReflectionRegisterForCreation(type)) {
@@ -383,7 +381,7 @@ final class ForyJsonGraalVMFeature implements Feature {
     if (!intrinsicTarget && !hasTypeCodec && !hasJsonValue && subTypes == null) {
       registerModelHierarchy(access, targetType, annotations);
       if (targetType.isRecord()) {
-        prepareRecord(targetType);
+        registerRecord(targetType);
       } else if (!Modifier.isAbstract(targetType.getModifiers())) {
         ObjectInstantiators.getObjectInstantiator(targetType);
         if (GraalvmSupport.needReflectionRegisterForCreation(targetType)) {
@@ -432,10 +430,10 @@ final class ForyJsonGraalVMFeature implements Feature {
         if (annotation(annotations, field, JsonValue.class) != null) {
           hasValue = true;
           RuntimeReflection.register(field);
-          // JsonValueDeclaration deliberately coalesces a Record component's propagated field and
-          // accessor annotations to the backing field on the interpreted path.
-          JsonFieldAccessor.prepareField(field);
-          if (Runtime.version().feature() <= 24) {
+          if (!field.getDeclaringClass().isRecord()) {
+            JsonFieldAccessor.forField(field);
+          }
+          if (!field.getDeclaringClass().isRecord() && Runtime.version().feature() <= 24) {
             access.registerAsUnsafeAccessed(field);
           }
           registerOccurrenceCodecs(annotations, field);
@@ -446,7 +444,7 @@ final class ForyJsonGraalVMFeature implements Feature {
       if (annotation(annotations, method, JsonValue.class) != null) {
         hasValue = true;
         RuntimeReflection.register(method);
-        JsonFieldAccessor.prepareGetter(method);
+        JsonFieldAccessor.forGetter(method);
         registerOccurrenceCodecs(annotations, method);
       }
     }
@@ -458,7 +456,7 @@ final class ForyJsonGraalVMFeature implements Feature {
             && annotation(annotations, method, JsonValue.class) != null) {
           hasValue = true;
           RuntimeReflection.register(method);
-          JsonFieldAccessor.prepareGetter(method);
+          JsonFieldAccessor.forGetter(method);
           registerOccurrenceCodecs(annotations, method);
         }
       }
@@ -467,16 +465,16 @@ final class ForyJsonGraalVMFeature implements Feature {
       return false;
     }
     if (type.isRecord()) {
-      prepareRecord(type);
+      registerRecord(type);
     }
     for (Constructor<?> constructor : type.getDeclaredConstructors()) {
       if (annotation(annotations, constructor, JsonCreator.class) != null) {
-        registerCreator(type, constructor);
+        registerCreator(constructor);
       }
     }
     for (Method method : type.getDeclaredMethods()) {
       if (annotation(annotations, method, JsonCreator.class) != null) {
-        registerCreator(type, method);
+        registerCreator(method);
       }
     }
     return true;
@@ -499,9 +497,6 @@ final class ForyJsonGraalVMFeature implements Feature {
   @Override
   public void afterAnalysis(AfterAnalysisAccess access) {
     JsonGeneratedClassRegistry.freeze();
-    JsonFieldAccessor.freezeNativeAccessors();
-    JsonCreatorInfo.freezeNativeCreators();
-    ObjectCodec.freezeNativeAnySetters();
   }
 
   private void registerModelHierarchy(DuringAnalysisAccess access, Class<?> type) {
@@ -524,7 +519,7 @@ final class ForyJsonGraalVMFeature implements Feature {
       for (Field field : current.getDeclaredFields()) {
         if (isJsonField(field)) {
           if (!record) {
-            JsonFieldAccessor.prepareField(field);
+            JsonFieldAccessor.forField(field);
           }
           if (!current.isRecord() && Runtime.version().feature() <= 24) {
             access.registerAsUnsafeAccessed(field);
@@ -539,14 +534,14 @@ final class ForyJsonGraalVMFeature implements Feature {
       }
       for (Method method : current.getDeclaredMethods()) {
         if (annotation(annotations, method, JsonValue.class) != null) {
-          prepareMethodAccessors(annotations, method);
+          resolveMethodAccessors(annotations, method);
         }
       }
     }
     for (Method method : type.getMethods()) {
       boolean mixinSelector = hasMixinSelector(annotations, method);
       if (ObjectCodec.usesJsonMetadata(method, record) || mixinSelector) {
-        prepareMethodAccessors(annotations, method);
+        resolveMethodAccessors(annotations, method);
         if (method.getDeclaringClass().isInterface()) {
           RuntimeReflection.register(method);
         }
@@ -569,16 +564,15 @@ final class ForyJsonGraalVMFeature implements Feature {
     }
     for (Constructor<?> constructor : type.getDeclaredConstructors()) {
       if (annotation(annotations, constructor, JsonCreator.class) != null) {
-        registerCreator(type, constructor);
+        registerCreator(constructor);
         registerParameterCodecs(annotations, constructor.getParameters());
         registerResolvedParameterTypes(ownerType, constructor.getParameters());
-        registerUnwrappedParameters(
-            access, ownerType, annotations, constructor.getParameters());
+        registerUnwrappedParameters(access, ownerType, annotations, constructor.getParameters());
       }
     }
     for (Method method : type.getDeclaredMethods()) {
       if (annotation(annotations, method, JsonCreator.class) != null) {
-        registerCreator(type, method);
+        registerCreator(method);
         registerParameterCodecs(annotations, method.getParameters());
         registerResolvedParameterTypes(ownerType, method.getParameters());
         registerUnwrappedParameters(access, ownerType, annotations, method.getParameters());
@@ -586,35 +580,34 @@ final class ForyJsonGraalVMFeature implements Feature {
     }
   }
 
-  private void prepareRecord(Class<?> type) {
+  private void registerRecord(Class<?> type) {
     RuntimeReflection.registerAllRecordComponents(type);
-    RecordUtils.prepareRecordComponentGetters(type);
     for (RecordComponent component : type.getRecordComponents()) {
-      JsonFieldAccessor.prepareGetter(component.getAccessor());
+      JsonFieldAccessor.forGetter(component.getAccessor());
     }
     Constructor<?> constructor = RecordUtils.getRecordConstructor(type).f0;
-    registerCreator(type, constructor);
+    registerCreator(constructor);
   }
 
-  private void registerCreator(Class<?> ownerType, Executable executable) {
+  private void registerCreator(Executable executable) {
     if (processedCreators.add(executable)) {
       RuntimeReflection.register(executable);
-      JsonCreatorInfo.prepareNativeCreator(ownerType, executable);
+      JsonCreatorInfo.creatorHandle(executable);
     }
   }
 
-  private static void prepareMethodAccessors(JsonMixinView annotations, Method method) {
+  private static void resolveMethodAccessors(JsonMixinView annotations, Method method) {
     int modifiers = method.getModifiers();
     if (Modifier.isStatic(modifiers) || method.isSynthetic() || method.isBridge()) {
       return;
     }
     if (method.getParameterCount() == 0 && method.getReturnType() != void.class) {
-      JsonFieldAccessor.prepareGetter(method);
+      JsonFieldAccessor.forGetter(method);
     } else if (method.getParameterCount() == 1 && method.getReturnType() == void.class) {
-      JsonFieldAccessor.prepareSetter(method);
+      JsonFieldAccessor.forSetter(method);
     }
     if (annotation(annotations, method, JsonAnySetter.class) != null) {
-      ObjectCodec.prepareNativeAnySetter(method);
+      ObjectCodec.AnyInfo.anySetterHandle(method);
     }
   }
 
@@ -656,15 +649,13 @@ final class ForyJsonGraalVMFeature implements Feature {
     return changed;
   }
 
-  private void registerParameterCodecs(
-      JsonMixinView annotations, Parameter[] parameters) {
+  private void registerParameterCodecs(JsonMixinView annotations, Parameter[] parameters) {
     for (Parameter parameter : parameters) {
       registerCodecs(annotation(annotations, parameter, JsonCodec.class));
     }
   }
 
-  private void registerOccurrenceCodecs(
-      JsonMixinView annotations, AnnotatedElement element) {
+  private void registerOccurrenceCodecs(JsonMixinView annotations, AnnotatedElement element) {
     registerCodecs(annotation(annotations, element, JsonCodec.class));
     if (annotation(annotations, element, JsonBase64.class) != null) {
       registerCodec(Base64ByteArrayCodec.class);
@@ -909,5 +900,4 @@ final class ForyJsonGraalVMFeature implements Feature {
       return 31 * name.hashCode() + Arrays.hashCode(parameterTypes);
     }
   }
-
 }

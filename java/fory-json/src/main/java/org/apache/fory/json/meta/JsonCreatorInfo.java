@@ -20,23 +20,21 @@
 package org.apache.fory.json.meta;
 
 import java.lang.invoke.MethodHandle;
-import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodType;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Executable;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.Arrays;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 import org.apache.fory.annotation.Internal;
+import org.apache.fory.collection.ClassValueCache;
 import org.apache.fory.json.ForyJsonException;
 import org.apache.fory.json.codec.GeneratedJsonCodec;
 import org.apache.fory.json.resolver.JsonTypeResolver;
 import org.apache.fory.platform.AndroidSupport;
 import org.apache.fory.platform.GraalvmSupport;
-import org.apache.fory.platform.JdkVersion;
 import org.apache.fory.platform.internal._JDKAccess;
 
 /**
@@ -50,11 +48,10 @@ import org.apache.fory.platform.internal._JDKAccess;
  */
 @Internal
 public final class JsonCreatorInfo {
-  private static final MethodHandle CONSTRUCTOR_REFLECTION_INVOKER =
-      prepareConstructorReflectionInvoker();
-  private static Map<Executable, MethodHandle> nativeInvokers = new HashMap<>();
-  private static Map<Executable, MethodHandle> nativeStringInvokers = new HashMap<>();
-  private static boolean nativeCreatorsFrozen;
+  // The Feature resolves each discovered executable through creatorHandle during analysis, and
+  // runtime configurations retrieve the retained handles through the same cache.
+  private static final ClassValueCache<ConcurrentMap<Executable, CreatorHandles>> NATIVE_CREATORS =
+      ClassValueCache.newClassKeyCache(32);
 
   private final Class<?> ownerType;
   private final Executable executable;
@@ -75,10 +72,7 @@ public final class JsonCreatorInfo {
     this.fields = fields;
     this.defaults = defaults;
     this.generatedCodec = generatedCodec;
-    invoker =
-        generatedCodec == null
-            ? buildInvoker(ownerType, executable, executable.getParameterCount())
-            : null;
+    invoker = generatedCodec == null ? buildInvoker(executable) : null;
     hashes = new long[fields.length];
     for (int i = 0; i < fields.length; i++) {
       hashes[i] = fields[i].nameHash();
@@ -150,22 +144,12 @@ public final class JsonCreatorInfo {
     try {
       value = (Object) invoker.invokeExact(arguments);
     } catch (Throwable cause) {
-      cause = creatorCause(cause);
       if (cause instanceof Error) {
         throw (Error) cause;
       }
       throw new ForyJsonException("JSON creator failed for " + ownerType.getName(), cause);
     }
     return requireResult(value);
-  }
-
-  private Throwable creatorCause(Throwable cause) {
-    return GraalvmSupport.isGraalRuntime()
-            && JdkVersion.MAJOR_VERSION >= 25
-            && executable instanceof Constructor
-            && cause instanceof InvocationTargetException
-        ? cause.getCause()
-        : cause;
   }
 
   private Object requireResult(Object value) {
@@ -176,22 +160,26 @@ public final class JsonCreatorInfo {
     return value;
   }
 
-  private static MethodHandle buildInvoker(
-      Class<?> ownerType, Executable executable, int parameterCount) {
+  private static MethodHandle buildInvoker(Executable executable) {
     if (AndroidSupport.IS_ANDROID) {
       // Android has no supported trusted MethodHandle lookup. Creator shape validation guarantees
       // a public executable; accessibility is needed only when its declaring class is non-public.
       executable.setAccessible(true);
       return null;
     }
-    if (GraalvmSupport.isGraalRuntime()) {
-      MethodHandle invoker = nativeInvokers.get(executable);
-      if (invoker == null) {
-        throw missingNativeCreator(executable);
-      }
-      return invoker;
+    return creatorHandle(executable);
+  }
+
+  /** Returns the array-argument invocation handle for one JSON creator. */
+  @Internal
+  public static MethodHandle creatorHandle(Executable executable) {
+    if (GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE) {
+      return nativeCreatorHandles(executable).arrayInvoker;
     }
-    MethodHandle target = creatorTarget(ownerType, executable);
+    return arrayInvoker(creatorTarget(executable), executable.getParameterCount());
+  }
+
+  private static MethodHandle arrayInvoker(MethodHandle target, int parameterCount) {
     // The interpreted reader already owns one trusted fixed-size argument array. Spread that
     // exact array into the creator without a second carrier or per-call reflective access check.
     return target
@@ -201,115 +189,49 @@ public final class JsonCreatorInfo {
 
   /** Returns the one-String-argument creator used by a JsonValue representation. */
   @Internal
-  public static MethodHandle stringCreatorHandle(Class<?> ownerType, Executable executable) {
-    if (GraalvmSupport.isGraalRuntime()) {
-      MethodHandle invoker = nativeStringInvokers.get(executable);
-      if (invoker == null) {
-        throw missingNativeCreator(executable);
-      }
-      return invoker;
+  public static MethodHandle stringCreatorHandle(Executable executable) {
+    if (GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE) {
+      return nativeCreatorHandles(executable).stringInvoker;
     }
-    return creatorTarget(ownerType, executable)
-        .asType(MethodType.methodType(Object.class, String.class));
+    return creatorTarget(executable).asType(MethodType.methodType(Object.class, String.class));
   }
 
-  /** Prepares the exact Native Image runtime handle for one registered creator. */
-  @Internal
-  public static synchronized void prepareNativeCreator(Class<?> ownerType, Executable executable) {
-    if (!GraalvmSupport.isGraalBuildTime() || nativeCreatorsFrozen) {
-      throw new IllegalStateException("Fory JSON native creator cache is not writable");
-    }
-    MethodHandle target;
-    MethodHandle invoker;
-    if (executable instanceof Constructor && JdkVersion.MAJOR_VERSION >= 25) {
-      target = constructorReflectionTarget(ownerType, (Constructor<?>) executable);
-      invoker = target;
-    } else {
-      target = creatorTarget(ownerType, executable);
-      invoker =
-          target
-              .asSpreader(Object[].class, executable.getParameterCount())
-              .asType(MethodType.methodType(Object.class, Object[].class));
-    }
-    nativeInvokers.putIfAbsent(executable, invoker);
-    if (executable.getParameterCount() == 1 && executable.getParameterTypes()[0] == String.class) {
-      if (!(executable instanceof Constructor) || JdkVersion.MAJOR_VERSION < 25) {
-        nativeStringInvokers.putIfAbsent(
-            executable, target.asType(MethodType.methodType(Object.class, String.class)));
-      }
-    }
+  private static CreatorHandles nativeCreatorHandles(Executable executable) {
+    ConcurrentMap<Executable, CreatorHandles> creators =
+        NATIVE_CREATORS.get(executable.getDeclaringClass(), ConcurrentHashMap::new);
+    return creators.computeIfAbsent(executable, JsonCreatorInfo::newCreatorHandles);
   }
 
-  /** Freezes all Native Image creator handles after hosted analysis. */
-  @Internal
-  public static synchronized void freezeNativeCreators() {
-    if (nativeCreatorsFrozen) {
-      return;
-    }
-    nativeInvokers = immutable(nativeInvokers);
-    nativeStringInvokers = immutable(nativeStringInvokers);
-    nativeCreatorsFrozen = true;
+  private static CreatorHandles newCreatorHandles(Executable executable) {
+    MethodHandle target = creatorTarget(executable);
+    MethodHandle stringInvoker =
+        executable.getParameterCount() == 1 && executable.getParameterTypes()[0] == String.class
+            ? target.asType(MethodType.methodType(Object.class, String.class))
+            : null;
+    return new CreatorHandles(arrayInvoker(target, executable.getParameterCount()), stringInvoker);
   }
 
-  private static Map<Executable, MethodHandle> immutable(Map<Executable, MethodHandle> invokers) {
-    return invokers.isEmpty()
-        ? Collections.emptyMap()
-        : Collections.unmodifiableMap(new HashMap<>(invokers));
-  }
-
-  private static ForyJsonException missingNativeCreator(Executable executable) {
-    return new ForyJsonException(
-        "Missing Native Image Fory JSON creator metadata for " + executable);
-  }
-
-  /** Returns the prepared array-argument creator used by GraalVM 25 constructors. */
-  @Internal
-  public static MethodHandle arrayCreatorHandle(Class<?> ownerType, Executable executable) {
-    return buildInvoker(ownerType, executable, executable.getParameterCount());
-  }
-
-  private static MethodHandle constructorReflectionTarget(
-      Class<?> ownerType, Constructor<?> constructor) {
-    return MethodHandles.insertArguments(
-        CONSTRUCTOR_REFLECTION_INVOKER.bindTo(constructor), 1, true, ownerType);
-  }
-
-  private static MethodHandle prepareConstructorReflectionInvoker() {
-    if (!GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE || JdkVersion.MAJOR_VERSION < 25) {
-      return null;
-    }
-    try {
-      // GraalVM 25 implements direct constructor MethodHandles through a reflection bridge whose
-      // synthetic caller cannot access concealed model packages. Preserve the executable's normal
-      // public access contract by supplying its declaring class as the caller. The resulting
-      // per-executable handle is prepared at image build time and performs no runtime lookup.
-      return _JDKAccess._trustedLookup(Constructor.class)
-          .findVirtual(
-              Constructor.class,
-              "newInstanceWithCaller",
-              MethodType.methodType(Object.class, Object[].class, boolean.class, Class.class));
-    } catch (NoSuchMethodException | IllegalAccessException e) {
-      throw new ForyJsonException("Cannot prepare GraalVM 25 JSON constructor invocation", e);
-    }
-  }
-
-  private static MethodHandle creatorTarget(Class<?> ownerType, Executable executable) {
+  private static MethodHandle creatorTarget(Executable executable) {
+    Class<?> declaringClass = executable.getDeclaringClass();
     try {
       // A target-class trusted lookup has full member access without requiring the application
       // module to export or open its model package.
-      if (executable instanceof Constructor) {
-        return _JDKAccess._trustedLookup(ownerType)
-            .findConstructor(
-                ownerType, MethodType.methodType(void.class, executable.getParameterTypes()));
-      }
-      Method factory = (Method) executable;
-      return _JDKAccess._trustedLookup(factory.getDeclaringClass())
-          .findStatic(
-              factory.getDeclaringClass(),
-              factory.getName(),
-              MethodType.methodType(factory.getReturnType(), factory.getParameterTypes()));
-    } catch (NoSuchMethodException | IllegalAccessException e) {
-      throw new ForyJsonException("Cannot access JSON creator for " + ownerType.getName(), e);
+      return executable instanceof Constructor
+          ? _JDKAccess._trustedLookup(declaringClass)
+              .unreflectConstructor((Constructor<?>) executable)
+          : _JDKAccess._trustedLookup(declaringClass).unreflect((Method) executable);
+    } catch (IllegalAccessException e) {
+      throw new ForyJsonException("Cannot access JSON creator " + executable, e);
+    }
+  }
+
+  private static final class CreatorHandles {
+    private final MethodHandle arrayInvoker;
+    private final MethodHandle stringInvoker;
+
+    private CreatorHandles(MethodHandle arrayInvoker, MethodHandle stringInvoker) {
+      this.arrayInvoker = arrayInvoker;
+      this.stringInvoker = stringInvoker;
     }
   }
 }

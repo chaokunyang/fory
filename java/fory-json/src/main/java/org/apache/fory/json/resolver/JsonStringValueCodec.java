@@ -36,8 +36,6 @@ import org.apache.fory.json.reader.Utf8JsonReader;
 import org.apache.fory.json.writer.StringJsonWriter;
 import org.apache.fory.json.writer.Utf8JsonWriter;
 import org.apache.fory.platform.AndroidSupport;
-import org.apache.fory.platform.GraalvmSupport;
-import org.apache.fory.platform.JdkVersion;
 
 /** Complete String representation selected by one effective {@code JsonValue} member. */
 final class JsonStringValueCodec implements JsonValueCodec<Object> {
@@ -162,14 +160,8 @@ final class JsonStringValueCodec implements JsonValueCodec<Object> {
       if (generatedCodec != null) {
         return new GeneratedCreator(ownerType, generatedCodec);
       }
-      if (GraalvmSupport.isGraalRuntime()
-          && JdkVersion.MAJOR_VERSION >= 25
-          && executable instanceof Constructor) {
-        return new ReflectionCreator(
-            ownerType, JsonCreatorInfo.arrayCreatorHandle(ownerType, executable));
-      }
       if (!AndroidSupport.IS_ANDROID) {
-        return new MethodHandleCreator(ownerType, buildInvoker(ownerType, executable));
+        return new MethodHandleCreator(ownerType, buildInvoker(executable));
       }
       executable.setAccessible(true);
       return executable instanceof Constructor
@@ -177,8 +169,8 @@ final class JsonStringValueCodec implements JsonValueCodec<Object> {
           : new FactoryCreator(ownerType, (Method) executable);
     }
 
-    private static MethodHandle buildInvoker(Class<?> ownerType, Executable executable) {
-      return JsonCreatorInfo.stringCreatorHandle(ownerType, executable);
+    private static MethodHandle buildInvoker(Executable executable) {
+      return JsonCreatorInfo.stringCreatorHandle(executable);
     }
   }
 
@@ -217,27 +209,6 @@ final class JsonStringValueCodec implements JsonValueCodec<Object> {
         return requireResult(result);
       } catch (Throwable cause) {
         throw creatorFailure(cause);
-      }
-    }
-  }
-
-  private static final class ReflectionCreator extends ValueCreator {
-    private final MethodHandle invoker;
-
-    private ReflectionCreator(Class<?> ownerType, MethodHandle invoker) {
-      super(ownerType);
-      this.invoker = invoker;
-    }
-
-    @Override
-    Object create(JsonReader reader, String value) {
-      try {
-        Object result = (Object) invoker.invokeExact(reader.creatorArguments(value));
-        return requireResult(result);
-      } catch (Throwable cause) {
-        throw creatorFailure(cause instanceof InvocationTargetException ? cause.getCause() : cause);
-      } finally {
-        reader.clearCreatorArguments();
       }
     }
   }

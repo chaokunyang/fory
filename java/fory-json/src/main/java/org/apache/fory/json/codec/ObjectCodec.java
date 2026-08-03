@@ -25,10 +25,11 @@ import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.lang.reflect.Type;
-import java.util.Collections;
-import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 import org.apache.fory.annotation.Internal;
+import org.apache.fory.collection.ClassValueCache;
 import org.apache.fory.json.ForyJsonException;
 import org.apache.fory.json.PropertyNamingStrategy;
 import org.apache.fory.json.annotation.JsonCodec;
@@ -157,18 +158,6 @@ public class ObjectCodec<T> implements JsonValueCodec<T> {
         skippedNames,
         unwrappedInfo,
         instantiator);
-  }
-
-  /** Prepares one {@code JsonAnySetter} handle for Native Image runtime metadata construction. */
-  @Internal
-  public static void prepareNativeAnySetter(Method method) {
-    AnyInfo.prepareNativeSetter(method);
-  }
-
-  /** Freezes all Native Image {@code JsonAnySetter} handles after hosted analysis. */
-  @Internal
-  public static void freezeNativeAnySetters() {
-    AnyInfo.freezeNativeSetters();
   }
 
   /** Returns whether hosted metadata must retain this method for object discovery. */
@@ -1425,8 +1414,10 @@ public class ObjectCodec<T> implements JsonValueCodec<T> {
 
   @Internal
   public static final class AnyInfo {
-    private static Map<Method, MethodHandle> nativeSetterHandles = new HashMap<>();
-    private static boolean nativeSetterHandlesFrozen;
+    // Hosted discovery and runtime codec construction both resolve Any setters through
+    // anySetterHandle, so the image heap owns the single cache of prepared handles.
+    private static final ClassValueCache<ConcurrentMap<Method, MethodHandle>>
+        NATIVE_SETTER_HANDLES = ClassValueCache.newClassKeyCache(32);
 
     private final Field writeField;
     private final Method writeGetter;
@@ -1475,7 +1466,7 @@ public class ObjectCodec<T> implements JsonValueCodec<T> {
       setterHandle =
           readSetter == null || generatedSetter != null || AndroidSupport.IS_ANDROID
               ? null
-              : methodHandle(readSetter);
+              : anySetterHandle(readSetter);
       if (readSetter != null && generatedSetter == null && AndroidSupport.IS_ANDROID) {
         readSetter.setAccessible(true);
       }
@@ -1601,38 +1592,23 @@ public class ObjectCodec<T> implements JsonValueCodec<T> {
       }
     }
 
-    private static MethodHandle methodHandle(Method method) {
-      if (GraalvmSupport.isGraalRuntime()) {
-        MethodHandle handle = nativeSetterHandles.get(method);
-        if (handle == null) {
-          throw new ForyJsonException(
-              "Missing Native Image Fory JSON Any setter metadata for " + method);
-        }
-        return handle;
+    /** Returns the invocation handle for one {@code JsonAnySetter} method. */
+    @Internal
+    public static MethodHandle anySetterHandle(Method method) {
+      if (GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE) {
+        ConcurrentMap<Method, MethodHandle> handles =
+            NATIVE_SETTER_HANDLES.get(method.getDeclaringClass(), ConcurrentHashMap::new);
+        return handles.computeIfAbsent(method, AnyInfo::newAnySetterHandle);
       }
+      return newAnySetterHandle(method);
+    }
+
+    private static MethodHandle newAnySetterHandle(Method method) {
       try {
         return _JDKAccess._trustedLookup(method.getDeclaringClass()).unreflect(method);
       } catch (IllegalAccessException e) {
         throw new ForyJsonException("Cannot access @JsonAnySetter " + method, e);
       }
-    }
-
-    private static synchronized void prepareNativeSetter(Method method) {
-      if (!GraalvmSupport.isGraalBuildTime() || nativeSetterHandlesFrozen) {
-        throw new IllegalStateException("Fory JSON native Any setter cache is not writable");
-      }
-      nativeSetterHandles.putIfAbsent(method, methodHandle(method));
-    }
-
-    private static synchronized void freezeNativeSetters() {
-      if (nativeSetterHandlesFrozen) {
-        return;
-      }
-      nativeSetterHandles =
-          nativeSetterHandles.isEmpty()
-              ? Collections.emptyMap()
-              : Collections.unmodifiableMap(new HashMap<>(nativeSetterHandles));
-      nativeSetterHandlesFrozen = true;
     }
   }
 

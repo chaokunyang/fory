@@ -1595,20 +1595,23 @@ template <typename T> struct CompileTimeFieldHelpers {
       return false;
     } else {
       using FieldType = ValueType<Index>;
-      constexpr TypeId field_type = static_cast<TypeId>(field_type_id<Index>());
       if constexpr (field_nullable<Index>() || field_track_ref<Index>() ||
                     is_nullable_v<FieldType>) {
         return true;
-      } else if constexpr (is_struct_type(field_type)) {
-        return false;
-      } else if constexpr (is_ext_type(field_type) ||
-                           field_type == TypeId::NONE) {
-        return declared_read_data_always_advances<FieldType>::value;
-      } else if constexpr (field_type == TypeId::UNKNOWN) {
-        return field_dynamic_value<Index>() != 0 ||
-               declared_read_data_always_advances<FieldType>::value;
       } else {
-        return read_data_always_advances_v<FieldType>;
+        constexpr TypeId field_type =
+            static_cast<TypeId>(field_type_id<Index>());
+        if constexpr (is_struct_type(field_type)) {
+          return false;
+        } else if constexpr (is_ext_type(field_type) ||
+                             field_type == TypeId::NONE) {
+          return declared_read_data_always_advances<FieldType>::value;
+        } else if constexpr (field_type == TypeId::UNKNOWN) {
+          return field_dynamic_value<Index>() != 0 ||
+                 declared_read_data_always_advances<FieldType>::value;
+        } else {
+          return read_data_always_advances_v<FieldType>;
+        }
       }
     }
   }

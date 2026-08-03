@@ -469,7 +469,6 @@ public final class ForyJsonExample {
     Preconditions.checkArgument(
         Arrays.equals(
             json.fromJson("{\"value\":\"AQID\"}", Base64Bytes.class).value, new byte[] {1, 2, 3}));
-
   }
 
   private static void testSubtypes() {

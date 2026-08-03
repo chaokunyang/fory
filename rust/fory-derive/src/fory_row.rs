@@ -15,71 +15,196 @@
 // specific language governing permissions and limitations
 // under the License.
 
-use crate::util::{extract_fields, source_fields};
 use proc_macro::TokenStream;
-use quote::quote;
+use quote::{format_ident, quote};
+use syn::fold::{self, Fold};
+use syn::{Data, DeriveInput, Fields, GenericParam, Lifetime, LifetimeParam, Path};
 
-pub fn derive_row(ast: &syn::DeriveInput, runtime_root: proc_macro2::TokenStream) -> TokenStream {
+pub fn derive_row(ast: &DeriveInput, runtime_root: proc_macro2::TokenStream) -> TokenStream {
+    match expand_row(ast, runtime_root) {
+        Ok(tokens) => tokens.into(),
+        Err(error) => error.into_compile_error().into(),
+    }
+}
+
+fn expand_row(
+    ast: &DeriveInput,
+    runtime_root: proc_macro2::TokenStream,
+) -> syn::Result<proc_macro2::TokenStream> {
+    let fields = match &ast.data {
+        Data::Struct(data) => match &data.fields {
+            Fields::Named(fields) => &fields.named,
+            Fields::Unnamed(fields) => {
+                return Err(syn::Error::new_spanned(
+                    fields,
+                    "ForyRow can only be derived for structs with named fields",
+                ));
+            }
+            Fields::Unit => {
+                return Err(syn::Error::new_spanned(
+                    ast,
+                    "ForyRow can only be derived for structs with named fields",
+                ));
+            }
+        },
+        Data::Enum(_) => {
+            return Err(syn::Error::new_spanned(
+                ast,
+                "ForyRow cannot be derived for enums",
+            ));
+        }
+        Data::Union(_) => {
+            return Err(syn::Error::new_spanned(
+                ast,
+                "ForyRow cannot be derived for unions",
+            ));
+        }
+    };
+
     let name = &ast.ident;
-    let source_fields = match &ast.data {
-        syn::Data::Struct(s) => source_fields(&s.fields),
-        _ => {
-            panic!("only struct be supported")
-        }
-    };
-    let fields = extract_fields(&source_fields);
-
-    let write_exprs = fields.iter().enumerate().map(|(index, field)| {
-        let ty = &field.ty;
-        let ident = field.ident.as_ref().expect("field should provide ident");
-
-        quote! {
-            let mut callback_info = struct_writer.write_start(#index);
-            <#ty as #runtime_root::row::Row<'a>>::write(&v.#ident, struct_writer.get_writer())?;
-            struct_writer.write_end(callback_info);
-        }
-    });
-
-    let getter_exprs = fields.iter().enumerate().map(|(index, field)| {
-        let ty = &field.ty;
-        let ident = field.ident.as_ref().expect("field should provide ident");
-        let getter_name: proc_macro2::Ident = syn::Ident::new(&format!("{ident}"), ident.span());
-
-        quote! {
-            pub fn #getter_name(&self) -> <#ty as #runtime_root::row::Row<'a>>::ReadResult {
-                let bytes = self.struct_data.get_field_bytes(#index);
-                <#ty as #runtime_root::row::Row<'a>>::cast(bytes)
-            }
-        }
-    });
-
-    let getter: proc_macro2::Ident = syn::Ident::new(&format!("{name}ForyRowGetter"), name.span());
-
+    let visibility = &ast.vis;
+    let getter = format_ident!("{}ForyRowGetter", name);
     let num_fields = fields.len();
+    let row_lifetime = row_lifetime(ast);
 
-    let gen = quote! {
-        struct #getter<'a> {
-            struct_data: #runtime_root::row::StructViewer<'a>
-        }
+    let mut row_generics = ast.generics.clone();
+    for field in fields {
+        let ty = &field.ty;
+        let predicate = syn::parse2(quote! {
+            #ty: #runtime_root::row::RowValue
+        })?;
+        row_generics.make_where_clause().predicates.push(predicate);
+    }
 
-        impl<'a> #getter<'a> {
-            #(#getter_exprs)*
-        }
-
-        impl<'a> #runtime_root::row::Row<'a> for #name {
-
-            type ReadResult = #getter<'a>;
-
-            fn write(v: &Self, writer: &mut #runtime_root::buffer::Writer) -> Result<(), #runtime_root::error::Error> {
-                let mut struct_writer = #runtime_root::row::StructWriter::new(#num_fields, writer);
-                #(#write_exprs);*;
-                Ok(())
-            }
-
-            fn cast(bytes: &'a [u8]) -> Self::ReadResult {
-                #getter{ struct_data: #runtime_root::row::StructViewer::new(bytes, #num_fields) }
-            }
-        }
+    let source_path: Path = {
+        let (_, source_ty_generics, _) = row_generics.split_for_impl();
+        syn::parse2(quote! { #name #source_ty_generics })?
     };
-    gen.into()
+    // Copied bounds and field types live on the generated getter, where an
+    // unmodified `Self` would refer to the getter instead of the source row.
+    let mut getter_generics = SelfTypeRewriter {
+        source_path: source_path.clone(),
+    }
+    .fold_generics(row_generics.clone());
+    getter_generics.params.insert(
+        0,
+        GenericParam::Lifetime(LifetimeParam::new(row_lifetime.clone())),
+    );
+    let (impl_generics, ty_generics, where_clause) = row_generics.split_for_impl();
+    let (getter_impl_generics, getter_ty_generics, getter_where_clause) =
+        getter_generics.split_for_impl();
+
+    let mut writes = Vec::with_capacity(num_fields);
+    let mut getters = Vec::with_capacity(num_fields);
+    for (index, field) in fields.iter().enumerate() {
+        let ident = field.ident.as_ref().ok_or_else(|| {
+            syn::Error::new_spanned(field, "ForyRow requires named struct fields")
+        })?;
+        let ty = &field.ty;
+        let getter_ty = SelfTypeRewriter {
+            source_path: source_path.clone(),
+        }
+        .fold_type(ty.clone());
+        writes.push(quote! {
+            struct_writer.write(#index, &self.#ident)?;
+        });
+        getters.push(quote! {
+            #visibility fn #ident(
+                &self,
+            ) -> ::core::result::Result<
+                <#getter_ty as #runtime_root::row::RowValue>::View<#row_lifetime>,
+                #runtime_root::error::Error,
+            > {
+                self.struct_data.get::<#getter_ty>(#index)
+            }
+        });
+    }
+
+    Ok(quote! {
+        #visibility struct #getter #getter_impl_generics #getter_where_clause {
+            struct_data: #runtime_root::row::StructView<#row_lifetime>,
+            _marker: ::core::marker::PhantomData<fn() -> *const #name #ty_generics>,
+        }
+
+        impl #getter_impl_generics #getter #getter_ty_generics #getter_where_clause {
+            #(#getters)*
+        }
+
+        impl #impl_generics #runtime_root::row::RowValue for #name #ty_generics #where_clause {
+            type View<#row_lifetime> = #getter #getter_ty_generics;
+
+            const FIXED_SIZE: ::core::option::Option<usize> = ::core::option::Option::None;
+
+            fn write(
+                &self,
+                writer: #runtime_root::row::ValueWriter<'_, '_>,
+            ) -> ::core::result::Result<(), #runtime_root::error::Error> {
+                let mut struct_writer = writer.struct_writer(#num_fields)?;
+                #(#writes)*
+                ::core::result::Result::Ok(())
+            }
+
+            fn read<#row_lifetime>(
+                bytes: &#row_lifetime [u8],
+            ) -> ::core::result::Result<Self::View<#row_lifetime>, #runtime_root::error::Error> {
+                ::core::result::Result::Ok(#getter {
+                    struct_data: #runtime_root::row::StructView::new(bytes, #num_fields)?,
+                    _marker: ::core::marker::PhantomData,
+                })
+            }
+        }
+
+        impl #impl_generics #runtime_root::row::Row for #name #ty_generics #where_clause {}
+    })
+}
+
+fn row_lifetime(ast: &DeriveInput) -> Lifetime {
+    let mut collector = LifetimeCollector::default();
+    collector.fold_derive_input(ast.clone());
+    let mut suffix = 0usize;
+    loop {
+        let name = if suffix == 0 {
+            "__fory_row".to_owned()
+        } else {
+            format!("__fory_row_{suffix}")
+        };
+        if !collector.names.iter().any(|used| used == &name) {
+            return Lifetime::new(&format!("'{name}"), proc_macro2::Span::call_site());
+        }
+        suffix += 1;
+    }
+}
+
+#[derive(Default)]
+struct LifetimeCollector {
+    names: Vec<String>,
+}
+
+impl Fold for LifetimeCollector {
+    fn fold_lifetime(&mut self, lifetime: Lifetime) -> Lifetime {
+        self.names.push(lifetime.ident.to_string());
+        lifetime
+    }
+}
+
+struct SelfTypeRewriter {
+    source_path: Path,
+}
+
+impl Fold for SelfTypeRewriter {
+    fn fold_path(&mut self, path: Path) -> Path {
+        let mut path = fold::fold_path(self, path);
+        let Some(first) = path.segments.first() else {
+            return path;
+        };
+        if path.leading_colon.is_some() || first.ident != "Self" {
+            return path;
+        }
+
+        let mut segments = self.source_path.segments.clone();
+        segments.extend(path.segments.into_iter().skip(1));
+        path.leading_colon = self.source_path.leading_colon;
+        path.segments = segments;
+        path
+    }
 }

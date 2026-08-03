@@ -235,8 +235,8 @@ mod tests {
     #[test]
     fn renamed_facade_row_derive() {
         let row = to_row(&RenamedRow { id: 9 }).unwrap();
-        let decoded = from_row::<RenamedRow>(&row);
-        assert_eq!(decoded.id(), 9);
+        let decoded = from_row::<RenamedRow>(&row).unwrap();
+        assert_eq!(decoded.id().unwrap(), 9);
     }
 
     #[test]

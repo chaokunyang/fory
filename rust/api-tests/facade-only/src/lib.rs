@@ -626,9 +626,9 @@ mod tests {
             name: "Grace".to_string(),
         };
         let row = to_row(&value).unwrap();
-        let decoded = from_row::<RowUser>(&row);
-        assert_eq!(decoded.id(), 7);
-        assert_eq!(decoded.name(), "Grace");
+        let decoded = from_row::<RowUser>(&row).unwrap();
+        assert_eq!(decoded.id().unwrap(), 7);
+        assert_eq!(decoded.name().unwrap(), "Grace");
     }
 
     #[test]

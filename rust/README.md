@@ -17,7 +17,7 @@ The Rust implementation provides versatile and high-performance serialization wi
 - **Polymorphic**: Serialize trait objects with `Box<dyn Trait>`, `Rc<dyn Trait>`, and `Arc<dyn Trait>`
 - **Schema Evolution**: Compatible mode for independent schema changes
 - **Reduced-Precision Types**: `Float16` and `BFloat16` scalars with `Vec<Float16>` / `Vec<BFloat16>` arrays
-- **Two Formats**: Object graph serialization and zero-copy row-based format
+- **Two Formats**: Object graph serialization and the Standard Row Format shared with Java, C++, and Python
 
 ## Crates
 
@@ -523,17 +523,16 @@ Custom serializers implement the body-only `write_data` and `read_data`
 operations. Fory's complete-value `write` and `read` operations add reference
 and type-information framing.
 
-### 8. Row-Based Serialization
+### 8. Standard Row Format
 
-Apache Fory™ provides a high-performance **row format** for zero-copy deserialization. Unlike traditional object serialization that reconstructs entire objects in memory, row format enables **random access** to fields directly from binary data without full deserialization.
+Apache Fory™ Rust implements the Standard Row Format shared with Java, C++, and Python. `from_row` returns a borrowed view, so applications can validate and access selected fields or collection elements without reconstructing the complete value.
 
 **Key benefits:**
 
-- **Zero-copy access**: Read fields without allocating or copying data
-- **Partial deserialization**: Access only the fields you need
-- **Memory-mapped files**: Work with data larger than RAM
-- **Cache-friendly**: Sequential memory layout for better CPU cache utilization
-- **Lazy evaluation**: Defer expensive operations until field access
+- **Zero-copy access**: Read strings, binary values, and nested structures through borrowed views
+- **Selective access**: Read only the fields or collection elements the application needs
+- **Cross-language rows**: Exchange the same binary layout with Java, C++, and Python
+- **Bounds-checked reads**: Malformed offsets, sizes, counts, and UTF-8 return `Error`
 
 **When to use row format:**
 
@@ -541,74 +540,49 @@ Apache Fory™ provides a high-performance **row format** for zero-copy deserial
 - Large datasets where only a subset of fields is needed
 - Memory-constrained environments
 - High-throughput data pipelines
-- Reading from memory-mapped files or shared memory
-
-**How it works:**
-
-- Fields are encoded in a binary row with fixed offsets for primitives
-- Variable-length data (strings, collections) stored with offset pointers
-- Null bitmap tracks which fields are present
-- Nested structures supported through recursive row encoding
+- Standard Row Format interchange with other Fory implementations
 
 ```rust
-use fory::{to_row, from_row};
-use fory::ForyRow;
-use std::collections::BTreeMap;
+use fory::{from_row, to_row, Error, ForyRow};
 
 #[derive(ForyRow)]
 struct UserProfile {
     id: i64,
     username: String,
-    email: String,
+    email: Option<String>,
     scores: Vec<i32>,
-    preferences: BTreeMap<String, String>,
     is_active: bool,
 }
 
-let profile = UserProfile {
-    id: 12345,
-    username: "alice".to_string(),
-    email: "alice@example.com".to_string(),
-    scores: vec![95, 87, 92, 88],
-    preferences: BTreeMap::from([
-        ("theme".to_string(), "dark".to_string()),
-        ("language".to_string(), "en".to_string()),
-    ]),
-    is_active: true,
-};
+fn main() -> Result<(), Error> {
+    let bytes = to_row(&UserProfile {
+        id: 12345,
+        username: "alice".to_string(),
+        email: None,
+        scores: vec![95, 87, 92, 88],
+        is_active: true,
+    })?;
 
-// Serialize to row format
-let row_data = to_row(&profile).unwrap();
+    let row = from_row::<UserProfile>(&bytes)?;
+    assert_eq!(row.id()?, 12345);
+    assert_eq!(row.username()?, "alice");
+    assert_eq!(row.email()?, None);
+    assert!(row.is_active()?);
 
-// Zero-copy deserialization - no object allocation!
-let row = from_row::<UserProfile>(&row_data);
-
-// Access fields directly from binary data
-assert_eq!(row.id(), 12345);
-assert_eq!(row.username(), "alice");
-assert_eq!(row.email(), "alice@example.com");
-assert_eq!(row.is_active(), true);
-
-// Access collections efficiently
-let scores = row.scores();
-assert_eq!(scores.size(), 4);
-assert_eq!(scores.get(0).unwrap(), 95);
-assert_eq!(scores.get(1).unwrap(), 87);
-
-let prefs = row.preferences();
-assert_eq!(prefs.keys().size(), 2);
-assert_eq!(prefs.keys().get(0).unwrap(), "language");
-assert_eq!(prefs.values().get(0).unwrap(), "en");
+    let scores = row.scores()?;
+    assert_eq!(scores.len(), 4);
+    assert_eq!(scores.get(1)?, 87);
+    Ok(())
+}
 ```
 
-**Performance comparison:**
+`#[derive(ForyRow)]` supports named structs, including generic structs, and encodes fields in source declaration order. `Option<T>` supplies field or array-element nullability without changing `T`'s slot width. Generated field getters and array `get` calls are fallible because variable ranges and UTF-8 are validated when accessed.
 
-| Operation            | Object Format                 | Row Format                      |
-| -------------------- | ----------------------------- | ------------------------------- |
-| Full deserialization | Allocates all objects         | Zero allocation                 |
-| Single field access  | Full deserialization required | Direct offset read              |
-| Memory usage         | Full object graph in memory   | Only accessed fields in memory  |
-| Suitable for         | Small objects, full access    | Large objects, selective access |
+Supported fixed-width values are `bool`, `i8`, `i16`, `i32`, `i64`, `f32`, `f64`, `Date`, `Timestamp`, and `Duration`. Supported variable-width values are UTF-8 `String`/`&str`, binary `Vec<u8>`/`&[u8]`, fixed and dynamic arrays over supported element types, `BTreeMap`, nested derived structs, and `Option<T>`. `Vec<u8>` uses the binary encoding rather than the Standard Array encoding. `Float16` and `Decimal` are not supported by Row Format because the standard specification does not define complete interoperable encodings for them.
+
+Standard rows use an 8-byte-aligned null bitmap and one 8-byte slot per struct field. Fixed-width fields are stored little-endian in their slots. Variable-width slots encode the little-endian `u64` value `(relative_offset << 32) | size`; variable bodies and array slot regions have zero padding to 8-byte alignment. Standard arrays use natural-width storage for fixed elements, and maps contain complete key and value arrays.
+
+`to_row` accepts derived structs, supported arrays, and `BTreeMap` roots. Scalar, string, binary, and `Option<T>` values are field or element values rather than standalone roots. See the [Rust Row Format guide](https://fory.apache.org/docs/guide/rust/row-format) and [Row Format specification](https://fory.apache.org/docs/specification/row_format_spec) for details.
 
 ## Cross-Language Serialization
 
@@ -633,7 +607,7 @@ See [xlang_type_mapping.md](https://fory.apache.org/docs/specification/xlang_typ
 
 Apache Fory™ Rust is designed for maximum performance:
 
-- **Zero-Copy Deserialization**: Row format enables direct memory access without copying
+- **Selective Zero-Copy Access**: Row Format returns borrowed views for direct field and element access
 - **Buffer Pre-allocation**: Minimizes memory allocations during serialization
 - **Compact Encoding**: Variable-length encoding for space efficiency
 - **Little-Endian**: Optimized for modern CPU architectures
@@ -664,7 +638,7 @@ cd benchmarks/rust
 - Schema evolution with compatible mode
 - Graph-like data structures with circular references
 
-### Row-Based Serialization
+### Standard Row Format
 
 - High-throughput data processing
 - Analytics workloads requiring fast field access

@@ -4575,8 +4575,7 @@ read_struct_fields_compatible(T &obj, ReadContext &ctx,
 template <typename T>
 struct Serializer<T, std::enable_if_t<is_fory_serializable_v<T>>> {
   static constexpr TypeId type_id = TypeId::STRUCT;
-  static constexpr bool read_data_always_advances =
-      detail::CompileTimeFieldHelpers<T>::read_data_always_advances;
+  static constexpr bool is_generated_struct_serializer = true;
 
   /// write type info only (type_id and meta index if applicable).
   /// This is used by collection serializers to write element type info.
@@ -5054,6 +5053,12 @@ struct Serializer<T, std::enable_if_t<is_fory_serializable_v<T>>> {
     return read_data(ctx);
   }
 };
+
+template <typename T>
+struct declared_read_data_always_advances<
+    T, std::enable_if_t<Serializer<T>::is_generated_struct_serializer>>
+    : std::bool_constant<
+          detail::CompileTimeFieldHelpers<T>::read_data_always_advances> {};
 
 } // namespace serialization
 } // namespace fory

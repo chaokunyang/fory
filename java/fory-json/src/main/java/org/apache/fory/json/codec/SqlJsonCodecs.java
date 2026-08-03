@@ -128,8 +128,6 @@ public final class SqlJsonCodecs {
         return constructorHandle == null
             ? constructor.newInstance(millis)
             : (T) constructorHandle.invoke(millis);
-      } catch (ReflectiveOperationException e) {
-        throw new ForyJsonException("Cannot create SQL JSON type " + type, e);
       } catch (Throwable e) {
         throw new ForyJsonException("Cannot create SQL JSON type " + type, e);
       }

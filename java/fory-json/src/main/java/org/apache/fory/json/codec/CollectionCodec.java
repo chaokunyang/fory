@@ -1388,7 +1388,9 @@ public abstract class CollectionCodec<T extends Collection<?>> implements JsonVa
         list.add(e7);
         return list;
       }
-      reader.reserveGraphMemory(ARRAY_LIST_OWNER_BYTES + 8 * REFERENCE_BYTES);
+      // Capacity nine is materialized before the ninth child is read, so charge every backing
+      // slot before allocating the list.
+      reader.reserveGraphMemory(ARRAY_LIST_OWNER_BYTES + 9 * REFERENCE_BYTES);
       ArrayList<Object> list = new ArrayList<>(9);
       list.add(e0);
       list.add(e1);
@@ -1398,14 +1400,15 @@ public abstract class CollectionCodec<T extends Collection<?>> implements JsonVa
       list.add(e5);
       list.add(e6);
       list.add(e7);
+      list.add(codec.readLatin1(reader));
       int pendingSize = 0;
-      do {
+      while (reader.consumeNextCommaOrEndArray()) {
         if ((pendingSize & REFERENCE_BATCH_MASK) == REFERENCE_BATCH_MASK) {
           reader.reserveGraphMemory(REFERENCE_BATCH_BYTES);
         }
         list.add(codec.readLatin1(reader));
         pendingSize++;
-      } while (reader.consumeNextCommaOrEndArray());
+      }
       int tailSize = pendingSize & REFERENCE_BATCH_MASK;
       if (tailSize != 0) {
         reader.reserveGraphMemory(tailSize * REFERENCE_BYTES);
@@ -1537,7 +1540,9 @@ public abstract class CollectionCodec<T extends Collection<?>> implements JsonVa
         list.add(e7);
         return list;
       }
-      reader.reserveGraphMemory(ARRAY_LIST_OWNER_BYTES + 8 * REFERENCE_BYTES);
+      // Capacity nine is materialized before the ninth child is read, so charge every backing
+      // slot before allocating the list.
+      reader.reserveGraphMemory(ARRAY_LIST_OWNER_BYTES + 9 * REFERENCE_BYTES);
       ArrayList<Object> list = new ArrayList<>(9);
       list.add(e0);
       list.add(e1);
@@ -1547,14 +1552,15 @@ public abstract class CollectionCodec<T extends Collection<?>> implements JsonVa
       list.add(e5);
       list.add(e6);
       list.add(e7);
+      list.add(codec.readUtf16(reader));
       int pendingSize = 0;
-      do {
+      while (reader.consumeNextCommaOrEndArray()) {
         if ((pendingSize & REFERENCE_BATCH_MASK) == REFERENCE_BATCH_MASK) {
           reader.reserveGraphMemory(REFERENCE_BATCH_BYTES);
         }
         list.add(codec.readUtf16(reader));
         pendingSize++;
-      } while (reader.consumeNextCommaOrEndArray());
+      }
       int tailSize = pendingSize & REFERENCE_BATCH_MASK;
       if (tailSize != 0) {
         reader.reserveGraphMemory(tailSize * REFERENCE_BYTES);
@@ -1686,7 +1692,9 @@ public abstract class CollectionCodec<T extends Collection<?>> implements JsonVa
         list.add(e7);
         return list;
       }
-      reader.reserveGraphMemory(ARRAY_LIST_OWNER_BYTES + 8 * REFERENCE_BYTES);
+      // Capacity nine is materialized before the ninth child is read, so charge every backing
+      // slot before allocating the list.
+      reader.reserveGraphMemory(ARRAY_LIST_OWNER_BYTES + 9 * REFERENCE_BYTES);
       ArrayList<Object> list = new ArrayList<>(9);
       list.add(e0);
       list.add(e1);
@@ -1696,14 +1704,15 @@ public abstract class CollectionCodec<T extends Collection<?>> implements JsonVa
       list.add(e5);
       list.add(e6);
       list.add(e7);
+      list.add(codec.readUtf8(reader));
       int pendingSize = 0;
-      do {
+      while (reader.consumeNextCommaOrEndArray()) {
         if ((pendingSize & REFERENCE_BATCH_MASK) == REFERENCE_BATCH_MASK) {
           reader.reserveGraphMemory(REFERENCE_BATCH_BYTES);
         }
         list.add(codec.readUtf8(reader));
         pendingSize++;
-      } while (reader.consumeNextCommaOrEndArray());
+      }
       int tailSize = pendingSize & REFERENCE_BATCH_MASK;
       if (tailSize != 0) {
         reader.reserveGraphMemory(tailSize * REFERENCE_BYTES);

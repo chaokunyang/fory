@@ -129,13 +129,32 @@ fn expand_row(
 
     Ok(quote! {
         #[doc = #view_doc]
-        #visibility struct #view #view_generics {
+        #visibility struct #view #view_generics #view_where_clause {
             struct_data: #runtime_root::row::StructView<#row_lifetime>,
             _marker: ::core::marker::PhantomData<fn() -> *const #name #ty_generics>,
         }
 
         impl #view_impl_generics #view #view_ty_generics #view_where_clause {
             #(#field_methods)*
+        }
+
+        impl #view_impl_generics ::core::marker::Copy for #view #view_ty_generics #view_where_clause {}
+
+        impl #view_impl_generics ::core::clone::Clone for #view #view_ty_generics #view_where_clause {
+            fn clone(&self) -> Self {
+                *self
+            }
+        }
+
+        // Backing bytes are a trait capability so schema fields named
+        // `as_bytes` or `encoded_len` keep owning their generated methods.
+        impl #view_impl_generics #runtime_root::row::RowView<#row_lifetime>
+            for #view #view_ty_generics #view_where_clause
+        {
+            #[inline]
+            fn as_bytes(&self) -> &#row_lifetime [u8] {
+                #runtime_root::row::RowView::as_bytes(&self.struct_data)
+            }
         }
 
         impl #impl_generics #runtime_root::row::RowValue for #name #ty_generics #where_clause {

@@ -543,7 +543,7 @@ Apache Fory™ Rust implements the Standard Row Format shared with Java, C++, an
 - Standard Row Format interchange with other Fory implementations
 
 ```rust
-use fory::{from_row, to_row, Error, ForyRow};
+use fory::{from_row, to_row, Error, ForyRow, RowView};
 
 #[derive(ForyRow)]
 struct UserProfile {
@@ -572,17 +572,22 @@ fn main() -> Result<(), Error> {
     let scores = row.scores()?;
     assert_eq!(scores.len(), 4);
     assert_eq!(scores.get(1)?, 87);
+    assert_eq!(
+        scores.iter().collect::<Result<Vec<_>, _>>()?,
+        [95, 87, 92, 88]
+    );
+    assert_eq!(row.as_bytes(), bytes);
     Ok(())
 }
 ```
 
-`#[derive(ForyRow)]` supports named structs, including generic structs, and encodes fields in source declaration order. `Option<T>` supplies field or array-element nullability without changing `T`'s slot width. Generated field methods and array `get` calls return `Result`, validating variable ranges and UTF-8 when accessed.
+`#[derive(ForyRow)]` supports named structs, including generic structs, and encodes fields in source declaration order. `Option<T>` supplies field or array-element nullability without changing `T`'s slot width. Generated field methods, array access and iteration, and map indexed access return `Result`, validating variable ranges and UTF-8 when accessed. Immutable views are cheap `Copy` values, and the `RowView` trait exposes their exact encoded slice through `as_bytes`.
 
 Supported fixed-width values are `bool`, `i8`, `i16`, `i32`, `i64`, `f32`, `f64`, `Date`, `Timestamp`, and `Duration`. Supported variable-width values are UTF-8 `String`/`&str`, binary `Vec<u8>`/`&[u8]`, fixed and dynamic arrays over supported element types, `BTreeMap`, nested derived structs, and `Option<T>`. `Vec<u8>` uses the binary encoding rather than the Standard Array encoding. `Float16` and `Decimal` are not supported by Row Format because the standard specification does not define complete interoperable encodings for them.
 
 Standard rows use an 8-byte-aligned null bitmap and one 8-byte slot per struct field. Fixed-width fields are stored little-endian in their slots. Variable-width slots encode the little-endian `u64` value `(relative_offset << 32) | size`; variable bodies and array slot regions have zero padding to 8-byte alignment. Standard arrays use natural-width storage for fixed elements, and maps contain complete key and value arrays.
 
-`to_row` accepts derived structs, supported arrays, and `BTreeMap` roots. Scalar, string, binary, and `Option<T>` values are field or element values rather than standalone roots. See the [Rust Row Format guide](https://fory.apache.org/docs/guide/rust/row-format) and [Row Format specification](https://fory.apache.org/docs/specification/row_format_spec) for details.
+`to_row` accepts derived structs, supported arrays, and `BTreeMap` roots. `to_row_into` writes the same bytes into a reusable caller-owned `Vec<u8>` and clears partial output on error. Scalar, string, binary, and `Option<T>` values are field or element values rather than standalone roots. See the [Rust Row Format guide](https://fory.apache.org/docs/guide/rust/row-format) and [Row Format specification](https://fory.apache.org/docs/specification/row_format_spec) for details.
 
 ## Cross-Language Serialization
 

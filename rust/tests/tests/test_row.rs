@@ -17,7 +17,7 @@
 
 use std::collections::BTreeMap;
 
-use fory_core::row::{from_row, to_row};
+use fory_core::row::{from_row, to_row, to_row_into, RowView};
 use fory_core::types::{Date, Duration, Timestamp};
 use fory_derive::ForyRow;
 
@@ -95,6 +95,12 @@ where
     for<'__fory_row> T: RowBorrow<'__fory_row>,
 {
     value: T,
+}
+
+#[derive(ForyRow)]
+struct ByteMethodFields {
+    as_bytes: i32,
+    encoded_len: i32,
 }
 
 #[test]
@@ -367,4 +373,148 @@ fn container_shape_is_validated() {
     let mut mismatched = map;
     mismatched[40..48].copy_from_slice(&2u64.to_le_bytes());
     assert!(from_row::<BTreeMap<String, i32>>(&mismatched).is_err());
+}
+
+#[test]
+fn collection_view_navigation() {
+    let fixed_bytes = to_row(&vec![1i32, 2, 3]).unwrap();
+    let fixed = from_row::<Vec<i32>>(&fixed_bytes).unwrap();
+    let mut fixed_iter = fixed.iter();
+    assert_eq!(fixed_iter.len(), 3);
+    assert_eq!(fixed_iter.next().unwrap().unwrap(), 1);
+    assert_eq!(fixed_iter.len(), 2);
+    assert_eq!(fixed_iter.collect::<Result<Vec<_>, _>>().unwrap(), [2, 3]);
+
+    let optional_bytes = to_row(&vec![Some("a".to_owned()), None, Some("b".to_owned())]).unwrap();
+    let optional = from_row::<Vec<Option<String>>>(&optional_bytes).unwrap();
+    assert_eq!(
+        (&optional)
+            .into_iter()
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap(),
+        [Some("a"), None, Some("b")]
+    );
+
+    let nested_bytes = to_row(&vec![NestedChild { value: 4 }, NestedChild { value: 5 }]).unwrap();
+    let nested = from_row::<Vec<NestedChild>>(&nested_bytes).unwrap();
+    let nested_values = nested
+        .iter()
+        .map(|value| value.and_then(|view| view.value()))
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap();
+    assert_eq!(nested_values, [4, 5]);
+
+    let map_bytes = to_row(&BTreeMap::from([
+        ("a".to_owned(), 1i32),
+        ("b".to_owned(), 2i32),
+    ]))
+    .unwrap();
+    let map = from_row::<BTreeMap<String, i32>>(&map_bytes).unwrap();
+    assert_eq!(map.len(), 2);
+    assert!(!map.is_empty());
+    assert_eq!(map.key(0).unwrap(), "a");
+    assert_eq!(map.value(0).unwrap(), 1);
+    assert!(map.key(map.len()).is_err());
+    assert!(map.value(map.len()).is_err());
+
+    let empty_bytes = to_row(&BTreeMap::<String, i32>::new()).unwrap();
+    let empty = from_row::<BTreeMap<String, i32>>(&empty_bytes).unwrap();
+    assert!(empty.is_empty());
+    assert_eq!(empty.len(), 0);
+    assert_eq!(empty.keys().iter().len(), 0);
+}
+
+#[test]
+fn iteration_is_lazy() {
+    let mut bytes = to_row(&vec!["a".to_owned(), "b".to_owned()]).unwrap();
+    bytes[24..32].copy_from_slice(&(((40u64) << 32) | 100).to_le_bytes());
+
+    let view = from_row::<Vec<String>>(&bytes).unwrap();
+    let mut iter = view.iter();
+    assert_eq!(iter.next().unwrap().unwrap(), "a");
+    assert!(iter.next().unwrap().is_err());
+    assert!(iter.next().is_none());
+}
+
+#[test]
+fn view_bytes_and_copies() {
+    fn copy<T: Copy>(value: T) -> T {
+        value
+    }
+
+    fn clone<T: Clone>(value: &T) -> T {
+        value.clone()
+    }
+
+    let nested_bytes = to_row(&NestedParent {
+        child: NestedChild { value: 7 },
+    })
+    .unwrap();
+    let parent = from_row::<NestedParent>(&nested_bytes).unwrap();
+    assert_eq!(parent.as_bytes(), nested_bytes);
+    assert_eq!(parent.encoded_len(), nested_bytes.len());
+    assert_eq!(copy(parent).child().unwrap().value().unwrap(), 7);
+    assert_eq!(clone(&parent).child().unwrap().value().unwrap(), 7);
+
+    let child = parent.child().unwrap();
+    assert_eq!(child.as_bytes(), &nested_bytes[16..32]);
+    assert_eq!(child.encoded_len(), 16);
+
+    let array_bytes = to_row(&vec![NestedChild { value: 8 }]).unwrap();
+    let array = from_row::<Vec<NestedChild>>(&array_bytes).unwrap();
+    assert_eq!(copy(array).as_bytes(), array_bytes);
+    assert_eq!(array.encoded_len(), array_bytes.len());
+
+    let map_bytes = to_row(&BTreeMap::from([("k".to_owned(), 9i32)])).unwrap();
+    let map = from_row::<BTreeMap<String, i32>>(&map_bytes).unwrap();
+    assert_eq!(copy(map).as_bytes(), map_bytes);
+    assert_eq!(map.encoded_len(), map_bytes.len());
+
+    let named_bytes = to_row(&ByteMethodFields {
+        as_bytes: 10,
+        encoded_len: 20,
+    })
+    .unwrap();
+    let named = from_row::<ByteMethodFields>(&named_bytes).unwrap();
+    assert_eq!(named.as_bytes().unwrap(), 10);
+    assert_eq!(named.encoded_len().unwrap(), 20);
+    assert_eq!(RowView::as_bytes(&named), named_bytes);
+    assert_eq!(RowView::encoded_len(&named), named_bytes.len());
+}
+
+#[test]
+fn reusable_row_buffer() {
+    let mut buffer = Vec::with_capacity(256);
+    let original_pointer = buffer.as_ptr();
+    let original_capacity = buffer.capacity();
+
+    let value = MixedRow {
+        number: 7,
+        text: "reused".to_owned(),
+        short: 3,
+    };
+    let expected = to_row(&value).unwrap();
+    to_row_into(&value, &mut buffer).unwrap();
+    assert_eq!(buffer, expected);
+    assert_eq!(buffer.as_ptr(), original_pointer);
+    assert_eq!(buffer.capacity(), original_capacity);
+
+    let array = vec![1i16, 2];
+    let expected = to_row(&array).unwrap();
+    to_row_into(&array, &mut buffer).unwrap();
+    assert_eq!(buffer, expected);
+
+    let map = BTreeMap::from([("k".to_owned(), "v".to_owned())]);
+    let expected = to_row(&map).unwrap();
+    to_row_into(&map, &mut buffer).unwrap();
+    assert_eq!(buffer, expected);
+
+    let invalid = TemporalRow {
+        date: Date::from_epoch_days(i64::from(i32::MAX) + 1),
+        timestamp: Timestamp::from_epoch_micros(0),
+        duration: Duration::from_micros(0),
+    };
+    assert!(to_row_into(&invalid, &mut buffer).is_err());
+    assert!(buffer.is_empty());
+    assert_eq!(buffer.capacity(), original_capacity);
 }

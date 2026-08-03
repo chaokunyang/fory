@@ -38,7 +38,7 @@ Row Format is schema-driven: the Rust type supplied to `from_row` determines the
 ## Basic Usage
 
 ```rust
-use fory::{from_row, to_row, Error, ForyRow};
+use fory::{from_row, to_row, Error, ForyRow, RowView};
 use std::collections::BTreeMap;
 
 #[derive(ForyRow)]
@@ -77,16 +77,40 @@ fn main() -> Result<(), Error> {
     assert_eq!(scores.len(), 4);
     assert_eq!(scores.get(0)?, 95);
     assert_eq!(scores.get(1)?, 87);
+    assert_eq!(
+        scores.iter().collect::<Result<Vec<_>, _>>()?,
+        [95, 87, 92, 88]
+    );
 
     let preferences = row.preferences()?;
-    assert_eq!(preferences.keys().len(), 2);
-    assert_eq!(preferences.keys().get(0)?, "language");
-    assert_eq!(preferences.values().get(0)?, "en");
+    assert_eq!(preferences.len(), 2);
+    assert_eq!(preferences.key(0)?, "language");
+    assert_eq!(preferences.value(0)?, "en");
+    assert_eq!(row.as_bytes(), row_data);
     Ok(())
 }
 ```
 
 `to_row` accepts Row Format roots: derived structs, supported arrays, and `BTreeMap` values. Scalar, string, binary, and `Option<T>` values are field or element values rather than standalone roots.
+
+## View Traversal and Buffer Reuse
+
+`ArrayView::iter` and `IntoIterator for &ArrayView` read elements on demand through the same checked path as `get`. Each item is a `Result`, so malformed data is reported when that element is visited.
+
+`MapView` exposes `len`, `is_empty`, `key(index)`, and `value(index)`. Its `keys()` and `values()` array views remain available for independent iteration.
+
+Struct, array, and map views are cheap `Copy` and `Clone` values. The `RowView` trait provides `as_bytes()`, which returns the exact encoded slice bound to the view, and `encoded_len()`, which returns its length. A nested view returns only its size-delimited child bytes.
+
+Use `to_row_into` to replace a caller-owned buffer while retaining its capacity:
+
+```rust
+use fory::to_row_into;
+
+let mut row_data = Vec::with_capacity(4096);
+to_row_into(&vec![1i32, 2, 3], &mut row_data).unwrap();
+```
+
+Repeated calls discard the previous logical contents. If encoding returns an error, the buffer is left empty. Row framing remains the application's responsibility.
 
 ## Nullability and Field Order
 
@@ -131,7 +155,7 @@ For the normative layout and size formulas, see the [Row Format Specification](h
 
 ## Validation and Errors
 
-`from_row`, generated field methods, and array `get` calls return `Result`. They reject truncated fixed regions, invalid counts, out-of-range offsets and sizes, invalid UTF-8, fixed-array length mismatches, and mismatched map key/value counts.
+`from_row`, generated field methods, array `get`/iteration, and map indexed access return `Result`. They reject truncated fixed regions, invalid counts, out-of-range offsets and sizes, invalid UTF-8, fixed-array length mismatches, and mismatched map key/value counts.
 
 Array access is also bounds-checked:
 

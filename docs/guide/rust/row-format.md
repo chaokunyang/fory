@@ -90,9 +90,9 @@ fn main() -> Result<(), Error> {
 
 ## Nullability and Field Order
 
-`Option<T>` declares a nullable field or array element. `None` sets the corresponding null bit, and the getter returns `None` without reading a value body. `Some(value)` uses the same fixed slot width as `T`.
+`Option<T>` declares a nullable field or array element. `None` sets the corresponding null bit, and the field method returns `None` without reading a value body. `Some(value)` uses the same fixed slot width as `T`.
 
-`#[derive(ForyRow)]` supports named structs, including generic structs. Fields are encoded in source declaration order. The derive generates a borrowed getter type whose visibility matches the source struct, and every generated field getter returns `Result<_, Error>`.
+`#[derive(ForyRow)]` supports named structs, including generic structs. Fields are encoded in source declaration order. The derive generates a borrowed `StructNameRowView` type whose visibility matches the source struct, and every generated field method returns `Result<_, Error>`.
 
 Changing field order or field types changes the Row Format schema. Coordinate such changes across all producers and consumers.
 
@@ -131,7 +131,7 @@ For the normative layout and size formulas, see the [Row Format Specification](h
 
 ## Validation and Errors
 
-`from_row`, generated field getters, and array `get` calls return `Result`. They reject truncated fixed regions, invalid counts, out-of-range offsets and sizes, invalid UTF-8, fixed-array length mismatches, and mismatched map key/value counts.
+`from_row`, generated field methods, and array `get` calls return `Result`. They reject truncated fixed regions, invalid counts, out-of-range offsets and sizes, invalid UTF-8, fixed-array length mismatches, and mismatched map key/value counts.
 
 Array access is also bounds-checked:
 

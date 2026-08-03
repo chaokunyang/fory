@@ -25,7 +25,7 @@ use super::row::{Row, RowValue};
 
 /// A zero-copy view over one Standard Row Format struct.
 ///
-/// This type is public only because `ForyRow` getters are generated in
+/// This type is public only because `ForyRow` views are generated in
 /// downstream crates.
 #[doc(hidden)]
 pub struct StructView<'a> {

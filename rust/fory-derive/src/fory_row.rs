@@ -63,7 +63,7 @@ fn expand_row(
 
     let name = &ast.ident;
     let visibility = &ast.vis;
-    let getter = format_ident!("{}ForyRowGetter", name);
+    let view = format_ident!("{}RowView", name);
     let num_fields = fields.len();
     let row_lifetime = row_lifetime(ast);
 
@@ -80,58 +80,57 @@ fn expand_row(
         let (_, source_ty_generics, _) = row_generics.split_for_impl();
         syn::parse2(quote! { #name #source_ty_generics })?
     };
-    // Copied bounds and field types live on the generated getter, where an
-    // unmodified `Self` would refer to the getter instead of the source row.
-    let mut getter_generics = SelfTypeRewriter {
+    // Copied bounds and field types live on the generated view, where an
+    // unmodified `Self` would refer to the view instead of the source row.
+    let mut view_generics = SelfTypeRewriter {
         source_path: source_path.clone(),
     }
     .fold_generics(row_generics.clone());
-    getter_generics.params.insert(
+    view_generics.params.insert(
         0,
         GenericParam::Lifetime(LifetimeParam::new(row_lifetime.clone())),
     );
     let (impl_generics, ty_generics, where_clause) = row_generics.split_for_impl();
-    let (getter_impl_generics, getter_ty_generics, getter_where_clause) =
-        getter_generics.split_for_impl();
+    let (view_impl_generics, view_ty_generics, view_where_clause) = view_generics.split_for_impl();
 
     let mut writes = Vec::with_capacity(num_fields);
-    let mut getters = Vec::with_capacity(num_fields);
+    let mut field_methods = Vec::with_capacity(num_fields);
     for (index, field) in fields.iter().enumerate() {
         let ident = field.ident.as_ref().ok_or_else(|| {
             syn::Error::new_spanned(field, "ForyRow requires named struct fields")
         })?;
         let ty = &field.ty;
-        let getter_ty = SelfTypeRewriter {
+        let field_ty = SelfTypeRewriter {
             source_path: source_path.clone(),
         }
         .fold_type(ty.clone());
         writes.push(quote! {
             struct_writer.write(#index, &self.#ident)?;
         });
-        getters.push(quote! {
+        field_methods.push(quote! {
             #visibility fn #ident(
                 &self,
             ) -> ::core::result::Result<
-                <#getter_ty as #runtime_root::row::RowValue>::View<#row_lifetime>,
+                <#field_ty as #runtime_root::row::RowValue>::View<#row_lifetime>,
                 #runtime_root::error::Error,
             > {
-                self.struct_data.get::<#getter_ty>(#index)
+                self.struct_data.get::<#field_ty>(#index)
             }
         });
     }
 
     Ok(quote! {
-        #visibility struct #getter #getter_impl_generics #getter_where_clause {
+        #visibility struct #view #view_impl_generics #view_where_clause {
             struct_data: #runtime_root::row::StructView<#row_lifetime>,
             _marker: ::core::marker::PhantomData<fn() -> *const #name #ty_generics>,
         }
 
-        impl #getter_impl_generics #getter #getter_ty_generics #getter_where_clause {
-            #(#getters)*
+        impl #view_impl_generics #view #view_ty_generics #view_where_clause {
+            #(#field_methods)*
         }
 
         impl #impl_generics #runtime_root::row::RowValue for #name #ty_generics #where_clause {
-            type View<#row_lifetime> = #getter #getter_ty_generics;
+            type View<#row_lifetime> = #view #view_ty_generics;
 
             const FIXED_SIZE: ::core::option::Option<usize> = ::core::option::Option::None;
 
@@ -147,7 +146,7 @@ fn expand_row(
             fn read<#row_lifetime>(
                 bytes: &#row_lifetime [u8],
             ) -> ::core::result::Result<Self::View<#row_lifetime>, #runtime_root::error::Error> {
-                ::core::result::Result::Ok(#getter {
+                ::core::result::Result::Ok(#view {
                     struct_data: #runtime_root::row::StructView::new(bytes, #num_fields)?,
                     _marker: ::core::marker::PhantomData,
                 })

@@ -29,13 +29,13 @@ struct MixedRow {
 }
 
 #[derive(ForyRow)]
-struct ChildRow {
+struct NestedChild {
     value: i32,
 }
 
 #[derive(ForyRow)]
-struct ParentRow {
-    child: ChildRow,
+struct NestedParent {
+    child: NestedChild,
 }
 
 #[derive(ForyRow)]
@@ -235,8 +235,8 @@ fn standard_map_bytes() {
 
 #[test]
 fn nested_row_bytes() {
-    let bytes = to_row(&ParentRow {
-        child: ChildRow { value: 7 },
+    let bytes = to_row(&NestedParent {
+        child: NestedChild { value: 7 },
     })
     .unwrap();
     let expected = [
@@ -247,7 +247,7 @@ fn nested_row_bytes() {
     ];
     assert_eq!(bytes, expected);
 
-    let view = from_row::<ParentRow>(&bytes).unwrap();
+    let view: NestedParentRowView<'_> = from_row::<NestedParent>(&bytes).unwrap();
     assert_eq!(view.child().unwrap().value().unwrap(), 7);
 }
 

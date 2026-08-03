@@ -120,7 +120,7 @@
 //!
 //! The macro generates:
 //! - A `RowValue` implementation and a root `Row` marker implementation
-//! - A borrowed getter type whose visibility matches the source struct
+//! - A borrowed view type whose visibility matches the source struct
 //! - One declaration-order field method per source field
 //! - Field methods returning `Result<<Field as RowValue>::View<'_>, Error>`
 //!
@@ -296,7 +296,7 @@ fn derive_serializer(input: DeriveInput) -> TokenStream {
 ///
 /// This macro accepts named structs whose fields implement `RowValue`. It
 /// implements `RowValue` and the root `Row` marker, preserves field declaration
-/// order, and generates borrowed field getters that return `Result`.
+/// order, and generates a borrowed view with field methods that return `Result`.
 ///
 /// # Example
 ///

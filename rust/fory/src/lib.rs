@@ -92,7 +92,7 @@ pub use fory_core::{
     fory::Fory,
     fory::ForyBuilder,
     register_trait_type,
-    row::{from_row, to_row, ArrayView, MapView, Row},
+    row::{from_row, to_row, to_row_into, ArrayIter, ArrayView, MapView, Row, RowView},
     ArcSerializer, ArcWeak, ArcWeakSerializer, ArraySerializer, BFloat16, BTreeMapSerializer,
     BTreeSetSerializer, BinaryHeapSerializer, BoxSerializer, Date, Decimal, Duration, Float16,
     ForyObject, HashMapSerializer, HashSetSerializer, LinkedListSerializer, MutexSerializer,

@@ -32,7 +32,8 @@ enum WriteTarget<'a, 'b> {
 /// The exact destination for one Row Format value.
 ///
 /// This type is public only because `ForyRow` implementations are generated in
-/// downstream crates. Applications should use [`to_row`] instead.
+/// downstream crates. Applications should use [`to_row`] or [`to_row_into`]
+/// instead.
 #[doc(hidden)]
 pub struct ValueWriter<'a, 'b> {
     target: WriteTarget<'a, 'b>,
@@ -321,7 +322,22 @@ fn write_variable<T: RowValue + ?Sized>(
 /// Encodes a struct, array, or map as a Standard Row Format root.
 pub fn to_row<T: Row + ?Sized>(value: &T) -> Result<Vec<u8>, Error> {
     let mut buffer = Vec::new();
-    let mut writer = Writer::from_buffer(&mut buffer);
-    value.write(ValueWriter::variable(&mut writer))?;
+    to_row_into(value, &mut buffer)?;
     Ok(buffer)
+}
+
+/// Replaces `buffer` with one encoded Standard Row Format root.
+///
+/// Existing capacity is retained for reuse. If encoding fails, `buffer` is
+/// left empty.
+pub fn to_row_into<T: Row + ?Sized>(value: &T, buffer: &mut Vec<u8>) -> Result<(), Error> {
+    buffer.clear();
+    let result = {
+        let mut writer = Writer::from_buffer(buffer);
+        value.write(ValueWriter::variable(&mut writer))
+    };
+    if result.is_err() {
+        buffer.clear();
+    }
+    result
 }

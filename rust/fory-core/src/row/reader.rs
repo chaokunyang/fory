@@ -23,11 +23,24 @@ use crate::error::Error;
 use super::bit_util::{bitmap_width, is_bit_set, round_up_to_word, slot_width};
 use super::row::{Row, RowValue};
 
+/// Backing-byte access shared by immutable Standard Row Format views.
+pub trait RowView<'a> {
+    /// Returns the complete encoded bytes bound to this view.
+    fn as_bytes(&self) -> &'a [u8];
+
+    /// Returns the number of encoded bytes bound to this view.
+    #[inline]
+    fn encoded_len(&self) -> usize {
+        self.as_bytes().len()
+    }
+}
+
 /// A zero-copy view over one Standard Row Format struct.
 ///
 /// This type is public only because `ForyRow` views are generated in
 /// downstream crates.
 #[doc(hidden)]
+#[derive(Clone, Copy)]
 pub struct StructView<'a> {
     bytes: &'a [u8],
     bitmap_width: usize,
@@ -91,6 +104,13 @@ impl<'a> StructView<'a> {
     }
 }
 
+impl<'a> RowView<'a> for StructView<'a> {
+    #[inline]
+    fn as_bytes(&self) -> &'a [u8] {
+        self.bytes
+    }
+}
+
 /// A zero-copy view over one Standard Row Format array.
 pub struct ArrayView<'a, T: RowValue> {
     bytes: &'a [u8],
@@ -100,6 +120,14 @@ pub struct ArrayView<'a, T: RowValue> {
     element_size: usize,
     fixed_end: usize,
     marker: PhantomData<T>,
+}
+
+impl<T: RowValue> Copy for ArrayView<'_, T> {}
+
+impl<T: RowValue> Clone for ArrayView<'_, T> {
+    fn clone(&self) -> Self {
+        *self
+    }
 }
 
 impl<'a, T: RowValue> ArrayView<'a, T> {
@@ -141,6 +169,14 @@ impl<'a, T: RowValue> ArrayView<'a, T> {
         self.num_elements == 0
     }
 
+    /// Returns an iterator that reads elements on demand.
+    pub fn iter(&self) -> ArrayIter<'_, 'a, T> {
+        ArrayIter {
+            view: self,
+            index: 0,
+        }
+    }
+
     /// Reads one array element without materializing the rest of the array.
     pub fn get(&self, index: usize) -> Result<T::View<'a>, Error> {
         self.check_index(index)?;
@@ -176,10 +212,61 @@ impl<'a, T: RowValue> ArrayView<'a, T> {
     }
 }
 
+impl<'a, T: RowValue> RowView<'a> for ArrayView<'a, T> {
+    #[inline]
+    fn as_bytes(&self) -> &'a [u8] {
+        self.bytes
+    }
+}
+
+/// An iterator over the elements of an [`ArrayView`].
+pub struct ArrayIter<'view, 'row, T: RowValue> {
+    view: &'view ArrayView<'row, T>,
+    index: usize,
+}
+
+impl<'row, T: RowValue> Iterator for ArrayIter<'_, 'row, T> {
+    type Item = Result<T::View<'row>, Error>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.index == self.view.len() {
+            return None;
+        }
+        let index = self.index;
+        self.index += 1;
+        Some(self.view.get(index))
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        let remaining = self.view.len() - self.index;
+        (remaining, Some(remaining))
+    }
+}
+
+impl<T: RowValue> ExactSizeIterator for ArrayIter<'_, '_, T> {}
+
+impl<'view, 'row, T: RowValue> IntoIterator for &'view ArrayView<'row, T> {
+    type Item = Result<T::View<'row>, Error>;
+    type IntoIter = ArrayIter<'view, 'row, T>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.iter()
+    }
+}
+
 /// A zero-copy view over one Standard Row Format map.
 pub struct MapView<'a, K: RowValue, V: RowValue> {
+    bytes: &'a [u8],
     keys: ArrayView<'a, K>,
     values: ArrayView<'a, V>,
+}
+
+impl<K: RowValue, V: RowValue> Copy for MapView<'_, K, V> {}
+
+impl<K: RowValue, V: RowValue> Clone for MapView<'_, K, V> {
+    fn clone(&self) -> Self {
+        *self
+    }
 }
 
 impl<'a, K: RowValue, V: RowValue> MapView<'a, K, V> {
@@ -198,7 +285,31 @@ impl<'a, K: RowValue, V: RowValue> MapView<'a, K, V> {
                 "row map key and value arrays have different lengths",
             ));
         }
-        Ok(Self { keys, values })
+        Ok(Self {
+            bytes,
+            keys,
+            values,
+        })
+    }
+
+    /// Returns the number of key-value pairs encoded in this map.
+    pub fn len(&self) -> usize {
+        self.keys.len()
+    }
+
+    /// Returns true when this map contains no key-value pairs.
+    pub fn is_empty(&self) -> bool {
+        self.keys.is_empty()
+    }
+
+    /// Reads the key at `index` without materializing the map.
+    pub fn key(&self, index: usize) -> Result<K::View<'a>, Error> {
+        self.keys.get(index)
+    }
+
+    /// Reads the value at `index` without materializing the map.
+    pub fn value(&self, index: usize) -> Result<V::View<'a>, Error> {
+        self.values.get(index)
     }
 
     /// Returns the map's key array.
@@ -223,6 +334,13 @@ impl<'a, K: RowValue, V: RowValue> MapView<'a, K, V> {
             map.insert(self.keys.get(index)?, self.values.get(index)?);
         }
         Ok(map)
+    }
+}
+
+impl<'a, K: RowValue, V: RowValue> RowView<'a> for MapView<'a, K, V> {
+    #[inline]
+    fn as_bytes(&self) -> &'a [u8] {
+        self.bytes
     }
 }
 

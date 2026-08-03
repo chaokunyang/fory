@@ -23,10 +23,10 @@ mod writer;
 
 #[doc(hidden)]
 pub use reader::StructView;
-pub use reader::{from_row, ArrayView, MapView};
+pub use reader::{from_row, ArrayIter, ArrayView, MapView, RowView};
 pub use row::Row;
 #[doc(hidden)]
 pub use row::RowValue;
-pub use writer::to_row;
+pub use writer::{to_row, to_row_into};
 #[doc(hidden)]
 pub use writer::{StructWriter, ValueWriter};

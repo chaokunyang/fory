@@ -103,6 +103,11 @@ struct ByteMethodFields {
     encoded_len: i32,
 }
 
+#[derive(ForyRow)]
+struct GenericValue<T> {
+    value: T,
+}
+
 #[test]
 fn standard_row_bytes() {
     let bytes = to_row(&MixedRow {
@@ -455,6 +460,14 @@ fn view_bytes_and_copies() {
     assert_eq!(parent.encoded_len(), nested_bytes.len());
     assert_eq!(copy(parent).child().unwrap().value().unwrap(), 7);
     assert_eq!(clone(&parent).child().unwrap().value().unwrap(), 7);
+
+    let generic_bytes = to_row(&GenericValue {
+        value: "owned".to_owned(),
+    })
+    .unwrap();
+    let generic = from_row::<GenericValue<String>>(&generic_bytes).unwrap();
+    assert_eq!(copy(generic).value().unwrap(), "owned");
+    assert_eq!(clone(&generic).value().unwrap(), "owned");
 
     let child = parent.child().unwrap();
     assert_eq!(child.as_bytes(), &nested_bytes[16..32]);

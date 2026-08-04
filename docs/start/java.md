@@ -125,6 +125,6 @@ object mapping, annotations, Android, GraalVM, and security.
 ## Runtime Notes
 
 - On JDK 25 and later, follow the setup in
-  [Java Object Serialization](../object-serialization/java/index.md#jdk-25-and-later).
+  [Java Object Serialization](../object-serialization/java/index.md).
 - For Android, see [Java Android support](../object-serialization/java/android.md).
 - For native images, see [Java GraalVM support](../object-serialization/java/graalvm.md).

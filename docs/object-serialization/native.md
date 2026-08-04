@@ -28,6 +28,11 @@ Use [xlang serialization](xlang.md) whenever another Fory runtime must read the 
 shared type system and wire format; native mode deliberately stays closer to one language's object
 model.
 
+Native and xlang type support overlap. A type listed on this page is not necessarily exclusive to
+native mode; many language-native carriers also work in xlang when they have a portable mapping.
+Choose the mode from the data boundary and required wire contract first, then check the runtime's
+type mapping for the specific model.
+
 ## When To Use Native Mode
 
 Native mode is the right choice when:
@@ -95,14 +100,16 @@ reconstruction behavior.
 
 ## Rust
 
-Choose [Rust native serialization](rust/native.md) for Rust-only payloads that use a broader Rust
-type and ownership model than the portable xlang mapping. Examples include Rust-specific integer
-types such as `u128`, `i128`, `usize`, and `isize`; typed `Rc<T>` and `Arc<T>` values; weak
-references; `RefCell<T>`; `Mutex<T>`; and native Rust targets carried through traits or `dyn Any`.
+Choose [Rust native serialization](rust/native.md) when every endpoint is Rust and the payload
+should use the Rust-specific wire format. This choice does not mean common Rust containers,
+`Rc<T>`, `Arc<T>`, trait objects, or `dyn Any` are unavailable in xlang. Those carriers can also
+participate in xlang when their selected concrete types have portable mappings. Use the
+[Xlang Type Mapping](../specification/xlang_type_mapping.md) and the Rust runtime guide to check the
+exact model.
 
-Rust native mode also supports data-carrying, struct-style enums whose variants contain multiple
-fields. A `#[derive(ForyUnion)]` enum can mix unit variants, tuple variants with one or more fields,
-and named variants with one or more fields:
+One native-specific shape is a data-carrying, struct-style enum whose variants contain multiple
+fields directly. In native mode, a `#[derive(ForyUnion)]` enum can mix unit variants, tuple variants
+with one or more fields, and named variants with one or more fields:
 
 ```rust
 use fory::ForyUnion;
@@ -125,17 +132,14 @@ third-party enum shapes.
 ## C++
 
 Choose [C++ native serialization](cpp/native.md) when every endpoint is C++ and the data model
-should preserve a broader C++ type surface without portable xlang mapping constraints. This
-includes:
+should use the C++-specific wire format. Standard containers, structs and classes,
+`std::optional`, `std::variant`, tuple-like values, smart pointers, and supported scalar carriers
+are not categorically native-only; they can also work in xlang when the corresponding portable
+mapping exists.
 
-- structs and classes described with `FORY_STRUCT`;
-- standard containers, `std::optional`, `std::variant`, and tuple-like values;
-- `std::shared_ptr` and `std::unique_ptr` object graphs;
-- native character types such as `char`, `char16_t`, and `char32_t`; and
-- unsigned integer shapes with C++ native-mode type IDs.
-
-Use [Supported Types](cpp/supported-types.md) for the complete C++ type matrix and the corresponding
-xlang mappings.
+Choose native mode because the boundary is C++-only or because the particular model needs a
+C++-specific representation, not merely because it uses a C++ standard-library type. Use
+[Supported Types](cpp/supported-types.md) for the exact native and xlang mappings.
 
 ## Migrating From Another Serializer
 

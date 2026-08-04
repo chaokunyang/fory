@@ -29,7 +29,6 @@ class ForySiteSyncTest(unittest.TestCase):
     def test_rejects_forbidden_doc_roots(self):
         for source, dest in (
             ("docs/security/", "docs/security/"),
-            ("docs/images/", "docs/images/"),
             ("docs/development/", "docs/security/"),
         ):
             content = f"""apache/fory-site@main:

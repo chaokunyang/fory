@@ -28,7 +28,6 @@ from typing import List, Tuple
 TARGET_REPO = "apache/fory-site@main"
 FORBIDDEN_SYNC_ROOTS = (
     pathlib.PurePosixPath("docs/security"),
-    pathlib.PurePosixPath("docs/images"),
 )
 
 

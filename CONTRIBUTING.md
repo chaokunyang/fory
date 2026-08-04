@@ -229,7 +229,7 @@ To use Jetbrains IDEA IDE for Java Development, you need to configure the projec
 And due to the usage of `sun.misc.Unsafe` API, which is not visible in Java 11+, you need to configure java compiler with `--releaese` option disabled.
 
 <div align="center">
-  <img width="65%" alt="" src="docs/development/idea-jdk11.png"><br>
+  <img width="65%" alt="" src="docs/images/idea-jdk11.png"><br>
 </div>
 
 ## Website

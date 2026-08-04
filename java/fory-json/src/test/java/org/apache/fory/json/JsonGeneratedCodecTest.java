@@ -275,7 +275,7 @@ public class JsonGeneratedCodecTest extends ForyJsonTestModels {
             JsonAsciiToken.prefix("\"alpha\":"), -1L, "\"alpha\":".length()));
     assertEquals(utf8.readIntTokenValue(), 1);
 
-    Latin1JsonReader truncatedLatin1 = newLatin1Reader(" \"a");
+    Latin1JsonReader truncatedLatin1 = newLatin1Reader(latin1Bytes(" \"a"));
     assertEquals(truncatedLatin1.readFieldNamePrefix(), 0);
     assertEquals(truncatedLatin1.position(), 1);
     Utf8JsonReader truncatedUtf8 = newUtf8Reader(" \"a".getBytes(StandardCharsets.UTF_8));

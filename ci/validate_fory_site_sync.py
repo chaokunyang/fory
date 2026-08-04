@@ -26,6 +26,17 @@ import sys
 from typing import List, Tuple
 
 TARGET_REPO = "apache/fory-site@main"
+FORBIDDEN_SYNC_ROOTS = (
+    pathlib.PurePosixPath("docs/security"),
+    pathlib.PurePosixPath("docs/images"),
+)
+
+
+def is_forbidden_sync_path(path: str) -> bool:
+    candidate = pathlib.PurePosixPath(path.rstrip("/"))
+    return any(
+        candidate == root or root in candidate.parents for root in FORBIDDEN_SYNC_ROOTS
+    )
 
 
 def parse_sync_mappings(sync_file: pathlib.Path) -> List[Tuple[str, str]]:
@@ -55,6 +66,10 @@ def parse_sync_mappings(sync_file: pathlib.Path) -> List[Tuple[str, str]]:
         dest_match = re.match(r"^dest:\s*(.+)$", stripped)
         if dest_match and source:
             dest = dest_match.group(1).strip().strip("'\"")
+            if is_forbidden_sync_path(source) or is_forbidden_sync_path(dest):
+                raise RuntimeError(
+                    f"path must not be synced to fory-site: {source} -> {dest}"
+                )
             mappings.append((source, dest))
             source = None
 

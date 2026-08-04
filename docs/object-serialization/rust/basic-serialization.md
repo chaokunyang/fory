@@ -1,7 +1,7 @@
 ---
 title: Basic Serialization
 sidebar_position: 1
-id: core-api
+id: basic-serialization
 license: |
   Licensed to the Apache Software Foundation (ASF) under one or more
   contributor license agreements.  See the NOTICE file distributed with
@@ -416,8 +416,8 @@ explicit array field attribute when the schema is dense `array<T>`.
 
 - [Xlang Serialization Specification](../../specification/xlang_serialization_spec.md)
 - [Type Mapping Reference](../../specification/xlang_type_mapping.md)
-- [Java Interoperability Guide](../java/core-api.md#cross-language-interoperability)
-- [Python Interoperability Guide](../python/core-api.md#cross-language-interoperability)
+- [Java Interoperability Guide](../java/basic-serialization.md#cross-language-interoperability)
+- [Python Interoperability Guide](../python/basic-serialization.md#cross-language-interoperability)
 
 ### Related Guides
 

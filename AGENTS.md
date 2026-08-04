@@ -9,11 +9,11 @@ This is the entry point for AI guidance in Apache Fory. Read this file first, th
 - `.agents/docs-and-formatting.md`: documentation, specification, and markdown rules.
 - `.agents/ci-and-pr.md`: code review workflow, CI triage, PR expectations, and commit conventions.
 - `.agents/testing/integration-tests.md`: `integration_tests/` prerequisites, regeneration rules, and commands.
-- `docs/object-serialization/security.md`: user-facing security guidance for binary object
-  serialization.
+- `docs/security/index.md`: contributor-facing security model index. This directory is internal
+  documentation and is intentionally excluded from the website sync.
+- `docs/security/threat-model.md`: project trust boundaries and downstream responsibilities.
+- `docs/security/deserialization.md`: implementation boundaries for untrusted deserialization.
 - `docs/json/security.md`: user-facing security guidance for Fory JSON.
-- `docs/object-serialization/security.md`: implementation boundaries for
-  untrusted deserialization classification.
 - `.agents/languages/java.md`
 - `.agents/languages/csharp.md`
 - `.agents/languages/cpp.md`
@@ -34,7 +34,7 @@ This is the entry point for AI guidance in Apache Fory. Read this file first, th
 - Respect ownership. Keep logic, state, and helpers in their natural owner, and do not move serializer-local, context-local, runtime-type-local, or protocol-local problems into global utilities.
 - Check the spec before implementation. For wire behavior and xlang mapping, use the specs as the source of truth and never copy one runtime's bug into another runtime just to make tests pass.
 - Do not make assumptions about runtime behavior, ownership, registration, metadata construction, protocol semantics, or test coverage. Read the current code, owning docs/specs, and relevant tests before making a design judgment or implementation decision. If the evidence is incomplete, inspect more or state the uncertainty explicitly instead of filling gaps from memory or analogy with another runtime.
-- For untrusted deserialization, read `docs/object-serialization/security.md` before changing allocation, stream filling, skip, reference, metadata, or policy validation behavior. Variable-length deserialization must not allocate or reserve backing/output capacity from attacker-declared lengths or counts before the byte owner has proven proportional readable bytes with `checkReadableBytes` or the runtime equivalent. Root graph memory reservation is accounting only and may happen before that byte check, but it must not replace the byte check.
+- For untrusted deserialization, read `docs/security/deserialization.md` before changing allocation, stream filling, skip, reference, metadata, or policy validation behavior. Variable-length deserialization must not allocate or reserve backing/output capacity from attacker-declared lengths or counts before the byte owner has proven proportional readable bytes with `checkReadableBytes` or the runtime equivalent. Root graph memory reservation is accounting only and may happen before that byte check, but it must not replace the byte check.
 - Malformed input must surface as a controlled root-operation error and still run
   root cleanup, but the exact exception type, error code, message, detection
   layer, and detection point are not contracts unless a public API or
@@ -331,7 +331,8 @@ This is the entry point for AI guidance in Apache Fory. Read this file first, th
 
 ## Security
 
-User-facing security guidance lives only under Object Serialization and Fory JSON. Read
-`docs/object-serialization/security.md` or `docs/json/security.md` for the selected product. Before
-reporting or changing allocation, stream filling, skip, reference, metadata, or policy validation
-behavior, read `docs/object-serialization/security.md`.
+User-facing object-serialization security guidance lives in each runtime directory, such as
+`docs/object-serialization/java/security.md`; Fory JSON guidance lives in `docs/json/security.md`.
+Contributor-facing security models remain under `docs/security/` and are excluded from the website.
+Before reporting or changing allocation, stream filling, skip, reference, metadata, or policy
+validation behavior, read `docs/security/deserialization.md`.

@@ -45,9 +45,6 @@ apache/fory-site@main:
   - source: docs/development/
     dest: docs/development/
     deleteOrphaned: true
-  - source: docs/images/
-    dest: docs/images/
-    deleteOrphaned: true
   - source: docs/specification/
     dest: docs/specification/
     deleteOrphaned: true

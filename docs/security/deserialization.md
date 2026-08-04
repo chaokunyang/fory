@@ -1,215 +1,7 @@
 ---
-title: Security
-sidebar_position: 99
-id: security
-license: |
-  Licensed to the Apache Software Foundation (ASF) under one or more
-  contributor license agreements.  See the NOTICE file distributed with
-  this work for additional information regarding copyright ownership.
-  The ASF licenses this file to You under the Apache License, Version 2.0
-  (the "License"); you may not use this file except in compliance with
-  the License.  You may obtain a copy of the License at
-
-     http://www.apache.org/licenses/LICENSE-2.0
-
-  Unless required by applicable law or agreed to in writing, software
-  distributed under the License is distributed on an "AS IS" BASIS,
-  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-  See the License for the specific language governing permissions and
-  limitations under the License.
+title: Deserialization Security Model
+sidebar_position: 3
 ---
-
-This guide defines the trust boundary and safe operating model for Fory binary object serialization in xlang and native mode. It also provides the contributor-facing classification rules used to review untrusted deserialization paths.
-
-Fory is an in-process serialization library. Applications link Fory into their
-own process, configure serializers and type policies, and call Fory APIs to
-serialize application-owned objects or deserialize encoded Fory data. Fory does
-not provide a standalone network service, daemon, authentication system, or
-transport protocol.
-
-## Trust Boundaries
-
-Fory's primary security boundary is encoded bytes or streams passed to
-deserialization APIs from untrusted or partially trusted sources. The embedding
-application owns where those bytes come from and which Fory configuration,
-registered types, schemas, and policies are used to read them.
-
-The adversary model for untrusted deserialization is a sender that can craft
-encoded bytes or stream behavior presented to a Fory read API. It does not assume
-the sender can change the embedding application's Fory configuration, registered
-type set, `TypeChecker` or equivalent allow-list policy, schema definitions,
-classloader, or other active policy objects unless the application itself exposes
-those controls.
-
-Fory security boundaries include:
-
-- Runtime safety, including avoiding crashes, panics, undefined behavior, and
-  out-of-bounds memory access.
-- Resource ownership, including memory, CPU progress, stream buffers, native
-  allocations, callbacks, and retained read-side state.
-- Explicit Fory policy checks, such as class, type, function, method,
-  registration, or deserialization policies that restrict what may be
-  materialized.
-- Cleanup boundaries, where state created during a failed root operation must
-  not leak into later operations.
-
-Runtime serializer code generation and JIT compilation are not paths for
-executing encoded input. They operate on types and schemas after the active
-registration check, `TypeChecker`, schema check, or policy check has accepted the
-type surface. When class registration is disabled, `TypeChecker` or an
-equivalent allow-list policy is the relevant gate. Generated serializer code is
-derived from checked type descriptors rather than from attacker-controlled byte
-contents.
-
-The [security review model](#security-review-model) defines how to
-classify these boundaries for untrusted deserialization paths.
-
-## Non-Goals
-
-Fory does not provide:
-
-- Encoded-data authenticity, integrity, confidentiality, signing, MACs, or
-  encryption.
-- Transport security or protection for bytes while they are stored or moved
-  outside Fory.
-- Application-level authorization or validation for the business meaning of a
-  successfully deserialized value.
-- A sandbox for user-registered classes, functions, constructors, setters,
-  finalizers, or other application-owned logic.
-
-Applications that receive Fory data from untrusted sources should authenticate
-or integrity-check those bytes before passing them to Fory when authenticity or
-tamper resistance matters.
-
-## Downstream Responsibilities
-
-Applications are responsible for:
-
-- Choosing whether a byte source is trusted enough for the configured
-  deserialization mode.
-- Keeping class or type registration enabled for untrusted data unless another
-  explicit Fory policy owns the accepted type surface.
-- Registering only types and serializers that are safe for the application's
-  trust boundary.
-- Configuring depth and resource limits for the largest data shape the
-  application intends to accept.
-- Treating cross-language peers and schemas as part of the application's trust
-  relationship.
-
-Disabling registration or using dynamic deserialization on trusted data is a
-configuration choice. For untrusted data, bypassing an explicit Fory policy,
-crashing, leaking resources, retaining attacker-controlled state, or allocating
-disproportionately remains security-relevant as described in the
-[security review model](#security-review-model).
-
-## Resource Limits
-
-### Depth Limits
-
-Set the runtime's depth limit to the deepest graph the application deliberately
-accepts. Some runtimes apply this limit to every nested value; others apply a
-separate dynamic-object depth limit. Use the selected runtime's configuration
-page for its exact scope and default. A depth limit prevents excessively nested
-input from turning into unbounded recursion, but it is not a byte or memory
-quota.
-
-### Graph Memory Limit
-
-`maxGraphMemoryBytes`, or the runtime-equivalent option, is an approximate gate
-for graph owners materialized by one root deserialization operation. The fixed
-default is 128 MiB, and explicit values must be positive. Each root operation
-starts with the full configured budget, including after a failed read.
-
-The budget covers runtime-owned collections, maps, arrays, structs, and objects
-according to each implementation's storage model. It is not exact heap
-accounting, an input-size limit, or a replacement for readable-byte checks.
-Actual process memory may be higher. Keep external body or file-size limits at
-the boundary that receives the bytes.
-
-### Remote Schema Metadata Limits
-
-Compatible mode may receive remote metadata (`TypeDef` or `TypeMeta`) for types that are not already
-known by the reader. Fory limits how many distinct remote metadata versions can be accepted, and
-also limits the size of each received metadata body:
-
-- `maxSchemaVersionsPerType`: maximum accepted remote metadata versions for one logical type. The
-  default is `10`.
-- `maxAverageSchemaVersionsPerType`: average accepted remote metadata versions across all accepted
-  remote types. The default is `3`; the effective global floor is `8192` metadata entries.
-- `maxTypeFields`: maximum fields declared by one received struct metadata body. The default is
-  `512`.
-- `maxTypeMetaBytes`: maximum encoded metadata body bytes for one received TypeDef or TypeMeta body,
-  excluding the 8-byte header and any extended-size varint. The default is `4096`.
-
-These limits are resource protections. They do not change wire format, registration requirements,
-dynamic type loading, unknown-type handling, or schema-evolution compatibility.
-
-Raise these values only when a known peer deliberately sends larger metadata or
-many schema versions.
-
-### Count-Driven Container Work Limit
-
-Every runtime limits collection elements and map entries whose repeated read
-bodies do not consume proportional input. The default root allowance is `8192`.
-Zero is a strict limit, and negative values are rejected. Raise the limit only
-for trusted payloads that intentionally use compact zero-byte element codecs or
-empty Struct bodies. This is a reader resource limit and does not change the
-wire format or writer behavior.
-
-## Configure a Runtime
-
-Keep registration enabled for untrusted input, choose the wire mode explicitly,
-and set limits to values derived from the endpoint's accepted models. A minimal
-Java boundary looks like this:
-
-```java
-Fory fory =
-    Fory.builder()
-        .withXlang(true)
-        .requireClassRegistration(true)
-        .withMaxDepth(50)
-        .withMaxGraphMemoryBytes(128L * 1024 * 1024)
-        .withMaxUnbackedContainerItems(8192)
-        .build();
-```
-
-Register only the application types that the endpoint accepts. If registration
-is disabled, configure the runtime's explicit type checker or allow-list before
-reading external data.
-
-Exact option names, defaults, and mode-specific behavior belong to the runtime
-configuration guides:
-
-| Runtime               | Configuration                                           |
-| --------------------- | ------------------------------------------------------- |
-| Java                  | [Java configuration](java/configuration.md)             |
-| Python                | [Python configuration](python/configuration.md)         |
-| C++                   | [C++ configuration](cpp/configuration.md)               |
-| Go                    | [Go configuration](go/configuration.md)                 |
-| Rust                  | [Rust configuration](rust/configuration.md)             |
-| JavaScript/TypeScript | [JavaScript configuration](javascript/configuration.md) |
-| C#                    | [C# configuration](csharp/configuration.md)             |
-| Swift                 | [Swift configuration](swift/configuration.md)           |
-| Dart                  | [Dart configuration](dart/configuration.md)             |
-| Scala                 | [Scala configuration](scala/configuration.md)           |
-| Kotlin                | [Kotlin configuration](kotlin/configuration.md)         |
-
-## Verify the Boundary
-
-Add negative tests alongside the normal round trip. Verify that the configured
-reader rejects:
-
-- an unregistered or disallowed application type;
-- a graph deeper than the accepted model;
-- a graph that exceeds the configured memory budget;
-- excessive remote schema versions or metadata size in compatible xlang mode;
-- excessive count-driven container work; and
-- a malformed root followed by a valid root on the same reusable runtime.
-
-Also verify the application's external authentication, integrity, request-size,
-timeout, and domain-validation controls independently of Fory.
-
-## Security Review Model
 
 This document defines the security model for Apache Fory deserialization. It is
 a public security reference for classifying deserialization behavior and
@@ -222,24 +14,27 @@ failures caused by untrusted input, but it should not add hot-path validation
 that only enforces byte-form strictness when doing so does not protect a Fory
 security boundary.
 
-### Scope
+## Scope
 
-This model applies only to deserializing Fory binary object-serialization data
-from untrusted or partially trusted sources. Fory JSON has a separate
-[security guide](../json/security.md) because it uses different readers,
-policies, codecs, and resource-accounting rules.
+This model applies to deserializing Fory binary data from untrusted or
+partially trusted sources. Its resource, policy, and cleanup boundaries also
+apply to Java Fory JSON. The Java Fory JSON subsection under
+[Graph Memory Budget](#graph-memory-budget) defines that format's accounting
+scope without changing binary Fory behavior.
 
 It does not treat the semantic content of a successfully deserialized value as a
 Fory security boundary. A sender can always construct protocol-valid data whose
 value is chosen by that sender. Application authorization, object-level business
 rules, and domain-specific validation remain application responsibilities.
-The selected business invariant remains an application policy rather than a
-Fory protocol security boundary.
+Java Fory JSON applications can enforce those rules with `JsonValidator` or in
+a `JsonCreator`, but the selected business invariant remains an application
+policy rather than a Fory protocol security boundary.
 
-This model does not govern memory-format paths unless a runtime explicitly
-exposes such a path through an untrusted deserialization API.
+This model also does not cover trusted in-memory formats. Row format and other
+memory-format paths are trusted-data paths unless a runtime explicitly exposes
+them as untrusted deserialization APIs.
 
-### Trust Boundaries
+## Trust Boundaries
 
 Fory deserialization should treat the encoded input as untrusted at API
 boundaries that accept external bytes or streams.
@@ -263,7 +58,7 @@ Fory security boundaries do not include:
   shape, unless rejecting other shapes is an explicit owner policy or protects
   one of the boundaries above.
 
-### Type And Class Policy
+## Type And Class Policy
 
 Type, class, function, method, registration, and deserialization policies are
 security boundaries when they are intended to restrict what untrusted bytes may
@@ -321,7 +116,7 @@ clearly creates or copies and that remain reachable from the materialized graph.
 Temporary helper allocations and user-code internals remain outside that
 accounting boundary.
 
-### Depth And Progress
+## Depth And Progress
 
 Deserialization paths that recurse through objects, metadata, containers, or
 references should enforce the runtime's configured depth limit before crafted
@@ -333,7 +128,7 @@ Loops that consume encoded data should guarantee byte progress, logical
 progress, or a terminal error. Inputs that can keep a reader in a no-progress
 loop are security-relevant even when they do not allocate memory.
 
-### Security Invariants
+## Security Invariants
 
 Deserialization code must prevent the following outcomes for untrusted input:
 
@@ -354,7 +149,7 @@ When a path cannot produce one of these outcomes, earlier rejection of malformed
 bytes is normally a correctness or interoperability choice, not a security
 requirement.
 
-### Robustness Scope Gate
+## Robustness Scope Gate
 
 Before reporting or fixing a deserialization robustness finding, establish a
 concrete consequence in the current implementation:
@@ -372,7 +167,7 @@ reserved value is accepted, rejected late, decoded differently, or produces a
 less precise error. Such validation is actionable only when it prevents one of
 the concrete consequences above or implements an explicit public contract.
 
-### Controlled Deserialization Errors
+## Controlled Deserialization Errors
 
 When a decoder determines that input is invalid for the active owner path, the
 root operation must return an error and run its normal failure cleanup. This is
@@ -390,7 +185,7 @@ remains correct, and any relevant security invariant is preserved. They should
 not pin an exact error type or message when doing so would require additional
 successful-path validation that protects no security boundary.
 
-### Non-Security Semantics
+## Non-Security Semantics
 
 The following patterns are not vulnerabilities by default:
 
@@ -415,7 +210,7 @@ the protocol owner, is effectively free on the relevant path, or protects a
 security invariant listed above. Do not add protocol-layer validation solely to
 reject scalar byte forms whose only effect is extra decode cost.
 
-#### Value-bearing ref flags
+### Value-bearing ref flags
 
 Some read paths intentionally share handling for multiple value-bearing flags.
 For example, when both `NotNullValue` and `RefValue` mean that an encoded value
@@ -424,7 +219,7 @@ flag bug by itself. Treat it as a bug only if the merged handling loses required
 reference semantics, returns success across an explicit owner policy, or creates
 a resource or runtime-safety failure.
 
-### Allocation And Byte Availability
+## Allocation And Byte Availability
 
 Fory should not make large allocations from attacker-declared lengths before
 the required bytes are available or have been read exactly.
@@ -479,7 +274,7 @@ may expose byte read and byte skip operations, but string decoding, decimal
 parsing, primitive-array encoding, compression modes, and collection capacity
 policy belong to the owning serializers.
 
-### Collection And Map Capacity
+## Collection And Map Capacity
 
 Large valid collection inputs are allowed. If the input contains many encoded
 elements, proportional deserialization is expected.
@@ -501,7 +296,7 @@ validation can cause a no-progress loop, unbounded resource growth, retained
 state, or success across a Fory policy boundary. Protocol-allowed chunk
 segmentation is normal input and is not a security issue by itself.
 
-### Unbacked Container Work Budget
+## Unbacked Container Work Budget
 
 Runtimes enforce a root-scoped limit on count-driven collection elements and
 map entries whose repeated read bodies are not backed by input progress. The
@@ -522,7 +317,7 @@ retain their direct loop and proportional readable-byte check. Generated and
 compiled serializers should remove budget access and periodic branches from
 those proven-positive paths.
 
-### Graph Memory Budget
+## Graph Memory Budget
 
 Runtimes should enforce a per-operation approximate gate for estimated memory created by one
 materialized graph. This is cumulative accounting for graph owners created by one top-level
@@ -580,7 +375,7 @@ type-erased materialization paths reserve the shallow storage for the heap value
 Parents must not recursively include child object, collection, map, string, binary, or primitive
 dense-array contents; the child owner reserves its own shallow memory when it is materialized.
 
-#### Java Fory Core
+### Java Fory Core
 
 Java Fory core primitive-array serializers reserve the portable array header plus the logical
 length multiplied by the primitive storage width. Primitive-list serializers reserve the returned
@@ -592,7 +387,43 @@ Float16 and BFloat16 dense-array carriers also include their wrapper's shallow o
 list conversion first decodes a primitive array, the array's reservation remains as credit toward
 the final list estimate, and the conversion reserves only a positive remaining difference.
 
-#### Generated Structural Targets
+### Java Fory JSON
+
+Java Fory JSON uses `ForyJsonBuilder.withMaxGraphMemoryBytes` to configure this per-root gate. The
+default is the fixed `ForyJson.DEFAULT_MAX_GRAPH_MEMORY_BYTES` value of 128 MiB, and explicit values
+must be positive. String and UTF-8 byte-array root reads use the same configured limit. Every root
+read starts with the complete limit, and success or failure cannot reduce the next root operation's
+budget. The limit is not derived from input length.
+
+Built-in Java JSON accounting includes shallow POJO and record storage, collections and sets plus
+candidate element-reference slots, maps plus candidate key/value-reference slots, reference arrays
+plus their slots, and Java primitive arrays plus their primitive storage. Natural `JsonObject` and
+`JsonArray` values follow the same map and collection rules. Unknown-length collection, map, and
+array storage is reserved in 1024-item batches before each batch's final child and at the tail.
+Repeated set elements and duplicate or overwritten map members are therefore charged per input
+occurrence. A reference array is charged even when its elements are leaves, and an object is charged
+even when all of its properties are leaves. Primitive arrays decoded from JSON arrays reserve the
+portable array header and actual Java primitive width using the same batch schedule.
+`AtomicReference`, `AtomicReferenceArray`, and generic `Optional<T>` values include wrapper and
+reference storage; primitive optionals and atomic primitive values are leaves.
+
+Dedicated Java JSON leaf codecs are excluded from graph accounting: null, strings, characters,
+booleans, numeric values including arbitrary-precision numbers, enums, temporal and other scalar
+values, and binary values. A `byte[]` handled by a binary or Base64 codec remains a binary leaf;
+the same Java carrier decoded from a JSON numeric array is a primitive-array owner. Byte-availability
+and grammar checks still apply independently of graph accounting.
+
+A custom Java JSON codec that materializes composite graph owners must call
+`JsonReader.reserveGraphMemory` with its application-defined byte estimate for each composite
+application object, collection, map, or reference array. Unknown-length retained storage should be
+reserved in bounded batches before each batch's final child and at the tail; a codec may use
+stronger timing. A custom scalar or other dedicated leaf representation makes no reservation. The
+budget cannot include custom allocations that the codec does not reserve, application constructor
+or validator internals, temporary parsing storage, or unrelated process memory. Applications must
+therefore combine this approximate gate with transport input limits, timeouts, and other resource
+controls appropriate to their trust boundary.
+
+### Generated Structural Targets
 
 Wire members and physical storage are separate inputs. Properties, accessors, interfaces, and
 logical schema aliases are not physical fields and must not be charged as storage. A field that is
@@ -627,9 +458,9 @@ must not add reflection, layout probing, allocation, or field enumeration to des
 paths. The normal owner rules still apply: a reference target reserves its shallow owner and field
 storage, while an inline value target is charged by the holder that owns its storage.
 
-#### Runtime-Specific Owner Notes
+### Runtime-Specific Owner Notes
 
-##### C++
+#### C++
 
 C++ plain structs, products, and standard-library containers are value storage unless a pointer,
 smart pointer, or type-erased owner allocates them on the heap. Top-level deserialization initializes
@@ -643,7 +474,7 @@ materialization paths reserve the shallow storage for the heap value they alloca
 or returning it. Generic C++ paths must not invent standard-library header, node, bucket, allocator,
 or debug-layout overheads.
 
-##### Rust
+#### Rust
 
 Rust structs, tuples, enums, and collection values are inline value storage unless a `Box`, `Rc`,
 `Arc`, or type-erased owner allocates them. Top-level and derived value read paths initialize or
@@ -667,7 +498,7 @@ count-derived backing allocation in that case. Node, bucket, and entry owners re
 the declared count drives allocation. Implementations must not substitute guessed allocation costs,
 padding bytes, a global compact-body bypass, or a second collection or map codec.
 
-##### Swift
+#### Swift
 
 Swift structs, enums, tuples, and collection values are value storage. Top-level value reads and
 nested value serializers should not reserve their own self storage. The holder that owns the value,
@@ -679,7 +510,7 @@ type-size information, such as `MemoryLayout<T>.stride`, when they allocate or r
 Class, existential, or boxed materialization paths reserve owner storage when Fory creates the
 retained object or box. Runtime object-layout probing should not be added to hot read paths.
 
-##### Go
+#### Go
 
 Go structs and slice or map headers are value storage unless a pointer, interface materialization, or
 other heap owner allocates them. Top-level deserialization and struct value serializers should not
@@ -692,7 +523,7 @@ serializer or resolver when possible; read loops should not recompute reflective
 when the owner already knows the concrete type. Interface or dynamic paths reserve only storage that
 Fory clearly materializes and retains.
 
-##### C\#
+#### C\#
 
 C# combines reference owners and inline value types. Classes, arrays, lists, dictionaries, hash sets,
 and other heap containers reserve a nonzero shallow owner cost plus direct backing, reference-slot,
@@ -711,7 +542,7 @@ table layouts unless the owner path has a cheap, stable, explicit lower-bound st
 documents the formula. Owner constants should be real lower bounds for the owner shape, not
 placeholder markers.
 
-### Skip Semantics
+## Skip Semantics
 
 Skipping unknown or incompatible data is classified by concrete impact, not by
 whether the runtime materializes a temporary value.
@@ -732,7 +563,7 @@ that case, classify the behavior by concrete impact:
 - Pure strictness about whether a skipped value used one specific encoding shape
   is not a security issue.
 
-### Metadata And Type Resolution
+## Metadata And Type Resolution
 
 Metadata parsing is security-sensitive when it affects retained read-side state,
 type dispatch, or policy decisions.
@@ -821,7 +652,7 @@ Metadata byte-form strictness alone is not a security requirement. Rejecting a
 metadata shape is useful only when the owner wants that strictness or when the
 shape changes type identity, retained state, resource use, or policy behavior.
 
-### Reference Tracking
+## Reference Tracking
 
 Reference tracking is part of the wire protocol and is performance-sensitive.
 Readers may use sentinel values and shared value-bearing branches to keep hot
@@ -840,7 +671,7 @@ not rejected at the earliest possible byte. Lazy rejection is acceptable when
 the root operation still returns an error and no security invariant is violated.
 The downstream error does not need to be a dedicated reference-protocol error.
 
-### Error Propagation And Cleanup
+## Error Propagation And Cleanup
 
 Fory runtimes may intentionally use lazy error propagation. After a read records
 an error, later read steps may continue until the outer operation observes and
@@ -858,7 +689,7 @@ Nested `try`/`finally` or equivalent cleanup should be added only when the
 outer root-operation cleanup cannot cover the state or resource owned by the
 nested path.
 
-### Performance Requirements
+## Performance Requirements
 
 Security validation must preserve Fory hot-path performance. Do not add
 validation solely for strictness when it introduces:
@@ -875,7 +706,7 @@ Prefer owner-local checks that can be inlined and that already use information
 available in the current serializer. Do not move serializer-owned semantics into
 generic read-context helpers.
 
-### Classification Guide
+## Classification Guide
 
 Use the following questions when reviewing deserialization behavior:
 
@@ -893,7 +724,7 @@ If the answer to the first seven questions is no, the issue is normally not a
 security finding. If the validation is not effectively free, avoid adding it
 unless the protocol owner explicitly requires it.
 
-### Documentation Boundaries
+## Documentation Boundaries
 
 Security model documents must not include exploit samples, CVE narratives,
 line-level vulnerability candidates, branch history, migration timelines, or

@@ -1,7 +1,7 @@
 ---
 title: Basic Serialization
 sidebar_position: 1
-id: core-api
+id: basic-serialization
 license: |
   Licensed to the Apache Software Foundation (ASF) under one or more
   contributor license agreements.  See the NOTICE file distributed with
@@ -382,8 +382,8 @@ Xlang mode has additional overhead compared to Java native mode:
 
 - [Xlang Serialization Specification](../../specification/xlang_serialization_spec.md)
 - [Type Mapping Reference](../../specification/xlang_type_mapping.md)
-- [Python Interoperability Guide](../python/core-api.md#cross-language-interoperability)
-- [Rust Interoperability Guide](../rust/core-api.md#cross-language-interoperability)
+- [Python Interoperability Guide](../python/basic-serialization.md#cross-language-interoperability)
+- [Rust Interoperability Guide](../rust/basic-serialization.md#cross-language-interoperability)
 
 ### Related Guides
 

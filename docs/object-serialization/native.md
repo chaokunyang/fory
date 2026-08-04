@@ -19,40 +19,41 @@ license: |
   limitations under the License.
 ---
 
-Native serialization uses a runtime-specific wire format and the owning language's native type
-system. Choose it when every writer and reader uses the same runtime and the payload should preserve
-language-specific types or behavior. Native payloads from different runtime families are not
-interchangeable.
+Native serialization uses an implementation-specific wire format and the host language's native
+type system. Choose it when every writer and reader uses the same Fory implementation family and
+the payload should preserve language-specific types or behavior. Native payloads from different
+implementation families are not interchangeable.
 
-Use [xlang serialization](xlang.md) whenever another Fory runtime must read the bytes. Xlang uses a
-shared type system and wire format; native mode deliberately stays closer to one language's object
-model.
+Use [xlang serialization](xlang.md) whenever a peer with a different native wire format must read
+the bytes. Xlang uses a shared type system and wire format; native mode deliberately stays closer to
+the implementation family's native object model.
 
 Native and xlang type support overlap. A type listed on this page is not necessarily exclusive to
 native mode; many language-native carriers also work in xlang when they have a portable mapping.
-Choose the mode from the data boundary and required wire contract first, then check the runtime's
+Choose the mode from the data boundary and required wire contract first, then check the language's
 type mapping for the specific model.
 
 ## When To Use Native Mode
 
 Native mode is the right choice when:
 
-- every producer and consumer uses the same language runtime;
+- every producer and consumer uses one Fory implementation family;
 - the object graph contains language-specific types or behavior outside the portable xlang type
   mapping;
 - an application is moving from an existing same-language serializer and should keep its current
   object model instead of introducing a cross-language schema; or
-- stored or transported data is an internal runtime boundary rather than a contract shared with
-  other languages.
+- stored or transported data stays within one implementation family rather than a contract shared
+  across implementation families.
 
-Use xlang instead when the bytes cross a language boundary, when multiple runtime implementations
-share the contract, or when portability is more important than the full native object surface.
+Use xlang instead when peers use different Fory implementation families, when the contract must
+remain language-independent, or when portability is more important than the full native object
+surface.
 
 | Scenario                                                      | Recommended mode |
 | ------------------------------------------------------------- | ---------------- |
-| Same-runtime object graph with language-specific types        | Native           |
+| One implementation family with language-specific types        | Native           |
 | Replacement for an existing same-language object serializer   | Native           |
-| Data exchanged by two or more Fory language implementations   | Xlang            |
+| Data exchanged across Fory implementation families            | Xlang            |
 | A long-lived contract intended to remain language-independent | Xlang            |
 
 ## Java
@@ -104,7 +105,7 @@ Choose [Rust native serialization](rust/native.md) when every endpoint is Rust a
 should use the Rust-specific wire format. This choice does not mean common Rust containers,
 `Rc<T>`, `Arc<T>`, trait objects, or `dyn Any` are unavailable in xlang. Those carriers can also
 participate in xlang when their selected concrete types have portable mappings. Use the
-[Xlang Type Mapping](../specification/xlang_type_mapping.md) and the Rust runtime guide to check the
+[Xlang Type Mapping](../specification/xlang_type_mapping.md) and the Rust language guide to check the
 exact model.
 
 One native-specific shape is a data-carrying, struct-style enum whose variants contain multiple
@@ -147,21 +148,21 @@ Native mode is a replacement serialization path, not a decoder for another libra
 Kryo, FST, Hessian, JDK serialization, Pickle, cloudpickle, and MessagePack bytes do not become Fory
 native bytes automatically.
 
-Move writers and readers to the matching Fory runtime together. If existing stored data must remain
-readable during migration, keep the previous decoder at that boundary and reserialize values with
-Fory as they are migrated. Do not use native mode for a boundary that still has readers in another
-language.
+Move writers and readers to the corresponding Fory implementation family together. If existing
+stored data must remain readable during migration, keep the previous decoder at that boundary and
+reserialize values with Fory as they are migrated. Do not use native mode for a boundary that still
+has readers using a different native wire format.
 
 ## Enable Native Mode
 
-| Runtime | Native-mode configuration                 |
-| ------- | ----------------------------------------- |
-| Java    | `Fory.builder().withXlang(false).build()` |
-| Python  | `pyfory.Fory(xlang=False)`                |
-| C++     | `Fory::builder().xlang(false).build()`    |
-| Rust    | `Fory::builder().xlang(false).build()`    |
+| Language | Native-mode configuration                 |
+| -------- | ----------------------------------------- |
+| Java     | `Fory.builder().withXlang(false).build()` |
+| Python   | `pyfory.Fory(xlang=False)`                |
+| C++      | `Fory::builder().xlang(false).build()`    |
+| Rust     | `Fory::builder().xlang(false).build()`    |
 
-## Runtime Guides
+## Language Guides
 
 - [Java](java/native.md)
 - [Python](python/native.md)
@@ -171,5 +172,5 @@ language.
 - [Scala](scala/native.md)
 - [Kotlin](kotlin/native.md)
 
-Each runtime guide owns its exact supported types, configuration, schema behavior, extension APIs,
+Each language guide owns its exact supported types, configuration, schema behavior, extension APIs,
 and diagnostics.

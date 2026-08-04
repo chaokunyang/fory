@@ -25,6 +25,7 @@ public final class ByteBuffer {
     internal var storage: [UInt8]
 
     @usableFromInline
+    @exclusivity(unchecked)
     internal var cursor: Int
 
     private var dataBridge = Data()

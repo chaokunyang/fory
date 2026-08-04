@@ -101,8 +101,8 @@ public class _JDKAccess {
   }
 
   public static String jdk25AccessMessage() {
-    return "On JDK25+, opening java.base/java.lang.invoke to Fory core is optional but "
-        + "recommended. It is required when the current-JDK Unsafe fallback is disabled or "
+    return "On JDK25+, opening java.base/java.lang.invoke to Fory core is not required, but "
+        + "is recommended. It is required when the current-JDK Unsafe fallback is disabled or "
         + "unavailable. Use "
         + "--add-opens=java.base/java.lang.invoke=ALL-UNNAMED when Fory is on the "
         + "classpath, or --add-opens=java.base/java.lang.invoke=org.apache.fory.core when "

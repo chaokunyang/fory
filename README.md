@@ -160,7 +160,7 @@ Gradle:
 implementation "org.apache.fory:fory-core:1.5.0"
 ```
 
-On JDK25+, opening `java.lang.invoke` to Fory core is not required, but is recommended. It avoids the
+On JDK25+, opening `java.lang.invoke` to Fory core is also recommended. It avoids the
 current-JDK Unsafe fallback and is required when Unsafe access is disabled or unavailable, including
 with `--sun-misc-unsafe-memory-access=deny`. Use `ALL-UNNAMED` when Fory is on the classpath:
 

@@ -76,8 +76,10 @@ implementation("org.apache.fory:fory-core:1.5.0")
 
 #### JDK 25 and Later
 
-On JDK 25 and later, open `java.lang.invoke` to Fory. Use `ALL-UNNAMED` when Fory is on
-the classpath:
+On JDK 25 and later, opening `java.lang.invoke` to Fory core is optional but recommended. It avoids
+the current-JDK Unsafe fallback and is required when Unsafe access is disabled or unavailable,
+including with `--sun-misc-unsafe-memory-access=deny`. Use `ALL-UNNAMED` when Fory is on the
+classpath:
 
 ```bash
 --add-opens=java.base/java.lang.invoke=ALL-UNNAMED

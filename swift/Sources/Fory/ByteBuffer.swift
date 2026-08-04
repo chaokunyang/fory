@@ -823,6 +823,9 @@ public final class ByteBuffer {
                 return nil
             }
             let utf8Bytes = UnsafeBufferPointer(start: base.advanced(by: start), count: count)
+            if #available(macOS 15.0, iOS 18.0, *) {
+                return String(validating: utf8Bytes, as: UTF8.self)
+            }
             return String(bytes: utf8Bytes, encoding: .utf8)
         }
         guard let decoded else {

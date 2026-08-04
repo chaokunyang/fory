@@ -823,10 +823,17 @@ public final class ByteBuffer {
                 return nil
             }
             let utf8Bytes = UnsafeBufferPointer(start: base.advanced(by: start), count: count)
-            if #available(macOS 15.0, iOS 18.0, *) {
-                return String(validating: utf8Bytes, as: UTF8.self)
+            var index = 0
+            while index < count {
+                if utf8Bytes[index] >= 0x80 {
+                    if #available(macOS 15.0, iOS 18.0, *) {
+                        return String(validating: utf8Bytes, as: UTF8.self)
+                    }
+                    return String(bytes: utf8Bytes, encoding: .utf8)
+                }
+                index += 1
             }
-            return String(bytes: utf8Bytes, encoding: .utf8)
+            return String(decoding: utf8Bytes, as: UTF8.self)
         }
         guard let decoded else {
             throw ForyError.invalidData("invalid UTF-8 sequence")

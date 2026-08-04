@@ -901,6 +901,14 @@ public enum ArraySerializer<Element: Serializer>: Serializer {
             itemReadAlwaysAdvances: elementReadAlwaysAdvances,
             label: "array"
         )
+        if !trackRef && !hasNull && elementReadAlwaysAdvances {
+            if let elementTypeInfo {
+                return try Codec.withFieldTypeInfo(elementTypeInfo, context) {
+                    try readNonnullableElements(context, codec: Codec.self, count: length)
+                }
+            }
+            return try readNonnullableElements(context, codec: Codec.self, count: length)
+        }
         return try Codec.withFieldTypeInfo(elementTypeInfo, context) {
             if trackRef {
                 return try readArrayTrackingInitialization(
@@ -941,19 +949,6 @@ public enum ArraySerializer<Element: Serializer>: Serializer {
                 }
             }
 
-            if elementReadAlwaysAdvances {
-                return try readArrayTrackingInitialization(
-                    count: length
-                ) { destination, initializedCount in
-                    for index in 0..<length {
-                        destination.advanced(by: index).initialize(
-                            to: try Codec.readFieldData(context)
-                        )
-                        initializedCount = index + 1
-                    }
-                }
-            }
-
             return try readArrayTrackingInitialization(
                 count: length
             ) { destination, initializedCount in
@@ -976,6 +971,23 @@ public enum ArraySerializer<Element: Serializer>: Serializer {
                     try settleUnbackedContainerItems(
                         context, completed: windowItems, startCursor: windowStart)
                 }
+            }
+        }
+    }
+
+    @inlinable
+    @inline(__always)
+    internal static func readNonnullableElements<Codec: FieldCodec>(
+        _ context: ReadContext,
+        codec _: Codec.Type,
+        count: Int
+    ) throws -> [Codec.Target] where Codec.Target == Element.Target {
+        try [Codec.Target](unsafeUninitializedCapacity: count) { destination, initializedCount in
+            let baseAddress = destination.baseAddress!
+            for index in 0..<count {
+                baseAddress.advanced(by: index).initialize(to: try Codec.readFieldData(context))
+                // A later decode may throw, so Array must own every initialized prefix element.
+                initializedCount = index + 1
             }
         }
     }

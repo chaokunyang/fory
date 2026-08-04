@@ -18,7 +18,10 @@
 import Foundation
 
 public final class ByteBuffer {
+    // Storage access is synchronous and never re-entered while borrowed. Overlapping access is
+    // invalid because unchecked exclusivity removes Swift's runtime enforcement on this hot path.
     @usableFromInline
+    @exclusivity(unchecked)
     internal var storage: [UInt8]
 
     @usableFromInline

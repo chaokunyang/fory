@@ -1237,6 +1237,19 @@ def _update_release_doc_lines(lines, release_version):
 
 
 def _update_release_doc_line(line, release_version):
+    scoped_patterns = (
+        r"(\bpyfory(?:\[[^\]]+\])?==)" + VERSION_PATTERN,
+        r"(\bgithub\.com/apache/fory/go/fory@v)" + VERSION_PATTERN,
+        r"(@apache-fory/(?:core|hps)@)" + VERSION_PATTERN,
+    )
+    scoped_update = line
+    has_scoped_dependency = False
+    for pattern in scoped_patterns:
+        if re.search(pattern, scoped_update):
+            has_scoped_dependency = True
+        scoped_update = re.sub(pattern, r"\g<1>" + release_version, scoped_update)
+    if has_scoped_dependency:
+        return scoped_update
     if not _is_release_doc_line(line):
         return line
     if "crates.io-v" in line:
@@ -1255,9 +1268,6 @@ def _is_release_doc_line(line):
         or "org.apache.fory" in line
         or "Apache.Fory" in line
         or "dart pub add fory" in line
-        or re.search(r"\bpyfory(?:\[[^\]]+\])?==" + VERSION_PATTERN, line)
-        or re.search(r"\bgithub\.com/apache/fory/go/fory@v" + VERSION_PATTERN, line)
-        or re.search(r"@apache-fory/(?:core|hps)@" + VERSION_PATTERN, line)
         or re.search(r"^\s*fory\s*[:=]", line)
         or "https://github.com/apache/fory.git" in line
         or 'bazel_dep(name = "fory"' in line

@@ -312,12 +312,12 @@ Snapshots for Java, Scala, and Kotlin are available from
 
 ## Choose a Serialization Format
 
-| Format        | Use it when                                                   | Start here                                              |
-| ------------- | ------------------------------------------------------------- | ------------------------------------------------------- |
-| Xlang binary  | Data crosses language boundaries                              | [Xlang guide](docs/object-serialization/xlang/index.md) |
-| Native binary | Producer and consumer are in the same runtime family          | [Native guide](docs/object-serialization/native.md)     |
-| Row format    | You need random field access or analytics-style partial reads | [Row Format](docs/row-format/index.md)                  |
-| Fory JSON     | Java applications need high-performance standard JSON         | [Fory JSON](java/fory-json/README.md)                   |
+| Format                 | Use it when                                                   | Start here                                                            |
+| ---------------------- | ------------------------------------------------------------- | --------------------------------------------------------------------- |
+| Xlang binary (default) | Data crosses language boundaries                              | [Cross-language interoperability](docs/object-serialization/xlang.md) |
+| Native binary          | Producer and consumer are in the same runtime family          | [Native guide](docs/object-serialization/native.md)                   |
+| Row format             | You need random field access or analytics-style partial reads | [Row Format](docs/row-format/index.md)                                |
+| Fory JSON              | Java applications need high-performance standard JSON         | [Fory JSON](java/fory-json/README.md)                                 |
 
 For Java, Scala, Kotlin, Python, C++, Go, and Rust, use native mode for
 same-language traffic. It avoids xlang's cross-language type mapping and
@@ -616,7 +616,7 @@ fun main() {
 ```
 
 For shared/circular references, polymorphism, numeric IDs versus names, and
-type-mapping rules, see the [cross-language guide](docs/object-serialization/xlang) and
+type-mapping rules, see the [cross-language guide](docs/object-serialization/xlang.md) and
 [type mapping specification](docs/specification/xlang_type_mapping.md).
 
 ## Native Serialization
@@ -909,7 +909,7 @@ security, and platform guides.
 | Dart                  | [docs/object-serialization/dart](docs/object-serialization/dart)                       | [View](https://fory.apache.org/docs/object-serialization/dart/)        |
 | Scala                 | [docs/object-serialization/scala](docs/object-serialization/scala)                     | [View](https://fory.apache.org/docs/object-serialization/scala/)       |
 | Kotlin                | [docs/object-serialization/kotlin](docs/object-serialization/kotlin)                   | [View](https://fory.apache.org/docs/object-serialization/kotlin/)      |
-| Cross-language xlang  | [docs/object-serialization/xlang](docs/object-serialization/xlang)                     | [View](https://fory.apache.org/docs/object-serialization/xlang/)       |
+| Cross-language xlang  | [docs/object-serialization/xlang.md](docs/object-serialization/xlang.md)               | [View](https://fory.apache.org/docs/object-serialization/xlang)        |
 | Schema IDL/compiler   | [docs/compiler](docs/compiler)                                                         | [View](https://fory.apache.org/docs/compiler/)                         |
 | GraalVM native image  | [docs/object-serialization/java/graalvm.md](docs/object-serialization/java/graalvm.md) | [View](https://fory.apache.org/docs/object-serialization/java/graalvm) |
 | Android               | [docs/object-serialization/java/android.md](docs/object-serialization/java/android.md) | [View](https://fory.apache.org/docs/object-serialization/java/android) |

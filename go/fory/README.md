@@ -144,6 +144,6 @@ Topics covered:
 - [Supported Types](https://fory.apache.org/docs/object-serialization/go/supported-types) - Complete type support reference
 - [References](https://fory.apache.org/docs/object-serialization/go/references) - Circular references and shared objects
 - [Schema Evolution](https://fory.apache.org/docs/object-serialization/go/schema-evolution) - Forward/backward compatibility
-- [Xlang Serialization](https://fory.apache.org/docs/object-serialization/go/xlang) - Multi-language serialization
+- [Basic Serialization](https://fory.apache.org/docs/object-serialization/go/core-api) - Default xlang APIs and interoperability
 - [Thread Safety](https://fory.apache.org/docs/object-serialization/go/thread-safety) - Concurrent usage patterns
 - [Troubleshooting](https://fory.apache.org/docs/object-serialization/go/troubleshooting) - Common issues and solutions

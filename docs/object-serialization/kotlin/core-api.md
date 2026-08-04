@@ -1,7 +1,7 @@
 ---
-title: Kotlin Xlang Serialization
+title: Basic Serialization
 sidebar_position: 1
-id: xlang
+id: core-api
 license: |
   Licensed to the Apache Software Foundation (ASF) under one or more
   contributor license agreements.  See the NOTICE file distributed with
@@ -19,6 +19,12 @@ license: |
   limitations under the License.
 ---
 
+Xlang is the default serialization mode for Fory Kotlin. This page covers the basic serialization API and interoperability rules for that default mode.
+
+## Cross-Language Interoperability
+
+The following sections cover model generation, registration, and cross-language round trips in the default xlang mode.
+
 Kotlin xlang serialization uses the JVM Fory implementation through `ForyKotlin`. Use it when
 Kotlin payloads must be read by another supported Fory runtime. Register portable model types with
 the same identity and field schema on every peer.
@@ -27,7 +33,7 @@ Kotlin data classes, enums, and sealed-class models use the Kotlin integration a
 serializers where applicable. Exact portable carrier mappings remain defined by the
 [xlang type mapping](../../specification/xlang_type_mapping.md).
 
-## Create an xlang instance
+### Create a Fory Instance
 
 ```kotlin
 import org.apache.fory.kotlin.ForyKotlin
@@ -37,7 +43,7 @@ val fory = ForyKotlin.builder()
     .build()
 ```
 
-## First round trip
+### First round trip
 
 ```kotlin
 import org.apache.fory.ThreadSafeFory

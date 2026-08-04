@@ -822,18 +822,37 @@ public final class ByteBuffer {
             guard let base = buffer.baseAddress else {
                 return nil
             }
-            let utf8Bytes = UnsafeBufferPointer(start: base.advanced(by: start), count: count)
+            let utf8Base = base.advanced(by: start)
+            let utf8Bytes = UnsafeBufferPointer(start: utf8Base, count: count)
             var index = 0
-            while index < count {
-                if utf8Bytes[index] >= 0x80 {
-                    if #available(macOS 15.0, iOS 18.0, *) {
-                        return String(validating: utf8Bytes, as: UTF8.self)
-                    }
-                    return String(bytes: utf8Bytes, encoding: .utf8)
+            var isASCII = true
+            // An ASCII byte has a clear high bit, so this mask checks eight bytes at once
+            // regardless of native byte order. The bounded loop makes the unaligned load safe.
+            while index <= count - MemoryLayout<UInt64>.size {
+                let word = UnsafeRawPointer(utf8Base.advanced(by: index))
+                    .loadUnaligned(as: UInt64.self)
+                if word & 0x8080_8080_8080_8080 != 0 {
+                    isASCII = false
+                    break
                 }
-                index += 1
+                index += MemoryLayout<UInt64>.size
             }
-            return String(decoding: utf8Bytes, as: UTF8.self)
+            if isASCII {
+                while index < count {
+                    if utf8Bytes[index] >= 0x80 {
+                        isASCII = false
+                        break
+                    }
+                    index += 1
+                }
+            }
+            if isASCII {
+                return String(decoding: utf8Bytes, as: UTF8.self)
+            }
+            if #available(macOS 15.0, iOS 18.0, *) {
+                return String(validating: utf8Bytes, as: UTF8.self)
+            }
+            return String(bytes: utf8Bytes, encoding: .utf8)
         }
         guard let decoded else {
             throw ForyError.invalidData("invalid UTF-8 sequence")

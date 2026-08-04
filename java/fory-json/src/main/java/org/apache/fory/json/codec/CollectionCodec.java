@@ -630,11 +630,10 @@ public abstract class CollectionCodec<T extends Collection<?>> implements JsonVa
         list.add(e3);
         return list;
       }
-      return readLatin1ArrayListTail(reader, e0, e1, e2, e3);
-    }
-
-    private ArrayList<Object> readLatin1ArrayListTail(
-        Latin1JsonReader reader, Object e0, Object e1, Object e2, Object e3) {
+      // Keep this real exact-allocation prefix in the collection owner. Splitting here makes each
+      // method smaller than C2's hot-inline limit, so a generated caller can absorb the collection
+      // and element closure solely according to compilation order. The uncommon longer tail stays
+      // separate below.
       Object e4 = readLatin1Element(reader);
       if (!reader.consumeNextCommaOrEndArray()) {
         reader.exitDepth();
@@ -1389,7 +1388,9 @@ public abstract class CollectionCodec<T extends Collection<?>> implements JsonVa
         list.add(e7);
         return list;
       }
-      reader.reserveGraphMemory(ARRAY_LIST_OWNER_BYTES + 8 * REFERENCE_BYTES);
+      // Capacity nine is materialized before the ninth child is read, so charge every backing
+      // slot before allocating the list.
+      reader.reserveGraphMemory(ARRAY_LIST_OWNER_BYTES + 9 * REFERENCE_BYTES);
       ArrayList<Object> list = new ArrayList<>(9);
       list.add(e0);
       list.add(e1);
@@ -1399,14 +1400,15 @@ public abstract class CollectionCodec<T extends Collection<?>> implements JsonVa
       list.add(e5);
       list.add(e6);
       list.add(e7);
+      list.add(codec.readLatin1(reader));
       int pendingSize = 0;
-      do {
+      while (reader.consumeNextCommaOrEndArray()) {
         if ((pendingSize & REFERENCE_BATCH_MASK) == REFERENCE_BATCH_MASK) {
           reader.reserveGraphMemory(REFERENCE_BATCH_BYTES);
         }
         list.add(codec.readLatin1(reader));
         pendingSize++;
-      } while (reader.consumeNextCommaOrEndArray());
+      }
       int tailSize = pendingSize & REFERENCE_BATCH_MASK;
       if (tailSize != 0) {
         reader.reserveGraphMemory(tailSize * REFERENCE_BYTES);
@@ -1538,7 +1540,9 @@ public abstract class CollectionCodec<T extends Collection<?>> implements JsonVa
         list.add(e7);
         return list;
       }
-      reader.reserveGraphMemory(ARRAY_LIST_OWNER_BYTES + 8 * REFERENCE_BYTES);
+      // Capacity nine is materialized before the ninth child is read, so charge every backing
+      // slot before allocating the list.
+      reader.reserveGraphMemory(ARRAY_LIST_OWNER_BYTES + 9 * REFERENCE_BYTES);
       ArrayList<Object> list = new ArrayList<>(9);
       list.add(e0);
       list.add(e1);
@@ -1548,14 +1552,15 @@ public abstract class CollectionCodec<T extends Collection<?>> implements JsonVa
       list.add(e5);
       list.add(e6);
       list.add(e7);
+      list.add(codec.readUtf16(reader));
       int pendingSize = 0;
-      do {
+      while (reader.consumeNextCommaOrEndArray()) {
         if ((pendingSize & REFERENCE_BATCH_MASK) == REFERENCE_BATCH_MASK) {
           reader.reserveGraphMemory(REFERENCE_BATCH_BYTES);
         }
         list.add(codec.readUtf16(reader));
         pendingSize++;
-      } while (reader.consumeNextCommaOrEndArray());
+      }
       int tailSize = pendingSize & REFERENCE_BATCH_MASK;
       if (tailSize != 0) {
         reader.reserveGraphMemory(tailSize * REFERENCE_BYTES);
@@ -1611,16 +1616,9 @@ public abstract class CollectionCodec<T extends Collection<?>> implements JsonVa
         list.add(e3);
         return list;
       }
-      return readUtf8ArrayListTail(reader, codec, e0, e1, e2, e3);
-    }
-
-    private ArrayList<Object> readUtf8ArrayListTail(
-        Utf8JsonReader reader,
-        Utf8ReaderCodec<Object> codec,
-        Object e0,
-        Object e1,
-        Object e2,
-        Object e3) {
+      // Keep the fifth exact-allocation lane in the collection owner. If this lane is split after
+      // four elements, both resulting methods fall below C2's hot-inline limit and let an outer
+      // fallback caller absorb the object-element closure according to compilation order.
       Object e4 = codec.readUtf8(reader);
       if (!reader.consumeNextCommaOrEndArray()) {
         reader.exitDepth();
@@ -1633,6 +1631,17 @@ public abstract class CollectionCodec<T extends Collection<?>> implements JsonVa
         list.add(e4);
         return list;
       }
+      return readUtf8ArrayListTail(reader, codec, e0, e1, e2, e3, e4);
+    }
+
+    private ArrayList<Object> readUtf8ArrayListTail(
+        Utf8JsonReader reader,
+        Utf8ReaderCodec<Object> codec,
+        Object e0,
+        Object e1,
+        Object e2,
+        Object e3,
+        Object e4) {
       Object e5 = codec.readUtf8(reader);
       if (!reader.consumeNextCommaOrEndArray()) {
         reader.exitDepth();
@@ -1687,7 +1696,9 @@ public abstract class CollectionCodec<T extends Collection<?>> implements JsonVa
         list.add(e7);
         return list;
       }
-      reader.reserveGraphMemory(ARRAY_LIST_OWNER_BYTES + 8 * REFERENCE_BYTES);
+      // Capacity nine is materialized before the ninth child is read, so charge every backing
+      // slot before allocating the list.
+      reader.reserveGraphMemory(ARRAY_LIST_OWNER_BYTES + 9 * REFERENCE_BYTES);
       ArrayList<Object> list = new ArrayList<>(9);
       list.add(e0);
       list.add(e1);
@@ -1697,14 +1708,15 @@ public abstract class CollectionCodec<T extends Collection<?>> implements JsonVa
       list.add(e5);
       list.add(e6);
       list.add(e7);
+      list.add(codec.readUtf8(reader));
       int pendingSize = 0;
-      do {
+      while (reader.consumeNextCommaOrEndArray()) {
         if ((pendingSize & REFERENCE_BATCH_MASK) == REFERENCE_BATCH_MASK) {
           reader.reserveGraphMemory(REFERENCE_BATCH_BYTES);
         }
         list.add(codec.readUtf8(reader));
         pendingSize++;
-      } while (reader.consumeNextCommaOrEndArray());
+      }
       int tailSize = pendingSize & REFERENCE_BATCH_MASK;
       if (tailSize != 0) {
         reader.reserveGraphMemory(tailSize * REFERENCE_BYTES);

@@ -285,7 +285,7 @@ public class JsonGraphMemoryBudgetTest extends ForyJsonTestModels {
   @Test
   public void stagedCollectionBatches() {
     TypeRef<List<CountingChild>> type = new TypeRef<List<CountingChild>>() {};
-    int prefixSize = codegenEnabled() ? 9 : 8;
+    int prefixSize = 9;
     int completed = prefixSize + 1023;
     String input = childArray(completed + 1);
     long budget =
@@ -297,6 +297,17 @@ public class JsonGraphMemoryBudgetTest extends ForyJsonTestModels {
         ForyJsonException.class,
         () -> jsonWithBudget(budget).fromJson(input.getBytes(StandardCharsets.UTF_8), type));
     assertEquals(CountingChild.creations, completed);
+  }
+
+  @Test
+  public void ninthSlotGuardsArrayListStorage() {
+    TypeRef<List<CountingChild>> type = new TypeRef<List<CountingChild>>() {};
+    long budget = shallow(ArrayList.class) + 8L * REF_BYTES + 9L * shallow(CountingChild.class);
+
+    assertNinthSlotGuard(childArray(9), type, budget, 8);
+    assertNinthSlotGuard(
+        childArray(9).getBytes(StandardCharsets.UTF_8), type, budget, codegenEnabled() ? 9 : 8);
+    assertNinthSlotGuard(utf16ChildArray(9), type, budget, 8);
   }
 
   @Test
@@ -442,6 +453,25 @@ public class JsonGraphMemoryBudgetTest extends ForyJsonTestModels {
       input.append("{\"number\":").append(i).append('}');
     }
     return input.append(']').toString();
+  }
+
+  private static String utf16ChildArray(int size) {
+    String input = childArray(size);
+    return input.replaceFirst("\\{", "{\"ignored\":\"Ā\",");
+  }
+
+  private <T> void assertNinthSlotGuard(
+      String input, TypeRef<T> type, long budget, int expectedCreations) {
+    CountingChild.creations = 0;
+    assertThrows(ForyJsonException.class, () -> jsonWithBudget(budget).fromJson(input, type));
+    assertEquals(CountingChild.creations, expectedCreations);
+  }
+
+  private <T> void assertNinthSlotGuard(
+      byte[] input, TypeRef<T> type, long budget, int expectedCreations) {
+    CountingChild.creations = 0;
+    assertThrows(ForyJsonException.class, () -> jsonWithBudget(budget).fromJson(input, type));
+    assertEquals(CountingChild.creations, expectedCreations);
   }
 
   private static String childMap(int size) {

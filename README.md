@@ -305,7 +305,7 @@ serializer setup.
 
 **Development From Source**
 
-See [docs/development/building.md](docs/development/building.md).
+See [docs/development/index.md](docs/development/index.md).
 
 Snapshots for Java, Scala, and Kotlin are available from
 `https://repository.apache.org/snapshots/` with the matching `-SNAPSHOT` version.
@@ -913,7 +913,7 @@ security, and platform guides.
 | Schema IDL/compiler   | [docs/compiler](docs/compiler)                                                         | [View](https://fory.apache.org/docs/compiler/)                         |
 | GraalVM native image  | [docs/object-serialization/java/graalvm.md](docs/object-serialization/java/graalvm.md) | [View](https://fory.apache.org/docs/object-serialization/java/graalvm) |
 | Android               | [docs/object-serialization/java/android.md](docs/object-serialization/java/android.md) | [View](https://fory.apache.org/docs/object-serialization/java/android) |
-| Development           | [docs/development/building.md](docs/development/building.md)                           | [View](docs/development/building.md)                                   |
+| Development           | [docs/development/index.md](docs/development/index.md)                                 | [View](docs/development/index.md)                                      |
 
 **Specifications**
 
@@ -934,7 +934,7 @@ security, and platform guides.
 ## Contributing
 
 Read [CONTRIBUTING.md](CONTRIBUTING.md) and
-[docs/development/building.md](docs/development/building.md) before sending pull requests. Bug
+[docs/development/index.md](docs/development/index.md) before sending pull requests. Bug
 reports, docs fixes, tests, benchmarks, and implementation improvements are welcome.
 
 ## License

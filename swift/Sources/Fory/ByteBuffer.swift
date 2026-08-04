@@ -18,8 +18,8 @@
 import Foundation
 
 public final class ByteBuffer {
-    // Storage access is synchronous and never re-entered while borrowed. Overlapping access is
-    // invalid because unchecked exclusivity removes Swift's runtime enforcement on this hot path.
+    // Buffer state access is synchronous and never re-entered while borrowed. Overlapping access is
+    // invalid because unchecked exclusivity removes Swift's runtime enforcement on these hot paths.
     @usableFromInline
     @exclusivity(unchecked)
     internal var storage: [UInt8]
@@ -28,6 +28,7 @@ public final class ByteBuffer {
     @exclusivity(unchecked)
     internal var cursor: Int
 
+    @exclusivity(unchecked)
     private var dataBridge = Data()
 
     @inlinable
@@ -179,26 +180,6 @@ public final class ByteBuffer {
                     }
                     destinationBase.copyMemory(from: sourceBase, byteCount: byteCount)
                 }
-            }
-        }
-        return dataBridge
-    }
-
-    @usableFromInline
-    @inline(__always)
-    internal func materializeData(
-        byteCount: Int,
-        _ body: (UnsafeMutablePointer<UInt8>) -> Void
-    ) -> Data {
-        if dataBridge.count != byteCount {
-            dataBridge.count = byteCount
-        }
-        if byteCount > 0 {
-            dataBridge.withUnsafeMutableBytes { destination in
-                guard let base = destination.baseAddress?.assumingMemoryBound(to: UInt8.self) else {
-                    return
-                }
-                body(base)
             }
         }
         return dataBridge

@@ -1255,6 +1255,9 @@ def _is_release_doc_line(line):
         or "org.apache.fory" in line
         or "Apache.Fory" in line
         or "dart pub add fory" in line
+        or re.search(r"\bpyfory(?:\[[^\]]+\])?==" + VERSION_PATTERN, line)
+        or re.search(r"\bgithub\.com/apache/fory/go/fory@v" + VERSION_PATTERN, line)
+        or re.search(r"@apache-fory/(?:core|hps)@" + VERSION_PATTERN, line)
         or re.search(r"^\s*fory\s*[:=]", line)
         or "https://github.com/apache/fory.git" in line
         or 'bazel_dep(name = "fory"' in line

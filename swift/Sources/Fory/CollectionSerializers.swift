@@ -904,10 +904,10 @@ public enum ArraySerializer<Element: Serializer>: Serializer {
         if !trackRef && !hasNull && elementReadAlwaysAdvances {
             if let elementTypeInfo {
                 return try Codec.withFieldTypeInfo(elementTypeInfo, context) {
-                    try readNonnullableElements(context, codec: Codec.self, count: length)
+                    try readNonNullElements(context, codec: Codec.self, count: length)
                 }
             }
-            return try readNonnullableElements(context, codec: Codec.self, count: length)
+            return try readNonNullElements(context, codec: Codec.self, count: length)
         }
         return try Codec.withFieldTypeInfo(elementTypeInfo, context) {
             if trackRef {
@@ -977,7 +977,7 @@ public enum ArraySerializer<Element: Serializer>: Serializer {
 
     @inlinable
     @inline(__always)
-    internal static func readNonnullableElements<Codec: FieldCodec>(
+    internal static func readNonNullElements<Codec: FieldCodec>(
         _ context: ReadContext,
         codec _: Codec.Type,
         count: Int

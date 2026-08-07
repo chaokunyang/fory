@@ -119,7 +119,7 @@ func (c *WriteContext) RefResolver() *RefResolver {
 
 // HasError returns true if an error has occurred
 func (c *WriteContext) HasError() bool {
-	return c.err.kind != ErrKindOK
+	return c.err.HasError()
 }
 
 // Err returns a pointer to the accumulated error

@@ -63,6 +63,20 @@ This is the entry point for AI guidance in Apache Fory. Read this file first, th
   malformed or noncanonical flag, enum value, marker, length form, or reserved
   value is accepted, rejected late, decoded differently, or produces a less
   precise error.
+- Keep security remediation scope frozen. Do not fix a standalone non-security
+  correctness, interoperability, API, or lifecycle issue merely because it is
+  discovered during security work. Include an adjacent non-security change only
+  when omitting it would leave the security fix incomplete or force the same
+  owner into an ugly, duplicated, or knowingly unsound design; otherwise record
+  the issue separately and leave production code unchanged.
+- A reference hit reuses the already-materialized final owner. Do not attach
+  target-type provenance to reference slots, add parallel reference metadata,
+  recursively revalidate the referenced graph, or convert the referenced value
+  for the current field. Python must return the existing owner without processing
+  a different compatible target shape. In another runtime, add an exact
+  same-final-type/carrier check only when unchecked reuse has a proven concrete
+  security consequence such as a crash or disproportionate memory/work; reject a
+  mismatch and never perform type conversion on the reference-hit path.
 - Arbitrary-precision binary Decimal codecs accept only scales in
   `[-10_000, 10_000]` and an absolute unscaled magnitude of at most `10_000`
   binary bytes. The Java standalone `BigInteger` serializer uses the same

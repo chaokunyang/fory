@@ -224,7 +224,7 @@ export class BinaryReader {
   stringWithHeader() {
     const header = this.readVarUint36Small();
     const type = header & 0b11;
-    const len = Math.floor(header / 4);
+    const len = header >>> 2;
     switch (type) {
       case LATIN1:
         return len === 0 ? "" : this.stringLatin1(len);
@@ -413,15 +413,7 @@ export class BinaryReader {
       readIdx++;
       result |= (fourByteValue >>> 3) & 0xfe00000;
       if ((fourByteValue & 0x80000000) !== 0) {
-        const fifthByte = this.dataView.getUint8(readIdx++);
-        result += (fifthByte & 0x7f) * 0x10000000;
-        if ((fifthByte & 0x80) !== 0) {
-          const sixthByte = this.dataView.getUint8(readIdx++);
-          if (sixthByte > 1) {
-            throw new Error("VarUint36Small exceeds 36 bits");
-          }
-          result += sixthByte * 0x800000000;
-        }
+        result |= (this.dataView.getUint8(readIdx++) & 0xff) << 28;
       }
     }
     this.cursor = readIdx;
@@ -429,21 +421,25 @@ export class BinaryReader {
   }
 
   private readVarUint36Slow(): number {
-    let result = 0;
-    let multiplier = 1;
-    for (let i = 0; i < 5; i++) {
-      const byte = this.readUint8();
-      result += (byte & 0x7f) * multiplier;
-      if ((byte & 0x80) === 0) {
-        return result;
+    let b = this.readUint8();
+    let result = b & 0x7f;
+    if ((b & 0x80) !== 0) {
+      b = this.readUint8();
+      result |= (b & 0x7f) << 7;
+      if ((b & 0x80) !== 0) {
+        b = this.readUint8();
+        result |= (b & 0x7f) << 14;
+        if ((b & 0x80) !== 0) {
+          b = this.readUint8();
+          result |= (b & 0x7f) << 21;
+          if ((b & 0x80) !== 0) {
+            b = this.readUint8();
+            result |= (b & 0xff) << 28;
+          }
+        }
       }
-      multiplier *= 0x80;
     }
-    const sixthByte = this.readUint8();
-    if (sixthByte > 1) {
-      throw new Error("VarUint36Small exceeds 36 bits");
-    }
-    return result + sixthByte * multiplier;
+    return result >>> 0;
   }
 
   readVarInt32() {

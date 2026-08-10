@@ -79,6 +79,13 @@ describe("enum", () => {
     const enumSerializer = fory.register(enumType);
     expect(enumSerializer.serializer.needToWriteRef()).toBe(false);
 
+    const rootBytes = enumSerializer.serialize(Foo.first);
+    const reader = new BinaryReader({});
+    reader.reset(rootBytes);
+    expect(reader.readUint8()).toBe(ConfigFlags.isCrossLanguageFlag);
+    expect(reader.readInt8()).toBe(RefFlags.NotNullValueFlag);
+    expect(reader.readUint8()).toBe(TypeId.ENUM);
+
     const nodeType = Type.struct(102, {
       value: Type.int32(),
     });
@@ -89,13 +96,6 @@ describe("enum", () => {
         second: nodeType.clone().setTrackingRef(true).setId(3),
       }),
     );
-    const rootBytes = enumSerializer.serialize(Foo.first);
-    const reader = new BinaryReader({});
-    reader.reset(rootBytes);
-    expect(reader.readUint8()).toBe(ConfigFlags.isCrossLanguageFlag);
-    expect(reader.readInt8()).toBe(RefFlags.NotNullValueFlag);
-    expect(reader.readUint8()).toBe(TypeId.ENUM);
-
     const shared = { value: 7 };
     const result = sequenceSerializer.deserialize(
       sequenceSerializer.serialize({

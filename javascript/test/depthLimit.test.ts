@@ -275,11 +275,6 @@ describe("depth-limit", () => {
       readerFory.register(readerChild);
       const writer = writerFory.register(writerRoot);
       const reader = readerFory.register(readerRoot);
-      const shallowType = Type.struct(7403, {
-        value: Type.int32().setId(1),
-      });
-      const shallowWriter = writerFory.register(shallowType);
-      const shallowReader = readerFory.register(shallowType);
       const malformedDepth = writer.serialize({
         child: {
           grandchild: { value: "7" },
@@ -293,6 +288,11 @@ describe("depth-limit", () => {
       );
       expect(readerFory.readContext.depth).toBe(0);
 
+      const shallowType = Type.struct(7403, {
+        value: Type.int32().setId(1),
+      });
+      const shallowWriter = writerFory.register(shallowType);
+      const shallowReader = readerFory.register(shallowType);
       expect(shallowReader.deserialize(shallowWriter.serialize({ value: 10 }))).toEqual({
         value: 10,
       });

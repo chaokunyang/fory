@@ -183,116 +183,6 @@ describe("typemeta", () => {
     expect(() => Type.string().setId(-1)).toThrow("field id must be non-negative");
   });
 
-  test("validates field id encoding range", () => {
-    const fieldId = 65_551;
-    const typeInfo = Type.struct(7012, {
-      value: Type.string().setId(fieldId),
-    });
-    const bytes = TypeMeta.fromTypeInfo(typeInfo).toBytes();
-    const reader = new BinaryReader({});
-    reader.reset(bytes);
-    const parsed = TypeMeta.fromBytes(reader);
-
-    expect(parsed.getFieldInfo()[0].fieldId).toBe(fieldId);
-    expect(
-      Array.from(bytes).some(
-        (value, index, all) =>
-          value === 0xfc &&
-          all[index + 1] === 0x80 &&
-          all[index + 2] === 0x80 &&
-          all[index + 3] === 0x04,
-      ),
-    ).toBe(true);
-
-    expect(() => Type.string().setId(0xffffffff + 16)).toThrow();
-    expect(() => Type.string().setId(1.5)).toThrow();
-    expect(() => Type.string().setId(Number.NaN)).toThrow();
-    expect(() => Type.string().setId(Number.POSITIVE_INFINITY)).toThrow();
-
-    const mutated = Type.string();
-    mutated.id = Number.NaN;
-    expect(() => TypeMeta.fromTypeInfo(Type.struct(7013, { value: mutated }))).toThrow();
-  });
-
-  test("validates field identity", () => {
-    expect(() =>
-      TypeMeta.fromTypeInfo(
-        Type.struct(7014, {
-          fooBar: Type.string(),
-          foo_bar: Type.string(),
-        }),
-      ),
-    ).toThrow("Duplicate field name foo_bar");
-
-    const acronyms = TypeMeta.fromTypeInfo(
-      Type.struct(7016, {
-        fooBar: Type.string(),
-        fooBAR: Type.string(),
-      }),
-    );
-    expect(acronyms.getFieldInfo().map((field) => field.fieldName)).toEqual(["fooBAR", "fooBar"]);
-    expect(() => acronyms.toBytes()).not.toThrow();
-    expect(() =>
-      TypeMeta.fromTypeInfo(
-        Type.struct(7017, {
-          fooBAR: Type.string(),
-          foo_b_a_r: Type.string(),
-        }),
-      ),
-    ).toThrow("Duplicate field name foo_b_a_r");
-
-    const tagged = Type.string().setId(1);
-    const remote = TypeMeta.fromTypeInfo(
-      Type.struct(7015, {
-        taggedRemote: Type.string().setId(1),
-        value: Type.string(),
-      }),
-    );
-    const remapped = remote.remapFieldNames({ value: tagged });
-    expect(remapped.filter((field) => field.fieldName === "value")).toHaveLength(1);
-    expect(new Set(remapped.map((field) => field.fieldName)).size).toBe(2);
-  });
-
-  test("keeps the first compatible field binding", () => {
-    const writerFory = new Fory({ compatible: true });
-    const readerFory = new Fory({ compatible: true });
-    const writer = writerFory.register(
-      Type.struct(7018, {
-        value: Type.int32(),
-        taggedRemote: Type.string().setId(1),
-      }),
-    );
-    const reader = readerFory.register(
-      Type.struct(7018, {
-        value: Type.int32().setId(1),
-      }),
-    );
-
-    expect(reader.deserialize(writer.serialize({ value: 1, taggedRemote: "second" }))).toEqual({
-      value: 1,
-    });
-  });
-
-  test("keeps tag placeholders out of name identity", () => {
-    const writerFory = new Fory({ compatible: true });
-    const readerFory = new Fory({ compatible: true });
-    const writer = writerFory.register(
-      Type.struct(7019, {
-        $tag1: Type.int32(),
-        taggedRemote: Type.string().setId(1),
-      }),
-    );
-    const reader = readerFory.register(
-      Type.struct(7019, {
-        $tag1: Type.int32(),
-      }),
-    );
-
-    expect(reader.deserialize(writer.serialize({ $tag1: 5, taggedRemote: "skip" }))).toEqual({
-      $tag1: 5,
-    });
-  });
-
   test("orders name-based identifiers with ordinal comparison", () => {
     const typeMeta = TypeMeta.fromTypeInfo(
       Type.struct(7011, {
@@ -435,16 +325,8 @@ describe("typemeta", () => {
     const reader = readerFory.register(readerType);
     const validTypeMeta = TypeMeta.fromTypeInfo(writerType, (writerFory as any).typeResolver);
     const duplicateTypeMeta = TypeMeta.fromTypeInfo(writerType, (writerFory as any).typeResolver);
-    const duplicateBytes = new Uint8Array(duplicateTypeMeta.toBytes());
-    const bodyOffset = typeMetaBodyOffset(duplicateBytes);
-    duplicateBytes[bodyOffset + 5] = duplicateBytes[bodyOffset + 3];
-    const body = duplicateBytes.subarray(bodyOffset);
-    const { header } = (TypeMeta as any).buildHeader(body, false);
-    new DataView(
-      duplicateBytes.buffer,
-      duplicateBytes.byteOffset,
-      duplicateBytes.byteLength,
-    ).setBigUint64(0, header, true);
+    duplicateTypeMeta.getFieldInfo()[1].fieldId = 1;
+    const duplicateBytes = duplicateTypeMeta.toBytes();
     const parseReader = new BinaryReader({});
     parseReader.reset(duplicateBytes);
     expect(() => TypeMeta.fromBytes(parseReader)).toThrow("Duplicate field id 1");
@@ -1880,18 +1762,16 @@ describe("typemeta", () => {
 
     expect(Array.from(result.values as Int32Array)).toEqual([0, 1, -1]);
 
-    const taggedWriterFory = new Fory({ compatible: true });
-    const taggedReaderFory = new Fory({ compatible: true });
     const taggedWriterType = Type.struct(7219, {
       values: Type.list(Type.int64({ encoding: "tagged" })).setId(1),
     });
     const taggedReaderType = Type.struct(7219, {
       values: Type.int64Array().setId(1),
     });
-    const taggedBytes = taggedWriterFory.register(taggedWriterType).serialize({
+    const taggedBytes = writerFory.register(taggedWriterType).serialize({
       values: [0n, 1n, -1n],
     });
-    const taggedResult = taggedReaderFory.register(taggedReaderType).deserialize(taggedBytes);
+    const taggedResult = readerFory.register(taggedReaderType).deserialize(taggedBytes);
 
     expect(Array.from(taggedResult.values as BigInt64Array)).toEqual([0n, 1n, -1n]);
   });

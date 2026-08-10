@@ -147,9 +147,6 @@ export default class Fory {
     deserialize(bytes: Uint8Array): InstanceType<T> | null;
   };
   register(constructor: any, customSerializer?: CustomSerializer<any>) {
-    // Root codegen captures resolver state in generated closures and checked metadata caches.
-    // Freezing permanently at the first attempt keeps every later root on that same registry.
-    this.typeResolver.ensureRegistrationOpen();
     let serializer: Serializer;
     if (constructor.prototype?.[ForyTypeInfoSymbol]) {
       const typeInfo: TypeInfo = (constructor.prototype[ForyTypeInfoSymbol] as WithForyClsInfo)
@@ -176,7 +173,6 @@ export default class Fory {
   }
 
   deserialize<T = any>(bytes: Uint8Array, serializer: Serializer = this.anySerializer): T | null {
-    this.typeResolver.freezeRegistration();
     this.readContext.reset(bytes);
     try {
       const reader = this.readContext.reader;
@@ -210,7 +206,6 @@ export default class Fory {
     const writer = writeContext.writer;
     const rootHeader = ConfigFlags.isCrossLanguageFlag;
     rootSerializer = (data: any) => {
-      this.typeResolver.freezeRegistration();
       writeContext.reset();
       writer.writeUint8(rootHeader);
       writer.reserve(serializer.fixedSize);
@@ -233,7 +228,6 @@ export default class Fory {
       : this.anySerializer;
     const rootHeader = ConfigFlags.isCrossLanguageFlag;
     rootDeserializer = (bytes: Uint8Array) => {
-      this.typeResolver.freezeRegistration();
       readContext.reset(bytes);
       try {
         const bitmap = reader.readUint8();

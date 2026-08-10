@@ -41,7 +41,7 @@ class ExtSerializerGenerator extends BaseSerializerGenerator {
     this.typeInfo = typeInfo;
     this.typeMeta = TypeMeta.fromTypeInfo(this.typeInfo, this.builder.resolver);
     this.serializerExpr = TypeId.isNamedType(typeInfo.typeId)
-      ? `${this.builder.getTypeResolverName()}.getSerializerByName(${CodecBuilder.sourceString(typeInfo.named!)})`
+      ? `${this.builder.getTypeResolverName()}.getSerializerByNamedType(${this.builder.resolver.computeTypeId(typeInfo)}, ${CodecBuilder.sourceString(typeInfo.namespace)}, ${CodecBuilder.sourceString(typeInfo.typeName)})`
       : `${this.builder.getTypeResolverName()}.getSerializerById(${typeInfo.typeId}, ${typeInfo.userTypeId})`;
     this.ownTypeInfoExpr = `${this.serializerExpr}.getTypeInfo()`;
   }
@@ -133,7 +133,11 @@ class ExtSerializerGenerator extends BaseSerializerGenerator {
             const name = this.scope.declare(
               "ext_ser",
               TypeId.isNamedType(this.typeInfo.typeId)
-                ? this.builder.typeResolver.getSerializerByName(this.typeInfo.named!)
+                ? this.builder.typeResolver.getSerializerByNamedType(
+                    this.builder.resolver.computeTypeId(this.typeInfo),
+                    this.typeInfo.namespace,
+                    this.typeInfo.typeName,
+                  )
                 : this.builder.typeResolver.getSerializerById(
                     this.typeInfo.typeId,
                     this.typeInfo.userTypeId,
@@ -155,7 +159,11 @@ class ExtSerializerGenerator extends BaseSerializerGenerator {
             const name = this.scope.declare(
               "ext_ser",
               TypeId.isNamedType(this.typeInfo.typeId)
-                ? this.builder.typeResolver.getSerializerByName(this.typeInfo.named!)
+                ? this.builder.typeResolver.getSerializerByNamedType(
+                    this.builder.resolver.computeTypeId(this.typeInfo),
+                    this.typeInfo.namespace,
+                    this.typeInfo.typeName,
+                  )
                 : this.builder.typeResolver.getSerializerById(
                     this.typeInfo.typeId,
                     this.typeInfo.userTypeId,

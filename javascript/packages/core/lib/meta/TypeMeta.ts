@@ -20,7 +20,7 @@
 import { BinaryWriter } from "../writer";
 import { BinaryReader } from "../reader";
 import { Encoding, MetaStringDecoder, MetaStringEncoder } from "./MetaString";
-import { TypeInfo } from "../typeInfo";
+import { checkFieldId, TypeInfo } from "../typeInfo";
 import { TypeId } from "../type";
 import { x64hash128 } from "../murmurHash3";
 import { fromString } from "../platformBuffer";
@@ -389,6 +389,7 @@ export class TypeMeta {
     if (TypeId.structType(typeInfo.typeId)) {
       const structTypeInfo = typeInfo;
       const usedFieldIds = new Set<number>();
+      const usedFieldNames = new Set<string>();
       fieldInfo = Object.entries(structTypeInfo.options!.props!).map(([fieldName, typeInfo]) => {
         let fieldTypeId = typeResolver ? typeResolver.computeTypeId(typeInfo) : typeInfo.typeId;
         if (fieldTypeId === TypeId.NAMED_ENUM) {
@@ -397,15 +398,19 @@ export class TypeMeta {
           fieldTypeId = TypeId.UNION;
         }
         const { trackingRef, nullable, id, userTypeId, options } = typeInfo;
-        if (typeof id === "number" && id < 0) {
-          throw new Error(`Field id for ${fieldName} must be non-negative`);
-        }
         const fieldId = typeof id === "number" ? id : undefined;
         if (fieldId !== undefined) {
+          checkFieldId(fieldId);
           if (usedFieldIds.has(fieldId)) {
             throw new Error(`Duplicate field id ${fieldId}`);
           }
           usedFieldIds.add(fieldId);
+        } else {
+          const normalizedName = TypeMeta.toSnakeCase(fieldName);
+          if (usedFieldNames.has(normalizedName)) {
+            throw new Error(`Duplicate field name ${normalizedName}`);
+          }
+          usedFieldNames.add(normalizedName);
         }
         return new FieldInfo(
           fieldName,
@@ -527,6 +532,7 @@ export class TypeMeta {
     }
     const fields: FieldInfo[] = [];
     let fieldIds: Set<number> | undefined;
+    let fieldNames: Set<string> | undefined;
     for (let i = 0; i < numFields; i++) {
       const fieldInfo = this.readFieldInfo(bodyReader);
       if (fieldInfo.hasFieldId()) {
@@ -538,6 +544,15 @@ export class TypeMeta {
           fieldIds = new Set();
         }
         fieldIds.add(fieldId);
+      } else {
+        const fieldName = fieldInfo.getFieldName();
+        if (fieldNames?.has(fieldName)) {
+          throw new Error(`Duplicate field name ${fieldName}`);
+        }
+        if (fieldNames === undefined) {
+          fieldNames = new Set();
+        }
+        fieldNames.add(fieldName);
       }
       fields.push(fieldInfo);
     }
@@ -745,32 +760,65 @@ export class TypeMeta {
     const localNameByNormalized = new Map<string, string>();
     for (const [fieldName, typeInfo] of Object.entries(localProps)) {
       if (typeof typeInfo.id === "number") {
-        if (typeInfo.id < 0) {
-          throw new Error(`Field id for ${fieldName} must be non-negative`);
+        checkFieldId(typeInfo.id);
+        if (localNameById.has(typeInfo.id)) {
+          throw new Error(`Duplicate field id ${typeInfo.id}`);
         }
         localNameById.set(typeInfo.id, fieldName);
-      }
-      const normalized = TypeMeta.toSnakeCase(fieldName);
-      if (!localNameByNormalized.has(normalized)) {
+      } else {
+        const normalized = TypeMeta.toSnakeCase(fieldName);
+        if (localNameByNormalized.has(normalized)) {
+          throw new Error(`Duplicate field name ${normalized}`);
+        }
         localNameByNormalized.set(normalized, fieldName);
       }
     }
 
+    const usedLocalFields = new Set<string>();
+    const generatedFieldNames = new Set(Object.keys(localProps));
+    const nextUnmappedName = (fieldName: string) => {
+      let name = fieldName;
+      while (generatedFieldNames.has(name)) {
+        name += "$";
+      }
+      generatedFieldNames.add(name);
+      return name;
+    };
     return this.fields.map((fieldInfo) => {
       let resolvedName = fieldInfo.getFieldName();
+      let matchedLocal = false;
       if (fieldInfo.hasFieldId()) {
         const localName = localNameById.get(fieldInfo.getFieldId()!);
         if (localName) {
           resolvedName = localName;
+          matchedLocal = true;
+        } else if (
+          Object.prototype.hasOwnProperty.call(localProps, resolvedName) &&
+          localProps[resolvedName].id === undefined
+        ) {
+          resolvedName = nextUnmappedName(resolvedName);
         }
       } else if (Object.prototype.hasOwnProperty.call(localProps, resolvedName)) {
         resolvedName = fieldInfo.getFieldName();
+        matchedLocal = true;
       } else {
         const normalized = TypeMeta.toSnakeCase(resolvedName);
         const localName = localNameByNormalized.get(normalized);
         if (localName) {
           resolvedName = localName;
+          matchedLocal = true;
         }
+      }
+      if (matchedLocal) {
+        if (usedLocalFields.has(resolvedName)) {
+          resolvedName = nextUnmappedName(fieldInfo.getFieldName());
+          matchedLocal = false;
+        } else {
+          usedLocalFields.add(resolvedName);
+        }
+      }
+      if (!matchedLocal) {
+        generatedFieldNames.add(resolvedName);
       }
       if (resolvedName === fieldInfo.getFieldName()) {
         return fieldInfo;
@@ -884,7 +932,22 @@ export class TypeMeta {
   }
 
   private writeFieldsInfo(writer: BinaryWriter, fields: FieldInfo[]) {
+    const fieldIds = new Set<number>();
+    const fieldNames = new Set<string>();
     for (const fieldInfo of fields) {
+      if (fieldInfo.fieldId !== undefined) {
+        checkFieldId(fieldInfo.fieldId);
+        if (fieldIds.has(fieldInfo.fieldId)) {
+          throw new Error(`Duplicate field id ${fieldInfo.fieldId}`);
+        }
+        fieldIds.add(fieldInfo.fieldId);
+      } else {
+        const normalizedName = TypeMeta.toSnakeCase(fieldInfo.getFieldName());
+        if (fieldNames.has(normalizedName)) {
+          throw new Error(`Duplicate field name ${normalizedName}`);
+        }
+        fieldNames.add(normalizedName);
+      }
       // header: 2 bits field name encoding + 4 bits size + nullability flag + ref tracking flag
       let header = fieldInfo.trackingRef ? 1 : 0;
       header |= fieldInfo.nullable ? 0b10 : 0b00;
@@ -1040,27 +1103,7 @@ export class TypeMeta {
   }
 
   static toSnakeCase(name: string) {
-    const result = [];
-    const chars = Array.from(name);
-
-    for (let i = 0; i < chars.length; i++) {
-      const c = chars[i];
-      if (c >= "A" && c <= "Z") {
-        if (i > 0) {
-          const prevUpper = chars[i - 1] >= "A" && chars[i - 1] <= "Z";
-          const nextUpperOrEnd =
-            i + 1 >= chars.length || (chars[i + 1] >= "A" && chars[i + 1] <= "Z");
-
-          if (!prevUpper || !nextUpperOrEnd) {
-            result.push("_");
-          }
-        }
-        result.push(c.toLowerCase());
-      } else {
-        result.push(c);
-      }
-    }
-    return result.join("");
+    return TypeMeta.lowerCamelToLowerUnderscore(name);
   }
 
   static getFieldSortKey(i: { fieldName: string; fieldId?: number }) {

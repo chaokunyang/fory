@@ -571,7 +571,7 @@ class StructSerializerGenerator extends BaseSerializerGenerator {
     // edge cases). The self-serializer may not be registered yet during factory
     // initialization so we cannot hoist it eagerly.
     this.serializerExpr = TypeId.isNamedType(typeInfo.typeId)
-      ? `${this.builder.getTypeResolverName()}.getSerializerByName(${CodecBuilder.sourceString(typeInfo.named!)})`
+      ? `${this.builder.getTypeResolverName()}.getSerializerByNamedType(${this.builder.resolver.computeTypeId(typeInfo)}, ${CodecBuilder.sourceString(typeInfo.namespace)}, ${CodecBuilder.sourceString(typeInfo.typeName)})`
       : `${this.builder.getTypeResolverName()}.getSerializerById(${typeInfo.typeId}, ${typeInfo.userTypeId})`;
     this.ownTypeInfoExpr = `${this.serializerExpr}.getTypeInfo()`;
   }
@@ -1446,7 +1446,7 @@ class StructSerializerGenerator extends BaseSerializerGenerator {
         fixedSize += propGenerator.getFixedSize();
       });
     } else {
-      fixedSize += this.builder.resolver.getSerializerByName(typeInfo.named!)!.fixedSize;
+      fixedSize += this.builder.resolver.getSerializerByTypeInfo(typeInfo)!.fixedSize;
     }
     return fixedSize;
   }

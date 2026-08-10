@@ -25,7 +25,7 @@ import {
 } from "../packages/core/lib/meta/MetaString";
 import { BinaryReader } from "../packages/core/lib/reader";
 import { BinaryWriter } from "../packages/core/lib/writer";
-import { describe, expect, test } from "@jest/globals";
+import { describe, expect, jest, test } from "@jest/globals";
 
 function readerFor(bytes: Uint8Array): BinaryReader {
   const reader = new BinaryReader({});
@@ -61,5 +61,32 @@ describe("meta string", () => {
     expect(metaStringReader.readTypeName(reader)).toBe("first");
     expect(metaStringReader.readTypeName(reader)).toBe("second");
     expect(metaStringReader.readTypeName(reader)).toBe("first");
+  });
+
+  test("caches reference decoding by role", () => {
+    const encoded = new MetaStringEncoder(".", "_").encodeByEncoding(
+      ".",
+      Encoding.LOWER_UPPER_DIGIT_SPECIAL,
+    );
+    const writer = new BinaryWriter({});
+    writer.writeVarUInt32(encoded.getBytes().length << 1);
+    writer.writeUint8(encoded.getEncoding());
+    writer.buffer(encoded.getBytes());
+    writer.writeVarUInt32(3);
+    writer.writeVarUInt32(3);
+    writer.writeVarUInt32(3);
+
+    const reader = readerFor(writer.dump());
+    const metaStringReader = new MetaStringReader();
+    const decodeBytes = jest.spyOn(MetaStringDecoder.prototype, "decodeBytes");
+    try {
+      expect(metaStringReader.readNamespace(reader)).toBe(".");
+      expect(metaStringReader.readTypeName(reader)).toBe("$");
+      expect(metaStringReader.readTypeName(reader)).toBe("$");
+      expect(metaStringReader.readNamespace(reader)).toBe(".");
+      expect(decodeBytes).toHaveBeenCalledTimes(1);
+    } finally {
+      decodeBytes.mockRestore();
+    }
   });
 });

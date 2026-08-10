@@ -97,6 +97,8 @@ export default class TypeResolver {
   readonly trackingRef: boolean;
   private internalSerializer: Serializer[] = new Array(300);
   private customSerializer: Map<number | string, Serializer> = new Map();
+  private namedSerializer: Map<number, Map<string, Map<string, Serializer>>> = new Map();
+  private registrationFrozen = false;
 
   private writeContext!: WriteContext;
   private readContext!: ReadContext;
@@ -190,6 +192,20 @@ export default class TypeResolver {
     return `u:${userTypeId}`;
   }
 
+  private namedSerializers(typeId: number, namespace: string) {
+    let byNamespace = this.namedSerializer.get(typeId);
+    if (byNamespace === undefined) {
+      byNamespace = new Map();
+      this.namedSerializer.set(typeId, byNamespace);
+    }
+    let byTypeName = byNamespace.get(namespace);
+    if (byTypeName === undefined) {
+      byTypeName = new Map();
+      byNamespace.set(namespace, byTypeName);
+    }
+    return byTypeName;
+  }
+
   private initInternalSerializer() {
     const registerSerializer = (typeInfo: TypeInfo) => {
       return this.registerSerializer(typeInfo, new Gen(this).generateSerializer(typeInfo));
@@ -270,7 +286,18 @@ export default class TypeResolver {
     this.initInternalSerializer();
   }
 
+  freezeRegistration() {
+    this.registrationFrozen = true;
+  }
+
+  ensureRegistrationOpen() {
+    if (this.registrationFrozen) {
+      throw new Error("types and serializers must be registered before the first root operation");
+    }
+  }
+
   registerSerializer(typeInfo: TypeInfo, serializer: Serializer = uninitSerialize) {
+    this.ensureRegistrationOpen();
     const typeId = this.computeTypeId(typeInfo);
     if (!TypeId.isNamedType(typeId)) {
       if (TypeId.needsUserTypeId(typeId) && typeInfo.userTypeId !== -1) {
@@ -298,13 +325,13 @@ export default class TypeResolver {
       return this.customSerializer.get(typeId);
     }
 
-    const name = typeInfo.named!;
-    if (this.customSerializer.has(name)) {
-      Object.assign(this.customSerializer.get(name)!, serializer);
+    const namedSerializers = this.namedSerializers(typeId, typeInfo.namespace);
+    if (namedSerializers.has(typeInfo.typeName)) {
+      Object.assign(namedSerializers.get(typeInfo.typeName)!, serializer);
     } else {
-      this.customSerializer.set(name, { ...serializer });
+      namedSerializers.set(typeInfo.typeName, { ...serializer });
     }
-    return this.customSerializer.get(name);
+    return namedSerializers.get(typeInfo.typeName);
   }
 
   generateReadSerializer(typeInfo: TypeInfo) {
@@ -312,6 +339,7 @@ export default class TypeResolver {
   }
 
   regenerateReadSerializer(typeInfo: TypeInfo) {
+    this.ensureRegistrationOpen();
     const serializer = this.generateReadSerializer(typeInfo);
     return this.registerSerializer(typeInfo, {
       readDataAlwaysAdvances: serializer.readDataAlwaysAdvances,
@@ -328,7 +356,7 @@ export default class TypeResolver {
   getSerializerByTypeInfo(typeInfo: TypeInfo) {
     const typeId = this.computeTypeId(typeInfo);
     if (TypeId.isNamedType(typeId)) {
-      return this.customSerializer.get(typeInfo.named!);
+      return this.getSerializerByNamedType(typeId, typeInfo.namespace, typeInfo.typeName);
     }
     return this.getSerializerById(typeId, typeInfo.userTypeId);
   }
@@ -343,8 +371,8 @@ export default class TypeResolver {
     return this.customSerializer.get(id)!;
   }
 
-  getSerializerByName(typeIdOrName: number | string) {
-    return this.customSerializer.get(typeIdOrName);
+  getSerializerByNamedType(typeId: number, namespace: string, typeName: string) {
+    return this.namedSerializer.get(typeId)?.get(namespace)?.get(typeName);
   }
 
   getSerializerByData(v: any) {

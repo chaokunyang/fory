@@ -501,7 +501,11 @@ export class MapSerializerGenerator extends BaseSerializerGenerator {
       return this.scope.declare(
         "map_inner_ser",
         TypeId.isNamedType(innerTypeInfo.typeId)
-          ? this.builder.typeResolver.getSerializerByName(innerTypeInfo.named!)
+          ? this.builder.typeResolver.getSerializerByNamedType(
+              this.builder.resolver.computeTypeId(innerTypeInfo),
+              innerTypeInfo.namespace,
+              innerTypeInfo.typeName,
+            )
           : this.builder.typeResolver.getSerializerById(
               innerTypeInfo.typeId,
               innerTypeInfo.userTypeId,
@@ -726,7 +730,11 @@ export class MapSerializerGenerator extends BaseSerializerGenerator {
       return this.scope.declare(
         "map_inner_ser",
         TypeId.isNamedType(innerTypeInfo.typeId)
-          ? this.builder.typeResolver.getSerializerByName(innerTypeInfo.named!)
+          ? this.builder.typeResolver.getSerializerByNamedType(
+              this.builder.resolver.computeTypeId(innerTypeInfo),
+              innerTypeInfo.namespace,
+              innerTypeInfo.typeName,
+            )
           : this.builder.typeResolver.getSerializerById(
               innerTypeInfo.typeId,
               innerTypeInfo.userTypeId,

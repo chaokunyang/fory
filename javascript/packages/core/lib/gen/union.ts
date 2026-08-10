@@ -46,9 +46,8 @@ class UnionSerializerGenerator extends BaseSerializerGenerator {
       for (const [caseIdx, caseTypeInfo] of Object.entries(cases)) {
         const ti = caseTypeInfo as TypeInfo;
         const isNamed = TypeId.isNamedType(ti._typeId);
-        const named = isNamed ? CodecBuilder.sourceString(ti.named) : "null";
         caseEntries.push(
-          `${caseIdx}: { typeId: ${ti.typeId}, userTypeId: ${ti.userTypeId ?? -1}, named: ${named} }`,
+          `${caseIdx}: { typeId: ${this.builder.resolver.computeTypeId(ti)}, userTypeId: ${ti.userTypeId ?? -1}, namespace: ${CodecBuilder.sourceString(ti.namespace)}, typeName: ${CodecBuilder.sourceString(ti.typeName)}, named: ${isNamed} }`,
         );
         this.caseGenerators.set(
           caseIdx,
@@ -90,7 +89,7 @@ class UnionSerializerGenerator extends BaseSerializerGenerator {
   private writeDynamicCaseValue(unionValue: string, caseInfo: string) {
     return `
       if (${caseInfo}) {
-        ${this.writerSerializer} = ${caseInfo}.named ? ${this.builder.getTypeResolverName()}.getSerializerByName(${caseInfo}.named) : ${this.builder.getTypeResolverName()}.getSerializerById(${caseInfo}.typeId, ${caseInfo}.userTypeId);
+        ${this.writerSerializer} = ${caseInfo}.named ? ${this.builder.getTypeResolverName()}.getSerializerByNamedType(${caseInfo}.typeId, ${caseInfo}.namespace, ${caseInfo}.typeName) : ${this.builder.getTypeResolverName()}.getSerializerById(${caseInfo}.typeId, ${caseInfo}.userTypeId);
       } else {
         ${this.writerSerializer} = ${this.builder.getExternal(AnyHelper.name)}.getSerializer(${this.builder.getWriteContextName()}, ${unionValue});
       }
@@ -236,7 +235,7 @@ class UnionSerializerGenerator extends BaseSerializerGenerator {
             "unionTypeInfoBytes",
             `new Uint8Array([${TypeMeta.fromTypeInfo(this.typeInfo).toBytes().join(",")}])`,
           );
-          const serializerExpr = `${this.builder.getTypeResolverName()}.getSerializerByName(${CodecBuilder.sourceString(this.typeInfo.named!)})`;
+          const serializerExpr = `${this.builder.getTypeResolverName()}.getSerializerByNamedType(${this.builder.resolver.computeTypeId(this.typeInfo)}, ${CodecBuilder.sourceString(this.typeInfo.namespace)}, ${CodecBuilder.sourceString(this.typeInfo.typeName)})`;
           typeMeta = this.builder.typeMetaResolver.writeTypeMeta(
             `${serializerExpr}.getTypeInfo()`,
             bytes,

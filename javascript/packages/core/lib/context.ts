@@ -19,7 +19,7 @@
 
 import { BinaryReader } from "./reader";
 import { BinaryWriter } from "./writer";
-import { MetaString, MetaStringDecoder, MetaStringEncoder } from "./meta/MetaString";
+import { Encoding, MetaString, MetaStringDecoder, MetaStringEncoder } from "./meta/MetaString";
 import { InnerFieldInfo, TypeMeta } from "./meta/TypeMeta";
 import { Type, TypeInfo } from "./typeInfo";
 import { Config, RefFlags, Serializer, TypeId } from "./type";
@@ -36,7 +36,11 @@ type TypeResolverLike = {
   trackingRef: boolean;
   computeTypeId(typeInfo: TypeInfo): number;
   getSerializerById(id: number, userTypeId?: number): Serializer | undefined;
-  getSerializerByName(name: string): Serializer | undefined;
+  getSerializerByNamedType(
+    typeId: number,
+    namespace: string,
+    typeName: string,
+  ): Serializer | undefined;
   getSerializerByData(value: any): Serializer | null | undefined;
   isCompatible(): boolean;
   generateReadSerializer(typeInfo: TypeInfo): Serializer;
@@ -295,44 +299,66 @@ export class MetaStringWriter {
 }
 
 export class MetaStringReader {
-  private names: string[] = [];
+  private names: Array<{
+    bytes: Uint8Array;
+    encoding: Encoding;
+    namespace?: string;
+    typeName?: string;
+  }> = [];
   private namespaceDecoder = new MetaStringDecoder(".", "_");
   private typenameDecoder = new MetaStringDecoder("$", "_");
 
-  readTypeName(reader: BinaryReader) {
+  private readReference(
+    idOrLen: number,
+    decoder: MetaStringDecoder,
+    role: "namespace" | "typeName",
+  ) {
+    const index = (idOrLen >>> 1) - 1;
+    if (index < 0 || index >= this.names.length) {
+      throw new Error(`Invalid MetaString reference ${index}`);
+    }
+    const occurrence = this.names[index];
+    let name = occurrence[role];
+    if (name === undefined) {
+      name = decoder.decodeBytes(occurrence.bytes, occurrence.encoding);
+      occurrence[role] = name;
+    }
+    return name;
+  }
+
+  private readName(
+    reader: BinaryReader,
+    decoder: MetaStringDecoder,
+    role: "namespace" | "typeName",
+  ) {
     const idOrLen = reader.readVarUInt32();
     if (idOrLen & 1) {
-      return this.names[(idOrLen >>> 1) - 1];
+      return this.readReference(idOrLen, decoder, role);
     }
     const len = idOrLen >> 1;
     if (len === 0) {
-      this.names.push("");
+      this.names.push({ bytes: new Uint8Array(), encoding: Encoding.UTF_8, [role]: "" });
       return "";
     }
     const encoding = reader.readUint8();
-    const name = this.typenameDecoder.decode(reader, len, encoding);
-    this.names.push(name);
+    const start = reader.readGetCursor();
+    const name = decoder.decode(reader, len, encoding);
+    this.names.push({ bytes: reader.bufferRefAt(start, len), encoding, [role]: name });
     return name;
+  }
+
+  readTypeName(reader: BinaryReader) {
+    return this.readName(reader, this.typenameDecoder, "typeName");
   }
 
   readNamespace(reader: BinaryReader) {
-    const idOrLen = reader.readVarUInt32();
-    if (idOrLen & 1) {
-      return this.names[(idOrLen >>> 1) - 1];
-    }
-    const len = idOrLen >> 1;
-    if (len === 0) {
-      this.names.push("");
-      return "";
-    }
-    const encoding = reader.readUint8();
-    const name = this.namespaceDecoder.decode(reader, len, encoding);
-    this.names.push(name);
-    return name;
+    return this.readName(reader, this.namespaceDecoder, "namespace");
   }
 
   reset() {
-    this.names = [];
+    if (this.names.length !== 0) {
+      this.names.length = 0;
+    }
   }
 }
 
@@ -565,15 +591,23 @@ export class ReadContext {
     this.reader.reset(bytes);
     this.refReader.reset();
     this.metaStringReader.reset();
-    this.typeMeta = [];
+    if (this.typeMeta.length !== 0) {
+      this.typeMeta.length = 0;
+    }
     this._depth = 0;
     this.remainingGraphMemoryBytes = this.maxGraphMemoryBytes;
     this.remainingUnbackedContainerItems = this.maxUnbackedContainerItems;
   }
 
-  resetReadDepth() {
-    // Root reads call this in finally; nested readers retain depth when a child throws.
+  resetRootState() {
+    // Root reads own failure cleanup; nested readers retain their live state when a child throws.
+    this.refReader.reset();
+    this.metaStringReader.reset();
+    if (this.typeMeta.length !== 0) {
+      this.typeMeta.length = 0;
+    }
     this._depth = 0;
+    this.remainingGraphMemoryBytes = 0;
     this.remainingUnbackedContainerItems = 0;
   }
 
@@ -1026,7 +1060,11 @@ export class ReadContext {
   private serializerByTypeMeta(typeMeta: TypeMeta) {
     const typeId = typeMeta.getTypeId();
     if (TypeId.isNamedType(typeId)) {
-      return this.typeResolver.getSerializerByName(`${typeMeta.getNs()}$${typeMeta.getTypeName()}`);
+      return this.typeResolver.getSerializerByNamedType(
+        typeId,
+        typeMeta.getNs(),
+        typeMeta.getTypeName(),
+      );
     }
     if (TypeId.needsUserTypeId(typeId)) {
       return this.typeResolver.getSerializerById(typeId, typeMeta.getUserTypeId());
@@ -1382,8 +1420,11 @@ export class ReadContext {
     let originalTypeInfo = original instanceof TypeInfo ? original : original?.getTypeInfo();
     if (!originalSerializer && !originalTypeInfo) {
       if (TypeId.isNamedType(typeId)) {
-        const named = `${typeMeta.getNs()}$${typeMeta.getTypeName()}`;
-        originalSerializer = this.typeResolver.getSerializerByName(named);
+        originalSerializer = this.typeResolver.getSerializerByNamedType(
+          typeId,
+          typeMeta.getNs(),
+          typeMeta.getTypeName(),
+        );
       } else {
         originalSerializer = this.typeResolver.getSerializerById(typeId, typeMeta.getUserTypeId());
       }

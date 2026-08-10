@@ -47,7 +47,7 @@ function context(typeResolver = {}, config = {}) {
     getSerializerById() {
       return undefined;
     },
-    getSerializerByName() {
+    getSerializerByNamedType() {
       return undefined;
     },
     getUnknownStructSerializer() {
@@ -166,7 +166,8 @@ runTest("remote schema limit rejects extra versions", () => {
     computeTypeId(candidate) {
       return candidate.typeId;
     },
-    getSerializerByName(name) {
+    getSerializerByNamedType(_typeId, namespace, typeName) {
+      const name = `${namespace}$${typeName}`;
       return name === "example$Shared" ? original : undefined;
     },
     generateReadSerializer(candidate) {
@@ -193,7 +194,8 @@ runTest("remote TypeMeta key cap preserves persistent owner state", () => {
   };
   const readContext = context(
     {
-      getSerializerByName(name) {
+      getSerializerByNamedType(_typeId, namespace, typeName) {
+        const name = `${namespace}$${typeName}`;
         return name === "example$LocalAtCap" ? localOwner : {};
       },
     },
@@ -244,7 +246,8 @@ runTest("remote TypeMeta key cap preserves persistent owner state", () => {
 
 runTest("remote non-struct TypeMeta uses schema limit", () => {
   const readContext = context({
-    getSerializerByName(name) {
+    getSerializerByNamedType(_typeId, namespace, typeName) {
+      const name = `${namespace}$${typeName}`;
       return name === "example$SharedEnum" ? {} : undefined;
     },
   });
@@ -258,7 +261,8 @@ runTest("remote non-struct TypeMeta uses schema limit", () => {
 runTest("failed non-struct TypeMeta does not consume schema limit", () => {
   let registered = false;
   const readContext = context({
-    getSerializerByName(name) {
+    getSerializerByNamedType(_typeId, namespace, typeName) {
+      const name = `${namespace}$${typeName}`;
       return registered && name === "example$SharedEnum" ? {} : undefined;
     },
   });
@@ -289,7 +293,8 @@ runTest("exact local non-struct TypeMeta bypasses schema limit", () => {
     computeTypeId(typeInfo) {
       return typeInfo.typeId;
     },
-    getSerializerByName(name) {
+    getSerializerByNamedType(_typeId, namespace, typeName) {
+      const name = `${namespace}$${typeName}`;
       return name === "example$SharedEnum" ? localSerializer : undefined;
     },
   });
@@ -309,7 +314,8 @@ runTest("exact local non-struct TypeMeta bypasses schema limit", () => {
     computeTypeId(typeInfo) {
       return typeInfo.typeId;
     },
-    getSerializerByName(name) {
+    getSerializerByNamedType(_typeId, namespace, typeName) {
+      const name = `${namespace}$${typeName}`;
       return name === "example$SharedEnum" ? localSerializer : undefined;
     },
   });
@@ -325,7 +331,8 @@ runTest("named enum TypeMeta validates declared owner before caching", () => {
   const colorMeta = TypeMeta.fromTypeInfo(colorInfo);
   const otherMeta = TypeMeta.fromTypeInfo(otherInfo);
   const readContext = context({
-    getSerializerByName(name) {
+    getSerializerByNamedType(_typeId, namespace, typeName) {
+      const name = `${namespace}$${typeName}`;
       if (name === "example$Color") {
         return localSerializer(colorInfo);
       }
@@ -400,7 +407,8 @@ runTest("TypeMeta cache hit skips current body", () => {
     computeTypeId(candidate) {
       return candidate.typeId;
     },
-    getSerializerByName(name) {
+    getSerializerByNamedType(_typeId, namespace, typeName) {
+      const name = `${namespace}$${typeName}`;
       return name === "example$Cached" ? original : undefined;
     },
     generateReadSerializer(candidate) {
@@ -495,7 +503,8 @@ runTest("exact local TypeMeta bypasses schema limit", () => {
     getSerializerById() {
       return undefined;
     },
-    getSerializerByName(name) {
+    getSerializerByNamedType(_typeId, namespace, typeName) {
+      const name = `${namespace}$${typeName}`;
       return name === "example$Shared" ? activeOriginal : undefined;
     },
     generateReadSerializer(typeInfo) {
@@ -546,7 +555,8 @@ runTest("exact local TypeMeta does not consume schema limit", () => {
     computeTypeId(typeInfo) {
       return typeInfo.typeId;
     },
-    getSerializerByName(name) {
+    getSerializerByNamedType(_typeId, namespace, typeName) {
+      const name = `${namespace}$${typeName}`;
       return name === "example$Shared" ? original : undefined;
     },
     generateReadSerializer(typeInfo) {
@@ -573,7 +583,7 @@ runTest("failed Any TypeMeta does not consume schema limit", () => {
     getSerializerById(typeId, userTypeId) {
       return userTypeId === 901 ? original : undefined;
     },
-    getSerializerByName() {
+    getSerializerByNamedType() {
       return undefined;
     },
     generateReadSerializer(typeInfo) {
@@ -623,7 +633,7 @@ runTest("exact Any TypeMeta bypasses schema limit", () => {
     getSerializerById(typeId, userTypeId) {
       return userTypeId === 901 ? activeOriginal : undefined;
     },
-    getSerializerByName() {
+    getSerializerByNamedType() {
       return undefined;
     },
     generateReadSerializer(typeInfo) {

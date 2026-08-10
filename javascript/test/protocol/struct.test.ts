@@ -60,7 +60,6 @@ describe("protocol", () => {
       },
     );
     const nonNullableSer = fory.register(nonNullable);
-    expect(() => nonNullableSer.serialize({ a: null })).toThrow(/Field "a" is not nullable/);
 
     // 2) nullable not specified => keep old behavior (null allowed)
     const nullableUnspecified = Type.struct(
@@ -72,6 +71,7 @@ describe("protocol", () => {
       },
     );
     const { serialize, deserialize } = fory.register(nullableUnspecified);
+    expect(() => nonNullableSer.serialize({ a: null })).toThrow(/Field "a" is not nullable/);
     expect(deserialize(serialize({ a: null }))).toEqual({ a: null });
   });
 

@@ -20,6 +20,8 @@
 import { fromString } from "../platformBuffer";
 import { BinaryReader } from "../reader";
 
+const utf8Decoder = new TextDecoder("utf-8");
+
 export enum Encoding {
   UTF_8, // Using UTF-8 as the fallback
   LOWER_SPECIAL,
@@ -112,6 +114,26 @@ export class MetaStringDecoder {
         return this.decodeRepAllToLowerSpecial(reader.bufferRef(len));
       case Encoding.UTF_8:
         return reader.stringUtf8(len);
+      default:
+        throw new Error("Unexpected encoding flag: " + encoding);
+    }
+  }
+
+  public decodeBytes(data: Uint8Array, encoding: Encoding): string {
+    if (data.length === 0) {
+      return "";
+    }
+    switch (encoding) {
+      case Encoding.LOWER_SPECIAL:
+        return this.decodeLowerSpecial(data);
+      case Encoding.LOWER_UPPER_DIGIT_SPECIAL:
+        return this.decodeLowerUpperDigitSpecial(data);
+      case Encoding.FIRST_TO_LOWER_SPECIAL:
+        return this.decodeRepFirstLowerSpecial(data);
+      case Encoding.ALL_TO_LOWER_SPECIAL:
+        return this.decodeRepAllToLowerSpecial(data);
+      case Encoding.UTF_8:
+        return utf8Decoder.decode(data);
       default:
         throw new Error("Unexpected encoding flag: " + encoding);
     }

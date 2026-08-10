@@ -353,8 +353,8 @@ class TypeResolverBuilder {
     return `${this.holder}.getSerializerById(${id}, ${userTypeId})`;
   }
 
-  getSerializerByName(name: string) {
-    return `${this.holder}.getSerializerByName(${CodecBuilder.sourceString(name)})`;
+  getSerializerByNamedType(typeId: number, namespace: string, typeName: string) {
+    return `${this.holder}.getSerializerByNamedType(${typeId}, ${CodecBuilder.sourceString(namespace)}, ${CodecBuilder.sourceString(typeName)})`;
   }
 
   getSerializerByData(v: string) {

@@ -37,10 +37,6 @@ export class AnyHelper {
     }
     let serializer: Serializer | undefined;
 
-    function buildNamedTypeKey(ns: string, typeName: string) {
-      return `${ns}$${typeName}`;
-    }
-
     function tryUpdateSerializer(serializer: Serializer | undefined | null, typeMeta: TypeMeta) {
       if (!serializer) {
         if (readContext.isCompatible() && TypeId.structType(typeMeta.getTypeId())) {
@@ -71,11 +67,11 @@ export class AnyHelper {
           const typeMeta = readContext.readTypeMeta();
           const ns = typeMeta.getNs();
           const typeName = typeMeta.getTypeName();
-          serializer = typeResolver.getSerializerByName(buildNamedTypeKey(ns, typeName));
+          serializer = typeResolver.getSerializerByNamedType(typeId, ns, typeName);
         } else {
           const ns = readContext.readNamespace();
           const typeName = readContext.readTypeName();
-          serializer = typeResolver.getSerializerByName(buildNamedTypeKey(ns, typeName));
+          serializer = typeResolver.getSerializerByNamedType(typeId, ns, typeName);
         }
         break;
       case TypeId.NAMED_EXT:
@@ -83,11 +79,11 @@ export class AnyHelper {
           const typeMeta = readContext.readTypeMeta();
           const ns = typeMeta.getNs();
           const typeName = typeMeta.getTypeName();
-          serializer = typeResolver.getSerializerByName(buildNamedTypeKey(ns, typeName));
+          serializer = typeResolver.getSerializerByNamedType(typeId, ns, typeName);
         } else {
           const ns = readContext.readNamespace();
           const typeName = readContext.readTypeName();
-          serializer = typeResolver.getSerializerByName(buildNamedTypeKey(ns, typeName));
+          serializer = typeResolver.getSerializerByNamedType(typeId, ns, typeName);
         }
         break;
       case TypeId.NAMED_STRUCT:
@@ -96,13 +92,12 @@ export class AnyHelper {
           const typeMeta = readContext.readTypeMeta();
           const ns = typeMeta.getNs();
           const typeName = typeMeta.getTypeName();
-          const named = buildNamedTypeKey(ns, typeName);
-          const namedSerializer = typeResolver.getSerializerByName(named);
+          const namedSerializer = typeResolver.getSerializerByNamedType(typeId, ns, typeName);
           serializer = tryUpdateSerializer(namedSerializer, typeMeta);
         } else {
           const ns = readContext.readNamespace();
           const typeName = readContext.readTypeName();
-          serializer = typeResolver.getSerializerByName(buildNamedTypeKey(ns, typeName));
+          serializer = typeResolver.getSerializerByNamedType(typeId, ns, typeName);
         }
         break;
       default:

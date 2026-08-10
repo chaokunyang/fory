@@ -49,6 +49,7 @@ from pyfory.meta.typedef import (
     _UINT64_MASK,
 )
 from pyfory.types import TypeId
+from pyfory.field import validate_field_identities
 from pyfory._fory import NO_USER_TYPE_ID
 from pyfory.meta.metastring import MetaStringDecoder, Encoding
 
@@ -243,6 +244,7 @@ def read_fields_info(buffer: Buffer, resolver, defined_class: str, num_fields: i
     for _ in range(num_fields):
         field_info = read_field_info(buffer, resolver, defined_class)
         field_infos.append(field_info)
+    validate_field_identities(field_infos, f"TypeDef {defined_class}")
     return field_infos
 
 

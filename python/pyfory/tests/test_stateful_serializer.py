@@ -144,11 +144,17 @@ class ComplexStateObject:
         )
 
 
+def prepare_stateful_types(fory, *classes):
+    for cls in classes:
+        fory.type_resolver.get_type_info(cls)
+
+
 def test_basic_stateful_object():
     """Test basic object with __getstate__ and __setstate__"""
     fory = Fory(xlang=False, ref=True, strict=False, compatible=False)
 
     obj = BasicStatefulObject(42, "original_secret")
+    prepare_stateful_types(fory, BasicStatefulObject)
     serialized = fory.serialize(obj)
     deserialized = fory.deserialize(serialized)
 
@@ -168,6 +174,7 @@ def test_immutable_with_getnewargs_ex():
     fory = Fory(xlang=False, ref=True, strict=False, compatible=False)
 
     obj = ImmutableWithArgsEx(10, 20, "test")
+    prepare_stateful_types(fory, ImmutableWithArgsEx)
     # Simulate the state that would be set by __setstate__ for comparison
     obj._extra = "some_extra"
 
@@ -191,6 +198,7 @@ def test_immutable_with_getnewargs():
     fory = Fory(xlang=False, ref=True, strict=False, compatible=False)
 
     obj = ImmutableWithArgs(100, 200)
+    prepare_stateful_types(fory, ImmutableWithArgs)
     # Simulate the state that would be set by __setstate__ for comparison
     obj._metadata = "old_style"
 
@@ -213,6 +221,7 @@ def test_stateful_only_object():
     fory = Fory(xlang=False, ref=True, strict=False, compatible=False)
 
     obj = StatefulOnlyObject("test_data")
+    prepare_stateful_types(fory, StatefulOnlyObject)
     # Simulate the state that would be set by __setstate__ for comparison
     obj.processed = "restored_test_data"
 
@@ -234,6 +243,7 @@ def test_complex_state_object():
     fory = Fory(xlang=False, ref=True, strict=False, compatible=False)
 
     obj = ComplexStateObject("test", [1, 2, 3, {"nested": "value"}])
+    prepare_stateful_types(fory, ComplexStateObject)
     # Simulate the state that would be set by __setstate__ for comparison
     obj.extra_info = {"serialized_at": "test_time"}
 
@@ -257,6 +267,7 @@ def test_reference_tracking():
     fory = Fory(xlang=False, ref=True, strict=False, compatible=False)
 
     obj = BasicStatefulObject(42)
+    prepare_stateful_types(fory, BasicStatefulObject)
     # Create a list with the same object referenced twice
     container = [obj, obj, {"ref": obj}]
 
@@ -275,6 +286,7 @@ def test_nested_stateful_objects():
 
     inner = BasicStatefulObject(10)
     outer = ComplexStateObject("outer", [inner, BasicStatefulObject(20)])
+    prepare_stateful_types(fory, BasicStatefulObject, ComplexStateObject)
 
     serialized = fory.serialize(outer)
     deserialized = fory.deserialize(serialized)

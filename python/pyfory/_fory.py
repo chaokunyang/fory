@@ -394,6 +394,9 @@ class Fory:
         """
         self.type_resolver.register_serializer(cls, serializer)
 
+    def _freeze_registry(self):
+        self.type_resolver._freeze_registry()
+
     def dumps(
         self,
         obj,
@@ -421,6 +424,7 @@ class Fory:
             the passed object (or a view of it) is unsupported. If your sink
             needs retention, copy bytes inside ``write``.
         """
+        self._freeze_registry()
         try:
             self.buffer.set_writer_index(0)
             output_stream = Buffer.wrap_output_stream(stream)
@@ -476,6 +480,7 @@ class Fory:
             >>> print(type(data))
             <class 'bytes'>
         """
+        self._freeze_registry()
         try:
             write_buffer = self._serialize(
                 obj,
@@ -553,6 +558,7 @@ class Fory:
             >>> print(obj)
             {'key': 'value'}
         """
+        self._freeze_registry()
         try:
             return self._deserialize(buffer, buffers, unsupported_objects)
         finally:

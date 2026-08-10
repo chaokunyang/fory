@@ -15,7 +15,19 @@
 # specific language governing permissions and limitations
 # under the License.
 
+import types
+
 import pyfory
+
+
+def serialize_prepared(fory, value):
+    for cls in (type, types.FunctionType, types.MethodType, staticmethod, classmethod):
+        fory.type_resolver.get_type_info(cls)
+    values = value.values() if isinstance(value, dict) else value if isinstance(value, (list, tuple)) else (value,)
+    for item in values:
+        if isinstance(item, types.MethodType) and item.__self__ is not None and not isinstance(item.__self__, type):
+            fory.type_resolver.get_type_info(type(item.__self__))
+    return fory.serialize(value)
 
 
 # Global classes for testing global class method serialization
@@ -88,7 +100,7 @@ class TestMethodSerialization:
         method = obj.instance_method
 
         # Test serialization/deserialization
-        serialized = fory.serialize(method)
+        serialized = serialize_prepared(fory, method)
         deserialized = fory.deserialize(serialized)
 
         assert method() == deserialized()
@@ -108,7 +120,7 @@ class TestMethodSerialization:
         method = TestClass.class_method
 
         # Test serialization/deserialization
-        serialized = fory.serialize(method)
+        serialized = serialize_prepared(fory, method)
         deserialized = fory.deserialize(serialized)
 
         assert method() == deserialized()
@@ -126,7 +138,7 @@ class TestMethodSerialization:
         method = TestClass.static_method
 
         # Test serialization/deserialization
-        serialized = fory.serialize(method)
+        serialized = serialize_prepared(fory, method)
         deserialized = fory.deserialize(serialized)
 
         assert method() == deserialized()
@@ -155,21 +167,21 @@ class TestMethodSerialization:
 
         # Test instance method
         instance_method = obj.add
-        serialized = fory.serialize(instance_method)
+        serialized = serialize_prepared(fory, instance_method)
         deserialized = fory.deserialize(serialized)
         assert instance_method(5) == deserialized(5)
         assert instance_method(5) == 15
 
         # Test classmethod
         class_method = TestClass.multiply
-        serialized = fory.serialize(class_method)
+        serialized = serialize_prepared(fory, class_method)
         deserialized = fory.deserialize(serialized)
         assert class_method(3, 4) == deserialized(3, 4)
         assert class_method(3, 4) == 12
 
         # Test staticmethod
         static_method = TestClass.subtract
-        serialized = fory.serialize(static_method)
+        serialized = serialize_prepared(fory, static_method)
         deserialized = fory.deserialize(serialized)
         assert static_method(10, 3) == deserialized(10, 3)
         assert static_method(10, 3) == 7
@@ -187,7 +199,7 @@ class TestMethodSerialization:
         method = OuterClass.InnerClass.inner_class_method
 
         # Test serialization/deserialization
-        serialized = fory.serialize(method)
+        serialized = serialize_prepared(fory, method)
         deserialized = fory.deserialize(serialized)
 
         assert method() == deserialized()
@@ -208,7 +220,7 @@ def test_classmethod_serialization():
             return A
 
     method = A.f
-    serialized = fory.serialize(method)
+    serialized = serialize_prepared(fory, method)
     deserialized = fory.deserialize(serialized)
 
     assert isinstance(deserialized, type(method))
@@ -233,7 +245,7 @@ def test_staticmethod_serialization():
             return "static_result"
 
     method = A.g
-    serialized = fory.serialize(method)
+    serialized = serialize_prepared(fory, method)
     deserialized = fory.deserialize(serialized)
 
     assert method() == deserialized()
@@ -246,7 +258,7 @@ def test_global_classmethod_serialization():
     fory = pyfory.Fory(xlang=False, strict=False, ref=True, compatible=False)
 
     method = GlobalTestClass.class_method
-    serialized = fory.serialize(method)
+    serialized = serialize_prepared(fory, method)
     deserialized = fory.deserialize(serialized)
 
     assert isinstance(deserialized, type(method))
@@ -259,7 +271,7 @@ def test_global_classmethod_with_args():
     fory = pyfory.Fory(xlang=False, strict=False, ref=True, compatible=False)
 
     method = GlobalTestClass.class_method_with_args
-    serialized = fory.serialize(method)
+    serialized = serialize_prepared(fory, method)
     deserialized = fory.deserialize(serialized)
 
     args = ("arg1", "arg2")
@@ -272,7 +284,7 @@ def test_global_staticmethod_serialization():
     fory = pyfory.Fory(xlang=False, strict=False, ref=True, compatible=False)
 
     method = GlobalTestClass.static_method
-    serialized = fory.serialize(method)
+    serialized = serialize_prepared(fory, method)
     deserialized = fory.deserialize(serialized)
 
     assert deserialized() == method()
@@ -284,7 +296,7 @@ def test_global_staticmethod_with_args():
     fory = pyfory.Fory(xlang=False, strict=False, ref=True, compatible=False)
 
     method = GlobalTestClass.static_method_with_args
-    serialized = fory.serialize(method)
+    serialized = serialize_prepared(fory, method)
     deserialized = fory.deserialize(serialized)
 
     args = ("test1", "test2")
@@ -298,7 +310,7 @@ def test_global_instance_method_serialization():
 
     obj = GlobalTestClass("test_value")
     method = obj.instance_method
-    serialized = fory.serialize(method)
+    serialized = serialize_prepared(fory, method)
     deserialized = fory.deserialize(serialized)
 
     assert deserialized() == method()
@@ -313,8 +325,8 @@ def test_multiple_global_classes():
     method1 = GlobalTestClass.class_method
     method2 = AnotherGlobalClass.another_class_method
 
-    serialized1 = fory.serialize(method1)
-    serialized2 = fory.serialize(method2)
+    serialized1 = serialize_prepared(fory, method1)
+    serialized2 = serialize_prepared(fory, method2)
 
     deserialized1 = fory.deserialize(serialized1)
     deserialized2 = fory.deserialize(serialized2)
@@ -331,7 +343,7 @@ def test_global_class_inheritance():
 
     # Test inherited class method
     method = GlobalClassWithInheritance.inherited_class_method
-    serialized = fory.serialize(method)
+    serialized = serialize_prepared(fory, method)
     deserialized = fory.deserialize(serialized)
 
     assert deserialized() == method()
@@ -339,7 +351,7 @@ def test_global_class_inheritance():
 
     # Test parent class method on child class
     parent_method = GlobalClassWithInheritance.class_method
-    serialized_parent = fory.serialize(parent_method)
+    serialized_parent = serialize_prepared(fory, parent_method)
     deserialized_parent = fory.deserialize(serialized_parent)
 
     assert deserialized_parent() == parent_method()
@@ -352,7 +364,7 @@ def test_global_methods_without_ref_tracking():
 
     # Global classes should work even without track_ref
     method = GlobalTestClass.class_method
-    serialized = fory.serialize(method)
+    serialized = serialize_prepared(fory, method)
     deserialized = fory.deserialize(serialized)
 
     assert deserialized() == method()
@@ -369,7 +381,7 @@ def test_global_method_collection():
         AnotherGlobalClass.another_class_method,
     ]
 
-    serialized = fory.serialize(methods)
+    serialized = serialize_prepared(fory, methods)
     deserialized = fory.deserialize(serialized)
 
     assert len(deserialized) == len(methods)
@@ -387,7 +399,7 @@ def test_global_method_in_dict():
         "another_method": AnotherGlobalClass.another_class_method,
     }
 
-    serialized = fory.serialize(method_dict)
+    serialized = serialize_prepared(fory, method_dict)
     deserialized = fory.deserialize(serialized)
 
     assert len(deserialized) == len(method_dict)

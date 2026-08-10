@@ -17,6 +17,12 @@
 
 from pyfory import Fory
 from dataclasses import dataclass
+import types
+
+
+def prepare_class_serialization(fory):
+    for cls in (type, types.FunctionType, types.MethodType, staticmethod, classmethod):
+        fory.type_resolver.get_type_info(cls)
 
 
 def test_local_class_serialization():
@@ -42,6 +48,7 @@ def test_local_class_serialization():
 
     # Test basic serialization of the class type itself
     fory = Fory(xlang=False, ref=True, strict=False, compatible=False)
+    prepare_class_serialization(fory)
 
     # Serialize the class type
     serialized = fory.serialize(LocalClass)
@@ -79,6 +86,7 @@ def test_local_class_with_closure():
     LocalClassWithClosure = create_local_class_with_closure(3)
 
     fory = Fory(xlang=False, ref=True, strict=False, compatible=False)
+    prepare_class_serialization(fory)
 
     # Serialize the class type
     serialized = fory.serialize(LocalClassWithClosure)
@@ -116,6 +124,7 @@ def test_local_class_with_inheritance():
 
     LocalClass = create_local_class_with_inheritance()
     fory = Fory(xlang=False, ref=True, strict=False, compatible=False)
+    prepare_class_serialization(fory)
 
     # Serialize and deserialize the class
     serialized = fory.serialize(LocalClass)
@@ -157,6 +166,7 @@ def test_local_class_with_class_variables():
 
     LocalClass = create_class_with_vars()
     fory = Fory(xlang=False, ref=True, strict=False, compatible=False)
+    prepare_class_serialization(fory)
 
     # Create some instances to modify class state
     LocalClass(1)  # This increments the counter
@@ -202,6 +212,7 @@ def test_nested_global_classes():
             return self.InnerGlobalClass(inner_val)
 
     fory = Fory(xlang=False, ref=True, strict=False, compatible=False)
+    prepare_class_serialization(fory)
 
     # Test serializing the outer class
     serialized_outer = fory.serialize(OuterGlobalClass)
@@ -260,6 +271,7 @@ def test_complex_local_class_scenarios():
         return OuterLocalClass
 
     fory = Fory(xlang=False, ref=True, strict=False, compatible=False)
+    prepare_class_serialization(fory)
 
     # Create complex local class with nested closures
     ComplexLocalClass = create_complex_local_scenario(5)
@@ -305,6 +317,7 @@ def test_local_class_with_multiple_inheritance():
         return LocalMultipleInheritanceClass
 
     fory = Fory(xlang=False, ref=True, strict=False, compatible=False)
+    prepare_class_serialization(fory)
 
     LocalClass = create_local_class_with_multiple_inheritance()
 
@@ -358,6 +371,14 @@ def test_dataclass_serialize():
         @staticmethod
         def h(x):
             return 10 * x
+
+    prepare_class_serialization(fory)
+    fory.type_resolver.get_type_info(LocalPerson)
+    fory.type_resolver.get_type_info(type(LocalPerson.__dataclass_params__))
+    local_field = next(iter(LocalPerson.__dataclass_fields__.values()))
+    fory.type_resolver.get_type_info(type(local_field))
+    fory.type_resolver.get_type_info(type(local_field._field_type))
+    fory.type_resolver.get_type_info(type(local_field.default))
 
     for cls in [LocalPerson, LocalPerson]:
         assert str(fory.loads(fory.dumps(cls))("Bob", 25)) == str(cls("Bob", 25))

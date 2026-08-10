@@ -102,6 +102,8 @@ def test_current_behavior():
     print("Testing current behavior with stateful objects...")
 
     fory = Fory(xlang=False, ref=True, strict=False, compatible=False)
+    for cls in (StatefulObject, ImmutableWithArgs, ImmutableOldStyle):
+        fory.type_resolver.get_type_info(cls)
 
     # Test basic stateful object
     obj1 = StatefulObject(42, "original_secret")

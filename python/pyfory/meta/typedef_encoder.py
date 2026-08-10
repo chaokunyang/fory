@@ -40,6 +40,7 @@ from pyfory.meta.typedef import (
 from pyfory.meta.metastring import MetaStringEncoder
 from pyfory._fory import NO_USER_TYPE_ID
 from pyfory.types import TypeId
+from pyfory.field import validate_local_field_identities
 
 from pyfory.serialization import Buffer
 
@@ -64,6 +65,7 @@ def encode_typedef(type_resolver, cls, include_fields: bool = True):
     type_id, user_type_id = type_resolver.get_registered_type_ids(cls)
     if include_fields and is_struct_typedef_kind(type_id):
         field_infos = build_field_infos(type_resolver, cls)
+        validate_local_field_identities(field_infos, f"class {cls.__name__}")
     else:
         field_infos = []
 

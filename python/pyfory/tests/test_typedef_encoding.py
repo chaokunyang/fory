@@ -54,6 +54,9 @@ from pyfory.meta.typedef_encoder import (
     FIELD_NAME_ENCODER,
     encode_typedef,
     prepend_header,
+    write_fields_info,
+    write_namespace,
+    write_typename,
 )
 from pyfory.meta.typedef_decoder import decode_typedef
 from pyfory.serializer import PyArraySerializer
@@ -219,6 +222,62 @@ class SharedDagLocalPayload:
     payload: List[List[List[List[pyfory.Int64]]]] = pyfory.field(ref=True)
 
 
+@dataclass
+class MetadataRemoteV1:
+    first: int
+
+
+@dataclass
+class MetadataRemoteV2:
+    first: int
+    second: str
+
+
+@dataclass
+class MetadataLocal:
+    first: int
+    second: str
+    third: List[int]
+
+
+@dataclass
+class DuplicateLocalTags:
+    first: int = pyfory.field(id=1)
+    second: int = pyfory.field(id=1)
+
+
+@dataclass
+class CollidingLocalNames:
+    foo_bar: int
+    fooBar: int
+
+
+@dataclass
+class CollidingTaggedLocalNames:
+    foo_bar: int = pyfory.field(id=1)
+    fooBar: int = pyfory.field(id=2)
+
+
+@dataclass
+class TaggedLocalField:
+    value: int = pyfory.field(id=1)
+
+
+@dataclass
+class PlaceholderLocalField:
+    __tag_7__: int = 0
+
+
+def _named_compatible_typedef(name, fields):
+    namespace, typename = name.rsplit(".", 1)
+    body = Buffer.allocate(128)
+    body.write_uint8(STRUCT_TYPEDEF_FLAG | REGISTER_BY_NAME_FLAG | typedef_module.COMPATIBLE_TYPEDEF_FLAG | len(fields))
+    write_namespace(body, namespace)
+    write_typename(body, typename)
+    write_fields_info(None, body, fields)
+    return prepend_header(body.to_bytes(0, body.get_writer_index()), False)
+
+
 def test_collection_field_type():
     """Test collection field type creation and serialization."""
     element_type = FieldType(TypeId.INT32, True, True, False)
@@ -255,6 +314,131 @@ def test_typedef_creation():
     assert len(typedef.fields) == 2
     assert typedef.encoded == b"encoded_data"
     assert typedef.is_compressed is False
+
+
+def test_local_typedef_field_identities():
+    for cls in (DuplicateLocalTags, CollidingLocalNames, CollidingTaggedLocalNames):
+        fory = Fory(xlang=True, compatible=True)
+        fory.register(cls, name=f"example.{cls.__name__}")
+        with pytest.raises(ValueError, match="Duplicate"):
+            encode_typedef(fory.type_resolver, cls)
+
+
+@pytest.mark.parametrize(
+    "fields",
+    [
+        [
+            FieldInfo(
+                "__tag_1__",
+                FieldType(TypeId.INT32, True, False, False),
+                "example.DuplicateRemote",
+                1,
+            ),
+            FieldInfo(
+                "__tag_1__",
+                FieldType(TypeId.INT32, True, False, False),
+                "example.DuplicateRemote",
+                1,
+            ),
+        ],
+        [
+            FieldInfo(
+                "foo_bar",
+                FieldType(TypeId.INT32, True, False, False),
+                "example.DuplicateRemote",
+            ),
+            FieldInfo(
+                "fooBar",
+                FieldType(TypeId.INT32, True, False, False),
+                "example.DuplicateRemote",
+            ),
+        ],
+    ],
+)
+def test_remote_field_identities(fields):
+    encoded = _named_compatible_typedef("example.DuplicateRemote", fields)
+    reader = Fory(xlang=True, compatible=True)
+    with pytest.raises(ValueError, match="Duplicate"):
+        decode_typedef(Buffer(encoded), reader.type_resolver)
+
+
+def test_remote_tag_identity_domain():
+    int_type = FieldType(TypeId.INT32, True, False, False)
+    encoded = _named_compatible_typedef(
+        "example.TaggedRemote",
+        [
+            FieldInfo("foo_bar", int_type, "example.TaggedRemote", 1),
+            FieldInfo("fooBar", int_type, "example.TaggedRemote", 2),
+        ],
+    )
+    decoded = decode_typedef(Buffer(encoded), Fory(xlang=True, compatible=True).type_resolver)
+    assert [field.tag_id for field in decoded.fields] == [1, 2]
+
+
+def test_binder_rejects_local_name_collision():
+    int_type = FieldType(TypeId.INT32, True, False, False)
+    type_def = TypeDef(
+        "example",
+        "CollidingTaggedLocalNames",
+        CollidingTaggedLocalNames,
+        TypeId.NAMED_COMPATIBLE_STRUCT,
+        [FieldInfo("fooBar", int_type, "example.CollidingTaggedLocalNames")],
+    )
+    reader = Fory(xlang=True, compatible=True)
+    with pytest.raises(ValueError, match="Duplicate compatible field identity"):
+        type_def.create_serializer(reader.type_resolver)
+
+
+def test_field_identity_domains():
+    int_type = FieldType(TypeId.INT32, True, False, False)
+    named = _named_compatible_typedef(
+        "example.TaggedLocalField",
+        [FieldInfo("value", int_type, "example.TaggedLocalField")],
+    )
+    reader = Fory(xlang=True, compatible=True)
+    reader.register(TaggedLocalField, name="example.TaggedLocalField")
+    type_info = _read_remote_typedef(reader, TypeId.NAMED_COMPATIBLE_STRUCT, named)
+    assert type_info.serializer._field_infos[0].name == "value"
+    assert type_info.serializer._field_infos[0].assign is True
+
+    tagged_field = FieldInfo("__tag_1__", int_type, "example.TaggedLocalField", 1)
+    named_field = FieldInfo("value", int_type, "example.TaggedLocalField")
+    for fields in ([tagged_field, named_field], [named_field, tagged_field]):
+        mixed = _named_compatible_typedef(
+            "example.TaggedLocalField",
+            fields,
+        )
+        reader = Fory(xlang=True, compatible=True)
+        reader.register(TaggedLocalField, name="example.TaggedLocalField")
+        with pytest.raises(TypeNotCompatibleError, match="reuses local field"):
+            _read_remote_typedef(reader, TypeId.NAMED_COMPATIBLE_STRUCT, mixed)
+
+    placeholder = _named_compatible_typedef(
+        "example.PlaceholderLocalField",
+        [FieldInfo("__tag_7__", int_type, "example.PlaceholderLocalField", 7)],
+    )
+    reader = Fory(xlang=True, compatible=True)
+    reader.register(PlaceholderLocalField, name="example.PlaceholderLocalField")
+    type_info = _read_remote_typedef(reader, TypeId.NAMED_COMPATIBLE_STRUCT, placeholder)
+    assert type_info.serializer._field_infos[0].assign is False
+
+
+def test_versions_share_local_metadata():
+    name = "example.MetadataLocal"
+    reader = Fory(xlang=True, compatible=True)
+    reader.register(MetadataLocal, name=name)
+    canonical = reader.type_resolver.get_serializer(MetadataLocal)
+    _, first_encoded = _remote_typedef(True, name, MetadataRemoteV1)
+    _, second_encoded = _remote_typedef(True, name, MetadataRemoteV2)
+
+    first = _read_remote_typedef(reader, TypeId.NAMED_COMPATIBLE_STRUCT, first_encoded)
+    second = _read_remote_typedef(reader, TypeId.NAMED_COMPATIBLE_STRUCT, second_encoded)
+
+    assert len(canonical._local_metadata.field_infos) == 3
+    assert first.serializer._local_metadata is canonical._local_metadata
+    assert second.serializer._local_metadata is canonical._local_metadata
+    assert first.serializer._type_hints is canonical._type_hints
+    assert second.serializer._default_values_factory is canonical._default_values_factory
 
 
 def test_field_info_creation():
@@ -709,18 +893,16 @@ def test_exact_local_struct_typedef_populates_cache(xlang):
         max_schema_versions_per_type=1,
     )
     reader.register(SimpleTypeDef, name="example.SimpleTypeDef")
+    local_type_info = reader.type_resolver.get_type_info(SimpleTypeDef)
     type_id, _ = reader.type_resolver.get_registered_type_ids(SimpleTypeDef)
-    encoded = encode_typedef(reader.type_resolver, SimpleTypeDef).encoded
+    encoded = local_type_info.type_def.encoded
     header = Buffer(encoded).read_int64()
-
-    type_info = _read_remote_typedef(reader, type_id, encoded)
-    assert type_info.cls is SimpleTypeDef
-    assert reader.type_resolver._meta_shared_type_info[header].cls is SimpleTypeDef
+    assert reader.type_resolver._meta_shared_type_info[header] is local_type_info
 
     invalid_body = bytearray(encoded)
     invalid_body[-1] ^= 1
     type_info = _read_remote_typedef(reader, type_id, bytes(invalid_body))
-    assert type_info.cls is SimpleTypeDef
+    assert type_info is local_type_info
 
 
 @pytest.mark.parametrize("xlang", [False, True])

@@ -21,6 +21,7 @@ import datetime
 import decimal
 import enum
 import math
+import struct
 from typing import Dict, Any, List, Set, Optional, Tuple
 
 import pytest
@@ -39,6 +40,9 @@ from pyfory.serializer import FixedInt32Serializer
 from pyfory.struct import DataClassSerializer, build_default_values_factory, compute_struct_fingerprint
 from pyfory.type_util import get_type_hints
 from pyfory.types import TypeId
+
+
+REFERENCE_BYTES = struct.calcsize("P")
 
 
 def ser_de(fory, obj):
@@ -60,6 +64,135 @@ def compat_ser(remote_cls, local_cls, value, type_id):
     writer.register_type(remote_cls, type_id=type_id)
     reader.register_type(local_cls, type_id=type_id)
     return writer, reader, writer.serialize(value)
+
+
+@dataclass
+class RemoteCompatibleAliases:
+    first: Any = pyfory.field(ref=True)
+    second: Any = pyfory.field(ref=True)
+
+
+@dataclass
+class LocalCompatibleAliases:
+    first: Set[pyfory.Int64] = pyfory.field(ref=True)
+    second: Set[pyfory.Int64] = pyfory.field(ref=True)
+
+
+@dataclass
+class NarrowCompatibleDefaults:
+    value: int
+
+
+@dataclass
+class WideCompatibleDefaults:
+    value: int
+    values: List[int]
+
+
+@pyfory.dataclass(slots=True)
+class SlottedDataBase:
+    base: int
+
+
+@dataclass
+class HybridDataChild(SlottedDataBase):
+    child: int
+
+
+@dataclass
+class IteratorSlottedData:
+    __slots__ = iter(("left", "right"))
+
+    left: int
+    right: int
+
+
+class ShadowedDataBase:
+    __slots__ = ("value",)
+
+
+@dataclass
+class ShadowedDataChild(ShadowedDataBase):
+    value: int = 0
+
+
+def _compatible_payload(value, remote_cls, name):
+    writer = Fory(xlang=True, compatible=True, ref=True)
+    writer.register_type(remote_cls, name=name)
+    return writer.serialize(value)
+
+
+def _compatible_reader(local_cls, name, budget):
+    reader = Fory(
+        xlang=True,
+        compatible=True,
+        ref=True,
+        max_graph_memory_bytes=budget,
+    )
+    reader.register_type(local_cls, name=name)
+    return reader
+
+
+def test_alias_final_owner_budget():
+    shared = [1, 2]
+    payload = _compatible_payload(
+        RemoteCompatibleAliases(shared, shared),
+        RemoteCompatibleAliases,
+        "example.CompatibleAliases",
+    )
+    struct_bytes = 16 * REFERENCE_BYTES
+    raw_list_bytes = 6 * REFERENCE_BYTES
+    final_set_bytes = 8 * REFERENCE_BYTES
+    budget = struct_bytes + raw_list_bytes + final_set_bytes
+
+    with pytest.raises(ValueError, match="Estimated graph memory budget exceeded"):
+        _compatible_reader(LocalCompatibleAliases, "example.CompatibleAliases", budget - 1).deserialize(payload)
+
+    restored = _compatible_reader(LocalCompatibleAliases, "example.CompatibleAliases", budget).deserialize(payload)
+    assert restored.first == {1, 2}
+    assert restored.first is restored.second
+
+
+def test_missing_collection_budget():
+    payload = _compatible_payload(
+        NarrowCompatibleDefaults(7),
+        NarrowCompatibleDefaults,
+        "example.CompatibleDefaults",
+    )
+    budget = (16 + 4) * REFERENCE_BYTES
+    with pytest.raises(ValueError, match="Estimated graph memory budget exceeded"):
+        _compatible_reader(WideCompatibleDefaults, "example.CompatibleDefaults", budget - 1).deserialize(payload)
+
+    restored = _compatible_reader(WideCompatibleDefaults, "example.CompatibleDefaults", budget).deserialize(payload)
+    assert restored == WideCompatibleDefaults(7, [])
+
+
+def test_hybrid_dataclass_layout_budget():
+    name = "example.HybridDataChild"
+    payload = _compatible_payload(HybridDataChild(1, 2), HybridDataChild, name)
+    budget = 15 * REFERENCE_BYTES
+    with pytest.raises(ValueError, match="Estimated graph memory budget exceeded"):
+        _compatible_reader(HybridDataChild, name, budget - 1).deserialize(payload)
+
+    restored = _compatible_reader(HybridDataChild, name, budget).deserialize(payload)
+    assert restored == HybridDataChild(1, 2)
+    assert restored.__dict__ == {"child": 2}
+
+
+@pytest.mark.parametrize(
+    "value,name,budget",
+    [
+        (IteratorSlottedData(1, 2), "example.IteratorSlottedData", 6 * REFERENCE_BYTES),
+        (ShadowedDataChild(1), "example.ShadowedDataChild", 15 * REFERENCE_BYTES),
+    ],
+)
+def test_descriptor_layout_budget(value, name, budget):
+    payload = _compatible_payload(value, type(value), name)
+    with pytest.raises(ValueError, match="Estimated graph memory budget exceeded"):
+        _compatible_reader(type(value), name, budget - 1).deserialize(payload)
+
+    restored = _compatible_reader(type(value), name, budget).deserialize(payload)
+    assert restored == value
 
 
 @dataclass
@@ -580,14 +713,18 @@ def test_integer_widening_direct():
 
     writer, reader, payload = compat_ser(RemoteInt32Scalar, LocalInt64Scalar, RemoteInt32Scalar(42), 751)
     assert reader.deserialize(payload) == LocalInt64Scalar(42)
-    type_info = next(iter(reader.type_resolver._meta_shared_type_info.values()))
+    encoded = writer.type_resolver.get_type_info(RemoteInt32Scalar).type_def.encoded
+    remote_header = int.from_bytes(encoded[:8], "little", signed=True)
+    type_info = reader.type_resolver._meta_shared_type_info[remote_header]
     field_serializer = type_info.serializer._serializers[0]
     assert type(field_serializer).__name__ == "Int32Serializer"
     assert not isinstance(field_serializer, CompatibleScalarFieldSerializer)
 
     writer, reader, payload = compat_ser(RemoteInt64Scalar, LocalInt8Scalar, RemoteInt64Scalar(42), 752)
     assert reader.deserialize(payload) == LocalInt8Scalar(42)
-    type_info = next(iter(reader.type_resolver._meta_shared_type_info.values()))
+    encoded = writer.type_resolver.get_type_info(RemoteInt64Scalar).type_def.encoded
+    remote_header = int.from_bytes(encoded[:8], "little", signed=True)
+    type_info = reader.type_resolver._meta_shared_type_info[remote_header]
     assert isinstance(type_info.serializer._serializers[0], CompatibleScalarFieldSerializer)
 
 
@@ -663,6 +800,7 @@ def test_inheritance():
     print(type_hints)
     assert type_hints.keys() == {"f1", "f2", "f3"}
     fory = Fory(xlang=False, ref=True, strict=False, compatible=False)
+    fory.type_resolver.get_type_info(ChildClass1)
     obj = ChildClass1(f1="a", f2=-10, f3={"a": -10.0, "b": 1 / 3})
     assert ser_de(fory, obj) == obj
     assert type(fory.type_resolver.get_serializer(ChildClass1)) is pyfory.DataClassSerializer
@@ -814,6 +952,7 @@ def test_duration_and_decimal_fields_use_declared_serializers():
 )
 def test_bool_field_coercion(value, expected):
     fory = Fory(xlang=False, ref=True, strict=False, compatible=False)
+    fory.type_resolver.get_type_info(BoolCoercionObject)
     result = ser_de(fory, BoolCoercionObject(value))
     assert result.b is expected
 
@@ -821,6 +960,7 @@ def test_bool_field_coercion(value, expected):
 def test_bool_field_coercion_numpy_bool():
     np = pytest.importorskip("numpy")
     fory = Fory(xlang=False, ref=True, strict=False, compatible=False)
+    fory.type_resolver.get_type_info(BoolCoercionObject)
 
     result_true = ser_de(fory, BoolCoercionObject(np.bool_(True)))
     assert result_true.b is True
@@ -917,6 +1057,7 @@ def test_data_class_serializer_xlang():
 @pytest.mark.parametrize("track_ref", [False, True])
 def test_dataclass_with_typed_tuple_field(track_ref):
     fory = Fory(xlang=False, ref=track_ref, strict=False, compatible=False)
+    fory.type_resolver.get_type_info(TupleFieldObject)
     obj = TupleFieldObject(bar=("a", 1))
     assert ser_de(fory, obj) == obj
 
@@ -1131,6 +1272,8 @@ def test_optional_fields(xlang, compatible):
     fory = Fory(xlang=xlang, ref=True, compatible=compatible, strict=False)
     if xlang:
         fory.register_type(OptionalFieldsObject, name="example.OptionalFieldsObject")
+    else:
+        fory.type_resolver.get_type_info(OptionalFieldsObject)
 
     obj_with_none = OptionalFieldsObject(f1=None, f2=None, f3=None, f4=42, f5="test")
     result = ser_de(fory, obj_with_none)
@@ -1171,6 +1314,9 @@ def test_nested_optional_fields(xlang, compatible):
     if xlang:
         fory.register_type(ComplexObject, name="example.ComplexObject")
         fory.register_type(NestedOptionalObject, name="example.NestedOptionalObject")
+    else:
+        fory.type_resolver.get_type_info(ComplexObject)
+        fory.type_resolver.get_type_info(NestedOptionalObject)
 
     obj_with_none = NestedOptionalObject(f1=None, f2=None, f3="test")
     result = ser_de(fory, obj_with_none)

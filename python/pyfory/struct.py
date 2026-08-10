@@ -28,6 +28,7 @@ import reprlib
 import struct
 import sys
 import typing
+import types
 from typing import List, Dict
 
 from pyfory.annotation import (
@@ -61,7 +62,7 @@ from pyfory.type_util import (
 from pyfory.serialization import Buffer
 from pyfory.serialization import ENABLE_FORY_CYTHON_SERIALIZATION
 from pyfory.error import TypeNotCompatibleError
-from pyfory.resolver import NULL_FLAG, NOT_NULL_VALUE_FLAG
+from pyfory.resolver import NULL_FLAG, NOT_NULL_VALUE_FLAG, REF_FLAG
 from pyfory.field import (
     ForyFieldMeta,
     extract_field_meta,
@@ -86,8 +87,10 @@ _REFERENCE_BYTES = struct.calcsize("P")
 # Lower-bound shallow owner costs for retained Python struct shapes. Normal objects retain an
 # instance dict for field storage; slotted objects store field references in object slots.
 _SLOTTED_STRUCT_OWNER_BYTES = 4 * _REFERENCE_BYTES
-_DICT_BACKED_STRUCT_OWNER_BYTES = 4 * _REFERENCE_BYTES
 _INSTANCE_DICT_OWNER_BYTES = 8 * _REFERENCE_BYTES
+_LIST_OWNER_BYTES = 4 * _REFERENCE_BYTES
+_SET_OWNER_BYTES = 6 * _REFERENCE_BYTES
+_DICT_OWNER_BYTES = 8 * _REFERENCE_BYTES
 
 _MISSING_DEFAULT_INT_TYPES = {
     int,
@@ -194,6 +197,100 @@ class FieldInfo:
     field_type: object = None  # Recursive TypeDef schema node for this field
     assign: bool = True  # Whether a remote field value may be assigned locally
     validation_field_type: object = None  # Local schema used for compatible-read validation
+
+
+@dataclasses.dataclass(frozen=True)
+class MissingFieldDefault:
+    """A missing-field value factory and its Fory-owned shallow allocation."""
+
+    factory: typing.Callable[[], typing.Any]
+    graph_memory_bytes: int = 0
+
+    def __call__(self):
+        return self.factory()
+
+
+@dataclasses.dataclass(frozen=True)
+class LocalStructMetadata:
+    """Immutable class-wide metadata shared by every accepted schema version."""
+
+    type_hints: typing.Mapping[str, typing.Any]
+    unwrapped_hints: typing.Mapping[str, typing.Any]
+    field_names: typing.Tuple[str, ...]
+    field_name_set: typing.FrozenSet[str]
+    default_values_factory: typing.Mapping[str, MissingFieldDefault]
+    slot_names: typing.FrozenSet[str]
+    slot_count: int
+    has_instance_dict: bool
+    uses_attribute_access: bool
+    field_infos: tuple = ()
+    field_types: typing.Mapping[str, typing.Any] = dataclasses.field(default_factory=lambda: types.MappingProxyType({}))
+
+
+def _class_member_layout(clz: type):
+    """Return effective slots, physical slot count, and instance-dict layout."""
+    effective_slot_names = set()
+    resolved_names = set()
+    physical_slot_count = 0
+    effective_dict_descriptor = False
+    for base in clz.__mro__:
+        for name, descriptor in base.__dict__.items():
+            is_member_descriptor = isinstance(descriptor, types.MemberDescriptorType)
+            if is_member_descriptor:
+                # Class creation leaves member descriptors behind even when the __slots__
+                # declaration was a one-shot iterator. Count every physical slot, including
+                # storage hidden by a more-derived attribute with the same name.
+                physical_slot_count += 1
+            if name in resolved_names:
+                continue
+            resolved_names.add(name)
+            if is_member_descriptor:
+                effective_slot_names.add(name)
+            elif name == "__dict__":
+                effective_dict_descriptor = isinstance(descriptor, types.GetSetDescriptorType)
+    return (
+        frozenset(effective_slot_names),
+        physical_slot_count,
+        bool(getattr(clz, "__dictoffset__", 0)),
+        effective_dict_descriptor,
+    )
+
+
+def build_local_struct_metadata(
+    type_resolver,
+    clz: type,
+    *,
+    field_infos=(),
+    field_types=None,
+) -> LocalStructMetadata:
+    """Build the one immutable local-layout owner for a registered class."""
+    type_hints = get_type_hints(clz)
+    unwrapped_hints = {field_name: unwrap_optional(hint)[0] for field_name, hint in type_hints.items()}
+    field_names = tuple(field.name for field in dataclasses.fields(clz)) if dataclasses.is_dataclass(clz) else ()
+    default_values_factory = build_default_values_factory(type_resolver, type_hints, dataclasses.fields(clz)) if dataclasses.is_dataclass(clz) else {}
+    slot_names, slot_count, has_instance_dict, _ = _class_member_layout(clz)
+    return LocalStructMetadata(
+        types.MappingProxyType(type_hints),
+        types.MappingProxyType(unwrapped_hints),
+        field_names,
+        frozenset(field_names),
+        types.MappingProxyType(default_values_factory),
+        slot_names,
+        slot_count,
+        has_instance_dict,
+        bool(slot_count) or not has_instance_dict,
+        tuple(field_infos),
+        types.MappingProxyType(dict(field_types or {})),
+    )
+
+
+def struct_graph_memory(local_metadata: LocalStructMetadata, materialized_fields) -> int:
+    """Return shallow storage for the concrete local instance layout."""
+    graph_memory_bytes = _SLOTTED_STRUCT_OWNER_BYTES + local_metadata.slot_count * _REFERENCE_BYTES
+    if local_metadata.has_instance_dict:
+        dict_fields = sum(field_name not in local_metadata.slot_names for field_name in materialized_fields)
+        graph_memory_bytes += _INSTANCE_DICT_OWNER_BYTES + dict_fields * 2 * _REFERENCE_BYTES
+    return graph_memory_bytes
 
 
 class UnknownStructSerializer(Serializer):
@@ -526,7 +623,7 @@ def resolve_missing_field_default(
     dc_field: dataclasses.Field,
     type_resolver,
     type_hints: dict[str, typing.Any],
-) -> typing.Callable[[], typing.Any]:
+) -> MissingFieldDefault:
     type_hint = type_hints.get(dc_field.name, typing.Any)
     unwrapped_type, is_optional = unwrap_optional(type_hint)
     meta = extract_field_meta(dc_field)
@@ -538,10 +635,10 @@ def resolve_missing_field_default(
             members = tuple(unwrapped_type)
             if members:
                 default_value = members[0]
-        return lambda value=default_value: value
+        return MissingFieldDefault(lambda value=default_value: value)
 
     if dc_field.default_factory is not dataclasses.MISSING:
-        return dc_field.default_factory
+        return MissingFieldDefault(dc_field.default_factory)
 
     if not effective_nullable:
         unwrapped_type = normalize_fory_type(unwrapped_type)
@@ -551,24 +648,24 @@ def resolve_missing_field_default(
             members = tuple(unwrapped_type)
             if members:
                 default_value = members[0]
-                return lambda value=default_value: value
+                return MissingFieldDefault(lambda value=default_value: value)
         if origin is list or origin == typing.List:
-            return lambda: []
+            return MissingFieldDefault(list, _LIST_OWNER_BYTES)
         if origin is set or origin == typing.Set:
-            return lambda: set()
+            return MissingFieldDefault(set, _SET_OWNER_BYTES)
         if origin is dict or origin == typing.Dict:
-            return lambda: {}
+            return MissingFieldDefault(dict, _DICT_OWNER_BYTES)
         if unwrapped_type is bool:
-            return lambda: False
+            return MissingFieldDefault(lambda: False)
         if unwrapped_type in _MISSING_DEFAULT_INT_TYPES:
-            return lambda: 0
+            return MissingFieldDefault(lambda: 0)
         if unwrapped_type in _MISSING_DEFAULT_FLOAT_TYPES:
-            return lambda: 0.0
+            return MissingFieldDefault(lambda: 0.0)
         if unwrapped_type is str:
-            return lambda: ""
+            return MissingFieldDefault(lambda: "")
         if unwrapped_type is bytes:
-            return lambda: b""
-    return lambda: None
+            return MissingFieldDefault(lambda: b"")
+    return MissingFieldDefault(lambda: None)
 
 
 def _resolve_missing_field_default(dc_field, type_resolver, type_hints):
@@ -593,11 +690,15 @@ class DataClassSerializer(Serializer):
         ref_fields: Dict[str, bool] = None,
         field_infos: List[FieldInfo] = None,
         fields_from_typedef: bool = False,
+        local_metadata: typing.Optional[LocalStructMetadata] = None,
     ):
         super().__init__(type_resolver, clz)
 
-        self._type_hints = get_type_hints(clz)
-        self._has_slots = hasattr(clz, "__slots__")
+        if local_metadata is None:
+            local_metadata = build_local_struct_metadata(type_resolver, clz)
+        self._local_metadata = local_metadata
+        self._type_hints = local_metadata.type_hints
+        self._has_slots = local_metadata.uses_attribute_access
 
         self._fields_from_typedef = fields_from_typedef or (field_names is not None and serializers is not None)
         if field_infos is not None:
@@ -641,7 +742,7 @@ class DataClassSerializer(Serializer):
                         unwrapped_type, _ = unwrap_optional(self._type_hints.get(key, typing.Any))
                         self._serializers[index] = infer_field(key, unwrapped_type, visitor, types_path=[])
 
-        self._unwrapped_hints = self._compute_unwrapped_hints()
+        self._unwrapped_hints = local_metadata.unwrapped_hints
         if self._fields_from_typedef:
             hash_str = compute_struct_fingerprint(self.type_resolver, self._field_names, self._serializers, self._nullable_fields, self._field_infos)
             hash_bytes = hash_str.encode("utf-8")
@@ -659,7 +760,7 @@ class DataClassSerializer(Serializer):
             )
 
         self._field_name_interned = {name: sys.intern(name) for name in self._field_names}
-        self._current_class_field_names = set(self._get_field_names(self.type_))
+        self._current_class_field_names = local_metadata.field_name_set
         self._assign_fields = [
             bool(getattr(self._field_infos[index], "assign", True)) if index < len(self._field_infos) else True
             for index in range(len(self._field_names))
@@ -677,11 +778,7 @@ class DataClassSerializer(Serializer):
         self._has_missing_fields = any(
             field_name not in self._current_class_field_names or not self._assign_fields[index] for index, field_name in enumerate(self._field_names)
         )
-        self._default_values_factory = (
-            build_default_values_factory(self.type_resolver, self._type_hints, dataclasses.fields(self.type_))
-            if dataclasses.is_dataclass(self.type_)
-            else {}
-        )
+        self._default_values_factory = local_metadata.default_values_factory
         self._missing_field_defaults = self._build_missing_field_defaults()
         from pyfory.converter import CompatibleScalarFieldSerializer
 
@@ -700,11 +797,8 @@ class DataClassSerializer(Serializer):
             or (self._serializers[index] is not None and self._serializers[index].read_data_always_advances)
             for index, field_name in enumerate(self._field_names)
         )
-        if self._has_slots:
-            self._graph_memory_bytes = _SLOTTED_STRUCT_OWNER_BYTES + len(self._field_names) * _REFERENCE_BYTES
-        else:
-            # Dict-backed instances retain an instance dict with key and value references per field.
-            self._graph_memory_bytes = _DICT_BACKED_STRUCT_OWNER_BYTES + _INSTANCE_DICT_OWNER_BYTES + len(self._field_names) * 2 * _REFERENCE_BYTES
+        materialized_fields = self._assigned_field_names | {field_name for field_name, _ in self._missing_field_defaults}
+        self._graph_memory_bytes = struct_graph_memory(local_metadata, materialized_fields)
 
     def _get_field_names(self, clz):
         if hasattr(clz, "__dict__"):
@@ -717,9 +811,6 @@ class DataClassSerializer(Serializer):
                 return [slots]
             return sorted(slots)
         return []
-
-    def _compute_unwrapped_hints(self):
-        return {field_name: unwrap_optional(hint)[0] for field_name, hint in self._type_hints.items()}
 
     def _build_missing_field_defaults(self):
         if not self.type_resolver.compatible or not self._default_values_factory:
@@ -783,20 +874,66 @@ class DataClassSerializer(Serializer):
             return read_context.read_no_ref()
         return read_context.read_no_ref(serializer=serializer)
 
-    def _default_field_value(self, field_name):
+    def _default_field_value(self, read_context, field_name):
         default_factory = self._default_values_factory.get(field_name)
         if default_factory is None:
             return None
+        if default_factory.graph_memory_bytes:
+            read_context.reserve_graph_memory(default_factory.graph_memory_bytes)
         return default_factory()
 
-    def _assign_read_field_value(self, obj, obj_dict, field_name, field_value, validation_field_type):
-        if validation_field_type is not None:
-            from pyfory.meta.typedef import coerce_assignable_value, is_value_assignable
+    def _finalize_field_value(self, read_context, field_name, field_value, validation_field_type):
+        from pyfory.meta.typedef import (
+            coerce_assignable_value,
+            coercion_graph_memory,
+            is_value_assignable,
+        )
 
-            if not is_value_assignable(field_value, validation_field_type):
-                field_value = self._default_field_value(field_name)
+        if not is_value_assignable(field_value, validation_field_type):
+            return self._default_field_value(read_context, field_name)
+        graph_memory_bytes = coercion_graph_memory(field_value, validation_field_type)
+        if graph_memory_bytes:
+            read_context.reserve_graph_memory(graph_memory_bytes)
+        return coerce_assignable_value(field_value, validation_field_type)
+
+    def _read_validated_field_value(
+        self,
+        read_context,
+        field_name,
+        serializer,
+        is_nullable,
+        is_dynamic,
+        is_basic,
+        is_tracking_ref,
+        is_compatible_scalar_field,
+        validation_field_type,
+    ):
+        if is_tracking_ref:
+            ref_id = read_context.try_preserve_ref_id()
+            if ref_id == REF_FLAG:
+                # A back-reference preserves the first materialized owner and
+                # identity; compatible conversion never replays on a ref hit.
+                return read_context.get_read_ref()
+            if ref_id == NULL_FLAG:
+                field_value = None
             else:
-                field_value = coerce_assignable_value(field_value, validation_field_type)
+                field_value = read_context._read_non_ref_internal(None if is_dynamic else serializer)
+            field_value = self._finalize_field_value(read_context, field_name, field_value, validation_field_type)
+            if ref_id >= 0:
+                read_context.set_read_ref(ref_id, field_value)
+            return field_value
+        field_value = self._read_field_value(
+            read_context,
+            serializer,
+            is_nullable,
+            is_dynamic,
+            is_basic,
+            is_tracking_ref,
+            is_compatible_scalar_field,
+        )
+        return self._finalize_field_value(read_context, field_name, field_value, validation_field_type)
+
+    def _assign_read_field_value(self, obj, obj_dict, field_name, field_value):
         interned_name = self._field_name_interned[field_name]
         if obj_dict is not None:
             obj_dict[interned_name] = field_value
@@ -883,24 +1020,35 @@ class DataClassSerializer(Serializer):
                         is_compatible_scalar_field,
                     )
                     continue
-                field_value = self._read_field_value(
-                    read_context,
-                    serializer,
-                    is_nullable,
-                    is_dynamic,
-                    is_basic,
-                    is_tracking_ref,
-                    is_compatible_scalar_field,
-                )
                 validation_field_type = self._validation_field_types[index]
                 if validation_field_type is None:
+                    field_value = self._read_field_value(
+                        read_context,
+                        serializer,
+                        is_nullable,
+                        is_dynamic,
+                        is_basic,
+                        is_tracking_ref,
+                        is_compatible_scalar_field,
+                    )
                     interned_name = self._field_name_interned[field_name]
                     if obj_dict is not None:
                         obj_dict[interned_name] = field_value
                     else:
                         setattr(obj, interned_name, field_value)
                 else:
-                    self._assign_read_field_value(obj, obj_dict, field_name, field_value, validation_field_type)
+                    field_value = self._read_validated_field_value(
+                        read_context,
+                        field_name,
+                        serializer,
+                        is_nullable,
+                        is_dynamic,
+                        is_basic,
+                        is_tracking_ref,
+                        is_compatible_scalar_field,
+                        validation_field_type,
+                    )
+                    self._assign_read_field_value(obj, obj_dict, field_name, field_value)
         else:
             if not self._has_validation_fields:
                 for index, field_name in enumerate(self._field_names):
@@ -932,27 +1080,40 @@ class DataClassSerializer(Serializer):
                     is_tracking_ref = self._ref_fields.get(field_name, False)
                     is_basic = self._basic_field_flags[index]
                     is_compatible_scalar_field = self._compatible_scalar_field_flags[index]
-                    field_value = self._read_field_value(
-                        read_context,
-                        serializer,
-                        is_nullable,
-                        is_dynamic,
-                        is_basic,
-                        is_tracking_ref,
-                        is_compatible_scalar_field,
-                    )
                     validation_field_type = self._validation_field_types[index]
                     if validation_field_type is None:
+                        field_value = self._read_field_value(
+                            read_context,
+                            serializer,
+                            is_nullable,
+                            is_dynamic,
+                            is_basic,
+                            is_tracking_ref,
+                            is_compatible_scalar_field,
+                        )
                         interned_name = self._field_name_interned[field_name]
                         if obj_dict is not None:
                             obj_dict[interned_name] = field_value
                         else:
                             setattr(obj, interned_name, field_value)
                     else:
-                        self._assign_read_field_value(obj, obj_dict, field_name, field_value, validation_field_type)
+                        field_value = self._read_validated_field_value(
+                            read_context,
+                            field_name,
+                            serializer,
+                            is_nullable,
+                            is_dynamic,
+                            is_basic,
+                            is_tracking_ref,
+                            is_compatible_scalar_field,
+                            validation_field_type,
+                        )
+                        self._assign_read_field_value(obj, obj_dict, field_name, field_value)
 
         if self._missing_field_defaults:
             for field_name, default_factory in self._missing_field_defaults:
+                if default_factory.graph_memory_bytes:
+                    read_context.reserve_graph_memory(default_factory.graph_memory_bytes)
                 value = default_factory()
                 if obj_dict is not None:
                     obj_dict[field_name] = value
@@ -972,9 +1133,14 @@ class DataClassStubSerializer(DataClassSerializer):
         return self._replace().read(read_context)
 
     def _replace(self):
-        typeinfo = self.type_resolver.get_type_info(self.type_)
-        typeinfo.serializer = DataClassSerializer(self.type_resolver, self.type_)
-        return typeinfo.serializer
+        typeinfo = self.type_resolver.get_type_info(self.type_, create=False)
+        serializer = None if typeinfo is None else typeinfo.serializer
+        # Recursive serializers may retain this stub while the canonical
+        # serializer is being built. Root-entry finalization must commit that
+        # serializer before use; the stub must never repair registry state later.
+        if serializer is None or isinstance(serializer, DataClassStubSerializer):
+            raise RuntimeError(f"Serializer finalization incomplete for {self.type_}")
+        return serializer
 
 
 basic_types = {

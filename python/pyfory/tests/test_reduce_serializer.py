@@ -19,6 +19,11 @@ from pyfory import Fory
 from pyfory.serializer import ReduceSerializer
 
 
+def prepare_reduce_types(fory, *classes):
+    for cls in (type, type(abs), type(iter([])), type(iter({}.items())), *classes):
+        fory.type_resolver.get_type_info(cls)
+
+
 class BasicReduceObject:
     """Object that implements __reduce__ returning (callable, args)"""
 
@@ -140,6 +145,7 @@ def test_basic_reduce_object():
     fory = Fory(xlang=False, ref=True, strict=False, compatible=False)
 
     obj = BasicReduceObject(42, 3)
+    prepare_reduce_types(fory, BasicReduceObject)
 
     # Verify ReduceSerializer is used
     serializer = fory.type_resolver.get_serializer(BasicReduceObject)
@@ -159,6 +165,7 @@ def test_reduce_with_state_object():
     fory = Fory(xlang=False, ref=True, strict=False, compatible=False)
 
     obj = ReduceWithStateObject("test", {"key": "value"})
+    prepare_reduce_types(fory, ReduceWithStateObject)
 
     # Verify ReduceSerializer is used
     serializer = fory.type_resolver.get_serializer(ReduceWithStateObject)
@@ -179,6 +186,7 @@ def test_reduce_ex_object():
     fory = Fory(xlang=False, ref=True, strict=False, compatible=False)
 
     obj = ReduceExObject(5, 7)
+    prepare_reduce_types(fory, ReduceExObject)
 
     # Verify ReduceSerializer is used
     serializer = fory.type_resolver.get_serializer(ReduceExObject)
@@ -199,6 +207,7 @@ def test_reduce_with_list_items():
     fory = Fory(xlang=False, ref=True, strict=False, compatible=False)
 
     obj = ReduceWithListItems([1, 2, 3, 4])
+    prepare_reduce_types(fory, ReduceWithListItems)
 
     # Verify ReduceSerializer is used
     serializer = fory.type_resolver.get_serializer(ReduceWithListItems)
@@ -218,6 +227,7 @@ def test_reduce_with_dict_items():
     fory = Fory(xlang=False, ref=True, strict=False, compatible=False)
 
     obj = ReduceWithDictItems({"a": 1, "b": 2})
+    prepare_reduce_types(fory, ReduceWithDictItems)
 
     # Verify ReduceSerializer is used
     serializer = fory.type_resolver.get_serializer(ReduceWithDictItems)
@@ -237,6 +247,7 @@ def test_reduce_precedence_over_stateful():
     fory = Fory(xlang=False, ref=True, strict=False, compatible=False)
 
     obj = BothReduceAndStateful(100)
+    prepare_reduce_types(fory, BothReduceAndStateful)
 
     # Verify ReduceSerializer is used, not StatefulSerializer
     serializer = fory.type_resolver.get_serializer(BothReduceAndStateful)
@@ -259,6 +270,7 @@ def test_reference_tracking():
     obj1 = BasicReduceObject(42)
     obj2 = BasicReduceObject(42)
     container = [obj1, obj1, obj2]  # obj1 appears twice
+    prepare_reduce_types(fory, BasicReduceObject)
 
     serialized = fory.serialize(container)
     deserialized = fory.deserialize(serialized)
@@ -278,6 +290,7 @@ def test_nested_reduce_objects():
 
     inner = BasicReduceObject(10, 2)
     outer = ReduceWithStateObject("outer", {"inner": inner})
+    prepare_reduce_types(fory, BasicReduceObject, ReduceWithStateObject)
 
     serialized = fory.serialize(outer)
     deserialized = fory.deserialize(serialized)
@@ -294,6 +307,7 @@ def test_cross_language_compatibility():
     fory = Fory(xlang=False, ref=True, strict=False, compatible=False)
 
     obj = BasicReduceObject(123, 4)
+    prepare_reduce_types(fory, BasicReduceObject)
 
     # Serialize with Python
     serialized = fory.serialize(obj)

@@ -81,7 +81,10 @@ def _small_hash_collision(shared_registry):
 
 def _write_meta_string(buffer, encoded_meta_string):
     buffer.write_var_uint32(encoded_meta_string.length << 1)
-    buffer.write_int8(encoded_meta_string.encoding)
+    if 0 < encoded_meta_string.length <= 16:
+        buffer.write_int8(encoded_meta_string.encoding)
+    elif encoded_meta_string.length > 16:
+        buffer.write_int64(encoded_meta_string.hashcode)
     buffer.write_bytes(encoded_meta_string.data)
 
 
@@ -200,6 +203,35 @@ def test_cython_small_metastring_collision():
     assert reader.read_encoded_meta_string(buffer).data == collision.data
 
 
+@pytest.mark.skipif(CythonMetaStringReader is None, reason="Cython serialization extension is unavailable")
+@pytest.mark.parametrize("value", ["cacheKey", "cache-key-" * 30])
+def test_cython_metastring_cache_survives_reset(value):
+    class NonCachingRegistry:
+        def __init__(self):
+            self.calls = 0
+
+        def get_or_create_encoded_meta_string(self, data, hashcode):
+            self.calls += 1
+            return EncodedMetaString(data, hashcode)
+
+    encoder = MetaStringEncoder("$", "_")
+    encoded_meta_string = SharedRegistry().get_encoded_meta_string(encoder.encode(value))
+    registry = NonCachingRegistry()
+    reader = CythonMetaStringReader(registry)
+    buffer = Buffer.allocate(512)
+    _write_meta_string(buffer, encoded_meta_string)
+
+    buffer.set_reader_index(0)
+    first = reader.read_encoded_meta_string(buffer)
+    reader.reset()
+    buffer.set_reader_index(0)
+    second = reader.read_encoded_meta_string(buffer)
+
+    assert second is first
+    assert second.hashcode == encoded_meta_string.hashcode
+    assert registry.calls == 1
+
+
 @pytest.mark.skipif(
     not ENABLE_FORY_CYTHON_SERIALIZATION,
     reason="Cython serialization extension is unavailable",
@@ -256,7 +288,7 @@ def test_strict_wire_name_no_import():
     ENABLE_FORY_CYTHON_SERIALIZATION,
     reason="pure TypeResolver regression",
 )
-def test_namespace_alias_not_cached():
+def test_namespace_alias_rejected():
     config = Fory(xlang=True, compatible=False, strict=False).config
     resolver = TypeResolver(config, shared_registry=SharedRegistry())
     resolver.initialize()
@@ -277,7 +309,8 @@ def test_namespace_alias_not_cached():
         meta_string_reader=MetaStringReader(resolver.shared_registry),
     )
 
-    assert resolver.read_type_info(read_context) is typeinfo
+    with pytest.raises(Exception):
+        resolver.read_type_info(read_context)
     assert (namespace, typename) not in resolver._ns_type_to_type_info
     assert (
         typeinfo.namespace_bytes,
@@ -285,7 +318,7 @@ def test_namespace_alias_not_cached():
     ) in resolver._ns_type_to_type_info
 
 
-def test_wire_type_alias_cache_is_bounded():
+def test_wire_type_alias_rejected():
     fory = Fory(xlang=True, compatible=False, strict=False)
     resolver = fory.type_resolver
     typeinfo = resolver.register_type(
@@ -305,7 +338,8 @@ def test_wire_type_alias_cache_is_bounded():
     buffer.set_reader_index(0)
     try:
         fory.read_context.prepare(buffer)
-        assert resolver.read_type_info(fory.read_context) is typeinfo
+        with pytest.raises(Exception):
+            resolver.read_type_info(fory.read_context)
         assert (namespace, typename) not in resolver._ns_type_to_type_info
     finally:
         fory.reset_read()
@@ -346,6 +380,30 @@ def test_strict_wire_alias_rejected(namespace_name, type_name):
     with pytest.raises(TypeUnregisteredError):
         resolver.read_type_info(read_context)
     assert (namespace, typename) not in resolver._ns_type_to_type_info
+
+
+@pytest.mark.parametrize(
+    "wrong_kind",
+    [TypeId.NAMED_ENUM, TypeId.NAMED_EXT, TypeId.NAMED_UNION],
+)
+def test_exact_named_kind_rejected(wrong_kind):
+    fory = Fory(xlang=True, compatible=False, strict=True)
+    typeinfo = fory.register_type(
+        StrictWireNameType,
+        name="security.StrictWireNameType",
+    )
+    buffer = Buffer.allocate(128)
+    writer = MetaStringWriter()
+    buffer.write_uint8(wrong_kind)
+    writer.write_encoded_meta_string(buffer, typeinfo.namespace_bytes)
+    writer.write_encoded_meta_string(buffer, typeinfo.typename_bytes)
+    buffer.set_reader_index(0)
+    try:
+        fory.read_context.prepare(buffer)
+        with pytest.raises(TypeUnregisteredError, match="named type kind"):
+            fory.type_resolver.read_type_info(fory.read_context)
+    finally:
+        fory.reset_read()
 
 
 def test_malformed_metastring_ref_raises_value_error():

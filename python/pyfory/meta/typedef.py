@@ -17,6 +17,7 @@
 
 import enum
 import array
+import struct
 import typing
 from typing import List
 from pyfory.annotation import ArrayMeta
@@ -27,6 +28,7 @@ from pyfory.type_util import get_homogeneous_tuple_elem_type, infer_field
 from pyfory.meta.metastring import Encoding
 from pyfory.type_util import infer_field_types
 from pyfory.lib.mmh3 import hash_buffer
+from pyfory.field import canonical_field_name, validate_local_field_identities
 
 
 # Constants from the specification
@@ -44,6 +46,10 @@ TYPEDEF_HASH_SHIFT = 64 - NUM_HASH_BITS
 TYPEDEF_HASH_MASK = ((1 << 64) - 1) ^ ((1 << TYPEDEF_HASH_SHIFT) - 1)
 _INT64_MIN = -(1 << 63)
 _UINT64_MASK = (1 << 64) - 1
+_REFERENCE_BYTES = struct.calcsize("P")
+_LIST_OWNER_BYTES = 4 * _REFERENCE_BYTES
+_SET_OWNER_BYTES = 6 * _REFERENCE_BYTES
+_DICT_OWNER_BYTES = 8 * _REFERENCE_BYTES
 
 NAMESPACE_ENCODINGS = [
     Encoding.UTF_8,
@@ -235,7 +241,7 @@ class TypeDef:
                     resolved_names.append(wire_name)
                 else:
                     # Try converting snake_case to camelCase
-                    camel_name = _snake_to_camel(wire_name)
+                    camel_name = canonical_field_name(wire_name)
                     if camel_name in class_field_names:
                         resolved_names.append(camel_name)
                     else:
@@ -255,9 +261,14 @@ class TypeDef:
                         return NonExistEnumSerializer(resolver)
                     raise
             return resolver.get_type_info_by_id(self.type_id, user_type_id=self.user_type_id).serializer
-        from pyfory.struct import DataClassSerializer, UnknownStruct, UnknownStructSerializer
+        from pyfory.struct import (
+            DataClassSerializer,
+            UnknownStruct,
+            UnknownStructSerializer,
+            build_local_struct_metadata,
+        )
         from pyfory.struct import FieldInfo as StructFieldInfo
-        from pyfory.type_util import get_type_hints, unwrap_optional
+        from pyfory.type_util import unwrap_optional
 
         if self.cls is UnknownStruct:
             return UnknownStructSerializer(resolver, self)
@@ -265,19 +276,47 @@ class TypeDef:
         # Resolve actual field names from TAG_ID encoding if needed
         field_names = self._resolve_field_names_from_tag_ids()
 
-        local_field_infos = build_field_infos(resolver, self.cls)
-        local_infos_by_name = {field_info.name: field_info for field_info in local_field_infos}
+        local_metadata = None
+        try:
+            local_type_info = resolver.get_type_info(self.cls, create=False)
+        except (AttributeError, TypeError):
+            local_type_info = None
+        if local_type_info is not None:
+            local_metadata = getattr(local_type_info.serializer, "_local_metadata", None)
+        if local_metadata is None:
+            local_field_infos = build_field_infos(resolver, self.cls)
+            local_field_types = infer_field_types(self.cls, field_nullable=resolver.field_nullable)
+            local_metadata = build_local_struct_metadata(
+                resolver,
+                self.cls,
+                field_infos=local_field_infos,
+                field_types=local_field_types,
+            )
+        else:
+            local_field_infos = local_metadata.field_infos
+            local_field_types = local_metadata.field_types
+        # A tagged local field may still match a name-based schema version; only
+        # an incoming tagged placeholder is restricted to tag lookup.
+        local_infos_by_name = {canonical_field_name(field_info.name): field_info for field_info in local_field_infos}
         local_infos_by_tag = {field_info.tag_id: field_info for field_info in local_field_infos if field_info.tag_id >= 0}
-        local_field_types = infer_field_types(self.cls, field_nullable=resolver.field_nullable)
-        type_hints = get_type_hints(self.cls)
+        type_hints = local_metadata.type_hints
         runtime_field_infos = []
+        assigned_local_fields = set()
         for i, field_info in enumerate(self.fields):
             resolved_name = field_names[i]
             local_info = None
             if field_info.tag_id >= 0:
                 local_info = local_infos_by_tag.get(field_info.tag_id)
-            if local_info is None:
-                local_info = local_infos_by_name.get(resolved_name)
+            else:
+                name_identity = canonical_field_name(resolved_name)
+                local_info = local_infos_by_name.get(name_identity)
+            # A local attribute can bind once even when it has both tag and name identities.
+            if local_info is not None and local_info.name in assigned_local_fields:
+                from pyfory.error import TypeNotCompatibleError
+
+                raise TypeNotCompatibleError(f"Compatible field {field_info.name!r} reuses local field {local_info.name!r}")
+            if local_info is not None:
+                assigned_local_fields.add(local_info.name)
             can_assign, validation_field_type = plan_field_assignment(
                 field_info.field_type,
                 local_info.field_type if local_info is not None else None,
@@ -286,19 +325,20 @@ class TypeDef:
                 from pyfory.error import TypeNotCompatibleError
 
                 raise TypeNotCompatibleError(f"Compatible field {resolved_name!r} cannot be read as local field {local_info.name!r}")
-            type_hint = type_hints.get(resolved_name, typing.Any)
+            local_name = local_info.name if local_info is not None else resolved_name
+            type_hint = type_hints.get(local_name, typing.Any)
             unwrapped_type, _ = unwrap_optional(type_hint, field_nullable=resolver.field_nullable)
             serializer = _create_compatible_field_serializer(
                 resolver,
-                resolved_name,
+                local_name,
                 type_hint,
                 field_info.field_type,
                 local_info.field_type if local_info is not None else None,
-                local_field_types.get(resolved_name, None),
+                local_field_types.get(local_name, None),
             )
             runtime_field_infos.append(
                 StructFieldInfo(
-                    name=resolved_name,
+                    name=local_name,
                     index=i,
                     type_hint=type_hint,
                     tag_id=field_info.tag_id,
@@ -320,6 +360,7 @@ class TypeDef:
             self.cls,
             field_infos=runtime_field_infos,
             fields_from_typedef=True,
+            local_metadata=local_metadata,
         )
 
     def __repr__(self):
@@ -340,11 +381,7 @@ def _snake_to_camel(s: str) -> str:
 
     If there are no underscores, the string is returned unchanged.
     """
-    if "_" not in s:
-        return s
-    parts = s.split("_")
-    # First part stays lowercase, rest are capitalized
-    return parts[0] + "".join(part.capitalize() for part in parts[1:])
+    return canonical_field_name(s)
 
 
 class FieldInfo:
@@ -1138,6 +1175,41 @@ def coerce_assignable_value(value, local_field_type: FieldType):
     return value
 
 
+def coercion_graph_memory(value, local_field_type: FieldType) -> int:
+    """Return shallow bytes for owners a compatible coercion will create."""
+    return _coercion_graph_memory(value, local_field_type, {})
+
+
+def _coercion_graph_memory(value, local_field_type: FieldType, completed) -> int:
+    key = (id(value), id(local_field_type))
+    previous = completed.get(key)
+    if previous is not None:
+        return 0
+    if value is None:
+        completed[key] = True
+        return 0
+    type_id = local_field_type.type_id
+    graph_memory_bytes = 0
+    if type_id == TypeId.LIST:
+        if type(value) is not list:
+            graph_memory_bytes += _LIST_OWNER_BYTES + len(value) * _REFERENCE_BYTES
+        for element in value:
+            graph_memory_bytes += _coercion_graph_memory(element, local_field_type.element_type, completed)
+    elif type_id == TypeId.SET:
+        if type(value) is not set:
+            graph_memory_bytes += _SET_OWNER_BYTES + len(value) * _REFERENCE_BYTES
+        for element in value:
+            graph_memory_bytes += _coercion_graph_memory(element, local_field_type.element_type, completed)
+    elif type_id == TypeId.MAP:
+        if type(value) is not dict:
+            graph_memory_bytes += _DICT_OWNER_BYTES + len(value) * 2 * _REFERENCE_BYTES
+        for map_key, map_value in value.items():
+            graph_memory_bytes += _coercion_graph_memory(map_key, local_field_type.key_type, completed)
+            graph_memory_bytes += _coercion_graph_memory(map_value, local_field_type.value_type, completed)
+    completed[key] = True
+    return graph_memory_bytes
+
+
 def _coerce_assignable_value(value, local_field_type: FieldType, completed):
     # Keep the memo completed-only so cycles retain normal Python recursion failure.
     key = (id(value), id(local_field_type))
@@ -1296,6 +1368,7 @@ def build_field_infos(type_resolver, cls):
     for field_name in sorted_field_names:
         field_info = field_infos_map[field_name]
         new_field_infos.append(field_info)
+    validate_local_field_identities(new_field_infos, f"class {cls.__name__}")
     return new_field_infos
 
 

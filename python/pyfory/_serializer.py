@@ -18,6 +18,7 @@
 import datetime
 import logging
 import platform
+import struct
 import time
 import array
 from abc import ABC
@@ -53,6 +54,9 @@ except ImportError:
     np = None
 
 logger = logging.getLogger(__name__)
+
+_REFERENCE_BYTES = struct.calcsize("P")
+_PY_OBJECT_OWNER_BYTES = 4 * _REFERENCE_BYTES
 
 
 class Serializer(ABC):
@@ -592,4 +596,5 @@ class SliceSerializer(Serializer):
             step = None
         else:
             step = read_context.read_no_ref()
+        read_context.reserve_graph_memory(_PY_OBJECT_OWNER_BYTES)
         return slice(start, stop, step)

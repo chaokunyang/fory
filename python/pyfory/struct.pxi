@@ -26,7 +26,6 @@ cdef int64_t _STRUCT_REFERENCE_BYTES = sizeof(PyObject*)
 # Lower-bound shallow owner costs for retained Python struct shapes. Normal objects retain an
 # instance dict for field storage; slotted objects store field references in object slots.
 cdef int64_t _SLOTTED_STRUCT_OWNER_BYTES = 4 * sizeof(PyObject*)
-cdef int64_t _DICT_BACKED_STRUCT_OWNER_BYTES = 4 * sizeof(PyObject*)
 cdef int64_t _INSTANCE_DICT_OWNER_BYTES = 8 * sizeof(PyObject*)
 
 
@@ -47,7 +46,7 @@ cdef struct FieldRuntimeInfo:
 cdef class DataClassSerializer(Serializer):
     # The Cython path keeps a compact per-field metadata table so hot struct
     # reads and writes can stay on typed branches instead of repeated Python lookups.
-    cdef public dict _type_hints
+    cdef public object _type_hints
     cdef public bint _has_slots
     cdef public bint _fields_from_typedef
     cdef public bint _has_missing_fields
@@ -59,18 +58,20 @@ cdef class DataClassSerializer(Serializer):
     cdef public dict _dynamic_fields
     cdef public list _field_infos
     cdef public dict _field_metas
-    cdef public dict _unwrapped_hints
+    cdef public object _unwrapped_hints
     cdef public int32_t _hash
     cdef public tuple _field_name_interned
     cdef tuple _serializer_owner
     cdef tuple _validation_field_type_owner
-    cdef public dict _default_values_factory
+    cdef public object _default_values_factory
     cdef public int64_t _graph_memory_bytes
+    cdef public object _local_metadata
     cdef tuple _missing_field_defaults
     cdef public object _assign_fields
     cdef public object _assigned_field_names
     cdef public object _value_assignable_checker
     cdef public object _value_assigner
+    cdef object _coercion_memory
     cdef vector[FieldRuntimeInfo] _field_runtime_infos
 
     def __init__(
@@ -84,22 +85,27 @@ cdef class DataClassSerializer(Serializer):
         ref_fields: dict = None,
         field_infos: list = None,
         fields_from_typedef: bint = False,
+        local_metadata=None,
     ):
         super().__init__(type_resolver, clz)
 
         from pyfory.lib.mmh3 import hash_buffer
         from pyfory.struct import (
             _extract_field_infos,
-            build_default_values_factory,
+            build_local_struct_metadata,
             compute_struct_fingerprint,
             compute_struct_meta,
+            struct_graph_memory,
             StructFieldSerializerVisitor,
         )
-        from pyfory.type_util import get_type_hints, unwrap_optional, infer_field
+        from pyfory.type_util import unwrap_optional, infer_field
         from pyfory.types import TypeId, is_primitive_type
 
-        self._type_hints = get_type_hints(clz)
-        self._has_slots = hasattr(clz, "__slots__")
+        if local_metadata is None:
+            local_metadata = build_local_struct_metadata(type_resolver, clz)
+        self._local_metadata = local_metadata
+        self._type_hints = local_metadata.type_hints
+        self._has_slots = local_metadata.uses_attribute_access
 
         self._fields_from_typedef = fields_from_typedef or (field_names is not None and serializers is not None)
         if field_infos is not None:
@@ -145,7 +151,7 @@ cdef class DataClassSerializer(Serializer):
                 else:
                     self._serializers = list(serializers)
 
-        self._unwrapped_hints = self._compute_unwrapped_hints()
+        self._unwrapped_hints = local_metadata.unwrapped_hints
         if self._fields_from_typedef:
             hash_str = compute_struct_fingerprint(
                 type_resolver,
@@ -174,34 +180,30 @@ cdef class DataClassSerializer(Serializer):
 
         self._field_name_interned = tuple(self._intern_field_name(name) for name in self._field_names)
         self._serializer_owner = tuple(self._serializers)
-        if dataclasses.is_dataclass(clz):
-            self._default_values_factory = build_default_values_factory(
-                type_resolver, self._type_hints, dataclasses.fields(clz)
-            )
-        else:
-            self._default_values_factory = {}
+        self._default_values_factory = local_metadata.default_values_factory
         self._build_fastpath_metadata()
         self._build_missing_field_defaults()
-        if self._has_slots:
-            self._graph_memory_bytes = (
-                _SLOTTED_STRUCT_OWNER_BYTES + <int64_t>len(self._field_names) * _STRUCT_REFERENCE_BYTES
-            )
-        else:
-            # Dict-backed instances retain an instance dict with key and value references per field.
-            self._graph_memory_bytes = (
-                _DICT_BACKED_STRUCT_OWNER_BYTES
-                + _INSTANCE_DICT_OWNER_BYTES
-                + <int64_t>len(self._field_names) * 2 * _STRUCT_REFERENCE_BYTES
-            )
+        materialized_fields = self._assigned_field_names | {
+            field_name for field_name, _ in self._missing_field_defaults
+        }
+        self._graph_memory_bytes = struct_graph_memory(
+            local_metadata, materialized_fields
+        )
 
         if self._has_validation_fields:
-            from pyfory.meta.typedef import coerce_assignable_value, is_value_assignable
+            from pyfory.meta.typedef import (
+                coerce_assignable_value,
+                coercion_graph_memory,
+                is_value_assignable,
+            )
 
             self._value_assignable_checker = is_value_assignable
             self._value_assigner = coerce_assignable_value
+            self._coercion_memory = coercion_graph_memory
         else:
             self._value_assignable_checker = None
             self._value_assigner = None
+            self._coercion_memory = None
 
     cdef object _intern_field_name(self, str name):
         cdef bytes encoded = name.encode("utf-8")
@@ -222,11 +224,6 @@ cdef class DataClassSerializer(Serializer):
                 return [slots]
             return sorted(slots)
         return []
-
-    cdef dict _compute_unwrapped_hints(self):
-        from pyfory.type_util import unwrap_optional
-
-        return {field_name: unwrap_optional(hint)[0] for field_name, hint in self._type_hints.items()}
 
     cdef inline uint8_t _resolve_basic_type_id(self, Serializer serializer, bint is_dynamic, object compatible_scalar_cls):
         cdef uint8_t type_id
@@ -462,9 +459,9 @@ cdef class DataClassSerializer(Serializer):
 
         if self._missing_field_defaults:
             if self._has_slots:
-                self._apply_missing_defaults_slots(obj)
+                self._apply_missing_defaults_slots(read_context, obj)
             else:
-                self._apply_missing_defaults_dict(obj.__dict__)
+                self._apply_missing_defaults_dict(read_context, obj.__dict__)
         return obj
 
     cdef inline void _read_dict(self, ReadContext read_context, object obj):
@@ -485,12 +482,14 @@ cdef class DataClassSerializer(Serializer):
                 return
             for i in range(field_count):
                 field_info = &self._field_runtime_infos[i]
-                field_value = self._read_field_value(read_context, field_info)
                 field_name = <object>field_info.field_name
                 if field_info.validation_field_type == NULL:
+                    field_value = self._read_field_value(read_context, field_info)
                     obj_dict[field_name] = field_value
                 else:
-                    obj_dict[field_name] = self._validate_or_default(field_name, field_value, field_info)
+                    obj_dict[field_name] = self._read_validated_field_value(
+                        read_context, field_name, field_info
+                    )
             return
 
         if not self._has_validation_fields:
@@ -509,12 +508,14 @@ cdef class DataClassSerializer(Serializer):
             if field_info.field_exists == 0 or field_info.assign == 0:
                 self._read_field_value(read_context, field_info)
                 continue
-            field_value = self._read_field_value(read_context, field_info)
             field_name = <object>field_info.field_name
             if field_info.validation_field_type == NULL:
+                field_value = self._read_field_value(read_context, field_info)
                 obj_dict[field_name] = field_value
             else:
-                obj_dict[field_name] = self._validate_or_default(field_name, field_value, field_info)
+                obj_dict[field_name] = self._read_validated_field_value(
+                    read_context, field_name, field_info
+                )
 
     cdef inline void _read_slots(self, ReadContext read_context, object obj):
         cdef Py_ssize_t i
@@ -533,15 +534,17 @@ cdef class DataClassSerializer(Serializer):
                 return
             for i in range(field_count):
                 field_info = &self._field_runtime_infos[i]
-                field_value = self._read_field_value(read_context, field_info)
                 field_name = <object>field_info.field_name
                 if field_info.validation_field_type == NULL:
+                    field_value = self._read_field_value(read_context, field_info)
                     PyObject_SetAttr(obj, field_name, field_value)
                 else:
                     PyObject_SetAttr(
                         obj,
                         field_name,
-                        self._validate_or_default(field_name, field_value, field_info),
+                        self._read_validated_field_value(
+                            read_context, field_name, field_info
+                        ),
                     )
             return
 
@@ -561,15 +564,17 @@ cdef class DataClassSerializer(Serializer):
             if field_info.field_exists == 0 or field_info.assign == 0:
                 self._read_field_value(read_context, field_info)
                 continue
-            field_value = self._read_field_value(read_context, field_info)
             field_name = <object>field_info.field_name
             if field_info.validation_field_type == NULL:
+                field_value = self._read_field_value(read_context, field_info)
                 PyObject_SetAttr(obj, field_name, field_value)
             else:
                 PyObject_SetAttr(
                     obj,
                     field_name,
-                    self._validate_or_default(field_name, field_value, field_info),
+                    self._read_validated_field_value(
+                        read_context, field_name, field_info
+                    ),
                 )
 
     cdef inline object _read_field_value(self, ReadContext read_context, FieldRuntimeInfo *field_info):
@@ -602,38 +607,93 @@ cdef class DataClassSerializer(Serializer):
             return read_context.read_no_ref()
         return read_context.read_non_ref(serializer)
 
-    cdef inline object _default_field_value(self, object field_name):
+    cdef inline object _default_field_value(self, ReadContext read_context, object field_name):
         cdef object default_factory = self._default_values_factory.get(field_name)
         if default_factory is None:
             return None
+        if default_factory.graph_memory_bytes:
+            read_context.reserve_graph_memory_c(default_factory.graph_memory_bytes)
         return default_factory()
 
-    cdef inline object _validate_or_default(self, object field_name, object field_value, FieldRuntimeInfo *field_info):
-        if field_info.validation_field_type != NULL:
-            if not self._value_assignable_checker(field_value, <object>field_info.validation_field_type):
-                return self._default_field_value(field_name)
-            return self._value_assigner(field_value, <object>field_info.validation_field_type)
-        return field_value
+    cdef inline object _validate_or_default(
+        self,
+        ReadContext read_context,
+        object field_name,
+        object field_value,
+        FieldRuntimeInfo *field_info,
+    ):
+        cdef int64_t graph_memory_bytes
+        if not self._value_assignable_checker(
+            field_value, <object>field_info.validation_field_type
+        ):
+            return self._default_field_value(read_context, field_name)
+        graph_memory_bytes = self._coercion_memory(
+            field_value, <object>field_info.validation_field_type
+        )
+        if graph_memory_bytes:
+            read_context.reserve_graph_memory_c(graph_memory_bytes)
+        return self._value_assigner(
+            field_value, <object>field_info.validation_field_type
+        )
 
-    cdef inline void _apply_missing_defaults_dict(self, dict obj_dict):
+    cdef inline object _read_validated_field_value(
+        self,
+        ReadContext read_context,
+        object field_name,
+        FieldRuntimeInfo *field_info,
+    ):
+        cdef int32_t ref_id
+        cdef object field_value
+        cdef Serializer serializer
+        if field_info.track_ref != 0:
+            ref_id = read_context.try_preserve_ref_id()
+            if ref_id == REF_FLAG:
+                # A back-reference preserves the first materialized owner and
+                # identity; compatible conversion never replays on a ref hit.
+                return read_context.get_read_ref()
+            if ref_id == NULL_FLAG:
+                field_value = None
+            else:
+                serializer = (
+                    None
+                    if field_info.is_dynamic != 0
+                    else <object>field_info.serializer
+                )
+                field_value = read_context._read_non_ref_internal(serializer)
+            field_value = self._validate_or_default(
+                read_context, field_name, field_value, field_info
+            )
+            if ref_id >= 0:
+                read_context.set_read_ref(ref_id, field_value)
+            return field_value
+        field_value = self._read_field_value(read_context, field_info)
+        return self._validate_or_default(
+            read_context, field_name, field_value, field_info
+        )
+
+    cdef inline void _apply_missing_defaults_dict(self, ReadContext read_context, dict obj_dict):
         cdef object field_name
         cdef object default_factory
 
         for field_name, default_factory in self._missing_field_defaults:
+            if default_factory.graph_memory_bytes:
+                read_context.reserve_graph_memory_c(default_factory.graph_memory_bytes)
             obj_dict[field_name] = default_factory()
 
-    cdef inline void _apply_missing_defaults_slots(self, object obj):
+    cdef inline void _apply_missing_defaults_slots(self, ReadContext read_context, object obj):
         cdef object field_name
         cdef object default_factory
 
         for field_name, default_factory in self._missing_field_defaults:
+            if default_factory.graph_memory_bytes:
+                read_context.reserve_graph_memory_c(default_factory.graph_memory_bytes)
             PyObject_SetAttr(obj, field_name, default_factory())
 
 
 @cython.final
 cdef class DataClassStubSerializer(Serializer):
-    # Keep a lazy stub so recursive dataclass registration can install the real
-    # serializer on first use without re-entering construction.
+    # Keep a delegate stub so recursive dataclass construction can refer to the
+    # canonical serializer without re-entering construction.
     cpdef write(self, WriteContext write_context, value):
         self._replace().write(write_context, value)
 
@@ -641,6 +701,10 @@ cdef class DataClassStubSerializer(Serializer):
         return self._replace().read(read_context)
 
     cpdef object _replace(self):
-        cdef TypeInfo typeinfo = self.type_resolver.get_type_info(self.type_)
-        typeinfo.serializer = DataClassSerializer(self.type_resolver, self.type_)
-        return typeinfo.serializer
+        cdef TypeInfo typeinfo = self.type_resolver.get_type_info(self.type_, create=False)
+        cdef object serializer = None if typeinfo is None else typeinfo.serializer
+        # Root-entry finalization must commit the canonical serializer before
+        # use; this stub must never repair registry state after the freeze.
+        if serializer is None or isinstance(serializer, DataClassStubSerializer):
+            raise RuntimeError(f"Serializer finalization incomplete for {self.type_}")
+        return serializer

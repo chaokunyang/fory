@@ -82,6 +82,7 @@ ENABLE_FORY_CYTHON_SERIALIZATION = os.environ.get(
 cdef int32_t NOT_NULL_BOOL_FLAG = (NOT_NULL_VALUE_FLAG & 0xFF) | (<int32_t>TypeId.BOOL << 8)
 cdef int32_t NOT_NULL_STRING_FLAG = (NOT_NULL_VALUE_FLAG & 0xFF) | (<int32_t>TypeId.STRING << 8)
 cdef int32_t NOT_NULL_FLOAT64_FLAG = (NOT_NULL_VALUE_FLAG & 0xFF) | (<int32_t>TypeId.FLOAT64 << 8)
+cdef int64_t _PY_WRAPPER_OWNER_BYTES = 4 * sizeof(PyObject*)
 _PRIMITIVE_TYPE_IDS = frozenset(range(1, 21)) - {16}
 
 
@@ -308,6 +309,12 @@ cdef class TypeResolver:
         for typeinfo in self.resolver._types_info.values():
             self._populate_type_info(typeinfo)
 
+    cdef inline void _freeze_registry(self):
+        cdef object typeinfo
+        if self.resolver._freeze_registry():
+            for typeinfo in self.resolver._types_info.values():
+                self._populate_type_info(typeinfo)
+
     def register_type(
         self,
         cls,
@@ -346,6 +353,7 @@ cdef class TypeResolver:
         cdef TypeInfo typeinfo
         cdef uint8_t previous_type_id
         cdef uint32_t previous_user_type_id
+        self.resolver._check_registry_mutable()
         typeinfo = self.resolver.get_type_info(cls)
         previous_type_id = typeinfo.type_id
         previous_user_type_id = typeinfo.user_type_id
@@ -469,7 +477,11 @@ cdef class TypeResolver:
             type_metabytes = read_context.meta_string_reader.read_encoded_meta_string(
                 buffer
             )
-            return self._load_bytes_to_type_info(ns_metabytes, type_metabytes)
+            return self._load_bytes_to_type_info(
+                ns_metabytes,
+                type_metabytes,
+                type_id,
+            )
         if reg_kind == TypeRegistrationKind.BY_ID:
             user_type_id = buffer.read_var_uint32()
             entry = self._c_user_type_id_to_type_info.find(user_type_id)
@@ -551,7 +563,7 @@ cdef class TypeResolver:
         write_context.write_var_uint32(index << 1)
         type_def = typeinfo.type_def
         if type_def is None:
-            self.resolver._set_type_info(typeinfo)
+            self.resolver._finalize_type_info(typeinfo)
             type_def = typeinfo.type_def
         write_context.write_bytes(type_def.encoded)
 
@@ -626,7 +638,7 @@ cdef class TypeResolver:
         typeinfo = self.resolver._local_type_info_for_typedef(type_def)
         if typeinfo is not None:
             if typeinfo.type_def is None:
-                self.resolver._set_type_info(typeinfo)
+                self.resolver._finalize_type_info(typeinfo)
             if (
                 typeinfo.type_def is not None
                 and typeinfo.type_def.encoded == type_def.encoded
@@ -655,7 +667,10 @@ cdef class TypeResolver:
         return typeinfo
 
     cdef inline TypeInfo _load_bytes_to_type_info(
-        self, object ns_metabytes, object type_metabytes
+        self,
+        object ns_metabytes,
+        object type_metabytes,
+        uint8_t expected_type_id,
     ):
         cdef pair[int64_t, int64_t] hash_key = pair[int64_t, int64_t](
             ns_metabytes.hashcode,
@@ -681,8 +696,17 @@ cdef class TypeResolver:
                     typeinfo.typename_bytes,
                 )
             ):
+                if typeinfo.type_id != expected_type_id:
+                    self.resolver._check_named_type_kind(
+                        typeinfo,
+                        expected_type_id,
+                    )
                 return typeinfo
-        typeinfo = self.resolver._load_metabytes_to_type_info(ns_metabytes, type_metabytes)
+        typeinfo = self.resolver._load_metabytes_to_type_info(
+            ns_metabytes,
+            type_metabytes,
+            expected_type_id,
+        )
         if (
             cache_slot_empty
             # The Python resolver owns the bounded accepted-alias set. The
@@ -895,6 +919,7 @@ cdef class SliceSerializer(Serializer):
             step = None
         else:
             step = read_context.read_no_ref()
+        read_context.reserve_graph_memory_c(_PY_WRAPPER_OWNER_BYTES)
         return slice(start, stop, step)
 
 
@@ -1120,6 +1145,9 @@ cdef class Fory:
     def register_serializer(self, cls, serializer):
         self.type_resolver.register_serializer(cls, serializer)
 
+    cdef inline void _freeze_registry(self):
+        self.type_resolver._freeze_registry()
+
     def dumps(
         self,
         obj,
@@ -1135,6 +1163,7 @@ cdef class Fory:
         )
 
     def dump(self, obj, stream):
+        self._freeze_registry()
         try:
             self.buffer.set_writer_index(0)
             self.buffer.bind_output_stream(Buffer.wrap_output_stream(stream))
@@ -1158,6 +1187,7 @@ cdef class Fory:
 
     def serialize(self, obj, Buffer buffer=None, buffer_callback=None, unsupported_callback=None):
         cdef Buffer write_buffer
+        self._freeze_registry()
         try:
             write_buffer = self._serialize(
                 obj,
@@ -1198,6 +1228,7 @@ cdef class Fory:
         return buffer
 
     def deserialize(self, buffer, buffers=None, unsupported_objects=None):
+        self._freeze_registry()
         try:
             return self._deserialize(
                 buffer,

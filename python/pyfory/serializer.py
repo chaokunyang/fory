@@ -58,7 +58,6 @@ _PY_OBJECT_OWNER_BYTES = 4 * _REFERENCE_BYTES
 _TUPLE_OWNER_BYTES = 3 * _REFERENCE_BYTES
 _DICT_OWNER_BYTES = 8 * _REFERENCE_BYTES
 _SLOTTED_OBJECT_OWNER_BYTES = _PY_OBJECT_OWNER_BYTES
-_DICT_BACKED_OBJECT_OWNER_BYTES = _PY_OBJECT_OWNER_BYTES
 _INSTANCE_DICT_OWNER_BYTES = _DICT_OWNER_BYTES
 _MAX_GRAPH_MEMORY_BYTES = (1 << 63) - 1
 
@@ -1216,6 +1215,8 @@ class StatefulSerializer(Serializer):
         read_context.policy.authorize_instantiation(self.cls)
         if args or kwargs:
             # Case 1: __getnewargs__ was used. Re-create by calling __init__.
+            # Charge only the returned instance; constructor internals remain application-owned.
+            read_context.reserve_graph_memory(_PY_OBJECT_OWNER_BYTES)
             obj = self.cls(*args, **kwargs)
         else:
             # Case 2: Only __getstate__ was used. Create without calling __init__.
@@ -1236,6 +1237,8 @@ class _DefaultPolicyStatefulSerializer(StatefulSerializer):
 
         if args or kwargs:
             # Case 1: __getnewargs__ was used. Re-create by calling __init__.
+            # Charge only the returned instance; constructor internals remain application-owned.
+            read_context.reserve_graph_memory(_PY_OBJECT_OWNER_BYTES)
             obj = self.cls(*args, **kwargs)
         else:
             # Case 2: Only __getstate__ was used. Create without calling __init__.
@@ -1508,13 +1511,15 @@ class TypeSerializer(Serializer):
         # graph reservation covers the bases tuple retained by the created class.
         bases = tuple(read_context.read_ref() for _ in range(num_bases))
         read_context.policy.authorize_instantiation(type, module=module, qualname=qualname, bases=bases)
-        read_context.reserve_graph_memory(_PY_OBJECT_OWNER_BYTES)
+        # type() creates the returned class and its final namespace dictionary together.
+        read_context.reserve_graph_memory(_PY_OBJECT_OWNER_BYTES + _DICT_OWNER_BYTES)
         cls = type(name, bases, {})
         read_context.set_read_ref(ref_id, cls)
         read_context.policy.validate_class(cls, is_local=True)
 
         num_class_methods = read_context.read_var_uint32()
         _check_non_negative_size(num_class_methods, "local class method")
+        read_context.reserve_graph_memory(num_class_methods * 2 * _REFERENCE_BYTES)
         policy = read_context.policy
         use_default_policy = policy is DEFAULT_POLICY
         for _ in range(num_class_methods):
@@ -1527,6 +1532,8 @@ class TypeSerializer(Serializer):
                 policy.validate_method(method, is_local=True)
             setattr(cls, attr_name, method)
         class_dict = read_context.read_ref()
+        # The decoded map can remain reference-reachable; type() owns a separate final dictionary.
+        read_context.reserve_graph_memory(len(class_dict) * 2 * _REFERENCE_BYTES)
         for k, v in class_dict.items():
             setattr(cls, k, v)
 
@@ -1559,7 +1566,9 @@ class MappingProxySerializer(Serializer):
         write_context.write_ref(dict(value))
 
     def read(self, read_context):
-        return types.MappingProxyType(read_context.read_ref())
+        mapping = read_context.read_ref()
+        read_context.reserve_graph_memory(_PY_OBJECT_OWNER_BYTES)
+        return types.MappingProxyType(mapping)
 
 
 class FunctionSerializer(Serializer):
@@ -1761,18 +1770,26 @@ class FunctionSerializer(Serializer):
             freevars.append(read_context.read_string())
 
         globals_dict = read_context.read_ref()
+        if type(globals_dict) is not dict:
+            raise ValueError("function globals must be a dict")
 
         # Create a globals dictionary with module's globals as the base
-        func_global_entries = len(mod.__dict__) if mod else 0
-        if isinstance(globals_dict, dict):
-            func_global_entries = max(func_global_entries, len(globals_dict))
-        has_builtins = (mod is not None and "__builtins__" in mod.__dict__) or (isinstance(globals_dict, dict) and "__builtins__" in globals_dict)
+        module_globals = mod.__dict__ if mod is not None else None
+        if module_globals is None:
+            func_global_entries = len(globals_dict)
+            has_builtins = "__builtins__" in globals_dict
+        else:
+            func_global_entries = len(module_globals)
+            for key in globals_dict:
+                if key not in module_globals:
+                    func_global_entries += 1
+            has_builtins = "__builtins__" in module_globals or "__builtins__" in globals_dict
         if not has_builtins:
             func_global_entries += 1
         read_context.reserve_graph_memory(_DICT_OWNER_BYTES + func_global_entries * 2 * _REFERENCE_BYTES)
         func_globals = {}
-        if mod:
-            func_globals.update(mod.__dict__)
+        if module_globals is not None:
+            func_globals.update(module_globals)
 
         func_globals.update(globals_dict)
 
@@ -1787,6 +1804,10 @@ class FunctionSerializer(Serializer):
         func.__qualname__ = qualname
 
         attrs = read_context.read_ref()
+        if attrs:
+            # A tracked attrs map can remain reference-reachable after its entries are copied into
+            # the function's separate final dictionary.
+            read_context.reserve_graph_memory(_DICT_OWNER_BYTES + len(attrs) * 2 * _REFERENCE_BYTES)
         for attr_name, attr_value in attrs.items():
             setattr(func, attr_name, attr_value)
 
@@ -1878,21 +1899,41 @@ class ObjectSerializer(Serializer):
 
     def __init__(self, type_resolver, clz: type):
         super().__init__(type_resolver, clz)
-        # If the class defines __slots__, compute and store a sorted list once
+        # Preserve the established field-selection path; layout accounting below uses the
+        # descriptors installed by class creation instead of consuming this declaration again.
         slots = getattr(clz, "__slots__", None)
         self._slot_field_names = None
         if slots is not None:
-            # __slots__ can be a string or iterable of strings
             if isinstance(slots, str):
                 slots = [slots]
             self._slot_field_names = sorted(slots)
-        if self._slot_field_names is None:
-            # Dict-backed objects retain an instance dict with key and value references per field.
-            self._graph_memory_owner_bytes = _DICT_BACKED_OBJECT_OWNER_BYTES + _INSTANCE_DICT_OWNER_BYTES
-            self._graph_memory_field_bytes = 2 * _REFERENCE_BYTES
-        else:
-            self._graph_memory_owner_bytes = _SLOTTED_OBJECT_OWNER_BYTES
-            self._graph_memory_field_bytes = _REFERENCE_BYTES
+
+        from pyfory.struct import _class_member_layout
+
+        effective_slot_names, physical_slot_count, self._has_instance_dict, effective_dict_descriptor = _class_member_layout(clz)
+
+        # __new__ allocates every physical slot, including inherited slots, regardless of the
+        # incoming field count. Instance dictionaries remain lazy and are charged only when Fory
+        # assigns a field that is not backed by one of these slots.
+        self._effective_slot_names = effective_slot_names
+        self._effective_dict_descriptor = effective_dict_descriptor
+        self._plain_dict_backed = self._has_instance_dict and physical_slot_count == 0
+        self._graph_memory_owner_bytes = _SLOTTED_OBJECT_OWNER_BYTES + physical_slot_count * _REFERENCE_BYTES
+        if self._plain_dict_backed:
+            # Preserve the established plain-object budget: its final instance dictionary and all
+            # incoming entries are charged from the wire count before construction.
+            self._graph_memory_owner_bytes += _INSTANCE_DICT_OWNER_BYTES
+
+    def _reserve_instance_dict(self, read_context, field_name, allocated):
+        if self._plain_dict_backed:
+            return True
+        if self._has_instance_dict and self._effective_dict_descriptor and field_name == "__dict__":
+            # This assignment attaches the already-accounted decoded dictionary directly.
+            return True
+        if self._has_instance_dict and field_name not in self._effective_slot_names:
+            read_context.reserve_graph_memory((0 if allocated else _INSTANCE_DICT_OWNER_BYTES) + 2 * _REFERENCE_BYTES)
+            return True
+        return allocated
 
     def write(self, write_context, value):
         if self._slot_field_names is not None:
@@ -1912,7 +1953,8 @@ class ObjectSerializer(Serializer):
         policy.authorize_instantiation(self.type_)
         num_fields = read_context.read_var_uint32()
         _check_non_negative_size(num_fields, "object field")
-        read_context.reserve_graph_memory(self._graph_memory_owner_bytes + num_fields * self._graph_memory_field_bytes)
+        field_bytes = num_fields * 2 * _REFERENCE_BYTES if self._plain_dict_backed else 0
+        read_context.reserve_graph_memory(self._graph_memory_owner_bytes + field_bytes)
         obj = self.type_.__new__(self.type_)
         read_context.reference(obj)
         state = {}
@@ -1921,7 +1963,9 @@ class ObjectSerializer(Serializer):
             field_value = read_context.read_ref()
             state[field_name] = field_value
         policy.intercept_setstate(obj, state)
+        instance_dict_allocated = False
         for field_name, field_value in state.items():
+            instance_dict_allocated = self._reserve_instance_dict(read_context, field_name, instance_dict_allocated)
             setattr(obj, field_name, field_value)
         return obj
 
@@ -1930,12 +1974,15 @@ class _DefaultPolicyObjectSerializer(ObjectSerializer):
     def read(self, read_context):
         num_fields = read_context.read_var_uint32()
         _check_non_negative_size(num_fields, "object field")
-        read_context.reserve_graph_memory(self._graph_memory_owner_bytes + num_fields * self._graph_memory_field_bytes)
+        field_bytes = num_fields * 2 * _REFERENCE_BYTES if self._plain_dict_backed else 0
+        read_context.reserve_graph_memory(self._graph_memory_owner_bytes + field_bytes)
         obj = self.type_.__new__(self.type_)
         read_context.reference(obj)
+        instance_dict_allocated = False
         for _ in range(num_fields):
             field_name = read_context.read_string()
             field_value = read_context.read_ref()
+            instance_dict_allocated = self._reserve_instance_dict(read_context, field_name, instance_dict_allocated)
             setattr(obj, field_name, field_value)
         return obj
 

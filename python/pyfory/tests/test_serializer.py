@@ -22,6 +22,7 @@ import gc
 import io
 import os
 import pickle
+import types
 import weakref
 from collections.abc import MutableSequence
 from enum import Enum, IntEnum
@@ -35,6 +36,7 @@ from dataclasses import dataclass
 import pytest
 
 import pyfory
+import pyfory.registry as registry_module
 from pyfory.serialization import Buffer, _bfloat16_from_bits, _bfloat16_to_bits, _float16_from_bits, _float16_to_bits
 from pyfory import Fory, EnumSerializer
 from pyfory.serializer import (
@@ -46,9 +48,24 @@ from pyfory.serializer import (
     Numpy1DArraySerializer,
 )
 from pyfory.types import TypeId
+from pyfory.union import UnionSerializer
 from pyfory.utils import lazy_import
 
 pa = lazy_import("pyarrow")
+
+
+def prepare_pandas_frame_types(fory, frame):
+    for cls in (
+        pd.DataFrame,
+        type(frame._mgr),
+        type,
+        type(frame._mgr.blocks[0]),
+        type(pd._libs.internals._unpickle_block),
+        type(frame.columns),
+        types.FunctionType,
+        type(frame.index),
+    ):
+        fory.type_resolver.get_type_info(cls)
 
 
 def test_compatible_mode_overrides():
@@ -685,6 +702,8 @@ def test_ref_cleanup():
     fory = Fory(xlang=False, ref=True, strict=False, compatible=False)
     o1 = RefTestClass1()
     o2 = RefTestClass2(f1=o1)
+    fory.register_type(RefTestClass1)
+    fory.register_type(RefTestClass2)
     pickle.loads(pickle.dumps(o2))
     ref1 = weakref.ref(o1)
     ref2 = weakref.ref(o2)
@@ -792,6 +811,72 @@ class RegisterClass:
         self.f1 = f1
 
 
+class FrozenRegistration:
+    pass
+
+
+class RejectedRegistration:
+    pass
+
+
+@dataclass
+class FrozenChild:
+    value: int
+
+
+@dataclass
+class FrozenParent:
+    child: FrozenChild
+
+
+@dataclass
+class BrokenFinalization:
+    value: int
+
+
+@dataclass
+class FrozenRecursive:
+    child: Optional["FrozenRecursive"] = None
+
+
+class FrozenMetadataEnum(Enum):
+    VALUE = 1
+
+
+@dataclass
+class FrozenExt:
+    value: int
+
+
+@dataclass
+class FrozenSecondExt:
+    value: int
+
+
+class FrozenExtSerializer(pyfory.Serializer):
+    def write(self, write_context, value):
+        write_context.write_int32(value.value)
+
+    def read(self, read_context):
+        return self.type_(read_context.read_int32())
+
+
+class FrozenUnion:
+    def __init__(self, case_id, value):
+        self._case_id = case_id
+        self._value = value
+
+    def case_id(self):
+        return self._case_id
+
+    @staticmethod
+    def _from_case_id(case_id, value):
+        return FrozenUnion(case_id, value)
+
+    def __eq__(self, other):
+        return isinstance(other, FrozenUnion) and (self._case_id, self._value) == (other._case_id, other._value)
+
+
 def test_register_py_serializer():
     fory = Fory(xlang=False, ref=True, strict=False, compatible=False)
 
@@ -804,7 +889,7 @@ def test_register_py_serializer():
             a.f1 = read_context.read_int32()
             return a
 
-    fory.register_type(A, serializer=Serializer(fory.type_resolver, RegisterClass))
+    fory.register_type(RegisterClass, serializer=Serializer(fory.type_resolver, RegisterClass))
     assert fory.deserialize(fory.serialize(RegisterClass(100))).f1 == 100
 
 
@@ -902,9 +987,362 @@ def test_register_type_name_exclusive():
         fory.register_type(A, type_id=100, name="example.A")
 
 
+@pytest.mark.parametrize("root", ["serialize", "deserialize", "dump"])
+def test_registry_freezes_at_root(root):
+    fory = Fory(xlang=True, compatible=False)
+    fory.register_type(FrozenRegistration, type_id=701)
+
+    if root == "serialize":
+        fory.serialize(None)
+    elif root == "deserialize":
+        with pytest.raises(Exception):
+            fory.deserialize(b"")
+    else:
+        fory.dump(None, io.BytesIO())
+
+    registrations = (
+        lambda: fory.register(RejectedRegistration, type_id=702),
+        lambda: fory.register_type(RejectedRegistration, name="test.Rejected"),
+        lambda: fory.register_union(
+            RejectedRegistration,
+            name="test.RejectedUnion",
+            serializer=object(),
+        ),
+        lambda: fory.register_serializer(FrozenRegistration, object()),
+        lambda: fory.type_resolver.register_type(RejectedRegistration, type_id=702),
+        lambda: fory.type_resolver.register_union(
+            RejectedRegistration,
+            name="test.RejectedUnion",
+            serializer=object(),
+        ),
+        lambda: fory.type_resolver.register_serializer(FrozenRegistration, object()),
+    )
+    for registration in registrations:
+        with pytest.raises(RuntimeError, match="first root operation"):
+            registration()
+    assert fory.type_resolver.get_type_info(RejectedRegistration, create=False) is None
+    assert fory.type_resolver.get_type_info(FrozenRegistration).type_id == TypeId.STRUCT
+
+
+def test_frozen_serializer_lookup(monkeypatch):
+    fory = Fory(xlang=False, strict=False, compatible=False)
+    fory.serialize(None)
+    serializer_count = 0
+    serializer_type = registry_module._DefaultPolicyObjectSerializer
+
+    class CountingSerializer(serializer_type):
+        def __init__(self, type_resolver, cls):
+            nonlocal serializer_count
+            serializer_count += 1
+            super().__init__(type_resolver, cls)
+
+    monkeypatch.setattr(
+        registry_module,
+        "_DefaultPolicyObjectSerializer",
+        CountingSerializer,
+    )
+    registry_sizes = tuple(
+        len(getattr(fory.type_resolver, attr))
+        for attr in (
+            "_types_info",
+            "_type_id_to_type_info",
+            "_user_type_id_to_type_info",
+            "_ns_type_to_type_info",
+        )
+    )
+
+    with pytest.raises(RuntimeError, match="first root operation"):
+        fory.type_resolver.register_serializer(RejectedRegistration, object())
+    with pytest.raises(RuntimeError, match="first root operation"):
+        fory.type_resolver.get_type_info(RejectedRegistration)
+
+    assert serializer_count == 0
+    assert registry_sizes == tuple(
+        len(getattr(fory.type_resolver, attr))
+        for attr in (
+            "_types_info",
+            "_type_id_to_type_info",
+            "_user_type_id_to_type_info",
+            "_ns_type_to_type_info",
+        )
+    )
+    assert fory.type_resolver.get_type_info(RejectedRegistration, create=False) is None
+
+
+def test_frozen_named_lookup(monkeypatch):
+    writer = Fory(xlang=True, compatible=False)
+    writer.register_type(FrozenRegistration, name="test.FrozenWireType")
+    data = writer.serialize(FrozenRegistration())
+
+    reader = Fory(xlang=True, strict=False, compatible=False)
+    loaded = False
+
+    def reject_load(*_args, **_kwargs):
+        nonlocal loaded
+        loaded = True
+        raise AssertionError("frozen named lookup must not load a class")
+
+    monkeypatch.setattr(registry_module, "load_class", reject_load)
+    with pytest.raises(RuntimeError, match="first root operation"):
+        reader.deserialize(data)
+    assert not loaded
+
+
+def test_registered_types_finalize():
+    fory = Fory(xlang=True, compatible=True)
+    parent_info = fory.register_type(FrozenParent, name="test.FrozenParent")
+    child_info = fory.register_type(FrozenChild, name="test.FrozenChild")
+    assert parent_info.serializer is None
+    assert child_info.serializer is None
+
+    value = FrozenParent(FrozenChild(7))
+    data = fory.serialize(value)
+
+    assert parent_info.serializer is not None
+    assert child_info.serializer is not None
+    assert parent_info.type_def is not None
+    assert child_info.type_def is not None
+    assert fory.deserialize(data) == value
+
+
+def test_lazy_dataclass_finalizes():
+    from pyfory.struct import DataClassStubSerializer
+
+    fory = Fory(xlang=False, strict=False, compatible=False)
+    type_info = fory.type_resolver.get_type_info(BrokenFinalization)
+    assert isinstance(type_info.serializer, DataClassStubSerializer)
+
+    value = BrokenFinalization(7)
+    data = fory.serialize(value)
+
+    assert not isinstance(type_info.serializer, DataClassStubSerializer)
+    assert fory.deserialize(data) == value
+
+
+def test_recursive_serializer_stable():
+    fory = Fory(xlang=True, compatible=True, ref=True)
+    type_info = fory.register_type(FrozenRecursive, name="test.FrozenRecursive")
+    value = FrozenRecursive(FrozenRecursive())
+
+    first = fory.serialize(value)
+    serializer = type_info.serializer
+    maps = tuple(
+        dict(getattr(fory.type_resolver, attr))
+        for attr in (
+            "_types_info",
+            "_type_id_to_type_info",
+            "_user_type_id_to_type_info",
+            "_ns_type_to_type_info",
+            "_meta_shared_type_info",
+        )
+    )
+
+    assert fory.deserialize(first) == value
+    assert fory.deserialize(fory.serialize(value)) == value
+    assert type_info.serializer is serializer
+    assert maps == tuple(
+        dict(getattr(fory.type_resolver, attr))
+        for attr in (
+            "_types_info",
+            "_type_id_to_type_info",
+            "_user_type_id_to_type_info",
+            "_ns_type_to_type_info",
+            "_meta_shared_type_info",
+        )
+    )
+
+
+def test_named_metadata_finalizes():
+    enum_fory = Fory(xlang=True, compatible=True)
+    enum_info = enum_fory.register_type(FrozenMetadataEnum, name="test.FrozenMetadataEnum")
+    enum_serializer = enum_info.serializer
+    enum_data = enum_fory.serialize(FrozenMetadataEnum.VALUE)
+    assert enum_fory.deserialize(enum_data) is FrozenMetadataEnum.VALUE
+    assert enum_info.serializer is enum_serializer
+
+    ext_fory = Fory(xlang=True, compatible=True)
+    ext_serializer = FrozenExtSerializer(ext_fory.type_resolver, FrozenExt)
+    ext_info = ext_fory.register_type(FrozenExt, name="test.FrozenExt", serializer=ext_serializer)
+    ext_data = ext_fory.serialize(FrozenExt(7))
+    assert ext_fory.deserialize(ext_data) == FrozenExt(7)
+    assert ext_info.serializer is ext_serializer
+
+    union_fory = Fory(xlang=True, compatible=True)
+    union_serializer = UnionSerializer(union_fory.type_resolver, FrozenUnion, {0: str})
+    union_info = union_fory.register_union(
+        FrozenUnion,
+        name="test.FrozenUnion",
+        serializer=union_serializer,
+    )
+    union_data = union_fory.serialize(FrozenUnion(0, "value"))
+    assert union_fory.deserialize(union_data) == FrozenUnion(0, "value")
+    assert union_info.serializer is union_serializer
+
+    for fory, type_info in (
+        (enum_fory, enum_info),
+        (ext_fory, ext_info),
+        (union_fory, union_info),
+    ):
+        assert type_info.type_def is not None
+        header = Buffer(type_info.type_def.encoded).read_int64()
+        assert fory.type_resolver._meta_shared_type_info[header] is type_info
+
+
+def test_pre_root_serializer_rebind():
+    fory = Fory(xlang=True, compatible=True)
+    type_info = fory.register_type(FrozenExt, name="test.ReboundExt")
+    fory.type_resolver.get_serializer(FrozenExt)
+    old_header = Buffer(type_info.type_def.encoded).read_int64()
+    assert fory.type_resolver._meta_shared_type_info[old_header] is type_info
+    id_map = dict(fory.type_resolver._type_id_to_type_info)
+
+    serializer = FrozenExtSerializer(fory.type_resolver, FrozenExt)
+    fory.register_serializer(FrozenExt, serializer)
+    assert type_info.type_def is None
+    assert old_header not in fory.type_resolver._meta_shared_type_info
+    assert fory.type_resolver._type_id_to_type_info == id_map
+
+    data = fory.serialize(FrozenExt(9))
+    assert fory.deserialize(data) == FrozenExt(9)
+    assert type_info.serializer is serializer
+    assert type_info.type_id == TypeId.NAMED_EXT
+    new_header = Buffer(type_info.type_def.encoded).read_int64()
+    assert new_header != old_header
+    assert fory.type_resolver._meta_shared_type_info[new_header] is type_info
+
+
+def test_named_serializer_id_map():
+    fory = Fory(xlang=True, compatible=True)
+    first = fory.register_type(FrozenExt, name="test.NamedFirst")
+    second = fory.register_type(FrozenSecondExt, name="test.NamedSecond")
+    for cls in (FrozenExt, FrozenSecondExt):
+        fory.type_resolver.get_serializer(cls)
+    id_map = dict(fory.type_resolver._type_id_to_type_info)
+    wire_map = dict(fory.type_resolver._ns_type_to_type_info)
+    named_infos = (
+        fory.type_resolver.get_type_info_by_name("test", "NamedFirst"),
+        fory.type_resolver.get_type_info_by_name("test", "NamedSecond"),
+    )
+
+    first_serializer = FrozenExtSerializer(fory.type_resolver, FrozenExt)
+    second_serializer = FrozenExtSerializer(fory.type_resolver, FrozenSecondExt)
+    fory.register_serializer(FrozenExt, first_serializer)
+    fory.register_serializer(FrozenSecondExt, second_serializer)
+
+    assert fory.type_resolver._type_id_to_type_info == id_map
+    assert TypeId.NAMED_EXT not in fory.type_resolver._type_id_to_type_info
+    assert fory.type_resolver._ns_type_to_type_info == wire_map
+    assert named_infos == (
+        fory.type_resolver.get_type_info_by_name("test", "NamedFirst"),
+        fory.type_resolver.get_type_info_by_name("test", "NamedSecond"),
+    )
+    assert fory.deserialize(fory.serialize(FrozenExt(3))) == FrozenExt(3)
+    assert first.serializer is first_serializer
+    assert second.serializer is second_serializer
+
+
+def test_failed_finalization_freezes(monkeypatch):
+    fory = Fory(xlang=True, compatible=True)
+    type_info = fory.register_type(
+        BrokenFinalization,
+        name="test.BrokenFinalization",
+    )
+    encode_type_def = registry_module.encode_typedef
+
+    def fail_finalization(resolver, cls):
+        if cls is type_info.cls:
+            assert type_info.serializer is not None
+            raise ValueError("finalization failed")
+        return encode_type_def(resolver, cls)
+
+    monkeypatch.setattr(
+        registry_module,
+        "encode_typedef",
+        fail_finalization,
+    )
+
+    with pytest.raises(ValueError, match="finalization failed"):
+        fory.serialize(None)
+    assert type_info.serializer is None
+    assert type_info.type_def is None
+    with pytest.raises(RuntimeError, match="first root operation"):
+        fory.type_resolver.get_type_info(type_info.cls)
+    assert type_info.serializer is None
+    assert type_info.type_def is None
+    with pytest.raises(RuntimeError, match="first root operation"):
+        fory.register_type(RejectedRegistration, name="test.Rejected")
+    assert fory.type_resolver.get_type_info(RejectedRegistration, create=False) is None
+
+
+def test_registration_conflicts():
+    class First:
+        pass
+
+    class Second:
+        pass
+
+    class DifferentKind(Enum):
+        VALUE = 1
+
+    fory = Fory(xlang=True, compatible=False)
+    first = fory.register_type(First, name="SameName")
+    with pytest.raises(TypeError, match="type name"):
+        fory.register_type(Second, name=".SameName")
+    with pytest.raises(TypeError, match="type name"):
+        fory.register_type(DifferentKind, name="SameName")
+    assert fory.type_resolver.get_type_info_by_name("", "SameName") is first
+    assert fory.type_resolver.get_type_info(Second, create=False) is None
+    assert fory.type_resolver.get_type_info(DifferentKind, create=False) is None
+
+    numeric = Fory(xlang=True, compatible=False)
+    first = numeric.register_type(First, type_id=703)
+    with pytest.raises(TypeError, match="user_type_id 703"):
+        numeric.register_type(Second, type_id=703)
+    assert (
+        numeric.type_resolver.get_type_info_by_id(
+            TypeId.STRUCT,
+            user_type_id=703,
+        )
+        is first
+    )
+    assert numeric.type_resolver.get_type_info(Second, create=False) is None
+
+    for registration in ("name", "id"):
+        union_fory = Fory(xlang=True, compatible=False)
+        serializer = UnionSerializer(union_fory.type_resolver, FrozenUnion, {0: str})
+        if registration == "name":
+            union_fory.register_union(
+                FrozenUnion,
+                name="test.FirstUnion",
+                serializer=serializer,
+            )
+            duplicate = lambda: union_fory.register_union(
+                FrozenUnion,
+                name="test.SecondUnion",
+                serializer=serializer,
+            )
+        else:
+            union_fory.register_union(FrozenUnion, type_id=704, serializer=serializer)
+            duplicate = lambda: union_fory.register_union(FrozenUnion, type_id=705, serializer=serializer)
+        state = (
+            dict(union_fory.type_resolver._types_info),
+            dict(union_fory.type_resolver._ns_type_to_type_info),
+            dict(union_fory.type_resolver._user_type_id_to_type_info),
+        )
+        with pytest.raises(TypeError, match="registered already"):
+            duplicate()
+        assert state == (
+            dict(union_fory.type_resolver._types_info),
+            dict(union_fory.type_resolver._ns_type_to_type_info),
+            dict(union_fory.type_resolver._user_type_id_to_type_info),
+        )
+
+
 def test_np_types():
     fory = Fory(xlang=False, ref=True, strict=False, compatible=False)
     o1 = [1, True, np.dtype(np.int32)]
+    fory.register_type(type(o1[2]))
+    fory.type_resolver.get_type_info(type(type(o1[2])))
     data1 = fory.serialize(o1)
     new_o1 = fory.deserialize(data1)
     assert o1 == new_o1
@@ -913,6 +1351,8 @@ def test_np_types():
 def test_pandas_dataframe():
     fory = Fory(xlang=False, ref=True, strict=False, compatible=False)
     df = pd.DataFrame({"a": list(range(10))})
+    fory.register_type(pd.DataFrame)
+    prepare_pandas_frame_types(fory, df)
     df2 = fory.deserialize(fory.serialize(df))
     assert df2.equals(df)
 
@@ -929,6 +1369,7 @@ def test_unsupported_callback():
         return x + x
 
     obj1 = [1, True, f1, f2, {1: 2}]
+    fory.register_type(type(f1))
     unsupported_objects = []
     binary1 = fory.serialize(obj1, unsupported_callback=unsupported_objects.append)
     # Functions are now properly supported, so unsupported_objects should be empty
@@ -984,6 +1425,7 @@ class SparseIntEnum(IntEnum):
 
 def test_enum():
     fory = Fory(xlang=False, ref=True, compatible=False)
+    fory.register_type(EnumClass)
     assert ser_de(fory, EnumClass.E1) == EnumClass.E1
     assert ser_de(fory, EnumClass.E2) == EnumClass.E2
     assert ser_de(fory, EnumClass.E3) == EnumClass.E3
@@ -1000,6 +1442,7 @@ def test_xlang_enum_uses_sparse_integer_values():
 
 def test_duplicate_serialize():
     fory = Fory(xlang=False, ref=True, compatible=False)
+    fory.register_type(EnumClass)
     assert ser_de(fory, EnumClass.E1) == EnumClass.E1
     assert ser_de(fory, EnumClass.E2) == EnumClass.E2
     assert ser_de(fory, EnumClass.E4) == EnumClass.E4
@@ -1012,6 +1455,8 @@ def test_pandas_range_index():
     fory = Fory(xlang=False, ref=True, strict=False, compatible=False)
     fory.register_type(pd.RangeIndex, serializer=pyfory.serializer.PandasRangeIndexSerializer(fory.type_resolver))
     index = pd.RangeIndex(1, 100, 2, name="a")
+    fory.register_type(type(index.dtype))
+    fory.type_resolver.get_type_info(type(type(index.dtype)))
     new_index = ser_de(fory, index)
     pd.testing.assert_index_equal(new_index, new_index)
 
@@ -1035,6 +1480,7 @@ def test_py_serialize_dataclass(track_ref):
         strict=False,
         compatible=False,
     )
+    fory.register_type(PyDataClass1)
     obj1 = PyDataClass1(f1=1, f2=-2.0, f3="abc", f4=True, f5="xyz", f6=[1, 2], f7={"k1": "v1"})
     assert ser_de(fory, obj1) == obj1
     obj2 = PyDataClass1(f1=None, f2=-2.0, f3="abc", f4=None, f5="xyz", f6=None, f7=None)
@@ -1095,6 +1541,10 @@ def test_function(track_ref):
         strict=False,
         compatible=False,
     )
+    fory.register_type(types.FunctionType)
+    fory.register_type(types.MethodType)
+    df = pd.DataFrame({"a": list(range(10))})
+    prepare_pandas_frame_types(fory, df)
     c = fory.deserialize(fory.serialize(lambda x: x * 2))
     assert c(2) == 4
 
@@ -1104,7 +1554,6 @@ def test_function(track_ref):
     c = fory.deserialize(fory.serialize(func))
     assert c(2) == 4
 
-    df = pd.DataFrame({"a": list(range(10))})
     df_sum = fory.deserialize(fory.serialize(df.sum))
     assert df_sum().equals(df.sum())
 
@@ -1163,6 +1612,8 @@ def test_map_fields_chunk_serializer(track_ref):
     map_fields_object.dict_with_custom_obj = dict_with_custom_obj
     map_fields_object.single_key_dict = single_key_dict
 
+    fory.register_type(MapFields)
+    fory.register_type(CustomClass)
     serialized = fory.serialize(map_fields_object)
     deserialized = fory.deserialize(serialized)
 
@@ -1216,6 +1667,7 @@ def test_py_serialize_object(track_ref):
 def test_py_serialize_empty_object(track_ref):
     fory = Fory(xlang=False, ref=track_ref, strict=False, compatible=False)
     obj = object()
+    fory.register_type(object)
     result = ser_de(fory, obj)
     assert type(result) is object
 

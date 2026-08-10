@@ -23,6 +23,63 @@ cdef extern from "fory/thirdparty/MurmurHash3.h":
     void MurmurHash3_x64_128(const void *key, int len, uint32_t seed, void *out) nogil
 
 
+cdef extern from *:
+    """
+    #include <cstring>
+
+    static inline uint64_t fory_load_u64(const char *data) {
+      uint64_t value;
+      std::memcpy(&value, data, sizeof(value));
+      return value;
+    }
+
+    static inline uint64_t fory_rotl64(uint64_t value, int shift) {
+      return (value << shift) | (value >> (64 - shift));
+    }
+
+    static inline void fory_sip_round(uint64_t &v0, uint64_t &v1,
+                                      uint64_t &v2, uint64_t &v3) {
+      v0 += v1;
+      v1 = fory_rotl64(v1, 13);
+      v1 ^= v0;
+      v0 = fory_rotl64(v0, 32);
+      v2 += v3;
+      v3 = fory_rotl64(v3, 16);
+      v3 ^= v2;
+      v0 += v3;
+      v3 = fory_rotl64(v3, 21);
+      v3 ^= v0;
+      v2 += v1;
+      v1 = fory_rotl64(v1, 17);
+      v1 ^= v2;
+      v2 = fory_rotl64(v2, 32);
+    }
+
+    static inline uint64_t fory_meta_cache_hash(uint64_t value,
+                                                uint64_t key0,
+                                                uint64_t key1) {
+      uint64_t v0 = 0x736f6d6570736575ULL ^ key0;
+      uint64_t v1 = 0x646f72616e646f6dULL ^ key1;
+      uint64_t v2 = 0x6c7967656e657261ULL ^ key0;
+      uint64_t v3 = 0x7465646279746573ULL ^ key1;
+      const uint64_t length = 8ULL << 56;
+      v3 ^= value;
+      fory_sip_round(v0, v1, v2, v3);
+      v0 ^= value;
+      v3 ^= length;
+      fory_sip_round(v0, v1, v2, v3);
+      v0 ^= length;
+      v2 ^= 0xff;
+      fory_sip_round(v0, v1, v2, v3);
+      fory_sip_round(v0, v1, v2, v3);
+      fory_sip_round(v0, v1, v2, v3);
+      return v0 ^ v1 ^ v2 ^ v3;
+    }
+    """
+    uint64_t fory_load_u64(const char *data) noexcept nogil
+    uint64_t fory_meta_cache_hash(uint64_t value, uint64_t key0, uint64_t key1) noexcept nogil
+
+
 INT64_TYPE_ID = TypeId.VARINT64
 FLOAT64_TYPE_ID = TypeId.FLOAT64
 BOOL_TYPE_ID = TypeId.BOOL
@@ -269,6 +326,8 @@ cdef class RefReader:
 
     cdef inline set_read_ref(self, int32_t ref_id, obj):
         cdef int32_t size
+        cdef PyObject *previous
+        cdef PyObject *replacement
         if not self.track_ref:
             return
         if ref_id == NOT_NULL_VALUE_FLAG:
@@ -276,11 +335,16 @@ cdef class RefReader:
         size = self.read_objects.size()
         if ref_id < 0 or ref_id >= size:
             raise ValueError(f"Invalid ref id {ref_id}, current size {size}")
-        # Referenceable containers/structs may populate their slot eagerly
-        # through reference(), so the follow-up store only fills an empty slot.
-        if self.read_objects[ref_id] == NULL:
-            Py_INCREF(obj)
-            self.read_objects[ref_id] = <PyObject *>obj
+        replacement = <PyObject *>obj
+        previous = self.read_objects[ref_id]
+        if previous == replacement:
+            return
+        # Compatible field finalization may replace an eagerly published raw
+        # carrier with its one final owner. This remains the ordinary ref slot:
+        # later RefFlag reads resolve the final value without alternate state.
+        Py_INCREF(obj)
+        self.read_objects[ref_id] = replacement
+        Py_XDECREF(previous)
 
     cpdef inline reset(self):
         cdef PyObject *item
@@ -339,14 +403,19 @@ cdef class MetaStringWriter:
 @cython.final
 cdef class MetaStringReader:
     cdef object shared_registry
+    cdef uint64_t _cache_hash_key0
+    cdef uint64_t _cache_hash_key1
     cdef vector[PyObject *] _c_dynamic_id_to_encoded_meta_string_vec
     cdef vector[PyObject *] _c_owned_dynamic_encoded_meta_string_vec
     cdef vector[PyObject *] _c_cached_encoded_meta_string_vec
-    cdef flat_hash_map[int64_t, PyObject *] _c_hash_to_encoded_meta_string
-    cdef flat_hash_map[int64_t, PyObject *] _c_hash_to_small_encoded_meta_string
+    cdef flat_hash_map[pair[uint64_t, int64_t], PyObject *] _c_hash_to_encoded_meta_string
+    cdef flat_hash_map[pair[uint64_t, int64_t], PyObject *] _c_hash_to_small_encoded_meta_string
 
     def __init__(self, shared_registry):
+        cdef bytes cache_hash_key = os.urandom(16)
         self.shared_registry = shared_registry
+        self._cache_hash_key0 = fory_load_u64(PyBytes_AS_STRING(cache_hash_key))
+        self._cache_hash_key1 = fory_load_u64(PyBytes_AS_STRING(cache_hash_key) + 8)
 
     def __dealloc__(self):
         cdef PyObject *item
@@ -363,13 +432,14 @@ cdef class MetaStringReader:
         cdef int64_t hashcode
         cdef int64_t canonical_hash
         cdef int64_t[2] hash_out
+        cdef pair[uint64_t, int64_t] cache_key
         cdef PyObject *encoded_meta_string_ptr
         cdef int32_t reader_index
         cdef int8_t encoding = 0
         cdef bytes data
         cdef bytes cached_data
         cdef object encoded_meta_string
-        cdef pair[int64_t, PyObject *] *entry
+        cdef pair[pair[uint64_t, int64_t], PyObject *] *entry
         cdef bint cache_entry
         if header & 0b1:
             if length <= 0:
@@ -391,7 +461,15 @@ cdef class MetaStringReader:
             if <uint8_t> encoding > 4:
                 raise ValueError(f"Unexpected encoding flag: {encoding}")
             hashcode = _hash_small_metastring(v1, v2, length, <uint8_t> encoding)
-            entry = self._c_hash_to_small_encoded_meta_string.find(hashcode)
+            # Persistent cache placement must not be predictable from a wire-controlled
+            # protocol hash. Keep the raw hash for registry identity and byte validation.
+            cache_key.first = fory_meta_cache_hash(
+                <uint64_t> hashcode,
+                self._cache_hash_key0,
+                self._cache_hash_key1,
+            )
+            cache_key.second = hashcode
+            entry = self._c_hash_to_small_encoded_meta_string.find(cache_key)
             reader_index = buffer.get_reader_index()
             if entry != NULL and deref(entry).second != NULL:
                 cached_data = (<object> deref(entry).second).data
@@ -425,7 +503,7 @@ cdef class MetaStringReader:
                 if cache_entry:
                     Py_INCREF(<object> encoded_meta_string_ptr)
                     self._c_cached_encoded_meta_string_vec.push_back(encoded_meta_string_ptr)
-                    self._c_hash_to_small_encoded_meta_string[hashcode] = encoded_meta_string_ptr
+                    self._c_hash_to_small_encoded_meta_string[cache_key] = encoded_meta_string_ptr
                 else:
                     Py_INCREF(<object> encoded_meta_string_ptr)
                     self._c_owned_dynamic_encoded_meta_string_vec.push_back(encoded_meta_string_ptr)
@@ -435,7 +513,13 @@ cdef class MetaStringReader:
                 raise ValueError(f"Unexpected encoding flag: {hashcode & 0xFF}")
             reader_index = buffer.get_reader_index()
             buffer.check_bound(reader_index, length)
-            entry = self._c_hash_to_encoded_meta_string.find(hashcode)
+            cache_key.first = fory_meta_cache_hash(
+                <uint64_t> hashcode,
+                self._cache_hash_key0,
+                self._cache_hash_key1,
+            )
+            cache_key.second = hashcode
+            entry = self._c_hash_to_encoded_meta_string.find(cache_key)
             if entry != NULL and deref(entry).second != NULL:
                 cached_data = (<object> deref(entry).second).data
                 if (
@@ -478,7 +562,7 @@ cdef class MetaStringReader:
                 if cache_entry:
                     Py_INCREF(<object> encoded_meta_string_ptr)
                     self._c_cached_encoded_meta_string_vec.push_back(encoded_meta_string_ptr)
-                    self._c_hash_to_encoded_meta_string[hashcode] = encoded_meta_string_ptr
+                    self._c_hash_to_encoded_meta_string[cache_key] = encoded_meta_string_ptr
                 else:
                     Py_INCREF(<object> encoded_meta_string_ptr)
                     self._c_owned_dynamic_encoded_meta_string_vec.push_back(encoded_meta_string_ptr)
@@ -569,6 +653,7 @@ cdef class WriteContext:
         self.depth = 0
 
     cpdef inline prepare(self, Buffer buffer, buffer_callback=None, unsupported_callback=None):
+        buffer._check_writable()
         self.buffer = buffer
         self.c_buffer = buffer.c_buffer
         self.buffer_callback = buffer_callback

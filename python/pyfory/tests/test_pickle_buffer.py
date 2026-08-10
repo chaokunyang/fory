@@ -16,6 +16,7 @@
 # under the License.
 
 import pickle
+import types
 import pytest
 from pyfory import Fory
 
@@ -29,6 +30,20 @@ try:
     import pandas as pd
 except ImportError:
     pd = None
+
+
+def prepare_pandas_types(fory, frame):
+    for cls in (
+        pd.DataFrame,
+        type(frame._mgr),
+        type,
+        type(frame._mgr.blocks[0]),
+        type(pd._libs.internals._unpickle_block),
+        type(frame.columns),
+        types.FunctionType,
+        type(frame.index),
+    ):
+        fory.type_resolver.get_type_info(cls)
 
 
 def test_pickle_buffer_serialization():
@@ -71,6 +86,7 @@ def test_pandas_out_of_band_serialization():
             "c": ["text"] * 1000,
         }
     )
+    prepare_pandas_types(fory, df)
 
     buffer_objects = []
     serialized = fory.serialize(df, buffer_callback=buffer_objects.append)
@@ -133,6 +149,7 @@ def test_mixed_numpy_pandas_out_of_band():
 
     arr = np.arange(500, dtype=np.float64)
     df = pd.DataFrame({"x": np.arange(500, dtype=np.int64), "y": np.arange(500, dtype=np.float32)})
+    prepare_pandas_types(fory, df)
 
     data = {"array": arr, "dataframe": df}
 

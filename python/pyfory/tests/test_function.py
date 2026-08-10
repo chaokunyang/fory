@@ -63,13 +63,13 @@ def test_regular_functions_serialization():
 
     # Test regular function
     fory.register_type(type(add_one))
+    # Registry contents are finalized by the first root operation.
+    fory.register_type(tuple)
+    fory.register_type(list)
     serialized = fory.serialize(add_one)
     deserialized = fory.deserialize(serialized)
     assert add_one(test_input) == deserialized(test_input)
 
-    # Register the necessary types for complex functions
-    fory.register_type(tuple)
-    fory.register_type(list)
     # dict is already registered by default with MapSerializer
 
     # Test complex function

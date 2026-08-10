@@ -17,15 +17,18 @@
 
 import array
 import dataclasses
+import marshal
 import struct
 import sys
+import types
 from typing import Any, List
 
 import pytest
 
 import pyfory
+from pyfory.policy import DEFAULT_POLICY
 from pyfory.serialization import Buffer
-from pyfory.serializer import ListSerializer
+from pyfory.serializer import FunctionSerializer, ListSerializer, ObjectSerializer
 
 try:
     import numpy as np
@@ -125,9 +128,56 @@ class BudgetStatefulObject:
         pass
 
 
+class BudgetStatefulArgsObject:
+    def __init__(self, _value):
+        pass
+
+    def __getnewargs__(self):
+        return (1,)
+
+    def __getstate__(self):
+        return None
+
+    def __setstate__(self, state):
+        pass
+
+
 class BudgetReduceObject:
     def __reduce__(self):
         return (BudgetReduceObject, ())
+
+
+class BudgetSlotBase:
+    __slots__ = ("base",)
+
+
+class BudgetSlotChild(BudgetSlotBase):
+    __slots__ = ("child",)
+
+
+class BudgetHybridObject(BudgetSlotBase):
+    pass
+
+
+class BudgetExplicitHybrid:
+    __slots__ = ("slot", "__dict__")
+
+
+class BudgetIteratorSlots:
+    __slots__ = iter(("left", "right"))
+
+
+class BudgetShadowBase:
+    __slots__ = ("shadowed",)
+
+
+class BudgetShadowHybrid(BudgetShadowBase):
+    shadowed = 0
+
+
+class BudgetDictShadow(BudgetExplicitHybrid):
+    __slots__ = ()
+    __dict__ = "shadowed"
 
 
 SKIP_CLASS_ATTR_NAMES = (
@@ -231,6 +281,30 @@ def read_object_ndarray(shape, items, length=None):
 
     try:
         fory.read_context.prepare(Buffer(payload))
+        return fory.read_context.read_non_ref(serializer)
+    finally:
+        fory.reset_read()
+
+
+def object_body_payload(fields):
+    fory = new_fory(xlang=False)
+    buffer = Buffer.allocate(64)
+    try:
+        fory.write_context.prepare(buffer)
+        buffer.write_var_uint32(len(fields))
+        for name, value in fields:
+            buffer.write_string(name)
+            fory.write_context.write_ref(value)
+        return buffer.to_bytes(0, buffer.get_writer_index())
+    finally:
+        fory.reset_write()
+
+
+def read_object_body(cls, fields, limit):
+    fory = new_fory(limit, xlang=False)
+    serializer = ObjectSerializer(fory.type_resolver, cls)
+    try:
+        fory.read_context.prepare(Buffer(object_body_payload(fields)))
         return fory.read_context.read_non_ref(serializer)
     finally:
         fory.reset_read()
@@ -370,20 +444,40 @@ def test_stateful_object_budget():
     assert isinstance(reader.deserialize(data), BudgetStatefulObject)
 
 
+def test_stateful_constructor_owner_budget():
+    value = BudgetStatefulArgsObject(1)
+    writer = new_fory(xlang=False)
+    writer.register_type(BudgetStatefulArgsObject)
+    data = writer.serialize(value)
+
+    constructor_budget = tuple_memory(1) + map_memory(0)
+    with pytest.raises(ValueError, match="Estimated graph memory budget exceeded"):
+        reader = new_fory(constructor_budget, xlang=False)
+        reader.register_type(BudgetStatefulArgsObject)
+        reader.deserialize(data)
+
+    reader = new_fory(constructor_budget + PY_OBJECT_OWNER_BYTES, xlang=False)
+    reader.register_type(BudgetStatefulArgsObject)
+    assert isinstance(reader.deserialize(data), BudgetStatefulArgsObject)
+
+
 def test_reduce_object_budget():
     value = BudgetReduceObject()
     writer = new_fory(xlang=False)
     writer.register_type(BudgetReduceObject)
+    writer.type_resolver.get_type_info(type)
     data = writer.serialize(value)
 
     reduce_args_budget = tuple_memory(0) + PY_OBJECT_OWNER_BYTES
     with pytest.raises(ValueError, match="Estimated graph memory budget exceeded"):
         reader = new_fory(reduce_args_budget - 1, xlang=False)
         reader.register_type(BudgetReduceObject)
+        reader.type_resolver.get_type_info(type)
         reader.deserialize(data)
 
     reader = new_fory(reduce_args_budget, xlang=False)
     reader.register_type(BudgetReduceObject)
+    reader.type_resolver.get_type_info(type)
     assert isinstance(reader.deserialize(data), BudgetReduceObject)
 
 
@@ -393,7 +487,10 @@ def test_local_function_budget():
     def local_func(value=5):
         return value + captured
 
+    local_func.marker = 11
+
     writer = new_fory(xlang=False)
+    writer.type_resolver.get_type_info(types.FunctionType)
     data = writer.serialize(local_func)
 
     module_entries = len(sys.modules[local_func.__module__].__dict__)
@@ -405,35 +502,209 @@ def test_local_function_budget():
         + map_memory(0)
         + map_memory(module_entries)
         + PY_OBJECT_OWNER_BYTES
-        + map_memory(0)
+        + map_memory(1)
+        + map_memory(1)
     )
     with pytest.raises(ValueError, match="Estimated graph memory budget exceeded"):
-        new_fory(budget - PY_OBJECT_OWNER_BYTES, xlang=False).deserialize(data)
+        reader = new_fory(budget - map_memory(1), xlang=False)
+        reader.type_resolver.get_type_info(types.FunctionType)
+        reader.deserialize(data)
 
-    restored = new_fory(budget, xlang=False).deserialize(data)
+    reader = new_fory(budget, xlang=False)
+    reader.type_resolver.get_type_info(types.FunctionType)
+    restored = reader.deserialize(data)
     assert restored() == local_func()
+    assert restored.marker == local_func.marker
+
+
+def test_function_globals_union_budget():
+    global_name = "_fory_function_union_value"
+    module_globals = globals()
+    module_globals[global_name] = 7
+
+    def local_func():
+        return _fory_function_union_value  # noqa: F821
+
+    try:
+        writer = new_fory(xlang=False)
+        writer.type_resolver.get_type_info(types.FunctionType)
+        data = writer.serialize(local_func)
+    finally:
+        del module_globals[global_name]
+
+    module_entries = len(sys.modules[local_func.__module__].__dict__)
+    budget = PY_OBJECT_OWNER_BYTES + map_memory(1) + map_memory(module_entries + 1) + PY_OBJECT_OWNER_BYTES + map_memory(0)
+    with pytest.raises(ValueError, match="Estimated graph memory budget exceeded"):
+        reader = new_fory(budget - 1, xlang=False)
+        reader.type_resolver.get_type_info(types.FunctionType)
+        reader.deserialize(data)
+
+    reader = new_fory(budget, xlang=False)
+    reader.type_resolver.get_type_info(types.FunctionType)
+    restored = reader.deserialize(data)
+    assert restored() == 7
+
+
+def test_function_globals_carrier():
+    def local_func():
+        return None
+
+    writer = new_fory(xlang=False)
+    buffer = Buffer.allocate(256)
+    try:
+        writer.write_context.prepare(buffer)
+        buffer.write_int8(2)
+        buffer.write_string(local_func.__module__)
+        buffer.write_string(local_func.__qualname__)
+        buffer.write_bytes_and_size(marshal.dumps(local_func.__code__))
+        buffer.write_bool(False)
+        buffer.write_bool(False)
+        buffer.write_var_uint32(0)
+        buffer.write_var_uint32(0)
+        writer.write_context.write_ref([])
+        writer.write_context.write_ref({})
+        data = buffer.to_bytes(0, buffer.get_writer_index())
+    finally:
+        writer.reset_write()
+
+    reader = new_fory(xlang=False)
+    serializer = FunctionSerializer(reader.type_resolver, types.FunctionType)
+    try:
+        reader.read_context.prepare(Buffer(data))
+        with pytest.raises(ValueError):
+            reader.read_context.read_non_ref(serializer)
+    finally:
+        reader.reset_read()
+
+    class DictSubclass(dict):
+        def __iter__(self):
+            raise AssertionError("dict subclass operations must not run")
+
+    class FunctionReadContext:
+        policy = DEFAULT_POLICY
+
+        def __init__(self):
+            self._strings = iter((local_func.__module__, local_func.__qualname__))
+
+        def read_int8(self):
+            return 2
+
+        def read_string(self):
+            return next(self._strings)
+
+        def read_bytes_and_size(self):
+            return marshal.dumps(local_func.__code__)
+
+        def reserve_graph_memory(self, _size):
+            pass
+
+        def read_bool(self):
+            return False
+
+        def read_var_uint32(self):
+            return 0
+
+        def read_ref(self):
+            return DictSubclass()
+
+    with pytest.raises(ValueError):
+        serializer._deserialize_function(FunctionReadContext())
 
 
 def test_local_class_budget():
     def make_class():
         class LocalBudgetClass:
-            pass
+            marker = 7
+            normalize = classmethod(abs)
 
         return LocalBudgetClass
 
     cls = make_class()
     writer = new_fory(xlang=False)
+    writer.type_resolver.get_type_info(type)
+    writer.type_resolver.get_type_info(type(abs))
     data = writer.serialize(cls)
 
-    class_attrs = {name: value for name, value in cls.__dict__.items() if name not in SKIP_CLASS_ATTR_NAMES}
+    class_attrs = {name: value for name, value in cls.__dict__.items() if name not in SKIP_CLASS_ATTR_NAMES and not isinstance(value, classmethod)}
+    class_method_count = sum(isinstance(value, classmethod) for value in cls.__dict__.values())
     class_attr_value_budget = sum(collection_memory(len(value)) for value in class_attrs.values() if isinstance(value, tuple))
-    budget = collection_memory(1) + PY_OBJECT_OWNER_BYTES + map_memory(len(class_attrs)) + class_attr_value_budget
+    final_dict_budget = DICT_OWNER_BYTES + (len(class_attrs) + class_method_count) * 2 * REFERENCE_BYTES
+    budget = (
+        tuple_memory(1)
+        + PY_OBJECT_OWNER_BYTES
+        + class_method_count * PY_OBJECT_OWNER_BYTES
+        + map_memory(len(class_attrs))
+        + class_attr_value_budget
+        + final_dict_budget
+    )
     with pytest.raises(ValueError, match="Estimated graph memory budget exceeded"):
-        new_fory(collection_memory(1), xlang=False).deserialize(data)
+        reader = new_fory(budget - final_dict_budget, xlang=False)
+        reader.type_resolver.get_type_info(type)
+        reader.type_resolver.get_type_info(type(abs))
+        reader.deserialize(data)
 
-    restored = new_fory(budget, xlang=False).deserialize(data)
+    reader = new_fory(budget, xlang=False)
+    reader.type_resolver.get_type_info(type)
+    reader.type_resolver.get_type_info(type(abs))
+    restored = reader.deserialize(data)
     assert restored.__name__ == cls.__name__
     assert restored.__bases__ == cls.__bases__
+
+
+def test_native_slot_layout_budget():
+    fixed_layout_budget = PY_OBJECT_OWNER_BYTES + 2 * REFERENCE_BYTES
+    with pytest.raises(ValueError, match="Estimated graph memory budget exceeded"):
+        read_object_body(BudgetSlotChild, [], fixed_layout_budget - 1)
+
+    restored = read_object_body(BudgetSlotChild, [], fixed_layout_budget)
+    assert isinstance(restored, BudgetSlotChild)
+    assert not hasattr(restored, "base")
+    assert not hasattr(restored, "child")
+
+
+def test_iterator_slot_layout_budget():
+    fixed_layout_budget = PY_OBJECT_OWNER_BYTES + 2 * REFERENCE_BYTES
+    with pytest.raises(ValueError, match="Estimated graph memory budget exceeded"):
+        read_object_body(BudgetIteratorSlots, [], fixed_layout_budget - 1)
+
+    restored = read_object_body(BudgetIteratorSlots, [], fixed_layout_budget)
+    assert isinstance(restored, BudgetIteratorSlots)
+
+
+def test_shadowed_slot_dict_budget():
+    fixed_layout_budget = PY_OBJECT_OWNER_BYTES + REFERENCE_BYTES
+    final_dict_budget = map_memory(1)
+    budget = fixed_layout_budget + final_dict_budget
+    with pytest.raises(ValueError, match="Estimated graph memory budget exceeded"):
+        read_object_body(BudgetShadowHybrid, [("shadowed", 1)], budget - 1)
+
+    restored = read_object_body(BudgetShadowHybrid, [("shadowed", 1)], budget)
+    assert restored.__dict__ == {"shadowed": 1}
+
+
+def test_native_hybrid_dict_budget():
+    fixed_layout_budget = PY_OBJECT_OWNER_BYTES + REFERENCE_BYTES
+    final_dict_budget = map_memory(1)
+    with pytest.raises(ValueError, match="Estimated graph memory budget exceeded"):
+        read_object_body(BudgetHybridObject, [("extra", 1)], fixed_layout_budget + final_dict_budget - 1)
+
+    restored = read_object_body(BudgetHybridObject, [("extra", 1)], fixed_layout_budget + final_dict_budget)
+    assert restored.extra == 1
+
+    restored = read_object_body(BudgetExplicitHybrid, [("__dict__", {"extra": 1})], fixed_layout_budget + final_dict_budget)
+    assert restored.extra == 1
+
+
+def test_shadowed_dict_descriptor_budget():
+    fixed_layout_budget = PY_OBJECT_OWNER_BYTES + REFERENCE_BYTES
+    decoded_dict_budget = map_memory(1)
+    instance_dict_budget = map_memory(1)
+    budget = fixed_layout_budget + decoded_dict_budget + instance_dict_budget
+    with pytest.raises(ValueError, match="Estimated graph memory budget exceeded"):
+        read_object_body(BudgetDictShadow, [("__dict__", {"extra": 1})], budget - 1)
+
+    restored = read_object_body(BudgetDictShadow, [("__dict__", {"extra": 1})], budget)
+    assert BudgetExplicitHybrid.__dict__["__dict__"].__get__(restored) == {"__dict__": {"extra": 1}}
 
 
 def test_self_ref_budget():
@@ -590,6 +861,23 @@ def test_dense_leaf_owners_skipped():
             np.testing.assert_array_equal(restored, value)
         else:
             assert restored == value
+
+
+def test_native_wrapper_budgets():
+    slice_item = slice(None, None, None)
+    slice_value = [slice_item, slice_item]
+    slice_budget = collection_memory(2) + PY_OBJECT_OWNER_BYTES
+    restored = expect_budget(slice_value, slice_budget, xlang=False)
+    assert restored == slice_value
+    assert restored[0] is restored[1]
+
+    proxy_item = types.MappingProxyType({})
+    proxy_value = [proxy_item, proxy_item]
+    proxy_budget = collection_memory(2) + map_memory(0) + PY_OBJECT_OWNER_BYTES
+    restored = expect_budget(proxy_value, proxy_budget, xlang=False)
+    assert isinstance(restored[0], types.MappingProxyType)
+    assert restored[0] == proxy_value[0]
+    assert restored[0] is restored[1]
 
 
 def test_compatible_array_to_list_budget():

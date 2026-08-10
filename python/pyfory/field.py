@@ -44,6 +44,43 @@ FORY_OBJECT_METADATA_KEY = "__fory_object__"
 _FIELD_ID_UNSET = object()
 
 
+def canonical_field_name(name: str) -> str:
+    """Return the field identity used by compatible snake/camel binding."""
+    if "_" not in name:
+        return name
+    parts = name.split("_")
+    return parts[0] + "".join(part.capitalize() for part in parts[1:])
+
+
+def validate_field_identities(field_infos, owner: str) -> None:
+    """Reject duplicate tag or normalized-name identities within one schema."""
+    _validate_field_identities(field_infos, owner, include_tagged_names=False)
+
+
+def validate_local_field_identities(field_infos, owner: str) -> None:
+    """Reject identities that make local compatible name binding ambiguous."""
+    _validate_field_identities(field_infos, owner, include_tagged_names=True)
+
+
+def _validate_field_identities(field_infos, owner: str, *, include_tagged_names: bool) -> None:
+    tags = {}
+    names = {}
+    for field_info in field_infos:
+        tag_id = field_info.tag_id
+        if tag_id >= 0:
+            previous = tags.get(tag_id)
+            if previous is not None:
+                raise ValueError(f"Duplicate tag ID {tag_id} in {owner}: fields {previous!r} and {field_info.name!r} have the same ID")
+            tags[tag_id] = field_info.name
+            if not include_tagged_names:
+                continue
+        identity = canonical_field_name(field_info.name)
+        previous = names.get(identity)
+        if previous is not None:
+            raise ValueError(f"Duplicate compatible field identity {identity!r} in {owner}: fields {previous!r} and {field_info.name!r} collide")
+        names[identity] = field_info.name
+
+
 @dataclasses.dataclass(frozen=True)
 class ForyFieldMeta:
     """

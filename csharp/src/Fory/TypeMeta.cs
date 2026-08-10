@@ -271,14 +271,33 @@ public sealed class TypeMetaFieldType : IEquatable<TypeMetaFieldType>
 public sealed class TypeMetaFieldInfo : IEquatable<TypeMetaFieldInfo>
 {
     public TypeMetaFieldInfo(short? fieldId, string fieldName, TypeMetaFieldType fieldType)
+        : this(
+            fieldId,
+            fieldId.HasValue && fieldId.Value >= 0 ? (ulong)fieldId.Value : null,
+            fieldName,
+            fieldType)
+    {
+    }
+
+    private TypeMetaFieldInfo(
+        short? fieldId,
+        ulong? wireFieldId,
+        string fieldName,
+        TypeMetaFieldType fieldType)
     {
         FieldId = fieldId;
+        WireFieldId = wireFieldId;
         FieldName = fieldName;
         FieldType = fieldType;
         AssignedFieldId = -1;
     }
 
     public short? FieldId { get; }
+
+    // The public Int16 view is the local generated-field domain. Remote wire tags
+    // retain the full 15 + varuint32 identity here so they can be skipped or
+    // compared without narrowing into a different local field.
+    internal ulong? WireFieldId { get; }
 
     public string FieldName { get; }
 
@@ -301,25 +320,24 @@ public sealed class TypeMetaFieldInfo : IEquatable<TypeMetaFieldInfo>
             header |= 0b10;
         }
 
-        if (FieldId.HasValue)
+        if (FieldId.HasValue && FieldId.Value < 0)
         {
-            short fieldId = FieldId.Value;
-            if (fieldId < 0)
-            {
-                throw new EncodingException("negative field id is invalid");
-            }
+            throw new EncodingException("negative field id is invalid");
+        }
 
-            int size = fieldId;
+        if (WireFieldId.HasValue)
+        {
+            ulong fieldId = WireFieldId.Value;
             header |= 0b11 << 6;
-            if (size >= TypeMetaConstants.FieldNameSizeThreshold)
+            if (fieldId >= TypeMetaConstants.FieldNameSizeThreshold)
             {
                 header |= 0b0011_1100;
                 writer.WriteUInt8(header);
-                writer.WriteVarUInt32((uint)(size - TypeMetaConstants.FieldNameSizeThreshold));
+                writer.WriteVarUInt32(checked((uint)(fieldId - TypeMetaConstants.FieldNameSizeThreshold)));
             }
             else
             {
-                header |= (byte)(size << 2);
+                header |= (byte)(fieldId << 2);
                 writer.WriteUInt8(header);
             }
 
@@ -358,20 +376,24 @@ public sealed class TypeMetaFieldInfo : IEquatable<TypeMetaFieldInfo>
         byte header = reader.ReadUInt8();
         int encodingFlags = (header >> 6) & 0b11;
         int size = (header >> 2) & 0b1111;
+        ulong? wireFieldId = encodingFlags == 3 ? (ulong)size : null;
         if (size == TypeMetaConstants.FieldNameSizeThreshold)
         {
             uint extension = reader.ReadVarUInt32();
-            if (encodingFlags == 3 && extension > short.MaxValue - TypeMetaConstants.FieldNameSizeThreshold)
+            if (encodingFlags == 3)
             {
-                // Wire tags are varuint32, but local generated dispatch owns Int16 ids.
-                // Reject before narrowing so a high remote tag cannot alias a local field.
-                ThrowFieldIdOutOfRange();
+                wireFieldId = (ulong)TypeMetaConstants.FieldNameSizeThreshold + extension;
             }
-
-            size = checked(size + (int)extension);
+            else
+            {
+                size = checked(size + (int)extension);
+            }
         }
 
-        size = checked(size + 1);
+        if (encodingFlags != 3)
+        {
+            size = checked(size + 1);
+        }
 
         bool nullable = (header & 0b10) != 0;
         bool trackRef = (header & 0b1) != 0;
@@ -379,8 +401,9 @@ public sealed class TypeMetaFieldInfo : IEquatable<TypeMetaFieldInfo>
 
         if (encodingFlags == 3)
         {
-            short fieldId = checked((short)(size - 1));
-            return new TypeMetaFieldInfo(fieldId, $"$tag{fieldId}", fieldType);
+            ulong fieldId = wireFieldId!.Value;
+            short? publicFieldId = fieldId <= (ulong)short.MaxValue ? (short)fieldId : null;
+            return new TypeMetaFieldInfo(publicFieldId, fieldId, $"$tag{fieldId}", fieldType);
         }
 
         if (encodingFlags >= TypeMetaEncodings.FieldNameMetaStringEncodings.Length)
@@ -395,12 +418,6 @@ public sealed class TypeMetaFieldInfo : IEquatable<TypeMetaFieldInfo>
         return new TypeMetaFieldInfo(null, name, fieldType);
     }
 
-    [MethodImpl(MethodImplOptions.NoInlining)]
-    private static void ThrowFieldIdOutOfRange()
-    {
-        throw new InvalidDataException("Type metadata field id exceeds the supported Int16 range");
-    }
-
     public bool Equals(TypeMetaFieldInfo? other)
     {
         if (other is null)
@@ -409,6 +426,7 @@ public sealed class TypeMetaFieldInfo : IEquatable<TypeMetaFieldInfo>
         }
 
         return FieldId == other.FieldId &&
+               WireFieldId == other.WireFieldId &&
                FieldName == other.FieldName &&
                FieldType.Equals(other.FieldType);
     }
@@ -420,7 +438,7 @@ public sealed class TypeMetaFieldInfo : IEquatable<TypeMetaFieldInfo>
 
     public override int GetHashCode()
     {
-        return HashCode.Combine(FieldId, FieldName, FieldType);
+        return HashCode.Combine(FieldId, WireFieldId, FieldName, FieldType);
     }
 }
 
@@ -782,34 +800,34 @@ public sealed class TypeMeta : IEquatable<TypeMeta>
         ArgumentNullException.ThrowIfNull(localFieldInfos);
 
         Dictionary<string, (int Index, TypeMetaFieldInfo Field)> localByName = new(localFieldInfos.Count, StringComparer.Ordinal);
-        Dictionary<short, (int Index, TypeMetaFieldInfo Field)> localById = new(localFieldInfos.Count);
+        Dictionary<ulong, (int Index, TypeMetaFieldInfo Field)> localById = new(localFieldInfos.Count);
         for (int i = 0; i < localFieldInfos.Count; i++)
         {
             TypeMetaFieldInfo localField = localFieldInfos[i];
-            if (localField.FieldId.HasValue && localField.FieldId.Value >= 0)
+            if (localField.WireFieldId.HasValue)
             {
-                short fieldId = localField.FieldId.Value;
+                ulong fieldId = localField.WireFieldId.Value;
                 if (!localById.TryAdd(fieldId, (i, localField)))
                 {
                     throw new InvalidDataException(
                         $"duplicate local field id {fieldId} in compatible type metadata");
                 }
             }
-            else if (!string.IsNullOrEmpty(localField.FieldName))
+            else if (!localField.FieldId.HasValue && !string.IsNullOrEmpty(localField.FieldName))
             {
                 localByName.TryAdd(localField.FieldName, (i, localField));
             }
         }
 
-        HashSet<short>? remoteFieldIds = null;
+        HashSet<ulong>? remoteFieldIds = null;
         HashSet<int> usedLocalFields = [];
         for (int i = 0; i < remoteTypeMeta.Fields.Count; i++)
         {
             TypeMetaFieldInfo remoteField = remoteTypeMeta.Fields[i];
             remoteField.CompatibleScalarRead = null;
-            if (remoteField.FieldId.HasValue && remoteField.FieldId.Value >= 0)
+            if (remoteField.WireFieldId.HasValue)
             {
-                short fieldId = remoteField.FieldId.Value;
+                ulong fieldId = remoteField.WireFieldId.Value;
                 remoteFieldIds ??= [];
                 if (!remoteFieldIds.Add(fieldId))
                 {
@@ -821,14 +839,13 @@ public sealed class TypeMeta : IEquatable<TypeMeta>
             int localIndex = -1;
             TypeMetaFieldInfo? localMatch = null;
 
-            if (remoteField.FieldId.HasValue &&
-                remoteField.FieldId.Value >= 0 &&
-                localById.TryGetValue(remoteField.FieldId.Value, out (int Index, TypeMetaFieldInfo Field) byId))
+            if (remoteField.WireFieldId.HasValue &&
+                localById.TryGetValue(remoteField.WireFieldId.Value, out (int Index, TypeMetaFieldInfo Field) byId))
             {
                 localIndex = byId.Index;
                 localMatch = byId.Field;
             }
-            else if (!remoteField.FieldId.HasValue)
+            else if (!remoteField.WireFieldId.HasValue && !remoteField.FieldId.HasValue)
             {
                 if (localByName.TryGetValue(remoteField.FieldName, out (int Index, TypeMetaFieldInfo Field) byName))
                 {

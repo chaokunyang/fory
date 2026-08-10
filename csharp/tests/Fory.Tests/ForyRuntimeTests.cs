@@ -432,10 +432,13 @@ public sealed class OneStringField
 }
 
 [ForyStruct]
-public sealed class TaggedIntField
+public sealed class TaggedIntFields
 {
     [ForyField(15)]
     public int Value { get; set; }
+
+    [ForyField(16)]
+    public int Tail { get; set; }
 }
 
 [ForyStruct]
@@ -3155,8 +3158,10 @@ public sealed class ForyRuntimeTests
         Assert.Contains("TypeMeta metadata hash mismatch", exception.Message, StringComparison.Ordinal);
     }
 
-    [Fact]
-    public void TypeMetaRejectsOversizedFieldId()
+    [Theory]
+    [InlineData(32_768UL)]
+    [InlineData(4_294_967_310UL)]
+    public void TypeMetaReadsWideFieldId(ulong fieldId)
     {
         TypeMeta typeMeta = new(
             (uint)TypeId.CompatibleStruct,
@@ -3164,31 +3169,71 @@ public sealed class ForyRuntimeTests
             MetaString.Empty('.', '_'),
             MetaString.Empty('$', '_'),
             registerByName: false,
-            [new TypeMetaFieldInfo(15, "value", new TypeMetaFieldType((uint)TypeId.VarInt32, false))]);
+            [
+                new TypeMetaFieldInfo(15, "value", new TypeMetaFieldType((uint)TypeId.VarInt32, false)),
+                new TypeMetaFieldInfo(16, "tail", new TypeMetaFieldType((uint)TypeId.VarInt32, false)),
+            ]);
         byte[] encoded = typeMeta.Encode();
+        byte[] rewritten = RewriteTypeMetaFieldId(encoded, fieldId);
 
-        TypeMeta decoded = TypeMeta.Decode(encoded);
-        Assert.Equal((short)15, Assert.Single(decoded.Fields).FieldId);
+        TypeMeta decoded = TypeMeta.Decode(rewritten);
+        Assert.Null(decoded.Fields[0].FieldId);
+        Assert.Equal(fieldId, decoded.Fields[0].WireFieldId);
+        Assert.Equal($"$tag{fieldId}", decoded.Fields[0].FieldName);
+        Assert.Equal((short)16, decoded.Fields[1].FieldId);
+        Assert.Equal(16UL, decoded.Fields[1].WireFieldId);
 
-        byte[] aliased = RewriteTypeMetaFieldId(encoded, 65_551);
-        Assert.Throws<InvalidDataException>(() => TypeMeta.Decode(aliased));
+        TypeMeta roundTripped = TypeMeta.Decode(decoded.Encode());
+        Assert.Equal(fieldId, roundTripped.Fields[0].WireFieldId);
+        Assert.Equal(16UL, roundTripped.Fields[1].WireFieldId);
+
+        List<TypeMetaFieldInfo> localFields =
+        [
+            new TypeMetaFieldInfo(14, "value", new TypeMetaFieldType((uint)TypeId.VarInt32, false)),
+            new TypeMetaFieldInfo(16, "tail", new TypeMetaFieldType((uint)TypeId.VarInt32, false)),
+        ];
+        TypeMeta.AssignFieldIds(decoded, localFields);
+        Assert.Equal(-1, decoded.Fields[0].AssignedFieldId);
+        Assert.Equal(2, decoded.Fields[1].AssignedFieldId);
+
+        TypeMeta duplicate = new(
+            decoded.TypeId,
+            decoded.UserTypeId,
+            decoded.NamespaceName,
+            decoded.TypeName,
+            decoded.RegisterByName,
+            [decoded.Fields[0], decoded.Fields[0]]);
+        InvalidDataException exception = Assert.Throws<InvalidDataException>(
+            () => TypeMeta.AssignFieldIds(duplicate, localFields));
+        Assert.Contains($"duplicate remote field id {fieldId}", exception.Message, StringComparison.Ordinal);
     }
 
-    [Fact]
-    public void CompatibleReadRejectsTagAlias()
+    [Theory]
+    [InlineData(32_768UL)]
+    [InlineData(4_294_967_310UL)]
+    public void CompatibleReadSkipsWideFieldId(ulong fieldId)
     {
         ForyRuntime writer = ForyRuntime.Builder().Compatible(true).Build();
-        writer.Register<TaggedIntField>(515);
-        byte[] payload = writer.Serialize(new TaggedIntField { Value = 42 });
+        writer.Register<TaggedIntFields>(515);
+        byte[] payload = writer.Serialize(new TaggedIntFields { Value = 42, Tail = 73 });
+        byte[] followingPayload = writer.Serialize(new TaggedIntFields { Value = 84, Tail = 91 });
+        byte[] rewritten = RewriteCompatibleTypeMetaFieldId(payload, fieldId);
+        byte[] frames = new byte[rewritten.Length + followingPayload.Length];
+        Buffer.BlockCopy(rewritten, 0, frames, 0, rewritten.Length);
+        Buffer.BlockCopy(followingPayload, 0, frames, rewritten.Length, followingPayload.Length);
 
-        ForyRuntime controlReader = ForyRuntime.Builder().Compatible(true).Build();
-        controlReader.Register<TaggedIntField>(515);
-        Assert.Equal(42, controlReader.Deserialize<TaggedIntField>(payload).Value);
+        ForyRuntime reader = ForyRuntime.Builder().Compatible(true).Build();
+        reader.Register<TaggedIntFields>(515);
+        ByteReader frameReader = new(frames);
 
-        byte[] aliased = RewriteCompatibleTypeMetaFieldId(payload, 65_551);
-        ForyRuntime aliasReader = ForyRuntime.Builder().Compatible(true).Build();
-        aliasReader.Register<TaggedIntField>(515);
-        Assert.Throws<InvalidDataException>(() => aliasReader.Deserialize<TaggedIntField>(aliased));
+        TaggedIntFields decoded = reader.DeserializeFromReader<TaggedIntFields>(frameReader);
+        Assert.Equal(0, decoded.Value);
+        Assert.Equal(73, decoded.Tail);
+
+        TaggedIntFields following = reader.DeserializeFromReader<TaggedIntFields>(frameReader);
+        Assert.Equal(84, following.Value);
+        Assert.Equal(91, following.Tail);
+        Assert.Equal(0, frameReader.Remaining);
     }
 
     [Fact]
@@ -3408,7 +3453,7 @@ public sealed class ForyRuntimeTests
         return rewrittenPayload;
     }
 
-    private static byte[] RewriteCompatibleTypeMetaFieldId(byte[] payload, uint fieldId)
+    private static byte[] RewriteCompatibleTypeMetaFieldId(byte[] payload, ulong fieldId)
     {
         (int typeMetaStart, int typeMetaEnd, _) = ReadCompatibleTypeMetaRange(payload);
         byte[] encodedTypeMeta = payload[typeMetaStart..typeMetaEnd];
@@ -3421,15 +3466,16 @@ public sealed class ForyRuntimeTests
         return rewrittenPayload;
     }
 
-    private static byte[] RewriteTypeMetaFieldId(byte[] encoded, uint fieldId)
+    private static byte[] RewriteTypeMetaFieldId(byte[] encoded, ulong fieldId)
     {
         Assert.True(fieldId >= 15);
+        Assert.True(fieldId <= (ulong)uint.MaxValue + 15);
         ulong originalHeader = BinaryPrimitives.ReadUInt64LittleEndian(encoded);
         int bodyOffset = TypeMetaBodyOffset(encoded, originalHeader);
         byte[] originalBody = encoded[bodyOffset..];
         ByteReader bodyReader = new(originalBody);
         byte metaHeader = bodyReader.ReadUInt8();
-        Assert.Equal(1, metaHeader & 0b1_1111);
+        Assert.NotEqual(0, metaHeader & 0b1_1111);
         Assert.Equal(0, metaHeader & 0b10_0000);
         _ = bodyReader.ReadVarUInt32();
 
@@ -3442,7 +3488,7 @@ public sealed class ForyRuntimeTests
         int fieldTypeOffset = bodyReader.Cursor;
 
         ByteWriter extensionWriter = new();
-        extensionWriter.WriteVarUInt32(fieldId - 15);
+        extensionWriter.WriteVarUInt32(checked((uint)(fieldId - 15)));
         byte[] extension = extensionWriter.ToArray();
         byte[] body = new byte[extensionOffset + extension.Length + (originalBody.Length - fieldTypeOffset)];
         Buffer.BlockCopy(originalBody, 0, body, 0, extensionOffset);

@@ -35,11 +35,13 @@
 #include <algorithm>
 #include <cfloat>
 #include <climits>
+#include <cstddef>
 #include <limits>
 #include <map>
 #include <memory>
 #include <optional>
 #include <string>
+#include <type_traits>
 #include <variant>
 #include <vector>
 
@@ -144,6 +146,19 @@ struct WideTagStruct {
 struct MaxTagStruct {
   int32_t value = 0;
   FORY_STRUCT(MaxTagStruct, (value, fory::F(4294967295LL)));
+};
+
+template <int64_t Tag> struct WireTagWriter {
+  int32_t value = 0;
+  int32_t a_skipped = 0;
+  int32_t z_kept = 0;
+  FORY_STRUCT(WireTagWriter, (value, fory::F(Tag)), a_skipped, z_kept);
+};
+
+template <int64_t Tag> struct WireTagReader {
+  int32_t mapped = 0;
+  int32_t z_kept = 0;
+  FORY_STRUCT(WireTagReader, (mapped, fory::F(Tag)), z_kept);
 };
 
 struct NormalizedCollisionStruct {
@@ -757,6 +772,38 @@ namespace fory {
 namespace serialization {
 namespace test {
 
+struct LegacyFieldInfoLayout {
+  int16_t field_id;
+  std::string field_name;
+  FieldType field_type;
+};
+
+struct LegacyTypeMetaLayout {
+  int64_t hash;
+  uint32_t type_id;
+  uint32_t user_type_id;
+  std::string namespace_str;
+  std::string type_name;
+  bool register_by_name;
+  std::vector<FieldInfo> field_infos;
+};
+
+static_assert(
+    std::is_same_v<decltype(FieldInfo::field_id), int16_t>,
+    "FieldInfo::field_id is part of the installed shared-library ABI");
+static_assert(sizeof(FieldInfo) == sizeof(LegacyFieldInfoLayout));
+static_assert(alignof(FieldInfo) == alignof(LegacyFieldInfoLayout));
+static_assert(offsetof(FieldInfo, field_id) ==
+              offsetof(LegacyFieldInfoLayout, field_id));
+static_assert(offsetof(FieldInfo, field_name) ==
+              offsetof(LegacyFieldInfoLayout, field_name));
+static_assert(offsetof(FieldInfo, field_type) ==
+              offsetof(LegacyFieldInfoLayout, field_type));
+static_assert(sizeof(TypeMeta) == sizeof(LegacyTypeMetaLayout));
+static_assert(alignof(TypeMeta) == alignof(LegacyTypeMetaLayout));
+static_assert(offsetof(TypeMeta, field_infos) ==
+              offsetof(LegacyTypeMetaLayout, field_infos));
+
 // Helper to register all test struct types on a Fory instance
 inline void register_all_test_types(Fory &fory) {
   uint32_t type_id = 1;
@@ -809,13 +856,85 @@ inline FieldType make_test_field_type(TypeId type_id,
                    std::move(generics));
 }
 
-inline FieldInfo make_test_field_info(std::string name, int64_t tag_id,
+inline FieldInfo make_test_field_info(std::string name, int16_t tag_id,
                                       FieldType field_type) {
   FieldInfo info(std::move(name), std::move(field_type));
   if (tag_id >= 0) {
     info.field_id = tag_id;
   }
   return info;
+}
+
+inline Result<uint64_t, Error>
+read_first_wire_tag(const std::vector<uint8_t> &type_def) {
+  std::vector<uint8_t> bytes = type_def;
+  Buffer buffer(bytes);
+  Error error;
+  uint64_t header = 0;
+  buffer.read_bytes(&header, sizeof(header), error);
+  if (FORY_PREDICT_FALSE(!error.ok())) {
+    return Unexpected(std::move(error));
+  }
+  if ((header & 0xffu) == 0xffu) {
+    (void)buffer.read_var_uint32(error);
+  }
+  uint8_t meta_header = buffer.read_uint8(error);
+  if (FORY_PREDICT_FALSE(!error.ok())) {
+    return Unexpected(std::move(error));
+  }
+  size_t num_fields = meta_header & 0x1fu;
+  if (num_fields == 0x1fu) {
+    num_fields += buffer.read_var_uint32(error);
+  }
+  if (FORY_PREDICT_FALSE(!error.ok()) || num_fields == 0) {
+    return Unexpected(error.ok() ? Error::invalid_data("TypeMeta has no fields")
+                                 : std::move(error));
+  }
+  (void)buffer.read_var_uint32(error);
+  uint8_t field_header = buffer.read_uint8(error);
+  if (FORY_PREDICT_FALSE(!error.ok())) {
+    return Unexpected(std::move(error));
+  }
+  if (FORY_PREDICT_FALSE(field_header >> 6 != 3)) {
+    return Unexpected(Error::invalid_data("First field is not tag-identified"));
+  }
+  uint64_t tag = (field_header >> 2) & 0x0fu;
+  if (tag == 0x0fu) {
+    tag += buffer.read_var_uint32(error);
+  }
+  if (FORY_PREDICT_FALSE(!error.ok())) {
+    return Unexpected(std::move(error));
+  }
+  return tag;
+}
+
+template <int64_t Tag> void verify_wire_tag() {
+  auto writer =
+      Fory::builder().xlang(true).compatible(true).track_ref(false).build();
+  auto reader =
+      Fory::builder().xlang(true).compatible(true).track_ref(false).build();
+  ASSERT_TRUE(writer.register_struct<WireTagWriter<Tag>>(630).ok());
+  ASSERT_TRUE(reader.register_struct<WireTagReader<Tag>>(630).ok());
+
+  auto encoded = writer.serialize(WireTagWriter<Tag>{7, 11, 42});
+  ASSERT_TRUE(encoded.ok()) << encoded.error().to_string();
+  auto decoded = reader.deserialize<WireTagReader<Tag>>(encoded.value());
+  ASSERT_TRUE(decoded.ok()) << decoded.error().to_string();
+  EXPECT_EQ(decoded.value().mapped, 7);
+  EXPECT_EQ(decoded.value().z_kept, 42);
+
+  auto type_info = writer.type_resolver().get_type_info<WireTagWriter<Tag>>();
+  ASSERT_TRUE(type_info.ok()) << type_info.error().to_string();
+  auto wire_tag = read_first_wire_tag(type_info.value()->type_def);
+  ASSERT_TRUE(wire_tag.ok()) << wire_tag.error().to_string();
+  EXPECT_EQ(wire_tag.value(), static_cast<uint64_t>(Tag));
+
+  std::vector<uint8_t> type_def = type_info.value()->type_def;
+  Buffer type_buffer(type_def);
+  auto parsed = TypeMeta::from_bytes(type_buffer, nullptr);
+  ASSERT_TRUE(parsed.ok()) << parsed.error().to_string();
+  ASSERT_EQ(parsed.value()->field_infos.size(), 3U);
+  EXPECT_EQ(parsed.value()->field_infos[0].field_id, -1);
 }
 
 template <typename T> void test_roundtrip(const T &original) {
@@ -1721,31 +1840,40 @@ TEST(StructComprehensiveTest, WideFieldTagsKeepWireIdentity) {
 
   TypeMeta wide = fory.type_resolver().clone_struct_meta<WideTagStruct>();
   ASSERT_EQ(wide.field_infos.size(), 1U);
-  EXPECT_EQ(wide.field_infos[0].field_id, 65536);
+  EXPECT_EQ(wide.field_infos[0].field_id, -1);
+  auto wide_info = fory.type_resolver().get_type_info<WideTagStruct>();
+  ASSERT_TRUE(wide_info.ok()) << wide_info.error().to_string();
+  auto wide_tag = read_first_wire_tag(wide_info.value()->type_def);
+  ASSERT_TRUE(wide_tag.ok()) << wide_tag.error().to_string();
+  EXPECT_EQ(wide_tag.value(), 65536U);
 
-  TypeMeta maximum = fory.type_resolver().clone_struct_meta<MaxTagStruct>();
-  ASSERT_EQ(maximum.field_infos.size(), 1U);
-  EXPECT_EQ(maximum.field_infos[0].field_id,
-            std::numeric_limits<uint32_t>::max());
-  auto encoded = maximum.field_infos[0].to_bytes();
-  ASSERT_TRUE(encoded.ok()) << encoded.error().to_string();
-  Buffer buffer(encoded.value());
-  auto decoded = FieldInfo::from_bytes(buffer);
-  ASSERT_TRUE(decoded.ok()) << decoded.error().to_string();
-  EXPECT_EQ(decoded.value().field_id, std::numeric_limits<uint32_t>::max());
-
-  std::vector<FieldInfo> wrong_remote = {
-      make_test_field_info("value", 0, make_test_field_type(TypeId::VARINT32))};
-  ASSERT_TRUE(TypeMeta::assign_local_dispatch_ids(&wide, wrong_remote).ok());
-  EXPECT_EQ(wrong_remote[0].local_dispatch_id, -1);
-
-  std::vector<FieldInfo> matching_remote = {make_test_field_info(
-      "value", 65536, make_test_field_type(TypeId::VARINT32))};
   using LegacyAssign =
       Result<void, Error> (*)(const TypeMeta *, std::vector<FieldInfo> &);
   [[maybe_unused]] LegacyAssign assign_field_ids = &TypeMeta::assign_field_ids;
-  ASSERT_TRUE(assign_field_ids(&wide, matching_remote).ok());
-  EXPECT_EQ(matching_remote[0].local_dispatch_id, 0);
+}
+
+TEST(StructComprehensiveTest, WireTagRange) {
+  verify_wire_tag<4294967280LL>();
+  verify_wire_tag<4294967295LL>();
+  verify_wire_tag<4294967296LL>();
+  verify_wire_tag<4294967310LL>();
+
+  auto versioned = Fory::builder()
+                       .xlang(true)
+                       .compatible(false)
+                       .track_ref(false)
+                       .check_struct_version(true)
+                       .build();
+  ASSERT_TRUE(versioned.register_struct<WireTagWriter<4294967310LL>>(631).ok());
+  WireTagWriter<4294967310LL> value{7, 11, 42};
+  auto encoded = versioned.serialize(value);
+  ASSERT_TRUE(encoded.ok()) << encoded.error().to_string();
+  auto decoded =
+      versioned.deserialize<WireTagWriter<4294967310LL>>(encoded.value());
+  ASSERT_TRUE(decoded.ok()) << decoded.error().to_string();
+  EXPECT_EQ(decoded.value().value, 7);
+  EXPECT_EQ(decoded.value().a_skipped, 11);
+  EXPECT_EQ(decoded.value().z_kept, 42);
 }
 
 TEST(StructComprehensiveTest, StructFieldIdentityIsUnique) {
@@ -1786,8 +1914,8 @@ TEST(StructComprehensiveTest, RemoteFieldIdentityIsUnique) {
                            make_test_field_type(TypeId::VARINT32))};
   EXPECT_FALSE(
       TypeMeta::assign_local_dispatch_ids(&local, duplicate_names).ok());
-  EXPECT_EQ(duplicate_names[0].local_dispatch_id, -1);
-  EXPECT_EQ(duplicate_names[1].local_dispatch_id, -1);
+  EXPECT_EQ(duplicate_names[0].field_id, -1);
+  EXPECT_EQ(duplicate_names[1].field_id, -1);
 
   std::vector<FieldInfo> duplicate_tags = {
       make_test_field_info("first", 7, make_test_field_type(TypeId::VARINT32)),
@@ -1795,8 +1923,8 @@ TEST(StructComprehensiveTest, RemoteFieldIdentityIsUnique) {
                            make_test_field_type(TypeId::VARINT32))};
   EXPECT_FALSE(
       TypeMeta::assign_local_dispatch_ids(&local, duplicate_tags).ok());
-  EXPECT_EQ(duplicate_tags[0].local_dispatch_id, -1);
-  EXPECT_EQ(duplicate_tags[1].local_dispatch_id, -1);
+  EXPECT_EQ(duplicate_tags[0].field_id, 7);
+  EXPECT_EQ(duplicate_tags[1].field_id, 7);
 }
 
 TEST(StructComprehensiveTest, NonPrimitiveFieldsSortByFieldIdentifier) {
@@ -1892,7 +2020,7 @@ TEST(StructComprehensiveTest,
   auto scalar_result =
       TypeMeta::assign_local_dispatch_ids(&scalar_local, scalar_remote);
   ASSERT_TRUE(scalar_result.ok());
-  EXPECT_EQ(scalar_remote[0].local_dispatch_id, 1);
+  EXPECT_EQ(scalar_remote[0].field_id, 1);
 
   TypeMeta name_mode_local;
   name_mode_local.field_infos = {make_test_field_info(
@@ -1906,7 +2034,7 @@ TEST(StructComprehensiveTest,
   ASSERT_TRUE(
       TypeMeta::assign_local_dispatch_ids(&name_mode_local, mixed_mode_remote)
           .ok());
-  EXPECT_EQ(mixed_mode_remote[0].local_dispatch_id, -1);
+  EXPECT_EQ(mixed_mode_remote[0].field_id, -1);
 
   std::vector<FieldInfo> name_remote = {make_test_field_info(
       "items", -1,
@@ -1926,32 +2054,32 @@ TEST(StructComprehensiveTest,
       make_test_field_info("beta", -1, make_test_field_type(TypeId::VARINT32))};
   ASSERT_TRUE(
       TypeMeta::assign_local_dispatch_ids(&mixed_local, mixed_remote).ok());
-  EXPECT_EQ(mixed_remote[0].local_dispatch_id, 2);
-  EXPECT_EQ(mixed_remote[1].local_dispatch_id, 0);
-  EXPECT_EQ(mixed_remote[2].local_dispatch_id, 4);
+  EXPECT_EQ(mixed_remote[0].field_id, 2);
+  EXPECT_EQ(mixed_remote[1].field_id, 0);
+  EXPECT_EQ(mixed_remote[2].field_id, 4);
 
   std::vector<FieldInfo> untagged_remote_for_tagged_local = {
       make_test_field_info("tagged", -1, make_test_field_type(TypeId::STRING))};
   ASSERT_TRUE(TypeMeta::assign_local_dispatch_ids(
                   &mixed_local, untagged_remote_for_tagged_local)
                   .ok());
-  EXPECT_EQ(untagged_remote_for_tagged_local[0].local_dispatch_id, 0);
+  EXPECT_EQ(untagged_remote_for_tagged_local[0].field_id, 0);
 
   std::vector<FieldInfo> name_then_tag = {
       make_test_field_info("tagged", -1, make_test_field_type(TypeId::STRING)),
       make_test_field_info("tagged", 3, make_test_field_type(TypeId::STRING))};
   ASSERT_TRUE(
       TypeMeta::assign_local_dispatch_ids(&mixed_local, name_then_tag).ok());
-  EXPECT_EQ(name_then_tag[0].local_dispatch_id, 0);
-  EXPECT_EQ(name_then_tag[1].local_dispatch_id, -1);
+  EXPECT_EQ(name_then_tag[0].field_id, 0);
+  EXPECT_EQ(name_then_tag[1].field_id, -1);
 
   std::vector<FieldInfo> tag_then_name = {
       make_test_field_info("tagged", 3, make_test_field_type(TypeId::STRING)),
       make_test_field_info("tagged", -1, make_test_field_type(TypeId::STRING))};
   ASSERT_TRUE(
       TypeMeta::assign_local_dispatch_ids(&mixed_local, tag_then_name).ok());
-  EXPECT_EQ(tag_then_name[0].local_dispatch_id, 0);
-  EXPECT_EQ(tag_then_name[1].local_dispatch_id, -1);
+  EXPECT_EQ(tag_then_name[0].field_id, 0);
+  EXPECT_EQ(tag_then_name[1].field_id, -1);
 }
 
 TEST(StructComprehensiveTest, CompatibleSignedToUnsignedStructRead) {

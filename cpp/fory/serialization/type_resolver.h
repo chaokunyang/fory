@@ -201,19 +201,15 @@ bool field_types_compatible_top_level(const FieldType &local,
 /// Field information including name, type, and assigned field ID
 class FieldInfo {
 public:
-  // Canonical wire identity. -1 selects the field name; non-negative values
-  // retain the complete uint32 tag domain used by the wire format.
-  int64_t field_id;
-  // Compatible-reader dispatch ID assigned from the matched local field.
-  int16_t local_dispatch_id;
+  int16_t field_id;       // Tag ID if configured; -1 means no ID
   std::string field_name; // Field name
   FieldType field_type;   // Field type information
 
-  FieldInfo() : field_id(-1), local_dispatch_id(-1) {}
+  FieldInfo() : field_id(-1) {}
 
   FieldInfo(std::string name, FieldType type)
-      : field_id(-1), local_dispatch_id(-1), field_name(std::move(name)),
-        field_type(std::move(type)) {}
+      : field_id(-1), field_name(std::move(name)), field_type(std::move(type)) {
+  }
 
   /// write field info to buffer (for serialization)
   Result<std::vector<uint8_t>, Error> to_bytes() const;
@@ -222,8 +218,7 @@ public:
   static Result<FieldInfo, Error> from_bytes(Buffer &buffer);
 
   bool operator==(const FieldInfo &other) const {
-    return field_id == other.field_id && field_name == other.field_name &&
-           field_type == other.field_type;
+    return field_name == other.field_name && field_type == other.field_type;
   }
 };
 
@@ -293,9 +288,7 @@ public:
 
   static Result<void, Error>
   assign_field_ids(const TypeMeta *local_type,
-                   std::vector<FieldInfo> &remote_fields) {
-    return assign_local_dispatch_ids(local_type, remote_fields);
-  }
+                   std::vector<FieldInfo> &remote_fields);
 
   const std::vector<FieldInfo> &get_field_infos() const { return field_infos; }
   int64_t get_hash() const { return hash; }
@@ -336,6 +329,23 @@ public:
   /// This provides the cross-language struct version ID used by class
   /// version checking, consistent with Go, Java, and Rust implementations.
   static int32_t compute_struct_version(const TypeMeta &meta);
+
+private:
+  friend class ReadContext;
+  template <typename, typename> friend struct Serializer;
+
+  static Result<std::unique_ptr<TypeMeta>, Error> from_bytes_with_wire_ids(
+      Buffer &buffer, int64_t header, uint32_t max_type_fields,
+      uint32_t max_type_meta_bytes, std::vector<uint64_t> &wire_ids);
+
+  static Result<void, Error>
+  assign_wire_field_ids(const TypeInfo &local_type,
+                        const std::vector<uint64_t> &remote_wire_ids,
+                        std::vector<FieldInfo> &remote_fields);
+
+  static int32_t compute_struct_version(const TypeMeta &meta,
+                                        const int64_t *wire_ids,
+                                        size_t num_fields);
 };
 
 // ============================================================================
@@ -343,6 +353,11 @@ public:
 // ============================================================================
 
 namespace detail {
+
+inline constexpr uint64_t kFieldNameIdentity =
+    std::numeric_limits<uint64_t>::max();
+inline constexpr uint64_t kMaxFieldTag =
+    static_cast<uint64_t>(std::numeric_limits<uint32_t>::max()) + 15;
 
 inline uint32_t to_type_id(TypeId id) { return static_cast<uint32_t>(id); }
 
@@ -1093,13 +1108,128 @@ constexpr int64_t compute_field_id() {
         ::fory::detail::GetFieldConfigEntry<T, Index>::id;
     if constexpr (::fory::detail::GetFieldConfigEntry<T, Index>::has_id) {
       static_assert(config_id >= 0, "Fory field id must be non-negative");
-      static_assert(config_id <= static_cast<int64_t>(
-                                     std::numeric_limits<uint32_t>::max()),
-                    "Fory field id must fit uint32");
+      static_assert(static_cast<uint64_t>(config_id) <= kMaxFieldTag,
+                    "Fory field id exceeds the wire TAG_ID range");
       return config_id;
     }
   }
   return -1;
+}
+
+inline bool field_identity_compressed(uint32_t type_id) {
+  return type_id == static_cast<uint32_t>(TypeId::VARINT32) ||
+         type_id == static_cast<uint32_t>(TypeId::VARINT64) ||
+         type_id == static_cast<uint32_t>(TypeId::TAGGED_INT64) ||
+         type_id == static_cast<uint32_t>(TypeId::VAR_UINT32) ||
+         type_id == static_cast<uint32_t>(TypeId::VAR_UINT64) ||
+         type_id == static_cast<uint32_t>(TypeId::TAGGED_UINT64);
+}
+
+inline int32_t field_identity_size(uint32_t type_id) {
+  switch (static_cast<TypeId>(type_id)) {
+  case TypeId::BOOL:
+  case TypeId::INT8:
+  case TypeId::UINT8:
+  case TypeId::FLOAT8:
+    return 1;
+  case TypeId::INT16:
+  case TypeId::UINT16:
+  case TypeId::FLOAT16:
+  case TypeId::BFLOAT16:
+    return 2;
+  case TypeId::INT32:
+  case TypeId::VARINT32:
+  case TypeId::UINT32:
+  case TypeId::VAR_UINT32:
+  case TypeId::FLOAT32:
+    return 4;
+  case TypeId::INT64:
+  case TypeId::VARINT64:
+  case TypeId::TAGGED_INT64:
+  case TypeId::UINT64:
+  case TypeId::VAR_UINT64:
+  case TypeId::TAGGED_UINT64:
+  case TypeId::FLOAT64:
+    return 8;
+  default:
+    return 0;
+  }
+}
+
+inline int compare_field_identity(const FieldInfo &lhs, uint64_t lhs_id,
+                                  const FieldInfo &rhs, uint64_t rhs_id) {
+  const bool lhs_tagged = lhs_id != kFieldNameIdentity;
+  const bool rhs_tagged = rhs_id != kFieldNameIdentity;
+  if (lhs_tagged && rhs_tagged && lhs_id != rhs_id) {
+    return lhs_id < rhs_id ? -1 : 1;
+  }
+  if (lhs_tagged != rhs_tagged) {
+    return lhs_tagged ? -1 : 1;
+  }
+  if (lhs.field_name != rhs.field_name) {
+    return lhs.field_name < rhs.field_name ? -1 : 1;
+  }
+  return 0;
+}
+
+inline std::vector<size_t>
+sort_field_indices(const std::vector<FieldInfo> &fields,
+                   const std::vector<uint64_t> &wire_ids) {
+  FORY_CHECK(fields.size() == wire_ids.size());
+  std::vector<size_t> indices(fields.size());
+  for (size_t i = 0; i < fields.size(); ++i) {
+    indices[i] = i;
+  }
+  std::sort(indices.begin(), indices.end(), [&](size_t lhs, size_t rhs) {
+    const FieldInfo &a = fields[lhs];
+    const FieldInfo &b = fields[rhs];
+    const bool a_primitive =
+        a.field_type.type_id >= static_cast<uint32_t>(TypeId::BOOL) &&
+        a.field_type.type_id <= static_cast<uint32_t>(TypeId::FLOAT64);
+    const bool b_primitive =
+        b.field_type.type_id >= static_cast<uint32_t>(TypeId::BOOL) &&
+        b.field_type.type_id <= static_cast<uint32_t>(TypeId::FLOAT64);
+    const int a_group = a_primitive ? (a.field_type.nullable ? 1 : 0) : 2;
+    const int b_group = b_primitive ? (b.field_type.nullable ? 1 : 0) : 2;
+    if (a_group != b_group) {
+      return a_group < b_group;
+    }
+    if (a_group < 2) {
+      const bool a_compressed = field_identity_compressed(a.field_type.type_id);
+      const bool b_compressed = field_identity_compressed(b.field_type.type_id);
+      if (a_compressed != b_compressed) {
+        return !a_compressed;
+      }
+      const int32_t a_size = field_identity_size(a.field_type.type_id);
+      const int32_t b_size = field_identity_size(b.field_type.type_id);
+      if (a_size != b_size) {
+        return a_size > b_size;
+      }
+      if (a.field_type.type_id != b.field_type.type_id) {
+        return a.field_type.type_id < b.field_type.type_id;
+      }
+    }
+    return compare_field_identity(a, wire_ids[lhs], b, wire_ids[rhs]) < 0;
+  });
+  return indices;
+}
+
+template <typename T, size_t... Indices>
+constexpr std::array<int64_t, sizeof...(Indices)>
+build_field_ids(std::index_sequence<Indices...>) {
+  return {compute_field_id<void, T, Indices>()...};
+}
+
+template <size_t Size>
+std::vector<uint64_t>
+make_wire_ids(const std::array<int64_t, Size> &field_ids) {
+  std::vector<uint64_t> wire_ids;
+  wire_ids.reserve(Size);
+  for (int64_t field_id : field_ids) {
+    wire_ids.push_back(field_id < 0 ? kFieldNameIdentity
+                                    : static_cast<uint64_t>(field_id));
+  }
+  return wire_ids;
 }
 
 // Helper to check if a type is unsigned integer
@@ -1223,11 +1353,11 @@ template <typename T, size_t Index> struct FieldInfoBuilder {
 #endif
     FieldInfo info(std::move(field_name), std::move(field_type));
     if constexpr (field_id >= 0) {
-      static_assert(
-          static_cast<uint64_t>(field_id) <=
-              static_cast<uint64_t>(std::numeric_limits<uint32_t>::max()),
-          "Field tag exceeds uint32 range");
-      info.field_id = field_id;
+      static_assert(static_cast<uint64_t>(field_id) <= kMaxFieldTag,
+                    "Field tag exceeds the wire TAG_ID range");
+      if constexpr (field_id <= std::numeric_limits<int16_t>::max()) {
+        info.field_id = static_cast<int16_t>(field_id);
+      }
     }
     return info;
   }
@@ -1276,11 +1406,11 @@ template <typename T, size_t Index> struct FieldInfoBuilder {
 #endif
     FieldInfo info(std::move(field_name), std::move(field_type));
     if constexpr (field_id >= 0) {
-      static_assert(
-          static_cast<uint64_t>(field_id) <=
-              static_cast<uint64_t>(std::numeric_limits<uint32_t>::max()),
-          "Field tag exceeds uint32 range");
-      info.field_id = field_id;
+      static_assert(static_cast<uint64_t>(field_id) <= kMaxFieldTag,
+                    "Field tag exceeds the wire TAG_ID range");
+      if constexpr (field_id <= std::numeric_limits<int16_t>::max()) {
+        info.field_id = static_cast<int16_t>(field_id);
+      }
     }
     return info;
   }
@@ -2097,8 +2227,11 @@ TypeResolver::build_struct_type_info(uint32_t type_id, uint32_t user_type_id,
   }
   entry->type_name = std::move(resolved_name);
 
+  constexpr auto field_ids =
+      detail::build_field_ids<T>(std::make_index_sequence<field_count>{});
+  const auto wire_ids = detail::make_wire_ids(field_ids);
   fory::flat_hash_map<std::string, size_t> name_to_index;
-  fory::flat_hash_map<uint32_t, size_t> tag_to_index;
+  fory::flat_hash_map<uint64_t, size_t> tag_to_index;
   name_to_index.reserve(field_count);
   tag_to_index.reserve(field_count);
   auto field_infos =
@@ -2107,9 +2240,8 @@ TypeResolver::build_struct_type_info(uint32_t type_id, uint32_t user_type_id,
   for (size_t i = 0; i < field_count; ++i) {
     const FieldInfo &field = field_infos[i];
     entry->name_to_index.emplace(field.field_name, i);
-    if (field.field_id >= 0) {
-      if (!tag_to_index.emplace(static_cast<uint32_t>(field.field_id), i)
-               .second) {
+    if (wire_ids[i] != detail::kFieldNameIdentity) {
+      if (!tag_to_index.emplace(wire_ids[i], i).second) {
         return Unexpected(Error::invalid("Duplicate struct field tag"));
       }
     } else if (!name_to_index.emplace(field.field_name, i).second) {
@@ -2118,23 +2250,17 @@ TypeResolver::build_struct_type_info(uint32_t type_id, uint32_t user_type_id,
     }
   }
 
-  auto sorted_fields = TypeMeta::sort_field_infos(std::move(field_infos));
+  entry->sorted_indices = detail::sort_field_indices(field_infos, wire_ids);
 
-  entry->sorted_indices.clear();
-  entry->sorted_indices.reserve(field_count);
-  for (const auto &sorted_field : sorted_fields) {
-    const size_t *index = nullptr;
-    if (sorted_field.field_id >= 0) {
-      auto *tag_entry =
-          tag_to_index.find(static_cast<uint32_t>(sorted_field.field_id));
-      FORY_CHECK(tag_entry != nullptr);
-      index = &tag_entry->second;
-    } else {
-      auto *name_entry = name_to_index.find(sorted_field.field_name);
-      FORY_CHECK(name_entry != nullptr);
-      index = &name_entry->second;
+  // Before finalization, type_def is the existing registration-owned scratch
+  // owner for exact field identities. Successful finalization replaces these
+  // bytes in both the completed clone and the retained source resolver before
+  // either registry becomes observable as finalized.
+  entry->type_def.reserve(field_count * sizeof(uint64_t));
+  for (uint64_t wire_id : wire_ids) {
+    for (uint32_t shift = 0; shift < 64; shift += 8) {
+      entry->type_def.push_back(static_cast<uint8_t>(wire_id >> shift));
     }
-    entry->sorted_indices.push_back(*index);
   }
 
   entry->harness = make_struct_harness<T>();
@@ -2415,7 +2541,15 @@ TypeResolver::harness_struct_sorted_fields(TypeResolver &resolver) {
   constexpr size_t field_count = MetaDesc::Size;
   FORY_TRY(fields, detail::build_field_infos_with_resolver<T>(
                        resolver, std::make_index_sequence<field_count>{}));
-  auto sorted = TypeMeta::sort_field_infos(std::move(fields));
+  constexpr auto field_ids =
+      detail::build_field_ids<T>(std::make_index_sequence<field_count>{});
+  const auto wire_ids = detail::make_wire_ids(field_ids);
+  const auto indices = detail::sort_field_indices(fields, wire_ids);
+  std::vector<FieldInfo> sorted;
+  sorted.reserve(fields.size());
+  for (size_t index : indices) {
+    sorted.push_back(std::move(fields[index]));
+  }
   return sorted;
 }
 

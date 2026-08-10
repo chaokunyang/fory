@@ -688,9 +688,10 @@ Result<const TypeInfo *, Error> ReadContext::read_type_meta() {
   }
 
   // Not in cache - parse the TypeMeta
-  FORY_TRY(parsed_meta, TypeMeta::from_bytes_with_header(
+  std::vector<uint64_t> remote_wire_ids;
+  FORY_TRY(parsed_meta, TypeMeta::from_bytes_with_wire_ids(
                             *buffer_, meta_header, config_->max_type_fields,
-                            config_->max_type_meta_bytes));
+                            config_->max_type_meta_bytes, remote_wire_ids));
   // Find local TypeInfo to build compatible field dispatch (if registered).
   const TypeInfo *local_type_info = nullptr;
   if (parsed_meta->register_by_name) {
@@ -733,8 +734,8 @@ Result<const TypeInfo *, Error> ReadContext::read_type_meta() {
     // Have local type - assign field_ids by comparing schemas
     // Note: Extension types don't have type_meta (only structs do)
     if (local_type_info->type_meta) {
-      FORY_RETURN_NOT_OK(TypeMeta::assign_local_dispatch_ids(
-          local_type_info->type_meta.get(), parsed_meta->field_infos));
+      FORY_RETURN_NOT_OK(TypeMeta::assign_wire_field_ids(
+          *local_type_info, remote_wire_ids, parsed_meta->field_infos));
     }
     type_info->type_id = local_type_info->type_id;
     type_info->user_type_id = local_type_info->user_type_id;

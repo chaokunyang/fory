@@ -2148,6 +2148,68 @@ TEST(SerializationTest, ConfigurationBuilder) {
 // Thread Safety Tests
 // ============================================================================
 
+static void expect_finalized_source(TypeResolver &resolver) {
+  auto source_info = resolver.get_type_info<::SimpleStruct>();
+  ASSERT_TRUE(source_info.ok()) << source_info.error().to_string();
+  ASSERT_NE(source_info.value()->type_meta, nullptr);
+  ASSERT_FALSE(source_info.value()->type_def.empty());
+
+  std::vector<uint8_t> source_type_def = source_info.value()->type_def;
+  Buffer source_bytes(source_type_def);
+  auto parsed_source = TypeMeta::from_bytes(source_bytes, nullptr);
+  ASSERT_TRUE(parsed_source.ok()) << parsed_source.error().to_string();
+  EXPECT_EQ(source_bytes.remaining_size(), 0u);
+  EXPECT_EQ(parsed_source.value()->field_infos.size(), 2u);
+
+  auto cloned = resolver.clone();
+  auto cloned_info = cloned->get_type_info<::SimpleStruct>();
+  ASSERT_TRUE(cloned_info.ok()) << cloned_info.error().to_string();
+  ASSERT_NE(cloned_info.value()->type_meta, nullptr);
+  EXPECT_EQ(cloned_info.value()->type_def, source_info.value()->type_def);
+  EXPECT_EQ(cloned_info.value()->type_meta->field_infos.size(), 2u);
+
+  auto rebuilt = resolver.build_final_type_resolver();
+  ASSERT_TRUE(rebuilt.ok()) << rebuilt.error().to_string();
+  auto rebuilt_info = rebuilt.value()->get_type_info<::SimpleStruct>();
+  ASSERT_TRUE(rebuilt_info.ok()) << rebuilt_info.error().to_string();
+  ASSERT_NE(rebuilt_info.value()->type_meta, nullptr);
+  EXPECT_EQ(rebuilt_info.value()->type_def, source_info.value()->type_def);
+}
+
+TEST(SerializationTest, SourceResolverFinalizes) {
+  auto source_resolver = std::make_shared<TypeResolver>();
+  auto fory = Fory::builder()
+                  .xlang(true)
+                  .compatible(false)
+                  .track_ref(false)
+                  .type_resolver(source_resolver)
+                  .build();
+  ASSERT_TRUE(fory.register_struct<::SimpleStruct>(1).ok());
+  auto pending = source_resolver->get_type_info<::SimpleStruct>();
+  ASSERT_TRUE(pending.ok()) << pending.error().to_string();
+  EXPECT_EQ(pending.value()->type_meta, nullptr);
+  EXPECT_EQ(pending.value()->type_def.size(), 2 * sizeof(uint64_t));
+
+  auto bytes = fory.serialize(::SimpleStruct{1, 2});
+  ASSERT_TRUE(bytes.ok()) << bytes.error().to_string();
+  expect_finalized_source(*source_resolver);
+}
+
+TEST(SerializationTest, ThreadSafeSourceFinalizes) {
+  auto source_resolver = std::make_shared<TypeResolver>();
+  auto fory = Fory::builder()
+                  .xlang(true)
+                  .compatible(false)
+                  .track_ref(false)
+                  .type_resolver(source_resolver)
+                  .build_thread_safe();
+  ASSERT_TRUE(fory.register_struct<::SimpleStruct>(1).ok());
+
+  auto bytes = fory.serialize(::SimpleStruct{1, 2});
+  ASSERT_TRUE(bytes.ok()) << bytes.error().to_string();
+  expect_finalized_source(*source_resolver);
+}
+
 TEST(SerializationTest, ThreadSafeForyMultiThread) {
   auto fory = Fory::builder()
                   .xlang(true)

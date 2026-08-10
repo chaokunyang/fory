@@ -1471,19 +1471,18 @@ template <typename T> struct CompileTimeFieldHelpers {
             ::fory::detail::GetFieldConfigEntry<T, Index>::id;
         if constexpr (::fory::detail::GetFieldConfigEntry<T, Index>::has_id) {
           static_assert(config_id >= 0, "Fory field id must be non-negative");
-          static_assert(config_id <= static_cast<int64_t>(
-                                         std::numeric_limits<uint32_t>::max()),
-                        "Fory field id must fit uint32");
+          static_assert(static_cast<uint64_t>(config_id) <=
+                            ::fory::serialization::detail::kMaxFieldTag,
+                        "Fory field id exceeds the wire TAG_ID range");
           return config_id;
         }
       }
       if constexpr (is_fory_field_v<RawFieldType>) {
         static_assert(RawFieldType::tag_id >= 0,
                       "Fory field id must be non-negative");
-        static_assert(
-            static_cast<uint64_t>(RawFieldType::tag_id) <=
-                static_cast<uint64_t>(std::numeric_limits<uint32_t>::max()),
-            "Fory field id must fit uint32");
+        static_assert(static_cast<uint64_t>(RawFieldType::tag_id) <=
+                          ::fory::serialization::detail::kMaxFieldTag,
+                      "Fory field id exceeds the wire TAG_ID range");
         return RawFieldType::tag_id;
       }
       // No tag ID defined
@@ -1923,9 +1922,9 @@ template <typename T> struct CompileTimeFieldHelpers {
         return names;
       }();
 
-  static constexpr size_t tag_id_length(uint32_t value) {
+  static constexpr size_t tag_id_length(uint64_t value) {
     size_t count = 1;
-    uint32_t v = value;
+    uint64_t v = value;
     while (v >= 10) {
       v /= 10;
       ++count;
@@ -1936,7 +1935,7 @@ template <typename T> struct CompileTimeFieldHelpers {
   static constexpr size_t identifier_length(size_t index) {
     int64_t id = field_ids[index];
     if (id >= 0) {
-      return tag_id_length(static_cast<uint32_t>(id));
+      return tag_id_length(static_cast<uint64_t>(id));
     }
     return snake_case_lengths[index];
   }
@@ -1978,8 +1977,8 @@ template <typename T> struct CompileTimeFieldHelpers {
           for (size_t i = 0; i < FieldCount; ++i) {
             size_t length = identifier_lengths[i];
             if (field_ids[i] >= 0) {
-              uint32_t value = static_cast<uint32_t>(field_ids[i]);
-              uint32_t divisor = 1;
+              uint64_t value = static_cast<uint64_t>(field_ids[i]);
+              uint64_t divisor = 1;
               for (size_t j = 1; j < length; ++j) {
                 divisor *= 10;
               }
@@ -2159,6 +2158,15 @@ template <typename T> struct CompileTimeFieldHelpers {
 
   static inline constexpr std::array<size_t, FieldCount> sorted_indices =
       compute_sorted_indices();
+
+  static inline constexpr std::array<int64_t, FieldCount> sorted_field_ids =
+      []() constexpr {
+        std::array<int64_t, FieldCount> ids{};
+        for (size_t i = 0; i < FieldCount; ++i) {
+          ids[i] = field_ids[sorted_indices[i]];
+        }
+        return ids;
+      }();
 
   static inline constexpr std::array<std::string_view, FieldCount>
       sorted_field_names = []() constexpr {
@@ -3548,7 +3556,7 @@ read_exact_primitive_run(T &obj, ReadContext &ctx,
       constexpr int16_t next_matched_id =
           static_cast<int16_t>(next_sorted_idx * 2);
       if (remote_idx + 1 < remote_fields.size() &&
-          remote_fields[remote_idx + 1].local_dispatch_id == next_matched_id) {
+          remote_fields[remote_idx + 1].field_id == next_matched_id) {
         ++remote_idx;
         read_exact_primitive_run<T, next_sorted_idx>(obj, ctx, remote_fields,
                                                      remote_idx, offset);
@@ -4446,10 +4454,9 @@ bool skip_removed_tracked_struct(ReadContext &ctx,
   }
   for (size_t i = remote_idx + 1; i < remote_fields.size(); ++i) {
     const FieldInfo &candidate = remote_fields[i];
-    if (candidate.local_dispatch_id >= 0 &&
-        candidate.field_type == removed_type) {
-      if (skip_removed_struct_owner<T>(ctx, removed_type,
-                                       candidate.local_dispatch_id, indices)) {
+    if (candidate.field_id >= 0 && candidate.field_type == removed_type) {
+      if (skip_removed_struct_owner<T>(ctx, removed_type, candidate.field_id,
+                                       indices)) {
         return true;
       }
     }
@@ -4531,7 +4538,7 @@ read_struct_fields_compatible(T &obj, ReadContext &ctx,
   // Iterate through remote fields in their serialization order
   for (size_t remote_idx = 0; remote_idx < remote_fields.size(); ++remote_idx) {
     const auto &remote_field = remote_fields[remote_idx];
-    int16_t dispatch_id = remote_field.local_dispatch_id;
+    int16_t dispatch_id = remote_field.field_id;
 
     if (dispatch_id == -1) {
       if (use_exact_offset_reads) {
@@ -4692,8 +4699,10 @@ struct Serializer<T, std::enable_if_t<is_fory_serializable_v<T>>> {
             Error::type_error("Type metadata not initialized for struct"));
         return;
       }
-      int32_t local_version =
-          TypeMeta::compute_struct_version(*type_info->type_meta);
+      int32_t local_version = TypeMeta::compute_struct_version(
+          *type_info->type_meta,
+          detail::CompileTimeFieldHelpers<T>::sorted_field_ids.data(),
+          detail::CompileTimeFieldHelpers<T>::FieldCount);
       ctx.buffer().write_int32(local_version);
     }
 
@@ -4724,8 +4733,10 @@ struct Serializer<T, std::enable_if_t<is_fory_serializable_v<T>>> {
             Error::type_error("Type metadata not initialized for struct"));
         return;
       }
-      int32_t local_version =
-          TypeMeta::compute_struct_version(*type_info->type_meta);
+      int32_t local_version = TypeMeta::compute_struct_version(
+          *type_info->type_meta,
+          detail::CompileTimeFieldHelpers<T>::sorted_field_ids.data(),
+          detail::CompileTimeFieldHelpers<T>::FieldCount);
       ctx.buffer().write_int32(local_version);
     }
 
@@ -4935,8 +4946,10 @@ struct Serializer<T, std::enable_if_t<is_fory_serializable_v<T>>> {
             "Type metadata not initialized for requested struct"));
         return T{};
       }
-      int32_t local_version =
-          TypeMeta::compute_struct_version(*local_type_info->type_meta);
+      int32_t local_version = TypeMeta::compute_struct_version(
+          *local_type_info->type_meta,
+          detail::CompileTimeFieldHelpers<T>::sorted_field_ids.data(),
+          detail::CompileTimeFieldHelpers<T>::FieldCount);
       auto version_res = TypeMeta::check_struct_version(
           read_version, local_version, local_type_info->type_name);
       if (!version_res.ok()) {
@@ -5026,8 +5039,10 @@ struct Serializer<T, std::enable_if_t<is_fory_serializable_v<T>>> {
             "Type metadata not initialized for requested struct"));
         return T{};
       }
-      int32_t local_version =
-          TypeMeta::compute_struct_version(*local_type_info->type_meta);
+      int32_t local_version = TypeMeta::compute_struct_version(
+          *local_type_info->type_meta,
+          detail::CompileTimeFieldHelpers<T>::sorted_field_ids.data(),
+          detail::CompileTimeFieldHelpers<T>::FieldCount);
       auto version_res = TypeMeta::check_struct_version(
           read_version, local_version, local_type_info->type_name);
       if (!version_res.ok()) {

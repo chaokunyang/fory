@@ -82,6 +82,29 @@ struct MapReserver<MapType,
   static void reserve(MapType &map, uint32_t size) { map.reserve(size); }
 };
 
+template <typename K, typename V>
+FORY_ALWAYS_INLINE bool enter_generated_map(ReadContext &ctx) {
+  // Pointer and polymorphic entry owners already enter this shared budget;
+  // direct generated Struct values need the map to own that entry.
+  if constexpr (is_generated_struct_serializer_v<K> ||
+                is_generated_struct_serializer_v<V>) {
+    auto depth_res = ctx.increase_dyn_depth();
+    if (FORY_PREDICT_FALSE(!depth_res.ok())) {
+      ctx.set_error(std::move(depth_res).error());
+      return false;
+    }
+  }
+  return true;
+}
+
+template <typename K, typename V>
+FORY_ALWAYS_INLINE void leave_generated_map(ReadContext &ctx) {
+  if constexpr (is_generated_struct_serializer_v<K> ||
+                is_generated_struct_serializer_v<V>) {
+    ctx.decrease_dyn_depth();
+  }
+}
+
 template <size_t elem_bytes>
 inline bool reserve_map_storage(ReadContext &ctx, uint32_t length) {
   if (FORY_PREDICT_FALSE(elem_bytes != 0 &&
@@ -777,6 +800,9 @@ inline MapType read_map_data_fast(ReadContext &ctx, uint32_t length) {
   if (length == 0) {
     return result;
   }
+  if (FORY_PREDICT_FALSE((!enter_generated_map<K, V>(ctx)))) {
+    return result;
+  }
   constexpr bool entry_read_data_always_advances =
       read_data_always_advances_v<K> || read_data_always_advances_v<V>;
   if (FORY_PREDICT_FALSE(
@@ -885,6 +911,7 @@ inline MapType read_map_data_fast(ReadContext &ctx, uint32_t length) {
     len_counter += chunk_size;
   }
 
+  leave_generated_map<K, V>(ctx);
   return result;
 }
 
@@ -897,6 +924,9 @@ template <typename K, typename V, typename MapType>
 inline MapType read_map_data_slow(ReadContext &ctx, uint32_t length) {
   MapType result;
   if (length == 0) {
+    return result;
+  }
+  if (FORY_PREDICT_FALSE((!enter_generated_map<K, V>(ctx)))) {
     return result;
   }
   constexpr bool entry_read_data_always_advances =
@@ -1048,6 +1078,7 @@ inline MapType read_map_data_slow(ReadContext &ctx, uint32_t length) {
     len_counter += chunk_size;
   }
 
+  leave_generated_map<K, V>(ctx);
   return result;
 }
 

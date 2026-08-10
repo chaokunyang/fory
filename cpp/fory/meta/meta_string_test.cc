@@ -327,8 +327,32 @@ TEST_F(MetaStringTest, RoundtripLongString) {
 
 TEST_F(MetaStringTest, MetaStringTableReset) {
   MetaStringTable table;
+  Buffer value;
+  value.write_var_uint32(0);
+  auto decoded =
+      table.read_string(value, decoder_, MetaStringTable::Role::TypeName);
+  ASSERT_TRUE(decoded.ok());
   table.reset();
-  // Just verify no crash
+
+  Buffer reference;
+  reference.write_var_uint32((1u << 1) | 1u);
+  auto rejected =
+      table.read_string(reference, decoder_, MetaStringTable::Role::TypeName);
+  EXPECT_FALSE(rejected.ok());
+}
+
+TEST_F(MetaStringTest, MetaStringTableLegacyRead) {
+  using LegacyRead = Result<std::string, Error> (MetaStringTable::*)(
+      Buffer &, const MetaStringDecoder &);
+  [[maybe_unused]] LegacyRead legacy_read =
+      static_cast<LegacyRead>(&MetaStringTable::read_string);
+
+  MetaStringTable table;
+  Buffer buffer;
+  buffer.write_var_uint32(0);
+  auto decoded = table.read_string(buffer, decoder_);
+  ASSERT_TRUE(decoded.ok()) << decoded.error().to_string();
+  EXPECT_TRUE(decoded.value().empty());
 }
 
 TEST_F(MetaStringTest, MetaStringTableReadSmallString) {
@@ -350,9 +374,10 @@ TEST_F(MetaStringTest, MetaStringTableReadSmallString) {
                      encoded.value().bytes.size());
 
   buffer.reader_index(0);
-  auto result = table.read_string(buffer, decoder_);
+  auto result =
+      table.read_string(buffer, decoder_, MetaStringTable::Role::TypeName);
   ASSERT_TRUE(result.ok());
-  EXPECT_EQ(result.value(), input);
+  EXPECT_EQ(result.value().value, input);
 }
 
 TEST_F(MetaStringTest, MetaStringTableReadReference) {
@@ -377,14 +402,116 @@ TEST_F(MetaStringTest, MetaStringTableReadReference) {
   buffer.reader_index(0);
 
   // Read the first string
-  auto result1 = table.read_string(buffer, decoder_);
+  auto result1 =
+      table.read_string(buffer, decoder_, MetaStringTable::Role::TypeName);
   ASSERT_TRUE(result1.ok());
-  EXPECT_EQ(result1.value(), input);
+  EXPECT_EQ(result1.value().value, input);
 
   // Read the reference
-  auto result2 = table.read_string(buffer, decoder_);
+  auto result2 =
+      table.read_string(buffer, decoder_, MetaStringTable::Role::TypeName);
   ASSERT_TRUE(result2.ok());
-  EXPECT_EQ(result2.value(), input);
+  EXPECT_EQ(result2.value().value, input);
+  EXPECT_EQ(result2.value().value.data(), result1.value().value.data());
+}
+
+TEST_F(MetaStringTest, MetaStringReferenceUsesCurrentRole) {
+  MetaStringEncoder namespace_encoder{'.', '_'};
+  MetaStringDecoder namespace_decoder{'.', '_'};
+  MetaStringDecoder type_name_decoder{'$', '_'};
+  auto encoded =
+      namespace_encoder.encode(".", {MetaEncoding::LOWER_UPPER_DIGIT_SPECIAL});
+  ASSERT_TRUE(encoded.ok());
+
+  Buffer buffer;
+  buffer.write_var_uint32(static_cast<uint32_t>(encoded->bytes.size()) << 1);
+  buffer.write_uint8(static_cast<uint8_t>(encoded->encoding));
+  buffer.write_bytes(encoded->bytes.data(), encoded->bytes.size());
+  buffer.write_var_uint32((1u << 1) | 1u);
+
+  MetaStringTable table;
+  auto namespace_value = table.read_string(buffer, namespace_decoder,
+                                           MetaStringTable::Role::Namespace);
+  ASSERT_TRUE(namespace_value.ok());
+  EXPECT_EQ(namespace_value->value, ".");
+  auto type_name_value = table.read_string(buffer, type_name_decoder,
+                                           MetaStringTable::Role::TypeName);
+  ASSERT_TRUE(type_name_value.ok());
+  EXPECT_EQ(type_name_value->value, "$");
+}
+
+TEST_F(MetaStringTest, MetaStringViewsRemainStable) {
+  MetaStringTable table;
+  Buffer buffer;
+  auto write_utf8 = [&buffer](std::string_view value) {
+    buffer.write_var_uint32(static_cast<uint32_t>(value.size()) << 1);
+    if (!value.empty()) {
+      buffer.write_uint8(static_cast<uint8_t>(MetaEncoding::UTF8));
+      buffer.write_bytes(reinterpret_cast<const uint8_t *>(value.data()),
+                         value.size());
+    }
+  };
+  const std::string first = "stable_view";
+  write_utf8(first);
+  for (int i = 0; i < 128; ++i) {
+    write_utf8("entry_" + std::to_string(i));
+  }
+
+  auto first_view =
+      table.read_string(buffer, decoder_, MetaStringTable::Role::TypeName);
+  ASSERT_TRUE(first_view.ok());
+  const char *first_data = first_view->value.data();
+  for (int i = 0; i < 128; ++i) {
+    ASSERT_TRUE(
+        table.read_string(buffer, decoder_, MetaStringTable::Role::TypeName)
+            .ok());
+  }
+  EXPECT_EQ(first_view->value, first);
+  EXPECT_EQ(first_view->value.data(), first_data);
+}
+
+TEST_F(MetaStringTest, MetaStringPreservesNul) {
+  const std::string input("a\0b", 3);
+  Buffer buffer;
+  buffer.write_var_uint32(static_cast<uint32_t>(input.size()) << 1);
+  buffer.write_uint8(static_cast<uint8_t>(MetaEncoding::UTF8));
+  buffer.write_bytes(reinterpret_cast<const uint8_t *>(input.data()),
+                     input.size());
+  buffer.write_var_uint32((1u << 1) | 1u);
+
+  MetaStringTable table;
+  auto value =
+      table.read_string(buffer, decoder_, MetaStringTable::Role::TypeName);
+  ASSERT_TRUE(value.ok());
+  EXPECT_EQ(value->value, std::string_view(input));
+  auto reference =
+      table.read_string(buffer, decoder_, MetaStringTable::Role::TypeName);
+  ASSERT_TRUE(reference.ok());
+  EXPECT_EQ(reference->value, std::string_view(input));
+  EXPECT_EQ(reference->value.data(), value->value.data());
+}
+
+TEST_F(MetaStringTest, MetaStringBindsCanonicalView) {
+  const std::string input(80, 'a');
+  const std::string canonical = input;
+  auto encoded = encoder_.encode(input, {MetaEncoding::UTF8});
+  ASSERT_TRUE(encoded.ok());
+  Buffer buffer;
+  buffer.write_var_uint32(static_cast<uint32_t>(encoded->bytes.size()) << 1);
+  buffer.write_int64(
+      compute_meta_string_hash(encoded->bytes, encoded->encoding));
+  buffer.write_bytes(encoded->bytes.data(), encoded->bytes.size());
+  buffer.write_var_uint32((1u << 1) | 1u);
+
+  MetaStringTable table;
+  auto value =
+      table.read_string(buffer, decoder_, MetaStringTable::Role::TypeName);
+  ASSERT_TRUE(value.ok());
+  value->bind(canonical);
+  auto reference =
+      table.read_string(buffer, decoder_, MetaStringTable::Role::TypeName);
+  ASSERT_TRUE(reference.ok());
+  EXPECT_EQ(reference->value.data(), canonical.data());
 }
 
 TEST_F(MetaStringTest, MetaStringTableInvalidReference) {
@@ -396,7 +523,8 @@ TEST_F(MetaStringTest, MetaStringTableInvalidReference) {
   buffer.write_var_uint32(ref_header);
 
   buffer.reader_index(0);
-  auto result = table.read_string(buffer, decoder_);
+  auto result =
+      table.read_string(buffer, decoder_, MetaStringTable::Role::TypeName);
   EXPECT_FALSE(result.ok());
 }
 
@@ -409,9 +537,10 @@ TEST_F(MetaStringTest, MetaStringTableEmptyString) {
   buffer.write_var_uint32(header);
 
   buffer.reader_index(0);
-  auto result = table.read_string(buffer, decoder_);
+  auto result =
+      table.read_string(buffer, decoder_, MetaStringTable::Role::TypeName);
   ASSERT_TRUE(result.ok());
-  EXPECT_EQ(result.value(), "");
+  EXPECT_EQ(result.value().value, "");
 }
 
 TEST_F(MetaStringTest, MetaStringTableReadLargeNames) {
@@ -451,12 +580,14 @@ TEST_F(MetaStringTest, MetaStringTableReadLargeNames) {
 
   MetaStringTable table;
   buffer.reader_index(0);
-  auto decoded_namespace = table.read_string(buffer, namespace_decoder);
-  auto decoded_type_name = table.read_string(buffer, type_name_decoder);
+  auto decoded_namespace = table.read_string(buffer, namespace_decoder,
+                                             MetaStringTable::Role::Namespace);
+  auto decoded_type_name = table.read_string(buffer, type_name_decoder,
+                                             MetaStringTable::Role::TypeName);
   ASSERT_TRUE(decoded_namespace.ok());
   ASSERT_TRUE(decoded_type_name.ok());
-  EXPECT_EQ(decoded_namespace.value(), namespace_name);
-  EXPECT_EQ(decoded_type_name.value(), type_name);
+  EXPECT_EQ(decoded_namespace.value().value, namespace_name);
+  EXPECT_EQ(decoded_type_name.value().value, type_name);
   EXPECT_EQ(buffer.reader_index(), buffer.writer_index());
   EXPECT_EQ(compute_meta_string_hash(encoded_type_name.value().bytes,
                                      encoded_type_name.value().encoding),
@@ -485,14 +616,16 @@ TEST_F(MetaStringTest, MetaStringTableRejectsLargeHash) {
 
   MetaStringTable table;
   malformed.reader_index(0);
-  auto result = table.read_string(malformed, type_name_decoder);
+  auto result = table.read_string(malformed, type_name_decoder,
+                                  MetaStringTable::Role::TypeName);
   ASSERT_FALSE(result.ok());
   EXPECT_EQ(result.error().code(), ErrorCode::InvalidData);
 
   Buffer reference;
   reference.write_var_uint32((1u << 1) | 1u);
   reference.reader_index(0);
-  auto unpublished = table.read_string(reference, type_name_decoder);
+  auto unpublished = table.read_string(reference, type_name_decoder,
+                                       MetaStringTable::Role::TypeName);
   EXPECT_FALSE(unpublished.ok());
   EXPECT_EQ(unpublished.error().code(), ErrorCode::InvalidData);
 }

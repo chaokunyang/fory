@@ -29,6 +29,7 @@
 #include <limits>
 #include <map>
 #include <unordered_map>
+#include <unordered_set>
 
 namespace fory {
 namespace serialization {
@@ -50,6 +51,8 @@ constexpr int8_t NUM_HASH_BITS = 52;
 constexpr uint32_t TYPE_META_HASH_SHIFT = 64 - NUM_HASH_BITS;
 constexpr uint64_t TYPE_META_HASH_BITS_MASK = ~uint64_t{0}
                                               << TYPE_META_HASH_SHIFT;
+constexpr uint64_t MAX_TYPE_META_BODY_SIZE =
+    static_cast<uint64_t>(std::numeric_limits<int>::max()) - 2;
 
 // ============================================================================
 // FieldType Implementation
@@ -97,8 +100,9 @@ Result<FieldType, Error> FieldType::read_from(Buffer &buffer, bool read_flag,
     uint8_t remaining_generics;
   };
 
-  // A capped TypeMeta body can still encode thousands of nested container
-  // schemas, so input bytes rather than the native call stack bound parsing.
+  // Keep the materialized tree shallow enough that every recursive owner path
+  // (destruction, copying, comparison, and writing) remains stack-safe,
+  // including cleanup after a later parse or admission failure.
   std::vector<ParseFrame> stack;
   bool nested = false;
   while (true) {
@@ -116,9 +120,6 @@ Result<FieldType, Error> FieldType::read_from(Buffer &buffer, bool read_flag,
     const bool ref_track =
         header_has_flags ? (header & 0b01) != 0 : ref_tracking_val;
 
-    FieldType completed(tid, null, ref_track);
-    completed.user_type_id = kInvalidUserTypeId;
-
     uint8_t generic_count = 0;
     if (tid == static_cast<uint32_t>(TypeId::LIST) ||
         tid == static_cast<uint32_t>(TypeId::SET)) {
@@ -126,6 +127,15 @@ Result<FieldType, Error> FieldType::read_from(Buffer &buffer, bool read_flag,
     } else if (tid == static_cast<uint32_t>(TypeId::MAP)) {
       generic_count = 2;
     }
+
+    if (generic_count != 0 &&
+        FORY_PREDICT_FALSE(stack.size() >= FieldType::kMaxNesting)) {
+      return Unexpected(
+          Error::invalid_data("Field type nesting limit exceeded"));
+    }
+
+    FieldType completed(tid, null, ref_track);
+    completed.user_type_id = kInvalidUserTypeId;
 
     if (generic_count != 0) {
       stack.push_back({std::move(completed), generic_count});
@@ -160,6 +170,13 @@ Result<std::vector<uint8_t>, Error> FieldInfo::to_bytes() const {
   // write field header:
   // header: | field_name_encoding:2bits | size:4bits | nullability:1bit |
   // track_ref:1bit |
+  if (FORY_PREDICT_FALSE(
+          field_id < -1 ||
+          (field_id >= 0 &&
+           static_cast<uint64_t>(field_id) >
+               static_cast<uint64_t>(std::numeric_limits<uint32_t>::max())))) {
+    return Unexpected(Error::invalid("Field tag exceeds uint32 range"));
+  }
   const bool use_tag_id = field_id >= 0;
   uint8_t encoding_idx = use_tag_id ? 3 : 0; // TAG_ID or UTF8
   std::vector<uint8_t> encoded_name;
@@ -245,13 +262,20 @@ Result<FieldInfo, Error> FieldInfo::from_bytes(Buffer &buffer) {
     size_field += extra;
   }
 
+  if (FORY_PREDICT_FALSE(
+          use_tag_id &&
+          size_field >
+              static_cast<size_t>(std::numeric_limits<uint32_t>::max()))) {
+    return Unexpected(Error::invalid_data("Field tag exceeds uint32 range"));
+  }
+
   // Read field type with nullable and track_ref from header
   FORY_TRY(field_type,
            FieldType::read_from(buffer, false, nullable, track_ref));
 
   if (use_tag_id) {
     FieldInfo info("", std::move(field_type));
-    info.field_id = static_cast<int16_t>(size_field);
+    info.field_id = static_cast<int64_t>(size_field);
     return info;
   }
 
@@ -424,15 +448,6 @@ inline uint64_t compute_type_meta_hash_bits(const uint8_t *meta_bytes,
   return shifted & TYPE_META_HASH_BITS_MASK;
 }
 
-inline int64_t compute_type_meta_hash(const uint8_t *meta_bytes,
-                                      size_t meta_size) {
-  uint64_t header_low_bits =
-      std::min<uint64_t>(META_SIZE_MASK, static_cast<uint64_t>(meta_size));
-  return static_cast<int64_t>(
-      compute_type_meta_hash_bits(meta_bytes, meta_size, header_low_bits) >>
-      TYPE_META_HASH_SHIFT);
-}
-
 inline Result<void, Error> validate_type_meta_header(uint64_t header) {
   if (FORY_PREDICT_FALSE((header & TYPE_META_RESERVED_BITS_MASK) != 0)) {
     return Unexpected(
@@ -461,10 +476,9 @@ read_type_meta_size(Buffer &buffer, uint64_t header, size_t *header_size) {
       *header_size += (after - before);
     }
   }
-  if (FORY_PREDICT_FALSE(
-          meta_size > static_cast<uint64_t>(std::numeric_limits<int>::max()))) {
+  if (FORY_PREDICT_FALSE(meta_size > MAX_TYPE_META_BODY_SIZE)) {
     return Unexpected(
-        Error::invalid_data("TypeMeta body size exceeds supported range"));
+        Error::invalid_data("TypeMeta body exceeds supported hash input size"));
   }
   return static_cast<uint32_t>(meta_size);
 }
@@ -644,7 +658,7 @@ parse_type_meta_body(Buffer &body, const TypeMeta *local_type_info,
   // Remote fields are already in sender data order and must not be re-sorted.
   if (local_type_info != nullptr) {
     FORY_RETURN_IF_ERROR(
-        TypeMeta::assign_field_ids(local_type_info, field_infos));
+        TypeMeta::assign_local_dispatch_ids(local_type_info, field_infos));
   }
   if (FORY_PREDICT_FALSE(body.remaining_size() != 0)) {
     return Unexpected(Error::invalid_data(
@@ -739,10 +753,10 @@ Result<std::vector<uint8_t>, Error> TypeMeta::to_bytes() const {
   // Now write global binary header
   Buffer result_buffer;
   const uint32_t layer_size = layer_buffer.writer_index();
-  if (FORY_PREDICT_FALSE(layer_size > static_cast<uint32_t>(
-                                          std::numeric_limits<int>::max()))) {
+  if (FORY_PREDICT_FALSE(static_cast<uint64_t>(layer_size) >
+                         MAX_TYPE_META_BODY_SIZE)) {
     return Unexpected(
-        Error::invalid_data("TypeMeta body size exceeds supported range"));
+        Error::invalid_data("TypeMeta body exceeds supported hash input size"));
   }
   uint64_t meta_size = layer_size;
   uint64_t header = std::min(META_SIZE_MASK, meta_size);
@@ -1270,25 +1284,84 @@ TypeMeta::sort_field_infos(std::vector<FieldInfo> fields) {
 // Field ID Assignment (KEY FUNCTION for schema evolution!)
 // ============================================================================
 
+namespace {
+std::string normalize_field_name(const std::string &name);
+}
+
 Result<void, Error>
-TypeMeta::assign_field_ids(const TypeMeta *local_type,
-                           std::vector<FieldInfo> &remote_fields) {
+TypeMeta::assign_local_dispatch_ids(const TypeMeta *local_type,
+                                    std::vector<FieldInfo> &remote_fields) {
   const auto &local_fields = local_type->field_infos;
   constexpr size_t max_compatible_matched_field_index =
       (static_cast<size_t>(std::numeric_limits<int16_t>::max()) - 1) / 2;
+  const auto valid_field_id = [](const FieldInfo &field) {
+    return field.field_id >= -1 &&
+           (field.field_id < 0 ||
+            static_cast<uint64_t>(field.field_id) <=
+                static_cast<uint64_t>(std::numeric_limits<uint32_t>::max()));
+  };
+  if (FORY_PREDICT_FALSE(std::any_of(local_fields.begin(), local_fields.end(),
+                                     [&](const FieldInfo &field) {
+                                       return !valid_field_id(field);
+                                     }) ||
+                         std::any_of(remote_fields.begin(), remote_fields.end(),
+                                     [&](const FieldInfo &field) {
+                                       return !valid_field_id(field);
+                                     }))) {
+    return Unexpected(Error::invalid("Field tag exceeds uint32 range"));
+  }
 
   // Primary mapping: field name -> sorted index in local schema
   std::unordered_map<std::string, size_t> local_field_index_map;
+  std::unordered_map<std::string, size_t> local_tagged_name_map;
+  std::unordered_set<std::string> ambiguous_tagged_names;
   local_field_index_map.reserve(local_fields.size());
+  local_tagged_name_map.reserve(local_fields.size());
+  ambiguous_tagged_names.reserve(local_fields.size());
   for (size_t i = 0; i < local_fields.size(); ++i) {
-    local_field_index_map.emplace(local_fields[i].field_name, i);
+    std::string canonical_name =
+        normalize_field_name(local_fields[i].field_name);
+    if (local_fields[i].field_id < 0) {
+      if (!local_field_index_map.emplace(std::move(canonical_name), i).second) {
+        return Unexpected(
+            Error::invalid("Duplicate local canonical field name"));
+      }
+    } else if (!ambiguous_tagged_names.count(canonical_name)) {
+      if (!local_tagged_name_map.emplace(canonical_name, i).second) {
+        local_tagged_name_map.erase(canonical_name);
+        ambiguous_tagged_names.emplace(std::move(canonical_name));
+      }
+    }
   }
   // Tag ID mapping when field IDs are explicitly configured.
-  std::unordered_map<int16_t, size_t> local_field_id_map;
+  std::unordered_map<uint32_t, size_t> local_field_id_map;
   local_field_id_map.reserve(local_fields.size());
   for (size_t i = 0; i < local_fields.size(); ++i) {
-    if (local_fields[i].field_id >= 0) {
-      local_field_id_map.emplace(local_fields[i].field_id, i);
+    if (local_fields[i].field_id >= 0 &&
+        !local_field_id_map
+             .emplace(static_cast<uint32_t>(local_fields[i].field_id), i)
+             .second) {
+      return Unexpected(Error::invalid("Duplicate local field tag"));
+    }
+  }
+
+  // Validate the complete remote identity set before assigning any local
+  // dispatch IDs. Tag and canonical-name identities are separate domains.
+  std::unordered_set<uint32_t> remote_tag_ids;
+  std::unordered_set<std::string> remote_field_names;
+  remote_tag_ids.reserve(remote_fields.size());
+  remote_field_names.reserve(remote_fields.size());
+  for (const auto &remote_field : remote_fields) {
+    const bool unique =
+        remote_field.field_id >= 0
+            ? remote_tag_ids
+                  .emplace(static_cast<uint32_t>(remote_field.field_id))
+                  .second
+            : remote_field_names
+                  .emplace(normalize_field_name(remote_field.field_name))
+                  .second;
+    if (!unique) {
+      return Unexpected(Error::invalid_data("Duplicate remote field identity"));
     }
   }
   // Track which local fields have already been matched so that each
@@ -1311,7 +1384,7 @@ TypeMeta::assign_field_ids(const TypeMeta *local_type,
             std::to_string(local_index) + " exceeds max " +
             std::to_string(max_compatible_matched_field_index)));
       }
-      remote_field.field_id = static_cast<int16_t>(local_index * 2);
+      remote_field.local_dispatch_id = static_cast<int16_t>(local_index * 2);
       used[local_index] = true;
       return true;
     }
@@ -1324,7 +1397,8 @@ TypeMeta::assign_field_ids(const TypeMeta *local_type,
             std::to_string(local_index) + " exceeds max " +
             std::to_string(max_compatible_matched_field_index)));
       }
-      remote_field.field_id = static_cast<int16_t>(local_index * 2 + 1);
+      remote_field.local_dispatch_id =
+          static_cast<int16_t>(local_index * 2 + 1);
       used[local_index] = true;
       return true;
     }
@@ -1339,22 +1413,28 @@ TypeMeta::assign_field_ids(const TypeMeta *local_type,
     bool matched = false;
 
     if (remote_field.field_id >= 0) {
-      auto id_it = local_field_id_map.find(remote_field.field_id);
+      auto id_it =
+          local_field_id_map.find(static_cast<uint32_t>(remote_field.field_id));
       if (id_it != local_field_id_map.end()) {
         FORY_TRY(is_matched, assign_matched_field(remote_field, id_it->second));
         matched = is_matched;
       }
     } else {
-      // 1) Try exact name + type match first (fast path for same-language
-      //    schemas and most C++-only cases). A local tag-ID field's identifier
-      //    is the tag ID, not the field name, so it must not match an untagged
-      //    remote field by name in a mixed schema.
-      auto it = local_field_index_map.find(remote_field.field_name);
+      // Prefer a local name-identified field. If none exists, a remote name may
+      // bind a uniquely named local tagged field for schema evolution. The
+      // shared used-local gate prevents a later tag occurrence from binding the
+      // same field a second time.
+      const std::string canonical_name =
+          normalize_field_name(remote_field.field_name);
+      auto it = local_field_index_map.find(canonical_name);
       if (it != local_field_index_map.end()) {
-        size_t idx = it->second;
-        const FieldInfo &local_field = local_fields[idx];
-        if (local_field.field_id < 0) {
-          FORY_TRY(is_matched, assign_matched_field(remote_field, idx));
+        FORY_TRY(is_matched, assign_matched_field(remote_field, it->second));
+        matched = is_matched;
+      } else {
+        auto tagged_it = local_tagged_name_map.find(canonical_name);
+        if (tagged_it != local_tagged_name_map.end()) {
+          FORY_TRY(is_matched,
+                   assign_matched_field(remote_field, tagged_it->second));
           matched = is_matched;
         }
       }
@@ -1383,14 +1463,10 @@ TypeMeta::assign_field_ids(const TypeMeta *local_type,
 
     if (!matched) {
       // No suitable local field found -> mark as skipped.
-      remote_field.field_id = -1;
+      remote_field.local_dispatch_id = -1;
     }
   }
   return Result<void, Error>();
-}
-
-int64_t TypeMeta::compute_hash(const std::vector<uint8_t> &meta_bytes) {
-  return compute_type_meta_hash(meta_bytes.data(), meta_bytes.size());
 }
 
 namespace {
@@ -1683,6 +1759,11 @@ TypeResolver::get_type_info(const std::type_index &type_index) const {
 
 Result<std::unique_ptr<TypeResolver>, Error>
 TypeResolver::build_final_type_resolver() {
+  std::lock_guard<std::mutex> lock(registration_mutex_);
+  // Freezing the source resolver while holding its registration mutex makes
+  // first use linearizable with direct registration helpers. ThreadSafeFory
+  // retains this source resolver after publishing finalized pool owners.
+  finalized_ = true;
   auto final_resolver = std::make_unique<TypeResolver>();
 
   // copy configuration
@@ -1719,7 +1800,11 @@ TypeResolver::build_final_type_resolver() {
     final_resolver->user_type_info_by_id_.put(key, remap_type_info(old_ptr));
   }
   for (const auto &[key, old_ptr] : type_info_by_name_) {
-    final_resolver->type_info_by_name_[key] = remap_type_info(old_ptr);
+    (void)key;
+    TypeInfo *new_ptr = remap_type_info(old_ptr);
+    const uint32_t kind = named_type_kind(new_ptr->type_id);
+    final_resolver->type_info_by_name_[make_name_key(
+        new_ptr->namespace_name, new_ptr->type_name, kind)] = new_ptr;
   }
   for (const auto &[key, old_ptr] : type_info_by_runtime_type_) {
     final_resolver->type_info_by_runtime_type_[key] = remap_type_info(old_ptr);
@@ -1805,7 +1890,11 @@ std::unique_ptr<TypeResolver> TypeResolver::clone() const {
     cloned->user_type_info_by_id_.put(key, remap_type_info(old_ptr));
   }
   for (const auto &[key, old_ptr] : type_info_by_name_) {
-    cloned->type_info_by_name_[key] = remap_type_info(old_ptr);
+    (void)key;
+    TypeInfo *new_ptr = remap_type_info(old_ptr);
+    const uint32_t kind = named_type_kind(new_ptr->type_id);
+    cloned->type_info_by_name_[make_name_key(
+        new_ptr->namespace_name, new_ptr->type_name, kind)] = new_ptr;
   }
   for (const auto &[key, old_ptr] : type_info_by_runtime_type_) {
     cloned->type_info_by_runtime_type_[key] = remap_type_info(old_ptr);

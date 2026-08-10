@@ -37,6 +37,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <limits>
 #include <map>
 #include <memory>
 #include <optional>
@@ -340,6 +341,19 @@ struct SkippedFieldRefReader {
   FORY_STRUCT(SkippedFieldRefReader, (kept, fory::F(2)), (alias, fory::F(3)));
 };
 
+struct RemovedRefItem {
+  int32_t value = 0;
+  FORY_STRUCT(RemovedRefItem, (value, fory::F(1)));
+};
+
+struct RemovedOwnerWriter {
+  std::shared_ptr<RemovedRefItem> removed;
+  std::shared_ptr<RemovedRefItem> kept;
+  std::shared_ptr<RemovedRefItem> alias;
+  FORY_STRUCT(RemovedOwnerWriter, (removed, fory::F(1)), (kept, fory::F(2)),
+              (alias, fory::F(3)));
+};
+
 struct SkippedListRefWriter {
   std::vector<std::shared_ptr<SkippedRefItem>> skipped;
   std::shared_ptr<SkippedRefItem> kept;
@@ -533,6 +547,22 @@ Result<ReaderT, Error> convert_field(const WriterT &value, uint32_t type_id) {
   }
   return reader.deserialize<ReaderT>(bytes.value().data(),
                                      bytes.value().size());
+}
+
+std::vector<uint8_t> decimal_power_of_ten(uint32_t exponent) {
+  std::vector<uint8_t> magnitude = {1};
+  for (uint32_t power = 0; power < exponent; ++power) {
+    uint32_t carry = 0;
+    for (uint8_t &byte : magnitude) {
+      uint32_t value = static_cast<uint32_t>(byte) * 10 + carry;
+      byte = static_cast<uint8_t>(value);
+      carry = value >> 8;
+    }
+    if (carry != 0) {
+      magnitude.push_back(static_cast<uint8_t>(carry));
+    }
+  }
+  return magnitude;
 }
 
 size_t single_byte_delta_index(const std::vector<uint8_t> &left,
@@ -913,6 +943,33 @@ TEST(SchemaEvolutionTest, SkippedTrackedFieldKeepsRefIdsAligned) {
   EXPECT_EQ(decoded.value().kept, decoded.value().alias);
 }
 
+TEST(SchemaEvolutionTest, RemovedTrackedStructKeepsOwner) {
+  auto writer =
+      Fory::builder().compatible(true).xlang(true).track_ref(true).build();
+  auto reader =
+      Fory::builder().compatible(true).xlang(true).track_ref(true).build();
+
+  constexpr uint32_t ITEM_TYPE_ID = 1019;
+  constexpr uint32_t WRAPPER_TYPE_ID = 1020;
+  ASSERT_TRUE(writer.register_struct<RemovedRefItem>(ITEM_TYPE_ID).ok());
+  ASSERT_TRUE(reader.register_struct<SkippedRefItem>(ITEM_TYPE_ID).ok());
+  ASSERT_TRUE(writer.register_struct<RemovedOwnerWriter>(WRAPPER_TYPE_ID).ok());
+  ASSERT_TRUE(
+      reader.register_struct<SkippedFieldRefReader>(WRAPPER_TYPE_ID).ok());
+
+  auto owner = std::make_shared<RemovedRefItem>();
+  owner->value = 45;
+  auto bytes = writer.serialize(RemovedOwnerWriter{owner, owner, owner});
+  ASSERT_TRUE(bytes.ok()) << bytes.error().to_string();
+  auto decoded = reader.deserialize<SkippedFieldRefReader>(
+      bytes.value().data(), bytes.value().size());
+
+  ASSERT_TRUE(decoded.ok()) << decoded.error().to_string();
+  ASSERT_NE(decoded.value().kept, nullptr);
+  EXPECT_EQ(decoded.value().kept, decoded.value().alias);
+  EXPECT_EQ(decoded.value().kept->value, 0);
+}
+
 TEST(SchemaEvolutionTest, SkippedListElementsKeepRefIdsAligned) {
   auto writer = Fory::builder().compatible(true).xlang(true).build();
   auto reader = Fory::builder().compatible(true).xlang(true).build();
@@ -1247,6 +1304,76 @@ TEST(SchemaEvolutionTest, ScalarDecimal) {
       {Decimal::from_int64(1230, 3), 7}, 1030);
   ASSERT_TRUE(same_type.ok()) << same_type.error().to_string();
   EXPECT_EQ(same_type.value().value, Decimal::from_int64(1230, 3));
+}
+
+TEST(SchemaEvolutionTest, ScalarDecimalWorkBounds) {
+  std::vector<uint8_t> power_5000 = decimal_power_of_ten(5000);
+  auto reducible = convert_field<ScalarDecimalField, ScalarStringField>(
+      {Decimal(5000, false, power_5000)}, 1051);
+  ASSERT_TRUE(reducible.ok()) << reducible.error().to_string();
+  EXPECT_EQ(reducible.value().value, "1");
+
+  power_5000[0] += 1;
+  auto non_reducible = convert_field<ScalarDecimalField, ScalarStringField>(
+      {Decimal(5000, false, std::move(power_5000))}, 1052);
+  ASSERT_FALSE(non_reducible.ok());
+  EXPECT_EQ(non_reducible.error().code(), ErrorCode::InvalidData);
+
+  auto scale_bound = convert_field<ScalarDecimalField, ScalarStringField>(
+      {Decimal(5000, false, decimal_power_of_ten(4744))}, 1053);
+  ASSERT_TRUE(scale_bound.ok()) << scale_bound.error().to_string();
+  EXPECT_EQ(scale_bound.value().value,
+            std::string("0.") + std::string(255, '0') + "1");
+
+  auto scale_error = convert_field<ScalarDecimalField, ScalarStringField>(
+      {Decimal(5000, false, decimal_power_of_ten(4743))}, 1054);
+  ASSERT_FALSE(scale_error.ok());
+  EXPECT_EQ(scale_error.error().code(), ErrorCode::InvalidData);
+
+  auto digit_bound = convert_field<ScalarDecimalField, ScalarStringField>(
+      {Decimal(256, false, decimal_power_of_ten(511))}, 1055);
+  ASSERT_TRUE(digit_bound.ok()) << digit_bound.error().to_string();
+  EXPECT_EQ(digit_bound.value().value,
+            std::string("1") + std::string(255, '0'));
+
+  auto digit_error = convert_field<ScalarDecimalField, ScalarStringField>(
+      {Decimal(256, false, decimal_power_of_ten(512))}, 1056);
+  ASSERT_FALSE(digit_error.ok());
+  EXPECT_EQ(digit_error.error().code(), ErrorCode::InvalidData);
+
+  std::vector<uint8_t> max_magnitude(detail::MAX_DECIMAL_MAGNITUDE_BYTES, 0xFF);
+  auto magnitude_error = convert_field<ScalarDecimalField, ScalarStringField>(
+      {Decimal(0, false, std::move(max_magnitude))}, 1057);
+  ASSERT_FALSE(magnitude_error.ok());
+  EXPECT_EQ(magnitude_error.error().code(), ErrorCode::InvalidData);
+}
+
+TEST(SchemaEvolutionTest, ScalarFloatDecimalBounds) {
+  auto negative_bound = convert_field<ScalarDoubleField, ScalarDecimalField>(
+      {std::ldexp(1.0, -256)}, 1058);
+  ASSERT_TRUE(negative_bound.ok()) << negative_bound.error().to_string();
+  EXPECT_EQ(negative_bound.value().value.scale(), 256);
+
+  for (double value :
+       {std::ldexp(1.0, -257), std::numeric_limits<double>::denorm_min()}) {
+    auto result =
+        convert_field<ScalarDoubleField, ScalarDecimalField>({value}, 1059);
+    ASSERT_FALSE(result.ok());
+    EXPECT_EQ(result.error().code(), ErrorCode::InvalidData);
+  }
+
+  auto positive_bound = convert_field<ScalarDoubleField, ScalarDecimalField>(
+      {std::ldexp(1.0, 850)}, 1060);
+  ASSERT_TRUE(positive_bound.ok()) << positive_bound.error().to_string();
+  EXPECT_EQ(positive_bound.value().value.scale(), 0);
+
+  for (double value :
+       {std::ldexp(1.0, 851), std::numeric_limits<double>::max()}) {
+    auto result =
+        convert_field<ScalarDoubleField, ScalarDecimalField>({value}, 1061);
+    ASSERT_FALSE(result.ok());
+    EXPECT_EQ(result.error().code(), ErrorCode::InvalidData);
+  }
 }
 
 TEST(SchemaEvolutionTest, ScalarOptional) {

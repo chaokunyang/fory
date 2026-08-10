@@ -25,7 +25,11 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <deque>
+#include <functional>
+#include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace fory {
@@ -80,6 +84,16 @@ private:
 // java/fory-core/src/main/java/org/apache/fory/resolver/MetaStringResolver.java.
 class MetaStringTable {
 public:
+  enum class Role : uint8_t { Namespace = 0, TypeName = 1 };
+
+  struct View {
+    std::string_view value;
+    size_t hash;
+    std::string_view *canonical;
+
+    void bind(std::string_view registered) const { *canonical = registered; }
+  };
+
   MetaStringTable();
 
   // Decode a meta string from buffer using the provided decoder.
@@ -87,14 +101,31 @@ public:
   Result<std::string, Error> read_string(Buffer &buffer,
                                          const MetaStringDecoder &decoder);
 
+  Result<View, Error> read_string(Buffer &buffer,
+                                  const MetaStringDecoder &decoder, Role role);
+
   void reset();
 
 private:
-  struct Entry {
-    std::string decoded;
+  struct Decoded {
+    std::string value;
+    size_t hash;
+    std::string_view canonical;
   };
 
-  std::vector<Entry> entries_;
+  struct Entry {
+    std::vector<uint8_t> bytes;
+    MetaEncoding encoding;
+    std::optional<Decoded> namespace_value;
+    std::optional<Decoded> type_name_value;
+  };
+
+  Result<View, Error> decode(Entry &entry, const MetaStringDecoder &decoder,
+                             Role role);
+
+  // A namespace view must remain valid while the following type-name entry is
+  // inserted. deque preserves references to prior entries across push_back.
+  std::deque<Entry> entries_;
 };
 
 // Helper to map raw encoding byte to MetaEncoding.

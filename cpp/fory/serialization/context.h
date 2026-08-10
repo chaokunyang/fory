@@ -42,6 +42,35 @@ namespace serialization {
 class TypeResolver;
 class TypeMeta;
 
+struct RemoteTypeKey {
+  uint32_t type_id = 0;
+  uint32_t user_type_id = kInvalidUserTypeId;
+  bool register_by_name = false;
+  std::string namespace_name;
+  std::string type_name;
+
+  bool operator==(const RemoteTypeKey &other) const {
+    return type_id == other.type_id && user_type_id == other.user_type_id &&
+           register_by_name == other.register_by_name &&
+           namespace_name == other.namespace_name &&
+           type_name == other.type_name;
+  }
+};
+
+class MetadataKeyHash {
+public:
+  MetadataKeyHash();
+
+  size_t operator()(int64_t value) const;
+  size_t operator()(const RemoteTypeKey &key) const;
+
+private:
+  size_t hash_bytes(const void *data, size_t size) const;
+
+  uint64_t key0_;
+  uint64_t key1_;
+};
+
 /// write context for serialization operations.
 ///
 /// This class maintains the state during serialization, including:
@@ -128,7 +157,7 @@ public:
   /// Check if reference tracking is enabled.
   inline bool track_ref() const { return config_->track_ref; }
 
-  /// get maximum allowed dynamic nesting depth for polymorphic types.
+  /// Get the protected serialization nesting-depth limit.
   inline uint32_t max_dyn_depth() const { return config_->max_dyn_depth; }
 
   /// get current dynamic nesting depth.
@@ -457,8 +486,7 @@ public:
   /// Check if reference tracking is enabled.
   inline bool track_ref() const { return config_->track_ref; }
 
-  /// Get the maximum nesting depth for polymorphic and static smart-pointer
-  /// pointee reads.
+  /// Get the protected deserialization nesting-depth limit.
   inline uint32_t max_dyn_depth() const { return config_->max_dyn_depth; }
 
   /// Get the current protected deserialization nesting depth.
@@ -666,9 +694,9 @@ public:
 private:
   friend class Fory;
 
-  FORY_NOINLINE Result<std::string, Error>
+  FORY_NOINLINE Result<RemoteTypeKey, Error>
   check_remote_type_meta_limit(const TypeMeta &type_meta);
-  void record_remote_type_meta(const std::string &type_key);
+  void record_remote_type_meta(RemoteTypeKey type_key);
   FORY_NOINLINE bool set_graph_memory_exceeded(size_t bytes, size_t remaining);
   FORY_NOINLINE bool set_unbacked_container_items_exceeded(size_t items,
                                                            size_t remaining);
@@ -690,7 +718,9 @@ private:
   // Index-based access (pointers to cached_type_infos_ or type_resolver)
   std::vector<const TypeInfo *> reading_type_infos_;
   // Cache by meta_header (pointers to cached_type_infos_)
-  fory::flat_hash_map<int64_t, const TypeInfo *> parsed_type_infos_;
+  MetadataKeyHash metadata_key_hash_;
+  fory::flat_hash_map<int64_t, const TypeInfo *, MetadataKeyHash>
+      parsed_type_infos_;
   // Fast path for repeated type meta headers.
   int64_t cached_meta_header_ = 0;
   const TypeInfo *cached_meta_type_info_ = nullptr;
@@ -699,7 +729,8 @@ private:
 
   // Dynamic meta strings used for named type/class info.
   meta::MetaStringTable meta_string_table_;
-  fory::flat_hash_map<std::string, uint32_t> remote_schema_versions_by_type_;
+  fory::flat_hash_map<RemoteTypeKey, uint32_t, MetadataKeyHash>
+      remote_schema_versions_by_type_;
   uint64_t total_accepted_schema_versions_ = 0;
 };
 

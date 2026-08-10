@@ -36,7 +36,46 @@ namespace serialization {
 namespace {
 
 constexpr int32_t MAX_COMPATIBLE_DECIMAL_DIGITS = 256;
+constexpr size_t MAX_COMPATIBLE_DECIMAL_BITS = 851;
 constexpr size_t MAX_COMPATIBLE_NUMERIC_TEXT_LENGTH = 320;
+constexpr uint32_t DECIMAL_ZERO_CHUNK = 1'000'000'000;
+constexpr uint32_t DECIMAL_ZERO_CHUNK_DIGITS = 9;
+
+bool decimal_bits_fit(size_t bit_length, int64_t decimal_digits) {
+  if (decimal_digits <= 0) {
+    return false;
+  }
+  // 3.32193 is a strict upper bound for log2(10). The exact digit check
+  // follows after this cheap shape gate has bounded the BigUInt work.
+  constexpr uint64_t LOG2_10_NUMERATOR = 332'193;
+  constexpr uint64_t LOG2_10_DENOMINATOR = 100'000;
+  uint64_t digits = static_cast<uint64_t>(decimal_digits);
+  uint64_t max_bits = (digits * LOG2_10_NUMERATOR + LOG2_10_DENOMINATOR - 1) /
+                      LOG2_10_DENOMINATOR;
+  return bit_length <= max_bits;
+}
+
+size_t byte_magnitude_bit_length(const std::vector<uint8_t> &bytes) {
+  if (bytes.empty()) {
+    return 0;
+  }
+  uint8_t high = bytes.back();
+  size_t high_bits = 0;
+  while (high != 0) {
+    ++high_bits;
+    high >>= 1;
+  }
+  return (bytes.size() - 1) * 8 + high_bits;
+}
+
+size_t uint64_bit_length(uint64_t value) {
+  size_t bits = 0;
+  while (value != 0) {
+    ++bits;
+    value >>= 1;
+  }
+  return bits;
+}
 
 enum class ScalarKind {
   Bool,
@@ -103,19 +142,51 @@ struct BigUInt {
     return static_cast<uint32_t>(rem);
   }
 
+  uint32_t remainder(uint32_t divisor) const {
+    uint64_t rem = 0;
+    for (size_t i = limbs.size(); i > 0; --i) {
+      rem = ((rem << 32) | limbs[i - 1]) % divisor;
+    }
+    return static_cast<uint32_t>(rem);
+  }
+
   void multiply_pow10(uint32_t count) {
     for (uint32_t i = 0; i < count; ++i) {
       multiply(10);
     }
   }
 
-  bool divide_by_10_if_divisible() {
-    BigUInt copy = *this;
-    if (copy.divmod(10) != 0) {
+  bool divide_if_divisible(uint32_t divisor) {
+    if (remainder(divisor) != 0) {
       return false;
     }
-    *this = std::move(copy);
+    divmod(divisor);
     return true;
+  }
+
+  uint32_t strip_decimal_zeros(uint32_t limit) {
+    uint32_t stripped = 0;
+    while (limit - stripped >= DECIMAL_ZERO_CHUNK_DIGITS &&
+           divide_if_divisible(DECIMAL_ZERO_CHUNK)) {
+      stripped += DECIMAL_ZERO_CHUNK_DIGITS;
+    }
+    while (stripped < limit && divide_if_divisible(10)) {
+      ++stripped;
+    }
+    return stripped;
+  }
+
+  size_t bit_length() const {
+    if (is_zero()) {
+      return 0;
+    }
+    uint32_t high = limbs.back();
+    size_t high_bits = 0;
+    while (high != 0) {
+      ++high_bits;
+      high >>= 1;
+    }
+    return (limbs.size() - 1) * 32 + high_bits;
   }
 
   bool to_uint64(uint64_t &value) const {
@@ -199,10 +270,12 @@ struct BigUInt {
 
   static BigUInt from_bytes_le(const std::vector<uint8_t> &bytes) {
     BigUInt out;
-    for (size_t i = bytes.size(); i > 0; --i) {
-      out.multiply(256);
-      out.add(bytes[i - 1]);
+    out.limbs.resize((bytes.size() + sizeof(uint32_t) - 1) / sizeof(uint32_t));
+    for (size_t i = 0; i < bytes.size(); ++i) {
+      out.limbs[i / sizeof(uint32_t)] |= static_cast<uint32_t>(bytes[i])
+                                         << ((i % sizeof(uint32_t)) * 8);
     }
+    out.normalize();
     return out;
   }
 };
@@ -358,15 +431,39 @@ bool canonical_decimal(BigUInt magnitude, bool negative, int64_t scale64,
     out = Decimal(0, false, {});
     return true;
   }
-  while (scale64 > 0 && magnitude.divide_by_10_if_divisible()) {
-    --scale64;
+  if (scale64 < -static_cast<int64_t>(MAX_COMPATIBLE_DECIMAL_DIGITS)) {
+    return false;
   }
-  int64_t digit_count =
-      magnitude.decimal_digit_count_bounded(MAX_COMPATIBLE_DECIMAL_DIGITS + 1);
-  if (scale64 < 0) {
-    if (scale64 < -static_cast<int64_t>(MAX_COMPATIBLE_DECIMAL_DIGITS)) {
+  if (scale64 > MAX_COMPATIBLE_DECIMAL_DIGITS) {
+    int64_t excess_scale = scale64 - MAX_COMPATIBLE_DECIMAL_DIGITS;
+    if (excess_scale > std::numeric_limits<uint32_t>::max() ||
+        static_cast<uint64_t>(excess_scale) * 3 >= magnitude.bit_length()) {
       return false;
     }
+    uint32_t excess = static_cast<uint32_t>(excess_scale);
+    if (magnitude.strip_decimal_zeros(excess) != excess) {
+      return false;
+    }
+    scale64 -= excess_scale;
+  }
+
+  int64_t raw_digit_limit =
+      MAX_COMPATIBLE_DECIMAL_DIGITS + std::max<int64_t>(scale64, 0);
+  if (!decimal_bits_fit(magnitude.bit_length(), raw_digit_limit)) {
+    return false;
+  }
+  int64_t digit_count = magnitude.decimal_digit_count_bounded(raw_digit_limit);
+  if (digit_count > raw_digit_limit) {
+    return false;
+  }
+
+  if (scale64 > 0) {
+    uint32_t scale = static_cast<uint32_t>(scale64);
+    uint32_t stripped = magnitude.strip_decimal_zeros(scale);
+    scale64 -= stripped;
+    digit_count -= stripped;
+  }
+  if (scale64 < 0) {
     int64_t extra_digits = -scale64;
     if (digit_count >
         static_cast<int64_t>(MAX_COMPATIBLE_DECIMAL_DIGITS) - extra_digits) {
@@ -378,24 +475,38 @@ bool canonical_decimal(BigUInt magnitude, bool negative, int64_t scale64,
       scale64 > MAX_COMPATIBLE_DECIMAL_DIGITS) {
     return false;
   }
-  while (scale64 < 0) {
-    magnitude.multiply(10);
-    ++scale64;
-  }
-  if (scale64 > std::numeric_limits<int32_t>::max()) {
-    return false;
+  if (scale64 < 0) {
+    magnitude.multiply_pow10(static_cast<uint32_t>(-scale64));
+    scale64 = 0;
   }
   out =
       Decimal(static_cast<int32_t>(scale64), negative, magnitude.to_bytes_le());
   return true;
 }
 
-BigUInt decimal_magnitude(const Decimal &decimal) {
-  return BigUInt::from_bytes_le(decimal.magnitude_le());
+bool decimal_magnitude(const Decimal &decimal, BigUInt &out) {
+  const std::vector<uint8_t> &bytes = decimal.magnitude_le();
+  size_t bit_length = byte_magnitude_bit_length(bytes);
+  int64_t scale = decimal.scale();
+  int64_t raw_digit_limit =
+      MAX_COMPATIBLE_DECIMAL_DIGITS + std::max<int64_t>(scale, 0);
+  if (!decimal_bits_fit(bit_length, raw_digit_limit)) {
+    return false;
+  }
+  if (scale > MAX_COMPATIBLE_DECIMAL_DIGITS) {
+    int64_t excess_scale = scale - MAX_COMPATIBLE_DECIMAL_DIGITS;
+    if (static_cast<uint64_t>(excess_scale) * 3 >= bit_length) {
+      return false;
+    }
+  }
+  out = BigUInt::from_bytes_le(bytes);
+  return true;
 }
 
 bool canonical_decimal(const Decimal &decimal, Decimal &out) {
-  return canonical_decimal(decimal_magnitude(decimal), decimal.negative(),
+  BigUInt magnitude;
+  return decimal_magnitude(decimal, magnitude) &&
+         canonical_decimal(std::move(magnitude), decimal.negative(),
                            decimal.scale(), out);
 }
 
@@ -414,7 +525,9 @@ bool decimal_to_integral_magnitude(const Decimal &decimal, BigUInt &magnitude,
   if (!canonical_decimal(decimal, canonical)) {
     return false;
   }
-  magnitude = decimal_magnitude(canonical);
+  if (!decimal_magnitude(canonical, magnitude)) {
+    return false;
+  }
   negative = canonical.negative();
   if (canonical.scale() == 0) {
     return true;
@@ -423,12 +536,7 @@ bool decimal_to_integral_magnitude(const Decimal &decimal, BigUInt &magnitude,
     magnitude.multiply_pow10(static_cast<uint32_t>(-canonical.scale()));
     return true;
   }
-  for (int32_t i = 0; i < canonical.scale(); ++i) {
-    if (!magnitude.divide_by_10_if_divisible()) {
-      return false;
-    }
-  }
-  return true;
+  return false;
 }
 
 bool decimal_to_int64(const Decimal &decimal, int64_t min_value,
@@ -591,17 +699,26 @@ Decimal decimal_from_unsigned(uint64_t value) {
 
 bool decimal_from_float_bits(bool negative, uint64_t significand,
                              int32_t exponent, Decimal &out) {
-  BigUInt magnitude = BigUInt::from_uint64(significand);
   if (exponent >= 0) {
+    if (uint64_bit_length(significand) + static_cast<size_t>(exponent) >
+        MAX_COMPATIBLE_DECIMAL_BITS) {
+      return false;
+    }
+    BigUInt magnitude = BigUInt::from_uint64(significand);
     for (int32_t i = 0; i < exponent; ++i) {
       magnitude.multiply(2);
     }
     return canonical_decimal(std::move(magnitude), negative, 0, out);
   }
+  while (exponent < 0 && (significand & 1) == 0) {
+    significand >>= 1;
+    ++exponent;
+  }
   const int32_t scale = -exponent;
   if (scale > MAX_COMPATIBLE_DECIMAL_DIGITS) {
     return false;
   }
+  BigUInt magnitude = BigUInt::from_uint64(significand);
   for (int32_t i = 0; i < scale; ++i) {
     magnitude.multiply(5);
   }
@@ -687,7 +804,10 @@ bool decimal_plain_string(const Decimal &decimal, std::string &out) {
   if (!canonical_decimal(decimal, canonical)) {
     return false;
   }
-  BigUInt magnitude = decimal_magnitude(canonical);
+  BigUInt magnitude;
+  if (!decimal_magnitude(canonical, magnitude)) {
+    return false;
+  }
   std::string digits = magnitude.to_decimal_string();
   if (canonical.scale() <= 0) {
     if (canonical.scale() < 0 && !magnitude.is_zero()) {

@@ -129,7 +129,12 @@ inline std::string read_string_data(ReadContext &ctx) {
   // Handle different encodings
   switch (encoding) {
   case StringEncoding::LATIN1: {
-    std::string result = latin1_to_utf8(data, length_u32);
+    auto converted = ::fory::detail::latin1_to_utf8_checked(data, length_u32);
+    if (FORY_PREDICT_FALSE(!converted.ok())) {
+      ctx.set_error(std::move(converted).error());
+      return std::string();
+    }
+    std::string result = std::move(converted).value();
     buffer.unsafe_increase_reader_index(length_u32);
     return result;
   }

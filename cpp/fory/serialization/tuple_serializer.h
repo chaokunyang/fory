@@ -21,6 +21,7 @@
 
 #include "fory/serialization/collection_serializer.h"
 #include "fory/serialization/serializer.h"
+#include "fory/serialization/skip.h"
 #include <cstdint>
 #include <tuple>
 #include <type_traits>
@@ -148,6 +149,17 @@ inline Tuple read_tuple_elements_direct(ReadContext &ctx,
 }
 
 /// Read tuple elements with type info (xlang/compatible mode, heterogeneous)
+inline void read_tuple_heterogeneous_excess(ReadContext &ctx) {
+  if (!read_null_only_flag(ctx, RefMode::NullOnly)) {
+    return;
+  }
+  const TypeInfo *type_info = ctx.read_any_type_info(ctx.error());
+  if (FORY_PREDICT_FALSE(ctx.has_error())) {
+    return;
+  }
+  detail::skip_value_with_type_info(ctx, *type_info, RefMode::None);
+}
+
 template <typename Tuple, size_t... Is>
 inline Tuple read_tuple_elements_heterogeneous(ReadContext &ctx,
                                                uint32_t length,
@@ -172,8 +184,9 @@ inline Tuple read_tuple_elements_heterogeneous(ReadContext &ctx,
 
   // skip any extra elements beyond tuple size
   while (index < length && !ctx.has_error()) {
-    // skip value - read type and skip data
-    ctx.read_any_type_info(ctx.error());
+    // Tuple heterogeneous elements always carry a null envelope followed by
+    // their concrete type and body.
+    read_tuple_heterogeneous_excess(ctx);
     ++index;
   }
 
@@ -191,6 +204,84 @@ inline T read_tuple_homogeneous_value(ReadContext &ctx,
     return Serializer<T>::read(ctx, Mode, false);
   }
   return Serializer<T>::read_data(ctx);
+}
+
+template <bool MeasureProgress, bool HasTypeInfo, RefMode Mode, typename T>
+inline void read_tuple_homogeneous_excess_body(ReadContext &ctx,
+                                               uint32_t length,
+                                               const TypeInfo *type_info) {
+  uint32_t checkpoint_item = 0;
+  uint64_t checkpoint_byte = 0;
+  if constexpr (MeasureProgress) {
+    checkpoint_byte = ctx.buffer().logical_reader_index();
+  }
+  for (uint32_t i = 0; i < length; ++i) {
+    if (FORY_PREDICT_FALSE(ctx.has_error())) {
+      return;
+    }
+    (void)read_tuple_homogeneous_value<HasTypeInfo, Mode, T>(ctx, type_info);
+    if constexpr (MeasureProgress) {
+      const uint32_t completed = i + 1;
+      if ((completed & 1023U) == 0) {
+        if (FORY_PREDICT_FALSE(!detail::settle_unbacked_container_items(
+                ctx, completed - checkpoint_item, checkpoint_byte))) {
+          return;
+        }
+        checkpoint_item = completed;
+        checkpoint_byte = ctx.buffer().logical_reader_index();
+      }
+    }
+  }
+  if constexpr (MeasureProgress) {
+    if (checkpoint_item != length) {
+      (void)detail::settle_unbacked_container_items(
+          ctx, length - checkpoint_item, checkpoint_byte);
+    }
+  }
+}
+
+template <bool HasTypeInfo, RefMode Mode, typename T>
+inline void read_tuple_homogeneous_excess(ReadContext &ctx, uint32_t length,
+                                          const TypeInfo *type_info) {
+  // Inline type information may select a compatible remote body, so only a
+  // declared compile-time body or a per-value envelope proves progress here.
+  constexpr bool read_always_advances =
+      Mode != RefMode::None || (!HasTypeInfo && read_data_always_advances_v<T>);
+  read_tuple_homogeneous_excess_body<!read_always_advances, HasTypeInfo, Mode,
+                                     T>(ctx, length, type_info);
+}
+
+template <RefMode Mode>
+inline void read_empty_tuple_homogeneous(ReadContext &ctx, uint32_t length,
+                                         const TypeInfo &type_info) {
+  uint32_t checkpoint_item = 0;
+  uint64_t checkpoint_byte = 0;
+  if constexpr (Mode == RefMode::None) {
+    checkpoint_byte = ctx.buffer().logical_reader_index();
+  }
+  for (uint32_t i = 0; i < length; ++i) {
+    if (FORY_PREDICT_FALSE(ctx.has_error())) {
+      return;
+    }
+    detail::skip_value_with_type_info(ctx, type_info, Mode);
+    if constexpr (Mode == RefMode::None) {
+      const uint32_t completed = i + 1;
+      if ((completed & 1023U) == 0) {
+        if (FORY_PREDICT_FALSE(!detail::settle_unbacked_container_items(
+                ctx, completed - checkpoint_item, checkpoint_byte))) {
+          return;
+        }
+        checkpoint_item = completed;
+        checkpoint_byte = ctx.buffer().logical_reader_index();
+      }
+    }
+  }
+  if constexpr (Mode == RefMode::None) {
+    if (checkpoint_item != length) {
+      (void)detail::settle_unbacked_container_items(
+          ctx, length - checkpoint_item, checkpoint_byte);
+    }
+  }
 }
 
 template <bool HasTypeInfo, RefMode Mode, typename Tuple, size_t... Is>
@@ -216,15 +307,14 @@ inline Tuple read_tuple_elements_homogeneous(ReadContext &ctx, uint32_t length,
       }(),
       ...);
 
-  // skip any extra elements beyond tuple size
-  using ElemType = tuple_first_type_t<Tuple>;
-  if constexpr (Serializer<ElemType>::type_id == TypeId::NONE) {
-    return result;
-  }
-  while (index < length && !ctx.has_error()) {
-    (void)read_tuple_homogeneous_value<HasTypeInfo, Mode, ElemType>(ctx,
-                                                                    type_info);
-    ++index;
+  if (FORY_PREDICT_FALSE(index < length)) {
+    using ElemType = tuple_first_type_t<Tuple>;
+    if constexpr (Serializer<ElemType>::type_id == TypeId::NONE &&
+                  Mode == RefMode::None) {
+      return result;
+    }
+    read_tuple_homogeneous_excess<HasTypeInfo, Mode, ElemType>(
+        ctx, length - index, type_info);
   }
 
   return result;
@@ -313,7 +403,46 @@ template <> struct Serializer<std::tuple<>> {
   }
 
   static inline std::tuple<> read_data(ReadContext &ctx) {
-    ctx.read_var_uint32(ctx.error()); // Ignore length - empty tuple
+    uint32_t length = ctx.read_var_uint32(ctx.error());
+    if (FORY_PREDICT_FALSE(ctx.has_error()) || length == 0) {
+      return std::tuple<>();
+    }
+
+    uint8_t bitmap = ctx.read_uint8(ctx.error());
+    if (FORY_PREDICT_FALSE(ctx.has_error())) {
+      return std::tuple<>();
+    }
+    const bool is_same_type = (bitmap & COLL_IS_SAME_TYPE) != 0;
+    if (!is_same_type) {
+      for (uint32_t i = 0; i < length; ++i) {
+        if (FORY_PREDICT_FALSE(ctx.has_error())) {
+          return std::tuple<>();
+        }
+        read_tuple_heterogeneous_excess(ctx);
+      }
+      return std::tuple<>();
+    }
+
+    if (FORY_PREDICT_FALSE((bitmap & COLL_DECL_ELEMENT_TYPE) != 0)) {
+      ctx.set_error(Error::invalid_data(
+          "Empty tuple cannot resolve declared excess element type"));
+      return std::tuple<>();
+    }
+    const TypeInfo *type_info = ctx.read_any_type_info(ctx.error());
+    if (FORY_PREDICT_FALSE(ctx.has_error())) {
+      return std::tuple<>();
+    }
+    if (type_info->type_id == static_cast<uint32_t>(TypeId::NONE) &&
+        (bitmap & (COLL_TRACKING_REF | COLL_HAS_NULL)) == 0) {
+      return std::tuple<>();
+    }
+    if ((bitmap & COLL_TRACKING_REF) != 0) {
+      read_empty_tuple_homogeneous<RefMode::Tracking>(ctx, length, *type_info);
+    } else if ((bitmap & COLL_HAS_NULL) != 0) {
+      read_empty_tuple_homogeneous<RefMode::NullOnly>(ctx, length, *type_info);
+    } else {
+      read_empty_tuple_homogeneous<RefMode::None>(ctx, length, *type_info);
+    }
     return std::tuple<>();
   }
 

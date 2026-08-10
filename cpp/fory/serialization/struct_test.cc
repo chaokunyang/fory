@@ -136,6 +136,38 @@ struct MixedFieldIdentityStruct {
               alpha_value, (count, fory::F(2).varint()));
 };
 
+struct WideTagStruct {
+  int32_t value = 0;
+  FORY_STRUCT(WideTagStruct, (value, fory::F(65536)));
+};
+
+struct MaxTagStruct {
+  int32_t value = 0;
+  FORY_STRUCT(MaxTagStruct, (value, fory::F(4294967295LL)));
+};
+
+struct NormalizedCollisionStruct {
+  int32_t fooBar = 0;
+  int32_t foo_bar = 0;
+  FORY_STRUCT(NormalizedCollisionStruct, fooBar, foo_bar);
+};
+
+struct DuplicateTagStruct {
+  int32_t first = 0;
+  int32_t second = 0;
+  FORY_STRUCT(DuplicateTagStruct, (first, fory::F(7)), (second, fory::F(7)));
+};
+
+struct MixedMaskStruct {
+  std::string fooBar;
+  std::string foo_bar;
+
+  bool operator==(const MixedMaskStruct &other) const {
+    return fooBar == other.fooBar && foo_bar == other.foo_bar;
+  }
+  FORY_STRUCT(MixedMaskStruct, (fooBar, fory::F(9)), foo_bar);
+};
+
 struct SignedToUnsignedWriter {
   int32_t value;
 
@@ -320,6 +352,26 @@ struct TaggedUintStruct {
   FORY_STRUCT(TaggedUintStruct, (value, fory::F().tagged()));
 };
 
+struct VarintInt32Tail {
+  int32_t value = 0;
+  FORY_STRUCT(VarintInt32Tail, (value, fory::F().varint()));
+};
+
+struct VarintInt64Tail {
+  int64_t value = 0;
+  FORY_STRUCT(VarintInt64Tail, (value, fory::F().varint()));
+};
+
+struct VarintUint32Tail {
+  uint32_t value = 0;
+  FORY_STRUCT(VarintUint32Tail, (value, fory::F().varint()));
+};
+
+struct VarintUint64Tail {
+  uint64_t value = 0;
+  FORY_STRUCT(VarintUint64Tail, (value, fory::F().varint()));
+};
+
 // String handling
 struct StringTestStruct {
   std::string empty;
@@ -451,7 +503,30 @@ struct NestedContainerStruct {
   FORY_STRUCT(NestedContainerStruct, matrix, grouped_numbers);
 };
 
+struct RecursiveVectorNode {
+  int32_t value = 0;
+  std::vector<RecursiveVectorNode> children;
+
+  FORY_STRUCT(RecursiveVectorNode, value, children);
+};
+
 namespace T = fory::T;
+
+struct AnnotatedRecursiveVectorNode {
+  int32_t value = 0;
+  std::vector<AnnotatedRecursiveVectorNode> children;
+
+  FORY_STRUCT(AnnotatedRecursiveVectorNode, value,
+              (children, fory::F().list(T::scalar())));
+};
+
+struct AnnotatedRecursiveMapNode {
+  int32_t value = 0;
+  std::map<int32_t, AnnotatedRecursiveVectorNode> children;
+
+  FORY_STRUCT(AnnotatedRecursiveMapNode, value,
+              (children, fory::F().map(T::varint(), T::scalar())));
+};
 
 struct NestedAnnotatedStruct {
   std::map<uint32_t, std::vector<int64_t>> map;
@@ -734,10 +809,12 @@ inline FieldType make_test_field_type(TypeId type_id,
                    std::move(generics));
 }
 
-inline FieldInfo make_test_field_info(std::string name, int16_t field_id,
+inline FieldInfo make_test_field_info(std::string name, int64_t tag_id,
                                       FieldType field_type) {
   FieldInfo info(std::move(name), std::move(field_type));
-  info.field_id = field_id;
+  if (tag_id >= 0) {
+    info.field_id = tag_id;
+  }
   return info;
 }
 
@@ -898,6 +975,268 @@ TEST(StructComprehensiveTest, TaggedIntTruncationFails) {
     check_truncation(TaggedUintStruct{std::numeric_limits<uint64_t>::max()},
                      613, "unsigned");
   }
+}
+
+TEST(StructComprehensiveTest, VarintTailTruncationFails) {
+  auto check_truncation = [](auto original, uint32_t type_id) {
+    using StructType = decltype(original);
+    auto fory =
+        Fory::builder().xlang(true).compatible(false).track_ref(false).build();
+    ASSERT_TRUE(fory.register_struct<StructType>(type_id).ok());
+
+    auto serialized = fory.serialize(original);
+    ASSERT_TRUE(serialized.ok()) << serialized.error().to_string();
+    std::vector<uint8_t> bytes = std::move(serialized).value();
+    ASSERT_FALSE(bytes.empty());
+    bytes.pop_back();
+
+    auto result = fory.deserialize<StructType>(bytes.data(), bytes.size());
+    ASSERT_FALSE(result.ok());
+  };
+
+  check_truncation(VarintInt32Tail{1}, 614);
+  check_truncation(VarintInt64Tail{1}, 615);
+  check_truncation(VarintUint32Tail{1}, 616);
+  check_truncation(VarintUint64Tail{1}, 617);
+}
+
+TEST(StructComprehensiveTest, GeneratedVectorDepth) {
+  auto writer = Fory::builder()
+                    .xlang(true)
+                    .compatible(false)
+                    .track_ref(false)
+                    .max_dyn_depth(10)
+                    .build();
+  auto reader = Fory::builder()
+                    .xlang(true)
+                    .compatible(false)
+                    .track_ref(false)
+                    .max_dyn_depth(1)
+                    .build();
+  ASSERT_TRUE(writer.register_struct<RecursiveVectorNode>(618).ok());
+  ASSERT_TRUE(reader.register_struct<RecursiveVectorNode>(618).ok());
+
+  RecursiveVectorNode shallow{
+      0, std::vector<RecursiveVectorNode>{RecursiveVectorNode{1, {}}}};
+  RecursiveVectorNode deep{
+      0, std::vector<RecursiveVectorNode>{RecursiveVectorNode{
+             1, std::vector<RecursiveVectorNode>{RecursiveVectorNode{2, {}}}}}};
+  auto shallow_bytes = writer.serialize(shallow);
+  auto deep_bytes = writer.serialize(deep);
+  ASSERT_TRUE(shallow_bytes.ok()) << shallow_bytes.error().to_string();
+  ASSERT_TRUE(deep_bytes.ok()) << deep_bytes.error().to_string();
+
+  ASSERT_TRUE(
+      reader.deserialize<RecursiveVectorNode>(shallow_bytes.value()).ok());
+  auto rejected = reader.deserialize<RecursiveVectorNode>(deep_bytes.value());
+  ASSERT_FALSE(rejected.ok());
+  EXPECT_EQ(rejected.error().code(), ErrorCode::DepthExceed);
+  EXPECT_TRUE(
+      reader.deserialize<RecursiveVectorNode>(shallow_bytes.value()).ok());
+}
+
+TEST(StructComprehensiveTest, GeneratedEnvelopeDepth) {
+  auto nullable_writer = Fory::builder()
+                             .xlang(true)
+                             .compatible(false)
+                             .track_ref(false)
+                             .max_dyn_depth(10)
+                             .build();
+  auto nullable_reader = Fory::builder()
+                             .xlang(true)
+                             .compatible(false)
+                             .track_ref(false)
+                             .max_dyn_depth(1)
+                             .build();
+  ASSERT_TRUE(nullable_writer.register_struct<RecursiveVectorNode>(622).ok());
+  ASSERT_TRUE(nullable_reader.register_struct<RecursiveVectorNode>(622).ok());
+
+  std::vector<std::optional<RecursiveVectorNode>> nullable_shallow{
+      std::nullopt, RecursiveVectorNode{1, {}}};
+  std::vector<std::optional<RecursiveVectorNode>> nullable_deep{
+      std::nullopt, RecursiveVectorNode{1, {RecursiveVectorNode{2, {}}}}};
+  auto nullable_shallow_bytes = nullable_writer.serialize(nullable_shallow);
+  auto nullable_deep_bytes = nullable_writer.serialize(nullable_deep);
+  ASSERT_TRUE(nullable_shallow_bytes.ok())
+      << nullable_shallow_bytes.error().to_string();
+  ASSERT_TRUE(nullable_deep_bytes.ok())
+      << nullable_deep_bytes.error().to_string();
+  EXPECT_TRUE(nullable_reader
+                  .deserialize<std::vector<RecursiveVectorNode>>(
+                      *nullable_shallow_bytes)
+                  .ok());
+  auto nullable_rejected =
+      nullable_reader.deserialize<std::vector<RecursiveVectorNode>>(
+          *nullable_deep_bytes);
+  ASSERT_FALSE(nullable_rejected.ok());
+  EXPECT_EQ(nullable_rejected.error().code(), ErrorCode::DepthExceed);
+  EXPECT_TRUE(nullable_reader
+                  .deserialize<std::vector<RecursiveVectorNode>>(
+                      *nullable_shallow_bytes)
+                  .ok());
+
+  auto tracked_writer = Fory::builder()
+                            .xlang(true)
+                            .compatible(false)
+                            .track_ref(true)
+                            .max_dyn_depth(10)
+                            .build();
+  auto tracked_reader = Fory::builder()
+                            .xlang(true)
+                            .compatible(false)
+                            .track_ref(true)
+                            .max_dyn_depth(1)
+                            .build();
+  ASSERT_TRUE(tracked_writer.register_struct<RecursiveVectorNode>(623).ok());
+  ASSERT_TRUE(tracked_reader.register_struct<RecursiveVectorNode>(623).ok());
+
+  std::vector<std::shared_ptr<RecursiveVectorNode>> tracked_shallow{
+      std::make_shared<RecursiveVectorNode>(RecursiveVectorNode{1, {}})};
+  std::vector<std::shared_ptr<RecursiveVectorNode>> tracked_deep{
+      std::make_shared<RecursiveVectorNode>(
+          RecursiveVectorNode{1, {RecursiveVectorNode{2, {}}}})};
+  auto tracked_shallow_bytes = tracked_writer.serialize(tracked_shallow);
+  auto tracked_deep_bytes = tracked_writer.serialize(tracked_deep);
+  ASSERT_TRUE(tracked_shallow_bytes.ok())
+      << tracked_shallow_bytes.error().to_string();
+  ASSERT_TRUE(tracked_deep_bytes.ok())
+      << tracked_deep_bytes.error().to_string();
+  EXPECT_TRUE(
+      tracked_reader
+          .deserialize<std::vector<RecursiveVectorNode>>(*tracked_shallow_bytes)
+          .ok());
+  auto tracked_rejected =
+      tracked_reader.deserialize<std::vector<RecursiveVectorNode>>(
+          *tracked_deep_bytes);
+  ASSERT_FALSE(tracked_rejected.ok());
+  EXPECT_EQ(tracked_rejected.error().code(), ErrorCode::DepthExceed);
+  EXPECT_TRUE(
+      tracked_reader
+          .deserialize<std::vector<RecursiveVectorNode>>(*tracked_shallow_bytes)
+          .ok());
+}
+
+TEST(StructComprehensiveTest, GeneratedMapDepth) {
+  auto writer = Fory::builder()
+                    .xlang(true)
+                    .compatible(false)
+                    .track_ref(false)
+                    .max_dyn_depth(10)
+                    .build();
+  auto reader = Fory::builder()
+                    .xlang(true)
+                    .compatible(false)
+                    .track_ref(false)
+                    .max_dyn_depth(1)
+                    .build();
+  ASSERT_TRUE(writer.register_struct<RecursiveVectorNode>(619).ok());
+  ASSERT_TRUE(reader.register_struct<RecursiveVectorNode>(619).ok());
+
+  std::map<int32_t, RecursiveVectorNode> shallow{
+      {1, RecursiveVectorNode{1, {}}}};
+  std::map<int32_t, RecursiveVectorNode> deep{
+      {1, RecursiveVectorNode{1, std::vector<RecursiveVectorNode>{
+                                     RecursiveVectorNode{2, {}}}}}};
+  auto shallow_bytes = writer.serialize(shallow);
+  auto deep_bytes = writer.serialize(deep);
+  ASSERT_TRUE(shallow_bytes.ok()) << shallow_bytes.error().to_string();
+  ASSERT_TRUE(deep_bytes.ok()) << deep_bytes.error().to_string();
+
+  ASSERT_TRUE((reader
+                   .deserialize<std::map<int32_t, RecursiveVectorNode>>(
+                       shallow_bytes.value())
+                   .ok()));
+  auto rejected = reader.deserialize<std::map<int32_t, RecursiveVectorNode>>(
+      deep_bytes.value());
+  ASSERT_FALSE(rejected.ok());
+  EXPECT_EQ(rejected.error().code(), ErrorCode::DepthExceed);
+  EXPECT_TRUE((reader
+                   .deserialize<std::map<int32_t, RecursiveVectorNode>>(
+                       shallow_bytes.value())
+                   .ok()));
+
+  std::map<std::optional<int32_t>, RecursiveVectorNode> slow_shallow{
+      {1, RecursiveVectorNode{1, {}}}};
+  std::map<std::optional<int32_t>, RecursiveVectorNode> slow_deep{
+      {1, RecursiveVectorNode{1, {RecursiveVectorNode{2, {}}}}}};
+  auto slow_shallow_bytes = writer.serialize(slow_shallow);
+  auto slow_deep_bytes = writer.serialize(slow_deep);
+  ASSERT_TRUE(slow_shallow_bytes.ok())
+      << slow_shallow_bytes.error().to_string();
+  ASSERT_TRUE(slow_deep_bytes.ok()) << slow_deep_bytes.error().to_string();
+  EXPECT_TRUE(
+      (reader
+           .deserialize<std::map<std::optional<int32_t>, RecursiveVectorNode>>(
+               *slow_shallow_bytes)
+           .ok()));
+  auto slow_rejected =
+      reader.deserialize<std::map<std::optional<int32_t>, RecursiveVectorNode>>(
+          *slow_deep_bytes);
+  ASSERT_FALSE(slow_rejected.ok());
+  EXPECT_EQ(slow_rejected.error().code(), ErrorCode::DepthExceed);
+  EXPECT_TRUE(
+      (reader
+           .deserialize<std::map<std::optional<int32_t>, RecursiveVectorNode>>(
+               *slow_shallow_bytes)
+           .ok()));
+}
+
+TEST(StructComprehensiveTest, AnnotatedGeneratedDepth) {
+  auto writer = Fory::builder()
+                    .xlang(true)
+                    .compatible(false)
+                    .track_ref(false)
+                    .max_dyn_depth(10)
+                    .build();
+  auto reader = Fory::builder()
+                    .xlang(true)
+                    .compatible(false)
+                    .track_ref(false)
+                    .max_dyn_depth(1)
+                    .build();
+  ASSERT_TRUE(writer.register_struct<AnnotatedRecursiveVectorNode>(620).ok());
+  ASSERT_TRUE(reader.register_struct<AnnotatedRecursiveVectorNode>(620).ok());
+  ASSERT_TRUE(writer.register_struct<AnnotatedRecursiveMapNode>(621).ok());
+  ASSERT_TRUE(reader.register_struct<AnnotatedRecursiveMapNode>(621).ok());
+
+  AnnotatedRecursiveVectorNode shallow_vector{
+      0, {AnnotatedRecursiveVectorNode{1, {}}}};
+  AnnotatedRecursiveVectorNode deep_vector{
+      0,
+      {AnnotatedRecursiveVectorNode{1, {AnnotatedRecursiveVectorNode{2, {}}}}}};
+  auto shallow_vector_bytes = writer.serialize(shallow_vector);
+  auto deep_vector_bytes = writer.serialize(deep_vector);
+  ASSERT_TRUE(shallow_vector_bytes.ok());
+  ASSERT_TRUE(deep_vector_bytes.ok());
+  EXPECT_TRUE(
+      reader.deserialize<AnnotatedRecursiveVectorNode>(*shallow_vector_bytes)
+          .ok());
+  auto vector_rejected =
+      reader.deserialize<AnnotatedRecursiveVectorNode>(*deep_vector_bytes);
+  ASSERT_FALSE(vector_rejected.ok());
+  EXPECT_EQ(vector_rejected.error().code(), ErrorCode::DepthExceed);
+  EXPECT_TRUE(
+      reader.deserialize<AnnotatedRecursiveVectorNode>(*shallow_vector_bytes)
+          .ok());
+
+  AnnotatedRecursiveMapNode shallow_map{
+      0, {{1, AnnotatedRecursiveVectorNode{1, {}}}}};
+  AnnotatedRecursiveMapNode deep_map{
+      0,
+      {{1, AnnotatedRecursiveVectorNode{
+               1, {AnnotatedRecursiveVectorNode{2, {}}}}}}};
+  auto shallow_map_bytes = writer.serialize(shallow_map);
+  auto deep_map_bytes = writer.serialize(deep_map);
+  ASSERT_TRUE(shallow_map_bytes.ok());
+  ASSERT_TRUE(deep_map_bytes.ok());
+  EXPECT_TRUE(
+      reader.deserialize<AnnotatedRecursiveMapNode>(*shallow_map_bytes).ok());
+  auto map_rejected =
+      reader.deserialize<AnnotatedRecursiveMapNode>(*deep_map_bytes);
+  ASSERT_FALSE(map_rejected.ok());
+  EXPECT_EQ(map_rejected.error().code(), ErrorCode::DepthExceed);
+  EXPECT_TRUE(
+      reader.deserialize<AnnotatedRecursiveMapNode>(*shallow_map_bytes).ok());
 }
 
 TEST(StructComprehensiveTest, UnsignedEncodingFieldMeta) {
@@ -1318,15 +1657,15 @@ TEST(StructComprehensiveTest, FullyTaggedStructsUseNumericTagOrder) {
   EXPECT_EQ(fields[1].field_id, 2);
   EXPECT_EQ(fields[2].field_id, 10);
 
-  std::map<int16_t, const FieldInfo *> fields_by_id;
+  std::map<uint32_t, const FieldInfo *> fields_by_id;
   for (const auto &field : fields) {
-    fields_by_id.emplace(field.field_id, &field);
+    fields_by_id.emplace(static_cast<uint32_t>(field.field_id), &field);
   }
   ASSERT_NE(fields_by_id.find(1), fields_by_id.end());
   ASSERT_NE(fields_by_id.find(2), fields_by_id.end());
   ASSERT_NE(fields_by_id.find(10), fields_by_id.end());
 
-  auto fingerprint_part = [&](int16_t field_id) {
+  auto fingerprint_part = [&](uint32_t field_id) {
     const FieldInfo &field = *fields_by_id[field_id];
     return std::to_string(field_id) + "," +
            std::to_string(field.field_type.type_id) + "," +
@@ -1371,6 +1710,93 @@ TEST(StructComprehensiveTest, MixedFieldIdentifiersUseProtocolOrder) {
   EXPECT_EQ(fields[2].field_id, -1);
   EXPECT_EQ(fields[3].field_name, "beta_value");
   EXPECT_EQ(fields[3].field_id, -1);
+}
+
+TEST(StructComprehensiveTest, WideFieldTagsKeepWireIdentity) {
+  auto fory =
+      Fory::builder().xlang(true).compatible(true).track_ref(false).build();
+  ASSERT_TRUE(fory.register_struct<WideTagStruct>(608).ok());
+  ASSERT_TRUE(fory.register_struct<MaxTagStruct>(609).ok());
+  ASSERT_TRUE(fory.serialize(WideTagStruct{42}).ok());
+
+  TypeMeta wide = fory.type_resolver().clone_struct_meta<WideTagStruct>();
+  ASSERT_EQ(wide.field_infos.size(), 1U);
+  EXPECT_EQ(wide.field_infos[0].field_id, 65536);
+
+  TypeMeta maximum = fory.type_resolver().clone_struct_meta<MaxTagStruct>();
+  ASSERT_EQ(maximum.field_infos.size(), 1U);
+  EXPECT_EQ(maximum.field_infos[0].field_id,
+            std::numeric_limits<uint32_t>::max());
+  auto encoded = maximum.field_infos[0].to_bytes();
+  ASSERT_TRUE(encoded.ok()) << encoded.error().to_string();
+  Buffer buffer(encoded.value());
+  auto decoded = FieldInfo::from_bytes(buffer);
+  ASSERT_TRUE(decoded.ok()) << decoded.error().to_string();
+  EXPECT_EQ(decoded.value().field_id, std::numeric_limits<uint32_t>::max());
+
+  std::vector<FieldInfo> wrong_remote = {
+      make_test_field_info("value", 0, make_test_field_type(TypeId::VARINT32))};
+  ASSERT_TRUE(TypeMeta::assign_local_dispatch_ids(&wide, wrong_remote).ok());
+  EXPECT_EQ(wrong_remote[0].local_dispatch_id, -1);
+
+  std::vector<FieldInfo> matching_remote = {make_test_field_info(
+      "value", 65536, make_test_field_type(TypeId::VARINT32))};
+  using LegacyAssign =
+      Result<void, Error> (*)(const TypeMeta *, std::vector<FieldInfo> &);
+  [[maybe_unused]] LegacyAssign assign_field_ids = &TypeMeta::assign_field_ids;
+  ASSERT_TRUE(assign_field_ids(&wide, matching_remote).ok());
+  EXPECT_EQ(matching_remote[0].local_dispatch_id, 0);
+}
+
+TEST(StructComprehensiveTest, StructFieldIdentityIsUnique) {
+  auto collision =
+      Fory::builder().xlang(true).compatible(true).track_ref(false).build();
+  EXPECT_FALSE(collision.register_struct<NormalizedCollisionStruct>(610).ok());
+
+  auto duplicate =
+      Fory::builder().xlang(true).compatible(true).track_ref(false).build();
+  EXPECT_FALSE(duplicate.register_struct<DuplicateTagStruct>(611).ok());
+
+  MixedMaskStruct value{"tagged", "untagged"};
+  auto mixed =
+      Fory::builder().xlang(true).compatible(true).track_ref(false).build();
+  ASSERT_TRUE(mixed.register_struct<MixedMaskStruct>(612).ok());
+  auto encoded = mixed.serialize(value);
+  ASSERT_TRUE(encoded.ok()) << encoded.error().to_string();
+  auto decoded = mixed.deserialize<MixedMaskStruct>(encoded.value());
+  ASSERT_TRUE(decoded.ok()) << decoded.error().to_string();
+  EXPECT_EQ(decoded.value(), value);
+  const auto &indices = mixed.type_resolver().sorted_indices<MixedMaskStruct>();
+  ASSERT_EQ(indices.size(), 2U);
+  EXPECT_NE(indices[0], indices[1]);
+}
+
+TEST(StructComprehensiveTest, RemoteFieldIdentityIsUnique) {
+  TypeMeta local;
+  local.field_infos = {
+      make_test_field_info("foo_bar", -1,
+                           make_test_field_type(TypeId::VARINT32)),
+      make_test_field_info("tagged", 7,
+                           make_test_field_type(TypeId::VARINT32))};
+
+  std::vector<FieldInfo> duplicate_names = {
+      make_test_field_info("fooBar", -1,
+                           make_test_field_type(TypeId::VARINT32)),
+      make_test_field_info("foo_bar", -1,
+                           make_test_field_type(TypeId::VARINT32))};
+  EXPECT_FALSE(
+      TypeMeta::assign_local_dispatch_ids(&local, duplicate_names).ok());
+  EXPECT_EQ(duplicate_names[0].local_dispatch_id, -1);
+  EXPECT_EQ(duplicate_names[1].local_dispatch_id, -1);
+
+  std::vector<FieldInfo> duplicate_tags = {
+      make_test_field_info("first", 7, make_test_field_type(TypeId::VARINT32)),
+      make_test_field_info("second", 7,
+                           make_test_field_type(TypeId::VARINT32))};
+  EXPECT_FALSE(
+      TypeMeta::assign_local_dispatch_ids(&local, duplicate_tags).ok());
+  EXPECT_EQ(duplicate_tags[0].local_dispatch_id, -1);
+  EXPECT_EQ(duplicate_tags[1].local_dispatch_id, -1);
 }
 
 TEST(StructComprehensiveTest, NonPrimitiveFieldsSortByFieldIdentifier) {
@@ -1447,7 +1873,7 @@ TEST(StructComprehensiveTest,
                            {make_test_field_type(TypeId::VAR_UINT32),
                             make_test_field_type(TypeId::VAR_UINT32)}))};
   auto incompatible_result =
-      TypeMeta::assign_field_ids(&local_type, incompatible_remote);
+      TypeMeta::assign_local_dispatch_ids(&local_type, incompatible_remote);
   EXPECT_FALSE(incompatible_result.ok());
 
   std::vector<FieldInfo> nested_scalar_remote = {make_test_field_info(
@@ -1455,7 +1881,7 @@ TEST(StructComprehensiveTest,
       make_test_field_type(TypeId::LIST,
                            {make_test_field_type(TypeId::UINT32)}))};
   auto nested_scalar_result =
-      TypeMeta::assign_field_ids(&local_type, nested_scalar_remote);
+      TypeMeta::assign_local_dispatch_ids(&local_type, nested_scalar_remote);
   EXPECT_FALSE(nested_scalar_result.ok());
 
   TypeMeta scalar_local;
@@ -1463,9 +1889,10 @@ TEST(StructComprehensiveTest,
       "count", 8, make_test_field_type(TypeId::VAR_UINT32))};
   std::vector<FieldInfo> scalar_remote = {
       make_test_field_info("count", 8, make_test_field_type(TypeId::UINT32))};
-  auto scalar_result = TypeMeta::assign_field_ids(&scalar_local, scalar_remote);
+  auto scalar_result =
+      TypeMeta::assign_local_dispatch_ids(&scalar_local, scalar_remote);
   ASSERT_TRUE(scalar_result.ok());
-  EXPECT_EQ(scalar_remote[0].field_id, 1);
+  EXPECT_EQ(scalar_remote[0].local_dispatch_id, 1);
 
   TypeMeta name_mode_local;
   name_mode_local.field_infos = {make_test_field_info(
@@ -1477,15 +1904,16 @@ TEST(StructComprehensiveTest,
       make_test_field_type(TypeId::LIST,
                            {make_test_field_type(TypeId::UINT32)}))};
   ASSERT_TRUE(
-      TypeMeta::assign_field_ids(&name_mode_local, mixed_mode_remote).ok());
-  EXPECT_EQ(mixed_mode_remote[0].field_id, -1);
+      TypeMeta::assign_local_dispatch_ids(&name_mode_local, mixed_mode_remote)
+          .ok());
+  EXPECT_EQ(mixed_mode_remote[0].local_dispatch_id, -1);
 
   std::vector<FieldInfo> name_remote = {make_test_field_info(
       "items", -1,
       make_test_field_type(TypeId::LIST,
                            {make_test_field_type(TypeId::UINT32)}))};
-  ASSERT_TRUE(TypeMeta::assign_field_ids(&local_type, name_remote).ok());
-  EXPECT_EQ(name_remote[0].field_id, -1);
+  EXPECT_FALSE(
+      TypeMeta::assign_local_dispatch_ids(&local_type, name_remote).ok());
 
   TypeMeta mixed_local;
   mixed_local.field_infos = {
@@ -1496,17 +1924,34 @@ TEST(StructComprehensiveTest,
       make_test_field_info("alpha", -1, make_test_field_type(TypeId::BINARY)),
       make_test_field_info("tagged", 3, make_test_field_type(TypeId::STRING)),
       make_test_field_info("beta", -1, make_test_field_type(TypeId::VARINT32))};
-  ASSERT_TRUE(TypeMeta::assign_field_ids(&mixed_local, mixed_remote).ok());
-  EXPECT_EQ(mixed_remote[0].field_id, 2);
-  EXPECT_EQ(mixed_remote[1].field_id, 0);
-  EXPECT_EQ(mixed_remote[2].field_id, 4);
+  ASSERT_TRUE(
+      TypeMeta::assign_local_dispatch_ids(&mixed_local, mixed_remote).ok());
+  EXPECT_EQ(mixed_remote[0].local_dispatch_id, 2);
+  EXPECT_EQ(mixed_remote[1].local_dispatch_id, 0);
+  EXPECT_EQ(mixed_remote[2].local_dispatch_id, 4);
 
   std::vector<FieldInfo> untagged_remote_for_tagged_local = {
       make_test_field_info("tagged", -1, make_test_field_type(TypeId::STRING))};
+  ASSERT_TRUE(TypeMeta::assign_local_dispatch_ids(
+                  &mixed_local, untagged_remote_for_tagged_local)
+                  .ok());
+  EXPECT_EQ(untagged_remote_for_tagged_local[0].local_dispatch_id, 0);
+
+  std::vector<FieldInfo> name_then_tag = {
+      make_test_field_info("tagged", -1, make_test_field_type(TypeId::STRING)),
+      make_test_field_info("tagged", 3, make_test_field_type(TypeId::STRING))};
   ASSERT_TRUE(
-      TypeMeta::assign_field_ids(&mixed_local, untagged_remote_for_tagged_local)
-          .ok());
-  EXPECT_EQ(untagged_remote_for_tagged_local[0].field_id, -1);
+      TypeMeta::assign_local_dispatch_ids(&mixed_local, name_then_tag).ok());
+  EXPECT_EQ(name_then_tag[0].local_dispatch_id, 0);
+  EXPECT_EQ(name_then_tag[1].local_dispatch_id, -1);
+
+  std::vector<FieldInfo> tag_then_name = {
+      make_test_field_info("tagged", 3, make_test_field_type(TypeId::STRING)),
+      make_test_field_info("tagged", -1, make_test_field_type(TypeId::STRING))};
+  ASSERT_TRUE(
+      TypeMeta::assign_local_dispatch_ids(&mixed_local, tag_then_name).ok());
+  EXPECT_EQ(tag_then_name[0].local_dispatch_id, 0);
+  EXPECT_EQ(tag_then_name[1].local_dispatch_id, -1);
 }
 
 TEST(StructComprehensiveTest, CompatibleSignedToUnsignedStructRead) {
@@ -1563,7 +2008,7 @@ TEST(StructComprehensiveTest, AssignFieldIdsRejectsMatchedIdOverflow) {
   std::vector<FieldInfo> remote_fields = {make_test_field_info(
       "field_" + std::to_string(max_compatible_matched_field_index + 1), -1,
       field_type)};
-  auto result = TypeMeta::assign_field_ids(&local_type, remote_fields);
+  auto result = TypeMeta::assign_local_dispatch_ids(&local_type, remote_fields);
 
   ASSERT_FALSE(result.ok());
   EXPECT_NE(result.error().message().find("exceeds max"), std::string::npos);

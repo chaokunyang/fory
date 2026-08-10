@@ -23,12 +23,112 @@
 #include "fory/thirdparty/MurmurHash3.h"
 #include "fory/type/type.h"
 #include <algorithm>
+#include <atomic>
+#include <chrono>
 #include <cstring>
+#include <random>
 
 namespace fory {
 namespace serialization {
 
 using namespace meta;
+
+namespace {
+
+uint64_t rotate_left(uint64_t value, uint32_t bits) {
+  return (value << bits) | (value >> (64 - bits));
+}
+
+void sip_round(uint64_t &v0, uint64_t &v1, uint64_t &v2, uint64_t &v3) {
+  v0 += v1;
+  v1 = rotate_left(v1, 13);
+  v1 ^= v0;
+  v0 = rotate_left(v0, 32);
+  v2 += v3;
+  v3 = rotate_left(v3, 16);
+  v3 ^= v2;
+  v0 += v3;
+  v3 = rotate_left(v3, 21);
+  v3 ^= v0;
+  v2 += v1;
+  v1 = rotate_left(v1, 17);
+  v1 ^= v2;
+  v2 = rotate_left(v2, 32);
+}
+
+uint64_t random_hash_key(const void *owner) {
+  static std::atomic<uint64_t> sequence{0};
+  uint64_t value = 0;
+  try {
+    std::random_device random;
+    value = (static_cast<uint64_t>(random()) << 32) ^ random();
+  } catch (...) {
+  }
+  value ^= static_cast<uint64_t>(
+      std::chrono::high_resolution_clock::now().time_since_epoch().count());
+  value ^= static_cast<uint64_t>(reinterpret_cast<uintptr_t>(owner));
+  value ^= sequence.fetch_add(UINT64_C(0x9e3779b97f4a7c15),
+                              std::memory_order_relaxed);
+  value ^= value >> 30;
+  value *= UINT64_C(0xbf58476d1ce4e5b9);
+  value ^= value >> 27;
+  value *= UINT64_C(0x94d049bb133111eb);
+  return value ^ (value >> 31);
+}
+
+} // namespace
+
+MetadataKeyHash::MetadataKeyHash()
+    : key0_(random_hash_key(this)), key1_(random_hash_key(this)) {}
+
+size_t MetadataKeyHash::hash_bytes(const void *data, size_t size) const {
+  const auto *bytes = static_cast<const uint8_t *>(data);
+  uint64_t v0 = key0_ ^ UINT64_C(0x736f6d6570736575);
+  uint64_t v1 = key1_ ^ UINT64_C(0x646f72616e646f6d);
+  uint64_t v2 = key0_ ^ UINT64_C(0x6c7967656e657261);
+  uint64_t v3 = key1_ ^ UINT64_C(0x7465646279746573);
+  const size_t full_size = size & ~size_t{7};
+  for (size_t offset = 0; offset < full_size; offset += 8) {
+    uint64_t word;
+    std::memcpy(&word, bytes + offset, sizeof(word));
+    v3 ^= word;
+    sip_round(v0, v1, v2, v3);
+    sip_round(v0, v1, v2, v3);
+    v0 ^= word;
+  }
+  uint64_t tail = static_cast<uint64_t>(size) << 56;
+  for (size_t i = 0; i < size - full_size; ++i) {
+    tail |= static_cast<uint64_t>(bytes[full_size + i]) << (i * 8);
+  }
+  v3 ^= tail;
+  sip_round(v0, v1, v2, v3);
+  sip_round(v0, v1, v2, v3);
+  v0 ^= tail;
+  v2 ^= 0xff;
+  for (int i = 0; i < 4; ++i) {
+    sip_round(v0, v1, v2, v3);
+  }
+  return static_cast<size_t>(v0 ^ v1 ^ v2 ^ v3);
+}
+
+size_t MetadataKeyHash::operator()(int64_t value) const {
+  return hash_bytes(&value, sizeof(value));
+}
+
+size_t MetadataKeyHash::operator()(const RemoteTypeKey &key) const {
+  uint64_t header = static_cast<uint64_t>(key.type_id) |
+                    (static_cast<uint64_t>(key.user_type_id) << 32);
+  size_t hash = hash_bytes(&header, sizeof(header));
+  if (key.register_by_name) {
+    const size_t namespace_hash =
+        hash_bytes(key.namespace_name.data(), key.namespace_name.size());
+    const size_t type_name_hash =
+        hash_bytes(key.type_name.data(), key.type_name.size());
+    hash ^= rotate_left(static_cast<uint64_t>(namespace_hash), 17);
+    hash ^= rotate_left(static_cast<uint64_t>(type_name_hash), 39);
+  }
+  return hash;
+}
 
 // ============================================================================
 // Meta String Encoding Constants (shared between encoder and writer)
@@ -420,7 +520,9 @@ uint32_t WriteContext::get_type_id_for_cache(const std::type_index &type_idx) {
 ReadContext::ReadContext(const Config &config,
                          std::unique_ptr<TypeResolver> type_resolver)
     : buffer_(nullptr), config_(&config),
-      type_resolver_(std::move(type_resolver)), current_dyn_depth_(0) {
+      type_resolver_(std::move(type_resolver)), current_dyn_depth_(0),
+      metadata_key_hash_(), parsed_type_infos_(0, metadata_key_hash_),
+      remote_schema_versions_by_type_(0, metadata_key_hash_) {
   FORY_CHECK(config.max_graph_memory_bytes > 0)
       << "max_graph_memory_bytes must be positive";
   FORY_CHECK(config.max_unbacked_container_items >= 0)
@@ -459,11 +561,13 @@ ReadContext::read_enum_type_info(uint32_t base_type_id) {
     }
     meta_string_table_active_ = true;
     FORY_TRY(namespace_str,
-             meta_string_table_.read_string(*buffer_, k_namespace_decoder));
+             meta_string_table_.read_string(*buffer_, k_namespace_decoder,
+                                            MetaStringTable::Role::Namespace));
     FORY_TRY(type_name,
-             meta_string_table_.read_string(*buffer_, k_type_name_decoder));
-    FORY_TRY(type_info,
-             type_resolver_->get_type_info_by_name(namespace_str, type_name));
+             meta_string_table_.read_string(*buffer_, k_type_name_decoder,
+                                            MetaStringTable::Role::TypeName));
+    FORY_TRY(type_info, type_resolver_->get_type_info_by_name(
+                            namespace_str, type_name, type_id));
     return type_info;
   }
 
@@ -473,18 +577,15 @@ ReadContext::read_enum_type_info(uint32_t base_type_id) {
 static constexpr uint64_t k_min_remote_type_meta_limit = 8192;
 static constexpr uint64_t k_max_remote_type_meta_keys = 8192;
 
-Result<std::string, Error>
+Result<RemoteTypeKey, Error>
 ReadContext::check_remote_type_meta_limit(const TypeMeta &type_meta) {
-  std::string key;
+  RemoteTypeKey key;
+  key.type_id = type_meta.type_id;
+  key.user_type_id = type_meta.user_type_id;
+  key.register_by_name = type_meta.register_by_name;
   if (type_meta.register_by_name) {
-    key.reserve(type_meta.namespace_str.size() + type_meta.type_name.size() +
-                2);
-    key.push_back('n');
-    key.append(type_meta.namespace_str);
-    key.push_back('\0');
-    key.append(type_meta.type_name);
-  } else {
-    key = "i" + std::to_string(type_meta.user_type_id);
+    key.namespace_name = type_meta.namespace_str;
+    key.type_name = type_meta.type_name;
   }
 
   auto *entry = remote_schema_versions_by_type_.find(key);
@@ -524,10 +625,10 @@ ReadContext::check_remote_type_meta_limit(const TypeMeta &type_meta) {
   return key;
 }
 
-void ReadContext::record_remote_type_meta(const std::string &type_key) {
+void ReadContext::record_remote_type_meta(RemoteTypeKey type_key) {
   auto *entry = remote_schema_versions_by_type_.find(type_key);
   if (entry == nullptr) {
-    remote_schema_versions_by_type_[type_key] = 1;
+    remote_schema_versions_by_type_.emplace(std::move(type_key), 1);
   } else {
     ++entry->second;
   }
@@ -587,18 +688,15 @@ Result<const TypeInfo *, Error> ReadContext::read_type_meta() {
   }
 
   // Not in cache - parse the TypeMeta
-  const uint32_t type_def_start =
-      buffer_->reader_index() - static_cast<uint32_t>(sizeof(int64_t));
   FORY_TRY(parsed_meta, TypeMeta::from_bytes_with_header(
                             *buffer_, meta_header, config_->max_type_fields,
                             config_->max_type_meta_bytes));
-  const uint32_t type_def_end = buffer_->reader_index();
-
-  // Find local TypeInfo to get field_id mapping (optional for schema evolution)
+  // Find local TypeInfo to build compatible field dispatch (if registered).
   const TypeInfo *local_type_info = nullptr;
   if (parsed_meta->register_by_name) {
     auto result = type_resolver_->get_type_info_by_name(
-        parsed_meta->namespace_str, parsed_meta->type_name);
+        parsed_meta->namespace_str, parsed_meta->type_name,
+        parsed_meta->type_id);
     if (result.ok()) {
       local_type_info = result.value();
     }
@@ -617,20 +715,14 @@ Result<const TypeInfo *, Error> ReadContext::read_type_meta() {
     }
   }
 
-  if (local_type_info) {
-    const auto &local_type_def = local_type_info->type_def;
-    const size_t remote_type_def_size =
-        static_cast<size_t>(type_def_end - type_def_start);
-    if (local_type_def.size() == remote_type_def_size &&
-        std::memcmp(local_type_def.data(), buffer_->data() + type_def_start,
-                    remote_type_def_size) == 0) {
-      parsed_type_infos_[meta_header] = local_type_info;
-      has_cached_meta_header_ = true;
-      cached_meta_header_ = meta_header;
-      cached_meta_type_info_ = local_type_info;
-      reading_type_infos_.push_back(local_type_info);
-      return local_type_info;
-    }
+  if (local_type_info && local_type_info->type_meta &&
+      parsed_meta->hash == local_type_info->type_meta->hash) {
+    parsed_type_infos_[meta_header] = local_type_info;
+    has_cached_meta_header_ = true;
+    cached_meta_header_ = meta_header;
+    cached_meta_type_info_ = local_type_info;
+    reading_type_infos_.push_back(local_type_info);
+    return local_type_info;
   }
 
   FORY_TRY(remote_schema_key, check_remote_type_meta_limit(*parsed_meta));
@@ -641,19 +733,14 @@ Result<const TypeInfo *, Error> ReadContext::read_type_meta() {
     // Have local type - assign field_ids by comparing schemas
     // Note: Extension types don't have type_meta (only structs do)
     if (local_type_info->type_meta) {
-      FORY_RETURN_NOT_OK(TypeMeta::assign_field_ids(
+      FORY_RETURN_NOT_OK(TypeMeta::assign_local_dispatch_ids(
           local_type_info->type_meta.get(), parsed_meta->field_infos));
     }
     type_info->type_id = local_type_info->type_id;
     type_info->user_type_id = local_type_info->user_type_id;
     type_info->type_meta = std::move(parsed_meta);
-    type_info->type_def = local_type_info->type_def;
     // CRITICAL: copy the harness from the registered type_info
     type_info->harness = local_type_info->harness;
-    type_info->name_to_index = local_type_info->name_to_index;
-    type_info->namespace_name = local_type_info->namespace_name;
-    type_info->type_name = local_type_info->type_name;
-    type_info->register_by_name = local_type_info->register_by_name;
   } else {
     // No local type - create stub TypeInfo with parsed meta
     type_info->type_id = parsed_meta->type_id;
@@ -667,7 +754,7 @@ Result<const TypeInfo *, Error> ReadContext::read_type_meta() {
   has_cached_meta_header_ = true;
   cached_meta_header_ = meta_header;
   cached_meta_type_info_ = raw_ptr;
-  record_remote_type_meta(remote_schema_key);
+  record_remote_type_meta(std::move(remote_schema_key));
 
   reading_type_infos_.push_back(raw_ptr);
   return raw_ptr;
@@ -716,11 +803,13 @@ Result<const TypeInfo *, Error> ReadContext::read_any_type_info() {
     }
     meta_string_table_active_ = true;
     FORY_TRY(namespace_str,
-             meta_string_table_.read_string(*buffer_, k_namespace_decoder));
+             meta_string_table_.read_string(*buffer_, k_namespace_decoder,
+                                            MetaStringTable::Role::Namespace));
     FORY_TRY(type_name,
-             meta_string_table_.read_string(*buffer_, k_type_name_decoder));
-    FORY_TRY(type_info,
-             type_resolver_->get_type_info_by_name(namespace_str, type_name));
+             meta_string_table_.read_string(*buffer_, k_type_name_decoder,
+                                            MetaStringTable::Role::TypeName));
+    FORY_TRY(type_info, type_resolver_->get_type_info_by_name(
+                            namespace_str, type_name, type_id));
     return type_info;
   }
   default: {

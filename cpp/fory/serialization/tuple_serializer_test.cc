@@ -116,6 +116,10 @@ struct TuplePolyDerived : TuplePolyBase {
   FORY_STRUCT(TuplePolyDerived, FORY_BASE(TuplePolyBase), derived_value);
 };
 
+struct TupleEmptyElement {
+  FORY_STRUCT(TupleEmptyElement);
+};
+
 Fory create_fory() {
   return Fory::builder().xlang(true).compatible(false).track_ref(true).build();
 }
@@ -309,6 +313,42 @@ TEST(TupleSerializerTest, HomogeneousOptimizationSize) {
   EXPECT_GT(hetero_bytes->size(), 0u);
 }
 
+TEST(TupleSerializerTest, HomogeneousExcessUsesAllowance) {
+  using WriterInner = std::vector<TupleEmptyElement>;
+  using ReaderInner = std::tuple<TupleEmptyElement>;
+  using WriterRoot = std::tuple<WriterInner, int32_t>;
+  using ReaderRoot = std::tuple<ReaderInner, int32_t>;
+
+  auto writer =
+      Fory::builder().xlang(true).compatible(false).track_ref(false).build();
+  ASSERT_TRUE(writer.register_struct<TupleEmptyElement>(308).ok());
+  auto bytes = writer.serialize(WriterRoot{WriterInner(3), 17});
+  ASSERT_TRUE(bytes.ok()) << bytes.error().to_string();
+
+  auto allowed = Fory::builder()
+                     .xlang(true)
+                     .compatible(false)
+                     .track_ref(false)
+                     .max_unbacked_container_items(2)
+                     .build();
+  ASSERT_TRUE(allowed.register_struct<TupleEmptyElement>(308).ok());
+  auto decoded = allowed.deserialize<ReaderRoot>(*bytes);
+  ASSERT_TRUE(decoded.ok()) << decoded.error().to_string();
+  EXPECT_EQ(std::get<1>(*decoded), 17);
+
+  auto limited = Fory::builder()
+                     .xlang(true)
+                     .compatible(false)
+                     .track_ref(false)
+                     .max_unbacked_container_items(1)
+                     .build();
+  ASSERT_TRUE(limited.register_struct<TupleEmptyElement>(308).ok());
+  auto rejected = limited.deserialize<ReaderRoot>(*bytes);
+  EXPECT_FALSE(rejected.ok());
+  EXPECT_NE(rejected.error().message().find("max_unbacked_container_items"),
+            std::string::npos);
+}
+
 TEST(TupleSerializerTest, ExtraNoneElementsNeedNoInput) {
   Config config;
   config.xlang = true;
@@ -323,6 +363,85 @@ TEST(TupleSerializerTest, ExtraNoneElementsNeedNoInput) {
   ASSERT_FALSE(ctx.has_error()) << ctx.error().to_string();
   EXPECT_EQ(result, std::tuple<std::monostate>{});
   EXPECT_EQ(ctx.buffer().reader_index(), buffer.writer_index());
+
+  buffer.reader_index(0);
+  ReadContext empty_ctx(config, std::make_unique<TypeResolver>());
+  empty_ctx.attach(buffer);
+  auto empty_result = Serializer<std::tuple<>>::read_data(empty_ctx);
+  ASSERT_FALSE(empty_ctx.has_error()) << empty_ctx.error().to_string();
+  EXPECT_EQ(empty_result, std::tuple<>{});
+  EXPECT_EQ(empty_ctx.buffer().reader_index(), buffer.writer_index());
+
+  auto check_envelopes = [](auto *tuple_tag, uint8_t envelope_flag,
+                            bool track_ref) {
+    using Tuple = std::remove_pointer_t<decltype(tuple_tag)>;
+    Config envelope_config;
+    envelope_config.xlang = true;
+    envelope_config.track_ref = track_ref;
+    Buffer envelope_buffer;
+    envelope_buffer.write_var_uint32(2);
+    envelope_buffer.write_uint8(COLL_IS_SAME_TYPE | envelope_flag);
+    envelope_buffer.write_uint8(static_cast<uint8_t>(TypeId::NONE));
+    envelope_buffer.write_int8(track_ref ? REF_VALUE_FLAG : NULL_FLAG);
+    envelope_buffer.write_int8(NOT_NULL_VALUE_FLAG);
+    envelope_buffer.write_var_int32(37);
+    ReadContext envelope_ctx(envelope_config, std::make_unique<TypeResolver>());
+    envelope_ctx.attach(envelope_buffer);
+
+    (void)Serializer<Tuple>::read_data(envelope_ctx);
+    ASSERT_FALSE(envelope_ctx.has_error()) << envelope_ctx.error().to_string();
+    EXPECT_EQ(envelope_ctx.read_var_int32(envelope_ctx.error()), 37);
+    EXPECT_FALSE(envelope_ctx.has_error()) << envelope_ctx.error().to_string();
+  };
+  check_envelopes(static_cast<std::tuple<> *>(nullptr), COLL_HAS_NULL, false);
+  check_envelopes(static_cast<std::tuple<> *>(nullptr), COLL_TRACKING_REF,
+                  true);
+  check_envelopes(static_cast<std::tuple<std::monostate> *>(nullptr),
+                  COLL_HAS_NULL, false);
+  check_envelopes(static_cast<std::tuple<std::monostate> *>(nullptr),
+                  COLL_TRACKING_REF, true);
+}
+
+TEST(TupleSerializerTest, HeterogeneousExcessIsConsumed) {
+  using WriterInner = std::tuple<int32_t, std::string, double>;
+  using ReaderInner = std::tuple<int32_t>;
+  using WriterRoot = std::tuple<WriterInner, int32_t>;
+  using ReaderRoot = std::tuple<ReaderInner, int32_t>;
+  auto fory =
+      Fory::builder().xlang(true).compatible(false).track_ref(false).build();
+  auto bytes = fory.serialize(
+      WriterRoot{WriterInner{7, std::string("ignored"), 3.5}, 19});
+  ASSERT_TRUE(bytes.ok()) << bytes.error().to_string();
+
+  auto decoded = fory.deserialize<ReaderRoot>(*bytes);
+  ASSERT_TRUE(decoded.ok()) << decoded.error().to_string();
+  EXPECT_EQ(std::get<0>(std::get<0>(*decoded)), 7);
+  EXPECT_EQ(std::get<1>(*decoded), 19);
+}
+
+TEST(TupleSerializerTest, EmptyTupleConsumesElements) {
+  using ReaderRoot = std::tuple<std::tuple<>, int32_t>;
+  auto fory =
+      Fory::builder().xlang(true).compatible(false).track_ref(false).build();
+
+  using HeterogeneousInner = std::tuple<int32_t, std::string>;
+  using HeterogeneousRoot = std::tuple<HeterogeneousInner, int32_t>;
+  auto heterogeneous =
+      fory.serialize(HeterogeneousRoot{HeterogeneousInner{5, "ignored"}, 23});
+  ASSERT_TRUE(heterogeneous.ok()) << heterogeneous.error().to_string();
+  auto heterogeneous_result = fory.deserialize<ReaderRoot>(*heterogeneous);
+  ASSERT_TRUE(heterogeneous_result.ok())
+      << heterogeneous_result.error().to_string();
+  EXPECT_EQ(std::get<1>(*heterogeneous_result), 23);
+
+  using HomogeneousRoot = std::tuple<std::vector<std::string>, int32_t>;
+  auto homogeneous =
+      fory.serialize(HomogeneousRoot{{"one", "two", "three"}, 29});
+  ASSERT_TRUE(homogeneous.ok()) << homogeneous.error().to_string();
+  auto homogeneous_result = fory.deserialize<ReaderRoot>(*homogeneous);
+  ASSERT_TRUE(homogeneous_result.ok())
+      << homogeneous_result.error().to_string();
+  EXPECT_EQ(std::get<1>(*homogeneous_result), 29);
 }
 
 TEST(TupleSerializerTest, SameTypeUsesRemoteReadBinding) {

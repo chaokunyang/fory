@@ -519,10 +519,34 @@ inline void collection_insert(Container &result, T &&elem) {
   }
 }
 
+template <typename T>
+FORY_ALWAYS_INLINE bool enter_generated_container(ReadContext &ctx) {
+  // Pointer and polymorphic element owners already enter this shared budget;
+  // direct generated Struct values need the container to own that entry.
+  if constexpr (is_generated_struct_serializer_v<T>) {
+    auto depth_res = ctx.increase_dyn_depth();
+    if (FORY_PREDICT_FALSE(!depth_res.ok())) {
+      ctx.set_error(std::move(depth_res).error());
+      return false;
+    }
+  }
+  return true;
+}
+
+template <typename T>
+FORY_ALWAYS_INLINE void leave_generated_container(ReadContext &ctx) {
+  if constexpr (is_generated_struct_serializer_v<T>) {
+    ctx.decrease_dyn_depth();
+  }
+}
+
 template <typename T, typename Container>
 inline bool read_declared_same_type_collection(Container &result,
                                                ReadContext &ctx,
                                                uint32_t length) {
+  if (FORY_PREDICT_FALSE(!enter_generated_container<T>(ctx))) {
+    return false;
+  }
   if constexpr (read_data_always_advances_v<T>) {
     for (uint32_t i = 0; i < length; ++i) {
       if (FORY_PREDICT_FALSE(ctx.has_error())) {
@@ -531,6 +555,10 @@ inline bool read_declared_same_type_collection(Container &result,
       auto elem = Serializer<T>::read(ctx, RefMode::None, false);
       collection_insert(result, std::move(elem));
     }
+    if (FORY_PREDICT_FALSE(ctx.has_error())) {
+      return false;
+    }
+    leave_generated_container<T>(ctx);
     return true;
   }
 
@@ -552,15 +580,25 @@ inline bool read_declared_same_type_collection(Container &result,
       checkpoint_byte = ctx.buffer().logical_reader_index();
     }
   }
-  return checkpoint_item == length ||
-         detail::settle_unbacked_container_items(ctx, length - checkpoint_item,
-                                                 checkpoint_byte);
+  if (FORY_PREDICT_FALSE(ctx.has_error())) {
+    return false;
+  }
+  if (checkpoint_item != length &&
+      FORY_PREDICT_FALSE(!detail::settle_unbacked_container_items(
+          ctx, length - checkpoint_item, checkpoint_byte))) {
+    return false;
+  }
+  leave_generated_container<T>(ctx);
+  return true;
 }
 
 template <typename T, typename Alloc>
 inline bool
 read_declared_same_type_collection(std::forward_list<T, Alloc> &result,
                                    ReadContext &ctx, uint32_t length) {
+  if (FORY_PREDICT_FALSE(!enter_generated_container<T>(ctx))) {
+    return false;
+  }
   auto tail = result.before_begin();
   uint32_t checkpoint_item = 0;
   uint64_t checkpoint_byte = 0;
@@ -585,11 +623,17 @@ read_declared_same_type_collection(std::forward_list<T, Alloc> &result,
       }
     }
   }
-  if constexpr (!read_data_always_advances_v<T>) {
-    return checkpoint_item == length ||
-           detail::settle_unbacked_container_items(
-               ctx, length - checkpoint_item, checkpoint_byte);
+  if (FORY_PREDICT_FALSE(ctx.has_error())) {
+    return false;
   }
+  if constexpr (!read_data_always_advances_v<T>) {
+    if (checkpoint_item != length &&
+        FORY_PREDICT_FALSE(!detail::settle_unbacked_container_items(
+            ctx, length - checkpoint_item, checkpoint_byte))) {
+      return false;
+    }
+  }
+  leave_generated_container<T>(ctx);
   return true;
 }
 
@@ -611,6 +655,9 @@ inline bool
 read_same_type_info_collection_body(Container &result, ReadContext &ctx,
                                     uint32_t length, const TypeInfo &type_info,
                                     Harness::ReadAsFn elem_reader) {
+  if (FORY_PREDICT_FALSE(!enter_generated_container<T>(ctx))) {
+    return false;
+  }
   uint32_t checkpoint_item = 0;
   uint64_t checkpoint_byte = 0;
   if constexpr (MeasureProgress) {
@@ -634,11 +681,17 @@ read_same_type_info_collection_body(Container &result, ReadContext &ctx,
       }
     }
   }
-  if constexpr (MeasureProgress) {
-    return checkpoint_item == length ||
-           detail::settle_unbacked_container_items(
-               ctx, length - checkpoint_item, checkpoint_byte);
+  if (FORY_PREDICT_FALSE(ctx.has_error())) {
+    return false;
   }
+  if constexpr (MeasureProgress) {
+    if (checkpoint_item != length &&
+        FORY_PREDICT_FALSE(!detail::settle_unbacked_container_items(
+            ctx, length - checkpoint_item, checkpoint_byte))) {
+      return false;
+    }
+  }
+  leave_generated_container<T>(ctx);
   return true;
 }
 
@@ -646,6 +699,9 @@ template <bool MeasureProgress, typename T, typename Alloc>
 inline bool read_same_type_info_collection_body(
     std::forward_list<T, Alloc> &result, ReadContext &ctx, uint32_t length,
     const TypeInfo &type_info, Harness::ReadAsFn elem_reader) {
+  if (FORY_PREDICT_FALSE(!enter_generated_container<T>(ctx))) {
+    return false;
+  }
   auto tail = result.before_begin();
   uint32_t checkpoint_item = 0;
   uint64_t checkpoint_byte = 0;
@@ -670,11 +726,17 @@ inline bool read_same_type_info_collection_body(
       }
     }
   }
-  if constexpr (MeasureProgress) {
-    return checkpoint_item == length ||
-           detail::settle_unbacked_container_items(
-               ctx, length - checkpoint_item, checkpoint_byte);
+  if (FORY_PREDICT_FALSE(ctx.has_error())) {
+    return false;
   }
+  if constexpr (MeasureProgress) {
+    if (checkpoint_item != length &&
+        FORY_PREDICT_FALSE(!detail::settle_unbacked_container_items(
+            ctx, length - checkpoint_item, checkpoint_byte))) {
+      return false;
+    }
+  }
+  leave_generated_container<T>(ctx);
   return true;
 }
 
@@ -699,6 +761,12 @@ inline void read_collection_with_type_info(Container &result, ReadContext &ctx,
                                            uint32_t length, bool track_ref,
                                            bool has_null,
                                            const TypeInfo &type_info) {
+  if constexpr (is_generated_struct_serializer_v<T>) {
+    if ((track_ref || has_null) &&
+        FORY_PREDICT_FALSE(!enter_generated_container<T>(ctx))) {
+      return;
+    }
+  }
   if constexpr (is_forward_list_v<Container>) {
     auto tail = result.before_begin();
     if (track_ref) {
@@ -753,6 +821,14 @@ inline void read_collection_with_type_info(Container &result, ReadContext &ctx,
       }
     } else {
       (void)read_same_type_info_collection<T>(result, ctx, length, type_info);
+    }
+  }
+  if constexpr (is_generated_struct_serializer_v<T>) {
+    if (track_ref || has_null) {
+      if (FORY_PREDICT_FALSE(ctx.has_error())) {
+        return;
+      }
+      leave_generated_container<T>(ctx);
     }
   }
 }
@@ -1366,6 +1442,9 @@ struct Serializer<
       }
 
       // General path: handle HAS_NULL and/or TRACKING_REF
+      if (FORY_PREDICT_FALSE(!enter_generated_container<T>(ctx))) {
+        return result;
+      }
       for (uint32_t i = 0; i < length; ++i) {
         if (FORY_PREDICT_FALSE(ctx.has_error())) {
           return result;
@@ -1392,6 +1471,10 @@ struct Serializer<
           result.push_back(std::move(elem));
         }
       }
+      if (FORY_PREDICT_FALSE(ctx.has_error())) {
+        return result;
+      }
+      leave_generated_container<T>(ctx);
 
       return result;
     }
@@ -1650,6 +1733,9 @@ template <typename T, typename Alloc> struct Serializer<std::list<T, Alloc>> {
       }
 
       // General path: handle HAS_NULL and/or TRACKING_REF
+      if (FORY_PREDICT_FALSE(!enter_generated_container<T>(ctx))) {
+        return result;
+      }
       for (uint32_t i = 0; i < length; ++i) {
         if (FORY_PREDICT_FALSE(ctx.has_error())) {
           return result;
@@ -1676,6 +1762,10 @@ template <typename T, typename Alloc> struct Serializer<std::list<T, Alloc>> {
           result.push_back(std::move(elem));
         }
       }
+      if (FORY_PREDICT_FALSE(ctx.has_error())) {
+        return result;
+      }
+      leave_generated_container<T>(ctx);
 
       return result;
     }
@@ -1840,6 +1930,9 @@ template <typename T, typename Alloc> struct Serializer<std::deque<T, Alloc>> {
       }
 
       // General path: handle HAS_NULL and/or TRACKING_REF
+      if (FORY_PREDICT_FALSE(!enter_generated_container<T>(ctx))) {
+        return result;
+      }
       for (uint32_t i = 0; i < length; ++i) {
         if (FORY_PREDICT_FALSE(ctx.has_error())) {
           return result;
@@ -1866,6 +1959,10 @@ template <typename T, typename Alloc> struct Serializer<std::deque<T, Alloc>> {
           result.push_back(std::move(elem));
         }
       }
+      if (FORY_PREDICT_FALSE(ctx.has_error())) {
+        return result;
+      }
+      leave_generated_container<T>(ctx);
 
       return result;
     }
@@ -2031,6 +2128,9 @@ struct Serializer<std::forward_list<T, Alloc>> {
         (void)read_declared_same_type_collection<T>(result, ctx, length);
       } else {
         // General path: handle HAS_NULL and/or TRACKING_REF
+        if (FORY_PREDICT_FALSE(!enter_generated_container<T>(ctx))) {
+          return result;
+        }
         for (uint32_t i = 0; i < length; ++i) {
           if (FORY_PREDICT_FALSE(ctx.has_error())) {
             return result;
@@ -2057,6 +2157,10 @@ struct Serializer<std::forward_list<T, Alloc>> {
             tail = result.insert_after(tail, std::move(elem));
           }
         }
+        if (FORY_PREDICT_FALSE(ctx.has_error())) {
+          return result;
+        }
+        leave_generated_container<T>(ctx);
       }
     }
     return result;
@@ -2345,6 +2449,9 @@ struct Serializer<std::set<T, Args...>> {
         return result;
       }
 
+      if (FORY_PREDICT_FALSE(!enter_generated_container<T>(ctx))) {
+        return result;
+      }
       for (uint32_t i = 0; i < size; ++i) {
         if (FORY_PREDICT_FALSE(ctx.has_error())) {
           return result;
@@ -2363,6 +2470,10 @@ struct Serializer<std::set<T, Args...>> {
           result.insert(std::move(elem));
         }
       }
+      if (FORY_PREDICT_FALSE(ctx.has_error())) {
+        return result;
+      }
+      leave_generated_container<T>(ctx);
       return result;
     }
   }
@@ -2521,6 +2632,9 @@ struct Serializer<std::unordered_set<T, Args...>> {
         return result;
       }
 
+      if (FORY_PREDICT_FALSE(!enter_generated_container<T>(ctx))) {
+        return result;
+      }
       for (uint32_t i = 0; i < size; ++i) {
         if (FORY_PREDICT_FALSE(ctx.has_error())) {
           return result;
@@ -2539,6 +2653,10 @@ struct Serializer<std::unordered_set<T, Args...>> {
           result.insert(std::move(elem));
         }
       }
+      if (FORY_PREDICT_FALSE(ctx.has_error())) {
+        return result;
+      }
+      leave_generated_container<T>(ctx);
       return result;
     }
   }

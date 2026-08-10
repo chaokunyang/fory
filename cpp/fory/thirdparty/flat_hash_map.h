@@ -409,6 +409,10 @@ public:
 
   explicit flat_hash_map(size_t bucket_count) { initialize(bucket_count); }
 
+  flat_hash_map(size_t bucket_count, const Hash &hash) : hash_(hash) {
+    initialize(bucket_count);
+  }
+
   flat_hash_map(std::initializer_list<value_type> values) {
     initialize(values.size());
     for (const auto &value : values) {
@@ -511,8 +515,7 @@ public:
       return;
     }
 
-    flat_hash_map replacement(target);
-    replacement.hash_ = hash_;
+    flat_hash_map replacement(target, hash_);
     replacement.eq_ = eq_;
     for (size_t i = 0; i < capacity_; ++i) {
       if (detail::flat_hash_map_internal::is_full(ctrl_[i])) {

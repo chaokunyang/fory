@@ -238,6 +238,12 @@ MetaStringDecoder::decode_lower_upper_digit_special_char(uint8_t value) const {
 
 MetaStringTable::MetaStringTable() = default;
 
+Result<std::string, Error>
+MetaStringTable::read_string(Buffer &buffer, const MetaStringDecoder &decoder) {
+  FORY_TRY(view, read_string(buffer, decoder, Role::TypeName));
+  return std::string(view.value);
+}
+
 int64_t compute_meta_string_hash(const std::vector<uint8_t> &bytes,
                                  MetaEncoding encoding) {
   static constexpr uint8_t k_empty_input = 0;
@@ -262,8 +268,9 @@ int64_t compute_meta_string_hash(const std::vector<uint8_t> &bytes,
   return signed_hash;
 }
 
-Result<std::string, Error>
-MetaStringTable::read_string(Buffer &buffer, const MetaStringDecoder &decoder) {
+Result<MetaStringTable::View, Error>
+MetaStringTable::read_string(Buffer &buffer, const MetaStringDecoder &decoder,
+                             Role role) {
   Error error;
   // Header is encoded with VarUint32Small7 on Java side, but wire
   // format is still standard varuint32.
@@ -279,7 +286,7 @@ MetaStringTable::read_string(Buffer &buffer, const MetaStringDecoder &decoder) {
       return Unexpected(Error::invalid_data(
           "Invalid meta string reference id: " + std::to_string(len_or_id)));
     }
-    return entries_[len_or_id - 1].decoded;
+    return decode(entries_[len_or_id - 1], decoder, role);
   }
 
   constexpr uint32_t k_small_threshold = 16;
@@ -336,16 +343,24 @@ MetaStringTable::read_string(Buffer &buffer, const MetaStringDecoder &decoder) {
     }
   }
 
-  std::string decoded;
-  if (len == 0) {
-    decoded = "";
-  } else {
-    FORY_TRY(tmp, decoder.decode(bytes.data(), bytes.size(), encoding));
-    decoded = std::move(tmp);
-  }
+  entries_.push_back(
+      Entry{std::move(bytes), encoding, std::nullopt, std::nullopt});
+  return decode(entries_.back(), decoder, role);
+}
 
-  entries_.push_back(Entry{decoded});
-  return decoded;
+Result<MetaStringTable::View, Error>
+MetaStringTable::decode(Entry &entry, const MetaStringDecoder &decoder,
+                        Role role) {
+  std::optional<Decoded> &cached =
+      role == Role::Namespace ? entry.namespace_value : entry.type_name_value;
+  if (!cached.has_value()) {
+    FORY_TRY(value, decoder.decode(entry.bytes.data(), entry.bytes.size(),
+                                   entry.encoding));
+    const size_t hash = std::hash<std::string_view>{}(value);
+    cached.emplace(Decoded{std::move(value), hash, std::string_view()});
+    cached->canonical = cached->value;
+  }
+  return View{cached->canonical, cached->hash, &cached->canonical};
 }
 
 void MetaStringTable::reset() { entries_.clear(); }

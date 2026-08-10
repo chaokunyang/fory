@@ -311,6 +311,18 @@ inline constexpr bool read_data_always_advances_v =
     is_deque_v<T> || is_forward_list_v<T> || is_map_like_v<T> ||
     is_set_like_v<T>;
 
+template <typename T, typename = void>
+struct is_generated_struct_serializer : std::false_type {};
+
+template <typename T>
+struct is_generated_struct_serializer<
+    T, std::void_t<decltype(Serializer<T>::is_generated_struct_serializer)>>
+    : std::bool_constant<Serializer<T>::is_generated_struct_serializer> {};
+
+template <typename T>
+inline constexpr bool is_generated_struct_serializer_v =
+    is_generated_struct_serializer<T>::value;
+
 // ============================================================================
 // Polymorphic Type Detection
 // ============================================================================

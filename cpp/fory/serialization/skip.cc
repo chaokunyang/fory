@@ -185,6 +185,19 @@ bool field_read_always_advances(const FieldType &field_type,
 }
 } // namespace
 
+void detail::skip_value_with_type_info(ReadContext &ctx,
+                                       const TypeInfo &type_info,
+                                       RefMode ref_mode) {
+  if (ref_mode != RefMode::None) {
+    bool has_value = consume_ref_flag(ctx, ref_mode == RefMode::Tracking,
+                                      ref_mode == RefMode::NullOnly);
+    if (FORY_PREDICT_FALSE(ctx.has_error()) || !has_value) {
+      return;
+    }
+  }
+  skip_data_with_type_info(ctx, &type_info);
+}
+
 void skip_varint(ReadContext &ctx) {
   // skip varint by reading it
   ctx.read_var_uint64(ctx.error());
@@ -192,14 +205,18 @@ void skip_varint(ReadContext &ctx) {
 
 void skip_string(ReadContext &ctx) {
   // Read string length + encoding
-  uint64_t size_encoding = ctx.read_var_uint64(ctx.error());
+  uint64_t size_encoding = ctx.read_var_uint36_small(ctx.error());
   if (FORY_PREDICT_FALSE(ctx.has_error())) {
     return;
   }
   uint64_t size = size_encoding >> 2;
+  if (FORY_PREDICT_FALSE(size > std::numeric_limits<uint32_t>::max())) {
+    ctx.set_error(Error::invalid_data("String length exceeds uint32 range"));
+    return;
+  }
 
   // skip string data
-  ctx.buffer().increase_reader_index(size, ctx.error());
+  ctx.buffer().increase_reader_index(static_cast<uint32_t>(size), ctx.error());
 }
 
 void skip_list(ReadContext &ctx, const FieldType &field_type) {

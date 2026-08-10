@@ -294,9 +294,6 @@ FORY_ALWAYS_INLINE uint32_t put_varint_at(T value, Buffer &buffer,
 }
 
 template <typename T>
-FORY_ALWAYS_INLINE T read_varint_at(Buffer &buffer, uint32_t &offset);
-
-template <typename T>
 struct is_signed_configurable_int
     : std::bool_constant<std::is_same_v<std::decay_t<T>, int32_t> ||
                          (std::is_same_v<std::decay_t<T>, int> &&
@@ -447,58 +444,6 @@ FORY_ALWAYS_INLINE uint32_t write_configurable_int_at(FieldType value,
       return put_varint_at<FieldType>(value, buffer, offset);
     }
     return put_varint_at<FieldType>(value, buffer, offset);
-  }
-}
-
-template <typename FieldType, typename StructT, size_t Index>
-FORY_ALWAYS_INLINE FieldType read_configurable_int_at(Buffer &buffer,
-                                                      uint32_t &offset) {
-  static_assert(is_configurable_int_v<FieldType>,
-                "read_configurable_int_at requires a configurable int type");
-  constexpr auto enc = field_int_encoding<FieldType, StructT, Index>();
-  if constexpr (is_signed_configurable_int_v<FieldType>) {
-    if constexpr (enc == Encoding::Fixed) {
-      if constexpr (is_configurable_int32_v<FieldType>) {
-        FieldType value =
-            static_cast<FieldType>(buffer.unsafe_get<int32_t>(offset));
-        offset += 4;
-        return value;
-      }
-      FieldType value =
-          static_cast<FieldType>(buffer.unsafe_get<int64_t>(offset));
-      offset += 8;
-      return value;
-    }
-    if constexpr (enc == Encoding::Tagged) {
-      uint32_t bytes_read = 0;
-      auto value = buffer.get_tagged_int64(offset, &bytes_read);
-      offset += bytes_read;
-      return static_cast<FieldType>(value);
-    }
-    return read_varint_at<FieldType>(buffer, offset);
-  } else {
-    if constexpr (enc == Encoding::Fixed) {
-      if constexpr (is_configurable_int32_v<FieldType>) {
-        FieldType value =
-            static_cast<FieldType>(buffer.unsafe_get<uint32_t>(offset));
-        offset += 4;
-        return value;
-      }
-      FieldType value =
-          static_cast<FieldType>(buffer.unsafe_get<uint64_t>(offset));
-      offset += 8;
-      return value;
-    }
-    if constexpr (enc == Encoding::Tagged) {
-      if constexpr (is_configurable_int64_v<FieldType>) {
-        uint32_t bytes_read = 0;
-        auto value = buffer.get_tagged_uint64(offset, &bytes_read);
-        offset += bytes_read;
-        return static_cast<FieldType>(value);
-      }
-      return read_varint_at<FieldType>(buffer, offset);
-    }
-    return read_varint_at<FieldType>(buffer, offset);
   }
 }
 
@@ -987,6 +932,9 @@ Container read_configured_list_data(ReadContext &ctx) {
   if (length == 0) {
     return result;
   }
+  if (FORY_PREDICT_FALSE(!enter_generated_container<Elem>(ctx))) {
+    return result;
+  }
   uint8_t bitmap = ctx.read_uint8(ctx.error());
   if (FORY_PREDICT_FALSE(ctx.has_error())) {
     return result;
@@ -1023,17 +971,26 @@ Container read_configured_list_data(ReadContext &ctx) {
     return result;
   }
   if constexpr (element_read_data_always_advances) {
-    (void)
-        read_configured_list_items<false, Container, StructT, Index, ElemNode>(
-            result, ctx, length, elem_ref_mode);
+    if (FORY_PREDICT_FALSE(
+            (!read_configured_list_items<false, Container, StructT, Index,
+                                         ElemNode>(result, ctx, length,
+                                                   elem_ref_mode)))) {
+      return result;
+    }
   } else if (elem_ref_mode != RefMode::None) {
-    (void)
-        read_configured_list_items<false, Container, StructT, Index, ElemNode>(
-            result, ctx, length, elem_ref_mode);
-  } else {
-    (void)read_configured_list_items<true, Container, StructT, Index, ElemNode>(
-        result, ctx, length, elem_ref_mode);
+    if (FORY_PREDICT_FALSE(
+            (!read_configured_list_items<false, Container, StructT, Index,
+                                         ElemNode>(result, ctx, length,
+                                                   elem_ref_mode)))) {
+      return result;
+    }
+  } else if (FORY_PREDICT_FALSE(
+                 (!read_configured_list_items<true, Container, StructT, Index,
+                                              ElemNode>(result, ctx, length,
+                                                        elem_ref_mode)))) {
+    return result;
   }
+  leave_generated_container<Elem>(ctx);
   return result;
 }
 
@@ -1224,6 +1181,9 @@ MapType read_configured_map_data(ReadContext &ctx) {
   if (length == 0) {
     return result;
   }
+  if (FORY_PREDICT_FALSE((!enter_generated_map<Key, Value>(ctx)))) {
+    return result;
+  }
   constexpr bool key_read_data_always_advances = []() constexpr {
     if constexpr (KeyNode >= 0) {
       return configured_read_data_always_advances<Key, StructT, Index,
@@ -1281,6 +1241,10 @@ MapType read_configured_map_data(ReadContext &ctx) {
     }
     read_count += chunk_size;
   }
+  if (FORY_PREDICT_FALSE(ctx.has_error())) {
+    return result;
+  }
+  leave_generated_map<Key, Value>(ctx);
   return result;
 }
 
@@ -1495,25 +1459,31 @@ template <typename T> struct CompileTimeFieldHelpers {
     }
   }
 
-  /// Returns the tag ID for the field at Index.
-  /// Returns -1 if no tag ID is defined.
-  template <size_t Index> static constexpr int16_t field_tag_id() {
+  /// Returns the tag ID for the field at Index, or -1 when absent.
+  template <size_t Index> static constexpr int64_t field_tag_id() {
     if constexpr (FieldCount == 0) {
       return -1;
     } else {
       using RawFieldType = RawFieldTypeFor<Index>;
 
       if constexpr (::fory::detail::has_field_config_v<T>) {
-        constexpr int16_t config_id =
+        constexpr int64_t config_id =
             ::fory::detail::GetFieldConfigEntry<T, Index>::id;
         if constexpr (::fory::detail::GetFieldConfigEntry<T, Index>::has_id) {
           static_assert(config_id >= 0, "Fory field id must be non-negative");
+          static_assert(config_id <= static_cast<int64_t>(
+                                         std::numeric_limits<uint32_t>::max()),
+                        "Fory field id must fit uint32");
           return config_id;
         }
       }
       if constexpr (is_fory_field_v<RawFieldType>) {
         static_assert(RawFieldType::tag_id >= 0,
                       "Fory field id must be non-negative");
+        static_assert(
+            static_cast<uint64_t>(RawFieldType::tag_id) <=
+                static_cast<uint64_t>(std::numeric_limits<uint32_t>::max()),
+            "Fory field id must fit uint32");
         return RawFieldType::tag_id;
       }
       // No tag ID defined
@@ -1524,7 +1494,7 @@ template <typename T> struct CompileTimeFieldHelpers {
   }
 
   template <size_t... Indices>
-  static constexpr std::array<int16_t, FieldCount>
+  static constexpr std::array<int64_t, FieldCount>
   make_field_ids(std::index_sequence<Indices...>) {
     if constexpr (FieldCount == 0) {
       return {};
@@ -1891,7 +1861,7 @@ template <typename T> struct CompileTimeFieldHelpers {
   static inline constexpr std::array<bool, FieldCount> nullable_flags =
       make_nullable_flags(std::make_index_sequence<FieldCount>{});
 
-  static inline constexpr std::array<int16_t, FieldCount> field_ids =
+  static inline constexpr std::array<int64_t, FieldCount> field_ids =
       make_field_ids(std::make_index_sequence<FieldCount>{});
 
   /// Flags for fields whose types are nullable wrappers (optional/shared_ptr/
@@ -1953,9 +1923,9 @@ template <typename T> struct CompileTimeFieldHelpers {
         return names;
       }();
 
-  static constexpr size_t tag_id_length(int16_t value) {
+  static constexpr size_t tag_id_length(uint32_t value) {
     size_t count = 1;
-    int16_t v = value;
+    uint32_t v = value;
     while (v >= 10) {
       v /= 10;
       ++count;
@@ -1964,9 +1934,9 @@ template <typename T> struct CompileTimeFieldHelpers {
   }
 
   static constexpr size_t identifier_length(size_t index) {
-    int16_t id = field_ids[index];
+    int64_t id = field_ids[index];
     if (id >= 0) {
-      return tag_id_length(id);
+      return tag_id_length(static_cast<uint32_t>(id));
     }
     return snake_case_lengths[index];
   }
@@ -2008,8 +1978,8 @@ template <typename T> struct CompileTimeFieldHelpers {
           for (size_t i = 0; i < FieldCount; ++i) {
             size_t length = identifier_lengths[i];
             if (field_ids[i] >= 0) {
-              int16_t value = field_ids[i];
-              int16_t divisor = 1;
+              uint32_t value = static_cast<uint32_t>(field_ids[i]);
+              uint32_t divisor = 1;
               for (size_t j = 1; j < length; ++j) {
                 divisor *= 10;
               }
@@ -2415,13 +2385,13 @@ template <typename T> struct CompileTimeFieldHelpers {
           total += 4; // fixed 4 bytes
           break;
         case TypeId::VARINT32:
-          total += 5; // varint max for 32-bit
+          total += 8; // optimized varint32 bulk-store extent
           break;
         case TypeId::UINT32:
           total += 4; // fixed 4 bytes
           break;
         case TypeId::VAR_UINT32:
-          total += 5; // varint max for 32-bit
+          total += 8; // optimized varint32 bulk-store extent
           break;
         case TypeId::FLOAT32:
           total += 4;
@@ -3578,7 +3548,7 @@ read_exact_primitive_run(T &obj, ReadContext &ctx,
       constexpr int16_t next_matched_id =
           static_cast<int16_t>(next_sorted_idx * 2);
       if (remote_idx + 1 < remote_fields.size() &&
-          remote_fields[remote_idx + 1].field_id == next_matched_id) {
+          remote_fields[remote_idx + 1].local_dispatch_id == next_matched_id) {
         ++remote_idx;
         read_exact_primitive_run<T, next_sorted_idx>(obj, ctx, remote_fields,
                                                      remote_idx, offset);
@@ -3982,44 +3952,6 @@ read_fixed_primitive_fields(T &obj, Buffer &buffer,
   buffer.reader_index(base_offset + Helpers::leading_fixed_size_bytes);
 }
 
-/// Read a single varint field at a given offset.
-/// Does NOT update reader_index - caller must track offset and update once.
-/// Caller must ensure buffer has enough bytes (pre-checked).
-template <typename T>
-FORY_ALWAYS_INLINE T read_varint_at(Buffer &buffer, uint32_t &offset) {
-  uint32_t bytes_read;
-  if constexpr (std::is_same_v<T, int32_t> || std::is_same_v<T, int>) {
-    // Handle both int32_t and int (different types on some platforms)
-    uint32_t raw = buffer.get_var_uint32(offset, &bytes_read);
-    offset += bytes_read;
-    // Zigzag decode
-    return static_cast<T>((raw >> 1) ^ (~(raw & 1) + 1));
-  } else if constexpr (std::is_same_v<T, int64_t> ||
-                       std::is_same_v<T, long long>) {
-    // Handle both int64_t and long long (different types on some platforms)
-    uint64_t raw = buffer.get_var_uint64(offset, &bytes_read);
-    offset += bytes_read;
-    // Zigzag decode
-    return static_cast<T>((raw >> 1) ^ (~(raw & 1) + 1));
-  } else if constexpr (std::is_same_v<T, uint32_t> ||
-                       std::is_same_v<T, unsigned int>) {
-    // Unsigned 32-bit varint (no zigzag)
-    uint32_t raw = buffer.get_var_uint32(offset, &bytes_read);
-    offset += bytes_read;
-    return raw;
-  } else if constexpr (std::is_same_v<T, uint64_t> ||
-                       std::is_same_v<T, unsigned long long>) {
-    // Unsigned 64-bit varint (no zigzag) - used for VAR_UINT64 and
-    // TAGGED_UINT64
-    uint64_t raw = buffer.get_var_uint64(offset, &bytes_read);
-    offset += bytes_read;
-    return raw;
-  } else {
-    static_assert(sizeof(T) == 0, "Unsupported varint type");
-    return T{};
-  }
-}
-
 template <typename T>
 FORY_ALWAYS_INLINE T read_varint_at_checked(Buffer &buffer, uint32_t &offset,
                                             Error &error) {
@@ -4280,18 +4212,10 @@ FORY_ALWAYS_INLINE void read_single_varint_field(T &obj, Buffer &buffer,
 
   FieldType result;
   if constexpr (is_configurable_int_v<FieldType>) {
-    constexpr Encoding enc = field_int_encoding<FieldType, T, original_index>();
-    if constexpr (enc == Encoding::Tagged) {
-      // Tagged integers issue fixed-width loads, so the local-offset batch must
-      // use the reader that proves the 4-byte or 9-byte range first.
-      result = read_configurable_int_at_checked<FieldType, T, original_index>(
-          buffer, offset, error);
-    } else {
-      result = read_configurable_int_at<FieldType, T, original_index>(buffer,
-                                                                      offset);
-    }
+    result = read_configurable_int_at_checked<FieldType, T, original_index>(
+        buffer, offset, error);
   } else {
-    result = read_varint_at<FieldType>(buffer, offset);
+    result = read_varint_at_checked<FieldType>(buffer, offset, error);
   }
 
   if constexpr (is_fory_field_v<RawFieldType>) {
@@ -4302,8 +4226,8 @@ FORY_ALWAYS_INLINE void read_single_varint_field(T &obj, Buffer &buffer,
 }
 
 /// Fast read consecutive varint primitive fields (int32, int64).
-/// Tagged fields use checked local-offset readers; genuine varint helpers
-/// bounds-check their bulk and slow-path loads.
+/// Every local-offset read propagates a zero-byte/truncated result before the
+/// generated root can accept a partial object.
 /// Optimized: tracks offset locally and updates reader_index once at the end.
 /// StartIdx is the sorted index to start reading from.
 template <typename T, size_t StartIdx, size_t... Is>
@@ -4312,7 +4236,7 @@ read_varint_primitive_fields(T &obj, Buffer &buffer, uint32_t &offset,
                              Error &error, std::index_sequence<Is...>) {
   // Read each varint field using helper function - no lambda overhead
   // Is are 0, 1, 2, ... so actual sorted position is StartIdx + Is
-  // Checked tagged readers set Error without advancing a failed field's
+  // Checked local-offset readers set Error without advancing a failed field's
   // offset. Preserve lazy propagation; the root read boundary observes it.
   (read_single_varint_field<T, StartIdx + Is>(obj, buffer, offset, error), ...);
 }
@@ -4438,8 +4362,103 @@ read_struct_fields_impl_fast(T &obj, ReadContext &ctx,
   }
 }
 
+template <typename T, size_t SortedIndex>
+bool skip_removed_struct_case(ReadContext &ctx,
+                              const FieldType &remote_field_type,
+                              int16_t matched_id) {
+  if (matched_id / 2 != static_cast<int16_t>(SortedIndex)) {
+    return false;
+  }
+  using Helpers = CompileTimeFieldHelpers<T>;
+  constexpr size_t original_index = Helpers::sorted_indices[SortedIndex];
+  using RawFieldType =
+      typename Helpers::template RawFieldTypeFor<original_index>;
+  using LocalFieldType = unwrap_field_t<RawFieldType>;
+  if constexpr (!is_shared_ptr_v<LocalFieldType>) {
+    return false;
+  } else {
+    using Pointee = typename LocalFieldType::element_type;
+    if constexpr (!is_generated_struct_serializer_v<Pointee> ||
+                  !std::is_default_constructible_v<Pointee> ||
+                  std::is_abstract_v<Pointee>) {
+      return false;
+    } else {
+      int8_t flag = ctx.read_int8(ctx.error());
+      if (FORY_PREDICT_FALSE(ctx.has_error())) {
+        return true;
+      }
+      if (flag == NULL_FLAG) {
+        return true;
+      }
+      if (flag == REF_FLAG) {
+        (void)ctx.read_var_uint32(ctx.error());
+        return true;
+      }
+      if (flag == NOT_NULL_VALUE_FLAG) {
+        skip_field_value(ctx, remote_field_type, RefMode::None);
+        return true;
+      }
+      if (FORY_PREDICT_FALSE(flag != REF_VALUE_FLAG)) {
+        ctx.set_error(
+            Error::invalid_ref("Unexpected reference flag value: " +
+                               std::to_string(static_cast<int>(flag))));
+        return true;
+      }
+      if (FORY_PREDICT_FALSE(!ctx.track_ref())) {
+        ctx.set_error(Error::invalid_ref(
+            "REF_VALUE flag encountered when reference tracking disabled"));
+        return true;
+      }
+      uint32_t ref_id = ctx.ref_reader().reserve_ref_id();
+      if (FORY_PREDICT_FALSE(!ctx.reserve_graph_memory(sizeof(Pointee)))) {
+        return true;
+      }
+      auto owner = std::make_shared<Pointee>();
+      // This empty object is the final owner for the removed field. Publishing
+      // it before consuming the body lets later mapped Ref fields resolve the
+      // same identity without registering or materializing the remote Struct.
+      ctx.ref_reader().store_shared_ref_at(ref_id, owner);
+      skip_field_value(ctx, remote_field_type, RefMode::None);
+      return true;
+    }
+  }
+}
+
+template <typename T, size_t... Indices>
+bool skip_removed_struct_owner(ReadContext &ctx,
+                               const FieldType &remote_field_type,
+                               int16_t matched_id,
+                               std::index_sequence<Indices...>) {
+  return (
+      false || ... ||
+      skip_removed_struct_case<T, Indices>(ctx, remote_field_type, matched_id));
+}
+
+template <typename T, size_t... Indices>
+bool skip_removed_tracked_struct(ReadContext &ctx,
+                                 const std::vector<FieldInfo> &remote_fields,
+                                 size_t remote_idx,
+                                 std::index_sequence<Indices...> indices) {
+  const FieldType &removed_type = remote_fields[remote_idx].field_type;
+  if (removed_type.ref_mode != RefMode::Tracking ||
+      !is_struct_type(static_cast<TypeId>(removed_type.type_id))) {
+    return false;
+  }
+  for (size_t i = remote_idx + 1; i < remote_fields.size(); ++i) {
+    const FieldInfo &candidate = remote_fields[i];
+    if (candidate.local_dispatch_id >= 0 &&
+        candidate.field_type == removed_type) {
+      if (skip_removed_struct_owner<T>(ctx, removed_type,
+                                       candidate.local_dispatch_id, indices)) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
 /// Read struct fields with schema evolution (compatible mode)
-/// Reads fields in remote schema order, dispatching by field_id to local fields
+/// Reads fields in remote schema order, dispatching to local fields.
 template <typename T, size_t... Indices>
 FORY_NOINLINE void
 read_struct_fields_compatible(T &obj, ReadContext &ctx,
@@ -4512,15 +4531,18 @@ read_struct_fields_compatible(T &obj, ReadContext &ctx,
   // Iterate through remote fields in their serialization order
   for (size_t remote_idx = 0; remote_idx < remote_fields.size(); ++remote_idx) {
     const auto &remote_field = remote_fields[remote_idx];
-    int16_t field_id = remote_field.field_id;
+    int16_t dispatch_id = remote_field.local_dispatch_id;
 
-    if (field_id == -1) {
+    if (dispatch_id == -1) {
       if (use_exact_offset_reads) {
         buffer.reader_index(offset);
       }
       // Field unknown locally — skip its value
       RefMode remote_ref_mode = remote_field.field_type.ref_mode;
-      skip_field_value(ctx, remote_field.field_type, remote_ref_mode);
+      if (!skip_removed_tracked_struct<T>(ctx, remote_fields, remote_idx,
+                                          std::index_sequence<Indices...>{})) {
+        skip_field_value(ctx, remote_field.field_type, remote_ref_mode);
+      }
       if (FORY_PREDICT_FALSE(ctx.has_error())) {
         return;
       }
@@ -4530,24 +4552,24 @@ read_struct_fields_compatible(T &obj, ReadContext &ctx,
       continue;
     }
 
-    switch (field_id) {
+    switch (dispatch_id) {
       FORY_COMPAT_LOOP_SWITCH_CASES_128()
     default:
       if constexpr (128U < total_cases) {
-        if ((field_id & 1) == 0) {
+        if ((dispatch_id & 1) == 0) {
           if (use_exact_offset_reads) {
-            dispatch_compat_exact_read_at_impl<T, 128>(obj, ctx, field_id,
+            dispatch_compat_exact_read_at_impl<T, 128>(obj, ctx, dispatch_id,
                                                        offset);
           } else {
-            dispatch_compat_exact_read_impl<T, 128>(obj, ctx, field_id);
+            dispatch_compat_exact_read_impl<T, 128>(obj, ctx, dispatch_id);
           }
         } else {
           if (use_exact_offset_reads) {
             dispatch_compat_conversion_read_at_impl<T, 128>(
-                obj, ctx, field_id, remote_field.field_type, offset);
+                obj, ctx, dispatch_id, remote_field.field_type, offset);
           } else {
             dispatch_compat_conversion_read_impl<T, 128>(
-                obj, ctx, field_id, remote_field.field_type);
+                obj, ctx, dispatch_id, remote_field.field_type);
           }
         }
       } else {

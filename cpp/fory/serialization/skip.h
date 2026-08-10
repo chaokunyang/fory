@@ -38,6 +38,14 @@ namespace serialization {
 void skip_field_value(ReadContext &ctx, const FieldType &field_type,
                       RefMode ref_mode);
 
+namespace detail {
+
+/// Skip a value whose type information was already read from the stream.
+void skip_value_with_type_info(ReadContext &ctx, const TypeInfo &type_info,
+                               RefMode ref_mode);
+
+} // namespace detail
+
 /// skip a varint value
 void skip_varint(ReadContext &ctx);
 

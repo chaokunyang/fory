@@ -75,6 +75,13 @@ struct NestedStruct {
   FORY_STRUCT(NestedStruct, point, label);
 };
 
+struct FixedNamedStruct {
+  int32_t value = 0;
+  FORY_STRUCT(FixedNamedStruct, value);
+};
+
+FORY_STRUCT_EVOLVING(FixedNamedStruct, false);
+
 enum class Color { RED, GREEN, BLUE };
 enum class SignedScopedStatus : int32_t { NEG = -3, ZERO = 0, LARGE = 42 };
 FORY_ENUM(SignedScopedStatus, NEG, ZERO, LARGE);
@@ -141,6 +148,37 @@ compute_body_only_type_meta_hash_bits_for_test(const uint8_t *meta_bytes,
     shifted = ~shifted + 1;
   }
   return shifted & kHashBitsMask;
+}
+
+std::vector<uint8_t> encode_type_meta_body(Buffer &body,
+                                           bool valid_hash = true) {
+  constexpr uint64_t kMetaSizeMask = 0xff;
+  const uint32_t meta_size = body.writer_index();
+  uint64_t header = std::min<uint64_t>(kMetaSizeMask, meta_size);
+  header |=
+      compute_type_meta_hash_bits_for_test(body.data(), meta_size, header);
+  if (!valid_hash) {
+    header ^= uint64_t{1} << 63;
+  }
+
+  Buffer encoded;
+  encoded.write_bytes(reinterpret_cast<const uint8_t *>(&header),
+                      sizeof(header));
+  if (meta_size >= kMetaSizeMask) {
+    encoded.write_var_uint32(meta_size - kMetaSizeMask);
+  }
+  encoded.write_bytes(body.data(), meta_size);
+  return std::vector<uint8_t>(encoded.data(),
+                              encoded.data() + encoded.writer_index());
+}
+
+void write_list_field_type(Buffer &body, size_t depth) {
+  ASSERT_GT(depth, 0U);
+  body.write_uint8(static_cast<uint8_t>(TypeId::LIST));
+  for (size_t i = 1; i < depth; ++i) {
+    body.write_var_uint32(static_cast<uint32_t>(TypeId::LIST) << 2);
+  }
+  body.write_var_uint32(static_cast<uint32_t>(TypeId::NONE) << 2);
 }
 
 } // namespace
@@ -599,6 +637,22 @@ TEST(SerializationTest, DateSkipConsumesVarInt64DayCount) {
             write_ctx.buffer().writer_index());
 }
 
+TEST(SerializationTest, StringSkipRejectsWideLength) {
+  Config config;
+  ReadContext ctx(config, std::make_unique<TypeResolver>());
+  Buffer buffer;
+  const uint64_t wide_length =
+      static_cast<uint64_t>(std::numeric_limits<uint32_t>::max()) + 1;
+  buffer.write_var_uint36_small(wide_length << 2);
+  ctx.attach(buffer);
+
+  skip_field_value(ctx, FieldType(static_cast<uint32_t>(TypeId::STRING), false),
+                   RefMode::None);
+  ASSERT_TRUE(ctx.has_error());
+  EXPECT_EQ(ctx.error().code(), ErrorCode::InvalidData);
+  EXPECT_EQ(buffer.reader_index(), buffer.writer_index());
+}
+
 TEST(SerializationTest, DecimalRoundTripsEdgeCases) {
   auto fory =
       Fory::builder().xlang(true).compatible(false).track_ref(false).build();
@@ -723,6 +777,119 @@ TEST(SerializationTest, DurationUsesSecondsAndNanosecondsPayload) {
     EXPECT_EQ(read_ctx.buffer().reader_index(),
               write_ctx.buffer().writer_index());
   }
+}
+
+TEST(SerializationTest, DurationCarrierBounds) {
+  struct TestCase {
+    int64_t seconds;
+    int32_t nanos;
+    int64_t expected;
+  };
+  const std::vector<TestCase> valid = {
+      {-9'223'372'037, 145'224'192, std::numeric_limits<int64_t>::min()},
+      {9'223'372'036, 854'775'807, std::numeric_limits<int64_t>::max()},
+      {9'223'372'037, -200'000'000, 9'223'372'036'800'000'000},
+  };
+  auto fory =
+      Fory::builder().xlang(true).compatible(false).track_ref(false).build();
+
+  for (const TestCase &test_case : valid) {
+    Buffer buffer;
+    buffer.write_var_int64(test_case.seconds);
+    buffer.write_int32(test_case.nanos);
+    ReadContext read_ctx(fory.config(), fory.type_resolver().clone());
+    read_ctx.attach(buffer);
+    Duration value = Serializer<Duration>::read_data(read_ctx);
+    ASSERT_FALSE(read_ctx.has_error()) << read_ctx.error().to_string();
+    EXPECT_EQ(value.count(), test_case.expected);
+  }
+
+  for (const auto &parts :
+       {std::pair<int64_t, int32_t>{-9'223'372'037, 145'224'191},
+        std::pair<int64_t, int32_t>{9'223'372'036, 854'775'808}}) {
+    Buffer buffer;
+    buffer.write_var_int64(parts.first);
+    buffer.write_int32(parts.second);
+    ReadContext read_ctx(fory.config(), fory.type_resolver().clone());
+    read_ctx.attach(buffer);
+    Serializer<Duration>::read_data(read_ctx);
+    EXPECT_TRUE(read_ctx.has_error());
+  }
+
+  Buffer truncated;
+  truncated.write_var_int64(std::numeric_limits<int64_t>::max());
+  ReadContext truncated_ctx(fory.config(), fory.type_resolver().clone());
+  truncated_ctx.attach(truncated);
+  Serializer<Duration>::read_data(truncated_ctx);
+  EXPECT_TRUE(truncated_ctx.has_error());
+}
+
+TEST(SerializationTest, TimestampCarrierBounds) {
+  struct TestCase {
+    int64_t seconds;
+    uint32_t nanos;
+    int64_t expected;
+  };
+  const std::vector<TestCase> valid = {
+      {-9'223'372'037, 145'224'192, std::numeric_limits<int64_t>::min()},
+      {9'223'372'036, 854'775'807, std::numeric_limits<int64_t>::max()},
+      {-9'223'372'038, 4'294'967'295, -9'223'372'033'705'032'705},
+  };
+  auto fory =
+      Fory::builder().xlang(true).compatible(false).track_ref(false).build();
+
+  for (const TestCase &test_case : valid) {
+    Buffer buffer;
+    buffer.write_int64(test_case.seconds);
+    buffer.write_uint32(test_case.nanos);
+    ReadContext read_ctx(fory.config(), fory.type_resolver().clone());
+    read_ctx.attach(buffer);
+    Timestamp value = Serializer<Timestamp>::read_data(read_ctx);
+    ASSERT_FALSE(read_ctx.has_error()) << read_ctx.error().to_string();
+    EXPECT_EQ(value.time_since_epoch().count(), test_case.expected);
+  }
+
+  for (const auto &parts :
+       {std::pair<int64_t, uint32_t>{-9'223'372'037, 145'224'191},
+        std::pair<int64_t, uint32_t>{9'223'372'036, 854'775'808}}) {
+    Buffer buffer;
+    buffer.write_int64(parts.first);
+    buffer.write_uint32(parts.second);
+    ReadContext read_ctx(fory.config(), fory.type_resolver().clone());
+    read_ctx.attach(buffer);
+    Serializer<Timestamp>::read_data(read_ctx);
+    EXPECT_TRUE(read_ctx.has_error());
+  }
+
+  Buffer truncated;
+  truncated.write_int64(std::numeric_limits<int64_t>::min());
+  ReadContext truncated_ctx(fory.config(), fory.type_resolver().clone());
+  truncated_ctx.attach(truncated);
+  Serializer<Timestamp>::read_data(truncated_ctx);
+  EXPECT_TRUE(truncated_ctx.has_error());
+}
+
+TEST(SerializationTest, ChronoTemporalBounds) {
+  auto fory =
+      Fory::builder().xlang(true).compatible(false).track_ref(false).build();
+
+  Buffer duration_buffer;
+  duration_buffer.write_var_int64(9'223'372'036);
+  duration_buffer.write_int32(854'775'808);
+  ReadContext duration_ctx(fory.config(), fory.type_resolver().clone());
+  duration_ctx.attach(duration_buffer);
+  Serializer<std::chrono::nanoseconds>::read_data(duration_ctx);
+  EXPECT_TRUE(duration_ctx.has_error());
+
+  using ChronoTimestamp = std::chrono::time_point<std::chrono::system_clock,
+                                                  std::chrono::nanoseconds>;
+  Buffer timestamp_buffer;
+  timestamp_buffer.write_int64(-9'223'372'037);
+  timestamp_buffer.write_uint32(145'224'191);
+  ReadContext timestamp_ctx(fory.config(), fory.type_resolver().clone());
+  timestamp_ctx.attach(timestamp_buffer);
+  Serializer<ChronoTimestamp>::read_data(timestamp_ctx);
+  EXPECT_TRUE(timestamp_ctx.has_error());
 }
 
 TEST(SerializationTest, DurationSkipConsumesSecondsAndNanosecondsPayload) {
@@ -1180,6 +1347,8 @@ TEST(SerializationTest, RegistrationByIdFailureDoesNotLeakTypeInfo) {
 
   auto simple_info = resolver.get_type_info<::SimpleStruct>();
   ASSERT_TRUE(simple_info.ok());
+  [[maybe_unused]] auto name_index_member = &TypeInfo::name_to_index;
+  EXPECT_FALSE(simple_info.value()->name_to_index.empty());
   auto by_user_id =
       resolver.get_user_type_info_by_id(simple_info.value()->type_id, 1);
   ASSERT_TRUE(by_user_id.ok());
@@ -1203,7 +1372,12 @@ TEST(SerializationTest, RegistrationByNameFailureDoesNotLeakTypeInfo) {
 
   auto simple_info = resolver.get_type_info<::SimpleStruct>();
   ASSERT_TRUE(simple_info.ok());
-  auto by_name = resolver.get_type_info_by_name("demo", "SharedType");
+  using LegacyLookup = Result<const TypeInfo *, Error> (TypeResolver::*)(
+      const std::string &, const std::string &) const;
+  [[maybe_unused]] LegacyLookup legacy_lookup =
+      static_cast<LegacyLookup>(&TypeResolver::get_type_info_by_name);
+  auto by_name = resolver.get_type_info_by_name(std::string("demo"),
+                                                std::string("SharedType"));
   ASSERT_TRUE(by_name.ok());
   EXPECT_EQ(by_name.value(), simple_info.value());
 
@@ -1211,6 +1385,63 @@ TEST(SerializationTest, RegistrationByNameFailureDoesNotLeakTypeInfo) {
       fory.register_struct<::NestedStruct>("demo", "Nested.Type");
   EXPECT_FALSE(dotted_type_name.ok());
   EXPECT_EQ(dotted_type_name.error().code(), ErrorCode::Invalid);
+}
+
+TEST(SerializationTest, NamedTypeIdentityPreservesNul) {
+  auto fory =
+      Fory::builder().xlang(true).compatible(false).track_ref(false).build();
+  const std::string first_name("b\0c", 3);
+  const std::string second_namespace("a\0b", 3);
+  ASSERT_TRUE(fory.register_struct<::SimpleStruct>("a", first_name).ok());
+  ASSERT_TRUE(fory.register_struct<::NestedStruct>(second_namespace, "c").ok());
+
+  auto first = fory.type_resolver().get_type_info<::SimpleStruct>();
+  auto second = fory.type_resolver().get_type_info<::NestedStruct>();
+  ASSERT_TRUE(first.ok());
+  ASSERT_TRUE(second.ok());
+  auto first_by_name = fory.type_resolver().get_type_info_by_name(
+      "a", first_name, static_cast<uint32_t>(TypeId::NAMED_STRUCT));
+  auto second_by_name = fory.type_resolver().get_type_info_by_name(
+      second_namespace, "c", static_cast<uint32_t>(TypeId::NAMED_STRUCT));
+  ASSERT_TRUE(first_by_name.ok());
+  ASSERT_TRUE(second_by_name.ok());
+  EXPECT_EQ(first_by_name.value(), first.value());
+  EXPECT_EQ(second_by_name.value(), second.value());
+  EXPECT_NE(first_by_name.value(), second_by_name.value());
+}
+
+TEST(SerializationTest, NamedTypeIdentityIncludesKind) {
+  using LocalUnion = std::variant<int32_t, std::string>;
+  auto fory =
+      Fory::builder().xlang(true).compatible(true).track_ref(false).build();
+  ASSERT_TRUE(fory.register_struct<::SimpleStruct>("kind", "Shared").ok());
+  ASSERT_TRUE(fory.register_struct<::FixedNamedStruct>("kind", "Shared").ok());
+  ASSERT_TRUE(fory.register_enum<SignedScopedStatus>("kind", "Shared").ok());
+  ASSERT_TRUE(fory.register_extension_type<IdLimitExt>("kind", "Shared").ok());
+  ASSERT_TRUE(fory.register_union<LocalUnion>("kind", "Shared").ok());
+
+  const std::array<uint32_t, 5> kinds = {
+      static_cast<uint32_t>(TypeId::NAMED_COMPATIBLE_STRUCT),
+      static_cast<uint32_t>(TypeId::NAMED_STRUCT),
+      static_cast<uint32_t>(TypeId::NAMED_ENUM),
+      static_cast<uint32_t>(TypeId::NAMED_EXT),
+      static_cast<uint32_t>(TypeId::NAMED_UNION)};
+  std::array<const TypeInfo *, 5> infos{};
+  for (size_t i = 0; i < kinds.size(); ++i) {
+    auto info =
+        fory.type_resolver().get_type_info_by_name("kind", "Shared", kinds[i]);
+    ASSERT_TRUE(info.ok()) << info.error().to_string();
+    EXPECT_EQ(info.value()->type_id, kinds[i]);
+    infos[i] = info.value();
+  }
+  for (size_t i = 0; i < infos.size(); ++i) {
+    for (size_t j = i + 1; j < infos.size(); ++j) {
+      EXPECT_NE(infos[i], infos[j]);
+    }
+  }
+  auto ambiguous = fory.type_resolver().get_type_info_by_name(
+      std::string("kind"), std::string("Shared"));
+  EXPECT_FALSE(ambiguous.ok());
 }
 
 static std::vector<uint8_t> make_remote_type_meta(const std::string &type_name,
@@ -1236,6 +1467,20 @@ make_remote_non_struct_type_meta(TypeId type_id, const std::string &type_name) {
   EXPECT_TRUE(bytes.ok()) << "TypeMeta serialization failed: "
                           << bytes.error().to_string();
   return bytes.value();
+}
+
+static std::vector<uint8_t>
+make_utf8_named_enum_meta(const std::string &type_name) {
+  auto write_name = [](Buffer &body, std::string_view value) {
+    body.write_uint8(static_cast<uint8_t>(value.size() << 2));
+    body.write_bytes(reinterpret_cast<const uint8_t *>(value.data()),
+                     value.size());
+  };
+  Buffer body;
+  body.write_uint8(1);
+  write_name(body, "example");
+  write_name(body, type_name);
+  return encode_type_meta_body(body);
 }
 
 static Result<const TypeInfo *, Error>
@@ -1279,9 +1524,13 @@ TEST(SerializationTest, RemoteNonStructTypeMetaUsesSchemaLimit) {
 
   auto second = append_and_read_type_meta(
       ctx, make_remote_non_struct_type_meta(TypeId::NAMED_EXT, "RemoteEnum"));
-  EXPECT_FALSE(second.ok());
-  ASSERT_FALSE(second.ok());
-  EXPECT_EQ(second.error().code(), ErrorCode::InvalidData);
+  ASSERT_TRUE(second.ok()) << second.error().to_string();
+  EXPECT_EQ(first.value()->type_id, static_cast<uint32_t>(TypeId::NAMED_ENUM));
+  EXPECT_EQ(second.value()->type_id, static_cast<uint32_t>(TypeId::NAMED_EXT));
+
+  auto enum_v2 =
+      append_and_read_type_meta(ctx, make_utf8_named_enum_meta("RemoteEnum"));
+  EXPECT_FALSE(enum_v2.ok());
 }
 
 TEST(SerializationTest, ExactLocalNonStructTypeMetaBypassesLimit) {
@@ -1292,6 +1541,7 @@ TEST(SerializationTest, ExactLocalNonStructTypeMetaBypassesLimit) {
                   .build();
   ASSERT_TRUE(
       fory.register_enum<SignedScopedStatus>("example", "SharedEnum").ok());
+  ASSERT_TRUE(fory.serialize(SignedScopedStatus::ZERO).ok());
   auto local_type_info =
       fory.type_resolver().get_type_info<SignedScopedStatus>();
   ASSERT_TRUE(local_type_info.ok()) << local_type_info.error().to_string();
@@ -1300,6 +1550,8 @@ TEST(SerializationTest, ExactLocalNonStructTypeMetaBypassesLimit) {
 
   auto first = append_and_read_type_meta(ctx, exact);
   ASSERT_TRUE(first.ok()) << first.error().to_string();
+  EXPECT_FALSE(first.value()->type_def.empty());
+  EXPECT_EQ(first.value()->type_name, "SharedEnum");
   auto second = append_and_read_type_meta(
       ctx, make_remote_non_struct_type_meta(TypeId::NAMED_EXT, "SharedEnum"));
   ASSERT_TRUE(second.ok()) << second.error().to_string();
@@ -1313,6 +1565,7 @@ TEST(SerializationTest, ExactLocalNamedUnionTypeMetaBypassesLimit) {
                   .max_schema_versions_per_type(1)
                   .build();
   ASSERT_TRUE(fory.register_union<LocalUnion>("example", "SharedUnion").ok());
+  ASSERT_TRUE(fory.serialize(LocalUnion{int32_t{1}}).ok());
   auto local_type_info = fory.type_resolver().get_type_info<LocalUnion>();
   ASSERT_TRUE(local_type_info.ok()) << local_type_info.error().to_string();
   std::vector<uint8_t> exact = local_type_info.value()->type_def;
@@ -1321,9 +1574,48 @@ TEST(SerializationTest, ExactLocalNamedUnionTypeMetaBypassesLimit) {
 
   auto first = append_and_read_type_meta(ctx, exact);
   ASSERT_TRUE(first.ok()) << first.error().to_string();
+  EXPECT_FALSE(first.value()->type_def.empty());
+  EXPECT_EQ(first.value()->type_name, "SharedUnion");
   auto second = append_and_read_type_meta(
       ctx, make_remote_non_struct_type_meta(TypeId::NAMED_EXT, "SharedUnion"));
   ASSERT_TRUE(second.ok()) << second.error().to_string();
+}
+
+TEST(SerializationTest, RemoteTypeInfoKeepsRemoteSchemaOnly) {
+  auto fory = Fory::builder().xlang(true).compatible(true).build();
+  ASSERT_TRUE(fory.register_struct<SimpleStruct>("example", "CacheOwner").ok());
+  ASSERT_TRUE(fory.serialize(SimpleStruct{1, 2}).ok());
+  auto local = fory.type_resolver().get_type_info<SimpleStruct>();
+  ASSERT_TRUE(local.ok()) << local.error().to_string();
+  ASSERT_EQ(local.value()->type_id,
+            static_cast<uint32_t>(TypeId::NAMED_COMPATIBLE_STRUCT));
+
+  std::vector<FieldInfo> fields;
+  fields.emplace_back(
+      "remote_value",
+      FieldType(static_cast<uint32_t>(TypeId::VARINT32), false));
+  TypeMeta remote =
+      TypeMeta::from_fields(local.value()->type_id, "example", "CacheOwner",
+                            true, kInvalidUserTypeId, std::move(fields));
+  auto remote_bytes = remote.to_bytes();
+  ASSERT_TRUE(remote_bytes.ok()) << remote_bytes.error().to_string();
+
+  ReadContext ctx(fory.config(), fory.type_resolver().clone());
+  auto first = append_and_read_type_meta(ctx, remote_bytes.value());
+  ASSERT_TRUE(first.ok()) << first.error().to_string();
+  ASSERT_TRUE(first.value()->harness.valid());
+  ASSERT_NE(first.value()->type_meta, nullptr);
+  EXPECT_EQ(first.value()->type_meta->type_name, "CacheOwner");
+  EXPECT_TRUE(first.value()->type_def.empty());
+  EXPECT_TRUE(first.value()->sorted_indices.empty());
+  EXPECT_TRUE(first.value()->name_to_index.empty());
+  EXPECT_TRUE(first.value()->namespace_name.empty());
+  EXPECT_TRUE(first.value()->type_name.empty());
+  EXPECT_FALSE(first.value()->register_by_name);
+
+  auto second = append_and_read_type_meta(ctx, remote_bytes.value());
+  ASSERT_TRUE(second.ok()) << second.error().to_string();
+  EXPECT_EQ(second.value(), first.value());
 }
 
 TEST(SerializationTest, RemoteSchemaLimitKeepsUnknownTypesSeparate) {
@@ -1487,57 +1779,97 @@ TEST(SerializationTest, TypeMetaHeaderUses52BitMetadataHash) {
             parsed.value()->get_hash());
 }
 
-TEST(SerializationTest, TypeMetaParsesDeepFieldTypeIteratively) {
-  constexpr uint32_t kDepth = 4000;
-  constexpr uint64_t kMetaSizeMask = 0xff;
+TEST(SerializationTest, TypeMetaBoundsFieldNesting) {
+  auto make_body = [](size_t depth) {
+    Buffer body;
+    body.write_uint8(0x81);
+    body.write_var_uint32(1);
+    body.write_uint8(0xc0);
+    write_list_field_type(body, depth);
+    return encode_type_meta_body(body);
+  };
 
+  std::vector<uint8_t> accepted_bytes = make_body(FieldType::kMaxNesting);
+  Buffer accepted(accepted_bytes);
+  auto parsed = TypeMeta::from_bytes(accepted, nullptr);
+  ASSERT_TRUE(parsed.ok()) << parsed.error().to_string();
+  EXPECT_EQ(accepted.reader_index(), accepted.writer_index());
+  parsed.value().reset();
+
+  std::vector<uint8_t> rejected_bytes = make_body(FieldType::kMaxNesting + 1);
+  Buffer rejected(rejected_bytes);
+  auto over_limit = TypeMeta::from_bytes(rejected, nullptr);
+  EXPECT_FALSE(over_limit.ok());
+}
+
+TEST(SerializationTest, TypeMetaUnwindsLateChildren) {
+  Buffer map_body;
+  map_body.write_uint8(0x81);
+  map_body.write_var_uint32(1);
+  map_body.write_uint8(0xc0);
+  map_body.write_uint8(static_cast<uint8_t>(TypeId::MAP));
+  for (size_t i = 0; i < FieldType::kMaxNesting - 1; ++i) {
+    map_body.write_var_uint32(static_cast<uint32_t>(TypeId::LIST) << 2);
+  }
+  map_body.write_var_uint32(static_cast<uint32_t>(TypeId::NONE) << 2);
+  for (size_t i = 0; i < FieldType::kMaxNesting; ++i) {
+    map_body.write_var_uint32(static_cast<uint32_t>(TypeId::LIST) << 2);
+  }
+  map_body.write_var_uint32(static_cast<uint32_t>(TypeId::NONE) << 2);
+  std::vector<uint8_t> map_bytes = encode_type_meta_body(map_body);
+  Buffer map_input(map_bytes);
+  EXPECT_FALSE(TypeMeta::from_bytes(map_input, nullptr).ok());
+
+  Buffer fields_body;
+  fields_body.write_uint8(0x82);
+  fields_body.write_var_uint32(1);
+  fields_body.write_uint8(0xc0);
+  write_list_field_type(fields_body, FieldType::kMaxNesting);
+  fields_body.write_uint8(0xc4);
+  write_list_field_type(fields_body, FieldType::kMaxNesting + 1);
+  std::vector<uint8_t> fields_bytes = encode_type_meta_body(fields_body);
+  Buffer fields_input(fields_bytes);
+  EXPECT_FALSE(TypeMeta::from_bytes(fields_input, nullptr).ok());
+}
+
+TEST(SerializationTest, TypeMetaUnwindsAfterHash) {
   Buffer body;
   body.write_uint8(0x81);
   body.write_var_uint32(1);
   body.write_uint8(0xc0);
-  body.write_uint8(static_cast<uint8_t>(TypeId::LIST));
-  for (uint32_t i = 1; i < kDepth; ++i) {
-    body.write_var_uint32(static_cast<uint32_t>(TypeId::LIST) << 2);
+  write_list_field_type(body, FieldType::kMaxNesting);
+  std::vector<uint8_t> bytes = encode_type_meta_body(body, false);
+  Buffer input(bytes);
+  EXPECT_FALSE(TypeMeta::from_bytes(input, nullptr).ok());
+}
+
+TEST(SerializationTest, TypeMetaUnwindsOnAdmission) {
+  Buffer shallow_body;
+  shallow_body.write_uint8(0x81);
+  shallow_body.write_var_uint32(1);
+  shallow_body.write_uint8(0xc0);
+  shallow_body.write_uint8(static_cast<uint8_t>(TypeId::NONE));
+  std::vector<uint8_t> shallow = encode_type_meta_body(shallow_body);
+
+  Buffer deep_body;
+  deep_body.write_uint8(0x81);
+  deep_body.write_var_uint32(1);
+  deep_body.write_uint8(0xc0);
+  write_list_field_type(deep_body, FieldType::kMaxNesting);
+  std::vector<uint8_t> deep = encode_type_meta_body(deep_body);
+
+  Config config;
+  config.compatible = true;
+  config.max_schema_versions_per_type = 1;
+  {
+    ReadContext ctx(config, std::make_unique<TypeResolver>());
+    ASSERT_TRUE(append_and_read_type_meta(ctx, shallow).ok());
+    EXPECT_FALSE(append_and_read_type_meta(ctx, deep).ok());
   }
-  body.write_var_uint32(static_cast<uint32_t>(TypeId::NONE) << 2);
-  ASSERT_LE(body.writer_index(), 4096U);
-
-  const uint32_t meta_size = body.writer_index();
-  uint64_t header = std::min<uint64_t>(kMetaSizeMask, meta_size);
-  header |=
-      compute_type_meta_hash_bits_for_test(body.data(), meta_size, header);
-
-  Buffer encoded;
-  encoded.write_bytes(reinterpret_cast<const uint8_t *>(&header),
-                      sizeof(header));
-  encoded.write_var_uint32(meta_size - kMetaSizeMask);
-  encoded.write_bytes(body.data(), meta_size);
-
-  auto parsed = TypeMeta::from_bytes(encoded, nullptr);
-  ASSERT_TRUE(parsed.ok()) << parsed.error().to_string();
-  EXPECT_EQ(encoded.reader_index(), encoded.writer_index());
-  ASSERT_EQ(parsed.value()->field_infos.size(), 1U);
-
-  const FieldType *field_type = &parsed.value()->field_infos.front().field_type;
-  for (uint32_t i = 0; i < kDepth; ++i) {
-    ASSERT_EQ(field_type->type_id, static_cast<uint32_t>(TypeId::LIST));
-    ASSERT_EQ(field_type->generics.size(), 1U);
-    field_type = &field_type->generics.front();
+  {
+    ReadContext ctx(config, std::make_unique<TypeResolver>());
+    ASSERT_TRUE(append_and_read_type_meta(ctx, deep).ok());
   }
-  EXPECT_EQ(field_type->type_id, static_cast<uint32_t>(TypeId::NONE));
-  EXPECT_TRUE(field_type->generics.empty());
-
-  uint64_t expected_fingerprint = FieldType::compute_compatible_fingerprint(
-      static_cast<uint32_t>(TypeId::NONE), {});
-  std::vector<FieldType> child(1);
-  for (uint32_t i = 0; i < kDepth; ++i) {
-    child[0].compatible_fingerprint = expected_fingerprint;
-    expected_fingerprint = FieldType::compute_compatible_fingerprint(
-        static_cast<uint32_t>(TypeId::LIST), child);
-  }
-  EXPECT_EQ(
-      parsed.value()->field_infos.front().field_type.compatible_fingerprint,
-      expected_fingerprint);
 }
 
 TEST(SerializationTest, TypeMetaCannotReadPastDeclaredBody) {
@@ -1618,6 +1950,27 @@ TEST(SerializationTest, TypeMetaRejectsMaxTypeMetaBytes) {
   ASSERT_FALSE(parsed.ok());
   EXPECT_NE(parsed.error().to_string().find("max_type_meta_bytes"),
             std::string::npos);
+}
+
+TEST(SerializationTest, TypeMetaBoundsHashInputSize) {
+  constexpr uint32_t kLowSize = 0xff;
+  constexpr uint32_t kMaxHashBody =
+      static_cast<uint32_t>(std::numeric_limits<int>::max()) - 2;
+  const int64_t header = kLowSize;
+
+  Buffer supported;
+  supported.write_var_uint32(kMaxHashBody - kLowSize);
+  auto supported_result = TypeMeta::from_bytes_with_header(
+      supported, header, 512, std::numeric_limits<uint32_t>::max());
+  ASSERT_FALSE(supported_result.ok());
+  EXPECT_EQ(supported_result.error().code(), ErrorCode::BufferOutOfBound);
+
+  Buffer oversized;
+  oversized.write_var_uint32(kMaxHashBody + 1 - kLowSize);
+  auto oversized_result = TypeMeta::from_bytes_with_header(
+      oversized, header, 512, std::numeric_limits<uint32_t>::max());
+  ASSERT_FALSE(oversized_result.ok());
+  EXPECT_EQ(oversized_result.error().code(), ErrorCode::InvalidData);
 }
 
 TEST(SerializationTest, TypeMetaRejectsBodyOnlyHeaderHash) {
@@ -1855,6 +2208,87 @@ TEST(SerializationTest, ThreadSafeForyRejectsRegistrationAfterFirstSerialize) {
   EXPECT_EQ(late_registration.error().code(), ErrorCode::Invalid);
   EXPECT_NE(late_registration.error().to_string().find("Cannot register types"),
             std::string::npos);
+}
+
+TEST(SerializationTest, ThreadSafeFailedRootFreezes) {
+  auto source_resolver = std::make_shared<TypeResolver>();
+  auto fory = Fory::builder()
+                  .xlang(true)
+                  .compatible(false)
+                  .track_ref(false)
+                  .type_resolver(source_resolver)
+                  .build_thread_safe();
+
+  auto root_result = fory.deserialize<int32_t>(nullptr, 0);
+  ASSERT_FALSE(root_result.ok());
+
+  auto facade_registration = fory.register_struct<::SimpleStruct>(1);
+  ASSERT_FALSE(facade_registration.ok());
+  EXPECT_EQ(facade_registration.error().code(), ErrorCode::Invalid);
+
+  auto type_info = source_resolver->get_type_info_by_id(
+      static_cast<uint32_t>(TypeId::STRING));
+  ASSERT_TRUE(type_info.ok());
+  ASSERT_EQ(type_info.value()->harness.any_write_fn, nullptr);
+  ASSERT_EQ(type_info.value()->harness.any_read_fn, nullptr);
+
+  auto late_registration = register_any_type<std::string>(*source_resolver);
+  ASSERT_FALSE(late_registration.ok());
+  EXPECT_EQ(late_registration.error().code(), ErrorCode::Invalid);
+  EXPECT_NE(late_registration.error().to_string().find("finalized"),
+            std::string::npos);
+  EXPECT_EQ(type_info.value()->harness.any_write_fn, nullptr);
+  EXPECT_EQ(type_info.value()->harness.any_read_fn, nullptr);
+  EXPECT_FALSE(
+      source_resolver->get_type_info(std::type_index(typeid(std::string)))
+          .ok());
+}
+
+TEST(SerializationTest, ThreadSafeFirstUseRace) {
+  auto fory = Fory::builder()
+                  .xlang(true)
+                  .compatible(false)
+                  .track_ref(false)
+                  .build_thread_safe();
+
+  std::atomic<bool> start{false};
+  std::atomic<bool> root_entered{false};
+  std::atomic<bool> root_succeeded{false};
+  std::thread root_thread([&]() {
+    while (!start.load(std::memory_order_acquire)) {
+      std::this_thread::yield();
+    }
+    root_entered.store(true, std::memory_order_release);
+    root_succeeded.store(fory.serialize(int32_t{7}).ok(),
+                         std::memory_order_release);
+  });
+
+  start.store(true, std::memory_order_release);
+  while (!root_entered.load(std::memory_order_acquire)) {
+    std::this_thread::yield();
+  }
+  auto raced_registration =
+      register_any_type<std::string>(fory.type_resolver());
+  root_thread.join();
+
+  ASSERT_TRUE(root_succeeded.load(std::memory_order_acquire));
+  if (raced_registration.ok()) {
+    auto any_result = fory.serialize(std::any(std::string("registered")));
+    EXPECT_TRUE(any_result.ok()) << any_result.error().to_string();
+  } else {
+    EXPECT_EQ(raced_registration.error().code(), ErrorCode::Invalid);
+  }
+
+  std::atomic<bool> late_registration_rejected{false};
+  std::thread late_registration_thread([&]() {
+    auto late_registration = register_any_type<int64_t>(fory.type_resolver());
+    late_registration_rejected.store(!late_registration.ok() &&
+                                         late_registration.error().code() ==
+                                             ErrorCode::Invalid,
+                                     std::memory_order_release);
+  });
+  late_registration_thread.join();
+  EXPECT_TRUE(late_registration_rejected.load(std::memory_order_acquire));
 }
 
 TEST(SerializationTest, TemporalCarriersAreHashable) {

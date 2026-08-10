@@ -250,6 +250,219 @@ TEST(Buffer, TestReadVarUint36SmallTruncated) {
   EXPECT_EQ(buffer.reader_index(), 0U);
 }
 
+TEST(Buffer, VarUint36SmallUsesVarUint64) {
+  constexpr uint64_t kFirstSixByteValue = uint64_t{1} << 35;
+  constexpr uint64_t kMaxValue = (uint64_t{1} << 36) - 1;
+  const std::vector<uint64_t> values = {0x7f, 0x80, kFirstSixByteValue,
+                                        kMaxValue};
+
+  for (uint64_t value : values) {
+    std::shared_ptr<Buffer> expected;
+    std::shared_ptr<Buffer> actual;
+    ASSERT_TRUE(allocate_buffer(32, &expected));
+    ASSERT_TRUE(allocate_buffer(32, &actual));
+    expected->write_var_uint64(value);
+    actual->write_var_uint36_small(value);
+
+    ASSERT_EQ(actual->writer_index(), expected->writer_index());
+    EXPECT_EQ(
+        std::memcmp(actual->data(), expected->data(), actual->writer_index()),
+        0);
+
+    Error error;
+    EXPECT_EQ(actual->read_var_uint36_small(error), value);
+    ASSERT_TRUE(error.ok()) << error.to_string();
+    EXPECT_EQ(actual->reader_index(), actual->writer_index());
+
+    std::vector<uint8_t> exact(actual->data(),
+                               actual->data() + actual->writer_index());
+    Buffer exact_buffer(exact);
+    EXPECT_EQ(exact_buffer.read_var_uint36_small(error), value);
+    ASSERT_TRUE(error.ok()) << error.to_string();
+    EXPECT_EQ(exact_buffer.reader_index(), exact.size());
+  }
+}
+
+TEST(Buffer, WriterRangeRejectsOverflow) {
+  std::shared_ptr<Buffer> buffer;
+  ASSERT_TRUE(allocate_buffer(8, &buffer));
+
+  buffer->writer_index(8);
+  EXPECT_DEATH(buffer->writer_index(9), "Buffer overflow");
+
+  buffer->writer_index(1);
+  EXPECT_DEATH(
+      buffer->increase_writer_index(std::numeric_limits<uint32_t>::max()),
+      "Buffer overflow");
+  EXPECT_DEATH(buffer->grow(std::numeric_limits<uint32_t>::max()),
+               "Buffer overflow");
+
+  buffer->writer_index(8);
+  buffer->grow(1);
+  buffer->increase_writer_index(1);
+  EXPECT_EQ(buffer->writer_index(), 9U);
+}
+
+TEST(Buffer, OffsetRangeRejectsOverflow) {
+  std::shared_ptr<Buffer> buffer;
+  ASSERT_TRUE(allocate_buffer(8, &buffer));
+  uint32_t bytes_read = 0;
+
+  EXPECT_DEATH(
+      (void)buffer->get<uint64_t>(std::numeric_limits<uint32_t>::max()),
+      "Out of range");
+  EXPECT_DEATH(buffer->get_int24(std::numeric_limits<uint32_t>::max()),
+               "Out of range");
+  EXPECT_DEATH(buffer->put_int24(std::numeric_limits<uint32_t>::max(), 1),
+               "Buffer out of bound");
+
+  EXPECT_DEATH(buffer->get_tagged_uint64(std::numeric_limits<uint32_t>::max(),
+                                         &bytes_read),
+               "Buffer out of bound");
+  buffer->unsafe_put<uint32_t>(0, 1);
+  EXPECT_DEATH(buffer->get_tagged_int64(0, &bytes_read), "Buffer out of bound");
+  EXPECT_DEATH(
+      buffer->put_tagged_uint64(std::numeric_limits<uint32_t>::max(), 0),
+      "Buffer out of bound");
+  EXPECT_DEATH(buffer->put_tagged_int64(0, std::numeric_limits<int64_t>::max()),
+               "Buffer out of bound");
+
+  const uint8_t byte = 1;
+  EXPECT_DEATH(
+      buffer->copy_from(std::numeric_limits<uint32_t>::max(), &byte, 0, 1),
+      "Buffer overflow");
+}
+
+TEST(Buffer, RepresentedCopyChecksExtents) {
+  std::shared_ptr<Buffer> source;
+  std::shared_ptr<Buffer> destination;
+  ASSERT_TRUE(allocate_buffer(4, &source));
+  ASSERT_TRUE(allocate_buffer(2, &destination));
+
+  EXPECT_DEATH(source->copy(3, 2, destination), "Buffer out of bound");
+  EXPECT_DEATH(source->copy(0, 4, destination), "Buffer out of bound");
+
+  Buffer destination_ref(destination->data(), destination->size(), false);
+  EXPECT_DEATH(source->copy(3, 2, destination_ref), "Buffer out of bound");
+  EXPECT_DEATH(source->copy(0, 4, destination_ref), "Buffer out of bound");
+
+  source->unsafe_put<uint16_t>(0, 0x0201);
+  source->copy(0, 2, destination);
+  EXPECT_EQ(destination->get<uint16_t>(0), 0x0201);
+}
+
+TEST(Buffer, RepresentedCopySupportsOverlap) {
+  std::vector<uint8_t> bytes = {1, 2, 3, 4, 5};
+  Buffer source(bytes);
+  auto destination = std::make_shared<Buffer>(bytes.data() + 1, 4, false);
+  source.copy(0, 4, destination);
+  EXPECT_EQ(bytes, (std::vector<uint8_t>{1, 1, 2, 3, 4}));
+
+  bytes = {1, 2, 3, 4, 5};
+  Buffer source_ref(bytes);
+  Buffer destination_ref(bytes.data() + 1, 4, false);
+  source_ref.copy(0, 4, destination_ref);
+  EXPECT_EQ(bytes, (std::vector<uint8_t>{1, 1, 2, 3, 4}));
+}
+
+TEST(Buffer, VarUintPutChecksPhysicalExtent) {
+  std::shared_ptr<Buffer> one_byte;
+  std::shared_ptr<Buffer> two_bytes;
+  std::shared_ptr<Buffer> three_bytes;
+  std::shared_ptr<Buffer> four_bytes;
+  std::shared_ptr<Buffer> seven_bytes;
+  std::shared_ptr<Buffer> eight_bytes;
+  std::shared_ptr<Buffer> nine_bytes;
+  ASSERT_TRUE(allocate_buffer(1, &one_byte));
+  ASSERT_TRUE(allocate_buffer(2, &two_bytes));
+  ASSERT_TRUE(allocate_buffer(3, &three_bytes));
+  ASSERT_TRUE(allocate_buffer(4, &four_bytes));
+  ASSERT_TRUE(allocate_buffer(7, &seven_bytes));
+  ASSERT_TRUE(allocate_buffer(8, &eight_bytes));
+  ASSERT_TRUE(allocate_buffer(9, &nine_bytes));
+
+  EXPECT_EQ(one_byte->put_var_uint32(0, 0x7f), 1U);
+  EXPECT_EQ(two_bytes->put_var_uint64(0, 0x80), 2U);
+  constexpr uint32_t kThreeByteValue = uint32_t{1} << 14;
+  EXPECT_DEATH(three_bytes->put_var_uint32(0, kThreeByteValue),
+               "Buffer out of bound");
+  EXPECT_EQ(four_bytes->put_var_uint32(0, kThreeByteValue), 3U);
+  constexpr uint64_t kFourByteValue = uint64_t{1} << 21;
+  EXPECT_EQ(four_bytes->put_var_uint64(0, kFourByteValue), 4U);
+
+  constexpr uint32_t kFiveByteValue = uint32_t{1} << 28;
+  EXPECT_DEATH(seven_bytes->put_var_uint32(0, kFiveByteValue),
+               "Buffer out of bound");
+  EXPECT_EQ(eight_bytes->put_var_uint32(0, kFiveByteValue), 5U);
+  uint32_t bytes_read = 0;
+  EXPECT_EQ(eight_bytes->get_var_uint32(0, &bytes_read), kFiveByteValue);
+  EXPECT_EQ(bytes_read, 5U);
+
+  constexpr uint64_t kNineByteValue = uint64_t{1} << 56;
+  EXPECT_DEATH(eight_bytes->put_var_uint64(0, kNineByteValue),
+               "Buffer out of bound");
+  EXPECT_EQ(nine_bytes->put_var_uint64(0, kNineByteValue), 9U);
+  EXPECT_EQ(nine_bytes->get_var_uint64(0, &bytes_read), kNineByteValue);
+  EXPECT_EQ(bytes_read, 9U);
+}
+
+TEST(Buffer, NegativeEqualsReturnsFalse) {
+  std::vector<uint8_t> bytes = {1, 2, 3};
+  Buffer first(bytes);
+  Buffer second(bytes);
+
+  EXPECT_FALSE(first.equals(second, -1));
+  EXPECT_FALSE(first.equals(first, -1));
+}
+
+TEST(Buffer, EmptyRangeOperations) {
+  Buffer first;
+  Buffer second;
+  std::vector<uint8_t> byte = {1};
+  Buffer nonempty(byte);
+
+  EXPECT_TRUE(first.equals(second));
+  EXPECT_TRUE(first.equals(second, 0));
+  EXPECT_TRUE(first.equals(nonempty, 0));
+
+  auto shared_out = std::make_shared<Buffer>();
+  first.copy(0, 0, shared_out);
+  first.copy(0, 0, second);
+  first.copy(0, 0, static_cast<uint8_t *>(nullptr));
+  first.copy(0, 0, static_cast<uint8_t *>(nullptr),
+             std::numeric_limits<uint32_t>::max());
+  first.copy_from(std::numeric_limits<uint32_t>::max(), nullptr,
+                  std::numeric_limits<uint32_t>::max(), 0);
+  EXPECT_EQ(first.size(), 0U);
+}
+
+TEST(Buffer, TaggedSmallNegative) {
+  std::shared_ptr<Buffer> buffer;
+  ASSERT_TRUE(allocate_buffer(8, &buffer));
+
+  EXPECT_EQ(buffer->put_tagged_int64(0, -1), 4U);
+  uint32_t bytes_read = 0;
+  EXPECT_EQ(buffer->get_tagged_int64(0, &bytes_read), -1);
+  EXPECT_EQ(bytes_read, 4U);
+
+  constexpr uint64_t kMaxSmallUnsigned = 0x7fffffff;
+  EXPECT_EQ(buffer->put_tagged_uint64(0, kMaxSmallUnsigned), 4U);
+  EXPECT_EQ(buffer->get_tagged_uint64(0, &bytes_read), kMaxSmallUnsigned);
+  EXPECT_EQ(bytes_read, 4U);
+
+  Buffer streaming;
+  streaming.write_tagged_int64(-1);
+  Error error;
+  EXPECT_EQ(streaming.read_tagged_int64(error), -1);
+  ASSERT_TRUE(error.ok()) << error.to_string();
+
+  streaming.writer_index(0);
+  ASSERT_TRUE(streaming.reader_index(0, error));
+  streaming.write_tagged_uint64(kMaxSmallUnsigned);
+  EXPECT_EQ(streaming.read_tagged_uint64(error), kMaxSmallUnsigned);
+  ASSERT_TRUE(error.ok()) << error.to_string();
+}
+
 TEST(Buffer, StreamReadFromOneByteSource) {
   std::vector<uint8_t> raw;
   raw.reserve(64);

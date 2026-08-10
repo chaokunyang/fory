@@ -25,9 +25,11 @@
 #include <chrono>
 #include <cstdint>
 #include <deque>
+#include <limits>
 #include <list>
 #include <map>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <set>
 #include <string>
@@ -44,6 +46,7 @@
 
 #include "fory/meta/field.h"
 #include "fory/meta/field_info.h"
+#include "fory/meta/meta_string.h"
 #include "fory/meta/type_traits.h"
 #include "fory/serialization/config.h"
 #include "fory/serialization/serializer.h"
@@ -103,6 +106,8 @@ template <typename T, typename Enable> struct TypeIndex {
 /// ref_mode (precomputed), and generics
 class FieldType {
 public:
+  static constexpr size_t kMaxNesting = 128;
+
   uint32_t type_id;
   // Stored as unsigned; 0xffffffff means "unset".
   uint32_t user_type_id;
@@ -196,15 +201,19 @@ bool field_types_compatible_top_level(const FieldType &local,
 /// Field information including name, type, and assigned field ID
 class FieldInfo {
 public:
-  int16_t field_id;       // Tag ID if configured; -1 means no ID
+  // Canonical wire identity. -1 selects the field name; non-negative values
+  // retain the complete uint32 tag domain used by the wire format.
+  int64_t field_id;
+  // Compatible-reader dispatch ID assigned from the matched local field.
+  int16_t local_dispatch_id;
   std::string field_name; // Field name
   FieldType field_type;   // Field type information
 
-  FieldInfo() : field_id(-1) {}
+  FieldInfo() : field_id(-1), local_dispatch_id(-1) {}
 
   FieldInfo(std::string name, FieldType type)
-      : field_id(-1), field_name(std::move(name)), field_type(std::move(type)) {
-  }
+      : field_id(-1), local_dispatch_id(-1), field_name(std::move(name)),
+        field_type(std::move(type)) {}
 
   /// write field info to buffer (for serialization)
   Result<std::vector<uint8_t>, Error> to_bytes() const;
@@ -213,7 +222,8 @@ public:
   static Result<FieldInfo, Error> from_bytes(Buffer &buffer);
 
   bool operator==(const FieldInfo &other) const {
-    return field_name == other.field_name && field_type == other.field_type;
+    return field_id == other.field_id && field_name == other.field_name &&
+           field_type == other.field_type;
   }
 };
 
@@ -278,8 +288,14 @@ public:
   /// Assign field IDs by comparing with local type
   /// This is the key function for schema evolution!
   static Result<void, Error>
+  assign_local_dispatch_ids(const TypeMeta *local_type,
+                            std::vector<FieldInfo> &remote_fields);
+
+  static Result<void, Error>
   assign_field_ids(const TypeMeta *local_type,
-                   std::vector<FieldInfo> &remote_fields);
+                   std::vector<FieldInfo> &remote_fields) {
+    return assign_local_dispatch_ids(local_type, remote_fields);
+  }
 
   const std::vector<FieldInfo> &get_field_infos() const { return field_infos; }
   int64_t get_hash() const { return hash; }
@@ -320,10 +336,6 @@ public:
   /// This provides the cross-language struct version ID used by class
   /// version checking, consistent with Go, Java, and Rust implementations.
   static int32_t compute_struct_version(const TypeMeta &meta);
-
-private:
-  /// Compute hash from type meta bytes
-  static int64_t compute_hash(const std::vector<uint8_t> &meta_bytes);
 };
 
 // ============================================================================
@@ -1075,12 +1087,15 @@ constexpr bool compute_track_ref() {
 }
 
 template <typename ActualFieldType, typename T, size_t Index>
-constexpr int16_t compute_field_id() {
+constexpr int64_t compute_field_id() {
   if constexpr (::fory::detail::has_field_config_v<T>) {
-    constexpr int16_t config_id =
+    constexpr int64_t config_id =
         ::fory::detail::GetFieldConfigEntry<T, Index>::id;
     if constexpr (::fory::detail::GetFieldConfigEntry<T, Index>::has_id) {
       static_assert(config_id >= 0, "Fory field id must be non-negative");
+      static_assert(config_id <= static_cast<int64_t>(
+                                     std::numeric_limits<uint32_t>::max()),
+                    "Fory field id must fit uint32");
       return config_id;
     }
   }
@@ -1187,7 +1202,7 @@ template <typename T, size_t Index> struct FieldInfoBuilder {
     constexpr bool is_nullable =
         compute_is_nullable<ActualFieldType, T, Index, UnwrappedFieldType>();
     constexpr bool track_ref = compute_track_ref<ActualFieldType, T, Index>();
-    constexpr int16_t field_id = compute_field_id<ActualFieldType, T, Index>();
+    constexpr int64_t field_id = compute_field_id<ActualFieldType, T, Index>();
 
     constexpr FieldNodeSpec spec =
         ::fory::detail::GetFieldConfigEntry<T, Index>::spec;
@@ -1207,7 +1222,13 @@ template <typename T, size_t Index> struct FieldInfoBuilder {
               << std::endl;
 #endif
     FieldInfo info(std::move(field_name), std::move(field_type));
-    info.field_id = field_id;
+    if constexpr (field_id >= 0) {
+      static_assert(
+          static_cast<uint64_t>(field_id) <=
+              static_cast<uint64_t>(std::numeric_limits<uint32_t>::max()),
+          "Field tag exceeds uint32 range");
+      info.field_id = field_id;
+    }
     return info;
   }
 
@@ -1233,7 +1254,7 @@ template <typename T, size_t Index> struct FieldInfoBuilder {
     constexpr bool is_nullable =
         compute_is_nullable<ActualFieldType, T, Index, UnwrappedFieldType>();
     constexpr bool track_ref = compute_track_ref<ActualFieldType, T, Index>();
-    constexpr int16_t field_id = compute_field_id<ActualFieldType, T, Index>();
+    constexpr int64_t field_id = compute_field_id<ActualFieldType, T, Index>();
 
     constexpr FieldNodeSpec spec =
         ::fory::detail::GetFieldConfigEntry<T, Index>::spec;
@@ -1254,7 +1275,13 @@ template <typename T, size_t Index> struct FieldInfoBuilder {
               << std::endl;
 #endif
     FieldInfo info(std::move(field_name), std::move(field_type));
-    info.field_id = field_id;
+    if constexpr (field_id >= 0) {
+      static_assert(
+          static_cast<uint64_t>(field_id) <=
+              static_cast<uint64_t>(std::numeric_limits<uint32_t>::max()),
+          "Field tag exceeds uint32 range");
+      info.field_id = field_id;
+    }
     return info;
   }
 };
@@ -1341,6 +1368,15 @@ public:
   Result<const TypeInfo *, Error>
   get_type_info_by_name(const std::string &ns,
                         const std::string &type_name) const;
+
+  Result<const TypeInfo *, Error>
+  get_type_info_by_name(std::string_view ns, std::string_view type_name,
+                        uint32_t type_id) const;
+
+  Result<const TypeInfo *, Error>
+  get_type_info_by_name(const meta::MetaStringTable::View &ns,
+                        const meta::MetaStringTable::View &type_name,
+                        uint32_t type_id) const;
 
   /// get TypeInfo by type_index (used for looking up registered types)
   /// @return const pointer to TypeInfo if found, error otherwise
@@ -1498,8 +1534,39 @@ private:
   template <typename T>
   static Harness::ReadAsFn find_exact_read(const std::type_info &target);
 
-  static std::string make_name_key(const std::string &ns,
-                                   const std::string &name);
+  struct NamedTypeKey {
+    std::string_view namespace_name;
+    std::string_view type_name;
+    size_t namespace_hash;
+    size_t type_name_hash;
+    uint32_t kind;
+
+    bool operator==(const NamedTypeKey &other) const {
+      const bool namespace_equal =
+          namespace_name.data() == other.namespace_name.data() &&
+          namespace_name.size() == other.namespace_name.size();
+      const bool type_name_equal = type_name.data() == other.type_name.data() &&
+                                   type_name.size() == other.type_name.size();
+      return kind == other.kind &&
+             (namespace_equal || namespace_name == other.namespace_name) &&
+             (type_name_equal || type_name == other.type_name);
+    }
+  };
+
+  struct NamedTypeKeyHash {
+    size_t operator()(const NamedTypeKey &key) const {
+      size_t hash = key.namespace_hash;
+      hash ^=
+          key.type_name_hash + size_t{0x9e3779b9} + (hash << 6) + (hash >> 2);
+      hash ^= static_cast<size_t>(key.kind) + size_t{0x9e3779b9} + (hash << 6) +
+              (hash >> 2);
+      return hash;
+    }
+  };
+
+  static uint32_t named_type_kind(uint32_t type_id);
+  static NamedTypeKey make_name_key(std::string_view ns, std::string_view name,
+                                    uint32_t kind);
   static uint64_t make_user_type_key(uint32_t type_id, uint32_t user_type_id);
 
   /// Register a TypeInfo, taking ownership and storing in primary storage.
@@ -1511,7 +1578,8 @@ private:
   void register_type_internal_runtime(const std::type_index &type_index,
                                       TypeInfo *info);
 
-  void check_registration_thread();
+  /// Validate registration state while registration_mutex_ is held.
+  Result<void, Error> check_registration();
 
   void register_builtin_types();
 
@@ -1522,6 +1590,7 @@ private:
 
   std::thread::id registration_thread_id_;
   bool finalized_;
+  std::mutex registration_mutex_;
 
   // Primary storage - owns all TypeInfo objects
   std::vector<std::unique_ptr<TypeInfo>> type_infos_;
@@ -1532,7 +1601,8 @@ private:
   util::U64PtrMap<TypeInfo> type_info_by_ctid_{256};
   util::U32PtrMap<TypeInfo> type_info_by_id_{256};
   util::U64PtrMap<TypeInfo> user_type_info_by_id_{256};
-  fory::flat_hash_map<std::string, TypeInfo *> type_info_by_name_;
+  fory::flat_hash_map<NamedTypeKey, TypeInfo *, NamedTypeKeyHash>
+      type_info_by_name_;
   util::U64PtrMap<TypeInfo> partial_type_infos_{256};
 
   // For runtime polymorphic lookups (smart pointers) - uses std::type_index
@@ -1560,12 +1630,15 @@ inline void TypeResolver::apply_config(const Config &config) {
   track_ref_ = config.track_ref;
 }
 
-inline void TypeResolver::check_registration_thread() {
+inline Result<void, Error> TypeResolver::check_registration() {
+  if (FORY_PREDICT_FALSE(finalized_)) {
+    return Unexpected(Error::invalid(
+        "TypeResolver has been finalized, cannot register more types"));
+  }
   FORY_CHECK(std::this_thread::get_id() == registration_thread_id_)
       << "TypeResolver registration methods must be called from the same "
          "thread that created the TypeResolver";
-  FORY_CHECK(!finalized_)
-      << "TypeResolver has been finalized, cannot register more types";
+  return Result<void, Error>();
 }
 
 template <typename Source, typename Target>
@@ -1747,7 +1820,8 @@ get_type_info_with_resolver(TypeResolver &resolver) {
 }
 
 template <typename T> Result<void, Error> TypeResolver::register_any_type() {
-  check_registration_thread();
+  std::lock_guard<std::mutex> lock(registration_mutex_);
+  FORY_RETURN_IF_ERROR(check_registration());
   using ChronoTimestamp = std::chrono::time_point<std::chrono::system_clock,
                                                   std::chrono::nanoseconds>;
   if constexpr (std::is_same_v<T, std::chrono::nanoseconds> ||
@@ -1785,7 +1859,8 @@ template <typename T> Result<void, Error> TypeResolver::register_any_type() {
 
 template <typename T>
 Result<void, Error> TypeResolver::register_by_id(uint32_t type_id) {
-  check_registration_thread();
+  std::lock_guard<std::mutex> lock(registration_mutex_);
+  FORY_RETURN_IF_ERROR(check_registration());
   if (type_id == kInvalidUserTypeId) {
     return Unexpected(Error::invalid(
         "type_id must be in range [0, 0xfffffffe] for register_by_id"));
@@ -1840,7 +1915,8 @@ template <typename T>
 Result<void, Error>
 TypeResolver::register_by_name(const std::string &ns,
                                const std::string &type_name) {
-  check_registration_thread();
+  std::lock_guard<std::mutex> lock(registration_mutex_);
+  FORY_RETURN_IF_ERROR(check_registration());
   if (type_name.empty()) {
     return Unexpected(
         Error::invalid("type_name must be non-empty for register_by_name"));
@@ -1892,7 +1968,8 @@ TypeResolver::register_by_name(const std::string &ns,
 
 template <typename T>
 Result<void, Error> TypeResolver::register_ext_type_by_id(uint32_t type_id) {
-  check_registration_thread();
+  std::lock_guard<std::mutex> lock(registration_mutex_);
+  FORY_RETURN_IF_ERROR(check_registration());
   if (type_id == kInvalidUserTypeId) {
     return Unexpected(Error::invalid("type_id must be in range [0, 0xfffffffe] "
                                      "for register_ext_type_by_id"));
@@ -1916,7 +1993,8 @@ template <typename T>
 Result<void, Error>
 TypeResolver::register_ext_type_by_name(const std::string &ns,
                                         const std::string &type_name) {
-  check_registration_thread();
+  std::lock_guard<std::mutex> lock(registration_mutex_);
+  FORY_RETURN_IF_ERROR(check_registration());
   if (type_name.empty()) {
     return Unexpected(Error::invalid(
         "type_name must be non-empty for register_ext_type_by_name"));
@@ -1940,7 +2018,8 @@ TypeResolver::register_ext_type_by_name(const std::string &ns,
 
 template <typename T>
 Result<void, Error> TypeResolver::register_union_by_id(uint32_t type_id) {
-  check_registration_thread();
+  std::lock_guard<std::mutex> lock(registration_mutex_);
+  FORY_RETURN_IF_ERROR(check_registration());
   if (type_id == kInvalidUserTypeId) {
     return Unexpected(Error::invalid(
         "type_id must be in range [0, 0xfffffffe] for register_union_by_id"));
@@ -1963,7 +2042,8 @@ template <typename T>
 Result<void, Error>
 TypeResolver::register_union_by_name(const std::string &ns,
                                      const std::string &type_name) {
-  check_registration_thread();
+  std::lock_guard<std::mutex> lock(registration_mutex_);
+  FORY_RETURN_IF_ERROR(check_registration());
   if (type_name.empty()) {
     return Unexpected(Error::invalid(
         "type_name must be non-empty for register_union_by_name"));
@@ -2006,7 +2086,6 @@ TypeResolver::build_struct_type_info(uint32_t type_id, uint32_t user_type_id,
 
   using MetaDesc = decltype(fory_field_info(std::declval<T>()));
   constexpr size_t field_count = MetaDesc::Size;
-  const auto field_names = MetaDesc::Names;
 
   std::string resolved_name = type_name;
   if (resolved_name.empty()) {
@@ -2018,29 +2097,44 @@ TypeResolver::build_struct_type_info(uint32_t type_id, uint32_t user_type_id,
   }
   entry->type_name = std::move(resolved_name);
 
-  entry->name_to_index.reserve(field_count);
-  for (size_t i = 0; i < field_count; ++i) {
-    // Convert camel_case field name to snake_case for cross-language
-    // compatibility
-    constexpr size_t max_snake_len = 128;
-    auto [snake_buffer, snake_len] =
-        ::fory::to_snake_case<max_snake_len>(field_names[i]);
-    entry->name_to_index.emplace(std::string(snake_buffer.data(), snake_len),
-                                 i);
-  }
-
+  fory::flat_hash_map<std::string, size_t> name_to_index;
+  fory::flat_hash_map<uint32_t, size_t> tag_to_index;
+  name_to_index.reserve(field_count);
+  tag_to_index.reserve(field_count);
   auto field_infos =
       detail::build_field_infos<T>(std::make_index_sequence<field_count>{});
+  entry->name_to_index.reserve(field_count);
+  for (size_t i = 0; i < field_count; ++i) {
+    const FieldInfo &field = field_infos[i];
+    entry->name_to_index.emplace(field.field_name, i);
+    if (field.field_id >= 0) {
+      if (!tag_to_index.emplace(static_cast<uint32_t>(field.field_id), i)
+               .second) {
+        return Unexpected(Error::invalid("Duplicate struct field tag"));
+      }
+    } else if (!name_to_index.emplace(field.field_name, i).second) {
+      return Unexpected(
+          Error::invalid("Duplicate canonical struct field name"));
+    }
+  }
+
   auto sorted_fields = TypeMeta::sort_field_infos(std::move(field_infos));
 
   entry->sorted_indices.clear();
   entry->sorted_indices.reserve(field_count);
   for (const auto &sorted_field : sorted_fields) {
-    auto *name_entry = entry->name_to_index.find(sorted_field.field_name);
-    FORY_CHECK(name_entry != nullptr)
-        << "Sorted field name '" << sorted_field.field_name
-        << "' not found in original struct definition";
-    entry->sorted_indices.push_back(name_entry->second);
+    const size_t *index = nullptr;
+    if (sorted_field.field_id >= 0) {
+      auto *tag_entry =
+          tag_to_index.find(static_cast<uint32_t>(sorted_field.field_id));
+      FORY_CHECK(tag_entry != nullptr);
+      index = &tag_entry->second;
+    } else {
+      auto *name_entry = name_to_index.find(sorted_field.field_name);
+      FORY_CHECK(name_entry != nullptr);
+      index = &name_entry->second;
+    }
+    entry->sorted_indices.push_back(*index);
   }
 
   entry->harness = make_struct_harness<T>();
@@ -2331,14 +2425,24 @@ TypeResolver::harness_empty_sorted_fields(TypeResolver &) {
   return std::vector<FieldInfo>{};
 }
 
-inline std::string TypeResolver::make_name_key(const std::string &ns,
-                                               const std::string &name) {
-  std::string key;
-  key.reserve(ns.size() + 1 + name.size());
-  key.append(ns);
-  key.push_back('\0');
-  key.append(name);
-  return key;
+inline uint32_t TypeResolver::named_type_kind(uint32_t type_id) {
+  switch (static_cast<TypeId>(type_id)) {
+  case TypeId::NAMED_STRUCT:
+  case TypeId::NAMED_COMPATIBLE_STRUCT:
+  case TypeId::NAMED_ENUM:
+  case TypeId::NAMED_EXT:
+  case TypeId::NAMED_UNION:
+    return type_id;
+  default:
+    return 0;
+  }
+}
+
+inline TypeResolver::NamedTypeKey
+TypeResolver::make_name_key(std::string_view ns, std::string_view name,
+                            uint32_t kind) {
+  return NamedTypeKey{ns, name, std::hash<std::string_view>{}(ns),
+                      std::hash<std::string_view>{}(name), kind};
 }
 
 inline uint64_t TypeResolver::make_user_type_key(uint32_t type_id,
@@ -2362,7 +2466,7 @@ TypeResolver::register_type_internal(uint64_t ctid,
   const bool has_user_type_key =
       !raw_ptr->register_by_name && raw_ptr->user_type_id != kInvalidUserTypeId;
   uint64_t user_type_key = 0;
-  std::string name_key;
+  NamedTypeKey name_key{};
 
   if (is_internal) {
     TypeInfo *existing =
@@ -2383,7 +2487,9 @@ TypeResolver::register_type_internal(uint64_t ctid,
   }
 
   if (raw_ptr->register_by_name) {
-    name_key = make_name_key(raw_ptr->namespace_name, raw_ptr->type_name);
+    const uint32_t kind = named_type_kind(raw_ptr->type_id);
+    FORY_CHECK(kind != 0) << "Unsupported named type id " << raw_ptr->type_id;
+    name_key = make_name_key(raw_ptr->namespace_name, raw_ptr->type_name, kind);
     auto *entry = type_info_by_name_.find(name_key);
     if (entry != nullptr) {
       return Unexpected(Error::invalid(
@@ -2443,13 +2549,67 @@ TypeResolver::get_user_type_info_by_id(uint32_t type_id,
 inline Result<const TypeInfo *, Error>
 TypeResolver::get_type_info_by_name(const std::string &ns,
                                     const std::string &type_name) const {
-  auto key = make_name_key(ns, type_name);
+  const TypeInfo *match = nullptr;
+  constexpr std::array<uint32_t, 5> named_kinds = {
+      static_cast<uint32_t>(TypeId::NAMED_STRUCT),
+      static_cast<uint32_t>(TypeId::NAMED_COMPATIBLE_STRUCT),
+      static_cast<uint32_t>(TypeId::NAMED_ENUM),
+      static_cast<uint32_t>(TypeId::NAMED_EXT),
+      static_cast<uint32_t>(TypeId::NAMED_UNION)};
+  for (uint32_t kind : named_kinds) {
+    auto key = make_name_key(ns, type_name, kind);
+    auto *entry = type_info_by_name_.find(key);
+    if (entry == nullptr) {
+      continue;
+    }
+    if (FORY_PREDICT_FALSE(match != nullptr)) {
+      return Unexpected(Error::type_error(
+          "TypeInfo lookup is ambiguous for type: " + ns + "." + type_name));
+    }
+    match = entry->second;
+  }
+  if (match != nullptr) {
+    return match;
+  }
+  return Unexpected(Error::type_error("TypeInfo not found for type: " + ns +
+                                      "." + type_name));
+}
+
+inline Result<const TypeInfo *, Error> TypeResolver::get_type_info_by_name(
+    std::string_view ns, std::string_view type_name, uint32_t type_id) const {
+  const uint32_t kind = named_type_kind(type_id);
+  if (FORY_PREDICT_FALSE(kind == 0)) {
+    return Unexpected(Error::type_error("Unsupported named type id: " +
+                                        std::to_string(type_id)));
+  }
+  auto key = make_name_key(ns, type_name, kind);
   auto *entry = type_info_by_name_.find(key);
   if (entry != nullptr) {
     return entry->second;
   }
-  return Unexpected(Error::type_error("TypeInfo not found for type: " + ns +
-                                      "." + type_name));
+  return Unexpected(Error::type_error(
+      "TypeInfo not found for type: " + std::string(ns) + "." +
+      std::string(type_name) + ", kind=" + std::to_string(kind)));
+}
+
+inline Result<const TypeInfo *, Error> TypeResolver::get_type_info_by_name(
+    const meta::MetaStringTable::View &ns,
+    const meta::MetaStringTable::View &type_name, uint32_t type_id) const {
+  const uint32_t kind = named_type_kind(type_id);
+  if (FORY_PREDICT_FALSE(kind == 0)) {
+    return Unexpected(Error::type_error("Unsupported named type id: " +
+                                        std::to_string(type_id)));
+  }
+  NamedTypeKey key{ns.value, type_name.value, ns.hash, type_name.hash, kind};
+  auto *entry = type_info_by_name_.find(key);
+  if (entry != nullptr) {
+    ns.bind(entry->second->namespace_name);
+    type_name.bind(entry->second->type_name);
+    return entry->second;
+  }
+  return Unexpected(Error::type_error(
+      "TypeInfo not found for type: " + std::string(ns.value) + "." +
+      std::string(type_name.value) + ", kind=" + std::to_string(kind)));
 }
 
 // ============================================================================

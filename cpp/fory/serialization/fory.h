@@ -92,11 +92,10 @@ public:
     return *this;
   }
 
-  /// Set maximum allowed nesting depth for dynamically-typed objects.
+  /// Set the protected object-graph nesting-depth limit.
   ///
-  /// This limits the maximum depth for nested polymorphic object serialization
-  /// (e.g., shared_ptr<Base>, unique_ptr<Base>). This prevents stack overflow
-  /// from deeply nested structures in dynamic serialization scenarios.
+  /// This covers polymorphic/pointer owners and direct generated
+  /// Struct/container recursion to prevent native stack exhaustion.
   ///
   /// Default value is 5.
   ForyBuilder &max_dyn_depth(uint32_t depth) {
@@ -518,9 +517,10 @@ private:
   }
 
 protected:
-  void lock_registration() const {
+  Result<std::unique_ptr<TypeResolver>, Error> finalize_type_resolver() const {
     std::lock_guard<std::mutex> lock(registration_mutex_);
     registration_locked_ = true;
+    return type_resolver_->build_final_type_resolver();
   }
 
   /// Protected constructor - only derived classes can instantiate.
@@ -795,8 +795,7 @@ private:
   /// Finalize the type resolver on first use.
   void ensure_finalized() {
     if (!finalized_) {
-      lock_registration();
-      auto final_result = type_resolver_->build_final_type_resolver();
+      auto final_result = finalize_type_resolver();
       FORY_CHECK(final_result.ok())
           << "Failed to build finalized TypeResolver: "
           << final_result.error().to_string();
@@ -962,24 +961,28 @@ class ThreadSafeFory : public BaseFory {
 public:
   template <typename T>
   Result<std::vector<uint8_t>, Error> serialize(const T &obj) {
+    ensure_finalized();
     auto fory_handle = fory_pool_.acquire();
     return fory_handle->serialize(obj);
   }
 
   template <typename T>
   Result<size_t, Error> serialize(OutputStream &output_stream, const T &obj) {
+    ensure_finalized();
     auto fory_handle = fory_pool_.acquire();
     return fory_handle->serialize(output_stream, obj);
   }
 
   template <typename T>
   Result<size_t, Error> serialize(std::ostream &ostream, const T &obj) {
+    ensure_finalized();
     auto fory_handle = fory_pool_.acquire();
     return fory_handle->serialize(ostream, obj);
   }
 
   template <typename T>
   Result<size_t, Error> serialize_to(Buffer &buffer, const T &obj) {
+    ensure_finalized();
     auto fory_handle = fory_pool_.acquire();
     return fory_handle->serialize_to(buffer, obj);
   }
@@ -987,12 +990,14 @@ public:
   template <typename T>
   Result<size_t, Error> serialize_to(std::vector<uint8_t> &output,
                                      const T &obj) {
+    ensure_finalized();
     auto fory_handle = fory_pool_.acquire();
     return fory_handle->serialize_to(output, obj);
   }
 
   template <typename T>
   Result<T, Error> deserialize(const uint8_t *data, size_t size) {
+    ensure_finalized();
     auto fory_handle = fory_pool_.acquire();
     return fory_handle->template deserialize<T>(data, size);
   }
@@ -1004,11 +1009,13 @@ public:
 
   template <typename T>
   Result<T, Error> deserialize(InputStream &input_stream) {
+    ensure_finalized();
     auto fory_handle = fory_pool_.acquire();
     return fory_handle->template deserialize<T>(input_stream);
   }
 
   template <typename T> Result<T, Error> deserialize(StdInputStream &stream) {
+    ensure_finalized();
     auto fory_handle = fory_pool_.acquire();
     return fory_handle->template deserialize<T>(stream);
   }
@@ -1022,15 +1029,18 @@ private:
               config_, get_finalized_resolver(), Fory::PreFinalized{}));
         }) {}
 
-  std::shared_ptr<TypeResolver> get_finalized_resolver() const {
+  void ensure_finalized() const {
     std::call_once(finalized_once_flag_, [this]() {
-      lock_registration();
-      auto final_result = type_resolver_->build_final_type_resolver();
+      auto final_result = finalize_type_resolver();
       FORY_CHECK(final_result.ok())
           << "Failed to build finalized TypeResolver: "
           << final_result.error().to_string();
       finalized_resolver_ = std::move(final_result).value();
     });
+  }
+
+  std::shared_ptr<TypeResolver> get_finalized_resolver() const {
+    ensure_finalized();
     return finalized_resolver_->clone();
   }
 

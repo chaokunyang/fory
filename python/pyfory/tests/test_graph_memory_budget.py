@@ -444,7 +444,7 @@ def test_stateful_object_budget():
     assert isinstance(reader.deserialize(data), BudgetStatefulObject)
 
 
-def test_stateful_constructor_owner_budget():
+def test_stateful_owner_budget():
     value = BudgetStatefulArgsObject(1)
     writer = new_fory(xlang=False)
     writer.register_type(BudgetStatefulArgsObject)
@@ -695,7 +695,7 @@ def test_native_hybrid_dict_budget():
     assert restored.extra == 1
 
 
-def test_shadowed_dict_descriptor_budget():
+def test_shadowed_descriptor_budget():
     fixed_layout_budget = PY_OBJECT_OWNER_BYTES + REFERENCE_BYTES
     decoded_dict_budget = map_memory(1)
     instance_dict_budget = map_memory(1)

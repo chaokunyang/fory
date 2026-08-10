@@ -205,7 +205,7 @@ def test_cython_small_metastring_collision():
 
 @pytest.mark.skipif(CythonMetaStringReader is None, reason="Cython serialization extension is unavailable")
 @pytest.mark.parametrize("value", ["cacheKey", "cache-key-" * 30])
-def test_cython_metastring_cache_survives_reset(value):
+def test_cython_meta_cache_reset(value):
     class NonCachingRegistry:
         def __init__(self):
             self.calls = 0

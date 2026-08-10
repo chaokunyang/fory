@@ -999,7 +999,7 @@ public class ClassResolverTest extends ForyTestBase {
 
     assertTupleCollisionRejected(false);
     assertTupleCollisionRejected(true);
-    assertDefaultJdkTupleCollisionRejected();
+    assertJdkTupleCollision();
   }
 
   @Test
@@ -1168,7 +1168,7 @@ public class ClassResolverTest extends ForyTestBase {
         () -> resolver.loadBytesToTypeInfo(Types.NAMED_STRUCT, emptyNamespace, flattenedName));
   }
 
-  private static void assertDefaultJdkTupleCollisionRejected() {
+  private static void assertJdkTupleCollision() {
     Fory fory =
         Fory.builder()
             .withXlang(false)

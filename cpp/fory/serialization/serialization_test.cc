@@ -117,9 +117,9 @@ namespace test {
 
 namespace {
 
-uint64_t compute_type_meta_hash_bits_for_test(const uint8_t *meta_bytes,
-                                              size_t meta_size,
-                                              uint64_t header_low_bits) {
+uint64_t type_meta_hash_bits_for_test(const uint8_t *meta_bytes,
+                                      size_t meta_size,
+                                      uint64_t header_low_bits) {
   constexpr uint32_t kHashShift = 12;
   constexpr uint64_t kHashBitsMask = UINT64_MAX << kHashShift;
   std::vector<uint8_t> hash_input(meta_size + 2);
@@ -155,8 +155,7 @@ std::vector<uint8_t> encode_type_meta_body(Buffer &body,
   constexpr uint64_t kMetaSizeMask = 0xff;
   const uint32_t meta_size = body.writer_index();
   uint64_t header = std::min<uint64_t>(kMetaSizeMask, meta_size);
-  header |=
-      compute_type_meta_hash_bits_for_test(body.data(), meta_size, header);
+  header |= type_meta_hash_bits_for_test(body.data(), meta_size, header);
   if (!valid_hash) {
     header ^= uint64_t{1} << 63;
   }
@@ -1881,8 +1880,7 @@ TEST(SerializationTest, TypeMetaCannotReadPastDeclaredBody) {
 
   const uint32_t meta_size = body.writer_index();
   uint64_t header = meta_size;
-  header |=
-      compute_type_meta_hash_bits_for_test(body.data(), meta_size, header);
+  header |= type_meta_hash_bits_for_test(body.data(), meta_size, header);
 
   Buffer encoded;
   encoded.write_bytes(reinterpret_cast<const uint8_t *>(&header),
@@ -2034,7 +2032,7 @@ TEST(SerializationTest, TypeMetaRejectsNonStructReservedKindBits) {
   std::memcpy(&header, bytes.data(), sizeof(header));
   ASSERT_NE(header & 0xff, 0xff);
   header &= ~(UINT64_MAX << 12);
-  header |= compute_type_meta_hash_bits_for_test(
+  header |= type_meta_hash_bits_for_test(
       bytes.data() + sizeof(uint64_t), bytes.size() - sizeof(uint64_t), header);
   std::memcpy(bytes.data(), &header, sizeof(header));
 

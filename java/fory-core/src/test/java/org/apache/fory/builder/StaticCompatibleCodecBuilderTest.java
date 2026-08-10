@@ -144,8 +144,7 @@ public class StaticCompatibleCodecBuilderTest {
       setField(writerType, writerValue, "name", xlang ? "xlang" : "native");
 
       Object result =
-          roundTripThroughStaticCompatibleSerializer(
-              writer, reader, writerType, readerType, writerValue);
+          roundTripStaticCompatible(writer, reader, writerType, readerType, writerValue);
       Assert.assertSame(result.getClass(), readerType);
       Assert.assertEquals(getField(readerType, result, "id"), 42);
       Assert.assertEquals(getField(readerType, result, "added"), "default");
@@ -187,8 +186,7 @@ public class StaticCompatibleCodecBuilderTest {
       setField(writerType, writerValue, "value", "named");
 
       Object result =
-          roundTripThroughStaticCompatibleSerializer(
-              writer, reader, writerType, readerType, writerValue);
+          roundTripStaticCompatible(writer, reader, writerType, readerType, writerValue);
       Assert.assertEquals(getField(readerType, result, "value"), "tagged");
     }
   }
@@ -290,8 +288,7 @@ public class StaticCompatibleCodecBuilderTest {
       setField(writerType, writerValue, "id", "73");
 
       Object result =
-          roundTripThroughStaticCompatibleSerializer(
-              writer, reader, writerType, readerType, writerValue);
+          roundTripStaticCompatible(writer, reader, writerType, readerType, writerValue);
       Assert.assertSame(result.getClass(), readerType);
       Assert.assertEquals(invoke(readerType, result, "id"), 73);
     }
@@ -530,8 +527,7 @@ public class StaticCompatibleCodecBuilderTest {
           new org.apache.fory.collection.Int32List(new int[] {4, 5, 6}));
 
       Object result =
-          roundTripThroughStaticCompatibleSerializer(
-              writer, reader, writerType, readerType, writerValue);
+          roundTripStaticCompatible(writer, reader, writerType, readerType, writerValue);
       Assert.assertSame(result.getClass(), readerType);
       Assert.assertTrue(
           Arrays.equals((int[]) getField(readerType, result, "values"), new int[] {4, 5, 6}));
@@ -580,8 +576,7 @@ public class StaticCompatibleCodecBuilderTest {
       setField(writerType, writerValue, "after", Arrays.asList("after"));
 
       Object result =
-          roundTripThroughStaticCompatibleSerializer(
-              writer, reader, writerType, readerType, writerValue);
+          roundTripStaticCompatible(writer, reader, writerType, readerType, writerValue);
       Assert.assertSame(result.getClass(), readerType);
       Assert.assertEquals(getField(readerType, result, "name"), "shared");
       Assert.assertEquals(getField(readerType, result, "after"), Arrays.asList("after"));
@@ -621,8 +616,7 @@ public class StaticCompatibleCodecBuilderTest {
       setField(writerType, writerValue, "values", new int[] {7, 8, 9});
 
       Object result =
-          roundTripThroughStaticCompatibleSerializer(
-              writer, reader, writerType, readerType, writerValue);
+          roundTripStaticCompatible(writer, reader, writerType, readerType, writerValue);
       Assert.assertSame(result.getClass(), readerType);
       Assert.assertEquals(getField(readerType, result, "values"), Arrays.asList(7, 8, 9));
     }
@@ -680,8 +674,7 @@ public class StaticCompatibleCodecBuilderTest {
       setField(writerType, writerValue, "values", Arrays.asList(shared, shared));
 
       Object result =
-          roundTripThroughStaticCompatibleSerializer(
-              writer, reader, writerType, readerType, writerValue);
+          roundTripStaticCompatible(writer, reader, writerType, readerType, writerValue);
       List<?> values = (List<?>) getField(readerType, result, "values");
       Assert.assertSame(values.get(0).getClass(), LinkedList.class);
       Assert.assertEquals(values.get(0), Arrays.asList(4, 5, 6));
@@ -765,8 +758,7 @@ public class StaticCompatibleCodecBuilderTest {
       Object writerValue = writerType.getConstructor().newInstance();
       setField(writerType, writerValue, "value", new byte[] {1, 2});
       Object result =
-          roundTripThroughStaticCompatibleSerializer(
-              writer, reader, writerType, readerType, writerValue);
+          roundTripStaticCompatible(writer, reader, writerType, readerType, writerValue);
       Assert.assertTrue(
           Arrays.equals((byte[]) getField(readerType, result, "value"), new byte[] {1, 2}));
     }
@@ -873,7 +865,7 @@ public class StaticCompatibleCodecBuilderTest {
     }
   }
 
-  private static Object roundTripThroughStaticCompatibleSerializer(
+  private static Object roundTripStaticCompatible(
       Fory writer, Fory reader, Class<?> writerType, Class<?> readerType, Object writerValue)
       throws Exception {
     TypeDef remoteTypeDef = TypeDef.buildTypeDef(writer.getTypeResolver(), writerType);

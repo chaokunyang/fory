@@ -375,7 +375,7 @@ def test_remote_tag_identity_domain():
     assert [field.tag_id for field in decoded.fields] == [1, 2]
 
 
-def test_binder_rejects_local_name_collision():
+def test_local_name_collision():
     int_type = FieldType(TypeId.INT32, True, False, False)
     type_def = TypeDef(
         "example",

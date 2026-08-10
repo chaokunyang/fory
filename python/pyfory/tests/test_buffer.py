@@ -270,7 +270,7 @@ def test_buffer_export_mutability():
     assert backing == bytearray(b"xycd")
 
 
-def test_write_context_requires_writable_buffer():
+def test_write_context_writable_buffer():
     fory = pyfory.Fory()
     readonly = Buffer(b"\0")
     if ENABLE_FORY_CYTHON_SERIALIZATION:

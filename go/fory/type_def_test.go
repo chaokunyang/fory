@@ -672,7 +672,7 @@ func readRemoteTypeDef(t *testing.T, fory *Fory, typeDef *TypeDef) error {
 	return nil
 }
 
-func TestDecodeTypeDefFallbackDefersNamedAliasCache(t *testing.T) {
+func TestTypeDefDefersNamedAliasCache(t *testing.T) {
 	fory := NewFory(WithXlang(false), WithCompatible(true))
 	require.NoError(t, fory.RegisterStructByName(SimpleStruct{}, "example.SimpleStruct"))
 	typeDef, err := buildTypeDef(fory, reflect.ValueOf(SimpleStruct{}))

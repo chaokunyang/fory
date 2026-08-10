@@ -844,7 +844,7 @@ public sealed class ForyRuntimeTests
     }
 
     [Fact]
-    public void ThreadSafeForyRejectsRegistrationAfterRoot()
+    public void ThreadSafeForyRejectsLateRegister()
     {
         using ThreadSafeFory fory = ForyRuntime.Builder().TrackRef(true).BuildThreadSafe();
         _ = fory.Serialize(1);

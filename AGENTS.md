@@ -68,7 +68,11 @@ This is the entry point for AI guidance in Apache Fory. Read this file first, th
   discovered during security work. Include an adjacent non-security change only
   when omitting it would leave the security fix incomplete or force the same
   owner into an ugly, duplicated, or knowingly unsound design; otherwise record
-  the issue separately and leave production code unchanged.
+  the issue separately and leave production code unchanged. This rule prevents
+  new scope; it does not authorize rolling back a non-security fix that is
+  already implemented and validated. Preserve such fixes. If one may affect
+  performance, inspect and measure the affected path first, then optimize it on
+  evidence instead of removing it by classification.
 - A reference hit reuses the already-materialized final owner. Do not attach
   target-type provenance to reference slots, add parallel reference metadata,
   recursively revalidate the referenced graph, or convert the referenced value

@@ -696,6 +696,29 @@ struct StructWithFieldIds {
     email: String,
 }
 
+#[derive(ForyStruct, Debug, PartialEq)]
+struct StructWithWideFieldIds {
+    #[fory(id = 65551)]
+    high: i32,
+    #[fory(id = 4294967310)]
+    max: i32,
+}
+
+#[test]
+fn field_ids_preserve_wire_domain() {
+    let fields = StructWithWideFieldIds::fields_info(&TypeResolver::default()).unwrap();
+
+    assert_eq!(fields[0].field_id, 65_551);
+    assert_eq!(fields[1].field_id, 4_294_967_310);
+
+    let mut fory = Fory::builder().xlang(true).compatible(true).build();
+    fory.register::<StructWithWideFieldIds>(13).unwrap();
+    let value = StructWithWideFieldIds { high: 1, max: 2 };
+    let bytes = fory.serialize(&value).unwrap();
+    let decoded = fory.deserialize::<StructWithWideFieldIds>(&bytes).unwrap();
+    assert_eq!(decoded, value);
+}
+
 #[test]
 fn test_field_id_attribute() {
     let mut fory = Fory::builder().xlang(false).compatible(false).build();

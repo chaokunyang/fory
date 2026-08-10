@@ -29,6 +29,41 @@ use std::sync::Arc;
 const MAX_DECIMAL_MAGNITUDE_BYTES: usize = 10_000;
 const MAX_DECIMAL_SCALE: i32 = 10_000;
 
+#[inline(always)]
+#[allow(clippy::manual_range_contains)]
+pub(super) fn checked_scale(scale: i32) -> Result<i32, Error> {
+    if scale < -MAX_DECIMAL_SCALE || scale > MAX_DECIMAL_SCALE {
+        return Err(decimal_scale_out_of_range(scale));
+    }
+    Ok(scale)
+}
+
+#[cold]
+#[inline(never)]
+fn decimal_scale_out_of_range(scale: i32) -> Error {
+    Error::invalid_data(format!(
+        "decimal scale {} exceeds supported range [{}, {}]",
+        scale, -MAX_DECIMAL_SCALE, MAX_DECIMAL_SCALE
+    ))
+}
+
+#[inline(always)]
+pub(super) fn checked_magnitude_len(len: u64) -> Result<usize, Error> {
+    if len == 0 {
+        return Err(Error::invalid_data(
+            "invalid decimal magnitude length 0".to_string(),
+        ));
+    }
+    if len > MAX_DECIMAL_MAGNITUDE_BYTES as u64 {
+        return Err(Error::invalid_data(format!(
+            "decimal magnitude length {} exceeds limit {}",
+            len, MAX_DECIMAL_MAGNITUDE_BYTES
+        )));
+    }
+    usize::try_from(len)
+        .map_err(|_| Error::invalid_data(format!("invalid decimal magnitude length {}", len)))
+}
+
 impl Serializer for Decimal {
     type Target = Self;
 
@@ -54,15 +89,8 @@ impl Serializer for Decimal {
     }
 
     #[inline(always)]
-    #[allow(clippy::manual_range_contains)]
     fn read_data(context: &mut ReadContext) -> Result<Self, Error> {
-        let scale = context.reader.read_var_i32()?;
-        if scale < -MAX_DECIMAL_SCALE || scale > MAX_DECIMAL_SCALE {
-            return Err(Error::invalid_data(format!(
-                "decimal scale {} exceeds supported range [{}, {}]",
-                scale, -MAX_DECIMAL_SCALE, MAX_DECIMAL_SCALE
-            )));
-        }
+        let scale = checked_scale(context.reader.read_var_i32()?)?;
         let unscaled = read_decimal_unscaled(&mut context.reader)?;
         Ok(Self { unscaled, scale })
     }
@@ -126,19 +154,7 @@ fn read_decimal_unscaled(reader: &mut Reader) -> Result<BigInt, Error> {
     let meta = header >> 1;
     let sign = (meta & 1) != 0;
     let len = meta >> 1;
-    if len == 0 {
-        return Err(Error::invalid_data(
-            "invalid decimal magnitude length 0".to_string(),
-        ));
-    }
-    if len > MAX_DECIMAL_MAGNITUDE_BYTES as u64 {
-        return Err(Error::invalid_data(format!(
-            "decimal magnitude length {} exceeds limit {}",
-            len, MAX_DECIMAL_MAGNITUDE_BYTES
-        )));
-    }
-    let len = usize::try_from(len)
-        .map_err(|_| Error::invalid_data(format!("invalid decimal magnitude length {}", len)))?;
+    let len = checked_magnitude_len(len)?;
     let magnitude_bytes = reader.read_bytes(len)?;
     if magnitude_bytes[len - 1] == 0 {
         return Err(Error::invalid_data(

@@ -23,7 +23,7 @@ use crate::resolver::{RefFlag, RefMode};
 use crate::serializer::Serializer;
 use crate::type_id;
 use crate::types::{bfloat16::bfloat16, float16::float16, Decimal};
-use num_bigint::BigInt;
+use num_bigint::{BigInt, BigUint, Sign};
 use num_traits::{One, Signed, ToPrimitive, Zero};
 use std::any::Any;
 
@@ -2008,6 +2008,23 @@ fn canonicalize_decimal(unscaled: &mut BigInt, scale: &mut i32) -> Result<(), Er
     const DECIMAL_CHUNK: u32 = 1_000_000_000;
     const DECIMAL_CHUNK_DIGITS: i32 = 9;
 
+    if *scale > MAX_COMPATIBLE_DECIMAL_DIGITS {
+        // A compatible result can retain at most 256 scale digits, so every excess digit must be
+        // a real factor of ten. Prove the required powers of two and five before any base-10 radix
+        // expansion, then remove them in one division; per-zero division would itself be quadratic.
+        let required_zeros = (*scale - MAX_COMPATIBLE_DECIMAL_DIGITS) as u32;
+        if unscaled.magnitude().trailing_zeros().unwrap_or(0) < u64::from(required_zeros) {
+            return Err(decimal_bounds_error());
+        }
+        let five_factor = BigUint::from(5u8).pow(required_zeros);
+        if !(unscaled.magnitude() % &five_factor).is_zero() {
+            return Err(decimal_bounds_error());
+        }
+        let ten_factor = five_factor << required_zeros as usize;
+        *unscaled /= BigInt::from_biguint(Sign::Plus, ten_factor);
+        *scale = MAX_COMPATIBLE_DECIMAL_DIGITS;
+    }
+
     // One scalar remainder bounds the common path. A zero chunk can hide an
     // arbitrarily long run, so strip that run with one radix reconstruction.
     let mut chunk = (unscaled.magnitude() % DECIMAL_CHUNK)
@@ -2032,6 +2049,13 @@ fn canonicalize_decimal(unscaled: &mut BigInt, scale: &mut i32) -> Result<(), Er
         return Ok(());
     }
 
+    // The mandatory reduction above caps scale at 256. Reject magnitudes that cannot become a
+    // 256-digit result even if every remaining scale digit is removable, bounding radix work to
+    // at most 512 digits.
+    let max_digits = (*scale + MAX_COMPATIBLE_DECIMAL_DIGITS) as u32;
+    if unscaled.magnitude() >= &BigUint::from(10u8).pow(max_digits) {
+        return Err(decimal_bounds_error());
+    }
     let (sign, digits) = unscaled.to_radix_le(10);
     let trailing_zeros = digits
         .iter()
@@ -2042,16 +2066,22 @@ fn canonicalize_decimal(unscaled: &mut BigInt, scale: &mut i32) -> Result<(), Er
     if digits.len() - trailing_zeros > MAX_COMPATIBLE_DECIMAL_DIGITS as usize {
         // num-bigint rebuilds base-10 digits progressively. Reject an invalid
         // significant prefix before that work can become quadratic.
-        return Err(conversion_error(
-            type_id::DECIMAL,
-            type_id::DECIMAL,
-            "converted decimal exceeds compatible conversion bounds",
-        ));
+        return Err(decimal_bounds_error());
     }
     *unscaled = BigInt::from_radix_le(sign, &digits[trailing_zeros..], 10)
         .expect("BigInt base-10 digits are valid");
     *scale -= trailing_zeros as i32;
     Ok(())
+}
+
+#[cold]
+#[inline(never)]
+fn decimal_bounds_error() -> Error {
+    conversion_error(
+        type_id::DECIMAL,
+        type_id::DECIMAL,
+        "converted decimal exceeds compatible conversion bounds",
+    )
 }
 
 fn canonicalize_decimal_i64(unscaled: &mut BigInt, scale: &mut i64) {

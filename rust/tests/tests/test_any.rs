@@ -279,6 +279,29 @@ fn test_any_registered_by_name() {
 }
 
 #[test]
+fn named_type_kind_must_match() {
+    #[derive(ForyStruct, PartialEq, Debug)]
+    struct NamedPerson {
+        age: i32,
+    }
+
+    let mut fory = Fory::builder().xlang(false).compatible(false).build();
+    fory.register_by_name::<NamedPerson>("test.really_long_registered_person_type_name")
+        .unwrap();
+
+    let value: Box<dyn Any> = Box::new(NamedPerson { age: 30 });
+    let mut bytes = fory.serialize(&value).unwrap();
+    assert_eq!(bytes[2], fory_core::type_id::NAMED_STRUCT as u8);
+    bytes[2] = fory_core::type_id::NAMED_EXT as u8;
+
+    let error = match fory.deserialize::<Box<dyn Any>>(&bytes) {
+        Ok(_) => panic!("mismatched named kind must fail"),
+        Err(error) => error,
+    };
+    assert!(error.to_string().contains("does not match registered kind"));
+}
+
+#[test]
 fn test_mixed_any_types() {
     use fory_derive::ForyStruct;
 

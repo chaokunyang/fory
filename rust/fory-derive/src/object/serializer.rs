@@ -172,6 +172,7 @@ pub fn derive_serializer(
                 .into();
         }
     };
+    let read_data = read::guard_static_read(read_data);
 
     let type_index = misc::allocate_type_id();
     let serializer_arc = send_sync.serializer;

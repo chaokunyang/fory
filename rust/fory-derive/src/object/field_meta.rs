@@ -35,11 +35,14 @@ use std::collections::HashMap;
 use syn::spanned::Spanned;
 use syn::{Field, GenericArgument, PathArguments, Type};
 
+// The extended TAG_ID body stores `field_id - 15` as a full varuint32.
+const MAX_FIELD_ID: u64 = u32::MAX as u64 + 15;
+
 /// Represents parsed `#[fory(...)]` field attributes
 #[derive(Clone, Default)]
 pub struct ForyFieldMeta {
     /// Field tag ID: None = use field name, Some(>=0) = use tag ID
-    pub id: Option<i32>,
+    pub id: Option<i64>,
     /// Whether the field can be null (None = use type-based default)
     pub nullable: Option<bool>,
     /// Whether to enable reference tracking (None = use type-based default)
@@ -164,7 +167,7 @@ impl ForyFieldMeta {
     }
 
     /// Returns effective field ID or -1 for field name encoding
-    pub fn effective_id(&self) -> i32 {
+    pub fn effective_id(&self) -> i64 {
         self.id.unwrap_or(-1)
     }
 
@@ -235,14 +238,20 @@ fn parse_meta_item(
             ));
         }
         let lit: syn::LitInt = nested.value()?.parse()?;
-        let id: i32 = lit.base10_parse()?;
+        let id: i128 = lit.base10_parse()?;
         if id < 0 {
             return Err(syn::Error::new(lit.span(), "id must be non-negative"));
+        }
+        if id > MAX_FIELD_ID as i128 {
+            return Err(syn::Error::new(
+                lit.span(),
+                format!("id must not exceed {MAX_FIELD_ID}"),
+            ));
         }
         if meta.id.is_some() {
             return Err(syn::Error::new(nested.path.span(), "duplicate id config"));
         }
-        meta.id = Some(id);
+        meta.id = Some(id as i64);
     } else if nested.path.is_ident("nullable") {
         let value = parse_bool_or_flag(&nested)?;
         if meta.nullable.is_some() {
@@ -549,7 +558,7 @@ fn parse_bool_or_flag(meta: &syn::meta::ParseNestedMeta) -> syn::Result<bool> {
 /// Validates that field tag IDs are unique within a struct
 #[allow(dead_code)]
 pub fn validate_field_metas(fields_with_meta: &[(&Field, ForyFieldMeta)]) -> syn::Result<()> {
-    let mut id_to_field: HashMap<i32, &syn::Ident> = HashMap::new();
+    let mut id_to_field: HashMap<i64, &syn::Ident> = HashMap::new();
 
     for (field, meta) in fields_with_meta {
         if meta.skip {
@@ -718,6 +727,16 @@ mod tests {
         };
         let err = parse_field_meta(&field).unwrap_err();
         assert!(err.to_string().contains("id must be non-negative"));
+    }
+
+    #[test]
+    fn rejects_tag_above_wire_domain() {
+        let field: Field = parse_quote! {
+            #[fory(id = 4294967311)]
+            name: String
+        };
+        let err = parse_field_meta(&field).unwrap_err();
+        assert!(err.to_string().contains("id must not exceed"));
     }
 
     #[test]

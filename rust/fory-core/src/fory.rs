@@ -287,13 +287,13 @@ impl ForyBuilder {
         self
     }
 
-    /// Sets the maximum depth for nested dynamic object serialization.
+    /// Sets the maximum depth for dynamic and generated static object deserialization.
     ///
     /// # Arguments
     ///
-    /// * `max_dyn_depth` - The maximum nesting depth allowed for dynamically-typed objects
-    ///   (e.g., trait objects, boxed types). This prevents stack overflow from deeply nested
-    ///   structures in dynamic serialization scenarios.
+    /// * `max_dyn_depth` - The maximum nesting depth allowed for dynamically typed objects and
+    ///   generated static structs or enums. This prevents stack overflow from deeply nested
+    ///   deserialization.
     ///
     /// # Returns
     ///
@@ -403,7 +403,7 @@ impl ForyBuilder {
 /// - **Schema evolution**: Compatible mode by default, with a same-schema optimization available
 /// - **Reference tracking**: Handles shared and circular references
 /// - **Trait object serialization**: Supports serializing polymorphic trait objects
-/// - **Dynamic depth limiting**: Configurable limit for nested dynamic object serialization
+/// - **Decode depth limiting**: Configurable limit for nested dynamic and generated static objects
 ///
 /// # Examples
 ///
@@ -511,7 +511,7 @@ impl Fory {
         self.config.share_meta
     }
 
-    /// Returns the maximum depth for nested dynamic object serialization.
+    /// Returns the maximum dynamic or generated static object deserialization depth.
     pub fn get_max_dyn_depth(&self) -> u32 {
         self.config.max_dyn_depth
     }

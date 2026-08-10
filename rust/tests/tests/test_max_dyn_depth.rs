@@ -16,7 +16,8 @@
 // under the License.
 
 use fory_core::fory::Fory;
-use fory_derive::ForyStruct;
+use fory_core::{ReadContext, RefFlag, RefMode, Serializer, TypeId, WriteContext};
+use fory_derive::{ForyStruct, ForyUnion};
 use std::any::Any;
 
 #[derive(ForyStruct, Debug)]
@@ -24,6 +25,209 @@ use std::any::Any;
 struct Container {
     value: i32,
     nested: Option<Box<dyn Any>>,
+}
+
+#[derive(ForyStruct, Debug, PartialEq)]
+struct StaticNode {
+    value: i32,
+    next: Option<Box<StaticNode>>,
+}
+
+// The selected root owns only the root envelope. This avoids unrelated recursive registration
+// metadata while keeping the generated recursive body inside Fory's TLS and root-reset boundary.
+struct StaticNodeRoot;
+
+impl Serializer for StaticNodeRoot {
+    type Target = StaticNode;
+
+    fn write_data(value: &StaticNode, context: &mut WriteContext) -> Result<(), fory_core::Error> {
+        StaticNode::write_data(value, context)
+    }
+
+    fn read_data(context: &mut ReadContext) -> Result<StaticNode, fory_core::Error> {
+        StaticNode::read_data(context)
+    }
+
+    fn write(
+        value: &StaticNode,
+        context: &mut WriteContext,
+        ref_mode: RefMode,
+        _write_type_info: bool,
+    ) -> Result<(), fory_core::Error> {
+        if ref_mode != RefMode::None {
+            context.writer.write_i8(RefFlag::NotNullValue as i8);
+        }
+        StaticNode::write_data(value, context)
+    }
+
+    fn read(
+        context: &mut ReadContext,
+        ref_mode: RefMode,
+        _read_type_info: bool,
+    ) -> Result<StaticNode, fory_core::Error> {
+        if ref_mode != RefMode::None {
+            let flag = context.reader.read_i8()?;
+            if flag != RefFlag::NotNullValue as i8 {
+                return Err(fory_core::Error::invalid_data(
+                    "invalid static node root reference flag",
+                ));
+            }
+        }
+        StaticNode::read_data(context)
+    }
+
+    fn static_type_id() -> TypeId {
+        TypeId::STRUCT
+    }
+}
+
+#[derive(ForyStruct)]
+struct RemoteLevel3 {
+    value: i32,
+}
+
+#[derive(ForyStruct)]
+struct RemoteLevel2 {
+    next: Option<Box<RemoteLevel3>>,
+}
+
+// The remote-only root field forces the compatible reader onto its generated slow body. Counting
+// that body is what makes the third generated level exceed a limit of two.
+#[derive(ForyStruct)]
+struct RemoteLevel1 {
+    extra: i32,
+    next: Option<Box<RemoteLevel2>>,
+}
+
+#[derive(ForyStruct, Debug, PartialEq)]
+struct LocalLevel3 {
+    value: i32,
+}
+
+#[derive(ForyStruct, Debug, PartialEq)]
+struct LocalLevel2 {
+    next: Option<Box<LocalLevel3>>,
+}
+
+#[derive(ForyStruct, Debug, PartialEq)]
+struct LocalLevel1 {
+    next: Option<Box<LocalLevel2>>,
+}
+
+#[derive(ForyUnion, Debug, PartialEq)]
+enum StaticList {
+    #[fory(unknown)]
+    Unknown(fory_core::UnknownCase),
+    #[fory(default)]
+    End,
+    Next(Box<StaticList>),
+}
+
+fn static_node(depth: i32) -> StaticNode {
+    StaticNode {
+        value: depth,
+        next: (depth > 1).then(|| Box::new(static_node(depth - 1))),
+    }
+}
+
+fn static_list(depth: i32) -> StaticList {
+    if depth > 1 {
+        StaticList::Next(Box::new(static_list(depth - 1)))
+    } else {
+        StaticList::End
+    }
+}
+
+#[test]
+fn static_struct_depth_and_reset() {
+    if fory_core::error::should_panic_on_error() {
+        return;
+    }
+    let fory = Fory::builder()
+        .xlang(false)
+        .compatible(false)
+        .max_dyn_depth(2)
+        .build();
+
+    let deep_bytes = fory
+        .serialize_with::<StaticNodeRoot>(&static_node(3))
+        .unwrap();
+    let shallow = static_node(1);
+    let shallow_bytes = fory.serialize_with::<StaticNodeRoot>(&shallow).unwrap();
+
+    let deep = fory.deserialize_with::<StaticNodeRoot>(&deep_bytes);
+    assert!(deep.is_err(), "recursive static struct must respect depth");
+    assert_eq!(
+        fory.deserialize_with::<StaticNodeRoot>(&shallow_bytes)
+            .unwrap(),
+        shallow
+    );
+}
+
+#[test]
+fn compatible_struct_depth_and_reset() {
+    if fory_core::error::should_panic_on_error() {
+        return;
+    }
+    let mut writer = Fory::builder().xlang(false).compatible(true).build();
+    writer.register::<RemoteLevel3>(201).unwrap();
+    writer.register::<RemoteLevel2>(202).unwrap();
+    writer.register::<RemoteLevel1>(203).unwrap();
+
+    let mut reader = Fory::builder()
+        .xlang(false)
+        .compatible(true)
+        .max_dyn_depth(2)
+        .build();
+    reader.register::<LocalLevel3>(201).unwrap();
+    reader.register::<LocalLevel2>(202).unwrap();
+    reader.register::<LocalLevel1>(203).unwrap();
+
+    let deep_bytes = writer
+        .serialize(&RemoteLevel1 {
+            extra: 1,
+            next: Some(Box::new(RemoteLevel2 {
+                next: Some(Box::new(RemoteLevel3 { value: 3 })),
+            })),
+        })
+        .unwrap();
+    let shallow_bytes = writer
+        .serialize(&RemoteLevel1 {
+            extra: 1,
+            next: None,
+        })
+        .unwrap();
+
+    let deep: Result<LocalLevel1, _> = reader.deserialize(&deep_bytes);
+    assert!(deep.is_err(), "compatible static struct must respect depth");
+    assert_eq!(
+        reader.deserialize::<LocalLevel1>(&shallow_bytes).unwrap(),
+        LocalLevel1 { next: None }
+    );
+}
+
+#[test]
+fn static_enum_depth_and_reset() {
+    if fory_core::error::should_panic_on_error() {
+        return;
+    }
+    let mut fory = Fory::builder()
+        .xlang(false)
+        .compatible(false)
+        .max_dyn_depth(2)
+        .build();
+    fory.register_union::<StaticList>(102).unwrap();
+
+    let deep_bytes = fory.serialize(&static_list(3)).unwrap();
+    let shallow = static_list(1);
+    let shallow_bytes = fory.serialize(&shallow).unwrap();
+
+    let deep: Result<StaticList, _> = fory.deserialize(&deep_bytes);
+    assert!(deep.is_err(), "recursive static enum must respect depth");
+    assert_eq!(
+        fory.deserialize::<StaticList>(&shallow_bytes).unwrap(),
+        shallow
+    );
 }
 
 #[test]

@@ -23,6 +23,8 @@ use crate::serializer::collection::{
     field_read_data_always_advances, settle_unbacked_items, DECL_ELEMENT_TYPE, HAS_NULL,
     IS_SAME_TYPE, TRACKING_REF,
 };
+use crate::serializer::decimal::{checked_magnitude_len, checked_scale};
+use crate::serializer::string::checked_string_len;
 use crate::serializer::util;
 use crate::type_id as types;
 use crate::util::ENABLE_FORY_DEBUG_OUTPUT;
@@ -108,7 +110,7 @@ fn skip_sized_bytes(context: &mut ReadContext, element_size: Option<usize>) -> R
 #[inline(never)]
 fn skip_string(context: &mut ReadContext) -> Result<(), Error> {
     let header = context.reader.read_var_u36_small()?;
-    let len = (header >> 2) as usize;
+    let len = checked_string_len(header >> 2)?;
     let encoding = header & 0b11;
     match encoding {
         // Latin1 and UTF-16 have no validation beyond readable bytes in the current reader.
@@ -133,19 +135,14 @@ fn skip_string(context: &mut ReadContext) -> Result<(), Error> {
 #[cold]
 #[inline(never)]
 fn skip_decimal(context: &mut ReadContext) -> Result<(), Error> {
-    let _scale = context.reader.read_var_i32()?;
+    checked_scale(context.reader.read_var_i32()?)?;
     let header = context.reader.read_var_u64()?;
     if (header & 1) == 0 {
         return Ok(());
     }
 
     let meta = header >> 1;
-    let len = (meta >> 1) as usize;
-    if len == 0 {
-        return Err(Error::invalid_data(
-            "invalid decimal magnitude length 0".to_string(),
-        ));
-    }
+    let len = checked_magnitude_len(meta >> 1)?;
     let start = context.reader.get_cursor();
     context.reader.check_bound(len)?;
     let payload = context.reader.sub_slice(start, start + len)?;
@@ -209,14 +206,7 @@ pub fn skip_any_value(context: &mut ReadContext, read_ref_flag: bool) -> Result<
                 let type_info = context.read_type_meta()?;
                 (FieldType::new(type_id, true, Vec::new()), Some(type_info))
             } else {
-                let namespace = context.read_meta_string()?.to_owned();
-                let type_name = context.read_meta_string()?.to_owned();
-                let rc_namespace = Rc::from(namespace);
-                let rc_type_name = Rc::from(type_name);
-                let type_info = context
-                    .get_type_resolver()
-                    .get_type_info_by_meta_string_name(rc_namespace, rc_type_name)
-                    .ok_or_else(|| crate::Error::type_error("Name harness not found"))?;
+                let type_info = context.read_named_type_info(type_id)?;
                 (FieldType::new(type_id, true, Vec::new()), Some(type_info))
             }
         }
@@ -1091,7 +1081,24 @@ pub fn skip_enum_variant(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{Config, Reader, TypeResolver};
+    use crate::resolver::meta_string_resolver::MetaStringWriterResolver;
+    use crate::serializer::Serializer;
+    use crate::{Config, Reader, TypeResolver, Writer};
+
+    struct NamedSkipTarget(u8);
+
+    impl Serializer for NamedSkipTarget {
+        type Target = Self;
+
+        fn write_data(value: &Self, context: &mut crate::WriteContext) -> Result<(), Error> {
+            context.writer.write_u8(value.0);
+            Ok(())
+        }
+
+        fn read_data(context: &mut ReadContext) -> Result<Self, Error> {
+            Ok(Self(context.reader.read_u8()?))
+        }
+    }
 
     fn assert_empty_collection_uses_budget(collection_type: u32) {
         let bytes = [3, IS_SAME_TYPE | DECL_ELEMENT_TYPE];
@@ -1136,5 +1143,87 @@ mod tests {
 
         let error = skip_map(&mut context, &field_type).unwrap_err();
         assert!(error.to_string().contains("max_unbacked_container_items"));
+    }
+
+    #[test]
+    fn decimal_skip_oversized_magnitude() {
+        let mut bytes = Vec::new();
+        let mut writer = Writer::from_buffer(&mut bytes);
+        writer.write_var_i32(0);
+        let magnitude_len = 10_001_u64;
+        let meta = magnitude_len << 1;
+        writer.write_var_u64((meta << 1) | 1);
+        let header_len = writer.len();
+
+        let mut context = ReadContext::new(TypeResolver::default(), Config::default());
+        context.attach_reader(Reader::new(&bytes));
+        let error = skip_decimal(&mut context).unwrap_err();
+        assert!(error.to_string().contains("decimal magnitude length"));
+        assert_eq!(context.reader.get_cursor(), header_len);
+    }
+
+    #[test]
+    fn decimal_skip_scale_bounds() {
+        for scale in [-10_000, 10_000] {
+            let mut bytes = Vec::new();
+            let mut writer = Writer::from_buffer(&mut bytes);
+            writer.write_var_i32(scale);
+            writer.write_var_u64(0);
+            let end = writer.len();
+
+            let mut context = ReadContext::new(TypeResolver::default(), Config::default());
+            context.attach_reader(Reader::new(&bytes));
+            skip_decimal(&mut context).unwrap();
+            assert_eq!(context.reader.get_cursor(), end);
+        }
+    }
+
+    #[test]
+    fn decimal_skip_checks_scale_first() {
+        for scale in [-10_001, 10_001] {
+            let mut bytes = Vec::new();
+            let mut writer = Writer::from_buffer(&mut bytes);
+            writer.write_var_i32(scale);
+            let scale_end = writer.len();
+            writer.write_var_u64(5);
+            writer.write_u8(1);
+
+            let mut context = ReadContext::new(TypeResolver::default(), Config::default());
+            context.attach_reader(Reader::new(&bytes));
+            let error = skip_decimal(&mut context).unwrap_err();
+            assert!(error.to_string().contains("decimal scale"));
+            assert_eq!(context.reader.get_cursor(), scale_end);
+        }
+    }
+
+    #[test]
+    fn named_skip_checks_incoming_kind() {
+        let mut resolver = TypeResolver::default();
+        resolver
+            .register_serializer_by_name::<NamedSkipTarget>("review.NamedSkipTarget")
+            .unwrap();
+        let resolver = resolver.build_final_type_resolver().unwrap();
+        let type_info = resolver
+            .get_target_type_info(&std::any::TypeId::of::<NamedSkipTarget>())
+            .unwrap();
+
+        let mut bytes = Vec::new();
+        let mut writer = Writer::from_buffer(&mut bytes);
+        let mut meta_writer = MetaStringWriterResolver::default();
+        writer.write_u8(types::NAMED_STRUCT as u8);
+        meta_writer
+            .write_meta_string_bytes(&mut writer, type_info.get_namespace())
+            .unwrap();
+        meta_writer
+            .write_meta_string_bytes(&mut writer, type_info.get_type_name())
+            .unwrap();
+        let body_start = writer.len();
+        writer.write_u8(42);
+
+        let mut context = ReadContext::new(resolver, Config::default());
+        context.attach_reader(Reader::new(&bytes));
+        let error = skip_any_value(&mut context, false).unwrap_err();
+        assert!(error.to_string().contains("does not match registered kind"));
+        assert_eq!(context.reader.get_cursor(), body_start);
     }
 }

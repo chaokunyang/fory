@@ -116,8 +116,8 @@ pub fn read_type_info<S: Serializer>(context: &mut ReadContext) -> Result<(), Er
             // Read type meta inline using streaming protocol
             let _type_info = context.read_type_meta()?;
         } else {
-            let _namespace_msb = context.read_meta_string()?;
-            let _type_name_msb = context.read_meta_string()?;
+            let _namespace_msb = context.read_namespace()?;
+            let _type_name_msb = context.read_type_name()?;
         }
     } else {
         context.reader.read_var_u32()?;

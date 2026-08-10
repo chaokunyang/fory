@@ -20,6 +20,7 @@ use fory_derive::{ForyEnum, ForyStruct};
 use std::any::Any;
 use std::collections::HashMap;
 use std::rc::Rc;
+use std::sync::Arc;
 
 #[derive(ForyStruct, Debug, PartialEq)]
 struct TestSkipFields {
@@ -97,6 +98,20 @@ struct SkippedAnyFieldReader {
     alias: Rc<dyn Any>,
 }
 
+#[derive(ForyStruct)]
+struct SkippedArcAnyWriter {
+    #[fory(id = 0)]
+    skipped: Arc<dyn Any + Send + Sync>,
+    #[fory(id = 1)]
+    alias: Arc<dyn Any + Send + Sync>,
+}
+
+#[derive(ForyStruct)]
+struct SkippedArcAnyReader {
+    #[fory(id = 1)]
+    alias: Arc<dyn Any + Send + Sync>,
+}
+
 #[derive(ForyStruct, Debug, PartialEq)]
 struct SkippedRefListWriter {
     #[fory(id = 0)]
@@ -131,6 +146,52 @@ struct SkippedRefMapReader {
     kept: Rc<RefSkipItem>,
     #[fory(id = 2)]
     alias: Rc<RefSkipItem>,
+}
+
+#[derive(ForyStruct, Debug, PartialEq)]
+struct RemovedRcWriter {
+    #[fory(id = 0)]
+    removed: Rc<RefSkipItem>,
+    #[fory(id = 1)]
+    alias: Rc<RefSkipItem>,
+}
+
+#[derive(ForyStruct, Debug, PartialEq)]
+struct RemovedRcReader {
+    #[fory(id = 1)]
+    alias: Rc<RefSkipItem>,
+}
+
+#[derive(ForyStruct, Debug, PartialEq)]
+struct RemovedArcWriter {
+    #[fory(id = 0)]
+    removed: Arc<RefSkipItem>,
+    #[fory(id = 1)]
+    alias: Arc<RefSkipItem>,
+}
+
+#[derive(ForyStruct, Debug, PartialEq)]
+struct RemovedArcReader {
+    #[fory(id = 1)]
+    alias: Arc<RefSkipItem>,
+}
+
+#[derive(ForyStruct, Debug, PartialEq)]
+struct AmbiguousOwnerWriter {
+    #[fory(id = 0)]
+    removed: Rc<RefSkipItem>,
+    #[fory(id = 3)]
+    value: i32,
+}
+
+#[derive(ForyStruct, Debug, PartialEq)]
+struct AmbiguousOwnerReader {
+    #[fory(id = 1)]
+    local_rc: Rc<RefSkipItem>,
+    #[fory(id = 2)]
+    local_arc: Arc<RefSkipItem>,
+    #[fory(id = 3)]
+    value: i32,
 }
 
 #[derive(ForyEnum, Debug, PartialEq)]
@@ -364,6 +425,165 @@ fn skipped_ref_map_keeps_ref_ids_aligned() {
 
     assert_eq!(decoded.kept.value, 44);
     assert!(Rc::ptr_eq(&decoded.kept, &decoded.alias));
+}
+
+#[test]
+fn removed_rc_owner_resolves_alias() {
+    let mut writer = Fory::builder()
+        .xlang(false)
+        .compatible(true)
+        .track_ref(true)
+        .build();
+    writer.register::<RefSkipItem>(1100).unwrap();
+    writer.register::<RemovedRcWriter>(1101).unwrap();
+    let mut reader = Fory::builder()
+        .xlang(false)
+        .compatible(true)
+        .track_ref(true)
+        .build();
+    reader.register::<RefSkipItem>(1100).unwrap();
+    reader.register::<RemovedRcReader>(1101).unwrap();
+
+    let shared = Rc::new(RefSkipItem { value: 45 });
+    let bytes = writer
+        .serialize(&RemovedRcWriter {
+            removed: shared.clone(),
+            alias: shared,
+        })
+        .unwrap();
+    let decoded: RemovedRcReader = reader.deserialize(&bytes).unwrap();
+
+    assert_eq!(decoded.alias.value, 45);
+}
+
+#[test]
+fn removed_arc_owner_resolves_alias() {
+    let mut writer = Fory::builder()
+        .xlang(false)
+        .compatible(true)
+        .track_ref(true)
+        .build();
+    writer.register::<RefSkipItem>(1102).unwrap();
+    writer.register::<RemovedArcWriter>(1103).unwrap();
+    let mut reader = Fory::builder()
+        .xlang(false)
+        .compatible(true)
+        .track_ref(true)
+        .build();
+    reader.register::<RefSkipItem>(1102).unwrap();
+    reader.register::<RemovedArcReader>(1103).unwrap();
+
+    let shared = Arc::new(RefSkipItem { value: 46 });
+    let bytes = writer
+        .serialize(&RemovedArcWriter {
+            removed: shared.clone(),
+            alias: shared,
+        })
+        .unwrap();
+    let decoded: RemovedArcReader = reader.deserialize(&bytes).unwrap();
+
+    assert_eq!(decoded.alias.value, 46);
+}
+
+#[test]
+fn removed_any_owner_resolves_alias() {
+    let mut writer = Fory::builder()
+        .xlang(false)
+        .compatible(true)
+        .track_ref(true)
+        .build();
+    writer.register::<RefSkipItem>(1104).unwrap();
+    writer.register::<SkippedAnyFieldWriter>(1105).unwrap();
+    let mut reader = Fory::builder()
+        .xlang(false)
+        .compatible(true)
+        .track_ref(true)
+        .build();
+    reader.register::<RefSkipItem>(1104).unwrap();
+    reader.register::<SkippedAnyFieldReader>(1105).unwrap();
+
+    let shared: Rc<dyn Any> = Rc::new(RefSkipItem { value: 47 });
+    let bytes = writer
+        .serialize(&SkippedAnyFieldWriter {
+            skipped: shared.clone(),
+            kept: shared.clone(),
+            alias: shared,
+        })
+        .unwrap();
+    let decoded: SkippedAnyFieldReader = reader.deserialize(&bytes).unwrap();
+
+    assert_eq!(
+        decoded.kept.downcast_ref::<RefSkipItem>().unwrap().value,
+        47
+    );
+    assert!(Rc::ptr_eq(&decoded.kept, &decoded.alias));
+}
+
+#[test]
+fn arc_any_owner_resolves_alias() {
+    let mut writer = Fory::builder()
+        .xlang(false)
+        .compatible(true)
+        .track_ref(true)
+        .build();
+    writer.register::<RefSkipItem>(1108).unwrap();
+    writer.register::<SkippedArcAnyWriter>(1109).unwrap();
+    let mut reader = Fory::builder()
+        .xlang(false)
+        .compatible(true)
+        .track_ref(true)
+        .build();
+    reader.register::<RefSkipItem>(1108).unwrap();
+    reader.register::<SkippedArcAnyReader>(1109).unwrap();
+
+    let shared: Arc<dyn Any + Send + Sync> = Arc::new(RefSkipItem { value: 50 });
+    let bytes = writer
+        .serialize(&SkippedArcAnyWriter {
+            skipped: shared.clone(),
+            alias: shared,
+        })
+        .unwrap();
+    let decoded: SkippedArcAnyReader = reader.deserialize(&bytes).unwrap();
+
+    assert_eq!(
+        decoded.alias.downcast_ref::<RefSkipItem>().unwrap().value,
+        50
+    );
+}
+
+#[test]
+fn removed_owner_ambiguity_is_rejected() {
+    let mut writer = Fory::builder()
+        .xlang(false)
+        .compatible(true)
+        .track_ref(true)
+        .build();
+    writer.register::<RefSkipItem>(1106).unwrap();
+    writer.register::<AmbiguousOwnerWriter>(1107).unwrap();
+    let mut reader = Fory::builder()
+        .xlang(false)
+        .compatible(true)
+        .track_ref(true)
+        .build();
+    reader.register::<RefSkipItem>(1106).unwrap();
+    reader.register::<AmbiguousOwnerReader>(1107).unwrap();
+
+    let bytes = writer
+        .serialize(&AmbiguousOwnerWriter {
+            removed: Rc::new(RefSkipItem { value: 48 }),
+            value: 49,
+        })
+        .unwrap();
+    let error = reader
+        .deserialize::<AmbiguousOwnerReader>(&bytes)
+        .unwrap_err();
+
+    assert!(
+        error
+            .to_string()
+            .contains("matches multiple local owner codecs"),
+        "{error}"
+    );
 }
 
 #[test]

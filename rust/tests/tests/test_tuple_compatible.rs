@@ -100,6 +100,56 @@ fn test_tuple_size_mismatch() {
     assert!(!long.3);
 }
 
+#[test]
+fn empty_struct_list_adapts() {
+    #[derive(ForyStruct, Debug, PartialEq)]
+    struct Empty {}
+
+    #[derive(ForyStruct, Debug, PartialEq)]
+    struct Source {
+        items: Vec<Empty>,
+        tail: i32,
+    }
+
+    #[derive(ForyStruct, Debug, PartialEq)]
+    struct Target {
+        items: (Empty, Empty),
+        tail: i32,
+    }
+
+    let mut writer = Fory::builder().xlang(false).compatible(true).build();
+    writer.register::<Empty>(9100).unwrap();
+    writer.register::<Source>(9101).unwrap();
+    let mut reader = Fory::builder()
+        .xlang(false)
+        .compatible(true)
+        .max_unbacked_container_items(16)
+        .build();
+    reader.register::<Empty>(9100).unwrap();
+    reader.register::<Target>(9101).unwrap();
+
+    let value = Source {
+        items: (0..16).map(|_| Empty {}).collect(),
+        tail: 57,
+    };
+    let bin = writer.serialize(&value).unwrap();
+
+    let roundtrip: Source = writer.deserialize(&bin).unwrap();
+    assert_eq!(roundtrip, value);
+
+    let adapted: Target = reader.deserialize(&bin).unwrap();
+    assert_eq!(adapted.items, (Empty {}, Empty {}));
+    assert_eq!(adapted.tail, 57);
+
+    let items: Vec<Empty> = (0..16).map(|_| Empty {}).collect();
+    let bin = writer.serialize(&items).unwrap();
+    let roundtrip: Vec<Empty> = writer.deserialize(&bin).unwrap();
+    assert_eq!(roundtrip, items);
+
+    let adapted: (Empty, Empty) = reader.deserialize(&bin).unwrap();
+    assert_eq!(adapted, (Empty {}, Empty {}));
+}
+
 /// Test 2: Tuples containing list/set/map elements
 #[test]
 fn test_tuple_with_collections_compatible() {

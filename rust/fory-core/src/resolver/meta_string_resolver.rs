@@ -23,8 +23,7 @@ use std::sync::OnceLock;
 
 use crate::buffer::Writer;
 use crate::error::Error;
-use crate::meta::NAMESPACE_DECODER;
-use crate::meta::{Encoding, MetaString};
+use crate::meta::{Encoding, MetaString, MetaStringDecoder, NAMESPACE_DECODER, TYPE_NAME_DECODER};
 use crate::util::murmurhash3_x64_128;
 use crate::Reader;
 
@@ -88,7 +87,14 @@ impl MetaStringBytes {
     }
 
     pub fn to_meta_string(&self) -> Result<MetaString, Error> {
-        let ms = NAMESPACE_DECODER.decode(&self.bytes, self.encoding)?;
+        self.to_meta_string_with_decoder(&NAMESPACE_DECODER)
+    }
+
+    fn to_meta_string_with_decoder(
+        &self,
+        decoder: &MetaStringDecoder,
+    ) -> Result<MetaString, Error> {
+        let ms = decoder.decode(&self.bytes, self.encoding)?;
         Ok(ms)
     }
 
@@ -189,7 +195,7 @@ impl MetaStringWriterResolver {
 }
 
 pub struct MetaStringReaderResolver {
-    meta_string_bytes_to_string: HashMap<*const MetaStringBytes, MetaString>,
+    meta_string_bytes_to_string: HashMap<(*const MetaStringBytes, MetaStringKind), MetaString>,
     // `dynamic_read` stores raw pointers into these Box owners (or the static empty value).
     // Boxes keep pointees stable across map/vector growth, and reset invalidates every pointer
     // before dropping a root owner.
@@ -199,6 +205,22 @@ pub struct MetaStringReaderResolver {
     root_meta_string_bytes: Vec<Box<MetaStringBytes>>,
     dynamic_read: Vec<Option<*const MetaStringBytes>>,
     dynamic_read_id: usize,
+}
+
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+enum MetaStringKind {
+    Namespace,
+    TypeName,
+}
+
+impl MetaStringKind {
+    #[inline(always)]
+    fn decoder(self) -> &'static MetaStringDecoder {
+        match self {
+            Self::Namespace => &NAMESPACE_DECODER,
+            Self::TypeName => &TYPE_NAME_DECODER,
+        }
+    }
 }
 
 impl Default for MetaStringReaderResolver {
@@ -285,23 +307,27 @@ impl MetaStringReaderResolver {
     ) -> Result<&MetaStringBytes, Error> {
         self.check_dynamic_read_capacity()?;
         let key = (hash_code, len);
+        let bytes = reader.read_bytes(len)?;
+        let mut key_occupied = false;
         if let Some(mb) = self.hash_to_meta_string_bytes.get(&key) {
-            // The hash-length key identifies bytes validated on the cache miss. A hit can skip
-            // the redundant body without hashing, allocation, or policy work.
-            reader.skip(len)?;
-            let ptr = mb.as_ref() as *const MetaStringBytes;
-            self.update_dynamic_read(ptr);
-            return Ok(unsafe { &*ptr });
+            key_occupied = true;
+            if mb.bytes.as_slice() == bytes {
+                // The cached owner is reusable only after the incoming encoded identity matches.
+                // A fixed wire hash is a validation hint, not a type-name identity.
+                let ptr = mb.as_ref() as *const MetaStringBytes;
+                self.update_dynamic_read(ptr);
+                return Ok(unsafe { &*ptr });
+            }
         }
 
         let encoding = byte_to_encoding((hash_code & HEADER_MASK) as u8)?;
-        let bytes = reader.read_bytes(len)?.to_vec();
-        if compute_meta_string_hash(&bytes, encoding) != hash_code {
+        if compute_meta_string_hash(bytes, encoding) != hash_code {
             return Err(Error::invalid_data("malformed meta string hash"));
         }
-        let owner = Box::new(MetaStringBytes::new(bytes, hash_code)?);
+        let owner = Box::new(MetaStringBytes::new(bytes.to_vec(), hash_code)?);
         let ptr = owner.as_ref() as *const MetaStringBytes;
-        if len <= Self::MAX_CACHED_READ_META_STRING_LENGTH
+        if !key_occupied
+            && len <= Self::MAX_CACHED_READ_META_STRING_LENGTH
             && self.cached_meta_string_count() < Self::MAX_CACHED_READ_META_STRINGS
         {
             self.hash_to_meta_string_bytes.insert(key, owner);
@@ -411,7 +437,10 @@ impl MetaStringReaderResolver {
 
         for owner in &self.root_meta_string_bytes {
             let ptr = owner.as_ref() as *const MetaStringBytes;
-            self.meta_string_bytes_to_string.remove(&ptr);
+            self.meta_string_bytes_to_string
+                .remove(&(ptr, MetaStringKind::Namespace));
+            self.meta_string_bytes_to_string
+                .remove(&(ptr, MetaStringKind::TypeName));
         }
         self.root_meta_string_bytes.clear();
 
@@ -433,15 +462,36 @@ impl MetaStringReaderResolver {
 
     #[inline(always)]
     pub fn read_meta_string(&mut self, reader: &mut Reader) -> Result<&MetaString, Error> {
+        self.read_meta_string_for_kind(reader, MetaStringKind::Namespace)
+    }
+
+    #[inline(always)]
+    pub(crate) fn read_namespace(&mut self, reader: &mut Reader) -> Result<&MetaString, Error> {
+        self.read_meta_string_for_kind(reader, MetaStringKind::Namespace)
+    }
+
+    #[inline(always)]
+    pub(crate) fn read_type_name(&mut self, reader: &mut Reader) -> Result<&MetaString, Error> {
+        self.read_meta_string_for_kind(reader, MetaStringKind::TypeName)
+    }
+
+    #[inline(always)]
+    fn read_meta_string_for_kind(
+        &mut self,
+        reader: &mut Reader,
+        kind: MetaStringKind,
+    ) -> Result<&MetaString, Error> {
         let ptr = {
             let mb_ref = self.read_meta_string_bytes(reader)?;
             mb_ref as *const MetaStringBytes
         };
-        let ms_ref = match self.meta_string_bytes_to_string.entry(ptr) {
+        // Dynamic ordinals identify encoded bytes, not their semantic role. The same bytes must
+        // therefore be decoded independently when reused as a namespace and a type name.
+        let ms_ref = match self.meta_string_bytes_to_string.entry((ptr, kind)) {
             Entry::Occupied(o) => o.into_mut(),
             Entry::Vacant(v) => {
                 let mb_ref = unsafe { &*ptr };
-                let ms = mb_ref.to_meta_string()?;
+                let ms = mb_ref.to_meta_string_with_decoder(kind.decoder())?;
                 v.insert(ms)
             }
         };
@@ -459,6 +509,7 @@ fn too_many_meta_string_references() -> Error {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::meta::NAMESPACE_ENCODER;
 
     fn write_big(writer: &mut Writer<'_>, bytes: &[u8]) {
         let hash_code = compute_meta_string_hash(bytes, Encoding::Utf8);
@@ -471,6 +522,29 @@ mod tests {
         writer.write_var_u32((bytes.len() as u32) << 1);
         writer.write_u8(Encoding::Utf8 as u8);
         writer.write_bytes(bytes);
+    }
+
+    #[test]
+    fn dynamic_name_roles() {
+        let namespace = NAMESPACE_ENCODER.encode("a.1").unwrap();
+        let mut buffer = Vec::new();
+        let mut writer = Writer::from_buffer(&mut buffer);
+        writer.write_var_u32((namespace.bytes.len() as u32) << 1);
+        writer.write_u8(namespace.encoding as u8);
+        writer.write_bytes(&namespace.bytes);
+        writer.write_var_u32(3);
+
+        let bytes = writer.dump();
+        let mut reader = Reader::new(bytes.as_slice());
+        let mut resolver = MetaStringReaderResolver::default();
+        assert_eq!(
+            resolver.read_namespace(&mut reader).unwrap().original,
+            "a.1"
+        );
+        assert_eq!(
+            resolver.read_type_name(&mut reader).unwrap().original,
+            "a$1"
+        );
     }
 
     #[test]
@@ -569,7 +643,9 @@ mod tests {
         assert_eq!(dynamic_ptr, root_ptr);
         assert_eq!(resolver.hash_to_meta_string_bytes.len(), 1);
         assert_eq!(resolver.root_meta_string_bytes.len(), root_count);
-        assert!(resolver.meta_string_bytes_to_string.contains_key(&root_ptr));
+        assert!(resolver
+            .meta_string_bytes_to_string
+            .contains_key(&(root_ptr, MetaStringKind::Namespace)));
         assert!(resolver.dynamic_read.len() > MetaStringReaderResolver::MAX_RETAINED_ROOT_CAPACITY);
 
         resolver.reset();
@@ -580,7 +656,9 @@ mod tests {
         );
         assert!(resolver.root_meta_string_bytes.is_empty());
         assert_eq!(resolver.root_meta_string_bytes.capacity(), 0);
-        assert!(!resolver.meta_string_bytes_to_string.contains_key(&root_ptr));
+        assert!(!resolver
+            .meta_string_bytes_to_string
+            .contains_key(&(root_ptr, MetaStringKind::Namespace)));
         assert_eq!(resolver.meta_string_bytes_to_string.len(), 1);
         assert!(
             resolver.meta_string_bytes_to_string.capacity()

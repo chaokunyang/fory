@@ -168,12 +168,12 @@ fn is_forward_field_internal(ty: &Type, struct_name: &str) -> bool {
 
 #[derive(Clone)]
 struct FieldSortKey {
-    id: Option<i32>,
+    id: Option<i64>,
     text: String,
 }
 
 impl FieldSortKey {
-    fn id(id: i32) -> Self {
+    fn id(id: i64) -> Self {
         Self {
             id: Some(id),
             text: id.to_string(),
@@ -570,7 +570,7 @@ pub(super) fn get_sort_fields_ts(fields: &[&Field]) -> TokenStream {
 /// Field metadata for fingerprint computation.
 struct FieldFingerprintInfo {
     /// Field ID, or -1 when the field is identified by name.
-    field_id: i32,
+    field_id: i64,
     /// Field name (snake_case) or field ID as string.
     name_or_id: String,
     /// Recursive field type fingerprint.

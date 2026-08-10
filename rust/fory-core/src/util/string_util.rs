@@ -698,6 +698,13 @@ pub mod buffer_rw_string {
     use crate::buffer::{Reader, Writer};
     use crate::error::Error;
 
+    #[inline(always)]
+    fn latin1_utf8_capacity(len: usize) -> Result<usize, Error> {
+        len.checked_mul(2)
+            .filter(|&capacity| capacity <= isize::MAX as usize)
+            .ok_or_else(|| Error::invalid_data("Latin1 string exceeds native allocation limit"))
+    }
+
     #[inline]
     pub fn write_latin1_standard(writer: &mut Writer, s: &str) {
         for c in s.chars() {
@@ -794,15 +801,12 @@ pub mod buffer_rw_string {
         if len % 2 != 0 {
             return Err(Error::encoding_error("UTF-16 length must be even"));
         }
-        unsafe {
-            let slice = std::slice::from_raw_parts(reader.bf.as_ptr().add(reader.cursor), len);
-            let units: Vec<u16> = slice
-                .chunks_exact(2)
-                .map(|c| u16::from_le_bytes([c[0], c[1]]))
-                .collect();
-            reader.move_next(len);
-            Ok(String::from_utf16_lossy(&units))
-        }
+        let slice = reader.read_bytes(len)?;
+        let units: Vec<u16> = slice
+            .chunks_exact(2)
+            .map(|c| u16::from_le_bytes([c[0], c[1]]))
+            .collect();
+        Ok(String::from_utf16_lossy(&units))
     }
 
     #[inline]
@@ -890,10 +894,10 @@ pub mod buffer_rw_string {
         if len == 0 {
             return Ok(String::new());
         }
-        let src = reader.sub_slice(reader.get_cursor(), reader.get_cursor() + len)?;
-
-        // Pessimistic allocation: Latin1 0x80-0xFF expands to 2 bytes in UTF-8
-        let mut out: Vec<u8> = Vec::with_capacity(len * 2);
+        // Pessimistic allocation: Latin1 0x80-0xFF expands to 2 bytes in UTF-8.
+        let capacity = latin1_utf8_capacity(len)?;
+        let src = reader.read_bytes(len)?;
+        let mut out: Vec<u8> = Vec::with_capacity(capacity);
 
         unsafe {
             let out_ptr = out.as_mut_ptr();
@@ -987,7 +991,6 @@ pub mod buffer_rw_string {
 
             out.set_len(out_len);
         }
-        reader.move_next(len);
         Ok(unsafe { String::from_utf8_unchecked(out) })
     }
 
@@ -1079,6 +1082,20 @@ pub mod buffer_rw_string {
                 assert_eq!(read_utf16_standard(&mut reader, bytes_len).unwrap(), s);
                 assert_eq!(read_utf16_standard(&mut reader, bytes_len).unwrap(), s);
             }
+        }
+
+        #[test]
+        fn test_utf16_truncated() {
+            let mut reader = Reader::new(b"A");
+            assert!(read_utf16_standard(&mut reader, 2).is_err());
+            assert_eq!(reader.get_cursor(), 0);
+        }
+
+        #[test]
+        fn test_latin1_native_capacity() {
+            let len = (isize::MAX as usize / 2) + 1;
+            let error = latin1_utf8_capacity(len).unwrap_err();
+            assert!(error.to_string().contains("native allocation limit"));
         }
     }
 }

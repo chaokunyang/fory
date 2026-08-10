@@ -91,7 +91,7 @@ use std::rc::Rc;
 const SMALL_NUM_FIELDS_THRESHOLD: usize = 0b11111;
 const DEFAULT_MAX_TYPE_FIELDS: usize = 512;
 const DEFAULT_MAX_TYPE_META_BYTES: usize = 4096;
-const MAX_COMPATIBLE_MATCHED_FIELD_INDEX: usize = (i16::MAX as usize - 1) / 2;
+const MAX_TYPE_META_NESTING: usize = 128;
 const REGISTER_BY_NAME_FLAG: u8 = 0b0010_0000;
 const COMPATIBLE_TYPEDEF_FLAG: u8 = 0b0100_0000;
 const STRUCT_TYPEDEF_FLAG: u8 = 0b1000_0000;
@@ -99,7 +99,9 @@ const FIELD_NAME_SIZE_THRESHOLD: usize = 0b1111;
 /// Marker value in encoding bits to indicate field ID mode (instead of field name)
 const FIELD_ID_ENCODING_MARKER: u8 = 0b11;
 /// Threshold for field ID that fits in 4-bit size field
-const SMALL_FIELD_ID_THRESHOLD: i16 = 0b1111;
+const SMALL_FIELD_ID_THRESHOLD: i64 = 0b1111;
+// The extended TAG_ID body stores `field_id - 15` as a full varuint32.
+const MAX_FIELD_ID: i64 = u32::MAX as i64 + SMALL_FIELD_ID_THRESHOLD;
 
 const BIG_NAME_THRESHOLD: usize = 0b111111;
 
@@ -366,7 +368,16 @@ impl FieldType {
         reader: &mut Reader,
         read_flag: bool,
         nullable: Option<bool>,
+        nesting: usize,
     ) -> Result<Self, Error> {
+        // TypeMeta bodies have an independently configurable byte limit. Keep schema recursion
+        // bounded here so raising that byte limit cannot turn nested generic metadata into native
+        // stack exhaustion before body-hash validation.
+        if nesting > MAX_TYPE_META_NESTING {
+            return Err(Error::invalid_data(format!(
+                "TypeMeta field type nesting exceeds max {MAX_TYPE_META_NESTING}"
+            )));
+        }
         let header = if read_flag {
             reader.read_var_u32()?
         } else {
@@ -397,7 +408,7 @@ impl FieldType {
         let user_type_id = NO_USER_TYPE_ID;
         Ok(match type_id {
             x if x == TypeId::LIST as u32 || x == TypeId::SET as u32 => {
-                let generic = Self::from_bytes(reader, true, None)?;
+                let generic = Self::from_bytes(reader, true, None, nesting + 1)?;
                 Self::new_with_user_type_id(
                     type_id,
                     user_type_id,
@@ -407,8 +418,8 @@ impl FieldType {
                 )
             }
             x if x == TypeId::MAP as u32 => {
-                let key_generic = Self::from_bytes(reader, true, None)?;
-                let val_generic = Self::from_bytes(reader, true, None)?;
+                let key_generic = Self::from_bytes(reader, true, None, nesting + 1)?;
+                let val_generic = Self::from_bytes(reader, true, None, nesting + 1)?;
                 Self::new_with_user_type_id(
                     type_id,
                     user_type_id,
@@ -426,7 +437,7 @@ impl FieldType {
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct FieldInfo {
-    pub field_id: i16,
+    pub field_id: i64,
     pub field_name: String,
     pub field_type: FieldType,
 }
@@ -434,13 +445,13 @@ pub struct FieldInfo {
 impl FieldInfo {
     pub fn new(field_name: &str, field_type: FieldType) -> FieldInfo {
         FieldInfo {
-            field_id: -1i16,
+            field_id: -1,
             field_name: field_name.to_string(),
             field_type,
         }
     }
 
-    pub fn new_with_id(field_id: i16, field_name: &str, field_type: FieldType) -> FieldInfo {
+    pub fn new_with_id(field_id: i64, field_name: &str, field_type: FieldType) -> FieldInfo {
         FieldInfo {
             field_id,
             field_name: field_name.to_string(),
@@ -468,14 +479,12 @@ impl FieldInfo {
         // Check if this is field ID mode (encoding bits == 0b11)
         if encoding_bits == FIELD_ID_ENCODING_MARKER {
             // Field ID mode: | 0b11:2bits | field_id_low:4bits | nullable:1bit | track_ref:1bit |
-            let mut field_id = ((header >> 2) & FIELD_NAME_SIZE_THRESHOLD as u8) as i16;
+            let mut field_id = ((header >> 2) & FIELD_NAME_SIZE_THRESHOLD as u8) as i64;
             if field_id == SMALL_FIELD_ID_THRESHOLD {
-                field_id = field_id
-                    .checked_add(reader.read_var_u32()? as i16)
-                    .ok_or_else(|| Error::invalid_data("field_id overflow"))?;
+                field_id += reader.read_var_u32()? as i64;
             }
 
-            let mut field_type = FieldType::from_bytes(reader, false, Option::from(nullable))?;
+            let mut field_type = FieldType::from_bytes(reader, false, Option::from(nullable), 0)?;
             field_type.track_ref = track_ref;
 
             Ok(FieldInfo {
@@ -492,14 +501,14 @@ impl FieldInfo {
             }
             name_size += 1;
 
-            let mut field_type = FieldType::from_bytes(reader, false, Option::from(nullable))?;
+            let mut field_type = FieldType::from_bytes(reader, false, Option::from(nullable), 0)?;
             field_type.track_ref = track_ref;
 
             let field_name_bytes = reader.read_bytes(name_size)?;
 
             let field_name = FIELD_NAME_DECODER.decode(field_name_bytes, encoding)?;
             Ok(FieldInfo {
-                field_id: -1i16,
+                field_id: -1,
                 field_name: field_name.original,
                 field_type,
             })
@@ -519,6 +528,11 @@ impl FieldInfo {
             // Field ID mode: | 0b11:2bits | field_id_low:4bits | nullable:1bit | track_ref:1bit |
             // Use max(0, field_id) to handle unmatched fields that have field_id = -1
             let field_id = std::cmp::max(0, self.field_id);
+            if field_id > MAX_FIELD_ID {
+                return Err(Error::invalid_data(format!(
+                    "field ID {field_id} exceeds maximum {MAX_FIELD_ID}"
+                )));
+            }
             let mut header: u8 = (min(SMALL_FIELD_ID_THRESHOLD, field_id) as u8) << 2;
             if track_ref {
                 header |= 1;
@@ -710,7 +724,7 @@ fn compute_schema_hash(field_infos: &[FieldInfo]) -> i64 {
 }
 
 #[inline(always)]
-pub fn compute_field_hash(hash: u32, id: i16) -> u32 {
+pub fn compute_field_hash(hash: u32, id: i64) -> u32 {
     let mut next_hash = (hash as u64) * 31 + (id as u64);
     while next_hash >= MAX_HASH32 {
         next_hash /= 7;
@@ -719,7 +733,7 @@ pub fn compute_field_hash(hash: u32, id: i16) -> u32 {
 }
 
 #[inline(always)]
-pub fn compute_struct_hash(field_ids: impl IntoIterator<Item = i16>) -> u32 {
+pub fn compute_struct_hash(field_ids: impl IntoIterator<Item = i64>) -> u32 {
     field_ids.into_iter().fold(17u32, compute_field_hash)
 }
 
@@ -843,7 +857,7 @@ pub fn assign_remote_field_ids(
         .map(|(i, f)| (f.field_name.clone(), (i, f)))
         .collect();
 
-    let field_index_by_id: HashMap<i16, (usize, &FieldInfo)> = local_field_infos
+    let field_index_by_id: HashMap<i64, (usize, &FieldInfo)> = local_field_infos
         .iter()
         .enumerate()
         .filter(|(_, f)| f.field_id >= 0)
@@ -890,17 +904,12 @@ pub fn assign_remote_field_ids(
                 if field.field_name.is_empty() {
                     field.field_name = local_info.field_name.clone();
                 }
-                if sorted_index > MAX_COMPATIBLE_MATCHED_FIELD_INDEX {
-                    return Err(Error::type_error(format!(
-                        "Cannot assign compatible matched id for local field {}: local field index {} exceeds max {}",
-                        local_info.field_name, sorted_index, MAX_COMPATIBLE_MATCHED_FIELD_INDEX
-                    )));
-                }
-                field.field_id = if exact_field {
-                    (sorted_index * 2) as i16
-                } else {
-                    (sorted_index * 2 + 1) as i16
-                };
+                let matched_id = sorted_index
+                    .checked_mul(2)
+                    .and_then(|id| id.checked_add((!exact_field) as usize))
+                    .and_then(|id| i64::try_from(id).ok())
+                    .ok_or_else(|| Error::type_error("too many compatible fields"))?;
+                field.field_id = matched_id;
                 used_local_fields[sorted_index] = true;
                 if crate::util::ENABLE_FORY_DEBUG_OUTPUT {
                     eprintln!(
@@ -1405,26 +1414,46 @@ mod tests {
     }
 
     #[test]
-    fn rejects_unrepresentable_matched_field_id() {
+    fn preserves_full_field_id_domain() {
         let field_type = FieldType::new(crate::type_id::INT32, false, vec![]);
-        let mut local_fields = Vec::with_capacity(MAX_COMPATIBLE_MATCHED_FIELD_INDEX + 2);
-        for index in 0..=MAX_COMPATIBLE_MATCHED_FIELD_INDEX + 1 {
-            local_fields.push(FieldInfo::new(
-                &format!("field_{}", index),
-                field_type.clone(),
-            ));
+        for field_id in [65_551, MAX_FIELD_ID] {
+            let field = FieldInfo::new_with_id(field_id, "value", field_type.clone());
+            let bytes = field.to_bytes().unwrap();
+            let expected_extension: &[u8] = if field_id == 65_551 {
+                &[0x80, 0x80, 0x04]
+            } else {
+                &[0xff, 0xff, 0xff, 0xff, 0x0f]
+            };
+            assert_eq!(bytes[0], 0xfc);
+            assert_eq!(&bytes[1..1 + expected_extension.len()], expected_extension);
+            let mut reader = Reader::new(&bytes);
+            let decoded = FieldInfo::from_bytes(&mut reader).unwrap();
+
+            assert_eq!(decoded.field_id, field_id);
+            assert!(reader.slice_after_cursor().is_empty());
         }
-        let mut remote_fields = [FieldInfo::new(
-            &format!("field_{}", MAX_COMPATIBLE_MATCHED_FIELD_INDEX + 1),
-            field_type,
-        )];
+    }
 
-        let message = assign_remote_field_ids(&local_fields, &mut remote_fields)
-            .err()
-            .map(|error| error.to_string())
-            .unwrap_or_default();
+    #[test]
+    fn rejects_deep_field_types() {
+        let mut field_type = FieldType::new(crate::type_id::INT32, false, vec![]);
+        for _ in 0..=MAX_TYPE_META_NESTING {
+            field_type = FieldType::new(crate::type_id::LIST, false, vec![field_type]);
+        }
+        let meta = TypeMeta::new(
+            STRUCT,
+            1,
+            MetaString::get_empty().clone(),
+            MetaString::get_empty().clone(),
+            false,
+            vec![FieldInfo::new("value", field_type)],
+        )
+        .unwrap();
+        let (bytes, _) = meta.to_bytes().unwrap();
+        let mut reader = Reader::new(&bytes);
 
-        assert!(message.contains("exceeds max"));
+        let error = TypeMeta::from_bytes(&mut reader, &TypeResolver::default()).unwrap_err();
+        assert!(error.to_string().contains("field type nesting"));
     }
 
     #[test]
@@ -1530,6 +1559,17 @@ mod tests {
         let field_type = FieldType::new(crate::type_id::STRING, false, vec![]);
         let local_fields = [FieldInfo::new_with_id(1, "value", field_type.clone())];
         let mut remote_fields = [FieldInfo::new("value", field_type)];
+
+        assign_remote_field_ids(&local_fields, &mut remote_fields).unwrap();
+
+        assert_eq!(remote_fields[0].field_id, -1);
+    }
+
+    #[test]
+    fn high_tag_does_not_match_low_tag() {
+        let field_type = FieldType::new(crate::type_id::STRING, false, vec![]);
+        let local_fields = [FieldInfo::new_with_id(15, "value", field_type.clone())];
+        let mut remote_fields = [FieldInfo::new_with_id(65_551, "", field_type)];
 
         assign_remote_field_ids(&local_fields, &mut remote_fields).unwrap();
 

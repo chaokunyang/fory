@@ -296,12 +296,13 @@ fn small_zero_padding_does_not_alias() {
 }
 
 #[test]
-fn checked_big_hit_skips_body() {
+fn big_hit_requires_exact_body() {
     let bytes = b"checked_big_cache_hit";
     let different_body = vec![0xff; bytes.len()];
     let hash_code = meta_string_hash(bytes, Encoding::Utf8);
     let mut buffer = vec![];
     let mut writer = Writer::from_buffer(&mut buffer);
+    write_big(&mut writer, bytes, hash_code);
     write_big(&mut writer, bytes, hash_code);
     write_big(&mut writer, &different_body, hash_code);
 
@@ -312,6 +313,11 @@ fn checked_big_hit_skips_body() {
     let cached = resolver.read_meta_string_bytes(&mut reader).unwrap();
     assert_eq!(cached as *const _, cached_ptr);
     assert_eq!(cached.bytes.as_slice(), bytes);
+    let err = resolver.read_meta_string_bytes(&mut reader).unwrap_err();
+    assert!(
+        err.to_string().contains("malformed meta string hash"),
+        "unexpected error: {err}"
+    );
     assert_eq!(reader.get_cursor(), binding.len());
 
     let mut truncated = vec![];

@@ -32,7 +32,7 @@ pub struct Config {
     pub compress_string: bool,
     /// Whether UTF-8 string payloads are validated before constructing Rust strings.
     pub check_string_read: bool,
-    /// Maximum depth for nested dynamic object serialization.
+    /// Maximum depth for dynamic and generated static object deserialization.
     pub max_dyn_depth: u32,
     /// Whether class version checking is enabled.
     pub check_struct_version: bool,
@@ -115,7 +115,7 @@ impl Config {
         self.check_string_read
     }
 
-    /// Get maximum dynamic depth.
+    /// Get the maximum dynamic or generated static deserialization depth.
     #[inline(always)]
     pub fn max_dyn_depth(&self) -> u32 {
         self.max_dyn_depth

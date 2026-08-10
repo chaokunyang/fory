@@ -389,6 +389,9 @@ pub struct ReadContext<'a> {
     meta_string_resolver: MetaStringReaderResolver,
     pub ref_reader: RefReader,
     current_depth: u32,
+    // Generated static bodies use a separate counter because dynamic dispatch already owns its
+    // depth frame. Sharing one counter would double-count every dynamically resolved struct.
+    current_static_depth: u32,
 }
 
 // Safety: ReadContext follows the same invariants as WriteContext—external orchestrators ensure
@@ -418,6 +421,7 @@ impl<'a> ReadContext<'a> {
             meta_string_resolver: MetaStringReaderResolver::default(),
             ref_reader: RefReader::new(),
             current_depth: 0,
+            current_static_depth: 0,
         }
     }
 
@@ -457,7 +461,7 @@ impl<'a> ReadContext<'a> {
         self.check_string_read
     }
 
-    /// Get maximum dynamic depth
+    /// Get the maximum dynamic or generated static deserialization depth.
     #[inline(always)]
     pub fn max_dyn_depth(&self) -> u32 {
         self.max_dyn_depth
@@ -544,7 +548,7 @@ impl<'a> ReadContext<'a> {
                     // Read type meta inline using streaming protocol
                     self.read_type_meta()
                 } else {
-                    self.read_named_type_info()
+                    self.read_named_type_info(fory_type_id)
                 }
             }
             _ => self
@@ -557,12 +561,16 @@ impl<'a> ReadContext<'a> {
     // Name decoding and resolver fallback allocate; keep them out of the common ID and compatible
     // dispatch body without marking successful named dispatch as cold.
     #[inline(never)]
-    fn read_named_type_info(&mut self) -> Result<Rc<TypeInfo>, Error> {
-        let namespace = self.read_meta_string()?.to_owned();
-        let type_name = self.read_meta_string()?.to_owned();
+    pub(crate) fn read_named_type_info(
+        &mut self,
+        expected_type_id: u32,
+    ) -> Result<Rc<TypeInfo>, Error> {
+        let namespace = self.read_namespace()?.to_owned();
+        let type_name = self.read_type_name()?.to_owned();
         let rc_namespace = Rc::from(namespace.clone());
         let rc_type_name = Rc::from(type_name.clone());
-        self.type_resolver
+        let type_info = self
+            .type_resolver
             .get_type_info_by_meta_string_name(rc_namespace, rc_type_name)
             .or_else(|| {
                 self.type_resolver
@@ -573,7 +581,15 @@ impl<'a> ReadContext<'a> {
                     "Name harness not found: namespace='{}', type='{}'",
                     namespace.original, type_name.original
                 ))
-            })
+            })?;
+        if type_info.get_type_id() as u32 != expected_type_id {
+            return Err(Error::type_error(format!(
+                "Named type kind {} does not match registered kind {}",
+                expected_type_id,
+                type_info.get_type_id() as u32
+            )));
+        }
+        Ok(type_info)
     }
 
     #[inline(always)]
@@ -595,6 +611,16 @@ impl<'a> ReadContext<'a> {
     #[inline(always)]
     pub fn read_meta_string(&mut self) -> Result<&MetaString, Error> {
         self.meta_string_resolver.read_meta_string(&mut self.reader)
+    }
+
+    #[inline(always)]
+    pub(crate) fn read_namespace(&mut self) -> Result<&MetaString, Error> {
+        self.meta_string_resolver.read_namespace(&mut self.reader)
+    }
+
+    #[inline(always)]
+    pub(crate) fn read_type_name(&mut self) -> Result<&MetaString, Error> {
+        self.meta_string_resolver.read_type_name(&mut self.reader)
     }
 
     #[inline(always)]
@@ -620,14 +646,45 @@ impl<'a> ReadContext<'a> {
     }
 
     #[inline(always)]
+    #[doc(hidden)]
+    pub fn inc_static_depth(&mut self) -> Result<(), Error> {
+        self.current_static_depth += 1;
+        if self.current_static_depth > self.max_dyn_depth() {
+            return Err(static_depth_exceeded(
+                self.max_dyn_depth(),
+                self.current_static_depth,
+            ));
+        }
+        Ok(())
+    }
+
+    #[inline(always)]
+    #[doc(hidden)]
+    pub fn dec_static_depth(&mut self) {
+        // Generated readers decrement only after the complete body succeeds. Root reset owns the
+        // failed path so nested readers need no Drop guard or failure cleanup.
+        self.current_static_depth = self.current_static_depth.saturating_sub(1);
+    }
+
+    #[inline(always)]
     pub fn reset(&mut self) {
         self.meta_resolver.reset();
         self.meta_string_resolver.reset();
         self.ref_reader.reset();
         // Root reset is the only failure-cleanup owner for read depth.
         self.current_depth = 0;
+        self.current_static_depth = 0;
         self.remaining_unbacked_container_items = 0;
     }
+}
+
+#[cold]
+#[inline(never)]
+fn static_depth_exceeded(max_depth: u32, current_depth: u32) -> Error {
+    Error::depth_exceed(format!(
+        "Maximum static object nesting depth ({max_depth}) exceeded. Current depth: {current_depth}. \
+         Consider increasing max_dyn_depth if this is expected."
+    ))
 }
 
 #[cold]

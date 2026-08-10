@@ -17,8 +17,8 @@
 
 use super::codec::{compatible_field_pair, field_ref_mode, generic_field_type, Codec};
 use super::collection::{
-    read_collection_type_info, write_collection_type_info, DECL_ELEMENT_TYPE, HAS_NULL,
-    IS_SAME_TYPE, TRACKING_REF,
+    field_read_data_always_advances, read_collection_type_info, settle_unbacked_items,
+    write_collection_type_info, DECL_ELEMENT_TYPE, HAS_NULL, IS_SAME_TYPE, TRACKING_REF,
 };
 use super::skip::{skip_any_value, skip_known_value};
 use crate::context::{ReadContext, WriteContext};
@@ -117,6 +117,53 @@ fn tuple_ref_mode(header: u8) -> RefMode {
     }
 }
 
+const UNBACKED_CHECK_INTERVAL: usize = 1024;
+
+#[inline(always)]
+fn check_tuple_len(
+    context: &ReadContext,
+    len: u32,
+    body_always_advances: bool,
+) -> Result<(), Error> {
+    let len = len as usize;
+    // Declared unit and empty-struct tuple bodies are valid zero-byte values. The tuple owner must
+    // therefore gate only the count beyond the root-shared logical-work allowance unless every
+    // reached position and excess skip is proven to consume a byte.
+    let required = if body_always_advances {
+        len
+    } else {
+        len.saturating_sub(context.remaining_unbacked_container_items())
+    };
+    context.reader.check_bound(required)
+}
+
+#[inline(always)]
+fn record_tuple_progress(
+    context: &mut ReadContext,
+    window_items: &mut usize,
+    window_start: &mut usize,
+) -> Result<(), Error> {
+    *window_items += 1;
+    if *window_items == UNBACKED_CHECK_INTERVAL {
+        settle_unbacked_items(context, *window_items, *window_start)?;
+        *window_start = context.reader.get_cursor();
+        *window_items = 0;
+    }
+    Ok(())
+}
+
+#[inline(always)]
+fn settle_tuple_tail(
+    context: &mut ReadContext,
+    window_items: usize,
+    window_start: usize,
+) -> Result<(), Error> {
+    if window_items != 0 {
+        settle_unbacked_items(context, window_items, window_start)?;
+    }
+    Ok(())
+}
+
 #[inline(always)]
 fn read_tuple_value<T: 'static, C: Codec<T>>(
     context: &mut ReadContext,
@@ -172,23 +219,51 @@ fn skip_tuple_values(
     declared_type: Option<&FieldType>,
     type_info: Option<&Rc<TypeInfo>>,
 ) -> Result<(), Error> {
+    let body_always_advances = ref_mode != RefMode::None
+        || !same_type
+        || declared_type.is_some_and(field_read_data_always_advances);
+    if body_always_advances {
+        if !same_type {
+            for _ in 0..count {
+                skip_any_value(context, ref_mode != RefMode::None)?;
+            }
+            return Ok(());
+        }
+        if let Some(field_type) = declared_type {
+            for _ in 0..count {
+                skip_known_value(context, Some(field_type), ref_mode, None)?;
+            }
+            return Ok(());
+        }
+        let type_info = type_info.ok_or_else(missing_tuple_metadata)?;
+        for _ in 0..count {
+            skip_known_value(context, None, ref_mode, Some(type_info))?;
+        }
+        return Ok(());
+    }
+
+    let mut window_start = context.reader.get_cursor();
+    let mut window_items = 0usize;
     if !same_type {
         for _ in 0..count {
             skip_any_value(context, ref_mode != RefMode::None)?;
+            record_tuple_progress(context, &mut window_items, &mut window_start)?;
         }
-        return Ok(());
+        return settle_tuple_tail(context, window_items, window_start);
     }
     if let Some(field_type) = declared_type {
         for _ in 0..count {
             skip_known_value(context, Some(field_type), ref_mode, None)?;
+            record_tuple_progress(context, &mut window_items, &mut window_start)?;
         }
-        return Ok(());
+        return settle_tuple_tail(context, window_items, window_start);
     }
     let type_info = type_info.ok_or_else(missing_tuple_metadata)?;
     for _ in 0..count {
         skip_known_value(context, None, ref_mode, Some(type_info))?;
+        record_tuple_progress(context, &mut window_items, &mut window_start)?;
     }
-    Ok(())
+    settle_tuple_tail(context, window_items, window_start)
 }
 
 #[cold]
@@ -202,10 +277,20 @@ where
     T: 'static,
     S: Serializer<Target = T>,
 {
+    if ref_mode != RefMode::None || S::READ_DATA_ALWAYS_ADVANCES {
+        for _ in 0..count {
+            let _ = S::read(context, ref_mode, false)?;
+        }
+        return Ok(());
+    }
+
+    let mut window_start = context.reader.get_cursor();
+    let mut window_items = 0usize;
     for _ in 0..count {
         let _ = S::read(context, ref_mode, false)?;
+        record_tuple_progress(context, &mut window_items, &mut window_start)?;
     }
-    Ok(())
+    settle_tuple_tail(context, window_items, window_start)
 }
 
 macro_rules! tuple_declared_type {
@@ -290,6 +375,79 @@ macro_rules! tuple_read_node {
     };
 }
 
+macro_rules! tuple_node_always_advances {
+    (
+        value,
+        $C:ty,
+        $ref_mode:expr,
+        $same_type:expr,
+        $declared:expr,
+        $declared_type:expr,
+        $type_info:expr
+    ) => {
+        !$same_type
+            || $ref_mode != RefMode::None
+            || (<$C as Serializer>::READ_DATA_ALWAYS_ADVANCES
+                && ($declared
+                    || $type_info
+                        .as_ref()
+                        .is_some_and(|type_info| type_info.has_exact_local_schema())))
+    };
+    (
+        field,
+        $C:ty,
+        $ref_mode:expr,
+        $same_type:expr,
+        $declared:expr,
+        $declared_type:expr,
+        $type_info:expr
+    ) => {
+        !$same_type
+            || $ref_mode != RefMode::None
+            || (<$C as Serializer>::READ_DATA_ALWAYS_ADVANCES
+                && if $declared {
+                    $declared_type
+                        .as_ref()
+                        .is_some_and(|field_type| field_read_data_always_advances(*field_type))
+                } else {
+                    $type_info
+                        .as_ref()
+                        .is_some_and(|type_info| type_info.has_exact_local_schema())
+                })
+    };
+}
+
+macro_rules! tuple_skip_always_advances {
+    (
+        value,
+        $ref_mode:expr,
+        $same_type:expr,
+        $declared:expr,
+        $declared_type:expr;
+        ($T:ident, $C:ident, $S:ident, $index:tt)
+        $(, ($rest_t:ident, $rest_c:ident, $rest_s:ident, $rest_index:tt))*
+    ) => {
+        !$same_type
+            || $ref_mode != RefMode::None
+            || ($declared && <$C as Serializer>::READ_DATA_ALWAYS_ADVANCES)
+    };
+    (
+        field,
+        $ref_mode:expr,
+        $same_type:expr,
+        $declared:expr,
+        $declared_type:expr;
+        $(($T:ident, $C:ident, $S:ident, $index:tt)),+
+    ) => {
+        !$same_type
+            || $ref_mode != RefMode::None
+            || ($declared
+                && $declared_type
+                    .as_ref()
+                    .is_some_and(|field_type| field_read_data_always_advances(*field_type)))
+    };
+}
+
 macro_rules! tuple_skip_nodes {
     (
         value,
@@ -350,7 +508,6 @@ macro_rules! read_tuple_body {
             return Ok(($(read_tuple_element::<$T, $C>(context)?,)+));
         }
         let len = context.reader.read_var_u32()?;
-        context.reader.check_bound(len as usize)?;
         if len == 0 {
             return Ok(($($C::default_value(context)?,)+));
         }
@@ -375,11 +532,41 @@ macro_rules! read_tuple_body {
             tuple_type_info_field!($layer, type_info, ref_mode);
         let _ = &declared_type;
         let _ = &type_info_field;
+        let prefix_always_advances = true $(&& (len <= $index
+            || tuple_node_always_advances!(
+                $layer,
+                $C,
+                ref_mode,
+                same_type,
+                declared,
+                declared_type,
+                type_info
+            )))+;
+        let tuple_arity = impl_tuple_codec!(@count $($T),+) as u32;
+        let excess_always_advances = len <= tuple_arity
+            || tuple_skip_always_advances!(
+                $layer,
+                ref_mode,
+                same_type,
+                declared,
+                declared_type;
+                $(($T, $C, $S, $index)),+
+            );
+        check_tuple_len(
+            context,
+            len,
+            prefix_always_advances && excess_always_advances,
+        )?;
+        let prefix_start = if prefix_always_advances {
+            None
+        } else {
+            Some(context.reader.get_cursor())
+        };
         let mut index = 0u32;
         let value = ($({
             let value = if index < len {
                 index += 1;
-                tuple_read_node!(
+                let value = tuple_read_node!(
                     $layer,
                     $T,
                     $C,
@@ -390,12 +577,16 @@ macro_rules! read_tuple_body {
                     declared_type,
                     type_info,
                     type_info_field
-                )?
+                )?;
+                value
             } else {
                 $C::default_value(context)?
             };
             value
         },)+);
+        if let Some(prefix_start) = prefix_start {
+            settle_unbacked_items(context, index as usize, prefix_start)?;
+        }
         tuple_skip_nodes!(
             $layer,
             context,
@@ -1114,3 +1305,76 @@ impl_tuple_codec!(
     (T20, C20, S20, 20),
     (T21, C21, S21, 21)
 );
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{Config, Reader};
+
+    fn read_context<'a>(bytes: &'a [u8], allowance: usize) -> ReadContext<'a> {
+        let config = Config {
+            compatible: true,
+            ..Config::default()
+        };
+        let mut context = ReadContext::new(TypeResolver::default(), config);
+        context.remaining_unbacked_container_items = allowance;
+        context.attach_reader(Reader::new(bytes));
+        context
+    }
+
+    #[test]
+    fn reads_compact_unit_bodies() {
+        let bytes = [3, IS_SAME_TYPE | DECL_ELEMENT_TYPE];
+        let mut context = read_context(&bytes, 3);
+
+        let value = <((), ()) as Serializer>::read_data(&mut context).unwrap();
+
+        assert_eq!(value, ((), ()));
+        assert_eq!(context.reader.get_cursor(), bytes.len());
+        assert_eq!(context.remaining_unbacked_container_items(), 0);
+    }
+
+    #[test]
+    fn rejects_excess_compact_units() {
+        // The unread byte satisfies the proportional pre-gate. Since none of the three unit
+        // bodies consumes it, actual progress still exhausts the two-item allowance.
+        let bytes = [3, IS_SAME_TYPE | DECL_ELEMENT_TYPE, 0];
+        let mut context = read_context(&bytes, 2);
+
+        let error = <((), ()) as Serializer>::read_data(&mut context).unwrap_err();
+
+        assert!(error.to_string().contains("max_unbacked_container_items"));
+    }
+
+    #[derive(Debug, PartialEq)]
+    struct ConservativeByte(u8);
+
+    impl Serializer for ConservativeByte {
+        type Target = Self;
+
+        fn write_data(value: &Self, context: &mut WriteContext) -> Result<(), Error> {
+            context.writer.write_u8(value.0);
+            Ok(())
+        }
+
+        fn read_data(context: &mut ReadContext) -> Result<Self, Error> {
+            Ok(Self(context.reader.read_u8()?))
+        }
+
+        fn default_value(_: &mut ReadContext) -> Result<Self, Error> {
+            Ok(Self(0))
+        }
+    }
+
+    #[test]
+    fn accepts_backed_tuple_progress() {
+        let bytes = [3, IS_SAME_TYPE | DECL_ELEMENT_TYPE, 1, 2, 3];
+        let mut context = read_context(&bytes, 0);
+
+        let value = <(ConservativeByte,) as Serializer>::read_data(&mut context).unwrap();
+
+        assert_eq!(value, (ConservativeByte(1),));
+        assert_eq!(context.reader.get_cursor(), bytes.len());
+        assert_eq!(context.remaining_unbacked_container_items(), 0);
+    }
+}

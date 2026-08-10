@@ -98,6 +98,7 @@ export default class TypeResolver {
   private internalSerializer: Serializer[] = new Array(300);
   private customSerializer: Map<number | string, Serializer> = new Map();
   private namedSerializer: Map<number, Map<string, Map<string, Serializer>>> = new Map();
+  private registrationFrozen = false;
 
   private writeContext!: WriteContext;
   private readContext!: ReadContext;
@@ -285,7 +286,18 @@ export default class TypeResolver {
     this.initInternalSerializer();
   }
 
+  freezeRegistration() {
+    this.registrationFrozen = true;
+  }
+
+  ensureRegistrationOpen() {
+    if (this.registrationFrozen) {
+      throw new Error("types and serializers must be registered before the first root operation");
+    }
+  }
+
   registerSerializer(typeInfo: TypeInfo, serializer: Serializer = uninitSerialize) {
+    this.ensureRegistrationOpen();
     const typeId = this.computeTypeId(typeInfo);
     if (!TypeId.isNamedType(typeId)) {
       if (TypeId.needsUserTypeId(typeId) && typeInfo.userTypeId !== -1) {
@@ -327,6 +339,7 @@ export default class TypeResolver {
   }
 
   regenerateReadSerializer(typeInfo: TypeInfo) {
+    this.ensureRegistrationOpen();
     const serializer = this.generateReadSerializer(typeInfo);
     return this.registerSerializer(typeInfo, {
       readDataAlwaysAdvances: serializer.readDataAlwaysAdvances,

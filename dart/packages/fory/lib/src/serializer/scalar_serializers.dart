@@ -140,7 +140,7 @@ final class StringSerializer extends Serializer<String> {
   static String readPayload(ReadContext context) {
     final header = context.buffer.readVarUint36Small();
     final encoding = header & 0x03;
-    final byteLength = header >>> 2;
+    final byteLength = header ~/ 4;
     return readStringFromBuffer(context.buffer, byteLength, encoding);
   }
 }

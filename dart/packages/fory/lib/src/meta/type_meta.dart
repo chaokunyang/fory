@@ -23,6 +23,7 @@ import 'dart:typed_data';
 import 'package:fory/src/memory/buffer.dart';
 import 'package:fory/src/config.dart';
 import 'package:fory/src/meta/meta_string.dart';
+import 'package:fory/src/meta/parsed_type_meta_entries.dart';
 import 'package:fory/src/meta/type_ids.dart';
 import 'package:fory/src/resolver/type_resolver.dart';
 import 'package:fory/src/types/int64.dart';
@@ -113,7 +114,7 @@ final class TypeHeader {
 
 final class ParsedTypeMetaCache {
   final LinkedHashMap<Int64, TypeInfo> _entries =
-      LinkedHashMap<Int64, TypeInfo>();
+      createParsedTypeMetaEntries<TypeInfo>();
   TypeInfo? _cachedTypeInfo;
 
   @pragma('vm:prefer-inline')

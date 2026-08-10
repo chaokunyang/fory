@@ -46,6 +46,14 @@ const int _unbackedCheckInterval = 1024;
 // separately by count below. This is not a Fory wire header or a Dart VM layout probe.
 const int _listOwnerBytes = 6 * _referenceBytes;
 
+typedef GeneratedValueReader<T> =
+    T Function(
+      ReadContext context,
+      TypeInfo resolved,
+      FieldType? fieldType,
+      bool hasPreservedRef,
+    );
+
 @pragma('vm:prefer-inline')
 void _writeDirectTypeInfoValue(
   WriteContext context,
@@ -229,14 +237,17 @@ T readFieldTypeValue<T>(
   }
   final resolved = declaredTypeInfo!;
   if (fieldType.nullable || fieldType.ref) {
-    final flag = context.refReader.tryPreserveRefId(context.buffer);
-    final preservedRefId = flag >= RefWriter.refValueFlag ? flag : null;
+    final flag = context.refReader.readRefOrNull(context.buffer);
     if (flag == RefWriter.nullFlag) {
       return fallback as T;
     }
     if (flag == RefWriter.refFlag) {
       return context.refReader.getReadRef() as T;
     }
+    final preservedRefId = context.refReader.preserveRefValue(
+      flag,
+      resolved.supportsRef,
+    );
     final value = context.readResolvedValue(
       resolved,
       fieldType,
@@ -932,6 +943,174 @@ Set<T> readTypedSetPayload<T>(
   return result;
 }
 
+List<T> readGeneratedListPayload<T>(
+  ReadContext context,
+  FieldType? elementFieldType,
+  GeneratedValueReader<T> readValue, {
+  bool hasPreservedRef = false,
+}) {
+  final state = _prepareListRead(context, elementFieldType);
+  final result = <T>[];
+  if (hasPreservedRef) {
+    // A first child may refer back to this list. The direct typed list must be
+    // the published owner before any child read; a raw backing plus cast view
+    // would retain two owners and would still publish the wrong identity.
+    context.reference(result);
+  }
+  if (state.size == 0) {
+    return result;
+  }
+  if (state.guardUnbackedItems) {
+    context.checkUnbackedContainerAllocation(state.size);
+  } else {
+    context.buffer.checkReadableBytes(state.size);
+  }
+  if (state.tracksDepth) {
+    context.increaseDepth();
+  }
+  if (state.guardUnbackedItems) {
+    var checkpoint = bufferReaderIndex(context.buffer);
+    for (var index = 0; index < state.size; index += 1) {
+      result.add(_readGeneratedListItem(context, state, readValue));
+      if (((index + 1) & (_unbackedCheckInterval - 1)) == 0) {
+        final cursor = bufferReaderIndex(context.buffer);
+        context.settleUnbackedContainerItems(
+          _unbackedCheckInterval,
+          cursor - checkpoint,
+        );
+        checkpoint = cursor;
+      }
+    }
+    final tail = state.size & (_unbackedCheckInterval - 1);
+    if (tail != 0) {
+      context.settleUnbackedContainerItems(
+        tail,
+        bufferReaderIndex(context.buffer) - checkpoint,
+      );
+    }
+  } else {
+    for (var index = 0; index < state.size; index += 1) {
+      result.add(_readGeneratedListItem(context, state, readValue));
+    }
+  }
+  if (state.tracksDepth) {
+    context.decreaseDepth();
+  }
+  return result;
+}
+
+Set<T> readGeneratedSetPayload<T>(
+  ReadContext context,
+  FieldType? elementFieldType,
+  GeneratedValueReader<T> readValue, {
+  bool hasPreservedRef = false,
+}) {
+  final state = _prepareListRead(context, elementFieldType);
+  final result = <T>{};
+  if (hasPreservedRef) {
+    // The typed set is the final generated carrier. Publish it before reading
+    // children so every nested RefFlag observes this owner, not a raw Set.
+    context.reference(result);
+  }
+  if (state.size == 0) {
+    return result;
+  }
+  if (!state.guardUnbackedItems) {
+    context.buffer.checkReadableBytes(state.size);
+  }
+  if (state.tracksDepth) {
+    context.increaseDepth();
+  }
+  if (state.guardUnbackedItems) {
+    var checkpoint = bufferReaderIndex(context.buffer);
+    for (var index = 0; index < state.size; index += 1) {
+      result.add(_readGeneratedListItem(context, state, readValue));
+      if (((index + 1) & (_unbackedCheckInterval - 1)) == 0) {
+        final cursor = bufferReaderIndex(context.buffer);
+        context.settleUnbackedContainerItems(
+          _unbackedCheckInterval,
+          cursor - checkpoint,
+        );
+        checkpoint = cursor;
+      }
+    }
+    final tail = state.size & (_unbackedCheckInterval - 1);
+    if (tail != 0) {
+      context.settleUnbackedContainerItems(
+        tail,
+        bufferReaderIndex(context.buffer) - checkpoint,
+      );
+    }
+  } else {
+    for (var index = 0; index < state.size; index += 1) {
+      result.add(_readGeneratedListItem(context, state, readValue));
+    }
+  }
+  if (state.tracksDepth) {
+    context.decreaseDepth();
+  }
+  return result;
+}
+
+BoolList readGeneratedBoolListPayload(
+  ReadContext context,
+  FieldType? elementFieldType,
+  GeneratedValueReader<bool> readValue, {
+  bool hasPreservedRef = false,
+}) {
+  final state = _prepareListRead(
+    context,
+    elementFieldType,
+    ownerBytes: 0,
+    ownerElementBytes: 0,
+  );
+  if (state.guardUnbackedItems) {
+    context.checkUnbackedContainerAllocation(state.size);
+  } else {
+    context.buffer.checkReadableBytes(state.size);
+  }
+  final result = BoolList(state.size);
+  if (hasPreservedRef) {
+    // BoolList has its final dense storage as soon as its length is known.
+    context.reference(result);
+  }
+  if (state.size == 0) {
+    return result;
+  }
+  if (state.tracksDepth) {
+    context.increaseDepth();
+  }
+  if (state.guardUnbackedItems) {
+    var checkpoint = bufferReaderIndex(context.buffer);
+    for (var index = 0; index < state.size; index += 1) {
+      result[index] = _readGeneratedListItem(context, state, readValue);
+      if (((index + 1) & (_unbackedCheckInterval - 1)) == 0) {
+        final cursor = bufferReaderIndex(context.buffer);
+        context.settleUnbackedContainerItems(
+          _unbackedCheckInterval,
+          cursor - checkpoint,
+        );
+        checkpoint = cursor;
+      }
+    }
+    final tail = state.size & (_unbackedCheckInterval - 1);
+    if (tail != 0) {
+      context.settleUnbackedContainerItems(
+        tail,
+        bufferReaderIndex(context.buffer) - checkpoint,
+      );
+    }
+  } else {
+    for (var index = 0; index < state.size; index += 1) {
+      result[index] = _readGeneratedListItem(context, state, readValue);
+    }
+  }
+  if (state.tracksDepth) {
+    context.decreaseDepth();
+  }
+  return result;
+}
+
 void writeTypedListPayload<T>(
   WriteContext context,
   List<T> values,
@@ -1119,10 +1298,12 @@ final class _PreparedListRead {
 @pragma('vm:prefer-inline')
 _PreparedListRead _prepareListRead(
   ReadContext context,
-  FieldType? elementFieldType,
-) {
+  FieldType? elementFieldType, {
+  int ownerBytes = _listOwnerBytes,
+  int ownerElementBytes = _referenceBytes,
+}) {
   final size = context.buffer.readVarUint32();
-  context.reserveGraphMemory(_listOwnerBytes + size * _referenceBytes);
+  context.reserveGraphMemory(ownerBytes + size * ownerElementBytes);
   if (size == 0) {
     return _PreparedListRead(
       size: 0,
@@ -1213,6 +1394,117 @@ Object? _readPreparedListItem(ReadContext context, _PreparedListRead state) {
   return _readDifferentTypeElement(context, state.trackRef, state.hasNull);
 }
 
+T _readGeneratedListItem<T>(
+  ReadContext context,
+  _PreparedListRead state,
+  GeneratedValueReader<T> readValue,
+) {
+  if (state.declaredTypeInfo != null) {
+    return _readGeneratedKnownValue(
+      context,
+      state.declaredTypeInfo!,
+      state.elementFieldType,
+      state.trackRef,
+      state.hasNull,
+      readValue,
+    );
+  }
+  if (state.sameTypeInfo != null) {
+    return _readGeneratedKnownValue(
+      context,
+      state.sameTypeInfo!,
+      null,
+      state.trackRef,
+      state.hasNull,
+      readValue,
+    );
+  }
+  if (state.trackRef || state.hasNull) {
+    final flag = context.refReader.readRefOrNull(context.buffer);
+    if (flag == RefWriter.nullFlag) {
+      return null as T;
+    }
+    if (flag == RefWriter.refFlag) {
+      return context.refReader.getReadRef() as T;
+    }
+    final resolved = context.readTypeMetaValue();
+    final preservedRefId = context.refReader.preserveRefValue(
+      flag,
+      resolved.supportsRef,
+    );
+    return _readGeneratedResolvedValue(
+      context,
+      resolved,
+      null,
+      preservedRefId,
+      readValue,
+      trackDepth: tracksNestedPayloadDepth(resolved),
+    );
+  }
+  final resolved = context.readTypeMetaValue();
+  if (tracksNestedPayloadDepth(resolved)) {
+    context.increaseDepth();
+    final value = readValue(context, resolved, null, false);
+    context.decreaseDepth();
+    return value;
+  }
+  return readValue(context, resolved, null, false);
+}
+
+T _readGeneratedKnownValue<T>(
+  ReadContext context,
+  TypeInfo resolved,
+  FieldType? fieldType,
+  bool trackRef,
+  bool hasNull,
+  GeneratedValueReader<T> readValue,
+) {
+  if (!trackRef && !hasNull) {
+    return readValue(context, resolved, fieldType, false);
+  }
+  final flag = context.refReader.readRefOrNull(context.buffer);
+  if (flag == RefWriter.nullFlag) {
+    return null as T;
+  }
+  if (flag == RefWriter.refFlag) {
+    return context.refReader.getReadRef() as T;
+  }
+  final preservedRefId = context.refReader.preserveRefValue(
+    flag,
+    resolved.supportsRef,
+  );
+  return _readGeneratedResolvedValue(
+    context,
+    resolved,
+    fieldType,
+    preservedRefId,
+    readValue,
+  );
+}
+
+T _readGeneratedResolvedValue<T>(
+  ReadContext context,
+  TypeInfo resolved,
+  FieldType? fieldType,
+  int? preservedRefId,
+  GeneratedValueReader<T> readValue, {
+  bool trackDepth = false,
+}) {
+  if (trackDepth) {
+    context.increaseDepth();
+  }
+  final value = readValue(context, resolved, fieldType, preservedRefId != null);
+  if (preservedRefId != null &&
+      resolved.supportsRef &&
+      context.refReader.readRefAt(preservedRefId) == null) {
+    context.setReadRef(preservedRefId, value);
+  }
+  if (trackDepth) {
+    context.decreaseDepth();
+  }
+  return value;
+}
+
 @pragma('vm:prefer-inline')
 Object? _readSameTypeElement(
   ReadContext context,
@@ -1222,14 +1514,17 @@ Object? _readSameTypeElement(
   bool hasNull,
 ) {
   if (hasNull || trackRef) {
-    final flag = context.refReader.tryPreserveRefId(context.buffer);
-    final preservedRefId = flag >= RefWriter.refValueFlag ? flag : null;
+    final flag = context.refReader.readRefOrNull(context.buffer);
     if (flag == RefWriter.nullFlag) {
       return null;
     }
     if (flag == RefWriter.refFlag) {
       return context.refReader.getReadRef();
     }
+    final preservedRefId = context.refReader.preserveRefValue(
+      flag,
+      typeInfo.supportsRef,
+    );
     final value = readTypeInfoValue(
       context,
       typeInfo,

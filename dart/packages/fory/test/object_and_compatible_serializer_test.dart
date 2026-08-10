@@ -17,7 +17,10 @@
  * under the License.
  */
 
+import 'dart:typed_data';
+
 import 'package:fory/fory.dart';
+import 'package:fory/src/meta/type_meta.dart';
 import 'package:test/test.dart';
 
 part 'object_and_compatible_serializer_test.fory.dart';
@@ -125,6 +128,51 @@ class StaticPayloadEnvelopeV2 {
   SharedLeaf? payload;
 }
 
+@ForyStruct()
+class RemovedCompatibleLeaf {
+  RemovedCompatibleLeaf();
+
+  @ForyField(id: 1)
+  String label = '';
+
+  @ForyField(id: 2)
+  int value = 0;
+}
+
+@ForyStruct()
+class RemovedStructEnvelopeV1 {
+  RemovedStructEnvelopeV1();
+
+  @ForyField(id: 1, ref: true)
+  RemovedCompatibleLeaf? first;
+
+  @ForyField(id: 2, ref: true)
+  RemovedCompatibleLeaf? second;
+
+  @ForyField(id: 3, ref: true, dynamic: false)
+  Object? firstAlias;
+
+  @ForyField(id: 4, ref: true, dynamic: false)
+  Object? secondAlias;
+
+  @ForyField(id: 5, ref: true, dynamic: false)
+  Object? repeatedFirstAlias;
+}
+
+@ForyStruct()
+class RemovedStructEnvelopeV2 {
+  RemovedStructEnvelopeV2();
+
+  @ForyField(id: 3, ref: true, dynamic: false)
+  Object? firstAlias;
+
+  @ForyField(id: 4, ref: true, dynamic: false)
+  Object? secondAlias;
+
+  @ForyField(id: 5, ref: true, dynamic: false)
+  Object? repeatedFirstAlias;
+}
+
 void _registerCommonTypes(Fory fory) {
   ObjectAndCompatibleSerializerTestForyModule.register(
     fory,
@@ -169,6 +217,25 @@ void _registerV2Types(Fory fory) {
     CompatibleEnvelopeV2,
     name: 'compat.Envelope',
   );
+}
+
+Uint8List _corruptRootTypeDefBody(Uint8List bytes) {
+  final corrupted = Uint8List.fromList(bytes);
+  final source = Buffer.wrap(corrupted);
+  source.readUint8();
+  source.readByte();
+  source.readVarUint32Small7();
+  if (source.readVarUint32Small14() != 0) {
+    throw StateError('Expected an inline root TypeDef.');
+  }
+  final header = TypeHeader(source.readInt64());
+  final bodyLength = header.readMetaSize(source);
+  final bodyOffset = corrupted.length - source.readableBytes;
+  if (bodyLength == 0) {
+    throw StateError('Expected a non-empty root TypeDef body.');
+  }
+  corrupted[bodyOffset + bodyLength - 1] ^= 1;
+  return corrupted;
 }
 
 void main() {
@@ -326,6 +393,88 @@ void main() {
             (error) => error.toString(),
             'message',
             contains('incompatible local and remote schemas'),
+          ),
+        ),
+      );
+    });
+
+    test('removed unregistered Structs retain reference identity', () {
+      final writer = Fory(compatible: true);
+      final reader = Fory(compatible: true);
+      ObjectAndCompatibleSerializerTestForyModule.register(
+        writer,
+        RemovedCompatibleLeaf,
+        name: 'compat.RemovedLeaf',
+      );
+      ObjectAndCompatibleSerializerTestForyModule.register(
+        writer,
+        RemovedStructEnvelopeV1,
+        name: 'compat.RemovedStructEnvelope',
+      );
+      ObjectAndCompatibleSerializerTestForyModule.register(
+        reader,
+        RemovedStructEnvelopeV2,
+        name: 'compat.RemovedStructEnvelope',
+      );
+
+      final first =
+          RemovedCompatibleLeaf()
+            ..label = 'first'
+            ..value = 1;
+      final second =
+          RemovedCompatibleLeaf()
+            ..label = 'second'
+            ..value = 2;
+      final migrated = reader.deserialize<RemovedStructEnvelopeV2>(
+        writer.serialize(
+          RemovedStructEnvelopeV1()
+            ..first = first
+            ..second = second
+            ..firstAlias = first
+            ..secondAlias = second
+            ..repeatedFirstAlias = first,
+        ),
+      );
+
+      expect(migrated.firstAlias.runtimeType, Object);
+      expect(
+        identical(migrated.firstAlias, migrated.repeatedFirstAlias),
+        isTrue,
+      );
+      expect(identical(migrated.firstAlias, migrated.secondAlias), isFalse);
+    });
+
+    test('unregistered Struct roots do not retain metadata', () {
+      final writer = Fory(compatible: true);
+      final reader = Fory(compatible: true);
+      ObjectAndCompatibleSerializerTestForyModule.register(
+        writer,
+        RemovedCompatibleLeaf,
+        name: 'compat.RemovedLeaf',
+      );
+      final bytes = writer.serialize(
+        RemovedCompatibleLeaf()
+          ..label = 'root'
+          ..value = 1,
+      );
+
+      expect(
+        () => reader.deserialize<Object?>(bytes),
+        throwsA(
+          isA<StateError>().having(
+            (error) => error.toString(),
+            'message',
+            contains('is not registered for materialization'),
+          ),
+        ),
+      );
+      expect(
+        () => reader.deserialize<Object?>(_corruptRootTypeDefBody(bytes)),
+        throwsA(
+          isA<StateError>().having(
+            (error) => error.toString(),
+            'message',
+            contains('Invalid TypeDef metadata hash'),
           ),
         ),
       );

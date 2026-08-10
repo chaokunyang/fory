@@ -1173,23 +1173,26 @@ _DecimalValue _canonicalDecimalValue(BigInt unscaled, int scale) {
 
 @pragma('vm:never-inline')
 _DecimalValue _canonicalizeLongDecimal(BigInt unscaled, int scale) {
-  final negative = unscaled.isNegative;
-  final digits = unscaled.abs().toString();
-  var significantEnd = digits.length;
-  var resultScale = scale;
-  while (resultScale > 0 && digits.codeUnitAt(significantEnd - 1) == 48) {
-    significantEnd -= 1;
-    resultScale -= 1;
+  var low = 0;
+  var high = scale + 1;
+  while (low + 1 < high) {
+    final candidate = (low + high) >> 1;
+    if (unscaled.remainder(_ten.pow(candidate)) == BigInt.zero) {
+      low = candidate;
+    } else {
+      high = candidate;
+    }
   }
-  // Check the canonical shape before parsing the retained prefix. Dividing a
-  // growing BigInt once per stripped zero makes valid long-zero decimals
-  // quadratic.
+  final resultScale = scale - low;
+  final resultUnscaled = low == 0 ? unscaled : unscaled ~/ _ten.pow(low);
+  // Check the binary BigInt before any decimal conversion. A wire Decimal may
+  // carry 10,000 magnitude bytes, while compatible output allows only 256
+  // digits; calling BigInt.toString before this gate is quadratic radix work.
   if (resultScale > _maxCompatibleDecimalDigits ||
-      significantEnd > _maxCompatibleDecimalDigits) {
+      resultUnscaled.abs() >= _maxCompatibleDecimalMagnitude) {
     throw const FormatException('Compatible decimal is too large.');
   }
-  final magnitude = BigInt.parse(digits.substring(0, significantEnd));
-  return _DecimalValue(negative ? -magnitude : magnitude, resultScale);
+  return _DecimalValue(resultUnscaled, resultScale);
 }
 
 int _decimalDigitCount(BigInt value) {

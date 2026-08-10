@@ -310,6 +310,33 @@ void main() {
       );
     });
 
+    test('rejects named metadata kind mismatches', () {
+      final writer = Fory(compatible: false);
+      final reader = Fory(compatible: false);
+      writer.registerSerializer(
+        PlainCustomValue,
+        const PlainCustomValueSerializer(),
+        name: 'validation.PlainCustomValue',
+      );
+      reader.registerSerializer(
+        PlainCustomValue,
+        const PlainCustomValueSerializer(),
+        name: 'validation.PlainCustomValue',
+      );
+      final bytes = writer.serialize(PlainCustomValue('value'));
+      expect(bytes[2], TypeIds.namedExt);
+      bytes[2] = TypeIds.namedStruct;
+
+      expect(
+        () => reader.deserialize<Object?>(bytes),
+        throwsStateError,
+      );
+      final roundTrip = reader.deserialize<Object?>(
+        writer.serialize(PlainCustomValue('follow-on')),
+      ) as PlainCustomValue;
+      expect(roundTrip.value, 'follow-on');
+    });
+
     test('rejects unregistered generated and custom values', () {
       final fory = Fory();
 

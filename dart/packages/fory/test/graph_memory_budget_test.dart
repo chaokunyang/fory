@@ -96,6 +96,22 @@ class BudgetCompatibleArrayEnvelope {
   Int32List values = Int32List(0);
 }
 
+@ForyStruct()
+final class BudgetConvertedHolder {
+  BudgetConvertedHolder(this.values);
+
+  @ForyField(ref: true)
+  final List<List<int>> values;
+}
+
+@ForyStruct()
+final class BudgetNestedOwnerHolder {
+  BudgetNestedOwnerHolder();
+
+  @ListField(element: ListType(ref: true, element: Int32Type()))
+  List<List<int>> values = <List<int>>[];
+}
+
 class BudgetHierarchyBase {
   BudgetHierarchyBase();
 
@@ -228,6 +244,22 @@ void _registerCompatibleHierarchy(Fory fory) {
     fory,
     BudgetHierarchyChild,
     name: 'test.BudgetHierarchy',
+  );
+}
+
+void _registerConvertedHolder(Fory fory) {
+  GraphMemoryBudgetTestForyModule.register(
+    fory,
+    BudgetConvertedHolder,
+    name: 'test.BudgetConvertedHolder',
+  );
+}
+
+void _registerNestedOwner(Fory fory) {
+  GraphMemoryBudgetTestForyModule.register(
+    fory,
+    BudgetNestedOwnerHolder,
+    name: 'test.BudgetNestedOwnerHolder',
   );
 }
 
@@ -443,6 +475,59 @@ void main() {
       expect(roundTrip.ids, equals(<int>[1]));
       expect(roundTrip.tags, equals(<String>{'x'}));
       expect(roundTrip.counts, equals(<String, int>{'one': 1}));
+    });
+
+    test('reserves one final converted container for tracked aliases', () {
+      final values = <List<int>>[
+        <int>[1, 2],
+      ];
+      final writer = Fory();
+      _registerConvertedHolder(writer);
+      final bytes = writer.serialize(<BudgetConvertedHolder>[
+        BudgetConvertedHolder(values),
+        BudgetConvertedHolder(values),
+      ]);
+      final required =
+          _listGraphBytes(2) +
+          2 * _objectGraphBytes(1) +
+          _listGraphBytes(1) +
+          _listGraphBytes(2);
+
+      final failingReader = Fory(maxGraphMemoryBytes: required - 1);
+      _registerConvertedHolder(failingReader);
+      expect(() => failingReader.deserialize<List>(bytes), _throwsGraphBudget);
+
+      final passingReader = Fory(maxGraphMemoryBytes: required);
+      _registerConvertedHolder(passingReader);
+      final result = passingReader.deserialize<List>(bytes);
+      final first = result[0] as BudgetConvertedHolder;
+      final second = result[1] as BudgetConvertedHolder;
+      expect(identical(first.values, second.values), isTrue);
+      expect(first.values, equals(values));
+    });
+
+    test('charges a shared nested generated owner once', () {
+      final shared = <int>[1, 2];
+      final writer = Fory();
+      _registerNestedOwner(writer);
+      final bytes = writer.serialize(
+        BudgetNestedOwnerHolder()..values = <List<int>>[shared, shared],
+      );
+      final required =
+          _objectGraphBytes(1) + _listGraphBytes(2) + _listGraphBytes(2);
+
+      final failingReader = Fory(maxGraphMemoryBytes: required - 1);
+      _registerNestedOwner(failingReader);
+      expect(
+        () => failingReader.deserialize<BudgetNestedOwnerHolder>(bytes),
+        _throwsGraphBudget,
+      );
+
+      final passingReader = Fory(maxGraphMemoryBytes: required);
+      _registerNestedOwner(passingReader);
+      final result = passingReader.deserialize<BudgetNestedOwnerHolder>(bytes);
+      expect(identical(result.values[0], result.values[1]), isTrue);
+      expect(result.values[0], equals(shared));
     });
 
     test('skips compatible list to typed array leaf', () {

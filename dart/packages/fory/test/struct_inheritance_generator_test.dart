@@ -401,7 +401,9 @@ class PolicyChild extends PolicyBase with PolicyMixin {
           contains('needsRootRef: false,'),
           isNot(contains("identifier: '_base_secret',")),
           isNot(contains("identifier: '_mixin_secret',")),
-          isNot(contains('context.reference(value);')),
+            contains(
+              'if (context.depth == 1 && context.hasPreservedRefId)',
+            ),
         ),
       );
     });
@@ -590,6 +592,36 @@ class IdChild extends IdBase {
 }
 ''',
         message: 'duplicate field id 7',
+      );
+    });
+
+    test('accepts the largest extended field id', () async {
+      await _expectGenerationOutput(
+        source: '''
+@ForyStruct()
+class LargestFieldId {
+  LargestFieldId();
+
+  @ForyField(id: 0x10000000e)
+  int value = 0;
+}
+''',
+        output: contains('id: 4294967310,'),
+      );
+    });
+
+    test('rejects field ids outside the extended header', () async {
+      await _expectGenerationError(
+        source: '''
+@ForyStruct()
+class OversizedFieldId {
+  OversizedFieldId();
+
+  @ForyField(id: 0x10000000f)
+  int value = 0;
+}
+''',
+        message: 'field id must not exceed 4294967310',
       );
     });
 

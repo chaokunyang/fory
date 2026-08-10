@@ -21,13 +21,14 @@ import 'package:fory/src/memory/buffer.dart';
 import 'package:fory/src/context/ref_writer.dart';
 
 final class RefReader {
-  // Missing compatible structs may surface as null field values, but they are
-  // not published as reference targets; keep ref reads as direct lookups.
+  // RefFlag always reuses the final owner already published in this table,
+  // including owners materialized by compatible generated skip paths.
   final List<Object?> _refs = <Object?>[];
   final List<int> _preservedIds = <int>[];
   Object? _resolved;
   int? _resolvedId;
 
+  @pragma('vm:prefer-inline')
   int readRefOrNull(Buffer buffer) {
     final flag = buffer.readByte();
     if (flag == RefWriter.refFlag) {
@@ -42,18 +43,19 @@ final class RefReader {
   }
 
   @pragma('vm:prefer-inline')
-  int tryPreserveRefId(Buffer buffer) {
-    final flag = buffer.readByte();
-    if (flag == RefWriter.refValueFlag) {
-      return preserveRefId();
+  int? preserveRefValue(int flag, bool supportsRef) {
+    if (flag < RefWriter.refValueFlag) {
+      return null;
     }
-    if (flag == RefWriter.refFlag) {
-      final id = buffer.readVarUint32();
-      _resolvedId = id;
-      _resolved = _refs[id];
-      return flag;
+    if (flag != RefWriter.refValueFlag) {
+      _throwInvalidRefValue(flag);
     }
-    return flag;
+    // Resolve the payload capability before reserving so a malformed value
+    // envelope cannot shift the reference IDs owned by later values.
+    if (!supportsRef) {
+      _throwUnsupportedRefValue();
+    }
+    return preserveRefId();
   }
 
   int preserveRefId([int? refId]) {
@@ -107,4 +109,14 @@ final class RefReader {
     _resolved = null;
     _resolvedId = null;
   }
+}
+
+@pragma('vm:never-inline')
+Never _throwUnsupportedRefValue() {
+  throw StateError('RefValue is not supported by this value type.');
+}
+
+@pragma('vm:never-inline')
+Never _throwInvalidRefValue(int flag) {
+  throw StateError('Unexpected reference value flag $flag.');
 }

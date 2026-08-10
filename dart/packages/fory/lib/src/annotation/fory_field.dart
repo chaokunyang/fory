@@ -35,6 +35,9 @@ final class ForyField {
   final bool ignore;
 
   /// The stable numeric field identity used for schema evolution.
+  ///
+  /// Values must fit the protocol's extended field header: `0` through
+  /// `2^32 + 14`, inclusive.
   final int? id;
 
   /// An optional override for the field's inferred nullability.

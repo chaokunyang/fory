@@ -20,7 +20,10 @@
 import 'package:meta/meta.dart';
 
 import 'package:fory/src/context/read_context.dart';
+import 'package:fory/src/context/ref_writer.dart';
 import 'package:fory/src/meta/field_info.dart';
+import 'package:fory/src/meta/type_ids.dart';
+import 'package:fory/src/resolver/type_resolver.dart';
 import 'package:fory/src/serializer/collection_serializers.dart';
 import 'package:fory/src/serializer/scalar_conversion.dart';
 import 'package:fory/src/serializer/serialization_field_info.dart';
@@ -202,5 +205,70 @@ void skipGeneratedCompatibleStructField(
   ReadContext context,
   CompatibleStructReadField field,
 ) {
-  readCompatibleField(context, field.remoteField);
+  _skipCompatibleRemoteField(context, field.remoteField);
 }
+
+void _skipCompatibleRemoteField(ReadContext context, FieldInfo field) {
+  if (!_isStructTypeId(field.fieldType.typeId)) {
+    readCompatibleField(context, field);
+    return;
+  }
+  _skipCompatibleRemoteStruct(context, field);
+}
+
+void _skipCompatibleRemoteStruct(ReadContext context, FieldInfo field) {
+  final fieldType = field.fieldType;
+  var flag = RefWriter.notNullValueFlag;
+  if (fieldType.ref || fieldType.nullable) {
+    flag = context.readRefOrNull();
+    if (flag == RefWriter.nullFlag || flag == RefWriter.refFlag) {
+      return;
+    }
+    if (flag != RefWriter.refValueFlag && flag != RefWriter.notNullValueFlag) {
+      throw StateError('Unexpected Struct reference flag $flag.');
+    }
+  }
+  final resolved = context.readTypeMetaValue();
+  if (resolved.kind != RegistrationKind.struct) {
+    throw StateError('Removed Struct field resolved to a non-Struct type.');
+  }
+  final preservedRefId = context.refReader.preserveRefValue(
+    flag,
+    resolved.supportsRef,
+  );
+  final structSerializer = resolved.structSerializer;
+  if (structSerializer != null) {
+    final value = context.readResolvedValue(
+      resolved,
+      fieldType,
+      hasPreservedRef: preservedRefId != null,
+    );
+    if (preservedRefId != null &&
+        context.refReader.readRefAt(preservedRefId) == null) {
+      context.setReadRef(preservedRefId, value);
+    }
+    return;
+  }
+  final remoteTypeDef = resolved.remoteTypeDef;
+  if (remoteTypeDef == null) {
+    throw StateError('Removed Struct field has no remote schema.');
+  }
+  if (preservedRefId != null) {
+    // An unregistered Struct cannot construct its declared Dart type. This
+    // empty object is the final owner for the authorized removed-field path;
+    // publish it before consuming children so ordinary RefFlag lookup keeps
+    // the wire reference identity and numbering.
+    context.reference(Object());
+  }
+  context.increaseDepth();
+  for (final remoteField in remoteTypeDef.fields) {
+    _skipCompatibleRemoteField(context, remoteField);
+  }
+  context.decreaseDepth();
+}
+
+bool _isStructTypeId(int typeId) =>
+    typeId == TypeIds.struct ||
+    typeId == TypeIds.compatibleStruct ||
+    typeId == TypeIds.namedStruct ||
+    typeId == TypeIds.namedCompatibleStruct;

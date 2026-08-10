@@ -364,6 +364,38 @@ void main() {
       expect(bufferBytes(buffer), same(fullStorage));
     });
 
+    test('generated varuint32 rejects an overwide fifth byte', () {
+      final fory = Fory();
+      _registerSignedFields(fory);
+      final zeroBytes = fory.serialize(SignedFields());
+      final firstFieldBytes = fory.serialize(
+        SignedFields()..i64Fixed = Int64(1),
+      );
+      var bodyOffset = 0;
+      while (zeroBytes[bodyOffset] == firstFieldBytes[bodyOffset]) {
+        bodyOffset += 1;
+      }
+      final buffer =
+          Buffer(128)
+            ..writeBytes(zeroBytes.sublist(0, bodyOffset))
+            ..writeInt64(Int64(0))
+            ..writeInt64FromInt(0)
+            ..writeInt32(0)
+            ..writeVarInt64(Int64(0))
+            ..writeVarInt64(Int64(0))
+            ..writeVarInt64FromInt(0)
+            ..writeVarInt64FromInt(0)
+            ..writeTaggedInt64(Int64(0))
+            ..writeTaggedInt64FromInt(0)
+            ..writeBytes(<int>[0x80, 0x80, 0x80, 0x80, 0x10])
+            ..writeBytes(zeroBytes.sublist(bodyOffset + 27));
+
+      expect(
+        () => fory.deserializeFrom<SignedFields>(buffer),
+        throwsStateError,
+      );
+    });
+
     test(
       'web rejects JS-unsafe Dart int fields instead of corrupting bytes',
       () {

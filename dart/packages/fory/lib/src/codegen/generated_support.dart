@@ -31,6 +31,8 @@ export 'package:fory/src/memory/buffer.dart'
         bufferSetReaderIndex,
         bufferSetWriterIndex;
 export 'package:fory/src/serializer/generated_struct_serializer.dart';
+export 'package:fory/src/serializer/collection_serializers.dart'
+    show GeneratedValueReader;
 
 import 'package:fory/src/codegen/generated_registry.dart';
 import 'package:fory/src/context/ref_writer.dart';
@@ -48,6 +50,118 @@ import 'package:fory/src/util/int_validation.dart';
 
 @internal
 const Endian generatedLittleEndian = Endian.little;
+
+@internal
+typedef GeneratedResolvedType = resolver.TypeInfo;
+
+@internal
+typedef GeneratedReadFieldType = meta_types.FieldType;
+
+@internal
+@pragma('vm:never-inline')
+Never throwGeneratedVarUint32() {
+  throw StateError('Invalid varuint32 encoding.');
+}
+
+@internal
+Object? readGeneratedValue(
+  ReadContext context,
+  resolver.TypeInfo resolved,
+  meta_types.FieldType? fieldType,
+  bool hasPreservedRef,
+) {
+  return readTypeInfoValue(
+    context,
+    resolved,
+    fieldType,
+    hasPreservedRef: hasPreservedRef,
+  );
+}
+
+@internal
+List<T> readGeneratedListValue<T>(
+  ReadContext context,
+  resolver.TypeInfo resolved,
+  meta_types.FieldType? fieldType,
+  bool hasPreservedRef,
+  GeneratedValueReader<T> readElement,
+) {
+  if (resolved.typeId != TypeIds.list) {
+    _throwGeneratedContainerType('List', resolved.typeId);
+  }
+  return readGeneratedListPayload(
+    context,
+    fieldType?.arguments.isEmpty ?? true ? null : fieldType!.arguments.first,
+    readElement,
+    hasPreservedRef: hasPreservedRef,
+  );
+}
+
+@internal
+Set<T> readGeneratedSetValue<T>(
+  ReadContext context,
+  resolver.TypeInfo resolved,
+  meta_types.FieldType? fieldType,
+  bool hasPreservedRef,
+  GeneratedValueReader<T> readElement,
+) {
+  if (resolved.typeId != TypeIds.set) {
+    _throwGeneratedContainerType('Set', resolved.typeId);
+  }
+  return readGeneratedSetPayload(
+    context,
+    fieldType?.arguments.isEmpty ?? true ? null : fieldType!.arguments.first,
+    readElement,
+    hasPreservedRef: hasPreservedRef,
+  );
+}
+
+@internal
+Map<K, V> readGeneratedMapValue<K, V>(
+  ReadContext context,
+  resolver.TypeInfo resolved,
+  meta_types.FieldType? fieldType,
+  bool hasPreservedRef,
+  GeneratedValueReader<K> readKey,
+  GeneratedValueReader<V> readValue,
+) {
+  if (resolved.typeId != TypeIds.map) {
+    _throwGeneratedContainerType('Map', resolved.typeId);
+  }
+  final arguments = fieldType?.arguments;
+  return readGeneratedMapPayload(
+    context,
+    arguments == null || arguments.isEmpty ? null : arguments[0],
+    arguments == null || arguments.length < 2 ? null : arguments[1],
+    readKey,
+    readValue,
+    hasPreservedRef: hasPreservedRef,
+  );
+}
+
+@internal
+BoolList readGeneratedBoolListValue(
+  ReadContext context,
+  resolver.TypeInfo resolved,
+  meta_types.FieldType? fieldType,
+  bool hasPreservedRef,
+  GeneratedValueReader<bool> readElement,
+) {
+  if (resolved.typeId != TypeIds.list) {
+    _throwGeneratedContainerType('BoolList', resolved.typeId);
+  }
+  return readGeneratedBoolListPayload(
+    context,
+    fieldType?.arguments.isEmpty ?? true ? null : fieldType!.arguments.first,
+    readElement,
+    hasPreservedRef: hasPreservedRef,
+  );
+}
+
+@pragma('vm:never-inline')
+Never _throwGeneratedContainerType(String expected, int typeId) {
+  throw StateError('Expected $expected payload, received type id $typeId.');
+}
 
 @internal
 final class GeneratedFieldType {
@@ -453,8 +567,7 @@ Object? readGeneratedUnionCaseValue(
   ReadContext context,
   GeneratedStructFieldInfo field,
 ) {
-  final flag = context.refReader.tryPreserveRefId(context.buffer);
-  final preservedRefId = flag >= RefWriter.refValueFlag ? flag : null;
+  final flag = context.refReader.readRefOrNull(context.buffer);
   if (flag == RefWriter.nullFlag) {
     return null;
   }
@@ -468,6 +581,10 @@ Object? readGeneratedUnionCaseValue(
           ? context.typeResolver.resolveFieldType(fieldType)
           : null);
   final resolved = context.readTypeMetaValue(declared);
+  final preservedRefId = context.refReader.preserveRefValue(
+    flag,
+    resolved.supportsRef,
+  );
   final value = context.readResolvedValue(
     resolved,
     fieldType,
@@ -507,6 +624,79 @@ Object? readGeneratedStructDescriptorValue(
     return context.readResolvedValue(actualResolved, fieldType);
   }
   return readFieldValue(context, field.field, fallback);
+}
+
+@internal
+@pragma('vm:prefer-inline')
+T readGeneratedStructConvertedValue<T>(
+  ReadContext context,
+  GeneratedStructFieldDescriptor field,
+  GeneratedValueReader<T> readValue, [
+  T? fallback,
+]) {
+  return _readGeneratedConvertedValue(
+    context,
+    field.field,
+    field.declaredTypeInfo,
+    field.usesDeclaredType,
+    readValue,
+    fallback,
+  );
+}
+
+@internal
+@pragma('vm:prefer-inline')
+T readGeneratedCompatibleValue<T>(
+  ReadContext context,
+  CompatibleStructReadField field,
+  GeneratedValueReader<T> readValue, [
+  T? fallback,
+]) {
+  final localField = field.localField!;
+  return _readGeneratedConvertedValue(
+    context,
+    localField,
+    fieldDeclaredTypeInfo(context.typeResolver, localField),
+    fieldUsesDeclaredType(context.typeResolver, localField),
+    readValue,
+    fallback,
+  );
+}
+
+T _readGeneratedConvertedValue<T>(
+  ReadContext context,
+  GeneratedStructFieldInfo field,
+  resolver.TypeInfo? declared,
+  bool usesDeclaredType,
+  GeneratedValueReader<T> readValue,
+  T? fallback,
+) {
+  final fieldType = field.fieldType;
+  var flag = RefWriter.notNullValueFlag;
+  if (fieldType.isDynamic || fieldType.nullable || fieldType.ref) {
+    flag = context.refReader.readRefOrNull(context.buffer);
+    if (flag == RefWriter.nullFlag) {
+      return fallback as T;
+    }
+    if (flag == RefWriter.refFlag) {
+      return context.refReader.getReadRef() as T;
+    }
+  }
+  final resolved =
+      fieldType.isDynamic || !usesDeclaredType || declared == null
+          ? context.readTypeMetaValue(declared)
+          : declared;
+  final preservedRefId = context.refReader.preserveRefValue(
+    flag,
+    resolved.supportsRef,
+  );
+  final value = readValue(context, resolved, fieldType, preservedRefId != null);
+  if (preservedRefId != null &&
+      resolved.supportsRef &&
+      context.refReader.readRefAt(preservedRefId) == null) {
+    context.setReadRef(preservedRefId, value);
+  }
+  return value;
 }
 
 @internal

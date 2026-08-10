@@ -252,9 +252,6 @@ final class ReadContext {
   /// Reserves the next read ref id or reuses [refId] when provided.
   int preserveRefId([int? refId]) => _refReader.preserveRefId(refId);
 
-  /// Reads a ref/value header and preserves a new id only for fresh values.
-  int tryPreserveRefId() => _refReader.tryPreserveRefId(_buffer);
-
   /// Returns the last reserved read ref id.
   int get lastPreservedRefId => _refReader.lastPreservedRefId;
 
@@ -274,8 +271,7 @@ final class ReadContext {
 
   /// Reads a root value using Ref semantics and expected root type [T].
   Object? readRefAs<T>() {
-    final flag = _refReader.tryPreserveRefId(_buffer);
-    final preservedRefId = flag >= RefWriter.refValueFlag ? flag : null;
+    final flag = _refReader.readRefOrNull(_buffer);
     if (flag == RefWriter.nullFlag) {
       return null;
     }
@@ -293,6 +289,10 @@ final class ReadContext {
                 ) ??
                 _readTypeMeta(expectedRootType);
     final resolved = _typeResolver.resolveExpectedRootType<T>(typeMetaResolved);
+    final preservedRefId = _refReader.preserveRefValue(
+      flag,
+      resolved.supportsRef,
+    );
     final rootPreservedRefId =
         preservedRefId == null &&
                 flag == RefWriter.notNullValueFlag &&
@@ -350,8 +350,7 @@ final class ReadContext {
   }
 
   Object? _readRefWithResolved(TypeInfo Function(TypeInfo) resolveRootType) {
-    final flag = _refReader.tryPreserveRefId(_buffer);
-    final preservedRefId = flag >= RefWriter.refValueFlag ? flag : null;
+    final flag = _refReader.readRefOrNull(_buffer);
     if (flag == RefWriter.nullFlag) {
       return null;
     }
@@ -359,6 +358,10 @@ final class ReadContext {
       return _refReader.getReadRef();
     }
     final resolved = resolveRootType(_readTypeMeta());
+    final preservedRefId = _refReader.preserveRefValue(
+      flag,
+      resolved.supportsRef,
+    );
     final rootPreservedRefId =
         preservedRefId == null &&
                 flag == RefWriter.notNullValueFlag &&
@@ -513,7 +516,17 @@ final class ReadContext {
         return const DateTimeSerializer().read(this);
       default:
         if (resolved.kind == RegistrationKind.struct) {
-          return resolved.structSerializer!.readValue(
+          final structSerializer = resolved.structSerializer;
+          if (structSerializer == null) {
+            final identity =
+                resolved.userTypeId != null
+                    ? 'id ${resolved.userTypeId}'
+                    : '${resolved.namespace ?? ''}.${resolved.typeName ?? resolved.type}';
+            throw StateError(
+              'Struct $identity is not registered for materialization.',
+            );
+          }
+          return structSerializer.readValue(
             this,
             resolved,
             hasCurrentPreservedRef: hasPreservedRef,

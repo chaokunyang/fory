@@ -163,6 +163,8 @@ abstract final class _RemoteEnumField {}
 
 abstract final class _RemoteUnionField {}
 
+abstract final class _RemoteStructField {}
+
 final TypeInfo _unknownRemoteEnumTypeInfo = TypeInfo(
   type: _RemoteEnumField,
   kind: RegistrationKind.enumType,
@@ -815,6 +817,9 @@ final class TypeResolver {
       return cached.resolved;
     }
     final resolved = resolveUserByEncodedName(namespace, typeName);
+    if (!_matchesNamedTypeId(resolved, typeId)) {
+      _throwNamedTypeKind(typeId, resolved);
+    }
     _namedTypeLookupCache[slot] = _NamedTypeReadCacheEntry(
       typeId,
       namespace,
@@ -825,6 +830,14 @@ final class TypeResolver {
       _lastNamedTypeById[typeId] = resolved;
     }
     return resolved;
+  }
+
+  @pragma('vm:never-inline')
+  Never _throwNamedTypeKind(int typeId, TypeInfo resolved) {
+    throw StateError(
+      'Named type metadata id $typeId does not match registered kind '
+      '${resolved.kind}.',
+    );
   }
 
   SerializationFieldInfo serializationFieldInfo(
@@ -996,6 +1009,9 @@ final class TypeResolver {
           ([expected]) => metaStringReader.readMetaString(buffer, expected),
     );
     if (typeMeta.hasEncodedName) {
+      if (!_matchesNamedTypeId(typeMeta.resolvedType, typeMeta.typeId)) {
+        _throwNamedTypeKind(typeMeta.typeId, typeMeta.resolvedType);
+      }
       _rememberNamedType(typeMeta.typeId, typeMeta.resolvedType);
     }
     return typeMeta.resolvedType;
@@ -1388,8 +1404,28 @@ final class TypeResolver {
     }
     final resolved =
         userTypeId != null
-            ? resolveUserById(userTypeId)
-            : resolveUserByEncodedName(encodedNamespace!, encodedTypeName!);
+            ? _registeredById[userTypeId]
+            : _registeredByEncodedName[encodedNamespace!]?[encodedTypeName!];
+    if (resolved == null) {
+      if (!isStruct) {
+        if (userTypeId != null) {
+          throw StateError('Unknown registered type id $userTypeId.');
+        }
+        throw StateError(
+          'Unknown named type '
+          '${decodePackageMetaString(encodedNamespace!.bytes, encodedNamespace.encoding)}.'
+          '${decodeTypeNameMetaString(encodedTypeName!.bytes, encodedTypeName.encoding)}.',
+        );
+      }
+      return _metadataOnlyStruct(
+        header,
+        typeId: typeId,
+        userTypeId: userTypeId,
+        encodedNamespace: encodedNamespace,
+        encodedTypeName: encodedTypeName,
+        fields: fields,
+      );
+    }
     if (_typeDefTypeId(
           resolved.kind,
           byName: byName,
@@ -1429,7 +1465,10 @@ final class TypeResolver {
       kind: resolved.kind,
       typeId: resolved.typeId,
       supportsRef: resolved.supportsRef,
-      needsRootRef: resolved.needsRootRef,
+      // The writer reserves the implicit root ref slot from its schema. A
+      // compatible local schema may differ, so retaining the local value here
+      // would shift every nested RefFlag id in the received graph.
+      needsRootRef: _fieldsNeedRootRef(fields),
       usesNestedTypeDefinitions: resolved.usesNestedTypeDefinitions,
       // Compatible field dispatch follows the received schema. Derive this
       // one-level fact from the remote fields instead of retaining the local
@@ -1451,6 +1490,65 @@ final class TypeResolver {
     _parsedTypeMetaCache.remember(header, remoteResolved);
     _recordRemoteTypeDef(remoteSchemaKey);
     return remoteResolved;
+  }
+
+  @pragma('vm:never-inline')
+  TypeInfo _metadataOnlyStruct(
+    TypeHeader header, {
+    required int typeId,
+    required int? userTypeId,
+    required EncodedMetaString? encodedNamespace,
+    required EncodedMetaString? encodedTypeName,
+    required List<FieldInfo> fields,
+  }) {
+    final evolving =
+        typeId == TypeIds.compatibleStruct ||
+        typeId == TypeIds.namedCompatibleStruct;
+    final namespace =
+        encodedNamespace == null
+            ? null
+            : decodePackageMetaString(
+              encodedNamespace.bytes,
+              encodedNamespace.encoding,
+            );
+    final typeName =
+        encodedTypeName == null
+            ? null
+            : decodeTypeNameMetaString(
+              encodedTypeName.bytes,
+              encodedTypeName.encoding,
+            );
+    final remoteTypeDef = TypeDef(
+      evolving: evolving,
+      fields: List<FieldInfo>.unmodifiable(fields),
+      header: header.value,
+      encoded: Uint8List(0),
+    );
+    // This is checked remote metadata, not a registration or a materializable
+    // dynamic type. The caller adds it only to the root-local shared TypeDef
+    // table so generated compatible skips can consume repeated markers. Do not
+    // publish it to the persistent checked cache or schema counters: a failing
+    // independent dynamic root must not retain an unknown remote identity.
+    return TypeInfo(
+      type: _RemoteStructField,
+      kind: RegistrationKind.struct,
+      typeId: typeId,
+      supportsRef: true,
+      needsRootRef: false,
+      usesNestedTypeDefinitions: _fieldsUseNestedTypeDefinitions(fields),
+      readDataAlwaysAdvances: _fieldsReadDataAlwaysAdvances(fields),
+      evolving: evolving,
+      fields: remoteTypeDef.fields,
+      serializer: const _UnknownRemoteFieldSerializer('struct'),
+      structSerializer: null,
+      userTypeId: userTypeId,
+      namespace: namespace,
+      typeName: typeName,
+      encodedNamespace: encodedNamespace,
+      encodedTypeName: encodedTypeName,
+      typeDef: null,
+      remoteTypeDef: remoteTypeDef,
+    );
   }
 
   bool _matchesEncodedTypeDef(

@@ -206,14 +206,17 @@ T readFieldValue<T>(
   }
   final resolved = declaredTypeInfo;
   if (fieldType.nullable || fieldType.ref) {
-    final flag = context.refReader.tryPreserveRefId(context.buffer);
-    final preservedRefId = flag >= RefWriter.refValueFlag ? flag : null;
+    final flag = context.refReader.readRefOrNull(context.buffer);
     if (flag == RefWriter.nullFlag) {
       return fallback as T;
     }
     if (flag == RefWriter.refFlag) {
       return context.refReader.getReadRef() as T;
     }
+    final preservedRefId = context.refReader.preserveRefValue(
+      flag,
+      resolved.supportsRef,
+    );
     final value = context.readResolvedValue(
       resolved,
       fieldType,
@@ -236,14 +239,14 @@ Object? readCompatibleField(ReadContext context, FieldInfo field) {
   }
   if (fieldType.isPrimitive) {
     if (fieldType.nullable) {
-      final flag = context.refReader.tryPreserveRefId(context.buffer);
-      final preservedRefId = flag >= RefWriter.refValueFlag ? flag : null;
+      final flag = context.refReader.readRefOrNull(context.buffer);
       if (flag == RefWriter.nullFlag) {
         return null;
       }
       if (flag == RefWriter.refFlag) {
         return context.refReader.getReadRef();
       }
+      final preservedRefId = context.refReader.preserveRefValue(flag, false);
       final value = convertPrimitiveFieldValue(
         context.readPrimitiveValue(fieldType.typeId),
         fieldType,
@@ -292,14 +295,17 @@ Object? readCompatibleField(ReadContext context, FieldInfo field) {
   }
   final resolved = declaredTypeInfo;
   if (fieldType.nullable || fieldType.ref) {
-    final flag = context.refReader.tryPreserveRefId(context.buffer);
-    final preservedRefId = flag >= RefWriter.refValueFlag ? flag : null;
+    final flag = context.refReader.readRefOrNull(context.buffer);
     if (flag == RefWriter.nullFlag) {
       return null;
     }
     if (flag == RefWriter.refFlag) {
       return context.refReader.getReadRef();
     }
+    final preservedRefId = context.refReader.preserveRefValue(
+      flag,
+      resolved.supportsRef,
+    );
     final value = context.readResolvedValue(
       resolved,
       fieldType,

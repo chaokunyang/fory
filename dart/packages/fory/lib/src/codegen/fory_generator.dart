@@ -52,6 +52,7 @@ class DebugGeneratedFieldTypeSpec {
 }
 
 final class ForyGenerator extends Generator {
+  static const int _maxFieldId = 0xffffffff + 15;
   static const int _referenceBytes = 4;
   // Conservative lower bound for a retained generated Dart struct object itself. Field reference
   // slots are added separately; this is not a Fory wire header or a Dart VM layout probe.
@@ -1958,6 +1959,12 @@ final class ForyGenerator extends Generator {
         element: annotationField,
       );
     }
+    if (rawFieldId != null && rawFieldId > _maxFieldId) {
+      throw InvalidGenerationSourceError(
+        'Fory field id must not exceed $_maxFieldId.',
+        element: annotationField,
+      );
+    }
     final nullable =
         nullableValue == null || nullableValue.isNull
             ? _isNullable(effectiveType)
@@ -2542,9 +2549,19 @@ final class ForyGenerator extends Generator {
               '      final ${field.displayType} ${field.localName} = $readerFunctionName(readGeneratedStructDeclaredValue(context, fields[$index]));',
             );
           } else {
-            output.writeln(
-              '      final ${field.displayType} ${field.localName} = $readerFunctionName(readGeneratedStructDescriptorValue(context, fields[$index]));',
-            );
+            if (_needsGeneratedRefConversion(field)) {
+              final generatedReader = _generatedRefReaderName(
+                structSpec.name,
+                field,
+              );
+              output.writeln(
+                '      final ${field.displayType} ${field.localName} = readGeneratedStructConvertedValue<${field.displayType}>(context, fields[$index], $generatedReader);',
+              );
+            } else {
+              output.writeln(
+                '      final ${field.displayType} ${field.localName} = $readerFunctionName(readGeneratedStructDescriptorValue(context, fields[$index]));',
+              );
+            }
           }
           final directPrimitiveEndRun = directPrimitiveRunByEnd[index];
           if (directPrimitiveEndRun != null) {
@@ -2595,7 +2612,124 @@ final class ForyGenerator extends Generator {
         )
         ..writeln('}')
         ..writeln();
+      if (_usesGeneratedContainerReader(field)) {
+        final generatedReader = _generatedRefReaderName(structSpec.name, field);
+        _writeGeneratedValueReader(
+          output,
+          field.type,
+          field.fieldType,
+          generatedReader,
+          'field ${field.name}',
+        );
+      }
     }
+  }
+
+  void _writeGeneratedValueReader(
+    StringBuffer output,
+    DartType type,
+    _GeneratedFieldTypeSpec fieldType,
+    String functionName,
+    String errorTarget,
+  ) {
+    final typeName = _typeCodeString(type);
+    output.writeln(
+      '$typeName $functionName(ReadContext context, GeneratedResolvedType resolved, GeneratedReadFieldType? fieldType, bool hasPreservedRef) {',
+    );
+    if (_isList(type) && fieldType.typeId == TypeIds.list) {
+      final elementType = (type as InterfaceType).typeArguments.single;
+      final elementFieldType = fieldType.arguments.single;
+      final elementReader = _nestedGeneratedReaderName(functionName, 'element');
+      output
+        ..writeln(
+          '  return readGeneratedListValue<${_typeCodeString(elementType)}>(context, resolved, fieldType, hasPreservedRef, $elementReader);',
+        )
+        ..writeln('}')
+        ..writeln();
+      _writeGeneratedValueReader(
+        output,
+        elementType,
+        elementFieldType,
+        elementReader,
+        'list item',
+      );
+      return;
+    }
+    if (_isBoolList(type) && fieldType.typeId == TypeIds.list) {
+      final elementReader = _nestedGeneratedReaderName(functionName, 'element');
+      output
+        ..writeln(
+          '  return readGeneratedBoolListValue(context, resolved, fieldType, hasPreservedRef, $elementReader);',
+        )
+        ..writeln('}')
+        ..writeln()
+        ..writeln(
+          'bool $elementReader(ReadContext context, GeneratedResolvedType resolved, GeneratedReadFieldType? fieldType, bool hasPreservedRef) {',
+        )
+        ..writeln(
+          '  final value = readGeneratedValue(context, resolved, fieldType, hasPreservedRef);',
+        )
+        ..writeln(
+          "  return value == null ? (throw StateError('Received null for non-nullable BoolList item.')) : value as bool;",
+        )
+        ..writeln('}')
+        ..writeln();
+      return;
+    }
+    if (_isSet(type) && fieldType.typeId == TypeIds.set) {
+      final elementType = (type as InterfaceType).typeArguments.single;
+      final elementFieldType = fieldType.arguments.single;
+      final elementReader = _nestedGeneratedReaderName(functionName, 'element');
+      output
+        ..writeln(
+          '  return readGeneratedSetValue<${_typeCodeString(elementType)}>(context, resolved, fieldType, hasPreservedRef, $elementReader);',
+        )
+        ..writeln('}')
+        ..writeln();
+      _writeGeneratedValueReader(
+        output,
+        elementType,
+        elementFieldType,
+        elementReader,
+        'set item',
+      );
+      return;
+    }
+    if (_isMap(type) && fieldType.typeId == TypeIds.map) {
+      final arguments = (type as InterfaceType).typeArguments;
+      final keyReader = _nestedGeneratedReaderName(functionName, 'key');
+      final valueReader = _nestedGeneratedReaderName(functionName, 'value');
+      output
+        ..writeln(
+          '  return readGeneratedMapValue<${_typeCodeString(arguments[0])}, ${_typeCodeString(arguments[1])}>(context, resolved, fieldType, hasPreservedRef, $keyReader, $valueReader);',
+        )
+        ..writeln('}')
+        ..writeln();
+      _writeGeneratedValueReader(
+        output,
+        arguments[0],
+        fieldType.arguments[0],
+        keyReader,
+        'map key',
+      );
+      _writeGeneratedValueReader(
+        output,
+        arguments[1],
+        fieldType.arguments[1],
+        valueReader,
+        'map value',
+      );
+      return;
+    }
+    output
+      ..writeln(
+        '  final value = readGeneratedValue(context, resolved, fieldType, hasPreservedRef);',
+      )
+      ..writeln(
+        '  return ${_conversionExpressionForType(type, fieldType, 'value', nullExpression: _nullExpression(type, errorTarget: errorTarget))};',
+      )
+      ..writeln('}')
+      ..writeln();
   }
 
   void _writeMutableFieldRead(
@@ -2646,7 +2780,9 @@ final class ForyGenerator extends Generator {
           '$readerFunctionName(readGeneratedStructDeclaredValue(context, fields[$index]), $currentValue)';
     } else {
       decoded =
-          '$readerFunctionName(readGeneratedStructDescriptorValue(context, fields[$index], $currentValue), $currentValue)';
+          _needsGeneratedRefConversion(field)
+              ? 'readGeneratedStructConvertedValue<${field.displayType}>(context, fields[$index], ${_generatedRefReaderName(structSpec.name, field)}, $currentValue)'
+              : '$readerFunctionName(readGeneratedStructDescriptorValue(context, fields[$index], $currentValue), $currentValue)';
     }
     output.writeln('$indent${field.access.write('value', decoded)};');
   }
@@ -2675,6 +2811,16 @@ final class ForyGenerator extends Generator {
         if (_structNeedsEarlyReadReference(structSpec)) {
           output
             ..writeln('    if (context.hasPreservedRefId) {')
+            ..writeln('      context.reference(value);')
+            ..writeln('    }');
+        } else {
+          // A compatible remote schema can reserve an implicit root ref even
+          // when the local schema does not. Limit this publication to the root
+          // so a nested compatible object cannot consume its parent's slot.
+          output
+            ..writeln(
+              '    if (context.depth == 1 && context.hasPreservedRefId) {',
+            )
             ..writeln('      context.reference(value);')
             ..writeln('    }');
         }
@@ -2960,6 +3106,19 @@ final class ForyGenerator extends Generator {
       return;
     }
     final readerFunctionName = field.readerFunctionName(structSpec.name);
+    if (_usesGeneratedContainerReader(field)) {
+      final generatedReader = _generatedRefReaderName(structSpec.name, field);
+      final fallbackArg = fallback == null ? '' : ', $fallback';
+      final ordinaryRead = _readerCall(
+        readerFunctionName,
+        'readGeneratedCompatibleStructField(context, $readField)',
+        fallback,
+      );
+      output.writeln(
+        '$indent$target = $readField.topLevelListArrayPair ? $ordinaryRead : readGeneratedCompatibleValue<${field.displayType}>(context, $readField, $generatedReader$fallbackArg);',
+      );
+      return;
+    }
     output.writeln(
       '$indent$target = ${_readerCall(readerFunctionName, 'readGeneratedCompatibleStructField(context, $readField)', fallback)};',
     );
@@ -3003,7 +3162,15 @@ final class ForyGenerator extends Generator {
         fallback == null
             ? 'readGeneratedStructDescriptorValue(context, fields[$index])'
             : 'readGeneratedStructDescriptorValue(context, fields[$index], $fallback)';
-    output.writeln('$indent$target = $readerFunctionName($valueExpression);');
+    if (_needsGeneratedRefConversion(field)) {
+      final fallbackArg = fallback == null ? '' : ', $fallback';
+      final generatedReader = _generatedRefReaderName(structSpec.name, field);
+      output.writeln(
+        '$indent$target = readGeneratedStructConvertedValue<${field.displayType}>(context, fields[$index], $generatedReader$fallbackArg);',
+      );
+    } else {
+      output.writeln('$indent$target = $readerFunctionName($valueExpression);');
+    }
   }
 
   _DirectCompatibleScalarRead? _directCompatibleScalarRead(
@@ -3443,6 +3610,38 @@ GeneratedFieldType(
     return true;
   }
 
+  bool _needsGeneratedRefConversion(_GeneratedFieldSpec field) {
+    return _hasTrackedContainer(field.fieldType);
+  }
+
+  bool _usesGeneratedContainerReader(_GeneratedFieldSpec field) {
+    final typeId = field.fieldType.typeId;
+    return (typeId == TypeIds.list &&
+            (_isList(field.type) || _isBoolList(field.type))) ||
+        (typeId == TypeIds.set && _isSet(field.type)) ||
+        (typeId == TypeIds.map && _isMap(field.type));
+  }
+
+  String _generatedRefReaderName(String structName, _GeneratedFieldSpec field) {
+    final digest = _privateFieldDigest('$structName\u0000${field.name}');
+    return '_gr$digest';
+  }
+
+  String _nestedGeneratedReaderName(String parent, String role) {
+    final digest = _privateFieldDigest('$parent\u0000$role');
+    return '_gr$digest';
+  }
+
+  bool _hasTrackedContainer(_GeneratedFieldTypeSpec fieldType) {
+    if (fieldType.ref &&
+        (fieldType.typeId == TypeIds.list ||
+            fieldType.typeId == TypeIds.set ||
+            fieldType.typeId == TypeIds.map)) {
+      return true;
+    }
+    return fieldType.arguments.any(_hasTrackedContainer);
+  }
+
   bool _usesDirectGeneratedBasicFastPath(_GeneratedFieldSpec field) {
     if (field.fieldType.nullable ||
         field.fieldType.ref ||
@@ -3546,7 +3745,8 @@ GeneratedFieldType(
   ) {
     if (field.fieldType.nullable ||
         field.fieldType.ref ||
-        _isGeneratedDynamicField(field)) {
+        _isGeneratedDynamicField(field) ||
+        _hasTrackedContainer(field.fieldType)) {
       return false;
     }
     if (_isBoolList(field.type)) {
@@ -4091,7 +4291,7 @@ GeneratedFieldType(
     output
       ..writeln('$indent var $shift = 0;')
       ..writeln('$indent var $result = 0;')
-      ..writeln('$indent while (true) {')
+      ..writeln('$indent while ($shift < 28) {')
       ..writeln('$indent   final $byte = $bytes[$offset];')
       ..writeln('$indent   $offset += 1;')
       ..writeln('$indent   $result |= ($byte & 0x7f) << $shift;')
@@ -4099,6 +4299,17 @@ GeneratedFieldType(
       ..writeln('$indent     break;')
       ..writeln('$indent   }')
       ..writeln('$indent   $shift += 7;')
+      ..writeln('$indent }')
+      // A varuint32 fifth byte owns only four data bits. Keep this generated
+      // path aligned with Buffer.readVarUint32 so malformed continuations
+      // cannot turn the direct field run into an input-sized loop.
+      ..writeln('$indent if ($shift == 28) {')
+      ..writeln('$indent   final $byte = $bytes[$offset];')
+      ..writeln('$indent   $offset += 1;')
+      ..writeln('$indent   if (($byte & 0xf0) != 0) {')
+      ..writeln('$indent     throwGeneratedVarUint32();')
+      ..writeln('$indent   }')
+      ..writeln('$indent   $result |= $byte << 28;')
       ..writeln('$indent }');
   }
 

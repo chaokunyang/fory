@@ -373,6 +373,222 @@ Map<K, V> readTypedMapPayload<K, V>(
   return result;
 }
 
+Map<K, V> readGeneratedMapPayload<K, V>(
+  ReadContext context,
+  FieldType? keyFieldType,
+  FieldType? valueFieldType,
+  GeneratedValueReader<K> readKey,
+  GeneratedValueReader<V> readValue, {
+  bool hasPreservedRef = false,
+}) {
+  var remaining = context.buffer.readVarUint32();
+  context.reserveGraphMemory(_mapOwnerBytes + remaining * 2 * _referenceBytes);
+  final declaredKeyTypeInfo =
+      keyFieldType == null || keyFieldType.isDynamic
+          ? null
+          : context.typeResolver.resolveFieldType(keyFieldType);
+  final declaredValueTypeInfo =
+      valueFieldType == null || valueFieldType.isDynamic
+          ? null
+          : context.typeResolver.resolveFieldType(valueFieldType);
+  final result = <K, V>{};
+  if (hasPreservedRef) {
+    // The typed map is the final generated owner. Bind it before keys or
+    // values are read so nested back-references resolve to this exact map.
+    context.reference(result);
+  }
+  while (remaining > 0) {
+    final header = context.buffer.readUint8();
+    final keyHasNull = (header & MapFlags.keyHasNull) != 0;
+    final valueHasNull = (header & MapFlags.valueHasNull) != 0;
+    if (keyHasNull || valueHasNull) {
+      final key =
+          keyHasNull
+              ? null as K
+              : _readGeneratedDynamicMapValue(
+                context,
+                header,
+                MapFlags.trackingKeyRef,
+                MapFlags.keyDeclaredType,
+                keyFieldType,
+                declaredKeyTypeInfo,
+                readKey,
+              );
+      final value =
+          valueHasNull
+              ? null as V
+              : _readGeneratedDynamicMapValue(
+                context,
+                header,
+                MapFlags.trackingValueRef,
+                MapFlags.valueDeclaredType,
+                valueFieldType,
+                declaredValueTypeInfo,
+                readValue,
+              );
+      result[key] = value;
+      remaining -= 1;
+      continue;
+    }
+    final keyTrackRef = (header & MapFlags.trackingKeyRef) != 0;
+    final valueTrackRef = (header & MapFlags.trackingValueRef) != 0;
+    final keyDeclared = (header & MapFlags.keyDeclaredType) != 0;
+    final valueDeclared = (header & MapFlags.valueDeclaredType) != 0;
+    final chunkSize = context.buffer.readUint8();
+    if (chunkSize == 0 || chunkSize > remaining) {
+      _throwInvalidMapChunk(chunkSize, remaining);
+    }
+    final keyTypeInfo = keyDeclared ? null : context.readTypeMetaValue();
+    final valueTypeInfo = valueDeclared ? null : context.readTypeMetaValue();
+    final resolvedKeyTypeInfo = keyDeclared ? declaredKeyTypeInfo : keyTypeInfo;
+    final resolvedValueTypeInfo =
+        valueDeclared ? declaredValueTypeInfo : valueTypeInfo;
+    final tracksDepth =
+        (resolvedKeyTypeInfo != null &&
+            tracksNestedPayloadDepth(resolvedKeyTypeInfo)) ||
+        (resolvedValueTypeInfo != null &&
+            tracksNestedPayloadDepth(resolvedValueTypeInfo));
+    final guardUnbackedItems =
+        !keyTrackRef &&
+        !valueTrackRef &&
+        resolvedKeyTypeInfo != null &&
+        resolvedValueTypeInfo != null &&
+        !resolvedKeyTypeInfo.readDataAlwaysAdvances &&
+        !resolvedValueTypeInfo.readDataAlwaysAdvances;
+    final checkpoint =
+        guardUnbackedItems ? bufferReaderIndex(context.buffer) : 0;
+    if (tracksDepth) {
+      context.increaseDepth();
+    }
+    for (var index = 0; index < chunkSize; index += 1) {
+      final key = _readGeneratedKnownMapValue(
+        context,
+        keyDeclared ? declaredKeyTypeInfo! : keyTypeInfo!,
+        keyDeclared ? keyFieldType : null,
+        keyTrackRef,
+        readKey,
+      );
+      final value = _readGeneratedKnownMapValue(
+        context,
+        valueDeclared ? declaredValueTypeInfo! : valueTypeInfo!,
+        valueDeclared ? valueFieldType : null,
+        valueTrackRef,
+        readValue,
+      );
+      result[key] = value;
+    }
+    if (guardUnbackedItems) {
+      context.settleUnbackedContainerItems(
+        chunkSize,
+        bufferReaderIndex(context.buffer) - checkpoint,
+      );
+    }
+    if (tracksDepth) {
+      context.decreaseDepth();
+    }
+    remaining -= chunkSize;
+  }
+  return result;
+}
+
+T _readGeneratedDynamicMapValue<T>(
+  ReadContext context,
+  int header,
+  int trackingFlag,
+  int declaredFlag,
+  FieldType? fieldType,
+  TypeInfo? declaredTypeInfo,
+  GeneratedValueReader<T> readValue,
+) {
+  final trackRef = (header & trackingFlag) != 0;
+  if ((header & declaredFlag) != 0 && fieldType != null) {
+    return _readGeneratedKnownMapValue(
+      context,
+      declaredTypeInfo!,
+      fieldType,
+      trackRef,
+      readValue,
+    );
+  }
+  if (trackRef) {
+    final flag = context.refReader.readRefOrNull(context.buffer);
+    if (flag == RefWriter.refFlag) {
+      return context.refReader.getReadRef() as T;
+    }
+    final resolved = context.readTypeMetaValue();
+    final preservedRefId = context.refReader.preserveRefValue(
+      flag,
+      resolved.supportsRef,
+    );
+    return _readGeneratedMapPayloadValue(
+      context,
+      resolved,
+      null,
+      preservedRefId,
+      readValue,
+      trackDepth: tracksNestedPayloadDepth(resolved),
+    );
+  }
+  final resolved = context.readTypeMetaValue();
+  if (tracksNestedPayloadDepth(resolved)) {
+    context.increaseDepth();
+    final value = readValue(context, resolved, null, false);
+    context.decreaseDepth();
+    return value;
+  }
+  return readValue(context, resolved, null, false);
+}
+
+T _readGeneratedKnownMapValue<T>(
+  ReadContext context,
+  TypeInfo resolved,
+  FieldType? fieldType,
+  bool trackRef,
+  GeneratedValueReader<T> readValue,
+) {
+  if (!trackRef) {
+    return readValue(context, resolved, fieldType, false);
+  }
+  final flag = context.refReader.readRefOrNull(context.buffer);
+  if (flag == RefWriter.refFlag) {
+    return context.refReader.getReadRef() as T;
+  }
+  final preservedRefId = context.refReader.preserveRefValue(
+    flag,
+    resolved.supportsRef,
+  );
+  return _readGeneratedMapPayloadValue(
+    context,
+    resolved,
+    fieldType,
+    preservedRefId,
+    readValue,
+  );
+}
+
+T _readGeneratedMapPayloadValue<T>(
+  ReadContext context,
+  TypeInfo resolved,
+  FieldType? fieldType,
+  int? preservedRefId,
+  GeneratedValueReader<T> readValue, {
+  bool trackDepth = false,
+}) {
+  if (trackDepth) {
+    context.increaseDepth();
+  }
+  final value = readValue(context, resolved, fieldType, preservedRefId != null);
+  if (preservedRefId != null &&
+      resolved.supportsRef &&
+      context.refReader.readRefAt(preservedRefId) == null) {
+    context.setReadRef(preservedRefId, value);
+  }
+  if (trackDepth) {
+    context.decreaseDepth();
+  }
+  return value;
+}
+
 @pragma('vm:never-inline')
 Never _throwInvalidMapChunk(int chunkSize, int remaining) {
   throw StateError(
@@ -546,11 +762,14 @@ Object? _readResolvedMapValue(
   if (!trackRef) {
     return readTypeInfoValue(context, typeInfo, fieldType);
   }
-  final flag = context.refReader.tryPreserveRefId(context.buffer);
-  final preservedRefId = flag >= RefWriter.refValueFlag ? flag : null;
+  final flag = context.refReader.readRefOrNull(context.buffer);
   if (flag == RefWriter.refFlag) {
     return context.refReader.getReadRef();
   }
+  final preservedRefId = context.refReader.preserveRefValue(
+    flag,
+    typeInfo.supportsRef,
+  );
   final value = readTypeInfoValue(
     context,
     typeInfo,

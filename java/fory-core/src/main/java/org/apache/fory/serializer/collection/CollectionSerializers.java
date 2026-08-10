@@ -78,6 +78,7 @@ import org.apache.fory.util.Preconditions;
 @SuppressWarnings({"unchecked", "rawtypes"})
 public class CollectionSerializers {
   private static final int REFERENCE_BYTES = GraphMemoryEstimates.REFERENCE_BYTES;
+  private static final int ARRAY_OWNER_BYTES = GraphMemoryEstimates.objectArrayBytes();
   private static final int ARRAY_LIST_OWNER_BYTES =
       GraphMemoryEstimates.shallowObjectBytes(ArrayList.class);
   private static final int HASH_MAP_OWNER_BYTES =
@@ -88,6 +89,22 @@ public class CollectionSerializers {
       Math.addExact(
           GraphMemoryEstimates.shallowObjectBytes(LinkedHashSet.class),
           GraphMemoryEstimates.shallowObjectBytes(java.util.LinkedHashMap.class));
+  private static final int TREE_SET_OWNER_BYTES =
+      Math.addExact(
+          GraphMemoryEstimates.shallowObjectBytes(TreeSet.class),
+          GraphMemoryEstimates.shallowObjectBytes(java.util.TreeMap.class));
+  private static final int CONCURRENT_SKIP_SET_OWNER_BYTES =
+      Math.addExact(
+          GraphMemoryEstimates.shallowObjectBytes(ConcurrentSkipListSet.class),
+          GraphMemoryEstimates.shallowObjectBytes(
+              java.util.concurrent.ConcurrentSkipListMap.class));
+  private static final int COPY_ON_WRITE_LIST_OWNER_BYTES =
+      Math.addExact(
+          GraphMemoryEstimates.shallowObjectBytes(CopyOnWriteArrayList.class), ARRAY_OWNER_BYTES);
+  private static final int COPY_ON_WRITE_SET_OWNER_BYTES =
+      Math.addExact(
+          GraphMemoryEstimates.shallowObjectBytes(CopyOnWriteArraySet.class),
+          COPY_ON_WRITE_LIST_OWNER_BYTES);
   private static final int SINGLETON_LIST_OWNER_BYTES =
       GraphMemoryEstimates.shallowObjectBytes(Collections.singletonList(null).getClass());
   private static final int SINGLETON_SET_OWNER_BYTES =
@@ -97,6 +114,9 @@ public class CollectionSerializers {
           Collections.newSetFromMap(new HashMap<>()).getClass());
   private static final int KEY_SET_VIEW_OWNER_BYTES =
       GraphMemoryEstimates.shallowObjectBytes(ConcurrentHashMap.KeySetView.class);
+  private static final int BIT_SET_OWNER_BYTES =
+      GraphMemoryEstimates.shallowObjectBytes(BitSet.class);
+  private static final int PRIORITY_QUEUE_DEFAULT_CAPACITY = 11;
 
   private static final Comparator NATURAL_ORDER_COMPARATOR = Comparator.naturalOrder();
 
@@ -153,6 +173,16 @@ public class CollectionSerializers {
       MemoryBuffer buffer = readContext.getBuffer();
       int numElements = readCollectionSize(readContext, buffer, elementReadAlwaysAdvances);
       setNumElements(numElements);
+      return newArrayList(readContext, numElements);
+    }
+
+    @Override
+    public ArrayList newCollectionForCompatibleArray(ReadContext readContext, int numElements) {
+      reserveCollection(readContext, numElements);
+      return newArrayList(readContext, numElements);
+    }
+
+    private ArrayList newArrayList(ReadContext readContext, int numElements) {
       ArrayList arrayList = new ArrayList(numElements);
       readContext.reference(arrayList);
       return arrayList;
@@ -262,7 +292,13 @@ public class CollectionSerializers {
     private MethodHandle noArgConstructor;
 
     public SortedSetSerializer(TypeResolver typeResolver, Class<T> cls) {
-      super(typeResolver, cls, true);
+      super(
+          typeResolver,
+          cls,
+          true,
+          cls == TreeSet.class
+              ? TREE_SET_OWNER_BYTES
+              : GraphMemoryEstimates.shallowObjectBytes(cls));
       if (cls != TreeSet.class) {
         try {
           comparatorConstructor = ReflectionUtils.getCtrHandle(cls, Comparator.class);
@@ -379,7 +415,7 @@ public class CollectionSerializers {
 
     public CopyOnWriteArrayListSerializer(
         TypeResolver typeResolver, Class<CopyOnWriteArrayList> type) {
-      super(typeResolver, type, true);
+      super(typeResolver, type, true, COPY_ON_WRITE_LIST_OWNER_BYTES);
     }
 
     @Override
@@ -387,13 +423,28 @@ public class CollectionSerializers {
       MemoryBuffer buffer = readContext.getBuffer();
       int numElements = readCollectionSize(readContext, buffer, elementReadAlwaysAdvances);
       setNumElements(numElements);
-      return new CollectionContainer<>(numElements);
+      return newContainer(readContext, numElements);
+    }
+
+    @Override
+    public Collection newCollectionForCompatibleArray(ReadContext readContext, int numElements) {
+      reserveCollection(readContext, numElements);
+      return newContainer(readContext, numElements);
+    }
+
+    private Collection newContainer(ReadContext readContext, int numElements) {
+      CopyOnWriteArrayList target = new CopyOnWriteArrayList();
+      // Child aliases must resolve to the final COW owner, not the transient element holder.
+      readContext.reference(target);
+      return new CollectionContainer<>(numElements, target);
     }
 
     @Override
     public CopyOnWriteArrayList onCollectionRead(Collection collection) {
-      Object[] elements = ((CollectionContainer) collection).elements;
-      return new CopyOnWriteArrayList(elements);
+      CollectionContainer container = (CollectionContainer) collection;
+      CopyOnWriteArrayList target = (CopyOnWriteArrayList) container.target;
+      target.addAll(container);
+      return target;
     }
 
     @Override
@@ -413,7 +464,7 @@ public class CollectionSerializers {
 
     public CopyOnWriteArraySetSerializer(
         TypeResolver typeResolver, Class<CopyOnWriteArraySet> type) {
-      super(typeResolver, type, true);
+      super(typeResolver, type, true, COPY_ON_WRITE_SET_OWNER_BYTES);
     }
 
     @Override
@@ -421,13 +472,18 @@ public class CollectionSerializers {
       MemoryBuffer buffer = readContext.getBuffer();
       int numElements = readCollectionSize(readContext, buffer, elementReadAlwaysAdvances);
       setNumElements(numElements);
-      return new CollectionContainer<>(numElements);
+      CopyOnWriteArraySet target = new CopyOnWriteArraySet();
+      // Child aliases must resolve to the final COW owner, not the transient element holder.
+      readContext.reference(target);
+      return new CollectionContainer<>(numElements, target);
     }
 
     @Override
     public CopyOnWriteArraySet onCollectionRead(Collection collection) {
-      Object[] elements = ((CollectionContainer) collection).elements;
-      return new CopyOnWriteArraySet(Arrays.asList(elements));
+      CollectionContainer container = (CollectionContainer) collection;
+      CopyOnWriteArraySet target = (CopyOnWriteArraySet) container.target;
+      target.addAll(container);
+      return target;
     }
 
     @Override
@@ -555,7 +611,7 @@ public class CollectionSerializers {
 
     public ConcurrentSkipListSetSerializer(
         TypeResolver typeResolver, Class<ConcurrentSkipListSet> cls) {
-      super(typeResolver, cls, true);
+      super(typeResolver, cls, true, CONCURRENT_SKIP_SET_OWNER_BYTES);
     }
 
     @Override
@@ -831,6 +887,15 @@ public class CollectionSerializers {
       MemoryBuffer buffer = readContext.getBuffer();
       Class elemClass = typeResolver.readTypeInfo(readContext).getType();
       int length = readCollectionSize(readContext, buffer, true);
+      int enumUniverseSize = elemClass.getEnumConstants().length;
+      if (enumUniverseSize > Long.SIZE) {
+        long wordBytes = ((enumUniverseSize + 63L) >>> 6) * Long.BYTES;
+        long logicalElementBytes = (long) length * REFERENCE_BYTES;
+        // The generic collection estimate already charges logical element slots. JumboEnumSet
+        // additionally retains a universe-sized long array even when the decoded set is empty.
+        readContext.reserveGraphMemory(
+            ARRAY_OWNER_BYTES + Math.max(0L, wordBytes - logicalElementBytes));
+      }
       EnumSet object = EnumSet.noneOf(elemClass);
       Serializer elemSerializer = typeResolver.getSerializer(elemClass);
       for (int i = 0; i < length; i++) {
@@ -876,6 +941,7 @@ public class CollectionSerializers {
       buffer.checkReadableBytes(size);
       long[] values = new long[size >>> 3];
       buffer.readInt64ArrayBytes(values, size);
+      readContext.reserveGraphMemory(BIT_SET_OWNER_BYTES + ARRAY_OWNER_BYTES + (long) size);
       return BitSet.valueOf(values);
     }
   }
@@ -910,6 +976,13 @@ public class CollectionSerializers {
       int numElements = readCollectionSize(readContext, buffer, elementReadAlwaysAdvances);
       setNumElements(numElements);
       Comparator comparator = (Comparator) readContext.readRef();
+      // The comparator constructor retains the specified default Object[11] backing. The generic
+      // collection estimate already covers decoded slots, so add the array owner and uncovered
+      // default-capacity slots.
+      readContext.reserveGraphMemory(
+          ARRAY_OWNER_BYTES
+              + (long) Math.max(0, PRIORITY_QUEUE_DEFAULT_CAPACITY - numElements)
+                  * REFERENCE_BYTES);
       PriorityQueue queue = new PriorityQueue(comparator);
       readContext.reference(queue);
       return queue;
@@ -1202,6 +1275,16 @@ public class CollectionSerializers {
       int numElements =
           readCollectionSize(readContext, readContext.getBuffer(), elementReadAlwaysAdvances);
       setNumElements(numElements);
+      return newArrayList(readContext, numElements);
+    }
+
+    @Override
+    public List newCollectionForCompatibleArray(ReadContext readContext, int numElements) {
+      reserveCollection(readContext, numElements);
+      return newArrayList(readContext, numElements);
+    }
+
+    private List newArrayList(ReadContext readContext, int numElements) {
       ArrayList list = new ArrayList(numElements);
       readContext.reference(list);
       return list;

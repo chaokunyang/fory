@@ -21,7 +21,10 @@ package org.apache.fory.serializer;
 
 import java.lang.reflect.Field;
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.LinkedList;
 import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
 import org.apache.fory.Fory;
 import org.apache.fory.collection.BFloat16List;
 import org.apache.fory.collection.BoolList;
@@ -38,6 +41,7 @@ import org.apache.fory.collection.UInt64List;
 import org.apache.fory.collection.UInt8List;
 import org.apache.fory.context.ReadContext;
 import org.apache.fory.context.RefReader;
+import org.apache.fory.context.WriteContext;
 import org.apache.fory.exception.DeserializationException;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.memory.NativeByteOrder;
@@ -49,11 +53,13 @@ import org.apache.fory.resolver.RefMode;
 import org.apache.fory.resolver.TypeInfo;
 import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.serializer.collection.CollectionFlags;
+import org.apache.fory.serializer.collection.CollectionLikeSerializer;
 import org.apache.fory.type.BFloat16;
 import org.apache.fory.type.BFloat16Array;
 import org.apache.fory.type.Descriptor;
 import org.apache.fory.type.Float16;
 import org.apache.fory.type.Float16Array;
+import org.apache.fory.type.GenericType;
 import org.apache.fory.type.TypeAnnotationUtils;
 import org.apache.fory.type.TypeUtils;
 import org.apache.fory.type.Types;
@@ -69,6 +75,10 @@ final class CompatibleCollectionArrayReader {
   static final int READ_ARRAY_TO_LIST = 2;
   static final int READ_LIST_TO_LIST = 3;
   static final int READ_ARRAY_TO_ARRAY = 4;
+
+  private static final int NESTED_UNSUPPORTED = -1;
+  private static final int NESTED_UNCHANGED = 0;
+  private static final int NESTED_BOUND = 1;
 
   static final class ReadAction {
     final int mode;
@@ -123,7 +133,7 @@ final class CompatibleCollectionArrayReader {
       int localListElementTypeId = listElementTypeId(localFieldType);
       if (localListElementTypeId != Types.UNKNOWN
           && peerArrayTypeId == denseArrayTypeId(localListElementTypeId)
-          && canMaterializeListTarget(field.getType(), peerArrayTypeId)) {
+          && canMaterializeDenseArrayListTarget(field.getType(), peerArrayTypeId)) {
         return new ReadAction(
             READ_ARRAY_TO_LIST, peerArrayTypeId, localListElementTypeId, field.getType());
       }
@@ -191,7 +201,7 @@ final class CompatibleCollectionArrayReader {
       int localListElementTypeId = listElementTypeId(localType);
       if (localListElementTypeId != Types.UNKNOWN
           && peerArrayTypeId == denseArrayTypeId(localListElementTypeId)
-          && canMaterializeListTarget(localDescriptor.getRawType(), peerArrayTypeId)) {
+          && canMaterializeDenseArrayListTarget(localDescriptor.getRawType(), peerArrayTypeId)) {
         return new ReadAction(
             READ_ARRAY_TO_LIST,
             peerArrayTypeId,
@@ -309,16 +319,28 @@ final class CompatibleCollectionArrayReader {
       Class<?> targetType) {
     switch (refMode) {
       case NONE:
+        preserveDirectTargetRef(readContext, readMode, targetType);
         return readNotNull(readContext, readMode, arrayTypeId, elementTypeId, targetType);
       case NULL_ONLY:
         if (readContext.getBuffer().readByte() == Fory.NULL_FLAG) {
           return null;
         }
+        preserveDirectTargetRef(readContext, readMode, targetType);
         return readNotNull(readContext, readMode, arrayTypeId, elementTypeId, targetType);
       case TRACKING:
         return readTracking(readContext, readMode, arrayTypeId, elementTypeId, targetType);
       default:
         throw new IllegalStateException("Unknown refMode: " + refMode);
+    }
+  }
+
+  private static void preserveDirectTargetRef(
+      ReadContext readContext, int readMode, Class<?> targetType) {
+    if (readMode == READ_ARRAY_TO_LIST && usesDeclaredCollectionTarget(targetType)) {
+      // The collection hook publishes through the ordinary reference operation. Its sentinel must
+      // be owned by this field; stack non-emptiness may instead represent a parent still awaiting
+      // final construction and must never be consumed here.
+      readContext.preserveRefId(-1);
     }
   }
 
@@ -333,8 +355,14 @@ final class CompatibleCollectionArrayReader {
     if (nextReadRefId >= Fory.NOT_NULL_VALUE_FLAG) {
       Object value = readNotNull(readContext, readMode, arrayTypeId, elementTypeId, targetType);
       refReader.setReadRef(nextReadRefId, value);
+      // Primitive array materializers cannot publish early, while declared collection targets do.
+      // Pop only the exact still-pending id so both owners retain ordinary reference numbering.
+      if (readContext.hasPreservedRefId() && readContext.lastPreservedRefId() == nextReadRefId) {
+        readContext.reference(value);
+      }
       return value;
     }
+    // A back-reference already names its final published owner; never adapt it to the local target.
     return refReader.getReadRef();
   }
 
@@ -355,6 +383,9 @@ final class CompatibleCollectionArrayReader {
       return readListBodyAsListTarget(readContext, arrayTypeId, elementTypeId, targetType);
     }
     if (readMode == READ_ARRAY_TO_LIST) {
+      if (usesDeclaredCollectionTarget(targetType)) {
+        return readDenseArrayAsListTarget(readContext, arrayTypeId, targetType);
+      }
       Object array = readDenseArrayBody(readContext, arrayTypeId);
       return materializeTarget(readContext, array, arrayTypeId, targetType);
     }
@@ -615,9 +646,10 @@ final class CompatibleCollectionArrayReader {
                   + elementTypeId);
         }
       }
-      return readListPrimitiveElements(buffer, numElements, arrayTypeId, elementTypeId, hasNull);
+      return readListPrimitiveElements(
+          readContext, numElements, arrayTypeId, elementTypeId, hasNull);
     }
-    return readListPrimitiveElements(buffer, numElements, arrayTypeId, elementTypeId, false);
+    return readListPrimitiveElements(readContext, numElements, arrayTypeId, elementTypeId, false);
   }
 
   private static Object readListBodyAsListTarget(
@@ -626,7 +658,7 @@ final class CompatibleCollectionArrayReader {
     int numElements = buffer.readVarUInt32Small7();
     validateElementCount(numElements);
     if (numElements == 0) {
-      Object array = readListPrimitiveElements(buffer, 0, arrayTypeId, elementTypeId, false);
+      Object array = readListPrimitiveElements(readContext, 0, arrayTypeId, elementTypeId, false);
       return materializeTarget(readContext, array, arrayTypeId, targetType);
     }
     int flags = buffer.readByte();
@@ -663,7 +695,7 @@ final class CompatibleCollectionArrayReader {
       return readNullableListBoxedElements(readContext, numElements, arrayTypeId, elementTypeId);
     }
     Object array =
-        readListPrimitiveElements(buffer, numElements, arrayTypeId, elementTypeId, false);
+        readListPrimitiveElements(readContext, numElements, arrayTypeId, elementTypeId, false);
     return materializeTarget(readContext, array, arrayTypeId, targetType);
   }
 
@@ -673,7 +705,229 @@ final class CompatibleCollectionArrayReader {
     int elemSize = elementSize(arrayTypeId);
     validateBinarySize(byteSize, elemSize);
     buffer.checkReadableBytes(byteSize);
+    readContext.reserveGraphMemory(GraphMemoryEstimates.objectArrayBytes() + (long) byteSize);
     return readPrimitiveElements(buffer, byteSize, byteSize / elemSize, arrayTypeId);
+  }
+
+  @SuppressWarnings({"rawtypes", "unchecked"})
+  private static Object readDenseArrayAsListTarget(
+      ReadContext readContext, int arrayTypeId, Class<?> targetType) {
+    MemoryBuffer buffer = readContext.getBuffer();
+    int byteSize = buffer.readVarUInt32Small7();
+    int elemSize = elementSize(arrayTypeId);
+    validateBinarySize(byteSize, elemSize);
+    buffer.checkReadableBytes(byteSize);
+    int numElements = byteSize / elemSize;
+    CollectionLikeSerializer collectionSerializer =
+        (CollectionLikeSerializer) readContext.getTypeResolver().getSerializer(targetType);
+    return readDenseArrayAsListTarget(
+        readContext, buffer, arrayTypeId, numElements, collectionSerializer);
+  }
+
+  @SuppressWarnings({"rawtypes", "unchecked"})
+  private static Object readDenseArrayAsListTarget(
+      ReadContext readContext,
+      MemoryBuffer buffer,
+      int arrayTypeId,
+      int numElements,
+      CollectionLikeSerializer collectionSerializer) {
+    Collection collection =
+        collectionSerializer.newCollectionForCompatibleArray(readContext, numElements);
+    for (int i = 0; i < numElements; i++) {
+      collection.add(readDenseArrayElement(buffer, arrayTypeId));
+    }
+    return collectionSerializer.onCollectionRead(collection);
+  }
+
+  static boolean supportsNestedCollectionArray(
+      TypeResolver resolver,
+      FieldTypes.FieldType remoteFieldType,
+      FieldTypes.FieldType localFieldType,
+      GenericType localGenericType) {
+    return nestedCollectionArrayState(
+            resolver, remoteFieldType, null, localFieldType, localGenericType)
+        == NESTED_BOUND;
+  }
+
+  static boolean bindNestedCollectionArray(
+      TypeResolver resolver,
+      FieldTypes.FieldType remoteFieldType,
+      GenericType remoteGenericType,
+      FieldTypes.FieldType localFieldType,
+      GenericType localGenericType) {
+    return nestedCollectionArrayState(
+            resolver, remoteFieldType, remoteGenericType, localFieldType, localGenericType)
+        == NESTED_BOUND;
+  }
+
+  @SuppressWarnings("rawtypes")
+  private static int nestedCollectionArrayState(
+      TypeResolver resolver,
+      FieldTypes.FieldType remoteFieldType,
+      GenericType remoteGenericType,
+      FieldTypes.FieldType localFieldType,
+      GenericType localGenericType) {
+    int remoteArrayTypeId = arrayTypeId(remoteFieldType);
+    if (remoteArrayTypeId != Types.UNKNOWN && isListField(localFieldType)) {
+      int localElementTypeId = listElementTypeId(localFieldType);
+      if (remoteFieldType.trackingRef() != localFieldType.trackingRef()
+          || localElementTypeId == Types.UNKNOWN
+          || remoteArrayTypeId != denseArrayTypeId(localElementTypeId)
+          || localGenericType == null
+          || !usesDeclaredCollectionTarget(localGenericType.getCls())) {
+        return NESTED_UNSUPPORTED;
+      }
+      if (remoteGenericType != null) {
+        // Fieldless generated descriptors install GenericType overrides after their base
+        // constructor. Resolve the declared raw carrier here so LIST's canonical ArrayList
+        // serializer cannot replace a declared LinkedList or COW owner during that earlier bind.
+        Serializer serializer = resolver.getSerializer(localGenericType.getCls());
+        if (!(serializer instanceof CollectionLikeSerializer)) {
+          return NESTED_UNSUPPORTED;
+        }
+        remoteGenericType.setSerializer(
+            new DenseArrayListSerializer(
+                resolver,
+                remoteArrayTypeId,
+                localGenericType.getCls(),
+                (CollectionLikeSerializer) serializer));
+      }
+      return NESTED_BOUND;
+    }
+    if (arrayTypeId(localFieldType) != Types.UNKNOWN && isListField(remoteFieldType)) {
+      return NESTED_UNSUPPORTED;
+    }
+    if (remoteFieldType.getTypeId() != localFieldType.getTypeId()
+        || remoteFieldType.trackingRef() != localFieldType.trackingRef()) {
+      return NESTED_UNSUPPORTED;
+    }
+    if (remoteFieldType instanceof FieldTypes.CollectionFieldType
+        && localFieldType instanceof FieldTypes.CollectionFieldType) {
+      return nestedCollectionArrayState(
+          resolver,
+          ((FieldTypes.CollectionFieldType) remoteFieldType).getElementType(),
+          typeParameter(remoteGenericType, 0),
+          ((FieldTypes.CollectionFieldType) localFieldType).getElementType(),
+          typeParameter(localGenericType, 0));
+    }
+    if (remoteFieldType instanceof FieldTypes.MapFieldType
+        && localFieldType instanceof FieldTypes.MapFieldType) {
+      FieldTypes.MapFieldType remoteMap = (FieldTypes.MapFieldType) remoteFieldType;
+      FieldTypes.MapFieldType localMap = (FieldTypes.MapFieldType) localFieldType;
+      int keyState =
+          nestedCollectionArrayState(
+              resolver,
+              remoteMap.getKeyType(),
+              typeParameter(remoteGenericType, 0),
+              localMap.getKeyType(),
+              typeParameter(localGenericType, 0));
+      int valueState =
+          nestedCollectionArrayState(
+              resolver,
+              remoteMap.getValueType(),
+              typeParameter(remoteGenericType, 1),
+              localMap.getValueType(),
+              typeParameter(localGenericType, 1));
+      return mergeNestedStates(keyState, valueState);
+    }
+    if (remoteFieldType instanceof FieldTypes.ArrayFieldType
+        && localFieldType instanceof FieldTypes.ArrayFieldType) {
+      FieldTypes.ArrayFieldType remoteArray = (FieldTypes.ArrayFieldType) remoteFieldType;
+      FieldTypes.ArrayFieldType localArray = (FieldTypes.ArrayFieldType) localFieldType;
+      if (remoteArray.getDimensions() != localArray.getDimensions()) {
+        return NESTED_UNSUPPORTED;
+      }
+      return nestedCollectionArrayState(
+          resolver,
+          remoteArray.getComponentType(),
+          typeParameter(remoteGenericType, 0),
+          localArray.getComponentType(),
+          typeParameter(localGenericType, 0));
+    }
+    return remoteFieldType.equals(localFieldType) ? NESTED_UNCHANGED : NESTED_UNSUPPORTED;
+  }
+
+  private static GenericType typeParameter(GenericType genericType, int index) {
+    if (genericType == null || genericType.getTypeParametersCount() <= index) {
+      return null;
+    }
+    return genericType.getTypeParameters()[index];
+  }
+
+  private static int mergeNestedStates(int first, int second) {
+    if (first == NESTED_UNSUPPORTED || second == NESTED_UNSUPPORTED) {
+      return NESTED_UNSUPPORTED;
+    }
+    return first == NESTED_BOUND || second == NESTED_BOUND ? NESTED_BOUND : NESTED_UNCHANGED;
+  }
+
+  @SuppressWarnings({"rawtypes", "unchecked"})
+  private static final class DenseArrayListSerializer extends Serializer<Object> {
+    private final int arrayTypeId;
+    private final CollectionLikeSerializer targetSerializer;
+
+    private DenseArrayListSerializer(
+        TypeResolver resolver,
+        int arrayTypeId,
+        Class<?> targetType,
+        CollectionLikeSerializer targetSerializer) {
+      super(resolver.getConfig(), (Class) targetType);
+      this.arrayTypeId = arrayTypeId;
+      this.targetSerializer = targetSerializer;
+    }
+
+    @Override
+    public void write(WriteContext writeContext, Object value) {
+      throw new UnsupportedOperationException("Compatible nested array serializer is read-only");
+    }
+
+    @Override
+    public Object read(ReadContext readContext) {
+      MemoryBuffer buffer = readContext.getBuffer();
+      int byteSize = buffer.readVarUInt32Small7();
+      int elemSize = elementSize(arrayTypeId);
+      validateBinarySize(byteSize, elemSize);
+      buffer.checkReadableBytes(byteSize);
+      return readDenseArrayAsListTarget(
+          readContext, buffer, arrayTypeId, byteSize / elemSize, targetSerializer);
+    }
+
+    @Override
+    public boolean readDataAlwaysAdvances() {
+      return true;
+    }
+  }
+
+  private static Object readDenseArrayElement(MemoryBuffer buffer, int arrayTypeId) {
+    switch (arrayTypeId) {
+      case Types.BOOL_ARRAY:
+        return buffer.readBoolean();
+      case Types.INT8_ARRAY:
+        return buffer.readByte();
+      case Types.UINT8_ARRAY:
+        return buffer.readByte() & 0xFF;
+      case Types.INT16_ARRAY:
+        return buffer.readInt16();
+      case Types.UINT16_ARRAY:
+        return buffer.readInt16() & 0xFFFF;
+      case Types.FLOAT16_ARRAY:
+        return Float16.fromBits(buffer.readInt16());
+      case Types.BFLOAT16_ARRAY:
+        return BFloat16.fromBits(buffer.readInt16());
+      case Types.INT32_ARRAY:
+        return buffer.readInt32();
+      case Types.UINT32_ARRAY:
+        return Integer.toUnsignedLong(buffer.readInt32());
+      case Types.INT64_ARRAY:
+      case Types.UINT64_ARRAY:
+        return buffer.readInt64();
+      case Types.FLOAT32_ARRAY:
+        return buffer.readFloat32();
+      case Types.FLOAT64_ARRAY:
+        return buffer.readFloat64();
+      default:
+        throw new IllegalArgumentException("Unsupported dense array type id " + arrayTypeId);
+    }
   }
 
   private static Object readPrimitiveElements(
@@ -763,8 +1017,14 @@ final class CompatibleCollectionArrayReader {
   }
 
   private static Object readListPrimitiveElements(
-      MemoryBuffer buffer, int numElements, int arrayTypeId, int elementTypeId, boolean hasNull) {
+      ReadContext readContext,
+      int numElements,
+      int arrayTypeId,
+      int elementTypeId,
+      boolean hasNull) {
+    MemoryBuffer buffer = readContext.getBuffer();
     buffer.checkReadableBytes(minReadablePrimitiveListBytes(numElements, elementTypeId, hasNull));
+    readContext.reserveGraphMemory(primitiveArrayBytes(numElements, arrayTypeId));
     switch (elementTypeId) {
       case Types.BOOL:
         {
@@ -1058,14 +1318,16 @@ final class CompatibleCollectionArrayReader {
       return array;
     }
     if (targetType == Float16Array.class) {
+      readContext.reserveGraphMemory(GraphMemoryEstimates.shallowObjectBytes(Float16Array.class));
       return Float16Array.wrapBits((short[]) array);
     }
     if (targetType == BFloat16Array.class) {
+      readContext.reserveGraphMemory(GraphMemoryEstimates.shallowObjectBytes(BFloat16Array.class));
       return BFloat16Array.wrapBits((short[]) array);
     }
-    Object primitiveList = materializePrimitiveList(array, arrayTypeId, targetType);
-    if (primitiveList != null) {
-      return primitiveList;
+    if (canMaterializePrimitiveListTarget(targetType, arrayTypeId)) {
+      readContext.reserveGraphMemory(GraphMemoryEstimates.shallowObjectBytes(targetType));
+      return materializePrimitiveList(array, arrayTypeId, targetType);
     }
     if (targetType.isAssignableFrom(ArrayList.class)) {
       return materializeBoxedList(readContext, array, arrayTypeId);
@@ -1149,6 +1411,17 @@ final class CompatibleCollectionArrayReader {
         || targetType.isAssignableFrom(ArrayList.class);
   }
 
+  private static boolean canMaterializeDenseArrayListTarget(Class<?> targetType, int arrayTypeId) {
+    return canMaterializeListTarget(targetType, arrayTypeId)
+        || usesDeclaredCollectionTarget(targetType);
+  }
+
+  private static boolean usesDeclaredCollectionTarget(Class<?> targetType) {
+    return targetType == LinkedList.class
+        || targetType == CopyOnWriteArrayList.class
+        || targetType.isAssignableFrom(ArrayList.class);
+  }
+
   private static boolean canMaterializePrimitiveListTarget(Class<?> targetType, int arrayTypeId) {
     switch (arrayTypeId) {
       case Types.BOOL_ARRAY:
@@ -1185,7 +1458,13 @@ final class CompatibleCollectionArrayReader {
   private static List<Object> materializeBoxedList(
       ReadContext readContext, Object array, int arrayTypeId) {
     int size = java.lang.reflect.Array.getLength(array);
-    readContext.reserveGraphMemory(ARRAY_LIST_OWNER_BYTES + (long) size * REFERENCE_BYTES);
+    long listBytes = ARRAY_LIST_OWNER_BYTES + (long) size * REFERENCE_BYTES;
+    long additionalBytes = listBytes - primitiveArrayBytes(size, arrayTypeId);
+    // The compatible primitive reader has already reserved its allocation. Add only the positive
+    // difference needed for the returned boxed list instead of charging both representations.
+    if (additionalBytes > 0) {
+      readContext.reserveGraphMemory(additionalBytes);
+    }
     ArrayList<Object> list = new ArrayList<>(size);
     switch (arrayTypeId) {
       case Types.BOOL_ARRAY:
@@ -1253,6 +1532,10 @@ final class CompatibleCollectionArrayReader {
         throw new IllegalArgumentException("Unsupported dense array type id " + arrayTypeId);
     }
     return list;
+  }
+
+  private static long primitiveArrayBytes(int numElements, int arrayTypeId) {
+    return GraphMemoryEstimates.objectArrayBytes() + (long) numElements * elementSize(arrayTypeId);
   }
 
   private static int elementSize(int arrayTypeId) {

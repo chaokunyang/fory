@@ -69,6 +69,8 @@ import org.apache.fory.util.Preconditions;
  */
 @SuppressWarnings({"unchecked", "rawtypes"})
 public class MapSerializers {
+  private static final int REFERENCE_BYTES = GraphMemoryEstimates.REFERENCE_BYTES;
+  private static final int ARRAY_OWNER_BYTES = GraphMemoryEstimates.objectArrayBytes();
   private static final int HASH_MAP_OWNER_BYTES =
       GraphMemoryEstimates.shallowObjectBytes(HashMap.class);
   private static final int SINGLETON_MAP_OWNER_BYTES =
@@ -431,8 +433,15 @@ public class MapSerializers {
     @Override
     public EnumMap newMap(ReadContext readContext, boolean entryReadAlwaysAdvances) {
       MemoryBuffer buffer = readContext.getBuffer();
-      setNumElements(readMapSize(readContext, buffer, entryReadAlwaysAdvances));
+      int numElements = readMapSize(readContext, buffer, entryReadAlwaysAdvances);
+      setNumElements(numElements);
       Class<?> keyType = typeResolver.readTypeInfo(readContext).getType();
+      long universeBytes = (long) keyType.getEnumConstants().length * REFERENCE_BYTES;
+      long logicalEntryBytes = (long) numElements * 2 * REFERENCE_BYTES;
+      // The generic map estimate already charges logical key/value slots. EnumMap also retains a
+      // values array sized to the complete enum universe, including for an empty map.
+      readContext.reserveGraphMemory(
+          ARRAY_OWNER_BYTES + Math.max(0L, universeBytes - logicalEntryBytes));
       EnumMap map = new EnumMap(keyType);
       readContext.reference(map);
       return map;

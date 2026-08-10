@@ -110,9 +110,9 @@ public final class StaticCompatibleCodecBuilder extends ObjectCodecBuilder {
     // constructor after it because CodegenContext snapshots instance init into constructors.
     String constructorCode =
         StringUtils.format(
-            ""
-                + "super(${typeResolver}, ${cls}, ${typeDef}, Descriptor.getDescriptors(${cls}));\n"
-                + "this.${generatedTypeResolver} = (${generatedTypeResolverType}) ${typeResolver};\n",
+            "super(${typeResolver}, ${cls}, ${typeDef}, Descriptor.getDescriptors(${cls}));\n"
+                + "this.${generatedTypeResolver} = (${generatedTypeResolverType})"
+                + " ${typeResolver};\n",
             "typeResolver",
             CONSTRUCTOR_TYPE_RESOLVER_NAME,
             "cls",
@@ -192,7 +192,14 @@ public final class StaticCompatibleCodecBuilder extends ObjectCodecBuilder {
   private String genRecordCompatibleRead() {
     RecordComponent[] components = RecordUtils.getRecordComponents(beanClass);
     StringBuilder code = new StringBuilder();
-    code.append(graphMemoryReserveCode()).append('\n');
+    code.append(graphMemoryReserveCode())
+        .append('\n')
+        .append("boolean _f_hasRecordRef = ")
+        .append(READ_CONTEXT_NAME)
+        .append(".hasPreservedRefId();\n")
+        .append("int _f_recordRefId = _f_hasRecordRef ? ")
+        .append(READ_CONTEXT_NAME)
+        .append(".lastPreservedRefId() : -1;\n");
     for (int i = 0; i < components.length; i++) {
       Class<?> componentType = components[i].getType();
       code.append(recordLocalType(componentType))
@@ -214,14 +221,17 @@ public final class StaticCompatibleCodecBuilder extends ObjectCodecBuilder {
         .append('\n')
         .append("}\n");
     if (recordCtrAccessible) {
-      code.append("return new ").append(ctx.type(beanClass)).append("(");
+      code.append(ctx.type(beanClass))
+          .append(" _f_record = new ")
+          .append(ctx.type(beanClass))
+          .append("(");
       for (int i = 0; i < components.length; i++) {
         if (i > 0) {
           code.append(", ");
         }
         code.append("_f_recordValue").append(i);
       }
-      code.append(");");
+      code.append(");\n").append(recordPublicationCode()).append("return _f_record;");
       return code.toString();
     }
     String recordArgs = recordArgsFieldName(components.length);
@@ -239,15 +249,39 @@ public final class StaticCompatibleCodecBuilder extends ObjectCodecBuilder {
     Code.ExprCode newRecord =
         new Invoke(generatedObjectInstantiator(), "newInstanceWithArguments", OBJECT_TYPE, values)
             .genCode(ctx);
+    code.append("try {\n");
     if (StringUtils.isNotBlank(newRecord.code())) {
-      code.append(newRecord.code()).append('\n');
+      code.append(indent(newRecord.code(), 2)).append('\n');
     }
-    code.append("Object _f_record = ").append(newRecord.value()).append(";\n");
+    code.append("  Object _f_record = ")
+        .append(newRecord.value())
+        .append(";\n")
+        .append(indent(recordPublicationCode(), 2))
+        .append('\n')
+        .append("  return _f_record;\n")
+        .append("} finally {\n");
     for (int i = 0; i < components.length; i++) {
-      code.append("_f_recordArgs[").append(i).append("] = null;\n");
+      code.append("  _f_recordArgs[").append(i).append("] = null;\n");
     }
-    code.append("return _f_record;");
+    code.append("}");
     return code.toString();
+  }
+
+  private String recordPublicationCode() {
+    return "if (_f_hasRecordRef) {\n"
+        + "  "
+        + READ_CONTEXT_NAME
+        + ".setReadRef(_f_recordRefId, _f_record);\n"
+        + "  if ("
+        + READ_CONTEXT_NAME
+        + ".hasPreservedRefId() && "
+        + READ_CONTEXT_NAME
+        + ".lastPreservedRefId() == _f_recordRefId) {\n"
+        + "    "
+        + READ_CONTEXT_NAME
+        + ".reference(_f_record);\n"
+        + "  }\n"
+        + "}\n";
   }
 
   private void genDispatchMethods() {
@@ -338,9 +372,7 @@ public final class StaticCompatibleCodecBuilder extends ObjectCodecBuilder {
       }
       String scalarRead =
           genCompatibleScalarReadExpr(
-              descriptor,
-              "_f_remoteField.serializationFieldInfo",
-              "localFieldInfo(" + localId + ")");
+              descriptor, "_f_remoteField.serializationFieldInfo", "_f_remoteField.localFieldInfo");
       if (scalarRead != null) {
         code.append(debugRemoteReadCode("before read", "_f_remoteField", 4))
             .append("    ")
@@ -358,11 +390,10 @@ public final class StaticCompatibleCodecBuilder extends ObjectCodecBuilder {
           .append(", _f_remoteField);\n")
           .append(debugRemoteReadCode("after read", "_f_remoteField", 6))
           .append(
-              "      _f_remoteField.serializationFieldInfo.fieldConverter.set(_f_value, _f_fieldValue);\n")
+              "      _f_remoteField.serializationFieldInfo.fieldConverter.set(_f_value,"
+                  + " _f_fieldValue);\n")
           .append("    } else {\n")
-          .append("      SerializationFieldInfo _f_localField = localFieldInfo(")
-          .append(localId)
-          .append(");\n")
+          .append("      SerializationFieldInfo _f_localField = _f_remoteField.localFieldInfo;\n")
           .append("      Object _f_fieldValue = readCompatibleFieldValue(")
           .append(READ_CONTEXT_NAME)
           .append(", _f_remoteField, _f_localField);\n")
@@ -406,9 +437,7 @@ public final class StaticCompatibleCodecBuilder extends ObjectCodecBuilder {
       }
       String scalarRead =
           genCompatibleScalarReadExpr(
-              descriptor,
-              "_f_remoteField.serializationFieldInfo",
-              "localFieldInfo(" + localId + ")");
+              descriptor, "_f_remoteField.serializationFieldInfo", "_f_remoteField.localFieldInfo");
       if (scalarRead != null) {
         code.append(debugRemoteReadCode("before read", "_f_remoteField", 4))
             .append("    _f_recordValue")
@@ -422,9 +451,7 @@ public final class StaticCompatibleCodecBuilder extends ObjectCodecBuilder {
         continue;
       }
       code.append(debugRemoteReadCode("before read", "_f_remoteField", 4))
-          .append("    SerializationFieldInfo _f_localField = localFieldInfo(")
-          .append(localId)
-          .append(");\n")
+          .append("    SerializationFieldInfo _f_localField = _f_remoteField.localFieldInfo;\n")
           .append("    Object _f_fieldValue = readCompatibleFieldValue(")
           .append(READ_CONTEXT_NAME)
           .append(", _f_remoteField, _f_localField);\n")

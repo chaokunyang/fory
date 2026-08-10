@@ -246,6 +246,8 @@ public final class ExceptionSerializers {
   }
 
   public static final class StackTraceElementSerializer extends Serializer<StackTraceElement> {
+    private static final int STACK_TRACE_ELEMENT_OWNER_BYTES =
+        GraphMemoryEstimates.shallowObjectBytes(StackTraceElement.class);
     private static final MethodHandles.Lookup LOOKUP =
         AndroidSupport.IS_ANDROID
             ? null
@@ -302,6 +304,7 @@ public final class ExceptionSerializers {
         readContext.readString();
         readContext.readRef();
       }
+      readContext.reserveGraphMemory(STACK_TRACE_ELEMENT_OWNER_BYTES);
       return newStackTraceElement(
           classLoaderName,
           moduleName,

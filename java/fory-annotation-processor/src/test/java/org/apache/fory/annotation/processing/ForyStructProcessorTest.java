@@ -20,7 +20,9 @@
 package org.apache.fory.annotation.processing;
 
 import java.io.IOException;
+import java.lang.reflect.Array;
 import java.lang.reflect.Field;
+import java.lang.reflect.Modifier;
 import java.net.URL;
 import java.net.URLClassLoader;
 import java.nio.charset.StandardCharsets;
@@ -46,6 +48,7 @@ import org.apache.fory.exception.SerializationException;
 import org.apache.fory.meta.FieldInfo;
 import org.apache.fory.meta.FieldTypes;
 import org.apache.fory.meta.TypeDef;
+import org.apache.fory.reflect.FieldAccessor;
 import org.apache.fory.reflect.TypeRef;
 import org.apache.fory.serializer.StaticGeneratedStructSerializer;
 import org.apache.fory.type.Descriptor;
@@ -68,6 +71,10 @@ public class ForyStructProcessorTest {
                 + "  public SimpleStruct() {}\n"
                 + "}\n");
     Assert.assertTrue(result.success, result.diagnostics());
+    Assert.assertFalse(
+        result
+            .generatedSource("test/SimpleStruct_ForyNativeSerializer.java")
+            .contains("GeneratedFieldAccessors"));
     try (URLClassLoader loader = result.classLoader()) {
       Class<?> type = loader.loadClass("test.SimpleStruct");
       Class<?> serializerType = loader.loadClass("test.SimpleStruct_ForyNativeSerializer");
@@ -731,7 +738,7 @@ public class ForyStructProcessorTest {
                 + "import org.apache.fory.annotation.Nullable;\n"
                 + "@ForyStruct public class EvolvingStruct {\n"
                 + "  @Nullable @ForyField(id = 1) public String id;\n"
-                + "  @Nullable @ForyField(id = 2) public String name;\n"
+                + "  @Nullable @ForyField(id = 2) private String name;\n"
                 + "  @Nullable @ForyField(id = 4) public String flag;\n"
                 + "  @ForyField(id = 5) public int text;\n"
                 + "  @Nullable @ForyField(id = 6) public String decimalText;\n"
@@ -749,7 +756,7 @@ public class ForyStructProcessorTest {
                 + "import org.apache.fory.annotation.Nullable;\n"
                 + "@ForyStruct public class EvolvingStruct {\n"
                 + "  @ForyField(id = 1) public int id;\n"
-                + "  @Nullable @ForyField(id = 2) public String name;\n"
+                + "  @Nullable @ForyField(id = 2) private String name;\n"
                 + "  @Nullable @ForyField(id = 3) public String added = \"default\";\n"
                 + "  @ForyField(id = 4) public boolean flag;\n"
                 + "  @Nullable @ForyField(id = 5) public String text;\n"
@@ -774,6 +781,9 @@ public class ForyStructProcessorTest {
     Assert.assertFalse(generatedSource.contains("canReadGeneratedField"));
     Assert.assertTrue(generatedSource.contains("FieldConverters.readIntTarget"));
     Assert.assertTrue(generatedSource.contains("FieldConverters.readBooleanTarget"));
+    Assert.assertTrue(
+        generatedSource.contains("private static final class GeneratedFieldAccessors"));
+    Assert.assertTrue(generatedSource.contains("must keep this holder runtime-initialized"));
     try (URLClassLoader writerLoader = writerResult.classLoader();
         URLClassLoader readerLoader = readerResult.classLoader()) {
       Class<?> writerType = writerLoader.loadClass("test.EvolvingStruct");
@@ -810,6 +820,19 @@ public class ForyStructProcessorTest {
               .requireClassRegistration(false)
               .build();
       reader.setMetaReadContext(new MetaReadContext());
+      StaticGeneratedStructSerializer<?> localSerializer =
+          (StaticGeneratedStructSerializer<?>)
+              reader.getTypeResolver().getTypeInfo(readerType).getSerializer();
+      StaticGeneratedStructSerializer<?> remoteSerializer =
+          localSerializer.copySerializer(
+              reader.getTypeResolver(),
+              readerType,
+              TypeDef.buildTypeDef(writer.getTypeResolver(), writerType));
+      assertNoLocalSchemaState(remoteSerializer);
+      for (StaticGeneratedStructSerializer.RemoteFieldInfo remoteField :
+          remoteSerializer.getRemoteFields()) {
+        Assert.assertNotNull(remoteField.localFieldInfo);
+      }
       Object roundTrip = reader.deserialize(bytes);
       Assert.assertSame(roundTrip.getClass(), readerType);
       Assert.assertEquals(getField(readerType, roundTrip, "id"), 42);
@@ -825,6 +848,35 @@ public class ForyStructProcessorTest {
       Assert.assertEquals(getField(readerType, roundTrip, "narrow"), 123);
       Object serializer = reader.getTypeResolver().getTypeInfo(readerType).getSerializer();
       Assert.assertTrue(serializer instanceof StaticGeneratedStructSerializer);
+    }
+  }
+
+  private static void assertNoLocalSchemaState(StaticGeneratedStructSerializer<?> serializer)
+      throws Exception {
+    for (String fieldName : Arrays.asList("allFields", "allFieldIds", "fieldsById")) {
+      Field field = serializer.getClass().getDeclaredField(fieldName);
+      field.setAccessible(true);
+      Assert.assertEquals(Array.getLength(field.get(serializer)), 0, fieldName);
+    }
+    for (Field field : serializer.getClass().getDeclaredFields()) {
+      if (field.getType() == FieldAccessor.class) {
+        Assert.fail("Accessor retained on remote serializer: " + field.getName());
+      }
+    }
+    Class<?> accessorHolder =
+        Class.forName(
+            serializer.getClass().getName() + "$GeneratedFieldAccessors",
+            false,
+            serializer.getClass().getClassLoader());
+    Assert.assertTrue(Modifier.isPrivate(accessorHolder.getModifiers()));
+    Assert.assertTrue(Modifier.isStatic(accessorHolder.getModifiers()));
+    Field[] accessorFields = accessorHolder.getDeclaredFields();
+    Assert.assertTrue(accessorFields.length > 0);
+    for (Field field : accessorFields) {
+      Assert.assertSame(field.getType(), FieldAccessor.class);
+      Assert.assertTrue(Modifier.isPrivate(field.getModifiers()), field.getName());
+      Assert.assertTrue(Modifier.isStatic(field.getModifiers()), field.getName());
+      Assert.assertTrue(Modifier.isFinal(field.getModifiers()), field.getName());
     }
   }
 

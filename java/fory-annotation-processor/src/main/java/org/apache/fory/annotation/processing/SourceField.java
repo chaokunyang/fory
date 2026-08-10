@@ -89,7 +89,7 @@ final class SourceField {
 
   String readExpression(String target) {
     if (readAccessKind == AccessKind.ACCESSOR) {
-      return fieldAccessorName() + ".get(" + target + ")";
+      return fieldAccessorExpression() + ".get(" + target + ")";
     }
     if (readAccessKind == AccessKind.METHOD) {
       return target + "." + readAccess + "()";
@@ -99,7 +99,7 @@ final class SourceField {
 
   String writeStatement(String target, String valueExpression) {
     if (writeAccessKind == AccessKind.ACCESSOR) {
-      return fieldAccessorName() + ".set(" + target + ", " + valueExpression + ");";
+      return fieldAccessorExpression() + ".set(" + target + ", " + valueExpression + ");";
     }
     if (writeAccessKind == AccessKind.METHOD) {
       return target + "." + writeAccess + "(" + valueExpression + ");";
@@ -113,6 +113,10 @@ final class SourceField {
 
   String fieldAccessorName() {
     return "fieldAccessor" + id;
+  }
+
+  private String fieldAccessorExpression() {
+    return "GeneratedFieldAccessors." + fieldAccessorName();
   }
 
   String defaultValue() {

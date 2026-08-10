@@ -24,10 +24,13 @@ package org.apache.fory.kotlin.xlang
 import java.math.BigDecimal
 import java.time.Instant
 import java.time.LocalDate
+import java.util.ArrayList
+import java.util.LinkedList
 import java.util.TreeMap
 import java.util.TreeSet
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.CopyOnWriteArraySet
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 import org.apache.fory.BaseFory
@@ -265,6 +268,61 @@ constructor(
   @ForyField(id = 2) val second: KotlinPet,
 )
 
+public open class KotlinPhysicalBase(
+  private val inheritedLong: Long = 1L,
+  private val inheritedShort: Short = 2,
+)
+
+@ForyStruct
+public class KotlinPhysicalStorage constructor(@ForyField(id = 1) public val id: Int) :
+  KotlinPhysicalBase() {
+  private val storageOnly: Long = 3L
+}
+
+@ForyStruct(evolving = false)
+public data class KotlinFixedRegistration constructor(@ForyField(id = 1) val id: Int)
+
+@ForyStruct
+public data class KotlinCollectionRefWriter
+constructor(
+  @Ref @ForyField(id = 1) val first: Map<String, Int>,
+  @Ref @ForyField(id = 2) val second: Map<String, Int>,
+  @ForyField(id = 3) val groups: List<@Ref Set<String>>,
+  @ForyField(id = 4) val lists: List<@Ref List<String>>,
+  @ForyField(id = 5) val sets: List<@Ref Set<String>>,
+)
+
+@ForyStruct
+public data class KotlinCollectionRefReader
+constructor(
+  @Ref @ForyField(id = 1) val first: TreeMap<String, Int>,
+  @Ref @ForyField(id = 2) val second: TreeMap<String, Int>,
+  @ForyField(id = 3) val groups: List<@Ref TreeSet<String>>,
+  @ForyField(id = 4) val lists: List<@Ref CopyOnWriteArrayList<String>>,
+  @ForyField(id = 5) val sets: List<@Ref CopyOnWriteArraySet<String>>,
+  @ForyField(id = 6) val added: String = "reader-default",
+)
+
+@ForyStruct
+public data class KotlinDenseTargetWriter
+constructor(
+  @ForyField(id = 1) val lists: List<@Ref IntArray>,
+  @ForyField(id = 2) val mutableLists: List<@Ref IntArray>,
+  @ForyField(id = 3) val arrayLists: List<@Ref IntArray>,
+  @ForyField(id = 4) val linkedLists: List<@Ref IntArray>,
+  @ForyField(id = 5) val copyOnWriteLists: List<@Ref IntArray>,
+)
+
+@ForyStruct
+public data class KotlinDenseTargetReader
+constructor(
+  @ForyField(id = 1) val lists: List<@Ref List<Int>>,
+  @ForyField(id = 2) val mutableLists: List<@Ref MutableList<Int>>,
+  @ForyField(id = 3) val arrayLists: List<@Ref ArrayList<Int>>,
+  @ForyField(id = 4) val linkedLists: List<@Ref LinkedList<Int>>,
+  @ForyField(id = 5) val copyOnWriteLists: List<@Ref CopyOnWriteArrayList<Int>>,
+)
+
 public fun main(args: Array<String>) {
   if (args.size < 2) {
     throw IllegalArgumentException("Usage: <case> <data-file>")
@@ -275,6 +333,16 @@ public fun main(args: Array<String>) {
     "constructor_backref_copy" -> constructorBackrefCopy()
     "dense_array_round_trip" -> denseArrayRoundTrip(args[1])
     "unsigned_collection_round_trip" -> unsignedCollectionRoundTrip(args[1])
+    "concrete_collection_refs" -> concreteCollectionRefs()
+    "dense_collection_refs" -> compatibleDenseTargets()
+    "physical_storage_budget" -> physicalStorageBudget()
+    "serializer_registration_freeze" -> serializerRegistrationFreezes()
+    "memory_owners" -> {
+      concreteCollectionRefs()
+      compatibleDenseTargets()
+      physicalStorageBudget()
+      serializerRegistrationFreezes()
+    }
     else -> throw IllegalArgumentException("Unsupported Kotlin xlang case ${args[0]}")
   }
 }
@@ -284,6 +352,10 @@ private fun staticSerializerRoundTrip(dataFile: String) {
   compatibleScalarContainerRefs()
   compatibleDenseUIntList()
   trackedDenseArrayRefs()
+  concreteCollectionRefs()
+  compatibleDenseTargets()
+  physicalStorageBudget()
+  serializerRegistrationFreezes()
 
   val fory = newFory()
   fory.register<KotlinUser>("kotlin.KotlinUser")
@@ -593,6 +665,203 @@ private fun staticSerializerRoundTrip(dataFile: String) {
   }
   checkUnionListBudget(emptyList())
   checkUnionListBudget(listOf(1u, 2u, UInt.MAX_VALUE))
+}
+
+private fun concreteCollectionRefs() {
+  val sharedMap = linkedMapOf("one" to 1)
+  val sharedSet = linkedSetOf("a", "b")
+  val sharedList = listOf("c", "d")
+  val sharedCopyOnWriteSet = linkedSetOf("e", "f")
+  val value =
+    KotlinCollectionRefWriter(
+      first = sharedMap,
+      second = sharedMap,
+      groups = listOf(sharedSet, sharedSet),
+      lists = listOf(sharedList, sharedList),
+      sets = listOf(sharedCopyOnWriteSet, sharedCopyOnWriteSet),
+    )
+  val writer = newRefCompatibleFory()
+  writer.register<KotlinCollectionRefWriter>("kotlin.CollectionRefOwners")
+  val bytes = writer.serialize(value)
+  val requiredBytes =
+    GraphMemoryEstimates.shallowObjectBytes(KotlinCollectionRefReader::class.java).toLong() +
+      GraphMemoryEstimates.shallowObjectBytes(TreeMap::class.java) +
+      2L * GraphMemoryEstimates.REFERENCE_BYTES +
+      GraphMemoryEstimates.shallowObjectBytes(java.util.ArrayList::class.java) +
+      2L * GraphMemoryEstimates.REFERENCE_BYTES +
+      GraphMemoryEstimates.shallowObjectBytes(TreeSet::class.java) +
+      GraphMemoryEstimates.shallowObjectBytes(TreeMap::class.java) +
+      2L * GraphMemoryEstimates.REFERENCE_BYTES +
+      GraphMemoryEstimates.shallowObjectBytes(java.util.ArrayList::class.java) +
+      2L * GraphMemoryEstimates.REFERENCE_BYTES +
+      GraphMemoryEstimates.shallowObjectBytes(CopyOnWriteArrayList::class.java) +
+      GraphMemoryEstimates.objectArrayBytes() +
+      2L * GraphMemoryEstimates.REFERENCE_BYTES +
+      GraphMemoryEstimates.shallowObjectBytes(java.util.ArrayList::class.java) +
+      2L * GraphMemoryEstimates.REFERENCE_BYTES +
+      GraphMemoryEstimates.shallowObjectBytes(CopyOnWriteArraySet::class.java) +
+      GraphMemoryEstimates.shallowObjectBytes(CopyOnWriteArrayList::class.java) +
+      GraphMemoryEstimates.objectArrayBytes() +
+      2L * GraphMemoryEstimates.REFERENCE_BYTES
+
+  val tooSmallReader = newRefBudgetCompatibleFory(requiredBytes - 1)
+  tooSmallReader.register<KotlinCollectionRefReader>("kotlin.CollectionRefOwners")
+  try {
+    tooSmallReader.deserialize(bytes, KotlinCollectionRefReader::class.java)
+    error("Concrete Kotlin collection targets exceeded their graph memory budget")
+  } catch (_: InsecureException) {}
+
+  val exactReader = newRefBudgetCompatibleFory(requiredBytes)
+  exactReader.register<KotlinCollectionRefReader>("kotlin.CollectionRefOwners")
+  val decoded = exactReader.deserialize(bytes, KotlinCollectionRefReader::class.java)
+  check(decoded.first === decoded.second)
+  check(decoded.first.javaClass == TreeMap::class.java) { decoded.first.javaClass.name }
+  check(decoded.groups[0] === decoded.groups[1])
+  check(decoded.groups[0].javaClass == TreeSet::class.java) { decoded.groups[0].javaClass.name }
+  check(decoded.lists[0] === decoded.lists[1])
+  check(decoded.lists[0].javaClass == CopyOnWriteArrayList::class.java) {
+    decoded.lists[0].javaClass.name
+  }
+  check(decoded.sets[0] === decoded.sets[1])
+  check(decoded.sets[0].javaClass == CopyOnWriteArraySet::class.java) {
+    decoded.sets[0].javaClass.name
+  }
+  check(decoded.added == "reader-default")
+}
+
+private fun physicalStorageBudget() {
+  val writer = newFory()
+  writer.register<KotlinPhysicalStorage>("kotlin.KotlinPhysicalStorage")
+  val bytes = writer.serialize(KotlinPhysicalStorage(7))
+  val requiredBytes =
+    GraphMemoryEstimates.shallowObjectBytes(KotlinPhysicalStorage::class.java).toLong()
+
+  val tooSmallReader = newBudgetFory(requiredBytes - 1)
+  tooSmallReader.register<KotlinPhysicalStorage>("kotlin.KotlinPhysicalStorage")
+  try {
+    tooSmallReader.deserialize(bytes, KotlinPhysicalStorage::class.java)
+    error("Kotlin physical storage exceeded its graph memory budget")
+  } catch (_: InsecureException) {}
+
+  val exactReader = newBudgetFory(requiredBytes)
+  exactReader.register<KotlinPhysicalStorage>("kotlin.KotlinPhysicalStorage")
+  val decoded = exactReader.deserialize(bytes, KotlinPhysicalStorage::class.java)
+  check(decoded.id == 7)
+  val descriptors =
+    (exactReader.getSerializer(KotlinPhysicalStorage::class.java)
+        as StaticGeneratedStructSerializer<*>)
+      .generatedDescriptors
+  check(descriptors.size == 1)
+  check(descriptors.single().name == "id")
+}
+
+private fun compatibleDenseTargets() {
+  val list = intArrayOf(1, 2)
+  val mutableList = intArrayOf(3, 4)
+  val arrayList = intArrayOf(5, 6)
+  val linkedList = intArrayOf(7, 8)
+  val copyOnWriteList = intArrayOf(9, 10)
+  val writer = newRefCompatibleFory()
+  writer.register<KotlinDenseTargetWriter>("kotlin.DenseTargets")
+  val bytes =
+    writer.serialize(
+      KotlinDenseTargetWriter(
+        lists = listOf(list, list),
+        mutableLists = listOf(mutableList, mutableList),
+        arrayLists = listOf(arrayList, arrayList),
+        linkedLists = listOf(linkedList, linkedList),
+        copyOnWriteLists = listOf(copyOnWriteList, copyOnWriteList),
+      )
+    )
+  val twoElementArrayListBytes =
+    GraphMemoryEstimates.shallowObjectBytes(ArrayList::class.java).toLong() +
+      2L * GraphMemoryEstimates.REFERENCE_BYTES
+  val outerListBytes = 5L * twoElementArrayListBytes
+  val arrayListTargetBytes = 3L * twoElementArrayListBytes
+  val requiredBytes =
+    GraphMemoryEstimates.shallowObjectBytes(KotlinDenseTargetReader::class.java).toLong() +
+      outerListBytes +
+      arrayListTargetBytes +
+      GraphMemoryEstimates.shallowObjectBytes(LinkedList::class.java) +
+      2L * GraphMemoryEstimates.REFERENCE_BYTES +
+      GraphMemoryEstimates.shallowObjectBytes(CopyOnWriteArrayList::class.java) +
+      GraphMemoryEstimates.objectArrayBytes() +
+      2L * GraphMemoryEstimates.REFERENCE_BYTES
+
+  val tooSmallReader = newRefBudgetCompatibleFory(requiredBytes - 1)
+  tooSmallReader.register<KotlinDenseTargetReader>("kotlin.DenseTargets")
+  try {
+    tooSmallReader.deserialize(bytes, KotlinDenseTargetReader::class.java)
+    error("Nested dense Kotlin list targets exceeded their graph memory budget")
+  } catch (_: InsecureException) {}
+
+  val exactReader = newRefBudgetCompatibleFory(requiredBytes)
+  exactReader.register<KotlinDenseTargetReader>("kotlin.DenseTargets")
+  val decoded = exactReader.deserialize(bytes, KotlinDenseTargetReader::class.java)
+  check(decoded.lists[0] === decoded.lists[1])
+  check(decoded.lists[0].javaClass == ArrayList::class.java)
+  check(decoded.lists[0] == listOf(1, 2))
+  check(decoded.mutableLists[0] === decoded.mutableLists[1])
+  check(decoded.mutableLists[0].javaClass == ArrayList::class.java)
+  check(decoded.mutableLists[0] == listOf(3, 4))
+  check(decoded.arrayLists[0] === decoded.arrayLists[1])
+  check(decoded.arrayLists[0].javaClass == ArrayList::class.java)
+  check(decoded.arrayLists[0] == listOf(5, 6))
+  check(decoded.linkedLists[0] === decoded.linkedLists[1])
+  check(decoded.linkedLists[0].javaClass == LinkedList::class.java) {
+    decoded.linkedLists[0].javaClass.name
+  }
+  check(decoded.linkedLists[0] == listOf(7, 8))
+  check(decoded.copyOnWriteLists[0] === decoded.copyOnWriteLists[1])
+  check(decoded.copyOnWriteLists[0].javaClass == CopyOnWriteArrayList::class.java) {
+    decoded.copyOnWriteLists[0].javaClass.name
+  }
+  check(decoded.copyOnWriteLists[0] == listOf(9, 10))
+}
+
+private fun serializerRegistrationFreezes() {
+  val registeredFory = newFory()
+  registeredFory.register<KotlinFixedRegistration>("kotlin.KotlinFixedRegistration")
+  check(
+    registeredFory.typeResolver.getTypeInfo(KotlinFixedRegistration::class.java).typeId ==
+      Types.NAMED_STRUCT
+  )
+  registeredFory.serialize(KotlinFixedRegistration(1))
+  val serializer = registeredFory.getSerializer(KotlinFixedRegistration::class.java)
+  try {
+    KotlinSerializers.registerSerializer(registeredFory, KotlinFixedRegistration::class.java)
+    error("Kotlin serializer registration succeeded after the first root operation")
+  } catch (_: ForyException) {}
+  check(registeredFory.getSerializer(KotlinFixedRegistration::class.java) === serializer)
+  check(
+    registeredFory.typeResolver.getTypeInfo(KotlinFixedRegistration::class.java).typeId ==
+      Types.NAMED_STRUCT
+  )
+
+  val unregisteredFory = newFory()
+  unregisteredFory.serialize("freeze")
+  check(!unregisteredFory.typeResolver.isRegistered(KotlinPhysicalStorage::class.java))
+  try {
+    KotlinSerializers.registerSerializer(unregisteredFory, KotlinPhysicalStorage::class.java)
+    error("Kotlin serializer registration added a type after the first root operation")
+  } catch (_: ForyException) {}
+  check(!unregisteredFory.typeResolver.isRegistered(KotlinPhysicalStorage::class.java))
+
+  val compatibleFory = newCompatibleFory()
+  KotlinSerializers.registerType(
+    compatibleFory,
+    KotlinPhysicalStorage::class.java,
+    "kotlin.KotlinPhysicalStorageCompatible",
+  )
+  check(
+    compatibleFory.typeResolver.getTypeInfo(KotlinPhysicalStorage::class.java).typeId ==
+      Types.NAMED_COMPATIBLE_STRUCT
+  )
+  KotlinSerializers.registerSerializer(compatibleFory, KotlinPhysicalStorage::class.java)
+  check(
+    compatibleFory.typeResolver.getTypeInfo(KotlinPhysicalStorage::class.java).typeId ==
+      Types.NAMED_COMPATIBLE_STRUCT
+  )
 }
 
 private fun trackedDenseArrayRefs() {

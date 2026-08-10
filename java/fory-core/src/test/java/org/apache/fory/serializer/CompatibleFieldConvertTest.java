@@ -22,6 +22,7 @@ package org.apache.fory.serializer;
 import com.google.common.collect.ImmutableSet;
 import java.lang.reflect.Field;
 import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
@@ -375,6 +376,28 @@ public class CompatibleFieldConvertTest extends ForyTestBase {
     public BigDecimal value;
   }
 
+  public static final class LongScaleDecimalWriter {
+    @ForyField(id = 0)
+    public BigDecimal value =
+        new BigDecimal(BigInteger.valueOf(12345).multiply(BigInteger.TEN.pow(1000)), 1000);
+  }
+
+  public static final class WideDecimalWriter {
+    @ForyField(id = 0)
+    public BigDecimal value = new BigDecimal(repeat("1", 300));
+  }
+
+  private static final class StripGuardDecimal extends BigDecimal {
+    private StripGuardDecimal(BigInteger unscaled, int scale) {
+      super(unscaled, scale);
+    }
+
+    @Override
+    public BigDecimal stripTrailingZeros() {
+      throw new AssertionError("normalization must not run for an impossible decimal shape");
+    }
+  }
+
   public static final class Float16Writer {
     @ForyField(id = 0)
     public Float16 value = Float16.ONE;
@@ -587,6 +610,25 @@ public class CompatibleFieldConvertTest extends ForyTestBase {
         readAs(new ExponentBoundStringWriter(), DecimalReader.class, xlang, codegen);
     Assert.assertEquals(exponentBound.value.unscaledValue().toString().length(), 256);
     Assert.assertEquals(exponentBound.value.scale(), 0);
+  }
+
+  @Test
+  public void testDecimalWorkGate() {
+    BigDecimal value = new StripGuardDecimal(BigInteger.ONE.shiftLeft(4096), 0);
+    Assert.assertThrows(
+        DeserializationException.class,
+        () -> FieldConverters.convertValue(BigDecimal.class, String.class, value));
+  }
+
+  @Test(dataProvider = "xlangAndCodegen")
+  public void testDecimalNormalization(boolean xlang, boolean codegen) {
+    StringReader normalized =
+        readAs(new LongScaleDecimalWriter(), StringReader.class, xlang, codegen);
+    Assert.assertEquals(normalized.value, "12345");
+
+    WideDecimalWriter writer = new WideDecimalWriter();
+    DecimalReader exact = readAs(writer, DecimalReader.class, xlang, codegen);
+    Assert.assertEquals(exact.value, writer.value);
   }
 
   @Test(dataProvider = "codegenModes")

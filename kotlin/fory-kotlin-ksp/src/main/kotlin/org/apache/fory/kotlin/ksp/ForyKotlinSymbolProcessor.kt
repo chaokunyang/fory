@@ -250,31 +250,76 @@ internal class ForyKotlinSymbolProcessor(private val environment: SymbolProcesso
           KotlinSerializerVisibility.PUBLIC
         },
       construction = parsed.construction,
-      graphMemoryBytes = graphMemoryBytes(fields),
+      graphMemoryBytes = graphMemoryBytes(declaration),
       fields = fields,
       originatingFiles = listOfNotNull(declaration.containingFile),
     )
   }
 
-  private fun graphMemoryBytes(fields: List<KotlinSourceField>): Int {
+  private fun graphMemoryBytes(declaration: KSClassDeclaration): Int {
     var bytes = JVM_OBJECT_BASE_BYTES
-    for (field in fields) {
-      bytes = Math.addExact(bytes, fieldGraphMemoryBytes(field.type))
+    val visited = hashSetOf<String>()
+    fun addFields(type: KSClassDeclaration) {
+      val identity = type.qualifiedName?.asString() ?: return
+      if (!visited.add(identity) || identity == "kotlin.Any" || identity == "java.lang.Object") {
+        return
+      }
+      for (member in type.declarations) {
+        // Wire fields and physical JVM storage deliberately have different owners: backing fields
+        // affect the shallow budget even when they are inherited or omitted from Fory metadata.
+        if (
+          member is KSPropertyDeclaration &&
+            (member.hasBackingField || member.isDelegated()) &&
+            Modifier.JAVA_STATIC !in member.modifiers
+        ) {
+          bytes = Math.addExact(bytes, physicalFieldBytes(member))
+        }
+      }
+      for (superType in type.superTypes) {
+        val superDeclaration = superType.resolve().declaration as? KSClassDeclaration ?: continue
+        addFields(superDeclaration)
+      }
     }
+    addFields(declaration)
     return bytes
   }
 
-  private fun fieldGraphMemoryBytes(type: KotlinSourceTypeNode): Int =
-    when (type.typeName) {
-      "boolean",
-      "byte" -> 1
-      "short" -> 2
-      "int",
-      "float" -> 4
-      "long",
-      "double" -> 8
-      else -> 4
+  private fun physicalFieldBytes(property: KSPropertyDeclaration): Int {
+    if (property.isDelegated()) {
+      return JVM_REFERENCE_BYTES
     }
+    return physicalTypeBytes(property.type.resolve())
+  }
+
+  private fun physicalTypeBytes(type: KSType): Int {
+    if (type.nullability != Nullability.NOT_NULL) {
+      return JVM_REFERENCE_BYTES
+    }
+    val declaration = type.declaration
+    return when (declaration.qualifiedName?.asString()) {
+      "kotlin.Boolean",
+      "kotlin.Byte" -> 1
+      "kotlin.Short",
+      "kotlin.Char" -> 2
+      "kotlin.Int",
+      "kotlin.Float",
+      "kotlin.UInt" -> 4
+      "kotlin.Long",
+      "kotlin.Double",
+      "kotlin.ULong" -> 8
+      "kotlin.UByte" -> 1
+      "kotlin.UShort" -> 2
+      else -> {
+        if (declaration is KSClassDeclaration && Modifier.VALUE in declaration.modifiers) {
+          val storageType =
+            declaration.primaryConstructor?.parameters?.singleOrNull()?.type?.resolve()
+          if (storageType != null) physicalTypeBytes(storageType) else JVM_REFERENCE_BYTES
+        } else {
+          JVM_REFERENCE_BYTES
+        }
+      }
+    }
+  }
 
   private fun parseStructFields(
     declaration: KSClassDeclaration,
@@ -988,19 +1033,10 @@ internal class ForyKotlinSymbolProcessor(private val environment: SymbolProcesso
       if (!validateCollectionFactory(factory, element, owner)) {
         return null
       }
-      val valueTypeName =
-        if (factory == CollectionFactory.NONE) {
-          kotlinSourceTypeName(type)
-        } else if (isList) {
-          "kotlin.collections.List<${element.valueTypeName}>"
-        } else {
-          "kotlin.collections.Set<${element.valueTypeName}>"
-        }
       return KotlinSourceTypeNode(
-        rawClassExpression =
-          if (isList) "java.util.List::class.java" else "java.util.Set::class.java",
+        rawClassExpression = collectionClassExpression(factory, isList),
         kotlinTypeName = if (isList) "java.util.List" else "java.util.Set",
-        valueTypeName = valueTypeName,
+        valueTypeName = kotlinSourceTypeName(type),
         typeName = if (isList) "java.util.List" else "java.util.Set",
         typeId = arrayTypeId ?: if (isList) "Types.LIST" else "Types.SET",
         nullable = nullable,
@@ -1047,17 +1083,11 @@ internal class ForyKotlinSymbolProcessor(private val environment: SymbolProcesso
       if (!validateMapFactory(factory, value, owner)) {
         return null
       }
-      val valueTypeName =
-        if (factory == CollectionFactory.NONE) {
-          kotlinSourceTypeName(type)
-        } else {
-          "kotlin.collections.Map<${key.valueTypeName}, ${value.valueTypeName}>"
-        }
       return KotlinSourceTypeNode(
-        rawClassExpression = rawMapClassExpression(qualifiedName),
-        kotlinTypeName = rawMapKotlinTypeName(qualifiedName),
-        valueTypeName = valueTypeName,
-        typeName = rawMapTypeName(qualifiedName),
+        rawClassExpression = mapClassExpression(factory),
+        kotlinTypeName = "java.util.Map",
+        valueTypeName = kotlinSourceTypeName(type),
+        typeName = "java.util.Map",
         typeId = "Types.MAP",
         nullable = nullable,
         trackingRef = hasTypeRef,
@@ -1611,25 +1641,38 @@ internal class ForyKotlinSymbolProcessor(private val environment: SymbolProcesso
       else -> CollectionFactory.NONE
     }
 
-  private fun rawCollectionClassExpression(qualifiedName: String?): String =
-    when (qualifiedName) {
-      "kotlin.collections.Set",
-      "kotlin.collections.MutableSet",
-      "java.util.Set" -> "java.util.Set::class.java"
-      else -> "java.util.List::class.java"
+  private fun collectionClassExpression(factory: CollectionFactory, list: Boolean): String =
+    when (factory) {
+      CollectionFactory.MUTABLE_LIST,
+      CollectionFactory.ARRAY_LIST -> "java.util.ArrayList::class.java"
+      CollectionFactory.LINKED_LIST -> "java.util.LinkedList::class.java"
+      CollectionFactory.COPY_ON_WRITE_ARRAY_LIST ->
+        "java.util.concurrent.CopyOnWriteArrayList::class.java"
+      CollectionFactory.MUTABLE_SET,
+      CollectionFactory.HASH_SET -> "java.util.HashSet::class.java"
+      CollectionFactory.LINKED_HASH_SET -> "java.util.LinkedHashSet::class.java"
+      CollectionFactory.TREE_SET -> "java.util.TreeSet::class.java"
+      CollectionFactory.COPY_ON_WRITE_ARRAY_SET ->
+        "java.util.concurrent.CopyOnWriteArraySet::class.java"
+      CollectionFactory.CONCURRENT_SKIP_LIST_SET ->
+        "java.util.concurrent.ConcurrentSkipListSet::class.java"
+      CollectionFactory.NONE ->
+        if (list) "java.util.List::class.java" else "java.util.Set::class.java"
+      else -> error("Not a collection factory: $factory")
     }
 
-  private fun rawCollectionKotlinTypeName(qualifiedName: String?): String =
-    if (isSet(qualifiedName)) "java.util.Set" else "java.util.List"
-
-  private fun rawCollectionTypeName(qualifiedName: String?): String =
-    if (isSet(qualifiedName)) "java.util.Set" else "java.util.List"
-
-  private fun rawMapClassExpression(qualifiedName: String?): String = "java.util.Map::class.java"
-
-  private fun rawMapKotlinTypeName(qualifiedName: String?): String = "java.util.Map"
-
-  private fun rawMapTypeName(qualifiedName: String?): String = "java.util.Map"
+  private fun mapClassExpression(factory: CollectionFactory): String =
+    when (factory) {
+      CollectionFactory.MUTABLE_MAP,
+      CollectionFactory.HASH_MAP -> "java.util.HashMap::class.java"
+      CollectionFactory.LINKED_HASH_MAP -> "java.util.LinkedHashMap::class.java"
+      CollectionFactory.TREE_MAP -> "java.util.TreeMap::class.java"
+      CollectionFactory.CONCURRENT_HASH_MAP -> "java.util.concurrent.ConcurrentHashMap::class.java"
+      CollectionFactory.CONCURRENT_SKIP_LIST_MAP ->
+        "java.util.concurrent.ConcurrentSkipListMap::class.java"
+      CollectionFactory.NONE -> "java.util.Map::class.java"
+      else -> error("Not a map factory: $factory")
+    }
 
   private fun denseArrayRawClass(qualifiedName: String): String =
     when (qualifiedName) {

@@ -64,8 +64,9 @@ public class ExceptionUtils {
     ReadContext readContext = fory.getReadContext();
     if (readContext.getRefReader() instanceof MapRefReader) {
       ObjectArray readObjects = ((MapRefReader) readContext.getRefReader()).getReadRefs();
-      // carry with read objects for better trouble shooting.
-      List<Object> objects = Arrays.asList(readObjects.objects).subList(0, readObjects.size);
+      // Keep only the active objects for troubleshooting. A view of the reusable backing array
+      // would escape through the exception and pin the read table after root cleanup replaces it.
+      List<Object> objects = Arrays.asList(Arrays.copyOf(readObjects.objects, readObjects.size));
       throw new DeserializationException(objects, t);
     }
     throw new DeserializationException("Failed to deserialize input", t);

@@ -84,16 +84,12 @@ public class ForyFieldTagIdTest extends ForyTestBase {
     // Verify field with id=0 has tag
     assertTrue(field0.hasFieldId(), "Field with id=0 should have tag in xlang=" + xlang);
     assertEquals(
-        field0.getFieldId(),
-        (short) 0,
-        "Field with id=0 should have tag value 0 in xlang=" + xlang);
+        field0.getFieldId(), 0, "Field with id=0 should have tag value 0 in xlang=" + xlang);
 
     // Verify field with id=5 has tag
     assertTrue(field5.hasFieldId(), "Field with id=5 should have tag in xlang=" + xlang);
     assertEquals(
-        field5.getFieldId(),
-        (short) 5,
-        "Field with id=5 should have tag value 5 in xlang=" + xlang);
+        field5.getFieldId(), 5, "Field with id=5 should have tag value 5 in xlang=" + xlang);
 
     // Verify field with annotation but no ID does NOT have tag
     assertFalse(

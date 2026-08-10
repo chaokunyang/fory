@@ -65,6 +65,11 @@ public class ConcurrentCollectionSerializer<T extends Collection> extends Collec
     super(typeResolver, type, supportCodegen);
   }
 
+  protected ConcurrentCollectionSerializer(
+      TypeResolver typeResolver, Class<T> type, boolean supportCodegen, int ownerBytes) {
+    super(typeResolver, type, supportCodegen, ownerBytes);
+  }
+
   /**
    * Creates a snapshot of the concurrent collection for safe serialization.
    *

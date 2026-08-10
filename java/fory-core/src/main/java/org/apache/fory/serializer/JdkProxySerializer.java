@@ -36,6 +36,10 @@ import org.apache.fory.util.Preconditions;
 /** Serializer for jdk {@link Proxy}. */
 @SuppressWarnings({"rawtypes", "unchecked"})
 public class JdkProxySerializer extends Serializer {
+  private static final int PROXY_OWNER_BYTES = GraphMemoryEstimates.shallowObjectBytes(Proxy.class);
+  private static final int DEFERRED_HANDLER_OWNER_BYTES =
+      GraphMemoryEstimates.shallowObjectBytes(DeferredInvocationHandler.class);
+
   private static class StubInvocationHandler implements InvocationHandler {
     @Override
     public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
@@ -141,9 +145,11 @@ public class JdkProxySerializer extends Serializer {
     if (!needToWriteRef) {
       InvocationHandler invocationHandler =
           unwrapInvocationHandler((InvocationHandler) readContext.readRef());
+      readContext.reserveGraphMemory(PROXY_OWNER_BYTES);
       return Proxy.newProxyInstance(typeResolver.getClassLoader(), interfaces, invocationHandler);
     }
     if (!MemoryUtils.JDK_PROXY_FIELD_ACCESS) {
+      readContext.reserveGraphMemory(PROXY_OWNER_BYTES + DEFERRED_HANDLER_OWNER_BYTES);
       DeferredInvocationHandler deferredHandler = new DeferredInvocationHandler();
       Object proxy =
           Proxy.newProxyInstance(typeResolver.getClassLoader(), interfaces, deferredHandler);
@@ -153,6 +159,7 @@ public class JdkProxySerializer extends Serializer {
       deferredHandler.setDelegate(invocationHandler);
       return proxy;
     }
+    readContext.reserveGraphMemory(PROXY_OWNER_BYTES);
     Object proxy = Proxy.newProxyInstance(typeResolver.getClassLoader(), interfaces, STUB_HANDLER);
     readContext.setReadRef(refId, proxy);
     InvocationHandler invocationHandler =

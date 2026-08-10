@@ -113,17 +113,42 @@ final class StaticSerializerSourceWriter {
     if (!struct.record) {
       builder.append("  private final ObjectInstantiator generatedObjectInstantiator;\n");
     }
-    for (SourceField field : struct.fields) {
-      if (field.usesFieldAccessor()) {
-        builder
-            .append("  private final FieldAccessor ")
-            .append(field.fieldAccessorName())
-            .append(";\n");
+    if (hasFieldAccessors()) {
+      builder.append(
+          "  // One canonical accessor set serves every remote schema serializer. The"
+              + " native-image\n");
+      builder.append(
+          "  // feature must keep this holder runtime-initialized because accessors contain VM"
+              + " field offsets.\n");
+      builder.append("  private static final class GeneratedFieldAccessors {\n");
+      for (SourceField field : struct.fields) {
+        if (field.usesFieldAccessor()) {
+          builder
+              .append("    private static final FieldAccessor ")
+              .append(field.fieldAccessorName())
+              .append(" = FieldAccessor.createAccessor(declaredField(")
+              .append(struct.typeName)
+              .append(".class, \"")
+              .append(escape(field.declaringClass))
+              .append("\", \"")
+              .append(escape(field.name))
+              .append("\"));\n");
+        }
       }
+      builder.append("  }\n");
     }
     builder.append("  private final int classVersionHash;\n");
     builder.append("  private final boolean sameSchemaCompatible;\n\n");
     builder.append("  private final boolean readDataAlwaysAdvances;\n\n");
+  }
+
+  private boolean hasFieldAccessors() {
+    for (SourceField field : struct.fields) {
+      if (field.usesFieldAccessor()) {
+        return true;
+      }
+    }
+    return false;
   }
 
   private void writeDescriptors() {
@@ -178,11 +203,6 @@ final class StaticSerializerSourceWriter {
     if (!struct.record) {
       builder.append("    this.generatedObjectInstantiator = null;\n");
     }
-    for (SourceField field : struct.fields) {
-      if (field.usesFieldAccessor()) {
-        builder.append("    this.").append(field.fieldAccessorName()).append(" = null;\n");
-      }
-    }
     builder.append("    this.classVersionHash = 0;\n");
     builder.append("    this.sameSchemaCompatible = false;\n");
     builder
@@ -205,7 +225,8 @@ final class StaticSerializerSourceWriter {
     builder.append("    super(typeResolver, type, typeDef, DESCRIPTORS);\n");
     writeConstructorBody(
         "buildLocalFieldGroups(DESCRIPTORS)",
-        "typeDef != null && !HAS_NESTED_COMPATIBLE_STRUCT_FIELDS && typeDef.getId() == TypeDef.buildTypeDef(typeResolver, type).getId()",
+        "typeDef != null && !HAS_NESTED_COMPATIBLE_STRUCT_FIELDS && typeDef.getId() =="
+            + " TypeDef.buildTypeDef(typeResolver, type).getId()",
         "typeDef.readDataAlwaysAdvances()");
     builder.append("  }\n\n");
   }
@@ -214,34 +235,30 @@ final class StaticSerializerSourceWriter {
       String fieldGroupsExpression,
       String sameSchemaExpression,
       String readDataAlwaysAdvancesExpression) {
-    builder.append("    FieldGroups fieldGroups = ").append(fieldGroupsExpression).append(";\n");
-    builder.append("    this.allFields = fieldGroups.allFields;\n");
-    builder.append("    this.allFieldIds = localFieldIds(allFields, DESCRIPTORS);\n");
-    builder.append("    this.fieldsById = new SerializationFieldInfo[DESCRIPTORS.size()];\n");
     if (!struct.record) {
       builder.append(
           "    this.generatedObjectInstantiator = typeResolver.getObjectInstantiator(type);\n");
     }
-    builder.append("    SerializationFieldInfo[] allFields = fieldGroups.allFields;\n");
-    builder.append("    int[] allFieldIds = localFieldIds(allFields, DESCRIPTORS);\n");
-    builder.append("    for (int i = 0; i < allFields.length; i++) {\n");
-    builder.append("      this.fieldsById[allFieldIds[i]] = allFields[i];\n");
-    builder.append("    }\n");
-    for (SourceField field : struct.fields) {
-      if (field.usesFieldAccessor()) {
-        builder
-            .append("    this.")
-            .append(field.fieldAccessorName())
-            .append(" = FieldAccessor.createAccessor(declaredField(type, \"")
-            .append(escape(field.declaringClass))
-            .append("\", \"")
-            .append(escape(field.name))
-            .append("\"));\n");
-      }
-    }
-    builder.append(
-        "    this.classVersionHash = typeResolver.checkClassVersion() ? computeClassVersionHash(DESCRIPTORS) : 0;\n");
     builder.append("    this.sameSchemaCompatible = ").append(sameSchemaExpression).append(";\n");
+    // A cached non-exact TypeDef reads through RemoteFieldInfo.localFieldInfo. It must not retain
+    // another complete local writer/schema view for every accepted remote schema version.
+    builder.append("    if (typeDef == null || sameSchemaCompatible) {\n");
+    builder.append("      FieldGroups fieldGroups = ").append(fieldGroupsExpression).append(";\n");
+    builder.append("      this.allFields = fieldGroups.allFields;\n");
+    builder.append("      this.allFieldIds = localFieldIds(allFields, DESCRIPTORS);\n");
+    builder.append("      this.fieldsById = new SerializationFieldInfo[DESCRIPTORS.size()];\n");
+    builder.append("      for (int i = 0; i < allFields.length; i++) {\n");
+    builder.append("        this.fieldsById[allFieldIds[i]] = allFields[i];\n");
+    builder.append("      }\n");
+    builder.append(
+        "      this.classVersionHash = typeResolver.checkClassVersion() ?"
+            + " computeClassVersionHash(DESCRIPTORS) : 0;\n");
+    builder.append("    } else {\n");
+    builder.append("      this.allFields = new SerializationFieldInfo[0];\n");
+    builder.append("      this.allFieldIds = new int[0];\n");
+    builder.append("      this.fieldsById = new SerializationFieldInfo[0];\n");
+    builder.append("      this.classVersionHash = 0;\n");
+    builder.append("    }\n");
     builder
         .append("    this.readDataAlwaysAdvances = ")
         .append(readDataAlwaysAdvancesExpression)
@@ -267,7 +284,8 @@ final class StaticSerializerSourceWriter {
         .append(" read(ReadContext readContext) {\n");
     builder.append("    if (typeDef != null) {\n");
     builder.append(
-        "      return sameSchemaCompatible ? readSchemaConsistent(readContext) : readCompatible(readContext);\n");
+        "      return sameSchemaCompatible ? readSchemaConsistent(readContext) :"
+            + " readCompatible(readContext);\n");
     builder.append("    }\n");
     builder.append("    return readSchemaConsistent(readContext);\n");
     builder.append("  }\n\n");
@@ -346,7 +364,8 @@ final class StaticSerializerSourceWriter {
     }
     builder.append("        default:\n");
     builder.append(
-        "          throw new IllegalStateException(\"Unknown generated field id \" + allFieldIds[i]);\n");
+        "          throw new IllegalStateException(\"Unknown generated field id \" +"
+            + " allFieldIds[i]);\n");
     builder.append("      }\n");
     builder.append("    }\n");
   }
@@ -764,7 +783,8 @@ final class StaticSerializerSourceWriter {
   private String unsignedInt32RangeCheck(String valueExpression) {
     return "if ((("
         + valueExpression
-        + ") & 0xffffffff00000000L) != 0) { throw new IllegalArgumentException(\"Unsigned value out of range\"); }";
+        + ") & 0xffffffff00000000L) != 0) { throw new IllegalArgumentException(\"Unsigned value out"
+        + " of range\"); }";
   }
 
   private String exactPrimitiveReadExpression(SourceField field) {
@@ -900,9 +920,7 @@ final class StaticSerializerSourceWriter {
         builder
             .append("          SerializationFieldInfo ")
             .append(fieldInfoName)
-            .append(" = fieldsById[")
-            .append(field.id)
-            .append("];\n");
+            .append(" = remoteField.localFieldInfo;\n");
         appendDebugRead("before", fieldInfoName, 10);
         if (canEmitDirectReadField(field)) {
           builder.append("          MemoryBuffer buffer = readContext.getBuffer();\n");
@@ -930,7 +948,7 @@ final class StaticSerializerSourceWriter {
       appendDebugRemoteRead("before read", "remoteField", 10);
       String scalarRead =
           compatibleScalarReadExpression(
-              field, "remoteField.serializationFieldInfo", "fieldsById[" + field.id + "]");
+              field, "remoteField.serializationFieldInfo", "remoteField.localFieldInfo");
       if (scalarRead != null) {
         builder
             .append("          field")
@@ -944,9 +962,9 @@ final class StaticSerializerSourceWriter {
         builder
             .append("          Object ")
             .append(fieldValueName)
-            .append(" = readCompatibleFieldValue(readContext, remoteField, fieldsById[")
-            .append(field.id)
-            .append("]);\n");
+            .append(
+                " = readCompatibleFieldValue(readContext, remoteField,"
+                    + " remoteField.localFieldInfo);\n");
         appendDebugRemoteRead("after read", "remoteField", 10);
         builder
             .append("          field")
@@ -960,7 +978,8 @@ final class StaticSerializerSourceWriter {
     }
     builder.append("        default:\n");
     builder.append(
-        "          throw new IllegalStateException(\"Invalid compatible matched id \" + remoteField.matchedId);\n");
+        "          throw new IllegalStateException(\"Invalid compatible matched id \" +"
+            + " remoteField.matchedId);\n");
     builder.append("      }\n");
   }
 
@@ -1004,7 +1023,8 @@ final class StaticSerializerSourceWriter {
       builder.append("    }\n");
     }
     builder.append(
-        "    throw new IllegalStateException(\"Invalid compatible matched id \" + remoteField.matchedId);\n");
+        "    throw new IllegalStateException(\"Invalid compatible matched id \" +"
+            + " remoteField.matchedId);\n");
     builder.append("  }\n\n");
   }
 
@@ -1023,9 +1043,7 @@ final class StaticSerializerSourceWriter {
         builder
             .append("        SerializationFieldInfo ")
             .append(fieldInfoName)
-            .append(" = fieldsById[")
-            .append(field.id)
-            .append("];\n");
+            .append(" = remoteField.localFieldInfo;\n");
         appendDebugRead("before", fieldInfoName, 8);
         if (canEmitDirectReadField(field)) {
           builder.append("        MemoryBuffer buffer = readContext.getBuffer();\n");
@@ -1051,7 +1069,7 @@ final class StaticSerializerSourceWriter {
       appendDebugRemoteRead("before read", "remoteField", 8);
       String scalarRead =
           compatibleScalarReadExpression(
-              field, "remoteField.serializationFieldInfo", "fieldsById[" + field.id + "]");
+              field, "remoteField.serializationFieldInfo", "remoteField.localFieldInfo");
       if (scalarRead != null) {
         builder.append("        ").append(field.writeStatement("value", scalarRead)).append("\n");
         appendDebugRemoteRead("after read", "remoteField", 8);
@@ -1060,9 +1078,9 @@ final class StaticSerializerSourceWriter {
         builder
             .append("        Object ")
             .append(fieldValueName)
-            .append(" = readCompatibleFieldValue(readContext, remoteField, fieldsById[")
-            .append(field.id)
-            .append("]);\n");
+            .append(
+                " = readCompatibleFieldValue(readContext, remoteField,"
+                    + " remoteField.localFieldInfo);\n");
         appendDebugRemoteRead("after read", "remoteField", 8);
         builder
             .append("        ")
@@ -1074,7 +1092,8 @@ final class StaticSerializerSourceWriter {
     }
     builder.append("      default:\n");
     builder.append(
-        "        throw new IllegalStateException(\"Invalid compatible matched id \" + remoteField.matchedId);\n");
+        "        throw new IllegalStateException(\"Invalid compatible matched id \" +"
+            + " remoteField.matchedId);\n");
     builder.append("    }\n");
     builder.append("  }\n\n");
   }
@@ -1289,10 +1308,12 @@ final class StaticSerializerSourceWriter {
     builder.append("    return TypeExtMeta.of(typeId, nullable, trackingRef);\n");
     builder.append("  }\n");
     builder.append(
-        "  private static java.lang.reflect.Field declaredField(Class<?> type, String declaringClassName, String fieldName) {\n");
+        "  private static java.lang.reflect.Field declaredField(Class<?> type, String"
+            + " declaringClassName, String fieldName) {\n");
     builder.append("    try {\n");
     builder.append(
-        "      return Class.forName(declaringClassName, false, type.getClassLoader()).getDeclaredField(fieldName);\n");
+        "      return Class.forName(declaringClassName, false,"
+            + " type.getClassLoader()).getDeclaredField(fieldName);\n");
     builder.append("    } catch (ReflectiveOperationException e) {\n");
     builder.append("      throw new IllegalStateException(e);\n");
     builder.append("    }\n");

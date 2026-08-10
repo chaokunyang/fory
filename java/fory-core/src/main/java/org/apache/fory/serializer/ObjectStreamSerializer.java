@@ -46,7 +46,7 @@ import java.util.function.Consumer;
 import org.apache.fory.builder.CodecUtils;
 import org.apache.fory.builder.LayerMarkerClassGenerator;
 import org.apache.fory.collection.ClassValueCache;
-import org.apache.fory.collection.LongMap;
+import org.apache.fory.collection.MetadataLongMap;
 import org.apache.fory.collection.ObjectArray;
 import org.apache.fory.collection.ObjectIntMap;
 import org.apache.fory.collection.ObjectMap;
@@ -102,7 +102,7 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
   private final SlotInfo[] slotsInfos;
   private final ObjectMap<TypeNameBytes, String> layerClassNameCache;
   // Instance-level cache: TypeDef ID -> TypeInfo (shared across all slots).
-  private final LongMap<TypeInfo> typeDefIdToTypeInfo = new LongMap<>(4, 0.4f);
+  private final MetadataLongMap<TypeInfo> typeDefIdToTypeInfo = new MetadataLongMap<>(4, 0.4f);
 
   private static CompatibleLayerSerializerBase<?> newGeneratedSerializer(
       TypeResolver typeResolver,

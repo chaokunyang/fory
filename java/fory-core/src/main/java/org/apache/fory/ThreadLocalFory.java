@@ -47,7 +47,7 @@ public class ThreadLocalFory extends AbstractThreadSafeFory {
   private final ThreadLocal<Fory> foryThreadLocal;
   private Consumer<Fory> factoryCallback;
   private final Map<Fory, Object> allFory;
-  private final Object callbackLock = new Object();
+  private final FacadeRegistrationGate registrationGate = new FacadeRegistrationGate();
 
   public ThreadLocalFory(Function<ForyBuilder, Fory> factory) {
     SharedRegistry sharedRegistry = new SharedRegistry();
@@ -63,32 +63,40 @@ public class ThreadLocalFory extends AbstractThreadSafeFory {
   }
 
   private Fory newFory() {
-    synchronized (callbackLock) {
-      Fory fory = foryFactory.get();
-      factoryCallback.accept(fory);
-      allFory.put(fory, null);
-      return fory;
-    }
+    return registrationGate.withLock(
+        () -> {
+          Fory fory = foryFactory.get();
+          factoryCallback.accept(fory);
+          allFory.put(fory, null);
+          return fory;
+        });
   }
 
   private Fory currentFory() {
+    registrationGate.freeze();
+    return foryThreadLocal.get();
+  }
+
+  private Fory currentForyForExecute() {
     return foryThreadLocal.get();
   }
 
   @Internal
   @Override
   public void registerCallback(Consumer<Fory> callback) {
-    synchronized (callbackLock) {
-      synchronized (allFory) {
-        allFory.keySet().forEach(callback);
-      }
-      factoryCallback = factoryCallback.andThen(callback);
-    }
+    registrationGate.apply(
+        () -> {
+          synchronized (allFory) {
+            allFory.keySet().forEach(callback);
+          }
+          factoryCallback = factoryCallback.andThen(callback);
+        });
   }
 
   @Override
   public <R> R execute(Function<Fory, R> action) {
-    return action.apply(currentFory());
+    Fory fory = currentForyForExecute();
+    return registrationGate.execute(fory, action);
   }
 
   @Override

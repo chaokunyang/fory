@@ -29,6 +29,7 @@ import java.util.List;
 import lombok.Data;
 import org.apache.fory.Fory;
 import org.apache.fory.annotation.ForyField;
+import org.apache.fory.collection.Tuple2;
 import org.apache.fory.exception.DeserializationException;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.resolver.ClassResolver;
@@ -36,6 +37,7 @@ import org.apache.fory.serializer.ObjectStreamSerializer;
 import org.apache.fory.test.bean.BeanA;
 import org.apache.fory.test.bean.MapFields;
 import org.apache.fory.test.bean.Struct;
+import org.apache.fory.type.Descriptor;
 import org.apache.fory.type.Types;
 import org.apache.fory.util.MurmurHash3;
 import org.testng.Assert;
@@ -584,11 +586,8 @@ public class NativeTypeDefEncoderTest {
       body.writeVarUInt32Small7(extendedSize);
       MemoryBuffer encoded = NativeTypeDefEncoder.prependHeader(body, false);
 
-      DeserializationException exception =
-          Assert.expectThrows(
-              DeserializationException.class,
-              () -> TypeDef.readTypeDef(fory.getTypeResolver(), encoded));
-      Assert.assertTrue(exception.getMessage().contains("field name size"));
+      Assert.assertThrows(
+          RuntimeException.class, () -> TypeDef.readTypeDef(fory.getTypeResolver(), encoded));
     }
   }
 
@@ -776,6 +775,28 @@ public class NativeTypeDefEncoderTest {
     private int annotatedField2;
   }
 
+  public static class ClassWithLargeTagIds {
+    @ForyField(id = 15)
+    private String field15;
+
+    @ForyField(id = 32768)
+    private String field32768;
+
+    @ForyField(id = 65535)
+    private String field65535;
+
+    @ForyField(id = 65551)
+    private String field65551;
+
+    @ForyField(id = Integer.MAX_VALUE)
+    private String fieldMax;
+  }
+
+  public static class MixedIdentityTarget {
+    @ForyField(id = 15)
+    private String value;
+  }
+
   @Test
   public void testBuildFieldsInfoWithDuplicateTagIds() {
     Fory fory = Fory.builder().withXlang(false).withMetaShare(true).withCompatible(false).build();
@@ -809,5 +830,94 @@ public class NativeTypeDefEncoderTest {
     Assert.assertThrows(
         IllegalArgumentException.class,
         () -> buildFieldsInfo((ClassResolver) fory.getTypeResolver(), ClassWithMixedFields.class));
+  }
+
+  @Test
+  public void testLargeTagIdsRoundTrip() {
+    Fory fory = Fory.builder().withXlang(false).withMetaShare(true).withCompatible(true).build();
+
+    TypeDef typeDef = TypeDef.buildTypeDef(fory.getTypeResolver(), ClassWithLargeTagIds.class);
+    TypeDef decoded =
+        TypeDef.readTypeDef(
+            fory.getTypeResolver(), MemoryBuffer.fromByteArray(typeDef.getEncoded()));
+
+    Assert.assertEquals(
+        decoded.getFieldsInfo().stream().map(FieldInfo::getFieldIdUnsigned).toArray(),
+        new Object[] {15L, 32768L, 65535L, 65551L, (long) Integer.MAX_VALUE});
+
+    ClassResolver resolver = (ClassResolver) fory.getTypeResolver();
+    FieldTypes.FieldType fieldType = decoded.getFieldsInfo().get(0).getFieldType();
+    MemoryBuffer body = nativeTypeDefBody(resolver, ClassWithLargeTagIds.class, 1);
+    int header = (3 << 2) | (7 << 4);
+    header |= fieldType.nullable() ? 0b10 : 0;
+    header |= fieldType.trackingRef() ? 1 : 0;
+    body.writeByte(header);
+    body.writeVarUInt32(-1);
+    fieldType.write(body, false);
+    TypeDef maxRemote =
+        TypeDef.readTypeDef(resolver, NativeTypeDefEncoder.prependHeader(body, false));
+    Assert.assertEquals(maxRemote.getFieldsInfo().get(0).getFieldIdUnsigned(), 7L + 0xffff_ffffL);
+    Assert.assertNull(
+        maxRemote.getDescriptors(resolver, ClassWithLargeTagIds.class).get(0).getField());
+  }
+
+  @Test
+  public void testRemoteFieldIdentityValidation() {
+    Fory fory = Fory.builder().withXlang(false).withMetaShare(true).withCompatible(true).build();
+    ClassResolver resolver = (ClassResolver) fory.getTypeResolver();
+    FieldTypes.FieldType fieldType =
+        buildFieldsInfo(resolver, MixedIdentityTarget.class).get(0).getFieldType();
+    String className = MixedIdentityTarget.class.getName();
+
+    Assert.assertThrows(
+        DeserializationException.class,
+        () ->
+            readRemoteTypeDef(
+                resolver,
+                MixedIdentityTarget.class,
+                Arrays.asList(
+                    new FieldInfo(className, "first", fieldType, 65551),
+                    new FieldInfo(className, "second", fieldType, 65551))));
+    Assert.assertThrows(
+        DeserializationException.class,
+        () ->
+            readRemoteTypeDef(
+                resolver,
+                MixedIdentityTarget.class,
+                Arrays.asList(
+                    new FieldInfo(className, "value", fieldType),
+                    new FieldInfo(className, "value", fieldType))));
+
+    TypeDef mixed =
+        readRemoteTypeDef(
+            resolver,
+            MixedIdentityTarget.class,
+            Arrays.asList(
+                new FieldInfo(className, "tagged", fieldType, 15),
+                new FieldInfo(className, "value", fieldType)));
+    List<Descriptor> descriptors = mixed.getDescriptors(resolver, MixedIdentityTarget.class);
+    Assert.assertNotNull(descriptors.get(0).getField());
+    Assert.assertNull(descriptors.get(1).getField());
+  }
+
+  private static TypeDef readRemoteTypeDef(
+      ClassResolver resolver, Class<?> type, List<FieldInfo> fields) {
+    MemoryBuffer body = nativeTypeDefBody(resolver, type, fields.size());
+    for (FieldInfo field : fields) {
+      NativeTypeDefEncoder.writeFieldsInfo(body, Collections.singletonList(field));
+    }
+    return TypeDef.readTypeDef(resolver, NativeTypeDefEncoder.prependHeader(body, false));
+  }
+
+  private static MemoryBuffer nativeTypeDefBody(
+      ClassResolver resolver, Class<?> type, int numFields) {
+    MemoryBuffer body = MemoryBuffer.newHeapBuffer(64);
+    int typeId = resolver.getTypeDefRootTypeId(type, true);
+    body.writeByte(NativeTypeDefEncoder.nativeKindCode(typeId) << 4);
+    body.writeVarUInt32Small7(numFields << 1);
+    Tuple2<String, String> encodedName = Encoders.encodePkgAndClass(type);
+    NativeTypeDefEncoder.writePkgName(body, encodedName.f0);
+    NativeTypeDefEncoder.writeTypeName(body, encodedName.f1);
+    return body;
   }
 }

@@ -48,10 +48,12 @@ abstract class AbstractScalaCollectionSerializer[A, T <: Iterable[A]](
     typeResolver: TypeResolver,
     cls: Class[T])
   extends CollectionLikeSerializer[T](typeResolver, cls) {
-  private val ReferenceBytes = 4L
+  private val ReferenceBytes = ScalaGraphMemory.REFERENCE_BYTES.toLong
   // Lower-bound shallow owner cost for the retained Scala collection wrapper itself. Element
   // slots are charged separately by count below; this is not a Fory wire header size.
   private val ScalaCollectionOwnerBytes = 3L * ReferenceBytes
+  private val LinkedList = classOf[scala.collection.immutable.List[_]].isAssignableFrom(cls)
+  private val MutableBitSet = cls == classOf[mutable.BitSet]
 
   override def onCollectionWrite(
       writeContext: WriteContext,
@@ -63,7 +65,20 @@ abstract class AbstractScalaCollectionSerializer[A, T <: Iterable[A]](
     val buffer = readContext.getBuffer
     val numElements = buffer.readVarUInt32Small7()
     checkCollectionSize(numElements)
-    readContext.reserveGraphMemory(ScalaCollectionOwnerBytes + numElements.toLong * ReferenceBytes)
+    if (LinkedList) {
+      readContext.reserveGraphMemory(
+        Math.multiplyExact(numElements.toLong, ScalaGraphMemory.LIST_NODE_BYTES.toLong))
+    } else if (MutableBitSet) {
+      readContext.reserveGraphMemory(
+          ScalaGraphMemory.BIT_SET_BYTES.toLong +
+          ScalaGraphMemory.ARRAY_OWNER_BYTES +
+          ScalaGraphMemory.LONG_BYTES)
+    } else {
+      readContext.reserveGraphMemory(
+        Math.addExact(
+          ScalaCollectionOwnerBytes,
+          Math.multiplyExact(numElements.toLong, ReferenceBytes)))
+    }
     setNumElements(numElements)
     val factory = readContext.readRef().asInstanceOf[Factory[A, T]]
     if (elementReadAlwaysAdvances) {
@@ -76,7 +91,13 @@ abstract class AbstractScalaCollectionSerializer[A, T <: Iterable[A]](
     }
     val builder = factory.newBuilder
     builder.sizeHint(numElements)
-    new JavaCollectionBuilder[A, T](builder)
+    if (MutableBitSet) {
+      new BitSetCollectionBuilder[T](
+        builder.asInstanceOf[mutable.Builder[Int, T]],
+        readContext)
+    } else {
+      new JavaCollectionBuilder[A, T](builder)
+    }
   }
 
   override def onCollectionRead(collection: util.Collection[_]): T = {
@@ -145,6 +166,32 @@ private class JavaCollectionBuilder[A, T](val builder: mutable.Builder[A, T])
   override def iterator(): util.Iterator[A] = ???
 
   override def size(): Int = ???
+}
+
+/** Builder adapter which reserves mutable BitSet backing words before they grow. */
+private final class BitSetCollectionBuilder[T](
+    builder: mutable.Builder[Int, T],
+    readContext: ReadContext)
+  extends JavaCollectionBuilder[Int, T](builder) {
+  private var words = 1
+
+  override def add(value: Int): Boolean = {
+    if (value >= 0) {
+      val wordIndex = value >>> 6
+      if (wordIndex >= words) {
+        var nextWords = words
+        while (wordIndex >= nextWords) {
+          nextWords *= 2
+        }
+        readContext.reserveGraphMemory(
+          Math.multiplyExact(
+            (nextWords - words).toLong,
+            ScalaGraphMemory.LONG_BYTES.toLong))
+        words = nextWords
+      }
+    }
+    super.add(value)
+  }
 }
 
 /**

@@ -21,8 +21,6 @@ package org.apache.fory.builder;
 
 import static org.apache.fory.type.TypeUtils.OBJECT_TYPE;
 
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 import org.apache.fory.Fory;
 import org.apache.fory.builder.Generated.GeneratedCompatibleLayerSerializer;
 import org.apache.fory.codegen.CodeGenerator;
@@ -72,17 +70,9 @@ public class CompatibleLayerCodecBuilder extends ObjectCodecBuilder {
     objectCodecOptimizer = new ObjectCodecOptimizer(beanClass, grouper, false, ctx);
   }
 
-  private static final Map<Long, Integer> idGenerator = new ConcurrentHashMap<>();
-
   @Override
   protected String codecSuffix() {
-    Integer id = idGenerator.get(layerTypeDef.getId());
-    if (id == null) {
-      synchronized (idGenerator) {
-        id = idGenerator.computeIfAbsent(layerTypeDef.getId(), k -> idGenerator.size());
-      }
-    }
-    return "CompatibleLayer" + id;
+    return "CompatibleLayer" + Long.toUnsignedString(layerTypeDef.getId(), 16);
   }
 
   @Override

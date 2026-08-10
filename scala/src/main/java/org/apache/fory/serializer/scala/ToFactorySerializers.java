@@ -27,8 +27,9 @@ import org.apache.fory.context.WriteContext;
 import org.apache.fory.exception.ForyException;
 import org.apache.fory.reflect.FieldAccessor;
 import org.apache.fory.reflect.ReflectionUtils;
-import org.apache.fory.serializer.Shareable;
+import org.apache.fory.serializer.GraphMemoryEstimates;
 import org.apache.fory.serializer.Serializer;
+import org.apache.fory.serializer.Shareable;
 
 public class ToFactorySerializers {
   static final Class<?> IterableToFactoryClass =
@@ -39,6 +40,8 @@ public class ToFactorySerializers {
   public static class IterableToFactorySerializer extends Serializer implements Shareable {
     private static final FieldAccessor FACTORY_ACCESSOR;
     private static final Constructor<?> CONSTRUCTOR;
+    private static final int OWNER_BYTES =
+        GraphMemoryEstimates.shallowObjectBytes(IterableToFactoryClass);
 
     static {
       try {
@@ -62,6 +65,7 @@ public class ToFactorySerializers {
 
     @Override
     public Object read(ReadContext readContext) {
+      readContext.reserveGraphMemory(OWNER_BYTES);
       try {
         return CONSTRUCTOR.newInstance(readContext.readRef());
       } catch (Exception e) {
@@ -73,6 +77,8 @@ public class ToFactorySerializers {
   public static class MapToFactorySerializer extends Serializer implements Shareable {
     private static final FieldAccessor FACTORY_ACCESSOR;
     private static final Constructor<?> CONSTRUCTOR;
+    private static final int OWNER_BYTES =
+        GraphMemoryEstimates.shallowObjectBytes(MapToFactoryClass);
 
     static {
       try {
@@ -96,6 +102,7 @@ public class ToFactorySerializers {
 
     @Override
     public Object read(ReadContext readContext) {
+      readContext.reserveGraphMemory(OWNER_BYTES);
       try {
         return CONSTRUCTOR.newInstance(readContext.readRef());
       } catch (Exception e) {

@@ -376,7 +376,7 @@ class ProcessorValidationTest {
       )
     val setType =
       KotlinSourceTypeNode(
-        rawClassExpression = "java.util.Set::class.java",
+        rawClassExpression = "java.util.TreeSet::class.java",
         kotlinTypeName = "java.util.TreeSet<kotlin.String>",
         valueTypeName = "kotlin.collections.Set<String>",
         typeName = "java.util.Set",
@@ -416,7 +416,7 @@ class ProcessorValidationTest {
       )
     val mapType =
       KotlinSourceTypeNode(
-        rawClassExpression = "java.util.Map::class.java",
+        rawClassExpression = "java.util.TreeMap::class.java",
         kotlinTypeName = "java.util.TreeMap<kotlin.String, kotlin.Int>",
         valueTypeName = "kotlin.collections.Map<String, Int>",
         typeName = "java.util.Map",
@@ -430,7 +430,7 @@ class ProcessorValidationTest {
       )
     val nestedMapType =
       KotlinSourceTypeNode(
-        rawClassExpression = "java.util.Map::class.java",
+        rawClassExpression = "java.util.TreeMap::class.java",
         kotlinTypeName = "java.util.TreeMap<kotlin.String, java.util.TreeSet<kotlin.String>>",
         valueTypeName = "java.util.TreeMap<String, java.util.TreeSet<String>>",
         typeName = "java.util.Map",
@@ -519,38 +519,50 @@ class ProcessorValidationTest {
         "return User(counts = (fieldValues[0] as java.util.TreeMap<String, Int>), names = (fieldValues[1] as java.util.List<java.util.TreeSet<String>>), arrays = (fieldValues[2] as java.util.List<IntArray>), nestedCounts = (fieldValues[3] as java.util.TreeMap<String, java.util.TreeSet<String>>))"
       )
     )
+    assertTrue(source.contains("TypeRef.of<Any>(java.util.TreeMap::class.java"))
+    assertTrue(source.contains("TypeRef.of<Any>(java.util.TreeSet::class.java"))
     assertTrue(
-      source.contains("KotlinCollectionAdapters.toTreeSet((readElement0 as Collection<*>))")
+      source.contains(
+        "this.fieldsById[0]!!.genericType.setSerializer(typeResolver.getSerializer(java.util.TreeMap::class.java))"
+      )
     )
     assertTrue(
       source.contains(
-        "KotlinCollectionAdapters.toTreeMap((readFieldValue(readContext, fieldInfo) as kotlin.collections.Map<String, Int>))"
+        "this.fieldsById[1]!!.genericType.getTypeParameter0().setSerializer(typeResolver.getSerializer(java.util.TreeSet::class.java))"
+      )
+    )
+    assertTrue(
+      source.contains(
+        "this.fieldsById[3]!!.genericType.setSerializer(typeResolver.getSerializer(java.util.TreeMap::class.java))"
+      )
+    )
+    assertTrue(
+      source.contains(
+        "this.fieldsById[3]!!.genericType.getTypeParameter1().setSerializer(typeResolver.getSerializer(java.util.TreeSet::class.java))"
       )
     )
     assertTrue(source.contains("0 -> {\n        trackConstructorRefRead(readContext, buffer)"))
     assertTrue(
-      source.contains(
-        "1 -> run { val readSource0 = ((readFieldValue(readContext, fieldInfo) as kotlin.collections.List<java.util.TreeSet<String>>) as Collection<*>);"
-      )
-    )
-    assertTrue(
-      source.contains("KotlinCollectionAdapters.toTreeMap") &&
-        source.contains("readCompatibleFieldValue(readContext, remoteField, localField)") &&
+      source.contains("readCompatibleFieldValue(readContext, remoteField, localField)") &&
         source.contains("ctorFieldValue(readContext")
     )
-    assertTrue(source.contains("3 -> {") && source.contains("fieldsById[1]!!"))
+    assertTrue(source.contains("2, 3 -> {") && source.contains("remoteField.localFieldInfo!!"))
+    assertTrue(source.contains("6, 7 -> {") && source.contains("remoteField.localFieldInfo!!"))
     assertTrue(
-      source.contains("readCompatibleFieldValue(readContext, remoteField, localField)") &&
-        source.contains("as Collection<*>")
+      source.contains(
+        "remoteField.serializationFieldInfo.genericType.setSerializer(remoteField.localFieldInfo!!.genericType.getSerializer())"
+      )
     )
-    assertTrue(source.contains("7 -> {") && source.contains("fieldsById[3]!!"))
+    assertTrue(source.contains("if (sameSchemaCompatible) {"))
     assertTrue(
-      source.contains("readCompatibleFieldValue(readContext, remoteField, localField)") &&
-        source.contains("as Map<*, *>")
+      source.contains(
+        "} else {\n      this.allFields = emptyArray()\n      this.allFieldIds = IntArray(0)\n      this.fieldsById = arrayOfNulls(0)"
+      )
     )
-    assertTrue(
-      source.contains("KotlinCollectionAdapters.toTreeSet((readEntry0.value as Collection<*>))")
-    )
+    assertFalse(source.contains("readSource"))
+    assertFalse(source.contains("readTarget"))
+    assertFalse(source.contains("KotlinCollectionAdapters.toTreeSet"))
+    assertFalse(source.contains("KotlinCollectionAdapters.toTreeMap"))
     val comparatorGuardIndex = source.indexOf("requireXlangNaturalOrdering(\"example.User.counts\"")
     assertTrue(comparatorGuardIndex >= 0)
     assertTrue(comparatorGuardIndex < source.indexOf("val buffer = writeContext.buffer"))
@@ -1471,22 +1483,22 @@ class ProcessorValidationTest {
 
     assertTrue(
       source.contains(
-        "remoteField.serializationFieldInfo.genericType.getTypeParameter0().setSerializer(this.fieldsById[0]!!.genericType.getTypeParameter0().getSerializer())"
+        "remoteField.serializationFieldInfo.genericType.getTypeParameter0().setSerializer(remoteField.localFieldInfo!!.genericType.getTypeParameter0().getSerializer())"
       )
     )
     assertTrue(
       source.contains(
-        "remoteField.serializationFieldInfo.genericType.getTypeParameter0().setSerializer(this.fieldsById[1]!!.genericType.getTypeParameter0().getSerializer())"
+        "remoteField.serializationFieldInfo.genericType.getTypeParameter0().setSerializer(remoteField.localFieldInfo!!.genericType.getTypeParameter0().getSerializer())"
       )
     )
     assertTrue(
       source.contains(
-        "remoteField.serializationFieldInfo.genericType.getTypeParameter1().setSerializer(this.fieldsById[1]!!.genericType.getTypeParameter1().getSerializer())"
+        "remoteField.serializationFieldInfo.genericType.getTypeParameter1().setSerializer(remoteField.localFieldInfo!!.genericType.getTypeParameter1().getSerializer())"
       )
     )
     assertTrue(
       source.contains(
-        "remoteField.serializationFieldInfo.genericType.getTypeParameter0().setSerializer(this.fieldsById[2]!!.genericType.getTypeParameter0().getSerializer())"
+        "remoteField.serializationFieldInfo.genericType.getTypeParameter0().setSerializer(remoteField.localFieldInfo!!.genericType.getTypeParameter0().getSerializer())"
       )
     )
     assertTrue(source.contains("if (remoteField.compatibleCollectionArrayReadAction == null)"))

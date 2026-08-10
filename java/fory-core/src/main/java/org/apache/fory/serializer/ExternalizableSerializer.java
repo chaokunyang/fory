@@ -57,6 +57,7 @@ public class ExternalizableSerializer<T extends Externalizable>
 
   @Override
   public T read(ReadContext readContext) {
+    readContext.reserveGraphMemory(objectGraphMemoryBytes);
     T t = objectInstantiator.newInstance();
     readContext.reference(t);
     objectInput.setReadContext(readContext);

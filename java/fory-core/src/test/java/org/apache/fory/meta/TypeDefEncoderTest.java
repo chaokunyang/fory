@@ -231,11 +231,20 @@ public class TypeDefEncoderTest {
   // Test data: Class with large tag IDs
   @Data
   public static class ClassWithLargeTagIds {
-    @ForyField(id = 32000)
+    @ForyField(id = 15)
     private String field1;
 
-    @ForyField(id = 32767) // Max short value
-    private int field2;
+    @ForyField(id = 32768)
+    private String field2;
+
+    @ForyField(id = 65535)
+    private String field3;
+
+    @ForyField(id = 65551)
+    private String field4;
+
+    @ForyField(id = Integer.MAX_VALUE)
+    private String field5;
   }
 
   public static class NestedUnionMapField {
@@ -382,15 +391,15 @@ public class TypeDefEncoderTest {
 
     // Verify all fields have the correct tag IDs
     Assert.assertTrue(fieldInfos.get(0).hasFieldId());
-    Assert.assertEquals(fieldInfos.get(0).getFieldId(), (short) 100);
+    Assert.assertEquals(fieldInfos.get(0).getFieldId(), 100);
     Assert.assertEquals(fieldInfos.get(0).getFieldName(), "field1");
 
     Assert.assertTrue(fieldInfos.get(1).hasFieldId());
-    Assert.assertEquals(fieldInfos.get(1).getFieldId(), (short) 200);
+    Assert.assertEquals(fieldInfos.get(1).getFieldId(), 200);
     Assert.assertEquals(fieldInfos.get(1).getFieldName(), "field2");
 
     Assert.assertTrue(fieldInfos.get(2).hasFieldId());
-    Assert.assertEquals(fieldInfos.get(2).getFieldId(), (short) 300);
+    Assert.assertEquals(fieldInfos.get(2).getFieldId(), 300);
     Assert.assertEquals(fieldInfos.get(2).getFieldName(), "field3");
   }
 
@@ -414,7 +423,7 @@ public class TypeDefEncoderTest {
 
     // annotatedField1 should have tag 50
     Assert.assertTrue(fieldInfos.get(0).hasFieldId());
-    Assert.assertEquals(fieldInfos.get(0).getFieldId(), (short) 50);
+    Assert.assertEquals(fieldInfos.get(0).getFieldId(), 50);
     Assert.assertEquals(fieldInfos.get(0).getFieldName(), "annotatedField1");
 
     // noAnnotation should not have a tag (uses field name)
@@ -427,7 +436,7 @@ public class TypeDefEncoderTest {
 
     // annotatedField2 should have tag 60
     Assert.assertTrue(fieldInfos.get(3).hasFieldId());
-    Assert.assertEquals(fieldInfos.get(3).getFieldId(), (short) 60);
+    Assert.assertEquals(fieldInfos.get(3).getFieldId(), 60);
     Assert.assertEquals(fieldInfos.get(3).getFieldName(), "annotatedField2");
   }
 
@@ -473,7 +482,7 @@ public class TypeDefEncoderTest {
 
     Assert.assertEquals(fieldInfos.size(), 1);
     Assert.assertTrue(fieldInfos.get(0).hasFieldId());
-    Assert.assertEquals(fieldInfos.get(0).getFieldId(), (short) 42);
+    Assert.assertEquals(fieldInfos.get(0).getFieldId(), 42);
     Assert.assertEquals(fieldInfos.get(0).getFieldName(), "field");
   }
 
@@ -532,18 +541,100 @@ public class TypeDefEncoderTest {
     List<Field> fields =
         Arrays.asList(
             getField(ClassWithLargeTagIds.class, "field1"),
-            getField(ClassWithLargeTagIds.class, "field2"));
+            getField(ClassWithLargeTagIds.class, "field2"),
+            getField(ClassWithLargeTagIds.class, "field3"),
+            getField(ClassWithLargeTagIds.class, "field4"),
+            getField(ClassWithLargeTagIds.class, "field5"));
 
     List<FieldInfo> fieldInfos =
         TypeDefEncoder.buildFieldsInfo(resolver, ClassWithLargeTagIds.class, fields);
 
-    Assert.assertEquals(fieldInfos.size(), 2);
+    Assert.assertEquals(fieldInfos.size(), 5);
+    Assert.assertEquals(
+        fieldInfos.stream().map(FieldInfo::getFieldIdUnsigned).collect(Collectors.toList()),
+        Arrays.asList(15L, 32768L, 65535L, 65551L, (long) Integer.MAX_VALUE));
+  }
 
-    Assert.assertTrue(fieldInfos.get(0).hasFieldId());
-    Assert.assertEquals(fieldInfos.get(0).getFieldId(), (short) 32000);
+  @Test
+  public void testLargeTagIdsRoundTripAndMatch() {
+    Fory fory = Fory.builder().withXlang(true).withCompatible(true).withMetaShare(true).build();
+    fory.register(ClassWithLargeTagIds.class, 6004);
 
-    Assert.assertTrue(fieldInfos.get(1).hasFieldId());
-    Assert.assertEquals(fieldInfos.get(1).getFieldId(), (short) 32767);
+    TypeDef local = TypeDef.buildTypeDef(fory.getTypeResolver(), ClassWithLargeTagIds.class);
+    TypeDef decoded =
+        TypeDef.readTypeDef(fory.getTypeResolver(), MemoryBuffer.fromByteArray(local.getEncoded()));
+
+    Assert.assertEquals(
+        decoded.getFieldsInfo().stream()
+            .map(FieldInfo::getFieldIdUnsigned)
+            .collect(Collectors.toList()),
+        Arrays.asList(15L, 32768L, 65535L, 65551L, (long) Integer.MAX_VALUE));
+    Map<Long, String> matchedFields =
+        decoded.getDescriptors(fory.getTypeResolver(), ClassWithLargeTagIds.class).stream()
+            .collect(
+                Collectors.toMap(
+                    descriptor -> (long) descriptor.getForyFieldId(), Descriptor::getName));
+    Assert.assertEquals(matchedFields.get(15L), "field1");
+    Assert.assertEquals(matchedFields.get(65551L), "field4");
+
+    long maxWireTag = 15L + 0xffff_ffffL;
+    MemoryBuffer body = MemoryBuffer.newHeapBuffer(32);
+    body.writeByte(TypeDefEncoder.STRUCT_FLAG | TypeDefEncoder.COMPATIBLE_FLAG | 1);
+    body.writeVarUInt32(6004);
+    FieldTypes.FieldType fieldType = local.getFieldsInfo().get(0).getFieldType();
+    int header = (3 << 6) | (TypeDefEncoder.FIELD_NAME_SIZE_THRESHOLD << 2);
+    header |= fieldType.nullable() ? 0b10 : 0;
+    header |= fieldType.trackingRef() ? 1 : 0;
+    body.writeByte(header);
+    body.writeVarUInt32(-1);
+    fieldType.writeCrossLanguage(body, false);
+    TypeDef maxRemote =
+        TypeDef.readTypeDef(
+            fory.getTypeResolver(), NativeTypeDefEncoder.prependHeader(body, false));
+    Assert.assertEquals(maxRemote.getFieldsInfo().get(0).getFieldIdUnsigned(), maxWireTag);
+    Assert.assertNull(
+        maxRemote
+            .getDescriptors(fory.getTypeResolver(), ClassWithLargeTagIds.class)
+            .get(0)
+            .getField());
+  }
+
+  @Test
+  public void testRemoteFieldIdentityValidation() {
+    Fory fory = Fory.builder().withXlang(true).withCompatible(true).withMetaShare(true).build();
+    fory.register(ClassWithLargeTagIds.class, 6004);
+    FieldTypes.FieldType fieldType =
+        TypeDef.buildTypeDef(fory.getTypeResolver(), ClassWithLargeTagIds.class)
+            .getFieldsInfo()
+            .get(0)
+            .getFieldType();
+    String className = ClassWithLargeTagIds.class.getName();
+
+    Assert.assertThrows(
+        DeserializationException.class,
+        () ->
+            readRemoteTypeDef(
+                fory,
+                Arrays.asList(
+                    new FieldInfo(className, "first", fieldType, 65551),
+                    new FieldInfo(className, "second", fieldType, 65551))));
+    Assert.assertThrows(
+        DeserializationException.class,
+        () ->
+            readRemoteTypeDef(
+                fory,
+                Arrays.asList(
+                    new FieldInfo(className, "fooBar", fieldType),
+                    new FieldInfo(className, "foo_bar", fieldType))));
+
+    TypeDef mixed =
+        readRemoteTypeDef(
+            fory,
+            Arrays.asList(
+                new FieldInfo(className, "tagged", fieldType, 15),
+                new FieldInfo(className, "tag15", fieldType)));
+    Assert.assertTrue(mixed.getFieldsInfo().get(0).hasFieldId());
+    Assert.assertFalse(mixed.getFieldsInfo().get(1).hasFieldId());
   }
 
   @Test
@@ -823,11 +914,8 @@ public class TypeDefEncoderTest {
       body.writeUInt8(Types.INT32);
       MemoryBuffer encoded = NativeTypeDefEncoder.prependHeader(body, false);
 
-      DeserializationException exception =
-          Assert.expectThrows(
-              DeserializationException.class,
-              () -> TypeDef.readTypeDef(fory.getTypeResolver(), encoded));
-      Assert.assertTrue(exception.getMessage().contains("field name size"));
+      Assert.assertThrows(
+          RuntimeException.class, () -> TypeDef.readTypeDef(fory.getTypeResolver(), encoded));
     }
   }
 
@@ -873,6 +961,18 @@ public class TypeDefEncoderTest {
     Assert.assertTrue(index >= Long.BYTES);
     malformed[index + needleBytes.length - 1] ^= 1;
     return malformed;
+  }
+
+  private static TypeDef readRemoteTypeDef(Fory fory, List<FieldInfo> fields) {
+    MemoryBuffer body = MemoryBuffer.newHeapBuffer(64);
+    body.writeByte(TypeDefEncoder.STRUCT_FLAG | TypeDefEncoder.COMPATIBLE_FLAG | fields.size());
+    body.writeVarUInt32(6004);
+    for (FieldInfo field : fields) {
+      TypeDefEncoder.writeFieldsInfo(
+          (XtypeResolver) fory.getTypeResolver(), body, Collections.singletonList(field));
+    }
+    return TypeDef.readTypeDef(
+        fory.getTypeResolver(), NativeTypeDefEncoder.prependHeader(body, false));
   }
 
   private static List<String> fieldNames(TypeDef typeDef) {

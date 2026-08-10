@@ -396,6 +396,25 @@ public class StreamTest extends ForyTestBase {
     }
   }
 
+  @Test
+  public void testChannelPrefixCompaction() throws IOException {
+    Fory fory = builder().build();
+    byte[] root = fory.serialize(12345);
+    int rootCount = 128;
+    byte[] roots = new byte[root.length * rootCount];
+    for (int i = 0; i < rootCount; i++) {
+      System.arraycopy(root, 0, roots, i * root.length, root.length);
+    }
+
+    try (ForyReadableChannel channel =
+        new ForyReadableChannel(new ChunkedReadableByteChannel(roots, 1), ByteBuffer.allocate(4))) {
+      for (int i = 0; i < rootCount; i++) {
+        assertEquals(fory.deserialize(channel), 12345);
+      }
+      assertTrue(backingCapacity(channel.getBuffer()) <= Math.max(16, root.length * 2));
+    }
+  }
+
   private static void assertGeometricGrowth(MemoryBuffer buffer, int numBytes, String label) {
     int growCount = 0;
     Object lastBacking = backingBuffer(buffer);
@@ -414,6 +433,11 @@ public class StreamTest extends ForyTestBase {
   private static Object backingBuffer(MemoryBuffer buffer) {
     byte[] heapMemory = buffer.getHeapMemory();
     return heapMemory != null ? heapMemory : buffer.getOffHeapBuffer();
+  }
+
+  private static int backingCapacity(MemoryBuffer buffer) {
+    byte[] heapMemory = buffer.getHeapMemory();
+    return heapMemory != null ? heapMemory.length : buffer.getOffHeapBuffer().capacity();
   }
 
   @Test

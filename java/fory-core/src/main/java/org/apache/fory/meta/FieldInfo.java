@@ -26,6 +26,7 @@ import org.apache.fory.annotation.ForyField;
 import org.apache.fory.annotation.Internal;
 import org.apache.fory.reflect.TypeRef;
 import org.apache.fory.resolver.TypeResolver;
+import org.apache.fory.serializer.CompatibleSerializer;
 import org.apache.fory.serializer.converter.FieldConverter;
 import org.apache.fory.serializer.converter.FieldConverters;
 import org.apache.fory.type.Descriptor;
@@ -47,13 +48,13 @@ public final class FieldInfo implements Serializable {
   final FieldTypes.FieldType fieldType;
 
   /** Field ID for schema evolution, -1 means no field ID (use field name). */
-  final short fieldId;
+  final long fieldId;
 
   public FieldInfo(String definedClass, String fieldName, FieldTypes.FieldType fieldType) {
-    this(definedClass, fieldName, fieldType, (short) -1);
+    this(definedClass, fieldName, fieldType, -1);
   }
 
-  FieldInfo(String definedClass, String fieldName, FieldTypes.FieldType fieldType, short fieldId) {
+  FieldInfo(String definedClass, String fieldName, FieldTypes.FieldType fieldType, long fieldId) {
     this.definedClass = definedClass;
     this.fieldName = fieldName;
     this.fieldType = fieldType;
@@ -77,6 +78,16 @@ public final class FieldInfo implements Serializable {
 
   /** Returns annotated field-id for the field. */
   public short getFieldId() {
+    if (fieldId > Short.MAX_VALUE) {
+      throw new IllegalStateException(
+          "Field id " + fieldId + " exceeds the legacy short accessor range");
+    }
+    return (short) fieldId;
+  }
+
+  /** Returns the complete unsigned wire field id. */
+  @Internal
+  public long getFieldIdUnsigned() {
     return fieldId;
   }
 
@@ -152,7 +163,9 @@ public final class FieldInfo implements Serializable {
       if (localFieldType != null && isListArrayRootPair(fieldType, localFieldType)) {
         throw incompatibleField("unsupported list/array compatible field mismatch", localFieldType);
       }
-      if (localFieldType != null && hasNestedFieldSchemaMismatch(fieldType, localFieldType)) {
+      if (localFieldType != null
+          && hasNestedFieldSchemaMismatch(fieldType, localFieldType)
+          && !CompatibleSerializer.supportsNestedCollectionArray(resolver, fieldType, descriptor)) {
         throw incompatibleField("nested field schema mismatch", localFieldType);
       }
       if (localFieldType != null && hasIncompatibleRootArrayOrBinary(fieldType, localFieldType)) {
@@ -204,8 +217,8 @@ public final class FieldInfo implements Serializable {
       return builder.build();
     }
     // This field doesn't exist in peer class, so any legal modifier will be OK. Preserve the
-    // remote tag id in the synthetic descriptor because descriptor grouping uses it as the sort key
-    // for compatible payload order.
+    // remote tag id in the synthetic name because Descriptor models local @ForyField ids as int,
+    // while descriptor grouping recognizes the complete unsigned "$tag<id>" sort key.
     // Use constant instead of reflection to avoid GraalVM native image issues.
     int stubModifiers = Modifier.PRIVATE | Modifier.FINAL;
     return new Descriptor(
@@ -214,8 +227,8 @@ public final class FieldInfo implements Serializable {
         fieldName,
         stubModifiers,
         definedClass,
-        hasFieldId(),
-        fieldId,
+        false,
+        -1,
         remoteNullable,
         remoteTrackingRef,
         ForyField.Dynamic.AUTO);

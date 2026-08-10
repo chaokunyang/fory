@@ -66,6 +66,8 @@ final class CompatibleScalarConverter {
   private static final BigDecimal DECIMAL_ZERO = BigDecimal.ZERO;
   private static final BigDecimal DECIMAL_ONE = BigDecimal.ONE;
   private static final int MAX_COMPATIBLE_DECIMAL_DIGITS = 256;
+  private static final long LOG2_10_NUMERATOR = 332_193L;
+  private static final long LOG2_10_DENOMINATOR = 100_000L;
   private static final int MAX_COMPATIBLE_NUMERIC_TEXT_LENGTH = 320;
 
   private CompatibleScalarConverter() {}
@@ -1678,6 +1680,31 @@ final class CompatibleScalarConverter {
     if (value.signum() == 0) {
       return BigDecimal.ZERO;
     }
+    int rawScale = value.scale();
+    if (rawScale < -MAX_COMPATIBLE_DECIMAL_DIGITS) {
+      throw new IllegalArgumentException("Decimal exceeds compatible conversion limit");
+    }
+    BigInteger unscaled = value.unscaledValue();
+    BigInteger magnitude = unscaled.signum() < 0 ? unscaled.negate() : unscaled;
+    int bitLength = magnitude.bitLength();
+    long rawDigitLimit = MAX_COMPATIBLE_DECIMAL_DIGITS + Math.max((long) rawScale, 0L);
+    if (!decimalBitsFit(bitLength, rawDigitLimit)) {
+      throw new IllegalArgumentException("Decimal exceeds compatible conversion limit");
+    }
+    if (rawScale > MAX_COMPATIBLE_DECIMAL_DIGITS) {
+      int requiredZeros = rawScale - MAX_COMPATIBLE_DECIMAL_DIGITS;
+      // A value divisible by 10^n needs more than 3n magnitude bits. Reject impossible shapes
+      // before constructing the divisor, then remove the required zeros in one bounded division.
+      if ((long) requiredZeros * 3L >= bitLength) {
+        throw new IllegalArgumentException("Decimal exceeds compatible conversion limit");
+      }
+      BigInteger[] quotientAndRemainder =
+          unscaled.divideAndRemainder(BigInteger.TEN.pow(requiredZeros));
+      if (quotientAndRemainder[1].signum() != 0) {
+        throw new IllegalArgumentException("Decimal exceeds compatible conversion limit");
+      }
+      value = new BigDecimal(quotientAndRemainder[0], rawScale - requiredZeros);
+    }
     BigDecimal stripped = value.stripTrailingZeros();
     int strippedScale = stripped.scale();
     long scale = Math.max((long) strippedScale, 0L);
@@ -1687,6 +1714,17 @@ final class CompatibleScalarConverter {
       throw new IllegalArgumentException("Decimal exceeds compatible conversion limit");
     }
     return strippedScale < 0 ? stripped.setScale(0) : stripped;
+  }
+
+  private static boolean decimalBitsFit(int bitLength, long decimalDigits) {
+    if (decimalDigits <= 0) {
+      return false;
+    }
+    // This rational is a strict upper bound for log2(10); the exact digit check follows after
+    // this gate has bounded normalization work.
+    long maxBits =
+        (decimalDigits * LOG2_10_NUMERATOR + LOG2_10_DENOMINATOR - 1) / LOG2_10_DENOMINATOR;
+    return bitLength <= maxBits;
   }
 
   private static BigDecimal floatDecimal(int dispatchId, Object value) {

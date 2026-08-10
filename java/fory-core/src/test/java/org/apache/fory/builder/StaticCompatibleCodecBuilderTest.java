@@ -31,6 +31,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import javax.tools.Diagnostic;
@@ -47,10 +48,13 @@ import org.apache.fory.meta.TypeDef;
 import org.apache.fory.platform.GraalvmSupport;
 import org.apache.fory.reflect.TypeRef;
 import org.apache.fory.resolver.TypeResolver;
+import org.apache.fory.serializer.CompatibleSerializer;
 import org.apache.fory.serializer.FieldGroups.FieldCodecCategory;
+import org.apache.fory.serializer.ObjectSerializer;
 import org.apache.fory.serializer.Serializer;
 import org.apache.fory.serializer.StaticGeneratedStructSerializer;
 import org.apache.fory.serializer.StaticGeneratedStructSerializer.RemoteFieldInfo;
+import org.apache.fory.util.record.RecordInfo;
 import org.testng.Assert;
 import org.testng.SkipException;
 import org.testng.annotations.DataProvider;
@@ -150,6 +154,46 @@ public class StaticCompatibleCodecBuilderTest {
   }
 
   @Test
+  public void testMixedIdentityBindsOnce() throws Exception {
+    CompilationResult writerResult =
+        compile(
+            "test.StaticCompatibleMixedIdentity",
+            "package test;\n"
+                + "import org.apache.fory.annotation.ForyField;\n"
+                + "public class StaticCompatibleMixedIdentity {\n"
+                + "  @ForyField(id = 15) public String legacy;\n"
+                + "  public String value;\n"
+                + "  public StaticCompatibleMixedIdentity() {}\n"
+                + "}\n");
+    CompilationResult readerResult =
+        compile(
+            "test.StaticCompatibleMixedIdentity",
+            "package test;\n"
+                + "import org.apache.fory.annotation.ForyField;\n"
+                + "public class StaticCompatibleMixedIdentity {\n"
+                + "  @ForyField(id = 15) public String value;\n"
+                + "  public StaticCompatibleMixedIdentity() {}\n"
+                + "}\n");
+    Assert.assertTrue(writerResult.success, writerResult.diagnostics());
+    Assert.assertTrue(readerResult.success, readerResult.diagnostics());
+    try (URLClassLoader writerLoader = writerResult.classLoader();
+        URLClassLoader readerLoader = readerResult.classLoader()) {
+      Class<?> writerType = writerLoader.loadClass("test.StaticCompatibleMixedIdentity");
+      Class<?> readerType = readerLoader.loadClass("test.StaticCompatibleMixedIdentity");
+      Fory writer = compatibleFory(writerLoader, writerType, false, "mixed-writer");
+      Fory reader = compatibleFory(readerLoader, readerType, false, "mixed-reader");
+      Object writerValue = writerType.getConstructor().newInstance();
+      setField(writerType, writerValue, "legacy", "tagged");
+      setField(writerType, writerValue, "value", "named");
+
+      Object result =
+          roundTripThroughStaticCompatibleSerializer(
+              writer, reader, writerType, readerType, writerValue);
+      Assert.assertEquals(getField(readerType, result, "value"), "tagged");
+    }
+  }
+
+  @Test
   public void testStaticCompatibleSerializerPreservesRemoteCodecCategories() throws Exception {
     CompilationResult writerResult =
         compile(
@@ -235,7 +279,9 @@ public class StaticCompatibleCodecBuilderTest {
       Assert.assertTrue(generatedSource.contains("int _f_recordValue0 = 0;"));
       Assert.assertTrue(
           generatedSource.contains(
-              "return new test.StaticCompatibleRecordPayload(_f_recordValue0);"));
+              "test.StaticCompatibleRecordPayload _f_record = new "
+                  + "test.StaticCompatibleRecordPayload(_f_recordValue0);"));
+      Assert.assertTrue(generatedSource.contains("_f_readContext.reference(_f_record);"));
       Assert.assertFalse(generatedSource.contains("newInstanceWithArguments"));
       Assert.assertFalse(generatedSource.contains("Object[] _f_recordArgs = this._f_recordArgs"));
       Assert.assertFalse(generatedSource.contains("_f_recordValues"));
@@ -279,8 +325,136 @@ public class StaticCompatibleCodecBuilderTest {
           new StaticCompatibleCodecBuilder(TypeRef.of(readerType), reader, remoteTypeDef).genCode();
       Assert.assertTrue(generatedSource.contains("newInstanceWithArguments"));
       Assert.assertTrue(generatedSource.contains("Object[] _f_recordArgs = this._f_recordArgs"));
+      Assert.assertTrue(generatedSource.contains("finally"));
+      Assert.assertTrue(generatedSource.contains("_f_recordArgs[0] = null"));
       Assert.assertFalse(
           generatedSource.contains("return new test.StaticCompatibleHiddenRecordPayload"));
+    }
+  }
+
+  @Test
+  public void testCompatibleRecordClearsArgs() throws Exception {
+    assumeRecordSupport();
+    CompilationResult writerResult =
+        compile(
+            "test.CompatibleFailingRecord",
+            "package test;\n"
+                + "public class CompatibleFailingRecord {\n"
+                + "  public String value;\n"
+                + "  public CompatibleFailingRecord() {}\n"
+                + "}\n");
+    CompilationResult readerResult =
+        compile(
+            "test.CompatibleFailingRecord",
+            "package test;\n"
+                + "public record CompatibleFailingRecord(String value) {\n"
+                + "  public static boolean fail;\n"
+                + "  public CompatibleFailingRecord {\n"
+                + "    if (fail) throw new IllegalStateException(\"expected\");\n"
+                + "  }\n"
+                + "}\n");
+    Assert.assertTrue(writerResult.success, writerResult.diagnostics());
+    Assert.assertTrue(readerResult.success, readerResult.diagnostics());
+    try (URLClassLoader writerLoader = writerResult.classLoader();
+        URLClassLoader readerLoader = readerResult.classLoader()) {
+      Class<?> writerType = writerLoader.loadClass("test.CompatibleFailingRecord");
+      Class<?> readerType = readerLoader.loadClass("test.CompatibleFailingRecord");
+      Fory writer = compatibleFory(writerLoader, writerType, false, "failing-record-writer", false);
+      Fory reader = compatibleFory(readerLoader, readerType, false, "failing-record-reader", false);
+      Object writerValue = writerType.getConstructor().newInstance();
+      setField(writerType, writerValue, "value", "retained-value");
+      writer.setMetaWriteContext(new MetaWriteContext());
+      byte[] bytes = writer.serialize(writerValue);
+
+      setField(readerType, null, "fail", true);
+      MetaReadContext metaReadContext = new MetaReadContext();
+      reader.setMetaReadContext(metaReadContext);
+      Assert.assertThrows(RuntimeException.class, () -> reader.deserialize(bytes));
+
+      Serializer<?> serializer = metaReadContext.readTypeInfos.get(0).getSerializer();
+      Assert.assertTrue(serializer instanceof CompatibleSerializer);
+      Field recordInfoField = CompatibleSerializer.class.getDeclaredField("recordInfo");
+      recordInfoField.setAccessible(true);
+      RecordInfo recordInfo = (RecordInfo) recordInfoField.get(serializer);
+      Assert.assertEquals(recordInfo.getRecordComponents(), new Object[] {null});
+    }
+  }
+
+  @Test
+  public void testRecordSelfCycleFails() throws Exception {
+    assumeRecordSupport();
+    CompilationResult result =
+        compile(
+            "test.CyclicRecord",
+            "package test;\n"
+                + "import java.util.List;\n"
+                + "public record CyclicRecord(List<Object> values) {}\n");
+    Assert.assertTrue(result.success, result.diagnostics());
+    try (URLClassLoader loader = result.classLoader()) {
+      Class<?> type = loader.loadClass("test.CyclicRecord");
+      Fory fory =
+          Fory.builder()
+              .withClassLoader(loader)
+              .withXlang(false)
+              .withRefTracking(true)
+              .withCodegen(false)
+              .requireClassRegistration(false)
+              .build();
+      List<Object> values = new ArrayList<>();
+      Object record = type.getConstructor(List.class).newInstance(values);
+      values.add(record);
+
+      byte[] bytes = fory.serialize(record);
+      Assert.assertThrows(RuntimeException.class, () -> fory.deserialize(bytes, cast(type)));
+
+      Object acyclic = type.getConstructor(List.class).newInstance(Arrays.asList("ok"));
+      List<Object> aliases = Arrays.asList(acyclic, acyclic);
+      List<?> decoded = (List<?>) fory.deserialize(fory.serialize(aliases));
+      Assert.assertSame(decoded.get(0), decoded.get(1));
+      Assert.assertEquals(invoke(type, decoded.get(0), "values"), Arrays.asList("ok"));
+    }
+  }
+
+  @Test
+  public void testRecordFailureClearsArgs() throws Exception {
+    assumeRecordSupport();
+    CompilationResult result =
+        compile(
+            "test.FailingRecord",
+            "package test;\n"
+                + "public record FailingRecord(String value) {\n"
+                + "  public static boolean fail;\n"
+                + "  public FailingRecord {\n"
+                + "    if (fail) throw new IllegalStateException(\"expected\");\n"
+                + "  }\n"
+                + "}\n");
+    Assert.assertTrue(result.success, result.diagnostics());
+    try (URLClassLoader loader = result.classLoader()) {
+      Class<?> type = loader.loadClass("test.FailingRecord");
+      Fory fory =
+          Fory.builder()
+              .withClassLoader(loader)
+              .withXlang(false)
+              .withRefTracking(true)
+              .withCodegen(false)
+              .requireClassRegistration(false)
+              .build();
+      Object value = type.getConstructor(String.class).newInstance("retained-value");
+      byte[] bytes = fory.serialize(value);
+
+      setField(type, null, "fail", true);
+      Assert.assertThrows(RuntimeException.class, () -> fory.deserialize(bytes, cast(type)));
+
+      Serializer<?> serializer = fory.getTypeResolver().getSerializer(type);
+      Assert.assertTrue(serializer instanceof ObjectSerializer);
+      Field recordInfoField = ObjectSerializer.class.getDeclaredField("recordInfo");
+      recordInfoField.setAccessible(true);
+      RecordInfo recordInfo = (RecordInfo) recordInfoField.get(serializer);
+      Assert.assertEquals(recordInfo.getRecordComponents(), new Object[] {null});
+
+      setField(type, null, "fail", false);
+      Assert.assertEquals(
+          invoke(type, fory.deserialize(bytes, cast(type)), "value"), "retained-value");
     }
   }
 
@@ -451,6 +625,67 @@ public class StaticCompatibleCodecBuilderTest {
               writer, reader, writerType, readerType, writerValue);
       Assert.assertSame(result.getClass(), readerType);
       Assert.assertEquals(getField(readerType, result, "values"), Arrays.asList(7, 8, 9));
+    }
+  }
+
+  @Test
+  public void testNestedArrayUsesAdapter() throws Exception {
+    CompilationResult writerResult =
+        compile(
+            "test.StaticCompatibleNestedArrayPayload",
+            "package test;\n"
+                + "import java.util.List;\n"
+                + "import org.apache.fory.annotation.Ref;\n"
+                + "public class StaticCompatibleNestedArrayPayload {\n"
+                + "  public List<int @Ref []> values;\n"
+                + "  public StaticCompatibleNestedArrayPayload() {}\n"
+                + "}\n");
+    CompilationResult readerResult =
+        compile(
+            "test.StaticCompatibleNestedArrayPayload",
+            "package test;\n"
+                + "import java.util.LinkedList;\n"
+                + "import java.util.List;\n"
+                + "import org.apache.fory.annotation.Int32Type;\n"
+                + "import org.apache.fory.annotation.Ref;\n"
+                + "import org.apache.fory.config.Int32Encoding;\n"
+                + "public class StaticCompatibleNestedArrayPayload {\n"
+                + "  public List<@Ref LinkedList<@Int32Type(encoding = Int32Encoding.FIXED)"
+                + " Integer>> values;\n"
+                + "  public StaticCompatibleNestedArrayPayload() {}\n"
+                + "}\n");
+    Assert.assertTrue(writerResult.success, writerResult.diagnostics());
+    Assert.assertTrue(readerResult.success, readerResult.diagnostics());
+    try (URLClassLoader writerLoader = writerResult.classLoader();
+        URLClassLoader readerLoader = readerResult.classLoader()) {
+      Class<?> writerType = writerLoader.loadClass("test.StaticCompatibleNestedArrayPayload");
+      Class<?> readerType = readerLoader.loadClass("test.StaticCompatibleNestedArrayPayload");
+      Fory writer =
+          compatibleFory(writerLoader, writerType, true, "nested-array-writer", true, true);
+      Fory reader =
+          compatibleFory(readerLoader, readerType, true, "nested-array-reader", true, true);
+      TypeDef remoteTypeDef = TypeDef.buildTypeDef(writer.getTypeResolver(), writerType);
+      Class<? extends Serializer> serializerClass =
+          CodecUtils.loadOrGenStaticCompatibleCodecClass(
+              reader.getTypeResolver(), cast(readerType), remoteTypeDef);
+      Serializer<Object> compatibleSerializer =
+          serializerClass
+              .getConstructor(TypeResolver.class, Class.class, TypeDef.class)
+              .newInstance(reader.getTypeResolver(), readerType, remoteTypeDef);
+      RemoteFieldInfo remoteField = remoteFields(compatibleSerializer).get(0);
+      Assert.assertTrue(remoteField.nestedCollectionArrayMatch);
+      Assert.assertEquals(remoteField.matchedId, 1);
+      Object writerValue = writerType.getConstructor().newInstance();
+      int[] shared = new int[] {4, 5, 6};
+      setField(writerType, writerValue, "values", Arrays.asList(shared, shared));
+
+      Object result =
+          roundTripThroughStaticCompatibleSerializer(
+              writer, reader, writerType, readerType, writerValue);
+      List<?> values = (List<?>) getField(readerType, result, "values");
+      Assert.assertSame(values.get(0).getClass(), LinkedList.class);
+      Assert.assertEquals(values.get(0), Arrays.asList(4, 5, 6));
+      Assert.assertSame(values.get(1), values.get(0));
     }
   }
 
@@ -654,6 +889,11 @@ public class StaticCompatibleCodecBuilderTest {
         compatibleSerializerClass
             .getConstructor(TypeResolver.class, Class.class, TypeDef.class)
             .newInstance(reader.getTypeResolver(), readerClass, remoteTypeDef);
+    for (RemoteFieldInfo remoteField : remoteFields(compatibleSerializer)) {
+      if (remoteField.matchedId != -1) {
+        Assert.assertNotNull(remoteField.localFieldInfo);
+      }
+    }
     Assert.assertThrows(
         UnsupportedOperationException.class,
         () -> compatibleSerializer.write(reader.getWriteContext(), null));
@@ -718,12 +958,23 @@ public class StaticCompatibleCodecBuilderTest {
 
   private static Fory compatibleFory(
       ClassLoader classLoader, Class<?> type, boolean xlang, String role, boolean codegen) {
+    return compatibleFory(classLoader, type, xlang, role, codegen, false);
+  }
+
+  private static Fory compatibleFory(
+      ClassLoader classLoader,
+      Class<?> type,
+      boolean xlang,
+      String role,
+      boolean codegen,
+      boolean refTracking) {
     Fory fory =
         Fory.builder()
             .withName("static-compatible-" + role + "-" + (xlang ? "xlang" : "native"))
             .withClassLoader(classLoader)
             .withXlang(xlang)
             .withCodegen(codegen)
+            .withRefTracking(refTracking)
             .withMetaShare(true)
             .withScopedMetaShare(false)
             .withCompatible(true)

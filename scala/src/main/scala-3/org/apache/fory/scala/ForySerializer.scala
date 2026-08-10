@@ -21,6 +21,7 @@ package org.apache.fory.scala
 
 import org.apache.fory.{BaseFory, Fory, ForyModule, ThreadSafeFory}
 import org.apache.fory.annotation.Internal
+import org.apache.fory.exception.ForyException
 import org.apache.fory.meta.TypeDef
 import org.apache.fory.resolver.TypeResolver
 import org.apache.fory.serializer.Serializer
@@ -58,6 +59,16 @@ object ForySerializer {
     if typeName == null || typeName.isEmpty || typeName.contains(".") then {
       throw new IllegalArgumentException(
         "typeName must be non-empty and must not contain `.` when namespace is provided")
+    }
+  }
+
+  private def checkRegistrationOpen(resolver: TypeResolver): Unit = {
+    // Public generated registration must freeze with the root facade. Resolver serializer
+    // mutation stays available for lazy internal resolution after registration has finished.
+    if resolver.isRegistrationFinished then {
+      throw new ForyException(
+        "Cannot register class/serializer after registration has been frozen. Please register " +
+          "all classes before invoking top-level `serialize/deserialize/copy` methods of Fory.")
     }
   }
 
@@ -110,6 +121,7 @@ object ForySerializer {
       throw new IllegalArgumentException("Use ForySerializer.register for Scala union serializers")
     }
     val resolver = fory.getTypeResolver
+    checkRegistrationOpen(resolver)
     resolver.setSerializer(cls, serializer.createSerializer(resolver))
   }
 
@@ -125,6 +137,7 @@ object ForySerializer {
     val resolver = fory.getTypeResolver
     serializer match {
       case _ if serializer.isUnion =>
+        checkRegistrationOpen(resolver)
         val unionSerializer = serializer.createSerializer(resolver)
         if typeId != null then {
           resolver.registerUnion(cls, typeId.longValue(), unionSerializer)
@@ -143,6 +156,7 @@ object ForySerializer {
         }
       case _ =>
         registerType(fory, cls, typeId, namespace, typeName)
+        checkRegistrationOpen(resolver)
         resolver.setSerializer(cls, serializer.createSerializer(resolver))
     }
   }

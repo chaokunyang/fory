@@ -178,15 +178,63 @@ internal class KotlinSerializerSourceWriter(private val struct: KotlinSourceStru
     sameSchemaExpression: String,
     bindCompatibleScalars: Boolean,
   ) {
-    builder.append("    val fieldGroups: FieldGroups = ").append(fieldGroupsExpression).append("\n")
-    builder.append("    this.allFields = fieldGroups.allFields\n")
-    builder.append("    this.allFieldIds = localFieldIds(this.allFields, DESCRIPTORS)\n")
-    builder.append("    this.fieldsById = arrayOfNulls(DESCRIPTORS.size)\n")
-    builder.append("    for (i in this.allFields.indices) {\n")
-    builder.append("      this.fieldsById[this.allFieldIds[i]] = this.allFields[i]\n")
-    builder.append("    }\n")
+    if (bindCompatibleScalars) {
+      builder.append("    val sameSchemaCompatible = ").append(sameSchemaExpression).append("\n")
+      builder.append("    this.sameSchemaCompatible = sameSchemaCompatible\n")
+      builder.append("    if (sameSchemaCompatible) {\n")
+      writeLocalFieldState(fieldGroupsExpression, "  ")
+      writeConstructorFieldState("  ")
+      writeScalarBindings("  ")
+      builder.append(
+        "      this.classVersionHash = if (typeResolver.checkClassVersion()) computeClassVersionHash(DESCRIPTORS) else 0\n"
+      )
+      builder.append("    } else {\n")
+      builder.append("      this.allFields = emptyArray()\n")
+      builder.append("      this.allFieldIds = IntArray(0)\n")
+      builder.append("      this.fieldsById = arrayOfNulls(0)\n")
+      builder.append("      this.constructorFieldIds = null\n")
+      builder.append("      this.constructorFieldBits = null\n")
+      builder.append("      this.classVersionHash = 0\n")
+      writeCompatibleScalarBindings("  ")
+      builder.append("    }\n")
+      return
+    }
+    writeLocalFieldState(fieldGroupsExpression)
+    writeConstructorFieldState()
+    writeScalarBindings()
+    builder.append(
+      "    this.classVersionHash = if (typeResolver.checkClassVersion()) computeClassVersionHash(DESCRIPTORS) else 0\n"
+    )
+    builder.append("    this.sameSchemaCompatible = ").append(sameSchemaExpression).append("\n")
+  }
+
+  private fun writeLocalFieldState(fieldGroupsExpression: String, indent: String = "") {
+    builder
+      .append("    ")
+      .append(indent)
+      .append("val fieldGroups: FieldGroups = ")
+      .append(fieldGroupsExpression)
+      .append("\n")
+    builder.append("    ").append(indent).append("this.allFields = fieldGroups.allFields\n")
+    builder
+      .append("    ")
+      .append(indent)
+      .append("this.allFieldIds = localFieldIds(this.allFields, DESCRIPTORS)\n")
+    builder
+      .append("    ")
+      .append(indent)
+      .append("this.fieldsById = arrayOfNulls(DESCRIPTORS.size)\n")
+    builder.append("    ").append(indent).append("for (i in this.allFields.indices) {\n")
+    builder
+      .append("      ")
+      .append(indent)
+      .append("this.fieldsById[this.allFieldIds[i]] = this.allFields[i]\n")
+    builder.append("    ").append(indent).append("}\n")
+  }
+
+  private fun writeConstructorFieldState(indent: String = "") {
     if (struct.construction == KotlinStructConstruction.CONSTRUCTOR) {
-      builder.append("    this.constructorFieldIds = intArrayOf(")
+      builder.append("    ").append(indent).append("this.constructorFieldIds = intArrayOf(")
       for (i in struct.fields.indices) {
         if (i > 0) {
           builder.append(", ")
@@ -195,33 +243,30 @@ internal class KotlinSerializerSourceWriter(private val struct: KotlinSourceStru
       }
       builder.append(")\n")
     } else {
-      builder.append("    this.constructorFieldIds = null\n")
+      builder.append("    ").append(indent).append("this.constructorFieldIds = null\n")
     }
-    builder.append(
-      "    this.constructorFieldBits = buildConstructorFieldBits(DESCRIPTORS.size, constructorFieldIds)\n"
-    )
-    writeScalarBindings()
-    if (bindCompatibleScalars) {
-      writeCompatibleScalarBindings()
-    }
-    builder.append(
-      "    this.classVersionHash = if (typeResolver.checkClassVersion()) computeClassVersionHash(DESCRIPTORS) else 0\n"
-    )
-    builder.append("    this.sameSchemaCompatible = ").append(sameSchemaExpression).append("\n")
+    builder
+      .append("    ")
+      .append(indent)
+      .append(
+        "this.constructorFieldBits = buildConstructorFieldBits(DESCRIPTORS.size, constructorFieldIds)\n"
+      )
   }
 
-  private fun writeScalarBindings() {
+  private fun writeScalarBindings(indent: String = "") {
     for (field in struct.fields) {
-      if (field.type.typeArguments.isEmpty() || !needsScalarSerializer(field.type)) {
+      if (field.type.typeArguments.isEmpty() || !needsGeneratedSerializerBinding(field.type)) {
         continue
       }
-      writeScalarBinding(field.type, "this.fieldsById[${field.id}]!!.genericType")
+      writeScalarBinding(field.type, "this.fieldsById[${field.id}]!!.genericType", indent)
     }
   }
 
-  private fun writeCompatibleScalarBindings() {
+  private fun writeCompatibleScalarBindings(indent: String = "") {
     val fields =
-      struct.fields.filter { it.type.isCollectionOrMap() && needsScalarSerializer(it.type) }
+      struct.fields.filter {
+        it.type.isCollectionOrMap() && needsGeneratedSerializerBinding(it.type)
+      }
     if (fields.isEmpty()) {
       return
     }
@@ -229,27 +274,44 @@ internal class KotlinSerializerSourceWriter(private val struct: KotlinSourceStru
     // scalar leaves so the Java container serializer fills its budgeted, published owner with the
     // final Kotlin values instead of making the generated read allocate a second owner. The
     // distinct list/array adapter does not consume GenericType and must adapt its own owner.
-    builder.append("    for (remoteField in remoteFields) {\n")
-    builder.append("      when (remoteField.matchedId) {\n")
+    builder.append("    ").append(indent).append("for (remoteField in remoteFields) {\n")
+    builder.append("      ").append(indent).append("when (remoteField.matchedId) {\n")
     for (field in fields) {
-      builder.append("        ").append(field.id * 2 + 1).append(" -> {\n")
+      // Wire-exact container schemas can still have different local runtime carriers, so both
+      // compatible dispatch variants must select the declared final target serializer.
+      builder
+        .append("        ")
+        .append(indent)
+        .append(field.id * 2)
+        .append(", ")
+        .append(field.id * 2 + 1)
+        .append(" -> {\n")
       if (usesCompatibleScalarListAdapter(field.type)) {
-        builder.append("          if (remoteField.compatibleCollectionArrayReadAction == null) {\n")
+        builder
+          .append("          ")
+          .append(indent)
+          .append("if (remoteField.compatibleCollectionArrayReadAction == null) {\n")
       }
+      val bindingIndent = indent + if (usesCompatibleScalarListAdapter(field.type)) "  " else ""
+      writeScalarBinding(
+        field.type,
+        "remoteField.localFieldInfo!!.genericType",
+        bindingIndent + "      ",
+      )
       writeCompatibleScalarBinding(
         field.type,
         "remoteField.serializationFieldInfo.genericType",
-        "this.fieldsById[${field.id}]!!.genericType",
-        if (usesCompatibleScalarListAdapter(field.type)) "  " else "",
+        "remoteField.localFieldInfo!!.genericType",
+        bindingIndent,
       )
       if (usesCompatibleScalarListAdapter(field.type)) {
-        builder.append("          }\n")
+        builder.append("          ").append(indent).append("}\n")
       }
-      builder.append("        }\n")
+      builder.append("        ").append(indent).append("}\n")
     }
-    builder.append("        else -> {}\n")
-    builder.append("      }\n")
-    builder.append("    }\n")
+    builder.append("        ").append(indent).append("else -> {}\n")
+    builder.append("      ").append(indent).append("}\n")
+    builder.append("    ").append(indent).append("}\n")
   }
 
   private fun writeCompatibleScalarBinding(
@@ -258,6 +320,23 @@ internal class KotlinSerializerSourceWriter(private val struct: KotlinSourceStru
     localGenericExpression: String,
     indent: String = "",
   ) {
+    if (type.collectionFactory != CollectionFactory.NONE) {
+      builder
+        .append("          ")
+        .append(indent)
+        .append("if (!remoteField.nestedCollectionArrayMatch) {\n")
+      // A nested dense-array/list bridge installs its own final-target reader on the remote
+      // GenericType. Replacing that serializer here would make the concrete collection serializer
+      // consume dense-array bytes as an ordinary list body.
+      builder
+        .append("            ")
+        .append(indent)
+        .append(remoteGenericExpression)
+        .append(".setSerializer(")
+        .append(localGenericExpression)
+        .append(".getSerializer())\n")
+      builder.append("          ").append(indent).append("}\n")
+    }
     if ((type.unsigned && type.componentType == null) || type.typeId == "Types.DURATION") {
       builder
         .append("          ")
@@ -278,10 +357,24 @@ internal class KotlinSerializerSourceWriter(private val struct: KotlinSourceStru
     }
   }
 
-  private fun writeScalarBinding(type: KotlinSourceTypeNode, genericExpression: String) {
+  private fun writeScalarBinding(
+    type: KotlinSourceTypeNode,
+    genericExpression: String,
+    indent: String = "",
+  ) {
+    if (type.collectionFactory != CollectionFactory.NONE) {
+      builder
+        .append("    ")
+        .append(indent)
+        .append(genericExpression)
+        .append(".setSerializer(typeResolver.getSerializer(")
+        .append(type.rawClassExpression)
+        .append("))\n")
+    }
     if (type.unsigned && type.componentType == null) {
       builder
         .append("    ")
+        .append(indent)
         .append(genericExpression)
         .append(".setSerializer(KotlinXlangUnsignedSerializers.serializer(typeResolver.config, ")
         .append(type.typeId ?: "Types.UNKNOWN")
@@ -295,12 +388,13 @@ internal class KotlinSerializerSourceWriter(private val struct: KotlinSourceStru
     if (type.typeId == "Types.DURATION") {
       builder
         .append("    ")
+        .append(indent)
         .append(genericExpression)
         .append(".setSerializer(DurationSerializers.serializer(typeResolver.config))\n")
       return
     }
     for (i in type.typeArguments.indices) {
-      writeScalarBinding(type.typeArguments[i], "$genericExpression.getTypeParameter$i()")
+      writeScalarBinding(type.typeArguments[i], "$genericExpression.getTypeParameter$i()", indent)
     }
   }
 
@@ -833,7 +927,7 @@ internal class KotlinSerializerSourceWriter(private val struct: KotlinSourceStru
         directReadExpression(field)
           ?: castReadExpression(
             field,
-            "readFieldValue(readContext, fieldsById[${field.id}]!!)",
+            "readFieldValue(readContext, remoteField.localFieldInfo!!)",
             compatible = false,
           )
       val constructorDirectRead =
@@ -862,11 +956,7 @@ internal class KotlinSerializerSourceWriter(private val struct: KotlinSourceStru
       builder.append("\n")
       builder.append(indent).append("    }\n")
       builder.append(indent).append("    ").append(field.id * 2 + 1).append(" -> {\n")
-      builder
-        .append(indent)
-        .append("      val localField = fieldsById[")
-        .append(field.id)
-        .append("]!!\n")
+      builder.append(indent).append("      val localField = remoteField.localFieldInfo!!\n")
       val readExpression =
         compatibleScalarReadExpression(field)
           ?: "readCompatibleFieldValue(readContext, remoteField, localField)"
@@ -946,7 +1036,7 @@ internal class KotlinSerializerSourceWriter(private val struct: KotlinSourceStru
         directReadExpression(field)
           ?: castReadExpression(
             field,
-            "readFieldValue(readContext, fieldsById[${field.id}]!!)",
+            "readFieldValue(readContext, remoteField.localFieldInfo!!)",
             compatible = false,
           )
       builder
@@ -960,7 +1050,7 @@ internal class KotlinSerializerSourceWriter(private val struct: KotlinSourceStru
       builder.append("\n")
       builder.append("        }\n")
       builder.append("        ").append(field.id * 2 + 1).append(" -> {\n")
-      builder.append("          val localField = fieldsById[").append(field.id).append("]!!\n")
+      builder.append("          val localField = remoteField.localFieldInfo!!\n")
       builder
         .append("          value.")
         .append(field.name)
@@ -1240,160 +1330,7 @@ internal class KotlinSerializerSourceWriter(private val struct: KotlinSourceStru
   }
 
   private fun constructorReadExpression(field: KotlinSourceField, valueExpression: String): String {
-    return collectionReadExpression(field.type, valueExpression, 0, erasedInput = false)
-  }
-
-  private fun collectionReadExpression(
-    type: KotlinSourceTypeNode,
-    valueExpression: String,
-    depth: Int,
-    erasedInput: Boolean
-  ): String {
-    if (!type.isCollectionOrMap()) {
-      return valueExpression
-    }
-    if (type.nullable) {
-      val value = "readValue$depth"
-      return "$valueExpression?.let { $value -> ${collectionReadExpression(type.copy(nullable = false), value, depth + 1, erasedInput)} }"
-    }
-    if (type.typeArguments.any { needsCollectionReadAdaptation(it) }) {
-      return readContainerExpression(type, valueExpression, depth)
-    }
-    return applyCollectionFactory(type, valueExpression, erasedInput)
-  }
-
-  private fun needsCollectionReadAdaptation(type: KotlinSourceTypeNode): Boolean =
-    type.collectionFactory != CollectionFactory.NONE ||
-      (type.isCollectionOrMap() && type.typeArguments.any { needsCollectionReadAdaptation(it) })
-
-  private fun readContainerExpression(
-    type: KotlinSourceTypeNode,
-    expression: String,
-    depth: Int
-  ): String {
-    val source = "readSource$depth"
-    val target = "readTarget$depth"
-    return when (type.typeId) {
-      "Types.LIST" -> {
-        val element = "readElement$depth"
-        val adaptedElement = readElementExpression(type.typeArguments[0], element, depth + 1)
-        val targetBuild = readTarget(type, source, target)
-        "run { val $source = ${erasedCollectionExpression(type, expression)}; val $target = ${targetBuild.init}; for ($element in $source) { $target.add($adaptedElement) }; ${targetBuild.result} }"
-      }
-      "Types.SET" -> {
-        val element = "readElement$depth"
-        val adaptedElement = readElementExpression(type.typeArguments[0], element, depth + 1)
-        val targetBuild = readTarget(type, source, target)
-        "run { val $source = ${erasedCollectionExpression(type, expression)}; val $target = ${targetBuild.init}; for ($element in $source) { $target.add($adaptedElement) }; ${targetBuild.result} }"
-      }
-      "Types.MAP" -> {
-        val entry = "readEntry$depth"
-        val adaptedKey = readElementExpression(type.typeArguments[0], "$entry.key", depth + 1)
-        val adaptedValue = readElementExpression(type.typeArguments[1], "$entry.value", depth + 2)
-        val targetBuild = readTarget(type, source, target)
-        "run { val $source = ${erasedCollectionExpression(type, expression)}; val $target = ${targetBuild.init}; for ($entry in $source.entries) { $target[$adaptedKey] = $adaptedValue }; ${targetBuild.result} }"
-      }
-      else -> expression
-    }
-  }
-
-  private fun readElementExpression(
-    type: KotlinSourceTypeNode,
-    expression: String,
-    depth: Int
-  ): String {
-    if (!needsCollectionReadAdaptation(type)) {
-      return expression
-    }
-    return collectionReadExpression(type, expression, depth, erasedInput = true)
-  }
-
-  private fun erasedCollectionExpression(type: KotlinSourceTypeNode, expression: String): String =
-    when (type.typeId) {
-      "Types.LIST",
-      "Types.SET" -> "($expression as Collection<*>)"
-      "Types.MAP" -> "($expression as Map<*, *>)"
-      else -> expression
-    }
-
-  private fun typedCollectionExpression(type: KotlinSourceTypeNode, expression: String): String {
-    if (!type.isCollectionOrMap()) {
-      return expression
-    }
-    return "(${erasedCollectionExpression(type, expression)} as ${type.valueTypeName.removeSuffix("?")})"
-  }
-
-  private fun applyCollectionFactory(
-    type: KotlinSourceTypeNode,
-    valueExpression: String,
-    erasedInput: Boolean = false
-  ): String {
-    if (type.collectionFactory == CollectionFactory.NONE) {
-      return valueExpression
-    }
-    val conversion = collectionConversionFunction(type.collectionFactory)
-    if (!erasedInput) {
-      return "$conversion($valueExpression)"
-    }
-    return typedCollectionExpression(
-      type,
-      "$conversion(${erasedCollectionExpression(type, valueExpression)})"
-    )
-  }
-
-  private fun readTarget(
-    type: KotlinSourceTypeNode,
-    source: String,
-    target: String
-  ): ContainerTarget {
-    val valueType = type.valueTypeName.removeSuffix("?")
-    fun castTarget(): String = "$target as $valueType"
-    return when (type.typeId) {
-      "Types.LIST" ->
-        when (type.collectionFactory) {
-          CollectionFactory.LINKED_LIST ->
-            ContainerTarget("java.util.LinkedList<Any?>()", castTarget())
-          CollectionFactory.COPY_ON_WRITE_ARRAY_LIST ->
-            ContainerTarget(
-              "java.util.ArrayList<Any?>($source.size)",
-              "java.util.concurrent.CopyOnWriteArrayList($target) as $valueType"
-            )
-          else -> ContainerTarget("java.util.ArrayList<Any?>($source.size)", castTarget())
-        }
-      "Types.SET" ->
-        when (type.collectionFactory) {
-          CollectionFactory.HASH_SET ->
-            ContainerTarget("java.util.HashSet<Any?>($source.size)", castTarget())
-          CollectionFactory.TREE_SET -> ContainerTarget("java.util.TreeSet<Any?>()", castTarget())
-          CollectionFactory.COPY_ON_WRITE_ARRAY_SET ->
-            ContainerTarget(
-              "java.util.LinkedHashSet<Any?>($source.size)",
-              "java.util.concurrent.CopyOnWriteArraySet($target) as $valueType"
-            )
-          CollectionFactory.CONCURRENT_SKIP_LIST_SET ->
-            ContainerTarget("java.util.concurrent.ConcurrentSkipListSet<Any?>()", castTarget())
-          else -> ContainerTarget("java.util.LinkedHashSet<Any?>($source.size)", castTarget())
-        }
-      "Types.MAP" ->
-        when (type.collectionFactory) {
-          CollectionFactory.HASH_MAP ->
-            ContainerTarget("java.util.HashMap<Any?, Any?>($source.size)", castTarget())
-          CollectionFactory.TREE_MAP ->
-            ContainerTarget("java.util.TreeMap<Any?, Any?>()", castTarget())
-          CollectionFactory.CONCURRENT_HASH_MAP ->
-            ContainerTarget(
-              "java.util.concurrent.ConcurrentHashMap<Any?, Any?>($source.size)",
-              castTarget()
-            )
-          CollectionFactory.CONCURRENT_SKIP_LIST_MAP ->
-            ContainerTarget(
-              "java.util.concurrent.ConcurrentSkipListMap<Any?, Any?>()",
-              castTarget()
-            )
-          else -> ContainerTarget("java.util.LinkedHashMap<Any?, Any?>($source.size)", castTarget())
-        }
-      else -> ContainerTarget("null", castTarget())
-    }
+    return valueExpression
   }
 
   private fun localVariableType(field: KotlinSourceField): String {
@@ -1572,6 +1509,11 @@ internal class KotlinSerializerSourceWriter(private val struct: KotlinSourceStru
     (type.unsigned && type.componentType == null) ||
       type.typeId == "Types.DURATION" ||
       type.typeArguments.any { needsScalarSerializer(it) }
+
+  private fun needsGeneratedSerializerBinding(type: KotlinSourceTypeNode): Boolean =
+    type.collectionFactory != CollectionFactory.NONE ||
+      needsScalarSerializer(type) ||
+      type.typeArguments.any { needsGeneratedSerializerBinding(it) }
 
   private fun KotlinSourceTypeNode.isCollectionOrMap(): Boolean =
     typeId == "Types.LIST" || typeId == "Types.SET" || typeId == "Types.MAP"
@@ -1984,28 +1926,4 @@ internal class KotlinSerializerSourceWriter(private val struct: KotlinSourceStru
     }
 
   private fun escape(value: String): String = value.replace("\\", "\\\\").replace("\"", "\\\"")
-
-  private fun collectionConversionFunction(factory: CollectionFactory): String =
-    when (factory) {
-      CollectionFactory.MUTABLE_LIST -> "KotlinCollectionAdapters.toMutableList"
-      CollectionFactory.ARRAY_LIST -> "KotlinCollectionAdapters.toArrayList"
-      CollectionFactory.LINKED_LIST -> "KotlinCollectionAdapters.toLinkedList"
-      CollectionFactory.COPY_ON_WRITE_ARRAY_LIST ->
-        "KotlinCollectionAdapters.toCopyOnWriteArrayList"
-      CollectionFactory.MUTABLE_SET -> "KotlinCollectionAdapters.toMutableSet"
-      CollectionFactory.HASH_SET -> "KotlinCollectionAdapters.toHashSet"
-      CollectionFactory.LINKED_HASH_SET -> "KotlinCollectionAdapters.toLinkedHashSet"
-      CollectionFactory.TREE_SET -> "KotlinCollectionAdapters.toTreeSet"
-      CollectionFactory.COPY_ON_WRITE_ARRAY_SET -> "KotlinCollectionAdapters.toCopyOnWriteArraySet"
-      CollectionFactory.CONCURRENT_SKIP_LIST_SET ->
-        "KotlinCollectionAdapters.toConcurrentSkipListSet"
-      CollectionFactory.MUTABLE_MAP -> "KotlinCollectionAdapters.toMutableMap"
-      CollectionFactory.HASH_MAP -> "KotlinCollectionAdapters.toHashMap"
-      CollectionFactory.LINKED_HASH_MAP -> "KotlinCollectionAdapters.toLinkedHashMap"
-      CollectionFactory.TREE_MAP -> "KotlinCollectionAdapters.toTreeMap"
-      CollectionFactory.CONCURRENT_HASH_MAP -> "KotlinCollectionAdapters.toConcurrentHashMap"
-      CollectionFactory.CONCURRENT_SKIP_LIST_MAP ->
-        "KotlinCollectionAdapters.toConcurrentSkipListMap"
-      CollectionFactory.NONE -> error("No conversion function for NONE")
-    }
 }

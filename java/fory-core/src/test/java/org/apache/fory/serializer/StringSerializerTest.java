@@ -458,6 +458,25 @@ public class StringSerializerTest extends ForyTestBase {
   }
 
   @Test
+  public void testSecondaryUtf8ScratchReuse() throws Exception {
+    Fory fory = Fory.builder().withXlang(true).build();
+    StringSerializer serializer = new StringSerializer(fory.getConfig());
+    byte[] utf8 = "abc你好".getBytes(StandardCharsets.UTF_8);
+    MemoryBuffer buffer = MemoryUtils.wrap(ByteBuffer.allocateDirect(utf8.length * 2));
+
+    buffer.writeBytes(utf8);
+    assertEquals(serializer.readBytesUTF8ForXlang(buffer, utf8.length), "abc你好");
+    Field scratchField = StringSerializer.class.getDeclaredField("byteArray2");
+    scratchField.setAccessible(true);
+    byte[] scratch = (byte[]) scratchField.get(serializer);
+    Assert.assertTrue(scratch.length >= utf8.length);
+
+    buffer.writeBytes(utf8);
+    assertEquals(serializer.readBytesUTF8ForXlang(buffer, utf8.length), "abc你好");
+    Assert.assertSame(scratchField.get(serializer), scratch);
+  }
+
+  @Test
   public void testRejectInvalidUtf8DecodedBytes() {
     Fory fory =
         Fory.builder()

@@ -24,6 +24,7 @@ import static org.testng.Assert.assertThrows;
 import static org.testng.Assert.assertTrue;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.LinkedHashSet;
@@ -229,7 +230,7 @@ public class MetaShareXlangTest extends ForyTestBase {
   }
 
   @Test
-  public void testNestedListArrayRejected() {
+  public void testNestedListArrayCompatibleRead() {
     Fory nestedListFory = compatibleFory(NestedListField.class);
     NestedListField nestedListStruct = new NestedListField();
     nestedListStruct.values = Arrays.asList(Arrays.asList(1, 2));
@@ -242,8 +243,10 @@ public class MetaShareXlangTest extends ForyTestBase {
     NestedArrayElementField nestedArrayStruct = new NestedArrayElementField();
     nestedArrayStruct.values = Arrays.asList(new int[] {1, 2});
     byte[] nestedArrayBytes = nestedArrayFory.serialize(nestedArrayStruct);
-    assertThrows(
-        DeserializationException.class, () -> nestedListFory.deserialize(nestedArrayBytes));
+    NestedListField nestedListResult =
+        (NestedListField) nestedListFory.deserialize(nestedArrayBytes);
+    assertEquals(nestedListResult.values.get(0).getClass(), ArrayList.class);
+    assertEquals(nestedListResult.values, Arrays.asList(Arrays.asList(1, 2)));
 
     Fory nestedSetListFory = compatibleFory(NestedSetListField.class, false);
     NestedSetListField nestedSetListStruct = new NestedSetListField();
@@ -257,8 +260,11 @@ public class MetaShareXlangTest extends ForyTestBase {
     NestedSetArrayElementField nestedSetArrayStruct = new NestedSetArrayElementField();
     nestedSetArrayStruct.values = new LinkedHashSet<>(Arrays.asList(new int[] {1, 2}));
     byte[] nestedSetArrayBytes = nestedSetArrayFory.serialize(nestedSetArrayStruct);
-    assertThrows(
-        DeserializationException.class, () -> nestedSetListFory.deserialize(nestedSetArrayBytes));
+    NestedSetListField nestedSetListResult =
+        (NestedSetListField) nestedSetListFory.deserialize(nestedSetArrayBytes);
+    List<Integer> nestedSetList = nestedSetListResult.values.iterator().next();
+    assertEquals(nestedSetList.getClass(), ArrayList.class);
+    assertEquals(nestedSetList, Arrays.asList(1, 2));
   }
 
   private static Fory compatibleFory(Class<?> type) {

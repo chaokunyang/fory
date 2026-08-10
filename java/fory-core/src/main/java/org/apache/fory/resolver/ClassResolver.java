@@ -206,6 +206,7 @@ import org.apache.fory.util.record.RecordUtils;
 @SuppressWarnings({"rawtypes", "unchecked"})
 public class ClassResolver extends TypeResolver {
   private static final Logger LOG = LoggerFactory.getLogger(ClassResolver.class);
+  private static final int MAX_CACHED_READ_TYPE_NAMES = 8192;
 
   public static final int NATIVE_START_ID = Types.BOUND;
   // reserved 5 small internal type ids for future use
@@ -246,6 +247,7 @@ public class ClassResolver extends TypeResolver {
   // Every deserialization for unregistered class will query it, performance is important.
   private final ObjectMap<TypeNameBytes, TypeInfo> compositeNameBytes2TypeInfo =
       new ObjectMap<>(16, foryMapLoadFactor);
+  private int cachedReadTypeNames;
   private final ShimDispatcher shimDispatcher;
 
   public ClassResolver(
@@ -580,6 +582,7 @@ public class ClassResolver extends TypeResolver {
     }
     updateTypeInfo(cls, typeInfo);
     extRegistry.registeredClasses.put(cls.getName(), cls);
+    putRegisteredJavaName(typeInfo);
     registerGraalvmClass(cls);
   }
 
@@ -628,6 +631,7 @@ public class ClassResolver extends TypeResolver {
     }
     updateTypeInfo(cls, typeInfo);
     extRegistry.registeredClasses.put(cls.getName(), cls);
+    putRegisteredJavaName(typeInfo);
     registerGraalvmClass(cls);
   }
 
@@ -732,6 +736,23 @@ public class ClassResolver extends TypeResolver {
     registerGraalvmClass(cls);
   }
 
+  private void putRegisteredJavaName(TypeInfo registeredTypeInfo) {
+    int namedTypeId = toNamedTypeId(registeredTypeInfo.typeId);
+    Tuple2<String, String> name = Encoders.encodePkgAndClass(registeredTypeInfo.type);
+    EncodedMetaString namespace = sharedRegistry.getPackageEncodedMetaString(name.f0);
+    EncodedMetaString typeName = sharedRegistry.getTypeNameEncodedMetaString(name.f1);
+    TypeInfo namedTypeInfo =
+        new TypeInfo(
+            registeredTypeInfo.type,
+            namespace,
+            typeName,
+            registeredTypeInfo.serializer,
+            namedTypeId,
+            INVALID_USER_TYPE_ID);
+    compositeNameBytes2TypeInfo.put(
+        new TypeNameBytes(namedTypeInfo.namespace, namedTypeInfo.typeName), namedTypeInfo);
+  }
+
   private void registerUserImpl(Class<?> cls, int userId) {
     checkRegisterAllowed();
     Preconditions.checkArgument(userId != -1, "User type id 0xffffffff is reserved");
@@ -747,6 +768,7 @@ public class ClassResolver extends TypeResolver {
     }
     updateTypeInfo(cls, typeInfo);
     extRegistry.registeredClasses.put(cls.getName(), cls);
+    putRegisteredJavaName(typeInfo);
     registerGraalvmClass(cls);
   }
 
@@ -2110,6 +2132,12 @@ public class ClassResolver extends TypeResolver {
   @Override
   protected TypeInfo loadBytesToTypeInfo(
       EncodedMetaString packageBytes, EncodedMetaString simpleClassNameBytes) {
+    return loadBytesToTypeInfo(-1, packageBytes, simpleClassNameBytes);
+  }
+
+  @Override
+  protected TypeInfo loadBytesToTypeInfo(
+      int typeId, EncodedMetaString packageBytes, EncodedMetaString simpleClassNameBytes) {
     TypeNameBytes typeNameBytes = new TypeNameBytes(packageBytes, simpleClassNameBytes);
     TypeInfo typeInfo = compositeNameBytes2TypeInfo.get(typeNameBytes);
     // An exact hit returns the stored result, including an UnknownClass placeholder. It must not
@@ -2117,12 +2145,16 @@ public class ClassResolver extends TypeResolver {
     if (typeInfo == null) {
       typeInfo =
           populateBytesToTypeInfo(
-              typeNameBytes, packageBytes, simpleClassNameBytes, config.deserializeUnknownClass());
+              typeId,
+              typeNameBytes,
+              packageBytes,
+              simpleClassNameBytes,
+              config.deserializeUnknownClass());
     }
     // Note: Don't create serializer here - this method is used by both readTypeInfo
     // (which needs serializer) and readClassInternal (which doesn't need serializer).
     // Serializer creation is handled by ensureSerializerForTypeInfo in TypeResolver.
-    return typeInfo;
+    return typeId == -1 ? typeInfo : checkNamedTypeInfo(typeId, typeInfo);
   }
 
   @Override
@@ -2136,43 +2168,70 @@ public class ClassResolver extends TypeResolver {
       }
       // Get or create TypeInfo with serializer
       TypeInfo newTypeInfo = getTypeInfo(typeInfo.type);
-      // Update the cache with the correct TypeInfo that has a serializer
+      // Keep the exact wire tuple and named kind while adopting the registered serializer.
+      typeInfo.setSerializer(this, newTypeInfo.serializer);
       if (typeInfo.typeName != null) {
         TypeNameBytes typeNameBytes = new TypeNameBytes(typeInfo.namespace, typeInfo.typeName);
-        compositeNameBytes2TypeInfo.put(typeNameBytes, newTypeInfo);
+        if (compositeNameBytes2TypeInfo.get(typeNameBytes) != null) {
+          compositeNameBytes2TypeInfo.put(typeNameBytes, typeInfo);
+        }
       }
-      return newTypeInfo;
+      return typeInfo;
     }
     return typeInfo;
   }
 
   private TypeInfo populateBytesToTypeInfo(
+      int expectedTypeId,
       TypeNameBytes typeNameBytes,
       EncodedMetaString packageBytes,
       EncodedMetaString simpleClassNameBytes,
       boolean deserializeUnknownClass) {
     String packageName = packageBytes.decode(PACKAGE_DECODER);
     String className = simpleClassNameBytes.decode(TYPE_NAME_DECODER);
+    TypeInfo registeredTypeInfo = getRegisteredTypeInfo(packageName, className);
+    if (registeredTypeInfo != null) {
+      if (expectedTypeId != -1) {
+        checkNamedTypeInfo(expectedTypeId, registeredTypeInfo);
+      }
+      cacheReadTypeInfo(typeNameBytes, registeredTypeInfo);
+      return registeredTypeInfo;
+    }
     ClassSpec classSpec = Encoders.decodePkgAndClass(packageName, className);
-    Class<?> cls = extRegistry.registeredClasses.get(classSpec.entireClassName);
-    if (cls == null) {
-      cls = loadRegisteredArray(classSpec.entireClassName);
+    Class<?> cls = null;
+    if (config.requireClassRegistration() && classSpec.isArray) {
+      // Arrays of registered components are trusted by the same policy as their component, but
+      // only the canonical structured Java name may inherit that trust.
+      Class<?> registeredArray = loadRegisteredArray(classSpec.entireClassName);
+      if (registeredArray != null && isCanonicalJavaName(registeredArray, packageName, className)) {
+        cls = registeredArray;
+      }
     }
     if (cls == null) {
+      // The structured wire name missed the exact registered-name cache. Dynamic/default-JDK
+      // policy may still accept the canonical Java name, but flattened class-keyed registration
+      // state must never authorize a different name tuple.
       cls =
-          loadClass(
+          loadClassByPolicy(
               classSpec.entireClassName,
               classSpec.isEnum,
               classSpec.dimension,
               deserializeUnknownClass);
     }
     boolean unknownClass = UnknownClass.class.isAssignableFrom(TypeUtils.getComponentIfArray(cls));
+    if (!unknownClass && !isCanonicalJavaName(cls, packageName, className)) {
+      throw new InsecureException(
+          String.format("Class %s is not registered.", classSpec.entireClassName));
+    }
     if (!unknownClass) {
       checkClassForDeserialization(cls);
     }
-    int typeId = buildUnregisteredTypeId(cls, null);
+    int typeId = usesNonStructTypeDef(cls) ? Types.NAMED_EXT : buildUnregisteredTypeId(cls, null);
     TypeInfo typeInfo =
         new TypeInfo(cls, packageBytes, simpleClassNameBytes, null, typeId, INVALID_USER_TYPE_ID);
+    if (expectedTypeId != -1) {
+      checkNamedTypeInfo(expectedTypeId, typeInfo);
+    }
     if (unknownClass) {
       typeInfo.serializer =
           UnknownClassSerializers.getSerializer(this, classSpec.entireClassName, cls);
@@ -2183,8 +2242,32 @@ public class ClassResolver extends TypeResolver {
         classInfoMap.put(cls, typeInfo);
       }
     }
-    compositeNameBytes2TypeInfo.put(typeNameBytes, typeInfo);
+    cacheReadTypeInfo(typeNameBytes, typeInfo);
     return typeInfo;
+  }
+
+  private static boolean isCanonicalJavaName(Class<?> cls, String packageName, String className) {
+    Tuple2<String, String> canonicalName = Encoders.encodePkgAndClass(cls);
+    return canonicalName.f0.equals(packageName) && canonicalName.f1.equals(className);
+  }
+
+  private void cacheReadTypeInfo(TypeNameBytes typeNameBytes, TypeInfo typeInfo) {
+    // Explicit registrations publish unconditionally at their call sites. Bound only aliases
+    // learned from wire input; overflow names are still resolved and checked for this root.
+    if (cachedReadTypeNames < MAX_CACHED_READ_TYPE_NAMES) {
+      compositeNameBytes2TypeInfo.put(typeNameBytes, typeInfo);
+      cachedReadTypeNames++;
+    }
+  }
+
+  private TypeInfo getRegisteredTypeInfo(String packageName, String className) {
+    EncodedMetaString canonicalPackage =
+        Encoders.PACKAGE_ENCODER.encodeBinary(
+            packageName, Encoders.computePackageEncoding(packageName));
+    EncodedMetaString canonicalClassName =
+        Encoders.TYPE_NAME_ENCODER.encodeBinary(
+            className, Encoders.computeTypeNameEncoding(className));
+    return compositeNameBytes2TypeInfo.get(new TypeNameBytes(canonicalPackage, canonicalClassName));
   }
 
   @Internal

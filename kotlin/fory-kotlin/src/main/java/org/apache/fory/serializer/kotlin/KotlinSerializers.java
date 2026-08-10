@@ -237,6 +237,16 @@ public class KotlinSerializers {
 
   public static void registerSerializer(Fory fory, Class<?> cls) {
     TypeResolver resolver = fory.getTypeResolver();
+    // This helper replaces a generated Struct serializer on its existing TypeInfo. Routing through
+    // Fory.registerSerializer would classify that public custom serializer as EXT, while omitting
+    // this owner-local freeze check would leave the lazy internal setSerializer path as a late
+    // registration bypass.
+    if (resolver.isRegistrationFinished()) {
+      throw new ForyException(
+          "Cannot register class/serializer after registration has been frozen. Please register "
+              + "all classes before invoking top-level `serialize/deserialize/copy` methods of "
+              + "Fory.");
+    }
     Serializer serializer = newGeneratedSerializer(resolver, cls);
     if (resolver.isRegistered(cls)) {
       resolver.setSerializer(cls, serializer);

@@ -27,11 +27,14 @@ import static org.testng.Assert.assertTrue;
 import static org.testng.Assert.expectThrows;
 
 import java.nio.ByteBuffer;
+import org.apache.fory.Fory;
 import org.apache.fory.TestUtils;
 import org.apache.fory.collection.LongLongByteMap;
+import org.apache.fory.collection.MetadataLongMap;
 import org.apache.fory.context.MetaStringReader;
 import org.apache.fory.context.MetaStringWriter;
 import org.apache.fory.exception.ForyException;
+import org.apache.fory.exception.InsecureException;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.memory.MemoryUtils;
 import org.apache.fory.meta.EncodedMetaString;
@@ -46,9 +49,8 @@ public class MetaStringIOTest {
 
   @Test
   public void testWriteMetaString() {
-    SharedRegistry sharedRegistry = newSharedRegistry();
     MetaStringWriter writer = new MetaStringWriter();
-    MetaStringReader reader = new MetaStringReader(sharedRegistry);
+    MetaStringReader reader = new MetaStringReader();
     MemoryBuffer buffer = MemoryUtils.buffer(32);
     String str = StringUtils.random(128, 0);
     EncodedMetaString encodedMetaString = newGenericMetaString(str);
@@ -71,9 +73,8 @@ public class MetaStringIOTest {
         }) {
       for (int i = 0; i < 32; i++) {
         String str = StringUtils.random(i, 0);
-        SharedRegistry sharedRegistry = newSharedRegistry();
         MetaStringWriter writer = new MetaStringWriter();
-        MetaStringReader reader = new MetaStringReader(sharedRegistry);
+        MetaStringReader reader = new MetaStringReader();
         writer.writeMetaString(buffer, newGenericMetaString(str));
         String metaString = reader.readMetaString(buffer).decode(Encoders.GENERIC_DECODER);
         assertEquals(metaString.hashCode(), str.hashCode());
@@ -85,10 +86,9 @@ public class MetaStringIOTest {
   }
 
   @Test
-  public void testMetaStringWriterResetClearsDynamicWriteState() {
-    SharedRegistry sharedRegistry = newSharedRegistry();
+  public void testWriterResetClearsIds() {
     MetaStringWriter writer = new MetaStringWriter();
-    MetaStringReader reader = new MetaStringReader(sharedRegistry);
+    MetaStringReader reader = new MetaStringReader();
     EncodedMetaString metaString = newGenericMetaString("thread_safe_fory");
     MemoryBuffer buffer = MemoryUtils.buffer(64);
 
@@ -104,21 +104,95 @@ public class MetaStringIOTest {
   }
 
   @Test
-  public void testMetaStringReaderUsesSharedRegistryInstances() {
+  public void testReaderKeepsNamesLocal() {
     SharedRegistry sharedRegistry = newSharedRegistry();
     MetaStringWriter writer = new MetaStringWriter();
-    MetaStringReader reader = new MetaStringReader(sharedRegistry);
+    MetaStringReader reader = new MetaStringReader();
     EncodedMetaString encodedMetaString = newGenericMetaString("shared_meta_string");
     MemoryBuffer buffer = MemoryUtils.buffer(64);
 
     writer.writeMetaString(buffer, encodedMetaString);
 
     EncodedMetaString readMetaString = reader.readMetaString(buffer);
+    assertEquals(sharedRegistry.encodedMetaStringMap.size(), 0);
     EncodedMetaString cachedMetaString =
         sharedRegistry.getOrCreateEncodedMetaString(
             encodedMetaString.bytes, encodedMetaString.hash);
 
-    assertSame(readMetaString, cachedMetaString);
+    assertNotSame(readMetaString, cachedMetaString);
+  }
+
+  @Test
+  public void testExpectedNamesAcrossRoots() {
+    SharedRegistry sharedRegistry = newSharedRegistry();
+    EncodedMetaString smallName = sharedRegistry.getPackageEncodedMetaString("pkg");
+    EncodedMetaString largeName =
+        sharedRegistry.getTypeNameEncodedMetaString("PersistentExpectedCandidateLongName");
+    assertTrue(smallName.bytes.length <= 16);
+    assertTrue(largeName.bytes.length > 16);
+    MetaStringReader reader = new MetaStringReader();
+
+    for (int root = 0; root < 2; root++) {
+      MemoryBuffer buffer =
+          MemoryUtils.buffer(smallName.bytes.length + largeName.bytes.length + 32);
+      MetaStringWriter writer = new MetaStringWriter();
+      writer.writeMetaString(buffer, smallName);
+      writer.writeMetaString(buffer, largeName);
+
+      assertSame(reader.readMetaString(buffer, smallName), smallName);
+      assertSame(reader.readMetaString(buffer, largeName), largeName);
+      assertReadCachesEmpty(reader);
+      reader.reset();
+
+      assertReadCachesEmpty(reader);
+      assertSame(sharedRegistry.getPackageEncodedMetaString("pkg"), smallName);
+      assertSame(
+          sharedRegistry.getTypeNameEncodedMetaString("PersistentExpectedCandidateLongName"),
+          largeName);
+    }
+  }
+
+  @Test
+  public void testRejectedNameStaysLocal() {
+    byte[] bytes = newNamedTypeBytes();
+    SharedRegistry sharedRegistry = newSharedRegistry();
+    Fory reader =
+        Fory.builder()
+            .withXlang(false)
+            .requireClassRegistration(true)
+            .withCompatible(false)
+            .withSharedRegistry(sharedRegistry)
+            .build();
+    int sharedNames = sharedRegistry.encodedMetaStringMap.size();
+
+    expectThrows(InsecureException.class, () -> reader.deserialize(bytes));
+
+    assertEquals(sharedRegistry.encodedMetaStringMap.size(), sharedNames);
+    assertReadCachesEmpty(reader.getReadContext().getMetaStringReader());
+  }
+
+  @Test
+  public void testAcceptedNameStaysLocal() {
+    byte[] bytes = newNamedTypeBytes();
+    SharedRegistry sharedRegistry = newSharedRegistry();
+    Fory reader =
+        Fory.builder()
+            .withXlang(false)
+            .requireClassRegistration(true)
+            .withCompatible(false)
+            .withSharedRegistry(sharedRegistry)
+            .build();
+    int initialSharedNames = sharedRegistry.encodedMetaStringMap.size();
+    reader.register(LongNamedTypeForMetaStringPublication.class);
+    int registeredSharedNames = sharedRegistry.encodedMetaStringMap.size();
+    assertTrue(registeredSharedNames > initialSharedNames);
+
+    LongNamedTypeForMetaStringPublication value =
+        reader.deserialize(bytes, LongNamedTypeForMetaStringPublication.class);
+
+    assertEquals(value.number, 17);
+    assertEquals(sharedRegistry.encodedMetaStringMap.size(), registeredSharedNames);
+    assertReadCachesEmpty(reader.getReadContext().getMetaStringReader());
   }
 
   @Test
@@ -151,9 +225,8 @@ public class MetaStringIOTest {
   }
 
   @Test
-  public void testReadBigMetaStringRejectsNonCanonicalHash() {
-    SharedRegistry sharedRegistry = newSharedRegistry();
-    MetaStringReader reader = new MetaStringReader(sharedRegistry);
+  public void testRejectsNonCanonicalHash() {
+    MetaStringReader reader = new MetaStringReader();
     EncodedMetaString encodedMetaString = newGenericMetaString(StringUtils.random(32, 0));
     MemoryBuffer buffer = MemoryUtils.buffer(64);
 
@@ -165,26 +238,58 @@ public class MetaStringIOTest {
   }
 
   @Test
-  public void testCachedBigMetaStringReusesHeaderCache() {
-    SharedRegistry sharedRegistry = newSharedRegistry();
-    MetaStringReader reader = new MetaStringReader(sharedRegistry);
+  public void testBigMetaStringCacheHit() {
+    MetaStringReader reader = new MetaStringReader();
     EncodedMetaString encodedMetaString = newGenericMetaString(StringUtils.random(32, 0));
     MemoryBuffer buffer = MemoryUtils.buffer(128);
 
-    buffer.writeVarUInt32Small7(encodedMetaString.bytes.length << 1);
-    buffer.writeInt64(encodedMetaString.hash);
-    buffer.writeBytes(encodedMetaString.bytes);
-    assertSame(
-        reader.readMetaString(buffer),
-        sharedRegistry.getOrCreateEncodedMetaString(
-            encodedMetaString.bytes, encodedMetaString.hash));
+    writeBigMetaString(buffer, encodedMetaString);
+    writeBigMetaString(buffer, encodedMetaString);
+    EncodedMetaString first = reader.readMetaString(buffer);
+    EncodedMetaString second = reader.readMetaString(buffer);
+
+    assertSame(first, second);
     assertEquals(buffer.readerIndex(), buffer.writerIndex());
   }
 
   @Test
-  public void testReadSmallMetaStringKeyIncludesLengthAndEncoding() {
-    SharedRegistry sharedRegistry = newSharedRegistry();
-    MetaStringReader reader = new MetaStringReader(sharedRegistry);
+  public void testExpectedBigNameIdentity() {
+    MetaStringReader reader = new MetaStringReader();
+    EncodedMetaString encodedMetaString = newGenericMetaString(StringUtils.random(32, 0));
+    byte[] differentBytes = encodedMetaString.bytes.clone();
+    differentBytes[0] ^= 1;
+    EncodedMetaString wrongCache = new EncodedMetaString(differentBytes, encodedMetaString.hash);
+    MemoryBuffer buffer = newBigMetaStringBuffer(encodedMetaString);
+
+    EncodedMetaString read = reader.readMetaString(buffer, wrongCache);
+
+    assertNotSame(read, wrongCache);
+    assertEquals(read.bytes, encodedMetaString.bytes);
+    assertEquals(buffer.readerIndex(), buffer.writerIndex());
+  }
+
+  @Test
+  public void testCachedBigNameIdentity() {
+    MetaStringReader reader = new MetaStringReader();
+    EncodedMetaString encodedMetaString = newGenericMetaString(StringUtils.random(32, 0));
+    byte[] differentBytes = encodedMetaString.bytes.clone();
+    differentBytes[0] ^= 1;
+    EncodedMetaString wrongCache = new EncodedMetaString(differentBytes, encodedMetaString.hash);
+    MetadataLongMap<EncodedMetaString> readCache =
+        TestUtils.getFieldValue(reader, "hash2MetaStringMap");
+    readCache.put(encodedMetaString.hash, wrongCache);
+    MemoryBuffer buffer = newBigMetaStringBuffer(encodedMetaString);
+
+    EncodedMetaString read = reader.readMetaString(buffer);
+
+    assertNotSame(read, wrongCache);
+    assertEquals(read.bytes, encodedMetaString.bytes);
+    assertEquals(buffer.readerIndex(), buffer.writerIndex());
+  }
+
+  @Test
+  public void testSmallMetaStringKey() {
+    MetaStringReader reader = new MetaStringReader();
     MemoryBuffer buffer = MemoryUtils.buffer(32);
 
     buffer.writeVarUInt32Small7(1 << 1);
@@ -204,9 +309,8 @@ public class MetaStringIOTest {
   }
 
   @Test
-  public void testMetaStringReaderResetClearsDynamicIdsOnly() {
-    SharedRegistry sharedRegistry = newSharedRegistry();
-    MetaStringReader reader = new MetaStringReader(sharedRegistry);
+  public void testResetClearsReadCaches() {
+    MetaStringReader reader = new MetaStringReader();
     MemoryBuffer buffer = MemoryUtils.buffer(32);
 
     buffer.writeVarUInt32Small7(1 << 1);
@@ -214,14 +318,51 @@ public class MetaStringIOTest {
     buffer.writeByte('a');
     reader.readMetaString(buffer);
 
-    LongLongByteMap<?> readCache = TestUtils.getFieldValue(reader, "longLongMetaStringMap");
-    assertEquals(readCache.size, 1);
+    LongLongByteMap<EncodedMetaString> smallCache =
+        TestUtils.getFieldValue(reader, "longLongMetaStringMap");
+    MetadataLongMap<EncodedMetaString> bigCache =
+        TestUtils.getFieldValue(reader, "hash2MetaStringMap");
+    EncodedMetaString value = newGenericMetaString("value");
+    for (int i = 1; i <= 2048; i++) {
+      smallCache.put(i, 0, (byte) 0, value);
+      bigCache.put(i, value);
+    }
+    assertTrue(((Object[]) TestUtils.getFieldValue(smallCache, "keyTable")).length > 2048);
+    assertTrue(((long[]) TestUtils.getFieldValue(bigCache, "keyTable")).length > 2048);
+
     reader.reset();
-    assertEquals(readCache.size, 1);
+
+    assertEquals(smallCache.size, 0);
+    assertEquals(bigCache.size, 0);
+    assertTrue(((Object[]) TestUtils.getFieldValue(smallCache, "keyTable")).length <= 2048);
+    assertTrue(((long[]) TestUtils.getFieldValue(bigCache, "keyTable")).length <= 2048);
 
     MemoryBuffer refBuffer = MemoryUtils.buffer(8);
     refBuffer.writeVarUInt32Small7((1 << 1) | 1);
     expectThrows(ForyException.class, () -> reader.readMetaString(refBuffer));
+  }
+
+  @Test
+  public void testMetaStringLimitCleanup() {
+    MetaStringReader reader = new MetaStringReader();
+    MemoryBuffer buffer = MemoryUtils.buffer(1 << 16);
+    for (int i = 0; i <= 8192; i++) {
+      buffer.writeVarUInt32Small7(1 << 1);
+      buffer.writeByte(0);
+      buffer.writeByte('a');
+    }
+
+    for (int i = 0; i < 8192; i++) {
+      reader.readMetaString(buffer);
+    }
+    expectThrows(ForyException.class, () -> reader.readMetaString(buffer));
+    reader.reset();
+
+    MemoryBuffer nextRoot = MemoryUtils.buffer(8);
+    nextRoot.writeVarUInt32Small7(1 << 1);
+    nextRoot.writeByte(0);
+    nextRoot.writeByte('b');
+    assertEquals(reader.readMetaString(nextRoot).bytes, new byte[] {'b'});
   }
 
   @Test
@@ -242,5 +383,40 @@ public class MetaStringIOTest {
     EncodedMetaString encodedMetaString = newGenericMetaString(str);
     return sharedRegistry.getOrCreateEncodedMetaString(
         encodedMetaString.bytes, encodedMetaString.hash);
+  }
+
+  private static MemoryBuffer newBigMetaStringBuffer(EncodedMetaString encodedMetaString) {
+    MemoryBuffer buffer = MemoryUtils.buffer(encodedMetaString.bytes.length + 16);
+    writeBigMetaString(buffer, encodedMetaString);
+    return buffer;
+  }
+
+  private static void writeBigMetaString(MemoryBuffer buffer, EncodedMetaString encodedMetaString) {
+    buffer.writeVarUInt32Small7(encodedMetaString.bytes.length << 1);
+    buffer.writeInt64(encodedMetaString.hash);
+    buffer.writeBytes(encodedMetaString.bytes);
+  }
+
+  private static byte[] newNamedTypeBytes() {
+    Fory writer =
+        Fory.builder()
+            .withXlang(false)
+            .requireClassRegistration(false)
+            .withCompatible(false)
+            .build();
+    LongNamedTypeForMetaStringPublication value = new LongNamedTypeForMetaStringPublication();
+    value.number = 17;
+    return writer.serialize(value);
+  }
+
+  private static void assertReadCachesEmpty(MetaStringReader reader) {
+    LongLongByteMap<?> smallCache = TestUtils.getFieldValue(reader, "longLongMetaStringMap");
+    MetadataLongMap<?> bigCache = TestUtils.getFieldValue(reader, "hash2MetaStringMap");
+    assertEquals(smallCache.size, 0);
+    assertEquals(bigCache.size, 0);
+  }
+
+  public static final class LongNamedTypeForMetaStringPublication {
+    public int number;
   }
 }

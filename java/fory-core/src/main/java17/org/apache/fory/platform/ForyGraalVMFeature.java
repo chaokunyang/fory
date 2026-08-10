@@ -48,6 +48,7 @@ import org.graalvm.nativeimage.hosted.RuntimeSerialization;
  * <p>The Fory core Native Image configuration activates this feature automatically.
  */
 final class ForyGraalVMFeature implements Feature {
+  private static final String GENERATED_FIELD_ACCESSORS = "GeneratedFieldAccessors";
 
   private final Set<Class<?>> processedClasses = ConcurrentHashMap.newKeySet();
   private final Set<Class<?>> processedProxyInterfaces = ConcurrentHashMap.newKeySet();
@@ -62,6 +63,7 @@ final class ForyGraalVMFeature implements Feature {
   @Override
   public void beforeAnalysis(BeforeAnalysisAccess access) {
     for (Class<?> serializerClass : GraalvmSupport.getRegisteredSerializerClasses()) {
+      configureSerializerRuntimeHolders(serializerClass);
       RuntimeClassInitialization.initializeAtBuildTime(serializerClass);
     }
   }
@@ -133,7 +135,18 @@ final class ForyGraalVMFeature implements Feature {
   }
 
   private void registerSerializerClass(Class<?> clazz) {
+    configureSerializerRuntimeHolders(clazz);
     registerConstructors(clazz);
+  }
+
+  private void configureSerializerRuntimeHolders(Class<?> clazz) {
+    for (Class<?> nestedClass : clazz.getDeclaredClasses()) {
+      if (nestedClass.getSimpleName().equals(GENERATED_FIELD_ACCESSORS)) {
+        // Generated serializers are build-initialized, but their canonical accessors contain
+        // VM-specific field offsets and must be created in the runtime image.
+        RuntimeClassInitialization.initializeAtRunTime(nestedClass);
+      }
+    }
   }
 
   private void registerSerializableHierarchy(Class<?> clazz) {

@@ -1354,7 +1354,7 @@ public final class StringSerializer extends ImmutableSerializer<String> {
     byte[] byteArray2 = this.byteArray2;
     if (byteArray2.length < numElements) {
       byteArray2 = new byte[numElements];
-      this.byteArray = byteArray2;
+      this.byteArray2 = byteArray2;
     }
     if (byteArray2.length > DEFAULT_BUFFER_SIZE) {
       smoothByteArrayLength =

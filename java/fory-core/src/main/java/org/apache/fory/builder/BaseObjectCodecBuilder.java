@@ -89,7 +89,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.StringJoiner;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
 import java.util.function.Supplier;
 import org.apache.fory.Fory;
@@ -222,9 +221,6 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
     descriptorDispatchId = new HashMap<>();
   }
 
-  // Must be static to be shared across the whole process life.
-  private static final Map<String, Map<String, Integer>> idGenerator = new ConcurrentHashMap<>();
-
   public String codecClassName(Class<?> beanClass) {
     String name = ReflectionUtils.getClassNameWithoutPackage(beanClass).replace("$", "_");
     StringBuilder nameBuilder = new StringBuilder(name);
@@ -241,16 +237,11 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
       nameBuilder.append("Fory");
     }
     nameBuilder.append("Codec").append(codecSuffix());
-    Map<String, Integer> subGenerator =
-        idGenerator.computeIfAbsent(nameBuilder.toString(), k -> new ConcurrentHashMap<>());
-    String key = fory.getConfig().getConfigHash() + "_" + CodeGenerator.getClassUniqueId(beanClass);
-    Integer id = subGenerator.get(key);
-    if (id == null) {
-      synchronized (subGenerator) {
-        id = subGenerator.computeIfAbsent(key, k -> subGenerator.size());
-      }
+    nameBuilder.append('_').append(Integer.toUnsignedString(fory.getConfig().getConfigHash(), 16));
+    String classUniqueId = CodeGenerator.getClassUniqueId(beanClass);
+    if (StringUtils.isNotBlank(classUniqueId)) {
+      nameBuilder.append('_').append(classUniqueId);
     }
-    nameBuilder.append('_').append(id);
     return nameBuilder.toString();
   }
 

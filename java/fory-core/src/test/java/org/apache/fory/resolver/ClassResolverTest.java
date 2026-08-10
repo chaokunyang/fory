@@ -32,6 +32,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
 import java.io.Serializable;
 import java.lang.reflect.Constructor;
+import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
@@ -57,7 +58,9 @@ import lombok.EqualsAndHashCode;
 import lombok.ToString;
 import org.apache.fory.Fory;
 import org.apache.fory.ForyTestBase;
+import org.apache.fory.TestUtils;
 import org.apache.fory.builder.Generated;
+import org.apache.fory.collection.ObjectMap;
 import org.apache.fory.config.ForyBuilder;
 import org.apache.fory.context.MetaReadContext;
 import org.apache.fory.context.ReadContext;
@@ -73,6 +76,7 @@ import org.apache.fory.meta.ClassSpec;
 import org.apache.fory.meta.EncodedMetaString;
 import org.apache.fory.meta.Encoders;
 import org.apache.fory.meta.FieldTypes;
+import org.apache.fory.meta.MetaString;
 import org.apache.fory.meta.TypeDef;
 import org.apache.fory.reflect.TypeRef;
 import org.apache.fory.resolver.longlongpkg.C1;
@@ -304,6 +308,7 @@ public class ClassResolverTest extends ForyTestBase {
 
   @Test
   public void testSuppressXtypeWarnings() throws Exception {
+    String warning = "A named type is not registered and will be read as an unknown class.";
     String suppressed =
         captureOutput(
             () ->
@@ -314,7 +319,7 @@ public class ClassResolverTest extends ForyTestBase {
                         .withDeserializeUnknownClass(true)
                         .suppressClassRegistrationWarnings(true)
                         .build()));
-    assertEquals(count(suppressed, "Class missing.pkg.MissingType not registered"), 0);
+    assertEquals(count(suppressed, warning), 0);
 
     String unsuppressed =
         captureOutput(
@@ -326,7 +331,8 @@ public class ClassResolverTest extends ForyTestBase {
                         .withDeserializeUnknownClass(true)
                         .suppressClassRegistrationWarnings(false)
                         .build()));
-    assertEquals(count(unsuppressed, "Class missing.pkg.MissingType not registered"), 1);
+    assertEquals(count(unsuppressed, "missing.pkg.MissingType"), 0);
+    Assert.assertTrue(count(unsuppressed, warning) <= 1);
   }
 
   @Test
@@ -408,7 +414,7 @@ public class ClassResolverTest extends ForyTestBase {
     buffer.readerIndex(0);
 
     Assert.assertThrows(
-        InsecureException.class, () -> resolver.readSharedClassMeta(readContext, BeanB.class));
+        InsecureException.class, () -> resolver.readSharedClassMeta(readContext, BeanA.class));
   }
 
   @Test
@@ -656,6 +662,7 @@ public class ClassResolverTest extends ForyTestBase {
             .requireClassRegistration(true)
             .withCompatible(false)
             .withMetaShare(true)
+            .withMaxTypeMetaBytes(1)
             .withMaxSchemaVersionsPerType(1);
     finishBuilder(builder);
     SharedRegistry sharedRegistry = new SharedRegistry();
@@ -701,6 +708,8 @@ public class ClassResolverTest extends ForyTestBase {
     assertSame(
         resolver.readSharedClassMeta(readContext, TestNeedToWriteReferenceClass.class).getType(),
         TestNeedToWriteReferenceClass.class);
+    Assert.assertEquals(buffer.readerIndex(), buffer.writerIndex());
+    Assert.assertFalse(sharedRegistry.remoteTypeDefById.containsKey(exact.getId()));
     assertSame(other, sharedRegistry.getOrCreateRemoteTypeDef(other, "test.Enum"));
   }
 
@@ -964,6 +973,216 @@ public class ClassResolverTest extends ForyTestBase {
 
     assertSame(resolver.loadClass(Foo.class.getName()), Foo.class);
     assertSame(resolver.loadClassForMeta(Foo.class.getName(), false, -1), Foo.class);
+  }
+
+  @Test
+  public void testNamedTypeIdentity() {
+    for (boolean xlang : new boolean[] {false, true}) {
+      Fory fory =
+          Fory.builder()
+              .withXlang(xlang)
+              .requireClassRegistration(true)
+              .withCompatible(false)
+              .build();
+      TypeResolver resolver = fory.getTypeResolver();
+      resolver.register(TestNeedToWriteReferenceClass.class, "", "color");
+      EncodedMetaString emptyNamespace = EncodedMetaString.EMPTY;
+      EncodedMetaString peerColor =
+          Encoders.TYPE_NAME_ENCODER.encodeBinary("color", MetaString.Encoding.UTF_8);
+
+      TypeInfo typeInfo = resolver.loadBytesToTypeInfo(Types.NAMED_ENUM, emptyNamespace, peerColor);
+      assertSame(typeInfo.type, TestNeedToWriteReferenceClass.class);
+      Assert.assertThrows(
+          InsecureException.class,
+          () -> resolver.loadBytesToTypeInfo(Types.NAMED_STRUCT, emptyNamespace, peerColor));
+    }
+
+    assertTupleCollisionRejected(false);
+    assertTupleCollisionRejected(true);
+    assertDefaultJdkTupleCollisionRejected();
+  }
+
+  @Test
+  public void testIdNameTuple() {
+    for (boolean xlang : new boolean[] {false, true}) {
+      Fory fory =
+          Fory.builder()
+              .withXlang(xlang)
+              .requireClassRegistration(true)
+              .withCompatible(false)
+              .build();
+      TypeResolver resolver = fory.getTypeResolver();
+      resolver.register(Foo.class, 101);
+      String packageName = Foo.class.getPackage().getName();
+      String typeName = Foo.class.getName().substring(packageName.length() + 1);
+      EncodedMetaString packageBytes =
+          Encoders.PACKAGE_ENCODER.encodeBinary(
+              packageName, Encoders.computePackageEncoding(packageName));
+      EncodedMetaString typeNameBytes =
+          Encoders.TYPE_NAME_ENCODER.encodeBinary(
+              typeName, Encoders.computeTypeNameEncoding(typeName));
+
+      TypeInfo typeInfo =
+          resolver.loadBytesToTypeInfo(Types.NAMED_STRUCT, packageBytes, typeNameBytes);
+      assertSame(typeInfo.type, Foo.class);
+      assertEquals(typeInfo.typeId, Types.NAMED_STRUCT);
+    }
+  }
+
+  @Test
+  public void testReadTypeNameCacheBound() throws Exception {
+    for (boolean xlang : new boolean[] {false, true}) {
+      Fory fory =
+          Fory.builder()
+              .withXlang(xlang)
+              .requireClassRegistration(true)
+              .withCompatible(false)
+              .build();
+      TypeResolver resolver = fory.getTypeResolver();
+      EncodedMetaString namespace = EncodedMetaString.EMPTY;
+      TypeInfo typeInfo =
+          new TypeInfo(
+              Foo.class,
+              namespace,
+              Encoders.TYPE_NAME_ENCODER.encodeBinary("Foo", MetaString.Encoding.UTF_8),
+              null,
+              Types.NAMED_STRUCT,
+              Types.INVALID_USER_TYPE_ID);
+      Method cacheMethod =
+          resolver
+              .getClass()
+              .getDeclaredMethod("cacheReadTypeInfo", TypeNameBytes.class, TypeInfo.class);
+      cacheMethod.setAccessible(true);
+      String cacheField =
+          xlang ? "compositeClassNameBytes2TypeInfo" : "compositeNameBytes2TypeInfo";
+      ObjectMap<TypeNameBytes, TypeInfo> cache = TestUtils.getFieldValue(resolver, cacheField);
+      int initialSize = cache.size;
+      TypeNameBytes overflowName = null;
+      for (int i = 0; i <= 8192; i++) {
+        EncodedMetaString typeName =
+            Encoders.TYPE_NAME_ENCODER.encodeBinary("missing" + i, MetaString.Encoding.UTF_8);
+        TypeNameBytes name = new TypeNameBytes(namespace, typeName);
+        cacheMethod.invoke(resolver, name, typeInfo);
+        if (i == 8192) {
+          overflowName = name;
+        }
+      }
+      assertEquals(cache.size, initialSize + 8192);
+      assertNull(cache.get(overflowName));
+      assertEquals(TestUtils.getFieldValue(resolver, "cachedReadTypeNames"), Integer.valueOf(8192));
+    }
+  }
+
+  @Test
+  public void testRemoteWarningCardinality() throws Exception {
+    int previousLogLevel = LoggerFactory.getLogLevel();
+    try {
+      LoggerFactory.setLogLevel(LogLevel.WARN_LEVEL);
+      AllowListChecker checker = new AllowListChecker(AllowListChecker.CheckLevel.WARN);
+      for (int i = 0; i < 100; i++) {
+        checker.checkType(null, "unlisted.remote.Type" + i);
+      }
+      assertRemoteWarningKeys(
+          AllowListChecker.class,
+          "unlisted.remote.Type",
+          "A class is not in the allow list. Check whether its objects are allowed for "
+              + "serialization or deserialization.");
+
+      Fory nativeFory =
+          Fory.builder()
+              .withXlang(false)
+              .requireClassRegistration(false)
+              .withDeserializeUnknownClass(true)
+              .suppressClassRegistrationWarnings(false)
+              .withCompatible(true)
+              .build();
+      for (int i = 0; i < 100; i++) {
+        nativeFory.getTypeResolver().loadClassByPolicy("missing.remote.Native" + i, false, 0, true);
+      }
+      assertRemoteWarningKeys(
+          TypeResolver.class,
+          "missing.remote.Native",
+          "A class could not be loaded and will be read as an unknown class.");
+
+      Fory xlangFory =
+          Fory.builder()
+              .withXlang(true)
+              .requireClassRegistration(true)
+              .withDeserializeUnknownClass(true)
+              .suppressClassRegistrationWarnings(false)
+              .withCompatible(true)
+              .build();
+      TypeResolver xlangResolver = xlangFory.getTypeResolver();
+      for (int i = 0; i < 100; i++) {
+        EncodedMetaString typeName =
+            Encoders.TYPE_NAME_ENCODER.encodeBinary("missingXlang" + i, MetaString.Encoding.UTF_8);
+        Assert.assertThrows(
+            IllegalStateException.class,
+            () ->
+                xlangResolver.loadBytesToTypeInfo(
+                    Types.NAMED_STRUCT, EncodedMetaString.EMPTY, typeName));
+      }
+      assertRemoteWarningKeys(
+          XtypeResolver.class,
+          "missingXlang",
+          "A named type is not registered and will be read as an unknown class.");
+    } finally {
+      LoggerFactory.setLogLevel(previousLogLevel);
+    }
+  }
+
+  private static void assertRemoteWarningKeys(Class<?> owner, String marker, String fixedMessage)
+      throws Exception {
+    Field loggerField = owner.getDeclaredField("LOG");
+    loggerField.setAccessible(true);
+    Object logger = loggerField.get(null);
+    Object logOnceState = TestUtils.getFieldValue(logger, "logOnceState");
+    Set<?> logged = TestUtils.getFieldValue(logOnceState, "logged");
+    int matchingKeys = 0;
+    for (Object key : logged) {
+      String message = TestUtils.getFieldValue(key, "msg");
+      Object[] args = TestUtils.getFieldValue(key, "args");
+      if (fixedMessage.equals(message)
+          || (message != null && message.contains(marker))
+          || Arrays.deepToString(args).contains(marker)) {
+        matchingKeys++;
+      }
+    }
+    Assert.assertTrue(matchingKeys <= 1, "Remote names created " + matchingKeys + " warning keys");
+  }
+
+  private static void assertTupleCollisionRejected(boolean xlang) {
+    Fory fory =
+        Fory.builder()
+            .withXlang(xlang)
+            .requireClassRegistration(true)
+            .withCompatible(false)
+            .build();
+    TypeResolver resolver = fory.getTypeResolver();
+    resolver.register(Foo.class, "safe", "Type");
+    EncodedMetaString emptyNamespace = EncodedMetaString.EMPTY;
+    EncodedMetaString flattenedName =
+        Encoders.TYPE_NAME_ENCODER.encodeBinary("safe.Type", MetaString.Encoding.UTF_8);
+    Assert.assertThrows(
+        ForyException.class,
+        () -> resolver.loadBytesToTypeInfo(Types.NAMED_STRUCT, emptyNamespace, flattenedName));
+  }
+
+  private static void assertDefaultJdkTupleCollisionRejected() {
+    Fory fory =
+        Fory.builder()
+            .withXlang(false)
+            .requireClassRegistration(true)
+            .withCompatible(false)
+            .build();
+    EncodedMetaString flattenedName =
+        Encoders.TYPE_NAME_ENCODER.encodeBinary(
+            Serializable.class.getName(), MetaString.Encoding.UTF_8);
+    Assert.assertThrows(
+        InsecureException.class,
+        () ->
+            fory.getTypeResolver()
+                .loadBytesToTypeInfo(Types.NAMED_STRUCT, EncodedMetaString.EMPTY, flattenedName));
   }
 
   @Test

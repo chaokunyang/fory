@@ -24,6 +24,7 @@ import java.nio.ByteBuffer;
 import java.nio.channels.ReadableByteChannel;
 import java.nio.channels.SeekableByteChannel;
 import javax.annotation.concurrent.NotThreadSafe;
+import org.apache.fory.annotation.Internal;
 import org.apache.fory.exception.DeserializationException;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.platform.AndroidSupport;
@@ -290,6 +291,29 @@ public class ForyReadableChannel implements ForyStreamReader, ReadableByteChanne
   @Override
   public MemoryBuffer getBuffer() {
     return memoryBuffer;
+  }
+
+  /** Discards consumed bytes while preserving unread bytes prefetched for the next root. */
+  @Internal
+  public void compactBuffer() {
+    MemoryBuffer memoryBuf = memoryBuffer;
+    int readerIndex = memoryBuf.readerIndex();
+    if (readerIndex == 0) {
+      return;
+    }
+    int unreadBytes = memoryBuf.remaining();
+    ByteBuffer byteBuf = byteBuffer;
+    // A read method may compute its post-fill absolute cursor before invoking fillBuffer, so moving
+    // bytes during a fill invalidates that pending cursor. Root finalization is the safe owner for
+    // compaction and still preserves bytes prefetched from the following root.
+    int dataEnd = byteBuf.position();
+    int dataStart = dataEnd - memoryBuf.size();
+    byteBuf.limit(dataEnd);
+    byteBuf.position(dataStart + readerIndex);
+    byteBuf.compact();
+    byteBuf.limit(unreadBytes);
+    memoryBuf.initByteBuffer(byteBuf, unreadBytes);
+    memoryBuf.readerIndex(0);
   }
 
   private void readFully(ByteBuffer dst, int length) throws IOException {

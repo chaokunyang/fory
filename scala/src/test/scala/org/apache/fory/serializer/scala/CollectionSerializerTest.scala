@@ -22,8 +22,13 @@ package org.apache.fory.serializer.scala
 import org.apache.fory.Fory
 import org.apache.fory.exception.InsecureException
 import org.apache.fory.scala.ForyScala
+import org.apache.fory.serializer.GraphMemoryEstimates
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AnyWordSpec
+
+import scala.collection.Factory
+import scala.collection.immutable.ListMap
+import scala.collection.mutable
 
 class CollectionSerializerTest extends AnyWordSpec with Matchers {
   val params: Seq[Boolean] = List(false, true)
@@ -117,6 +122,92 @@ class CollectionSerializerTest extends AnyWordSpec with Matchers {
       intercept[InsecureException] {
         reader.deserialize(writer.serialize(Map("a" -> 1, "b" -> 2, "c" -> 3)))
       }
+    }
+
+    "reserve Some wrappers" in {
+      val writer = runtime()
+      val some = Some("value")
+      writer.register(some.getClass)
+      val ownerBytes = GraphMemoryEstimates.shallowObjectBytes(some.getClass)
+      val bytes = writer.serialize(some)
+
+      intercept[RuntimeException] {
+        val reader = runtime(maxGraphMemoryBytes = Some(ownerBytes - 1))
+        reader.register(some.getClass)
+        reader.deserialize(bytes)
+      }
+      val reader = runtime(maxGraphMemoryBytes = Some(ownerBytes))
+      reader.register(some.getClass)
+      reader.deserialize(bytes) shouldEqual some
+    }
+
+    "reserve ToFactory wrappers" in {
+      val writer = runtime()
+      val iterableFactory: Factory[Int, List[Int]] =
+        List.empty[Int].iterableFactory.iterableFactory
+      val mapFactory: Factory[(String, Int), Map[String, Int]] =
+        Map.empty[String, Int].mapFactory.mapFactory[String, Int]
+
+      Seq(iterableFactory, mapFactory).foreach { factory =>
+        val ownerBytes = GraphMemoryEstimates.shallowObjectBytes(factory.getClass)
+        val bytes = writer.serialize(factory)
+        intercept[RuntimeException] {
+          runtime(maxGraphMemoryBytes = Some(ownerBytes - 1)).deserialize(bytes)
+        }
+        runtime(maxGraphMemoryBytes = Some(ownerBytes)).deserialize(bytes).getClass shouldBe
+          factory.getClass
+      }
+
+      val aliases = Array[AnyRef](
+        iterableFactory.asInstanceOf[AnyRef],
+        iterableFactory.asInstanceOf[AnyRef])
+      val decoded = writer.deserialize(writer.serialize(aliases)).asInstanceOf[Array[AnyRef]]
+      decoded(0) shouldBe theSameInstanceAs(decoded(1))
+    }
+
+    "reserve linked collection nodes" in {
+      val writer = runtime()
+      val list = List.fill(6)("v")
+      val listBytes =
+        list.size.toLong * GraphMemoryEstimates
+          .shallowObjectBytes(classOf[scala.collection.immutable.::[_]]) +
+          GraphMemoryEstimates.shallowObjectBytes(list.iterableFactory.iterableFactory.getClass)
+      val encodedList = writer.serialize(list)
+
+      intercept[RuntimeException] {
+        runtime(maxGraphMemoryBytes = Some(listBytes - 1)).deserialize(encodedList)
+      }
+      runtime(maxGraphMemoryBytes = Some(listBytes)).deserialize(encodedList) shouldEqual list
+
+      val listMap = ListMap("a" -> 1, "b" -> 2, "c" -> 3, "d" -> 4)
+      val listMapBytes =
+        listMap.size.toLong * GraphMemoryEstimates.shallowObjectBytes(
+          Class.forName("scala.collection.immutable.ListMap$Node")) +
+          GraphMemoryEstimates.shallowObjectBytes(listMap.mapFactory.mapFactory.getClass)
+      val encodedListMap = writer.serialize(listMap)
+      intercept[RuntimeException] {
+        runtime(maxGraphMemoryBytes = Some(listMapBytes - 1)).deserialize(encodedListMap)
+      }
+      runtime(maxGraphMemoryBytes = Some(listMapBytes)).deserialize(encodedListMap) shouldEqual listMap
+    }
+
+    "reserve mutable BitSet span storage" in {
+      val writer = runtime()
+      val bitSet = mutable.BitSet(65536)
+      val words = 2048L
+      val bitSetBytes =
+        GraphMemoryEstimates.shallowObjectBytes(classOf[mutable.BitSet]).toLong +
+          GraphMemoryEstimates.objectArrayBytes() + words * java.lang.Long.BYTES +
+          GraphMemoryEstimates.shallowObjectBytes(
+            bitSet.sortedIterableFactory
+              .evidenceIterableFactory[Any](bitSet.ordering.asInstanceOf[Ordering[Any]])
+              .getClass)
+      val bytes = writer.serialize(bitSet)
+
+      intercept[RuntimeException] {
+        runtime(maxGraphMemoryBytes = Some(bitSetBytes - 1)).deserialize(bytes)
+      }
+      runtime(maxGraphMemoryBytes = Some(bitSetBytes)).deserialize(bytes) shouldEqual bitSet
     }
   }
 }

@@ -33,7 +33,6 @@ import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.SortedMap;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
 import org.apache.fory.Fory;
 import org.apache.fory.builder.Generated.GeneratedCompatibleSerializer;
@@ -57,6 +56,7 @@ import org.apache.fory.serializer.FieldGroups.SerializationFieldInfo;
 import org.apache.fory.serializer.ObjectSerializer;
 import org.apache.fory.serializer.Serializer;
 import org.apache.fory.serializer.Serializers;
+import org.apache.fory.serializer.StaticGeneratedStructSerializer;
 import org.apache.fory.serializer.converter.FieldConverter;
 import org.apache.fory.serializer.converter.FieldConverters;
 import org.apache.fory.type.BFloat16;
@@ -161,20 +161,10 @@ public class CompatibleCodecBuilder extends ObjectCodecBuilder {
     return typeDef.readDataAlwaysAdvances();
   }
 
-  // Must be static to be shared across the whole process life.
-  private static final Map<Long, Integer> idGenerator = new ConcurrentHashMap<>();
-
   @Override
   protected String codecSuffix() {
-    // For every class def sent from different peer, if the class def are different, then
-    // a new serializer needs being generated.
-    Integer id = idGenerator.get(typeDef.getId());
-    if (id == null) {
-      synchronized (idGenerator) {
-        id = idGenerator.computeIfAbsent(typeDef.getId(), k -> idGenerator.size());
-      }
-    }
-    return "Compatible" + id;
+    // The checked TypeDef hash already uniquely identifies the remote schema.
+    return "Compatible" + Long.toUnsignedString(typeDef.getId(), 16);
   }
 
   @Override
@@ -353,6 +343,20 @@ public class CompatibleCodecBuilder extends ObjectCodecBuilder {
       return skipField(descriptor);
     }
     if (converter == null) {
+      if (!hasCompatibleCollectionArrayRead(descriptor)
+          && CompatibleSerializer.supportsNestedCollectionArray(typeResolver, descriptor)) {
+        // Nested array-to-list adaptation is bound to the remote GenericType. Inlining the remote
+        // descriptor would bypass that final-owner serializer and leave the primitive array intact.
+        Expression value =
+            new StaticInvoke(
+                StaticGeneratedStructSerializer.class,
+                "readFieldValue",
+                OBJECT_TYPE,
+                typeResolverRef,
+                readContextRef(),
+                remoteFieldInfo(descriptor));
+        return new Expression.ListExpression(value, callback.apply(value));
+      }
       return super.deserializeField(buffer, descriptor, callback);
     }
     Expression targetValue = fieldConverterTargetRead(descriptor, converter);
@@ -503,7 +507,7 @@ public class CompatibleCodecBuilder extends ObjectCodecBuilder {
   }
 
   private Expression remoteFieldInfo(Descriptor descriptor) {
-    ensureCompatibleFieldInfos();
+    ensureRemoteFieldInfos();
     return fieldInfo(remoteFieldInfosName, descriptor);
   }
 
@@ -521,17 +525,32 @@ public class CompatibleCodecBuilder extends ObjectCodecBuilder {
   }
 
   private void ensureCompatibleFieldInfos() {
+    ensureRemoteFieldInfos();
+    if (localFieldInfosName != null) {
+      return;
+    }
+    localFieldInfosName = ctx.newName(LOCAL_FIELD_INFOS_NAME);
+    TypeRef<SerializationFieldInfo[]> fieldInfoArrayType =
+        TypeRef.of(SerializationFieldInfo[].class);
+    ctx.addField(
+        false,
+        true,
+        ctx.type(fieldInfoArrayType),
+        localFieldInfosName,
+        new StaticInvoke(
+            CompatibleCodecBuilder.class,
+            "buildLocalFieldInfosByRemoteOrder",
+            fieldInfoArrayType,
+            constructorResolver(),
+            constructorClass(),
+            constructorTypeDef()));
+  }
+
+  private void ensureRemoteFieldInfos() {
     if (remoteFieldInfosName != null) {
       return;
     }
     remoteFieldInfosName = ctx.newName(REMOTE_FIELD_INFOS_NAME);
-    localFieldInfosName = ctx.newName(LOCAL_FIELD_INFOS_NAME);
-    Expression constructorResolver =
-        new Expression.Reference(CONSTRUCTOR_TYPE_RESOLVER_NAME, TypeRef.of(TypeResolver.class));
-    Expression constructorClass =
-        new Expression.Reference(POJO_CLASS_TYPE_NAME, TypeRef.of(Class.class));
-    Expression constructorTypeDef =
-        new Expression.Reference(CONSTRUCTOR_TYPE_DEF_NAME, TypeRef.of(TypeDef.class));
     TypeRef<SerializationFieldInfo[]> fieldInfoArrayType =
         TypeRef.of(SerializationFieldInfo[].class);
     ctx.addField(
@@ -543,21 +562,21 @@ public class CompatibleCodecBuilder extends ObjectCodecBuilder {
             CompatibleCodecBuilder.class,
             "buildRemoteFieldInfos",
             fieldInfoArrayType,
-            constructorResolver,
-            constructorClass,
-            constructorTypeDef));
-    ctx.addField(
-        false,
-        true,
-        ctx.type(fieldInfoArrayType),
-        localFieldInfosName,
-        new StaticInvoke(
-            CompatibleCodecBuilder.class,
-            "buildLocalFieldInfosByRemoteOrder",
-            fieldInfoArrayType,
-            constructorResolver,
-            constructorClass,
-            constructorTypeDef));
+            constructorResolver(),
+            constructorClass(),
+            constructorTypeDef()));
+  }
+
+  private Expression constructorResolver() {
+    return new Expression.Reference(CONSTRUCTOR_TYPE_RESOLVER_NAME, TypeRef.of(TypeResolver.class));
+  }
+
+  private Expression constructorClass() {
+    return new Expression.Reference(POJO_CLASS_TYPE_NAME, TypeRef.of(Class.class));
+  }
+
+  private Expression constructorTypeDef() {
+    return new Expression.Reference(CONSTRUCTOR_TYPE_DEF_NAME, TypeRef.of(TypeDef.class));
   }
 
   public static SerializationFieldInfo[] buildRemoteFieldInfos(
@@ -565,7 +584,12 @@ public class CompatibleCodecBuilder extends ObjectCodecBuilder {
     DescriptorGrouper grouper = typeResolver.createDescriptorGrouper(typeDef, cls);
     // Generated skip helpers dispatch from SerializationFieldInfo.codecCategory. Preserve the
     // grouper's category instead of rebuilding every remote field as OTHER.
-    return FieldGroups.buildFieldInfos(typeResolver, grouper).allFields;
+    SerializationFieldInfo[] fieldInfos =
+        FieldGroups.buildFieldInfos(typeResolver, grouper).allFields;
+    for (SerializationFieldInfo fieldInfo : fieldInfos) {
+      CompatibleSerializer.bindNestedCollectionArray(typeResolver, fieldInfo);
+    }
+    return fieldInfos;
   }
 
   public static SerializationFieldInfo[] buildLocalFieldInfosByRemoteOrder(

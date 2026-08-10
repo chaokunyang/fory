@@ -31,7 +31,6 @@ import org.apache.fory.annotation.{
   UInt8Type
 }
 import org.apache.fory.config.Int64Encoding
-import org.apache.fory.exception.InsecureException
 import org.apache.fory.memory.MemoryBuffer
 import org.apache.fory.meta.TypeDef
 import org.apache.fory.reflect.{FieldAccessor, ObjectInstantiators}
@@ -85,6 +84,21 @@ object ForySerializerDerivationTest {
       scores: Map[String, Option[Long @UInt64Type(encoding = Int64Encoding.TAGGED)]],
       @ForyField(id = 4) keyed: Map[Option[String], Int],
       @ForyField(id = 5) extra: String)
+      derives ForySerializer
+
+  @ForyStruct
+  final case class XlangListBox(
+      @ForyField(id = 1) values: List[String])
+      derives ForySerializer
+
+  @ForyStruct
+  final case class XlangOptionListBox(
+      @ForyField(id = 1) values: List[Option[String]])
+      derives ForySerializer
+
+  @ForyStruct
+  final case class XlangOptionMapBox(
+      @ForyField(id = 1) values: Map[String, Option[String]])
       derives ForySerializer
 
   @ForyStruct
@@ -212,6 +226,23 @@ object ForySerializerDerivationTest {
     case Node(value: UnionRefNode)
   }
 
+  @ForyUnion
+  enum CollectionUnion derives ForySerializer {
+    @ForyUnknownCase
+    case Unknown(value: UnknownCase)
+
+    @ForyCase(id = 1)
+    case Names(value: List[String] @Ref)
+  }
+
+  @ForyStruct
+  final case class UnionAliasBox(
+      @ForyField(id = 1) first: CollectionUnion,
+      @ForyField(id = 2) second: CollectionUnion,
+      @ForyField(id = 3) later: SearchUser @Ref,
+      @ForyField(id = 4) laterAlias: SearchUser @Ref)
+      derives ForySerializer
+
   def xlangFory(): Fory = {
     val fory = ForyScala.builder()
       .withXlang(true)
@@ -228,6 +259,15 @@ object ForySerializerDerivationTest {
       fory,
       classOf[OptionalCollectionBox],
       "scala_test.OptionalCollectionBox")
+    ForySerializer.register(fory, classOf[XlangListBox], "scala_test.XlangListBox")
+    ForySerializer.register(
+      fory,
+      classOf[XlangOptionListBox],
+      "scala_test.XlangOptionListBox")
+    ForySerializer.register(
+      fory,
+      classOf[XlangOptionMapBox],
+      "scala_test.XlangOptionMapBox")
     ForySerializer.register(fory, classOf[CopyBox], "scala_test.CopyBox")
     ForySerializer.register(fory, classOf[RefMetadataBox], "scala_test.RefMetadataBox")
     ForySerializer.register(fory, classOf[RefNode], "scala_test.RefNode")
@@ -235,6 +275,8 @@ object ForySerializerDerivationTest {
     ForySerializer.register(fory, classOf[MixedRecord], "scala_test.MixedRecord")
     ForySerializer.register(fory, classOf[SearchTarget], "scala_test.SearchTarget")
     ForySerializer.register(fory, classOf[UnionCycle], "scala_test.UnionCycle")
+    ForySerializer.register(fory, classOf[CollectionUnion], "scala_test.CollectionUnion")
+    ForySerializer.register(fory, classOf[UnionAliasBox], "scala_test.UnionAliasBox")
     fory
   }
 
@@ -259,6 +301,18 @@ object ForySerializerDerivationTest {
       .suppressClassRegistrationWarnings(false)
       .build()
     ForySerializer.register(fory, classOf[StoredState], "scala_test.StoredState")
+    ForySerializer.register(fory, classOf[Person], "scala_test.Person")
+    ForySerializer.register(fory, classOf[XlangListBox], "scala_test.XlangListBox")
+    ForySerializer.register(
+      fory,
+      classOf[XlangOptionListBox],
+      "scala_test.XlangOptionListBox")
+    ForySerializer.register(
+      fory,
+      classOf[XlangOptionMapBox],
+      "scala_test.XlangOptionMapBox")
+    ForySerializer.register(fory, classOf[SearchUser], "scala_test.SearchUser")
+    ForySerializer.register(fory, classOf[SearchTarget], "scala_test.SearchTarget")
     fory
   }
 
@@ -268,6 +322,14 @@ object ForySerializerDerivationTest {
       FieldAccessor.createAccessor(cls.getDeclaredField(fieldName)).putObject(value, fieldValue)
     }
     value
+  }
+
+  def assertNoLocalSchemaState(serializer: StaticGeneratedStructSerializer[?]): Unit = {
+    Seq("allFields", "allFieldIds", "fieldsById").foreach { fieldName =>
+      val field = serializer.getClass.getDeclaredField(fieldName)
+      field.setAccessible(true)
+      assert(java.lang.reflect.Array.getLength(field.get(serializer)) == 0, fieldName)
+    }
   }
 }
 
@@ -288,12 +350,160 @@ class ForySerializerDerivationTest extends AnyWordSpec with Matchers {
       val required = GraphMemoryEstimates.shallowObjectBytes(classOf[StoredState]).toLong
       val bytes = graphBudgetFory(required).serialize(value)
 
-      intercept[InsecureException] {
+      intercept[RuntimeException] {
         graphBudgetFory(required - 1).deserialize(bytes)
       }
       val restored = graphBudgetFory(required).deserialize(bytes).asInstanceOf[StoredState]
       restored.id shouldBe value.id
       restored.localOnlyValue shouldBe value.localOnlyValue
+    }
+
+    "reserve generated Option wrappers" in {
+      val value = Person("Ada", 36, Some("ada@example.com"))
+      val objectBytes = GraphMemoryEstimates.shallowObjectBytes(classOf[Person]).toLong
+      val someBytes = GraphMemoryEstimates.shallowObjectBytes(classOf[Some[?]]).toLong
+      val bytes = xlangFory().serialize(value)
+
+      intercept[RuntimeException] {
+        graphBudgetFory(objectBytes + someBytes - 1).deserialize(bytes)
+      }
+      graphBudgetFory(objectBytes + someBytes).deserialize(bytes) shouldEqual value
+    }
+
+    "reserve xlang List and Option storage" in {
+      val listNodeBytes =
+        GraphMemoryEstimates.shallowObjectBytes(classOf[scala.collection.immutable.::[?]]).toLong
+      val someBytes = GraphMemoryEstimates.shallowObjectBytes(classOf[Some[?]]).toLong
+      val writer = xlangFory()
+
+      val list = XlangListBox(List.fill(5)("v"))
+      val listBytes =
+        GraphMemoryEstimates.shallowObjectBytes(classOf[XlangListBox]).toLong +
+          5L * listNodeBytes
+      val encodedList = writer.serialize(list)
+      intercept[RuntimeException] {
+        graphBudgetFory(listBytes - 1).deserialize(encodedList)
+      }
+      graphBudgetFory(listBytes).deserialize(encodedList) shouldEqual list
+
+      val optionList = XlangOptionListBox(List(Some("v")))
+      val optionListBytes =
+        GraphMemoryEstimates.shallowObjectBytes(classOf[XlangOptionListBox]).toLong +
+          listNodeBytes + someBytes
+      val encodedOptionList = writer.serialize(optionList)
+      intercept[RuntimeException] {
+        graphBudgetFory(optionListBytes - 1).deserialize(encodedOptionList)
+      }
+      graphBudgetFory(optionListBytes).deserialize(encodedOptionList) shouldEqual optionList
+
+      val optionMap = XlangOptionMapBox(Map("k" -> Some("v")))
+      val mapBytes =
+        GraphMemoryEstimates.shallowObjectBytes(classOf[XlangOptionMapBox]).toLong +
+          GraphMemoryEstimates.shallowObjectBytes(classOf[Map[?, ?]]) +
+          2L * GraphMemoryEstimates.REFERENCE_BYTES + someBytes
+      val encodedOptionMap = writer.serialize(optionMap)
+      intercept[RuntimeException] {
+        graphBudgetFory(mapBytes - 1).deserialize(encodedOptionMap)
+      }
+      graphBudgetFory(mapBytes).deserialize(encodedOptionMap) shouldEqual optionMap
+    }
+
+    "reserve union Option wrappers" in {
+      val value = SearchTarget.OptionalTagged(Some(99L))
+      val someBytes = GraphMemoryEstimates.shallowObjectBytes(classOf[Some[?]]).toLong
+      val bytes = xlangFory().serialize(value)
+
+      intercept[RuntimeException] {
+        graphBudgetFory(someBytes - 1).deserialize(bytes)
+      }
+      graphBudgetFory(someBytes).deserialize(bytes) shouldEqual value
+    }
+
+    "publish final Scala union collection targets" in {
+      val runtime = xlangFory()
+      val shared = List("a", "b")
+      val later = SearchUser("later")
+      val value = UnionAliasBox(
+        CollectionUnion.Names(shared), CollectionUnion.Names(shared), later, later)
+
+      val decoded = runtime.deserialize(runtime.serialize(value)).asInstanceOf[UnionAliasBox]
+      val first = decoded.first.asInstanceOf[CollectionUnion.Names].value
+      val second = decoded.second.asInstanceOf[CollectionUnion.Names].value
+
+      first shouldBe theSameInstanceAs(second)
+      decoded.later shouldEqual later
+      decoded.later shouldBe theSameInstanceAs(decoded.laterAlias)
+    }
+
+    "reject wrong union collection aliases" in {
+      val runtime = xlangFory()
+      val serializer = runtime.getSerializer(classOf[CollectionUnion])
+      val wrongCarrier = new java.util.ArrayList[String]()
+      wrongCarrier.add("wrong")
+      val buffer = MemoryBuffer.newHeapBuffer(8)
+      buffer.writeVarUInt32(1)
+      buffer.writeByte(Fory.REF_FLAG)
+      buffer.writeVarUInt32(0)
+      val readContext = runtime.getReadContext
+      readContext.prepare(buffer, null, false)
+      try {
+        readContext.preserveRefId() shouldBe 0
+        readContext.reference(wrongCarrier)
+        intercept[RuntimeException] {
+          serializer.read(readContext)
+        }
+        readContext.getReadRef(0) shouldBe theSameInstanceAs(wrongCarrier)
+      } finally {
+        readContext.reset()
+      }
+    }
+
+    "freeze public registration helpers" in {
+      var unionSerializerCreated = false
+      given ForySerializer[CollectionUnion] with {
+        override def isUnion: Boolean = true
+
+        override def createSerializer(
+            typeResolver: org.apache.fory.resolver.TypeResolver,
+            typeDef: TypeDef): org.apache.fory.serializer.Serializer[CollectionUnion] = {
+          unionSerializerCreated = true
+          throw new IllegalStateException("Late union serializer creation")
+        }
+      }
+
+      Seq(
+        () => {
+          val runtime = xlangFory()
+          runtime.serialize(Person("Ada", 36, None))
+          runtime
+        },
+        () => {
+          val runtime = xlangFory()
+          intercept[RuntimeException] {
+            runtime.deserialize(Array.emptyByteArray)
+          }
+          runtime
+        }).foreach { runtime =>
+        val frozenRuntime = runtime()
+        val serializer = frozenRuntime.getSerializer(classOf[Person])
+        intercept[RuntimeException] {
+          ForySerializer.registerSerializer(frozenRuntime, classOf[Person])
+        }
+        frozenRuntime.getSerializer(classOf[Person]) shouldBe theSameInstanceAs(serializer)
+        intercept[RuntimeException] {
+          ForySerializer.register(
+            frozenRuntime,
+            classOf[StoredState],
+            "scala_test.LateStoredState")
+        }
+        intercept[RuntimeException] {
+          ForySerializer.register(
+            frozenRuntime,
+            classOf[CollectionUnion],
+            "scala_test.LateCollectionUnion")
+        }
+        unionSerializerCreated shouldBe false
+      }
     }
 
     "register derived structs with dotted names" in {
@@ -397,6 +607,21 @@ class ForySerializerDerivationTest extends AnyWordSpec with Matchers {
         classOf[CompatibleScalarReader],
         "scala_test",
         "CompatibleScalar")
+      ForySerializer.register(
+        readerFory,
+        classOf[CompatibleScalarWriter],
+        3001L)
+
+      val remoteSerializer =
+        summon[ForySerializer[CompatibleScalarReader]]
+          .createSerializer(
+            readerFory.getTypeResolver,
+            TypeDef.buildTypeDef(writerFory.getTypeResolver, classOf[CompatibleScalarWriter]))
+          .asInstanceOf[StaticGeneratedStructSerializer[CompatibleScalarReader]]
+      assertNoLocalSchemaState(remoteSerializer)
+      remoteSerializer.getRemoteFields.asScala
+        .filter(_.matchedId != -1)
+        .foreach(remoteField => remoteField.localFieldInfo should not be null)
 
       val writerValue = CompatibleScalarWriter(
         Some("true"),
@@ -431,6 +656,22 @@ class ForySerializerDerivationTest extends AnyWordSpec with Matchers {
         classOf[AccessorScalarReader],
         "scala_test",
         "AccessorScalar")
+      ForySerializer.register(
+        readerFory,
+        classOf[AccessorScalarWriter],
+        3002L)
+
+      val remoteSerializer =
+        summon[ForySerializer[AccessorScalarReader]]
+          .createSerializer(
+            readerFory.getTypeResolver,
+            TypeDef.buildTypeDef(writerFory.getTypeResolver, classOf[AccessorScalarWriter]))
+          .asInstanceOf[StaticGeneratedStructSerializer[AccessorScalarReader]]
+      assertNoLocalSchemaState(remoteSerializer)
+      remoteSerializer.getClass.getDeclaredFields
+        .filter(field => field.getType.isArray)
+        .map(_.getType.getComponentType)
+        .toSeq should not contain classOf[FieldAccessor]
 
       val writerValue = newAccessorValue(
         classOf[AccessorScalarWriter],

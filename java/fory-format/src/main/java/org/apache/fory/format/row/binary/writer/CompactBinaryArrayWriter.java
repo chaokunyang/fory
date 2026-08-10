@@ -127,7 +127,9 @@ public class CompactBinaryArrayWriter extends BinaryArrayWriter {
 
   @Override
   protected void primitiveArrayAdvance(final int size) {
-    buffer._increaseWriterIndexUnsafe(size);
+    // The compact parent includes this additional extent after reset. Its earlier reservation
+    // covers only the header and fixed storage, so the cursor advance must grow capacity too.
+    buffer.increaseWriterIndex(size);
   }
 
   @Override

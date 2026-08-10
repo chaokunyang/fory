@@ -24,6 +24,7 @@ import static org.apache.fory.meta.NativeTypeDefEncoder.getClassFields;
 
 import java.util.List;
 import org.apache.fory.Fory;
+import org.apache.fory.exception.InvalidDataException;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.meta.FieldInfo;
 import org.apache.fory.meta.NativeTypeDefEncoder;
@@ -60,5 +61,18 @@ public class TypeDefEncoderTest {
     Assert.assertEquals(typeDef.getClassName(), type.getName());
     Assert.assertEquals(typeDef.getFieldsInfo().size(), type.getDeclaredFields().length);
     Assert.assertEquals(typeDef.getFieldsInfo(), fieldsInfo);
+  }
+
+  @Test
+  public void testZstdDecompressionLimit() {
+    ZstdMetaCompressor compressor = new ZstdMetaCompressor();
+    byte[] metadata = new byte[128];
+    byte[] compressed = compressor.compress(metadata, 0, metadata.length);
+
+    Assert.assertEquals(
+        compressor.decompress(compressed, 0, compressed.length, metadata.length), metadata);
+    Assert.expectThrows(
+        InvalidDataException.class,
+        () -> compressor.decompress(compressed, 0, compressed.length, metadata.length - 1));
   }
 }

@@ -1642,28 +1642,40 @@ public class MapSerializersTest extends ForyTestBase {
     assertEquals(fory.deserialize(bytes), holder);
     Assert.assertTrue(fory.getSerializer(MapChunkHolder.class) instanceof Generated);
 
-    assertGeneratedChunkRejected(fory, bytes, 0);
-    assertGeneratedChunkRejected(fory, bytes, 2);
+    MapChunkHolder twoEntries = new MapChunkHolder();
+    twoEntries.values.put("only-key", 17);
+    twoEntries.values.put("second-key", 18);
+    byte[] twoEntryBytes = fory.serialize(twoEntries);
+    // The frames first differ at map size and then at chunk size. Locating the field from its own
+    // encoding avoids corrupting an unrelated 0x01 byte inside hashed root metadata.
+    int mapSizeOffset = firstDifference(bytes, twoEntryBytes, 0);
+    Assert.assertEquals(bytes[mapSizeOffset] & 0xff, 1);
+    Assert.assertEquals(twoEntryBytes[mapSizeOffset] & 0xff, 2);
+    int chunkSizeOffset = firstDifference(bytes, twoEntryBytes, mapSizeOffset + 1);
+    Assert.assertEquals(bytes[chunkSizeOffset] & 0xff, 1);
+    Assert.assertEquals(twoEntryBytes[chunkSizeOffset] & 0xff, 2);
+
+    assertGeneratedChunkRejected(fory, bytes, chunkSizeOffset, 0);
+    assertGeneratedChunkRejected(fory, bytes, chunkSizeOffset, 2);
   }
 
-  private static void assertGeneratedChunkRejected(Fory fory, byte[] bytes, int replacement) {
-    boolean rejected = false;
-    for (int i = 0; i < bytes.length; i++) {
-      if ((bytes[i] & 0xff) != 1) {
-        continue;
-      }
-      byte[] corrupted = bytes.clone();
-      corrupted[i] = (byte) replacement;
-      try {
-        fory.deserialize(corrupted);
-      } catch (DeserializationException exception) {
-        if (exception.getMessage().contains("Map chunk size")) {
-          rejected = true;
-          break;
-        }
+  private static int firstDifference(byte[] first, byte[] second, int start) {
+    int length = Math.min(first.length, second.length);
+    for (int i = start; i < length; i++) {
+      if (first[i] != second[i]) {
+        return i;
       }
     }
-    Assert.assertTrue(rejected, "Generated map reader did not reject chunk size " + replacement);
+    throw new AssertionError("Serialized map frames have no difference after offset " + start);
+  }
+
+  private static void assertGeneratedChunkRejected(
+      Fory fory, byte[] bytes, int chunkSizeOffset, int replacement) {
+    byte[] corrupted = bytes.clone();
+    corrupted[chunkSizeOffset] = (byte) replacement;
+    DeserializationException exception =
+        Assert.expectThrows(DeserializationException.class, () -> fory.deserialize(corrupted));
+    Assert.assertTrue(exception.getMessage().contains("Map chunk size"));
   }
 
   @Data

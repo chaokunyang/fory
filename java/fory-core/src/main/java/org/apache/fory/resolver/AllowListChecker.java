@@ -130,9 +130,8 @@ public class AllowListChecker implements TypeChecker {
         }
         if (!allowed) {
           LOG.warnOnce(
-              "Class {} not in allow list, please check whether objects of this class "
-                  + "are allowed for serialization or deserialization.",
-              className);
+              "A class is not in the allow list. Check whether its objects are allowed for "
+                  + "serialization or deserialization.");
         }
         return true;
       case STRICT:

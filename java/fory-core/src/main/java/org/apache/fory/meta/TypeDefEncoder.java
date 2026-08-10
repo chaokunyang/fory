@@ -142,7 +142,7 @@ class TypeDefEncoder {
             descriptor -> {
               FieldType fieldType = FieldTypes.buildFieldType(resolver, descriptor);
               if (descriptor.hasForyField()) {
-                int tagId = descriptor.getForyFieldId();
+                int tagId = (int) descriptor.getForyFieldId();
                 if (tagId >= 0) {
                   if (!usedTagIds.add(tagId)) {
                     throw new IllegalArgumentException(
@@ -153,8 +153,7 @@ class TypeDefEncoder {
                             + " in class "
                             + type.getName());
                   }
-                  return new FieldInfo(
-                      type.getName(), descriptor.getName(), fieldType, (short) tagId);
+                  return new FieldInfo(type.getName(), descriptor.getName(), fieldType, tagId);
                 }
                 // Negative is the annotation default sentinel for no configured tag ID; fall
                 // through to create regular FieldInfo. User-facing tag IDs must be non-negative.
@@ -271,7 +270,11 @@ class TypeDefEncoder {
       int size, encodingFlags;
       byte[] encoded = null;
       if (fieldInfo.hasFieldId()) {
-        size = fieldInfo.getFieldId();
+        long fieldId = fieldInfo.getFieldIdUnsigned();
+        Preconditions.checkArgument(
+            fieldId <= Integer.MAX_VALUE,
+            "Field tag ID must be expressible as a non-negative signed int: " + fieldId);
+        size = (int) fieldId;
         encodingFlags = 3;
       } else {
         // Convert camelCase field names to snake_case for xlang interoperability

@@ -47,10 +47,11 @@ import scala.collection.{Factory, mutable}
  */
 abstract class AbstractScalaMapSerializer[K, V, T](typeResolver: TypeResolver, cls: Class[T])
   extends MapLikeSerializer[T](typeResolver, cls) {
-  private val ReferenceBytes = 4L
+  private val ReferenceBytes = ScalaGraphMemory.REFERENCE_BYTES.toLong
   // Lower-bound shallow owner cost for the retained Scala map wrapper itself. Key/value slots are
   // charged separately by count below; this is not a Fory wire header size.
   private val ScalaMapOwnerBytes = 3L * ReferenceBytes
+  private val LinkedListMap = classOf[scala.collection.immutable.ListMap[_, _]].isAssignableFrom(cls)
 
   def onMapWrite(writeContext: WriteContext, value: T): util.Map[_, _]
 
@@ -60,8 +61,15 @@ abstract class AbstractScalaMapSerializer[K, V, T](typeResolver: TypeResolver, c
     val buffer = readContext.getBuffer
     val numElements = buffer.readVarUInt32Small7()
     checkMapSize(numElements)
-    readContext.reserveGraphMemory(
-      ScalaMapOwnerBytes + numElements.toLong * 2L * ReferenceBytes)
+    if (LinkedListMap) {
+      readContext.reserveGraphMemory(
+        Math.multiplyExact(numElements.toLong, ScalaGraphMemory.LIST_MAP_NODE_BYTES.toLong))
+    } else {
+      readContext.reserveGraphMemory(
+        Math.addExact(
+          ScalaMapOwnerBytes,
+          Math.multiplyExact(numElements.toLong, 2L * ReferenceBytes)))
+    }
     setNumElements(numElements)
     val factory = readContext.readRef().asInstanceOf[Factory[(K, V), T]]
     if (entryReadAlwaysAdvances) {

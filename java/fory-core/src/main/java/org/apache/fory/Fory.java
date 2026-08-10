@@ -158,7 +158,7 @@ public final class Fory implements BaseFory {
       typeResolver.setTypeChecker(configuredTypeChecker);
     }
     MetaStringWriter metaStringWriter = new MetaStringWriter();
-    MetaStringReader metaStringReader = new MetaStringReader(sharedRegistry);
+    MetaStringReader metaStringReader = new MetaStringReader();
     writeContext =
         new WriteContext(config, new Generics(), typeResolver, refWriter, metaStringWriter);
     readContext =
@@ -459,7 +459,11 @@ public final class Fory implements BaseFory {
 
   @Override
   public <T> T deserialize(ForyReadableChannel channel, Class<T> type) {
-    return deserialize(channel.getBuffer(), type);
+    try {
+      return deserialize(channel.getBuffer(), type);
+    } finally {
+      channel.compactBuffer();
+    }
   }
 
   @Override
@@ -545,8 +549,12 @@ public final class Fory implements BaseFory {
 
   @Override
   public Object deserialize(ForyReadableChannel channel, Iterable<MemoryBuffer> outOfBandBuffers) {
-    MemoryBuffer buf = channel.getBuffer();
-    return deserialize(buf, outOfBandBuffers);
+    try {
+      MemoryBuffer buf = channel.getBuffer();
+      return deserialize(buf, outOfBandBuffers);
+    } finally {
+      channel.compactBuffer();
+    }
   }
 
   @SuppressWarnings("unchecked")

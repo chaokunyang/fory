@@ -62,6 +62,7 @@ import org.apache.fory.serializer.CompatibleLayerSerializer;
 import org.apache.fory.serializer.CompatibleLayerSerializerBase;
 import org.apache.fory.serializer.FieldGroups;
 import org.apache.fory.serializer.FieldGroups.SerializationFieldInfo;
+import org.apache.fory.serializer.GraphMemoryEstimates;
 import org.apache.fory.serializer.JavaSerializer;
 import org.apache.fory.serializer.ObjectSerializer;
 import org.apache.fory.serializer.Serializer;
@@ -169,7 +170,12 @@ public class ChildContainerSerializers {
 
     protected ChildCollectionSerializer(
         TypeResolver typeResolver, Class<T> cls, Set<Class<?>> superClasses) {
-      super(typeResolver, cls);
+      this(typeResolver, cls, superClasses, GraphMemoryEstimates.shallowObjectBytes(cls));
+    }
+
+    protected ChildCollectionSerializer(
+        TypeResolver typeResolver, Class<T> cls, Set<Class<?>> superClasses, int ownerBytes) {
+      super(typeResolver, cls, !ReflectionUtils.isDynamicGeneratedCLass(cls), ownerBytes);
       this.slotSuperClasses = superClasses;
       slotsSerializers = buildSlotsSerializers(typeResolver, superClasses, cls);
     }
@@ -232,8 +238,20 @@ public class ChildContainerSerializers {
     private final SortedSetSubclassFactory<T> subclassFactory;
 
     public ChildSortedSetSerializer(TypeResolver typeResolver, Class<T> cls) {
-      super(typeResolver, cls, superClasses);
+      super(typeResolver, cls, superClasses, sortedSetOwnerBytes(cls));
       subclassFactory = new SortedSetSubclassFactory<>(cls);
+    }
+
+    private static int sortedSetOwnerBytes(Class<?> cls) {
+      int childOwnerBytes;
+      // The subclass factory invokes the inherited sorted-set constructor, which still creates the
+      // corresponding retained backing-map owner.
+      if (TreeSet.class.isAssignableFrom(cls)) {
+        childOwnerBytes = GraphMemoryEstimates.shallowObjectBytes(TreeMap.class);
+      } else {
+        childOwnerBytes = GraphMemoryEstimates.shallowObjectBytes(ConcurrentSkipListMap.class);
+      }
+      return Math.addExact(GraphMemoryEstimates.shallowObjectBytes(cls), childOwnerBytes);
     }
 
     static boolean supports(Class<?> cls) {

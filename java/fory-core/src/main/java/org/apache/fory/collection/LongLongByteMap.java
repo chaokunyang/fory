@@ -21,6 +21,7 @@ package org.apache.fory.collection;
 
 import java.util.Arrays;
 import org.apache.fory.annotation.Internal;
+import org.apache.fory.util.MurmurHash3;
 import org.apache.fory.util.Preconditions;
 
 /**
@@ -53,6 +54,7 @@ public final class LongLongByteMap<V> {
   LongLongByteKey[] keyTable;
   V[] valueTable;
   private final float loadFactor;
+  private final long hashSeed;
   private int threshold;
 
   private int shift;
@@ -66,9 +68,14 @@ public final class LongLongByteMap<V> {
    * @param initialCapacity If not a power of two, it is increased to the next nearest power of two.
    */
   public LongLongByteMap(int initialCapacity, float loadFactor) {
+    this(initialCapacity, loadFactor, MetadataHashSeed.next());
+  }
+
+  LongLongByteMap(int initialCapacity, float loadFactor, long hashSeed) {
     Preconditions.checkArgument(
         0 <= loadFactor && loadFactor <= 1, "loadFactor %s must be > 0 and < 1", loadFactor);
     this.loadFactor = loadFactor;
+    this.hashSeed = hashSeed;
     int tableSize = ForyObjectMap.tableSize(initialCapacity, loadFactor);
     threshold = (int) (tableSize * loadFactor);
     mask = tableSize - 1;
@@ -77,8 +84,11 @@ public final class LongLongByteMap<V> {
     valueTable = (V[]) new Object[tableSize];
   }
 
-  private int place(long k1, long k2, byte k3) {
-    return (int) ((k1 * 31 + k2 * 17 + k3) * ForyObjectMap.MASK_NUMBER >>> shift);
+  int place(long k1, long k2, byte k3) {
+    long hash = MurmurHash3.fmix64(k1 ^ hashSeed);
+    hash ^= Long.rotateLeft(MurmurHash3.fmix64(k2 + hashSeed), 23);
+    hash ^= (k3 & 0xffL) * ForyObjectMap.MASK_NUMBER;
+    return (int) (MurmurHash3.fmix64(hash) >>> shift);
   }
 
   /**

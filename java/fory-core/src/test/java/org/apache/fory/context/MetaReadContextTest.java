@@ -19,25 +19,23 @@
 
 package org.apache.fory.context;
 
-import org.apache.fory.collection.ObjectArray;
-import org.apache.fory.resolver.TypeInfo;
+import static org.testng.Assert.assertEquals;
+import static org.testng.Assert.assertNull;
 
-/**
- * Read-side state for meta-share deserialization.
- *
- * <p>When scoped meta share is disabled, the same instance can be reused across multiple reads so
- * type definitions announced by the peer remain available for later payloads.
- */
-public class MetaReadContext {
-  private static final int MAX_RETAINED_TYPE_INFOS = 1024;
+import org.testng.annotations.Test;
 
-  /**
-   * Type infos announced by the peer, indexed by the protocol id assigned during the current or
-   * shared meta-share session.
-   */
-  public final ObjectArray<TypeInfo> readTypeInfos = new ObjectArray<>();
+public class MetaReadContextTest {
+  @Test
+  public void testOccurrenceTableReset() {
+    MetaReadContext context = new MetaReadContext();
+    for (int i = 0; i < 2048; i++) {
+      context.readTypeInfos.add(null);
+    }
 
-  void reset() {
-    readTypeInfos.clearApproximate(MAX_RETAINED_TYPE_INFOS);
+    context.reset();
+
+    assertEquals(context.readTypeInfos.size, 0);
+    assertEquals(context.readTypeInfos.objects.length, 1024);
+    assertNull(context.readTypeInfos.objects[0]);
   }
 }

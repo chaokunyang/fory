@@ -120,9 +120,18 @@ public class SynchronizedSerializers {
 
     @Override
     public Collection read(ReadContext readContext) {
+      boolean hasWrapperRef = readContext.hasPreservedRefId();
+      int wrapperRefId = hasWrapperRef ? readContext.lastPreservedRefId() : -1;
       final Object sourceCollection = readContext.readRef();
       readContext.reserveGraphMemory(ownerBytes);
-      return (Collection) factory.apply(sourceCollection);
+      Collection result = (Collection) factory.apply(sourceCollection);
+      if (hasWrapperRef) {
+        readContext.setReadRef(wrapperRefId, result);
+        if (readContext.hasPreservedRefId() && readContext.lastPreservedRefId() == wrapperRefId) {
+          readContext.reference(result);
+        }
+      }
+      return result;
     }
 
     @Override
@@ -209,9 +218,18 @@ public class SynchronizedSerializers {
 
     @Override
     public Map read(ReadContext readContext) {
+      boolean hasWrapperRef = readContext.hasPreservedRefId();
+      int wrapperRefId = hasWrapperRef ? readContext.lastPreservedRefId() : -1;
       final Object sourceCollection = readContext.readRef();
       readContext.reserveGraphMemory(ownerBytes);
-      return (Map) factory.apply(sourceCollection);
+      Map result = (Map) factory.apply(sourceCollection);
+      if (hasWrapperRef) {
+        readContext.setReadRef(wrapperRefId, result);
+        if (readContext.hasPreservedRefId() && readContext.lastPreservedRefId() == wrapperRefId) {
+          readContext.reference(result);
+        }
+      }
+      return result;
     }
   }
 

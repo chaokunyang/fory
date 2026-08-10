@@ -22,6 +22,7 @@ package org.apache.fory.extension.meta;
 import com.github.luben.zstd.Zstd;
 import com.github.luben.zstd.ZstdException;
 import java.util.Arrays;
+import org.apache.fory.exception.InvalidDataException;
 import org.apache.fory.meta.MetaCompressor;
 
 public class ZstdMetaCompressor implements MetaCompressor {
@@ -48,11 +49,28 @@ public class ZstdMetaCompressor implements MetaCompressor {
 
   @Override
   public byte[] decompress(byte[] data, int offset, int size) {
-    int decompressedSize = (int) Zstd.getFrameContentSize(data, offset, size, false);
+    return decompress(data, offset, size, Integer.MAX_VALUE);
+  }
+
+  @Override
+  public byte[] decompress(byte[] data, int offset, int size, int maxOutputSize) {
+    long frameContentSize = Zstd.getFrameContentSize(data, offset, size, false);
+    if (frameContentSize < 0) {
+      throw new InvalidDataException("Invalid compressed TypeDef metadata frame size.");
+    }
+    if (frameContentSize > maxOutputSize || frameContentSize > Integer.MAX_VALUE) {
+      throw new InvalidDataException("Decompressed TypeDef metadata exceeds the maximum size.");
+    }
+    int decompressedSize = (int) frameContentSize;
     byte[] decompressedBytes = new byte[decompressedSize];
     long originalSize =
         Zstd.decompressByteArray(decompressedBytes, 0, decompressedSize, data, offset, size);
-    return Arrays.copyOf(decompressedBytes, (int) originalSize);
+    if (Zstd.isError(originalSize)) {
+      throw new InvalidDataException("Invalid compressed TypeDef metadata.");
+    }
+    return originalSize == decompressedSize
+        ? decompressedBytes
+        : Arrays.copyOf(decompressedBytes, (int) originalSize);
   }
 
   @Override

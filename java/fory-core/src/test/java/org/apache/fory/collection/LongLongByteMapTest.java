@@ -42,4 +42,23 @@ public class LongLongByteMapTest {
       Assert.assertEquals(map.get(i, i, (byte) i), "a" + i);
     }
   }
+
+  @Test
+  public void testMetadataHashingUsesSeed() {
+    LongLongByteMap<String> first = new LongLongByteMap<>(64, 0.5f, 1);
+    LongLongByteMap<String> second = new LongLongByteMap<>(64, 0.5f, 2);
+    MetadataLongMap<String> firstLong = new MetadataLongMap<>(64, 0.5f, 1);
+    MetadataLongMap<String> secondLong = new MetadataLongMap<>(64, 0.5f, 2);
+
+    boolean compositePlacementDiffers = false;
+    boolean longPlacementDiffers = false;
+    for (int i = 1; i <= 32; i++) {
+      compositePlacementDiffers |=
+          first.place(i, i * 17L, (byte) i) != second.place(i, i * 17L, (byte) i);
+      longPlacementDiffers |= firstLong.place(i) != secondLong.place(i);
+    }
+
+    Assert.assertTrue(compositePlacementDiffers);
+    Assert.assertTrue(longPlacementDiffers);
+  }
 }

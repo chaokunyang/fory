@@ -665,6 +665,8 @@ public class Serializers {
 
   public static final class AtomicReferenceSerializer extends Serializer<AtomicReference>
       implements Shareable {
+    private static final int ATOMIC_REFERENCE_OWNER_BYTES =
+        GraphMemoryEstimates.shallowObjectBytes(AtomicReference.class);
 
     public AtomicReferenceSerializer(Config config) {
       super(config, AtomicReference.class);
@@ -682,7 +684,9 @@ public class Serializers {
 
     @Override
     public AtomicReference read(ReadContext readContext) {
-      return new AtomicReference(readContext.readRef());
+      Object value = readContext.readRef();
+      readContext.reserveGraphMemory(ATOMIC_REFERENCE_OWNER_BYTES);
+      return new AtomicReference(value);
     }
   }
 

@@ -17,27 +17,27 @@
  * under the License.
  */
 
-package org.apache.fory.context;
+package org.apache.fory.collection;
 
-import org.apache.fory.collection.ObjectArray;
-import org.apache.fory.resolver.TypeInfo;
+import org.apache.fory.annotation.Internal;
+import org.apache.fory.util.MurmurHash3;
 
-/**
- * Read-side state for meta-share deserialization.
- *
- * <p>When scoped meta share is disabled, the same instance can be reused across multiple reads so
- * type definitions announced by the peer remain available for later payloads.
- */
-public class MetaReadContext {
-  private static final int MAX_RETAINED_TYPE_INFOS = 1024;
+/** A long-keyed map with per-instance hashing for persistent input-derived metadata. */
+@Internal
+public final class MetadataLongMap<V> extends LongMap<V> {
+  private final long hashSeed;
 
-  /**
-   * Type infos announced by the peer, indexed by the protocol id assigned during the current or
-   * shared meta-share session.
-   */
-  public final ObjectArray<TypeInfo> readTypeInfos = new ObjectArray<>();
+  public MetadataLongMap(int initialCapacity, float loadFactor) {
+    this(initialCapacity, loadFactor, MetadataHashSeed.next());
+  }
 
-  void reset() {
-    readTypeInfos.clearApproximate(MAX_RETAINED_TYPE_INFOS);
+  MetadataLongMap(int initialCapacity, float loadFactor, long hashSeed) {
+    super(initialCapacity, loadFactor);
+    this.hashSeed = hashSeed;
+  }
+
+  @Override
+  protected int place(long item) {
+    return (int) (MurmurHash3.fmix64(item ^ hashSeed) >>> shift);
   }
 }

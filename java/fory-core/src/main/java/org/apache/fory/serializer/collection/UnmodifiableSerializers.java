@@ -114,9 +114,18 @@ public class UnmodifiableSerializers {
 
     @Override
     public Collection read(ReadContext readContext) {
+      boolean hasWrapperRef = readContext.hasPreservedRefId();
+      int wrapperRefId = hasWrapperRef ? readContext.lastPreservedRefId() : -1;
       Object source = readContext.readRef();
       readContext.reserveGraphMemory(ownerBytes);
-      return (Collection) factory.apply(source);
+      Collection result = (Collection) factory.apply(source);
+      if (hasWrapperRef) {
+        readContext.setReadRef(wrapperRefId, result);
+        if (readContext.hasPreservedRefId() && readContext.lastPreservedRefId() == wrapperRefId) {
+          readContext.reference(result);
+        }
+      }
+      return result;
     }
 
     @Override
@@ -191,9 +200,18 @@ public class UnmodifiableSerializers {
 
     @Override
     public Map read(ReadContext readContext) {
+      boolean hasWrapperRef = readContext.hasPreservedRefId();
+      int wrapperRefId = hasWrapperRef ? readContext.lastPreservedRefId() : -1;
       Object source = readContext.readRef();
       readContext.reserveGraphMemory(ownerBytes);
-      return (Map) factory.apply(source);
+      Map result = (Map) factory.apply(source);
+      if (hasWrapperRef) {
+        readContext.setReadRef(wrapperRefId, result);
+        if (readContext.hasPreservedRefId() && readContext.lastPreservedRefId() == wrapperRefId) {
+          readContext.reference(result);
+        }
+      }
+      return result;
     }
   }
 

@@ -21,6 +21,7 @@ package org.apache.fory.serializer.collection;
 
 import java.util.AbstractCollection;
 import java.util.AbstractMap;
+import java.util.Collection;
 import java.util.Comparator;
 import java.util.Iterator;
 import java.util.Set;
@@ -31,10 +32,16 @@ class Container {}
 /** A collection container to hold collection elements by array. */
 class CollectionContainer<T> extends AbstractCollection<T> {
   final Object[] elements;
+  final Collection<?> target;
   int size;
 
   public CollectionContainer(int capacity) {
+    this(capacity, null);
+  }
+
+  CollectionContainer(int capacity, Collection<?> target) {
     elements = new Object[capacity];
+    this.target = target;
   }
 
   @Override
@@ -45,6 +52,13 @@ class CollectionContainer<T> extends AbstractCollection<T> {
   @Override
   public int size() {
     return size;
+  }
+
+  @Override
+  public Object[] toArray() {
+    // This decoder-only holder exposes its scratch array so COW finalizers can batch-copy it
+    // without allocating another transient collection carrier.
+    return elements;
   }
 
   @Override

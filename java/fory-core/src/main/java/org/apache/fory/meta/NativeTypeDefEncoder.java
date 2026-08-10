@@ -100,7 +100,7 @@ public class NativeTypeDefEncoder {
 
       FieldInfo fieldInfo;
       if (descriptor.hasForyField()) {
-        int tagId = descriptor.getForyFieldId();
+        int tagId = (int) descriptor.getForyFieldId();
         if (tagId >= 0) {
           if (!usedTagIds.add(tagId)) {
             throw new IllegalArgumentException(
@@ -113,8 +113,7 @@ public class NativeTypeDefEncoder {
           }
           // Create FieldInfo with tag ID for optimized serialization
           fieldInfo =
-              new FieldInfo(
-                  descriptor.getDeclaringClass(), descriptor.getName(), fieldType, (short) tagId);
+              new FieldInfo(descriptor.getDeclaringClass(), descriptor.getName(), fieldType, tagId);
         } else {
           // Negative is the annotation default sentinel for no configured tag ID; use field name.
           fieldInfo =
@@ -343,7 +342,12 @@ public class NativeTypeDefEncoder {
       byte[] encoded = metaString.getBytes();
       int size = (encoded.length - 1);
       if (fieldInfo.hasFieldId()) {
-        size = fieldInfo.getFieldId();
+        long fieldId = fieldInfo.getFieldIdUnsigned();
+        if (fieldId > Integer.MAX_VALUE) {
+          throw new IllegalArgumentException(
+              "Field tag ID must be expressible as a non-negative signed int: " + fieldId);
+        }
+        size = (int) fieldId;
         encodingFlags = 3;
       }
       header |= (byte) (encodingFlags << 2);

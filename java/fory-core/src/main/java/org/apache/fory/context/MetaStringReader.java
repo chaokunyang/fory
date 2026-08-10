@@ -22,19 +22,22 @@ package org.apache.fory.context;
 import java.util.Arrays;
 import org.apache.fory.annotation.Internal;
 import org.apache.fory.collection.LongLongByteMap;
-import org.apache.fory.collection.LongMap;
+import org.apache.fory.collection.MetadataLongMap;
 import org.apache.fory.exception.ForyException;
 import org.apache.fory.memory.LittleEndian;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.meta.EncodedMetaString;
 import org.apache.fory.meta.MetaString;
-import org.apache.fory.resolver.SharedRegistry;
 
 /**
  * Read-side state for meta-string references.
  *
- * <p>The reader interns incoming {@link EncodedMetaString} values and assigns dense dynamic ids to
- * newly seen entries so later references can resolve them without allocating new wrappers.
+ * <p>{@link #dynamicReadStringIds} is the current root's occurrence table. The two hash maps
+ * deduplicate validated but not yet accepted wire bodies only within that root; reset clears their
+ * entries and bounds retained backing storage. Persistent checked or expected owners belong to
+ * resolver TypeInfo, TypeDef, and name caches or to {@code SharedRegistry} registration/writer
+ * interning. Callers may supply those owners as expected candidates, but this reader neither
+ * publishes nor clears them.
  */
 @Internal
 public final class MetaStringReader {
@@ -42,21 +45,19 @@ public final class MetaStringReader {
   private static final float LOAD_FACTOR = 0.5f;
   private static final int SMALL_STRING_THRESHOLD = 16;
   private static final int ENCODING_BITS = 4;
-  private static final int MAX_CACHED_READ_META_STRINGS = 8192;
-  private static final int MAX_CACHED_READ_META_STRING_LENGTH = 2048;
+  private static final int MAX_ROOT_META_STRINGS = 8192;
+  private static final int MAX_ROOT_META_STRING_LENGTH = 2048;
+  private static final int MAX_RETAINED_META_STRING_SLOTS = 1024;
 
-  private final LongMap<EncodedMetaString> hash2MetaStringMap =
-      new LongMap<>(INITIAL_CAPACITY, LOAD_FACTOR);
+  private final MetadataLongMap<EncodedMetaString> hash2MetaStringMap =
+      new MetadataLongMap<>(INITIAL_CAPACITY, LOAD_FACTOR);
   private final LongLongByteMap<EncodedMetaString> longLongMetaStringMap =
       new LongLongByteMap<>(INITIAL_CAPACITY, LOAD_FACTOR);
-  private final SharedRegistry sharedRegistry;
   private EncodedMetaString[] dynamicReadStringIds = new EncodedMetaString[INITIAL_CAPACITY];
   private int dynamicReadStringId;
 
-  /** Creates an empty reader state for one deserialization stream. */
-  public MetaStringReader(SharedRegistry sharedRegistry) {
-    this.sharedRegistry = sharedRegistry;
-  }
+  /** Creates an empty reader whose root-local state is cleared by {@link #reset()}. */
+  public MetaStringReader() {}
 
   /**
    * Reads a meta string whose header has already been parsed from the stream and includes the
@@ -131,10 +132,10 @@ public final class MetaStringReader {
   private EncodedMetaString readBigMetaString(
       MemoryBuffer buffer, EncodedMetaString cache, int len) {
     long hashCode = buffer.readInt64();
-    if (cache.hash == hashCode && cache.bytes.length == len) {
-      // Big meta-string hashes are the wire identity on this cache hit. The body hash is computed
-      // and checked before a new entry is published; later hits intentionally skip the body.
-      buffer.checkReadableBytes(len);
+    buffer.checkReadableBytes(len);
+    if (cache.hash == hashCode
+        && cache.bytes.length == len
+        && buffer.equalTo(cache.bytes, 0, buffer.readerIndex(), len)) {
       buffer._increaseReaderIndexUnsafe(len);
       return cache;
     }
@@ -144,18 +145,22 @@ public final class MetaStringReader {
   private EncodedMetaString readBigMetaString(MemoryBuffer buffer, int len, long hashCode) {
     buffer.checkReadableBytes(len);
     EncodedMetaString encodedMetaString = hash2MetaStringMap.get(hashCode);
-    if (encodedMetaString != null && encodedMetaString.bytes.length == len) {
-      // Preserve the header-keyed fast path: entries reach this map only after their bytes matched
-      // the wire hash, so repeat hits advance over the redundant body without rehashing.
+    if (encodedMetaString != null
+        && encodedMetaString.bytes.length == len
+        && buffer.equalTo(encodedMetaString.bytes, 0, buffer.readerIndex(), len)) {
+      // The wire hash narrows the root-local lookup, but exact bytes own a named type's identity.
+      // Skipping on hash and length alone can substitute a different cached name before the
+      // resolver performs its exact TypeNameBytes comparison.
       buffer._increaseReaderIndexUnsafe(len);
       return encodedMetaString;
     }
     byte[] bytes = readAndValidateBigMetaString(buffer, len, hashCode);
-    EncodedMetaString canonicalMetaString =
-        sharedRegistry.getOrCreateEncodedMetaString(bytes, hashCode);
+    // Wire names stay root-local until an owning resolver validates and publishes their TypeInfo.
+    // Publishing here would let a later-rejected name persist in the shared registry.
+    EncodedMetaString canonicalMetaString = new EncodedMetaString(bytes, hashCode);
     if (encodedMetaString == null
-        && len <= MAX_CACHED_READ_META_STRING_LENGTH
-        && hash2MetaStringMap.size < MAX_CACHED_READ_META_STRINGS) {
+        && len <= MAX_ROOT_META_STRING_LENGTH
+        && hash2MetaStringMap.size < MAX_ROOT_META_STRINGS) {
       hash2MetaStringMap.put(hashCode, canonicalMetaString);
     }
     return canonicalMetaString;
@@ -172,7 +177,7 @@ public final class MetaStringReader {
   }
 
   private boolean shouldCacheSmallMetaString() {
-    return longLongMetaStringMap.size < MAX_CACHED_READ_META_STRINGS;
+    return longLongMetaStringMap.size < MAX_ROOT_META_STRINGS;
   }
 
   private EncodedMetaString cacheSmallMetaString(
@@ -190,8 +195,7 @@ public final class MetaStringReader {
     LittleEndian.putInt64(data, 8, v2);
     byte[] bytes = Arrays.copyOf(data, len);
     long hashCode = EncodedMetaString.computeHash(bytes, encoding);
-    return cacheSmallMetaString(
-        v1, v2, key, sharedRegistry.getOrCreateEncodedMetaString(bytes, hashCode));
+    return cacheSmallMetaString(v1, v2, key, new EncodedMetaString(bytes, hashCode));
   }
 
   private EncodedMetaString readSmallMetaString(MemoryBuffer buffer, int len) {
@@ -257,15 +261,16 @@ public final class MetaStringReader {
   }
 
   private void updateDynamicString(EncodedMetaString encodedMetaString) {
-    int currentDynamicReadId = dynamicReadStringId++;
+    int currentDynamicReadId = dynamicReadStringId;
+    if (currentDynamicReadId >= MAX_ROOT_META_STRINGS) {
+      throw new ForyException("Too many meta string references in payload");
+    }
     EncodedMetaString[] readStringIds = dynamicReadStringIds;
     if (readStringIds.length <= currentDynamicReadId) {
-      if (currentDynamicReadId >= MAX_CACHED_READ_META_STRINGS) {
-        throw new ForyException("Too many meta string references in payload");
-      }
       readStringIds = dynamicReadStringIds = growRead(readStringIds, currentDynamicReadId);
     }
     readStringIds[currentDynamicReadId] = encodedMetaString;
+    dynamicReadStringId = currentDynamicReadId + 1;
   }
 
   private static EncodedMetaString[] growRead(EncodedMetaString[] current, int id) {
@@ -280,12 +285,17 @@ public final class MetaStringReader {
 
   /** Clears all dynamic ids so this reader can be reused for a new deserialization stream. */
   public void reset() {
+    // These caches contain untrusted wire bodies before named-type acceptance. Keep them local to
+    // one root; accepted names persist only through the resolver's checked TypeInfo caches.
+    hash2MetaStringMap.clear(MAX_RETAINED_META_STRING_SLOTS);
+    longLongMetaStringMap.clear(MAX_RETAINED_META_STRING_SLOTS);
     int dynamicReadId = dynamicReadStringId;
+    dynamicReadStringId = 0;
     if (dynamicReadId != 0) {
-      for (int i = 0; i < dynamicReadId; i++) {
-        dynamicReadStringIds[i] = null;
-      }
-      dynamicReadStringId = 0;
+      // Clear only committed slots. Failed reads must never make root cleanup index beyond the
+      // fixed reference array and leave this reader poisoned for later operations.
+      Arrays.fill(
+          dynamicReadStringIds, 0, Math.min(dynamicReadId, dynamicReadStringIds.length), null);
     }
   }
 }

@@ -24,6 +24,7 @@ import java.lang.reflect.Constructor;
 import java.util.Collection;
 import org.apache.fory.Fory;
 import org.apache.fory.annotation.CodegenInvoke;
+import org.apache.fory.annotation.Internal;
 import org.apache.fory.config.Config;
 import org.apache.fory.context.CopyContext;
 import org.apache.fory.context.ReadContext;
@@ -485,28 +486,7 @@ public abstract class CollectionLikeSerializer<T> extends Serializer<T> {
   public Collection newCollection(ReadContext readContext, boolean elementReadAlwaysAdvances) {
     MemoryBuffer buffer = readContext.getBuffer();
     numElements = readCollectionSize(readContext, buffer, elementReadAlwaysAdvances);
-    if (AndroidSupport.IS_ANDROID) {
-      try {
-        Constructor<?> constructor = type.getDeclaredConstructor();
-        constructor.setAccessible(true);
-        T instance = (T) constructor.newInstance();
-        readContext.reference(instance);
-        return (Collection) instance;
-      } catch (Throwable e) {
-        throw buildException(e);
-      }
-    }
-    if (constructor == null) {
-      constructor = ReflectionUtils.getCtrHandle(type, true);
-    }
-    try {
-      T instance = (T) constructor.invoke();
-      readContext.reference(instance);
-      return (Collection) instance;
-    } catch (Throwable e) {
-      // reduce code size of critical path.
-      throw buildException(e);
-    }
+    return newEmptyCollection(readContext);
   }
 
   public Collection newCollection(CopyContext copyContext, Collection collection) {
@@ -530,6 +510,42 @@ public abstract class CollectionLikeSerializer<T> extends Serializer<T> {
     }
     try {
       return (Collection) constructor.invoke();
+    } catch (Throwable e) {
+      // reduce code size of critical path.
+      throw buildException(e);
+    }
+  }
+
+  /**
+   * Creates the declared collection owner for a compatible dense-array field.
+   *
+   * <p>The compatible reader must validate proportional readable bytes before calling this hook.
+   */
+  @Internal
+  public Collection newCollectionForCompatibleArray(ReadContext readContext, int numElements) {
+    reserveCollection(readContext, numElements);
+    return newEmptyCollection(readContext);
+  }
+
+  private Collection newEmptyCollection(ReadContext readContext) {
+    if (AndroidSupport.IS_ANDROID) {
+      try {
+        Constructor<?> constructor = type.getDeclaredConstructor();
+        constructor.setAccessible(true);
+        T instance = (T) constructor.newInstance();
+        readContext.reference(instance);
+        return (Collection) instance;
+      } catch (Throwable e) {
+        throw buildException(e);
+      }
+    }
+    if (constructor == null) {
+      constructor = ReflectionUtils.getCtrHandle(type, true);
+    }
+    try {
+      T instance = (T) constructor.invoke();
+      readContext.reference(instance);
+      return (Collection) instance;
     } catch (Throwable e) {
       // reduce code size of critical path.
       throw buildException(e);
@@ -595,8 +611,17 @@ public abstract class CollectionLikeSerializer<T> extends Serializer<T> {
         buffer.checkReadableBytes(requiredReadable);
       }
     }
-    readContext.reserveGraphMemory(collectionOwnerBytes + (long) numElements * REFERENCE_BYTES);
+    reserveCollectionBytes(readContext, numElements);
     return numElements;
+  }
+
+  protected final void reserveCollection(ReadContext readContext, int numElements) {
+    checkCollectionSize(numElements);
+    reserveCollectionBytes(readContext, numElements);
+  }
+
+  private void reserveCollectionBytes(ReadContext readContext, int numElements) {
+    readContext.reserveGraphMemory(collectionOwnerBytes + (long) numElements * REFERENCE_BYTES);
   }
 
   protected final void checkCollectionSize(int numElements) {

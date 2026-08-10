@@ -57,6 +57,7 @@ import org.apache.fory.collection.ConcurrentIdentityMap;
 import org.apache.fory.collection.IdentityMap;
 import org.apache.fory.collection.IdentityObjectIntMap;
 import org.apache.fory.collection.LongMap;
+import org.apache.fory.collection.MetadataLongMap;
 import org.apache.fory.collection.Tuple2;
 import org.apache.fory.config.Config;
 import org.apache.fory.context.MetaReadContext;
@@ -886,7 +887,9 @@ public abstract class TypeResolver {
 
       // MetaStringReader returns the provided cache object only when the wire identity matches. For
       // big meta strings, metadata-hash validation happens before the entry is first cached.
-      if (typeNameBytesCache == simpleClassNameBytes && packageNameBytesCache == namespaceBytes) {
+      if (typeInfoCache.typeId == header
+          && typeNameBytesCache == simpleClassNameBytes
+          && packageNameBytesCache == namespaceBytes) {
         return typeInfoCache;
       }
     } else {
@@ -930,11 +933,10 @@ public abstract class TypeResolver {
       // Reference to previously read type in this stream
       typeInfo = getMetaReadTypeInfo(metaReadContext, index);
     } else {
-      // New type in stream, with optimized reuse by validated TypeDef header. A header-cache
-      // hit intentionally skips the body without rehashing: entries are published only after the
-      // TypeDef body has parsed successfully and matched the 52-bit metadata hash. Do not add
-      // body/hash/schema-limit/exact-local checks here; the header-miss path owns them before
-      // cache publish.
+      // A checked-cache hit or an expected local header match skips the opaque TypeDef body. The
+      // checked cache is published only after parse, hash, and policy validation; the protocol
+      // header itself is the unique identity for the expected local schema. Only a header miss
+      // parses, validates, counts, and publishes remote metadata.
       long id = buffer.readInt64();
       TypeDef cachedTypeDef = cachedTypeInfo == null ? null : cachedTypeInfo.getTypeDef();
       // A field-local cache hit is valid only when the cached TypeInfo carries the exact checked
@@ -942,7 +944,14 @@ public abstract class TypeResolver {
       if (cachedTypeDef != null && cachedTypeDef.getId() == id) {
         typeInfo = cachedTypeInfo;
       } else {
-        typeInfo = extRegistry.typeInfoByTypeDefId.get(id);
+        TypeDef localTypeDef = targetClass == null ? null : exactLocalTypeDef(id, targetClass);
+        if (localTypeDef != null) {
+          // The protocol header is the schema identity. A known expected local match must remain
+          // allocation-free and must not become a remote metadata version or checked-cache entry.
+          typeInfo = getTypeInfo(targetClass);
+        } else {
+          typeInfo = extRegistry.typeInfoByTypeDefId.get(id);
+        }
       }
       if (typeInfo != null) {
         TypeDef.skipTypeDef(buffer, id);
@@ -1025,6 +1034,13 @@ public abstract class TypeResolver {
       newTypeInfo = typeInfo;
     } else {
       TypeDef typeDef = typeInfo.getTypeDef();
+      if (typeDef == null && targetClass == UnknownStruct.class) {
+        // An expected-local header hit deliberately keeps the canonical local TypeInfo and skips
+        // the wire body. If a later occurrence is consumed by compatible removed-field skip, use
+        // that same local schema to build the UnknownStruct owner; reparsing or publishing remote
+        // metadata here would defeat the header-identity fast path.
+        typeDef = getTypeDef(readClass, true);
+      }
       if (typeDef == null || !typeDef.isStructSchemaKind()) {
         throw new ForyException(
             "Remote metadata type "
@@ -1065,6 +1081,41 @@ public abstract class TypeResolver {
   protected TypeInfo loadBytesToTypeInfo(
       int typeId, EncodedMetaString namespaceBytes, EncodedMetaString simpleClassNameBytes) {
     return loadBytesToTypeInfo(namespaceBytes, simpleClassNameBytes);
+  }
+
+  protected final TypeInfo checkNamedTypeInfo(int typeId, TypeInfo typeInfo) {
+    if (typeInfo.typeId != typeId) {
+      throwNamedTypeMismatch(typeId, typeInfo.typeId);
+    }
+    return typeInfo;
+  }
+
+  protected static int toNamedTypeId(int typeId) {
+    switch (typeId) {
+      case Types.ENUM:
+        return Types.NAMED_ENUM;
+      case Types.STRUCT:
+        return Types.NAMED_STRUCT;
+      case Types.COMPATIBLE_STRUCT:
+        return Types.NAMED_COMPATIBLE_STRUCT;
+      case Types.EXT:
+        return Types.NAMED_EXT;
+      case Types.UNION:
+      case Types.TYPED_UNION:
+        return Types.NAMED_UNION;
+      default:
+        if (Types.isNamedType(typeId)) {
+          return typeId;
+        }
+        throw new IllegalArgumentException("Type " + typeId + " has no named form");
+    }
+  }
+
+  private static void throwNamedTypeMismatch(int expectedTypeId, int actualTypeId) {
+    throw new InsecureException(
+        String.format(
+            "Named type kind %s does not match the resolved kind %s",
+            expectedTypeId, actualTypeId));
   }
 
   /**
@@ -1172,17 +1223,18 @@ public abstract class TypeResolver {
   }
 
   private TypeDef exactLocalTypeDef(TypeDef remoteTypeDef, Class<?> cls) {
-    return exactLocalTypeDef(remoteTypeDef.getEncoded(), cls);
+    return exactLocalTypeDef(remoteTypeDef.getId(), cls);
   }
 
-  private TypeDef exactLocalTypeDef(byte[] remoteEncoded, Class<?> cls) {
-    // UnknownStruct has no local metadata to compare against; building it would change
-    // open-world unknown-type semantics.
+  private TypeDef exactLocalTypeDef(long remoteId, Class<?> cls) {
+    // Only metadata already present in the local TypeDef map is an expected-local schema. Building
+    // a TypeDef here would turn a remote miss into local type construction and can violate class
+    // registration policy for declared polymorphic targets.
     if (UnknownClass.class.isAssignableFrom(TypeUtils.getComponentIfArray(cls))) {
       return null;
     }
-    TypeDef localTypeDef = getTypeDef(cls, true);
-    return Arrays.equals(remoteEncoded, localTypeDef.getEncoded()) ? localTypeDef : null;
+    TypeDef localTypeDef = typeDefMap.get(cls);
+    return localTypeDef != null && remoteId == localTypeDef.getId() ? localTypeDef : null;
   }
 
   // TODO(chaokunyang) if TypeDef is consistent with class in this process,
@@ -1444,6 +1496,12 @@ public abstract class TypeResolver {
     if (cls != null) {
       return cls;
     }
+    return loadClassByPolicy(className, isEnum, arrayDims, deserializeUnknownClass);
+  }
+
+  /** Resolves a dynamic class after the caller has already ruled out an exact registered name. */
+  protected final Class<?> loadClassByPolicy(
+      String className, boolean isEnum, int arrayDims, boolean deserializeUnknownClass) {
     if (config.requireClassRegistration() && !DefaultJdkClassAllowList.contains(className)) {
       if (deserializeUnknownClass) {
         return UnknownClass.getUnknowClass(className, isEnum, arrayDims, metaContextShareEnabled);
@@ -1460,7 +1518,7 @@ public abstract class TypeResolver {
     } catch (IllegalStateException e) {
       if (deserializeUnknownClass) {
         if (!config.suppressClassRegistrationWarnings()) {
-          LOG.warnOnce(e.getMessage());
+          LOG.warnOnce("A class could not be loaded and will be read as an unknown class.");
         }
         return UnknownClass.getUnknowClass(className, isEnum, arrayDims, metaContextShareEnabled);
       }
@@ -2062,11 +2120,11 @@ public abstract class TypeResolver {
   }
 
   protected static int compareFieldSortKey(Descriptor d1, Descriptor d2) {
-    Integer id1 = getFieldSortId(d1);
-    Integer id2 = getFieldSortId(d2);
+    Long id1 = getFieldSortId(d1);
+    Long id2 = getFieldSortId(d2);
     int c;
     if (id1 != null && id2 != null) {
-      c = Integer.compare(id1, id2);
+      c = Long.compare(id1, id2);
     } else if (id1 != null) {
       c = -1;
     } else if (id2 != null) {
@@ -2090,16 +2148,16 @@ public abstract class TypeResolver {
     return getFieldSortId(descriptor) != null;
   }
 
-  private static Integer getFieldSortId(Descriptor descriptor) {
+  private static Long getFieldSortId(Descriptor descriptor) {
     if (descriptor.hasForyFieldId()) {
-      return descriptor.getForyFieldId();
+      return (long) descriptor.getForyFieldId();
     }
     String name = descriptor.getName();
     if (name != null && name.startsWith("$tag")) {
       String tagId = name.substring(4);
       if (!tagId.isEmpty()) {
         try {
-          return Integer.parseInt(tagId);
+          return Long.parseLong(tagId);
         } catch (NumberFormatException ignored) {
           // Fall back to string sorting for non-numeric synthetic tag names.
         }
@@ -2453,7 +2511,7 @@ public abstract class TypeResolver {
     int classIdGenerator = 1;
     int userIdGenerator = 0;
     final ArrayList<SerializerFactory> serializerFactories = new ArrayList<>();
-    final LongMap<TypeInfo> typeInfoByTypeDefId = new LongMap<>(2, 0.5f);
+    final MetadataLongMap<TypeInfo> typeInfoByTypeDefId = new MetadataLongMap<>(2, 0.5f);
     // cache absTypeInfo, support custom serializer for abstract or interface.
     // IdentityHashMap is more memory efficient than fory IdentityMap, and this is not in hotpath
     // for query

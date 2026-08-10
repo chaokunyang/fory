@@ -35,6 +35,8 @@ import org.apache.fory.resolver.TypeResolver;
  */
 public final class OptionalSerializers {
   public static final class OptionalSerializer extends Serializer<Optional> {
+    private static final int OPTIONAL_OWNER_BYTES =
+        GraphMemoryEstimates.shallowObjectBytes(Optional.class);
 
     public OptionalSerializer(Config config) {
       super(config, Optional.class);
@@ -56,7 +58,12 @@ public final class OptionalSerializers {
 
     @Override
     public Optional read(ReadContext readContext) {
-      return Optional.ofNullable(readContext.readRef());
+      Object value = readContext.readRef();
+      if (value == null) {
+        return Optional.empty();
+      }
+      readContext.reserveGraphMemory(OPTIONAL_OWNER_BYTES);
+      return Optional.of(value);
     }
   }
 

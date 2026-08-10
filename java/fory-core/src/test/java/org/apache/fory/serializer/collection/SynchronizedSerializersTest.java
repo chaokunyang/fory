@@ -20,9 +20,11 @@
 package org.apache.fory.serializer.collection;
 
 import static org.testng.Assert.assertEquals;
+import static org.testng.Assert.assertSame;
 import static org.testng.Assert.assertTrue;
 
 import com.google.common.collect.ImmutableMap;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
@@ -88,6 +90,30 @@ public class SynchronizedSerializersTest extends ForyTestBase {
               .getName()
               .contains("Synchronized"));
     }
+  }
+
+  @Test
+  public void testFinalWrapperPublication() {
+    Fory fory = builder().withRefTracking(true).build();
+    List<String> value = Collections.synchronizedList(new ArrayList<>(Arrays.asList("a", "b")));
+    Serializer serializer =
+        SynchronizedSerializers.createSerializer(fory.getTypeResolver(), value.getClass());
+    MemoryBuffer buffer = MemoryUtils.buffer(64);
+    writeSerializer(fory, serializer, buffer, value);
+
+    withReadContext(
+        fory,
+        buffer,
+        readContext -> {
+          int refId = readContext.preserveRefId();
+          Object result = serializer.read(readContext);
+          assertSame(readContext.getReadRef(refId), result);
+          return result;
+        });
+
+    List<Object> aliases = Arrays.asList(value, value);
+    List<?> decoded = (List<?>) fory.deserialize(fory.serialize(aliases));
+    assertSame(decoded.get(0), decoded.get(1));
   }
 
   private static FieldAccessor sourceAccessor(Class<?> cls) {

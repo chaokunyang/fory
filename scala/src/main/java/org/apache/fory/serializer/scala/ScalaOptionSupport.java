@@ -17,27 +17,21 @@
  * under the License.
  */
 
-package org.apache.fory.context;
+package org.apache.fory.serializer.scala;
 
-import org.apache.fory.collection.ObjectArray;
-import org.apache.fory.resolver.TypeInfo;
+import org.apache.fory.annotation.Internal;
+import org.apache.fory.context.ReadContext;
 
-/**
- * Read-side state for meta-share deserialization.
- *
- * <p>When scoped meta share is disabled, the same instance can be reused across multiple reads so
- * type definitions announced by the peer remain available for later payloads.
- */
-public class MetaReadContext {
-  private static final int MAX_RETAINED_TYPE_INFOS = 1024;
+/** Materializes Scala {@link scala.Option} values with their retained-owner reservation. */
+@Internal
+public final class ScalaOptionSupport {
+  private ScalaOptionSupport() {}
 
-  /**
-   * Type infos announced by the peer, indexed by the protocol id assigned during the current or
-   * shared meta-share session.
-   */
-  public final ObjectArray<TypeInfo> readTypeInfos = new ObjectArray<>();
-
-  void reset() {
-    readTypeInfos.clearApproximate(MAX_RETAINED_TYPE_INFOS);
+  public static scala.Option<Object> wrap(ReadContext readContext, Object value) {
+    if (value == null) {
+      return scala.Option.empty();
+    }
+    readContext.reserveGraphMemory(ScalaGraphMemory.SOME_BYTES);
+    return new scala.Some<>(value);
   }
 }

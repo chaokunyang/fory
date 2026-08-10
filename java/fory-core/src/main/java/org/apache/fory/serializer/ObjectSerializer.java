@@ -215,11 +215,22 @@ public final class ObjectSerializer<T> extends AbstractObjectSerializer<T> {
     readContext.reserveGraphMemory((long) objectGraphMemoryBytes);
     MemoryBuffer buffer = readContext.getBuffer();
     if (isRecord) {
+      boolean hasRecordRef = readContext.hasPreservedRefId();
+      int recordRefId = hasRecordRef ? readContext.lastPreservedRefId() : -1;
       Object[] fields = readFields(readContext);
       fields = RecordUtils.remapping(recordInfo, fields);
-      T obj = objectInstantiator.newInstanceWithArguments(fields);
-      Arrays.fill(recordInfo.getRecordComponents(), null);
-      return obj;
+      try {
+        T record = objectInstantiator.newInstanceWithArguments(fields);
+        if (hasRecordRef) {
+          readContext.setReadRef(recordRefId, record);
+          if (readContext.hasPreservedRefId() && readContext.lastPreservedRefId() == recordRefId) {
+            readContext.reference(record);
+          }
+        }
+        return record;
+      } finally {
+        Arrays.fill(recordInfo.getRecordComponents(), null);
+      }
     }
     T obj = newBean();
     if (trackingRef) {

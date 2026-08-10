@@ -16,6 +16,7 @@
 // under the License.
 
 using System.Buffers;
+using System.Runtime.CompilerServices;
 
 namespace Apache.Fory;
 
@@ -359,10 +360,18 @@ public sealed class TypeMetaFieldInfo : IEquatable<TypeMetaFieldInfo>
         int size = (header >> 2) & 0b1111;
         if (size == TypeMetaConstants.FieldNameSizeThreshold)
         {
-            size += (int)reader.ReadVarUInt32();
+            uint extension = reader.ReadVarUInt32();
+            if (encodingFlags == 3 && extension > short.MaxValue - TypeMetaConstants.FieldNameSizeThreshold)
+            {
+                // Wire tags are varuint32, but local generated dispatch owns Int16 ids.
+                // Reject before narrowing so a high remote tag cannot alias a local field.
+                ThrowFieldIdOutOfRange();
+            }
+
+            size = checked(size + (int)extension);
         }
 
-        size += 1;
+        size = checked(size + 1);
 
         bool nullable = (header & 0b10) != 0;
         bool trackRef = (header & 0b1) != 0;
@@ -370,7 +379,7 @@ public sealed class TypeMetaFieldInfo : IEquatable<TypeMetaFieldInfo>
 
         if (encodingFlags == 3)
         {
-            short fieldId = unchecked((short)(size - 1));
+            short fieldId = checked((short)(size - 1));
             return new TypeMetaFieldInfo(fieldId, $"$tag{fieldId}", fieldType);
         }
 
@@ -384,6 +393,12 @@ public sealed class TypeMetaFieldInfo : IEquatable<TypeMetaFieldInfo>
             nameBytes,
             TypeMetaEncodings.FieldNameMetaStringEncodings[encodingFlags]).Value;
         return new TypeMetaFieldInfo(null, name, fieldType);
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static void ThrowFieldIdOutOfRange()
+    {
+        throw new InvalidDataException("Type metadata field id exceeds the supported Int16 range");
     }
 
     public bool Equals(TypeMetaFieldInfo? other)

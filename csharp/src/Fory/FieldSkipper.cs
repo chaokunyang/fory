@@ -20,6 +20,7 @@ namespace Apache.Fory;
 public static class FieldSkipper
 {
     private const int UnbackedCheckInterval = 1024;
+    private static readonly int SkippedStructOwnerBytes = 2 * IntPtr.Size + sizeof(int);
 
     public static void SkipFieldValue(ReadContext context, TypeMetaFieldType fieldType)
     {
@@ -135,6 +136,11 @@ public static class FieldSkipper
 
     private static object? ReadInlineTypedPayload(ReadContext context)
     {
+        if (TrySkipUnregisteredStruct(context, publishRef: false, refId: 0, out object? owner))
+        {
+            return owner;
+        }
+
         TypeInfo typeInfo = context.TypeResolver.ReadAnyTypeInfo(context);
         context.TypeResolver.SkipAnyValue(typeInfo, context);
         return null;
@@ -142,8 +148,61 @@ public static class FieldSkipper
 
     private static object? ReadInlineTypedPayload(ReadContext context, uint refId)
     {
+        if (TrySkipUnregisteredStruct(context, publishRef: true, refId, out object? owner))
+        {
+            return owner;
+        }
+
         TypeInfo typeInfo = context.TypeResolver.ReadAnyTypeInfo(context);
         return context.TypeResolver.ReadAnyValue(typeInfo, context, refId);
+    }
+
+    private static bool TrySkipUnregisteredStruct(
+        ReadContext context,
+        bool publishRef,
+        uint refId,
+        out object? owner)
+    {
+        owner = null;
+        int typeInfoStart = context.Reader.Cursor;
+        uint rawTypeId = context.Reader.ReadUInt8();
+        if (rawTypeId is not (uint)TypeId.CompatibleStruct and
+            not (uint)TypeId.NamedCompatibleStruct)
+        {
+            context.Reader.SetCursor(typeInfoStart);
+            return false;
+        }
+
+        TypeMeta typeMeta = context.ReadTypeMeta();
+
+        if (typeMeta.TypeId != rawTypeId)
+        {
+            throw new TypeMismatchException(rawTypeId, typeMeta.TypeId ?? uint.MaxValue);
+        }
+
+        if (context.TypeResolver.TryGetLocalTypeInfo(typeMeta, out _))
+        {
+            context.Reader.SetCursor(typeInfoStart);
+            return false;
+        }
+
+        // A removed Struct is authorized by its generated enclosing schema. Keep dynamic roots
+        // registration-gated, but make this skip path's empty object the final reference owner so
+        // later aliases preserve identity without adding parallel reference state.
+        if (publishRef)
+        {
+            context.ReserveGraphMemory(SkippedStructOwnerBytes);
+            owner = new object();
+            context.RefReader.StoreRefAt(refId, owner);
+        }
+
+        context.IncreaseReadDepth();
+        foreach (TypeMetaFieldInfo field in typeMeta.Fields)
+        {
+            SkipFieldValue(context, field.FieldType);
+        }
+        context.DecreaseReadDepth();
+        return true;
     }
 
     private static object? ReadResolvedValue(ReadContext context, TypeInfo typeInfo, RefMode refMode)

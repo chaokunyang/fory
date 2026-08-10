@@ -2832,7 +2832,9 @@ public sealed partial class ForyModelGenerator
             }
         }
 
-        return sb.ToString();
+        // Structural identity validation must use the same canonical spelling that TypeMeta
+        // emission writes, or two accepted members can collapse to one wire field name.
+        return sb.ToString().Replace("b_float16", "bfloat16");
     }
 
     private static string Sanitize(string name)

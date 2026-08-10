@@ -432,6 +432,13 @@ public sealed class OneStringField
 }
 
 [ForyStruct]
+public sealed class TaggedIntField
+{
+    [ForyField(15)]
+    public int Value { get; set; }
+}
+
+[ForyStruct]
 public sealed class TwoStringField
 {
     public string F1 { get; set; } = string.Empty;
@@ -834,18 +841,12 @@ public sealed class ForyRuntimeTests
     }
 
     [Fact]
-    public void ThreadSafeForyRegistrationAppliesToInitializedThreadLocalInstance()
+    public void ThreadSafeForyRejectsRegistrationAfterRoot()
     {
         using ThreadSafeFory fory = ForyRuntime.Builder().TrackRef(true).BuildThreadSafe();
         _ = fory.Serialize(1);
-        fory.Register<Node>(952);
 
-        Node source = new() { Value = 7 };
-        source.Next = source;
-        Node decoded = fory.Deserialize<Node>(fory.Serialize(source));
-        Assert.Equal(7, decoded.Value);
-        Assert.NotNull(decoded.Next);
-        Assert.Same(decoded, decoded.Next);
+        Assert.Throws<InvalidOperationException>(() => fory.Register<Node>(952));
     }
 
     [Fact]
@@ -3155,6 +3156,42 @@ public sealed class ForyRuntimeTests
     }
 
     [Fact]
+    public void TypeMetaRejectsOversizedFieldId()
+    {
+        TypeMeta typeMeta = new(
+            (uint)TypeId.CompatibleStruct,
+            515,
+            MetaString.Empty('.', '_'),
+            MetaString.Empty('$', '_'),
+            registerByName: false,
+            [new TypeMetaFieldInfo(15, "value", new TypeMetaFieldType((uint)TypeId.VarInt32, false))]);
+        byte[] encoded = typeMeta.Encode();
+
+        TypeMeta decoded = TypeMeta.Decode(encoded);
+        Assert.Equal((short)15, Assert.Single(decoded.Fields).FieldId);
+
+        byte[] aliased = RewriteTypeMetaFieldId(encoded, 65_551);
+        Assert.Throws<InvalidDataException>(() => TypeMeta.Decode(aliased));
+    }
+
+    [Fact]
+    public void CompatibleReadRejectsTagAlias()
+    {
+        ForyRuntime writer = ForyRuntime.Builder().Compatible(true).Build();
+        writer.Register<TaggedIntField>(515);
+        byte[] payload = writer.Serialize(new TaggedIntField { Value = 42 });
+
+        ForyRuntime controlReader = ForyRuntime.Builder().Compatible(true).Build();
+        controlReader.Register<TaggedIntField>(515);
+        Assert.Equal(42, controlReader.Deserialize<TaggedIntField>(payload).Value);
+
+        byte[] aliased = RewriteCompatibleTypeMetaFieldId(payload, 65_551);
+        ForyRuntime aliasReader = ForyRuntime.Builder().Compatible(true).Build();
+        aliasReader.Register<TaggedIntField>(515);
+        Assert.Throws<InvalidDataException>(() => aliasReader.Deserialize<TaggedIntField>(aliased));
+    }
+
+    [Fact]
     public void TypeMetaAssignFieldIdsPrefersIdAndFallsBackToName()
     {
         List<TypeMetaFieldInfo> localFields =
@@ -3371,6 +3408,60 @@ public sealed class ForyRuntimeTests
         return rewrittenPayload;
     }
 
+    private static byte[] RewriteCompatibleTypeMetaFieldId(byte[] payload, uint fieldId)
+    {
+        (int typeMetaStart, int typeMetaEnd, _) = ReadCompatibleTypeMetaRange(payload);
+        byte[] encodedTypeMeta = payload[typeMetaStart..typeMetaEnd];
+        byte[] rewrittenTypeMeta = RewriteTypeMetaFieldId(encodedTypeMeta, fieldId);
+
+        byte[] rewrittenPayload = new byte[typeMetaStart + rewrittenTypeMeta.Length + (payload.Length - typeMetaEnd)];
+        Buffer.BlockCopy(payload, 0, rewrittenPayload, 0, typeMetaStart);
+        Buffer.BlockCopy(rewrittenTypeMeta, 0, rewrittenPayload, typeMetaStart, rewrittenTypeMeta.Length);
+        Buffer.BlockCopy(payload, typeMetaEnd, rewrittenPayload, typeMetaStart + rewrittenTypeMeta.Length, payload.Length - typeMetaEnd);
+        return rewrittenPayload;
+    }
+
+    private static byte[] RewriteTypeMetaFieldId(byte[] encoded, uint fieldId)
+    {
+        Assert.True(fieldId >= 15);
+        ulong originalHeader = BinaryPrimitives.ReadUInt64LittleEndian(encoded);
+        int bodyOffset = TypeMetaBodyOffset(encoded, originalHeader);
+        byte[] originalBody = encoded[bodyOffset..];
+        ByteReader bodyReader = new(originalBody);
+        byte metaHeader = bodyReader.ReadUInt8();
+        Assert.Equal(1, metaHeader & 0b1_1111);
+        Assert.Equal(0, metaHeader & 0b10_0000);
+        _ = bodyReader.ReadVarUInt32();
+
+        int fieldHeaderOffset = bodyReader.Cursor;
+        byte fieldHeader = bodyReader.ReadUInt8();
+        Assert.Equal(3, fieldHeader >> 6);
+        Assert.Equal(15, (fieldHeader >> 2) & 0b1111);
+        int extensionOffset = bodyReader.Cursor;
+        _ = bodyReader.ReadVarUInt32();
+        int fieldTypeOffset = bodyReader.Cursor;
+
+        ByteWriter extensionWriter = new();
+        extensionWriter.WriteVarUInt32(fieldId - 15);
+        byte[] extension = extensionWriter.ToArray();
+        byte[] body = new byte[extensionOffset + extension.Length + (originalBody.Length - fieldTypeOffset)];
+        Buffer.BlockCopy(originalBody, 0, body, 0, extensionOffset);
+        Buffer.BlockCopy(extension, 0, body, extensionOffset, extension.Length);
+        Buffer.BlockCopy(originalBody, fieldTypeOffset, body, extensionOffset + extension.Length, originalBody.Length - fieldTypeOffset);
+
+        Assert.Equal(fieldHeaderOffset + 1, extensionOffset);
+        ulong headerLowBits = (ulong)Math.Min(body.Length, 0xff);
+        ByteWriter writer = new();
+        writer.WriteUInt64(TypeMetaHashBits(body, headerLowBits) | headerLowBits);
+        if (body.Length >= 0xff)
+        {
+            writer.WriteVarUInt32((uint)(body.Length - 0xff));
+        }
+
+        writer.WriteBytes(body);
+        return writer.ToArray();
+    }
+
     private static TReader CompatibleRead<TWriter, TReader>(TWriter value, bool trackRef = false)
     {
         ForyRuntime writer = ForyRuntime.Builder().Compatible(true).TrackRef(trackRef).Build();
@@ -3439,6 +3530,19 @@ public sealed class ForyRuntimeTests
     private static ulong BodyOnlyTypeMetaHashBits(ReadOnlySpan<byte> body)
     {
         (ulong bodyHash, _) = MurmurHash3.X64_128(body, 47);
+        ulong shifted = bodyHash << 12;
+        long signed = unchecked((long)shifted);
+        long absSigned = signed == long.MinValue ? signed : Math.Abs(signed);
+        return unchecked((ulong)absSigned) & (ulong.MaxValue << 12);
+    }
+
+    private static ulong TypeMetaHashBits(ReadOnlySpan<byte> body, ulong headerLowBits)
+    {
+        byte[] hashInput = new byte[body.Length + sizeof(ushort)];
+        body.CopyTo(hashInput);
+        hashInput[body.Length] = unchecked((byte)headerLowBits);
+        hashInput[body.Length + 1] = unchecked((byte)(headerLowBits >> 8));
+        (ulong bodyHash, _) = MurmurHash3.X64_128(hashInput, 47);
         ulong shifted = bodyHash << 12;
         long signed = unchecked((long)shifted);
         long absSigned = signed == long.MinValue ? signed : Math.Abs(signed);

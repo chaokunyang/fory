@@ -77,6 +77,35 @@ public sealed class CustomPayloadSerializer : Serializer<CustomPayload>
     }
 }
 
+[ForyStruct]
+public sealed class FrozenPayload
+{
+    public int Value { get; set; }
+}
+
+public sealed class FrozenPayloadSerializer : Serializer<FrozenPayload>
+{
+    public static int Constructions;
+
+    public FrozenPayloadSerializer()
+    {
+        Interlocked.Increment(ref Constructions);
+    }
+
+    public override FrozenPayload DefaultValue => null!;
+
+    public override void WriteData(WriteContext context, in FrozenPayload value, bool hasGenerics)
+    {
+        _ = hasGenerics;
+        context.Writer.WriteVarInt32(value.Value);
+    }
+
+    public override FrozenPayload ReadData(ReadContext context)
+    {
+        return new FrozenPayload { Value = context.Reader.ReadVarInt32() };
+    }
+}
+
 public sealed class RuntimeEdgeCaseTests
 {
     [Fact]
@@ -742,7 +771,6 @@ public sealed class RuntimeEdgeCaseTests
     public void ThreadSafeDottedSerializerNameRoundTrip()
     {
         using ThreadSafeFory fory = ForyRuntime.Builder().BuildThreadSafe();
-        _ = fory.Serialize(1);
         fory.Register<CustomPayload, CustomPayloadSerializer>("test.custom_payload");
 
         CustomPayload decoded = fory.Deserialize<CustomPayload>(
@@ -753,14 +781,559 @@ public sealed class RuntimeEdgeCaseTests
     }
 
     [Fact]
-    public void DeserializeRejectsTrailingBytes()
+    public void NamedTypeRefsUseCurrentRole()
+    {
+        ForyRuntime fory = NewNamedRefFory();
+
+        TypeNotRegisteredException exception = Assert.Throws<TypeNotRegisteredException>(
+            () => fory.Deserialize<List<object?>>(NamedRefPayload(crossRoleNamespace: true)));
+
+        Assert.Contains("namespace=.", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void NamedTypeSameRoleRefs()
+    {
+        ForyRuntime fory = NewNamedRefFory();
+
+        List<object?> decoded = fory.Deserialize<List<object?>>(
+            NamedRefPayload(crossRoleNamespace: false));
+
+        Assert.Collection(
+            decoded,
+            value => Assert.Equal(1, Assert.IsType<CustomPayload>(value).Id),
+            value => Assert.Equal(2, Assert.IsType<CustomPayload>(value).Id));
+    }
+
+    [Fact]
+    public void LongNamedRefsCacheSameRole()
+    {
+        string namespaceName = new('n', 512);
+        string typeName = new('T', 512);
+        ForyRuntime fory = ForyRuntime.Builder().Compatible(false).Build();
+        fory.Register<CustomPayload, CustomPayloadSerializer>(namespaceName, typeName);
+        MetaString namespaceMeta = MetaStringEncoder.Namespace.Encode(
+            namespaceName,
+            MetaStringEncoding.Utf8);
+        MetaString typeNameMeta = MetaStringEncoder.TypeName.Encode(
+            typeName,
+            MetaStringEncoding.Utf8);
+
+        List<object?> decoded = fory.Deserialize<List<object?>>(
+            RepeatedNamedRefPayload(namespaceMeta, typeNameMeta, 16));
+
+        Assert.Equal(16, decoded.Count);
+        Assert.Equal(1, Assert.IsType<CustomPayload>(decoded[0]).Id);
+        Assert.Equal(16, Assert.IsType<CustomPayload>(decoded[^1]).Id);
+        Assert.Equal(1, CachedRoleCount(ReadContextFor(fory).GetReadMetaStringOccurrence(0)!));
+        ReadMetaStringOccurrence typeOccurrence =
+            ReadContextFor(fory).GetReadMetaStringOccurrence(1)!;
+        Assert.Equal(1, CachedRoleCount(typeOccurrence));
+        Assert.Equal(2, CachedResolutionCount(typeOccurrence));
+    }
+
+    [Fact]
+    public void LongNamedRefsCacheCrossRole()
+    {
+        string typeName = new('$', 512);
+        string namespaceName = new('.', 512);
+        ForyRuntime fory = ForyRuntime.Builder().Compatible(false).Build();
+        fory.Register<CustomPayload, CustomPayloadSerializer>("seed", typeName);
+        fory.Register<CustomPayload>(namespaceName, "Victim");
+
+        List<object?> decoded = fory.Deserialize<List<object?>>(
+            RepeatedCrossRolePayload(typeName, 16));
+
+        Assert.Equal(16, decoded.Count);
+        Assert.Equal(1, Assert.IsType<CustomPayload>(decoded[0]).Id);
+        Assert.Equal(16, Assert.IsType<CustomPayload>(decoded[^1]).Id);
+        ReadContext context = ReadContextFor(fory);
+        ReadMetaStringOccurrence sharedOccurrence = context.GetReadMetaStringOccurrence(1)!;
+        Assert.Equal(2, CachedRoleCount(sharedOccurrence));
+        Assert.Equal(2, CachedResolutionCount(sharedOccurrence));
+        ReadMetaStringOccurrence victimOccurrence = context.GetReadMetaStringOccurrence(2)!;
+        Assert.Equal(1, CachedRoleCount(victimOccurrence));
+        Assert.Equal(2, CachedResolutionCount(victimOccurrence));
+    }
+
+    [Fact]
+    public void NamedRefsCacheMultiplePairs()
+    {
+        string typeName = new('T', 512);
+        ForyRuntime fory = ForyRuntime.Builder().Compatible(false).Build();
+        fory.Register<CustomPayload, CustomPayloadSerializer>("left", typeName);
+        fory.Register<CustomPayload>("right", typeName);
+
+        List<object?> decoded = fory.Deserialize<List<object?>>(
+            AlternatingNamedPairs(typeName, 16));
+
+        Assert.Equal(16, decoded.Count);
+        Assert.Equal(1, Assert.IsType<CustomPayload>(decoded[0]).Id);
+        Assert.Equal(16, Assert.IsType<CustomPayload>(decoded[^1]).Id);
+        ReadContext context = ReadContextFor(fory);
+        ReadMetaStringOccurrence typeOccurrence = context.GetReadMetaStringOccurrence(1)!;
+        Assert.Equal(2, CachedPairCount(typeOccurrence));
+        Assert.NotNull(context.GetReadMetaStringOccurrence(16));
+        Assert.Null(context.GetReadMetaStringOccurrence(17));
+    }
+
+    [Fact]
+    public void NamedRefKindMismatchFails()
+    {
+        string typeName = new('T', 512);
+        ForyRuntime fory = ForyRuntime.Builder().Compatible(false).Build();
+        fory.Register<CustomPayload, CustomPayloadSerializer>("left", typeName);
+
+        InvalidDataException exception = Assert.Throws<InvalidDataException>(
+            () => fory.Deserialize<List<object?>>(NamedKindMismatch(typeName)));
+
+        Assert.Contains("NamedStruct", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void RegistryFreezesAfterSuccessfulRoot()
     {
         ForyRuntime fory = ForyRuntime.Builder().Build();
-        byte[] payload = fory.Serialize(123);
+        Assert.Equal(1, fory.Deserialize<int>(fory.Serialize(1)));
+
+        Assert.Throws<InvalidOperationException>(() => fory.Register<FrozenPayload>(710));
+    }
+
+    [Fact]
+    public void FrozenRegistryRejectsBeforeMutation()
+    {
+        ForyRuntime fory = ForyRuntime.Builder().Build();
+        _ = fory.Serialize(1);
+        FrozenPayloadSerializer.Constructions = 0;
+
+        Action[] registrations =
+        [
+            () => fory.Register<FrozenPayload>(711),
+            () => fory.Register<FrozenPayload>(string.Empty),
+            () => fory.Register<FrozenPayload>("test", "bad.name"),
+            () => fory.Register<FrozenPayload, FrozenPayloadSerializer>(712),
+            () => fory.Register<FrozenPayload, FrozenPayloadSerializer>(string.Empty),
+            () => fory.Register<FrozenPayload, FrozenPayloadSerializer>("test", "bad.name"),
+        ];
+
+        foreach (Action registration in registrations)
+        {
+            Assert.Throws<InvalidOperationException>(registration);
+        }
+
+        Assert.Equal(0, FrozenPayloadSerializer.Constructions);
+    }
+
+    [Fact]
+    public void FailedRootFreezesRegistry()
+    {
+        ForyRuntime fory = ForyRuntime.Builder().Build();
+
+        Assert.Throws<OutOfBoundsException>(() => fory.Deserialize<int>(Array.Empty<byte>()));
+        Assert.Throws<InvalidOperationException>(() => fory.Register<FrozenPayload>(713));
+    }
+
+    [Fact]
+    public void FailedReaderRootFreezesRegistry()
+    {
+        ForyRuntime fory = ForyRuntime.Builder().Build();
+
+        Assert.Throws<OutOfBoundsException>(
+            () => fory.DeserializeFromReader<int>(new ByteReader(Array.Empty<byte>())));
+        Assert.Throws<InvalidOperationException>(() => fory.Register<FrozenPayload>(714));
+    }
+
+    [Fact]
+    public void ThreadSafeFailedRootFreezesRegistry()
+    {
+        using ThreadSafeFory fory = ForyRuntime.Builder().BuildThreadSafe();
+
+        Assert.Throws<OutOfBoundsException>(() => fory.Deserialize<int>(Array.Empty<byte>()));
+        Assert.Throws<InvalidOperationException>(() => fory.Register<FrozenPayload>(715));
+        FrozenPayloadSerializer.Constructions = 0;
+        Assert.Throws<InvalidOperationException>(
+            () => fory.Register<FrozenPayload, FrozenPayloadSerializer>(string.Empty));
+        Assert.Equal(0, FrozenPayloadSerializer.Constructions);
+    }
+
+    [Fact]
+    public async Task ThreadSafeRootAndRegistrationRace()
+    {
+        using ThreadSafeFory fory = ForyRuntime.Builder().BuildThreadSafe();
+        using Barrier start = new(2);
+        Exception? registrationError = null;
+
+        Task root = Task.Run(() =>
+        {
+            start.SignalAndWait();
+            _ = fory.Serialize(1);
+        });
+        Task registration = Task.Run(() =>
+        {
+            start.SignalAndWait();
+            try
+            {
+                fory.Register<FrozenPayload>(716);
+            }
+            catch (Exception error)
+            {
+                registrationError = error;
+            }
+        });
+
+        await Task.WhenAll(root, registration);
+        Assert.True(registrationError is null or InvalidOperationException);
+        Assert.Throws<InvalidOperationException>(() => fory.Register<TimeEnvelope>(717));
+
+        if (registrationError is null)
+        {
+            FrozenPayload value = new() { Value = 42 };
+            Assert.Equal(value.Value, fory.Deserialize<FrozenPayload>(fory.Serialize(value)).Value);
+        }
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void TrailingBytesResetReadState(bool useSpan)
+    {
+        ForyRuntime writer = NewCompatibleTimeFory();
+        byte[] payload = writer.Serialize(new TimeEnvelope { Dates = [new DateOnly(2024, 1, 2)] });
+        ForyRuntime probe = NewCompatibleTimeFory();
+        _ = probe.DeserializeFromReader<TimeEnvelope>(new ByteReader(payload));
+        Assert.NotNull(ReadContextFor(probe).GetTypeMetaRef(0));
+
+        ForyRuntime reader = NewCompatibleTimeFory();
         byte[] invalidPayload = [.. payload, 0x7F];
 
-        InvalidDataException exception = Assert.Throws<InvalidDataException>(() => fory.Deserialize<int>(invalidPayload));
+        InvalidDataException exception = useSpan
+            ? Assert.Throws<InvalidDataException>(() => DeserializeSpan(reader, invalidPayload))
+            : Assert.Throws<InvalidDataException>(() => reader.Deserialize<TimeEnvelope>(invalidPayload));
         Assert.Contains("unexpected trailing bytes", exception.Message, StringComparison.Ordinal);
+        ReadContext context = ReadContextFor(reader);
+        Assert.Null(context.GetTypeMetaRef(0));
+        Assert.Null(context.GetReadMetaStringOccurrence(0));
+    }
+
+    [Fact]
+    public void InnerFailureClearsTypeMetaCache()
+    {
+        ForyRuntime fory = ForyRuntime.Builder()
+            .Compatible(false)
+            .MaxSchemaVersionsPerType(1)
+            .Build();
+        ReadContext context = ReadContextFor(fory);
+        TypeMeta first = ReadAndStoreTypeMeta(context, RemoteStructTypeMeta(901, "first"));
+        ulong firstHeader = EncodedTypeMetaHeader(first);
+
+        Assert.Throws<InvalidDataException>(() => fory.Deserialize<int>([0]));
+
+        Assert.False(context.TryGetTypeMetaByHeader(firstHeader, out _));
+        TypeMeta second = ReadAndStoreTypeMeta(context, RemoteStructTypeMeta(901, "second"));
+        Assert.True(context.TryGetTypeMetaByHeader(EncodedTypeMetaHeader(second), out _));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void TrailingFailureClearsTypeMetaCache(bool useSpan)
+    {
+        ForyRuntime fory = ForyRuntime.Builder()
+            .Compatible(false)
+            .MaxSchemaVersionsPerType(1)
+            .Build();
+        ReadContext context = ReadContextFor(fory);
+        TypeMeta first = ReadAndStoreTypeMeta(context, RemoteStructTypeMeta(901, "first"));
+        ulong firstHeader = EncodedTypeMetaHeader(first);
+        byte[] invalidPayload = [.. fory.Serialize(123), 0x7F];
+
+        if (useSpan)
+        {
+            Assert.Throws<InvalidDataException>(() => DeserializeIntSpan(fory, invalidPayload));
+        }
+        else
+        {
+            Assert.Throws<InvalidDataException>(() => fory.Deserialize<int>(invalidPayload));
+        }
+
+        Assert.False(context.TryGetTypeMetaByHeader(firstHeader, out _));
+        TypeMeta second = ReadAndStoreTypeMeta(context, RemoteStructTypeMeta(901, "second"));
+        Assert.True(context.TryGetTypeMetaByHeader(EncodedTypeMetaHeader(second), out _));
+    }
+
+    private static ForyRuntime NewCompatibleTimeFory()
+    {
+        ForyRuntime fory = ForyRuntime.Builder().Compatible(true).Build();
+        fory.Register<TimeEnvelope>(701);
+        return fory;
+    }
+
+    private static void DeserializeSpan(ForyRuntime fory, byte[] payload)
+    {
+        _ = fory.Deserialize<TimeEnvelope>(payload.AsSpan());
+    }
+
+    private static void DeserializeIntSpan(ForyRuntime fory, byte[] payload)
+    {
+        _ = fory.Deserialize<int>(payload.AsSpan());
+    }
+
+    private static ForyRuntime NewNamedRefFory()
+    {
+        ForyRuntime fory = ForyRuntime.Builder().Compatible(false).Build();
+        fory.Register<CustomPayload, CustomPayloadSerializer>("seed", "$");
+        fory.Register<CustomPayload>("$", "Victim");
+        return fory;
+    }
+
+    private static byte[] NamedRefPayload(bool crossRoleNamespace)
+    {
+        MetaString seedNamespace = MetaStringEncoder.Namespace.Encode(
+            "seed",
+            MetaStringEncoding.Utf8);
+        MetaString sharedSpecial = MetaStringEncoder.TypeName.Encode(
+            "$",
+            MetaStringEncoding.LowerUpperDigitSpecial);
+        MetaString victimType = MetaStringEncoder.TypeName.Encode(
+            "Victim",
+            MetaStringEncoding.Utf8);
+
+        ByteWriter writer = new();
+        writer.WriteUInt8(ForyHeaderFlag.IsXlang);
+        writer.WriteInt8((sbyte)RefFlag.NotNullValue);
+        writer.WriteUInt8((byte)TypeId.List);
+        writer.WriteVarUInt32(2);
+        writer.WriteUInt8(0);
+
+        writer.WriteUInt8((byte)TypeId.NamedExt);
+        WriteMetaString(writer, seedNamespace);
+        WriteMetaString(writer, sharedSpecial);
+        writer.WriteVarInt32(8);
+
+        writer.WriteUInt8((byte)TypeId.NamedExt);
+        writer.WriteVarUInt32(crossRoleNamespace ? 5u : 3u);
+        if (crossRoleNamespace)
+        {
+            WriteMetaString(writer, victimType);
+        }
+        else
+        {
+            writer.WriteVarUInt32(5);
+        }
+        writer.WriteVarInt32(9);
+        return writer.ToArray();
+    }
+
+    private static byte[] RepeatedNamedRefPayload(
+        MetaString namespaceName,
+        MetaString typeName,
+        int count)
+    {
+        ByteWriter writer = NamedListWriter(count);
+        for (int i = 0; i < count; i++)
+        {
+            writer.WriteUInt8((byte)TypeId.NamedExt);
+            if (i == 0)
+            {
+                WriteMetaString(writer, namespaceName);
+                WriteMetaString(writer, typeName);
+            }
+            else
+            {
+                writer.WriteVarUInt32(3);
+                writer.WriteVarUInt32(5);
+            }
+
+            writer.WriteVarInt32(i + 8);
+        }
+
+        return writer.ToArray();
+    }
+
+    private static byte[] RepeatedCrossRolePayload(string sharedTypeName, int count)
+    {
+        MetaString seedNamespace = MetaStringEncoder.Namespace.Encode(
+            "seed",
+            MetaStringEncoding.Utf8);
+        MetaString sharedSpecial = MetaStringEncoder.TypeName.Encode(
+            sharedTypeName,
+            MetaStringEncoding.LowerUpperDigitSpecial);
+        MetaString victimType = MetaStringEncoder.TypeName.Encode(
+            "Victim",
+            MetaStringEncoding.Utf8);
+        ByteWriter writer = NamedListWriter(count);
+        for (int i = 0; i < count; i++)
+        {
+            writer.WriteUInt8((byte)TypeId.NamedExt);
+            if (i == 0)
+            {
+                WriteMetaString(writer, seedNamespace);
+                WriteMetaString(writer, sharedSpecial);
+            }
+            else
+            {
+                writer.WriteVarUInt32(5);
+                if (i == 1)
+                {
+                    WriteMetaString(writer, victimType);
+                }
+                else
+                {
+                    writer.WriteVarUInt32(7);
+                }
+            }
+
+            writer.WriteVarInt32(i + 8);
+        }
+
+        return writer.ToArray();
+    }
+
+    private static byte[] AlternatingNamedPairs(string typeName, int count)
+    {
+        MetaString typeNameMeta = MetaStringEncoder.TypeName.Encode(
+            typeName,
+            MetaStringEncoding.Utf8);
+        ByteWriter writer = NamedListWriter(count);
+        for (int i = 0; i < count; i++)
+        {
+            MetaString namespaceMeta = MetaStringEncoder.Namespace.Encode(
+                (i & 1) == 0 ? "left" : "right",
+                MetaStringEncoding.Utf8);
+            writer.WriteUInt8((byte)TypeId.NamedExt);
+            WriteMetaString(writer, namespaceMeta);
+            if (i == 0)
+            {
+                WriteMetaString(writer, typeNameMeta);
+            }
+            else
+            {
+                writer.WriteVarUInt32(5);
+            }
+
+            writer.WriteVarInt32(i + 8);
+        }
+
+        return writer.ToArray();
+    }
+
+    private static byte[] NamedKindMismatch(string typeName)
+    {
+        MetaString namespaceMeta = MetaStringEncoder.Namespace.Encode(
+            "left",
+            MetaStringEncoding.Utf8);
+        MetaString typeNameMeta = MetaStringEncoder.TypeName.Encode(
+            typeName,
+            MetaStringEncoding.Utf8);
+        ByteWriter writer = NamedListWriter(2);
+        writer.WriteUInt8((byte)TypeId.NamedExt);
+        WriteMetaString(writer, namespaceMeta);
+        WriteMetaString(writer, typeNameMeta);
+        writer.WriteVarInt32(8);
+        writer.WriteUInt8((byte)TypeId.NamedStruct);
+        writer.WriteVarUInt32(3);
+        writer.WriteVarUInt32(5);
+        return writer.ToArray();
+    }
+
+    private static ByteWriter NamedListWriter(int count)
+    {
+        ByteWriter writer = new();
+        writer.WriteUInt8(ForyHeaderFlag.IsXlang);
+        writer.WriteInt8((sbyte)RefFlag.NotNullValue);
+        writer.WriteUInt8((byte)TypeId.List);
+        writer.WriteVarUInt32((uint)count);
+        writer.WriteUInt8(0);
+        return writer;
+    }
+
+    private static void WriteMetaString(ByteWriter writer, MetaString value)
+    {
+        Assert.True(value.Bytes.Length > 0);
+        writer.WriteVarUInt32((uint)(value.Bytes.Length << 1));
+        if (value.Bytes.Length > 16)
+        {
+            writer.WriteInt64(unchecked((long)MetaStringHash(value)));
+        }
+        else
+        {
+            writer.WriteUInt8((byte)value.Encoding);
+        }
+
+        writer.WriteBytes(value.Bytes);
+    }
+
+    private static ulong MetaStringHash(MetaString value)
+    {
+        (ulong h1, _) = MurmurHash3.X64_128(value.Bytes, 47);
+        long hash = unchecked((long)h1);
+        if (hash != long.MinValue)
+        {
+            hash = Math.Abs(hash);
+        }
+
+        ulong result = unchecked((ulong)hash);
+        if (result == 0)
+        {
+            result += 256;
+        }
+
+        result &= 0xffff_ffff_ffff_ff00;
+        return result | (byte)value.Encoding;
+    }
+
+    private static int CachedRoleCount(ReadMetaStringOccurrence occurrence)
+    {
+        return HasOccurrenceValue(occurrence, "_namespaceValue") +
+               HasOccurrenceValue(occurrence, "_typeNameValue");
+    }
+
+    private static int CachedResolutionCount(ReadMetaStringOccurrence occurrence)
+    {
+        return HasOccurrenceValue(occurrence, "_resolvedTypeInfo") +
+               HasOccurrenceValue(occurrence, "_resolvedWireTypeInfo");
+    }
+
+    private static int CachedPairCount(ReadMetaStringOccurrence occurrence)
+    {
+        System.Reflection.FieldInfo? field = typeof(ReadMetaStringOccurrence).GetField(
+            "_resolvedPairs",
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+        Assert.NotNull(field);
+        return field.GetValue(occurrence) is System.Collections.IDictionary pairs
+            ? pairs.Count
+            : HasOccurrenceValue(occurrence, "_resolvedTypeInfo");
+    }
+
+    private static int HasOccurrenceValue(
+        ReadMetaStringOccurrence occurrence,
+        string fieldName)
+    {
+        System.Reflection.FieldInfo? field = typeof(ReadMetaStringOccurrence).GetField(
+            fieldName,
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+        Assert.NotNull(field);
+        return field.GetValue(occurrence) is null ? 0 : 1;
+    }
+
+    private static ReadContext ReadContextFor(ForyRuntime fory)
+    {
+        System.Reflection.FieldInfo? field = typeof(ForyRuntime).GetField(
+            "_readContext",
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+        Assert.NotNull(field);
+        return Assert.IsType<ReadContext>(field.GetValue(fory));
+    }
+
+    [Fact]
+    public void DeserializeFromReaderReadsFrames()
+    {
+        ForyRuntime fory = ForyRuntime.Builder().Build();
+        ByteReader reader = new([.. fory.Serialize(123), .. fory.Serialize(456)]);
+
+        Assert.Equal(123, fory.DeserializeFromReader<int>(reader));
+        Assert.Equal(456, fory.DeserializeFromReader<int>(reader));
+        Assert.Equal(0, reader.Remaining);
     }
 
     [Fact]

@@ -15,9 +15,220 @@
 // specific language governing permissions and limitations
 // under the License.
 
+using System.Buffers.Binary;
 using System.Runtime.CompilerServices;
+using System.Security.Cryptography;
 
 namespace Apache.Fory;
+
+internal sealed class ReadMetaStringOccurrence
+{
+    private readonly struct NamedTypeKey : IEquatable<NamedTypeKey>
+    {
+        internal NamedTypeKey(string namespaceName, UserTypeKind kind)
+        {
+            NamespaceName = namespaceName;
+            Kind = kind;
+        }
+
+        private string NamespaceName { get; }
+
+        private UserTypeKind Kind { get; }
+
+        public bool Equals(NamedTypeKey other)
+        {
+            return Kind == other.Kind &&
+                   string.Equals(NamespaceName, other.NamespaceName, StringComparison.Ordinal);
+        }
+
+        public override bool Equals(object? obj)
+        {
+            return obj is NamedTypeKey other && Equals(other);
+        }
+
+        public override int GetHashCode()
+        {
+            return HashCode.Combine(StringComparer.Ordinal.GetHashCode(NamespaceName), Kind);
+        }
+    }
+
+    private readonly struct NamedTypeResolution
+    {
+        internal NamedTypeResolution(TypeInfo typeInfo, TypeInfo? wireTypeInfo)
+        {
+            TypeInfo = typeInfo;
+            WireTypeInfo = wireTypeInfo;
+        }
+
+        internal TypeInfo TypeInfo { get; }
+
+        internal TypeInfo? WireTypeInfo { get; }
+    }
+
+    private readonly MetaStringEncoding _encoding;
+    private readonly byte[] _bytes;
+    private string? _namespaceValue;
+    private string? _typeNameValue;
+    private string? _resolvedNamespace;
+    private UserTypeKind _resolvedKind;
+    private TypeInfo? _resolvedTypeInfo;
+    private TypeInfo? _resolvedWireTypeInfo;
+    private Dictionary<NamedTypeKey, NamedTypeResolution>? _resolvedPairs;
+
+    internal ReadMetaStringOccurrence(MetaString value)
+    {
+        _encoding = value.Encoding;
+        _bytes = value.Bytes;
+        if (value.SpecialChar1 == MetaStringDecoder.Namespace.SpecialChar1 &&
+            value.SpecialChar2 == MetaStringDecoder.Namespace.SpecialChar2)
+        {
+            _namespaceValue = value.Value;
+        }
+        else
+        {
+            _typeNameValue = value.Value;
+        }
+    }
+
+    internal MetaString GetValue(
+        MetaStringDecoder decoder,
+        IReadOnlyList<MetaStringEncoding> encodings)
+    {
+        if (!encodings.Contains(_encoding))
+        {
+            throw new InvalidDataException(
+                $"meta string encoding {_encoding} not allowed in this context");
+        }
+
+        bool namespaceRole =
+            decoder.SpecialChar1 == MetaStringDecoder.Namespace.SpecialChar1 &&
+            decoder.SpecialChar2 == MetaStringDecoder.Namespace.SpecialChar2;
+        string? cached = namespaceRole ? _namespaceValue : _typeNameValue;
+        if (cached is not null)
+        {
+            return new MetaString(
+                cached,
+                _encoding,
+                decoder.SpecialChar1,
+                decoder.SpecialChar2,
+                _bytes);
+        }
+
+        // The occurrence owns encoded identity. Decode each semantic role at most once so a tiny
+        // reference cannot repeatedly allocate or scan a long namespace/type-name body.
+        MetaString value = decoder.Decode(_bytes, _encoding);
+        if (namespaceRole)
+        {
+            _namespaceValue = value.Value;
+        }
+        else
+        {
+            _typeNameValue = value.Value;
+        }
+
+        return value;
+    }
+
+    internal bool TryGetResolution(
+        string namespaceName,
+        UserTypeKind kind,
+        out TypeInfo typeInfo,
+        out TypeInfo? wireTypeInfo)
+    {
+        if (_resolvedTypeInfo is not null &&
+            _resolvedKind == kind &&
+            string.Equals(_resolvedNamespace, namespaceName, StringComparison.Ordinal))
+        {
+            typeInfo = _resolvedTypeInfo;
+            wireTypeInfo = _resolvedWireTypeInfo;
+            return true;
+        }
+
+        if (_resolvedPairs is not null &&
+            _resolvedPairs.TryGetValue(
+                new NamedTypeKey(namespaceName, kind),
+                out NamedTypeResolution resolution))
+        {
+            typeInfo = resolution.TypeInfo;
+            wireTypeInfo = resolution.WireTypeInfo;
+            return true;
+        }
+
+        typeInfo = null!;
+        wireTypeInfo = null;
+        return false;
+    }
+
+    internal bool MatchesRegisteredIdentity(
+        MetaString namespaceName,
+        MetaString typeName,
+        UserTypeKind kind,
+        TypeInfo typeInfo)
+    {
+        if (TryGetResolution(
+                namespaceName.Value,
+                kind,
+                out TypeInfo cachedTypeInfo,
+                out _))
+        {
+            return ReferenceEquals(cachedTypeInfo, typeInfo);
+        }
+
+        string expectedNamespace = typeInfo.NamespaceName!.Value.Value;
+        string expectedTypeName = typeInfo.TypeName!.Value.Value;
+        if (namespaceName.Value != expectedNamespace ||
+            typeName.Value != expectedTypeName)
+        {
+            return false;
+        }
+
+        StoreResolution(namespaceName.Value, kind, typeInfo, wireTypeInfo: null);
+        return true;
+    }
+
+    internal void StoreResolution(
+        string namespaceName,
+        UserTypeKind kind,
+        TypeInfo typeInfo,
+        TypeInfo? wireTypeInfo)
+    {
+        if (_resolvedTypeInfo is null)
+        {
+            _resolvedNamespace = namespaceName;
+            _resolvedKind = kind;
+            _resolvedTypeInfo = typeInfo;
+            _resolvedWireTypeInfo = wireTypeInfo;
+            return;
+        }
+
+        NamedTypeKey key = new(namespaceName, kind);
+        if (_resolvedKind == kind &&
+            string.Equals(_resolvedNamespace, namespaceName, StringComparison.Ordinal))
+        {
+            _resolvedTypeInfo = typeInfo;
+            _resolvedWireTypeInfo = wireTypeInfo;
+            if (_resolvedPairs is not null)
+            {
+                _resolvedPairs[key] = new NamedTypeResolution(typeInfo, wireTypeInfo);
+            }
+
+            return;
+        }
+
+        // Keep the common single-pair path inline. Only a second successful registered pair
+        // allocates a root-scoped map, whose entries are bounded by the frozen local registry.
+        if (_resolvedPairs is null)
+        {
+            _resolvedPairs = new Dictionary<NamedTypeKey, NamedTypeResolution>(4)
+            {
+                [new NamedTypeKey(_resolvedNamespace!, _resolvedKind)] =
+                    new NamedTypeResolution(_resolvedTypeInfo, _resolvedWireTypeInfo),
+            };
+        }
+
+        _resolvedPairs[key] = new NamedTypeResolution(typeInfo, wireTypeInfo);
+    }
+}
 
 public sealed class ReadContext
 {
@@ -25,11 +236,12 @@ public sealed class ReadContext
     private const int MaxRemoteTypeMetaKeys = 8192;
 
     private readonly ReusableArray<TypeMeta> _typeMetaRefs = new();
-    private readonly UInt64Map<TypeMeta> _typeMetasByHeader = new();
+    private readonly UInt64Map<TypeMeta> _typeMetasByHeader =
+        new(placementSeed: CreateTypeMetaCacheSeed());
     private TypeMeta? _firstTypeMetaRef;
     private bool _hasFirstTypeMetaRef;
 
-    private readonly List<MetaString> _readMetaStrings = [];
+    private readonly List<ReadMetaStringOccurrence> _readMetaStrings = [];
 
     internal readonly UInt64Map<TypeInfo> _readTypeInfoByType = new();
     private readonly int _maxDynamicReadDepth;
@@ -322,14 +534,14 @@ public sealed class ReadContext
         _totalAcceptedSchemaVersions++;
     }
 
-    internal MetaString? GetReadMetaString(int index)
+    internal ReadMetaStringOccurrence? GetReadMetaStringOccurrence(int index)
     {
         return index >= 0 && index < _readMetaStrings.Count ? _readMetaStrings[index] : null;
     }
 
-    internal void AppendReadMetaString(MetaString value)
+    internal void AppendReadMetaString(ReadMetaStringOccurrence occurrence)
     {
-        _readMetaStrings.Add(value);
+        _readMetaStrings.Add(occurrence);
     }
 
     internal TypeMeta ReadTypeMeta()
@@ -561,5 +773,25 @@ public sealed class ReadContext
         _typeMetaRefs.Clear();
         _readMetaStrings.Clear();
         _remainingUnbackedContainerItems = 0;
+    }
+
+    internal void ResetAfterFailure()
+    {
+        Reset();
+        // Remote metadata may be accepted before the owning value body fails. Failed roots must
+        // not accumulate that decoded state across operations, while successful roots keep using
+        // this map as the sole checked-cache owner.
+        _typeMetasByHeader.Clear();
+        _remoteSchemaVersionsByType.Clear();
+        _totalAcceptedSchemaVersions = 0;
+    }
+
+    private static ulong CreateTypeMetaCacheSeed()
+    {
+        Span<byte> bytes = stackalloc byte[sizeof(ulong)];
+        RandomNumberGenerator.Fill(bytes);
+        // This accepted cache survives Reset, so only its in-process placement is secret; raw
+        // protocol headers remain the equality keys and the cache remains the validation owner.
+        return BinaryPrimitives.ReadUInt64LittleEndian(bytes) | 1;
     }
 }

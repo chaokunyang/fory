@@ -1040,18 +1040,23 @@ public sealed class TypeResolver
         MetaString namespaceName = ReadMetaString(
             context,
             MetaStringDecoder.Namespace,
-            TypeMetaEncodings.NamespaceMetaStringEncodings);
+            TypeMetaEncodings.NamespaceMetaStringEncodings,
+            out _);
         MetaString typeName = ReadMetaString(
             context,
             MetaStringDecoder.TypeName,
-            TypeMetaEncodings.TypeNameMetaStringEncodings);
+            TypeMetaEncodings.TypeNameMetaStringEncodings,
+            out ReadMetaStringOccurrence typeNameOccurrence);
         if (!typeInfo.RegisterByName || !typeInfo.NamespaceName.HasValue || !typeInfo.TypeName.HasValue)
         {
             throw new InvalidDataException("received name-registered type info for id-registered local type");
         }
 
-        if (namespaceName.Value != typeInfo.NamespaceName.Value.Value ||
-            typeName.Value != typeInfo.TypeName.Value.Value)
+        if (!typeNameOccurrence.MatchesRegisteredIdentity(
+                namespaceName,
+                typeName,
+                declaredKind,
+                typeInfo))
         {
             throw new InvalidDataException(
                 $"type name mismatch: expected {typeInfo.NamespaceName.Value.Value}::{typeInfo.TypeName.Value.Value}, got {namespaceName.Value}::{typeName.Value}");
@@ -1223,12 +1228,44 @@ public sealed class TypeResolver
         MetaString namespaceName = ReadMetaString(
             context,
             MetaStringDecoder.Namespace,
-            TypeMetaEncodings.NamespaceMetaStringEncodings);
+            TypeMetaEncodings.NamespaceMetaStringEncodings,
+            out _);
         MetaString typeName = ReadMetaString(
             context,
             MetaStringDecoder.TypeName,
-            TypeMetaEncodings.TypeNameMetaStringEncodings);
-        return ResolveAnyUserTypeInfo(wireTypeId, namespaceName.Value, typeName.Value, compatible: false);
+            TypeMetaEncodings.TypeNameMetaStringEncodings,
+            out ReadMetaStringOccurrence typeNameOccurrence);
+        UserTypeKind kind = NamedKind(wireTypeId);
+        if (typeNameOccurrence.TryGetResolution(
+                namespaceName.Value,
+                kind,
+                out TypeInfo cachedTypeInfo,
+                out TypeInfo? cachedWireTypeInfo))
+        {
+            if (cachedWireTypeInfo is not null)
+            {
+                return cachedWireTypeInfo;
+            }
+
+            ValidateAnyReadWireType(cachedTypeInfo, wireTypeId, compatible: false);
+            TypeInfo resolvedCachedTypeInfo = cachedTypeInfo.WithWireTypeInfo(wireTypeId);
+            typeNameOccurrence.StoreResolution(
+                namespaceName.Value,
+                kind,
+                cachedTypeInfo,
+                resolvedCachedTypeInfo);
+            return resolvedCachedTypeInfo;
+        }
+
+        TypeInfo typeInfo = RequireRegisteredTypeInfoByName(namespaceName.Value, typeName.Value);
+        ValidateAnyReadWireType(typeInfo, wireTypeId, compatible: false);
+        TypeInfo resolvedTypeInfo = typeInfo.WithWireTypeInfo(wireTypeId);
+        typeNameOccurrence.StoreResolution(
+            namespaceName.Value,
+            kind,
+            typeInfo,
+            resolvedTypeInfo);
+        return resolvedTypeInfo;
     }
 
     private TypeInfo ReadAnyTypeInfo(TypeId wireTypeId, bool compatible, ReadContext context)
@@ -1477,13 +1514,6 @@ public sealed class TypeResolver
         return typeInfo.WithWireTypeInfo(wireTypeId);
     }
 
-    private TypeInfo ResolveAnyUserTypeInfo(TypeId wireTypeId, string namespaceName, string typeName, bool compatible)
-    {
-        TypeInfo typeInfo = RequireRegisteredTypeInfoByName(namespaceName, typeName);
-        ValidateAnyReadWireType(typeInfo, wireTypeId, compatible);
-        return typeInfo.WithWireTypeInfo(wireTypeId);
-    }
-
     private void ValidateAnyReadWireType(TypeInfo typeInfo, TypeId wireTypeId, bool compatible)
     {
         if (!typeInfo.UserTypeKind.HasValue)
@@ -1565,6 +1595,18 @@ public sealed class TypeResolver
         }
 
         throw new TypeNotRegisteredException($"namespace={namespaceName}, type={typeName}");
+    }
+
+    private static UserTypeKind NamedKind(TypeId wireTypeId)
+    {
+        return wireTypeId switch
+        {
+            TypeId.NamedEnum => UserTypeKind.Enum,
+            TypeId.NamedStruct => UserTypeKind.Struct,
+            TypeId.NamedExt => UserTypeKind.Ext,
+            TypeId.NamedUnion => UserTypeKind.TypedUnion,
+            _ => throw new InvalidDataException($"wire type {wireTypeId} is not name-registered"),
+        };
     }
 
     internal bool TryGetLocalTypeInfo(TypeMeta typeMeta, out TypeInfo typeInfo)
@@ -1707,7 +1749,8 @@ public sealed class TypeResolver
     private static MetaString ReadMetaString(
         ReadContext context,
         MetaStringDecoder decoder,
-        IReadOnlyList<MetaStringEncoding> encodings)
+        IReadOnlyList<MetaStringEncoding> encodings,
+        out ReadMetaStringOccurrence occurrence)
     {
         uint header = context.Reader.ReadVarUInt32();
         int length = checked((int)(header >> 1));
@@ -1715,13 +1758,14 @@ public sealed class TypeResolver
         if (isRef)
         {
             int index = length - 1;
-            MetaString? cached = context.GetReadMetaString(index);
+            ReadMetaStringOccurrence? cached = context.GetReadMetaStringOccurrence(index);
             if (cached is null)
             {
                 throw new InvalidDataException($"unknown meta string ref index {index}");
             }
 
-            return cached.Value;
+            occurrence = cached;
+            return cached.GetValue(decoder, encodings);
         }
 
         MetaString value;
@@ -1752,7 +1796,8 @@ public sealed class TypeResolver
             value = decoder.Decode(bytes, encoding);
         }
 
-        context.AppendReadMetaString(value);
+        occurrence = new ReadMetaStringOccurrence(value);
+        context.AppendReadMetaString(occurrence);
         return value;
     }
 

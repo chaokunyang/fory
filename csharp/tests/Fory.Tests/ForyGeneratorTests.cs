@@ -1542,6 +1542,26 @@ public sealed class ForyGeneratorTests
             diagnostic => diagnostic.Id == "FORY016");
     }
 
+    [Fact]
+    public void FieldNameAliasesAreRejected()
+    {
+        const string source = """
+            using Apache.Fory;
+            namespace GeneratedDiagnostics;
+            [ForyStruct]
+            public sealed class DuplicateNames
+            {
+                public int bFloat16;
+                public int bfloat16;
+            }
+            """;
+
+        Assert.Contains(
+            GenerateDiagnostics(source),
+            diagnostic => diagnostic.Id == "FORY016" &&
+                          diagnostic.GetMessage().Contains("bfloat16", StringComparison.Ordinal));
+    }
+
     public static TheoryData<string, string> ExternalDiagnosticCases => new()
     {
         {

@@ -39,6 +39,8 @@ internal sealed class UInt64Map<TValue>
     private const ulong EmptyKey = ulong.MaxValue;
     private const double DefaultLoadFactor = 0.5;
     private const ulong GoldenRatio = 0x9E3779B97F4A7C15;
+    private const ulong SeedMix1 = 0xBF58476D1CE4E5B9;
+    private const ulong SeedMix2 = 0x94D049BB133111EB;
 
     private struct Slot
     {
@@ -52,11 +54,26 @@ internal sealed class UInt64Map<TValue>
     private int _shift;
     private int _count;
     private readonly double _loadFactor;
+    private readonly ulong _placementMultiplier;
+    private readonly ulong _placementOffset;
     private int _growThreshold;
 
-    internal UInt64Map(int initialCapacity = 2, double loadFactor = DefaultLoadFactor)
+    internal UInt64Map(
+        int initialCapacity = 2,
+        double loadFactor = DefaultLoadFactor,
+        ulong placementSeed = 0)
     {
         _loadFactor = loadFactor;
+        if (placementSeed == 0)
+        {
+            _placementMultiplier = GoldenRatio;
+            _placementOffset = 0;
+        }
+        else
+        {
+            _placementMultiplier = MixPlacementSeed(placementSeed) | 1;
+            _placementOffset = MixPlacementSeed(unchecked(placementSeed + GoldenRatio));
+        }
         int capacity = NextPowerOfTwo(Math.Max(initialCapacity, 2));
         _entries = new Slot[capacity];
         _tableCapacity = capacity;
@@ -186,7 +203,15 @@ internal sealed class UInt64Map<TValue>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private int Place(ulong key)
     {
-        return (int)((key * GoldenRatio) >> _shift);
+        return (int)(unchecked(key * _placementMultiplier + _placementOffset) >> _shift);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static ulong MixPlacementSeed(ulong value)
+    {
+        value = unchecked((value ^ (value >> 30)) * SeedMix1);
+        value = unchecked((value ^ (value >> 27)) * SeedMix2);
+        return value ^ (value >> 31);
     }
 
     private void Grow()

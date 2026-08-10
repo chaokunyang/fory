@@ -898,10 +898,11 @@ public final class TypeMeta: Equatable, @unchecked Sendable {
     ) -> Bool {
         if topLevel && remoteType.typeID == localType.typeID
             && isContainerFieldTypeID(remoteType.typeID)
-            && (remoteType.nullable != localType.nullable || remoteType.trackRef != localType.trackRef)
+            && remoteType.trackRef != localType.trackRef
         {
-            // The outer container envelope selects the optional/reference carrier. It cannot be
-            // adapted by recursively compatible element, key, or value codecs.
+            // Reference tracking changes alias ownership and cannot be adapted. Nullable framing
+            // is different: generated changed-schema reads consume the remote envelope and use the
+            // statically selected local serializer to wrap a value or provide its null default.
             return false
         }
         if topLevel, isCompatibleTopLevelListArrayFieldType(remoteType, localType) {

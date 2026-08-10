@@ -514,31 +514,33 @@ func compatibleTypeDefCacheHit() throws {
 }
 
 @Test
-func containerEnvelopeChangeRejected() throws {
+func containerNullableChangeIsAdapted() throws {
     let optional = OptionalContainersV1(
         list: ["list"],
         set: ["set"],
         map: ["map": 1]
     )
-    try expectInvalidData {
-        let _: RequiredListV2 = try compatibleDecode(
-            optional, as: RequiredListV2.self, id: 9963)
-    }
-    try expectInvalidData {
-        let _: RequiredSetV2 = try compatibleDecode(
-            optional, as: RequiredSetV2.self, id: 9963)
-    }
-    try expectInvalidData {
-        let _: RequiredMapV2 = try compatibleDecode(
-            optional, as: RequiredMapV2.self, id: 9963)
-    }
-    try expectInvalidData {
-        let _: OptionalContainersV1 = try compatibleDecode(
-            RequiredListV2(list: ["list"]),
-            as: OptionalContainersV1.self,
-            id: 9963
-        )
-    }
+    let list: RequiredListV2 = try compatibleDecode(optional, as: RequiredListV2.self, id: 9963)
+    #expect(list.list == ["list"])
+    let set: RequiredSetV2 = try compatibleDecode(optional, as: RequiredSetV2.self, id: 9963)
+    #expect(set.set == ["set"])
+    let map: RequiredMapV2 = try compatibleDecode(optional, as: RequiredMapV2.self, id: 9963)
+    #expect(map.map == ["map": 1])
+
+    let null = OptionalContainersV1(list: nil, set: nil, map: nil)
+    let nullList: RequiredListV2 = try compatibleDecode(null, as: RequiredListV2.self, id: 9963)
+    #expect(nullList.list.isEmpty)
+    let nullSet: RequiredSetV2 = try compatibleDecode(null, as: RequiredSetV2.self, id: 9963)
+    #expect(nullSet.set.isEmpty)
+    let nullMap: RequiredMapV2 = try compatibleDecode(null, as: RequiredMapV2.self, id: 9963)
+    #expect(nullMap.map.isEmpty)
+
+    let wrapped: OptionalContainersV1 = try compatibleDecode(
+        RequiredListV2(list: ["list"]),
+        as: OptionalContainersV1.self,
+        id: 9963
+    )
+    #expect(wrapped.list == ["list"])
 }
 
 @Test

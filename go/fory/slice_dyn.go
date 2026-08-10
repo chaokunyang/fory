@@ -34,6 +34,7 @@ type sliceDynSerializer struct {
 	declaredElemType         reflect.Type
 	declaredElemSerializer   Serializer
 	declaredElemTypeInfo     *TypeInfo
+	declaredElemTypeID       TypeId
 	elemDeclType             bool
 	declaredElemReferencable bool
 	elemBytes                int
@@ -403,6 +404,7 @@ func (s *sliceDynSerializer) readData(ctx *ReadContext, value reflect.Value, exp
 	var elemType reflect.Type
 	var elemSerializer Serializer
 	elemValueBytes := 0
+	elemTypeID := TypeId(UNKNOWN)
 	if (collectFlag & CollectionIsSameType) != 0 {
 		if (collectFlag & CollectionIsDeclElementType) == 0 {
 			if s.declaredElemSerializer != nil {
@@ -415,12 +417,14 @@ func (s *sliceDynSerializer) readData(ctx *ReadContext, value reflect.Value, exp
 			elemType = s.declaredElemType
 			elemSerializer = s.declaredElemSerializer
 			elemValueBytes = s.declaredElemBytes
+			elemTypeID = s.declaredElemTypeID
 			// An explicitly selected element codec owns the body. The TypeInfo read
 			// from the header supplies wire identity only and must not replace it.
 		} else if elemTypeInfo != nil && elemTypeInfo.Serializer != nil {
 			elemType = elemTypeInfo.Type
 			elemSerializer = elemTypeInfo.Serializer
 			elemValueBytes = elemTypeInfo.ValueBytes
+			elemTypeID = TypeId(elemTypeInfo.TypeID)
 		}
 		if ctx.HasError() {
 			return
@@ -440,7 +444,7 @@ func (s *sliceDynSerializer) readData(ctx *ReadContext, value reflect.Value, exp
 			value.Set(reflect.MakeSlice(sliceType, length, length))
 			ctx.RefResolver().Reference(value)
 		}
-		s.readSameType(ctx, buf, value, elemType, elemSerializer, elemValueBytes, collectFlag, length)
+		s.readSameType(ctx, buf, value, elemType, elemSerializer, elemValueBytes, elemTypeID, collectFlag, length)
 		if ctx.HasError() {
 			return
 		}
@@ -467,7 +471,7 @@ func (s *sliceDynSerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode,
 }
 
 // readSameType handles deserialization of slices where all elements share the same type
-func (s *sliceDynSerializer) readSameType(ctx *ReadContext, buf *ByteBuffer, value reflect.Value, elemType reflect.Type, serializer Serializer, valueBytes int, flag int8, length int) {
+func (s *sliceDynSerializer) readSameType(ctx *ReadContext, buf *ByteBuffer, value reflect.Value, elemType reflect.Type, serializer Serializer, valueBytes int, typeID TypeId, flag int8, length int) {
 	trackRefs := (flag & CollectionTrackingRef) != 0
 	hasNull := (flag & CollectionHasNull) != 0
 	ctxErr := ctx.Err()
@@ -486,20 +490,12 @@ func (s *sliceDynSerializer) readSameType(ctx *ReadContext, buf *ByteBuffer, val
 	if _, ok := serializer.(*structSerializer); ok && elemType.Kind() == reflect.Struct {
 		isNamedStruct = true
 	}
-	boxedStructBytes := int64(0)
-	if elemType.Kind() == reflect.Struct {
-		if _, pointerOwner := serializer.(*ptrToValueSerializer); !pointerOwner {
-			if valueBytes > 0 {
-				boxedStructBytes = int64(valueBytes)
-			} else if structSer, ok := serializer.(*structSerializer); ok {
-				boxedStructBytes = int64(structSer.valueBytes)
-			}
-		}
-	}
+	interfaceBytes := interfaceOwnerBytes(
+		value.Type().Elem(), elemType, serializer, valueBytes, typeID)
 	if !trackRefs && !hasNull && !serializerReadDataAlwaysAdvances(serializer) {
 		checkpoint := buf.logicalReaderIndex()
 		for i := 0; i < length; i++ {
-			if boxedStructBytes > 0 && !ctx.ReserveGraphMemory(boxedStructBytes) {
+			if interfaceBytes > 0 && !ctx.ReserveGraphMemory(interfaceBytes) {
 				return
 			}
 			elem := reflect.New(elemType).Elem()
@@ -531,6 +527,7 @@ func (s *sliceDynSerializer) readSameType(ctx *ReadContext, buf *ByteBuffer, val
 				return
 			}
 			if refID == int32(NullFlag) {
+				value.Index(i).SetZero()
 				continue
 			}
 			// Handle RefFlag - element references a previously read object
@@ -543,7 +540,7 @@ func (s *sliceDynSerializer) readSameType(ctx *ReadContext, buf *ByteBuffer, val
 
 			// For named struct types, use pointer for circular reference support
 			var elem reflect.Value
-			if boxedStructBytes > 0 && !ctx.ReserveGraphMemory(boxedStructBytes) {
+			if interfaceBytes > 0 && !ctx.ReserveGraphMemory(interfaceBytes) {
 				return
 			}
 			if isNamedStruct {
@@ -567,9 +564,10 @@ func (s *sliceDynSerializer) readSameType(ctx *ReadContext, buf *ByteBuffer, val
 		} else if hasNull {
 			refFlag := buf.ReadInt8(ctxErr)
 			if refFlag == NullFlag {
+				value.Index(i).SetZero()
 				continue
 			}
-			if boxedStructBytes > 0 && !ctx.ReserveGraphMemory(boxedStructBytes) {
+			if interfaceBytes > 0 && !ctx.ReserveGraphMemory(interfaceBytes) {
 				return
 			}
 			elem := reflect.New(elemType).Elem()
@@ -579,7 +577,7 @@ func (s *sliceDynSerializer) readSameType(ctx *ReadContext, buf *ByteBuffer, val
 			}
 			value.Index(i).Set(elem)
 		} else {
-			if boxedStructBytes > 0 && !ctx.ReserveGraphMemory(boxedStructBytes) {
+			if interfaceBytes > 0 && !ctx.ReserveGraphMemory(interfaceBytes) {
 				return
 			}
 			elem := reflect.New(elemType).Elem()
@@ -607,6 +605,7 @@ func (s *sliceDynSerializer) readDifferentTypes(
 				return
 			}
 			if refID == int32(NullFlag) {
+				value.Index(i).SetZero()
 				continue
 			}
 			if refID < int32(NotNullValueFlag) {
@@ -625,17 +624,9 @@ func (s *sliceDynSerializer) readDifferentTypes(
 			if ctx.HasError() {
 				return
 			}
-			boxedStructBytes := int64(0)
-			if elemType.Kind() == reflect.Struct {
-				if _, pointerOwner := serializer.(*ptrToValueSerializer); !pointerOwner {
-					if typeInfo.ValueBytes > 0 {
-						boxedStructBytes = int64(typeInfo.ValueBytes)
-					} else if structSer, ok := serializer.(*structSerializer); ok {
-						boxedStructBytes = int64(structSer.valueBytes)
-					}
-				}
-			}
-			if boxedStructBytes > 0 && !ctx.ReserveGraphMemory(boxedStructBytes) {
+			interfaceBytes := interfaceOwnerBytes(
+				value.Type().Elem(), elemType, serializer, typeInfo.ValueBytes, TypeId(typeInfo.TypeID))
+			if interfaceBytes > 0 && !ctx.ReserveGraphMemory(interfaceBytes) {
 				return
 			}
 			elem := reflect.New(elemType).Elem()
@@ -651,6 +642,7 @@ func (s *sliceDynSerializer) readDifferentTypes(
 			if hasNull {
 				headFlag := buf.ReadInt8(ctxErr)
 				if headFlag == NullFlag {
+					value.Index(i).SetZero()
 					continue
 				}
 			}
@@ -663,17 +655,9 @@ func (s *sliceDynSerializer) readDifferentTypes(
 			if ctx.HasError() {
 				return
 			}
-			boxedStructBytes := int64(0)
-			if elemType.Kind() == reflect.Struct {
-				if _, pointerOwner := serializer.(*ptrToValueSerializer); !pointerOwner {
-					if typeInfo.ValueBytes > 0 {
-						boxedStructBytes = int64(typeInfo.ValueBytes)
-					} else if structSer, ok := serializer.(*structSerializer); ok {
-						boxedStructBytes = int64(structSer.valueBytes)
-					}
-				}
-			}
-			if boxedStructBytes > 0 && !ctx.ReserveGraphMemory(boxedStructBytes) {
+			interfaceBytes := interfaceOwnerBytes(
+				value.Type().Elem(), elemType, serializer, typeInfo.ValueBytes, TypeId(typeInfo.TypeID))
+			if interfaceBytes > 0 && !ctx.ReserveGraphMemory(interfaceBytes) {
 				return
 			}
 			elem := reflect.New(elemType).Elem()

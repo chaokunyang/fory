@@ -109,8 +109,18 @@ func (s interfaceScalarSerializer) concreteValue(value reflect.Value) reflect.Va
 	return value
 }
 
+func (s interfaceScalarSerializer) newScalar(ctx *ReadContext) reflect.Value {
+	if s.type_.Kind() == reflect.Struct && !ctx.ReserveGraphMemory(int64(s.type_.Size())) {
+		return reflect.Value{}
+	}
+	return reflect.New(s.type_).Elem()
+}
+
 func (s interfaceScalarSerializer) ReadData(ctx *ReadContext, value reflect.Value) {
-	scalar := reflect.New(s.type_).Elem()
+	scalar := s.newScalar(ctx)
+	if !scalar.IsValid() {
+		return
+	}
 	s.serializer.ReadData(ctx, scalar)
 	if ctx.HasError() {
 		return
@@ -129,7 +139,10 @@ func (s interfaceScalarSerializer) Read(ctx *ReadContext, refMode RefMode, readT
 			return
 		}
 	}
-	scalar := reflect.New(s.type_).Elem()
+	scalar := s.newScalar(ctx)
+	if !scalar.IsValid() {
+		return
+	}
 	s.serializer.Read(ctx, RefModeNone, readType, hasGenerics, scalar)
 	if ctx.HasError() {
 		return

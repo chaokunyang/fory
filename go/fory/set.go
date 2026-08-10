@@ -76,6 +76,7 @@ type setSerializer struct {
 	elemSerializer       Serializer
 	declaredElemType     reflect.Type
 	declaredElemTypeInfo *TypeInfo
+	declaredElemTypeID   TypeId
 	elemDeclType         bool
 	elemReferencable     bool
 	hasGenerics          bool
@@ -367,8 +368,9 @@ func (s setSerializer) ReadData(ctx *ReadContext, value reflect.Value) {
 		if !ctx.ReserveGraphMemory(int64(graphSetOwnerBytes)) {
 			return
 		}
-		// Initialize empty set if length is 0
-		value.Set(reflect.MakeMap(type_))
+		if value.IsNil() || value.Len() > 0 {
+			value.Set(reflect.MakeMap(type_))
+		}
 		ctx.RefResolver().Reference(value)
 		ctx.decDepth()
 		return
@@ -430,9 +432,10 @@ func (s setSerializer) ReadData(ctx *ReadContext, value reflect.Value) {
 		return
 	}
 
-	// Initialize set if nil
-	if value.IsNil() {
+	if value.IsNil() || value.Len() > length {
 		value.Set(reflect.MakeMapWithSize(type_, length))
+	} else {
+		value.Clear()
 	}
 	// Register reference for tracking (handles circular references)
 	ctx.RefResolver().Reference(value)
@@ -472,29 +475,23 @@ func (s setSerializer) readSameType(ctx *ReadContext, buf *ByteBuffer, value ref
 			return
 		}
 	}
-	if keyType.Kind() != reflect.Ptr && keyType.Kind() != reflect.Interface {
-		if ptrSer, ok := serializer.(*ptrToValueSerializer); ok {
-			serializer = ptrSer.valueSerializer
-		}
+	valueBytes := s.declaredElemBytes
+	typeID := s.declaredElemTypeID
+	if s.elemSerializer == nil && typeInfo != nil {
+		valueBytes = typeInfo.ValueBytes
+		typeID = TypeId(typeInfo.TypeID)
+	}
+	elemType, serializer = wrapMapSerializerIfNeeded(
+		ctx, keyType, elemType, serializer, valueBytes)
+	if ctx.HasError() {
+		return
 	}
 	declaredGenericDispatch := declaredGenerics && serializerNeedsGenericDispatch(serializer)
-	boxedStructBytes := int64(0)
-	if keyType.Kind() == reflect.Interface && elemType.Kind() == reflect.Struct {
-		// Interface set keys can box struct values; pointer wrappers reserve their own pointee.
-		if _, pointerOwner := serializer.(*ptrToValueSerializer); !pointerOwner {
-			if s.elemSerializer != nil && s.declaredElemBytes > 0 {
-				boxedStructBytes = int64(s.declaredElemBytes)
-			} else if s.elemSerializer == nil && typeInfo != nil && typeInfo.ValueBytes > 0 {
-				boxedStructBytes = int64(typeInfo.ValueBytes)
-			} else if structSer, ok := serializer.(*structSerializer); ok {
-				boxedStructBytes = int64(structSer.valueBytes)
-			}
-		}
-	}
+	interfaceBytes := interfaceOwnerBytes(keyType, elemType, serializer, valueBytes, typeID)
 	if !trackRefs && !hasNull && !serializerReadDataAlwaysAdvances(serializer) {
 		checkpoint := buf.logicalReaderIndex()
 		for i := 0; i < length; i++ {
-			if boxedStructBytes > 0 && !ctx.ReserveGraphMemory(boxedStructBytes) {
+			if interfaceBytes > 0 && !ctx.ReserveGraphMemory(interfaceBytes) {
 				return
 			}
 			elem := reflect.New(elemType).Elem()
@@ -540,7 +537,7 @@ func (s setSerializer) readSameType(ctx *ReadContext, buf *ByteBuffer, value ref
 				}
 				continue
 			}
-			if boxedStructBytes > 0 && !ctx.ReserveGraphMemory(boxedStructBytes) {
+			if interfaceBytes > 0 && !ctx.ReserveGraphMemory(interfaceBytes) {
 				return
 			}
 			elem := reflect.New(elemType).Elem()
@@ -565,7 +562,7 @@ func (s setSerializer) readSameType(ctx *ReadContext, buf *ByteBuffer, value ref
 				}
 				continue
 			}
-			if boxedStructBytes > 0 && !ctx.ReserveGraphMemory(boxedStructBytes) {
+			if interfaceBytes > 0 && !ctx.ReserveGraphMemory(interfaceBytes) {
 				return
 			}
 			elem := reflect.New(elemType).Elem()
@@ -577,7 +574,7 @@ func (s setSerializer) readSameType(ctx *ReadContext, buf *ByteBuffer, value ref
 				return
 			}
 		} else {
-			if boxedStructBytes > 0 && !ctx.ReserveGraphMemory(boxedStructBytes) {
+			if interfaceBytes > 0 && !ctx.ReserveGraphMemory(interfaceBytes) {
 				return
 			}
 			elem := reflect.New(elemType).Elem()
@@ -648,13 +645,10 @@ func (s setSerializer) readDifferentTypes(ctx *ReadContext, buf *ByteBuffer, val
 		if ctx.HasError() {
 			return
 		}
-		if keyType.Kind() == reflect.Interface && typeInfo.Type != nil && typeInfo.Type.Kind() == reflect.Struct {
-			// Interface set keys can box struct values; pointer wrappers reserve their own pointee.
-			if _, pointerOwner := serializer.(*ptrToValueSerializer); !pointerOwner && valueBytes > 0 {
-				if !ctx.ReserveGraphMemory(int64(valueBytes)) {
-					return
-				}
-			}
+		if ownerBytes := interfaceOwnerBytes(
+			keyType, elemType, serializer, valueBytes, TypeId(typeInfo.TypeID),
+		); ownerBytes > 0 && !ctx.ReserveGraphMemory(ownerBytes) {
+			return
 		}
 		elem := reflect.New(elemType).Elem()
 		serializer.ReadData(ctx, elem)
@@ -706,7 +700,9 @@ func setMapKey(ctx *ReadContext, mapValue, key reflect.Value, keyType reflect.Ty
 			return false
 		}
 	}
-	if !finalKey.Type().Comparable() {
+	// Type.Comparable is insufficient when a comparable type contains an
+	// interface whose dynamic value is unhashable.
+	if !finalKey.Comparable() {
 		ctx.SetError(DeserializationErrorf("set element type %v is not comparable", finalKey.Type()))
 		return false
 	}
@@ -727,6 +723,8 @@ func (s setSerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, ha
 			// Reference found or null
 			if refID != int32(NullFlag) {
 				assignReadRef(ctx, refID, value)
+			} else {
+				value.SetZero()
 			}
 			return
 		}

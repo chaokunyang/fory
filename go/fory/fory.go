@@ -33,6 +33,9 @@ import (
 // ErrNoSerializer indicates no serializer is registered for a type
 var ErrNoSerializer = errors.New("fory: no serializer registered for type")
 
+// ErrRegistryFrozen indicates registration was attempted after a root operation started.
+var ErrRegistryFrozen = errors.New("fory: types and serializers must be registered before the first root serialization or deserialization operation")
+
 // Public named registration accepts one dotted name; resolver primitives receive
 // the split wire metadata components because named TypeDefs store them separately.
 func splitRegisteredName(name string) (string, string, error) {
@@ -200,11 +203,13 @@ func WithMaxAverageSchemaVersionsPerType(size int) Option {
 // ============================================================================
 
 // Fory is the main serialization instance.
+// Type and serializer registration must finish before its first root operation.
 // Note: Fory is NOT thread-safe. Use ThreadSafeFory for concurrent use.
 type Fory struct {
-	config        Config
-	metaContext   *MetaContext
-	compatibleSet bool
+	config         Config
+	metaContext    *MetaContext
+	compatibleSet  bool
+	registryFrozen bool
 
 	// Reusable contexts - avoid allocation on each SerializeWithCallback/DeserializeWithCallbackBuffers call
 	writeCtx *WriteContext
@@ -294,6 +299,18 @@ func validateUserTypeID(typeID uint32) error {
 	return nil
 }
 
+//go:noinline
+func (f *Fory) checkRegistrationOpen() error {
+	if f.registryFrozen {
+		return ErrRegistryFrozen
+	}
+	return nil
+}
+
+func (f *Fory) beginRoot() {
+	f.registryFrozen = true
+}
+
 // RegisterStruct registers a struct type with a numeric ID for cross-language serialization.
 // This is compatible with Java's fory.register(Class, int) method.
 // type_ can be either a reflect.Type or an instance of the type
@@ -302,6 +319,9 @@ func validateUserTypeID(typeID uint32) error {
 //
 //go:noinline
 func (f *Fory) RegisterStruct(type_ any, typeID uint32) error {
+	if err := f.checkRegistrationOpen(); err != nil {
+		return err
+	}
 	if err := validateUserTypeID(typeID); err != nil {
 		return err
 	}
@@ -335,6 +355,9 @@ func (f *Fory) RegisterStruct(type_ any, typeID uint32) error {
 //
 //go:noinline
 func (f *Fory) RegisterUnion(type_ any, typeID uint32, serializer Serializer) error {
+	if err := f.checkRegistrationOpen(); err != nil {
+		return err
+	}
 	if serializer == nil {
 		return fmt.Errorf("RegisterUnion requires a non-nil serializer")
 	}
@@ -363,6 +386,9 @@ func (f *Fory) RegisterUnion(type_ any, typeID uint32, serializer Serializer) er
 //
 //go:noinline
 func (f *Fory) RegisterUnionByName(type_ any, name string, serializer Serializer) error {
+	if err := f.checkRegistrationOpen(); err != nil {
+		return err
+	}
 	if serializer == nil {
 		return fmt.Errorf("RegisterUnionByName requires a non-nil serializer")
 	}
@@ -392,6 +418,9 @@ func (f *Fory) RegisterUnionByName(type_ any, name string, serializer Serializer
 //
 //go:noinline
 func (f *Fory) RegisterStructByName(type_ any, name string) error {
+	if err := f.checkRegistrationOpen(); err != nil {
+		return err
+	}
 	var t reflect.Type
 	if rt, ok := type_.(reflect.Type); ok {
 		t = rt
@@ -419,6 +448,9 @@ func (f *Fory) RegisterStructByName(type_ any, name string) error {
 //
 //go:noinline
 func (f *Fory) RegisterEnum(type_ any, typeID uint32) error {
+	if err := f.checkRegistrationOpen(); err != nil {
+		return err
+	}
 	if err := validateUserTypeID(typeID); err != nil {
 		return err
 	}
@@ -451,6 +483,9 @@ func (f *Fory) RegisterEnum(type_ any, typeID uint32) error {
 //
 //go:noinline
 func (f *Fory) RegisterEnumByName(type_ any, name string) error {
+	if err := f.checkRegistrationOpen(); err != nil {
+		return err
+	}
 	var t reflect.Type
 	if rt, ok := type_.(reflect.Type); ok {
 		t = rt
@@ -483,6 +518,9 @@ func (f *Fory) RegisterEnumByName(type_ any, name string) error {
 //
 //go:noinline
 func (f *Fory) RegisterExtension(type_ any, typeID uint32, serializer ExtensionSerializer) error {
+	if err := f.checkRegistrationOpen(); err != nil {
+		return err
+	}
 	if err := validateUserTypeID(typeID); err != nil {
 		return err
 	}
@@ -522,6 +560,9 @@ func (f *Fory) RegisterExtension(type_ any, typeID uint32, serializer ExtensionS
 //
 //go:noinline
 func (f *Fory) RegisterExtensionByName(type_ any, name string, serializer ExtensionSerializer) error {
+	if err := f.checkRegistrationOpen(); err != nil {
+		return err
+	}
 	var t reflect.Type
 	if rt, ok := type_.(reflect.Type); ok {
 		t = rt
@@ -538,7 +579,7 @@ func (f *Fory) RegisterExtensionByName(type_ any, name string, serializer Extens
 	return f.typeResolver.registerExtensionByName(t, namespace, typeName, serializer)
 }
 
-// Reset clears internal state for reuse
+// Reset clears root operation state for reuse. It does not reopen registration.
 func (f *Fory) Reset() {
 	f.writeCtx.Reset()
 	f.readCtx.Reset()
@@ -563,6 +604,7 @@ func (f *Fory) Reset() {
 //
 // For thread-safe usage, use threadsafe.Fory which copies the data internally.
 func (f *Fory) Serialize(value any) ([]byte, error) {
+	f.beginRoot()
 	defer f.resetWriteState()
 	if !validateRootDecimal(f.writeCtx.Err(), value) {
 		return nil, f.writeCtx.TakeError()
@@ -598,6 +640,7 @@ func (f *Fory) rootRefMode() RefMode {
 // Deserialize deserializes data directly into the provided target value.
 // The target must be a pointer to the value to deserialize into.
 func (f *Fory) Deserialize(data []byte, v any) error {
+	f.beginRoot()
 	defer f.resetReadState()
 	f.readCtx.SetData(data)
 	target := reflect.ValueOf(v).Elem()
@@ -637,6 +680,7 @@ func (f *Fory) resetWriteState() {
 // This is useful when you need to write multiple serialized values to the same buffer.
 // Returns error if serialization fails.
 func (f *Fory) SerializeTo(buf *ByteBuffer, value any) error {
+	f.beginRoot()
 	defer f.resetWriteState()
 	if !validateRootDecimal(f.writeCtx.Err(), value) {
 		return f.writeCtx.TakeError()
@@ -690,31 +734,31 @@ func (f *Fory) SerializeTo(buf *ByteBuffer, value any) error {
 // The buffer's reader index is advanced as data is read.
 // This is useful when reading multiple serialized values from the same buffer.
 func (f *Fory) DeserializeFrom(buf *ByteBuffer, v any) error {
+	f.beginRoot()
 	// Reset contexts for each independent serialized object
-	defer f.resetReadState()
-
 	// Temporarily swap buffer
 	origBuffer := f.readCtx.buffer
 	f.readCtx.buffer = buf
+	defer func() {
+		// Restore the owned buffer before root cleanup so an escaping panic cannot
+		// leave a caller-owned buffer installed for the next operation.
+		f.readCtx.buffer = origBuffer
+		f.resetReadState()
+	}()
 	target := reflect.ValueOf(v).Elem()
 	f.readCtx.remainingGraphMemoryBytes = f.config.MaxGraphMemoryBytes
 	f.readCtx.remainingUnbackedContainerItems = f.config.MaxUnbackedContainerItems
 
 	readHeader(f.readCtx)
 	if f.readCtx.HasError() {
-		f.readCtx.buffer = origBuffer
 		return f.readCtx.TakeError()
 	}
 
 	// Deserialize the value - TypeMeta is read inline using streaming protocol
 	f.readCtx.ReadValue(target, f.rootRefMode(), true)
 	if f.readCtx.HasError() {
-		f.readCtx.buffer = origBuffer
 		return f.readCtx.TakeError()
 	}
-
-	// Restore original buffer
-	f.readCtx.buffer = origBuffer
 
 	return nil
 }
@@ -743,6 +787,7 @@ func (f *Fory) Unmarshal(data []byte, v any) error {
 // If callback is provided, it will be called for each BufferObject during serialization.
 // Return true from callback to write in-band, false for out-of-band.
 func (f *Fory) SerializeWithCallback(buffer *ByteBuffer, v any, callback func(BufferObject) bool) error {
+	f.beginRoot()
 	buf := f.writeCtx.buffer
 	defer func() {
 		// Reset internal state but NOT the buffer - caller manages buffer state
@@ -786,6 +831,7 @@ func (f *Fory) SerializeWithCallback(buffer *ByteBuffer, v any, callback func(Bu
 // DeserializeWithCallbackBuffers deserializes from buffer into the provided value (for streaming/cross-language use).
 // The third parameter is optional external buffers for out-of-band data (can be nil).
 func (f *Fory) DeserializeWithCallbackBuffers(buffer *ByteBuffer, v any, buffers []*ByteBuffer) error {
+	f.beginRoot()
 	// Use the caller buffer only for this root; later stream roots reuse the
 	// original internal buffer.
 	origBuffer := f.readCtx.buffer
@@ -919,6 +965,7 @@ func readHeaderSlow(ctx *ReadContext, bitmap byte) {
 //
 // For thread-safe usage, use threadsafe.Serialize which copies the data internally.
 func Serialize[T any](f *Fory, value T) ([]byte, error) {
+	f.beginRoot()
 	defer f.resetWriteState()
 	v := any(value)
 	if !validateRootDecimal(f.writeCtx.Err(), v) {
@@ -1075,6 +1122,7 @@ func Serialize[T any](f *Fory, value T) ([]byte, error) {
 // For structs, it reads directly into the struct fields.
 // Note: Fory instance is NOT thread-safe. Use ThreadSafeFory for concurrent use.
 func Deserialize[T any](f *Fory, data []byte, target *T) error {
+	f.beginRoot()
 	// Generic roots share the same reusable read and metadata owners as the
 	// method API, so both entry and every exit must start from a root-clean state.
 	f.resetReadState()

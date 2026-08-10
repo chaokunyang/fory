@@ -800,6 +800,10 @@ func (c *ReadContext) ReadValue(value reflect.Value, refMode RefMode, readType b
 				c.SetError(FromError(err))
 				return
 			}
+			if refID == int32(NullFlag) {
+				value.SetZero()
+				return
+			}
 			if refID < int32(NotNullValueFlag) {
 				// Reference found
 				assignReadRef(c, refID, value)
@@ -808,6 +812,7 @@ func (c *ReadContext) ReadValue(value reflect.Value, refMode RefMode, readType b
 		} else if refMode == RefModeNullOnly {
 			flag := c.buffer.ReadInt8(c.Err())
 			if flag == NullFlag {
+				value.SetZero()
 				return
 			}
 		}
@@ -831,6 +836,7 @@ func (c *ReadContext) ReadValue(value reflect.Value, refMode RefMode, readType b
 				typeInfo.Serializer.ReadData(c, reflect.Value{})
 			}
 			// Leave interface value as nil for unknown types
+			value.SetZero()
 			return
 		}
 		if typeInfo.Serializer == nil {
@@ -889,6 +895,9 @@ func (c *ReadContext) ReadValue(value reflect.Value, refMode RefMode, readType b
 		if c.HasError() {
 			return
 		}
+		if !reserveInterfaceOwner(c, typeInfo, actualType, serializer) {
+			return
+		}
 		newValue = reflect.New(actualType).Elem()
 		valueToSet = newValue
 
@@ -923,6 +932,36 @@ func (c *ReadContext) ReadValue(value reflect.Value, refMode RefMode, readType b
 
 	// Read handles ref tracking and type info internally
 	serializer.Read(c, refMode, readType, false, value)
+}
+
+func reserveInterfaceOwner(
+	ctx *ReadContext, typeInfo *TypeInfo, actualType reflect.Type, serializer Serializer,
+) bool {
+	if _, pointerOwner := serializer.(*ptrToValueSerializer); pointerOwner {
+		return true
+	}
+	typeID := TypeId(typeInfo.TypeID)
+	// Union and enum carriers are explicitly excluded from graph owner charging.
+	if typeID == UNION || typeID == TYPED_UNION || typeID == NAMED_UNION {
+		return true
+	}
+	reserve := actualType.Kind() == reflect.Struct
+	if !reserve {
+		if typeID == EXT || typeID == NAMED_EXT {
+			switch actualType.Kind() {
+			case reflect.Array, reflect.Map, reflect.Slice:
+				reserve = true
+			}
+		}
+	}
+	if !reserve {
+		return true
+	}
+	bytes := typeInfo.ValueBytes
+	if bytes == 0 {
+		bytes = int(actualType.Size())
+	}
+	return ctx.ReserveGraphMemory(int64(bytes))
 }
 
 // ReadInto reads a value using a specific serializer with optional ref/type info

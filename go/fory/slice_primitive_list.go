@@ -250,6 +250,9 @@ func (s compatiblePrimitiveListToArraySerializer) ReadData(ctx *ReadContext, val
 	}
 	if length == 0 {
 		if value.Kind() == reflect.Slice {
+			if !ctx.ReserveGraphMemory(int64(graphSliceOwnerBytes)) {
+				return
+			}
 			value.Set(reflect.MakeSlice(value.Type(), 0, 0))
 		} else if value.Len() != 0 {
 			ctx.SetError(DeserializationErrorf("array-compatible list length %d does not match array length %d", length, value.Len()))

@@ -274,17 +274,16 @@ func TestSerializeStructSimple(t *testing.T) {
 		type A struct {
 			F1 []string
 		}
-		require.Nil(t, fory.RegisterStructByName(A{}, "example.A"))
-		serde(t, fory, A{})
-		serde(t, fory, &A{})
-		serde(t, fory, A{F1: []string{"str1", "", "str2"}})
-		serde(t, fory, &A{F1: []string{"str1", "", "str2"}})
-
 		type SimpleB struct {
 			F1 []string
 			F2 map[string]int32
 		}
+		require.Nil(t, fory.RegisterStructByName(A{}, "example.A"))
 		require.Nil(t, fory.RegisterStructByName(SimpleB{}, "example.SimpleB"))
+		serde(t, fory, A{})
+		serde(t, fory, &A{})
+		serde(t, fory, A{F1: []string{"str1", "", "str2"}})
+		serde(t, fory, &A{F1: []string{"str1", "", "str2"}})
 		serde(t, fory, SimpleB{})
 		serde(t, fory, SimpleB{
 			F1: []string{"str1", "", "str2"},
@@ -410,24 +409,24 @@ func newFoo() Foo {
 func TestSerializeStruct(t *testing.T) {
 	for _, referenceTracking := range []bool{false, true} {
 		fory := NewFory(WithXlang(true), WithCompatible(false), WithRefTracking(referenceTracking))
+		type A struct {
+			F1 Bar
+			F2 any
+		}
 		require.Nil(t, fory.RegisterStructByName(Bar{}, "example.Bar"))
+		require.Nil(t, fory.RegisterStructByName(A{}, "example.A"))
+		require.Nil(t, fory.RegisterStructByName(Foo{}, "example.Foo"))
 		serde(t, fory, &Bar{})
 		bar := Bar{F1: 1, F2: "str"}
 		serde(t, fory, bar)
 		serde(t, fory, &bar)
 
-		type A struct {
-			F1 Bar
-			F2 any
-		}
-		require.Nil(t, fory.RegisterStructByName(A{}, "example.A"))
 		serde(t, fory, A{})
 		serde(t, fory, &A{})
 		// Use int64 for any fields since xlang deserializes integers to int64
 		serde(t, fory, A{F1: Bar{F1: 1, F2: "str"}, F2: int64(-1)})
 		serde(t, fory, &A{F1: Bar{F1: 1, F2: "str"}, F2: int64(-1)})
 
-		require.Nil(t, fory.RegisterStructByName(Foo{}, "example.Foo"))
 		foo := newFoo()
 		serde(t, fory, foo)
 		serde(t, fory, &foo)
@@ -435,8 +434,8 @@ func TestSerializeStruct(t *testing.T) {
 }
 
 func TestSerializeCircularReference(t *testing.T) {
-	fory := NewFory(WithXlang(true), WithCompatible(false), WithRefTracking(true))
 	{
+		fory := NewFory(WithXlang(true), WithCompatible(false), WithRefTracking(true))
 		type A struct {
 			A1 *A
 		}
@@ -455,6 +454,7 @@ func TestSerializeCircularReference(t *testing.T) {
 		require.Same(t, a1, a1.A1)
 	}
 	{
+		fory := NewFory(WithXlang(true), WithCompatible(false), WithRefTracking(true))
 		type CircularRefB struct {
 			F1 string
 			F2 *CircularRefB

@@ -672,7 +672,7 @@ func readRemoteTypeDef(t *testing.T, fory *Fory, typeDef *TypeDef) error {
 	return nil
 }
 
-func TestDecodeTypeDefFallbackNamedTypeCachesLookup(t *testing.T) {
+func TestDecodeTypeDefFallbackDefersNamedAliasCache(t *testing.T) {
 	fory := NewFory(WithXlang(false), WithCompatible(true))
 	require.NoError(t, fory.RegisterStructByName(SimpleStruct{}, "example.SimpleStruct"))
 	typeDef, err := buildTypeDef(fory, reflect.ValueOf(SimpleStruct{}))
@@ -695,7 +695,8 @@ func TestDecodeTypeDefFallbackNamedTypeCachesLookup(t *testing.T) {
 	decoded := readTypeDef(fory, buffer, header, readErr)
 	require.NoError(t, readErr.CheckError())
 	require.NotNil(t, decoded)
-	require.Contains(t, fory.typeResolver.nsTypeToTypeInfo, nameKey)
+	require.Equal(t, reflect.TypeOf(SimpleStruct{}), decoded.type_)
+	require.NotContains(t, fory.typeResolver.nsTypeToTypeInfo, nameKey)
 }
 
 func TestTypeDefRejectsNamespaceLengthBeyondMetadata(t *testing.T) {
@@ -757,7 +758,7 @@ func TestTypeDefRejectsMalformedName(t *testing.T) {
 
 			_, err := decodeTypeDef(fory, frame, header)
 			require.Error(t, err)
-			require.Contains(t, err.Error(), "missing first character")
+			require.Contains(t, err.Error(), "failed to decode TypeDef typename")
 		})
 	}
 }

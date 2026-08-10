@@ -322,7 +322,8 @@ func skipCollection(ctx *ReadContext, fieldDef FieldDef) {
 		}
 	}
 
-	elementReadAlwaysAdvances := !isSameType || trackRef || hasNull ||
+	hasPerElementType := !isSameType && !isDeclared
+	elementReadAlwaysAdvances := hasPerElementType || trackRef || hasNull ||
 		fieldReadAlwaysAdvances(elemDef, elemTypeInfo)
 	if elementReadAlwaysAdvances {
 		for i := uint32(0); i < length; i++ {

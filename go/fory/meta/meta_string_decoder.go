@@ -84,6 +84,19 @@ func (d *Decoder) decodeGeneric(data []byte, algorithm Encoding) ([]byte, error)
 	stripLastChar := (data[0] & 0x80) >> 7
 	totBits := len(data)*8 - 1 - int(stripLastChar)*bitsPerChar
 	totChars := totBits / bitsPerChar
+	if totChars == 0 {
+		return nil, fmt.Errorf("invalid packed meta string: non-empty body has no characters")
+	}
+	// Packed MetaStrings leave the low tail bits unused. Requiring those bits
+	// to stay zero gives every packed body one encoded identity; otherwise an
+	// attacker can create many hash-distinct byte strings for the same name.
+	unusedBits := len(data)*8 - 1 - totChars*bitsPerChar
+	if unusedBits > 7 {
+		return nil, fmt.Errorf("invalid packed meta string: inconsistent strip marker")
+	}
+	if unusedBits > 0 && data[len(data)-1]&byte((1<<unusedBits)-1) != 0 {
+		return nil, fmt.Errorf("invalid packed meta string: non-zero unused tail bits")
+	}
 	chars := make([]byte, totChars)
 	bitPos, bitCount := 6, 1 // first highest bit indicates whether strip last char
 	for i := 0; i < totChars; i++ {

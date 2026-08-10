@@ -335,6 +335,12 @@ func (t *TypeSpec) goTypeForResolver(resolver *TypeResolver) (reflect.Type, erro
 	if t.GoType != nil {
 		return t.GoType, nil
 	}
+	// Validate the whole tree before constructing any runtime type. Successful
+	// reflect.SliceOf/MapOf results live in Go's process-global cache, so a
+	// later invalid map key must not leave already-created child types behind.
+	if err := t.validateRuntimeType(resolver); err != nil {
+		return nil, err
+	}
 	t.normalizeChildren()
 	switch t.Kind {
 	case TypeSpecList:
@@ -387,6 +393,61 @@ func (t *TypeSpec) goTypeForResolver(resolver *TypeResolver) (reflect.Type, erro
 		}
 		return reflect.TypeOf((*any)(nil)).Elem(), nil
 	}
+}
+
+func (t *TypeSpec) validateRuntimeType(resolver *TypeResolver) error {
+	if t == nil {
+		return nil
+	}
+	t.normalizeChildren()
+	switch t.TypeID {
+	case LIST:
+		return t.Element.validateRuntimeType(resolver)
+	case SET:
+		if t.Element == nil {
+			return nil
+		}
+		if !t.Element.runtimeTypeComparable(resolver) {
+			return fmt.Errorf("SET element type %d is not comparable in Go", t.Element.TypeID)
+		}
+		return t.Element.validateRuntimeType(resolver)
+	case MAP:
+		if t.Key == nil || t.Value == nil {
+			return nil
+		}
+		if !t.Key.runtimeTypeComparable(resolver) {
+			return fmt.Errorf("MAP key type %d is not comparable in Go", t.Key.TypeID)
+		}
+		if err := t.Key.validateRuntimeType(resolver); err != nil {
+			return err
+		}
+		return t.Value.validateRuntimeType(resolver)
+	default:
+		return nil
+	}
+}
+
+func (t *TypeSpec) runtimeTypeComparable(resolver *TypeResolver) bool {
+	if t == nil {
+		return true
+	}
+	if t.GoType != nil {
+		return t.GoType.Comparable()
+	}
+	switch t.TypeID {
+	case LIST, SET, MAP, BINARY, DECIMAL:
+		return false
+	}
+	if isPrimitiveArrayType(t.TypeID) {
+		return false
+	}
+	if resolver != nil {
+		if info := resolver.typeIDToTypeInfo[uint32(t.TypeID)]; info != nil && info.Type != nil {
+			return info.Type.Comparable()
+		}
+	}
+	// Unresolved user-defined wire types materialize as interface{} here.
+	return true
 }
 
 type parsedFieldTag struct {
@@ -495,6 +556,9 @@ func parseFieldTag(field reflect.StructField) (parsedFieldTag, error) {
 			}
 			if id < 0 {
 				return parsedFieldTag{}, InvalidTagErrorf("invalid fory tag id=%d on field %s: id must be non-negative", id, field.Name)
+			}
+			if uint64(id) > maxTypeDefTagID {
+				return parsedFieldTag{}, InvalidTagErrorf("invalid fory tag id=%d on field %s: id exceeds TypeDef range", id, field.Name)
 			}
 			parsed.idSet = true
 			parsed.tagID = id
@@ -1840,6 +1904,7 @@ func serializerForTypeSpec(resolver *TypeResolver, goType reflect.Type, spec *Ty
 			}
 			sliceSerializer.declaredElemType = elemType
 			sliceSerializer.declaredElemSerializer = elemSerializer
+			sliceSerializer.declaredElemTypeID = spec.Element.TypeID
 			sliceSerializer.elemDeclType = !needsElemTypeInfo(spec.Element.TypeID)
 			if !sliceSerializer.elemDeclType {
 				sliceSerializer.declaredElemTypeInfo = resolver.getTypeInfoByType(elemType)
@@ -1858,8 +1923,15 @@ func serializerForTypeSpec(resolver *TypeResolver, goType reflect.Type, spec *Ty
 		referencable := spec.Element != nil && spec.Element.TrackRef
 		return newDeclaredSliceSerializer(goType, elemSerializer, referencable)
 	case SET:
+		if goType.Kind() != reflect.Map || !isSetReflectType(goType) {
+			return nil, fmt.Errorf("SET type spec requires map-backed Set Go type, got %s", goType)
+		}
 		elemType := goType.Key()
 		var elemSerializer Serializer
+		declaredElemTypeID := TypeId(UNKNOWN)
+		if spec.Element != nil {
+			declaredElemTypeID = spec.Element.TypeID
+		}
 		if spec.Element != nil && spec.Element.TypeID != UNKNOWN {
 			if elemType.Kind() == reflect.Interface {
 				schemaElemType, err := spec.Element.goTypeForResolver(resolver)
@@ -1881,6 +1953,7 @@ func serializerForTypeSpec(resolver *TypeResolver, goType reflect.Type, spec *Ty
 			elemSerializer:       elemSerializer,
 			declaredElemType:     elemType,
 			declaredElemTypeInfo: resolver.getTypeInfoByType(elemType),
+			declaredElemTypeID:   declaredElemTypeID,
 			elemDeclType:         spec.Element == nil || !needsElemTypeInfo(spec.Element.TypeID),
 			elemReferencable:     spec.Element != nil && spec.Element.TrackRef,
 			hasGenerics:          true,
@@ -1891,10 +1964,17 @@ func serializerForTypeSpec(resolver *TypeResolver, goType reflect.Type, spec *Ty
 			maxLength:            maxGraphCount(int(goType.Key().Size()) + int(goType.Elem().Size())),
 		}, nil
 	case MAP:
+		if goType.Kind() != reflect.Map {
+			return nil, fmt.Errorf("MAP type spec requires map Go type, got %s", goType)
+		}
 		// Resolve children independently: a dynamic child does not erase the
 		// declared codec selected by the enclosing schema for its sibling.
 		keyType := goType.Key()
 		var keySerializer Serializer
+		declaredKeyTypeID := TypeId(UNKNOWN)
+		if spec.Key != nil {
+			declaredKeyTypeID = spec.Key.TypeID
+		}
 		if spec.Key != nil && spec.Key.TypeID != UNKNOWN {
 			if keyType.Kind() == reflect.Interface {
 				schemaKeyType, err := spec.Key.goTypeForResolver(resolver)
@@ -1911,6 +1991,10 @@ func serializerForTypeSpec(resolver *TypeResolver, goType reflect.Type, spec *Ty
 		}
 		valueType := goType.Elem()
 		var valueSerializer Serializer
+		declaredValueTypeID := TypeId(UNKNOWN)
+		if spec.Value != nil {
+			declaredValueTypeID = spec.Value.TypeID
+		}
 		if spec.Value != nil && spec.Value.TypeID != UNKNOWN {
 			if valueType.Kind() == reflect.Interface {
 				schemaValueType, err := spec.Value.goTypeForResolver(resolver)
@@ -1926,19 +2010,21 @@ func serializerForTypeSpec(resolver *TypeResolver, goType reflect.Type, spec *Ty
 			valueSerializer = serializer
 		}
 		return mapSerializer{
-			type_:              goType,
-			declaredKeyType:    keyType,
-			declaredValueType:  valueType,
-			declaredKeyBytes:   int(keyType.Size()),
-			declaredValueBytes: int(valueType.Size()),
-			keySerializer:      keySerializer,
-			valueSerializer:    valueSerializer,
-			keyReferencable:    spec.Key != nil && spec.Key.TrackRef,
-			valueReferencable:  spec.Value != nil && spec.Value.TrackRef,
-			hasGenerics:        true,
-			keyBytes:           int(goType.Key().Size()),
-			valueBytes:         int(goType.Elem().Size()),
-			maxLength:          maxGraphCount(int(goType.Key().Size()) + int(goType.Elem().Size())),
+			type_:               goType,
+			declaredKeyType:     keyType,
+			declaredValueType:   valueType,
+			declaredKeyBytes:    int(keyType.Size()),
+			declaredValueBytes:  int(valueType.Size()),
+			declaredKeyTypeID:   declaredKeyTypeID,
+			declaredValueTypeID: declaredValueTypeID,
+			keySerializer:       keySerializer,
+			valueSerializer:     valueSerializer,
+			keyReferencable:     spec.Key != nil && spec.Key.TrackRef,
+			valueReferencable:   spec.Value != nil && spec.Value.TrackRef,
+			hasGenerics:         true,
+			keyBytes:            int(goType.Key().Size()),
+			valueBytes:          int(goType.Elem().Size()),
+			maxLength:           maxGraphCount(int(goType.Key().Size()) + int(goType.Elem().Size())),
 		}, nil
 	}
 	if serializer, ok, err := serializerForEncodedScalar(goType, spec.TypeID); ok || err != nil {

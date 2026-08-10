@@ -246,6 +246,7 @@ func (s *arrayConcreteValueSerializer) ReadData(ctx *ReadContext, value reflect.
 		} else if hasNull {
 			flag := buf.ReadInt8(err)
 			if flag == NullFlag {
+				elem.SetZero()
 				continue
 			}
 			s.elemSerializer.ReadData(ctx, elem)

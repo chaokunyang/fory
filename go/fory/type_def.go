@@ -486,6 +486,9 @@ func buildFieldDefs(fory *Fory, value reflect.Value) ([]FieldDef, error) {
 	var entries []fieldDefEntry
 
 	type_ := value.Type()
+	if err := validateForyTags(type_); err != nil {
+		return nil, err
+	}
 	for i := 0; i < type_.NumField(); i++ {
 		field := type_.Field(i)
 
@@ -785,6 +788,9 @@ func writeSimpleTypeName(buffer *ByteBuffer, metaBytes *MetaStringBytes, encoder
 }
 
 func encodingTypeDef(typeResolver *TypeResolver, typeDef *TypeDef) ([]byte, error) {
+	if err := validateFieldDefIdentities(typeDef.fieldDefs); err != nil {
+		return nil, err
+	}
 	buffer := NewByteBuffer(nil)
 
 	if err := writeMetaHeader(buffer, typeDef); err != nil {
@@ -940,6 +946,9 @@ func writeFieldDefs(typeResolver *TypeResolver, buffer *ByteBuffer, fieldDefs []
 
 // writeFieldDef writes a single field's definition
 func writeFieldDef(typeResolver *TypeResolver, buffer *ByteBuffer, field FieldDef) error {
+	if field.tagID >= 0 && uint64(field.tagID) > maxTypeDefTagID {
+		return fmt.Errorf("field tag ID %d exceeds TypeDef range", field.tagID)
+	}
 	// WriteData field header
 	// 2 bits field name encoding + 4 bits size + nullability flag + ref tracking flag
 	offset := buffer.writerIndex
@@ -1222,7 +1231,6 @@ func decodeTypeDef(fory *Fory, buffer *ByteBuffer, header int64) (*TypeDef, erro
 			if fallbackInfo, fallbackExists := fory.typeResolver.namedTypeToTypeInfo[nameKey]; fallbackExists {
 				info = fallbackInfo
 				exists = true
-				fory.typeResolver.nsTypeToTypeInfo[nsTypeKey{nsBytes.Hashcode, nameBytes.Hashcode}] = info
 			}
 		}
 		if exists {
@@ -1276,6 +1284,9 @@ func decodeTypeDef(fory *Fory, buffer *ByteBuffer, header int64) (*TypeDef, erro
 	if err := validateParsedTypeDefHash(globalHeader, metaSizeBits, extraMetaSize, encodedMeta); err != nil {
 		return nil, err
 	}
+	if err := validateFieldDefIdentities(fieldInfos); err != nil {
+		return nil, err
+	}
 
 	encoded := buildTypeDefEncoded(globalHeader, metaSizeBits, extraMetaSize, encodedMeta)
 
@@ -1301,6 +1312,29 @@ func decodeTypeDef(fory *Fory, buffer *ByteBuffer, header int64) (*TypeDef, erro
 		}
 	}
 	return typeDef, nil
+}
+
+func validateFieldDefIdentities(fieldDefs []FieldDef) error {
+	identities := make(map[string]struct{}, len(fieldDefs))
+	for _, field := range fieldDefs {
+		var identity string
+		if field.tagID >= 0 {
+			if uint64(field.tagID) > maxTypeDefTagID {
+				return fmt.Errorf("TypeDef field tag ID %d exceeds supported range", field.tagID)
+			}
+			identity = fmt.Sprintf("id:%d", field.tagID)
+		} else {
+			if field.name == "" {
+				return fmt.Errorf("TypeDef field name must be non-empty")
+			}
+			identity = "name:" + field.name
+		}
+		if _, exists := identities[identity]; exists {
+			return fmt.Errorf("duplicate TypeDef field identity %s", identity)
+		}
+		identities[identity] = struct{}{}
+	}
+	return nil
 }
 
 func sameMetaStringBytes(left, right *MetaStringBytes) bool {

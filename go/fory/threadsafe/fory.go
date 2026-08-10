@@ -19,15 +19,33 @@
 package threadsafe
 
 import (
+	"fmt"
+	"reflect"
 	"sync"
+	"sync/atomic"
 
 	"github.com/apache/fory/go/fory"
 )
 
+type structRegistration struct {
+	type_ reflect.Type
+	name  string
+}
+
+func (r structRegistration) apply(inner *fory.Fory) error {
+	return inner.RegisterStructByName(r.type_, r.name)
+}
+
 // Fory is a thread-safe wrapper around fory.Fory using sync.Pool.
 // It provides the same API as fory.Fory but is safe for concurrent use.
+// Registration must finish before its first root operation.
 type Fory struct {
-	pool sync.Pool
+	pool           sync.Pool
+	registrationMu sync.Mutex
+	registryFrozen atomic.Bool
+	factory        func() *fory.Fory
+	registrations  []structRegistration
+	prepared       *fory.Fory
 }
 
 // New creates a new thread-safe Fory instance.
@@ -42,21 +60,44 @@ func NewWithFactory(factory func() *fory.Fory) *Fory {
 	if factory == nil {
 		panic("threadsafe.NewWithFactory requires a non-nil factory")
 	}
-	f := &Fory{}
-	f.pool = sync.Pool{
-		New: func() any {
-			inner := factory()
-			if inner == nil {
-				panic("threadsafe.NewWithFactory factory returned nil")
-			}
-			return inner
-		},
-	}
-	return f
+	return &Fory{factory: factory}
 }
 
-func (f *Fory) acquire() *fory.Fory {
-	return f.pool.Get().(*fory.Fory)
+func (f *Fory) newInner() (*fory.Fory, error) {
+	inner := f.factory()
+	if inner == nil {
+		panic("threadsafe.NewWithFactory factory returned nil")
+	}
+	// Before the first root, callers hold registrationMu. After registryFrozen
+	// is published, registrations are immutable, so pool misses can replay them
+	// without extending the root hot-path lock.
+	for _, registration := range f.registrations {
+		if err := registration.apply(inner); err != nil {
+			return nil, fmt.Errorf("apply registration %q to new Fory instance: %w", registration.name, err)
+		}
+	}
+	return inner, nil
+}
+
+func (f *Fory) acquire() (*fory.Fory, error) {
+	if !f.registryFrozen.Load() {
+		f.registrationMu.Lock()
+		if !f.registryFrozen.Load() {
+			f.registryFrozen.Store(true)
+			inner := f.prepared
+			f.prepared = nil
+			f.registrationMu.Unlock()
+			if inner != nil {
+				return inner, nil
+			}
+			return f.newInner()
+		}
+		f.registrationMu.Unlock()
+	}
+	if pooled := f.pool.Get(); pooled != nil {
+		return pooled.(*fory.Fory), nil
+	}
+	return f.newInner()
 }
 
 func (f *Fory) release(inner *fory.Fory) {
@@ -70,7 +111,10 @@ func (f *Fory) release(inner *fory.Fory) {
 
 // Serialize serializes a value using a pooled Fory instance
 func (f *Fory) Serialize(v any) ([]byte, error) {
-	inner := f.acquire()
+	inner, err := f.acquire()
+	if err != nil {
+		return nil, err
+	}
 	data, err := inner.Serialize(v)
 	if err != nil {
 		f.release(inner)
@@ -85,16 +129,45 @@ func (f *Fory) Serialize(v any) ([]byte, error) {
 
 // Deserialize deserializes data into the provided value using a pooled Fory instance
 func (f *Fory) Deserialize(data []byte, v any) error {
-	inner := f.acquire()
+	inner, err := f.acquire()
+	if err != nil {
+		return err
+	}
 	defer f.release(inner)
 	return inner.Deserialize(data, v)
 }
 
-// RegisterStructByName registers a struct type by name for cross-language serialization.
+// RegisterStructByName registers a struct type by name before the first root operation.
 func (f *Fory) RegisterStructByName(type_ any, name string) error {
-	inner := f.acquire()
-	defer f.release(inner)
-	return inner.RegisterStructByName(type_, name)
+	f.registrationMu.Lock()
+	defer f.registrationMu.Unlock()
+	if f.registryFrozen.Load() {
+		return fory.ErrRegistryFrozen
+	}
+	if f.prepared == nil {
+		inner, err := f.newInner()
+		if err != nil {
+			return err
+		}
+		f.prepared = inner
+	}
+	registration := structRegistration{name: name}
+	if err := f.prepared.RegisterStructByName(type_, name); err != nil {
+		// A failed registration is not part of the facade registry. Rebuild from
+		// the successful log before the next registration or first root.
+		f.prepared = nil
+		return err
+	}
+	if registeredType, ok := type_.(reflect.Type); ok {
+		registration.type_ = registeredType
+	} else {
+		registration.type_ = reflect.TypeOf(type_)
+		if registration.type_.Kind() == reflect.Ptr {
+			registration.type_ = registration.type_.Elem()
+		}
+	}
+	f.registrations = append(f.registrations, registration)
+	return nil
 }
 
 // ============================================================================
@@ -104,7 +177,10 @@ func (f *Fory) RegisterStructByName(type_ any, name string) error {
 // Serialize serializes a value with type T inferred, thread-safe.
 // Takes pointer to avoid interface heap allocation and struct copy.
 func Serialize[T any](f *Fory, value *T) ([]byte, error) {
-	inner := f.acquire()
+	inner, err := f.acquire()
+	if err != nil {
+		return nil, err
+	}
 	data, err := fory.Serialize(inner, value)
 	if err != nil {
 		f.release(inner)
@@ -120,7 +196,10 @@ func Serialize[T any](f *Fory, value *T) ([]byte, error) {
 // Deserialize deserializes data directly into the provided target, thread-safe.
 // Takes pointer to avoid interface heap allocation and enable direct writes.
 func Deserialize[T any](f *Fory, data []byte, target *T) error {
-	inner := f.acquire()
+	inner, err := f.acquire()
+	if err != nil {
+		return err
+	}
 	defer f.release(inner)
 	return fory.Deserialize(inner, data, target)
 }

@@ -160,6 +160,14 @@ func (s *optionalSerializer) setHas(value reflect.Value, has bool) {
 	}
 }
 
+func (s *optionalSerializer) clear(value reflect.Value) {
+	valueField := s.valueField(value)
+	if valueField.CanSet() {
+		valueField.SetZero()
+	}
+	s.setHas(value, false)
+}
+
 func (s *optionalSerializer) Write(ctx *WriteContext, refMode RefMode, writeType bool, hasGenerics bool, value reflect.Value) {
 	if !s.has(value) {
 		s.writeNull(ctx, refMode, writeType)
@@ -224,16 +232,18 @@ func (s *optionalSerializer) WriteData(ctx *WriteContext, value reflect.Value) {
 
 func (s *optionalSerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, hasGenerics bool, value reflect.Value) {
 	buf := ctx.Buffer()
+	refID := int32(NotNullValueFlag)
 	switch refMode {
 	case RefModeTracking:
-		refID, refErr := ctx.RefResolver().TryPreserveRefId(buf)
+		var refErr error
+		refID, refErr = ctx.RefResolver().TryPreserveRefId(buf)
 		if refErr != nil {
 			ctx.SetError(FromError(refErr))
 			return
 		}
 		if refID < int32(NotNullValueFlag) {
 			if refID == int32(NullFlag) {
-				s.setHas(value, false)
+				s.clear(value)
 				return
 			}
 			valueField := s.valueField(value)
@@ -245,7 +255,7 @@ func (s *optionalSerializer) Read(ctx *ReadContext, refMode RefMode, readType bo
 	case RefModeNullOnly:
 		flag := buf.ReadInt8(ctx.Err())
 		if flag == NullFlag {
-			s.setHas(value, false)
+			s.clear(value)
 			return
 		}
 	case RefModeNone:
@@ -269,6 +279,30 @@ func (s *optionalSerializer) Read(ctx *ReadContext, refMode RefMode, readType bo
 			}
 			if structSer, ok := serializer.(*structSerializer); ok && len(structSer.fieldDefs) > 0 {
 				valueField := s.valueField(value)
+				if s.valueType.Kind() == reflect.Ptr {
+					ptrSer, ok := s.valueSerializer.(*ptrToValueSerializer)
+					if !ok {
+						ctx.SetError(DeserializationErrorf(
+							"optional pointer type %v has no pointer serializer", s.valueType))
+						return
+					}
+					if valueField.IsNil() {
+						if !ctx.ReserveGraphMemory(int64(ptrSer.valueBytes)) {
+							return
+						}
+						valueField.Set(reflect.New(s.valueType.Elem()))
+					}
+					// The preserved Optional[*Struct] reference denotes the pointer owner,
+					// so publish it before consuming fields for circular and later refs.
+					if refID >= 0 {
+						if !publishReadRef(ctx, refID, valueField) {
+							return
+						}
+					}
+					s.setHas(value, true)
+					structSer.ReadData(ctx, valueField.Elem())
+					return
+				}
 				s.setHas(value, true)
 				structSer.ReadData(ctx, valueField)
 				return

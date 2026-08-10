@@ -115,9 +115,8 @@ func TestSerializeAny(t *testing.T) {
 
 // TestDeserialize tests the Deserialize generic function
 func TestDeserialize(t *testing.T) {
-	f := New(fory.WithXlang(false), fory.WithRefTracking(true), fory.WithCompatible(false))
-
 	t.Run("Int32", func(t *testing.T) {
+		f := New(fory.WithXlang(false), fory.WithRefTracking(true), fory.WithCompatible(false))
 		val := int32(42)
 		data, err := Serialize(f, &val)
 		require.NoError(t, err)
@@ -129,6 +128,7 @@ func TestDeserialize(t *testing.T) {
 	})
 
 	t.Run("String", func(t *testing.T) {
+		f := New(fory.WithXlang(false), fory.WithRefTracking(true), fory.WithCompatible(false))
 		val := "hello"
 		data, err := Serialize(f, &val)
 		require.NoError(t, err)
@@ -140,6 +140,7 @@ func TestDeserialize(t *testing.T) {
 	})
 
 	t.Run("Slice", func(t *testing.T) {
+		f := New(fory.WithXlang(false), fory.WithRefTracking(true), fory.WithCompatible(false))
 		// Serialize a struct containing the slice since *[]T is not supported
 		type SliceWrapper struct {
 			Items []int32

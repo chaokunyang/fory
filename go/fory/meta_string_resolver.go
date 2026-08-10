@@ -18,8 +18,10 @@
 package fory
 
 import (
+	"bytes"
 	"encoding/binary"
 	"fmt"
+
 	"github.com/apache/fory/go/fory/meta"
 )
 
@@ -222,6 +224,10 @@ func (r *MetaStringResolver) ReadMetaStringBytes(buf *ByteBuffer, ctxErr *Error)
 		}
 	} else {
 		if m, ok := r.hashToMetaStrBytes[hashcode]; ok {
+			if m.Encoding != encoding || !bytes.Equal(m.Data, data) {
+				ctxErr.SetError(fmt.Errorf("meta string body hash collision"))
+				return nil
+			}
 			r.dynamicIDToEnumString = append(r.dynamicIDToEnumString, m)
 			return m
 		}
@@ -233,10 +239,6 @@ func (r *MetaStringResolver) ReadMetaStringBytes(buf *ByteBuffer, ctxErr *Error)
 	if length <= SmallStringThreshold {
 		if len(r.smallHashToMetaStrBytes) < maxCachedMetaStrings {
 			r.smallHashToMetaStrBytes[key] = m
-		}
-	} else {
-		if len(r.hashToMetaStrBytes) < maxCachedMetaStrings {
-			r.hashToMetaStrBytes[hashcode] = m
 		}
 	}
 	r.dynamicIDToEnumString = append(r.dynamicIDToEnumString, m)
@@ -274,7 +276,25 @@ func (r *MetaStringResolver) GetMetaStrBytes(metastr *meta.MetaString) *MetaStri
 	// Create and cache new instance
 	m := NewMetaStringBytes(data, hashcode)
 	r.metaStrToMetaStrBytes[metastr] = m
+	r.cacheValidatedMetaString(m)
 	return m
+}
+
+// cacheValidatedMetaString publishes only application-configured metadata.
+// Read misses remain root-local until ResetRead, so a failed or rejected
+// input-selected type cannot populate the persistent large-body cache.
+func (r *MetaStringResolver) cacheValidatedMetaString(m *MetaStringBytes) {
+	if m == nil || len(m.Data) <= SmallStringThreshold || len(r.hashToMetaStrBytes) >= maxCachedMetaStrings {
+		return
+	}
+	if existing, ok := r.hashToMetaStrBytes[m.Hashcode]; ok {
+		if sameMetaStringBytes(existing, m) {
+			return
+		}
+		// A fixed-hash collision is not an alternate identity for this cache.
+		return
+	}
+	r.hashToMetaStrBytes[m.Hashcode] = m
 }
 
 // ComputeMetaStringHash computes the hashcode for meta string bytes

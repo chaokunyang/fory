@@ -37,12 +37,16 @@ const (
 // PrimitiveFieldInfo contains only the fields needed for hot primitive serialization loops.
 // This minimal struct improves cache efficiency during iteration.
 type PrimitiveFieldInfo struct {
+	// Keep pointer-sized fields together so the wide buffer offset still packs
+	// into a 24-byte record on 64-bit targets.
 	Offset      uintptr    // Field offset for unsafe access
+	Meta        *FieldMeta // Cold metadata used by optional fields
+	WriteOffset uint32     // Offset within the fixed-fields buffer
 	DispatchId  DispatchId // Type dispatch ID
-	WriteOffset uint8      // Offset within fixed-fields buffer (0-255, sufficient for fixed primitives)
 	Kind        FieldKind
-	Meta        *FieldMeta
 }
+
+const maxPrimitiveWriteOffset = ^uint32(0)
 
 type remoteFieldReadAction uint8
 
@@ -210,11 +214,14 @@ func GroupFields(fields []FieldInfo) FieldGroup {
 	// Compute WriteOffset after sorting and build primitive field slice
 	g.PrimitiveFixedFields = make([]PrimitiveFieldInfo, len(g.FixedFields))
 	for i := range g.FixedFields {
+		if uint64(g.FixedSize) > uint64(maxPrimitiveWriteOffset) {
+			panic(fmt.Sprintf("fixed-field offset %d exceeds supported maximum %d", g.FixedSize, maxPrimitiveWriteOffset))
+		}
 		g.FixedFields[i].WriteOffset = g.FixedSize
 		g.PrimitiveFixedFields[i] = PrimitiveFieldInfo{
 			Offset:      g.FixedFields[i].Offset,
 			DispatchId:  g.FixedFields[i].DispatchId,
-			WriteOffset: uint8(g.FixedSize),
+			WriteOffset: uint32(g.FixedSize),
 			Kind:        g.FixedFields[i].Kind,
 			Meta:        g.FixedFields[i].Meta,
 		}

@@ -168,6 +168,10 @@ func (s *ptrToValueSerializer) Read(ctx *ReadContext, refMode RefMode, readType 
 			ctxErr.SetError(refErr)
 			return
 		}
+		if refID == int32(NullFlag) {
+			value.SetZero()
+			return
+		}
 		if refID < int32(NotNullValueFlag) {
 			// Reference found
 			assignReadRef(ctx, refID, value)
@@ -176,6 +180,7 @@ func (s *ptrToValueSerializer) Read(ctx *ReadContext, refMode RefMode, readType 
 	case RefModeNullOnly:
 		flag := buf.ReadInt8(ctxErr)
 		if flag == NullFlag {
+			value.SetZero()
 			return
 		}
 	case RefModeNone:
@@ -264,8 +269,15 @@ func (s *ptrToInterfaceSerializer) Write(ctx *WriteContext, refMode RefMode, wri
 }
 
 func (s *ptrToInterfaceSerializer) ReadData(ctx *ReadContext, value reflect.Value) {
-	// Create a new interface pointer
-	newVal := reflect.New(value.Type().Elem())
+	newVal := value
+	if value.IsNil() {
+		// The interface wrapper is a distinct retained owner. Its dynamic child
+		// remains charged by the child serializer.
+		if !ctx.ReserveGraphMemory(int64(value.Type().Elem().Size())) {
+			return
+		}
+		newVal = reflect.New(value.Type().Elem())
+	}
 
 	// Use ReadValue to handle the polymorphic interface value with ref tracking and type info
 	ctx.ReadValue(newVal.Elem(), RefModeTracking, true)
@@ -273,7 +285,9 @@ func (s *ptrToInterfaceSerializer) ReadData(ctx *ReadContext, value reflect.Valu
 		return
 	}
 
-	value.Set(newVal)
+	if value.IsNil() {
+		value.Set(newVal)
+	}
 }
 
 func (s *ptrToInterfaceSerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, hasGenerics bool, value reflect.Value) {
@@ -286,6 +300,10 @@ func (s *ptrToInterfaceSerializer) Read(ctx *ReadContext, refMode RefMode, readT
 			ctx.SetError(FromError(refErr))
 			return
 		}
+		if refID == int32(NullFlag) {
+			value.SetZero()
+			return
+		}
 		if refID < int32(NotNullValueFlag) {
 			// Reference found
 			assignReadRef(ctx, refID, value)
@@ -294,6 +312,7 @@ func (s *ptrToInterfaceSerializer) Read(ctx *ReadContext, refMode RefMode, readT
 	case RefModeNullOnly:
 		flag := buf.ReadInt8(ctxErr)
 		if flag == NullFlag {
+			value.SetZero()
 			return
 		}
 	}

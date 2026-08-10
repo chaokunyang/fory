@@ -50,16 +50,18 @@ type mapSerializer struct {
 	declaredValueType reflect.Type
 	// These charge concrete value storage retained behind interface map slots;
 	// keyBytes and valueBytes below account for the slots themselves.
-	declaredKeyBytes   int
-	declaredValueBytes int
-	keySerializer      Serializer
-	valueSerializer    Serializer
-	keyReferencable    bool
-	valueReferencable  bool
-	hasGenerics        bool // True when map is a struct field with declared key/value types
-	keyBytes           int
-	valueBytes         int
-	maxLength          int64
+	declaredKeyBytes    int
+	declaredValueBytes  int
+	declaredKeyTypeID   TypeId
+	declaredValueTypeID TypeId
+	keySerializer       Serializer
+	valueSerializer     Serializer
+	keyReferencable     bool
+	valueReferencable   bool
+	hasGenerics         bool // True when map is a struct field with declared key/value types
+	keyBytes            int
+	valueBytes          int
+	maxLength           int64
 }
 
 // Write handles ref tracking and type writing, then delegates to WriteData
@@ -334,11 +336,6 @@ func (s mapSerializer) ReadData(ctx *ReadContext, value reflect.Value) {
 		return
 	}
 	mapType := type_
-	// For any maps without declared types, use map[any]any.
-	if !s.hasGenerics && type_.Key().Kind() == reflect.Interface && type_.Elem().Kind() == reflect.Interface {
-		iface := reflect.TypeOf((*any)(nil)).Elem()
-		mapType = reflect.MapOf(iface, iface)
-	}
 	keyBytes := s.keyBytes
 	valueBytes := s.valueBytes
 	elemBytes := keyBytes + valueBytes
@@ -359,7 +356,7 @@ func (s mapSerializer) ReadData(ctx *ReadContext, value reflect.Value) {
 		return
 	}
 	if size == 0 {
-		if value.IsNil() {
+		if value.IsNil() || value.Len() > 0 {
 			value.Set(reflect.MakeMap(mapType))
 		}
 		refResolver.Reference(value)
@@ -376,8 +373,10 @@ func (s mapSerializer) ReadData(ctx *ReadContext, value reflect.Value) {
 	if !checkUnbackedContainerAllocation(ctx, size-1) {
 		return
 	}
-	if value.IsNil() {
+	if value.IsNil() || value.Len() > size {
 		value.Set(reflect.MakeMapWithSize(mapType, size))
+	} else {
+		value.Clear()
 	}
 	refResolver.Reference(value)
 
@@ -468,17 +467,22 @@ func (s mapSerializer) readNullValueEntry(ctx *ReadContext, header uint8, keyTyp
 	keyDeclared := (header & KEY_DECL_TYPE) != 0
 	trackKeyRef := (header & TRACKING_KEY_REF) != 0
 	if keyDeclared {
-		if s.declaredKeyType != nil && s.keySerializer != nil &&
-			keyType.Kind() == reflect.Interface && s.declaredKeyType.Kind() == reflect.Struct {
-			if _, pointerOwner := s.keySerializer.(*ptrToValueSerializer); !pointerOwner &&
-				!reserveMapBox(ctx, int64(s.declaredKeyBytes), trackKeyRef) {
-				return reflect.Value{}
-			}
+		targetKeyType := keyType
+		var serializer Serializer
+		keyType, serializer = wrapMapSerializerIfNeeded(
+			ctx, targetKeyType, s.declaredKeyType, s.keySerializer, s.declaredKeyBytes)
+		if ctx.HasError() || !reserveMapBox(
+			ctx,
+			interfaceOwnerBytes(targetKeyType, keyType, serializer, s.declaredKeyBytes, s.declaredKeyTypeID),
+			trackKeyRef,
+		) {
+			return reflect.Value{}
 		}
-		keyType = s.declaredKeyType
+		return s.readSingleValue(
+			ctx, buf, ctxErr, true, trackKeyRef, keyType, serializer, resolver, refResolver)
 	}
 
-	return s.readSingleValue(ctx, buf, ctxErr, keyDeclared, trackKeyRef, keyType, s.keySerializer, resolver, refResolver)
+	return s.readSingleValue(ctx, buf, ctxErr, false, trackKeyRef, keyType, nil, resolver, refResolver)
 }
 
 // readNullKeyEntry reads an entry where key is null, returns the value
@@ -488,17 +492,22 @@ func (s mapSerializer) readNullKeyEntry(ctx *ReadContext, header uint8, valueTyp
 	valueDeclared := (header & VALUE_DECL_TYPE) != 0
 	trackValueRef := (header & TRACKING_VALUE_REF) != 0
 	if valueDeclared {
-		if s.declaredValueType != nil && s.valueSerializer != nil &&
-			valueType.Kind() == reflect.Interface && s.declaredValueType.Kind() == reflect.Struct {
-			if _, pointerOwner := s.valueSerializer.(*ptrToValueSerializer); !pointerOwner &&
-				!reserveMapBox(ctx, int64(s.declaredValueBytes), trackValueRef) {
-				return reflect.Value{}
-			}
+		targetValueType := valueType
+		var serializer Serializer
+		valueType, serializer = wrapMapSerializerIfNeeded(
+			ctx, targetValueType, s.declaredValueType, s.valueSerializer, s.declaredValueBytes)
+		if ctx.HasError() || !reserveMapBox(
+			ctx,
+			interfaceOwnerBytes(targetValueType, valueType, serializer, s.declaredValueBytes, s.declaredValueTypeID),
+			trackValueRef,
+		) {
+			return reflect.Value{}
 		}
-		valueType = s.declaredValueType
+		return s.readSingleValue(
+			ctx, buf, ctxErr, true, trackValueRef, valueType, serializer, resolver, refResolver)
 	}
 
-	return s.readSingleValue(ctx, buf, ctxErr, valueDeclared, trackValueRef, valueType, s.valueSerializer, resolver, refResolver)
+	return s.readSingleValue(ctx, buf, ctxErr, false, trackValueRef, valueType, nil, resolver, refResolver)
 }
 
 // readSingleValue reads a single key or value with proper ref/type handling
@@ -540,18 +549,10 @@ func (s mapSerializer) readSingleValue(ctx *ReadContext, buf *ByteBuffer, ctxErr
 		if ctx.HasError() {
 			return reflect.Value{}
 		}
-		if staticType.Kind() == reflect.Interface && valType.Kind() == reflect.Struct {
-			if _, pointerOwner := ser.(*ptrToValueSerializer); !pointerOwner {
-				valueBytes := ti.ValueBytes
-				if valueBytes == 0 {
-					if structSer, ok := ser.(*structSerializer); ok {
-						valueBytes = structSer.valueBytes
-					}
-				}
-				if valueBytes > 0 && !ctx.ReserveGraphMemory(int64(valueBytes)) {
-					return reflect.Value{}
-				}
-			}
+		if ownerBytes := interfaceOwnerBytes(
+			staticType, valType, ser, ti.ValueBytes, TypeId(ti.TypeID),
+		); ownerBytes > 0 && !ctx.ReserveGraphMemory(ownerBytes) {
+			return reflect.Value{}
 		}
 		v := reflect.New(valType).Elem()
 		ser.ReadData(ctx, v)
@@ -581,18 +582,10 @@ func (s mapSerializer) readSingleValue(ctx *ReadContext, buf *ByteBuffer, ctxErr
 		if ctx.HasError() {
 			return reflect.Value{}
 		}
-		if staticType.Kind() == reflect.Interface && valType.Kind() == reflect.Struct {
-			if _, pointerOwner := ser.(*ptrToValueSerializer); !pointerOwner {
-				valueBytes := typeInfo.ValueBytes
-				if valueBytes == 0 {
-					if structSer, ok := ser.(*structSerializer); ok {
-						valueBytes = structSer.valueBytes
-					}
-				}
-				if valueBytes > 0 && !ctx.ReserveGraphMemory(int64(valueBytes)) {
-					return reflect.Value{}
-				}
-			}
+		if ownerBytes := interfaceOwnerBytes(
+			staticType, valType, ser, typeInfo.ValueBytes, TypeId(typeInfo.TypeID),
+		); ownerBytes > 0 && !ctx.ReserveGraphMemory(ownerBytes) {
+			return reflect.Value{}
 		}
 	} else {
 		ser = declaredSer
@@ -669,6 +662,11 @@ func (s mapSerializer) readChunk(ctx *ReadContext, mapVal reflect.Value, header 
 			return 0
 		}
 		keyType = s.declaredKeyType
+		keyType, keySer = wrapMapSerializerIfNeeded(
+			ctx, targetKeyType, keyType, keySer, s.declaredKeyBytes)
+		if ctx.HasError() {
+			return 0
+		}
 	}
 
 	if !valDeclType {
@@ -690,6 +688,11 @@ func (s mapSerializer) readChunk(ctx *ReadContext, mapVal reflect.Value, header 
 			return 0
 		}
 		valueType = s.declaredValueType
+		valueType, valSer = wrapMapSerializerIfNeeded(
+			ctx, targetValueType, valueType, valSer, s.declaredValueBytes)
+		if ctx.HasError() {
+			return 0
+		}
 	}
 
 	keyRefMode := RefModeNone
@@ -700,30 +703,20 @@ func (s mapSerializer) readChunk(ctx *ReadContext, mapVal reflect.Value, header 
 	if trackValRef {
 		valRefMode = RefModeTracking
 	}
-	keyBoxBytes := int64(0)
-	if targetKeyType.Kind() == reflect.Interface && keyType.Kind() == reflect.Struct {
-		if _, pointerOwner := keySer.(*ptrToValueSerializer); !pointerOwner {
-			if keyTypeInfo != nil && keyTypeInfo.ValueBytes > 0 {
-				keyBoxBytes = int64(keyTypeInfo.ValueBytes)
-			} else if keyDeclType {
-				keyBoxBytes = int64(s.declaredKeyBytes)
-			} else if structSer, ok := keySer.(*structSerializer); ok {
-				keyBoxBytes = int64(structSer.valueBytes)
-			}
-		}
+	keyValueBytes := s.declaredKeyBytes
+	keyTypeID := s.declaredKeyTypeID
+	if keyTypeInfo != nil {
+		keyValueBytes = keyTypeInfo.ValueBytes
+		keyTypeID = TypeId(keyTypeInfo.TypeID)
 	}
-	valueBoxBytes := int64(0)
-	if targetValueType.Kind() == reflect.Interface && valueType.Kind() == reflect.Struct {
-		if _, pointerOwner := valSer.(*ptrToValueSerializer); !pointerOwner {
-			if valueTypeInfo != nil && valueTypeInfo.ValueBytes > 0 {
-				valueBoxBytes = int64(valueTypeInfo.ValueBytes)
-			} else if valDeclType {
-				valueBoxBytes = int64(s.declaredValueBytes)
-			} else if structSer, ok := valSer.(*structSerializer); ok {
-				valueBoxBytes = int64(structSer.valueBytes)
-			}
-		}
+	keyBoxBytes := interfaceOwnerBytes(targetKeyType, keyType, keySer, keyValueBytes, keyTypeID)
+	valueValueBytes := s.declaredValueBytes
+	valueTypeID := s.declaredValueTypeID
+	if valueTypeInfo != nil {
+		valueValueBytes = valueTypeInfo.ValueBytes
+		valueTypeID = TypeId(valueTypeInfo.TypeID)
 	}
+	valueBoxBytes := interfaceOwnerBytes(targetValueType, valueType, valSer, valueValueBytes, valueTypeID)
 	entryReadAlwaysAdvances := trackKeyRef || trackValRef ||
 		serializerReadDataAlwaysAdvances(keySer) ||
 		serializerReadDataAlwaysAdvances(valSer)
@@ -784,11 +777,13 @@ func reserveMapBox(ctx *ReadContext, bytes int64, trackRef bool) bool {
 	if trackRef {
 		// Only a new non-null value materializes a box. Peek before allocation so
 		// nulls and back-references neither allocate nor consume graph budget.
+		// TryPreserveRefId accepts every marker at or above NotNullValueFlag as
+		// value-bearing, so accepted positive markers must take the same charge.
 		if !ctx.Buffer().CheckReadable(1, ctx.Err()) {
 			return false
 		}
 		flag := int8(ctx.Buffer().data[ctx.Buffer().readerIndex])
-		if flag != RefValueFlag && flag != NotNullValueFlag {
+		if flag < NotNullValueFlag {
 			return true
 		}
 	}
@@ -846,12 +841,15 @@ func readMapRefAndType(ctx *ReadContext, refMode RefMode, readType bool, value r
 		if refID < int32(NotNullValueFlag) {
 			if refID != int32(NullFlag) {
 				assignReadRef(ctx, refID, value)
+			} else {
+				value.SetZero()
 			}
 			return true
 		}
 	case RefModeNullOnly:
 		flag := buf.ReadInt8(ctxErr)
 		if flag == NullFlag {
+			value.SetZero()
 			return true
 		}
 	}
@@ -872,6 +870,42 @@ func unwrapInterface(v reflect.Value) reflect.Value {
 	return v
 }
 
+func interfaceOwnerBytes(
+	targetType, valueType reflect.Type, serializer Serializer, valueBytes int, typeID TypeId,
+) int64 {
+	if targetType == nil || valueType == nil || targetType.Kind() != reflect.Interface ||
+		valueType.Kind() == reflect.Ptr || !valueType.AssignableTo(targetType) {
+		return 0
+	}
+	if _, pointerOwner := serializer.(*ptrToValueSerializer); pointerOwner {
+		return 0
+	}
+	// Preserve the explicit enum/union owner exclusion in container interface slots.
+	if typeID == UNION || typeID == TYPED_UNION || typeID == NAMED_UNION {
+		return 0
+	}
+	if valueType.Kind() != reflect.Struct {
+		// Registered aggregate extension values retain a boxed value header in
+		// the interface slot; their custom body codec does not own that box.
+		if _, extension := serializer.(*extensionSerializerAdapter); !extension {
+			return 0
+		}
+		switch valueType.Kind() {
+		case reflect.Array, reflect.Map, reflect.Slice:
+		default:
+			return 0
+		}
+	}
+	if valueBytes == 0 {
+		if structSer, ok := serializer.(*structSerializer); ok {
+			valueBytes = structSer.valueBytes
+		}
+	}
+	return int64(valueBytes)
+}
+
+// Pointer-only interface values must be materialized before their body is read;
+// late wrapping at map insertion would publish and charge a different owner.
 func wrapMapSerializerIfNeeded(
 	ctx *ReadContext, declaredType, actualType reflect.Type, serializer Serializer, valueBytes int,
 ) (reflect.Type, Serializer) {
@@ -958,7 +992,9 @@ func setMapValue(ctx *ReadContext, mapVal, key, value reflect.Value) bool {
 			return false
 		}
 	}
-	if !finalKey.Type().Comparable() {
+	// Type.Comparable is insufficient when a comparable type contains an
+	// interface whose dynamic value is unhashable.
+	if !finalKey.Comparable() {
 		ctx.SetError(DeserializationErrorf("map key type %v is not comparable", finalKey.Type()))
 		return false
 	}

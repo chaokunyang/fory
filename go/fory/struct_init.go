@@ -56,7 +56,10 @@ func (s *structSerializer) initialize(typeResolver *TypeResolver) error {
 	s.readDataAlwaysAdvances = s.computeReadDataAlwaysAdvances()
 	// Compute struct hash
 	s.structHash = s.computeHash()
-	if s.tempValue == nil {
+	// Remote TypeDef serializers are read owners. Retaining a full local-T write
+	// scratch per accepted remote schema would keep application-sized memory
+	// alive across roots, so only canonical local serializers warm this cache.
+	if s.fieldDefs == nil && s.tempValue == nil {
 		tmp := reflect.New(s.type_).Elem()
 		s.tempValue = &tmp
 	}
@@ -270,6 +273,14 @@ func (s *structSerializer) initFields(typeResolver *TypeResolver) error {
 func (s *structSerializer) initFieldsFromTypeDef(typeResolver *TypeResolver) error {
 	type_ := s.type_
 	emptyInterfaceType := reflect.TypeOf((*any)(nil)).Elem()
+	for _, def := range s.fieldDefs {
+		if def.typeSpec == nil {
+			return fmt.Errorf("remote field %q has no TypeSpec", def.name)
+		}
+		if err := def.typeSpec.validateRuntimeType(typeResolver); err != nil {
+			return fmt.Errorf("remote field %q: %w", def.name, err)
+		}
+	}
 	if type_ == nil {
 		// Type is not known - we'll create an any placeholder
 		// This happens when deserializing unknown types in compatible mode
@@ -327,6 +338,9 @@ func (s *structSerializer) initFieldsFromTypeDef(typeResolver *TypeResolver) err
 		s.typeDefDiffers = true // Unknown type, must use ordered reading
 		return nil
 	}
+	if err := validateForyTags(type_); err != nil {
+		return err
+	}
 
 	type localFieldBinding struct {
 		index  int
@@ -361,31 +375,61 @@ func (s *structSerializer) initFieldsFromTypeDef(typeResolver *TypeResolver) err
 			name:   fieldSpec.Name,
 			spec:   fieldSpec,
 		}
-		fieldNameToBinding[fieldSpec.Name] = binding
+		if fieldSpec.TagID >= 0 {
+			fieldTagIDToBinding[fieldSpec.TagID] = binding
+		} else {
+			fieldNameToBinding[fieldSpec.Name] = binding
+		}
 		localNullableByIndex[i] = fieldDeclaredNullable(fieldSpec)
 		localTrackRefByIndex[i] = fieldDeclaredTrackRef(fieldSpec, typeResolver.fory.config.IsXlang, typeResolver.TrackRef())
 		localSpecByIndex[i] = fieldSpec.Type
-		if fieldSpec.TagID >= 0 {
-			fieldTagIDToBinding[fieldSpec.TagID] = binding
+	}
+
+	remoteBindings := make([]localFieldBinding, len(s.fieldDefs))
+	remoteBindingFound := make([]bool, len(s.fieldDefs))
+	boundLocalFields := make(map[int]string, len(s.fieldDefs))
+	for i, def := range s.fieldDefs {
+		var binding localFieldBinding
+		var exists bool
+		if def.tagID >= 0 {
+			binding, exists = fieldTagIDToBinding[def.tagID]
+		} else if def.name != "" {
+			binding, exists = fieldNameToBinding[def.name]
 		}
+		if !exists {
+			continue
+		}
+		if prior, duplicate := boundLocalFields[binding.index]; duplicate {
+			return fmt.Errorf("remote fields %s and %s bind the same local field %s", prior, fieldLabel(def), binding.name)
+		}
+		boundLocalFields[binding.index] = fieldLabel(def)
+		if binding.goType.Kind() == reflect.Interface && isCollectionType(def.typeSpec.TypeID) {
+			return fmt.Errorf("compatible container field %s cannot be materialized as local interface %s", fieldLabel(def), binding.goType)
+		}
+		if !typeSpecsMayBind(def.typeSpec, binding.spec.Type) {
+			return fmt.Errorf("compatible field %s cannot be read as local field %s", fieldLabel(def), binding.name)
+		}
+		remoteBindings[i] = binding
+		remoteBindingFound[i] = true
 	}
 
 	var fields []FieldInfo
 
-	for _, def := range s.fieldDefs {
-		fieldSerializer, err := getFieldTypeSerializerWithResolver(typeResolver, def.typeSpec)
-		if err != nil || fieldSerializer == nil {
-			remoteTypeInfo, _ := def.typeSpec.getTypeInfoWithResolver(typeResolver)
-			if remoteTypeInfo.Type != nil {
-				fieldSerializer, _ = typeResolver.getSerializerByType(remoteTypeInfo.Type, true)
+	for defIndex, def := range s.fieldDefs {
+		var fieldSerializer Serializer
+		remoteType := emptyInterfaceType
+		typeLookupFailed := true
+		if remoteBindingFound[defIndex] {
+			var err error
+			fieldSerializer, err = getFieldTypeSerializerWithResolver(typeResolver, def.typeSpec)
+			remoteTypeInfo, typeErr := def.typeSpec.getTypeInfoWithResolver(typeResolver)
+			if typeErr == nil && remoteTypeInfo.Type != nil {
+				remoteType = remoteTypeInfo.Type
+				typeLookupFailed = remoteType == emptyInterfaceType
+				if (err != nil || fieldSerializer == nil) && !typeLookupFailed {
+					fieldSerializer, _ = typeResolver.getSerializerByType(remoteType, true)
+				}
 			}
-		}
-
-		remoteTypeInfo, _ := def.typeSpec.getTypeInfoWithResolver(typeResolver)
-		remoteType := remoteTypeInfo.Type
-		typeLookupFailed := remoteType == nil || remoteType == emptyInterfaceType
-		if remoteType == nil {
-			remoteType = emptyInterfaceType
 		}
 
 		isStructLikeField := isStructFieldType(def.typeSpec)
@@ -396,32 +440,18 @@ func (s *structSerializer) initFieldsFromTypeDef(typeResolver *TypeResolver) err
 		var localFieldName string
 		var localType reflect.Type
 		var localFieldSpec *FieldSpec
-		var exists bool
+		exists := remoteBindingFound[defIndex]
 		var scalarConversion *compatibleScalarConversion
 		exactSchema := false
 
-		if def.tagID >= 0 {
-			if binding, ok := fieldTagIDToBinding[def.tagID]; ok {
-				exists = true
-				fieldIndex = binding.index
-				localType = binding.goType
-				offset = binding.offset
-				localFieldName = binding.name
-				bindingSpec := binding.spec
-				localFieldSpec = &bindingSpec
-			}
-		}
-
-		if !exists && def.name != "" {
-			if binding, ok := fieldNameToBinding[def.name]; ok {
-				exists = true
-				fieldIndex = binding.index
-				localType = binding.goType
-				offset = binding.offset
-				localFieldName = binding.name
-				bindingSpec := binding.spec
-				localFieldSpec = &bindingSpec
-			}
+		if exists {
+			binding := remoteBindings[defIndex]
+			fieldIndex = binding.index
+			localType = binding.goType
+			offset = binding.offset
+			localFieldName = binding.name
+			bindingSpec := binding.spec
+			localFieldSpec = &bindingSpec
 		}
 
 		if exists {
@@ -602,7 +632,14 @@ func (s *structSerializer) initFieldsFromTypeDef(typeResolver *TypeResolver) err
 			if shouldRead {
 				if localType != nil && !usesCompatibleCollectionArrayReader {
 					localSerializer, localErr := serializerForTypeSpec(typeResolver, localType, def.typeSpec)
-					if localErr == nil && localSerializer != nil {
+					interfaceScalar := localType.Kind() == reflect.Interface &&
+						interfaceScalarType(defTypeId) && fieldSerializer != nil
+					dynamicInterface := isPolymorphicField && localType.Kind() == reflect.Interface
+					structInterface := isStructLikeField && localType.Kind() == reflect.Interface
+					if localErr != nil && !interfaceScalar && !dynamicInterface && !structInterface {
+						return fmt.Errorf("compatible field %s: %w", fieldLabel(def), localErr)
+					}
+					if localSerializer != nil {
 						fieldSerializer = localSerializer
 					}
 				}
@@ -658,7 +695,7 @@ func (s *structSerializer) initFieldsFromTypeDef(typeResolver *TypeResolver) err
 						}
 					}
 				}
-				if localType.Kind() == reflect.Interface && compatibleScalarType(defTypeId) && fieldSerializer != nil {
+				if localType.Kind() == reflect.Interface && interfaceScalarType(defTypeId) && fieldSerializer != nil {
 					scalarType, ok := goTypeForTypeID(defTypeId, typeResolver)
 					if !ok || scalarType == nil || !scalarType.AssignableTo(localType) {
 						return fmt.Errorf("compatible scalar type %d cannot be materialized as %s", defTypeId, localType)
@@ -850,6 +887,18 @@ func (s *structSerializer) initFieldsFromTypeDef(typeResolver *TypeResolver) err
 	return nil
 }
 
+func interfaceScalarType(typeID TypeId) bool {
+	if compatibleScalarType(typeID) {
+		return true
+	}
+	switch typeID {
+	case DATE, TIMESTAMP, DURATION:
+		return true
+	default:
+		return false
+	}
+}
+
 func fieldSpecEqualForDiff(remoteSpec *TypeSpec, remoteNullable bool, remoteTrackRef bool, localSpec *TypeSpec, localNullable bool, localTrackRef bool) bool {
 	if remoteSpec == nil || localSpec == nil {
 		return remoteSpec == localSpec
@@ -861,6 +910,72 @@ func fieldSpecEqualForDiff(remoteSpec *TypeSpec, remoteNullable bool, remoteTrac
 	local.Nullable = localNullable
 	local.TrackRef = localTrackRef
 	return remote.EqualForDiff(local)
+}
+
+// typeSpecsMayBind is a reflection-free compatibility preflight. It must stay
+// ahead of remote runtime-type synthesis so a rejected TypeDef cannot populate
+// Go's process-global reflect type cache with child SliceOf/MapOf products.
+func typeSpecsMayBind(remote, local *TypeSpec) bool {
+	if remote == nil || local == nil {
+		return remote == local
+	}
+	remote.normalizeChildren()
+	local.normalizeChildren()
+	if remote.TypeID == UNKNOWN || local.TypeID == UNKNOWN {
+		return true
+	}
+	switch remote.TypeID {
+	case LIST:
+		if local.TypeID == LIST {
+			return typeSpecsMayBind(remote.Element, local.Element)
+		}
+		localElement, ok := primitiveArrayElementTypeID(local.TypeID)
+		return ok && remote.Element != nil &&
+			primitiveListElementTypeIdEqual(remote.Element.TypeID, localElement)
+	case SET:
+		return local.TypeID == SET && typeSpecsMayBind(remote.Element, local.Element)
+	case MAP:
+		return local.TypeID == MAP &&
+			typeSpecsMayBind(remote.Key, local.Key) &&
+			typeSpecsMayBind(remote.Value, local.Value)
+	default:
+		if local.TypeID == LIST {
+			remoteElement, ok := primitiveArrayElementTypeID(remote.TypeID)
+			if !ok && remote.TypeID == BINARY {
+				remoteElement, ok = UINT8, true
+			}
+			return ok && local.Element != nil &&
+				typeSpecsMayBind(NewSimpleTypeSpec(remoteElement), local.Element)
+		}
+		if isCollectionType(local.TypeID) {
+			return false
+		}
+		if typeIdEqualForDiff(remote.TypeID, local.TypeID) {
+			return true
+		}
+		if compatibleScalarType(remote.TypeID) && compatibleScalarType(local.TypeID) {
+			return true
+		}
+		return isUserDefinedType(remote.TypeID) && isUserDefinedType(local.TypeID)
+	}
+}
+
+func primitiveListElementTypeIdEqual(remote, local TypeId) bool {
+	if remote == local {
+		return true
+	}
+	switch local {
+	case INT32:
+		return remote == VARINT32
+	case UINT32:
+		return remote == VAR_UINT32
+	case INT64:
+		return remote == VARINT64 || remote == TAGGED_INT64
+	case UINT64:
+		return remote == VAR_UINT64 || remote == TAGGED_UINT64
+	default:
+		return false
+	}
 }
 
 func canReadEnumSpec(remote, local *TypeSpec) bool {

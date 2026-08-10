@@ -80,7 +80,6 @@ func TestDecodeMalformedMetaString(t *testing.T) {
 
 	_, err = decoder.Decode([]byte{0x80}, FIRST_TO_LOWER_SPECIAL)
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "missing first character")
 
 	_, err = decoder.Decode([]byte{0x74}, ALL_TO_LOWER_SPECIAL)
 	require.Error(t, err)

@@ -695,10 +695,11 @@ func (s stringSliceSerializer) ReadData(ctx *ReadContext, value reflect.Value) {
 
 	// Check if remote sent with ref tracking (handle both cases for compatibility)
 	trackRefs := (collectFlag & CollectionTrackingRef) != 0
+	hasNull := (collectFlag & CollectionHasNull) != 0
 
 	// Read elements
 	for i := 0; i < length; i++ {
-		if trackRefs {
+		if trackRefs || hasNull {
 			refFlag := buf.ReadInt8(ctxErr)
 			if refFlag == NullFlag {
 				continue // null string, leave as zero value

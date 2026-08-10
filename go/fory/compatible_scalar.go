@@ -277,7 +277,7 @@ func readDirectIntegerScalar(ctx *ReadContext, field *FieldInfo, fieldPtr unsafe
 				compatibleScalarFail(ctx, field.Meta.Name, scalar.remoteTypeID, scalar.localTypeID, "value is not an in-range integral target value")
 				return true
 			}
-			storeCompatibleInt(field.Kind, fieldPtr, optInfo, scalar.localType.Kind(), signed)
+			storeCompatibleInt(ctx, field.Kind, fieldPtr, optInfo, scalar.localType.Kind(), signed)
 			return true
 		}
 		if sourceUnsigned {
@@ -285,7 +285,7 @@ func readDirectIntegerScalar(ctx *ReadContext, field *FieldInfo, fieldPtr unsafe
 				compatibleScalarFail(ctx, field.Meta.Name, scalar.remoteTypeID, scalar.localTypeID, "value is not an in-range integral target value")
 				return true
 			}
-			storeCompatibleInt(field.Kind, fieldPtr, optInfo, scalar.localType.Kind(), int64(unsigned))
+			storeCompatibleInt(ctx, field.Kind, fieldPtr, optInfo, scalar.localType.Kind(), int64(unsigned))
 			return true
 		}
 	}
@@ -296,7 +296,7 @@ func readDirectIntegerScalar(ctx *ReadContext, field *FieldInfo, fieldPtr unsafe
 				compatibleScalarFail(ctx, field.Meta.Name, scalar.remoteTypeID, scalar.localTypeID, "value is not an in-range unsigned integral target value")
 				return true
 			}
-			storeCompatibleUint(field.Kind, fieldPtr, optInfo, scalar.localType.Kind(), uint64(signed))
+			storeCompatibleUint(ctx, field.Kind, fieldPtr, optInfo, scalar.localType.Kind(), uint64(signed))
 			return true
 		}
 		if sourceUnsigned {
@@ -304,7 +304,7 @@ func readDirectIntegerScalar(ctx *ReadContext, field *FieldInfo, fieldPtr unsafe
 				compatibleScalarFail(ctx, field.Meta.Name, scalar.remoteTypeID, scalar.localTypeID, "value is not an in-range unsigned integral target value")
 				return true
 			}
-			storeCompatibleUint(field.Kind, fieldPtr, optInfo, scalar.localType.Kind(), unsigned)
+			storeCompatibleUint(ctx, field.Kind, fieldPtr, optInfo, scalar.localType.Kind(), unsigned)
 			return true
 		}
 	}
@@ -398,42 +398,42 @@ func storeCompatibleScalarValue(ctx *ReadContext, field *FieldInfo, fieldPtr uns
 			compatibleScalarFail(ctx, field.Meta.Name, value.typeID, scalar.localTypeID, "value is not exactly boolean")
 			return
 		}
-		storeFieldValue(field.Kind, fieldPtr, optInfo, v)
+		storeCompatibleValue(ctx, field.Kind, fieldPtr, optInfo, v)
 	case STRING:
 		v, ok := compatibleValueToString(value)
 		if !ok {
 			compatibleScalarFail(ctx, field.Meta.Name, value.typeID, scalar.localTypeID, "value has no finite canonical string form")
 			return
 		}
-		storeFieldValue(field.Kind, fieldPtr, optInfo, v)
+		storeCompatibleValue(ctx, field.Kind, fieldPtr, optInfo, v)
 	case DECIMAL:
 		v, ok := compatibleValueToDecimal(value)
 		if !ok {
 			compatibleScalarFail(ctx, field.Meta.Name, value.typeID, scalar.localTypeID, "value is not exactly representable as decimal")
 			return
 		}
-		storeFieldValue(field.Kind, fieldPtr, optInfo, v)
+		storeCompatibleValue(ctx, field.Kind, fieldPtr, optInfo, v)
 	case FLOAT16, BFLOAT16:
 		bits, ok := compatibleValueToHalf(value, scalar.localTypeID)
 		if !ok {
 			compatibleScalarFail(ctx, field.Meta.Name, value.typeID, scalar.localTypeID, "value is not exactly representable by target floating type")
 			return
 		}
-		storeFieldValue(field.Kind, fieldPtr, optInfo, bits)
+		storeCompatibleValue(ctx, field.Kind, fieldPtr, optInfo, bits)
 	case FLOAT32:
 		v, ok := compatibleValueToFloat32(value)
 		if !ok {
 			compatibleScalarFail(ctx, field.Meta.Name, value.typeID, scalar.localTypeID, "value is not exactly representable by float32")
 			return
 		}
-		storeFieldValue(field.Kind, fieldPtr, optInfo, v)
+		storeCompatibleValue(ctx, field.Kind, fieldPtr, optInfo, v)
 	case FLOAT64:
 		v, ok := compatibleValueToFloat64(value)
 		if !ok {
 			compatibleScalarFail(ctx, field.Meta.Name, value.typeID, scalar.localTypeID, "value is not exactly representable by float64")
 			return
 		}
-		storeFieldValue(field.Kind, fieldPtr, optInfo, v)
+		storeCompatibleValue(ctx, field.Kind, fieldPtr, optInfo, v)
 	default:
 		if isSignedTypeID(scalar.localTypeID) {
 			v, ok := compatibleValueToInt(value, scalar.localTypeID, scalar.localType.Kind())
@@ -441,7 +441,7 @@ func storeCompatibleScalarValue(ctx *ReadContext, field *FieldInfo, fieldPtr uns
 				compatibleScalarFail(ctx, field.Meta.Name, value.typeID, scalar.localTypeID, "value is not an in-range integral target value")
 				return
 			}
-			storeCompatibleInt(field.Kind, fieldPtr, optInfo, scalar.localType.Kind(), v)
+			storeCompatibleInt(ctx, field.Kind, fieldPtr, optInfo, scalar.localType.Kind(), v)
 			return
 		}
 		v, ok := compatibleValueToUint(value, scalar.localTypeID, scalar.localType.Kind())
@@ -449,28 +449,28 @@ func storeCompatibleScalarValue(ctx *ReadContext, field *FieldInfo, fieldPtr uns
 			compatibleScalarFail(ctx, field.Meta.Name, value.typeID, scalar.localTypeID, "value is not an in-range unsigned integral target value")
 			return
 		}
-		storeCompatibleUint(field.Kind, fieldPtr, optInfo, scalar.localType.Kind(), v)
+		storeCompatibleUint(ctx, field.Kind, fieldPtr, optInfo, scalar.localType.Kind(), v)
 	}
 }
 
 func storeCompatibleScalarIdentity(ctx *ReadContext, field *FieldInfo, fieldPtr unsafe.Pointer, optInfo optionalInfo, value compatibleScalarValue) {
 	switch value.typeID {
 	case BOOL:
-		storeFieldValue(field.Kind, fieldPtr, optInfo, value.boolVal)
+		storeCompatibleValue(ctx, field.Kind, fieldPtr, optInfo, value.boolVal)
 	case STRING:
-		storeFieldValue(field.Kind, fieldPtr, optInfo, value.string)
+		storeCompatibleValue(ctx, field.Kind, fieldPtr, optInfo, value.string)
 	case INT8, INT16, INT32, VARINT32, INT64, VARINT64, TAGGED_INT64:
-		storeCompatibleInt(field.Kind, fieldPtr, optInfo, field.Meta.CompatibleScalar.localType.Kind(), value.signed)
+		storeCompatibleInt(ctx, field.Kind, fieldPtr, optInfo, field.Meta.CompatibleScalar.localType.Kind(), value.signed)
 	case UINT8, UINT16, UINT32, VAR_UINT32, UINT64, VAR_UINT64, TAGGED_UINT64:
-		storeCompatibleUint(field.Kind, fieldPtr, optInfo, field.Meta.CompatibleScalar.localType.Kind(), value.unsigned)
+		storeCompatibleUint(ctx, field.Kind, fieldPtr, optInfo, field.Meta.CompatibleScalar.localType.Kind(), value.unsigned)
 	case FLOAT16, BFLOAT16:
-		storeFieldValue(field.Kind, fieldPtr, optInfo, value.halfBits)
+		storeCompatibleValue(ctx, field.Kind, fieldPtr, optInfo, value.halfBits)
 	case FLOAT32:
-		storeFieldValue(field.Kind, fieldPtr, optInfo, value.float32)
+		storeCompatibleValue(ctx, field.Kind, fieldPtr, optInfo, value.float32)
 	case FLOAT64:
-		storeFieldValue(field.Kind, fieldPtr, optInfo, value.float64)
+		storeCompatibleValue(ctx, field.Kind, fieldPtr, optInfo, value.float64)
 	case DECIMAL:
-		storeFieldValue(field.Kind, fieldPtr, optInfo, value.decimal)
+		storeCompatibleValue(ctx, field.Kind, fieldPtr, optInfo, value.decimal)
 	default:
 		compatibleScalarFail(ctx, field.Meta.Name, value.typeID, field.Meta.CompatibleScalar.localTypeID, "unsupported identity scalar type")
 	}
@@ -1010,7 +1010,27 @@ func decimalRat(decimal Decimal) (*big.Rat, bool) {
 		unscaled.Mul(unscaled, pow10Int(extraDigits))
 		return new(big.Rat).SetInt(unscaled), true
 	}
+	if unscaled.Sign() == 0 {
+		return new(big.Rat), true
+	}
 	scale := int64(decimal.Scale)
+	if scale > maxCompatibleDecimalDigits {
+		excessScale := scale - maxCompatibleDecimalDigits
+		if excessScale >= decimalDigitUpperBound(unscaled) {
+			return nil, false
+		}
+		// A valid result can retain at most 256 fractional digits. Strip the
+		// mandatory excess in one division so a long zero suffix cannot force
+		// one full-width big.Int division per encoded scale unit.
+		quotient := new(big.Int)
+		remainder := new(big.Int)
+		quotient.QuoRem(unscaled, pow10Int(excessScale), remainder)
+		if remainder.Sign() != 0 {
+			return nil, false
+		}
+		unscaled = quotient
+		scale = maxCompatibleDecimalDigits
+	}
 	ten := big.NewInt(10)
 	zero := big.NewInt(0)
 	rem := new(big.Int)
@@ -1023,8 +1043,7 @@ func decimalRat(decimal Decimal) (*big.Rat, bool) {
 		unscaled = q
 		scale--
 	}
-	if scale > maxCompatibleDecimalDigits ||
-		decimalDigitCount(unscaled) > int(maxCompatibleDecimalDigits) {
+	if decimalDigitCount(unscaled) > int(maxCompatibleDecimalDigits) {
 		return nil, false
 	}
 	return new(big.Rat).SetFrac(unscaled, pow10Int(scale)), true
@@ -1033,8 +1052,14 @@ func decimalRat(decimal Decimal) (*big.Rat, bool) {
 func canonicalDecimalFromRat(rat *big.Rat) (Decimal, bool) {
 	num := new(big.Int).Set(rat.Num())
 	den := new(big.Int).Set(rat.Denom())
-	twos := factorCount(den, 2)
-	fives := factorCount(den, 5)
+	twos, ok := boundedFactorCount(den, 2)
+	if !ok {
+		return Decimal{}, false
+	}
+	fives, ok := boundedFactorCount(den, 5)
+	if !ok {
+		return Decimal{}, false
+	}
 	if den.Cmp(big.NewInt(1)) != 0 {
 		return Decimal{}, false
 	}
@@ -1072,21 +1097,25 @@ func canonicalDecimalFromRat(rat *big.Rat) (Decimal, bool) {
 	return NewDecimal(num, int32(scale)), true
 }
 
-func factorCount(value *big.Int, factor int64) int64 {
+func boundedFactorCount(value *big.Int, factor int64) (int64, bool) {
 	divisor := big.NewInt(factor)
+	one := big.NewInt(1)
 	zero := big.NewInt(0)
 	rem := new(big.Int)
+	quotient := new(big.Int)
 	count := int64(0)
-	for value.Cmp(big.NewInt(1)) > 0 {
-		q := new(big.Int)
-		q.QuoRem(value, divisor, rem)
+	for value.Cmp(one) > 0 {
+		quotient.QuoRem(value, divisor, rem)
 		if rem.Cmp(zero) != 0 {
 			break
 		}
-		value.Set(q)
+		if count == maxCompatibleDecimalDigits {
+			return 0, false
+		}
+		value.Set(quotient)
 		count++
 	}
-	return count
+	return count, true
 }
 
 func canonicalDecimalString(decimal Decimal) (string, bool) {
@@ -1152,6 +1181,13 @@ func decimalDigitCount(value *big.Int) int {
 	return len(magnitude.String())
 }
 
+func decimalDigitUpperBound(value *big.Int) int64 {
+	bitLength := int64(value.BitLen())
+	// 30103 / 100000 is slightly greater than log10(2), so this cannot
+	// underestimate the decimal digit count.
+	return (bitLength*30_103 + 99_999) / 100_000
+}
+
 func signedRange(typeID TypeId, kind reflect.Kind) (int64, int64) {
 	switch typeID {
 	case INT8:
@@ -1202,33 +1238,54 @@ func isUnsignedTypeID(typeID TypeId) bool {
 	}
 }
 
-func storeCompatibleInt(kind FieldKind, fieldPtr unsafe.Pointer, optInfo optionalInfo, targetKind reflect.Kind, value int64) {
+func storeCompatibleValue[T any](ctx *ReadContext, kind FieldKind, fieldPtr unsafe.Pointer, optInfo optionalInfo, value T) {
+	if kind != FieldKindOptional || optInfo.valueType.Kind() != reflect.Ptr {
+		storeReadFieldValue(ctx, kind, fieldPtr, optInfo, value)
+		return
+	}
+
+	valueSlot := reflect.NewAt(optInfo.valueType, unsafe.Add(fieldPtr, optInfo.valueOffset)).Elem()
+	if valueSlot.IsNil() {
+		if !ctx.ReserveGraphMemory(int64(optInfo.valueType.Elem().Size())) {
+			return
+		}
+		valueSlot.Set(reflect.New(optInfo.valueType.Elem()))
+	}
+	scalar := reflect.ValueOf(value)
+	if scalar.Type() != optInfo.valueType.Elem() {
+		scalar = scalar.Convert(optInfo.valueType.Elem())
+	}
+	valueSlot.Elem().Set(scalar)
+	*(*bool)(unsafe.Add(fieldPtr, optInfo.hasOffset)) = true
+}
+
+func storeCompatibleInt(ctx *ReadContext, kind FieldKind, fieldPtr unsafe.Pointer, optInfo optionalInfo, targetKind reflect.Kind, value int64) {
 	switch targetKind {
 	case reflect.Int8:
-		storeFieldValue(kind, fieldPtr, optInfo, int8(value))
+		storeCompatibleValue(ctx, kind, fieldPtr, optInfo, int8(value))
 	case reflect.Int16:
-		storeFieldValue(kind, fieldPtr, optInfo, int16(value))
+		storeCompatibleValue(ctx, kind, fieldPtr, optInfo, int16(value))
 	case reflect.Int32:
-		storeFieldValue(kind, fieldPtr, optInfo, int32(value))
+		storeCompatibleValue(ctx, kind, fieldPtr, optInfo, int32(value))
 	case reflect.Int:
-		storeFieldValue(kind, fieldPtr, optInfo, int(value))
+		storeCompatibleValue(ctx, kind, fieldPtr, optInfo, int(value))
 	default:
-		storeFieldValue(kind, fieldPtr, optInfo, value)
+		storeCompatibleValue(ctx, kind, fieldPtr, optInfo, value)
 	}
 }
 
-func storeCompatibleUint(kind FieldKind, fieldPtr unsafe.Pointer, optInfo optionalInfo, targetKind reflect.Kind, value uint64) {
+func storeCompatibleUint(ctx *ReadContext, kind FieldKind, fieldPtr unsafe.Pointer, optInfo optionalInfo, targetKind reflect.Kind, value uint64) {
 	switch targetKind {
 	case reflect.Uint8:
-		storeFieldValue(kind, fieldPtr, optInfo, uint8(value))
+		storeCompatibleValue(ctx, kind, fieldPtr, optInfo, uint8(value))
 	case reflect.Uint16:
-		storeFieldValue(kind, fieldPtr, optInfo, uint16(value))
+		storeCompatibleValue(ctx, kind, fieldPtr, optInfo, uint16(value))
 	case reflect.Uint32:
-		storeFieldValue(kind, fieldPtr, optInfo, uint32(value))
+		storeCompatibleValue(ctx, kind, fieldPtr, optInfo, uint32(value))
 	case reflect.Uint:
-		storeFieldValue(kind, fieldPtr, optInfo, uint(value))
+		storeCompatibleValue(ctx, kind, fieldPtr, optInfo, uint(value))
 	default:
-		storeFieldValue(kind, fieldPtr, optInfo, value)
+		storeCompatibleValue(ctx, kind, fieldPtr, optInfo, value)
 	}
 }
 

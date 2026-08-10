@@ -15,11 +15,17 @@
 // specific language governing permissions and limitations
 // under the License.
 
-//go:build amd64 || arm64 || 386 || arm || loong64 || ppc64le || riscv64 || wasm
+//go:build mips64le || mipsle
 
 package fory
 
-const (
-	isLittleEndian        = true
-	useNativeEndianAccess = true
-)
+import "testing"
+
+func TestMIPSUsesUnalignedFallback(t *testing.T) {
+	if !isLittleEndian {
+		t.Fatal("MIPSLE must retain little-endian raw-copy paths")
+	}
+	if useNativeEndianAccess {
+		t.Fatal("MIPS must not enable typed unaligned buffer access")
+	}
+}

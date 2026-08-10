@@ -197,6 +197,7 @@ func (s ptrToStringSerializer) Read(ctx *ReadContext, refMode RefMode, readType 
 	err := ctx.Err()
 	if refMode != RefModeNone {
 		if ctx.buffer.ReadInt8(err) == NullFlag {
+			value.SetZero()
 			return
 		}
 	}
@@ -215,9 +216,13 @@ func (s ptrToStringSerializer) ReadData(ctx *ReadContext, value reflect.Value) {
 	if ctx.HasError() {
 		return
 	}
-	ptr := new(string)
-	*ptr = str
-	value.Set(reflect.ValueOf(ptr))
+	if value.IsNil() {
+		if !ctx.ReserveGraphMemory(int64(stringElementBytes)) {
+			return
+		}
+		value.Set(reflect.New(value.Type().Elem()))
+	}
+	value.Elem().SetString(str)
 }
 
 func (s ptrToStringSerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode, typeInfo *TypeInfo, value reflect.Value) {

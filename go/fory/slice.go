@@ -93,6 +93,9 @@ func readSliceOrArrayRef(ctx *ReadContext, refMode RefMode, value reflect.Value)
 		}
 		if refID < int32(NotNullValueFlag) {
 			if refID == int32(NullFlag) {
+				if value.Kind() == reflect.Slice {
+					value.SetZero()
+				}
 				return true
 			}
 			obj := ctx.RefResolver().GetReadObject(refID)
@@ -131,6 +134,9 @@ func readSliceOrArrayRef(ctx *ReadContext, refMode RefMode, value reflect.Value)
 	case RefModeNullOnly:
 		flag := buf.ReadInt8(ctxErr)
 		if flag == NullFlag {
+			if value.Kind() == reflect.Slice {
+				value.SetZero()
+			}
 			return true
 		}
 	}
@@ -454,7 +460,7 @@ func (s *sliceSerializer) ReadData(ctx *ReadContext, value reflect.Value) {
 		// For slices, allocate or resize as needed
 		if value.Cap() < length {
 			value.Set(reflect.MakeSlice(value.Type(), length, length))
-		} else if value.Len() < length {
+		} else if value.Len() != length {
 			value.Set(value.Slice(0, length))
 		}
 	}
@@ -549,7 +555,7 @@ func (s *sliceSerializer) ReadData(ctx *ReadContext, value reflect.Value) {
 			// - NotNullValueFlag (-1) + data for non-null elements
 			refFlag := buf.ReadInt8(ctxErr)
 			if refFlag == NullFlag {
-				// Element is null, leave slice element as nil (zero value)
+				elem.SetZero()
 				continue
 			}
 			// refFlag should be NotNullValueFlag, now read the actual data

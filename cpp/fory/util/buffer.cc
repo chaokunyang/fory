@@ -211,4 +211,11 @@ Buffer *allocate_buffer(uint32_t size) {
   }
 }
 
+void Buffer::grow_checked(uint64_t required_size, uint32_t min_capacity) {
+  FORY_CHECK(required_size < std::numeric_limits<uint32_t>::max())
+      << "Buffer overflow writer_index" << writer_index_ << " diff "
+      << min_capacity;
+  grow_to_fit(static_cast<uint32_t>(required_size));
+}
+
 } // namespace fory

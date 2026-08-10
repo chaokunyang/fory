@@ -39,6 +39,9 @@ namespace fory {
 
 class StdInputStream;
 class PyInputStream;
+namespace serialization::detail {
+struct StructFieldWriter;
+}
 
 // A buffer class for storing raw bytes with various methods for reading and
 // writing the bytes.
@@ -661,7 +664,7 @@ public:
   FORY_ALWAYS_INLINE void write_uint8(uint8_t value) {
     grow(1);
     unsafe_put_byte(writer_index_, value);
-    increase_writer_index(1);
+    advance_writer_index_unchecked(1);
   }
 
   /// write int8_t value to buffer at current writer index.
@@ -669,7 +672,7 @@ public:
   FORY_ALWAYS_INLINE void write_int8(int8_t value) {
     grow(1);
     unsafe_put_byte(writer_index_, static_cast<uint8_t>(value));
-    increase_writer_index(1);
+    advance_writer_index_unchecked(1);
   }
 
   /// write uint16_t value as fixed 2 bytes to buffer at current writer index.
@@ -677,7 +680,7 @@ public:
   FORY_ALWAYS_INLINE void write_uint16(uint16_t value) {
     grow(2);
     unsafe_put<uint16_t>(writer_index_, value);
-    increase_writer_index(2);
+    advance_writer_index_unchecked(2);
   }
 
   /// write int16_t value as fixed 2 bytes to buffer at current writer index.
@@ -685,7 +688,7 @@ public:
   FORY_ALWAYS_INLINE void write_int16(int16_t value) {
     grow(2);
     unsafe_put<int16_t>(writer_index_, value);
-    increase_writer_index(2);
+    advance_writer_index_unchecked(2);
   }
 
   /// write int24 value as fixed 3 bytes to buffer at current writer index.
@@ -693,7 +696,7 @@ public:
   FORY_ALWAYS_INLINE void write_int24(int32_t value) {
     grow(3);
     put_int24(writer_index_, value);
-    increase_writer_index(3);
+    advance_writer_index_unchecked(3);
   }
 
   /// write int32_t value as fixed 4 bytes to buffer at current writer index.
@@ -701,7 +704,7 @@ public:
   FORY_ALWAYS_INLINE void write_int32(int32_t value) {
     grow(4);
     unsafe_put<int32_t>(writer_index_, value);
-    increase_writer_index(4);
+    advance_writer_index_unchecked(4);
   }
 
   /// write uint32_t value as fixed 4 bytes to buffer at current writer index.
@@ -709,7 +712,7 @@ public:
   FORY_ALWAYS_INLINE void write_uint32(uint32_t value) {
     grow(4);
     unsafe_put<uint32_t>(writer_index_, value);
-    increase_writer_index(4);
+    advance_writer_index_unchecked(4);
   }
 
   /// write int64_t value as fixed 8 bytes to buffer at current writer index.
@@ -717,7 +720,7 @@ public:
   FORY_ALWAYS_INLINE void write_int64(int64_t value) {
     grow(8);
     unsafe_put<int64_t>(writer_index_, value);
-    increase_writer_index(8);
+    advance_writer_index_unchecked(8);
   }
 
   /// write float value as fixed 4 bytes to buffer at current writer index.
@@ -725,7 +728,7 @@ public:
   FORY_ALWAYS_INLINE void write_float(float value) {
     grow(4);
     unsafe_put<float>(writer_index_, value);
-    increase_writer_index(4);
+    advance_writer_index_unchecked(4);
   }
 
   /// write double value as fixed 8 bytes to buffer at current writer index.
@@ -733,7 +736,7 @@ public:
   FORY_ALWAYS_INLINE void write_double(double value) {
     grow(8);
     unsafe_put<double>(writer_index_, value);
-    increase_writer_index(8);
+    advance_writer_index_unchecked(8);
   }
 
   /// Write float16_t as fixed 2 bytes (raw IEEE 754 bits, little-endian).
@@ -741,7 +744,7 @@ public:
   FORY_ALWAYS_INLINE void write_f16(float16_t value) {
     grow(2);
     unsafe_put<uint16_t>(writer_index_, value.to_bits());
-    increase_writer_index(2);
+    advance_writer_index_unchecked(2);
   }
 
   /// Write bfloat16_t as fixed 2 bytes (raw IEEE 754 bits, little-endian).
@@ -749,7 +752,7 @@ public:
   FORY_ALWAYS_INLINE void write_bf16(bfloat16_t value) {
     grow(2);
     unsafe_put<uint16_t>(writer_index_, value.to_bits());
-    increase_writer_index(2);
+    advance_writer_index_unchecked(2);
   }
 
   /// write uint32_t value as varint to buffer at current writer index.
@@ -757,7 +760,7 @@ public:
   FORY_ALWAYS_INLINE void write_var_uint32(uint32_t value) {
     grow(8); // bulk write may write 8 bytes for varint32
     uint32_t len = put_var_uint32_unchecked(writer_index_, value);
-    increase_writer_index(len);
+    advance_writer_index_unchecked(len);
   }
 
   /// write int32_t value as varint (zigzag encoded) to buffer at current
@@ -773,7 +776,7 @@ public:
   FORY_ALWAYS_INLINE void write_var_uint64(uint64_t value) {
     grow(9); // Max 9 bytes for varint64
     uint32_t len = put_var_uint64_unchecked(writer_index_, value);
-    increase_writer_index(len);
+    advance_writer_index_unchecked(len);
   }
 
   /// write int64_t value as varint (zigzag encoded) to buffer at current
@@ -799,7 +802,7 @@ public:
   FORY_ALWAYS_INLINE void write_bytes(const void *data, uint32_t length) {
     grow(length);
     unsafe_put(writer_index_, data, length);
-    increase_writer_index(length);
+    advance_writer_index_unchecked(length);
     if (FORY_PREDICT_FALSE(output_stream_ != nullptr && writer_index_ > 4096)) {
       output_stream_->try_flush();
     }
@@ -1031,7 +1034,7 @@ public:
       grow(9);
       data_[writer_index_] = 0b1;
       unsafe_put<int64_t>(writer_index_ + 1, value);
-      increase_writer_index(9);
+      advance_writer_index_unchecked(9);
     }
   }
 
@@ -1067,7 +1070,7 @@ public:
       grow(9);
       data_[writer_index_] = 0b1;
       unsafe_put<uint64_t>(writer_index_ + 1, value);
-      increase_writer_index(9);
+      advance_writer_index_unchecked(9);
     }
   }
 
@@ -1122,11 +1125,14 @@ public:
   FORY_ALWAYS_INLINE void grow(uint32_t min_capacity) {
     const uint64_t required_size =
         static_cast<uint64_t>(writer_index_) + min_capacity;
-    FORY_CHECK(
-        FORY_PREDICT_TRUE(required_size < std::numeric_limits<uint32_t>::max()))
-        << "Buffer overflow writer_index" << writer_index_ << " diff "
-        << min_capacity;
-    grow_to_fit(static_cast<uint32_t>(required_size));
+    if (FORY_PREDICT_TRUE(required_size <= size_ &&
+                          required_size <
+                              std::numeric_limits<uint32_t>::max())) {
+      return;
+    }
+    // Keep overflow reporting and resize arithmetic off scalar write hot paths.
+    // The slow owner retains the same checked uint32_t capacity contract.
+    grow_checked(required_size, min_capacity);
   }
 
   /// reserve buffer to new_size
@@ -1201,6 +1207,7 @@ public:
   std::string hex() const;
 
 private:
+  friend struct serialization::detail::StructFieldWriter;
   friend class StdInputStream;
   friend class PyInputStream;
   friend class OutputStream;
@@ -1379,6 +1386,13 @@ private:
     return offset <= size_ && length <= size_ - offset;
   }
 
+  // Auto-growing writers call this only after grow() has proved the complete
+  // physical store extent and the uint32 writer-index range. Rechecking here
+  // would make every scalar write pay twice for the same safety proof.
+  FORY_ALWAYS_INLINE void advance_writer_index_unchecked(uint32_t diff) {
+    writer_index_ += diff;
+  }
+
   FORY_ALWAYS_INLINE void grow_to_fit(uint32_t required_size) {
     constexpr uint64_t kMaxBufferSize = std::numeric_limits<uint32_t>::max();
     if (required_size <= size_) {
@@ -1396,6 +1410,9 @@ private:
     }
     reserve(static_cast<uint32_t>(new_size));
   }
+
+  FORY_NOINLINE void grow_checked(uint64_t required_size,
+                                  uint32_t min_capacity);
 
   uint8_t *data_;
   uint32_t size_;

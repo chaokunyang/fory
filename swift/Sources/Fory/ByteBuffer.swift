@@ -124,8 +124,13 @@ public final class ByteBuffer {
         cursor = 0
     }
 
+    /// Moves the read cursor to an existing buffer boundary.
+    /// Invalid positions leave the cursor unchanged.
     @inlinable
     public func setCursor(_ value: Int) {
+        if value < 0 || value > readableCount {
+            return
+        }
         cursor = value
     }
 
@@ -190,8 +195,21 @@ public final class ByteBuffer {
         cursor
     }
 
+    /// Rewinds the read cursor without moving before the start of the buffer.
+    /// Invalid amounts leave the cursor unchanged.
     @inlinable
     public func moveBack(_ amount: Int) {
+        let length = readableCount
+        if amount < 0 || cursor < 0 || cursor > length || amount > cursor {
+            return
+        }
+        cursor -= amount
+    }
+
+    @usableFromInline
+    @inline(__always)
+    internal func moveBackUnchecked(_ amount: Int) {
+        // Hot read owners use this only to rewind bytes they just consumed successfully.
         cursor -= amount
     }
 
@@ -446,7 +464,7 @@ public final class ByteBuffer {
     @inline(__always)
     public func checkBound(_ need: Int) throws {
         let length = readableCount
-        if need < 0 || cursor > length || need > length - cursor {
+        if need < 0 || cursor < 0 || cursor > length || need > length - cursor {
             throw ForyError.outOfBounds(cursor: cursor, need: need, length: length)
         }
     }
@@ -532,7 +550,11 @@ public final class ByteBuffer {
     @inlinable
     @inline(__always)
     public func readVarUInt32() throws -> UInt32 {
-        let available = readableCount - cursor
+        let length = readableCount
+        if cursor < 0 || cursor > length {
+            throw ForyError.outOfBounds(cursor: cursor, need: 1, length: length)
+        }
+        let available = length - cursor
         if available >= 5 {
             let offset = cursor
             let b0 = byte(at: offset)
@@ -607,7 +629,11 @@ public final class ByteBuffer {
     @inlinable
     @inline(__always)
     public func readVarUInt64() throws -> UInt64 {
-        let available = readableCount - cursor
+        let length = readableCount
+        if cursor < 0 || cursor > length {
+            throw ForyError.outOfBounds(cursor: cursor, need: 1, length: length)
+        }
+        let available = length - cursor
         if available >= 9 {
             let offset = cursor
             let b0 = byte(at: offset)
@@ -764,7 +790,7 @@ public final class ByteBuffer {
         if (first & 1) == 0 {
             return Int64(first >> 1)
         }
-        moveBack(3)
+        moveBackUnchecked(3)
         return try readInt64()
     }
 
@@ -774,7 +800,7 @@ public final class ByteBuffer {
         if (first & 1) == 0 {
             return UInt64(first >> 1)
         }
-        moveBack(3)
+        moveBackUnchecked(3)
         return try readUInt64()
     }
 

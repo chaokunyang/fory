@@ -30,6 +30,29 @@ private func readDynamicDepthExceeded(_ depth: Int, maxDepth: Int) throws -> Nev
         "dynamic Any nesting depth \(depth) exceeds configured maxDepth \(maxDepth)")
 }
 
+@inline(never)
+private func invalidCompoundDepth(_ maxDepth: Int) throws -> Never {
+    throw ForyError.invalidData("configured maxDepth \(maxDepth) is negative")
+}
+
+@inline(never)
+private func compoundDepthExceeded(_ depth: Int, maxDepth: Int) throws -> Never {
+    throw ForyError.invalidData(
+        "compound nesting depth \(depth) exceeds configured maxDepth \(maxDepth)")
+}
+
+enum CompatibleTypeInfoEntry {
+    case registered(TypeInfo)
+    case skippedStruct(TypeMeta)
+
+    var registeredTypeInfo: TypeInfo? {
+        guard case .registered(let typeInfo) = self else {
+            return nil
+        }
+        return typeInfo
+    }
+}
+
 public final class ReadContext {
     public let buffer: ByteBuffer
     let typeResolver: TypeResolver
@@ -38,9 +61,13 @@ public final class ReadContext {
     public let checkClassVersion: Bool
     public let maxDepth: Int
     public let refReader: RefReader
-    private let compatibleTypeDefTypeInfos = ReusableArray<TypeInfo?>(defaultValue: nil, reserve: 2)
-    private let metaStrings = ReusableArray<MetaString?>(defaultValue: nil, reserve: 16)
+    private let compatibleTypeDefTypeInfos = ReusableArray<CompatibleTypeInfoEntry?>(
+        defaultValue: nil,
+        reserve: 2
+    )
+    private let metaStrings = ReusableArray<ReadMetaStringEntry?>(defaultValue: nil, reserve: 16)
     private var dynamicAnyDepth = 0
+    private var compoundDepth = 0
 
     private var typeInfoStack = UInt64Map<TypeInfo>(initialCapacity: 8)
     private var typeInfoScopeStack: [(typeKey: UInt64, previousTypeInfo: TypeInfo?)] = []
@@ -121,6 +148,27 @@ public final class ReadContext {
     func leaveDynamicAnyDepth() {
         if dynamicAnyDepth > 0 {
             dynamicAnyDepth -= 1
+        }
+    }
+
+    /// Enters one generated struct, class, or union materialization.
+    @inline(__always)
+    public func enterCompoundDepth() throws {
+        if maxDepth < 0 {
+            try invalidCompoundDepth(maxDepth)
+        }
+        let nextDepth = compoundDepth + 1
+        if nextDepth > maxDepth {
+            try compoundDepthExceeded(nextDepth, maxDepth: maxDepth)
+        }
+        compoundDepth = nextDepth
+    }
+
+    /// Leaves one successfully completed generated struct, class, or union materialization.
+    @inline(__always)
+    public func leaveCompoundDepth() {
+        if compoundDepth > 0 {
+            compoundDepth -= 1
         }
     }
 
@@ -218,10 +266,46 @@ public final class ReadContext {
                 decoder: .typeName,
                 encodings: typeNameMetaStringEncodings
             )
-            return try typeResolver.requireTypeInfo(namespace: namespace.value, typeName: typeName.value)
+            let namespaceValue = try namespace.value(
+                decoder: .namespace,
+                encodings: namespaceMetaStringEncodings
+            )
+            let typeNameValue = try typeName.value(
+                decoder: .typeName,
+                encodings: typeNameMetaStringEncodings
+            )
+            // The type-name occurrence owns lookup reuse as well as role-aware decoding.
+            // Compact references must not rehash attacker-controlled long names.
+            return try typeName.resolveTypeInfo(
+                namespace: namespaceValue,
+                typeName: typeNameValue,
+                decoderRole: .typeName,
+                wireTypeID: wireTypeID,
+                resolver: typeResolver
+            )
         case .structType, .enumType, .ext, .typedUnion, .union:
             let userTypeID = try buffer.readVarUInt32()
-            return try typeResolver.requireTypeInfo(userTypeID: userTypeID)
+            let typeInfo = try typeResolver.requireTypeInfo(userTypeID: userTypeID)
+            guard
+                matchesRegisteredIdentityKind(
+                    wireTypeID,
+                    declaredTypeID: typeInfo.typeID,
+                    registerByName: false
+                ),
+                isAllowedRegisteredWireTypeID(
+                    wireTypeID,
+                    declaredTypeID: typeInfo.typeID,
+                    registerByName: false,
+                    compatible: compatible,
+                    evolving: typeInfo.evolving
+                )
+            else {
+                throw ForyError.typeMismatch(
+                    expected: typeInfo.wireTypeID(compatible: compatible).rawValue,
+                    actual: wireTypeID.rawValue
+                )
+            }
+            return typeInfo
         default:
             return typeResolver.builtinTypeInfo(for: wireTypeID)
         }
@@ -280,15 +364,23 @@ public final class ReadContext {
                     decoder: .typeName,
                     encodings: typeNameMetaStringEncodings
                 )
+                let namespaceValue = try namespace.value(
+                    decoder: .namespace,
+                    encodings: namespaceMetaStringEncodings
+                )
+                let typeNameValue = try typeName.value(
+                    decoder: .typeName,
+                    encodings: typeNameMetaStringEncodings
+                )
                 guard localTypeInfo.registerByName else {
                     throw ForyError.invalidData(
                         "received name-registered type info for id-registered local type")
                 }
-                if namespace.value != localTypeInfo.namespace.value
-                    || typeName.value != localTypeInfo.typeName.value
+                if namespaceValue.value != localTypeInfo.namespace.value
+                    || typeNameValue.value != localTypeInfo.typeName.value
                 {
                     let expectedTypeName = "\(localTypeInfo.namespace.value)::\(localTypeInfo.typeName.value)"
-                    let actualTypeName = "\(namespace.value)::\(typeName.value)"
+                    let actualTypeName = "\(namespaceValue.value)::\(typeNameValue.value)"
                     throw ForyError.invalidData(
                         "type name mismatch: expected \(expectedTypeName), got \(actualTypeName)"
                     )
@@ -335,7 +427,7 @@ public final class ReadContext {
                     // A later value of this same type may refer back to this table index even when
                     // none of the type's fields require nested TypeDef metadata.
                     try buffer.skip(bodySize)
-                    compatibleTypeDefTypeInfos.push(localTypeInfo)
+                    compatibleTypeDefTypeInfos.push(.registered(localTypeInfo))
                     return nil
                 }
                 if let cached = typeResolver.getTypeInfo(forHeader: header) {
@@ -343,7 +435,7 @@ public final class ReadContext {
                     // after a successful TypeDef parse and 52-bit metadata-hash validation. Do not add
                     // body/hash/schema-limit/exact-local checks here; the miss path owns them before publish.
                     try buffer.skip(bodySize)
-                    compatibleTypeDefTypeInfos.push(cached)
+                    compatibleTypeDefTypeInfos.push(.registered(cached))
                     return try validateCompatibleTypeInfo(cached, for: localTypeInfo, wireTypeID: wireTypeID)
                 }
                 let cachedTypeInfo = try readTypeInfoBody(
@@ -351,7 +443,7 @@ public final class ReadContext {
                     header: header,
                     for: localTypeInfo,
                     wireTypeID: wireTypeID)
-                compatibleTypeDefTypeInfos.push(cachedTypeInfo)
+                compatibleTypeDefTypeInfos.push(.registered(cachedTypeInfo))
                 if cachedTypeInfo === localTypeInfo {
                     return nil
                 }
@@ -374,13 +466,99 @@ public final class ReadContext {
         return try readCompatibleTypeInfo(afterMarker: indexMarker)
     }
 
+    func readSkippedTypeInfo() throws -> CompatibleTypeInfoEntry {
+        let rawTypeID = UInt32(try buffer.readUInt8())
+        guard let wireTypeID = TypeId(rawValue: rawTypeID) else {
+            throw ForyError.invalidData("unknown skipped type id \(rawTypeID)")
+        }
+        guard wireTypeID == .compatibleStruct || wireTypeID == .namedCompatibleStruct else {
+            buffer.moveBackUnchecked(1)
+            return .registered(try readTypeInfo())
+        }
+        return try readSkippedCompatibleTypeInfo(wireTypeID: wireTypeID)
+    }
+
+    @inline(never)
+    private func readSkippedCompatibleTypeInfo(
+        wireTypeID: TypeId
+    ) throws -> CompatibleTypeInfoEntry {
+        let indexMarker = try buffer.readVarUInt32()
+        let index = Int(indexMarker >> 1)
+        if (indexMarker & 1) == 1 {
+            guard let entry = compatibleTypeDefTypeInfos.get(index) else {
+                throw ForyError.invalidData(
+                    "unknown compatible type definition ref index \(index)")
+            }
+            return entry
+        }
+
+        let typeMetaStart = buffer.getCursor()
+        let header = try buffer.readUInt64()
+        var bodySize = Int(header & UInt64(typeMetaSizeMask))
+        if bodySize == typeMetaSizeMask {
+            bodySize += Int(try buffer.readVarUInt32())
+        }
+        if let cached = typeResolver.getTypeInfo(forHeader: header) {
+            try buffer.skip(bodySize)
+            let entry = CompatibleTypeInfoEntry.registered(cached)
+            compatibleTypeDefTypeInfos.push(entry)
+            return entry
+        }
+
+        buffer.setCursor(typeMetaStart)
+        let decoded = try TypeMeta.decode(
+            buffer,
+            maxTypeFields: config.maxTypeFields,
+            maxTypeMetaBytes: config.maxTypeMetaBytes
+        )
+        let typeMetaEnd = buffer.getCursor()
+        guard decoded.typeID == wireTypeID.rawValue else {
+            throw ForyError.typeMismatch(
+                expected: wireTypeID.rawValue,
+                actual: decoded.typeID ?? TypeId.unknown.rawValue
+            )
+        }
+
+        let localTypeInfo: TypeInfo?
+        do {
+            localTypeInfo = try typeResolver.requireTypeInfo(for: decoded)
+        } catch ForyError.typeNotRegistered {
+            localTypeInfo = nil
+        }
+
+        let entry: CompatibleTypeInfoEntry
+        if let localTypeInfo {
+            let cached = try typeResolver.cacheTypeInfo(
+                decoded,
+                forHeader: header,
+                localTypeInfo: localTypeInfo,
+                exactLocal: try matchesLocalTypeDefBytes(
+                    localTypeInfo: localTypeInfo,
+                    typeMeta: decoded,
+                    start: typeMetaStart,
+                    end: typeMetaEnd
+                ),
+                config: config
+            )
+            entry = .registered(cached)
+        } else {
+            // This descriptor is root-local and skip-only. It is deliberately not
+            // registered or published to the checked cross-root metadata cache.
+            entry = .skippedStruct(decoded)
+        }
+        compatibleTypeDefTypeInfos.push(entry)
+        return entry
+    }
+
     private func readCompatibleTypeInfo(afterMarker indexMarker: UInt32) throws -> TypeInfo {
         let buffer = self.buffer
         let compatibleTypeDefTypeInfos = self.compatibleTypeDefTypeInfos
         let isRef = (indexMarker & 1) == 1
         let index = Int(indexMarker >> 1)
         if isRef {
-            guard let typeInfo = compatibleTypeDefTypeInfos.get(index) else {
+            guard
+                let typeInfo = compatibleTypeDefTypeInfos.get(index)?.registeredTypeInfo
+            else {
                 throw ForyError.invalidData("unknown compatible type definition ref index \(index)")
             }
             return typeInfo
@@ -397,12 +575,12 @@ public final class ReadContext {
             // after a successful TypeDef parse and 52-bit metadata-hash validation. Do not add
             // body/hash/schema-limit/exact-local checks here; the miss path owns them before publish.
             try buffer.skip(bodySize)
-            compatibleTypeDefTypeInfos.push(cached)
+            compatibleTypeDefTypeInfos.push(.registered(cached))
             return cached
         }
 
         let cachedTypeInfo = try readTypeInfoBody(start: typeMetaStart, header: header)
-        compatibleTypeDefTypeInfos.push(cachedTypeInfo)
+        compatibleTypeDefTypeInfos.push(.registered(cachedTypeInfo))
         return cachedTypeInfo
     }
 
@@ -417,7 +595,9 @@ public final class ReadContext {
         let isRef = (indexMarker & 1) == 1
         let index = Int(indexMarker >> 1)
         if isRef {
-            guard let typeInfo = compatibleTypeDefTypeInfos.get(index) else {
+            guard
+                let typeInfo = compatibleTypeDefTypeInfos.get(index)?.registeredTypeInfo
+            else {
                 throw ForyError.invalidData("unknown compatible type definition ref index \(index)")
             }
             return try validateCompatibleTypeInfo(typeInfo, for: localTypeInfo, wireTypeID: wireTypeID)
@@ -434,7 +614,7 @@ public final class ReadContext {
             // after a successful TypeDef parse and 52-bit metadata-hash validation. Do not add
             // body/hash/schema-limit/exact-local checks here; the miss path owns them before publish.
             try buffer.skip(bodySize)
-            compatibleTypeDefTypeInfos.push(cached)
+            compatibleTypeDefTypeInfos.push(.registered(cached))
             return try validateCompatibleTypeInfo(cached, for: localTypeInfo, wireTypeID: wireTypeID)
         }
 
@@ -443,7 +623,7 @@ public final class ReadContext {
             header: header,
             for: localTypeInfo,
             wireTypeID: wireTypeID)
-        compatibleTypeDefTypeInfos.push(cachedTypeInfo)
+        compatibleTypeDefTypeInfos.push(.registered(cachedTypeInfo))
         return try validateCompatibleTypeInfo(
             cachedTypeInfo, for: localTypeInfo, wireTypeID: wireTypeID)
     }
@@ -477,7 +657,7 @@ public final class ReadContext {
                     // local-schema hit rather than a remote cache publish. Keep it allocation-free:
                     // skip the body, add the local type to the per-read table, and do not parse/hash.
                     try buffer.skip(bodySize)
-                    compatibleTypeDefTypeInfos.push(localTypeInfo)
+                    compatibleTypeDefTypeInfos.push(.registered(localTypeInfo))
                     return localTypeInfo
                 }
 
@@ -486,7 +666,7 @@ public final class ReadContext {
                     // after a successful TypeDef parse and 52-bit metadata-hash validation. Do not add
                     // body/hash/schema-limit/exact-local checks here; the miss path owns them before publish.
                     try buffer.skip(bodySize)
-                    compatibleTypeDefTypeInfos.push(cached)
+                    compatibleTypeDefTypeInfos.push(.registered(cached))
                     return try validateCompatibleTypeInfo(cached, for: localTypeInfo, wireTypeID: wireTypeID)
                 } else {
                     let remoteTypeInfo = try readTypeInfoBody(
@@ -494,7 +674,7 @@ public final class ReadContext {
                         header: header,
                         for: localTypeInfo,
                         wireTypeID: wireTypeID)
-                    compatibleTypeDefTypeInfos.push(remoteTypeInfo)
+                    compatibleTypeDefTypeInfos.push(.registered(remoteTypeInfo))
                     return try validateCompatibleTypeInfo(
                         remoteTypeInfo, for: localTypeInfo, wireTypeID: wireTypeID)
                 }
@@ -695,20 +875,32 @@ public final class ReadContext {
     }
 
     @inline(__always)
-    func getReadMetaString(at index: Int) -> MetaString? {
+    func getReadMetaString(
+        at index: Int,
+        decoder: MetaStringDecoder,
+        encodings: [MetaStringEncoding]
+    ) throws -> MetaString? {
+        try metaStrings.get(index)?.value(decoder: decoder, encodings: encodings)
+    }
+
+    @inline(__always)
+    func getReadMetaStringEntry(at index: Int) -> ReadMetaStringEntry? {
         metaStrings.get(index)
     }
 
     @inline(__always)
-    func appendReadMetaString(_ value: MetaString) {
-        metaStrings.push(value)
+    func appendReadMetaString(_ entry: ReadMetaStringEntry) {
+        metaStrings.push(entry)
     }
 
     func reset() {
-        // Nested dynamic reads release depth only after success. A failure keeps
-        // the active depth until this root-owned cleanup resets the context.
+        // Nested reads release depth only after success. A failure keeps the
+        // active depth until this root-owned cleanup resets the context.
         if dynamicAnyDepth != 0 {
             dynamicAnyDepth = 0
+        }
+        if compoundDepth != 0 {
+            compoundDepth = 0
         }
         refReader.reset()
         if !typeInfoStack.isEmpty {
@@ -717,7 +909,7 @@ public final class ReadContext {
         if !typeInfoScopeStack.isEmpty {
             typeInfoScopeStack.removeAll(keepingCapacity: true)
         }
-        compatibleTypeDefTypeInfos.reset()
+        compatibleTypeDefTypeInfos.resetReleasingUsedElements()
         metaStrings.resetReleasingUsedElements()
         remainingUnbackedContainerItems = 0
     }

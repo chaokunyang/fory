@@ -584,27 +584,6 @@ func typeMetaBodyLimitRejectsLargeMetadata() throws {
 }
 
 @Test
-func typeMetaRejectsLargeTaggedFieldID() {
-    let body = ByteBuffer()
-    body.writeUInt8(0b1000_0001)
-    body.writeVarUInt32(1)
-    body.writeUInt8(0b1111_1100)
-    body.writeVarUInt32(UInt32(Int(Int16.max) + 1 - 0b1111))
-    body.writeUInt8(UInt8(TypeId.int32.rawValue))
-
-    let encoded = ByteBuffer()
-    encoded.writeUInt64(UInt64(body.count))
-    encoded.writeBytes(body.storage)
-
-    #expect(
-        throws: ForyError.invalidData(
-            "tagged field id \(Int(Int16.max) + 1) exceeds Int16 range")
-    ) {
-        _ = try TypeMeta.decode(encoded)
-    }
-}
-
-@Test
 func schemaLimitTracksStructTypesSeparately() throws {
     let config = Config(maxSchemaVersionsPerType: 1)
     let resolver = TypeResolver(config: config)
@@ -653,85 +632,21 @@ func schemaLimitTracksStructTypesSeparately() throws {
 }
 
 @Test
-func nonStructTypeMetaUsesSchemaLimit() throws {
-    let config = Config(maxSchemaVersionsPerType: 1)
-    let resolver = TypeResolver(config: config)
-    try resolver.register(SparseStatus.self, name: "example.SharedEnum")
-    try resolver.finishRegistration()
-    let namespace = try MetaStringEncoder.namespace.encode("example")
-    let typeName = try MetaStringEncoder.typeName.encode("SharedEnum")
-
-    func remoteTypeMeta(_ typeID: TypeId) throws -> TypeMeta {
-        try TypeMeta(
-            typeID: typeID.rawValue,
-            userTypeID: nil,
-            namespace: namespace,
-            typeName: typeName,
-            registerByName: true,
-            fields: []
-        )
-    }
-
-    func cache(_ typeMeta: TypeMeta) throws {
-        let encoded = try typeMeta.encode()
-        let headerReader = ByteBuffer(bytes: encoded)
-        let header = try headerReader.readUInt64()
-        let buffer = ByteBuffer(bytes: encoded)
-        let decoded = try TypeMeta.decode(buffer)
-        let localTypeInfo = try resolver.requireTypeInfo(for: decoded)
-        _ = try resolver.cacheTypeInfo(
-            decoded,
-            forHeader: header,
-            localTypeInfo: localTypeInfo,
-            exactLocal: false,
-            config: config
-        )
-    }
-
-    try cache(remoteTypeMeta(.namedExt))
-    #expect(throws: (any Error).self) {
-        try cache(remoteTypeMeta(.namedUnion))
-    }
-}
-
-@Test
-func exactLocalNonStructTypeMetaBypassesSchemaLimit() throws {
-    let config = Config(compatible: true, maxSchemaVersionsPerType: 1)
+func exactLocalNonStructSkipsCache() throws {
+    let config = Config(compatible: true)
     let resolver = TypeResolver(config: config)
     try resolver.register(SparseStatus.self, name: "example.SharedEnum")
     try resolver.finishRegistration()
     let localTypeInfo = try resolver.requireTypeInfo(for: SparseStatus.self)
-    let namespace = try MetaStringEncoder.namespace.encode("example")
-    let typeName = try MetaStringEncoder.typeName.encode("SharedEnum")
-
     let exactBuffer = ByteBuffer()
     exactBuffer.writeUInt8(UInt8(truncatingIfNeeded: TypeId.namedEnum.rawValue))
     exactBuffer.writeUInt8(0)
     exactBuffer.writeBytes(localTypeInfo.typeDefBytes!)
     let exactContext = ReadContext(buffer: exactBuffer, typeResolver: resolver, config: config)
     _ = try exactContext.readTypeInfo(for: SparseStatus.self)
-
-    let remote = try TypeMeta(
-        typeID: TypeId.namedExt.rawValue,
-        userTypeID: nil,
-        namespace: namespace,
-        typeName: typeName,
-        registerByName: true,
-        fields: []
-    )
-    let encoded = try remote.encode()
-    let headerReader = ByteBuffer(bytes: encoded)
-    let header = try headerReader.readUInt64()
-    let buffer = ByteBuffer(bytes: encoded)
-    let decoded = try TypeMeta.decode(buffer)
-    let resolved = try resolver.requireTypeInfo(for: decoded)
-    _ = try resolver.cacheTypeInfo(
-        decoded,
-        forHeader: header,
-        localTypeInfo: resolved,
-        exactLocal: false,
-        config: config
-    )
+    #if DEBUG
+        #expect(resolver.typeDefCacheCount == 0)
+    #endif
 }
 
 @Test
@@ -1459,7 +1374,7 @@ func macroFieldIDsPopulateCompatibleTypeMeta() {
     let fields = FieldIdConfigured.foryFieldsInfo(trackRef: false)
     #expect(fields.count == 2)
 
-    var byID: [Int16: TypeMeta.FieldInfo] = [:]
+    var byID: [UInt32: TypeMeta.FieldInfo] = [:]
     for field in fields {
         if let id = field.fieldID {
             byID[id] = field

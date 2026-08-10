@@ -158,6 +158,28 @@ func duplicateFieldIDsAreRejected() {
 }
 
 @Test
+func normalizedFieldNamesAreRejected() {
+    assertForyDiagnostic(
+        """
+        @ForyStruct
+        struct BadNames {
+            var fooBar: Int32 = 0
+            var foo_bar: Int32 = 0
+        }
+        """,
+        expandedSource:
+            """
+            struct BadNames {
+                var fooBar: Int32 = 0
+                var foo_bar: Int32 = 0
+            }
+            """,
+        message:
+            "fields 'fooBar' and 'foo_bar' normalize to duplicate compatible name 'foo_bar'"
+    )
+}
+
+@Test
 func unionPayloadHintsMustMatchPayloadType() {
     assertForyDiagnostic(
         """

@@ -32,6 +32,7 @@ final class UInt64Map<Value> {
     private var tableCapacity: Int
     private var mask: Int
     private var shift: Int
+    private let placementSeed: UInt64
     private var size = 0
     private let loadFactor: Double
     private var growThreshold: Int
@@ -39,8 +40,13 @@ final class UInt64Map<Value> {
     private var hasMaxKey = false
     private var maxKeyValue: Value?
 
-    init(initialCapacity: Int = 2, loadFactor: Double = uint64MapDefaultLoadFactor) {
+    init(
+        initialCapacity: Int = 2,
+        loadFactor: Double = uint64MapDefaultLoadFactor,
+        placementSeed: UInt64 = 0
+    ) {
         self.loadFactor = loadFactor
+        self.placementSeed = placementSeed
         let capacity = Self.nextPowerOfTwo(max(initialCapacity, 2))
         tableCapacity = capacity
         entries = UnsafeMutablePointer<Slot>.allocate(capacity: capacity)
@@ -196,8 +202,14 @@ final class UInt64Map<Value> {
 
     @inline(__always)
     private func place(_ key: UInt64) -> Int {
-        Int((key &* uint64MapGoldenRatio) >> shift)
+        Int(((key ^ placementSeed) &* uint64MapGoldenRatio) >> shift)
     }
+
+    #if DEBUG
+        func initialSlot(for key: UInt64) -> Int {
+            place(key)
+        }
+    #endif
 
     private func grow() {
         let oldEntries = entries

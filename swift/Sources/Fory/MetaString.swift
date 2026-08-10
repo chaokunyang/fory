@@ -465,6 +465,119 @@ public struct MetaStringDecoder: Sendable {
     }
 }
 
+final class ReadMetaStringEntry {
+    private let first: MetaString
+    private var alternate: MetaString?
+    private var resolvedNamespace: MetaString?
+    private var resolvedRoleSpecialChar1: Character?
+    private var resolvedRoleSpecialChar2: Character?
+    private var resolvedWireTypeID: TypeId?
+    private var resolvedTypeInfo: TypeInfo?
+    private var resolvedNamedTypes: [ResolvedNamedTypeKey: TypeInfo]?
+
+    init(_ value: MetaString) {
+        first = value
+    }
+
+    @inline(__always)
+    func value(
+        decoder: MetaStringDecoder,
+        encodings: [MetaStringEncoding]
+    ) throws -> MetaString {
+        if Self.matches(first, decoder: decoder) {
+            return first
+        }
+        if let alternate, Self.matches(alternate, decoder: decoder) {
+            return alternate
+        }
+        guard encodings.contains(first.encoding) else {
+            throw ForyError.invalidData(
+                "meta string encoding \(first.encoding) not allowed in this context")
+        }
+        // Occurrence references identify encoded bytes, not the role-dependent decoded value.
+        // Cache the second role so repeated references cannot repeatedly decode a long name.
+        let decoded = try decoder.decode(bytes: first.bytes, encoding: first.encoding)
+        alternate = decoded
+        return decoded
+    }
+
+    @inline(__always)
+    private static func matches(_ value: MetaString, decoder: MetaStringDecoder) -> Bool {
+        value.specialChar1 == decoder.specialChar1 && value.specialChar2 == decoder.specialChar2
+    }
+
+    @inline(__always)
+    func resolveTypeInfo(
+        namespace: MetaString,
+        typeName: MetaString,
+        decoderRole: MetaStringDecoder,
+        wireTypeID: TypeId,
+        resolver: TypeResolver
+    ) throws -> TypeInfo {
+        if let resolvedNamespace,
+            resolvedNamespace === namespace || resolvedNamespace.value == namespace.value,
+            resolvedRoleSpecialChar1 == decoderRole.specialChar1,
+            resolvedRoleSpecialChar2 == decoderRole.specialChar2,
+            resolvedWireTypeID == wireTypeID,
+            let resolvedTypeInfo
+        {
+            return resolvedTypeInfo
+        }
+        let key = ResolvedNamedTypeKey(
+            namespace: namespace.value,
+            roleSpecialChar1: decoderRole.specialChar1,
+            roleSpecialChar2: decoderRole.specialChar2,
+            wireTypeID: wireTypeID
+        )
+        if let cached = resolvedNamedTypes?[key] {
+            return cached
+        }
+        let typeInfo = try resolver.requireTypeInfo(
+            namespace: namespace.value,
+            typeName: typeName.value
+        )
+        guard typeInfo.wireTypeID(compatible: false) == wireTypeID else {
+            throw ForyError.typeMismatch(
+                expected: typeInfo.wireTypeID(compatible: false).rawValue,
+                actual: wireTypeID.rawValue
+            )
+        }
+        if resolvedNamespace == nil {
+            resolvedNamespace = namespace
+            resolvedRoleSpecialChar1 = decoderRole.specialChar1
+            resolvedRoleSpecialChar2 = decoderRole.specialChar2
+            resolvedWireTypeID = wireTypeID
+            resolvedTypeInfo = typeInfo
+        } else {
+            if resolvedNamedTypes == nil,
+                let firstNamespace = resolvedNamespace,
+                let firstRoleSpecialChar1 = resolvedRoleSpecialChar1,
+                let firstRoleSpecialChar2 = resolvedRoleSpecialChar2,
+                let firstWireTypeID = resolvedWireTypeID,
+                let firstTypeInfo = resolvedTypeInfo
+            {
+                resolvedNamedTypes = [
+                    ResolvedNamedTypeKey(
+                        namespace: firstNamespace.value,
+                        roleSpecialChar1: firstRoleSpecialChar1,
+                        roleSpecialChar2: firstRoleSpecialChar2,
+                        wireTypeID: firstWireTypeID
+                    ): firstTypeInfo
+                ]
+            }
+            resolvedNamedTypes?[key] = typeInfo
+        }
+        return typeInfo
+    }
+}
+
+private struct ResolvedNamedTypeKey: Hashable {
+    let namespace: String
+    let roleSpecialChar1: Character
+    let roleSpecialChar2: Character
+    let wireTypeID: TypeId
+}
+
 @inline(__always)
 func writeMetaString(
     context: WriteContext,
@@ -504,15 +617,18 @@ func readMetaString(
     context: ReadContext,
     decoder: MetaStringDecoder,
     encodings: [MetaStringEncoding]
-) throws -> MetaString {
+) throws -> ReadMetaStringEntry {
     let header = try context.buffer.readVarUInt32()
     let length = Int(header >> 1)
     let isRef = (header & 1) == 1
     if isRef {
         let index = length - 1
-        guard let cached = context.getReadMetaString(at: index) else {
+        guard
+            let cached = context.getReadMetaStringEntry(at: index)
+        else {
             throw ForyError.invalidData("unknown meta string ref index \(index)")
         }
+        _ = try cached.value(decoder: decoder, encodings: encodings)
         return cached
     }
 
@@ -544,8 +660,9 @@ func readMetaString(
         let bytes = try context.buffer.readBytes(count: length)
         value = try decoder.decode(bytes: bytes, encoding: encoding)
     }
-    context.appendReadMetaString(value)
-    return value
+    let entry = ReadMetaStringEntry(value)
+    context.appendReadMetaString(entry)
+    return entry
 }
 
 @inline(__always)

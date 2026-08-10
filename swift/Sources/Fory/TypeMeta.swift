@@ -32,6 +32,11 @@ private let typeMetaHashSeed: UInt64 = 47
 private let noUserTypeID: UInt32 = UInt32.max
 private let typeMetaMaxDepth = 20
 
+private func isContainerFieldTypeID(_ typeID: UInt32) -> Bool {
+    typeID == TypeId.list.rawValue || typeID == TypeId.set.rawValue
+        || typeID == TypeId.map.rawValue
+}
+
 public let namespaceMetaStringEncodings: [MetaStringEncoding] = [
     .utf8,
     .allToLowerSpecial,
@@ -200,19 +205,22 @@ public final class TypeMeta: Equatable, @unchecked Sendable {
     }
 
     public struct FieldInfo: Equatable, Sendable {
-        public var fieldID: Int16?
+        public var fieldID: UInt32?
         public var fieldName: String
         public var fieldType: FieldType
+        /// Local compatible-reader dispatch ordinal. This is not part of wire field identity.
+        public internal(set) var matchedFieldID: Int16?
 
-        public init(fieldID: Int16?, fieldName: String, fieldType: FieldType) {
+        public init(fieldID: UInt32?, fieldName: String, fieldType: FieldType) {
             self.fieldID = fieldID
             self.fieldName = fieldName
             self.fieldType = fieldType
+            self.matchedFieldID = nil
         }
 
         @inline(never)
-        private static func invalidTaggedFieldID(_ fieldID: Int) -> ForyError {
-            ForyError.invalidData("tagged field id \(fieldID) exceeds Int16 range")
+        private static func invalidFieldInfoSize(_ size: UInt32) -> ForyError {
+            ForyError.invalidData("field metadata size extension \(size) overflows UInt32")
         }
 
         fileprivate func write(_ buffer: ByteBuffer) throws {
@@ -225,15 +233,12 @@ public final class TypeMeta: Equatable, @unchecked Sendable {
             }
 
             if let fieldID {
-                if fieldID < 0 {
-                    throw ForyError.encodingError("negative field id is invalid")
-                }
-                let size = Int(fieldID)
+                let size = fieldID
                 header |= UInt8(0b11 << 6)
                 if size >= fieldNameSizeThreshold {
                     header |= 0b0011_1100
                     buffer.writeUInt8(header)
-                    buffer.writeVarUInt32(UInt32(size - fieldNameSizeThreshold))
+                    buffer.writeVarUInt32(size - UInt32(fieldNameSizeThreshold))
                 } else {
                     header |= UInt8(size << 2)
                     buffer.writeUInt8(header)
@@ -267,11 +272,14 @@ public final class TypeMeta: Equatable, @unchecked Sendable {
         fileprivate static func read(_ buffer: ByteBuffer) throws -> FieldInfo {
             let header = try buffer.readUInt8()
             let encodingFlags = Int((header >> 6) & 0b11)
-            var size = Int((header >> 2) & 0b1111)
-            if size == fieldNameSizeThreshold {
-                size += Int(try buffer.readVarUInt32())
+            var size = UInt32((header >> 2) & 0b1111)
+            if size == UInt32(fieldNameSizeThreshold) {
+                let extensionSize = try buffer.readVarUInt32()
+                if _slowPath(extensionSize > UInt32.max - size) {
+                    throw invalidFieldInfoSize(extensionSize)
+                }
+                size += extensionSize
             }
-            size += 1
 
             let nullable = (header & 0b10) != 0
             let trackRef = (header & 0b1) != 0
@@ -283,11 +291,7 @@ public final class TypeMeta: Equatable, @unchecked Sendable {
             )
 
             if encodingFlags == 3 {
-                let rawFieldID = size - 1
-                if _slowPath(rawFieldID > Int(Int16.max)) {
-                    throw invalidTaggedFieldID(rawFieldID)
-                }
-                let fieldID = Int16(rawFieldID)
+                let fieldID = size
                 return FieldInfo(
                     fieldID: fieldID,
                     fieldName: "$tag\(fieldID)",
@@ -298,12 +302,18 @@ public final class TypeMeta: Equatable, @unchecked Sendable {
             guard encodingFlags < fieldNameMetaStringEncodings.count else {
                 throw ForyError.invalidData("invalid field name encoding id")
             }
-            let nameBytes = try buffer.readBytes(count: size)
+            let nameBytes = try buffer.readBytes(count: Int(size) + 1)
             let name = try MetaStringDecoder.fieldName
                 .decode(bytes: nameBytes, encoding: fieldNameMetaStringEncodings[encodingFlags])
                 .value
 
             return FieldInfo(fieldID: nil, fieldName: name, fieldType: fieldType)
+        }
+
+        public static func == (lhs: FieldInfo, rhs: FieldInfo) -> Bool {
+            lhs.fieldID == rhs.fieldID
+                && lhs.fieldName == rhs.fieldName
+                && lhs.fieldType == rhs.fieldType
         }
     }
 
@@ -347,6 +357,7 @@ public final class TypeMeta: Equatable, @unchecked Sendable {
                 throw ForyError.encodingError("user type id is required in register-by-id mode")
             }
         }
+        try Self.validateFieldIdentities(fields)
 
         self.typeID = typeID
         self.userTypeID = userTypeID
@@ -363,6 +374,25 @@ public final class TypeMeta: Equatable, @unchecked Sendable {
             && lhs.typeName == rhs.typeName && lhs.registerByName == rhs.registerByName
             && lhs.fields == rhs.fields && lhs.compressed == rhs.compressed
             && lhs.headerHash == rhs.headerHash
+    }
+
+    private static func validateFieldIdentities(_ fields: [FieldInfo]) throws {
+        var fieldIDs = Set<UInt32>()
+        var fieldNames = Set<String>()
+        for field in fields {
+            if let fieldID = field.fieldID {
+                guard fieldIDs.insert(fieldID).inserted else {
+                    throw ForyError.invalidData("duplicate compatible field tag \(fieldID)")
+                }
+            } else if !field.fieldName.isEmpty {
+                let normalizedName = toSnakeCase(field.fieldName)
+                guard fieldNames.insert(normalizedName).inserted else {
+                    throw ForyError.invalidData(
+                        "duplicate compatible field name \(normalizedName)"
+                    )
+                }
+            }
+        }
     }
 
     public func encode() throws -> [UInt8] {
@@ -693,8 +723,8 @@ public final class TypeMeta: Equatable, @unchecked Sendable {
         guard !localFields.isEmpty else {
             var resolvedFields = fields
             var changed = false
-            for index in resolvedFields.indices where resolvedFields[index].fieldID != -1 {
-                resolvedFields[index].fieldID = -1
+            for index in resolvedFields.indices where resolvedFields[index].matchedFieldID != -1 {
+                resolvedFields[index].matchedFieldID = -1
                 changed = true
             }
             guard changed else {
@@ -713,15 +743,21 @@ public final class TypeMeta: Equatable, @unchecked Sendable {
         }
 
         var fieldIndexByName: [String: (Int, FieldInfo)] = [:]
-        var fieldIndexByID: [Int16: (Int, FieldInfo)] = [:]
+        var fieldIndexByID: [UInt32: (Int, FieldInfo)] = [:]
         fieldIndexByName.reserveCapacity(localFields.count)
         fieldIndexByID.reserveCapacity(localFields.count)
 
         for (index, localField) in localFields.enumerated() {
-            if let fieldID = localField.fieldID, fieldID >= 0 {
+            if let fieldID = localField.fieldID {
                 fieldIndexByID[fieldID] = (index, localField)
             } else {
-                fieldIndexByName[toSnakeCase(localField.fieldName)] = (index, localField)
+                let normalizedName = toSnakeCase(localField.fieldName)
+                guard fieldIndexByName[normalizedName] == nil else {
+                    throw ForyError.invalidData(
+                        "local compatible fields normalize to duplicate name \(normalizedName)"
+                    )
+                }
+                fieldIndexByName[normalizedName] = (index, localField)
             }
         }
 
@@ -733,7 +769,7 @@ public final class TypeMeta: Equatable, @unchecked Sendable {
             let field = resolvedFields[index]
 
             var localMatch: (Int, FieldInfo)?
-            if let fieldID = field.fieldID, fieldID >= 0 {
+            if let fieldID = field.fieldID {
                 if let candidate = fieldIndexByID[fieldID] {
                     guard Self.isCompatibleFieldType(field.fieldType, candidate.1.fieldType) else {
                         throw ForyError.invalidData(
@@ -772,8 +808,8 @@ public final class TypeMeta: Equatable, @unchecked Sendable {
             }
 
             guard let (sortedIndex, _) = localMatch else {
-                if field.fieldID != -1 {
-                    resolvedFields[index].fieldID = -1
+                if field.matchedFieldID != -1 {
+                    resolvedFields[index].matchedFieldID = -1
                     changed = true
                 }
                 continue
@@ -792,8 +828,8 @@ public final class TypeMeta: Equatable, @unchecked Sendable {
             let localField = localFields[sortedIndex]
             let exactField = field.fieldType == localField.fieldType
             let resolvedFieldID = Int16(sortedIndex * 2 + (exactField ? 0 : 1))
-            if field.fieldID != resolvedFieldID {
-                resolvedFields[index].fieldID = resolvedFieldID
+            if field.matchedFieldID != resolvedFieldID {
+                resolvedFields[index].matchedFieldID = resolvedFieldID
                 changed = true
             }
             usedLocalFields[sortedIndex] = true
@@ -821,6 +857,14 @@ public final class TypeMeta: Equatable, @unchecked Sendable {
         topLevel: Bool = true,
         allowScalarConversion: Bool = true
     ) -> Bool {
+        if topLevel && remoteType.typeID == localType.typeID
+            && isContainerFieldTypeID(remoteType.typeID)
+            && (remoteType.nullable != localType.nullable || remoteType.trackRef != localType.trackRef)
+        {
+            // The outer container envelope selects the optional/reference carrier. It cannot be
+            // adapted by recursively compatible element, key, or value codecs.
+            return false
+        }
         if topLevel, isCompatibleTopLevelListArrayFieldType(remoteType, localType) {
             return true
         }

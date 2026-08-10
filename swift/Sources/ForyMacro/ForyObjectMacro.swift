@@ -51,7 +51,6 @@ public struct ForyStructMacro: MemberMacro, ExtensionMacro {
         if declaration.is(EnumDeclSyntax.self) {
             throw MacroExpansionErrorMessage("@ForyStruct supports struct and class declarations only")
         }
-
         let parsed = try parseFields(
             declaration,
             isExternal: objectConfig.targetType != nil
@@ -61,6 +60,7 @@ public struct ForyStructMacro: MemberMacro, ExtensionMacro {
             objectConfig.targetType
             ?? declaration.as(ClassDeclSyntax.self)?.name.text
             ?? "Self"
+        let hasInheritedTypes = declaration.as(ClassDeclSyntax.self)?.inheritanceClause != nil
         let successBodyAttribute =
             objectConfig.targetType != nil
                 && parsed.fields.contains(where: {
@@ -101,7 +101,11 @@ public struct ForyStructMacro: MemberMacro, ExtensionMacro {
 
         let schemaHashDecl: DeclSyntax = DeclSyntax(stringLiteral: try buildSchemaHashDecl(fields: parsed.fields))
         let compatibleTypeMetaDecl: DeclSyntax = DeclSyntax(
-            stringLiteral: buildCompatibleTypeMetaFieldsDecl(sortedFields: sortedFields, accessPrefix: accessPrefix)
+            stringLiteral: buildCompatibleTypeMetaFieldsDecl(
+                sortedFields: sortedFields,
+                accessPrefix: accessPrefix,
+                validateSuperclass: hasInheritedTypes
+            )
         )
         let defaultDecl: DeclSyntax = DeclSyntax(
             stringLiteral: buildDefaultDecl(
@@ -175,7 +179,6 @@ public struct ForyStructMacro: MemberMacro, ExtensionMacro {
         conformingTo _: [TypeSyntax],
         in _: some MacroExpansionContext
     ) throws -> [ExtensionDeclSyntax] {
-        _ = declaration
         let typeName = type.trimmedDescription
         guard !typeName.isEmpty else {
             return []
@@ -366,7 +369,7 @@ struct ParsedField {
 
     let isOptional: Bool
     let isCollection: Bool
-    let fieldID: Int?
+    let fieldID: UInt32?
     let schemaIdentifier: String
     let fieldIdentifier: String
 
@@ -433,7 +436,7 @@ private indirect enum FieldTypeHint {
 
 private struct ParsedForyFieldConfiguration {
     let encoding: FieldEncoding?
-    let id: Int?
+    let id: UInt32?
     let ignore: Bool?
     let typeHint: FieldTypeHint?
     let serializerType: String?
@@ -816,7 +819,7 @@ private func buildTaggedUnionEnumDecls(
         if enumCase.payload.isEmpty {
             return """
                 case \(caseID):
-                    return .\(enumCase.name)
+                    value = .\(enumCase.name)
                 """
         }
 
@@ -844,12 +847,12 @@ private func buildTaggedUnionEnumDecls(
             }
             return "__value\(payloadIndex)"
         }.joined(separator: ", ")
-        lines.append("    return .\(enumCase.name)(\(ctorArgs))")
+        lines.append("    value = .\(enumCase.name)(\(ctorArgs))")
         return lines.joined(separator: "\n")
     }.joined(separator: "\n        ")
     let unknownDefault: String = """
             default:
-                return .unknown(try UnknownCaseSerializer.readPayload(caseId: caseID, context))
+                value = .unknown(try UnknownCaseSerializer.readPayload(caseId: caseID, context))
         """
 
     let defaultDecl: DeclSyntax = DeclSyntax(
@@ -896,11 +899,15 @@ private func buildTaggedUnionEnumDecls(
         stringLiteral: """
             @inline(__always)
             \(accessPrefix)static func readData(_ context: ReadContext) throws -> Target {
+                try context.enterCompoundDepth()
                 let caseID = try context.buffer.readVarUInt32()
+                let value: Target
                 switch caseID {
                 \(readSwitchCases)
                 \(unknownDefault)
                 }
+                context.leaveCompoundDepth()
+                return value
             }
             """
     )
@@ -1111,9 +1118,17 @@ private func parseFields(
         }
     }
 
-    var seenFieldIDs: [Int: String] = [:]
+    var seenFieldIDs: [UInt32: String] = [:]
+    var seenFieldNames: [String: String] = [:]
     for field in fields {
         guard let fieldID = field.fieldID else {
+            let normalizedName = toSnakeCase(field.name)
+            if let existing = seenFieldNames[normalizedName] {
+                throw MacroExpansionErrorMessage(
+                    "fields '\(existing)' and '\(field.name)' normalize to duplicate compatible name '\(normalizedName)'"
+                )
+            }
+            seenFieldNames[normalizedName] = field.name
             continue
         }
         if let existing = seenFieldIDs[fieldID], existing != field.name {
@@ -1136,7 +1151,7 @@ private func parseForyFieldConfiguration(
     supportsEncoding: Bool
 ) throws -> ParsedForyFieldConfiguration? {
     var parsedEncoding: FieldEncoding?
-    var parsedID: Int?
+    var parsedID: UInt32?
     var parsedIgnore: Bool?
     var parsedTypeHint: FieldTypeHint?
     var parsedSerializerType: String?
@@ -1276,7 +1291,7 @@ private func parseForyCaseConfiguration(
         for arg in argList {
             let label = arg.label?.text
             if label == nil || label == "id" {
-                let idValue = try parseFieldIDExpression(arg.expression)
+                let idValue = try parseCaseIDExpression(arg.expression)
                 if let existing = parsedID, existing != idValue {
                     throw MacroExpansionErrorMessage("conflicting @ForyCase id values on the same declaration")
                 }
@@ -1641,16 +1656,30 @@ private func parseMapFieldTypeHint(args: LabeledExprListSyntax) throws -> FieldT
     return .map(key: key, value: value)
 }
 
-private func parseFieldIDExpression(_ expr: ExprSyntax) throws -> Int {
+private func parseFieldIDExpression(_ expr: ExprSyntax) throws -> UInt32 {
     let raw = trimType(expr.trimmedDescription)
-    guard let value = Int(raw) else {
+    guard let value = Int64(raw) else {
         throw MacroExpansionErrorMessage("@ForyField id must be an integer literal")
     }
     if value < 0 {
         throw MacroExpansionErrorMessage("@ForyField id must be non-negative")
     }
+    if value > Int64(UInt32.max) {
+        throw MacroExpansionErrorMessage("@ForyField id must be <= \(UInt32.max)")
+    }
+    return UInt32(value)
+}
+
+private func parseCaseIDExpression(_ expr: ExprSyntax) throws -> Int {
+    let raw = trimType(expr.trimmedDescription)
+    guard let value = Int(raw) else {
+        throw MacroExpansionErrorMessage("@ForyCase id must be an integer literal")
+    }
+    if value < 0 {
+        throw MacroExpansionErrorMessage("@ForyCase id must be non-negative")
+    }
     if value > Int(Int16.max) {
-        throw MacroExpansionErrorMessage("@ForyField id must be <= \(Int16.max)")
+        throw MacroExpansionErrorMessage("@ForyCase id must be <= \(Int16.max)")
     }
     return value
 }
@@ -2521,10 +2550,26 @@ private func buildSchemaHashDecl(fields: [ParsedField]) throws -> String {
         """
 }
 
-private func buildCompatibleTypeMetaFieldsDecl(sortedFields: [ParsedField], accessPrefix: String) -> String {
+private func buildCompatibleTypeMetaFieldsDecl(
+    sortedFields: [ParsedField],
+    accessPrefix: String,
+    validateSuperclass: Bool
+) -> String {
     let disabledExpr = compatibleTypeMetaFieldsExpr(sortedFields: sortedFields, trackRefExpression: "false")
     let enabledExpr = compatibleTypeMetaFieldsExpr(sortedFields: sortedFields, trackRefExpression: "true")
     let resolvedBody = resolvedTypeMetaFieldsBody(sortedFields: sortedFields)
+    let superclassValidation: String
+    if validateSuperclass {
+        superclassValidation = """
+            if _getSuperclass(Self.self) != nil {
+                throw ForyError.encodingError(
+                    "@ForyStruct classes cannot declare superclass inheritance because inherited storage is unavailable to the macro"
+                )
+            }
+            """
+    } else {
+        superclassValidation = ""
+    }
     return """
         private static let __foryFieldsInfoTrackRefDisabled: [TypeMeta.FieldInfo] = \(disabledExpr)
         private static let __foryFieldsInfoTrackRefEnabled: [TypeMeta.FieldInfo] = \(enabledExpr)
@@ -2537,6 +2582,7 @@ private func buildCompatibleTypeMetaFieldsDecl(sortedFields: [ParsedField], acce
             trackRef: Bool,
             resolveSerializerTypeId: (Any.Type) throws -> TypeId
         ) throws -> [TypeMeta.FieldInfo] {
+            \(superclassValidation)
             \(resolvedBody)
         }
         """

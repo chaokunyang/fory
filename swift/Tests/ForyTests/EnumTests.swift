@@ -219,15 +219,24 @@ func mixedEnumShapesRoundTrip() throws {
 }
 
 @Test
-func unionDepthOnlyCountsDynamicUnknownPayload() throws {
+func unionReadUsesCompoundDepth() throws {
     let writer = Fory(config: .init(trackRef: false, maxDepth: 8))
     try writer.register(Token.self, id: 1001)
     let value = Token.child(.child(.ident("leaf")))
     let bytes = try writer.serialize(value)
+    let shallowBytes = try writer.serialize(Token.ident("next"))
 
-    let staticReader = Fory(config: .init(trackRef: false, maxDepth: 0))
-    try staticReader.register(Token.self, id: 1001)
-    let decoded: Token = try staticReader.deserialize(bytes)
+    let limited = Fory(config: .init(trackRef: false, maxDepth: 2))
+    try limited.register(Token.self, id: 1001)
+    #expect(throws: ForyError.self) {
+        let _: Token = try limited.deserialize(bytes)
+    }
+    let shallow: Token = try limited.deserialize(shallowBytes)
+    #expect(shallow == .ident("next"))
+
+    let boundary = Fory(config: .init(trackRef: false, maxDepth: 3))
+    try boundary.register(Token.self, id: 1001)
+    let decoded: Token = try boundary.deserialize(bytes)
     #expect(decoded == value)
 
     func unknownContext(maxDepth: Int) -> ReadContext {

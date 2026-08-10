@@ -85,6 +85,94 @@ func byteBufferReplaceMutationAndSnapshots() throws {
 }
 
 @Test
+func invalidCursorMutationRejected() throws {
+    let buffer = ByteBuffer(bytes: [0x2A])
+
+    buffer.setCursor(-1)
+    #expect(buffer.getCursor() == 0)
+    #expect(try buffer.readUInt8() == 0x2A)
+
+    buffer.moveBack(2)
+    #expect(buffer.getCursor() == 1)
+
+    buffer.moveBack(Int.min)
+    #expect(buffer.getCursor() == 1)
+}
+
+@Test
+func byteBufferRootRejectsInvalidCursor() throws {
+    let fory = Fory()
+    let data = try fory.serialize(UInt8(42), with: UInt8.self)
+    let buffer = ByteBuffer(data: data)
+    buffer.cursor = -1
+
+    #expect(throws: ForyError.self) {
+        let _: UInt8 = try fory.deserialize(from: buffer, with: UInt8.self)
+    }
+    let decoded: UInt8 = try fory.deserialize(data, with: UInt8.self)
+    #expect(decoded == 42)
+}
+
+@Test
+func invalidVarUIntCursorRejected() throws {
+    let buffer = ByteBuffer(bytes: [0])
+
+    buffer.cursor = -1
+    #expect(throws: ForyError.self) {
+        _ = try buffer.readVarUInt32()
+    }
+
+    buffer.cursor = Int.min
+    #expect(throws: ForyError.self) {
+        _ = try buffer.readVarUInt64()
+    }
+}
+
+@Test
+func negativeVarUIntIndicesRejected() throws {
+    let bytes: [UInt8] = [0]
+    try bytes.withUnsafeBufferPointer { buffer in
+        var bufferIndex32 = -1
+        #expect(throws: ForyError.self) {
+            _ = try UnsafeUtil.readVarUInt32(from: buffer, index: &bufferIndex32)
+        }
+        #expect(bufferIndex32 == -1)
+
+        var bufferIndex64 = Int.min
+        #expect(throws: ForyError.self) {
+            _ = try UnsafeUtil.readVarUInt64(from: buffer, index: &bufferIndex64)
+        }
+        #expect(bufferIndex64 == Int.min)
+
+        let base = try #require(buffer.baseAddress)
+        var pointerIndex32 = -1
+        #expect(throws: ForyError.self) {
+            _ = try UnsafeUtil.readVarUInt32(
+                from: base,
+                length: buffer.count,
+                index: &pointerIndex32)
+        }
+        #expect(pointerIndex32 == -1)
+
+        var pointerIndex64 = Int.min
+        #expect(throws: ForyError.self) {
+            _ = try UnsafeUtil.readVarUInt64(
+                from: base,
+                length: buffer.count,
+                index: &pointerIndex64)
+        }
+        #expect(pointerIndex64 == Int.min)
+    }
+
+    #expect(throws: ForyError.self) {
+        try UnsafeUtil.checkReadable(
+            length: Int.max,
+            index: Int.max - 1,
+            need: Int.max)
+    }
+}
+
+@Test
 func byteBufferVarUIntBoundariesUseExpectedSizes() throws {
     let values32: [UInt32] = [
         0,

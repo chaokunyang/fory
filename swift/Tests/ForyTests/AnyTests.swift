@@ -86,6 +86,21 @@ private struct AnyHashableValueHolder {
     var value: AnyHashable = AnyHashable(Int32(0))
 }
 
+@ForyStruct
+private struct RoleSeedValue: Equatable {
+    var value: Int32 = 0
+}
+
+@ForyStruct
+private struct RoleTargetValue: Equatable {
+    var value: Int32 = 0
+}
+
+@ForyStruct
+private struct RoleAliasValue: Equatable {
+    var value: Int32 = 0
+}
+
 private typealias AnyArraySerializer = ArraySerializer<DynamicSerializer<Any>>
 private typealias StringAnyMapSerializer =
     DictionarySerializer<String, DynamicSerializer<Any>>
@@ -103,6 +118,194 @@ private func nestedDynamicAnyList(depth: Int) -> Any {
         value = [value] as [Any]
     }
     return value
+}
+
+private func readDynamicRefs<S: Serializer, Target>(
+    _ value: S.Target,
+    with serializer: S.Type,
+    target: Target.Type
+) throws -> (Target, Target) {
+    let fory = Fory(config: .init(trackRef: true, compatible: false))
+    let data = try fory.serialize(value, with: serializer)
+    var bytes = Array(data)
+    bytes[1] = UInt8(bitPattern: RefFlag.refValue.rawValue)
+    bytes.append(UInt8(bitPattern: RefFlag.ref.rawValue))
+    bytes.append(0)
+
+    let config = Config(trackRef: true, compatible: false)
+    let buffer = ByteBuffer(data: Data(bytes))
+    _ = try buffer.readUInt8()
+    let context = ReadContext(
+        buffer: buffer,
+        typeResolver: TypeResolver(config: config),
+        config: config
+    )
+    context.remainingGraphMemoryBytes = Int(config.maxGraphMemoryBytes)
+    context.remainingUnbackedContainerItems = config.maxUnbackedContainerItems
+    let decoded = try DynamicSerializer<Target>.read(
+        context,
+        refMode: .tracking,
+        readTypeInfo: true
+    )
+    let published = try context.refReader.readRefValue(0)
+    let referenced = try DynamicSerializer<Target>.read(
+        context,
+        refMode: .tracking,
+        readTypeInfo: false
+    )
+
+    #expect(ObjectIdentifier(Swift.type(of: published)) == ObjectIdentifier(Target.self))
+    return (decoded, referenced)
+}
+
+@Test
+func metaStringRefUsesCurrentRole() throws {
+    let typeName = try MetaStringEncoder.typeName.encode(
+        "$scope1",
+        allowedEncodings: typeNameMetaStringEncodings
+    )
+    let namespace = try MetaStringEncoder.namespace.encode(
+        ".scope1",
+        allowedEncodings: namespaceMetaStringEncodings
+    )
+    #expect(typeName.encoding == namespace.encoding)
+    #expect(typeName.bytes == namespace.bytes)
+
+    let writer = Fory(config: .init(trackRef: false, compatible: false))
+    try writer.register(RoleSeedValue.self, name: "$scope1")
+    try writer.register(RoleTargetValue.self, name: ".scope1.Target")
+
+    let reader = Fory(config: .init(trackRef: false, compatible: false))
+    try reader.register(RoleSeedValue.self, name: "$scope1")
+    try reader.register(RoleTargetValue.self, name: ".scope1.Target")
+    try reader.register(RoleAliasValue.self, name: "$scope1.Target")
+
+    let data = try writer.serialize(
+        [RoleSeedValue(value: 1), RoleTargetValue(value: 2)] as [Any],
+        with: AnyArraySerializer.self
+    )
+    let decoded = try reader.deserialize(data, with: AnyArraySerializer.self)
+    #expect(decoded[0] as? RoleSeedValue == RoleSeedValue(value: 1))
+    #expect(decoded[1] as? RoleTargetValue == RoleTargetValue(value: 2))
+}
+
+@Test
+func namedTypeRefsReuseLookup() throws {
+    let longTypeName = String(repeating: "longTypeName", count: 2_000)
+    let writer = Fory(config: .init(trackRef: false, compatible: false))
+    try writer.register(RoleSeedValue.self, name: longTypeName)
+
+    let reader = Fory(config: .init(trackRef: false, compatible: false))
+    try reader.register(RoleSeedValue.self, name: longTypeName)
+
+    let values = (0..<64).map { RoleSeedValue(value: Int32($0)) as Any }
+    let data = try writer.serialize(values, with: AnyArraySerializer.self)
+    let decoded = try reader.deserialize(data, with: AnyArraySerializer.self)
+    #expect(decoded.count == values.count)
+    #if DEBUG
+        #expect(reader.typeResolver.namedTypeLookupCount == 1)
+    #endif
+
+    let encodedTypeName = try MetaStringEncoder.typeName.encode(
+        longTypeName,
+        allowedEncodings: typeNameMetaStringEncodings
+    )
+    let typeNameEntry = ReadMetaStringEntry(encodedTypeName)
+    for _ in 0..<64 {
+        let freshNamespace = MetaString.empty(specialChar1: ".", specialChar2: "_")
+        _ = try typeNameEntry.resolveTypeInfo(
+            namespace: freshNamespace,
+            typeName: encodedTypeName,
+            decoderRole: .typeName,
+            wireTypeID: .namedStruct,
+            resolver: reader.typeResolver
+        )
+    }
+    #if DEBUG
+        #expect(reader.typeResolver.namedTypeLookupCount == 2)
+    #endif
+}
+
+@Test
+func namedTypeRefChecksWireKind() throws {
+    let typeName = "KindValue"
+    let namespace = try MetaStringEncoder.namespace.encode(
+        "",
+        allowedEncodings: namespaceMetaStringEncodings
+    )
+    let encodedTypeName = try MetaStringEncoder.typeName.encode(
+        typeName,
+        allowedEncodings: typeNameMetaStringEncodings
+    )
+    let buffer = ByteBuffer()
+    let writerResolver = TypeResolver(config: Config(compatible: false))
+    let writeContext = WriteContext(
+        buffer: buffer,
+        typeResolver: writerResolver,
+        trackRef: false
+    )
+    buffer.writeUInt8(UInt8(TypeId.namedStruct.rawValue))
+    try writeMetaString(
+        context: writeContext,
+        value: namespace,
+        encodings: namespaceMetaStringEncodings,
+        encoder: .namespace
+    )
+    try writeMetaString(
+        context: writeContext,
+        value: encodedTypeName,
+        encodings: typeNameMetaStringEncodings,
+        encoder: .typeName
+    )
+    buffer.writeUInt8(UInt8(TypeId.namedEnum.rawValue))
+    try writeMetaString(
+        context: writeContext,
+        value: namespace,
+        encodings: namespaceMetaStringEncodings,
+        encoder: .namespace
+    )
+    try writeMetaString(
+        context: writeContext,
+        value: encodedTypeName,
+        encodings: typeNameMetaStringEncodings,
+        encoder: .typeName
+    )
+    buffer.flip()
+
+    let config = Config(compatible: false)
+    let readerResolver = TypeResolver(config: config)
+    try readerResolver.register(RoleSeedValue.self, name: typeName)
+    try readerResolver.finishRegistration()
+    let context = ReadContext(
+        buffer: buffer,
+        typeResolver: readerResolver,
+        config: config
+    )
+    #expect(try context.readTypeInfo().wireTypeID(compatible: false) == .namedStruct)
+    #expect(throws: ForyError.self) {
+        _ = try context.readTypeInfo()
+    }
+}
+
+@Test
+func idTypeInfoChecksWireKind() throws {
+    let config = Config(compatible: false)
+    let resolver = TypeResolver(config: config)
+    try resolver.register(AnyObjectDynamicNode.self, id: 512)
+    try resolver.finishRegistration()
+    let buffer = ByteBuffer()
+    buffer.writeUInt8(UInt8(TypeId.enumType.rawValue))
+    buffer.writeVarUInt32(512)
+    buffer.flip()
+    let context = ReadContext(
+        buffer: buffer,
+        typeResolver: resolver,
+        config: config
+    )
+
+    #expect(throws: ForyError.self) {
+        _ = try context.readTypeInfo()
+    }
 }
 
 @Test
@@ -587,6 +790,33 @@ func homogeneousCarrierRootsRoundTrip() throws {
 }
 
 @Test
+func dynamicCarrierPublishesTarget() throws {
+    let (list, listRef) = try readDynamicRefs(
+        ["alpha", "beta"] as [Any],
+        with: AnyArraySerializer.self,
+        target: [String].self
+    )
+    #expect(list == ["alpha", "beta"])
+    #expect(listRef == list)
+
+    let (set, setRef) = try readDynamicRefs(
+        Set([AnyHashable("alpha"), AnyHashable("beta")]),
+        with: SetSerializer<AnyHashable>.self,
+        target: Set<String>.self
+    )
+    #expect(set == Set(["alpha", "beta"]))
+    #expect(setRef == set)
+
+    let (map, mapRef) = try readDynamicRefs(
+        [AnyHashable("alpha"): Int32(1), AnyHashable("beta"): Int32(2)] as [AnyHashable: Any],
+        with: AnyHashableAnyMapSerializer.self,
+        target: [String: Int32].self
+    )
+    #expect(map == ["alpha": 1, "beta": 2])
+    #expect(mapRef == map)
+}
+
+@Test
 func dynamicAnyListTracksRefs() throws {
     let fory = Fory(config: .init(trackRef: true, compatible: false))
     try fory.register(AnyObjectDynamicGraphNode.self, id: 503)
@@ -674,7 +904,7 @@ func dynamicAnyMaxDepthAllowsBoundaryDepth() throws {
 }
 
 @Test
-func dynamicClassCountsOneMaterialization() throws {
+func dynamicClassUsesCompoundDepth() throws {
     let tail = AnyObjectDynamicGraphNode(value: 3)
     let middle = AnyObjectDynamicGraphNode(value: 2, next: tail)
     let value = AnyObjectDynamicGraphNode(value: 1, next: middle)
@@ -694,9 +924,9 @@ func dynamicClassCountsOneMaterialization() throws {
         #expect(message.contains("maxDepth"))
     }
 
-    // The root is selected through Any, while its statically declared children
-    // follow the registered schema and do not consume dynamic Any depth.
-    let boundary = Fory(config: .init(trackRef: false, maxDepth: 1))
+    // The root is selected through Any once, while generated class reads bound
+    // every statically declared materialization independently.
+    let boundary = Fory(config: .init(trackRef: false, maxDepth: 3))
     try boundary.register(AnyObjectDynamicGraphNode.self, id: 507)
     let decoded = try boundary.deserialize(
         payload,

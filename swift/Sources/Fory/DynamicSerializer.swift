@@ -260,10 +260,13 @@ private func readDynamicValue<S: Serializer>(
         try valueTargetAsAnyObject(typeInfo)
     }
     let value = try typeInfo.readDynamic(context)
+    let target = try castDynamicTarget(value, to: S.Target.self, typeInfo: typeInfo)
     if let reservedRefID {
-        context.refReader.storeRef(value, at: reservedRefID)
+        // Dynamic container readers use erased carriers. Publish only the exact selected target so
+        // later references never observe a raw [Any], Set<AnyHashable>, or [AnyHashable: Any].
+        context.refReader.storeRef(target, at: reservedRefID)
     }
-    return try castDynamicTarget(value, to: S.Target.self, typeInfo: typeInfo)
+    return target
 }
 
 /// Serializes a dynamic value by resolving its registered concrete target type.

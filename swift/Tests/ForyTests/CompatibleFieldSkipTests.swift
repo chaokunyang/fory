@@ -96,9 +96,9 @@ private struct NamedCollectionItemV2: Equatable {
 @Test
 func skipsStaticReferenceBodies() throws {
     for trackRef in [false, true] {
-        // The collection TypeMeta consumes one generic level. Its static class
-        // items must not consume another level; only their Any field does.
-        let config = Config(trackRef: trackRef, compatible: true, maxDepth: 1)
+        // The root and each generated class item are compound materializations.
+        // The Any field uses its separate dynamic-depth counter.
+        let config = Config(trackRef: trackRef, compatible: true, maxDepth: 2)
         let writer = Fory(config: config)
         try writer.register(SkippedReferenceBody.self, id: 9980)
         try writer.register(SkippedReferenceOwnerV1.self, id: 9981)
@@ -123,7 +123,7 @@ func skipsStaticReferenceBodies() throws {
 
 @Test
 func skipsStaticValueBody() throws {
-    let config = Config(trackRef: false, compatible: true, maxDepth: 0)
+    let config = Config(trackRef: false, compatible: true, maxDepth: 2)
     let writer = Fory(config: config)
     try writer.register(SkippedValueBody.self, id: 9982)
     try writer.register(SkippedValueOwnerV1.self, id: 9983)

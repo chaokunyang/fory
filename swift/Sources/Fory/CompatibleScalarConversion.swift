@@ -1563,8 +1563,17 @@ private func compatibleFiniteBinaryFloatText(_ layout: BinaryFloatLayout) -> Str
     var digits = compatibleDecimalDigits(significand)
     var scale = 0
     if exponent2 >= 0 {
+        let expandedBitWidth = (UInt64.bitWidth - significand.leadingZeroBitCount) + exponent2
+        // Any integer wider than 851 bits exceeds the 256-digit conversion limit.
+        // Reject from the binary layout before expanding attacker-controlled exponents.
+        guard expandedBitWidth <= 851 else {
+            return nil
+        }
         for _ in 0..<exponent2 {
             compatibleMultiplyDecimalDigits(&digits, by: 2)
+            if digits.count > maxCompatibleDecimalDigits {
+                return nil
+            }
         }
     } else {
         scale = -exponent2

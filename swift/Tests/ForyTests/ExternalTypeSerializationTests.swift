@@ -164,6 +164,21 @@ private final class LocalNode {
     required init() {}
 }
 
+private class StoredBase {
+    var inherited: Int32 = 0
+
+    required init() {}
+}
+
+@ForyStruct
+private final class StoredChild: StoredBase {
+    var local: Int32 = 0
+
+    required init() {
+        super.init()
+    }
+}
+
 @ForyStruct
 private struct LocalNamedValue: NamedValue, Equatable {
     var name: String
@@ -1167,8 +1182,28 @@ func hiddenCarrierAliasIsRejected() throws {
     try fory.register(UserSerializer.self, id: 78)
     try fory.register(HiddenCarrierHolder.self, id: 79)
 
-    #expect(throws: ForyError.self) {
+    let firstFailure: ForyError
+    do {
         _ = try fory.serialize(HiddenCarrierHolder(users: []))
+        Issue.record("expected registration finalization failure")
+        return
+    } catch let error as ForyError {
+        firstFailure = error
+    }
+    #expect(throws: firstFailure) {
+        _ = try fory.serialize(Int32(1))
+    }
+    #expect(throws: ForyError.self) {
+        try fory.register(KeySerializer.self, id: 80)
+    }
+}
+
+@Test
+func inheritedStorageIsRejected() throws {
+    let fory = Fory()
+    try fory.register(StoredChild.self, id: 133)
+    #expect(throws: ForyError.self) {
+        _ = try fory.serialize(StoredChild())
     }
 }
 

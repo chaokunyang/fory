@@ -69,6 +69,36 @@ private struct CompatibleNestedMapV2: Equatable {
 }
 
 @ForyStruct
+private struct OptionalContainersV1: Equatable {
+    @ForyField(id: 1)
+    var list: [String]?
+
+    @ForyField(id: 2)
+    var set: Set<String>?
+
+    @ForyField(id: 3)
+    var map: [String: Int32]?
+}
+
+@ForyStruct
+private struct RequiredListV2: Equatable {
+    @ForyField(id: 1)
+    var list: [String] = []
+}
+
+@ForyStruct
+private struct RequiredSetV2: Equatable {
+    @ForyField(id: 2)
+    var set: Set<String> = []
+}
+
+@ForyStruct
+private struct RequiredMapV2: Equatable {
+    @ForyField(id: 3)
+    var map: [String: Int32] = [:]
+}
+
+@ForyStruct
 private struct RemoteFixedUInt32V1: Equatable {
     @ForyField(id: 1, encoding: .fixed)
     var id: UInt32 = 0
@@ -169,6 +199,35 @@ private struct ScalarBFloat16Box: Equatable {
 @ForyStruct
 private struct ScalarDecimalBox: Equatable {
     var value: Decimal = .zero
+}
+
+@ForyStruct
+private final class RemovedRefChild {
+    var value: Int32 = 0
+
+    required init() {}
+
+    init(value: Int32) {
+        self.value = value
+    }
+}
+
+@ForyStruct
+private struct RemovedRefV1 {
+    @ForyField(id: 1)
+    var first: RemovedRefChild?
+
+    @ForyField(id: 2)
+    var second: RemovedRefChild?
+
+    @ForyField(id: 3)
+    var keep: Int32 = 0
+}
+
+@ForyStruct
+private struct RemovedRefV2: Equatable {
+    @ForyField(id: 3)
+    var keep: Int32 = 0
 }
 
 @ForyStruct
@@ -425,6 +484,100 @@ func compatibleModeSupportsAddedAndRemovedFields() throws {
 }
 
 @Test
+func compatibleTypeDefCacheHit() throws {
+    let writer = Fory(config: .init(trackRef: false, compatible: true))
+    try writer.register(CompatibleProfileV1.self, id: 9900)
+
+    let reader = Fory(config: .init(trackRef: false, compatible: true))
+    try reader.register(CompatibleProfileV2.self, id: 9900)
+
+    let source = CompatibleProfileV1(id: 7, name: "swift")
+    let bytes = try writer.serialize(source)
+    let expected = CompatibleProfileV2(
+        id: source.id,
+        name: source.name,
+        nickname: "",
+        scores: []
+    )
+
+    let first: CompatibleProfileV2 = try reader.deserialize(bytes)
+    #expect(first == expected)
+    #if DEBUG
+        #expect(reader.typeResolver.typeDefCacheCount == 1)
+    #endif
+
+    let cached: CompatibleProfileV2 = try reader.deserialize(bytes)
+    #expect(cached == expected)
+    #if DEBUG
+        #expect(reader.typeResolver.typeDefCacheCount == 1)
+    #endif
+}
+
+@Test
+func containerEnvelopeChangeRejected() throws {
+    let optional = OptionalContainersV1(
+        list: ["list"],
+        set: ["set"],
+        map: ["map": 1]
+    )
+    try expectInvalidData {
+        let _: RequiredListV2 = try compatibleDecode(
+            optional, as: RequiredListV2.self, id: 9963)
+    }
+    try expectInvalidData {
+        let _: RequiredSetV2 = try compatibleDecode(
+            optional, as: RequiredSetV2.self, id: 9963)
+    }
+    try expectInvalidData {
+        let _: RequiredMapV2 = try compatibleDecode(
+            optional, as: RequiredMapV2.self, id: 9963)
+    }
+    try expectInvalidData {
+        let _: OptionalContainersV1 = try compatibleDecode(
+            RequiredListV2(list: ["list"]),
+            as: OptionalContainersV1.self,
+            id: 9963
+        )
+    }
+}
+
+@Test
+func containerTrackingChangeRejected() throws {
+    let config = Config(trackRef: true, compatible: true)
+    let resolver = TypeResolver(config: config)
+    try resolver.register(OptionalContainersV1.self, id: 9963)
+    try resolver.finishRegistration()
+    let localTypeInfo = try resolver.requireTypeInfo(for: OptionalContainersV1.self)
+    let localTypeMeta = try #require(localTypeInfo.typeMeta)
+    let empty = MetaString.empty(specialChar1: "_", specialChar2: "_")
+
+    for (index, localField) in localTypeMeta.fields.enumerated() {
+        // Swift value-container fields cannot emit outer reference tracking. Clone the generated
+        // field shape to model foreign metadata without weakening static carrier ownership.
+        #expect(!localField.fieldType.trackRef)
+        var remoteField = localField
+        remoteField.fieldType.trackRef = true
+        let remoteTypeMeta = try TypeMeta(
+            typeID: TypeId.compatibleStruct.rawValue,
+            userTypeID: 9963,
+            namespace: empty,
+            typeName: empty,
+            registerByName: false,
+            fields: [remoteField]
+        )
+        try expectInvalidData {
+            _ = try resolver.cacheTypeInfo(
+                remoteTypeMeta,
+                forHeader: UInt64(index + 1),
+                localTypeInfo: localTypeInfo,
+                exactLocal: false,
+                config: config
+            )
+        }
+    }
+}
+
+@Test
 func skipsDynamicMapNullEntries() throws {
     let writer = Fory(config: .init(trackRef: true, compatible: true))
     try writer.register(SkippedDynamicMapV1.self, id: 9962)
@@ -509,7 +662,7 @@ func compatibleUnionSkipperBoundsDynamicPayload() throws {
         #expect(message.contains("maxDepth"))
     }
 
-    let boundaryReader = Fory(config: .init(compatible: true, maxDepth: 2))
+    let boundaryReader = Fory(config: .init(compatible: true, maxDepth: 3))
     try boundaryReader.register(SkippedDepthUnion.self, id: 9964)
     try boundaryReader.register(SkippedUnionV2.self, id: 9965)
     let decoded: SkippedUnionV2 = try boundaryReader.deserialize(bytes)
@@ -759,7 +912,8 @@ func scalarTrackRefMismatchIsRejected() throws {
     }
 
     let resolvedBothTracking = try remoteTracking.assigningFieldIDs(from: localTracking)
-    #expect(resolvedBothTracking.fields[0].fieldID == 0)
+    #expect(resolvedBothTracking.fields[0].fieldID == 1)
+    #expect(resolvedBothTracking.fields[0].matchedFieldID == 0)
 
     let localNullableTracking = try TypeMeta(
         typeID: TypeId.compatibleStruct.rawValue,
@@ -789,7 +943,8 @@ func scalarTrackRefMismatchIsRejected() throws {
         ])
     let resolvedBothNullableTracking = try remoteNullableTracking.assigningFieldIDs(
         from: localNullableTracking)
-    #expect(resolvedBothNullableTracking.fields[0].fieldID == 0)
+    #expect(resolvedBothNullableTracking.fields[0].fieldID == 1)
+    #expect(resolvedBothNullableTracking.fields[0].matchedFieldID == 0)
     try expectInvalidData {
         _ = try remoteNullableTracking.assigningFieldIDs(from: localTracking)
     }
@@ -825,8 +980,10 @@ func namedRemoteOnlyFieldIsSkipped() throws {
         ])
 
     let resolved = try remote.assigningFieldIDs(from: local)
-    #expect(resolved.fields[0].fieldID == -1)
-    #expect(resolved.fields[1].fieldID == 2)
+    #expect(resolved.fields[0].fieldID == nil)
+    #expect(resolved.fields[0].matchedFieldID == -1)
+    #expect(resolved.fields[1].fieldID == nil)
+    #expect(resolved.fields[1].matchedFieldID == 2)
 }
 
 @Test
@@ -853,8 +1010,10 @@ func remoteOnlyFieldsSkipWhenLocalSchemaIsEmpty() throws {
         ])
 
     let resolved = try remote.assigningFieldIDs(from: local)
-    #expect(resolved.fields[0].fieldID == -1)
-    #expect(resolved.fields[1].fieldID == -1)
+    #expect(resolved.fields[0].fieldID == 1)
+    #expect(resolved.fields[0].matchedFieldID == -1)
+    #expect(resolved.fields[1].fieldID == 2)
+    #expect(resolved.fields[1].matchedFieldID == -1)
 }
 
 @Test
@@ -881,35 +1040,97 @@ func nameRemoteFieldDoesNotMatchTaggedLocalField() throws {
         ])
 
     let resolved = try remote.assigningFieldIDs(from: local)
-    #expect(resolved.fields[0].fieldID == -1)
+    #expect(resolved.fields[0].fieldID == nil)
+    #expect(resolved.fields[0].matchedFieldID == -1)
 }
 
 @Test
-func duplicateRemoteNameBindingFails() throws {
+func duplicateRemoteNamesFail() throws {
     let empty = MetaString.empty(specialChar1: "_", specialChar2: "_")
     let stringType = TypeMeta.FieldType(typeID: TypeId.string.rawValue, nullable: false)
-    let local = try TypeMeta(
-        typeID: TypeId.compatibleStruct.rawValue,
-        userTypeID: 1,
-        namespace: empty,
-        typeName: empty,
-        registerByName: false,
-        fields: [
-            TypeMeta.FieldInfo(fieldID: nil, fieldName: "value", fieldType: stringType)
-        ])
-    let remote = try TypeMeta(
-        typeID: TypeId.compatibleStruct.rawValue,
-        userTypeID: 1,
-        namespace: empty,
-        typeName: empty,
-        registerByName: false,
-        fields: [
-            TypeMeta.FieldInfo(fieldID: nil, fieldName: "value", fieldType: stringType),
-            TypeMeta.FieldInfo(fieldID: nil, fieldName: "value", fieldType: stringType)
-        ])
+    #expect(throws: ForyError.invalidData("duplicate compatible field name foo_bar")) {
+        _ = try TypeMeta(
+            typeID: TypeId.compatibleStruct.rawValue,
+            userTypeID: 1,
+            namespace: empty,
+            typeName: empty,
+            registerByName: false,
+            fields: [
+                TypeMeta.FieldInfo(fieldID: nil, fieldName: "fooBar", fieldType: stringType),
+                TypeMeta.FieldInfo(fieldID: nil, fieldName: "foo_bar", fieldType: stringType)
+            ])
+    }
+}
 
-    #expect(throws: ForyError.invalidData("compatible field value duplicates local field value")) {
-        _ = try remote.assigningFieldIDs(from: local)
+@Test
+func duplicateRemoteTagsFail() throws {
+    let empty = MetaString.empty(specialChar1: "_", specialChar2: "_")
+    let fieldType = TypeMeta.FieldType(typeID: TypeId.int32.rawValue, nullable: false)
+    #expect(throws: ForyError.invalidData("duplicate compatible field tag 1")) {
+        _ = try TypeMeta(
+            typeID: TypeId.compatibleStruct.rawValue,
+            userTypeID: 1,
+            namespace: empty,
+            typeName: empty,
+            registerByName: false,
+            fields: [
+                TypeMeta.FieldInfo(fieldID: 1, fieldName: "first", fieldType: fieldType),
+                TypeMeta.FieldInfo(fieldID: 1, fieldName: "second", fieldType: fieldType)
+            ]
+        )
+    }
+}
+
+@Test
+func namedCompatibleKindRejected() throws {
+    let resolver = TypeResolver(config: Config(compatible: true))
+    try resolver.register(
+        CompatibleProfileV1.self,
+        namespace: "kind",
+        typeName: "Value"
+    )
+    try resolver.finishRegistration()
+    let incompatible = try TypeMeta(
+        typeID: TypeId.namedEnum.rawValue,
+        userTypeID: nil,
+        namespace: try MetaStringEncoder.namespace.encode("kind"),
+        typeName: try MetaStringEncoder.typeName.encode("Value"),
+        registerByName: true,
+        fields: []
+    )
+
+    #expect(throws: ForyError.self) {
+        _ = try resolver.requireTypeInfo(for: incompatible)
+    }
+    let wrongRegistration = try TypeMeta(
+        typeID: TypeId.compatibleStruct.rawValue,
+        userTypeID: nil,
+        namespace: try MetaStringEncoder.namespace.encode("kind"),
+        typeName: try MetaStringEncoder.typeName.encode("Value"),
+        registerByName: true,
+        fields: []
+    )
+    #expect(throws: ForyError.self) {
+        _ = try resolver.requireTypeInfo(for: wrongRegistration)
+    }
+}
+
+@Test
+func idCompatibleKindRejected() throws {
+    let resolver = TypeResolver(config: Config(compatible: true))
+    try resolver.register(CompatibleProfileV1.self, id: 9971)
+    try resolver.finishRegistration()
+    let incompatible = try TypeMeta(
+        typeID: TypeId.enumType.rawValue,
+        userTypeID: 9971,
+        namespace: .empty(specialChar1: ".", specialChar2: "_"),
+        typeName: .empty(specialChar1: "$", specialChar2: "_"),
+        registerByName: false,
+        fields: []
+    )
+
+    #expect(throws: ForyError.self) {
+        _ = try resolver.requireTypeInfo(for: incompatible)
     }
 }
 
@@ -981,7 +1202,8 @@ func matchedByteFamilyClassification() throws {
         ])
 
     let resolved = try remoteUInt8Array.assigningFieldIDs(from: local)
-    #expect(resolved.fields[0].fieldID == 1)
+    #expect(resolved.fields[0].fieldID == nil)
+    #expect(resolved.fields[0].matchedFieldID == 1)
     try expectInvalidData {
         _ = try remoteInt8Array.assigningFieldIDs(from: local)
     }
@@ -1022,7 +1244,8 @@ func matchedNestedScalarShapeAcceptsNullableDrift() throws {
         ])
 
     let resolved = try remote.assigningFieldIDs(from: local)
-    #expect(resolved.fields[0].fieldID == 1)
+    #expect(resolved.fields[0].fieldID == nil)
+    #expect(resolved.fields[0].matchedFieldID == 1)
 }
 
 @Test
@@ -1141,6 +1364,55 @@ func scalarConversionFailures() throws {
             as: ScalarBFloat16Box.self,
             id: 9951
         )
+    }
+
+    try expectInvalidData {
+        let _: ScalarStringBox = try compatibleDecode(
+            ScalarDoubleBox(value: .greatestFiniteMagnitude),
+            as: ScalarStringBox.self,
+            id: 9966
+        )
+    }
+
+    try expectInvalidData {
+        let _: ScalarDecimalBox = try compatibleDecode(
+            ScalarDoubleBox(value: .greatestFiniteMagnitude),
+            as: ScalarDecimalBox.self,
+            id: 9967
+        )
+    }
+}
+
+@Test
+func unregisteredRemovedStructSkips() throws {
+    let writer = Fory(config: .init(trackRef: true, compatible: true))
+    try writer.register(RemovedRefChild.self, id: 9969)
+    try writer.register(RemovedRefV1.self, id: 9970)
+
+    let child = RemovedRefChild(value: 7)
+    let source = RemovedRefV1(first: child, second: child, keep: 9)
+    let holderBytes = try writer.serialize(source)
+    let emptyHolderBytes = try writer.serialize(RemovedRefV1(first: nil, second: nil, keep: 10))
+    let childBytes = try writer.serialize(child)
+
+    let reader = Fory(config: .init(trackRef: true, compatible: true))
+    try reader.register(RemovedRefV2.self, id: 9970)
+    let decoded: RemovedRefV2 = try reader.deserialize(holderBytes)
+    #expect(decoded == RemovedRefV2(keep: source.keep))
+
+    let limitedReader = Fory(
+        config: .init(trackRef: true, compatible: true, maxDepth: 1)
+    )
+    try limitedReader.register(RemovedRefV2.self, id: 9970)
+    #expect(throws: ForyError.self) {
+        let _: RemovedRefV2 = try limitedReader.deserialize(holderBytes)
+    }
+    let afterFailure: RemovedRefV2 = try limitedReader.deserialize(emptyHolderBytes)
+    #expect(afterFailure == RemovedRefV2(keep: 10))
+
+    let dynamicReader = Fory(config: .init(trackRef: true, compatible: true))
+    #expect(throws: ForyError.self) {
+        let _: Any = try dynamicReader.deserialize(childBytes)
     }
 }
 

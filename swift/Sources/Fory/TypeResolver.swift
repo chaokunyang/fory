@@ -102,6 +102,30 @@ func isAllowedRegisteredWireTypeID(
 }
 
 @inline(__always)
+func matchesRegisteredIdentityKind(
+    _ wireTypeID: TypeId,
+    declaredTypeID: TypeId,
+    registerByName: Bool
+) -> Bool {
+    switch normalizeRegisteredTypeID(declaredTypeID) {
+    case .structType:
+        return registerByName
+            ? wireTypeID == .namedStruct || wireTypeID == .namedCompatibleStruct
+            : wireTypeID == .structType || wireTypeID == .compatibleStruct
+    case .enumType:
+        return wireTypeID == (registerByName ? .namedEnum : .enumType)
+    case .ext:
+        return wireTypeID == (registerByName ? .namedExt : .ext)
+    case .typedUnion:
+        return registerByName
+            ? wireTypeID == .namedUnion
+            : wireTypeID == .typedUnion || wireTypeID == .union
+    default:
+        return false
+    }
+}
+
+@inline(__always)
 func registeredWireTypeNeedsUserTypeID(_ wireTypeID: TypeId) -> Bool {
     switch wireTypeID {
     case .enumType, .structType, .ext, .typedUnion, .union:
@@ -623,7 +647,9 @@ final class TypeResolver {
     private static let maxRemoteTypeMetaKeys = 8192
 
     private let trackRef: Bool
-    private var registrationFinished = false
+    private var registryFrozen = false
+    private var registrationFinalized = false
+    private var registrationFailure: ForyError?
 
     private var bySerializerType = UInt64Map<TypeInfo>(initialCapacity: 64)
     private var byTargetType = UInt64Map<TypeInfo>(initialCapacity: 64)
@@ -631,18 +657,35 @@ final class TypeResolver {
     private var byTypeName: [TypeNameKey: TypeInfo] = [:]
     private var registeredTypeInfos: [TypeInfo] = []
     private var builtinTypeInfoByID: [TypeInfo?] = []
-    private var typeInfoByHeader = UInt64Map<TypeInfo>(initialCapacity: 64)
+    // TypeDef headers are input-controlled. Keep the full header as the cache key, but seed
+    // placement per resolver so valid remote schemas cannot create repeatable probe clusters.
+    private let typeInfoByHeader: UInt64Map<TypeInfo>
     private var remoteSchemaVersionsByType: [String: Int] = [:]
     private var totalAcceptedSchemaVersions = 0
 
-    init(trackRef: Bool = false) {
+    init(
+        trackRef: Bool = false,
+        typeDefCachePlacementSeed: UInt64 = UInt64.random(in: 1...UInt64.max)
+    ) {
         self.trackRef = trackRef
+        typeInfoByHeader = UInt64Map(
+            initialCapacity: 64,
+            placementSeed: typeDefCachePlacementSeed
+        )
         seedBuiltinTypeInfos()
     }
 
     convenience init(config: Config) {
         self.init(trackRef: config.trackRef)
     }
+
+    #if DEBUG
+        var typeDefCacheCount: Int {
+            typeInfoByHeader.count
+        }
+
+        private(set) var namedTypeLookupCount = 0
+    #endif
 
     private func seedBuiltinTypeInfos() {
         seedBuiltin(Bool.self)
@@ -835,18 +878,32 @@ final class TypeResolver {
 
     @inline(__always)
     func finishRegistration() throws {
-        if registrationFinished {
+        if registrationFinalized {
             return
+        }
+        if let registrationFailure {
+            throw registrationFailure
         }
         try finishRegistrationSlow()
     }
 
     @inline(never)
     private func finishRegistrationSlow() throws {
-        for typeInfo in registeredTypeInfos {
-            try typeInfo.finalizeTypeMeta(resolver: self)
+        // Freezing and finalization are separate states: the first root permanently closes
+        // registration, while a partial builder failure must never be mistaken for success.
+        registryFrozen = true
+        do {
+            for typeInfo in registeredTypeInfos {
+                try typeInfo.finalizeTypeMeta(resolver: self)
+            }
+            registrationFinalized = true
+        } catch {
+            let failure =
+                error as? ForyError
+                ?? ForyError.invalidData("registration finalization failed: \(error)")
+            registrationFailure = failure
+            throw failure
         }
-        registrationFinished = true
     }
 
     func register<T: Serializer>(_ type: T.Type, id: UInt32) throws {
@@ -1189,6 +1246,9 @@ final class TypeResolver {
 
     @inline(__always)
     func requireTypeInfo(namespace: String, typeName: String) throws -> TypeInfo {
+        #if DEBUG
+            namedTypeLookupCount += 1
+        #endif
         guard let typeInfo = byTypeName[TypeNameKey(namespace: namespace, typeName: typeName)] else {
             try missingNamedTypeInfo(namespace: namespace, typeName: typeName)
         }
@@ -1304,6 +1364,11 @@ final class TypeResolver {
     @inline(never)
     func requireTypeInfo(for typeMeta: TypeMeta) throws -> TypeInfo {
         if typeMeta.registerByName {
+            guard let rawTypeID = typeMeta.typeID,
+                let wireTypeID = TypeId(rawValue: rawTypeID)
+            else {
+                throw ForyError.invalidData("missing or unknown compatible named type id")
+            }
             guard
                 let typeInfo = byTypeName[
                     TypeNameKey(namespace: typeMeta.namespace.value, typeName: typeMeta.typeName.value)]
@@ -1312,11 +1377,43 @@ final class TypeResolver {
                     "namespace=\(typeMeta.namespace.value), type=\(typeMeta.typeName.value)"
                 )
             }
+            guard
+                matchesRegisteredIdentityKind(
+                    wireTypeID,
+                    declaredTypeID: typeInfo.typeID,
+                    registerByName: true
+                )
+            else {
+                throw ForyError.typeMismatch(
+                    expected: typeInfo.wireTypeID(compatible: true).rawValue,
+                    actual: rawTypeID
+                )
+            }
             return typeInfo
         }
         if let userTypeID = typeMeta.userTypeID {
             guard let typeInfo = byUserTypeID.value(for: UInt64(userTypeID)) else {
                 throw ForyError.typeNotRegistered("user_type_id=\(userTypeID)")
+            }
+            guard let rawTypeID = typeMeta.typeID,
+                let wireTypeID = TypeId(rawValue: rawTypeID),
+                matchesRegisteredIdentityKind(
+                    wireTypeID,
+                    declaredTypeID: typeInfo.typeID,
+                    registerByName: false
+                ),
+                isAllowedRegisteredWireTypeID(
+                    wireTypeID,
+                    declaredTypeID: typeInfo.typeID,
+                    registerByName: false,
+                    compatible: true,
+                    evolving: typeInfo.evolving
+                )
+            else {
+                throw ForyError.typeMismatch(
+                    expected: typeInfo.wireTypeID(compatible: true).rawValue,
+                    actual: typeMeta.typeID ?? TypeId.unknown.rawValue
+                )
             }
             return typeInfo
         }
@@ -1324,7 +1421,7 @@ final class TypeResolver {
     }
 
     private func ensureRegistrationAllowed() throws {
-        guard !registrationFinished else {
+        guard !registryFrozen else {
             throw ForyError.invalidData(
                 "cannot register more types after top-level serialize/deserialize has frozen registration"
             )

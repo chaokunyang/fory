@@ -245,6 +245,7 @@ private func buildClassReadDataDecl(
     return """
         \(successBodyAttribute)
         private static func __foryReadDataImpl(_ context: ReadContext, reservedRefID: UInt32?) throws -> Target {
+            try context.enterCompoundDepth()
             let __buffer = context.buffer
             \(schemaHashCheckExpr())
             \(reserveClassGraphOwnerLine(fields: graphFields, indent: "        "))
@@ -253,6 +254,7 @@ private func buildClassReadDataDecl(
                 context.refReader.storeRef(value, at: reservedRefID)
             }
             \(schemaAssignBody)
+            context.leaveCompoundDepth()
             return value
         }
 
@@ -270,9 +272,12 @@ private func buildEmptyStructReadDataDecl(
     """
     \(successBodyAttribute)
     \(accessPrefix)static func readData(_ context: ReadContext) throws -> Target {
+        try context.enterCompoundDepth()
         let __buffer = context.buffer
         \(schemaHashCheckExpr())
-        return Target()
+        let value = Target()
+        context.leaveCompoundDepth()
+        return value
     }
     """
 }
@@ -294,12 +299,15 @@ private func buildStructReadDataDecl(
     return """
         \(successBodyAttribute)
         \(accessPrefix)static func readData(_ context: ReadContext) throws -> Target {
+            try context.enterCompoundDepth()
             let __buffer = context.buffer
             \(schemaHashCheckExpr())
             \(schemaReadBody)
-            return Target(
+            let value = Target(
                 \(ctorArgs)
             )
+            context.leaveCompoundDepth()
+            return value
         }
         """
 }
@@ -337,6 +345,7 @@ private func buildClassReadCompatibleDataDecl(
             remoteTypeInfo: TypeInfo,
             reservedRefID: UInt32?
         ) throws -> Target {
+            try context.enterCompoundDepth()
             \(bufferBinding)guard let typeMeta = remoteTypeInfo.compatibleTypeMeta else {
                 throw ForyError.invalidData("compatible type metadata is required")
             }
@@ -349,20 +358,23 @@ private func buildClassReadCompatibleDataDecl(
                typeMeta.headerHash == localHeaderHash {
                 if !remoteTypeInfo.typeDefHasUserTypeFields {
                     \(schemaAssignBody)
+                    context.leaveCompoundDepth()
                     return value
                 }
                 \(compatibleAlignedAssignBody)
+                context.leaveCompoundDepth()
                 return value
             }
             \(localFieldsBinding)for remoteField in typeMeta.fields {
-                switch Int(remoteField.fieldID ?? -1) {
+                switch Int(remoteField.matchedFieldID ?? -2) {
             \(compatibleCases)
                 case -1:
                     try context.skipFieldValue(remoteField.fieldType)
                 default:
-                    throw ForyError.invalidData("invalid compatible matched id \\(remoteField.fieldID ?? -2)")
+                    throw ForyError.invalidData("invalid compatible matched id \\(remoteField.matchedFieldID ?? -2)")
                 }
             }
+            context.leaveCompoundDepth()
             return value
         }
 
@@ -377,17 +389,22 @@ private func buildEmptyStructReadCompatibleDataDecl(accessPrefix: String) -> Str
     """
     @inline(never)
     \(accessPrefix)static func readCompatible(_ context: ReadContext, typeInfo: TypeInfo) throws -> Target {
+        try context.enterCompoundDepth()
         guard let typeMeta = typeInfo.compatibleTypeMeta else {
             throw ForyError.invalidData("compatible type metadata is required")
         }
         if let localHeaderHash = typeInfo.typeDefHeaderHash,
            typeMeta.headerHash == localHeaderHash {
-            return Target()
+            let value = Target()
+            context.leaveCompoundDepth()
+            return value
         }
         for remoteField in typeMeta.fields {
             try context.skipFieldValue(remoteField.fieldType)
         }
-        return Target()
+        let value = Target()
+        context.leaveCompoundDepth()
+        return value
     }
     """
 }
@@ -429,6 +446,7 @@ private func buildStructReadCompatibleDataDecl(
 
         @inline(never)
         \(accessPrefix)static func readCompatible(_ context: ReadContext, typeInfo: TypeInfo) throws -> Target {
+            try context.enterCompoundDepth()
             \(bufferBinding)guard let typeMeta = typeInfo.compatibleTypeMeta else {
                 throw ForyError.invalidData("compatible type metadata is required")
             }
@@ -436,19 +454,25 @@ private func buildStructReadCompatibleDataDecl(
                typeMeta.headerHash == localHeaderHash {
                 if !typeInfo.typeDefHasUserTypeFields {
                     \(schemaReadBody)
-                    return Target(
+                    let value = Target(
                         \(ctorArgs)
                     )
+                    context.leaveCompoundDepth()
+                    return value
                 }
                 \(compatibleAlignedReadBody)
-                return Target(
+                let value = Target(
                     \(ctorArgs)
                 )
+                context.leaveCompoundDepth()
+                return value
             }
-            return try Self.__foryReadChangedData(
+            let value = try Self.__foryReadChangedData(
                 context,
                 typeMeta: typeMeta
             )
+            context.leaveCompoundDepth()
+            return value
         }
         """
 }
@@ -471,12 +495,12 @@ private func buildStructChangedFallbackDecl(
               \(bufferBinding)
               \(defaults)
               \(localFieldsBinding)for remoteField in typeMeta.fields {
-                  switch Int(remoteField.fieldID ?? -1) {
+                  switch Int(remoteField.matchedFieldID ?? -2) {
                   \(cases)
                   case -1:
                       try context.skipFieldValue(remoteField.fieldType)
                   default:
-                      throw ForyError.invalidData("invalid compatible matched id \\(remoteField.fieldID ?? -2)")
+                      throw ForyError.invalidData("invalid compatible matched id \\(remoteField.matchedFieldID ?? -2)")
                   }
               }
               return Target(

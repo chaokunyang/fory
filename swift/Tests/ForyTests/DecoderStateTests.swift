@@ -39,8 +39,8 @@ func readContextResetReleasesMetaStrings() throws {
         let secondValue = try MetaStringEncoder.fieldName.encode("secondResetValue")
         first = firstValue
         second = secondValue
-        context.appendReadMetaString(firstValue)
-        context.appendReadMetaString(secondValue)
+        context.appendReadMetaString(ReadMetaStringEntry(firstValue))
+        context.appendReadMetaString(ReadMetaStringEntry(secondValue))
     }
 
     #expect(first != nil)
@@ -48,11 +48,23 @@ func readContextResetReleasesMetaStrings() throws {
     context.reset()
     #expect(first == nil)
     #expect(second == nil)
-    #expect(context.getReadMetaString(at: 0) == nil)
+    #expect(
+        try context.getReadMetaString(
+            at: 0,
+            decoder: .fieldName,
+            encodings: fieldNameMetaStringEncodings
+        ) == nil
+    )
 
     let reusedValue = try MetaStringEncoder.fieldName.encode("reusedValue")
-    context.appendReadMetaString(reusedValue)
-    let reused = try #require(context.getReadMetaString(at: 0))
+    context.appendReadMetaString(ReadMetaStringEntry(reusedValue))
+    let reused = try #require(
+        try context.getReadMetaString(
+            at: 0,
+            decoder: .fieldName,
+            encodings: fieldNameMetaStringEncodings
+        )
+    )
     #expect(reused === reusedValue)
 }
 

@@ -17,6 +17,8 @@
 
 import Foundation
 
+private final class SkippedStruct {}
+
 extension ReadContext {
     public func skipFieldValue(_ fieldType: TypeMeta.FieldType) throws {
         _ = try readSkippedFieldValue(
@@ -110,7 +112,8 @@ extension ReadContext {
                 let value = try readSkippedFieldPayload(
                     fieldType: fieldType,
                     typeInfo: typeInfo,
-                    readTypeInfo: readTypeInfo
+                    readTypeInfo: readTypeInfo,
+                    reservedRefID: refID
                 )
                 refReader.storeRef(value, at: refID)
                 return value
@@ -127,14 +130,19 @@ extension ReadContext {
     private func readSkippedFieldPayload(
         fieldType: TypeMeta.FieldType,
         typeInfo: TypeInfo?,
-        readTypeInfo: Bool
+        readTypeInfo: Bool,
+        reservedRefID: UInt32? = nil
     ) throws -> Any {
         if let typeInfo {
             return try readSkippedTypeInfoValue(fieldType: fieldType, typeInfo: typeInfo)
         }
         if readTypeInfo {
-            let typeInfo = try self.readTypeInfo()
-            return try readSkippedTypeInfoValue(fieldType: fieldType, typeInfo: typeInfo)
+            switch try readSkippedTypeInfo() {
+            case .registered(let typeInfo):
+                return try readSkippedTypeInfoValue(fieldType: fieldType, typeInfo: typeInfo)
+            case .skippedStruct(let typeMeta):
+                return try readSkippedStruct(typeMeta, reservedRefID: reservedRefID)
+            }
         }
 
         guard let resolvedTypeID = TypeId(rawValue: fieldType.typeID) else {
@@ -244,6 +252,24 @@ extension ReadContext {
         default:
             throw ForyError.invalidData("unsupported compatible field type id \(fieldType.typeID)")
         }
+    }
+
+    private func readSkippedStruct(
+        _ typeMeta: TypeMeta,
+        reservedRefID: UInt32?
+    ) throws -> Any {
+        try enterCompoundDepth()
+        let owner = SkippedStruct()
+        if let reservedRefID {
+            // This empty owner is final for the skip path. Publish it before
+            // children so an ordinary later Ref resolves to this exact object.
+            refReader.storeRef(owner, at: reservedRefID)
+        }
+        for field in typeMeta.fields {
+            try skipFieldValue(field.fieldType)
+        }
+        leaveCompoundDepth()
+        return owner
     }
 
     @inline(__always)

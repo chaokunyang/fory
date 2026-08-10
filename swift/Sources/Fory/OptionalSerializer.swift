@@ -154,7 +154,7 @@ public enum OptionalSerializer<Wrapped: Serializer>: Serializer {
             if refFlag == RefFlag.null.rawValue {
                 return nil
             }
-            context.buffer.moveBack(1)
+            context.buffer.moveBackUnchecked(1)
             return .some(
                 try context.withTypeInfo(typeInfo, for: Wrapped.self) {
                     try Wrapped.read(
@@ -330,7 +330,7 @@ public extension OptionalSerializer where Wrapped: FieldCodec {
             if refFlag == RefFlag.null.rawValue {
                 return nil
             }
-            context.buffer.moveBack(1)
+            context.buffer.moveBackUnchecked(1)
             return .some(
                 try Wrapped.withFieldTypeInfo(typeInfo, context) {
                     try Wrapped.readField(
@@ -378,7 +378,7 @@ public extension OptionalSerializer where Wrapped: FieldCodec {
             if refFlag == RefFlag.null.rawValue {
                 return nil
             }
-            context.buffer.moveBack(1)
+            context.buffer.moveBackUnchecked(1)
             return .some(
                 try Wrapped.readCompatibleField(
                     context,

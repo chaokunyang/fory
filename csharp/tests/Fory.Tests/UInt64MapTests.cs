@@ -28,17 +28,25 @@ public sealed class UInt64MapTests
     [Fact]
     public void SeededPlacementDispersesCluster()
     {
+        const ulong firstSeed = 0x18D7_43A5_91C2_0E6B;
+        const ulong secondSeed = 0xE72B_9C5A_6E3D_F194;
         ulong[] keys = LegacyClusterKeys(65);
         UInt64Map<int> first = new(
             initialCapacity: Capacity,
-            placementSeed: 0x18D7_43A5_91C2_0E6B);
+            placementSeed: firstSeed);
         UInt64Map<int> second = new(
             initialCapacity: Capacity,
-            placementSeed: 0xE72B_9C5A_6E3D_F194);
+            placementSeed: secondSeed);
 
         int[] firstSlots = keys.Select(key => Placement(first, key)).ToArray();
         int[] secondSlots = keys.Select(key => Placement(second, key)).ToArray();
 
+        Assert.Equal(
+            keys.Select(key => SeededPlacement(key, firstSeed)).ToArray(),
+            firstSlots);
+        Assert.Equal(
+            keys.Select(key => SeededPlacement(key, secondSeed)).ToArray(),
+            secondSlots);
         Assert.False(firstSlots.SequenceEqual(secondSlots));
         Assert.True(firstSlots.Take(64).Distinct().Count() > 32);
         Assert.True(secondSlots.Take(64).Distinct().Count() > 32);
@@ -93,10 +101,18 @@ public sealed class UInt64MapTests
 
         int[] firstSlots = keys.Select(key => Placement(first, key)).ToArray();
         int[] secondSlots = keys.Select(key => Placement(second, key)).ToArray();
+        ulong firstSeed = PlacementSeed(first);
+        ulong secondSeed = PlacementSeed(second);
 
-        Assert.False(firstSlots.SequenceEqual(secondSlots));
-        Assert.True(firstSlots.Take(64).Distinct().Count() > 32);
-        Assert.True(secondSlots.Take(64).Distinct().Count() > 32);
+        Assert.NotEqual(0UL, firstSeed);
+        Assert.NotEqual(0UL, secondSeed);
+        Assert.NotEqual(firstSeed, secondSeed);
+        Assert.Equal(
+            keys.Select(key => SeededPlacement(key, firstSeed)).ToArray(),
+            firstSlots);
+        Assert.Equal(
+            keys.Select(key => SeededPlacement(key, secondSeed)).ToArray(),
+            secondSlots);
     }
 
     [Fact]
@@ -160,6 +176,25 @@ public sealed class UInt64MapTests
             BindingFlags.Instance | BindingFlags.NonPublic);
         Assert.NotNull(field);
         return Assert.IsType<UInt64Map<TypeMeta>>(field.GetValue(context));
+    }
+
+    private static ulong PlacementSeed<TValue>(UInt64Map<TValue> map)
+    {
+        FieldInfo? field = typeof(UInt64Map<TValue>).GetField(
+            "_placementSeed",
+            BindingFlags.Instance | BindingFlags.NonPublic);
+        Assert.NotNull(field);
+        return Assert.IsType<ulong>(field.GetValue(map));
+    }
+
+    private static int SeededPlacement(ulong key, ulong seed)
+    {
+        const ulong mix1 = 0xBF58476D1CE4E5B9;
+        const ulong mix2 = 0x94D049BB133111EB;
+        ulong value = key ^ seed;
+        value = unchecked((value ^ (value >> 30)) * mix1);
+        value = unchecked((value ^ (value >> 27)) * mix2);
+        return (int)((value ^ (value >> 31)) >> 57);
     }
 
     private static int SimulateMissProbes(int[] initialSlots)

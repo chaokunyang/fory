@@ -54,8 +54,7 @@ internal sealed class UInt64Map<TValue>
     private int _shift;
     private int _count;
     private readonly double _loadFactor;
-    private readonly ulong _placementMultiplier;
-    private readonly ulong _placementOffset;
+    private readonly ulong _placementSeed;
     private int _growThreshold;
 
     internal UInt64Map(
@@ -64,16 +63,7 @@ internal sealed class UInt64Map<TValue>
         ulong placementSeed = 0)
     {
         _loadFactor = loadFactor;
-        if (placementSeed == 0)
-        {
-            _placementMultiplier = GoldenRatio;
-            _placementOffset = 0;
-        }
-        else
-        {
-            _placementMultiplier = MixPlacementSeed(placementSeed) | 1;
-            _placementOffset = MixPlacementSeed(unchecked(placementSeed + GoldenRatio));
-        }
+        _placementSeed = placementSeed;
         int capacity = NextPowerOfTwo(Math.Max(initialCapacity, 2));
         _entries = new Slot[capacity];
         _tableCapacity = capacity;
@@ -203,11 +193,18 @@ internal sealed class UInt64Map<TValue>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private int Place(ulong key)
     {
-        return (int)(unchecked(key * _placementMultiplier + _placementOffset) >> _shift);
+        if (_placementSeed == 0)
+        {
+            return (int)(unchecked(key * GoldenRatio) >> _shift);
+        }
+
+        // Seeded maps admit untrusted keys. Avalanche each key because an affine secret transform
+        // can preserve structured collision families even when its multiplier and offset are secret.
+        return (int)(MixPlacementKey(key ^ _placementSeed) >> _shift);
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static ulong MixPlacementSeed(ulong value)
+    private static ulong MixPlacementKey(ulong value)
     {
         value = unchecked((value ^ (value >> 30)) * SeedMix1);
         value = unchecked((value ^ (value >> 27)) * SeedMix2);

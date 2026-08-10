@@ -200,13 +200,22 @@ impl<'a> ResolvedField<'a> {
         let field_id = self.field_id;
         let name = &self.source.field_name;
         let call = self.codec_call();
-        quote! {{
-            fory_core::meta::FieldInfo::new_with_id(
-                #field_id,
-                #name,
-                #call::field_type(type_resolver)?
-            )
-        }}
+        if field_id > i64::from(i16::MAX) {
+            quote! {{
+                fory_core::meta::FieldInfo::new(
+                    #name,
+                    #call::field_type(type_resolver)?
+                )
+            }}
+        } else {
+            quote! {{
+                fory_core::meta::FieldInfo::new_with_id(
+                    #field_id as i16,
+                    #name,
+                    #call::field_type(type_resolver)?
+                )
+            }}
+        }
     }
 }
 

@@ -91,6 +91,7 @@ use std::rc::Rc;
 const SMALL_NUM_FIELDS_THRESHOLD: usize = 0b11111;
 const DEFAULT_MAX_TYPE_FIELDS: usize = 512;
 const DEFAULT_MAX_TYPE_META_BYTES: usize = 4096;
+const MAX_COMPATIBLE_MATCHED_FIELD_INDEX: usize = (i16::MAX as usize - 1) / 2;
 const MAX_TYPE_META_NESTING: usize = 128;
 const REGISTER_BY_NAME_FLAG: u8 = 0b0010_0000;
 const COMPATIBLE_TYPEDEF_FLAG: u8 = 0b0100_0000;
@@ -99,9 +100,9 @@ const FIELD_NAME_SIZE_THRESHOLD: usize = 0b1111;
 /// Marker value in encoding bits to indicate field ID mode (instead of field name)
 const FIELD_ID_ENCODING_MARKER: u8 = 0b11;
 /// Threshold for field ID that fits in 4-bit size field
-const SMALL_FIELD_ID_THRESHOLD: i64 = 0b1111;
+const SMALL_FIELD_ID_THRESHOLD: i16 = 0b1111;
 // The extended TAG_ID body stores `field_id - 15` as a full varuint32.
-const MAX_FIELD_ID: i64 = u32::MAX as i64 + SMALL_FIELD_ID_THRESHOLD;
+const MAX_FIELD_ID: i64 = u32::MAX as i64 + SMALL_FIELD_ID_THRESHOLD as i64;
 
 const BIG_NAME_THRESHOLD: usize = 0b111111;
 
@@ -437,7 +438,7 @@ impl FieldType {
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct FieldInfo {
-    pub field_id: i64,
+    pub field_id: i16,
     pub field_name: String,
     pub field_type: FieldType,
 }
@@ -451,7 +452,7 @@ impl FieldInfo {
         }
     }
 
-    pub fn new_with_id(field_id: i64, field_name: &str, field_type: FieldType) -> FieldInfo {
+    pub fn new_with_id(field_id: i16, field_name: &str, field_type: FieldType) -> FieldInfo {
         FieldInfo {
             field_id,
             field_name: field_name.to_string(),
@@ -471,6 +472,16 @@ impl FieldInfo {
     }
 
     pub fn from_bytes(reader: &mut Reader) -> Result<FieldInfo, Error> {
+        let (field_info, wire_field_id) = Self::from_bytes_with_id(reader)?;
+        if wire_field_id.is_some_and(|field_id| field_id > i64::from(i16::MAX)) {
+            return Err(Error::invalid_data(
+                "field ID exceeds the public FieldInfo i16 range",
+            ));
+        }
+        Ok(field_info)
+    }
+
+    fn from_bytes_with_id(reader: &mut Reader) -> Result<(FieldInfo, Option<i64>), Error> {
         let header = reader.read_u8()?;
         let nullable = (header & 2) != 0;
         let track_ref = (header & 1) != 0;
@@ -480,18 +491,22 @@ impl FieldInfo {
         if encoding_bits == FIELD_ID_ENCODING_MARKER {
             // Field ID mode: | 0b11:2bits | field_id_low:4bits | nullable:1bit | track_ref:1bit |
             let mut field_id = ((header >> 2) & FIELD_NAME_SIZE_THRESHOLD as u8) as i64;
-            if field_id == SMALL_FIELD_ID_THRESHOLD {
+            if field_id == i64::from(SMALL_FIELD_ID_THRESHOLD) {
                 field_id += reader.read_var_u32()? as i64;
             }
 
             let mut field_type = FieldType::from_bytes(reader, false, Option::from(nullable), 0)?;
             field_type.track_ref = track_ref;
 
-            Ok(FieldInfo {
-                field_id,
-                field_name: String::new(), // No field name when using ID encoding
-                field_type,
-            })
+            let public_field_id = i16::try_from(field_id).unwrap_or(-1);
+            Ok((
+                FieldInfo {
+                    field_id: public_field_id,
+                    field_name: String::new(), // No field name when using ID encoding
+                    field_type,
+                },
+                Some(field_id),
+            ))
         } else {
             // Field name mode (original behavior)
             let encoding = Self::u8_to_encoding(encoding_bits)?;
@@ -507,15 +522,18 @@ impl FieldInfo {
             let field_name_bytes = reader.read_bytes(name_size)?;
 
             let field_name = FIELD_NAME_DECODER.decode(field_name_bytes, encoding)?;
-            Ok(FieldInfo {
-                field_id: -1,
-                field_name: field_name.original,
-                field_type,
-            })
+            Ok((
+                FieldInfo {
+                    field_id: -1,
+                    field_name: field_name.original,
+                    field_type,
+                },
+                None,
+            ))
         }
     }
 
-    fn to_bytes(&self) -> Result<Vec<u8>, Error> {
+    fn to_bytes_with_id(&self, wire_field_id: Option<i64>) -> Result<Vec<u8>, Error> {
         let mut buffer = vec![];
         let mut writer = Writer::from_buffer(&mut buffer);
         let nullable = self.field_type.nullable;
@@ -524,16 +542,16 @@ impl FieldInfo {
         // Use field ID encoding if:
         // 1. field_id >= 0 (user-set or matched from local type), OR
         // 2. field_name is empty (ID-encoded field that couldn't be matched - use ID even if -1)
-        if self.field_id >= 0 || self.field_name.is_empty() {
+        if wire_field_id.is_some() || self.field_name.is_empty() {
             // Field ID mode: | 0b11:2bits | field_id_low:4bits | nullable:1bit | track_ref:1bit |
             // Use max(0, field_id) to handle unmatched fields that have field_id = -1
-            let field_id = std::cmp::max(0, self.field_id);
+            let field_id = wire_field_id.unwrap_or(0).max(0);
             if field_id > MAX_FIELD_ID {
                 return Err(Error::invalid_data(format!(
                     "field ID {field_id} exceeds maximum {MAX_FIELD_ID}"
                 )));
             }
-            let mut header: u8 = (min(SMALL_FIELD_ID_THRESHOLD, field_id) as u8) << 2;
+            let mut header: u8 = (min(i64::from(SMALL_FIELD_ID_THRESHOLD), field_id) as u8) << 2;
             if track_ref {
                 header |= 1;
             }
@@ -543,8 +561,8 @@ impl FieldInfo {
             // Set encoding bits to 0b11 to indicate field ID mode
             header |= FIELD_ID_ENCODING_MARKER << 6;
             writer.write_u8(header);
-            if field_id >= SMALL_FIELD_ID_THRESHOLD {
-                writer.write_var_u32((field_id - SMALL_FIELD_ID_THRESHOLD) as u32);
+            if field_id >= i64::from(SMALL_FIELD_ID_THRESHOLD) {
+                writer.write_var_u32((field_id - i64::from(SMALL_FIELD_ID_THRESHOLD)) as u32);
             }
             self.field_type.to_bytes(&mut writer, false, nullable)?;
             // No field name written in ID mode
@@ -578,6 +596,11 @@ impl FieldInfo {
         }
         Ok(buffer)
     }
+}
+
+#[inline(always)]
+fn field_wire_id(field_info: &FieldInfo) -> Option<i64> {
+    (field_info.field_id >= 0).then_some(i64::from(field_info.field_id))
 }
 
 const FNV_OFFSET_BASIS: u64 = 14695981039346656037;
@@ -724,7 +747,7 @@ fn compute_schema_hash(field_infos: &[FieldInfo]) -> i64 {
 }
 
 #[inline(always)]
-pub fn compute_field_hash(hash: u32, id: i64) -> u32 {
+pub fn compute_field_hash(hash: u32, id: i16) -> u32 {
     let mut next_hash = (hash as u64) * 31 + (id as u64);
     while next_hash >= MAX_HASH32 {
         next_hash /= 7;
@@ -733,7 +756,7 @@ pub fn compute_field_hash(hash: u32, id: i64) -> u32 {
 }
 
 #[inline(always)]
-pub fn compute_struct_hash(field_ids: impl IntoIterator<Item = i64>) -> u32 {
+pub fn compute_struct_hash(field_ids: impl IntoIterator<Item = i16>) -> u32 {
     field_ids.into_iter().fold(17u32, compute_field_hash)
 }
 
@@ -853,15 +876,15 @@ pub fn assign_remote_field_ids(
     let field_index_by_name: HashMap<String, (usize, &FieldInfo)> = local_field_infos
         .iter()
         .enumerate()
-        .filter(|(_, f)| f.field_id < 0 && !f.field_name.is_empty())
-        .map(|(i, f)| (f.field_name.clone(), (i, f)))
+        .filter(|(_, field)| field.field_id < 0 && !field.field_name.is_empty())
+        .map(|(i, field)| (field.field_name.clone(), (i, field)))
         .collect();
 
-    let field_index_by_id: HashMap<i64, (usize, &FieldInfo)> = local_field_infos
+    let field_index_by_id: HashMap<i16, (usize, &FieldInfo)> = local_field_infos
         .iter()
         .enumerate()
-        .filter(|(_, f)| f.field_id >= 0)
-        .map(|(i, f)| (f.field_id, (i, f)))
+        .filter(|(_, field)| field.field_id >= 0)
+        .map(|(i, field)| (field.field_id, (i, field)))
         .collect();
 
     let mut used_local_fields = vec![false; local_field_infos.len()];
@@ -873,60 +896,117 @@ pub fn assign_remote_field_ids(
             field_index_by_name.get(&snake_case_name).copied()
         };
 
-        match local_match {
-            Some((sorted_index, local_info)) => {
-                if used_local_fields[sorted_index] {
-                    return Err(Error::type_error(format!(
-                        "Remote field {} duplicates local field {} in compatible metadata",
-                        field.field_name, local_info.field_name
-                    )));
-                }
-                let exact_field = local_info.field_type.exact_shape_match(&field.field_type);
-                if !exact_field
-                    && !crate::serializer::codec::compatible_field_pair(
-                        &local_info.field_type,
-                        &field.field_type,
-                    )
-                {
-                    if crate::util::ENABLE_FORY_DEBUG_OUTPUT {
-                        eprintln!(
-                            "[fory-debug] schema-incompatible field: name={}, remote_type={:?}, local_type={:?}",
-                            field.field_name, field.field_type, local_info.field_type
-                        );
-                    }
-                    return Err(Error::type_error(format!(
-                        "Cannot read remote field {} as local field {}: remote and local field schemas are not compatible",
-                        field.field_name, local_info.field_name
-                    )));
-                }
-                // ID-encoded remote fields have no name. Copying the local name keeps later
-                // metadata reserialization and diagnostics tied to the matched local field.
-                if field.field_name.is_empty() {
-                    field.field_name = local_info.field_name.clone();
-                }
-                let matched_id = sorted_index
-                    .checked_mul(2)
-                    .and_then(|id| id.checked_add((!exact_field) as usize))
-                    .and_then(|id| i64::try_from(id).ok())
-                    .ok_or_else(|| Error::type_error("too many compatible fields"))?;
-                field.field_id = matched_id;
-                used_local_fields[sorted_index] = true;
+        assign_remote_field_id(field, local_match, &mut used_local_fields)?;
+    }
+    Ok(())
+}
+
+fn assign_remote_field_ids_with_wire(
+    local_field_infos: &[FieldInfo],
+    local_wire_ids: &[Option<i64>],
+    field_infos: &mut [FieldInfo],
+    remote_wire_ids: &[Option<i64>],
+) -> Result<(), Error> {
+    if local_wire_ids.len() != local_field_infos.len() || remote_wire_ids.len() != field_infos.len()
+    {
+        return Err(Error::invalid_data(
+            "field wire IDs must align with field metadata",
+        ));
+    }
+    // Build maps for both name-based and ID-based lookup. Full wire IDs stay owned by TypeMeta;
+    // FieldInfo's i16 ID remains the local compatible dispatch contract.
+    let field_index_by_name: HashMap<String, (usize, &FieldInfo)> = local_field_infos
+        .iter()
+        .zip(local_wire_ids)
+        .enumerate()
+        .filter(|(_, (field, wire_id))| wire_id.is_none() && !field.field_name.is_empty())
+        .map(|(i, (field, _))| (field.field_name.clone(), (i, field)))
+        .collect();
+
+    let field_index_by_id: HashMap<i64, (usize, &FieldInfo)> = local_field_infos
+        .iter()
+        .zip(local_wire_ids)
+        .enumerate()
+        .filter_map(|(i, (field, wire_id))| wire_id.map(|id| (id, (i, field))))
+        .collect();
+
+    let mut used_local_fields = vec![false; local_field_infos.len()];
+    for (field, remote_wire_id) in field_infos.iter_mut().zip(remote_wire_ids) {
+        let local_match = if let Some(remote_wire_id) = remote_wire_id {
+            field_index_by_id.get(remote_wire_id).copied()
+        } else {
+            let snake_case_name = to_snake_case(&field.field_name);
+            field_index_by_name.get(&snake_case_name).copied()
+        };
+
+        assign_remote_field_id(field, local_match, &mut used_local_fields)?;
+    }
+    Ok(())
+}
+
+fn assign_remote_field_id(
+    field: &mut FieldInfo,
+    local_match: Option<(usize, &FieldInfo)>,
+    used_local_fields: &mut [bool],
+) -> Result<(), Error> {
+    match local_match {
+        Some((sorted_index, local_info)) => {
+            if used_local_fields[sorted_index] {
+                return Err(Error::type_error(format!(
+                    "Remote field {} duplicates local field {} in compatible metadata",
+                    field.field_name, local_info.field_name
+                )));
+            }
+            let exact_field = local_info.field_type.exact_shape_match(&field.field_type);
+            if !exact_field
+                && !crate::serializer::codec::compatible_field_pair(
+                    &local_info.field_type,
+                    &field.field_type,
+                )
+            {
                 if crate::util::ENABLE_FORY_DEBUG_OUTPUT {
                     eprintln!(
-                        "[fory-debug]   matched field: name={}, assigned_field_id={}, remote_type={:?}, local_type={:?}",
-                        field.field_name, field.field_id, field.field_type, local_info.field_type
+                        "[fory-debug] schema-incompatible field: name={}, remote_type={:?}, local_type={:?}",
+                        field.field_name, field.field_type, local_info.field_type
                     );
                 }
+                return Err(Error::type_error(format!(
+                    "Cannot read remote field {} as local field {}: remote and local field schemas are not compatible",
+                    field.field_name, local_info.field_name
+                )));
             }
-            None => {
-                if crate::util::ENABLE_FORY_DEBUG_OUTPUT {
-                    eprintln!(
-                        "[fory-debug] no local match for field: name={}",
-                        field.field_name
-                    );
-                }
-                field.field_id = -1;
+            // ID-encoded remote fields have no name. Copying the local name keeps later metadata
+            // reserialization and diagnostics tied to the matched local field.
+            if field.field_name.is_empty() {
+                field.field_name = local_info.field_name.clone();
             }
+            if sorted_index > MAX_COMPATIBLE_MATCHED_FIELD_INDEX {
+                return Err(Error::type_error(format!(
+                    "Cannot assign compatible matched id for local field {}: local field index {} exceeds max {}",
+                    local_info.field_name, sorted_index, MAX_COMPATIBLE_MATCHED_FIELD_INDEX
+                )));
+            }
+            field.field_id = if exact_field {
+                (sorted_index * 2) as i16
+            } else {
+                (sorted_index * 2 + 1) as i16
+            };
+            used_local_fields[sorted_index] = true;
+            if crate::util::ENABLE_FORY_DEBUG_OUTPUT {
+                eprintln!(
+                    "[fory-debug]   matched field: name={}, assigned_field_id={}, remote_type={:?}, local_type={:?}",
+                    field.field_name, field.field_id, field.field_type, local_info.field_type
+                );
+            }
+        }
+        None => {
+            if crate::util::ENABLE_FORY_DEBUG_OUTPUT {
+                eprintln!(
+                    "[fory-debug] no local match for field: name={}",
+                    field.field_name
+                );
+            }
+            field.field_id = -1;
         }
     }
     Ok(())
@@ -943,6 +1023,9 @@ pub struct TypeMeta {
     type_name: Rc<MetaString>,
     register_by_name: bool,
     field_infos: Vec<FieldInfo>,
+    // FieldInfo keeps its original public i16 source contract. TypeMeta owns full protocol tag
+    // identities independently so extended TAG_ID values never narrow into local dispatch IDs.
+    field_wire_ids: Vec<Option<i64>>,
     bytes: Vec<u8>,
 }
 
@@ -955,6 +1038,39 @@ impl TypeMeta {
         register_by_name: bool,
         field_infos: Vec<FieldInfo>,
     ) -> Result<TypeMeta, Error> {
+        let field_wire_ids = field_infos.iter().map(field_wire_id).collect();
+        Self::new_with_field_ids(
+            type_id,
+            user_type_id,
+            namespace,
+            type_name,
+            register_by_name,
+            field_infos,
+            field_wire_ids,
+        )
+    }
+
+    fn new_with_field_ids(
+        type_id: u32,
+        user_type_id: u32,
+        namespace: MetaString,
+        type_name: MetaString,
+        register_by_name: bool,
+        field_infos: Vec<FieldInfo>,
+        field_wire_ids: Vec<Option<i64>>,
+    ) -> Result<TypeMeta, Error> {
+        if field_wire_ids.len() != field_infos.len() {
+            return Err(Error::invalid_data(
+                "field wire IDs must align with field metadata",
+            ));
+        }
+        for field_id in field_wire_ids.iter().flatten() {
+            if *field_id < 0 || *field_id > MAX_FIELD_ID {
+                return Err(Error::invalid_data(format!(
+                    "field ID {field_id} exceeds supported range [0, {MAX_FIELD_ID}]"
+                )));
+            }
+        }
         let schema_hash = compute_schema_hash(&field_infos);
         let mut meta = TypeMeta {
             hash: 0,
@@ -965,6 +1081,7 @@ impl TypeMeta {
             type_name: Rc::from(type_name),
             register_by_name,
             field_infos,
+            field_wire_ids,
             bytes: vec![],
         };
         let (bytes, meta_hash) = meta.to_bytes()?;
@@ -976,6 +1093,25 @@ impl TypeMeta {
     #[inline(always)]
     pub fn get_field_infos(&self) -> &Vec<FieldInfo> {
         &self.field_infos
+    }
+
+    /// Remaps parsed remote fields for a selected local enum variant.
+    ///
+    /// Generated compatible enum readers use this only when an explicit variant tag selects a
+    /// differently named local variant. Keeping both ID slices in TypeMeta prevents full-width
+    /// wire tags from being projected through FieldInfo's public i16 dispatch field.
+    #[doc(hidden)]
+    pub fn remap_remote_fields(
+        &self,
+        remote_meta: &TypeMeta,
+        field_infos: &mut [FieldInfo],
+    ) -> Result<(), Error> {
+        assign_remote_field_ids_with_wire(
+            &self.field_infos,
+            &self.field_wire_ids,
+            field_infos,
+            &remote_meta.field_wire_ids,
+        )
     }
 
     #[inline(always)]
@@ -1024,6 +1160,7 @@ impl TypeMeta {
             type_name: Rc::from(MetaString::get_empty().clone()),
             register_by_name: false,
             field_infos: vec![],
+            field_wire_ids: vec![],
             bytes: vec![],
         })
     }
@@ -1040,6 +1177,7 @@ impl TypeMeta {
             type_name: Rc::new((*self.type_name).clone()),
             register_by_name: self.register_by_name,
             field_infos: self.field_infos.clone(),
+            field_wire_ids: self.field_wire_ids.clone(),
             bytes: self.bytes.clone(),
         }
     }
@@ -1051,14 +1189,21 @@ impl TypeMeta {
         type_name: MetaString,
         register_by_name: bool,
         field_infos: Vec<FieldInfo>,
+        field_wire_ids: &[Option<i64>],
     ) -> Result<TypeMeta, Error> {
-        TypeMeta::new(
+        let field_wire_ids = if field_wire_ids.is_empty() {
+            field_infos.iter().map(field_wire_id).collect()
+        } else {
+            field_wire_ids.to_vec()
+        };
+        TypeMeta::new_with_field_ids(
             type_id,
             user_type_id,
             namespace,
             type_name,
             register_by_name,
             field_infos,
+            field_wire_ids,
         )
     }
 
@@ -1148,8 +1293,8 @@ impl TypeMeta {
             writer.write_var_u32(self.user_type_id);
         }
         if is_struct_type_def_kind(self.type_id) {
-            for field in self.field_infos.iter() {
-                writer.write_bytes(field.to_bytes()?.as_slice());
+            for (field, wire_field_id) in self.field_infos.iter().zip(&self.field_wire_ids) {
+                writer.write_bytes(field.to_bytes_with_id(*wire_field_id)?.as_slice());
             }
         }
         Ok(buffer)
@@ -1206,8 +1351,11 @@ impl TypeMeta {
 
         reader.check_bound(num_fields)?;
         let mut field_infos = Vec::with_capacity(num_fields);
+        let mut field_wire_ids = Vec::with_capacity(num_fields);
         for _ in 0..num_fields {
-            field_infos.push(FieldInfo::from_bytes(reader)?);
+            let (field_info, wire_field_id) = FieldInfo::from_bytes_with_id(reader)?;
+            field_infos.push(field_info);
+            field_wire_ids.push(wire_field_id);
         }
         if !is_struct && !field_infos.is_empty() {
             return Err(Error::invalid_data(
@@ -1227,7 +1375,11 @@ impl TypeMeta {
                         "TypeMeta kind does not match registered type metadata",
                     ));
                 }
-                Self::assign_field_ids(&type_info_current, &mut sorted_field_infos)?;
+                Self::assign_field_ids(
+                    &type_info_current,
+                    &mut sorted_field_infos,
+                    &field_wire_ids,
+                )?;
             }
         } else if user_type_id != NO_USER_TYPE_ID {
             if let Some(type_info_current) = type_resolver.get_user_type_info_by_id(user_type_id) {
@@ -1236,25 +1388,31 @@ impl TypeMeta {
                         "TypeMeta kind does not match registered type metadata",
                     ));
                 }
-                Self::assign_field_ids(&type_info_current, &mut sorted_field_infos)?;
+                Self::assign_field_ids(
+                    &type_info_current,
+                    &mut sorted_field_infos,
+                    &field_wire_ids,
+                )?;
             }
         } else if let Some(type_info_current) = type_resolver.get_type_info_by_id(type_id) {
-            Self::assign_field_ids(&type_info_current, &mut sorted_field_infos)?;
+            Self::assign_field_ids(&type_info_current, &mut sorted_field_infos, &field_wire_ids)?;
         }
         // if no type found, keep all fields id as -1 to be skipped.
-        TypeMeta::new(
+        TypeMeta::new_with_field_ids(
             type_id,
             user_type_id,
             namespace,
             type_name,
             register_by_name,
             sorted_field_infos,
+            field_wire_ids,
         )
     }
 
     fn assign_field_ids(
         type_info_current: &TypeInfo,
         field_infos: &mut [FieldInfo],
+        field_wire_ids: &[Option<i64>],
     ) -> Result<(), Error> {
         if crate::util::ENABLE_FORY_DEBUG_OUTPUT {
             eprintln!(
@@ -1279,7 +1437,12 @@ impl TypeMeta {
             }
         }
 
-        assign_remote_field_ids(local_field_infos, field_infos)
+        assign_remote_field_ids_with_wire(
+            local_field_infos,
+            &type_meta.field_wire_ids,
+            field_infos,
+            field_wire_ids,
+        )
     }
 
     #[allow(dead_code)]
@@ -1417,8 +1580,8 @@ mod tests {
     fn preserves_full_field_id_domain() {
         let field_type = FieldType::new(crate::type_id::INT32, false, vec![]);
         for field_id in [65_551, MAX_FIELD_ID] {
-            let field = FieldInfo::new_with_id(field_id, "value", field_type.clone());
-            let bytes = field.to_bytes().unwrap();
+            let field = FieldInfo::new("value", field_type.clone());
+            let bytes = field.to_bytes_with_id(Some(field_id)).unwrap();
             let expected_extension: &[u8] = if field_id == 65_551 {
                 &[0x80, 0x80, 0x04]
             } else {
@@ -1427,10 +1590,24 @@ mod tests {
             assert_eq!(bytes[0], 0xfc);
             assert_eq!(&bytes[1..1 + expected_extension.len()], expected_extension);
             let mut reader = Reader::new(&bytes);
-            let decoded = FieldInfo::from_bytes(&mut reader).unwrap();
+            let (_, decoded_field_id) = FieldInfo::from_bytes_with_id(&mut reader).unwrap();
 
-            assert_eq!(decoded.field_id, field_id);
+            assert_eq!(decoded_field_id, Some(field_id));
             assert!(reader.slice_after_cursor().is_empty());
+
+            let meta = TypeMeta::new_with_field_ids(
+                STRUCT,
+                1,
+                MetaString::get_empty().clone(),
+                MetaString::get_empty().clone(),
+                false,
+                vec![field],
+                vec![Some(field_id)],
+            )
+            .unwrap();
+            let mut reader = Reader::new(meta.get_bytes());
+            let parsed = TypeMeta::from_bytes(&mut reader, &TypeResolver::default()).unwrap();
+            assert_eq!(parsed.field_wire_ids, [Some(field_id)]);
         }
     }
 
@@ -1569,9 +1746,17 @@ mod tests {
     fn high_tag_does_not_match_low_tag() {
         let field_type = FieldType::new(crate::type_id::STRING, false, vec![]);
         let local_fields = [FieldInfo::new_with_id(15, "value", field_type.clone())];
-        let mut remote_fields = [FieldInfo::new_with_id(65_551, "", field_type)];
+        let local_wire_ids = [Some(15)];
+        let mut remote_fields = [FieldInfo::new("", field_type)];
+        let remote_wire_ids = [Some(65_551)];
 
-        assign_remote_field_ids(&local_fields, &mut remote_fields).unwrap();
+        assign_remote_field_ids_with_wire(
+            &local_fields,
+            &local_wire_ids,
+            &mut remote_fields,
+            &remote_wire_ids,
+        )
+        .unwrap();
 
         assert_eq!(remote_fields[0].field_id, -1);
     }

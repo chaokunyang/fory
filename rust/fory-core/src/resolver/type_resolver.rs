@@ -481,6 +481,7 @@ fn build_struct_type_infos<T: StructSerializer>(
 
     // Get sorted field infos (fields are already sorted and have IDs assigned by the macro)
     let sorted_field_infos = T::fields_info(type_resolver)?;
+    let field_wire_ids = T::type_meta_field_ids();
 
     // Build the main type info
     let type_meta = TypeMeta::from_fields(
@@ -490,6 +491,7 @@ fn build_struct_type_infos<T: StructSerializer>(
         (*partial_info.type_name).clone(),
         partial_info.register_by_name,
         sorted_field_infos,
+        field_wire_ids,
     )?;
     let type_def_bytes = type_meta.get_bytes().to_owned();
     let main_type_info = TypeInfo {
@@ -511,7 +513,15 @@ fn build_struct_type_infos<T: StructSerializer>(
     if type_resolver.compatible && is_enum_type_id(T::static_type_id()) {
         // Fields are already sorted with IDs assigned by the macro
         let variants_info = T::variants_fields_info(type_resolver)?;
-        for (variant_name, variant_type_id, fields_info) in variants_info.into_iter() {
+        let variant_wire_ids = T::variants_type_meta_field_ids();
+        if !variant_wire_ids.is_empty() && variant_wire_ids.len() != variants_info.len() {
+            return Err(Error::invalid_data(
+                "variant field wire IDs must align with variant metadata",
+            ));
+        }
+        for (variant_index, (variant_name, variant_type_id, fields_info)) in
+            variants_info.into_iter().enumerate()
+        {
             // Skip empty variant info (unit/unnamed variants)
             if fields_info.is_empty() {
                 continue;
@@ -531,6 +541,7 @@ fn build_struct_type_infos<T: StructSerializer>(
                     type_name_ms,
                     true,
                     fields_info.clone(),
+                    variant_wire_ids.get(variant_index).copied().unwrap_or(&[]),
                 )?
             } else {
                 if partial_info.user_type_id == NO_USER_TYPE_ID {
@@ -562,6 +573,7 @@ fn build_struct_type_infos<T: StructSerializer>(
                     type_name_ms,
                     true,
                     fields_info,
+                    variant_wire_ids.get(variant_index).copied().unwrap_or(&[]),
                 )?
             };
 
@@ -592,6 +604,7 @@ fn build_serializer_type_infos(
         (*partial_info.type_name).clone(),
         partial_info.register_by_name,
         vec![],
+        &[],
     )?;
     let type_def_bytes = type_meta.get_bytes().to_owned();
     let type_info = TypeInfo {

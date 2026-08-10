@@ -493,8 +493,8 @@ pub(crate) fn gen_read_compatible_target(
         })
         .enumerate()
         .flat_map(|(sorted_idx, binding)| {
-            let direct_field_id = (sorted_idx * 2) as i64;
-            let compatible_field_id = (sorted_idx * 2 + 1) as i64;
+            let direct_field_id = (sorted_idx * 2) as i16;
+            let compatible_field_id = (sorted_idx * 2 + 1) as i16;
             let field_index = sorted_idx;
             let direct_body = binding.read_compatible_direct();
             let compatible_body = binding.read_compatible_conversion();
@@ -640,7 +640,8 @@ pub(crate) fn gen_read_compatible_target(
                 // local variant, the remote synthetic variant TypeMeta could not be classified by
                 // name during parsing, so the selected local variant owns the field remap here.
                 remapped_fields = remote_meta.get_field_infos().clone();
-                fory_core::meta::assign_remote_field_ids(local_fields, &mut remapped_fields)?;
+                local_variant_type_meta
+                    .remap_remote_fields(remote_meta, &mut remapped_fields)?;
                 &remapped_fields
             };
             let local_fields_ptr = local_fields.as_ptr();

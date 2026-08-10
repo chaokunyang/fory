@@ -698,25 +698,55 @@ struct StructWithFieldIds {
 
 #[derive(ForyStruct, Debug, PartialEq)]
 struct StructWithWideFieldIds {
-    #[fory(id = 65551)]
-    high: i32,
     #[fory(id = 4294967310)]
-    max: i32,
+    max: String,
+    #[fory(id = 31)]
+    small: bool,
+    #[fory(id = 65551)]
+    high: i64,
+}
+
+#[derive(ForyStruct, Debug, PartialEq)]
+struct StructWithWideFieldPeer {
+    #[fory(id = 65551)]
+    renamed_high: i64,
+    #[fory(id = 4294967310)]
+    renamed_max: String,
+    #[fory(id = 31)]
+    renamed_small: bool,
 }
 
 #[test]
 fn field_ids_preserve_wire_domain() {
     let fields = StructWithWideFieldIds::fields_info(&TypeResolver::default()).unwrap();
+    let _: i16 = fields[0].field_id;
+    assert_eq!(
+        StructWithWideFieldIds::type_meta_field_ids(),
+        [Some(31), Some(65_551), Some(4_294_967_310)]
+    );
 
-    assert_eq!(fields[0].field_id, 65_551);
-    assert_eq!(fields[1].field_id, 4_294_967_310);
+    let mut writer = Fory::builder().xlang(false).compatible(true).build();
+    writer.register::<StructWithWideFieldIds>(13).unwrap();
+    let value = StructWithWideFieldIds {
+        max: "maximum".to_string(),
+        small: true,
+        high: 65_551,
+    };
+    let bytes = writer.serialize(&value).unwrap();
 
-    let mut fory = Fory::builder().xlang(true).compatible(true).build();
-    fory.register::<StructWithWideFieldIds>(13).unwrap();
-    let value = StructWithWideFieldIds { high: 1, max: 2 };
-    let bytes = fory.serialize(&value).unwrap();
-    let decoded = fory.deserialize::<StructWithWideFieldIds>(&bytes).unwrap();
-    assert_eq!(decoded, value);
+    let mut reader = Fory::builder().xlang(false).compatible(true).build();
+    reader.register::<StructWithWideFieldPeer>(13).unwrap();
+    let decoded = reader
+        .deserialize::<StructWithWideFieldPeer>(&bytes)
+        .unwrap();
+    assert_eq!(
+        decoded,
+        StructWithWideFieldPeer {
+            renamed_high: 65_551,
+            renamed_max: "maximum".to_string(),
+            renamed_small: true,
+        }
+    );
 }
 
 #[test]

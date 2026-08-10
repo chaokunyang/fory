@@ -1374,7 +1374,7 @@ func macroFieldIDsPopulateCompatibleTypeMeta() {
     let fields = FieldIdConfigured.foryFieldsInfo(trackRef: false)
     #expect(fields.count == 2)
 
-    var byID: [UInt32: TypeMeta.FieldInfo] = [:]
+    var byID: [Int16: TypeMeta.FieldInfo] = [:]
     for field in fields {
         if let id = field.fieldID {
             byID[id] = field

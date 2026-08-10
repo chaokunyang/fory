@@ -369,7 +369,7 @@ struct ParsedField {
 
     let isOptional: Bool
     let isCollection: Bool
-    let fieldID: UInt32?
+    let fieldID: UInt64?
     let schemaIdentifier: String
     let fieldIdentifier: String
 
@@ -436,7 +436,7 @@ private indirect enum FieldTypeHint {
 
 private struct ParsedForyFieldConfiguration {
     let encoding: FieldEncoding?
-    let id: UInt32?
+    let id: UInt64?
     let ignore: Bool?
     let typeHint: FieldTypeHint?
     let serializerType: String?
@@ -1118,7 +1118,7 @@ private func parseFields(
         }
     }
 
-    var seenFieldIDs: [UInt32: String] = [:]
+    var seenFieldIDs: [UInt64: String] = [:]
     var seenFieldNames: [String: String] = [:]
     for field in fields {
         guard let fieldID = field.fieldID else {
@@ -1151,7 +1151,7 @@ private func parseForyFieldConfiguration(
     supportsEncoding: Bool
 ) throws -> ParsedForyFieldConfiguration? {
     var parsedEncoding: FieldEncoding?
-    var parsedID: UInt32?
+    var parsedID: UInt64?
     var parsedIgnore: Bool?
     var parsedTypeHint: FieldTypeHint?
     var parsedSerializerType: String?
@@ -1656,7 +1656,7 @@ private func parseMapFieldTypeHint(args: LabeledExprListSyntax) throws -> FieldT
     return .map(key: key, value: value)
 }
 
-private func parseFieldIDExpression(_ expr: ExprSyntax) throws -> UInt32 {
+private func parseFieldIDExpression(_ expr: ExprSyntax) throws -> UInt64 {
     let raw = trimType(expr.trimmedDescription)
     guard let value = Int64(raw) else {
         throw MacroExpansionErrorMessage("@ForyField id must be an integer literal")
@@ -1664,10 +1664,11 @@ private func parseFieldIDExpression(_ expr: ExprSyntax) throws -> UInt32 {
     if value < 0 {
         throw MacroExpansionErrorMessage("@ForyField id must be non-negative")
     }
-    if value > Int64(UInt32.max) {
-        throw MacroExpansionErrorMessage("@ForyField id must be <= \(UInt32.max)")
+    let maxFieldID = UInt64(UInt32.max) + 15
+    if UInt64(value) > maxFieldID {
+        throw MacroExpansionErrorMessage("@ForyField id must be <= \(maxFieldID)")
     }
-    return UInt32(value)
+    return UInt64(value)
 }
 
 private func parseCaseIDExpression(_ expr: ExprSyntax) throws -> Int {
@@ -2594,7 +2595,7 @@ private func compatibleTypeMetaFieldsExpr(
 ) -> String {
     let fieldInfos = sortedFields.map { field in
         let fieldTypeExpr = compatibleTypeMetaFieldExpression(field, trackRefExpression: trackRefExpression)
-        return "TypeMeta.FieldInfo(fieldID: \(compatibleFieldIDExpr(field)), fieldName: \"\(field.name)\", fieldType: \(fieldTypeExpr))"
+        return "TypeMeta.FieldInfo(\(compatibleFieldIDArgument(field)), fieldName: \"\(field.name)\", fieldType: \(fieldTypeExpr))"
     }
     guard !fieldInfos.isEmpty else {
         return "[]"
@@ -2605,7 +2606,7 @@ private func compatibleTypeMetaFieldsExpr(
 private func resolvedTypeMetaFieldsBody(sortedFields: [ParsedField]) -> String {
     let fieldInfos = sortedFields.map { field in
         let fieldTypeExpr = resolvedTypeMetaFieldExpr(field)
-        return "TypeMeta.FieldInfo(fieldID: \(compatibleFieldIDExpr(field)), fieldName: \"\(field.name)\", fieldType: \(fieldTypeExpr))"
+        return "TypeMeta.FieldInfo(\(compatibleFieldIDArgument(field)), fieldName: \"\(field.name)\", fieldType: \(fieldTypeExpr))"
     }
     guard !fieldInfos.isEmpty else {
         return "return []"
@@ -2613,11 +2614,11 @@ private func resolvedTypeMetaFieldsBody(sortedFields: [ParsedField]) -> String {
     return "return [\n            \(fieldInfos.joined(separator: ",\n            "))\n        ]"
 }
 
-private func compatibleFieldIDExpr(_ field: ParsedField) -> String {
+private func compatibleFieldIDArgument(_ field: ParsedField) -> String {
     if let fieldID = field.fieldID {
-        return "\(fieldID)"
+        return "wireFieldID: \(fieldID)"
     }
-    return "nil"
+    return "fieldID: nil"
 }
 
 private func buildSchemaFingerprint(fields: [ParsedField], trackRefExpression: String) throws -> String {

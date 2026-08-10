@@ -25,15 +25,24 @@ private final class StaticDepthNode {
 }
 
 @ForyStruct
-private struct LargeTagSource {
-    @ForyField(id: 65551)
-    var original: Int32 = 0
+private struct WideTagSource {
+    @ForyField(id: 32768)
+    var first: String = ""
+
+    @ForyField(id: 4294967295)
+    var second: String = ""
+
+    @ForyField(id: 4294967296)
+    var third: String = ""
+
+    @ForyField(id: 4294967310)
+    var retained: String = ""
 }
 
 @ForyStruct
-private struct LargeTagTarget {
-    @ForyField(id: 65551)
-    var renamed: Int32 = 0
+private struct WideTagTarget {
+    @ForyField(id: 4294967310)
+    var renamed: String = ""
 }
 
 @Test
@@ -66,29 +75,32 @@ func staticCompoundDepthIsBounded() throws {
 }
 
 @Test
-func largeFieldTagCompatiblePath() throws {
-    let fields = LargeTagSource.foryFieldsInfo(trackRef: false)
-    #expect(fields.map(\.fieldID) == [65_551])
+func wideTagsSkipAndAlign() throws {
+    let expectedIDs: [UInt64] = [32_768, UInt64(UInt32.max), UInt64(UInt32.max) + 1, 4_294_967_310]
+    let fields = WideTagSource.foryFieldsInfo(trackRef: false)
+    #expect(fields.map(\.wireFieldID) == expectedIDs)
+    #expect(fields.map(\.fieldID) == [nil, nil, nil, nil])
 
     let writer = Fory(config: .init(compatible: true))
-    try writer.register(LargeTagSource.self, id: 11_991)
-    let bytes = try writer.serialize(LargeTagSource(original: 73))
-    let sourceInfo = try writer.typeResolver.requireTypeInfo(for: LargeTagSource.self)
+    try writer.register(WideTagSource.self, id: 11_991)
+    let bytes = try writer.serialize(
+        WideTagSource(first: "skip-1", second: "skip-2", third: "skip-3", retained: "kept")
+    )
+    let sourceInfo = try writer.typeResolver.requireTypeInfo(for: WideTagSource.self)
     let sourceMeta = try #require(sourceInfo.typeMeta)
-    #expect(sourceMeta.fields[0].fieldID == 65_551)
+    #expect(sourceMeta.fields.map(\.wireFieldID) == expectedIDs)
     let decodedMeta = try TypeMeta.decode(sourceMeta.encode())
-    #expect(decodedMeta.fields[0].fieldID == 65_551)
+    #expect(decodedMeta.fields.map(\.wireFieldID) == expectedIDs)
 
     let reader = Fory(config: .init(compatible: true))
-    try reader.register(LargeTagTarget.self, id: 11_991)
-    let decoded: LargeTagTarget = try reader.deserialize(bytes)
-    #expect(decoded.renamed == 73)
+    try reader.register(WideTagTarget.self, id: 11_991)
+    let decoded: WideTagTarget = try reader.deserialize(bytes)
+    #expect(decoded.renamed == "kept")
 
-    let targetInfo = try reader.typeResolver.requireTypeInfo(for: LargeTagTarget.self)
+    let targetInfo = try reader.typeResolver.requireTypeInfo(for: WideTagTarget.self)
     let targetMeta = try #require(targetInfo.typeMeta)
     let matchedMeta = try decodedMeta.assigningFieldIDs(from: targetMeta)
-    #expect(matchedMeta.fields[0].fieldID == 65_551)
-    #expect(matchedMeta.fields[0].matchedFieldID == 0)
+    #expect(matchedMeta.fields.map(\.matchedFieldID) == [-1, -1, -1, 0])
 }
 
 @Test
@@ -102,7 +114,7 @@ func fullFieldTagTypeMetaRoundTrip() throws {
         registerByName: false,
         fields: [
             TypeMeta.FieldInfo(
-                fieldID: UInt32.max,
+                wireFieldID: UInt64(UInt32.max) + 15,
                 fieldName: "maximum",
                 fieldType: TypeMeta.FieldType(
                     typeID: TypeId.int32.rawValue,
@@ -113,8 +125,24 @@ func fullFieldTagTypeMetaRoundTrip() throws {
     )
 
     let decoded = try TypeMeta.decode(meta.encode())
-    #expect(decoded.fields[0].fieldID == UInt32.max)
+    #expect(decoded.fields[0].fieldID == nil)
+    #expect(decoded.fields[0].wireFieldID == UInt64(UInt32.max) + 15)
     #expect(decoded.fields[0].matchedFieldID == nil)
+}
+
+@Test
+func legacyFieldInfoAPI() {
+    let fieldType = TypeMeta.FieldType(typeID: TypeId.int32.rawValue, nullable: false)
+    let typedID: Int16? = 17
+    var field = TypeMeta.FieldInfo(fieldID: typedID, fieldName: "value", fieldType: fieldType)
+    let returnedID: Int16? = field.fieldID
+    #expect(returnedID == typedID)
+    #expect(field.wireFieldID == 17)
+
+    field.fieldID = 23
+    #expect(field.wireFieldID == 23)
+    field.fieldID = nil
+    #expect(field.wireFieldID == nil)
 }
 
 private func depthNode(count: Int) -> StaticDepthNode {

@@ -40,8 +40,9 @@ namespace fory {
 class StdInputStream;
 class PyInputStream;
 namespace serialization::detail {
+struct StructFieldReader;
 struct StructFieldWriter;
-}
+} // namespace serialization::detail
 
 // A buffer class for storing raw bytes with various methods for reading and
 // writing the bytes.
@@ -376,46 +377,9 @@ public:
   /// Slow path: byte-by-byte for buffer edge cases.
   FORY_ALWAYS_INLINE uint32_t get_var_uint32(uint32_t offset,
                                              uint32_t *read_bytes_length) {
-    if (FORY_PREDICT_FALSE(offset >= size_)) {
-      *read_bytes_length = 0;
-      return 0;
-    }
-    // Fast path: need at least 5 bytes for safe bulk read (4 bytes + potential
-    // 5th)
-    if (FORY_PREDICT_TRUE(size_ - offset >= 5)) {
-      uint32_t bulk = load_unaligned<uint32_t>(data_ + offset);
-
-      uint32_t result = bulk & 0x7F;
-      if ((bulk & 0x80) == 0) {
-        *read_bytes_length = 1;
-        return result;
-      }
-      // Extract bits 7-13 from bulk (at positions 8-14 after shift)
-      result |= (bulk >> 1) & 0x3F80;
-      if ((bulk & 0x8000) == 0) {
-        *read_bytes_length = 2;
-        return result;
-      }
-      // Extract bits 14-20 from bulk (at positions 16-22 after shift)
-      result |= (bulk >> 2) & 0x1FC000;
-      if ((bulk & 0x800000) == 0) {
-        *read_bytes_length = 3;
-        return result;
-      }
-      // Extract bits 21-27 from bulk (at positions 24-30 after shift)
-      result |= (bulk >> 3) & 0xFE00000;
-      if ((bulk & 0x80000000) == 0) {
-        *read_bytes_length = 4;
-        return result;
-      }
-      // 5th byte for bits 28-31 (only 4 bits used for uint32, but mask with
-      // 0x7F per varint spec)
-      result |= static_cast<uint32_t>(data_[offset + 4] & 0x7F) << 28;
-      *read_bytes_length = 5;
-      return result;
-    }
-    // Slow path: byte-by-byte read
-    return read_var_uint32_slow(offset, read_bytes_length);
+    uint32_t value;
+    *read_bytes_length = get_var_uint32_length(offset, value);
+    return value;
   }
 
   /// Slow path for varuint32 decode when not enough bytes for bulk read.
@@ -1207,6 +1171,7 @@ public:
   std::string hex() const;
 
 private:
+  friend struct serialization::detail::StructFieldReader;
   friend struct serialization::detail::StructFieldWriter;
   friend class StdInputStream;
   friend class PyInputStream;
@@ -1222,6 +1187,40 @@ private:
   template <typename T>
   FORY_ALWAYS_INLINE static void store_unaligned(uint8_t *ptr, T value) {
     std::memcpy(ptr, &value, sizeof(T));
+  }
+
+  // Returning the physical length keeps the generated struct batch's failure
+  // proof in a register. The public value-returning API unwraps this same path.
+  FORY_ALWAYS_INLINE uint32_t get_var_uint32_length(uint32_t offset,
+                                                    uint32_t &value) {
+    if (FORY_PREDICT_FALSE(offset >= size_)) {
+      value = 0;
+      return 0;
+    }
+    if (FORY_PREDICT_TRUE(size_ - offset >= 5)) {
+      const uint32_t bulk = load_unaligned<uint32_t>(data_ + offset);
+      value = bulk & 0x7F;
+      if ((bulk & 0x80) == 0) {
+        return 1;
+      }
+      value |= (bulk >> 1) & 0x3F80;
+      if ((bulk & 0x8000) == 0) {
+        return 2;
+      }
+      value |= (bulk >> 2) & 0x1FC000;
+      if ((bulk & 0x800000) == 0) {
+        return 3;
+      }
+      value |= (bulk >> 3) & 0xFE00000;
+      if ((bulk & 0x80000000) == 0) {
+        return 4;
+      }
+      value |= static_cast<uint32_t>(data_[offset + 4] & 0x7F) << 28;
+      return 5;
+    }
+    uint32_t length;
+    value = read_var_uint32_slow(offset, &length);
+    return length;
   }
 
   FORY_ALWAYS_INLINE void rebind_input_stream_to_this() {

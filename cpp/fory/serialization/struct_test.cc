@@ -387,6 +387,24 @@ struct VarintUint64Tail {
   FORY_STRUCT(VarintUint64Tail, (value, fory::F().varint()));
 };
 
+struct VarintBatchV1 {
+  int32_t first = 0;
+  int32_t second = 0;
+  int32_t third = 0;
+  FORY_STRUCT(VarintBatchV1, (first, fory::F(1).varint()),
+              (second, fory::F(2).varint()), (third, fory::F(3).varint()));
+};
+
+struct VarintBatchV2 {
+  int32_t first = 0;
+  int32_t second = 0;
+  int32_t third = 0;
+  int32_t added = 0;
+  FORY_STRUCT(VarintBatchV2, (first, fory::F(1).varint()),
+              (second, fory::F(2).varint()), (third, fory::F(3).varint()),
+              (added, fory::F(4).varint()));
+};
+
 // String handling
 struct StringTestStruct {
   std::string empty;
@@ -1117,6 +1135,32 @@ TEST(StructComprehensiveTest, VarintTailTruncationFails) {
   check_truncation(VarintInt64Tail{1}, 615);
   check_truncation(VarintUint32Tail{1}, 616);
   check_truncation(VarintUint64Tail{1}, 617);
+}
+
+TEST(StructComprehensiveTest, VarintBatchTruncationFails) {
+  auto writer =
+      Fory::builder().xlang(true).compatible(true).track_ref(false).build();
+  auto exact_reader =
+      Fory::builder().xlang(true).compatible(true).track_ref(false).build();
+  auto evolved_reader =
+      Fory::builder().xlang(true).compatible(true).track_ref(false).build();
+  ASSERT_TRUE(writer.register_struct<VarintBatchV1>(629).ok());
+  ASSERT_TRUE(exact_reader.register_struct<VarintBatchV1>(629).ok());
+  ASSERT_TRUE(evolved_reader.register_struct<VarintBatchV2>(629).ok());
+
+  auto serialized = writer.serialize(VarintBatchV1{1, 2, 1 << 27});
+  ASSERT_TRUE(serialized.ok()) << serialized.error().to_string();
+  std::vector<uint8_t> bytes = std::move(serialized).value();
+  ASSERT_FALSE(bytes.empty());
+  bytes.pop_back();
+
+  auto exact = exact_reader.deserialize<VarintBatchV1>(bytes);
+  ASSERT_FALSE(exact.ok());
+  EXPECT_EQ(exact.error().code(), ErrorCode::BufferOutOfBound);
+
+  auto evolved = evolved_reader.deserialize<VarintBatchV2>(bytes);
+  ASSERT_FALSE(evolved.ok());
+  EXPECT_EQ(evolved.error().code(), ErrorCode::BufferOutOfBound);
 }
 
 TEST(StructComprehensiveTest, GeneratedVectorDepth) {

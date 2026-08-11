@@ -78,6 +78,20 @@ struct SerializationMeta<T,
 
 namespace detail {
 
+/// Length-returning access to Buffer's checked varuint32 decoder for a
+/// generated primitive batch. Buffer's public API uses the same decoder.
+struct StructFieldReader {
+  FORY_ALWAYS_INLINE static uint32_t
+  get_var_uint32_length(Buffer &buffer, uint32_t offset, uint32_t &value) {
+    return buffer.get_var_uint32_length(offset, value);
+  }
+
+  FORY_ALWAYS_INLINE static void commit_reader_index(Buffer &buffer,
+                                                     uint32_t offset) {
+    buffer.reader_index_ = offset;
+  }
+};
+
 /// Access to Buffer's unchecked varint body for the primitive struct batch.
 /// The batch reserves every field's maximum physical extent before calling
 /// these methods, so public per-put checks would repeat the same proof.
@@ -3521,6 +3535,13 @@ FORY_ALWAYS_INLINE FieldType read_configurable_int_at_checked(Buffer &buffer,
                                                               uint32_t &offset,
                                                               Error &error);
 
+template <typename T>
+FORY_ALWAYS_INLINE T read_varint_at_deferred(Buffer &buffer, uint32_t &offset,
+                                             uint32_t &bytes_read);
+
+template <typename T, size_t SortedPos>
+constexpr uint32_t varint_decoder_width();
+
 template <typename T, size_t Index>
 constexpr bool can_read_exact_primitive_with_offset() {
   using Helpers = CompileTimeFieldHelpers<T>;
@@ -3536,9 +3557,10 @@ constexpr bool can_read_exact_primitive_with_offset() {
          !configured_node_has_override<T, original_index>();
 }
 
-template <size_t Index, typename T>
-FORY_ALWAYS_INLINE void read_single_exact_primitive_at(T &obj, ReadContext &ctx,
-                                                       uint32_t &offset) {
+template <size_t Index, bool DeferError = false, typename T>
+FORY_ALWAYS_INLINE uint32_t read_single_exact_primitive_at(T &obj,
+                                                           ReadContext &ctx,
+                                                           uint32_t &offset) {
   using Helpers = CompileTimeFieldHelpers<T>;
   constexpr size_t original_index = Helpers::sorted_indices[Index];
   const auto field_info = fory_field_info(obj);
@@ -3548,8 +3570,12 @@ FORY_ALWAYS_INLINE void read_single_exact_primitive_at(T &obj, ReadContext &ctx,
   using RawFieldType =
       typename meta::RemoveMemberPointerCVRefT<decltype(field_ptr)>;
   using FieldType = unwrap_field_t<RawFieldType>;
-  FieldType value;
-  if constexpr (is_configurable_int_v<FieldType>) {
+  uint32_t bytes_read = 0;
+  FieldType value{};
+  if constexpr (DeferError) {
+    value =
+        read_varint_at_deferred<FieldType>(ctx.buffer(), offset, bytes_read);
+  } else if constexpr (is_configurable_int_v<FieldType>) {
     // Compatible exact schema still needs the local field encoding config:
     // uint32_t/uint64_t default to VAR_UINT*, while explicit fixed fields do
     // not.
@@ -3564,6 +3590,7 @@ FORY_ALWAYS_INLINE void read_single_exact_primitive_at(T &obj, ReadContext &ctx,
   } else {
     obj.*field_ptr = value;
   }
+  return bytes_read;
 }
 
 template <typename T, size_t MatchedId>
@@ -3571,7 +3598,7 @@ FORY_ALWAYS_INLINE void read_compatible_exact_case_at(T &obj, ReadContext &ctx,
                                                       uint32_t &offset) {
   constexpr size_t local_sorted_id = MatchedId / 2;
   if constexpr (can_read_exact_primitive_with_offset<T, local_sorted_id>()) {
-    read_single_exact_primitive_at<local_sorted_id>(obj, ctx, offset);
+    (void)read_single_exact_primitive_at<local_sorted_id>(obj, ctx, offset);
   } else {
     ctx.buffer().reader_index(offset);
     read_compatible_exact_case<T, MatchedId>(obj, ctx);
@@ -3584,18 +3611,41 @@ FORY_ALWAYS_INLINE void
 read_exact_primitive_run(T &obj, ReadContext &ctx,
                          const std::vector<FieldInfo> &remote_fields,
                          size_t &remote_idx, uint32_t &offset) {
-  read_single_exact_primitive_at<SortedIdx>(obj, ctx, offset);
+  constexpr uint32_t current_width = varint_decoder_width<T, SortedIdx>();
+  uint32_t bytes_read = 1;
+  if constexpr (current_width != 0) {
+    bytes_read =
+        read_single_exact_primitive_at<SortedIdx, true>(obj, ctx, offset);
+  } else {
+    (void)read_single_exact_primitive_at<SortedIdx>(obj, ctx, offset);
+  }
   constexpr size_t next_sorted_idx = SortedIdx + 1;
   if constexpr (next_sorted_idx < CompileTimeFieldHelpers<T>::FieldCount) {
     if constexpr (can_read_exact_primitive_with_offset<T, next_sorted_idx>()) {
       constexpr int16_t next_matched_id =
           static_cast<int16_t>(next_sorted_idx * 2);
-      if (remote_idx + 1 < remote_fields.size() &&
-          remote_fields[remote_idx + 1].field_id == next_matched_id) {
+      const bool has_exact_next =
+          remote_idx + 1 < remote_fields.size() &&
+          remote_fields[remote_idx + 1].field_id == next_matched_id;
+      constexpr uint32_t next_width =
+          varint_decoder_width<T, next_sorted_idx>();
+      if constexpr (current_width != 0 && next_width != current_width) {
+        if (FORY_PREDICT_FALSE(bytes_read == 0)) {
+          ctx.error().set_buffer_out_of_bound(offset, 1, ctx.buffer().size());
+          return;
+        }
+      }
+      if (has_exact_next) {
         ++remote_idx;
         read_exact_primitive_run<T, next_sorted_idx>(obj, ctx, remote_fields,
                                                      remote_idx, offset);
+        return;
       }
+    }
+  }
+  if constexpr (current_width != 0) {
+    if (FORY_PREDICT_FALSE(bytes_read == 0)) {
+      ctx.error().set_buffer_out_of_bound(offset, 1, ctx.buffer().size());
     }
   }
 }
@@ -3998,7 +4048,7 @@ read_fixed_primitive_fields(T &obj, Buffer &buffer,
 template <typename T>
 FORY_ALWAYS_INLINE T read_varint_at_checked(Buffer &buffer, uint32_t &offset,
                                             Error &error) {
-  uint32_t bytes_read = 0;
+  uint32_t bytes_read;
   if constexpr (std::is_same_v<T, int32_t> || std::is_same_v<T, int>) {
     uint32_t raw = buffer.get_var_uint32(offset, &bytes_read);
     if (FORY_PREDICT_FALSE(bytes_read == 0)) {
@@ -4037,6 +4087,61 @@ FORY_ALWAYS_INLINE T read_varint_at_checked(Buffer &buffer, uint32_t &offset,
   } else {
     static_assert(sizeof(T) == 0, "Unsupported checked varint type");
     return T{};
+  }
+}
+
+// An exact compatible run with one decoder can defer the zero-length check to
+// its final field: a failed getter does not advance offset, so the same decoder
+// must fail again for every remaining field in that run.
+template <typename T>
+FORY_ALWAYS_INLINE T read_varint_at_deferred(Buffer &buffer, uint32_t &offset,
+                                             uint32_t &bytes_read) {
+  if constexpr (std::is_same_v<T, int32_t> || std::is_same_v<T, int>) {
+    uint32_t raw;
+    bytes_read = StructFieldReader::get_var_uint32_length(buffer, offset, raw);
+    offset += bytes_read;
+    return static_cast<T>((raw >> 1) ^ (~(raw & 1) + 1));
+  } else if constexpr (std::is_same_v<T, int64_t> ||
+                       std::is_same_v<T, long long>) {
+    uint64_t raw = buffer.get_var_uint64(offset, &bytes_read);
+    offset += bytes_read;
+    return static_cast<T>((raw >> 1) ^ (~(raw & 1) + 1));
+  } else if constexpr (std::is_same_v<T, uint32_t> ||
+                       std::is_same_v<T, unsigned int>) {
+    uint32_t raw;
+    bytes_read = StructFieldReader::get_var_uint32_length(buffer, offset, raw);
+    offset += bytes_read;
+    return static_cast<T>(raw);
+  } else if constexpr (std::is_same_v<T, uint64_t> ||
+                       std::is_same_v<T, unsigned long long>) {
+    uint64_t raw = buffer.get_var_uint64(offset, &bytes_read);
+    offset += bytes_read;
+    return static_cast<T>(raw);
+  } else {
+    static_assert(sizeof(T) == 0, "Unsupported deferred varint type");
+    return T{};
+  }
+}
+
+template <typename T, size_t SortedPos>
+constexpr uint32_t varint_decoder_width() {
+  using Helpers = CompileTimeFieldHelpers<T>;
+  constexpr size_t original_index = Helpers::sorted_indices[SortedPos];
+  using RawFieldType =
+      typename Helpers::template RawFieldTypeFor<original_index>;
+  using FieldType = unwrap_field_t<RawFieldType>;
+  if constexpr (is_configurable_int_v<FieldType>) {
+    constexpr Encoding enc = field_int_encoding<FieldType, T, original_index>();
+    if constexpr (enc == Encoding::Tagged || enc == Encoding::Fixed) {
+      return 0;
+    }
+  }
+  if constexpr (is_configurable_int32_v<FieldType>) {
+    return 32;
+  } else if constexpr (is_configurable_int64_v<FieldType>) {
+    return 64;
+  } else {
+    return 0;
   }
 }
 
@@ -4239,8 +4344,9 @@ FORY_ALWAYS_INLINE T read_primitive_at_checked(Buffer &buffer, uint32_t &offset,
 /// Helper to read a single varint primitive field.
 /// No lambda overhead - direct function call that will be inlined.
 /// Handles both standard varint and tagged encoding based on field config.
-template <typename T, size_t SortedPos>
-FORY_ALWAYS_INLINE void read_single_varint_field(T &obj, Buffer &buffer,
+template <typename T, size_t SortedPos, bool DeferError = false,
+          bool ObserveLength = false>
+FORY_ALWAYS_INLINE auto read_single_varint_field(T &obj, Buffer &buffer,
                                                  uint32_t &offset,
                                                  Error &error) {
   using Helpers = CompileTimeFieldHelpers<T>;
@@ -4253,8 +4359,11 @@ FORY_ALWAYS_INLINE void read_single_varint_field(T &obj, Buffer &buffer,
       typename meta::RemoveMemberPointerCVRefT<decltype(field_ptr)>;
   using FieldType = unwrap_field_t<RawFieldType>;
 
-  FieldType result;
-  if constexpr (is_configurable_int_v<FieldType>) {
+  uint32_t bytes_read = 0;
+  FieldType result{};
+  if constexpr (DeferError) {
+    result = read_varint_at_deferred<FieldType>(buffer, offset, bytes_read);
+  } else if constexpr (is_configurable_int_v<FieldType>) {
     result = read_configurable_int_at_checked<FieldType, T, original_index>(
         buffer, offset, error);
   } else {
@@ -4266,6 +4375,9 @@ FORY_ALWAYS_INLINE void read_single_varint_field(T &obj, Buffer &buffer,
   } else {
     obj.*field_ptr = result;
   }
+  if constexpr (ObserveLength) {
+    return bytes_read;
+  }
 }
 
 /// Fast read consecutive varint primitive fields (int32, int64).
@@ -4273,15 +4385,45 @@ FORY_ALWAYS_INLINE void read_single_varint_field(T &obj, Buffer &buffer,
 /// generated root can accept a partial object.
 /// Optimized: tracks offset locally and updates reader_index once at the end.
 /// StartIdx is the sorted index to start reading from.
+template <typename T, size_t SortedPos, size_t RunIndex, size_t RunSize>
+FORY_ALWAYS_INLINE void read_varint_run_field(T &obj, Buffer &buffer,
+                                              uint32_t &offset, Error &error,
+                                              uint32_t &last_bytes) {
+  if constexpr (RunIndex + 1 == RunSize) {
+    last_bytes = read_single_varint_field<T, SortedPos, true, true>(
+        obj, buffer, offset, error);
+  } else {
+    read_single_varint_field<T, SortedPos, true>(obj, buffer, offset, error);
+  }
+}
+
 template <typename T, size_t StartIdx, size_t... Is>
-FORY_ALWAYS_INLINE void
+FORY_ALWAYS_INLINE bool
 read_varint_primitive_fields(T &obj, Buffer &buffer, uint32_t &offset,
                              Error &error, std::index_sequence<Is...>) {
-  // Read each varint field using helper function - no lambda overhead
   // Is are 0, 1, 2, ... so actual sorted position is StartIdx + Is
-  // Checked local-offset readers set Error without advancing a failed field's
-  // offset. Preserve lazy propagation; the root read boundary observes it.
-  (read_single_varint_field<T, StartIdx + Is>(obj, buffer, offset, error), ...);
+  constexpr uint32_t decoder_width = varint_decoder_width<T, StartIdx>();
+  constexpr bool homogeneous =
+      decoder_width != 0 &&
+      ((varint_decoder_width<T, StartIdx + Is>() == decoder_width) && ...);
+  if constexpr (homogeneous) {
+    uint32_t last_bytes = 0;
+    constexpr size_t run_size = sizeof...(Is);
+    (read_varint_run_field<T, StartIdx + Is, Is, run_size>(obj, buffer, offset,
+                                                           error, last_bytes),
+     ...);
+    if (FORY_PREDICT_FALSE(last_bytes == 0)) {
+      error.set_buffer_out_of_bound(offset, 1, buffer.size());
+      return false;
+    }
+    return true;
+  } else {
+    // Mixed decoders retain per-field checks because a narrower decoder could
+    // accept bytes after a wider decoder failed without advancing offset.
+    (read_single_varint_field<T, StartIdx + Is>(obj, buffer, offset, error),
+     ...);
+    return error.ok();
+  }
 }
 
 /// Helper to read remaining fields starting from Offset
@@ -4337,11 +4479,13 @@ void read_struct_fields_impl(T &obj, ReadContext &ctx,
       }
       // Track offset locally for batch varint reading
       uint32_t offset = buffer.reader_index();
-      read_varint_primitive_fields<T, fixed_count>(
-          obj, buffer, offset, ctx.error(),
-          std::make_index_sequence<varint_count>{});
-      // Update reader_index once after all varints
-      buffer.reader_index(offset);
+      if (FORY_PREDICT_FALSE((!read_varint_primitive_fields<T, fixed_count>(
+              obj, buffer, offset, ctx.error(),
+              std::make_index_sequence<varint_count>{})))) {
+        return;
+      }
+      // Every local-offset getter succeeded, so the final offset is bounded.
+      StructFieldReader::commit_reader_index(buffer, offset);
     }
 
     // Phase 3: Read remaining fields (if any) with normal path
@@ -4391,11 +4535,13 @@ read_struct_fields_impl_fast(T &obj, ReadContext &ctx,
     }
     // Track offset locally for batch varint reading
     uint32_t offset = buffer.reader_index();
-    read_varint_primitive_fields<T, fixed_count>(
-        obj, buffer, offset, ctx.error(),
-        std::make_index_sequence<varint_count>{});
-    // Update reader_index once after all varints
-    buffer.reader_index(offset);
+    if (FORY_PREDICT_FALSE((!read_varint_primitive_fields<T, fixed_count>(
+            obj, buffer, offset, ctx.error(),
+            std::make_index_sequence<varint_count>{})))) {
+      return;
+    }
+    // Every local-offset getter succeeded, so the final offset is bounded.
+    StructFieldReader::commit_reader_index(buffer, offset);
   }
 
   // Phase 3: Read remaining fields (if any) with normal path
@@ -4523,6 +4669,9 @@ read_struct_fields_compatible(T &obj, ReadContext &ctx,
                             T, local_sorted_id>()) {                           \
             read_exact_primitive_run<T, local_sorted_id>(                      \
                 obj, ctx, remote_fields, remote_idx, offset);                  \
+            if (FORY_PREDICT_FALSE(ctx.has_error())) {                         \
+              return;                                                          \
+            }                                                                  \
           } else {                                                             \
             read_compatible_exact_case_at<T, matched_case>(obj, ctx, offset);  \
           }                                                                    \
@@ -4602,6 +4751,9 @@ read_struct_fields_compatible(T &obj, ReadContext &ctx,
           if (use_exact_offset_reads) {
             dispatch_compat_exact_read_at_impl<T, 128>(obj, ctx, dispatch_id,
                                                        offset);
+            if (FORY_PREDICT_FALSE(ctx.has_error())) {
+              return;
+            }
           } else {
             dispatch_compat_exact_read_impl<T, 128>(obj, ctx, dispatch_id);
           }

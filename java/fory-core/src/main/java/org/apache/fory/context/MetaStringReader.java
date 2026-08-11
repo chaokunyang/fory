@@ -287,8 +287,14 @@ public final class MetaStringReader {
   public void reset() {
     // These caches contain untrusted wire bodies before named-type acceptance. Keep them local to
     // one root; accepted names persist only through the resolver's checked TypeInfo caches.
-    hash2MetaStringMap.clear(MAX_RETAINED_META_STRING_SLOTS);
-    longLongMetaStringMap.clear(MAX_RETAINED_META_STRING_SLOTS);
+    // A nonempty reset already bounds the backing arrays. Avoid recomputing table capacity on
+    // every later root while the root-local maps remain empty.
+    if (hash2MetaStringMap.size != 0) {
+      hash2MetaStringMap.clear(MAX_RETAINED_META_STRING_SLOTS);
+    }
+    if (longLongMetaStringMap.size != 0) {
+      longLongMetaStringMap.clear(MAX_RETAINED_META_STRING_SLOTS);
+    }
     int dynamicReadId = dynamicReadStringId;
     dynamicReadStringId = 0;
     if (dynamicReadId != 0) {

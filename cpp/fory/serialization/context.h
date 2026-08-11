@@ -61,7 +61,18 @@ class MetadataKeyHash {
 public:
   MetadataKeyHash();
 
-  size_t operator()(int64_t value) const;
+  FORY_ALWAYS_INLINE size_t operator()(int64_t value) const {
+    // Metadata headers are already fixed-width identities. A keyed avalanche
+    // keeps their persistent table placement unpredictable without paying the
+    // variable-length string hash cost on every exact-schema cache lookup.
+    uint64_t hash = static_cast<uint64_t>(value) ^ key0_;
+    hash ^= hash >> 30;
+    hash *= UINT64_C(0xbf58476d1ce4e5b9);
+    hash ^= hash >> 27;
+    hash *= UINT64_C(0x94d049bb133111eb);
+    hash ^= hash >> 31;
+    return static_cast<size_t>(hash);
+  }
   size_t operator()(const RemoteTypeKey &key) const;
 
 private:

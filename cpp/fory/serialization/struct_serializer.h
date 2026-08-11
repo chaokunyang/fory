@@ -3600,14 +3600,14 @@ FORY_ALWAYS_INLINE void read_compatible_exact_case_at(T &obj, ReadContext &ctx,
   if constexpr (can_read_exact_primitive_with_offset<T, local_sorted_id>()) {
     (void)read_single_exact_primitive_at<local_sorted_id>(obj, ctx, offset);
   } else {
-    ctx.buffer().reader_index(offset);
+    StructFieldReader::commit_reader_index(ctx.buffer(), offset);
     read_compatible_exact_case<T, MatchedId>(obj, ctx);
     offset = ctx.buffer().reader_index();
   }
 }
 
 template <typename T, size_t SortedIdx>
-FORY_ALWAYS_INLINE void
+FORY_ALWAYS_INLINE bool
 read_exact_primitive_run(T &obj, ReadContext &ctx,
                          const std::vector<FieldInfo> &remote_fields,
                          size_t &remote_idx, uint32_t &offset) {
@@ -3618,6 +3618,9 @@ read_exact_primitive_run(T &obj, ReadContext &ctx,
         read_single_exact_primitive_at<SortedIdx, true>(obj, ctx, offset);
   } else {
     (void)read_single_exact_primitive_at<SortedIdx>(obj, ctx, offset);
+    // Checked fixed-width readers record failures in ReadContext. Preserve the
+    // lazy-error contract and inspect that state at the compatible-read
+    // safepoint instead of adding a branch for every field in this hot run.
   }
   constexpr size_t next_sorted_idx = SortedIdx + 1;
   if constexpr (next_sorted_idx < CompileTimeFieldHelpers<T>::FieldCount) {
@@ -3632,22 +3635,24 @@ read_exact_primitive_run(T &obj, ReadContext &ctx,
       if constexpr (current_width != 0 && next_width != current_width) {
         if (FORY_PREDICT_FALSE(bytes_read == 0)) {
           ctx.error().set_buffer_out_of_bound(offset, 1, ctx.buffer().size());
-          return;
+          return false;
         }
       }
       if (has_exact_next) {
         ++remote_idx;
-        read_exact_primitive_run<T, next_sorted_idx>(obj, ctx, remote_fields,
-                                                     remote_idx, offset);
-        return;
+        return read_exact_primitive_run<T, next_sorted_idx>(
+            obj, ctx, remote_fields, remote_idx, offset);
       }
     }
   }
   if constexpr (current_width != 0) {
     if (FORY_PREDICT_FALSE(bytes_read == 0)) {
       ctx.error().set_buffer_out_of_bound(offset, 1, ctx.buffer().size());
+      return false;
     }
+    return true;
   }
+  return true;
 }
 
 template <typename T, size_t MatchedId>
@@ -3851,7 +3856,7 @@ dispatch_compat_exact_read_at_impl(T &obj, ReadContext &ctx, int16_t matched_id,
   case Base + (N): {                                                           \
     constexpr size_t matched_case = static_cast<size_t>(Base + (N));           \
     if constexpr (matched_case < total_cases && (matched_case & 1U) != 0) {    \
-      ctx.buffer().reader_index(offset);                                       \
+      StructFieldReader::commit_reader_index(ctx.buffer(), offset);            \
       read_compatible_conversion_case<T, matched_case>(obj, ctx,               \
                                                        remote_field_type);     \
       offset = ctx.buffer().reader_index();                                    \
@@ -4648,7 +4653,7 @@ bool skip_removed_tracked_struct(ReadContext &ctx,
 /// Read struct fields with schema evolution (compatible mode)
 /// Reads fields in remote schema order, dispatching to local fields.
 template <typename T, size_t... Indices>
-FORY_NOINLINE void
+FORY_NOINLINE bool
 read_struct_fields_compatible(T &obj, ReadContext &ctx,
                               const TypeMeta *remote_type_meta,
                               std::index_sequence<Indices...>) {
@@ -4667,10 +4672,11 @@ read_struct_fields_compatible(T &obj, ReadContext &ctx,
           constexpr size_t local_sorted_id = matched_case / 2;                 \
           if constexpr (can_read_exact_primitive_with_offset<                  \
                             T, local_sorted_id>()) {                           \
-            read_exact_primitive_run<T, local_sorted_id>(                      \
-                obj, ctx, remote_fields, remote_idx, offset);                  \
-            if (FORY_PREDICT_FALSE(ctx.has_error())) {                         \
-              return;                                                          \
+            const bool run_readable =                                          \
+                read_exact_primitive_run<T, local_sorted_id>(                  \
+                    obj, ctx, remote_fields, remote_idx, offset);              \
+            if (FORY_PREDICT_FALSE(!run_readable)) {                           \
+              return false;                                                    \
             }                                                                  \
           } else {                                                             \
             read_compatible_exact_case_at<T, matched_case>(obj, ctx, offset);  \
@@ -4680,7 +4686,7 @@ read_struct_fields_compatible(T &obj, ReadContext &ctx,
         }                                                                      \
       } else {                                                                 \
         if (use_exact_offset_reads) {                                          \
-          buffer.reader_index(offset);                                         \
+          StructFieldReader::commit_reader_index(buffer, offset);              \
         }                                                                      \
         read_compatible_conversion_case<T, matched_case>(                      \
             obj, ctx, remote_field.field_type);                                \
@@ -4726,7 +4732,7 @@ read_struct_fields_compatible(T &obj, ReadContext &ctx,
 
     if (dispatch_id == -1) {
       if (use_exact_offset_reads) {
-        buffer.reader_index(offset);
+        StructFieldReader::commit_reader_index(buffer, offset);
       }
       // Field unknown locally — skip its value
       RefMode remote_ref_mode = remote_field.field_type.ref_mode;
@@ -4735,7 +4741,7 @@ read_struct_fields_compatible(T &obj, ReadContext &ctx,
         skip_field_value(ctx, remote_field.field_type, remote_ref_mode);
       }
       if (FORY_PREDICT_FALSE(ctx.has_error())) {
-        return;
+        return false;
       }
       if (use_exact_offset_reads) {
         offset = buffer.reader_index();
@@ -4752,7 +4758,7 @@ read_struct_fields_compatible(T &obj, ReadContext &ctx,
             dispatch_compat_exact_read_at_impl<T, 128>(obj, ctx, dispatch_id,
                                                        offset);
             if (FORY_PREDICT_FALSE(ctx.has_error())) {
-              return;
+              return false;
             }
           } else {
             dispatch_compat_exact_read_impl<T, 128>(obj, ctx, dispatch_id);
@@ -4775,12 +4781,14 @@ read_struct_fields_compatible(T &obj, ReadContext &ctx,
 #undef FORY_COMPAT_LOOP_SWITCH_CASES_128
 #undef FORY_COMPAT_LOOP_SWITCH_CASES_16
 #undef FORY_COMPAT_LOOP_SWITCH_CASE
-  if (use_exact_offset_reads) {
-    buffer.reader_index(offset);
-  }
   if (FORY_PREDICT_FALSE(ctx.has_error())) {
-    return;
+    return false;
   }
+  if (use_exact_offset_reads) {
+    // Every local offset came from a checked getter or an ordinary reader.
+    StructFieldReader::commit_reader_index(buffer, offset);
+  }
+  return true;
 }
 
 } // namespace detail
@@ -5195,10 +5203,9 @@ struct Serializer<T, std::enable_if_t<is_fory_serializable_v<T>>> {
     }
 
     // Use remote TypeMeta for schema evolution - field IDs already assigned
-    detail::read_struct_fields_compatible(
-        obj, ctx, remote_type_info->type_meta.get(),
-        std::make_index_sequence<field_count>{});
-    if (FORY_PREDICT_FALSE(ctx.has_error())) {
+    if (FORY_PREDICT_FALSE(!detail::read_struct_fields_compatible(
+            obj, ctx, remote_type_info->type_meta.get(),
+            std::make_index_sequence<field_count>{}))) {
       return T{};
     }
 

@@ -111,10 +111,6 @@ size_t MetadataKeyHash::hash_bytes(const void *data, size_t size) const {
   return static_cast<size_t>(v0 ^ v1 ^ v2 ^ v3);
 }
 
-size_t MetadataKeyHash::operator()(int64_t value) const {
-  return hash_bytes(&value, sizeof(value));
-}
-
 size_t MetadataKeyHash::operator()(const RemoteTypeKey &key) const {
   uint64_t header = static_cast<uint64_t>(key.type_id) |
                     (static_cast<uint64_t>(key.user_type_id) << 32);

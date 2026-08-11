@@ -274,10 +274,10 @@ func (b *ByteBuffer) WriteInt32(value int32) {
 }
 
 func (b *ByteBuffer) WriteLength(value int) {
-	b.grow(4)
 	if value >= MaxInt32 {
 		panic(fmt.Errorf("too long: %d", value))
 	}
+	// WriteVarUint32 already reserves eight bytes for its bulk encoding.
 	b.WriteVarUint32(uint32(value))
 }
 

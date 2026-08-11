@@ -38,6 +38,23 @@
 namespace fory {
 namespace serialization {
 
+namespace detail {
+
+// Dense collection writers reserve the header's physical bulk-store extent
+// and the complete body before using this owner-local unchecked path.
+struct CollectionFieldWriter {
+  FORY_ALWAYS_INLINE static uint32_t put_size(Buffer &buffer, uint32_t offset,
+                                              uint32_t size) {
+    return buffer.put_var_uint32_unchecked(offset, size);
+  }
+
+  FORY_ALWAYS_INLINE static void commit(Buffer &buffer, uint32_t offset) {
+    buffer.writer_index_ = offset;
+  }
+};
+
+} // namespace detail
+
 // ============================================================================
 // Collection Header Constants
 // ============================================================================
@@ -1045,7 +1062,7 @@ struct Serializer<
   static inline void write_data(const std::vector<T, Alloc> &vec,
                                 WriteContext &ctx) {
     uint64_t total_bytes = static_cast<uint64_t>(vec.size()) * sizeof(T);
-    if (total_bytes > std::numeric_limits<uint32_t>::max()) {
+    if (total_bytes > std::numeric_limits<uint32_t>::max() - uint64_t{8}) {
       ctx.set_error(Error::invalid("Vector byte size exceeds uint32_t range"));
       return;
     }
@@ -1054,13 +1071,14 @@ struct Serializer<
     size_t max_size = 8 + total_bytes;
     buffer.grow(static_cast<uint32_t>(max_size));
     uint32_t writer_index = buffer.writer_index();
-    writer_index +=
-        buffer.put_var_uint32(writer_index, static_cast<uint32_t>(total_bytes));
+    writer_index += detail::CollectionFieldWriter::put_size(
+        buffer, writer_index, static_cast<uint32_t>(total_bytes));
     if (total_bytes > 0) {
       buffer.unsafe_put(writer_index, vec.data(),
                         static_cast<uint32_t>(total_bytes));
     }
-    buffer.writer_index(writer_index + static_cast<uint32_t>(total_bytes));
+    detail::CollectionFieldWriter::commit(
+        buffer, writer_index + static_cast<uint32_t>(total_bytes));
   }
 
   static inline void write_data_generic(const std::vector<T, Alloc> &vec,
@@ -1161,7 +1179,7 @@ template <typename Alloc> struct Serializer<std::vector<float16_t, Alloc>> {
                                 WriteContext &ctx) {
     uint64_t total_bytes =
         static_cast<uint64_t>(vec.size()) * sizeof(float16_t);
-    if (total_bytes > std::numeric_limits<uint32_t>::max()) {
+    if (total_bytes > std::numeric_limits<uint32_t>::max() - uint64_t{8}) {
       ctx.set_error(Error::invalid("Vector byte size exceeds uint32_t range"));
       return;
     }
@@ -1169,13 +1187,14 @@ template <typename Alloc> struct Serializer<std::vector<float16_t, Alloc>> {
     size_t max_size = 8 + total_bytes;
     buffer.grow(static_cast<uint32_t>(max_size));
     uint32_t writer_index = buffer.writer_index();
-    writer_index +=
-        buffer.put_var_uint32(writer_index, static_cast<uint32_t>(total_bytes));
+    writer_index += detail::CollectionFieldWriter::put_size(
+        buffer, writer_index, static_cast<uint32_t>(total_bytes));
     if (total_bytes > 0) {
       buffer.unsafe_put(writer_index, vec.data(),
                         static_cast<uint32_t>(total_bytes));
     }
-    buffer.writer_index(writer_index + static_cast<uint32_t>(total_bytes));
+    detail::CollectionFieldWriter::commit(
+        buffer, writer_index + static_cast<uint32_t>(total_bytes));
   }
 
   static inline void
@@ -1268,7 +1287,7 @@ template <typename Alloc> struct Serializer<std::vector<bfloat16_t, Alloc>> {
                                 WriteContext &ctx) {
     uint64_t total_bytes =
         static_cast<uint64_t>(vec.size()) * sizeof(bfloat16_t);
-    if (total_bytes > std::numeric_limits<uint32_t>::max()) {
+    if (total_bytes > std::numeric_limits<uint32_t>::max() - uint64_t{8}) {
       ctx.set_error(Error::invalid("Vector byte size exceeds uint32_t range"));
       return;
     }
@@ -1276,13 +1295,14 @@ template <typename Alloc> struct Serializer<std::vector<bfloat16_t, Alloc>> {
     size_t max_size = 8 + total_bytes;
     buffer.grow(static_cast<uint32_t>(max_size));
     uint32_t writer_index = buffer.writer_index();
-    writer_index +=
-        buffer.put_var_uint32(writer_index, static_cast<uint32_t>(total_bytes));
+    writer_index += detail::CollectionFieldWriter::put_size(
+        buffer, writer_index, static_cast<uint32_t>(total_bytes));
     if (total_bytes > 0) {
       buffer.unsafe_put(writer_index, vec.data(),
                         static_cast<uint32_t>(total_bytes));
     }
-    buffer.writer_index(writer_index + static_cast<uint32_t>(total_bytes));
+    detail::CollectionFieldWriter::commit(
+        buffer, writer_index + static_cast<uint32_t>(total_bytes));
   }
 
   static inline void
@@ -1570,18 +1590,24 @@ template <typename Alloc> struct Serializer<std::vector<bool, Alloc>> {
 
   static inline void write_data(const std::vector<bool, Alloc> &vec,
                                 WriteContext &ctx) {
+    if (FORY_PREDICT_FALSE(vec.size() >
+                           std::numeric_limits<uint32_t>::max() - size_t{8})) {
+      ctx.set_error(Error::invalid("Vector size exceeds uint32_t range"));
+      return;
+    }
     Buffer &buffer = ctx.buffer();
     // bulk write may write 8 bytes for varint32
     size_t max_size = 8 + vec.size();
     buffer.grow(static_cast<uint32_t>(max_size));
     uint32_t writer_index = buffer.writer_index();
-    writer_index +=
-        buffer.put_var_uint32(writer_index, static_cast<uint32_t>(vec.size()));
+    writer_index += detail::CollectionFieldWriter::put_size(
+        buffer, writer_index, static_cast<uint32_t>(vec.size()));
     for (size_t i = 0; i < vec.size(); ++i) {
       buffer.unsafe_put_byte(writer_index + i,
                              static_cast<uint8_t>(vec[i] ? 1 : 0));
     }
-    buffer.writer_index(writer_index + vec.size());
+    detail::CollectionFieldWriter::commit(
+        buffer, writer_index + static_cast<uint32_t>(vec.size()));
   }
 
   static inline void write_data_generic(const std::vector<bool, Alloc> &vec,

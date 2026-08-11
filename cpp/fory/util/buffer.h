@@ -40,6 +40,7 @@ namespace fory {
 class StdInputStream;
 class PyInputStream;
 namespace serialization::detail {
+struct CollectionFieldWriter;
 struct StructFieldReader;
 struct StructFieldWriter;
 } // namespace serialization::detail
@@ -1171,6 +1172,7 @@ public:
   std::string hex() const;
 
 private:
+  friend struct serialization::detail::CollectionFieldWriter;
   friend struct serialization::detail::StructFieldReader;
   friend struct serialization::detail::StructFieldWriter;
   friend class StdInputStream;

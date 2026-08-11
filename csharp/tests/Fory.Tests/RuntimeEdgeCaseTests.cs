@@ -1585,6 +1585,35 @@ public sealed class RuntimeEdgeCaseTests
     }
 
     [Fact]
+    public void ExactLocalMetaSkipsBody()
+    {
+        ForyRuntime fory = ForyRuntime.Builder().Compatible(true).Build();
+        fory.Register<CustomPayload>(901);
+        CustomPayload expected = new() { Id = 42, Marker = "local" };
+        byte[] payload = fory.Serialize(expected);
+        TypeResolver resolver = new();
+        resolver.Register(typeof(CustomPayload), 901);
+        byte[] typeMeta = resolver
+            .GetTypeInfo(typeof(CustomPayload))
+            .GetTypeMetaCacheEntry(trackRef: false)
+            .EncodedBytes;
+        int typeMetaOffset = payload.AsSpan().IndexOf(typeMeta);
+        Assert.True(typeMetaOffset >= 0);
+        byte[] invalidHeader = (byte[])payload.Clone();
+        invalidHeader[typeMetaOffset] ^= 1;
+        Assert.ThrowsAny<ForyException>(
+            () => fory.Deserialize<CustomPayload>(invalidHeader));
+
+        byte[] ignoredBody = (byte[])payload.Clone();
+        ignoredBody[typeMetaOffset + sizeof(ulong)] ^= 0xff;
+
+        CustomPayload actual = fory.Deserialize<CustomPayload>(ignoredBody);
+
+        Assert.Equal(expected.Id, actual.Id);
+        Assert.Equal(expected.Marker, actual.Marker);
+    }
+
+    [Fact]
     public void ExactNonStructTypeMetaBypassesLimit()
     {
         TypeResolver resolver = new();

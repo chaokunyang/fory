@@ -439,6 +439,7 @@ public sealed class ReadContext
             $"type meta index gap: index={index}, count={_typeMetaRefs.Count + 1}");
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     internal bool TryGetTypeMetaByHeader(ulong header, out TypeMeta typeMeta)
     {
         // This map is the sole accepted-metadata owner. Remote entries are published only after

@@ -15,6 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
+using System.Buffers.Binary;
 using System.Collections.Concurrent;
 using System.Collections.Immutable;
 using System.Reflection;
@@ -914,28 +915,11 @@ public sealed class TypeResolver
             !info.RegisterByName &&
             typeId == TypeId.CompatibleStruct)
         {
-            TypeMeta remoteTypeMeta;
-            // Operation-local refs point only to metadata already accepted by the checked header
-            // cache, so only a miss enters the cold validation and publication path.
-            if (!context.TryReadTypeMetaRef(out int index, out remoteTypeMeta))
-            {
-                ulong header = context.Reader.ReadUInt64();
-                if (context.TryGetTypeMetaByHeader(header, out remoteTypeMeta))
-                {
-                    TypeMeta.SkipBody(context.Reader, header);
-                    context.StoreTypeMetaRef(remoteTypeMeta, index);
-                }
-                else
-                {
-                    remoteTypeMeta = ReadRemoteTypeMeta(
-                        info,
-                        typeId,
-                        assignFieldIds: true,
-                        context,
-                        index,
-                        header);
-                }
-            }
+            TypeMeta remoteTypeMeta = ReadCompatibleTypeMeta(
+                info,
+                typeId,
+                assignFieldIds: true,
+                context);
 
             context.StoreTypeMeta(type, remoteTypeMeta);
             return;
@@ -955,26 +939,11 @@ public sealed class TypeResolver
             case TypeId.CompatibleStruct:
             case TypeId.NamedCompatibleStruct:
                 {
-                    TypeMeta remoteTypeMeta;
-                    if (!context.TryReadTypeMetaRef(out int index, out remoteTypeMeta))
-                    {
-                        ulong header = context.Reader.ReadUInt64();
-                        if (context.TryGetTypeMetaByHeader(header, out remoteTypeMeta))
-                        {
-                            TypeMeta.SkipBody(context.Reader, header);
-                            context.StoreTypeMetaRef(remoteTypeMeta, index);
-                        }
-                        else
-                        {
-                            remoteTypeMeta = ReadRemoteTypeMeta(
-                                info,
-                                typeId,
-                                assignFieldIds: true,
-                                context,
-                                index,
-                                header);
-                        }
-                    }
+                    TypeMeta remoteTypeMeta = ReadCompatibleTypeMeta(
+                        info,
+                        typeId,
+                        assignFieldIds: true,
+                        context);
 
                     context.StoreTypeMeta(type, remoteTypeMeta);
                     return;
@@ -1014,25 +983,11 @@ public sealed class TypeResolver
     {
         if (compatible)
         {
-            if (!context.TryReadTypeMetaRef(out int index, out TypeMeta remoteTypeMeta))
-            {
-                ulong header = context.Reader.ReadUInt64();
-                if (context.TryGetTypeMetaByHeader(header, out remoteTypeMeta))
-                {
-                    TypeMeta.SkipBody(context.Reader, header);
-                    context.StoreTypeMetaRef(remoteTypeMeta, index);
-                }
-                else
-                {
-                    _ = ReadRemoteTypeMeta(
-                        typeInfo,
-                        wireTypeId,
-                        assignFieldIds: false,
-                        context,
-                        index,
-                        header);
-                }
-            }
+            _ = ReadCompatibleTypeMeta(
+                typeInfo,
+                wireTypeId,
+                assignFieldIds: false,
+                context);
 
             return;
         }
@@ -1061,6 +1016,66 @@ public sealed class TypeResolver
             throw new InvalidDataException(
                 $"type name mismatch: expected {typeInfo.NamespaceName.Value.Value}::{typeInfo.TypeName.Value.Value}, got {namespaceName.Value}::{typeName.Value}");
         }
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private TypeMeta ReadCompatibleTypeMeta(
+        TypeInfo typeInfo,
+        TypeId wireTypeId,
+        bool assignFieldIds,
+        ReadContext context)
+    {
+        // Operation-local refs point only to metadata already accepted by the checked header
+        // cache or matched to this exact local schema.
+        if (context.TryReadTypeMetaRef(out int index, out TypeMeta remoteTypeMeta))
+        {
+            return remoteTypeMeta;
+        }
+
+        ulong header = context.Reader.ReadUInt64();
+        if (context.TryGetTypeMetaByHeader(header, out remoteTypeMeta))
+        {
+            TypeMeta.SkipBody(context.Reader, header);
+            context.StoreTypeMetaRef(remoteTypeMeta, index);
+            return remoteTypeMeta;
+        }
+
+        return ReadCompatibleTypeMetaMiss(
+            typeInfo,
+            wireTypeId,
+            assignFieldIds,
+            context,
+            index,
+            header);
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private TypeMeta ReadCompatibleTypeMetaMiss(
+        TypeInfo typeInfo,
+        TypeId wireTypeId,
+        bool assignFieldIds,
+        ReadContext context,
+        int index,
+        ulong header)
+    {
+        TypeInfo.TypeMetaCacheEntry local = typeInfo.GetTypeMetaCacheEntry(context.TrackRef);
+        if (header == BinaryPrimitives.ReadUInt64LittleEndian(local.EncodedBytes))
+        {
+            // The complete header proves both the 52-bit local schema identity and the low body
+            // framing bits. Only that exact hit may bypass the attacker-keyed checked cache.
+            TypeMeta.SkipBody(context.Reader, header);
+            context.StoreExactLocalTypeMeta(header, local.TypeMeta);
+            context.StoreTypeMetaRef(local.TypeMeta, index);
+            return local.TypeMeta;
+        }
+
+        return ReadRemoteTypeMeta(
+            typeInfo,
+            wireTypeId,
+            assignFieldIds,
+            context,
+            index,
+            header);
     }
 
     [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]

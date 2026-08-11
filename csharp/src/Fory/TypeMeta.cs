@@ -685,10 +685,22 @@ public sealed class TypeMeta : IEquatable<TypeMeta>
         }
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     internal static void SkipBody(ByteReader reader, ulong header)
     {
-        reader.Skip(ReadBodySize(reader, header));
+        int metaSize = (int)(header & TypeMetaConstants.TypeMetaSizeMask);
+        if (metaSize != (int)TypeMetaConstants.TypeMetaSizeMask)
+        {
+            reader.Skip(metaSize);
+            return;
+        }
+
+        SkipExtendedBody(reader, header);
     }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static void SkipExtendedBody(ByteReader reader, ulong header) =>
+        reader.Skip(ReadBodySize(reader, header));
 
     private static ulong ComputeHeaderLowBits(int bodyLength, bool compressed)
     {

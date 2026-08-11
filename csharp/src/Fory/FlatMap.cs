@@ -39,8 +39,6 @@ internal sealed class UInt64Map<TValue>
     private const ulong EmptyKey = ulong.MaxValue;
     private const double DefaultLoadFactor = 0.5;
     private const ulong GoldenRatio = 0x9E3779B97F4A7C15;
-    private const ulong SeedMix1 = 0xBF58476D1CE4E5B9;
-    private const ulong SeedMix2 = 0x94D049BB133111EB;
 
     private struct Slot
     {
@@ -54,7 +52,7 @@ internal sealed class UInt64Map<TValue>
     private int _shift;
     private int _count;
     private readonly double _loadFactor;
-    private readonly ulong _placementSeed;
+    private readonly ulong _placementMultiplier;
     private int _growThreshold;
 
     internal UInt64Map(
@@ -63,7 +61,7 @@ internal sealed class UInt64Map<TValue>
         ulong placementSeed = 0)
     {
         _loadFactor = loadFactor;
-        _placementSeed = placementSeed;
+        _placementMultiplier = placementSeed == 0 ? GoldenRatio : placementSeed | 1;
         int capacity = NextPowerOfTwo(Math.Max(initialCapacity, 2));
         _entries = new Slot[capacity];
         _tableCapacity = capacity;
@@ -193,22 +191,9 @@ internal sealed class UInt64Map<TValue>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private int Place(ulong key)
     {
-        if (_placementSeed == 0)
-        {
-            return (int)(unchecked(key * GoldenRatio) >> _shift);
-        }
-
-        // Seeded maps admit untrusted keys. Avalanche each key because an affine secret transform
-        // can preserve structured collision families even when its multiplier and offset are secret.
-        return (int)(MixPlacementKey(key ^ _placementSeed) >> _shift);
-    }
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static ulong MixPlacementKey(ulong value)
-    {
-        value = unchecked((value ^ (value >> 30)) * SeedMix1);
-        value = unchecked((value ^ (value >> 27)) * SeedMix2);
-        return value ^ (value >> 31);
+        // Seeded maps use a secret odd multiplier; unseeded maps retain the legacy GoldenRatio
+        // multiplier. Using a secret additive offset would preserve public collision differences.
+        return (int)(unchecked(key * _placementMultiplier) >> _shift);
     }
 
     private void Grow()

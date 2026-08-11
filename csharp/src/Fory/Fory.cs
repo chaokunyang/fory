@@ -195,7 +195,6 @@ public sealed class Fory
     /// <param name="value">Value to serialize.</param>
     public void Serialize<T>(IBufferWriter<byte> output, in T value)
     {
-        FreezeRegistry();
         byte[] payload = Serialize(value);
         output.Write(payload);
     }
@@ -212,7 +211,7 @@ public sealed class Fory
         FreezeRegistry();
         ByteReader reader = _readContext.Reader;
         reader.Reset(payload);
-        T value = DeserializeFromReader<T>(reader);
+        T value = DeserializeFromReaderCore<T>(reader);
         if (reader.Remaining != 0)
         {
             _readContext.ResetAfterFailure();
@@ -234,7 +233,7 @@ public sealed class Fory
         FreezeRegistry();
         ByteReader reader = _readContext.Reader;
         reader.Reset(payload);
-        T value = DeserializeFromReader<T>(reader);
+        T value = DeserializeFromReaderCore<T>(reader);
         if (reader.Remaining != 0)
         {
             _readContext.ResetAfterFailure();
@@ -284,6 +283,12 @@ public sealed class Fory
     internal T DeserializeFromReader<T>(ByteReader reader)
     {
         FreezeRegistry();
+        return DeserializeFromReaderCore<T>(reader);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private T DeserializeFromReaderCore<T>(ByteReader reader)
+    {
         ReadContext readContext = _readContext;
         readContext.ResetFor(reader);
         readContext._remainingGraphMemoryBytes = Config.MaxGraphMemoryBytes;

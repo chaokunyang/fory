@@ -3117,11 +3117,11 @@ public sealed class ForyRuntimeTests
     }
 
     [Fact]
-    public void CompatibleTypeMetaCacheMissValidatesBodyHashBeforeCaching()
+    public void RemoteMetaMissChecksBodyHash()
     {
         ForyRuntime writer = ForyRuntime.Builder().Compatible(true).Build();
-        writer.Register<OneStringField>(200);
-        byte[] payload = writer.Serialize(new OneStringField { F1 = "hello" });
+        writer.Register<TwoStringField>(200);
+        byte[] payload = writer.Serialize(new TwoStringField { F1 = "hello", F2 = "remote" });
         byte[] tamperedPayload = CorruptCompatibleTypeMetaBody(payload);
 
         ForyRuntime reader = ForyRuntime.Builder().Compatible(true).Build();

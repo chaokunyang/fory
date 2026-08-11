@@ -390,8 +390,8 @@ public sealed class ByteWriter
 
     public byte[] ToArray()
     {
-        byte[] result = new byte[_count];
-        Array.Copy(_storage, 0, result, 0, _count);
+        byte[] result = GC.AllocateUninitializedArray<byte>(_count);
+        _storage.AsSpan(0, _count).CopyTo(result);
         return result;
     }
 
@@ -709,6 +709,7 @@ public sealed class ByteReader
         return span;
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void Skip(int count)
     {
         CheckBound(count);

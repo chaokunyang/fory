@@ -39,6 +39,9 @@ Deliver measurable performance improvements in Apache Fory without protocol drif
 - Keep API surface minimal: do not add new API unless required by protocol/correctness or explicitly requested.
 - Never add public hacky API for performance shortcuts; keep optimization helpers internal/private and conceptually clean.
 - Do not hide regressions behind unsafe compiler flags or benchmark-only code paths.
+- Keep Git commit messages implementation-focused. Never include benchmark commands, scores,
+  deltas, run IDs, candidate or round labels, machine details, or experimental keep/revert
+  conclusions in a commit message; record that evidence in the task and performance-round logs.
 - Keep optimization surfaces nested-safe; avoid root-only shortcuts unless they are architecturally valid and requested.
 - Do not add reader-side validation solely to produce an earlier or more precise malformed-input
   error. A necessary crash, panic, undefined-behavior, out-of-bounds, resource-amplification,
@@ -119,7 +122,8 @@ Deliver measurable performance improvements in Apache Fory without protocol drif
 
 - Append one round entry to `tasks/perf_optimization_rounds.md` before starting the next round.
 - Include hypothesis, code change, exact commands, before/after numbers, and keep/revert decision.
-- Commit retained non-trivial rounds immediately.
+- Commit retained non-trivial rounds immediately, using a message that describes only the retained
+  implementation or documentation change.
 
 10. Re-plan on instability.
 

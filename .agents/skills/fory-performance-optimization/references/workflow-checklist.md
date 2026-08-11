@@ -37,6 +37,9 @@
 - Keep protocol bytes and semantics unchanged unless explicitly requested.
 - Keep API surface minimal and internal-first; avoid adding new public APIs unless explicitly required.
 - Remove touched legacy/dead code and stale docs instead of preserving compatibility scaffolding in perf rounds.
+- Keep Git commit messages limited to the retained implementation or documentation change. Put
+  commands, measurements, deltas, run IDs, candidate labels, environment details, and experiment
+  decisions in task logs, never in the commit message.
 - Pass only the structural and build gates required to create a trustworthy benchmark artifact.
 - Run targeted benchmark sequentially (at least 2 adjacent baseline/current pairs).
 - Use the paired-delta median and dispersion. Do not change code based on one pair, non-adjacent

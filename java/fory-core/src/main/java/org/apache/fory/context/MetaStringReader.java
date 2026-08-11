@@ -285,6 +285,13 @@ public final class MetaStringReader {
 
   /** Clears all dynamic ids so this reader can be reused for a new deserialization stream. */
   public void reset() {
+    int dynamicReadId = dynamicReadStringId;
+    dynamicReadStringId = 0;
+    // Every root-local cache insertion is followed by occurrence publication in the same read, so
+    // no occurrence means both maps are already empty.
+    if (dynamicReadId == 0) {
+      return;
+    }
     // These caches contain untrusted wire bodies before named-type acceptance. Keep them local to
     // one root; accepted names persist only through the resolver's checked TypeInfo caches.
     // A nonempty reset already bounds the backing arrays. Avoid recomputing table capacity on
@@ -295,13 +302,9 @@ public final class MetaStringReader {
     if (longLongMetaStringMap.size != 0) {
       longLongMetaStringMap.clear(MAX_RETAINED_META_STRING_SLOTS);
     }
-    int dynamicReadId = dynamicReadStringId;
-    dynamicReadStringId = 0;
-    if (dynamicReadId != 0) {
-      // Clear only committed slots. Failed reads must never make root cleanup index beyond the
-      // fixed reference array and leave this reader poisoned for later operations.
-      Arrays.fill(
-          dynamicReadStringIds, 0, Math.min(dynamicReadId, dynamicReadStringIds.length), null);
-    }
+    // Clear only committed slots. Failed reads must never make root cleanup index beyond the fixed
+    // reference array and leave this reader poisoned for later operations.
+    Arrays.fill(
+        dynamicReadStringIds, 0, Math.min(dynamicReadId, dynamicReadStringIds.length), null);
   }
 }

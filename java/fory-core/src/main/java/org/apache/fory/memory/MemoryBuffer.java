@@ -2087,20 +2087,25 @@ public final class MemoryBuffer {
 
   public void increaseReaderIndex(int diff) {
     long newReaderIdx = (long) readerIndex + diff;
+    if (newReaderIdx >= 0 && newReaderIdx <= size) {
+      readerIndex = (int) newReaderIdx;
+      return;
+    }
+    increaseReaderIndexSlow(diff, newReaderIdx);
+  }
+
+  private void increaseReaderIndexSlow(int diff, long newReaderIdx) {
     if (newReaderIdx < 0 || newReaderIdx > Integer.MAX_VALUE) {
       throwIndexOOBExceptionForRead();
     }
     int readerIdx = (int) newReaderIdx;
-    if (readerIdx > size) {
-      streamReader.fillBuffer(readerIdx - size);
-      // Channel-backed fills may compact unread bytes and reset readerIndex.
-      newReaderIdx = (long) readerIndex + diff;
-      if (newReaderIdx < 0 || newReaderIdx > size) {
-        throwIndexOOBExceptionForRead();
-      }
-      readerIdx = (int) newReaderIdx;
+    streamReader.fillBuffer(readerIdx - size);
+    // Channel-backed fills may compact unread bytes and reset readerIndex.
+    newReaderIdx = (long) readerIndex + diff;
+    if (newReaderIdx < 0 || newReaderIdx > size) {
+      throwIndexOOBExceptionForRead();
     }
-    readerIndex = readerIdx;
+    readerIndex = (int) newReaderIdx;
   }
 
   public long getUnsafeReaderAddress() {

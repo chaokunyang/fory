@@ -216,7 +216,10 @@ final class StaticSerializerSourceWriter {
         .append("(TypeResolver typeResolver, Class<?> type) {\n");
     builder.append("    super(typeResolver, type);\n");
     writeConstructorBody(
-        "buildFieldGroups(DESCRIPTORS)", "false", Boolean.toString(struct.readDataAlwaysAdvances));
+        "buildFieldGroups(DESCRIPTORS)",
+        "typeDef == null",
+        "false",
+        Boolean.toString(struct.readDataAlwaysAdvances));
     builder.append("  }\n\n");
     builder
         .append("  public ")
@@ -225,24 +228,28 @@ final class StaticSerializerSourceWriter {
     builder.append("    super(typeResolver, type, typeDef, DESCRIPTORS);\n");
     writeConstructorBody(
         "buildLocalFieldGroups(DESCRIPTORS)",
-        "typeDef != null && !HAS_NESTED_COMPATIBLE_STRUCT_FIELDS && typeDef.getId() =="
-            + " TypeDef.buildTypeDef(typeResolver, type).getId()",
+        "typeDef != null && typeDef.getId() == TypeDef.buildTypeDef(typeResolver, type).getId()",
+        "localTypeDefMatch && !HAS_NESTED_COMPATIBLE_STRUCT_FIELDS",
         "typeDef.readDataAlwaysAdvances()");
     builder.append("  }\n\n");
   }
 
   private void writeConstructorBody(
       String fieldGroupsExpression,
+      String localTypeDefExpression,
       String sameSchemaExpression,
       String readDataAlwaysAdvancesExpression) {
     if (!struct.record) {
       builder.append(
           "    this.generatedObjectInstantiator = typeResolver.getObjectInstantiator(type);\n");
     }
+    builder.append("    boolean localTypeDefMatch = ").append(localTypeDefExpression).append(";\n");
     builder.append("    this.sameSchemaCompatible = ").append(sameSchemaExpression).append(";\n");
     // A cached non-exact TypeDef reads through RemoteFieldInfo.localFieldInfo. It must not retain
     // another complete local writer/schema view for every accepted remote schema version.
-    builder.append("    if (typeDef == null || sameSchemaCompatible) {\n");
+    // The TypeDef id is the schema identity, so an exact local id still owns the writer field view
+    // even when nested compatible fields require the compatible read path.
+    builder.append("    if (localTypeDefMatch) {\n");
     builder.append("      FieldGroups fieldGroups = ").append(fieldGroupsExpression).append(";\n");
     builder.append("      this.allFields = fieldGroups.allFields;\n");
     builder.append("      this.allFieldIds = localFieldIds(allFields, DESCRIPTORS);\n");

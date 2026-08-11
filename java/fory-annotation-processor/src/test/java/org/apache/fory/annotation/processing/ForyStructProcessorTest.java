@@ -892,6 +892,56 @@ public class ForyStructProcessorTest {
   }
 
   @Test
+  public void testNestedExactLocalRoundTrip() throws Exception {
+    CompilationResult result =
+        compile(
+            "test.NestedExactStruct",
+            "package test;\n"
+                + "import java.util.List;\n"
+                + "import org.apache.fory.annotation.ForyField;\n"
+                + "import org.apache.fory.annotation.ForyStruct;\n"
+                + "@ForyStruct public class NestedExactStruct {\n"
+                + "  @ForyField(id = 1) public Child child;\n"
+                + "  @ForyField(id = 2) public List<Child> children;\n"
+                + "  public NestedExactStruct() {}\n"
+                + "  @ForyStruct public static class Child {\n"
+                + "    @ForyField(id = 1) public int value;\n"
+                + "    public Child() {}\n"
+                + "  }\n"
+                + "}\n");
+    Assert.assertTrue(result.success, result.diagnostics());
+    String generatedSource = result.generatedSource("test/NestedExactStruct_ForySerializer.java");
+    Assert.assertTrue(
+        generatedSource.contains("HAS_NESTED_COMPATIBLE_STRUCT_FIELDS = true;"), generatedSource);
+    try (URLClassLoader loader = result.classLoader()) {
+      Class<?> type = loader.loadClass("test.NestedExactStruct");
+      Class<?> childType = loader.loadClass("test.NestedExactStruct$Child");
+      Fory fory =
+          Fory.builder()
+              .withXlang(true)
+              .withClassLoader(loader)
+              .withCodegen(false)
+              .withCompatible(true)
+              .requireClassRegistration(true)
+              .build();
+      fory.register(type, 9201);
+      fory.register(childType, 9202);
+
+      Object value = type.getConstructor().newInstance();
+      Object child = childType.getConstructor().newInstance();
+      setField(childType, child, "value", 17);
+      setField(type, value, "child", child);
+      setField(type, value, "children", Collections.singletonList(child));
+
+      Object roundTrip = fory.deserialize(fory.serialize(value));
+      Assert.assertEquals(getField(childType, getField(type, roundTrip, "child"), "value"), 17);
+      List<?> children = (List<?>) getField(type, roundTrip, "children");
+      Assert.assertEquals(children.size(), 1);
+      Assert.assertEquals(getField(childType, children.get(0), "value"), 17);
+    }
+  }
+
+  @Test
   public void testStaticSerializerHandlesMonomorphicRecursiveField() throws Exception {
     CompilationResult result =
         compile(

@@ -604,7 +604,7 @@ export class ReadContext {
     this.refReader.reset();
     this.metaStringReader.reset();
     if (this.typeMeta.length !== 0) {
-      this.typeMeta.length = 0;
+      this.typeMeta = [];
     }
     this._depth = 0;
     this.remainingGraphMemoryBytes = 0;

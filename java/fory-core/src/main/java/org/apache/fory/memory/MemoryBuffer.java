@@ -211,7 +211,16 @@ public final class MemoryBuffer {
       throw new IllegalArgumentException(
           String.format("%d exceeds buffer size %d", (long) offset + length, buffer.length));
     }
-    initHeapBuffer(buffer, offset, length);
+    if (AndroidSupport.IS_ANDROID) {
+      MemoryOps.initHeapBuffer(this, buffer, offset, length);
+    } else {
+      this.heapMemory = buffer;
+      this.heapOffset = offset;
+      final long startPos = BYTE_ARRAY_OFFSET + offset;
+      this.address = startPos;
+      this.size = length;
+      this.addressLimit = startPos + length;
+    }
     if (streamReader != null) {
       this.streamReader = streamReader;
     } else {

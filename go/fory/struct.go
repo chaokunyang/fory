@@ -904,7 +904,21 @@ func storeFieldValue[T any](kind FieldKind, fieldPtr unsafe.Pointer, opt optiona
 }
 
 func storeReadFieldValue[T any](ctx *ReadContext, kind FieldKind, fieldPtr unsafe.Pointer, opt optionalInfo, value T) {
+	// Keep the common value store small enough to inline into primitive read loops.
+	// Nullable fields need the slower path because pointer allocation is error- and budget-gated.
+	if kind == FieldKindValue {
+		*(*T)(fieldPtr) = value
+		return
+	}
+	storeReadNullableFieldValue(ctx, kind, fieldPtr, opt, value)
+}
+
+func storeReadNullableFieldValue[T any](ctx *ReadContext, kind FieldKind, fieldPtr unsafe.Pointer, opt optionalInfo, value T) {
 	switch kind {
+	case FieldKindOptional:
+		*(*bool)(unsafe.Add(fieldPtr, opt.hasOffset)) = true
+		*(*T)(unsafe.Add(fieldPtr, opt.valueOffset)) = value
+		return
 	case FieldKindPointer:
 		if ctx.HasError() {
 			return
@@ -918,9 +932,6 @@ func storeReadFieldValue[T any](ctx *ReadContext, kind FieldKind, fieldPtr unsaf
 			*(**T)(fieldPtr) = ptr
 		}
 		*ptr = value
-	case FieldKindOptional:
-		*(*bool)(unsafe.Add(fieldPtr, opt.hasOffset)) = true
-		*(*T)(unsafe.Add(fieldPtr, opt.valueOffset)) = value
 	default:
 		*(*T)(fieldPtr) = value
 	}

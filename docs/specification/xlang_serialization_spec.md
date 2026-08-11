@@ -250,22 +250,28 @@ TypeDef/ClassDef encodings, fingerprints, dynamic root serialization,
 same-schema mode, and unknown-field skipping continue to treat `list<T>`
 and `array<T>` as distinct kinds.
 
-The adaptation is limited to the immediate schema of the matched compatible
-field. It does not apply when `list<T>` or `array<T>` appears inside another
-field type, including collection elements, map keys or values, array elements,
-union alternatives, or other generic/container positions. A peer `list<T?>`
-TypeDef element schema is not immediate schema incompatibility for a local
-matched `array<T>` field. Classification must accept the matched field when the
-element domains match and the only element-schema difference is nullable
-metadata. The reader must decide from the collection payload: if the payload
-actually carries a null element, the local `array<T>` field must raise a
-compatible-read error. Null list elements must not be coerced to dense-array
+Compatible field conversion applies only to a direct field of a compatible
+struct or class. Within a list, set, map key or value, array, union, or generic
+argument, the schema type shape must match exactly. Implementations MUST NOT
+recursively apply scalar conversion, list-array conversion,
+binary-byte-array conversion, or runtime-carrier conversion in those nested
+positions. The direct-field list/dense-array rule does not establish a
+recursive conversion rule. A nested registered struct may evolve its own
+fields under its own TypeDef after the enclosing element type identity has
+matched.
+
+A peer `list<T?>` TypeDef element schema is not immediate schema incompatibility
+for a local matched `array<T>` field. Classification must accept the matched
+field when the element domains match and the only element-schema difference is
+nullable metadata. The reader must decide from the collection payload: if the
+payload actually carries a null element, the local `array<T>` field must raise
+a compatible-read error. Null list elements must not be coerced to dense-array
 default values. Reference-tracked list-element framing is separate from
-nullable element schema. A Fory implementation that cannot materialize ref-tracked list
-elements into a dense array without generic/reference paths may reject that
-field during compatible classification; if it accepts the field, reference
-payloads that cannot be represented as dense array element values must fail
-during read.
+nullable element schema. A Fory implementation that cannot materialize
+ref-tracked list elements into a dense array without generic/reference paths
+may reject that field during compatible classification; if it accepts the
+field, reference payloads that cannot be represented as dense array element
+values must fail during read.
 
 The dense-array error rule applies to dense-array targets. A matched
 `list<T?>` field read into a local `list<T?>` target must keep using list

@@ -1269,18 +1269,7 @@ public class ForyStructProcessorTest {
       Assert.expectThrows(ForyException.class, () -> reader.deserialize(nullElementPayload));
     }
 
-    CompilationResult nestedListWriter =
-        compile(
-            "test.NestedListArrayMismatchStruct",
-            "package test;\n"
-                + "import java.util.Arrays;\n"
-                + "import java.util.List;\n"
-                + "import org.apache.fory.annotation.ForyStruct;\n"
-                + "@ForyStruct public class NestedListArrayMismatchStruct {\n"
-                + "  public List<List<Integer>> values;\n"
-                + "  public NestedListArrayMismatchStruct() {}\n"
-                + "}\n");
-    CompilationResult nestedArrayReader =
+    CompilationResult nestedArrayWriter =
         compile(
             "test.NestedListArrayMismatchStruct",
             "package test;\n"
@@ -1290,10 +1279,24 @@ public class ForyStructProcessorTest {
                 + "  public List<int[]> values;\n"
                 + "  public NestedListArrayMismatchStruct() {}\n"
                 + "}\n");
-    Assert.assertTrue(nestedListWriter.success, nestedListWriter.diagnostics());
-    Assert.assertTrue(nestedArrayReader.success, nestedArrayReader.diagnostics());
-    try (URLClassLoader writerLoader = nestedListWriter.classLoader();
-        URLClassLoader readerLoader = nestedArrayReader.classLoader()) {
+    CompilationResult nestedListReader =
+        compile(
+            "test.NestedListArrayMismatchStruct",
+            "package test;\n"
+                + "import java.util.List;\n"
+                + "import org.apache.fory.annotation.ForyStruct;\n"
+                + "@ForyStruct public class NestedListArrayMismatchStruct {\n"
+                + "  public List<List<Integer>> values;\n"
+                + "  public NestedListArrayMismatchStruct() {}\n"
+                + "}\n");
+    Assert.assertTrue(nestedArrayWriter.success, nestedArrayWriter.diagnostics());
+    Assert.assertTrue(nestedListReader.success, nestedListReader.diagnostics());
+    String nestedReaderSource =
+        nestedListReader.generatedSource("test/NestedListArrayMismatchStruct_ForySerializer.java");
+    Assert.assertTrue(nestedReaderSource.contains("readCompatibleField"));
+    Assert.assertFalse(nestedReaderSource.contains("bindNestedCollectionArray"));
+    try (URLClassLoader writerLoader = nestedArrayWriter.classLoader();
+        URLClassLoader readerLoader = nestedListReader.classLoader()) {
       Class<?> writerType = writerLoader.loadClass("test.NestedListArrayMismatchStruct");
       Class<?> readerType = readerLoader.loadClass("test.NestedListArrayMismatchStruct");
       Fory writer =
@@ -1301,9 +1304,14 @@ public class ForyStructProcessorTest {
       Fory reader =
           xlangCompatibleFory(readerLoader, readerType, false, "NestedListArrayMismatchStruct");
       Object writerValue = writerType.getConstructor().newInstance();
-      setField(writerType, writerValue, "values", Arrays.asList(Arrays.asList(1, 2, 3)));
+      setField(writerType, writerValue, "values", Arrays.asList(new int[] {1, 2, 3}));
       byte[] payload = writer.serialize(writerValue);
-      Assert.expectThrows(ForyException.class, () -> reader.deserialize(payload));
+      Object readerValue = readerType.getConstructor().newInstance();
+      setField(readerType, readerValue, "values", Arrays.asList(Arrays.asList(1, 2, 3)));
+      byte[] validPayload = reader.serialize(readerValue);
+      Assert.expectThrows(RuntimeException.class, () -> reader.deserialize(payload));
+      Object validResult = reader.deserialize(validPayload);
+      Assert.assertSame(validResult.getClass(), readerType);
     }
   }
 

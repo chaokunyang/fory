@@ -45,7 +45,6 @@ import java.util.function.LongFunction;
 import org.apache.fory.Fory;
 import org.apache.fory.ForyTestBase;
 import org.apache.fory.annotation.Int32Type;
-import org.apache.fory.annotation.Ref;
 import org.apache.fory.collection.Int32List;
 import org.apache.fory.config.Int32Encoding;
 import org.apache.fory.context.ReadContext;
@@ -153,39 +152,6 @@ public class GraphMemoryCompositeTest extends ForyTestBase {
         (CowListOwner) newCompatibleOwnerFory(CowListOwner.class).deserialize(bytes);
     assertEquals(cowOwner.aValues.getClass(), CopyOnWriteArrayList.class);
     assertEquals(cowOwner.aValues, expected);
-
-    NestedDenseOwner nestedSource = new NestedDenseOwner();
-    int[] nestedValues = new int[] {4, 5, 6};
-    nestedSource.aValues = new ArrayList<>();
-    nestedSource.aValues.add(nestedValues);
-    nestedSource.aValues.add(nestedValues);
-    byte[] nestedBytes = newCompatibleOwnerFory(NestedDenseOwner.class).serialize(nestedSource);
-
-    NestedLinkedOwner nestedLinked =
-        (NestedLinkedOwner)
-            newCompatibleOwnerFory(NestedLinkedOwner.class).deserialize(nestedBytes);
-    assertEquals(nestedLinked.aValues.get(0).getClass(), LinkedList.class);
-    assertEquals(nestedLinked.aValues.get(0), ImmutableList.of(4, 5, 6));
-    assertSame(nestedLinked.aValues.get(1), nestedLinked.aValues.get(0));
-
-    NestedArrayListOwner nestedArrayList =
-        (NestedArrayListOwner)
-            newCompatibleOwnerFory(NestedArrayListOwner.class).deserialize(nestedBytes);
-    assertEquals(nestedArrayList.aValues.get(0).getClass(), ArrayList.class);
-    assertEquals(nestedArrayList.aValues.get(0), ImmutableList.of(4, 5, 6));
-    assertSame(nestedArrayList.aValues.get(1), nestedArrayList.aValues.get(0));
-
-    NestedListOwner nestedList =
-        (NestedListOwner) newCompatibleOwnerFory(NestedListOwner.class).deserialize(nestedBytes);
-    assertEquals(nestedList.aValues.get(0).getClass(), ArrayList.class);
-    assertEquals(nestedList.aValues.get(0), ImmutableList.of(4, 5, 6));
-    assertSame(nestedList.aValues.get(1), nestedList.aValues.get(0));
-
-    NestedCowOwner nestedCow =
-        (NestedCowOwner) newCompatibleOwnerFory(NestedCowOwner.class).deserialize(nestedBytes);
-    assertEquals(nestedCow.aValues.get(0).getClass(), CopyOnWriteArrayList.class);
-    assertEquals(nestedCow.aValues.get(0), ImmutableList.of(4, 5, 6));
-    assertSame(nestedCow.aValues.get(1), nestedCow.aValues.get(0));
   }
 
   @Test
@@ -671,26 +637,5 @@ public class GraphMemoryCompositeTest extends ForyTestBase {
 
   public static final class CowListOwner {
     public CopyOnWriteArrayList<@Int32Type(encoding = Int32Encoding.FIXED) Integer> aValues;
-  }
-
-  public static final class NestedDenseOwner {
-    public List<int @Ref []> aValues;
-  }
-
-  public static final class NestedLinkedOwner {
-    public List<@Ref LinkedList<@Int32Type(encoding = Int32Encoding.FIXED) Integer>> aValues;
-  }
-
-  public static final class NestedArrayListOwner {
-    public List<@Ref ArrayList<@Int32Type(encoding = Int32Encoding.FIXED) Integer>> aValues;
-  }
-
-  public static final class NestedListOwner {
-    public List<@Ref List<@Int32Type(encoding = Int32Encoding.FIXED) Integer>> aValues;
-  }
-
-  public static final class NestedCowOwner {
-    public List<@Ref CopyOnWriteArrayList<@Int32Type(encoding = Int32Encoding.FIXED) Integer>>
-        aValues;
   }
 }

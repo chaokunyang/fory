@@ -24,14 +24,14 @@ import static org.testng.Assert.assertThrows;
 import static org.testng.Assert.assertTrue;
 
 import java.math.BigDecimal;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
-import java.util.LinkedHashSet;
+import java.util.LinkedHashMap;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
 import lombok.Data;
 import org.apache.fory.Fory;
 import org.apache.fory.ForyTestBase;
@@ -114,13 +114,64 @@ public class MetaShareXlangTest extends ForyTestBase {
   }
 
   @Data
-  static class NestedSetListField {
-    Set<List<Integer>> values;
+  static class NestedMapArrayValueField {
+    Map<String, int[]> values;
   }
 
   @Data
-  static class NestedSetArrayElementField {
-    Set<int[]> values;
+  static class NestedMapListValueField {
+    Map<String, List<@Int32Type(encoding = Int32Encoding.FIXED) Integer>> values;
+  }
+
+  @Data
+  static class NestedMapArrayKeyField {
+    Map<int[], String> values;
+  }
+
+  @Data
+  static class NestedMapListKeyField {
+    Map<List<@Int32Type(encoding = Int32Encoding.FIXED) Integer>, String> values;
+  }
+
+  @Data
+  static class NestedArrayComponentField {
+    int[][] values;
+  }
+
+  @Data
+  static class NestedListComponentField {
+    List<@Int32Type(encoding = Int32Encoding.FIXED) Integer>[] values;
+  }
+
+  @Data
+  static class NestedLinkedListField {
+    List<LinkedList<@Int32Type(encoding = Int32Encoding.FIXED) Integer>> values;
+  }
+
+  @Data
+  static class NestedCopyOnWriteField {
+    List<CopyOnWriteArrayList<@Int32Type(encoding = Int32Encoding.FIXED) Integer>> values;
+  }
+
+  @Data
+  static class NestedStructWriterField {
+    List<NestedStructWriterValue> values;
+  }
+
+  @Data
+  static class NestedStructReaderField {
+    List<NestedStructReaderValue> values;
+  }
+
+  @Data
+  static class NestedStructWriterValue {
+    int value;
+  }
+
+  @Data
+  static class NestedStructReaderValue {
+    long value;
+    String added = "default";
   }
 
   abstract static class InheritedFieldParent {
@@ -230,41 +281,81 @@ public class MetaShareXlangTest extends ForyTestBase {
   }
 
   @Test
-  public void testNestedListArrayCompatibleRead() {
-    Fory nestedListFory = compatibleFory(NestedListField.class);
-    NestedListField nestedListStruct = new NestedListField();
-    nestedListStruct.values = Arrays.asList(Arrays.asList(1, 2));
-    byte[] nestedListBytes = nestedListFory.serialize(nestedListStruct);
+  @SuppressWarnings("unchecked")
+  public void testNestedListArrayRejected() {
+    for (boolean codegen : new boolean[] {false, true}) {
+      NestedListField nestedList = new NestedListField();
+      nestedList.values = Arrays.asList(Arrays.asList(1, 2));
+      NestedArrayElementField nestedArray = new NestedArrayElementField();
+      nestedArray.values = Arrays.asList(new int[] {1, 2});
+      assertNestedReadFails(nestedList, nestedArray, codegen);
+      assertNestedReadFails(nestedArray, nestedList, codegen);
 
-    Fory nestedArrayFory = compatibleFory(NestedArrayElementField.class);
-    assertThrows(
-        DeserializationException.class, () -> nestedArrayFory.deserialize(nestedListBytes));
+      NestedMapArrayValueField mapArrayValue = new NestedMapArrayValueField();
+      mapArrayValue.values = new LinkedHashMap<>();
+      mapArrayValue.values.put("value", new int[] {1, 2});
+      NestedMapListValueField mapListValue = new NestedMapListValueField();
+      mapListValue.values = new LinkedHashMap<>();
+      mapListValue.values.put("value", Arrays.asList(1, 2));
+      assertNestedReadFails(mapArrayValue, mapListValue, codegen);
+      assertNestedReadFails(mapListValue, mapArrayValue, codegen);
 
-    NestedArrayElementField nestedArrayStruct = new NestedArrayElementField();
-    nestedArrayStruct.values = Arrays.asList(new int[] {1, 2});
-    byte[] nestedArrayBytes = nestedArrayFory.serialize(nestedArrayStruct);
-    NestedListField nestedListResult =
-        (NestedListField) nestedListFory.deserialize(nestedArrayBytes);
-    assertEquals(nestedListResult.values.get(0).getClass(), ArrayList.class);
-    assertEquals(nestedListResult.values, Arrays.asList(Arrays.asList(1, 2)));
+      NestedMapArrayKeyField mapArrayKey = new NestedMapArrayKeyField();
+      mapArrayKey.values = new LinkedHashMap<>();
+      mapArrayKey.values.put(new int[] {1, 2}, "value");
+      NestedMapListKeyField mapListKey = new NestedMapListKeyField();
+      mapListKey.values = new LinkedHashMap<>();
+      mapListKey.values.put(Arrays.asList(1, 2), "value");
+      assertNestedReadFails(mapArrayKey, mapListKey, codegen);
+      assertNestedReadFails(mapListKey, mapArrayKey, codegen);
 
-    Fory nestedSetListFory = compatibleFory(NestedSetListField.class, false);
-    NestedSetListField nestedSetListStruct = new NestedSetListField();
-    nestedSetListStruct.values = new LinkedHashSet<>(Arrays.asList(Arrays.asList(1, 2)));
-    byte[] nestedSetListBytes = nestedSetListFory.serialize(nestedSetListStruct);
+      NestedArrayComponentField arrayComponent = new NestedArrayComponentField();
+      arrayComponent.values = new int[][] {{1, 2}};
+      NestedListComponentField listComponent = new NestedListComponentField();
+      listComponent.values = new List[] {Arrays.asList(1, 2)};
+      assertNestedReadFails(arrayComponent, listComponent, codegen);
+      assertNestedReadFails(listComponent, arrayComponent, codegen);
 
-    Fory nestedSetArrayFory = compatibleFory(NestedSetArrayElementField.class, false);
-    assertThrows(
-        DeserializationException.class, () -> nestedSetArrayFory.deserialize(nestedSetListBytes));
+      NestedLinkedListField linkedList = new NestedLinkedListField();
+      linkedList.values = Arrays.asList(new LinkedList<>(Arrays.asList(1, 2)));
+      NestedCopyOnWriteField copyOnWrite = new NestedCopyOnWriteField();
+      copyOnWrite.values = Arrays.asList(new CopyOnWriteArrayList<>(Arrays.asList(1, 2)));
+      assertNestedReadFails(nestedArray, linkedList, codegen);
+      assertNestedReadFails(nestedArray, copyOnWrite, codegen);
+    }
+  }
 
-    NestedSetArrayElementField nestedSetArrayStruct = new NestedSetArrayElementField();
-    nestedSetArrayStruct.values = new LinkedHashSet<>(Arrays.asList(new int[] {1, 2}));
-    byte[] nestedSetArrayBytes = nestedSetArrayFory.serialize(nestedSetArrayStruct);
-    NestedSetListField nestedSetListResult =
-        (NestedSetListField) nestedSetListFory.deserialize(nestedSetArrayBytes);
-    List<Integer> nestedSetList = nestedSetListResult.values.iterator().next();
-    assertEquals(nestedSetList.getClass(), ArrayList.class);
-    assertEquals(nestedSetList, Arrays.asList(1, 2));
+  @Test
+  public void testNestedStructFieldEvolution() {
+    for (boolean codegen : new boolean[] {false, true}) {
+      Fory writer =
+          Fory.builder().withXlang(true).withCompatible(true).withCodegen(codegen).build();
+      writer.register(NestedStructWriterValue.class, "example.nested_struct_value");
+      writer.register(NestedStructWriterField.class, "example.nested_struct_field");
+      NestedStructWriterValue writerValue = new NestedStructWriterValue();
+      writerValue.value = 42;
+      NestedStructWriterField writerField = new NestedStructWriterField();
+      writerField.values = Arrays.asList(writerValue);
+
+      Fory reader =
+          Fory.builder().withXlang(true).withCompatible(true).withCodegen(codegen).build();
+      reader.register(NestedStructReaderValue.class, "example.nested_struct_value");
+      reader.register(NestedStructReaderField.class, "example.nested_struct_field");
+
+      NestedStructReaderField result =
+          (NestedStructReaderField) reader.deserialize(writer.serialize(writerField));
+      assertEquals(result.values.get(0).value, 42L);
+    }
+  }
+
+  private static void assertNestedReadFails(
+      Object writerValue, Object readerValue, boolean codegen) {
+    Fory writer = compatibleFory(writerValue.getClass(), codegen);
+    byte[] incompatibleBytes = writer.serialize(writerValue);
+    Fory reader = compatibleFory(readerValue.getClass(), codegen);
+    byte[] validBytes = reader.serialize(readerValue);
+    assertThrows(RuntimeException.class, () -> reader.deserialize(incompatibleBytes));
+    assertEquals(reader.deserialize(validBytes).getClass(), readerValue.getClass());
   }
 
   private static Fory compatibleFory(Class<?> type) {

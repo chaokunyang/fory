@@ -298,6 +298,13 @@ internal class KotlinSerializerSourceWriter(private val struct: KotlinSourceStru
         "remoteField.localFieldInfo!!.genericType",
         bindingIndent + "      ",
       )
+      if (field.type.collectionFactory != CollectionFactory.NONE) {
+        builder
+          .append("          ")
+          .append(bindingIndent)
+          .append("remoteField.serializationFieldInfo.genericType.setSerializer(")
+          .append("remoteField.localFieldInfo!!.genericType.getSerializer())\n")
+      }
       writeCompatibleScalarBinding(
         field.type,
         "remoteField.serializationFieldInfo.genericType",
@@ -320,23 +327,6 @@ internal class KotlinSerializerSourceWriter(private val struct: KotlinSourceStru
     localGenericExpression: String,
     indent: String = "",
   ) {
-    if (type.collectionFactory != CollectionFactory.NONE) {
-      builder
-        .append("          ")
-        .append(indent)
-        .append("if (!remoteField.nestedCollectionArrayMatch) {\n")
-      // A nested dense-array/list bridge installs its own final-target reader on the remote
-      // GenericType. Replacing that serializer here would make the concrete collection serializer
-      // consume dense-array bytes as an ordinary list body.
-      builder
-        .append("            ")
-        .append(indent)
-        .append(remoteGenericExpression)
-        .append(".setSerializer(")
-        .append(localGenericExpression)
-        .append(".getSerializer())\n")
-      builder.append("          ").append(indent).append("}\n")
-    }
     if ((type.unsigned && type.componentType == null) || type.typeId == "Types.DURATION") {
       builder
         .append("          ")

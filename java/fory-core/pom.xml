@@ -472,8 +472,12 @@
                   <target>
                     <delete dir="${fory.mr.classes}/25"/>
                     <mkdir dir="${fory.mr.classes}/25"/>
+                    <!-- Set the empty source path on Ant itself. A trailing compiler argument
+                         leaves Ant's implicit srcdir path active and can make javac reuse a newer
+                         root class instead of emitting its explicit JDK25 replacement. -->
                     <javac srcdir="${project.basedir}/src/main/java25"
                            destdir="${fory.mr.classes}/25"
+                           sourcepath=""
                            includeantruntime="false"
                            fork="true"
                            executable="${java.home}/bin/javac"
@@ -485,8 +489,6 @@
                       </classpath>
                       <compilerarg value="--release"/>
                       <compilerarg value="22"/>
-                      <compilerarg value="-sourcepath"/>
-                      <compilerarg value=""/>
                     </javac>
                   </target>
                 </configuration>

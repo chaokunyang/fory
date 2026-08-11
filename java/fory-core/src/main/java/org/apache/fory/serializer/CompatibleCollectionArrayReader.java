@@ -41,7 +41,6 @@ import org.apache.fory.collection.UInt64List;
 import org.apache.fory.collection.UInt8List;
 import org.apache.fory.context.ReadContext;
 import org.apache.fory.context.RefReader;
-import org.apache.fory.context.WriteContext;
 import org.apache.fory.exception.DeserializationException;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.memory.NativeByteOrder;
@@ -59,7 +58,6 @@ import org.apache.fory.type.BFloat16Array;
 import org.apache.fory.type.Descriptor;
 import org.apache.fory.type.Float16;
 import org.apache.fory.type.Float16Array;
-import org.apache.fory.type.GenericType;
 import org.apache.fory.type.TypeAnnotationUtils;
 import org.apache.fory.type.TypeUtils;
 import org.apache.fory.type.Types;
@@ -75,10 +73,6 @@ final class CompatibleCollectionArrayReader {
   static final int READ_ARRAY_TO_LIST = 2;
   static final int READ_LIST_TO_LIST = 3;
   static final int READ_ARRAY_TO_ARRAY = 4;
-
-  private static final int NESTED_UNSUPPORTED = -1;
-  private static final int NESTED_UNCHANGED = 0;
-  private static final int NESTED_BOUND = 1;
 
   static final class ReadAction {
     final int mode;
@@ -737,165 +731,6 @@ final class CompatibleCollectionArrayReader {
       collection.add(readDenseArrayElement(buffer, arrayTypeId));
     }
     return collectionSerializer.onCollectionRead(collection);
-  }
-
-  static boolean supportsNestedCollectionArray(
-      TypeResolver resolver,
-      FieldTypes.FieldType remoteFieldType,
-      FieldTypes.FieldType localFieldType,
-      GenericType localGenericType) {
-    return nestedCollectionArrayState(
-            resolver, remoteFieldType, null, localFieldType, localGenericType)
-        == NESTED_BOUND;
-  }
-
-  static boolean bindNestedCollectionArray(
-      TypeResolver resolver,
-      FieldTypes.FieldType remoteFieldType,
-      GenericType remoteGenericType,
-      FieldTypes.FieldType localFieldType,
-      GenericType localGenericType) {
-    return nestedCollectionArrayState(
-            resolver, remoteFieldType, remoteGenericType, localFieldType, localGenericType)
-        == NESTED_BOUND;
-  }
-
-  @SuppressWarnings("rawtypes")
-  private static int nestedCollectionArrayState(
-      TypeResolver resolver,
-      FieldTypes.FieldType remoteFieldType,
-      GenericType remoteGenericType,
-      FieldTypes.FieldType localFieldType,
-      GenericType localGenericType) {
-    int remoteArrayTypeId = arrayTypeId(remoteFieldType);
-    if (remoteArrayTypeId != Types.UNKNOWN && isListField(localFieldType)) {
-      int localElementTypeId = listElementTypeId(localFieldType);
-      if (remoteFieldType.trackingRef() != localFieldType.trackingRef()
-          || localElementTypeId == Types.UNKNOWN
-          || remoteArrayTypeId != denseArrayTypeId(localElementTypeId)
-          || localGenericType == null
-          || !usesDeclaredCollectionTarget(localGenericType.getCls())) {
-        return NESTED_UNSUPPORTED;
-      }
-      if (remoteGenericType != null) {
-        // Fieldless generated descriptors install GenericType overrides after their base
-        // constructor. Resolve the declared raw carrier here so LIST's canonical ArrayList
-        // serializer cannot replace a declared LinkedList or COW owner during that earlier bind.
-        Serializer serializer = resolver.getSerializer(localGenericType.getCls());
-        if (!(serializer instanceof CollectionLikeSerializer)) {
-          return NESTED_UNSUPPORTED;
-        }
-        remoteGenericType.setSerializer(
-            new DenseArrayListSerializer(
-                resolver,
-                remoteArrayTypeId,
-                localGenericType.getCls(),
-                (CollectionLikeSerializer) serializer));
-      }
-      return NESTED_BOUND;
-    }
-    if (arrayTypeId(localFieldType) != Types.UNKNOWN && isListField(remoteFieldType)) {
-      return NESTED_UNSUPPORTED;
-    }
-    if (remoteFieldType.getTypeId() != localFieldType.getTypeId()
-        || remoteFieldType.trackingRef() != localFieldType.trackingRef()) {
-      return NESTED_UNSUPPORTED;
-    }
-    if (remoteFieldType instanceof FieldTypes.CollectionFieldType
-        && localFieldType instanceof FieldTypes.CollectionFieldType) {
-      return nestedCollectionArrayState(
-          resolver,
-          ((FieldTypes.CollectionFieldType) remoteFieldType).getElementType(),
-          typeParameter(remoteGenericType, 0),
-          ((FieldTypes.CollectionFieldType) localFieldType).getElementType(),
-          typeParameter(localGenericType, 0));
-    }
-    if (remoteFieldType instanceof FieldTypes.MapFieldType
-        && localFieldType instanceof FieldTypes.MapFieldType) {
-      FieldTypes.MapFieldType remoteMap = (FieldTypes.MapFieldType) remoteFieldType;
-      FieldTypes.MapFieldType localMap = (FieldTypes.MapFieldType) localFieldType;
-      int keyState =
-          nestedCollectionArrayState(
-              resolver,
-              remoteMap.getKeyType(),
-              typeParameter(remoteGenericType, 0),
-              localMap.getKeyType(),
-              typeParameter(localGenericType, 0));
-      int valueState =
-          nestedCollectionArrayState(
-              resolver,
-              remoteMap.getValueType(),
-              typeParameter(remoteGenericType, 1),
-              localMap.getValueType(),
-              typeParameter(localGenericType, 1));
-      return mergeNestedStates(keyState, valueState);
-    }
-    if (remoteFieldType instanceof FieldTypes.ArrayFieldType
-        && localFieldType instanceof FieldTypes.ArrayFieldType) {
-      FieldTypes.ArrayFieldType remoteArray = (FieldTypes.ArrayFieldType) remoteFieldType;
-      FieldTypes.ArrayFieldType localArray = (FieldTypes.ArrayFieldType) localFieldType;
-      if (remoteArray.getDimensions() != localArray.getDimensions()) {
-        return NESTED_UNSUPPORTED;
-      }
-      return nestedCollectionArrayState(
-          resolver,
-          remoteArray.getComponentType(),
-          typeParameter(remoteGenericType, 0),
-          localArray.getComponentType(),
-          typeParameter(localGenericType, 0));
-    }
-    return remoteFieldType.equals(localFieldType) ? NESTED_UNCHANGED : NESTED_UNSUPPORTED;
-  }
-
-  private static GenericType typeParameter(GenericType genericType, int index) {
-    if (genericType == null || genericType.getTypeParametersCount() <= index) {
-      return null;
-    }
-    return genericType.getTypeParameters()[index];
-  }
-
-  private static int mergeNestedStates(int first, int second) {
-    if (first == NESTED_UNSUPPORTED || second == NESTED_UNSUPPORTED) {
-      return NESTED_UNSUPPORTED;
-    }
-    return first == NESTED_BOUND || second == NESTED_BOUND ? NESTED_BOUND : NESTED_UNCHANGED;
-  }
-
-  @SuppressWarnings({"rawtypes", "unchecked"})
-  private static final class DenseArrayListSerializer extends Serializer<Object> {
-    private final int arrayTypeId;
-    private final CollectionLikeSerializer targetSerializer;
-
-    private DenseArrayListSerializer(
-        TypeResolver resolver,
-        int arrayTypeId,
-        Class<?> targetType,
-        CollectionLikeSerializer targetSerializer) {
-      super(resolver.getConfig(), (Class) targetType);
-      this.arrayTypeId = arrayTypeId;
-      this.targetSerializer = targetSerializer;
-    }
-
-    @Override
-    public void write(WriteContext writeContext, Object value) {
-      throw new UnsupportedOperationException("Compatible nested array serializer is read-only");
-    }
-
-    @Override
-    public Object read(ReadContext readContext) {
-      MemoryBuffer buffer = readContext.getBuffer();
-      int byteSize = buffer.readVarUInt32Small7();
-      int elemSize = elementSize(arrayTypeId);
-      validateBinarySize(byteSize, elemSize);
-      buffer.checkReadableBytes(byteSize);
-      return readDenseArrayAsListTarget(
-          readContext, buffer, arrayTypeId, byteSize / elemSize, targetSerializer);
-    }
-
-    @Override
-    public boolean readDataAlwaysAdvances() {
-      return true;
-    }
   }
 
   private static Object readDenseArrayElement(MemoryBuffer buffer, int arrayTypeId) {

@@ -19,11 +19,9 @@
 
 package org.apache.fory.serializer;
 
-import java.lang.reflect.Field;
 import java.util.Arrays;
 import java.util.List;
 import java.util.stream.Collectors;
-import org.apache.fory.annotation.Internal;
 import org.apache.fory.builder.CompatibleCodecBuilder;
 import org.apache.fory.config.ForyBuilder;
 import org.apache.fory.context.ReadContext;
@@ -32,7 +30,6 @@ import org.apache.fory.context.WriteContext;
 import org.apache.fory.logging.Logger;
 import org.apache.fory.logging.LoggerFactory;
 import org.apache.fory.memory.MemoryBuffer;
-import org.apache.fory.meta.FieldTypes;
 import org.apache.fory.meta.TypeDef;
 import org.apache.fory.reflect.FieldAccessor;
 import org.apache.fory.resolver.ClassResolver;
@@ -42,10 +39,8 @@ import org.apache.fory.serializer.FieldGroups.SerializationFieldInfo;
 import org.apache.fory.serializer.converter.FieldConverters;
 import org.apache.fory.type.Descriptor;
 import org.apache.fory.type.DescriptorGrouper;
-import org.apache.fory.type.GenericType;
 import org.apache.fory.type.Generics;
 import org.apache.fory.type.ScalaTypes;
-import org.apache.fory.type.TypeUtils;
 import org.apache.fory.type.Types;
 import org.apache.fory.util.DefaultValueUtils;
 import org.apache.fory.util.Preconditions;
@@ -109,7 +104,6 @@ public class CompatibleSerializer<T> extends AbstractObjectSerializer<T> {
     // d.getField() may be null if not exists in this class when meta share enabled.
     FieldGroups fieldGroups = FieldGroups.buildFieldInfos(typeResolver, descriptorGrouper);
     allFields = fieldGroups.allFields;
-    bindNestedCollectionArrays(typeResolver, allFields);
     allCompatibleReadActions = buildCompatibleCollectionArrayReadActions(typeResolver, allFields);
     hasCompatibleCollectionArrayRead = allCompatibleReadActions != null;
     if (isRecord) {
@@ -193,54 +187,6 @@ public class CompatibleSerializer<T> extends AbstractObjectSerializer<T> {
     return CompatibleCollectionArrayReader.readAction(resolver, descriptor) != null;
   }
 
-  /** Returns whether a remote nested dense array can use the declared local list owner. */
-  @Internal
-  public static boolean supportsNestedCollectionArray(
-      TypeResolver resolver, FieldTypes.FieldType remoteFieldType, Descriptor localDescriptor) {
-    if (localDescriptor == null || !resolver.isCrossLanguage()) {
-      return false;
-    }
-    FieldTypes.FieldType localFieldType = FieldTypes.buildFieldType(resolver, localDescriptor);
-    return CompatibleCollectionArrayReader.supportsNestedCollectionArray(
-        resolver,
-        remoteFieldType,
-        localFieldType,
-        resolver.buildGenericType(localDescriptor.getTypeRef()));
-  }
-
-  /** Returns whether a compatible generated field needs the nested collection/array reader. */
-  @Internal
-  public static boolean supportsNestedCollectionArray(
-      TypeResolver resolver, Descriptor remoteDescriptor) {
-    Field field = remoteDescriptor.getField();
-    if (field == null) {
-      return false;
-    }
-    Descriptor localDescriptor =
-        new Descriptor(field, TypeUtils.getFieldTypeRef(field), null, null);
-    return supportsNestedCollectionArray(
-        resolver, FieldTypes.buildFieldType(resolver, remoteDescriptor), localDescriptor);
-  }
-
-  /** Binds a compatible generated field's remote GenericType to its declared local list owner. */
-  @Internal
-  public static boolean bindNestedCollectionArray(
-      TypeResolver resolver, SerializationFieldInfo fieldInfo) {
-    Field field = fieldInfo.descriptor.getField();
-    if (field == null) {
-      return false;
-    }
-    Descriptor localDescriptor =
-        new Descriptor(field, TypeUtils.getFieldTypeRef(field), null, null);
-    FieldTypes.FieldType remoteFieldType =
-        FieldTypes.buildFieldType(resolver, fieldInfo.descriptor);
-    FieldTypes.FieldType localFieldType = FieldTypes.buildFieldType(resolver, localDescriptor);
-    GenericType localGenericType = resolver.buildGenericType(localDescriptor.getTypeRef());
-    TypeUtils.applyFieldRefTrackingOverride(localGenericType, field, resolver.trackingRef());
-    return CompatibleCollectionArrayReader.bindNestedCollectionArray(
-        resolver, remoteFieldType, fieldInfo.genericType, localFieldType, localGenericType);
-  }
-
   private static CompatibleCollectionArrayReader.ReadAction
       requireCompatibleCollectionArrayReadAction(TypeResolver resolver, Descriptor descriptor) {
     CompatibleCollectionArrayReader.ReadAction action =
@@ -267,13 +213,6 @@ public class CompatibleSerializer<T> extends AbstractObjectSerializer<T> {
       }
     }
     return actions;
-  }
-
-  private static void bindNestedCollectionArrays(
-      TypeResolver resolver, SerializationFieldInfo[] fields) {
-    for (SerializationFieldInfo fieldInfo : fields) {
-      bindNestedCollectionArray(resolver, fieldInfo);
-    }
   }
 
   private static CompatibleCollectionArrayReader.ReadAction compatibleCollectionArrayReadAction(

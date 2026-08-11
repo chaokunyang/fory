@@ -812,15 +812,6 @@ public abstract class StaticGeneratedStructSerializer<T> extends AbstractObjectS
       this.nestedCollectionArrayMatch =
           CompatibleCollectionArrayReader.nestedCollectionArrayMatch(
               typeResolver, fieldInfo, localDescriptor);
-      boolean nestedCollectionArrayBound =
-          localFieldInfo != null
-              && nestedCollectionArrayMatch
-              && CompatibleCollectionArrayReader.bindNestedCollectionArray(
-                  typeResolver,
-                  fieldInfo.getFieldType(),
-                  serializationFieldInfo.genericType,
-                  FieldTypes.buildFieldType(typeResolver, localDescriptor),
-                  localFieldInfo.genericType);
       if (localFieldInfo == null) {
         this.matchedId = UNKNOWN_FIELD;
         this.canRead = false;
@@ -831,18 +822,11 @@ public abstract class StaticGeneratedStructSerializer<T> extends AbstractObjectS
         this.compatibleScalarRead = false;
       } else {
         boolean canGeneratedRead =
-            nestedCollectionArrayBound
-                || (!incompatibleCollectionArrayMatch
-                    && !nestedCollectionArrayMatch
-                    && FieldConverters.canReadCompatibleField(
-                        typeResolver, serializationFieldInfo, localFieldInfo));
-        if (nestedCollectionArrayBound) {
-          // The bound remote GenericType owns the nested dense-array adapter. Exact/local dispatch
-          // would bypass it and materialize the wire carrier instead of the declared list owner.
-          this.matchedId = matchedId * 2 + 1;
-          this.canRead = true;
-          this.compatibleScalarRead = false;
-        } else if (exactFieldSchema) {
+            !incompatibleCollectionArrayMatch
+                && !nestedCollectionArrayMatch
+                && FieldConverters.canReadCompatibleField(
+                    typeResolver, serializationFieldInfo, localFieldInfo);
+        if (exactFieldSchema) {
           this.matchedId = matchedId * 2;
           this.canRead = true;
           this.compatibleScalarRead = false;
@@ -850,9 +834,7 @@ public abstract class StaticGeneratedStructSerializer<T> extends AbstractObjectS
           this.matchedId = matchedId * 2 + 1;
           this.canRead = true;
           this.compatibleScalarRead =
-              !nestedCollectionArrayBound
-                  && FieldConverters.requiresSourceScalarRead(
-                      serializationFieldInfo, localFieldInfo);
+              FieldConverters.requiresSourceScalarRead(serializationFieldInfo, localFieldInfo);
         } else {
           throw incompatibleFieldError(
               fieldInfo,

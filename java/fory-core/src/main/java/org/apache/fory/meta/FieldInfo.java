@@ -26,7 +26,6 @@ import org.apache.fory.annotation.ForyField;
 import org.apache.fory.annotation.Internal;
 import org.apache.fory.reflect.TypeRef;
 import org.apache.fory.resolver.TypeResolver;
-import org.apache.fory.serializer.CompatibleSerializer;
 import org.apache.fory.serializer.converter.FieldConverter;
 import org.apache.fory.serializer.converter.FieldConverters;
 import org.apache.fory.type.Descriptor;
@@ -163,9 +162,7 @@ public final class FieldInfo implements Serializable {
       if (localFieldType != null && isListArrayRootPair(fieldType, localFieldType)) {
         throw incompatibleField("unsupported list/array compatible field mismatch", localFieldType);
       }
-      if (localFieldType != null
-          && hasNestedFieldSchemaMismatch(fieldType, localFieldType)
-          && !CompatibleSerializer.supportsNestedCollectionArray(resolver, fieldType, descriptor)) {
+      if (localFieldType != null && hasNestedFieldSchemaMismatch(fieldType, localFieldType)) {
         throw incompatibleField("nested field schema mismatch", localFieldType);
       }
       if (localFieldType != null && hasIncompatibleRootArrayOrBinary(fieldType, localFieldType)) {

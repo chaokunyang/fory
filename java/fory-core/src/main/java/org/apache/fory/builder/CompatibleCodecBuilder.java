@@ -56,7 +56,6 @@ import org.apache.fory.serializer.FieldGroups.SerializationFieldInfo;
 import org.apache.fory.serializer.ObjectSerializer;
 import org.apache.fory.serializer.Serializer;
 import org.apache.fory.serializer.Serializers;
-import org.apache.fory.serializer.StaticGeneratedStructSerializer;
 import org.apache.fory.serializer.converter.FieldConverter;
 import org.apache.fory.serializer.converter.FieldConverters;
 import org.apache.fory.type.BFloat16;
@@ -343,20 +342,6 @@ public class CompatibleCodecBuilder extends ObjectCodecBuilder {
       return skipField(descriptor);
     }
     if (converter == null) {
-      if (!hasCompatibleCollectionArrayRead(descriptor)
-          && CompatibleSerializer.supportsNestedCollectionArray(typeResolver, descriptor)) {
-        // Nested array-to-list adaptation is bound to the remote GenericType. Inlining the remote
-        // descriptor would bypass that final-owner serializer and leave the primitive array intact.
-        Expression value =
-            new StaticInvoke(
-                StaticGeneratedStructSerializer.class,
-                "readFieldValue",
-                OBJECT_TYPE,
-                typeResolverRef,
-                readContextRef(),
-                remoteFieldInfo(descriptor));
-        return new Expression.ListExpression(value, callback.apply(value));
-      }
       return super.deserializeField(buffer, descriptor, callback);
     }
     Expression targetValue = fieldConverterTargetRead(descriptor, converter);
@@ -584,12 +569,7 @@ public class CompatibleCodecBuilder extends ObjectCodecBuilder {
     DescriptorGrouper grouper = typeResolver.createDescriptorGrouper(typeDef, cls);
     // Generated skip helpers dispatch from SerializationFieldInfo.codecCategory. Preserve the
     // grouper's category instead of rebuilding every remote field as OTHER.
-    SerializationFieldInfo[] fieldInfos =
-        FieldGroups.buildFieldInfos(typeResolver, grouper).allFields;
-    for (SerializationFieldInfo fieldInfo : fieldInfos) {
-      CompatibleSerializer.bindNestedCollectionArray(typeResolver, fieldInfo);
-    }
-    return fieldInfos;
+    return FieldGroups.buildFieldInfos(typeResolver, grouper).allFields;
   }
 
   public static SerializationFieldInfo[] buildLocalFieldInfosByRemoteOrder(

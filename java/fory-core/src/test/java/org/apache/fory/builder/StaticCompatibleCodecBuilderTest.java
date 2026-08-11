@@ -31,7 +31,6 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import javax.tools.Diagnostic;
@@ -619,66 +618,6 @@ public class StaticCompatibleCodecBuilderTest {
           roundTripStaticCompatible(writer, reader, writerType, readerType, writerValue);
       Assert.assertSame(result.getClass(), readerType);
       Assert.assertEquals(getField(readerType, result, "values"), Arrays.asList(7, 8, 9));
-    }
-  }
-
-  @Test
-  public void testNestedArrayUsesAdapter() throws Exception {
-    CompilationResult writerResult =
-        compile(
-            "test.StaticCompatibleNestedArrayPayload",
-            "package test;\n"
-                + "import java.util.List;\n"
-                + "import org.apache.fory.annotation.Ref;\n"
-                + "public class StaticCompatibleNestedArrayPayload {\n"
-                + "  public List<int @Ref []> values;\n"
-                + "  public StaticCompatibleNestedArrayPayload() {}\n"
-                + "}\n");
-    CompilationResult readerResult =
-        compile(
-            "test.StaticCompatibleNestedArrayPayload",
-            "package test;\n"
-                + "import java.util.LinkedList;\n"
-                + "import java.util.List;\n"
-                + "import org.apache.fory.annotation.Int32Type;\n"
-                + "import org.apache.fory.annotation.Ref;\n"
-                + "import org.apache.fory.config.Int32Encoding;\n"
-                + "public class StaticCompatibleNestedArrayPayload {\n"
-                + "  public List<@Ref LinkedList<@Int32Type(encoding = Int32Encoding.FIXED)"
-                + " Integer>> values;\n"
-                + "  public StaticCompatibleNestedArrayPayload() {}\n"
-                + "}\n");
-    Assert.assertTrue(writerResult.success, writerResult.diagnostics());
-    Assert.assertTrue(readerResult.success, readerResult.diagnostics());
-    try (URLClassLoader writerLoader = writerResult.classLoader();
-        URLClassLoader readerLoader = readerResult.classLoader()) {
-      Class<?> writerType = writerLoader.loadClass("test.StaticCompatibleNestedArrayPayload");
-      Class<?> readerType = readerLoader.loadClass("test.StaticCompatibleNestedArrayPayload");
-      Fory writer =
-          compatibleFory(writerLoader, writerType, true, "nested-array-writer", true, true);
-      Fory reader =
-          compatibleFory(readerLoader, readerType, true, "nested-array-reader", true, true);
-      TypeDef remoteTypeDef = TypeDef.buildTypeDef(writer.getTypeResolver(), writerType);
-      Class<? extends Serializer> serializerClass =
-          CodecUtils.loadOrGenStaticCompatibleCodecClass(
-              reader.getTypeResolver(), cast(readerType), remoteTypeDef);
-      Serializer<Object> compatibleSerializer =
-          serializerClass
-              .getConstructor(TypeResolver.class, Class.class, TypeDef.class)
-              .newInstance(reader.getTypeResolver(), readerType, remoteTypeDef);
-      RemoteFieldInfo remoteField = remoteFields(compatibleSerializer).get(0);
-      Assert.assertTrue(remoteField.nestedCollectionArrayMatch);
-      Assert.assertEquals(remoteField.matchedId, 1);
-      Object writerValue = writerType.getConstructor().newInstance();
-      int[] shared = new int[] {4, 5, 6};
-      setField(writerType, writerValue, "values", Arrays.asList(shared, shared));
-
-      Object result =
-          roundTripStaticCompatible(writer, reader, writerType, readerType, writerValue);
-      List<?> values = (List<?>) getField(readerType, result, "values");
-      Assert.assertSame(values.get(0).getClass(), LinkedList.class);
-      Assert.assertEquals(values.get(0), Arrays.asList(4, 5, 6));
-      Assert.assertSame(values.get(1), values.get(0));
     }
   }
 

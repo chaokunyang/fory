@@ -553,6 +553,12 @@ class ProcessorValidationTest {
         "remoteField.serializationFieldInfo.genericType.setSerializer(remoteField.localFieldInfo!!.genericType.getSerializer())"
       )
     )
+    assertFalse(
+      source.contains(
+        "remoteField.serializationFieldInfo.genericType.getTypeParameter0().setSerializer(remoteField.localFieldInfo!!.genericType.getTypeParameter0().getSerializer())"
+      )
+    )
+    assertFalse(source.contains("nestedCollectionArrayMatch"))
     assertTrue(source.contains("if (sameSchemaCompatible) {"))
     assertTrue(
       source.contains(

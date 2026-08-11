@@ -31,6 +31,14 @@ This is the entry point for AI guidance in Apache Fory. Read this file first, th
 
 - Preserve architecture. Do not introduce new layers, parallel flows, or public APIs unless explicitly requested; prefer local repair in the existing owner over shared-infra expansion, and stop if a fix conflicts with an ADR, spec, or invariant.
 - Do not change an existing `RefReader`/`RefWriter` architecture or API to support compatible skip. Compatible skip must not add alternate reference slots or tables, alternate reference lookup or publication methods, or forwarding APIs in read/write contexts, builders, serializers, or generated-code plumbing. Keep ordinary reference publication and lookup unchanged and resolve the case in the existing compatible generated owner. For an authorized removed-field read of an unregistered Struct, the empty object created by the skip reader is that path's final owner: publish that same object for `RefValue`, consume the Struct fields, and let later `RefFlag` values resolve to it. This preserves reference numbering and identity without registering the Struct; an independent dynamic root still requires normal registration. Do not add parallel reference state, a sentinel, a rejection, or a common-path branch for this case.
+- Compatible type adaptation is a direct compatible-struct or compatible-class field operation
+  only. Collection elements, map keys and values, array elements, union alternatives, and generic
+  arguments are not compatibility boundaries and must retain their exact schema shape.
+  Implementations must not recursively install converters or alternate serializers for nested
+  types, including list-array, binary-byte-array, scalar-carrier, or concrete-collection
+  adaptation. A matched field with a nested type-shape mismatch must fail with a controlled
+  compatible-read error before materializing the field. A nested registered struct may still apply
+  its own TypeDef field compatibility after its element type identity has matched.
 - Respect ownership. Keep logic, state, and helpers in their natural owner, and do not move serializer-local, context-local, runtime-type-local, or protocol-local problems into global utilities.
 - Check the spec before implementation. For wire behavior and xlang mapping, use the specs as the source of truth and never copy one runtime's bug into another runtime just to make tests pass.
 - Do not make assumptions about runtime behavior, ownership, registration, metadata construction, protocol semantics, or test coverage. Read the current code, owning docs/specs, and relevant tests before making a design judgment or implementation decision. If the evidence is incomplete, inspect more or state the uncertainty explicitly instead of filling gaps from memory or analogy with another runtime.

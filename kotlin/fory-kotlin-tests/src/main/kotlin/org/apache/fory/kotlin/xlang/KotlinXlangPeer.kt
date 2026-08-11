@@ -304,24 +304,20 @@ constructor(
 )
 
 @ForyStruct
-public data class KotlinDenseTargetWriter
-constructor(
-  @ForyField(id = 1) val lists: List<@Ref IntArray>,
-  @ForyField(id = 2) val mutableLists: List<@Ref IntArray>,
-  @ForyField(id = 3) val arrayLists: List<@Ref IntArray>,
-  @ForyField(id = 4) val linkedLists: List<@Ref IntArray>,
-  @ForyField(id = 5) val copyOnWriteLists: List<@Ref IntArray>,
-)
+public data class KotlinDenseNestedWriter
+constructor(@ForyField(id = 1) val values: List<@Ref IntArray>)
 
 @ForyStruct
-public data class KotlinDenseTargetReader
-constructor(
-  @ForyField(id = 1) val lists: List<@Ref List<Int>>,
-  @ForyField(id = 2) val mutableLists: List<@Ref MutableList<Int>>,
-  @ForyField(id = 3) val arrayLists: List<@Ref ArrayList<Int>>,
-  @ForyField(id = 4) val linkedLists: List<@Ref LinkedList<Int>>,
-  @ForyField(id = 5) val copyOnWriteLists: List<@Ref CopyOnWriteArrayList<Int>>,
-)
+public data class KotlinDenseNestedReader
+constructor(@ForyField(id = 1) val values: List<@Ref List<Int>>)
+
+@ForyStruct
+public data class KotlinDenseLinkedReader
+constructor(@ForyField(id = 1) val values: List<@Ref LinkedList<Int>>)
+
+@ForyStruct
+public data class KotlinDenseCowReader
+constructor(@ForyField(id = 1) val values: List<@Ref CopyOnWriteArrayList<Int>>)
 
 public fun main(args: Array<String>) {
   if (args.size < 2) {
@@ -334,12 +330,12 @@ public fun main(args: Array<String>) {
     "dense_array_round_trip" -> denseArrayRoundTrip(args[1])
     "unsigned_collection_round_trip" -> unsignedCollectionRoundTrip(args[1])
     "concrete_collection_refs" -> concreteCollectionRefs()
-    "dense_collection_refs" -> compatibleDenseTargets()
+    "dense_collection_refs" -> nestedDenseTargetsRejected()
     "physical_storage_budget" -> physicalStorageBudget()
     "serializer_registration_freeze" -> serializerRegistrationFreezes()
     "memory_owners" -> {
       concreteCollectionRefs()
-      compatibleDenseTargets()
+      nestedDenseTargetsRejected()
       physicalStorageBudget()
       serializerRegistrationFreezes()
     }
@@ -353,7 +349,7 @@ private fun staticSerializerRoundTrip(dataFile: String) {
   compatibleDenseUIntList()
   trackedDenseArrayRefs()
   concreteCollectionRefs()
-  compatibleDenseTargets()
+  nestedDenseTargetsRejected()
   physicalStorageBudget()
   serializerRegistrationFreezes()
 
@@ -755,68 +751,22 @@ private fun physicalStorageBudget() {
   check(descriptors.single().name == "id")
 }
 
-private fun compatibleDenseTargets() {
-  val list = intArrayOf(1, 2)
-  val mutableList = intArrayOf(3, 4)
-  val arrayList = intArrayOf(5, 6)
-  val linkedList = intArrayOf(7, 8)
-  val copyOnWriteList = intArrayOf(9, 10)
+private fun nestedDenseTargetsRejected() {
+  val values = intArrayOf(1, 2)
   val writer = newRefCompatibleFory()
-  writer.register<KotlinDenseTargetWriter>("kotlin.DenseTargets")
-  val bytes =
-    writer.serialize(
-      KotlinDenseTargetWriter(
-        lists = listOf(list, list),
-        mutableLists = listOf(mutableList, mutableList),
-        arrayLists = listOf(arrayList, arrayList),
-        linkedLists = listOf(linkedList, linkedList),
-        copyOnWriteLists = listOf(copyOnWriteList, copyOnWriteList),
-      )
-    )
-  val twoElementArrayListBytes =
-    GraphMemoryEstimates.shallowObjectBytes(ArrayList::class.java).toLong() +
-      2L * GraphMemoryEstimates.REFERENCE_BYTES
-  val outerListBytes = 5L * twoElementArrayListBytes
-  val arrayListTargetBytes = 3L * twoElementArrayListBytes
-  val requiredBytes =
-    GraphMemoryEstimates.shallowObjectBytes(KotlinDenseTargetReader::class.java).toLong() +
-      outerListBytes +
-      arrayListTargetBytes +
-      GraphMemoryEstimates.shallowObjectBytes(LinkedList::class.java) +
-      2L * GraphMemoryEstimates.REFERENCE_BYTES +
-      GraphMemoryEstimates.shallowObjectBytes(CopyOnWriteArrayList::class.java) +
-      GraphMemoryEstimates.objectArrayBytes() +
-      2L * GraphMemoryEstimates.REFERENCE_BYTES
+  writer.register<KotlinDenseNestedWriter>("kotlin.DenseTargets")
+  val bytes = writer.serialize(KotlinDenseNestedWriter(listOf(values, values)))
+  assertNestedDenseFails(bytes, KotlinDenseNestedReader(listOf(listOf(1, 2))))
+  assertNestedDenseFails(bytes, KotlinDenseLinkedReader(listOf(LinkedList(listOf(1, 2)))))
+  assertNestedDenseFails(bytes, KotlinDenseCowReader(listOf(CopyOnWriteArrayList(listOf(1, 2)))))
+}
 
-  val tooSmallReader = newRefBudgetCompatibleFory(requiredBytes - 1)
-  tooSmallReader.register<KotlinDenseTargetReader>("kotlin.DenseTargets")
-  try {
-    tooSmallReader.deserialize(bytes, KotlinDenseTargetReader::class.java)
-    error("Nested dense Kotlin list targets exceeded their graph memory budget")
-  } catch (_: InsecureException) {}
-
-  val exactReader = newRefBudgetCompatibleFory(requiredBytes)
-  exactReader.register<KotlinDenseTargetReader>("kotlin.DenseTargets")
-  val decoded = exactReader.deserialize(bytes, KotlinDenseTargetReader::class.java)
-  check(decoded.lists[0] === decoded.lists[1])
-  check(decoded.lists[0].javaClass == ArrayList::class.java)
-  check(decoded.lists[0] == listOf(1, 2))
-  check(decoded.mutableLists[0] === decoded.mutableLists[1])
-  check(decoded.mutableLists[0].javaClass == ArrayList::class.java)
-  check(decoded.mutableLists[0] == listOf(3, 4))
-  check(decoded.arrayLists[0] === decoded.arrayLists[1])
-  check(decoded.arrayLists[0].javaClass == ArrayList::class.java)
-  check(decoded.arrayLists[0] == listOf(5, 6))
-  check(decoded.linkedLists[0] === decoded.linkedLists[1])
-  check(decoded.linkedLists[0].javaClass == LinkedList::class.java) {
-    decoded.linkedLists[0].javaClass.name
-  }
-  check(decoded.linkedLists[0] == listOf(7, 8))
-  check(decoded.copyOnWriteLists[0] === decoded.copyOnWriteLists[1])
-  check(decoded.copyOnWriteLists[0].javaClass == CopyOnWriteArrayList::class.java) {
-    decoded.copyOnWriteLists[0].javaClass.name
-  }
-  check(decoded.copyOnWriteLists[0] == listOf(9, 10))
+private inline fun <reified T : Any> assertNestedDenseFails(bytes: ByteArray, validValue: T) {
+  val reader = newRefCompatibleFory()
+  reader.register<T>("kotlin.DenseTargets")
+  val validBytes = reader.serialize(validValue)
+  check(runCatching { reader.deserialize(bytes, T::class.java) }.isFailure)
+  check(reader.deserialize(validBytes, T::class.java) == validValue)
 }
 
 private fun serializerRegistrationFreezes() {

@@ -19,6 +19,10 @@ Deliver measurable performance improvements in Apache Fory without protocol drif
   then immediately run that same case on the current branch before moving to the next case.
 - Under high or variable host load, run multiple short adjacent baseline/current pairs. Keep each
   process short and alternate sides instead of lengthening one run or batching all baseline runs.
+- After structural and build hard gates, benchmark each performance candidate before running its
+  correctness suites or style checks. Spend verification time only on candidates with a
+  repeatable, retainable gain; run an earlier minimal correctness check only when the benchmark
+  would otherwise be invalid or unsafe.
 - Keep only measured wins or explicitly requested architecture cleanups.
 - Revert speculative changes that do not pay off.
 - Align with reference runtimes (usually C++ first, then Rust/Java) when behavior and ownership models differ.
@@ -76,14 +80,10 @@ Deliver measurable performance improvements in Apache Fory without protocol drif
 - Touch the smallest surface that can validate the hypothesis.
 - Keep invariants explicit: protocol bytes, ownership, cache lifetime, reference semantics, nullability, schema-compatible behavior.
 
-6. Verify correctness.
+6. Benchmark and compare.
 
-- Run language-local build/test/lint for the touched implementation.
-- Run cross-language checks when runtime/type/protocol behavior can affect xlang.
-- Confirm serialized sizes and compatibility expectations where applicable.
-
-7. Benchmark and compare.
-
+- Pass only the structural and build gates required to produce a trustworthy benchmark artifact;
+  do not run the candidate's test suites or style checks yet.
 - Run targeted benchmark at least twice sequentially.
 - Pair each baseline case with the matching current-branch case before starting another case, so
   both measurements see closer machine load conditions.
@@ -96,6 +96,17 @@ Deliver measurable performance improvements in Apache Fory without protocol drif
 - Compare paired deltas using their median and dispersion. Do not optimize from a single pair,
   non-adjacent samples, or a contaminated result. If the retained pairs do not establish a stable
   signal, stop and wait for a cleaner window instead of changing code against the apparent result.
+- Revert a candidate that regresses or has no repeatable gain without spending time on its
+  correctness suites or style checks.
+
+7. Verify a positive candidate.
+
+- Only after the targeted benchmark shows a repeatable, retainable gain, run language-local focused
+  and full tests plus formatting, lint, and static checks for the touched implementation.
+- Run cross-language checks when runtime/type/protocol behavior can affect xlang.
+- Confirm serialized sizes and compatibility expectations where applicable.
+- An earlier minimal correctness check is allowed only when it is required to make the benchmark
+  result trustworthy, such as preventing invalid output, crashes, or an unexercised changed path.
 - Run one short full-suite sanity benchmark to catch collateral regressions.
 
 8. Decide keep or revert.

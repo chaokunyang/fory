@@ -37,11 +37,16 @@
 - Keep protocol bytes and semantics unchanged unless explicitly requested.
 - Keep API surface minimal and internal-first; avoid adding new public APIs unless explicitly required.
 - Remove touched legacy/dead code and stale docs instead of preserving compatibility scaffolding in perf rounds.
-- Run local build/test/lint for the touched language.
+- Pass only the structural and build gates required to create a trustworthy benchmark artifact.
 - Run targeted benchmark sequentially (at least 2 adjacent baseline/current pairs).
 - Use the paired-delta median and dispersion. Do not change code based on one pair, non-adjacent
   results, or an objectively contaminated pair; wait for a cleaner window when no stable signal
   remains.
+- Revert candidates without a repeatable gain before spending time on tests or style checks.
+- Only for a candidate with a repeatable, retainable gain, run focused/full tests and formatting,
+  lint, static, compatibility, and cross-language checks required by the touched surface.
+- Run a minimal correctness check before benchmarking only when the result would otherwise be
+  invalid or unsafe, such as invalid output, a crash, or failure to execute the changed path.
 - Run one short full-suite sanity benchmark.
 - Keep or revert based on measured data.
 - Append full round entry to `tasks/perf_optimization_rounds.md`.

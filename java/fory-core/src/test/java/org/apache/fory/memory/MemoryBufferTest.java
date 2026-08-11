@@ -40,12 +40,6 @@ import org.testng.annotations.Test;
 
 public class MemoryBufferTest {
 
-  private static void requireRootMemoryBuffer() {
-    if (JdkVersion.MAJOR_VERSION >= 25) {
-      throw new SkipException("The JDK 8-24 MemoryBuffer implementation is replaced on JDK 25+");
-    }
-  }
-
   @Test
   public void testBufferPut() {
     MemoryBuffer buffer = MemoryUtils.buffer(16);
@@ -107,7 +101,6 @@ public class MemoryBufferTest {
 
   @Test
   public void testBackingRangeChecks() {
-    requireRootMemoryBuffer();
     byte[] bytes = new byte[8];
     assertThrows(
         IllegalArgumentException.class,
@@ -134,11 +127,16 @@ public class MemoryBufferTest {
     assertThrows(IndexOutOfBoundsException.class, () -> buffer.increaseSize(5));
     assertThrows(IndexOutOfBoundsException.class, () -> buffer.increaseSize(Integer.MAX_VALUE));
     assertEquals(buffer.size(), 4);
+
+    MemoryBuffer direct = MemoryBuffer.fromDirectByteBuffer(ByteBuffer.allocateDirect(4), 2, null);
+    direct.increaseSize(2);
+    assertEquals(direct.size(), 4);
+    assertThrows(IndexOutOfBoundsException.class, () -> direct.increaseSize(1));
+    assertEquals(direct.size(), 4);
   }
 
   @Test
   public void testCursorRangeChecks() {
-    requireRootMemoryBuffer();
     MemoryBuffer buffer = MemoryBuffer.newHeapBuffer(8);
     buffer.writerIndex(4);
     buffer.increaseWriterIndex(-2);
@@ -163,7 +161,6 @@ public class MemoryBufferTest {
 
   @Test
   public void testPrimitiveWriteRanges() {
-    requireRootMemoryBuffer();
     MemoryBuffer buffer = MemoryBuffer.newHeapBuffer(8);
     assertThrows(IndexOutOfBoundsException.class, () -> buffer.writeBooleans(new boolean[0], 1, 0));
     assertThrows(IndexOutOfBoundsException.class, () -> buffer.writeChars(new char[0], 1, 0));
@@ -177,7 +174,6 @@ public class MemoryBufferTest {
 
   @Test
   public void testArrayBodyRanges() {
-    requireRootMemoryBuffer();
     MemoryBuffer streamBuffer =
         MemoryBuffer.fromByteArray(new byte[0], 0, 0, new NoOpArrayReader());
     assertThrows(
@@ -217,7 +213,6 @@ public class MemoryBufferTest {
 
   @Test
   public void testInt64ByteLength() {
-    requireRootMemoryBuffer();
     MemoryBuffer buffer = MemoryBuffer.fromByteArray(new byte[8]);
     assertThrows(IndexOutOfBoundsException.class, () -> buffer.readBytesAsInt64(-1));
     assertThrows(IndexOutOfBoundsException.class, () -> buffer.readBytesAsInt64(0));
@@ -589,7 +584,6 @@ public class MemoryBufferTest {
 
   @Test
   public void testGetBytesRangeChecks() {
-    requireRootMemoryBuffer();
     MemoryBuffer buffer = MemoryBuffer.fromByteArray(new byte[8], 0, 4);
     assertThrows(IndexOutOfBoundsException.class, () -> buffer.getBytes(0, 5));
     assertThrows(IndexOutOfBoundsException.class, () -> buffer.getBytes(-1, 0));
@@ -601,7 +595,6 @@ public class MemoryBufferTest {
 
   @Test
   public void testSliceRangeChecks() {
-    requireRootMemoryBuffer();
     MemoryBuffer heap = MemoryBuffer.fromByteArray(new byte[8], 2, 2);
     assertThrows(IndexOutOfBoundsException.class, () -> heap.slice(-1));
     assertThrows(IndexOutOfBoundsException.class, () -> heap.slice(-1, 1));
@@ -636,7 +629,6 @@ public class MemoryBufferTest {
 
   @Test
   public void testEqualityRangeChecks() {
-    requireRootMemoryBuffer();
     byte[] bytes = new byte[] {1, 2, 3, 4, 5, 6};
     MemoryBuffer left = MemoryBuffer.fromByteArray(bytes, 2, 2);
     MemoryBuffer right = MemoryBuffer.fromByteArray(bytes, 2, 2);

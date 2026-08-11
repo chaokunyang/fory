@@ -43,6 +43,15 @@ This is the entry point for AI guidance in Apache Fory. Read this file first, th
   hot-path branches, helper APIs, allocations, or generated-code expansion
   solely to make an error earlier, more specific, or more uniform, and do not
   write tests that force such error normalization.
+- Runtimes with an established lazy-error accumulator, including C++ and Go,
+  may keep executing bounds-safe codec work after recording an error and inspect
+  it at an existing serializer or root-operation safepoint. Deferred inspection
+  is an intentional hot-path design, not by itself a correctness or security
+  defect. Do not add per-field or per-element error branches, cursor rollback,
+  or tests that require immediate propagation solely because an earlier check is
+  possible. Treat the behavior as a defect only when the deferred path has a
+  concrete consequence listed below or an established safepoint can return
+  success instead of a controlled root error.
 - Never add a reader-side check solely to produce a more precise malformed-input
   error. Retain or add a check only when the unchecked path has a concrete
   consequence such as a crash, panic, undefined behavior, out-of-bounds access,

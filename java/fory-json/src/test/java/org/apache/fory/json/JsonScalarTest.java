@@ -1091,6 +1091,23 @@ public class JsonScalarTest extends ForyJsonTestModels {
     assertEquals(newLatin1Reader(latin1Bytes(uuid)).readUuid(), expectedUuid);
     assertEquals(utf16Reader(uuid).readUuid(), expectedUuid);
 
+    String uppercaseUuid = "\"ABCDEF01-ABCD-EFAB-CDEF-ABCDEF012345\"";
+    assertEquals(
+        newUtf8Reader(uppercaseUuid.getBytes(StandardCharsets.UTF_8)).readUuid(),
+        UUID.fromString("abcdef01-abcd-efab-cdef-abcdef012345"));
+    String[] invalidUuids = {
+      "\"g23e4567-e89b-12d3-a456-426614174000\"",
+      "\"123e4567-g89b-12d3-a456-426614174000\"",
+      "\"123e4567-e89b-g2d3-a456-426614174000\"",
+      "\"123e4567-e89b-12d3-g456-426614174000\"",
+      "\"123e4567-e89b-12d3-a456-g26614174000\""
+    };
+    for (String invalidUuid : invalidUuids) {
+      assertThrows(
+          IllegalArgumentException.class,
+          () -> newUtf8Reader(invalidUuid.getBytes(StandardCharsets.UTF_8)).readUuid());
+    }
+
     assertEquals(
         newUtf8Reader("123456789".getBytes(StandardCharsets.UTF_8)).readBigInteger(),
         BigInteger.valueOf(123456789L));

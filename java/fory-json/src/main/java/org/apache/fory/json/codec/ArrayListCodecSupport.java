@@ -23,7 +23,7 @@ import java.util.ArrayList;
 import org.apache.fory.annotation.Internal;
 
 /**
- * Backing-array access for exact generated {@link ArrayList} codecs.
+ * Field access for exact generated {@link ArrayList} codecs.
  *
  * <p>The Java 8 root implementation reports this optimization as unavailable. The JDK 9
  * multi-release implementation reads the backing array with a {@code VarHandle}. Availability is
@@ -41,6 +41,16 @@ public final class ArrayListCodecSupport {
 
   /** Returns the backing array of an exact {@link ArrayList}. */
   public static Object[] elements(ArrayList<?> list) {
+    throw new UnsupportedOperationException("Direct ArrayList access is unavailable");
+  }
+
+  /** Returns whether the current runtime can publish the size of a fresh {@link ArrayList}. */
+  public static boolean canSetSize() {
+    return false;
+  }
+
+  /** Publishes the size after a generated reader fills a fresh {@link ArrayList} backing array. */
+  public static void setSize(ArrayList<?> list, int size) {
     throw new UnsupportedOperationException("Direct ArrayList access is unavailable");
   }
 }

@@ -25,7 +25,7 @@ import org.apache.fory.annotation.Internal;
 import org.apache.fory.platform.internal._JDKAccess;
 
 /**
- * JDK 9 backing-array access for exact generated {@link ArrayList} codecs.
+ * JDK 9 field access for exact generated {@link ArrayList} codecs.
  *
  * <p>A generated loop first proves {@code value.getClass() == ArrayList.class} and snapshots the
  * list size. Reading the backing array once then removes the mutable {@code size} and {@code
@@ -41,6 +41,7 @@ import org.apache.fory.platform.internal._JDKAccess;
 @Internal
 public final class ArrayListCodecSupport {
   private static final VarHandle ELEMENTS = loadElements();
+  private static final VarHandle SIZE = loadSize();
 
   private ArrayListCodecSupport() {}
 
@@ -54,10 +55,29 @@ public final class ArrayListCodecSupport {
     return (Object[]) ELEMENTS.get(list);
   }
 
+  /** Returns whether the current runtime can publish the size of a fresh {@link ArrayList}. */
+  public static boolean canSetSize() {
+    return SIZE != null;
+  }
+
+  /** Publishes the size after a generated reader fills a fresh {@link ArrayList} backing array. */
+  public static void setSize(ArrayList<?> list, int size) {
+    SIZE.set(list, size);
+  }
+
   private static VarHandle loadElements() {
     try {
       return _JDKAccess._trustedLookup(ArrayList.class)
           .findVarHandle(ArrayList.class, "elementData", Object[].class);
+    } catch (NoSuchFieldException | IllegalAccessException e) {
+      return null;
+    }
+  }
+
+  private static VarHandle loadSize() {
+    try {
+      return _JDKAccess._trustedLookup(ArrayList.class)
+          .findVarHandle(ArrayList.class, "size", int.class);
     } catch (NoSuchFieldException | IllegalAccessException e) {
       return null;
     }

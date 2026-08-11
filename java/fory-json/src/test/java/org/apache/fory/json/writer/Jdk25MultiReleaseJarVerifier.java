@@ -113,6 +113,16 @@ public final class Jdk25MultiReleaseJarVerifier {
     require(
         ARRAY_LIST_NAME.equals(arrayList.getName()), "wrong JDK9 ArrayListCodecSupport class name");
     requireVarHandle(arrayList, "ELEMENTS");
+    requireVarHandle(arrayList, "SIZE");
+    Method canSetSize = arrayList.getMethod("canSetSize");
+    require(Boolean.TRUE.equals(canSetSize.invoke(null)), "ArrayList size access unavailable");
+    ArrayList<Object> values = new ArrayList<>(1);
+    Method elements = arrayList.getMethod("elements", ArrayList.class);
+    ((Object[]) elements.invoke(null, values))[0] = "value";
+    Method setSize = arrayList.getMethod("setSize", ArrayList.class, int.class);
+    setSize.invoke(null, values, 1);
+    require(
+        values.size() == 1 && "value".equals(values.get(0)), "ArrayList size publication failed");
   }
 
   private static void requireVarHandle(Class<?> type, String name) throws NoSuchFieldException {

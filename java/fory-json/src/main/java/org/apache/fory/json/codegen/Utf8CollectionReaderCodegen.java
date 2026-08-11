@@ -22,6 +22,7 @@ package org.apache.fory.json.codegen;
 import java.util.ArrayList;
 import org.apache.fory.codegen.Code;
 import org.apache.fory.codegen.CodegenContext;
+import org.apache.fory.json.codec.ArrayListCodecSupport;
 import org.apache.fory.json.codec.Utf8ReaderCodec;
 import org.apache.fory.json.reader.Utf8JsonReader;
 import org.apache.fory.serializer.GraphMemoryEstimates;
@@ -44,10 +45,15 @@ final class Utf8CollectionReaderCodegen {
 
   String genCode(String generatedPackage, String className, boolean stringElements) {
     CodegenContext ctx = new CodegenContext();
+    boolean directArrayListFill =
+        !stringElements
+            && ArrayListCodecSupport.isAvailable()
+            && ArrayListCodecSupport.canSetSize();
     ctx.setPackage(generatedPackage);
     ctx.setClassName(className);
     ctx.setClassModifiers("final");
-    ctx.addImports(ArrayList.class, Utf8JsonReader.class, Utf8ReaderCodec.class);
+    ctx.addImports(
+        ArrayList.class, ArrayListCodecSupport.class, Utf8JsonReader.class, Utf8ReaderCodec.class);
     ctx.implementsInterfaces(ctx.type(Utf8ReaderCodec.class));
     ctx.addField(true, ctx.type(Utf8ReaderCodec.class), "elementReader", null);
     ctx.addConstructor(
@@ -58,7 +64,7 @@ final class Utf8CollectionReaderCodegen {
       ctx.addMethod(
           "@Override public final",
           "readUtf8",
-          readBody(),
+          readBody(directArrayListFill),
           Object.class,
           Utf8JsonReader.class,
           "reader");
@@ -392,7 +398,7 @@ final class Utf8CollectionReaderCodegen {
         + ";\n";
   }
 
-  private static String readBody() {
+  private static String readBody(boolean directArrayListFill) {
     StringBuilder code = new StringBuilder();
     code.append("if (reader.tryReadNullToken()) {\n  return null;\n}\n");
     code.append("reader.enterDepth();\n");
@@ -416,10 +422,23 @@ final class Utf8CollectionReaderCodegen {
     code.append("      default:\n");
     code.append(reserveArrayList(ARRAY_LIST_PREFIX_SIZE, "        "));
     code.append("        list = new ArrayList(9);\n");
-    for (int i = 0; i < 8; i++) {
-      code.append("        list.add(e").append(i).append(");\n");
+    if (directArrayListFill) {
+      // Nine independent add sites let C2 absorb ArrayList growth and copy code inconsistently.
+      // The list is fresh and has exact prefix capacity, so fill it before publishing its size;
+      // the dynamic continuation below retains the only add site which can actually grow.
+      code.append("        Object[] elements = ArrayListCodecSupport.elements(list);\n");
+      for (int i = 0; i < 8; i++) {
+        code.append("        elements[").append(i).append("] = e").append(i).append(";\n");
+      }
+      code.append("        elements[8] = element;\n");
+      code.append("        ArrayListCodecSupport.setSize(list, 9);\n");
+    } else {
+      for (int i = 0; i < 8; i++) {
+        code.append("        list.add(e").append(i).append(");\n");
+      }
+      code.append("        list.add(element);\n");
     }
-    code.append("        list.add(element);\n    }\n");
+    code.append("    }\n");
     code.append("  } else {\n");
     code.append("    if (((size - ")
         .append(ARRAY_LIST_PREFIX_SIZE)
@@ -445,19 +464,18 @@ final class Utf8CollectionReaderCodegen {
     code.append("  reader.exitDepth();\n");
     code.append("  return list;\n}\n");
     code.append("reader.exitDepth();\n");
-    // list remains null only for the staged prefix, so size is at most eight and the generated int
-    // reservation cannot overflow.
+    // list remains null only for a non-empty staged prefix, so size is at most eight and the
+    // generated int reservation cannot overflow. Keep one add callsite per staged value: a
+    // cumulative switch emits 36 identical hot callsites and lets C2 absorb different subsets
+    // depending on compilation order.
     code.append(reserveArrayList("size", ""));
     code.append("list = new ArrayList(size);\n");
-    code.append("switch (size) {\n");
-    for (int size = 1; size <= 8; size++) {
-      code.append("  case ").append(size).append(":\n");
-      for (int i = 0; i < size; i++) {
-        code.append("    list.add(e").append(i).append(");\n");
-      }
-      code.append("    break;\n");
+    code.append("list.add(e0);\n");
+    for (int i = 1; i < 8; i++) {
+      code.append("if (size > ").append(i).append(") {\n");
+      code.append("  list.add(e").append(i).append(");\n");
+      code.append("}\n");
     }
-    code.append("  default: throw new IllegalStateException();\n}\n");
     code.append("return list;\n");
     return code.toString();
   }

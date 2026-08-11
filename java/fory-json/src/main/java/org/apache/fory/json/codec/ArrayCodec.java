@@ -508,6 +508,9 @@ public abstract class ArrayCodec<T> implements JsonValueCodec<T> {
       return Arrays.copyOf(values, size);
     }
 
+    // Keep the complete exact v0-v7 path in the typed entry. A smaller entry can be absorbed into
+    // the synthetic Object bridge based on C2 compilation order, producing different LongArray
+    // products for the same input.
     @Override
     public long[] readUtf8(Utf8JsonReader reader) {
       if (reader.tryReadNullToken()) {
@@ -543,10 +546,6 @@ public abstract class ArrayCodec<T> implements JsonValueCodec<T> {
         finishArray(reader, 4);
         return new long[] {v0, v1, v2, v3};
       }
-      return readUtf8Tail(reader, v0, v1, v2, v3);
-    }
-
-    private long[] readUtf8Tail(Utf8JsonReader reader, long v0, long v1, long v2, long v3) {
       rejectNull(reader);
       long v4 = reader.readLongValue();
       if (!reader.consumeNextCommaOrEndArray()) {
@@ -1593,16 +1592,18 @@ public abstract class ArrayCodec<T> implements JsonValueCodec<T> {
         finishReferenceArray(reader, 3);
         return new String[] {v0, v1, v2};
       }
+      return readUtf8Tail(reader, v0, v1, v2);
+    }
+
+    // Keep the complete exact v3-v8 path in this tail. Below HotSpot's 325-byte hot-inlining
+    // boundary, C2 can absorb the tail into the typed entry based on compilation order and form
+    // different StringArray products for the same input.
+    private String[] readUtf8Tail(Utf8JsonReader reader, String v0, String v1, String v2) {
       String v3 = reader.readNextNullableString();
       if (!reader.consumeNextCommaOrEndArray()) {
         finishReferenceArray(reader, 4);
         return new String[] {v0, v1, v2, v3};
       }
-      return readUtf8Tail(reader, v0, v1, v2, v3);
-    }
-
-    private String[] readUtf8Tail(
-        Utf8JsonReader reader, String v0, String v1, String v2, String v3) {
       String v4 = reader.readNextNullableString();
       if (!reader.consumeNextCommaOrEndArray()) {
         finishReferenceArray(reader, 5);

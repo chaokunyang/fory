@@ -877,9 +877,12 @@ public final class Utf8JsonReader extends JsonReader {
   // short tail used by Int parsing instead of sharing one generic token loop. The widths have
   // different safe digit counts, overflow rules, and runtime profiles; a small shared helper lets
   // one profile determine both callers' inline layout and loses the width-specific locals. Keep
-  // malformed input and overflow in their cold tails. Do not deduplicate this common path without
-  // matched intrinsic and aggregate C2 evidence, and never add padding or benchmark-specific
-  // digit-count branches to create an inline boundary.
+  // malformed input and overflow in their cold tails. Keep the common non-negative path small
+  // enough to inline into generated readers: forcing this whole method above HotSpot's 325-byte
+  // hot-inline threshold adds a call for every Long field and loses the fast compiled product.
+  // Any needed C2 boundary belongs inside the uncommon negative or overflow tails. Do not
+  // deduplicate this common path without matched intrinsic and aggregate C2 evidence, and never
+  // add padding or benchmark-specific digit-count branches to create an inline boundary.
   private long readLongToken() {
     byte[] bytes = input;
     int offset = position;
@@ -1234,6 +1237,9 @@ public final class Utf8JsonReader extends JsonReader {
     return BigDecimal.valueOf(-unscaled, scale);
   }
 
+  // Keep all five UUID hex ranges in this token owner. If this method drops below HotSpot's
+  // 325-byte hot-inlining boundary, C2 can absorb it into the synthetic codec bridge based on
+  // compilation order and produce bimodal deserialization throughput.
   private UUID readUuidToken() {
     byte[] bytes = input;
     int offset = position;
@@ -1248,32 +1254,75 @@ public final class Utf8JsonReader extends JsonReader {
         || bytes[start + 36] != '"') {
       throw new IllegalArgumentException();
     }
-    long msb = parseHex(bytes, start, 8);
-    msb = (msb << 16) | parseHex(bytes, start + 9, 4);
-    msb = (msb << 16) | parseHex(bytes, start + 14, 4);
-    long lsb = parseHex(bytes, start + 19, 4);
-    lsb = (lsb << 48) | parseHex(bytes, start + 24, 12);
+    long msb = 0;
+    int end = start + 8;
+    for (int i = start; i < end; i++) {
+      int ch = bytes[i];
+      if (ch >= '0' && ch <= '9') {
+        msb = (msb << 4) | (ch - '0');
+      } else {
+        int lower = ch | 0x20;
+        if (lower < 'a' || lower > 'f') {
+          throw new IllegalArgumentException();
+        }
+        msb = (msb << 4) | (lower - 'a' + 10);
+      }
+    }
+    end = start + 13;
+    for (int i = start + 9; i < end; i++) {
+      int ch = bytes[i];
+      if (ch >= '0' && ch <= '9') {
+        msb = (msb << 4) | (ch - '0');
+      } else {
+        int lower = ch | 0x20;
+        if (lower < 'a' || lower > 'f') {
+          throw new IllegalArgumentException();
+        }
+        msb = (msb << 4) | (lower - 'a' + 10);
+      }
+    }
+    end = start + 18;
+    for (int i = start + 14; i < end; i++) {
+      int ch = bytes[i];
+      if (ch >= '0' && ch <= '9') {
+        msb = (msb << 4) | (ch - '0');
+      } else {
+        int lower = ch | 0x20;
+        if (lower < 'a' || lower > 'f') {
+          throw new IllegalArgumentException();
+        }
+        msb = (msb << 4) | (lower - 'a' + 10);
+      }
+    }
+    long lsb = 0;
+    end = start + 23;
+    for (int i = start + 19; i < end; i++) {
+      int ch = bytes[i];
+      if (ch >= '0' && ch <= '9') {
+        lsb = (lsb << 4) | (ch - '0');
+      } else {
+        int lower = ch | 0x20;
+        if (lower < 'a' || lower > 'f') {
+          throw new IllegalArgumentException();
+        }
+        lsb = (lsb << 4) | (lower - 'a' + 10);
+      }
+    }
+    end = start + 36;
+    for (int i = start + 24; i < end; i++) {
+      int ch = bytes[i];
+      if (ch >= '0' && ch <= '9') {
+        lsb = (lsb << 4) | (ch - '0');
+      } else {
+        int lower = ch | 0x20;
+        if (lower < 'a' || lower > 'f') {
+          throw new IllegalArgumentException();
+        }
+        lsb = (lsb << 4) | (lower - 'a' + 10);
+      }
+    }
     position = start + 37;
     return new UUID(msb, lsb);
-  }
-
-  private static long parseHex(byte[] bytes, int offset, int length) {
-    long value = 0;
-    for (int i = 0; i < length; i++) {
-      value = (value << 4) | hexValue(bytes[offset + i]);
-    }
-    return value;
-  }
-
-  private static int hexValue(int ch) {
-    if (ch >= '0' && ch <= '9') {
-      return ch - '0';
-    }
-    int lower = ch | 0x20;
-    if (lower >= 'a' && lower <= 'f') {
-      return lower - 'a' + 10;
-    }
-    throw new IllegalArgumentException();
   }
 
   private double readDoubleToken() {
@@ -2292,6 +2341,9 @@ public final class Utf8JsonReader extends JsonReader {
     return null;
   }
 
+  // Keep the complete token parse in this method. A smaller wrapper lets C2 absorb the tail and
+  // then inline that closure into outer readers based on compilation order, producing bimodal
+  // throughput. The real token work must remain above HotSpot's 325-byte hot-inlining boundary.
   private OffsetDateTime tryReadIsoOffsetDateTimeToken() {
     byte[] bytes = input;
     int offset = position;
@@ -2312,11 +2364,7 @@ public final class Utf8JsonReader extends JsonReader {
     int day = parse2(bytes, start + 8);
     int hour = parse2(bytes, start + 11);
     int minute = parse2(bytes, start + 14);
-    return tryReadIsoOffsetDateTimeTail(bytes, start + 16, length, year, month, day, hour, minute);
-  }
-
-  private OffsetDateTime tryReadIsoOffsetDateTimeTail(
-      byte[] bytes, int index, int length, int year, int month, int day, int hour, int minute) {
+    int index = start + 16;
     int second = 0;
     int nano = 0;
     if (index < length && bytes[index] == ':') {

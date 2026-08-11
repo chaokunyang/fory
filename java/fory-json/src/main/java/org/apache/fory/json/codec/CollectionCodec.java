@@ -903,11 +903,8 @@ public abstract class CollectionCodec<T extends Collection<?>> implements JsonVa
         list.add(e3);
         return list;
       }
-      return readUtf8ArrayListTail(reader, e0, e1, e2, e3);
-    }
-
-    private ArrayList<Object> readUtf8ArrayListTail(
-        Utf8JsonReader reader, Object e0, Object e1, Object e2, Object e3) {
+      // Keep this real exact-allocation prefix in the UTF-8 ArrayList owner. A smaller method can
+      // be absorbed into DirectCollectionCodec.readUtf8 according to C2 compilation order.
       Object e4 = readUtf8Element(reader);
       if (!reader.consumeNextCommaOrEndArray()) {
         reader.exitDepth();

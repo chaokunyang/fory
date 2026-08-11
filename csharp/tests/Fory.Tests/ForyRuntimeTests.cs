@@ -3117,6 +3117,25 @@ public sealed class ForyRuntimeTests
     }
 
     [Fact]
+    public void ExactLocalMetaChecksWireKind()
+    {
+        ForyRuntime writer = ForyRuntime.Builder().Compatible(true).Build();
+        writer.Register<OneStringField>(200);
+        byte[] payload = writer.Serialize(new OneStringField { F1 = "hello" });
+        ByteReader headerReader = new(payload);
+        _ = headerReader.ReadUInt8();
+        _ = headerReader.ReadInt8();
+        int wireTypeOffset = headerReader.Cursor;
+        Assert.Equal((uint)TypeId.CompatibleStruct, headerReader.ReadUInt8());
+        payload[wireTypeOffset] = (byte)TypeId.NamedCompatibleStruct;
+
+        ForyRuntime reader = ForyRuntime.Builder().Compatible(true).Build();
+        reader.Register<OneStringField>(200);
+
+        Assert.Throws<TypeMismatchException>(() => reader.Deserialize<OneStringField>(payload));
+    }
+
+    [Fact]
     public void RemoteMetaMissChecksBodyHash()
     {
         ForyRuntime writer = ForyRuntime.Builder().Compatible(true).Build();

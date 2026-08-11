@@ -1059,7 +1059,8 @@ public sealed class TypeResolver
         ulong header)
     {
         TypeInfo.TypeMetaCacheEntry local = typeInfo.GetTypeMetaCacheEntry(context.TrackRef);
-        if (header == BinaryPrimitives.ReadUInt64LittleEndian(local.EncodedBytes))
+        if (local.TypeMeta.TypeId == (uint)wireTypeId &&
+            header == BinaryPrimitives.ReadUInt64LittleEndian(local.EncodedBytes))
         {
             // The complete header proves both the 52-bit local schema identity and the low body
             // framing bits. Only that exact hit may bypass the attacker-keyed checked cache.

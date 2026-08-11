@@ -4289,27 +4289,31 @@ GeneratedFieldType(
     final shift = '${result}Shift';
     final byte = '${result}Byte';
     output
-      ..writeln('$indent var $shift = 0;')
-      ..writeln('$indent var $result = 0;')
-      ..writeln('$indent while ($shift < 28) {')
-      ..writeln('$indent   final $byte = $bytes[$offset];')
-      ..writeln('$indent   $offset += 1;')
-      ..writeln('$indent   $result |= ($byte & 0x7f) << $shift;')
-      ..writeln('$indent   if (($byte & 0x80) == 0) {')
-      ..writeln('$indent     break;')
-      ..writeln('$indent   }')
-      ..writeln('$indent   $shift += 7;')
-      ..writeln('$indent }')
+      ..writeln('$indent final $byte = $bytes[$offset];')
+      ..writeln('$indent $offset += 1;')
+      ..writeln('$indent var $result = $byte & 0x7f;')
+      ..writeln('$indent if (($byte & 0x80) != 0) {')
+      ..writeln('$indent   var $shift = 7;')
+      ..writeln('$indent   while (true) {')
+      ..writeln('$indent     final $byte = $bytes[$offset];')
+      ..writeln('$indent     $offset += 1;')
+      ..writeln('$indent     $result |= ($byte & 0x7f) << $shift;')
+      ..writeln('$indent     if (($byte & 0x80) == 0) {')
+      ..writeln('$indent       break;')
+      ..writeln('$indent     }')
+      ..writeln('$indent     $shift += 7;')
       // A varuint32 fifth byte owns only four data bits. Keep this generated
-      // path aligned with Buffer.readVarUint32 so malformed continuations
-      // cannot turn the direct field run into an input-sized loop.
-      ..writeln('$indent if ($shift == 28) {')
-      ..writeln('$indent   final $byte = $bytes[$offset];')
-      ..writeln('$indent   $offset += 1;')
-      ..writeln('$indent   if (($byte & 0xf0) != 0) {')
-      ..writeln('$indent     throwGeneratedVarUint32();')
+      // path bounded without charging one-byte values for loop state.
+      ..writeln('$indent     if ($shift == 28) {')
+      ..writeln('$indent       final $byte = $bytes[$offset];')
+      ..writeln('$indent       $offset += 1;')
+      ..writeln('$indent       if (($byte & 0xf0) != 0) {')
+      ..writeln('$indent         throwGeneratedVarUint32();')
+      ..writeln('$indent       }')
+      ..writeln('$indent       $result |= $byte << 28;')
+      ..writeln('$indent       break;')
+      ..writeln('$indent     }')
       ..writeln('$indent   }')
-      ..writeln('$indent   $result |= $byte << 28;')
       ..writeln('$indent }');
   }
 

@@ -289,10 +289,10 @@ final class ReadContext {
                 ) ??
                 _readTypeMeta(expectedRootType);
     final resolved = _typeResolver.resolveExpectedRootType<T>(typeMetaResolved);
-    final preservedRefId = _refReader.preserveRefValue(
-      flag,
-      resolved.supportsRef,
-    );
+    final preservedRefId =
+        flag >= RefWriter.refValueFlag
+            ? _refReader.preserveRefValue(flag, resolved.supportsRef)
+            : null;
     final rootPreservedRefId =
         preservedRefId == null &&
                 flag == RefWriter.notNullValueFlag &&
@@ -358,10 +358,10 @@ final class ReadContext {
       return _refReader.getReadRef();
     }
     final resolved = resolveRootType(_readTypeMeta());
-    final preservedRefId = _refReader.preserveRefValue(
-      flag,
-      resolved.supportsRef,
-    );
+    final preservedRefId =
+        flag >= RefWriter.refValueFlag
+            ? _refReader.preserveRefValue(flag, resolved.supportsRef)
+            : null;
     final rootPreservedRefId =
         preservedRefId == null &&
                 flag == RefWriter.notNullValueFlag &&

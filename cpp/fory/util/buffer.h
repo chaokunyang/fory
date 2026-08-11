@@ -41,6 +41,7 @@ class StdInputStream;
 class PyInputStream;
 namespace serialization::detail {
 struct CollectionFieldWriter;
+struct StringFieldWriter;
 struct StructFieldReader;
 struct StructFieldWriter;
 } // namespace serialization::detail
@@ -1173,6 +1174,7 @@ public:
 
 private:
   friend struct serialization::detail::CollectionFieldWriter;
+  friend struct serialization::detail::StringFieldWriter;
   friend struct serialization::detail::StructFieldReader;
   friend struct serialization::detail::StructFieldWriter;
   friend class StdInputStream;

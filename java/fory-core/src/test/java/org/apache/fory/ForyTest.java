@@ -20,6 +20,7 @@
 package org.apache.fory;
 
 import static org.testng.Assert.assertEquals;
+import static org.testng.Assert.assertNotSame;
 import static org.testng.Assert.assertNull;
 import static org.testng.Assert.assertThrows;
 import static org.testng.Assert.assertTrue;
@@ -94,6 +95,30 @@ public class ForyTest extends ForyTestBase {
     byte[] bytes = fory.serialize(7);
     bytes[0] |= 0x02;
     assertThrows(IllegalArgumentException.class, () -> fory.deserialize(bytes, Integer.class));
+  }
+
+  @Test
+  public void testByteArrayInputRelease() {
+    byte[] bytes = newNativeFory().serialize(7);
+    Fory reader = newNativeFory();
+    MemoryBuffer inputBuffer = TestUtils.getFieldValue(reader, "byteArrayInputBuffer");
+
+    assertEquals(reader.deserialize(bytes), 7);
+    assertByteArrayReleased(inputBuffer, bytes);
+    assertEquals(reader.deserialize(bytes, Integer.class), Integer.valueOf(7));
+    assertByteArrayReleased(inputBuffer, bytes);
+    assertEquals(reader.deserialize(bytes, (Iterable<MemoryBuffer>) null), 7);
+    assertByteArrayReleased(inputBuffer, bytes);
+
+    byte[] invalidBytes = new byte[0];
+    assertThrows(RuntimeException.class, () -> reader.deserialize(invalidBytes));
+    assertByteArrayReleased(inputBuffer, invalidBytes);
+  }
+
+  private static void assertByteArrayReleased(MemoryBuffer inputBuffer, byte[] bytes) {
+    assertNotSame(inputBuffer.getHeapMemory(), bytes);
+    assertEquals(inputBuffer.size(), 0);
+    assertEquals(inputBuffer.readerIndex(), 0);
   }
 
   @Test

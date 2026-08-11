@@ -77,6 +77,7 @@ import org.apache.fory.util.StringUtils;
 @NotThreadSafe
 public final class Fory implements BaseFory {
   private static final Logger LOG = LoggerFactory.getLogger(Fory.class);
+  private static final byte[] EMPTY_BYTES = new byte[0];
 
   public static final byte NULL_FLAG = -3;
   // This flag indicates that object is a not-null value.
@@ -99,6 +100,9 @@ public final class Fory implements BaseFory {
   private final WriteContext writeContext;
   private final ReadContext readContext;
   private final CopyContext copyContext;
+  // Byte-array roots do not escape the root operation. Reuse their view, but always detach it in
+  // finally so a long-lived Fory instance never retains caller input across roots.
+  private final MemoryBuffer byteArrayInputBuffer = MemoryUtils.wrap(EMPTY_BYTES);
   private final IdentityHashMap<ForyModule, Boolean> installedModules = new IdentityHashMap<>();
   private final byte headerBitmap;
   private MemoryBuffer buffer;
@@ -410,7 +414,12 @@ public final class Fory implements BaseFory {
 
   @Override
   public Object deserialize(byte[] bytes) {
-    return deserialize(MemoryUtils.wrap(bytes), (Iterable<MemoryBuffer>) null);
+    MemoryBuffer inputBuffer = prepareByteArrayInput(bytes);
+    try {
+      return deserialize(inputBuffer, (Iterable<MemoryBuffer>) null);
+    } finally {
+      releaseByteArrayInput();
+    }
   }
 
   @Override
@@ -420,7 +429,12 @@ public final class Fory implements BaseFory {
 
   @Override
   public <T> T deserialize(byte[] bytes, Class<T> type) {
-    return deserialize(MemoryUtils.wrap(bytes), type);
+    MemoryBuffer inputBuffer = prepareByteArrayInput(bytes);
+    try {
+      return deserialize(inputBuffer, type);
+    } finally {
+      releaseByteArrayInput();
+    }
   }
 
   @Override
@@ -468,7 +482,12 @@ public final class Fory implements BaseFory {
 
   @Override
   public Object deserialize(byte[] bytes, Iterable<MemoryBuffer> outOfBandBuffers) {
-    return deserialize(MemoryUtils.wrap(bytes), outOfBandBuffers);
+    MemoryBuffer inputBuffer = prepareByteArrayInput(bytes);
+    try {
+      return deserialize(inputBuffer, outOfBandBuffers);
+    } finally {
+      releaseByteArrayInput();
+    }
   }
 
   @Override
@@ -555,6 +574,17 @@ public final class Fory implements BaseFory {
     } finally {
       channel.compactBuffer();
     }
+  }
+
+  private MemoryBuffer prepareByteArrayInput(byte[] bytes) {
+    byteArrayInputBuffer.pointTo(bytes, 0, bytes.length);
+    byteArrayInputBuffer.readerIndex(0);
+    return byteArrayInputBuffer;
+  }
+
+  private void releaseByteArrayInput() {
+    byteArrayInputBuffer.pointTo(EMPTY_BYTES, 0, 0);
+    byteArrayInputBuffer.readerIndex(0);
   }
 
   @SuppressWarnings("unchecked")

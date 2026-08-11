@@ -753,6 +753,7 @@ Object _readGeneratedCustomField(
 }
 
 @internal
+@pragma('vm:prefer-inline')
 void writeGeneratedDirectListValue<T>(
   WriteContext context,
   GeneratedStructFieldDescriptor field,

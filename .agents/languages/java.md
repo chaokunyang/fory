@@ -134,6 +134,22 @@ Load this file when changing anything under `java/` or when Java drives a cross-
 - In `MemoryBuffer` and `MemoryOps` hot paths, duplicate small straight-line copy/read/write logic
   when that keeps control flow direct. Do not add private helper indirection to hot paths just to
   reduce local code duplication; keep helpers for slow, cold, or error paths.
+- Add a Java `MemoryBuffer` check only when its absence can cause a JVM or native crash, OOM, or
+  attacker-controlled memory amplification. Delayed, masked, less precise, or differently typed
+  failures do not justify a check, and neither does an incorrect decoded result without one of
+  those crash or memory consequences. Do not duplicate an array, `ByteBuffer`, VarHandle, stream,
+  or other existing bounds owner merely to move or normalize an error.
+- The JDK 25 `MemoryBuffer` overlay is intentionally unchecked at its logical buffer boundary.
+  Indexed array accesses, absolute `ByteBuffer` accesses, and VarHandle accesses own bounds
+  enforcement and already provide a controlled failure; its exact exception type, message, and
+  detection point are not contracts. Do not copy the JDK 8-24 Unsafe-path range checks into this
+  overlay. Keep an explicit check only before allocation, capacity growth, or another side effect
+  when it is required to prevent a crash, OOM, or attacker-controlled memory amplification that the
+  access owner cannot contain.
+- `MemoryAllocator.grow` owns the postcondition that a successful return has supplied at least the
+  requested capacity. `MemoryBuffer` must not recheck that postcondition after calling `grow` or
+  `ensure`; an allocator that returns without satisfying it violates the allocator contract and
+  must be fixed in the allocator implementation rather than burdening every buffer hot path.
 - In JDK 25 Fory JSON C2-sensitive code, preserve measured, naturally large hot-method boundaries.
   A method that exceeds HotSpot's 325-byte hot-inline limit through real representation, scalar,
   array, collection, or generated-schema work is an independent subtree owner. Generated group

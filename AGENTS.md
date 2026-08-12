@@ -51,6 +51,11 @@ This is the entry point for AI guidance in Apache Fory. Read this file first, th
   hot-path branches, helper APIs, allocations, or generated-code expansion
   solely to make an error earlier, more specific, or more uniform, and do not
   write tests that force such error normalization.
+- Non-strict, non-precise, delayed, masked, differently typed, or differently layered controlled
+  errors are not security findings. Security remediation must not add checks solely to normalize,
+  sharpen, advance, or otherwise make such errors deterministic. Security tests must not require a
+  particular error type, message, layer, offset, or detection point unless an explicit public
+  contract makes that precision part of the policy boundary.
 - Runtimes with an established lazy-error accumulator, including C++ and Go,
   may keep executing bounds-safe codec work after recording an error and inspect
   it at an existing serializer or root-operation safepoint. Deferred inspection
@@ -70,6 +75,15 @@ This is the entry point for AI guidance in Apache Fory. Read this file first, th
   helper when the language supports it. A bounds-safe downstream operation that
   already raises a controlled root error is sufficient; do not duplicate it for
   error precision.
+- Buffer and memory-buffer checks require a stricter consequence test. Security remediation may add
+  a check only when its absence can cause a process crash or panic, undefined memory access, OOM, or
+  attacker-controlled memory amplification. Delayed, masked, less precise, or differently typed
+  errors are not sufficient reasons. Neither is an incorrect decoded result when the unchecked
+  path cannot cause one of those crash or memory consequences. A downstream bounds owner that
+  already fails in a controlled way is sufficient; do not duplicate its check in a hotter wrapper.
+  Apply this admission rule prospectively: do not remove an already completed and validated check
+  solely by reclassifying it when it has no demonstrated performance cost. Preserve that check as
+  a correctness fix unless an explicit task requires the behavioral rollback.
 - Before reporting or fixing a robustness finding, prove that the current path
   causes at least one concrete consequence: crash, panic, undefined behavior,
   or out-of-bounds access; disproportionate allocation, CPU work, or stream

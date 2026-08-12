@@ -22,11 +22,8 @@ package org.apache.fory.memory;
 import static org.testng.Assert.assertEquals;
 import static org.testng.Assert.assertFalse;
 import static org.testng.Assert.assertSame;
-import static org.testng.Assert.assertThrows;
 import static org.testng.Assert.assertTrue;
 
-import org.apache.fory.platform.JdkVersion;
-import org.testng.SkipException;
 import org.testng.annotations.AfterMethod;
 import org.testng.annotations.BeforeMethod;
 import org.testng.annotations.Test;
@@ -145,27 +142,6 @@ public class MemoryAllocatorTest {
     assertEquals(buffer.writerIndex(), 50);
     assertEquals(buffer.readerIndex(), 10);
     assertTrue(buffer.size() >= 210); // Should be at least 200 + 10 marker
-  }
-
-  @Test
-  public void testUndersizedGrowthRejected() {
-    if (JdkVersion.MAJOR_VERSION >= 25) {
-      throw new SkipException("The JDK 8-24 MemoryBuffer implementation is replaced on JDK 25+");
-    }
-    MemoryBuffer.setGlobalAllocator(
-        new MemoryAllocator() {
-          @Override
-          public MemoryBuffer allocate(int initialCapacity) {
-            return MemoryBuffer.fromByteArray(new byte[initialCapacity]);
-          }
-
-          @Override
-          public void grow(MemoryBuffer buffer, int newCapacity) {}
-        });
-    MemoryBuffer buffer = MemoryBuffer.newHeapBuffer(4);
-    assertThrows(IndexOutOfBoundsException.class, () -> buffer.ensure(5));
-    assertThrows(IndexOutOfBoundsException.class, () -> buffer.grow(5));
-    assertEquals(buffer.size(), 4);
   }
 
   @Test(expectedExceptions = NullPointerException.class)

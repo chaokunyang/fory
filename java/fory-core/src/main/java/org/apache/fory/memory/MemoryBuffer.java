@@ -2021,10 +2021,8 @@ public final class MemoryBuffer {
       throwOOBException();
     }
     if (length > size) {
+      // MemoryAllocator owns the requested-capacity postcondition; do not recheck it here.
       globalAllocator.grow(this, (int) length);
-      if (length > size) {
-        throwOOBException();
-      }
     }
   }
 
@@ -2034,10 +2032,8 @@ public final class MemoryBuffer {
       throwOOBException();
     }
     if (length > size) {
+      // MemoryAllocator owns the requested-capacity postcondition; do not recheck it here.
       globalAllocator.grow(this, length);
-      if (length > size) {
-        throwOOBException();
-      }
     }
   }
 

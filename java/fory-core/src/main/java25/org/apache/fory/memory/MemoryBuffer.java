@@ -57,11 +57,11 @@ import org.apache.fory.io.ForyStreamReader;
  * <p>Warning: The instance of this class should not be held at GraalVM build time; build-time heap
  * buffers do not represent the runtime heap layout.
  *
- * <p>In the Java 25 multi-release implementation, absolute random-access get/put methods are
- * internal fast paths. Callers must pass legal indices and ranges; read/write entry points perform
- * logical {@link MemoryBuffer} range validation before reaching these methods. The implementation
- * relies on {@link VarHandle}, array, and {@link ByteBuffer} access only for JVM memory safety and
- * does not repeat root Unsafe-style logical bounds checks.
+ * <p>The Java 25 multi-release implementation intentionally does not duplicate logical range
+ * checks around indexed array, absolute {@link ByteBuffer}, or {@link VarHandle} access. Those JVM
+ * accessors own bounds enforcement and already fail safely. The exact exception type, message, and
+ * detection point are not contracts, so adding checks only to make an invalid access fail earlier
+ * or more precisely would burden every hot buffer operation without improving memory safety.
  *
  * <p>Note(chaokunyang): Buffer operations are very common, and jvm inline and branch elimination is
  * not reliable even in c2 compiler, so we try to inline and avoid checks as we can manually. jvm
@@ -153,9 +153,9 @@ public final class MemoryBuffer {
    */
   private MemoryBuffer(byte[] buffer, int offset, int length, ForyStreamReader streamReader) {
     checkArgument(offset >= 0 && length >= 0);
-    if (offset > buffer.length - length) {
+    if (offset + length > buffer.length) {
       throw new IllegalArgumentException(
-          String.format("%d exceeds buffer size %d", (long) offset + length, buffer.length));
+          String.format("%d exceeds buffer size %d", offset + length, buffer.length));
     }
     this.heapMemory = buffer;
     this.heapOffset = offset;
@@ -210,9 +210,6 @@ public final class MemoryBuffer {
     checkNotNull(offHeapBuffer, "JDK25 MemoryBuffer requires a ByteBuffer owner for off-heap data");
     checkArgument(
         offHeapBuffer.isDirect(), "Only direct ByteBuffers can back off-heap MemoryBuffer");
-    checkArgument(
-        offHeapAddress <= offHeapBuffer.capacity() - size,
-        "Off-heap range exceeds ByteBuffer capacity");
     this.offHeapBuffer = offHeapBuffer;
     ByteBuffer nativeBuffer = offHeapBuffer.duplicate().order(NATIVE_ORDER);
     // Stream readers can expand the owner buffer limit after this duplicate is created. Keep the
@@ -233,10 +230,6 @@ public final class MemoryBuffer {
   }
 
   public void initByteBuffer(ByteBuffer buffer, int size) {
-    if (size < 0 || size > buffer.capacity()) {
-      throw new IllegalArgumentException(
-          String.format("size %d exceeds ByteBuffer capacity %d", size, buffer.capacity()));
-    }
     if (buffer.isDirect()) {
       initOffHeapBuffer(0, size, buffer);
     } else if (buffer.hasArray()) {
@@ -280,11 +273,6 @@ public final class MemoryBuffer {
   public void initHeapBuffer(byte[] buffer, int offset, int length) {
     if (buffer == null) {
       throw new NullPointerException("buffer");
-    }
-    if (offset < 0 || length < 0 || offset > buffer.length - length) {
-      throw new IllegalArgumentException(
-          String.format(
-              "offset %d and length %d exceed buffer size %d", offset, length, buffer.length));
     }
     this.heapMemory = buffer;
     this.heapOffset = offset;
@@ -658,20 +646,7 @@ public final class MemoryBuffer {
   }
 
   public void increaseSize(int diff) {
-    long maxSize;
-    if (heapMemory != null) {
-      maxSize = heapMemory.length - heapOffset;
-    } else if (nativeOffHeapBuffer != null) {
-      maxSize = nativeOffHeapBuffer.capacity() - address;
-    } else {
-      maxSize = size;
-    }
-    if (diff < 0 || maxSize < size || diff > maxSize - size) {
-      throwOOBException();
-    }
-    int newSize = size + diff;
-    this.addressLimit = address + newSize;
-    this.size = newSize;
+    this.addressLimit = address + (size += diff);
   }
 
   /**
@@ -1073,7 +1048,7 @@ public final class MemoryBuffer {
     this.writerIndex = writerIndex;
   }
 
-  private void throwOOBExceptionForWriteIndex(long writerIndex) {
+  private void throwOOBExceptionForWriteIndex(int writerIndex) {
     throw new IndexOutOfBoundsException(
         String.format(
             "writerIndex: %d (expected: 0 <= writerIndex <= size(%d))", writerIndex, size));
@@ -1107,12 +1082,9 @@ public final class MemoryBuffer {
 
   /** Increase writer index and grow buffer if needed. */
   public void increaseWriterIndex(int diff) {
-    long writerIdx = (long) writerIndex + diff;
-    if (writerIdx < 0 || writerIdx > Integer.MAX_VALUE) {
-      throwOOBExceptionForWriteIndex(writerIdx);
-    }
-    ensure((int) writerIdx);
-    this.writerIndex = (int) writerIdx;
+    int writerIdx = writerIndex + diff;
+    ensure(writerIdx);
+    this.writerIndex = writerIdx;
   }
 
   public void writeBoolean(boolean value) {
@@ -1917,11 +1889,8 @@ public final class MemoryBuffer {
   }
 
   public void writeBooleans(boolean[] values, int offset, int numElements) {
-    if (offset < 0 || numElements < 0 || offset > values.length - numElements) {
-      throwOOBException();
-    }
     final int writerIdx = writerIndex;
-    final int newIdx = Math.addExact(writerIdx, numElements);
+    final int newIdx = writerIdx + numElements;
     ensure(newIdx);
     writeBooleansFromArray(address + writerIdx, values, BOOLEAN_ARRAY_OFFSET + offset, numElements);
     writerIndex = newIdx;
@@ -1938,12 +1907,9 @@ public final class MemoryBuffer {
   }
 
   public void writeChars(char[] values, int offset, int numElements) {
-    if (offset < 0 || numElements < 0 || offset > values.length - numElements) {
-      throwOOBException();
-    }
     int numBytes = Math.multiplyExact(numElements, 2);
     final int writerIdx = writerIndex;
-    final int newIdx = Math.addExact(writerIdx, numBytes);
+    final int newIdx = writerIdx + numBytes;
     ensure(newIdx);
     writeCharsFromArray(address + writerIdx, values, CHAR_ARRAY_OFFSET + offset, numBytes);
     writerIndex = newIdx;
@@ -1960,12 +1926,9 @@ public final class MemoryBuffer {
   }
 
   public void writeShorts(short[] values, int offset, int numElements) {
-    if (offset < 0 || numElements < 0 || offset > values.length - numElements) {
-      throwOOBException();
-    }
     int numBytes = Math.multiplyExact(numElements, 2);
     final int writerIdx = writerIndex;
-    final int newIdx = Math.addExact(writerIdx, numBytes);
+    final int newIdx = writerIdx + numBytes;
     ensure(newIdx);
     writeShortsFromArray(address + writerIdx, values, SHORT_ARRAY_OFFSET + offset, numBytes);
     writerIndex = newIdx;
@@ -1982,12 +1945,9 @@ public final class MemoryBuffer {
   }
 
   public void writeInts(int[] values, int offset, int numElements) {
-    if (offset < 0 || numElements < 0 || offset > values.length - numElements) {
-      throwOOBException();
-    }
     int numBytes = Math.multiplyExact(numElements, 4);
     final int writerIdx = writerIndex;
-    final int newIdx = Math.addExact(writerIdx, numBytes);
+    final int newIdx = writerIdx + numBytes;
     ensure(newIdx);
     writeIntsFromArray(address + writerIdx, values, INT_ARRAY_OFFSET + offset, numBytes);
     writerIndex = newIdx;
@@ -2004,12 +1964,9 @@ public final class MemoryBuffer {
   }
 
   public void writeLongs(long[] values, int offset, int numElements) {
-    if (offset < 0 || numElements < 0 || offset > values.length - numElements) {
-      throwOOBException();
-    }
     int numBytes = Math.multiplyExact(numElements, 8);
     final int writerIdx = writerIndex;
-    final int newIdx = Math.addExact(writerIdx, numBytes);
+    final int newIdx = writerIdx + numBytes;
     ensure(newIdx);
     writeLongsFromArray(address + writerIdx, values, LONG_ARRAY_OFFSET + offset, numBytes);
     writerIndex = newIdx;
@@ -2026,12 +1983,9 @@ public final class MemoryBuffer {
   }
 
   public void writeFloats(float[] values, int offset, int numElements) {
-    if (offset < 0 || numElements < 0 || offset > values.length - numElements) {
-      throwOOBException();
-    }
     int numBytes = Math.multiplyExact(numElements, 4);
     final int writerIdx = writerIndex;
-    final int newIdx = Math.addExact(writerIdx, numBytes);
+    final int newIdx = writerIdx + numBytes;
     ensure(newIdx);
     writeFloatsFromArray(address + writerIdx, values, FLOAT_ARRAY_OFFSET + offset, numBytes);
     writerIndex = newIdx;
@@ -2048,12 +2002,9 @@ public final class MemoryBuffer {
   }
 
   public void writeDoubles(double[] values, int offset, int numElements) {
-    if (offset < 0 || numElements < 0 || offset > values.length - numElements) {
-      throwOOBException();
-    }
     int numBytes = Math.multiplyExact(numElements, 8);
     final int writerIdx = writerIndex;
-    final int newIdx = Math.addExact(writerIdx, numBytes);
+    final int newIdx = writerIdx + numBytes;
     ensure(newIdx);
     writeDoublesFromArray(address + writerIdx, values, DOUBLE_ARRAY_OFFSET + offset, numBytes);
     writerIndex = newIdx;
@@ -2061,28 +2012,18 @@ public final class MemoryBuffer {
 
   /** For off-heap buffer, this will make a heap buffer internally. */
   public void grow(int neededSize) {
-    long length = (long) writerIndex + neededSize;
-    if (neededSize < 0 || length < 0 || length > Integer.MAX_VALUE) {
-      throwOOBException();
-    }
+    int length = writerIndex + neededSize;
     if (length > size) {
-      globalAllocator.grow(this, (int) length);
-      if (length > size) {
-        throwOOBException();
-      }
+      // MemoryAllocator owns the requested-capacity postcondition; do not recheck it here.
+      globalAllocator.grow(this, length);
     }
   }
 
   /** For off-heap buffer, this will make a heap buffer internally. */
   public void ensure(int length) {
-    if (length < 0) {
-      throwOOBException();
-    }
     if (length > size) {
+      // MemoryAllocator owns the requested-capacity postcondition; do not recheck it here.
       globalAllocator.grow(this, length);
-      if (length > size) {
-        throwOOBException();
-      }
     }
   }
 
@@ -2140,26 +2081,14 @@ public final class MemoryBuffer {
   }
 
   public void increaseReaderIndex(int diff) {
-    long newReaderIdx = (long) readerIndex + diff;
-    if (newReaderIdx >= 0 && newReaderIdx <= size) {
-      readerIndex = (int) newReaderIdx;
-      return;
-    }
-    increaseReaderIndexSlow(diff, newReaderIdx);
-  }
-
-  private void increaseReaderIndexSlow(int diff, long newReaderIdx) {
-    if (newReaderIdx < 0 || newReaderIdx > Integer.MAX_VALUE) {
+    int readerIdx = readerIndex;
+    readerIndex = readerIdx += diff;
+    if (readerIdx < 0) {
       throwIndexOOBExceptionForRead();
+    } else if (readerIdx > size) {
+      // in this case, diff must be greater than 0.
+      streamReader.fillBuffer(readerIdx - size);
     }
-    int readerIdx = (int) newReaderIdx;
-    streamReader.fillBuffer(readerIdx - size);
-    // Channel-backed fills may compact unread bytes and reset readerIndex.
-    newReaderIdx = (long) readerIndex + diff;
-    if (newReaderIdx < 0 || newReaderIdx > size) {
-      throwIndexOOBExceptionForRead();
-    }
-    readerIndex = (int) newReaderIdx;
   }
 
   public long getUnsafeReaderAddress() {
@@ -3173,9 +3102,6 @@ public final class MemoryBuffer {
 
   /** Read {@code len} bytes into a long using little-endian order. */
   public long readBytesAsInt64(int len) {
-    if (len <= 0 || len > 8) {
-      throwOOBException();
-    }
     int readerIdx = readerIndex;
     // use subtract to avoid overflow
     int remaining = size - readerIdx;
@@ -3321,9 +3247,6 @@ public final class MemoryBuffer {
    * prefix.
    */
   public void readByteArrayBytes(byte[] values, int numBytes) {
-    if (numBytes < 0 || numBytes > values.length) {
-      throwOOBException();
-    }
     int readerIdx = readerIndex;
     if (readerIdx > size - numBytes) {
       streamReader.readTo(values, 0, numBytes);
@@ -3339,9 +3262,6 @@ public final class MemoryBuffer {
    * prefix.
    */
   public void readBooleanArrayBytes(boolean[] values, int numBytes) {
-    if (numBytes < 0 || numBytes > values.length) {
-      throwOOBException();
-    }
     int readerIdx = readerIndex;
     if (readerIdx > size - numBytes) {
       streamReader.readBooleans(values, 0, numBytes);
@@ -3357,9 +3277,6 @@ public final class MemoryBuffer {
    * prefix.
    */
   public void readCharArrayBytes(char[] values, int numBytes) {
-    if (numBytes < 0 || (numBytes & 1) != 0 || (numBytes >>> 1) > values.length) {
-      throwOOBException();
-    }
     int readerIdx = readerIndex;
     if (readerIdx > size - numBytes) {
       streamReader.readChars(values, 0, numBytes >>> 1);
@@ -3375,9 +3292,6 @@ public final class MemoryBuffer {
    * prefix.
    */
   public void readInt16ArrayBytes(short[] values, int numBytes) {
-    if (numBytes < 0 || (numBytes & 1) != 0 || (numBytes >>> 1) > values.length) {
-      throwOOBException();
-    }
     int readerIdx = readerIndex;
     if (readerIdx > size - numBytes) {
       streamReader.readShorts(values, 0, numBytes >>> 1);
@@ -3393,9 +3307,6 @@ public final class MemoryBuffer {
    * prefix.
    */
   public void readInt32ArrayBytes(int[] values, int numBytes) {
-    if (numBytes < 0 || (numBytes & 3) != 0 || (numBytes >>> 2) > values.length) {
-      throwOOBException();
-    }
     int readerIdx = readerIndex;
     if (readerIdx > size - numBytes) {
       streamReader.readInts(values, 0, numBytes >>> 2);
@@ -3411,9 +3322,6 @@ public final class MemoryBuffer {
    * prefix.
    */
   public void readInt64ArrayBytes(long[] values, int numBytes) {
-    if (numBytes < 0 || (numBytes & 7) != 0 || (numBytes >>> 3) > values.length) {
-      throwOOBException();
-    }
     int readerIdx = readerIndex;
     if (readerIdx > size - numBytes) {
       streamReader.readLongs(values, 0, numBytes >>> 3);
@@ -3429,9 +3337,6 @@ public final class MemoryBuffer {
    * prefix.
    */
   public void readFloat32ArrayBytes(float[] values, int numBytes) {
-    if (numBytes < 0 || (numBytes & 3) != 0 || (numBytes >>> 2) > values.length) {
-      throwOOBException();
-    }
     int readerIdx = readerIndex;
     if (readerIdx > size - numBytes) {
       streamReader.readFloats(values, 0, numBytes >>> 2);
@@ -3447,9 +3352,6 @@ public final class MemoryBuffer {
    * prefix.
    */
   public void readFloat64ArrayBytes(double[] values, int numBytes) {
-    if (numBytes < 0 || (numBytes & 7) != 0 || (numBytes >>> 3) > values.length) {
-      throwOOBException();
-    }
     int readerIdx = readerIndex;
     if (readerIdx > size - numBytes) {
       streamReader.readDoubles(values, 0, numBytes >>> 3);
@@ -3747,12 +3649,12 @@ public final class MemoryBuffer {
   }
 
   public byte[] getBytes(int index, int length) {
-    if (index < 0 || length < 0 || index > size - length) {
-      throwOOBException();
-    }
     if (index == 0 && heapMemory != null && heapOffset == 0) {
       // Arrays.copyOf is an intrinsics, which is faster
       return Arrays.copyOf(heapMemory, length);
+    }
+    if (index + length > size) {
+      throwIndexOOBExceptionForRead(length);
     }
     byte[] data = new byte[length];
     get(index, data, 0, length);
@@ -3760,25 +3662,21 @@ public final class MemoryBuffer {
   }
 
   public void getBytes(int index, byte[] dst, int dstIndex, int length) {
-    if (index < 0
-        || dstIndex < 0
-        || length < 0
-        || dstIndex > dst.length - length
-        || index > size - length) {
+    if (dstIndex > dst.length - length) {
+      throwOOBException();
+    }
+    if (index > size - length) {
       throwOOBException();
     }
     get(index, dst, dstIndex, length);
   }
 
   public MemoryBuffer slice(int offset) {
-    if (offset < 0 || offset > size) {
-      throwOOBExceptionForRange(offset, size - offset);
-    }
     return slice(offset, size - offset);
   }
 
   public MemoryBuffer slice(int offset, int length) {
-    if (offset < 0 || length < 0 || offset > size - length) {
+    if (offset + length > size) {
       throwOOBExceptionForRange(offset, length);
     }
     if (heapMemory != null) {
@@ -3832,11 +3730,8 @@ public final class MemoryBuffer {
    * @return true if buffers equal or len zero, false otherwise
    */
   public boolean equalTo(MemoryBuffer buf2, int offset1, int offset2, int len) {
-    checkArgument(len >= 0);
-    checkArgument(offset1 >= 0 && offset1 <= size - len);
-    checkArgument(buf2 != null && offset2 >= 0 && offset2 <= buf2.size - len);
     if (len == 0) {
-      return true;
+      return buf2 != null;
     }
 
     final long pos1 = address + offset1;
@@ -4032,9 +3927,6 @@ public final class MemoryBuffer {
 
   public static MemoryBuffer fromDirectByteBuffer(
       ByteBuffer buffer, int size, ForyStreamReader streamReader) {
-    checkNotNull(buffer, "buffer is null");
-    checkArgument(buffer.isDirect(), "Can't get address of a non-direct ByteBuffer.");
-    checkArgument(size >= 0 && size <= buffer.capacity() - buffer.position());
     long offHeapAddress = buffer.position();
     return new MemoryBuffer(offHeapAddress, size, buffer, streamReader);
   }

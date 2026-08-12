@@ -356,12 +356,10 @@ private:
   OutputStream *output_stream_ = nullptr;
 
   // Meta sharing state (for streaming inline TypeMeta)
-  // Maps TypeInfo* to index for reference tracking - uses map size as counter
+  // The first TypeInfo has index 0; the map stores later types at size + 1.
   util::FlatIntMap<uint64_t, uint32_t> write_type_info_index_map_;
   // Fast path for the common single-type stream: avoid hash map lookups.
   const TypeInfo *first_type_info_ = nullptr;
-  bool has_first_type_info_ = false;
-  bool type_info_index_map_active_ = false;
 };
 
 /// Read context for deserialization operations.

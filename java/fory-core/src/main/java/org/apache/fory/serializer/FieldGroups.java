@@ -183,7 +183,10 @@ public class FieldGroups {
     public final TypeInfo typeInfo;
     public final Serializer serializer;
     public final GenericType genericType;
+    // Native compatible container reads may cache remote schema metadata; writes retain the
+    // original local holder and must not reuse read state.
     public final TypeInfoHolder classInfoHolder;
+    public final TypeInfoHolder classInfoReadHolder;
     public final TypeInfo containerTypeInfo;
     public final Serializer<?> containerSerializerOverride;
     public final FieldCodecCategory codecCategory;
@@ -289,6 +292,13 @@ public class FieldGroups {
       } else {
         containerSerializerOverride = null;
       }
+      classInfoReadHolder =
+          codecCategory == FieldCodecCategory.CONTAINER
+                  && refMode != RefMode.TRACKING
+                  && !resolver.isCrossLanguage()
+                  && containerSerializerOverride == null
+              ? resolver.nilTypeInfoHolder()
+              : null;
       if (!resolver.isCrossLanguage()) {
         containerTypeInfo = null;
       } else {

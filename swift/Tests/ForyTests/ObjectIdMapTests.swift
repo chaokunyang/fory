@@ -85,24 +85,14 @@ func uint64MapClearKeepsCapacityAndClearsEntries() {
 
 #if DEBUG
     @Test
-    func uint64MapSeededPlacement() {
+    func typeDefCacheSeededPlacement() {
         let keys: [UInt64] = [1, 56, 90, 145, 234]
-        let unseeded = UInt64Map<UInt32>(initialCapacity: 64)
-        let seeded = UInt64Map<UInt32>(
-            initialCapacity: 64,
-            placementSeed: 0x54CA_71B3_2E90_D86F
-        )
+        let unseeded = TypeResolver(typeDefCachePlacementSeed: 0)
+        let seeded = TypeResolver(typeDefCachePlacementSeed: 0x54CA_71B3_2E90_D86F)
 
-        let unseededSlots = Set(keys.map { unseeded.initialSlot(for: $0) })
-        let seededSlots = Set(keys.map { seeded.initialSlot(for: $0) })
+        let unseededSlots = Set(keys.map { unseeded.typeDefCacheInitialSlot(for: $0) })
+        let seededSlots = Set(keys.map { seeded.typeDefCacheInitialSlot(for: $0) })
         #expect(unseededSlots.count == 1)
         #expect(seededSlots.count >= 4)
-
-        for (value, key) in keys.enumerated() {
-            seeded.set(UInt32(value), for: key)
-        }
-        for (value, key) in keys.enumerated() {
-            #expect(seeded.value(for: key) == UInt32(value))
-        }
     }
 #endif

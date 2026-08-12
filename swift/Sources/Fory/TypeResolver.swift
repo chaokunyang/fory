@@ -657,8 +657,9 @@ final class TypeResolver {
     private var byTypeName: [TypeNameKey: TypeInfo] = [:]
     private var registeredTypeInfos: [TypeInfo] = []
     private var builtinTypeInfoByID: [TypeInfo?] = []
-    // TypeDef headers are input-controlled. Keep the full header as the cache key, but seed
-    // placement per resolver so valid remote schemas cannot create repeatable probe clusters.
+    // TypeDef headers are input-controlled. Encode only this cache's keys with a per-resolver seed
+    // so valid remote schemas cannot create repeatable probe clusters in the shared map.
+    private let typeDefCachePlacementSeed: UInt64
     private let typeInfoByHeader: UInt64Map<TypeInfo>
     private var remoteSchemaVersionsByType: [String: Int] = [:]
     private var totalAcceptedSchemaVersions = 0
@@ -668,10 +669,8 @@ final class TypeResolver {
         typeDefCachePlacementSeed: UInt64 = UInt64.random(in: 1...UInt64.max)
     ) {
         self.trackRef = trackRef
-        typeInfoByHeader = UInt64Map(
-            initialCapacity: 64,
-            placementSeed: typeDefCachePlacementSeed
-        )
+        self.typeDefCachePlacementSeed = typeDefCachePlacementSeed
+        typeInfoByHeader = UInt64Map(initialCapacity: 64)
         seedBuiltinTypeInfos()
     }
 
@@ -685,7 +684,18 @@ final class TypeResolver {
         }
 
         private(set) var namedTypeLookupCount = 0
+
+        func typeDefCacheInitialSlot(for header: UInt64) -> Int {
+            typeInfoByHeader.initialSlot(for: typeDefCacheKey(header))
+        }
     #endif
+
+    @inline(__always)
+    private func typeDefCacheKey(_ header: UInt64) -> UInt64 {
+        // XOR is bijective: the map retains the complete header identity while placement stays
+        // unpredictable. Keep this work out of ordinary writer and registered-type maps.
+        header ^ typeDefCachePlacementSeed
+    }
 
     private func seedBuiltinTypeInfos() {
         seedBuiltin(Bool.self)
@@ -1083,7 +1093,7 @@ final class TypeResolver {
 
     @inline(__always)
     func getTypeInfo(forHeader header: UInt64) -> TypeInfo? {
-        typeInfoByHeader.value(for: header)
+        typeInfoByHeader.value(for: typeDefCacheKey(header))
     }
 
     @inline(never)
@@ -1094,11 +1104,12 @@ final class TypeResolver {
         exactLocal: Bool,
         config: Config
     ) throws -> TypeInfo {
-        if let cached = typeInfoByHeader.value(for: header) {
+        let cacheKey = typeDefCacheKey(header)
+        if let cached = typeInfoByHeader.value(for: cacheKey) {
             return cached
         }
         if exactLocal {
-            typeInfoByHeader.set(localTypeInfo, for: header)
+            typeInfoByHeader.set(localTypeInfo, for: cacheKey)
             return localTypeInfo
         }
         guard let localTypeMeta = localTypeInfo.typeMeta else {
@@ -1108,7 +1119,7 @@ final class TypeResolver {
         // Failed compatibility checks must not consult or mutate persistent remote accounting.
         let remoteSchemaKey = try checkRemoteTypeMetaLimit(typeMeta, config: config)
         let typeInfo = TypeInfo(dynamic: localTypeInfo, compatibleTypeMeta: canonicalTypeMeta)
-        typeInfoByHeader.set(typeInfo, for: header)
+        typeInfoByHeader.set(typeInfo, for: cacheKey)
         recordRemoteTypeMeta(remoteSchemaKey)
         return typeInfo
     }

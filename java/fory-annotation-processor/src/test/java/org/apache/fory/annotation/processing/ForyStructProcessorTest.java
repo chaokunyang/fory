@@ -679,6 +679,92 @@ public class ForyStructProcessorTest {
   }
 
   @Test
+  public void testDirectTaggedInt32Write() throws Exception {
+    String fields =
+        "  @ForyField(id = 1) public @Int32Type(encoding = Int32Encoding.FIXED) int first;\n"
+            + "  @ForyField(id = 2) public @Int32Type(encoding = Int32Encoding.FIXED) int second;\n"
+            + "  public TaggedIntStruct() {}\n";
+    CompilationResult staticResult =
+        compile(
+            "test.TaggedIntStruct",
+            "package test;\n"
+                + "import org.apache.fory.annotation.ForyField;\n"
+                + "import org.apache.fory.annotation.ForyStruct;\n"
+                + "import org.apache.fory.annotation.Int32Type;\n"
+                + "import org.apache.fory.config.Int32Encoding;\n"
+                + "@ForyStruct public class TaggedIntStruct {\n"
+                + fields
+                + "}\n");
+    CompilationResult runtimeResult =
+        compile(
+            "test.TaggedIntStruct",
+            "package test;\n"
+                + "import org.apache.fory.annotation.ForyField;\n"
+                + "import org.apache.fory.annotation.Int32Type;\n"
+                + "import org.apache.fory.config.Int32Encoding;\n"
+                + "public class TaggedIntStruct {\n"
+                + fields
+                + "}\n");
+    Assert.assertTrue(staticResult.success, staticResult.diagnostics());
+    Assert.assertTrue(runtimeResult.success, runtimeResult.diagnostics());
+    String generatedSource =
+        staticResult.generatedSource("test/TaggedIntStruct_ForySerializer.java");
+    int writeStart = generatedSource.indexOf("private void writeFields(");
+    int readStart = generatedSource.indexOf("private void readFields(");
+    Assert.assertTrue(writeStart >= 0 && readStart > writeStart, generatedSource);
+    String writeSource = generatedSource.substring(writeStart, readStart);
+    Assert.assertTrue(writeSource.contains("buffer.grow(8);"), generatedSource);
+    Assert.assertTrue(
+        writeSource.contains("buffer._unsafePutInt32(writerIndex, value.first);"), generatedSource);
+    Assert.assertTrue(
+        writeSource.contains("buffer._unsafePutInt32(writerIndex + 4, value.second);"),
+        generatedSource);
+    Assert.assertTrue(
+        writeSource.contains("buffer._unsafeWriterIndex(writerIndex + 8);"), generatedSource);
+    Assert.assertFalse(writeSource.contains("switch (allFieldIds[i])"), generatedSource);
+
+    CompilationResult unsortedResult =
+        compile(
+            "test.UnsortedTaggedIntStruct",
+            "package test;\n"
+                + "import org.apache.fory.annotation.ForyField;\n"
+                + "import org.apache.fory.annotation.ForyStruct;\n"
+                + "import org.apache.fory.annotation.Int32Type;\n"
+                + "import org.apache.fory.config.Int32Encoding;\n"
+                + "@ForyStruct public class UnsortedTaggedIntStruct {\n"
+                + "  @ForyField(id = 2) public @Int32Type(encoding = Int32Encoding.FIXED) int"
+                + " first;\n"
+                + "  @ForyField(id = 1) public @Int32Type(encoding = Int32Encoding.FIXED) int"
+                + " second;\n"
+                + "}\n");
+    Assert.assertTrue(unsortedResult.success, unsortedResult.diagnostics());
+    String unsortedSource =
+        unsortedResult.generatedSource("test/UnsortedTaggedIntStruct_ForySerializer.java");
+    int unsortedWriteStart = unsortedSource.indexOf("private void writeFields(");
+    int unsortedReadStart = unsortedSource.indexOf("private void readFields(");
+    Assert.assertTrue(
+        unsortedWriteStart >= 0 && unsortedReadStart > unsortedWriteStart, unsortedSource);
+    Assert.assertTrue(
+        unsortedSource
+            .substring(unsortedWriteStart, unsortedReadStart)
+            .contains("switch (allFieldIds[i])"),
+        unsortedSource);
+    try (URLClassLoader staticLoader = staticResult.classLoader();
+        URLClassLoader runtimeLoader = runtimeResult.classLoader()) {
+      Class<?> staticType = staticLoader.loadClass("test.TaggedIntStruct");
+      Class<?> runtimeType = runtimeLoader.loadClass("test.TaggedIntStruct");
+      ThreadSafeFory staticFory = threadSafeXlangFory(staticLoader, false);
+      ThreadSafeFory runtimeFory = threadSafeXlangFory(runtimeLoader, true);
+      assertTaggedInt32RoundTrip(staticType, runtimeType, staticFory, runtimeFory, 9301, 17, -29);
+
+      ThreadSafeFory staticNative = threadSafeFory(staticLoader, false, true);
+      ThreadSafeFory runtimeNative = threadSafeFory(runtimeLoader, true, true);
+      assertTaggedInt32RoundTrip(
+          staticType, runtimeType, staticNative, runtimeNative, 9302, 31, -43);
+    }
+  }
+
+  @Test
   public void testRecordReadAndCopyUseCanonicalConstructor() throws Exception {
     assumeRecordSupport();
     CompilationResult result =
@@ -1116,6 +1202,44 @@ public class ForyStructProcessorTest {
         .withCompatible(compatible)
         .requireClassRegistration(true)
         .buildThreadSafeForyPool(1);
+  }
+
+  private static ThreadSafeFory threadSafeXlangFory(ClassLoader classLoader, boolean codegen) {
+    return Fory.builder()
+        .withXlang(true)
+        .withClassLoader(classLoader)
+        .withCodegen(codegen)
+        .withCompatible(true)
+        .requireClassRegistration(true)
+        .buildThreadSafeForyPool(1);
+  }
+
+  private static void assertTaggedInt32RoundTrip(
+      Class<?> staticType,
+      Class<?> runtimeType,
+      ThreadSafeFory staticFory,
+      ThreadSafeFory runtimeFory,
+      int typeId,
+      int first,
+      int second)
+      throws Exception {
+    staticFory.register(staticType, typeId);
+    runtimeFory.register(runtimeType, typeId);
+    Object staticValue = staticType.getConstructor().newInstance();
+    setField(staticType, staticValue, "first", first);
+    setField(staticType, staticValue, "second", second);
+    Object runtimeValue = runtimeType.getConstructor().newInstance();
+    setField(runtimeType, runtimeValue, "first", first);
+    setField(runtimeType, runtimeValue, "second", second);
+    byte[] staticBytes = staticFory.serialize(staticValue);
+    byte[] runtimeBytes = runtimeFory.serialize(runtimeValue);
+    Assert.assertEquals(staticBytes, runtimeBytes);
+    Object runtimeRoundTrip = runtimeFory.deserialize(staticBytes);
+    Assert.assertEquals(getField(runtimeType, runtimeRoundTrip, "first"), first);
+    Assert.assertEquals(getField(runtimeType, runtimeRoundTrip, "second"), second);
+    Object staticRoundTrip = staticFory.deserialize(runtimeBytes);
+    Assert.assertEquals(getField(staticType, staticRoundTrip, "first"), first);
+    Assert.assertEquals(getField(staticType, staticRoundTrip, "second"), second);
   }
 
   @Test

@@ -342,7 +342,57 @@ final class StaticSerializerSourceWriter {
   }
 
   private void writeWriteGroups() {
+    if (canEmitDirectInt32Fields()) {
+      writeDirectInt32Fields();
+      return;
+    }
     writeWriteGroup("", "allFields", "allFieldIds", "writeFieldValue");
+  }
+
+  private boolean canEmitDirectInt32Fields() {
+    if (struct.debug || struct.record || struct.fields.isEmpty()) {
+      return false;
+    }
+    int previousTag = -1;
+    for (SourceField field : struct.fields) {
+      if (field.readAccessKind != SourceField.AccessKind.FIELD
+          || !field.erasedType.equals("int")
+          || !"INT32".equals(exactPrimitiveTypeId(field))
+          || !field.hasForyField
+          || field.foryFieldId <= previousTag
+          || field.nullable
+          || field.trackingRef) {
+        return false;
+      }
+      previousTag = field.foryFieldId;
+    }
+    return true;
+  }
+
+  private void writeDirectInt32Fields() {
+    int numBytes = struct.fields.size() * Integer.BYTES;
+    builder
+        .append("  private void writeFields(WriteContext writeContext, ")
+        .append(struct.typeName)
+        .append(" value) {\n");
+    // Exact local tagged fields are complete and sorted by their numeric tags. A nonlocal TypeDef
+    // deliberately owns an empty writer view, so it must emit no local fields.
+    builder.append("    if (allFields.length == 0) {\n");
+    builder.append("      return;\n");
+    builder.append("    }\n");
+    builder.append("    MemoryBuffer buffer = writeContext.getBuffer();\n");
+    builder.append("    buffer.grow(").append(numBytes).append(");\n");
+    builder.append("    int writerIndex = buffer.writerIndex();\n");
+    for (int i = 0; i < struct.fields.size(); i++) {
+      SourceField field = struct.fields.get(i);
+      builder.append("    buffer._unsafePutInt32(writerIndex");
+      if (i > 0) {
+        builder.append(" + ").append(i * Integer.BYTES);
+      }
+      builder.append(", ").append(field.readExpression("value")).append(");\n");
+    }
+    builder.append("    buffer._unsafeWriterIndex(writerIndex + ").append(numBytes).append(");\n");
+    builder.append("  }\n\n");
   }
 
   private void appendSchemaConsistentRecordLoop() {

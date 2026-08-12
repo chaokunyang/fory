@@ -395,7 +395,10 @@ class Fory:
         self.type_resolver.register_serializer(cls, serializer)
 
     def _freeze_registry(self):
-        self.type_resolver._freeze_registry()
+        # The resolver remains authoritative because callers may register through
+        # it directly. Avoid entering its finalization method after the first root.
+        if not self.type_resolver._registry_frozen:
+            self.type_resolver._freeze_registry()
 
     def dumps(
         self,

@@ -292,13 +292,9 @@ public class FieldGroups {
       } else {
         containerSerializerOverride = null;
       }
+      // Container fields retain distinct remote-read and local-write type metadata caches.
       classInfoReadHolder =
-          codecCategory == FieldCodecCategory.CONTAINER
-                  && refMode != RefMode.TRACKING
-                  && !resolver.isCrossLanguage()
-                  && containerSerializerOverride == null
-              ? resolver.nilTypeInfoHolder()
-              : null;
+          codecCategory == FieldCodecCategory.CONTAINER ? resolver.nilTypeInfoHolder() : null;
       if (!resolver.isCrossLanguage()) {
         containerTypeInfo = null;
       } else {

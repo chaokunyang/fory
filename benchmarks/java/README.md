@@ -72,9 +72,6 @@ The script runs either ordinary Jackson or Jackson Blackbird, never both. The ra
 and generated report contain only the selected implementation. Use `--libs` to change the other
 libraries included in the comparison.
 
-See the [Jackson and Jackson Blackbird benchmark comparison](JACKSON_BLACKBIRD_COMPARISON.md) for
-the recorded results from matched runs of both configurations.
-
 See `org.openjdk.jmh.runner.options.CommandLineOptions` for more information about jmh options:
 
 ```

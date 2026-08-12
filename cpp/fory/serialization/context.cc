@@ -77,31 +77,19 @@ WriteContext::write_type_meta(const std::type_index &type_id) {
 }
 
 void WriteContext::write_type_meta(const TypeInfo *type_info) {
-  const uint64_t key =
-      static_cast<uint64_t>(reinterpret_cast<uintptr_t>(type_info));
-  if (!type_info_index_map_active_) {
-    if (!has_first_type_info_) {
-      has_first_type_info_ = true;
-      first_type_info_ = type_info;
-      buffer_.write_uint8(0); // (index << 1), index=0
-      buffer_.write_bytes(type_info->type_def.data(),
-                          type_info->type_def.size());
-      return;
-    }
-    if (type_info == first_type_info_) {
-      buffer_.write_uint8(1); // (index << 1) | 1, index=0
-      return;
-    }
-    type_info_index_map_active_ = true;
-    write_type_info_index_map_.clear();
-    const uint64_t first_key =
-        static_cast<uint64_t>(reinterpret_cast<uintptr_t>(first_type_info_));
-    write_type_info_index_map_.put(first_key, 0);
-  } else if (type_info == first_type_info_) {
+  if (first_type_info_ == nullptr) {
+    first_type_info_ = type_info;
+    buffer_.write_uint8(0); // (index << 1), index=0
+    buffer_.write_bytes(type_info->type_def.data(), type_info->type_def.size());
+    return;
+  }
+  if (type_info == first_type_info_) {
     buffer_.write_uint8(1); // (index << 1) | 1, index=0
     return;
   }
 
+  const uint64_t key =
+      static_cast<uint64_t>(reinterpret_cast<uintptr_t>(type_info));
   if (auto *entry = write_type_info_index_map_.find(key)) {
     // Reference to previously written type: (index << 1) | 1, LSB=1
     uint32_t marker = static_cast<uint32_t>((entry->value << 1) | 1);
@@ -114,7 +102,7 @@ void WriteContext::write_type_meta(const TypeInfo *type_info) {
   }
 
   // New type: index << 1, LSB=0, followed by TypeDef bytes inline
-  uint32_t index = static_cast<uint32_t>(write_type_info_index_map_.size());
+  uint32_t index = static_cast<uint32_t>(write_type_info_index_map_.size() + 1);
   uint32_t marker = static_cast<uint32_t>(index << 1);
   if (marker < 0x80) {
     buffer_.write_uint8(static_cast<uint8_t>(marker));
@@ -404,13 +392,11 @@ void WriteContext::reset() {
   if (config_->track_ref) {
     ref_writer_.reset();
   }
-  // Clear meta map for streaming TypeMeta (size is used as counter)
-  if (type_info_index_map_active_) {
+  // Clear meta map for streaming TypeMeta.
+  if (!write_type_info_index_map_.empty()) {
     write_type_info_index_map_.clear();
   }
   first_type_info_ = nullptr;
-  has_first_type_info_ = false;
-  type_info_index_map_active_ = false;
   current_dyn_depth_ = 0;
   buffer_.clear_output_stream();
   output_stream_ = nullptr;

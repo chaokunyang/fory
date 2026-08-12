@@ -19,31 +19,25 @@
 
 package org.apache.fory.benchmark;
 
-import java.io.IOException;
-import org.apache.fory.benchmark.JsonSerializationSuite.JsonState;
+import org.apache.fory.benchmark.JacksonBlackbirdSerializationSuite.BlackbirdState;
 import org.apache.fory.benchmark.data.MediaContent;
 import org.testng.Assert;
 import org.testng.annotations.Test;
 
-public class JsonSerializationSuiteTest {
+public class JacksonBlackbirdSerializationSuiteTest {
   @Test
-  public void testJackson() throws IOException {
-    JsonSerializationSuite suite = new JsonSerializationSuite();
+  public void testBlackbird() {
+    JacksonBlackbirdSerializationSuite suite = new JacksonBlackbirdSerializationSuite();
+    BlackbirdState state = new BlackbirdState();
+    state.setup();
 
-    JsonState jackson = new JsonState();
-    jackson.setup();
-    assertJackson(jackson, suite);
-  }
-
-  private static void assertJackson(JsonState state, JsonSerializationSuite suite)
-      throws IOException {
     MediaContent fromBytes =
-        state.mapper.readValue(suite.jacksonToJsonBytes(state), MediaContent.class);
+        state.blackbirdMapper.readValue(suite.blackbirdToJsonBytes(state), MediaContent.class);
     MediaContent fromString =
-        state.mapper.readValue(suite.jacksonToJsonString(state), MediaContent.class);
+        state.blackbirdMapper.readValue(suite.blackbirdToJsonString(state), MediaContent.class);
     Assert.assertEquals(fromBytes, state.mediaContent);
     Assert.assertEquals(fromString, state.mediaContent);
-    Assert.assertEquals(suite.jacksonFromJsonBytes(state), state.mediaContent);
-    Assert.assertEquals(suite.jacksonFromJsonString(state), state.mediaContent);
+    Assert.assertEquals(suite.blackbirdFromJsonBytes(state), state.mediaContent);
+    Assert.assertEquals(suite.blackbirdFromJsonString(state), state.mediaContent);
   }
 }

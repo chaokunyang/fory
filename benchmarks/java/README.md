@@ -62,7 +62,7 @@ Run the JSON benchmark with ordinary Jackson, which is the default:
 ```
 
 Select [Jackson Blackbird](https://github.com/FasterXML/jackson-modules-base/tree/3.x/blackbird)
-explicitly:
+3.2.1 explicitly. Jackson 3 and Blackbird require Java 17 or newer:
 
 ```bash
 ./run_json.sh --jackson blackbird

@@ -197,11 +197,6 @@
       <version>${jackson.annotations.version}</version>
     </dependency>
     <dependency>
-      <groupId>tools.jackson.module</groupId>
-      <artifactId>jackson-module-blackbird</artifactId>
-      <version>${jackson3.version}</version>
-    </dependency>
-    <dependency>
       <groupId>com.google.code.gson</groupId>
       <artifactId>gson</artifactId>
       <version>${gson.version}</version>
@@ -254,6 +249,14 @@
       <properties>
         <maven.compiler.release>17</maven.compiler.release>
       </properties>
+      <dependencies>
+        <!-- Jackson 3 uses Java 17 bytecode, so keep it out of Java 11 compilation. -->
+        <dependency>
+          <groupId>tools.jackson.module</groupId>
+          <artifactId>jackson-module-blackbird</artifactId>
+          <version>${jackson3.version}</version>
+        </dependency>
+      </dependencies>
       <build>
         <plugins>
           <plugin>
@@ -271,6 +274,18 @@
                   <sources>
                     <!-- Add the java17 source directory -->
                     <source>src/main/java17</source>
+                  </sources>
+                </configuration>
+              </execution>
+              <execution>
+                <id>add-test-source</id>
+                <phase>generate-test-sources</phase>
+                <goals>
+                  <goal>add-test-source</goal>
+                </goals>
+                <configuration>
+                  <sources>
+                    <source>src/test/java17</source>
                   </sources>
                 </configuration>
               </execution>

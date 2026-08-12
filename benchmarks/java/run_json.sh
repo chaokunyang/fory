@@ -151,7 +151,7 @@ IFS=$'\t' read -r NORMALIZED_LIBS SERIALIZER_REGEX <<<"${LIB_CONFIG}"
 
 JMH_DURATION="$(jmh_time "${DURATION_SECONDS}")"
 RESULT_JSON="${REPORT_DIR}/benchmark_results.json"
-BENCHMARK_REGEX="org\\.apache\\.fory\\.benchmark\\.JsonSerializationSuite\\.(${SERIALIZER_REGEX})(To|From)Json(Bytes|String)$"
+BENCHMARK_REGEX="org\\.apache\\.fory\\.benchmark\\.(JsonSerializationSuite|JacksonBlackbirdSerializationSuite)\\.(${SERIALIZER_REGEX})(To|From)Json(Bytes|String)$"
 
 mkdir -p "${REPORT_DIR}"
 cd "${SCRIPT_DIR}"

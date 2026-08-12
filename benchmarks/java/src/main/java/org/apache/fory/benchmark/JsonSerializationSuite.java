@@ -43,8 +43,6 @@ import org.openjdk.jmh.annotations.Setup;
 import org.openjdk.jmh.annotations.State;
 import org.openjdk.jmh.annotations.Threads;
 import org.openjdk.jmh.annotations.Warmup;
-import tools.jackson.databind.json.JsonMapper;
-import tools.jackson.module.blackbird.BlackbirdModule;
 
 @BenchmarkMode(Mode.Throughput)
 @OutputTimeUnit(TimeUnit.MILLISECONDS)
@@ -132,22 +130,6 @@ public class JsonSerializationSuite {
     }
   }
 
-  @State(Scope.Thread)
-  public static class BlackbirdState extends JsonState {
-    JsonMapper blackbirdMapper;
-
-    @Setup
-    @Override
-    public void setup() {
-      super.setup();
-      blackbirdMapper = JsonMapper.builder().addModule(new BlackbirdModule()).build();
-      if (!mediaContent.equals(blackbirdMapper.readValue(jsonBytes, MediaContent.class))
-          || !mediaContent.equals(blackbirdMapper.readValue(jsonString, MediaContent.class))) {
-        throw new IllegalStateException("Jackson Blackbird produced different MediaContent");
-      }
-    }
-  }
-
   @Benchmark
   public byte[] foryToJsonBytes(JsonState state) {
     return state.foryJson.toJsonBytes(state.mediaContent);
@@ -162,11 +144,6 @@ public class JsonSerializationSuite {
   @Benchmark
   public byte[] jacksonToJsonBytes(JsonState state) throws IOException {
     return state.mapper.writeValueAsBytes(state.mediaContent);
-  }
-
-  @Benchmark
-  public byte[] blackbirdToJsonBytes(BlackbirdState state) {
-    return state.blackbirdMapper.writeValueAsBytes(state.mediaContent);
   }
 
   @Benchmark
@@ -190,11 +167,6 @@ public class JsonSerializationSuite {
   }
 
   @Benchmark
-  public String blackbirdToJsonString(BlackbirdState state) {
-    return state.blackbirdMapper.writeValueAsString(state.mediaContent);
-  }
-
-  @Benchmark
   public String gsonToJsonString(JsonState state) {
     return state.gson.toJson(state.mediaContent);
   }
@@ -212,11 +184,6 @@ public class JsonSerializationSuite {
   @Benchmark
   public MediaContent jacksonFromJsonBytes(JsonState state) throws IOException {
     return state.mapper.readValue(state.jsonBytes, MediaContent.class);
-  }
-
-  @Benchmark
-  public MediaContent blackbirdFromJsonBytes(BlackbirdState state) {
-    return state.blackbirdMapper.readValue(state.jsonBytes, MediaContent.class);
   }
 
   @Benchmark
@@ -238,11 +205,6 @@ public class JsonSerializationSuite {
   @Benchmark
   public MediaContent jacksonFromJsonString(JsonState state) throws IOException {
     return state.mapper.readValue(state.jsonString, MediaContent.class);
-  }
-
-  @Benchmark
-  public MediaContent blackbirdFromJsonString(BlackbirdState state) {
-    return state.blackbirdMapper.readValue(state.jsonString, MediaContent.class);
   }
 
   @Benchmark

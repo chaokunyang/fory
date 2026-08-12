@@ -445,6 +445,8 @@ public class TypeDef implements Serializable {
       } else {
         String fieldName = fieldInfo.getFieldName();
         String definedClass = fieldInfo.getDefinedClass();
+        // Match the wire declaring-class name before any compatibility fallback attempts to
+        // resolve that name as a class.
         descriptor = descriptorsMap.get(definedClass + "." + fieldName);
       }
       boolean remoteOnly = false;

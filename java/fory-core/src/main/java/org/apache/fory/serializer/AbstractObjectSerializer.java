@@ -542,7 +542,7 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
     if (readContext.getConfig().isXlang()) {
       return readContext.readNonRef(fieldInfo.containerTypeInfo);
     }
-    return readContext.readNonRef(fieldInfo.classInfoHolder);
+    return readContext.readNonRef(fieldInfo.classInfoReadHolder);
   }
 
   private static Object readContainerFieldValueRef(

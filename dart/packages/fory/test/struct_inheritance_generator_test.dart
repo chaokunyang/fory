@@ -592,14 +592,14 @@ class IdChild extends IdBase {
       );
     });
 
-    test('accepts the largest extended field id', () async {
+    test('accepts the largest field id', () async {
       await _expectGenerationOutput(
         source: '''
 @ForyStruct()
 class LargestFieldId {
   LargestFieldId();
 
-  @ForyField(id: 0x10000000e)
+  @ForyField(id: 0x1fffffff)
   int value = 0;
 }
 ''',
@@ -607,18 +607,18 @@ class LargestFieldId {
       );
     });
 
-    test('rejects field ids outside the extended header', () async {
+    test('rejects field ids outside the protocol range', () async {
       await _expectGenerationError(
         source: '''
 @ForyStruct()
 class OversizedFieldId {
   OversizedFieldId();
 
-  @ForyField(id: 0x10000000f)
+  @ForyField(id: 0x20000000)
   int value = 0;
 }
 ''',
-        message: 'field id must not exceed 4294967310',
+        message: 'field id must not exceed 536870911',
       );
     });
 

@@ -142,8 +142,9 @@ final Uint64 _fmixC2 = Uint64.fromWords(0x1a85ec53, 0xc4ceb9fe);
 }
 
 Int64 metaStringHash(List<int> bytes, {int encoding = 0}) {
-  var hash =
-      _absSigned64Bits(_int64FromUint64(_murmurHash3X64_128Bits(bytes).$1));
+  var hash = _absSigned64Bits(
+    _int64FromUint64(_murmurHash3X64_128Bits(bytes).$1),
+  );
   if (hash.isZero) {
     hash = hash + 0x100;
   }
@@ -156,16 +157,18 @@ Int64 typeDefHeader(
   bool compressed = false,
   int? headerLowBits,
 }) {
-  var lowBits = headerLowBits ??
+  var lowBits =
+      headerLowBits ??
       (bytes.length > _typeDefMetaSizeMask
           ? _typeDefMetaSizeMask
           : bytes.length);
   if (compressed) {
     lowBits |= _typeDefCompressMetaFlag;
   }
-  final hashInput = List<int>.of(bytes, growable: true)
-    ..add(lowBits & 0xff)
-    ..add((lowBits >> 8) & 0xff);
+  final hashInput =
+      List<int>.of(bytes, growable: true)
+        ..add(lowBits & 0xff)
+        ..add((lowBits >> 8) & 0xff);
   final hash = _int64FromUint64(
     _murmurHash3X64_128Bits(hashInput).$1 << _typeDefHashShift,
   );
@@ -175,53 +178,48 @@ Int64 typeDefHeader(
 }
 
 int schemaHash(TypeDef typeDef) {
-  return _murmurHash3X64_128Bits(utf8.encode(schemaFingerprint(typeDef)))
-      .$1
-      .low32;
+  return _murmurHash3X64_128Bits(
+    utf8.encode(schemaFingerprint(typeDef)),
+  ).$1.low32;
 }
 
 String schemaFingerprint(TypeDef typeDef) {
   final parts = typeDef.fields
-      .map(
-        (field) => (
-          id: field.id,
-          identifier: field.identifier,
-          fingerprint: StringBuffer()
-            ..write(field.identifier)
-            ..write(',')
-            ..write(
-              _fieldTypeFingerprint(
-                field.fieldType,
-                includeRef: true,
-                includeNullable: true,
-              ),
-            )
-            ..write(';'),
-        ),
-      )
-      .toList(growable: false)
-    ..sort((left, right) {
-      final leftId = left.id;
-      final rightId = right.id;
-      if ((leftId != null && leftId < 0) || (rightId != null && rightId < 0)) {
-        throw ArgumentError('Field id must be non-negative.');
-      }
-      final leftHasId = leftId != null;
-      final rightHasId = rightId != null;
-      if (leftHasId && rightHasId) {
-        final result = leftId.compareTo(rightId);
-        return result == 0
-            ? left.identifier.compareTo(right.identifier)
-            : result;
-      }
-      if (leftHasId) {
-        return -1;
-      }
-      if (rightHasId) {
-        return 1;
-      }
-      return left.identifier.compareTo(right.identifier);
-    });
+    .map(
+      (field) => (
+        id: field.id,
+        identifier: field.identifier,
+        fingerprint:
+            StringBuffer()
+              ..write(field.identifier)
+              ..write(',')
+              ..write(
+                _fieldTypeFingerprint(
+                  field.fieldType,
+                  includeRef: true,
+                  includeNullable: true,
+                ),
+              )
+              ..write(';'),
+      ),
+    )
+    .toList(growable: false)..sort((left, right) {
+    final leftId = left.id;
+    final rightId = right.id;
+    final leftHasId = leftId >= 0;
+    final rightHasId = rightId >= 0;
+    if (leftHasId && rightHasId) {
+      final result = leftId.compareTo(rightId);
+      return result == 0 ? left.identifier.compareTo(right.identifier) : result;
+    }
+    if (leftHasId) {
+      return -1;
+    }
+    if (rightHasId) {
+      return 1;
+    }
+    return left.identifier.compareTo(right.identifier);
+  });
   return parts.map((part) => part.fingerprint.toString()).join();
 }
 
@@ -230,12 +228,13 @@ String _fieldTypeFingerprint(
   required bool includeRef,
   required bool includeNullable,
 }) {
-  final buffer = StringBuffer()
-    ..write(_fingerprintTypeId(fieldType))
-    ..write(',')
-    ..write(includeRef && fieldType.ref ? '1' : '0')
-    ..write(',')
-    ..write(includeNullable && fieldType.nullable ? '1' : '0');
+  final buffer =
+      StringBuffer()
+        ..write(_fingerprintTypeId(fieldType))
+        ..write(',')
+        ..write(includeRef && fieldType.ref ? '1' : '0')
+        ..write(',')
+        ..write(includeNullable && fieldType.nullable ? '1' : '0');
   if (fieldType.arguments.isNotEmpty) {
     buffer.write('[');
     if (fieldType.typeId == TypeIds.map) {
@@ -293,11 +292,13 @@ int _fingerprintTypeId(FieldType fieldType) {
 }
 
 Uint64 _readLongLittleEndian(List<int> bytes, int offset) {
-  final low = (bytes[offset] & 0xff) +
+  final low =
+      (bytes[offset] & 0xff) +
       ((bytes[offset + 1] & 0xff) << 8) +
       ((bytes[offset + 2] & 0xff) << 16) +
       ((bytes[offset + 3] & 0xff) * 0x1000000);
-  final high = (bytes[offset + 4] & 0xff) +
+  final high =
+      (bytes[offset + 4] & 0xff) +
       ((bytes[offset + 5] & 0xff) << 8) +
       ((bytes[offset + 6] & 0xff) << 16) +
       ((bytes[offset + 7] & 0xff) * 0x1000000);

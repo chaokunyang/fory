@@ -201,7 +201,7 @@ bool field_types_compatible_top_level(const FieldType &local,
 /// Field information including name, type, and assigned field ID
 class FieldInfo {
 public:
-  int16_t field_id;       // Tag ID if configured; -1 means no ID
+  int32_t field_id;       // Tag ID or compatible dispatch ID; -1 means absent
   std::string field_name; // Field name
   FieldType field_type;   // Field type information
 
@@ -332,15 +332,15 @@ private:
 
   static Result<std::unique_ptr<TypeMeta>, Error> from_bytes_with_wire_ids(
       Buffer &buffer, int64_t header, uint32_t max_type_fields,
-      uint32_t max_type_meta_bytes, std::vector<uint64_t> &wire_ids);
+      uint32_t max_type_meta_bytes, std::vector<int32_t> &wire_ids);
 
   static Result<void, Error>
   assign_wire_field_ids(const TypeInfo &local_type,
-                        const std::vector<uint64_t> &remote_wire_ids,
+                        const std::vector<int32_t> &remote_wire_ids,
                         std::vector<FieldInfo> &remote_fields);
 
   static int32_t compute_struct_version(const TypeMeta &meta,
-                                        const int64_t *wire_ids,
+                                        const int32_t *wire_ids,
                                         size_t num_fields);
 };
 
@@ -350,10 +350,8 @@ private:
 
 namespace detail {
 
-inline constexpr uint64_t kFieldNameIdentity =
-    std::numeric_limits<uint64_t>::max();
-inline constexpr uint64_t kMaxFieldTag =
-    static_cast<uint64_t>(std::numeric_limits<uint32_t>::max()) + 15;
+inline constexpr int32_t kFieldNameIdentity = -1;
+inline constexpr int32_t kMaxFieldTag = (1 << 29) - 1;
 
 inline uint32_t to_type_id(TypeId id) { return static_cast<uint32_t>(id); }
 
@@ -1098,13 +1096,13 @@ constexpr bool compute_track_ref() {
 }
 
 template <typename ActualFieldType, typename T, size_t Index>
-constexpr int64_t compute_field_id() {
+constexpr int32_t compute_field_id() {
   if constexpr (::fory::detail::has_field_config_v<T>) {
-    constexpr int64_t config_id =
+    constexpr int32_t config_id =
         ::fory::detail::GetFieldConfigEntry<T, Index>::id;
     if constexpr (::fory::detail::GetFieldConfigEntry<T, Index>::has_id) {
       static_assert(config_id >= 0, "Fory field id must be non-negative");
-      static_assert(static_cast<uint64_t>(config_id) <= kMaxFieldTag,
+      static_assert(config_id <= kMaxFieldTag,
                     "Fory field id exceeds the wire TAG_ID range");
       return config_id;
     }
@@ -1152,8 +1150,8 @@ inline int32_t field_identity_size(uint32_t type_id) {
   }
 }
 
-inline int compare_field_identity(const FieldInfo &lhs, uint64_t lhs_id,
-                                  const FieldInfo &rhs, uint64_t rhs_id) {
+inline int compare_field_identity(const FieldInfo &lhs, int32_t lhs_id,
+                                  const FieldInfo &rhs, int32_t rhs_id) {
   const bool lhs_tagged = lhs_id != kFieldNameIdentity;
   const bool rhs_tagged = rhs_id != kFieldNameIdentity;
   if (lhs_tagged && rhs_tagged && lhs_id != rhs_id) {
@@ -1170,7 +1168,7 @@ inline int compare_field_identity(const FieldInfo &lhs, uint64_t lhs_id,
 
 inline std::vector<size_t>
 sort_field_indices(const std::vector<FieldInfo> &fields,
-                   const std::vector<uint64_t> &wire_ids) {
+                   const std::vector<int32_t> &wire_ids) {
   FORY_CHECK(fields.size() == wire_ids.size());
   std::vector<size_t> indices(fields.size());
   for (size_t i = 0; i < fields.size(); ++i) {
@@ -1211,19 +1209,17 @@ sort_field_indices(const std::vector<FieldInfo> &fields,
 }
 
 template <typename T, size_t... Indices>
-constexpr std::array<int64_t, sizeof...(Indices)>
+constexpr std::array<int32_t, sizeof...(Indices)>
 build_field_ids(std::index_sequence<Indices...>) {
   return {compute_field_id<void, T, Indices>()...};
 }
 
 template <size_t Size>
-std::vector<uint64_t>
-make_wire_ids(const std::array<int64_t, Size> &field_ids) {
-  std::vector<uint64_t> wire_ids;
+std::vector<int32_t> make_wire_ids(const std::array<int32_t, Size> &field_ids) {
+  std::vector<int32_t> wire_ids;
   wire_ids.reserve(Size);
-  for (int64_t field_id : field_ids) {
-    wire_ids.push_back(field_id < 0 ? kFieldNameIdentity
-                                    : static_cast<uint64_t>(field_id));
+  for (int32_t field_id : field_ids) {
+    wire_ids.push_back(field_id);
   }
   return wire_ids;
 }
@@ -1328,7 +1324,7 @@ template <typename T, size_t Index> struct FieldInfoBuilder {
     constexpr bool is_nullable =
         compute_is_nullable<ActualFieldType, T, Index, UnwrappedFieldType>();
     constexpr bool track_ref = compute_track_ref<ActualFieldType, T, Index>();
-    constexpr int64_t field_id = compute_field_id<ActualFieldType, T, Index>();
+    constexpr int32_t field_id = compute_field_id<ActualFieldType, T, Index>();
 
     constexpr FieldNodeSpec spec =
         ::fory::detail::GetFieldConfigEntry<T, Index>::spec;
@@ -1349,11 +1345,9 @@ template <typename T, size_t Index> struct FieldInfoBuilder {
 #endif
     FieldInfo info(std::move(field_name), std::move(field_type));
     if constexpr (field_id >= 0) {
-      static_assert(static_cast<uint64_t>(field_id) <= kMaxFieldTag,
+      static_assert(field_id <= kMaxFieldTag,
                     "Field tag exceeds the wire TAG_ID range");
-      if constexpr (field_id <= std::numeric_limits<int16_t>::max()) {
-        info.field_id = static_cast<int16_t>(field_id);
-      }
+      info.field_id = field_id;
     }
     return info;
   }
@@ -1380,7 +1374,7 @@ template <typename T, size_t Index> struct FieldInfoBuilder {
     constexpr bool is_nullable =
         compute_is_nullable<ActualFieldType, T, Index, UnwrappedFieldType>();
     constexpr bool track_ref = compute_track_ref<ActualFieldType, T, Index>();
-    constexpr int64_t field_id = compute_field_id<ActualFieldType, T, Index>();
+    constexpr int32_t field_id = compute_field_id<ActualFieldType, T, Index>();
 
     constexpr FieldNodeSpec spec =
         ::fory::detail::GetFieldConfigEntry<T, Index>::spec;
@@ -1402,11 +1396,9 @@ template <typename T, size_t Index> struct FieldInfoBuilder {
 #endif
     FieldInfo info(std::move(field_name), std::move(field_type));
     if constexpr (field_id >= 0) {
-      static_assert(static_cast<uint64_t>(field_id) <= kMaxFieldTag,
+      static_assert(field_id <= kMaxFieldTag,
                     "Field tag exceeds the wire TAG_ID range");
-      if constexpr (field_id <= std::numeric_limits<int16_t>::max()) {
-        info.field_id = static_cast<int16_t>(field_id);
-      }
+      info.field_id = field_id;
     }
     return info;
   }
@@ -2223,7 +2215,7 @@ TypeResolver::build_struct_type_info(uint32_t type_id, uint32_t user_type_id,
       detail::build_field_ids<T>(std::make_index_sequence<field_count>{});
   const auto wire_ids = detail::make_wire_ids(field_ids);
   fory::flat_hash_map<std::string, size_t> name_to_index;
-  fory::flat_hash_map<uint64_t, size_t> tag_to_index;
+  fory::flat_hash_map<int32_t, size_t> tag_to_index;
   name_to_index.reserve(field_count);
   tag_to_index.reserve(field_count);
   auto field_infos =
@@ -2248,10 +2240,11 @@ TypeResolver::build_struct_type_info(uint32_t type_id, uint32_t user_type_id,
   // owner for exact field identities. Successful finalization replaces these
   // bytes in both the completed clone and the retained source resolver before
   // either registry becomes observable as finalized.
-  entry->type_def.reserve(field_count * sizeof(uint64_t));
-  for (uint64_t wire_id : wire_ids) {
-    for (uint32_t shift = 0; shift < 64; shift += 8) {
-      entry->type_def.push_back(static_cast<uint8_t>(wire_id >> shift));
+  entry->type_def.reserve(field_count * sizeof(int32_t));
+  for (int32_t wire_id : wire_ids) {
+    const uint32_t encoded = static_cast<uint32_t>(wire_id);
+    for (uint32_t shift = 0; shift < 32; shift += 8) {
+      entry->type_def.push_back(static_cast<uint8_t>(encoded >> shift));
     }
   }
 

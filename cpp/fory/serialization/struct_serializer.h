@@ -1500,18 +1500,18 @@ template <typename T> struct CompileTimeFieldHelpers {
   }
 
   /// Returns the tag ID for the field at Index, or -1 when absent.
-  template <size_t Index> static constexpr int64_t field_tag_id() {
+  template <size_t Index> static constexpr int32_t field_tag_id() {
     if constexpr (FieldCount == 0) {
       return -1;
     } else {
       using RawFieldType = RawFieldTypeFor<Index>;
 
       if constexpr (::fory::detail::has_field_config_v<T>) {
-        constexpr int64_t config_id =
+        constexpr int32_t config_id =
             ::fory::detail::GetFieldConfigEntry<T, Index>::id;
         if constexpr (::fory::detail::GetFieldConfigEntry<T, Index>::has_id) {
           static_assert(config_id >= 0, "Fory field id must be non-negative");
-          static_assert(static_cast<uint64_t>(config_id) <=
+          static_assert(config_id <=
                             ::fory::serialization::detail::kMaxFieldTag,
                         "Fory field id exceeds the wire TAG_ID range");
           return config_id;
@@ -1520,7 +1520,7 @@ template <typename T> struct CompileTimeFieldHelpers {
       if constexpr (is_fory_field_v<RawFieldType>) {
         static_assert(RawFieldType::tag_id >= 0,
                       "Fory field id must be non-negative");
-        static_assert(static_cast<uint64_t>(RawFieldType::tag_id) <=
+        static_assert(RawFieldType::tag_id <=
                           ::fory::serialization::detail::kMaxFieldTag,
                       "Fory field id exceeds the wire TAG_ID range");
         return RawFieldType::tag_id;
@@ -1533,7 +1533,7 @@ template <typename T> struct CompileTimeFieldHelpers {
   }
 
   template <size_t... Indices>
-  static constexpr std::array<int64_t, FieldCount>
+  static constexpr std::array<int32_t, FieldCount>
   make_field_ids(std::index_sequence<Indices...>) {
     if constexpr (FieldCount == 0) {
       return {};
@@ -1945,7 +1945,7 @@ template <typename T> struct CompileTimeFieldHelpers {
   static inline constexpr std::array<bool, FieldCount> nullable_flags =
       make_nullable_flags(std::make_index_sequence<FieldCount>{});
 
-  static inline constexpr std::array<int64_t, FieldCount> field_ids =
+  static inline constexpr std::array<int32_t, FieldCount> field_ids =
       make_field_ids(std::make_index_sequence<FieldCount>{});
 
   /// Flags for fields whose types are nullable wrappers (optional/shared_ptr/
@@ -2018,7 +2018,7 @@ template <typename T> struct CompileTimeFieldHelpers {
   }
 
   static constexpr size_t identifier_length(size_t index) {
-    int64_t id = field_ids[index];
+    int32_t id = field_ids[index];
     if (id >= 0) {
       return tag_id_length(static_cast<uint64_t>(id));
     }
@@ -2062,7 +2062,7 @@ template <typename T> struct CompileTimeFieldHelpers {
           for (size_t i = 0; i < FieldCount; ++i) {
             size_t length = identifier_lengths[i];
             if (field_ids[i] >= 0) {
-              uint64_t value = static_cast<uint64_t>(field_ids[i]);
+              uint32_t value = static_cast<uint32_t>(field_ids[i]);
               uint64_t divisor = 1;
               for (size_t j = 1; j < length; ++j) {
                 divisor *= 10;
@@ -2244,9 +2244,9 @@ template <typename T> struct CompileTimeFieldHelpers {
   static inline constexpr std::array<size_t, FieldCount> sorted_indices =
       compute_sorted_indices();
 
-  static inline constexpr std::array<int64_t, FieldCount> sorted_field_ids =
+  static inline constexpr std::array<int32_t, FieldCount> sorted_field_ids =
       []() constexpr {
-        std::array<int64_t, FieldCount> ids{};
+        std::array<int32_t, FieldCount> ids{};
         for (size_t i = 0; i < FieldCount; ++i) {
           ids[i] = field_ids[sorted_indices[i]];
         }
@@ -4765,7 +4765,7 @@ read_struct_fields_compatible(T &obj, ReadContext &ctx,
   // Iterate through remote fields in their serialization order
   for (size_t remote_idx = 0; remote_idx < remote_fields.size(); ++remote_idx) {
     const auto &remote_field = remote_fields[remote_idx];
-    int16_t dispatch_id = remote_field.field_id;
+    int32_t dispatch_id = remote_field.field_id;
 
     if (dispatch_id == -1) {
       if (use_exact_offset_reads) {

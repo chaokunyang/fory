@@ -2141,7 +2141,7 @@ TEST(SerializationTest, SourceResolverFinalizes) {
   auto pending = source_resolver->get_type_info<::SimpleStruct>();
   ASSERT_TRUE(pending.ok()) << pending.error().to_string();
   EXPECT_EQ(pending.value()->type_meta, nullptr);
-  EXPECT_EQ(pending.value()->type_def.size(), 2 * sizeof(uint64_t));
+  EXPECT_EQ(pending.value()->type_def.size(), 2 * sizeof(int32_t));
 
   auto bytes = fory.serialize(::SimpleStruct{1, 2});
   ASSERT_TRUE(bytes.ok()) << bytes.error().to_string();

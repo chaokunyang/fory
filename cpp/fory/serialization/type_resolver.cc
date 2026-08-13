@@ -167,13 +167,13 @@ Result<FieldType, Error> FieldType::read_from(Buffer &buffer, bool read_flag,
 namespace {
 
 Result<std::vector<uint8_t>, Error> write_field_info(const FieldInfo &field,
-                                                     uint64_t wire_id) {
+                                                     int32_t wire_id) {
   Buffer buffer;
 
   // write field header:
   // header: | field_name_encoding:2bits | size:4bits | nullability:1bit |
   // track_ref:1bit |
-  if (FORY_PREDICT_FALSE(wire_id != detail::kFieldNameIdentity &&
+  if (FORY_PREDICT_FALSE(wire_id < detail::kFieldNameIdentity ||
                          wire_id > detail::kMaxFieldTag)) {
     return Unexpected(
         Error::invalid("Field tag exceeds the wire TAG_ID range"));
@@ -211,7 +211,7 @@ Result<std::vector<uint8_t>, Error> write_field_info(const FieldInfo &field,
     encoded_name = std::move(encoded.bytes);
   }
   const uint64_t size_field =
-      use_tag_id ? wire_id : static_cast<uint64_t>(encoded_name.size() - 1);
+      use_tag_id ? static_cast<uint32_t>(wire_id) : encoded_name.size() - 1;
   uint8_t header =
       (std::min<uint64_t>(FIELD_NAME_SIZE_THRESHOLD, size_field) << 2) & 0x3C;
 
@@ -243,7 +243,7 @@ Result<std::vector<uint8_t>, Error> write_field_info(const FieldInfo &field,
                               buffer.data() + buffer.writer_index());
 }
 
-Result<FieldInfo, Error> read_field_info(Buffer &buffer, uint64_t &wire_id) {
+Result<FieldInfo, Error> read_field_info(Buffer &buffer, int32_t &wire_id) {
   // Read field header
   Error error;
   uint8_t header = buffer.read_uint8(error);
@@ -279,12 +279,9 @@ Result<FieldInfo, Error> read_field_info(Buffer &buffer, uint64_t &wire_id) {
            FieldType::read_from(buffer, false, nullable, track_ref));
 
   if (use_tag_id) {
-    wire_id = size_field;
+    wire_id = static_cast<int32_t>(size_field);
     FieldInfo info("", std::move(field_type));
-    if (size_field <=
-        static_cast<uint64_t>(std::numeric_limits<int16_t>::max())) {
-      info.field_id = static_cast<int16_t>(size_field);
-    }
+    info.field_id = wire_id;
     return info;
   }
   wire_id = detail::kFieldNameIdentity;
@@ -336,13 +333,12 @@ Result<std::vector<uint8_t>, Error> FieldInfo::to_bytes() const {
   if (FORY_PREDICT_FALSE(field_id < -1)) {
     return Unexpected(Error::invalid("Field tag must be non-negative"));
   }
-  return write_field_info(*this, field_id < 0
-                                     ? detail::kFieldNameIdentity
-                                     : static_cast<uint64_t>(field_id));
+  return write_field_info(*this,
+                          field_id < 0 ? detail::kFieldNameIdentity : field_id);
 }
 
 Result<FieldInfo, Error> FieldInfo::from_bytes(Buffer &buffer) {
-  uint64_t wire_id = detail::kFieldNameIdentity;
+  int32_t wire_id = detail::kFieldNameIdentity;
   return read_field_info(buffer, wire_id);
 }
 
@@ -377,9 +373,9 @@ static const MetaStringEncoder k_type_name_encoder('$', '_');
 
 Result<void, Error>
 assign_field_dispatch(const std::vector<FieldInfo> &local_fields,
-                      const std::vector<uint64_t> &local_wire_ids,
+                      const std::vector<int32_t> &local_wire_ids,
                       std::vector<FieldInfo> &remote_fields,
-                      const std::vector<uint64_t> &remote_wire_ids);
+                      const std::vector<int32_t> &remote_wire_ids);
 
 inline Result<uint8_t, Error> encoding_to_index(MetaEncoding encoding,
                                                 const MetaEncoding *encodings,
@@ -610,7 +606,7 @@ read_meta_name(Buffer &buffer, const MetaStringDecoder &decoder,
 Result<std::unique_ptr<TypeMeta>, Error>
 parse_type_meta_body(Buffer &body, const TypeMeta *local_type_info,
                      int64_t meta_hash, uint32_t max_type_fields,
-                     std::vector<uint64_t> *wire_ids) {
+                     std::vector<int32_t> *wire_ids) {
   Error error;
   const uint8_t meta_header = body.read_uint8(error);
   if (FORY_PREDICT_FALSE(!error.ok())) {
@@ -683,10 +679,10 @@ parse_type_meta_body(Buffer &body, const TypeMeta *local_type_info,
   }
   std::vector<FieldInfo> field_infos;
   field_infos.reserve(num_fields);
-  std::vector<uint64_t> parsed_wire_ids;
+  std::vector<int32_t> parsed_wire_ids;
   parsed_wire_ids.reserve(num_fields);
   for (size_t i = 0; i < num_fields; ++i) {
-    uint64_t wire_id = detail::kFieldNameIdentity;
+    int32_t wire_id = detail::kFieldNameIdentity;
     FORY_TRY(field, read_field_info(body, wire_id));
     field_infos.push_back(std::move(field));
     parsed_wire_ids.push_back(wire_id);
@@ -694,12 +690,11 @@ parse_type_meta_body(Buffer &body, const TypeMeta *local_type_info,
 
   // Remote fields are already in sender data order and must not be re-sorted.
   if (local_type_info != nullptr) {
-    std::vector<uint64_t> local_wire_ids;
+    std::vector<int32_t> local_wire_ids;
     local_wire_ids.reserve(local_type_info->field_infos.size());
     for (const FieldInfo &field : local_type_info->field_infos) {
-      local_wire_ids.push_back(field.field_id < 0
-                                   ? detail::kFieldNameIdentity
-                                   : static_cast<uint64_t>(field.field_id));
+      local_wire_ids.push_back(field.field_id < 0 ? detail::kFieldNameIdentity
+                                                  : field.field_id);
     }
     FORY_RETURN_IF_ERROR(assign_field_dispatch(local_type_info->field_infos,
                                                local_wire_ids, field_infos,
@@ -747,29 +742,30 @@ TypeMeta TypeMeta::from_fields(uint32_t tid, const std::string &ns,
 
 namespace {
 
-Result<std::vector<uint64_t>, Error>
+Result<std::vector<int32_t>, Error>
 read_pending_wire_ids(const std::vector<uint8_t> &bytes, size_t field_count) {
   if (FORY_PREDICT_FALSE(field_count > std::numeric_limits<size_t>::max() /
-                                           sizeof(uint64_t))) {
+                                           sizeof(int32_t))) {
     return Unexpected(Error::invalid("Field identity count overflow"));
   }
-  const size_t expected_size = field_count * sizeof(uint64_t);
+  const size_t expected_size = field_count * sizeof(int32_t);
   if (FORY_PREDICT_FALSE(bytes.size() != expected_size)) {
     return Unexpected(Error::invalid("Pending field identity size mismatch"));
   }
-  std::vector<uint64_t> wire_ids(field_count, 0);
+  std::vector<int32_t> wire_ids(field_count, 0);
   for (size_t i = 0; i < field_count; ++i) {
-    for (uint32_t shift = 0; shift < 64; shift += 8) {
-      wire_ids[i] |=
-          static_cast<uint64_t>(bytes[i * sizeof(uint64_t) + shift / 8])
-          << shift;
+    uint32_t encoded = 0;
+    for (uint32_t shift = 0; shift < 32; shift += 8) {
+      encoded |= static_cast<uint32_t>(bytes[i * sizeof(int32_t) + shift / 8])
+                 << shift;
     }
+    wire_ids[i] = static_cast<int32_t>(encoded);
   }
   return wire_ids;
 }
 
 Result<std::vector<uint8_t>, Error>
-write_type_meta(const TypeMeta &meta, const std::vector<uint64_t> &wire_ids) {
+write_type_meta(const TypeMeta &meta, const std::vector<int32_t> &wire_ids) {
   Buffer layer_buffer;
 
   bool is_struct = is_struct_type(static_cast<TypeId>(meta.type_id));
@@ -855,12 +851,11 @@ write_type_meta(const TypeMeta &meta, const std::vector<uint64_t> &wire_ids) {
 } // namespace
 
 Result<std::vector<uint8_t>, Error> TypeMeta::to_bytes() const {
-  std::vector<uint64_t> wire_ids;
+  std::vector<int32_t> wire_ids;
   wire_ids.reserve(field_infos.size());
   for (const FieldInfo &field : field_infos) {
-    wire_ids.push_back(field.field_id < 0
-                           ? detail::kFieldNameIdentity
-                           : static_cast<uint64_t>(field.field_id));
+    wire_ids.push_back(field.field_id < 0 ? detail::kFieldNameIdentity
+                                          : field.field_id);
   }
   return write_type_meta(*this, wire_ids);
 }
@@ -910,14 +905,14 @@ Result<std::unique_ptr<TypeMeta>, Error>
 TypeMeta::from_bytes_with_header(Buffer &buffer, int64_t header,
                                  uint32_t max_type_fields,
                                  uint32_t max_type_meta_bytes) {
-  std::vector<uint64_t> wire_ids;
+  std::vector<int32_t> wire_ids;
   return from_bytes_with_wire_ids(buffer, header, max_type_fields,
                                   max_type_meta_bytes, wire_ids);
 }
 
 Result<std::unique_ptr<TypeMeta>, Error> TypeMeta::from_bytes_with_wire_ids(
     Buffer &buffer, int64_t header, uint32_t max_type_fields,
-    uint32_t max_type_meta_bytes, std::vector<uint64_t> &wire_ids) {
+    uint32_t max_type_meta_bytes, std::vector<int32_t> &wire_ids) {
   const uint64_t header_bits = static_cast<uint64_t>(header);
   FORY_RETURN_IF_ERROR(validate_type_meta_header(header_bits));
   FORY_TRY(meta_size, read_type_meta_size(buffer, header_bits, nullptr));
@@ -1225,12 +1220,11 @@ bool field_types_compatible_top_level(const FieldType &local,
 
 std::vector<FieldInfo>
 TypeMeta::sort_field_infos(std::vector<FieldInfo> fields) {
-  std::vector<uint64_t> wire_ids;
+  std::vector<int32_t> wire_ids;
   wire_ids.reserve(fields.size());
   for (const FieldInfo &field : fields) {
-    wire_ids.push_back(field.field_id < 0
-                           ? detail::kFieldNameIdentity
-                           : static_cast<uint64_t>(field.field_id));
+    wire_ids.push_back(field.field_id < 0 ? detail::kFieldNameIdentity
+                                          : field.field_id);
   }
   const auto indices = detail::sort_field_indices(fields, wire_ids);
   std::vector<FieldInfo> sorted;
@@ -1253,17 +1247,17 @@ namespace {
 
 Result<void, Error>
 assign_field_dispatch(const std::vector<FieldInfo> &local_fields,
-                      const std::vector<uint64_t> &local_wire_ids,
+                      const std::vector<int32_t> &local_wire_ids,
                       std::vector<FieldInfo> &remote_fields,
-                      const std::vector<uint64_t> &remote_wire_ids) {
+                      const std::vector<int32_t> &remote_wire_ids) {
   constexpr size_t max_compatible_matched_field_index =
       (static_cast<size_t>(std::numeric_limits<int16_t>::max()) - 1) / 2;
   if (FORY_PREDICT_FALSE(local_fields.size() != local_wire_ids.size() ||
                          remote_fields.size() != remote_wire_ids.size())) {
     return Unexpected(Error::invalid("Field identity count mismatch"));
   }
-  const auto invalid_wire_id = [](uint64_t wire_id) {
-    return wire_id != detail::kFieldNameIdentity &&
+  const auto invalid_wire_id = [](int32_t wire_id) {
+    return wire_id < detail::kFieldNameIdentity ||
            wire_id > detail::kMaxFieldTag;
   };
   if (FORY_PREDICT_FALSE(std::any_of(local_wire_ids.begin(),
@@ -1297,7 +1291,7 @@ assign_field_dispatch(const std::vector<FieldInfo> &local_fields,
     }
   }
   // Tag ID mapping when field IDs are explicitly configured.
-  std::unordered_map<uint64_t, size_t> local_field_id_map;
+  std::unordered_map<int32_t, size_t> local_field_id_map;
   local_field_id_map.reserve(local_fields.size());
   for (size_t i = 0; i < local_fields.size(); ++i) {
     if (local_wire_ids[i] != detail::kFieldNameIdentity &&
@@ -1308,7 +1302,7 @@ assign_field_dispatch(const std::vector<FieldInfo> &local_fields,
 
   // Validate the complete remote identity set before assigning any local
   // dispatch IDs. Tag and canonical-name identities are separate domains.
-  std::unordered_set<uint64_t> remote_tag_ids;
+  std::unordered_set<int32_t> remote_tag_ids;
   std::unordered_set<std::string> remote_field_names;
   remote_tag_ids.reserve(remote_fields.size());
   remote_field_names.reserve(remote_fields.size());
@@ -1344,7 +1338,7 @@ assign_field_dispatch(const std::vector<FieldInfo> &local_fields,
             std::to_string(local_index) + " exceeds max " +
             std::to_string(max_compatible_matched_field_index)));
       }
-      remote_field.field_id = static_cast<int16_t>(local_index * 2);
+      remote_field.field_id = static_cast<int32_t>(local_index * 2);
       used[local_index] = true;
       return true;
     }
@@ -1357,7 +1351,7 @@ assign_field_dispatch(const std::vector<FieldInfo> &local_fields,
             std::to_string(local_index) + " exceeds max " +
             std::to_string(max_compatible_matched_field_index)));
       }
-      remote_field.field_id = static_cast<int16_t>(local_index * 2 + 1);
+      remote_field.field_id = static_cast<int32_t>(local_index * 2 + 1);
       used[local_index] = true;
       return true;
     }
@@ -1437,19 +1431,17 @@ TypeMeta::assign_local_dispatch_ids(const TypeMeta *local_type,
   if (FORY_PREDICT_FALSE(local_type == nullptr)) {
     return Unexpected(Error::invalid("Local TypeMeta is required"));
   }
-  std::vector<uint64_t> local_wire_ids;
+  std::vector<int32_t> local_wire_ids;
   local_wire_ids.reserve(local_type->field_infos.size());
   for (const FieldInfo &field : local_type->field_infos) {
-    local_wire_ids.push_back(field.field_id < 0
-                                 ? detail::kFieldNameIdentity
-                                 : static_cast<uint64_t>(field.field_id));
+    local_wire_ids.push_back(field.field_id < 0 ? detail::kFieldNameIdentity
+                                                : field.field_id);
   }
-  std::vector<uint64_t> remote_wire_ids;
+  std::vector<int32_t> remote_wire_ids;
   remote_wire_ids.reserve(remote_fields.size());
   for (const FieldInfo &field : remote_fields) {
-    remote_wire_ids.push_back(field.field_id < 0
-                                  ? detail::kFieldNameIdentity
-                                  : static_cast<uint64_t>(field.field_id));
+    remote_wire_ids.push_back(field.field_id < 0 ? detail::kFieldNameIdentity
+                                                 : field.field_id);
   }
   return assign_field_dispatch(local_type->field_infos, local_wire_ids,
                                remote_fields, remote_wire_ids);
@@ -1457,7 +1449,7 @@ TypeMeta::assign_local_dispatch_ids(const TypeMeta *local_type,
 
 Result<void, Error>
 TypeMeta::assign_wire_field_ids(const TypeInfo &local_type,
-                                const std::vector<uint64_t> &remote_wire_ids,
+                                const std::vector<int32_t> &remote_wire_ids,
                                 std::vector<FieldInfo> &remote_fields) {
   if (FORY_PREDICT_FALSE(local_type.type_meta == nullptr)) {
     return Unexpected(Error::invalid("Local TypeMeta is required"));
@@ -1470,7 +1462,7 @@ TypeMeta::assign_wire_field_ids(const TypeInfo &local_type,
   if (FORY_PREDICT_FALSE(!error.ok())) {
     return Unexpected(std::move(error));
   }
-  std::vector<uint64_t> local_wire_ids;
+  std::vector<int32_t> local_wire_ids;
   FORY_TRY(local_meta,
            from_bytes_with_wire_ids(
                local_buffer, header, std::numeric_limits<uint32_t>::max(),
@@ -1577,7 +1569,7 @@ namespace {
 
 std::string
 compute_struct_fingerprint(const std::vector<FieldInfo> &field_infos,
-                           const std::vector<uint64_t> &wire_ids) {
+                           const std::vector<int32_t> &wire_ids) {
   // Computes the fingerprint string for a struct type used in schema
   // versioning.
   //
@@ -1605,8 +1597,8 @@ compute_struct_fingerprint(const std::vector<FieldInfo> &field_infos,
             [&](size_t lhs, size_t rhs) {
               const FieldInfo &a = field_infos[lhs];
               const FieldInfo &b = field_infos[rhs];
-              const uint64_t a_id = wire_ids[lhs];
-              const uint64_t b_id = wire_ids[rhs];
+              const int32_t a_id = wire_ids[lhs];
+              const int32_t b_id = wire_ids[rhs];
               if (a_id != detail::kFieldNameIdentity &&
                   b_id != detail::kFieldNameIdentity && a_id != b_id) {
                 return a_id < b_id;
@@ -1675,7 +1667,7 @@ compute_struct_fingerprint(const std::vector<FieldInfo> &field_infos,
 
   for (size_t index : sorted_indices) {
     const FieldInfo &fi = field_infos[index];
-    const uint64_t wire_id = wire_ids[index];
+    const int32_t wire_id = wire_ids[index];
     std::string field_id_or_name = wire_id != detail::kFieldNameIdentity
                                        ? std::to_string(wire_id)
                                        : normalize_field_name(fi.field_name);
@@ -1710,12 +1702,11 @@ int32_t compute_struct_version(const TypeMeta &meta,
 
 std::string TypeMeta::compute_struct_fingerprint(
     const std::vector<FieldInfo> &field_infos) {
-  std::vector<uint64_t> wire_ids;
+  std::vector<int32_t> wire_ids;
   wire_ids.reserve(field_infos.size());
   for (const FieldInfo &field : field_infos) {
-    wire_ids.push_back(field.field_id < 0
-                           ? detail::kFieldNameIdentity
-                           : static_cast<uint64_t>(field.field_id));
+    wire_ids.push_back(field.field_id < 0 ? detail::kFieldNameIdentity
+                                          : field.field_id);
   }
   return serialization::compute_struct_fingerprint(field_infos, wire_ids);
 }
@@ -1726,17 +1717,15 @@ int32_t TypeMeta::compute_struct_version(const TypeMeta &meta) {
 }
 
 int32_t TypeMeta::compute_struct_version(const TypeMeta &meta,
-                                         const int64_t *wire_ids,
+                                         const int32_t *wire_ids,
                                          size_t num_fields) {
   FORY_CHECK(num_fields == meta.field_infos.size());
-  std::vector<uint64_t> exact_wire_ids;
+  std::vector<int32_t> exact_wire_ids;
   exact_wire_ids.reserve(num_fields);
   for (size_t i = 0; i < num_fields; ++i) {
-    FORY_CHECK(wire_ids[i] < 0 ||
-               static_cast<uint64_t>(wire_ids[i]) <= detail::kMaxFieldTag);
-    exact_wire_ids.push_back(wire_ids[i] < 0
-                                 ? detail::kFieldNameIdentity
-                                 : static_cast<uint64_t>(wire_ids[i]));
+    FORY_CHECK(wire_ids[i] >= detail::kFieldNameIdentity &&
+               wire_ids[i] <= detail::kMaxFieldTag);
+    exact_wire_ids.push_back(wire_ids[i]);
   }
   return serialization::compute_struct_version(
       meta, serialization::compute_struct_fingerprint(meta.field_infos,
@@ -1904,16 +1893,16 @@ TypeResolver::build_final_type_resolver() {
     FORY_TRY(sorted_fields,
              partial_ptr->harness.sorted_field_infos_fn(*final_resolver));
 
-    Result<std::vector<uint64_t>, Error> pending_wire_ids =
+    Result<std::vector<int32_t>, Error> pending_wire_ids =
         is_struct_type(static_cast<TypeId>(partial_ptr->type_id))
             ? read_pending_wire_ids(partial_ptr->type_def, sorted_fields.size())
-            : Result<std::vector<uint64_t>, Error>(std::vector<uint64_t>{});
+            : Result<std::vector<int32_t>, Error>(std::vector<int32_t>{});
     FORY_TRY(original_wire_ids, std::move(pending_wire_ids));
     if (FORY_PREDICT_FALSE(partial_ptr->sorted_indices.size() !=
                            sorted_fields.size())) {
       return Unexpected(Error::invalid("Sorted field identity size mismatch"));
     }
-    std::vector<uint64_t> sorted_wire_ids;
+    std::vector<int32_t> sorted_wire_ids;
     sorted_wire_ids.reserve(sorted_fields.size());
     for (size_t original_index : partial_ptr->sorted_indices) {
       if (FORY_PREDICT_FALSE(original_index >= original_wire_ids.size())) {

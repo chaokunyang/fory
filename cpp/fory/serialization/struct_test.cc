@@ -136,14 +136,14 @@ struct MixedFieldIdentityStruct {
               alpha_value, (count, fory::F(2).varint()));
 };
 
-template <int64_t Tag> struct WireTagWriter {
+template <int32_t Tag> struct WireTagWriter {
   int32_t value = 0;
   int32_t a_skipped = 0;
   int32_t z_kept = 0;
   FORY_STRUCT(WireTagWriter, (value, fory::F(Tag)), a_skipped, z_kept);
 };
 
-template <int64_t Tag> struct WireTagReader {
+template <int32_t Tag> struct WireTagReader {
   int32_t mapped = 0;
   int32_t z_kept = 0;
   FORY_STRUCT(WireTagReader, (mapped, fory::F(Tag)), z_kept);
@@ -830,7 +830,7 @@ inline FieldType make_test_field_type(TypeId type_id,
                    std::move(generics));
 }
 
-inline FieldInfo make_test_field_info(std::string name, int16_t field_id,
+inline FieldInfo make_test_field_info(std::string name, int32_t field_id,
                                       FieldType field_type) {
   FieldInfo info(std::move(name), std::move(field_type));
   if (field_id >= 0) {
@@ -882,7 +882,7 @@ read_first_wire_tag(const std::vector<uint8_t> &type_def) {
   return tag;
 }
 
-template <int64_t Tag> void verify_wire_tag() {
+template <int32_t Tag> void verify_wire_tag() {
   auto writer =
       Fory::builder().xlang(true).compatible(true).track_ref(false).build();
   auto reader =
@@ -908,7 +908,7 @@ template <int64_t Tag> void verify_wire_tag() {
   auto parsed = TypeMeta::from_bytes(type_buffer, nullptr);
   ASSERT_TRUE(parsed.ok()) << parsed.error().to_string();
   ASSERT_EQ(parsed.value()->field_infos.size(), 3U);
-  EXPECT_EQ(parsed.value()->field_infos[0].field_id, -1);
+  EXPECT_EQ(parsed.value()->field_infos[0].field_id, Tag);
 }
 
 template <typename T> void test_roundtrip(const T &original) {
@@ -1378,7 +1378,7 @@ TEST(StructComprehensiveTest, UnsignedEncodingFieldMeta) {
         });
     return it == fields.end() ? nullptr : &*it;
   };
-  auto find_field_id = [&](int16_t id) -> const FieldInfo * {
+  auto find_field_id = [&](int32_t id) -> const FieldInfo * {
     auto it =
         std::find_if(fields.begin(), fields.end(), [&](const FieldInfo &field) {
           return field.field_id == id;
@@ -1823,11 +1823,9 @@ TEST(StructComprehensiveTest, MixedFieldIdentifiersUseProtocolOrder) {
 }
 
 TEST(StructComprehensiveTest, WireTagRange) {
+  verify_wire_tag<0>();
   verify_wire_tag<65536>();
-  verify_wire_tag<4294967280LL>();
-  verify_wire_tag<4294967295LL>();
-  verify_wire_tag<4294967296LL>();
-  verify_wire_tag<4294967310LL>();
+  verify_wire_tag<536870911>();
 
   auto versioned = Fory::builder()
                        .xlang(true)
@@ -1835,16 +1833,30 @@ TEST(StructComprehensiveTest, WireTagRange) {
                        .track_ref(false)
                        .check_struct_version(true)
                        .build();
-  ASSERT_TRUE(versioned.register_struct<WireTagWriter<4294967310LL>>(631).ok());
-  WireTagWriter<4294967310LL> value{7, 11, 42};
+  ASSERT_TRUE(versioned.register_struct<WireTagWriter<536870911>>(631).ok());
+  WireTagWriter<536870911> value{7, 11, 42};
   auto encoded = versioned.serialize(value);
   ASSERT_TRUE(encoded.ok()) << encoded.error().to_string();
   auto decoded =
-      versioned.deserialize<WireTagWriter<4294967310LL>>(encoded.value());
+      versioned.deserialize<WireTagWriter<536870911>>(encoded.value());
   ASSERT_TRUE(decoded.ok()) << decoded.error().to_string();
   EXPECT_EQ(decoded.value().value, 7);
   EXPECT_EQ(decoded.value().a_skipped, 11);
   EXPECT_EQ(decoded.value().z_kept, 42);
+
+  FieldInfo field("", make_test_field_type(TypeId::INT32));
+  field.field_id = 1 << 29;
+  EXPECT_FALSE(field.to_bytes().ok());
+
+  field.field_id = 0;
+  auto legal_field = field.to_bytes();
+  ASSERT_TRUE(legal_field.ok()) << legal_field.error().to_string();
+  Buffer invalid_field;
+  invalid_field.write_uint8(0xFC);
+  invalid_field.write_var_uint32((1u << 29) - 15);
+  invalid_field.write_bytes(legal_field.value().data() + 1,
+                            legal_field.value().size() - 1);
+  EXPECT_FALSE(FieldInfo::from_bytes(invalid_field).ok());
 }
 
 TEST(StructComprehensiveTest, StructFieldIdentityIsUnique) {

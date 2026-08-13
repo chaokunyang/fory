@@ -683,7 +683,7 @@ Result<const TypeInfo *, Error> ReadContext::read_type_meta() {
   }
 
   // Not in cache - parse the TypeMeta
-  std::vector<uint64_t> remote_wire_ids;
+  std::vector<int32_t> remote_wire_ids;
   FORY_TRY(parsed_meta, TypeMeta::from_bytes_with_wire_ids(
                             *buffer_, meta_header, config_->max_type_fields,
                             config_->max_type_meta_bytes, remote_wire_ids));

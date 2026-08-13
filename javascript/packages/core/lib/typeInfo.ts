@@ -24,7 +24,7 @@ import { Float16Array } from "./types/float16";
 import { Decimal } from "./types/decimal";
 
 const targetFields = new WeakMap<new () => any, { [key: string]: TypeInfo }>();
-export const MAX_FIELD_ID = 0xffffffff + 15;
+export const MAX_FIELD_ID = (1 << 29) - 1;
 
 export function checkFieldId(fieldId: number) {
   if (Number.isFinite(fieldId) && fieldId < 0) {
@@ -110,11 +110,9 @@ export class TypeInfo<T = unknown> extends ExtensibleFunction {
     this.trackingRef = v;
     return this;
   }
-  id?: number;
-  setId(v: number | undefined) {
-    if (typeof v === "number") {
-      checkFieldId(v);
-    }
+  id = -1;
+  setId(v: number) {
+    checkFieldId(v);
     this.id = v;
     return this;
   }

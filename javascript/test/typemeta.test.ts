@@ -30,6 +30,7 @@ import { TypeMeta } from "../packages/core/lib/meta/TypeMeta";
 import { x64hash128 } from "../packages/core/lib/murmurHash3";
 import { BinaryReader } from "../packages/core/lib/reader";
 import { RefFlags, TypeId } from "../packages/core/lib/type";
+import { MAX_FIELD_ID } from "../packages/core/lib/typeInfo";
 import { BinaryWriter } from "../packages/core/lib/writer";
 import { describe, expect, test } from "@jest/globals";
 
@@ -223,7 +224,27 @@ describe("typemeta", () => {
       ),
     ).toBe(true);
 
-    expect(() => Type.string().setId(0xffffffff + 16)).toThrow();
+    const maxTypeInfo = Type.struct(7014, {
+      value: Type.string().setId(MAX_FIELD_ID),
+    });
+    const maxBytes = TypeMeta.fromTypeInfo(maxTypeInfo).toBytes();
+    const maxReader = new BinaryReader({});
+    maxReader.reset(maxBytes);
+    expect(TypeMeta.fromBytes(maxReader).getFieldInfo()[0].fieldId).toBe(MAX_FIELD_ID);
+
+    const validTag = new BinaryWriter({});
+    validTag.writeVarUint32Small7(MAX_FIELD_ID - 15);
+    const invalidTag = new BinaryWriter({});
+    invalidTag.writeVarUint32Small7(MAX_FIELD_ID + 1 - 15);
+    const invalidBody = replaceFirstBytes(maxBytes.subarray(8), validTag.dump(), invalidTag.dump());
+    const invalidMeta = new BinaryWriter({});
+    invalidMeta.writeUint64((TypeMeta as any).buildHeader(invalidBody, false).header);
+    invalidMeta.buffer(invalidBody);
+    const invalidReader = new BinaryReader({});
+    invalidReader.reset(invalidMeta.dump());
+    expect(() => TypeMeta.fromBytes(invalidReader)).toThrow();
+
+    expect(() => Type.string().setId(MAX_FIELD_ID + 1)).toThrow();
     expect(() => Type.string().setId(1.5)).toThrow();
     expect(() => Type.string().setId(Number.NaN)).toThrow();
 

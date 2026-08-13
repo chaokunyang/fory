@@ -102,7 +102,8 @@ def aggregate_results(
         result["primaryMetric"]["scoreError"] = max(
             abs(score - median) for score in scores
         )
-        result["primaryMetric"].pop("rawData", None)
+        for field in ("rawData", "scoreConfidence", "scorePercentiles"):
+            result["primaryMetric"].pop(field, None)
         result["alternatingRounds"] = rounds
         result["aggregation"] = "median"
         aggregated.append(result)

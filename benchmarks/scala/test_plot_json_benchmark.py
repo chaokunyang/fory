@@ -64,6 +64,9 @@ class ScalaJsonPlotTest(unittest.TestCase):
                                 "primaryMetric": {
                                     "score": score,
                                     "scoreError": 1.0,
+                                    "scoreConfidence": [score - 1.0, score + 1.0],
+                                    "scorePercentiles": {"50.0": score},
+                                    "rawData": [[score]],
                                     "scoreUnit": "ops/s",
                                 },
                             }
@@ -74,6 +77,11 @@ class ScalaJsonPlotTest(unittest.TestCase):
         self.assertTrue(
             all(result["primaryMetric"]["score"] == 20.0 for result in results)
         )
+        for result in results:
+            metric = result["primaryMetric"]
+            self.assertNotIn("rawData", metric)
+            self.assertNotIn("scoreConfidence", metric)
+            self.assertNotIn("scorePercentiles", metric)
 
 
 if __name__ == "__main__":

@@ -25,9 +25,8 @@ import (
 
 const (
 	// TagIDUseFieldName indicates field name should be used instead of tag ID.
-	TagIDUseFieldName = -1
-	// TypeDef stores extended field tags as varuint32(tag - 15).
-	maxTypeDefTagID uint64 = 1<<32 - 1 + FieldNameSizeThreshold
+	TagIDUseFieldName int32 = -1
+	maxTypeDefTagID   int32 = 1<<29 - 1
 )
 
 func parseBoolStrict(s string) (bool, bool) {
@@ -69,10 +68,10 @@ func validateForyTags(t reflect.Type) error {
 			if parsed.tagID < 0 {
 				return InvalidTagErrorf("invalid fory tag id=%d on field %s: id must be non-negative", parsed.tagID, field.Name)
 			}
-			if uint64(parsed.tagID) > maxTypeDefTagID {
+			if parsed.tagID > maxTypeDefTagID {
 				return InvalidTagErrorf("invalid fory tag id=%d on field %s: id exceeds TypeDef range", parsed.tagID, field.Name)
 			}
-			identity := "id:" + strconv.Itoa(parsed.tagID)
+			identity := "id:" + strconv.FormatInt(int64(parsed.tagID), 10)
 			if existing, ok := identities[identity]; ok {
 				return InvalidTagErrorf("duplicate fory tag id=%d on fields %s and %s", parsed.tagID, existing, field.Name)
 			}

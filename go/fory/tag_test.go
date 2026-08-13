@@ -43,14 +43,14 @@ func TestParseFieldSpecBasic(t *testing.T) {
 	typ := reflect.TypeOf(Example{})
 
 	idSpec := mustParseFieldSpec(t, typ.Field(0))
-	require.Equal(t, 0, idSpec.TagID)
+	require.Equal(t, int32(0), idSpec.TagID)
 	require.False(t, idSpec.NullableSet)
 	require.False(t, idSpec.RefSet)
 	require.EqualValues(t, VARINT32, idSpec.Type.TypeId())
 	require.False(t, idSpec.Type.Nullable)
 
 	versionSpec := mustParseFieldSpec(t, typ.Field(1))
-	require.Equal(t, 1, versionSpec.TagID)
+	require.Equal(t, int32(1), versionSpec.TagID)
 	require.True(t, versionSpec.NullableSet)
 	require.True(t, versionSpec.Nullable)
 	require.True(t, versionSpec.RefSet)
@@ -218,7 +218,7 @@ func TestSortFieldsOrdersNonPrimitivesByFieldIdentifier(t *testing.T) {
 	serializers := make([]Serializer, len(fieldNames))
 	typeIDs := []TypeId{STRING, MAP, NAMED_STRUCT, LIST, VARINT32}
 	nullables := []bool{false, false, false, false, false}
-	tagIDs := []int{20, 10, TagIDUseFieldName, TagIDUseFieldName, 30}
+	tagIDs := []int32{20, 10, TagIDUseFieldName, TagIDUseFieldName, 30}
 
 	_, sortedNames := sortFields(nil, fieldNames, serializers, typeIDs, nullables, tagIDs)
 

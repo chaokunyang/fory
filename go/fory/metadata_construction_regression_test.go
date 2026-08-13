@@ -54,11 +54,11 @@ type metadataHighTag struct {
 }
 
 type metadataMaxTag struct {
-	Value int32 `fory:"id=4294967310"`
+	Value int32 `fory:"id=536870911"`
 }
 
 type metadataOverflowTag struct {
-	Value int32 `fory:"id=4294967311"`
+	Value int32 `fory:"id=536870912"`
 }
 
 func metadataField(name string, spec *TypeSpec) FieldDef {
@@ -249,12 +249,10 @@ func TestMetadataFieldIdentityValidation(t *testing.T) {
 	require.Error(t, f.RegisterStructByName(metadataNormalizedNames{}, "example.NormalizedNames"))
 	require.NoError(t, f.RegisterStructByName(metadataHighTag{}, "example.HighTag"))
 
-	if strconv.IntSize == 64 {
-		maxFory := New(WithCompatible(true))
-		require.NoError(t, maxFory.RegisterStructByName(metadataMaxTag{}, "example.MaxTag"))
-		overflowFory := New(WithCompatible(true))
-		require.Error(t, overflowFory.RegisterStructByName(metadataOverflowTag{}, "example.OverflowTag"))
-	}
+	maxFory := New(WithCompatible(true))
+	require.NoError(t, maxFory.RegisterStructByName(metadataMaxTag{}, "example.MaxTag"))
+	overflowFory := New(WithCompatible(true))
+	require.Error(t, overflowFory.RegisterStructByName(metadataOverflowTag{}, "example.OverflowTag"))
 
 }
 

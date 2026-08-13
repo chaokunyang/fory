@@ -29,6 +29,7 @@ from typing import Any, Dict, List, Optional
 import pytest
 
 import pyfory
+from pyfory.field import MAX_FIELD_ID
 from pyfory.meta import typedef as typedef_module
 from pyfory.meta import typedef_decoder
 from pyfory.serialization import Buffer, ENABLE_FORY_CYTHON_SERIALIZATION
@@ -369,10 +370,22 @@ def test_remote_tag_identity_domain():
         [
             FieldInfo("foo_bar", int_type, "example.TaggedRemote", 1),
             FieldInfo("fooBar", int_type, "example.TaggedRemote", 2),
+            FieldInfo("maximum", int_type, "example.TaggedRemote", MAX_FIELD_ID),
         ],
     )
     decoded = decode_typedef(Buffer(encoded), Fory(xlang=True, compatible=True).type_resolver)
-    assert [field.tag_id for field in decoded.fields] == [1, 2]
+    assert [field.tag_id for field in decoded.fields] == [1, 2, MAX_FIELD_ID]
+
+    body = Buffer.allocate(64)
+    body.write_uint8(STRUCT_TYPEDEF_FLAG | REGISTER_BY_NAME_FLAG | typedef_module.COMPATIBLE_TYPEDEF_FLAG | 1)
+    write_namespace(body, "example")
+    write_typename(body, "TaggedRemote")
+    body.write_uint8((typedef_module.FIELD_NAME_ENCODING_TAG_ID << 6) | (typedef_module.TAG_ID_SIZE_THRESHOLD << 2))
+    body.write_var_uint32(MAX_FIELD_ID + 1 - typedef_module.TAG_ID_SIZE_THRESHOLD)
+    int_type.write(body, False)
+    malformed = prepend_header(body.to_bytes(0, body.get_writer_index()), False)
+    with pytest.raises(Exception):
+        decode_typedef(Buffer(malformed), Fory(xlang=True, compatible=True).type_resolver)
 
 
 def test_local_name_collision():

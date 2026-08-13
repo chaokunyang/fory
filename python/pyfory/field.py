@@ -42,6 +42,7 @@ from typing import Any, Callable, Dict, Mapping, Optional
 FORY_FIELD_METADATA_KEY = "__fory__"
 FORY_OBJECT_METADATA_KEY = "__fory_object__"
 _FIELD_ID_UNSET = object()
+MAX_FIELD_ID = (1 << 29) - 1
 
 
 def canonical_field_name(name: str) -> str:
@@ -67,6 +68,8 @@ def _validate_field_identities(field_infos, owner: str, *, include_tagged_names:
     names = {}
     for field_info in field_infos:
         tag_id = field_info.tag_id
+        if tag_id < -1 or tag_id > MAX_FIELD_ID:
+            raise ValueError(f"Tag ID {tag_id} in {owner} must be -1 or in [0, {MAX_FIELD_ID}]")
         if tag_id >= 0:
             previous = tags.get(tag_id)
             if previous is not None:
@@ -166,7 +169,7 @@ def field(
         id: Field tag ID (optional).
             - omitted: Use field name with meta string encoding
             - >=0: Use numeric tag ID (more compact, stable across renames)
-            Must be unique within the class. Negative configured IDs are invalid.
+            Must be unique within the class and less than 2^29. Negative configured IDs are invalid.
 
         nullable: Whether to write null flag for this field.
             - False (default): Skip null flag, field cannot be None
@@ -217,6 +220,8 @@ def field(
         raise TypeError(f"id must be an int, got {type(id).__name__}")
     elif id < 0:
         raise ValueError(f"id must be non-negative, got {id}")
+    elif id > MAX_FIELD_ID:
+        raise ValueError(f"id must not exceed {MAX_FIELD_ID}, got {id}")
 
     # Build Fory metadata
     fory_meta = ForyFieldMeta(

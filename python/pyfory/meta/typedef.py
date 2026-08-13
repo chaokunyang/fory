@@ -28,7 +28,7 @@ from pyfory.type_util import get_homogeneous_tuple_elem_type, infer_field
 from pyfory.meta.metastring import Encoding
 from pyfory.type_util import infer_field_types
 from pyfory.lib.mmh3 import hash_buffer
-from pyfory.field import canonical_field_name, validate_local_field_identities
+from pyfory.field import MAX_FIELD_ID, canonical_field_name, validate_local_field_identities
 
 
 # Constants from the specification
@@ -373,6 +373,8 @@ class TypeDef:
 
 class FieldInfo:
     def __init__(self, name: str, field_type: "FieldType", defined_class: str, tag_id: int = -1):
+        if tag_id < -1 or tag_id > MAX_FIELD_ID:
+            raise ValueError(f"tag_id must be -1 or in [0, {MAX_FIELD_ID}], got {tag_id}")
         self.name = name
         self.field_type = field_type
         self.defined_class = defined_class

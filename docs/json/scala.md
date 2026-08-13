@@ -46,8 +46,9 @@ Reuse the resulting `ForyJson` instance. It is immutable and thread-safe after c
 
 Case classes are decoded by calling their full primary constructor. Fory invokes Scala's generated
 constructor-default methods for missing defaulted parameters; it does not parse default expressions
-or mutate constructor `val` fields. A missing parameter without a default is an error. Mutable body
-properties are applied after construction.
+or mutate constructor `val` fields. Defaults in later parameter lists receive the preceding
+constructor arguments exactly as Scala defines them. A missing parameter without a default is an
+error. Mutable body properties are applied after construction.
 
 Fory JSON annotations can be placed directly on Scala constructor properties:
 
@@ -95,7 +96,8 @@ the same case-class schema.
 
 Strict standard-library collections are reconstructed through their standard Scala builders.
 Fory does not add a Scala-specific collection-size limit; the codecs use the same input-length,
-depth, graph-memory, and read-progress limits as Fory JSON core.
+depth, graph-memory, and read-progress limits as Fory JSON core. A sparse `BitSet` whose highest
+index would require backing storage disproportionate to the available JSON input is rejected.
 
 Lazy or process-local values are intentionally unsupported by the default module, including
 `LazyList`, `Stream`, views, iterators, collection builders, `Try`, `Throwable`, `Future`, `Promise`,

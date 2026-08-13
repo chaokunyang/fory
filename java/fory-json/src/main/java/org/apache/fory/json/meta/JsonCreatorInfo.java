@@ -61,6 +61,7 @@ public final class JsonCreatorInfo {
   private final long[] hashes;
   private final MethodHandle invoker;
   private final GeneratedJsonCodec<?> generatedCodec;
+  private final Method[] defaultMethods;
   private final MethodHandle[] defaultInvokers;
   private final String[] parameterNames;
   private final JsonFieldInfo[] deferredFields;
@@ -117,8 +118,11 @@ public final class JsonCreatorInfo {
     this.defaults = defaults;
     this.generatedCodec = generatedCodec;
     this.parameterNames = parameterNames == null ? null : parameterNames.clone();
+    this.defaultMethods = defaultMethods == null ? null : defaultMethods.clone();
     defaultInvokers =
-        defaultMethods == null ? null : buildDefaultInvokers(ownerType, executable, defaultMethods);
+        this.defaultMethods == null
+            ? null
+            : buildDefaultInvokers(ownerType, executable, this.defaultMethods);
     invoker =
         generatedCodec == null
             ? buildInvoker(executable, defaults.length + this.deferredFields.length)
@@ -137,6 +141,7 @@ public final class JsonCreatorInfo {
     executable = source.executable;
     defaults = source.defaults;
     generatedCodec = source.generatedCodec;
+    defaultMethods = source.defaultMethods;
     defaultInvokers = source.defaultInvokers;
     parameterNames = source.parameterNames;
     this.deferredFields = deferredFields;
@@ -288,15 +293,21 @@ public final class JsonCreatorInfo {
     return defaultInvokers != null && defaultInvokers[index] != null;
   }
 
+  /** Returns one prevalidated language-defined constructor default method. */
+  @Internal
+  public Method defaultMethod(int index) {
+    return defaultMethods == null ? null : defaultMethods[index];
+  }
+
   /** Evaluates one prevalidated language-defined constructor default. */
   @Internal
-  public Object defaultValue(int index) {
+  public Object defaultValue(int index, Object[] arguments) {
     MethodHandle invoker = defaultInvokers[index];
     if (invoker == null) {
       throw missingArgument(index);
     }
     try {
-      return (Object) invoker.invokeExact();
+      return (Object) invoker.invokeExact(arguments);
     } catch (Throwable cause) {
       if (cause instanceof Error) {
         throw (Error) cause;
@@ -314,13 +325,19 @@ public final class JsonCreatorInfo {
         "Missing required JSON constructor property " + name + " for " + ownerType.getName());
   }
 
+  /** Returns whether one construction-workspace slot has not been read. */
+  @Internal
+  public static boolean isMissing(Object value) {
+    return value == MISSING;
+  }
+
   private void prepareArguments(Object[] arguments) {
     if (defaultInvokers == null) {
       return;
     }
     for (int i = 0; i < defaults.length; i++) {
       if (arguments[i] == MISSING) {
-        arguments[i] = defaultValue(i);
+        arguments[i] = defaultValue(i, arguments);
       }
     }
   }
@@ -349,15 +366,21 @@ public final class JsonCreatorInfo {
       if ((method.getDeclaringClass() != ownerType
               || !java.lang.reflect.Modifier.isStatic(method.getModifiers()))
           || !method.getName().equals("$lessinit$greater$default$" + (i + 1))
-          || method.getParameterCount() != 0
+          || method.getParameterCount() > i
           || !java.lang.reflect.Modifier.isPublic(method.getModifiers())
           || !boxed(parameterTypes[i]).isAssignableFrom(boxed(method.getReturnType()))) {
         throw new ForyJsonException("Invalid JSON constructor default method " + method);
       }
+      Class<?>[] dependencyTypes = method.getParameterTypes();
+      for (int j = 0; j < dependencyTypes.length; j++) {
+        if (dependencyTypes[j] != parameterTypes[j]) {
+          throw new ForyJsonException("Invalid JSON constructor default method " + method);
+        }
+      }
       try {
-        MethodHandle invoker =
+        MethodHandle target =
             _JDKAccess._trustedLookup(method.getDeclaringClass()).unreflect(method);
-        invokers[i] = invoker.asType(MethodType.methodType(Object.class));
+        invokers[i] = workspaceInvoker(target, dependencyTypes);
       } catch (IllegalAccessException e) {
         throw new ForyJsonException("Cannot access JSON constructor default " + method, e);
       }

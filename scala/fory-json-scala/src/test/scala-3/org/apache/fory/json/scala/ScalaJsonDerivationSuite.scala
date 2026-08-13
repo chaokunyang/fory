@@ -33,6 +33,12 @@ enum Color {
   case Red, Blue
 }
 
+enum DisplayColor {
+  case Red, Blue
+
+  override def toString: String = "display"
+}
+
 class ScalaJsonDerivationSuite extends AnyFunSuite {
   test("EmptyTuple uses an empty JSON array") {
     val json = ForyJsonScala.builder().withCodegen(false).build()
@@ -70,5 +76,7 @@ class ScalaJsonDerivationSuite extends AnyFunSuite {
     val json = ForyJsonScala.builder().withCodegen(false).build()
     assert(json.toJson(Color.Blue) == "\"Blue\"")
     assert(json.fromJson("\"Blue\"", classOf[Color]) == Color.Blue)
+    assert(json.toJson(DisplayColor.Red) == "\"Red\"")
+    assert(json.fromJson("\"Blue\"", classOf[DisplayColor]) == DisplayColor.Blue)
   }
 }

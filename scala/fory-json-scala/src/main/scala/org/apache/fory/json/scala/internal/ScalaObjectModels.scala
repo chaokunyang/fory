@@ -165,15 +165,52 @@ private[scala] object ScalaObjectModels {
   ): Array[Method] = {
     // Scala emits constructor-default forwarders on the case-class owner. Using those exact
     // methods keeps construction metadata owner-bound and avoids loading the companion singleton.
+    // A default in a later parameter list receives the preceding parameter lists as arguments.
     val defaults = new Array[Method](parameterTypes.length)
     var index = 0
     while (index < defaults.length) {
       val name = "$lessinit$greater$default$" + (index + 1)
-      try defaults(index) = typeClass.getMethod(name)
-      catch { case _: NoSuchMethodException => () }
+      val candidates = typeClass.getMethods.filter { method =>
+        val modifiers = method.getModifiers
+        method.getName == name && Modifier.isPublic(modifiers) && Modifier.isStatic(modifiers) &&
+        method.getParameterCount <= index &&
+        compatibleDefaultParameters(method.getParameterTypes, parameterTypes) &&
+        compatibleDefaultResult(method.getReturnType, parameterTypes(index))
+      }
+      if (candidates.length > 1)
+        throw new ForyJsonException(s"Ambiguous Scala constructor default $name on ${typeClass.getName}")
+      if (candidates.length == 1) defaults(index) = candidates(0)
       index += 1
     }
     defaults
+  }
+
+  private def compatibleDefaultParameters(
+      dependencies: Array[Class[_]],
+      constructorParameters: Array[Class[_]]
+  ): Boolean = {
+    var index = 0
+    while (index < dependencies.length) {
+      if (dependencies(index) != constructorParameters(index)) return false
+      index += 1
+    }
+    true
+  }
+
+  private def compatibleDefaultResult(result: Class[_], parameter: Class[_]): Boolean =
+    boxed(parameter).isAssignableFrom(boxed(result))
+
+  private def boxed(value: Class[_]): Class[_] = {
+    if (!value.isPrimitive) value
+    else if (value == java.lang.Boolean.TYPE) classOf[java.lang.Boolean]
+    else if (value == java.lang.Byte.TYPE) classOf[java.lang.Byte]
+    else if (value == java.lang.Short.TYPE) classOf[java.lang.Short]
+    else if (value == java.lang.Integer.TYPE) classOf[java.lang.Integer]
+    else if (value == java.lang.Long.TYPE) classOf[java.lang.Long]
+    else if (value == java.lang.Float.TYPE) classOf[java.lang.Float]
+    else if (value == java.lang.Double.TYPE) classOf[java.lang.Double]
+    else if (value == java.lang.Character.TYPE) classOf[java.lang.Character]
+    else value
   }
 
   private def singletonField(typeClass: Class[_]): Field = {

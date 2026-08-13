@@ -20,7 +20,7 @@
 package org.apache.fory.json.scala.internal
 
 import java.lang.reflect.Modifier
-import java.util.HashMap
+import java.util.{HashMap, IdentityHashMap}
 
 import org.apache.fory.json.ForyJsonException
 import org.apache.fory.json.codec.{AbstractJsonValueCodec, JsonValueCodec}
@@ -75,19 +75,25 @@ private[scala] object ScalaEnumCodec {
 private final class ScalaEnumCodec(typeClass: Class[_], values: Array[Object])
     extends AbstractJsonValueCodec[Object] {
   private val byName = new HashMap[String, Object](values.length * 2)
+  private val nameByValue = new IdentityHashMap[Object, String](values.length * 2)
   values.foreach { value =>
     if (!typeClass.isInstance(value))
       throw new ForyJsonException(s"Scala enum value is not a ${typeClass.getName}")
-    val name = value.toString
+    // productPrefix is the compiler-owned case label. Cache it by enum identity so an application
+    // toString override cannot change the JSON schema or add work to the writer hot path.
+    val name = value.asInstanceOf[Product].productPrefix
     if (byName.put(name, value) != null)
       throw new ForyJsonException(s"Duplicate Scala enum name $name on ${typeClass.getName}")
+    nameByValue.put(value, name)
   }
 
   override def write(writer: JsonWriter, value: Object): Unit = {
     if (value == null) writer.writeNull()
-    else if (!typeClass.isInstance(value))
-      throw new ForyJsonException(s"Expected Scala enum ${typeClass.getName}")
-    else writer.writeString(value.toString)
+    else {
+      val name = nameByValue.get(value)
+      if (name == null) throw new ForyJsonException(s"Expected Scala enum ${typeClass.getName}")
+      writer.writeString(name)
+    }
   }
 
   override def read(reader: JsonReader): Object = {

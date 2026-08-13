@@ -52,6 +52,7 @@ private[scala] final class ScalaBitSetCodec(mutableResult: Boolean)
   override def read(reader: JsonReader): scala.collection.BitSet = {
     if (reader.tryReadNullToken()) return null
     reader.enterDepth()
+    val inputStart = reader.position()
     reader.expectNextToken('[')
     var words = Array.emptyLongArray
     if (!reader.consumeNextToken(']')) {
@@ -61,7 +62,7 @@ private[scala] final class ScalaBitSetCodec(mutableResult: Boolean)
         if (bit < 0) throw invalidBit(bit)
         val requiredWords = (bit >>> 6) + 1
         if (requiredWords > words.length) {
-          words = grow(reader, words, requiredWords)
+          words = grow(reader, words, requiredWords, inputStart)
         }
         words(bit >>> 6) |= 1L << bit
         more = reader.consumeNextCommaOrEndArray()
@@ -76,12 +77,20 @@ private[scala] final class ScalaBitSetCodec(mutableResult: Boolean)
     result
   }
 
-  private def grow(reader: JsonReader, source: Array[Long], required: Int): Array[Long] = {
+  private def grow(
+      reader: JsonReader,
+      source: Array[Long],
+      required: Int,
+      inputStart: Int
+  ): Array[Long] = {
     var capacity = if (source.length == 0) 1 else source.length
     while (capacity < required) {
       val doubled = capacity.toLong << 1
       capacity = if (doubled >= required && doubled <= Int.MaxValue) doubled.toInt else required
     }
+    // One readable input byte per retained word is the same proportional-input lower bound used
+    // by count-driven containers. A compact high bit index must not allocate a dense backing array.
+    reader.checkReadableBytesFrom(inputStart, capacity)
     val addedWords = capacity - source.length
     val bytes = Math.multiplyExact(addedWords, java.lang.Long.BYTES)
     reader.reserveGraphMemory(if (source.length == 0) Math.addExact(ArrayHeaderBytes, bytes) else bytes)

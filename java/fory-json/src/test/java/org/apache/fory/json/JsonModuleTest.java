@@ -125,6 +125,35 @@ public class JsonModuleTest {
     assertEquals(creations.get(), 2);
   }
 
+  @Test
+  public void runtimeCompositeRollsBack() {
+    AtomicBoolean fail = new AtomicBoolean(true);
+    AtomicInteger creations = new AtomicInteger();
+    JsonCodecFactory factory =
+        (type, resolver) -> {
+          if (type.getRawType() != RecursiveValue.class) {
+            return null;
+          }
+          creations.incrementAndGet();
+          return new RecursiveCodec(fail);
+        };
+    ForyJson json =
+        ForyJson.builder()
+            .withModule(context -> context.registerCodecFactory(factory))
+            .withCodegen(false)
+            .build();
+
+    RecursiveValue value = new RecursiveValue(new RecursiveValue(null));
+    assertThrows(ForyJsonException.class, () -> json.toJson(value));
+    assertEquals(json.toJson(value), "{\"next\":{\"next\":null}}");
+    assertEquals(creations.get(), 2);
+
+    // A dynamic write binding must not authorize or populate a declared read binding.
+    RecursiveValue decoded = json.fromJson("{\"next\":{\"next\":null}}", RecursiveValue.class);
+    assertEquals(json.toJson(decoded), "{\"next\":{\"next\":null}}");
+    assertEquals(creations.get(), 3);
+  }
+
   private static final class KeyedModule implements ForyJsonModule {
     private final String key;
 

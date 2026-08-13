@@ -19,7 +19,7 @@
 
 package org.apache.fory.json.scala
 
-import org.apache.fory.json.annotation.{JsonIgnore, JsonProperty}
+import org.apache.fory.json.annotation.{JsonIgnore, JsonProperty, JsonUnwrapped}
 import org.apache.fory.json.codec.AbstractJsonValueCodec
 import org.apache.fory.json.reader.JsonReader
 import org.apache.fory.json.writer.JsonWriter
@@ -38,6 +38,19 @@ case class Media(
 case class BodyState(id: Int) {
   var label: String = "initial"
   var count: Int = 7
+}
+
+case class CurriedDefault(a: Int)(val b: Int = a + 1)
+
+case class UnwrappedDetails(code: Int = 5) {
+  var note: String = "default-note"
+}
+
+case class UnwrappedState(
+    id: Int = 3,
+    @JsonUnwrapped details: UnwrappedDetails = UnwrappedDetails()
+) {
+  var label: String = "default-label"
 }
 
 case class NullableRequired(value: String)
@@ -124,6 +137,33 @@ class ScalaJsonSuite extends AnyFunSuite {
     }
   }
 
+  test("constructor defaults use preceding parameter lists") {
+    for (json <- Seq(
+        ForyJsonScala.builder().withCodegen(false).build(),
+        ForyJsonScala.builder().withAsyncCompilation(false).build()
+      )) {
+      val value = json.fromJson("{\"a\":4}", classOf[CurriedDefault])
+      assert(value.a == 4)
+      assert(value.b == 5)
+    }
+  }
+
+  test("unwrapped creators apply defaults and body vars") {
+    for (json <- Seq(
+        ForyJsonScala.builder().withCodegen(false).build(),
+        ForyJsonScala.builder().withAsyncCompilation(false).build()
+      )) {
+      val value = json.fromJson(
+        "{\"label\":\"root\",\"note\":\"child\"}",
+        classOf[UnwrappedState]
+      )
+      assert(value.id == 3)
+      assert(value.label == "root")
+      assert(value.details.code == 5)
+      assert(value.details.note == "child")
+    }
+  }
+
   test("required constructor values cannot be omitted as null") {
     for (json <- Seq(
         ForyJsonScala.builder().withCodegen(false).build(),
@@ -201,8 +241,19 @@ class ScalaJsonSuite extends AnyFunSuite {
       json.fromJson("[-1]", classOf[scala.collection.immutable.BitSet])
     }
     assertThrows[org.apache.fory.json.ForyJsonException] {
+      json.fromJson("[100000000]", classOf[scala.collection.immutable.BitSet])
+    }
+    assertThrows[org.apache.fory.json.ForyJsonException] {
       val lazyType = new TypeRef[LazyList[Int]]() {}
       json.fromJson("[1]", lazyType)
+    }
+
+    val bounded = ForyJsonScala.builder().withCodegen(false).withMaxGraphMemoryBytes(48).build()
+    assertThrows[org.apache.fory.json.ForyJsonException] {
+      bounded.fromJson("[\"a\",\"b\",\"c\",\"d\"]", new TypeRef[Seq[String]]() {})
+    }
+    assertThrows[org.apache.fory.json.ForyJsonException] {
+      bounded.fromJson("[\"a\",\"b\",\"c\",\"d\"]", new TypeRef[Iterable[String]]() {})
     }
   }
 

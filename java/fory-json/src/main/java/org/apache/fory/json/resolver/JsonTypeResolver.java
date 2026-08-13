@@ -112,7 +112,7 @@ public final class JsonTypeResolver {
   private final IdentityMap<JsonTypeInfo, CollectionCodec<?>> collectionCodecs;
   private final IdentityMap<JsonTypeInfo, Class<?>> subtypeTypeRoots;
   private int resolutionDepth;
-  private boolean runtimeTypeResolution;
+  private Class<?> runtimeResolutionType;
   private Class<?> subtypeResolutionBase;
   private boolean isolateSubtypeResolution;
 
@@ -190,7 +190,18 @@ public final class JsonTypeResolver {
     }
     JsonValueCodec<?> selected = sharedRegistry.createCodec(rawType, ownerType, this);
     if (selected != null) {
-      return null;
+      if (!(selected instanceof ObjectCodec)) {
+        return null;
+      }
+      // A language object model still produces the standard ObjectCodec; only its constructor and
+      // accessors differ. Publish that shell without resolving it so JsonUnwrappedInfo remains the
+      // sole owner of iterative flattened-graph resolution and cycle detection.
+      ObjectCodec<?> codec = (ObjectCodec<?>) selected;
+      objectCodecs.put(key, codec);
+      typeInfo = newTypeInfo(rawType, rawType, codec);
+      publishTypeInfo(key, typeInfo);
+      registerTypeInfoOwner(typeInfo, codec);
+      return codec;
     }
     ObjectCodec<?> codec = objectCodecs.get(key);
     if (codec == null) {
@@ -311,6 +322,12 @@ public final class JsonTypeResolver {
     Class<?> rawType = CodecUtils.rawType(declaredType, fallback);
     Object key = resolutionTypeKey(declaredType, rawType);
     JsonTypeInfo typeInfo = typeInfos.get(key);
+    if (typeInfo == null && declaredType == rawType && runtimeResolutionType == rawType) {
+      // A dynamic root stays write-only, but its composite shell must still be visible to its own
+      // child binding. Do not publish that shell in typeInfos: a later declared read must resolve
+      // and validate an independent declared-type codec.
+      typeInfo = runtimeTypeInfos.get(rawType);
+    }
     if (typeInfo != null) {
       return typeInfo;
     }
@@ -812,12 +829,12 @@ public final class JsonTypeResolver {
   }
 
   private JsonTypeInfo resolveRuntimeTypeInfo(Class<?> runtimeType) {
-    boolean previousRuntimeResolution = runtimeTypeResolution;
-    runtimeTypeResolution = true;
+    Class<?> previousRuntimeType = runtimeResolutionType;
+    runtimeResolutionType = runtimeType;
     try {
       return resolveRuntimeTypeInfo0(runtimeType);
     } finally {
-      runtimeTypeResolution = previousRuntimeResolution;
+      runtimeResolutionType = previousRuntimeType;
     }
   }
 
@@ -861,6 +878,10 @@ public final class JsonTypeResolver {
       if (codec instanceof ObjectCodec) {
         objectCodecs.put(runtimeType, (ObjectCodec<?>) codec);
         publishTypeInfo(runtimeType, typeInfo);
+      } else {
+        // Composite runtime codecs need the same publish-before-bind lifecycle as ObjectCodec,
+        // without turning a dynamic write binding into a declared read schema.
+        runtimeTypeInfos.put(runtimeType, typeInfo);
       }
       registerTypeInfoOwner(typeInfo, codec);
       resolveCodecTypes(codec, typeRef);
@@ -872,7 +893,7 @@ public final class JsonTypeResolver {
   /** Returns whether the current cold lookup was initiated for a dynamic runtime write type. */
   @Internal
   public boolean resolvingRuntimeType() {
-    return runtimeTypeResolution;
+    return runtimeResolutionType != null;
   }
 
   /** Resolves one branch while preserving the closed root that owns its discriminator schema. */

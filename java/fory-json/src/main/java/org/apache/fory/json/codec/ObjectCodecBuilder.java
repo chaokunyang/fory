@@ -1653,7 +1653,7 @@ final class ObjectCodecBuilder {
     if (!record || generatedCodec == null) {
       for (Constructor<?> constructor : type.getDeclaredConstructors()) {
         validateCodecParameters(type, constructor, record, objectModel, annotations);
-        validateUnwrappedParameters(type, constructor, record, annotations);
+        validateUnwrappedParameters(type, constructor, record, objectModel, annotations);
         validateIgnoreParameters(type, constructor, record, objectModel, annotations);
       }
     }
@@ -1842,11 +1842,17 @@ final class ObjectCodecBuilder {
   }
 
   private static void validateUnwrappedParameters(
-      Class<?> type, Constructor<?> constructor, boolean record, Annotations annotations) {
+      Class<?> type,
+      Constructor<?> constructor,
+      boolean record,
+      JsonObjectModel objectModel,
+      Annotations annotations) {
     Parameter[] parameters = constructor.getParameters();
     for (int i = 0; i < parameters.length; i++) {
       JsonUnwrapped annotation = annotations.get(parameters[i], JsonUnwrapped.class);
-      if (annotation == null || annotations.has(constructor, JsonCreator.class)) {
+      if (annotation == null
+          || annotations.has(constructor, JsonCreator.class)
+          || objectModel != null && constructor.equals(objectModel.constructor())) {
         continue;
       }
       if (record && isPropagatedRecordUnwrapped(type, constructor, i, annotation, annotations)) {

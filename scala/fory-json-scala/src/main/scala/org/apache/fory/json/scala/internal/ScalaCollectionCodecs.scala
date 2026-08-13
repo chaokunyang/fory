@@ -184,6 +184,11 @@ private[scala] final class ScalaListCodec(nonEmptyOnly: Boolean, nilOnly: Boolea
 
 private[scala] final class ScalaIterableCodec(kind: Int, ownerBytes: Int)
     extends CompositeJsonCodec[scala.collection.Iterable[Any]] {
+  private val resultOwnerBytes =
+    if (kind == ScalaCollectionCodecs.ListKind) 0 else ownerBytes
+  private val retainedElementBytes =
+    if (kind == ScalaCollectionCodecs.ListKind) ScalaCollectionCodecs.ListNodeBytes
+    else ScalaCollectionCodecs.ReferenceBytes
   private var elementInfo: JsonTypeInfo = _
   private var elementClassTag: ClassTag[Any] = _
 
@@ -256,20 +261,20 @@ private[scala] final class ScalaIterableCodec(kind: Int, ownerBytes: Int)
     if (reader.tryReadNullToken()) return null
     reader.enterDepth()
     reader.expectNextToken('[')
-    reader.reserveGraphMemory(ownerBytes)
+    reader.reserveGraphMemory(resultOwnerBytes)
     val builder = newBuilder()
     val codec = elementInfo.latin1Reader()
     var size = 0
     if (!reader.consumeNextToken(']')) {
       var more = true
       while (more) {
-        ScalaCollectionCodecs.reserveReferences(reader, size)
+        ScalaCollectionCodecs.reserveElements(reader, size, retainedElementBytes)
         builder += codec.readLatin1(reader)
         size += 1
         more = reader.consumeNextCommaOrEndArray()
       }
     }
-    ScalaCollectionCodecs.reserveReferenceTail(reader, size)
+    ScalaCollectionCodecs.reserveElementTail(reader, size, retainedElementBytes)
     val result = builder.result().asInstanceOf[scala.collection.Iterable[Any]]
     reader.exitDepth()
     result
@@ -279,20 +284,20 @@ private[scala] final class ScalaIterableCodec(kind: Int, ownerBytes: Int)
     if (reader.tryReadNullToken()) return null
     reader.enterDepth()
     reader.expectNextToken('[')
-    reader.reserveGraphMemory(ownerBytes)
+    reader.reserveGraphMemory(resultOwnerBytes)
     val builder = newBuilder()
     val codec = elementInfo.utf16Reader()
     var size = 0
     if (!reader.consumeNextToken(']')) {
       var more = true
       while (more) {
-        ScalaCollectionCodecs.reserveReferences(reader, size)
+        ScalaCollectionCodecs.reserveElements(reader, size, retainedElementBytes)
         builder += codec.readUtf16(reader)
         size += 1
         more = reader.consumeNextCommaOrEndArray()
       }
     }
-    ScalaCollectionCodecs.reserveReferenceTail(reader, size)
+    ScalaCollectionCodecs.reserveElementTail(reader, size, retainedElementBytes)
     val result = builder.result().asInstanceOf[scala.collection.Iterable[Any]]
     reader.exitDepth()
     result
@@ -302,20 +307,20 @@ private[scala] final class ScalaIterableCodec(kind: Int, ownerBytes: Int)
     if (reader.tryReadNullToken()) return null
     reader.enterDepth()
     reader.expectNextToken('[')
-    reader.reserveGraphMemory(ownerBytes)
+    reader.reserveGraphMemory(resultOwnerBytes)
     val builder = newBuilder()
     val codec = elementInfo.utf8Reader()
     var size = 0
     if (!reader.consumeNextToken(']')) {
       var more = true
       while (more) {
-        ScalaCollectionCodecs.reserveReferences(reader, size)
+        ScalaCollectionCodecs.reserveElements(reader, size, retainedElementBytes)
         builder += codec.readUtf8(reader)
         size += 1
         more = reader.consumeNextCommaOrEndArray()
       }
     }
-    ScalaCollectionCodecs.reserveReferenceTail(reader, size)
+    ScalaCollectionCodecs.reserveElementTail(reader, size, retainedElementBytes)
     val result = builder.result().asInstanceOf[scala.collection.Iterable[Any]]
     reader.exitDepth()
     result
@@ -567,10 +572,9 @@ private[scala] object ScalaCollectionCodecs {
 
   val BatchSize = 1024
   val BatchMask = BatchSize - 1
-  private val ReferenceBytes = GraphMemoryEstimates.REFERENCE_BYTES
+  val ReferenceBytes = GraphMemoryEstimates.REFERENCE_BYTES
   val ListNodeBytes = GraphMemoryEstimates.shallowObjectBytes(classOf[scala.collection.immutable.::[_]])
   val ListBatchBytes = BatchSize * ListNodeBytes
-  private val ReferenceBatchBytes = BatchSize * ReferenceBytes
   private val MapEntryBytes = 2 * ReferenceBytes
   private val MapBatchBytes = BatchSize * MapEntryBytes
 
@@ -637,13 +641,13 @@ private[scala] object ScalaCollectionCodecs {
       classOf[scala.collection.immutable.IntMap[_]].isAssignableFrom(rawType) ||
       classOf[scala.collection.immutable.LongMap[_]].isAssignableFrom(rawType)
 
-  def reserveReferences(reader: JsonReader, size: Int): Unit = {
-    if ((size & BatchMask) == BatchMask) reader.reserveGraphMemory(ReferenceBatchBytes)
+  def reserveElements(reader: JsonReader, size: Int, bytes: Int): Unit = {
+    if ((size & BatchMask) == BatchMask) reader.reserveGraphMemory(BatchSize * bytes)
   }
 
-  def reserveReferenceTail(reader: JsonReader, size: Int): Unit = {
+  def reserveElementTail(reader: JsonReader, size: Int, bytes: Int): Unit = {
     val tail = size & BatchMask
-    if (tail != 0) reader.reserveGraphMemory(tail * ReferenceBytes)
+    if (tail != 0) reader.reserveGraphMemory(tail * bytes)
   }
 
   def reserveMapEntries(reader: JsonReader, size: Int): Unit = {

@@ -338,6 +338,31 @@ public abstract class JsonReader {
     return position;
   }
 
+  /**
+   * Proves that an already selected input span contains at least {@code bytes} readable bytes.
+   *
+   * <p>Every supported input code unit is backed by at least one byte, so the
+   * representation-neutral length is a conservative byte lower bound. Composite codecs use this
+   * before a compact scalar controls a larger variable-capacity allocation.
+   */
+  @Internal
+  public final void checkReadableBytesFrom(int start, int bytes) {
+    int inputLength = length();
+    if (start < 0 || start > position || bytes < 0 || bytes > inputLength - start) {
+      throwInsufficientReadableBytes(start, bytes, inputLength);
+    }
+  }
+
+  private void throwInsufficientReadableBytes(int start, int bytes, int inputLength) {
+    throw new ForyJsonException(
+        "Insufficient JSON input for variable-capacity value: requested "
+            + bytes
+            + " readable bytes from position "
+            + start
+            + ", input length "
+            + inputLength);
+  }
+
   @Internal
   public final String materializeFieldName(int start) {
     int current = position;

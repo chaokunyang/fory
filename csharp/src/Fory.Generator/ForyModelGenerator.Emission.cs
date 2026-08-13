@@ -176,10 +176,10 @@ public sealed partial class ForyModelGenerator
             "            global::Apache.Fory.TypeMetaFieldInfo remoteField = typeMeta.Fields[i];");
         sb.AppendLine(
             "            global::Apache.Fory.TypeMetaFieldInfo localField = expectedFields[i];");
-        sb.AppendLine("            if (remoteField.FieldId.HasValue && localField.FieldId.HasValue)");
+        sb.AppendLine("            if (remoteField.FieldId >= 0 && localField.FieldId >= 0)");
         sb.AppendLine("            {");
         sb.AppendLine(
-            "                if (remoteField.FieldId.Value != localField.FieldId.Value || !remoteField.FieldType.Equals(localField.FieldType))");
+            "                if (remoteField.FieldId != localField.FieldId || !remoteField.FieldType.Equals(localField.FieldType))");
         sb.AppendLine("                {");
         sb.AppendLine("                    return false;");
         sb.AppendLine("                }");
@@ -2815,8 +2815,8 @@ public sealed partial class ForyModelGenerator
         }
 
         IEnumerable<MemberModel> ordered = members
-            .OrderBy(m => m.FieldId.HasValue ? 0 : 1)
-            .ThenBy(m => m.FieldId.GetValueOrDefault())
+            .OrderBy(m => m.FieldId >= 0 ? 0 : 1)
+            .ThenBy(m => m.FieldId)
             .ThenBy(m => m.FieldIdentifier, StringComparer.Ordinal);
 
         StringBuilder sb = new();
@@ -2839,8 +2839,8 @@ public sealed partial class ForyModelGenerator
 
     private static string BuildSchemaFieldIdentifier(MemberModel member)
     {
-        return member.FieldId.HasValue
-            ? member.FieldId.Value.ToString(CultureInfo.InvariantCulture)
+        return member.FieldId >= 0
+            ? member.FieldId.ToString(CultureInfo.InvariantCulture)
             : member.FieldIdentifier;
     }
 
@@ -2945,9 +2945,9 @@ public sealed partial class ForyModelGenerator
         return $"new global::Apache.Fory.TypeMetaFieldType({model.TypeIdExpr}, {BoolLiteral(model.Nullable)}, {localTrackRefExpr})";
     }
 
-    private static string BuildTypeMetaFieldIdExpression(short? fieldId)
+    private static string BuildTypeMetaFieldIdExpression(int fieldId)
     {
-        return fieldId.HasValue ? $"(short){fieldId.Value}" : "null";
+        return fieldId.ToString(CultureInfo.InvariantCulture);
     }
 
     private static string BuildWriteRefModeExpression(MemberModel member)

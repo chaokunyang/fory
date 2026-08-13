@@ -550,8 +550,8 @@ func typeMetaFieldLimitRejectsLargeStruct() throws {
         typeName: .empty(specialChar1: "$", specialChar2: "_"),
         registerByName: false,
         fields: [
-            TypeMeta.FieldInfo(fieldID: nil, fieldName: "first", fieldType: fieldType),
-            TypeMeta.FieldInfo(fieldID: nil, fieldName: "second", fieldType: fieldType)
+            TypeMeta.FieldInfo(fieldID: -1, fieldName: "first", fieldType: fieldType),
+            TypeMeta.FieldInfo(fieldID: -1, fieldName: "second", fieldType: fieldType)
         ]
     )
     let encoded = try meta.encode()
@@ -571,7 +571,7 @@ func typeMetaBodyLimitRejectsLargeMetadata() throws {
         registerByName: false,
         fields: [
             TypeMeta.FieldInfo(
-                fieldID: nil,
+                fieldID: -1,
                 fieldName: "value",
                 fieldType: TypeMeta.FieldType(typeID: TypeId.int32.rawValue, nullable: false))
         ]
@@ -600,7 +600,7 @@ func schemaLimitTracksStructTypesSeparately() throws {
             registerByName: false,
             fields: [
                 TypeMeta.FieldInfo(
-                    fieldID: nil,
+                    fieldID: -1,
                     fieldName: fieldName,
                     fieldType: TypeMeta.FieldType(typeID: TypeId.int32.rawValue, nullable: false)
                 )
@@ -690,7 +690,7 @@ func failedSchemaDoesNotConsumeLimit() throws {
             registerByName: false,
             fields: [
                 TypeMeta.FieldInfo(
-                    fieldID: nil,
+                    fieldID: -1,
                     fieldName: fieldName,
                     fieldType: fieldType
                 )
@@ -792,7 +792,7 @@ func failedStaticMetaDoesNotCount() throws {
             registerByName: false,
             fields: [
                 TypeMeta.FieldInfo(
-                    fieldID: nil,
+                    fieldID: -1,
                     fieldName: fieldName,
                     fieldType: TypeMeta.FieldType(typeID: TypeId.int32.rawValue, nullable: false)
                 )
@@ -1300,7 +1300,7 @@ func macroNonPrimitiveFieldsSortByFieldIdentifier() throws {
         fields.map(\.fieldName) == [
             "intValue", "mapValue", "stringValue", "addressValue", "binaryValue"
         ])
-    #expect(fields.map(\.fieldID) == [nil, 10, 20, nil, nil])
+    #expect(fields.map(\.fieldID) == [-1, 10, 20, -1, -1])
 }
 
 @Test
@@ -1374,11 +1374,9 @@ func macroFieldIDsPopulateCompatibleTypeMeta() {
     let fields = FieldIdConfigured.foryFieldsInfo(trackRef: false)
     #expect(fields.count == 2)
 
-    var byID: [Int16: TypeMeta.FieldInfo] = [:]
-    for field in fields {
-        if let id = field.fieldID {
-            byID[id] = field
-        }
+    var byID: [Int32: TypeMeta.FieldInfo] = [:]
+    for field in fields where field.fieldID >= 0 {
+        byID[field.fieldID] = field
     }
 
     #expect(byID[2]?.fieldName == "stableID")
@@ -1595,12 +1593,12 @@ func typeMetaRoundTripByName() throws {
 
     let fields: [TypeMeta.FieldInfo] = [
         .init(
-            fieldID: nil,
+            fieldID: -1,
             fieldName: "createdAt",
             fieldType: .init(typeID: TypeId.varint64.rawValue, nullable: false)
         ),
         .init(
-            fieldID: nil,
+            fieldID: -1,
             fieldName: "tags",
             fieldType: .init(
                 typeID: TypeId.list.rawValue,
@@ -1609,7 +1607,7 @@ func typeMetaRoundTripByName() throws {
             )
         ),
         .init(
-            fieldID: nil,
+            fieldID: -1,
             fieldName: "attributes",
             fieldType: .init(
                 typeID: TypeId.map.rawValue,

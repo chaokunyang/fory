@@ -31,7 +31,7 @@ private let typeMetaNumHashBits: UInt64 = 52
 private let typeMetaHashSeed: UInt64 = 47
 private let noUserTypeID: UInt32 = UInt32.max
 private let typeMetaMaxDepth = 20
-private let maxTaggedFieldID = UInt64(UInt32.max) + UInt64(fieldNameSizeThreshold)
+private let maxTaggedFieldID: Int32 = (1 << 29) - 1
 
 private func isContainerFieldTypeID(_ typeID: UInt32) -> Bool {
     typeID == TypeId.list.rawValue || typeID == TypeId.set.rawValue
@@ -206,47 +206,29 @@ public final class TypeMeta: Equatable, @unchecked Sendable {
     }
 
     public struct FieldInfo: Equatable, Sendable {
-        /// The legacy public tag ID surface. Protocol tag IDs wider than `Int16` are available
-        /// internally through their wire identity and intentionally read as `nil` here.
-        public var fieldID: Int16? {
-            didSet {
-                wireFieldID = fieldID.flatMap { $0 >= 0 ? UInt64($0) : nil }
-            }
-        }
+        /// The protocol tag ID, or `-1` when the field is identified by name.
+        public var fieldID: Int32
         public var fieldName: String
         public var fieldType: FieldType
-        /// Full protocol tag identity, kept separate from local compatible dispatch.
-        internal var wireFieldID: UInt64?
         /// Local compatible-reader dispatch ordinal. This is not part of wire field identity.
-        public internal(set) var matchedFieldID: Int16?
+        public internal(set) var matchedFieldID: Int16
 
-        public init(fieldID: Int16?, fieldName: String, fieldType: FieldType) {
+        public init(fieldID: Int32, fieldName: String, fieldType: FieldType) {
             self.fieldID = fieldID
             self.fieldName = fieldName
             self.fieldType = fieldType
-            self.wireFieldID = fieldID.flatMap { $0 >= 0 ? UInt64($0) : nil }
-            self.matchedFieldID = nil
-        }
-
-        /// Creates field metadata with the full protocol tag identity used by generated schemas.
-        public init(wireFieldID: UInt64, fieldName: String, fieldType: FieldType) {
-            self.fieldID = Int16(exactly: wireFieldID)
-            self.fieldName = fieldName
-            self.fieldType = fieldType
-            self.wireFieldID = wireFieldID
-            self.matchedFieldID = nil
+            self.matchedFieldID = -1
         }
 
         private init(fieldName: String, fieldType: FieldType) {
-            self.fieldID = nil
+            self.fieldID = -1
             self.fieldName = fieldName
             self.fieldType = fieldType
-            self.wireFieldID = nil
-            self.matchedFieldID = nil
+            self.matchedFieldID = -1
         }
 
         @inline(never)
-        private static func invalidTaggedFieldID(_ fieldID: UInt64) -> ForyError {
+        private static func invalidTaggedFieldID(_ fieldID: Int32) -> ForyError {
             ForyError.encodingError(
                 "tagged field id \(fieldID) exceeds protocol maximum \(maxTaggedFieldID)"
             )
@@ -261,22 +243,22 @@ public final class TypeMeta: Equatable, @unchecked Sendable {
                 header |= 0b10
             }
 
-            if let fieldID, fieldID < 0 {
-                throw ForyError.encodingError("negative field id is invalid")
+            guard fieldID >= -1 else {
+                throw ForyError.encodingError("field id must be -1 or non-negative")
             }
-            if let wireFieldID {
-                guard wireFieldID <= maxTaggedFieldID else {
-                    throw Self.invalidTaggedFieldID(wireFieldID)
+            if fieldID >= 0 {
+                guard fieldID <= maxTaggedFieldID else {
+                    throw Self.invalidTaggedFieldID(fieldID)
                 }
                 header |= UInt8(0b11 << 6)
-                if wireFieldID >= UInt64(fieldNameSizeThreshold) {
+                if fieldID >= Int32(fieldNameSizeThreshold) {
                     header |= 0b0011_1100
                     buffer.writeUInt8(header)
                     buffer.writeVarUInt32(
-                        UInt32(wireFieldID - UInt64(fieldNameSizeThreshold))
+                        UInt32(fieldID - Int32(fieldNameSizeThreshold))
                     )
                 } else {
-                    header |= UInt8(wireFieldID << 2)
+                    header |= UInt8(fieldID << 2)
                     buffer.writeUInt8(header)
                 }
                 fieldType.write(buffer, writeFlags: false)
@@ -323,8 +305,13 @@ public final class TypeMeta: Equatable, @unchecked Sendable {
             )
 
             if encodingFlags == 3 {
+                guard size <= UInt64(maxTaggedFieldID) else {
+                    throw ForyError.invalidData(
+                        "tagged field id \(size) exceeds protocol maximum \(maxTaggedFieldID)"
+                    )
+                }
                 return FieldInfo(
-                    wireFieldID: size,
+                    fieldID: Int32(size),
                     fieldName: "$tag\(size)",
                     fieldType: fieldType
                 )
@@ -343,7 +330,6 @@ public final class TypeMeta: Equatable, @unchecked Sendable {
 
         public static func == (lhs: FieldInfo, rhs: FieldInfo) -> Bool {
             lhs.fieldID == rhs.fieldID
-                && lhs.wireFieldID == rhs.wireFieldID
                 && lhs.fieldName == rhs.fieldName
                 && lhs.fieldType == rhs.fieldType
         }
@@ -409,25 +395,30 @@ public final class TypeMeta: Equatable, @unchecked Sendable {
     }
 
     private static func validateFieldIdentities(_ fields: [FieldInfo]) throws {
-        var fieldIDs = Set<UInt64>()
-        var invalidLegacyFieldIDs = Set<Int16>()
+        var fieldIDs = Set<Int32>()
         var fieldNames = Set<String>()
         for field in fields {
-            if let fieldID = field.wireFieldID {
-                guard fieldIDs.insert(fieldID).inserted else {
-                    throw ForyError.invalidData("duplicate compatible field tag \(fieldID)")
+            if field.fieldID >= 0 {
+                guard field.fieldID <= maxTaggedFieldID else {
+                    throw ForyError.invalidData(
+                        "compatible field tag \(field.fieldID) exceeds protocol maximum \(maxTaggedFieldID)"
+                    )
                 }
-            } else if let fieldID = field.fieldID {
-                guard invalidLegacyFieldIDs.insert(fieldID).inserted else {
-                    throw ForyError.invalidData("duplicate compatible field tag \(fieldID)")
+                guard fieldIDs.insert(field.fieldID).inserted else {
+                    throw ForyError.invalidData("duplicate compatible field tag \(field.fieldID)")
                 }
-            } else if !field.fieldName.isEmpty {
+            } else if field.fieldID == -1 {
+                if field.fieldName.isEmpty {
+                    continue
+                }
                 let normalizedName = toSnakeCase(field.fieldName)
                 guard fieldNames.insert(normalizedName).inserted else {
                     throw ForyError.invalidData(
                         "duplicate compatible field name \(normalizedName)"
                     )
                 }
+            } else {
+                throw ForyError.invalidData("invalid compatible field tag \(field.fieldID)")
             }
         }
     }
@@ -780,14 +771,14 @@ public final class TypeMeta: Equatable, @unchecked Sendable {
         }
 
         var fieldIndexByName: [String: (Int, FieldInfo)] = [:]
-        var fieldIndexByID: [UInt64: (Int, FieldInfo)] = [:]
+        var fieldIndexByID: [Int32: (Int, FieldInfo)] = [:]
         fieldIndexByName.reserveCapacity(localFields.count)
         fieldIndexByID.reserveCapacity(localFields.count)
 
         for (index, localField) in localFields.enumerated() {
-            if let fieldID = localField.wireFieldID {
-                fieldIndexByID[fieldID] = (index, localField)
-            } else if localField.fieldID == nil {
+            if localField.fieldID >= 0 {
+                fieldIndexByID[localField.fieldID] = (index, localField)
+            } else {
                 let normalizedName = toSnakeCase(localField.fieldName)
                 guard fieldIndexByName[normalizedName] == nil else {
                     throw ForyError.invalidData(
@@ -806,8 +797,8 @@ public final class TypeMeta: Equatable, @unchecked Sendable {
             let field = resolvedFields[index]
 
             var localMatch: (Int, FieldInfo)?
-            if let fieldID = field.wireFieldID {
-                if let candidate = fieldIndexByID[fieldID] {
+            if field.fieldID >= 0 {
+                if let candidate = fieldIndexByID[field.fieldID] {
                     guard Self.isCompatibleFieldType(field.fieldType, candidate.1.fieldType) else {
                         throw ForyError.invalidData(
                             "compatible field \(field.fieldName) cannot be read as local field \(candidate.1.fieldName)"
@@ -817,7 +808,7 @@ public final class TypeMeta: Equatable, @unchecked Sendable {
                 }
             }
 
-            if localMatch == nil && field.wireFieldID == nil && field.fieldID == nil {
+            if localMatch == nil && field.fieldID == -1 {
                 if let candidate = fieldIndexByName[toSnakeCase(field.fieldName)] {
                     guard Self.isCompatibleFieldType(field.fieldType, candidate.1.fieldType) else {
                         throw ForyError.invalidData(
@@ -830,7 +821,7 @@ public final class TypeMeta: Equatable, @unchecked Sendable {
 
             // Only anonymous legacy fields may fall back by exact type. Named or
             // tagged remote-only fields must stay unmatched so the reader skips them.
-            if localMatch == nil && field.wireFieldID == nil && field.fieldID == nil
+            if localMatch == nil && field.fieldID == -1
                 && field.fieldName.isEmpty
             {
                 for localIndex in localFields.indices where !usedLocalFields[localIndex] {

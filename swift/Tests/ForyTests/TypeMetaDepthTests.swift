@@ -160,7 +160,7 @@ private func constructedTypeMeta(depth: Int) throws -> TypeMeta {
         namespace: .empty(specialChar1: ".", specialChar2: "_"),
         typeName: .empty(specialChar1: "$", specialChar2: "_"),
         registerByName: false,
-        fields: [TypeMeta.FieldInfo(fieldID: nil, fieldName: "value", fieldType: fieldType)]
+        fields: [TypeMeta.FieldInfo(fieldID: -1, fieldName: "value", fieldType: fieldType)]
     )
 }
 

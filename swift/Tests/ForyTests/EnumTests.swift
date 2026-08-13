@@ -271,7 +271,7 @@ func unionReadUsesCompoundDepth() throws {
 }
 
 @Test
-func unknownScalarReplayDepthBoundary() throws {
+func unknownScalarIgnoresWriteDepth() throws {
     let value = ForwardStringOrLong.unknown(
         UnknownCase(
             caseId: 77,
@@ -279,17 +279,13 @@ func unknownScalarReplayDepthBoundary() throws {
             value: Int32(9)
         ))
 
-    let blocked = Fory(config: .init(trackRef: false, compatible: false, maxDepth: 0))
-    try blocked.register(ForwardStringOrLong.self, id: 1002)
-    #expect(throws: (any Error).self) {
-        _ = try blocked.serialize(value)
-    }
+    let writer = Fory(config: .init(trackRef: false, compatible: false, maxDepth: 0))
+    try writer.register(ForwardStringOrLong.self, id: 1002)
+    let bytes = try writer.serialize(value)
 
     let boundary = Fory(config: .init(trackRef: false, compatible: false, maxDepth: 1))
     try boundary.register(ForwardStringOrLong.self, id: 1002)
-    let decoded: ForwardStringOrLong = try boundary.deserialize(
-        boundary.serialize(value)
-    )
+    let decoded: ForwardStringOrLong = try boundary.deserialize(bytes)
     guard case .unknown(let payload) = decoded else {
         Issue.record("expected unknown union case")
         return

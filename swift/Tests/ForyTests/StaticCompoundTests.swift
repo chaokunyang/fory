@@ -43,19 +43,19 @@ private struct WideTagSource {
     @ForyField(id: 32768)
     var first: String = ""
 
-    @ForyField(id: 4294967295)
+    @ForyField(id: 65551)
     var second: String = ""
 
-    @ForyField(id: 4294967296)
+    @ForyField(id: 268435456)
     var third: String = ""
 
-    @ForyField(id: 4294967310)
+    @ForyField(id: 536870911)
     var retained: String = ""
 }
 
 @ForyStruct
 private struct WideTagTarget {
-    @ForyField(id: 4294967310)
+    @ForyField(id: 536870911)
     var renamed: String = ""
 }
 
@@ -104,10 +104,9 @@ func leafCompoundReadersSkipDepth() throws {
 
 @Test
 func wideTagsSkipAndAlign() throws {
-    let expectedIDs: [UInt64] = [32_768, UInt64(UInt32.max), UInt64(UInt32.max) + 1, 4_294_967_310]
+    let expectedIDs: [Int32] = [32_768, 65_551, 268_435_456, 536_870_911]
     let fields = WideTagSource.foryFieldsInfo(trackRef: false)
-    #expect(fields.map(\.wireFieldID) == expectedIDs)
-    #expect(fields.map(\.fieldID) == [nil, nil, nil, nil])
+    #expect(fields.map(\.fieldID) == expectedIDs)
 
     let writer = Fory(config: .init(compatible: true))
     try writer.register(WideTagSource.self, id: 11_991)
@@ -116,9 +115,9 @@ func wideTagsSkipAndAlign() throws {
     )
     let sourceInfo = try writer.typeResolver.requireTypeInfo(for: WideTagSource.self)
     let sourceMeta = try #require(sourceInfo.typeMeta)
-    #expect(sourceMeta.fields.map(\.wireFieldID) == expectedIDs)
+    #expect(sourceMeta.fields.map(\.fieldID) == expectedIDs)
     let decodedMeta = try TypeMeta.decode(sourceMeta.encode())
-    #expect(decodedMeta.fields.map(\.wireFieldID) == expectedIDs)
+    #expect(decodedMeta.fields.map(\.fieldID) == expectedIDs)
 
     let reader = Fory(config: .init(compatible: true))
     try reader.register(WideTagTarget.self, id: 11_991)
@@ -129,6 +128,49 @@ func wideTagsSkipAndAlign() throws {
     let targetMeta = try #require(targetInfo.typeMeta)
     let matchedMeta = try decodedMeta.assigningFieldIDs(from: targetMeta)
     #expect(matchedMeta.fields.map(\.matchedFieldID) == [-1, -1, -1, 0])
+}
+
+@Test
+func fieldTagDomainIsBounded() throws {
+    let fieldType = TypeMeta.FieldType(typeID: TypeId.int32.rawValue, nullable: false)
+    let maxField = TypeMeta.FieldInfo(
+        fieldID: 536_870_911,
+        fieldName: "maximum",
+        fieldType: fieldType
+    )
+    let meta = try TypeMeta(
+        typeID: TypeId.compatibleStruct.rawValue,
+        userTypeID: 11_994,
+        namespace: .empty(specialChar1: ".", specialChar2: "_"),
+        typeName: .empty(specialChar1: "$", specialChar2: "_"),
+        registerByName: false,
+        fields: [maxField]
+    )
+    let decoded = try TypeMeta.decode(meta.encode())
+    #expect(decoded.fields.map(\.fieldID) == [536_870_911])
+
+    #expect(throws: (any Error).self) {
+        _ = try TypeMeta(
+            typeID: TypeId.compatibleStruct.rawValue,
+            userTypeID: 11_994,
+            namespace: .empty(specialChar1: ".", specialChar2: "_"),
+            typeName: .empty(specialChar1: "$", specialChar2: "_"),
+            registerByName: false,
+            fields: [TypeMeta.FieldInfo(fieldID: -2, fieldName: "invalid", fieldType: fieldType)]
+        )
+    }
+    #expect(throws: (any Error).self) {
+        _ = try TypeMeta(
+            typeID: TypeId.compatibleStruct.rawValue,
+            userTypeID: 11_994,
+            namespace: .empty(specialChar1: ".", specialChar2: "_"),
+            typeName: .empty(specialChar1: "$", specialChar2: "_"),
+            registerByName: false,
+            fields: [
+                TypeMeta.FieldInfo(fieldID: 536_870_912, fieldName: "invalid", fieldType: fieldType)
+            ]
+        )
+    }
 }
 
 private func depthNode(count: Int) -> StaticDepthNode {

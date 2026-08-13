@@ -374,12 +374,12 @@ private func buildClassReadCompatibleDataDecl(
                 return value
             }
             \(localFieldsBinding)for remoteField in typeMeta.fields {
-                switch Int(remoteField.matchedFieldID ?? -2) {
+                switch Int(remoteField.matchedFieldID) {
             \(compatibleCases)
                 case -1:
                     try context.skipFieldValue(remoteField.fieldType)
                 default:
-                    throw ForyError.invalidData("invalid compatible matched id \\(remoteField.matchedFieldID ?? -2)")
+                    throw ForyError.invalidData("invalid compatible matched id \\(remoteField.matchedFieldID)")
                 }
             }
             \(depth.leave)
@@ -501,12 +501,12 @@ private func buildStructChangedFallbackDecl(
               \(bufferBinding)
               \(defaults)
               \(localFieldsBinding)for remoteField in typeMeta.fields {
-                  switch Int(remoteField.matchedFieldID ?? -2) {
+                  switch Int(remoteField.matchedFieldID) {
                   \(cases)
                   case -1:
                       try context.skipFieldValue(remoteField.fieldType)
                   default:
-                      throw ForyError.invalidData("invalid compatible matched id \\(remoteField.matchedFieldID ?? -2)")
+                      throw ForyError.invalidData("invalid compatible matched id \\(remoteField.matchedFieldID)")
                   }
               }
               return Target(

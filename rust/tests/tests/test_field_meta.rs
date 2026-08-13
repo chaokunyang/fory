@@ -698,7 +698,7 @@ struct StructWithFieldIds {
 
 #[derive(ForyStruct, Debug, PartialEq)]
 struct StructWithWideFieldIds {
-    #[fory(id = 4294967310)]
+    #[fory(id = 536870911)]
     max: String,
     #[fory(id = 31)]
     small: bool,
@@ -710,7 +710,7 @@ struct StructWithWideFieldIds {
 struct StructWithWideFieldPeer {
     #[fory(id = 65551)]
     renamed_high: i64,
-    #[fory(id = 4294967310)]
+    #[fory(id = 536870911)]
     renamed_max: String,
     #[fory(id = 31)]
     renamed_small: bool,

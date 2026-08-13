@@ -101,8 +101,7 @@ const FIELD_NAME_SIZE_THRESHOLD: usize = 0b1111;
 const FIELD_ID_ENCODING_MARKER: u8 = 0b11;
 /// Threshold for field ID that fits in 4-bit size field
 const SMALL_FIELD_ID_THRESHOLD: i16 = 0b1111;
-// The extended TAG_ID body stores `field_id - 15` as a full varuint32.
-const MAX_FIELD_ID: i64 = u32::MAX as i64 + SMALL_FIELD_ID_THRESHOLD as i64;
+const MAX_FIELD_ID: i32 = (1 << 29) - 1;
 
 const BIG_NAME_THRESHOLD: usize = 0b111111;
 
@@ -438,7 +437,7 @@ impl FieldType {
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct FieldInfo {
-    pub field_id: i16,
+    pub field_id: i32,
     pub field_name: String,
     pub field_type: FieldType,
 }
@@ -452,7 +451,7 @@ impl FieldInfo {
         }
     }
 
-    pub fn new_with_id(field_id: i16, field_name: &str, field_type: FieldType) -> FieldInfo {
+    pub fn new_with_id(field_id: i32, field_name: &str, field_type: FieldType) -> FieldInfo {
         FieldInfo {
             field_id,
             field_name: field_name.to_string(),
@@ -472,16 +471,10 @@ impl FieldInfo {
     }
 
     pub fn from_bytes(reader: &mut Reader) -> Result<FieldInfo, Error> {
-        let (field_info, wire_field_id) = Self::from_bytes_with_id(reader)?;
-        if wire_field_id.is_some_and(|field_id| field_id > i64::from(i16::MAX)) {
-            return Err(Error::invalid_data(
-                "field ID exceeds the public FieldInfo i16 range",
-            ));
-        }
-        Ok(field_info)
+        Self::from_bytes_with_id(reader).map(|(field_info, _)| field_info)
     }
 
-    fn from_bytes_with_id(reader: &mut Reader) -> Result<(FieldInfo, Option<i64>), Error> {
+    fn from_bytes_with_id(reader: &mut Reader) -> Result<(FieldInfo, i32), Error> {
         let header = reader.read_u8()?;
         let nullable = (header & 2) != 0;
         let track_ref = (header & 1) != 0;
@@ -490,22 +483,27 @@ impl FieldInfo {
         // Check if this is field ID mode (encoding bits == 0b11)
         if encoding_bits == FIELD_ID_ENCODING_MARKER {
             // Field ID mode: | 0b11:2bits | field_id_low:4bits | nullable:1bit | track_ref:1bit |
-            let mut field_id = ((header >> 2) & FIELD_NAME_SIZE_THRESHOLD as u8) as i64;
-            if field_id == i64::from(SMALL_FIELD_ID_THRESHOLD) {
-                field_id += reader.read_var_u32()? as i64;
+            let mut field_id = ((header >> 2) & FIELD_NAME_SIZE_THRESHOLD as u8) as u64;
+            if field_id == SMALL_FIELD_ID_THRESHOLD as u64 {
+                field_id += u64::from(reader.read_var_u32()?);
             }
+            if field_id > MAX_FIELD_ID as u64 {
+                return Err(Error::invalid_data(format!(
+                    "field ID {field_id} exceeds maximum {MAX_FIELD_ID}"
+                )));
+            }
+            let field_id = field_id as i32;
 
             let mut field_type = FieldType::from_bytes(reader, false, Option::from(nullable), 0)?;
             field_type.track_ref = track_ref;
 
-            let public_field_id = i16::try_from(field_id).unwrap_or(-1);
             Ok((
                 FieldInfo {
-                    field_id: public_field_id,
+                    field_id,
                     field_name: String::new(), // No field name when using ID encoding
                     field_type,
                 },
-                Some(field_id),
+                field_id,
             ))
         } else {
             // Field name mode (original behavior)
@@ -528,12 +526,17 @@ impl FieldInfo {
                     field_name: field_name.original,
                     field_type,
                 },
-                None,
+                -1,
             ))
         }
     }
 
-    fn to_bytes_with_id(&self, wire_field_id: Option<i64>) -> Result<Vec<u8>, Error> {
+    fn to_bytes_with_id(&self, wire_field_id: i32) -> Result<Vec<u8>, Error> {
+        if wire_field_id < -1 {
+            return Err(Error::invalid_data(format!(
+                "field ID {wire_field_id} must be -1 or non-negative"
+            )));
+        }
         let mut buffer = vec![];
         let mut writer = Writer::from_buffer(&mut buffer);
         let nullable = self.field_type.nullable;
@@ -542,16 +545,16 @@ impl FieldInfo {
         // Use field ID encoding if:
         // 1. field_id >= 0 (user-set or matched from local type), OR
         // 2. field_name is empty (ID-encoded field that couldn't be matched - use ID even if -1)
-        if wire_field_id.is_some() || self.field_name.is_empty() {
+        if wire_field_id >= 0 || self.field_name.is_empty() {
             // Field ID mode: | 0b11:2bits | field_id_low:4bits | nullable:1bit | track_ref:1bit |
             // Use max(0, field_id) to handle unmatched fields that have field_id = -1
-            let field_id = wire_field_id.unwrap_or(0).max(0);
+            let field_id = wire_field_id.max(0);
             if field_id > MAX_FIELD_ID {
                 return Err(Error::invalid_data(format!(
                     "field ID {field_id} exceeds maximum {MAX_FIELD_ID}"
                 )));
             }
-            let mut header: u8 = (min(i64::from(SMALL_FIELD_ID_THRESHOLD), field_id) as u8) << 2;
+            let mut header: u8 = (min(i32::from(SMALL_FIELD_ID_THRESHOLD), field_id) as u8) << 2;
             if track_ref {
                 header |= 1;
             }
@@ -561,8 +564,8 @@ impl FieldInfo {
             // Set encoding bits to 0b11 to indicate field ID mode
             header |= FIELD_ID_ENCODING_MARKER << 6;
             writer.write_u8(header);
-            if field_id >= i64::from(SMALL_FIELD_ID_THRESHOLD) {
-                writer.write_var_u32((field_id - i64::from(SMALL_FIELD_ID_THRESHOLD)) as u32);
+            if field_id >= i32::from(SMALL_FIELD_ID_THRESHOLD) {
+                writer.write_var_u32((field_id - i32::from(SMALL_FIELD_ID_THRESHOLD)) as u32);
             }
             self.field_type.to_bytes(&mut writer, false, nullable)?;
             // No field name written in ID mode
@@ -599,8 +602,8 @@ impl FieldInfo {
 }
 
 #[inline(always)]
-fn field_wire_id(field_info: &FieldInfo) -> Option<i64> {
-    (field_info.field_id >= 0).then_some(i64::from(field_info.field_id))
+fn field_wire_id(field_info: &FieldInfo) -> i32 {
+    field_info.field_id
 }
 
 const FNV_OFFSET_BASIS: u64 = 14695981039346656037;
@@ -747,7 +750,7 @@ fn compute_schema_hash(field_infos: &[FieldInfo]) -> i64 {
 }
 
 #[inline(always)]
-pub fn compute_field_hash(hash: u32, id: i16) -> u32 {
+pub fn compute_field_hash(hash: u32, id: i32) -> u32 {
     let mut next_hash = (hash as u64) * 31 + (id as u64);
     while next_hash >= MAX_HASH32 {
         next_hash /= 7;
@@ -756,7 +759,7 @@ pub fn compute_field_hash(hash: u32, id: i16) -> u32 {
 }
 
 #[inline(always)]
-pub fn compute_struct_hash(field_ids: impl IntoIterator<Item = i16>) -> u32 {
+pub fn compute_struct_hash(field_ids: impl IntoIterator<Item = i32>) -> u32 {
     field_ids.into_iter().fold(17u32, compute_field_hash)
 }
 
@@ -880,7 +883,7 @@ pub fn assign_remote_field_ids(
         .map(|(i, field)| (field.field_name.clone(), (i, field)))
         .collect();
 
-    let field_index_by_id: HashMap<i16, (usize, &FieldInfo)> = local_field_infos
+    let field_index_by_id: HashMap<i32, (usize, &FieldInfo)> = local_field_infos
         .iter()
         .enumerate()
         .filter(|(_, field)| field.field_id >= 0)
@@ -903,9 +906,9 @@ pub fn assign_remote_field_ids(
 
 fn assign_remote_field_ids_with_wire(
     local_field_infos: &[FieldInfo],
-    local_wire_ids: &[Option<i64>],
+    local_wire_ids: &[i32],
     field_infos: &mut [FieldInfo],
-    remote_wire_ids: &[Option<i64>],
+    remote_wire_ids: &[i32],
 ) -> Result<(), Error> {
     if local_wire_ids.len() != local_field_infos.len() || remote_wire_ids.len() != field_infos.len()
     {
@@ -919,20 +922,21 @@ fn assign_remote_field_ids_with_wire(
         .iter()
         .zip(local_wire_ids)
         .enumerate()
-        .filter(|(_, (field, wire_id))| wire_id.is_none() && !field.field_name.is_empty())
+        .filter(|(_, (field, wire_id))| **wire_id < 0 && !field.field_name.is_empty())
         .map(|(i, (field, _))| (field.field_name.clone(), (i, field)))
         .collect();
 
-    let field_index_by_id: HashMap<i64, (usize, &FieldInfo)> = local_field_infos
+    let field_index_by_id: HashMap<i32, (usize, &FieldInfo)> = local_field_infos
         .iter()
         .zip(local_wire_ids)
         .enumerate()
-        .filter_map(|(i, (field, wire_id))| wire_id.map(|id| (id, (i, field))))
+        .filter(|(_, (_, wire_id))| **wire_id >= 0)
+        .map(|(i, (field, wire_id))| (*wire_id, (i, field)))
         .collect();
 
     let mut used_local_fields = vec![false; local_field_infos.len()];
     for (field, remote_wire_id) in field_infos.iter_mut().zip(remote_wire_ids) {
-        let local_match = if let Some(remote_wire_id) = remote_wire_id {
+        let local_match = if *remote_wire_id >= 0 {
             field_index_by_id.get(remote_wire_id).copied()
         } else {
             let snake_case_name = to_snake_case(&field.field_name);
@@ -987,9 +991,9 @@ fn assign_remote_field_id(
                 )));
             }
             field.field_id = if exact_field {
-                (sorted_index * 2) as i16
+                (sorted_index * 2) as i32
             } else {
-                (sorted_index * 2 + 1) as i16
+                (sorted_index * 2 + 1) as i32
             };
             used_local_fields[sorted_index] = true;
             if crate::util::ENABLE_FORY_DEBUG_OUTPUT {
@@ -1023,9 +1027,9 @@ pub struct TypeMeta {
     type_name: Rc<MetaString>,
     register_by_name: bool,
     field_infos: Vec<FieldInfo>,
-    // FieldInfo keeps its original public i16 source contract. TypeMeta owns full protocol tag
-    // identities independently so extended TAG_ID values never narrow into local dispatch IDs.
-    field_wire_ids: Vec<Option<i64>>,
+    // Compatible dispatch overwrites FieldInfo.field_id after matching, so TypeMeta keeps the
+    // original protocol tag identities in a parallel i32 slice using -1 for name encoding.
+    field_wire_ids: Vec<i32>,
     bytes: Vec<u8>,
 }
 
@@ -1057,17 +1061,17 @@ impl TypeMeta {
         type_name: MetaString,
         register_by_name: bool,
         field_infos: Vec<FieldInfo>,
-        field_wire_ids: Vec<Option<i64>>,
+        field_wire_ids: Vec<i32>,
     ) -> Result<TypeMeta, Error> {
         if field_wire_ids.len() != field_infos.len() {
             return Err(Error::invalid_data(
                 "field wire IDs must align with field metadata",
             ));
         }
-        for field_id in field_wire_ids.iter().flatten() {
-            if *field_id < 0 || *field_id > MAX_FIELD_ID {
+        for field_id in &field_wire_ids {
+            if *field_id < -1 || *field_id > MAX_FIELD_ID {
                 return Err(Error::invalid_data(format!(
-                    "field ID {field_id} exceeds supported range [0, {MAX_FIELD_ID}]"
+                    "field ID {field_id} must be -1 or within [0, {MAX_FIELD_ID}]"
                 )));
             }
         }
@@ -1098,8 +1102,8 @@ impl TypeMeta {
     /// Remaps parsed remote fields for a selected local enum variant.
     ///
     /// Generated compatible enum readers use this only when an explicit variant tag selects a
-    /// differently named local variant. Keeping both ID slices in TypeMeta prevents full-width
-    /// wire tags from being projected through FieldInfo's public i16 dispatch field.
+    /// differently named local variant. Keeping both ID slices in TypeMeta preserves protocol
+    /// identities after FieldInfo is reassigned to local compatible dispatch.
     #[doc(hidden)]
     pub fn remap_remote_fields(
         &self,
@@ -1189,7 +1193,7 @@ impl TypeMeta {
         type_name: MetaString,
         register_by_name: bool,
         field_infos: Vec<FieldInfo>,
-        field_wire_ids: &[Option<i64>],
+        field_wire_ids: &[i32],
     ) -> Result<TypeMeta, Error> {
         let field_wire_ids = if field_wire_ids.is_empty() {
             field_infos.iter().map(field_wire_id).collect()
@@ -1412,7 +1416,7 @@ impl TypeMeta {
     fn assign_field_ids(
         type_info_current: &TypeInfo,
         field_infos: &mut [FieldInfo],
-        field_wire_ids: &[Option<i64>],
+        field_wire_ids: &[i32],
     ) -> Result<(), Error> {
         if crate::util::ENABLE_FORY_DEBUG_OUTPUT {
             eprintln!(
@@ -1577,22 +1581,22 @@ mod tests {
     }
 
     #[test]
-    fn preserves_full_field_id_domain() {
+    fn preserves_field_id_domain() {
         let field_type = FieldType::new(crate::type_id::INT32, false, vec![]);
         for field_id in [65_551, MAX_FIELD_ID] {
             let field = FieldInfo::new("value", field_type.clone());
-            let bytes = field.to_bytes_with_id(Some(field_id)).unwrap();
+            let bytes = field.to_bytes_with_id(field_id).unwrap();
             let expected_extension: &[u8] = if field_id == 65_551 {
                 &[0x80, 0x80, 0x04]
             } else {
-                &[0xff, 0xff, 0xff, 0xff, 0x0f]
+                &[0xf0, 0xff, 0xff, 0xff, 0x01]
             };
             assert_eq!(bytes[0], 0xfc);
             assert_eq!(&bytes[1..1 + expected_extension.len()], expected_extension);
             let mut reader = Reader::new(&bytes);
             let (_, decoded_field_id) = FieldInfo::from_bytes_with_id(&mut reader).unwrap();
 
-            assert_eq!(decoded_field_id, Some(field_id));
+            assert_eq!(decoded_field_id, field_id);
             assert!(reader.slice_after_cursor().is_empty());
 
             let meta = TypeMeta::new_with_field_ids(
@@ -1602,13 +1606,21 @@ mod tests {
                 MetaString::get_empty().clone(),
                 false,
                 vec![field],
-                vec![Some(field_id)],
+                vec![field_id],
             )
             .unwrap();
             let mut reader = Reader::new(meta.get_bytes());
             let parsed = TypeMeta::from_bytes(&mut reader, &TypeResolver::default()).unwrap();
-            assert_eq!(parsed.field_wire_ids, [Some(field_id)]);
+            assert_eq!(parsed.field_wire_ids, [field_id]);
         }
+    }
+
+    #[test]
+    fn rejects_field_id_outside_protocol_domain() {
+        let field_type = FieldType::new(crate::type_id::INT32, false, vec![]);
+        let field = FieldInfo::new("value", field_type);
+        assert!(field.to_bytes_with_id(-2).is_err());
+        assert!(field.to_bytes_with_id(MAX_FIELD_ID + 1).is_err());
     }
 
     #[test]
@@ -1745,9 +1757,9 @@ mod tests {
     fn high_tag_does_not_match_low_tag() {
         let field_type = FieldType::new(crate::type_id::STRING, false, vec![]);
         let local_fields = [FieldInfo::new_with_id(15, "value", field_type.clone())];
-        let local_wire_ids = [Some(15)];
+        let local_wire_ids = [15];
         let mut remote_fields = [FieldInfo::new("", field_type)];
-        let remote_wire_ids = [Some(65_551)];
+        let remote_wire_ids = [65_551];
 
         assign_remote_field_ids_with_wire(
             &local_fields,

@@ -254,10 +254,10 @@ pub trait StructSerializer: Serializer {
 
     /// Full protocol tag identities aligned with `fields_info`.
     ///
-    /// An empty slice keeps the legacy behavior of deriving identities from public i16
-    /// `FieldInfo` values. Generated serializers override this for extended TAG_ID values.
+    /// An empty slice derives identities from `FieldInfo`; generated serializers override it to
+    /// preserve protocol tags after compatible matching replaces the field ID with local dispatch.
     #[doc(hidden)]
-    fn type_meta_field_ids() -> &'static [Option<i64>] {
+    fn type_meta_field_ids() -> &'static [i32] {
         &[]
     }
 
@@ -267,7 +267,7 @@ pub trait StructSerializer: Serializer {
 
     /// Full protocol tag identities aligned with `variants_fields_info`.
     #[doc(hidden)]
-    fn variants_type_meta_field_ids() -> &'static [&'static [Option<i64>]] {
+    fn variants_type_meta_field_ids() -> &'static [&'static [i32]] {
         &[]
     }
 

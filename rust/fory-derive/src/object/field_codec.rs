@@ -41,7 +41,7 @@ pub(crate) struct ResolvedField<'a> {
     pub private_ident: syn::Ident,
     pub codec_ty: TokenStream,
     pub value_ty: &'a Type,
-    pub field_id: i64,
+    pub field_id: i32,
     pub has_selected_provider: bool,
     pub read_always_advances: TokenStream,
 }
@@ -200,22 +200,13 @@ impl<'a> ResolvedField<'a> {
         let field_id = self.field_id;
         let name = &self.source.field_name;
         let call = self.codec_call();
-        if field_id > i64::from(i16::MAX) {
-            quote! {{
-                fory_core::meta::FieldInfo::new(
-                    #name,
-                    #call::field_type(type_resolver)?
-                )
-            }}
-        } else {
-            quote! {{
-                fory_core::meta::FieldInfo::new_with_id(
-                    #field_id as i16,
-                    #name,
-                    #call::field_type(type_resolver)?
-                )
-            }}
-        }
+        quote! {{
+            fory_core::meta::FieldInfo::new_with_id(
+                #field_id,
+                #name,
+                #call::field_type(type_resolver)?
+            )
+        }}
     }
 }
 
@@ -1042,7 +1033,7 @@ fn codec_for_child(ty: &Type, meta: &ForyFieldMeta) -> syn::Result<CodecSelectio
 
 fn transparent_child_meta(meta: &ForyFieldMeta) -> ForyFieldMeta {
     let mut child = meta.clone();
-    child.id = None;
+    child.id = -1;
     child.nullable = None;
     child.r#ref = None;
     child.skip = false;

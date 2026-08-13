@@ -98,12 +98,8 @@ pub fn gen_type_meta_field_ids(source_fields: &[SourceField<'_>]) -> TokenStream
                 .iter()
                 .find(|source| &source.field_name == field_name)?;
             let meta = parse_field_meta(source.field).ok()?;
-            Some(if meta.uses_tag_id() {
-                let field_id = meta.effective_id();
-                quote! { ::std::option::Option::Some(#field_id) }
-            } else {
-                quote! { ::std::option::Option::None }
-            })
+            let field_id = meta.effective_id();
+            Some(quote! { #field_id })
         })
         .collect::<Vec<_>>();
 

@@ -751,7 +751,7 @@ fn wide_variant_remap() {
         Empty,
         #[fory(id = 7)]
         Original {
-            #[fory(id = 4294967310)]
+            #[fory(id = 536870911)]
             max: String,
             #[fory(id = 31)]
             small: bool,
@@ -768,7 +768,7 @@ fn wide_variant_remap() {
         Renamed {
             #[fory(id = 65551)]
             renamed_high: i64,
-            #[fory(id = 4294967310)]
+            #[fory(id = 536870911)]
             renamed_max: String,
             #[fory(id = 31)]
             renamed_small: bool,

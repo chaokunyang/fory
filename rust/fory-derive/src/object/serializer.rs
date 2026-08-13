@@ -240,7 +240,7 @@ pub fn derive_serializer(
                 #fields_info
             }
 
-            fn type_meta_field_ids() -> &'static [::std::option::Option<i64>] {
+            fn type_meta_field_ids() -> &'static [i32] {
                 #type_meta_field_ids
             }
 
@@ -258,7 +258,7 @@ pub fn derive_serializer(
             }
 
             fn variants_type_meta_field_ids(
-            ) -> &'static [&'static [::std::option::Option<i64>]] {
+            ) -> &'static [&'static [i32]] {
                 #variants_type_meta_field_ids
             }
 

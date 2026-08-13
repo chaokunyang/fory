@@ -443,8 +443,8 @@ pub(crate) fn gen_read_compatible_target(
         })
         .enumerate()
         .flat_map(|(sorted_idx, binding)| {
-            let direct_field_id = (sorted_idx * 2) as i16;
-            let compatible_field_id = (sorted_idx * 2 + 1) as i16;
+            let direct_field_id = (sorted_idx * 2) as i32;
+            let compatible_field_id = (sorted_idx * 2 + 1) as i32;
             let field_index = sorted_idx;
             let direct_body = binding.read_compatible_direct();
             let compatible_body = binding.read_compatible_conversion();

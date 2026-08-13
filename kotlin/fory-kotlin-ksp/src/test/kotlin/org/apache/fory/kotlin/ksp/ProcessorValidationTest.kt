@@ -79,6 +79,15 @@ class ProcessorValidationTest {
   }
 
   @Test
+  fun validatesFieldIds() {
+    assertNull(fieldIdError(-1, requireFieldId = false))
+    assertNull(fieldIdError(0, requireFieldId = true))
+    assertNull(fieldIdError(536_870_911, requireFieldId = true))
+    assertTrue(fieldIdError(-1, requireFieldId = true)!!.contains("non-negative"))
+    assertTrue(fieldIdError(536_870_912, requireFieldId = true)!!.contains("536870911"))
+  }
+
+  @Test
   fun constructorNamesArguments() {
     val stringType =
       KotlinSourceTypeNode(

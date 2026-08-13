@@ -65,6 +65,13 @@ func buildReadCompatibleDataDecl(
     )
 }
 
+private func compoundDepthLines(_ fields: [ParsedField]) -> (enter: String, leave: String) {
+    guard fields.contains(where: \.readMayRecurse) else {
+        return ("", "")
+    }
+    return ("try context.enterCompoundDepth()", "context.leaveCompoundDepth()")
+}
+
 private func serializedGraphFieldBytesExpr(_ field: ParsedField) -> String {
     if field.primitiveSize > 0 {
         return "\(field.primitiveSize)"
@@ -241,11 +248,12 @@ private func buildClassReadDataDecl(
     let primitiveFastFields = leadingPrimitiveFastPathFields(sortedFields)
     let schemaAssignBody = buildClassAssignBody(
         sortedFields: sortedFields, primitiveFastFields: primitiveFastFields, compatibleAligned: false)
+    let depth = compoundDepthLines(sortedFields)
 
     return """
         \(successBodyAttribute)
         private static func __foryReadDataImpl(_ context: ReadContext, reservedRefID: UInt32?) throws -> Target {
-            try context.enterCompoundDepth()
+            \(depth.enter)
             let __buffer = context.buffer
             \(schemaHashCheckExpr())
             \(reserveClassGraphOwnerLine(fields: graphFields, indent: "        "))
@@ -254,7 +262,7 @@ private func buildClassReadDataDecl(
                 context.refReader.storeRef(value, at: reservedRefID)
             }
             \(schemaAssignBody)
-            context.leaveCompoundDepth()
+            \(depth.leave)
             return value
         }
 
@@ -272,11 +280,9 @@ private func buildEmptyStructReadDataDecl(
     """
     \(successBodyAttribute)
     \(accessPrefix)static func readData(_ context: ReadContext) throws -> Target {
-        try context.enterCompoundDepth()
         let __buffer = context.buffer
         \(schemaHashCheckExpr())
         let value = Target()
-        context.leaveCompoundDepth()
         return value
     }
     """
@@ -295,18 +301,19 @@ private func buildStructReadDataDecl(
         compatibleAligned: false
     )
     let ctorArgs = buildCtorArgs(fields)
+    let depth = compoundDepthLines(sortedFields)
 
     return """
         \(successBodyAttribute)
         \(accessPrefix)static func readData(_ context: ReadContext) throws -> Target {
-            try context.enterCompoundDepth()
+            \(depth.enter)
             let __buffer = context.buffer
             \(schemaHashCheckExpr())
             \(schemaReadBody)
             let value = Target(
                 \(ctorArgs)
             )
-            context.leaveCompoundDepth()
+            \(depth.leave)
             return value
         }
         """
@@ -337,6 +344,7 @@ private func buildClassReadCompatibleDataDecl(
         compatibleCases.contains("__foryLocalFields")
         ? "let __foryLocalFields = remoteTypeInfo.typeMeta?.fields ?? Self.foryFieldsInfo(trackRef: context.trackRef)\n        "
         : ""
+    let depth = compoundDepthLines(sortedFields)
 
     return """
         @inline(never)
@@ -345,7 +353,7 @@ private func buildClassReadCompatibleDataDecl(
             remoteTypeInfo: TypeInfo,
             reservedRefID: UInt32?
         ) throws -> Target {
-            try context.enterCompoundDepth()
+            \(depth.enter)
             \(bufferBinding)guard let typeMeta = remoteTypeInfo.compatibleTypeMeta else {
                 throw ForyError.invalidData("compatible type metadata is required")
             }
@@ -358,11 +366,11 @@ private func buildClassReadCompatibleDataDecl(
                typeMeta.headerHash == localHeaderHash {
                 if !remoteTypeInfo.typeDefHasUserTypeFields {
                     \(schemaAssignBody)
-                    context.leaveCompoundDepth()
+                    \(depth.leave)
                     return value
                 }
                 \(compatibleAlignedAssignBody)
-                context.leaveCompoundDepth()
+                \(depth.leave)
                 return value
             }
             \(localFieldsBinding)for remoteField in typeMeta.fields {
@@ -374,7 +382,7 @@ private func buildClassReadCompatibleDataDecl(
                     throw ForyError.invalidData("invalid compatible matched id \\(remoteField.matchedFieldID ?? -2)")
                 }
             }
-            context.leaveCompoundDepth()
+            \(depth.leave)
             return value
         }
 
@@ -389,21 +397,18 @@ private func buildEmptyStructReadCompatibleDataDecl(accessPrefix: String) -> Str
     """
     @inline(never)
     \(accessPrefix)static func readCompatible(_ context: ReadContext, typeInfo: TypeInfo) throws -> Target {
-        try context.enterCompoundDepth()
         guard let typeMeta = typeInfo.compatibleTypeMeta else {
             throw ForyError.invalidData("compatible type metadata is required")
         }
         if let localHeaderHash = typeInfo.typeDefHeaderHash,
            typeMeta.headerHash == localHeaderHash {
             let value = Target()
-            context.leaveCompoundDepth()
             return value
         }
         for remoteField in typeMeta.fields {
             try context.skipFieldValue(remoteField.fieldType)
         }
         let value = Target()
-        context.leaveCompoundDepth()
         return value
     }
     """
@@ -440,13 +445,14 @@ private func buildStructReadCompatibleDataDecl(
     let bufferBinding =
         (schemaReadBody.contains("__buffer") || compatibleAlignedReadBody.contains("__buffer"))
         ? "let __buffer = context.buffer\n        " : ""
+    let depth = compoundDepthLines(sortedFields)
 
     return """
         \(changedFallbackDecl)
 
         @inline(never)
         \(accessPrefix)static func readCompatible(_ context: ReadContext, typeInfo: TypeInfo) throws -> Target {
-            try context.enterCompoundDepth()
+            \(depth.enter)
             \(bufferBinding)guard let typeMeta = typeInfo.compatibleTypeMeta else {
                 throw ForyError.invalidData("compatible type metadata is required")
             }
@@ -457,21 +463,21 @@ private func buildStructReadCompatibleDataDecl(
                     let value = Target(
                         \(ctorArgs)
                     )
-                    context.leaveCompoundDepth()
+                    \(depth.leave)
                     return value
                 }
                 \(compatibleAlignedReadBody)
                 let value = Target(
                     \(ctorArgs)
                 )
-                context.leaveCompoundDepth()
+                \(depth.leave)
                 return value
             }
             let value = try Self.__foryReadChangedData(
                 context,
                 typeMeta: typeMeta
             )
-            context.leaveCompoundDepth()
+            \(depth.leave)
             return value
         }
         """

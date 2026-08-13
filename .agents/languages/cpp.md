@@ -19,6 +19,14 @@ Load this file when changing `cpp/`, Cython build plumbing, or C++ xlang behavio
   cursor rollback, or tests that pin the first detection point unless deferral can
   cause out-of-bounds access, undefined behavior, resource amplification, state
   pollution, or success past the required safepoint.
+- Deserialization depth is decoder-owned state. `WriteContext` must never expose or mutate it, even
+  when the application-owned object graph is recursive. A generated `Serializer<T>` computes
+  whether its own read body may recurse from its field metadata and guards only that body. Leaf-only
+  structs compile the guard out with `if constexpr`. Custom serializers own their own read
+  recursion. Collection, map, pointer, and `std::any` serializers manage only the recursive
+  structure in their own read bodies and must not inspect whether a child uses a generated
+  serializer. Do not use a generated-serializer marker as depth architecture; compatible
+  removed-field eligibility remains separate in the struct-compatible owner.
 - Put private methods last in class definitions, immediately before private fields.
 - Do not redesign alias-based or low-level public type shapes to add convenience methods unless the user explicitly asks for that API change.
 - For cross-language feature ports, match protocol behavior but use idiomatic C++ ownership and layering instead of mirroring Java structure literally.

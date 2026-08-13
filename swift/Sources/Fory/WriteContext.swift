@@ -22,17 +22,6 @@ private struct MetaStringCacheKey: Hashable {
     let bytes: [UInt8]
 }
 
-@inline(never)
-private func invalidDynamicDepth(_ maxDepth: Int) throws -> Never {
-    throw ForyError.invalidData("configured maxDepth \(maxDepth) is negative")
-}
-
-@inline(never)
-private func dynamicDepthExceeded(_ depth: Int, maxDepth: Int) throws -> Never {
-    throw ForyError.invalidData(
-        "dynamic Any nesting depth \(depth) exceeds configured maxDepth \(maxDepth)")
-}
-
 final class MetaStringWriteState {
     private var stringIndexByKey: [MetaStringCacheKey: UInt32] = [:]
     private var nextIndex: UInt32 = 0
@@ -70,14 +59,12 @@ public final class WriteContext {
     public let trackRef: Bool
     public let compatible: Bool
     public let checkClassVersion: Bool
-    public let maxDepth: Int
     public let refWriter: RefWriter
     let metaStringWriteState: MetaStringWriteState
     private let typeIndexBySerializer = UInt64Map<UInt32>(initialCapacity: 8)
     private var typeDefStateUsed = false
     private var metaStringWriteStateUsed = false
     private var dynamicRefStateUsed = false
-    private var dynamicAnyDepth = 0
     private var lastTypeInfo = TypeInfo.uncached
     private var lastTargetTypeInfo = TypeInfo.uncached
 
@@ -86,8 +73,7 @@ public final class WriteContext {
         typeResolver: TypeResolver,
         trackRef: Bool,
         compatible: Bool = false,
-        checkClassVersion: Bool = true,
-        maxDepth: Int = 5
+        checkClassVersion: Bool = true
     ) {
         self.init(
             buffer: buffer,
@@ -95,7 +81,6 @@ public final class WriteContext {
             trackRef: trackRef,
             compatible: compatible,
             checkClassVersion: checkClassVersion,
-            maxDepth: maxDepth,
             metaStringWriteState: MetaStringWriteState()
         )
     }
@@ -106,7 +91,6 @@ public final class WriteContext {
         trackRef: Bool,
         compatible: Bool,
         checkClassVersion: Bool,
-        maxDepth: Int,
         metaStringWriteState: MetaStringWriteState
     ) {
         self.buffer = buffer
@@ -114,21 +98,8 @@ public final class WriteContext {
         self.trackRef = trackRef
         self.compatible = compatible
         self.checkClassVersion = checkClassVersion
-        self.maxDepth = maxDepth
         self.refWriter = RefWriter()
         self.metaStringWriteState = metaStringWriteState
-    }
-
-    @inline(__always)
-    func enterDynamicAnyDepth() throws {
-        if maxDepth < 0 {
-            try invalidDynamicDepth(maxDepth)
-        }
-        let nextDepth = dynamicAnyDepth + 1
-        if nextDepth > maxDepth {
-            try dynamicDepthExceeded(nextDepth, maxDepth: maxDepth)
-        }
-        dynamicAnyDepth = nextDepth
     }
 
     @usableFromInline
@@ -158,13 +129,6 @@ public final class WriteContext {
     @inline(__always)
     internal func writeStaticTypeInfo(_ typeID: TypeId) {
         buffer.writeUInt8(UInt8(truncatingIfNeeded: typeID.rawValue))
-    }
-
-    @inline(__always)
-    func leaveDynamicAnyDepth() {
-        if dynamicAnyDepth > 0 {
-            dynamicAnyDepth -= 1
-        }
     }
 
     @inline(__always)
@@ -218,9 +182,6 @@ public final class WriteContext {
     }
 
     func reset() {
-        if dynamicAnyDepth != 0 {
-            dynamicAnyDepth = 0
-        }
         if trackRef || dynamicRefStateUsed {
             refWriter.reset()
             dynamicRefStateUsed = false

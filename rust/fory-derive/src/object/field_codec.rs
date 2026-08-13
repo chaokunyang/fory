@@ -316,6 +316,110 @@ pub(crate) fn struct_read_data_always_advances(
     Ok(quote! { false #(|| #fields)* })
 }
 
+pub(crate) fn struct_read_may_recurse(source_fields: &[SourceField<'_>]) -> syn::Result<bool> {
+    let bindings = build_bindings(source_fields)?;
+    Ok(bindings.iter().any(|binding| match binding {
+        // An explicitly selected custom serializer owns any recursion in its
+        // body. The generated parent must not add a compensating frame.
+        FieldBinding::Codec(field) => {
+            !field.has_selected_provider && type_may_recurse(field.value_ty)
+        }
+        FieldBinding::Skipped(_) => false,
+    }))
+}
+
+pub(crate) fn type_may_recurse(ty: &Type) -> bool {
+    match ty {
+        Type::Array(array) => type_may_recurse(array.elem.as_ref()),
+        Type::Tuple(tuple) => tuple.elems.iter().any(type_may_recurse),
+        Type::Paren(paren) => type_may_recurse(paren.elem.as_ref()),
+        Type::Group(group) => type_may_recurse(group.elem.as_ref()),
+        Type::Never(_) => false,
+        Type::Path(type_path) => {
+            let Some(segment) = type_path.path.segments.last() else {
+                return true;
+            };
+            let name = segment.ident.to_string();
+            if is_known_leaf_type(&name) {
+                return false;
+            }
+            if !is_transparent_read_carrier(&name) {
+                // Stable derive cannot inspect an opaque alias, generic parameter, or user type.
+                return true;
+            }
+            match &segment.arguments {
+                PathArguments::AngleBracketed(args) => args.args.iter().any(|arg| match arg {
+                    GenericArgument::Type(child) => type_may_recurse(child),
+                    GenericArgument::AssocType(binding) => type_may_recurse(&binding.ty),
+                    _ => false,
+                }),
+                PathArguments::None => false,
+                PathArguments::Parenthesized(_) => true,
+            }
+        }
+        // Trait objects, inferred/generic macro inputs, and every other unresolved shape may
+        // dispatch to a recursive reader and must retain the static depth frame.
+        _ => true,
+    }
+}
+
+fn is_known_leaf_type(name: &str) -> bool {
+    matches!(
+        name,
+        "bool"
+            | "i8"
+            | "i16"
+            | "i32"
+            | "i64"
+            | "i128"
+            | "isize"
+            | "u8"
+            | "u16"
+            | "u32"
+            | "u64"
+            | "u128"
+            | "usize"
+            | "f32"
+            | "f64"
+            | "float16"
+            | "Float16"
+            | "bfloat16"
+            | "BFloat16"
+            | "String"
+            | "Decimal"
+            | "Timestamp"
+            | "Date"
+            | "Duration"
+            | "NaiveDateTime"
+            | "NaiveDate"
+            | "ChronoDuration"
+            | "UnknownCase"
+            | "PhantomData"
+    )
+}
+
+fn is_transparent_read_carrier(name: &str) -> bool {
+    matches!(
+        name,
+        "Option"
+            | "Box"
+            | "Rc"
+            | "Arc"
+            | "RcWeak"
+            | "ArcWeak"
+            | "RefCell"
+            | "Mutex"
+            | "Vec"
+            | "VecDeque"
+            | "LinkedList"
+            | "BinaryHeap"
+            | "HashSet"
+            | "BTreeSet"
+            | "HashMap"
+            | "BTreeMap"
+    )
+}
+
 fn codec_body_is_known(ty: &Type) -> bool {
     if matches!(ty, Type::Array(_) | Type::Tuple(_)) {
         return true;

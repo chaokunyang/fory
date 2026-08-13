@@ -25,6 +25,20 @@ private final class StaticDepthNode {
 }
 
 @ForyStruct
+private struct StaticDepthLeaf: Equatable {
+    var count: Int32 = 0
+    var enabled: Bool = false
+}
+
+@ForyUnion
+private enum StaticDepthLeafUnion: Equatable {
+    @ForyUnknownCase
+    case unknown(UnknownCase)
+    case empty
+    case count(Int32)
+}
+
+@ForyStruct
 private struct WideTagSource {
     @ForyField(id: 32768)
     var first: String = ""
@@ -68,6 +82,23 @@ func staticCompoundDepthIsBounded() throws {
         try boundary.register(StaticDepthNode.self, id: 11_990)
         let decoded: StaticDepthNode = try boundary.deserialize(deepBytes)
         #expect(decoded.next?.next?.value == 3)
+    }
+}
+
+@Test
+func leafCompoundReadersSkipDepth() throws {
+    for compatible in [false, true] {
+        let fory = Fory(config: .init(compatible: compatible, maxDepth: 0))
+        try fory.register(StaticDepthLeaf.self, id: 11_992)
+        try fory.register(StaticDepthLeafUnion.self, id: 11_993)
+
+        let leaf = StaticDepthLeaf(count: 42, enabled: true)
+        let decodedLeaf: StaticDepthLeaf = try fory.deserialize(try fory.serialize(leaf))
+        #expect(decodedLeaf == leaf)
+
+        let union = StaticDepthLeafUnion.count(42)
+        let decodedUnion: StaticDepthLeafUnion = try fory.deserialize(try fory.serialize(union))
+        #expect(decodedUnion == union)
     }
 }
 

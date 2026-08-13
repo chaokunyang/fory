@@ -279,6 +279,12 @@ Load this file when changing `rust/` or Rust xlang behavior.
   compile-time selection hooks whose bodies must disappear after monomorphization.
 - If breakage is explicitly acceptable during a Rust module refactor, rewire macros, tests, and sibling crates directly to the new boundaries instead of adding compatibility re-exports.
 - For panic-safety in hot paths, preserve TLS context reuse. Add scoped guards or owned fallbacks rather than per-call context allocation, and reset reused contexts at entry and successful exit.
+- Deserialization depth is decoder-owned state. `WriteContext` and generated write bodies must never
+  expose or mutate it, even when the application-owned object graph is recursive. Each serializer
+  owns depth introduced by its own read body. Derive-generated structs and unions emit static-depth
+  bookkeeping only when their visible field or variant shape may recurse; leaf-only bodies emit no
+  check. An explicitly selected custom serializer owns its opaque read recursion, and a parent or
+  carrier must not compensate for a child serializer that omitted its own guard.
 - Read depth and per-root generic/reference state use root reset as their only failure-cleanup
   owner. Nested readers and skippers increment depth before reading children and decrement only
   after every child succeeds; an error must retain the failed path's depth and transient state until

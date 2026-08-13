@@ -117,8 +117,7 @@ func dateAndTimestampContextHelpersUseExpectedWireProtocols() throws {
         typeResolver: xlangTypeResolver,
         trackRef: false,
         compatible: true,
-        checkClassVersion: true,
-        maxDepth: 5
+        checkClassVersion: true
     )
 
     let xlangLocalDate = localDate(-1)
@@ -145,8 +144,7 @@ func dateAndTimestampContextHelpersUseExpectedWireProtocols() throws {
         typeResolver: xlangTypeResolver,
         trackRef: false,
         compatible: true,
-        checkClassVersion: true,
-        maxDepth: 5
+        checkClassVersion: true
     )
     let instant = Date(timeIntervalSince1970: 123_456.000_001)
     try timestampWriteContext.writeTimestamp(instant, refMode: .nullOnly, writeTypeInfo: true)

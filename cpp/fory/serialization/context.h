@@ -88,7 +88,6 @@ private:
 /// - Internal buffer for writing data (owned by context)
 /// - Reference tracking for shared/circular references
 /// - Configuration flags
-/// - Depth tracking for preventing stack overflow
 ///
 /// The WriteContext owns its own Buffer internally for reuse across
 /// serialization calls when pooled.
@@ -167,32 +166,6 @@ public:
 
   /// Check if reference tracking is enabled.
   inline bool track_ref() const { return config_->track_ref; }
-
-  /// Get the protected serialization nesting-depth limit.
-  inline uint32_t max_dyn_depth() const { return config_->max_dyn_depth; }
-
-  /// get current dynamic nesting depth.
-  inline uint32_t current_dyn_depth() const { return current_dyn_depth_; }
-
-  /// Increase dynamic nesting depth by 1.
-  ///
-  /// @return Error if max dynamic depth exceeded, success otherwise.
-  inline Result<void, Error> increase_dyn_depth() {
-    if (current_dyn_depth_ >= config_->max_dyn_depth) {
-      return Unexpected<Error>(
-          Error::depth_exceed("Max dynamic serialization depth exceeded: " +
-                              std::to_string(config_->max_dyn_depth)));
-    }
-    current_dyn_depth_++;
-    return Result<void, Error>();
-  }
-
-  /// Decrease dynamic nesting depth by 1.
-  inline void decrease_dyn_depth() {
-    if (current_dyn_depth_ > 0) {
-      current_dyn_depth_--;
-    }
-  }
 
   inline uint32_t flush_barrier_depth() const {
     return output_stream_ == nullptr ? 0
@@ -392,7 +365,6 @@ private:
   const Config *config_;
   std::unique_ptr<TypeResolver> type_resolver_;
   RefWriter ref_writer_;
-  uint32_t current_dyn_depth_;
   OutputStream *output_stream_ = nullptr;
 
   // Meta sharing state (for streaming inline TypeMeta)

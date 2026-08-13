@@ -124,6 +124,25 @@ nesting can exhaust the call stack or bypass cleanup. A malformed input that
 exceeds the configured depth should fail the root operation instead of
 continuing unbounded recursion.
 
+Depth limiting is decoder-only.
+
+### Write-Side Depth Is Forbidden
+
+Serialization MUST NOT perform depth detection. A writer MUST NOT read,
+increment, decrement, mirror, compare against, or otherwise reuse the
+deserialization depth limit. It MUST NOT maintain an equivalent structural or
+object-graph depth counter under another name, and it MUST NOT reject a local
+value because its serialization nesting exceeds the decoder limit. Recursive
+application-owned object graphs are not an exception. Any existing write-side
+depth check must be removed rather than optimized or moved to another writer
+owner.
+
+This prohibition does not prevent a writer from indexing a concrete
+writer-owned resource, such as selecting an entry from a generic-type stack.
+Such state must be named after that resource, must not be treated as a security
+depth limit, and must not compare against the deserialization depth limit or
+reject serialization because of object-graph nesting.
+
 Loops that consume encoded data should guarantee byte progress, logical
 progress, or a terminal error. Inputs that can keep a reader in a no-progress
 loop are security-relevant even when they do not allocate memory.

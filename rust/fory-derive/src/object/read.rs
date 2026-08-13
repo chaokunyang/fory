@@ -34,7 +34,10 @@ fn is_shared_owner_type(ty: &syn::Type) -> bool {
         .is_some_and(|segment| segment.ident == "Rc" || segment.ident == "Arc")
 }
 
-pub(crate) fn guard_static_read(body: TokenStream) -> TokenStream {
+pub(crate) fn guard_static_read(body: TokenStream, may_recurse: bool) -> TokenStream {
+    if !may_recurse {
+        return body;
+    }
     quote! {
         context.inc_static_depth()?;
         match (|| { #body })() {
@@ -322,8 +325,9 @@ pub fn gen_read_compatible(
     fields: &Fields,
     source_fields: &[SourceField<'_>],
     target_path: &TokenStream,
+    may_recurse: bool,
 ) -> TokenStream {
-    gen_read_compatible_target(fields, source_fields, target_path, None, None)
+    gen_read_compatible_target(fields, source_fields, target_path, None, None, may_recurse)
 }
 
 pub(crate) fn gen_read_compatible_target(
@@ -332,6 +336,7 @@ pub(crate) fn gen_read_compatible_target(
     target_path: &TokenStream,
     variant_ident: Option<&Ident>,
     variant_meta_type: Option<&TokenStream>,
+    may_recurse: bool,
 ) -> TokenStream {
     let bindings = match build_bindings(source_fields) {
         Ok(bindings) => bindings,
@@ -641,7 +646,7 @@ pub(crate) fn gen_read_compatible_target(
         #construction
     };
     let compatible_body = if variant_ident.is_none() {
-        guard_static_read(compatible_body)
+        guard_static_read(compatible_body, may_recurse)
     } else {
         compatible_body
     };

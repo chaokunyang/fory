@@ -1223,15 +1223,19 @@ Important rules:
   `try/finally` blocks just to restore operation-local state
 - top-level `Fory.deserialize(...)` owns the operation reset `finally`
 
-## Depth Tracking
+## Deserialization Depth Tracking
 
-`WriteContext` and `ReadContext` track logical object depth explicitly.
-`increaseDepth()` enforces `Config.maxDepth`.
+Only `ReadContext` enforces `Config.maxDepth`. Serialization must not read,
+increment, decrement, mirror, or otherwise reuse this decoder limit, including
+for recursive application-owned object graphs. A writer may retain a separately
+named traversal index only when it owns a concrete serialization resource such
+as generic-type stack selection; that index must not compare against
+`Config.maxDepth` or reject serialization.
 
-Depth should stay explicit on the contexts rather than relying on the native
-call stack alone. At the same time, depth cleanup should not depend on nested
-`try/finally` blocks throughout serializer code. Top-level context reset must be
-able to recover operation-local state after failures.
+Decoder depth should stay explicit on `ReadContext` rather than relying on the
+native call stack alone. At the same time, depth cleanup should not depend on
+nested `try/finally` blocks throughout serializer code. Top-level deserialize
+reset must recover operation-local read state after failures.
 
 ## Struct Compatibility
 

@@ -213,8 +213,6 @@ internal func writeDynamicValue<T>(
         context.buffer.writeInt8(RefFlag.notNullValue.rawValue)
     }
 
-    try context.enterDynamicAnyDepth()
-    defer { context.leaveDynamicAnyDepth() }
     try typeInfo.writeDynamic(target, context)
 }
 
@@ -321,9 +319,6 @@ public enum DynamicSerializer<T>: Serializer {
         if refMode != .none {
             context.buffer.writeInt8(RefFlag.notNullValue.rawValue)
         }
-
-        try context.enterDynamicAnyDepth()
-        defer { context.leaveDynamicAnyDepth() }
 
         let typeInfo = try context.typeInfo(forTarget: Swift.type(of: target))
         if writeTypeInfo {

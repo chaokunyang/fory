@@ -1128,7 +1128,7 @@ TEST(StructComprehensiveTest, GeneratedVectorDepth) {
                     .xlang(true)
                     .compatible(false)
                     .track_ref(false)
-                    .max_dyn_depth(1)
+                    .max_dyn_depth(2)
                     .build();
   ASSERT_TRUE(writer.register_struct<RecursiveVectorNode>(618).ok());
   ASSERT_TRUE(reader.register_struct<RecursiveVectorNode>(618).ok());
@@ -1304,7 +1304,7 @@ TEST(StructComprehensiveTest, AnnotatedGeneratedDepth) {
                     .xlang(true)
                     .compatible(false)
                     .track_ref(false)
-                    .max_dyn_depth(1)
+                    .max_dyn_depth(2)
                     .build();
   ASSERT_TRUE(writer.register_struct<AnnotatedRecursiveVectorNode>(620).ok());
   ASSERT_TRUE(reader.register_struct<AnnotatedRecursiveVectorNode>(620).ok());

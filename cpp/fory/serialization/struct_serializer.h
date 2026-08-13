@@ -980,9 +980,6 @@ Container read_configured_list_data(ReadContext &ctx) {
   if (length == 0) {
     return result;
   }
-  if (FORY_PREDICT_FALSE(!enter_generated_container<Elem>(ctx))) {
-    return result;
-  }
   uint8_t bitmap = ctx.read_uint8(ctx.error());
   if (FORY_PREDICT_FALSE(ctx.has_error())) {
     return result;
@@ -1038,7 +1035,6 @@ Container read_configured_list_data(ReadContext &ctx) {
                                                         elem_ref_mode)))) {
     return result;
   }
-  leave_generated_container<Elem>(ctx);
   return result;
 }
 
@@ -1229,9 +1225,6 @@ MapType read_configured_map_data(ReadContext &ctx) {
   if (length == 0) {
     return result;
   }
-  if (FORY_PREDICT_FALSE((!enter_generated_map<Key, Value>(ctx)))) {
-    return result;
-  }
   constexpr bool key_read_data_always_advances = []() constexpr {
     if constexpr (KeyNode >= 0) {
       return configured_read_data_always_advances<Key, StructT, Index,
@@ -1292,7 +1285,6 @@ MapType read_configured_map_data(ReadContext &ctx) {
   if (FORY_PREDICT_FALSE(ctx.has_error())) {
     return result;
   }
-  leave_generated_map<Key, Value>(ctx);
   return result;
 }
 
@@ -1631,6 +1623,51 @@ template <typename T> struct CompileTimeFieldHelpers {
       }
     }
   }
+
+  template <typename Value> static constexpr bool type_read_may_recurse() {
+    using Type = std::decay_t<Value>;
+    if constexpr (std::is_arithmetic_v<Type> || std::is_enum_v<Type> ||
+                  std::is_same_v<Type, std::string> ||
+                  std::is_same_v<Type, std::u16string> ||
+                  std::is_same_v<Type, std::u32string>) {
+      return false;
+    } else if constexpr (is_nullable_v<Type>) {
+      return type_read_may_recurse<nullable_element_t<Type>>();
+    } else if constexpr (is_std_array_v<Type>) {
+      return type_read_may_recurse<typename Type::value_type>();
+    } else if constexpr (is_fory_serializable_v<Type> || is_vector_v<Type> ||
+                         is_list_v<Type> || is_deque_v<Type> ||
+                         is_forward_list_v<Type> || is_map_like_v<Type> ||
+                         is_set_like_v<Type> || is_tuple_v<Type> ||
+                         is_variant_v<Type> || is_std_shared_ptr_v<Type> ||
+                         is_std_unique_ptr_v<Type> || is_weak_ptr_v<Type> ||
+                         std::is_same_v<Type, std::any>) {
+      return true;
+    } else {
+      // A custom serializer owns recursion introduced by its own body. The
+      // generated parent must not guess on its behalf.
+      return false;
+    }
+  }
+
+  template <size_t Index> static constexpr bool field_read_may_recurse() {
+    if constexpr (FieldCount == 0) {
+      return false;
+    } else if constexpr (field_dynamic_value<Index>() == 1) {
+      return true;
+    } else {
+      return type_read_may_recurse<ValueType<Index>>();
+    }
+  }
+
+  template <size_t... Indices>
+  static constexpr bool
+  compute_read_may_recurse(std::index_sequence<Indices...>) {
+    return (field_read_may_recurse<Indices>() || ... || false);
+  }
+
+  static constexpr bool read_may_recurse =
+      compute_read_may_recurse(std::make_index_sequence<FieldCount>{});
 
   template <size_t... Indices>
   static constexpr bool
@@ -4572,7 +4609,7 @@ bool skip_removed_struct_case(ReadContext &ctx,
     return false;
   } else {
     using Pointee = typename LocalFieldType::element_type;
-    if constexpr (!is_generated_struct_serializer_v<Pointee> ||
+    if constexpr (!is_fory_serializable_v<Pointee> ||
                   !std::is_default_constructible_v<Pointee> ||
                   std::is_abstract_v<Pointee>) {
       return false;
@@ -4797,7 +4834,25 @@ read_struct_fields_compatible(T &obj, ReadContext &ctx,
 template <typename T>
 struct Serializer<T, std::enable_if_t<is_fory_serializable_v<T>>> {
   static constexpr TypeId type_id = TypeId::STRUCT;
-  static constexpr bool is_generated_struct_serializer = true;
+  static constexpr bool read_may_recurse =
+      detail::CompileTimeFieldHelpers<T>::read_may_recurse;
+
+  static FORY_ALWAYS_INLINE bool enter_read_depth(ReadContext &ctx) {
+    if constexpr (read_may_recurse) {
+      auto depth_res = ctx.increase_dyn_depth();
+      if (FORY_PREDICT_FALSE(!depth_res.ok())) {
+        ctx.set_error(std::move(depth_res).error());
+        return false;
+      }
+    }
+    return true;
+  }
+
+  static FORY_ALWAYS_INLINE void leave_read_depth(ReadContext &ctx) {
+    if constexpr (read_may_recurse) {
+      ctx.decrease_dyn_depth();
+    }
+  }
 
   /// write type info only (type_id and meta index if applicable).
   /// This is used by collection serializers to write element type info.
@@ -5166,16 +5221,19 @@ struct Serializer<T, std::enable_if_t<is_fory_serializable_v<T>>> {
       }
     }
 
-    T obj{};
-    using FieldDescriptor =
-        decltype(fory_field_info(std::declval<const T &>()));
-    constexpr size_t field_count = FieldDescriptor::Size;
-
     // remote_type_info is from the stream, with field_ids already assigned
     if (!remote_type_info || !remote_type_info->type_meta) {
       ctx.set_error(Error::type_error("Remote type metadata not available"));
       return T{};
     }
+    if (FORY_PREDICT_FALSE(!enter_read_depth(ctx))) {
+      return T{};
+    }
+
+    T obj{};
+    using FieldDescriptor =
+        decltype(fory_field_info(std::declval<const T &>()));
+    constexpr size_t field_count = FieldDescriptor::Size;
 
     // Fast path: same schema hash, read fields in local sorted order.
     if (local_type_info &&
@@ -5189,6 +5247,7 @@ struct Serializer<T, std::enable_if_t<is_fory_serializable_v<T>>> {
           return T{};
         }
         ctx.buffer().shrink_input_buffer();
+        leave_read_depth(ctx);
         return obj;
       }
 
@@ -5199,6 +5258,7 @@ struct Serializer<T, std::enable_if_t<is_fory_serializable_v<T>>> {
         return T{};
       }
       ctx.buffer().shrink_input_buffer();
+      leave_read_depth(ctx);
       return obj;
     }
 
@@ -5210,6 +5270,7 @@ struct Serializer<T, std::enable_if_t<is_fory_serializable_v<T>>> {
     }
 
     ctx.buffer().shrink_input_buffer();
+    leave_read_depth(ctx);
     return obj;
   }
 
@@ -5245,6 +5306,9 @@ struct Serializer<T, std::enable_if_t<is_fory_serializable_v<T>>> {
       }
     }
 
+    if (FORY_PREDICT_FALSE(!enter_read_depth(ctx))) {
+      return T{};
+    }
     T obj{};
     using FieldDescriptor =
         decltype(fory_field_info(std::declval<const T &>()));
@@ -5256,6 +5320,7 @@ struct Serializer<T, std::enable_if_t<is_fory_serializable_v<T>>> {
     }
 
     ctx.buffer().shrink_input_buffer();
+    leave_read_depth(ctx);
     return obj;
   }
 
@@ -5285,7 +5350,7 @@ struct Serializer<T, std::enable_if_t<is_fory_serializable_v<T>>> {
 
 template <typename T>
 struct declared_read_data_always_advances<
-    T, std::enable_if_t<Serializer<T>::is_generated_struct_serializer>>
+    T, std::enable_if_t<is_fory_serializable_v<T>>>
     : std::bool_constant<
           detail::CompileTimeFieldHelpers<T>::read_data_always_advances> {};
 

@@ -378,6 +378,7 @@ struct ParsedField {
     let isCompressedNumeric: Bool
     let primitiveSize: Int
     let customCodecType: String?
+    let readMayRecurse: Bool
 }
 
 enum ParsedGraphField {
@@ -404,6 +405,7 @@ private struct ParsedEnumPayloadField {
     let isOptional: Bool
     let hasDeclaredChildren: Bool
     let customCodecType: String?
+    let readMayRecurse: Bool
 }
 
 private struct ParsedEnumCase {
@@ -532,7 +534,12 @@ private func parseEnumDecl(_ enumDecl: EnumDeclSyntax) throws -> ParsedEnumDecl 
                             typeText: payloadType,
                             isOptional: optional.isOptional,
                             hasDeclaredChildren: hasDeclaredChildren,
-                            customCodecType: customCodecType
+                            customCodecType: customCodecType,
+                            readMayRecurse: fieldReadMayRecurse(
+                                typeText: payloadType,
+                                classification: classification,
+                                typeHint: caseConfig?.payloadHint
+                            )
                         )
                     )
                 }
@@ -740,6 +747,11 @@ private func buildTaggedUnionEnumDecls(
     targetType: String,
     accessPrefix: String
 ) throws -> [DeclSyntax] {
+    let readMayRecurse = cases.contains { enumCase in
+        enumCase.payload.contains(where: \.readMayRecurse)
+    }
+    let enterDepth = readMayRecurse ? "try context.enterCompoundDepth()" : ""
+    let leaveDepth = readMayRecurse ? "context.leaveCompoundDepth()" : ""
     for enumCase in cases {
         if enumCase.unknownCase && !isRuntimeUnknownCase(enumCase) {
             throw MacroExpansionErrorMessage(
@@ -899,14 +911,14 @@ private func buildTaggedUnionEnumDecls(
         stringLiteral: """
             @inline(__always)
             \(accessPrefix)static func readData(_ context: ReadContext) throws -> Target {
-                try context.enterCompoundDepth()
+                \(enterDepth)
                 let caseID = try context.buffer.readVarUInt32()
                 let value: Target
                 switch caseID {
                 \(readSwitchCases)
                 \(unknownDefault)
                 }
-                context.leaveCompoundDepth()
+                \(leaveDepth)
                 return value
             }
             """
@@ -1110,7 +1122,12 @@ private func parseFields(
                 isCompressedNumeric: classification.isCompressedNumeric,
                 primitiveSize: classification.primitiveSize,
                 customCodecType:
-                    typeResolution.customCodecType ?? dynamicCodecType ?? carrierCodecType
+                    typeResolution.customCodecType ?? dynamicCodecType ?? carrierCodecType,
+                readMayRecurse: fieldReadMayRecurse(
+                    typeText: rawType,
+                    classification: classification,
+                    typeHint: fieldTypeHint
+                )
             )
             fields.append(field)
             graphFields.append(.serialized(field))
@@ -3575,6 +3592,38 @@ private func classifyType(
     }
 
     return .init(typeID: 27, isPrimitive: false, isBuiltIn: false, isCollection: false, isMap: false, isCompressedNumeric: false, primitiveSize: 0)
+}
+
+private func fieldReadMayRecurse(
+    typeText: String,
+    classification: TypeClassification,
+    typeHint: FieldTypeHint?
+) -> Bool {
+    if let typeHint {
+        switch typeHint {
+        case .with, .scalar:
+            // A selected custom serializer owns recursion in its own body;
+            // scalar hints are leaves.
+            return false
+        case .list, .array, .set, .map:
+            return true
+        case .inferredEncoding:
+            break
+        }
+    }
+    let concreteType = trimKnownModulePrefix(trimType(unwrapOptional(typeText).type))
+    if classification.isPrimitive
+        || (classification.isBuiltIn && !classification.isCollection && !classification.isMap)
+    {
+        return false
+    }
+    if concreteType == "UnknownCase" || concreteType.hasSuffix(".UnknownCase") {
+        return false
+    }
+    // Collection, map, dynamic, and opaque user types can descend. The
+    // generated serializer owns the frame around its own body; explicitly
+    // selected custom serializers are excluded above and own themselves.
+    return true
 }
 
 private func buildReadProgressDecl(fields: [ParsedField], accessPrefix: String) -> String {

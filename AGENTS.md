@@ -192,7 +192,16 @@ This is the entry point for AI guidance in Apache Fory. Read this file first, th
 - When a user corrects a non-obvious invariant, encode it in the nearest source comment before continuing, and also update `AGENTS.md`, `.agents/**`, docs, or specs when the rule is reusable beyond one file. Do not rely only on chat history, task notes, commit messages, or benchmark logs for corrections that protect security, protocol behavior, ownership, naming, or hot-path performance.
 - Reject semantic hacks. Do not bypass broken semantics by deleting cases, simplifying callers, adding coercion hooks, or using workaround fallbacks; fix the underlying bug and prove it with focused tests.
 - Protect hot paths. Avoid per-call allocations, callback objects, result tuples or records, unnecessary runtime branches, and wrapper-class substitutions in hot codec/runtime paths; prefer conditional imports and allocation-free concrete implementations where they fit the language.
-- Decoder depth and the generic-type stack paired with that depth use root-operation failure cleanup. Nested decoders decrement depth and pop generic types only after successful child reads; do not add nested `try/finally` to restore them after exceptions. The root operation's `finally`/reset must clear both decoder depth and the generic-type stack.
+- Depth limiting is decoder-only. Writers must never read, increment, decrement, mirror, or reuse
+  the deserialization depth limit, including for recursive application-owned object graphs. Writers
+  must not maintain an equivalent structural or object-graph depth counter under another name or
+  reject serialization because of nesting. Remove existing write-side depth checks rather than
+  optimizing, relocating, or renaming them. Any distinct writer resource mechanism belongs to its
+  own natural owner, is named after that resource, and must not reuse decoder depth. Decoder depth
+  and the generic-type stack paired with that depth use root-operation failure
+  cleanup. Nested decoders decrement depth and pop generic types only after successful child reads;
+  do not add nested `try/finally` to restore them after exceptions. The root operation's
+  `finally`/reset must clear both decoder depth and the generic-type stack.
 - Keep public APIs minimal. Public APIs must match user ownership and mental model, not internal implementation details; generated flows stay type-owned, while custom serializer registration stays explicit.
 - A Fory instance may register types or serializers only before its first root
   serialization or deserialization operation. Starting either operation

@@ -1088,6 +1088,8 @@ fn compatible_variant_reads(
                         target_path,
                         Some(ident),
                         Some(&meta_type),
+                        crate::object::field_codec::struct_read_may_recurse(&source_fields)
+                            .unwrap_or(true),
                     );
 
                     let default_value = variant_default_value(v, target_path);

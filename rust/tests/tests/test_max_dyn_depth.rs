@@ -33,6 +33,22 @@ struct StaticNode {
     next: Option<Box<StaticNode>>,
 }
 
+#[derive(ForyStruct, Debug, PartialEq)]
+struct LeafStruct {
+    count: i32,
+    enabled: bool,
+    ratio: f64,
+}
+
+#[derive(ForyUnion, Debug, PartialEq)]
+enum LeafEnum {
+    #[fory(unknown)]
+    Unknown(fory_core::UnknownCase),
+    #[fory(default)]
+    Empty,
+    Count(i32),
+}
+
 // The selected root owns only the root envelope. This avoids unrelated recursive registration
 // metadata while keeping the generated recursive body inside Fory's TLS and root-reset boundary.
 struct StaticNodeRoot;
@@ -91,8 +107,8 @@ struct RemoteLevel2 {
     next: Option<Box<RemoteLevel3>>,
 }
 
-// The remote-only root field forces the compatible reader onto its generated slow body. Counting
-// that body is what makes the third generated level exceed a limit of two.
+// The remote-only root field forces the compatible reader onto its generated slow body. The leaf
+// RemoteLevel3 body is depth-free, while the two structural bodies still exceed a limit of one.
 #[derive(ForyStruct)]
 struct RemoteLevel1 {
     extra: i32,
@@ -139,6 +155,29 @@ fn static_list(depth: i32) -> StaticList {
 }
 
 #[test]
+fn leaf_reads_skip_depth() {
+    let mut fory = Fory::builder()
+        .xlang(false)
+        .compatible(false)
+        .max_dyn_depth(0)
+        .build();
+    fory.register::<LeafStruct>(103).unwrap();
+    fory.register_union::<LeafEnum>(104).unwrap();
+
+    let value = LeafStruct {
+        count: 42,
+        enabled: true,
+        ratio: 1.5,
+    };
+    let bytes = fory.serialize(&value).unwrap();
+    assert_eq!(fory.deserialize::<LeafStruct>(&bytes).unwrap(), value);
+
+    let value = LeafEnum::Count(42);
+    let bytes = fory.serialize(&value).unwrap();
+    assert_eq!(fory.deserialize::<LeafEnum>(&bytes).unwrap(), value);
+}
+
+#[test]
 fn static_struct_depth_and_reset() {
     if fory_core::error::should_panic_on_error() {
         return;
@@ -146,7 +185,7 @@ fn static_struct_depth_and_reset() {
     let fory = Fory::builder()
         .xlang(false)
         .compatible(false)
-        .max_dyn_depth(2)
+        .max_dyn_depth(1)
         .build();
 
     let deep_bytes = fory
@@ -177,7 +216,7 @@ fn compatible_struct_depth_and_reset() {
     let mut reader = Fory::builder()
         .xlang(false)
         .compatible(true)
-        .max_dyn_depth(2)
+        .max_dyn_depth(1)
         .build();
     reader.register::<LocalLevel3>(201).unwrap();
     reader.register::<LocalLevel2>(202).unwrap();

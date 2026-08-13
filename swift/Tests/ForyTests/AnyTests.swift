@@ -870,6 +870,20 @@ func dynamicAnyObjectTracksCycle() throws {
 }
 
 @Test
+func writerIgnoresReadDepth() throws {
+    let value = nestedDynamicAnyList(depth: 3)
+    let writer = Fory(config: .init(maxDepth: 0))
+    let payload = try writer.serialize(value, with: DynamicSerializer<Any>.self)
+
+    let reader = Fory(config: .init(maxDepth: 4))
+    let decoded = try reader.deserialize(payload, with: DynamicSerializer<Any>.self)
+    let level1 = try #require(decoded as? [Any])
+    let level2 = try #require(level1.first as? [Any])
+    let level3 = try #require(level2.first as? [Any])
+    #expect(level3.first as? Int32 == 1)
+}
+
+@Test
 func dynamicAnyMaxDepthRejectsDeepNesting() throws {
     let value = nestedDynamicAnyList(depth: 3)
     let writer = Fory(config: .init(maxDepth: 8))

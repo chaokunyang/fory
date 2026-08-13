@@ -103,12 +103,21 @@ pub fn derive_serializer(
         reserved_space,
         static_type_id,
         read_data_always_advances,
+        read_may_recurse,
     ) = match &ast.data {
         Data::Struct(data) => {
             let source = source_fields(&data.fields);
             let fields = extract_fields(&source);
             let read_data_always_advances =
                 match crate::object::field_codec::struct_read_data_always_advances(&source) {
+                    Ok(value) => value,
+                    Err(err) => {
+                        clear_struct_context();
+                        return err.into_compile_error().into();
+                    }
+                };
+            let read_may_recurse =
+                match crate::object::field_codec::struct_read_may_recurse(&source) {
                     Ok(value) => value,
                     Err(err) => {
                         clear_struct_context();
@@ -130,7 +139,7 @@ pub fn derive_serializer(
                     Ok(::std::vec::Vec::new())
                 },
                 quote! { &[] },
-                read::gen_read_compatible(&data.fields, &source, &target_path),
+                read::gen_read_compatible(&data.fields, &source, &target_path, read_may_recurse),
                 Vec::new(),
                 write::gen_write(),
                 write::gen_write_data(&source),
@@ -143,34 +152,42 @@ pub fn derive_serializer(
                 write::gen_reserved_space(&source),
                 quote! { fory_core::TypeId::STRUCT },
                 read_data_always_advances,
+                read_may_recurse,
             )
         }
-        Data::Enum(data) => (
-            derive_enum::gen_actual_type_id(data),
-            quote! { &[] },
-            derive_enum::gen_field_fields_info(data),
-            derive_enum::gen_type_meta_field_ids(data),
-            derive_enum::gen_variants_fields_info(name, &ast.generics, data),
-            derive_enum::gen_variants_type_meta_field_ids(data),
-            quote! {
-                let _ = (context, type_info);
-                Err(fory_core::Error::not_allowed(
-                    "read_compatible is valid only for struct targets",
-                ))
-            },
-            derive_enum::gen_variant_meta_types(name, &ast.generics, data),
-            derive_enum::gen_write(data),
-            derive_enum::gen_write_data(data, &ast.generics, &target_path),
-            derive_enum::gen_write_type_info(data),
-            derive_enum::gen_read(data),
-            derive_enum::gen_read_with_type_info(data),
-            derive_enum::gen_read_data(data, &ast.generics, &target_path),
-            derive_enum::gen_read_type_info(data),
-            derive_enum::gen_default_value(data, &target_path),
-            derive_enum::gen_reserved_space(),
-            derive_enum::gen_static_type_id(data),
-            quote! { true },
-        ),
+        Data::Enum(data) => {
+            let read_may_recurse = data.variants.iter().any(|variant| {
+                let source = source_fields(&variant.fields);
+                crate::object::field_codec::struct_read_may_recurse(&source).unwrap_or(true)
+            });
+            (
+                derive_enum::gen_actual_type_id(data),
+                quote! { &[] },
+                derive_enum::gen_field_fields_info(data),
+                derive_enum::gen_type_meta_field_ids(data),
+                derive_enum::gen_variants_fields_info(name, &ast.generics, data),
+                derive_enum::gen_variants_type_meta_field_ids(data),
+                quote! {
+                    let _ = (context, type_info);
+                    Err(fory_core::Error::not_allowed(
+                        "read_compatible is valid only for struct targets",
+                    ))
+                },
+                derive_enum::gen_variant_meta_types(name, &ast.generics, data),
+                derive_enum::gen_write(data),
+                derive_enum::gen_write_data(data, &ast.generics, &target_path),
+                derive_enum::gen_write_type_info(data),
+                derive_enum::gen_read(data),
+                derive_enum::gen_read_with_type_info(data),
+                derive_enum::gen_read_data(data, &ast.generics, &target_path),
+                derive_enum::gen_read_type_info(data),
+                derive_enum::gen_default_value(data, &target_path),
+                derive_enum::gen_reserved_space(),
+                derive_enum::gen_static_type_id(data),
+                quote! { true },
+                read_may_recurse,
+            )
+        }
         Data::Union(_) => {
             clear_struct_context();
             return syn::Error::new_spanned(name, "Rust unions are not supported")
@@ -178,7 +195,7 @@ pub fn derive_serializer(
                 .into();
         }
     };
-    let read_data = read::guard_static_read(read_data);
+    let read_data = read::guard_static_read(read_data, read_may_recurse);
 
     let type_index = misc::allocate_type_id();
     let serializer_arc = send_sync.serializer;

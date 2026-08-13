@@ -98,112 +98,79 @@ public enum UnknownCaseSerializer {
         guard let typeId = TypeId(rawValue: unknown.typeId), let value = unknown.value else {
             return false
         }
-        // Scalar replay bypasses DynamicSerializer, but the reader still materializes one
-        // dynamically selected Any value. Enter only after a matching scalar type is known so the
-        // non-scalar fallback remains responsible for its own dynamic depth.
         switch typeId {
         case .bool:
             guard let typed = value as? Bool else { return false }
-            try context.enterDynamicAnyDepth()
-            defer { context.leaveDynamicAnyDepth() }
             writeRefAndType(typeId, context)
             context.buffer.writeUInt8(typed ? 1 : 0)
             return true
         case .int8:
             guard let typed = value as? Int8 else { return false }
-            try context.enterDynamicAnyDepth()
-            defer { context.leaveDynamicAnyDepth() }
             writeRefAndType(typeId, context)
             context.buffer.writeInt8(typed)
             return true
         case .uint8:
             guard let typed = value as? UInt8 else { return false }
-            try context.enterDynamicAnyDepth()
-            defer { context.leaveDynamicAnyDepth() }
             writeRefAndType(typeId, context)
             context.buffer.writeUInt8(typed)
             return true
         case .int16:
             guard let typed = value as? Int16 else { return false }
-            try context.enterDynamicAnyDepth()
-            defer { context.leaveDynamicAnyDepth() }
             writeRefAndType(typeId, context)
             context.buffer.writeInt16(typed)
             return true
         case .uint16:
             guard let typed = value as? UInt16 else { return false }
-            try context.enterDynamicAnyDepth()
-            defer { context.leaveDynamicAnyDepth() }
             writeRefAndType(typeId, context)
             context.buffer.writeUInt16(typed)
             return true
         case .int32:
             guard let typed = value as? Int32 else { return false }
-            try context.enterDynamicAnyDepth()
-            defer { context.leaveDynamicAnyDepth() }
             writeRefAndType(typeId, context)
             context.buffer.writeInt32(typed)
             return true
         case .varint32:
             guard let typed = value as? Int32 else { return false }
-            try context.enterDynamicAnyDepth()
-            defer { context.leaveDynamicAnyDepth() }
             writeRefAndType(typeId, context)
             context.buffer.writeVarInt32(typed)
             return true
         case .uint32:
             guard let typed = value as? UInt32 else { return false }
-            try context.enterDynamicAnyDepth()
-            defer { context.leaveDynamicAnyDepth() }
             writeRefAndType(typeId, context)
             context.buffer.writeUInt32(typed)
             return true
         case .varUInt32:
             guard let typed = value as? UInt32 else { return false }
-            try context.enterDynamicAnyDepth()
-            defer { context.leaveDynamicAnyDepth() }
             writeRefAndType(typeId, context)
             context.buffer.writeVarUInt32(typed)
             return true
         case .int64:
             guard let typed = value as? Int64 else { return false }
-            try context.enterDynamicAnyDepth()
-            defer { context.leaveDynamicAnyDepth() }
             writeRefAndType(typeId, context)
             context.buffer.writeInt64(typed)
             return true
         case .varint64:
             guard let typed = value as? Int64 else { return false }
-            try context.enterDynamicAnyDepth()
-            defer { context.leaveDynamicAnyDepth() }
             writeRefAndType(typeId, context)
             context.buffer.writeVarInt64(typed)
             return true
         case .taggedInt64:
             guard let typed = value as? Int64 else { return false }
-            try context.enterDynamicAnyDepth()
-            defer { context.leaveDynamicAnyDepth() }
             writeRefAndType(typeId, context)
             context.buffer.writeTaggedInt64(typed)
             return true
         case .uint64:
             guard let typed = value as? UInt64 else { return false }
-            try context.enterDynamicAnyDepth()
-            defer { context.leaveDynamicAnyDepth() }
             writeRefAndType(typeId, context)
             context.buffer.writeUInt64(typed)
             return true
         case .varUInt64:
             guard let typed = value as? UInt64 else { return false }
-            try context.enterDynamicAnyDepth()
-            defer { context.leaveDynamicAnyDepth() }
             writeRefAndType(typeId, context)
             context.buffer.writeVarUInt64(typed)
             return true
         case .taggedUInt64:
             guard let typed = value as? UInt64 else { return false }
-            try context.enterDynamicAnyDepth()
-            defer { context.leaveDynamicAnyDepth() }
             writeRefAndType(typeId, context)
             context.buffer.writeTaggedUInt64(typed)
             return true

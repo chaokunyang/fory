@@ -1029,6 +1029,39 @@ struct StaticUniqueHolder {
   FORY_STRUCT(StaticUniqueHolder, ptr);
 };
 
+enum class LeafDepthEnum : int32_t { A = 1, B = 2 };
+
+struct LeafDepthValue {
+  int32_t count = 0;
+  bool enabled = false;
+  LeafDepthEnum kind = LeafDepthEnum::A;
+  FORY_STRUCT(LeafDepthValue, count, enabled, kind);
+};
+
+TEST(SmartPtrSerializerTest, LeafReadsSkipDepth) {
+  static_assert(!Serializer<LeafDepthValue>::read_may_recurse);
+
+  auto fory = Fory::builder()
+                  .xlang(true)
+                  .compatible(false)
+                  .track_ref(false)
+                  .max_dyn_depth(0)
+                  .build();
+  ASSERT_TRUE(fory.register_struct<LeafDepthValue>(299).ok());
+
+  LeafDepthValue value;
+  value.count = 42;
+  value.enabled = true;
+  value.kind = LeafDepthEnum::B;
+  auto value_bytes = fory.serialize(value);
+  ASSERT_TRUE(value_bytes.ok()) << value_bytes.error().to_string();
+  auto decoded_value = fory.deserialize<LeafDepthValue>(*value_bytes);
+  ASSERT_TRUE(decoded_value.ok()) << decoded_value.error().to_string();
+  EXPECT_EQ(decoded_value->count, 42);
+  EXPECT_TRUE(decoded_value->enabled);
+  EXPECT_EQ(decoded_value->kind, LeafDepthEnum::B);
+}
+
 TEST(SmartPtrSerializerTest, MaxDynDepthExceeded) {
   // Create Fory with max_dyn_depth=2
   auto fory =
@@ -1080,7 +1113,7 @@ TEST(SmartPtrSerializerTest, SharedCollectionDepth) {
                     .xlang(true)
                     .track_ref(false)
                     .compatible(false)
-                    .max_dyn_depth(1)
+                    .max_dyn_depth(2)
                     .build();
   ASSERT_TRUE(
       writer.register_struct<NestedContainer>("test", "NestedContainer").ok());
@@ -1123,7 +1156,7 @@ TEST(SmartPtrSerializerTest, StaticSharedDepth) {
                     .xlang(true)
                     .track_ref(false)
                     .compatible(false)
-                    .max_dyn_depth(1)
+                    .max_dyn_depth(3)
                     .build();
   ASSERT_TRUE(writer.register_struct<StaticSharedHolder>(310).ok());
   ASSERT_TRUE(reader.register_struct<StaticSharedHolder>(310).ok());
@@ -1167,7 +1200,7 @@ TEST(SmartPtrSerializerTest, UniqueCollectionDepth) {
                     .xlang(true)
                     .track_ref(false)
                     .compatible(false)
-                    .max_dyn_depth(1)
+                    .max_dyn_depth(2)
                     .build();
   ASSERT_TRUE(writer
                   .register_struct<UniqueNestedContainer>(
@@ -1214,7 +1247,7 @@ TEST(SmartPtrSerializerTest, StaticUniqueDepth) {
                     .xlang(true)
                     .track_ref(false)
                     .compatible(false)
-                    .max_dyn_depth(1)
+                    .max_dyn_depth(3)
                     .build();
   ASSERT_TRUE(writer.register_struct<StaticUniqueHolder>(311).ok());
   ASSERT_TRUE(reader.register_struct<StaticUniqueHolder>(311).ok());
@@ -1248,9 +1281,9 @@ TEST(SmartPtrSerializerTest, StaticUniqueDepth) {
 }
 
 TEST(SmartPtrSerializerTest, MaxDynDepthSufficient) {
-  // Create Fory with max_dyn_depth=5 (sufficient for 3 levels)
+  // A holder, each pointer, and each recursive struct body own one frame.
   auto fory =
-      Fory::builder().xlang(true).compatible(false).max_dyn_depth(5).build();
+      Fory::builder().xlang(true).compatible(false).max_dyn_depth(7).build();
   fory.register_struct<NestedContainerHolder>(300);
   fory.register_struct<NestedContainer>("test", "NestedContainer");
 
@@ -1356,7 +1389,7 @@ TEST(SmartPtrSerializerTest, StaticPolymorphicDepth) {
                     .xlang(true)
                     .track_ref(false)
                     .compatible(false)
-                    .max_dyn_depth(1)
+                    .max_dyn_depth(3)
                     .build();
   ASSERT_TRUE(writer.register_struct<MonoSharedHolder>(320).ok());
   ASSERT_TRUE(reader.register_struct<MonoSharedHolder>(320).ok());

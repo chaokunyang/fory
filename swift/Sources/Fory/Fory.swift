@@ -119,7 +119,6 @@ public final class Fory {
             trackRef: config.trackRef,
             compatible: config.compatible,
             checkClassVersion: config.checkClassVersion,
-            maxDepth: config.maxDepth,
             metaStringWriteState: MetaStringWriteState()
         )
         self.readContext = ReadContext(

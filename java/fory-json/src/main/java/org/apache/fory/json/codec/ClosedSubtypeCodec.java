@@ -34,6 +34,7 @@ import org.apache.fory.json.resolver.JsonTypeInfo;
 import org.apache.fory.json.resolver.JsonTypeResolver;
 import org.apache.fory.json.writer.StringJsonWriter;
 import org.apache.fory.json.writer.Utf8JsonWriter;
+import org.apache.fory.reflect.TypeRef;
 
 /**
  * Resolver-local closed subtype dispatcher whose branch slots follow child JsonTypeInfo updates.
@@ -49,9 +50,11 @@ import org.apache.fory.json.writer.Utf8JsonWriter;
  */
 @Internal
 @SuppressWarnings("unchecked")
-public final class ClosedSubtypeCodec implements JsonValueCodec<Object> {
+public final class ClosedSubtypeCodec implements CompositeJsonCodec<Object> {
   private final Class<?> baseType;
   private final JsonSubTypesInfo definition;
+  private final TypeRef<?> declaredType;
+  private final Object[] singletonValues;
   private final JsonTypeInfo[] children;
   private final ObjectCodec<Object>[] objectCodecs;
   private JsonFieldTable[] inlineReadTables;
@@ -62,8 +65,38 @@ public final class ClosedSubtypeCodec implements JsonValueCodec<Object> {
   /** Creates an unresolved resolver-local dispatcher shell for a validated subtype definition. */
   @Internal
   public ClosedSubtypeCodec(Class<?> baseType, JsonSubTypesInfo definition) {
+    this(baseType, definition, null);
+  }
+
+  /** Creates an unresolved dispatcher with an exact factory-owned declared root type. */
+  @Internal
+  public ClosedSubtypeCodec(
+      Class<?> baseType, JsonSubTypesInfo definition, TypeRef<?> declaredType) {
+    this(baseType, definition, declaredType, null);
+  }
+
+  /** Creates an unresolved dispatcher with parent-owned singleton subtype values. */
+  @Internal
+  public ClosedSubtypeCodec(
+      Class<?> baseType,
+      JsonSubTypesInfo definition,
+      TypeRef<?> declaredType,
+      Object[] singletonValues) {
     this.baseType = baseType;
     this.definition = definition;
+    this.declaredType = declaredType;
+    if (singletonValues != null && singletonValues.length != definition.classes.length) {
+      throw new IllegalArgumentException("Singleton values do not match subtype branches");
+    }
+    this.singletonValues = singletonValues == null ? null : singletonValues.clone();
+    if (singletonValues != null) {
+      for (int i = 0; i < singletonValues.length; i++) {
+        Object value = singletonValues[i];
+        if (value != null && value.getClass() != definition.classes[i]) {
+          throw new IllegalArgumentException("Singleton value does not match subtype branch " + i);
+        }
+      }
+    }
     children = new JsonTypeInfo[definition.classes.length];
     objectCodecs =
         definition.inclusion == Inclusion.PROPERTY
@@ -79,16 +112,24 @@ public final class ClosedSubtypeCodec implements JsonValueCodec<Object> {
    * fails.
    */
   @Internal
-  public void resolve(JsonTypeResolver resolver) {
+  @Override
+  public void resolveTypes(TypeRef<?> type, JsonTypeResolver resolver) {
+    TypeRef<?> rootType = declaredType == null ? type : declaredType;
     for (int i = 0; i < children.length; i++) {
       Class<?> subtype = definition.classes[i];
-      JsonTypeInfo child = resolver.getTypeInfo(subtype, subtype);
+      TypeRef<?> childType = rootType.getSubtype(subtype);
+      Object singleton = singletonValues == null ? null : singletonValues[i];
+      JsonTypeInfo child =
+          singleton == null
+              ? resolver.getSubtypeTypeInfo(
+                  baseType, childType.getType(), subtype, declaredType != null)
+              : resolver.createLeafTypeInfo(childType, new SingletonSubtypeCodec(singleton));
       if (definition.inclusion == Inclusion.PROPERTY) {
-        if (resolver.canonicalObjectCodec(child) == null) {
+        ObjectCodec<?> objectCodec = resolver.canonicalObjectCodec(child);
+        if (objectCodec == null) {
           throw new ForyJsonException(
               "Inline JSON subtype requires the default object representation: " + subtype);
         }
-        ObjectCodec<?> objectCodec = resolver.getObjectCodec(subtype);
         rejectDiscriminatorCollision(objectCodec, definition.scanInfo.property());
         objectCodecs[i] = (ObjectCodec<Object>) objectCodec;
         ObjectCodec.AnyInfo any = objectCodec.anyInfo();
@@ -116,7 +157,7 @@ public final class ClosedSubtypeCodec implements JsonValueCodec<Object> {
       writer.writeNull();
       return;
     }
-    int index = requireSubtype(value.getClass());
+    int index = requireSubtype(value);
     if (definition.inclusion == Inclusion.PROPERTY) {
       writer.writeObjectStart();
       writer.writeRawValue(
@@ -146,7 +187,7 @@ public final class ClosedSubtypeCodec implements JsonValueCodec<Object> {
       writer.writeNull();
       return;
     }
-    int index = requireSubtype(value.getClass());
+    int index = requireSubtype(value);
     if (definition.inclusion == Inclusion.PROPERTY) {
       writer.writeObjectStart();
       writer.writeRawValue(definition.utf8SubtypePrefixes[index]);
@@ -275,13 +316,86 @@ public final class ClosedSubtypeCodec implements JsonValueCodec<Object> {
     return value;
   }
 
-  private int requireSubtype(Class<?> runtimeType) {
-    int index = definition.classIndex(runtimeType);
+  private int requireSubtype(Object value) {
+    Class<?> runtimeType = value.getClass();
+    Object[] singletons = singletonValues;
+    if (singletons != null) {
+      int classMatch = -1;
+      for (int i = 0; i < singletons.length; i++) {
+        Object singleton = singletons[i];
+        if (singleton != null) {
+          if (value == singleton) {
+            return i;
+          }
+        } else if (definition.classes[i] == runtimeType) {
+          classMatch = i;
+        }
+      }
+      if (classMatch >= 0) {
+        return classMatch;
+      }
+    }
+    int index = singletons == null ? definition.classIndex(runtimeType) : -1;
     if (index < 0) {
       throw new ForyJsonException(
           "Runtime type " + runtimeType.getName() + " is not a declared subtype of " + baseType);
     }
     return index;
+  }
+
+  private static final class SingletonSubtypeCodec implements JsonValueCodec<Object> {
+    private final Object singleton;
+
+    private SingletonSubtypeCodec(Object singleton) {
+      this.singleton = singleton;
+    }
+
+    @Override
+    public void writeString(StringJsonWriter writer, Object value) {
+      requireSingleton(value);
+      writer.writeObjectStart();
+      writer.writeObjectEnd();
+    }
+
+    @Override
+    public void writeUtf8(Utf8JsonWriter writer, Object value) {
+      requireSingleton(value);
+      writer.writeObjectStart();
+      writer.writeObjectEnd();
+    }
+
+    @Override
+    public Object readLatin1(Latin1JsonReader reader) {
+      readEmptyObject(reader);
+      return singleton;
+    }
+
+    @Override
+    public Object readUtf16(Utf16JsonReader reader) {
+      readEmptyObject(reader);
+      return singleton;
+    }
+
+    @Override
+    public Object readUtf8(Utf8JsonReader reader) {
+      readEmptyObject(reader);
+      return singleton;
+    }
+
+    private void requireSingleton(Object value) {
+      if (value != singleton) {
+        throw new ForyJsonException("Expected closed subtype singleton " + singleton);
+      }
+    }
+
+    private static void readEmptyObject(org.apache.fory.json.reader.JsonReader reader) {
+      reader.enterDepth();
+      reader.expectNextToken('{');
+      if (!reader.consumeNextToken('}')) {
+        throw new ForyJsonException("Closed subtype singleton requires an empty JSON object");
+      }
+      reader.exitDepth();
+    }
   }
 
   @Internal

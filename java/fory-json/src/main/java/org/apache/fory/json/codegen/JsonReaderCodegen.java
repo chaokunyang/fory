@@ -26,6 +26,7 @@ import java.lang.reflect.Constructor;
 import java.lang.reflect.Executable;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
+import java.util.Arrays;
 import java.util.Map;
 import org.apache.fory.codegen.Code;
 import org.apache.fory.codegen.CodegenContext;
@@ -607,9 +608,9 @@ abstract class JsonReaderCodegen {
         "properties",
         JsonCodegen.generatedCodecArrayType(ctx, readerArrayType()),
         "codecs");
-    addCreatorMethod(ctx, type, creatorInfo.executable());
+    addCreatorMethod(ctx, type, creatorInfo);
     ctx.clearExprState();
-    Code.ExprCode body = creatorReadExpression(type, creatorInfo).genCode(ctx);
+    Code.ExprCode body = creatorReadExpression(builder, type, creatorInfo).genCode(ctx);
     String bodyCode = body.code();
     bodyCode = bodyCode == null ? "" : ctx.optimizeMethodCode(bodyCode);
     ctx.addMethod(
@@ -650,12 +651,12 @@ abstract class JsonReaderCodegen {
       }
     }
     addAnyReaderConstructor(ctx, creatorConstructorExpression(fields), storesAnyReader);
-    addCreatorMethod(ctx, type, creatorInfo.executable());
+    addCreatorMethod(ctx, type, creatorInfo);
     addGeneratedMethod(
         ctx,
         "private final",
         anyReadMethod,
-        anyCreatorReadExpression(type, creatorInfo),
+        anyCreatorReadExpression(builder, type, creatorInfo),
         Object.class,
         concreteReaderType,
         "reader");
@@ -672,12 +673,13 @@ abstract class JsonReaderCodegen {
     return ctx.genCode();
   }
 
-  private Expression anyCreatorReadExpression(Class<?> type, JsonCreatorInfo creatorInfo) {
+  private Expression anyCreatorReadExpression(
+      JsonGeneratedCodecBuilder builder, Class<?> type, JsonCreatorInfo creatorInfo) {
     JsonCreatorFieldInfo[] fields = creatorInfo.fields();
     Class<?>[] parameterTypes = creatorInfo.executable().getParameterTypes();
     Expression.ListExpression expressions = new Expression.ListExpression();
     expressions.add(new Expression.Invoke(readerRef(), "enterDepth"));
-    Expression[] arguments = creatorArguments(creatorInfo.executable(), expressions);
+    CreatorArguments arguments = creatorArguments(creatorInfo, expressions);
     Expression anyMap =
         new Expression.Variable("anyMap", new Expression.Null(TypeRef.of(Map.class), false));
     expressions.add(anyMap);
@@ -688,7 +690,7 @@ abstract class JsonReaderCodegen {
             new Expression.ListExpression(
                 reserveObject(objectOwner),
                 new Expression.Invoke(readerRef(), "exitDepth"),
-                new Expression.Return(createValue(type, arguments)))));
+                finishCreator(builder, type, creatorInfo, arguments))));
 
     Expression.ListExpression loop = new Expression.ListExpression();
     Expression fieldStart =
@@ -716,8 +718,8 @@ abstract class JsonReaderCodegen {
           new Expression.Switch.Case(
               i,
               new Expression.ListExpression(
-                  new Expression.Assign(
-                      arguments[fields[i].argumentIndex()], readCreatorValue(fields[i], i)),
+                  assignCreatorArgument(
+                      arguments, fields[i].argumentIndex(), readCreatorValue(fields[i], i)),
                   new Expression.Break()));
     }
     loop.add(
@@ -742,10 +744,10 @@ abstract class JsonReaderCodegen {
         new Expression.If(
             ne(anyMap, new Expression.Null(TypeRef.of(Map.class), false)),
             new Expression.ListExpression(
-                finished, new Expression.Assign(arguments[any.constructionIndex()], finished))));
+                finished, assignCreatorArgument(arguments, any.constructionIndex(), finished))));
     expressions.add(reserveObject(objectOwner));
     expressions.add(new Expression.Invoke(readerRef(), "exitDepth"));
-    expressions.add(new Expression.Return(createValue(type, arguments)));
+    expressions.add(finishCreator(builder, type, creatorInfo, arguments));
     return expressions;
   }
 
@@ -791,7 +793,8 @@ abstract class JsonReaderCodegen {
                 eq(match, Expression.Literal.ofInt(JsonFieldTable.UNKNOWN)), read, skip)));
   }
 
-  private void addCreatorMethod(CodegenContext ctx, Class<?> type, Executable executable) {
+  private void addCreatorMethod(CodegenContext ctx, Class<?> type, JsonCreatorInfo creatorInfo) {
+    Executable executable = creatorInfo.executable();
     Class<?>[] parameterTypes = executable.getParameterTypes();
     Object[] parameters = new Object[parameterTypes.length << 1];
     StringBuilder invocation = new StringBuilder();
@@ -817,7 +820,7 @@ abstract class JsonReaderCodegen {
     if (executable instanceof Method) {
       body.append("value = (").append(typeName).append(") owner.requireCreatorResult(value);\n");
     }
-    if (objectOwner.hasValidators()) {
+    if (objectOwner.hasValidators() && !creatorInfo.hasDeferredFields()) {
       body.append("owner.validateObject(value);\n");
     }
     body.append("return value;");
@@ -908,11 +911,12 @@ abstract class JsonReaderCodegen {
             new Reference("this.selfReader", TypeRef.of(readerCapabilityType())), nestedReader));
   }
 
-  private Expression creatorReadExpression(Class<?> type, JsonCreatorInfo creatorInfo) {
+  private Expression creatorReadExpression(
+      JsonGeneratedCodecBuilder builder, Class<?> type, JsonCreatorInfo creatorInfo) {
     JsonCreatorFieldInfo[] fields = creatorInfo.fields();
     Expression.ListExpression expressions = new Expression.ListExpression();
     expressions.add(new Expression.Invoke(readerRef(), "enterDepth"));
-    Expression[] arguments = creatorArguments(creatorInfo.executable(), expressions);
+    CreatorArguments arguments = creatorArguments(creatorInfo, expressions);
     expressions.add(expectExpr('{'));
     expressions.add(
         new Expression.If(
@@ -920,7 +924,7 @@ abstract class JsonReaderCodegen {
             new Expression.ListExpression(
                 reserveObject(objectOwner),
                 new Expression.Invoke(readerRef(), "exitDepth"),
-                new Expression.Return(createValue(type, arguments)))));
+                finishCreator(builder, type, creatorInfo, arguments))));
 
     Expression.ListExpression loop = new Expression.ListExpression();
     Expression hash = readFieldNameHash("creatorFieldHash");
@@ -943,8 +947,8 @@ abstract class JsonReaderCodegen {
           new Expression.Switch.Case(
               i,
               new Expression.ListExpression(
-                  new Expression.Assign(
-                      arguments[fields[i].argumentIndex()], readCreatorValue(fields[i], i)),
+                  assignCreatorArgument(
+                      arguments, fields[i].argumentIndex(), readCreatorValue(fields[i], i)),
                   new Expression.Break()));
     }
     loop.add(
@@ -956,21 +960,101 @@ abstract class JsonReaderCodegen {
     expressions.add(new Expression.While(Expression.Literal.True, loop));
     expressions.add(reserveObject(objectOwner));
     expressions.add(new Expression.Invoke(readerRef(), "exitDepth"));
-    expressions.add(new Expression.Return(createValue(type, arguments)));
+    expressions.add(finishCreator(builder, type, creatorInfo, arguments));
     return expressions;
   }
 
-  private Expression[] creatorArguments(
-      Executable executable, Expression.ListExpression expressions) {
+  private CreatorArguments creatorArguments(
+      JsonCreatorInfo creatorInfo, Expression.ListExpression expressions) {
     // Creator fields cover only read-enabled JSON members. The executable owns the full argument
     // shape, including ignored or getter-only parameters which must still receive typed defaults.
+    Executable executable = creatorInfo.executable();
     Class<?>[] parameterTypes = executable.getParameterTypes();
-    Expression[] arguments = new Expression[parameterTypes.length];
-    for (int i = 0; i < parameterTypes.length; i++) {
-      arguments[i] = new Expression.Variable("a" + i, creatorDefault(parameterTypes[i]));
-      expressions.add(arguments[i]);
+    JsonFieldInfo[] deferredFields = creatorInfo.deferredFields();
+    int argumentCount = parameterTypes.length;
+    Expression[] values = new Expression[argumentCount + deferredFields.length];
+    Expression[] present =
+        creatorInfo.tracksArgumentPresence() ? new Expression[values.length] : null;
+    for (int i = 0; i < values.length; i++) {
+      Class<?> valueType =
+          i < argumentCount ? parameterTypes[i] : deferredFields[i - argumentCount].readRawType();
+      values[i] = new Expression.Variable("a" + i, creatorDefault(valueType));
+      expressions.add(values[i]);
+      if (present != null) {
+        present[i] = new Expression.Variable("p" + i, Expression.Literal.False);
+        expressions.add(present[i]);
+      }
     }
-    return arguments;
+    return new CreatorArguments(values, present);
+  }
+
+  private Expression assignCreatorArgument(
+      CreatorArguments arguments, int index, Expression value) {
+    Expression assign = new Expression.Assign(arguments.values[index], value);
+    if (arguments.present == null) {
+      return assign;
+    }
+    return new Expression.ListExpression(
+        assign, new Expression.Assign(arguments.present[index], Expression.Literal.True));
+  }
+
+  private Expression resolveMissingArguments(
+      JsonCreatorInfo creatorInfo, CreatorArguments arguments) {
+    if (arguments.present == null) {
+      return new Expression.ListExpression();
+    }
+    Class<?>[] parameterTypes = creatorInfo.executable().getParameterTypes();
+    Expression.ListExpression expressions = new Expression.ListExpression();
+    for (int i = 0; i < parameterTypes.length; i++) {
+      Expression defaultValue =
+          new Expression.Cast(
+              new Expression.Invoke(
+                  fieldRef("creator", JsonCreatorInfo.class),
+                  "defaultValue",
+                  TypeRef.of(Object.class),
+                  Expression.Literal.ofInt(i)),
+              TypeRef.of(parameterTypes[i]));
+      expressions.add(
+          new Expression.If(
+              not(arguments.present[i]), new Expression.Assign(arguments.values[i], defaultValue)));
+    }
+    return expressions;
+  }
+
+  private Expression finishCreator(
+      JsonGeneratedCodecBuilder builder,
+      Class<?> type,
+      JsonCreatorInfo creatorInfo,
+      CreatorArguments arguments) {
+    Expression.ListExpression expressions = new Expression.ListExpression();
+    expressions.add(resolveMissingArguments(creatorInfo, arguments));
+    Expression[] constructorArguments =
+        Arrays.copyOf(arguments.values, creatorInfo.argumentCount());
+    Expression value = new Expression.Variable("value", createValue(type, constructorArguments));
+    expressions.add(value);
+    JsonFieldInfo[] deferredFields = creatorInfo.deferredFields();
+    for (int i = 0; i < deferredFields.length; i++) {
+      int slot = creatorInfo.argumentCount() + i;
+      expressions.add(
+          new Expression.If(
+              arguments.present[slot],
+              builder.setField(deferredFields[i], value, arguments.values[slot])));
+    }
+    if (creatorInfo.hasDeferredFields() && objectOwner.hasValidators()) {
+      expressions.add(new Expression.Invoke(ownerRef(), "validateObject", value));
+    }
+    expressions.add(new Expression.Return(value));
+    return expressions;
+  }
+
+  private static final class CreatorArguments {
+    private final Expression[] values;
+    private final Expression[] present;
+
+    private CreatorArguments(Expression[] values, Expression[] present) {
+      this.values = values;
+      this.present = present;
+    }
   }
 
   private void addUnwrappedCreatorMethods(

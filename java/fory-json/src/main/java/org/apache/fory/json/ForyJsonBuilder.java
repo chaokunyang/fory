@@ -19,7 +19,9 @@
 
 package org.apache.fory.json;
 
+import java.util.ArrayList;
 import java.util.IdentityHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import org.apache.fory.json.annotation.JsonMixin;
@@ -60,6 +62,8 @@ public final class ForyJsonBuilder {
   private JsonTypeChecker typeChecker;
   private final CodecRegistry codecRegistry = new CodecRegistry();
   private final Map<Class<?>, Class<?>> mixins = new IdentityHashMap<>();
+  private final List<ForyJsonModule> modules = new ArrayList<>();
+  private final IdentityHashMap<ForyJsonModule, Boolean> moduleIdentities = new IdentityHashMap<>();
 
   ForyJsonBuilder() {}
 
@@ -212,6 +216,21 @@ public final class ForyJsonBuilder {
     return this;
   }
 
+  /** Registers a resolver-owned complete codec factory for one exact class. */
+  public <T> ForyJsonBuilder registerCodec(Class<T> type, JsonCodecFactory factory) {
+    codecRegistry.registerFactory(type, factory);
+    return this;
+  }
+
+  /** Adds an immutable JSON module to this builder. Repeating the same instance is ignored. */
+  public ForyJsonBuilder withModule(ForyJsonModule module) {
+    Objects.requireNonNull(module, "module");
+    if (moduleIdentities.put(module, Boolean.TRUE) == null) {
+      modules.add(module);
+    }
+    return this;
+  }
+
   /**
    * Registers the JSON Mixin declared by {@code mixinType} for its exact target class.
    *
@@ -225,26 +244,7 @@ public final class ForyJsonBuilder {
    *     declaration
    */
   public ForyJsonBuilder registerMixin(Class<?> mixinType) {
-    Objects.requireNonNull(mixinType, "mixinType");
-    JsonMixin declaration;
-    try {
-      declaration = mixinType.getDeclaredAnnotation(JsonMixin.class);
-    } catch (RuntimeException | LinkageError e) {
-      throw new IllegalArgumentException(
-          "Cannot read JSON Mixin declaration " + mixinType.getName(), e);
-    }
-    if (declaration == null) {
-      throw new IllegalArgumentException(
-          "JSON Mixin source is missing @JsonMixin: " + mixinType.getName());
-    }
-    Class<?> target;
-    try {
-      target = declaration.target();
-    } catch (RuntimeException | LinkageError e) {
-      throw new IllegalArgumentException(
-          "Cannot resolve JSON Mixin target for " + mixinType.getName(), e);
-    }
-    mixins.put(target, mixinType);
+    mixins.put(ModuleInstaller.mixinTarget(mixinType), mixinType);
     return this;
   }
 
@@ -271,6 +271,8 @@ public final class ForyJsonBuilder {
     boolean effectiveCodegen = codegenEnabled && !AndroidSupport.IS_ANDROID;
     boolean effectiveAsyncCompilation =
         asyncCompilationEnabled && effectiveCodegen && !GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE;
+    ModuleInstaller.InstalledModules installed =
+        ModuleInstaller.install(new ArrayList<>(modules), codecRegistry, mixins);
     return new ForyJson(
         new JsonConfig(
             writeNullFields,
@@ -284,8 +286,11 @@ public final class ForyJsonBuilder {
             maxGraphMemoryBytes,
             concurrencyLevel,
             bufferSizeLimitBytes,
-            codecRegistry,
-            mixins,
+            installed.codecs,
+            installed.mixins,
+            installed.factories,
+            installed.moduleIdentities,
+            installed.factoryIdentities,
             typeChecker));
   }
 }

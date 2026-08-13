@@ -77,7 +77,7 @@ import org.apache.fory.serializer.GraphMemoryEstimates;
  * paths independently, but it is built from this codec's immutable field metadata and preserves the
  * same null, unknown-field, creator, and member-discovery semantics.
  */
-public class ObjectCodec<T> implements JsonValueCodec<T> {
+public class ObjectCodec<T> implements CompositeJsonCodec<T> {
   protected final Class<?> type;
   protected final JsonFieldInfo[] writeFields;
   protected final JsonFieldInfo[] readFields;
@@ -128,6 +128,30 @@ public class ObjectCodec<T> implements JsonValueCodec<T> {
           writeNullFields,
           sharedRegistry,
           generatedCodec);
+    } catch (ForyJsonException e) {
+      throw sharedRegistry.mixinSchemaFailure(ownerType.getRawType(), e);
+    }
+  }
+
+  /** Builds an object codec from a validated language-module object model. */
+  @Internal
+  public static <T> ObjectCodec<T> build(
+      TypeRef<T> ownerType,
+      boolean propertyDiscoveryEnabled,
+      PropertyNamingStrategy propertyNamingStrategy,
+      boolean writeNullFields,
+      JsonSharedRegistry sharedRegistry,
+      GeneratedJsonCodec<?> generatedCodec,
+      JsonObjectModel objectModel) {
+    try {
+      return ObjectCodecBuilder.build(
+          ownerType,
+          propertyDiscoveryEnabled,
+          propertyNamingStrategy,
+          writeNullFields,
+          sharedRegistry,
+          generatedCodec,
+          objectModel);
     } catch (ForyJsonException e) {
       throw sharedRegistry.mixinSchemaFailure(ownerType.getRawType(), e);
     }
@@ -274,6 +298,11 @@ public class ObjectCodec<T> implements JsonValueCodec<T> {
     if (unwrappedInfo != null) {
       unwrappedInfo.resolve(this, typeResolver);
     }
+  }
+
+  @Override
+  public final void resolveTypes(TypeRef<?> type, JsonTypeResolver resolver) {
+    resolveTypes(resolver);
   }
 
   @Internal

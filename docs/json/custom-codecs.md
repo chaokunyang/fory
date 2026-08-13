@@ -261,6 +261,40 @@ Map keys are JSON object member names and use `MapKeyCodec`, not `JsonValueCodec
 codec class follows the same construction rules as a value codec. Null Map keys are rejected, and
 decoded keys must match the declared key type.
 
+## Language Modules
+
+A language integration can install a coherent set of exact codecs, Mixins, and parameterized type
+families through `ForyJsonModule`:
+
+```java
+import org.apache.fory.json.ForyJson;
+import org.apache.fory.json.ForyJsonModule;
+import org.apache.fory.json.ModuleContext;
+
+public final class ExampleJsonModule implements ForyJsonModule {
+  @Override
+  public void install(ModuleContext context) {
+    context.registerCodec(Money.class, new MoneyCodec());
+  }
+}
+
+ForyJson json =
+    ForyJson.builder()
+        .withModule(new ExampleJsonModule())
+        .build();
+```
+
+Installation runs only while `build()` creates the immutable runtime configuration. Module codecs
+and factories must be immutable and thread-safe. A configuration-free module can use the default
+`moduleKey()`, which is its class name. A configurable module must override `moduleKey()` with a
+deterministic value that includes every option affecting codec selection or generated code.
+
+Use `ModuleContext.registerCodec(Class, JsonValueCodec)` for a fixed exact codec,
+`registerCodec(Class, JsonCodecFactory)` when an exact type needs a fresh resolver-owned codec,
+`registerMixin` for an annotated Mixin, and `registerCodecFactory` for a parameterized type family.
+Application registrations on `ForyJsonBuilder` take precedence over module exact registrations.
+Conflicting module registrations fail during `build()` rather than depending on installation order.
+
 ## Codec Construction and Platform Support
 
 An annotation codec class must be public, concrete, top-level or static nested, and have a public

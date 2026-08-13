@@ -110,6 +110,7 @@ final class Utf8WriterCodegen extends JsonWriterCodegen {
         if (i == 0
             && !objectStartFused
             && !property.writeNull()
+            && !property.requiresNonNullWrite()
             && canPackObjectStartString(property)) {
           // The generated first-field branch consumes neither ordinary prefix field.
         } else if (objectStartFused && i == 0) {

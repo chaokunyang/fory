@@ -728,6 +728,8 @@ public final class ForyJson {
     private final Latin1JsonReader latin1Reader;
     private final Utf16JsonReader utf16Reader;
     private byte[] charBackedUtf16Bytes;
+    private Class<?> lastRuntimeRootType;
+    private JsonTypeInfo lastRuntimeRootInfo;
     private Type lastRootType;
     private Class<?> lastRootFallback;
     private JsonTypeInfo lastRootInfo;
@@ -791,7 +793,14 @@ public final class ForyJson {
     }
 
     private JsonTypeInfo rootTypeInfo(Class<?> type) {
-      return rootTypeInfo(type, type);
+      JsonTypeInfo typeInfo = lastRuntimeRootInfo;
+      if (lastRuntimeRootType == type && typeInfo != null) {
+        return typeInfo;
+      }
+      typeInfo = typeResolver.getRuntimeTypeInfo(type);
+      lastRuntimeRootType = type;
+      lastRuntimeRootInfo = typeInfo;
+      return typeInfo;
     }
 
     private JsonTypeInfo rootTypeInfo(Type type, Class<?> fallback) {

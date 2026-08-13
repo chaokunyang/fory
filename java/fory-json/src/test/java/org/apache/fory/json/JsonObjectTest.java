@@ -34,6 +34,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import org.apache.fory.json.annotation.JsonIgnore;
 import org.apache.fory.json.data.DeclaredParentField;
 import org.apache.fory.json.data.DirectionalIgnore;
 import org.apache.fory.json.data.FirstIntField;
@@ -298,5 +299,49 @@ public class JsonObjectTest extends ForyJsonTestModels {
     assertEquals(value.both, 1);
     assertEquals(value.writeOnly, 2);
     assertEquals(value.readOnly, 9);
+  }
+
+  @Test
+  public void methodIgnore() {
+    ForyJson json = newJson();
+    MethodIgnored value = new MethodIgnored();
+    assertEquals(json.toJson(value), "{\"visible\":1}");
+    MethodIgnored decoded =
+        json.fromJson("{\"hidden\":9,\"inputOnly\":8,\"visible\":7}", MethodIgnored.class);
+    assertEquals(decoded.hidden, 2);
+    assertEquals(decoded.inputOnly, 8);
+    assertEquals(decoded.visible, 7);
+  }
+
+  public static final class MethodIgnored {
+    public int hidden = 2;
+    public int inputOnly = 3;
+    public int visible = 1;
+
+    @JsonIgnore
+    public int getHidden() {
+      return hidden;
+    }
+
+    public void setHidden(int hidden) {
+      this.hidden = hidden;
+    }
+
+    @JsonIgnore(ignoreRead = false)
+    public int getInputOnly() {
+      return inputOnly;
+    }
+
+    public void setInputOnly(int inputOnly) {
+      this.inputOnly = inputOnly;
+    }
+
+    public int getVisible() {
+      return visible;
+    }
+
+    public void setVisible(int visible) {
+      this.visible = visible;
+    }
   }
 }

@@ -303,6 +303,18 @@ public abstract class JsonReader {
    */
   public abstract String readFieldName();
 
+  /** Consumes {@code expected} after whitespace when present. */
+  public abstract boolean consumeNextToken(char expected);
+
+  /** Consumes {@code expected} after whitespace or fails. */
+  public abstract void expectNextToken(char expected);
+
+  /** Consumes the comma before the next object member, or the closing brace. */
+  public abstract boolean consumeNextCommaOrEndObject();
+
+  /** Consumes the comma before the next array element, or the closing bracket. */
+  public abstract boolean consumeNextCommaOrEndArray();
+
   protected static long fieldNameHash(int length, long word0, long word1) {
     if (length == 0) {
       return JsonFieldNameHash.MAGIC_HASH_CODE;

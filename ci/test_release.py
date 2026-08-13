@@ -38,6 +38,7 @@ class ReleaseDocVersionTest(unittest.TestCase):
             '    .package(url: "https://github.com/apache/fory.git", exact: "1.5.0")\n',
             'implementation("org.apache.fory:fory-core:1.5.0")\n',
             'libraryDependencies += "org.apache.fory" %% "fory-scala" % "1.5.0"\n',
+            'libraryDependencies += "org.apache.fory" %% "fory-json-scala" % "1.5.0"\n',
             'implementation("io.grpc:grpc-api:1.73.0")\n',
             "The wire format was introduced in version 1.5.0.\n",
         ]
@@ -54,6 +55,7 @@ class ReleaseDocVersionTest(unittest.TestCase):
             '    .package(url: "https://github.com/apache/fory.git", exact: "1.6.0")\n',
             'implementation("org.apache.fory:fory-core:1.6.0")\n',
             'libraryDependencies += "org.apache.fory" %% "fory-scala" % "1.6.0"\n',
+            'libraryDependencies += "org.apache.fory" %% "fory-json-scala" % "1.6.0"\n',
             'implementation("io.grpc:grpc-api:1.73.0")\n',
             "The wire format was introduced in version 1.5.0.\n",
         ]

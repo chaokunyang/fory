@@ -67,6 +67,8 @@ RELEASE_DOC_ROOTS = (
     "java/fory-json/README.md",
     "rust/README.md",
     "scala/README.md",
+    "scala/fory-scala/README.md",
+    "scala/fory-json-scala/README.md",
     "csharp/README.md",
     "swift/README.md",
     "dart/packages/fory/README.md",

@@ -26,6 +26,7 @@ import static org.testng.Assert.fail;
 
 import java.nio.charset.StandardCharsets;
 import org.apache.fory.json.annotation.JsonCreator;
+import org.apache.fory.json.annotation.JsonIgnore;
 import org.apache.fory.json.annotation.JsonProperty;
 import org.testng.annotations.Factory;
 import org.testng.annotations.Test;
@@ -149,6 +150,15 @@ public class JsonCreatorTest extends ForyJsonTestModels {
     assertEquals(value.value, 7);
   }
 
+  @Test
+  public void ignoredCreatorParameter() {
+    IgnoredCreator value =
+        newJson().fromJson("{\"visible\":7,\"hidden\":\"secret\"}", IgnoredCreator.class);
+    assertEquals(value.visible, 7);
+    assertEquals(value.hidden, "secret");
+    assertEquals(newJson().toJson(value), "{\"visible\":7}");
+  }
+
   static final class HiddenArgument {
     public int value;
   }
@@ -159,6 +169,19 @@ public class JsonCreatorTest extends ForyJsonTestModels {
     @JsonCreator
     public PublicHiddenCreator(@JsonProperty("input") HiddenArgument input) {
       value = input.value;
+    }
+  }
+
+  public static final class IgnoredCreator {
+    public final int visible;
+    public final String hidden;
+
+    @JsonCreator
+    public IgnoredCreator(
+        @JsonProperty("visible") int visible,
+        @JsonProperty("hidden") @JsonIgnore(ignoreRead = false) String hidden) {
+      this.visible = visible;
+      this.hidden = hidden;
     }
   }
 

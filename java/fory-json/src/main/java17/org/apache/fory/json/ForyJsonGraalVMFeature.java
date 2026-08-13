@@ -65,6 +65,7 @@ import org.apache.fory.json.codegen.JsonCodegenKey;
 import org.apache.fory.json.meta.JsonCreatorInfo;
 import org.apache.fory.json.meta.JsonFieldAccessor;
 import org.apache.fory.json.meta.JsonValidatorInfo;
+import org.apache.fory.json.resolver.CodecRegistry.FactoryBinding;
 import org.apache.fory.json.resolver.JsonGeneratedClassRegistry;
 import org.apache.fory.json.resolver.JsonSharedRegistry;
 import org.apache.fory.json.resolver.JsonSharedRegistry.JsonMixinView;
@@ -91,6 +92,7 @@ final class ForyJsonGraalVMFeature implements Feature {
   private final Set<Class<?>> processedMixins = ConcurrentHashMap.newKeySet();
   private final Map<Class<?>, Set<Class<?>>> reachableMixins = new LinkedHashMap<>();
   private final Set<Class<?>> processedProviders = ConcurrentHashMap.newKeySet();
+  private final Set<Class<?>> processedFactoryModels = ConcurrentHashMap.newKeySet();
   private final Set<Class<?>> processedCodecs = ConcurrentHashMap.newKeySet();
   private final Set<Class<?>> processedContainers = ConcurrentHashMap.newKeySet();
   private final Set<Executable> processedCreators = new LinkedHashSet<>();
@@ -134,7 +136,7 @@ final class ForyJsonGraalVMFeature implements Feature {
           changed |= registerMixin(access, type, mixin.target());
         }
         if (type.getDeclaredAnnotation(ForyJsonProvider.class) != null) {
-          changed |= registerProvider(type);
+          changed |= registerProvider(access, type);
         }
         if (type == ForyJson.class) {
           registerBuiltInTypes(access);
@@ -148,7 +150,7 @@ final class ForyJsonGraalVMFeature implements Feature {
     }
   }
 
-  private boolean registerProvider(Class<?> providerClass) {
+  private boolean registerProvider(DuringAnalysisAccess access, Class<?> providerClass) {
     if (!processedProviders.add(providerClass)) {
       return false;
     }
@@ -200,19 +202,49 @@ final class ForyJsonGraalVMFeature implements Feature {
         hostedConfigurations.put(key, configurations);
       }
       ClassLoader classLoader = config.classLoader();
-      boolean knownLoader = false;
-      for (HostedConfiguration configuration : configurations) {
-        if (configuration.classLoader == classLoader) {
-          knownLoader = true;
+      HostedConfiguration configuration = null;
+      for (HostedConfiguration candidate : configurations) {
+        if (candidate.classLoader == classLoader) {
+          configuration = candidate;
           break;
         }
       }
-      if (!knownLoader) {
-        configurations.add(new HostedConfiguration(config));
+      if (configuration == null) {
+        configuration = new HostedConfiguration(config);
+        configurations.add(configuration);
         changed = true;
+      }
+      ArrayList<Map.Entry<Class<?>, FactoryBinding>> bindings =
+          new ArrayList<>(config.codecRegistry().factoryBindings().entrySet());
+      bindings.sort(Comparator.comparing(entry -> entry.getKey().getName()));
+      for (Map.Entry<Class<?>, FactoryBinding> entry : bindings) {
+        changed |= addFactoryRoot(access, configuration, entry.getKey());
+        for (Class<?> runtimeType : entry.getValue().handledRuntimeClasses()) {
+          changed |= registerFactoryModel(access, runtimeType);
+        }
       }
     }
     return changed;
+  }
+
+  private boolean addFactoryRoot(
+      DuringAnalysisAccess access, HostedConfiguration configuration, Class<?> type) {
+    boolean changed = configuration.factoryModels.add(type);
+    return registerFactoryModel(access, type) || changed;
+  }
+
+  private boolean registerFactoryModel(DuringAnalysisAccess access, Class<?> type) {
+    if (processedModels.contains(type) || !processedFactoryModels.add(type)) {
+      return false;
+    }
+    RuntimeReflection.register(type);
+    registerContainer(type);
+    registerDeclarations(type);
+    registerModelHierarchy(access, type);
+    if (type.isRecord()) {
+      registerRecord(type);
+    }
+    return true;
   }
 
   private static MethodHandle providerConstructor(
@@ -267,6 +299,7 @@ final class ForyJsonGraalVMFeature implements Feature {
         hostedConfigurations.entrySet()) {
       for (HostedConfiguration configuration : entry.getValue()) {
         LinkedHashSet<Class<?>> selectedModels = new LinkedHashSet<>(processedModels);
+        selectedModels.addAll(configuration.factoryModels);
         for (Map.Entry<Class<?>, Set<Class<?>>> mixin : reachableMixins.entrySet()) {
           if (mixin.getValue().contains(configuration.mixins.get(mixin.getKey()))) {
             selectedModels.add(mixin.getKey());
@@ -884,6 +917,7 @@ final class ForyJsonGraalVMFeature implements Feature {
     private final JsonTypeResolver resolver;
     private final Map<Class<?>, Class<?>> mixins;
     private final Set<Class<?>> processedModels = new LinkedHashSet<>();
+    private final Set<Class<?>> factoryModels = new LinkedHashSet<>();
 
     private HostedConfiguration(JsonConfig config) {
       classLoader = config.classLoader();

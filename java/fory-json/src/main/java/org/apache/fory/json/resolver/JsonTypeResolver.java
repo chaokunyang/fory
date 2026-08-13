@@ -19,7 +19,9 @@
 
 package org.apache.fory.json.resolver;
 
+import java.lang.reflect.Constructor;
 import java.lang.reflect.GenericArrayType;
+import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
@@ -29,6 +31,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.IdentityHashMap;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.Optional;
@@ -46,7 +49,9 @@ import org.apache.fory.json.codec.ArrayCodec;
 import org.apache.fory.json.codec.ClosedSubtypeCodec;
 import org.apache.fory.json.codec.CodecUtils;
 import org.apache.fory.json.codec.CollectionCodec;
+import org.apache.fory.json.codec.CompositeJsonCodec;
 import org.apache.fory.json.codec.GeneratedJsonCodec;
+import org.apache.fory.json.codec.JsonObjectModel;
 import org.apache.fory.json.codec.JsonSubTypesInfo;
 import org.apache.fory.json.codec.JsonUnwrappedInfo;
 import org.apache.fory.json.codec.JsonValueCodec;
@@ -98,27 +103,30 @@ public final class JsonTypeResolver {
 
   private final Map<Object, ObjectCodec<?>> objectCodecs;
   private final Map<Object, JsonTypeInfo> typeInfos;
+  private final IdentityHashMap<Class<?>, JsonTypeInfo> runtimeTypeInfos;
   private final JsonSharedRegistry sharedRegistry;
   private final JsonCodegen codegen;
   private final JsonJITContext jitContext;
   private final IdentityMap<Class<?>, JsonTypeInfo> rawObjectTypeInfos;
   private final IdentityMap<ObjectCodec<?>, JsonTypeInfo> canonicalObjectTypeInfos;
   private final IdentityMap<JsonTypeInfo, CollectionCodec<?>> collectionCodecs;
+  private final IdentityMap<JsonTypeInfo, Class<?>> subtypeTypeRoots;
   private int resolutionDepth;
-
-  private enum RuntimeObjectKey {
-    INSTANCE
-  }
+  private boolean runtimeTypeResolution;
+  private Class<?> subtypeResolutionBase;
+  private boolean isolateSubtypeResolution;
 
   public JsonTypeResolver(JsonSharedRegistry sharedRegistry) {
     this.sharedRegistry = sharedRegistry;
     objectCodecs = new HashMap<>();
     typeInfos = new HashMap<>();
+    runtimeTypeInfos = new IdentityHashMap<>();
     codegen = sharedRegistry.codegen();
     jitContext = sharedRegistry.newJITContext();
     rawObjectTypeInfos = new IdentityMap<>();
     canonicalObjectTypeInfos = new IdentityMap<>();
     collectionCodecs = new IdentityMap<>();
+    subtypeTypeRoots = new IdentityMap<>();
   }
 
   /** Returns the shared registry that owns this resolver and its reader cache domain. */
@@ -144,7 +152,7 @@ public final class JsonTypeResolver {
   @SuppressWarnings("unchecked")
   private <T> ObjectCodec<T> getObjectCodec(TypeRef<T> ownerType) {
     Class<?> rawType = ownerType.getRawType();
-    Object key = typeInfoKey(ownerType.getType(), rawType);
+    Object key = resolutionTypeKey(ownerType.getType(), rawType);
     return getObjectCodec(ownerType, key);
   }
 
@@ -170,7 +178,7 @@ public final class JsonTypeResolver {
   @Internal
   public ObjectCodec<?> getUnwrappedObjectCodec(Class<?> rawType) {
     TypeRef<?> ownerType = TypeRef.of(rawType);
-    Object key = typeInfoKey(rawType, rawType);
+    Object key = resolutionTypeKey(rawType, rawType);
     JsonTypeInfo typeInfo = typeInfos.get(key);
     if (typeInfo != null) {
       // Generated capabilities replace type-info slots; objectCodecs retains the stable metadata
@@ -190,7 +198,7 @@ public final class JsonTypeResolver {
       objectCodecs.put(key, codec);
     }
     typeInfo = newTypeInfo(rawType, rawType, codec);
-    typeInfos.put(key, typeInfo);
+    publishTypeInfo(key, typeInfo);
     registerTypeInfoOwner(typeInfo, codec);
     return codec;
   }
@@ -216,7 +224,7 @@ public final class JsonTypeResolver {
     if (rawObjectTypeInfos.get(typeInfo.rawType()) != typeInfo) {
       return null;
     }
-    return objectCodecs.get(typeInfo.rawType());
+    return objectCodecs.get(metadataKey(typeInfo));
   }
 
   /** Returns an exact declared ArrayList-backed UTF-8 collection owner, or {@code null}. */
@@ -291,12 +299,17 @@ public final class JsonTypeResolver {
   private JsonTypeInfo declaredCollectionElement(JsonTypeInfo collection) {
     Type elementType = CodecUtils.elementType(collection.type());
     Class<?> rawType = CodecUtils.rawType(elementType, Object.class);
-    return typeInfos.get(typeInfoKey(elementType, rawType));
+    Class<?> subtypeRoot = subtypeTypeRoots.get(collection);
+    Object key =
+        subtypeRoot == null
+            ? typeInfoKey(elementType, rawType)
+            : subtypeTypeKey(subtypeRoot, elementType, rawType);
+    return typeInfos.get(key);
   }
 
   public JsonTypeInfo getTypeInfo(Type declaredType, Class<?> fallback) {
     Class<?> rawType = CodecUtils.rawType(declaredType, fallback);
-    Object key = typeInfoKey(declaredType, rawType);
+    Object key = resolutionTypeKey(declaredType, rawType);
     JsonTypeInfo typeInfo = typeInfos.get(key);
     if (typeInfo != null) {
       return typeInfo;
@@ -374,7 +387,7 @@ public final class JsonTypeResolver {
   private JsonTypeInfo resolveTypeInfo(Type declaredType, Class<?> rawType, Object key) {
     JsonTypeInfo typeInfo = customTypeInfo(declaredType, rawType);
     if (typeInfo != null) {
-      typeInfos.put(key, typeInfo);
+      publishTypeInfo(key, typeInfo);
       return typeInfo;
     }
     JsonSubTypesInfo definition = sharedRegistry.subTypesInfo(rawType);
@@ -385,8 +398,8 @@ public final class JsonTypeResolver {
       // Closed graphs may recursively refer to their declared base through a subtype field or
       // container. Publish the complete dispatcher shell before resolving every finite branch.
       // The outer cold-resolution transaction removes the complete provisional graph on failure.
-      typeInfos.put(key, typeInfo);
-      codec.resolve(this);
+      publishTypeInfo(key, typeInfo);
+      codec.resolveTypes(TypeRef.of(declaredType), this);
       return typeInfo;
     }
     return buildTypeInfo(rawType, declaredType, key);
@@ -487,6 +500,12 @@ public final class JsonTypeResolver {
               ? new ScalarCodecs.OptionalCodec(contentInfo)
               : new ScalarCodecs.AtomicReferenceCodec(contentInfo);
       return newTypeInfo(declaredType, rawType, codec);
+    }
+    JsonValueCodec<?> codec = sharedRegistry.createCodec(rawType, typeRef, this);
+    if (codec instanceof CompositeJsonCodec) {
+      JsonTypeInfo typeInfo = newTypeInfo(declaredType, rawType, JsonFieldKind.OBJECT, codec, true);
+      ((CompositeJsonCodec<?>) codec).resolveTypes(typeRef, this, annotation);
+      return typeInfo;
     }
     throw invalidCodecConfig(rawType, "does not support child codecs");
   }
@@ -659,7 +678,11 @@ public final class JsonTypeResolver {
     ResolutionSnapshot snapshot =
         resolutionDepth == 0
             ? new ResolutionSnapshot(
-                new HashSet<>(typeInfos.keySet()), new HashSet<>(objectCodecs.keySet()))
+                new HashSet<>(typeInfos.keySet()),
+                new HashSet<>(objectCodecs.keySet()),
+                new HashSet<>(runtimeTypeInfos.keySet()),
+                copyIdentityMap(rawObjectTypeInfos),
+                copyIdentityMap(canonicalObjectTypeInfos))
             : null;
     resolutionDepth++;
     return snapshot;
@@ -712,14 +735,8 @@ public final class JsonTypeResolver {
       Map.Entry<Object, JsonTypeInfo> entry = typeIterator.next();
       if (!snapshot.typeKeys.contains(entry.getKey())) {
         JsonTypeInfo value = entry.getValue();
-        if (rawObjectTypeInfos.get(value.rawType()) == value) {
-          rawObjectTypeInfos.remove(value.rawType());
-          ObjectCodec<?> owner = objectCodecs.get(value.rawType());
-          if (owner != null) {
-            canonicalObjectTypeInfos.remove(owner);
-          }
-        }
         collectionCodecs.remove(value);
+        subtypeTypeRoots.remove(value);
         typeIterator.remove();
       }
     }
@@ -729,27 +746,61 @@ public final class JsonTypeResolver {
         objectIterator.remove();
       }
     }
+    Iterator<Class<?>> runtimeIterator = runtimeTypeInfos.keySet().iterator();
+    while (runtimeIterator.hasNext()) {
+      if (!snapshot.runtimeKeys.contains(runtimeIterator.next())) {
+        runtimeIterator.remove();
+      }
+    }
+    restoreIdentityMap(rawObjectTypeInfos, snapshot.rawObjectTypeInfos);
+    restoreIdentityMap(canonicalObjectTypeInfos, snapshot.canonicalObjectTypeInfos);
   }
 
   private static final class ResolutionSnapshot {
     private final Set<Object> typeKeys;
     private final Set<Object> objectKeys;
+    private final Set<Class<?>> runtimeKeys;
+    private final IdentityHashMap<Class<?>, JsonTypeInfo> rawObjectTypeInfos;
+    private final IdentityHashMap<ObjectCodec<?>, JsonTypeInfo> canonicalObjectTypeInfos;
 
-    private ResolutionSnapshot(Set<Object> typeKeys, Set<Object> objectKeys) {
+    private ResolutionSnapshot(
+        Set<Object> typeKeys,
+        Set<Object> objectKeys,
+        Set<Class<?>> runtimeKeys,
+        IdentityHashMap<Class<?>, JsonTypeInfo> rawObjectTypeInfos,
+        IdentityHashMap<ObjectCodec<?>, JsonTypeInfo> canonicalObjectTypeInfos) {
       this.typeKeys = typeKeys;
       this.objectKeys = objectKeys;
+      this.runtimeKeys = runtimeKeys;
+      this.rawObjectTypeInfos = rawObjectTypeInfos;
+      this.canonicalObjectTypeInfos = canonicalObjectTypeInfos;
+    }
+  }
+
+  private static <K, V> IdentityHashMap<K, V> copyIdentityMap(IdentityMap<K, V> source) {
+    IdentityHashMap<K, V> copy = new IdentityHashMap<>(source.size);
+    for (Map.Entry<K, V> entry : source.iterable()) {
+      copy.put(entry.getKey(), entry.getValue());
+    }
+    return copy;
+  }
+
+  private static <K, V> void restoreIdentityMap(
+      IdentityMap<K, V> target, IdentityHashMap<K, V> snapshot) {
+    target.clear();
+    for (Map.Entry<K, V> entry : snapshot.entrySet()) {
+      target.put(entry.getKey(), entry.getValue());
     }
   }
 
   public JsonTypeInfo getRuntimeTypeInfo(Class<?> runtimeType) {
-    Object key = runtimeType == Object.class ? RuntimeObjectKey.INSTANCE : runtimeType;
-    JsonTypeInfo typeInfo = typeInfos.get(key);
+    JsonTypeInfo typeInfo = runtimeTypeInfos.get(runtimeType);
     if (typeInfo != null) {
       return typeInfo;
     }
     ResolutionSnapshot snapshot = beginResolution();
     try {
-      JsonTypeInfo result = resolveRuntimeTypeInfo(runtimeType, key);
+      JsonTypeInfo result = resolveRuntimeTypeInfo(runtimeType);
       completeResolution(snapshot);
       return result;
     } catch (RuntimeException | Error e) {
@@ -760,39 +811,225 @@ public final class JsonTypeResolver {
     }
   }
 
-  private JsonTypeInfo resolveRuntimeTypeInfo(Class<?> runtimeType, Object key) {
+  private JsonTypeInfo resolveRuntimeTypeInfo(Class<?> runtimeType) {
+    boolean previousRuntimeResolution = runtimeTypeResolution;
+    runtimeTypeResolution = true;
+    try {
+      return resolveRuntimeTypeInfo0(runtimeType);
+    } finally {
+      runtimeTypeResolution = previousRuntimeResolution;
+    }
+  }
+
+  private JsonTypeInfo resolveRuntimeTypeInfo0(Class<?> runtimeType) {
     JsonTypeInfo typeInfo = customTypeInfo(runtimeType, runtimeType);
-    JsonValueCodec<?> codec = null;
-    if (typeInfo == null) {
-      sharedRegistry.checkSecure(runtimeType);
+    if (typeInfo != null) {
+      runtimeTypeInfos.put(runtimeType, typeInfo);
+      return typeInfo;
+    }
+    sharedRegistry.checkSecure(runtimeType);
+    Class<?> aliasTarget = sharedRegistry.runtimeCodecTarget(runtimeType);
+    if (aliasTarget != null) {
+      typeInfo = getTypeInfo(aliasTarget, aliasTarget);
+      runtimeTypeInfos.put(runtimeType, typeInfo);
+      return typeInfo;
+    }
+    if (runtimeType == Object.class) {
+      // Declared Object uses the natural JSON codec, but an actual Object instance has the
+      // structural empty-object representation. Keep those two owners separate so natural
+      // runtime dispatch cannot resolve back to itself.
       TypeRef<?> typeRef = TypeRef.of(runtimeType);
-      codec =
-          runtimeType == Object.class
-              ? getObjectCodec(typeRef)
-              : sharedRegistry.createCodec(runtimeType, typeRef, this);
-      if (codec == null) {
-        codec = getObjectCodec(typeRef);
-      }
+      JsonValueCodec<?> codec = getObjectCodec(typeRef);
       typeInfo = newTypeInfo(runtimeType, runtimeType, codec);
-    }
-    JsonTypeInfo recursiveTypeInfo = typeInfos.get(key);
-    if (recursiveTypeInfo != null) {
-      return recursiveTypeInfo;
-    }
-    typeInfos.put(key, typeInfo);
-    if (codec != null) {
       registerTypeInfoOwner(typeInfo, codec);
+      runtimeTypeInfos.put(runtimeType, typeInfo);
+      return typeInfo;
     }
+    typeInfo = typeInfos.get(runtimeType);
+    if (typeInfo != null) {
+      runtimeTypeInfos.put(runtimeType, typeInfo);
+      return typeInfo;
+    }
+    TypeRef<?> typeRef = TypeRef.of(runtimeType);
+    JsonValueCodec<?> codec = sharedRegistry.createCodec(runtimeType, typeRef, this);
+    if (codec == null) {
+      codec = getObjectCodec(typeRef);
+    }
+    typeInfo = typeInfos.get(runtimeType);
+    if (typeInfo == null) {
+      typeInfo = newTypeInfo(runtimeType, runtimeType, codec);
+      if (codec instanceof ObjectCodec) {
+        objectCodecs.put(runtimeType, (ObjectCodec<?>) codec);
+        publishTypeInfo(runtimeType, typeInfo);
+      }
+      registerTypeInfoOwner(typeInfo, codec);
+      resolveCodecTypes(codec, typeRef);
+    }
+    runtimeTypeInfos.put(runtimeType, typeInfo);
     return typeInfo;
+  }
+
+  /** Returns whether the current cold lookup was initiated for a dynamic runtime write type. */
+  @Internal
+  public boolean resolvingRuntimeType() {
+    return runtimeTypeResolution;
+  }
+
+  /** Resolves one branch while preserving the closed root that owns its discriminator schema. */
+  @Internal
+  public JsonTypeInfo getSubtypeTypeInfo(
+      Class<?> baseType, Type declaredType, Class<?> fallback, boolean isolated) {
+    Class<?> previousBase = subtypeResolutionBase;
+    boolean previousIsolation = isolateSubtypeResolution;
+    subtypeResolutionBase = baseType;
+    isolateSubtypeResolution = isolated;
+    try {
+      return getTypeInfo(declaredType, fallback);
+    } finally {
+      subtypeResolutionBase = previousBase;
+      isolateSubtypeResolution = previousIsolation;
+    }
+  }
+
+  /** Returns whether the current cold lookup is resolving a branch of {@code baseType}. */
+  @Internal
+  public boolean resolvingSubtypeOf(Class<?> baseType) {
+    return subtypeResolutionBase == baseType;
   }
 
   public void checkSecure(Class<?> type) {
     sharedRegistry.checkSecure(type);
   }
 
+  /** Builds an unresolved object codec from language-module construction metadata. */
+  @Internal
+  public ObjectCodec<?> createObjectCodec(TypeRef<?> ownerType, JsonObjectModel objectModel) {
+    Class<?> type = ownerType.getRawType();
+    sharedRegistry.checkSecure(type);
+    validateObjectModel(type, objectModel);
+    return ObjectCodec.build(
+        ownerType,
+        sharedRegistry.propertyDiscoveryEnabled(),
+        sharedRegistry.propertyNamingStrategy(),
+        sharedRegistry.writeNullFields(),
+        sharedRegistry,
+        sharedRegistry.generatedCodec(type),
+        objectModel);
+  }
+
+  private static void validateObjectModel(Class<?> type, JsonObjectModel objectModel) {
+    Constructor<?> constructor = objectModel.constructor();
+    int modifiers = constructor.getModifiers();
+    if (constructor.getDeclaringClass() != type
+        || !Modifier.isPublic(modifiers)
+        || constructor.isSynthetic()
+        || constructor.isVarArgs()
+        || constructor.getTypeParameters().length != 0) {
+      throw new ForyJsonException("Invalid JSON object-model constructor " + constructor);
+    }
+    Class<?>[] parameterTypes = constructor.getParameterTypes();
+    String[] names = objectModel.parameterNames();
+    Method[] accessors = objectModel.accessors();
+    for (int i = 0; i < accessors.length; i++) {
+      Method accessor = accessors[i];
+      if (accessor == null) {
+        continue;
+      }
+      int accessorModifiers = accessor.getModifiers();
+      boolean unitAccessor =
+          accessor.getReturnType() == void.class
+              && parameterTypes[i].getName().equals("scala.runtime.BoxedUnit");
+      if (!accessor.getName().equals(names[i])
+          || accessor.getParameterCount() != 0
+          || accessor.getReturnType() != parameterTypes[i] && !unitAccessor
+          || !Modifier.isPublic(accessorModifiers)
+          || Modifier.isStatic(accessorModifiers)
+          || accessor.isBridge()
+          || accessor.isSynthetic()
+          || !accessor.getDeclaringClass().isAssignableFrom(type)) {
+        throw new ForyJsonException("Invalid JSON object-model accessor " + accessor);
+      }
+    }
+    String[] propertyNames = objectModel.propertyNames();
+    Method[] getters = objectModel.propertyGetters();
+    Method[] setters = objectModel.propertySetters();
+    for (int i = 0; i < propertyNames.length; i++) {
+      Method getter = getters[i];
+      Method setter = setters[i];
+      if (getter == null && setter == null) {
+        throw new ForyJsonException(
+            "JSON object-model property has no accessor " + propertyNames[i]);
+      }
+      Class<?> propertyType =
+          getter == null ? setter.getParameterTypes()[0] : getter.getReturnType();
+      boolean unitGetter =
+          getter != null
+              && getter.getReturnType() == void.class
+              && parameterType(propertyNames[i], names, parameterTypes) != null
+              && parameterType(propertyNames[i], names, parameterTypes)
+                  .getName()
+                  .equals("scala.runtime.BoxedUnit");
+      if (getter != null
+          && (!getter.getName().equals(propertyNames[i])
+              || getter.getParameterCount() != 0
+              || getter.getReturnType() == void.class && !unitGetter
+              || !validObjectModelMethod(type, getter))) {
+        throw new ForyJsonException("Invalid JSON object-model getter " + getter);
+      }
+      if (setter != null
+          && (setter.getParameterCount() != 1
+              || setter.getParameterTypes()[0] != propertyType
+              || setter.getReturnType() != void.class
+              || !validObjectModelMethod(type, setter))) {
+        throw new ForyJsonException("Invalid JSON object-model setter " + setter);
+      }
+    }
+  }
+
+  private static Class<?> parameterType(
+      String propertyName, String[] names, Class<?>[] parameterTypes) {
+    for (int i = 0; i < names.length; i++) {
+      if (propertyName.equals(names[i])) {
+        return parameterTypes[i];
+      }
+    }
+    return null;
+  }
+
+  private static boolean validObjectModelMethod(Class<?> type, Method method) {
+    int modifiers = method.getModifiers();
+    return Modifier.isPublic(modifiers)
+        && !Modifier.isStatic(modifiers)
+        && !method.isBridge()
+        && !method.isSynthetic()
+        && method.getDeclaringClass().isAssignableFrom(type);
+  }
+
   @Internal
   public void checkMapKeySecure(Class<?> type) {
     sharedRegistry.checkMapKeySecure(type);
+  }
+
+  /** Returns the built-in object-member codec for one approved map key type. */
+  @Internal
+  public MapKeyCodec getMapKeyCodec(Class<?> type) {
+    checkMapKeySecure(type);
+    return MapCodec.keyCodec(type);
+  }
+
+  /** Returns one annotation-selected object-member codec for an approved map key type. */
+  @Internal
+  public MapKeyCodec getMapKeyCodec(Class<?> type, Class<? extends MapKeyCodec> codecClass) {
+    checkMapKeySecure(type);
+    return sharedRegistry.mapKeyCodec(type, codecClass);
+  }
+
+  /** Creates uncached type metadata for one parent-owned leaf codec. */
+  @Internal
+  public JsonTypeInfo createLeafTypeInfo(TypeRef<?> type, JsonValueCodec<?> codec) {
+    Class<?> rawType = type.getRawType();
+    sharedRegistry.checkSecure(rawType);
+    return newTypeInfo(type.getType(), rawType, JsonFieldKind.OBJECT, codec, false);
   }
 
   @SuppressWarnings("unchecked")
@@ -2079,7 +2316,7 @@ public final class JsonTypeResolver {
         return canonicalObjectOwner(typeInfo) == objectOwner;
       }
       return collectionCodecs.get(typeInfo) == collectionOwner
-          && typeInfos.get(typeInfoKey(typeInfo.type(), typeInfo.rawType())) == typeInfo;
+          && typeInfos.get(metadataKey(typeInfo)) == typeInfo;
     }
 
     private Object current(CapabilityKind kind) {
@@ -2145,9 +2382,19 @@ public final class JsonTypeResolver {
       return recursiveTypeInfo;
     }
     JsonTypeInfo typeInfo = newTypeInfo(declaredType, rawType, codec);
-    typeInfos.put(key, typeInfo);
+    if (codec instanceof ObjectCodec) {
+      objectCodecs.put(key, (ObjectCodec<?>) codec);
+    }
+    publishTypeInfo(key, typeInfo);
     registerTypeInfoOwner(typeInfo, codec);
+    resolveCodecTypes(codec, typeRef);
     return typeInfo;
+  }
+
+  private void resolveCodecTypes(JsonValueCodec<?> codec, TypeRef<?> type) {
+    if (codec instanceof CompositeJsonCodec) {
+      ((CompositeJsonCodec<?>) codec).resolveTypes(type, this);
+    }
   }
 
   private JsonTypeInfo buildObjectTypeInfo(TypeRef<?> ownerType, Object key) {
@@ -2163,7 +2410,7 @@ public final class JsonTypeResolver {
       // must be visible before any field resolves so self-references reuse the same field table and
       // capability slots. The outer cold-resolution transaction removes both on failure.
       objectCodecs.put(key, codec);
-      typeInfos.put(key, typeInfo);
+      publishTypeInfo(key, typeInfo);
       registerTypeInfoOwner(typeInfo, codec);
       codec.resolveTypes(this);
       return typeInfo;
@@ -2171,7 +2418,7 @@ public final class JsonTypeResolver {
     // A public getObjectCodec call may already own construction of this shell. Bind its type info
     // now; the outer owner finishes field resolution before returning the codec to its caller.
     typeInfo = newTypeInfo(ownerType.getType(), ownerType.getRawType(), codec);
-    typeInfos.put(key, typeInfo);
+    publishTypeInfo(key, typeInfo);
     registerTypeInfoOwner(typeInfo, codec);
     return typeInfo;
   }
@@ -2202,8 +2449,96 @@ public final class JsonTypeResolver {
     }
   }
 
+  private void publishTypeInfo(Object key, JsonTypeInfo typeInfo) {
+    typeInfos.put(key, typeInfo);
+    if (key instanceof SubtypeTypeKey) {
+      subtypeTypeRoots.put(typeInfo, ((SubtypeTypeKey) key).baseType);
+    }
+  }
+
+  private Object metadataKey(JsonTypeInfo typeInfo) {
+    Class<?> subtypeRoot = subtypeTypeRoots.get(typeInfo);
+    Object key = typeInfoKey(typeInfo.type(), typeInfo.rawType());
+    return subtypeRoot == null ? key : new SubtypeTypeKey(subtypeRoot, key);
+  }
+
+  private Object resolutionTypeKey(Type declaredType, Class<?> rawType) {
+    if (!isolateSubtypeResolution || subtypeResolutionBase == null) {
+      return typeInfoKey(declaredType, rawType);
+    }
+    // An exact closed-sum factory owns its branch metadata. Scope every type containing a branch
+    // to that root so recursive binding can reuse it without making the branch a declared schema.
+    return subtypeTypeKey(subtypeResolutionBase, declaredType, rawType);
+  }
+
+  private static Object subtypeTypeKey(Class<?> baseType, Type declaredType, Class<?> rawType) {
+    Object key = typeInfoKey(declaredType, rawType);
+    return referencesSubtype(baseType, declaredType, rawType)
+        ? new SubtypeTypeKey(baseType, key)
+        : key;
+  }
+
+  private static boolean referencesSubtype(Class<?> baseType, Type declaredType, Class<?> rawType) {
+    if (rawType != baseType && baseType.isAssignableFrom(rawType)) {
+      return true;
+    }
+    if (declaredType instanceof ParameterizedType) {
+      Type[] arguments = ((ParameterizedType) declaredType).getActualTypeArguments();
+      for (Type argument : arguments) {
+        Class<?> argumentType = CodecUtils.rawType(argument, Object.class);
+        if (referencesSubtype(baseType, argument, argumentType)) {
+          return true;
+        }
+      }
+    } else if (declaredType instanceof GenericArrayType) {
+      Type elementType = ((GenericArrayType) declaredType).getGenericComponentType();
+      return referencesSubtype(
+          baseType, elementType, CodecUtils.rawType(elementType, Object.class));
+    } else if (declaredType instanceof WildcardType) {
+      WildcardType wildcard = (WildcardType) declaredType;
+      for (Type bound : wildcard.getUpperBounds()) {
+        if (referencesSubtype(baseType, bound, CodecUtils.rawType(bound, Object.class))) {
+          return true;
+        }
+      }
+      for (Type bound : wildcard.getLowerBounds()) {
+        if (referencesSubtype(baseType, bound, CodecUtils.rawType(bound, Object.class))) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
   private static Object typeInfoKey(Type declaredType, Class<?> rawType) {
     return declaredType instanceof Class ? rawType : declaredType;
+  }
+
+  private static final class SubtypeTypeKey {
+    private final Class<?> baseType;
+    private final Object typeKey;
+
+    private SubtypeTypeKey(Class<?> baseType, Object typeKey) {
+      this.baseType = baseType;
+      this.typeKey = typeKey;
+    }
+
+    @Override
+    public boolean equals(Object other) {
+      if (this == other) {
+        return true;
+      }
+      if (!(other instanceof SubtypeTypeKey)) {
+        return false;
+      }
+      SubtypeTypeKey that = (SubtypeTypeKey) other;
+      return baseType == that.baseType && typeKey.equals(that.typeKey);
+    }
+
+    @Override
+    public int hashCode() {
+      return 31 * System.identityHashCode(baseType) + typeKey.hashCode();
+    }
   }
 
   private static TypeRef<?> typeRef(Type declaredType, Class<?> rawType) {

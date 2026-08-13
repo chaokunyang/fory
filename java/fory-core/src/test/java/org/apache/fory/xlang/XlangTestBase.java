@@ -1826,6 +1826,11 @@ public abstract class XlangTestBase extends ForyTestBase {
   }
 
   protected void testListArrayCompatibleRead(boolean enableCodegen) throws java.io.IOException {
+    testListArrayCompatibleRead(enableCodegen, true);
+  }
+
+  protected void testListArrayCompatibleRead(
+      boolean enableCodegen, boolean nullableElementConversion) throws java.io.IOException {
     Fory listFory = compatibleListArrayFory(XlangCompatibleInt32ListField.class, enableCodegen);
     Fory nullableListFory =
         compatibleListArrayFory(XlangCompatibleNullableInt32ListField.class, enableCodegen);
@@ -1884,13 +1889,21 @@ public abstract class XlangTestBase extends ForyTestBase {
         (XlangCompatibleInt32ArrayField)
             arrayFory.deserialize(MemoryUtils.wrap(nullableListWithoutNullsPayload));
     assertIntArrayEquals(nullableArrayResult.values, 1, 2, 3);
-    ctx =
-        prepareExecution(
-            "test_list_array_compatible_list_to_array", nullableListWithoutNullsPayload);
-    runPeer(ctx);
-    XlangCompatibleInt32ArrayField peerNullableArrayResult =
-        (XlangCompatibleInt32ArrayField) arrayFory.deserialize(readBuffer(ctx.dataFile()));
-    assertIntArrayEquals(peerNullableArrayResult.values, 1, 2, 3);
+    if (nullableElementConversion) {
+      ctx =
+          prepareExecution(
+              "test_list_array_compatible_list_to_array", nullableListWithoutNullsPayload);
+      runPeer(ctx);
+      XlangCompatibleInt32ArrayField peerNullableArrayResult =
+          (XlangCompatibleInt32ArrayField) arrayFory.deserialize(readBuffer(ctx.dataFile()));
+      assertIntArrayEquals(peerNullableArrayResult.values, 1, 2, 3);
+    } else {
+      ctx =
+          prepareExecution(
+              "test_list_array_compatible_nullable_list_to_array_error",
+              nullableListWithoutNullsPayload);
+      runPeer(ctx);
+    }
 
     XlangCompatibleNullableInt32ListField nullableListWithNull =
         newCompatibleNullableInt32ListField(1, null, 3);

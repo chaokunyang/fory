@@ -433,6 +433,6 @@ public class SwiftXlangTest extends XlangTestBase {
   @Override
   @Test(groups = "xlang", dataProvider = "enableCodegenParallel")
   public void testListArrayCompatibleRead(boolean enableCodegen) throws java.io.IOException {
-    super.testListArrayCompatibleRead(enableCodegen);
+    super.testListArrayCompatibleRead(enableCodegen, false);
   }
 }

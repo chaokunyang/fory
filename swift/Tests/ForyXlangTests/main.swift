@@ -203,9 +203,9 @@ private struct NullableComprehensiveCompatibleSwift {
     var boxedBool: Bool = false
 
     var stringField: String = ""
-    var listField: [String] = []
-    var setField: Set<String> = []
-    var mapField: [String: String] = [:]
+    var listField: [String?] = []
+    var setField: Set<String?> = []
+    var mapField: [String?: String?] = [:]
 
     var nullableInt1: Int32 = 0
     var nullableLong1: Int64 = 0
@@ -214,9 +214,9 @@ private struct NullableComprehensiveCompatibleSwift {
     var nullableBool1: Bool = false
 
     var nullableString2: String = ""
-    var nullableList2: [String] = []
-    var nullableSet2: Set<String> = []
-    var nullableMap2: [String: String] = [:]
+    var nullableList2: [String?] = []
+    var nullableSet2: Set<String?> = []
+    var nullableMap2: [String?: String?] = [:]
 }
 
 @ForyStruct
@@ -341,7 +341,7 @@ private struct AnimalListHolder {
 
 @ForyStruct
 private struct AnimalMapHolder {
-    var animalMap: [String: Any] = [:]
+    var animalMap: [String?: Any] = [:]
 }
 
 @ForyUnion

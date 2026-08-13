@@ -815,6 +815,28 @@ import org.apache.fory.scala.ForyScala
       errors.exists(_.message.contains("must be annotated with @ForyCase")) shouldBe true
     }
 
+    "validate field tag range" in {
+      typeCheckErrors("""
+        import org.apache.fory.annotation.{ForyField, ForyStruct}
+        import org.apache.fory.scala.ForySerializer
+
+        @ForyStruct
+        final case class MaxFieldTag(@ForyField(id = 536870911) value: Int)
+            derives ForySerializer
+      """) shouldBe empty
+
+      val errors = typeCheckErrors("""
+        import org.apache.fory.annotation.{ForyField, ForyStruct}
+        import org.apache.fory.scala.ForySerializer
+
+        @ForyStruct
+        final case class InvalidFieldTag(@ForyField(id = 536870912) value: Int)
+            derives ForySerializer
+      """)
+
+      errors.exists(_.message.contains("536870911")) shouldBe true
+    }
+
     "reject union enums with only unknown case" in {
       val errors = typeCheckErrors("""
         import org.apache.fory.annotation.{ForyUnion, ForyUnknownCase}

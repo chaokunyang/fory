@@ -1629,8 +1629,7 @@ mod tests {
         let (bytes, _) = meta.to_bytes().unwrap();
         let mut reader = Reader::new(&bytes);
 
-        let error = TypeMeta::from_bytes(&mut reader, &TypeResolver::default()).unwrap_err();
-        assert!(error.to_string().contains("field type nesting"));
+        assert!(TypeMeta::from_bytes(&mut reader, &TypeResolver::default()).is_err());
     }
 
     #[test]

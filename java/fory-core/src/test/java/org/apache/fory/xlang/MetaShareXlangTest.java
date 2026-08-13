@@ -39,7 +39,6 @@ import org.apache.fory.annotation.ArrayType;
 import org.apache.fory.annotation.Int32Type;
 import org.apache.fory.collection.Int32List;
 import org.apache.fory.config.Int32Encoding;
-import org.apache.fory.exception.DeserializationException;
 import org.apache.fory.test.bean.BeanB;
 import org.apache.fory.xlang.PyCrossLanguageTest.Bar;
 import org.apache.fory.xlang.PyCrossLanguageTest.Foo;
@@ -195,32 +194,34 @@ public class MetaShareXlangTest extends ForyTestBase {
 
   @Test
   public void testTopLevelListArrayCompatibleRead() {
-    Fory listFory = compatibleFory(DirectListField.class);
-    DirectListField listStruct = new DirectListField();
-    listStruct.values = new Int32List(new int[] {1, 2, 3});
-    byte[] listBytes = listFory.serialize(listStruct);
+    for (boolean codegen : new boolean[] {false, true}) {
+      Fory listFory = compatibleFory(DirectListField.class, codegen);
+      DirectListField listStruct = new DirectListField();
+      listStruct.values = new Int32List(new int[] {1, 2, 3});
+      byte[] listBytes = listFory.serialize(listStruct);
 
-    Fory arrayFory = compatibleFory(DirectArrayField.class);
-    DirectArrayField arrayStruct = (DirectArrayField) arrayFory.deserialize(listBytes);
-    assertTrue(Arrays.equals(arrayStruct.values, new int[] {1, 2, 3}));
+      Fory arrayFory = compatibleFory(DirectArrayField.class, codegen);
+      DirectArrayField arrayStruct = (DirectArrayField) arrayFory.deserialize(listBytes);
+      assertTrue(Arrays.equals(arrayStruct.values, new int[] {1, 2, 3}));
 
-    DirectListField emptyListStruct = new DirectListField();
-    emptyListStruct.values = new Int32List();
-    DirectArrayField emptyArrayStruct =
-        (DirectArrayField) arrayFory.deserialize(listFory.serialize(emptyListStruct));
-    assertEquals(emptyArrayStruct.values.length, 0);
+      DirectListField emptyListStruct = new DirectListField();
+      emptyListStruct.values = new Int32List();
+      DirectArrayField emptyArrayStruct =
+          (DirectArrayField) arrayFory.deserialize(listFory.serialize(emptyListStruct));
+      assertEquals(emptyArrayStruct.values.length, 0);
 
-    DirectArrayField peerArrayStruct = new DirectArrayField();
-    peerArrayStruct.values = new int[] {4, 5, 6};
-    byte[] arrayBytes = arrayFory.serialize(peerArrayStruct);
-    DirectListField readListStruct = (DirectListField) listFory.deserialize(arrayBytes);
-    assertEquals(readListStruct.values, Arrays.asList(4, 5, 6));
+      DirectArrayField peerArrayStruct = new DirectArrayField();
+      peerArrayStruct.values = new int[] {4, 5, 6};
+      byte[] arrayBytes = arrayFory.serialize(peerArrayStruct);
+      DirectListField readListStruct = (DirectListField) listFory.deserialize(arrayBytes);
+      assertEquals(readListStruct.values, Arrays.asList(4, 5, 6));
 
-    DirectArrayField emptyPeerArrayStruct = new DirectArrayField();
-    emptyPeerArrayStruct.values = new int[0];
-    DirectListField emptyReadListStruct =
-        (DirectListField) listFory.deserialize(arrayFory.serialize(emptyPeerArrayStruct));
-    assertEquals(emptyReadListStruct.values, java.util.Collections.emptyList());
+      DirectArrayField emptyPeerArrayStruct = new DirectArrayField();
+      emptyPeerArrayStruct.values = new int[0];
+      DirectListField emptyReadListStruct =
+          (DirectListField) listFory.deserialize(arrayFory.serialize(emptyPeerArrayStruct));
+      assertEquals(emptyReadListStruct.values, java.util.Collections.emptyList());
+    }
   }
 
   @Test
@@ -250,18 +251,6 @@ public class MetaShareXlangTest extends ForyTestBase {
   }
 
   @Test
-  public void testTopLevelListArrayCompatibleReadWithoutCodegen() {
-    Fory listFory = compatibleFory(DirectListField.class, false);
-    DirectListField listStruct = new DirectListField();
-    listStruct.values = new Int32List(new int[] {1, 2, 3});
-
-    Fory arrayFory = compatibleFory(DirectArrayField.class, false);
-    DirectArrayField arrayStruct =
-        (DirectArrayField) arrayFory.deserialize(listFory.serialize(listStruct));
-    assertTrue(Arrays.equals(arrayStruct.values, new int[] {1, 2, 3}));
-  }
-
-  @Test
   public void testNullableListCompatibleReadToArray() {
     for (boolean codegen : new boolean[] {false, true}) {
       Fory listFory = compatibleFory(DirectNullableListField.class, codegen);
@@ -276,7 +265,7 @@ public class MetaShareXlangTest extends ForyTestBase {
       DirectNullableListField nullElementStruct = new DirectNullableListField();
       nullElementStruct.values = Arrays.asList(1, null, 3);
       byte[] nullElementBytes = listFory.serialize(nullElementStruct);
-      assertThrows(DeserializationException.class, () -> arrayFory.deserialize(nullElementBytes));
+      assertThrows(RuntimeException.class, () -> arrayFory.deserialize(nullElementBytes));
     }
   }
 

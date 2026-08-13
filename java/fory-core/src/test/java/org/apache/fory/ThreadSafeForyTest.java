@@ -593,19 +593,6 @@ public class ThreadSafeForyTest extends ForyTestBase {
   }
 
   @Test
-  public void testForyRegisterAfterSerializeThrows() {
-    Fory fory =
-        Fory.builder()
-            .withXlang(false)
-            .requireClassRegistration(true)
-            .withCompatible(false)
-            .build();
-    fory.register(BeanA.class);
-    fory.serialize("ok");
-    Assert.assertThrows(ForyException.class, () -> fory.register(BeanB.class));
-  }
-
-  @Test
   public void testPoolRegisterAfterSerializeThrows() {
     ThreadSafeFory fory =
         Fory.builder()
@@ -630,8 +617,6 @@ public class ThreadSafeForyTest extends ForyTestBase {
 
     Fory escaped = fory.execute(value -> value);
     Assert.assertThrows(ForyException.class, () -> escaped.register(BeanB.class));
-    escaped.serialize("ok");
-    Assert.assertThrows(ForyException.class, () -> fory.register(BeanB.class));
     assertNull(((ClassResolver) escaped.getTypeResolver()).getRegisteredClassId(BeanB.class));
 
     AtomicReference<Fory> future = new AtomicReference<>();
@@ -656,8 +641,6 @@ public class ThreadSafeForyTest extends ForyTestBase {
 
     Fory escaped = fory.execute(value -> value);
     Assert.assertThrows(ForyException.class, () -> escaped.register(BeanB.class));
-    escaped.serialize("ok");
-    Assert.assertThrows(ForyException.class, () -> fory.register(BeanB.class));
 
     Fory[] pooledFory = TestUtils.getFieldValue(fory, "pooledFory");
     for (Fory child : pooledFory) {

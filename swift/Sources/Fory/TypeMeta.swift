@@ -929,6 +929,12 @@ public final class TypeMeta: Equatable, @unchecked Sendable {
         if topLevel, allowScalarConversion, isCompatibleScalarFieldType(remoteType, localType) {
             return true
         }
+        if !topLevel,
+            remoteType.nullable != localType.nullable
+                || remoteType.trackRef != localType.trackRef
+        {
+            return false
+        }
         if normalizeUserTypeIDForComparison(remoteType.typeID)
             != normalizeUserTypeIDForComparison(localType.typeID)
         {
@@ -938,11 +944,7 @@ public final class TypeMeta: Equatable, @unchecked Sendable {
             compatibleScalarKind(remoteType.typeID) != nil
                 || compatibleScalarKind(localType.typeID) != nil
         {
-            // Untracked nested scalar payloads carry null markers at read time. A nullable schema can
-            // match a non-null local container element; the container reader owns actual-null semantics.
             return remoteType.typeID == localType.typeID
-                && remoteType.trackRef == localType.trackRef
-                && (!remoteType.trackRef || remoteType.nullable == localType.nullable)
                 && remoteType.generics.isEmpty
                 && localType.generics.isEmpty
         }
@@ -972,15 +974,13 @@ public final class TypeMeta: Equatable, @unchecked Sendable {
         if remoteType.typeID == TypeId.list.rawValue {
             return listElementMatchesDenseArrayTypeID(
                 remoteType,
-                arrayTypeID: localType.typeID,
-                requireUnframedElement: true
+                arrayTypeID: localType.typeID
             )
         }
         if localType.typeID == TypeId.list.rawValue {
             return listElementMatchesDenseArrayTypeID(
                 localType,
-                arrayTypeID: remoteType.typeID,
-                requireUnframedElement: false
+                arrayTypeID: remoteType.typeID
             )
         }
         return false
@@ -988,18 +988,15 @@ public final class TypeMeta: Equatable, @unchecked Sendable {
 
     private static func listElementMatchesDenseArrayTypeID(
         _ listType: FieldType,
-        arrayTypeID: UInt32,
-        requireUnframedElement: Bool
+        arrayTypeID: UInt32
     ) -> Bool {
         guard listType.typeID == TypeId.list.rawValue,
-            let elementType = listType.generics.first
+            listType.generics.count == 1,
+            let elementType = listType.generics.first,
+            !elementType.nullable,
+            !elementType.trackRef,
+            elementType.generics.isEmpty
         else {
-            return false
-        }
-        // Nullable element schema is allowed for list<T?> -> array<T>; actual
-        // null payload elements fail in the dense-array reader. Ref-tracked
-        // element framing is rejected here because this path stays primitive-only.
-        if requireUnframedElement, elementType.trackRef {
             return false
         }
         return TypeId.listElementTypeID(elementType.typeID, matchesDenseArrayTypeID: arrayTypeID)

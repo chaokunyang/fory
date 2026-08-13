@@ -22,7 +22,6 @@ package org.apache.fory.context;
 import org.apache.fory.Fory;
 import org.apache.fory.collection.IntArray;
 import org.apache.fory.collection.ObjectArray;
-import org.apache.fory.exception.ForyException;
 import org.apache.fory.memory.MemoryBuffer;
 
 /**
@@ -103,27 +102,20 @@ public final class MapRefReader implements RefReader {
     setReadRef(refId, object);
   }
 
-  /** Returns the previously materialized object stored at {@code id}. */
+  /**
+   * Returns the object stored at {@code id}, or {@code null} while a constructor-created owner is
+   * still reserved but not materialized. Constructor serializers inspect that sentinel to detect
+   * cycles at their field owner; rejecting it here would break their existing tracking protocol.
+   */
   @Override
   public Object getReadRef(int id) {
-    Object object = readObjects.get(id);
-    if (object == null) {
-      // Null is never entered as a reference-table value. It marks an owner whose serializer has
-      // reserved an id but cannot publish the final object yet, so returning it would silently
-      // corrupt constructor-bound cycles and delayed collection/view aliases.
-      throwUnresolvedRef(id);
-    }
-    return object;
+    return readObjects.get(id);
   }
 
   /** Returns the object resolved by the last ref header that pointed to an existing instance. */
   @Override
   public Object getReadRef() {
     return readObject;
-  }
-
-  private static void throwUnresolvedRef(int id) {
-    throw new ForyException("Reference id " + id + " is not resolved yet");
   }
 
   /** Stores {@code object} under an already reserved read ref id. */

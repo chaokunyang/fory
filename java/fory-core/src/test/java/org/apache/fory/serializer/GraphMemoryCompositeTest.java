@@ -49,7 +49,6 @@ import org.apache.fory.collection.Int32List;
 import org.apache.fory.config.Int32Encoding;
 import org.apache.fory.context.ReadContext;
 import org.apache.fory.context.WriteContext;
-import org.apache.fory.exception.InsecureException;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.resolver.RefMode;
 import org.apache.fory.serializer.collection.GuavaCollectionSerializers;
@@ -108,7 +107,7 @@ public class GraphMemoryCompositeTest extends ForyTestBase {
     List<Integer> expected = ImmutableList.of(1, -2, 3);
     long linkedListBytes = collectionBytes(LinkedList.class, expected.size());
     assertThrows(
-        InsecureException.class,
+        RuntimeException.class,
         () -> readDenseList(linkedListBytes - 1, LinkedList.class, 1, -2, 3));
     Object linkedList = readDenseList(linkedListBytes, LinkedList.class, 1, -2, 3);
     assertEquals(linkedList.getClass(), LinkedList.class);
@@ -116,8 +115,7 @@ public class GraphMemoryCompositeTest extends ForyTestBase {
 
     long arrayListBytes = collectionBytes(ArrayList.class, expected.size());
     assertThrows(
-        InsecureException.class,
-        () -> readDenseList(arrayListBytes - 1, ArrayList.class, 1, -2, 3));
+        RuntimeException.class, () -> readDenseList(arrayListBytes - 1, ArrayList.class, 1, -2, 3));
     Object arrayList = readDenseList(arrayListBytes, ArrayList.class, 1, -2, 3);
     assertEquals(arrayList.getClass(), ArrayList.class);
     assertEquals(arrayList, expected);
@@ -127,7 +125,7 @@ public class GraphMemoryCompositeTest extends ForyTestBase {
 
     long copyOnWriteBytes =
         collectionBytes(CopyOnWriteArrayList.class, expected.size()) + ARRAY_OWNER_BYTES;
-    assertThrows(InsecureException.class, () -> readDenseCowAlias(copyOnWriteBytes - 1, 1, -2, 3));
+    assertThrows(RuntimeException.class, () -> readDenseCowAlias(copyOnWriteBytes - 1, 1, -2, 3));
     readDenseCowAlias(copyOnWriteBytes, 1, -2, 3);
 
     DenseArrayOwner source = new DenseArrayOwner();
@@ -276,7 +274,7 @@ public class GraphMemoryCompositeTest extends ForyTestBase {
     list.add(list);
     long listBytes = collectionBytes(CopyOnWriteArrayList.class, 1) + ARRAY_OWNER_BYTES;
     byte[] listData = newRefFory(DEFAULT_GRAPH_MEMORY_BYTES).serialize(list);
-    assertThrows(InsecureException.class, () -> newRefFory(listBytes - 1).deserialize(listData));
+    assertThrows(RuntimeException.class, () -> newRefFory(listBytes - 1).deserialize(listData));
     CopyOnWriteArrayList<?> decodedList =
         (CopyOnWriteArrayList<?>) newRefFory(listBytes).deserialize(listData);
     assertSame(decodedList.get(0), decodedList);
@@ -288,7 +286,7 @@ public class GraphMemoryCompositeTest extends ForyTestBase {
             + GraphMemoryEstimates.shallowObjectBytes(CopyOnWriteArrayList.class)
             + ARRAY_OWNER_BYTES;
     byte[] setData = newRefFory(DEFAULT_GRAPH_MEMORY_BYTES).serialize(set);
-    assertThrows(InsecureException.class, () -> newRefFory(setBytes - 1).deserialize(setData));
+    assertThrows(RuntimeException.class, () -> newRefFory(setBytes - 1).deserialize(setData));
     CopyOnWriteArraySet<?> decodedSet =
         (CopyOnWriteArraySet<?>) newRefFory(setBytes).deserialize(setData);
     assertSame(decodedSet.iterator().next(), decodedSet);
@@ -424,7 +422,7 @@ public class GraphMemoryCompositeTest extends ForyTestBase {
       Class<?> targetType,
       Object expected) {
     assertThrows(
-        InsecureException.class,
+        RuntimeException.class,
         () -> readEmptyCompatible(required - 1, readMode, arrayTypeId, elementTypeId, targetType));
     assertEquals(
         readEmptyCompatible(required, readMode, arrayTypeId, elementTypeId, targetType), expected);
@@ -548,7 +546,7 @@ public class GraphMemoryCompositeTest extends ForyTestBase {
       Object form, Object expected, long required, boolean biMap) {
     byte[] bytes = writeMapForm(form, biMap);
     assertThrows(
-        InsecureException.class, () -> readMapForm(required - 1, bytes, form.getClass(), biMap));
+        RuntimeException.class, () -> readMapForm(required - 1, bytes, form.getClass(), biMap));
     assertEquals(readMapForm(required, bytes, form.getClass(), biMap), expected);
   }
 
@@ -591,7 +589,7 @@ public class GraphMemoryCompositeTest extends ForyTestBase {
   private static void assertGraphBudget(
       Object value, long required, LongFunction<Fory> foryFactory) {
     byte[] bytes = foryFactory.apply(DEFAULT_GRAPH_MEMORY_BYTES).serialize(value);
-    assertThrows(InsecureException.class, () -> foryFactory.apply(required - 1).deserialize(bytes));
+    assertThrows(RuntimeException.class, () -> foryFactory.apply(required - 1).deserialize(bytes));
     assertEquals(foryFactory.apply(required).deserialize(bytes), value);
   }
 

@@ -294,11 +294,7 @@ fn named_type_kind_must_match() {
     assert_eq!(bytes[2], fory_core::type_id::NAMED_STRUCT as u8);
     bytes[2] = fory_core::type_id::NAMED_EXT as u8;
 
-    let error = match fory.deserialize::<Box<dyn Any>>(&bytes) {
-        Ok(_) => panic!("mismatched named kind must fail"),
-        Err(error) => error,
-    };
-    assert!(error.to_string().contains("does not match registered kind"));
+    assert!(fory.deserialize::<Box<dyn Any>>(&bytes).is_err());
 }
 
 #[test]

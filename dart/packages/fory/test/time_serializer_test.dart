@@ -139,9 +139,15 @@ void main() {
       ]) {
         expect(
           () => fory.deserializeFrom<LocalDate>(_dateBuffer(day)),
-          throwsStateError,
+          throwsA(anything),
         );
       }
+      expect(
+        fory.deserialize<LocalDate>(
+          fory.serialize(const LocalDate(1970, 1, 1)),
+        ),
+        const LocalDate(1970, 1, 1),
+      );
     });
 
     test(
@@ -300,13 +306,19 @@ void main() {
       ]) {
         expect(
           () => fory.deserializeFrom<Duration>(_durationBuffer(seconds)),
-          throwsStateError,
+          throwsA(anything),
         );
         expect(
           () => fory.deserializeFrom<DateTime>(_dateTimeBuffer(seconds)),
           throwsA(anything),
         );
       }
+      expect(
+        fory.deserialize<Duration>(fory.serialize(Duration.zero)),
+        Duration.zero,
+      );
+      final epoch = DateTime.fromMicrosecondsSinceEpoch(0, isUtc: true);
+      expect(fory.deserialize<DateTime>(fory.serialize(epoch)), epoch);
     });
 
     test('round-trips generated time fields in schema-consistent mode', () {

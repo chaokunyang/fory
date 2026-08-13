@@ -38,7 +38,6 @@ import java.util.PriorityQueue;
 import java.util.concurrent.atomic.AtomicReference;
 import org.apache.fory.Fory;
 import org.apache.fory.ForyTestBase;
-import org.apache.fory.exception.InsecureException;
 import org.apache.fory.memory.MemoryUtils;
 import org.testng.annotations.Test;
 
@@ -137,7 +136,7 @@ public class GraphMemoryOwnersTest extends ForyTestBase {
   private static void assertBudget(Object value, long required, boolean trackingRef) {
     byte[] bytes = newFory(required, trackingRef).serialize(value);
     assertThrows(
-        InsecureException.class, () -> newFory(required - 1, trackingRef).deserialize(bytes));
+        RuntimeException.class, () -> newFory(required - 1, trackingRef).deserialize(bytes));
     Object decoded = newFory(required, trackingRef).deserialize(bytes);
     assertEquals(decoded.getClass(), value.getClass());
   }

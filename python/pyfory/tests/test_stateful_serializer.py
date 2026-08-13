@@ -15,7 +15,6 @@
 # specific language governing permissions and limitations
 # under the License.
 
-import pytest
 from pyfory import Fory
 from pyfory.serializer import StatefulSerializer
 
@@ -300,7 +299,7 @@ def test_nested_stateful_objects():
     assert deserialized.items[1].value == 20
 
 
-def test_cross_language_compatibility():
+def test_registered_stateful_roundtrip():
     """Test that StatefulSerializer works with type registration"""
     fory = Fory(xlang=False, ref=True, strict=True, compatible=False)
 
@@ -317,7 +316,3 @@ def test_cross_language_compatibility():
 
     assert deserialized.value == 42
     assert obj == deserialized
-
-
-if __name__ == "__main__":
-    pytest.main([__file__, "-v"])

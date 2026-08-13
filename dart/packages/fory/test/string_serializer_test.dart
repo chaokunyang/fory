@@ -257,19 +257,6 @@ void main() {
       }
     });
 
-    test('consumes canonical six-byte string headers', () {
-      final buffer =
-          Buffer()
-            ..writeUint8(0x01)
-            ..writeByte(-1)
-            ..writeVarUint32Small7(TypeIds.string)
-            // Latin1 header for a 0x200000000-byte string.
-            ..writeBytes(const <int>[0x80, 0x80, 0x80, 0x80, 0x80, 0x01, 0x7f]);
-
-      expect(() => Fory().deserializeFrom<String>(buffer), throwsA(anything));
-      expect(buffer.readableBytes, equals(1));
-    });
-
     test('round-trips string collections with mixed content', () {
       final fory = Fory();
       final values = <String>[

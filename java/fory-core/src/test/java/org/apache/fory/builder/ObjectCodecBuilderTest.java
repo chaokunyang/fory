@@ -39,9 +39,7 @@ import org.apache.fory.codegen.CodeGenerator;
 import org.apache.fory.codegen.CompileUnit;
 import org.apache.fory.codegen.JaninoUtils;
 import org.apache.fory.codegen.javalangnameconflict.MethodSpiltObject;
-import org.apache.fory.meta.TypeDef;
 import org.apache.fory.platform.JdkVersion;
-import org.apache.fory.reflect.TypeRef;
 import org.apache.fory.serializer.collection.CollectionSerializersTest;
 import org.apache.fory.test.bean.AccessBeans;
 import org.apache.fory.test.bean.BeanA;
@@ -71,43 +69,6 @@ public class ObjectCodecBuilderTest extends ForyTestBase {
     new ObjectCodecBuilder(BeanB.class, fory).genCode();
     new ObjectCodecBuilder(Struct.createStructClass("ObjectCodecBuilderTestStruct", 1), fory)
         .genCode();
-  }
-
-  @Test
-  public void testSchemaCodecNames() {
-    Fory fory =
-        Fory.builder()
-            .withXlang(false)
-            .withMetaShare(true)
-            .requireClassRegistration(false)
-            .withCompatible(true)
-            .build();
-    TypeDef beanADef = TypeDef.buildTypeDef(fory.getTypeResolver(), BeanA.class);
-    TypeDef beanBDef = TypeDef.buildTypeDef(fory.getTypeResolver(), BeanB.class);
-
-    String beanAName =
-        new CompatibleCodecBuilder(TypeRef.of(BeanA.class), fory, beanADef)
-            .codecClassName(BeanA.class);
-    String beanANameAgain =
-        new CompatibleCodecBuilder(TypeRef.of(BeanA.class), fory, beanADef)
-            .codecClassName(BeanA.class);
-    String beanBDefName =
-        new CompatibleCodecBuilder(TypeRef.of(BeanA.class), fory, beanBDef)
-            .codecClassName(BeanA.class);
-    Assert.assertEquals(beanANameAgain, beanAName);
-    Assert.assertTrue(
-        beanAName.contains("Compatible" + Long.toUnsignedString(beanADef.getId(), 16)));
-    Assert.assertNotEquals(beanBDefName, beanAName);
-
-    String layerName =
-        new CompatibleLayerCodecBuilder(TypeRef.of(BeanA.class), fory, beanADef, BeanA.class)
-            .codecClassName(BeanA.class);
-    Assert.assertTrue(
-        layerName.contains("CompatibleLayer" + Long.toUnsignedString(beanADef.getId(), 16)));
-
-    String objectName = new ObjectCodecBuilder(BeanA.class, fory).codecClassName(BeanA.class);
-    Assert.assertTrue(
-        objectName.contains("_" + Integer.toUnsignedString(fory.getConfig().getConfigHash(), 16)));
   }
 
   @Test

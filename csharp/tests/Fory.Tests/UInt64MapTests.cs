@@ -41,12 +41,6 @@ public sealed class UInt64MapTests
         int[] firstSlots = keys.Select(key => Placement(first, key)).ToArray();
         int[] secondSlots = keys.Select(key => Placement(second, key)).ToArray();
 
-        Assert.Equal(
-            keys.Select(key => SeededPlacement(key, firstSeed)).ToArray(),
-            firstSlots);
-        Assert.Equal(
-            keys.Select(key => SeededPlacement(key, secondSeed)).ToArray(),
-            secondSlots);
         Assert.False(firstSlots.SequenceEqual(secondSlots));
         Assert.True(firstSlots.Take(64).Distinct().Count() > 32);
         Assert.True(secondSlots.Take(64).Distinct().Count() > 32);
@@ -101,48 +95,20 @@ public sealed class UInt64MapTests
 
         int[] firstSlots = keys.Select(key => Placement(first, key)).ToArray();
         int[] secondSlots = keys.Select(key => Placement(second, key)).ToArray();
-        ulong firstSeed = PlacementMultiplier(first);
-        ulong secondSeed = PlacementMultiplier(second);
+        Assert.False(firstSlots.SequenceEqual(secondSlots));
+        Assert.True(firstSlots.Take(64).Distinct().Count() > 32);
+        Assert.True(secondSlots.Take(64).Distinct().Count() > 32);
 
-        Assert.NotEqual(0UL, firstSeed);
-        Assert.NotEqual(0UL, secondSeed);
-        Assert.NotEqual(firstSeed, secondSeed);
-        Assert.Equal(
-            keys.Select(key => SeededPlacement(key, firstSeed)).ToArray(),
-            firstSlots);
-        Assert.Equal(
-            keys.Select(key => SeededPlacement(key, secondSeed)).ToArray(),
-            secondSlots);
-    }
+        for (int i = 0; i < 64; i++)
+        {
+            Assert.True(firstContext.TryGetTypeMetaByHeader(keys[i], out TypeMeta firstValue));
+            Assert.Same(typeMeta, firstValue);
+            Assert.True(secondContext.TryGetTypeMetaByHeader(keys[i], out TypeMeta secondValue));
+            Assert.Same(typeMeta, secondValue);
+        }
 
-    [Fact]
-    public void TypeMetaCacheHitSurvivesReset()
-    {
-        const ulong header = 0xffUL;
-        TypeMeta typeMeta = new(
-            (uint)TypeId.Struct,
-            902,
-            MetaString.Empty('.', '_'),
-            MetaString.Empty('$', '_'),
-            registerByName: false,
-            []);
-        ByteWriter writer = new();
-        writer.WriteVarUInt32(0);
-        writer.WriteUInt64(header);
-        writer.WriteVarUInt32(0);
-        writer.WriteBytes(new byte[0xff]);
-        writer.WriteUInt8(0x7b);
-
-        Config config = Fory.Builder().Compatible(false).Build().Config;
-        ReadContext context = new(
-            new ByteReader(Array.Empty<byte>()),
-            new TypeResolver(),
-            config);
-        context.StoreRemoteTypeMeta(header, typeMeta);
-        context.ResetFor(new ByteReader(writer.ToArray()));
-
-        Assert.Same(typeMeta, context.ReadTypeMeta());
-        Assert.Equal(0x7b, context.Reader.ReadUInt8());
+        Assert.False(firstContext.TryGetTypeMetaByHeader(keys[64], out _));
+        Assert.False(secondContext.TryGetTypeMetaByHeader(keys[64], out _));
     }
 
     private static ulong[] LegacyClusterKeys(int count)
@@ -176,20 +142,6 @@ public sealed class UInt64MapTests
             BindingFlags.Instance | BindingFlags.NonPublic);
         Assert.NotNull(field);
         return Assert.IsType<UInt64Map<TypeMeta>>(field.GetValue(context));
-    }
-
-    private static ulong PlacementMultiplier<TValue>(UInt64Map<TValue> map)
-    {
-        FieldInfo? field = typeof(UInt64Map<TValue>).GetField(
-            "_placementMultiplier",
-            BindingFlags.Instance | BindingFlags.NonPublic);
-        Assert.NotNull(field);
-        return Assert.IsType<ulong>(field.GetValue(map));
-    }
-
-    private static int SeededPlacement(ulong key, ulong seed)
-    {
-        return (int)(unchecked(key * (seed | 1)) >> 57);
     }
 
     private static int SimulateMissProbes(int[] initialSlots)

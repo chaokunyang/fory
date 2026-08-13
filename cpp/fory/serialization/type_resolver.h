@@ -286,10 +286,6 @@ public:
   assign_local_dispatch_ids(const TypeMeta *local_type,
                             std::vector<FieldInfo> &remote_fields);
 
-  static Result<void, Error>
-  assign_field_ids(const TypeMeta *local_type,
-                   std::vector<FieldInfo> &remote_fields);
-
   const std::vector<FieldInfo> &get_field_infos() const { return field_infos; }
   int64_t get_hash() const { return hash; }
   uint32_t get_type_id() const { return type_id; }
@@ -1496,10 +1492,6 @@ public:
   /// get type info by namespace and type name (for namespaced types)
   /// @return const pointer to TypeInfo if found, error otherwise
   Result<const TypeInfo *, Error>
-  get_type_info_by_name(const std::string &ns,
-                        const std::string &type_name) const;
-
-  Result<const TypeInfo *, Error>
   get_type_info_by_name(std::string_view ns, std::string_view type_name,
                         uint32_t type_id) const;
 
@@ -2678,35 +2670,6 @@ TypeResolver::get_user_type_info_by_id(uint32_t type_id,
   return Unexpected(Error::type_error(
       "TypeInfo not found for type_id: " + std::to_string(type_id) +
       ", user_type_id: " + std::to_string(user_type_id)));
-}
-
-inline Result<const TypeInfo *, Error>
-TypeResolver::get_type_info_by_name(const std::string &ns,
-                                    const std::string &type_name) const {
-  const TypeInfo *match = nullptr;
-  constexpr std::array<uint32_t, 5> named_kinds = {
-      static_cast<uint32_t>(TypeId::NAMED_STRUCT),
-      static_cast<uint32_t>(TypeId::NAMED_COMPATIBLE_STRUCT),
-      static_cast<uint32_t>(TypeId::NAMED_ENUM),
-      static_cast<uint32_t>(TypeId::NAMED_EXT),
-      static_cast<uint32_t>(TypeId::NAMED_UNION)};
-  for (uint32_t kind : named_kinds) {
-    auto key = make_name_key(ns, type_name, kind);
-    auto *entry = type_info_by_name_.find(key);
-    if (entry == nullptr) {
-      continue;
-    }
-    if (FORY_PREDICT_FALSE(match != nullptr)) {
-      return Unexpected(Error::type_error(
-          "TypeInfo lookup is ambiguous for type: " + ns + "." + type_name));
-    }
-    match = entry->second;
-  }
-  if (match != nullptr) {
-    return match;
-  }
-  return Unexpected(Error::type_error("TypeInfo not found for type: " + ns +
-                                      "." + type_name));
 }
 
 inline Result<const TypeInfo *, Error> TypeResolver::get_type_info_by_name(

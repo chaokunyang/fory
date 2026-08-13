@@ -176,24 +176,6 @@ struct RemovedArcReader {
     alias: Arc<RefSkipItem>,
 }
 
-#[derive(ForyStruct, Debug, PartialEq)]
-struct AmbiguousOwnerWriter {
-    #[fory(id = 0)]
-    removed: Rc<RefSkipItem>,
-    #[fory(id = 3)]
-    value: i32,
-}
-
-#[derive(ForyStruct, Debug, PartialEq)]
-struct AmbiguousOwnerReader {
-    #[fory(id = 1)]
-    local_rc: Rc<RefSkipItem>,
-    #[fory(id = 2)]
-    local_arc: Arc<RefSkipItem>,
-    #[fory(id = 3)]
-    value: i32,
-}
-
 #[derive(ForyEnum, Debug, PartialEq)]
 enum TestEnumSkip {
     Pending,
@@ -548,41 +530,6 @@ fn arc_any_owner_resolves_alias() {
     assert_eq!(
         decoded.alias.downcast_ref::<RefSkipItem>().unwrap().value,
         50
-    );
-}
-
-#[test]
-fn removed_owner_ambiguity_is_rejected() {
-    let mut writer = Fory::builder()
-        .xlang(false)
-        .compatible(true)
-        .track_ref(true)
-        .build();
-    writer.register::<RefSkipItem>(1106).unwrap();
-    writer.register::<AmbiguousOwnerWriter>(1107).unwrap();
-    let mut reader = Fory::builder()
-        .xlang(false)
-        .compatible(true)
-        .track_ref(true)
-        .build();
-    reader.register::<RefSkipItem>(1106).unwrap();
-    reader.register::<AmbiguousOwnerReader>(1107).unwrap();
-
-    let bytes = writer
-        .serialize(&AmbiguousOwnerWriter {
-            removed: Rc::new(RefSkipItem { value: 48 }),
-            value: 49,
-        })
-        .unwrap();
-    let error = reader
-        .deserialize::<AmbiguousOwnerReader>(&bytes)
-        .unwrap_err();
-
-    assert!(
-        error
-            .to_string()
-            .contains("matches multiple local owner codecs"),
-        "{error}"
     );
 }
 

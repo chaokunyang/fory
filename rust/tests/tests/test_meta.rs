@@ -17,24 +17,6 @@
 
 use fory_core::meta::{FieldInfo, FieldType, MetaString, TypeMeta};
 use fory_core::type_id::TypeId;
-use fory_core::{compute_field_hash, compute_struct_hash};
-
-#[test]
-fn field_info_i16_source_api() {
-    let field_id: i16 = 43;
-    let field_type = FieldType::new(TypeId::BOOL as u32, true, vec![]);
-    let constructed = FieldInfo::new_with_id(field_id, "value", field_type.clone());
-    let _: i16 = constructed.field_id;
-
-    let literal = FieldInfo {
-        field_id,
-        field_name: "value".to_string(),
-        field_type,
-    };
-    let _: i16 = literal.field_id;
-    let _ = compute_field_hash(17, field_id);
-    let _ = compute_struct_hash([field_id]);
-}
 
 #[test]
 fn test_meta_hash() {

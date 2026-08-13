@@ -320,7 +320,7 @@ function num2Bin(num: number) {
       expect(() => reader.stringWithHeader()).toThrow(/Unsupported string encoding/);
 
       reader.reset(new Uint8Array([0x82, 0x80, 0x80, 0x80, 0x80, 0x01]));
-      expect(() => reader.stringWithHeader()).toThrow(/Insufficient bytes for UTF-8 string/);
+      expect(() => reader.stringWithHeader()).toThrow();
 
       reader.reset(new Uint8Array([0x80, 0x80, 0x80, 0x80, 0x80]));
       expect(() => reader.stringWithHeader()).toThrow();

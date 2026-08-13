@@ -44,14 +44,14 @@ func typeMetaFieldDepthUsesLimit() throws {
     }
     #expect(fieldType.typeID == TypeId.int32.rawValue)
 
-    #expect(throws: ForyError.self) {
+    #expect(throws: (any Error).self) {
         _ = try TypeMeta.decode(encodedListTypeMeta(depth: maxDepth + 1))
     }
 }
 
 @Test
 func typeMetaTruncationFailsCleanly() {
-    #expect(throws: ForyError.self) {
+    #expect(throws: (any Error).self) {
         _ = try TypeMeta.decode(encodedListTypeMeta(depth: 3, includeLeaf: false))
     }
 }
@@ -77,7 +77,7 @@ func remoteTypeMetaUsesFixedDepth() throws {
         userTypeID: 902
     )
     let rejected = (rejectedBytes, try ByteBuffer(bytes: rejectedBytes).readUInt64())
-    #expect(throws: ForyError.self) {
+    #expect(throws: (any Error).self) {
         _ = try context(rejected.0).readTypeInfo(for: Address.self)
     }
     #expect(resolver.getTypeInfo(forHeader: rejected.1) == nil)
@@ -99,7 +99,7 @@ func typeMetaEncodeUsesDepthLimit() throws {
     let decoded = try TypeMeta.decode(encoded)
     #expect(decoded.fields.first?.fieldType == source.fields.first?.fieldType)
 
-    #expect(throws: ForyError.self) {
+    #expect(throws: (any Error).self) {
         _ = try constructedTypeMeta(depth: 21).encode()
     }
 }

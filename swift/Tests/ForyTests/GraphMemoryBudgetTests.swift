@@ -254,13 +254,9 @@ private func rootMapBudget<Key: Serializer, Value: Serializer>(
     dictionaryBudget(key: key, value: value, count: count)
 }
 
-private func expectInvalidData(_ body: () throws -> Void) {
-    do {
+private func expectControlledFailure(_ body: () throws -> Void) {
+    #expect(throws: (any Error).self) {
         try body()
-        Issue.record("expected invalid data")
-    } catch ForyError.invalidData {
-    } catch {
-        Issue.record("expected invalid data, got \(error)")
     }
 }
 
@@ -318,7 +314,7 @@ func fixedDefaultBudget() throws {
 @Test
 func unknownCaseChargesCarrier() throws {
     for flag in [RefFlag.null, .ref, .refValue, .notNullValue] {
-        expectInvalidData {
+        expectControlledFailure {
             let input = unknownCaseContext(
                 flag: flag,
                 budget: unknownCaseCarrierGraphBytes - 1
@@ -362,7 +358,7 @@ func explicitConfigOverridesDefault() throws {
     let bytes = try makeBudgetFory().serialize(values)
     let required = rootArrayBudget(String.self, count: values.count)
 
-    expectInvalidData {
+    expectControlledFailure {
         let _: [String] = try makeBudgetFory(maxGraphMemoryBytes: Int64(required - 1)).deserialize(
             bytes)
     }
@@ -381,7 +377,7 @@ func siblingContainersShareOneBudget() throws {
     let oneList = listBudget(BudgetNode.self, count: 16, elementOwnerBytes: budgetNodeGraphBytes)
     let required = oneList * 2
 
-    expectInvalidData {
+    expectControlledFailure {
         let _: BudgetSiblings = try makeBudgetFory(maxGraphMemoryBytes: Int64(required - 1))
             .deserialize(bytes)
     }
@@ -403,7 +399,7 @@ func generatedSelfReferenceBudget() throws {
         budgetSelfNodeGraphBytes()
         + listBudget(BudgetSelfNode.self, count: 1)
 
-    expectInvalidData {
+    expectControlledFailure {
         let _: BudgetSelfNode = try makeBudgetFory(
             maxGraphMemoryBytes: Int64(required - 1),
             trackRef: true
@@ -425,7 +421,7 @@ func nestedEmptyArraysChargeOwner() throws {
     let bytes = try makeBudgetFory().serialize(value)
     let required = listBudget([String].self, count: count) + count * ownerBytes([String].self)
 
-    expectInvalidData {
+    expectControlledFailure {
         let _: [[String]] = try makeBudgetFory(maxGraphMemoryBytes: Int64(required - 1))
             .deserialize(bytes)
     }
@@ -440,7 +436,7 @@ func mapBudgetIsCharged() throws {
     let bytes = try makeBudgetFory().serialize(value)
     let required = rootMapBudget(key: String.self, value: Int32.self, count: value.count)
 
-    expectInvalidData {
+    expectControlledFailure {
         let _: [String: Int32] = try makeBudgetFory(maxGraphMemoryBytes: Int64(required - 1))
             .deserialize(bytes)
     }
@@ -455,7 +451,7 @@ func emptyTypedMapOwnerIsCharged() throws {
     let bytes = try makeBudgetFory().serialize(value)
     let required = rootMapBudget(key: String.self, value: Int32.self, count: value.count)
 
-    expectInvalidData {
+    expectControlledFailure {
         let _: [String: Int32] = try makeBudgetFory(maxGraphMemoryBytes: Int64(required - 1))
             .deserialize(bytes)
     }
@@ -473,7 +469,7 @@ func arrayInlineValueBudget() throws {
         count: nodes.count,
         elementOwnerBytes: budgetNodeGraphBytes
     )
-    expectInvalidData {
+    expectControlledFailure {
         let _: [BudgetNode] = try makeBudgetFory(maxGraphMemoryBytes: Int64(nodeBudget - 1))
             .deserialize(nodeBytes)
     }
@@ -484,7 +480,7 @@ func arrayInlineValueBudget() throws {
     let ints: [Int32] = [1, 2, 3, 4]
     let intBytes = try makeBudgetFory().serialize(ints)
     let intBudget = rootArrayBudget(Int32.self, count: ints.count)
-    expectInvalidData {
+    expectControlledFailure {
         let _: [Int32] = try makeBudgetFory(maxGraphMemoryBytes: Int64(intBudget - 1))
             .deserialize(intBytes)
     }
@@ -505,7 +501,7 @@ func setConversionOwnerChargedOnce() throws {
     let bytes = try makeBudgetFory().serialize(values)
     let required = ownerBytes(Set<Int32>.self) + arrayBudget(Int32.self, count: values.count)
 
-    expectInvalidData {
+    expectControlledFailure {
         let _: Set<Int32> = try makeBudgetFory(maxGraphMemoryBytes: Int64(required - 1))
             .deserialize(bytes)
     }
@@ -540,7 +536,7 @@ func dynamicAnyEmptyMapOwnerOnce() throws {
             count: value.count
         )
 
-    expectInvalidData {
+    expectControlledFailure {
         _ = try makeBudgetFory(maxGraphMemoryBytes: Int64(required - 1))
             .deserialize(bytes, with: DynamicSerializer<Any>.self)
     }
@@ -558,7 +554,7 @@ func publicAnyArrayBudget() throws {
     )
     let required = listBudget(DynamicSerializer<Any>.self, count: value.count)
 
-    expectInvalidData {
+    expectControlledFailure {
         _ = try makeBudgetFory(maxGraphMemoryBytes: Int64(required - 1))
             .deserialize(bytes, with: ArraySerializer<DynamicSerializer<Any>>.self)
     }
@@ -577,7 +573,7 @@ func publicAnyMapBudget() throws {
         value: DynamicSerializer<Any>.self,
         count: stringMap.count
     )
-    expectInvalidData {
+    expectControlledFailure {
         _ = try makeBudgetFory(maxGraphMemoryBytes: Int64(stringRequired - 1))
             .deserialize(stringBytes, with: StringMapSerializer.self)
     }
@@ -593,7 +589,7 @@ func publicAnyMapBudget() throws {
         value: DynamicSerializer<Any>.self,
         count: intMap.count
     )
-    expectInvalidData {
+    expectControlledFailure {
         _ = try makeBudgetFory(maxGraphMemoryBytes: Int64(intRequired - 1))
             .deserialize(intBytes, with: IntMapSerializer.self)
     }
@@ -617,7 +613,7 @@ func publicAnyMapBudget() throws {
         value: DynamicSerializer<Any>.self,
         count: anyHashableMap.count
     )
-    expectInvalidData {
+    expectControlledFailure {
         _ = try makeBudgetFory(maxGraphMemoryBytes: Int64(anyHashableRequired - 1))
             .deserialize(anyHashableBytes, with: AnyHashableMapSerializer.self)
     }
@@ -635,7 +631,7 @@ func dynamicAnyArrayBudget() throws {
     let count = list.count
     let required = listBudget(DynamicSerializer<Any>.self, count: count)
 
-    expectInvalidData {
+    expectControlledFailure {
         _ = try makeBudgetFory(maxGraphMemoryBytes: Int64(required - 1))
             .deserialize(bytes, with: DynamicSerializer<Any>.self)
     }
@@ -679,7 +675,7 @@ func dynamicRootChargesHeapBox() throws {
     )
     let required = MemoryLayout<DynamicBoxBudgetV1>.stride
 
-    expectInvalidData {
+    expectControlledFailure {
         _ = try makeFory(Int64(required - 1))
             .deserialize(bytes, with: DynamicSerializer<Any>.self)
     }
@@ -704,7 +700,7 @@ func dynamicArrayChargesHeapBoxes() throws {
         listBudget(DynamicSerializer<Any>.self, count: value.count)
         + MemoryLayout<DynamicBoxBudgetV1>.stride
 
-    expectInvalidData {
+    expectControlledFailure {
         _ = try makeFory(Int64(required - 1)).deserialize(bytes, with: Serializer.self)
     }
     let decoded = try makeFory(Int64(required)).deserialize(bytes, with: Serializer.self)
@@ -741,7 +737,7 @@ func unknownCaseChargesDynamicHeapBox() throws {
         return try UnknownCaseSerializer.readPayload(caseId: 7, context)
     }
 
-    expectInvalidData {
+    expectControlledFailure {
         _ = try read(required - 1)
     }
     let decoded = try read(required)
@@ -770,7 +766,7 @@ func compatibleDynamicUsesLocalBoxSize() throws {
     let bytes = try writer().serialize(value as Any, with: DynamicSerializer<Any>.self)
     let required = MemoryLayout<DynamicBoxBudgetV2>.stride
 
-    expectInvalidData {
+    expectControlledFailure {
         _ = try reader(Int64(required - 1))
             .deserialize(bytes, with: DynamicSerializer<Any>.self)
     }
@@ -801,7 +797,7 @@ func dynamicFieldUsesExistentialSlot() throws {
     let required =
         classOwnerBytes + max(1, MemoryLayout<any BudgetDynamicValueProtocol>.stride)
 
-    expectInvalidData {
+    expectControlledFailure {
         _ =
             try makeFory(Int64(required - 1))
             .deserialize(bytes) as BudgetDynamicHolder
@@ -867,7 +863,7 @@ func byteCheckRejectsLargeLength() throws {
         config: config
     )
 
-    expectInvalidData {
+    expectControlledFailure {
         _ = try [String].readData(context)
     }
 }

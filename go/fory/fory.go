@@ -23,7 +23,6 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
-	"unsafe"
 )
 
 // ============================================================================
@@ -1021,10 +1020,7 @@ func Serialize[T any](f *Fory, value T) ([]byte, error) {
 	case string:
 		f.writeCtx.buffer.WriteInt8(NotNullValueFlag)
 		f.writeCtx.WriteTypeId(STRING)
-		f.writeCtx.buffer.WriteVarUint32(uint32(len(val)))
-		if len(val) > 0 {
-			f.writeCtx.buffer.WriteBinary(unsafe.Slice(unsafe.StringData(val), len(val)))
-		}
+		writeString(f.writeCtx.buffer, val)
 	case []byte:
 		f.writeCtx.buffer.WriteInt8(NotNullValueFlag)
 		f.writeCtx.WriteTypeId(BINARY)

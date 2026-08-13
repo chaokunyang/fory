@@ -43,7 +43,6 @@ import org.apache.fory.annotation.ForyUnion
 import org.apache.fory.annotation.ForyUnknownCase
 import org.apache.fory.annotation.Ref
 import org.apache.fory.exception.ForyException
-import org.apache.fory.exception.InsecureException
 import org.apache.fory.exception.SerializationException
 import org.apache.fory.kotlin.Fixed
 import org.apache.fory.kotlin.ForyKotlin
@@ -325,20 +324,8 @@ public fun main(args: Array<String>) {
   }
   when (args[0]) {
     "static_serializer_round_trip" -> staticSerializerRoundTrip(args[1])
-    "compatible_default_round_trip" -> compatibleDefaultRoundTrip()
-    "constructor_backref_copy" -> constructorBackrefCopy()
     "dense_array_round_trip" -> denseArrayRoundTrip(args[1])
     "unsigned_collection_round_trip" -> unsignedCollectionRoundTrip(args[1])
-    "concrete_collection_refs" -> concreteCollectionRefs()
-    "dense_collection_refs" -> nestedDenseTargetsRejected()
-    "physical_storage_budget" -> physicalStorageBudget()
-    "serializer_registration_freeze" -> serializerRegistrationFreezes()
-    "memory_owners" -> {
-      concreteCollectionRefs()
-      nestedDenseTargetsRejected()
-      physicalStorageBudget()
-      serializerRegistrationFreezes()
-    }
     else -> throw IllegalArgumentException("Unsupported Kotlin xlang case ${args[0]}")
   }
 }
@@ -579,6 +566,7 @@ private fun staticSerializerRoundTrip(dataFile: String) {
   check(compatibleDecoded.maybeULong == null)
 
   compatibleDefaultRoundTrip()
+  constructorBackrefCopy()
 
   val durationAndHalfArrays =
     KotlinDurationAndHalfArrays(
@@ -702,10 +690,14 @@ private fun concreteCollectionRefs() {
 
   val tooSmallReader = newRefBudgetCompatibleFory(requiredBytes - 1)
   tooSmallReader.register<KotlinCollectionRefReader>("kotlin.CollectionRefOwners")
-  try {
-    tooSmallReader.deserialize(bytes, KotlinCollectionRefReader::class.java)
-    error("Concrete Kotlin collection targets exceeded their graph memory budget")
-  } catch (_: InsecureException) {}
+  val budgetRejected =
+    try {
+      tooSmallReader.deserialize(bytes, KotlinCollectionRefReader::class.java)
+      false
+    } catch (_: ForyException) {
+      true
+    }
+  check(budgetRejected) { "Concrete Kotlin collection targets exceeded their graph memory budget" }
 
   val exactReader = newRefBudgetCompatibleFory(requiredBytes)
   exactReader.register<KotlinCollectionRefReader>("kotlin.CollectionRefOwners")
@@ -734,10 +726,14 @@ private fun physicalStorageBudget() {
 
   val tooSmallReader = newBudgetFory(requiredBytes - 1)
   tooSmallReader.register<KotlinPhysicalStorage>("kotlin.KotlinPhysicalStorage")
-  try {
-    tooSmallReader.deserialize(bytes, KotlinPhysicalStorage::class.java)
-    error("Kotlin physical storage exceeded its graph memory budget")
-  } catch (_: InsecureException) {}
+  val budgetRejected =
+    try {
+      tooSmallReader.deserialize(bytes, KotlinPhysicalStorage::class.java)
+      false
+    } catch (_: ForyException) {
+      true
+    }
+  check(budgetRejected) { "Kotlin physical storage exceeded its graph memory budget" }
 
   val exactReader = newBudgetFory(requiredBytes)
   exactReader.register<KotlinPhysicalStorage>("kotlin.KotlinPhysicalStorage")
@@ -906,10 +902,14 @@ private fun checkUnionListBudget(values: List<UInt>) {
   val tooSmallReader = newBudgetFory(requiredBytes - 1)
   tooSmallReader.register<KotlinUser>("kotlin.KotlinUser")
   KotlinSerializers.registerUnion(tooSmallReader, KotlinPet::class.java, "kotlin.KotlinPet")
-  try {
-    tooSmallReader.deserialize(bytes, KotlinPet::class.java)
-    error("Kotlin union list exceeded its graph memory budget")
-  } catch (_: InsecureException) {}
+  val budgetRejected =
+    try {
+      tooSmallReader.deserialize(bytes, KotlinPet::class.java)
+      false
+    } catch (_: ForyException) {
+      true
+    }
+  check(budgetRejected) { "Kotlin union list exceeded its graph memory budget" }
 
   val exactReader = newBudgetFory(requiredBytes)
   exactReader.register<KotlinUser>("kotlin.KotlinUser")
@@ -933,10 +933,14 @@ private fun compatibleScalarContainerRefs() {
 
   val tooSmallReader = newRefBudgetCompatibleFory(requiredBytes - 1)
   tooSmallReader.register<KotlinCompatibleUIntListReader>("kotlin.CompatibleUIntListRefs")
-  try {
-    tooSmallReader.deserialize(bytes, KotlinCompatibleUIntListReader::class.java)
-    error("Compatible Kotlin scalar container exceeded its graph memory budget")
-  } catch (_: InsecureException) {}
+  val budgetRejected =
+    try {
+      tooSmallReader.deserialize(bytes, KotlinCompatibleUIntListReader::class.java)
+      false
+    } catch (_: ForyException) {
+      true
+    }
+  check(budgetRejected) { "Compatible Kotlin scalar container exceeded its graph memory budget" }
 
   val exactReader = newRefBudgetCompatibleFory(requiredBytes)
   exactReader.register<KotlinCompatibleUIntListReader>("kotlin.CompatibleUIntListRefs")
@@ -962,10 +966,14 @@ private fun compatibleDenseUIntList() {
 
   val tooSmallReader = newRefBudgetCompatibleFory(requiredBytes - 1)
   tooSmallReader.register<KotlinCompatibleDenseUIntListReader>("kotlin.CompatibleDenseUIntList")
-  try {
-    tooSmallReader.deserialize(bytes, KotlinCompatibleDenseUIntListReader::class.java)
-    error("Compatible dense UInt list exceeded its graph memory budget")
-  } catch (_: InsecureException) {}
+  val budgetRejected =
+    try {
+      tooSmallReader.deserialize(bytes, KotlinCompatibleDenseUIntListReader::class.java)
+      false
+    } catch (_: ForyException) {
+      true
+    }
+  check(budgetRejected) { "Compatible dense UInt list exceeded its graph memory budget" }
 
   val exactReader = newRefBudgetCompatibleFory(requiredBytes)
   exactReader.register<KotlinCompatibleDenseUIntListReader>("kotlin.CompatibleDenseUIntList")

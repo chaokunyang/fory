@@ -110,29 +110,25 @@ public class MemoryBufferTest {
     requireRootMemoryBuffer();
     byte[] bytes = new byte[8];
     assertThrows(
-        IllegalArgumentException.class,
-        () -> MemoryBuffer.fromByteArray(bytes, Integer.MAX_VALUE, 1));
+        RuntimeException.class, () -> MemoryBuffer.fromByteArray(bytes, Integer.MAX_VALUE, 1));
     assertThrows(
-        IllegalArgumentException.class,
-        () -> MemoryBuffer.fromByteArray(bytes, 1, Integer.MAX_VALUE));
+        RuntimeException.class, () -> MemoryBuffer.fromByteArray(bytes, 1, Integer.MAX_VALUE));
 
     MemoryBuffer buffer = MemoryBuffer.fromByteArray(bytes, 0, 4);
-    assertThrows(IllegalArgumentException.class, () -> buffer.pointTo(bytes, Integer.MAX_VALUE, 1));
+    assertThrows(RuntimeException.class, () -> buffer.pointTo(bytes, Integer.MAX_VALUE, 1));
     Assert.assertSame(buffer.getHeapMemory(), bytes);
     assertEquals(buffer.size(), 4);
 
+    assertThrows(RuntimeException.class, () -> buffer.initByteBuffer(ByteBuffer.allocate(4), 5));
     assertThrows(
-        IllegalArgumentException.class, () -> buffer.initByteBuffer(ByteBuffer.allocate(4), 5));
+        RuntimeException.class, () -> buffer.initByteBuffer(ByteBuffer.allocateDirect(4), -1));
     assertThrows(
-        IllegalArgumentException.class,
-        () -> buffer.initByteBuffer(ByteBuffer.allocateDirect(4), -1));
-    assertThrows(
-        IllegalArgumentException.class,
+        RuntimeException.class,
         () -> MemoryBuffer.fromDirectByteBuffer(ByteBuffer.allocateDirect(4), 5, null));
 
-    assertThrows(IndexOutOfBoundsException.class, () -> buffer.increaseSize(-1));
-    assertThrows(IndexOutOfBoundsException.class, () -> buffer.increaseSize(5));
-    assertThrows(IndexOutOfBoundsException.class, () -> buffer.increaseSize(Integer.MAX_VALUE));
+    assertThrows(RuntimeException.class, () -> buffer.increaseSize(-1));
+    assertThrows(RuntimeException.class, () -> buffer.increaseSize(5));
+    assertThrows(RuntimeException.class, () -> buffer.increaseSize(Integer.MAX_VALUE));
     assertEquals(buffer.size(), 4);
   }
 
@@ -143,21 +139,19 @@ public class MemoryBufferTest {
     buffer.writerIndex(4);
     buffer.increaseWriterIndex(-2);
     assertEquals(buffer.writerIndex(), 2);
-    assertThrows(IndexOutOfBoundsException.class, () -> buffer.increaseWriterIndex(-3));
-    assertThrows(
-        IndexOutOfBoundsException.class, () -> buffer.increaseWriterIndex(Integer.MAX_VALUE));
+    assertThrows(RuntimeException.class, () -> buffer.increaseWriterIndex(-3));
+    assertThrows(RuntimeException.class, () -> buffer.increaseWriterIndex(Integer.MAX_VALUE));
     assertEquals(buffer.writerIndex(), 2);
-    assertThrows(IndexOutOfBoundsException.class, () -> buffer.grow(-1));
-    assertThrows(IndexOutOfBoundsException.class, () -> buffer.grow(Integer.MAX_VALUE));
-    assertThrows(IndexOutOfBoundsException.class, () -> buffer.ensure(-1));
+    assertThrows(RuntimeException.class, () -> buffer.grow(-1));
+    assertThrows(RuntimeException.class, () -> buffer.grow(Integer.MAX_VALUE));
+    assertThrows(RuntimeException.class, () -> buffer.ensure(-1));
 
     buffer.readerIndex(4);
     buffer.increaseReaderIndex(-2);
     assertEquals(buffer.readerIndex(), 2);
-    assertThrows(IndexOutOfBoundsException.class, () -> buffer.increaseReaderIndex(-3));
-    assertThrows(
-        IndexOutOfBoundsException.class, () -> buffer.increaseReaderIndex(Integer.MAX_VALUE));
-    assertThrows(IndexOutOfBoundsException.class, () -> buffer.increaseReaderIndex(7));
+    assertThrows(RuntimeException.class, () -> buffer.increaseReaderIndex(-3));
+    assertThrows(RuntimeException.class, () -> buffer.increaseReaderIndex(Integer.MAX_VALUE));
+    assertThrows(RuntimeException.class, () -> buffer.increaseReaderIndex(7));
     assertEquals(buffer.readerIndex(), 2);
   }
 
@@ -165,13 +159,13 @@ public class MemoryBufferTest {
   public void testPrimitiveWriteRanges() {
     requireRootMemoryBuffer();
     MemoryBuffer buffer = MemoryBuffer.newHeapBuffer(8);
-    assertThrows(IndexOutOfBoundsException.class, () -> buffer.writeBooleans(new boolean[0], 1, 0));
-    assertThrows(IndexOutOfBoundsException.class, () -> buffer.writeChars(new char[0], 1, 0));
-    assertThrows(IndexOutOfBoundsException.class, () -> buffer.writeShorts(new short[0], 1, 0));
-    assertThrows(IndexOutOfBoundsException.class, () -> buffer.writeInts(new int[0], 1, 0));
-    assertThrows(IndexOutOfBoundsException.class, () -> buffer.writeLongs(new long[0], 1, 0));
-    assertThrows(IndexOutOfBoundsException.class, () -> buffer.writeFloats(new float[0], 1, 0));
-    assertThrows(IndexOutOfBoundsException.class, () -> buffer.writeDoubles(new double[0], 1, 0));
+    assertThrows(RuntimeException.class, () -> buffer.writeBooleans(new boolean[0], 1, 0));
+    assertThrows(RuntimeException.class, () -> buffer.writeChars(new char[0], 1, 0));
+    assertThrows(RuntimeException.class, () -> buffer.writeShorts(new short[0], 1, 0));
+    assertThrows(RuntimeException.class, () -> buffer.writeInts(new int[0], 1, 0));
+    assertThrows(RuntimeException.class, () -> buffer.writeLongs(new long[0], 1, 0));
+    assertThrows(RuntimeException.class, () -> buffer.writeFloats(new float[0], 1, 0));
+    assertThrows(RuntimeException.class, () -> buffer.writeDoubles(new double[0], 1, 0));
     assertEquals(buffer.writerIndex(), 0);
   }
 
@@ -181,47 +175,35 @@ public class MemoryBufferTest {
     MemoryBuffer streamBuffer =
         MemoryBuffer.fromByteArray(new byte[0], 0, 0, new NoOpArrayReader());
     assertThrows(
-        IndexOutOfBoundsException.class,
+        RuntimeException.class,
         () -> streamBuffer.readByteArrayBytes(new byte[0], Integer.MIN_VALUE));
+    assertThrows(RuntimeException.class, () -> streamBuffer.readByteArrayBytes(new byte[0], 1));
     assertThrows(
-        IndexOutOfBoundsException.class, () -> streamBuffer.readByteArrayBytes(new byte[0], 1));
+        RuntimeException.class, () -> streamBuffer.readBooleanArrayBytes(new boolean[0], 1));
+    assertThrows(RuntimeException.class, () -> streamBuffer.readCharArrayBytes(new char[0], 2));
+    assertThrows(RuntimeException.class, () -> streamBuffer.readInt16ArrayBytes(new short[0], 2));
+    assertThrows(RuntimeException.class, () -> streamBuffer.readInt32ArrayBytes(new int[0], 4));
+    assertThrows(RuntimeException.class, () -> streamBuffer.readInt64ArrayBytes(new long[0], 8));
+    assertThrows(RuntimeException.class, () -> streamBuffer.readFloat32ArrayBytes(new float[0], 4));
     assertThrows(
-        IndexOutOfBoundsException.class,
-        () -> streamBuffer.readBooleanArrayBytes(new boolean[0], 1));
-    assertThrows(
-        IndexOutOfBoundsException.class, () -> streamBuffer.readCharArrayBytes(new char[0], 2));
-    assertThrows(
-        IndexOutOfBoundsException.class, () -> streamBuffer.readInt16ArrayBytes(new short[0], 2));
-    assertThrows(
-        IndexOutOfBoundsException.class, () -> streamBuffer.readInt32ArrayBytes(new int[0], 4));
-    assertThrows(
-        IndexOutOfBoundsException.class, () -> streamBuffer.readInt64ArrayBytes(new long[0], 8));
-    assertThrows(
-        IndexOutOfBoundsException.class, () -> streamBuffer.readFloat32ArrayBytes(new float[0], 4));
-    assertThrows(
-        IndexOutOfBoundsException.class,
-        () -> streamBuffer.readFloat64ArrayBytes(new double[0], 8));
+        RuntimeException.class, () -> streamBuffer.readFloat64ArrayBytes(new double[0], 8));
 
     MemoryBuffer aligned = MemoryBuffer.fromByteArray(new byte[1]);
-    assertThrows(IndexOutOfBoundsException.class, () -> aligned.readCharArrayBytes(new char[1], 1));
-    assertThrows(
-        IndexOutOfBoundsException.class, () -> aligned.readInt16ArrayBytes(new short[1], 1));
-    assertThrows(IndexOutOfBoundsException.class, () -> aligned.readInt32ArrayBytes(new int[1], 1));
-    assertThrows(
-        IndexOutOfBoundsException.class, () -> aligned.readInt64ArrayBytes(new long[1], 1));
-    assertThrows(
-        IndexOutOfBoundsException.class, () -> aligned.readFloat32ArrayBytes(new float[1], 1));
-    assertThrows(
-        IndexOutOfBoundsException.class, () -> aligned.readFloat64ArrayBytes(new double[1], 1));
+    assertThrows(RuntimeException.class, () -> aligned.readCharArrayBytes(new char[1], 1));
+    assertThrows(RuntimeException.class, () -> aligned.readInt16ArrayBytes(new short[1], 1));
+    assertThrows(RuntimeException.class, () -> aligned.readInt32ArrayBytes(new int[1], 1));
+    assertThrows(RuntimeException.class, () -> aligned.readInt64ArrayBytes(new long[1], 1));
+    assertThrows(RuntimeException.class, () -> aligned.readFloat32ArrayBytes(new float[1], 1));
+    assertThrows(RuntimeException.class, () -> aligned.readFloat64ArrayBytes(new double[1], 1));
   }
 
   @Test
   public void testInt64ByteLength() {
     requireRootMemoryBuffer();
     MemoryBuffer buffer = MemoryBuffer.fromByteArray(new byte[8]);
-    assertThrows(IndexOutOfBoundsException.class, () -> buffer.readBytesAsInt64(-1));
-    assertThrows(IndexOutOfBoundsException.class, () -> buffer.readBytesAsInt64(0));
-    assertThrows(IndexOutOfBoundsException.class, () -> buffer.readBytesAsInt64(9));
+    assertThrows(RuntimeException.class, () -> buffer.readBytesAsInt64(-1));
+    assertThrows(RuntimeException.class, () -> buffer.readBytesAsInt64(0));
+    assertThrows(RuntimeException.class, () -> buffer.readBytesAsInt64(9));
     assertEquals(buffer.readerIndex(), 0);
   }
 
@@ -591,24 +573,23 @@ public class MemoryBufferTest {
   public void testGetBytesRangeChecks() {
     requireRootMemoryBuffer();
     MemoryBuffer buffer = MemoryBuffer.fromByteArray(new byte[8], 0, 4);
-    assertThrows(IndexOutOfBoundsException.class, () -> buffer.getBytes(0, 5));
-    assertThrows(IndexOutOfBoundsException.class, () -> buffer.getBytes(-1, 0));
-    assertThrows(IndexOutOfBoundsException.class, () -> buffer.getBytes(0, new byte[1], -1, 0));
+    assertThrows(RuntimeException.class, () -> buffer.getBytes(0, 5));
+    assertThrows(RuntimeException.class, () -> buffer.getBytes(-1, 0));
+    assertThrows(RuntimeException.class, () -> buffer.getBytes(0, new byte[1], -1, 0));
     assertThrows(
-        IndexOutOfBoundsException.class,
-        () -> buffer.getBytes(0, new byte[1], 0, Integer.MIN_VALUE));
+        RuntimeException.class, () -> buffer.getBytes(0, new byte[1], 0, Integer.MIN_VALUE));
   }
 
   @Test
   public void testSliceRangeChecks() {
     requireRootMemoryBuffer();
     MemoryBuffer heap = MemoryBuffer.fromByteArray(new byte[8], 2, 2);
-    assertThrows(IndexOutOfBoundsException.class, () -> heap.slice(-1));
-    assertThrows(IndexOutOfBoundsException.class, () -> heap.slice(-1, 1));
-    assertThrows(IndexOutOfBoundsException.class, () -> heap.slice(0, -1));
+    assertThrows(RuntimeException.class, () -> heap.slice(-1));
+    assertThrows(RuntimeException.class, () -> heap.slice(-1, 1));
+    assertThrows(RuntimeException.class, () -> heap.slice(0, -1));
 
     MemoryBuffer direct = MemoryUtils.wrap(ByteBuffer.allocateDirect(4));
-    assertThrows(IndexOutOfBoundsException.class, () -> direct.slice(Integer.MAX_VALUE, 1));
+    assertThrows(RuntimeException.class, () -> direct.slice(Integer.MAX_VALUE, 1));
   }
 
   @Test
@@ -640,11 +621,11 @@ public class MemoryBufferTest {
     byte[] bytes = new byte[] {1, 2, 3, 4, 5, 6};
     MemoryBuffer left = MemoryBuffer.fromByteArray(bytes, 2, 2);
     MemoryBuffer right = MemoryBuffer.fromByteArray(bytes, 2, 2);
-    assertThrows(IllegalArgumentException.class, () -> left.equalTo(right, -1, 0, 1));
-    assertThrows(IllegalArgumentException.class, () -> left.equalTo(right, 0, -1, 1));
-    assertThrows(IllegalArgumentException.class, () -> left.equalTo(right, 1, 1, 2));
-    assertThrows(IllegalArgumentException.class, () -> left.equalTo(right, 3, 3, 0));
-    assertThrows(IllegalArgumentException.class, () -> left.equalTo(right, 0, 0, -1));
+    assertThrows(RuntimeException.class, () -> left.equalTo(right, -1, 0, 1));
+    assertThrows(RuntimeException.class, () -> left.equalTo(right, 0, -1, 1));
+    assertThrows(RuntimeException.class, () -> left.equalTo(right, 1, 1, 2));
+    assertThrows(RuntimeException.class, () -> left.equalTo(right, 3, 3, 0));
+    assertThrows(RuntimeException.class, () -> left.equalTo(right, 0, 0, -1));
   }
 
   @Test

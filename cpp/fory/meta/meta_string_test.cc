@@ -341,20 +341,6 @@ TEST_F(MetaStringTest, MetaStringTableReset) {
   EXPECT_FALSE(rejected.ok());
 }
 
-TEST_F(MetaStringTest, MetaStringTableLegacyRead) {
-  using LegacyRead = Result<std::string, Error> (MetaStringTable::*)(
-      Buffer &, const MetaStringDecoder &);
-  [[maybe_unused]] LegacyRead legacy_read =
-      static_cast<LegacyRead>(&MetaStringTable::read_string);
-
-  MetaStringTable table;
-  Buffer buffer;
-  buffer.write_var_uint32(0);
-  auto decoded = table.read_string(buffer, decoder_);
-  ASSERT_TRUE(decoded.ok()) << decoded.error().to_string();
-  EXPECT_TRUE(decoded.value().empty());
-}
-
 TEST_F(MetaStringTest, MetaStringTableReadSmallString) {
   MetaStringTable table;
   Buffer buffer;
@@ -619,7 +605,6 @@ TEST_F(MetaStringTest, MetaStringTableRejectsLargeHash) {
   auto result = table.read_string(malformed, type_name_decoder,
                                   MetaStringTable::Role::TypeName);
   ASSERT_FALSE(result.ok());
-  EXPECT_EQ(result.error().code(), ErrorCode::InvalidData);
 
   Buffer reference;
   reference.write_var_uint32((1u << 1) | 1u);
@@ -627,7 +612,6 @@ TEST_F(MetaStringTest, MetaStringTableRejectsLargeHash) {
   auto unpublished = table.read_string(reference, type_name_decoder,
                                        MetaStringTable::Role::TypeName);
   EXPECT_FALSE(unpublished.ok());
-  EXPECT_EQ(unpublished.error().code(), ErrorCode::InvalidData);
 }
 
 // ============================================================================

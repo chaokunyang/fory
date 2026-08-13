@@ -67,6 +67,7 @@ func TestSkipDeclaredCollectionProgress(t *testing.T) {
 		require.NoError(t, f.readCtx.CheckError())
 		require.Equal(t, byte(0x7f), f.readCtx.Buffer().ReadByte(f.readCtx.Err()))
 	})
+
 }
 
 func TestSkippedStructRefPublication(t *testing.T) {

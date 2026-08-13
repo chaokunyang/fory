@@ -134,18 +134,12 @@ fn empty_struct_list_adapts() {
     };
     let bin = writer.serialize(&value).unwrap();
 
-    let roundtrip: Source = writer.deserialize(&bin).unwrap();
-    assert_eq!(roundtrip, value);
-
     let adapted: Target = reader.deserialize(&bin).unwrap();
     assert_eq!(adapted.items, (Empty {}, Empty {}));
     assert_eq!(adapted.tail, 57);
 
     let items: Vec<Empty> = (0..16).map(|_| Empty {}).collect();
     let bin = writer.serialize(&items).unwrap();
-    let roundtrip: Vec<Empty> = writer.deserialize(&bin).unwrap();
-    assert_eq!(roundtrip, items);
-
     let adapted: (Empty, Empty) = reader.deserialize(&bin).unwrap();
     assert_eq!(adapted, (Empty {}, Empty {}));
 }

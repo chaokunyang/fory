@@ -373,6 +373,7 @@ def test_dataclass_serialize():
             return 10 * x
 
     prepare_class_serialization(fory)
+    fory.type_resolver.get_type_info(Person)
     fory.type_resolver.get_type_info(LocalPerson)
     fory.type_resolver.get_type_info(type(LocalPerson.__dataclass_params__))
     local_field = next(iter(LocalPerson.__dataclass_fields__.values()))
@@ -380,7 +381,7 @@ def test_dataclass_serialize():
     fory.type_resolver.get_type_info(type(local_field._field_type))
     fory.type_resolver.get_type_info(type(local_field.default))
 
-    for cls in [LocalPerson, LocalPerson]:
+    for cls in [Person, LocalPerson]:
         assert str(fory.loads(fory.dumps(cls))("Bob", 25)) == str(cls("Bob", 25))
         # serialize global class instance method
         assert fory.loads(fory.dumps(cls("Bob", 20).f))(10) == 200

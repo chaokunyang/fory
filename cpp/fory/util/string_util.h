@@ -26,7 +26,6 @@
 #include <cstdint>
 #include <cstring>
 #include <limits>
-#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -169,14 +168,6 @@ inline Result<std::string, Error> latin1_to_utf8_checked(const uint8_t *data,
 }
 
 } // namespace detail
-
-inline std::string latin1_to_utf8(const uint8_t *data, size_t length) {
-  auto result = detail::latin1_to_utf8_checked(data, length);
-  if (FORY_PREDICT_FALSE(!result.ok())) {
-    throw std::length_error(result.error().message());
-  }
-  return std::move(result).value();
-}
 
 // Convert UTF-16 code units to UTF-8 string.
 // Handles surrogate pairs for characters outside BMP.

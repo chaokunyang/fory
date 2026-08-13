@@ -371,19 +371,6 @@ class TypeDef:
         )
 
 
-def _snake_to_camel(s: str) -> str:
-    """Convert snake_case to camelCase.
-
-    This reverses Java's lowerCamelToLowerUnderscore conversion:
-    - new_object -> newObject
-    - old_object -> oldObject
-    - my_field_name -> myFieldName
-
-    If there are no underscores, the string is returned unchanged.
-    """
-    return canonical_field_name(s)
-
-
 class FieldInfo:
     def __init__(self, name: str, field_type: "FieldType", defined_class: str, tag_id: int = -1):
         self.name = name

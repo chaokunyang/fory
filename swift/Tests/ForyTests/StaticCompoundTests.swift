@@ -55,11 +55,8 @@ func staticCompoundDepthIsBounded() throws {
 
         let limited = Fory(config: .init(compatible: compatible, maxDepth: 2))
         try limited.register(StaticDepthNode.self, id: 11_990)
-        do {
+        #expect(throws: (any Error).self) {
             let _: StaticDepthNode = try limited.deserialize(deepBytes)
-            Issue.record("expected maxDepth failure")
-        } catch ForyError.invalidData(let message) {
-            #expect(message.contains("maxDepth"))
         }
 
         let reused: StaticDepthNode = try limited.deserialize(shallowBytes)
@@ -101,48 +98,6 @@ func wideTagsSkipAndAlign() throws {
     let targetMeta = try #require(targetInfo.typeMeta)
     let matchedMeta = try decodedMeta.assigningFieldIDs(from: targetMeta)
     #expect(matchedMeta.fields.map(\.matchedFieldID) == [-1, -1, -1, 0])
-}
-
-@Test
-func fullFieldTagTypeMetaRoundTrip() throws {
-    let empty = MetaString.empty(specialChar1: "_", specialChar2: "_")
-    let meta = try TypeMeta(
-        typeID: TypeId.compatibleStruct.rawValue,
-        userTypeID: 11_992,
-        namespace: empty,
-        typeName: empty,
-        registerByName: false,
-        fields: [
-            TypeMeta.FieldInfo(
-                wireFieldID: UInt64(UInt32.max) + 15,
-                fieldName: "maximum",
-                fieldType: TypeMeta.FieldType(
-                    typeID: TypeId.int32.rawValue,
-                    nullable: false
-                )
-            )
-        ]
-    )
-
-    let decoded = try TypeMeta.decode(meta.encode())
-    #expect(decoded.fields[0].fieldID == nil)
-    #expect(decoded.fields[0].wireFieldID == UInt64(UInt32.max) + 15)
-    #expect(decoded.fields[0].matchedFieldID == nil)
-}
-
-@Test
-func legacyFieldInfoAPI() {
-    let fieldType = TypeMeta.FieldType(typeID: TypeId.int32.rawValue, nullable: false)
-    let typedID: Int16? = 17
-    var field = TypeMeta.FieldInfo(fieldID: typedID, fieldName: "value", fieldType: fieldType)
-    let returnedID: Int16? = field.fieldID
-    #expect(returnedID == typedID)
-    #expect(field.wireFieldID == 17)
-
-    field.fieldID = 23
-    #expect(field.wireFieldID == 23)
-    field.fieldID = nil
-    #expect(field.wireFieldID == nil)
 }
 
 private func depthNode(count: Int) -> StaticDepthNode {

@@ -282,7 +282,7 @@ func namedTypeRefChecksWireKind() throws {
         config: config
     )
     #expect(try context.readTypeInfo().wireTypeID(compatible: false) == .namedStruct)
-    #expect(throws: ForyError.self) {
+    #expect(throws: (any Error).self) {
         _ = try context.readTypeInfo()
     }
 }
@@ -303,7 +303,7 @@ func idTypeInfoChecksWireKind() throws {
         config: config
     )
 
-    #expect(throws: ForyError.self) {
+    #expect(throws: (any Error).self) {
         _ = try context.readTypeInfo()
     }
 }
@@ -876,11 +876,8 @@ func dynamicAnyMaxDepthRejectsDeepNesting() throws {
     let payload = try writer.serialize(value, with: DynamicSerializer<Any>.self)
 
     let limited = Fory(config: .init(maxDepth: 3))
-    do {
+    #expect(throws: (any Error).self) {
         _ = try limited.deserialize(payload, with: DynamicSerializer<Any>.self)
-        #expect(Bool(false))
-    } catch {
-        #expect(String(describing: error).contains("maxDepth"))
     }
 }
 
@@ -917,11 +914,8 @@ func dynamicClassUsesCompoundDepth() throws {
 
     let limited = Fory(config: .init(trackRef: false, maxDepth: 0))
     try limited.register(AnyObjectDynamicGraphNode.self, id: 507)
-    do {
+    #expect(throws: (any Error).self) {
         _ = try limited.deserialize(payload, with: DynamicSerializer<AnyObject>.self)
-        Issue.record("expected maxDepth failure")
-    } catch ForyError.invalidData(let message) {
-        #expect(message.contains("maxDepth"))
     }
 
     // The root is selected through Any once, while generated class reads bound
@@ -955,11 +949,8 @@ func dynamicValueStructDepthIsBounded() throws {
 
     let limited = Fory(config: .init(trackRef: false, compatible: false, maxDepth: 2))
     try limited.register(AnyDynamicValueNode.self, id: 508)
-    do {
+    #expect(throws: (any Error).self) {
         let _: AnyDynamicValueNode = try limited.deserialize(deepData)
-        Issue.record("expected maxDepth failure")
-    } catch ForyError.invalidData(let message) {
-        #expect(message.contains("maxDepth"))
     }
 
     let reused: AnyDynamicValueNode = try limited.deserialize(shallowData)

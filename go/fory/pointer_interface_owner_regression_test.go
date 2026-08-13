@@ -74,20 +74,6 @@ type ownerDecimalSource struct {
 	Value Decimal
 }
 
-type ownerAggregate [2]int32
-
-type ownerAggregateCodec struct{}
-
-func (ownerAggregateCodec) WriteData(ctx *WriteContext, value reflect.Value) {
-	ctx.Buffer().WriteInt32(int32(value.Index(0).Int()))
-	ctx.Buffer().WriteInt32(int32(value.Index(1).Int()))
-}
-
-func (ownerAggregateCodec) ReadData(ctx *ReadContext, value reflect.Value) {
-	value.Index(0).SetInt(int64(ctx.Buffer().ReadInt32(ctx.Err())))
-	value.Index(1).SetInt(int64(ctx.Buffer().ReadInt32(ctx.Err())))
-}
-
 type ownerUnion struct {
 	caseID uint32
 	value  any
@@ -116,6 +102,20 @@ type ownerNullHolder struct {
 	Value   any
 }
 
+type ownerSkippedNullable struct {
+	Optional *string `fory:"id=1"`
+	Tail     int32   `fory:"id=2"`
+}
+
+type ownerSkippedNullableSource struct {
+	Removed *ownerSkippedNullable `fory:"id=1,ref=true"`
+	Kept    int32                 `fory:"id=2"`
+}
+
+type ownerSkippedNullableTarget struct {
+	Kept int32 `fory:"id=2"`
+}
+
 func TestPointerOwnerBudget(t *testing.T) {
 	value := int32(7)
 	writer := New(WithCompatible(false))
@@ -129,7 +129,6 @@ func TestPointerOwnerBudget(t *testing.T) {
 	var rejected ownerScalarHolder
 	err = reader.Deserialize(data, &rejected)
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "maxGraphMemoryBytes")
 
 	reader = New(WithCompatible(false), WithMaxGraphMemoryBytes(required))
 	require.NoError(t, reader.RegisterStructByName(ownerScalarHolder{}, "test.OwnerScalarHolder"))
@@ -184,7 +183,6 @@ func TestStringPointerOwnerBudget(t *testing.T) {
 			require.NoError(t, reader.RegisterStructByName(test.newTarget(), "test.OwnerStringHolder"))
 			err = reader.Deserialize(data, test.newTarget())
 			require.Error(t, err)
-			require.Contains(t, err.Error(), "maxGraphMemoryBytes")
 
 			reader = New(WithCompatible(false), WithMaxGraphMemoryBytes(required))
 			require.NoError(t, reader.RegisterStructByName(test.newTarget(), "test.OwnerStringHolder"))
@@ -218,7 +216,6 @@ func TestOptionalPointerOwner(t *testing.T) {
 	var rejected ownerOptionalTarget
 	err = newReader(required-1).Deserialize(data, &rejected)
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "maxGraphMemoryBytes")
 
 	var decoded ownerOptionalTarget
 	require.NoError(t, newReader(required).Deserialize(data, &decoded))
@@ -262,7 +259,6 @@ func TestDirectInterfaceOwners(t *testing.T) {
 			var rejected any
 			err = New(WithCompatible(false), WithMaxGraphMemoryBytes(required-1)).Deserialize(data, &rejected)
 			require.Error(t, err)
-			require.Contains(t, err.Error(), "maxGraphMemoryBytes")
 
 			var decoded any
 			require.NoError(t, New(WithCompatible(false), WithMaxGraphMemoryBytes(required)).Deserialize(data, &decoded))
@@ -340,44 +336,12 @@ func TestCompatibleInterfaceOwners(t *testing.T) {
 			var rejected ownerInterfaceTarget
 			err = newReader(required-1).Deserialize(data, &rejected)
 			require.Error(t, err)
-			require.Contains(t, err.Error(), "maxGraphMemoryBytes")
 
 			var decoded ownerInterfaceTarget
 			require.NoError(t, newReader(required).Deserialize(data, &decoded))
 			test.check(t, decoded.Value)
 		})
 	}
-}
-
-func TestRegisteredInterfaceOwner(t *testing.T) {
-	value := ownerAggregate{7, 9}
-	writer := New(WithCompatible(false))
-	require.NoError(t, writer.RegisterExtension(value, 4025, ownerAggregateCodec{}))
-	typeInfo, err := writer.typeResolver.GetTypeInfo(reflect.ValueOf(value), true)
-	require.NoError(t, err)
-	writer.writeCtx.Reset()
-	typeInfo.Serializer.Write(writer.writeCtx, RefModeTracking, true, false, reflect.ValueOf(value))
-	require.NoError(t, writer.writeCtx.CheckError())
-	data := append([]byte(nil), writer.writeCtx.Buffer().Bytes()...)
-
-	read := func(budget int64) (any, error) {
-		reader := New(WithCompatible(false), WithMaxGraphMemoryBytes(budget))
-		if err := reader.RegisterExtension(value, 4025, ownerAggregateCodec{}); err != nil {
-			return nil, err
-		}
-		reader.readCtx.SetData(data)
-		reader.readCtx.remainingGraphMemoryBytes = budget
-		var target any
-		reader.readCtx.ReadValue(reflect.ValueOf(&target).Elem(), RefModeTracking, true)
-		return target, reader.readCtx.CheckError()
-	}
-	required := int64(reflect.TypeOf(value).Size())
-	_, err = read(required - 1)
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "maxGraphMemoryBytes")
-	decoded, err := read(required)
-	require.NoError(t, err)
-	require.Equal(t, value, decoded)
 }
 
 func TestInterfacePointerOwner(t *testing.T) {
@@ -395,11 +359,11 @@ func TestInterfacePointerOwner(t *testing.T) {
 		(&ptrToInterfaceSerializer{}).ReadData(reader.readCtx, value)
 		return reader.readCtx.CheckError()
 	}
+
 	required := int64(reflect.TypeFor[any]().Size())
 	var rejected *any
 	err := read(required-1, &rejected)
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "maxGraphMemoryBytes")
 
 	var decoded *any
 	require.NoError(t, read(required, &decoded))
@@ -436,34 +400,29 @@ func TestNullDestinationClearing(t *testing.T) {
 }
 
 func TestSkipNullableEnvelope(t *testing.T) {
-	field := FieldDef{
-		name:     "value",
-		typeSpec: NewSimpleTypeSpec(STRING),
-		nullable: true,
-	}
+	writer := New(WithXlang(true), WithCompatible(true), WithTrackRef(true))
+	require.NoError(t, writer.RegisterStruct(ownerSkippedNullable{}, 4401))
+	require.NoError(t, writer.RegisterStruct(ownerSkippedNullableSource{}, 4402))
+	reader := New(WithXlang(true), WithCompatible(true), WithTrackRef(true))
+	require.NoError(t, reader.RegisterStruct(ownerSkippedNullableTarget{}, 4402))
+
+	text := "value"
 	for _, test := range []struct {
-		name string
-		body func(*ByteBuffer)
+		name     string
+		optional *string
 	}{
-		{"null", func(buf *ByteBuffer) { buf.WriteInt8(NullFlag) }},
-		{"value", func(buf *ByteBuffer) {
-			buf.WriteInt8(NotNullValueFlag)
-			writeString(buf, "value")
-		}},
+		{"null", nil},
+		{"value", &text},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			buf := NewByteBuffer(nil)
-			test.body(buf)
-			bodyEnd := buf.WriterIndex()
-			buf.WriteInt32(17)
-
-			f := New(WithCompatible(true))
-			f.readCtx.SetData(buf.Bytes())
-			f.readCtx.remainingGraphMemoryBytes = f.config.MaxGraphMemoryBytes
-			(&skipStructSerializer{fieldDefs: []FieldDef{field}}).ReadData(f.readCtx, reflect.Value{})
-			require.NoError(t, f.readCtx.CheckError())
-			require.Equal(t, bodyEnd, f.readCtx.Buffer().ReaderIndex())
-			require.Equal(t, int32(17), f.readCtx.Buffer().ReadInt32(f.readCtx.Err()))
+			data, err := writer.Serialize(&ownerSkippedNullableSource{
+				Removed: &ownerSkippedNullable{Optional: test.optional, Tail: 11},
+				Kept:    17,
+			})
+			require.NoError(t, err)
+			var target ownerSkippedNullableTarget
+			require.NoError(t, reader.Deserialize(data, &target))
+			require.Equal(t, int32(17), target.Kept)
 		})
 	}
 }

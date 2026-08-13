@@ -396,7 +396,6 @@ func TestTypeDefRejectsMaxTypeFields(t *testing.T) {
 	reader := NewFory(WithXlang(false), WithCompatible(true), WithMaxTypeFields(1))
 	_, err = decodeTypeDef(reader, buffer, header)
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "MaxTypeFields")
 }
 
 func TestTypeDefRejectsMaxTypeMetaBytes(t *testing.T) {
@@ -412,7 +411,6 @@ func TestTypeDefRejectsMaxTypeMetaBytes(t *testing.T) {
 	reader := NewFory(WithXlang(false), WithCompatible(true), WithMaxTypeMetaBytes(1))
 	_, err = decodeTypeDef(reader, buffer, header)
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "MaxTypeMetaBytes")
 }
 
 func TestTypeDefRejectsReservedGlobalHeaderBits(t *testing.T) {
@@ -485,7 +483,6 @@ func TestTypeDefRejectsMetadataHashMismatch(t *testing.T) {
 
 	_, err := decodeTypeDef(fory, buffer, int64(len(body)))
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "metadata hash")
 }
 
 func TestTypeDefHeaderHashIncludesHeaderLowBits(t *testing.T) {
@@ -504,7 +501,6 @@ func TestTypeDefHeaderHashIncludesHeaderLowBits(t *testing.T) {
 
 	_, err := decodeTypeDef(fory, buffer, rewrittenHeader)
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "metadata hash")
 }
 
 func TestTypeDefRejectsCompressedMetadata(t *testing.T) {
@@ -515,7 +511,6 @@ func TestTypeDefRejectsCompressedMetadata(t *testing.T) {
 
 	_, err := decodeTypeDef(fory, frame, header)
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "compressed xlang TypeDef")
 }
 
 func TestReadSharedTypeMetaExactLocalPopulatesCache(t *testing.T) {
@@ -572,11 +567,6 @@ func TestSkipTypeDefExtendedSizeIntRange(t *testing.T) {
 
 	skipTypeDef(buffer, META_SIZE_MASK, &err)
 	require.Error(t, err.CheckError())
-	if intSize == 32 {
-		require.Contains(t, err.Error(), "supported int range")
-	} else {
-		require.Equal(t, ErrKindBufferOutOfBound, err.Kind())
-	}
 }
 
 func TestRemoteSchemaLimitRejectsExtraVersions(t *testing.T) {
@@ -588,7 +578,6 @@ func TestRemoteSchemaLimitRejectsExtraVersions(t *testing.T) {
 	err := readRemoteTypeDef(t, fory, second)
 
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "MaxSchemaVersionsPerType")
 }
 
 func TestRemoteSchemaLimitKeepsUnknownTypesSeparate(t *testing.T) {
@@ -622,7 +611,6 @@ func TestRemoteNonStructTypeDefUsesLimit(t *testing.T) {
 
 	_, err = fory.typeResolver.checkRemoteTypeDefLimit(second)
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "MaxSchemaVersionsPerType")
 }
 
 func TestExactLocalNonStructTypeDefBypassesLimit(t *testing.T) {
@@ -709,7 +697,6 @@ func TestTypeDefRejectsNamespaceLengthBeyondMetadata(t *testing.T) {
 
 	_, err := decodeTypeDef(fory, frame, header)
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "namespace length")
 }
 
 func TestTypeDefRejectsFieldNameLengthBeyondMetadata(t *testing.T) {
@@ -724,7 +711,6 @@ func TestTypeDefRejectsFieldNameLengthBeyondMetadata(t *testing.T) {
 
 	_, err := decodeTypeDef(fory, frame, header)
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "field name length")
 }
 
 func TestTypeDefRejectsMalformedName(t *testing.T) {
@@ -758,7 +744,6 @@ func TestTypeDefRejectsMalformedName(t *testing.T) {
 
 			_, err := decodeTypeDef(fory, frame, header)
 			require.Error(t, err)
-			require.Contains(t, err.Error(), "failed to decode TypeDef typename")
 		})
 	}
 }

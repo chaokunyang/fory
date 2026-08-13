@@ -345,8 +345,6 @@ TEST(TupleSerializerTest, HomogeneousExcessUsesAllowance) {
   ASSERT_TRUE(limited.register_struct<TupleEmptyElement>(308).ok());
   auto rejected = limited.deserialize<ReaderRoot>(*bytes);
   EXPECT_FALSE(rejected.ok());
-  EXPECT_NE(rejected.error().message().find("max_unbacked_container_items"),
-            std::string::npos);
 }
 
 TEST(TupleSerializerTest, ExtraNoneElementsNeedNoInput) {

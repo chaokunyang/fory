@@ -98,9 +98,6 @@ public:
 
   // Decode a meta string from buffer using the provided decoder.
   // This mirrors MetaStringResolver#read_meta_string_bytes.
-  Result<std::string, Error> read_string(Buffer &buffer,
-                                         const MetaStringDecoder &decoder);
-
   Result<View, Error> read_string(Buffer &buffer,
                                   const MetaStringDecoder &decoder, Role role);
 

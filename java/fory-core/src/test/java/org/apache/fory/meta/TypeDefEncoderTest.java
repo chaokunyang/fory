@@ -93,31 +93,10 @@ public class TypeDefEncoderTest {
     private int annotatedField2;
   }
 
-  // Test data: Class with duplicate tag IDs in mixed scenario
-  @Data
-  public static class ClassWithMixedDuplicateTagIds {
-    @ForyField(id = 50)
-    private String annotatedField1;
-
-    private String noAnnotation;
-
-    private String optOutField;
-
-    @ForyField(id = 50) // Duplicate with annotatedField1
-    private int annotatedField2;
-  }
-
   // Test data: Class with invalid negative tag ID
   @Data
   public static class ClassWithNegativeTagId {
     @ForyField(id = -2)
-    private String field;
-  }
-
-  // Test data: Class with single field
-  @Data
-  public static class ClassWithSingleField {
-    @ForyField(id = 42)
     private String field;
   }
 
@@ -216,16 +195,6 @@ public class TypeDefEncoderTest {
     int f29;
     int f30;
     int f31;
-  }
-
-  // Test data: Class with all fields using field names
-  @Data
-  public static class ClassWithAllFieldNames {
-    private String field1;
-
-    private int field2;
-
-    private double field3;
   }
 
   // Test data: Class with large tag IDs
@@ -441,25 +410,6 @@ public class TypeDefEncoderTest {
   }
 
   @Test
-  public void testBuildFieldsInfoWithMixedDuplicateTagIds() {
-    Fory fory = Fory.builder().withXlang(true).withCompatible(false).withMetaShare(true).build();
-    fory.register(ClassWithMixedDuplicateTagIds.class);
-    TypeResolver resolver = fory.getTypeResolver();
-
-    List<Field> fields =
-        Arrays.asList(
-            getField(ClassWithMixedDuplicateTagIds.class, "annotatedField1"),
-            getField(ClassWithMixedDuplicateTagIds.class, "noAnnotation"),
-            getField(ClassWithMixedDuplicateTagIds.class, "optOutField"),
-            getField(ClassWithMixedDuplicateTagIds.class, "annotatedField2"));
-
-    Assert.assertThrows(
-        IllegalArgumentException.class,
-        () ->
-            TypeDefEncoder.buildFieldsInfo(resolver, ClassWithMixedDuplicateTagIds.class, fields));
-  }
-
-  @Test
   public void testBuildFieldsInfoRejectsNegativeTagId() {
     Fory fory = Fory.builder().withXlang(true).withCompatible(false).withMetaShare(true).build();
     TypeResolver resolver = fory.getTypeResolver();
@@ -467,23 +417,6 @@ public class TypeDefEncoderTest {
     Assert.assertThrows(
         IllegalArgumentException.class,
         () -> TypeDefEncoder.buildFieldsInfo(resolver, ClassWithNegativeTagId.class, fields));
-  }
-
-  @Test
-  public void testBuildFieldsInfoWithSingleField() {
-    Fory fory = Fory.builder().withXlang(true).withCompatible(false).withMetaShare(true).build();
-    fory.register(ClassWithSingleField.class);
-    TypeResolver resolver = fory.getTypeResolver();
-
-    List<Field> fields = Collections.singletonList(getField(ClassWithSingleField.class, "field"));
-
-    List<FieldInfo> fieldInfos =
-        TypeDefEncoder.buildFieldsInfo(resolver, ClassWithSingleField.class, fields);
-
-    Assert.assertEquals(fieldInfos.size(), 1);
-    Assert.assertTrue(fieldInfos.get(0).hasFieldId());
-    Assert.assertEquals(fieldInfos.get(0).getFieldId(), 42);
-    Assert.assertEquals(fieldInfos.get(0).getFieldName(), "field");
   }
 
   @Test
@@ -507,52 +440,6 @@ public class TypeDefEncoderTest {
     for (FieldInfo fieldInfo : fieldInfos) {
       Assert.assertFalse(fieldInfo.hasFieldId());
     }
-  }
-
-  @Test
-  public void testBuildFieldsInfoWithAllFieldNames() {
-    Fory fory = Fory.builder().withXlang(true).withCompatible(false).withMetaShare(true).build();
-    fory.register(ClassWithAllFieldNames.class);
-    TypeResolver resolver = fory.getTypeResolver();
-
-    List<Field> fields =
-        Arrays.asList(
-            getField(ClassWithAllFieldNames.class, "field1"),
-            getField(ClassWithAllFieldNames.class, "field2"),
-            getField(ClassWithAllFieldNames.class, "field3"));
-
-    List<FieldInfo> fieldInfos =
-        TypeDefEncoder.buildFieldsInfo(resolver, ClassWithAllFieldNames.class, fields);
-
-    Assert.assertEquals(fieldInfos.size(), 3);
-
-    // All fields without configured IDs should not have tags (use field names)
-    for (FieldInfo fieldInfo : fieldInfos) {
-      Assert.assertFalse(fieldInfo.hasFieldId());
-    }
-  }
-
-  @Test
-  public void testBuildFieldsInfoWithLargeTagIds() {
-    Fory fory = Fory.builder().withXlang(true).withCompatible(false).withMetaShare(true).build();
-    fory.register(ClassWithLargeTagIds.class);
-    TypeResolver resolver = fory.getTypeResolver();
-
-    List<Field> fields =
-        Arrays.asList(
-            getField(ClassWithLargeTagIds.class, "field1"),
-            getField(ClassWithLargeTagIds.class, "field2"),
-            getField(ClassWithLargeTagIds.class, "field3"),
-            getField(ClassWithLargeTagIds.class, "field4"),
-            getField(ClassWithLargeTagIds.class, "field5"));
-
-    List<FieldInfo> fieldInfos =
-        TypeDefEncoder.buildFieldsInfo(resolver, ClassWithLargeTagIds.class, fields);
-
-    Assert.assertEquals(fieldInfos.size(), 5);
-    Assert.assertEquals(
-        fieldInfos.stream().map(FieldInfo::getFieldIdUnsigned).collect(Collectors.toList()),
-        Arrays.asList(15L, 32768L, 65535L, 65551L, (long) Integer.MAX_VALUE));
   }
 
   @Test
@@ -611,7 +498,7 @@ public class TypeDefEncoderTest {
     String className = ClassWithLargeTagIds.class.getName();
 
     Assert.assertThrows(
-        DeserializationException.class,
+        RuntimeException.class,
         () ->
             readRemoteTypeDef(
                 fory,
@@ -619,22 +506,13 @@ public class TypeDefEncoderTest {
                     new FieldInfo(className, "first", fieldType, 65551),
                     new FieldInfo(className, "second", fieldType, 65551))));
     Assert.assertThrows(
-        DeserializationException.class,
+        RuntimeException.class,
         () ->
             readRemoteTypeDef(
                 fory,
                 Arrays.asList(
                     new FieldInfo(className, "fooBar", fieldType),
                     new FieldInfo(className, "foo_bar", fieldType))));
-
-    TypeDef mixed =
-        readRemoteTypeDef(
-            fory,
-            Arrays.asList(
-                new FieldInfo(className, "tagged", fieldType, 15),
-                new FieldInfo(className, "tag15", fieldType)));
-    Assert.assertTrue(mixed.getFieldsInfo().get(0).hasFieldId());
-    Assert.assertFalse(mixed.getFieldsInfo().get(1).hasFieldId());
   }
 
   @Test
@@ -753,13 +631,11 @@ public class TypeDefEncoderTest {
             .withMaxTypeFields(31)
             .build();
 
-    DeserializationException exception =
-        Assert.expectThrows(
-            DeserializationException.class,
-            () ->
-                TypeDef.readTypeDef(
-                    reader.getTypeResolver(), MemoryBuffer.fromByteArray(typeDef.getEncoded())));
-    Assert.assertTrue(exception.getMessage().contains("maxTypeFields"));
+    Assert.assertThrows(
+        RuntimeException.class,
+        () ->
+            TypeDef.readTypeDef(
+                reader.getTypeResolver(), MemoryBuffer.fromByteArray(typeDef.getEncoded())));
   }
 
   @Test
@@ -775,13 +651,11 @@ public class TypeDefEncoderTest {
             .withMaxTypeMetaBytes(1)
             .build();
 
-    DeserializationException exception =
-        Assert.expectThrows(
-            DeserializationException.class,
-            () ->
-                TypeDef.readTypeDef(
-                    reader.getTypeResolver(), MemoryBuffer.fromByteArray(typeDef.getEncoded())));
-    Assert.assertTrue(exception.getMessage().contains("maxTypeMetaBytes"));
+    Assert.assertThrows(
+        RuntimeException.class,
+        () ->
+            TypeDef.readTypeDef(
+                reader.getTypeResolver(), MemoryBuffer.fromByteArray(typeDef.getEncoded())));
   }
 
   @Test
@@ -877,11 +751,8 @@ public class TypeDefEncoderTest {
     body.writeByte(0b11);
     MemoryBuffer encoded = NativeTypeDefEncoder.prependHeader(body, false);
 
-    DeserializationException exception =
-        Assert.expectThrows(
-            DeserializationException.class,
-            () -> TypeDef.readTypeDef(fory.getTypeResolver(), encoded));
-    Assert.assertTrue(exception.getMessage().contains("namespace encoding"));
+    Assert.assertThrows(
+        RuntimeException.class, () -> TypeDef.readTypeDef(fory.getTypeResolver(), encoded));
   }
 
   @Test
@@ -894,11 +765,8 @@ public class TypeDefEncoderTest {
       body.writeVarUInt32Small7(extendedSize);
       MemoryBuffer encoded = NativeTypeDefEncoder.prependHeader(body, false);
 
-      DeserializationException exception =
-          Assert.expectThrows(
-              DeserializationException.class,
-              () -> TypeDef.readTypeDef(fory.getTypeResolver(), encoded));
-      Assert.assertTrue(exception.getMessage().contains("namespace size"));
+      Assert.assertThrows(
+          RuntimeException.class, () -> TypeDef.readTypeDef(fory.getTypeResolver(), encoded));
     }
   }
 

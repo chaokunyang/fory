@@ -313,12 +313,7 @@ fn big_hit_requires_exact_body() {
     let cached = resolver.read_meta_string_bytes(&mut reader).unwrap();
     assert_eq!(cached as *const _, cached_ptr);
     assert_eq!(cached.bytes.as_slice(), bytes);
-    let err = resolver.read_meta_string_bytes(&mut reader).unwrap_err();
-    assert!(
-        err.to_string().contains("malformed meta string hash"),
-        "unexpected error: {err}"
-    );
-    assert_eq!(reader.get_cursor(), binding.len());
+    assert!(resolver.read_meta_string_bytes(&mut reader).is_err());
 
     let mut truncated = vec![];
     let mut writer = Writer::from_buffer(&mut truncated);

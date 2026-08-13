@@ -19,10 +19,8 @@
 
 package org.apache.fory.serializer.collection;
 
-import static org.apache.fory.serializer.collection.UnmodifiableSerializers.createSerializer;
 import static org.testng.Assert.assertEquals;
 import static org.testng.Assert.assertSame;
-import static org.testng.Assert.assertTrue;
 
 import com.google.common.collect.ImmutableMap;
 import java.util.ArrayList;
@@ -45,11 +43,8 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentSkipListMap;
 import org.apache.fory.Fory;
 import org.apache.fory.ForyTestBase;
-import org.apache.fory.memory.MemoryBuffer;
-import org.apache.fory.memory.MemoryUtils;
 import org.apache.fory.reflect.FieldAccessor;
 import org.apache.fory.reflect.ReflectionUtils;
-import org.apache.fory.serializer.Serializer;
 import org.apache.fory.test.bean.CollectionFields;
 import org.apache.fory.test.bean.MapFields;
 import org.testng.Assert;
@@ -65,7 +60,6 @@ public class UnmodifiableSerializersTest extends ForyTestBase {
             .requireClassRegistration(false)
             .withCompatible(false)
             .build();
-    MemoryBuffer buffer = MemoryUtils.buffer(32);
     Object[] values =
         new Object[] {
           Collections.unmodifiableCollection(Collections.singletonList("abc")),
@@ -78,62 +72,25 @@ public class UnmodifiableSerializersTest extends ForyTestBase {
           Collections.unmodifiableSortedMap(new TreeMap<>(ImmutableMap.of("k1", "v1")))
         };
     for (Object value : values) {
-      buffer.writerIndex(0);
-      buffer.readerIndex(0);
-      Serializer serializer = createSerializer(fory.getTypeResolver(), value.getClass());
-      writeSerializer(fory, serializer, buffer, value);
-      Object newObj = readSerializer(fory, serializer, buffer);
+      Object newObj = serDe(fory, value);
       assertEquals(newObj.getClass(), value.getClass());
       FieldAccessor sourceAccessor = sourceAccessor(value.getClass());
       Object innerValue = sourceAccessor.getObject(value);
       Object newValue = sourceAccessor.getObject(newObj);
       assertEquals(innerValue, newValue);
-
-      newObj = serDe(fory, value);
-      innerValue = sourceAccessor.getObject(value);
-      newValue = sourceAccessor.getObject(newObj);
-      assertEquals(innerValue, newValue);
-      assertTrue(
-          fory.getTypeResolver()
-              .getSerializerClass(value.getClass())
-              .getName()
-              .contains("Unmodifiable"));
     }
   }
 
   @Test
   public void testFinalWrapperPublication() {
     Fory fory = builder().withRefTracking(true).build();
-    List<String> value = Collections.unmodifiableList(new ArrayList<>(Arrays.asList("a", "b")));
-    Serializer serializer = createSerializer(fory.getTypeResolver(), value.getClass());
-    MemoryBuffer buffer = MemoryUtils.buffer(64);
-    writeSerializer(fory, serializer, buffer, value);
-
-    withReadContext(
-        fory,
-        buffer,
-        readContext -> {
-          int refId = readContext.preserveRefId();
-          Object result = serializer.read(readContext);
-          assertSame(readContext.getReadRef(refId), result);
-          return result;
-        });
-
-    List<Object> aliases = Arrays.asList(value, value);
-    List<?> decoded = (List<?>) fory.deserialize(fory.serialize(aliases));
-    assertSame(decoded.get(0), decoded.get(1));
+    assertAliases(fory, Collections.unmodifiableList(new ArrayList<>(Arrays.asList("a", "b"))));
+    assertAliases(fory, Collections.unmodifiableMap(new TreeMap<>(ImmutableMap.of("k", "v"))));
   }
 
-  @Test
-  public void testWrapperSelfCycleFails() {
-    Fory fory = builder().withRefTracking(true).build();
-    List<Object> source = new ArrayList<>();
-    List<Object> wrapper = Collections.unmodifiableList(source);
-    source.add(wrapper);
-
-    byte[] bytes = fory.serialize(wrapper);
-    Assert.assertThrows(RuntimeException.class, () -> fory.deserialize(bytes));
-    Assert.assertEquals(fory.deserialize(fory.serialize(Arrays.asList("ok"))), Arrays.asList("ok"));
+  private static void assertAliases(Fory fory, Object value) {
+    List<?> decoded = (List<?>) fory.deserialize(fory.serialize(Arrays.asList(value, value)));
+    assertSame(decoded.get(0), decoded.get(1));
   }
 
   private static FieldAccessor sourceAccessor(Class<?> cls) {

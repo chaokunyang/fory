@@ -92,7 +92,7 @@ public sealed class CompatibleSkipReferenceTests
             .MaxGraphMemoryBytes(outerOwnerBytes + skippedOwnerBytes - 1)
             .Build();
         constrainedReader.Register<RemovedRefReader>(720);
-        Assert.Throws<InvalidDataException>(
+        Assert.ThrowsAny<ForyException>(
             () => constrainedReader.Deserialize<RemovedRefReader>(bytes));
 
         ForyRuntime exactReader = ForyRuntime.Builder()

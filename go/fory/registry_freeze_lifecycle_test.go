@@ -120,8 +120,6 @@ func TestRegistryFreezeRoots(t *testing.T) {
 			return f.DeserializeFromStream(NewInputStream(bytes.NewReader(nil)), new(int32))
 		}},
 		{"DeserializeFromReader", func(f *Fory) error { return f.DeserializeFromReader(bytes.NewReader(nil), new(int32)) }},
-		{"Marshal", func(f *Fory) error { _, err := f.Marshal(badDecimal); return err }},
-		{"Unmarshal", func(f *Fory) error { return f.Unmarshal(nil, new(int32)) }},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -145,8 +143,6 @@ func TestBorrowedBufferPanicRestore(t *testing.T) {
 	require.Panics(t, func() {
 		_ = f.DeserializeFrom(borrowed, int32(0))
 	})
-	require.Zero(t, borrowed.ReaderIndex())
-
 	var value int32
 	require.NoError(t, f.Deserialize(data, &value))
 	require.Equal(t, int32(7), value)

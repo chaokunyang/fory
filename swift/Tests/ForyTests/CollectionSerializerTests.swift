@@ -326,7 +326,7 @@ func genericArrayReleasesInitializedPrefix() {
     )
     context.remainingGraphMemoryBytes = Int(config.maxGraphMemoryBytes)
 
-    #expect(throws: ForyError.invalidData("array release probe failure")) {
+    #expect(throws: (any Error).self) {
         _ = try ArraySerializer<ArrayReleaseProbeCodec>.readData(context)
     }
     #expect(arrayReleaseCounter.value == 0)

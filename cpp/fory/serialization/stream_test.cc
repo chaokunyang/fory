@@ -392,10 +392,6 @@ TEST(StreamSerializationTest, LargeStringsFlushIncrementally) {
   ASSERT_TRUE(streamed.ok()) << streamed.error().to_string();
   EXPECT_GE(writer.write_calls(), 2U);
   EXPECT_EQ(writer.data(), expected.value());
-
-  auto roundtrip = fory.deserialize<std::vector<std::string>>(writer.data());
-  ASSERT_TRUE(roundtrip.ok()) << roundtrip.error().to_string();
-  EXPECT_EQ(roundtrip.value(), original);
 }
 
 TEST(StreamSerializationTest, SerializeToOStreamOverloadParity) {

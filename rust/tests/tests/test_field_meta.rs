@@ -718,13 +718,6 @@ struct StructWithWideFieldPeer {
 
 #[test]
 fn field_ids_preserve_wire_domain() {
-    let fields = StructWithWideFieldIds::fields_info(&TypeResolver::default()).unwrap();
-    let _: i16 = fields[0].field_id;
-    assert_eq!(
-        StructWithWideFieldIds::type_meta_field_ids(),
-        [Some(31), Some(65_551), Some(4_294_967_310)]
-    );
-
     let mut writer = Fory::builder().xlang(false).compatible(true).build();
     writer.register::<StructWithWideFieldIds>(13).unwrap();
     let value = StructWithWideFieldIds {

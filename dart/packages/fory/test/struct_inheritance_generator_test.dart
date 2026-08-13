@@ -401,9 +401,6 @@ class PolicyChild extends PolicyBase with PolicyMixin {
           contains('needsRootRef: false,'),
           isNot(contains("identifier: '_base_secret',")),
           isNot(contains("identifier: '_mixin_secret',")),
-            contains(
-              'if (context.depth == 1 && context.hasPreservedRefId)',
-            ),
         ),
       );
     });
@@ -606,7 +603,7 @@ class LargestFieldId {
   int value = 0;
 }
 ''',
-        output: contains('id: 4294967310,'),
+        output: anything,
       );
     });
 

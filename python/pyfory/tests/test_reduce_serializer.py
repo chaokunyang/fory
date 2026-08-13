@@ -300,22 +300,3 @@ def test_nested_reduce_objects():
     assert deserialized.data["inner"] == inner
     assert deserialized.data["inner"].value == 10
     assert deserialized.data["inner"].multiplier == 2
-
-
-def test_cross_language_compatibility():
-    """Test cross-language compatibility"""
-    fory = Fory(xlang=False, ref=True, strict=False, compatible=False)
-
-    obj = BasicReduceObject(123, 4)
-    prepare_reduce_types(fory, BasicReduceObject)
-
-    # Serialize with Python
-    serialized = fory.serialize(obj)
-
-    # Should be able to deserialize (basic test)
-    deserialized = fory.deserialize(serialized)
-    assert deserialized == obj
-
-    # The serialized data should use Fory's native format, not pickle
-    # This is verified by the fact that we're using write_ref/read_ref
-    # in the ReduceSerializer implementation

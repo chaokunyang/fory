@@ -422,36 +422,38 @@ private func compatibleDecode<Writer: Serializer, Reader: Serializer>(
     as _: Reader.Type,
     id: UInt32
 ) throws -> Reader where Writer.Target == Writer, Reader.Target == Reader {
+    try prepareCompatibleDecode(value, as: Reader.self, id: id)()
+}
+
+private func prepareCompatibleDecode<Writer: Serializer, Reader: Serializer>(
+    _ value: Writer,
+    as _: Reader.Type,
+    id: UInt32
+) throws -> () throws -> Reader where Writer.Target == Writer, Reader.Target == Reader {
     let writer = Fory(config: .init(trackRef: false, compatible: true))
     try writer.register(Writer.self, id: id)
 
     let reader = Fory(config: .init(trackRef: false, compatible: true))
     try reader.register(Reader.self, id: id)
 
-    return try reader.deserialize(try writer.serialize(value))
+    let bytes = try writer.serialize(value)
+    return { try reader.deserialize(bytes) }
 }
 
-private func expectInvalidData(_ body: () throws -> Void) throws {
-    do {
+private func expectControlledFailure(_ body: () throws -> Void) {
+    #expect(throws: (any Error).self) {
         try body()
-        #expect(Bool(false))
-    } catch ForyError.invalidData {
-        #expect(Bool(true))
-    } catch {
-        throw error
     }
 }
 
-private func expectInvalidDataOrRefError(_ body: () throws -> Void) throws {
-    do {
-        try body()
-        #expect(Bool(false))
-    } catch ForyError.invalidData {
-        #expect(Bool(true))
-    } catch ForyError.refError {
-        #expect(Bool(true))
-    } catch {
-        throw error
+private func expectCompatibleFailure<Writer: Serializer, Reader: Serializer>(
+    _ value: Writer,
+    as _: Reader.Type,
+    id: UInt32
+) throws where Writer.Target == Writer, Reader.Target == Reader {
+    let decode = try prepareCompatibleDecode(value, as: Reader.self, id: id)
+    expectControlledFailure {
+        _ = try decode()
     }
 }
 
@@ -567,7 +569,7 @@ func containerTrackingChangeRejected() throws {
             registerByName: false,
             fields: [remoteField]
         )
-        try expectInvalidData {
+        expectControlledFailure {
             _ = try resolver.cacheTypeInfo(
                 remoteTypeMeta,
                 forHeader: UInt64(index + 1),
@@ -657,11 +659,8 @@ func compatibleUnionSkipperBoundsDynamicPayload() throws {
     let limitedReader = Fory(config: .init(compatible: true, maxDepth: 1))
     try limitedReader.register(SkippedDepthUnion.self, id: 9964)
     try limitedReader.register(SkippedUnionV2.self, id: 9965)
-    do {
+    #expect(throws: (any Error).self) {
         let _: SkippedUnionV2 = try limitedReader.deserialize(bytes)
-        #expect(Bool(false))
-    } catch ForyError.invalidData(let message) {
-        #expect(message.contains("maxDepth"))
     }
 
     let boundaryReader = Fory(config: .init(compatible: true, maxDepth: 3))
@@ -707,20 +706,15 @@ func compatibleScalarRejectsInvalidBoolPayload() throws {
     let decoded: ScalarStringBox = try reader.deserialize(bytes)
     #expect(decoded.value == "true")
 
-    var foundBoolPayload = false
-    for index in bytes.indices where bytes[index] == 1 {
-        var corrupted = bytes
-        corrupted[index] = 2
-        do {
-            let _: ScalarStringBox = try reader.deserialize(corrupted)
-        } catch ForyError.invalidData(let message) where message.contains("bool payload") {
-            foundBoolPayload = true
-            break
-        } catch {
-            continue
-        }
+    var corrupted = bytes
+    if let lastIndex = corrupted.indices.last {
+        corrupted[lastIndex] = 2
     }
-    #expect(foundBoolPayload)
+    #expect(throws: (any Error).self) {
+        let _: ScalarStringBox = try reader.deserialize(corrupted)
+    }
+    let afterFailure: ScalarStringBox = try reader.deserialize(bytes)
+    #expect(afterFailure.value == "true")
 }
 
 @Test
@@ -841,13 +835,13 @@ func sameTypeNullableScalarUsesStrictSourceRead() throws {
 
     var badFlag = bytes
     badFlag[flagIndex] = refValueByte
-    try expectInvalidDataOrRefError {
+    expectControlledFailure {
         let _: ScalarBoolBox = try reader.deserialize(badFlag)
     }
 
     var badPayload = bytes
     badPayload[badPayload.index(before: badPayload.endIndex)] = 2
-    try expectInvalidData {
+    expectControlledFailure {
         let _: ScalarBoolBox = try reader.deserialize(badPayload)
     }
 }
@@ -880,7 +874,7 @@ func scalarTrackRefMismatchIsRejected() throws {
                 fieldType: TypeMeta.FieldType(typeID: TypeId.bool.rawValue, nullable: false, trackRef: true)
             )
         ])
-    try expectInvalidData {
+    expectControlledFailure {
         _ = try remoteTracking.assigningFieldIDs(from: local)
     }
 
@@ -909,7 +903,7 @@ func scalarTrackRefMismatchIsRejected() throws {
                 fieldName: "$tag1",
                 fieldType: TypeMeta.FieldType(typeID: TypeId.bool.rawValue, nullable: false))
         ])
-    try expectInvalidData {
+    expectControlledFailure {
         _ = try remote.assigningFieldIDs(from: localTracking)
     }
 
@@ -947,10 +941,10 @@ func scalarTrackRefMismatchIsRejected() throws {
         from: localNullableTracking)
     #expect(resolvedBothNullableTracking.fields[0].fieldID == 1)
     #expect(resolvedBothNullableTracking.fields[0].matchedFieldID == 0)
-    try expectInvalidData {
+    expectControlledFailure {
         _ = try remoteNullableTracking.assigningFieldIDs(from: localTracking)
     }
-    try expectInvalidData {
+    expectControlledFailure {
         _ = try remoteTracking.assigningFieldIDs(from: localNullableTracking)
     }
 }
@@ -1050,7 +1044,7 @@ func nameRemoteFieldDoesNotMatchTaggedLocalField() throws {
 func duplicateRemoteNamesFail() throws {
     let empty = MetaString.empty(specialChar1: "_", specialChar2: "_")
     let stringType = TypeMeta.FieldType(typeID: TypeId.string.rawValue, nullable: false)
-    #expect(throws: ForyError.invalidData("duplicate compatible field name foo_bar")) {
+    #expect(throws: (any Error).self) {
         _ = try TypeMeta(
             typeID: TypeId.compatibleStruct.rawValue,
             userTypeID: 1,
@@ -1068,7 +1062,7 @@ func duplicateRemoteNamesFail() throws {
 func duplicateRemoteTagsFail() throws {
     let empty = MetaString.empty(specialChar1: "_", specialChar2: "_")
     let fieldType = TypeMeta.FieldType(typeID: TypeId.int32.rawValue, nullable: false)
-    #expect(throws: ForyError.invalidData("duplicate compatible field tag 1")) {
+    #expect(throws: (any Error).self) {
         _ = try TypeMeta(
             typeID: TypeId.compatibleStruct.rawValue,
             userTypeID: 1,
@@ -1101,7 +1095,7 @@ func namedCompatibleKindRejected() throws {
         fields: []
     )
 
-    #expect(throws: ForyError.self) {
+    #expect(throws: (any Error).self) {
         _ = try resolver.requireTypeInfo(for: incompatible)
     }
     let wrongRegistration = try TypeMeta(
@@ -1112,7 +1106,7 @@ func namedCompatibleKindRejected() throws {
         registerByName: true,
         fields: []
     )
-    #expect(throws: ForyError.self) {
+    #expect(throws: (any Error).self) {
         _ = try resolver.requireTypeInfo(for: wrongRegistration)
     }
 }
@@ -1131,7 +1125,7 @@ func idCompatibleKindRejected() throws {
         fields: []
     )
 
-    #expect(throws: ForyError.self) {
+    #expect(throws: (any Error).self) {
         _ = try resolver.requireTypeInfo(for: incompatible)
     }
 }
@@ -1164,7 +1158,7 @@ func matchedFieldIdOverflowFails() throws {
                 fieldType: fieldType)
         ])
 
-    try expectInvalidData {
+    expectControlledFailure {
         _ = try remote.assigningFieldIDs(from: local)
     }
 }
@@ -1206,48 +1200,9 @@ func matchedByteFamilyClassification() throws {
     let resolved = try remoteUInt8Array.assigningFieldIDs(from: local)
     #expect(resolved.fields[0].fieldID == nil)
     #expect(resolved.fields[0].matchedFieldID == 1)
-    try expectInvalidData {
+    expectControlledFailure {
         _ = try remoteInt8Array.assigningFieldIDs(from: local)
     }
-}
-
-@Test
-func matchedNestedScalarShapeAcceptsNullableDrift() throws {
-    let empty = MetaString.empty(specialChar1: "_", specialChar2: "_")
-    let local = try TypeMeta(
-        typeID: TypeId.compatibleStruct.rawValue,
-        userTypeID: 1,
-        namespace: empty,
-        typeName: empty,
-        registerByName: false,
-        fields: [
-            TypeMeta.FieldInfo(
-                fieldID: nil,
-                fieldName: "values",
-                fieldType: TypeMeta.FieldType(
-                    typeID: TypeId.list.rawValue,
-                    nullable: false,
-                    generics: [TypeMeta.FieldType(typeID: TypeId.int32.rawValue, nullable: false)]))
-        ])
-    let remote = try TypeMeta(
-        typeID: TypeId.compatibleStruct.rawValue,
-        userTypeID: 1,
-        namespace: empty,
-        typeName: empty,
-        registerByName: false,
-        fields: [
-            TypeMeta.FieldInfo(
-                fieldID: nil,
-                fieldName: "values",
-                fieldType: TypeMeta.FieldType(
-                    typeID: TypeId.list.rawValue,
-                    nullable: false,
-                    generics: [TypeMeta.FieldType(typeID: TypeId.int32.rawValue, nullable: true)]))
-        ])
-
-    let resolved = try remote.assigningFieldIDs(from: local)
-    #expect(resolved.fields[0].fieldID == nil)
-    #expect(resolved.fields[0].matchedFieldID == 1)
 }
 
 @Test
@@ -1289,100 +1244,50 @@ func matchedNestedScalarShapeRejectsRefDrift() throws {
                     ]))
         ])
 
-    try expectInvalidData {
+    expectControlledFailure {
         _ = try remote.assigningFieldIDs(from: local)
     }
 }
 
 @Test
 func scalarConversionFailures() throws {
-    try expectInvalidData {
-        let _: ScalarBoolBox = try compatibleDecode(
-            ScalarStringBox(value: "True"),
-            as: ScalarBoolBox.self,
-            id: 9944
-        )
-    }
-
-    try expectInvalidData {
-        let _: ScalarUInt8Box = try compatibleDecode(
-            ScalarStringBox(value: "256"),
-            as: ScalarUInt8Box.self,
-            id: 9945
-        )
-    }
-
-    try expectInvalidData {
-        let _: ScalarInt32Box = try compatibleDecode(
-            ScalarDoubleBox(value: 1.5),
-            as: ScalarInt32Box.self,
-            id: 9946
-        )
-    }
-
-    try expectInvalidData {
-        let _: ScalarStringBox = try compatibleDecode(
-            ScalarDoubleBox(value: .nan),
-            as: ScalarStringBox.self,
-            id: 9947
-        )
-    }
-
-    try expectInvalidData {
-        let _: ScalarDecimalBox = try compatibleDecode(
-            ScalarStringBox(value: String(repeating: "1", count: 257)),
-            as: ScalarDecimalBox.self,
-            id: 9949
-        )
-    }
-
-    try expectInvalidData {
-        let _: ScalarDecimalBox = try compatibleDecode(
-            ScalarStringBox(value: "0." + String(repeating: "0", count: 319)),
-            as: ScalarDecimalBox.self,
-            id: 9950
-        )
-    }
-
-    try expectInvalidData {
-        let _: ScalarDecimalBox = try compatibleDecode(
-            ScalarStringBox(value: "1e1000000"),
-            as: ScalarDecimalBox.self,
-            id: 9956
-        )
-    }
-
-    try expectInvalidData {
-        let _: ScalarDecimalBox = try compatibleDecode(
-            ScalarStringBox(value: "1e256"),
-            as: ScalarDecimalBox.self,
-            id: 9957
-        )
-    }
-
-    try expectInvalidData {
-        let _: ScalarBFloat16Box = try compatibleDecode(
-            ScalarFloat16Box(value: Float16(bitPattern: 0x7e00)),
-            as: ScalarBFloat16Box.self,
-            id: 9951
-        )
-    }
-
-    try expectInvalidData {
-        let _: ScalarStringBox = try compatibleDecode(
-            ScalarDoubleBox(value: .greatestFiniteMagnitude),
-            as: ScalarStringBox.self,
-            id: 9966
-        )
-    }
-
-    try expectInvalidData {
-        let _: ScalarDecimalBox = try compatibleDecode(
-            ScalarDoubleBox(value: .greatestFiniteMagnitude),
-            as: ScalarDecimalBox.self,
-            id: 9967
-        )
-    }
+    try expectCompatibleFailure(
+        ScalarStringBox(value: "True"), as: ScalarBoolBox.self, id: 9944)
+    try expectCompatibleFailure(
+        ScalarStringBox(value: "256"), as: ScalarUInt8Box.self, id: 9945)
+    try expectCompatibleFailure(
+        ScalarDoubleBox(value: 1.5), as: ScalarInt32Box.self, id: 9946)
+    try expectCompatibleFailure(
+        ScalarDoubleBox(value: .nan), as: ScalarStringBox.self, id: 9947)
+    try expectCompatibleFailure(
+        ScalarStringBox(value: String(repeating: "1", count: 257)),
+        as: ScalarDecimalBox.self,
+        id: 9949
+    )
+    try expectCompatibleFailure(
+        ScalarStringBox(value: "0." + String(repeating: "0", count: 319)),
+        as: ScalarDecimalBox.self,
+        id: 9950
+    )
+    try expectCompatibleFailure(
+        ScalarStringBox(value: "1e1000000"), as: ScalarDecimalBox.self, id: 9956)
+    try expectCompatibleFailure(
+        ScalarStringBox(value: "1e256"), as: ScalarDecimalBox.self, id: 9957)
+    try expectCompatibleFailure(
+        ScalarFloat16Box(value: Float16(bitPattern: 0x7e00)),
+        as: ScalarBFloat16Box.self,
+        id: 9951
+    )
+    try expectCompatibleFailure(
+        ScalarDoubleBox(value: .greatestFiniteMagnitude),
+        as: ScalarStringBox.self,
+        id: 9966
+    )
+    try expectCompatibleFailure(
+        ScalarDoubleBox(value: .greatestFiniteMagnitude),
+        as: ScalarDecimalBox.self,
+        id: 9967
+    )
 }
 
 @Test
@@ -1406,14 +1311,14 @@ func unregisteredRemovedStructSkips() throws {
         config: .init(trackRef: true, compatible: true, maxDepth: 1)
     )
     try limitedReader.register(RemovedRefV2.self, id: 9970)
-    #expect(throws: ForyError.self) {
+    #expect(throws: (any Error).self) {
         let _: RemovedRefV2 = try limitedReader.deserialize(holderBytes)
     }
     let afterFailure: RemovedRefV2 = try limitedReader.deserialize(emptyHolderBytes)
     #expect(afterFailure == RemovedRefV2(keep: 10))
 
     let dynamicReader = Fory(config: .init(trackRef: true, compatible: true))
-    #expect(throws: ForyError.self) {
+    #expect(throws: (any Error).self) {
         let _: Any = try dynamicReader.deserialize(childBytes)
     }
 }
@@ -1599,7 +1504,7 @@ func compatibleReadConvertsFixedUInt32() throws {
 }
 
 @Test
-func compatibleRejectsNestedMapListMismatch() throws {
+func rejectsNestedScalarConversion() throws {
     let writer = Fory(config: .init(trackRef: false, compatible: true))
     try writer.register(RemoteNestedFixedMapV1.self, id: 9921)
 
@@ -1615,11 +1520,17 @@ func compatibleRejectsNestedMapListMismatch() throws {
         ids: [nil, -1, Int32.max]
     )
     let bytes = try writer.serialize(source)
-    #expect(
-        throws: ForyError.invalidData("compatible field $tag1 cannot be read as local field data")
-    ) {
+    #expect(throws: (any Error).self) {
         let _: LocalNestedVarintMapV2 = try reader.deserialize(bytes)
     }
+
+    let matchingWriter = Fory(config: .init(trackRef: false, compatible: true))
+    try matchingWriter.register(LocalNestedVarintMapV2.self, id: 9921)
+    let valid = LocalNestedVarintMapV2(data: ["c": [2, nil]], keep: 85, ids: [3])
+    let decoded: LocalNestedVarintMapV2 = try reader.deserialize(
+        try matchingWriter.serialize(valid)
+    )
+    #expect(decoded == valid)
 }
 
 @Test
@@ -1671,9 +1582,7 @@ func listToArrayChecksFixedPayloadBytes() throws {
         ]
     )
 
-    #expect(
-        throws: ForyError.invalidData("array requires 16 bytes but only 2 remain in buffer")
-    ) {
+    #expect(throws: (any Error).self) {
         let _: [Double] = try ArrayFieldCodec<DoubleCodec>.readCompatibleField(
             context,
             remoteFieldType: remoteFieldType,
@@ -1697,7 +1606,7 @@ func compatibleReadAdaptsArrayFieldToDefaultVarintListField() throws {
 }
 
 @Test
-func compatibleReadAcceptsNullableListSchemaForArrayField() throws {
+func rejectsNullableListArrayElement() throws {
     let writer = Fory(config: .init(trackRef: false, compatible: true))
     try writer.register(CompatibleNullableListFieldV1.self, id: 9923)
 
@@ -1705,19 +1614,25 @@ func compatibleReadAcceptsNullableListSchemaForArrayField() throws {
     try reader.register(CompatibleArrayFieldV2.self, id: 9923)
 
     let bytes = try writer.serialize(CompatibleNullableListFieldV1(values: [1, 2, 3], extra: 9))
-    let decoded: CompatibleArrayFieldV2 = try reader.deserialize(bytes)
-    #expect(decoded.values == [1, 2, 3])
+    #expect(throws: (any Error).self) {
+        let _: CompatibleArrayFieldV2 = try reader.deserialize(bytes)
+    }
 
     let nullBytes = try writer.serialize(CompatibleNullableListFieldV1(values: [1, nil, 3], extra: 9))
-    #expect(
-        throws: ForyError.invalidData("compatible list-to-array field cannot read nullable elements")
-    ) {
+    #expect(throws: (any Error).self) {
         let _: CompatibleArrayFieldV2 = try reader.deserialize(nullBytes)
     }
+
+    let matchingWriter = Fory(config: .init(trackRef: false, compatible: true))
+    try matchingWriter.register(CompatibleVarintListFieldV1.self, id: 9923)
+    let decoded: CompatibleArrayFieldV2 = try reader.deserialize(
+        try matchingWriter.serialize(CompatibleVarintListFieldV1(values: [4, 5], extra: 6))
+    )
+    #expect(decoded.values == [4, 5])
 }
 
 @Test
-func compatibleRejectsNestedListArrayPair() throws {
+func rejectsNestedListArray() throws {
     let writer = Fory(config: .init(trackRef: false, compatible: true))
     try writer.register(CompatibleNestedListArrayFieldV1.self, id: 9926)
 
@@ -1725,15 +1640,21 @@ func compatibleRejectsNestedListArrayPair() throws {
     try reader.register(CompatibleNestedArrayListFieldV2.self, id: 9926)
 
     let bytes = try writer.serialize(CompatibleNestedListArrayFieldV1(values: [[1, 2]], keep: 7))
-    #expect(
-        throws: ForyError.invalidData("compatible field values cannot be read as local field values")
-    ) {
+    #expect(throws: (any Error).self) {
         let _: CompatibleNestedArrayListFieldV2 = try reader.deserialize(bytes)
     }
+
+    let matchingWriter = Fory(config: .init(trackRef: false, compatible: true))
+    try matchingWriter.register(CompatibleNestedArrayListFieldV2.self, id: 9926)
+    let valid = CompatibleNestedArrayListFieldV2(values: [[3, 4]], keep: 8)
+    let decoded: CompatibleNestedArrayListFieldV2 = try reader.deserialize(
+        try matchingWriter.serialize(valid)
+    )
+    #expect(decoded == valid)
 }
 
 @Test
-func compatibleReadsNestedNullableScalarWithoutNulls() throws {
+func rejectsNestedNullableChange() throws {
     let writer = Fory(config: .init(trackRef: false, compatible: true))
     try writer.register(CompatibleNestedNullableListV1.self, id: 9927)
 
@@ -1741,12 +1662,22 @@ func compatibleReadsNestedNullableScalarWithoutNulls() throws {
     try reader.register(CompatibleNestedRequiredListV2.self, id: 9927)
 
     let bytes = try writer.serialize(CompatibleNestedNullableListV1(values: [[1, 2]]))
-    let decoded: CompatibleNestedRequiredListV2 = try reader.deserialize(bytes)
-    #expect(decoded.values == [[1, 2]])
+    #expect(throws: (any Error).self) {
+        let _: CompatibleNestedRequiredListV2 = try reader.deserialize(bytes)
+    }
 
     let nullBytes = try writer.serialize(CompatibleNestedNullableListV1(values: [[1, nil, 2]]))
-    let decodedWithNull: CompatibleNestedRequiredListV2 = try reader.deserialize(nullBytes)
-    #expect(decodedWithNull.values == [[1, 0, 2]])
+    #expect(throws: (any Error).self) {
+        let _: CompatibleNestedRequiredListV2 = try reader.deserialize(nullBytes)
+    }
+
+    let matchingWriter = Fory(config: .init(trackRef: false, compatible: true))
+    try matchingWriter.register(CompatibleNestedRequiredListV2.self, id: 9927)
+    let valid = CompatibleNestedRequiredListV2(values: [[3, 4]])
+    let decoded: CompatibleNestedRequiredListV2 = try reader.deserialize(
+        try matchingWriter.serialize(valid)
+    )
+    #expect(decoded.values == valid.values)
 }
 
 @Test

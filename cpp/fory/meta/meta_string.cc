@@ -238,12 +238,6 @@ MetaStringDecoder::decode_lower_upper_digit_special_char(uint8_t value) const {
 
 MetaStringTable::MetaStringTable() = default;
 
-Result<std::string, Error>
-MetaStringTable::read_string(Buffer &buffer, const MetaStringDecoder &decoder) {
-  FORY_TRY(view, read_string(buffer, decoder, Role::TypeName));
-  return std::string(view.value);
-}
-
 int64_t compute_meta_string_hash(const std::vector<uint8_t> &bytes,
                                  MetaEncoding encoding) {
   static constexpr uint8_t k_empty_input = 0;

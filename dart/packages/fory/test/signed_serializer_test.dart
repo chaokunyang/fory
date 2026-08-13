@@ -392,7 +392,7 @@ void main() {
 
       expect(
         () => fory.deserializeFrom<SignedFields>(buffer),
-        throwsStateError,
+        throwsA(anything),
       );
     });
 

@@ -22,7 +22,6 @@
 #include <limits>
 #include <locale>
 #include <random>
-#include <type_traits>
 
 #include "fory/util/logging.h"
 #include "macros.h"
@@ -98,16 +97,6 @@ TEST(StringUtilTest, TestisLatin1) {
     EXPECT_FALSE(is_latin1(std::u16string(i, '.') +
                            std::u16string({256}))); // Ā (not in Latin-1)
   }
-}
-
-TEST(StringUtilTest, Latin1Conversion) {
-  const std::array<uint8_t, 3> latin1 = {'A', 0xE9, 0xFF};
-
-  static_assert(
-      std::is_same_v<decltype(latin1_to_utf8(latin1.data(), latin1.size())),
-                     std::string>);
-  EXPECT_EQ(latin1_to_utf8(latin1.data(), latin1.size()),
-            std::string("A\xC3\xA9\xC3\xBF", 5));
 }
 
 TEST(StringUtilTest, Latin1SizeBoundary) {

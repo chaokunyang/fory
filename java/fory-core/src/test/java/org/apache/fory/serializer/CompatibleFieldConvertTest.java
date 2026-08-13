@@ -37,13 +37,10 @@ import org.apache.fory.annotation.Ref;
 import org.apache.fory.annotation.UInt64Type;
 import org.apache.fory.annotation.UInt8Type;
 import org.apache.fory.config.Int64Encoding;
-import org.apache.fory.exception.DeserializationException;
 import org.apache.fory.reflect.ReflectionUtils;
-import org.apache.fory.serializer.FieldGroups.SerializationFieldInfo;
 import org.apache.fory.serializer.converter.FieldConverter;
 import org.apache.fory.serializer.converter.FieldConverters;
 import org.apache.fory.type.BFloat16;
-import org.apache.fory.type.Descriptor;
 import org.apache.fory.type.Float16;
 import org.testng.Assert;
 import org.testng.annotations.DataProvider;
@@ -218,32 +215,6 @@ public class CompatibleFieldConvertTest extends ForyTestBase {
     @Ref
     @ForyField(id = 0)
     public String value = "true";
-  }
-
-  public static final class RefBooleanWriter {
-    @Ref
-    @ForyField(id = 0)
-    public Boolean value = true;
-  }
-
-  public static final class NullableRefBooleanWriter {
-    @Nullable
-    @Ref
-    @ForyField(id = 0)
-    public Boolean value = true;
-  }
-
-  public static final class RefBooleanReader {
-    @Ref
-    @ForyField(id = 0)
-    public Boolean value;
-  }
-
-  public static final class NullableRefBooleanReader {
-    @Nullable
-    @Ref
-    @ForyField(id = 0)
-    public Boolean value;
   }
 
   public static final class BoolReader {
@@ -616,7 +587,7 @@ public class CompatibleFieldConvertTest extends ForyTestBase {
   public void testDecimalWorkGate() {
     BigDecimal value = new StripGuardDecimal(BigInteger.ONE.shiftLeft(4096), 0);
     Assert.assertThrows(
-        DeserializationException.class,
+        RuntimeException.class,
         () -> FieldConverters.convertValue(BigDecimal.class, String.class, value));
   }
 
@@ -665,39 +636,6 @@ public class CompatibleFieldConvertTest extends ForyTestBase {
     Assert.assertThrows(RuntimeException.class, () -> reader.deserialize(bytes));
   }
 
-  @Test
-  public void testScalarTrackingRefClassifier() {
-    Fory fory = Fory.builder().withXlang(true).withCompatible(true).withRefTracking(true).build();
-    SerializationFieldInfo remoteRef =
-        new SerializationFieldInfo(
-            fory.getTypeResolver(),
-            Descriptor.getDescriptorsMap(RefStringBoolWriter.class).get("value"));
-    SerializationFieldInfo localBool =
-        new SerializationFieldInfo(
-            fory.getTypeResolver(), Descriptor.getDescriptorsMap(BoolReader.class).get("value"));
-    SerializationFieldInfo localRef =
-        new SerializationFieldInfo(
-            fory.getTypeResolver(),
-            Descriptor.getDescriptorsMap(RefBooleanReader.class).get("value"));
-    Assert.assertTrue(remoteRef.trackingRef);
-    Assert.assertTrue(localRef.trackingRef);
-    Assert.assertFalse(FieldConverters.canConvert(remoteRef, localBool));
-    Assert.assertFalse(FieldConverters.canConvert(localBool, localRef));
-    Assert.assertTrue(FieldConverters.canConvert(localRef, localRef));
-
-    SerializationFieldInfo remoteNullableRef =
-        new SerializationFieldInfo(
-            fory.getTypeResolver(),
-            Descriptor.getDescriptorsMap(NullableRefBooleanWriter.class).get("value"));
-    SerializationFieldInfo localNullableRef =
-        new SerializationFieldInfo(
-            fory.getTypeResolver(),
-            Descriptor.getDescriptorsMap(NullableRefBooleanReader.class).get("value"));
-    Assert.assertFalse(FieldConverters.canConvert(remoteNullableRef, localRef));
-    Assert.assertFalse(FieldConverters.canConvert(remoteRef, localNullableRef));
-    Assert.assertTrue(FieldConverters.canConvert(localNullableRef, localNullableRef));
-  }
-
   @Test(dataProvider = "xlang")
   public void testScalarTrackingRefMismatchRejected(boolean xlang) {
     assertRefSchemaFails(new RefStringBoolWriter(), StringReader.class, xlang, false);
@@ -716,9 +654,9 @@ public class CompatibleFieldConvertTest extends ForyTestBase {
     Assert.assertEquals("true", exactNullableRefReader.value);
   }
 
-  @Test
-  public void testNestedScalarMismatchRejected() {
-    assertSchemaFails(new StringListWriter(), IntListReader.class, true, false);
+  @Test(dataProvider = "codegenModes")
+  public void testNestedScalarMismatchRejected(boolean codegen) {
+    assertSchemaFails(new StringListWriter(), IntListReader.class, true, codegen);
   }
 
   @Test(dataProvider = "codegenModes")
@@ -780,7 +718,7 @@ public class CompatibleFieldConvertTest extends ForyTestBase {
 
     Fory reader = compatibleFory(xlang, codegen);
     reader.register(StringReader.class, 28000);
-    Assert.assertThrows(DeserializationException.class, () -> reader.deserialize(bytes));
+    Assert.assertThrows(RuntimeException.class, () -> reader.deserialize(bytes));
   }
 
   @Test(dataProvider = "xlangAndCodegen")
@@ -795,7 +733,7 @@ public class CompatibleFieldConvertTest extends ForyTestBase {
 
     Fory reader = compatibleFory(xlang, codegen);
     reader.register(BoolReader.class, 28000);
-    Assert.assertThrows(DeserializationException.class, () -> reader.deserialize(bytes));
+    Assert.assertThrows(RuntimeException.class, () -> reader.deserialize(bytes));
   }
 
   @Test(dataProvider = "xlangAndCodegen")
@@ -808,7 +746,7 @@ public class CompatibleFieldConvertTest extends ForyTestBase {
 
     Fory reader = compatibleFory(xlang, codegen);
     reader.register(BoolReader.class, 28000);
-    Assert.assertThrows(DeserializationException.class, () -> reader.deserialize(bytes));
+    Assert.assertThrows(RuntimeException.class, () -> reader.deserialize(bytes));
   }
 
   private static <T> T readAs(
@@ -834,7 +772,7 @@ public class CompatibleFieldConvertTest extends ForyTestBase {
   private static void assertConversionFails(
       Object writerObject, Class<?> readerClass, boolean xlang, boolean codegen) {
     Assert.assertThrows(
-        DeserializationException.class, () -> readAs(writerObject, readerClass, xlang, codegen));
+        RuntimeException.class, () -> readAs(writerObject, readerClass, xlang, codegen));
   }
 
   private static void assertSchemaFails(

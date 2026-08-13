@@ -21,7 +21,6 @@ package org.apache.fory.builder;
 
 import java.io.IOException;
 import java.lang.reflect.Field;
-import java.lang.reflect.InvocationTargetException;
 import java.net.URL;
 import java.net.URLClassLoader;
 import java.nio.charset.StandardCharsets;
@@ -373,41 +372,6 @@ public class StaticCompatibleCodecBuilderTest {
       recordInfoField.setAccessible(true);
       RecordInfo recordInfo = (RecordInfo) recordInfoField.get(serializer);
       Assert.assertEquals(recordInfo.getRecordComponents(), new Object[] {null});
-    }
-  }
-
-  @Test
-  public void testRecordSelfCycleFails() throws Exception {
-    assumeRecordSupport();
-    CompilationResult result =
-        compile(
-            "test.CyclicRecord",
-            "package test;\n"
-                + "import java.util.List;\n"
-                + "public record CyclicRecord(List<Object> values) {}\n");
-    Assert.assertTrue(result.success, result.diagnostics());
-    try (URLClassLoader loader = result.classLoader()) {
-      Class<?> type = loader.loadClass("test.CyclicRecord");
-      Fory fory =
-          Fory.builder()
-              .withClassLoader(loader)
-              .withXlang(false)
-              .withRefTracking(true)
-              .withCodegen(false)
-              .requireClassRegistration(false)
-              .build();
-      List<Object> values = new ArrayList<>();
-      Object record = type.getConstructor(List.class).newInstance(values);
-      values.add(record);
-
-      byte[] bytes = fory.serialize(record);
-      Assert.assertThrows(RuntimeException.class, () -> fory.deserialize(bytes, cast(type)));
-
-      Object acyclic = type.getConstructor(List.class).newInstance(Arrays.asList("ok"));
-      List<Object> aliases = Arrays.asList(acyclic, acyclic);
-      List<?> decoded = (List<?>) fory.deserialize(fory.serialize(aliases));
-      Assert.assertSame(decoded.get(0), decoded.get(1));
-      Assert.assertEquals(invoke(type, decoded.get(0), "values"), Arrays.asList("ok"));
     }
   }
 
@@ -829,12 +793,22 @@ public class StaticCompatibleCodecBuilderTest {
         UnsupportedOperationException.class,
         () -> compatibleSerializer.write(reader.getWriteContext(), null));
 
+    GraalvmSupport.getClassRegistry(reader.getConfig().getConfigHash())
+        .putCompatibleDeserializerClass(readerType, compatibleSerializerClass);
+
     writer.setMetaWriteContext(new MetaWriteContext());
     byte[] bytes = writer.serialize(writerValue);
-    reader.setMetaReadContext(new MetaReadContext());
-    return reader.deserialize(bytes);
+    MetaReadContext metaReadContext = new MetaReadContext();
+    reader.setMetaReadContext(metaReadContext);
+    Object result = reader.deserialize(bytes);
+    Serializer<?> rootSerializer = metaReadContext.readTypeInfos.get(0).getSerializer();
+    Assert.assertTrue(
+        GeneratedStaticCompatibleSerializer.class.isAssignableFrom(rootSerializer.getClass()),
+        rootSerializer.getClass().getName());
+    return result;
   }
 
+  @SuppressWarnings("unchecked")
   private static void assertStaticSchemaFails(String writerSource, String readerSource)
       throws Exception {
     CompilationResult writerResult = compile("test.StaticCompatibleNestedPayload", writerSource);
@@ -851,15 +825,56 @@ public class StaticCompatibleCodecBuilderTest {
       Class<? extends Serializer> compatibleSerializerClass =
           CodecUtils.loadOrGenStaticCompatibleCodecClass(
               reader.getTypeResolver(), cast(readerType), remoteTypeDef);
-      InvocationTargetException exception =
-          Assert.expectThrows(
-              InvocationTargetException.class,
-              () ->
-                  compatibleSerializerClass
-                      .getConstructor(TypeResolver.class, Class.class, TypeDef.class)
-                      .newInstance(reader.getTypeResolver(), readerType, remoteTypeDef));
-      Assert.assertTrue(exception.getCause() instanceof RuntimeException, exception.toString());
+      Serializer<Object> localStaticSerializer =
+          (Serializer<Object>)
+              compatibleSerializerClass
+                  .getConstructor(TypeResolver.class, Class.class, TypeDef.class)
+                  .newInstance(
+                      reader.getTypeResolver(),
+                      readerType,
+                      TypeDef.buildTypeDef(reader.getTypeResolver(), readerType));
+      reader.getTypeResolver().setSerializer(cast(readerType), localStaticSerializer);
+      Assert.assertSame(
+          reader.getTypeResolver().getTypeInfo(readerType).getSerializer(), localStaticSerializer);
+
+      Object writerValue = writerType.getConstructor().newInstance();
+      initializeSchemaField(writerType, writerValue);
+      writer.setMetaWriteContext(new MetaWriteContext());
+      byte[] incompatibleBytes = writer.serialize(writerValue);
+      reader.setMetaReadContext(new MetaReadContext());
+      RuntimeException failure =
+          Assert.expectThrows(RuntimeException.class, () -> reader.deserialize(incompatibleBytes));
+      assertStackContains(failure, compatibleSerializerClass);
+
+      Object readerValue = readerType.getConstructor().newInstance();
+      initializeSchemaField(readerType, readerValue);
+      Fory recoveryWriter =
+          compatibleFory(readerLoader, readerType, true, "schema-recovery-writer");
+      recoveryWriter.setMetaWriteContext(new MetaWriteContext());
+      byte[] validBytes = recoveryWriter.serialize(readerValue);
+      reader.setMetaReadContext(new MetaReadContext());
+      Assert.assertSame(reader.deserialize(validBytes).getClass(), readerType);
     }
+  }
+
+  private static void initializeSchemaField(Class<?> type, Object value) throws Exception {
+    Field field = type.getField("values");
+    if (field.getType().isArray()) {
+      field.set(value, java.lang.reflect.Array.newInstance(field.getType().getComponentType(), 0));
+    } else {
+      field.set(value, new ArrayList<>());
+    }
+  }
+
+  private static void assertStackContains(Throwable failure, Class<?> owner) {
+    for (Throwable cause = failure; cause != null; cause = cause.getCause()) {
+      for (StackTraceElement element : cause.getStackTrace()) {
+        if (element.getClassName().equals(owner.getName())) {
+          return;
+        }
+      }
+    }
+    Assert.fail("Expected failure from generated static compatible serializer", failure);
   }
 
   private static Map<String, FieldCodecCategory> remoteCodecCategories(

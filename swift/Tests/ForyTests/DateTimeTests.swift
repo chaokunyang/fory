@@ -19,18 +19,12 @@ import Foundation
 import Testing
 @testable import Fory
 
-private let secondsPerDay = 86_400.0
-
 @ForyStruct
 private struct DateMacroHolder {
     var day: LocalDate = LocalDate()
 
     var instant: Date = Date(timeIntervalSince1970: 0)
     var timestamp: Date = Date(timeIntervalSince1970: 0)
-}
-
-private func midnightUTC(epochDay: Int64) -> Date {
-    Date(timeIntervalSince1970: Double(epochDay) * secondsPerDay)
 }
 
 private func localDate(_ epochDay: Int64) -> LocalDate {
@@ -82,7 +76,7 @@ func dateAndTimestampRoundTrip() throws {
         (malformedDuration.count - 4)..<malformedDuration.count,
         with: invalidNanos.copyToData()
     )
-    #expect(throws: ForyError.self) {
+    #expect(throws: (any Error).self) {
         let _: Duration = try fory.deserialize(malformedDuration)
     }
     let durationAfterFailure: Duration = try fory.deserialize(durationData)

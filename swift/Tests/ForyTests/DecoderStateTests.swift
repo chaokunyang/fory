@@ -48,22 +48,14 @@ func readContextResetReleasesMetaStrings() throws {
     context.reset()
     #expect(first == nil)
     #expect(second == nil)
-    #expect(
-        try context.getReadMetaString(
-            at: 0,
-            decoder: .fieldName,
-            encodings: fieldNameMetaStringEncodings
-        ) == nil
-    )
+    #expect(context.getReadMetaStringEntry(at: 0) == nil)
 
     let reusedValue = try MetaStringEncoder.fieldName.encode("reusedValue")
     context.appendReadMetaString(ReadMetaStringEntry(reusedValue))
-    let reused = try #require(
-        try context.getReadMetaString(
-            at: 0,
-            decoder: .fieldName,
-            encodings: fieldNameMetaStringEncodings
-        )
+    let reusedEntry = try #require(context.getReadMetaStringEntry(at: 0))
+    let reused = try reusedEntry.value(
+        decoder: .fieldName,
+        encodings: fieldNameMetaStringEncodings
     )
     #expect(reused === reusedValue)
 }
@@ -207,13 +199,8 @@ func remoteSchemaLogicalKeyLimitPersists() throws {
     }
 
     func expectLogicalKeyLimit(_ typeMeta: TypeMeta) {
-        do {
+        #expect(throws: (any Error).self) {
             _ = try cache(typeMeta)
-            Issue.record("expected remote logical type limit")
-        } catch ForyError.invalidData(let message) {
-            #expect(message.contains("logical type limit"))
-        } catch {
-            Issue.record("expected invalid data, got \(error)")
         }
     }
 

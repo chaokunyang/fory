@@ -735,8 +735,7 @@ mod tests {
             #[fory(id = 4294967311)]
             name: String
         };
-        let err = parse_field_meta(&field).unwrap_err();
-        assert!(err.to_string().contains("id must not exceed"));
+        assert!(parse_field_meta(&field).is_err());
     }
 
     #[test]

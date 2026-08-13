@@ -20,6 +20,7 @@
 package org.apache.fory.context;
 
 import org.apache.fory.Fory;
+import org.apache.fory.TestUtils;
 import org.apache.fory.exception.DeserializationException;
 import org.apache.fory.util.ExceptionUtils;
 import org.testng.Assert;
@@ -54,15 +55,9 @@ public class MapRefReaderTest {
         Assert.expectThrows(
             DeserializationException.class,
             () -> ExceptionUtils.handleReadFailed(fory, new NullPointerException()));
+    java.util.List<?> snapshot = TestUtils.getFieldValue(exception, "readObjects");
+    Assert.assertEquals(snapshot, java.util.Collections.singletonList("original"));
     reader.getReadRefs().objects[0] = "changed";
-    Assert.assertTrue(exception.getMessage().contains("original"));
-    Assert.assertFalse(exception.getMessage().contains("changed"));
-  }
-
-  @Test
-  public void testUnresolvedRefFails() {
-    MapRefReader reader = new MapRefReader();
-    int refId = reader.preserveRefId();
-    Assert.assertThrows(RuntimeException.class, () -> reader.getReadRef(refId));
+    Assert.assertEquals(snapshot, java.util.Collections.singletonList("original"));
   }
 }

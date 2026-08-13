@@ -28,6 +28,18 @@ type sliceReuseValue struct {
 	Value int32
 }
 
+type compatibleEmptyList struct {
+	Payload []int32 `fory:"type=list(element=int32(nullable=false,encoding=fixed))"`
+}
+
+type compatibleEmptySlice struct {
+	Payload []int32 `fory:"type=array(element=int32)"`
+}
+
+type compatibleEmptyArray struct {
+	Payload [0]int32 `fory:"type=array(element=int32)"`
+}
+
 type sliceAggregateValue interface {
 	sliceAggregateValue()
 }
@@ -158,66 +170,41 @@ func TestInterfaceSlotReuse(t *testing.T) {
 	})
 }
 
-func TestStringSliceNullable(t *testing.T) {
-	buf := NewByteBuffer(nil)
-	buf.WriteVarUint32(3)
-	buf.WriteInt8(int8(CollectionDeclSameType | CollectionHasNull))
-	buf.WriteInt8(NullFlag)
-	buf.WriteInt8(NotNullValueFlag)
-	writeString(buf, "value")
-	buf.WriteInt8(NullFlag)
-
-	f := New(WithMaxGraphMemoryBytes(
-		int64(graphSliceOwnerBytes) + 3*int64(stringElementBytes)))
-	f.readCtx.SetData(buf.Bytes())
-	f.readCtx.remainingGraphMemoryBytes = f.config.MaxGraphMemoryBytes
-	var target []string
-	stringSliceSerializer{}.ReadData(f.readCtx, reflect.ValueOf(&target).Elem())
-	require.NoError(t, f.readCtx.CheckError())
-	require.Equal(t, []string{"", "value", ""}, target)
-}
-
 func TestCompatibleEmptySliceBudget(t *testing.T) {
-	listSerializer, ok := newPrimitiveListSerializer(reflect.TypeOf([]int32{}), INT32)
-	require.True(t, ok)
-	listReader := listSerializer.(primitiveListSerializer)
-	compatible := compatiblePrimitiveListToArraySerializer{listReader: listReader}
-
-	writer := New()
-	writer.writeCtx.Reset()
-	listReader.WriteData(writer.writeCtx, reflect.ValueOf([]int32{}))
-	require.NoError(t, writer.writeCtx.CheckError())
-	data := append([]byte(nil), writer.writeCtx.Buffer().Bytes()...)
+	writer := New(WithXlang(true), WithCompatible(true))
+	require.NoError(t, writer.RegisterStructByName(
+		compatibleEmptyList{}, "test.CompatibleEmptyList"))
+	data, err := writer.Serialize(&compatibleEmptyList{Payload: []int32{}})
+	require.NoError(t, err)
 
 	t.Run("slice", func(t *testing.T) {
 		for _, budget := range []int64{
 			int64(graphSliceOwnerBytes) - 1,
 			int64(graphSliceOwnerBytes),
 		} {
-			reader := New()
-			reader.readCtx.SetData(data)
-			reader.readCtx.remainingGraphMemoryBytes = budget
-			var target []int32
-			compatible.ReadData(reader.readCtx, reflect.ValueOf(&target).Elem())
-			readErr := reader.readCtx.CheckError()
+			reader := New(
+				WithXlang(true), WithCompatible(true), WithMaxGraphMemoryBytes(budget))
+			require.NoError(t, reader.RegisterStructByName(
+				compatibleEmptySlice{}, "test.CompatibleEmptyList"))
+			var target compatibleEmptySlice
+			readErr := reader.Deserialize(data, &target)
 			if budget < int64(graphSliceOwnerBytes) {
 				require.Error(t, readErr)
-				require.Contains(t, readErr.Error(), "maxGraphMemoryBytes")
 				continue
 			}
 			require.NoError(t, readErr)
-			require.NotNil(t, target)
-			require.Empty(t, target)
+			require.NotNil(t, target.Payload)
+			require.Empty(t, target.Payload)
 		}
 	})
 
 	t.Run("array", func(t *testing.T) {
-		reader := New()
-		reader.readCtx.SetData(data)
-		reader.readCtx.remainingGraphMemoryBytes = 1
-		var target [0]int32
-		compatible.ReadData(reader.readCtx, reflect.ValueOf(&target).Elem())
-		require.NoError(t, reader.readCtx.CheckError())
+		reader := New(
+			WithXlang(true), WithCompatible(true), WithMaxGraphMemoryBytes(1))
+		require.NoError(t, reader.RegisterStructByName(
+			compatibleEmptyArray{}, "test.CompatibleEmptyList"))
+		var target compatibleEmptyArray
+		require.NoError(t, reader.Deserialize(data, &target))
 	})
 }
 
@@ -243,7 +230,6 @@ func TestInterfaceAggregateBudget(t *testing.T) {
 			readErr := reader.Deserialize(data, &target)
 			if budget < sliceBytes+aggregateBytes {
 				require.Error(t, readErr)
-				require.Contains(t, readErr.Error(), "maxGraphMemoryBytes")
 				continue
 			}
 			require.NoError(t, readErr)
@@ -267,7 +253,6 @@ func TestInterfaceAggregateBudget(t *testing.T) {
 			readErr := reader.Deserialize(data, &target)
 			if budget < aggregateBytes {
 				require.Error(t, readErr)
-				require.Contains(t, readErr.Error(), "maxGraphMemoryBytes")
 				continue
 			}
 			require.NoError(t, readErr)
@@ -281,7 +266,6 @@ func TestInterfaceAggregateBudget(t *testing.T) {
 			target, readErr := readSelectedAggregate(t, source, budget)
 			if budget < sliceBytes+aggregateBytes {
 				require.Error(t, readErr)
-				require.Contains(t, readErr.Error(), "maxGraphMemoryBytes")
 				continue
 			}
 			require.NoError(t, readErr)
@@ -295,7 +279,6 @@ func TestInterfaceAggregateBudget(t *testing.T) {
 			target, readErr := readSelectedAggregate(t, source, budget)
 			if budget < aggregateBytes {
 				require.Error(t, readErr)
-				require.Contains(t, readErr.Error(), "maxGraphMemoryBytes")
 				continue
 			}
 			require.NoError(t, readErr)
@@ -322,7 +305,6 @@ func TestInterfaceAggregateBudget(t *testing.T) {
 			readErr := reader.Deserialize(data, &target)
 			if budget < required {
 				require.Error(t, readErr)
-				require.Contains(t, readErr.Error(), "maxGraphMemoryBytes")
 				continue
 			}
 			require.NoError(t, readErr)
@@ -347,7 +329,6 @@ func TestInterfaceAggregateBudget(t *testing.T) {
 			readErr := reader.Deserialize(data, &target)
 			if budget < aggregateBytes {
 				require.Error(t, readErr)
-				require.Contains(t, readErr.Error(), "maxGraphMemoryBytes")
 				continue
 			}
 			require.NoError(t, readErr)

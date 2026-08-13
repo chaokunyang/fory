@@ -15,6 +15,8 @@
 # specific language governing permissions and limitations
 # under the License.
 
+import types
+
 import pytest
 
 try:
@@ -27,3 +29,17 @@ def require_pyarrow(func):
     arrow_not_installed = pa is None or not hasattr(pa, "get_library_dirs")
     mark_decorator = pytest.mark.skipif(arrow_not_installed, reason="pyarrow not installed")(func)
     return mark_decorator
+
+
+def prepare_pandas_types(fory, frame, pandas):
+    for cls in (
+        pandas.DataFrame,
+        type(frame._mgr),
+        type,
+        type(frame._mgr.blocks[0]),
+        type(pandas._libs.internals._unpickle_block),
+        type(frame.columns),
+        types.FunctionType,
+        type(frame.index),
+    ):
+        fory.type_resolver.get_type_info(cls)

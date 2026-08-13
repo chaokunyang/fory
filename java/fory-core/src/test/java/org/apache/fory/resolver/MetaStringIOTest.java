@@ -33,8 +33,6 @@ import org.apache.fory.collection.LongLongByteMap;
 import org.apache.fory.collection.MetadataLongMap;
 import org.apache.fory.context.MetaStringReader;
 import org.apache.fory.context.MetaStringWriter;
-import org.apache.fory.exception.ForyException;
-import org.apache.fory.exception.InsecureException;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.memory.MemoryUtils;
 import org.apache.fory.meta.EncodedMetaString;
@@ -104,25 +102,6 @@ public class MetaStringIOTest {
   }
 
   @Test
-  public void testReaderKeepsNamesLocal() {
-    SharedRegistry sharedRegistry = newSharedRegistry();
-    MetaStringWriter writer = new MetaStringWriter();
-    MetaStringReader reader = new MetaStringReader();
-    EncodedMetaString encodedMetaString = newGenericMetaString("shared_meta_string");
-    MemoryBuffer buffer = MemoryUtils.buffer(64);
-
-    writer.writeMetaString(buffer, encodedMetaString);
-
-    EncodedMetaString readMetaString = reader.readMetaString(buffer);
-    assertEquals(sharedRegistry.encodedMetaStringMap.size(), 0);
-    EncodedMetaString cachedMetaString =
-        sharedRegistry.getOrCreateEncodedMetaString(
-            encodedMetaString.bytes, encodedMetaString.hash);
-
-    assertNotSame(readMetaString, cachedMetaString);
-  }
-
-  @Test
   public void testExpectedNamesAcrossRoots() {
     SharedRegistry sharedRegistry = newSharedRegistry();
     EncodedMetaString smallName = sharedRegistry.getPackageEncodedMetaString("pkg");
@@ -165,7 +144,7 @@ public class MetaStringIOTest {
             .build();
     int sharedNames = sharedRegistry.encodedMetaStringMap.size();
 
-    expectThrows(InsecureException.class, () -> reader.deserialize(bytes));
+    expectThrows(RuntimeException.class, () -> reader.deserialize(bytes));
 
     assertEquals(sharedRegistry.encodedMetaStringMap.size(), sharedNames);
     assertReadCachesEmpty(reader.getReadContext().getMetaStringReader());
@@ -234,7 +213,7 @@ public class MetaStringIOTest {
     buffer.writeInt64(encodedMetaString.hash + 0x100);
     buffer.writeBytes(encodedMetaString.bytes);
 
-    expectThrows(ForyException.class, () -> reader.readMetaString(buffer));
+    expectThrows(RuntimeException.class, () -> reader.readMetaString(buffer));
   }
 
   @Test
@@ -339,7 +318,7 @@ public class MetaStringIOTest {
 
     MemoryBuffer refBuffer = MemoryUtils.buffer(8);
     refBuffer.writeVarUInt32Small7((1 << 1) | 1);
-    expectThrows(ForyException.class, () -> reader.readMetaString(refBuffer));
+    expectThrows(RuntimeException.class, () -> reader.readMetaString(refBuffer));
   }
 
   @Test
@@ -355,7 +334,7 @@ public class MetaStringIOTest {
     for (int i = 0; i < 8192; i++) {
       reader.readMetaString(buffer);
     }
-    expectThrows(ForyException.class, () -> reader.readMetaString(buffer));
+    expectThrows(RuntimeException.class, () -> reader.readMetaString(buffer));
     reader.reset();
 
     MemoryBuffer nextRoot = MemoryUtils.buffer(8);

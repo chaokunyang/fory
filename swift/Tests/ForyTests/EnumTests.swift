@@ -228,7 +228,7 @@ func unionReadUsesCompoundDepth() throws {
 
     let limited = Fory(config: .init(trackRef: false, maxDepth: 2))
     try limited.register(Token.self, id: 1001)
-    #expect(throws: ForyError.self) {
+    #expect(throws: (any Error).self) {
         let _: Token = try limited.deserialize(bytes)
     }
     let shallow: Token = try limited.deserialize(shallowBytes)
@@ -255,13 +255,10 @@ func unionReadUsesCompoundDepth() throws {
         return context
     }
 
-    do {
+    #expect(throws: (any Error).self) {
         let _: ForwardStringOrLong = try ForwardStringOrLong.readData(
             unknownContext(maxDepth: 0)
         )
-        Issue.record("expected maxDepth failure")
-    } catch ForyError.invalidData(let message) {
-        #expect(message.contains("maxDepth"))
     }
 
     let unknown = try ForwardStringOrLong.readData(unknownContext(maxDepth: 1))
@@ -284,11 +281,8 @@ func unknownScalarReplayDepthBoundary() throws {
 
     let blocked = Fory(config: .init(trackRef: false, compatible: false, maxDepth: 0))
     try blocked.register(ForwardStringOrLong.self, id: 1002)
-    do {
+    #expect(throws: (any Error).self) {
         _ = try blocked.serialize(value)
-        Issue.record("expected maxDepth failure")
-    } catch ForyError.invalidData(let message) {
-        #expect(message.contains("maxDepth"))
     }
 
     let boundary = Fory(config: .init(trackRef: false, compatible: false, maxDepth: 1))

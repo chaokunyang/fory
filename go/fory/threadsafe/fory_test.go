@@ -24,6 +24,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+type genericSliceHolder struct {
+	Items []int32
+}
+
 // TestFory tests the thread-safe Fory wrapper
 func TestFory(t *testing.T) {
 	f := New(fory.WithXlang(false), fory.WithRefTracking(true), fory.WithCompatible(false))
@@ -88,73 +92,17 @@ func TestFory(t *testing.T) {
 	})
 }
 
-// TestSerializeAny tests the Serialize/Deserialize methods
-func TestSerializeAny(t *testing.T) {
+func TestGenericRegistrationReplay(t *testing.T) {
 	f := New(fory.WithXlang(false), fory.WithRefTracking(true), fory.WithCompatible(false))
+	require.NoError(t, f.RegisterStructByName(genericSliceHolder{}, "threadsafe.GenericSliceHolder"))
+	original := genericSliceHolder{Items: []int32{1, 2, 3, 4, 5}}
+	data, err := Serialize(f, &original)
+	require.NoError(t, err)
 
-	t.Run("Primitives", func(t *testing.T) {
-		data, err := f.Serialize(int32(42))
-		require.NoError(t, err)
-
-		var result int32
-		err = f.Deserialize(data, &result)
-		require.NoError(t, err)
-		require.Equal(t, int32(42), result)
-	})
-
-	t.Run("String", func(t *testing.T) {
-		data, err := f.Serialize("hello")
-		require.NoError(t, err)
-
-		var result string
-		err = f.Deserialize(data, &result)
-		require.NoError(t, err)
-		require.Equal(t, "hello", result)
-	})
-}
-
-// TestDeserialize tests the Deserialize generic function
-func TestDeserialize(t *testing.T) {
-	t.Run("Int32", func(t *testing.T) {
-		f := New(fory.WithXlang(false), fory.WithRefTracking(true), fory.WithCompatible(false))
-		val := int32(42)
-		data, err := Serialize(f, &val)
-		require.NoError(t, err)
-
-		var result int32
-		err = Deserialize(f, data, &result)
-		require.NoError(t, err)
-		require.Equal(t, int32(42), result)
-	})
-
-	t.Run("String", func(t *testing.T) {
-		f := New(fory.WithXlang(false), fory.WithRefTracking(true), fory.WithCompatible(false))
-		val := "hello"
-		data, err := Serialize(f, &val)
-		require.NoError(t, err)
-
-		var result string
-		err = Deserialize(f, data, &result)
-		require.NoError(t, err)
-		require.Equal(t, "hello", result)
-	})
-
-	t.Run("Slice", func(t *testing.T) {
-		f := New(fory.WithXlang(false), fory.WithRefTracking(true), fory.WithCompatible(false))
-		// Serialize a struct containing the slice since *[]T is not supported
-		type SliceWrapper struct {
-			Items []int32
-		}
-		require.NoError(t, f.RegisterStructByName(SliceWrapper{}, "threadsafe.SliceWrapper"))
-		original := SliceWrapper{Items: []int32{1, 2, 3, 4, 5}}
-		data, err := Serialize(f, &original)
-		require.NoError(t, err)
-
-		var result SliceWrapper
-		err = Deserialize(f, data, &result)
-		require.NoError(t, err)
-		require.Equal(t, original.Items, result.Items)
-	})
+	var result genericSliceHolder
+	err = Deserialize(f, data, &result)
+	require.NoError(t, err)
+	require.Equal(t, original, result)
 }
 
 // TestGlobalFunctions tests the global convenience functions

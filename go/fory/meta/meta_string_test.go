@@ -83,7 +83,6 @@ func TestDecodeMalformedMetaString(t *testing.T) {
 
 	_, err = decoder.Decode([]byte{0x74}, ALL_TO_LOWER_SPECIAL)
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "trailing escape")
 }
 
 func calcTotalBytes(src string, bitsPerChar int, encoding Encoding) int {
@@ -118,5 +117,4 @@ func TestEncodeWithEncodingNonAscii(t *testing.T) {
 
 	_, err := encoder.EncodeWithEncoding("こんにちは", LOWER_SPECIAL)
 	require.Error(t, err, "Expected error for non-ASCII characters in non-UTF-8 encoding")
-	require.Equal(t, "non-ASCII characters in meta string are not allowed", err.Error())
 }

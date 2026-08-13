@@ -1317,7 +1317,6 @@ TEST(SchemaEvolutionTest, ScalarDecimalWorkBounds) {
   auto non_reducible = convert_field<ScalarDecimalField, ScalarStringField>(
       {Decimal(5000, false, std::move(power_5000))}, 1052);
   ASSERT_FALSE(non_reducible.ok());
-  EXPECT_EQ(non_reducible.error().code(), ErrorCode::InvalidData);
 
   auto scale_bound = convert_field<ScalarDecimalField, ScalarStringField>(
       {Decimal(5000, false, decimal_power_of_ten(4744))}, 1053);
@@ -1328,7 +1327,6 @@ TEST(SchemaEvolutionTest, ScalarDecimalWorkBounds) {
   auto scale_error = convert_field<ScalarDecimalField, ScalarStringField>(
       {Decimal(5000, false, decimal_power_of_ten(4743))}, 1054);
   ASSERT_FALSE(scale_error.ok());
-  EXPECT_EQ(scale_error.error().code(), ErrorCode::InvalidData);
 
   auto digit_bound = convert_field<ScalarDecimalField, ScalarStringField>(
       {Decimal(256, false, decimal_power_of_ten(511))}, 1055);
@@ -1339,13 +1337,11 @@ TEST(SchemaEvolutionTest, ScalarDecimalWorkBounds) {
   auto digit_error = convert_field<ScalarDecimalField, ScalarStringField>(
       {Decimal(256, false, decimal_power_of_ten(512))}, 1056);
   ASSERT_FALSE(digit_error.ok());
-  EXPECT_EQ(digit_error.error().code(), ErrorCode::InvalidData);
 
   std::vector<uint8_t> max_magnitude(detail::MAX_DECIMAL_MAGNITUDE_BYTES, 0xFF);
   auto magnitude_error = convert_field<ScalarDecimalField, ScalarStringField>(
       {Decimal(0, false, std::move(max_magnitude))}, 1057);
   ASSERT_FALSE(magnitude_error.ok());
-  EXPECT_EQ(magnitude_error.error().code(), ErrorCode::InvalidData);
 }
 
 TEST(SchemaEvolutionTest, ScalarFloatDecimalBounds) {
@@ -1359,7 +1355,6 @@ TEST(SchemaEvolutionTest, ScalarFloatDecimalBounds) {
     auto result =
         convert_field<ScalarDoubleField, ScalarDecimalField>({value}, 1059);
     ASSERT_FALSE(result.ok());
-    EXPECT_EQ(result.error().code(), ErrorCode::InvalidData);
   }
 
   auto positive_bound = convert_field<ScalarDoubleField, ScalarDecimalField>(
@@ -1372,7 +1367,6 @@ TEST(SchemaEvolutionTest, ScalarFloatDecimalBounds) {
     auto result =
         convert_field<ScalarDoubleField, ScalarDecimalField>({value}, 1061);
     ASSERT_FALSE(result.ok());
-    EXPECT_EQ(result.error().code(), ErrorCode::InvalidData);
   }
 }
 

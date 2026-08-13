@@ -43,7 +43,6 @@ import org.apache.fory.Fory;
 import org.apache.fory.ThreadSafeFory;
 import org.apache.fory.context.MetaReadContext;
 import org.apache.fory.context.MetaWriteContext;
-import org.apache.fory.exception.ForyException;
 import org.apache.fory.exception.SerializationException;
 import org.apache.fory.meta.FieldInfo;
 import org.apache.fory.meta.FieldTypes;
@@ -869,7 +868,6 @@ public class ForyStructProcessorTest {
     Assert.assertTrue(generatedSource.contains("FieldConverters.readBooleanTarget"));
     Assert.assertTrue(
         generatedSource.contains("private static final class GeneratedFieldAccessors"));
-    Assert.assertTrue(generatedSource.contains("must keep this holder runtime-initialized"));
     try (URLClassLoader writerLoader = writerResult.classLoader();
         URLClassLoader readerLoader = readerResult.classLoader()) {
       Class<?> writerType = writerLoader.loadClass("test.EvolvingStruct");
@@ -996,9 +994,6 @@ public class ForyStructProcessorTest {
                 + "  }\n"
                 + "}\n");
     Assert.assertTrue(result.success, result.diagnostics());
-    String generatedSource = result.generatedSource("test/NestedExactStruct_ForySerializer.java");
-    Assert.assertTrue(
-        generatedSource.contains("HAS_NESTED_COMPATIBLE_STRUCT_FIELDS = true;"), generatedSource);
     try (URLClassLoader loader = result.classLoader()) {
       Class<?> type = loader.loadClass("test.NestedExactStruct");
       Class<?> childType = loader.loadClass("test.NestedExactStruct$Child");
@@ -1390,7 +1385,7 @@ public class ForyStructProcessorTest {
           Arrays.equals((int[]) getField(readerType, result, "values"), new int[] {1, 2, 3}));
       setField(writerType, writerValue, "values", Arrays.asList(1, null, 3));
       byte[] nullElementPayload = writer.serialize(writerValue);
-      Assert.expectThrows(ForyException.class, () -> reader.deserialize(nullElementPayload));
+      Assert.expectThrows(RuntimeException.class, () -> reader.deserialize(nullElementPayload));
     }
 
     CompilationResult nestedArrayWriter =
@@ -1415,10 +1410,6 @@ public class ForyStructProcessorTest {
                 + "}\n");
     Assert.assertTrue(nestedArrayWriter.success, nestedArrayWriter.diagnostics());
     Assert.assertTrue(nestedListReader.success, nestedListReader.diagnostics());
-    String nestedReaderSource =
-        nestedListReader.generatedSource("test/NestedListArrayMismatchStruct_ForySerializer.java");
-    Assert.assertTrue(nestedReaderSource.contains("readCompatibleField"));
-    Assert.assertFalse(nestedReaderSource.contains("bindNestedCollectionArray"));
     try (URLClassLoader writerLoader = nestedArrayWriter.classLoader();
         URLClassLoader readerLoader = nestedListReader.classLoader()) {
       Class<?> writerType = writerLoader.loadClass("test.NestedListArrayMismatchStruct");

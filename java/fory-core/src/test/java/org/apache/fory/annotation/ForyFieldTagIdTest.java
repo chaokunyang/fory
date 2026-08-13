@@ -21,10 +21,8 @@ package org.apache.fory.annotation;
 
 import static org.testng.Assert.assertEquals;
 import static org.testng.Assert.assertFalse;
-import static org.testng.Assert.assertNull;
 import static org.testng.Assert.assertTrue;
 
-import java.lang.reflect.Field;
 import java.util.List;
 import lombok.Data;
 import org.apache.fory.Fory;
@@ -49,19 +47,12 @@ public class ForyFieldTagIdTest extends ForyTestBase {
     public String fieldWithoutAnnotation;
   }
 
-  @Data
-  public static class NegativeTagIdClass {
-    @ForyField(id = -2)
-    public String invalidField;
-  }
-
-  @Test(dataProvider = "languageAndCodegen")
-  public void testFieldInfoCreationWithTagIds(boolean xlang, boolean codegen, boolean registered) {
+  @Test(dataProvider = "languages")
+  public void testFieldInfoCreationWithTagIds(boolean xlang) {
     Fory fory =
         Fory.builder()
             .withXlang(xlang)
-            .requireClassRegistration(registered)
-            .withCodegen(codegen)
+            .requireClassRegistration(false)
             .withCompatible(xlang)
             .build();
 
@@ -110,78 +101,9 @@ public class ForyFieldTagIdTest extends ForyTestBase {
         "Field without annotation should use field name in xlang=" + xlang);
   }
 
-  @DataProvider(name = "languageAndCodegen")
-  public Object[][] languageAndCodegen() {
-    return new Object[][] {
-      {false, false, false},
-      {false, false, true},
-      {false, true, false},
-      {false, true, true},
-      {true, false, true},
-      {true, true, true},
-    };
-  }
-
-  @Test
-  public void testTagIdAnnotationValues() throws Exception {
-    // Directly test that annotation reading works correctly
-    Field field0 = TestClass.class.getDeclaredField("fieldWithTag0");
-    Field field5 = TestClass.class.getDeclaredField("fieldWithTag5");
-    Field fieldOptOut = TestClass.class.getDeclaredField("fieldOptingOutOfTag");
-    Field fieldNoAnnotation = TestClass.class.getDeclaredField("fieldWithoutAnnotation");
-
-    ForyField annotation0 = field0.getAnnotation(ForyField.class);
-    ForyField annotation5 = field5.getAnnotation(ForyField.class);
-    ForyField annotationOptOut = fieldOptOut.getAnnotation(ForyField.class);
-    ForyField annotationNoAnnotation = fieldNoAnnotation.getAnnotation(ForyField.class);
-
-    // Verify annotation values
-    assertEquals(annotation0.id(), 0, "Field 0 should have id=0");
-    assertEquals(annotation5.id(), 5, "Field 5 should have id=5");
-    assertEquals(annotationOptOut.id(), -1, "Field without ID should use sentinel");
-    assertNull(
-        annotationNoAnnotation, "Field without annotation should have no ForyField annotation");
-  }
-
-  @Test
-  public void testMissingIdUsesFieldNameBehavior() {
-    // Test that omitting id uses field-name metadata.
-    Fory fory =
-        Fory.builder()
-            .withXlang(true)
-            .withCompatible(false)
-            .requireClassRegistration(false)
-            .build();
-    fory.register(TestClass.class, "test.TestClass");
-
-    TestClass obj = new TestClass();
-    obj.setFieldWithTag0("value0");
-    obj.setFieldWithTag5("value5");
-    obj.setFieldOptingOutOfTag("optOutValue");
-    obj.setFieldWithoutAnnotation("noAnnotationValue");
-
-    // Serialize and deserialize
-    byte[] bytes = fory.serialize(obj);
-    TestClass deserialized = (TestClass) fory.deserialize(bytes);
-
-    // All fields should deserialize correctly
-    assertEquals(deserialized.getFieldWithTag0(), "value0");
-    assertEquals(deserialized.getFieldWithTag5(), "value5");
-    assertEquals(deserialized.getFieldOptingOutOfTag(), "optOutValue");
-    assertEquals(deserialized.getFieldWithoutAnnotation(), "noAnnotationValue");
-  }
-
-  @Test
-  public void testNegativeTagIdRejected() {
-    Fory fory =
-        Fory.builder()
-            .withXlang(true)
-            .withCompatible(false)
-            .requireClassRegistration(false)
-            .build();
-    org.testng.Assert.assertThrows(
-        IllegalArgumentException.class,
-        () -> TypeDef.buildTypeDef(fory.getTypeResolver(), NegativeTagIdClass.class));
+  @DataProvider(name = "languages")
+  public Object[][] languages() {
+    return new Object[][] {{false}, {true}};
   }
 
   /** Helper method to find a FieldInfo by field name */

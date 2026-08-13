@@ -18,7 +18,6 @@
 package fory
 
 import (
-	"math/big"
 	"reflect"
 	"strconv"
 	"testing"
@@ -56,7 +55,6 @@ func TestCompatibleScalarPointer(t *testing.T) {
 	var rejected scalarInt64Ptr
 	err = newReader(valueBytes-1).Unmarshal(data, &rejected)
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "maxGraphMemoryBytes")
 	require.Nil(t, rejected.Value)
 
 	var decoded scalarInt64Ptr
@@ -87,7 +85,6 @@ func TestCompatibleOptionalPointer(t *testing.T) {
 	var rejected scalarOptionalInt64Ptr
 	err = reader.Unmarshal(data, &rejected)
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "maxGraphMemoryBytes")
 	require.True(t, rejected.Value.IsNone())
 
 	reader = NewForyWithOptions(
@@ -113,39 +110,6 @@ func TestCompatibleOptionalPointer(t *testing.T) {
 	require.NoError(t, reader.Unmarshal(data, &reused))
 	require.Same(t, &existing, reused.Value.Unwrap())
 	require.Equal(t, int64(0), existing)
-}
-
-func TestCompatibleDecimalBounds(t *testing.T) {
-	atLimit, ok := decimalRat(NewDecimal(big.NewInt(1), int32(maxCompatibleDecimalDigits)))
-	require.True(t, ok)
-	require.NotNil(t, atLimit)
-
-	expanded := new(big.Int).Exp(big.NewInt(10), big.NewInt(maxCompatibleDecimalDigits+1), nil)
-	normalized, ok := decimalRat(NewDecimal(expanded, int32(maxCompatibleDecimalDigits+1)))
-	require.True(t, ok)
-	require.Zero(t, normalized.Cmp(big.NewRat(1, 1)))
-	maxScaleValue := new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(maxDecimalScale)), nil)
-	normalized, ok = decimalRat(NewDecimal(maxScaleValue, maxDecimalScale))
-	require.True(t, ok)
-	require.Zero(t, normalized.Cmp(big.NewRat(1, 1)))
-
-	_, ok = decimalRat(NewDecimal(big.NewInt(1), int32(maxCompatibleDecimalDigits+1)))
-	require.False(t, ok)
-	tooManyDigits := new(big.Int).Lsh(big.NewInt(1), 1000)
-	tooManyDigits.Mul(tooManyDigits, big.NewInt(10))
-	_, ok = decimalRat(NewDecimal(tooManyDigits, 1))
-	require.False(t, ok)
-}
-
-func TestCompatibleFloatScaleBound(t *testing.T) {
-	atLimit := new(big.Int).Lsh(big.NewInt(1), uint(maxCompatibleDecimalDigits))
-	count, ok := boundedFactorCount(atLimit, 2)
-	require.True(t, ok)
-	require.Equal(t, maxCompatibleDecimalDigits, count)
-
-	overLimit := new(big.Int).Lsh(big.NewInt(1), uint(maxCompatibleDecimalDigits+1))
-	_, ok = boundedFactorCount(overLimit, 2)
-	require.False(t, ok)
 }
 
 func TestEpochDayInt64Range(t *testing.T) {

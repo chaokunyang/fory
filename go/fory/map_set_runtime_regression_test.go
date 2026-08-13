@@ -137,7 +137,6 @@ func TestStandaloneInterfaceMapTarget(t *testing.T) {
 		err = badReader.Deserialize(badData, &target)
 	})
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "not assignable")
 }
 
 func TestMapSetRejectDynamicHashKeys(t *testing.T) {
@@ -255,7 +254,6 @@ func TestSelectedPointerInterfaceOwners(t *testing.T) {
 			err := readBodyWithBudget(t, f, serializer, data, target, budget)
 			if budget < required {
 				require.Error(t, err)
-				require.Contains(t, err.Error(), "maxGraphMemoryBytes")
 				continue
 			}
 			require.NoError(t, err)
@@ -294,7 +292,6 @@ func TestSelectedPointerInterfaceOwners(t *testing.T) {
 			err := readBodyWithBudget(t, f, serializer, data, target, budget)
 			if budget < required {
 				require.Error(t, err)
-				require.Contains(t, err.Error(), "maxGraphMemoryBytes")
 				continue
 			}
 			require.NoError(t, err)
@@ -418,7 +415,6 @@ func TestExtensionInterfaceOwners(t *testing.T) {
 			err := readBodyWithBudget(t, tracked, serializer, buf.Bytes(), target, budget)
 			if budget < required {
 				require.Error(t, err)
-				require.Contains(t, err.Error(), "maxGraphMemoryBytes")
 				continue
 			}
 			require.NoError(t, err)

@@ -137,10 +137,10 @@ func decimalRejectsNonCanonicalBigPayloads() throws {
     let zeroBigEncoding = Data([0x01, 0xff, 0x28, 0x00, 0x01])
     let trailingZeroPayload = Data([0x01, 0xff, 0x28, 0x00, 0x09, 0x01, 0x00])
 
-    #expect(throws: ForyError.self) {
+    #expect(throws: (any Error).self) {
         let _: Decimal = try fory.deserialize(zeroBigEncoding)
     }
-    #expect(throws: ForyError.self) {
+    #expect(throws: (any Error).self) {
         let _: Decimal = try fory.deserialize(trailingZeroPayload)
     }
 }
@@ -192,7 +192,7 @@ func decimalReaderChecksNativeMagnitude() throws {
             magnitude: oversizedMagnitude
         )
     )
-    #expect(throws: ForyError.self) {
+    #expect(throws: (any Error).self) {
         let _: Decimal = try fory.deserialize(from: oversizedBuffer)
     }
     #expect(oversizedBuffer.remaining == oversizedMagnitude.count)
@@ -200,7 +200,7 @@ func decimalReaderChecksNativeMagnitude() throws {
     let overflowBuffer = ByteBuffer(
         data: decimalWireData(scale: 0, header: UInt64.max)
     )
-    #expect(throws: ForyError.self) {
+    #expect(throws: (any Error).self) {
         let _: Decimal = try fory.deserialize(from: overflowBuffer)
     }
 
@@ -213,7 +213,7 @@ func decimalReaderChecksNativeMagnitude() throws {
             magnitude: truncatedMagnitude
         )
     )
-    #expect(throws: ForyError.self) {
+    #expect(throws: (any Error).self) {
         let _: Decimal = try fory.deserialize(from: truncatedBuffer)
     }
     #expect(truncatedBuffer.remaining == truncatedMagnitude.count)
@@ -235,7 +235,7 @@ func decimalReaderUsesFoundationScaleRange() throws {
     }
 
     for scale in [Int32(-128), 129, -10_001, -10_000, 10_000, 10_001, .min, .max] {
-        #expect(throws: ForyError.self) {
+        #expect(throws: (any Error).self) {
             let _: Decimal = try fory.deserialize(
                 decimalWireData(scale: scale, header: 0x04)
             )

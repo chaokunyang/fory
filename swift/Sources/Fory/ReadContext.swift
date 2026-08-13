@@ -875,15 +875,6 @@ public final class ReadContext {
     }
 
     @inline(__always)
-    func getReadMetaString(
-        at index: Int,
-        decoder: MetaStringDecoder,
-        encodings: [MetaStringEncoding]
-    ) throws -> MetaString? {
-        try metaStrings.get(index)?.value(decoder: decoder, encodings: encodings)
-    }
-
-    @inline(__always)
     func getReadMetaStringEntry(at index: Int) -> ReadMetaStringEntry? {
         metaStrings.get(index)
     }

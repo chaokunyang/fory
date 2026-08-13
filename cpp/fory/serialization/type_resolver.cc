@@ -1456,12 +1456,6 @@ TypeMeta::assign_local_dispatch_ids(const TypeMeta *local_type,
 }
 
 Result<void, Error>
-TypeMeta::assign_field_ids(const TypeMeta *local_type,
-                           std::vector<FieldInfo> &remote_fields) {
-  return assign_local_dispatch_ids(local_type, remote_fields);
-}
-
-Result<void, Error>
 TypeMeta::assign_wire_field_ids(const TypeInfo &local_type,
                                 const std::vector<uint64_t> &remote_wire_ids,
                                 std::vector<FieldInfo> &remote_fields) {

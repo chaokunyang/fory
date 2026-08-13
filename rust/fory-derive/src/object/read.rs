@@ -393,35 +393,6 @@ pub(crate) fn gen_read_compatible_target(
         .enumerate()
         .filter(|(_, binding)| is_shared_owner_type(binding.value_ty))
         .collect();
-    let shared_owner_preflight_checks: Vec<_> = shared_owner_bindings
-        .iter()
-        .map(|(field_index, binding)| {
-            let field_index = *field_index;
-            let value_ty = binding.value_ty;
-            let codec_ty = &binding.codec_ty;
-            quote! {
-                // field_index comes from the same filtered binding order that built local_fields.
-                if unsafe { &(*local_fields_ptr.add(#field_index)).field_type }
-                    == &_field.field_type
-                {
-                    let candidate_value_type = ::std::any::TypeId::of::<#value_ty>();
-                    let candidate_codec_type = ::std::any::TypeId::of::<#codec_ty>();
-                    if skipped_owner_found
-                        && (skipped_owner_value_type != candidate_value_type
-                            || skipped_owner_codec_type != candidate_codec_type)
-                    {
-                        return Err(fory_core::Error::type_error(format!(
-                            "removed reference field '{}' matches multiple local owner codecs",
-                            _field.field_name.as_str(),
-                        )));
-                    }
-                    skipped_owner_found = true;
-                    skipped_owner_value_type = candidate_value_type;
-                    skipped_owner_codec_type = candidate_codec_type;
-                }
-            }
-        })
-        .collect();
     let shared_owner_selectors: Vec<_> = shared_owner_bindings
         .iter()
         .enumerate()
@@ -459,32 +430,6 @@ pub(crate) fn gen_read_compatible_target(
         .collect();
 
     let has_shared_owner_candidates = !shared_owner_bindings.is_empty();
-    let needs_shared_owner_preflight = shared_owner_bindings.len() > 1;
-    let shared_owner_preflight = if !needs_shared_owner_preflight {
-        quote! {}
-    } else {
-        quote! {
-            for _field in fields.iter() {
-                if _field.field_id == -1
-                    && matches!(
-                        _field.field_type.type_id,
-                        fory_core::type_id::STRUCT
-                            | fory_core::type_id::COMPATIBLE_STRUCT
-                            | fory_core::type_id::NAMED_STRUCT
-                            | fory_core::type_id::NAMED_COMPATIBLE_STRUCT
-                            | fory_core::type_id::UNKNOWN
-                    )
-                    && _field.field_type.track_ref
-                {
-                    let mut skipped_owner_found = false;
-                    let mut skipped_owner_value_type = ::std::any::TypeId::of::<()>();
-                    let mut skipped_owner_codec_type = ::std::any::TypeId::of::<()>();
-                    #(#shared_owner_preflight_checks)*
-                }
-            }
-        }
-    };
-
     let match_arms: Vec<TokenStream> = bindings
         .iter()
         .filter_map(|binding| match binding {
@@ -684,11 +629,8 @@ pub(crate) fn gen_read_compatible_target(
 
     let compatible_body = quote! {
         #(#declare_ts)*
-        // A later RefFlag can target an unmatched earlier Struct field. Preflight all owner
-        // candidates before reading any payload so an ambiguous Rust carrier cannot partially
-        // mutate the result or reference table. The selected ordinary codec then publishes the
-        // same Rc/Arc owner that later retained fields resolve.
-        #shared_owner_preflight
+        // A later RefFlag can target an unmatched earlier Struct field. The selected ordinary
+        // codec publishes the same Rc/Arc owner that later retained fields resolve.
         for _field in fields.iter() {
             match _field.field_id {
                 #(#match_arms)*
@@ -707,34 +649,5 @@ pub(crate) fn gen_read_compatible_target(
     quote! {
         #schema_setup
         #compatible_body
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use quote::quote;
-    use syn::{parse_quote, Data, DeriveInput};
-
-    use super::gen_read_compatible;
-    use crate::util::source_fields;
-
-    #[test]
-    fn owner_scan_is_allocation_free() {
-        let input: DeriveInput = parse_quote! {
-            struct OwnerReader {
-                local_rc: Rc<Item>,
-                local_arc: Arc<Item>,
-            }
-        };
-        let Data::Struct(data) = input.data else {
-            unreachable!();
-        };
-        let source = source_fields(&data.fields);
-        let generated =
-            gen_read_compatible(&data.fields, &source, &quote! { OwnerReader }).to_string();
-
-        assert!(generated.contains("skipped_owner_found"), "{generated}");
-        assert!(!generated.contains("skipped_owner_readers"), "{generated}");
-        assert!(!generated.contains("Vec :: with_capacity"), "{generated}");
     }
 }

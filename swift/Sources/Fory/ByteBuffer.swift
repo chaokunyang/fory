@@ -199,8 +199,7 @@ public final class ByteBuffer {
     /// Invalid amounts leave the cursor unchanged.
     @inlinable
     public func moveBack(_ amount: Int) {
-        let length = readableCount
-        if amount < 0 || cursor < 0 || cursor > length || amount > cursor {
+        if amount < 0 || amount > cursor {
             return
         }
         cursor -= amount
@@ -464,7 +463,7 @@ public final class ByteBuffer {
     @inline(__always)
     public func checkBound(_ need: Int) throws {
         let length = readableCount
-        if need < 0 || cursor < 0 || cursor > length || need > length - cursor {
+        if need < 0 || cursor > length || need > length - cursor {
             throw ForyError.outOfBounds(cursor: cursor, need: need, length: length)
         }
     }
@@ -550,11 +549,7 @@ public final class ByteBuffer {
     @inlinable
     @inline(__always)
     public func readVarUInt32() throws -> UInt32 {
-        let length = readableCount
-        if cursor < 0 || cursor > length {
-            throw ForyError.outOfBounds(cursor: cursor, need: 1, length: length)
-        }
-        let available = length - cursor
+        let available = readableCount - cursor
         if available >= 5 {
             let offset = cursor
             let b0 = byte(at: offset)
@@ -629,11 +624,7 @@ public final class ByteBuffer {
     @inlinable
     @inline(__always)
     public func readVarUInt64() throws -> UInt64 {
-        let length = readableCount
-        if cursor < 0 || cursor > length {
-            throw ForyError.outOfBounds(cursor: cursor, need: 1, length: length)
-        }
-        let available = length - cursor
+        let available = readableCount - cursor
         if available >= 9 {
             let offset = cursor
             let b0 = byte(at: offset)

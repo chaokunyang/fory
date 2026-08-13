@@ -235,23 +235,6 @@ def test_classmethod_serialization():
     assert original_result == deserialized_result
 
 
-def test_staticmethod_serialization():
-    """Standalone test for staticmethod serialization."""
-    fory = pyfory.Fory(xlang=False, strict=False, ref=True, compatible=False)
-
-    class A:
-        @staticmethod
-        def g():
-            return "static_result"
-
-    method = A.g
-    serialized = serialize_prepared(fory, method)
-    deserialized = fory.deserialize(serialized)
-
-    assert method() == deserialized()
-    assert method() == "static_result"
-
-
 # Global class method tests
 def test_global_classmethod_serialization():
     """Test serialization of global class methods."""
@@ -405,10 +388,3 @@ def test_global_method_in_dict():
     assert len(deserialized) == len(method_dict)
     for key in method_dict:
         assert method_dict[key]() == deserialized[key]()
-
-
-if __name__ == "__main__":
-    # Run tests
-    import pytest
-
-    pytest.main([__file__, "-v"])

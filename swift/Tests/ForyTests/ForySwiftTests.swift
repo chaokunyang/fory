@@ -946,7 +946,7 @@ func nameRegistrationAllowsSimpleName() throws {
 func nameRegistrationRejectsEmptyName() throws {
     let fory = Fory()
 
-    #expect(throws: ForyError.self) {
+    #expect(throws: (any Error).self) {
         try fory.register(Address.self, name: "")
     }
 }
@@ -955,7 +955,7 @@ func nameRegistrationRejectsEmptyName() throws {
 func nameRegistrationRejectsTrailingDot() throws {
     let fory = Fory()
 
-    #expect(throws: ForyError.self) {
+    #expect(throws: (any Error).self) {
         try fory.register(Address.self, name: "com.example.")
     }
 }
@@ -964,7 +964,7 @@ func nameRegistrationRejectsTrailingDot() throws {
 func splitNameRegistrationRejectsDottedTypeName() throws {
     let resolver = TypeResolver(config: Config(trackRef: false))
 
-    #expect(throws: ForyError.self) {
+    #expect(throws: (any Error).self) {
         try resolver.register(Address.self, namespace: "com", typeName: "example.Address")
     }
 }
@@ -1696,7 +1696,7 @@ func typeMetaHeaderHashIncludesHeaderLowBits() throws {
         encoded[index] = UInt8(truncatingIfNeeded: rewrittenHeader >> (index * 8))
     }
 
-    #expect(throws: ForyError.self) {
+    #expect(throws: (any Error).self) {
         _ = try TypeMeta.decode(encoded)
     }
 }

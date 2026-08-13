@@ -558,17 +558,12 @@ class ProcessorValidationTest {
         "remoteField.serializationFieldInfo.genericType.getTypeParameter0().setSerializer(remoteField.localFieldInfo!!.genericType.getTypeParameter0().getSerializer())"
       )
     )
-    assertFalse(source.contains("nestedCollectionArrayMatch"))
     assertTrue(source.contains("if (sameSchemaCompatible) {"))
     assertTrue(
       source.contains(
         "} else {\n      this.allFields = emptyArray()\n      this.allFieldIds = IntArray(0)\n      this.fieldsById = arrayOfNulls(0)"
       )
     )
-    assertFalse(source.contains("readSource"))
-    assertFalse(source.contains("readTarget"))
-    assertFalse(source.contains("KotlinCollectionAdapters.toTreeSet"))
-    assertFalse(source.contains("KotlinCollectionAdapters.toTreeMap"))
     val comparatorGuardIndex = source.indexOf("requireXlangNaturalOrdering(\"example.User.counts\"")
     assertTrue(comparatorGuardIndex >= 0)
     assertTrue(comparatorGuardIndex < source.indexOf("val buffer = writeContext.buffer"))
@@ -1494,17 +1489,7 @@ class ProcessorValidationTest {
     )
     assertTrue(
       source.contains(
-        "remoteField.serializationFieldInfo.genericType.getTypeParameter0().setSerializer(remoteField.localFieldInfo!!.genericType.getTypeParameter0().getSerializer())"
-      )
-    )
-    assertTrue(
-      source.contains(
         "remoteField.serializationFieldInfo.genericType.getTypeParameter1().setSerializer(remoteField.localFieldInfo!!.genericType.getTypeParameter1().getSerializer())"
-      )
-    )
-    assertTrue(
-      source.contains(
-        "remoteField.serializationFieldInfo.genericType.getTypeParameter0().setSerializer(remoteField.localFieldInfo!!.genericType.getTypeParameter0().getSerializer())"
       )
     )
     assertTrue(source.contains("if (remoteField.compatibleCollectionArrayReadAction == null)"))

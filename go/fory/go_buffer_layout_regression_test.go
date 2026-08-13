@@ -65,15 +65,6 @@ type wideFixedFieldStruct struct {
 func TestWideFixedFieldOffsets(t *testing.T) {
 	f := New(WithXlang(true), WithCompatible(false))
 	require.NoError(t, f.RegisterStruct(wideFixedFieldStruct{}, 1700))
-
-	typeInfo, err := f.typeResolver.GetTypeInfo(reflect.ValueOf(wideFixedFieldStruct{}), false)
-	require.NoError(t, err)
-	serializer, ok := typeInfo.Serializer.(*structSerializer)
-	require.True(t, ok)
-	require.NoError(t, serializer.initialize(f.typeResolver))
-	require.Len(t, serializer.fieldGroup.PrimitiveFixedFields, 34)
-	require.Equal(t, uint32(248), serializer.fieldGroup.PrimitiveFixedFields[31].WriteOffset)
-	require.Equal(t, uint32(256), serializer.fieldGroup.PrimitiveFixedFields[32].WriteOffset)
 	expectedInfoSize := uintptr(24)
 	if unsafe.Sizeof(uintptr(0)) == 4 {
 		expectedInfoSize = 16

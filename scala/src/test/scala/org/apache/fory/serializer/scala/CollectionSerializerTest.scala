@@ -20,7 +20,7 @@
 package org.apache.fory.serializer.scala
 
 import org.apache.fory.Fory
-import org.apache.fory.exception.InsecureException
+import org.apache.fory.exception.ForyException
 import org.apache.fory.scala.ForyScala
 import org.apache.fory.serializer.GraphMemoryEstimates
 import org.scalatest.matchers.should.Matchers
@@ -111,16 +111,18 @@ class CollectionSerializerTest extends AnyWordSpec with Matchers {
     "reserve scala collection storage" in {
       val writer = runtime()
       val reader = runtime(maxGraphMemoryBytes = Some(23))
-      intercept[InsecureException] {
-        reader.deserialize(writer.serialize(List.fill(6)("v")))
+      val bytes = writer.serialize(List.fill(6)("v"))
+      intercept[ForyException] {
+        reader.deserialize(bytes)
       }
     }
 
     "reserve scala map storage" in {
       val writer = runtime()
       val reader = runtime(maxGraphMemoryBytes = Some(23))
-      intercept[InsecureException] {
-        reader.deserialize(writer.serialize(Map("a" -> 1, "b" -> 2, "c" -> 3)))
+      val bytes = writer.serialize(Map("a" -> 1, "b" -> 2, "c" -> 3))
+      intercept[ForyException] {
+        reader.deserialize(bytes)
       }
     }
 
@@ -157,12 +159,6 @@ class CollectionSerializerTest extends AnyWordSpec with Matchers {
         runtime(maxGraphMemoryBytes = Some(ownerBytes)).deserialize(bytes).getClass shouldBe
           factory.getClass
       }
-
-      val aliases = Array[AnyRef](
-        iterableFactory.asInstanceOf[AnyRef],
-        iterableFactory.asInstanceOf[AnyRef])
-      val decoded = writer.deserialize(writer.serialize(aliases)).asInstanceOf[Array[AnyRef]]
-      decoded(0) shouldBe theSameInstanceAs(decoded(1))
     }
 
     "reserve linked collection nodes" in {

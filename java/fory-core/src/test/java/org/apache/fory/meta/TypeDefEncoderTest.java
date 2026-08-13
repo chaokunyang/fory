@@ -212,7 +212,7 @@ public class TypeDefEncoderTest {
     @ForyField(id = 65551)
     private String field4;
 
-    @ForyField(id = Integer.MAX_VALUE)
+    @ForyField(id = ForyField.MAX_ID)
     private String field5;
   }
 
@@ -452,19 +452,14 @@ public class TypeDefEncoderTest {
         TypeDef.readTypeDef(fory.getTypeResolver(), MemoryBuffer.fromByteArray(local.getEncoded()));
 
     Assert.assertEquals(
-        decoded.getFieldsInfo().stream()
-            .map(FieldInfo::getFieldIdUnsigned)
-            .collect(Collectors.toList()),
-        Arrays.asList(15L, 32768L, 65535L, 65551L, (long) Integer.MAX_VALUE));
-    Map<Long, String> matchedFields =
+        decoded.getFieldsInfo().stream().map(FieldInfo::getFieldId).collect(Collectors.toList()),
+        Arrays.asList(15, 32768, 65535, 65551, ForyField.MAX_ID));
+    Map<Integer, String> matchedFields =
         decoded.getDescriptors(fory.getTypeResolver(), ClassWithLargeTagIds.class).stream()
-            .collect(
-                Collectors.toMap(
-                    descriptor -> (long) descriptor.getForyFieldId(), Descriptor::getName));
-    Assert.assertEquals(matchedFields.get(15L), "field1");
-    Assert.assertEquals(matchedFields.get(65551L), "field4");
+            .collect(Collectors.toMap(Descriptor::getForyFieldId, Descriptor::getName));
+    Assert.assertEquals(matchedFields.get(15), "field1");
+    Assert.assertEquals(matchedFields.get(65551), "field4");
 
-    long maxWireTag = 15L + 0xffff_ffffL;
     MemoryBuffer body = MemoryBuffer.newHeapBuffer(32);
     body.writeByte(TypeDefEncoder.STRUCT_FLAG | TypeDefEncoder.COMPATIBLE_FLAG | 1);
     body.writeVarUInt32(6004);
@@ -473,17 +468,13 @@ public class TypeDefEncoderTest {
     header |= fieldType.nullable() ? 0b10 : 0;
     header |= fieldType.trackingRef() ? 1 : 0;
     body.writeByte(header);
-    body.writeVarUInt32(-1);
+    body.writeVarUInt32(ForyField.MAX_ID + 1 - TypeDefEncoder.FIELD_NAME_SIZE_THRESHOLD);
     fieldType.writeCrossLanguage(body, false);
-    TypeDef maxRemote =
-        TypeDef.readTypeDef(
-            fory.getTypeResolver(), NativeTypeDefEncoder.prependHeader(body, false));
-    Assert.assertEquals(maxRemote.getFieldsInfo().get(0).getFieldIdUnsigned(), maxWireTag);
-    Assert.assertNull(
-        maxRemote
-            .getDescriptors(fory.getTypeResolver(), ClassWithLargeTagIds.class)
-            .get(0)
-            .getField());
+    Assert.assertThrows(
+        RuntimeException.class,
+        () ->
+            TypeDef.readTypeDef(
+                fory.getTypeResolver(), NativeTypeDefEncoder.prependHeader(body, false)));
   }
 
   @Test

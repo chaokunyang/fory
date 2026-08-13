@@ -270,11 +270,7 @@ class TypeDefEncoder {
       int size, encodingFlags;
       byte[] encoded = null;
       if (fieldInfo.hasFieldId()) {
-        long fieldId = fieldInfo.getFieldIdUnsigned();
-        Preconditions.checkArgument(
-            fieldId <= Integer.MAX_VALUE,
-            "Field tag ID must be expressible as a non-negative signed int: " + fieldId);
-        size = (int) fieldId;
+        size = fieldInfo.getFieldId();
         encodingFlags = 3;
       } else {
         // Convert camelCase field names to snake_case for xlang interoperability

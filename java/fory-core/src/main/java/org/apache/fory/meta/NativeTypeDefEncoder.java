@@ -342,12 +342,7 @@ public class NativeTypeDefEncoder {
       byte[] encoded = metaString.getBytes();
       int size = (encoded.length - 1);
       if (fieldInfo.hasFieldId()) {
-        long fieldId = fieldInfo.getFieldIdUnsigned();
-        if (fieldId > Integer.MAX_VALUE) {
-          throw new IllegalArgumentException(
-              "Field tag ID must be expressible as a non-negative signed int: " + fieldId);
-        }
-        size = (int) fieldId;
+        size = fieldInfo.getFieldId();
         encodingFlags = 3;
       }
       header |= (byte) (encodingFlags << 2);

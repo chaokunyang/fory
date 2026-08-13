@@ -2120,11 +2120,11 @@ public abstract class TypeResolver {
   }
 
   protected static int compareFieldSortKey(Descriptor d1, Descriptor d2) {
-    Long id1 = getFieldSortId(d1);
-    Long id2 = getFieldSortId(d2);
+    Integer id1 = getFieldSortId(d1);
+    Integer id2 = getFieldSortId(d2);
     int c;
     if (id1 != null && id2 != null) {
-      c = Long.compare(id1, id2);
+      c = Integer.compare(id1, id2);
     } else if (id1 != null) {
       c = -1;
     } else if (id2 != null) {
@@ -2148,16 +2148,16 @@ public abstract class TypeResolver {
     return getFieldSortId(descriptor) != null;
   }
 
-  private static Long getFieldSortId(Descriptor descriptor) {
+  private static Integer getFieldSortId(Descriptor descriptor) {
     if (descriptor.hasForyFieldId()) {
-      return (long) descriptor.getForyFieldId();
+      return descriptor.getForyFieldId();
     }
     String name = descriptor.getName();
     if (name != null && name.startsWith("$tag")) {
       String tagId = name.substring(4);
       if (!tagId.isEmpty()) {
         try {
-          return Long.parseLong(tagId);
+          return Integer.parseInt(tagId);
         } catch (NumberFormatException ignored) {
           // Fall back to string sorting for non-numeric synthetic tag names.
         }

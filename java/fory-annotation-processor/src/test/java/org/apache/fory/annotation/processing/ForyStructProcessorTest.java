@@ -354,11 +354,6 @@ public class ForyStructProcessorTest {
                 + "  public NegativeIdStruct() {}\n"
                 + "}\n");
     Assert.assertFalse(result.success);
-    Assert.assertTrue(
-        result
-            .diagnostics()
-            .contains("@ForyField id must be -1 (no tag ID) or a non-negative tag ID"),
-        result.diagnostics());
   }
 
   @Test

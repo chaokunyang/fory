@@ -767,7 +767,7 @@ public class NativeTypeDefEncoderTest {
     @ForyField(id = 65551)
     private String field65551;
 
-    @ForyField(id = Integer.MAX_VALUE)
+    @ForyField(id = ForyField.MAX_ID)
     private String fieldMax;
   }
 
@@ -812,8 +812,8 @@ public class NativeTypeDefEncoderTest {
             fory.getTypeResolver(), MemoryBuffer.fromByteArray(typeDef.getEncoded()));
 
     Assert.assertEquals(
-        decoded.getFieldsInfo().stream().map(FieldInfo::getFieldIdUnsigned).toArray(),
-        new Object[] {15L, 32768L, 65535L, 65551L, (long) Integer.MAX_VALUE});
+        decoded.getFieldsInfo().stream().map(FieldInfo::getFieldId).toArray(),
+        new Object[] {15, 32768, 65535, 65551, ForyField.MAX_ID});
 
     ClassResolver resolver = (ClassResolver) fory.getTypeResolver();
     FieldTypes.FieldType fieldType = decoded.getFieldsInfo().get(0).getFieldType();
@@ -822,13 +822,11 @@ public class NativeTypeDefEncoderTest {
     header |= fieldType.nullable() ? 0b10 : 0;
     header |= fieldType.trackingRef() ? 1 : 0;
     body.writeByte(header);
-    body.writeVarUInt32(-1);
+    body.writeVarUInt32(ForyField.MAX_ID + 1 - 7);
     fieldType.write(body, false);
-    TypeDef maxRemote =
-        TypeDef.readTypeDef(resolver, NativeTypeDefEncoder.prependHeader(body, false));
-    Assert.assertEquals(maxRemote.getFieldsInfo().get(0).getFieldIdUnsigned(), 7L + 0xffff_ffffL);
-    Assert.assertNull(
-        maxRemote.getDescriptors(resolver, ClassWithLargeTagIds.class).get(0).getField());
+    Assert.assertThrows(
+        RuntimeException.class,
+        () -> TypeDef.readTypeDef(resolver, NativeTypeDefEncoder.prependHeader(body, false)));
   }
 
   @Test

@@ -21,6 +21,7 @@ package org.apache.fory.annotation;
 
 import static org.testng.Assert.assertEquals;
 import static org.testng.Assert.assertFalse;
+import static org.testng.Assert.assertThrows;
 import static org.testng.Assert.assertTrue;
 
 import java.util.List;
@@ -45,6 +46,11 @@ public class ForyFieldTagIdTest extends ForyTestBase {
     @ForyField public String fieldOptingOutOfTag;
 
     public String fieldWithoutAnnotation;
+  }
+
+  public static class InvalidTagClass {
+    @ForyField(id = 1 << 29)
+    public String value;
   }
 
   @Test(dataProvider = "languages")
@@ -104,6 +110,14 @@ public class ForyFieldTagIdTest extends ForyTestBase {
   @DataProvider(name = "languages")
   public Object[][] languages() {
     return new Object[][] {{false}, {true}};
+  }
+
+  @Test
+  public void rejectsTagOutsideProtocolDomain() {
+    Fory fory = Fory.builder().requireClassRegistration(false).build();
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> TypeDef.buildTypeDef(fory.getTypeResolver(), InvalidTagClass.class));
   }
 
   /** Helper method to find a FieldInfo by field name */

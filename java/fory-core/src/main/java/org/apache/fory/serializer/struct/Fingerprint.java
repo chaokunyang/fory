@@ -100,7 +100,7 @@ public class Fingerprint {
 
       // Get field identifier: tag ID if configured, otherwise snake_case name
       String fieldIdentifier;
-      long fieldId = -1;
+      int fieldId = -1;
       if (descriptor.hasForyFieldId()) {
         fieldId = descriptor.getForyFieldId();
         fieldIdentifier = String.valueOf(fieldId);
@@ -159,10 +159,10 @@ public class Fingerprint {
 
   private static final class FingerprintField {
     private final String identifier;
-    private final long fieldId;
+    private final int fieldId;
     private final String fingerprint;
 
-    private FingerprintField(String identifier, long fieldId, String fingerprint) {
+    private FingerprintField(String identifier, int fieldId, String fingerprint) {
       this.identifier = identifier;
       this.fieldId = fieldId;
       this.fingerprint = fingerprint;
@@ -172,7 +172,7 @@ public class Fingerprint {
       boolean leftTagged = left.fieldId >= 0;
       boolean rightTagged = right.fieldId >= 0;
       if (leftTagged && rightTagged) {
-        int result = Long.compare(left.fieldId, right.fieldId);
+        int result = Integer.compare(left.fieldId, right.fieldId);
         if (result != 0) {
           return result;
         }

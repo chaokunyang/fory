@@ -36,6 +36,7 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import org.apache.fory.annotation.ForyField;
 import org.apache.fory.collection.Tuple2;
 import org.apache.fory.exception.DeserializationException;
 import org.apache.fory.logging.Logger;
@@ -217,7 +218,7 @@ class TypeDefDecoder {
   private static List<FieldInfo> readFieldsInfo(
       MemoryBuffer buffer, XtypeResolver resolver, String className, int numFields) {
     List<FieldInfo> fieldInfos = new ArrayList<>();
-    Set<Long> tagIds = new HashSet<>();
+    Set<Integer> tagIds = new HashSet<>();
     Set<String> fieldNames = new HashSet<>();
     for (int i = 0; i < numFields; i++) {
       // header: 2 bits field name encoding + 4 bits size + nullability flag + ref tracking flag
@@ -239,7 +240,11 @@ class TypeDefDecoder {
       // read field name or tag ID
       if (useTagID) {
         // When useTagID is true, fieldNameSize actually contains the tag ID
-        long tagId = fieldNameSize - 1;
+        long wireTagId = fieldNameSize - 1;
+        if (wireTagId > ForyField.MAX_ID) {
+          throw new DeserializationException("TypeDef field tag ID out of range: " + wireTagId);
+        }
+        int tagId = (int) wireTagId;
         if (!tagIds.add(tagId)) {
           throw new DeserializationException("Duplicate TypeDef field tag ID " + tagId);
         }

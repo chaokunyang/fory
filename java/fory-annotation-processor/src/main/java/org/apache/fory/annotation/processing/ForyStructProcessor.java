@@ -60,6 +60,7 @@ import javax.tools.StandardLocation;
 
 public final class ForyStructProcessor extends AbstractProcessor {
   private static final int REFERENCE_BYTES = 4;
+  private static final int MAX_FORY_FIELD_ID = (1 << 29) - 1;
   // Source classes are not loadable as Class<?> during annotation processing; generated struct
   // estimates add compile-time field widths to the shared JVM object-base component.
   private static final int JVM_OBJECT_BASE_BYTES = REFERENCE_BYTES + REFERENCE_BYTES;
@@ -316,6 +317,10 @@ public final class ForyStructProcessor extends AbstractProcessor {
       String binaryName, Map<Integer, VariableElement> fieldIds, VariableElement field) {
     ForyFieldMeta foryField = foryField(field);
     if (foryField.hasForyField && foryField.id >= 0) {
+      if (foryField.id > MAX_FORY_FIELD_ID) {
+        throw new InvalidStructException(
+            "@ForyField id must be smaller than 2^29 in " + binaryName, field);
+      }
       VariableElement previousField = fieldIds.put(foryField.id, field);
       if (previousField != null) {
         throw new InvalidStructException(
@@ -1186,9 +1191,9 @@ public final class ForyStructProcessor extends AbstractProcessor {
         dynamic = String.valueOf(value);
       }
     }
-    if (id < -1) {
+    if (id < -1 || id > MAX_FORY_FIELD_ID) {
       throw new InvalidStructException(
-          "@ForyField id must be -1 (no tag ID) or a non-negative tag ID", field);
+          "@ForyField id must be -1 (no tag ID) or in [0, 2^29)", field);
     }
     return new ForyFieldMeta(true, id, dynamic);
   }

@@ -47,13 +47,16 @@ public final class FieldInfo implements Serializable {
   final FieldTypes.FieldType fieldType;
 
   /** Field ID for schema evolution, -1 means no field ID (use field name). */
-  final long fieldId;
+  final int fieldId;
 
   public FieldInfo(String definedClass, String fieldName, FieldTypes.FieldType fieldType) {
     this(definedClass, fieldName, fieldType, -1);
   }
 
-  FieldInfo(String definedClass, String fieldName, FieldTypes.FieldType fieldType, long fieldId) {
+  FieldInfo(String definedClass, String fieldName, FieldTypes.FieldType fieldType, int fieldId) {
+    if (fieldId < -1 || fieldId > ForyField.MAX_ID) {
+      throw new IllegalArgumentException("Field tag ID out of range: " + fieldId);
+    }
     this.definedClass = definedClass;
     this.fieldName = fieldName;
     this.fieldType = fieldType;
@@ -76,17 +79,7 @@ public final class FieldInfo implements Serializable {
   }
 
   /** Returns annotated field-id for the field. */
-  public short getFieldId() {
-    if (fieldId > Short.MAX_VALUE) {
-      throw new IllegalStateException(
-          "Field id " + fieldId + " exceeds the legacy short accessor range");
-    }
-    return (short) fieldId;
-  }
-
-  /** Returns the complete unsigned wire field id. */
-  @Internal
-  public long getFieldIdUnsigned() {
+  public int getFieldId() {
     return fieldId;
   }
 

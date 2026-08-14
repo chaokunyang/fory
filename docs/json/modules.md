@@ -56,37 +56,6 @@ Installation runs while `build()` creates the immutable runtime configuration. T
 configuration as immutable after adding it to a builder. Registered codec instances are shared by
 concurrent operations and must be thread-safe.
 
-## Packaging Scala Derivations
-
-An application can call `register[thirdparty.Result]` directly when it owns one builder. A library
-that supports several third-party Scala 3 enums can instead derive their codecs in a reusable
-module:
-
-```scala
-import org.apache.fory.json.{ForyJsonModule, ModuleContext}
-import org.apache.fory.json.scala.*
-
-object ThirdPartyJsonModule extends ForyJsonModule:
-  override def install(context: ModuleContext): Unit =
-    context.registerCodec(
-      classOf[thirdparty.Result],
-      ScalaJsonCodec.derived[thirdparty.Result]
-    )
-
-val json =
-  ForyJsonScala.builder()
-    .withModule(ThirdPartyJsonModule)
-    .build()
-```
-
-`ScalaJsonCodec.derived` runs at module compilation, so consumers install the compiled module
-without deriving those schemas again. This is the reusable equivalent of calling
-`register[thirdparty.Result]` on one builder.
-
-Modules are installed explicitly with `withModule`. Fory JSON does not scan the classpath or invoke
-modules through `ServiceLoader`; explicit installation keeps the enabled codecs deterministic and
-prevents an unrelated dependency from changing deserialization behavior.
-
 ## Module Registrations
 
 `ModuleContext` exposes the registrations needed by reusable integrations:

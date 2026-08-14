@@ -176,6 +176,36 @@ builder call site:
 val json = ForyJsonScala.builder().register[thirdparty.Result].build()
 ```
 
+### Packaging Derived Codecs in a Module
+
+A library that supports several third-party Scala 3 enums can package their derived codecs in a
+reusable module:
+
+```scala
+import org.apache.fory.json.{ForyJsonModule, ModuleContext}
+import org.apache.fory.json.scala.*
+
+object ThirdPartyJsonModule extends ForyJsonModule:
+  override def install(context: ModuleContext): Unit =
+    context.registerCodec(
+      classOf[thirdparty.Result],
+      ScalaJsonCodec.derived[thirdparty.Result]
+    )
+
+val json =
+  ForyJsonScala.builder()
+    .withModule(ThirdPartyJsonModule)
+    .build()
+```
+
+The derivation is compiled as part of the module, so consumers only install the compiled module.
+This is the reusable equivalent of calling `register[thirdparty.Result]` on one builder.
+
+Modules are installed explicitly with `withModule`. Fory JSON does not scan the classpath or invoke
+modules through `ServiceLoader`; explicit installation keeps the enabled codecs deterministic and
+prevents an unrelated dependency from changing deserialization behavior. See
+[Modules](modules.md) for the general module API and registration rules.
+
 ## GraalVM Native Image
 
 The Scala module uses the same build-time module registration on the JVM and in a native image.

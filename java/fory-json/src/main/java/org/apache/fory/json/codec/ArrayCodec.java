@@ -31,6 +31,7 @@ import org.apache.fory.json.resolver.JsonTypeInfo;
 import org.apache.fory.json.resolver.JsonTypeResolver;
 import org.apache.fory.json.writer.StringJsonWriter;
 import org.apache.fory.json.writer.Utf8JsonWriter;
+import org.apache.fory.reflect.TypeRef;
 import org.apache.fory.serializer.GraphMemoryEstimates;
 import org.apache.fory.type.TypeUtils;
 
@@ -55,12 +56,15 @@ public abstract class ArrayCodec<T> implements JsonValueCodec<T> {
     this.componentType = componentType;
   }
 
-  public static <T> ArrayCodec<T> create(Class<T> arrayType, JsonTypeResolver resolver) {
+  public static <T> ArrayCodec<T> create(
+      Class<T> arrayType, TypeRef<?> arrayTypeRef, JsonTypeResolver resolver) {
     if (!arrayType.isArray()) {
       throw new ForyJsonException("Unsupported JSON array type " + arrayType);
     }
     Class<?> componentType = arrayType.getComponentType();
-    JsonTypeInfo componentTypeInfo = resolver.getTypeInfo(componentType, componentType);
+    TypeRef<?> componentTypeRef = arrayTypeRef.getComponentType();
+    JsonTypeInfo componentTypeInfo =
+        resolver.getTypeInfo(componentTypeRef.getType(), componentType);
     return create(arrayType, componentTypeInfo);
   }
 

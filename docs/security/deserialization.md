@@ -149,6 +149,26 @@ When a path cannot produce one of these outcomes, earlier rejection of malformed
 bytes is normally a correctness or interoperability choice, not a security
 requirement.
 
+## Reader Limits Do Not Imply Writer Limits
+
+Read-side length, scale, count, depth, memory, and work limits protect
+deserialization from untrusted input. They are not automatically value-range
+contracts for serialization and do not require a corresponding writer-side
+check.
+
+In particular, Java Fory JSON's arbitrary-precision number length and decimal
+scale limits bound reader-side parsing and materialization. Writers must not
+reject an in-memory `BigInteger`, `BigDecimal`, or language wrapper solely
+because the default reader would reject the resulting JSON. Round-trip
+symmetry, matching error behavior, and test uniformity do not justify extra
+writer branches or validation.
+
+A writer-side restriction is appropriate only when the wire specification or a
+public write API explicitly requires it, or when writing the value otherwise
+causes a concrete writer-owned runtime-safety or resource failure. Such a check
+belongs to the writer that owns that boundary and must not be inferred from a
+deserialization limit.
+
 ## Robustness Scope Gate
 
 Before reporting or fixing a deserialization robustness finding, establish a

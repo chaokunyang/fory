@@ -33,6 +33,8 @@ private[scala] object ScalaTypeCodecFactory extends JsonCodecFactory {
   override def create(typeRef: TypeRef[_], resolver: JsonTypeResolver): JsonValueCodec[_] = {
     val rawType = typeRef.getRawType
     val name = rawType.getName
+    val enumerationCodec = ScalaEnumerationTypes.createCodec(typeRef)
+    if (enumerationCodec != null) return enumerationCodec
 
     if (isRejected(rawType)) throw ScalaTypeSupport.unsupported(typeRef, "runtime-state or lazy type")
     if (classOf[Range].isAssignableFrom(rawType)) {

@@ -150,6 +150,7 @@ public final class JsonFieldInfo {
       JsonFieldAccessor writeAccessor,
       JsonFieldAccessor readAccessor,
       TypeRef<?> ownerType,
+      Type objectModelType,
       JsonCodec codecAnnotation,
       Class<? extends JsonValueCodec<?>> valueCodecClass,
       JsonFormat formatAnnotation,
@@ -165,9 +166,20 @@ public final class JsonFieldInfo {
     this.readSetter = readSetter;
     Class<?> writeFallback = writeRawType(writeField, writeGetter);
     Class<?> readFallback = readRawType(readField, readSetter);
-    this.writeType = resolveType(ownerType, writeType(writeField, writeGetter));
+    Type resolvedObjectModelType = resolveType(ownerType, objectModelType);
+    this.writeType =
+        writeFallback == null
+            ? null
+            : resolvedObjectModelType == null
+                ? resolveType(ownerType, writeType(writeField, writeGetter))
+                : resolvedObjectModelType;
     this.writeRawType = semanticRawType(writeType, writeFallback);
-    this.readType = resolveType(ownerType, readType(readField, readSetter));
+    this.readType =
+        readFallback == null
+            ? null
+            : resolvedObjectModelType == null
+                ? resolveType(ownerType, readType(readField, readSetter))
+                : resolvedObjectModelType;
     this.readRawType = semanticRawType(readType, readFallback);
     this.codecAnnotation = codecAnnotation;
     this.valueCodecClass = valueCodecClass;
@@ -275,6 +287,7 @@ public final class JsonFieldInfo {
             writeAccessor,
             readAccessor,
             ownerType,
+            writeType != null ? writeType : readType,
             codecAnnotation,
             valueCodecClass,
             formatAnnotation,

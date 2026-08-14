@@ -19,6 +19,7 @@
 
 package org.apache.fory.json;
 
+import java.lang.annotation.Annotation;
 import java.lang.invoke.MethodHandle;
 import java.lang.reflect.AnnotatedElement;
 import java.lang.reflect.Constructor;
@@ -86,6 +87,11 @@ final class ForyJsonGraalVMFeature implements Feature {
       "org.apache.fory.json.scala.ScalaJsonCodec";
   private static final String SCALA_JSON_CODEC_FACTORY =
       "org.apache.fory.json.scala.internal.ScalaTypeCodecFactory$";
+  private static final String SCALA_ENUMERATION_ANNOTATION =
+      "org.apache.fory.json.scala.JsonEnumeration";
+  private static final String[] SCALA_ENUMERATION_SLOTS = {
+    "value", "element", "content", "mapKey", "mapValue"
+  };
   private static final String SCALA_ENUM_CLASS = "scala.reflect.Enum";
   private static final String[] SQL_TYPES = {
     "java.sql.Date", "java.sql.Time", "java.sql.Timestamp"
@@ -100,6 +106,7 @@ final class ForyJsonGraalVMFeature implements Feature {
   private final Set<Class<?>> processedProviders = ConcurrentHashMap.newKeySet();
   private final Set<Class<?>> processedFactoryModels = ConcurrentHashMap.newKeySet();
   private final Set<Class<?>> scalaDerivedModels = ConcurrentHashMap.newKeySet();
+  private final Set<Class<?>> scalaEnumerationOwners = ConcurrentHashMap.newKeySet();
   private final Set<Class<?>> processedCodecs = ConcurrentHashMap.newKeySet();
   private final Set<Class<?>> processedContainers = ConcurrentHashMap.newKeySet();
   private final Set<Executable> processedCreators = new LinkedHashSet<>();
@@ -581,6 +588,7 @@ final class ForyJsonGraalVMFeature implements Feature {
 
   private void registerModelHierarchy(
       DuringAnalysisAccess access, Class<?> type, JsonMixinView annotations) {
+    registerScalaEnumerationOwners(type);
     TypeRef<?> ownerType = TypeRef.of(type);
     boolean record = type.isRecord();
     for (Class<?> current = type;
@@ -659,6 +667,71 @@ final class ForyJsonGraalVMFeature implements Feature {
         registerUnwrappedParameters(access, ownerType, annotations, method.getParameters());
       }
     }
+  }
+
+  private void registerScalaEnumerationOwners(Class<?> type) {
+    for (Class<?> current = type;
+        current != null && current != Object.class;
+        current = current.getSuperclass()) {
+      for (Field field : current.getDeclaredFields()) {
+        registerScalaEnumerationOwner(field);
+      }
+      for (Method method : current.getDeclaredMethods()) {
+        registerScalaEnumerationOwner(method);
+        for (Parameter parameter : method.getParameters()) {
+          registerScalaEnumerationOwner(parameter);
+        }
+      }
+      for (Constructor<?> constructor : current.getDeclaredConstructors()) {
+        for (Parameter parameter : constructor.getParameters()) {
+          registerScalaEnumerationOwner(parameter);
+        }
+      }
+    }
+  }
+
+  private void registerScalaEnumerationOwner(AnnotatedElement element) {
+    for (Annotation annotation : element.getDeclaredAnnotations()) {
+      Class<? extends Annotation> annotationType = annotation.annotationType();
+      if (!annotationType.getName().equals(SCALA_ENUMERATION_ANNOTATION)) {
+        continue;
+      }
+      RuntimeReflection.register(annotationType);
+      for (String slot : SCALA_ENUMERATION_SLOTS) {
+        Method method;
+        Class<?> owner;
+        try {
+          method = annotationType.getMethod(slot);
+          owner = (Class<?>) method.invoke(annotation);
+        } catch (ReflectiveOperationException | ClassCastException e) {
+          throw new IllegalStateException("Invalid Scala JSON Enumeration annotation", e);
+        }
+        RuntimeReflection.register(method);
+        if (owner != Void.class && scalaEnumerationOwners.add(owner)) {
+          registerScalaEnumerationOwner(owner);
+        }
+      }
+    }
+  }
+
+  private static void registerScalaEnumerationOwner(Class<?> owner) {
+    RuntimeReflection.register(owner);
+    Field field;
+    try {
+      field = owner.getField("MODULE$");
+    } catch (NoSuchFieldException e) {
+      throw new IllegalStateException(
+          "Scala Enumeration owner has no public MODULE$ field: " + owner.getName(), e);
+    }
+    int modifiers = field.getModifiers();
+    if (field.getType() != owner
+        || !Modifier.isPublic(modifiers)
+        || !Modifier.isStatic(modifiers)
+        || !Modifier.isFinal(modifiers)) {
+      throw new IllegalStateException(
+          "Invalid Scala Enumeration owner singleton: " + owner.getName());
+    }
+    RuntimeReflection.register(field);
   }
 
   private void registerRecord(Class<?> type) {

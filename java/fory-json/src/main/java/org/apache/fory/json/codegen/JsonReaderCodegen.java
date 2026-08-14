@@ -3259,15 +3259,6 @@ abstract class JsonReaderCodegen {
     return directFieldNameSwitch(fieldIndex, prefix, names);
   }
 
-  private Expression directCreatorFieldNameSwitch(
-      Expression fieldIndex, Expression prefix, JsonCreatorFieldInfo[] fields) {
-    String[] names = new String[fields.length];
-    for (int i = 0; i < fields.length; i++) {
-      names[i] = fields[i].name();
-    }
-    return directFieldNameSwitch(fieldIndex, prefix, names);
-  }
-
   private Expression directFieldNameSwitch(
       Expression fieldIndex, Expression prefix, String[] names) {
     int[] keys = new int[names.length];
@@ -3309,6 +3300,15 @@ abstract class JsonReaderCodegen {
               key, new Expression.ListExpression(resolve, new Expression.Break()));
     }
     return new Expression.Switch(prefix, cases, null);
+  }
+
+  private Expression directCreatorFieldNameSwitch(
+      Expression fieldIndex, Expression prefix, JsonCreatorFieldInfo[] fields) {
+    String[] names = new String[fields.length];
+    for (int i = 0; i < fields.length; i++) {
+      names[i] = fields[i].name();
+    }
+    return directFieldNameSwitch(fieldIndex, prefix, names);
   }
 
   private Expression fieldSwitch(

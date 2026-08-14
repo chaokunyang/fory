@@ -30,6 +30,8 @@ import org.apache.fory.serializer.GraphMemoryEstimates
 
 import scala.reflect.ClassTag
 
+// Scala List is sealed to Nil and ::, so exact List codecs traverse nodes without
+// runtime-family checks.
 private[scala] final class ScalaListCodec(nonEmptyOnly: Boolean, nilOnly: Boolean)
     extends CompositeJsonCodec[List[Any]] {
   private var elementInfo: JsonTypeInfo = _
@@ -67,15 +69,15 @@ private[scala] final class ScalaListCodec(nonEmptyOnly: Boolean, nilOnly: Boolea
       writer.writeNull()
       return
     }
-    ScalaCollectionCodecs.requireSupportedRuntime(value.getClass)
     val codec = elementInfo.stringWriter()
     writer.writeArrayStart()
     var current = value
     var index = 0
-    while (current.nonEmpty) {
+    while (current ne Nil) {
+      val node = current.asInstanceOf[scala.collection.immutable.::[Any]]
       writer.writeComma(index)
-      codec.writeString(writer, current.head)
-      current = current.tail
+      codec.writeString(writer, node.head)
+      current = node.tail
       index += 1
     }
     writer.writeArrayEnd()
@@ -86,15 +88,15 @@ private[scala] final class ScalaListCodec(nonEmptyOnly: Boolean, nilOnly: Boolea
       writer.writeNull()
       return
     }
-    ScalaCollectionCodecs.requireSupportedRuntime(value.getClass)
     val codec = elementInfo.utf8Writer()
     writer.writeArrayStart()
     var current = value
     var index = 0
-    while (current.nonEmpty) {
+    while (current ne Nil) {
+      val node = current.asInstanceOf[scala.collection.immutable.::[Any]]
       writer.writeComma(index)
-      codec.writeUtf8(writer, current.head)
-      current = current.tail
+      codec.writeUtf8(writer, node.head)
+      current = node.tail
       index += 1
     }
     writer.writeArrayEnd()

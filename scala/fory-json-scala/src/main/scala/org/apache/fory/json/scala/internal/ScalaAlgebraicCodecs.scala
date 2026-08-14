@@ -22,6 +22,7 @@ package org.apache.fory.json.scala.internal
 import org.apache.fory.json.ForyJsonException
 import org.apache.fory.json.annotation.JsonCodec
 import org.apache.fory.json.codec.CompositeJsonCodec
+import org.apache.fory.json.meta.JsonFieldNameHash
 import org.apache.fory.json.reader.{Latin1JsonReader, Utf16JsonReader, Utf8JsonReader}
 import org.apache.fory.json.resolver.{JsonTypeInfo, JsonTypeResolver}
 import org.apache.fory.json.writer.{StringJsonWriter, Utf8JsonWriter}
@@ -140,10 +141,10 @@ private[scala] final class ScalaEitherCodec(branch: Int)
     writer.writeObjectStart()
     value match {
       case Left(left) =>
-        writer.writeFieldName("left")
+        writer.writeFieldName("l")
         leftInfo.stringWriter().writeString(writer, left)
       case Right(right) =>
-        writer.writeFieldName("right")
+        writer.writeFieldName("r")
         rightInfo.stringWriter().writeString(writer, right)
     }
     writer.writeObjectEnd()
@@ -157,10 +158,10 @@ private[scala] final class ScalaEitherCodec(branch: Int)
     writer.writeObjectStart()
     value match {
       case Left(left) =>
-        writer.writeFieldName("left")
+        writer.writeFieldName("l")
         leftInfo.utf8Writer().writeUtf8(writer, left)
       case Right(right) =>
-        writer.writeFieldName("right")
+        writer.writeFieldName("r")
         rightInfo.utf8Writer().writeUtf8(writer, right)
     }
     writer.writeObjectEnd()
@@ -171,11 +172,15 @@ private[scala] final class ScalaEitherCodec(branch: Int)
     reader.enterDepth()
     reader.expectNextToken('{')
     if (reader.consumeNextToken('}')) throw invalid()
-    val name = reader.readFieldName()
+    val nameHash = reader.readFieldNameHash()
     reader.expectNextToken(':')
     val value =
-      if (name == "left") newLeft(reader, leftInfo.latin1Reader().readLatin1(reader))
-      else if (name == "right") newRight(reader, rightInfo.latin1Reader().readLatin1(reader))
+      if (nameHash == ScalaEitherCodec.LeftHash || nameHash == ScalaEitherCodec.LegacyLeftHash)
+        newLeft(reader, leftInfo.latin1Reader().readLatin1(reader))
+      else if (
+        nameHash == ScalaEitherCodec.RightHash || nameHash == ScalaEitherCodec.LegacyRightHash
+      )
+        newRight(reader, rightInfo.latin1Reader().readLatin1(reader))
       else throw invalid()
     if (reader.consumeNextCommaOrEndObject()) throw invalid()
     reader.exitDepth()
@@ -187,11 +192,15 @@ private[scala] final class ScalaEitherCodec(branch: Int)
     reader.enterDepth()
     reader.expectNextToken('{')
     if (reader.consumeNextToken('}')) throw invalid()
-    val name = reader.readFieldName()
+    val nameHash = reader.readFieldNameHash()
     reader.expectNextToken(':')
     val value =
-      if (name == "left") newLeft(reader, leftInfo.utf16Reader().readUtf16(reader))
-      else if (name == "right") newRight(reader, rightInfo.utf16Reader().readUtf16(reader))
+      if (nameHash == ScalaEitherCodec.LeftHash || nameHash == ScalaEitherCodec.LegacyLeftHash)
+        newLeft(reader, leftInfo.utf16Reader().readUtf16(reader))
+      else if (
+        nameHash == ScalaEitherCodec.RightHash || nameHash == ScalaEitherCodec.LegacyRightHash
+      )
+        newRight(reader, rightInfo.utf16Reader().readUtf16(reader))
       else throw invalid()
     if (reader.consumeNextCommaOrEndObject()) throw invalid()
     reader.exitDepth()
@@ -203,11 +212,15 @@ private[scala] final class ScalaEitherCodec(branch: Int)
     reader.enterDepth()
     reader.expectNextToken('{')
     if (reader.consumeNextToken('}')) throw invalid()
-    val name = reader.readFieldName()
+    val nameHash = reader.readFieldNameHash()
     reader.expectNextToken(':')
     val value =
-      if (name == "left") newLeft(reader, leftInfo.utf8Reader().readUtf8(reader))
-      else if (name == "right") newRight(reader, rightInfo.utf8Reader().readUtf8(reader))
+      if (nameHash == ScalaEitherCodec.LeftHash || nameHash == ScalaEitherCodec.LegacyLeftHash)
+        newLeft(reader, leftInfo.utf8Reader().readUtf8(reader))
+      else if (
+        nameHash == ScalaEitherCodec.RightHash || nameHash == ScalaEitherCodec.LegacyRightHash
+      )
+        newRight(reader, rightInfo.utf8Reader().readUtf8(reader))
       else throw invalid()
     if (reader.consumeNextCommaOrEndObject()) throw invalid()
     reader.exitDepth()
@@ -230,10 +243,14 @@ private[scala] final class ScalaEitherCodec(branch: Int)
   }
 
   private def invalid(): ForyJsonException =
-    new ForyJsonException("Scala Either JSON must contain exactly one left or right member")
+    new ForyJsonException("Scala Either JSON must contain exactly one l or r member")
 }
 
 private[scala] object ScalaEitherCodec {
+  private val LeftHash = JsonFieldNameHash.hash("l")
+  private val RightHash = JsonFieldNameHash.hash("r")
+  private val LegacyLeftHash = JsonFieldNameHash.hash("left")
+  private val LegacyRightHash = JsonFieldNameHash.hash("right")
   private val LeftOwnerBytes = GraphMemoryEstimates.shallowObjectBytes(classOf[Left[_, _]])
   private val RightOwnerBytes = GraphMemoryEstimates.shallowObjectBytes(classOf[Right[_, _]])
 }

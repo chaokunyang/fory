@@ -181,6 +181,7 @@ class ScalaJsonSuite extends AnyFunSuite {
     val json = ForyJsonScala.builder().withCodegen(false).build()
     val listType = new TypeRef[List[Int]]() {}
     assert(json.fromJson(json.toJson(List(1, 2, 3), listType), listType) == List(1, 2, 3))
+    assert(json.toJson(List.empty[Int], listType) == "[]")
 
     val mapType = new TypeRef[Map[String, Option[Int]]]() {}
     val value = Map("a" -> Some(1), "b" -> None)
